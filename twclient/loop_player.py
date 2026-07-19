@@ -21,6 +21,15 @@ enter_auto_loop()/leave_auto_loop()) -- entering/leaving is THIS
 module's job alone, never the generic `set_mode` verb (see
 control_lock.py's module docstring for why: auto_loop must never read
 as "on" without an actually-running thread behind it).
+
+**TW-03/TW-04:** every cycle drives `replay_skill()` directly (not
+`skills.play_skill()` -- this module already has its own cycle/floor
+loop), so it inherits both fixes from there for free as long as this
+module forwards the right arguments: the TW-03 start-anchor guard (an
+AUTO-LOOP run that wanders off its recorded start sector halts exactly
+like any other mid-run surprise) and the TW-04 Trace-Ledger row per
+send (`ledger`/`session_id`, optional constructor args, `actor="trainer"`
+-- see `skills.replay_skill`'s docstring for the full contract).
 """
 
 import threading
@@ -28,7 +37,7 @@ import time
 
 from .control_lock import ControlModeConflict
 from .ledger import snapshot_state
-from .skills import ReplayDivergence, replay_skill
+from .skills import ReplayDivergence, SkillError, replay_skill
 
 _PAUSE_POLL_S = 0.1
 
@@ -44,10 +53,18 @@ class LoopPlayerError(Exception):
 
 
 class LoopPlayer:
-    def __init__(self, session, control_lock, watch_hub):
+    def __init__(self, session, control_lock, watch_hub, ledger=None, session_id=None):
         self.session = session
         self.control_lock = control_lock
         self.watch_hub = watch_hub
+        # TW-04: optional ledger.LedgerWriter-shaped object + the
+        # session_id every ledger row this player produces gets tagged
+        # with (actor="trainer" is hardcoded at the call site below --
+        # an AUTO-LOOP run is deterministic-engine-driven by definition).
+        # Both None by default -- a caller that hasn't wired them up yet
+        # (e.g. a bare dispatch-harness test) keeps behaving unchanged.
+        self.ledger = ledger
+        self.session_id = session_id
         self._state_lock = threading.Lock()
         self._thread = None
         self._stop = threading.Event()
@@ -56,7 +73,8 @@ class LoopPlayer:
         self.cycles_total = 0
         self.cycles_done = 0
         self.floor = None
-        self.last_result = None  # None while running; else "cycles_complete" | "surprise" | "floor_reached" | "stopped"
+        self.last_result = None  # None while running; else "cycles_complete" | "surprise" | "floor_reached" | "stopped" | "refused"
+        self.last_error = None  # str(exc) when last_result == "refused" (TW-03: e.g. a missing start_anchor); else None
 
     @property
     def running(self):
@@ -67,11 +85,14 @@ class LoopPlayer:
     def paused(self):
         return self._pause.is_set()
 
-    def start(self, skill, name, cycles, floor=None, params=None, step_timeout=8.0):
+    def start(self, skill, name, cycles, floor=None, params=None, step_timeout=8.0, force=False):
         """Raises LoopPlayerError if a run is already active or `cycles`
         exceeds the hard cap, ControlModeConflict if the control-lock
         refuses (human attached, or -- belt and suspenders -- somehow
-        already in auto_loop)."""
+        already in auto_loop). `force` (TW-03) is forwarded to every
+        cycle's `replay_skill()` call -- it waives ONLY a missing/legacy
+        `start_anchor` on `skill`, never a detected sector mismatch; see
+        `skills._check_start_anchor()`."""
         if cycles > _MAX_CYCLES:
             raise LoopPlayerError(f"cycles_exceeds_cap:{cycles}>{_MAX_CYCLES}")
         with self._state_lock:
@@ -83,10 +104,11 @@ class LoopPlayer:
             self.cycles_done = 0
             self.floor = floor
             self.last_result = None
+            self.last_error = None
             self._stop.clear()
             self._pause.clear()
             self._thread = threading.Thread(
-                target=self._run, args=(skill, params or {}, step_timeout), daemon=True
+                target=self._run, args=(skill, params or {}, step_timeout, force), daemon=True
             )
             self._thread.start()
 
@@ -138,10 +160,12 @@ class LoopPlayer:
             "cycle": self.cycles_done,
             "cycles_total": self.cycles_total,
             "last_result": self.last_result,
+            "last_error": self.last_error,
         }
 
-    def _run(self, skill, params, step_timeout):
+    def _run(self, skill, params, step_timeout, force=False):
         result = "cycles_complete"
+        error_msg = None
         try:
             for cycle in range(self.cycles_total):
                 while self._pause.is_set() and not self._stop.is_set():
@@ -156,14 +180,34 @@ class LoopPlayer:
                         result = "floor_reached"
                         break
                 try:
-                    replay_skill(self.session, skill, params=params, step_timeout=step_timeout)
+                    replay_skill(
+                        self.session,
+                        skill,
+                        params=params,
+                        step_timeout=step_timeout,
+                        force=force,
+                        ledger=self.ledger,
+                        session_id=self.session_id,
+                    )
                 except ReplayDivergence:
                     result = "surprise"
+                    break
+                except SkillError as e:
+                    # TW-03: a missing/legacy start_anchor refused without
+                    # force=True (see skills._check_start_anchor()) -- a
+                    # config-level refusal, not a live "surprise", but
+                    # still needs to end this cycle's run cleanly rather
+                    # than escape uncaught out of a background thread
+                    # (which would leave last_result stuck at whatever it
+                    # defaulted to, silently misreporting what happened).
+                    result = "refused"
+                    error_msg = str(e)
                     break
                 self.cycles_done = cycle + 1
                 self._broadcast_progress()
         finally:
             self.last_result = result
+            self.last_error = error_msg
             try:
                 self.control_lock.leave_auto_loop()
             except ControlModeConflict:
