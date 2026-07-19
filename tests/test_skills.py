@@ -16,7 +16,20 @@ class FakeReplaySession:
     """`screens[0]` is the CURRENT screen before any send(); each send()
     advances to the next entry in `screens[1:]`. Once exhausted, stays on
     the final screen (models a settled target that doesn't change
-    further, same convention as FakeLoginSession)."""
+    further, same convention as FakeLoginSession).
+
+    The advance is DEFERRED to the next `sleep()` call rather than
+    applied synchronously inside `send()` -- matching the more realistic
+    async-response convention `test_settle.py`'s `StagedSession` already
+    uses (a real Session's response bytes arrive later, over a separate
+    reader path, never instantly at send()-time). This is load-bearing
+    for `settle.send_and_confirm`'s idle-detection path (used by
+    replay_skill for a step with no explicit `wait_prompt`, TW-02):
+    `wait_for_settle` can only see an "idle" settle if `session.rx_count`
+    genuinely increases AFTER its own polling starts -- a synchronous
+    same-call bump (the old convention) would already be reflected in
+    the `start_rx_count` it captures at its own start, so it would never
+    observe a NEW arrival and would spin to "timeout" every time."""
 
     def __init__(self, screens):
         self.t = 0.0
@@ -25,12 +38,19 @@ class FakeReplaySession:
         self._screens = screens
         self._i = 0
         self.sent = []
+        self._pending_advance = False
 
     def clock(self):
         return self.t
 
     def sleep(self, seconds):
         self.t += seconds
+        if self._pending_advance:
+            self._pending_advance = False
+            if self._i < len(self._screens) - 1:
+                self._i += 1
+            self.rx_count += 1
+            self.last_rx = self.t
 
     def render(self):
         return self._screens[self._i].split("\n")
@@ -43,10 +63,7 @@ class FakeReplaySession:
 
     def send(self, text, enter=True, secret=False):
         self.sent.append((text, secret))
-        if self._i < len(self._screens) - 1:
-            self._i += 1
-        self.rx_count += 1
-        self.last_rx = self.t
+        self._pending_advance = True
 
 
 class _RecordingLedger:
@@ -453,3 +470,108 @@ def test_play_skill_forwards_ledger_and_session_id_across_every_cycle():
     assert result["halted"] == "cycles_complete"
     assert len(ledger.calls) == 3  # one row per cycle's one step
     assert all(c["actor"] == "trainer" and c["session_id"] == "s-loop" for c in ledger.calls)
+
+
+# -- TW-02: send/settle race, routed through settle.send_and_confirm --------
+#
+# _AnimatedSession models a scripted (arrival_time, text) timeline WITHIN
+# a single send() -- unlike FakeReplaySession's one-shot-per-send advance,
+# this can represent a multi-stage transition (an animation, a slow
+# multi-part redraw), which is what these two live incidents actually
+# need. Kept local to this section rather than folded into the shared
+# FakeReplaySession, which many unrelated tests above depend on for its
+# simpler one-shot-per-send shape.
+
+
+class _AnimatedSession:
+    def __init__(self, pre_text, stages):
+        self.t = 0.0
+        self.rx_count = 0
+        self.last_rx = 0.0
+        self._text = pre_text
+        self._stages = sorted(stages)
+        self.sent = []
+
+    def clock(self):
+        return self.t
+
+    def sleep(self, seconds):
+        self.t += seconds
+        while self._stages and self._stages[0][0] <= self.t:
+            _, text = self._stages.pop(0)
+            self._text = text
+            self.rx_count += 1
+            self.last_rx = self.t
+
+    def render(self):
+        return self._text.split("\n")
+
+    def render_text(self, rows=None):
+        return "\n".join(rows) if rows is not None else self._text
+
+    def send(self, text, enter=True, secret=False):
+        self.sent.append((text, secret))
+
+
+def test_replay_skill_mid_animation_screen_change_halts_cleanly_not_a_misfire():
+    """TW-02 (the -75-alignment/false-halt class, settle.py's own module
+    docstring): a still-transitioning screen (an animation, a slow
+    multi-part redraw) can go quiet just long enough to satisfy the
+    debounce window mid-transition, then keep changing. Before this
+    fix, replay_skill classified whatever text happened to be on screen
+    at that premature quiet moment and either pressed the NEXT step's
+    send against it, or coincidentally matched expected_post_class --
+    both a silent misfire. send_and_confirm's stability re-check must
+    catch the continued change and refuse to confirm, so the step halts
+    cleanly as its own distinct surprise (reason="confirm_failed"), not
+    misclassified as an ordinary post_class divergence, and never
+    pressed onward to a second send."""
+    session = _AnimatedSession(
+        "Command [TL=00753:0/0/0/850]",
+        stages=[(0.05, "Docking sequence initiated..."), (0.5, "Docking sequence continues...")],
+    )
+    skill = _skill([{"input": "M", "wait_prompt": None, "expected_post_class": "sector_display"}])
+    with pytest.raises(skills.ReplayDivergence) as exc_info:
+        skills.replay_skill(session, skill, force=True)
+    err = exc_info.value
+    assert err.step_i == 0
+    assert err.reason == "confirm_failed"
+    assert "unconfirmed_settle" in err.actual
+    assert session.sent == [("M", False)]  # exactly one send -- never a misfired second step
+
+
+def test_replay_skill_slow_hub_warp_does_not_false_halt_on_premature_idle():
+    """TW-02 companion: a warp-animation frame goes quiet just long
+    enough to satisfy debounce_ms mid-transition, well before the
+    recorded step's own wait_prompt target text ever arrives.
+    send_and_confirm must not treat that premature idle as proof
+    nothing more is coming -- the step still succeeds once the real
+    confirm evidence lands, however late (no false halt)."""
+    session = _AnimatedSession(
+        "Sector : 100\nCommand [TL=00753:0/0/0/850]",
+        stages=[(0.05, "Warping...\nHub drive engaged."), (0.9, "Sector : 200")],
+    )
+    skill = _skill(
+        [{"input": "M", "wait_prompt": r"Sector\s*:\s*200", "expected_post_class": "sector_display"}],
+        start_anchor=100,
+    )
+    results = skills.replay_skill(session, skill)
+    assert session.sent == [("M", False)]
+    assert results[0]["actual"] == "sector_display"
+
+
+def test_play_skill_treats_a_confirm_failure_as_a_surprise_halt():
+    """play_skill wraps replay_skill in a generic `except
+    ReplayDivergence` -- proves a confirm_failed divergence (not just an
+    ordinary post_class divergence) is caught the same way, halting the
+    loop cleanly with the trace-so-far intact rather than an uncaught
+    exception escaping an unattended AUTO-LOOP-style run."""
+    session = _AnimatedSession(
+        "Command [TL=00753:0/0/0/850]",
+        stages=[(0.05, "Docking sequence initiated..."), (0.5, "Docking sequence continues...")],
+    )
+    skill = _skill([{"input": "M", "wait_prompt": None, "expected_post_class": "sector_display"}])
+    result = skills.play_skill(session, skill, cycles=5, force=True)
+    assert result["halted"] == "surprise"
+    assert result["cycles_completed"] == 0
+    assert result["divergence"]["reason"] == "confirm_failed"

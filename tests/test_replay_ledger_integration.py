@@ -23,11 +23,24 @@ class _FakeSession:
     test_actor_attribution.py's FakeSession) -- a single static screen
     that is simultaneously anchor-matching (TW-03) and post-classifies
     as the skill step's `expected_post_class`, so a real `send()` neither
-    trips the anchor guard nor a post-class divergence."""
+    trips the anchor guard nor a post-class divergence.
+
+    TW-02: `skills.replay_skill` now routes its send through
+    `settle.send_and_confirm`, which needs the full settle-detection
+    protocol surface (`clock()`/`rx_count`/`last_rx`/`sleep()`), not just
+    `send()`/`wait_settle()`/`render()`. `send()`'s rx_count/last_rx bump
+    is DEFERRED to the next `sleep()` call (matching this codebase's
+    other post-TW-02 fakes) so `send_and_confirm`'s idle-based confirm
+    path can actually observe a fresh arrival rather than always
+    resolving to "timeout"."""
 
     def __init__(self, session_id):
         self.logger = _FakeLogger(session_id)
         self.sent = []
+        self.t = 0.0
+        self.rx_count = 0
+        self.last_rx = 0.0
+        self._pending_advance = False
 
     def render(self):
         return _SCREEN.splitlines()
@@ -35,8 +48,19 @@ class _FakeSession:
     def render_text(self, rows=None):
         return "\n".join(rows) if rows is not None else _SCREEN
 
+    def clock(self):
+        return self.t
+
+    def sleep(self, seconds):
+        self.t += seconds
+        if self._pending_advance:
+            self._pending_advance = False
+            self.rx_count += 1
+            self.last_rx = self.t
+
     def send(self, text, enter=True, secret=False):
         self.sent.append((text, enter, secret))
+        self._pending_advance = True
 
     def wait_settle(self, wait_prompt=None, timeout=8.0, debounce_ms=350):
         return "idle", 0.0

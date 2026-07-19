@@ -19,7 +19,20 @@ class FakeLoginSession:
     On send(), validates `expect(text, secret)` (if given) against what
     the automaton sent, records it, and advances to the next step's
     screen. Once the script is exhausted, stays on the final screen
-    (models a settled target screen that doesn't change further)."""
+    (models a settled target screen that doesn't change further).
+
+    The advance is DEFERRED to the next `sleep()` call rather than
+    applied synchronously inside `send()` -- matching the more realistic
+    async-response convention `test_settle.py`'s `StagedSession` already
+    uses (a real Session's response bytes arrive later, over a separate
+    reader path, never instantly at send()-time). This is load-bearing
+    for `settle.send_and_confirm`'s idle-detection path (used by
+    run_login for a step with no explicit wait_hint, TW-02):
+    `wait_for_settle` can only see an "idle" settle if `session.rx_count`
+    genuinely increases AFTER its own polling starts -- a synchronous
+    same-call bump (the old convention) would already be reflected in
+    the `start_rx_count` it captures at its own start, so it would never
+    observe a NEW arrival and would spin to "timeout" every time."""
 
     def __init__(self, steps):
         self.t = 0.0
@@ -28,6 +41,7 @@ class FakeLoginSession:
         self._steps = steps
         self._i = 0
         self.sent = []  # [(text, secret), ...]
+        self._pending_advance = False
 
     # -- settle-detection protocol surface (matches Session) -------------
     def clock(self):
@@ -35,6 +49,12 @@ class FakeLoginSession:
 
     def sleep(self, seconds):
         self.t += seconds
+        if self._pending_advance:
+            self._pending_advance = False
+            if self._i < len(self._steps) - 1:
+                self._i += 1
+            self.rx_count += 1
+            self.last_rx = self.t
 
     def render(self):
         return self._steps[self._i]["screen"].split("\n")
@@ -62,10 +82,7 @@ class FakeLoginSession:
         step = self._steps[self._i]
         if step.get("expect") is not None:
             assert step["expect"](text, secret), f"step {self._i}: unexpected send {text!r} secret={secret!r}"
-        if self._i < len(self._steps) - 1:
-            self._i += 1
-        self.rx_count += 1
-        self.last_rx = self.t
+        self._pending_advance = True
 
 
 class FakeProfile:
@@ -394,3 +411,131 @@ def test_planet_name_box_prompt_not_confused_by_stale_planet_wording():
     cls, taken = run_login(session, profile, get_password=lambda n: "x", save_password=lambda n, pw: None)
     assert cls == "main_command"
     assert session.sent == [(profile.planet_name, False), ("Q", False)]
+
+
+# -- TW-02: send/settle race, routed through settle.send_and_confirm --------
+#
+# _decide() never supplies an explicit wait_hint (every branch's third
+# tuple element is None), so run_login always exercises send_and_confirm's
+# confirm_prompt=None (idle+stability-recheck) fallback -- these two fakes
+# model that path's own failure/recovery shapes directly, distinct from
+# FakeLoginSession's simpler ordered-script convention.
+
+
+class _NeverSettlesSession:
+    """A prompt that keeps changing forever on a fixed fake-clock cadence
+    (faster than the debounce window) -- models a persistently-glitching
+    screen that never genuinely settles, no matter how many retry rounds
+    run_login attempts. The PROMPT LINE itself never changes (still
+    "What is your name?"), only trailing content above it, so
+    classify_screen keeps recognizing the same login_name gate anchor
+    every round."""
+
+    def __init__(self, change_every_s=0.1):
+        self.t = 0.0
+        self.rx_count = 0
+        self.last_rx = 0.0
+        self._change_every_s = change_every_s
+        self._next_change_at = change_every_s
+        self._tick = 0
+        self.sent = []
+
+    def clock(self):
+        return self.t
+
+    def sleep(self, seconds):
+        self.t += seconds
+        while self.t >= self._next_change_at:
+            self._tick += 1
+            self._next_change_at += self._change_every_s
+            self.rx_count += 1
+            self.last_rx = self.t
+
+    def render(self):
+        return f"(frame {self._tick})\nWhat is your name?".split("\n")
+
+    def render_text(self, rows=None):
+        return "\n".join(rows) if rows is not None else f"(frame {self._tick})\nWhat is your name?"
+
+    def send(self, text, enter=True, secret=False):
+        self.sent.append((text, secret))
+
+
+def test_run_login_persistently_unconfirmed_send_raises_after_stagnation_cap():
+    """TW-02: a screen that never genuinely settles must not retry
+    forever -- a persistently failing confirm is folded into the SAME
+    stagnant-round budget an unrecognized screen already uses, so it
+    eventually raises a clean, distinctly-labeled LoginError instead of
+    looping (the mid-animation/clean-halt shape, applied to login)."""
+    profile = FakeProfile()
+    session = _NeverSettlesSession()
+    with pytest.raises(LoginError, match="automaton_send_unconfirmed"):
+        run_login(session, profile, get_password=lambda n: "x", save_password=lambda n, pw: None)
+
+
+class _RecoversAfterOneGlitchSession:
+    """The FIRST send()'s confirm never settles within the per-step
+    budget (a transient settle-race); a SECOND, identical retry send()
+    (run_login re-sends the same input once a failed confirm loops back
+    to the same classification) settles cleanly. Proves a transient
+    settle-race gets a genuine second chance via the existing
+    stagnant-round retry budget rather than aborting on the first failed
+    confirm (the slow-settle/no-false-halt shape, applied to login)."""
+
+    def __init__(self, glitch_text, final_text):
+        self.t = 0.0
+        self.rx_count = 0
+        self.last_rx = 0.0
+        self._text = glitch_text
+        self._final_text = final_text
+        self._glitching = False
+        self._next_tick = None
+        self._settle_at = None
+        self.sent = []
+
+    def clock(self):
+        return self.t
+
+    def sleep(self, seconds):
+        self.t += seconds
+        if self._glitching:
+            while self.t >= self._next_tick:
+                self.rx_count += 1
+                self.last_rx = self.t
+                self._next_tick += 0.1
+        elif self._settle_at is not None and self.t >= self._settle_at:
+            self._text = self._final_text
+            self.rx_count += 1
+            self.last_rx = self.t
+            self._settle_at = None
+
+    def render(self):
+        return self._text.split("\n")
+
+    def render_text(self, rows=None):
+        return "\n".join(rows) if rows is not None else self._text
+
+    def send(self, text, enter=True, secret=False):
+        self.sent.append((text, secret))
+        if len(self.sent) == 1:
+            self._glitching = True
+            self._next_tick = self.t + 0.1
+        else:
+            self._glitching = False
+            self._settle_at = self.t + 0.05
+
+
+def test_run_login_recovers_from_a_transient_unconfirmed_send_via_retry():
+    """TW-02 companion: the FIRST attempt's confirm never settles within
+    budget, but the automaton's existing retry path (folding a failed
+    confirm into the stagnant-round budget rather than aborting
+    outright) gives it a genuine second chance -- the retried send
+    settles cleanly and login proceeds to completion, proving this
+    isn't a false halt on a merely-slow send."""
+    profile = FakeProfile()
+    session = _RecoversAfterOneGlitchSession(
+        glitch_text="What is your name?", final_text="Command [TL=00:00:00]:[1] (?=Help)? :"
+    )
+    cls, _ = run_login(session, profile, get_password=lambda n: "x", save_password=lambda n, pw: None)
+    assert cls == "main_command"
+    assert session.sent == [(profile.handle, False), (profile.handle, False)]  # one failed attempt, one retry

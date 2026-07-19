@@ -225,3 +225,50 @@ def test_send_and_confirm_never_matching_is_a_safe_desync_not_a_guess():
     assert reason == "timeout"
     assert confirmed is False
     assert elapsed >= 0.3
+
+
+# -- TW-02: confirm_prompt=None fallback (replay/play/login's common case,
+# no caller-supplied target regex) + the premature-idle fix for the
+# confirm_prompt-given path (the hub-warp-animation shape) ------------------
+
+
+def test_send_and_confirm_none_confirms_via_a_stable_idle_settle():
+    s = StagedSession(stages=[(0.05, "Sector : 100")])
+    reason, elapsed, confirmed = send_and_confirm(s, "M", confirm_prompt=None, enter=True, timeout_s=2.0)
+    assert reason == "idle"
+    assert confirmed is True
+    assert s.sent == [("M", True, False)]
+
+
+def test_send_and_confirm_none_rejects_when_more_bytes_arrive_during_the_recheck():
+    # The hub-warp-animation shape without a caller-supplied target
+    # regex: a debounce-satisfying quiet moment fires "idle", but the
+    # screen keeps changing a beat later -- must not be confirmed.
+    s = StagedSession(stages=[(0.05, "Docking sequence initiated..."), (0.5, "Docking sequence continues...")])
+    reason, elapsed, confirmed = send_and_confirm(s, "M", confirm_prompt=None, enter=True, timeout_s=2.0)
+    assert reason == "idle"
+    assert confirmed is False
+
+
+def test_send_and_confirm_loops_past_a_premature_idle_to_find_the_real_match():
+    # The hub-warp-animation shape WITH a caller-supplied target regex:
+    # an early, non-matching frame goes quiet long enough to satisfy the
+    # debounce window well before the true target text arrives. A bare
+    # "idle" with no match must not be treated as a stop condition --
+    # the wait keeps going (against the remaining timeout_s budget)
+    # until the real confirm_prompt evidence lands, however late.
+    s = StagedSession(stages=[(0.05, "Warping..."), (0.9, "Docking complete.")])
+    reason, elapsed, confirmed = send_and_confirm(s, "M", r"Docking\s+complete", enter=True, timeout_s=2.0)
+    assert reason == "prompt"
+    assert confirmed is True
+
+
+def test_send_and_confirm_prompt_given_still_times_out_when_never_matched():
+    # Companion to the above: looping past a premature idle must still
+    # be BOUNDED by timeout_s, not an unbounded wait, when the target
+    # genuinely never arrives.
+    s = StagedSession(stages=[(0.05, "Warping..."), (0.9, "Still warping...")])
+    reason, elapsed, confirmed = send_and_confirm(s, "M", r"Docking\s+complete", enter=True, timeout_s=1.0)
+    assert reason == "timeout"
+    assert confirmed is False
+    assert elapsed >= 1.0

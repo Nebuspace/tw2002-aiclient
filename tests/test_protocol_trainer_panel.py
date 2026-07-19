@@ -127,7 +127,7 @@ def test_list_skills_carries_live_progress_for_the_currently_armed_loop(fake_dae
     skills.save_skill("running-loop", [_STEP, _STEP, _STEP], source="recorded", start_anchor=_ANCHOR_SECTOR)
     skill = skills.load_skill("running-loop")
     fake_daemon.session._screen = _ANCHOR_SCREEN  # TW-03: matches the skill's start_anchor above
-    fake_daemon.session.wait_settle = lambda **kw: (time.sleep(0.05), ("idle", 0.05))[1]
+    fake_daemon.session._real_time_scale = 0.1  # TW-02: replay_skill no longer calls session.wait_settle() directly
     fake_daemon.loop_player.start(skill, "running-loop", cycles=3)
     assert _wait_until(lambda: fake_daemon.loop_player.cycles_done >= 1)
 
@@ -145,7 +145,7 @@ def test_list_skills_carries_live_progress_for_the_currently_armed_loop(fake_dae
 def test_play_start_arms_the_loop_and_status_reports_progress(fake_daemon, fake_ledger_entries):
     skills.save_skill("start-loop", [_STEP, _STEP], source="recorded", start_anchor=_ANCHOR_SECTOR)
     fake_daemon.session._screen = _ANCHOR_SCREEN  # TW-03: matches the skill's start_anchor above
-    fake_daemon.session.wait_settle = lambda **kw: (time.sleep(0.05), ("idle", 0.05))[1]
+    fake_daemon.session._real_time_scale = 0.1  # TW-02: replay_skill no longer calls session.wait_settle() directly
 
     resp = send_request(fake_daemon.sock_path, "play_start", {"name": "start-loop", "cycles": 2})
     assert resp["ok"] is True
@@ -191,7 +191,7 @@ def test_play_start_refuses_while_human_attached(fake_daemon, fake_ledger_entrie
 def test_play_stop_always_allowed_even_mid_run(fake_daemon, fake_ledger_entries):
     skills.save_skill("stop-loop", [_STEP], source="recorded", start_anchor=_ANCHOR_SECTOR)
     fake_daemon.session._screen = _ANCHOR_SCREEN  # TW-03: matches the skill's start_anchor above
-    fake_daemon.session.wait_settle = lambda **kw: (time.sleep(0.05), ("idle", 0.05))[1]
+    fake_daemon.session._real_time_scale = 0.1  # TW-02: replay_skill no longer calls session.wait_settle() directly
     send_request(fake_daemon.sock_path, "play_start", {"name": "stop-loop", "cycles": 50})
     assert _wait_until(lambda: fake_daemon.loop_player.cycles_done >= 1)
 
@@ -214,7 +214,7 @@ def test_play_stop_with_nothing_running_is_a_harmless_no_op(fake_daemon, fake_le
 def test_play_pause_and_resume_round_trip(fake_daemon, fake_ledger_entries):
     skills.save_skill("pause-loop", [_STEP], source="recorded", start_anchor=_ANCHOR_SECTOR)
     fake_daemon.session._screen = _ANCHOR_SCREEN  # TW-03: matches the skill's start_anchor above
-    fake_daemon.session.wait_settle = lambda **kw: (time.sleep(0.05), ("idle", 0.05))[1]
+    fake_daemon.session._real_time_scale = 0.1  # TW-02: replay_skill no longer calls session.wait_settle() directly
     send_request(fake_daemon.sock_path, "play_start", {"name": "pause-loop", "cycles": 50})
     assert _wait_until(lambda: fake_daemon.loop_player.cycles_done >= 1)
 
@@ -263,7 +263,7 @@ def test_replay_and_play_verbs_are_rejected_during_an_active_attach(fake_daemon,
 def test_do_is_rejected_with_a_distinct_error_while_auto_loop_is_running(fake_daemon, fake_ledger_entries):
     skills.save_skill("lock-check-loop", [_STEP], source="recorded", start_anchor=_ANCHOR_SECTOR)
     fake_daemon.session._screen = _ANCHOR_SCREEN  # TW-03: matches the skill's start_anchor above
-    fake_daemon.session.wait_settle = lambda **kw: (time.sleep(0.05), ("idle", 0.05))[1]
+    fake_daemon.session._real_time_scale = 0.1  # TW-02: replay_skill no longer calls session.wait_settle() directly
     send_request(fake_daemon.sock_path, "play_start", {"name": "lock-check-loop", "cycles": 50})
     assert _wait_until(lambda: fake_daemon.loop_player.cycles_done >= 1)
 

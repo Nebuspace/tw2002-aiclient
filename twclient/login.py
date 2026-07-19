@@ -32,6 +32,25 @@ inserted at an unexpected point) never desync it. This is also what makes
 `ensure` (B4) idempotent for free -- calling it against a screen already
 mid-flow just resumes the unmet suffix.
 
+**TW-02 (send/settle race):** every send this automaton makes now goes
+through `settle.send_and_confirm` rather than a bare `session.send()` +
+idle-only `wait_settle()` -- an autonomous login run must never treat a
+screen that only transiently looked settled mid-transition as proof its
+last answer landed. `confirm_prompt` is the classification's own
+`wait_hint` from `_decide()` when one is meaningful (currently always
+`None` here -- every login step re-classifies the CURRENT screen from
+scratch on the next iteration rather than pinning to a specific next
+prompt, per the reactive/order-independent design above), so in
+practice every send leans on `send_and_confirm`'s idle+stability-
+recheck fallback. A failed confirm does NOT abort outright (a slow
+multi-part screen -- an ANSI banner, a welcome splash -- can legitimately
+take a beat to finish rendering): it's folded into the SAME
+`stagnant_rounds`/`last_signature` budget an unrecognized screen already
+uses, so a persistently-failing confirm still raises `LoginError`
+(`automaton_send_unconfirmed`) within the existing retry ceiling rather
+than spinning forever, while a merely-slow one gets a few more loop
+iterations to resolve on its own.
+
 The password NEVER touches this module's return values, exceptions, or
 any log call -- every send of it goes through `session.send(..., secret=True)`,
 which routes to `TranscriptLogger.log_redacted()` (twclient/connection.py),
@@ -39,6 +58,8 @@ the same redaction path already proven for `tw do --secret`.
 """
 
 import re
+
+from .settle import send_and_confirm
 
 _MAX_STEPS = 60
 _STEP_SETTLE_TIMEOUT_S = 12.0
@@ -125,8 +146,28 @@ def run_login(session, profile, get_password, save_password, target="main_comman
             continue
 
         send_text, secret, wait_hint = action
-        session.send(send_text, enter=True, secret=secret)
-        session.wait_settle(wait_prompt=wait_hint, timeout=_STEP_SETTLE_TIMEOUT_S)
+        _reason, _elapsed, confirmed = send_and_confirm(
+            session, send_text, confirm_prompt=wait_hint, enter=True, secret=secret, timeout_s=_STEP_SETTLE_TIMEOUT_S
+        )
+        if not confirmed:
+            # TW-02: the send went out, but the resulting screen was
+            # never positively confirmed -- never assume it landed as
+            # intended. Folded into the SAME stagnation budget an
+            # unrecognized screen already uses (not a fresh reset, and
+            # not an immediate abort): a genuinely transient settle-race
+            # (a slow multi-part redraw) gets a few more loop iterations
+            # to resolve itself via re-classification on the next pass,
+            # while a persistently failing confirm still hits the
+            # existing retry ceiling instead of spinning forever.
+            signature = (cls, prompt, "unconfirmed")
+            stagnant_rounds = stagnant_rounds + 1 if signature == last_signature else 0
+            last_signature = signature
+            if stagnant_rounds >= _STAGNANT_ROUNDS_LIMIT:
+                raise LoginError(
+                    f"automaton_send_unconfirmed:classification={cls!r}:prompt={prompt!r}:reason={_reason}"
+                )
+            continue
+
         stagnant_rounds = 0
         last_signature = None
 

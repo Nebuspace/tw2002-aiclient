@@ -48,6 +48,7 @@ import time
 from pathlib import Path
 
 from .classify import classify_screen
+from .settle import send_and_confirm
 from .state_parser import parse_state
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -78,13 +79,16 @@ class ReplayDivergence(Exception):
     step's actual post-classification didn't match what was recorded)
     from `"start_anchor_mismatch"` (TW-03: the CURRENT sector doesn't
     match -- or can't even be read off -- the skill's `start_anchor`,
-    checked before step 0 of every cycle, `step_i=-1`). Both are a live
-    "reality disagreed with the recording" surprise, so both reuse this
-    one halt-on-surprise exception rather than a second type -- a
-    `play_skill()` run already treats any `ReplayDivergence` as
-    `"halted": "surprise"` with the trace-so-far intact, which is
-    exactly the right outcome for a loop that quietly wandered off its
-    anchor sector mid-run, not just one that got a bad first launch."""
+    checked before step 0 of every cycle, `step_i=-1`) and
+    `"confirm_failed"` (TW-02: `settle.send_and_confirm` never
+    positively confirmed the step's send -- see `replay_skill`'s
+    docstring). All three are a live "reality disagreed with the
+    recording" surprise, so all three reuse this one halt-on-surprise
+    exception rather than a separate type per case -- a `play_skill()`
+    run already treats any `ReplayDivergence` as `"halted": "surprise"`
+    with the trace-so-far intact, which is exactly the right outcome
+    for a loop that quietly wandered off its anchor sector mid-run, not
+    just one that got a bad first launch."""
 
     def __init__(self, step_i, expected, actual, screen, results, reason="post_class"):
         self.step_i = step_i
@@ -273,12 +277,28 @@ def _check_start_anchor(session, skill, force):
 
 
 def replay_skill(session, skill, params=None, step_timeout=8.0, force=False, ledger=None, session_id=None):
-    """Re-issue `skill`'s steps via `session.send` + `wait_settle`,
-    validating each step's actual post-classification against what was
+    """Re-issue `skill`'s steps via `settle.send_and_confirm`, validating
+    each step's actual post-classification against what was
     recorded/mined. Returns the list of per-step results on full success;
     raises ReplayDivergence (carrying every result up to and including
     the failing step) the instant reality disagrees -- never presses on
     past a surprise (DESIGN-v2 11b).
+
+    **TW-02 (send/settle race, -75-alignment/false-halt class):** a bare
+    `session.send()` + idle-only settle can hand back a screen that only
+    LOOKS settled mid-transition (settle.py's own module docstring), and
+    an autonomous replay/play/AUTO-LOOP run must never fire the NEXT
+    step's send against a screen it hasn't positively confirmed is the
+    one it thinks it's looking at. Every step's send now goes through
+    `settle.send_and_confirm(confirm_prompt=step.get("wait_prompt"))` --
+    the step's own recorded `wait_prompt` when the caller supplied one at
+    record time, else `None` (send_and_confirm's own idle+stability-
+    recheck fallback, since most recorded steps have no explicit
+    wait_prompt at all). `confirmed=False` is itself a surprise: raised
+    as `ReplayDivergence(reason="confirm_failed")` BEFORE ever attempting
+    to classify the (still possibly unsettled) screen against
+    `expected_post_class` -- classifying an unconfirmed screen would
+    just relocate the same false-halt/false-pass risk one line down.
 
     Before the first send, validates the CURRENT sector against the
     skill's `start_anchor` (TW-03) -- see `_check_start_anchor()`;
@@ -287,23 +307,37 @@ def replay_skill(session, skill, params=None, step_timeout=8.0, force=False, led
     is given (a `ledger.LedgerWriter`-shaped object), every step's send
     also produces one Trace-Ledger row via `ledger.record_do(...,
     actor="trainer", session_id=session_id)` -- recorded even for a step
-    that turns out to be the surprising one, since that's the send most
-    worth having a ledger row for. Both default to `None`/no-op so an
-    unwired caller keeps behaving exactly as before."""
+    that turns out to be the surprising one (including an unconfirmed
+    send), since that's the send most worth having a ledger row for.
+    Both default to `None`/no-op so an unwired caller keeps behaving
+    exactly as before."""
     _check_start_anchor(session, skill, force)
     results = []
     for i, step in enumerate(skill["steps"]):
         input_text = _apply_params(step["input"], params)
+        expected = step.get("expected_post_class")
         pre_text = session.render_text(session.render())
-        session.send(input_text, enter=True, secret=False)
-        reason, elapsed = session.wait_settle(wait_prompt=step.get("wait_prompt"), timeout=step_timeout)
+        settled_reason, _elapsed, confirmed = send_and_confirm(
+            session, input_text, confirm_prompt=step.get("wait_prompt"), enter=True, secret=False, timeout_s=step_timeout
+        )
         rows = session.render()
         text = session.render_text(rows)
         prompt = rows[-1].strip() if rows else ""
+
+        if not confirmed:
+            actual = f"unconfirmed_settle:{settled_reason}"
+            results.append(
+                {"step": i, "input": input_text, "expected": expected, "actual": actual, "settled_reason": settled_reason}
+            )
+            if ledger is not None:
+                ledger.record_do(pre_text, input_text, False, text, actual, actor="trainer", session_id=session_id)
+            raise ReplayDivergence(
+                step_i=i, expected=expected, actual=actual, screen=rows, results=results, reason="confirm_failed"
+            )
+
         actual = classify_screen(text, prompt)
-        expected = step.get("expected_post_class")
         results.append(
-            {"step": i, "input": input_text, "expected": expected, "actual": actual, "settled_reason": reason}
+            {"step": i, "input": input_text, "expected": expected, "actual": actual, "settled_reason": settled_reason}
         )
         if ledger is not None:
             ledger.record_do(pre_text, input_text, False, text, actual, actor="trainer", session_id=session_id)

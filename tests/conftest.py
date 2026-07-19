@@ -18,6 +18,7 @@ import shutil
 import socket
 import tempfile
 import threading
+import time
 from pathlib import Path
 
 import pytest
@@ -75,9 +76,34 @@ class FakeAttachSession:
     """Enough surface for protocol.dispatch()'s do/send/status/screen
     verbs AND daemon.py's raw keystroke forwarding -- no network. Mirrors
     tests/test_watch.py's FakeSession + tests/test_login.py's
-    FakeLoginSession conventions."""
+    FakeLoginSession conventions.
 
-    def __init__(self, initial_screen="Command [TL=00:00:00]:[1234] (?=Help)? :"):
+    TW-02: `send()`/`send_raw()`'s rx_count/last_rx bump is DEFERRED to
+    the next `sleep()` call rather than applied synchronously -- matching
+    the async-response convention `test_settle.py`'s `StagedSession` (and
+    this codebase's other fakes, post-TW-02) already use. A synchronous
+    same-call bump is already reflected in the `start_rx_count`
+    `settle.wait_for_settle` captures at its OWN call start, so it would
+    never observe a NEW arrival and would always resolve via "timeout" --
+    load-bearing now that `skills.replay_skill` (driven here via
+    `LoopPlayer`, see test_protocol_trainer_panel.py) routes its send
+    through `settle.send_and_confirm`'s idle-based confirm path.
+
+    `real_time_scale` (default 0.0, no real cost -- unchanged behavior
+    for every test that doesn't set it) lets a LoopPlayer-driven test
+    reintroduce controllable REAL wall-clock pacing per cycle: previously
+    those tests monkeypatched `session.wait_settle` directly
+    (`time.sleep(0.05)` per settle call) to keep a background AUTO-LOOP
+    thread running slowly enough for the test's own real-time polling to
+    observe/interrupt mid-run state -- but replay_skill no longer calls
+    `session.wait_settle()` at all (TW-02), so that monkeypatch is now
+    inert. Setting `_real_time_scale` scales every `sleep(seconds)` call
+    by a REAL `time.sleep(seconds * scale)`, so a full confirm (roughly
+    debounce_ms + stability_pause_s of fake-clock time) costs about
+    `scale * 0.5` real seconds -- `0.1` reproduces the original ~50ms
+    per cycle."""
+
+    def __init__(self, initial_screen="Command [TL=00:00:00]:[1234] (?=Help)? :", real_time_scale=0.0):
         self._screen = initial_screen
         self.conn = _FakeConn()
         self.host = "fake-host"
@@ -94,6 +120,8 @@ class FakeAttachSession:
         self.last_sent = None
         self.last_sent_ts = None
         self._cursor = {"x": 0, "y": 0}
+        self._pending_advance = False
+        self._real_time_scale = real_time_scale
 
     def render(self):
         return self._screen.split("\n")
@@ -114,24 +142,28 @@ class FakeAttachSession:
         return self.t
 
     def sleep(self, seconds):
+        if self._real_time_scale:
+            time.sleep(seconds * self._real_time_scale)
         self.t += seconds
+        if self._pending_advance:
+            self._pending_advance = False
+            self.rx_count += 1
+            self.last_rx = self.t
 
     def wait_settle(self, wait_prompt=None, timeout=8.0, debounce_ms=350):
         return "idle", 0.0
 
     def send(self, text, enter=True, secret=False):
         self.sent.append((text, enter, secret))
-        self.rx_count += 1
-        self.last_rx = self.t
         self.last_sent = "<redacted>" if secret else text
         self.last_sent_ts = self.t
+        self._pending_advance = True
 
     def send_raw(self, data: bytes):
         self.raw_sent.append(data)
-        self.rx_count += 1
-        self.last_rx = self.t
         self.last_sent = data.decode("latin-1", errors="replace")
         self.last_sent_ts = self.t
+        self._pending_advance = True
 
     def record_history(self, verb, args, prompt, classification, settled_reason):
         self.history.append((verb, args, prompt, classification, settled_reason))

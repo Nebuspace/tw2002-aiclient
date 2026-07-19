@@ -37,6 +37,22 @@ screen fails the match outright instead of masquerading as "settled" --
 plus one extra quiet beat re-check after the match to reject a
 transient flicker. A caller that never proceeds past `confirmed=False`
 structurally cannot answer a prompt it hasn't verified it's looking at.
+
+**TW-02 (replay/play/login):** these callers often don't have a single
+known target regex the way haggle.py's small closed set of dialogue
+shapes does -- a recorded skill step or login sub-step frequently has
+no explicit `wait_prompt` at all. `send_and_confirm(confirm_prompt=
+None)` covers this: it confirms via a genuinely settled idle instead of
+a regex match, still applying the same stability re-check (no MORE
+bytes arrive during one more quiet beat) so a mid-transition screen
+can't masquerade as settled just because it happened to go quiet for
+one debounce window. Separately, when a `confirm_prompt` IS given, a
+bare debounce-satisfying "idle" with no match is no longer treated as
+a stop condition on its own -- it's discarded and re-polled against the
+remaining timeout budget, since a slow multi-stage transition (the
+hub-warp-animation shape) can go quiet just long enough to satisfy
+`debounce_ms` mid-transition, well before the true target text ever
+arrives.
 """
 
 import re
@@ -115,7 +131,7 @@ def wait_until_settled(session, debounce_ms=350, timeout_s=8.0, poll_interval_s=
 def send_and_confirm(
     session,
     text,
-    confirm_prompt,
+    confirm_prompt=None,
     enter=True,
     secret=False,
     timeout_s=8.0,
@@ -124,24 +140,82 @@ def send_and_confirm(
     stability_pause_s=_CONFIRM_STABILITY_PAUSE_S,
 ):
     """Send `text` (with EXPLICIT `enter` -- the caller decides per
-    prompt-shape, not a blanket default) then require the settled screen
-    to POSITIVELY match `confirm_prompt` -- never idle-only. Returns
-    `(reason, elapsed, confirmed)`. `confirmed=False` (target prompt
-    never matched within `timeout_s`, or matched only transiently and
-    was gone on the stability re-check) means a desync the caller MUST
-    treat as unsafe to proceed past -- never guess/answer a prompt it
-    can't positively identify (see module docstring)."""
-    session.send(text, enter=enter, secret=secret)
-    reason, elapsed = wait_for_settle(
-        session, wait_prompt=confirm_prompt, debounce_ms=debounce_ms, timeout_s=timeout_s, poll_interval_s=poll_interval_s
-    )
-    if reason != "prompt":
-        return reason, elapsed, False
+    prompt-shape, not a blanket default) then require the settle to be
+    POSITIVELY confirmed -- never idle-only. Returns `(reason, elapsed,
+    confirmed)`. `confirmed=False` means a desync the caller MUST treat
+    as unsafe to proceed past -- never guess/answer a prompt it can't
+    positively identify (see module docstring).
 
-    # Stability re-check: a transitional screen can flash confirm_prompt
-    # in one frame and be gone a beat later -- confirmed only if it's
-    # STILL there after one more quiet moment.
+    Two confirmation modes, chosen by whether the caller has a specific
+    target shape in hand:
+
+    - `confirm_prompt` given (haggle.py's usage: a small closed set of
+      known next-screen shapes) -- the settled screen must POSITIVELY
+      match it. A bare debounce-satisfying "idle" with NO match is
+      **not** treated as proof nothing more is coming: a slow
+      multi-stage transition (the hub-warp-animation shape) can go
+      quiet just long enough to satisfy `debounce_ms` mid-transition,
+      well before the true target text ever arrives -- so an
+      unmatched "idle" is discarded and re-polled against the
+      remaining `timeout_s` budget instead of failing fast. Only a
+      genuine `confirm_prompt` match, or the whole budget running out,
+      ends the wait. Once matched, one more `stability_pause_s` beat
+      re-checks it's STILL there (a transitional screen can flash the
+      match in one frame and be gone the next).
+    - `confirm_prompt=None` (TW-02: replay/play/login's common case --
+      a recorded step or login sub-step with no caller-supplied target
+      regex to confirm against) -- confirms via a genuinely settled
+      idle instead: `wait_for_settle`'s own "idle" reason, followed by
+      the SAME stability re-check applied to byte arrivals rather than
+      a regex match (no MORE bytes arrive during one more
+      `stability_pause_s` beat). This is a strictly weaker guarantee
+      than a positive shape match (it can't tell WHICH screen arrived,
+      only that one did and stayed put) -- callers that can name a
+      target shape should always prefer passing `confirm_prompt`."""
+    session.send(text, enter=enter, secret=secret)
+    start = session.clock()
+
+    if confirm_prompt is not None:
+        while True:
+            remaining = timeout_s - (session.clock() - start)
+            if remaining <= 0:
+                return "timeout", session.clock() - start, False
+            reason, _elapsed = wait_for_settle(
+                session,
+                wait_prompt=confirm_prompt,
+                debounce_ms=debounce_ms,
+                timeout_s=remaining,
+                poll_interval_s=poll_interval_s,
+            )
+            if reason == "prompt":
+                break
+            if reason == "timeout":
+                return "timeout", session.clock() - start, False
+            # reason == "idle" with no confirm_prompt match yet -- a lull,
+            # not proof of a genuine stop; keep polling against what's
+            # left of the budget rather than failing fast.
+        elapsed = session.clock() - start
+
+        # Stability re-check: a transitional screen can flash confirm_prompt
+        # in one frame and be gone a beat later -- confirmed only if it's
+        # STILL there after one more quiet moment.
+        session.sleep(stability_pause_s)
+        if not re.search(confirm_prompt, session.render_text()):
+            return "prompt", elapsed, False
+        return "prompt", elapsed, True
+
+    # No specific target shape known -- confirm via a genuinely stable
+    # idle settle instead: reason must be "idle" (never a bare "prompt",
+    # since none was given), then re-verify no MORE bytes arrive during
+    # one more stability pause (the same hub-warp-animation fix, applied
+    # to byte arrivals instead of a regex match).
+    reason, elapsed = wait_for_settle(
+        session, wait_prompt=None, debounce_ms=debounce_ms, timeout_s=timeout_s, poll_interval_s=poll_interval_s
+    )
+    if reason != "idle":
+        return reason, elapsed, False
+    rx_at_settle = session.rx_count
     session.sleep(stability_pause_s)
-    if not re.search(confirm_prompt, session.render_text()):
-        return "prompt", elapsed, False
-    return "prompt", elapsed, True
+    if session.rx_count != rx_at_settle:
+        return reason, elapsed, False
+    return reason, elapsed, True

@@ -1,8 +1,9 @@
 """LoopPlayer (twclient/loop_player.py) -- the AUTO-LOOP background
 driver. No sockets, no curses, no real network -- a FakeLoopSession
-mirrors replay_skill()'s actual usage (send/wait_settle/render/
-render_text), and a FakeWatchHub just captures broadcast_extra() calls
-into a list so progress-event shape/ordering is directly assertable.
+mirrors replay_skill()'s actual usage (the full settle-detection
+protocol surface send_and_confirm needs, plus render/render_text), and a
+FakeWatchHub just captures broadcast_extra() calls into a list so
+progress-event shape/ordering is directly assertable.
 """
 
 import time
@@ -23,19 +24,50 @@ class FakeLoopSession:
     50-cycle "slow loop" (used to give a test room to call stop()/
     pause() mid-run) would blast through every cycle in well under a
     millisecond and finish before the test thread ever gets scheduled
-    again."""
+    again.
+
+    TW-02: `replay_skill()` now drives its send through
+    `settle.send_and_confirm`, which needs the full settle-detection
+    protocol surface (`clock()`/`rx_count`/`last_rx`/`sleep()`), not just
+    `send()`/`wait_settle()`/`render()`. LoopPlayer runs `replay_skill()`
+    inside a REAL background thread, so `sleep()` still needs to cost a
+    little REAL wall-clock time (so the test driver's own real-time
+    polling can interleave and observe/interrupt mid-run state) -- but
+    only ONCE per send, not on every debounce poll iteration
+    `send_and_confirm`'s idle-fallback makes internally: `send()` marks
+    an advance pending; the FIRST subsequent `sleep()` call pays the
+    real `cycle_delay_s` delay and resolves it (rx_count bumps, `last_rx`
+    lands on the FAKE clock `self.t`, mirroring `test_skills.py`'s
+    `FakeReplaySession`); every later `sleep()` call in that same settle
+    wait (debounce accumulation, the stability re-check) costs no
+    further real time, so one whole confirm still costs ~cycle_delay_s
+    of real time end to end, matching the original pacing."""
 
     def __init__(self, screen=_MAIN_COMMAND_SCREEN, cycle_delay_s=0.05):
         self._screen = screen
         self.cycle_delay_s = cycle_delay_s
         self.sent = []
+        self.t = 0.0
+        self.rx_count = 0
+        self.last_rx = 0.0
+        self._pending_advance = False
+
+    def clock(self):
+        return self.t
+
+    def sleep(self, seconds):
+        if self._pending_advance:
+            time.sleep(self.cycle_delay_s)
+            self._pending_advance = False
+            self.t += seconds
+            self.rx_count += 1
+            self.last_rx = self.t
+        else:
+            self.t += seconds
 
     def send(self, text, enter=True, secret=False):
         self.sent.append(text)
-
-    def wait_settle(self, wait_prompt=None, timeout=8.0):
-        time.sleep(self.cycle_delay_s)
-        return "idle", self.cycle_delay_s
+        self._pending_advance = True
 
     def render(self):
         return self._screen.split("\n")
