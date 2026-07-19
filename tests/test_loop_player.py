@@ -52,13 +52,39 @@ class FakeWatchHub:
         self.events.append(event)
 
 
-def _skill(n_steps=1):
+def _skill(n_steps=1, start_anchor=None):
     return {
         "name": "test-loop",
+        "start_anchor": start_anchor,
         "steps": [
             {"input": "d", "wait_prompt": None, "expected_post_class": "main_command"} for _ in range(n_steps)
         ],
     }
+
+
+class _RecordingLedger:
+    """Same fake as tests/test_skills.py's -- pins down the TW-04
+    interface contract skills.replay_skill()/LoopPlayer code against
+    (actor="trainer", session_id=...), since this worktree's ledger.py
+    doesn't have the real signature yet (a sibling lane's in-flight
+    change, proven at integration)."""
+
+    def __init__(self):
+        self.calls = []
+
+    def record_do(self, pre_text, input_text, secret, post_text, settled_class, capture=None, actor=None, session_id=None):
+        self.calls.append(
+            dict(
+                pre_text=pre_text,
+                input_text=input_text,
+                secret=secret,
+                post_text=post_text,
+                settled_class=settled_class,
+                capture=capture,
+                actor=actor,
+                session_id=session_id,
+            )
+        )
 
 
 def _wait_until(predicate, timeout=3.0):
@@ -76,7 +102,7 @@ def test_start_runs_all_cycles_and_broadcasts_progress_per_cycle():
     hub = FakeWatchHub()
     player = LoopPlayer(session, lock, hub)
 
-    player.start(_skill(), "test-loop", cycles=3)
+    player.start(_skill(), "test-loop", cycles=3, force=True)  # _skill() has no start_anchor (TW-03)
     assert _wait_until(lambda: not player.running)
 
     assert player.cycles_done == 3
@@ -96,7 +122,7 @@ def test_start_enters_auto_loop_mode_and_leaves_it_on_completion():
     hub = FakeWatchHub()
     player = LoopPlayer(session, lock, hub)
 
-    player.start(_skill(), "test-loop", cycles=1)
+    player.start(_skill(), "test-loop", cycles=1, force=True)  # _skill() has no start_anchor (TW-03)
     assert lock.mode == MODE_AUTO_LOOP  # observable mid-run
     assert _wait_until(lambda: not player.running)
     assert lock.mode == MODE_AI_PILOT  # released on completion
@@ -133,9 +159,9 @@ def test_start_refuses_when_already_running():
     hub = FakeWatchHub()
     player = LoopPlayer(session, lock, hub)
 
-    player.start(_skill(n_steps=1), "slow-loop", cycles=50)  # plenty of time to still be running
+    player.start(_skill(n_steps=1), "slow-loop", cycles=50, force=True)  # plenty of time to still be running
     with pytest.raises(LoopPlayerError):
-        player.start(_skill(), "test-loop", cycles=1)
+        player.start(_skill(), "test-loop", cycles=1, force=True)
     player.stop()
     _wait_until(lambda: not player.running)
 
@@ -146,7 +172,7 @@ def test_stop_halts_before_all_cycles_complete():
     hub = FakeWatchHub()
     player = LoopPlayer(session, lock, hub)
 
-    player.start(_skill(), "test-loop", cycles=50)
+    player.start(_skill(), "test-loop", cycles=50, force=True)  # _skill() has no start_anchor (TW-03)
     assert _wait_until(lambda: player.cycles_done >= 1)
     player.stop()
     assert _wait_until(lambda: not player.running)
@@ -162,7 +188,7 @@ def test_pause_blocks_progress_until_resumed():
     hub = FakeWatchHub()
     player = LoopPlayer(session, lock, hub)
 
-    player.start(_skill(), "test-loop", cycles=50)
+    player.start(_skill(), "test-loop", cycles=50, force=True)  # _skill() has no start_anchor (TW-03)
     assert _wait_until(lambda: player.cycles_done >= 1)
     player.pause()
     assert player.paused is True
@@ -214,10 +240,11 @@ def test_snapshot_reflects_live_progress():
     player = LoopPlayer(session, lock, hub)
 
     assert player.snapshot() == {
-        "running": False, "paused": False, "name": None, "cycle": 0, "cycles_total": 0, "last_result": None,
+        "running": False, "paused": False, "name": None, "cycle": 0, "cycles_total": 0,
+        "last_result": None, "last_error": None,
     }
 
-    player.start(_skill(), "test-loop", cycles=2)
+    player.start(_skill(), "test-loop", cycles=2, force=True)  # _skill() has no start_anchor (TW-03)
     assert _wait_until(lambda: not player.running)
     snap = player.snapshot()
     assert snap["running"] is False
@@ -225,6 +252,65 @@ def test_snapshot_reflects_live_progress():
     assert snap["cycle"] == 2
     assert snap["cycles_total"] == 2
     assert snap["last_result"] == "cycles_complete"
+
+
+# -- TW-03/TW-04: start_anchor guard + ledgering, threaded through LoopPlayer ------
+
+
+def test_start_refuses_unanchored_skill_without_force():
+    """A skill with no start_anchor (TW-03) must not silently replay --
+    the guard's SkillError is caught inside _run() (not left to escape
+    uncaught out of the background thread) and reported as a clean
+    last_result="refused"/last_error, with cycles_done staying 0 and
+    zero keystrokes sent; cleanup (leave_auto_loop) still runs."""
+    session = FakeLoopSession()
+    lock = ControlLock()
+    hub = FakeWatchHub()
+    player = LoopPlayer(session, lock, hub)
+
+    player.start(_skill(), "test-loop", cycles=3)  # force defaults to False
+    assert _wait_until(lambda: not player.running)
+    assert player.last_result == "refused"
+    assert "missing_start_anchor" in player.last_error
+    assert player.cycles_done == 0
+    assert session.sent == []
+    assert lock.mode == MODE_AI_PILOT  # cleanup still released the lock
+
+
+def test_start_halts_on_start_anchor_mismatch():
+    """FakeLoopSession's screen is static (send() doesn't change it), so
+    this fires at cycle 0 -- the genuinely mid-run "loop wandered off its
+    anchor sector" case is exercised end-to-end via the exact same
+    replay_skill() call in tests/test_skills.py's
+    test_play_skill_halts_on_start_anchor_mismatch_mid_run; LoopPlayer
+    just needs to funnel that ReplayDivergence into last_result the same
+    way it already does for a post-class surprise."""
+    session = FakeLoopSession(screen="Sector : 100\n" + _MAIN_COMMAND_SCREEN)
+    lock = ControlLock()
+    hub = FakeWatchHub()
+    player = LoopPlayer(session, lock, hub)
+
+    player.start(_skill(start_anchor=999), "test-loop", cycles=5)
+    assert _wait_until(lambda: not player.running)
+
+    assert player.last_result == "surprise"
+    assert player.cycles_done == 0
+    assert session.sent == []
+
+
+def test_start_forwards_ledger_and_session_id_to_every_send():
+    session = FakeLoopSession()
+    lock = ControlLock()
+    hub = FakeWatchHub()
+    ledger = _RecordingLedger()
+    player = LoopPlayer(session, lock, hub, ledger=ledger, session_id="s-loop-9")
+
+    player.start(_skill(n_steps=2), "test-loop", cycles=2, force=True)  # unanchored -- see force
+    assert _wait_until(lambda: not player.running)
+
+    assert len(ledger.calls) == 4  # 2 cycles * 2 steps
+    assert all(c["actor"] == "trainer" for c in ledger.calls)
+    assert all(c["session_id"] == "s-loop-9" for c in ledger.calls)
 
 
 def test_leave_auto_loop_from_a_finishing_thread_never_clobbers_a_later_mode():

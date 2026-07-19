@@ -13,6 +13,33 @@ with stop-loss/cycle-cap rails for unattended automated playback (11d).
 Skills live at `state/skills/<name>.json` (recorded/blessed) and
 `state/skills/_drafts/<name>.json` (miner proposals awaiting a human/AI
 to bless them by re-saving into the top-level directory).
+
+**TW-03 start-anchor (P0, near-miss-autopilot class):** a live incident
+replayed a skill verbatim from the wrong sector and warped the ship off
+into a stale sector -- a skill's recorded steps only make sense from the
+sector they were recorded in, and nothing was checking that before this.
+Every skill now carries a `start_anchor` (the sector `tw record start`
+was standing in, persisted by `SkillRecorder`/`save_skill`); replay/play
+validates the CURRENT sector against it before the first send of every
+cycle -- see `_check_start_anchor()`. A skill saved before this field
+existed has `start_anchor: null` and refuses to replay by default (never
+silently unanchored) unless the caller passes `force=True`.
+
+**TW-04 replay-ledgering (P0):** a second live incident -- a replayed
+buy that moved -9,047cr left NO Trace-Ledger row, because `replay_skill`
+sends via `session.send()` directly rather than through protocol.py's
+`do`/`send` dispatch (the only place that currently calls
+`ledger.record_do()`). `replay_skill`/`play_skill` now take an optional
+`ledger` (a `ledger.LedgerWriter`-shaped object) and `session_id`, and
+record one ledger row per step with `actor="trainer"` -- see
+`knowledge/architecture/autonomy-loop.md` for the `actor`/`session_id`
+schema this is wired against. Deliberately NOT tagged with `capture=`:
+that field means "the currently-open `tw record` window" elsewhere in
+this codebase, and reusing it here would silently inflate
+`protocol.py`'s demo-profit sum (which assumes `capture`-tagged entries
+belong to the ONE original recording) every time a recorded skill gets
+replayed. `ledger`/`session_id` default to `None` (no-op) so callers
+that don't wire them up yet keep working unchanged.
 """
 
 import json
@@ -21,6 +48,7 @@ import time
 from pathlib import Path
 
 from .classify import classify_screen
+from .state_parser import parse_state
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 SKILLS_DIR = PROJECT_ROOT / "state" / "skills"
@@ -44,14 +72,27 @@ class ReplayDivergence(Exception):
     (or landed on a screen classify.py can't even name) -- raised rather
     than pressed through, per DESIGN-v2 11b/11d's halt-on-surprise
     requirement. Carries every step result up to and including the
-    failing one."""
+    failing one.
 
-    def __init__(self, step_i, expected, actual, screen, results):
+    `reason` distinguishes the ordinary "post_class" divergence (a
+    step's actual post-classification didn't match what was recorded)
+    from `"start_anchor_mismatch"` (TW-03: the CURRENT sector doesn't
+    match -- or can't even be read off -- the skill's `start_anchor`,
+    checked before step 0 of every cycle, `step_i=-1`). Both are a live
+    "reality disagreed with the recording" surprise, so both reuse this
+    one halt-on-surprise exception rather than a second type -- a
+    `play_skill()` run already treats any `ReplayDivergence` as
+    `"halted": "surprise"` with the trace-so-far intact, which is
+    exactly the right outcome for a loop that quietly wandered off its
+    anchor sector mid-run, not just one that got a bad first launch."""
+
+    def __init__(self, step_i, expected, actual, screen, results, reason="post_class"):
         self.step_i = step_i
         self.expected = expected
         self.actual = actual
         self.screen = screen
         self.results = results
+        self.reason = reason
         super().__init__(f"step {step_i}: expected {expected!r}, got {actual!r}")
 
     def as_dict(self):
@@ -61,6 +102,7 @@ class ReplayDivergence(Exception):
             "actual": self.actual,
             "screen": self.screen,
             "results": self.results,
+            "reason": self.reason,
         }
 
 
@@ -80,13 +122,19 @@ def skill_path(name, draft=False, skills_dir=None, drafts_dir=None):
     return Path(base) / f"{_safe_name(name)}.json"
 
 
-def save_skill(name, steps, source="recorded", mined_stats=None, draft=False, skills_dir=None, drafts_dir=None):
+def save_skill(name, steps, source="recorded", mined_stats=None, start_anchor=None, draft=False, skills_dir=None, drafts_dir=None):
     path = skill_path(name, draft=draft, skills_dir=skills_dir, drafts_dir=drafts_dir)
     path.parent.mkdir(parents=True, exist_ok=True)
     doc = {
         "name": name,
         "created_ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "source": source,  # "recorded" (tw record) or "mined" (miner.py draft proposal)
+        # TW-03: the sector this skill was recorded/mined FROM, or None
+        # for a skill saved before this field existed -- always present
+        # in the schema (never an absent key) so `.get("start_anchor")`
+        # means the same thing whether the file predates this field or
+        # was saved with no anchor available. See _check_start_anchor().
+        "start_anchor": start_anchor,
         "steps": steps,
     }
     if mined_stats is not None:
@@ -119,16 +167,25 @@ class SkillRecorder:
         self.skills_dir = skills_dir
         self.active_name = None
         self._steps = []
+        self._start_anchor = None
 
     @property
     def recording(self):
         return self.active_name is not None
 
-    def start(self, name=None):
+    def start(self, name=None, start_anchor=None):
+        """`start_anchor` (TW-03): the sector the caller was standing in
+        when this capture began, if known (e.g. `parse_state(current
+        text).get("sector")` -- this class stays session-agnostic, so
+        computing that value is the caller's job, same division of
+        labor as `record_step()` already has for wait_prompt/
+        expected_post_class). Persisted verbatim into the saved skill by
+        `stop()` below; `None` if the caller doesn't have/pass one."""
         if self.recording:
             raise SkillError(f"already_recording:{self.active_name}")
         self.active_name = name or auto_capture_name()
         self._steps = []
+        self._start_anchor = start_anchor
         return self.active_name
 
     def record_step(self, input_text, wait_prompt, expected_post_class, secret=False):
@@ -146,10 +203,11 @@ class SkillRecorder:
     def stop(self):
         if not self.recording:
             return None
-        name, steps = self.active_name, self._steps
+        name, steps, start_anchor = self.active_name, self._steps, self._start_anchor
         self.active_name = None
         self._steps = []
-        path = save_skill(name, steps, source="recorded", skills_dir=self.skills_dir)
+        self._start_anchor = None
+        path = save_skill(name, steps, source="recorded", start_anchor=start_anchor, skills_dir=self.skills_dir)
         return {"name": name, "steps": len(steps), "path": str(path)}
 
 
@@ -165,16 +223,78 @@ def _apply_params(input_text, params):
         return input_text
 
 
-def replay_skill(session, skill, params=None, step_timeout=8.0):
+def _check_start_anchor(session, skill, force):
+    """TW-03 safety guard, called before the first send of every
+    `replay_skill()` invocation (so `play_skill()`'s per-cycle loop gets
+    it re-checked every cycle for free -- see ReplayDivergence's
+    docstring for why that's the right behavior for a loop, not just a
+    one-off replay).
+
+    Two distinct failure shapes, on purpose:
+    - `start_anchor` missing entirely (a skill saved before this field
+      existed) -- there is nothing to check reality against, so this is
+      a skill-level config problem, not an in-flight surprise: it raises
+      plain `SkillError` (an "invalid artifact for safe replay" error,
+      same family as a corrupt/missing skill file) and fires identically
+      on every cycle, so it's always caught at cycle 0 -- never mid-loop
+      only. The ONLY way past it is the caller explicitly passing
+      `force=True`; this NEVER silently replays unanchored.
+    - `start_anchor` present but the CURRENT sector doesn't match it (or
+      can't even be read off the current screen at all) -- a live
+      "reality disagrees with the recording" surprise, so it raises
+      `ReplayDivergence` (reason="start_anchor_mismatch") exactly like a
+      diverged post-classification. `force` does NOT bypass this case --
+      forcing past a *detected* mismatch is the exact near-miss this
+      guard exists to prevent; `force` only ever waives the
+      "nothing-to-check-against" legacy case above.
+    """
+    start_anchor = skill.get("start_anchor")
+    if start_anchor is None:
+        if force:
+            return
+        name = skill.get("name", "?")
+        raise SkillError(
+            f"missing_start_anchor:{name}: recorded before start-anchor tracking existed, "
+            "so the current sector can't be safety-checked against it -- re-record this "
+            "skill, or replay with force=True to proceed unanchored at your own risk"
+        )
+    rows = session.render()
+    text = session.render_text(rows)
+    current_sector = parse_state(text).get("sector")
+    if current_sector != start_anchor:
+        raise ReplayDivergence(
+            step_i=-1,
+            expected=f"sector:{start_anchor}",
+            actual=f"sector:{current_sector}" if current_sector is not None else "sector:unknown",
+            screen=rows,
+            results=[],
+            reason="start_anchor_mismatch",
+        )
+
+
+def replay_skill(session, skill, params=None, step_timeout=8.0, force=False, ledger=None, session_id=None):
     """Re-issue `skill`'s steps via `session.send` + `wait_settle`,
     validating each step's actual post-classification against what was
     recorded/mined. Returns the list of per-step results on full success;
     raises ReplayDivergence (carrying every result up to and including
     the failing step) the instant reality disagrees -- never presses on
-    past a surprise (DESIGN-v2 11b)."""
+    past a surprise (DESIGN-v2 11b).
+
+    Before the first send, validates the CURRENT sector against the
+    skill's `start_anchor` (TW-03) -- see `_check_start_anchor()`;
+    `force=True` waives ONLY a missing/legacy anchor, never a detected
+    mismatch. `ledger`/`session_id` (TW-04) are optional: when `ledger`
+    is given (a `ledger.LedgerWriter`-shaped object), every step's send
+    also produces one Trace-Ledger row via `ledger.record_do(...,
+    actor="trainer", session_id=session_id)` -- recorded even for a step
+    that turns out to be the surprising one, since that's the send most
+    worth having a ledger row for. Both default to `None`/no-op so an
+    unwired caller keeps behaving exactly as before."""
+    _check_start_anchor(session, skill, force)
     results = []
     for i, step in enumerate(skill["steps"]):
         input_text = _apply_params(step["input"], params)
+        pre_text = session.render_text(session.render())
         session.send(input_text, enter=True, secret=False)
         reason, elapsed = session.wait_settle(wait_prompt=step.get("wait_prompt"), timeout=step_timeout)
         rows = session.render()
@@ -185,20 +305,28 @@ def replay_skill(session, skill, params=None, step_timeout=8.0):
         results.append(
             {"step": i, "input": input_text, "expected": expected, "actual": actual, "settled_reason": reason}
         )
+        if ledger is not None:
+            ledger.record_do(pre_text, input_text, False, text, actual, actor="trainer", session_id=session_id)
         surprised = actual == "unknown" or (expected is not None and actual != expected)
         if surprised:
             raise ReplayDivergence(step_i=i, expected=expected, actual=actual, screen=rows, results=results)
     return results
 
 
-def play_skill(session, skill, cycles, floor=None, params=None, step_timeout=8.0):
+def play_skill(session, skill, cycles, floor=None, params=None, step_timeout=8.0, force=False, ledger=None, session_id=None):
     """Loop `replay_skill()` for automated unattended playback (11d),
     bounded by two independent rails: `cycles` (hard cap, itself capped
     at `_MAX_PLAY_CYCLES`) and `floor` (stop-loss -- checked BEFORE every
     cycle so a losing run never digs itself deeper). `tw watch`/
     `tw spectate` already give a human a live view of whatever this is
     doing -- no separate streaming path needed here; this stays a single
-    bounded dispatch, the same shape as `ensure`'s login automaton."""
+    bounded dispatch, the same shape as `ensure`'s login automaton.
+
+    `force`/`ledger`/`session_id` are forwarded unchanged into every
+    cycle's `replay_skill()` call (see its docstring for TW-03/TW-04) --
+    a start-anchor mismatch on cycle 2+ (the loop wandered off where it
+    started) surfaces exactly like any other mid-run surprise, via the
+    existing `except ReplayDivergence` below."""
     if cycles > _MAX_PLAY_CYCLES:
         raise SkillError(f"cycles_exceeds_cap:{cycles}>{_MAX_PLAY_CYCLES}")
     trace = []
@@ -212,7 +340,15 @@ def play_skill(session, skill, cycles, floor=None, params=None, step_timeout=8.0
             if credits is not None and credits <= floor:
                 return {"halted": "floor_reached", "cycles_completed": cycle, "credits": credits, "trace": trace}
         try:
-            results = replay_skill(session, skill, params=params, step_timeout=step_timeout)
+            results = replay_skill(
+                session,
+                skill,
+                params=params,
+                step_timeout=step_timeout,
+                force=force,
+                ledger=ledger,
+                session_id=session_id,
+            )
         except ReplayDivergence as e:
             return {"halted": "surprise", "cycles_completed": cycle, "divergence": e.as_dict(), "trace": trace}
         trace.append({"cycle": cycle, "steps": results})
