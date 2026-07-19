@@ -1,0 +1,4 @@
+# Dev/test only — not a runtime dependency of twclient.
+# Install:  .venv/bin/pip install -r requirements-dev.txt
+pytest>=8.0
+pytest-xdist>=3.5
