@@ -15,7 +15,9 @@ from twclient.spectate_layout import (
     VIEWPORT_H,
     VIEWPORT_W,
     compose_dashboard,
+    compose_decisions_placeholder,
     compose_hud_cells,
+    compose_live_metrics,
     compose_port_panel,
     format_freshness,
     format_idle_age,
@@ -35,9 +37,12 @@ from twclient.spectate_layout import (
     compose_control_strip,
     format_loops_library_header,
     format_loops_library_row,
+    format_longest_chain_banner,
     format_mode_badge,
     format_play_progress_or_hints,
     format_tx_readout,
+    longest_chain_steps,
+    sort_trade_loop_chains,
 )
 
 
@@ -208,17 +213,20 @@ def test_frame_layout_below_floor_is_too_small():
 
 
 def test_frame_layout_no_border_tier_below_viewport_width():
+    # Terminal 24x80 → inner 22x78 < VIEWPORT_W → no_border
     regions = frame_layout(24, 80)
     assert regions["mode"] == "no_border"
     assert regions["viewport"]["border"] is False
     assert regions["gutter"] is None
+    assert regions["outer"] is not None
     # never stretched past the native grid, even unbordered
     assert regions["viewport"]["game_w"] <= GAME_W
     assert regions["viewport"]["game_h"] <= GAME_H
 
 
 def test_frame_layout_minimal_tier_borders_and_centers_with_no_gutter():
-    regions = frame_layout(30, 90)
+    # +2 outer pad so INNER cols == 90
+    regions = frame_layout(32, 92)
     assert regions["mode"] == "minimal"
     vp = regions["viewport"]
     assert vp["border"] is True
@@ -227,62 +235,75 @@ def test_frame_layout_minimal_tier_borders_and_centers_with_no_gutter():
     assert vp["game_w"] == GAME_W  # native, zero-inset, never stretched
     assert vp["game_h"] == GAME_H
     assert regions["gutter"] is None
-    # centered: equal-ish margin on both sides
-    left_margin = vp["x"]
-    right_margin = 90 - (vp["x"] + vp["w"])
+    assert regions["decisions"] is None
+    # centered inside the outer inset: equal-ish margin on both sides
+    left_margin = vp["x"] - 1  # subtract outer pad
+    right_margin = 92 - 1 - (vp["x"] + vp["w"])
     assert abs(left_margin - right_margin) <= 1
 
 
 def test_frame_layout_right_gutter_tier_left_anchors_viewport():
-    regions = frame_layout(30, RIGHT_GUTTER_MIN_COLS)
+    # Terminal size = content floor + outer pad (1 per side)
+    regions = frame_layout(36, RIGHT_GUTTER_MIN_COLS + 2)
     assert regions["mode"] == "right_gutter"
     vp = regions["viewport"]
     assert vp["border"] is True
-    assert vp["x"] == 0
+    assert vp["x"] == 1  # left-anchored inside outer inset
     gutter = regions["gutter"]
     assert gutter is not None
     # viewport and gutter never overlap
     assert gutter["x"] >= vp["x"] + vp["w"]
+    # Decisions (when present) shares the leftover band with LOG, not the gutter
+    if regions["decisions"] is not None and regions["ticker"] is not None:
+        assert regions["decisions"]["y"] == regions["ticker"]["y"]
+        assert regions["decisions"]["x"] >= regions["ticker"]["x"] + regions["ticker"]["w"]
+        assert gutter["h"] == vp["h"]  # gutter keeps full viewport height
 
 
 def test_frame_layout_full_tier_centers_viewport_with_right_gutter():
-    regions = frame_layout(40, FULL_GUTTER_MIN_COLS)
+    regions = frame_layout(42, FULL_GUTTER_MIN_COLS + 2)
     assert regions["mode"] == "full"
     vp = regions["viewport"]
     gutter = regions["gutter"]
     assert gutter is not None
     assert gutter["x"] >= vp["x"] + vp["w"]
-    assert vp["x"] > 0  # centered, not left-anchored like right_gutter
+    assert vp["x"] > 1  # centered inside inset, not left-anchored like right_gutter
+    assert regions["outer"] is not None
+    assert regions["outer"]["w"] == FULL_GUTTER_MIN_COLS + 2
 
 
 def test_frame_layout_viewport_never_stretched_beyond_native_grid():
     for cols in (60, 82, 90, 108, 132, 200):
-        regions = frame_layout(50, cols)
+        regions = frame_layout(52, cols + 2)
+        if regions["mode"] == "too_small":
+            continue
         vp = regions["viewport"]
         assert vp["game_w"] <= GAME_W
         assert vp["game_h"] <= GAME_H
 
 
-def test_frame_layout_status_bar_always_present_and_pinned_to_last_row():
-    for lines, cols in ((20, 60), (24, 80), (30, 90), (40, 140)):
+def test_frame_layout_status_bar_always_present_and_pinned_to_last_inner_row():
+    for lines, cols in ((22, 62), (26, 82), (32, 92), (42, 142)):
         regions = frame_layout(lines, cols)
-        assert regions["status"]["y"] == lines - 1
+        assert regions["status"]["y"] == lines - 2  # above outer bottom border
         assert regions["status"]["h"] == 1
+        assert regions["outer"] is not None
 
 
 def test_frame_layout_drops_header_before_border_under_height_pressure():
     """Exactly enough body height for a bordered viewport and nothing
     else -- the header is the first thing to go (plan: "height ladder
     degrades by dropping header/border lines")."""
-    lines = VIEWPORT_H + 1  # body_lines == VIEWPORT_H exactly, status eats the +1
-    regions = frame_layout(lines, MINIMAL_HEADER_MIN_COLS)
+    # inner: status(1) + VIEWPORT_H → terminal +2 outer
+    lines = VIEWPORT_H + 1 + 2
+    regions = frame_layout(lines, MINIMAL_HEADER_MIN_COLS + 2)
     assert regions["viewport"]["border"] is True
     assert regions["header"] is None
 
 
 def test_frame_layout_adds_header_once_there_is_a_spare_line():
-    lines = VIEWPORT_H + 2
-    regions = frame_layout(lines, MINIMAL_HEADER_MIN_COLS)
+    lines = VIEWPORT_H + 2 + 2
+    regions = frame_layout(lines, MINIMAL_HEADER_MIN_COLS + 2)
     assert regions["viewport"]["border"] is True
     assert regions["header"] is not None
 
@@ -290,47 +311,80 @@ def test_frame_layout_adds_header_once_there_is_a_spare_line():
 def test_frame_layout_too_small_has_no_control_region():
     regions = frame_layout(19, 200)
     assert regions["control"] is None
+    assert regions["outer"] is None
 
 
 def test_frame_layout_control_strip_sits_directly_above_status_when_present():
-    regions = frame_layout(40, 140)  # plenty of leftover body height
+    regions = frame_layout(42, 142)  # plenty of leftover body height
     control = regions["control"]
     assert control is not None
     assert control["h"] == 1
     assert control["y"] == regions["status"]["y"] - 1
-    assert control["w"] == 140
+    assert control["w"] == 140  # inner cols
 
 
 def test_frame_layout_control_strip_takes_priority_over_ticker_for_scarce_leftover():
     """Exactly one spare body row (not enough for BOTH control and a
-    2-row-minimum ticker) -- the control strip wins (WO: "the control
+    titled LOG box) -- the control strip wins (WO: "the control
     strip is the panel's primary interactive surface; the ticker is a
     nice-to-have event log"), and the ticker is dropped entirely rather
     than the two overlapping."""
-    lines = VIEWPORT_H + 2  # body_lines - viewport_h - header(1) == 0 leftover after header...
     # Use a size with exactly 1 leftover row AFTER the header is placed.
-    lines = VIEWPORT_H + 3  # body_lines=VIEWPORT_H+2, header eats 1, leftover=1
-    regions = frame_layout(lines, MINIMAL_HEADER_MIN_COLS)
+    # inner leftover=1 → lines = VIEWPORT_H + 3 + 2 outer
+    lines = VIEWPORT_H + 3 + 2
+    regions = frame_layout(lines, MINIMAL_HEADER_MIN_COLS + 2)
     assert regions["header"] is not None
     assert regions["control"] is not None
     assert regions["ticker"] is None
 
 
 def test_frame_layout_ticker_still_appears_with_enough_leftover_for_both():
-    lines = VIEWPORT_H + 6
-    regions = frame_layout(lines, MINIMAL_HEADER_MIN_COLS)
+    lines = VIEWPORT_H + 6 + 2
+    regions = frame_layout(lines, MINIMAL_HEADER_MIN_COLS + 2)
     assert regions["control"] is not None
     assert regions["ticker"] is not None
+    assert regions["ticker"].get("title") == "LOG"
     # control sits between the ticker and the status bar, never overlapping either.
     assert regions["ticker"]["y"] + regions["ticker"]["h"] <= regions["control"]["y"]
     assert regions["control"]["y"] + regions["control"]["h"] <= regions["status"]["y"]
 
 
 def test_frame_layout_is_a_pure_function_of_its_inputs():
-    a = frame_layout(40, 140)
-    b = frame_layout(40, 140)
+    a = frame_layout(42, 142)
+    b = frame_layout(42, 142)
     assert a == b  # same inputs -> structurally equal dict every time
 
+
+def test_frame_layout_tw08_regions_do_not_overlap_at_full_tier():
+    """TW-08 geometry proof: outer / viewport / gutter / decisions /
+    log / control / status rects are pairwise non-overlapping (outer
+    is the wrap; inners must not collide with each other)."""
+    regions = frame_layout(42, FULL_GUTTER_MIN_COLS + 2)
+    assert regions["mode"] == "full"
+    assert regions["outer"] is not None
+    assert regions["decisions"] is not None
+    assert regions["ticker"] is not None
+
+    def _rect(r):
+        return (r["y"], r["x"], r["y"] + r["h"], r["x"] + r["w"])
+
+    def _overlap(a, b):
+        ay0, ax0, ay1, ax1 = a
+        by0, bx0, by1, bx1 = b
+        return not (ay1 <= by0 or by1 <= ay0 or ax1 <= bx0 or bx1 <= ax0)
+
+    panes = [
+        regions["viewport"], regions["gutter"], regions["decisions"],
+        regions["ticker"], regions["control"], regions["status"],
+    ]
+    if regions["header"] is not None:
+        panes.insert(0, regions["header"])
+    rects = [_rect(p) for p in panes]
+    for i in range(len(rects)):
+        for j in range(i + 1, len(rects)):
+            assert not _overlap(rects[i], rects[j]), (
+                f"overlap between panes {i} and {j}: {rects[i]} vs {rects[j]}"
+            )
 
 # -- the persistent HUD accumulator (the operator's directive) --------------
 
@@ -445,6 +499,35 @@ def test_compose_hud_cells_turns_cell_shows_comma_formatted_count():
     cells = compose_hud_cells(tracked, now=1.0)
     turns_cell = [c for c in cells if c["label"] == "TURNS"][0]
     assert turns_cell["value"] == "29,990"
+
+
+def test_compose_live_metrics_placeholder_shape():
+    rows = compose_live_metrics({})
+    assert [r["label"] for r in rows] == [
+        "STATIONS", "PLANETS", "FIGHTERS", "MINES", "PROBLEMS",
+    ]
+    assert all(r["value"] == "0" for r in rows)
+
+
+def test_compose_live_metrics_reads_tracked_tuple_values():
+    tracked = {
+        "stations_found": (12, 1.0),
+        "planets_found": (3, 1.0),
+        "fighters_seen": (40, 1.0),
+        "mines_seen": (2, 1.0),
+        "problem_sectors": (1, 1.0),
+    }
+    by_label = {r["label"]: r["value"] for r in compose_live_metrics(tracked)}
+    assert by_label == {
+        "STATIONS": "12", "PLANETS": "3", "FIGHTERS": "40",
+        "MINES": "2", "PROBLEMS": "1",
+    }
+
+
+def test_compose_decisions_placeholder_is_nonempty():
+    lines = compose_decisions_placeholder()
+    assert len(lines) >= 1
+    assert any("TW-13" in line or "coach" in line.lower() for line in lines)
 
 
 # -- tick_down_timer / format_idle_age / status_semantic --------------------
@@ -774,30 +857,36 @@ def test_compose_control_strip_shows_hints_when_idle():
     assert strip["tx"] == "→ -"
 
 
-# -- Trainer Control Panel: Learned-Loops Library overlay -------------------
+# -- Trainer Control Panel: Trade Loop Chains overlay (TW-07) ---------------
 
 
-def test_format_loops_library_row_mined_shows_profit_per_turn():
-    loop = {"name": "mined-loop", "source": "mined", "profit_per_turn": 12.5, "steps": 3, "draft": True}
-    row = format_loops_library_row(loop, selected=False, cols=80)
+def test_format_loops_library_row_mined_shows_three_metrics():
+    loop = {
+        "name": "mined-loop", "source": "mined",
+        "profit_per_turn": 12.5, "profit_per_action": 40.0,
+        "steps": 3, "draft": True,
+    }
+    row = format_loops_library_row(loop, selected=False, cols=100)
     assert "mined-loop" in row
-    assert "+12.5cr/turn" in row
+    assert "+12.5/t" in row
+    assert "+40" in row
     assert "DRAFT" in row
-    assert "3 steps" in row
+    assert "3 hops" in row
 
 
-def test_format_loops_library_row_recorded_shows_demo_profit():
+def test_format_loops_library_row_recorded_shows_overall_and_exec():
     loop = {"name": "recorded-loop", "source": "recorded", "demo_profit": 230, "steps": 5, "draft": False}
-    row = format_loops_library_row(loop, selected=False, cols=80)
-    assert "+230cr demo" in row
+    row = format_loops_library_row(loop, selected=False, cols=100)
+    assert "+230" in row
+    assert "5 hops" in row
     assert "DRAFT" not in row
 
 
 def test_format_loops_library_row_no_profit_data_shows_dash():
     loop = {"name": "unknown-loop", "source": "recorded", "steps": 1, "draft": False}
-    row = format_loops_library_row(loop, selected=False, cols=80)
-    assert row.rstrip().endswith("1 steps")
-    assert " - " in row or row.count("-") >= 1
+    row = format_loops_library_row(loop, selected=False, cols=100)
+    assert "1 hops" in row
+    assert row.count("-") >= 1
 
 
 def test_format_loops_library_row_selected_gets_a_marker():
@@ -808,12 +897,43 @@ def test_format_loops_library_row_selected_gets_a_marker():
     assert not unselected_row.startswith("▸")
 
 
+def test_format_loops_library_row_longest_gets_star():
+    loop = {"name": "long", "source": "recorded", "demo_profit": 1, "steps": 9, "draft": False}
+    row = format_loops_library_row(loop, selected=False, cols=80, longest=True)
+    assert row.startswith("★")
+
+
 def test_format_loops_library_row_truncates_to_cols():
     loop = {"name": "a-very-long-loop-name-that-would-overflow", "source": "recorded", "demo_profit": 1, "steps": 1, "draft": False}
     row = format_loops_library_row(loop, selected=False, cols=20)
     assert len(row) <= 19
 
 
-def test_format_loops_library_header_shows_count():
+def test_format_loops_library_header_shows_count_and_tw07_title():
     header = format_loops_library_header(3)
-    assert "3 loop(s)" in header
+    assert "TRADE LOOP CHAINS" in header
+    assert "3 chain(s)" in header
+    assert "Enter arms" in header
+    assert "Enter run" not in header
+
+
+def test_sort_trade_loop_chains_profit_desc():
+    loops = [
+        {"name": "low", "source": "recorded", "demo_profit": 10, "steps": 2},
+        {"name": "high", "source": "recorded", "demo_profit": 500, "steps": 1},
+        {"name": "mid", "source": "mined", "profit_per_turn": 50.0, "steps": 4},
+    ]
+    sorted_loops = sort_trade_loop_chains(loops)
+    assert [loop["name"] for loop in sorted_loops] == ["high", "mid", "low"]
+
+
+def test_longest_chain_steps_and_banner():
+    loops = [
+        {"name": "short", "steps": 2, "demo_profit": 100},
+        {"name": "long", "steps": 7, "demo_profit": 1},
+    ]
+    assert longest_chain_steps(loops) == 7
+    banner = format_longest_chain_banner(loops[1], cols=60)
+    assert "LONGEST CHAIN" in banner
+    assert "long" in banner
+    assert "7 hops" in banner

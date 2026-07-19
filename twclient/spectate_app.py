@@ -40,15 +40,20 @@ from .spectate_layout import (
     TICKER_MAX,
     compose_control_strip,
     compose_dashboard,
+    compose_decisions_placeholder,
     compose_hud_cells,
+    compose_live_metrics,
     compose_port_panel,
     format_idle_age,
     format_loops_library_header,
     format_loops_library_row,
+    format_longest_chain_banner,
     format_ticker_entry,
     frame_layout,
     is_recent,
+    longest_chain_steps,
     render_plain,
+    sort_trade_loop_chains,
     status_semantic,
     update_tracked_stats,
 )
@@ -91,11 +96,23 @@ _PYTE_TO_CURSES_COLOR = {
 # handler is cheap insurance. Just sets a flag; the redraw itself happens
 # on the main curses thread inside _run()'s loop (curses isn't
 # signal-handler-safe to call into directly).
+#
+# TW-15: Ctrl-C under curses.wrapper()'s cbreak()/ISIG rarely reaches
+# getch() as byte 3 -- the tty driver raises SIGINT first. Mirror the
+# SIGWINCH pattern: catch SIGINT, set a flag, detach on the next loop
+# tick. Keep the ch==3 branch as a belt-and-suspenders for raw-mode /
+# harnesses that DO deliver ^C as a literal byte.
 _resize_pending = threading.Event()
+_detach_pending = threading.Event()
 
 
 def _on_sigwinch(signum, frame):
     _resize_pending.set()
+
+
+def _on_sigint(signum, frame):
+    """TW-15: real-terminal Ctrl-C arrives as SIGINT, not getch()==3."""
+    _detach_pending.set()
 
 
 class SpectateClient:
@@ -277,19 +294,33 @@ def _draw_pane(win, lines, max_lines, max_cols):
     win.noutrefresh()
 
 
-def _draw_ticker(win, lines, max_lines, max_cols, flash_active, palette):
-    """Like _draw_pane(), but the NEWEST row (motion B3: newest-ticker-
-    row flash-on-arrival) gets a brief highlighted attribute while
-    `flash_active` -- an at-a-glance "something just landed" cue on the
-    event log, distinct from the HUD's per-field flashes above."""
+def _draw_ticker(win, region, lines, flash_active, palette, glyphs):
+    """Titled LOG box (TW-08) — bordered + " LOG " title. Newest row
+    (motion B3) still flash-on-arrival inside the content inset."""
     win.erase()
-    visible = lines[:max_lines]
+    h, w = region["h"], region["w"]
+    accent_attr = palette.attr_for("cyan", "default", False)
+    _draw_box(
+        win, 0, 0, h, w,
+        glyphs["hud_tl"], glyphs["hud_tr"], glyphs["hud_bl"], glyphs["hud_br"],
+        glyphs["hud_h"], glyphs["hud_v"], accent_attr,
+    )
+    try:
+        win.addnstr(0, 2, " LOG ", max(0, w - 4), accent_attr)
+    except curses.error:
+        pass
+    content_h = max(0, h - 2)
+    content_w = max(0, w - 2)
+    visible = lines[-content_h:] if content_h else []
     flash_attr = palette.attr_for("brown", "default", True)
     last_idx = len(visible) - 1
     for i, line in enumerate(visible):
         attr = flash_attr if (flash_active and i == last_idx) else curses.A_NORMAL
+        # Prefer the LINE TAIL when truncating — TX / settle suffixes live
+        # at the end and are what operators need to glance at.
+        shown = line if len(line) <= content_w else line[-content_w:]
         try:
-            win.addnstr(i, 0, line, max_cols - 1, attr)
+            win.addnstr(1 + i, 1, shown, content_w, attr)
         except curses.error:
             pass
     win.noutrefresh()
@@ -518,7 +549,7 @@ def _draw_viewport(win, region, screen_lines, color_rows, glyphs, palette, borde
     win.noutrefresh()
 
 
-def _draw_hud_gutter(win, region, cells, port_rows, glyphs, palette, muted_attr):
+def _draw_hud_gutter(win, region, cells, metric_rows, port_rows, glyphs, palette, muted_attr):
     """The persistent stats HUD (CREDITS/SECTOR/TURNS/CARGO/PROFIT),
     each cell showing its last-known value plus a `freshness` age
     string, dimmed (muted_attr) once stale. Unlike the viewport, this
@@ -533,9 +564,10 @@ def _draw_hud_gutter(win, region, cells, port_rows, glyphs, palette, muted_attr)
     value line so the label+value pair stays a stable, easy-to-scan
     column across all 5 cells.
 
-    `port_rows` (compose_port_panel()) render as extra lines AFTER the
-    5 stat cells, only while a port is actually the current screen --
-    the gutter has plenty of spare height in the tiers that show it."""
+    TW-08 appends a compact live-metrics array (Stations/Planets/
+    Fighters/Mines/Problems) after the ship cells — structure now,
+    values later via TW-06. `port_rows` still render after that when a
+    port is the current screen."""
     win.erase()
     h, w = region["h"], region["w"]
     accent_attr = palette.attr_for("cyan", "default", False)
@@ -574,6 +606,22 @@ def _draw_hud_gutter(win, region, cells, port_rows, glyphs, palette, muted_attr)
                     pass
         row += 3  # 2 content lines + 1 blank spacer between cells
 
+    if metric_rows and row < h - 1:
+        try:
+            win.addnstr(row, col, "METRICS", max(0, w - col - 1), curses.A_BOLD)
+        except curses.error:
+            pass
+        row += 1
+        for mrow in metric_rows:
+            if row >= h - 1:
+                break
+            text = f"{mrow['label']:<8}{mrow['value']}"
+            try:
+                win.addnstr(row, col, text, max(0, w - col - 1), curses.A_NORMAL)
+            except curses.error:
+                pass
+            row += 1
+
     if port_rows and row < h - 1:
         try:
             win.addnstr(row, col, "PORT", max(0, w - col - 1), curses.A_BOLD)
@@ -590,6 +638,48 @@ def _draw_hud_gutter(win, region, cells, port_rows, glyphs, palette, muted_attr)
             except curses.error:
                 pass
             row += 1
+    win.noutrefresh()
+
+
+def _draw_outer_frame(win, region, glyphs, palette):
+    """TW-08: one double-line box around the whole client — the visual
+    unifier that makes the cockpit read as a single composition."""
+    win.erase()
+    h, w = region["h"], region["w"]
+    attr = palette.attr_for("cyan", "default", True)
+    _draw_box(
+        win, 0, 0, h, w,
+        glyphs["viewport_tl"], glyphs["viewport_tr"], glyphs["viewport_bl"], glyphs["viewport_br"],
+        glyphs["viewport_h"], glyphs["viewport_v"], attr,
+    )
+    win.noutrefresh()
+
+
+def _draw_decisions(win, region, lines, glyphs, palette):
+    """TW-08 Decisions box — titled + bordered; placeholder lines until
+    the coaching engine (TW-13) feeds real recommendations."""
+    win.erase()
+    h, w = region["h"], region["w"]
+    accent_attr = palette.attr_for("cyan", "default", False)
+    _draw_box(
+        win, 0, 0, h, w,
+        glyphs["hud_tl"], glyphs["hud_tr"], glyphs["hud_bl"], glyphs["hud_br"],
+        glyphs["hud_h"], glyphs["hud_v"], accent_attr,
+    )
+    try:
+        win.addnstr(0, 2, " DECISIONS ", max(0, w - 4), accent_attr)
+    except curses.error:
+        pass
+    col = 2
+    row = 1
+    for line in lines:
+        if row >= h - 1:
+            break
+        try:
+            win.addnstr(row, col, line, max(0, w - col - 1), curses.A_DIM if hasattr(curses, "A_DIM") else curses.A_NORMAL)
+        except curses.error:
+            pass
+        row += 1
     win.noutrefresh()
 
 
@@ -656,59 +746,102 @@ def _draw_control_strip(win, region, strip, palette):
     win.noutrefresh()
 
 
-def _draw_loops_library(stdscr, lines, cols, loops, selected, pending_cycles, confirm, palette):
-    """The Learned-Loops Library overlay (`L`) -- a full-screen modal
-    listing every saved skill, drawn directly on stdscr (not a
-    persistent pane like the dashboard's regions: it appears/disappears
-    entirely on a keypress, so there's no reflow-tier geometry to cache
-    between frames) while `library_open` is true, REPLACING the normal
-    dashboard for as long as it's open. Esc/L (handled by the caller)
-    closes it without side effects; Enter no longer starts the loop
-    directly -- it ARMS a y/N confirm gate (see _handle_key) since this
-    fires a live-money action (play_start), and a passive-looking panel
-    must never one-keystroke-launch one (the operator lost ~9k credits to exactly
-    that). `confirm` is the chosen loop dict while that gate is up
-    (replaces the "cycles armed" line with the confirm prompt), else
-    None for the normal list."""
+def _draw_loops_library(stdscr, lines, cols, loops, selected, pending_cycles, confirm, palette, glyphs):
+    """Trade Loop Chains overlay (`L`, TW-07) -- bordered centered modal
+    listing every saved skill as a chain, drawn on stdscr (not a
+    persistent pane: it appears/disappears on a keypress) while
+    `library_open` is true, REPLACING the dashboard. Enter ARMS a y/N
+    confirm gate (see _handle_key); Esc/L closes without side effects.
+    Client-sorted by profit desc; longest-hop chain is celebrated as a
+    ★ centerpiece above the list."""
     stdscr.erase()
     accent_attr = palette.attr_for("cyan", "default", False)
-    header = format_loops_library_header(len(loops))
+    celebrate_attr = palette.attr_for("brown", "default", True) | curses.A_BOLD
+
+    # Inset modal with a titled HUD-style border.
+    box_h = max(8, lines - 2)
+    box_w = max(40, min(cols - 2, cols - 4 if cols > 44 else cols - 2))
+    box_y = max(0, (lines - box_h) // 2)
+    box_x = max(0, (cols - box_w) // 2)
+    _draw_box(
+        stdscr, box_y, box_x, box_h, box_w,
+        glyphs["hud_tl"], glyphs["hud_tr"], glyphs["hud_bl"], glyphs["hud_br"],
+        glyphs["hud_h"], glyphs["hud_v"], accent_attr,
+    )
+    title = " TRADE LOOP CHAINS "
     try:
-        stdscr.addnstr(0, 0, header, max(1, cols - 1), curses.A_BOLD)
+        stdscr.addnstr(box_y, box_x + 2, title, max(0, box_w - 4), accent_attr | curses.A_BOLD)
     except curses.error:
         pass
+
+    # Content area inside the border.
+    inner_x = box_x + 2
+    inner_w = max(1, box_w - 4)
+    row_y = box_y + 1
+
+    header = format_loops_library_header(len(loops))
+    try:
+        stdscr.addnstr(row_y, inner_x, header, inner_w, curses.A_BOLD)
+    except curses.error:
+        pass
+    row_y += 1
+
     if confirm is not None:
         prompt = f'Play "{confirm["name"]}" x{pending_cycles} LIVE? y/N'
-        # "danger" tone (the SAME red/bold vocabulary status/gauge cells
-        # use for a real hazard, not a cosmetic accent) + reverse-video so
-        # this reads as unmissable, not just another list row.
         confirm_attr = _tone_attr("danger", palette, curses.A_BOLD) | curses.A_REVERSE
         try:
-            stdscr.addnstr(1, 0, prompt, max(1, cols - 1), confirm_attr)
+            stdscr.addnstr(row_y, inner_x, prompt, inner_w, confirm_attr)
         except curses.error:
             pass
     else:
         try:
-            stdscr.addnstr(1, 0, f"cycles armed: {pending_cycles}", max(1, cols - 1), accent_attr)
+            stdscr.addnstr(row_y, inner_x, f"cycles armed: {pending_cycles}", inner_w, accent_attr)
         except curses.error:
             pass
+    row_y += 1
+
     if not loops:
         try:
-            stdscr.addnstr(3, 0, "(no learned loops yet -- `tw record`/`tw mine` first)", max(1, cols - 1))
+            stdscr.addnstr(
+                row_y + 1, inner_x,
+                "(no trade loop chains yet -- `tw record`/`tw mine` first)",
+                inner_w,
+            )
         except curses.error:
             pass
     else:
-        for i, loop in enumerate(loops):
-            row = 3 + i
-            if row >= lines - 1:
-                break
-            is_selected = i == selected
-            row_text = format_loops_library_row(loop, is_selected, cols)
-            attr = curses.A_REVERSE if is_selected else curses.A_NORMAL
+        max_hops = longest_chain_steps(loops)
+        # Celebrate longest as a centerpiece banner (first chain that ties
+        # the max hop count — list itself stays profit-sorted).
+        longest_loop = next(
+            (loop for loop in loops if int(loop.get("steps") or 0) == max_hops),
+            None,
+        )
+        if longest_loop is not None and max_hops > 0:
+            banner = format_longest_chain_banner(longest_loop, inner_w + 1)
             try:
-                stdscr.addnstr(row, 0, row_text, max(1, cols - 1), attr)
+                stdscr.addnstr(row_y, inner_x, banner, inner_w, celebrate_attr)
             except curses.error:
                 pass
+            row_y += 1
+
+        for i, loop in enumerate(loops):
+            if row_y >= box_y + box_h - 1:
+                break
+            is_selected = i == selected
+            is_longest = int(loop.get("steps") or 0) == max_hops and max_hops > 0
+            row_text = format_loops_library_row(
+                loop, is_selected, inner_w + 1, longest=is_longest and not is_selected,
+            )
+            attr = curses.A_REVERSE if is_selected else (
+                celebrate_attr if is_longest else curses.A_NORMAL
+            )
+            try:
+                stdscr.addnstr(row_y, inner_x, row_text, inner_w, attr)
+            except curses.error:
+                pass
+            row_y += 1
+
     stdscr.noutrefresh()
     curses.doupdate()
 
@@ -720,7 +853,7 @@ def _build_windows(regions):
     curses.newwin() itself fail just drops that one pane rather than
     crashing the whole loop."""
     windows = {}
-    for key in ("header", "viewport", "gutter", "ticker", "control", "status"):
+    for key in ("outer", "header", "viewport", "gutter", "decisions", "ticker", "control", "status"):
         r = regions.get(key)
         if r is None:
             continue
@@ -774,7 +907,8 @@ def _handle_key(ch, sock_path, status, library):
 
     if ch in (ord("l"), ord("L")):
         resp = _send_control(sock_path, "list_skills")
-        library["loops"] = resp.get("loops", []) if resp.get("ok") else []
+        raw = resp.get("loops", []) if resp.get("ok") else []
+        library["loops"] = sort_trade_loop_chains(raw)
         library["selected"] = 0
         library["pending_cycles"] = 1
         library["confirm"] = None  # a fresh open must never inherit a stale confirm
@@ -814,7 +948,9 @@ def _run(stdscr, client, sock_path, pid_path, unicode_ok):
     stdscr.nodelay(True)
     stdscr.timeout(50)
     prev_handler = signal.signal(signal.SIGWINCH, _on_sigwinch)
+    prev_sigint = signal.signal(signal.SIGINT, _on_sigint)
     _resize_pending.clear()
+    _detach_pending.clear()
     palette = _ColorPairs()
     palette.init()
     glyphs = terminal.glyph_set(unicode_ok)
@@ -840,9 +976,13 @@ def _run(stdscr, client, sock_path, pid_path, unicode_ok):
 
     try:
         while True:
+            # TW-15: SIGINT-driven detach (real terminals) checked BEFORE
+            # getch so a mid-overlay ^C never waits on a quiet event/timeout.
+            if _detach_pending.is_set():
+                return
             ch = stdscr.getch()
-            if ch == 3:  # Ctrl-C -- ALWAYS detaches immediately, even mid-overlay
-                return  # (never let the library submode trap the user with no way out)
+            if ch == 3:  # rare: raw-mode / harness delivered literal ^C
+                return  # always detach, even mid-overlay
             library_was_open = library["open"]
             if _handle_key(ch, sock_path, status, library):
                 pass  # Trainer Control Panel consumed it -- fall through to redraw
@@ -915,7 +1055,7 @@ def _run(stdscr, client, sock_path, pid_path, unicode_ok):
                 # with current data, not a stale snapshot.
                 _draw_loops_library(
                     stdscr, lines, cols, library["loops"], library["selected"], library["pending_cycles"],
-                    library.get("confirm"), palette,
+                    library.get("confirm"), palette, glyphs,
                 )
                 continue
 
@@ -934,6 +1074,7 @@ def _run(stdscr, client, sock_path, pid_path, unicode_ok):
             )
     finally:
         signal.signal(signal.SIGWINCH, prev_handler)
+        signal.signal(signal.SIGINT, prev_sigint)
 
 
 def _render(windows, regions, event, tracked, ticker_history, status, palette, glyphs, now, anim_tick, idle_age, semantic, flash_active, got_content):
@@ -957,6 +1098,11 @@ def _render(windows, regions, event, tracked, ticker_history, status, palette, g
     # needs no loop-level state, just "is `now` still inside the window".
     classification_pulsing = is_recent(tracked.get("_classification_pulse_ts"), now, CLASSIFICATION_PULSE_DURATION_S)
     ticker_flashing = is_recent(tracked.get("_ticker_flash_ts"), now, TICKER_FLASH_DURATION_S)
+
+    # TW-08 outer frame -- draw first so the one wrapped box sits under
+    # every pane; inner windows overwrite their own regions on doupdate.
+    if regions.get("outer") is not None and "outer" in windows:
+        _draw_outer_frame(windows["outer"], regions["outer"], glyphs, palette)
 
     # The header is either a classification banner (event-driven, like
     # the viewport below) or, in the "minimal" tier with no side gutter,
@@ -986,14 +1132,23 @@ def _render(windows, regions, event, tracked, ticker_history, status, palette, g
     # couple of tick-driven redraws after the event that triggered it.
     if regions["ticker"] is not None and "ticker" in windows and (got_content or ticker_flashing):
         lines = [format_ticker_entry(e) for e in ticker_history[-TICKER_MAX:]]
-        _draw_ticker(windows["ticker"], lines, regions["ticker"]["h"], regions["ticker"]["w"], ticker_flashing, palette)
+        _draw_ticker(windows["ticker"], regions["ticker"], lines, ticker_flashing, palette, glyphs)
 
     # The HUD gutter and status bar redraw every call (they're both
     # small/cheap) since freshness/spinner/heartbeat/idle-age (and now
     # the tween/flash/sparkline/gauge) all tick locally between events.
     if regions["gutter"] is not None and "gutter" in windows:
         port_rows = compose_port_panel(event, bar_full=glyphs["bar_full"], bar_empty=glyphs["bar_empty"])
-        _draw_hud_gutter(windows["gutter"], regions["gutter"], _cells(), port_rows, glyphs, palette, muted_attr)
+        _draw_hud_gutter(
+            windows["gutter"], regions["gutter"], _cells(),
+            compose_live_metrics(tracked), port_rows, glyphs, palette, muted_attr,
+        )
+
+    if regions.get("decisions") is not None and "decisions" in windows:
+        _draw_decisions(
+            windows["decisions"], regions["decisions"],
+            compose_decisions_placeholder(), glyphs, palette,
+        )
 
     # Trainer Control Panel's control strip -- redraws every call (cheap,
     # same reasoning as the gutter/status above): the live AUTO-LOOP

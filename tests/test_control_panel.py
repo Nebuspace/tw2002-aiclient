@@ -29,7 +29,7 @@ from twclient.control_lock import MODE_AI_PILOT, MODE_AUTO_LOOP, MODE_SPECTATE
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 VENV_PYTHON = PROJECT_ROOT / ".venv" / "bin" / "python3"
-PTY_ROWS, PTY_COLS = 32, 110  # right_gutter tier -- control strip + full HUD room
+PTY_ROWS, PTY_COLS = 36, 112  # right_gutter + TW-08 outer pad — inner 34×110
 
 _BOOTSTRAP_TEMPLATE = """\
 import sys
