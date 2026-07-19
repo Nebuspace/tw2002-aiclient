@@ -38,9 +38,13 @@ Daily-driver verbs (full table in `README.md`):
 | `tw status [--json]` | Daemon alive? connected? idle-ms? current classification. Always safe/read-only — check this before `tw start`/`tw stop` if you're unsure whether a session is already live. |
 | `tw stop` | Best-effort in-game QUIT, disconnect, daemon exit. |
 
-Test: `.venv/bin/python -m pytest tests/` — network-free, fake-clock/fake-session driven, 390
-tests as of the last verification. No linter is configured for this project (no
-`pyproject.toml`/`ruff.toml`/`.flake8`) — don't invent a lint step.
+Test: `.venv/bin/python -m pytest tests/` — network-free, fake-clock/fake-session driven (500+
+tests). One caveat: exactly two tests in `tests/test_spectate_app.py` are gated on the REAL
+`run/twd.sock` existing (`skipif` otherwise) — with a live daemon up they attach a real read-only
+spectator and can flake on whatever the live screen shows. Running the suite next to a live
+session, `--deselect` those two (grep `SOCK_PATH.exists` in that file for the current node ids).
+No linter is configured for this project (no `pyproject.toml`/`ruff.toml`/`.flake8`) — don't
+invent a lint step.
 
 ## Architecture map (`twclient/`)
 
