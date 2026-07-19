@@ -101,8 +101,13 @@ def isolated_world_store(tmp_path, monkeypatch):
     return profiles_path
 
 
-ALICE_SCREEN = "Sector : 123\nCommand [TL=00753:0/0/0/850] (?=Help)? : "
-BOB_SCREEN = "Sector : 999\nCommand [TL=00753:0/0/0/850] (?=Help)? : "
+# A genuine sector-status shape (mack round-3: the world-model write-hook
+# now gates on `is_genuine_sector_status` -- a bare "Sector : N" with no
+# sibling status marker beneath it no longer qualifies, exactly the same
+# "Ports :" sibling convention this file's own combined-screen tests
+# below already use).
+ALICE_SCREEN = "Sector : 123\nPorts   : None\nCommand [TL=00753:0/0/0/850] (?=Help)? : "
+BOB_SCREEN = "Sector : 999\nPorts   : None\nCommand [TL=00753:0/0/0/850] (?=Help)? : "
 
 
 # -- (a) a `do` producing a screen with a sector persists it, queryable -----
@@ -291,6 +296,79 @@ def test_real_sector_wins_over_a_same_screen_phantom_chat_mention_end_to_end(iso
     assert real_sector is not None
     assert real_sector["port"]["commodities"][0]["name"] == "Fuel Ore"
     assert phantom_sector is None, "a same-screen chat mention must never create a phantom sector entry"
+
+
+# -- (c4) mack round-3's fresh-eyes follow-up: a line-isolated forgery ------
+# -- REPRODUCING the "own line" shape the round-2 fix requires, but --------
+# -- embedded in an otherwise-narrative block, was itself still ------------
+# -- exploitable -- closed via `is_genuine_sector_status`'s sibling --------
+# -- co-occurrence gate on the world-model WRITE path only ------------------
+
+
+def test_residual_line_isolated_forgery_in_a_narrative_block_is_not_ingested_end_to_end(
+    isolated_world_store,
+):
+    """Adapted from mack's probe_residual_line_anchor.py, driven through
+    the real dispatch path: the bot is REALLY in sector 100 at a real
+    port; a planet-comment/bulletin block later on the SAME screen
+    contains a line-isolated "Sector : 8675" with no sibling status
+    marker of its own. The phantom sector must never get a world-model
+    entry -- see `is_genuine_sector_status`'s docstring for why the
+    real, earlier "Ports :"-adjacent block does not vouch for it."""
+    _write_profiles(
+        isolated_world_store,
+        {"alice": {"host": "bat.example.com", "port": 23, "game_letter": "A", "handle": "Alice"}},
+    )
+    residual_screen = (
+        "Sector : 100\n"
+        "Ports   : Terran (Class 0)\n"
+        "\n"
+        "-- Planet comment --\n"
+        "Great deals waiting here!\n"
+        "Sector : 8675\n"
+        "Come check it out!\n"
+        "\n"
+        "Command [TL=00:12:34]:[1000] (?=Help) ?"
+    )
+    session = FakeSession("bat.example.com", residual_screen, auto_login_profile="alice")
+
+    resp = protocol.dispatch(session, "do", {"input": ""}, FakeServer())
+
+    assert resp["ok"] is True
+    # parse_state()'s own extraction is unaffected by this fix -- other
+    # consumers (skills.py/ledger.py/protocol.py's replay start-anchor)
+    # still need the last-match value exactly as before.
+    assert resp["state"]["sector"] == 8675
+    world_id = protocol._current_world_id(session)
+    assert world_model.get_sector(world_id, 8675) is None, (
+        "a line-isolated forged 'Sector : N' in a narrative block must never create a phantom "
+        "sector entry, even though it reproduces the round-2 fix's own-line requirement"
+    )
+
+
+def test_genuine_sector_screen_with_warps_sibling_persists_correctly(isolated_world_store):
+    """A plain, non-adversarial genuine sector-status screen using the
+    OTHER accepted sibling shape (`Warps to Sector(s) :`, not `Ports :`)
+    must still persist normally -- the new gate narrows the false-
+    positive surface, it doesn't disable ordinary genuine writes."""
+    _write_profiles(
+        isolated_world_store,
+        {"alice": {"host": "bat.example.com", "port": 23, "game_letter": "A", "handle": "Alice"}},
+    )
+    genuine_screen = (
+        "Sector : 4242\n"
+        "Warps to Sector(s) :  12 - 45 - 99\n"
+        "Command [TL=00:12:34]:[1000] (?=Help) ?"
+    )
+    session = FakeSession("bat.example.com", genuine_screen, auto_login_profile="alice")
+
+    resp = protocol.dispatch(session, "do", {"input": ""}, FakeServer())
+
+    assert resp["ok"] is True
+    world_id = protocol._current_world_id(session)
+    sector = world_model.get_sector(world_id, 4242)
+    assert sector is not None
+    assert sector["warps"] == [12, 45, 99]
 
 
 def test_chat_only_screen_with_no_genuine_status_line_persists_nothing(isolated_world_store):

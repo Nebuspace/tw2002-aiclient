@@ -13,7 +13,7 @@ from contextlib import contextmanager
 from . import world_identity, world_model
 from .classify import classify_screen
 from .control_lock import MODE_AI_PILOT, MODE_AUTO_LOOP, MODE_HUMAN, ControlModeConflict
-from .state_parser import parse_port_report, parse_state
+from .state_parser import is_genuine_sector_status, parse_port_report, parse_state
 
 
 def _control_lock_error(server):
@@ -185,10 +185,20 @@ def _write_world_model(session, text, prompt, parsed_state):
     paths, each independently guarded so a failure in one never blocks
     the other:
 
-    - The single-sector `parse_state()` mapping -- unconditional, gated
-      only on `parse_state` having found a real `sector` to attribute
-      the reading to (`write_from_state`'s own no-sector-means-no-write
-      guard).
+    - The single-sector `parse_state()` mapping -- gated on `parse_state`
+      having found a real `sector` to attribute the reading to
+      (`write_from_state`'s own no-sector-means-no-write guard) AND
+      (mack round-3 finding) on `is_genuine_sector_status` finding that
+      sector's line-start match co-occurring with a sibling status-block
+      marker (`Ports :` / `Warps to Sector(s) :`) immediately beneath
+      it. Round 2's line-anchored `_SECTOR_RE` only required the forged
+      "Sector : N" be alone on ITS line, not alone on the SCREEN -- a
+      line-isolated forgery inside an otherwise-narrative block (a
+      planet-comment/bulletin post) still won last-match-wins over an
+      earlier, genuine status line elsewhere on the same screen. See
+      `state_parser.is_genuine_sector_status`'s docstring for the full
+      provenance rationale (mirrors `classify._is_genuine_cim_report`'s
+      shape-not-text-match philosophy).
     - The batch `parse_port_report()` mapping -- mack Finding 2: this
       used to run unconditionally on every response text with zero
       provenance check, so any screen merely REPRODUCING a CIM report's
@@ -202,7 +212,8 @@ def _write_world_model(session, text, prompt, parsed_state):
     if wid is None:
         return
     try:
-        world_model.write_from_state(wid, parsed_state)
+        if is_genuine_sector_status(text):
+            world_model.write_from_state(wid, parsed_state)
     except Exception as exc:  # noqa: BLE001 -- a world-model write must never fail the response
         _log_world_model_failure(session, "write_from_state", exc)
 

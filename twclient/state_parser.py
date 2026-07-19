@@ -45,6 +45,14 @@ own line) before landing this."""
 import re
 
 _SECTOR_RE = re.compile(r"^\s*sector\s*:?\s*(\d+)", re.I | re.M)
+# The sibling status-block markers a genuine TW2002 sector-status display
+# prints directly beneath its own "Sector : N" line -- "Ports :" and
+# "Warps to Sector(s) :" are the two shapes already independently
+# established by this file's own tests/fixtures (see
+# `is_genuine_sector_status()` below for why co-occurrence with one of
+# these, not mere presence of "sector" text, is the trust signal; mirrors
+# `_WARPS_RE`'s same "Warps to Sector(s)" literal shape).
+_SECTOR_STATUS_SIBLING_RE = re.compile(r"^\s*(?:ports?\s*:|warps?\s+to\s+sector\(s\)\s*:)", re.I)
 # TL= is ambiguous across TWGS variants: the classic shape is a plain turn
 # count ("TL=00753:0/0/0/850"), but this live server's MBBS Gold build
 # uses TL= for a HH:MM:SS countdown ("TL=00:00:00") instead — matching
@@ -225,6 +233,69 @@ def parse_state(rendered_text: str) -> dict:
         state["port"] = {"commodities": commodities}
 
     return state
+
+
+# -- Sector-write provenance for the world-model (mack round-3 residual,
+# closed 2026-07-19) --------------------------------------------------------
+#
+# The round-2 fix above (`_SECTOR_RE`'s line-anchoring) closed the
+# mid-sentence forgery, but only required the forged "Sector : N" be
+# alone on ITS OWN line -- not alone on the SCREEN. A line-isolated
+# "Sector : 8675" embedded in an otherwise-narrative multi-line block
+# (a planet-comment/bulletin post, a forged multi-line "transmission")
+# still reproduces the exact shape `_SECTOR_RE` requires, and still wins
+# via `parse_state()`'s deliberate last-match-wins rule (needed for the
+# real stale-scrollback case) over an earlier, genuine status line --
+# mack's confirmed repro: a real "Sector : 100" / "Ports : ..." block,
+# followed later on the SAME screen by a planet-comment block whose only
+# line-isolated "Sector : 8675" has no other status content around it.
+#
+# Text-matching the sector line's own shape can't be the trust signal
+# here either (same lesson as `classify._is_genuine_cim_report`) --
+# what a forger embedding one line inside narrative prose has no reason
+# to also reproduce is the SIBLING status-block shape a genuine in-game
+# system status display always prints immediately beneath its own
+# "Sector : N" line: a "Ports :" label (every real sector-status
+# capture in this file's own tests/fixtures shows this), or a "Warps
+# to Sector(s) :" label (`_WARPS_RE`'s own literal shape). So:
+# `is_genuine_sector_status()` finds the LAST-match sector line (the
+# same one `parse_state()`'s `sector` field anchors to) and requires a
+# sibling status marker among the lines immediately following it, up to
+# the next blank line (the real status block is a contiguous run of
+# non-blank lines; a blank line is where it ends and the port-trade
+# table / narrative body begins) -- never checked against the whole
+# screen, since the genuine block earlier in the SAME screen must not
+# vouch for an unrelated, later, line-isolated forgery.
+#
+# This is deliberately scoped to the WORLD-MODEL WRITE path only (see
+# protocol.py's `_write_world_model`) -- `parse_state()`'s own `sector`
+# field, and every other consumer reading it directly (skills.py's
+# start_anchor, ledger.py, protocol.py's replay start-anchor), are
+# UNCHANGED: those need the sector off any normal settled game screen,
+# not just a screen carrying a full sibling status block.
+def is_genuine_sector_status(rendered_text: str) -> bool:
+    """True only when the sector `parse_state()` would anchor to (the
+    LAST line-start "Sector : N" match, same discipline as `parse_state`
+    itself) is immediately followed -- before the next blank line -- by
+    one of the sibling status-block markers (`Ports :` / `Warps to
+    Sector(s) :`) a genuine in-game sector display always carries. See
+    the section docstring above for the provenance rationale."""
+    lines = rendered_text.splitlines()
+
+    sector_idx = None
+    for i, line in enumerate(lines):
+        if _SECTOR_RE.match(line):
+            sector_idx = i  # keep overwriting -- last match wins, same as parse_state()'s sector field
+
+    if sector_idx is None:
+        return False
+
+    for line in lines[sector_idx + 1 :]:
+        if not line.strip():
+            break  # the contiguous status block ends at the first blank line
+        if _SECTOR_STATUS_SIBLING_RE.match(line):
+            return True
+    return False
 
 
 # -- Batch/CIM port-report parsing (world-model canon,

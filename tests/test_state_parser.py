@@ -2,7 +2,7 @@
 
 import os
 
-from twclient.state_parser import parse_haggle, parse_port_report, parse_state
+from twclient.state_parser import is_genuine_sector_status, parse_haggle, parse_port_report, parse_state
 
 FIXTURE_DIR = os.path.join(os.path.dirname(__file__), "fixtures")
 
@@ -87,6 +87,66 @@ def test_real_sector_wins_over_a_same_screen_phantom_chat_mention():
     state = parse_state(screen)
     assert state["sector"] == 100
     assert state["port"]["commodities"][0]["name"] == "Fuel Ore"
+
+
+# -- `is_genuine_sector_status()` (mack round-3 residual, closed 2026-07-19) -
+#
+# Round 2's line-anchoring only required the forged "Sector : N" be
+# alone on ITS line, not alone on the SCREEN -- a line-isolated forgery
+# inside an otherwise-narrative block still reproduces that shape and
+# still wins parse_state()'s last-match-wins rule. These tests cover the
+# new WORLD-MODEL-WRITE-ONLY provenance gate; parse_state()'s own
+# `sector` field is asserted UNCHANGED throughout (see module docstring
+# -- other consumers still need it).
+
+
+def test_genuine_status_line_with_ports_sibling_is_trusted():
+    screen = "Sector : 100\nPorts   : Terran (Class 0)\nCommand [TL=00:12:34]:[1000] (?=Help) ?"
+    assert is_genuine_sector_status(screen) is True
+
+
+def test_genuine_status_line_with_warps_to_sector_sibling_is_trusted():
+    screen = "Sector : 100\nWarps to Sector(s) :  12 - 45 - 99\nCommand [TL=00:12:34]:[1000] (?=Help) ?"
+    assert is_genuine_sector_status(screen) is True
+
+
+def test_bare_sector_line_with_no_sibling_at_all_is_not_trusted():
+    """A line-start "Sector : N" with nothing status-shaped immediately
+    beneath it (just the command prompt) is not enough on its own --
+    the genuine in-game display always carries at least one sibling
+    status field alongside it."""
+    screen = "Sector : 100\nCommand [TL=00:12:34]:[1000] (?=Help) ?"
+    assert is_genuine_sector_status(screen) is False
+
+
+def test_mid_sentence_phantom_with_no_line_start_match_is_not_trusted():
+    screen = 'Incoming transmission: "Meet me in Sector: 8675, come see!"\nCommand [TL=00:12:34]:[1000] (?=Help) ?'
+    assert is_genuine_sector_status(screen) is False
+
+
+def test_residual_line_isolated_forgery_in_a_narrative_block_is_not_trusted():
+    """mack round-3's confirmed repro (probe_residual_line_anchor.py):
+    a real "Sector : 100" / "Ports : ..." block, followed later on the
+    SAME screen by a planet-comment block whose only line-isolated
+    "Sector : 8675" has no sibling status marker around it at all. The
+    genuine block earlier in the screen must not vouch for this later,
+    unrelated, line-isolated forgery -- the gate is evaluated against
+    the LAST-match line specifically (the one parse_state()'s `sector`
+    field itself would report), not "does a sibling exist anywhere on
+    the screen"."""
+    screen = (
+        "Sector : 100\n"
+        "Ports   : Terran (Class 0)\n"
+        "\n"
+        "-- Planet comment --\n"
+        "Great deals waiting here!\n"
+        "Sector : 8675\n"
+        "Come check it out!\n"
+        "\n"
+        "Command [TL=00:12:34]:[1000] (?=Help) ?"
+    )
+    assert parse_state(screen)["sector"] == 8675  # unchanged -- parse_state()'s own extraction
+    assert is_genuine_sector_status(screen) is False
 
 
 def test_extracts_turns_left_from_command_prompt():
