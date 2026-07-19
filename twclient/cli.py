@@ -201,6 +201,24 @@ def cmd_log(args):
         print(ledger.render_trail_line(entry))
 
 
+def cmd_analyze(args):
+    """TW-12 / §15.6 session-retro: group ledger decisions by pattern and
+    rank profitable recurrers as candidates to codify. Reads the ledger
+    directly (daemon optional). Session key is a capture name, ISO-ts
+    prefix, or `all` until TW-05 adds real session_id."""
+    from . import analyze
+
+    report = analyze.analyze_session(
+        args.session,
+        min_support=args.min_support,
+        top_k=args.top,
+    )
+    if getattr(args, "json", False):
+        print(json.dumps({"ok": True, **report}))
+        return
+    print(analyze.format_report(report))
+
+
 def cmd_status(args):
     if not daemon_alive():
         resp = {"ok": True, "daemon_running": False, "connected": False}
@@ -653,6 +671,23 @@ def build_parser():
     sp.add_argument("--min-support", type=int, default=2, help="minimum recurrence count to surface a pattern")
     add_json(sp)
     sp.set_defaults(func=cmd_mine)
+
+    sp = sub.add_parser(
+        "analyze",
+        help=(
+            "session-retro (TW-12 / §15.6): read a ledger slice, group recurring decisions, "
+            "rank profitable ones as candidates to codify — <session> is a capture name, "
+            "ISO-ts prefix, or 'all' (real session_id arrives with TW-05)"
+        ),
+    )
+    sp.add_argument(
+        "session",
+        help="capture name, timestamp prefix (e.g. 2026-07-19), or 'all'",
+    )
+    sp.add_argument("--min-support", type=int, default=2, help="minimum recurrence to surface a pattern")
+    sp.add_argument("--top", type=int, default=20, help="max candidates to print")
+    add_json(sp)
+    sp.set_defaults(func=cmd_analyze)
 
     sp = sub.add_parser(
         "play",
