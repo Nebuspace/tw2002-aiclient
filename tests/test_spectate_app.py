@@ -20,6 +20,7 @@ import os
 import pty
 import re
 import select
+import signal
 import struct
 import subprocess
 import sys
@@ -31,6 +32,7 @@ import pyte
 import pytest
 
 from twclient import terminal
+from twclient import spectate_app as spectate_app_mod
 from twclient.spectate_app import _SEMANTIC_COLORS, _ColorPairs, _tone_attr
 from twclient.spectate_layout import compose_control_strip, frame_layout
 
@@ -771,6 +773,71 @@ _DEFAULT_FAKE_STATUS = {
 
 def _status(**overrides):
     return {**_DEFAULT_FAKE_STATUS, **overrides}
+
+
+def test_on_sigint_sets_detach_pending_flag():
+    """TW-15 unit: SIGINT handler must arm the detach latch (the real-terminal
+    path under curses cbreak/ISIG never delivers byte 3 to getch)."""
+    spectate_app_mod._detach_pending.clear()
+    spectate_app_mod._on_sigint(signal.SIGINT, None)
+    assert spectate_app_mod._detach_pending.is_set()
+    spectate_app_mod._detach_pending.clear()
+
+
+def test_sigint_detaches_interactive_spectate_under_a_fake_pty():
+    """TW-15: sending SIGINT to the spectate process (what a real terminal's
+    Ctrl-C does under curses cbreak/ISIG) must cleanly exit the curses loop
+    -- proving the escape hatch is no longer dead code that only checked
+    getch()==3."""
+    rows, cols = 36, 112
+    script = _FAKE_HARNESS_TEMPLATE.format(
+        project_root=str(PROJECT_ROOT), events=json.dumps([_SAMPLE_EVENT]),
+        gap=0.3, fake_status_json=json.dumps(_status()), record_path=None,
+    )
+    master_fd, slave_fd = pty.openpty()
+    _set_winsize(slave_fd, rows, cols)
+    env = dict(os.environ)
+    env["TERM"] = "xterm"
+    proc = subprocess.Popen(
+        [sys.executable, "-c", script],
+        stdin=slave_fd, stdout=slave_fd, stderr=slave_fd,
+        cwd=str(PROJECT_ROOT), env=env, start_new_session=True,
+    )
+    os.close(slave_fd)
+    captured = b""
+    deadline = time.monotonic() + 8.0
+    saw_hud = False
+    try:
+        while time.monotonic() < deadline:
+            ready, _, _ = select.select([master_fd], [], [], 0.3)
+            if master_fd in ready:
+                try:
+                    chunk = os.read(master_fd, 65536)
+                except OSError:
+                    break
+                if not chunk:
+                    break
+                captured += chunk
+                if b"AI-PILOT" in captured and not saw_hud:
+                    saw_hud = True
+                    os.kill(proc.pid, signal.SIGINT)
+            if saw_hud and proc.poll() is not None:
+                break
+        assert saw_hud, f"spectate never rendered before SIGINT; captured:\n{captured!r}"
+        # Allow a short window for the loop to notice _detach_pending.
+        proc.wait(timeout=5)
+        assert proc.returncode == 0, (
+            f"SIGINT detach should exit cleanly via curses.wrapper; "
+            f"got returncode={proc.returncode}"
+        )
+    finally:
+        if proc.poll() is None:
+            proc.kill()
+            proc.wait(timeout=2)
+        try:
+            os.close(master_fd)
+        except OSError:
+            pass
 
 
 def test_control_strip_shows_the_ai_pilot_badge_and_hints_under_a_fake_pty():

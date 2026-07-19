@@ -96,11 +96,23 @@ _PYTE_TO_CURSES_COLOR = {
 # handler is cheap insurance. Just sets a flag; the redraw itself happens
 # on the main curses thread inside _run()'s loop (curses isn't
 # signal-handler-safe to call into directly).
+#
+# TW-15: Ctrl-C under curses.wrapper()'s cbreak()/ISIG rarely reaches
+# getch() as byte 3 -- the tty driver raises SIGINT first. Mirror the
+# SIGWINCH pattern: catch SIGINT, set a flag, detach on the next loop
+# tick. Keep the ch==3 branch as a belt-and-suspenders for raw-mode /
+# harnesses that DO deliver ^C as a literal byte.
 _resize_pending = threading.Event()
+_detach_pending = threading.Event()
 
 
 def _on_sigwinch(signum, frame):
     _resize_pending.set()
+
+
+def _on_sigint(signum, frame):
+    """TW-15: real-terminal Ctrl-C arrives as SIGINT, not getch()==3."""
+    _detach_pending.set()
 
 
 class SpectateClient:
@@ -936,7 +948,9 @@ def _run(stdscr, client, sock_path, pid_path, unicode_ok):
     stdscr.nodelay(True)
     stdscr.timeout(50)
     prev_handler = signal.signal(signal.SIGWINCH, _on_sigwinch)
+    prev_sigint = signal.signal(signal.SIGINT, _on_sigint)
     _resize_pending.clear()
+    _detach_pending.clear()
     palette = _ColorPairs()
     palette.init()
     glyphs = terminal.glyph_set(unicode_ok)
@@ -962,9 +976,13 @@ def _run(stdscr, client, sock_path, pid_path, unicode_ok):
 
     try:
         while True:
+            # TW-15: SIGINT-driven detach (real terminals) checked BEFORE
+            # getch so a mid-overlay ^C never waits on a quiet event/timeout.
+            if _detach_pending.is_set():
+                return
             ch = stdscr.getch()
-            if ch == 3:  # Ctrl-C -- ALWAYS detaches immediately, even mid-overlay
-                return  # (never let the library submode trap the user with no way out)
+            if ch == 3:  # rare: raw-mode / harness delivered literal ^C
+                return  # always detach, even mid-overlay
             library_was_open = library["open"]
             if _handle_key(ch, sock_path, status, library):
                 pass  # Trainer Control Panel consumed it -- fall through to redraw
@@ -1056,6 +1074,7 @@ def _run(stdscr, client, sock_path, pid_path, unicode_ok):
             )
     finally:
         signal.signal(signal.SIGWINCH, prev_handler)
+        signal.signal(signal.SIGINT, prev_sigint)
 
 
 def _render(windows, regions, event, tracked, ticker_history, status, palette, glyphs, now, anim_tick, idle_age, semantic, flash_active, got_content):
