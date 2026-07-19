@@ -219,6 +219,67 @@ def cmd_analyze(args):
     print(analyze.format_report(report))
 
 
+def cmd_players_list(args):
+    """TW-31 CLI wiring (v1): list the multi-character rotation bank.
+    Pure client-side, direct `state/player_bank.json` read -- no daemon
+    socket round trip, same pattern as `cmd_log` reading
+    `state/ledger.jsonl` directly. `player_bank.load_bank()` never
+    creates the file on a miss (just returns an empty in-memory bank),
+    so an absent bank shows the hint below without ever touching disk."""
+    from . import player_bank
+
+    bank = player_bank.load_bank()
+    players = bank["players"]
+    if getattr(args, "json", False):
+        print(json.dumps({"ok": True, "players": players}))
+        return
+    if not players:
+        print("(player bank empty -- add a character with `tw players add <profile-name>`)")
+        return
+    for p in players:
+        last_played = p.get("last_played") or "never"
+        print(
+            f"{p['name']:<16} {p['handle']:<16} {p['host']:<24} "
+            f"{p['game_letter']:<3} {last_played:<21} {p.get('turns_state', '')}"
+        )
+
+
+def cmd_players_add(args):
+    """Add a character from an EXISTING `config/profiles.toml` profile.
+    Only ever takes a profile NAME -- `player_bank.add_player` pulls
+    handle/host/port/game_letter from the profile itself via
+    `credentials.load_profile`, so a bank entry can never drift from
+    the profile actually used to connect. No password anywhere near
+    this path: `credentials.Profile` has no password field at all."""
+    from . import credentials, player_bank
+
+    notes = _parse_params(args.note, flag="--note") if args.note else None
+    try:
+        entry = player_bank.add_player(args.profile, notes=notes)
+    except (player_bank.PlayerBankError, credentials.CredentialError) as e:
+        # add_player calls credentials.load_profile() internally (an
+        # unknown/incomplete profile raises CredentialError, not
+        # PlayerBankError) -- both are the same "clean error, exit 1"
+        # case from this verb's point of view.
+        print(f"ERROR: {e}")
+        sys.exit(1)
+    print(f"added {entry['name']} ({entry['handle']})")
+
+
+def cmd_players_next(args):
+    """Pure rotation-order query (`player_bank.next_player`) -- reads
+    the bank but decides and writes nothing; the daemon-side rotation
+    driver that actually acts on this is a later, separate wave."""
+    from . import player_bank
+
+    bank = player_bank.load_bank()
+    name = player_bank.next_player(bank, current=args.current)
+    if name is None:
+        print("none: all players exhausted")
+    else:
+        print(name)
+
+
 def cmd_status(args):
     if not daemon_alive():
         resp = {"ok": True, "daemon_running": False, "connected": False}
@@ -292,13 +353,15 @@ def cmd_ensure(args):
         sys.exit(1)
 
 
-def _parse_params(pairs):
+def _parse_params(pairs, flag="--param"):
     """`--param k=v` (repeatable) -> {"k": "v", ...} for skill template
-    substitution (twclient.skills._apply_params)."""
+    substitution (twclient.skills._apply_params). Also reused by `tw
+    players add --note k=v` (flag="--note") -- identical k=v shape,
+    just a different caller-facing flag name in the error message."""
     params = {}
     for pair in pairs:
         if "=" not in pair:
-            print(f"ERROR: --param must be k=v, got {pair!r}")
+            print(f"ERROR: {flag} must be k=v, got {pair!r}")
             sys.exit(1)
         k, v = pair.split("=", 1)
         params[k] = v
@@ -688,6 +751,41 @@ def build_parser():
     sp.add_argument("--top", type=int, default=20, help="max candidates to print")
     add_json(sp)
     sp.set_defaults(func=cmd_analyze)
+
+    sp = sub.add_parser(
+        "players",
+        help=(
+            "multi-character rotation bank (TW-31): list (default) / add / next -- pure "
+            "client-side, reads/writes state/player_bank.json directly, no daemon involved"
+        ),
+    )
+    add_json(sp)
+    sp.set_defaults(func=cmd_players_list, players_action=None)
+    # Nested subparsers (rather than a single flat verb) because add/next
+    # take genuinely different arguments -- a positional profile name +
+    # repeatable --note vs. an optional --current -- unlike record/autoloop's
+    # action choices, which all share one option set.
+    players_sub = sp.add_subparsers(dest="players_action")
+
+    sp_add = players_sub.add_parser(
+        "add", help="add a player from an existing config/profiles.toml profile"
+    )
+    sp_add.add_argument("profile", help="profile name in config/profiles.toml")
+    sp_add.add_argument(
+        "--note", action="append", default=[], metavar="k=v",
+        help="scalar note, repeatable (password-shaped keys are refused)",
+    )
+    sp_add.set_defaults(func=cmd_players_add)
+
+    sp_next = players_sub.add_parser(
+        "next",
+        help="who's up next in rotation order (least-recently-played among non-exhausted players)",
+    )
+    sp_next.add_argument(
+        "--current", default=None,
+        help="rotate away from this player if they're the single most-overdue",
+    )
+    sp_next.set_defaults(func=cmd_players_next)
 
     sp = sub.add_parser(
         "play",
