@@ -45,7 +45,7 @@ SOCK_PATH = PROJECT_ROOT / "run" / "twd.sock"
 # every Phase 0/1/2 chrome element except the side gutter is exercised,
 # well above MIN_LINES/MIN_COLS (20x60) so the "terminal too small"
 # message never applies here.
-PTY_ROWS, PTY_COLS = 30, 90
+PTY_ROWS, PTY_COLS = 36, 112  # right_gutter + outer pad (TW-08): inner 34x110
 
 # This environment's actual chrome-glyph capability (same call
 # run_interactive() makes) -- both the pty child (env=dict(os.environ), so
@@ -523,7 +523,7 @@ def test_interactive_spectate_hud_persists_and_ages_freshness_under_a_fake_pty()
     "minimal" tier's packed header stat-strip deliberately omits the
     per-cell "Ns ago" text for width reasons (see _draw_header_strip()'s
     docstring) -- only the vertical HUD gutter shows freshness in full."""
-    rows, cols = 32, 110  # right_gutter tier -- see frame_layout()
+    rows, cols = 36, 112  # right_gutter tier -- see frame_layout()
     captured = _run_fake_spectate_in_pty(
         [_SAMPLE_EVENT, _SAMPLE_EVENT_WITHOUT_CREDITS],
         lambda buf: b"CREDITS" in buf and b"s ago" in buf,
@@ -578,7 +578,7 @@ def test_interactive_spectate_credit_gain_flashes_green_with_a_chip_under_a_fake
     exact settled "100,230" text: CREDIT_FLASH_DURATION_S is only 1.5s,
     and waiting for tween-settle first burns real wall-clock margin
     against it once subprocess/curses startup overhead is included."""
-    rows, cols = 32, 110  # right_gutter tier -- gutter has room for the chip
+    rows, cols = 36, 112  # right_gutter tier -- gutter has room for the chip
     captured = _run_fake_spectate_in_pty(
         [_credits_event(100000), _credits_event(100230)],
         lambda buf: b"+230" in buf,
@@ -598,7 +598,7 @@ def test_interactive_spectate_credit_gain_flashes_green_with_a_chip_under_a_fake
 
 def test_interactive_spectate_credit_loss_flashes_red_with_a_chip_under_a_fake_pty():
     """Phase 3 motion B1: a credits DECREASE flashes red with a "-500 ▼" chip."""
-    rows, cols = 32, 110
+    rows, cols = 36, 112
     captured = _run_fake_spectate_in_pty(
         [_credits_event(100000), _credits_event(99500)],
         lambda buf: b"-500" in buf,
@@ -621,7 +621,7 @@ def test_interactive_spectate_credits_sparkline_renders_under_a_fake_pty():
     CREDITS cell's freshness line once there's a real series (2+
     samples) -- distinguishable from plain text by using glyphs outside
     the freshness-line's normal vocabulary (digits/letters/"ago")."""
-    rows, cols = 32, 110
+    rows, cols = 36, 112
     spark_chars = set(_GLYPHS["sparkline"])
     events = [_credits_event(100000 + i * 50) for i in range(5)]
     captured = _run_fake_spectate_in_pty(
@@ -649,7 +649,7 @@ def test_interactive_spectate_turns_gauge_renders_and_colors_danger_when_low_und
     just "a bar appeared", since the first (1000/1000 = 100%, all-filled,
     green) event would otherwise satisfy a looser check before the
     second event -- the one this test is actually about -- ever lands."""
-    rows, cols = 32, 110
+    rows, cols = 36, 112
     events = [
         {**_credits_event(100000), "state": {"credits": 100000, "turns_left": 1000}},
         {**_credits_event(100000), "state": {"credits": 100000, "turns_left": 100}},  # 10% left
@@ -678,7 +678,7 @@ def test_interactive_spectate_turns_gauge_renders_and_colors_danger_when_low_und
 def test_interactive_spectate_port_panel_renders_bar_meters_under_a_fake_pty():
     """Phase 4 motion C4: port commodity %-bar-meters appear in the HUD
     gutter, colored green for a "buying" row."""
-    rows, cols = 32, 110
+    rows, cols = 36, 112
     event = {
         "screen": ["<A> Attack   <T> Trade   <Q> Quit :"] + [""] * 23,
         "color": [],
@@ -713,7 +713,7 @@ def test_interactive_spectate_port_panel_renders_bar_meters_under_a_fake_pty():
 def test_interactive_spectate_ticker_flashes_newest_row_under_a_fake_pty():
     """Phase 3 motion B3: the newest ticker row gets a brief highlighted
     color right after it arrives."""
-    rows, cols = 32, 110
+    rows, cols = 36, 112
     events = [_credits_event(100000), _credits_event(100100)]
     captured = _run_fake_spectate_in_pty(
         events, lambda buf: b"main_command" in buf and _COLOR_SET_SGR_RE.search(buf) is not None,
@@ -739,7 +739,7 @@ def test_interactive_spectate_classification_pulse_reverses_header_under_a_fake_
     header line. Needs a tier where the classification-badge header
     actually renders (right_gutter/full), not the "minimal" tier's HUD
     stat-strip, which shows no classification text at all."""
-    rows, cols = 32, 110
+    rows, cols = 36, 112
     event_a = _credits_event(100000)
     event_b = {**_credits_event(100000), "classification": "port_menu"}
     captured = _run_fake_spectate_in_pty(
@@ -774,7 +774,7 @@ def _status(**overrides):
 
 
 def test_control_strip_shows_the_ai_pilot_badge_and_hints_under_a_fake_pty():
-    rows, cols = 32, 110  # right_gutter tier -- plenty of leftover for the control strip
+    rows, cols = 36, 112  # right_gutter tier -- plenty of leftover for the control strip
     captured = _run_fake_spectate_in_pty(
         [_SAMPLE_EVENT], lambda buf: b"AI-PILOT" in buf,
         timeout=8.0, rows=rows, cols=cols, fake_status=_status(),
@@ -792,7 +792,7 @@ def test_control_strip_shows_the_ai_pilot_badge_and_hints_under_a_fake_pty():
 
 
 def test_control_strip_shows_the_auto_loop_badge_and_live_progress_bar_under_a_fake_pty():
-    rows, cols = 32, 110
+    rows, cols = 36, 112
     play = {"running": True, "paused": False, "name": "demo-loop", "cycle": 2, "cycles_total": 5, "last_result": None}
     captured = _run_fake_spectate_in_pty(
         [_SAMPLE_EVENT], lambda buf: b"AUTO-LOOP" in buf and b"demo-loop" in buf,
@@ -805,7 +805,7 @@ def test_control_strip_shows_the_auto_loop_badge_and_live_progress_bar_under_a_f
 
 
 def test_control_strip_shows_manual_badge_when_a_human_is_attached_under_a_fake_pty():
-    rows, cols = 32, 110
+    rows, cols = 36, 112
     captured = _run_fake_spectate_in_pty(
         [_SAMPLE_EVENT], lambda buf: b"YOU HAVE CONTROL" in buf,
         timeout=8.0, rows=rows, cols=cols, fake_status=_status(mode="human"),
@@ -820,7 +820,7 @@ def test_control_strip_shows_the_spectate_badge_and_survives_the_muted_tone_unde
     very first render KeyError'd the whole curses loop dead. Mirrors
     test_control_strip_shows_manual_badge_...'s shape but drives the
     SPECTATE mode specifically -- the exact state that crashed."""
-    rows, cols = 32, 110
+    rows, cols = 36, 112
     captured = _run_fake_spectate_in_pty(
         [_SAMPLE_EVENT], lambda buf: b"SPECTATE" in buf,
         timeout=8.0, rows=rows, cols=cols, fake_status=_status(mode="spectate"),
@@ -859,7 +859,7 @@ def test_tone_attr_resolves_muted_and_degrades_gracefully_for_an_unknown_tone():
 
 
 def test_control_strip_shows_the_live_tx_readout_under_a_fake_pty():
-    rows, cols = 32, 110
+    rows, cols = 36, 112
     event = {**_SAMPLE_EVENT, "sent_input": "158"}
     captured = _run_fake_spectate_in_pty(
         [event], lambda buf: b"\xe2\x86\x92 158" in buf,  # UTF-8 for "→ 158"
@@ -870,7 +870,7 @@ def test_control_strip_shows_the_live_tx_readout_under_a_fake_pty():
 
 
 def test_control_strip_ticker_pairs_tx_with_the_settle_outcome_under_a_fake_pty():
-    rows, cols = 32, 110
+    rows, cols = 36, 112
     events = [{**_SAMPLE_EVENT, "sent_input": "d"}]
     captured = _run_fake_spectate_in_pty(
         events, lambda buf: b"main_command" in buf and b"\xe2\x86\x92d" in buf,
@@ -889,33 +889,33 @@ def test_loops_library_overlay_opens_on_l_and_lists_loops_under_a_fake_pty():
     responds to input; a real populated listing + Enter-to-start is
     proven end-to-end in test_control_panel.py against a real (fake-
     session) daemon."""
-    rows, cols = 32, 110
+    rows, cols = 36, 112
     captured = _run_fake_spectate_and_type_in_pty(
         [_SAMPLE_EVENT],
         type_after=(b"AI-PILOT", b"l"),
-        stop_condition=lambda buf: b"Learned-Loops Library" in buf,
+        stop_condition=lambda buf: b"TRADE LOOP CHAINS" in buf,
         timeout=8.0, rows=rows, cols=cols, fake_status=_status(),
     )
     text = captured.decode("utf-8", errors="replace")
-    assert "Learned-Loops Library" in text, f"library overlay never opened; captured:\n{text}"
-    assert "no learned loops yet" in text, f"empty-state message never rendered; captured:\n{text}"
+    assert "TRADE LOOP CHAINS" in text, f"library overlay never opened; captured:\n{text}"
+    assert "no trade loop chains yet" in text, f"empty-state message never rendered; captured:\n{text}"
 
 
 def test_loops_library_overlay_closes_on_esc_and_dashboard_resumes_under_a_fake_pty():
-    rows, cols = 32, 110
+    rows, cols = 36, 112
     captured = _run_fake_spectate_and_type_in_pty(
         [_SAMPLE_EVENT],
         type_after=(b"AI-PILOT", b"l"),
-        second_type_after=(b"Learned-Loops Library", bytes([27])),  # Esc
+        second_type_after=(b"TRADE LOOP CHAINS", bytes([27])),  # Esc
         stop_condition=lambda buf: buf.count(b"AI-PILOT") >= 2,  # dashboard re-rendered after closing
         timeout=8.0, rows=rows, cols=cols, fake_status=_status(),
     )
-    assert b"Learned-Loops Library" in captured, "overlay never opened in the first place"
+    assert b"TRADE LOOP CHAINS" in captured, "overlay never opened in the first place"
     # The LAST thing on screen (pyte's replayed grid) must be the normal
     # dashboard again, not the overlay frozen open.
     grid = _pyte_grid(captured, rows, cols)
     full_text = "\n".join(grid)
-    assert "Learned-Loops Library" not in full_text, f"overlay still showing after Esc; grid:\n{full_text}"
+    assert "TRADE LOOP CHAINS" not in full_text, f"overlay still showing after Esc; grid:\n{full_text}"
     assert "AI-PILOT" in full_text, f"dashboard did not resume after closing the overlay; grid:\n{full_text}"
 
 
@@ -938,12 +938,12 @@ def test_library_enter_arms_a_confirm_prompt_instead_of_launching_under_a_fake_p
     refused send renders identically to a real one on this daemon-less
     harness -- the only trustworthy signal is whether _send_control()
     was ever actually called with "play_start"."""
-    rows, cols = 32, 110
+    rows, cols = 36, 112
     record_path = tmp_path / "sent_calls.json"
     captured = _run_fake_spectate_and_type_in_pty(
         [_SAMPLE_EVENT],
         type_after=(b"AI-PILOT", b"l"),
-        second_type_after=(b"Learned-Loops Library", b"\r"),  # Enter -- must only ARM, not fire
+        second_type_after=(b"TRADE LOOP CHAINS", b"\r"),  # Enter -- must only ARM, not fire
         stop_condition=lambda buf: b"LIVE? y/N" in buf,
         timeout=8.0, rows=rows, cols=cols, fake_status=_status(), record_path=str(record_path),
     )
@@ -952,19 +952,19 @@ def test_library_enter_arms_a_confirm_prompt_instead_of_launching_under_a_fake_p
 
 
 def test_library_enter_then_y_fires_play_start_exactly_once_under_a_fake_pty(tmp_path):
-    rows, cols = 32, 110
+    rows, cols = 36, 112
     record_path = tmp_path / "sent_calls.json"
     captured = _run_fake_spectate_and_type_in_pty(
         [_SAMPLE_EVENT],
         type_after=(b"AI-PILOT", b"l"),
-        second_type_after=(b"Learned-Loops Library", b"\r"),  # arm
+        second_type_after=(b"TRADE LOOP CHAINS", b"\r"),  # arm
         third_type_after=(b"LIVE? y/N", b"y"),  # confirm
         stop_condition=lambda buf: buf.count(b"AI-PILOT") >= 2,  # dashboard resumed post-launch
         timeout=8.0, rows=rows, cols=cols, fake_status=_status(), record_path=str(record_path),
     )
     grid = _pyte_grid(captured, rows, cols)
     full_text = "\n".join(grid)
-    assert "Learned-Loops Library" not in full_text, f"overlay should close after confirming; grid:\n{full_text}"
+    assert "TRADE LOOP CHAINS" not in full_text, f"overlay should close after confirming; grid:\n{full_text}"
 
     calls = json.loads(record_path.read_text())
     play_start_calls = [c for c in calls if c["verb"] == "play_start"]
@@ -983,12 +983,12 @@ def test_library_enter_then_cancel_sends_nothing_under_a_fake_pty(tmp_path):
     above), which lets the harness's normal trailing 'q' finish the job,
     rather than reaching for Ctrl-C (unreliable in THIS pty harness --
     see _run_fake_spectate_and_type_in_pty's docstring)."""
-    rows, cols = 32, 110
+    rows, cols = 36, 112
     record_path = tmp_path / "sent_calls.json"
     _run_fake_spectate_and_type_in_pty(
         [_SAMPLE_EVENT],
         type_after=(b"AI-PILOT", b"l"),
-        second_type_after=(b"Learned-Loops Library", b"\r"),  # arm
+        second_type_after=(b"TRADE LOOP CHAINS", b"\r"),  # arm
         third_type_after=(b"LIVE? y/N", b"n"),  # cancel -- library stays open, no send
         fourth_type_after=(b"cycles armed", b"l"),  # close the (now-plain-list) overlay
         stop_condition=lambda buf: buf.count(b"AI-PILOT") >= 2,  # dashboard resumed after closing

@@ -112,6 +112,12 @@ RIGHT_GUTTER_MIN_COLS = 108    # == VIEWPORT_W + HUD_GUTTER_W: viewport + one gu
 FULL_GUTTER_MIN_COLS = 132     # right_gutter's fit PLUS a comfortable centered margin (visual symmetry)
 MIN_COLS = 60
 MIN_LINES = 20
+# TW-08: one-cell outer frame around the whole client. Layout math uses
+# the INNER content size (cols/lines minus 2); thresholds above remain
+# content floors — callers measuring a REAL terminal must add +2.
+OUTER_FRAME_PAD = 1  # per side
+# Titled LOG box needs ≥3 rows (border + 1 content + border).
+LOG_BOX_MIN_H = 3
 
 
 def frame_layout(lines: int, cols: int) -> dict:
@@ -120,6 +126,10 @@ def frame_layout(lines: int, cols: int) -> dict:
     for spectate_app's curses renderer to build windows from. No
     curses/terminal involved -- unit-testable directly, matching this
     module's existing pure-layout split.
+
+    TW-08 wraps the entire client in an OUTER bordered frame. All other
+    regions are laid out in the 1-cell inset; thresholds below are
+    measured against that INNER content size.
 
     Ladder (cols-driven; height degrades by dropping header/ticker, then
     the control strip, then the viewport's own border, before ever
@@ -137,6 +147,11 @@ def frame_layout(lines: int, cols: int) -> dict:
     primary interactive surface; the ticker is a nice-to-have event
     log) -- so a narrow-but-tall terminal shows mode/TX/hints even when
     there's no room left for the ticker underneath it.
+
+    When a right HUD gutter is present and tall enough, its BOTTOM is
+    split off into a titled "DECISIONS" box (placeholder content until
+    TW-13). The bottom log ("ticker") is always a titled "LOG" box when
+    present.
     """
     if lines < MIN_LINES or cols < MIN_COLS:
         return {
@@ -145,61 +160,89 @@ def frame_layout(lines: int, cols: int) -> dict:
                 f"Terminal too small ({cols}x{lines}) — need at least "
                 f"{MIN_COLS}x{MIN_LINES}. Resize to continue."
             ),
+            "outer": None,
             "header": None,
             "viewport": None,
             "gutter": None,
+            "decisions": None,
             "ticker": None,
             "control": None,
             "status": None,
         }
 
-    # The status bar (liveness lives there, Phase 2) is always reserved
-    # once past the floor above.
-    status = {"y": lines - 1, "x": 0, "w": cols, "h": 1}
-    body_lines = lines - 1
+    outer = {"y": 0, "x": 0, "w": cols, "h": lines}
+    ox = oy = OUTER_FRAME_PAD
+    i_cols = cols - 2 * OUTER_FRAME_PAD
+    i_lines = lines - 2 * OUTER_FRAME_PAD
 
-    can_border = cols >= MINIMAL_HEADER_MIN_COLS and body_lines >= VIEWPORT_H
+    # The status bar (liveness lives there, Phase 2) is always reserved
+    # once past the floor above — pinned to the last INNER row.
+    status = {"y": oy + i_lines - 1, "x": ox, "w": i_cols, "h": 1}
+    body_lines = i_lines - 1
+
+    can_border = i_cols >= MINIMAL_HEADER_MIN_COLS and body_lines >= VIEWPORT_H
     if can_border:
         viewport_h, border = VIEWPORT_H, True
     else:
         viewport_h, border = min(GAME_H, body_lines), False
-    viewport_w = VIEWPORT_W if border else min(GAME_W, cols)
+    viewport_w = VIEWPORT_W if border else min(GAME_W, i_cols)
 
-    body_top = 0
+    body_top = oy
     header = None
     if body_lines - viewport_h >= 1:
-        header = {"y": 0, "x": 0, "w": cols, "h": 1}
-        body_top = 1
+        header = {"y": oy, "x": ox, "w": i_cols, "h": 1}
+        body_top = oy + 1
 
     leftover = body_lines - viewport_h - (1 if header else 0)
 
     control = None
     if leftover >= 1:
-        control = {"y": lines - 2, "x": 0, "w": cols, "h": 1}
+        control = {"y": status["y"] - 1, "x": ox, "w": i_cols, "h": 1}
         leftover -= 1
 
     ticker = None
-    if leftover >= 2:
-        ticker_h = min(4, leftover)
-        ticker_y = lines - 1 - (1 if control else 0) - ticker_h
-        ticker = {"y": ticker_y, "x": 0, "w": cols, "h": ticker_h}
+    decisions = None
+    # TW-08: leftover band hosts a titled LOG box; when wide enough, split
+    # the same band side-by-side with DECISIONS so the HUD gutter stays
+    # full-height for ship stats + live-metrics + port meters.
+    if leftover >= LOG_BOX_MIN_H:
+        band_h = min(5, leftover)
+        band_y = status["y"] - (1 if control else 0) - band_h
+        if i_cols >= 60:
+            # Decisions is a short placeholder panel; keep LOG wide enough
+            # that settle+TX suffixes remain readable.
+            dec_w = min(24, max(16, i_cols // 5))
+            log_w = i_cols - dec_w
+            decisions = {
+                "y": band_y, "x": ox + log_w, "w": dec_w, "h": band_h,
+                "title": "DECISIONS", "border": True,
+            }
+            ticker = {
+                "y": band_y, "x": ox, "w": log_w, "h": band_h,
+                "title": "LOG", "border": True,
+            }
+        else:
+            ticker = {
+                "y": band_y, "x": ox, "w": i_cols, "h": band_h,
+                "title": "LOG", "border": True,
+            }
 
-    if cols >= FULL_GUTTER_MIN_COLS:
+    if i_cols >= FULL_GUTTER_MIN_COLS:
         mode = "full"
-        gutter = {"y": body_top, "x": cols - HUD_GUTTER_W, "w": HUD_GUTTER_W, "h": viewport_h}
-        viewport_x = max(0, (cols - viewport_w - HUD_GUTTER_W) // 2)
-    elif cols >= RIGHT_GUTTER_MIN_COLS:
+        gutter = {"y": body_top, "x": ox + i_cols - HUD_GUTTER_W, "w": HUD_GUTTER_W, "h": viewport_h}
+        viewport_x = ox + max(0, (i_cols - viewport_w - HUD_GUTTER_W) // 2)
+    elif i_cols >= RIGHT_GUTTER_MIN_COLS:
         mode = "right_gutter"
-        gutter = {"y": body_top, "x": cols - HUD_GUTTER_W, "w": HUD_GUTTER_W, "h": viewport_h}
-        viewport_x = 0
-    elif cols >= MINIMAL_HEADER_MIN_COLS:
+        gutter = {"y": body_top, "x": ox + i_cols - HUD_GUTTER_W, "w": HUD_GUTTER_W, "h": viewport_h}
+        viewport_x = ox
+    elif i_cols >= MINIMAL_HEADER_MIN_COLS:
         mode = "minimal"
         gutter = None
-        viewport_x = max(0, (cols - viewport_w) // 2)
+        viewport_x = ox + max(0, (i_cols - viewport_w) // 2)
     else:
         mode = "no_border"
         gutter = None
-        viewport_x = 0
+        viewport_x = ox
 
     viewport = {
         "y": body_top,
@@ -217,9 +260,11 @@ def frame_layout(lines: int, cols: int) -> dict:
     return {
         "mode": mode,
         "message": None,
+        "outer": outer,
         "header": header,
         "viewport": viewport,
         "gutter": gutter,
+        "decisions": decisions,
         "ticker": ticker,
         "control": control,
         "status": status,
@@ -489,6 +534,45 @@ def compose_hud_cells(
     return cells
 
 
+# TW-08 live-metrics array (structure now; values from world-model later via TW-06).
+# Fixed display order the operator named: Stations / Planets / Fighters /
+# Mines / Problem-sectors. Always emit a full shape so the HUD never jumps.
+_LIVE_METRIC_SPECS = (
+    ("stations_found", "STATIONS"),
+    ("planets_found", "PLANETS"),
+    ("fighters_seen", "FIGHTERS"),
+    ("mines_seen", "MINES"),
+    ("problem_sectors", "PROBLEMS"),
+)
+
+
+def compose_live_metrics(tracked: dict | None = None) -> list[dict]:
+    """HUD live-metrics rows (TW-08). Each key is live-trackable once the
+    world-model fills `tracked`; until then every value is the placeholder
+    `0` so the structure ships visible and stable."""
+    tracked = tracked or {}
+    rows = []
+    for key, label in _LIVE_METRIC_SPECS:
+        entry = tracked.get(key)
+        if isinstance(entry, tuple) and len(entry) >= 1:
+            value = entry[0]
+        elif entry is None:
+            value = 0
+        else:
+            value = entry
+        rows.append({"label": label, "value": f"{int(value):,}" if isinstance(value, int) else str(value)})
+    return rows
+
+
+def compose_decisions_placeholder() -> list[str]:
+    """Decisions box content until TW-13 coaches land. Fixed copy so the
+    titled box proves the region is wired without inventing advice."""
+    return [
+        "(coach pending)",
+        "TW-13 fills this",
+    ]
+
+
 def compose_port_panel(event: dict, bar_full: str = "█", bar_empty: str = "░") -> list[dict]:
     """Port commodity %-bar-meters (Phase 4 motion C4) -- sourced
     straight off the CURRENT event's state, deliberately NOT persisted
@@ -571,9 +655,10 @@ def gauge_semantic(fraction: float) -> str:
     return "danger"
 
 
-# -- Trainer Control Panel (TUI-POLISH-PLAN.md) -- control strip + Learned-
-# Loops Library. Same discipline as everything above: pure text/tuples, no
-# curses -- spectate_app.py owns the actual drawing + key handling.
+# -- Trainer Control Panel (TUI-POLISH-PLAN.md) -- control strip + Trade
+# Loop Chains overlay (TW-07 rename of the Learned-Loops Library). Same
+# discipline as everything above: pure text/tuples, no curses --
+# spectate_app.py owns the actual drawing + key handling.
 
 # (label, tone) per control-lock mode -- tone is the SAME ok/warn/danger/
 # info vocabulary status_semantic()/gauge_semantic() already use, plus
@@ -585,7 +670,7 @@ _MODE_BADGES = {
     "spectate": ("SPECTATE", "muted"),
 }
 
-CONTROL_HINTS = "M)ode  L)ibrary  Space pause/resume  X stop  P panic"
+CONTROL_HINTS = "M)ode  L)chains  Space pause/resume  X stop  P panic"
 PLAY_PROGRESS_BAR_WIDTH = 12
 
 
@@ -638,29 +723,102 @@ def compose_control_strip(mode: str, sent_input, play: dict | None) -> dict:
     }
 
 
-def format_loops_library_row(loop: dict, selected: bool, cols: int) -> str:
-    """One row of the Learned-Loops Library overlay (`L`) -- name ·
-    source · the profit metric the entry actually carries (miner's
-    cr/turn rate for a "mined" skill, the summed demo-run credits for a
-    "recorded" one -- see protocol.py's _dispatch_list_skills for why
-    those are deliberately different metrics, never a fabricated
-    per-cycle rate for something only ever demonstrated once) · step
-    count. `selected` only changes the leading marker -- spectate_app.py
-    applies the highlight attribute separately."""
-    if "profit_per_turn" in loop and loop["profit_per_turn"] is not None:
-        profit_text = f"{loop['profit_per_turn']:+.1f}cr/turn"
-    elif loop.get("demo_profit") is not None:
-        profit_text = f"{loop['demo_profit']:+,}cr demo"
+def chain_overall_profit(loop: dict):
+    """Overall profit for ranking/display. Recorded skills carry a summed
+    demo-run credits delta; mined skills do not get a fabricated overall
+    from rate × hops — return None and show an em-dash."""
+    if loop.get("demo_profit") is not None:
+        return float(loop["demo_profit"])
+    return None
+
+
+def chain_cr_per_turn(loop: dict):
+    v = loop.get("profit_per_turn")
+    return float(v) if v is not None else None
+
+
+def chain_cr_per_execution(loop: dict):
+    """One-way chain-execution credits: mined `profit_per_action` when
+    present; recorded `demo_profit` (one demo ≈ one traverse)."""
+    if loop.get("profit_per_action") is not None:
+        return float(loop["profit_per_action"])
+    if loop.get("demo_profit") is not None:
+        return float(loop["demo_profit"])
+    return None
+
+
+def _chain_sort_key(loop: dict) -> float:
+    overall = chain_overall_profit(loop)
+    if overall is not None:
+        return overall
+    cr_turn = chain_cr_per_turn(loop)
+    if cr_turn is not None:
+        return cr_turn
+    return float("-inf")
+
+
+def sort_trade_loop_chains(loops: list) -> list:
+    """Client-side profit-desc sort (TW-07). Does not mutate the input."""
+    return sorted(loops or [], key=_chain_sort_key, reverse=True)
+
+
+def longest_chain_steps(loops: list) -> int:
+    """Hop count of the longest chain in `loops` (0 if empty)."""
+    if not loops:
+        return 0
+    return max(int(loop.get("steps") or 0) for loop in loops)
+
+
+def format_chain_metric(value, kind: str) -> str:
+    """Compact three-metric display helpers. `kind` is overall|turn|exec."""
+    if value is None:
+        return "-"
+    if kind == "turn":
+        return f"{value:+.1f}/t"
+    if isinstance(value, float) and not value.is_integer():
+        return f"{value:+.1f}"
+    return f"{int(value):+,}"
+
+
+def format_loops_library_row(
+    loop: dict, selected: bool, cols: int, *, longest: bool = False,
+) -> str:
+    """One row of the Trade Loop Chains overlay (`L`) -- name · source ·
+    THREE metrics (overall profit · avg cr/turn · cr/chain-execution) ·
+    hop count. `longest` marks the celebrated longest-hop chain (TW-07);
+    `selected` only changes the leading marker -- spectate_app.py applies
+    the highlight attribute separately."""
+    overall = format_chain_metric(chain_overall_profit(loop), "overall")
+    cr_turn = format_chain_metric(chain_cr_per_turn(loop), "turn")
+    cr_exec = format_chain_metric(chain_cr_per_execution(loop), "exec")
+    if longest:
+        marker = "★"
+    elif selected:
+        marker = "▸"
     else:
-        profit_text = "-"
-    marker = "▸" if selected else " "
+        marker = " "
     tag = "DRAFT " if loop.get("draft") else ""
-    row = f"{marker} {tag}{loop['name']:<28} {loop['source']:<9} {profit_text:>14} {loop['steps']:>3} steps"
+    hops = int(loop.get("steps") or 0)
+    row = (
+        f"{marker} {tag}{loop['name']:<22} {loop.get('source', '?'):<9} "
+        f"{overall:>10} {cr_turn:>8} {cr_exec:>10} {hops:>3} hops"
+    )
     return row[: max(0, cols - 1)]
 
 
 def format_loops_library_header(count: int) -> str:
-    return f"Learned-Loops Library — {count} loop(s) — ↑/↓ select · 1-9 cycles · Enter run · Esc/L close"
+    # TW-07 rename + TW-20 Enter wording (arms, does not fire).
+    return (
+        f"TRADE LOOP CHAINS — {count} chain(s) — "
+        f"↑/↓ select · 1-9 cycles · Enter arms · Esc/L close"
+    )
+
+
+def format_longest_chain_banner(loop: dict, cols: int) -> str:
+    """Centerpiece callout for the longest-hop chain (TW-07 §22.2)."""
+    hops = int(loop.get("steps") or 0)
+    text = f"★ LONGEST CHAIN · {loop.get('name', '?')} · {hops} hops"
+    return text[: max(0, cols - 1)]
 
 
 def render_plain(dashboard: dict) -> str:
