@@ -8,6 +8,7 @@ failure carries "error".
 
 import re
 import time
+from contextlib import contextmanager
 
 from .classify import classify_screen
 from .control_lock import MODE_AI_PILOT, MODE_AUTO_LOOP, MODE_HUMAN, ControlModeConflict
@@ -15,12 +16,16 @@ from .state_parser import parse_state
 
 
 def _control_lock_error(server):
-    """Shared do/send/play/replay/haggle guard: None when the AI is free
-    to drive (default, no server.control_lock at all in a bare
+    """Shared do/send/play/replay/haggle MODE guard: None when the AI is
+    free to drive (default, no server.control_lock at all in a bare
     dispatch-harness test, or mode == ai_pilot); otherwise an error
     response naming WHO/WHAT currently holds the lock, so a caller (or a
     test) can tell a human attach apart from a running AUTO-LOOP or a
-    plain paused/spectate state -- never just one flat "locked" string."""
+    plain paused/spectate state -- never just one flat "locked" string.
+
+    This is the MODE check only -- one layer below `_driving_dispatch()`,
+    which additionally reserves the single active-driver slot (TW-04) so
+    two ai_pilot dispatches can't both be mid-send at once."""
     lock = getattr(server, "control_lock", None)
     if lock is None or lock.ai_may_send():
         return None
@@ -30,6 +35,76 @@ def _control_lock_error(server):
     if mode == MODE_AUTO_LOOP:
         return {"ok": False, "error": "controller_locked_by_auto_loop"}
     return {"ok": False, "error": f"controller_locked:{mode}"}
+
+
+@contextmanager
+def _driving_dispatch(server):
+    """Shared do/send/play/replay/haggle guard (TW-04): layers the
+    single active-driver slot on top of `_control_lock_error`'s mode
+    check, without changing any of the five call sites' existing shape
+    (`with _driving_dispatch(server) as lock_error: if lock_error is not
+    None: return lock_error`).
+
+    A second concurrent ai_pilot dispatch -- e.g. two `tw do` processes
+    racing in from separate one-shot CLI connections, each its own
+    socket round trip (DESIGN.md's one-shot-CLI shape means there's no
+    persistent "connection" to hold a lock across; the driver slot's
+    lifetime IS one dispatch call) -- is refused outright with a clear
+    protocol error rather than queued or silently interleaved.
+
+    Always releases on the way out -- success, an early `return` from
+    inside the `with` block, or an uncaught exception -- crash-safe like
+    take_human()/release_human()."""
+    lock_error = _control_lock_error(server)
+    if lock_error is not None:
+        yield lock_error
+        return
+    lock = getattr(server, "control_lock", None)
+    if lock is None:
+        # Bare dispatch-harness test with no control_lock at all -- same
+        # "unrestricted" convention _control_lock_error already uses one
+        # call up.
+        yield None
+        return
+    try:
+        lock.acquire_driver()
+    except ControlModeConflict as e:
+        yield {"ok": False, "error": str(e)}
+        return
+    try:
+        yield None
+    finally:
+        lock.release_driver()
+
+
+def _current_actor(server):
+    """TW-05 actor attribution (knowledge/architecture/autonomy-loop.md):
+    who/what generated this dispatch's send. Direct do/send/haggle in
+    the default ai_pilot mode is `"ai"` (an LLM worker deciding what to
+    send); `"human"` when the connection is itself in MODE_HUMAN.
+    do/send/haggle are actually refused outright while MODE_HUMAN holds
+    the lock (`_control_lock_error`), so this branch is inert via those
+    verbs today -- kept anyway so `_record_ledger`'s actor stays correct
+    the moment any future change lets a human-attributed send reach this
+    same choke point (e.g. routing `send_raw()`'s attach keystrokes
+    through the same ledger sink)."""
+    lock = getattr(server, "control_lock", None)
+    if lock is not None and lock.mode == MODE_HUMAN:
+        return "human"
+    return "ai"
+
+
+def _current_session_id(session):
+    """TW-05: the daemon's own continuous-play-session id, reused as-is
+    rather than minted fresh here -- `TranscriptLogger` (session.py)
+    already generates one per daemon run (`session.logger.session_id`)
+    and names that session's own transcript log file, so a ledger
+    entry's `session_id` and its transcript's filename correlate for
+    free. `getattr`-guarded like every other optional session surface
+    this module reads (`server.watch_hub`, `session.cursor_pos`) --
+    absent on the bare fake-session test doubles that predate it."""
+    logger = getattr(session, "logger", None)
+    return getattr(logger, "session_id", None) if logger is not None else None
 
 
 def build_response(session, rows=None, settled_reason=None, extra=None):
@@ -69,43 +144,43 @@ def dispatch(session, verb, args, server):
         return build_response(session, rows=rows)
 
     if verb == "do":
-        lock_error = _control_lock_error(server)
-        if lock_error is not None:
-            return lock_error
-        text = args.get("input", "")
-        enter = args.get("enter", True)
-        secret = args.get("secret", False)
-        wait_prompt = args.get("wait_prompt")
-        pre_text = session.render_text(session.render())
-        try:
-            session.send(text, enter=enter, secret=secret)
-            reason, elapsed = session.wait_settle(
-                wait_prompt=wait_prompt,
-                timeout=args.get("timeout", 8.0),
-                debounce_ms=args.get("debounce_ms", 350),
-            )
-        except re.error as e:
-            return {"ok": False, "error": f"bad_wait_prompt_regex:{e}"}
-        resp = build_response(session, settled_reason=reason, extra={"elapsed": elapsed})
-        history_args = {**args, "input": "<redacted>"} if secret else args
-        session.record_history("do", history_args, resp["prompt"], resp["classification"], reason)
-        _record_ledger(server, pre_text, text, secret, resp)
-        _record_skill_step(server, text, wait_prompt, resp["classification"], secret)
-        return resp
+        with _driving_dispatch(server) as lock_error:
+            if lock_error is not None:
+                return lock_error
+            text = args.get("input", "")
+            enter = args.get("enter", True)
+            secret = args.get("secret", False)
+            wait_prompt = args.get("wait_prompt")
+            pre_text = session.render_text(session.render())
+            try:
+                session.send(text, enter=enter, secret=secret)
+                reason, elapsed = session.wait_settle(
+                    wait_prompt=wait_prompt,
+                    timeout=args.get("timeout", 8.0),
+                    debounce_ms=args.get("debounce_ms", 350),
+                )
+            except re.error as e:
+                return {"ok": False, "error": f"bad_wait_prompt_regex:{e}"}
+            resp = build_response(session, settled_reason=reason, extra={"elapsed": elapsed})
+            history_args = {**args, "input": "<redacted>"} if secret else args
+            session.record_history("do", history_args, resp["prompt"], resp["classification"], reason)
+            _record_ledger(server, session, pre_text, text, secret, resp)
+            _record_skill_step(server, text, wait_prompt, resp["classification"], secret)
+            return resp
 
     if verb == "send":
-        lock_error = _control_lock_error(server)
-        if lock_error is not None:
-            return lock_error
-        text = args.get("input", "")
-        enter = args.get("enter", True)
-        secret = args.get("secret", False)
-        pre_text = session.render_text(session.render())
-        session.send(text, enter=enter, secret=secret)
-        resp = build_response(session)
-        _record_ledger(server, pre_text, text, secret, resp)
-        _record_skill_step(server, text, None, resp["classification"], secret)
-        return resp
+        with _driving_dispatch(server) as lock_error:
+            if lock_error is not None:
+                return lock_error
+            text = args.get("input", "")
+            enter = args.get("enter", True)
+            secret = args.get("secret", False)
+            pre_text = session.render_text(session.render())
+            session.send(text, enter=enter, secret=secret)
+            resp = build_response(session)
+            _record_ledger(server, session, pre_text, text, secret, resp)
+            _record_skill_step(server, text, None, resp["classification"], secret)
+            return resp
 
     if verb == "read":
         wait_prompt = args.get("wait_prompt")
@@ -191,25 +266,25 @@ def dispatch(session, verb, args, server):
         return _dispatch_record_stop(server)
 
     if verb == "replay":
-        lock_error = _control_lock_error(server)
-        if lock_error is not None:
-            return lock_error
-        return _dispatch_replay(session, args)
+        with _driving_dispatch(server) as lock_error:
+            if lock_error is not None:
+                return lock_error
+            return _dispatch_replay(session, args)
 
     if verb == "mine":
         return _dispatch_mine(args)
 
     if verb == "play":
-        lock_error = _control_lock_error(server)
-        if lock_error is not None:
-            return lock_error
-        return _dispatch_play(session, args)
+        with _driving_dispatch(server) as lock_error:
+            if lock_error is not None:
+                return lock_error
+            return _dispatch_play(session, args)
 
     if verb == "haggle":
-        lock_error = _control_lock_error(server)
-        if lock_error is not None:
-            return lock_error
-        return _dispatch_haggle(server, session, args)
+        with _driving_dispatch(server) as lock_error:
+            if lock_error is not None:
+                return lock_error
+            return _dispatch_haggle(server, session, args)
 
     # -- Trainer Control Panel: Learned-Loops Library + AUTO-LOOP background
     # driver (TUI-POLISH-PLAN.md) -------------------------------------------
@@ -231,12 +306,17 @@ def dispatch(session, verb, args, server):
     return {"ok": False, "error": f"unknown_verb:{verb}"}
 
 
-def _record_ledger(server, pre_text, input_text, secret, resp):
-    """C1 hook: every `do`/`send` dispatch appends one Trace-Ledger entry
-    (twclient/ledger.py), tagged with the currently-open `tw record`
-    capture name if any. `server.ledger` is absent in tests that build a
-    bare dispatch harness -- silently a no-op then, same convention as
-    `status`'s `getattr(server, "watch_hub", None)`."""
+def _record_ledger(server, session, pre_text, input_text, secret, resp, actor=None):
+    """C1 hook: every `do`/`send`/`haggle` dispatch appends one
+    Trace-Ledger entry (twclient/ledger.py), tagged with the
+    currently-open `tw record` capture name if any, plus TW-05's
+    actor/session_id attribution. `actor=None` (do/send's case) derives
+    the actor from mode via `_current_actor()`; a caller with its own
+    fixed attribution (haggle -- a deterministic, no-LLM engine per
+    knowledge/architecture/autonomy-loop.md's own "trainer" definition)
+    passes an explicit override instead. `server.ledger` is absent in
+    tests that build a bare dispatch harness -- silently a no-op then,
+    same convention as `status`'s `getattr(server, "watch_hub", None)`."""
     ledger = getattr(server, "ledger", None)
     if ledger is None:
         return
@@ -245,7 +325,16 @@ def _record_ledger(server, pre_text, input_text, secret, resp):
     if recorder is not None:
         capture = recorder.active_name
     post_text = "\n".join(resp["screen"])
-    ledger.record_do(pre_text, input_text, secret, post_text, resp["classification"], capture=capture)
+    ledger.record_do(
+        pre_text,
+        input_text,
+        secret,
+        post_text,
+        resp["classification"],
+        capture=capture,
+        actor=actor if actor is not None else _current_actor(server),
+        session_id=_current_session_id(session),
+    )
 
 
 def _record_skill_step(server, input_text, wait_prompt, post_class, secret):
@@ -347,7 +436,10 @@ def _dispatch_haggle(server, session, args):
     )
     resp = build_response(session, extra={"haggle": result})
     input_desc = f"<haggle:{result['outcome']}>"
-    _record_ledger(server, pre_text, input_desc, False, resp)
+    # TW-05: haggle is the deterministic, no-LLM engine autonomy-loop.md
+    # names explicitly as a "trainer" example -- never the mode-derived
+    # "ai" default `_current_actor()` would otherwise give it.
+    _record_ledger(server, session, pre_text, input_desc, False, resp, actor="trainer")
     return resp
 
 
@@ -422,7 +514,17 @@ def _dispatch_play_start(server, args):
     """Trainer Control Panel's AUTO-LOOP "start" -- arms LoopPlayer
     (loop_player.py) on a saved skill and returns immediately; progress
     streams over the watch subscribe channel (WatchHub.broadcast_extra,
-    "play_progress" events), not this response."""
+    "play_progress" events), not this response.
+
+    TW-04 preempt guard: refuses up front, with a clear error naming the
+    active driver, if an ai_pilot dispatch (do/send/replay/play/haggle)
+    is mid-flight right now -- instead of silently preempting a driving
+    pilot. LoopPlayer.start() -> ControlLock.enter_auto_loop() re-checks
+    the SAME active-driver slot atomically under its own lock (the true
+    source of truth, race-free against a dispatch starting in the
+    instant between this check and that call); this early check just
+    gives a fast, named error without first loading the skill file off
+    disk for a request that's going to be refused anyway."""
     from .loop_player import LoopPlayerError
     from .skills import SkillError, load_skill
 
@@ -432,6 +534,9 @@ def _dispatch_play_start(server, args):
     player = getattr(server, "loop_player", None)
     if player is None:
         return {"ok": False, "error": "loop_player_unavailable"}
+    lock = getattr(server, "control_lock", None)
+    if lock is not None and lock.is_driving():
+        return {"ok": False, "error": "locked_by_active_driver"}
     try:
         skill = load_skill(name)
     except SkillError as e:

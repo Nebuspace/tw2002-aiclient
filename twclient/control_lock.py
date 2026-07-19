@@ -6,7 +6,17 @@ Trainer Control Panel, TUI-POLISH-PLAN.md's "Mode selector" --
 {ai_pilot, auto_loop, human, spectate}):
 
   MODE_AI_PILOT (default) -- do/send/play/replay/haggle always succeed;
-                   the AI drives.
+                   the AI drives. EXCLUSIVE-per-dispatch (TW-04): the AI
+                   may drive, but only ONE do/send-family dispatch at a
+                   time -- acquire_driver()/release_driver() (paired in
+                   protocol.py's own dispatch-scoped guard, mirroring
+                   take_human's discipline) reserve a single "active
+                   driver" slot for the whole duration of one dispatch,
+                   so two `tw do` calls racing in from separate one-shot
+                   CLI connections (there's no persistent connection to
+                   hold a lock across -- see DESIGN.md's one-shot-CLI
+                   shape) can never both be mid-send at once. A second
+                   concurrent driver is refused outright, never queued.
   MODE_HUMAN    -- an interactive `tw attach` session holds the keyboard;
                    every driving verb from anyone else is REJECTED
                    outright (never queued/interleaved onto the wire).
@@ -68,16 +78,29 @@ _EXCLUSIVE_MODES = frozenset({MODE_HUMAN, MODE_AUTO_LOOP})
 
 
 class ControlModeConflict(Exception):
-    """Raised when a mode transition is rejected: take_human() finding
-    MODE_HUMAN already held by another attach session, or set_mode()
-    finding MODE_HUMAN active (an attach's exclusive hold can't be
-    clobbered by a plain mode-set)."""
+    """Raised when a mode transition/reservation is rejected:
+    take_human() finding MODE_HUMAN already held by another attach
+    session, enter_auto_loop() finding MODE_HUMAN active OR an ai_pilot
+    driver already mid-dispatch (TW-04 -- see acquire_driver()),
+    acquire_driver() finding the active-driver slot already held by
+    another dispatch, or set_mode() finding MODE_HUMAN/MODE_AUTO_LOOP
+    active (an attach's/loop's exclusive hold can't be clobbered by a
+    plain mode-set)."""
 
 
 class ControlLock:
     def __init__(self):
         self._lock = threading.Lock()
         self._mode = MODE_AI_PILOT
+        # TW-04: is some do/send-family dispatch (do/send/replay/play/
+        # haggle) actively mid-flight right now? Orthogonal to `_mode`
+        # (it's only ever True while _mode == MODE_AI_PILOT, since every
+        # one of those verbs is already refused in any other mode -- see
+        # protocol.py's _control_lock_error) but tracked separately
+        # because "the AI may drive" (the mode) and "a specific driver
+        # is driving THIS INSTANT" (this flag) are different questions --
+        # see acquire_driver()/release_driver() below.
+        self._driving = False
 
     @property
     def mode(self):
@@ -109,18 +132,67 @@ class ControlLock:
         with self._lock:
             self._mode = MODE_AI_PILOT
 
+    # -- exclusive, dispatch-scoped (TW-04: one in-flight ai_pilot driver) --
+
+    def acquire_driver(self):
+        """Reserves the single active-driver slot for the whole duration
+        of one do/send-family dispatch (do/send/replay/play/haggle --
+        see protocol.py's shared `_driving_dispatch` guard). Two `tw do`
+        calls racing in from separate one-shot CLI connections both pass
+        `ai_may_send()` (mode == ai_pilot is true for either); without
+        this second, EXCLUSIVE layer on top, both could call
+        `session.send()` around the same moment and interleave two
+        different logical conversations onto the one wire -- individual
+        `Session.send()` calls are already byte-atomic (session.py's own
+        `send_lock`), but nothing serialized the SEMANTIC send-then-
+        settle unit until now.
+
+        Raises ControlModeConflict("controller_busy") if another
+        dispatch already holds the slot -- refused outright, never
+        queued (queuing would mean holding a second client's one-shot
+        socket open indefinitely, which this protocol was never built to
+        do). Always paired with release_driver() in the caller's own
+        try/finally -- crash-safe like take_human()/release_human()."""
+        with self._lock:
+            if self._driving:
+                raise ControlModeConflict("controller_busy")
+            self._driving = True
+
+    def release_driver(self):
+        """Idempotent -- safe even if acquire_driver() was never called
+        (defensive cleanup path), mirroring release_human()."""
+        with self._lock:
+            self._driving = False
+
+    def is_driving(self):
+        """True while the active-driver slot is held (some do/send-
+        family dispatch is mid-flight right now). Read by
+        `_dispatch_play_start` (protocol.py) so an AUTO-LOOP start
+        request can refuse up front, with a clear error, instead of
+        racing enter_auto_loop() below for the answer."""
+        with self._lock:
+            return self._driving
+
     # -- exclusive, thread-scoped (loop_player.LoopPlayer) ----------------
 
     def enter_auto_loop(self):
         """Entered only via LoopPlayer.start() (never the generic
         set_mode() verb -- see module docstring). Refuses to preempt an
         active human attach, mirroring take_human()'s own no-stealing
-        rule in the other direction."""
+        rule in the other direction -- and (TW-04) refuses to preempt an
+        ai_pilot dispatch that's actively mid-flight RIGHT NOW, the same
+        no-stealing rule extended to the active-driver slot. This check
+        happens atomically under the same lock as the mode transition
+        (not as a separate up-front look-then-act in protocol.py) so a
+        `do` dispatch starting in the instant between a caller's check
+        and this call can never still get silently preempted."""
         with self._lock:
             if self._mode == MODE_HUMAN:
                 raise ControlModeConflict("locked_by_human_attach")
             if self._mode == MODE_AUTO_LOOP:
                 raise ControlModeConflict("already_running")
+            if self._driving:
+                raise ControlModeConflict("locked_by_active_driver")
             self._mode = MODE_AUTO_LOOP
 
     def leave_auto_loop(self):

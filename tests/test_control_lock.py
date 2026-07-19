@@ -166,3 +166,80 @@ def test_enter_auto_loop_again_after_leave_succeeds():
     lock.leave_auto_loop()
     lock.enter_auto_loop()  # must not raise
     assert lock.mode == MODE_AUTO_LOOP
+
+
+# -- acquire_driver()/release_driver()/is_driving() -- TW-04's exclusive
+# active-driver slot: at most one do/send-family dispatch mid-flight -----
+
+def test_is_driving_false_by_default():
+    lock = ControlLock()
+    assert lock.is_driving() is False
+
+
+def test_acquire_driver_marks_is_driving_true():
+    lock = ControlLock()
+    lock.acquire_driver()
+    assert lock.is_driving() is True
+    assert lock.mode == MODE_AI_PILOT  # orthogonal to mode -- still ai_pilot
+
+
+def test_acquire_driver_twice_raises_controller_busy():
+    lock = ControlLock()
+    lock.acquire_driver()
+    with pytest.raises(ControlModeConflict) as exc_info:
+        lock.acquire_driver()
+    assert str(exc_info.value) == "controller_busy"
+    assert lock.is_driving() is True  # unchanged by the rejected attempt
+
+
+def test_release_driver_clears_is_driving():
+    lock = ControlLock()
+    lock.acquire_driver()
+    lock.release_driver()
+    assert lock.is_driving() is False
+
+
+def test_release_driver_is_safe_when_not_held():
+    lock = ControlLock()
+    lock.release_driver()  # must not raise
+    assert lock.is_driving() is False
+
+
+def test_acquire_driver_again_after_release_succeeds():
+    lock = ControlLock()
+    lock.acquire_driver()
+    lock.release_driver()
+    lock.acquire_driver()  # must not raise
+    assert lock.is_driving() is True
+
+
+# -- TW-04's second incident: enter_auto_loop() must not preempt an
+# actively-driving ai_pilot dispatch -------------------------------------
+
+def test_enter_auto_loop_refuses_to_preempt_an_active_driver():
+    lock = ControlLock()
+    lock.acquire_driver()
+    with pytest.raises(ControlModeConflict) as exc_info:
+        lock.enter_auto_loop()
+    assert str(exc_info.value) == "locked_by_active_driver"
+    assert lock.mode == MODE_AI_PILOT  # never transitioned
+
+    lock.release_driver()
+    lock.enter_auto_loop()  # succeeds once the driver releases
+    assert lock.mode == MODE_AUTO_LOOP
+
+
+def test_driver_lock_never_leaks_after_a_dispatch_ends():
+    # Mode-transition/release proof: once a driver releases (mirroring a
+    # completed dispatch), BOTH the driver slot AND the mode machine are
+    # free again -- a stuck/leaked flag would wedge either take_human()
+    # or enter_auto_loop() forever.
+    lock = ControlLock()
+    lock.acquire_driver()
+    lock.release_driver()
+    assert lock.is_driving() is False
+    lock.take_human()  # must not raise -- nothing left held
+    assert lock.mode == MODE_HUMAN
+    lock.release_human()
+    lock.enter_auto_loop()  # must not raise either
+    assert lock.mode == MODE_AUTO_LOOP

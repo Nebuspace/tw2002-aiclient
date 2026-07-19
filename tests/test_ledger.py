@@ -228,6 +228,111 @@ def test_ledger_writer_redacts_secret_input_via_append(tmp_path):
     assert "hunter2" not in path.read_text(encoding="utf-8")
 
 
+# -- TW-05 actor attribution: actor/session_id/intent -----------------
+
+
+def test_record_do_defaults_actor_to_ai_and_session_fields_to_none(tmp_path):
+    writer = ledger.LedgerWriter(path=tmp_path / "ledger.jsonl")
+    entry = writer.record_do(
+        pre_text="Command [TL=00753:0/0/0/850]:",
+        input_text="d",
+        secret=False,
+        post_text="Command [TL=00753:0/0/0/850]:",
+        settled_class="main_command",
+    )
+    assert entry["actor"] == "ai"
+    assert entry["session_id"] is None
+    assert entry["intent"] is None
+
+
+def test_record_do_accepts_explicit_actor_session_id_and_intent(tmp_path):
+    path = tmp_path / "ledger.jsonl"
+    writer = ledger.LedgerWriter(path=path)
+    entry = writer.record_do(
+        pre_text="Command [TL=00753:0/0/0/850]:",
+        input_text="158",
+        secret=False,
+        post_text="Command [TL=00753:0/0/0/850]:",
+        settled_class="main_command",
+        actor="trainer",
+        session_id="s-42",
+        intent="selling organics, port buys above average",
+    )
+    assert entry["actor"] == "trainer"
+    assert entry["session_id"] == "s-42"
+    assert entry["intent"] == "selling organics, port buys above average"
+
+    on_disk = ledger.read_entries(path=path)
+    assert on_disk[0]["actor"] == "trainer"
+    assert on_disk[0]["session_id"] == "s-42"
+    assert on_disk[0]["intent"] == "selling organics, port buys above average"
+
+
+def test_record_do_accepts_actor_human(tmp_path):
+    writer = ledger.LedgerWriter(path=tmp_path / "ledger.jsonl")
+    entry = writer.record_do(
+        pre_text="Command [TL=00753:0/0/0/850]:",
+        input_text="M4223",
+        secret=False,
+        post_text="Sector : 4223",
+        settled_class="sector_display",
+        actor="human",
+        session_id="s-42",
+    )
+    assert entry["actor"] == "human"
+
+
+def test_read_entries_treats_a_pre_tw05_row_without_actor_fields_as_readable(tmp_path):
+    # Old-row compatibility: a ledger line written before TW-05 has no
+    # actor/session_id/intent keys at all -- read_entries() must still
+    # parse it cleanly (no KeyError/exception), and callers reading it
+    # back get "missing" via .get(), never a crash.
+    path = tmp_path / "ledger.jsonl"
+    old_row = {
+        "ts": "2026-07-18T12:00:00Z",
+        "capture": None,
+        "prompt": "Command [TL=00753:0/0/0/850]:",
+        "pre_state": {},
+        "input": "d",
+        "post_state": {},
+        "settled_class": "main_command",
+        "screen_delta_summary": "unchanged",
+        "reward": {},
+    }
+    path.write_text(json.dumps(old_row) + "\n", encoding="utf-8")
+
+    entries = ledger.read_entries(path=path)
+    assert len(entries) == 1
+    assert entries[0]["input"] == "d"
+    assert entries[0].get("actor") is None  # absent, not defaulted on read
+    assert entries[0].get("session_id") is None
+    assert entries[0].get("intent") is None
+
+
+def test_read_entries_mixes_pre_and_post_tw05_rows_without_error(tmp_path):
+    path = tmp_path / "ledger.jsonl"
+    writer = ledger.LedgerWriter(path=path)
+    # A pre-TW-05 row already on disk...
+    old_row = {"ts": "2026-07-18T12:00:00Z", "input": "d", "capture": None}
+    path.write_text(json.dumps(old_row) + "\n", encoding="utf-8")
+    # ...followed by a new TW-05 row appended by the current code.
+    writer.record_do(
+        pre_text="Command [TL=00753:0/0/0/850]:",
+        input_text="M",
+        secret=False,
+        post_text="Sector : 100",
+        settled_class="sector_display",
+        actor="ai",
+        session_id="s-99",
+    )
+
+    entries = ledger.read_entries(path=path)
+    assert len(entries) == 2
+    assert "actor" not in entries[0]
+    assert entries[1]["actor"] == "ai"
+    assert entries[1]["session_id"] == "s-99"
+
+
 def test_read_entries_skips_corrupt_trailing_line(tmp_path):
     path = tmp_path / "ledger.jsonl"
     path.write_text(json.dumps({"input": "A"}) + "\n" + "{not valid json\n", encoding="utf-8")
