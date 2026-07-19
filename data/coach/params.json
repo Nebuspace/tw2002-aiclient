@@ -1,0 +1,48 @@
+{
+  "version": 1,
+  "_comment": "TW-13 configurable coaching numbers. verified_vs_live=false means DESIGN §16 hypothesis — do NOT treat as hard truth until live confirm.",
+  "params": [
+    {
+      "key": "port_regrowth_pct_per_day",
+      "value": 10,
+      "unit": "percent",
+      "verified_vs_live": false,
+      "source_note": "YT/variant hypothesis (§16) — verify on our game before autopilot uses it"
+    },
+    {
+      "key": "rotate_threshold_trades",
+      "value": 50,
+      "unit": "trades",
+      "verified_vs_live": false,
+      "source_note": "Coach default: rotate when remaining trades estimate drops below this"
+    },
+    {
+      "key": "plague_stock_warn",
+      "value": 10000000,
+      "unit": "credits_stock_proxy",
+      "verified_vs_live": false,
+      "source_note": "§16 plague ~10M stock hypothesis — proxy only"
+    },
+    {
+      "key": "shield_fighters_ratio_hint",
+      "value": 0.1,
+      "unit": "ratio",
+      "verified_vs_live": false,
+      "source_note": "~7% missile bypass heuristic → shields ≥ ~10% fighters"
+    },
+    {
+      "key": "buy_production_max_unit_price",
+      "value": 9,
+      "unit": "credits",
+      "verified_vs_live": false,
+      "source_note": "§16: buy planet production when per-unit price <9cr"
+    },
+    {
+      "key": "adjacent_pair_turns_estimate",
+      "value": 4,
+      "unit": "turns",
+      "verified_vs_live": false,
+      "source_note": "Rough adjacent pair cycle floor; ship turns_per_warp adjusts live"
+    }
+  ]
+}

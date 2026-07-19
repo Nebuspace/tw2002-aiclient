@@ -1,0 +1,24 @@
+{
+  "_comment": "TEST FIXTURE ONLY — NOT stock TW2002 canon. Arbitrary values for schema/loader tests. Real rows are introspected per-server via TW-27.",
+  "world_id": "fixture+test",
+  "ships": [
+    {
+      "ship_name": "Fixture Scout",
+      "max_holds": 10,
+      "max_fighters": 5,
+      "max_shields": 2,
+      "combat_odds_modifier": 1.0,
+      "turns_per_warp": 3,
+      "base_cost_credits": 1000,
+      "alignment_requirement": 0,
+      "rank_requirement": null,
+      "transwarp_capable": false,
+      "special_abilities": [],
+      "source": "introspected: shipyard listing (fixture)",
+      "last_verified_ts": "2026-07-19T00:00:00Z"
+    }
+  ],
+  "scanners": [],
+  "transwarp": [],
+  "items": []
+}
