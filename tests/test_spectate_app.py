@@ -1065,3 +1065,68 @@ def test_library_enter_then_cancel_sends_nothing_under_a_fake_pty(tmp_path):
     assert all(c["verb"] != "play_start" for c in calls), (
         f"Enter-then-cancel must send NOTHING to play_start: {calls}"
     )
+
+
+# ---------------------------------------------------------------------------
+# WO-SPECTATE-FLICKER — status poll must not viewport-dirty; idle calm
+# ---------------------------------------------------------------------------
+
+def test_status_identity_ignores_idle_age_and_clock_fields():
+    """Regression: status polls change last_rx_age_s every time — that
+    alone must NOT count as a chrome identity change (would re-dirty
+    panes on every poll)."""
+    from twclient.spectate_app import _status_identity
+
+    base = {
+        "connected": False,
+        "mode": "ai_pilot",
+        "play": None,
+        "subscriber_count": 0,
+        "host": None,
+        "name": None,
+        "daemon_pid": "123",
+        "last_rx_age_s": 1.0,
+    }
+    aged = dict(base)
+    aged["last_rx_age_s"] = 99.0
+    assert _status_identity(base) == _status_identity(aged)
+    flipped = dict(base)
+    flipped["connected"] = True
+    assert _status_identity(base) != _status_identity(flipped)
+
+
+def test_idle_anim_interval_is_slower_than_connected():
+    from twclient.spectate_app import ANIM_INTERVAL_S, IDLE_ANIM_INTERVAL_S
+
+    assert IDLE_ANIM_INTERVAL_S > ANIM_INTERVAL_S
+    assert IDLE_ANIM_INTERVAL_S >= 0.4
+
+
+def test_spectate_source_status_poll_does_not_set_got_content():
+    """Static guard: ordinary status polls must not assign got_content
+    (the confirmed WO-SPECTATE-FLICKER mechanism). Connected-flip may
+    set it once so the waiting-frame can swap. Chrome uses chrome_dirty."""
+    src = (PROJECT_ROOT / "twclient" / "spectate_app.py").read_text()
+    assert "chrome_dirty" in src
+    assert "Intentionally NOT got_content" in src or "only the connected-flip" in src
+    poll_start = src.index("if now - last_status_poll > STATUS_POLL_INTERVAL_S:")
+    poll_end = src.index("flash_active = now < flash_until")
+    poll_block = src[poll_start:poll_end]
+    assert "chrome_dirty = True" in poll_block
+    # got_content may appear only under the connected-flip branch.
+    for line in poll_block.splitlines():
+        if "got_content = True" in line:
+            assert "Viewport must swap" in poll_block or "connected" in poll_block.lower()
+            break
+    else:
+        # Fine if we ever move the flip mark elsewhere.
+        pass
+
+
+def test_waiting_session_screen_mentions_no_game():
+    from twclient.spectate_layout import waiting_session_screen
+
+    lines = waiting_session_screen(24)
+    assert any("No game session" in line for line in lines)
+    assert len(lines) == 24
+

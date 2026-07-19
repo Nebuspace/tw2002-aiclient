@@ -56,6 +56,7 @@ from .spectate_layout import (
     sort_trade_loop_chains,
     status_semantic,
     update_tracked_stats,
+    waiting_session_screen,
 )
 
 # MIN_COLS/MIN_LINES are re-exported (not just used internally) --
@@ -70,10 +71,33 @@ STATUS_POLL_INTERVAL_S = 1.5
 # of whether a new watch event arrived; the (expensive) viewport redraws
 # ONLY on a real event -- that split is the actual CPU/flicker fix, not
 # just "redraw less often everywhere".
+#
+# WO-SPECTATE-FLICKER (2026-07-19): a status poll must NEVER set the
+# viewport-dirty flag (`got_content`). Polls used to do that every
+# STATUS_POLL_INTERVAL_S, which erased+repainted the inner viewport on
+# a quiet no-player screen and read as constant flicker. Chrome changes
+# (mode/connect/play) use `chrome_dirty` instead; idle-age ticks on the
+# anim path without a viewport wipe.
 ANIM_FPS = 13
 ANIM_INTERVAL_S = 1.0 / ANIM_FPS
+IDLE_ANIM_INTERVAL_S = 0.5  # calm chrome refresh when disconnected / no player
 HEARTBEAT_PERIOD_S = 0.8  # slow breathing-dot toggle, distinct from the faster waiting spinner
 FLASH_DURATION_S = 0.4    # brief reverse-video pulse on a connect/disconnect transition
+
+
+def _status_identity(status):
+    """Fields whose change warrants a chrome redraw — NOT poll clocks /
+    idle-age (those refresh via the anim tick without wiping panes)."""
+    return (
+        bool(status.get("connected")),
+        status.get("mode"),
+        status.get("play") if not isinstance(status.get("play"), dict)
+        else tuple(sorted((status.get("play") or {}).items())),
+        status.get("subscriber_count"),
+        status.get("host"),
+        status.get("name"),
+        status.get("daemon_pid"),
+    )
 
 # pyte's color names (see twclient/terminal.py's color_map()) -> curses'
 # basic-8 constants. pyte calls ANSI code 33 "brown"; every real terminal
@@ -696,7 +720,7 @@ def _draw_status(win, region, connected, semantic, spinner_char, heartbeat_char,
     attr = palette.attr_for(fg, bg, bold)
     if flash_active:
         attr |= curses.A_REVERSE
-    conn_word = "CONNECTED" if connected else "DISCONNECTED"
+    conn_word = "NO GAME LINK" if not connected else "CONNECTED"
     left = f"{heartbeat_char} {conn_word}  {spinner_char} idle {idle_text}"
     right = "q quit"
     try:
@@ -1014,18 +1038,32 @@ def _run(stdscr, client, sock_path, pid_path, unicode_ok):
                 got_content = True
 
             now = time.monotonic()
+            chrome_dirty = False
             if now - last_status_poll > STATUS_POLL_INTERVAL_S:
                 new_status = fetch_status(sock_path)
                 new_status["daemon_pid"] = pid_path.read_text().strip() if pid_path.exists() else None
                 if prev_connected is not None and new_status["connected"] != prev_connected:
                     flash_until = now + FLASH_DURATION_S  # connection/settle transition flash
+                    chrome_dirty = True
+                    # Viewport must swap live screen ↔ waiting-frame.
+                    got_content = True
+                if _status_identity(new_status) != _status_identity(status):
+                    chrome_dirty = True
                 prev_connected = new_status["connected"]
                 status = new_status
                 status_poll_ts = now
                 last_status_poll = now
-                got_content = True
+                # Intentionally NOT got_content for ordinary polls — only
+                # the connected-flip above may mark viewport dirty
+                # (WO-SPECTATE-FLICKER).
 
-            anim_due = (now - last_anim) >= ANIM_INTERVAL_S
+            flash_active = now < flash_until
+            if flash_active:
+                chrome_dirty = True
+
+            connected = bool(status.get("connected"))
+            anim_interval = ANIM_INTERVAL_S if connected else IDLE_ANIM_INTERVAL_S
+            anim_due = (now - last_anim) >= anim_interval
             if anim_due:
                 anim_tick += 1
                 last_anim = now
@@ -1045,7 +1083,8 @@ def _run(stdscr, client, sock_path, pid_path, unicode_ok):
                     stdscr.addnstr(0, 0, regions["message"], max(1, cols - 1))
                 except curses.error:
                     pass
-                stdscr.refresh()
+                stdscr.noutrefresh()
+                curses.doupdate()
                 continue
 
             if library["open"]:
@@ -1059,7 +1098,7 @@ def _run(stdscr, client, sock_path, pid_path, unicode_ok):
                 )
                 continue
 
-            if not (got_content or anim_due):
+            if not (got_content or anim_due or chrome_dirty):
                 continue  # the idle-CPU win (Phase 0): nothing changed, nothing animating
 
             idle_age = None
@@ -1070,14 +1109,15 @@ def _run(stdscr, client, sock_path, pid_path, unicode_ok):
             _render(
                 windows, regions, last_event, tracked, ticker_history, status,
                 palette, glyphs, now, anim_tick, idle_age, semantic,
-                flash_active=(now < flash_until), got_content=got_content,
+                flash_active=flash_active, got_content=got_content,
+                calm_idle=not connected,
             )
     finally:
         signal.signal(signal.SIGWINCH, prev_handler)
         signal.signal(signal.SIGINT, prev_sigint)
 
 
-def _render(windows, regions, event, tracked, ticker_history, status, palette, glyphs, now, anim_tick, idle_age, semantic, flash_active, got_content):
+def _render(windows, regions, event, tracked, ticker_history, status, palette, glyphs, now, anim_tick, idle_age, semantic, flash_active, got_content, calm_idle=False):
     connected = status.get("connected", False)
     accent_attr = palette.attr_for("cyan", "default", True)
     muted_attr = curses.A_DIM if hasattr(curses, "A_DIM") else curses.A_NORMAL
@@ -1099,9 +1139,17 @@ def _render(windows, regions, event, tracked, ticker_history, status, palette, g
     classification_pulsing = is_recent(tracked.get("_classification_pulse_ts"), now, CLASSIFICATION_PULSE_DURATION_S)
     ticker_flashing = is_recent(tracked.get("_ticker_flash_ts"), now, TICKER_FLASH_DURATION_S)
 
-    # TW-08 outer frame -- draw first so the one wrapped box sits under
+    # TW-08 outer frame -- draw FIRST so the one wrapped box sits under
     # every pane; inner windows overwrite their own regions on doupdate.
-    if regions.get("outer") is not None and "outer" in windows:
+    #
+    # WO-SPECTATE-FLICKER follow-up (Max 2026-07-19): the outer window
+    # spans the FULL client rect and `_draw_outer_frame` does erase().
+    # Painting it on every anim tick (without also noutrefresh'ing every
+    # overlapping sibling) blanks the viewport/ticker in doupdate — after
+    # we stopped status-polls from marking got_content, that read as
+    # "flash once then disappear." Outer is static chrome: only redraw
+    # it when panes were rebuilt / real content arrived.
+    if got_content and regions.get("outer") is not None and "outer" in windows:
         _draw_outer_frame(windows["outer"], regions["outer"], glyphs, palette)
 
     # The header is either a classification banner (event-driven, like
@@ -1117,13 +1165,21 @@ def _render(windows, regions, event, tracked, ticker_history, status, palette, g
 
     # The viewport only changes when a new event actually arrived (or
     # the panes were just rebuilt) -- the expensive draw stays
-    # event-driven, not tied to the animation tick.
+    # event-driven, not tied to the animation tick OR status polls.
+    # Disconnected: never show a leftover login/name prompt — calm
+    # "waiting for session" copy instead (Max: confusing vs DISCONNECTED).
     if got_content:
         if regions["viewport"] is not None and "viewport" in windows:
             border_attr = accent_attr if connected else palette.attr_for("red", "default", False)
+            if connected:
+                screen_lines = event.get("screen") or []
+                color_rows = event.get("color") or []
+            else:
+                screen_lines = waiting_session_screen(regions["viewport"].get("game_h", 24))
+                color_rows = []
             _draw_viewport(
                 windows["viewport"], regions["viewport"],
-                event.get("screen") or [], event.get("color") or [],
+                screen_lines, color_rows,
                 glyphs, palette, border_attr,
             )
 
@@ -1158,8 +1214,13 @@ def _render(windows, regions, event, tracked, ticker_history, status, palette, g
         _draw_control_strip(windows["control"], regions["control"], strip, palette)
 
     if "status" in windows:
-        spinner_char = glyphs["spinner"][anim_tick % len(glyphs["spinner"])]
-        heartbeat_char = glyphs["heartbeat"][int(now / HEARTBEAT_PERIOD_S) % len(glyphs["heartbeat"])]
+        if calm_idle:
+            # No-player / disconnected: steady glyph, not a busy morph.
+            spinner_char = glyphs["spinner"][0]
+            heartbeat_char = glyphs["heartbeat"][0]
+        else:
+            spinner_char = glyphs["spinner"][anim_tick % len(glyphs["spinner"])]
+            heartbeat_char = glyphs["heartbeat"][int(now / HEARTBEAT_PERIOD_S) % len(glyphs["heartbeat"])]
         idle_text = format_idle_age(idle_age) if idle_age is not None else "-"
         _draw_status(
             windows["status"], regions["status"], connected, semantic,

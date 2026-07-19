@@ -24,8 +24,12 @@ import termios
 import time
 from pathlib import Path
 
+import pytest
+
 from twclient import skills
 from twclient.control_lock import MODE_AI_PILOT, MODE_AUTO_LOOP, MODE_SPECTATE
+
+pytestmark = pytest.mark.xdist_group("control_panel_timing")
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 VENV_PYTHON = PROJECT_ROOT / ".venv" / "bin" / "python3"
@@ -144,10 +148,17 @@ def test_pressing_p_panics_and_stops_a_running_loop(fake_daemon, tmp_path, monke
     monkeypatch.setattr(skills, "SKILLS_DIR", skills_dir)
     monkeypatch.setattr(skills, "DRAFTS_DIR", skills_dir / "_drafts")
     skills.save_skill("panic-loop", [_STEP], source="recorded")
-    fake_daemon.session.wait_settle = lambda **kw: (time.sleep(0.05), ("idle", 0.05))[1]
+    # real_time_scale (private lever, see FakeAttachSession's docstring in conftest.py) is the
+    # ONLY thing that costs real wall-clock time per cycle post-TW-02 -- session.wait_settle()
+    # is dead code now that replay_skill routes through send_and_confirm's fake-clock settle.
+    # 0.5 keeps the forced 50-cycle loop running past the 8s PTY window so the keystroke, not
+    # self-completion, is what stops it (measured: cycle-1 ~0.3s, full 50-cycle run ~14.8s).
+    fake_daemon.session._real_time_scale = 0.5
 
     skill = skills.load_skill("panic-loop")
-    fake_daemon.loop_player.start(skill, "panic-loop", cycles=50)
+    # force=True mirrors the panel's Enter+y confirmed-start path (protocol forwards force);
+    # waives only the missing start_anchor on the ad-hoc _STEP skill, not a real sector mismatch
+    fake_daemon.loop_player.start(skill, "panic-loop", cycles=50, force=True)
     assert _wait_until(lambda: fake_daemon.loop_player.cycles_done >= 1)
     assert fake_daemon.control_lock.mode == MODE_AUTO_LOOP
 
@@ -159,7 +170,7 @@ def test_pressing_p_panics_and_stops_a_running_loop(fake_daemon, tmp_path, monke
         final_stop=lambda buf: b"SPECTATE" in buf,
         timeout=8.0,
     )
-    assert _wait_until(lambda: not fake_daemon.loop_player.running)
+    assert _wait_until(lambda: not fake_daemon.loop_player.running, timeout=8.0)
     assert fake_daemon.control_lock.mode == MODE_SPECTATE, (
         f"Panic never landed the daemon in SPECTATE -- mode is {fake_daemon.control_lock.mode!r}"
     )
@@ -235,10 +246,17 @@ def test_x_stops_a_running_loop_and_returns_to_ai_pilot(fake_daemon, tmp_path, m
     monkeypatch.setattr(skills, "SKILLS_DIR", skills_dir)
     monkeypatch.setattr(skills, "DRAFTS_DIR", skills_dir / "_drafts")
     skills.save_skill("x-loop", [_STEP], source="recorded")
-    fake_daemon.session.wait_settle = lambda **kw: (time.sleep(0.05), ("idle", 0.05))[1]
+    # real_time_scale (private lever, see FakeAttachSession's docstring in conftest.py) is the
+    # ONLY thing that costs real wall-clock time per cycle post-TW-02 -- session.wait_settle()
+    # is dead code now that replay_skill routes through send_and_confirm's fake-clock settle.
+    # 0.5 keeps the forced 50-cycle loop running past the 8s PTY window so the keystroke, not
+    # self-completion, is what stops it (measured: cycle-1 ~0.3s, full 50-cycle run ~14.8s).
+    fake_daemon.session._real_time_scale = 0.5
 
     skill = skills.load_skill("x-loop")
-    fake_daemon.loop_player.start(skill, "x-loop", cycles=50)
+    # force=True mirrors the panel's Enter+y confirmed-start path (protocol forwards force);
+    # waives only the missing start_anchor on the ad-hoc _STEP skill, not a real sector mismatch
+    fake_daemon.loop_player.start(skill, "x-loop", cycles=50, force=True)
     assert _wait_until(lambda: fake_daemon.loop_player.cycles_done >= 1)
 
     pid_path = tmp_path / "fake.pid"
@@ -249,7 +267,7 @@ def test_x_stops_a_running_loop_and_returns_to_ai_pilot(fake_daemon, tmp_path, m
         final_stop=lambda buf: b"AI-PILOT" in buf,
         timeout=8.0,
     )
-    assert _wait_until(lambda: not fake_daemon.loop_player.running)
+    assert _wait_until(lambda: not fake_daemon.loop_player.running, timeout=8.0)
     assert fake_daemon.control_lock.mode == MODE_AI_PILOT
     assert fake_daemon.loop_player.last_result == "stopped"
 
@@ -259,10 +277,17 @@ def test_space_pauses_and_resumes_a_running_loop(fake_daemon, tmp_path, monkeypa
     monkeypatch.setattr(skills, "SKILLS_DIR", skills_dir)
     monkeypatch.setattr(skills, "DRAFTS_DIR", skills_dir / "_drafts")
     skills.save_skill("pause-loop", [_STEP], source="recorded")
-    fake_daemon.session.wait_settle = lambda **kw: (time.sleep(0.05), ("idle", 0.05))[1]
+    # real_time_scale (private lever, see FakeAttachSession's docstring in conftest.py) is the
+    # ONLY thing that costs real wall-clock time per cycle post-TW-02 -- session.wait_settle()
+    # is dead code now that replay_skill routes through send_and_confirm's fake-clock settle.
+    # 0.5 keeps the forced 50-cycle loop running past the 8s PTY window so the keystroke, not
+    # self-completion, is what stops it (measured: cycle-1 ~0.3s, full 50-cycle run ~14.8s).
+    fake_daemon.session._real_time_scale = 0.5
 
     skill = skills.load_skill("pause-loop")
-    fake_daemon.loop_player.start(skill, "pause-loop", cycles=50)
+    # force=True mirrors the panel's Enter+y confirmed-start path (protocol forwards force);
+    # waives only the missing start_anchor on the ad-hoc _STEP skill, not a real sector mismatch
+    fake_daemon.loop_player.start(skill, "pause-loop", cycles=50, force=True)
     assert _wait_until(lambda: fake_daemon.loop_player.cycles_done >= 1)
 
     pid_path = tmp_path / "fake.pid"
@@ -273,7 +298,7 @@ def test_space_pauses_and_resumes_a_running_loop(fake_daemon, tmp_path, monkeypa
         final_stop=lambda buf: b"PAUSED" in buf,
         timeout=8.0,
     )
-    assert _wait_until(lambda: fake_daemon.loop_player.paused)
+    assert _wait_until(lambda: fake_daemon.loop_player.paused, timeout=8.0)
 
     fake_daemon.loop_player.stop()
     _wait_until(lambda: not fake_daemon.loop_player.running)

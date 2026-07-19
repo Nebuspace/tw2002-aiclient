@@ -10,6 +10,31 @@ curses window management and calls these to get the text to draw.
 TICKER_MAX = 8
 DEFAULT_EVENT = {"screen": [], "color": [], "prompt": "", "classification": "connecting...", "state": {}}
 
+# Calm GAME-pane copy when the daemon has no live game/player link — so a
+# leftover login prompt ("What's your name?") never contradicts status.
+WAITING_SESSION_LINES = (
+    "",
+    "  No game session yet.",
+    "",
+    "  Spectate is attached to the local daemon, but the",
+    "  game/player link is down — there is no live screen.",
+    "",
+    "  Start or reconnect a player, and this GAME pane",
+    "  will show the world.",
+    "",
+    "  Status NO GAME LINK = daemon has no live telnet",
+    "  session (spectate itself is fine; q quits viewer).",
+)
+
+
+def waiting_session_screen(game_h):
+    """Placeholder lines for the GAME viewport when disconnected."""
+    h = max(1, int(game_h or 1))
+    lines = list(WAITING_SESSION_LINES)
+    if len(lines) < h:
+        lines.extend([""] * (h - len(lines)))
+    return lines[:h]
+
 
 def format_sidebar(event: dict) -> list[str]:
     state = event.get("state") or {}
