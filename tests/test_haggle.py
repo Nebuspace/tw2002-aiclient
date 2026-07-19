@@ -50,6 +50,56 @@ def _scripted(responses):
     return respond
 
 
+class SettlingThenReactiveSession:
+    """Like `FakePortSession`, but the very FIRST screen isn't
+    immediately stable -- bytes keep arriving on a scripted
+    `(arrival_time, text)` timeline (same model as test_settle.py's
+    `StagedSession`) before the TRUE settled render appears. Needed to
+    prove `run_haggle`'s pre-send freshness gate (TW-01 defect #3)
+    actually waits for `settle.wait_until_settled()` rather than reading
+    whatever's on screen the instant it's invoked. Once the staged
+    arrivals are exhausted, `.send()` behaves exactly like
+    `FakePortSession` (a reactive, scripted responder)."""
+
+    def __init__(self, stages, respond):
+        self.t = 0.0
+        self.rx_count = 0
+        self.last_rx = 0.0
+        self._stages = sorted(stages)
+        self._text = ""
+        self._respond = respond
+        self.round_i = 0
+        self.sent = []
+        self._apply_pending()
+
+    def clock(self):
+        return self.t
+
+    def sleep(self, seconds):
+        self.t += seconds
+        self._apply_pending()
+
+    def _apply_pending(self):
+        while self._stages and self._stages[0][0] <= self.t:
+            _, text = self._stages.pop(0)
+            self._text = text
+            self.rx_count += 1
+            self.last_rx = self.t
+
+    def render(self):
+        return self._text.splitlines()
+
+    def render_text(self, rows=None):
+        return "\n".join(rows) if rows is not None else self._text
+
+    def send(self, text, enter=True, secret=False):
+        self.sent.append((text, enter, secret))
+        self.round_i += 1
+        self._text = self._respond(text, self.round_i)
+        self.rx_count += 1
+        self.last_rx = self.t
+
+
 def test_run_haggle_buy_direction_converges_in_two_rounds_like_the_real_capture():
     # Real capture: baseline 2,214 -> our aggressive ask (buy direction
     # means we're SELLING, want MORE) -> port barely concedes to 2,216
@@ -199,3 +249,125 @@ def test_run_haggle_honors_an_explicit_fair_value_override():
     assert session.sent[0] == ("3000", True, False)
     assert result["fair_value"] == 3000
     assert result["outcome"] == HaggleOutcome.ACCEPTED
+
+
+# -- TW-01 money-path hardening regressions (2026-07-19) --------------------
+#
+# Three real-loss-causing defects: (1) the settle-layer confirm regex
+# necessarily matches "Command [TL=" anywhere in the (possibly stale)
+# screen, not just the current line; (2) "offer prompt gone" alone used
+# to mean ACCEPTED, with zero trade evidence; (3) no freshness gate on
+# the very first read, before round 1's ask is even computed. Every test
+# below would have failed under the pre-fix code (each traced by hand
+# against the old "current_default not in haggle -> ACCEPTED at our_ask"
+# / no-gate logic before being written).
+
+
+def test_run_haggle_stale_command_prompt_elsewhere_on_screen_does_not_confirm_a_deal():
+    # The "misfire at 4187" class: our counter-offer send lands on a
+    # screen where a Command[TL=...] prompt is still visible near the
+    # TOP as stale scrollback left over from BEFORE the haggle dialogue
+    # was ever entered, while the TRUE current (bottom) line is
+    # something else entirely, unresolved. send_and_confirm's
+    # confirm_prompt does a plain whole-string re.search, so it DOES
+    # match (the settle layer can't tell stale from current) -- but the
+    # offer prompt being gone must never be read as "the port took our
+    # ask" without evidence anchored to the REAL current line.
+    responses = [
+        "Command [TL=00:00:00]:[999] (?=Help)? : \n"
+        "A meteor shower forces you to divert course.\n"
+        "Recalculating approach vector...\n"
+    ]
+    session = FakePortSession(
+        "We'll buy them for 4,187 credits.\nYour offer [4,187] ? ", _scripted(responses)
+    )
+
+    result = run_haggle(session, fair_value=4187, open_aggression_pct=0.0, round_cap=4)
+
+    assert result["outcome"] == HaggleOutcome.DESYNC_FALLBACK
+    assert result["resolved"] is False
+    assert result["final_price"] is None
+
+
+def test_run_haggle_stray_content_after_the_accept_default_send_does_not_confirm_a_deal():
+    # The "post-accept stray input" class: after we send the blank
+    # accept-default (having converged within threshold), a stray bit
+    # of leftover/garbled content lands us on a screen where
+    # Command[TL=...] is still visible (again satisfying the settle
+    # layer's whole-string search) but the TRUE current line is an
+    # error/echo, not a genuine resolution.
+    responses = [
+        "We'll buy them for 2,010 credits.\nYour offer [2,010] ? ",
+        "Command [TL=00:00:00]:[1] (?=Help)? : A\n\nUnknown command. Please try again.\n",
+    ]
+    session = FakePortSession(
+        "We'll buy them for 2,000 credits.\nYour offer [2,000] ? ", _scripted(responses)
+    )
+
+    result = run_haggle(session, round_cap=4, accept_threshold_pct=5.0, open_aggression_pct=15.0)
+
+    assert session.sent[1] == ("", True, False)  # the accept-default send still went out
+    assert result["outcome"] == HaggleOutcome.DESYNC_FALLBACK
+    assert result["resolved"] is False
+    assert result["final_price"] is None
+
+
+def test_run_haggle_reports_the_verified_credits_delta_as_final_price_over_a_guessed_ask():
+    # When a credits-balance baseline IS available (some port screens DO
+    # show it), the verified DELTA is the honest final_price -- never
+    # just "whatever we last asked for", even when the two differ (a
+    # real trade can close at a slightly different net amount than the
+    # raw ask, e.g. a fee folded in) -- final_price must be EVIDENCED,
+    # never guessed.
+    initial = (
+        "You have 100,000 credits and 10 empty cargo holds.\n\n"
+        "We'll buy them for 2,000 credits.\nYour offer [2,000] ? "
+    )
+    responses = [
+        "Done, we'll take the lot.\n\n"
+        "You have 102,300 credits and 10 empty cargo holds.\n\n"
+        "Command [TL=00:00:00]:[1] (?=Help)? : "
+    ]
+    session = FakePortSession(initial, _scripted(responses))
+
+    result = run_haggle(session, fair_value=2000, open_aggression_pct=0.0, round_cap=4)
+
+    assert session.sent[0][0] == "2000"  # what we actually asked for
+    assert result["outcome"] == HaggleOutcome.ACCEPTED
+    assert result["final_price"] == 2300  # the VERIFIED delta, not the raw ask
+
+
+def test_run_haggle_waits_for_a_fresh_settled_render_before_reading_the_opening_prompt():
+    # Defect #3: the screen is STILL mid-transition (an intervening
+    # "docking" screen, no haggle prompt at all) at the moment
+    # run_haggle is invoked; the REAL settled offer-prompt only appears
+    # a beat later. Without the pre-send freshness gate, run_haggle
+    # would read the transitional text immediately and misreport
+    # "no active haggle" even though a genuine dialogue is one beat away.
+    stages = [
+        (0.0, "Docking with starbase Alpha...\n"),
+        (0.2, "We'll buy them for 800 credits.\nYour offer [800] ? "),
+    ]
+    responses = ["Done, we'll take the lot.\n\nCommand [TL=00:00:00]:[1] (?=Help)? : "]
+    session = SettlingThenReactiveSession(stages, _scripted(responses))
+
+    result = run_haggle(session, round_cap=4)
+
+    assert result["outcome"] == HaggleOutcome.ACCEPTED
+    first_ask = int(session.sent[0][0])
+    assert first_ask > 800  # negotiated off the REAL settled baseline, not the transitional screen
+
+
+def test_run_haggle_desync_fallback_when_the_screen_never_settles_before_the_first_read():
+    # The screen never stops changing at all (a sustained animation/
+    # redraw) -- the freshness gate must time out and refuse to read/act
+    # on it, rather than parsing whatever happens to be on screen.
+    stages = [(0.05 * i, f"Redrawing frame {i}...\n") for i in range(1, 200)]
+    session = SettlingThenReactiveSession(stages, lambda _s, _r: "unreachable")
+
+    result = run_haggle(session, fresh_render_timeout_s=0.5)
+
+    assert result["outcome"] == HaggleOutcome.DESYNC_FALLBACK
+    assert result["resolved"] is False
+    assert result["final_price"] is None
+    assert session.sent == []  # never sends anything against an unsettled render
