@@ -147,6 +147,102 @@ def plan_map_fill(
     )
 
 
+@dataclass(frozen=True)
+class StarDockPlan:
+    """One Find-StarDock tick — route if known, else map-fill to hunt."""
+
+    found: bool
+    stardock_sectors: tuple[int, ...]
+    route: Optional[tuple[int, ...]]  # path on known graph when found
+    next_sector: Optional[int]  # immediate next hop toward dock or frontier
+    hunt: Optional[MapFillPlan]  # set when dock not yet landmark-cached
+    mode: str  # "route" | "hunt" | "arrived" | "exhausted"
+
+
+def plan_find_stardock(
+    world_id: str,
+    *,
+    current_sector: int,
+    turn_budget: int,
+    epsilon: float = 0.1,
+    landmark: str = "StarDock",
+    state_dir=None,
+    rng: Optional[random.Random] = None,
+) -> StarDockPlan:
+    """Find-StarDock tick: pathfind if landmark known, else Map-fill hunt.
+
+    Does not write the world-model or emit keystrokes — callers that
+    visit sectors (density scan / move) are what populate landmarks.
+    """
+    budget = max(0, int(turn_budget))
+    docks = tuple(find_landmark_sectors(world_id, landmark, state_dir=state_dir))
+    graph = known_graph(world_id, state_dir=state_dir)
+    cur = int(current_sector)
+
+    if docks:
+        # Prefer nearest known StarDock on the known subgraph.
+        best: Optional[tuple[int, ...]] = None
+        for dock in docks:
+            path = path_to_sector(graph, cur, dock)
+            if path is None:
+                continue
+            if best is None or len(path) < len(best):
+                best = path
+        if best is None:
+            return StarDockPlan(
+                found=True,
+                stardock_sectors=docks,
+                route=None,
+                next_sector=None,
+                hunt=None,
+                mode="exhausted",
+            )
+        if len(best) == 1:
+            return StarDockPlan(
+                found=True,
+                stardock_sectors=docks,
+                route=best,
+                next_sector=None,
+                hunt=None,
+                mode="arrived",
+            )
+        if budget <= 0:
+            return StarDockPlan(
+                found=True,
+                stardock_sectors=docks,
+                route=best,
+                next_sector=None,
+                hunt=None,
+                mode="exhausted",
+            )
+        return StarDockPlan(
+            found=True,
+            stardock_sectors=docks,
+            route=best,
+            next_sector=best[1],
+            hunt=None,
+            mode="route",
+        )
+
+    hunt = plan_map_fill(
+        world_id,
+        current_sector=cur,
+        turn_budget=budget,
+        epsilon=epsilon,
+        state_dir=state_dir,
+        rng=rng,
+    )
+    nxt = hunt.next_hop.to if hunt.next_hop is not None else None
+    return StarDockPlan(
+        found=False,
+        stardock_sectors=(),
+        route=None,
+        next_sector=nxt,
+        hunt=hunt,
+        mode="hunt" if nxt is not None else "exhausted",
+    )
+
+
 def find_landmark_sectors(
     world_id: str,
     landmark_name: str,

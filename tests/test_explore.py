@@ -7,6 +7,7 @@ from twclient.explore import (
     frontier_edges,
     path_to_sector,
     plan_map_fill,
+    plan_find_stardock,
     find_landmark_sectors,
 )
 import random
@@ -121,3 +122,61 @@ def test_frontier_edges_unit():
     edges = frontier_edges(graph, start=1)
     assert len(edges) == 1
     assert edges[0].frm == 2 and edges[0].to == 9
+
+
+def test_find_stardock_routes_when_landmark_known(tmp_path: Path):
+    wid = "test+sdroute"
+    _seed(
+        wid,
+        tmp_path,
+        [
+            {"sector_id": 1, "warps": [2], "landmarks": []},
+            {"sector_id": 2, "warps": [1, 3], "landmarks": []},
+            {"sector_id": 3, "warps": [2], "landmarks": ["StarDock"]},
+        ],
+    )
+    plan = plan_find_stardock(
+        wid, current_sector=1, turn_budget=5, epsilon=0.0, state_dir=tmp_path,
+    )
+    assert plan.found is True
+    assert plan.mode == "route"
+    assert plan.route == (1, 2, 3)
+    assert plan.next_sector == 2
+    assert plan.hunt is None
+
+
+def test_find_stardock_arrived(tmp_path: Path):
+    wid = "test+sdhere"
+    _seed(
+        wid,
+        tmp_path,
+        [{"sector_id": 7, "warps": [], "landmarks": ["StarDock"]}],
+    )
+    plan = plan_find_stardock(
+        wid, current_sector=7, turn_budget=3, state_dir=tmp_path,
+    )
+    assert plan.mode == "arrived"
+    assert plan.next_sector is None
+    assert plan.route == (7,)
+
+
+def test_find_stardock_hunts_via_map_fill(tmp_path: Path):
+    wid = "test+sdhunt"
+    _seed(
+        wid,
+        tmp_path,
+        [
+            {"sector_id": 1, "warps": [2], "landmarks": []},
+            {"sector_id": 2, "warps": [1, 99], "landmarks": []},
+        ],
+    )
+    plan = plan_find_stardock(
+        wid, current_sector=1, turn_budget=4, epsilon=0.0, state_dir=tmp_path,
+        rng=random.Random(0),
+    )
+    assert plan.found is False
+    assert plan.mode == "hunt"
+    assert plan.next_sector == 99
+    assert plan.hunt is not None
+    assert plan.hunt.next_hop is not None
+    assert plan.hunt.next_hop.to == 99
