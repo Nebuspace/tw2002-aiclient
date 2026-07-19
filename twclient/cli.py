@@ -326,7 +326,7 @@ def cmd_replay(args):
     params = _parse_params(args.param)
     resp = send_request(
         "replay",
-        {"name": args.name, "params": params, "step_timeout": args.step_timeout},
+        {"name": args.name, "params": params, "step_timeout": args.step_timeout, "force": args.force},
         timeout=args.timeout + 5,
     )
     print_response(resp, args)
@@ -372,6 +372,7 @@ def cmd_play(args):
             "floor": args.floor,
             "params": params,
             "step_timeout": args.step_timeout,
+            "force": args.force,
         },
         timeout=args.timeout + 5,
     )
@@ -660,6 +661,10 @@ def build_parser():
     sp.add_argument("--param", action="append", default=[], metavar="k=v", help="template substitution (repeatable)")
     sp.add_argument("--step-timeout", type=float, default=8.0, help="per-step settle timeout")
     sp.add_argument("--timeout", type=float, default=60.0, help="overall client-socket budget")
+    sp.add_argument(
+        "--force", action="store_true",
+        help="TW-03: waive a missing/legacy start_anchor (never bypasses a DETECTED sector mismatch)",
+    )
     add_json(sp)
     sp.set_defaults(func=cmd_replay)
 
@@ -701,6 +706,10 @@ def build_parser():
     sp.add_argument("--param", action="append", default=[], metavar="k=v", help="template substitution (repeatable)")
     sp.add_argument("--step-timeout", type=float, default=8.0, help="per-step settle timeout")
     sp.add_argument("--timeout", type=float, default=600.0, help="overall client-socket budget")
+    sp.add_argument(
+        "--force", action="store_true",
+        help="TW-03: waive a missing/legacy start_anchor (never bypasses a DETECTED sector mismatch)",
+    )
     add_json(sp)
     sp.set_defaults(func=cmd_play)
 

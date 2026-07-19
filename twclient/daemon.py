@@ -237,7 +237,13 @@ def main(argv=None):
     # Trainer Control Panel (TUI-POLISH-PLAN.md) -- the AUTO-LOOP
     # background driver (loop_player.py); always-on infrastructure like
     # control_lock above, not gated behind any capture-open flag.
-    server.loop_player = LoopPlayer(session, server.control_lock, watch_hub)
+    # TW-04: reuses this daemon's own Trace-Ledger + TranscriptLogger
+    # session id (set in Session.__init__, always present on a real
+    # session by this point) so every AUTO-LOOP send gets the same
+    # actor="trainer" ledger row a `tw replay`/`tw play` dispatch does.
+    server.loop_player = LoopPlayer(
+        session, server.control_lock, watch_hub, ledger=server.ledger, session_id=session.logger.session_id
+    )
     server.request_stop = lambda: threading.Thread(target=_shutdown, args=(server, session), daemon=True).start()
 
     try:

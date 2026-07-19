@@ -260,7 +260,7 @@ def dispatch(session, verb, args, server):
 
     # -- v2.1 item 11: macro/recording/pattern-learning verbs -----------
     if verb == "record_start":
-        return _dispatch_record_start(server, args)
+        return _dispatch_record_start(server, session, args)
 
     if verb == "record_stop":
         return _dispatch_record_stop(server)
@@ -269,7 +269,7 @@ def dispatch(session, verb, args, server):
         with _driving_dispatch(server) as lock_error:
             if lock_error is not None:
                 return lock_error
-            return _dispatch_replay(session, args)
+            return _dispatch_replay(server, session, args)
 
     if verb == "mine":
         return _dispatch_mine(args)
@@ -278,7 +278,7 @@ def dispatch(session, verb, args, server):
         with _driving_dispatch(server) as lock_error:
             if lock_error is not None:
                 return lock_error
-            return _dispatch_play(session, args)
+            return _dispatch_play(server, session, args)
 
     if verb == "haggle":
         with _driving_dispatch(server) as lock_error:
@@ -346,14 +346,22 @@ def _record_skill_step(server, input_text, wait_prompt, post_class, secret):
     recorder.record_step(input_text, wait_prompt, post_class, secret=secret)
 
 
-def _dispatch_record_start(server, args):
+def _dispatch_record_start(server, session, args):
+    """TW-03 wiring: a new capture's `start_anchor` is the sector the
+    caller is standing in RIGHT NOW (parse_state on the current settled
+    text) -- computed here, at the one place a `tw record start` capture
+    begins, rather than asked of the caller; `None` when the current
+    screen doesn't parse a sector (e.g. mid-login), same as any other
+    unparseable-state case elsewhere in this module."""
     from .skills import SkillError
 
     recorder = getattr(server, "skill_recorder", None)
     if recorder is None:
         return {"ok": False, "error": "recording_unavailable"}
+    text = session.render_text(session.render())
+    start_anchor = parse_state(text).get("sector")
     try:
-        name = recorder.start(args.get("name"))
+        name = recorder.start(args.get("name"), start_anchor=start_anchor)
     except SkillError as e:
         return {"ok": False, "error": str(e)}
     return {"ok": True, "recording": name}
@@ -369,7 +377,15 @@ def _dispatch_record_stop(server):
     return {"ok": True, **result}
 
 
-def _dispatch_replay(session, args):
+def _dispatch_replay(server, session, args):
+    """TW-03/TW-04 wiring: `force` is the caller's explicit opt-in to
+    waive a missing/legacy `start_anchor` (see skills._check_start_anchor
+    -- never bypasses a DETECTED mismatch); `ledger`/`session_id` route
+    every replayed step into the same Trace-Ledger this daemon's
+    do/send/haggle dispatches already write to, tagged `actor="trainer"`
+    by replay_skill itself. `server.ledger` is absent in bare
+    dispatch-harness tests -- same getattr(..., None) no-op convention
+    as `_record_ledger`."""
     from .skills import ReplayDivergence, SkillError, load_skill, replay_skill
 
     name = args.get("name")
@@ -377,12 +393,25 @@ def _dispatch_replay(session, args):
         return {"ok": False, "error": "missing_name"}
     try:
         skill = load_skill(name)
-    except SkillError as e:
-        return {"ok": False, "error": str(e)}
-    try:
-        results = replay_skill(session, skill, params=args.get("params") or {}, step_timeout=args.get("step_timeout", 8.0))
+        results = replay_skill(
+            session,
+            skill,
+            params=args.get("params") or {},
+            step_timeout=args.get("step_timeout", 8.0),
+            force=args.get("force", False),
+            ledger=getattr(server, "ledger", None),
+            session_id=_current_session_id(session),
+        )
     except ReplayDivergence as e:
         return {"ok": False, "error": "divergence", **e.as_dict()}
+    except SkillError as e:
+        # A missing/legacy start_anchor (skills._check_start_anchor) also
+        # raises SkillError, same as load_skill's own not-found/corrupt
+        # cases -- one shared try block, matching _dispatch_play's
+        # existing convention below, so both raise shapes get the same
+        # clean {"ok": False, "error": "..."} instead of falling through
+        # to daemon.py's generic internal_error catch-all.
+        return {"ok": False, "error": str(e)}
     return {"ok": True, "name": name, "results": results}
 
 
@@ -393,7 +422,10 @@ def _dispatch_mine(args):
     return {"ok": True, **result}
 
 
-def _dispatch_play(session, args):
+def _dispatch_play(server, session, args):
+    """TW-03/TW-04 wiring -- same `force`/`ledger`/`session_id` contract
+    as `_dispatch_replay` above, forwarded into every cycle's
+    `replay_skill()` call by `play_skill` itself."""
     from .skills import SkillError, load_skill, play_skill
 
     name = args.get("name")
@@ -408,6 +440,9 @@ def _dispatch_play(session, args):
             floor=args.get("floor"),
             params=args.get("params") or {},
             step_timeout=args.get("step_timeout", 8.0),
+            force=args.get("force", False),
+            ledger=getattr(server, "ledger", None),
+            session_id=_current_session_id(session),
         )
     except SkillError as e:
         return {"ok": False, "error": str(e)}
@@ -549,6 +584,7 @@ def _dispatch_play_start(server, args):
             floor=args.get("floor"),
             params=args.get("params") or {},
             step_timeout=args.get("step_timeout", 8.0),
+            force=args.get("force", False),
         )
     except (LoopPlayerError, ControlModeConflict) as e:
         return {"ok": False, "error": str(e)}
