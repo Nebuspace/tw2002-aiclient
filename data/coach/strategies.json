@@ -1,0 +1,158 @@
+{
+  "version": 1,
+  "_comment": "TW-13 coaching KB content half. Cross-links OKF strategies; numbers live in params.json (mostly unverified hypotheses until live confirm).",
+  "strategies": [
+    {
+      "id": "pair_trade_loop",
+      "title": "Pair trade loops",
+      "what": "Cycle complementary ports: buy low at A, sell/buy at B, return. Rank by credits-per-turn, not credits-per-trip.",
+      "when_trigger": "docked_at_port",
+      "tradeoffs": [
+        "Smaller faster loops can beat fatter slow ones.",
+        "Stock depletes — loops are not infinite.",
+        "Haggle is a per-trade overlay, not a property of the loop."
+      ],
+      "steps": [
+        "Identify a nearby complementary port from the world-model.",
+        "Estimate turns/cycle (warps × turns-per-warp + trade time).",
+        "Rank candidates by cr/turn; prefer adjacent pairs.",
+        "Run until remaining-trades prediction says rotate."
+      ],
+      "okf_refs": ["/strategies/pair-trade-loops.md", "/strategies/port-economics.md"],
+      "hypothesis_flags": ["floor_prices_unverified"],
+      "priority": 10
+    },
+    {
+      "id": "route_longevity",
+      "title": "Rotate before decay",
+      "what": "Estimate remaining profitable trades from stock ÷ holds; leave before margin collapses. Ports may regrow — revisit later.",
+      "when_trigger": "loop_depleting",
+      "tradeoffs": [
+        "Abandoning too early wastes setup turns.",
+        "Staying too late burns turns for crumbs.",
+        "Very large aggregate stock can signal plague risk (hypothesis)."
+      ],
+      "steps": [
+        "Read buy/sell stock fields for the active commodities.",
+        "remaining ≈ min(stock fields) ÷ current holds.",
+        "If below rotate_threshold_trades, hunt a fresh pair/chain.",
+        "Schedule a revisit after regrowth_window if the pair was strong."
+      ],
+      "okf_refs": ["/strategies/port-economics.md"],
+      "hypothesis_flags": ["port_regrowth_pct_unverified", "plague_threshold_unverified"],
+      "priority": 20
+    },
+    {
+      "id": "dead_end_planet",
+      "title": "Hide a planet in a dead-end",
+      "what": "Single-exit sectors are strong defend/hide spots for a private planet once genesis is on the table.",
+      "when_trigger": "at_dead_end",
+      "tradeoffs": [
+        "Genesis + defense is a real credit/turn commit — coach, don't auto-fire.",
+        "A dead-end with heavy traffic is not private."
+      ],
+      "steps": [
+        "Confirm the sector has exactly one warp.",
+        "Note fighters/mines on approach from the world-model.",
+        "Surface as a genesis/hide candidate; wait for operator confirm."
+      ],
+      "okf_refs": ["/strategies/planet-colonization.md", "/strategies/exploration.md"],
+      "hypothesis_flags": [],
+      "priority": 40
+    },
+    {
+      "id": "toll_math",
+      "title": "Toll / gate combat math",
+      "what": "Decide attack vs pay vs reroute from fighter odds and surrender ratios. Attack is NOT free — expect fighter losses.",
+      "when_trigger": "toll_or_gate",
+      "tradeoffs": [
+        "Reroute (~1 turn) is often cheaper than a fight.",
+        "Shields absorb more efficiently than buying fighters at rack.",
+        "Auto-engage is forbidden without explicit operator call (anti-PK)."
+      ],
+      "steps": [
+        "Estimate fighters needed ≈ (enemyFtr × enemyOdds) ÷ yourOdds.",
+        "Check shield cushion (~10% of fighters as a starting heuristic).",
+        "Compare expected fighter loss vs reroute turn cost.",
+        "Coach the options; never auto-attack players."
+      ],
+      "okf_refs": ["/strategies/toll-and-defense-math.md"],
+      "hypothesis_flags": ["toll_odds_formula_unverified", "surrender_ratios_unverified"],
+      "priority": 15
+    },
+    {
+      "id": "planet_production",
+      "title": "Planet production compounder",
+      "what": "Planets make turn-free compounding income; cargo left on-planet can raise daily production. Best lever on no-PvP builder games.",
+      "when_trigger": "planet_management",
+      "tradeoffs": [
+        "Mega-planets invite plague risk — diversify (hypothesis).",
+        "Buying production with credits only pays when unit price is cheap enough.",
+        "Equipment→planet→high-buyer dump loop needs relocation turns."
+      ],
+      "steps": [
+        "Prefer many mid planets over one mega-planet.",
+        "When equipment is cheap, mass-transfer to planet before relocating beside a buyer.",
+        "Track productivity; spread load if approaching plague band."
+      ],
+      "okf_refs": ["/strategies/planet-colonization.md"],
+      "hypothesis_flags": ["planet_production_numbers_unverified", "plague_band_unverified"],
+      "priority": 30
+    },
+    {
+      "id": "holds_first",
+      "title": "Holds-first ship progression",
+      "what": "Prioritize cargo capacity, then shields, then fighters. Rush a danger/density scanner early.",
+      "when_trigger": "at_shipyard",
+      "tradeoffs": [
+        "Bigger holds without a sustaining loop stock depletes ports faster.",
+        "Upgrading late in a turn-capped run may not amortize (see TW-30).",
+        "Ship numbers are per-server — read game_data, never stock constants."
+      ],
+      "steps": [
+        "Look up max-holds / cost from introspected game_data.",
+        "Run TW-30 upgrade decision against remaining turns + loop economics.",
+        "If recommend=false, coach HOLD with the rationale flags."
+      ],
+      "okf_refs": ["/reference/tw2002-ships-and-equipment.md"],
+      "hypothesis_flags": [],
+      "priority": 25
+    },
+    {
+      "id": "longest_profit_chain",
+      "title": "Celebrate longest profit chains",
+      "what": "Multi-hop adjacent station cycles where every hop margins positive; call out length + cr/turn (TW-21).",
+      "when_trigger": "chain_opportunity",
+      "tradeoffs": [
+        "Longer is preferred, but cr/turn still breaks ties.",
+        "Needs a filled warp+port world-model to fire live."
+      ],
+      "steps": [
+        "Run find_profit_chains / longest_profit_chain on the graph.",
+        "Surface format_coach_callout to the Decisions box.",
+        "Optionally arm as a library row (source=discovered)."
+      ],
+      "okf_refs": ["/strategies/pair-trade-loops.md"],
+      "hypothesis_flags": [],
+      "priority": 12
+    },
+    {
+      "id": "explore_density",
+      "title": "Density-scan before stepping",
+      "what": "Scan adjacent sectors to prioritize visits; turn-free force-multiplier for mapping.",
+      "when_trigger": "exploring_frontier",
+      "tradeoffs": [
+        "Scan signatures are hypothesized mappings — verify vs live.",
+        "Does not replace visiting sectors that must be mapped for nav."
+      ],
+      "steps": [
+        "If a density scanner is mounted, scan unknown adjacents first.",
+        "Visit high-value signatures next (ports, specials).",
+        "Write findings into the world-model."
+      ],
+      "okf_refs": ["/strategies/exploration.md", "/reference/tw2002-ships-and-equipment.md"],
+      "hypothesis_flags": ["density_scan_value_map_unverified"],
+      "priority": 35
+    }
+  ]
+}
