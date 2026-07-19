@@ -10,9 +10,10 @@ import re
 import time
 from contextlib import contextmanager
 
+from . import world_identity, world_model
 from .classify import classify_screen
 from .control_lock import MODE_AI_PILOT, MODE_AUTO_LOOP, MODE_HUMAN, ControlModeConflict
-from .state_parser import parse_state
+from .state_parser import parse_port_report, parse_state
 
 
 def _control_lock_error(server):
@@ -122,6 +123,64 @@ def _current_session_id(session):
     return getattr(logger, "session_id", None) if logger is not None else None
 
 
+def _current_world_id(session):
+    """TW-06/TW-25 world-model write-hook keying
+    (knowledge/architecture/world-model.md's World Identity section):
+    the `world_id` this session's parsed reads should be attributed to,
+    or `None` when there's no attributable world -- manual play with no
+    configured character (`session.auto_login_profile` unset), or a
+    profile name that no longer resolves (`credentials.CredentialError`
+    -- deleted/renamed profile, malformed profiles.toml entry, etc).
+
+    Deliberately NEVER falls back to a host-only key: the canon is
+    explicit that host-only keying causes galaxy-bleed between
+    different characters sharing a host+game -- no-key-means-no-write
+    is the correct, safe default here, not a gap to paper over.
+
+    `getattr`-guarded on `auto_login_profile` like every other optional
+    session surface this module reads (`server.watch_hub`,
+    `session.cursor_pos`) -- absent on bare fake-session test doubles
+    that predate it."""
+    profile_name = getattr(session, "auto_login_profile", None)
+    if not profile_name:
+        return None
+    from . import credentials
+
+    try:
+        profile = credentials.load_profile(profile_name)
+    except credentials.CredentialError:
+        return None
+    return world_identity.world_id(session.host, profile.game_letter, profile.handle)
+
+
+def _write_world_model(session, text, parsed_state):
+    """TW-06/TW-25 world-model write-hook: fire-and-forget side effect
+    of `build_response` -- see `_current_world_id()` for the no-profile-
+    means-no-write guarantee. Never allowed to affect the response: a
+    store I/O error, a corrupt-store `WorldModelError`, or any other
+    world_model failure is swallowed here exactly like daemon.py's
+    dispatch-level `except Exception` guard -- a persistence hiccup must
+    never fail the `tw do`/`tw read`/`tw screen` response the caller is
+    waiting on. Two independent write paths, each independently
+    guarded so a failure in one never blocks the other: the single-
+    sector `parse_state()` mapping, and the batch `parse_port_report()`
+    mapping (`[]` on a non-report screen -- safe to attempt on every
+    response)."""
+    wid = _current_world_id(session)
+    if wid is None:
+        return
+    try:
+        world_model.write_from_state(wid, parsed_state)
+    except Exception:  # noqa: BLE001 -- a world-model write must never fail the response
+        pass
+    try:
+        records = parse_port_report(text)
+        if records:
+            world_model.bulk_upsert(wid, records)
+    except Exception:  # noqa: BLE001 -- same guarantee for the batch path
+        pass
+
+
 def build_response(session, rows=None, settled_reason=None, extra=None):
     color = None
     if rows is None:
@@ -130,13 +189,14 @@ def build_response(session, rows=None, settled_reason=None, extra=None):
         rows, color = session.render_with_color()
     text = session.render_text(rows)
     prompt = rows[-1].strip() if rows else ""
+    parsed_state = parse_state(text)
     resp = {
         "ok": True,
         "screen": rows,
         "color": color,
         "prompt": prompt,
         "classification": classify_screen(text, prompt),
-        "state": parse_state(text),
+        "state": parsed_state,
         # TX channel ("Core transparency", TUI-POLISH-PLAN.md) + attach's
         # MANUAL-mode caret -- both optional on the session surface
         # (getattr/hasattr-guarded like server.watch_hub/server.ledger
@@ -150,6 +210,12 @@ def build_response(session, rows=None, settled_reason=None, extra=None):
         resp["settled_reason"] = settled_reason
     if extra:
         resp.update(extra)
+    # TW-06/TW-25 world-model write-hook (knowledge/architecture/world-
+    # model.md's Write Hooks section): every parsed game-state read
+    # feeds the per-world sector store as a pure side effect -- see
+    # _write_world_model()'s docstring for the swallow-guard this relies
+    # on never being able to fail the response above.
+    _write_world_model(session, text, parsed_state)
     return resp
 
 

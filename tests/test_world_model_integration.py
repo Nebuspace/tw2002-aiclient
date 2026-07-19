@@ -1,0 +1,225 @@
+"""End-to-end proof that the TW-06/TW-25 world-model foundation is
+actually wired, not just unit-tested in isolation -- drives the real
+`protocol.dispatch()`/`build_response()` path with a scripted fake
+session (same bare-dispatch-harness idiom as test_protocol_haggle.py's/
+test_actor_attribution.py's FakeSession/FakeServer), through
+`_current_world_id()`'s real profile resolution (a monkeypatched
+`credentials.PROFILES_PATH`, not a stubbed resolver), into a
+tmp-path-isolated `world_model` store. protocol.py's write-hook calls
+`world_model.write_from_state()`/`bulk_upsert()` with no `state_dir` of
+its own to thread through (there's no such session/server surface to
+carry one) -- monkeypatching `world_model.WORLD_DIR`, the store's own
+default-path constant, is the sanctioned way to isolate this per its
+`state_dir=` convention (see world_model.py's module docstring / TW-06
+dispatch note)."""
+
+import os
+
+import pytest
+
+from twclient import credentials, protocol, world_model
+
+FIXTURE_DIR = os.path.join(os.path.dirname(__file__), "fixtures")
+
+
+def _load_fixture(name):
+    with open(os.path.join(FIXTURE_DIR, name), encoding="utf-8") as f:
+        return f.read()
+
+
+class FakeSession:
+    """Minimal bare-dispatch-harness session (same surface as
+    test_protocol_haggle.py's/test_actor_attribution.py's FakeSession)
+    plus `.host`/`.auto_login_profile` -- the two fields
+    `_current_world_id()` actually reads."""
+
+    def __init__(self, host, initial_text, auto_login_profile=None):
+        self.host = host
+        self.auto_login_profile = auto_login_profile
+        self._text = initial_text
+        self.sent = []
+        self.rx_count = 1
+        self.last_rx = 0.0
+        self.t = 0.0
+
+    def clock(self):
+        return self.t
+
+    def sleep(self, seconds):
+        self.t += seconds
+
+    def render(self):
+        return self._text.splitlines()
+
+    def render_with_color(self):
+        return self.render(), None
+
+    def render_text(self, rows=None):
+        return "\n".join(rows) if rows is not None else self._text
+
+    def send(self, text, enter=True, secret=False):
+        self.sent.append((text, enter, secret))
+        self.rx_count += 1
+        self.last_rx = self.t
+
+    def wait_settle(self, wait_prompt=None, timeout=8.0, debounce_ms=350):
+        return "idle", 0.0
+
+    def record_history(self, *a, **kw):
+        pass
+
+
+class FakeServer:
+    """Deliberately bare -- no `.control_lock`/`.ledger`/
+    `.skill_recorder`, matching protocol.py's own documented "bare
+    dispatch harness" convention (every one of those is getattr-guarded
+    to a no-op)."""
+
+
+def _write_profiles(path, profiles):
+    lines = []
+    for name, p in profiles.items():
+        lines.append(f"[{name}]")
+        lines.append(f'host = "{p["host"]}"')
+        lines.append(f'port = {p["port"]}')
+        lines.append(f'game_letter = "{p["game_letter"]}"')
+        lines.append(f'handle = "{p["handle"]}"')
+        lines.append("")
+    path.write_text("\n".join(lines), encoding="utf-8")
+
+
+@pytest.fixture(autouse=True)
+def isolated_world_store(tmp_path, monkeypatch):
+    """Every test in this file gets its own tmp world_model directory
+    AND its own tmp profiles.toml -- never the real project's state/ or
+    config/ (this is the integration-proof suite; it must never read or
+    write the live daemon's on-disk state). Returns the tmp
+    profiles.toml path for tests to populate via `_write_profiles`."""
+    monkeypatch.setattr(world_model, "WORLD_DIR", tmp_path / "world")
+    profiles_path = tmp_path / "profiles.toml"
+    monkeypatch.setattr(credentials, "PROFILES_PATH", profiles_path)
+    return profiles_path
+
+
+ALICE_SCREEN = "Sector : 123\nCommand [TL=00753:0/0/0/850] (?=Help)? : "
+BOB_SCREEN = "Sector : 999\nCommand [TL=00753:0/0/0/850] (?=Help)? : "
+
+
+# -- (a) a `do` producing a screen with a sector persists it, queryable -----
+
+
+def test_do_with_a_sector_screen_persists_the_sector_queryable(isolated_world_store):
+    _write_profiles(
+        isolated_world_store,
+        {"alice": {"host": "bat.example.com", "port": 23, "game_letter": "A", "handle": "Alice"}},
+    )
+    session = FakeSession("bat.example.com", ALICE_SCREEN, auto_login_profile="alice")
+
+    resp = protocol.dispatch(session, "do", {"input": ""}, FakeServer())
+
+    assert resp["ok"] is True
+    world_id = protocol._current_world_id(session)
+    assert world_id is not None
+    sector = world_model.get_sector(world_id, 123)
+    assert sector is not None
+    assert sector["sector_id"] == 123
+
+
+# -- (b) a second world (different profile handle) stays isolated ----------
+
+
+def test_two_worlds_stay_isolated_by_profile_handle(isolated_world_store):
+    _write_profiles(
+        isolated_world_store,
+        {
+            "alice": {"host": "bat.example.com", "port": 23, "game_letter": "A", "handle": "Alice"},
+            "bob": {"host": "bat.example.com", "port": 23, "game_letter": "A", "handle": "Bob"},
+        },
+    )
+    alice_session = FakeSession("bat.example.com", ALICE_SCREEN, auto_login_profile="alice")
+    bob_session = FakeSession("bat.example.com", BOB_SCREEN, auto_login_profile="bob")
+
+    protocol.dispatch(alice_session, "do", {"input": ""}, FakeServer())
+    protocol.dispatch(bob_session, "do", {"input": ""}, FakeServer())
+
+    alice_world = protocol._current_world_id(alice_session)
+    bob_world = protocol._current_world_id(bob_session)
+    assert alice_world != bob_world  # same host+game_letter, different handle -- anti-galaxy-bleed
+
+    alice_sectors = {s["sector_id"] for s in world_model.all_sectors(alice_world)}
+    bob_sectors = {s["sector_id"] for s in world_model.all_sectors(bob_world)}
+    assert alice_sectors == {123}
+    assert bob_sectors == {999}
+    assert 999 not in alice_sectors
+    assert 123 not in bob_sectors
+
+
+# -- (c) a CIM-report-shaped screen bulk-upserts multiple sectors -----------
+
+
+def test_cim_report_screen_bulk_upserts_every_sector(isolated_world_store):
+    _write_profiles(
+        isolated_world_store,
+        {"alice": {"host": "bat.example.com", "port": 23, "game_letter": "A", "handle": "Alice"}},
+    )
+    session = FakeSession(
+        "bat.example.com", _load_fixture("cim_port_report.txt"), auto_login_profile="alice"
+    )
+
+    resp = protocol.dispatch(session, "do", {"input": "v"}, FakeServer())
+
+    assert resp["ok"] is True
+    world_id = protocol._current_world_id(session)
+    sectors = {s["sector_id"] for s in world_model.all_sectors(world_id)}
+    assert {1234, 5001, 5678} <= sectors
+
+
+# -- (d) auto_login_profile=None no-ops the write-hook cleanly -------------
+
+
+def test_no_auto_login_profile_no_ops_the_write_hook_cleanly(isolated_world_store):
+    session = FakeSession("bat.example.com", ALICE_SCREEN, auto_login_profile=None)
+
+    resp = protocol.dispatch(session, "do", {"input": ""}, FakeServer())
+
+    assert resp["ok"] is True
+    assert resp["state"]["sector"] == 123  # the response itself is unaffected
+    assert protocol._current_world_id(session) is None
+    assert not world_model.WORLD_DIR.exists()  # no world store ever created -- no crash, no file
+
+
+# -- (e) a world_model write failure never fails the `tw do` response ------
+
+
+def test_a_world_model_write_failure_never_fails_the_do_response(isolated_world_store, monkeypatch):
+    _write_profiles(
+        isolated_world_store,
+        {"alice": {"host": "bat.example.com", "port": 23, "game_letter": "A", "handle": "Alice"}},
+    )
+    session = FakeSession("bat.example.com", ALICE_SCREEN, auto_login_profile="alice")
+
+    def _boom(*a, **kw):
+        raise RuntimeError("simulated world_model failure")
+
+    monkeypatch.setattr(world_model, "write_from_state", _boom)
+    monkeypatch.setattr(world_model, "bulk_upsert", _boom)
+
+    resp = protocol.dispatch(session, "do", {"input": ""}, FakeServer())
+
+    assert resp["ok"] is True
+    assert resp["state"]["sector"] == 123
+
+
+# -- game_knowledge (TW-25) coexists, no writer wired this wave -------------
+
+
+def test_game_knowledge_imports_and_coexists_with_no_write_hook_this_wave():
+    """TW-25's game_knowledge store has no live write-hook this wave --
+    its filler (the menu-crawler/introspector) is safety-gated and not
+    built yet. This just proves the module imports cleanly alongside
+    the now-wired world_model without colliding with anything
+    protocol.py touches."""
+    from twclient import game_knowledge
+
+    assert callable(game_knowledge.load_knowledge)
+    assert callable(game_knowledge.knowledge_path)
