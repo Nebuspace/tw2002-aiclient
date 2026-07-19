@@ -1130,3 +1130,93 @@ def test_waiting_session_screen_mentions_no_game():
     assert any("No game session" in line for line in lines)
     assert len(lines) == 24
 
+
+def test_outer_frame_only_drawn_when_got_content():
+    """WO-SPECTATE-FLICKER mechanism #2: anim-only frames must NOT
+    erase the full-client outer sibling (that blanks viewport/ticker)."""
+    src = (PROJECT_ROOT / "twclient" / "spectate_app.py").read_text()
+    # The call site must be gated on got_content.
+    assert "if got_content and regions.get(\"outer\")" in src or \
+        "if got_content and regions.get('outer')" in src
+    # And there must be an explanatory note tying erase() to the blank-pane failure.
+    assert "WO-SPECTATE-FLICKER follow-up" in src
+    assert "_draw_outer_frame" in src
+
+
+def test_render_skips_outer_erase_on_anim_only_tick(monkeypatch):
+    """Runtime invariant: calm idle `_render` with got_content=False never
+    calls `_draw_outer_frame` (no erase of the full-client sibling)."""
+    drawn = {"outer": 0, "viewport": 0, "doupdate": 0}
+
+    def fake_outer(*a, **k):
+        drawn["outer"] += 1
+
+    def fake_viewport(*a, **k):
+        drawn["viewport"] += 1
+
+    def fake_doupdate():
+        drawn["doupdate"] += 1
+
+    monkeypatch.setattr(spectate_app_mod, "_draw_outer_frame", fake_outer)
+    monkeypatch.setattr(spectate_app_mod, "_draw_viewport", fake_viewport)
+    monkeypatch.setattr(curses, "doupdate", fake_doupdate)
+    # Stub the other pane drawers used on an anim tick so _render can run
+    # without real curses windows.
+    for name in (
+        "_draw_header_strip", "_draw_header", "_draw_ticker",
+        "_draw_hud_gutter", "_draw_decisions", "_draw_control_strip", "_draw_status",
+    ):
+        monkeypatch.setattr(spectate_app_mod, name, lambda *a, **k: None)
+
+    regions = {
+        "mode": "comfortable",
+        "outer": {"y": 0, "x": 0, "h": 36, "w": 112},
+        "header": None,
+        "viewport": {"y": 2, "x": 1, "h": 26, "w": 82, "border": True, "game_h": 24, "game_w": 80},
+        "gutter": None,
+        "decisions": None,
+        "ticker": None,
+        "control": None,
+        "status": {"y": 35, "x": 1, "h": 1, "w": 110},
+    }
+    windows = {
+        "outer": object(),
+        "viewport": object(),
+        "status": object(),
+    }
+    status = {
+        "connected": False, "mode": "ai_pilot", "play": None,
+        "subscriber_count": 0, "host": None, "name": None,
+    }
+    glyphs = {
+        "freshness_mark": "*", "delta_up": "^", "delta_down": "v",
+        "bar_full": "#", "bar_empty": "-",
+        "spinner": ["|", "/", "-"], "heartbeat": [".", "o"],
+        "viewport_tl": "+", "viewport_tr": "+", "viewport_bl": "+", "viewport_br": "+",
+        "viewport_h": "-", "viewport_v": "|",
+        "hud_tl": "+", "hud_tr": "+", "hud_bl": "+", "hud_br": "+",
+        "hud_h": "-", "hud_v": "|",
+    }
+
+    class FakePalette:
+        def attr_for(self, *a, **k):
+            return 0
+
+    # Anim-only tick: must not touch outer or viewport.
+    spectate_app_mod._render(
+        windows, regions, dict(spectate_app_mod.DEFAULT_EVENT), {}, [], status,
+        FakePalette(), glyphs, now=1.0, anim_tick=3, idle_age=None, semantic="danger",
+        flash_active=False, got_content=False, calm_idle=True,
+    )
+    assert drawn == {"outer": 0, "viewport": 0, "doupdate": 1}
+
+    # Content tick: outer + viewport both paint once.
+    spectate_app_mod._render(
+        windows, regions, dict(spectate_app_mod.DEFAULT_EVENT), {}, [], status,
+        FakePalette(), glyphs, now=1.0, anim_tick=3, idle_age=None, semantic="danger",
+        flash_active=False, got_content=True, calm_idle=True,
+    )
+    assert drawn["outer"] == 1
+    assert drawn["viewport"] == 1
+    assert drawn["doupdate"] == 2
+
