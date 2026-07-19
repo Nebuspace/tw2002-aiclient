@@ -174,6 +174,83 @@ def test_cim_report_screen_bulk_upserts_every_sector(isolated_world_store):
     assert {1234, 5001, 5678} <= sectors
 
 
+# -- (c2) mack Finding 2: a screen merely QUOTING the report shape is ------
+# -- NOT ingested, even though parse_port_report() itself still finds ------
+# -- well-formed rows in it (the gate is classification, not parsing) ------
+
+
+def test_help_screen_quoting_a_cim_report_is_not_ingested(isolated_world_store):
+    """Adapted from mack's probe_poison.py Scenario A: a help/tutorial
+    screen quoting the CIM report format as a worked example must not
+    get bulk-ingested as real sector data, even though its text
+    reproduces the header/footer/row punctuation byte-for-byte."""
+    _write_profiles(
+        isolated_world_store,
+        {"alice": {"host": "bat.example.com", "port": 23, "game_letter": "A", "handle": "Alice"}},
+    )
+    help_screen = (
+        "Command [TL=00:00:00]:[1000] (?=Help) ? cim\n"
+        "\n"
+        "The Continuous Information Manifest (CIM) report looks like this:\n"
+        "\n"
+        "-=-=- Port Report (CIM) -=-=-\n"
+        "Sector 999  Class: BBS F:10% O:20% E:30%  Warps: 1-2-3\n"
+        "-=-=- End of Report -=-=-\n"
+        "\n"
+        "Use it to scan multiple sectors at once.\n"
+        "Command [TL=00:00:01]:[1000] (?=Help) ?"
+    )
+    session = FakeSession("bat.example.com", help_screen, auto_login_profile="alice")
+
+    resp = protocol.dispatch(session, "do", {"input": "cim"}, FakeServer())
+
+    assert resp["ok"] is True
+    world_id = protocol._current_world_id(session)
+    sector = world_model.get_sector(world_id, 999)
+    # The single-sector write_from_state() path is explicitly OUT OF
+    # SCOPE for this finding (mack: "fine to keep unconditional") --
+    # parse_state()'s bare `sector\s*:?\s*\d+` anchor has no CIM-specific
+    # awareness at all and may still pick up "Sector 999" from this
+    # quoted text as a bare sector_id-only entry. What must NOT happen is
+    # the BULK path deriving port/warps data from the report's own row
+    # grammar -- that's the actual vulnerability this finding fixes.
+    assert sector is None or (sector["port"] is None and sector["warps"] == []), (
+        "the bulk parse_port_report() path ingested port/warps data from a quoted example: "
+        f"{sector}"
+    )
+
+
+def test_forged_chat_broadcast_quoting_a_cim_report_is_not_ingested(isolated_world_store):
+    """Adapted from mack's probe_poison.py Scenario B: a forged/griefing
+    chat broadcast reproducing the identical report punctuation must not
+    get ingested either."""
+    _write_profiles(
+        isolated_world_store,
+        {"alice": {"host": "bat.example.com", "port": 23, "game_letter": "A", "handle": "Alice"}},
+    )
+    chat_screen = (
+        "Incoming transmission from Rival Trader:\n"
+        "-=-=- Port Report (CIM) -=-=-\n"
+        "Sector 42  Class: SSB F:1% O:1% E:1%  Warps: 66-77-88\n"
+        "-=-=- End of Report -=-=-\n"
+        "\n"
+        "Command [TL=00:00:05]:[1000] (?=Help) ?"
+    )
+    session = FakeSession("bat.example.com", chat_screen, auto_login_profile="alice")
+
+    resp = protocol.dispatch(session, "do", {"input": ""}, FakeServer())
+
+    assert resp["ok"] is True
+    world_id = protocol._current_world_id(session)
+    sector = world_model.get_sector(world_id, 42)
+    # See the comment in test_help_screen_quoting_a_cim_report_is_not_ingested
+    # above -- the single-sector path is out of scope; the bulk path
+    # deriving port/warps from the report's row grammar is the bug.
+    assert sector is None or (sector["port"] is None and sector["warps"] == []), (
+        f"the bulk parse_port_report() path ingested port/warps data from a forged broadcast: {sector}"
+    )
+
+
 # -- (d) auto_login_profile=None no-ops the write-hook cleanly -------------
 
 
@@ -208,6 +285,112 @@ def test_a_world_model_write_failure_never_fails_the_do_response(isolated_world_
 
     assert resp["ok"] is True
     assert resp["state"]["sector"] == 123
+
+
+# -- (e2) mack Finding 4: a swallowed failure is no longer 100% silent -----
+
+
+class FakeLogger:
+    """Minimal stand-in for `logging_util.TranscriptLogger` -- only the
+    one method `_log_world_model_failure` actually calls."""
+
+    def __init__(self):
+        self.notes = []
+
+    def log_note(self, note):
+        self.notes.append(note)
+
+
+def test_a_world_model_write_failure_is_logged_when_the_session_has_a_logger(
+    isolated_world_store, monkeypatch
+):
+    """Adapted from mack's probe_silent_loss.py: the response must still
+    never fail (unchanged guarantee), but a session WITH a transcript
+    logger must now see a diagnostic note -- the failure is no longer
+    100% invisible."""
+    _write_profiles(
+        isolated_world_store,
+        {"alice": {"host": "bat.example.com", "port": 23, "game_letter": "A", "handle": "Alice"}},
+    )
+    session = FakeSession("bat.example.com", ALICE_SCREEN, auto_login_profile="alice")
+    session.logger = FakeLogger()
+
+    def _boom(*a, **kw):
+        raise RuntimeError("simulated world_model failure")
+
+    monkeypatch.setattr(world_model, "write_from_state", _boom)
+
+    resp = protocol.dispatch(session, "do", {"input": ""}, FakeServer())
+
+    assert resp["ok"] is True
+    assert resp["state"]["sector"] == 123
+    assert session.logger.notes, "a world_model failure with a session logger present must be logged"
+    assert any("write_from_state" in note for note in session.logger.notes)
+
+
+def test_a_world_model_write_failure_with_no_session_logger_stays_a_clean_noop(
+    isolated_world_store, monkeypatch
+):
+    """The bare fake-session test doubles that predate `.logger` (this
+    whole file's own FakeSession, before we opted one in above) must
+    keep working exactly as before -- getattr-guarded, no crash."""
+    _write_profiles(
+        isolated_world_store,
+        {"alice": {"host": "bat.example.com", "port": 23, "game_letter": "A", "handle": "Alice"}},
+    )
+    session = FakeSession("bat.example.com", ALICE_SCREEN, auto_login_profile="alice")
+    assert not hasattr(session, "logger")
+
+    def _boom(*a, **kw):
+        raise RuntimeError("simulated world_model failure")
+
+    monkeypatch.setattr(world_model, "write_from_state", _boom)
+
+    resp = protocol.dispatch(session, "do", {"input": ""}, FakeServer())
+
+    assert resp["ok"] is True
+    assert resp["state"]["sector"] == 123
+
+
+# -- (f) mack Finding 5: `tw state` feeds the world-model too --------------
+
+
+def test_state_verb_persists_the_observed_sector(isolated_world_store):
+    """`tw state` observes the current sector exactly like `do`/`read`/
+    `screen` do, but never fed the world-model write-hook at all --
+    inconsistent coverage for a verb explicitly meant for cheap
+    polling."""
+    _write_profiles(
+        isolated_world_store,
+        {"alice": {"host": "bat.example.com", "port": 23, "game_letter": "A", "handle": "Alice"}},
+    )
+    session = FakeSession("bat.example.com", ALICE_SCREEN, auto_login_profile="alice")
+
+    resp = protocol.dispatch(session, "state", {}, FakeServer())
+
+    assert resp["ok"] is True
+    assert resp["state"]["sector"] == 123
+    world_id = protocol._current_world_id(session)
+    sector = world_model.get_sector(world_id, 123)
+    assert sector is not None
+    assert sector["sector_id"] == 123
+
+
+def test_state_verb_also_bulk_ingests_a_genuine_cim_report(isolated_world_store):
+    _write_profiles(
+        isolated_world_store,
+        {"alice": {"host": "bat.example.com", "port": 23, "game_letter": "A", "handle": "Alice"}},
+    )
+    session = FakeSession(
+        "bat.example.com", _load_fixture("cim_port_report.txt"), auto_login_profile="alice"
+    )
+
+    resp = protocol.dispatch(session, "state", {}, FakeServer())
+
+    assert resp["ok"] is True
+    world_id = protocol._current_world_id(session)
+    sectors = {s["sector_id"] for s in world_model.all_sectors(world_id)}
+    assert {1234, 5001, 5678} <= sectors
 
 
 # -- game_knowledge (TW-25) coexists, no writer wired this wave -------------

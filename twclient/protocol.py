@@ -153,32 +153,66 @@ def _current_world_id(session):
     return world_identity.world_id(session.host, profile.game_letter, profile.handle)
 
 
-def _write_world_model(session, text, parsed_state):
+def _log_world_model_failure(session, where, exc):
+    """mack Finding 4 (2026-07-19 adversarial review): `_write_world_model`
+    must never let a world-model failure fail the caller's response (see
+    its own docstring), but swallowing it with ZERO trace anywhere left a
+    corrupt-store or persistent failure 100% invisible forever -- no log
+    call existed in this module at all. Routes the swallowed exception to
+    the session's own transcript logger (`logging_util.TranscriptLogger`,
+    the same object every password-redaction call already goes through)
+    as a single diagnostic line -- never raised, never affecting the
+    response. `getattr`-guarded like every other optional session surface
+    this module reads (`server.watch_hub`, `session.cursor_pos`): a bare
+    fake-session test double with no `.logger` at all is a silent no-op
+    here, exactly as before this fix."""
+    logger = getattr(session, "logger", None)
+    log_note = getattr(logger, "log_note", None)
+    if log_note is not None:
+        log_note(f"world_model {where} failed: {exc!r}")
+
+
+def _write_world_model(session, text, prompt, parsed_state):
     """TW-06/TW-25 world-model write-hook: fire-and-forget side effect
     of `build_response` -- see `_current_world_id()` for the no-profile-
     means-no-write guarantee. Never allowed to affect the response: a
     store I/O error, a corrupt-store `WorldModelError`, or any other
     world_model failure is swallowed here exactly like daemon.py's
     dispatch-level `except Exception` guard -- a persistence hiccup must
-    never fail the `tw do`/`tw read`/`tw screen` response the caller is
-    waiting on. Two independent write paths, each independently
-    guarded so a failure in one never blocks the other: the single-
-    sector `parse_state()` mapping, and the batch `parse_port_report()`
-    mapping (`[]` on a non-report screen -- safe to attempt on every
-    response)."""
+    never fail the `tw do`/`tw read`/`tw screen`/`tw state` response the
+    caller is waiting on -- but is no longer silent: see
+    `_log_world_model_failure` (mack Finding 4). Two independent write
+    paths, each independently guarded so a failure in one never blocks
+    the other:
+
+    - The single-sector `parse_state()` mapping -- unconditional, gated
+      only on `parse_state` having found a real `sector` to attribute
+      the reading to (`write_from_state`'s own no-sector-means-no-write
+      guard).
+    - The batch `parse_port_report()` mapping -- mack Finding 2: this
+      used to run unconditionally on every response text with zero
+      provenance check, so any screen merely REPRODUCING a CIM report's
+      header/footer punctuation (a help screen quoting it as a worked
+      example, a forged chat broadcast) got ingested as real sector
+      data. Now gated on `classify_screen` returning the dedicated
+      `cim_report` classification (see `classify._is_genuine_cim_report`'s
+      docstring for what "genuine" means) -- text-matching the report's
+      own shape is never trusted as the provenance signal by itself."""
     wid = _current_world_id(session)
     if wid is None:
         return
     try:
         world_model.write_from_state(wid, parsed_state)
-    except Exception:  # noqa: BLE001 -- a world-model write must never fail the response
-        pass
-    try:
-        records = parse_port_report(text)
-        if records:
-            world_model.bulk_upsert(wid, records)
-    except Exception:  # noqa: BLE001 -- same guarantee for the batch path
-        pass
+    except Exception as exc:  # noqa: BLE001 -- a world-model write must never fail the response
+        _log_world_model_failure(session, "write_from_state", exc)
+
+    if classify_screen(text, prompt) == "cim_report":
+        try:
+            records = parse_port_report(text)
+            if records:
+                world_model.bulk_upsert(wid, records)
+        except Exception as exc:  # noqa: BLE001 -- same guarantee for the batch path
+            _log_world_model_failure(session, "bulk_upsert", exc)
 
 
 def build_response(session, rows=None, settled_reason=None, extra=None):
@@ -215,7 +249,7 @@ def build_response(session, rows=None, settled_reason=None, extra=None):
     # feeds the per-world sector store as a pure side effect -- see
     # _write_world_model()'s docstring for the swallow-guard this relies
     # on never being able to fail the response above.
-    _write_world_model(session, text, parsed_state)
+    _write_world_model(session, text, prompt, parsed_state)
     return resp
 
 
@@ -278,8 +312,23 @@ def dispatch(session, verb, args, server):
         return resp
 
     if verb == "state":
-        text = session.render_text()
-        return {"ok": True, "state": parse_state(text)}
+        # D13 discipline: one render() call, threaded into render_text()
+        # -- calling render() and render_text() with no rows separately
+        # would be two independent lock acquisitions racing a byte
+        # arriving in between (same hazard render_with_color()'s own
+        # docstring warns about for text+color).
+        rows = session.render()
+        text = session.render_text(rows)
+        prompt = rows[-1].strip() if rows else ""
+        parsed_state = parse_state(text)
+        # mack Finding 5: `tw state` observes the current sector just
+        # like `do`/`read`/`screen` do, but never fed the world-model
+        # write-hook at all -- an inconsistent coverage gap for a verb
+        # explicitly meant for cheap polling. Dedup (Finding 3a) makes
+        # this effectively free on the common no-change-since-last-poll
+        # case.
+        _write_world_model(session, text, prompt, parsed_state)
+        return {"ok": True, "state": parsed_state}
 
     if verb == "history":
         n = args.get("n", 20)

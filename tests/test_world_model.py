@@ -1,5 +1,20 @@
 """World model tests (TW-06) -- no network, tmp_path only, never
-touches the real state/ directory."""
+touches the real state/ directory.
+
+2026-07-19 hardening pass (mack adversarial review, findings 1/3):
+the persistence layout changed from one `sectors.json` per world to
+one `<sector_id>.json` file per sector (Finding 3b -- O(1) writes +
+per-sector lock scope instead of an O(total sectors) full-store
+rewrite behind one world-wide lock). `load_store`/`save_store`/
+`_store_lock`/`_store_path` were internal-only (never part of the
+documented public API: get_sector/upsert_sector/bulk_upsert/
+all_sectors/query/write_from_state) and are GONE -- replaced by
+`_load_sector_file`/`_save_sector_file`/`_sector_lock`/`_sector_path`,
+scoped per sector rather than per world. Tests below that exercised
+those internals directly are rewritten against the new primitives;
+tests exercising only the public API are unchanged. This was a
+greenfield change (no `state/world/` data existed anywhere yet) -- no
+migration was needed or attempted."""
 
 import fcntl
 import json
@@ -17,37 +32,37 @@ WORLD_A = "hostA__F__ALPHA"
 WORLD_B = "hostB__F__BRAVO"
 
 
-# -- load_store / save_store ------------------------------------------------
+# -- per-sector file load/save (replaces the old whole-store load_store/
+# save_store direct tests) ---------------------------------------------
 
-def test_load_store_missing_file_returns_fresh_empty_store(tmp_path):
-    store = world_model.load_store(WORLD_A, state_dir=tmp_path)
-    assert store == {"version": 1, "world_id": WORLD_A, "sectors": {}}
-    assert not (tmp_path / WORLD_A / "sectors.json").exists()  # load never creates the file
-
-
-def test_save_then_load_round_trips(tmp_path):
-    original = {"version": 1, "world_id": WORLD_A, "sectors": {}}
-    world_model.save_store(original, WORLD_A, state_dir=tmp_path)
-    assert world_model.load_store(WORLD_A, state_dir=tmp_path) == original
+def test_load_sector_file_missing_returns_none(tmp_path):
+    assert world_model._load_sector_file(WORLD_A, 1, state_dir=tmp_path) is None
+    assert not (tmp_path / WORLD_A / "sectors" / "1.json").exists()  # reading never creates the file
 
 
-def test_save_store_leaves_no_temp_file_after_success(tmp_path):
-    world_model.save_store({"version": 1, "world_id": WORLD_A, "sectors": {}}, WORLD_A, state_dir=tmp_path)
-    path = tmp_path / WORLD_A / "sectors.json"
+def test_save_then_load_sector_file_round_trips(tmp_path):
+    record = world_model._default_sector(1)
+    world_model._save_sector_file(WORLD_A, 1, record, state_dir=tmp_path)
+    assert world_model._load_sector_file(WORLD_A, 1, state_dir=tmp_path) == record
+
+
+def test_save_sector_file_leaves_no_temp_file_after_success(tmp_path):
+    world_model._save_sector_file(WORLD_A, 1, world_model._default_sector(1), state_dir=tmp_path)
+    path = world_model._sector_path(WORLD_A, 1, state_dir=tmp_path)
     tmp_sibling = path.with_suffix(path.suffix + ".tmp")
     assert not tmp_sibling.exists()
     assert path.exists()
 
 
-def test_save_store_creates_file_with_0600_permissions(tmp_path):
-    world_model.save_store({"version": 1, "world_id": WORLD_A, "sectors": {}}, WORLD_A, state_dir=tmp_path)
-    path = tmp_path / WORLD_A / "sectors.json"
+def test_save_sector_file_creates_file_with_0600_permissions(tmp_path):
+    world_model._save_sector_file(WORLD_A, 1, world_model._default_sector(1), state_dir=tmp_path)
+    path = world_model._sector_path(WORLD_A, 1, state_dir=tmp_path)
     assert stat.S_IMODE(os.stat(path).st_mode) == 0o600
 
 
-def test_save_store_atomic_write_survives_a_crash_before_rename(tmp_path, monkeypatch):
-    original = {"version": 1, "world_id": WORLD_A, "sectors": {"1": world_model._default_sector(1)}}
-    world_model.save_store(original, WORLD_A, state_dir=tmp_path)
+def test_upsert_sector_atomic_write_survives_a_crash_before_rename(tmp_path, monkeypatch):
+    world_model.upsert_sector(WORLD_A, {"sector_id": 1, "warps": [1]}, state_dir=tmp_path)
+    original = world_model.get_sector(WORLD_A, 1, state_dir=tmp_path)
 
     def boom(*_a, **_kw):
         raise OSError("simulated crash before rename")
@@ -55,17 +70,14 @@ def test_save_store_atomic_write_survives_a_crash_before_rename(tmp_path, monkey
     monkeypatch.setattr(world_model.os, "replace", boom)
 
     with pytest.raises(OSError):
-        world_model.save_store(
-            {"version": 1, "world_id": WORLD_A, "sectors": {"2": world_model._default_sector(2)}},
-            WORLD_A, state_dir=tmp_path,
-        )
+        world_model.upsert_sector(WORLD_A, {"sector_id": 1, "warps": [2]}, state_dir=tmp_path)
 
-    assert world_model.load_store(WORLD_A, state_dir=tmp_path) == original
+    assert world_model.get_sector(WORLD_A, 1, state_dir=tmp_path) == original
 
 
-def test_save_store_removes_orphaned_tmp_file_on_write_failure(tmp_path, monkeypatch):
-    original = {"version": 1, "world_id": WORLD_A, "sectors": {}}
-    world_model.save_store(original, WORLD_A, state_dir=tmp_path)
+def test_upsert_sector_removes_orphaned_tmp_file_on_write_failure(tmp_path, monkeypatch):
+    world_model.upsert_sector(WORLD_A, {"sector_id": 1, "warps": [1]}, state_dir=tmp_path)
+    original = world_model.get_sector(WORLD_A, 1, state_dir=tmp_path)
 
     def boom(*_a, **_kw):
         raise ValueError("simulated write-time failure")
@@ -73,51 +85,62 @@ def test_save_store_removes_orphaned_tmp_file_on_write_failure(tmp_path, monkeyp
     monkeypatch.setattr(world_model.json, "dump", boom)
 
     with pytest.raises(ValueError):
-        world_model.save_store(
-            {"version": 1, "world_id": WORLD_A, "sectors": {"1": world_model._default_sector(1)}},
-            WORLD_A, state_dir=tmp_path,
-        )
+        world_model.upsert_sector(WORLD_A, {"sector_id": 1, "warps": [2]}, state_dir=tmp_path)
 
-    path = tmp_path / WORLD_A / "sectors.json"
+    path = world_model._sector_path(WORLD_A, 1, state_dir=tmp_path)
     tmp_sibling = path.with_suffix(path.suffix + ".tmp")
     assert not tmp_sibling.exists()
-    assert world_model.load_store(WORLD_A, state_dir=tmp_path) == original
+    assert world_model.get_sector(WORLD_A, 1, state_dir=tmp_path) == original
 
 
-# -- corrupt/malformed store files ------------------------------------------
+# -- corrupt/malformed sector files -------------------------------------
 
-def test_load_store_raises_on_truncated_json(tmp_path):
-    path = tmp_path / WORLD_A / "sectors.json"
+def test_load_sector_file_raises_on_truncated_json(tmp_path):
+    path = world_model._sector_path(WORLD_A, 1, state_dir=tmp_path)
     path.parent.mkdir(parents=True)
-    path.write_text('{"version": 1, "sectors": {', encoding="utf-8")
+    path.write_text('{"sector_id": 1,', encoding="utf-8")
     with pytest.raises(world_model.WorldModelError):
-        world_model.load_store(WORLD_A, state_dir=tmp_path)
+        world_model._load_sector_file(WORLD_A, 1, state_dir=tmp_path)
 
 
-def test_load_store_raises_on_empty_file(tmp_path):
-    path = tmp_path / WORLD_A / "sectors.json"
+def test_load_sector_file_raises_on_empty_file(tmp_path):
+    path = world_model._sector_path(WORLD_A, 1, state_dir=tmp_path)
     path.parent.mkdir(parents=True)
     path.write_text("", encoding="utf-8")
     with pytest.raises(world_model.WorldModelError):
-        world_model.load_store(WORLD_A, state_dir=tmp_path)
+        world_model._load_sector_file(WORLD_A, 1, state_dir=tmp_path)
 
 
-def test_load_store_raises_on_unsupported_version(tmp_path):
-    path = tmp_path / WORLD_A / "sectors.json"
+def test_load_sector_file_raises_on_non_object_shape(tmp_path):
+    path = world_model._sector_path(WORLD_A, 1, state_dir=tmp_path)
     path.parent.mkdir(parents=True)
-    path.write_text(json.dumps({"version": 999, "sectors": {}}), encoding="utf-8")
-    with pytest.raises(world_model.WorldModelError, match="999"):
-        world_model.load_store(WORLD_A, state_dir=tmp_path)
-
-
-def test_load_store_raises_on_sector_entry_missing_sector_id(tmp_path):
-    path = tmp_path / WORLD_A / "sectors.json"
-    path.parent.mkdir(parents=True)
-    path.write_text(
-        json.dumps({"version": 1, "sectors": {"1": {"warps": []}}}), encoding="utf-8"
-    )
+    path.write_text(json.dumps([1, 2, 3]), encoding="utf-8")
     with pytest.raises(world_model.WorldModelError):
-        world_model.load_store(WORLD_A, state_dir=tmp_path)
+        world_model._load_sector_file(WORLD_A, 1, state_dir=tmp_path)
+
+
+def test_load_sector_file_raises_on_missing_sector_id(tmp_path):
+    path = world_model._sector_path(WORLD_A, 1, state_dir=tmp_path)
+    path.parent.mkdir(parents=True)
+    path.write_text(json.dumps({"warps": []}), encoding="utf-8")
+    with pytest.raises(world_model.WorldModelError):
+        world_model._load_sector_file(WORLD_A, 1, state_dir=tmp_path)
+
+
+def test_a_corrupt_sector_does_not_block_a_DIFFERENT_sector(tmp_path):
+    """Per-sector granularity means a corrupt sector 1 must not prevent
+    reading/writing a perfectly healthy sector 2 -- a direct consequence
+    of Finding 3b's per-file layout (the old single-store design had no
+    such isolation: one corrupt entry anywhere failed the ENTIRE load)."""
+    path = world_model._sector_path(WORLD_A, 1, state_dir=tmp_path)
+    path.parent.mkdir(parents=True)
+    path.write_text("not json", encoding="utf-8")
+
+    world_model.upsert_sector(WORLD_A, {"sector_id": 2, "warps": [3]}, state_dir=tmp_path)
+    assert world_model.get_sector(WORLD_A, 2, state_dir=tmp_path)["warps"] == [3]
+
+    with pytest.raises(world_model.WorldModelError):
+        world_model.get_sector(WORLD_A, 1, state_dir=tmp_path)
 
 
 # -- upsert_sector / get_sector round trip -----------------------------------
@@ -210,6 +233,10 @@ def test_a_field_absent_from_the_write_is_preserved_not_cleared(tmp_path):
 
 
 def test_upsert_sector_always_restamps_last_seen_ts(tmp_path):
+    """An EXPLICIT caller-supplied last_seen_ts is real content (a
+    deliberate re-stamp), not the auto-generated fallback the Finding 3a
+    dedup check excludes -- so two explicit, DIFFERENT stamps must both
+    persist even though nothing else about the record changed."""
     first = world_model.upsert_sector(
         WORLD_A, {"sector_id": 1, "last_seen_ts": "2026-07-18T00:00:00Z"}, state_dir=tmp_path
     )
@@ -218,6 +245,64 @@ def test_upsert_sector_always_restamps_last_seen_ts(tmp_path):
     )
     assert first["last_seen_ts"] == "2026-07-18T00:00:00Z"
     assert second["last_seen_ts"] == "2026-07-19T00:00:00Z"
+
+
+# -- nested port field-level merge (mack Finding 1) --------------------------
+
+def test_write_from_state_class_unobserved_preserves_a_previously_cim_learned_class(tmp_path):
+    """Adapted from mack's probe_clobber.py: a CIM bulk_upsert teaches
+    sector 100's port class is BBS; an ordinary later port-trade-screen
+    visit through write_from_state() (parse_state() never extracts a
+    class at all) must NOT clobber it back to None -- the class simply
+    isn't part of what that screen observed, so it must be preserved,
+    not overwritten with an explicit None."""
+    world_model.bulk_upsert(
+        WORLD_A,
+        [{"sector_id": 100, "port": {"class": "BBS", "commodities": [
+            {"name": "Fuel Ore", "status": "buying", "pct": 50}
+        ]}}],
+        state_dir=tmp_path,
+    )
+    before = world_model.get_sector(WORLD_A, 100, state_dir=tmp_path)
+    assert before["port"]["class"] == "BBS"
+
+    parsed_state = {
+        "sector": 100,
+        "port": {"commodities": [
+            {"name": "Fuel Ore", "status": "buying", "amount": 500, "pct": 55},
+        ]},
+    }
+    world_model.write_from_state(WORLD_A, parsed_state, state_dir=tmp_path)
+
+    after = world_model.get_sector(WORLD_A, 100, state_dir=tmp_path)
+    assert after["port"]["class"] == "BBS", "an unobserved class must never clobber a previously-learned one"
+    assert after["port"]["commodities"][0]["pct"] == 55  # the actually-observed field DID update
+
+
+def test_upsert_sector_explicit_none_class_still_resets_it(tmp_path):
+    """The nested merge only preserves ABSENT sub-keys -- a caller that
+    explicitly supplies `"class": None` (as opposed to omitting the key)
+    is making a deliberate statement and must still win, exactly like
+    any other present-field-replaces case."""
+    world_model.upsert_sector(
+        WORLD_A, {"sector_id": 5, "port": {"class": "BBS", "commodities": []}}, state_dir=tmp_path
+    )
+    merged = world_model.upsert_sector(
+        WORLD_A, {"sector_id": 5, "port": {"class": None, "commodities": []}}, state_dir=tmp_path
+    )
+    assert merged["port"]["class"] is None
+
+
+def test_upsert_sector_explicit_none_port_still_resets_the_whole_field(tmp_path):
+    """An explicit top-level `"port": None` (the whole field, not a
+    partial dict) is a deliberate "no port here" reset -- NOT run
+    through the nested per-sub-field merge, same as any other top-level
+    field's explicit-value-present case."""
+    world_model.upsert_sector(
+        WORLD_A, {"sector_id": 5, "port": {"class": "BBS", "commodities": []}}, state_dir=tmp_path
+    )
+    merged = world_model.upsert_sector(WORLD_A, {"sector_id": 5, "port": None}, state_dir=tmp_path)
+    assert merged["port"] is None
 
 
 # -- bulk_upsert --------------------------------------------------------------
@@ -235,24 +320,28 @@ def test_bulk_upsert_writes_many_sectors_in_one_pass(tmp_path):
 def test_bulk_upsert_empty_list_is_a_noop(tmp_path):
     result = world_model.bulk_upsert(WORLD_A, [], state_dir=tmp_path)
     assert result == []
-    assert not (tmp_path / WORLD_A / "sectors.json").exists()
+    assert not (tmp_path / WORLD_A).exists()
 
 
-def test_bulk_upsert_acquires_the_lock_only_once(tmp_path, monkeypatch):
-    """One lock hold for the whole batch, not one per record -- proves
-    the batch-write path really is a single load-mutate-save critical
-    section, not N of them."""
-    acquisitions = []
-    real_store_lock = world_model._store_lock
+def test_bulk_upsert_acquires_one_lock_per_new_sector_not_a_shared_lock(tmp_path, monkeypatch):
+    """mack Finding 3b: a bulk write of N sectors must NOT hold one
+    shared lock across all N (that would reintroduce the exact
+    cross-sector contention per-sector persistence exists to remove).
+    Proves the opposite of the old single-store design's guarantee: N
+    distinct new sectors acquire N distinct per-sector locks, one each
+    -- never fewer (no accidental sharing) and never more (no redundant
+    re-locking)."""
+    acquired = []
+    real_sector_lock = world_model._sector_lock
 
-    def counting_lock(world_id, state_dir=None):
-        acquisitions.append(1)
-        return real_store_lock(world_id, state_dir=state_dir)
+    def counting_lock(world_id, sector_id, state_dir=None):
+        acquired.append(sector_id)
+        return real_sector_lock(world_id, sector_id, state_dir=state_dir)
 
-    monkeypatch.setattr(world_model, "_store_lock", counting_lock)
+    monkeypatch.setattr(world_model, "_sector_lock", counting_lock)
     records = [{"sector_id": i} for i in range(1, 11)]
     world_model.bulk_upsert(WORLD_A, records, state_dir=tmp_path)
-    assert len(acquisitions) == 1
+    assert sorted(acquired) == list(range(1, 11))
 
 
 # -- all_sectors / query --------------------------------------------------------
@@ -296,12 +385,14 @@ def test_two_worlds_never_share_sector_data(tmp_path):
     assert world_model.get_sector(WORLD_B, 5, state_dir=tmp_path)["landmarks"] == ["class_zero"]
 
 
-def test_two_worlds_persist_to_distinct_files(tmp_path):
+def test_two_worlds_persist_to_distinct_sector_directories(tmp_path):
     world_model.upsert_sector(WORLD_A, {"sector_id": 1}, state_dir=tmp_path)
     world_model.upsert_sector(WORLD_B, {"sector_id": 1}, state_dir=tmp_path)
-    assert (tmp_path / WORLD_A / "sectors.json").exists()
-    assert (tmp_path / WORLD_B / "sectors.json").exists()
-    assert (tmp_path / WORLD_A / "sectors.json") != (tmp_path / WORLD_B / "sectors.json")
+    path_a = world_model._sector_path(WORLD_A, 1, state_dir=tmp_path)
+    path_b = world_model._sector_path(WORLD_B, 1, state_dir=tmp_path)
+    assert path_a.exists()
+    assert path_b.exists()
+    assert path_a != path_b
 
 
 # -- write_from_state mapping -------------------------------------------------
@@ -328,7 +419,7 @@ def test_write_from_state_maps_port_commodities(tmp_path):
     assert merged["port"]["commodities"] == [
         {"name": "Fuel Ore", "status": "selling", "amount": 18000, "pct": 100}
     ]
-    assert merged["port"]["class"] is None  # state_parser doesn't extract class today
+    assert merged["port"]["class"] is None  # state_parser doesn't extract class today, nothing to preserve yet
     assert merged["port"]["last_seen_ts"] is not None
 
 
@@ -349,14 +440,123 @@ def test_write_from_state_actually_persists(tmp_path):
     assert world_model.get_sector(WORLD_A, 7, state_dir=tmp_path) is not None
 
 
-# -- concurrency: lock closes the lost-update races --------------------------
+# -- dedup no-op (mack Finding 3a) -------------------------------------------
 
-def test_store_lock_real_flock_blocks_second_acquirer_until_released(tmp_path):
+def test_upsert_sector_identical_content_is_a_true_noop_no_write_no_lock(tmp_path, monkeypatch):
+    """The hot-path fix: re-observing the SAME sector with IDENTICAL
+    content (the overwhelmingly common case in a `tw do` loop) must not
+    touch the lock or the disk at all on the second call."""
+    world_model.upsert_sector(WORLD_A, {"sector_id": 1, "warps": [2, 3]}, state_dir=tmp_path)
+    path = world_model._sector_path(WORLD_A, 1, state_dir=tmp_path)
+    mtime_before = path.stat().st_mtime_ns
+
+    lock_calls = []
+    real_sector_lock = world_model._sector_lock
+
+    def counting_lock(world_id, sector_id, state_dir=None):
+        lock_calls.append(sector_id)
+        return real_sector_lock(world_id, sector_id, state_dir=state_dir)
+
+    monkeypatch.setattr(world_model, "_sector_lock", counting_lock)
+    merged = world_model.upsert_sector(WORLD_A, {"sector_id": 1, "warps": [2, 3]}, state_dir=tmp_path)
+
+    assert lock_calls == [], "an identical-content upsert must never acquire the lock"
+    assert path.stat().st_mtime_ns == mtime_before, "an identical-content upsert must never rewrite the file"
+    assert merged["warps"] == [2, 3]
+
+
+def test_upsert_sector_changed_content_still_writes(tmp_path):
+    world_model.upsert_sector(WORLD_A, {"sector_id": 1, "warps": [2, 3]}, state_dir=tmp_path)
+    path = world_model._sector_path(WORLD_A, 1, state_dir=tmp_path)
+    mtime_before = path.stat().st_mtime_ns
+    time.sleep(0.01)
+
+    merged = world_model.upsert_sector(WORLD_A, {"sector_id": 1, "warps": [4, 5]}, state_dir=tmp_path)
+
+    assert path.stat().st_mtime_ns != mtime_before
+    assert merged["warps"] == [4, 5]
+
+
+def test_write_from_state_repeated_identical_observation_dedups_despite_fresh_timestamps(tmp_path):
+    """The real hot-path shape: write_from_state() never supplies an
+    explicit last_seen_ts (top-level OR nested port.last_seen_ts) --
+    both are auto-stamped fresh on every call. Re-observing the exact
+    same port/warps twice in a row must still dedup to a true no-op
+    despite those two auto-stamps differing between calls."""
+    parsed = {
+        "sector": 1,
+        "warps": [2, 3],
+        "port": {"commodities": [{"name": "Fuel Ore", "status": "buying", "amount": 10, "pct": 50}]},
+    }
+    world_model.write_from_state(WORLD_A, parsed, state_dir=tmp_path)
+    path = world_model._sector_path(WORLD_A, 1, state_dir=tmp_path)
+    mtime_before = path.stat().st_mtime_ns
+
+    world_model.write_from_state(WORLD_A, dict(parsed), state_dir=tmp_path)
+
+    assert path.stat().st_mtime_ns == mtime_before
+
+
+def test_bulk_upsert_dedups_unchanged_records_within_a_repeat_batch(tmp_path):
+    records = [{"sector_id": i, "warps": [i + 1]} for i in range(1, 6)]
+    world_model.bulk_upsert(WORLD_A, records, state_dir=tmp_path)
+    paths = [world_model._sector_path(WORLD_A, i, state_dir=tmp_path) for i in range(1, 6)]
+    mtimes_before = [p.stat().st_mtime_ns for p in paths]
+
+    world_model.bulk_upsert(WORLD_A, [dict(r) for r in records], state_dir=tmp_path)
+
+    assert [p.stat().st_mtime_ns for p in paths] == mtimes_before
+
+
+# -- per-sector hot path (mack Finding 3b: O(1), not O(total sectors)) -------
+
+def test_single_sector_upsert_cost_does_not_grow_with_total_known_sectors(tmp_path):
+    """Adapted from mack's probe_hotpath.py: seed worlds of increasing
+    known-sector counts, then time ONE incremental upsert to a
+    DIFFERENT, unrelated sector in each. Per-sector files mean this cost
+    must stay flat -- the old one-big-JSON-file design made it grow
+    with total sectors (a full load+rewrite on every write)."""
+    timings = {}
+    for n in (50, 400, 1500):
+        wid = f"scale_world_{n}"
+        records = [{"sector_id": i, "warps": [i + 1, i - 1]} for i in range(1, n + 1)]
+        world_model.bulk_upsert(wid, records, state_dir=tmp_path)
+
+        start = time.perf_counter()
+        for _ in range(20):
+            world_model.upsert_sector(wid, {"sector_id": 1, "warps": [2, 999]}, state_dir=tmp_path)
+            # alternate the value so the dedup no-op path (Finding 3a)
+            # doesn't mask what an ACTUAL write costs -- this is timing
+            # the write path itself, not the no-op short-circuit.
+            world_model.upsert_sector(wid, {"sector_id": 1, "warps": [3, 998]}, state_dir=tmp_path)
+        timings[n] = (time.perf_counter() - start) / 40
+
+    # Generous bound: the smallest-world timing scaled up should still
+    # comfortably cover the largest-world timing if cost is flat; a
+    # real O(n) regression (the old design) would blow this out by
+    # 30x at n=1500 vs n=50.
+    assert timings[1500] < timings[50] * 8 + 0.02, (
+        f"single-sector upsert cost grew with total known sectors: {timings}"
+    )
+
+
+def test_all_sectors_still_lists_every_sector_at_scale(tmp_path):
+    """Sanity check alongside the hot-path proof above -- the O(1) write
+    path must not have silently broken enumeration."""
+    n = 250
+    records = [{"sector_id": i} for i in range(1, n + 1)]
+    world_model.bulk_upsert(WORLD_A, records, state_dir=tmp_path)
+    assert len(world_model.all_sectors(WORLD_A, state_dir=tmp_path)) == n
+
+
+# -- concurrency: per-sector lock scope removes cross-sector contention -----
+
+def test_sector_lock_real_flock_blocks_second_acquirer_until_released(tmp_path):
     """Real flock proof -- no monkeypatch, no threads: a second, wholly
-    independent open-file-description on the same lock path cannot take
-    LOCK_EX while the first holds it, and can immediately after the
-    first releases."""
-    path = world_model._store_path(WORLD_A, tmp_path)
+    independent open-file-description on the SAME sector's lock path
+    cannot take LOCK_EX while the first holds it, and can immediately
+    after the first releases."""
+    path = world_model._sector_path(WORLD_A, 1, state_dir=tmp_path)
     lock_path = world_model._lock_path(path)
     lock_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -381,38 +581,65 @@ def test_store_lock_real_flock_blocks_second_acquirer_until_released(tmp_path):
         os.close(fd3)
 
 
-def test_concurrent_upsert_never_loses_an_update(tmp_path, monkeypatch):
-    """Adapted from player_bank's Trace-1: without a lock spanning the
-    FULL load-mutate-save critical section, two concurrent upserts to
-    DIFFERENT sectors in the same world can race so the second
-    caller's save (built from a stale, pre-first-caller load) silently
-    overwrites the first caller's write -- one sector just vanishes.
-    Real threads + a monkeypatch hook pause the first writer mid-
-    critical-section (still holding the real flock) so the second
+def test_concurrent_writes_to_different_sectors_do_not_serialize(tmp_path):
+    """Adapted from mack's probe_contention.py: the ROOT bug this
+    (alongside dedup) exists to fix -- a slow writer holding sector 1's
+    lock must NOT stall a concurrent writer touching sector 2. Under the
+    old single-store design, every writer shared ONE lock regardless of
+    which sector it touched, so this would have blocked for the full
+    hold duration; under per-sector locks, sector 2's write proceeds
+    immediately."""
+    hold_seconds = 1.0
+
+    def slow_writer_on_sector_1():
+        with world_model._sector_lock(WORLD_A, 1, state_dir=tmp_path):
+            time.sleep(hold_seconds)
+
+    t = threading.Thread(target=slow_writer_on_sector_1)
+    t.start()
+    time.sleep(0.1)  # let the slow writer acquire sector 1's lock first
+
+    start = time.perf_counter()
+    world_model.upsert_sector(WORLD_A, {"sector_id": 2, "warps": [1]}, state_dir=tmp_path)
+    elapsed = time.perf_counter() - start
+    t.join()
+
+    assert elapsed < hold_seconds * 0.5, (
+        f"a concurrent writer on a DIFFERENT sector was stalled {elapsed:.2f}s by a "
+        f"{hold_seconds:.2f}s hold on an unrelated sector's lock -- cross-sector contention regressed"
+    )
+
+
+def test_concurrent_upsert_to_the_same_sector_never_loses_an_update(tmp_path, monkeypatch):
+    """Same-sector concurrency still needs the lock for correctness --
+    per-sector persistence only removes CROSS-sector contention, never
+    the within-sector critical section. Two real threads race a write
+    to the SAME sector; a monkeypatch hook pauses the first writer
+    mid-critical-section (still holding the real flock) so the second
     writer's own lock acquisition is forced to actually block until
-    release, proving the fix."""
-    real_save_store = world_model.save_store
+    release, proving neither update is silently lost."""
+    real_save = world_model._save_sector_file
     first_holding = threading.Event()
     release_first = threading.Event()
 
-    def hook(store, world_id, state_dir=None):
-        if "1" in store["sectors"]:
+    def hook(world_id, sector_id, record, state_dir=None):
+        if record.get("warps") == [111]:
             first_holding.set()
             assert release_first.wait(timeout=5), "test deadlocked waiting for release"
-        return real_save_store(store, world_id, state_dir=state_dir)
+        return real_save(world_id, sector_id, record, state_dir=state_dir)
 
-    monkeypatch.setattr(world_model, "save_store", hook)
+    monkeypatch.setattr(world_model, "_save_sector_file", hook)
 
     errors = []
 
-    def write(sector_id):
+    def write(warps):
         try:
-            world_model.upsert_sector(WORLD_A, {"sector_id": sector_id}, state_dir=tmp_path)
+            world_model.upsert_sector(WORLD_A, {"sector_id": 1, "warps": warps}, state_dir=tmp_path)
         except Exception as e:
             errors.append(e)
 
-    t1 = threading.Thread(target=write, args=(1,))
-    t2 = threading.Thread(target=write, args=(2,))
+    t1 = threading.Thread(target=write, args=([111],))
+    t2 = threading.Thread(target=write, args=([222],))
 
     t1.start()
     assert first_holding.wait(timeout=5), "first writer never reached its critical section"
@@ -423,17 +650,18 @@ def test_concurrent_upsert_never_loses_an_update(tmp_path, monkeypatch):
     t1.join(timeout=5)
     t2.join(timeout=5)
 
-    assert not errors, f"unexpected error(s) from concurrent upsert_sector: {errors}"
-    sector_ids = {s["sector_id"] for s in world_model.all_sectors(WORLD_A, state_dir=tmp_path)}
-    assert sector_ids == {1, 2}, "lost update -- one upsert_sector call was silently discarded"
+    assert not errors, f"unexpected error(s) from concurrent same-sector upsert: {errors}"
+    final = world_model.get_sector(WORLD_A, 1, state_dir=tmp_path)
+    assert final["warps"] in ([111], [222]), "one of the two racing writers must win outright, not blend"
 
 
 def test_real_concurrent_upsert_across_many_threads_never_loses_an_update(tmp_path):
     """The acceptance bar (mirrors player_bank's real-writer test): N
     real threads hammering the real public API against ONE shared world
-    store at the same instant (a `threading.Barrier` maximizes overlap).
-    The lock must guarantee zero lost updates regardless of how the OS
-    actually schedules them."""
+    store at the same instant (a `threading.Barrier` maximizes overlap),
+    each writing a DIFFERENT sector. The per-sector lock must guarantee
+    zero lost updates regardless of how the OS actually schedules
+    them."""
     n = 16
     errors = []
     barrier = threading.Barrier(n)

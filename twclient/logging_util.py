@@ -33,6 +33,18 @@ class TranscriptLogger:
         ts = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
         self._fh.write(f"[{ts}] {direction} <<{note}>>\n")
 
+    def log_note(self, note: str):
+        """A single operator-visible diagnostic line in the transcript --
+        e.g. a swallowed-but-not-silent side-effect failure (protocol.py's
+        world-model write-hook, TW-06/TW-25 mack Finding 4) that must
+        never fail the caller's response but also must never vanish with
+        zero trace. Not a structured log level -- this project has no
+        logging framework; one plain timestamped line follows the exact
+        idiom `log_raw`/`log_redacted` already establish for this
+        transcript."""
+        ts = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        self._fh.write(f"[{ts}] NOTE {note}\n")
+
     def close(self):
         try:
             self._fh.close()

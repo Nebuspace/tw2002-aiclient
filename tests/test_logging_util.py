@@ -28,3 +28,15 @@ def test_log_redacted_custom_note(tmp_path):
     logger.close()
     content = open(logger.path, encoding="utf-8").read()
     assert "password entry" in content
+
+
+def test_log_note_writes_a_timestamped_diagnostic_line(tmp_path):
+    """TW-06/TW-25 Finding 4: the world-model write-hook's swallow-guard
+    routes here so a persistent failure leaves SOME operator-visible
+    trace instead of vanishing silently forever."""
+    logger = TranscriptLogger(str(tmp_path))
+    logger.log_note("world_model write_from_state failed: WorldModelError('corrupt store')")
+    logger.close()
+    content = open(logger.path, encoding="utf-8").read()
+    assert "NOTE" in content
+    assert "world_model write_from_state failed" in content

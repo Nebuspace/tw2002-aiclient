@@ -185,3 +185,104 @@ def test_char_create_gate_checked_against_current_prompt_line():
     text = "You were not found in the player database.\r\nWould you like to start a new character in this game?  (Type Y or N)"
     prompt = "Would you like to start a new character in this game?  (Type Y or N)"
     assert classify_screen(text, prompt) == "char_create"
+
+
+# -- cim_report (mack Finding 2, 2026-07-19 adversarial review) -------------
+#
+# parse_port_report() used to run with zero provenance check -- any
+# screen merely REPRODUCING the report's header/footer punctuation got
+# ingested as real sector data. These probes (adapted from mack's
+# probe_poison.py) prove the new `cim_report` anchor tells a genuine
+# system-generated report apart from a quoted example or forged
+# transmission that reproduces the identical text.
+
+
+def test_real_cim_report_fixture_classifies_as_cim_report():
+    text = _load_fixture("cim_port_report.txt")
+    rows = text.splitlines()
+    prompt = rows[-1].strip() if rows else ""
+    assert classify_screen(text, prompt) == "cim_report"
+
+
+def test_help_screen_quoting_a_cim_report_as_a_worked_example_is_not_cim_report():
+    """mack's probe_poison.py Scenario A: a help/tutorial screen quoting
+    the report format as a worked example reproduces the exact
+    header/footer punctuation, but carries narrative framing both
+    before ("...looks like this:") and after ("Use it to scan...") the
+    report that real system output never does."""
+    text = (
+        "Command [TL=00:00:00]:[1000] (?=Help) ? cim\n"
+        "\n"
+        "The Continuous Information Manifest (CIM) report looks like this:\n"
+        "\n"
+        "-=-=- Port Report (CIM) -=-=-\n"
+        "Sector 999  Class: BBS F:10% O:20% E:30%  Warps: 1-2-3\n"
+        "-=-=- End of Report -=-=-\n"
+        "\n"
+        "Use it to scan multiple sectors at once.\n"
+        "Command [TL=00:00:01]:[1000] (?=Help) ?"
+    )
+    rows = text.splitlines()
+    prompt = rows[-1].strip()
+    assert classify_screen(text, prompt) != "cim_report"
+
+
+def test_forged_chat_broadcast_quoting_a_cim_report_is_not_cim_report():
+    """mack's probe_poison.py Scenario B: a forged/griefing chat
+    broadcast reproducing the identical report punctuation, with no
+    game-generated framing distinguishing it from a real report -- but
+    it DOES carry its own "Incoming transmission from..." label directly
+    above the header, which a genuine report (immediately preceded by
+    only the triggering command's own echo) never has."""
+    text = (
+        "Incoming transmission from Rival Trader:\n"
+        "-=-=- Port Report (CIM) -=-=-\n"
+        "Sector 42  Class: SSB F:1% O:1% E:1%  Warps: 66-77-88\n"
+        "-=-=- End of Report -=-=-\n"
+        "\n"
+        "Command [TL=00:00:05]:[1000] (?=Help) ?"
+    )
+    rows = text.splitlines()
+    prompt = rows[-1].strip()
+    assert classify_screen(text, prompt) != "cim_report"
+
+
+def test_cim_report_not_yet_closed_is_not_trusted():
+    """A report still printing (header seen, no footer yet) must not be
+    classified as a genuine closed report -- same "don't parse mid-
+    arrival" discipline as state_parser's own report parser."""
+    text = "-=-=- Port Report (CIM) -=-=-\nSector 1  Class: BBB F:1% O:1% E:1%\nCommand [TL=00:00:00]:[1] (?=Help) ?"
+    rows = text.splitlines()
+    prompt = rows[-1].strip()
+    assert classify_screen(text, prompt) != "cim_report"
+
+
+def test_cim_report_anchors_to_the_latest_report_in_scrollback():
+    """A stale, already-closed report sitting higher in the buffer, with
+    intervening narrative text, must not itself get classified as the
+    live report -- classify_screen() must land on the genuinely fresh
+    one printed after it."""
+    text = (
+        "-=-=-        Port Report (CIM)        -=-=-\n"
+        "Sector 111  Class: BBB  F:10% O:20% E:30%\n"
+        "-=-=-        End of Report        -=-=-\n"
+        "(intervening scrolled game text)\n"
+        "Command [TL=00:00:00]:[1] (?=Help) ? v\n"
+        "\n"
+        "-=-=-        Port Report (CIM)        -=-=-\n"
+        "Sector 222  Class: SSS  F:90% O:80% E:70%\n"
+        "-=-=-        End of Report        -=-=-\n"
+        "\n"
+        "Command [TL=00:00:01]:[1] (?=Help) ?"
+    )
+    rows = text.splitlines()
+    prompt = rows[-1].strip()
+    assert classify_screen(text, prompt) == "cim_report"
+
+
+def test_classify_whole_text_also_recognizes_a_genuine_cim_report():
+    """The naive whole-text classify() must agree with classify_screen()
+    on a genuine report -- both call the same structural check, just
+    with different arguments."""
+    text = _load_fixture("cim_port_report.txt")
+    assert classify(text) == "cim_report"

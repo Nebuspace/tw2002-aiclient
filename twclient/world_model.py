@@ -8,19 +8,47 @@ concerns stay decoupled), holding one record per known sector:
 `sector_id`, `warps`, `port`, `threats`, `landmarks`,
 `formation_membership`, `last_seen_ts` -- exactly the canon shape.
 
-Persistence layout: `state/world/<world_id>/sectors.json`, one file per
-world -- this alone is the cross-world isolation guarantee (two worlds
-never share a file, so they structurally cannot bleed into each other).
+**Persistence layout (mack Finding 3, 2026-07-19 hardening pass):** ONE
+FILE PER SECTOR -- `state/world/<world_id>/sectors/<sector_id>.json` --
+not one big `sectors.json` per world. The original single-file-per-
+world design made every write O(total known sectors) (a full
+load+full-rewrite on every upsert, ~38ms @ 2000 sectors measured live)
+and forced every writer through ONE lock regardless of which sector it
+touched (two threads writing DIFFERENT sectors serialized behind each
+other for no reason -- the daemon is `ThreadingMixIn`, so this was
+reachable in real play). Per-sector files make a single-sector write
+O(1) (only that file is read/rewritten) and give the flock per-sector
+scope (`<sector_id>.json.lock`, not a world-wide lock) -- concurrent
+writers touching DIFFERENT sectors in the same world no longer contend
+at all. Cross-world isolation is still the structural guarantee it
+always was: two worlds never share a directory, so they structurally
+cannot bleed into each other. This was a greenfield change (no
+`state/world/` data existed anywhere yet) -- no migration was needed.
 
 Concurrency: the flock + atomic-temp-then-rename + 0600 discipline is
 copied from `player_bank.py` (the just-shipped, mack+cipher-hardened
 reference) verbatim -- the daemon and CLI both write, so the
 load-mutate-save race is real and the lock is mandatory, not optional.
-The lock guards a sibling `<sectors.json>.lock` file per world (never
-the store file itself), so lock-free readers (`get_sector`,
+The lock guards a sibling `<sector_id>.json.lock` file per sector
+(never the sector file itself), so lock-free readers (`get_sector`,
 `all_sectors`, `query`) are never blocked by a held write lock --
-readers are protected from a torn read by `save_store`'s atomic
-rename, not by this lock.
+readers are protected from a torn read by the atomic rename, not by
+this lock.
+
+**Dedup no-op (mack Finding 3a):** `upsert_sector`/`bulk_upsert` first
+compare what the write WOULD produce against what's already stored
+(a lock-free read, same discipline as any other reader) and skip the
+lock and the disk write entirely when nothing actually changed --
+most `tw do`/`tw read`/`tw screen` responses re-observe the identical
+current sector, so this eliminates the vast majority of writes in a
+`tw play` loop. `last_seen_ts` (both the top-level one and the nested
+`port.last_seen_ts`, both auto-re-stamped every call by
+`write_from_state`'s callers) is excluded from that comparison --
+otherwise the dedup could never fire, since the auto-stamp differs on
+literally every call regardless of content. An EXPLICITLY caller-
+supplied top-level `last_seen_ts` (a deliberate re-stamp, not the
+auto-fallback) is still honored as real content, so a bare restamp-only
+write still persists -- see `_content_equal`'s docstring.
 
 **Field-level upsert semantics (the "additive, last-write-wins per
 field" rule the canon's Write Hooks section describes):** `record`
@@ -36,6 +64,33 @@ entry -- this is the "additive" half: a warps-only write from movement
 (no port info observed this pass) must not erase previously-learned
 port data for that sector. `last_seen_ts` is always re-stamped on
 every upsert, whether the caller supplies one or not.
+
+**Nested port field-level merge (mack Finding 1, 2026-07-19
+hardening pass):** the `port` field is the ONE exception to "fully
+replaces, never sub-merged" above -- when `record["port"]` is present
+as a dict (not an explicit `None`), its OWN sub-fields (`class`,
+`commodities`, `last_seen_ts`) get the SAME additive treatment the top
+level already gets, one level deeper. Why: `state_parser.parse_state()`
+extracts port `commodities` from an ordinary port-trade screen but
+NEVER extracts a `class` at all -- `write_from_state()`'s old mapping
+built `{"class": parsed_port.get("class"), ...}`, which is `None` for
+every ordinary visit, and because `port` was replaced WHOLESALE, that
+explicit `None` CLOBBERED a `class` a previous CIM `bulk_upsert` had
+already learned. The fix is symmetric with the top-level rule: a
+sub-key ABSENT from the incoming `port` dict is preserved from
+whatever's already stored; a sub-key PRESENT (even if its value is
+itself `None`) replaces. Only `class` gets a synthetic default (`None`)
+when there's NEITHER an incoming value NOR anything already stored --
+`commodities`/`last_seen_ts` are never invented out of thin air that
+way, since every real caller always supplies both (only `class` has the
+documented never-observed-by-a-plain-screen-visit gap). `write_from_state()`
+now OMITS the `class` key entirely rather than writing an explicit
+`None` for a class it never observed -- see its own docstring. An
+explicit top-level `record["port"] = None` (as opposed to a dict) is
+NOT run through this nested merge -- that is still an unambiguous,
+deliberate "this sector has no port, clear whatever was there"
+wholesale reset, exactly like any other top-level field's
+explicit-value-provided case.
 """
 
 import contextlib
@@ -49,17 +104,17 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 STATE_DIR = PROJECT_ROOT / "state"
 WORLD_DIR = STATE_DIR / "world"
-SECTORS_FILENAME = "sectors.json"
-
-STORE_VERSION = 1
+SECTORS_SUBDIR = "sectors"
 
 _SECTOR_FIELDS = ("warps", "port", "threats", "landmarks", "formation_membership")
+_PORT_FIELDS = ("class", "commodities", "last_seen_ts")
 
 
 class WorldModelError(Exception):
-    """Store-level errors: corrupt sectors.json, an unsupported
-    version, a sector entry missing its (required) sector_id key, or a
-    caller-supplied record missing sector_id."""
+    """Store-level errors: a corrupt `<sector_id>.json`, a sector file
+    with an invalid (non-object) shape, a sector file missing its
+    (required) `sector_id` key, or a caller-supplied record missing
+    `sector_id`."""
 
 
 def _now_iso(clock=None):
@@ -79,13 +134,28 @@ def _default_sector(sector_id):
     }
 
 
-def _new_store(world_id):
-    return {"version": STORE_VERSION, "world_id": world_id, "sectors": {}}
+def _default_port():
+    """Only `class` is defaulted on a brand-new port with no incoming
+    value for it -- `commodities`/`last_seen_ts` are NOT invented out of
+    thin air when a fresh write doesn't supply them (every real caller
+    -- `write_from_state`, the CIM batch mapping -- always supplies
+    both, so there's no real-world path where they'd need a synthetic
+    default; only `class` has the documented "a real screen visit never
+    observes this at all" gap `_merge_port`'s docstring explains)."""
+    return {"class": None}
 
 
-def _store_path(world_id, state_dir=None):
+def _world_dir(world_id, state_dir=None):
     base = Path(state_dir) if state_dir is not None else WORLD_DIR
-    return base / world_id / SECTORS_FILENAME
+    return base / world_id
+
+
+def _sectors_dir(world_id, state_dir=None):
+    return _world_dir(world_id, state_dir=state_dir) / SECTORS_SUBDIR
+
+
+def _sector_path(world_id, sector_id, state_dir=None):
+    return _sectors_dir(world_id, state_dir=state_dir) / f"{sector_id}.json"
 
 
 def _lock_path(path):
@@ -93,12 +163,13 @@ def _lock_path(path):
 
 
 @contextlib.contextmanager
-def _store_lock(world_id, state_dir=None):
+def _sector_lock(world_id, sector_id, state_dir=None):
     """Exclusive `fcntl.flock`, held across a mutator's FULL
-    load-mutate-save critical section -- mirrors `player_bank._bank_lock`
-    exactly, one lock file per world (so two different worlds' writers
-    never contend with each other)."""
-    path = _store_path(world_id, state_dir)
+    load-mutate-save critical section for ONE sector -- mirrors
+    `player_bank._bank_lock`'s discipline, scoped per-sector so two
+    writers touching DIFFERENT sectors in the same world never contend
+    (mack Finding 3, hot-path + lock-contention hardening)."""
+    path = _sector_path(world_id, sector_id, state_dir=state_dir)
     path.parent.mkdir(parents=True, exist_ok=True)
     lock_path = _lock_path(path)
     fd = os.open(str(lock_path), os.O_CREAT | os.O_RDWR, 0o600)
@@ -110,60 +181,50 @@ def _store_lock(world_id, state_dir=None):
         os.close(fd)
 
 
-def load_store(world_id, state_dir=None):
-    """Load the world's sector store, or return a fresh empty store if
-    it doesn't exist yet -- that's the expected pre-first-visit state
-    for a brand new world, never an error. A corrupt/truncated/empty
-    file, an unsupported `version`, or a sector entry missing its
-    (required) `sector_id` key are all treated as fatal structural
-    corruption -- `WorldModelError`, naming the file, NEVER a silent
-    reset to an empty store (that would be data loss dressed as
-    recovery). Lock-free: safe for concurrent readers because
-    `save_store`'s atomic rename means a read never observes a
-    partially-written file, only a complete old or new one."""
-    path = _store_path(world_id, state_dir)
+def _load_sector_file(world_id, sector_id, state_dir=None):
+    """One sector's on-disk record, or `None` if this world has never
+    written that sector yet -- the expected pre-first-visit state,
+    never an error. A corrupt/truncated/empty file, a non-object
+    shape, or a missing (required) `sector_id` key are all fatal
+    structural corruption -- `WorldModelError`, naming the file, NEVER
+    a silent reset to an empty/default sector (that would be data loss
+    dressed as recovery). Lock-free: safe for concurrent readers
+    because `_save_sector_file`'s atomic rename means a read never
+    observes a partially-written file, only a complete old or new
+    one."""
+    path = _sector_path(world_id, sector_id, state_dir=state_dir)
     if not path.exists():
-        return _new_store(world_id)
+        return None
     with open(path, encoding="utf-8") as f:
         try:
             data = json.load(f)
         except json.JSONDecodeError as e:
             raise WorldModelError(
-                f"world_model store is corrupt (invalid JSON): {path} ({e})"
+                f"world_model sector file is corrupt (invalid JSON): {path} ({e})"
             ) from e
     if not isinstance(data, dict):
         raise WorldModelError(
-            f"world_model store has an invalid top-level shape (expected an object): {path}"
+            f"world_model sector file has an invalid shape (expected an object): {path}"
         )
-    data.setdefault("version", STORE_VERSION)
-    if data["version"] != STORE_VERSION:
-        raise WorldModelError(
-            f"unsupported world_model store version {data['version']!r} in {path} "
-            f"(expected {STORE_VERSION})"
-        )
-    data.setdefault("world_id", world_id)
-    data.setdefault("sectors", {})
-    for key, entry in data["sectors"].items():
-        if "sector_id" not in entry:
-            raise WorldModelError(
-                f"world_model sector entry {key!r} is missing sector_id in {path}"
-            )
+    if "sector_id" not in data:
+        raise WorldModelError(f"world_model sector file is missing sector_id: {path}")
     return data
 
 
-def save_store(store, world_id, state_dir=None):
+def _save_sector_file(world_id, sector_id, record, state_dir=None):
     """Atomic write: temp-then-rename, chmod 0600 (mirrors
     `player_bank.save_bank`/`credentials._write_secrets` exactly), so a
-    crash mid-write can never corrupt an existing store -- the
+    crash mid-write can never corrupt an existing sector file -- the
     destination only ever sees a complete, valid write. On ANY failure
-    before the rename completes, the orphaned temp file is removed too."""
-    path = _store_path(world_id, state_dir)
+    before the rename completes, the orphaned temp file is removed
+    too."""
+    path = _sector_path(world_id, sector_id, state_dir=state_dir)
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp_path = path.with_suffix(path.suffix + ".tmp")
     try:
         fd = os.open(str(tmp_path), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
         with os.fdopen(fd, "w", encoding="utf-8") as f:
-            json.dump(store, f, indent=2, sort_keys=True)
+            json.dump(record, f, indent=2, sort_keys=True)
             f.write("\n")
         os.chmod(tmp_path, 0o600)
         os.replace(str(tmp_path), str(path))
@@ -174,71 +235,138 @@ def save_store(store, world_id, state_dir=None):
         raise
 
 
-def _merge_sector_locked(store, record, now):
-    """Assumes the caller already holds `_store_lock` and owns `store`
-    (a dict just returned by `load_store`, not yet saved) -- mutates it
-    in place and returns the merged sector dict. Never acquires the
-    lock itself: exists so `upsert_sector` and `bulk_upsert` can share
-    this logic inside ONE lock acquisition each (mirrors
-    `player_bank._add_player_locked`)."""
+def _merge_port(existing_port, incoming_port):
+    """Nested field-level merge for the `port` sub-dict -- see the
+    module docstring's "Nested port field-level merge" section (mack
+    Finding 1). `incoming_port` is only ever partial the same way a
+    top-level `record` is: a sub-key present (even if its value is
+    itself `None`) replaces; a sub-key ABSENT is preserved from
+    whatever's already stored (or the default if nothing's stored
+    yet)."""
+    merged_port = dict(existing_port) if existing_port is not None else _default_port()
+    for subfield in _PORT_FIELDS:
+        if subfield in incoming_port:
+            merged_port[subfield] = incoming_port[subfield]
+    return merged_port
+
+
+def _compute_merged_sector(existing, record, now):
+    """Pure computation, no I/O and no lock -- the merge formula
+    shared by the fast lock-free dedup pre-check and the locked
+    critical section (mack Finding 3a): given the record already
+    stored for this sector (or `None`) and an incoming partial
+    `record`, returns what the merged sector WOULD be, without
+    persisting anything."""
     if "sector_id" not in record:
         raise WorldModelError("upsert_sector: record is missing required 'sector_id' key")
     sector_id = record["sector_id"]
-    key = str(sector_id)
-    existing = store["sectors"].get(key)
     merged = dict(existing) if existing is not None else _default_sector(sector_id)
     for field in _SECTOR_FIELDS:
-        if field in record:
+        if field not in record:
+            continue
+        if field == "port" and record["port"] is not None:
+            merged["port"] = _merge_port(merged.get("port"), record["port"])
+        else:
             merged[field] = record[field]
     merged["sector_id"] = sector_id
     merged["last_seen_ts"] = record.get("last_seen_ts") or _now_iso(now)
-    store["sectors"][key] = merged
     return merged
+
+
+def _content_equal(prospective, existing, record):
+    """Is `prospective` (what an upsert would write) really a no-op
+    against `existing` (what's already stored)? Never true when
+    `existing` is `None` (a sector's first-ever write always persists).
+    Otherwise compares everything EXCEPT bookkeeping timestamps: the
+    nested `port.last_seen_ts` is always auto-stamped by every caller
+    today (never a meaningful, caller-intentional value), so it's
+    always excluded. The TOP-LEVEL `last_seen_ts` is excluded too
+    UNLESS the caller explicitly supplied one on `record` -- an
+    explicit value is a deliberate re-stamp (real content the caller
+    asked to persist), while the auto `_now_iso()` fallback every
+    `write_from_state()` call gets is pure noise that changes on every
+    single response regardless of whether anything was actually
+    observed differently -- comparing it unconditionally would mean
+    the dedup this exists for (mack Finding 3a) could never fire."""
+    if existing is None:
+        return False
+
+    def _strip(d, drop_top_level_ts):
+        d = dict(d)
+        if drop_top_level_ts:
+            d.pop("last_seen_ts", None)
+        if isinstance(d.get("port"), dict):
+            port = dict(d["port"])
+            port.pop("last_seen_ts", None)
+            d["port"] = port
+        return d
+
+    drop_top_level_ts = not record.get("last_seen_ts")
+    return _strip(prospective, drop_top_level_ts) == _strip(existing, drop_top_level_ts)
 
 
 def upsert_sector(world_id, record, state_dir=None, now=None):
     """Write one (possibly partial) sector record into `world_id`'s
     store -- see module docstring for the field-level replace-not-merge
-    semantics. Returns a deep copy of the resulting merged sector."""
-    with _store_lock(world_id, state_dir=state_dir):
-        store = load_store(world_id, state_dir=state_dir)
-        merged = _merge_sector_locked(store, record, now)
-        save_store(store, world_id, state_dir=state_dir)
+    (and nested-port-merge) semantics. Returns a deep copy of the
+    resulting merged sector. A true no-op write (mack Finding 3a: the
+    merged result would be identical, content-wise, to what's already
+    stored) never touches the lock or the disk at all."""
+    if "sector_id" not in record:
+        raise WorldModelError("upsert_sector: record is missing required 'sector_id' key")
+    sector_id = record["sector_id"]
+
+    existing = _load_sector_file(world_id, sector_id, state_dir=state_dir)
+    prospective = _compute_merged_sector(existing, record, now)
+    if _content_equal(prospective, existing, record):
+        return copy.deepcopy(existing)
+
+    with _sector_lock(world_id, sector_id, state_dir=state_dir):
+        existing_locked = _load_sector_file(world_id, sector_id, state_dir=state_dir)
+        merged = _compute_merged_sector(existing_locked, record, now)
+        if _content_equal(merged, existing_locked, record):
+            merged = existing_locked
+        else:
+            _save_sector_file(world_id, sector_id, merged, state_dir=state_dir)
     return copy.deepcopy(merged)
 
 
 def bulk_upsert(world_id, records, state_dir=None, now=None):
     """Batch form of `upsert_sector` -- the write path a batch
     port/sector report (many sectors on one screen) or a density-scan
-    exploration pass needs: every record in `records` is merged under
-    ONE lock acquisition and ONE save, rather than one lock/save cycle
-    per sector. Returns a list of deep copies of the merged sectors, in
-    the same order as `records`."""
+    exploration pass needs. Each record is upserted under its OWN
+    per-sector lock (mack Finding 3: a bulk write of N sectors must not
+    hold one shared lock across all N -- that would reintroduce the
+    exact cross-sector contention per-sector persistence exists to
+    remove), with the SAME dedup no-op short-circuit `upsert_sector`
+    gets individually. Returns a list of deep copies of the merged
+    sectors, in the same order as `records`."""
     if not records:
         return []
-    with _store_lock(world_id, state_dir=state_dir):
-        store = load_store(world_id, state_dir=state_dir)
-        merged_list = [_merge_sector_locked(store, r, now) for r in records]
-        save_store(store, world_id, state_dir=state_dir)
-    return [copy.deepcopy(m) for m in merged_list]
+    return [upsert_sector(world_id, r, state_dir=state_dir, now=now) for r in records]
 
 
 def get_sector(world_id, sector_id, state_dir=None):
     """A single sector's record (deep copy -- mutating the return
     value never touches the live store), or `None` if this world has
     never seen that sector."""
-    store = load_store(world_id, state_dir=state_dir)
-    entry = store["sectors"].get(str(sector_id))
+    entry = _load_sector_file(world_id, sector_id, state_dir=state_dir)
     return copy.deepcopy(entry) if entry is not None else None
 
 
 def all_sectors(world_id, state_dir=None):
     """Every known sector in this world, sorted by `sector_id`, as deep
     copies (mutating the returned list/dicts never touches the live
-    store)."""
-    store = load_store(world_id, state_dir=state_dir)
-    ordered = sorted(store["sectors"].items(), key=lambda kv: int(kv[0]))
-    return [copy.deepcopy(entry) for _, entry in ordered]
+    store). O(total known sectors) by nature (every sector's file must
+    be read to list them all) -- unlike `upsert_sector`, this was never
+    the hot path mack's Finding 3 targeted."""
+    sectors_dir = _sectors_dir(world_id, state_dir=state_dir)
+    if not sectors_dir.exists():
+        return []
+    sector_ids = sorted(int(p.stem) for p in sectors_dir.glob("*.json"))
+    return [
+        copy.deepcopy(_load_sector_file(world_id, sid, state_dir=state_dir)) for sid in sector_ids
+    ]
 
 
 def query(world_id, predicate, state_dir=None):
@@ -264,10 +392,19 @@ def write_from_state(world_id, parsed_state, state_dir=None, now=None):
     populated by other passes (auto-explore, the formation detector),
     not by a raw state-parser read, so they're left untouched here
     (field-level upsert semantics: absent fields are preserved, not
-    cleared). `state_parser.parse_state()` doesn't currently extract a
-    port `class` or a `threats` shape at all -- this mapping is
-    forward-compatible with whichever of those it grows next rather
-    than inventing fields state_parser doesn't produce today."""
+    cleared).
+
+    `state_parser.parse_state()` doesn't currently extract a port
+    `class` at all -- mack Finding 1: the OLD mapping wrote
+    `"class": parsed_port.get("class")`, an explicit `None` on every
+    ordinary port visit, which the store's old wholesale-replace `port`
+    semantics let CLOBBER a `class` a previous CIM `bulk_upsert` had
+    already learned. The fix (generalized per the finding: this mapping
+    must never emit an explicit-`None` nested field for something
+    merely UNOBSERVED) is to omit the `class` key entirely when
+    `parsed_port` doesn't have one -- `_merge_port`'s nested-merge on
+    the store side then preserves whatever `class` (if any) is already
+    on record, rather than resetting it."""
     sector_id = parsed_state.get("sector")
     if sector_id is None:
         return None
@@ -277,11 +414,13 @@ def write_from_state(world_id, parsed_state, state_dir=None, now=None):
         record["warps"] = list(parsed_state["warps"])
     if "port" in parsed_state:
         parsed_port = parsed_state["port"] or {}
-        record["port"] = {
-            "class": parsed_port.get("class"),
+        port_record = {
             "commodities": [dict(c) for c in parsed_port.get("commodities", [])],
             "last_seen_ts": _now_iso(now),
         }
+        if "class" in parsed_port:
+            port_record["class"] = parsed_port["class"]
+        record["port"] = port_record
     if "threats" in parsed_state:
         record["threats"] = dict(parsed_state["threats"])
 

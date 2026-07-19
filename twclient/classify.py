@@ -38,6 +38,15 @@ def _regex_matcher(pattern):
 _BRACKET_OPTION_RE = re.compile(r"[(<]\s*[a-z!]\s*[)>]\s*\S+", re.I)
 _DASH_OPTION_RE = re.compile(r"^\s*[a-z]\s*[-:]\s*\S+", re.I)
 
+# CIM/port-report header+footer -- mirrors state_parser.py's own
+# `_CIM_HEADER_RE`/`_CIM_FOOTER_RE` (duplicated deliberately: this is a
+# CLASSIFICATION anchor, a different concern from state_parser's
+# DATA-EXTRACTION patterns, exactly the same "sector_display" ↔
+# `_SECTOR_RE` precedent already in this module).
+_CIM_REPORT_HEADER_RE = re.compile(r"^-=-=-\s+Port Report \(CIM\)\s+-=-=-$")
+_CIM_REPORT_FOOTER_RE = re.compile(r"^-=-=-\s+End of Report\s+-=-=-$")
+_COMMAND_ECHO_LINE_RE = re.compile(r"command\s*\[\s*tl\s*=", re.I)
+
 
 def _is_menu(text: str) -> bool:
     """A genuine multi-line options menu: at least two DIFFERENT lines
@@ -61,6 +70,67 @@ def _is_menu(text: str) -> bool:
             if qualifying_lines >= 2:
                 return True
     return False
+
+
+def _is_genuine_cim_report(full_text: str) -> bool:
+    """mack Finding 2 (2026-07-19 adversarial review): `parse_port_report`
+    ran on EVERY response with zero provenance check -- any screen merely
+    REPRODUCING the report's header/footer punctuation (a help screen
+    quoting it as a worked example, a forged chat/broadcast line) got
+    ingested into the world-model as real sector data. Text-matching the
+    report's own shape can't be the trust signal, since a quoted example
+    or a forged transmission can (and in mack's probes, does) reproduce
+    that shape byte-for-byte.
+
+    What CAN'T be reproduced without also making the screen look
+    obviously wrong is EXCLUSIVITY: a genuine system-generated report is
+    the server's SOLE output in response to the command that triggered
+    it -- nothing else shares the screen with it. A worked example needs
+    a lead-in ("...looks like this:"); a forged transmission needs a
+    label ("Incoming transmission from..."); a trailing remark ("Use it
+    to scan...") is exactly the kind of narrative framing real system
+    output never carries. So: trusted only when nothing but blank lines
+    (or the command-prompt echo that triggered it) precedes the LATEST
+    closed report's header, and nothing but blank lines follow its
+    footer up to the screen's own final (prompt) line.
+
+    Anchors to the LAST closed report in the buffer -- same
+    stale-scrollback discipline as `state_parser._latest_cim_report_lines`
+    -- and treats a report with no footer yet (still printing) as not
+    confidently closed, so it's never trusted mid-arrival."""
+    lines = full_text.splitlines()
+    if not lines:
+        return False
+
+    header_idx = None
+    for i, line in enumerate(lines):
+        if _CIM_REPORT_HEADER_RE.match(line.strip()):
+            header_idx = i  # keep overwriting -- last match wins
+
+    if header_idx is None:
+        return False
+
+    footer_idx = None
+    for j in range(header_idx + 1, len(lines)):
+        if _CIM_REPORT_FOOTER_RE.match(lines[j].strip()):
+            footer_idx = j
+            break
+    if footer_idx is None:
+        return False
+
+    for line in reversed(lines[:header_idx]):
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if _COMMAND_ECHO_LINE_RE.search(stripped):
+            break
+        return False  # narrative text shares the screen -- not trusted
+
+    for line in lines[footer_idx + 1 : -1]:
+        if line.strip():
+            return False  # narrative text after the report -- not trusted
+
+    return True
 
 
 _GATE_ANCHORS = [
@@ -105,7 +175,15 @@ def classify(rendered_text: str) -> str:
     order-dependent — fine for a single isolated string (tests, one-off
     checks), but prefer classify_screen() for a live rendered screen where
     stale unclaimed grid content can produce a false gate match.
-    """
+
+    `cim_report` is checked before everything else, same rationale as
+    classify_screen() below (see `_is_genuine_cim_report`'s docstring) --
+    it needs the FULL text to evaluate (a genuine report's own prompt
+    line looks like any other main_command prompt, so it can't be
+    reached via the ordinary gate/content anchor lists at all, which
+    invoke gate anchors against a single line)."""
+    if _is_genuine_cim_report(rendered_text):
+        return "cim_report"
     for name, matcher in _ANCHORS:
         if matcher(rendered_text):
             return name
@@ -117,7 +195,18 @@ def classify_screen(full_text: str, prompt_line: str) -> str:
     prompt line only, content anchors against the whole screen, and gate
     anchors against the whole screen only as a last resort if there's no
     prompt line to check at all. See module docstring for the rationale.
-    """
+
+    `cim_report` (mack Finding 2) is checked FIRST, ahead of even gate
+    anchors: a genuine CIM report's own prompt line is an ordinary
+    `main_command` prompt like any other (the report is what's ABOVE the
+    prompt, not the prompt itself), so it would never be reached via the
+    gate-anchors-on-prompt-line pass below -- exactly the same
+    specificity-wins-over-generic precedent as `computer` being checked
+    before `main_command`, just evaluated against the whole screen
+    instead of the prompt line since that's what the structural check
+    needs (see `_is_genuine_cim_report`)."""
+    if _is_genuine_cim_report(full_text):
+        return "cim_report"
     if prompt_line:
         for name, matcher in _GATE_ANCHORS:
             if matcher(prompt_line):
