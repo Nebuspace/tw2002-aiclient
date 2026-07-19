@@ -113,3 +113,20 @@ def test_haggle_verb_records_exactly_one_ledger_entry_when_a_ledger_is_wired(tmp
     assert len(entries) == 1  # the WHOLE haggle is one ledger entry, not one per round
     assert entries[0]["input"].startswith("<haggle:")
     assert entries[0]["settled_class"] == resp["classification"]
+
+
+def test_haggle_verb_records_actor_trainer_not_the_mode_derived_ai_default(tmp_path):
+    # TW-05: autonomy-loop.md names haggling explicitly as a "trainer"
+    # (deterministic, no-LLM engine) example -- never the ai_pilot
+    # mode's own "ai" default _current_actor() would otherwise give it.
+    responses = ["Done, we'll take the lot.\n\nCommand [TL=00:00:00]:[1] (?=Help)? : "]
+    session = FakeSession("We'll buy them for 1,000 credits.\nYour offer [1,000] ? ", _scripted(responses))
+
+    server = FakeServer()
+    ledger_path = tmp_path / "ledger.jsonl"
+    server.ledger = LedgerWriter(path=ledger_path)
+
+    protocol.dispatch(session, "haggle", {}, server)
+
+    entries = read_entries(path=ledger_path)
+    assert entries[0]["actor"] == "trainer"

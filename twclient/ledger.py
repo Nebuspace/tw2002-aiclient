@@ -2,15 +2,26 @@
 item 11a, C1).
 
 Every `do`/`send` verb dispatch (protocol.py) is appended to a single,
-ever-growing JSONL sink at `state/ledger.jsonl`: `{ts, capture, prompt,
-pre_state, input, post_state, settled_class, screen_delta_summary,
-reward}`. This is the raw material `twclient/miner.py` mines for
-recurring profitable input-subsequences (C10), and what
-`twclient/skills.py`'s `tw record` capture window tags via `capture` so
-a human/AI can later tell "this run was a named trade-loop
-capture" from "this was just background play". Auto-on: every
+ever-growing JSONL sink at `state/ledger.jsonl`: `{ts, capture, actor,
+session_id, intent, prompt, pre_state, input, post_state, settled_class,
+screen_delta_summary, reward}`. This is the raw material
+`twclient/miner.py` mines for recurring profitable input-subsequences
+(C10), and what `twclient/skills.py`'s `tw record` capture window tags
+via `capture` so a human/AI can later tell "this run was a named
+trade-loop capture" from "this was just background play". Auto-on: every
 ledger-hooked verb writes here regardless of whether a named `tw record`
 capture is active.
+
+`actor`/`session_id`/`intent` are TW-05's actor-attribution fields
+(knowledge/architecture/autonomy-loop.md) -- additive on top of the v1
+schema above: `actor` is one of `{"ai", "trainer", "human"}` (default
+"ai" -- see `record_do()`'s own docstring for who passes what),
+`session_id` correlates a run of entries to one continuous play session,
+`intent` is an optional short AI-supplied rationale. An older ledger row
+read back via `read_entries()` simply has these keys absent -- every
+read site here and in miner.py/skills.py already treats a missing key as
+"unknown", the same convention `reward`'s own per-field omission relies
+on -- so old rows stay fully readable, never migrated in place.
 
 `prompt` is the game's actual question (DESIGN-v2.md §10) -- the last
 non-blank line of `pre_text`, e.g. "Your offer [158]?" -- so a human
@@ -136,11 +147,33 @@ class LedgerWriter:
             with open(self.path, "a", encoding="utf-8") as f:
                 f.write(line)
 
-    def record_do(self, pre_text, input_text, secret, post_text, settled_class, capture=None):
+    def record_do(
+        self,
+        pre_text,
+        input_text,
+        secret,
+        post_text,
+        settled_class,
+        capture=None,
+        actor: str = "ai",
+        session_id: str | None = None,
+        intent: str | None = None,
+    ):
         """Build and append one ledger entry for a completed `do`/`send`.
         `capture` is the active `tw record` skill name, if any (protocol.py
         reads it off `server.skill_recorder`), else None -- the ledger
-        keeps recording regardless of whether a named capture is open."""
+        keeps recording regardless of whether a named capture is open.
+
+        TW-05 actor attribution (knowledge/architecture/autonomy-loop.md):
+        `actor` defaults to `"ai"` -- protocol.py's do/send/haggle choke
+        point (the direct LLM-decided path); a deterministic, no-LLM
+        caller (loop replay, mining, or any other rules-based engine)
+        passes `actor="trainer"` explicitly, and a keystroke typed
+        directly by the operator passes `actor="human"`. `session_id`
+        correlates this entry to one continuous play session; `intent`
+        is an optional short AI-supplied rationale. All three are
+        keyword-only-by-convention (never required positionally) so
+        every pre-TW-05 call site keeps working unchanged."""
         pre_state = snapshot_state(pre_text)
         post_state = snapshot_state(post_text)
         prompt = extract_prompt(pre_text)
@@ -153,6 +186,9 @@ class LedgerWriter:
         entry = {
             "ts": _now_iso(),
             "capture": capture,
+            "actor": actor,
+            "session_id": session_id,
+            "intent": intent,
             "prompt": prompt,
             "pre_state": pre_state,
             "input": "<redacted>" if secret else input_text,
