@@ -1,0 +1,9 @@
+Command [TL=00753:0/0/0/850] (?=Help)? : v
+
+-=-=-        Port Report (CIM)        -=-=-
+Sector 1234  Class: BBS  F:100% O:40% E:60%  Warps: 2235-2100-1999
+Sector 5001  Warps: 5002-5003
+Sector 5678  Class: SSB  F:20% O:80% E:10%
+-=-=-        End of Report        -=-=-
+
+Command [TL=00752:0/0/0/850] (?=Help)? :

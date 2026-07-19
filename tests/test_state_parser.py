@@ -2,7 +2,7 @@
 
 import os
 
-from twclient.state_parser import parse_haggle, parse_state
+from twclient.state_parser import parse_haggle, parse_port_report, parse_state
 
 FIXTURE_DIR = os.path.join(os.path.dirname(__file__), "fixtures")
 
@@ -234,3 +234,83 @@ def test_parse_haggle_current_default_absent_once_the_offer_prompt_is_gone():
     )
     haggle = parse_haggle(text)
     assert "current_default" not in haggle
+
+
+# -- parse_port_report: batch-ingest for the world-model's `bulk_upsert`
+# (knowledge/architecture/world-model.md). PROVENANCE CAVEAT: the CIM
+# report grammar exercised below is CONSTRUCTED from documented TW2002
+# conventions (the three-letter Buy/Sell port-class code is
+# independently verified real; the header/footer/row punctuation is
+# this project's own -- no live-captured multi-sector report exists
+# yet). Expect a refinement pass once the daemon sees a real one. -----
+
+
+def test_parse_port_report_clean_multi_sector_fixture():
+    """The representative shape: a header, three sector rows (one with
+    both port and warps, one warps-only, one port-only), a footer."""
+    text = _load_fixture("cim_port_report.txt")
+    records = parse_port_report(text)
+    by_sector = {r["sector_id"]: r for r in records}
+    assert set(by_sector) == {1234, 5001, 5678}
+
+    full = by_sector[1234]
+    assert full["warps"] == [2235, 2100, 1999]
+    assert full["port"]["class"] == "BBS"
+    commodities = {c["name"]: c for c in full["port"]["commodities"]}
+    assert commodities["Fuel Ore"] == {"name": "Fuel Ore", "status": "buying", "pct": 100}
+    assert commodities["Organics"] == {"name": "Organics", "status": "buying", "pct": 40}
+    assert commodities["Equipment"] == {"name": "Equipment", "status": "selling", "pct": 60}
+
+    warps_only = by_sector[5001]
+    assert warps_only["warps"] == [5002, 5003]
+    assert "port" not in warps_only
+
+    port_only = by_sector[5678]
+    assert "warps" not in port_only
+    assert port_only["port"]["class"] == "SSB"
+
+
+def test_parse_port_report_no_report_on_screen_returns_empty_list():
+    assert parse_port_report("Command [TL=00753:0/0/0/850] (?=Help)? :") == []
+
+
+def test_parse_port_report_anchors_to_the_latest_report_not_a_stale_one_in_scrollback():
+    """Regression-shaped (same discipline as parse_state()'s stale-sector
+    test): a stale, already-closed report sitting higher in the buffer
+    must not shadow a genuinely fresher one printed after it."""
+    text = (
+        "-=-=-        Port Report (CIM)        -=-=-\n"
+        "Sector 111  Class: BBB  F:10% O:20% E:30%\n"
+        "-=-=-        End of Report        -=-=-\n"
+        "(intervening scrolled game text)\n"
+        "-=-=-        Port Report (CIM)        -=-=-\n"
+        "Sector 222  Class: SSS  F:90% O:80% E:70%\n"
+        "-=-=-        End of Report        -=-=-\n"
+    )
+    records = parse_port_report(text)
+    assert [r["sector_id"] for r in records] == [222]
+
+
+def test_parse_port_report_skips_a_malformed_row_without_crashing():
+    """A row with an unparseable sector token is dropped conservatively
+    -- never a guessed/garbage record into the world-model -- while its
+    well-formed sibling rows still parse."""
+    text = (
+        "-=-=-        Port Report (CIM)        -=-=-\n"
+        "Sector ABCD  Class: BBS  F:100% O:40% E:60%\n"
+        "Sector 333  Class: BBS  F:100% O:40% E:60%\n"
+        "-=-=-        End of Report        -=-=-\n"
+    )
+    records = parse_port_report(text)
+    assert [r["sector_id"] for r in records] == [333]
+
+
+def test_parse_port_report_drops_a_bare_sector_row_with_no_usable_data():
+    """A sector number alone, with neither a port nor warps segment,
+    carries no content worth writing to the world-model."""
+    text = (
+        "-=-=-        Port Report (CIM)        -=-=-\n"
+        "Sector 444\n"
+        "-=-=-        End of Report        -=-=-\n"
+    )
+    assert parse_port_report(text) == []
