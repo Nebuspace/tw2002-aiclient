@@ -24,11 +24,27 @@ status context, once at the very end as the actual post-transaction
 result (both caught live: "...You have 100,101 credits...<accept the
 offer>...You have 100,485 credits..." on ONE rendered screen) -- so
 `_YOU_HAVE_CREDITS_RE` below takes the LAST match too.
-"""
+
+**Line-anchored (mack Finding 2's F2 carve-out, closed 2026-07-19):**
+`_SECTOR_RE` used to match "sector" ANYWHERE in the buffer, including
+mid-sentence inside ordinary narrative/chat text -- mack's confirmed
+live trace: the bot really in sector 100 at a real port, with a
+same-screen chat line ("...Sector: 8675, come check it out!") arriving
+AFTER the real status line. The last-match discipline above (needed
+for the real stale-scrollback case) then picked the PHANTOM 8675 --
+misattributing the bot's real observed port data to a sector it never
+visited, while its actual current sector went unrecorded that pass.
+The genuine in-game status line is always its OWN line (`Sector : N`,
+optionally indented); a chat/narrative mention embeds "Sector: N"
+mid-sentence, never as a bare line-leading label. `_SECTOR_RE` is now
+anchored to the START of a line (`re.MULTILINE`) so it only matches the
+former shape -- verified against every existing `parse_state()`
+consumer/fixture (all of which already render the status line as its
+own line) before landing this."""
 
 import re
 
-_SECTOR_RE = re.compile(r"sector\s*:?\s*(\d+)", re.I)
+_SECTOR_RE = re.compile(r"^\s*sector\s*:?\s*(\d+)", re.I | re.M)
 # TL= is ambiguous across TWGS variants: the classic shape is a plain turn
 # count ("TL=00753:0/0/0/850"), but this live server's MBBS Gold build
 # uses TL= for a HH:MM:SS countdown ("TL=00:00:00") instead — matching
@@ -234,7 +250,13 @@ _CIM_HEADER_RE = re.compile(r"^-=-=-\s+Port Report \(CIM\)\s+-=-=-$")
 _CIM_FOOTER_RE = re.compile(r"^-=-=-\s+End of Report\s+-=-=-$")
 _ROW_SECTOR_RE = re.compile(r"^Sector\s+(\S+)")
 _ROW_PORT_CLASS_RE = re.compile(r"Class:\s*([BS]{3})\b")
-_ROW_PORT_PCTS_RE = re.compile(r"F:(\d+)%\s+O:(\d+)%\s+E:(\d+)%")
+# A percentage is bounded 0-100 -- a careless forgery ("F:150%") is
+# rejected outright rather than silently accepted as real port data
+# (mack's cheap-orthogonal-hardening suggestion, 2026-07-19 follow-up).
+_PCT_RE_FRAGMENT = r"(?:100|[0-9]{1,2})"
+_ROW_PORT_PCTS_RE = re.compile(
+    rf"F:({_PCT_RE_FRAGMENT})%\s+O:({_PCT_RE_FRAGMENT})%\s+E:({_PCT_RE_FRAGMENT})%"
+)
 _ROW_WARPS_RE = re.compile(r"Warps:\s*([\d\-]+)")
 
 

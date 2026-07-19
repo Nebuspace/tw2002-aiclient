@@ -35,20 +35,22 @@ The lock guards a sibling `<sector_id>.json.lock` file per sector
 readers are protected from a torn read by the atomic rename, not by
 this lock.
 
-**Dedup no-op (mack Finding 3a):** `upsert_sector`/`bulk_upsert` first
-compare what the write WOULD produce against what's already stored
-(a lock-free read, same discipline as any other reader) and skip the
-lock and the disk write entirely when nothing actually changed --
-most `tw do`/`tw read`/`tw screen` responses re-observe the identical
-current sector, so this eliminates the vast majority of writes in a
-`tw play` loop. `last_seen_ts` (both the top-level one and the nested
-`port.last_seen_ts`, both auto-re-stamped every call by
-`write_from_state`'s callers) is excluded from that comparison --
-otherwise the dedup could never fire, since the auto-stamp differs on
-literally every call regardless of content. An EXPLICITLY caller-
-supplied top-level `last_seen_ts` (a deliberate re-stamp, not the
-auto-fallback) is still honored as real content, so a bare restamp-only
-write still persists -- see `_content_equal`'s docstring.
+**`last_seen_ts` always advances on a genuine observation (Samantha's
+2026-07-19 follow-up ruling, superseding the original mack Finding 3a
+dedup no-op):** an earlier hardening pass here made `upsert_sector`
+skip the lock and the disk write ENTIRELY when the merge was a true
+content no-op, to cut write volume in a `tw play` loop. That silently
+froze `last_seen_ts` on a genuine, unchanged re-observation -- wrong,
+since `last_seen_ts` is the canon's "I was actually here, this
+recently" staleness marker a future freshness/rescan policy needs to
+stay honest, not a "content last changed" marker. Per-sector
+persistence (the "Persistence layout" section above) already made a
+single write O(1) and cheap (~1ms measured) -- comparable to the
+no-op's own bookkeeping cost -- so the removed skip's benefit was
+marginal next to the correctness cost. `upsert_sector` now always
+acquires the lock and always writes, so `last_seen_ts` always
+re-stamps on every call, exactly as the "Field-level upsert semantics"
+section below has always documented.
 
 **Field-level upsert semantics (the "additive, last-write-wins per
 field" rule the canon's Write Hooks section describes):** `record`
@@ -251,9 +253,7 @@ def _merge_port(existing_port, incoming_port):
 
 
 def _compute_merged_sector(existing, record, now):
-    """Pure computation, no I/O and no lock -- the merge formula
-    shared by the fast lock-free dedup pre-check and the locked
-    critical section (mack Finding 3a): given the record already
+    """Pure computation, no I/O and no lock -- given the record already
     stored for this sector (or `None`) and an incoming partial
     `record`, returns what the merged sector WOULD be, without
     persisting anything."""
@@ -273,61 +273,22 @@ def _compute_merged_sector(existing, record, now):
     return merged
 
 
-def _content_equal(prospective, existing, record):
-    """Is `prospective` (what an upsert would write) really a no-op
-    against `existing` (what's already stored)? Never true when
-    `existing` is `None` (a sector's first-ever write always persists).
-    Otherwise compares everything EXCEPT bookkeeping timestamps: the
-    nested `port.last_seen_ts` is always auto-stamped by every caller
-    today (never a meaningful, caller-intentional value), so it's
-    always excluded. The TOP-LEVEL `last_seen_ts` is excluded too
-    UNLESS the caller explicitly supplied one on `record` -- an
-    explicit value is a deliberate re-stamp (real content the caller
-    asked to persist), while the auto `_now_iso()` fallback every
-    `write_from_state()` call gets is pure noise that changes on every
-    single response regardless of whether anything was actually
-    observed differently -- comparing it unconditionally would mean
-    the dedup this exists for (mack Finding 3a) could never fire."""
-    if existing is None:
-        return False
-
-    def _strip(d, drop_top_level_ts):
-        d = dict(d)
-        if drop_top_level_ts:
-            d.pop("last_seen_ts", None)
-        if isinstance(d.get("port"), dict):
-            port = dict(d["port"])
-            port.pop("last_seen_ts", None)
-            d["port"] = port
-        return d
-
-    drop_top_level_ts = not record.get("last_seen_ts")
-    return _strip(prospective, drop_top_level_ts) == _strip(existing, drop_top_level_ts)
-
-
 def upsert_sector(world_id, record, state_dir=None, now=None):
     """Write one (possibly partial) sector record into `world_id`'s
     store -- see module docstring for the field-level replace-not-merge
     (and nested-port-merge) semantics. Returns a deep copy of the
-    resulting merged sector. A true no-op write (mack Finding 3a: the
-    merged result would be identical, content-wise, to what's already
-    stored) never touches the lock or the disk at all."""
+    resulting merged sector. ALWAYS a real write under the per-sector
+    lock, and ALWAYS re-stamps `last_seen_ts` -- see the module
+    docstring's "`last_seen_ts` always advances" section for why an
+    earlier true-no-op-skip optimization here was walked back."""
     if "sector_id" not in record:
         raise WorldModelError("upsert_sector: record is missing required 'sector_id' key")
     sector_id = record["sector_id"]
 
-    existing = _load_sector_file(world_id, sector_id, state_dir=state_dir)
-    prospective = _compute_merged_sector(existing, record, now)
-    if _content_equal(prospective, existing, record):
-        return copy.deepcopy(existing)
-
     with _sector_lock(world_id, sector_id, state_dir=state_dir):
-        existing_locked = _load_sector_file(world_id, sector_id, state_dir=state_dir)
-        merged = _compute_merged_sector(existing_locked, record, now)
-        if _content_equal(merged, existing_locked, record):
-            merged = existing_locked
-        else:
-            _save_sector_file(world_id, sector_id, merged, state_dir=state_dir)
+        existing = _load_sector_file(world_id, sector_id, state_dir=state_dir)
+        merged = _compute_merged_sector(existing, record, now)
+        _save_sector_file(world_id, sector_id, merged, state_dir=state_dir)
     return copy.deepcopy(merged)
 
 
@@ -338,9 +299,8 @@ def bulk_upsert(world_id, records, state_dir=None, now=None):
     per-sector lock (mack Finding 3: a bulk write of N sectors must not
     hold one shared lock across all N -- that would reintroduce the
     exact cross-sector contention per-sector persistence exists to
-    remove), with the SAME dedup no-op short-circuit `upsert_sector`
-    gets individually. Returns a list of deep copies of the merged
-    sectors, in the same order as `records`."""
+    remove). Returns a list of deep copies of the merged sectors, in
+    the same order as `records`."""
     if not records:
         return []
     return [upsert_sector(world_id, r, state_dir=state_dir, now=now) for r in records]

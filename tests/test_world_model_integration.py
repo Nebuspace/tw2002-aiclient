@@ -251,6 +251,73 @@ def test_forged_chat_broadcast_quoting_a_cim_report_is_not_ingested(isolated_wor
     )
 
 
+# -- (c3) mack's fresh-eyes follow-up: the single-sector write_from_state() -
+# -- path's F2 carve-out was ITSELF exploitable -- closed via a line-anchored
+# -- _SECTOR_RE (state_parser.py), not a protocol.py/classify.py change -----
+
+
+def test_real_sector_wins_over_a_same_screen_phantom_chat_mention_end_to_end(isolated_world_store):
+    """Adapted from mack's probe_f2_combined.py, driven through the real
+    dispatch path: the bot is REALLY in sector 100 at a real port; a
+    same-screen chat line mentions "Sector: 8675" mid-sentence AFTER the
+    real status line. The real port data must persist under the bot's
+    ACTUAL sector (100), never the phantom (8675)."""
+    _write_profiles(
+        isolated_world_store,
+        {"alice": {"host": "bat.example.com", "port": 23, "game_letter": "A", "handle": "Alice"}},
+    )
+    combined_screen = (
+        "Sector : 100\n"
+        "Ports   : Terran (Class 0)\n"
+        "\n"
+        "Fuel Ore   Buying     1200    75%\n"
+        "Organics   Selling     800    40%\n"
+        "Equipment  Buying      300    90%\n"
+        "\n"
+        "Incoming transmission from Rival Trader:\n"
+        '"Great deals waiting in Sector: 8675, come check it out!"\n'
+        "\n"
+        "Command [TL=00:12:34]:[1000] (?=Help) ?"
+    )
+    session = FakeSession("bat.example.com", combined_screen, auto_login_profile="alice")
+
+    resp = protocol.dispatch(session, "do", {"input": ""}, FakeServer())
+
+    assert resp["ok"] is True
+    assert resp["state"]["sector"] == 100
+    world_id = protocol._current_world_id(session)
+    real_sector = world_model.get_sector(world_id, 100)
+    phantom_sector = world_model.get_sector(world_id, 8675)
+    assert real_sector is not None
+    assert real_sector["port"]["commodities"][0]["name"] == "Fuel Ore"
+    assert phantom_sector is None, "a same-screen chat mention must never create a phantom sector entry"
+
+
+def test_chat_only_screen_with_no_genuine_status_line_persists_nothing(isolated_world_store):
+    """Adapted from mack's probe_f2_carveout.py: a screen whose ONLY
+    "sector" mention is embedded in narrative/chat text (no genuine
+    status line at all) must not create ANY sector entry."""
+    _write_profiles(
+        isolated_world_store,
+        {"alice": {"host": "bat.example.com", "port": 23, "game_letter": "A", "handle": "Alice"}},
+    )
+    forged_narrative_screen = (
+        "Incoming transmission from Rival Trader:\n"
+        '"Meet me in Sector: 8675 with 50000 credits, I have a great deal!"\n'
+        "\n"
+        "You have 50,000 credits.\n"
+        "Command [TL=00:12:34]:[1000] (?=Help) ?"
+    )
+    session = FakeSession("bat.example.com", forged_narrative_screen, auto_login_profile="alice")
+
+    resp = protocol.dispatch(session, "do", {"input": ""}, FakeServer())
+
+    assert resp["ok"] is True
+    assert resp["state"].get("sector") is None
+    world_id = protocol._current_world_id(session)
+    assert world_model.get_sector(world_id, 8675) is None
+
+
 # -- (d) auto_login_profile=None no-ops the write-hook cleanly -------------
 
 

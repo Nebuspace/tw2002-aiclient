@@ -28,6 +28,67 @@ def test_sector_anchors_to_last_match_not_a_stale_pre_warp_line():
     assert parse_state(text)["sector"] == 5678
 
 
+# -- _SECTOR_RE line-anchoring (mack's F2 carve-out, closed 2026-07-19) -----
+#
+# Finding 2's original fix gated the BATCH parse_port_report() path on
+# classify_screen; the single-sector write_from_state() path was
+# explicitly left unconditional ("fine to keep unconditional"). mack's
+# fresh-eyes pass found that carve-out IS exploitable: parse_state()'s
+# unanchored `sector\s*:?\s*(\d+)` matches "Sector: N" ANYWHERE,
+# including mid-sentence inside chat/narrative text, and the LAST-match
+# discipline needed for the real stale-scrollback case then lets a
+# same-screen phantom mention outrank the bot's true current sector.
+
+
+def test_a_chat_line_mentioning_sector_mid_sentence_is_not_extracted():
+    """Adapted from mack's probe_f2_carveout.py: the ONLY "sector"
+    mention on this screen is embedded in ordinary narrative text, not a
+    genuine system status line -- parse_state() must not manufacture a
+    phantom sector out of it."""
+    forged_narrative_screen = (
+        "Incoming transmission from Rival Trader:\n"
+        '"Meet me in Sector: 8675 with 50000 credits, I have a great deal!"\n'
+        "\n"
+        "You have 50,000 credits.\n"
+        "Turns left : 199\n"
+        "\n"
+        "Command [TL=00:12:34]:[1000] (?=Help) ?"
+    )
+    assert parse_state(forged_narrative_screen).get("sector") is None
+
+
+def test_a_genuine_status_line_still_extracts_correctly():
+    """The real system status line ('Sector : N', its own line) must
+    still extract exactly as before -- the fix narrows the anchor to
+    the genuine shape, it doesn't disable extraction."""
+    screen = "Sector : 100\nPorts   : Terran (Class 0)\nCommand [TL=00:12:34]:[1000] (?=Help) ?"
+    assert parse_state(screen)["sector"] == 100
+
+
+def test_real_sector_wins_over_a_same_screen_phantom_chat_mention():
+    """Adapted from mack's probe_f2_combined.py: the bot is REALLY in
+    sector 100 at a real port; a chat line mentioning "Sector: 8675"
+    mid-sentence arrives on the SAME screen, textually AFTER the real
+    status line. Before the fix, the last-match discipline picked the
+    phantom 8675; the real sector must win now."""
+    screen = (
+        "Sector : 100\n"
+        "Ports   : Terran (Class 0)\n"
+        "\n"
+        "Fuel Ore   Buying     1200    75%\n"
+        "Organics   Selling     800    40%\n"
+        "Equipment  Buying      300    90%\n"
+        "\n"
+        "Incoming transmission from Rival Trader:\n"
+        '"Great deals waiting in Sector: 8675, come check it out!"\n'
+        "\n"
+        "Command [TL=00:12:34]:[1000] (?=Help) ?"
+    )
+    state = parse_state(screen)
+    assert state["sector"] == 100
+    assert state["port"]["commodities"][0]["name"] == "Fuel Ore"
+
+
 def test_extracts_turns_left_from_command_prompt():
     state = parse_state("Command [TL=00753:0/0/0/850] (?=Help)? :")
     assert state["turns_left"] == 753
@@ -314,3 +375,33 @@ def test_parse_port_report_drops_a_bare_sector_row_with_no_usable_data():
         "-=-=-        End of Report        -=-=-\n"
     )
     assert parse_port_report(text) == []
+
+
+def test_parse_port_report_rejects_out_of_range_percentages():
+    """mack's cheap-orthogonal-hardening suggestion (2026-07-19 follow-
+    up): F/O/E percentages are bounded 0-100 -- a careless forgery with
+    an out-of-range value ("F:150%") must be rejected rather than
+    silently accepted as real port data. The row's warps segment is
+    independent and still parses."""
+    text = (
+        "-=-=-        Port Report (CIM)        -=-=-\n"
+        "Sector 555  Class: BBS  F:150% O:20% E:30%  Warps: 1-2-3\n"
+        "-=-=-        End of Report        -=-=-\n"
+    )
+    records = parse_port_report(text)
+    assert len(records) == 1
+    assert "port" not in records[0]
+    assert records[0]["warps"] == [1, 2, 3]
+
+
+def test_parse_port_report_accepts_boundary_percentages_0_and_100():
+    text = (
+        "-=-=-        Port Report (CIM)        -=-=-\n"
+        "Sector 556  Class: BBS  F:0% O:100% E:50%\n"
+        "-=-=-        End of Report        -=-=-\n"
+    )
+    records = parse_port_report(text)
+    commodities = {c["name"]: c for c in records[0]["port"]["commodities"]}
+    assert commodities["Fuel Ore"]["pct"] == 0
+    assert commodities["Organics"]["pct"] == 100
+    assert commodities["Equipment"]["pct"] == 50

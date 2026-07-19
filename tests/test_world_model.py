@@ -16,6 +16,7 @@ tests exercising only the public API are unchanged. This was a
 greenfield change (no `state/world/` data existed anywhere yet) -- no
 migration was needed or attempted."""
 
+import datetime
 import fcntl
 import json
 import os
@@ -440,15 +441,32 @@ def test_write_from_state_actually_persists(tmp_path):
     assert world_model.get_sector(WORLD_A, 7, state_dir=tmp_path) is not None
 
 
-# -- dedup no-op (mack Finding 3a) -------------------------------------------
+# -- last_seen_ts always advances (Samantha's 2026-07-19 ruling, -----------
+# -- supersedes mack Finding 3a's true no-op-skip dedup) --------------------
+#
+# An earlier hardening pass made upsert_sector() skip the lock and the
+# disk write entirely when the merge was a content no-op, to cut write
+# volume. That silently froze last_seen_ts on a genuine, unchanged
+# re-observation -- wrong, since it's the "I was actually here, this
+# recently" staleness marker a future freshness/rescan policy needs to
+# stay honest. Per-sector writes are already O(1)/~1ms, so the removed
+# skip's benefit was marginal next to that correctness cost. Every
+# upsert_sector() call now always writes and always re-stamps
+# last_seen_ts.
 
-def test_upsert_sector_identical_content_is_a_true_noop_no_write_no_lock(tmp_path, monkeypatch):
-    """The hot-path fix: re-observing the SAME sector with IDENTICAL
-    content (the overwhelmingly common case in a `tw do` loop) must not
-    touch the lock or the disk at all on the second call."""
-    world_model.upsert_sector(WORLD_A, {"sector_id": 1, "warps": [2, 3]}, state_dir=tmp_path)
+
+def test_upsert_sector_identical_content_still_writes_and_advances_last_seen_ts(tmp_path, monkeypatch):
+    """Adapted from mack's probe_ts_semantics.py: re-observing the SAME
+    sector with IDENTICAL content, at a later clock reading, must still
+    acquire the lock, still rewrite the file, and still advance
+    last_seen_ts -- the opposite of the old dedup no-op's guarantee."""
+    clock1 = lambda: datetime.datetime(2026, 1, 1, tzinfo=datetime.timezone.utc)
+    clock2 = lambda: datetime.datetime(2026, 6, 1, tzinfo=datetime.timezone.utc)
+
+    world_model.upsert_sector(WORLD_A, {"sector_id": 1, "warps": [2, 3]}, state_dir=tmp_path, now=clock1)
     path = world_model._sector_path(WORLD_A, 1, state_dir=tmp_path)
     mtime_before = path.stat().st_mtime_ns
+    first = world_model.get_sector(WORLD_A, 1, state_dir=tmp_path)
 
     lock_calls = []
     real_sector_lock = world_model._sector_lock
@@ -458,11 +476,15 @@ def test_upsert_sector_identical_content_is_a_true_noop_no_write_no_lock(tmp_pat
         return real_sector_lock(world_id, sector_id, state_dir=state_dir)
 
     monkeypatch.setattr(world_model, "_sector_lock", counting_lock)
-    merged = world_model.upsert_sector(WORLD_A, {"sector_id": 1, "warps": [2, 3]}, state_dir=tmp_path)
+    merged = world_model.upsert_sector(WORLD_A, {"sector_id": 1, "warps": [2, 3]}, state_dir=tmp_path, now=clock2)
 
-    assert lock_calls == [], "an identical-content upsert must never acquire the lock"
-    assert path.stat().st_mtime_ns == mtime_before, "an identical-content upsert must never rewrite the file"
+    assert lock_calls == [1], "a genuine re-observation must still acquire the lock and write"
+    assert path.stat().st_mtime_ns != mtime_before, "a genuine re-observation must still rewrite the file"
     assert merged["warps"] == [2, 3]
+    assert merged["last_seen_ts"] != first["last_seen_ts"], (
+        "last_seen_ts must advance on a genuine re-observation, even with unchanged content"
+    )
+    assert merged["last_seen_ts"] == world_model._now_iso(clock2)
 
 
 def test_upsert_sector_changed_content_still_writes(tmp_path):
@@ -477,35 +499,40 @@ def test_upsert_sector_changed_content_still_writes(tmp_path):
     assert merged["warps"] == [4, 5]
 
 
-def test_write_from_state_repeated_identical_observation_dedups_despite_fresh_timestamps(tmp_path):
+def test_write_from_state_repeated_identical_observation_still_advances_last_seen_ts(tmp_path):
     """The real hot-path shape: write_from_state() never supplies an
     explicit last_seen_ts (top-level OR nested port.last_seen_ts) --
     both are auto-stamped fresh on every call. Re-observing the exact
-    same port/warps twice in a row must still dedup to a true no-op
-    despite those two auto-stamps differing between calls."""
+    same port/warps twice in a row must still re-stamp both, at a later
+    clock reading."""
+    clock1 = lambda: datetime.datetime(2026, 1, 1, tzinfo=datetime.timezone.utc)
+    clock2 = lambda: datetime.datetime(2026, 6, 1, tzinfo=datetime.timezone.utc)
     parsed = {
         "sector": 1,
         "warps": [2, 3],
         "port": {"commodities": [{"name": "Fuel Ore", "status": "buying", "amount": 10, "pct": 50}]},
     }
-    world_model.write_from_state(WORLD_A, parsed, state_dir=tmp_path)
-    path = world_model._sector_path(WORLD_A, 1, state_dir=tmp_path)
-    mtime_before = path.stat().st_mtime_ns
+    world_model.write_from_state(WORLD_A, parsed, state_dir=tmp_path, now=clock1)
+    first = world_model.get_sector(WORLD_A, 1, state_dir=tmp_path)
 
-    world_model.write_from_state(WORLD_A, dict(parsed), state_dir=tmp_path)
+    world_model.write_from_state(WORLD_A, dict(parsed), state_dir=tmp_path, now=clock2)
+    second = world_model.get_sector(WORLD_A, 1, state_dir=tmp_path)
 
-    assert path.stat().st_mtime_ns == mtime_before
+    assert second["last_seen_ts"] != first["last_seen_ts"]
+    assert second["port"]["last_seen_ts"] != first["port"]["last_seen_ts"]
 
 
-def test_bulk_upsert_dedups_unchanged_records_within_a_repeat_batch(tmp_path):
+def test_bulk_upsert_repeat_batch_still_writes_and_advances_timestamps(tmp_path):
+    clock1 = lambda: datetime.datetime(2026, 1, 1, tzinfo=datetime.timezone.utc)
+    clock2 = lambda: datetime.datetime(2026, 6, 1, tzinfo=datetime.timezone.utc)
     records = [{"sector_id": i, "warps": [i + 1]} for i in range(1, 6)]
-    world_model.bulk_upsert(WORLD_A, records, state_dir=tmp_path)
-    paths = [world_model._sector_path(WORLD_A, i, state_dir=tmp_path) for i in range(1, 6)]
-    mtimes_before = [p.stat().st_mtime_ns for p in paths]
+    world_model.bulk_upsert(WORLD_A, records, state_dir=tmp_path, now=clock1)
+    before = {i: world_model.get_sector(WORLD_A, i, state_dir=tmp_path)["last_seen_ts"] for i in range(1, 6)}
 
-    world_model.bulk_upsert(WORLD_A, [dict(r) for r in records], state_dir=tmp_path)
+    world_model.bulk_upsert(WORLD_A, [dict(r) for r in records], state_dir=tmp_path, now=clock2)
+    after = {i: world_model.get_sector(WORLD_A, i, state_dir=tmp_path)["last_seen_ts"] for i in range(1, 6)}
 
-    assert [p.stat().st_mtime_ns for p in paths] == mtimes_before
+    assert all(after[i] != before[i] for i in range(1, 6))
 
 
 # -- per-sector hot path (mack Finding 3b: O(1), not O(total sectors)) -------
