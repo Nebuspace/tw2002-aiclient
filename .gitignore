@@ -1,0 +1,37 @@
+.venv/
+run/
+logs/
+state/
+config.local.json
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Real host/port + any other local secrets-adjacent env overrides — see
+# twclient/env.py's resolution order. Never tracked.
+.env
+
+# Internal orchestration/agent-memory -- not part of the shippable
+# client (hub ruling, 2026-07-19).
+.samantha/
+.claude/
+CLAUDE.local.md
+
+# B2 secure credential store — profiles.toml is non-secret shape (host/
+# port/game-letter/handle) but still local-only; secrets.json holds
+# passwords and must NEVER be tracked. profiles.toml.example is the only
+# tracked file in config/.
+config/profiles.toml
+config/secrets.json
+config/*.local.*
+
+# OS cruft + stray logs outside the tracked logs/ dir (Cipher's
+# forward-looking gap, 2026-07-19).
+.DS_Store
+*.log
+
+# Live orchestration/planning journals -- never public; the curated
+# public canon is knowledge/ (hub ruling, 2026-07-19).
+DESIGN-v2.md
+QUEUE.md
+TUI-POLISH-PLAN.md

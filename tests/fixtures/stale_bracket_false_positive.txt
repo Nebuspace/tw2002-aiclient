@@ -1,0 +1,24 @@
+Notice: If you don't play for 30 days, your ship                    
+and your assets will be removed to make room for someone else.      
+                                                                    
+Do you wish to make up a new Alias for your Trader Name,            
+or would you rather use your BBS name of ZEPHYR?                    
+Use (N)ew Name or (B)BS Name [B] ? B                                
+                                                                    
+                                                                    
+Your ship is being initialized.                                     
+                                                                    
+You must now christen your new Murene Merchant Cruiser              
+Choose a name carefully as you will have it for a while!            
+                                                                    
+What do you want to name your ship? (30 letters)                    
+Stardrift                                                           
+                                                                    
+Stardrift is what you want? Yes                                     
+One moment please                                                   
+You will be started with your very own home planet.  Its your option
+to abandon it or to keep it and try to build it into a powerful base
+of your own.                                                        
+                                                                    
+What do you want to name your home planet? (Class M, Earth Type)    
+[---------------------------------------]                           

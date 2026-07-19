@@ -1,0 +1,20 @@
+# Copy this file to profiles.toml (gitignored) and fill in real values.
+# profiles.toml holds NON-SECRET shape only — host/port/game-letter/handle.
+# Passwords NEVER go here; they live out-of-band in config/secrets.json
+# (auto-created, chmod 600) or an env var TW2002_PASSWORD_<PROFILE> —
+# see twclient/credentials.py.
+#
+# host/port here are a fallback only: TW2002_HOST/TW2002_PORT (process
+# env or the gitignored repo-root .env) resolve first — see
+# twclient/env.py's resolution order.
+#
+# ship_name / planet_name are optional; default to "<handle>Ship" /
+# "<handle>World" if omitted.
+
+[default]
+host = "your-twgs-host.example"
+port = 23
+game_letter = "F"
+handle = "YourHandle"
+# ship_name = "MyShip"
+# planet_name = "MyWorld"

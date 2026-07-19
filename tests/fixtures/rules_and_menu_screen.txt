@@ -1,0 +1,25 @@
+                                                                                
+················································································
+                     ██████┐ ██│  ██│██┐    ██████┐███████┐                     
+                     ██┌──██┐██│  ██│██│    ██┌───┘██─────┘                     
+                     ▓▓▓▓▓▓┌┘▓▓│  ▓▓│▓▓│    ▓▓▓▓┐  ▓▓▓▓▓▓▓┐                     
+                     ▒▒┌▒▒┌┘ ▒▒│  ▒▒│▒▒│    ▒▒┌─┘  └────▒▒│                     
+                     ░░│└░░░ └░░░░░┌┘░░░░░░ ░░░░░░┐░░░░░░░│                     
+                     └─┘ └──┘ └────┘ └─────┘└─────┘└──────┘                     
+            1. No duplicate accounts of any kind.                               
+            2. No glitches/bug exploiting.                                      
+            3. No account sharing or sharing of passwords.                      
+            4. No PVP! This is a builder game, for new players to practice.     
+················································································
+[Pause]                                                                         
+                                                                                
+   ==-- Trade Wars 2002 --==                                                    
+                                                                                
+   T - Play Trade Wars 2002                                                     
+   I - Introduction & Help                                                      
+   S - View Game Settings                                                       
+   H - High scores                                                              
+   M - View Access Modes                                                        
+   X - Exit                                                                     
+                                                                                
+Enter your choice:                                                              

@@ -1,0 +1,819 @@
+"""Spectator dashboard layout tests — pure functions, no curses/terminal
+involved. Feeds synthetic events and asserts each dashboard section
+renders the expected values.
+"""
+
+from twclient.spectate_layout import (
+    CREDIT_FLASH_DURATION_S,
+    CREDIT_TWEEN_DURATION_S,
+    FRESHNESS_STALE_S,
+    FULL_GUTTER_MIN_COLS,
+    GAME_H,
+    GAME_W,
+    MINIMAL_HEADER_MIN_COLS,
+    RIGHT_GUTTER_MIN_COLS,
+    VIEWPORT_H,
+    VIEWPORT_W,
+    compose_dashboard,
+    compose_hud_cells,
+    compose_port_panel,
+    format_freshness,
+    format_idle_age,
+    format_sidebar,
+    format_status_line,
+    format_ticker_entry,
+    frame_layout,
+    gauge_semantic,
+    is_recent,
+    render_bar_meter,
+    render_plain,
+    render_sparkline,
+    status_semantic,
+    tick_down_timer,
+    update_tracked_stats,
+    CONTROL_HINTS,
+    compose_control_strip,
+    format_loops_library_header,
+    format_loops_library_row,
+    format_mode_badge,
+    format_play_progress_or_hints,
+    format_tx_readout,
+)
+
+
+def _event(**overrides):
+    base = {
+        "ok": True,
+        "screen": ["Command [TL=00:00:00]:[22825] (?=Help)? :"],
+        "prompt": "Command [TL=00:00:00]:[22825] (?=Help)? :",
+        "classification": "main_command",
+        "settled_reason": "idle",
+        "state": {"sector": 22825, "turns_left": 29990, "credits": 100000},
+        "ts": "2026-07-19T00:00:00Z",
+    }
+    base.update(overrides)
+    return base
+
+
+def test_sidebar_includes_classification_and_settled_reason():
+    lines = format_sidebar(_event())
+    joined = "\n".join(lines)
+    assert "main_command" in joined
+    assert "idle" in joined
+
+
+def test_sidebar_includes_parsed_state_fields():
+    lines = format_sidebar(_event())
+    joined = "\n".join(lines)
+    assert "22825" in joined
+    assert "29,990" in joined  # comma-formatted per the credits/turns convention
+    assert "100,000" in joined
+
+
+def test_sidebar_prefers_turns_left_over_turn_timer_when_both_absent_is_fine():
+    lines = format_sidebar(_event(state={"turn_timer": "00:00:00"}))
+    joined = "\n".join(lines)
+    assert "00:00:00" in joined
+    assert "Turns left" not in joined
+
+
+def test_sidebar_renders_port_commodities():
+    state = {"port": {"commodities": [{"name": "Fuel Ore", "status": "buying", "pct": 100, "amount": 2650}]}}
+    lines = format_sidebar(_event(state=state))
+    joined = "\n".join(lines)
+    assert "Fuel Ore" in joined
+    assert "buying" in joined
+    assert "100%" in joined
+
+
+def test_sidebar_omits_missing_fields_gracefully():
+    lines = format_sidebar(_event(state={}))
+    joined = "\n".join(lines)
+    assert "Sector" not in joined
+    assert "Credits" not in joined
+    assert "Port" not in joined
+
+
+def test_sidebar_renders_confidence_and_novelty_when_present():
+    """Forward-compatible with a future A5 confidence/novelty score --
+    must render if present, must not error/appear if absent (already
+    covered by the omission test above)."""
+    lines = format_sidebar(_event(confidence=0.92, novelty="new_screen_shape"))
+    joined = "\n".join(lines)
+    assert "0.92" in joined
+    assert "new_screen_shape" in joined
+
+
+def test_ticker_entry_format():
+    entry = format_ticker_entry(_event())
+    assert entry.startswith("[2026-07-19T00:00:00Z]")
+    assert "main_command" in entry
+    assert "idle" in entry
+
+
+def test_ticker_entry_truncates_long_prompts():
+    entry = format_ticker_entry(_event(prompt="x" * 100))
+    assert len(entry) < 100
+
+
+def test_ticker_entry_pairs_the_sent_input_when_present():
+    entry = format_ticker_entry(_event(sent_input="158"))
+    assert entry.endswith("→158")
+
+
+def test_ticker_entry_omits_tx_segment_when_absent():
+    entry = format_ticker_entry(_event())
+    assert "→" not in entry
+
+
+def test_status_line_connected():
+    line = format_status_line(connected=True, subscriber_count=2, last_rx_age_s=1.5, daemon_pid=4242)
+    assert "CONNECTED" in line
+    assert "DISCONNECTED" not in line
+    assert "subscribers: 2" in line
+    assert "1.5s ago" in line
+    assert "4242" in line
+
+
+def test_status_line_disconnected_defaults():
+    line = format_status_line()
+    assert "DISCONNECTED" in line
+    assert "subscribers: 0" in line
+
+
+def test_compose_dashboard_assembles_all_sections():
+    dashboard = compose_dashboard(_event(), ticker_history=[_event()], status={"connected": True})
+    assert dashboard["main"] == _event()["screen"]
+    assert any("main_command" in line for line in dashboard["sidebar"])
+    assert len(dashboard["ticker"]) == 1
+    assert "CONNECTED" in dashboard["status"]
+
+
+def test_compose_dashboard_caps_ticker_to_max_recent():
+    history = [_event(ts=f"t{i}") for i in range(20)]
+    dashboard = compose_dashboard(_event(), ticker_history=history, status={})
+    assert len(dashboard["ticker"]) == 8  # TICKER_MAX
+    assert "t19" in dashboard["ticker"][-1]  # most recent kept
+
+
+def test_compose_dashboard_handles_no_event_yet():
+    dashboard = compose_dashboard(None, ticker_history=[], status={})
+    assert dashboard["main"] == []
+    assert dashboard["ticker"] == []
+    assert dashboard["main_color"] == []
+
+
+def test_compose_dashboard_carries_color_map_alongside_main_text():
+    """D13: main_color rides alongside main so a curses renderer can zip
+    them together by row index -- render_plain() ignores it (plain text
+    has no use for it), but it must still be present on the dashboard."""
+    color = [[{"start": 0, "end": 3, "fg": "red", "bg": "default", "bold": True}]]
+    dashboard = compose_dashboard(_event(color=color), ticker_history=[], status={})
+    assert dashboard["main_color"] == color
+
+
+def test_compose_dashboard_defaults_main_color_when_absent():
+    dashboard = compose_dashboard(_event(), ticker_history=[], status={})
+    assert dashboard["main_color"] == []
+
+
+def test_render_plain_includes_all_sections_and_is_a_single_string():
+    dashboard = compose_dashboard(_event(), ticker_history=[_event()], status={"connected": True})
+    text = render_plain(dashboard)
+    assert isinstance(text, str)
+    assert "MAIN" in text
+    assert "SIDEBAR" in text
+    assert "EVENTS" in text
+    assert "Command [TL=" in text
+    assert "CONNECTED" in text
+
+
+def test_render_plain_handles_empty_dashboard_without_crashing():
+    dashboard = compose_dashboard(None, ticker_history=[], status={})
+    text = render_plain(dashboard)
+    assert "(no screen yet)" in text
+    assert "(no events yet)" in text
+
+
+# -- frame_layout() -- the pure reflow ladder (Phase 0/1) ------------------
+
+
+def test_frame_layout_below_floor_is_too_small():
+    regions = frame_layout(19, 200)
+    assert regions["mode"] == "too_small"
+    assert "19" in regions["message"] or "resize" in regions["message"].lower() or "Resize" in regions["message"]
+
+    regions = frame_layout(40, 59)
+    assert regions["mode"] == "too_small"
+
+
+def test_frame_layout_no_border_tier_below_viewport_width():
+    regions = frame_layout(24, 80)
+    assert regions["mode"] == "no_border"
+    assert regions["viewport"]["border"] is False
+    assert regions["gutter"] is None
+    # never stretched past the native grid, even unbordered
+    assert regions["viewport"]["game_w"] <= GAME_W
+    assert regions["viewport"]["game_h"] <= GAME_H
+
+
+def test_frame_layout_minimal_tier_borders_and_centers_with_no_gutter():
+    regions = frame_layout(30, 90)
+    assert regions["mode"] == "minimal"
+    vp = regions["viewport"]
+    assert vp["border"] is True
+    assert vp["w"] == VIEWPORT_W
+    assert vp["h"] == VIEWPORT_H
+    assert vp["game_w"] == GAME_W  # native, zero-inset, never stretched
+    assert vp["game_h"] == GAME_H
+    assert regions["gutter"] is None
+    # centered: equal-ish margin on both sides
+    left_margin = vp["x"]
+    right_margin = 90 - (vp["x"] + vp["w"])
+    assert abs(left_margin - right_margin) <= 1
+
+
+def test_frame_layout_right_gutter_tier_left_anchors_viewport():
+    regions = frame_layout(30, RIGHT_GUTTER_MIN_COLS)
+    assert regions["mode"] == "right_gutter"
+    vp = regions["viewport"]
+    assert vp["border"] is True
+    assert vp["x"] == 0
+    gutter = regions["gutter"]
+    assert gutter is not None
+    # viewport and gutter never overlap
+    assert gutter["x"] >= vp["x"] + vp["w"]
+
+
+def test_frame_layout_full_tier_centers_viewport_with_right_gutter():
+    regions = frame_layout(40, FULL_GUTTER_MIN_COLS)
+    assert regions["mode"] == "full"
+    vp = regions["viewport"]
+    gutter = regions["gutter"]
+    assert gutter is not None
+    assert gutter["x"] >= vp["x"] + vp["w"]
+    assert vp["x"] > 0  # centered, not left-anchored like right_gutter
+
+
+def test_frame_layout_viewport_never_stretched_beyond_native_grid():
+    for cols in (60, 82, 90, 108, 132, 200):
+        regions = frame_layout(50, cols)
+        vp = regions["viewport"]
+        assert vp["game_w"] <= GAME_W
+        assert vp["game_h"] <= GAME_H
+
+
+def test_frame_layout_status_bar_always_present_and_pinned_to_last_row():
+    for lines, cols in ((20, 60), (24, 80), (30, 90), (40, 140)):
+        regions = frame_layout(lines, cols)
+        assert regions["status"]["y"] == lines - 1
+        assert regions["status"]["h"] == 1
+
+
+def test_frame_layout_drops_header_before_border_under_height_pressure():
+    """Exactly enough body height for a bordered viewport and nothing
+    else -- the header is the first thing to go (plan: "height ladder
+    degrades by dropping header/border lines")."""
+    lines = VIEWPORT_H + 1  # body_lines == VIEWPORT_H exactly, status eats the +1
+    regions = frame_layout(lines, MINIMAL_HEADER_MIN_COLS)
+    assert regions["viewport"]["border"] is True
+    assert regions["header"] is None
+
+
+def test_frame_layout_adds_header_once_there_is_a_spare_line():
+    lines = VIEWPORT_H + 2
+    regions = frame_layout(lines, MINIMAL_HEADER_MIN_COLS)
+    assert regions["viewport"]["border"] is True
+    assert regions["header"] is not None
+
+
+def test_frame_layout_too_small_has_no_control_region():
+    regions = frame_layout(19, 200)
+    assert regions["control"] is None
+
+
+def test_frame_layout_control_strip_sits_directly_above_status_when_present():
+    regions = frame_layout(40, 140)  # plenty of leftover body height
+    control = regions["control"]
+    assert control is not None
+    assert control["h"] == 1
+    assert control["y"] == regions["status"]["y"] - 1
+    assert control["w"] == 140
+
+
+def test_frame_layout_control_strip_takes_priority_over_ticker_for_scarce_leftover():
+    """Exactly one spare body row (not enough for BOTH control and a
+    2-row-minimum ticker) -- the control strip wins (WO: "the control
+    strip is the panel's primary interactive surface; the ticker is a
+    nice-to-have event log"), and the ticker is dropped entirely rather
+    than the two overlapping."""
+    lines = VIEWPORT_H + 2  # body_lines - viewport_h - header(1) == 0 leftover after header...
+    # Use a size with exactly 1 leftover row AFTER the header is placed.
+    lines = VIEWPORT_H + 3  # body_lines=VIEWPORT_H+2, header eats 1, leftover=1
+    regions = frame_layout(lines, MINIMAL_HEADER_MIN_COLS)
+    assert regions["header"] is not None
+    assert regions["control"] is not None
+    assert regions["ticker"] is None
+
+
+def test_frame_layout_ticker_still_appears_with_enough_leftover_for_both():
+    lines = VIEWPORT_H + 6
+    regions = frame_layout(lines, MINIMAL_HEADER_MIN_COLS)
+    assert regions["control"] is not None
+    assert regions["ticker"] is not None
+    # control sits between the ticker and the status bar, never overlapping either.
+    assert regions["ticker"]["y"] + regions["ticker"]["h"] <= regions["control"]["y"]
+    assert regions["control"]["y"] + regions["control"]["h"] <= regions["status"]["y"]
+
+
+def test_frame_layout_is_a_pure_function_of_its_inputs():
+    a = frame_layout(40, 140)
+    b = frame_layout(40, 140)
+    assert a == b  # same inputs -> structurally equal dict every time
+
+
+# -- the persistent HUD accumulator (the operator's directive) --------------
+
+
+def test_update_tracked_stats_persists_fields_across_events_lacking_them():
+    """The exact bug this replaces: format_sidebar's `if "credits" in
+    state` silently DROPPED credits on a credits-less screen. The
+    accumulator must instead keep the last-known value."""
+    tracked = {}
+    tracked = update_tracked_stats(tracked, {"state": {"credits": 100000, "sector": 22825}}, now=10.0)
+    assert tracked["credits"] == (100000, 10.0)
+    assert tracked["sector"] == (22825, 10.0)
+
+    # A later event with NO state at all (e.g. a combat prompt) --
+    # previously-tracked fields must survive untouched.
+    tracked = update_tracked_stats(tracked, {"state": {}}, now=15.0)
+    assert tracked["credits"] == (100000, 10.0)
+    assert tracked["sector"] == (22825, 10.0)
+
+
+def test_update_tracked_stats_updates_only_fields_present_on_the_new_event():
+    tracked = {"credits": (100, 1.0), "sector": (5, 1.0)}
+    tracked = update_tracked_stats(tracked, {"state": {"sector": 6}}, now=2.0)
+    assert tracked["sector"] == (6, 2.0)
+    assert tracked["credits"] == (100, 1.0)  # untouched -- not in this event's state
+
+
+def test_update_tracked_stats_prefers_turns_left_and_falls_back_to_turn_timer():
+    tracked = update_tracked_stats({}, {"state": {"turns_left": 29990}}, now=1.0)
+    assert tracked["turns"] == (("count", 29990), 1.0)
+
+    tracked = update_tracked_stats({}, {"state": {"turn_timer": "00:04:12"}}, now=1.0)
+    assert tracked["turns"] == (("timer", "00:04:12"), 1.0)
+
+
+def test_update_tracked_stats_computes_profit_as_delta_from_first_seen_credits():
+    tracked = update_tracked_stats({}, {"state": {"credits": 100000}}, now=1.0)
+    assert "profit" not in tracked  # no baseline delta yet on the very first sighting
+
+    tracked = update_tracked_stats(tracked, {"state": {"credits": 100230}}, now=2.0)
+    assert tracked["profit"] == (230, 2.0)
+
+    tracked = update_tracked_stats(tracked, {"state": {"credits": 99500}}, now=3.0)
+    assert tracked["profit"] == (-500, 3.0)  # can go negative -- a real loss since session start
+
+
+def test_update_tracked_stats_is_pure_returns_new_dict():
+    tracked = {}
+    out = update_tracked_stats(tracked, {"state": {"sector": 1}}, now=1.0)
+    assert tracked == {}  # original untouched
+    assert out is not tracked
+
+
+def test_update_tracked_stats_handles_none_event():
+    assert update_tracked_stats({}, None, now=1.0) == {}
+
+
+# -- format_freshness / staleness -------------------------------------------
+
+
+def test_format_freshness_shows_now_for_sub_second_age():
+    assert format_freshness(0.4) == "✦ now"
+
+
+def test_format_freshness_shows_seconds_ago():
+    assert format_freshness(7.9) == "✦ 7s ago"
+
+
+def test_format_freshness_accepts_an_ascii_mark():
+    assert format_freshness(3.0, mark="*") == "* 3s ago"
+
+
+# -- compose_hud_cells() -----------------------------------------------------
+
+
+def test_compose_hud_cells_placeholder_shape_with_no_data_yet():
+    cells = compose_hud_cells({}, now=100.0)
+    labels = [c["label"] for c in cells]
+    assert labels == ["CREDITS", "SECTOR", "TURNS", "CARGO", "PROFIT"]
+    assert all(c["value"] == "-" for c in cells)
+    assert all(c["freshness"] == "" for c in cells)
+    assert all(c["stale"] is False for c in cells)
+
+
+def test_compose_hud_cells_formats_values_and_freshness():
+    tracked = update_tracked_stats({}, {"state": {"credits": 100000, "sector": 1027, "cargo_holds_empty": 50}}, now=100.0)
+    cells = compose_hud_cells(tracked, now=102.0)
+    by_label = {c["label"]: c for c in cells}
+    assert by_label["CREDITS"]["value"] == "100,000"
+    assert by_label["CREDITS"]["freshness"] == "✦ 2s ago"
+    assert by_label["SECTOR"]["value"] == "1027"
+    assert by_label["CARGO"]["value"] == "50"
+
+
+def test_compose_hud_cells_dims_a_cell_past_the_staleness_threshold():
+    tracked = update_tracked_stats({}, {"state": {"credits": 100000}}, now=0.0)
+    fresh = compose_hud_cells(tracked, now=FRESHNESS_STALE_S - 1)
+    stale = compose_hud_cells(tracked, now=FRESHNESS_STALE_S + 1)
+    assert [c for c in fresh if c["label"] == "CREDITS"][0]["stale"] is False
+    assert [c for c in stale if c["label"] == "CREDITS"][0]["stale"] is True
+
+
+def test_compose_hud_cells_turns_cell_ticks_down_a_live_timer():
+    tracked = update_tracked_stats({}, {"state": {"turn_timer": "00:00:10"}}, now=0.0)
+    cells = compose_hud_cells(tracked, now=4.0)
+    turns_cell = [c for c in cells if c["label"] == "TURNS"][0]
+    assert turns_cell["value"] == "00:00:06"
+
+
+def test_compose_hud_cells_turns_cell_shows_comma_formatted_count():
+    tracked = update_tracked_stats({}, {"state": {"turns_left": 29990}}, now=0.0)
+    cells = compose_hud_cells(tracked, now=1.0)
+    turns_cell = [c for c in cells if c["label"] == "TURNS"][0]
+    assert turns_cell["value"] == "29,990"
+
+
+# -- tick_down_timer / format_idle_age / status_semantic --------------------
+
+
+def test_tick_down_timer_counts_down_and_floors_at_zero():
+    assert tick_down_timer("00:00:10", 4.0) == "00:00:06"
+    assert tick_down_timer("00:00:10", 999.0) == "00:00:00"
+
+
+def test_tick_down_timer_passes_through_unparseable_input():
+    assert tick_down_timer("garbage", 4.0) == "garbage"
+    assert tick_down_timer(None, 4.0) is None
+
+
+def test_format_idle_age_seconds_then_minutes():
+    assert format_idle_age(4.2) == "4.2s"
+    assert format_idle_age(65) == "1m05s"
+
+
+def test_status_semantic_disconnected_is_danger():
+    assert status_semantic(False, None) == "danger"
+    assert status_semantic(False, 0.1) == "danger"
+
+
+def test_status_semantic_connected_and_fresh_is_ok():
+    assert status_semantic(True, 0.5) == "ok"
+    assert status_semantic(True, None) == "ok"
+
+
+def test_status_semantic_connected_but_stale_rx_is_warn():
+    assert status_semantic(True, 30.0) == "warn"
+
+
+# -- is_recent() / render_bar_meter() / render_sparkline() / gauge_semantic() --
+
+
+def test_is_recent_true_within_window_false_after_and_for_none():
+    assert is_recent(10.0, now=10.5, duration=1.0) is True
+    assert is_recent(10.0, now=11.5, duration=1.0) is False
+    assert is_recent(None, now=11.5, duration=1.0) is False
+
+
+def test_render_bar_meter_scales_and_clamps():
+    assert render_bar_meter(0.0, 10) == "[" + "░" * 10 + "]"
+    assert render_bar_meter(1.0, 10) == "[" + "█" * 10 + "]"
+    assert render_bar_meter(0.5, 10) == "[" + "█" * 5 + "░" * 5 + "]"
+    assert render_bar_meter(-1.0, 10) == "[" + "░" * 10 + "]"  # clamped, not garbled
+    assert render_bar_meter(2.0, 10) == "[" + "█" * 10 + "]"
+
+
+def test_render_bar_meter_accepts_ascii_fallback_chars():
+    assert render_bar_meter(0.5, 4, full_char="#", empty_char=".") == "[##..]"
+
+
+def test_render_sparkline_empty_series_is_empty_string():
+    assert render_sparkline([]) == ""
+
+
+def test_render_sparkline_flat_series_uses_middle_glyph():
+    chars = "▁▂▃▄▅▆▇█"
+    flat = render_sparkline([100, 100, 100], chars=chars)
+    assert flat == chars[len(chars) // 2] * 3
+
+
+def test_render_sparkline_scales_to_series_min_max():
+    chars = ".-=#"
+    line = render_sparkline([0, 50, 100], chars=chars)
+    assert line[0] == "."   # the series minimum -> the ramp's lowest glyph
+    assert line[-1] == "#"  # the series maximum -> the ramp's highest glyph
+    assert len(line) == 3
+
+
+def test_gauge_semantic_thresholds():
+    assert gauge_semantic(1.0) == "ok"
+    assert gauge_semantic(0.5) == "ok"
+    assert gauge_semantic(0.3) == "warn"
+    assert gauge_semantic(0.2) == "warn"
+    assert gauge_semantic(0.1) == "danger"
+    assert gauge_semantic(0.0) == "danger"
+
+
+# -- update_tracked_stats()'s Phase 3/4 "something just happened" bookkeeping --
+
+
+def test_update_tracked_stats_sets_ticker_flash_on_any_real_event():
+    tracked = update_tracked_stats({}, {"state": {}}, now=5.0)
+    assert tracked["_ticker_flash_ts"] == 5.0
+
+
+def test_update_tracked_stats_does_not_set_ticker_flash_for_a_none_event():
+    tracked = update_tracked_stats({}, None, now=5.0)
+    assert "_ticker_flash_ts" not in tracked
+
+
+def test_update_tracked_stats_pulses_on_classification_change_only():
+    tracked = update_tracked_stats({}, {"classification": "main_command", "state": {}}, now=1.0)
+    assert "_classification_pulse_ts" not in tracked  # first sighting -- nothing "changed" yet
+
+    tracked = update_tracked_stats(tracked, {"classification": "main_command", "state": {}}, now=2.0)
+    assert "_classification_pulse_ts" not in tracked  # same classification -- no pulse
+
+    tracked = update_tracked_stats(tracked, {"classification": "port_menu", "state": {}}, now=3.0)
+    assert tracked["_classification_pulse_ts"] == 3.0
+
+
+def test_update_tracked_stats_flashes_and_tweens_on_a_real_credits_change():
+    tracked = update_tracked_stats({}, {"state": {"credits": 100000}}, now=1.0)
+    assert "_credits_flash" not in tracked  # first sighting -- no prior value to delta against
+    assert "_credits_tween" not in tracked
+
+    tracked = update_tracked_stats(tracked, {"state": {"credits": 100230}}, now=2.0)
+    assert tracked["_credits_flash"] == (230, 2.0)
+    assert tracked["_credits_tween"] == (100000, 100230, 2.0)
+
+
+def test_update_tracked_stats_does_not_flash_when_credits_is_unchanged():
+    tracked = update_tracked_stats({}, {"state": {"credits": 100000}}, now=1.0)
+    tracked = update_tracked_stats(tracked, {"state": {"credits": 100000}}, now=2.0)
+    assert "_credits_flash" not in tracked
+
+
+def test_update_tracked_stats_builds_a_bounded_credit_series():
+    tracked = {}
+    for i in range(30):
+        tracked = update_tracked_stats(tracked, {"state": {"credits": 100000 + i}}, now=float(i))
+    assert len(tracked["_credit_series"]) == 20  # CREDIT_SPARK_WIDTH
+    assert tracked["_credit_series"][-1] == 100029  # newest sample kept
+    assert tracked["_credit_series"][0] == 100010   # oldest beyond the window dropped
+
+
+def test_update_tracked_stats_turns_max_tracks_the_session_high():
+    tracked = update_tracked_stats({}, {"state": {"turns_left": 1000}}, now=1.0)
+    assert tracked["_turns_max"] == 1000
+    tracked = update_tracked_stats(tracked, {"state": {"turns_left": 800}}, now=2.0)
+    assert tracked["_turns_max"] == 1000  # spent turns don't lower the "full tank" mark
+    tracked = update_tracked_stats(tracked, {"state": {"turns_left": 1200}}, now=3.0)
+    assert tracked["_turns_max"] == 1200  # a real increase raises it
+
+
+# -- compose_hud_cells()'s Phase 3/4 per-field extras -----------------------
+
+
+def test_credits_cell_flashes_gain_with_a_chip_and_tweens_toward_the_target():
+    tracked = update_tracked_stats({}, {"state": {"credits": 100000}}, now=0.0)
+    tracked = update_tracked_stats(tracked, {"state": {"credits": 100230}}, now=10.0)
+
+    # Mid-tween (well inside CREDIT_TWEEN_DURATION_S): value is BETWEEN
+    # old and new, not yet the final number.
+    mid_cells = compose_hud_cells(tracked, now=10.0 + CREDIT_TWEEN_DURATION_S / 2)
+    credits_cell = [c for c in mid_cells if c["label"] == "CREDITS"][0]
+    mid_value = int(credits_cell["value"].replace(",", ""))
+    assert 100000 < mid_value < 100230
+
+    # Tween finished, flash still fresh: final value + gain tone + chip.
+    settled_cells = compose_hud_cells(tracked, now=10.0 + CREDIT_TWEEN_DURATION_S + 0.05)
+    credits_cell = [c for c in settled_cells if c["label"] == "CREDITS"][0]
+    assert credits_cell["value"] == "100,230"
+    assert credits_cell["tone"] == "gain"
+    assert "230" in credits_cell["chip"]
+
+    # Flash long expired: back to neutral, no chip.
+    late_cells = compose_hud_cells(tracked, now=10.0 + CREDIT_FLASH_DURATION_S + 1.0)
+    credits_cell = [c for c in late_cells if c["label"] == "CREDITS"][0]
+    assert credits_cell["tone"] is None
+    assert credits_cell["chip"] == ""
+
+
+def test_credits_cell_flashes_loss_on_a_decrease():
+    tracked = update_tracked_stats({}, {"state": {"credits": 100000}}, now=0.0)
+    tracked = update_tracked_stats(tracked, {"state": {"credits": 99500}}, now=1.0)
+    cells = compose_hud_cells(tracked, now=1.1)
+    credits_cell = [c for c in cells if c["label"] == "CREDITS"][0]
+    assert credits_cell["tone"] == "loss"
+    assert "-500" in credits_cell["chip"]
+
+
+def test_credits_cell_no_flash_or_chip_on_first_sighting():
+    tracked = update_tracked_stats({}, {"state": {"credits": 100000}}, now=0.0)
+    cells = compose_hud_cells(tracked, now=0.1)
+    credits_cell = [c for c in cells if c["label"] == "CREDITS"][0]
+    assert credits_cell["tone"] is None
+    assert credits_cell["chip"] == ""
+
+
+def test_credits_cell_carries_a_sparkline_once_there_is_a_series():
+    tracked = update_tracked_stats({}, {"state": {"credits": 100000}}, now=0.0)
+    tracked = update_tracked_stats(tracked, {"state": {"credits": 100500}}, now=1.0)
+    cells = compose_hud_cells(tracked, now=1.0)
+    credits_cell = [c for c in cells if c["label"] == "CREDITS"][0]
+    assert len(credits_cell["spark"]) == 2
+
+
+def test_turns_cell_shows_a_gauge_and_tone_once_a_max_is_known():
+    tracked = update_tracked_stats({}, {"state": {"turns_left": 1000}}, now=0.0)
+    tracked = update_tracked_stats(tracked, {"state": {"turns_left": 100}}, now=1.0)  # 10% left
+    cells = compose_hud_cells(tracked, now=1.0)
+    turns_cell = [c for c in cells if c["label"] == "TURNS"][0]
+    assert turns_cell["value"] == "100"  # plain value untouched by the gauge suffix
+    assert turns_cell["gauge"].startswith("[") and turns_cell["gauge"].endswith("]")
+    assert turns_cell["tone"] == "danger"  # 10% -> below the danger threshold
+
+
+def test_turns_cell_no_gauge_for_the_timer_variant():
+    tracked = update_tracked_stats({}, {"state": {"turn_timer": "00:00:30"}}, now=0.0)
+    cells = compose_hud_cells(tracked, now=0.0)
+    turns_cell = [c for c in cells if c["label"] == "TURNS"][0]
+    assert turns_cell["gauge"] == ""
+    assert turns_cell["tone"] is None
+
+
+def test_non_credits_non_turns_cells_carry_neutral_extras():
+    tracked = update_tracked_stats({}, {"state": {"sector": 1027, "cargo_holds_empty": 50}}, now=0.0)
+    cells = compose_hud_cells(tracked, now=0.0)
+    for label in ("SECTOR", "CARGO", "PROFIT"):
+        cell = [c for c in cells if c["label"] == label][0]
+        assert cell["tone"] is None
+        assert cell["chip"] == ""
+
+
+# -- compose_port_panel() ----------------------------------------------------
+
+
+def test_compose_port_panel_empty_when_no_port_in_state():
+    assert compose_port_panel({"state": {}}) == []
+    assert compose_port_panel(None) == []
+
+
+def test_compose_port_panel_renders_one_row_per_commodity_with_bar_and_tone():
+    event = {
+        "state": {
+            "port": {
+                "commodities": [
+                    {"name": "Fuel Ore", "status": "buying", "pct": 100, "amount": 2650},
+                    {"name": "Organics", "status": "selling", "pct": 40, "amount": 10},
+                ]
+            }
+        }
+    }
+    rows = compose_port_panel(event)
+    assert len(rows) == 2
+    assert rows[0] == {"name": "Fuel Ore", "pct": 100, "bar": "[" + "█" * 10 + "]", "tone": "ok"}
+    assert rows[1]["tone"] == "info"  # "selling" is not "buying"
+    assert rows[1]["bar"] == "[" + "█" * 4 + "░" * 6 + "]"  # 40%
+
+
+def test_compose_port_panel_does_not_persist_across_events():
+    """Deliberate design choice (see compose_port_panel's docstring): a
+    port's numbers are only shown while CURRENTLY at that port -- calling
+    it against a later, port-less event must return nothing, not stale
+    data from the earlier one."""
+    at_port = {"state": {"port": {"commodities": [{"name": "Fuel Ore", "status": "buying", "pct": 100}]}}}
+    assert compose_port_panel(at_port) != []
+    left_port = {"state": {"sector": 1027}}
+    assert compose_port_panel(left_port) == []
+
+
+# -- Trainer Control Panel: mode badge / TX readout / control strip --------
+
+
+def test_format_mode_badge_known_modes():
+    label, tone = format_mode_badge("ai_pilot")
+    assert label == "AI-PILOT" and tone == "info"
+    label, tone = format_mode_badge("auto_loop")
+    assert tone == "ok"
+    label, tone = format_mode_badge("human")
+    assert tone == "warn"
+    label, tone = format_mode_badge("spectate")
+    assert tone == "muted"
+
+
+def test_format_mode_badge_unknown_mode_degrades_gracefully():
+    label, tone = format_mode_badge("something_new")
+    assert label == "SOMETHING_NEW"
+    assert tone is None
+
+
+def test_format_mode_badge_handles_falsy_mode():
+    label, tone = format_mode_badge(None)
+    assert label == "?"
+
+
+def test_format_tx_readout_shows_dash_when_nothing_sent_yet():
+    assert format_tx_readout(None) == "→ -"
+    assert format_tx_readout("") == "→ -"
+
+
+def test_format_tx_readout_shows_the_sent_text():
+    assert format_tx_readout("158") == "→ 158"
+
+
+def test_format_play_progress_or_hints_shows_hints_when_nothing_running():
+    assert format_play_progress_or_hints(None) == CONTROL_HINTS
+    assert format_play_progress_or_hints({"running": False}) == CONTROL_HINTS
+
+
+def test_format_play_progress_or_hints_shows_a_live_bar_while_running():
+    play = {"running": True, "paused": False, "name": "demo-loop", "cycle": 2, "cycles_total": 5}
+    text = format_play_progress_or_hints(play)
+    assert "Playing demo-loop" in text
+    assert "2/5" in text
+    assert "[" in text and "]" in text
+
+
+def test_format_play_progress_or_hints_shows_paused_state():
+    play = {"running": True, "paused": True, "name": "demo-loop", "cycle": 2, "cycles_total": 5}
+    assert "PAUSED demo-loop" in format_play_progress_or_hints(play)
+
+
+def test_format_play_progress_or_hints_guards_zero_cycles_total():
+    play = {"running": True, "paused": False, "name": "demo-loop", "cycle": 0, "cycles_total": 0}
+    text = format_play_progress_or_hints(play)  # must not raise (division by zero)
+    assert "0/0" in text
+
+
+def test_compose_control_strip_assembles_all_segments():
+    strip = compose_control_strip("auto_loop", "158", {"running": True, "paused": False, "name": "d", "cycle": 1, "cycles_total": 3})
+    assert strip["badge"] == " AUTO-LOOP "
+    assert strip["badge_tone"] == "ok"
+    assert strip["tx"] == "→ 158"
+    assert "Playing d" in strip["right"]
+
+
+def test_compose_control_strip_shows_hints_when_idle():
+    strip = compose_control_strip("ai_pilot", None, None)
+    assert strip["right"] == CONTROL_HINTS
+    assert strip["tx"] == "→ -"
+
+
+# -- Trainer Control Panel: Learned-Loops Library overlay -------------------
+
+
+def test_format_loops_library_row_mined_shows_profit_per_turn():
+    loop = {"name": "mined-loop", "source": "mined", "profit_per_turn": 12.5, "steps": 3, "draft": True}
+    row = format_loops_library_row(loop, selected=False, cols=80)
+    assert "mined-loop" in row
+    assert "+12.5cr/turn" in row
+    assert "DRAFT" in row
+    assert "3 steps" in row
+
+
+def test_format_loops_library_row_recorded_shows_demo_profit():
+    loop = {"name": "recorded-loop", "source": "recorded", "demo_profit": 230, "steps": 5, "draft": False}
+    row = format_loops_library_row(loop, selected=False, cols=80)
+    assert "+230cr demo" in row
+    assert "DRAFT" not in row
+
+
+def test_format_loops_library_row_no_profit_data_shows_dash():
+    loop = {"name": "unknown-loop", "source": "recorded", "steps": 1, "draft": False}
+    row = format_loops_library_row(loop, selected=False, cols=80)
+    assert row.rstrip().endswith("1 steps")
+    assert " - " in row or row.count("-") >= 1
+
+
+def test_format_loops_library_row_selected_gets_a_marker():
+    loop = {"name": "x", "source": "recorded", "demo_profit": 1, "steps": 1, "draft": False}
+    selected_row = format_loops_library_row(loop, selected=True, cols=80)
+    unselected_row = format_loops_library_row(loop, selected=False, cols=80)
+    assert selected_row.startswith("▸")
+    assert not unselected_row.startswith("▸")
+
+
+def test_format_loops_library_row_truncates_to_cols():
+    loop = {"name": "a-very-long-loop-name-that-would-overflow", "source": "recorded", "demo_profit": 1, "steps": 1, "draft": False}
+    row = format_loops_library_row(loop, selected=False, cols=20)
+    assert len(row) <= 19
+
+
+def test_format_loops_library_header_shows_count():
+    header = format_loops_library_header(3)
+    assert "3 loop(s)" in header

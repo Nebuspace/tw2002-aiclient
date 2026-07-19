@@ -1,0 +1,7 @@
+#!/bin/sh
+''''exec "$(dirname "$0")"/.venv/bin/python3 "$0" "$@" # '''
+"""tw — one-shot CLI entry point. See DESIGN.md and README.md."""
+from twclient.cli import main
+
+if __name__ == "__main__":
+    main()

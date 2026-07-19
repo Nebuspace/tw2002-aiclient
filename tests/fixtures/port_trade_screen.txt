@@ -1,0 +1,25 @@
+                                                                            
+Enter your choice [T] ?                                                     
+<Port>                                                                      
+                                                                            
+Docking...                                                                  
+One turn deducted, 29990 turns left.                                        
+                                                                            
+Commerce report for Adipocere Primus: 10:54:42 PM Sat Jul 18, 2054          
+                                                                            
+-=-=-        Docking Log        -=-=-                                       
+No current ship docking log on file.                                        
+For finding this neglected port you receive 50 experience point(s).         
+You have been promoted to Sergeant!                                         
+                                                                            
+ Items     Status  Trading % of max OnBoard                                 
+ -----     ------  ------- -------- -------                                 
+Fuel Ore   Buying    2650    100%       0                                   
+Organics   Buying    2970    100%       0                                   
+Equipment  Buying    1220    100%       0                                   
+                                                                            
+You don't have anything they want, and they don't have anything you can buy.
+                                                                            
+You have 100,000 credits and 50 empty cargo holds.                          
+                                                                            
+Command [TL=00:00:00]:[21068] (?=Help)? :                                   
