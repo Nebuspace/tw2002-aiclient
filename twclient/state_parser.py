@@ -88,6 +88,34 @@ def _last_nonblank_line(text: str) -> str:
     return ""
 
 
+def last_nonblank_line(text: str) -> str:
+    """Public wrapper around `_last_nonblank_line()` -- other modules
+    (haggle.py's evidence/anchor checks) need the SAME "current prompt
+    line only, not the whole possibly-stale buffer" convention this
+    module's own gate anchors (`current_default` above) already use,
+    without re-deriving the same last-non-blank-line logic a second
+    time."""
+    return _last_nonblank_line(text)
+
+
+def credits_balance(rendered_text: str) -> "int | None":
+    """The STRICT "you have N credits" balance only -- unlike
+    `parse_state()`'s `credits` field, this NEVER falls back to the
+    generic "N credits" mention (`_CREDITS_AMOUNT_FIRST_RE`), which a
+    port's own price quote ("We'll buy them for N credits.") would
+    otherwise satisfy just as well and get misread as an actual
+    balance. A haggle dialogue screen is dominated by exactly those
+    price-quote sentences, so haggle.py's credit-delta verification
+    needs this narrower, unambiguous extraction rather than
+    `parse_state()`'s caller-friendly-but-looser fallback chain.
+    Last-match anchored, same stale-scrollback discipline as
+    `parse_state()`'s own `credits` field (see module docstring)."""
+    matches = _YOU_HAVE_CREDITS_RE.findall(rendered_text)
+    if not matches:
+        return None
+    return int(matches[-1].replace(",", ""))
+
+
 def parse_haggle(rendered_text: str) -> dict:
     """Best-effort extraction of an in-progress port-haggle dialogue:
     `{direction, baseline, latest_quote, current_default}` (any/all

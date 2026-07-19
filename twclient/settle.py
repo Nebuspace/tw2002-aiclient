@@ -72,6 +72,46 @@ def wait_for_settle(session, wait_prompt=None, debounce_ms=350, timeout_s=8.0, p
         session.sleep(poll_interval_s)
 
 
+def wait_until_settled(session, debounce_ms=350, timeout_s=8.0, poll_interval_s=0.04):
+    """Block until the session's rx activity has been quiet for at least
+    `debounce_ms` **as measured right now** -- a pre-send freshness gate
+    for a caller about to READ the current render and act on it, distinct
+    from `wait_for_settle()`'s "wait for a change, then settle" contract.
+
+    `wait_for_settle()` can only detect idleness that occurs DURING its
+    own call window: it requires `session.rx_count` to increase past the
+    value captured at call-start before "idle" can ever fire (see its
+    `test_never_settles_idle_without_any_new_bytes` case) -- so it
+    structurally cannot confirm a screen that was ALREADY fully settled
+    before the call began, which is exactly the case at the TOP of
+    `haggle.run_haggle()`: the caller is handed a session already sitting
+    at an offer prompt, with no send of its own to wait on. Reading
+    `session.render()` at that point with no freshness check at all
+    risks parsing a screen still mid-transition from whatever action the
+    CALLER took to get there (DESIGN-v2 §8's send/settle-race philosophy,
+    applied to the read side instead of the send side).
+
+    Same `>=1 byte ever received` guard as `wait_for_settle()`'s own idle
+    path (a connection that has NEVER produced any traffic isn't
+    "settled", it's simply never having started) -- times out instead of
+    reporting idle. Returns `("idle", elapsed)` or `("timeout", elapsed)`.
+    """
+    start = session.clock()
+    debounce_s = debounce_ms / 1000.0
+
+    while True:
+        now = session.clock()
+        elapsed = now - start
+
+        if session.rx_count > 0 and (now - session.last_rx) >= debounce_s:
+            return "idle", elapsed
+
+        if elapsed >= timeout_s:
+            return "timeout", elapsed
+
+        session.sleep(poll_interval_s)
+
+
 def send_and_confirm(
     session,
     text,

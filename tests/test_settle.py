@@ -1,6 +1,6 @@
 """Settle-detection timing tests with a fake clock — no real sleeping."""
 
-from twclient.settle import send_and_confirm, wait_for_settle
+from twclient.settle import send_and_confirm, wait_for_settle, wait_until_settled
 
 
 class ScriptedSession:
@@ -87,6 +87,50 @@ def test_timeout_fires_even_with_traffic_if_no_prompt_and_never_idle():
     reason, elapsed = wait_for_settle(s, debounce_ms=100, timeout_s=1.0, poll_interval_s=0.02)
     assert reason == "timeout"
     assert elapsed >= 1.0
+
+
+# -- wait_until_settled: the pre-send freshness gate (TW-01 defect #3) --
+# Unlike wait_for_settle (which can only detect idleness that occurs
+# DURING its own call window -- it requires rx_count to increase past
+# the value captured at call-start), wait_until_settled must recognize a
+# screen that was ALREADY fully settled before it was ever invoked --
+# exactly haggle.py's pre-send use case: the caller is handed a session
+# already sitting at a prompt, with no send of its own to wait on.
+
+
+def test_wait_until_settled_reports_idle_immediately_if_already_quiet_before_the_call():
+    s = ScriptedSession(byte_arrival_times=[0.0])
+    s.sleep(0.01)  # process the t=0 arrival -- last_rx lands at ~0.01
+    s.t = 1.0  # jump the clock directly (bypassing sleep()'s own coarse
+    # last_rx-restamping) -- simulates real time having already passed
+    # well beyond the debounce window before the gate is ever called
+    reason, elapsed = wait_until_settled(s, debounce_ms=350, timeout_s=8.0, poll_interval_s=0.04)
+    assert reason == "idle"
+    assert elapsed < 0.1  # found on the very first check -- no extra waiting needed
+
+
+def test_wait_until_settled_keeps_waiting_while_new_bytes_keep_arriving():
+    # A burst of arrivals all under the debounce window apart -- must
+    # settle debounce_ms after the LAST one, not the first.
+    s = ScriptedSession(byte_arrival_times=[0.1, 0.2, 0.3])
+    reason, elapsed = wait_until_settled(s, debounce_ms=350, timeout_s=8.0, poll_interval_s=0.04)
+    assert reason == "idle"
+    assert elapsed >= 0.65
+
+
+def test_wait_until_settled_times_out_if_traffic_never_goes_quiet():
+    s = ScriptedSession(byte_arrival_times=[0.05 * i for i in range(1, 50)])
+    reason, elapsed = wait_until_settled(s, debounce_ms=100, timeout_s=1.0, poll_interval_s=0.02)
+    assert reason == "timeout"
+    assert elapsed >= 1.0
+
+
+def test_wait_until_settled_never_reports_idle_with_zero_bytes_ever_received():
+    # Same guard as wait_for_settle's own idle path -- a connection that
+    # has never produced any traffic isn't "settled", it never started.
+    s = ScriptedSession()  # no arrivals scheduled at all
+    reason, elapsed = wait_until_settled(s, debounce_ms=50, timeout_s=0.3, poll_interval_s=0.05)
+    assert reason == "timeout"
 
 
 # -- send_and_confirm: the send/settle race fix (DESIGN-v2 §8, ELEVATED) --
