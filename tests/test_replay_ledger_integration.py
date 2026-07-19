@@ -11,6 +11,8 @@ dispatch: `protocol.dispatch(..., "replay", ...)` -> `skills.replay_skill`
 lanes' own real code.
 """
 
+import json
+
 from twclient import protocol, skills
 from twclient.ledger import LedgerWriter, read_entries
 
@@ -164,3 +166,30 @@ def test_replay_verb_force_waives_a_missing_legacy_start_anchor(tmp_path, monkey
     assert len(entries) == 1
     assert entries[0]["actor"] == "trainer"
     assert entries[0]["session_id"] == "s-join-3"
+
+
+def test_replay_verb_returns_clean_error_for_a_steps_less_skill_file(tmp_path, monkeypatch):
+    # P0 finding 4: a valid-JSON-but-steps-less skill file (hand-edited or
+    # truncated) must surface through the REAL wire dispatch as a clean
+    # {"ok": False, "error": "skill_corrupt:..."} -- not an uncaught
+    # KeyError falling through to daemon.py's generic internal_error
+    # catch-all (see test_active_driver.py's own internal_error
+    # convention for the shape this must NOT produce).
+    skills_dir = tmp_path / "skills"
+    skills_dir.mkdir(parents=True)
+    monkeypatch.setattr(skills, "SKILLS_DIR", skills_dir)
+    (skills_dir / "no_steps.json").write_text(
+        json.dumps({"name": "no_steps", "source": "recorded", "start_anchor": None}), encoding="utf-8"
+    )
+
+    session = _FakeSession(session_id="s-join-4")
+    server = _FakeServer()
+    ledger_path = tmp_path / "ledger.jsonl"
+    server.ledger = LedgerWriter(path=ledger_path)
+
+    resp = protocol.dispatch(session, "replay", {"name": "no_steps"}, server)
+
+    assert resp["ok"] is False
+    assert "skill_corrupt" in resp["error"]
+    assert session.sent == []
+    assert read_entries(path=ledger_path) == []

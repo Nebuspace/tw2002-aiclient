@@ -123,6 +123,63 @@ def test_mine_patterns_normalizes_haggled_numerals_so_the_loop_still_recurs():
     assert [s["input"] for s in loop["sample_steps"]] == ["B", "146", "S", "370"]
 
 
+# -- P0 finding 3: start_anchor threaded through to mined drafts ------------
+
+
+def _anchored_entry(input_text, settled_class, sector, d_credits=0, d_turns=-1):
+    return {
+        "input": input_text,
+        "settled_class": settled_class,
+        "reward": {"d_credits": d_credits, "d_turns": d_turns},
+        "pre_state": {"sector": sector},
+    }
+
+
+def _build_anchored_trade_loop_ledger(sector=100):
+    """Same 2-step buy/sell loop shape as _build_trade_loop_ledger, but
+    every row also carries `pre_state.sector` -- the real ledger's shape
+    (LedgerWriter.record_do's own snapshot_state()), which the plain
+    `_entry()` fixture above deliberately omits."""
+    entries = [_anchored_entry("N_lead", "sector_display", sector, d_credits=-10)]
+    for i in range(2):
+        entries.append(_anchored_entry("B", "port_trade", sector, d_credits=-100))
+        entries.append(_anchored_entry("S", "port_trade", sector + 1, d_credits=400))
+        entries.append(_anchored_entry(f"N{i}", "sector_display", sector, d_credits=-10))
+    return entries
+
+
+def test_mine_patterns_threads_the_origin_sector_as_start_anchor():
+    # A mined draft's start_anchor must be the sector the chunk's FIRST
+    # row (the window's own opening send) was standing in -- the same
+    # start_anchor semantic SkillRecorder.start() already persists for a
+    # human-recorded capture (skills.py's TW-03 guard), so a mined draft
+    # gets the identical safety net instead of always defaulting unanchored.
+    entries = _build_anchored_trade_loop_ledger(sector=100)
+    patterns = miner.mine_patterns(entries=entries, min_support=2, min_window=2, max_window=2)
+    trade_loop = next(p for p in patterns if p["inputs"] == ["B", "S"])
+    assert trade_loop["start_anchor"] == 100  # sector "B" (the chunk's first row) was sent from
+
+
+def test_mine_patterns_start_anchor_none_when_rows_lack_a_sector():
+    # A chunk whose rows never carried a parseable sector (older ledger
+    # rows, or -- as here -- a fixture that predates the field) must
+    # never have one invented; save_skill's own legacy-refuse path
+    # (skills._check_start_anchor) already handles start_anchor=None safely.
+    entries = _build_trade_loop_ledger()  # no pre_state on these rows at all
+    patterns = miner.mine_patterns(entries=entries, min_support=2)
+    trade_loop = next(p for p in patterns if p["inputs"] == ["B", "S"])
+    assert trade_loop["start_anchor"] is None
+
+
+def test_propose_drafts_saves_the_pattern_start_anchor(tmp_path):
+    entries = _build_anchored_trade_loop_ledger(sector=200)
+    patterns = miner.mine_patterns(entries=entries, min_support=2, min_window=2, max_window=2)
+    drafts = miner.propose_drafts(patterns, top_k=3, drafts_dir=tmp_path)
+    trade_draft = next(d for d in drafts if d["inputs"] == ["B", "S"])
+    saved = json.loads((tmp_path / f"{trade_draft['name']}.json").read_text(encoding="utf-8"))
+    assert saved["start_anchor"] == 200
+
+
 def test_propose_drafts_writes_only_profitable_top_k(tmp_path):
     entries = _build_trade_loop_ledger()
     patterns = miner.mine_patterns(entries=entries, min_support=2)

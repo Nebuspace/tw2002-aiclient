@@ -93,6 +93,15 @@ def mine_patterns(entries=None, min_support=_DEFAULT_MIN_SUPPORT, min_window=_MI
                 {
                     "d_credits": d_credits_total,
                     "turns_spent": turns_total,
+                    # TW-03 parity for mined drafts (P0): the sector the
+                    # chunk's FIRST row was standing in before its own
+                    # input was sent -- the same start_anchor semantic
+                    # SkillRecorder.start() already persists for a
+                    # human-recorded capture. A ledger row lacking
+                    # `pre_state`/`sector` (an older row, or a test
+                    # fixture that predates it) yields None here, same
+                    # as a legacy skill -- never invented, only read.
+                    "start_anchor": (chunk[0].get("pre_state") or {}).get("sector"),
                     "steps": [
                         {"input": e.get("input"), "wait_prompt": None, "expected_post_class": e.get("settled_class")}
                         for e in chunk
@@ -122,6 +131,10 @@ def mine_patterns(entries=None, min_support=_DEFAULT_MIN_SUPPORT, min_window=_MI
                 "cr_per_turn": cr_per_turn,
                 "cr_per_action": cr_per_action,
                 "sample_steps": occurrences[0]["steps"],
+                # Same "occurrences[0]" convention sample_steps already
+                # uses -- one anchor per pattern, from its first-seen
+                # occurrence.
+                "start_anchor": occurrences[0]["start_anchor"],
             }
         )
 
@@ -153,6 +166,12 @@ def propose_drafts(patterns, top_k=_DEFAULT_TOP_K, drafts_dir=None):
                 "cr_per_turn": pattern["cr_per_turn"],
                 "cr_per_action": pattern["cr_per_action"],
             },
+            # TW-03 parity (P0): a mined draft is just as replayable-from-
+            # the-wrong-sector as a recorded one -- thread the mined
+            # origin sector through so `_check_start_anchor()`'s guard
+            # covers it too, instead of every mined draft silently
+            # defaulting to the unanchored legacy path.
+            start_anchor=pattern.get("start_anchor"),
             draft=True,
             drafts_dir=drafts_dir,
         )

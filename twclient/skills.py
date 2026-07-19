@@ -155,9 +155,19 @@ def load_skill(name, draft=False, skills_dir=None, drafts_dir=None):
         raise SkillError(f"skill_not_found:{name}")
     with open(path, encoding="utf-8") as f:
         try:
-            return json.load(f)
+            doc = json.load(f)
         except json.JSONDecodeError as e:
             raise SkillError(f"skill_corrupt:{name}:{e}") from e
+    # Valid JSON but not a usable skill document (e.g. a hand-edited or
+    # truncated file missing "steps") -- replay_skill()/play_skill() both
+    # index `skill["steps"]` unconditionally, so this must be caught HERE,
+    # the one load choke point every caller (replay/play/list_skills)
+    # already goes through, rather than surfacing as a raw KeyError that
+    # protocol.py's `except SkillError` handlers can't catch, falling
+    # through to daemon.py's generic internal_error catch-all instead.
+    if not isinstance(doc, dict) or "steps" not in doc:
+        raise SkillError(f"skill_corrupt:{name}:missing 'steps'")
+    return doc
 
 
 class SkillRecorder:

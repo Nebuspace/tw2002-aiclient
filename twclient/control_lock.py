@@ -83,9 +83,12 @@ class ControlModeConflict(Exception):
     session, enter_auto_loop() finding MODE_HUMAN active OR an ai_pilot
     driver already mid-dispatch (TW-04 -- see acquire_driver()),
     acquire_driver() finding the active-driver slot already held by
-    another dispatch, or set_mode() finding MODE_HUMAN/MODE_AUTO_LOOP
-    active (an attach's/loop's exclusive hold can't be clobbered by a
-    plain mode-set)."""
+    another dispatch OR the mode no longer `ai_pilot` (the P0 atomicity
+    fix below -- same messages `protocol.py`'s `_control_lock_error`
+    produces: `"controller_locked_by_human"`/`"controller_locked_by_
+    auto_loop"`/`f"controller_locked:{mode}"`), or set_mode() finding
+    MODE_HUMAN/MODE_AUTO_LOOP active (an attach's/loop's exclusive hold
+    can't be clobbered by a plain mode-set)."""
 
 
 class ControlLock:
@@ -147,13 +150,40 @@ class ControlLock:
         `send_lock`), but nothing serialized the SEMANTIC send-then-
         settle unit until now.
 
-        Raises ControlModeConflict("controller_busy") if another
-        dispatch already holds the slot -- refused outright, never
-        queued (queuing would mean holding a second client's one-shot
-        socket open indefinitely, which this protocol was never built to
-        do). Always paired with release_driver() in the caller's own
-        try/finally -- crash-safe like take_human()/release_human()."""
+        **Atomicity fix (P0):** `_control_lock_error`'s mode check and
+        this method used to be two SEPARATE lock acquisitions --
+        `protocol.py`'s `_driving_dispatch` calls the former, sees mode
+        == ai_pilot, then calls this method a moment later. In that
+        window, `enter_auto_loop()`/`take_human()` could slip in, flip
+        the mode away from ai_pilot, and this method would never
+        re-check it -- only `self._driving`. A `do`-family dispatch
+        could then win the driver slot while AUTO-LOOP or a human attach
+        believed it held exclusive control, interleaving two independent
+        send-then-settle units onto the one wire (the exact class TW-04
+        exists to prevent, just one layer up). This method is now the
+        single atomic authority: mode AND the driver slot are checked
+        (and the slot claimed) under ONE lock hold, so nothing can
+        interleave between them. `_control_lock_error`'s own separate
+        check stays in place purely as a fast, clear up-front error for
+        the common (non-racing) case -- it is never the source of truth.
+
+        Raises `ControlModeConflict` naming WHY: mode-refusal first
+        (`"controller_locked_by_human"` / `"controller_locked_by_
+        auto_loop"` / `f"controller_locked:{mode}"` -- identical strings
+        to `_control_lock_error`'s, so a caller can't tell which check
+        caught it), else `"controller_busy"` if the slot itself is
+        already held. Refused outright, never queued (queuing would mean
+        holding a second client's one-shot socket open indefinitely,
+        which this protocol was never built to do). Always paired with
+        release_driver() in the caller's own try/finally -- crash-safe
+        like take_human()/release_human()."""
         with self._lock:
+            if self._mode != MODE_AI_PILOT:
+                if self._mode == MODE_HUMAN:
+                    raise ControlModeConflict("controller_locked_by_human")
+                if self._mode == MODE_AUTO_LOOP:
+                    raise ControlModeConflict("controller_locked_by_auto_loop")
+                raise ControlModeConflict(f"controller_locked:{self._mode}")
             if self._driving:
                 raise ControlModeConflict("controller_busy")
             self._driving = True

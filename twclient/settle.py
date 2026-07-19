@@ -162,6 +162,24 @@ def send_and_confirm(
       ends the wait. Once matched, one more `stability_pause_s` beat
       re-checks it's STILL there (a transitional screen can flash the
       match in one frame and be gone the next).
+
+      **Stale pre-send match guard:** `wait_for_settle`'s own
+      match-wins-immediately-at-t0 contract (deliberate and correct for
+      a caller-driven `--wait-prompt` poll) means a `confirm_prompt`
+      that already matches whatever was on screen BEFORE this call's
+      `send()` -- e.g. haggle's repeating `Your\\s+offer\\s*\\[` shape
+      still showing the PREVIOUS round's prompt -- would otherwise be
+      accepted instantly, well before the real response to THIS send
+      ever arrives. `send_and_confirm` closes this itself (rather than
+      touching `wait_for_settle`'s contract): a "prompt" match is only
+      accepted once `session.rx_count` has increased past the count
+      captured right after `send()` -- i.e. genuinely new bytes have
+      landed since this send -- mirroring the idle path's own
+      `got_new_bytes` discipline one layer up. A match against
+      unchanged, pre-send content is discarded exactly like a premature
+      idle: one poll tick is advanced (since a wait_for_settle call that
+      matches at its own t=0 never sleeps internally) and the wait
+      resumes against the remaining budget.
     - `confirm_prompt=None` (TW-02: replay/play/login's common case --
       a recorded step or login sub-step with no caller-supplied target
       regex to confirm against) -- confirms via a genuinely settled
@@ -172,6 +190,18 @@ def send_and_confirm(
       than a positive shape match (it can't tell WHICH screen arrived,
       only that one did and stayed put) -- callers that can name a
       target shape should always prefer passing `confirm_prompt`."""
+    # Captured BEFORE send(), not after: some fake-session test doubles
+    # (the historical synchronous-bump convention -- FakePortSession,
+    # this project's other pre-TW-02 fakes) bump rx_count SYNCHRONOUSLY
+    # inside send() itself, so a baseline captured after send() returns
+    # would already include that bump and make even a genuinely fresh
+    # response look "stale" against itself. Capturing before send() is
+    # correct either way: for a synchronous-bump fake, send()'s own bump
+    # then registers as "new since rx_at_send"; for a realistic
+    # deferred-response session (real Session, or a fake staging
+    # arrivals only inside sleep()), rx_count simply doesn't move until
+    # a genuine later arrival does.
+    rx_at_send = session.rx_count
     session.send(text, enter=enter, secret=secret)
     start = session.clock()
 
@@ -188,7 +218,18 @@ def send_and_confirm(
                 poll_interval_s=poll_interval_s,
             )
             if reason == "prompt":
-                break
+                if session.rx_count > rx_at_send:
+                    break
+                # Matched, but against content that was ALREADY on
+                # screen before this send -- no evidence it's a
+                # response to what we just sent (see module docstring's
+                # "stale pre-send match guard"). wait_for_settle can
+                # return "prompt" at its own t=0 with no sleep at all,
+                # so advance one poll tick ourselves before re-checking,
+                # else this would spin forever without the clock (or the
+                # remaining budget) ever moving.
+                session.sleep(poll_interval_s)
+                continue
             if reason == "timeout":
                 return "timeout", session.clock() - start, False
             # reason == "idle" with no confirm_prompt match yet -- a lull,

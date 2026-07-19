@@ -4,6 +4,7 @@ keyed by send(), mirroring FakeLoginSession's settle-detection surface
 (tests/test_login.py) but without the expect-assertion machinery replay
 doesn't need."""
 
+import json
 import time
 
 import pytest
@@ -194,6 +195,31 @@ def test_save_and_load_skill_round_trip(tmp_path):
 def test_load_missing_skill_raises():
     with pytest.raises(skills.SkillError):
         skills.load_skill("does_not_exist", skills_dir="/nonexistent")
+
+
+def test_load_skill_with_valid_json_but_no_steps_raises_clean_skill_error(tmp_path):
+    # P0 finding 4: a hand-edited/truncated skill file can be valid JSON
+    # yet still lack "steps" -- replay_skill()/play_skill() both index
+    # skill["steps"] unconditionally, so without this guard the KeyError
+    # would surface uncaught, past every `except SkillError` handler in
+    # protocol.py, as a raw internal_error instead of a clean protocol
+    # response (see test_protocol_no_steps_skill_file_below).
+    path = tmp_path / "no_steps.json"
+    path.write_text(json.dumps({"name": "no_steps", "source": "recorded", "start_anchor": None}), encoding="utf-8")
+    with pytest.raises(skills.SkillError) as exc_info:
+        skills.load_skill("no_steps", skills_dir=tmp_path)
+    assert "skill_corrupt" in str(exc_info.value)
+
+
+def test_load_skill_rejects_a_json_document_that_is_not_an_object(tmp_path):
+    # Same "valid JSON, wrong shape" family -- a bare JSON array/scalar
+    # has no "steps" key to even index KeyError-style; must still be a
+    # clean SkillError, not an uncaught TypeError from `doc["steps"]`.
+    path = tmp_path / "not_a_dict.json"
+    path.write_text(json.dumps([1, 2, 3]), encoding="utf-8")
+    with pytest.raises(skills.SkillError) as exc_info:
+        skills.load_skill("not_a_dict", skills_dir=tmp_path)
+    assert "skill_corrupt" in str(exc_info.value)
 
 
 def test_skill_name_sanitized_for_path_traversal(tmp_path):

@@ -272,3 +272,55 @@ def test_send_and_confirm_prompt_given_still_times_out_when_never_matched():
     assert reason == "timeout"
     assert confirmed is False
     assert elapsed >= 1.0
+
+
+# -- P0 finding 1: stale pre-send confirm_prompt match ----------------------
+#
+# wait_for_settle's own match-wins-immediately-at-t0 contract is correct
+# and deliberate for a caller-driven --wait-prompt poll (test above) --
+# but send_and_confirm must NEVER let a confirm_prompt match against
+# content that was already on screen BEFORE this call's own send() count
+# as confirmation. The realistic failure shape: haggle's repeating
+# "Your offer [N] ?" prompt is still showing the PREVIOUS round's value
+# when the NEXT round's send_and_confirm is invoked -- the real server's
+# response hasn't arrived yet, but the regex already matches.
+
+
+def test_send_and_confirm_rejects_a_stale_confirm_prompt_match_predating_this_send():
+    s = StagedSession(
+        initial_text="We'll buy them for 2,214 credits.\nYour offer [2,214] ? ",
+        stages=[(0.5, "We'll buy them for 2,216 credits.\nYour offer [2,216] ? ")],
+    )
+    reason, elapsed, confirmed = send_and_confirm(s, "2450", r"Your\s+offer\s*\[", enter=True, timeout_s=8.0)
+    assert reason == "prompt"
+    assert confirmed is True
+    assert s.sent == [("2450", True, False)]
+    # Confirmed only once the genuinely NEW response landed (t=0.5) --
+    # never against the stale pre-send content sitting there at t=0.
+    assert elapsed >= 0.5
+
+
+def test_send_and_confirm_never_confirms_on_pre_send_content_with_nothing_new_arriving():
+    # Companion: if truly NOTHING new ever arrives after the send (the
+    # stale content just sits there unchanged forever), the stale-match
+    # guard must not spin the wait forever either -- still bounded by
+    # timeout_s like every other desync case.
+    s = StagedSession(initial_text="Your offer [2,214] ? ")
+    reason, elapsed, confirmed = send_and_confirm(s, "2450", r"Your\s+offer\s*\[", enter=True, timeout_s=0.3)
+    assert reason == "timeout"
+    assert confirmed is False
+    assert elapsed >= 0.3
+
+
+def test_send_and_confirm_none_mode_never_idle_confirms_with_zero_bytes_since_send():
+    # Companion check for the confirm_prompt=None fallback path: it
+    # already requires session.rx_count to increase past the count
+    # captured at THIS call's own start (wait_for_settle's own guard,
+    # called immediately after send() with no intervening sleep) --
+    # verified explicitly here since it was previously only exercised
+    # via wait_for_settle directly, never through send_and_confirm's own
+    # call site.
+    s = StagedSession(initial_text="Sector : 100")
+    reason, elapsed, confirmed = send_and_confirm(s, "M", confirm_prompt=None, enter=True, timeout_s=0.3)
+    assert reason == "timeout"
+    assert confirmed is False

@@ -23,9 +23,16 @@ def _control_lock_error(server):
     test) can tell a human attach apart from a running AUTO-LOOP or a
     plain paused/spectate state -- never just one flat "locked" string.
 
-    This is the MODE check only -- one layer below `_driving_dispatch()`,
-    which additionally reserves the single active-driver slot (TW-04) so
-    two ai_pilot dispatches can't both be mid-send at once."""
+    This is a FAST, non-atomic pre-check only -- a clear early error for
+    the common (non-racing) case, one layer below `_driving_dispatch()`,
+    which additionally reserves the single active-driver slot (TW-04).
+    It is deliberately NOT the source of truth for mode: a mode
+    transition (`enter_auto_loop()`/`take_human()`) can land in the
+    window between this check returning None and `acquire_driver()`
+    actually running, so `control_lock.ControlLock.acquire_driver()`
+    itself re-checks mode atomically under the same lock as the driver-
+    slot claim (see its own docstring) -- this function's result is only
+    ever a hint, never relied on for correctness."""
     lock = getattr(server, "control_lock", None)
     if lock is None or lock.ai_may_send():
         return None
@@ -51,6 +58,14 @@ def _driving_dispatch(server):
     persistent "connection" to hold a lock across; the driver slot's
     lifetime IS one dispatch call) -- is refused outright with a clear
     protocol error rather than queued or silently interleaved.
+
+    `lock.acquire_driver()` below is the ATOMIC authority on both mode
+    and the driver slot (see its docstring) -- the `_control_lock_error`
+    check above it is only a fast up-front hint, so a mode-refusal
+    caught HERE instead (an `enter_auto_loop()`/`take_human()` that slipped
+    in between the two checks) still yields the identical
+    `{"ok": False, "error": ...}` shape via the `except ControlModeConflict`
+    below, indistinguishable to the caller from the fast-path case.
 
     Always releases on the way out -- success, an early `return` from
     inside the `with` block, or an uncaught exception -- crash-safe like
@@ -459,7 +474,22 @@ def _dispatch_haggle(server, session, args):
     sends -- a haggle round-trip is the meaningful caller-visible
     action, not each individual round)."""
     from .haggle import run_haggle
+    from .settle import wait_until_settled
 
+    # P0 finding 5: gate this capture on the SAME freshness check
+    # run_haggle's own opening read uses (haggle.py's `wait_until_settled`
+    # pre-send gate) rather than reading `session.render()` the instant
+    # this dispatch is entered -- an ungated read here can grab a
+    # still-transitional frame that doesn't match the settled screen
+    # haggle actually negotiated against, corrupting the ledger's
+    # pre_state baseline (e.g. silently omitting a credits reading that
+    # WAS present a beat later). Uses haggle.py's own gate defaults, so
+    # in the overwhelmingly common case (nothing changes between this
+    # call and run_haggle's own internal gate a moment later) it
+    # resolves instantly -- run_haggle's gate then finds the SAME
+    # already-quiet screen and settles immediately too, never a
+    # double wait in practice.
+    wait_until_settled(session)
     pre_text = session.render_text(session.render())
     result = run_haggle(
         session,

@@ -229,6 +229,34 @@ def test_enter_auto_loop_refuses_to_preempt_an_active_driver():
     assert lock.mode == MODE_AUTO_LOOP
 
 
+def test_acquire_driver_refuses_when_auto_loop_wins_the_mode_race():
+    # P0 finding 2: protocol.py's _control_lock_error mode check and
+    # acquire_driver() used to be two separate lock acquisitions --
+    # enter_auto_loop() slipping in between them (the exact interleaving
+    # probe_driver_race.py demonstrates) used to leave acquire_driver()
+    # only checking self._driving, never re-checking mode, so a
+    # do-family dispatch could win the driver slot while AUTO-LOOP
+    # believed it held exclusive control. acquire_driver() must now
+    # refuse atomically the instant mode is no longer ai_pilot.
+    lock = ControlLock()
+    lock.enter_auto_loop()  # wins the mode race first
+    with pytest.raises(ControlModeConflict) as exc_info:
+        lock.acquire_driver()
+    assert str(exc_info.value) == "controller_locked_by_auto_loop"
+    assert lock.is_driving() is False  # the slot was never claimed
+
+
+def test_acquire_driver_refuses_when_human_attach_wins_the_mode_race():
+    # The other interleaving mack's finding calls out: take_human()
+    # slipping in before acquire_driver() is called.
+    lock = ControlLock()
+    lock.take_human()
+    with pytest.raises(ControlModeConflict) as exc_info:
+        lock.acquire_driver()
+    assert str(exc_info.value) == "controller_locked_by_human"
+    assert lock.is_driving() is False
+
+
 def test_driver_lock_never_leaks_after_a_dispatch_ends():
     # Mode-transition/release proof: once a driver releases (mirroring a
     # completed dispatch), BOTH the driver slot AND the mode machine are
