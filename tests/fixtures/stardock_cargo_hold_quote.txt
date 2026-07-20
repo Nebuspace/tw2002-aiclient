@@ -1,0 +1,8 @@
+Command [TL=00751:0/0/0/850] (?=Help)? : u
+
+-=-=-        StarDock Shipyard - Cargo Hold Upgrade        -=-=-
+Your ship can hold up to 20 additional cargo holds.
+Holds cost 1,468 credits each, for a total of 29,360 credits to fill them all.
+-=-=-        End of Cargo Hold Upgrade Quote        -=-=-
+
+How many holds would you like to buy [0-20] ?

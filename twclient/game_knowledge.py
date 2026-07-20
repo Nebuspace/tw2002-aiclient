@@ -17,15 +17,18 @@ such a discovery is persisted, upserted, and queried back.
    place) rather than accumulating duplicates, because the whole point
    of a menu-map is that the SAME signature recurs every time the
    crawler revisits that screen.
-2. **Game-data tables** -- `ships` / `scanners` / `transwarp` / `items`,
-   each row keyed by a caller-supplied string key (a ship_name,
-   scanner_type, etc. -- domain semantics this store has no opinion on;
-   see `knowledge/reference/tw2002-ships-and-equipment.md`'s `# Schema`
-   section for what each table's fields mean) plus two fields every row
-   carries regardless of table: `source` (how it was obtained) and
-   `last_verified_ts` (stamped fresh on every upsert -- this store
-   records when a value was last confirmed live, it never decides when
-   that confirmation should happen; that's the introspector's job).
+2. **Game-data tables** -- `ships` / `scanners` / `transwarp` / `items` /
+   `cargo_holds`, each row keyed by a caller-supplied string key (a
+   ship_name, scanner_type, etc. -- domain semantics this store has no
+   opinion on; see `knowledge/reference/tw2002-ships-and-equipment.md`'s
+   `# Schema` section for what each table's fields mean, and
+   `game_data.py`'s `persist_cargo_hold_price` docstring for why
+   `cargo_holds` is always keyed by one fixed singleton key rather than
+   a per-item name) plus two fields every row carries regardless of
+   table: `source` (how it was obtained) and `last_verified_ts`
+   (stamped fresh on every upsert -- this store records when a value
+   was last confirmed live, it never decides when that confirmation
+   should happen; that's the introspector's job).
 
 **Keying -- per world, via the pinned `world_identity.world_id()`
 interface** (a sibling lane's module, imported here, never authored
@@ -65,12 +68,15 @@ KNOWLEDGE_FILENAME = "game_knowledge.json"
 
 SCHEMA_VERSION = 1
 
-# The four game-data tables tw2002-ships-and-equipment.md's `# Schema`
-# section defines. Table NAMES are validated here (a typo'd table
-# should fail loudly, not silently create a fifth table); per-table
-# FIELD names/types are that doc's business, not this store's -- see
-# module docstring.
-GAME_DATA_TABLES = ("ships", "scanners", "transwarp", "items")
+# The five game-data tables tw2002-ships-and-equipment.md's `# Schema`
+# section defines (`cargo_holds` added by TW-27 P1-b -- a StarDock
+# hold-upgrade price quote, not a doc-schema catalog table, but this
+# store treats it identically to the other four: a validated table
+# name plus opaque per-table fields). Table NAMES are validated here (a
+# typo'd table should fail loudly, not silently create a sixth table);
+# per-table FIELD names/types are the caller's business, not this
+# store's -- see module docstring.
+GAME_DATA_TABLES = ("ships", "scanners", "transwarp", "items", "cargo_holds")
 
 # Menu-map edge kinds (per the TW-25 dispatch's pinned shape).
 MENU_EDGE_KINDS = ("nav", "info", "action")

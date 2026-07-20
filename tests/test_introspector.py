@@ -6,7 +6,8 @@ equipment screen yet -- the fixtures under `tests/fixtures/stardock_*
 shop table conventions, not a byte-for-byte real capture (same caveat
 `state_parser.py`'s own CIM-report parsing carries -- see that
 module's section docstring). Expect a refinement pass once the daemon
-actually sees a real StarDock screen.
+actually sees a real StarDock screen. `stardock_cargo_hold_quote*.txt`
+(TW-27 P1-b) carry the identical caveat.
 """
 
 import json
@@ -14,8 +15,9 @@ from pathlib import Path
 
 import pytest
 
-from twclient.game_data import load_game_data, validate_ship_row
+from twclient.game_data import load_game_data, validate_cargo_hold_row, validate_ship_row
 from twclient.introspector import (
+    parse_cargo_hold_price,
     parse_item_listing,
     parse_scanner_listing,
     parse_shipyard_listing,
@@ -145,6 +147,81 @@ def test_non_introspected_source_is_rejected_by_validator():
     row["source"] = "authored: some wiki stat table"
     with pytest.raises(ValueError, match="introspected"):
         validate_ship_row(row)
+
+
+# -- parse_cargo_hold_price -------------------------------------------------
+
+
+def test_parse_cargo_hold_price_clean_fixture():
+    text = _load_fixture("stardock_cargo_hold_quote.txt")
+    row = parse_cargo_hold_price(text)
+    assert row == {"cost_per_hold": 1468, "source": "introspected: stardock_cargo_holds"}
+
+
+def test_parse_cargo_hold_price_at_max_holds_returns_none():
+    """The block is present and closed, but there's no price line to
+    show (ship already at max holds) -- absence, never a guess."""
+    text = _load_fixture("stardock_cargo_hold_quote_at_max.txt")
+    assert parse_cargo_hold_price(text) is None
+
+
+def test_parse_cargo_hold_price_no_block_on_screen_returns_none():
+    assert parse_cargo_hold_price("Command [TL=00753:0/0/0/850] (?=Help)? :") is None
+
+
+def test_parse_cargo_hold_price_anchors_to_latest_not_stale_scrollback():
+    """Same stale-scrollback discipline as `parse_shipyard_listing`'s
+    own regression test: an older, already-closed quote sitting higher
+    in the buffer must not shadow a genuinely fresher one."""
+    text = (
+        "-=-=-        StarDock Shipyard - Cargo Hold Upgrade        -=-=-\n"
+        "Holds cost 1,000 credits each.\n"
+        "-=-=-        End of Cargo Hold Upgrade Quote        -=-=-\n"
+        "(intervening scrolled game text)\n"
+        "-=-=-        StarDock Shipyard - Cargo Hold Upgrade        -=-=-\n"
+        "Holds cost 2,500 credits each.\n"
+        "-=-=-        End of Cargo Hold Upgrade Quote        -=-=-\n"
+    )
+    assert parse_cargo_hold_price(text)["cost_per_hold"] == 2500
+
+
+def test_parse_cargo_hold_price_row_conforms_to_cargo_hold_row_schema():
+    text = _load_fixture("stardock_cargo_hold_quote.txt")
+    row = dict(parse_cargo_hold_price(text))
+    row["last_verified_ts"] = "2026-07-19T00:00:00Z"
+    validated = validate_cargo_hold_row(row)
+    assert validated.cost_per_hold == 1468
+    assert validated.source.startswith("introspected")
+
+
+def test_parse_cargo_hold_price_rows_load_via_game_data_loader(tmp_path):
+    text = _load_fixture("stardock_cargo_hold_quote.txt")
+    row = parse_cargo_hold_price(text)
+    row["last_verified_ts"] = "2026-07-19T00:00:00Z"
+    payload = {
+        "world_id": "introspector-test",
+        "ships": [],
+        "scanners": [],
+        "transwarp": [],
+        "items": [],
+        "cargo_holds": [row],
+    }
+    path = tmp_path / "introspected_game_data.json"
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+    data = load_game_data(path)
+    assert len(data.cargo_holds) == 1
+    assert data.cargo_holds[0].cost_per_hold == 1468
+    assert data.cargo_holds[0].source.startswith("introspected")
+
+
+def test_cargo_hold_non_introspected_source_is_rejected_by_validator():
+    text = _load_fixture("stardock_cargo_hold_quote.txt")
+    row = dict(parse_cargo_hold_price(text))
+    row["last_verified_ts"] = "2026-07-19T00:00:00Z"
+    row["source"] = "authored: some wiki stat table"
+    with pytest.raises(ValueError, match="introspected"):
+        validate_cargo_hold_row(row)
 
 
 # -- parse_scanner_listing / parse_transwarp_listing / parse_item_listing --

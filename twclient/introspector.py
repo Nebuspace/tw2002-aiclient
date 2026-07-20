@@ -31,6 +31,16 @@ not a real candidate no matter how good its stats look on paper (see
 `ship_upgrade_decision.py`'s own `commissioned` gate, and the "Progres-
 sion and commissioning" section of the ships-and-equipment reference).
 
+A ship's hold COUNT is fixed at build, but StarDock separately quotes a
+live per-hold CREDITS price to expand your CURRENT ship's holds toward
+its max -- `parse_cargo_hold_price()` below captures that scalar quote.
+It is deliberately NOT a name-keyed catalog row like `parse_shipyard_
+listing()`'s ship rows: TW2002 only quotes a hold price for the ship
+you already have in hand, never browsable for ships you don't own, and
+this project has no current-ship-name introspection yet to key it more
+finely (see that function's own docstring). This is exactly the number
+`ship_upgrade_decision.py`'s existing `cost_per_hold` parameter wants.
+
 **PROVENANCE CAVEAT:** this repo has no live-captured StarDock/
 shipyard/equipment screen yet. The row grammar below (a columnar
 Name/Holds/Fighters/Shields/Odds/Turns-per-warp/Cost/Alignment/Rank/
@@ -49,6 +59,17 @@ import re
 
 _SHIPYARD_HEADER_RE = re.compile(r"^-=-=-\s+StarDock Shipyard - Ship Registration\s+-=-=-$")
 _SHIPYARD_FOOTER_RE = re.compile(r"^-=-=-\s+End of Shipyard Listing\s+-=-=-$")
+
+_CARGO_HOLD_HEADER_RE = re.compile(r"^-=-=-\s+StarDock Shipyard - Cargo Hold Upgrade\s+-=-=-$")
+_CARGO_HOLD_FOOTER_RE = re.compile(r"^-=-=-\s+End of Cargo Hold Upgrade Quote\s+-=-=-$")
+
+# The live per-hold credits quote inside a bracketed Cargo Hold Upgrade
+# block, e.g. "Holds cost 1,468 credits each, for a total of 29,360
+# credits to fill them all." Only the PER-HOLD number is captured -- an
+# optional trailing "for a total of ..." clause is decorative
+# confirmation math, not a separate field `game_data.CargoHoldRow`
+# tracks.
+_CARGO_HOLD_PRICE_RE = re.compile(r"[Hh]olds?\s+cost\s+(?P<cost>\d[\d,]*)\s+credits\s+each")
 
 _SCANNER_HEADER_RE = re.compile(r"^-=-=-\s+Density & Holographic Scanners\s+-=-=-$")
 _SCANNER_FOOTER_RE = re.compile(r"^-=-=-\s+End of Scanner Listing\s+-=-=-$")
@@ -168,6 +189,41 @@ def parse_shipyard_listing(
             }
         )
     return rows
+
+
+def parse_cargo_hold_price(
+    rendered_text: str, *, source: str = "introspected: stardock_cargo_holds"
+) -> "dict | None":
+    """The live per-hold credits price StarDock quotes for expanding the
+    CURRENT ship's cargo holds, or `None` when there's nothing safe to
+    report -- no closed Cargo Hold Upgrade block on screen at all, or a
+    closed block whose text doesn't contain a matching price line (e.g.
+    a "you already carry the maximum number of holds" quote with no
+    price to show). Absence is returned, NEVER a guessed/zero price --
+    this is exactly the number `ship_upgrade_decision.py`'s
+    `cost_per_hold` parameter feeds into the autopilot's upgrade-ROI
+    math, so a wrong guess here risks a bad spend decision (see this
+    module's docstring).
+
+    Unlike `parse_shipyard_listing`'s multi-row ship catalog, this is a
+    single scalar quote for the ship the player currently has in hand --
+    see `game_data.persist_cargo_hold_price`'s docstring for why the
+    persist layer accordingly keys this under one fixed singleton key
+    rather than a name-keyed table row.
+
+    Same stale-scrollback anchoring as every other parser in this
+    module -- `_bracketed_lines` anchors to the LATEST closed Cargo Hold
+    Upgrade block; if that block unusually contains more than one
+    matching price line, the last one wins."""
+    lines = _bracketed_lines(rendered_text, _CARGO_HOLD_HEADER_RE, _CARGO_HOLD_FOOTER_RE)
+    cost = None
+    for raw_line in lines:
+        m = _CARGO_HOLD_PRICE_RE.search(raw_line)
+        if m:
+            cost = _to_int(m.group("cost"))  # keep overwriting -- last match wins
+    if cost is None:
+        return None
+    return {"cost_per_hold": cost, "source": source}
 
 
 def _parse_equip_rows(rendered_text: str, header_re: "re.Pattern", footer_re: "re.Pattern") -> "list[tuple]":

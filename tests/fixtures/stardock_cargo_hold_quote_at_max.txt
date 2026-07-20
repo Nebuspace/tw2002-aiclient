@@ -1,0 +1,7 @@
+Command [TL=00750:0/0/0/850] (?=Help)? : u
+
+-=-=-        StarDock Shipyard - Cargo Hold Upgrade        -=-=-
+Your ship already carries the maximum number of cargo holds.
+-=-=-        End of Cargo Hold Upgrade Quote        -=-=-
+
+Command [TL=00749:0/0/0/850] (?=Help)? :

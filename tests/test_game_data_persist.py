@@ -292,3 +292,105 @@ def test_real_concurrent_persist_ship_row_across_many_threads_never_loses_an_upd
         f"lost update(s) under real concurrency -- expected {n} ships, "
         f"got {len(final_names)}: missing {set(names) - final_names}"
     )
+
+
+# -- cargo-hold price persist/query path (TW-27 P1-b) ------------------------
+#
+# Same bridge-over-game_knowledge write lane as the ships tests above,
+# but the table is a fixed-key SINGLETON -- see `game_data.CARGO_HOLD_KEY`'s
+# comment for why -- so there is no per-name variant of these tests.
+
+
+def _cargo_hold_row(**overrides):
+    row = {
+        "cost_per_hold": 1468,
+        "source": "introspected: stardock_cargo_holds (test)",
+        "last_verified_ts": "2026-07-19T00:00:00Z",
+    }
+    row.update(overrides)
+    return row
+
+
+def test_persist_cargo_hold_price_then_get_round_trips(tmp_path):
+    persisted = game_data.persist_cargo_hold_price(WORLD_A, _cargo_hold_row(), state_dir=tmp_path)
+    assert isinstance(persisted, game_data.CargoHoldRow)
+    assert persisted.cost_per_hold == 1468
+
+    fetched = game_data.get_cargo_hold_price(WORLD_A, state_dir=tmp_path)
+    assert fetched == persisted
+
+
+def test_persist_cargo_hold_price_writes_into_the_existing_game_knowledge_store(tmp_path):
+    game_data.persist_cargo_hold_price(WORLD_A, _cargo_hold_row(), state_dir=tmp_path)
+    path = game_knowledge.knowledge_path_for_world(WORLD_A, state_dir=tmp_path)
+    assert path.exists()
+    rows = game_knowledge.list_game_data_rows(path, "cargo_holds")
+    assert [r["key"] for r in rows] == [game_data.CARGO_HOLD_KEY]
+
+
+def test_persist_cargo_hold_price_stamps_last_verified_ts_for_a_tsless_introspector_row(tmp_path):
+    introspector_row = {
+        "cost_per_hold": 2500,
+        "source": "introspected: stardock_cargo_holds",
+        # NOTE: no "last_verified_ts" key -- the introspector's documented
+        # no-clock contract (mirrors the ship-row seam test above).
+    }
+    assert "last_verified_ts" not in introspector_row
+
+    persisted = game_data.persist_cargo_hold_price(WORLD_A, introspector_row, state_dir=tmp_path)
+    assert isinstance(persisted.last_verified_ts, str) and persisted.last_verified_ts
+    assert persisted.cost_per_hold == 2500
+
+
+def test_get_cargo_hold_price_returns_none_when_never_persisted(tmp_path):
+    assert game_data.get_cargo_hold_price(WORLD_A, state_dir=tmp_path) is None
+
+
+def test_persist_cargo_hold_price_rejects_non_introspected_source(tmp_path):
+    with pytest.raises(ValueError, match="introspected"):
+        game_data.persist_cargo_hold_price(
+            WORLD_A, _cargo_hold_row(source="authored: wiki"), state_dir=tmp_path
+        )
+    path = game_knowledge.knowledge_path_for_world(WORLD_A, state_dir=tmp_path)
+    assert not path.exists()
+
+
+def test_persist_cargo_hold_price_rejects_missing_required_field(tmp_path):
+    row = _cargo_hold_row()
+    del row["cost_per_hold"]
+    with pytest.raises(ValueError, match="cost_per_hold"):
+        game_data.persist_cargo_hold_price(WORLD_A, row, state_dir=tmp_path)
+    path = game_knowledge.knowledge_path_for_world(WORLD_A, state_dir=tmp_path)
+    assert not path.exists()
+
+
+def test_persist_cargo_hold_price_newer_capture_supersedes_older_row(tmp_path, monkeypatch):
+    # Non-empty `last_verified_ts` on the input row -- so `persist_cargo_hold_price`'s
+    # own ts-less stamp check is a no-op and only `upsert_game_data_row`'s internal
+    # stamp consumes from the iterator below, exactly once per persist (mirrors
+    # `test_persist_ship_row_newer_capture_supersedes_older_row`'s identical setup).
+    stamps = iter(["2026-07-19T00:00:01Z", "2026-07-19T00:00:02Z"])
+    monkeypatch.setattr(game_knowledge, "_now_iso", lambda: next(stamps))
+
+    first = game_data.persist_cargo_hold_price(
+        WORLD_A,
+        _cargo_hold_row(cost_per_hold=1468, last_verified_ts="2026-07-01T00:00:00Z"),
+        state_dir=tmp_path,
+    )
+    second = game_data.persist_cargo_hold_price(
+        WORLD_A,
+        _cargo_hold_row(cost_per_hold=2500, last_verified_ts="2026-07-19T00:00:00Z"),
+        state_dir=tmp_path,
+    )
+    fetched = game_data.get_cargo_hold_price(WORLD_A, state_dir=tmp_path)
+    assert fetched.cost_per_hold == 2500  # updated in place, never a second row
+    assert second.last_verified_ts != first.last_verified_ts
+    assert fetched.last_verified_ts == second.last_verified_ts
+
+
+def test_cross_world_isolation_cargo_hold_price_never_bleeds_between_worlds(tmp_path):
+    game_data.persist_cargo_hold_price(
+        WORLD_A, _cargo_hold_row(cost_per_hold=1468), state_dir=tmp_path
+    )
+    assert game_data.get_cargo_hold_price(WORLD_B, state_dir=tmp_path) is None
+    assert game_data.get_cargo_hold_price(WORLD_A, state_dir=tmp_path).cost_per_hold == 1468

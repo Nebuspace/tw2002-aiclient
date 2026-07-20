@@ -16,7 +16,14 @@ open a second/parallel store. `validate_ship_row` (the introspected-
 only + required-fields gate `load_game_data` already runs at load time)
 gates the WRITER too: a non-introspected or malformed row is rejected
 at `persist_ship_row()`, before the store is ever touched, not just
-later on read."""
+later on read.
+
+`persist_cargo_hold_price`/`get_cargo_hold_price` (TW-27 P1-b) are the
+same bridge shape for StarDock's live per-hold-credits upgrade quote —
+one fixed singleton row per world rather than a ship_name-keyed catalog
+(see `CARGO_HOLD_KEY`'s comment for why); the scheduler consuming it
+must treat `None` as "unknown, skip the upgrade branch," never a
+guessed price."""
 
 from __future__ import annotations
 
@@ -33,6 +40,17 @@ from . import game_knowledge
 # into -- must match one of game_knowledge.GAME_DATA_TABLES exactly (a
 # typo'd table name fails loudly there, not silently here).
 SHIPS_TABLE = "ships"
+
+# Same discipline for the StarDock cargo-hold-price quote. Unlike
+# SHIPS_TABLE (keyed per ship_name -- a real catalog), this table only
+# ever holds ONE row: TW2002 quotes a hold price for the ship currently
+# in hand, not a browsable catalog, and this project has no
+# current-ship-name introspection yet to key it any more finely (see
+# `persist_cargo_hold_price`'s docstring). A fixed singleton key keeps
+# that limitation explicit and mechanical rather than silently reusing
+# an arbitrary caller-supplied string.
+CARGO_HOLDS_TABLE = "cargo_holds"
+CARGO_HOLD_KEY = "current"
 
 REQUIRED_SHIP_FIELDS = frozenset({
     "ship_name",
@@ -94,6 +112,21 @@ class ItemRow:
     last_verified_ts: str
 
 
+REQUIRED_CARGO_HOLD_FIELDS = frozenset({"cost_per_hold", "source", "last_verified_ts"})
+
+
+@dataclass(frozen=True)
+class CargoHoldRow:
+    """StarDock's live per-hold credits quote for expanding the CURRENT
+    ship's cargo holds -- see `persist_cargo_hold_price`'s docstring for
+    why this is a SINGLETON row (one quote at a time), not a name-keyed
+    catalog row like `ShipRow`."""
+
+    cost_per_hold: int
+    source: str
+    last_verified_ts: str
+
+
 @dataclass(frozen=True)
 class GameData:
     world_id: Optional[str] = None
@@ -101,6 +134,7 @@ class GameData:
     scanners: tuple[ScannerRow, ...] = field(default_factory=tuple)
     transwarp: tuple[TranswarpRow, ...] = field(default_factory=tuple)
     items: tuple[ItemRow, ...] = field(default_factory=tuple)
+    cargo_holds: tuple[CargoHoldRow, ...] = field(default_factory=tuple)
 
 
 def _require_introspected(source: Any, *, kind: str) -> str:
@@ -148,6 +182,17 @@ def validate_ship_row(row: Mapping[str, Any]) -> ShipRow:
     )
 
 
+def validate_cargo_hold_row(row: Mapping[str, Any]) -> CargoHoldRow:
+    missing = REQUIRED_CARGO_HOLD_FIELDS - frozenset(row.keys())
+    if missing:
+        raise ValueError(f"cargo_hold row missing fields: {sorted(missing)}")
+    return CargoHoldRow(
+        cost_per_hold=int(row["cost_per_hold"]),
+        source=_require_introspected(row["source"], kind="cargo_hold"),
+        last_verified_ts=_require_ts(row["last_verified_ts"], kind="cargo_hold"),
+    )
+
+
 def empty_game_data(world_id: Optional[str] = None) -> GameData:
     return GameData(world_id=world_id)
 
@@ -186,6 +231,14 @@ def load_game_data(path: str | Path) -> GameData:
         )
         for i in raw.get("items") or ()
     )
+    cargo_holds = tuple(
+        CargoHoldRow(
+            cost_per_hold=int(c["cost_per_hold"]),
+            source=_require_introspected(c["source"], kind="cargo_hold"),
+            last_verified_ts=_require_ts(c["last_verified_ts"], kind="cargo_hold"),
+        )
+        for c in raw.get("cargo_holds") or ()
+    )
     world_id = raw.get("world_id")
     return GameData(
         world_id=None if world_id is None else str(world_id),
@@ -193,6 +246,7 @@ def load_game_data(path: str | Path) -> GameData:
         scanners=scanners,
         transwarp=transwarp,
         items=items,
+        cargo_holds=cargo_holds,
     )
 
 
@@ -347,3 +401,67 @@ def list_flyable_ships(
         return alignment is not None and alignment >= ship.alignment_requirement
 
     return tuple(s for s in list_ships(world_id, state_dir=state_dir) if _flyable(s))
+
+
+# -- cargo-hold price persist/query path (TW-27 P1-b write lane) ------------
+#
+# Same bridge-over-game_knowledge shape as the ships persist path above,
+# but keyed by the fixed CARGO_HOLD_KEY singleton -- see that constant's
+# comment for why.
+
+
+def _cargo_hold_row_fields(row: CargoHoldRow) -> dict:
+    return {
+        "cost_per_hold": row.cost_per_hold,
+        "source": row.source,
+        "last_verified_ts": row.last_verified_ts,
+    }
+
+
+def persist_cargo_hold_price(
+    world_id: str, row: Mapping[str, Any], *, state_dir: str | Path | None = None
+) -> CargoHoldRow:
+    """Validate + persist StarDock's live per-hold credits quote into
+    `world_id`'s per-world game-data store, superseding whatever quote
+    was persisted before -- `validate_cargo_hold_row` gates the WRITER
+    (a non-introspected `source` or a missing required field raises
+    `ValueError` before the store is ever touched), exactly like
+    `persist_ship_row`.
+
+    A ts-less row (the introspector's documented no-clock contract --
+    see `introspector.parse_cargo_hold_price`'s docstring) is stamped
+    fresh here at write time, same convention as `persist_ship_row`.
+
+    Always writes to `CARGO_HOLD_KEY` regardless of what (if anything)
+    the caller's `row` supplies -- this table has exactly one row per
+    world by design (see `CARGO_HOLD_KEY`'s comment), so there is no
+    per-item key for a caller to get wrong here. Persisting again (a
+    fresher StarDock visit) overwrites the prior quote wholesale, same
+    last-write-wins discipline `persist_ship_row` documents -- a hold
+    price is always a whole, current quote, never a partial one to
+    merge."""
+    if not row.get("last_verified_ts"):
+        row = dict(row)
+        row["last_verified_ts"] = game_knowledge._now_iso()
+    cargo_hold = validate_cargo_hold_row(row)
+    path = game_knowledge.knowledge_path_for_world(world_id, state_dir=state_dir)
+    stored = game_knowledge.upsert_game_data_row(
+        path,
+        CARGO_HOLDS_TABLE,
+        CARGO_HOLD_KEY,
+        _cargo_hold_row_fields(cargo_hold),
+        source=cargo_hold.source,
+    )
+    return validate_cargo_hold_row(stored)
+
+
+def get_cargo_hold_price(
+    world_id: str, *, state_dir: str | Path | None = None
+) -> Optional[CargoHoldRow]:
+    """The most recently introspected per-hold price for `world_id`, or
+    `None` if this world has never had one persisted -- the scheduler
+    reading this (autopilot.py) must treat `None` as "unknown, skip the
+    upgrade branch," never substitute a guess."""
+    path = game_knowledge.knowledge_path_for_world(world_id, state_dir=state_dir)
+    row = game_knowledge.get_game_data_row(path, CARGO_HOLDS_TABLE, CARGO_HOLD_KEY)
+    return validate_cargo_hold_row(row) if row is not None else None
