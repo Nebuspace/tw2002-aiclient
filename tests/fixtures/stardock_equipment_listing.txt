@@ -1,0 +1,22 @@
+Command [TL=00752:0/0/0/850] (?=Help)? : e
+
+-=-=-        StarDock Special Equipment & Devices        -=-=-
+
+-=-=-        Density & Holographic Scanners        -=-=-
+Scanner Type                  Cost        Notes
+Fixture Density Scanner      50,000      Reveals adjacent sector signatures
+Fixture Holo Scanner         85,000      Reveals adjacent sector contents in detail
+-=-=-        End of Scanner Listing        -=-=-
+
+-=-=-        TransWarp Drive Installation        -=-=-
+TransWarp Drive           4,750,000      Jump directly to any previously visited sector
+-=-=-        End of TransWarp Listing        -=-=-
+
+-=-=-        Special Devices & Ordnance        -=-=-
+Item Name                     Cost        Notes
+Fixture Genesis Torpedo      250,000      Creates a new planet in the target sector
+Fixture Space Mine            15,000      Deployable hazard in the current sector
+Not A Real Item Row At All Here
+-=-=-        End of Item Listing        -=-=-
+
+Command [TL=00751:0/0/0/850] (?=Help)? :

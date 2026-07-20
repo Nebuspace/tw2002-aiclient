@@ -1,0 +1,12 @@
+Command [TL=00753:0/0/0/850] (?=Help)? : s
+
+-=-=-        StarDock Shipyard - Ship Registration        -=-=-
+Ship Name                    Holds  Ftrs  Shlds  Odds  T/W        Cost  Align  Rank   TW  Abilities
+Fixture Scout                    6   500   100  1.00     1      95,000      0  None    N
+Fixture Cruiser                 20  2500   500  1.10     4   1,750,000   -300  Alien   Y
+Fixture Frigate                  35  2500   400  1.25     2   3,700,000   -600  Alien   Y  Cloak,ECM
+Fixture Transport                65   500   150  0.90     6     155,000      0  None    N
+Not A Real Ship Row Here With No Numbers At All
+-=-=-        End of Shipyard Listing        -=-=-
+
+Command [TL=00752:0/0/0/850] (?=Help)? :
