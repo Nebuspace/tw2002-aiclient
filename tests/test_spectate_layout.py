@@ -27,12 +27,15 @@ from twclient.spectate_layout import (
     compute_autonomy_ratio,
     format_autonomy_counts,
     format_autonomy_lines,
+    format_autopilot_trace_lines,
     format_chain_summary,
     format_freshness,
     format_idle_age,
     format_sidebar,
     format_status_line,
     format_ticker_entry,
+    format_trace_ev,
+    PROVISIONAL_AUTOPILOT_TRACE,
     frame_layout,
     gauge_semantic,
     is_recent,
@@ -609,6 +612,46 @@ def test_format_autonomy_lines_ties_pct_to_app_ai_counts():
     assert empty[1] == "App 0 / AI 0 · Hum 0"
 
 
+def test_format_autopilot_trace_lines_chosen_gated_and_hold():
+    lines = format_autopilot_trace_lines(PROVISIONAL_AUTOPILOT_TRACE, cols=40)
+    assert lines[0].startswith("★ trade_cycle")
+    assert "550" in lines[0]
+    assert any(ln.startswith("★ trade_cycle") or ln.startswith("★ trade") for ln in lines[1:])
+    assert any(ln.startswith("· upgrade_holds") for ln in lines)
+    gated = [ln for ln in lines if ln.startswith("⊘")]
+    assert gated and "explore" in gated[0]
+    assert "turn-reserve" in gated[0] or "50" in gated[0]
+    # HOLD when chosen is None
+    hold = format_autopilot_trace_lines(
+        {"chosen": None, "candidates": [
+            {"kind": "explore", "ev_cr_per_turn": None, "gated": True, "gate_reason": "cash"},
+        ]},
+        cols=22,
+    )
+    assert hold[0] == "HOLD"
+    assert "—" in hold[1]  # None EV → em-dash, never 0
+    assert hold[1].startswith("⊘")
+    # empty / malformed → "—", no crash
+    assert format_autopilot_trace_lines(None) == ["—"]
+    assert format_autopilot_trace_lines({}) == ["—"]
+    assert format_autopilot_trace_lines("bogus") == ["—"]
+    assert format_trace_ev(None) == "—"
+    # dual attr tolerance
+    class _C:
+        kind = "trade_cycle"
+        ev_cr_per_turn = 100.0
+        gated = False
+        gate_reason = None
+
+    class _T:
+        chosen = "trade_cycle"
+        candidates = [_C()]
+
+    attr_lines = format_autopilot_trace_lines(_T(), cols=30)
+    assert attr_lines[0].startswith("★ trade_cycle")
+    assert all(len(ln) <= 30 for ln in attr_lines)
+
+
 def test_compose_hud_cells_appends_autonomy_when_provided():
     # autonomy kwarg is accepted but does not grow the 5-cell ship HUD
     # (a 6th 3-row cell would clip PORT meters in the gutter).
@@ -666,11 +709,13 @@ def test_render_plain_includes_phase2_sections():
             "ai": 10,
             "human": 2,
         },
+        "decisions": format_autopilot_trace_lines(PROVISIONAL_AUTOPILOT_TRACE, cols=40),
         "goals_chain": ["AUTO 75%", "App 30 / AI 10 · Hum 2", "— GOALS —", "· map 9s"],
     })
     assert "METRICS" in text and "STATIONS" in text
     assert "AUTONOMY" in text and "75%" in text
     assert "App 30" in text and "AI 10" in text and "Hum 2" in text
+    assert "DECISIONS" in text and "trade_cycle" in text and "550" in text
     assert "GOALS / CHAIN" in text
     # empty autonomy still renders cleanly
     empty = render_plain({

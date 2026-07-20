@@ -708,6 +708,122 @@ def format_autonomy_lines(ratio_data: dict | None = None) -> list[str]:
     return [f"AUTO {pct}", format_autonomy_counts(data)]
 
 
+# -- WO-P2c Autopilot dry-run decision-trace (pure layout) -----------------
+
+# Provisional mock until Impl #1's revised autopilot SHA relays real field
+# names + transport. Hub negotiates; defensive .get() tolerates churn.
+PROVISIONAL_AUTOPILOT_TRACE = {
+    "tick": 3,
+    "context": {"turns_left": 220, "cash": 48000, "sector": 42},
+    "candidates": [
+        {
+            "kind": "trade_cycle",
+            "ev_cr_per_turn": 550.0,
+            "rationale": "loop @1↔3 margin 55/hold",
+            "gated": False,
+            "gate_reason": None,
+        },
+        {
+            "kind": "upgrade_holds",
+            "ev_cr_per_turn": 200.0,
+            "rationale": "Δ40 holds / 12t cycle",
+            "gated": False,
+            "gate_reason": None,
+        },
+        {
+            "kind": "explore",
+            "ev_cr_per_turn": 10.0,
+            "rationale": "3 unmapped adj",
+            "gated": True,
+            "gate_reason": "turn-reserve<50",
+        },
+    ],
+    "chosen": "trade_cycle",
+}
+
+
+def _trace_field(obj, key, default=None):
+    """Dict-or-attr getter — same dual tolerance as format_chain_summary."""
+    if obj is None:
+        return default
+    if isinstance(obj, dict):
+        return obj.get(key, default)
+    return getattr(obj, key, default)
+
+
+def format_trace_ev(value) -> str:
+    """None-safe EV formatter — never guess/zero a missing value."""
+    if value is None:
+        return "—"
+    try:
+        v = float(value)
+    except (TypeError, ValueError):
+        return "—"
+    if v != v:  # NaN
+        return "—"
+    if abs(v - round(v)) < 1e-9:
+        return str(int(round(v)))
+    return f"{v:.1f}"
+
+
+def format_autopilot_trace_lines(trace, *, cols: int = 22) -> list[str]:
+    """Decisions-box lines for a Phase-1 autopilot dry-run decision trace.
+
+    Header = chosen action + EV (`★ trade_cycle 550 cr/t`) or `HOLD`.
+    Per candidate: `★` chosen / `·` other / `⊘` gated. Clipped to `cols`.
+    Empty / None / malformed → `["—"]` (never crash).
+    """
+    cols = max(8, int(cols))
+    if trace is None:
+        return ["—"]
+    if isinstance(trace, dict) and not trace:
+        return ["—"]
+    if not isinstance(trace, dict) and not (
+        hasattr(trace, "chosen") or hasattr(trace, "candidates")
+    ):
+        return ["—"]
+
+    candidates = _trace_field(trace, "candidates") or ()
+    if not isinstance(candidates, (list, tuple)):
+        candidates = ()
+    # Explicit key missing on empty-ish objects → treat as malformed empty
+    if isinstance(trace, dict) and "chosen" not in trace and not candidates:
+        return ["—"]
+
+    chosen_kind = _trace_field(trace, "chosen")
+    chosen_ev = None
+    if chosen_kind is not None:
+        for c in candidates:
+            if _trace_field(c, "kind") == chosen_kind:
+                chosen_ev = _trace_field(c, "ev_cr_per_turn")
+                break
+
+    if chosen_kind is None:
+        header = "HOLD"
+    else:
+        header = f"★ {chosen_kind} {format_trace_ev(chosen_ev)} cr/t"
+    lines = [header[:cols]]
+
+    for c in candidates:
+        kind = _trace_field(c, "kind") or "?"
+        gated = bool(_trace_field(c, "gated"))
+        gate_reason = _trace_field(c, "gate_reason")
+        ev_s = format_trace_ev(_trace_field(c, "ev_cr_per_turn"))
+        if gated:
+            glyph = "⊘"
+        elif chosen_kind is not None and kind == chosen_kind:
+            glyph = "★"
+        else:
+            glyph = "·"
+        body = f"{glyph} {kind} {ev_s}"
+        if gated and gate_reason:
+            rem = cols - len(body) - 1
+            if rem > 2:
+                body = f"{body} {str(gate_reason)[:rem]}"
+        lines.append(body[:cols])
+    return lines
+
+
 def compose_autonomy_headline(ratio_data: dict | None = None) -> dict:
     """One HUD-shaped cell for the autonomy gauge (uniform with compose_hud_cells)."""
     data = ratio_data or {}
@@ -1161,6 +1277,11 @@ def render_plain(dashboard: dict) -> str:
         pct = auto.get("pct_display", "—")
         lines.append("-" * 80)
         lines.append(f" AUTONOMY  {pct}  {format_autonomy_counts(auto)}")
+    if dashboard.get("decisions"):
+        lines.append("-" * 80)
+        lines.append(" DECISIONS — autopilot dry-run")
+        lines.append("-" * 80)
+        lines.extend(dashboard["decisions"])
     if dashboard.get("goals_chain"):
         lines.append("-" * 80)
         lines.append(" GOALS / CHAIN")
