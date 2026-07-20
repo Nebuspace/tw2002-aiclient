@@ -13,7 +13,6 @@ DEFAULT_EVENT = {"screen": [], "color": [], "prompt": "", "classification": "con
 # Calm GAME-pane copy when the daemon has no live game/player link — so a
 # leftover login prompt ("What's your name?") never contradicts status.
 WAITING_SESSION_LINES = (
-    "",
     "  No game session yet.",
     "",
     "  Spectate is attached to the local daemon, but the",

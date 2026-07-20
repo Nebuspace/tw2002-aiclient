@@ -1220,13 +1220,19 @@ def _render(windows, regions, event, tracked, ticker_history, status, palette, g
     # The viewport only changes when a new event actually arrived (or
     # the panes were just rebuilt) -- the expensive draw stays
     # event-driven, not tied to the animation tick OR status polls.
-    # Disconnected: never show a leftover login/name prompt — calm
-    # "waiting for session" copy instead (Max: confusing vs DISCONNECTED).
+    # Waiting frame only when disconnected with an empty screen. A fed
+    # event with real content must paint flush (WO-SPECTATE-INSET) even
+    # if status still reports disconnected — polls can lag the first
+    # stream event; never blank the cell inside the border once content
+    # arrived (leftover login prompts are still suppressed when the
+    # event screen is empty).
     if got_content:
         if regions["viewport"] is not None and "viewport" in windows:
             border_attr = accent_attr if connected else palette.attr_for("red", "default", False)
-            if connected:
-                screen_lines = event.get("screen") or []
+            raw_screen = list(event.get("screen") or [])
+            has_game_screen = any((line or "").strip() for line in raw_screen)
+            if connected or has_game_screen:
+                screen_lines = raw_screen
                 color_rows = event.get("color") or []
             else:
                 screen_lines = waiting_session_screen(regions["viewport"].get("game_h", 24))
