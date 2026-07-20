@@ -12,10 +12,15 @@ against the real daemon mid-session could inject real keystrokes into
 the actual live game).
 """
 
+import functools
 import json
 import os
+import pty
+import select
 import shutil
 import socket
+import subprocess
+import sys
 import tempfile
 import threading
 import time
@@ -239,3 +244,81 @@ def send_request(sock_path, verb, args=None, timeout=5.0):
         buf += chunk
     s.close()
     return json.loads(buf.decode("utf-8"))
+
+
+# A no-op curses.wrapper() round-trip (initscr -> cbreak -> keypad ->
+# nocbreak -> endwin) -- the exact minimum every real entry point these
+# pty tests drive (spectate_app.run_interactive / interactive_app.
+# run_interactive_attach) does before either ever touches a keystroke.
+# Exits 0 iff that round-trip succeeds, 1 on any curses.error/OSError.
+_PTY_CURSES_PROBE_SRC = (
+    "import curses, sys\n"
+    "def _check(stdscr):\n"
+    "    pass\n"
+    "try:\n"
+    "    curses.wrapper(_check)\n"
+    "except Exception:\n"
+    "    sys.exit(1)\n"
+    "sys.exit(0)\n"
+)
+
+
+@functools.lru_cache(maxsize=None)
+def pty_curses_supported():
+    """Functional capability probe for tests/test_control_panel.py and
+    tests/test_interactive_app.py: can a subprocess spawned the exact
+    way those tests spawn theirs (fresh pty via pty.openpty(), pty slave
+    on stdin/stdout/stderr, start_new_session=True, TERM=xterm) actually
+    initialize curses end-to-end? This is the real discriminator for the
+    false-fail those tests hit in a headless/no-controlling-terminal
+    environment (curses.wrapper()'s initscr()/cbreak() raising uncaught,
+    or the process otherwise exiting nonzero) -- not a heuristic like
+    os.isatty(0), which would wrongly skip in a pty-capable environment
+    whose own stdin/stdout merely aren't a tty (true of a CI runner or an
+    agent harness driving pytest, both of which still pass the real
+    tests here). Computed once per test run and cached -- every calling
+    test module shares the one result instead of re-probing.
+
+    Must drain master_fd exactly like the real tests' pty drivers do
+    (_drive_pty / _run_attach_in_pty): curses' own init/teardown escape
+    sequences are only tens of bytes, but an undrained pty still blocks
+    the child's write() (and therefore its exit) until a reader shows up
+    -- discovered the hard way when an earlier plain proc.wait(timeout)
+    version timed out and falsely reported "unsupported" in this very
+    pty-capable environment."""
+    master_fd, slave_fd = pty.openpty()
+    try:
+        proc = subprocess.Popen(
+            [sys.executable, "-c", _PTY_CURSES_PROBE_SRC],
+            stdin=slave_fd, stdout=slave_fd, stderr=slave_fd,
+            env=dict(os.environ, TERM="xterm"),
+            start_new_session=True,
+        )
+        os.close(slave_fd)
+        slave_fd = -1
+        deadline = time.monotonic() + 5.0
+        while time.monotonic() < deadline and proc.poll() is None:
+            ready, _, _ = select.select([master_fd], [], [], 0.3)
+            if master_fd in ready:
+                try:
+                    if not os.read(master_fd, 65536):
+                        break
+                except OSError:
+                    break
+        if proc.poll() is None:
+            proc.kill()
+        try:
+            proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            pass
+        return proc.returncode == 0
+    finally:
+        if slave_fd != -1:
+            try:
+                os.close(slave_fd)
+            except OSError:
+                pass
+        try:
+            os.close(master_fd)
+        except OSError:
+            pass

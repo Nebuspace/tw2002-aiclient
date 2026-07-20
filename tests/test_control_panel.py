@@ -29,7 +29,21 @@ import pytest
 from twclient import skills
 from twclient.control_lock import MODE_AI_PILOT, MODE_AUTO_LOOP, MODE_SPECTATE
 
-pytestmark = pytest.mark.xdist_group("control_panel_timing")
+from .conftest import pty_curses_supported
+
+# Every test in this file drives run_interactive() end-to-end through a
+# real pty (see _drive_pty below) -- in a headless/no-controlling-
+# terminal environment that subprocess can't initialize curses and the
+# whole module would false-fail rather than exercise anything. Skip
+# guard, not a blanket os.isatty(0) check: see pty_curses_supported()'s
+# docstring in conftest.py for why a functional probe is required here.
+pytestmark = [
+    pytest.mark.xdist_group("control_panel_timing"),
+    pytest.mark.skipif(
+        not pty_curses_supported(),
+        reason="no controlling-terminal/pty support in this env -- can't init curses in a pty subprocess",
+    ),
+]
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 VENV_PYTHON = PROJECT_ROOT / ".venv" / "bin" / "python3"
