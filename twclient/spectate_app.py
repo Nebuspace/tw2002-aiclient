@@ -58,6 +58,15 @@ from .spectate_layout import (
     update_tracked_stats,
     waiting_session_screen,
 )
+from .explore import (
+    cycle_explore_mode,
+    format_explore_decision_lines,
+    plan_find_formations,
+    plan_find_stardock,
+    plan_map_fill,
+)
+from .world_model import WORLD_DIR
+import os
 
 # MIN_COLS/MIN_LINES are re-exported (not just used internally) --
 # twclient/interactive_app.py (the `tw attach` MANUAL-mode viewer, a
@@ -306,6 +315,43 @@ class _ColorPairs:
                     self._next_id += 1
             self._pair_ids[key] = pair_id
         return attr | curses.color_pair(pair_id)
+
+
+def _resolve_world_id():
+    """Best-effort world_id for explore ticks without a daemon status field.
+
+    Prefers TW_WORLD_ID; else the sole directory under state/world/.
+    Returns None when ambiguous or empty (Decisions stays on coach placeholder).
+    """
+    env = (os.environ.get("TW_WORLD_ID") or "").strip()
+    if env:
+        return env
+    try:
+        if WORLD_DIR.is_dir():
+            kids = sorted(p.name for p in WORLD_DIR.iterdir() if p.is_dir())
+            if len(kids) == 1:
+                return kids[0]
+    except OSError:
+        pass
+    return None
+
+
+def _explore_plan_for_mode(mode, world_id, sector):
+    """Run one explore planner tick; None when mode off / missing inputs."""
+    if mode == "off" or world_id is None or sector is None:
+        return None
+    try:
+        sector = int(sector)
+    except (TypeError, ValueError):
+        return None
+    budget = 10
+    if mode == "mapfill":
+        return plan_map_fill(world_id, current_sector=sector, turn_budget=budget, epsilon=0.0)
+    if mode == "stardock":
+        return plan_find_stardock(world_id, current_sector=sector, turn_budget=budget, epsilon=0.0)
+    if mode == "formations":
+        return plan_find_formations(world_id, current_sector=sector, turn_budget=budget, epsilon=0.0)
+    return None
 
 
 def _draw_pane(win, lines, max_lines, max_cols):
@@ -889,12 +935,10 @@ def _build_windows(regions):
     return windows
 
 
-def _handle_key(ch, sock_path, status, library):
+def _handle_key(ch, sock_path, status, library, explore_state=None):
     """Trainer Control Panel keybindings -- mutates `library` (dict:
-    open/loops/selected/pending_cycles/confirm) in place and fires at
-    most one _send_control() META-command per keypress. Kept as its own function
-    (not inlined in _run()'s already-large loop) so the library-open
-    sub-mode's key handling doesn't tangle with the normal dashboard's.
+    open/loops/selected/pending_cycles/confirm) and optional
+    `explore_state` ({"mode": off|mapfill|stardock|formations}) in place.
     Returns True if this key was consumed as a Trainer Control Panel
     command (caller should NOT also treat it as detach/resize)."""
     if library["open"]:
@@ -937,6 +981,11 @@ def _handle_key(ch, sock_path, status, library):
         library["pending_cycles"] = 1
         library["confirm"] = None  # a fresh open must never inherit a stale confirm
         library["open"] = True
+        return True
+    if ch in (ord("e"), ord("E")):
+        # TW-14: cycle explore tick (plans → Decisions only; no keystrokes).
+        if explore_state is not None:
+            explore_state["mode"] = cycle_explore_mode(explore_state.get("mode") or "off")
         return True
     if ch in (ord("m"), ord("M")):
         # Only ai_pilot<->spectate is reachable from HERE -- MODE_HUMAN is
@@ -992,6 +1041,7 @@ def _run(stdscr, client, sock_path, pid_path, unicode_ok):
     prev_connected = None
     flash_until = 0.0
     library = {"open": False, "loops": [], "selected": 0, "pending_cycles": 1, "confirm": None}
+    explore_state = {"mode": "off"}
 
     windows = {}
     regions = None
@@ -1008,7 +1058,8 @@ def _run(stdscr, client, sock_path, pid_path, unicode_ok):
             if ch == 3:  # rare: raw-mode / harness delivered literal ^C
                 return  # always detach, even mid-overlay
             library_was_open = library["open"]
-            if _handle_key(ch, sock_path, status, library):
+            prev_explore = explore_state["mode"]
+            if _handle_key(ch, sock_path, status, library, explore_state):
                 pass  # Trainer Control Panel consumed it -- fall through to redraw
             elif ch in (ord("q"), ord("Q")):  # detach, don't touch the daemon
                 return
@@ -1017,6 +1068,9 @@ def _run(stdscr, client, sock_path, pid_path, unicode_ok):
                 _resize_pending.clear()
 
             got_content = False
+            chrome_dirty = False
+            if explore_state["mode"] != prev_explore:
+                chrome_dirty = True
             if library_was_open and not library["open"]:
                 # The overlay draws straight onto stdscr, covering rows/
                 # cols the dashboard's persistent sub-windows (Phase 0)
@@ -1038,7 +1092,6 @@ def _run(stdscr, client, sock_path, pid_path, unicode_ok):
                 got_content = True
 
             now = time.monotonic()
-            chrome_dirty = False
             if now - last_status_poll > STATUS_POLL_INTERVAL_S:
                 new_status = fetch_status(sock_path)
                 new_status["daemon_pid"] = pid_path.read_text().strip() if pid_path.exists() else None
@@ -1111,13 +1164,14 @@ def _run(stdscr, client, sock_path, pid_path, unicode_ok):
                 palette, glyphs, now, anim_tick, idle_age, semantic,
                 flash_active=flash_active, got_content=got_content,
                 calm_idle=not connected,
+                explore_mode=explore_state["mode"],
             )
     finally:
         signal.signal(signal.SIGWINCH, prev_handler)
         signal.signal(signal.SIGINT, prev_sigint)
 
 
-def _render(windows, regions, event, tracked, ticker_history, status, palette, glyphs, now, anim_tick, idle_age, semantic, flash_active, got_content, calm_idle=False):
+def _render(windows, regions, event, tracked, ticker_history, status, palette, glyphs, now, anim_tick, idle_age, semantic, flash_active, got_content, calm_idle=False, explore_mode="off"):
     connected = status.get("connected", False)
     accent_attr = palette.attr_for("cyan", "default", True)
     muted_attr = curses.A_DIM if hasattr(curses, "A_DIM") else curses.A_NORMAL
@@ -1201,9 +1255,20 @@ def _render(windows, regions, event, tracked, ticker_history, status, palette, g
         )
 
     if regions.get("decisions") is not None and "decisions" in windows:
+        decision_lines = compose_decisions_placeholder()
+        if explore_mode and explore_mode != "off":
+            wid = _resolve_world_id()
+            sector = (event.get("state") or {}).get("sector")
+            plan = _explore_plan_for_mode(explore_mode, wid, sector)
+            if wid is None:
+                decision_lines = ["E) explore on", "set TW_WORLD_ID", "or 1 world/"]
+            elif sector is None:
+                decision_lines = ["E) explore on", "no sector yet"]
+            else:
+                decision_lines = format_explore_decision_lines(explore_mode, plan)
         _draw_decisions(
             windows["decisions"], regions["decisions"],
-            compose_decisions_placeholder(), glyphs, palette,
+            decision_lines, glyphs, palette,
         )
 
     # Trainer Control Panel's control strip -- redraws every call (cheap,

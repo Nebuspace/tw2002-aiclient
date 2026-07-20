@@ -695,7 +695,7 @@ _MODE_BADGES = {
     "spectate": ("SPECTATE", "muted"),
 }
 
-CONTROL_HINTS = "M)ode  L)chains  Space pause/resume  X stop  P panic"
+CONTROL_HINTS = "M)ode  L)chains  E)xplore  Spc pause  X stop  P panic"
 PLAY_PROGRESS_BAR_WIDTH = 12
 
 

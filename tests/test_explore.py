@@ -180,3 +180,48 @@ def test_find_stardock_hunts_via_map_fill(tmp_path: Path):
     assert plan.hunt is not None
     assert plan.hunt.next_hop is not None
     assert plan.hunt.next_hop.to == 99
+
+
+def test_find_formations_routes_to_dead_end(tmp_path: Path):
+    from twclient.explore import plan_find_formations
+
+    wid = "test+form"
+    _seed(
+        wid,
+        tmp_path,
+        [
+            {"sector_id": 1, "warps": [2], "landmarks": []},
+            {"sector_id": 2, "warps": [1, 3], "landmarks": []},
+            {"sector_id": 3, "warps": [2], "landmarks": []},  # dead-end
+        ],
+    )
+    plan = plan_find_formations(
+        wid, current_sector=1, turn_budget=5, epsilon=0.0, state_dir=tmp_path,
+    )
+    assert plan.found is True
+    assert plan.mode == "route"
+    assert plan.next_sector == 2
+    assert plan.kind == "dead-end"
+
+
+def test_cycle_explore_mode_and_decision_lines():
+    from twclient.explore import (
+        cycle_explore_mode,
+        format_explore_decision_lines,
+        MapFillPlan,
+        FrontierEdge,
+    )
+
+    assert cycle_explore_mode("off") == "mapfill"
+    assert cycle_explore_mode("formations") == "off"
+    plan = MapFillPlan(
+        next_hop=FrontierEdge(frm=1, to=9, depth=1),
+        frontier=(FrontierEdge(frm=1, to=9, depth=1),),
+        known_sectors=2,
+        unmapped_targets=1,
+        turns_budget_remaining=3,
+        mode="exploit",
+    )
+    lines = format_explore_decision_lines("mapfill", plan)
+    assert lines[0] == "MAP-FILL"
+    assert "→9" in lines[1]

@@ -243,6 +243,162 @@ def plan_find_stardock(
     )
 
 
+@dataclass(frozen=True)
+class FormationsPlan:
+    """One Find-Formations tick — route to a catalogued candidate, else hunt."""
+
+    found: bool
+    targets: tuple[int, ...]  # genesis / formation sectors of interest
+    kind: Optional[str]
+    route: Optional[tuple[int, ...]]
+    next_sector: Optional[int]
+    hunt: Optional[MapFillPlan]
+    mode: str  # "route" | "hunt" | "arrived" | "exhausted" | "catalog"
+
+
+def plan_find_formations(
+    world_id: str,
+    *,
+    current_sector: int,
+    turn_budget: int,
+    epsilon: float = 0.1,
+    state_dir=None,
+    rng: Optional[random.Random] = None,
+) -> FormationsPlan:
+    """Find-Formations tick: route toward nearest genesis candidate.
+
+    Runs TW-16 `catalog_world` (read-only). If candidates exist, pathfind
+    to the nearest (entrance if set, else first sector). Otherwise Map-fill
+    to grow the graph. Never deploys Genesis — locate/recommend only.
+    """
+    from twclient.formations import catalog_world
+
+    budget = max(0, int(turn_budget))
+    cur = int(current_sector)
+    graph = known_graph(world_id, state_dir=state_dir)
+    cat = catalog_world(world_id, state_dir=state_dir)
+    candidates = cat.genesis_candidates
+    if not candidates:
+        hunt = plan_map_fill(
+            world_id,
+            current_sector=cur,
+            turn_budget=budget,
+            epsilon=epsilon,
+            state_dir=state_dir,
+            rng=rng,
+        )
+        nxt = hunt.next_hop.to if hunt.next_hop is not None else None
+        return FormationsPlan(
+            found=False,
+            targets=(),
+            kind=None,
+            route=None,
+            next_sector=nxt,
+            hunt=hunt,
+            mode="hunt" if nxt is not None else "exhausted",
+        )
+
+    # Nearest candidate by path length to entrance or first member.
+    best_route: Optional[tuple[int, ...]] = None
+    best_kind: Optional[str] = None
+    best_targets: tuple[int, ...] = ()
+    for f in candidates:
+        goal = f.entrance if f.entrance is not None else (f.sectors[0] if f.sectors else None)
+        if goal is None:
+            continue
+        path = path_to_sector(graph, cur, goal)
+        if path is None:
+            continue
+        if best_route is None or len(path) < len(best_route):
+            best_route = path
+            best_kind = f.kind
+            best_targets = f.sectors
+
+    if best_route is None:
+        return FormationsPlan(
+            found=True,
+            targets=tuple(sorted({s for f in candidates for s in f.sectors})),
+            kind=candidates[0].kind,
+            route=None,
+            next_sector=None,
+            hunt=None,
+            mode="catalog",
+        )
+    if len(best_route) == 1:
+        return FormationsPlan(
+            found=True,
+            targets=best_targets,
+            kind=best_kind,
+            route=best_route,
+            next_sector=None,
+            hunt=None,
+            mode="arrived",
+        )
+    if budget <= 0:
+        return FormationsPlan(
+            found=True,
+            targets=best_targets,
+            kind=best_kind,
+            route=best_route,
+            next_sector=None,
+            hunt=None,
+            mode="exhausted",
+        )
+    return FormationsPlan(
+        found=True,
+        targets=best_targets,
+        kind=best_kind,
+        route=best_route,
+        next_sector=best_route[1],
+        hunt=None,
+        mode="route",
+    )
+
+
+EXPLORE_MODES = ("off", "mapfill", "stardock", "formations")
+
+
+def cycle_explore_mode(current: str) -> str:
+    """Trainer-panel tick cycle: off → mapfill → stardock → formations → off."""
+    cur = current if current in EXPLORE_MODES else "off"
+    i = EXPLORE_MODES.index(cur)
+    return EXPLORE_MODES[(i + 1) % len(EXPLORE_MODES)]
+
+
+def format_explore_decision_lines(mode: str, plan) -> list[str]:
+    """Short DECISIONS-pane lines for the active explore tick (no keystrokes)."""
+    if mode == "off" or plan is None:
+        return ["E) explore off", "cycles map/sd/form"]
+    if mode == "mapfill":
+        label = "MAP-FILL"
+        nxt = getattr(plan, "next_hop", None)
+        nxt_s = getattr(nxt, "to", None) if nxt is not None else None
+        m = getattr(plan, "mode", "?")
+        if nxt_s is not None:
+            return [label, f"next →{nxt_s}", f"({m})"]
+        return [label, "no frontier", f"({m})"]
+    if mode == "stardock":
+        label = "FIND-SD"
+        nxt = getattr(plan, "next_sector", None)
+        m = getattr(plan, "mode", "?")
+        if m == "arrived":
+            return [label, "at StarDock", "(arrived)"]
+        if nxt is not None:
+            return [label, f"next →{nxt}", f"({m})"]
+        return [label, "no route yet", f"({m})"]
+    if mode == "formations":
+        label = "FORMATIONS"
+        nxt = getattr(plan, "next_sector", None)
+        kind = getattr(plan, "kind", None) or "—"
+        m = getattr(plan, "mode", "?")
+        if m == "arrived":
+            return [label, f"at {kind}", "(arrived)"]
+        if nxt is not None:
+            return [label, f"next →{nxt}", f"{kind} ({m})"]
+        return [label, f"{kind}", f"({m})"]
+    return [f"E) {mode}"]
+
+
 def find_landmark_sectors(
     world_id: str,
     landmark_name: str,
