@@ -563,6 +563,53 @@ def cmd_loops(args):
         sys.exit(1)
 
 
+def cmd_crawl(args):
+    """TW-26 live-crawl driver (v1): drive a hub-supervised menu crawl
+    against `--profile`'s world. Requires the daemon already connected
+    (no cold-start spawn here, unlike `tw ensure`/`tw start` — a crawl
+    is deliberately not a thing to launch casually). `path`/`log_path`
+    default under this project's own `state/`/`logs/` trees when omitted
+    (a per-world `game_knowledge.knowledge_path()` when the profile has
+    a fixed `handle`; otherwise a plain per-profile fallback — see
+    protocol.py's `_dispatch_crawl_start` docstring for why a
+    handle-less allow_register profile can't always resolve the real
+    per-world path up front)."""
+    from . import credentials
+
+    if not (daemon_alive() and SOCK_PATH.exists()):
+        print("ERROR: daemon_not_running — start it first with `tw start`")
+        sys.exit(1)
+
+    try:
+        profile = credentials.load_profile(args.profile)
+    except credentials.CredentialError as e:
+        print(f"ERROR: {e}")
+        sys.exit(1)
+
+    path = args.path
+    if not path and profile.handle:
+        from . import game_knowledge
+        path = str(game_knowledge.knowledge_path(profile.host, profile.game_letter, profile.handle))
+    if not path:
+        path = str(PROJECT_ROOT / "state" / "crawl" / f"{args.profile}_game_knowledge.json")
+    log_path = args.log_path or str(LOG_DIR / f"crawl_{args.profile}.jsonl")
+
+    resp = send_request(
+        "crawl_start",
+        {
+            "profile": args.profile,
+            "path": path,
+            "log_path": log_path,
+            "max_nodes": args.max_nodes,
+            "step_timeout": args.step_timeout,
+        },
+        timeout=args.timeout,
+    )
+    print_response(resp, args)
+    if not resp.get("ok"):
+        sys.exit(1)
+
+
 def cmd_autoloop(args):
     """Trainer Control Panel: start/stop/pause/resume the daemon's
     background AUTO-LOOP driver (loop_player.py) -- the CLI-scriptable
@@ -902,6 +949,23 @@ def build_parser():
     sp.add_argument("--step-timeout", type=float, default=8.0, help="per-step settle timeout (start only)")
     add_json(sp)
     sp.set_defaults(func=cmd_autoloop)
+
+    sp = sub.add_parser(
+        "crawl",
+        help=(
+            "TW-26: drive a hub-supervised menu crawl against a "
+            "crawl_sacrificial profile's world — refused by the daemon "
+            "for any profile that hasn't opted in"
+        ),
+    )
+    sp.add_argument("--profile", required=True, help="profile name in config/profiles.toml (must be crawl_sacrificial=true)")
+    sp.add_argument("--path", default=None, help="game_knowledge store path (default: per-world if handle is known, else per-profile under state/crawl/)")
+    sp.add_argument("--log-path", dest="log_path", default=None, help="live JSONL log path (default: logs/crawl_<profile>.jsonl)")
+    sp.add_argument("--max-nodes", type=int, default=200, help="hard cap on menu nodes visited")
+    sp.add_argument("--step-timeout", type=float, default=8.0, help="per-step settle timeout")
+    sp.add_argument("--timeout", type=float, default=600.0, help="overall client-socket budget")
+    add_json(sp)
+    sp.set_defaults(func=cmd_crawl)
 
     sp = sub.add_parser("watch", help="tail the settle-edge push-stream (read-only spectator feed)")
     sp.add_argument("--frames", type=int, default=None, help="exit after N events (default: until Ctrl-C)")

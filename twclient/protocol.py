@@ -399,6 +399,9 @@ def dispatch(session, verb, args, server):
     if verb == "ensure":
         return _dispatch_ensure(session, args)
 
+    if verb == "crawl_start":
+        return _dispatch_crawl_start(server, session, args)
+
     # -- v2.1 item 11: macro/recording/pattern-learning verbs -----------
     if verb == "record_start":
         return _dispatch_record_start(server, session, args)
@@ -632,6 +635,89 @@ def _dispatch_haggle(server, session, args):
     # "ai" default `_current_actor()` would otherwise give it.
     _record_ledger(server, session, pre_text, input_desc, False, resp, actor="trainer")
     return resp
+
+
+def _dispatch_crawl_start(server, session, args):
+    """TW-26 live-crawl driver wiring. Gated behind TWO independent
+    checks, in order: a fast, up-front `crawl_sacrificial` check on the
+    loaded profile (a clear, cheap refusal before the driver slot is
+    even reserved for a request that's going to be refused anyway — same
+    "fast hint, not the source of truth" discipline `_control_lock_error`
+    uses one layer above `acquire_driver()`), then `_driving_dispatch`
+    (server) — the SAME ai_pilot driving-lock guard do/send/replay/play/
+    haggle already share — so a crawl is refused outright, never queued,
+    if a human attach or another driver (including a second concurrent
+    crawl) currently holds the connection. `crawl_driver.run_live_crawl`
+    re-checks `crawl_sacrificial` itself, structurally, regardless of
+    this fast check ever running at all — that is the true, authoritative
+    gate (see its own docstring).
+
+    Synchronous: this dispatch blocks the calling one-shot connection for
+    the crawl's full duration, mirroring `_dispatch_play`'s/
+    `_dispatch_haggle`'s own shape (not loop_player.py's background-
+    thread model — a backgrounded crawl is a natural follow-up, not
+    built here). There is currently no live cross-connection abort
+    channel over the wire protocol (`abort_check=None` below) — a JSON
+    request/response round trip has no way to carry a callable, and this
+    dispatch's own driver-slot hold blocks any second connection from
+    reaching a hypothetical `crawl_abort` verb until this one returns
+    anyway. See the TW-26 crawl-driver handoff report's Concerns for why
+    that is a deliberate, documented scope line rather than an oversight.
+
+    `path`/`log_path` are REQUIRED, caller-resolved arguments, not
+    computed here: a `crawl_sacrificial` profile paired with
+    `allow_register` (WO-MS-4) may not have a fixed `handle` in
+    `profiles.toml` at all (the name-bank rider draws one fresh per
+    registration attempt), so this dispatch cannot always derive a
+    `game_knowledge.knowledge_path()` up front the way `ensure`'s
+    `_current_world_id` can for an already-registered profile. Left to
+    the caller (`cli.py`'s `tw crawl`, which falls back to a per-profile
+    path under `state/`/`logs/` when it can) rather than papered over
+    with a guess.
+
+    The `session_factory` handed to `run_live_crawl` here is a bare
+    closure returning THIS daemon's one persistent `session` object on
+    every call — NOT a fresh per-node reconnect.
+    `menu_crawler.crawl_menus()`'s BFS-via-replay traversal assumes
+    `session_factory()` always returns a session already sitting at the
+    world's STABLE START CONTEXT (see that module's own Traversal
+    docstring); a real reconnect-capable factory is explicitly flagged
+    there as "a separate future lane, not this one" — this dispatch
+    wires the gate/shape ahead of that lane landing, not a claim that a
+    live daemon crawl is fully load-bearing yet."""
+    from . import credentials
+    from .crawl_driver import CrawlSafetyError, run_live_crawl
+
+    profile_name = args.get("profile")
+    if not profile_name:
+        return {"ok": False, "error": "missing_profile"}
+    try:
+        profile = credentials.load_profile(profile_name)
+    except credentials.CredentialError as e:
+        return {"ok": False, "error": str(e)}
+    if not getattr(profile, "crawl_sacrificial", False):
+        return {"ok": False, "error": f"not_crawl_sacrificial:{profile_name}"}
+
+    path = args.get("path")
+    log_path = args.get("log_path")
+    if not path or not log_path:
+        return {"ok": False, "error": "missing_path_or_log_path"}
+
+    with _driving_dispatch(server) as lock_error:
+        if lock_error is not None:
+            return lock_error
+        try:
+            result = run_live_crawl(
+                profile,
+                lambda: session,
+                path=path,
+                log_path=log_path,
+                max_nodes=args.get("max_nodes", 200),
+                step_timeout=args.get("step_timeout", 8.0),
+            )
+        except CrawlSafetyError as e:
+            return {"ok": False, "error": str(e)}
+        return {"ok": True, **result}
 
 
 def _dispatch_list_skills(server, args):

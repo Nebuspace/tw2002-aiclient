@@ -28,6 +28,17 @@ draws a fresh handle/ship_name/planet_name per registration attempt
 instead of pinning one. login.py's `char_create` dispatch is the actual
 enforcement point — it raises before sending a single registration
 keystroke if the profile hasn't opted in.
+
+**TW-26 live-crawl driver:** `Profile.crawl_sacrificial` is a second,
+independent opt-in gate (default False, mirroring `allow_register`'s
+own shape exactly) — the code-enforced half of the crawler's A+C
+protocol (a disposable, zero-asset character, plus a hub-supervisor able
+to abort mid-crawl; see `twclient/crawl_driver.py`'s module docstring).
+`crawl_driver.run_live_crawl()` refuses outright, before opening a
+single connection, on any profile where this isn't `True`. A real
+sacrificial-crawl profile is expected to set BOTH `crawl_sacrificial =
+true` and `allow_register = true` — the pairing is a caller/config
+convention, not enforced here; this field only gates the crawl half.
 """
 
 import json
@@ -61,7 +72,7 @@ class CredentialError(Exception):
 
 class Profile:
     def __init__(self, name, host, port, game_letter, handle=None, ship_name=None, planet_name=None, server=None,
-                 allow_register=False):
+                 allow_register=False, crawl_sacrificial=False):
         self.name = name
         self.host = host
         self.port = int(port)
@@ -86,11 +97,17 @@ class Profile:
         # this field, and every profile that doesn't explicitly set it,
         # behaves exactly as before. See login.py's char_create dispatch.
         self.allow_register = bool(allow_register)
+        # TW-26: opt-in gate for the live-crawl driver -- default False,
+        # same safe-by-omission shape as allow_register above. See
+        # twclient/crawl_driver.py's module docstring for the A+C
+        # protocol this is the code-enforced half of.
+        self.crawl_sacrificial = bool(crawl_sacrificial)
 
     def __repr__(self):
         return (
             f"Profile(name={self.name!r}, host={self.host!r}, port={self.port!r}, game_letter={self.game_letter!r}, "
-            f"handle={self.handle!r}, server={self.server!r}, allow_register={self.allow_register!r})"
+            f"handle={self.handle!r}, server={self.server!r}, allow_register={self.allow_register!r}, "
+            f"crawl_sacrificial={self.crawl_sacrificial!r})"
         )
 
 
@@ -124,6 +141,7 @@ def load_profile(name, profiles_path=None, servers_path=None):
         if port is None:
             port = cport
     allow_register = bool(p.get("allow_register", False))
+    crawl_sacrificial = bool(p.get("crawl_sacrificial", False))
     required = ["game_letter"]
     # WO-MS-4: `handle` stays required for every profile as before UNLESS
     # it has explicitly opted into `allow_register` -- only THAT shape (a
@@ -150,6 +168,7 @@ def load_profile(name, profiles_path=None, servers_path=None):
         planet_name=p.get("planet_name"),
         server=server_key,
         allow_register=allow_register,
+        crawl_sacrificial=crawl_sacrificial,
     )
 
 
