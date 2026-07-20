@@ -245,6 +245,216 @@ def test_password_saved_before_confirm_round_even_if_run_later_fails():
     assert len(saved["default"]) == 8
 
 
+# -- game_select classification variants -----------------------------------
+#
+# login.py's `_decide()` already sends `profile.game_letter` on ANY
+# `game_select` classification -- these prove classify.py's second,
+# structurally different boxed-menu TWGS variant (found live against a
+# real TWGS server, no "select a game" text anywhere on screen) reaches
+# that same existing handler, with zero changes needed in this module.
+
+def test_boxed_game_select_menu_variant_sends_configured_game_letter():
+    profile = FakeProfile()
+    boxed_game_select_screen = (
+        "twgs.test.example\n"
+        "Game\n"
+        "<A> Vanilla TW2002: Mostly default settings\n"
+        "<#> Players Online\n"
+        "<!> View Game Descriptions\n"
+        "<Q> Quit\n"
+        "Selection (? for menu):"
+    )
+    steps = [
+        {"screen": boxed_game_select_screen, "expect": _is(profile.game_letter)},
+        {"screen": "Command [TL=00:00:00]:[1] (?=Help)? :", "expect": None},
+    ]
+    session = FakeLoginSession(steps)
+    cls, _ = run_login(session, profile, get_password=lambda n: "x", save_password=lambda n, pw: None)
+    assert cls == "main_command"
+    assert session.sent == [(profile.game_letter, False)]
+
+
+def test_boxed_game_select_lookalike_without_game_header_does_not_send_letter():
+    """Precision guard, applied through the automaton: a DIFFERENT menu
+    sharing the exact same bracket style and 'Selection (? for menu):'
+    prompt, but with no boxed 'Game' header, must NOT be misclassified as
+    game_select -- that would send the configured game LETTER as a
+    keystroke on the wrong screen. It must fail loud (automaton_stuck)
+    rather than guess, same as any other unrecognized menu."""
+    profile = FakeProfile()
+    lookalike_menu_screen = (
+        "Main Menu\n"
+        "<A> Page News\n"
+        "<B> Read Mail\n"
+        "<Q> Quit\n"
+        "Selection (? for menu):"
+    )
+    steps = [{"screen": lookalike_menu_screen, "expect": lambda text, secret: False}]
+    session = FakeLoginSession(steps)
+    with pytest.raises(LoginError, match="automaton_stuck"):
+        run_login(session, profile, get_password=lambda n: "x", save_password=lambda n, pw: None)
+    assert session.sent == []
+
+
+def test_banner_game_select_menu_variant_sends_configured_game_letter():
+    """A THIRD, non-boxed TWGS game-select shape (no box-drawing at all),
+    distinguished only by the TWGS server startup banner above the
+    bracket list -- proves `_is_twgs_server_banner_game_select_menu`
+    (classify.py) reaches login.py's existing `game_select` handler too,
+    with zero changes needed in this module."""
+    profile = FakeProfile()
+    banner_game_select_screen = (
+        "TradeWars Game Server\n"
+        "TWGS v2.20b\n"
+        "Server registered to twgs.test.example\n"
+        "<A> Sample Game One\n"
+        "<#> Players Online\n"
+        "<!> View game descriptions\n"
+        "<Q> Quit\n"
+        "Selection (? for menu):"
+    )
+    steps = [
+        {"screen": banner_game_select_screen, "expect": _is(profile.game_letter)},
+        {"screen": "Command [TL=00:00:00]:[1] (?=Help)? :", "expect": None},
+    ]
+    session = FakeLoginSession(steps)
+    cls, _ = run_login(session, profile, get_password=lambda n: "x", save_password=lambda n, pw: None)
+    assert cls == "main_command"
+    assert session.sent == [(profile.game_letter, False)]
+
+
+def test_banner_game_select_lookalike_without_the_twgs_banner_does_not_send_letter():
+    """Precision guard, applied through the automaton: a DIFFERENT TWGS
+    lobby menu sharing the exact same bracket style and
+    'Selection (? for menu):' prompt, but with no TWGS server startup
+    banner, must NOT be misclassified as game_select -- that would send
+    the configured game LETTER as a keystroke on the wrong screen. It
+    must fail loud (automaton_stuck) rather than guess, same as any
+    other unrecognized menu."""
+    profile = FakeProfile()
+    lookalike_menu_screen = (
+        "Welcome to a different TWGS lobby\n"
+        "<A> Sample Game One\n"
+        "<#> Players Online\n"
+        "<Q> Quit\n"
+        "Selection (? for menu):"
+    )
+    steps = [{"screen": lookalike_menu_screen, "expect": lambda text, secret: False}]
+    session = FakeLoginSession(steps)
+    with pytest.raises(LoginError, match="automaton_stuck"):
+        run_login(session, profile, get_password=lambda n: "x", save_password=lambda n, pw: None)
+    assert session.sent == []
+
+
+# -- stale-scrollback precision guards, applied through the automaton
+# (cipher adversarial review, 2026-07-20) -----------------------------------
+#
+# Both classify.py variant checks originally had no tie between their
+# header/banner signal and the CURRENT prompt -- a stale header/banner
+# left over from an EARLIER game-select screen could combine with a
+# LATER, unrelated menu sharing the same generic prompt and still
+# misfire game_select, which here would mean sending the configured
+# game LETTER as a keystroke on the WRONG screen. Driven end-to-end
+# through the automaton (not just classify.py directly) so this can't
+# regress silently even if some future change only touches login.py's
+# own dispatch table.
+
+
+def test_stale_boxed_door_select_bleeding_into_module_entry_menu_answers_the_real_current_menu_not_the_stale_letter():
+    """The stale boxed door-select box must NOT be treated as game_select
+    (that would send the configured game LETTER, wrong for this screen)
+    -- but the screen's REAL current content genuinely IS the
+    module-entry menu ("T - Play Trade Wars 2002" is really the CURRENT
+    prompt's own menu here, not stale), so the correct, already-existing
+    `_MODULE_ENTRY_MENU_RE` handler correctly answers "T". The
+    load-bearing assertion is what it does NOT send: never the
+    configured game letter ("F")."""
+    profile = FakeProfile()
+    stale_boxed_then_module_entry = (
+        "+------------------+--------------------------+\n"
+        "| Game             | Note: Multi-playing on   |\n"
+        "+------------------+--------------------------+\n"
+        "| <A> Vanilla TW2002: The Original              |\n"
+        "| <Q> Quit                                      |\n"
+        "+------------------------------------------------+\n"
+        "\n"
+        "\n"
+        "T - Play Trade Wars 2002\n"
+        "E - Exit\n"
+        "Selection (? for menu):"
+    )
+    steps = [
+        {"screen": stale_boxed_then_module_entry, "expect": _is("T")},
+        {"screen": "Command [TL=00:00:00]:[1] (?=Help)? :", "expect": None},
+    ]
+    session = FakeLoginSession(steps)
+    cls, _ = run_login(session, profile, get_password=lambda n: "x", save_password=lambda n, pw: None)
+    assert cls == "main_command"
+    assert session.sent == [("T", False)]
+    assert profile.game_letter not in [t for t, _s in session.sent]
+
+
+def test_stale_twgs_banner_bleeding_into_unrelated_utility_menu_fails_loud_not_a_blind_letter_send():
+    profile = FakeProfile()
+    stale_banner_then_utility_menu = (
+        "TradeWars Game Server\n"
+        "TWGS v2.20b\n"
+        "Server registered to twgs.test.example\n"
+        "\n"
+        "\n"
+        "<A> Read System Notices\n"
+        "<B> Change Terminal Options\n"
+        "Selection (? for menu):"
+    )
+    steps = [{"screen": stale_banner_then_utility_menu, "expect": lambda text, secret: False}]
+    session = FakeLoginSession(steps)
+    with pytest.raises(LoginError, match="automaton_stuck"):
+        run_login(session, profile, get_password=lambda n: "x", save_password=lambda n, pw: None)
+    assert session.sent == []
+
+
+# -- ROUND 2 stale-scrollback hardening (cipher re-attack, same day) -------
+#
+# The stale-scrollback guards above prove ADJACENCY -- the header/banner and
+# the qualifying game-select body sit in the same range -- but never prove
+# that body is the LAST menu content before the prompt. A STALE, never-
+# cleared copy of a FULL game-select body (markers + "<Q> Quit" included)
+# can itself sit ahead of a genuinely CURRENT, actually-different bracket-
+# style "Utility Menu" -- a shape the dash-only exclusion above never
+# covers. Before the round-2 fix (classify.py's
+# `_range_has_no_menu_after_game_select_markers`), this misclassified as
+# game_select and sent the configured game LETTER onto the real, live
+# Utility Menu. Driven end-to-end through the automaton, same rationale as
+# the round-1 guards above: this can't regress silently even if a future
+# change only touches login.py's own dispatch table.
+
+
+def test_stale_game_select_body_bleeding_into_a_live_utility_menu_fails_loud_not_a_blind_letter_send():
+    profile = FakeProfile()
+    stale_game_select_body_then_utility_menu = (
+        "TradeWars Game Server\n"
+        "TWGS v2.20b\n"
+        "Server registered to twgs.test.example\n"
+        "\n"
+        "<A> Sample Game One\n"
+        "<#> Players Online\n"
+        "<!> View game descriptions\n"
+        "<Q> Quit\n"
+        "\n"
+        "Utility Menu\n"
+        "\n"
+        "<A> Refresh\n"
+        "<B> Message a player\n"
+        "\n"
+        "Selection (? for menu):"
+    )
+    steps = [{"screen": stale_game_select_body_then_utility_menu, "expect": lambda text, secret: False}]
+    session = FakeLoginSession(steps)
+    with pytest.raises(LoginError, match="automaton_stuck"):
+        run_login(session, profile, get_password=lambda n: "x", save_password=lambda n, pw: None)
+    assert session.sent == []
+
+
 # -- RETURNING branch -----------------------------------------------------
 
 def test_returning_login_uses_saved_password_and_skips_registration():
@@ -1006,3 +1216,230 @@ def test_register_with_name_bank_propagates_unrelated_login_errors_unretried(tmp
             name_bank_path=bank_path, rng=random.Random(3),
         )
     assert calls["n"] == 1  # never retried a non-collision failure
+
+
+# -- game_select answered-once-per-connection safety fix --------------------
+#
+# A real game-select prompt is answered exactly ONCE per TCP connection
+# (session.py's `game_select_answered` flag). This closes the `ensure`-
+# mid-session stale-pyte-buffer misfire vector at the SOURCE, independent
+# of any classify.py heuristic: a SECOND `game_select` classification on
+# the SAME session/connection -- even from a LATER `run_login` call with
+# its own fresh `state` dict, the exact shape a later `ensure` dispatch
+# takes -- must never be answered with a second blind keystroke.
+
+def test_game_select_answered_flag_set_after_the_real_game_select_is_sent():
+    profile = FakeProfile()
+    steps = [
+        {"screen": "<F> Bob the Builder\nSelect a game :", "expect": _is(profile.game_letter)},
+        {"screen": "Command [TL=00:00:00]:[1] (?=Help)? :", "expect": None},
+    ]
+    session = FakeLoginSession(steps)
+    cls, _ = run_login(session, profile, get_password=lambda n: "x", save_password=lambda n, pw: None)
+    assert cls == "main_command"
+    assert session.sent == [(profile.game_letter, False)]
+    assert session.game_select_answered is True
+
+
+def test_second_game_select_same_connection_is_refused_not_resent():
+    """The concrete vector: a real game-select is answered once, then a
+    LATER stale `game_select` screen (a later `run_login`/`ensure` call
+    against the SAME session, its own fresh `state` dict) must fail
+    loud rather than send the game letter a second time."""
+    profile = FakeProfile()
+    steps = [
+        {"screen": "<F> Bob the Builder\nSelect a game :", "expect": _is(profile.game_letter)},
+        {"screen": "Command [TL=00:00:00]:[1] (?=Help)? :", "expect": None},
+    ]
+    session = FakeLoginSession(steps)
+    cls, _ = run_login(session, profile, get_password=lambda n: "x", save_password=lambda n, pw: None)
+    assert cls == "main_command"
+    assert session.sent == [(profile.game_letter, False)]
+
+    # A later ensure/run_login call, same session/connection, fresh
+    # `state` dict -- a stale scrollback buffer misclassifying the
+    # current screen as game_select again. Must never be answered.
+    session._steps = [{"screen": "<F> Bob the Builder\nSelect a game :", "expect": lambda text, secret: False}]
+    session._i = 0
+    with pytest.raises(LoginError, match="automaton_stuck"):
+        run_login(session, profile, get_password=lambda n: "x", save_password=lambda n, pw: None)
+    assert session.sent == [(profile.game_letter, False)]  # unchanged -- zero blind sends
+
+
+def test_game_select_answered_flag_resets_after_reconnect():
+    """Mirrors session.py's own reconnect() contract: a genuinely fresh
+    connection (guardian's D9 reconnect-replay, or a fresh cold-start
+    login) must still answer a real game-select normally -- the flag is
+    per-CONNECTION, not a permanent one-time-ever latch."""
+    profile = FakeProfile()
+    steps = [
+        {"screen": "<F> Bob the Builder\nSelect a game :", "expect": _is(profile.game_letter)},
+        {"screen": "Command [TL=00:00:00]:[1] (?=Help)? :", "expect": None},
+    ]
+    session = FakeLoginSession(steps)
+    run_login(session, profile, get_password=lambda n: "x", save_password=lambda n, pw: None)
+    assert session.game_select_answered is True
+
+    # FakeLoginSession models no real socket, so there's nothing to
+    # reconnect() here -- this directly exercises the reset session.py's
+    # own reconnect() performs (see test_session.py for that unit test).
+    session.game_select_answered = False
+    session._steps = [
+        {"screen": "<F> Bob the Builder\nSelect a game :", "expect": _is(profile.game_letter)},
+        {"screen": "Command [TL=00:00:00]:[1] (?=Help)? :", "expect": None},
+    ]
+    session._i = 0
+
+    cls, _ = run_login(session, profile, get_password=lambda n: "x", save_password=lambda n, pw: None)
+    assert cls == "main_command"
+    assert session.sent[-1] == (profile.game_letter, False)
+
+
+# -- REVISE (mack/cipher, adversarial review): the flag must latch only on
+# a CONFIRMED send, never at decide-time -- an earlier version of this fix
+# set it inside `_decide` the instant it chose to send the letter, before
+# `send_and_confirm` ever confirmed anything landed. An unconfirmed or
+# outright-failed send would then latch the flag True with the prompt
+# never actually answered; since `conn.connected` stays True in both
+# cases (only the reader thread / close()/reconnect() flip it), the one
+# reset path (reconnect()) would never fire either -- a permanent
+# automaton_stuck wedge on this connection until an operator force-
+# restarted it. These two tests prove the fix.
+
+
+class _RaisingSendSession:
+    """Models mack's finding: `session.send()` itself raises (a real
+    socket `sendall` failure) -- propagates uncaught out of run_login
+    (same as any other send-path exception; login.py has no try/except
+    around `send_and_confirm`), never reaching the confirmed-send
+    checkpoint that latches the flag. Enough surface to reach the
+    game_select send call and no further."""
+
+    def __init__(self, screen):
+        self._screen = screen
+        self.rx_count = 0
+        self.last_rx = 0.0
+        self.t = 0.0
+        self.game_select_answered = False  # mirrors the real Session's default
+
+    def clock(self):
+        return self.t
+
+    def sleep(self, seconds):
+        self.t += seconds
+
+    def render(self):
+        return self._screen.split("\n")
+
+    def render_text(self, rows=None):
+        return "\n".join(rows) if rows is not None else self._screen
+
+    def send(self, text, enter=True, secret=False):
+        raise OSError("simulated sendall failure")
+
+
+def test_game_select_answered_flag_stays_false_after_a_failed_send():
+    """mack's OSError-mid-send finding: a hard send failure must never
+    latch the flag -- it aborts run_login entirely, uncaught, before the
+    confirmed-send checkpoint that sets the flag is ever reached."""
+    profile = FakeProfile()
+    session = _RaisingSendSession("<F> Bob the Builder\nSelect a game :")
+    with pytest.raises(OSError):
+        run_login(session, profile, get_password=lambda n: "x", save_password=lambda n, pw: None)
+    assert session.game_select_answered is False
+
+
+class _FlakyGameSelectSession:
+    """Models cipher's hub-warp-animation finding for the game_select
+    send specifically: `send_and_confirm`'s `confirm_prompt=None` idle
+    path (game_select's `wait_hint` is always None -- see login.py's
+    module docstring) fires "idle", but ONE more byte arrives during its
+    own post-idle stability-recheck pause (settle.py's own documented
+    hub-warp-animation case: `test_send_and_confirm_none_rejects_when_
+    more_bytes_arrive_during_the_recheck`, test_settle.py) -- unconfirmed
+    on the FIRST attempt, then confirms cleanly on the identical resend.
+
+    Combines test_settle.py's `StagedSession`/`ScriptedSession` arrival-
+    timeline convention (`.sleep()` applies any arrival due by the new
+    clock time -- needed to place that extra byte precisely inside the
+    stability-recheck window) with this file's own `FakeLoginSession`
+    ordered screen-script convention (needed to drive the automaton on to
+    `main_command` once the resend succeeds). The rendered screen text
+    never changes across the flaky attempt -- this isolates
+    send_and_confirm's confirm TIMING from classify_screen's text
+    reading, rather than modeling a literal changing game-select screen."""
+
+    def __init__(self, steps):
+        self.t = 0.0
+        self.rx_count = 0
+        self.last_rx = 0.0
+        self._steps = steps
+        self._i = 0
+        self.sent = []
+        self._pending_arrivals = []
+        self._advance_after = False
+
+    def clock(self):
+        return self.t
+
+    def sleep(self, seconds):
+        self.t += seconds
+        while self._pending_arrivals and self._pending_arrivals[0] <= self.t:
+            self._pending_arrivals.pop(0)
+            self.rx_count += 1
+            self.last_rx = self.t
+        if not self._pending_arrivals and self._advance_after and self._i < len(self._steps) - 1:
+            self._advance_after = False
+            self._i += 1
+
+    def render(self):
+        return self._steps[self._i]["screen"].split("\n")
+
+    def render_text(self, rows=None):
+        return "\n".join(rows) if rows is not None else self._steps[self._i]["screen"]
+
+    def wait_settle(self, wait_prompt=None, timeout=8.0, debounce_ms=350):
+        return wait_for_settle(self, wait_prompt=wait_prompt, timeout_s=timeout, debounce_ms=debounce_ms)
+
+    def send(self, text, enter=True, secret=False):
+        self.sent.append((text, secret))
+        step = self._steps[self._i]
+        if step.get("expect") is not None:
+            assert step["expect"](text, secret), f"unexpected send {text!r} secret={secret!r}"
+        attempts = step.get("_attempts", 0)
+        step["_attempts"] = attempts + 1
+        base = self.t
+        if step.get("flaky") and attempts == 0:
+            # First attempt: one arrival lands almost immediately
+            # (satisfies the debounce -> "idle" fires), then a SECOND
+            # arrival is timed to land during send_and_confirm's own
+            # post-idle stability-recheck sleep -- confirmed=False. Never
+            # advances the script -- the caller retries the same screen.
+            self._pending_arrivals = [base + 0.05, base + 0.45]
+            self._advance_after = False
+        else:
+            # A clean, single-arrival confirm -- advances the script.
+            self._pending_arrivals = [base + 0.05]
+            self._advance_after = True
+
+
+def test_game_select_answered_flag_only_latches_after_confirmed_not_on_an_unconfirmed_attempt():
+    """The wedge-fix proof: an unconfirmed first attempt at game_select
+    must NOT latch the flag and must NOT raise -- the automaton retries
+    itself on the very next reactive-loop iteration (exactly like every
+    other branch already does), succeeds on the resend, and only THEN
+    latches the flag."""
+    profile = FakeProfile()
+    steps = [
+        {"screen": "<F> Bob the Builder\nSelect a game :", "expect": _is(profile.game_letter), "flaky": True},
+        {"screen": "Command [TL=00:00:00]:[1] (?=Help)? :", "expect": None},
+    ]
+    session = _FlakyGameSelectSession(steps)
+
+    cls, _ = run_login(session, profile, get_password=lambda n: "x", save_password=lambda n, pw: None)
+
+    assert cls == "main_command"
+    # Sent twice -- the flaky unconfirmed attempt, then the confirmed
+    # resend -- both the identical game letter, never anything else.
+    assert session.sent == [(profile.game_letter, False), (profile.game_letter, False)]
+    assert session.game_select_answered is True

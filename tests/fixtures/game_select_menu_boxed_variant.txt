@@ -1,0 +1,13 @@
+│                    twgs.test.example                    │
+└──────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────┐ ┌──────────────────────┐
+│                Game                 │ │ Note: Multi-playing  │
+├─────────────────────────────────────┤ │ is strongly frowned  │
+│ <A> Vanilla TW2002: Mostly default  │ │ upon and discour-    │
+│     settings; 250 turns, 1000       │ │ aged on this TWGS    │
+│     sectors, increased Terran       │ │ server. ...          │
+│ <#> Players Online                  │ │                      │
+│ <!> View Game Descriptions          │ │          -- SysOp    │
+│ <Q> Quit                            │ │                      │
+└─────────────────────────────────────┘ └──────────────────────┘
+Selection (? for menu):

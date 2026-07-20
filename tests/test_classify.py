@@ -87,6 +87,283 @@ def test_real_captured_game_select_menu_fixture():
     assert classify(text) == "game_select"
 
 
+def test_real_captured_boxed_game_select_menu_variant_fixture():
+    """A structurally DIFFERENT live TWGS game-select shape: no "select a
+    game" text anywhere on screen (the original anchor above never
+    fires), just a bracket-style menu under a boxed "Game" header,
+    ending in the generic "Selection (? for menu):" prompt. Promotes
+    this shape to `game_select` too via `_is_twgs_boxed_game_select_menu`
+    (classify.py), so login.py's existing `game_select` handler --
+    sending `profile.game_letter` -- fires here exactly as it does for
+    the "select a game" wording."""
+    text = _load_fixture("game_select_menu_boxed_variant.txt")
+    rows = text.splitlines()
+    prompt = rows[-1].strip() if rows else ""
+    assert classify(text) == "game_select"
+    assert classify_screen(text, prompt) == "game_select"
+
+
+def test_boxed_game_select_prompt_without_game_header_is_still_a_plain_menu():
+    """Precision guard: a DIFFERENT TWGS menu (e.g. a server's main lobby)
+    can share the exact same generic bracket style AND the exact same
+    "Selection (? for menu):" prompt -- but without the boxed "Game"
+    header, it must NOT be misclassified as `game_select` (that would
+    send the configured game LETTER as a keystroke on the wrong screen).
+    It must still land on the generic `menu` classification."""
+    text = (
+        "┌──────────────────────┐\n"
+        "│      Main Menu        │\n"
+        "├──────────────────────┤\n"
+        "│ <A> Page News          │\n"
+        "│ <B> Read Mail          │\n"
+        "│ <Q> Quit               │\n"
+        "└──────────────────────┘\n"
+        "Selection (? for menu):"
+    )
+    rows = text.splitlines()
+    prompt = rows[-1].strip()
+    assert classify(text) == "menu"
+    assert classify_screen(text, prompt) == "menu"
+
+
+def test_real_captured_banner_game_select_menu_variant_fixture():
+    """A THIRD, structurally different live TWGS game-select shape: no
+    box-drawing at all (unlike the boxed variant above) -- just a plain
+    bracket list ending in the same generic "Selection (? for menu):"
+    prompt, distinguished only by the TWGS server startup banner printed
+    above it ("TradeWars Game Server" / "TWGS v<version>" / "Server
+    registered to <host>"). Before this fix, this shape fell all the way
+    through to the generic `menu` classification (confirmed live) since
+    it has neither "select a game" text nor a boxed "Game" header --
+    `_is_twgs_server_banner_game_select_menu` (classify.py) is the third
+    signal-path that catches it, so login.py's existing `game_select`
+    handler fires here too."""
+    text = _load_fixture("game_select_menu_banner_variant.txt")
+    rows = text.splitlines()
+    prompt = rows[-1].strip() if rows else ""
+    assert classify(text) == "game_select"
+    assert classify_screen(text, prompt) == "game_select"
+
+
+def test_banner_game_select_lookalike_without_the_twgs_banner_is_still_a_plain_menu():
+    """Precision guard, mirroring the boxed-variant negative test above:
+    a DIFFERENT TWGS lobby menu can share the exact same bracket style
+    AND the exact same "Selection (? for menu):" prompt -- but without
+    the TWGS server startup banner (title + version + "registered to"),
+    it must NOT be misclassified as `game_select` (that would send the
+    configured game LETTER as a keystroke on the wrong screen). It must
+    still land on the generic `menu` classification."""
+    text = (
+        "Welcome to a different TWGS lobby\n"
+        "\n"
+        "<A> Sample Game One                    <B> Stock 5,000 Sectors\n"
+        "<C> Stock 10,000 Sector Gold           <D> Stock 5,000 Sector SOLO\n"
+        "<#> Players Online\n"
+        "<Q> Quit\n"
+        "\n"
+        "Selection (? for menu):"
+    )
+    rows = text.splitlines()
+    prompt = rows[-1].strip()
+    assert classify(text) == "menu"
+    assert classify_screen(text, prompt) == "menu"
+
+
+# -- stale-scrollback / adversarial precision hardening (cipher review,
+# 2026-07-20) -------------------------------------------------------------
+#
+# The FIRST versions of both game_select variant checks above scanned
+# their header/banner signal against the WHOLE screen with no tie to the
+# CURRENT prompt -- so a STALE header/banner left over from an earlier
+# game-select screen could combine with a LATER, unrelated menu sharing
+# the same generic "Selection (? for menu):" prompt and still misfire
+# game_select (which would send the configured game LETTER on the wrong
+# screen). These five vectors (adapted from the adversarial review's own
+# probe script) each construct exactly that shape a different way; all
+# five must classify as the generic `menu`, never `game_select`.
+
+
+def test_stale_boxed_door_select_bleeding_into_a_later_module_entry_menu_is_not_game_select():
+    """Vector 1: a genuine boxed door-select screen (real "Game" header
+    + bracket menu) painted on an EARLIER screen is never cleared from
+    the pyte grid; the NEXT real screen in the same login flow (the
+    module-entry menu, a totally different step) only overwrites the
+    bottom rows and legitimately also ends in the generic prompt."""
+    text = (
+        "+------------------+--------------------------+\n"
+        "| Game             | Note: Multi-playing on   |\n"
+        "+------------------+--------------------------+\n"
+        "| <A> Vanilla TW2002: The Original              |\n"
+        "| <Q> Quit                                      |\n"
+        "+------------------------------------------------+\n"
+        "\n"
+        "\n"
+        "T - Play Trade Wars 2002\n"
+        "E - Exit\n"
+        "Selection (? for menu):"
+    )
+    rows = text.splitlines()
+    prompt = rows[-1].strip()
+    assert classify(text) == "menu"
+    assert classify_screen(text, prompt) == "menu"
+
+
+def test_stale_twgs_banner_bleeding_into_a_later_unrelated_utility_menu_is_not_game_select():
+    """Vector 2: the TWGS connect-time banner (printed once) never
+    scrolls off / clears; a LATER, unrelated generic-prompt menu (e.g. a
+    sysop/utility menu reached deep in the flow) still has it sitting
+    above."""
+    text = (
+        "TradeWars Game Server\n"
+        "TWGS v2.20b\n"
+        "Server registered to twgs.test.example\n"
+        "\n"
+        "\n"
+        "<A> Read System Notices\n"
+        "<B> Change Terminal Options\n"
+        "Selection (? for menu):"
+    )
+    rows = text.splitlines()
+    prompt = rows[-1].strip()
+    assert classify(text) == "menu"
+    assert classify_screen(text, prompt) == "menu"
+
+
+def test_help_screen_quoting_the_banner_verbatim_plus_an_unrelated_menu_is_not_game_select():
+    """Vector 3: no stale scrollback needed at all -- just a help/manual
+    screen that QUOTES the banner as documentation, plus an unrelated
+    bracket menu of its own, ending in the same generic prompt by
+    coincidence."""
+    text = (
+        "HELP: Connecting to a TWGS server\n"
+        "When you connect you'll see a banner like:\n"
+        "  TradeWars Game Server\n"
+        "  TWGS v2.20b\n"
+        "  Server registered to twgs.test.example\n"
+        "That's just version info, nothing to act on.\n"
+        "\n"
+        "<A> Next help topic\n"
+        "<B> Previous help topic\n"
+        "Selection (? for menu):"
+    )
+    rows = text.splitlines()
+    prompt = rows[-1].strip()
+    assert classify(text) == "menu"
+    assert classify_screen(text, prompt) == "menu"
+
+
+def test_game_as_a_table_column_header_is_not_a_boxed_game_select_header():
+    """Vector 4: a "who's playing what" status box with a real column
+    header literally "Game", plus a genuine unrelated bracket menu below
+    it (utility/options menu), ending in the same generic prompt."""
+    text = (
+        "+--------+----------+--------+\n"
+        "| Player | Game     | Status |\n"
+        "+--------+----------+--------+\n"
+        "| Alice  | TWGS-1   | Active |\n"
+        "+--------+----------+--------+\n"
+        "\n"
+        "<A> Refresh\n"
+        "<B> Message a player\n"
+        "Selection (? for menu):"
+    )
+    rows = text.splitlines()
+    prompt = rows[-1].strip()
+    assert classify(text) == "menu"
+    assert classify_screen(text, prompt) == "menu"
+
+
+def test_chat_lines_mimicking_bracket_menu_shape_plus_a_game_box_is_not_game_select():
+    """Vector 5: two players with single-letter handles chatting, whose
+    lines happen to look like bracket menu options, on a screen that
+    (independently) has a "Game" box AND ends in the generic prompt --
+    the hardest vector since there's no blank-line gap at all between
+    the box and the chat lines."""
+    text = (
+        "+------+\n"
+        "| Game |\n"
+        "+------+\n"
+        "Lobby chat:\n"
+        "<A> hey anyone want to play\n"
+        "<B> sure invite me\n"
+        "Selection (? for menu):"
+    )
+    rows = text.splitlines()
+    prompt = rows[-1].strip()
+    assert classify(text) == "menu"
+    assert classify_screen(text, prompt) == "menu"
+
+
+# -- ROUND 2 stale-scrollback hardening (cipher re-attack, same day) -------
+#
+# The round-1 fix above (vectors 1-5) proves ADJACENCY -- the header/banner
+# and the qualifying body sit in the same range -- but never proves the
+# qualifying body is the LAST menu content before the prompt. A STALE, never-
+# cleared copy of a FULL game-select body (markers included) can itself sit
+# in that range ahead of a genuinely CURRENT, actually-different bracket-
+# style menu (not dash-style, so `_range_has_no_dash_style_menu` misses it),
+# and the round-1 fix alone still misfires `game_select`. Both vectors below
+# must classify as the generic `menu`, never `game_select`.
+
+
+def test_stale_boxed_game_select_body_bleeding_into_a_live_utility_menu_is_not_game_select():
+    """The boxed variant's own game-select body (header, game list, BOTH
+    markers, "<Q> Quit") never clears from the pyte grid; a REAL, actually-
+    current "Utility Menu" with its own unrelated bracket options sits
+    directly above the prompt. Before the round-2 fix, the stale markers
+    higher up in the same range still vouched for `game_select` here."""
+    text = (
+        "┌──────────────────────────────────────┐\n"
+        "│                Game                 │\n"
+        "├──────────────────────────────────────┤\n"
+        "│ <A> Vanilla TW2002: Mostly default  │\n"
+        "│ <#> Players Online                  │\n"
+        "│ <!> View Game Descriptions          │\n"
+        "│ <Q> Quit                            │\n"
+        "└──────────────────────────────────────┘\n"
+        "\n"
+        "Utility Menu\n"
+        "\n"
+        "<A> Refresh\n"
+        "<B> Message a player\n"
+        "\n"
+        "Selection (? for menu):"
+    )
+    rows = text.splitlines()
+    prompt = rows[-1].strip()
+    assert classify(text) == "menu"
+    assert classify_screen(text, prompt) == "menu"
+
+
+def test_stale_banner_game_select_body_bleeding_into_a_live_utility_menu_is_not_game_select():
+    """Same shape as the boxed vector above, applied to the non-boxed
+    banner variant: the TWGS connect-time banner plus its own full
+    game-select body (game list, BOTH markers, "<Q> Quit") is stale
+    scrollback; a REAL, actually-current "Utility Menu" sits directly
+    above the prompt."""
+    text = (
+        "TradeWars Game Server\n"
+        "TWGS v2.20b\n"
+        "Server registered to twgs.test.example\n"
+        "\n"
+        "<A> Sample Game One\n"
+        "<#> Players Online\n"
+        "<!> View game descriptions\n"
+        "<Q> Quit\n"
+        "\n"
+        "Utility Menu\n"
+        "\n"
+        "<A> Refresh\n"
+        "<B> Message a player\n"
+        "\n"
+        "Selection (? for menu):"
+    )
+    rows = text.splitlines()
+    prompt = rows[-1].strip()
+    assert classify(text) == "menu"
+    assert classify_screen(text, prompt) == "menu"
+
+
 def test_inline_same_line_bracket_confirmation_is_not_a_menu():
     """Regression: 'Use (N)ew Name or (B)BS Name [B] ?' has two bracket
     pairs on ONE line -- an inline confirmation, not a genuine multi-line

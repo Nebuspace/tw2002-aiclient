@@ -17,7 +17,7 @@ from .state_parser import is_genuine_sector_status, parse_port_report, parse_sta
 
 
 def _control_lock_error(server):
-    """Shared do/send/play/replay/haggle MODE guard: None when the AI is
+    """Shared do/send/play/replay/haggle/ensure MODE guard: None when the AI is
     free to drive (default, no server.control_lock at all in a bare
     dispatch-harness test, or mode == ai_pilot); otherwise an error
     response naming WHO/WHAT currently holds the lock, so a caller (or a
@@ -47,9 +47,9 @@ def _control_lock_error(server):
 
 @contextmanager
 def _driving_dispatch(server):
-    """Shared do/send/play/replay/haggle guard (TW-04): layers the
+    """Shared do/send/play/replay/haggle/ensure guard (TW-04): layers the
     single active-driver slot on top of `_control_lock_error`'s mode
-    check, without changing any of the five call sites' existing shape
+    check, without changing any of these call sites' existing shape
     (`with _driving_dispatch(server) as lock_error: if lock_error is not
     None: return lock_error`).
 
@@ -397,7 +397,17 @@ def dispatch(session, verb, args, server):
         return {"ok": True, "stopping": True}
 
     if verb == "ensure":
-        return _dispatch_ensure(session, args)
+        # Safety fix: `ensure` drives the login automaton (a keystroke-
+        # sending verb, same as do/send/replay/play/haggle) but was
+        # dispatched with no control-lock gate at all -- it could inject
+        # a keystroke even while a human held MODE_HUMAN via `tw attach`.
+        # Same shared guard those five verbs already use (see
+        # `_driving_dispatch`'s docstring): refuses under MODE_HUMAN/
+        # MODE_AUTO_LOOP, still succeeds under the default ai_pilot mode.
+        with _driving_dispatch(server) as lock_error:
+            if lock_error is not None:
+                return lock_error
+            return _dispatch_ensure(session, args)
 
     if verb == "crawl_start":
         return _dispatch_crawl_start(server, session, args)

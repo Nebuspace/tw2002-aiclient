@@ -212,7 +212,7 @@ def run_login(session, profile, get_password, save_password, target="main_comman
         if cls == target:
             return cls, step
 
-        action = _decide(cls, text, prompt, profile, state, get_password, save_password)
+        action = _decide(cls, text, prompt, profile, state, get_password, save_password, session)
 
         if action is None:
             signature = (cls, prompt)
@@ -250,6 +250,29 @@ def run_login(session, profile, get_password, save_password, target="main_comman
 
         stagnant_rounds = 0
         last_signature = None
+        if cls == "game_select":
+            # Safety fix: latch the per-CONNECTION "answered" flag only
+            # once the send is actually CONFIRMED, never at decide-time
+            # (see _decide's game_select branch above). Latching earlier
+            # (mack/cipher, adversarial review) can PERMANENTLY wedge a
+            # real drop: a game_select send that fails outright (session.send()
+            # raising OSError -- propagates uncaught, this line is simply
+            # never reached, same as any other send-path exception) or
+            # merely goes unconfirmed (a transitional screen -- the
+            # hub-warp-animation shape, settle.py's own documented case)
+            # would latch True with the prompt never actually answered;
+            # since `conn.connected` stays True in both cases (only the
+            # reader thread / close()/reconnect() flip it), the one
+            # reset path (reconnect()) would never fire either, wedging
+            # this connection in automaton_stuck forever. Setting it only
+            # here -- after `confirmed` is already known True -- means an
+            # unconfirmed/failed attempt leaves the flag False, so the
+            # reactive classify-loop above re-answers on its own next
+            # iteration exactly like every other branch already does,
+            # while a genuinely confirmed answer still closes the
+            # stale-buffer over-match vector for the rest of this
+            # connection.
+            session.game_select_answered = True
 
     raise LoginError(f"automaton_exhausted_steps:{_MAX_STEPS}")
 
@@ -315,11 +338,24 @@ def _bbs_unsupported_message(rec, servers_path):
     )
 
 
-def _decide(cls, text, prompt, profile, state, get_password, save_password):
+def _decide(cls, text, prompt, profile, state, get_password, save_password, session):
     """Return (send_text, secret, wait_prompt_hint) for the current
     screen, or None if nothing in the table matches (caller treats that
     as possible-stagnation and re-polls). Order matters only where two
-    rules could otherwise both look plausible; see inline notes."""
+    rules could otherwise both look plausible; see inline notes.
+
+    `session` is threaded through only for the game_select branch below
+    -- it READS the PER-CONNECTION `game_select_answered` flag (see
+    session.py), deliberately not folded into `state` (this function's
+    other bookkeeping) because the vector this guards against is a
+    LATER `run_login` call -- a later `ensure` against the SAME
+    connection -- with its own fresh `state` dict; a per-run flag would
+    never see the earlier answer at all. This function only ever READS
+    the flag, never sets it: `run_login` itself latches it True, and
+    only once the send is actually CONFIRMED (see its own comment) --
+    latching here at decide-time, before the send is even attempted, was
+    a wedge hazard (mack/cipher, adversarial review) an unconfirmed or
+    outright-failed send could never recover from."""
 
     # -- D7 nuisances first: these can interleave with any branch. -------
     if cls == "pause_key":
@@ -345,6 +381,27 @@ def _decide(cls, text, prompt, profile, state, get_password, save_password):
         return "Y", False, None
 
     if cls == "game_select":
+        # Safety fix: a real game-select prompt is answered exactly ONCE
+        # per TCP connection -- a SECOND `game_select` classification on
+        # this same connection is BY DEFINITION a misfire (most likely a
+        # stale pyte buffer from earlier in the connection, classified
+        # via a later ordinary screen sharing the same generic prompt),
+        # not a genuine second game-select screen to answer. Refusing
+        # here -- returning None, the same "nothing matched" signal any
+        # other unrecognized screen produces -- routes it through the
+        # SAME stagnation/`automaton_stuck` fail-loud path, never a
+        # blind keystroke. `getattr(..., False)` guards test doubles
+        # that predate this flag (matches this project's convention
+        # elsewhere for optional session surfaces).
+        #
+        # Only READS the flag -- never sets it here. An unconfirmed or
+        # outright-failed send must be free to retry itself on the next
+        # reactive loop iteration (exactly like every other branch in
+        # this table already does), so the flag is latched True by
+        # `run_login` itself, and only once `send_and_confirm` actually
+        # reports the send CONFIRMED (see run_login's own comment).
+        if getattr(session, "game_select_answered", False):
+            return None
         return profile.game_letter, False, None
 
     if cls == "menu" and _MODULE_ENTRY_MENU_RE.search(text):

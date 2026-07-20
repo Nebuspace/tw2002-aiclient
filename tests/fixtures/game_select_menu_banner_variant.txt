@@ -1,0 +1,16 @@
+TradeWars Game Server                                     Copyright (C) Vendor
+TWGS v2.20b                                               www.vendor.example
+
+Server registered to twgs.test.example
+Supports up to 25 games and 100 nodes
+
+<A> Sample Game One                    <B> Stock 5,000 Sectors
+<C> Stock 10,000 Sector Gold           <D> Stock 5,000 Sector SOLO
+<E> Call To Battle 10,000 Sector       <F> Pirates Final
+
+<#> Players Online
+<!> View game descriptions
+
+<Q> Quit
+
+Selection (? for menu):
