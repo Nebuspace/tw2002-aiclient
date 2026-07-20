@@ -1,0 +1,1078 @@
+"""twclient/autopilot.py — §22/§23 Phase 1 autonomous goal-orchestrator
+(WO-P1 sub-parts P1-a scheduler core, P1-c gate + dry-run, P1-d
+auto-start hook). Deterministic, NO LLM. See the ratified design at
+`.samantha/plans/tw2002-phase1-orchestrator-design-2026-07-20.md`
+(gitignored internal planning doc) for the full rationale this module
+implements.
+
+**The tick loop (design doc's ASSESS -> SELECT -> EXECUTE -> RECORD),
+actor="trainer":**
+
+1. **ASSESS** — `assess()` turns the CURRENT rendered screen (via
+   `state_parser.parse_state()`, already anchored to the LAST match --
+   see that module's docstring) plus caller-supplied world-model-derived
+   inputs (known trade hops, the current ship spec, an upgrade candidate
+   catalog + loop economics, an explore/StarDock plan) into one
+   `WorldSnapshot`. `chains.py`/`ship_upgrade_decision.py`/`explore.py`
+   are all deliberately decoupled from the world-model by their own
+   design ("mockable input, wire the adapter later" -- see each module's
+   docstring); this module wires them via explicit caller-supplied
+   inputs rather than inventing a new world-model-to-hops/catalog bridge
+   that doesn't exist anywhere else in this codebase yet.
+2. **SELECT** — `select()` is a CONTINUOUS cost-benefit scorer (the
+   ratified refinement, decision #2 below), never a fixed sequence: every
+   candidate action is scored by expected value (cr/turn) from scratch,
+   every tick, with NO persisted "committed pursuit" state carried
+   between ticks. This is what makes interruption structural rather than
+   a special case: a lower-EV pursuit is naturally abandoned the instant
+   a higher-EV one out-scores it on the very next tick, because nothing
+   about a previous tick's pick constrains the next one.
+3. **EXECUTE** — gated by BOTH the per-profile `autonomous` opt-in flag
+   (fail-closed, default False -- see `credentials.Profile`) and dry-run:
+   `AutopilotEngine.dry_run_tick()` NEVER sends, regardless of the flag
+   (the pre-enablement proof surface, decision #5); `live_tick()` refuses
+   outright (`AutopilotGateError`) unless `profile.autonomous` is True,
+   and even then only ever sends ONE plain sector-number navigation
+   keystroke per tick, gated on the CURRENT screen actually classifying
+   as the main sector command prompt (see "HIGH-2" note below), via
+   `settle.send_and_confirm` (the Phase-0 net -- never a bare
+   `session.send()`). See this module's own docstring section "Scope:
+   EXECUTE is navigation-only" below for why a fuller dock/trade/haggle
+   driver is NOT built here.
+4. **RECORD** — every tick's decision (dry-run or live) is ledgered via
+   `ledger.LedgerWriter.record_do()`, `actor="trainer"`, so the autonomy
+   gauge/session-retro can see it regardless of whether it drove.
+
+**Scope: EXECUTE is navigation-only (a deliberate, surfaced scope cut).**
+The design doc's goal-set wiring table describes "run the trade loop" as
+`loop_player` replay / a deterministic trade driver + `haggle` -- but
+`loop_player.py` only replays an ALREADY-RECORDED skill (`tw record`),
+and no generic "drive an arbitrary freshly-discovered `ProfitChain`
+end-to-end (navigate, dock, buy/sell to a haggle target, undock, repeat)"
+primitive exists anywhere in this codebase yet. Building that generic
+trade-automation driver is a substantially bigger, separate engineering
+effort than "wire the already-built engines into a scorer" -- so EXECUTE
+here is deliberately narrowed to the one action every candidate kind
+converges on safely: send the next navigation hop's sector number via
+`send_and_confirm(confirm_prompt=None)` (TW-02's own convention for a
+caller with no single known target regex -- see settle.py's module
+docstring). This is provably safe (a bare sector-number send can never
+trigger a destructive/Genesis/PvP/colonist-commitment prompt) and is
+enough to prove the gate + control-lock discipline end to end; a fuller
+haggle-wired trade-loop driver is a natural follow-up, not invented here
+unreviewed. `run_chain`'s `next_sector` is populated only when the
+player is CURRENTLY SITTING at the chain's normalized start sector (see
+`_score_chain`) -- navigating TO an off-position chain's start first is
+the same follow-up, and would reuse `explore.path_to_sector`.
+
+**HIGH-2 (adversarial-review fix, 2026-07-20): a classify-gate on the
+LIVE screen before every send.** `next_sector` rides `assess().sector`,
+which is `state_parser`'s whole-buffer LAST-match "Sector : N" --
+correct for `state_parser` (that anchoring is a deliberate stale-
+scrollback fix, never to be "simplified" back to first-match -- see that
+module's own docstring), but it means a STALE "Sector : 100" block can
+still be sitting in scrollback above a LIVE, totally different blocking
+prompt (a haggle "Your offer [500] ?", a colonist-quantity/fighter-
+deploy prompt) that also happens to take a bare number + Enter. Sending
+a candidate's `next_sector` with zero regard for what's actually
+live on screen would fire that number into whatever's really being
+asked. `live_tick()` therefore reclassifies the CURRENT screen via
+`classify.classify_screen()` immediately before every send and refuses
+(HOLDS the tick, no send, `Decision.send_outcome` records why) unless
+the live classification is exactly `"main_command"` -- the one prompt
+where a bare sector number is a genuine warp command.
+
+**Hard safety (independent of the Moderate econ caps below -- design
+decision #3):** `select()` structurally only ever emits `"run_chain"` /
+`"upgrade"` / `"explore"` candidates -- Genesis / colonist-load / planet
+commitment and PvP-initiate are never candidate kinds this scorer can
+produce, so `_execute()`'s kind-whitelist can never reach one. Never a
+bypass of `send_and_confirm`.
+
+**Cross-seat trace schema (2026-07-20 supplement).** `decision_to_trace()`
+renders any `Decision` into one structured dict a sibling seat's
+"Decisions-box" viewer consumes directly -- `{"tick", "context"
+{"turns_left"/"cash"/"sector"}, "candidates" [{"kind", "ev_cr_per_turn",
+"rationale", "gated", "gate_reason"}, ...], "chosen"}`. One source (the
+`Decision` object itself, now carrying its own `tick` + originating
+`snapshot`), two renders: this structured dict, and the pre-existing
+human-readable ledger `intent` string `_record()` already builds --
+deliberately left as its own separate, already-tested string-builder
+rather than rederived from the trace dict, so this supplement changes
+no existing ledger-text behavior. `AutopilotEngine.trace_log()` (the
+bounded recent history) and `AutopilotLoop.snapshot()["last_trace"]`
+(the single latest tick) are the two read transports.
+"""
+
+from __future__ import annotations
+
+import contextlib
+import dataclasses
+import math
+import threading
+import time
+import traceback
+from collections import deque
+from dataclasses import dataclass, field
+from typing import Callable, Optional, Sequence
+
+from .chains import ProfitChain, TradeHop, longest_profit_chain
+from .classify import classify_screen
+from .control_lock import MODE_HUMAN, ControlModeConflict
+from .settle import send_and_confirm
+from .ship_upgrade_decision import (
+    LoopEconomics,
+    PlayerState,
+    ShipSpec,
+    UpgradeDecision,
+    choose_upgrade,
+    remaining_productive_turns,
+)
+from .state_parser import parse_state
+
+ACTOR = "trainer"
+
+# The one live classification a bare sector-number send is safe against
+# -- see this module's own "HIGH-2" docstring note.
+_MOVEMENT_PROMPT_CLASS = "main_command"
+
+# -- Moderate econ caps (design decision #3 -- "looser economics, HARD
+# safety stops stay regardless of Moderate"). Module constants, tunable
+# by a caller via EconCaps below; these are the WO's proposed defaults.
+DEFAULT_TURN_RESERVE = 50
+DEFAULT_CASH_FLOOR = 10_000
+DEFAULT_KEEP_MIN_DEFENSE_FIGHTERS = 20
+# Reserved for a future buy/spend driver (Phase 1 has none -- EXECUTE is
+# navigation-only, see module docstring): the threshold above which a
+# planned spend should be surfaced to the operator rather than fired
+# autonomously. Unused this phase; kept here (not deleted) so a later
+# spend-capable EXECUTE inherits the cap rather than reinventing it.
+DEFAULT_SURFACE_BEFORE_SPEND = 50_000
+
+# Exploration's baseline EV (§11 "no idle", decision #4): picked whenever
+# nothing else scores higher, so a tick always has SOMETHING to do even
+# with zero known chains/eligible upgrades. Deliberately tiny and
+# strictly positive (never zero -- a zero-EV candidate racing a bare "do
+# nothing" would be an arbitrary tie) and small enough it can never
+# outrank a genuine discovered chain/upgrade.
+EXPLORE_BASELINE_EV = 0.01
+
+# Hard cap on ticks a single AutopilotLoop background run will execute
+# before stopping on its own -- this repo's established ethos (mirrors
+# loop_player.py's own _MAX_CYCLES): an unattended background scheduler
+# must never be unbounded regardless of caller intent. `AutopilotLoop`
+# also clamps any caller-supplied `max_ticks` to this ceiling -- see its
+# own `__init__`.
+_MAX_TICKS = 500
+
+# In-memory decision-trace bound (mack MED finding): `AutopilotEngine`
+# accumulates a `Decision` every tick for as long as it's alive -- an
+# unbounded list is a slow leak for a long-running background loop.
+# Kept as a bounded ring (most-recent-`_MAX_DECISIONS_KEPT` only); the
+# ledger (when wired) is the durable, unbounded record -- this in-memory
+# trace is a debugging/preview convenience, not the record of truth.
+_MAX_DECISIONS_KEPT = 200
+
+# Floor for a caller-supplied tick_interval_s (LOW, cipher): a zero/
+# negative interval would busy-loop the background thread pointlessly.
+_MIN_TICK_INTERVAL_S = 0.001
+
+
+class AutopilotGateError(Exception):
+    """Raised by `AutopilotEngine.live_tick()`/`AutopilotLoop.start()`
+    when the profile's `autonomous` flag isn't True -- fail-closed (see
+    module docstring). Also raised for a candidate kind outside the
+    scorer's own whitelist (belt-and-braces; `select()` can't actually
+    produce one -- see module docstring's Hard safety section)."""
+
+
+class AutopilotLoopError(Exception):
+    """A start/stop request that doesn't apply to the loop's current
+    state (e.g. starting while already running) -- mirrors
+    `loop_player.LoopPlayerError`'s own shape."""
+
+
+@dataclass(frozen=True)
+class EconCaps:
+    """Moderate-risk economic caps (design decision #3). Bounds on
+    candidate SELECTION/EXECUTION only -- never on the hard safety stops
+    in the module docstring, which apply regardless of these values."""
+
+    turn_reserve: int = DEFAULT_TURN_RESERVE
+    cash_floor: int = DEFAULT_CASH_FLOOR
+    keep_min_defense_fighters: int = DEFAULT_KEEP_MIN_DEFENSE_FIGHTERS
+    surface_before_spend: int = DEFAULT_SURFACE_BEFORE_SPEND
+
+
+@dataclass(frozen=True)
+class WorldSnapshot:
+    """ASSESS output. `sector`/`credits`/`turns_left` come from
+    `state_parser.parse_state()` off the CURRENT rendered screen;
+    everything else is caller-supplied world-model-derived input (see
+    module docstring for why chains/explore/ship_upgrade_decision are
+    wired this way rather than each growing its own world-model
+    adapter here)."""
+
+    sector: Optional[int]
+    credits: Optional[int]
+    turns_left: Optional[int]
+    current_ship: Optional[ShipSpec] = None
+    hops: tuple[TradeHop, ...] = field(default_factory=tuple)
+    ship_catalog: tuple[ShipSpec, ...] = field(default_factory=tuple)
+    loop: Optional[LoopEconomics] = None
+    stardock_route: Optional[tuple[int, ...]] = None  # known-graph path to StarDock, incl. current sector first
+    explore_next_sector: Optional[int] = None  # next frontier hop (map-fill / StarDock hunt), if any
+    explore_mode: str = "explore"  # label only, for the decision trace rationale
+    hostile_or_pvp: bool = False
+
+
+def assess(
+    rendered_text: str,
+    *,
+    current_ship: Optional[ShipSpec] = None,
+    hops: Sequence[TradeHop] = (),
+    ship_catalog: Sequence[ShipSpec] = (),
+    loop: Optional[LoopEconomics] = None,
+    stardock_route: Optional[Sequence[int]] = None,
+    explore_next_sector: Optional[int] = None,
+    explore_mode: str = "explore",
+    hostile_or_pvp: bool = False,
+) -> WorldSnapshot:
+    """Read the CURRENT screen via `state_parser.parse_state()` and fold
+    it together with the caller-supplied world-model-derived inputs into
+    one `WorldSnapshot` -- SELECT never re-reads live state mid-decision,
+    it only ever sees this one immutable snapshot."""
+    state = parse_state(rendered_text)
+    return WorldSnapshot(
+        sector=state.get("sector"),
+        credits=state.get("credits"),
+        turns_left=state.get("turns_left"),
+        current_ship=current_ship,
+        hops=tuple(hops),
+        ship_catalog=tuple(ship_catalog),
+        loop=loop,
+        stardock_route=tuple(stardock_route) if stardock_route is not None else None,
+        explore_next_sector=explore_next_sector,
+        explore_mode=explore_mode,
+        hostile_or_pvp=hostile_or_pvp,
+    )
+
+
+@dataclass(frozen=True)
+class Candidate:
+    """One scored SELECT option. `next_sector` is the concrete sector
+    number EXECUTE would send this tick, or `None` when this candidate
+    has nothing concrete to send yet (e.g. an upgrade recommendation with
+    no known route to StarDock, or a chain whose start isn't the current
+    sector -- see module docstring's Scope section)."""
+
+    kind: str  # "run_chain" | "upgrade" | "explore"
+    ev_per_turn: float
+    rationale: str
+    next_sector: Optional[int] = None
+    chain: Optional[ProfitChain] = None
+    upgrade: Optional[UpgradeDecision] = None
+
+
+@dataclass(frozen=True)
+class Decision:
+    """SELECT's full output for one tick -- also the dry-run proof
+    surface (design decision #5): every candidate considered, whichever
+    (if any) was skipped and why, which one won, and why.
+
+    `send_outcome` is filled in by `AutopilotEngine.live_tick()` AFTER
+    SELECT (never by `select()`/`dry_run_tick()`, which never send):
+    `None` (nothing sent -- dry-run, or the chosen candidate had no
+    concrete `next_sector`), `"held:not_main_command:<cls>"` (HIGH-2's
+    classify-gate refused -- the live screen wasn't the movement prompt),
+    `"sent"` (a confirmed send), or `"unconfirmed"` (settle.py's
+    `send_and_confirm` reported a desync -- see that module's docstring
+    for why this must never be silently treated as success).
+
+    `tick`/`snapshot` (2026-07-20 cross-seat trace supplement): `tick` is
+    this ENGINE instance's own monotonic counter (stamped by
+    `AutopilotEngine` under `self._lock`, dry-run and live ticks sharing
+    one sequence -- see `decision_to_trace()` below, the one place these
+    two fields get read). `snapshot` is the exact `WorldSnapshot` SELECT
+    scored this tick, kept so a later renderer never has to re-derive
+    ASSESS's output from anything but this one `Decision` object (one
+    source, two renders: this dataclass, and whatever a caller renders
+    from it -- a human-readable string or `decision_to_trace()`'s dict)."""
+
+    ts: float
+    candidates: tuple[Candidate, ...]
+    chosen: Optional[Candidate]
+    reason: str
+    skipped: tuple[str, ...] = field(default_factory=tuple)
+    interrupted: bool = False  # True when `chosen.kind` differs from the last LIVE tick's chosen kind
+    send_outcome: Optional[str] = None
+    tick: int = 0  # this engine's own monotonic tick counter -- see class docstring note above
+    snapshot: Optional[WorldSnapshot] = None  # the WorldSnapshot SELECT scored this tick -- see class docstring note above
+
+
+def _score_chain(snapshot: WorldSnapshot, caps: EconCaps) -> tuple[Optional[Candidate], Optional[str]]:
+    if not snapshot.hops:
+        return None, None
+    chain = longest_profit_chain(snapshot.hops)
+    if chain is None:
+        return None, "run_chain: no profitable cycle in known hops"
+    # MED fail-closed fix (mack M-a): an UNKNOWN turn budget must skip
+    # this candidate outright, never silently disable the turn-reserve
+    # floor the way `if turns_left is not None: <only then check>` used
+    # to -- DEFAULT_TURN_RESERVE exists specifically to prevent turn-
+    # exhaustion/forced-logout, so a parse hiccup must not bypass it.
+    if snapshot.turns_left is None:
+        return None, "run_chain: turns_left unknown -- skipped (fail-closed, turn-reserve floor can't be verified)"
+    productive = snapshot.turns_left - caps.turn_reserve
+    if productive < chain.turns:
+        return None, (
+            f"run_chain: needs {chain.turns}t > {productive}t productive "
+            f"(turn-reserve floor {caps.turn_reserve}t)"
+        )
+    next_sector = None
+    if (
+        snapshot.sector is not None
+        and len(chain.sectors) > 1
+        and chain.sectors[0] == snapshot.sector
+    ):
+        next_sector = chain.sectors[1]
+    path = "→".join(str(s) for s in chain.sectors)
+    return (
+        Candidate(
+            kind="run_chain",
+            ev_per_turn=chain.cr_per_turn,
+            rationale=f"run known chain {path}: {chain.cr_per_turn:.1f} cr/turn",
+            next_sector=next_sector,
+            chain=chain,
+        ),
+        None,
+    )
+
+
+def _score_upgrade(snapshot: WorldSnapshot, caps: EconCaps) -> tuple[Optional[Candidate], Optional[str]]:
+    # StarDock prices absent from game_data (P1-b captures them
+    # separately) -> treat price as UNKNOWN -> skip the branch entirely,
+    # NEVER guess a spend (WO hard rule).
+    if not snapshot.ship_catalog:
+        return None, "upgrade: StarDock prices unknown (ship_catalog empty) -- skipped, never guessed"
+    if snapshot.loop is None or snapshot.current_ship is None or snapshot.turns_left is None:
+        return None, "upgrade: missing loop-economics/current-ship/turns_left input -- skipped"
+    # MED fail-closed fix (mack M-b, cipher): an UNKNOWN balance must
+    # skip, exactly like a known-too-low balance already did -- treating
+    # "we don't know" as "assume it's fine" would bypass the cash floor
+    # on a parse hiccup.
+    if snapshot.credits is None:
+        return None, "upgrade: credits unknown -- skipped (fail-closed, cash floor can't be verified)"
+    if snapshot.credits < caps.cash_floor:
+        return None, f"upgrade: credits below cash floor ({caps.cash_floor}cr) -- skipped"
+    if snapshot.loop.turns_per_cycle <= 0:
+        return None, "upgrade: invalid loop economics (turns_per_cycle<=0) -- skipped"
+
+    # MED fail-closed fix (mack M-c): "never guess a spend" must also
+    # hold PER-SHIP, not just at whole-catalog emptiness -- an unpriced
+    # ship sentineled as cost<=0 (or one that isn't actually bigger than
+    # the current hull) is filtered out here before it ever reaches
+    # `choose_upgrade()`, rather than trusting that engine's own
+    # payback math to happen to reject it. CONTRACT for the future P1-b
+    # price feed: it must OMIT unpriced ships from the catalog entirely,
+    # never sentinel one in as cost=0.
+    priced_catalog = tuple(
+        s for s in snapshot.ship_catalog if s.cost > 0 and s.holds > snapshot.current_ship.holds
+    )
+    if not priced_catalog:
+        return None, (
+            "upgrade: no priced, strictly-bigger ship in catalog "
+            "(cost<=0 sentinels / non-larger hulls excluded) -- skipped"
+        )
+
+    player = PlayerState(
+        turns_left=snapshot.turns_left,
+        current_holds=snapshot.current_ship.holds,
+        turn_reserve=caps.turn_reserve,
+        hostile_or_pvp=snapshot.hostile_or_pvp,
+        current_fighters=snapshot.current_ship.fighters,
+        current_shields=snapshot.current_ship.shields,
+    )
+    decision = choose_upgrade(
+        priced_catalog,
+        player,
+        snapshot.loop,
+        defense_floor_fighters=caps.keep_min_defense_fighters,
+    )
+    if not decision.recommend or decision.ship is None:
+        return None, f"upgrade: {decision.rationale}"
+
+    # Decision #2 -- the TURN-COST to travel to StarDock uses the CURRENT
+    # ship's turns-per-warp, never a constant (game-D: Prison Barge
+    # 6/warp vs Galleon 3/warp is the whole reason). `choose_upgrade`'s
+    # own payback gate above has NO idea about StarDock distance at all
+    # (ship_upgrade_decision.py is travel-agnostic by design -- see its
+    # own docstring); this is the extra, travel-INCLUSIVE feasibility
+    # check this module layers on top. CONFIRMED CORRECT under
+    # adversarial review (2026-07-20) -- this is the legitimate per-ship
+    # warp use; do not touch it when fixing HIGH-1 below.
+    #
+    # MED fail-closed fix (cipher re-verify, 2026-07-20): `stardock_route
+    # is None` (route UNKNOWN -- no path to StarDock computed yet) used to
+    # collapse to the exact SAME `travel_turns = 0` as "already AT
+    # StarDock" (a genuine known 1-entry route) -- an unknown feasibility
+    # silently read as the single BEST case (free travel), the same
+    # never-guess-a-spend/never-guess-feasibility violation the
+    # `payback or 0.0` fix above closes. Only a KNOWN route may compute
+    # travel: `None` (or a malformed empty tuple) -> skip the candidate
+    # outright; a genuine 1-entry route (current sector only) IS
+    # legitimately 0 travel (already at dock); len>1 is real hops.
+    if not snapshot.stardock_route:
+        return None, "upgrade: stardock route unknown -- skipped (never guess travel-feasibility)"
+    travel_turns = 0
+    if len(snapshot.stardock_route) > 1:
+        hops_to_dock = len(snapshot.stardock_route) - 1
+        travel_turns = hops_to_dock * snapshot.current_ship.turns_per_warp
+
+    # LOW fix (mack): reuse ship_upgrade_decision's own CLAMPED helper
+    # instead of duplicating `turns_left - turn_reserve` unclamped here.
+    productive = remaining_productive_turns(player)
+    # MED fail-closed fix (class invariant with (a)/(b)/(c) above,
+    # 2026-07-20 revision): `decision.projected_payback or 0.0` used to
+    # coerce an UNKNOWN payback to 0 -- i.e. treat "we don't know" as the
+    # single BEST possible outcome (free) -- exactly the fail-OPEN shape
+    # this class of fix exists to close. `choose_upgrade()`'s own contract
+    # guarantees a real positive `projected_payback` whenever
+    # `decision.recommend` is True (see `evaluate_candidate`'s `pb is
+    # None` early-return, ship_upgrade_decision.py), so this branch isn't
+    # reachable through today's `choose_upgrade` -- kept as a defensive
+    # class-invariant guard (never a caller-trust assumption) against that
+    # contract changing underneath this caller, mirroring (a)/(b)/(c).
+    if decision.projected_payback is None:
+        return None, f"upgrade: {decision.ship.name} payback unknown -- skipped (never treated as free)"
+    payback = decision.projected_payback
+    total_turns_needed = payback + travel_turns
+    if total_turns_needed > productive:
+        return None, (
+            f"upgrade: {decision.ship.name} payback {payback:.1f}t + {travel_turns}t travel "
+            f"(this ship's {snapshot.current_ship.turns_per_warp}/warp) = {total_turns_needed:.1f}t "
+            f"> {productive}t productive -- HOLD"
+        )
+
+    # HIGH-1 fix (mack poc1/poc5/poc6, triple-proven): the cross-kind EV
+    # must be genuine cr/turn, comparable one-for-one against
+    # `chain.cr_per_turn`. `holds_per_turn()` is
+    # `(holds*margin)/(turns_per_cycle*turns_per_warp)` -- dimensionally
+    # cr/turn^2, since `turns_per_cycle` ALREADY bakes in warp time (see
+    # `LoopEconomics`'s own docstring: "wall-turns to run one full cycle
+    # (warp+trade)") and `holds_per_turn` re-multiplies it. Subtracting
+    # two such terms produced a warp-RATIO artifact, not a genuine
+    # throughput delta -- poc6 showed the SAME candidate/loop/chain
+    # ranked differently based purely on which ship you happened to be
+    # flying (3 vs 6 turns/warp), even though the true holds-only benefit
+    # never changed. The correct cross-kind EV is the TRUE holds-only
+    # delta: extra holds x margin-per-hold, spread over one cycle's wall-
+    # turns -- warp-STABLE, independent of either ship's turns_per_warp
+    # (that variable only belongs in the TRAVEL feasibility check above,
+    # never in this EV). `holds_per_turn` stays exactly as-is for
+    # `choose_upgrade()`'s OWN internal same-basis ranking among multiple
+    # eligible candidates in the catalog (ship_upgrade_decision.py's
+    # concern, correct there) -- this is only about what SELECT compares
+    # across kinds.
+    #
+    # KNOWN LIMITATION (accepted, mack + team-lead, 2026-07-20): this
+    # credits the extra-HOLDS benefit only -- it does not also credit a
+    # faster hull's cycle-shortening, since `LoopEconomics.turns_per_cycle`
+    # isn't decomposed per-ship here. A candidate that's both bigger AND
+    # meaningfully faster is therefore conservatively UNDER-counted, never
+    # over-counted. A fuller per-ship cycle-time model is a deferred
+    # refinement, not built here.
+    extra_holds = decision.ship.holds - snapshot.current_ship.holds
+    extra_cr_per_turn = extra_holds * snapshot.loop.margin_per_hold / snapshot.loop.turns_per_cycle
+    if extra_cr_per_turn <= 0:
+        # Defensive only -- `priced_catalog`'s own holds> filter above
+        # already guarantees extra_holds > 0 for every candidate
+        # `choose_upgrade` could have picked from.
+        return None, f"upgrade: {decision.ship.name} no positive holds-only delta vs current ship -- skipped"
+
+    next_sector = None
+    if snapshot.stardock_route and len(snapshot.stardock_route) > 1:
+        next_sector = snapshot.stardock_route[1]
+
+    return (
+        Candidate(
+            kind="upgrade",
+            ev_per_turn=extra_cr_per_turn,
+            rationale=(
+                f"detour to StarDock for {decision.ship.name}: payback {payback:.1f}t + "
+                f"{travel_turns}t travel <= {productive}t budget; +{extra_cr_per_turn:.1f} cr/turn"
+            ),
+            next_sector=next_sector,
+            upgrade=decision,
+        ),
+        None,
+    )
+
+
+def _score_explore(snapshot: WorldSnapshot) -> tuple[Optional[Candidate], Optional[str]]:
+    if snapshot.explore_next_sector is None:
+        return None, "explore: no frontier/route target (exhausted)"
+    return (
+        Candidate(
+            kind="explore",
+            ev_per_turn=EXPLORE_BASELINE_EV,
+            rationale=(
+                f"keep exploring ({snapshot.explore_mode}) toward sector "
+                f"{snapshot.explore_next_sector} -- no idle (§11)"
+            ),
+            next_sector=snapshot.explore_next_sector,
+        ),
+        None,
+    )
+
+
+def select(snapshot: WorldSnapshot, caps: EconCaps = EconCaps()) -> Decision:
+    """SELECT: score every candidate action from scratch and pick the
+    highest expected-value one. Stateless -- see module docstring for why
+    that's what makes interruption structural rather than a special case;
+    `interrupted`/history-tracking is `AutopilotEngine`'s job, not this
+    function's."""
+    candidates: list[Candidate] = []
+    skipped: list[str] = []
+
+    for scorer in (_score_chain, _score_upgrade, _score_explore):
+        args = (snapshot, caps) if scorer is not _score_explore else (snapshot,)
+        candidate, skip_reason = scorer(*args)
+        if candidate is not None:
+            candidates.append(candidate)
+        elif skip_reason is not None:
+            skipped.append(skip_reason)
+
+    if not candidates:
+        return Decision(
+            ts=time.time(), candidates=(), chosen=None, reason="no_candidates",
+            skipped=tuple(skipped), snapshot=snapshot,
+        )
+
+    ranked = sorted(candidates, key=lambda c: c.ev_per_turn, reverse=True)
+    chosen = ranked[0]
+    return Decision(
+        ts=time.time(),
+        candidates=tuple(candidates),
+        chosen=chosen,
+        reason=f"highest EV: {chosen.kind} ({chosen.ev_per_turn:.2f} cr/turn)",
+        skipped=tuple(skipped),
+        snapshot=snapshot,
+    )
+
+
+# The one whitelist of candidate kinds `select()` can ever produce (mirrors
+# `AutopilotEngine._execute()`'s own belt-and-braces whitelist) -- used only
+# to give `decision_to_trace()`'s `candidates` list a stable, predictable
+# ordering (run_chain, upgrade, explore) regardless of which kinds happened
+# to score vs. get skipped this tick.
+_TRACE_KIND_ORDER = ("run_chain", "upgrade", "explore")
+
+
+def decision_to_trace(decision: Decision) -> dict:
+    """Render a `Decision` into the cross-seat trace schema (2026-07-20
+    supplement, the sibling-seat "Decisions-box" viewer contract): ONE
+    structured object a remote viewer and a human-readable proof render
+    both consume identically -- see this module's tests for the exact
+    shape asserted field-by-field. Exact schema:
+
+        {"tick": int,
+         "context": {"turns_left": int|None, "cash": int|None, "sector": int|None},
+         "candidates": [{"kind": str, "ev_cr_per_turn": float|None,
+                         "rationale": str, "gated": bool, "gate_reason": str|None}, ...],
+         "chosen": str|None}
+
+    `ev_cr_per_turn` is `None` whenever a candidate's genuine cr/turn is
+    unknown (skipped at SELECT-time, or the winning candidate's SEND was
+    HELD/unconfirmed) -- NEVER 0 or a guess, the same None-discipline as
+    this module's fail-closed fixes. A candidate that was actually SCORED
+    (present in `decision.candidates`) is `gated=False`; one that never
+    produced a `Candidate` at all (only a `decision.skipped` reason string,
+    itself always prefixed `"<kind>: ..."` -- see each `_score_*` function)
+    is `gated=True` with that reason. `chosen` is the winning kind, or
+    `None` when the tick HOLDs -- which includes BOTH "nothing scored"
+    (`decision.chosen is None`) AND "something scored and won, but the
+    live send was HELD or came back unconfirmed" (HIGH-2 / the confirmed-
+    handling MED fix): in the latter case the winning candidate's own
+    trace entry is re-marked `gated=True` with the `send_outcome` as its
+    `gate_reason` -- it DID win the score (still shown), it just never
+    became a real action this tick."""
+    snap = decision.snapshot
+    context = {
+        "turns_left": snap.turns_left if snap is not None else None,
+        "cash": snap.credits if snap is not None else None,
+        "sector": snap.sector if snap is not None else None,
+    }
+
+    by_kind: dict[str, dict] = {}
+    for c in decision.candidates:
+        by_kind[c.kind] = {
+            "kind": c.kind,
+            "ev_cr_per_turn": c.ev_per_turn,
+            "rationale": c.rationale,
+            "gated": False,
+            "gate_reason": None,
+        }
+    for reason in decision.skipped:
+        kind, _, detail = reason.partition(":")
+        kind = kind.strip()
+        if kind in _TRACE_KIND_ORDER and kind not in by_kind:
+            detail = detail.strip() or reason
+            by_kind[kind] = {
+                "kind": kind,
+                "ev_cr_per_turn": None,
+                "rationale": detail,
+                "gated": True,
+                "gate_reason": detail,
+            }
+
+    chosen_kind = decision.chosen.kind if decision.chosen is not None else None
+    if chosen_kind is not None and decision.send_outcome and (
+        decision.send_outcome.startswith("held:") or decision.send_outcome == "unconfirmed"
+    ):
+        entry = by_kind.get(chosen_kind)
+        if entry is not None:
+            entry["gated"] = True
+            entry["gate_reason"] = decision.send_outcome
+        chosen_kind = None
+
+    return {
+        "tick": decision.tick,
+        "context": context,
+        "candidates": [by_kind[k] for k in _TRACE_KIND_ORDER if k in by_kind],
+        "chosen": chosen_kind,
+    }
+
+
+class AutopilotEngine:
+    """Owns ONE tick's ASSESS -> SELECT -> EXECUTE -> RECORD for one
+    session. `profile.autonomous` (captured once, at construction, as
+    `self.enabled`) fail-closed-gates `live_tick()`; `dry_run_tick()`
+    NEVER sends regardless of `self.enabled` (the pre-enablement proof
+    surface).
+
+    Mirrors `skills.replay_skill()`'s own posture: this class does NOT
+    touch `control_lock` itself -- exactly like `replay_skill()`, the
+    raw per-cycle driver, has no control-lock interaction of its own,
+    leaving that to its scheduler (`loop_player.LoopPlayer`, which enters/
+    leaves MODE_AUTO_LOOP once for the whole multi-cycle run). Here,
+    `AutopilotLoop` is that scheduler -- see its own docstring. A caller
+    driving `live_tick()` standalone (outside an `AutopilotLoop`) is
+    responsible for holding whatever exclusive slot applies, the same
+    trust contract `replay_skill()` already has with ITS callers.
+
+    **HIGH-3 fix (mack poc2, 2026-07-20): interrupt-history is LIVE-tick
+    ONLY, and lock-guarded.** `_last_chosen_kind` is the human-facing
+    interrupt-proof signal (design decision #5's `[INTERRUPT]` tag) --
+    only `live_tick()` ever WRITES it; `dry_run_tick()` READS it (so a
+    preview's own `interrupted` flag answers "would this interrupt the
+    actual driven history"), but never mutates it. Without this split, a
+    no-op preview call (e.g. a status/preview verb showing "what would
+    autopilot do right now") could flip `interrupted` on the NEXT real
+    live tick even though the real driven kind never changed (a false
+    positive), or mask a genuine interrupt (a false negative) -- poc2
+    confirmed the false-positive live. `self._lock` additionally guards
+    every read/write of `_last_chosen_kind`/`self.decisions`: a
+    background `AutopilotLoop` thread calling `live_tick()` and a
+    foreground caller calling `dry_run_tick()` (a status/preview verb)
+    on the SAME engine instance are a genuine concurrent-access
+    possibility this module must not assume away."""
+
+    def __init__(
+        self,
+        session,
+        profile,
+        control_lock,
+        *,
+        ledger=None,
+        session_id: Optional[str] = None,
+        caps: EconCaps = EconCaps(),
+    ):
+        self.session = session
+        self.profile = profile
+        self.control_lock = control_lock
+        self.ledger = ledger
+        self.session_id = session_id
+        self.caps = caps
+        # WO-P1 fail-closed gate: captured once here, from the profile
+        # handed in at construction -- `live_tick()` consults ONLY this,
+        # never re-reads `profile.autonomous` live, so a profile object
+        # mutated after construction can't silently flip a live engine's
+        # gate out from under a caller already holding a reference to it.
+        self.enabled = bool(getattr(profile, "autonomous", False))
+        # Bounded ring (mack MED finding) -- see _MAX_DECISIONS_KEPT.
+        self.decisions: deque[Decision] = deque(maxlen=_MAX_DECISIONS_KEPT)
+        self._last_chosen_kind: Optional[str] = None  # LIVE-tick-only -- see class docstring's HIGH-3 note
+        self._lock = threading.Lock()
+        # Cross-seat trace supplement (2026-07-20): one monotonic counter,
+        # shared by dry-run and live ticks alike, stamped onto each
+        # `Decision.tick` under `self._lock` -- so a caller polling
+        # `trace_log()`/`decision_to_trace()` over time sees a stable,
+        # never-reused sequence even though `self.decisions` itself is a
+        # bounded ring that evicts old entries.
+        self._tick_counter = 0
+
+    def dry_run_tick(self, **assess_kwargs) -> Decision:
+        """The pre-enablement proof surface (design decision #5):
+        ASSESS + SELECT + RECORD, ZERO sends -- regardless of
+        `self.enabled`. Reads (never writes) the LIVE interrupt history
+        -- see class docstring's HIGH-3 note."""
+        text = self.session.render_text(self.session.render())
+        snapshot = assess(text, **assess_kwargs)
+        decision = select(snapshot, self.caps)
+        with self._lock:
+            interrupted = (
+                decision.chosen is not None
+                and self._last_chosen_kind is not None
+                and decision.chosen.kind != self._last_chosen_kind
+            )
+            self._tick_counter += 1
+            decision = dataclasses.replace(decision, tick=self._tick_counter, interrupted=interrupted)
+            self.decisions.append(decision)
+        self._record(decision, pre_text=text, input_text="<dry-run:no-send>", post_text=text, dry_run=True)
+        return decision
+
+    def live_tick(self, **assess_kwargs) -> Decision:
+        """Fail-closed: refuses via `AutopilotGateError` before a single
+        byte is assessed for sending unless `self.enabled` is True (i.e.
+        `profile.autonomous` was True at construction). Sends at most ONE
+        navigation keystroke this tick, gated by HIGH-2's classify check
+        -- see module docstring's Scope/HIGH-2 sections. The ONLY path
+        that writes `_last_chosen_kind` -- see class docstring's HIGH-3
+        note."""
+        if not self.enabled:
+            raise AutopilotGateError(f"autonomous_disabled:profile={getattr(self.profile, 'name', '?')}")
+        pre_text = self.session.render_text(self.session.render())
+        snapshot = assess(pre_text, **assess_kwargs)
+        decision = select(snapshot, self.caps)
+
+        with self._lock:
+            interrupted = (
+                decision.chosen is not None
+                and self._last_chosen_kind is not None
+                and decision.chosen.kind != self._last_chosen_kind
+            )
+            if decision.chosen is not None:
+                self._last_chosen_kind = decision.chosen.kind
+        if interrupted:
+            decision = dataclasses.replace(decision, interrupted=True)
+
+        post_text = pre_text
+        input_text = "<no-send>"
+        chosen = decision.chosen
+        if chosen is not None and chosen.next_sector is not None:
+            # HIGH-2 gate-check TOCTOU fix (cipher re-verify, 2026-07-20):
+            # ONE fresh render feeds BOTH the full-text and the prompt-line
+            # the gate classifies against -- never reuse tick-start
+            # `pre_text` (already stale by the time we reach the gate)
+            # alongside a SECOND, later render's prompt line. Matches the
+            # repo's own "one render feeds both" convention (see e.g.
+            # login.py: `rows = session.render(); text =
+            # session.render_text(rows)`). A blank gate render (no rows,
+            # or an empty last line -- a screen-clear mid-transition, e.g.
+            # a hub-warp) is ITSELF a HOLD: classify.py's own documented
+            # last-resort fallback (`if not prompt_line: <gate-scan the
+            # WHOLE full_text>`) would otherwise let a STALE main_command
+            # string still sitting in `pre_text` green-light a send onto a
+            # screen that was never actually confirmed settled at all --
+            # cipher's PoC fired a real send this way through the old
+            # stale-`pre_text`-plus-fresh-blank-prompt_line combination.
+            gate_rows = self.session.render()
+            gate_prompt = gate_rows[-1].strip() if gate_rows else ""
+            if not gate_prompt:
+                decision = dataclasses.replace(decision, send_outcome="held:blank_screen")
+            else:
+                gate_full = self.session.render_text(gate_rows)
+                cls = classify_screen(gate_full, gate_prompt)
+                if cls != _MOVEMENT_PROMPT_CLASS:
+                    # HIGH-2: the live screen isn't the movement prompt --
+                    # HOLD, never send a bare sector number into whatever
+                    # blocking prompt (haggle, colonist-qty, fighter-deploy,
+                    # ...) is actually live right now.
+                    decision = dataclasses.replace(decision, send_outcome=f"held:not_main_command:{cls}")
+                else:
+                    confirmed = self._execute(chosen)
+                    post_text = self.session.render_text(self.session.render())
+                    input_text = str(chosen.next_sector)
+                    decision = dataclasses.replace(decision, send_outcome="sent" if confirmed else "unconfirmed")
+
+        with self._lock:
+            self._tick_counter += 1
+            decision = dataclasses.replace(decision, tick=self._tick_counter)
+            self.decisions.append(decision)
+
+        self._record(decision, pre_text=pre_text, input_text=input_text, post_text=post_text, dry_run=False)
+        return decision
+
+    def trace_log(self) -> list[dict]:
+        """Cross-seat trace supplement transport (2026-07-20): the bounded
+        recent-decision ring (see `_MAX_DECISIONS_KEPT`), each entry
+        rendered through `decision_to_trace()` -- the accessor a
+        "Decisions-box" viewer (or any other status/preview caller) polls
+        for the full recent history, oldest first. Lock-guarded, same as
+        every other read/write of `self.decisions` -- see class
+        docstring's HIGH-3 note."""
+        with self._lock:
+            return [decision_to_trace(d) for d in self.decisions]
+
+    def _execute(self, candidate: Candidate) -> bool:
+        """Sends `candidate.next_sector` and returns whether
+        `send_and_confirm` actually CONFIRMED it landed (MED fix,
+        mack + settle.py's own contract: a `confirmed=False` desync must
+        never be silently treated as a successful send)."""
+        # Belt-and-braces: `select()` can only ever produce these three
+        # kinds (see module docstring's Hard safety section) -- this
+        # dispatch can never actually reach the else branch through
+        # `select()`'s own output, but a bare pass-through with no
+        # whitelist at all would silently trust ANY future candidate
+        # kind, including one this module never intended to authorize.
+        if candidate.kind not in ("run_chain", "upgrade", "explore"):
+            raise AutopilotGateError(f"refused_unknown_candidate_kind:{candidate.kind}")
+        _reason, _elapsed, confirmed = send_and_confirm(
+            self.session, str(candidate.next_sector), confirm_prompt=None, enter=True
+        )
+        return confirmed
+
+    def _record(self, decision: Decision, *, pre_text: str, input_text: str, post_text: str, dry_run: bool) -> None:
+        if self.ledger is None:
+            return
+        prefix = "DRY-RUN " if dry_run else ""
+        if decision.chosen is None:
+            intent = f"{prefix}{decision.reason}"
+        else:
+            tag = " [INTERRUPT]" if decision.interrupted else ""
+            outcome = f" [{decision.send_outcome}]" if decision.send_outcome else ""
+            intent = f"{prefix}{decision.reason}{tag}{outcome}: {decision.chosen.rationale}"
+        settled_class = "autopilot_tick_unconfirmed" if decision.send_outcome == "unconfirmed" else "autopilot_tick"
+        self.ledger.record_do(
+            pre_text,
+            input_text,
+            False,
+            post_text,
+            settled_class,
+            actor=ACTOR,
+            session_id=self.session_id,
+            intent=intent,
+        )
+
+    def _record_crash(self, exc: BaseException) -> None:
+        """MED fix (mack poc4): a background `AutopilotLoop` tick that
+        raises must not die silently. Ledgers a distinguishable
+        `"autopilot_crashed"` entry (actor=trainer) BEFORE the loop's own
+        `finally` releases MODE_AUTO_LOOP, so a caller inspecting the
+        ledger/session-retro (or the loop's own `last_error`, see
+        `AutopilotLoop`) can tell "crashed mid-run" apart from "never got
+        a chance to tick yet" -- both of which otherwise look identical
+        (`running=False`, `ticks_done` unchanged)."""
+        if self.ledger is None:
+            return
+        try:
+            text = self.session.render_text(self.session.render())
+        except Exception:
+            text = "<render_failed_during_crash_handling>"
+        self.ledger.record_do(
+            text,
+            "<no-send>",
+            False,
+            text,
+            "autopilot_crashed",
+            actor=ACTOR,
+            session_id=self.session_id,
+            intent=f"CRASHED: {type(exc).__name__}: {exc}",
+        )
+
+
+class AutopilotLoop:
+    """Background AUTO-LOOP scheduler -- mirrors `loop_player.LoopPlayer`
+    exactly (same thread + control-lock discipline, same "entering/
+    leaving MODE_AUTO_LOOP is THIS class's job alone, never per-tick"
+    rule): `start()` enters MODE_AUTO_LOOP ONCE for the whole run (raises
+    `ControlModeConflict` if a human is attached or another AUTO_LOOP
+    run is already active); each cycle calls
+    `engine.live_tick(**snapshot_provider())`; `stop()`/the run's own
+    `finally` leaves MODE_AUTO_LOOP exactly once. `snapshot_provider` is a
+    zero-arg callable returning a fresh kwargs dict each tick (wiring
+    live game_knowledge/game_data reads into that callable is the
+    daemon-integration caller's job -- this class only owns the thread
+    lifecycle + control-lock transition, same division of labor
+    `LoopPlayer` already has with `replay_skill()`).
+
+    Two MED fixes (mack, 2026-07-20):
+    - **Silent thread death (poc4):** a `live_tick()` exception used to
+      propagate straight out of the background thread with `finally`
+      quietly releasing the control-lock and nothing else -- a crash and
+      "never ticked yet" were indistinguishable from the outside. Now
+      caught, stashed on `self.last_error`, ledgered via
+      `engine._record_crash()`, and the loop stops cleanly.
+    - **Honor `send_and_confirm`'s `confirmed`:** a tick whose
+      `Decision.send_outcome == "unconfirmed"` means a real desync
+      (settle.py: never safe to proceed past) -- the loop halts rather
+      than ticking blindly forward past it, and records why via
+      `self.last_error`.
+    """
+
+    def __init__(
+        self,
+        engine: AutopilotEngine,
+        snapshot_provider: Callable[[], dict],
+        *,
+        tick_interval_s: float = 1.0,
+        max_ticks: int = _MAX_TICKS,
+    ):
+        self.engine = engine
+        self.snapshot_provider = snapshot_provider
+        # LOW fixes (cipher): clamp caller input rather than trusting it
+        # verbatim -- the hard-cap/no-busy-loop backstops are a class
+        # invariant, not merely a documented convention.
+        #
+        # MED fix (mack re-verify, 2026-07-20): a non-finite tick_interval_s
+        # (NaN, or +-inf) used to bypass this floor entirely via `max()`'s
+        # own NaN-compare quirk (`max(nan, x)` returns `nan`, not `x`) --
+        # the unclamped NaN then reaches `time.sleep(nan)` in `_run()`'s
+        # tick loop, OUTSIDE that method's own try/except, so the
+        # background thread dies with `self.last_error` left at `None` --
+        # the exact silent-death failure mode this revision's MED fix
+        # (poc4) exists to close. `math.isfinite()` catches NaN AND +-inf
+        # uniformly; either floors to the same `_MIN_TICK_INTERVAL_S` a
+        # non-positive interval already floors to.
+        interval = float(tick_interval_s)
+        self.tick_interval_s = max(interval, _MIN_TICK_INTERVAL_S) if math.isfinite(interval) else _MIN_TICK_INTERVAL_S
+        # LOW fix (cipher re-verify, 2026-07-20): a negative/zero max_ticks
+        # survives the old `min(int(max_ticks), _MAX_TICKS)` unchanged
+        # (`min(-10, 500) == -10`), and `range(-10)` is empty -- a 0-tick,
+        # silently-"successful" no-op run that masks whatever caller bug
+        # passed a negative value in the first place. Floor to >=1 tick.
+        self.max_ticks = max(1, min(int(max_ticks), _MAX_TICKS))
+        self._thread: Optional[threading.Thread] = None
+        self._stop = threading.Event()
+        self.ticks_done = 0
+        self.last_decision: Optional[Decision] = None
+        self.last_error: Optional[str] = None
+
+    @property
+    def running(self) -> bool:
+        return self._thread is not None and self._thread.is_alive()
+
+    def start(self) -> None:
+        """Raises `AutopilotGateError` if the engine isn't gate-enabled,
+        `AutopilotLoopError` if already running, `ControlModeConflict` if
+        the control-lock refuses (human attached, or -- belt and braces
+        -- somehow already in auto_loop)."""
+        if not self.engine.enabled:
+            raise AutopilotGateError(
+                f"autonomous_disabled:profile={getattr(self.engine.profile, 'name', '?')}"
+            )
+        if self.running:
+            raise AutopilotLoopError("already_running")
+        self.engine.control_lock.enter_auto_loop()  # raises ControlModeConflict on refusal
+        self._stop.clear()
+        self.ticks_done = 0
+        self.last_decision = None
+        self.last_error = None
+        self._thread = threading.Thread(target=self._run, daemon=True)
+        self._thread.start()
+
+    def stop(self, join_timeout: float = 2.0) -> bool:
+        """Signals the loop to exit at its next tick boundary (never
+        aborts a tick mid-flight) and joins up to `join_timeout` seconds
+        -- mirrors `LoopPlayer.stop()`'s own contract exactly, including
+        why the join matters for a caller relying on "stop() returned =>
+        control_lock is back to ai_pilot". Idempotent/safe when nothing
+        is running.
+
+        Returns whether the thread had actually stopped by the time this
+        returns (LOW fix, cipher: previously undocumented/unsignaled --
+        a single in-flight tick outlasting `join_timeout` is a safe,
+        best-effort situation, NOT a wedge: `_stop` is still set, and the
+        loop's own next tick boundary + `finally` will still release
+        MODE_AUTO_LOOP; this return value just lets a caller tell "it's
+        already stopped" from "still winding down")."""
+        self._stop.set()
+        thread = self._thread
+        if thread is None:
+            return True
+        thread.join(timeout=join_timeout)
+        return not thread.is_alive()
+
+    def snapshot(self) -> dict:
+        return {
+            "running": self.running,
+            "ticks_done": self.ticks_done,
+            "last_reason": self.last_decision.reason if self.last_decision else None,
+            "last_error": self.last_error,
+            # Cross-seat trace supplement (2026-07-20): the status-field
+            # transport option -- a caller polling this loop's own
+            # snapshot() gets the last tick's structured trace for free,
+            # no separate accessor needed for the single-most-recent case
+            # (see `AutopilotEngine.trace_log()` for the full recent history).
+            "last_trace": decision_to_trace(self.last_decision) if self.last_decision is not None else None,
+        }
+
+    def _run(self) -> None:
+        try:
+            for _ in range(self.max_ticks):
+                if self._stop.is_set():
+                    break
+                try:
+                    kwargs = self.snapshot_provider()
+                    self.last_decision = self.engine.live_tick(**kwargs)
+                except Exception as exc:  # noqa: BLE001 -- MED fix: never die silently, see class docstring
+                    self.last_error = f"{type(exc).__name__}: {exc}\n{traceback.format_exc()}"
+                    with contextlib.suppress(Exception):
+                        self.engine._record_crash(exc)
+                    break
+                self.ticks_done += 1
+                if self.last_decision.send_outcome == "unconfirmed":
+                    # MED fix: a real settle desync -- halt rather than
+                    # tick blindly past it (settle.py's own contract).
+                    self.last_error = "settle_unconfirmed: halted rather than ticking past a send/settle desync"
+                    break
+                time.sleep(self.tick_interval_s)
+        finally:
+            with contextlib.suppress(ControlModeConflict):
+                self.engine.control_lock.leave_auto_loop()
+
+
+def maybe_auto_start(
+    session,
+    profile,
+    control_lock,
+    snapshot_provider: Callable[[], dict],
+    *,
+    ledger=None,
+    session_id: Optional[str] = None,
+    caps: EconCaps = EconCaps(),
+    tick_interval_s: float = 1.0,
+) -> Optional[AutopilotLoop]:
+    """P1-d: the post-login auto-start hook (design doc's
+    "Auto-start-on-connect"). Intended call site: right after `run_login`
+    (`login.py`) reaches `main_command`, e.g. `protocol.py`'s
+    `_dispatch_ensure`, once that (separate, shared-file) integration is
+    wired -- this function is deliberately standalone/pure here (no edit
+    to `login.py`/`protocol.py`/`daemon.py`, all either explicitly
+    out-of-lane for this WO or on the "don't rewrite the engines" list)
+    so it's directly callable/testable without that wiring existing yet.
+
+    Returns a STARTED `AutopilotLoop` iff `profile.autonomous` is True
+    AND the control-lock will accept entering MODE_AUTO_LOOP right now
+    (not already human-attached or already auto-looping); returns `None`
+    otherwise -- never raises for the ordinary "not enabled" / "human has
+    the keyboard" cases, since a post-login hook declining to start must
+    never crash the login success path it's attached to. Never starts
+    under MODE_HUMAN (checked twice: once here for a fast/clear early
+    exit, and authoritatively inside `AutopilotLoop.start()` ->
+    `control_lock.enter_auto_loop()`'s own atomic check -- mirroring
+    control_lock.py's own documented "up-front check is never the source
+    of truth" pattern, so a race between the two can never leave this
+    silently started under a human)."""
+    if not bool(getattr(profile, "autonomous", False)):
+        return None
+    if control_lock.mode == MODE_HUMAN:
+        return None
+    engine = AutopilotEngine(session, profile, control_lock, ledger=ledger, session_id=session_id, caps=caps)
+    loop = AutopilotLoop(engine, snapshot_provider, tick_interval_s=tick_interval_s)
+    try:
+        loop.start()
+    except ControlModeConflict:
+        return None
+    return loop

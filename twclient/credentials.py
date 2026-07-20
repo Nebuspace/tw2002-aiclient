@@ -39,6 +39,16 @@ single connection, on any profile where this isn't `True`. A real
 sacrificial-crawl profile is expected to set BOTH `crawl_sacrificial =
 true` and `allow_register = true` — the pairing is a caller/config
 convention, not enforced here; this field only gates the crawl half.
+
+**§22/§23 Phase 1 (WO-P1) autonomous orchestrator:** `Profile.autonomous`
+is a third, independent opt-in gate (default False, same safe-by-omission
+shape as `allow_register`/`crawl_sacrificial` above) — the fail-closed
+enablement flag `twclient/autopilot.py`'s `AutopilotEngine`/
+`maybe_auto_start()` hard-gate on before ANY autonomous send. Every
+profile that predates this field, and every profile that doesn't
+explicitly set it, keeps driving manually (or under `tw play`/AI-pilot)
+exactly as before — this field only turns on the trainer tick loop for a
+profile that has explicitly opted in.
 """
 
 import json
@@ -72,7 +82,7 @@ class CredentialError(Exception):
 
 class Profile:
     def __init__(self, name, host, port, game_letter, handle=None, ship_name=None, planet_name=None, server=None,
-                 allow_register=False, crawl_sacrificial=False):
+                 allow_register=False, crawl_sacrificial=False, autonomous=False):
         self.name = name
         self.host = host
         self.port = int(port)
@@ -102,12 +112,19 @@ class Profile:
         # twclient/crawl_driver.py's module docstring for the A+C
         # protocol this is the code-enforced half of.
         self.crawl_sacrificial = bool(crawl_sacrificial)
+        # WO-P1: opt-in gate for the autonomous trainer tick loop --
+        # default False, same safe-by-omission shape as the two gates
+        # above. See twclient/autopilot.py's module docstring; that
+        # module's AutopilotEngine/maybe_auto_start() are the actual
+        # enforcement points -- this field only carries the operator's
+        # per-profile choice.
+        self.autonomous = bool(autonomous)
 
     def __repr__(self):
         return (
             f"Profile(name={self.name!r}, host={self.host!r}, port={self.port!r}, game_letter={self.game_letter!r}, "
             f"handle={self.handle!r}, server={self.server!r}, allow_register={self.allow_register!r}, "
-            f"crawl_sacrificial={self.crawl_sacrificial!r})"
+            f"crawl_sacrificial={self.crawl_sacrificial!r}, autonomous={self.autonomous!r})"
         )
 
 
@@ -142,6 +159,7 @@ def load_profile(name, profiles_path=None, servers_path=None):
             port = cport
     allow_register = bool(p.get("allow_register", False))
     crawl_sacrificial = bool(p.get("crawl_sacrificial", False))
+    autonomous = bool(p.get("autonomous", False))
     required = ["game_letter"]
     # WO-MS-4: `handle` stays required for every profile as before UNLESS
     # it has explicitly opted into `allow_register` -- only THAT shape (a
@@ -169,6 +187,7 @@ def load_profile(name, profiles_path=None, servers_path=None):
         server=server_key,
         allow_register=allow_register,
         crawl_sacrificial=crawl_sacrificial,
+        autonomous=autonomous,
     )
 
 
