@@ -1196,7 +1196,7 @@ def _render(windows, regions, event, tracked, ticker_history, status, palette, g
     # TW-08 outer frame -- draw FIRST so the one wrapped box sits under
     # every pane; inner windows overwrite their own regions on doupdate.
     #
-    # WO-SPECTATE-FLICKER follow-up (Max 2026-07-19): the outer window
+    # WO-SPECTATE-FLICKER follow-up (operator 2026-07-19): the outer window
     # spans the FULL client rect and `_draw_outer_frame` does erase().
     # Painting it on every anim tick (without also noutrefresh'ing every
     # overlapping sibling) blanks the viewport/ticker in doupdate — after
