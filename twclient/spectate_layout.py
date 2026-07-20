@@ -791,6 +791,10 @@ def format_autopilot_trace_lines(trace, *, cols: int = 22) -> list[str]:
         return ["—"]
 
     chosen_kind = _trace_field(trace, "chosen")
+    # Non-str chosen (enum/dict/object) = malformed — fail-safe to "—"
+    # so a provisional→real schema reconcile can't leak a Python repr.
+    if chosen_kind is not None and not isinstance(chosen_kind, str):
+        return ["—"]
     chosen_ev = None
     if chosen_kind is not None:
         for c in candidates:

@@ -635,6 +635,10 @@ def test_format_autopilot_trace_lines_chosen_gated_and_hold():
     assert format_autopilot_trace_lines(None) == ["—"]
     assert format_autopilot_trace_lines({}) == ["—"]
     assert format_autopilot_trace_lines("bogus") == ["—"]
+    # non-str chosen must not leak a Python repr into the TUI
+    assert format_autopilot_trace_lines(
+        {"candidates": "notalist", "chosen": object()}
+    ) == ["—"]
     assert format_trace_ev(None) == "—"
     # dual attr tolerance
     class _C:
