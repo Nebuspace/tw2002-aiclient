@@ -25,6 +25,8 @@ from twclient.spectate_layout import (
     compose_port_panel,
     compose_primary_goals_lines,
     compute_autonomy_ratio,
+    format_autonomy_counts,
+    format_autonomy_lines,
     format_chain_summary,
     format_freshness,
     format_idle_age,
@@ -591,6 +593,22 @@ def test_compute_autonomy_ratio_empty_and_window():
     assert data["pct_display"] == "100%"
 
 
+def test_format_autonomy_lines_ties_pct_to_app_ai_counts():
+    # App/(App+AI) = 30/(30+10) = 75% — counts ARE the ratio.
+    data = compute_autonomy_ratio(
+        [{"actor": "trainer"}] * 30 + [{"actor": "ai"}] * 10 + [{"actor": "human"}] * 2
+    )
+    assert data["pct_display"] == "75%"
+    lines = format_autonomy_lines(data)
+    assert lines[0] == "AUTO 75%"
+    assert lines[1] == "App 30 / AI 10 · Hum 2"
+    assert "App 30" in format_autonomy_counts(data)
+    assert "AI 10" in format_autonomy_counts(data)
+    empty = format_autonomy_lines(compute_autonomy_ratio([]))
+    assert empty[0] == "AUTO —"
+    assert empty[1] == "App 0 / AI 0 · Hum 0"
+
+
 def test_compose_hud_cells_appends_autonomy_when_provided():
     # autonomy kwarg is accepted but does not grow the 5-cell ship HUD
     # (a 6th 3-row cell would clip PORT meters in the gutter).
@@ -642,12 +660,25 @@ def test_render_plain_includes_phase2_sections():
         "ticker": [],
         "status": "STATUS ok",
         "metrics": [{"label": "STATIONS", "value": "3"}],
-        "autonomy": {"pct_display": "42%"},
-        "goals_chain": ["— GOALS —", "· map 9s"],
+        "autonomy": {
+            "pct_display": "75%",
+            "trainer": 30,
+            "ai": 10,
+            "human": 2,
+        },
+        "goals_chain": ["AUTO 75%", "App 30 / AI 10 · Hum 2", "— GOALS —", "· map 9s"],
     })
     assert "METRICS" in text and "STATIONS" in text
-    assert "AUTONOMY" in text and "42%" in text
+    assert "AUTONOMY" in text and "75%" in text
+    assert "App 30" in text and "AI 10" in text and "Hum 2" in text
     assert "GOALS / CHAIN" in text
+    # empty autonomy still renders cleanly
+    empty = render_plain({
+        "main": [], "sidebar": [], "ticker": [], "status": "ok",
+        "autonomy": compute_autonomy_ratio([]),
+    })
+    assert "AUTONOMY" in empty and "—" in empty
+    assert "App 0 / AI 0 · Hum 0" in empty
 
 
 def test_compose_decisions_placeholder_is_nonempty():

@@ -48,6 +48,7 @@ from .spectate_layout import (
     compose_phase2_side_panel,
     compose_port_panel,
     compute_autonomy_ratio,
+    format_autonomy_lines,
     format_idle_age,
     format_loops_library_header,
     format_loops_library_row,
@@ -1377,11 +1378,10 @@ def _render(windows, regions, event, tracked, ticker_history, status, palette, g
             chain = phase2_cache.get("chain")
             goals = _build_goals_snapshot(wid, chain)
             sector = (event.get("state") or {}).get("sector")
-            # AUTONOMY lives in the GOALS band (one line) — not the HUD gutter —
-            # so PORT commodity meters keep their pre-P2 rows.
-            decision_lines = [
-                f"AUTO {autonomy.get('pct_display') or '—'}",
-            ] + compose_phase2_side_panel(
+            # AUTONOMY lives in the GOALS band — not the HUD gutter —
+            # so PORT commodity meters keep their pre-P2 rows. Counts
+            # (App/AI/Hum) sit with the % so the ratio math is visible.
+            decision_lines = format_autonomy_lines(autonomy) + compose_phase2_side_panel(
                 goals, chain, current_sector=sector,
                 width=max(12, (regions["decisions"].get("w") or 22) - 4),
             )
@@ -1472,9 +1472,7 @@ def run_snapshot(sock_path, pid_path, frames=1, settle_wait_s=8.0):
             chain = _longest_chain_for_panel(sock_path)
             goals = _build_goals_snapshot(wid, chain)
             sector = (last_event.get("state") or {}).get("sector")
-            dashboard["goals_chain"] = [
-                f"AUTO {auto.get('pct_display') or '—'}",
-            ] + compose_phase2_side_panel(
+            dashboard["goals_chain"] = format_autonomy_lines(auto) + compose_phase2_side_panel(
                 goals, chain, current_sector=sector, width=40,
             )
             print(render_plain(dashboard))

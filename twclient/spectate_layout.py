@@ -688,6 +688,26 @@ def compute_autonomy_ratio(entries, *, window: int = 500, session_id=None) -> di
     }
 
 
+def format_autonomy_counts(ratio_data: dict | None = None) -> str:
+    """Max terms: App = trainer, AI = llm-pilot; Hum = human attach (ratio-excluded)."""
+    data = ratio_data or {}
+    app = int(data.get("trainer") or 0)
+    ai = int(data.get("ai") or 0)
+    human = int(data.get("human") or 0)
+    return f"App {app} / AI {ai} · Hum {human}"
+
+
+def format_autonomy_lines(ratio_data: dict | None = None) -> list[str]:
+    """GOALS-band lines: AUTO % plus the counts that define it (App/(App+AI)).
+
+    Kept out of the HUD METRICS gutter so PORT commodity meters stay unclipped.
+    Empty ledger → "—" for % and zero counts (no crash).
+    """
+    data = ratio_data or {}
+    pct = data.get("pct_display") or "—"
+    return [f"AUTO {pct}", format_autonomy_counts(data)]
+
+
 def compose_autonomy_headline(ratio_data: dict | None = None) -> dict:
     """One HUD-shaped cell for the autonomy gauge (uniform with compose_hud_cells)."""
     data = ratio_data or {}
@@ -1137,8 +1157,10 @@ def render_plain(dashboard: dict) -> str:
         for row in dashboard["metrics"]:
             lines.append(f"{row['label']:<10}{row['value']}")
     if dashboard.get("autonomy"):
+        auto = dashboard["autonomy"]
+        pct = auto.get("pct_display", "—")
         lines.append("-" * 80)
-        lines.append(f" AUTONOMY  {dashboard['autonomy'].get('pct_display', '—')}")
+        lines.append(f" AUTONOMY  {pct}  {format_autonomy_counts(auto)}")
     if dashboard.get("goals_chain"):
         lines.append("-" * 80)
         lines.append(" GOALS / CHAIN")
