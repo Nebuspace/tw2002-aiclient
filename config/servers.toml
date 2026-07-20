@@ -407,11 +407,22 @@ hostname = "bbs.katone.net"
 port = 23
 transport = "telnet"
 front_end = "bbs"
-aliases = []
+aliases = ["tradewars.cmstactical.net"]
 status = "online"
 sources = ["classictw", "microblaster"]
-notes = "tradewars.cmstactical.net; default→23"
+notes = "tradewars.cmstactical.net is a listed alt; see tradewars_cmstactical_net for L0 probe of that hostname; default→23"
 last_checked_at = "2026-07-20T01:11:19Z"
+
+[servers.tradewars_cmstactical_net]
+hostname = "tradewars.cmstactical.net"
+port = 23
+transport = "telnet"
+front_end = "auto"
+aliases = ["bbs.katone.net"]
+status = "offline"
+sources = ["classictw", "microblaster", "ms-3b"]
+notes = "MS-3b: katone alt — L0: DNS NXDOMAIN (no TWGS-direct door on this hostname today); stay offline"
+last_checked_at = "2026-07-20T02:06:18Z"
 
 [servers.orreli_net]
 hostname = "bbs.orreli.net"
@@ -454,6 +465,7 @@ front_end = "auto"
 aliases = []
 status = "unverified"
 sources = ["classictw"]
+notes = "MS-3b: silent listener on L0 (connects, no classifiable banner) — stay unverified; not a BBS-nav target"
 last_checked_at = "2026-07-20T01:10:34Z"
 
 [servers.thunder_storm_ca]
@@ -493,12 +505,12 @@ last_checked_at = "2026-07-20T01:10:54Z"
 hostname = "bbs.wccastle.net"
 port = 2424
 transport = "telnet"
-front_end = "auto"
+front_end = "bbs"
 aliases = []
-status = "unverified"
+status = "online"
 sources = ["classictw"]
-notes = "⚠️ :2424; Wildcat's Castle"
-last_checked_at = "2026-07-20T01:12:21Z"
+notes = "⚠️ :2424; Wildcat's Castle — MS-3b L0: Wildcat! Interactive Net Server → bbs"
+last_checked_at = "2026-07-20T02:06:13Z"
 
 [servers.gaulven_com]
 hostname = "gaulven.com"
@@ -517,7 +529,7 @@ port = 23
 transport = "telnet"
 front_end = "bbs"
 aliases = []
-status = "unverified"
+status = "online"
 sources = ["google-search"]
 notes = "Arcadia; default→23"
-last_checked_at = "2026-07-20T01:10:29Z"
+last_checked_at = "2026-07-20T02:06:10Z"

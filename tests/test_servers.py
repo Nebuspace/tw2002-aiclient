@@ -7,9 +7,11 @@ import pytest
 from twclient import credentials, servers
 
 
-def test_catalog_has_48_servers():
+def test_catalog_has_49_servers():
+    """48 inventory + MS-3b katone alt endpoint (tradewars.cmstactical.net)."""
     rows = servers.list_servers()
-    assert len(rows) == 48
+    assert len(rows) == 49
+    assert any(r["key"] == "tradewars_cmstactical_net" for r in rows)
 
 
 def test_front_end_values_are_contract():
@@ -43,7 +45,7 @@ def test_adding_server_is_catalog_edit_only(tmp_path: Path):
         + "sources = [\"test\"]\n"
     )
     rows = servers.list_servers(path=catalog)
-    assert len(rows) == 49
+    assert len(rows) == 50
     host, port = servers.resolve_endpoint("wo_ms1_tmp_probe", path=catalog)
     assert (host, port) == ("example.invalid", 2345)
 

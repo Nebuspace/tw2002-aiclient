@@ -27,6 +27,22 @@ def test_classify_bbs():
     assert probe.classify_banner(BBS_BANNER) == "bbs"
 
 
+def test_classify_mystic_bbs():
+    """MS-3b: Mystic banner → bbs (was protocol-fail without this anchor)."""
+    banner = "Welcome to Arcadia\nMystic BBS for Win32\nEnter your name:\n"
+    assert probe.classify_banner(banner) == "bbs"
+
+
+def test_classify_wildcat_bbs():
+    """MS-3b: Wildcat banner → bbs."""
+    banner = (
+        "Wildcat! Interactive Net Server\n"
+        "Wildcat's Castle BBS\n"
+        "Please log in:\n"
+    )
+    assert probe.classify_banner(banner) == "bbs"
+
+
 def test_classify_protocol_fail():
     assert probe.classify_banner(PROTO_FAIL) == "protocol-fail"
 

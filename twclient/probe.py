@@ -40,6 +40,9 @@ _BBS_MARKERS = (
     "enter your user name or number",
     "Synchronet BBS",
     "user name or number now",
+    # MS-3b: directory BBS packages that previously fell through to protocol-fail
+    "Mystic BBS",
+    "Wildcat! Interactive Net Server",
 )
 _PROTOCOL_FAIL_MARKERS = (
     "Failed to detect protocol",
