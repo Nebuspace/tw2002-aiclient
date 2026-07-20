@@ -236,6 +236,41 @@ def cmd_servers_list(args):
     print(f"({len(rows)} servers)")
 
 
+def cmd_probe(args):
+    """WO-MS-3: read-only catalog probe (IAC-only L0; optional --menu L1)."""
+    from . import probe as probe_mod
+
+    menu = bool(getattr(args, "menu", False))
+    write_catalog = bool(getattr(args, "write_catalog", False))
+    if getattr(args, "all", False):
+        results = probe_mod.probe_all(menu=menu)
+    else:
+        key = getattr(args, "server", None)
+        if not key:
+            raise SystemExit("tw probe: pass a catalog key or --all")
+        results = [probe_mod.probe_server_key(key, menu=menu)]
+
+    out_path = probe_mod.write_results_file(results)
+    if write_catalog:
+        probe_mod.patch_catalog_status(results)
+
+    if getattr(args, "json", False):
+        print(json.dumps({"ok": True, "results": results, "results_file": str(out_path)}))
+        return
+    print(f"{'KEY':<28} {'CLASS':<14} {'STATUS':<10} {'HOST:PORT'}")
+    for r in results:
+        hp = f"{r.get('host')}:{r.get('port')}"
+        print(
+            f"{r.get('key','?'):<28} {r.get('classification','?'):<14} "
+            f"{r.get('status','?'):<10} {hp}"
+        )
+        if r.get("error"):
+            print(f"  ! {r['error']}")
+    print(f"({len(results)} probed · results → {out_path})")
+    if write_catalog:
+        print("(catalog status/last_checked_at patched)")
+
+
 def cmd_players_list(args):
     """TW-31 CLI wiring (v1): list the multi-character rotation bank.
     Pure client-side, direct `state/player_bank.json` read -- no daemon
@@ -905,6 +940,41 @@ def build_parser():
     servers_sub = servers_p.add_subparsers(dest="servers_cmd", required=True)
     sp_list = servers_sub.add_parser("list", help="list all cataloged servers")
     sp_list.set_defaults(func=cmd_servers_list)
+
+    # WO-MS-3 — read-only probe (announce-first shared cli.py edit)
+    sp = sub.add_parser(
+        "probe",
+        help=(
+            "read-only catalog probe: IAC negotiation only (L0); optional "
+            "--menu peeks the TWGS game list with one CR at ENTER-for-none"
+        ),
+    )
+    sp.add_argument(
+        "server",
+        nargs="?",
+        default=None,
+        help="catalog key (from `tw servers list`); omit with --all",
+    )
+    sp.add_argument(
+        "--all",
+        action="store_true",
+        help="probe every catalog endpoint sequentially (one connection each)",
+    )
+    sp.add_argument(
+        "--menu",
+        action="store_true",
+        help=(
+            "L1: send at most one CR, only at the TWGS '(ENTER for none)' "
+            "prompt, to scrape the game-letter menu; default OFF"
+        ),
+    )
+    sp.add_argument(
+        "--write-catalog",
+        action="store_true",
+        help="patch status + last_checked_at into config/servers.toml",
+    )
+    sp.add_argument("--json", action="store_true", help="JSON output")
+    sp.set_defaults(func=cmd_probe)
 
     return p
 
