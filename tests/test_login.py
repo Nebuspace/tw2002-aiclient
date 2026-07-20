@@ -6,9 +6,11 @@ against twgs.test.example (see login.py's module docstring) without
 depending on literal password text (which is CSPRNG-random for a fresh
 NEW-registration and must not be predictable/hardcoded in a test)."""
 
+import random
+
 import pytest
 
-from twclient.login import LoginError, run_login
+from twclient.login import LoginError, register_with_name_bank, run_login
 from twclient.settle import wait_for_settle
 
 from .conftest import FAKE_HOST, FAKE_PORT
@@ -87,7 +89,7 @@ class FakeLoginSession:
 
 class FakeProfile:
     def __init__(self, name="default", host=FAKE_HOST, port=FAKE_PORT, game_letter="F", handle="AEGIS",
-                 ship_name="Vantage", planet_name="Anchorage", server=None):
+                 ship_name="Vantage", planet_name="Anchorage", server=None, allow_register=True):
         self.name = name
         self.host = host
         self.port = port
@@ -96,6 +98,15 @@ class FakeProfile:
         self.ship_name = ship_name
         self.planet_name = planet_name
         self.server = server  # optional catalog key (WO-MS-1/WO-MS-2); None = today's bare host/port shape
+        # WO-MS-4: defaults True so every pre-existing NEW-registration
+        # test in this file (none of which pass this kwarg) keeps
+        # exercising the registration branch unmodified; the hard-gate
+        # guard tests construct FakeProfile(allow_register=False)
+        # explicitly to prove the refusal.
+        self.allow_register = allow_register
+        self.handle_explicit = handle is not None
+        self.ship_name_explicit = ship_name is not None
+        self.planet_name_explicit = planet_name is not None
 
 
 def _is(expected):
@@ -701,3 +712,297 @@ def test_front_end_unrecognized_value_fails_loudly_never_guesses(monkeypatch):
     with pytest.raises(LoginError, match=r"front_end_unrecognized:server=weird_host:front_end='carrier-pigeon'"):
         run_login(session, profile, get_password=lambda n: "x", save_password=lambda n, pw: None)
     assert session.sent == []
+
+
+# -- WO-MS-4: registration opt-in hard-gate ----------------------------------
+#
+# Auto-creating a character on a real server is a policy call: char_create's
+# dispatch must refuse BEFORE sending the "Y" that starts registration
+# unless the profile has explicitly opted in via `allow_register`.
+
+_PRE_REGISTRATION_STEPS = [
+    {"screen": "Please enter your name (ENTER for none):", "expect": _is("")},
+    {"screen": "<F> Bob the Builder\nSelect a game :", "expect": _is("F")},
+    {"screen": "T - Play Trade Wars 2002\nI - Introduction & Help\nEnter your choice:", "expect": _is("T")},
+    {"screen": "What is your name?", "expect": _is("AEGIS")},
+    {"screen": "Use ANSI graphics?", "expect": _is("Y")},
+    {"screen": "Show today's log? (Y/N) [N]", "expect": _is("N")},
+]
+
+
+def _char_create_screen():
+    return (
+        "You were not found in the player database.\n"
+        "Would you like to start a new character in this game?  (Type Y or N)"
+    )
+
+
+def test_allow_register_false_hard_fails_before_any_registration_keystroke():
+    profile = FakeProfile(allow_register=False)
+    steps = _PRE_REGISTRATION_STEPS + [
+        # Must never be sent -- a send here fails this test's own
+        # assertion inside FakeLoginSession, independent of the
+        # LoginError assertion below.
+        {"screen": _char_create_screen(), "expect": lambda text, secret: False},
+    ]
+    session = FakeLoginSession(steps)
+    with pytest.raises(LoginError, match=r"registration_not_permitted:profile=default:set allow_register=true to opt in"):
+        run_login(session, profile, get_password=lambda n: "x", save_password=lambda n, pw: None)
+    # Exactly the 6 pre-registration sends landed; nothing for char_create.
+    assert session.sent == [("", False), ("F", False), ("T", False), ("AEGIS", False), ("Y", False), ("N", False)]
+
+
+class _ProfileWithoutAllowRegisterAttr:
+    """Mimics a profile object that PREDATES the allow_register field
+    entirely -- belt-and-braces proof of the `getattr(profile,
+    "allow_register", False)` SAFE default, not just the
+    attribute-present-and-False case above."""
+
+    def __init__(self):
+        self.name = "legacy"
+        self.host = FAKE_HOST
+        self.port = FAKE_PORT
+        self.game_letter = "F"
+        self.handle = "AEGIS"
+        self.ship_name = "Vantage"
+        self.planet_name = "Anchorage"
+        self.server = None
+        # deliberately no self.allow_register at all
+
+
+def test_allow_register_missing_attribute_hard_fails_via_safe_default():
+    profile = _ProfileWithoutAllowRegisterAttr()
+    steps = _PRE_REGISTRATION_STEPS + [
+        {"screen": _char_create_screen(), "expect": lambda text, secret: False},
+    ]
+    session = FakeLoginSession(steps)
+    with pytest.raises(LoginError, match=r"registration_not_permitted:profile=legacy"):
+        run_login(session, profile, get_password=lambda n: "x", save_password=lambda n, pw: None)
+    assert session.sent == [("", False), ("F", False), ("T", False), ("AEGIS", False), ("Y", False), ("N", False)]
+
+
+# -- WO-MS-4: NEW-branch prompt-coverage variety -----------------------------
+#
+# Both fixtures below are CONSTRUCTED (never captured live) -- MS-3's own
+# live-probe LOE finding is that every TWGS front-end probed so far is
+# byte-identical, so no modded-server registration prompt has actually been
+# observed yet. These prove the _NEW_BRANCH_VARIANTS registry mechanism
+# (one recognized entry dispatched correctly) and the fail-loud posture for
+# anything NOT in it (never guessed/sent blind), same discipline as
+# state_parser.py's own constructed-not-live fixtures.
+
+def test_new_branch_variant_registry_recognized_prompt_is_answered():
+    profile = FakeProfile()
+    saved = {}
+    steps = _PRE_REGISTRATION_STEPS + [
+        {"screen": _char_create_screen(), "expect": _is("Y")},
+        # CONSTRUCTED: a hypothetical modded server's extra registration
+        # question, seeded into _NEW_BRANCH_VARIANTS to prove the
+        # mechanism, not because any real server has been observed asking it.
+        {"screen": "Enable the weekly news digest?", "expect": _is("N")},
+        {"screen": "Please enter a password for this game account.\nPassword?", "expect": lambda t, s: s is True},
+        {"screen": "Repeat password to verify.\nPassword?", "expect": lambda t, s: s is True},
+        {
+            "screen": (
+                f"Do you wish to make up a new Alias for your Trader Name,\n"
+                f"or would you rather use your BBS name of {profile.handle}?\n"
+                f"Use (N)ew Name or (B)BS Name [B] ?"
+            ),
+            "expect": _is("B"),
+        },
+        {"screen": "What do you want to name your ship? (30 letters)", "expect": _is(profile.ship_name)},
+        {"screen": f"{profile.ship_name} is what you want?", "expect": _is("Y")},
+        {
+            "screen": "What do you want to name your home planet? (Class K-BE, Desert wasteland)\n[---------------------------------------]",
+            "expect": _is(profile.planet_name),
+        },
+        {"screen": "Planet command (?=help) [D]", "expect": _is("Q")},
+        {"screen": "Command [TL=00:00:00]:[24146] (?=Help)? :", "expect": None},
+    ]
+    session = FakeLoginSession(steps)
+    cls, _ = run_login(
+        session, profile, get_password=lambda n: saved.get(n), save_password=lambda n, pw: saved.__setitem__(n, pw)
+    )
+    assert cls == "main_command"
+
+
+def test_new_branch_unrecognized_variant_prompt_fails_loud_never_guesses():
+    """CONSTRUCTED: a hypothetical modded-server question that IS
+    gameplay-affecting (an alignment pick -- exactly the kind of choice
+    _NEW_BRANCH_VARIANTS' own module comment says must never be guessed).
+    Not in the registry -- must raise automaton_stuck rather than loop or
+    send anything for it."""
+    profile = FakeProfile()
+    steps = _PRE_REGISTRATION_STEPS + [
+        {"screen": _char_create_screen(), "expect": _is("Y")},
+        {"screen": "Choose your alignment: (G)ood, (N)eutral, or (E)vil?", "expect": lambda text, secret: False},
+    ]
+    session = FakeLoginSession(steps)
+    with pytest.raises(LoginError, match="automaton_stuck"):
+        run_login(session, profile, get_password=lambda n: "x", save_password=lambda n, pw: None)
+    # The 6 pre-registration sends plus char_create's "Y" landed; nothing
+    # was ever sent for the unrecognized alignment prompt.
+    assert session.sent == [("", False), ("F", False), ("T", False), ("AEGIS", False), ("Y", False), ("N", False), ("Y", False)]
+
+
+# -- WO-MS-4: name-bank collision detection + bounded redraw -----------------
+
+def _bank_collision_steps():
+    """A drawn handle that turns out to already belong to an existing
+    character: straight to the password gate with no char_create in
+    between (the RETURNING shape), same as
+    test_returning_login_without_saved_password_raises_rather_than_guessing
+    above -- but here `bank_draw=True` must turn this into a distinct
+    collision error instead of the generic returning_no_saved_password.
+    Uses `_any` for the handle-echo step (not `_PRE_REGISTRATION_STEPS`'
+    hardcoded "AEGIS") since a bank-drawn handle's exact value isn't known
+    ahead of time."""
+    return [
+        {"screen": "Please enter your name (ENTER for none):", "expect": _is("")},
+        {"screen": "<F> Bob the Builder\nSelect a game :", "expect": _is("F")},
+        {"screen": "T - Play Trade Wars 2002\nI - Introduction & Help\nEnter your choice:", "expect": _is("T")},
+        {"screen": "What is your name?", "expect": _any},
+        {"screen": "Use ANSI graphics?", "expect": _is("Y")},
+        {"screen": "Show today's log? (Y/N) [N]", "expect": _is("N")},
+        {"screen": "Password?", "expect": lambda text, secret: False},  # never reached -- raises first
+    ]
+
+
+def test_run_login_bank_draw_collision_raises_distinct_error_and_sends_nothing_secret():
+    profile = FakeProfile(handle="SomeoneElse")
+    session = FakeLoginSession(_bank_collision_steps())
+    with pytest.raises(LoginError, match=r"bank_draw_handle_collision:profile=default:handle=SomeoneElse"):
+        run_login(session, profile, get_password=lambda n: None, save_password=lambda n, pw: None, bank_draw=True)
+    assert all(not secret for _text, secret in session.sent)  # no password was ever sent
+
+
+def _new_registration_steps_for_bank_draw(ship_name, planet_name):
+    """Same shape as _new_registration_steps, but the handle-echo step
+    accepts ANY value (`_any`) since the caller doesn't control which
+    handle register_with_name_bank's rng draws."""
+    seen_password = {}
+
+    def _expect_password_consistent(text, secret):
+        if not secret:
+            return False
+        if "value" not in seen_password:
+            seen_password["value"] = text
+        return text == seen_password["value"]
+
+    return [
+        {"screen": "Please enter your name (ENTER for none):", "expect": _is("")},
+        {"screen": "<F> Bob the Builder\nSelect a game :", "expect": _is("F")},
+        {"screen": "T - Play Trade Wars 2002\nI - Introduction & Help\nEnter your choice:", "expect": _is("T")},
+        {"screen": "What is your name?", "expect": _any},
+        {"screen": "Use ANSI graphics?", "expect": _is("Y")},
+        {"screen": "Show today's log? (Y/N) [N]", "expect": _is("N")},
+        {"screen": _char_create_screen(), "expect": _is("Y")},
+        {"screen": "Please enter a password for this game account.\nPassword?", "expect": _expect_password_consistent},
+        {"screen": "Repeat password to verify.\nPassword?", "expect": _expect_password_consistent},
+        {
+            "screen": "Do you wish to make up a new Alias for your Trader Name,\nor would you rather use your BBS name of X?\nUse (N)ew Name or (B)BS Name [B] ?",
+            "expect": _is("B"),
+        },
+        {"screen": "What do you want to name your ship? (30 letters)", "expect": _is(ship_name)},
+        {"screen": f"{ship_name} is what you want?", "expect": _is("Y")},
+        {
+            "screen": "What do you want to name your home planet? (Class K-BE, Desert wasteland)\n[---------------------------------------]",
+            "expect": _is(planet_name),
+        },
+        {"screen": "Planet command (?=help) [D]", "expect": _is("Q")},
+        {"screen": "Command [TL=00:00:00]:[24146] (?=Help)? :", "expect": None},
+    ]
+
+
+def _write_name_bank(tmp_path, handles):
+    path = tmp_path / "name_bank.toml"
+    handles_toml = ", ".join(f'"{h}"' for h in handles)
+    path.write_text(f'[names]\nhandles = [{handles_toml}]\nships = ["Ship"]\nplanets = ["World"]\n')
+    return path
+
+
+def test_register_with_name_bank_redraws_after_collision_then_succeeds(tmp_path):
+    """The name-bank rider's bounded retry: the first two drawn identities
+    collide with an existing character; register_with_name_bank obtains a
+    FRESH session (a collided session can never be resumed -- see its own
+    docstring) and redraws each time, succeeding on the third attempt."""
+    bank_path = _write_name_bank(tmp_path, ["Collide1", "Collide2", "FreshOne"])
+    from twclient.credentials import Profile
+
+    profile = Profile(
+        name="crawler", host=FAKE_HOST, port=FAKE_PORT, game_letter="F",
+        handle=None, ship_name="Vantage", planet_name="Anchorage", allow_register=True,
+    )
+    saved = {}
+    attempts = {"n": 0}
+
+    def session_provider():
+        attempts["n"] += 1
+        if attempts["n"] <= 2:
+            return FakeLoginSession(_bank_collision_steps())
+        return FakeLoginSession(_new_registration_steps_for_bank_draw("Vantage", "Anchorage"))
+
+    cls, _ = register_with_name_bank(
+        session_provider, profile, get_password=lambda n: saved.get(n),
+        save_password=lambda n, pw: saved.__setitem__(n, pw),
+        name_bank_path=bank_path, rng=random.Random(1234),
+    )
+    assert cls == "main_command"
+    assert attempts["n"] == 3
+    assert "crawler" in saved
+
+
+def test_register_with_name_bank_exhausts_attempts_then_fails_loud(tmp_path):
+    """Every draw collides -- must fail loudly with a distinct,
+    attempt-count-naming error rather than retrying forever."""
+    bank_path = _write_name_bank(tmp_path, ["AlwaysCollides"])
+    from twclient.credentials import Profile
+
+    profile = Profile(
+        name="crawler", host=FAKE_HOST, port=FAKE_PORT, game_letter="F",
+        handle=None, ship_name="Vantage", planet_name="Anchorage", allow_register=True,
+    )
+
+    def session_provider():
+        return FakeLoginSession(_bank_collision_steps())
+
+    with pytest.raises(LoginError, match=r"bank_draw_exhausted_attempts:5"):
+        register_with_name_bank(
+            session_provider, profile, get_password=lambda n: None, save_password=lambda n, pw: None,
+            name_bank_path=bank_path, rng=random.Random(7),
+        )
+
+
+def test_register_with_name_bank_propagates_unrelated_login_errors_unretried(tmp_path):
+    """A failure that ISN'T a bank-draw collision (here: allow_register
+    left False on the per-attempt profile it builds) must propagate
+    immediately -- register_with_name_bank only retries the specific
+    collision signature, never masks a different failure as a redraw."""
+    bank_path = _write_name_bank(tmp_path, ["Whatever"])
+    from twclient.credentials import Profile
+
+    profile = Profile(
+        name="crawler", host=FAKE_HOST, port=FAKE_PORT, game_letter="F",
+        handle=None, ship_name="Vantage", planet_name="Anchorage", allow_register=False,
+    )
+    calls = {"n": 0}
+
+    def session_provider():
+        calls["n"] += 1
+        steps = [
+            {"screen": "Please enter your name (ENTER for none):", "expect": _is("")},
+            {"screen": "<F> Bob the Builder\nSelect a game :", "expect": _is("F")},
+            {"screen": "T - Play Trade Wars 2002\nI - Introduction & Help\nEnter your choice:", "expect": _is("T")},
+            {"screen": "What is your name?", "expect": _any},
+            {"screen": "Use ANSI graphics?", "expect": _is("Y")},
+            {"screen": "Show today's log? (Y/N) [N]", "expect": _is("N")},
+            {"screen": _char_create_screen(), "expect": lambda text, secret: False},
+        ]
+        return FakeLoginSession(steps)
+
+    with pytest.raises(LoginError, match="registration_not_permitted"):
+        register_with_name_bank(
+            session_provider, profile, get_password=lambda n: None, save_password=lambda n, pw: None,
+            name_bank_path=bank_path, rng=random.Random(3),
+        )
+    assert calls["n"] == 1  # never retried a non-collision failure

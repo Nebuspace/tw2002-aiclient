@@ -14,6 +14,15 @@
 #
 # ship_name / planet_name are optional; default to "<handle>Ship" /
 # "<handle>World" if omitted.
+#
+# WO-MS-4: `allow_register = true` opts a profile IN to automated
+# NEW-character registration -- default false/omitted means login.py
+# refuses to register (registration_not_permitted) rather than silently
+# creating a character. Only an allow_register profile may also omit
+# `handle` entirely: twclient/name_bank.py then draws a fresh
+# handle/ship_name/planet_name per registration attempt instead of
+# pinning one (see register_with_name_bank()). Any of those three fields
+# you DO set explicitly always wins over the bank draw.
 
 [default]
 host = "your-twgs-host.example"
@@ -22,6 +31,7 @@ game_letter = "F"
 handle = "YourHandle"
 # ship_name = "MyShip"
 # planet_name = "MyWorld"
+# allow_register = true
 
 # Example catalog-backed profile (host/port filled from servers.toml):
 # [catalog_demo]

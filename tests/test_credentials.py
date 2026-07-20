@@ -54,6 +54,67 @@ def test_load_profile_incomplete_raises(tmp_path):
         credentials.load_profile("default", profiles_path=p)
 
 
+# -- WO-MS-4: allow_register policy gate -------------------------------------
+
+def test_allow_register_defaults_false_for_every_pre_existing_profile_shape(tmp_path):
+    p = _write_profiles(
+        tmp_path,
+        '[default]\nhost = "example.com"\nport = 23\ngame_letter = "F"\nhandle = "AEGIS"\n',
+    )
+    profile = credentials.load_profile("default", profiles_path=p)
+    assert profile.allow_register is False
+
+
+def test_allow_register_true_is_read_from_toml(tmp_path):
+    p = _write_profiles(
+        tmp_path,
+        '[default]\nhost = "example.com"\nport = 23\ngame_letter = "F"\nhandle = "AEGIS"\nallow_register = true\n',
+    )
+    profile = credentials.load_profile("default", profiles_path=p)
+    assert profile.allow_register is True
+
+
+def test_missing_handle_raises_unless_allow_register_is_set(tmp_path):
+    """A normal profile still requires `handle` exactly as before this
+    change -- only an allow_register=true profile may omit it (the
+    name-bank rider draws one fresh per attempt instead)."""
+    p = _write_profiles(tmp_path, '[default]\nhost = "example.com"\nport = 23\ngame_letter = "F"\n')
+    with pytest.raises(credentials.CredentialError, match=r"profile_incomplete.*handle"):
+        credentials.load_profile("default", profiles_path=p)
+
+
+def test_missing_handle_is_allowed_when_allow_register_is_true(tmp_path):
+    p = _write_profiles(
+        tmp_path,
+        '[default]\nhost = "example.com"\nport = 23\ngame_letter = "F"\nallow_register = true\n',
+    )
+    profile = credentials.load_profile("default", profiles_path=p)
+    assert profile.handle is None
+    assert profile.ship_name is None  # never derives "NoneShip" from a blank handle
+    assert profile.planet_name is None
+    assert profile.allow_register is True
+
+
+def test_profile_explicit_flags_reflect_what_the_caller_actually_passed():
+    """The name-bank rider (twclient/name_bank.py) distinguishes an
+    explicitly-set field from a defaulted/blank one via these flags --
+    they must reflect the raw constructor argument, before any
+    defaulting, not the post-defaulting value."""
+    explicit = credentials.Profile(
+        name="p", host="h", port=23, game_letter="F", handle="AEGIS", ship_name="Vantage", planet_name="Anchorage",
+    )
+    assert (explicit.handle_explicit, explicit.ship_name_explicit, explicit.planet_name_explicit) == (True, True, True)
+
+    handle_only = credentials.Profile(name="p", host="h", port=23, game_letter="F", handle="AEGIS")
+    assert handle_only.handle_explicit is True
+    # ship_name/planet_name were DEFAULTED from handle, not explicitly given.
+    assert (handle_only.ship_name_explicit, handle_only.planet_name_explicit) == (False, False)
+    assert (handle_only.ship_name, handle_only.planet_name) == ("AEGISShip", "AEGISWorld")
+
+    blank = credentials.Profile(name="p", host="h", port=23, game_letter="F", allow_register=True)
+    assert (blank.handle_explicit, blank.ship_name_explicit, blank.planet_name_explicit) == (False, False, False)
+
+
 def test_list_profiles(tmp_path):
     p = _write_profiles(
         tmp_path,

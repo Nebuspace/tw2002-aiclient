@@ -66,8 +66,30 @@ single keystroke -- BBS-menu navigation is a declined Wave-2 item, not a
 silently-attempted best-effort, and the current live catalog has zero
 `bbs` entries (pruned MS-3c) so this is a guard for future adds, not a
 reachable path today. See `_resolve_front_end`/`_bbs_unsupported_message`.
+
+**WO-MS-4 (registration policy gate + prompt variety + name bank):**
+auto-creating a character on a real server is a policy call, not a pure
+mechanics one -- `char_create`'s dispatch below hard-gates on
+`profile.allow_register` (default False) BEFORE sending the "Y" that
+starts registration, exactly the same posture WO-MS-2 uses for `bbs`.
+`_NEW_BRANCH_VARIANTS` is an extension point for modded/variant TWGS
+registration prompts: MS-3's own live-probe finding (see
+`audit/tw2002-multiserver/multiserver-wo-plan-2026-07-19.md`) is that
+every front-end probed so far is byte-identical, so this registry ships
+with a single CONSTRUCTED (never live-captured) entry proving the
+mechanism end-to-end, not a set of guessed real-world variants -- an
+unrecognized NEW-branch prompt still falls through to the same
+stagnation/`automaton_stuck` path every unrecognized screen already uses.
+`register_with_name_bank()` is the bounded-retry wrapper around
+`run_login(bank_draw=True, ...)` for a profile that leaves handle/
+ship_name/planet_name unset (`twclient/name_bank.py`): if a drawn handle
+turns out to already belong to an existing character (the RETURNING
+branch instead of the expected `char_create`), that's a collision, not a
+missing-password failure, and it redraws with a fresh session rather than
+guessing or reusing someone else's account.
 """
 
+import random
 import re
 
 from .settle import send_and_confirm
@@ -97,6 +119,30 @@ _PLANET_NAME_BOX_RE = re.compile(r"^\[-+\]$")
 _PLANET_COMMAND_RE = re.compile(r"planet\s+command", re.I)
 _OUTER_NAME_PROMPT_RE = re.compile(r"enter\s+for\s+none", re.I)
 
+# -- WO-MS-4: NEW-branch prompt-coverage extension point --------------------
+#
+# (pattern, response) pairs checked only while `state["registering"]` is
+# True (see _decide below), after every established sub-step above -- so a
+# real, currently-recognized step always wins first. Every response here
+# must be a purely cosmetic/non-committal (Y/N or similar) confirmation
+# with NO game-state effect; this registry is never the place to encode a
+# GUESS at a gameplay-affecting choice (this project has been burned by
+# exactly that shape before -- DESIGN-v2's "-75 alignment" auto-defaulted
+# colonist prompt). A pattern that doesn't match anything here still falls
+# through to the same unrecognized-screen/`automaton_stuck` path every
+# other unrecognized screen already uses -- never guessed, never sent
+# blind.
+#
+# The one entry below is CONSTRUCTED, never captured against a real
+# server (MS-3's own live-probe LOE finding is that every TWGS front-end
+# probed so far is byte-identical -- no modded variant has actually been
+# observed): it exists to prove the registry mechanism end-to-end (see
+# tests/test_login.py's test_new_branch_variant_registry_* pair), and is
+# the template for the first REAL variant once one is captured live.
+_NEW_BRANCH_VARIANTS = [
+    (re.compile(r"enable\s+the\s+weekly\s+news\s+digest\??", re.I), "N"),
+]
+
 
 class LoginError(Exception):
     """The automaton could not make progress toward the target
@@ -107,7 +153,8 @@ class LoginError(Exception):
     never send a keystroke it isn't sure about."""
 
 
-def run_login(session, profile, get_password, save_password, target="main_command", trace=None, servers_path=None):
+def run_login(session, profile, get_password, save_password, target="main_command", trace=None, servers_path=None,
+              bank_draw=False):
     """Drive `session` from wherever it currently is to `target`
     classification. `get_password(profile_name) -> str|None` and
     `save_password(profile_name, password)` are injected (not imported
@@ -116,6 +163,17 @@ def run_login(session, profile, get_password, save_password, target="main_comman
     twclient.credentials.get_password/save_password. `servers_path`
     overrides the server catalog location (tests only; real callers
     leave it None and get `twclient.servers.SERVERS_PATH`).
+
+    `bank_draw` (WO-MS-4, default False -- every existing caller/test is
+    unaffected): set True only when `profile.handle` was freshly drawn
+    from the name bank rather than pinned by the operator (see
+    `register_with_name_bank`). It changes exactly one thing: reaching
+    the RETURNING branch (no `char_create` seen, i.e. the handle already
+    belongs to an existing character) raises the distinct
+    `bank_draw_handle_collision` LoginError instead of the generic
+    `returning_no_saved_password` -- a drawn-and-collided handle is a
+    "redraw and retry" signal, not the ordinary "this profile's saved
+    credential is missing/stale" failure.
 
     Returns (final_classification, steps_taken). Raises LoginError on
     failure to progress. Never returns without either reaching `target`
@@ -137,6 +195,7 @@ def run_login(session, profile, get_password, save_password, target="main_comman
         "registering": None,  # None = undetermined yet; True/False once char_create is (or isn't) seen
         "password": None,
         "password_attempts": 0,
+        "bank_draw": bank_draw,  # WO-MS-4
     }
     stagnant_rounds = 0
     last_signature = None
@@ -292,6 +351,17 @@ def _decide(cls, text, prompt, profile, state, get_password, save_password):
         return "T", False, None
 
     if cls == "char_create":
+        # WO-MS-4 hard-gate: auto-creating a character on a real server is
+        # a policy call, not a pure mechanics one (same posture WO-MS-2
+        # uses for `bbs`) -- refuse BEFORE the "Y" that starts
+        # registration if the profile hasn't explicitly opted in. Checked
+        # every time this classification is seen, not just once, so a
+        # non-opted-in profile can never be talked into registering no
+        # matter how it got to this screen.
+        if not getattr(profile, "allow_register", False):
+            raise LoginError(
+                f"registration_not_permitted:profile={profile.name}:set allow_register=true to opt in"
+            )
         # This prompt only appears when the handle was NOT found in the
         # player database -- answering it is structurally always "yes,
         # create one" (DESIGN-v2 B3).
@@ -303,6 +373,20 @@ def _decide(cls, text, prompt, profile, state, get_password, save_password):
             # Reached a password gate without ever seeing char_create --
             # the handle WAS found in the database. RETURNING branch.
             state["registering"] = False
+            if state["bank_draw"]:
+                # WO-MS-4: this handle was FRESHLY DRAWN from the name
+                # bank for a NEW registration, not pinned by the operator
+                # -- landing in RETURNING means it collided with an
+                # existing character, not that a real saved credential is
+                # missing/stale. Distinct error so the caller
+                # (register_with_name_bank) can tell "redraw and retry"
+                # apart from a genuine returning_no_saved_password
+                # failure, and so this never falls through to sending
+                # whatever password.py happens to have on file for
+                # `profile.name` under a DIFFERENT character's handle.
+                raise LoginError(
+                    f"bank_draw_handle_collision:profile={profile.name}:handle={profile.handle}"
+                )
 
         if state["registering"]:
             if state["password"] is None:
@@ -361,6 +445,19 @@ def _decide(cls, text, prompt, profile, state, get_password, save_password):
     if _PLANET_COMMAND_RE.search(prompt):
         return "Q", False, None
 
+    # WO-MS-4: modded/variant-server NEW-branch extras. Scoped to
+    # state["registering"] so this can never fire for the RETURNING
+    # branch or before char_create has even been seen -- see
+    # _NEW_BRANCH_VARIANTS' own module-level comment. Checked LAST, after
+    # every established sub-step above, so a real recognized step always
+    # takes priority; anything that matches nothing here (the common
+    # case -- no live variant has been observed) falls through to the
+    # same unrecognized-screen/automaton_stuck path as always.
+    if state["registering"]:
+        for pattern, response in _NEW_BRANCH_VARIANTS:
+            if pattern.search(prompt):
+                return response, False, None
+
     return None
 
 
@@ -368,3 +465,67 @@ def _fresh_password():
     from .credentials import generate_password
 
     return generate_password()
+
+
+def register_with_name_bank(session_provider, profile, get_password, save_password, target="main_command",
+                             name_bank_path=None, rng=None, max_attempts=5, trace=None, servers_path=None):
+    """WO-MS-4 rider: drives `run_login` with a fresh (handle, ship_name,
+    planet_name) drawn from the name bank (`twclient/name_bank.py`) on
+    each attempt, for a `profile` that leaves those fields unset in
+    `profiles.toml` (any field it DOES set explicitly always wins --
+    resolve_bank_identity() never overrides it). `profile.allow_register`
+    must already be True; this function doesn't set it -- it's the
+    operator's opt-in, not this helper's to grant.
+
+    `session_provider` is a zero-arg callable returning a fresh,
+    already-connected, ready-to-drive session for each attempt.
+    Reconnecting an in-progress TWGS session mid-flow isn't a thing --
+    once the server has moved past the name prompt there's no way back to
+    it short of a genuinely new connection, so a collision (see below)
+    always starts over from a fresh session, never resumes the old one.
+
+    Bounded retry: if the drawn handle already belongs to an existing
+    character on this server -- `run_login(bank_draw=True)` raises
+    `bank_draw_handle_collision` the moment it lands in the RETURNING
+    branch instead of the expected NEW `char_create` prompt -- a new
+    candidate is drawn and retried, up to `max_attempts` times, before
+    failing loudly. Any OTHER LoginError (an unrelated failure -- a stuck
+    automaton, an exhausted password retry, a front_end gate, an
+    unrecognized NEW-branch prompt) propagates immediately, unretried.
+
+    `rng` is an injectable `random.Random` (deterministic tests); `name_bank_path`
+    overrides the bank file location (tests only). Returns whatever
+    `run_login` returns on success: `(final_classification, steps_taken)`.
+    """
+    from . import name_bank as name_bank_mod
+    from .credentials import Profile
+
+    rng = rng or random.Random()
+    last_error = None
+
+    for _attempt in range(max_attempts):
+        session = session_provider()
+        handle, ship_name, planet_name = name_bank_mod.resolve_bank_identity(profile, rng=rng, path=name_bank_path)
+        attempt_profile = Profile(
+            name=profile.name,
+            host=profile.host,
+            port=profile.port,
+            game_letter=profile.game_letter,
+            handle=handle,
+            ship_name=ship_name,
+            planet_name=planet_name,
+            server=profile.server,
+            allow_register=getattr(profile, "allow_register", False),
+        )
+        try:
+            return run_login(
+                session, attempt_profile, get_password, save_password, target=target, trace=trace,
+                servers_path=servers_path, bank_draw=True,
+            )
+        except LoginError as exc:
+            if "bank_draw_handle_collision" not in str(exc):
+                raise
+            last_error = exc
+            continue
+
+    raise LoginError(f"bank_draw_exhausted_attempts:{max_attempts}:last={last_error}")
