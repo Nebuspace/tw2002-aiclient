@@ -14,11 +14,18 @@ from twclient.spectate_layout import (
     RIGHT_GUTTER_MIN_COLS,
     VIEWPORT_H,
     VIEWPORT_W,
+    GoalsSnapshot,
+    aggregate_world_metrics,
+    compose_autonomy_headline,
     compose_dashboard,
     compose_decisions_placeholder,
     compose_hud_cells,
     compose_live_metrics,
+    compose_phase2_side_panel,
     compose_port_panel,
+    compose_primary_goals_lines,
+    compute_autonomy_ratio,
+    format_chain_summary,
     format_freshness,
     format_idle_age,
     format_sidebar,
@@ -28,6 +35,7 @@ from twclient.spectate_layout import (
     gauge_semantic,
     is_recent,
     render_bar_meter,
+    stamp_world_metrics,
     render_plain,
     render_sparkline,
     status_semantic,
@@ -522,6 +530,124 @@ def test_compose_live_metrics_reads_tracked_tuple_values():
         "STATIONS": "12", "PLANETS": "3", "FIGHTERS": "40",
         "MINES": "2", "PROBLEMS": "1",
     }
+
+
+def test_aggregate_world_metrics_counts_ports_threats_landmarks():
+    sectors = [
+        {"sector_id": 1, "port": {"class": 1}, "threats": {"mines": False, "fighters": None},
+         "landmarks": [], "formation_membership": None},
+        {"sector_id": 2, "port": None, "threats": {"mines": True, "fighters": 5},
+         "landmarks": ["Own Planet"], "formation_membership": ["one-way"]},
+        {"sector_id": 3, "port": {"class": 3}, "threats": {"mines": False, "fighters": None},
+         "landmarks": ["StarDock"], "formation_membership": []},
+    ]
+    m = aggregate_world_metrics(sectors)
+    assert m == {
+        "stations_found": 2,
+        "planets_found": 1,
+        "fighters_seen": 1,
+        "mines_seen": 1,
+        "problem_sectors": 1,  # sector 2 only (mines + fighters + one-way)
+    }
+
+
+def test_stamp_world_metrics_feeds_compose_live_metrics():
+    metrics = aggregate_world_metrics([
+        {"sector_id": 1, "port": {"class": 1}, "threats": {"mines": False, "fighters": None},
+         "landmarks": [], "formation_membership": None},
+        {"sector_id": 2, "port": None, "threats": {"mines": True, "fighters": None},
+         "landmarks": [], "formation_membership": None},
+    ])
+    tracked = stamp_world_metrics({}, metrics, now=9.0)
+    by_label = {r["label"]: r["value"] for r in compose_live_metrics(tracked)}
+    assert by_label["STATIONS"] == "1"
+    assert by_label["MINES"] == "1"
+    assert by_label["PROBLEMS"] == "1"
+
+
+def test_compute_autonomy_ratio_trainer_over_ai_plus_trainer():
+    entries = [
+        {"actor": "ai"},
+        {"actor": "ai"},
+        {"actor": "trainer"},
+        {"actor": "human"},
+        {"actor": "trainer"},
+    ]
+    data = compute_autonomy_ratio(entries)
+    assert data["ai"] == 2
+    assert data["trainer"] == 2
+    assert data["human"] == 1
+    assert data["ratio"] == 0.5
+    assert data["pct_display"] == "50%"
+
+
+def test_compute_autonomy_ratio_empty_and_window():
+    assert compute_autonomy_ratio([])["pct_display"] == "—"
+    assert compute_autonomy_ratio([])["ratio"] is None
+    entries = [{"actor": "ai"}] * 10 + [{"actor": "trainer"}] * 10
+    data = compute_autonomy_ratio(entries, window=5)
+    assert data["ai"] == 0
+    assert data["trainer"] == 5
+    assert data["pct_display"] == "100%"
+
+
+def test_compose_hud_cells_appends_autonomy_when_provided():
+    # autonomy kwarg is accepted but does not grow the 5-cell ship HUD
+    # (a 6th 3-row cell would clip PORT meters in the gutter).
+    cells = compose_hud_cells({}, now=1.0, autonomy=compute_autonomy_ratio([{"actor": "trainer"}]))
+    assert [c["label"] for c in cells] == [
+        "CREDITS", "SECTOR", "TURNS", "CARGO", "PROFIT",
+    ]
+    assert compose_autonomy_headline(compute_autonomy_ratio([{"actor": "trainer"}]))["value"] == "100%"
+    assert compose_autonomy_headline(None)["value"] == "—"
+
+
+def test_compose_primary_goals_and_chain_highlight():
+    from twclient.chains import ProfitChain, TradeHop
+    lines = compose_primary_goals_lines(GoalsSnapshot(
+        stardock_found=True, stardock_sectors=(4223,), known_sectors=40,
+        formations=2, longest_chain_hops=3, upgrade_status="HOLD",
+        holds_status="85/125",
+    ))
+    assert any("StarDock" in ln and "✓" in ln for ln in lines)
+    assert any("4223" in ln for ln in lines)
+    chain = ProfitChain(
+        sectors=(1, 2, 3, 1),
+        hops=(
+            TradeHop(1, 2, "A", 10, 1),
+            TradeHop(2, 3, "B", 10, 1),
+            TradeHop(3, 1, "C", 10, 1),
+        ),
+        overall_profit=30,
+        turns=3,
+        cr_per_turn=10.0,
+        cr_per_execution=30.0,
+    )
+    in_chain = format_chain_summary(chain, current_sector=2, cols=40)
+    assert any("★" in ln for ln in in_chain)
+    assert any("here ★2" in ln for ln in in_chain)
+    panel = compose_phase2_side_panel(
+        GoalsSnapshot(known_sectors=5),
+        {"sectors": [10, 11, 10], "steps": 2, "demo_profit": 50},
+        current_sector=10,
+        width=30,
+    )
+    assert "— GOALS —" in panel and "— CHAIN —" in panel
+
+
+def test_render_plain_includes_phase2_sections():
+    text = render_plain({
+        "main": ["hi"],
+        "sidebar": ["Sector: 1"],
+        "ticker": [],
+        "status": "STATUS ok",
+        "metrics": [{"label": "STATIONS", "value": "3"}],
+        "autonomy": {"pct_display": "42%"},
+        "goals_chain": ["— GOALS —", "· map 9s"],
+    })
+    assert "METRICS" in text and "STATIONS" in text
+    assert "AUTONOMY" in text and "42%" in text
+    assert "GOALS / CHAIN" in text
 
 
 def test_compose_decisions_placeholder_is_nonempty():

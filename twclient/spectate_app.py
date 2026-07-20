@@ -38,12 +38,16 @@ from .spectate_layout import (
     MIN_LINES,
     TICKER_FLASH_DURATION_S,
     TICKER_MAX,
+    GoalsSnapshot,
+    aggregate_world_metrics,
     compose_control_strip,
     compose_dashboard,
     compose_decisions_placeholder,
     compose_hud_cells,
     compose_live_metrics,
+    compose_phase2_side_panel,
     compose_port_panel,
+    compute_autonomy_ratio,
     format_idle_age,
     format_loops_library_header,
     format_loops_library_row,
@@ -54,17 +58,24 @@ from .spectate_layout import (
     longest_chain_steps,
     render_plain,
     sort_trade_loop_chains,
+    stamp_world_metrics,
     status_semantic,
     update_tracked_stats,
     waiting_session_screen,
 )
 from .explore import (
     cycle_explore_mode,
+    find_landmark_sectors,
     format_explore_decision_lines,
+    known_graph,
     plan_find_formations,
     plan_find_stardock,
     plan_map_fill,
 )
+from .formations import catalog_world
+from . import game_data
+from . import ledger
+from . import world_model
 from .world_model import WORLD_DIR
 import os
 
@@ -334,6 +345,86 @@ def _resolve_world_id():
     except OSError:
         pass
     return None
+
+
+def _stamp_live_world_metrics(tracked, now):
+    """WO-P2-a: fill TW-08 metric keys from the world-model (read-only)."""
+    wid = _resolve_world_id()
+    if not wid:
+        return tracked
+    try:
+        sectors = world_model.all_sectors(wid)
+    except OSError:
+        return tracked
+    return stamp_world_metrics(tracked, aggregate_world_metrics(sectors), now)
+
+
+def _autonomy_from_ledger():
+    """WO-P2-d: §15.1 ratio from ledger actor counts (read-only)."""
+    try:
+        entries = ledger.read_entries()
+    except OSError:
+        entries = []
+    return compute_autonomy_ratio(entries)
+
+
+def _build_goals_snapshot(world_id, chain=None):
+    """WO-P2-b: derive primary-goal status from engines + world-model (read-only)."""
+    if not world_id:
+        return GoalsSnapshot()
+    try:
+        dock = find_landmark_sectors(world_id, "StarDock")
+        graph = known_graph(world_id)
+        catalog = catalog_world(world_id)
+        formations = len(catalog.formations)
+        genesis = len(getattr(catalog, "genesis_candidates", ()) or ())
+    except OSError:
+        return GoalsSnapshot()
+    hops = None
+    if chain is not None:
+        if hasattr(chain, "hops"):
+            hops = len(chain.hops)
+        elif isinstance(chain, dict):
+            hops = int(chain.get("steps") or 0) or None
+    # P1-b price schema (hub relay): None = unknown → never guess/zero.
+    upgrade_status = "price?"
+    try:
+        hold_quote = game_data.get_cargo_hold_price(world_id)
+        if hold_quote is not None and getattr(hold_quote, "cost_per_hold", None) is not None:
+            upgrade_status = f"{int(hold_quote.cost_per_hold)}/h"
+    except (OSError, TypeError, ValueError):
+        upgrade_status = "price?"
+    return GoalsSnapshot(
+        stardock_found=bool(dock),
+        stardock_sectors=dock,
+        known_sectors=len(graph),
+        formations=formations,
+        genesis_candidates=genesis,
+        longest_chain_hops=hops,
+        upgrade_status=upgrade_status,
+        holds_status="—",
+    )
+
+
+def _longest_chain_for_panel(sock_path):
+    """Prefer skill-library longest hop chain (live list_skills); else None.
+
+    World-model → TradeHop margin adapter needs absolute buy/sell prices
+    (not yet on port commodity records); until then the library is the
+    truthful longest-chain source for the TUI.
+    """
+    resp = _send_control(sock_path, "list_skills")
+    raw = resp.get("loops", []) if resp and resp.get("ok") else []
+    loops = sort_trade_loop_chains(raw)
+    if not loops:
+        return None
+    max_hops = longest_chain_steps(loops)
+    if max_hops <= 0:
+        return loops[0]
+    return next(
+        (loop for loop in loops if int(loop.get("steps") or 0) == max_hops),
+        loops[0],
+    )
 
 
 def _explore_plan_for_mode(mode, world_id, sector):
@@ -725,9 +816,9 @@ def _draw_outer_frame(win, region, glyphs, palette):
     win.noutrefresh()
 
 
-def _draw_decisions(win, region, lines, glyphs, palette):
-    """TW-08 Decisions box — titled + bordered; placeholder lines until
-    the coaching engine (TW-13) feeds real recommendations."""
+def _draw_decisions(win, region, lines, glyphs, palette, title=None):
+    """TW-08 Decisions box — titled + bordered; placeholder / explore /
+    Phase-2 GOALS+CHAIN lines feed the same pane."""
     win.erase()
     h, w = region["h"], region["w"]
     accent_attr = palette.attr_for("cyan", "default", False)
@@ -736,8 +827,9 @@ def _draw_decisions(win, region, lines, glyphs, palette):
         glyphs["hud_tl"], glyphs["hud_tr"], glyphs["hud_bl"], glyphs["hud_br"],
         glyphs["hud_h"], glyphs["hud_v"], accent_attr,
     )
+    label = title or region.get("title") or "DECISIONS"
     try:
-        win.addnstr(0, 2, " DECISIONS ", max(0, w - 4), accent_attr)
+        win.addnstr(0, 2, f" {label} ", max(0, w - 4), accent_attr)
     except curses.error:
         pass
     col = 2
@@ -746,7 +838,7 @@ def _draw_decisions(win, region, lines, glyphs, palette):
         if row >= h - 1:
             break
         try:
-            win.addnstr(row, col, line, max(0, w - col - 1), curses.A_DIM if hasattr(curses, "A_DIM") else curses.A_NORMAL)
+            win.addnstr(row, col, line, max(0, w - col - 1), curses.A_NORMAL)
         except curses.error:
             pass
         row += 1
@@ -1042,6 +1134,7 @@ def _run(stdscr, client, sock_path, pid_path, unicode_ok):
     flash_until = 0.0
     library = {"open": False, "loops": [], "selected": 0, "pending_cycles": 1, "confirm": None}
     explore_state = {"mode": "off"}
+    phase2_cache = {"chain": None, "chain_ts": 0.0}
 
     windows = {}
     regions = None
@@ -1106,6 +1199,8 @@ def _run(stdscr, client, sock_path, pid_path, unicode_ok):
                 status = new_status
                 status_poll_ts = now
                 last_status_poll = now
+                phase2_cache["chain"] = _longest_chain_for_panel(sock_path)
+                phase2_cache["chain_ts"] = now
                 # Intentionally NOT got_content for ordinary polls — only
                 # the connected-flip above may mark viewport dirty
                 # (WO-SPECTATE-FLICKER).
@@ -1165,16 +1260,20 @@ def _run(stdscr, client, sock_path, pid_path, unicode_ok):
                 flash_active=flash_active, got_content=got_content,
                 calm_idle=not connected,
                 explore_mode=explore_state["mode"],
+                phase2_cache=phase2_cache,
             )
     finally:
         signal.signal(signal.SIGWINCH, prev_handler)
         signal.signal(signal.SIGINT, prev_sigint)
 
 
-def _render(windows, regions, event, tracked, ticker_history, status, palette, glyphs, now, anim_tick, idle_age, semantic, flash_active, got_content, calm_idle=False, explore_mode="off"):
+def _render(windows, regions, event, tracked, ticker_history, status, palette, glyphs, now, anim_tick, idle_age, semantic, flash_active, got_content, calm_idle=False, explore_mode="off", phase2_cache=None):
     connected = status.get("connected", False)
     accent_attr = palette.attr_for("cyan", "default", True)
     muted_attr = curses.A_DIM if hasattr(curses, "A_DIM") else curses.A_NORMAL
+    tracked = _stamp_live_world_metrics(tracked, now)
+    autonomy = _autonomy_from_ledger()
+    phase2_cache = phase2_cache or {}
 
     def _cells():
         # Single call site for compose_hud_cells() with the actual
@@ -1262,6 +1361,7 @@ def _render(windows, regions, event, tracked, ticker_history, status, palette, g
 
     if regions.get("decisions") is not None and "decisions" in windows:
         decision_lines = compose_decisions_placeholder()
+        panel_title = None
         if explore_mode and explore_mode != "off":
             wid = _resolve_world_id()
             sector = (event.get("state") or {}).get("sector")
@@ -1272,9 +1372,23 @@ def _render(windows, regions, event, tracked, ticker_history, status, palette, g
                 decision_lines = ["E) explore on", "no sector yet"]
             else:
                 decision_lines = format_explore_decision_lines(explore_mode, plan)
+        else:
+            wid = _resolve_world_id()
+            chain = phase2_cache.get("chain")
+            goals = _build_goals_snapshot(wid, chain)
+            sector = (event.get("state") or {}).get("sector")
+            # AUTONOMY lives in the GOALS band (one line) — not the HUD gutter —
+            # so PORT commodity meters keep their pre-P2 rows.
+            decision_lines = [
+                f"AUTO {autonomy.get('pct_display') or '—'}",
+            ] + compose_phase2_side_panel(
+                goals, chain, current_sector=sector,
+                width=max(12, (regions["decisions"].get("w") or 22) - 4),
+            )
+            panel_title = "GOALS"
         _draw_decisions(
             windows["decisions"], regions["decisions"],
-            decision_lines, glyphs, palette,
+            decision_lines, glyphs, palette, title=panel_title,
         )
 
     # Trainer Control Panel's control strip -- redraws every call (cheap,
@@ -1337,6 +1451,7 @@ def run_snapshot(sock_path, pid_path, frames=1, settle_wait_s=8.0):
     ticker_history = []
     last_event = dict(DEFAULT_EVENT)
     printed = 0
+    tracked = {}
     try:
         while printed < frames:
             event = client.next_event(timeout=settle_wait_s)
@@ -1344,9 +1459,24 @@ def run_snapshot(sock_path, pid_path, frames=1, settle_wait_s=8.0):
                 break  # nothing new within the wait window -- stop here
             last_event = event
             ticker_history.append(event)
+            now = time.monotonic()
+            tracked = update_tracked_stats(tracked, event, now)
+            tracked = _stamp_live_world_metrics(tracked, now)
             status = fetch_status(sock_path)
             status["daemon_pid"] = pid_path.read_text().strip() if pid_path.exists() else None
             dashboard = compose_dashboard(last_event, ticker_history, status)
+            auto = _autonomy_from_ledger()
+            dashboard["metrics"] = compose_live_metrics(tracked)
+            dashboard["autonomy"] = auto
+            wid = _resolve_world_id()
+            chain = _longest_chain_for_panel(sock_path)
+            goals = _build_goals_snapshot(wid, chain)
+            sector = (last_event.get("state") or {}).get("sector")
+            dashboard["goals_chain"] = [
+                f"AUTO {auto.get('pct_display') or '—'}",
+            ] + compose_phase2_side_panel(
+                goals, chain, current_sector=sector, width=40,
+            )
             print(render_plain(dashboard))
             print()
             printed += 1

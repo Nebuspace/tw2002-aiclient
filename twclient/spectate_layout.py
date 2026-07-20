@@ -532,6 +532,7 @@ def compose_hud_cells(
     tracked: dict, now: float, mark: str = "✦",
     delta_up: str = "▲", delta_down: str = "▼",
     bar_full: str = "█", bar_empty: str = "░",
+    autonomy: dict | None = None,
 ) -> list[dict]:
     """One cell per HUD stat, in the operator's fixed display order (CREDITS ·
     SECTOR · TURNS · CARGO · PROFIT) -- ready for either a vertical
@@ -549,12 +550,18 @@ def compose_hud_cells(
     and `spark` (a rolling sparkline); TURNS gets `gauge` (a fuel-meter
     bar once a max is known). Cells that don't use an extra field still
     carry it as "" -- a uniform shape, not an inconsistent one, so a
-    renderer never needs a per-cell isinstance/hasattr check."""
+    renderer never needs a per-cell isinstance/hasattr check.
+
+    Optional `autonomy` is accepted for API compatibility but ignored here —
+    a 6th 3-row HUD cell clips the PORT meters. Callers should prepend
+    compose_autonomy_headline() into the METRICS list (one line) instead."""
     cells = [_credits_cell(tracked, now, mark, delta_up, delta_down)]
     cells.append(_hud_cell(tracked.get("sector"), "SECTOR", _HUD_FIELD_SPECS[1][2], now, mark))
     cells.append(_turns_cell(tracked, now, mark, bar_full, bar_empty))
     cells.append(_hud_cell(tracked.get("cargo_holds_empty"), "CARGO", _HUD_FIELD_SPECS[2][2], now, mark))
     cells.append(_hud_cell(tracked.get("profit"), "PROFIT", _HUD_FIELD_SPECS[3][2], now, mark))
+    # Autonomy is NOT appended here — a 6th 3-row HUD cell clips PORT meters
+    # in the gutter. Spectate_app injects it as a one-line METRICS row instead.
     return cells
 
 
@@ -586,6 +593,272 @@ def compose_live_metrics(tracked: dict | None = None) -> list[dict]:
             value = entry
         rows.append({"label": label, "value": f"{int(value):,}" if isinstance(value, int) else str(value)})
     return rows
+
+
+_PROBLEM_FORMATION_KINDS = frozenset({"one-way", "warp-sink"})
+_PLANET_LANDMARK_TAGS = frozenset({"planet", "own_planet"})
+
+
+def aggregate_world_metrics(sectors) -> dict:
+    """Derive TW-08 metric counts from world-model sector records (read-only).
+
+    Heuristic until canon tightens PROBLEM definitions: a sector counts as
+    a problem when it has mines, any fighters sighting, or a one-way /
+    warp-sink formation membership tag.
+    """
+    stations = planets = fighters = mines = problems = 0
+    for sec in sectors or ():
+        threats = sec.get("threats") or {}
+        has_port = sec.get("port") is not None
+        has_mines = threats.get("mines") is True
+        has_fighters = threats.get("fighters") is not None
+        landmarks = sec.get("landmarks") or []
+        has_planet = False
+        for lm in landmarks:
+            lm_key = str(lm).casefold()
+            if lm_key in _PLANET_LANDMARK_TAGS or "planet" in lm_key:
+                has_planet = True
+                break
+        membership = sec.get("formation_membership") or []
+        if isinstance(membership, str):
+            membership = [membership]
+        has_problem_formation = bool(
+            _PROBLEM_FORMATION_KINDS.intersection(str(t).casefold() for t in membership)
+        )
+        if has_port:
+            stations += 1
+        if has_planet:
+            planets += 1
+        if has_fighters:
+            fighters += 1
+        if has_mines:
+            mines += 1
+        if has_mines or has_fighters or has_problem_formation:
+            problems += 1
+    return {
+        "stations_found": stations,
+        "planets_found": planets,
+        "fighters_seen": fighters,
+        "mines_seen": mines,
+        "problem_sectors": problems,
+    }
+
+
+def stamp_world_metrics(tracked: dict, metrics: dict, now: float) -> dict:
+    """Merge aggregate_world_metrics counts into tracked as (value, ts) tuples."""
+    out = dict(tracked or {})
+    for key, _label in _LIVE_METRIC_SPECS:
+        if key in metrics:
+            out[key] = (int(metrics[key]), now)
+    return out
+
+
+def compute_autonomy_ratio(entries, *, window: int = 500, session_id=None) -> dict:
+    """§15.1 graduation gauge: trainer / (ai + trainer).
+
+    Human actions are counted for display but excluded from the ratio
+    denominator. Unknown/missing actor fields are ignored for ratio math.
+    """
+    rows = list(entries or ())
+    if session_id is not None:
+        rows = [e for e in rows if e.get("session_id") == session_id]
+    if window is not None and window >= 0:
+        rows = rows[-window:]
+    trainer = ai = human = 0
+    for e in rows:
+        actor = e.get("actor")
+        if actor == "trainer":
+            trainer += 1
+        elif actor == "ai":
+            ai += 1
+        elif actor == "human":
+            human += 1
+    denom = ai + trainer
+    ratio = (trainer / denom) if denom else None
+    if ratio is None:
+        pct_display = "—"
+    else:
+        pct_display = f"{int(round(ratio * 100))}%"
+    return {
+        "ratio": ratio,
+        "trainer": trainer,
+        "ai": ai,
+        "human": human,
+        "pct_display": pct_display,
+    }
+
+
+def compose_autonomy_headline(ratio_data: dict | None = None) -> dict:
+    """One HUD-shaped cell for the autonomy gauge (uniform with compose_hud_cells)."""
+    data = ratio_data or {}
+    value = data.get("pct_display") or "—"
+    ratio = data.get("ratio")
+    tone = None
+    if isinstance(ratio, (int, float)):
+        if ratio >= 0.5:
+            tone = "ok"
+        elif ratio > 0:
+            tone = "warn"
+    return {
+        "label": "AUTONOMY",
+        "value": value,
+        "freshness": "",
+        "stale": False,
+        "tone": tone,
+        "chip": "",
+        "spark": "",
+        "gauge": "",
+    }
+
+
+# -- WO-P2 Primary Goals + Longest-Chain panels (pure layout) --------------
+
+
+class GoalsSnapshot:
+    """Frozen-enough goals view for compose_primary_goals_lines (plain dict OK too)."""
+
+    __slots__ = (
+        "stardock_found", "stardock_sectors", "known_sectors", "formations",
+        "genesis_candidates", "longest_chain_hops", "upgrade_status", "holds_status",
+    )
+
+    def __init__(
+        self,
+        *,
+        stardock_found: bool = False,
+        stardock_sectors=(),
+        known_sectors: int = 0,
+        formations: int = 0,
+        genesis_candidates: int = 0,
+        longest_chain_hops=None,
+        upgrade_status: str = "—",
+        holds_status: str = "—",
+    ):
+        self.stardock_found = bool(stardock_found)
+        self.stardock_sectors = tuple(stardock_sectors or ())
+        self.known_sectors = int(known_sectors)
+        self.formations = int(formations)
+        self.genesis_candidates = int(genesis_candidates)
+        self.longest_chain_hops = longest_chain_hops
+        self.upgrade_status = upgrade_status or "—"
+        self.holds_status = holds_status or "—"
+
+
+def compose_primary_goals_lines(snap, *, width: int = 22) -> list[str]:
+    """Primary-goals panel lines (WO-P2-b). Status glyphs: ✓ / · / —."""
+    width = max(12, int(width))
+    if not isinstance(snap, GoalsSnapshot):
+        snap = GoalsSnapshot(**(snap or {}))
+    dock = "✓" if snap.stardock_found else "·"
+    dock_detail = (
+        f"@{','.join(str(s) for s in snap.stardock_sectors[:3])}"
+        if snap.stardock_sectors else ""
+    )
+    chain = (
+        f"✓ {snap.longest_chain_hops}h"
+        if snap.longest_chain_hops
+        else "·"
+    )
+    lines = [
+        f"{dock} StarDock {dock_detail}".rstrip(),
+        f"· map {snap.known_sectors}s · form {snap.formations}",
+        f"{chain} longest chain",
+        f"· upgrade {snap.upgrade_status}"[:width],
+        f"· holds {snap.holds_status}"[:width],
+    ]
+    if snap.genesis_candidates:
+        lines.append(f"· genesis {snap.genesis_candidates}")
+    return [ln[:width] for ln in lines]
+
+
+def format_chain_summary(
+    chain,
+    *,
+    current_sector=None,
+    cols: int = 24,
+) -> list[str]:
+    """Longest-chain panel lines (WO-P2-c). Highlights current sector with ★.
+
+    Accepts a ProfitChain-like object (`.sectors`, `.overall_profit`, …)
+    or a library-row dict (`sectors`/`steps`/`demo_profit`/…).
+    """
+    cols = max(12, int(cols))
+    if chain is None:
+        return ["(no chain yet)", "explore / mine first"]
+
+    if hasattr(chain, "sectors"):
+        sectors = list(chain.sectors or ())
+        overall = getattr(chain, "overall_profit", None)
+        cr_turn = getattr(chain, "cr_per_turn", None)
+        hops = len(getattr(chain, "hops", ()) or ())
+        if not hops and sectors:
+            hops = max(0, len(sectors) - 1)
+    else:
+        sectors = list(chain.get("sectors") or ())
+        overall = chain.get("demo_profit")
+        cr_turn = chain.get("profit_per_turn")
+        hops = int(chain.get("steps") or max(0, len(sectors) - 1))
+
+    if not sectors:
+        return ["(no chain yet)", "explore / mine first"]
+
+    parts = []
+    try:
+        cur = int(current_sector) if current_sector is not None else None
+    except (TypeError, ValueError):
+        cur = None
+    for sid in sectors:
+        try:
+            sid_i = int(sid)
+        except (TypeError, ValueError):
+            parts.append(str(sid))
+            continue
+        if cur is not None and sid_i == cur:
+            parts.append(f"★{sid_i}")
+        else:
+            parts.append(str(sid_i))
+    path = "→".join(parts)
+    lines = [path[:cols], f"{hops} hops"]
+    metrics = []
+    if overall is not None:
+        try:
+            metrics.append(f"+{int(overall)}cr")
+        except (TypeError, ValueError):
+            metrics.append(f"+{overall}cr")
+    if cr_turn is not None:
+        try:
+            metrics.append(f"{float(cr_turn):.0f}/t")
+        except (TypeError, ValueError):
+            pass
+    if metrics:
+        lines.append(" ".join(metrics)[:cols])
+    if cur is not None and cur in {int(s) for s in sectors}:
+        lines.append(f"here ★{cur}"[:cols])
+    elif cur is not None:
+        lines.append(f"here {cur} (off)"[:cols])
+    return lines
+
+
+def compose_longest_chain_panel(chain, *, current_sector=None, cols: int = 24) -> list[str]:
+    """Alias used by the app — same body as format_chain_summary."""
+    return format_chain_summary(chain, current_sector=current_sector, cols=cols)
+
+
+def compose_phase2_side_panel(
+    goals_snap,
+    chain,
+    *,
+    current_sector=None,
+    width: int = 22,
+) -> list[str]:
+    """Combine GOALS + CHAIN for the Decisions-band panel (clipped by draw)."""
+    lines = ["— GOALS —"]
+    lines.extend(compose_primary_goals_lines(goals_snap, width=width))
+    lines.append("— CHAIN —")
+    lines.extend(
+        format_chain_summary(chain, current_sector=current_sector, cols=width)
+    )
+    return lines
 
 
 def compose_decisions_placeholder() -> list[str]:
@@ -857,6 +1130,20 @@ def render_plain(dashboard: dict) -> str:
     lines.append(" SIDEBAR — parsed state")
     lines.append("-" * 80)
     lines.extend(dashboard["sidebar"])
+    if dashboard.get("metrics"):
+        lines.append("-" * 80)
+        lines.append(" METRICS")
+        lines.append("-" * 80)
+        for row in dashboard["metrics"]:
+            lines.append(f"{row['label']:<10}{row['value']}")
+    if dashboard.get("autonomy"):
+        lines.append("-" * 80)
+        lines.append(f" AUTONOMY  {dashboard['autonomy'].get('pct_display', '—')}")
+    if dashboard.get("goals_chain"):
+        lines.append("-" * 80)
+        lines.append(" GOALS / CHAIN")
+        lines.append("-" * 80)
+        lines.extend(dashboard["goals_chain"])
     lines.append("-" * 80)
     lines.append(" EVENTS")
     lines.append("-" * 80)
