@@ -55,6 +55,17 @@ The password NEVER touches this module's return values, exceptions, or
 any log call -- every send of it goes through `session.send(..., secret=True)`,
 which routes to `TranscriptLogger.log_redacted()` (twclient/connection.py),
 the same redaction path already proven for `tw do --secret`.
+
+**WO-MS-2 (front_end adapter select):** the whole table above IS the
+TWGS-direct flow, unchanged. Before driving it, `run_login` resolves the
+profile's optional server-catalog key (`twclient/servers.py`, WO-MS-1) to
+a `front_end` and gates on it: `direct`/`auto` (or no catalog key at
+all -- today's only real-world shape) fall through to the existing
+automaton with zero behavior change; `bbs` fails loudly before sending a
+single keystroke -- BBS-menu navigation is a declined Wave-2 item, not a
+silently-attempted best-effort, and the current live catalog has zero
+`bbs` entries (pruned MS-3c) so this is a guard for future adds, not a
+reachable path today. See `_resolve_front_end`/`_bbs_unsupported_message`.
 """
 
 import re
@@ -96,18 +107,28 @@ class LoginError(Exception):
     never send a keystroke it isn't sure about."""
 
 
-def run_login(session, profile, get_password, save_password, target="main_command", trace=None):
+def run_login(session, profile, get_password, save_password, target="main_command", trace=None, servers_path=None):
     """Drive `session` from wherever it currently is to `target`
     classification. `get_password(profile_name) -> str|None` and
     `save_password(profile_name, password)` are injected (not imported
     directly) so this stays network/credential-store-decoupled for
     tests -- the live path (protocol.py) wires them to
-    twclient.credentials.get_password/save_password.
+    twclient.credentials.get_password/save_password. `servers_path`
+    overrides the server catalog location (tests only; real callers
+    leave it None and get `twclient.servers.SERVERS_PATH`).
 
     Returns (final_classification, steps_taken). Raises LoginError on
     failure to progress. Never returns without either reaching `target`
     or raising.
     """
+    # WO-MS-2: front_end adapter select -- gates BEFORE anything else in
+    # this function (including the pre-existing per-classification
+    # dispatch below, which is the unchanged TWGS-direct flow). Raises
+    # LoginError outright for `bbs` (never sends a keystroke); returns
+    # silently for `direct`/`auto`/no-catalog-key, i.e. every real
+    # profile in use today.
+    _resolve_front_end(profile, servers_path=servers_path)
+
     # Local import to avoid a hard dependency loop (classify <- login is
     # the only direction that matters; protocol imports both).
     from .classify import classify_screen
@@ -172,6 +193,67 @@ def run_login(session, profile, get_password, save_password, target="main_comman
         last_signature = None
 
     raise LoginError(f"automaton_exhausted_steps:{_MAX_STEPS}")
+
+
+def _resolve_front_end(profile, servers_path=None):
+    """WO-MS-2 seam: resolve which login table `run_login` should drive,
+    from the profile's optional server-catalog key (`server`, WO-MS-1).
+    A profile with no catalog key -- a bare host/port profile, today's
+    only real-world shape, and every existing test double in this
+    suite -- has nothing to resolve at all: `getattr(..., None)` treats
+    that identically to a resolved `direct`/`auto` catalog entry, i.e.
+    the pre-existing TWGS-direct automaton, unchanged.
+
+    Returns None on success (direct/auto/no-server); raises LoginError
+    for `bbs` (no BBS-navigation flow exists -- a declined Wave-2 item)
+    or for any front_end value this automaton doesn't recognize. Never
+    guesses: an unrecognized value fails loudly rather than silently
+    falling through to `direct`."""
+    server_key = getattr(profile, "server", None)
+    if not server_key:
+        return None
+
+    from . import servers as servers_mod
+
+    rec = servers_mod.get_server(server_key, path=servers_path)
+    front_end = rec["front_end"]
+    if front_end in ("direct", "auto"):
+        return None
+    if front_end == "bbs":
+        raise LoginError(_bbs_unsupported_message(rec, servers_path))
+    # servers.py's own catalog loader already constrains front_end to
+    # {direct, bbs, auto} at load time (ServerCatalogError otherwise) --
+    # this branch can't be reached via a real catalog file. Defensive
+    # belt-and-braces only: never guess if a value somehow reaches here.
+    raise LoginError(f"front_end_unrecognized:server={server_key}:front_end={front_end!r}")
+
+
+def _bbs_unsupported_message(rec, servers_path):
+    """Actionable failure text for a BBS-wrapped server: BBS-menu
+    navigation isn't implemented (declined Wave-2 item), so this names
+    the catalog's TWGS-direct alternative for the same hostname, if one
+    is cataloged -- the current live catalog has zero `bbs` entries
+    (pruned MS-3c), so this is a guard for future adds, proven here
+    against a synthetic catalog."""
+    from . import servers as servers_mod
+
+    alt = next(
+        (
+            other
+            for other in servers_mod.list_servers(path=servers_path)
+            if other["key"] != rec["key"] and other["hostname"] == rec["hostname"] and other["front_end"] == "direct"
+        ),
+        None,
+    )
+    if alt is not None:
+        return (
+            f"front_end_bbs_unsupported:server={rec['key']}:hostname={rec['hostname']}:bbs_port={rec['port']}:"
+            f"use_instead_server={alt['key']}:direct_alt_port={alt['port']}"
+        )
+    return (
+        f"front_end_bbs_unsupported:server={rec['key']}:hostname={rec['hostname']}:bbs_port={rec['port']}:"
+        f"no_cataloged_direct_alternative"
+    )
 
 
 def _decide(cls, text, prompt, profile, state, get_password, save_password):

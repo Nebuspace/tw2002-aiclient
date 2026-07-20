@@ -87,7 +87,7 @@ class FakeLoginSession:
 
 class FakeProfile:
     def __init__(self, name="default", host=FAKE_HOST, port=FAKE_PORT, game_letter="F", handle="AEGIS",
-                 ship_name="Vantage", planet_name="Anchorage"):
+                 ship_name="Vantage", planet_name="Anchorage", server=None):
         self.name = name
         self.host = host
         self.port = port
@@ -95,6 +95,7 @@ class FakeProfile:
         self.handle = handle
         self.ship_name = ship_name
         self.planet_name = planet_name
+        self.server = server  # optional catalog key (WO-MS-1/WO-MS-2); None = today's bare host/port shape
 
 
 def _is(expected):
@@ -539,3 +540,164 @@ def test_run_login_recovers_from_a_transient_unconfirmed_send_via_retry():
     cls, _ = run_login(session, profile, get_password=lambda n: "x", save_password=lambda n, pw: None)
     assert cls == "main_command"
     assert session.sent == [(profile.handle, False), (profile.handle, False)]  # one failed attempt, one retry
+
+
+# -- WO-MS-2: front_end catalog-driven adapter select ------------------------
+#
+# A profile may carry `server=<catalog key>` (twclient/servers.py, WO-MS-1);
+# run_login resolves that key's `front_end` BEFORE driving anything. These
+# tests write synthetic servers.toml fixtures rather than depending on the
+# real catalog's contents (which today has zero `bbs` entries -- MS-3c
+# pruned them -- so the `bbs` branch is a guard for future adds, proven here
+# against a fixture that models one).
+
+def _write_servers_toml(tmp_path, body):
+    path = tmp_path / "servers.toml"
+    path.write_text(body)
+    return path
+
+
+def _mask_secrets(sent):
+    """Sent-list shape with any secret-marked value blanked out -- the
+    CSPRNG-generated NEW-registration password differs run-to-run by
+    design, so a 'byte-for-byte identical path' check must compare the
+    SHAPE (order, which sends are secret) rather than the literal value."""
+    return [(None if secret else text, secret) for text, secret in sent]
+
+
+def test_front_end_bbs_raises_naming_direct_alternative_port(tmp_path):
+    """BBS-menu navigation isn't implemented (declined Wave-2 item) --
+    run_login must fail loudly before sending a single keystroke, and the
+    error must name the catalog's TWGS-direct alternative port so an
+    operator knows what to reach for instead."""
+    catalog = _write_servers_toml(
+        tmp_path,
+        '[servers.bbs_host]\n'
+        'hostname = "bbs.example.test"\n'
+        "port = 23\n"
+        'transport = "telnet"\n'
+        'front_end = "bbs"\n'
+        "aliases = []\n"
+        'status = "online"\n'
+        'sources = ["test"]\n'
+        "\n"
+        "[servers.bbs_host_direct_alt]\n"
+        'hostname = "bbs.example.test"\n'
+        "port = 2002\n"
+        'transport = "telnet"\n'
+        'front_end = "direct"\n'
+        "aliases = []\n"
+        'status = "online"\n'
+        'sources = ["test"]\n',
+    )
+    profile = FakeProfile(server="bbs_host")
+    session = FakeLoginSession([{"screen": "irrelevant -- never reached", "expect": None}])
+
+    with pytest.raises(LoginError, match=r"front_end_bbs_unsupported.*bbs_host.*direct_alt_port=2002"):
+        run_login(session, profile, get_password=lambda n: "x", save_password=lambda n, pw: None, servers_path=catalog)
+    assert session.sent == []  # no BBS navigation was ever attempted
+
+
+def test_front_end_bbs_without_cataloged_alternative_still_fails_loudly(tmp_path):
+    """No direct sibling cataloged for this host -- still fails loudly
+    (never guesses/attempts BBS navigation), just without a port to cite."""
+    catalog = _write_servers_toml(
+        tmp_path,
+        '[servers.lonely_bbs_host]\n'
+        'hostname = "lonely.example.test"\n'
+        "port = 23\n"
+        'transport = "telnet"\n'
+        'front_end = "bbs"\n'
+        "aliases = []\n"
+        'status = "online"\n'
+        'sources = ["test"]\n',
+    )
+    profile = FakeProfile(server="lonely_bbs_host")
+    session = FakeLoginSession([{"screen": "irrelevant -- never reached", "expect": None}])
+
+    with pytest.raises(LoginError, match=r"front_end_bbs_unsupported.*no_cataloged_direct_alternative"):
+        run_login(session, profile, get_password=lambda n: "x", save_password=lambda n, pw: None, servers_path=catalog)
+    assert session.sent == []
+
+
+def test_front_end_auto_resolves_to_direct_behavior(tmp_path):
+    catalog = _write_servers_toml(
+        tmp_path,
+        '[servers.auto_host]\n'
+        'hostname = "auto.example.test"\n'
+        "port = 23\n"
+        'transport = "telnet"\n'
+        'front_end = "auto"\n'
+        "aliases = []\n"
+        'status = "online"\n'
+        'sources = ["test"]\n',
+    )
+    profile = FakeProfile(server="auto_host")
+    saved = {}
+    steps, seen_password = _new_registration_steps(profile, password_screens=1)
+    session = FakeLoginSession(steps)
+
+    cls, taken = run_login(
+        session, profile, get_password=lambda n: saved.get(n), save_password=lambda n, pw: saved.__setitem__(n, pw),
+        servers_path=catalog,
+    )
+
+    assert cls == "main_command"
+    assert saved["default"] == seen_password["value"]
+
+
+def test_front_end_direct_is_byte_for_byte_the_existing_path(tmp_path):
+    """A profile whose catalog entry is explicitly front_end=direct must
+    drive the exact same send sequence, in the exact same order, as a
+    profile with no `server` at all (today's only real-world shape)."""
+    catalog = _write_servers_toml(
+        tmp_path,
+        '[servers.direct_host]\n'
+        'hostname = "direct.example.test"\n'
+        "port = 23\n"
+        'transport = "telnet"\n'
+        'front_end = "direct"\n'
+        "aliases = []\n"
+        'status = "online"\n'
+        'sources = ["test"]\n',
+    )
+    profile_catalog = FakeProfile(server="direct_host")
+    profile_bare = FakeProfile()  # no server key at all
+
+    saved_catalog, saved_bare = {}, {}
+    steps_catalog, _ = _new_registration_steps(profile_catalog, password_screens=1)
+    steps_bare, _ = _new_registration_steps(profile_bare, password_screens=1)
+    session_catalog = FakeLoginSession(steps_catalog)
+    session_bare = FakeLoginSession(steps_bare)
+
+    cls_catalog, taken_catalog = run_login(
+        session_catalog, profile_catalog, get_password=lambda n: saved_catalog.get(n),
+        save_password=lambda n, pw: saved_catalog.__setitem__(n, pw), servers_path=catalog,
+    )
+    cls_bare, taken_bare = run_login(
+        session_bare, profile_bare, get_password=lambda n: saved_bare.get(n),
+        save_password=lambda n, pw: saved_bare.__setitem__(n, pw),
+    )
+
+    assert cls_catalog == cls_bare == "main_command"
+    assert taken_catalog == taken_bare
+    assert _mask_secrets(session_catalog.sent) == _mask_secrets(session_bare.sent)
+
+
+def test_front_end_unrecognized_value_fails_loudly_never_guesses(monkeypatch):
+    """Defensive belt-and-braces: servers.py's own catalog loader already
+    constrains front_end to {direct, bbs, auto} at load time (a bad value
+    raises ServerCatalogError there, well before login.py ever sees it) --
+    this proves run_login still refuses to guess if an unrecognized value
+    somehow reaches it, rather than silently falling through to direct."""
+    from twclient import servers as servers_mod
+
+    fake_rec = {"key": "weird_host", "hostname": "weird.example.test", "port": 23, "front_end": "carrier-pigeon"}
+    monkeypatch.setattr(servers_mod, "get_server", lambda key, path=None: fake_rec)
+
+    profile = FakeProfile(server="weird_host")
+    session = FakeLoginSession([{"screen": "irrelevant -- never reached", "expect": None}])
+
+    with pytest.raises(LoginError, match=r"front_end_unrecognized:server=weird_host:front_end='carrier-pigeon'"):
+        run_login(session, profile, get_password=lambda n: "x", save_password=lambda n, pw: None)
+    assert session.sent == []
