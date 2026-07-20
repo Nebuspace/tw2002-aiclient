@@ -614,10 +614,10 @@ def test_format_autonomy_lines_ties_pct_to_app_ai_counts():
 
 def test_format_autopilot_trace_lines_chosen_gated_and_hold():
     lines = format_autopilot_trace_lines(PROVISIONAL_AUTOPILOT_TRACE, cols=40)
-    assert lines[0].startswith("★ trade_cycle")
+    assert lines[0].startswith("★ run_chain")
     assert "550" in lines[0]
-    assert any(ln.startswith("★ trade_cycle") or ln.startswith("★ trade") for ln in lines[1:])
-    assert any(ln.startswith("· upgrade_holds") for ln in lines)
+    assert any(ln.startswith("★ run_chain") for ln in lines[1:])
+    assert any(ln.startswith("· upgrade") for ln in lines)
     gated = [ln for ln in lines if ln.startswith("⊘")]
     assert gated and "explore" in gated[0]
     assert "turn-reserve" in gated[0] or "50" in gated[0]
@@ -642,17 +642,17 @@ def test_format_autopilot_trace_lines_chosen_gated_and_hold():
     assert format_trace_ev(None) == "—"
     # dual attr tolerance
     class _C:
-        kind = "trade_cycle"
+        kind = "run_chain"
         ev_cr_per_turn = 100.0
         gated = False
         gate_reason = None
 
     class _T:
-        chosen = "trade_cycle"
+        chosen = "run_chain"
         candidates = [_C()]
 
     attr_lines = format_autopilot_trace_lines(_T(), cols=30)
-    assert attr_lines[0].startswith("★ trade_cycle")
+    assert attr_lines[0].startswith("★ run_chain")
     assert all(len(ln) <= 30 for ln in attr_lines)
 
 
@@ -719,7 +719,7 @@ def test_render_plain_includes_phase2_sections():
     assert "METRICS" in text and "STATIONS" in text
     assert "AUTONOMY" in text and "75%" in text
     assert "App 30" in text and "AI 10" in text and "Hum 2" in text
-    assert "DECISIONS" in text and "trade_cycle" in text and "550" in text
+    assert "DECISIONS" in text and "run_chain" in text and "550" in text
     assert "GOALS / CHAIN" in text
     # empty autonomy still renders cleanly
     empty = render_plain({

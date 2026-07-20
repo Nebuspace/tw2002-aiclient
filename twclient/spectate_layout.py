@@ -717,14 +717,14 @@ PROVISIONAL_AUTOPILOT_TRACE = {
     "context": {"turns_left": 220, "cash": 48000, "sector": 42},
     "candidates": [
         {
-            "kind": "trade_cycle",
+            "kind": "run_chain",
             "ev_cr_per_turn": 550.0,
             "rationale": "loop @1↔3 margin 55/hold",
             "gated": False,
             "gate_reason": None,
         },
         {
-            "kind": "upgrade_holds",
+            "kind": "upgrade",
             "ev_cr_per_turn": 200.0,
             "rationale": "Δ40 holds / 12t cycle",
             "gated": False,
@@ -738,7 +738,7 @@ PROVISIONAL_AUTOPILOT_TRACE = {
             "gate_reason": "turn-reserve<50",
         },
     ],
-    "chosen": "trade_cycle",
+    "chosen": "run_chain",
 }
 
 
@@ -769,7 +769,7 @@ def format_trace_ev(value) -> str:
 def format_autopilot_trace_lines(trace, *, cols: int = 22) -> list[str]:
     """Decisions-box lines for a Phase-1 autopilot dry-run decision trace.
 
-    Header = chosen action + EV (`★ trade_cycle 550 cr/t`) or `HOLD`.
+    Header = chosen action + EV (`★ run_chain 550 cr/t`) or `HOLD`.
     Per candidate: `★` chosen / `·` other / `⊘` gated. Clipped to `cols`.
     Empty / None / malformed → `["—"]` (never crash).
     """
