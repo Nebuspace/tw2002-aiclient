@@ -601,3 +601,54 @@ def test_play_skill_treats_a_confirm_failure_as_a_surprise_halt():
     assert result["halted"] == "surprise"
     assert result["cycles_completed"] == 0
     assert result["divergence"]["reason"] == "confirm_failed"
+
+
+def test_replay_skill_end_to_end_never_auto_fires_the_colonist_takeover_default():
+    """DESIGN-v2 §8 -- the -75-alignment scar, proven END-TO-END through
+    replay_skill (not just the send_and_confirm primitive in isolation --
+    see test_settle.py's test_send_and_confirm_rejects_a_transient_flicker_not_yet_settled).
+
+    Live incident: at Terra, a docking send's response went quiet just
+    long enough to satisfy the idle debounce mid-transition, then the
+    server kept talking and the auto-defaulting "(L)eave or (T)ake
+    Colonists?" follow-up prompt arrived a beat later. A caller that
+    (wrongly) treated that premature idle as "step confirmed, move on"
+    would already have fired the NEXT recorded step's send -- landing on
+    the follow-up while it was live and racing the game's own default,
+    exactly like the real incident's decline losing the race -> colonists
+    auto-taken -> -75 alignment.
+
+    This models a 2-STEP skill specifically because the scar needs a step
+    N+1 to misfire onto -- a 1-step skill (as in
+    test_replay_skill_mid_animation_screen_change_halts_cleanly_not_a_misfire
+    above) has no next send whose withholding this could prove."""
+    session = _AnimatedSession(
+        "Command [TL=00753:0/0/0/850] (?=Help)? :",
+        stages=[
+            # A byte arrives (rx_count bumps -- an in-flight animation
+            # frame) but the VISIBLE screen hasn't advanced yet -- still
+            # the same command prompt the pre-send screen showed. This is
+            # the realistic shape of the race: an idle-only confirm would
+            # be perfectly happy to call this "settled" (new bytes +
+            # quiet), even though nothing about the actual response has
+            # arrived, because it never checks that the CONTENT moved on.
+            (0.05, "Command [TL=00753:0/0/0/850] (?=Help)? :"),
+            (0.5, "(L)eave or (T)ake Colonists? [T]"),  # the real follow-up, auto-defaulting to TAKE
+        ],
+    )
+    skill = _skill(
+        [
+            {"input": "D", "wait_prompt": None, "expected_post_class": "main_command"},  # step 0: dock at Terra
+            {"input": "N", "wait_prompt": None, "expected_post_class": None},  # step 1: the recorded decline
+        ]
+    )
+    with pytest.raises(skills.ReplayDivergence) as exc_info:
+        skills.replay_skill(session, skill, force=True)
+    err = exc_info.value
+    assert err.step_i == 0
+    assert err.reason == "confirm_failed"
+    # The critical, end-to-end assertion: step 1's "N" was NEVER sent --
+    # if it had been, it would have landed on the still-live colonist
+    # prompt, racing the game's own auto-default the same way the real
+    # incident's decline lost that race.
+    assert session.sent == [("D", False)]
