@@ -101,9 +101,22 @@ def knowledge_path(host, game_letter, handle, state_dir=None):
     at `tmp_path` so the real gitignored `state/` tree is never
     touched); everything else about the module takes the resulting
     `Path` directly rather than re-resolving identity per call."""
-    base = Path(state_dir) / "world" if state_dir is not None else WORLD_STATE_DIR
     slug = world_id(host, game_letter, handle)
-    return base / slug / KNOWLEDGE_FILENAME
+    return knowledge_path_for_world(slug, state_dir=state_dir)
+
+
+def knowledge_path_for_world(world_id_slug, state_dir=None):
+    """Same `<state_dir or state/>/world/<slug>/game_knowledge.json` path
+    join `knowledge_path()` does, but for a caller that already holds an
+    opaque, ALREADY-RESOLVED `world_id` slug (e.g. `game_data.py`'s
+    per-world game-data writer/query API, pinned to a `world_id`-first
+    signature the same way `world_model.py`'s public API is) rather
+    than a raw host/game_letter/handle triple. Never calls into
+    `world_identity` itself -- `knowledge_path()` above remains the ONE
+    call site of that interface; this is purely the path-join half,
+    factored out so it isn't duplicated per caller."""
+    base = Path(state_dir) / "world" if state_dir is not None else WORLD_STATE_DIR
+    return base / str(world_id_slug) / KNOWLEDGE_FILENAME
 
 
 def _lock_path(path):
