@@ -8,6 +8,10 @@
 # env or the gitignored repo-root .env) resolve first — see
 # twclient/env.py's resolution order.
 #
+# WO-MS-1: optional `server = "<catalog-key>"` resolves hostname/port from
+# config/servers.toml when host/port are omitted (`tw servers list` shows
+# keys). Existing host/port fields still work unchanged (backcompat).
+#
 # ship_name / planet_name are optional; default to "<handle>Ship" /
 # "<handle>World" if omitted.
 
@@ -18,3 +22,9 @@ game_letter = "F"
 handle = "YourHandle"
 # ship_name = "MyShip"
 # planet_name = "MyWorld"
+
+# Example catalog-backed profile (host/port filled from servers.toml):
+# [catalog_demo]
+# server = "geekm0nkey_com"
+# game_letter = "F"
+# handle = "Demo"

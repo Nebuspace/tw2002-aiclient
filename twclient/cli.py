@@ -219,6 +219,23 @@ def cmd_analyze(args):
     print(analyze.format_report(report))
 
 
+def cmd_servers_list(args):
+    """WO-MS-1: print the config/servers.toml catalog (no live connections)."""
+    from . import servers as servers_mod
+
+    rows = servers_mod.list_servers()
+    if getattr(args, "json", False):
+        print(json.dumps({"ok": True, "servers": rows, "count": len(rows)}))
+        return
+    print(f"{'KEY':<28} {'HOST':<36} {'PORT':>5} {'FE':<7} {'STATUS'}")
+    for r in rows:
+        print(
+            f"{r['key']:<28} {r['hostname']:<36} {r['port']:>5} "
+            f"{r['front_end']:<7} {r['status']}"
+        )
+    print(f"({len(rows)} servers)")
+
+
 def cmd_players_list(args):
     """TW-31 CLI wiring (v1): list the multi-character rotation bank.
     Pure client-side, direct `state/player_bank.json` read -- no daemon
@@ -882,6 +899,12 @@ def build_parser():
         ),
     )
     sp.set_defaults(func=cmd_attach)
+
+    # WO-MS-1 — server catalog (announce-first shared cli.py edit)
+    servers_p = sub.add_parser("servers", help="list / inspect the config/servers.toml catalog")
+    servers_sub = servers_p.add_subparsers(dest="servers_cmd", required=True)
+    sp_list = servers_sub.add_parser("list", help="list all cataloged servers")
+    sp_list.set_defaults(func=cmd_servers_list)
 
     return p
 

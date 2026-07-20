@@ -50,7 +50,7 @@ class CredentialError(Exception):
 
 
 class Profile:
-    def __init__(self, name, host, port, game_letter, handle, ship_name=None, planet_name=None):
+    def __init__(self, name, host, port, game_letter, handle, ship_name=None, planet_name=None, server=None):
         self.name = name
         self.host = host
         self.port = int(port)
@@ -58,9 +58,10 @@ class Profile:
         self.handle = handle
         self.ship_name = ship_name or f"{handle}Ship"
         self.planet_name = planet_name or f"{handle}World"
+        self.server = server  # optional catalog key (WO-MS-1)
 
     def __repr__(self):
-        return f"Profile(name={self.name!r}, host={self.host!r}, port={self.port!r}, game_letter={self.game_letter!r}, handle={self.handle!r})"
+        return f"Profile(name={self.name!r}, host={self.host!r}, port={self.port!r}, game_letter={self.game_letter!r}, handle={self.handle!r}, server={self.server!r})"
 
 
 def _load_toml(path):
@@ -74,23 +75,41 @@ def list_profiles(profiles_path=None):
     return sorted(_load_toml(profiles_path or PROFILES_PATH).keys())
 
 
-def load_profile(name, profiles_path=None):
+def load_profile(name, profiles_path=None, servers_path=None):
     data = _load_toml(profiles_path or PROFILES_PATH)
     if name not in data:
         raise CredentialError(f"profile_not_found:{name}")
     p = data[name]
-    required = ("host", "port", "game_letter", "handle")
+    server_key = p.get("server")
+    host = p.get("host")
+    port = p.get("port")
+    if server_key and (host is None or port is None):
+        from . import servers as servers_mod
+        try:
+            chost, cport = servers_mod.resolve_endpoint(server_key, path=servers_path)
+        except servers_mod.ServerCatalogError as e:
+            raise CredentialError(f"profile_server_unresolved:{name}:{e}") from e
+        if host is None:
+            host = chost
+        if port is None:
+            port = cport
+    required = ("game_letter", "handle")
     missing = [k for k in required if k not in p]
+    if host is None:
+        missing.append("host")
+    if port is None:
+        missing.append("port")
     if missing:
         raise CredentialError(f"profile_incomplete:{name}:missing={missing}")
     return Profile(
         name=name,
-        host=p["host"],
-        port=p["port"],
+        host=host,
+        port=port,
         game_letter=p["game_letter"],
         handle=p["handle"],
         ship_name=p.get("ship_name"),
         planet_name=p.get("planet_name"),
+        server=server_key,
     )
 
 
