@@ -8,9 +8,10 @@ port = 2002
 transport = "telnet"
 front_end = "direct"
 aliases = []
-status = "listed"
+status = "online"
 sources = ["seed", "telnetbbsguide", "microblaster"]
 notes = "A-Net Online, 7 games/6 nodes"
+last_checked_at = "2026-07-20T01:10:24Z"
 
 [servers.a_net_online]
 hostname = "bbs.a-net.online"
@@ -18,9 +19,10 @@ port = 2002
 transport = "telnet"
 front_end = "direct"
 aliases = []
-status = "listed"
+status = "offline"
 sources = ["google-search"]
 notes = "⚠️ likely same operator as #1 (alias)"
+last_checked_at = "2026-07-20T01:10:23Z"
 
 [servers.abandonedstardock_ddns_net]
 hostname = "abandonedstardock.ddns.net"
@@ -28,8 +30,9 @@ port = 2002
 transport = "telnet"
 front_end = "auto"
 aliases = []
-status = "listed"
+status = "online"
 sources = ["seed", "telnetbbsguide"]
+last_checked_at = "2026-07-20T01:10:26Z"
 
 [servers.briancmoses_com]
 hostname = "tw2002.briancmoses.com"
@@ -37,9 +40,10 @@ port = 23
 transport = "telnet"
 front_end = "direct"
 aliases = []
-status = "listed"
+status = "online"
 sources = ["seed", "telnetbbsguide"]
 notes = "no-port→23; also web JS telnet client"
+last_checked_at = "2026-07-20T01:10:31Z"
 
 [servers.tdod_org]
 hostname = "tdod.org"
@@ -47,9 +51,10 @@ port = 2002
 transport = "telnet"
 front_end = "auto"
 aliases = []
-status = "listed"
+status = "online"
 sources = ["seed", "telnetbbsguide"]
 notes = "\"Cbaxyz\""
+last_checked_at = "2026-07-20T01:12:08Z"
 
 [servers.interzone_annexia_xyz]
 hostname = "interzone.annexia.xyz"
@@ -57,9 +62,10 @@ port = 2002
 transport = "telnet"
 front_end = "auto"
 aliases = []
-status = "listed"
+status = "online"
 sources = ["seed", "telnetbbsguide"]
 notes = "City on the Edge of Forever"
+last_checked_at = "2026-07-20T01:11:14Z"
 
 [servers.conchaos_synchro_net]
 hostname = "conchaos.synchro.net"
@@ -67,9 +73,10 @@ port = 2002
 transport = "telnet"
 front_end = "direct"
 aliases = []
-status = "listed"
+status = "online"
 sources = ["seed", "telnetbbsguide", "classictw"]
 notes = "Constructive Chaos, multi-game; :23 = BBS front door (probe-proven TWGS-direct at :2002, login-loe §c)"
+last_checked_at = "2026-07-20T01:10:36Z"
 
 [servers.stream_thecrustychicken_com]
 hostname = "stream.thecrustychicken.com"
@@ -77,9 +84,10 @@ port = 23
 transport = "telnet"
 front_end = "auto"
 aliases = []
-status = "listed"
+status = "online"
 sources = ["seed", "telnetbbsguide"]
 notes = "no-port→23"
+last_checked_at = "2026-07-20T01:12:03Z"
 
 [servers.geekm0nkey_com]
 hostname = "twgs.geekm0nkey.com"
@@ -87,9 +95,10 @@ port = 23
 transport = "telnet"
 front_end = "direct"
 aliases = []
-status = "listed"
+status = "online"
 sources = ["seed", "telnetbbsguide", "classictw"]
 notes = "DarkMatter, 6 games; default→23"
+last_checked_at = "2026-07-20T01:11:06Z"
 
 [servers.kn6q_org]
 hostname = "bbs.kn6q.org"
@@ -97,9 +106,10 @@ port = 2002
 transport = "telnet"
 front_end = "auto"
 aliases = []
-status = "listed"
+status = "online"
 sources = ["seed", "telnetbbsguide"]
 notes = "Desert Rats Sanctuary"
+last_checked_at = "2026-07-20T01:11:23Z"
 
 [servers.eclipsebbs_com]
 hostname = "eclipsebbs.com"
@@ -107,8 +117,9 @@ port = 2002
 transport = "telnet"
 front_end = "auto"
 aliases = []
-status = "listed"
+status = "online"
 sources = ["seed", "telnetbbsguide"]
+last_checked_at = "2026-07-20T01:10:47Z"
 
 [servers.error404bbs_ddns_net]
 hostname = "error404bbs.ddns.net"
@@ -116,9 +127,10 @@ port = 24
 transport = "telnet"
 front_end = "auto"
 aliases = []
-status = "listed"
+status = "online"
 sources = ["seed", "telnetbbsguide"]
 notes = "⚠️ explicit :24 case"
+last_checked_at = "2026-07-20T01:10:49Z"
 
 [servers.furmenservices_net]
 hostname = "furmenservices.net"
@@ -126,8 +138,9 @@ port = 2002
 transport = "telnet"
 front_end = "auto"
 aliases = []
-status = "listed"
+status = "online"
 sources = ["seed", "telnetbbsguide"]
+last_checked_at = "2026-07-20T01:10:57Z"
 
 [servers.roguetw_net]
 hostname = "roguetw.net"
@@ -135,9 +148,10 @@ port = 2002
 transport = "telnet"
 front_end = "auto"
 aliases = []
-status = "listed"
+status = "online"
 sources = ["seed", "telnetbbsguide", "classictw"]
 notes = "Gone Rogue"
+last_checked_at = "2026-07-20T01:11:52Z"
 
 [servers.ild_tw_com]
 hostname = "ild-tw.com"
@@ -145,9 +159,10 @@ port = 2002
 transport = "telnet"
 front_end = "auto"
 aliases = []
-status = "listed"
+status = "online"
 sources = ["seed", "telnetbbsguide"]
 notes = "Intergalactic Loading Dock"
+last_checked_at = "2026-07-20T01:11:09Z"
 
 [servers.internetking_us]
 hostname = "tw.internetking.us"
@@ -155,9 +170,10 @@ port = 23
 transport = "telnet"
 front_end = "direct"
 aliases = []
-status = "listed"
+status = "online"
 sources = ["seed", "telnetbbsguide"]
 notes = "no-port→23; 25 mods"
+last_checked_at = "2026-07-20T01:11:11Z"
 
 [servers.70_122_245_201]
 hostname = "70.122.245.201"
@@ -165,9 +181,10 @@ port = 2002
 transport = "telnet"
 front_end = "auto"
 aliases = []
-status = "listed"
+status = "online"
 sources = ["seed", "telnetbbsguide"]
 notes = "Interstellar (bare IP)"
+last_checked_at = "2026-07-20T01:10:21Z"
 
 [servers.exciter_ws]
 hostname = "exciter.ws"
@@ -175,9 +192,10 @@ port = 2002
 transport = "telnet"
 front_end = "auto"
 aliases = []
-status = "listed"
+status = "online"
 sources = ["seed", "telnetbbsguide", "classictw"]
 notes = "Jumpstart BBS"
+last_checked_at = "2026-07-20T01:10:52Z"
 
 [servers.tw2002_net]
 hostname = "game.tw2002.net"
@@ -185,9 +203,10 @@ port = 23
 transport = "telnet"
 front_end = "direct"
 aliases = []
-status = "listed"
+status = "online"
 sources = ["telnetbbsguide", "tw2002.net"]
 notes = "Mark Van Daele; default→23"
+last_checked_at = "2026-07-20T01:12:19Z"
 
 [servers.memphistw_org]
 hostname = "bbs.memphistw.org"
@@ -195,8 +214,9 @@ port = 2002
 transport = "telnet"
 front_end = "auto"
 aliases = []
-status = "listed"
+status = "online"
 sources = ["telnetbbsguide", "classictw"]
+last_checked_at = "2026-07-20T01:11:28Z"
 
 [servers.microblaster_net]
 hostname = "microblaster.net"
@@ -204,9 +224,10 @@ port = 2002
 transport = "telnet"
 front_end = "auto"
 aliases = []
-status = "listed"
+status = "online"
 sources = ["telnetbbsguide"]
 notes = "also hosts the server-list site"
+last_checked_at = "2026-07-20T01:11:31Z"
 
 [servers.mba_dnsalias_com]
 hostname = "mba.dnsalias.com"
@@ -214,9 +235,10 @@ port = 2002
 transport = "telnet"
 front_end = "auto"
 aliases = []
-status = "listed"
+status = "online"
 sources = ["telnetbbsguide"]
 notes = "Moon Base Alpha"
+last_checked_at = "2026-07-20T01:11:26Z"
 
 [servers.mozysswamp_org]
 hostname = "bbs.mozysswamp.org"
@@ -224,9 +246,10 @@ port = 24
 transport = "telnet"
 front_end = "auto"
 aliases = []
-status = "listed"
+status = "online"
 sources = ["telnetbbsguide"]
 notes = ":24"
+last_checked_at = "2026-07-20T01:11:33Z"
 
 [servers.mtlgeek_synchro_net]
 hostname = "mtlgeek.synchro.net"
@@ -234,9 +257,10 @@ port = 2002
 transport = "telnet"
 front_end = "direct"
 aliases = []
-status = "listed"
+status = "online"
 sources = ["telnetbbsguide"]
 notes = ":23 = BBS front door (probe-proven TWGS-direct at :2002, login-loe §c)"
+last_checked_at = "2026-07-20T01:11:37Z"
 
 [servers.netpoint_webhop_me]
 hostname = "netpoint.webhop.me"
@@ -244,9 +268,10 @@ port = 2002
 transport = "telnet"
 front_end = "auto"
 aliases = []
-status = "unverified"
+status = "online"
 sources = ["telnetbbsguide (classictw:23)"]
 notes = "⚠️ port conflict 2002 vs 23; IT/EN"
+last_checked_at = "2026-07-20T01:11:39Z"
 
 [servers.countsflix_com]
 hostname = "countsflix.com"
@@ -254,9 +279,10 @@ port = 2002
 transport = "telnet"
 front_end = "auto"
 aliases = []
-status = "listed"
+status = "online"
 sources = ["telnetbbsguide"]
 notes = "Neutral Zone"
+last_checked_at = "2026-07-20T01:10:42Z"
 
 [servers.joestavern_ddns_net]
 hostname = "joestavern.ddns.net"
@@ -264,9 +290,10 @@ port = 2002
 transport = "telnet"
 front_end = "auto"
 aliases = []
-status = "listed"
+status = "online"
 sources = ["telnetbbsguide"]
 notes = "NoWhere"
+last_checked_at = "2026-07-20T01:11:17Z"
 
 [servers.securesyncsolutions_com]
 hostname = "bbs.securesyncsolutions.com"
@@ -274,9 +301,10 @@ port = 2002
 transport = "telnet"
 front_end = "auto"
 aliases = []
-status = "listed"
+status = "online"
 sources = ["telnetbbsguide"]
 notes = "Outta Control Hackers"
+last_checked_at = "2026-07-20T01:11:58Z"
 
 [servers.38_188_130_43]
 hostname = "38.188.130.43"
@@ -284,9 +312,10 @@ port = 23
 transport = "telnet"
 front_end = "auto"
 aliases = []
-status = "listed"
+status = "online"
 sources = ["telnetbbsguide", "classictw"]
 notes = "⚠️ Pirate's Cove = Tim Nugent, same IP deduped; default→23"
+last_checked_at = "2026-07-20T01:10:15Z"
 
 [servers.thequesttwgs_game_host_org]
 hostname = "thequesttwgs.game-host.org"
@@ -294,9 +323,10 @@ port = 23
 transport = "telnet"
 front_end = "auto"
 aliases = []
-status = "listed"
+status = "online"
 sources = ["telnetbbsguide"]
 notes = "default→23"
+last_checked_at = "2026-07-20T01:12:11Z"
 
 [servers.roysdon_net]
 hostname = "tw2002.roysdon.net"
@@ -304,9 +334,10 @@ port = 2002
 transport = "telnet"
 front_end = "auto"
 aliases = []
-status = "listed"
+status = "online"
 sources = ["telnetbbsguide"]
 notes = "family/friends"
+last_checked_at = "2026-07-20T01:11:55Z"
 
 [servers.sk_twgs_com]
 hostname = "sk-twgs.com"
@@ -314,9 +345,10 @@ port = 2002
 transport = "telnet"
 front_end = "direct"
 aliases = []
-status = "listed"
+status = "online"
 sources = ["telnetbbsguide", "classictw", "microblaster"]
 notes = "⚠️ 2 games on 1 host: Star Killer's + Viper's Pit (deduped); Ice9"
+last_checked_at = "2026-07-20T01:12:01Z"
 
 [servers.sursum_corda_com]
 hostname = "sursum-corda.com"
@@ -324,8 +356,9 @@ port = 2002
 transport = "telnet"
 front_end = "auto"
 aliases = []
-status = "listed"
+status = "online"
 sources = ["telnetbbsguide"]
+last_checked_at = "2026-07-20T01:12:06Z"
 
 [servers.3rdagetwgs_freeddns_org]
 hostname = "3rdagetwgs.freeddns.org"
@@ -333,9 +366,10 @@ port = 2002
 transport = "telnet"
 front_end = "auto"
 aliases = []
-status = "listed"
+status = "online"
 sources = ["telnetbbsguide"]
 notes = "Third Age"
+last_checked_at = "2026-07-20T01:10:18Z"
 
 [servers.tradewarsacademy_com]
 hostname = "tradewarsacademy.com"
@@ -343,8 +377,9 @@ port = 2002
 transport = "telnet"
 front_end = "auto"
 aliases = []
-status = "listed"
+status = "online"
 sources = ["telnetbbsguide"]
+last_checked_at = "2026-07-20T01:12:16Z"
 
 [servers.worldsapart_net]
 hostname = "tw.worldsapart.net"
@@ -352,8 +387,9 @@ port = 2002
 transport = "telnet"
 front_end = "auto"
 aliases = []
-status = "listed"
+status = "online"
 sources = ["telnetbbsguide"]
+last_checked_at = "2026-07-20T01:12:26Z"
 
 [servers.zot_org]
 hostname = "tw2002.zot.org"
@@ -361,9 +397,10 @@ port = 2002
 transport = "telnet"
 front_end = "auto"
 aliases = []
-status = "listed"
+status = "online"
 sources = ["telnetbbsguide"]
 notes = "Zot"
+last_checked_at = "2026-07-20T01:12:28Z"
 
 [servers.katone_net]
 hostname = "bbs.katone.net"
@@ -371,9 +408,10 @@ port = 23
 transport = "telnet"
 front_end = "bbs"
 aliases = []
-status = "listed"
+status = "online"
 sources = ["classictw", "microblaster"]
 notes = "tradewars.cmstactical.net; default→23"
+last_checked_at = "2026-07-20T01:11:19Z"
 
 [servers.orreli_net]
 hostname = "bbs.orreli.net"
@@ -381,9 +419,10 @@ port = 2002
 transport = "telnet"
 front_end = "direct"
 aliases = []
-status = "listed"
+status = "offline"
 sources = ["classictw"]
 notes = "vanilla 1k/25k-sector games"
+last_checked_at = "2026-07-20T01:11:42Z"
 
 [servers.polarwireless_ca]
 hostname = "polarwireless.ca"
@@ -391,9 +430,10 @@ port = 2002
 transport = "telnet"
 front_end = "auto"
 aliases = []
-status = "listed"
+status = "online"
 sources = ["classictw"]
 notes = "Crawford Intl Online Gaming"
+last_checked_at = "2026-07-20T01:11:49Z"
 
 [servers.crazyworldbbs_com]
 hostname = "crazyworldbbs.com"
@@ -401,9 +441,10 @@ port = 888
 transport = "telnet"
 front_end = "auto"
 aliases = []
-status = "listed"
+status = "online"
 sources = ["classictw"]
 notes = "⚠️ non-standard :888"
+last_checked_at = "2026-07-20T01:10:45Z"
 
 [servers.centralontarioremote_net]
 hostname = "centralontarioremote.net"
@@ -411,8 +452,9 @@ port = 2002
 transport = "telnet"
 front_end = "auto"
 aliases = []
-status = "listed"
+status = "unverified"
 sources = ["classictw"]
+last_checked_at = "2026-07-20T01:10:34Z"
 
 [servers.thunder_storm_ca]
 hostname = "Thunder-Storm.ca"
@@ -420,9 +462,10 @@ port = 52002
 transport = "telnet"
 front_end = "auto"
 aliases = []
-status = "listed"
+status = "online"
 sources = ["classictw"]
 notes = "⚠️ :52002; recovered from backup"
+last_checked_at = "2026-07-20T01:12:13Z"
 
 [servers.convolution_us]
 hostname = "convolution.us"
@@ -430,9 +473,10 @@ port = 23
 transport = "telnet"
 front_end = "bbs"
 aliases = []
-status = "listed"
+status = "online"
 sources = ["classictw"]
 notes = "default→23"
+last_checked_at = "2026-07-20T01:10:38Z"
 
 [servers.exiled_org]
 hostname = "twgs.exiled.org"
@@ -440,9 +484,10 @@ port = 2002
 transport = "telnet"
 front_end = "auto"
 aliases = []
-status = "listed"
+status = "online"
 sources = ["classictw"]
 notes = "Alpha Quadrant Invasion"
+last_checked_at = "2026-07-20T01:10:54Z"
 
 [servers.wccastle_net]
 hostname = "bbs.wccastle.net"
@@ -450,9 +495,10 @@ port = 2424
 transport = "telnet"
 front_end = "auto"
 aliases = []
-status = "listed"
+status = "unverified"
 sources = ["classictw"]
 notes = "⚠️ :2424; Wildcat's Castle"
+last_checked_at = "2026-07-20T01:12:21Z"
 
 [servers.gaulven_com]
 hostname = "gaulven.com"
@@ -463,6 +509,7 @@ aliases = []
 status = "offline"
 sources = ["classictw", "gaulven.com"]
 notes = "❌ **OFFLINE** (self-reported); +SSL :2001, +WSS :2003"
+last_checked_at = "2026-07-20T01:10:59Z"
 
 [servers.arcadiabbs_com]
 hostname = "bbs.arcadiabbs.com"
@@ -470,7 +517,7 @@ port = 23
 transport = "telnet"
 front_end = "bbs"
 aliases = []
-status = "listed"
+status = "unverified"
 sources = ["google-search"]
 notes = "Arcadia; default→23"
-
+last_checked_at = "2026-07-20T01:10:29Z"
