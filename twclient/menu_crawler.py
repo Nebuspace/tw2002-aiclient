@@ -164,12 +164,12 @@ for view/help/list/display/examine (reading content without "moving").
 recorded via the `kind="action"` unexplored-edge path instead.)
 """
 
-import hashlib
 import re
 from collections import deque
 
 from .classify import classify_screen
 from .game_knowledge import upsert_menu_edge, upsert_menu_node
+from .menu_sig import menu_signature
 from .settle import send_and_confirm, wait_until_settled
 
 # -- the safety vocabulary ----------------------------------------------------
@@ -804,14 +804,12 @@ def emit_key_if_safe(session, from_node, key, label, category, emitted_keys, sen
 
 # -- signature / labeling ------------------------------------------------------
 
-def _signature(full_text):
-    """A stable hash of a menu screen's identifying text -- computed by
-    this module (the caller), never by game_knowledge itself (see that
-    module's docstring). Trailing/leading blank lines and trailing
-    per-line whitespace are normalized away so cosmetically-identical
-    renders (e.g. differing only in trailing padding) hash identically."""
-    normalized = "\n".join(line.rstrip() for line in full_text.strip("\n").splitlines())
-    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()[:16]
+# Back-compat alias -- the signature logic itself lives in the pure
+# `menu_sig` module now (so sibling pure-logic consumers can import it
+# without dragging in this module's daemon deps), but `menu_nav` and
+# other callers reach it as `menu_crawler._signature`; keep that name
+# resolvable.
+_signature = menu_signature
 
 
 def _first_line(full_text):
@@ -845,7 +843,7 @@ def _replay(session_factory, steps, emitted_keys, send_log, step_timeout):
     for key, label, category in steps:
         if screen_state(text, prompt) != "menu":
             return None
-        from_node = _signature(text)
+        from_node = menu_signature(text)
         emitted, new_text, new_prompt = emit_key_if_safe(
             session, from_node, key, label, category, emitted_keys, send_log, step_timeout
         )
@@ -881,7 +879,7 @@ def crawl_menus(session_factory, path, max_nodes=_DEFAULT_MAX_NODES, step_timeou
     queue = deque()
 
     session, text, prompt = _open_and_settle(session_factory, step_timeout)
-    root_sig = _signature(text)
+    root_sig = menu_signature(text)
     upsert_menu_node(path, root_sig, label=_first_line(text))
     seen.add(root_sig)
     queue.append((root_sig, []))
@@ -924,7 +922,7 @@ def crawl_menus(session_factory, path, max_nodes=_DEFAULT_MAX_NODES, step_timeou
                 # read, nothing recorded, nothing queued.
                 continue
 
-            new_sig = _signature(new_text)
+            new_sig = menu_signature(new_text)
             upsert_menu_node(path, new_sig, label=_first_line(new_text))
             edge_kind = "nav" if category in _NAV_CATEGORIES else "info" if category in _INFO_CATEGORIES else "action"
             upsert_menu_edge(path, sig, key or "<enter>", new_sig, kind=edge_kind, desc=label)
