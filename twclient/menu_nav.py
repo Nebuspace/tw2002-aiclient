@@ -4,9 +4,9 @@ Pathfinding already lives in ``game_knowledge.find_menu_path``. This
 module answers the player's "where am I?" question: match a live screen to a
 known menu-map node (or honestly report off-map), then compose a route.
 
-Signature MUST match the crawler — we import ``menu_crawler._signature``
-so localize lookups never miss due to a divergent hash. Execution of the
-returned key sequence is a separate daemon-side WO.
+Signature MUST match the crawler — we import the neutral
+``menu_sig.menu_signature`` (same hash the crawler persists). Execution of
+the returned key sequence is a separate daemon-side WO.
 """
 
 from __future__ import annotations
@@ -14,7 +14,7 @@ from __future__ import annotations
 from typing import Any, Optional
 
 from .game_knowledge import find_menu_path, get_menu_node
-from .menu_crawler import _signature
+from .menu_sig import menu_signature
 
 
 def localize(screen_text: str, path) -> Optional[dict[str, Any]]:
@@ -26,7 +26,7 @@ def localize(screen_text: str, path) -> Optional[dict[str, Any]]:
     """
     if screen_text is None:
         return None
-    sig = _signature(screen_text)
+    sig = menu_signature(screen_text)
     return get_menu_node(path, sig)
 
 

@@ -1485,7 +1485,7 @@ def run_snapshot(sock_path, pid_path, frames=1, settle_wait_s=8.0):
             # same GOALS path as the live TUI (honest until an engine exists).
             # PROVISIONAL_AUTOPILOT_TRACE remains a unit-test / render-demo fixture.
             live_trace = status.get("autopilot_trace")
-            if live_trace is not None:
+            if live_trace:
                 dashboard["decisions"] = format_autopilot_trace_lines(live_trace, cols=40)
             else:
                 dashboard["decisions"] = format_autonomy_lines(auto) + compose_phase2_side_panel(

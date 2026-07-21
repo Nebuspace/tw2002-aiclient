@@ -1,8 +1,8 @@
 """TW-28 menu_nav localize + plan_nav — pure tests on synthetic maps."""
 
 from twclient import game_knowledge
-from twclient.menu_crawler import _signature
 from twclient.menu_nav import localize, plan_nav
+from twclient.menu_sig import menu_signature
 
 SCREEN_A = "=== Computer ===\n(1) Status\n(2) Ship\n"
 SCREEN_B = "=== Ship Status ===\nHolds: 50\n(Q) Quit\n"
@@ -11,7 +11,7 @@ SCREEN_OFF = "=== Totally Unknown Prompt ===\n(Z) Zap\n"
 
 def _seed_map(path, screen_text, label, *edge_specs):
     """Upsert node for screen_text; optional edges as (from_sig, key, to_sig, kind)."""
-    sig = _signature(screen_text)
+    sig = menu_signature(screen_text)
     game_knowledge.upsert_menu_node(path, sig, label=label)
     for frm, key, to, kind in edge_specs:
         game_knowledge.upsert_menu_edge(path, frm, key, to, kind=kind)
