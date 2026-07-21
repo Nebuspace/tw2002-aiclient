@@ -1196,9 +1196,10 @@ def test_compose_control_strip_shows_hints_when_idle():
 def test_control_hints_points_to_tw_attach_for_human_takeover():
     """Human-reported discoverability gap: `M` only cycles ai_pilot<->
     spectate (by design -- `tw attach` is the only door into
-    MODE_HUMAN); the legend must say so, and the addition must not blow
-    the "minimal" tier's control-strip width budget (82 inner cols)."""
-    assert "attach" in CONTROL_HINTS and "drive" in CONTROL_HINTS
+    MODE_HUMAN); the legend must say so via the real `A` keybinding
+    (WO-FA5c), and the addition must not blow the "minimal" tier's
+    control-strip width budget (82 inner cols)."""
+    assert "A)ttach" in CONTROL_HINTS
     # Every pre-existing token must still be intact -- an addition that
     # SILENTLY replaced/shortened one would be its own regression.
     for token in ("M)ode", "L)chains", "E)xplore", "Spc pause", "X stop", "P panic"):

@@ -1183,17 +1183,18 @@ _MODE_BADGES = {
     "spectate": ("SPECTATE", "muted"),
 }
 
-CONTROL_HINTS = "M)ode  L)chains  E)xplore  Spc pause  X stop  P panic  attach:drive"
+CONTROL_HINTS = "M)ode  L)chains  E)xplore  Spc pause  X stop  P panic  A)ttach"
 # WO-FA5a fold (human-reported, live-witnessed 2026-07-21): pressing `M`
 # here only cycles ai_pilot<->spectate BY DESIGN (`tw attach` is the only
 # door into MODE_HUMAN -- control_lock.py's module docstring) -- but the
 # legend never told the operator that, so `M` looked broken/dead-ended.
-# "attach:drive" is a pure discoverability pointer, not a spectate
-# keybinding -- `tw attach` is a SEPARATE process/command, invoked
-# outside this TUI entirely, so it deliberately does NOT follow the
-# "KEY)verb" shape the other tokens use (that shape implies a keystroke
-# THIS screen would consume). Kept to Samantha's own compact wording so
-# the whole legend still fits the "minimal" reflow tier's control strip
+# WO-FA5c upgrade: `A` is now a REAL keybinding THIS screen consumes
+# (spectate_app._suspend_and_run_attach() suspends curses and launches
+# `tw attach` as a subprocess, resuming on return) -- the interim
+# "attach:drive" pointer (a discoverability-only token that deliberately
+# didn't follow the "KEY)verb" shape, since it wasn't a keystroke this
+# screen consumed) is superseded by the same "KEY)verb" token every
+# other hint uses. Still fits the "minimal" reflow tier's control strip
 # (82 inner cols) without truncating the existing tokens -- see
 # test_control_strip_shows_the_attach_takeover_hint_under_a_fake_pty.
 PLAY_PROGRESS_BAR_WIDTH = 12

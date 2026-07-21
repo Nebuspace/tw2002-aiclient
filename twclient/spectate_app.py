@@ -27,8 +27,10 @@ import json
 import queue
 import signal
 import socket
+import subprocess
 import threading
 import time
+from pathlib import Path
 
 from . import terminal
 from .spectate_layout import (
@@ -77,8 +79,10 @@ from .explore import (
     plan_map_fill,
 )
 from .formations import catalog_world
+from . import chains
 from . import game_data
 from . import ledger
+from . import trade_adapter
 from . import world_model
 from .world_model import WORLD_DIR
 import os
@@ -413,12 +417,31 @@ def _build_goals_snapshot(world_id, chain=None):
 
 
 def _longest_chain_for_panel(sock_path):
-    """Prefer skill-library longest hop chain (live list_skills); else None.
-
-    World-model → TradeHop margin adapter needs absolute buy/sell prices
-    (not yet on port commodity records); until then the library is the
-    truthful longest-chain source for the TUI.
+    """Prefer a REAL discovered chain: FA3's world-model → TradeHop
+    adapter (`trade_adapter.build_trade_hops()`, pct-based commodity
+    pricing -- see that module's docstring) feeds TW-21's cycle finder
+    (`chains.longest_profit_chain()`). Falls back to the skill-library
+    longest hop chain (live list_skills) -- honestly labeled ("mined"/
+    "recorded", never "discovered") -- when there's no resolvable
+    world_id, no hops yet, or no profitable cycle among them.
     """
+    wid = _resolve_world_id()
+    if wid:
+        try:
+            hops, _note = trade_adapter.build_trade_hops(wid)
+        except OSError:
+            hops = ()
+        if hops:
+            chain = chains.longest_profit_chain(hops)
+            if chain is not None:
+                return chain
+    return _longest_chain_library_fallback(sock_path)
+
+
+def _longest_chain_library_fallback(sock_path):
+    """Skill-library longest hop chain (live list_skills) -- the FALLBACK
+    source when no real world-model chain is available (see
+    _longest_chain_for_panel)."""
     resp = _send_control(sock_path, "list_skills")
     raw = resp.get("loops", []) if resp and resp.get("ok") else []
     loops = sort_trade_loop_chains(raw)
@@ -851,10 +874,15 @@ def _draw_decisions(win, region, lines, glyphs, palette, title=None):
     win.noutrefresh()
 
 
-def _draw_status(win, region, connected, semantic, spinner_char, heartbeat_char, idle_text, flash_active, palette):
+def _draw_status(win, region, connected, semantic, spinner_char, heartbeat_char, idle_text, flash_active, palette, error_text=None):
     """Liveness bar (Phase 2): breathing heartbeat + waiting spinner +
     locally-ticked idle-age, semantically colored (green/amber/red), a
-    brief reverse-video flash on a connect/disconnect transition."""
+    brief reverse-video flash on a connect/disconnect transition.
+
+    `error_text` (WO-FA5c) surfaces a `tw attach` launch failure
+    (missing binary / nonzero exit) -- appended rather than replacing
+    the liveness text, since the daemon connection is unaffected by an
+    attach failure and still deserves showing."""
     win.erase()
     w = region["w"]
     # status_semantic() only ever returns ok/warn/danger today, but this
@@ -866,6 +894,10 @@ def _draw_status(win, region, connected, semantic, spinner_char, heartbeat_char,
         attr |= curses.A_REVERSE
     conn_word = "NO GAME LINK" if not connected else "CONNECTED"
     left = f"{heartbeat_char} {conn_word}  {spinner_char} idle {idle_text}"
+    if error_text:
+        # Plain ASCII marker, not a glyphs[]-table char -- this path has
+        # no `unicode_ok` to consult (draw-time only, no locale probe).
+        left = f"{left}  ! {error_text}"
     right = "q quit"
     try:
         win.addnstr(0, 0, left, max(0, w - 1), attr)
@@ -1033,12 +1065,54 @@ def _build_windows(regions):
     return windows
 
 
-def _handle_key(ch, sock_path, status, library, explore_state=None):
+def _attach_binary_path():
+    """Path to the sibling `tw` launcher script, resolved relative to
+    THIS file (not CWD) -- same self-locating convention every other
+    PROJECT_ROOT-style path in this codebase uses."""
+    return Path(__file__).resolve().parent.parent / "tw"
+
+
+def _suspend_and_run_attach(stdscr):
+    """A/a keybinding: suspend curses (the standard def_prog_mode() +
+    endwin() suspend idiom -- NOT a full teardown/reinit), hand the real
+    terminal to a fresh `tw attach` process (the interactive MANUAL-mode
+    driver -- a separate process this module never imports or drives
+    directly, keeping the module docstring's "NOTHING here ever forwards
+    a keystroke to the game" rule intact), then resume once it exits.
+    `subprocess.run()` blocks for the whole attach session -- spectate
+    goes fully quiet while the human drives, exactly like a real detach.
+
+    Never raises back into the getch() loop: a missing `tw` binary
+    (FileNotFoundError) or a nonzero exit both degrade to an error
+    string for the status line instead of crashing the spectator, and
+    curses is ALWAYS restored via `finally` even if the subprocess
+    itself misbehaves. Returns the error string, or None on a clean run.
+    """
+    error = None
+    curses.def_prog_mode()
+    curses.endwin()
+    try:
+        try:
+            result = subprocess.run([str(_attach_binary_path()), "attach"])
+        except FileNotFoundError as e:
+            error = f"tw attach not found: {e}"
+        else:
+            if result.returncode != 0:
+                error = f"tw attach exited {result.returncode}"
+    finally:
+        curses.reset_prog_mode()
+        stdscr.clear()
+        stdscr.refresh()
+    return error
+
+
+def _handle_key(ch, sock_path, status, library, explore_state=None, stdscr=None):
     """Trainer Control Panel keybindings -- mutates `library` (dict:
-    open/loops/selected/pending_cycles/confirm) and optional
-    `explore_state` ({"mode": off|mapfill|stardock|formations}) in place.
-    Returns True if this key was consumed as a Trainer Control Panel
-    command (caller should NOT also treat it as detach/resize)."""
+    open/loops/selected/pending_cycles/confirm), optional `explore_state`
+    ({"mode": off|mapfill|stardock|formations}), and `status` (only
+    "attach_error", see A/a below) in place. Returns True if this key
+    was consumed as a Trainer Control Panel command (caller should NOT
+    also treat it as detach/resize)."""
     if library["open"]:
         if library.get("confirm") is not None:
             # y/N confirm gate (Enter alone must NEVER fire play_start --
@@ -1071,6 +1145,14 @@ def _handle_key(ch, sock_path, status, library, explore_state=None):
             library["confirm"] = library["loops"][library["selected"]]
         return True
 
+    if ch in (ord("a"), ord("A")):
+        # tw attach is a SEPARATE process this screen hands the real
+        # terminal to (see _suspend_and_run_attach) -- `stdscr=None`
+        # (a caller that hasn't wired it through, e.g. an older test)
+        # degrades to a no-op rather than an AttributeError crash.
+        if stdscr is not None:
+            status["attach_error"] = _suspend_and_run_attach(stdscr)
+        return True
     if ch in (ord("l"), ord("L")):
         resp = _send_control(sock_path, "list_skills")
         raw = resp.get("loops", []) if resp.get("ok") else []
@@ -1158,7 +1240,8 @@ def _run(stdscr, client, sock_path, pid_path, unicode_ok):
                 return  # always detach, even mid-overlay
             library_was_open = library["open"]
             prev_explore = explore_state["mode"]
-            if _handle_key(ch, sock_path, status, library, explore_state):
+            attach_key = ch in (ord("a"), ord("A"))
+            if _handle_key(ch, sock_path, status, library, explore_state, stdscr):
                 pass  # Trainer Control Panel consumed it -- fall through to redraw
             elif ch in (ord("q"), ord("Q")):  # detach, don't touch the daemon
                 return
@@ -1170,6 +1253,11 @@ def _run(stdscr, client, sock_path, pid_path, unicode_ok):
             chrome_dirty = False
             if explore_state["mode"] != prev_explore:
                 chrome_dirty = True
+            if attach_key:
+                # tw attach just suspended/resumed curses (real terminal
+                # went away and came back) -- force a full repaint rather
+                # than waiting on the next event/status poll.
+                got_content = True
             if library_was_open and not library["open"]:
                 # The overlay draws straight onto stdscr, covering rows/
                 # cols the dashboard's persistent sub-windows (Phase 0)
@@ -1426,6 +1514,7 @@ def _render(windows, regions, event, tracked, ticker_history, status, palette, g
         _draw_status(
             windows["status"], regions["status"], connected, semantic,
             spinner_char, heartbeat_char, idle_text, flash_active, palette,
+            error_text=status.get("attach_error"),
         )
 
     curses.doupdate()

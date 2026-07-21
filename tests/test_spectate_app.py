@@ -31,7 +31,7 @@ from pathlib import Path
 import pyte
 import pytest
 
-from twclient import terminal
+from twclient import chains, terminal
 from twclient import spectate_app as spectate_app_mod
 from twclient.spectate_app import _SEMANTIC_COLORS, _ColorPairs, _tone_attr
 from twclient.spectate_layout import (
@@ -868,19 +868,20 @@ def test_control_strip_shows_the_ai_pilot_badge_and_hints_under_a_fake_pty():
 def test_control_strip_shows_the_attach_takeover_hint_under_a_fake_pty():
     """Human-reported discoverability gap (live witness, 2026-07-21): `M`
     only cycles ai_pilot<->spectate by design -- the legend must point to
-    `tw attach` as the actual human-takeover door. Proven at the standard
-    witness geometry (36x112, right_gutter tier) via the pyte grid/buffer
-    (project convention, never ANSI-regex): the new hint renders AND the
+    the real `A)ttach` keybinding (WO-FA5c upgrade from the interim
+    "attach:drive" pointer). Proven at the standard witness geometry
+    (36x112, right_gutter tier) via the pyte grid/buffer (project
+    convention, never ANSI-regex): the new hint renders AND the
     pre-existing legend tokens are still fully intact, not truncated to
     make room for it."""
     rows, cols = 36, 112
     captured = _run_fake_spectate_in_pty(
-        [_SAMPLE_EVENT], lambda buf: b"attach" in buf and b"drive" in buf,
+        [_SAMPLE_EVENT], lambda buf: b"A)ttach" in buf,
         timeout=8.0, rows=rows, cols=cols, fake_status=_status(),
     )
     grid = _pyte_grid(captured, rows, cols)
     full_text = "\n".join(grid)
-    assert "attach:drive" in full_text, f"attach-takeover hint never rendered; grid:\n{full_text}"
+    assert "A)ttach" in full_text, f"attach-takeover hint never rendered; grid:\n{full_text}"
     # The existing legend must survive intact, right up to its last
     # token -- a truncated "P pani" (or similar) would be exactly the
     # new discoverability bug pixel warned against.
@@ -1465,4 +1466,177 @@ def test_decisions_pane_vanishes_below_its_height_floor_and_log_fills_the_band_u
         f"viewport border did not render at this reduced size; "
         f"row was: {grid[viewport_region['y']]!r}"
     )
+
+
+# ---------------------------------------------------------------------------
+# WO-FA5b — _longest_chain_for_panel prefers a REAL FA3 world-model chain
+# ---------------------------------------------------------------------------
+
+
+def test_longest_chain_for_panel_prefers_a_real_profit_chain(monkeypatch):
+    """A resolvable world_id with a discoverable profit cycle must win
+    over the skill-library fallback -- the library's _send_control()
+    must not even be consulted."""
+    hops = (
+        chains.TradeHop(frm=1, to=2, commodity="Fuel Ore", margin=10.0, turns=2),
+        chains.TradeHop(frm=2, to=1, commodity="Organics", margin=5.0, turns=2),
+    )
+    monkeypatch.setattr(spectate_app_mod, "_resolve_world_id", lambda: "world1")
+    monkeypatch.setattr(spectate_app_mod.trade_adapter, "build_trade_hops", lambda wid, **kw: (hops, None))
+
+    def _boom(*a, **k):
+        raise AssertionError("library fallback must not be consulted when a real chain exists")
+
+    monkeypatch.setattr(spectate_app_mod, "_send_control", _boom)
+
+    result = spectate_app_mod._longest_chain_for_panel("/nonexistent.sock")
+    assert isinstance(result, chains.ProfitChain)
+    assert result.sectors[0] == result.sectors[-1]  # closed cycle
+
+
+def test_longest_chain_for_panel_falls_back_when_world_id_missing(monkeypatch):
+    monkeypatch.setattr(spectate_app_mod, "_resolve_world_id", lambda: None)
+    fake_loops = [{"name": "demo", "source": "mined", "steps": 3, "demo_profit": 100}]
+    monkeypatch.setattr(
+        spectate_app_mod, "_send_control",
+        lambda sock_path, verb, args=None, timeout=3.0: {"ok": True, "loops": fake_loops},
+    )
+    result = spectate_app_mod._longest_chain_for_panel("/nonexistent.sock")
+    assert result["name"] == "demo"
+
+
+def test_longest_chain_for_panel_falls_back_when_no_hops_discoverable(monkeypatch):
+    monkeypatch.setattr(spectate_app_mod, "_resolve_world_id", lambda: "world1")
+    monkeypatch.setattr(spectate_app_mod.trade_adapter, "build_trade_hops", lambda wid, **kw: ((), None))
+    fake_loops = [{"name": "demo", "source": "mined", "steps": 3, "demo_profit": 100}]
+    monkeypatch.setattr(
+        spectate_app_mod, "_send_control",
+        lambda sock_path, verb, args=None, timeout=3.0: {"ok": True, "loops": fake_loops},
+    )
+    result = spectate_app_mod._longest_chain_for_panel("/nonexistent.sock")
+    assert result["name"] == "demo"
+
+
+def test_longest_chain_for_panel_falls_back_when_hops_form_no_profitable_cycle(monkeypatch):
+    """Hops exist but don't close into a profitable cycle -- an honest
+    fallback to the library, never a fabricated chain."""
+    hops = (chains.TradeHop(frm=1, to=2, commodity="Fuel Ore", margin=10.0, turns=2),)
+    monkeypatch.setattr(spectate_app_mod, "_resolve_world_id", lambda: "world1")
+    monkeypatch.setattr(spectate_app_mod.trade_adapter, "build_trade_hops", lambda wid, **kw: (hops, None))
+    fake_loops = [{"name": "demo", "source": "mined", "steps": 3, "demo_profit": 100}]
+    monkeypatch.setattr(
+        spectate_app_mod, "_send_control",
+        lambda sock_path, verb, args=None, timeout=3.0: {"ok": True, "loops": fake_loops},
+    )
+    result = spectate_app_mod._longest_chain_for_panel("/nonexistent.sock")
+    assert result["name"] == "demo"
+
+
+# ---------------------------------------------------------------------------
+# WO-FA5c — A/a suspends curses, hands the terminal to `tw attach`, resumes
+# ---------------------------------------------------------------------------
+
+
+class _FakeSubprocessModule:
+    """Stands in for the real `subprocess` module inside spectate_app's
+    own namespace (monkeypatched via `spectate_app_mod.subprocess`) --
+    keeps the test from touching the REAL global subprocess module."""
+
+    def __init__(self, run_fn):
+        self.run = run_fn
+
+
+class _FakeStdscr:
+    def __init__(self, calls):
+        self._calls = calls
+
+    def clear(self):
+        self._calls.append("clear")
+
+    def refresh(self):
+        self._calls.append("refresh")
+
+
+def test_suspend_and_run_attach_launches_tw_attach_and_restores_curses(monkeypatch):
+    calls = []
+    monkeypatch.setattr(curses, "def_prog_mode", lambda: calls.append("def_prog_mode"))
+    monkeypatch.setattr(curses, "endwin", lambda: calls.append("endwin"))
+    monkeypatch.setattr(curses, "reset_prog_mode", lambda: calls.append("reset_prog_mode"))
+
+    captured_argv = []
+
+    class _Result:
+        returncode = 0
+
+    def fake_run(argv):
+        captured_argv.append(argv)
+        calls.append("subprocess.run")
+        return _Result()
+
+    monkeypatch.setattr(spectate_app_mod, "subprocess", _FakeSubprocessModule(fake_run))
+
+    error = spectate_app_mod._suspend_and_run_attach(_FakeStdscr(calls))
+    assert error is None
+    assert calls == ["def_prog_mode", "endwin", "subprocess.run", "reset_prog_mode", "clear", "refresh"]
+    assert captured_argv[0][0].endswith("/tw")
+    assert captured_argv[0][1] == "attach"
+
+
+def test_suspend_and_run_attach_reports_a_nonzero_exit_without_raising(monkeypatch):
+    monkeypatch.setattr(curses, "def_prog_mode", lambda: None)
+    monkeypatch.setattr(curses, "endwin", lambda: None)
+    monkeypatch.setattr(curses, "reset_prog_mode", lambda: None)
+
+    class _Result:
+        returncode = 7
+
+    monkeypatch.setattr(spectate_app_mod, "subprocess", _FakeSubprocessModule(lambda argv: _Result()))
+
+    error = spectate_app_mod._suspend_and_run_attach(_FakeStdscr([]))
+    assert error == "tw attach exited 7"
+
+
+def test_suspend_and_run_attach_restores_curses_even_on_a_missing_binary(monkeypatch):
+    """FileNotFoundError (no `tw` at the resolved path) must degrade to
+    a status-line error string, and curses must STILL be restored --
+    a crashed attach launch must never leave the real terminal stuck in
+    curses' raw/cbreak mode."""
+    calls = []
+    monkeypatch.setattr(curses, "def_prog_mode", lambda: None)
+    monkeypatch.setattr(curses, "endwin", lambda: None)
+    monkeypatch.setattr(curses, "reset_prog_mode", lambda: calls.append("reset_prog_mode"))
+
+    def fake_run(argv):
+        raise FileNotFoundError("no such file")
+
+    monkeypatch.setattr(spectate_app_mod, "subprocess", _FakeSubprocessModule(fake_run))
+
+    error = spectate_app_mod._suspend_and_run_attach(_FakeStdscr(calls))
+    assert error is not None and "not found" in error
+    assert calls == ["reset_prog_mode", "clear", "refresh"]
+
+
+def test_handle_key_a_invokes_attach_and_records_the_error_on_status(monkeypatch):
+    calls = []
+    monkeypatch.setattr(spectate_app_mod, "_suspend_and_run_attach", lambda stdscr: calls.append(stdscr) or "boom")
+    status = {"connected": True}
+    library = {"open": False, "loops": [], "selected": 0, "pending_cycles": 1, "confirm": None}
+    fake_stdscr = object()
+
+    consumed = spectate_app_mod._handle_key(ord("A"), "/nonexistent.sock", status, library, stdscr=fake_stdscr)
+    assert consumed is True
+    assert calls == [fake_stdscr]
+    assert status["attach_error"] == "boom"
+
+
+def test_handle_key_a_is_a_safe_noop_without_a_stdscr():
+    """A caller that hasn't wired stdscr through (e.g. an older/other
+    call site) must not crash -- degrades to consumed-but-inert rather
+    than an AttributeError out of the getch() loop."""
+    status = {"connected": True}
+    library = {"open": False, "loops": [], "selected": 0, "pending_cycles": 1, "confirm": None}
+
+    consumed = spectate_app_mod._handle_key(ord("a"), "/nonexistent.sock", status, library)
+    assert consumed is True
+    assert "attach_error" not in status
 
