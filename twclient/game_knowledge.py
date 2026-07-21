@@ -96,6 +96,8 @@ def _new_knowledge():
         "version": SCHEMA_VERSION,
         "menu_map": {"nodes": {}, "edges": []},
         "game_data": {table: {} for table in GAME_DATA_TABLES},
+        # Phase-3 try-then-verify rules (additive; SCHEMA_VERSION stays 1).
+        "learned_rules": {},
     }
 
 
@@ -183,6 +185,7 @@ def load_knowledge(path):
     data.setdefault("game_data", {})
     for table in GAME_DATA_TABLES:
         data["game_data"].setdefault(table, {})
+    data.setdefault("learned_rules", {})
     return data
 
 
@@ -400,3 +403,79 @@ def list_game_data_rows(path, table):
             f"unknown game_data table {table!r} (expected one of {GAME_DATA_TABLES})"
         )
     return [dict(r) for r in load_knowledge(path)["game_data"][table].values()]
+
+
+# -- learned rules (Phase-3 try-then-verify) ------------------------------------
+
+def _learned_rule_id(state_signature, tried_action):
+    return f"{state_signature}|{tried_action}"
+
+
+def upsert_learned_rule(path, state_signature, tried_action, observed_transition, confidence):
+    """Upsert a learned-rule record keyed by ``state_signature|tried_action``.
+
+    Idempotent: re-upserting the same pair updates ``observed_transition``,
+    ``confidence``, and ``last_seen_ts``; ``first_seen_ts`` is stamped once.
+    ``state_signature`` is a caller-supplied menu_sig hash (this store never
+    hashes screen text). ``confidence`` must be in ``[0, 1]``.
+    """
+    if not state_signature or not str(state_signature).strip():
+        raise GameKnowledgeError("learned rule state_signature must be non-empty")
+    if not tried_action or not str(tried_action).strip():
+        raise GameKnowledgeError("learned rule tried_action must be non-empty")
+    if not observed_transition or not str(observed_transition).strip():
+        raise GameKnowledgeError("learned rule observed_transition must be non-empty")
+    try:
+        conf = float(confidence)
+    except (TypeError, ValueError) as e:
+        raise GameKnowledgeError(
+            f"learned rule confidence must be a number in [0, 1], got {confidence!r}"
+        ) from e
+    if conf < 0.0 or conf > 1.0:
+        raise GameKnowledgeError(
+            f"learned rule confidence must be in [0, 1], got {conf!r}"
+        )
+    path = Path(path)
+    rule_id = _learned_rule_id(state_signature, tried_action)
+    with _knowledge_lock(path):
+        data = load_knowledge(path)
+        rules = data["learned_rules"]
+        now = _now_iso()
+        existing = rules.get(rule_id)
+        if existing is not None:
+            existing["observed_transition"] = observed_transition
+            existing["confidence"] = conf
+            existing["last_seen_ts"] = now
+            rule = existing
+        else:
+            rule = {
+                "state_signature": state_signature,
+                "tried_action": tried_action,
+                "observed_transition": observed_transition,
+                "confidence": conf,
+                "first_seen_ts": now,
+                "last_seen_ts": now,
+            }
+            rules[rule_id] = rule
+        save_knowledge(data, path)
+        return dict(rule)
+
+
+def get_learned_rule(path, state_signature, tried_action):
+    """A single learned rule by (state, action), or ``None``."""
+    rule_id = _learned_rule_id(state_signature, tried_action)
+    rule = load_knowledge(path)["learned_rules"].get(rule_id)
+    return dict(rule) if rule is not None else None
+
+
+def list_learned_rules(path):
+    """Every learned rule, as copies, in insertion order."""
+    return [dict(r) for r in load_knowledge(path)["learned_rules"].values()]
+
+
+def list_learned_rules_for_state(path, state_signature):
+    """Learned rules whose ``state_signature`` matches, as copies."""
+    return [
+        r for r in list_learned_rules(path)
+        if r.get("state_signature") == state_signature
+    ]
