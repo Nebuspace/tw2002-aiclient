@@ -689,7 +689,7 @@ def compute_autonomy_ratio(entries, *, window: int = 500, session_id=None) -> di
 
 
 def format_autonomy_counts(ratio_data: dict | None = None) -> str:
-    """Max terms: App = trainer, AI = llm-pilot; Hum = human attach (ratio-excluded)."""
+    """Metric terms: App = trainer, AI = llm-pilot; Hum = human attach (ratio-excluded)."""
     data = ratio_data or {}
     app = int(data.get("trainer") or 0)
     ai = int(data.get("ai") or 0)
