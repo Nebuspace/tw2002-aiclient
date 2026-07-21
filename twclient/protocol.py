@@ -450,12 +450,16 @@ def dispatch(session, verb, args, server):
         watch_hub = getattr(server, "watch_hub", None)
         lock = getattr(server, "control_lock", None)
         player = getattr(server, "loop_player", None)
-        # Cross-seat trace transport (WO-P2d, additive/dry-run-only): no
-        # AutopilotEngine exists on a real daemon yet (P1-d auto-start is
-        # deliberately deferred -- see autopilot.py's own docstring), so
-        # this is `None` on every real daemon today; a caller (the
-        # spectate Decisions panel) must never special-case a missing key,
-        # same null-safe convention as `play` above.
+        # Cross-seat trace transport (WO-P2d, additive/dry-run-only):
+        # `None` on every real daemon TODAY, since every shipped profile
+        # keeps `autonomous` at its default `False` -- but no longer
+        # structurally deferred: WO-FA6 wires `ensure`'s post-login
+        # `_maybe_auto_start_after_ensure` to fill this same slot the
+        # instant an operator arms a profile with `autonomous = true` (see
+        # that function's own docstring), same as a manual `autopilot_
+        # start` already does. A caller (the spectate Decisions panel)
+        # must never special-case a missing key, same null-safe
+        # convention as `play` above.
         autopilot_engine = getattr(server, "autopilot_engine", None)
         autopilot_trace = None
         if autopilot_engine is not None:
@@ -580,7 +584,42 @@ def dispatch(session, verb, args, server):
         with _driving_dispatch(server) as lock_error:
             if lock_error is not None:
                 return lock_error
-            return _dispatch_ensure(session, args)
+            resp = _dispatch_ensure(session, args)
+        # WO-FA6 (revised, mack HIGH): the design doc's "Auto-start-on-
+        # connect" -- wires autopilot.py's standalone `maybe_auto_start()`
+        # hook (P1-d) in, but ONLY for a GENUINE connect, never a routine
+        # re-`ensure` against an already-settled session. Two gates, both
+        # required:
+        #
+        # (i) `resp["already_there"] is False` -- `_dispatch_ensure` ran
+        #     the login automaton for real (its `if cls == target:` fast
+        #     path at ~:1496 sets `already_there=True` and returns without
+        #     ever touching this session again). The FIRST cut of this WO
+        #     gated on `resp["classification"] == target` instead, which
+        #     is true on EVERY successful `ensure` including the idempotent
+        #     fast path -- mack's HIGH: a routine repeated `ensure` (e.g.
+        #     the daemon's own guardian polling, or a caller defensively
+        #     re-ensuring an already-connected session) kept re-firing the
+        #     hook on a session that never moved, silently resurrecting a
+        #     loop that had DELIBERATELY halted (see (ii) below and
+        #     `_maybe_auto_start_after_ensure`'s own docstring for the
+        #     sticky-halt half of this fix).
+        # (ii) `server.autopilot_loop is None` -- checked inside
+        #     `_maybe_auto_start_after_ensure` itself, not here.
+        #
+        # Deliberately fired AFTER the `with` block above has released the
+        # active-driver slot, never from inside it: `AutopilotLoop.start()`
+        # -> `control_lock.enter_auto_loop()` raises `ControlModeConflict
+        # ("locked_by_active_driver")` outright while `_driving_dispatch`
+        # still holds that slot (see control_lock.py's `enter_auto_loop`/
+        # `acquire_driver` docstrings) -- attempting this INSIDE the `with`
+        # above would make every auto-start attempt silently decline, never
+        # actually arming. Mirrors `_dispatch_autopilot_start`'s own shape:
+        # that dispatch is likewise never wrapped in `_driving_dispatch`,
+        # for the identical reason.
+        if resp.get("ok") and resp.get("already_there") is False:
+            _maybe_auto_start_after_ensure(server, session, args.get("profile"))
+        return resp
 
     if verb == "crawl_start":
         return _dispatch_crawl_start(server, session, args)
@@ -1495,3 +1534,92 @@ def _dispatch_ensure(session, args):
         "ensure", {"profile": profile_name, "target": target}, resp["prompt"], resp["classification"], "ensure"
     )
     return resp
+
+
+def _maybe_auto_start_after_ensure(server, session, profile_name):
+    """WO-FA6: the `ensure`-verb integration `autopilot.py`'s standalone
+    `maybe_auto_start()` (P1-d) names as its intended call site -- wiring
+    only, no change to that function's own gates or execution posture.
+
+    Reloads the profile by name (a cheap TOML read) rather than
+    threading the `Profile` object `_dispatch_ensure` already loaded
+    internally back out through an extra return value -- same
+    reload-by-name convention `_dispatch_autopilot_preview`/
+    `_dispatch_autopilot_start` already use, and it keeps
+    `_dispatch_ensure`'s own signature/response shape untouched.
+
+    No-ops (never attempts a start) when there's no `profile_name`, no
+    `server.control_lock` at all (the bare dispatch-harness convention
+    every other optional server surface in this module already follows),
+    or the name no longer resolves -- all silent, since `ensure`'s own
+    response has already succeeded and must not be affected by any of
+    this. `maybe_auto_start` itself never raises for its two ordinary
+    "declined" cases (`profile.autonomous` False, or a human/auto_loop
+    already holding the lock) -- it returns `None`, which is exactly what
+    a real daemon sees on every real connect while every shipped profile
+    keeps `autonomous` at its default `False`: WIRING ONLY, no arm-
+    posture change. The broad `except` below is belt-and-suspenders for
+    anything else (e.g. a `snapshot_provider` call raising mid-tick) --
+    a post-login hook declining or failing to start must never crash the
+    ensure/login success path it's attached to.
+
+    On an actual start, the returned loop is stashed on `server.
+    autopilot_loop` -- the same attribute `_dispatch_autopilot_start`/
+    `_dispatch_autopilot_stop` already use, so a later `tw autopilot
+    stop` (or `tw status`) finds it exactly like a manually-armed loop --
+    and `loop.engine` onto `server.autopilot_engine`, so `tw status`'s
+    `autopilot_trace` reflects this loop's ticks too, the same slot
+    `_get_or_build_autopilot_engine` fills for the manual-start path.
+
+    **STICKY HALT (mack HIGH, WO-FA6 revise).** Checked FIRST, before
+    even looking at `profile_name`: if `server.autopilot_loop` is already
+    set -- running, OR halted with `.last_error` set (a crash, or the
+    `settle_unconfirmed` desync halt -- see `AutopilotLoop._run()`'s own
+    two halt branches) -- this hook NEVER touches it. A halt is the
+    engine's own safety brake; silently re-arming a fresh loop over a
+    halted one on the very next routine `ensure` (the daemon's guardian
+    reconnect-replay, or any caller defensively re-ensuring an
+    already-connected session) would erase `last_error` and resume
+    driving as if nothing happened -- exactly the "sticky" part a safety
+    halt requires. Recovery is a DELIBERATE supervisor action instead:
+    the halt is visible via `tw status`'s `play`/`autopilot_trace` (or
+    reading `last_error` directly), an operator investigates, an explicit
+    `autopilot_stop` clears the stash (`_dispatch_autopilot_stop` doesn't
+    special-case a halted loop -- it stops/reads it same as a running
+    one), and only THEN does a later genuine `ensure`/`autopilot_start`
+    see `autopilot_loop is None` again and re-arm. The call site's own
+    genuine-connect gate ((i) in its comment) narrows WHEN this hook
+    fires at all; this check is the second, independent half -- it must
+    hold regardless of how many genuine connects happen after a halt."""
+    if getattr(server, "autopilot_loop", None) is not None:
+        return
+    if not profile_name:
+        return
+    control_lock = getattr(server, "control_lock", None)
+    if control_lock is None:
+        return
+    from . import credentials
+    from .autopilot import maybe_auto_start
+
+    try:
+        profile = credentials.load_profile(profile_name)
+    except credentials.CredentialError:
+        return
+    try:
+        loop = maybe_auto_start(
+            session,
+            profile,
+            control_lock,
+            lambda: _autopilot_snapshot_kwargs(session),
+            ledger=getattr(server, "ledger", None),
+            session_id=_current_session_id(session),
+        )
+    except Exception as exc:  # noqa: BLE001 -- a post-login hook must never crash the ensure success path
+        logger = getattr(session, "logger", None)
+        log_note = getattr(logger, "log_note", None)
+        if log_note is not None:
+            log_note(f"maybe_auto_start failed: {exc!r}")
+        return
+    if loop is not None:
+        server.autopilot_loop = loop
+        server.autopilot_engine = loop.engine
