@@ -1157,8 +1157,16 @@ class AutopilotEngine:
                 return True, f"sent:credits_delta={result.credits_delta:+d}"
             return False, f"held:{result.stop_reason}"
 
+        # WO-SETTLE-EARLY: navigation warps opt into retry_unstable_idle so
+        # a hop that paints during/after the first idle+stability window
+        # confirms instead of false-unconfirmed (3034→250 / 4571→2429).
+        # Default settle fail-fast stays for skills/login (colonist race).
         reason, elapsed, confirmed = send_and_confirm(
-            self.session, str(candidate.next_sector), confirm_prompt=None, enter=True
+            self.session,
+            str(candidate.next_sector),
+            confirm_prompt=None,
+            enter=True,
+            retry_unstable_idle=True,
         )
         if confirmed:
             return True, None

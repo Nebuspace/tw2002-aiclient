@@ -250,6 +250,55 @@ def test_send_and_confirm_none_rejects_when_more_bytes_arrive_during_the_recheck
     assert confirmed is False
 
 
+def test_send_and_confirm_retry_unstable_idle_confirms_after_late_paint():
+    """WO-SETTLE-EARLY: live 3034→250 / 4571→2429 class — first idle
+    fires, hop paint arrives during stability_pause_s (~150ms), then
+    screen goes quiet. Default None-mode fail-fast would return
+    confirmed=False at ~0.5–0.8s; retry_unstable_idle must confirm
+    via wait_until_settled (already-quiet OK) within timeout_s."""
+    s = StagedSession(
+        stages=[
+            (0.05, "Sector  : 3034 in uncharted space.\nCommand [TL=00:00:00]:[3034] (?=Help)? :"),
+            (0.50, "Sector  : 250 in uncharted space.\nCommand [TL=00:00:00]:[250] (?=Help)? :"),
+        ]
+    )
+    reason, elapsed, confirmed = send_and_confirm(
+        s,
+        "250",
+        confirm_prompt=None,
+        enter=True,
+        timeout_s=2.0,
+        debounce_ms=350,
+        stability_pause_s=0.15,
+        retry_unstable_idle=True,
+    )
+    assert reason == "idle"
+    assert confirmed is True
+    assert elapsed > 0.5  # past the premature first-idle window
+    assert "250" in s.render_text()
+
+
+def test_send_and_confirm_retry_unstable_idle_still_times_out_when_never_quiet():
+    """WO-SETTLE-EARLY Accept: bounded wait — continuous traffic never
+    confirms even with retry_unstable_idle."""
+    # Bytes every 50ms forever past debounce — never a quiet window.
+    stages = [(0.05 * i, f"frame {i}") for i in range(1, 80)]
+    s = StagedSession(stages=stages)
+    reason, elapsed, confirmed = send_and_confirm(
+        s,
+        "250",
+        confirm_prompt=None,
+        enter=True,
+        timeout_s=1.0,
+        debounce_ms=350,
+        stability_pause_s=0.15,
+        retry_unstable_idle=True,
+    )
+    assert confirmed is False
+    assert reason in ("timeout", "idle")
+    assert elapsed >= 1.0
+
+
 def test_send_and_confirm_loops_past_a_premature_idle_to_find_the_real_match():
     # The hub-warp-animation shape WITH a caller-supplied target regex:
     # an early, non-matching frame goes quiet long enough to satisfy the

@@ -138,6 +138,7 @@ def send_and_confirm(
     debounce_ms=350,
     poll_interval_s=0.04,
     stability_pause_s=_CONFIRM_STABILITY_PAUSE_S,
+    retry_unstable_idle=False,
 ):
     """Send `text` (with EXPLICIT `enter` -- the caller decides per
     prompt-shape, not a blanket default) then require the settle to be
@@ -189,7 +190,17 @@ def send_and_confirm(
       `stability_pause_s` beat). This is a strictly weaker guarantee
       than a positive shape match (it can't tell WHICH screen arrived,
       only that one did and stayed put) -- callers that can name a
-      target shape should always prefer passing `confirm_prompt`."""
+      target shape should always prefer passing `confirm_prompt`.
+
+    **WO-SETTLE-EARLY (`retry_unstable_idle`):** default `False` keeps
+    the TW-02 fail-fast on bytes-during-stability (colonist-default race
+    / skills with `wait_prompt=None`). When `True` (autopilot explore/
+    upgrade warps), an unstable idle is NOT an immediate desync: keep
+    re-polling for a *stable* idle against the remaining `timeout_s`
+    budget via `wait_until_settled` (already-quiet OK — the bytes that
+    broke stability may have been the hop's final paint, so requiring
+    *new* bytes would hang). Still bounded: if the screen never goes
+    quiet, returns `timeout`/`confirmed=False`."""
     # Captured BEFORE send(), not after: some fake-session test doubles
     # (the historical synchronous-bump convention -- FakePortSession,
     # this project's other pre-TW-02 fakes) bump rx_count SYNCHRONOUSLY
@@ -250,13 +261,45 @@ def send_and_confirm(
     # since none was given), then re-verify no MORE bytes arrive during
     # one more stability pause (the same hub-warp-animation fix, applied
     # to byte arrivals instead of a regex match).
-    reason, elapsed = wait_for_settle(
-        session, wait_prompt=None, debounce_ms=debounce_ms, timeout_s=timeout_s, poll_interval_s=poll_interval_s
-    )
-    if reason != "idle":
-        return reason, elapsed, False
-    rx_at_settle = session.rx_count
-    session.sleep(stability_pause_s)
-    if session.rx_count != rx_at_settle:
-        return reason, elapsed, False
-    return reason, elapsed, True
+    #
+    # First pass uses wait_for_settle (requires >=1 new byte since send).
+    # WO-SETTLE-EARLY retries after an unstable idle use wait_until_settled
+    # so a hop whose final paint already landed during the stability
+    # window can still confirm without demanding yet more bytes.
+    awaiting_first_byte = True
+    first_idle_elapsed = None
+    while True:
+        remaining = timeout_s - (session.clock() - start)
+        if remaining <= 0:
+            return "timeout", session.clock() - start, False
+        if awaiting_first_byte:
+            reason, elapsed = wait_for_settle(
+                session,
+                wait_prompt=None,
+                debounce_ms=debounce_ms,
+                timeout_s=remaining,
+                poll_interval_s=poll_interval_s,
+            )
+            awaiting_first_byte = False
+        else:
+            reason, elapsed = wait_until_settled(
+                session,
+                debounce_ms=debounce_ms,
+                timeout_s=remaining,
+                poll_interval_s=poll_interval_s,
+            )
+            elapsed = session.clock() - start
+        if reason != "idle":
+            return reason, elapsed if first_idle_elapsed is None else session.clock() - start, False
+        if first_idle_elapsed is None:
+            first_idle_elapsed = elapsed
+        rx_at_settle = session.rx_count
+        session.sleep(stability_pause_s)
+        if session.rx_count == rx_at_settle:
+            return "idle", first_idle_elapsed if not retry_unstable_idle else session.clock() - start, True
+        if not retry_unstable_idle:
+            # Default TW-02: bytes during stability = fail-fast desync
+            # (colonist-default / mid-transition race). Do NOT keep
+            # waiting for eventual quiescence.
+            return "idle", first_idle_elapsed, False
+        # retry_unstable_idle: keep polling for a stable quiet within budget.
