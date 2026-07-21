@@ -26,7 +26,13 @@ Trainer Control Panel, TUI-POLISH-PLAN.md's "Mode selector" --
                    CommandHandler._handle_attach) can enter/leave this
                    mode, so a crashed/killed attach session can never
                    wedge the daemon in it. A second take_human() while
-                   one is already active is rejected.
+                   one is already active is rejected. take_human()
+                   itself always succeeds INSTANTLY even while an
+                   ai_pilot dispatch is actively mid-flight (`_driving`)
+                   -- the human always wins immediately, never blocked or
+                   refused on that account -- but the dispatch caught
+                   mid-flight is FENCED instead (WO-CLEANPREEMPT; see
+                   take_human()'s own docstring for what that triggers).
   MODE_SPECTATE -- driving paused; nobody's driving (the panel's
                    explicit "pause" state, also `play_stop`'s/panic's
                    landing mode). Not wired to any client's own
@@ -104,6 +110,14 @@ class ControlLock:
         # is driving THIS INSTANT" (this flag) are different questions --
         # see acquire_driver()/release_driver() below.
         self._driving = False
+        # WO-CLEANPREEMPT (mack's TW-04-Axis-2 finding): does the
+        # CURRENTLY-driving dispatch (if any) need to stop because
+        # take_human() found `_driving` True and granted anyway instead
+        # of refusing? Set only by take_human(), cleared only by
+        # release_driver() (the fenced dispatch's own release) or a
+        # fresh acquire_driver() claim -- never independently toggled
+        # elsewhere. See take_human()/is_driver_fenced()'s docstrings.
+        self._driver_fenced = False
 
     @property
     def mode(self):
@@ -121,12 +135,29 @@ class ControlLock:
         attach session (already_attached) OR a running LoopPlayer
         (locked_by_auto_loop) -- the operator stops the loop (panic/play_stop)
         before taking manual control, same as he'd detach before a
-        second attach."""
+        second attach.
+
+        Never refuses -- or blocks -- purely because an ai_pilot dispatch
+        is mid-flight (`self._driving`), unlike enter_auto_loop()'s
+        symmetric `locked_by_active_driver` guard: the human always wins
+        immediately (WO-CLEANPREEMPT). Instead, a driving dispatch caught
+        mid-flight here is FENCED -- `_driver_fenced` flips True (read via
+        is_driver_fenced()) -- so that dispatch's own caller
+        (protocol.py's do/send/haggle, via `_driver_was_fenced()`) can
+        flag its eventual ledger entry `interrupted_by_human`, and so
+        `Session.send_raw()` can hold the human's own first keystroke off
+        the wire until the fenced dispatch actually releases
+        (release_driver() clears `_driving` and `_driver_fenced`
+        together) -- a clean cutover onto the one wire, never a silent
+        two-writer interleave, all without this call itself ever waiting
+        on that release."""
         with self._lock:
             if self._mode == MODE_HUMAN:
                 raise ControlModeConflict("already_attached")
             if self._mode == MODE_AUTO_LOOP:
                 raise ControlModeConflict("locked_by_auto_loop")
+            if self._driving:
+                self._driver_fenced = True
             self._mode = MODE_HUMAN
 
     def release_human(self):
@@ -134,6 +165,16 @@ class ControlLock:
         without a matching take_human() (defensive cleanup path)."""
         with self._lock:
             self._mode = MODE_AI_PILOT
+
+    def is_driver_fenced(self):
+        """True once take_human() has fenced an in-flight ai_pilot
+        dispatch (see take_human()'s own docstring) -- cleared the
+        moment that dispatch actually releases (release_driver()).
+        Read by protocol.py's ledger hook (to flag
+        `interrupted_by_human`) and by `Session.send_raw()` (to hold a
+        human keystroke off the wire until the fence clears)."""
+        with self._lock:
+            return self._driver_fenced
 
     # -- exclusive, dispatch-scoped (TW-04: one in-flight ai_pilot driver) --
 
@@ -187,12 +228,25 @@ class ControlLock:
             if self._driving:
                 raise ControlModeConflict("controller_busy")
             self._driving = True
+            # WO-CLEANPREEMPT: a fresh claim always starts unfenced --
+            # release_driver() already clears this on the way out of the
+            # PREVIOUS hold, so this is belt-and-suspenders defensive
+            # (matching this method's own "single atomic authority"
+            # discipline) rather than a case that should ever fire live.
+            self._driver_fenced = False
 
     def release_driver(self):
         """Idempotent -- safe even if acquire_driver() was never called
-        (defensive cleanup path), mirroring release_human()."""
+        (defensive cleanup path), mirroring release_human(). Also clears
+        `_driver_fenced` (WO-CLEANPREEMPT): a fence is scoped to the ONE
+        dispatch that was caught mid-flight -- once it releases, mode is
+        already MODE_HUMAN, so no NEW ai_pilot dispatch can acquire the
+        driver slot to re-fence it (acquire_driver()'s own mode check
+        refuses outright), and nothing is left for a human keystroke to
+        wait on."""
         with self._lock:
             self._driving = False
+            self._driver_fenced = False
 
     def is_driving(self):
         """True while the active-driver slot is held (some do/send-

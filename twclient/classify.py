@@ -470,6 +470,53 @@ _CONTENT_ANCHORS = [
 
 _ANCHORS = _GATE_ANCHORS + _CONTENT_ANCHORS
 
+# -- WO-CLEANPREEMPT (secret sub-diff): FAIL-SAFE secret-entry detection
+# for the `tw attach` interactive keystroke path specifically -- see
+# is_probable_secret_prompt()'s own docstring for why this is a
+# DELIBERATELY broader, separate predicate from the `login_password`
+# gate anchor above (which stays narrow -- it also drives the AUTOMATED
+# login automaton's own behavior, not just its logging, so widening it
+# would change login.py's decisions, not just what gets redacted).
+_SECRET_PROMPT_RE = re.compile(
+    r"password|\bpin\b|pass\s*code|access\s*code|\bcode\b|verify|\bsecret\b",
+    re.I,
+)
+
+
+def is_probable_secret_prompt(prompt_line: str) -> bool:
+    """WO-CLEANPREEMPT (secret sub-diff): is the CURRENT prompt line
+    plausibly asking for a secret (password/PIN/passcode/access code/
+    verification code/etc)? Used ONLY by the `tw attach` interactive
+    keystroke path (Session.send_raw()'s send-time secret decision,
+    protocol.record_attach_keystroke()) -- NEVER by classify_screen()/
+    login.py's automaton, which stay on the narrower `login_password`
+    gate anchor above (see this function's own module-level comment for
+    why widening THAT anchor would be the wrong fix).
+
+    Deliberately broad and FAIL-SAFE, not a zero-leak guarantee: a raw
+    interactive keystroke stream has no structural "this is a password"
+    signal at all (unlike an automated login step, which KNOWS it's
+    sending a stored credential) -- the prompt's own TEXT is the only
+    signal available, so this errs heavily toward treating an ambiguous
+    prompt as secret rather than risking a real one landing in
+    cleartext: a redacted ordinary keystroke in the transcript is a
+    minor transparency loss; a leaked password/PIN is not. Matches
+    "password", "pin" (word-boundaried so it doesn't fire on "pinpoint"/
+    "spin"), "passcode"/"pass code", "access code", any other bare
+    "...code" prompt, "verify" (email/account verification codes), and
+    "secret".
+
+    **KNOWN RESIDUAL, not covered by this predicate** (documented per
+    the unbounded-input doctrine, not silently assumed complete): a
+    secret-entry prompt phrased with NONE of these words at all (e.g. a
+    custom in-game vendor's own idiosyncratic riddle-gate, or a prompt
+    in a language this regex doesn't cover) has no signal this function
+    can key on -- this is a best-effort heuristic over the prompt's
+    literal English text, not a semantic understanding of what the game
+    is asking for. Extend the pattern here as new secret-entry shapes
+    are found live (cipher's own review/extend remit)."""
+    return bool(_SECRET_PROMPT_RE.search(prompt_line or ""))
+
 
 def classify(rendered_text: str) -> str:
     """Whole-text anchor scan, gate anchors checked first. Simple and

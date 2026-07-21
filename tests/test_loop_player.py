@@ -104,7 +104,10 @@ class _RecordingLedger:
     def __init__(self):
         self.calls = []
 
-    def record_do(self, pre_text, input_text, secret, post_text, settled_class, capture=None, actor=None, session_id=None):
+    def record_do(
+        self, pre_text, input_text, secret, post_text, settled_class, capture=None, actor=None, session_id=None,
+        interrupted_by_human=False,
+    ):
         self.calls.append(
             dict(
                 pre_text=pre_text,
@@ -115,6 +118,7 @@ class _RecordingLedger:
                 capture=capture,
                 actor=actor,
                 session_id=session_id,
+                interrupted_by_human=interrupted_by_human,
             )
         )
 
@@ -343,6 +347,57 @@ def test_start_forwards_ledger_and_session_id_to_every_send():
     assert len(ledger.calls) == 4  # 2 cycles * 2 steps
     assert all(c["actor"] == "trainer" for c in ledger.calls)
     assert all(c["session_id"] == "s-loop-9" for c in ledger.calls)
+
+
+# -- WO-CLEANPREEMPT: is_driver_fenced wiring -------------------------------
+#
+# Provably inert for THIS caller under today's mode-machine invariants:
+# take_human() refuses outright while MODE_AUTO_LOOP is active
+# (`locked_by_auto_loop`), so `_driving` -- the only thing take_human()
+# fences on -- can never be True during a running AUTO-LOOP (acquire_
+# driver() itself refuses the instant mode isn't ai_pilot). Wired anyway
+# for consistency with every other replay_skill() caller, and the
+# defensive `except ReplayFenced` catch is proven directly below by
+# monkeypatching the real ControlLock's is_driver_fenced() -- bypassing
+# the actual invariant on purpose, purely to prove _run() can't crash
+# uncaught if a future change to that invariant ever lets this fire.
+
+
+def test_run_forwards_is_driver_fenced_bound_to_the_real_control_lock():
+    """Confirms the wiring reaches replay_skill() at all -- the normal
+    (unfenced) path, where is_driver_fenced() genuinely reads False
+    throughout, must behave identically to every existing test above."""
+    session = FakeLoopSession()
+    lock = ControlLock()
+    hub = FakeWatchHub()
+    player = LoopPlayer(session, lock, hub)
+
+    player.start(_skill(), "test-loop", cycles=2, force=True)
+    assert _wait_until(lambda: not player.running)
+
+    assert player.last_result == "cycles_complete"
+    assert player.cycles_done == 2
+
+
+def test_run_catches_replay_fenced_defensively_even_though_currently_unreachable(monkeypatch):
+    """Bypasses the real invariant on purpose (monkeypatches the REAL
+    ControlLock instance's is_driver_fenced() to return True) to prove
+    _run()'s new `except ReplayFenced` clause actually works -- without
+    it, a hypothetical future change letting this fire would crash the
+    background thread uncaught instead of reporting a clean
+    last_result="human_fenced"."""
+    session = FakeLoopSession()
+    lock = ControlLock()
+    monkeypatch.setattr(lock, "is_driver_fenced", lambda: True)
+    hub = FakeWatchHub()
+    player = LoopPlayer(session, lock, hub)
+
+    player.start(_skill(n_steps=2), "test-loop", cycles=5, force=True)
+    assert _wait_until(lambda: not player.running)
+
+    assert player.last_result == "human_fenced"
+    assert player.cycles_done == 0
+    assert session.sent == ["d"]  # step 0 of cycle 0 sent; nothing further
 
 
 def test_leave_auto_loop_from_a_finishing_thread_never_clobbers_a_later_mode():

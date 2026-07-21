@@ -30,6 +30,16 @@ AUTO-LOOP run that wanders off its recorded start sector halts exactly
 like any other mid-run surprise) and the TW-04 Trace-Ledger row per
 send (`ledger`/`session_id`, optional constructor args, `actor="trainer"`
 -- see `skills.replay_skill`'s docstring for the full contract).
+
+**WO-CLEANPREEMPT:** `_run()` also forwards `is_driver_fenced` into every
+`replay_skill()` call, same as `_dispatch_replay`/`_dispatch_play`
+(protocol.py) do -- currently a no-op for this caller specifically (see
+`_run()`'s own comment: take_human() already refuses outright while
+MODE_AUTO_LOOP is active, so the driver slot can never be fenced during
+an AUTO-LOOP run in the first place), wired for consistency/future-
+proofing rather than because a live gap exists here today. `ReplayFenced`
+is still caught defensively (`last_result = "human_fenced"`) so a future
+change to that invariant can't crash this background thread uncaught.
 """
 
 import threading
@@ -37,7 +47,7 @@ import time
 
 from .control_lock import ControlModeConflict
 from .ledger import snapshot_state
-from .skills import ReplayDivergence, SkillError, replay_skill
+from .skills import ReplayDivergence, ReplayFenced, SkillError, replay_skill
 
 _PAUSE_POLL_S = 0.1
 
@@ -73,7 +83,7 @@ class LoopPlayer:
         self.cycles_total = 0
         self.cycles_done = 0
         self.floor = None
-        self.last_result = None  # None while running; else "cycles_complete" | "surprise" | "floor_reached" | "stopped" | "refused"
+        self.last_result = None  # None while running; else "cycles_complete" | "surprise" | "floor_reached" | "stopped" | "refused" | "human_fenced"
         self.last_error = None  # str(exc) when last_result == "refused" (TW-03: e.g. a missing start_anchor); else None
 
     @property
@@ -188,7 +198,22 @@ class LoopPlayer:
                         force=force,
                         ledger=self.ledger,
                         session_id=self.session_id,
+                        # WO-CLEANPREEMPT: threaded through for consistency
+                        # with every other replay_skill() caller, though
+                        # currently provably inert for THIS caller --
+                        # take_human() refuses outright while MODE_AUTO_LOOP
+                        # is active (`locked_by_auto_loop`, control_lock.py),
+                        # so `_driving` (the only thing take_human() fences
+                        # on) can never be True while this loop is running:
+                        # acquire_driver() itself refuses the instant mode
+                        # isn't ai_pilot. Kept wired anyway so a future
+                        # change to that invariant doesn't silently leave
+                        # this caller unprotected.
+                        is_driver_fenced=self.control_lock.is_driver_fenced,
                     )
+                except ReplayFenced:
+                    result = "human_fenced"
+                    break
                 except ReplayDivergence:
                     result = "surprise"
                     break

@@ -214,6 +214,92 @@ def test_run_live_crawl_abort_mid_crawl_stops_cleanly(tmp_path):
     assert not any(e["event"] == "summary" for e in events)
 
 
+def test_run_live_crawl_abort_mid_crawl_names_the_reason(tmp_path):
+    """`aborted_reason` (WO-CLEANPREEMPT addition) carries the triggering
+    CrawlAborted message -- lets a caller/log tell an external
+    abort_check apart from a driver-fence stop without a separate
+    boolean field."""
+    profile = _profile(crawl_sacrificial=True)
+    log_path = tmp_path / "crawl.jsonl"
+    kpath = tmp_path / "game_knowledge.json"
+
+    result = run_live_crawl(
+        profile, _FakeCrawlSession, path=kpath, log_path=log_path, abort_check=lambda: True, max_nodes=50
+    )
+
+    assert result["aborted"] is True
+    assert result["aborted_reason"] == "abort_check requested a stop"
+    events = _read_jsonl(log_path)
+    aborted_events = [e for e in events if e.get("phase") == "aborted"]
+    assert aborted_events[0]["reason"] == "abort_check requested a stop"
+
+
+def test_run_live_crawl_non_aborted_completion_reports_aborted_reason_none(tmp_path):
+    profile = _profile(crawl_sacrificial=True)
+    log_path = tmp_path / "crawl.jsonl"
+    kpath = tmp_path / "game_knowledge.json"
+
+    result = run_live_crawl(profile, _FakeCrawlSession, path=kpath, log_path=log_path, max_nodes=50)
+
+    assert result["aborted"] is False
+    assert result["aborted_reason"] is None
+
+
+# -- WO-CLEANPREEMPT: is_driver_fenced -- a second, independent abort trigger
+
+
+def test_run_live_crawl_stops_cleanly_when_the_driver_is_fenced(tmp_path):
+    """Mirrors test_run_live_crawl_abort_mid_crawl_stops_cleanly's shape
+    exactly, with `is_driver_fenced` firing on the second session_factory
+    call instead of `abort_check` -- a `tw attach` racing in mid-crawl
+    (WO-CLEANPREEMPT) stops the crawl at the next node boundary, the
+    identical clean-stop path an external abort_check already uses."""
+    call_count = [0]
+
+    def is_driver_fenced():
+        call_count[0] += 1
+        return call_count[0] >= 2
+
+    profile = _profile(crawl_sacrificial=True)
+    log_path = tmp_path / "crawl.jsonl"
+    kpath = tmp_path / "game_knowledge.json"
+
+    result = run_live_crawl(
+        profile, _FakeCrawlSession, path=kpath, log_path=log_path, is_driver_fenced=is_driver_fenced, max_nodes=50
+    )
+
+    assert result["aborted"] is True
+    assert "fenced" in result["aborted_reason"]
+    assert result["nodes_visited"] is None
+    assert result["screens_seen"] == 1  # only the root-open succeeded before the fence fired
+
+    phases = [e["phase"] for e in _read_jsonl(log_path) if e["event"] == "phase"]
+    assert phases == ["connect", "registered", "crawl_start", "aborted"]
+
+
+def test_run_live_crawl_is_driver_fenced_and_abort_check_are_independent_triggers(tmp_path):
+    """Either signal alone is enough -- `abort_check` staying False the
+    whole run doesn't mask a fence, and vice versa (proven separately
+    above); here abort_check is provided but never trips, confirming the
+    fence check still fires on its own."""
+    profile = _profile(crawl_sacrificial=True)
+    log_path = tmp_path / "crawl.jsonl"
+    kpath = tmp_path / "game_knowledge.json"
+
+    result = run_live_crawl(
+        profile,
+        _FakeCrawlSession,
+        path=kpath,
+        log_path=log_path,
+        abort_check=lambda: False,
+        is_driver_fenced=lambda: True,
+        max_nodes=50,
+    )
+
+    assert result["aborted"] is True
+    assert "fenced" in result["aborted_reason"]
+
+
 def test_run_live_crawl_abort_check_never_called_when_gate_refuses(tmp_path):
     """The crawl_sacrificial gate is checked before abort_check is ever
     consulted at all -- a non-sacrificial profile refuses without

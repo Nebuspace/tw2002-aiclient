@@ -93,6 +93,24 @@ def _driving_dispatch(server):
         lock.release_driver()
 
 
+def _driver_was_fenced(server):
+    """Read once, right after a do/send/haggle dispatch's own send-then-
+    settle window closes -- immediately before its `_record_ledger` call
+    -- was a `take_human()` call fenced against THIS dispatch while it
+    was still mid-flight (WO-CLEANPREEMPT; see control_lock.ControlLock.
+    take_human()/is_driver_fenced())? A single lock-guarded read via
+    `is_driver_fenced()` -- never a second raw peek at `_driving`/
+    `_driver_fenced`, which `_driving_dispatch`'s own
+    `finally: lock.release_driver()` is about to clear anyway. `None`/
+    no-control_lock (a bare dispatch-harness test) reads as "never
+    fenced", same convention as `_control_lock_error`'s own getattr
+    guard."""
+    lock = getattr(server, "control_lock", None)
+    if lock is None:
+        return False
+    return lock.is_driver_fenced()
+
+
 def _current_actor(server):
     """TW-05 actor attribution (knowledge/architecture/autonomy-loop.md):
     who/what generated this dispatch's send. Direct do/send/haggle in
@@ -290,7 +308,24 @@ def dispatch(session, verb, args, server):
             resp = build_response(session, settled_reason=reason, extra={"elapsed": elapsed})
             history_args = {**args, "input": "<redacted>"} if secret else args
             session.record_history("do", history_args, resp["prompt"], resp["classification"], reason)
-            _record_ledger(server, session, pre_text, text, secret, resp)
+            # WO-CLEANPREEMPT FIX 1 (cipher-confirmed Concern-1): explicit
+            # actor="ai", mirroring haggle's own explicit actor="trainer"
+            # below -- NEVER `_current_actor()`'s live-mode derivation.
+            # `_driving_dispatch` only ever reaches this line while THIS
+            # dispatch legitimately acquired the driver slot under
+            # ai_pilot mode (acquire_driver()'s own atomic mode+slot
+            # check), so the true originating actor is unconditionally
+            # "ai" regardless of whether mode has since flipped to
+            # MODE_HUMAN (a fence, not a refusal -- see control_lock.py).
+            # `_current_actor()`'s human-branch reading mode AT
+            # LEDGER-WRITE TIME (post-fence) was the corrupted signal
+            # spectate_layout.compute_autonomy_ratio() consumed --
+            # `interrupted_by_human` is the correct, authoritative flag
+            # for that instead.
+            _record_ledger(
+                server, session, pre_text, text, secret, resp,
+                actor="ai", interrupted_by_human=_driver_was_fenced(server),
+            )
             _record_skill_step(server, text, wait_prompt, resp["classification"], secret)
             return resp
 
@@ -304,7 +339,12 @@ def dispatch(session, verb, args, server):
             pre_text = session.render_text(session.render())
             session.send(text, enter=enter, secret=secret)
             resp = build_response(session)
-            _record_ledger(server, session, pre_text, text, secret, resp)
+            # WO-CLEANPREEMPT FIX 1: same explicit actor="ai" as `do`
+            # above -- see that block's comment for the full rationale.
+            _record_ledger(
+                server, session, pre_text, text, secret, resp,
+                actor="ai", interrupted_by_human=_driver_was_fenced(server),
+            )
             _record_skill_step(server, text, None, resp["classification"], secret)
             return resp
 
@@ -474,7 +514,7 @@ def dispatch(session, verb, args, server):
     return {"ok": False, "error": f"unknown_verb:{verb}"}
 
 
-def _record_ledger(server, session, pre_text, input_text, secret, resp, actor=None):
+def _record_ledger(server, session, pre_text, input_text, secret, resp, actor=None, interrupted_by_human=False):
     """C1 hook: every `do`/`send`/`haggle` dispatch appends one
     Trace-Ledger entry (twclient/ledger.py), tagged with the
     currently-open `tw record` capture name if any, plus TW-05's
@@ -484,7 +524,15 @@ def _record_ledger(server, session, pre_text, input_text, secret, resp, actor=No
     knowledge/architecture/autonomy-loop.md's own "trainer" definition)
     passes an explicit override instead. `server.ledger` is absent in
     tests that build a bare dispatch harness -- silently a no-op then,
-    same convention as `status`'s `getattr(server, "watch_hub", None)`."""
+    same convention as `status`'s `getattr(server, "watch_hub", None)`.
+
+    `interrupted_by_human` (WO-CLEANPREEMPT, additive on top of TW-05's
+    actor fields) -- True when this dispatch's own driver slot was
+    fenced mid-flight by a `tw attach` taking control out from under it
+    (see `_driver_was_fenced()`); every do/send/haggle call site computes
+    it fresh right before calling here. Passed straight through to
+    `ledger.record_do()` so a pattern-learning consumer can exclude a
+    corrupted action->outcome mapping instead of silently trusting it."""
     ledger = getattr(server, "ledger", None)
     if ledger is None:
         return
@@ -501,6 +549,63 @@ def _record_ledger(server, session, pre_text, input_text, secret, resp, actor=No
         resp["classification"],
         capture=capture,
         actor=actor if actor is not None else _current_actor(server),
+        session_id=_current_session_id(session),
+        interrupted_by_human=interrupted_by_human,
+    )
+
+
+def record_attach_keystroke(server, session, pre_text, input_text, secret):
+    """WO-CLEANPREEMPT: routes a `tw attach` keystroke into the same
+    Trace-Ledger every do/send/haggle dispatch already writes to --
+    `actor="human"`, the branch `_current_actor()`'s own docstring has
+    anticipated since TW-05 ("routing send_raw()'s attach keystrokes
+    through the same ledger sink"). Called by daemon.py's
+    `CommandHandler._handle_attach` right after `session.send_raw()`
+    returns -- an attach connection never re-enters the one-shot verb
+    `dispatch()` at all (see `_handle_attach`'s own docstring), so this
+    is a second, parallel entry point onto the SAME ledger sink, not a
+    new branch of `_record_ledger`. No leading underscore (unlike this
+    module's other dispatch-internal helpers): this is the one function
+    here another module (daemon.py) calls directly.
+
+    There is no `resp`-shaped `build_response()` result to read
+    `post_text`/`classification` from here, unlike `_record_ledger`'s
+    do/send/haggle callers -- attach's live screen streams over a
+    SEPARATE `subscribe` connection (interactive_app.SpectateClient),
+    never through this request/response path -- so this reads the
+    post-send screen itself, immediately, with no `wait_settle` (an
+    interactive keystroke is never "settled"; the same immediacy the
+    `send` verb's own ledger write already accepts).
+
+    `secret` (WO-CLEANPREEMPT secret sub-diff) is now a REQUIRED
+    parameter, not derived here at all: mack's staleness finding showed
+    deriving it from `pre_text` (captured in `_handle_attach` BEFORE
+    `send_raw()`'s own up-to-10s fence-wait) could under-redact against
+    a screen that transitioned to a secret prompt DURING that wait. The
+    caller passes `session.last_sent_secret` -- the SAME send-time
+    decision (`classify.is_probable_secret_prompt()` against the CURRENT
+    screen, evaluated inside `send_raw()` right before the byte hit the
+    wire) that already gated the transcript LOG sink
+    (`TelnetConnection.send_bytes(secret=...)`) -- so both sinks agree,
+    always, by construction, never two independent derivations that
+    could disagree. `ledger.record_do()`'s existing secret branch
+    (input/prompt both -> "<redacted>") does the actual redaction from
+    there (TW-02b invariant: a human-typed secret must never land
+    cleartext in the ledger)."""
+    ledger = getattr(server, "ledger", None)
+    if ledger is None:
+        return
+    post_text = session.render_text(session.render())
+    post_lines = post_text.splitlines()
+    post_prompt = post_lines[-1].strip() if post_lines else ""
+    settled_class = classify_screen(post_text, post_prompt)
+    ledger.record_do(
+        pre_text,
+        input_text,
+        secret,
+        post_text,
+        settled_class,
+        actor="human",
         session_id=_current_session_id(session),
     )
 
@@ -553,8 +658,20 @@ def _dispatch_replay(server, session, args):
     do/send/haggle dispatches already write to, tagged `actor="trainer"`
     by replay_skill itself. `server.ledger` is absent in bare
     dispatch-harness tests -- same getattr(..., None) no-op convention
-    as `_record_ledger`."""
-    from .skills import ReplayDivergence, SkillError, load_skill, replay_skill
+    as `_record_ledger`.
+
+    WO-CLEANPREEMPT (multi-step fence, mack's repro): this dispatch
+    reserves the driver slot (`_driving_dispatch`, one `acquire_driver()`
+    call, protocol.py's "replay" verb block) for the WHOLE multi-step
+    run, not per-step -- so a `tw attach` racing in mid-replay fences the
+    entire run once, and `replay_skill()` must keep re-checking that
+    fence at every step boundary rather than firing every remaining
+    step's send regardless (see `replay_skill`'s own docstring).
+    `is_driver_fenced=lambda: _driver_was_fenced(server)` wires that
+    check through; `ReplayFenced` (distinct from `ReplayDivergence` --
+    an orderly human preemption, not "reality disagreed") gets its own
+    clean `"human_fenced"` error, never folded into `"divergence"`."""
+    from .skills import ReplayDivergence, ReplayFenced, SkillError, load_skill, replay_skill
 
     name = args.get("name")
     if not name:
@@ -569,7 +686,10 @@ def _dispatch_replay(server, session, args):
             force=args.get("force", False),
             ledger=getattr(server, "ledger", None),
             session_id=_current_session_id(session),
+            is_driver_fenced=lambda: _driver_was_fenced(server),
         )
+    except ReplayFenced as e:
+        return {"ok": False, "error": "human_fenced", **e.as_dict()}
     except ReplayDivergence as e:
         return {"ok": False, "error": "divergence", **e.as_dict()}
     except SkillError as e:
@@ -593,7 +713,13 @@ def _dispatch_mine(args):
 def _dispatch_play(server, session, args):
     """TW-03/TW-04 wiring -- same `force`/`ledger`/`session_id` contract
     as `_dispatch_replay` above, forwarded into every cycle's
-    `replay_skill()` call by `play_skill` itself."""
+    `replay_skill()` call by `play_skill` itself.
+
+    WO-CLEANPREEMPT: same `is_driver_fenced` wiring as `_dispatch_replay`
+    -- `play_skill()` already catches its own `ReplayFenced` internally
+    (same shape as its existing `ReplayDivergence` handling) and reports
+    `"halted": "human_fenced"` as part of `result`, so no new `except`
+    clause is needed here either."""
     from .skills import SkillError, load_skill, play_skill
 
     name = args.get("name")
@@ -611,6 +737,7 @@ def _dispatch_play(server, session, args):
             force=args.get("force", False),
             ledger=getattr(server, "ledger", None),
             session_id=_current_session_id(session),
+            is_driver_fenced=lambda: _driver_was_fenced(server),
         )
     except SkillError as e:
         return {"ok": False, "error": str(e)}
@@ -657,7 +784,16 @@ def _dispatch_haggle(server, session, args):
     # TW-05: haggle is the deterministic, no-LLM engine autonomy-loop.md
     # names explicitly as a "trainer" example -- never the mode-derived
     # "ai" default `_current_actor()` would otherwise give it.
-    _record_ledger(server, session, pre_text, input_desc, False, resp, actor="trainer")
+    _record_ledger(
+        server,
+        session,
+        pre_text,
+        input_desc,
+        False,
+        resp,
+        actor="trainer",
+        interrupted_by_human=_driver_was_fenced(server),
+    )
     return resp
 
 
@@ -738,6 +874,16 @@ def _dispatch_crawl_start(server, session, args):
                 log_path=log_path,
                 max_nodes=args.get("max_nodes", 200),
                 step_timeout=args.get("step_timeout", 8.0),
+                # WO-CLEANPREEMPT (multi-step fence): this dispatch holds
+                # the driver slot for the crawl's ENTIRE duration, same as
+                # replay/play above -- a `tw attach` racing in mid-crawl
+                # stops it at the next node boundary rather than letting
+                # it keep emitting keystrokes. Same `_driver_was_fenced()`
+                # reader as do/send/replay/play; `run_live_crawl` already
+                # has an `abort_check` seam for exactly this shape of
+                # external stop, so this is a second, independent trigger
+                # on the identical clean-stop path (see its docstring).
+                is_driver_fenced=lambda: _driver_was_fenced(server),
             )
         except CrawlSafetyError as e:
             return {"ok": False, "error": str(e)}

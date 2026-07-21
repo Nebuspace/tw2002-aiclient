@@ -23,6 +23,17 @@ read site here and in miner.py/skills.py already treats a missing key as
 "unknown", the same convention `reward`'s own per-field omission relies
 on -- so old rows stay fully readable, never migrated in place.
 
+`interrupted_by_human` (WO-CLEANPREEMPT) is a further additive field,
+default `False`: True when a `tw attach` took control_lock's MODE_HUMAN
+out from under this dispatch WHILE it was still mid-flight (see
+control_lock.ControlLock.take_human()/is_driver_fenced()), meaning the
+server response this entry's post_state/reward were computed from may
+have been shaped by BOTH this action and an interleaved human keystroke
+-- a corrupted action->outcome mapping. A Phase-3 learning-loop consumer
+(not yet live; lives in another seat's `learning/` lane) MUST skip an
+entry with this flag set rather than trusting it. Same "old rows simply
+lack the key" convention as the TW-05 fields above.
+
 `prompt` is the game's actual question (DESIGN-v2.md §10) -- the last
 non-blank line of `pre_text`, e.g. "Your offer [158]?" -- so a human
 scanning the ledger can tell what an `input` was answering, not just
@@ -158,6 +169,7 @@ class LedgerWriter:
         actor: str = "ai",
         session_id: str | None = None,
         intent: str | None = None,
+        interrupted_by_human: bool = False,
     ):
         """Build and append one ledger entry for a completed `do`/`send`.
         `capture` is the active `tw record` skill name, if any (protocol.py
@@ -173,7 +185,14 @@ class LedgerWriter:
         correlates this entry to one continuous play session; `intent`
         is an optional short AI-supplied rationale. All three are
         keyword-only-by-convention (never required positionally) so
-        every pre-TW-05 call site keeps working unchanged."""
+        every pre-TW-05 call site keeps working unchanged.
+
+        `interrupted_by_human` (WO-CLEANPREEMPT, additive on top of the
+        TW-05 fields above -- schema version unchanged) defaults `False`;
+        protocol.py's do/send/haggle call sites pass the real value via
+        `_driver_was_fenced()`. Every pre-existing call site
+        (skills.py/loop_player.py/autopilot.py, none of which pass it)
+        keeps writing unchanged rows."""
         pre_state = snapshot_state(pre_text)
         post_state = snapshot_state(post_text)
         prompt = extract_prompt(pre_text)
@@ -196,6 +215,7 @@ class LedgerWriter:
             "settled_class": settled_class,
             "screen_delta_summary": summarize_screen_delta(pre_text, post_text),
             "reward": compute_reward(pre_state, post_state),
+            "interrupted_by_human": interrupted_by_human,
         }
         self.append(entry)
         return entry

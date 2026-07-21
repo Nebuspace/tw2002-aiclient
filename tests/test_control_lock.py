@@ -257,6 +257,61 @@ def test_acquire_driver_refuses_when_human_attach_wins_the_mode_race():
     assert lock.is_driving() is False
 
 
+# -- WO-CLEANPREEMPT: take_human() fences an active driver instead of
+# refusing it, and never blocks/refuses on that account -----------------
+
+def test_take_human_never_refuses_while_driving():
+    lock = ControlLock()
+    lock.acquire_driver()
+    lock.take_human()  # must not raise -- the human always wins immediately
+    assert lock.mode == MODE_HUMAN
+    assert lock.is_driving() is True  # the ai_pilot dispatch is untouched, just fenced
+    assert lock.is_driver_fenced() is True
+
+
+def test_is_driver_fenced_false_by_default():
+    lock = ControlLock()
+    assert lock.is_driver_fenced() is False
+
+
+def test_take_human_does_not_fence_when_nothing_is_driving():
+    lock = ControlLock()
+    lock.take_human()
+    assert lock.is_driver_fenced() is False
+
+
+def test_release_driver_clears_the_fence():
+    lock = ControlLock()
+    lock.acquire_driver()
+    lock.take_human()
+    assert lock.is_driver_fenced() is True
+    lock.release_driver()
+    assert lock.is_driver_fenced() is False
+    assert lock.is_driving() is False
+
+
+def test_fresh_acquire_driver_after_a_fenced_release_starts_unfenced():
+    lock = ControlLock()
+    lock.acquire_driver()
+    lock.take_human()
+    lock.release_driver()
+    lock.release_human()
+    lock.acquire_driver()  # a brand new dispatch, unrelated to the earlier fence
+    assert lock.is_driver_fenced() is False
+
+
+def test_take_human_still_refuses_the_pre_existing_exclusive_modes_while_driving():
+    # The fence only changes the `_driving` interaction -- take_human()'s
+    # OTHER two refusals (already_attached, locked_by_auto_loop) are
+    # untouched by WO-CLEANPREEMPT.
+    lock = ControlLock()
+    lock.enter_auto_loop()
+    with pytest.raises(ControlModeConflict) as exc_info:
+        lock.take_human()
+    assert str(exc_info.value) == "locked_by_auto_loop"
+    assert lock.mode == MODE_AUTO_LOOP
+
+
 def test_driver_lock_never_leaks_after_a_dispatch_ends():
     # Mode-transition/release proof: once a driver releases (mirroring a
     # completed dispatch), BOTH the driver slot AND the mode machine are

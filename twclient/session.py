@@ -8,6 +8,7 @@ can be handed `self`.
 import threading
 import time
 
+from .classify import is_probable_secret_prompt
 from .connection import TelnetConnection
 from .iac import TelnetHandler
 from .logging_util import TranscriptLogger
@@ -15,6 +16,19 @@ from .settle import wait_for_settle
 from .terminal import TerminalScreen
 
 MIN_SEND_GAP_S = 0.15  # guardrail: no hammering the server
+
+# WO-CLEANPREEMPT: bounded wait for a FENCED in-flight ai_pilot dispatch
+# to actually release before a human `tw attach` keystroke reaches the
+# wire (see Session.send_raw()'s own docstring). Generous relative to
+# `do`'s own default settle timeout (protocol.py's "timeout" arg, 8.0s)
+# so an ordinary in-flight dispatch clears well within it; a genuinely
+# wedged dispatch (one that never reaches `release_driver()` at all --
+# which would already violate every OTHER try/finally-paired guarantee
+# in this codebase) is the only way this bound is ever actually reached,
+# and even then this is a courtesy ORDERING wait, never a second refusal
+# path -- the keystroke is sent regardless once the bound expires.
+_FENCE_WAIT_TIMEOUT_S = 10.0
+_FENCE_WAIT_POLL_S = 0.02
 
 
 class Session:
@@ -38,11 +52,30 @@ class Session:
         # auto-loop, or attach alike -- can show it, from ONE chokepoint
         # (send()/send_raw() below), the same way build_response() is
         # the single chokepoint on the receive side. `None` until the
-        # first send; a `secret=True` send stores the SAME "<redacted>"
-        # placeholder protocol.py's history/ledger already use -- never
-        # the real password text.
+        # first send; a `secret=True` send() -- and, as of WO-CLEANPREEMPT's
+        # secret sub-diff, a secret-prompt send_raw() attach keystroke too
+        # -- stores the SAME "<redacted>" placeholder protocol.py's
+        # history/ledger already use -- never the real password text.
+        # This closes the THIRD sink (`tw status`'s `sent_input` field,
+        # which reads straight off this attribute, and therefore the
+        # spectate TX-channel display that reads `sent_input` too) with
+        # the SAME send-time `secret` reading send_raw() already computes
+        # for the LOG/LEDGER sinks -- one decision, three sinks now, never
+        # a separate derivation for this one.
         self.last_sent = None
         self.last_sent_ts = None
+        # WO-CLEANPREEMPT (secret sub-diff): send_raw()'s OWN send-time
+        # secret decision (is_probable_secret_prompt() against the
+        # CURRENT screen, evaluated right before the byte reaches the
+        # wire -- see send_raw()'s docstring), exposed here so daemon.py's
+        # CommandHandler._handle_attach can read the SAME decision back
+        # after the call and thread it into protocol.record_attach_
+        # keystroke()'s own ledger row, rather than re-deriving it a
+        # second, potentially-stale way. `send()`'s own `secret` argument
+        # is caller-supplied and unrelated to this -- this attribute is
+        # ONLY ever set by send_raw(), defaulting False until the first
+        # attach keystroke.
+        self.last_sent_secret = False
 
         self.history = []  # ring buffer of recent do/read events
         self._history_cap = 200
@@ -159,7 +192,7 @@ class Session:
             self.last_sent = "<redacted>" if secret else text
             self.last_sent_ts = self._last_send_time
 
-    def send_raw(self, data: bytes):
+    def send_raw(self, data: bytes, control_lock=None):
         """Exact-byte pass-through for interactive `tw attach` keystrokes
         -- no text encoding, no auto-appended \\r\\n (unlike send()); the
         caller (daemon.py's CommandHandler._handle_attach) has already
@@ -168,19 +201,64 @@ class Session:
         guardrail as send() -- a human mashing keys deserves the same
         courtesy to the server as a scripted `do`.
 
-        `last_sent` gets the LATIN-1-decoded text (a raw keystroke has no
-        `secret` flag of its own -- see interactive_app.py's known
-        unredacted-attach-logging limitation; this doesn't newly regress
-        anything, just surfaces the same already-unredacted bytes)."""
+        `control_lock`, when provided (the ONLY real caller passes the
+        daemon's own ControlLock -- see CommandHandler._handle_attach),
+        gates a bounded wait for a FENCED in-flight ai_pilot dispatch
+        (WO-CLEANPREEMPT, control_lock.ControlLock.take_human()) to
+        actually clear before THIS byte reaches the wire: take_human()
+        itself never blocks or refuses while a dispatch is mid-flight
+        (the human always wins immediately) -- the wait happens HERE
+        instead, one layer later, at the point a real byte is about to
+        go out, so the fenced dispatch's own in-flight send-then-settle
+        window always closes before any human byte can interleave with
+        it on the wire. Bounded by `_FENCE_WAIT_TIMEOUT_S` -- a courtesy
+        ordering wait, never a second refusal path; the keystroke is
+        always eventually sent even if the bound is reached. `None` (the
+        default) is a complete no-op, matching every other optional-
+        collaborator convention in this codebase (protocol.py's
+        `getattr(..., None)` guards).
+
+        WO-CLEANPREEMPT (secret sub-diff, cipher's proven leak): a raw
+        keystroke has no `secret` flag of its own the way `send()`'s
+        caller can supply one -- so THIS function decides it, fresh,
+        every call: right after the fence-wait resolves (never before --
+        mack's staleness finding: the screen can transition to a secret
+        prompt DURING an up-to-`_FENCE_WAIT_TIMEOUT_S` wait, and a
+        pre-wait decision would under-redact against that later, real
+        prompt) and immediately before the byte reaches the wire, this
+        re-renders the CURRENT screen and classifies its prompt line via
+        `classify.is_probable_secret_prompt()` (a deliberately broad,
+        FAIL-SAFE heuristic -- see that function's own docstring for
+        what it catches and its documented residual). The result gates
+        `TelnetConnection.send_bytes(secret=...)` (redacts the transcript
+        LOG the same way `send_text(secret=True)` already does) and is
+        exposed via `self.last_sent_secret` so `CommandHandler.
+        _handle_attach` can thread the SAME decision into `protocol.
+        record_attach_keystroke()`'s ledger row -- one decision, read by
+        all three sinks (log, ledger, and `last_sent` below), never
+        independent (and therefore possibly disagreeing) derivations.
+        `last_sent` -- the THIRD sink (`tw status`'s `sent_input` field
+        reads it straight off this attribute, and the spectate
+        TX-channel display reads `sent_input` too) -- is now redacted
+        the SAME "<redacted>" way `send()` already redacts it for a
+        `secret=True` do/send call."""
+        if control_lock is not None:
+            deadline = time.monotonic() + _FENCE_WAIT_TIMEOUT_S
+            while control_lock.is_driver_fenced() and time.monotonic() < deadline:
+                time.sleep(_FENCE_WAIT_POLL_S)
+        rows = self.render()
+        prompt_line = rows[-1].strip() if rows else ""
+        secret = is_probable_secret_prompt(prompt_line)
         with self.send_lock:
             now = time.monotonic()
             delta = now - self._last_send_time
             if delta < MIN_SEND_GAP_S:
                 time.sleep(MIN_SEND_GAP_S - delta)
-            self.conn.send_bytes(data)
+            self.conn.send_bytes(data, secret=secret)
             self._last_send_time = time.monotonic()
-            self.last_sent = data.decode("latin-1", errors="replace")
+            self.last_sent = "<redacted>" if secret else data.decode("latin-1", errors="replace")
             self.last_sent_ts = self._last_send_time
+            self.last_sent_secret = secret
 
     # -- history ---------------------------------------------------------
 

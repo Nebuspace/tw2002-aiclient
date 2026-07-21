@@ -20,7 +20,7 @@ from .credentials import get_password, save_password
 from .guardian import SessionGuardian
 from .ledger import LedgerWriter
 from .loop_player import LoopPlayer
-from .protocol import dispatch
+from .protocol import dispatch, record_attach_keystroke
 from .session import Session
 from .skills import SkillRecorder
 from .watch import WatchHub
@@ -95,6 +95,28 @@ class CommandHandler(socketserver.StreamRequestHandler):
         produce (printable ASCII, control chars, ANSI cursor escapes)
         round-trips exactly through JSON that way, decoded back to bytes
         with .encode("latin-1") on this end.
+
+        WO-CLEANPREEMPT: `take_human()` above always succeeds instantly
+        even while an ai_pilot dispatch is actively mid-flight (fencing
+        it instead of refusing -- see control_lock.py) -- so every
+        keystroke send below passes `self.server.control_lock` through
+        to `session.send_raw()`, which holds the byte off the wire until
+        any such fenced dispatch actually releases (a clean cutover onto
+        the one wire). Each keystroke is also now routed into the same
+        Trace-Ledger every do/send/haggle dispatch writes to
+        (`record_attach_keystroke`, `actor="human"`) -- the branch
+        `protocol._current_actor()`'s own docstring anticipated since
+        TW-05.
+
+        WO-CLEANPREEMPT (secret sub-diff, cipher's proven leak): every
+        keystroke was previously logged UNREDACTED to the transcript --
+        `session.send_raw()` now decides `secret` itself (from the
+        CURRENT screen, right before the byte hits the wire) and gates
+        `connection.send_bytes()`'s own log line on it; `session.
+        last_sent_secret` carries that SAME decision back here so
+        `record_attach_keystroke`'s ledger row agrees with it -- one
+        decision, two sinks, never a second independent (and possibly
+        stale) derivation.
         """
         lock = self.server.control_lock
         session = self.server.session
@@ -123,7 +145,19 @@ class CommandHandler(socketserver.StreamRequestHandler):
                 if not isinstance(key, str):
                     self._respond({"ok": False, "error": "missing_key"})
                     continue
-                session.send_raw(key.encode("latin-1", errors="ignore"))
+                pre_text = session.render_text(session.render())
+                session.send_raw(key.encode("latin-1", errors="ignore"), control_lock=lock)
+                # WO-CLEANPREEMPT (secret sub-diff): `session.last_sent_secret`
+                # is send_raw()'s OWN send-time decision (the CURRENT
+                # screen, evaluated post-fence-wait, right before the
+                # byte hit the wire) -- read back here and threaded
+                # through so the ledger row agrees with the transcript
+                # log's own redaction, never re-derived a second,
+                # potentially-stale way from `pre_text` (which was
+                # captured BEFORE the fence-wait even started).
+                record_attach_keystroke(
+                    self.server, session, pre_text, session.last_sent, session.last_sent_secret
+                )
                 self._respond({"ok": True})
         except (BrokenPipeError, ConnectionResetError, OSError):
             pass

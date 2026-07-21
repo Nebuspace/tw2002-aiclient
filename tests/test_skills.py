@@ -79,7 +79,10 @@ class _RecordingLedger:
     def __init__(self):
         self.calls = []
 
-    def record_do(self, pre_text, input_text, secret, post_text, settled_class, capture=None, actor=None, session_id=None):
+    def record_do(
+        self, pre_text, input_text, secret, post_text, settled_class, capture=None, actor=None, session_id=None,
+        interrupted_by_human=False,
+    ):
         self.calls.append(
             dict(
                 pre_text=pre_text,
@@ -90,6 +93,7 @@ class _RecordingLedger:
                 capture=capture,
                 actor=actor,
                 session_id=session_id,
+                interrupted_by_human=interrupted_by_human,
             )
         )
 
@@ -496,6 +500,83 @@ def test_play_skill_forwards_ledger_and_session_id_across_every_cycle():
     assert result["halted"] == "cycles_complete"
     assert len(ledger.calls) == 3  # one row per cycle's one step
     assert all(c["actor"] == "trainer" and c["session_id"] == "s-loop" for c in ledger.calls)
+
+
+# -- WO-CLEANPREEMPT: multi-step fence (mack's quantified repro) ------------
+#
+# mack's finding: a 6-step skill fenced after step 1 kept firing the
+# remaining 5 steps regardless (every one of those rows `interrupted_by_
+# human=False`), because `_driving_dispatch` reserves the driver slot for
+# the WHOLE replay/play dispatch (one `acquire_driver()` call covering
+# every step), not per-step -- a human attaching mid-run fenced the whole
+# run once, and nothing re-checked it at any subsequent step boundary.
+
+
+def test_replay_skill_stops_firing_further_sends_once_fenced_mid_run():
+    """`is_driver_fenced` reads False on step 0's own check (nothing has
+    fenced it yet) and True from step 1's check onward (simulating a `tw
+    attach` racing in during/after step 0's send-then-confirm window) --
+    step 1's own send still completes (the fence is only OBSERVED after
+    that step's send, mirroring the do/send fix's own "during/after
+    settle" checkpoint), but steps 2 through 5 must NEVER fire."""
+    ledger = _RecordingLedger()
+    session = FakeReplaySession(["Command [TL=00753:0/0/0/850]"] + ["Sector : 100"] * 6)
+    skill = _skill(
+        [{"input": "M", "wait_prompt": None, "expected_post_class": "sector_display"} for _ in range(6)]
+    )
+    fence_calls = []
+
+    def is_driver_fenced():
+        fence_calls.append(1)
+        return len(fence_calls) >= 2
+
+    with pytest.raises(skills.ReplayFenced) as exc_info:
+        skills.replay_skill(session, skill, force=True, ledger=ledger, is_driver_fenced=is_driver_fenced)
+
+    assert exc_info.value.step_i == 1
+    # Only steps 0 and 1 were EVER sent -- the other 5 (mack's exact
+    # quantified bug) never fire once the fence is observed.
+    assert session.sent == [("M", False), ("M", False)]
+    assert len(ledger.calls) == 2  # no ledger row for a step that never sent
+    assert ledger.calls[0]["interrupted_by_human"] is False  # step 0: not yet fenced
+    assert ledger.calls[1]["interrupted_by_human"] is True  # step 1: fenced right after this send
+
+
+def test_replay_skill_completes_every_step_when_never_fenced_sensitivity_control():
+    """Sensitivity control for the test above: `is_driver_fenced` always
+    False -- proves the stop above is a real signal (an actual fence
+    event), not a check that halts unconditionally."""
+    ledger = _RecordingLedger()
+    session = FakeReplaySession(["Command [TL=00753:0/0/0/850]"] + ["Sector : 100"] * 6)
+    skill = _skill(
+        [{"input": "M", "wait_prompt": None, "expected_post_class": "sector_display"} for _ in range(6)]
+    )
+    results = skills.replay_skill(session, skill, force=True, ledger=ledger, is_driver_fenced=lambda: False)
+    assert len(results) == 6
+    assert session.sent == [("M", False)] * 6
+    assert all(c["interrupted_by_human"] is False for c in ledger.calls)
+
+
+def test_replay_skill_is_a_no_op_wait_when_is_driver_fenced_not_provided():
+    # Same optional-no-op convention as ledger/session_id -- an unwired
+    # caller (every pre-WO-CLEANPREEMPT call site) must keep working.
+    session = FakeReplaySession(["Command [TL=00753:0/0/0/850]", "Sector : 100"])
+    skill = _skill([{"input": "M", "wait_prompt": None, "expected_post_class": "sector_display"}])
+    results = skills.replay_skill(session, skill, force=True)
+    assert results[0]["actual"] == "sector_display"
+
+
+def test_play_skill_halts_with_human_fenced_when_the_driver_is_fenced_mid_cycle():
+    """`play_skill` reports a fence as its OWN distinct outcome, never
+    folded into "surprise" (an orderly human preemption is not "reality
+    disagreed with the recording")."""
+    session = FakeReplaySession(["Command [TL=00753:0/0/0/850]"] + ["Sector : 100"] * 3)
+    skill = _skill([{"input": "M", "wait_prompt": None, "expected_post_class": "sector_display"}])
+    result = skills.play_skill(session, skill, cycles=5, force=True, is_driver_fenced=lambda: True)
+    assert result["halted"] == "human_fenced"
+    assert result["cycles_completed"] == 0
+    assert result["fenced"]["step_i"] == 0
+    assert session.sent == [("M", False)]  # cycle 0's one step sent; cycles 1-4 never started
 
 
 # -- TW-02: send/settle race, routed through settle.send_and_confirm --------

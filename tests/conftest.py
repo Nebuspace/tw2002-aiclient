@@ -124,6 +124,14 @@ class FakeAttachSession:
         # see session.py) -- exercised by tests/test_protocol_trainer_panel.py.
         self.last_sent = None
         self.last_sent_ts = None
+        # WO-CLEANPREEMPT (secret sub-diff): mirrors the real Session's
+        # own `last_sent_secret` -- daemon.py's real _handle_attach reads
+        # it back after send_raw() unconditionally, so this fake needs
+        # the attribute even though no test here exercises real secret
+        # classification (this fake's screen is static/non-realistic;
+        # the actual redaction logic is proven against the real Session
+        # in tests/test_session.py and tests/test_attach_redaction.py).
+        self.last_sent_secret = False
         self._cursor = {"x": 0, "y": 0}
         self._pending_advance = False
         self._real_time_scale = real_time_scale
@@ -164,7 +172,24 @@ class FakeAttachSession:
         self.last_sent_ts = self.t
         self._pending_advance = True
 
-    def send_raw(self, data: bytes):
+    def send_raw(self, data: bytes, control_lock=None):
+        # `control_lock` mirrors the real Session.send_raw()'s
+        # WO-CLEANPREEMPT signature (daemon.py's real _handle_attach
+        # always passes it) -- accepted here so the real
+        # CommandHandler._handle_attach code path works unmodified
+        # against this fake, honoring the same bounded fence-wait a real
+        # Session would (a no-op in every existing fake_daemon test,
+        # since none of them arrange a fenced driver first). Deliberately
+        # REAL wall-clock (time.monotonic()/time.sleep()), not this
+        # fake's own simulated `self.t` -- this wait is cross-thread
+        # synchronization against a REAL ControlLock shared with the
+        # daemon's other real threads, unrelated to the settle-detection
+        # fake-clock semantics `sleep()`/`self.t` model elsewhere in this
+        # fixture.
+        if control_lock is not None:
+            deadline = time.monotonic() + 10.0
+            while control_lock.is_driver_fenced() and time.monotonic() < deadline:
+                time.sleep(0.02)
         self.raw_sent.append(data)
         self.last_sent = data.decode("latin-1", errors="replace")
         self.last_sent_ts = self.t

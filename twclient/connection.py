@@ -79,14 +79,28 @@ class TelnetConnection:
                 self.logger.log_raw("TX", data)
         self._sock.sendall(data)
 
-    def send_bytes(self, data: bytes):
+    def send_bytes(self, data: bytes, secret: bool = False):
         """Exact pass-through -- no text encoding, no auto-appended CRLF
         (unlike send_text()). Used for raw interactive keystrokes (`tw
         attach`), where the caller has already decided the exact wire
         bytes (e.g. a bare CRLF for Enter, an ANSI cursor escape for an
-        arrow key)."""
+        arrow key).
+
+        WO-CLEANPREEMPT (secret sub-diff): `secret`, when True, mirrors
+        send_text()'s own redaction contract EXACTLY -- log_redacted()
+        instead of the raw bytes, so a human-typed password/PIN/etc
+        typed via `tw attach` never lands in the transcript log (cipher's
+        proven leak: every keystroke was unconditionally log_raw()'d
+        here, regardless of what prompt it was answering). The caller
+        (Session.send_raw()) decides `secret` fresh, at the moment THIS
+        call is made, from the CURRENT screen -- see its own docstring;
+        this function trusts whatever it's handed, exactly like
+        send_text() already does, and never re-derives it itself."""
         if self.logger:
-            self.logger.log_raw("TX", data)
+            if secret:
+                self.logger.log_redacted("TX")
+            else:
+                self.logger.log_raw("TX", data)
         self._sock.sendall(data)
 
     def close(self):

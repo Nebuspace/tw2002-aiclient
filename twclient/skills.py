@@ -110,6 +110,35 @@ class ReplayDivergence(Exception):
         }
 
 
+class ReplayFenced(Exception):
+    """WO-CLEANPREEMPT (the multi-step expand): raised by `replay_skill()`
+    the instant a step reports the driver was fenced -- a `tw attach`
+    took `control_lock`'s MODE_HUMAN out from under this in-flight
+    replay/play/AUTO-LOOP run (see control_lock.ControlLock.take_human()/
+    is_driver_fenced()) -- checked right after THAT step's own
+    send-then-confirm window closes, same "observed during/after settle"
+    point the single-shot `do`/`send` fix (protocol.py) checks at.
+
+    Deliberately NOT a `ReplayDivergence` (even though both are a clean
+    halt-on-surprise carrying the trace-so-far): a human taking over
+    control is an orderly preemption, not "reality disagreed with the
+    recording" -- callers (`play_skill`/`LoopPlayer`/protocol.py's
+    `_dispatch_replay`) report it as its own distinct outcome
+    (`"human_fenced"`), never folded into "surprise"/"divergence". The
+    step that WAS just completed when the fence was noticed already got
+    its own ledger row (flagged `interrupted_by_human=True` by the
+    caller) before this raises -- this halts the loop from firing the
+    NEXT step's send, it never un-does the one just taken."""
+
+    def __init__(self, step_i, results):
+        self.step_i = step_i
+        self.results = results
+        super().__init__(f"fenced by a human attach after step {step_i}")
+
+    def as_dict(self):
+        return {"step_i": self.step_i, "results": self.results}
+
+
 def _safe_name(name: str) -> str:
     safe = _SAFE_NAME_RE.sub("_", name).strip("_")
     if not safe:
@@ -286,13 +315,32 @@ def _check_start_anchor(session, skill, force):
         )
 
 
-def replay_skill(session, skill, params=None, step_timeout=8.0, force=False, ledger=None, session_id=None):
+def replay_skill(
+    session, skill, params=None, step_timeout=8.0, force=False, ledger=None, session_id=None, is_driver_fenced=None
+):
     """Re-issue `skill`'s steps via `settle.send_and_confirm`, validating
     each step's actual post-classification against what was
     recorded/mined. Returns the list of per-step results on full success;
     raises ReplayDivergence (carrying every result up to and including
     the failing step) the instant reality disagrees -- never presses on
     past a surprise (DESIGN-v2 11b).
+
+    **WO-CLEANPREEMPT (multi-step fence, mack's repro):** `is_driver_fenced`
+    is an optional zero-arg callable (protocol.py passes
+    `_driver_was_fenced(server)`; `LoopPlayer` passes its own
+    `control_lock.is_driver_fenced`) -- since a replay/play dispatch
+    reserves the driver slot for its ENTIRE multi-step duration
+    (`_driving_dispatch`, one `acquire_driver()` covering every step, not
+    per-step), a human attaching mid-run fences the WHOLE dispatch once,
+    and without this check the loop would keep firing every remaining
+    step's send regardless (the exact class the single-shot do/send fix
+    closed, reopened here by the extra steps). Checked right after EVERY
+    step's own send-then-confirm window closes (mirroring the do/send
+    fix's own "observed during/after settle" point): that step's ledger
+    row is flagged `interrupted_by_human=<the reading>` either way, and
+    if fenced, `ReplayFenced` is raised immediately after -- firing NO
+    further send. `None` (the default) is a complete no-op, same
+    optional-no-op convention as `ledger`/`session_id`.
 
     **TW-02 (send/settle race, -75-alignment/false-halt class):** a bare
     `session.send()` + idle-only settle can hand back a screen that only
@@ -334,13 +382,26 @@ def replay_skill(session, skill, params=None, step_timeout=8.0, force=False, led
         text = session.render_text(rows)
         prompt = rows[-1].strip() if rows else ""
 
+        # WO-CLEANPREEMPT: checked right here, the same "during/after
+        # settle" point protocol.py's single-shot do/send fix checks at
+        # -- AFTER this step's own send-then-confirm window closes, so
+        # the ledger row about to be written for THIS step reflects
+        # whether a human attach raced it, and BEFORE the next step's
+        # send is ever considered.
+        fenced = is_driver_fenced() if is_driver_fenced is not None else False
+
         if not confirmed:
             actual = f"unconfirmed_settle:{settled_reason}"
             results.append(
                 {"step": i, "input": input_text, "expected": expected, "actual": actual, "settled_reason": settled_reason}
             )
             if ledger is not None:
-                ledger.record_do(pre_text, input_text, False, text, actual, actor="trainer", session_id=session_id)
+                ledger.record_do(
+                    pre_text, input_text, False, text, actual, actor="trainer", session_id=session_id,
+                    interrupted_by_human=fenced,
+                )
+            if fenced:
+                raise ReplayFenced(step_i=i, results=results)
             raise ReplayDivergence(
                 step_i=i, expected=expected, actual=actual, screen=rows, results=results, reason="confirm_failed"
             )
@@ -350,14 +411,22 @@ def replay_skill(session, skill, params=None, step_timeout=8.0, force=False, led
             {"step": i, "input": input_text, "expected": expected, "actual": actual, "settled_reason": settled_reason}
         )
         if ledger is not None:
-            ledger.record_do(pre_text, input_text, False, text, actual, actor="trainer", session_id=session_id)
+            ledger.record_do(
+                pre_text, input_text, False, text, actual, actor="trainer", session_id=session_id,
+                interrupted_by_human=fenced,
+            )
+        if fenced:
+            raise ReplayFenced(step_i=i, results=results)
         surprised = actual == "unknown" or (expected is not None and actual != expected)
         if surprised:
             raise ReplayDivergence(step_i=i, expected=expected, actual=actual, screen=rows, results=results)
     return results
 
 
-def play_skill(session, skill, cycles, floor=None, params=None, step_timeout=8.0, force=False, ledger=None, session_id=None):
+def play_skill(
+    session, skill, cycles, floor=None, params=None, step_timeout=8.0, force=False, ledger=None, session_id=None,
+    is_driver_fenced=None,
+):
     """Loop `replay_skill()` for automated unattended playback (11d),
     bounded by two independent rails: `cycles` (hard cap, itself capped
     at `_MAX_PLAY_CYCLES`) and `floor` (stop-loss -- checked BEFORE every
@@ -370,7 +439,13 @@ def play_skill(session, skill, cycles, floor=None, params=None, step_timeout=8.0
     cycle's `replay_skill()` call (see its docstring for TW-03/TW-04) --
     a start-anchor mismatch on cycle 2+ (the loop wandered off where it
     started) surfaces exactly like any other mid-run surprise, via the
-    existing `except ReplayDivergence` below."""
+    existing `except ReplayDivergence` below.
+
+    `is_driver_fenced` (WO-CLEANPREEMPT) is forwarded the same way --
+    `replay_skill()`'s own `ReplayFenced` is caught here and reported as
+    its own distinct `"halted": "human_fenced"` outcome, deliberately
+    never folded into `"surprise"` (a human taking over is an orderly
+    preemption, not reality disagreeing with the recording)."""
     if cycles > _MAX_PLAY_CYCLES:
         raise SkillError(f"cycles_exceeds_cap:{cycles}>{_MAX_PLAY_CYCLES}")
     trace = []
@@ -392,7 +467,10 @@ def play_skill(session, skill, cycles, floor=None, params=None, step_timeout=8.0
                 force=force,
                 ledger=ledger,
                 session_id=session_id,
+                is_driver_fenced=is_driver_fenced,
             )
+        except ReplayFenced as e:
+            return {"halted": "human_fenced", "cycles_completed": cycle, "fenced": e.as_dict(), "trace": trace}
         except ReplayDivergence as e:
             return {"halted": "surprise", "cycles_completed": cycle, "divergence": e.as_dict(), "trace": trace}
         trace.append({"cycle": cycle, "steps": results})

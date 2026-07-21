@@ -81,14 +81,23 @@ def _log_event(fh, event, **fields):
     fh.write(json.dumps({"ts": _utc_now(), "event": event, **fields}) + "\n")
 
 
-def _wrap_session_factory(session_factory, abort_check, log_fh, checkpoint_every, counter):
+def _wrap_session_factory(session_factory, abort_check, is_driver_fenced, log_fh, checkpoint_every, counter):
     """Returns a zero-arg callable `crawl_menus()` can use in place of
     the caller's real `session_factory` — identical contract (a fresh
     session already sitting at the world's stable start context), plus
     three side effects on every call:
 
     1. the abort check, evaluated BEFORE the real factory is ever
-       touched (see module docstring's Abort section);
+       touched (see module docstring's Abort section) -- `abort_check`
+       (an external hub-supervisor stop) and `is_driver_fenced`
+       (WO-CLEANPREEMPT: a `tw attach` took control_lock's MODE_HUMAN out
+       from under this in-flight crawl dispatch -- see control_lock.py's
+       `take_human()`/`is_driver_fenced()`) are two INDEPENDENT triggers
+       for the exact same clean stop, checked in the same place, for the
+       same reason `_wrap_session_factory`'s Abort section already
+       documents: `crawl_menus()` asks for a fresh session at every node
+       boundary, never mid-send, so this is always the next screen
+       boundary after either signal first fires, never mid-send;
     2. a live `"screen"` log line on every successful call, tagging the
        very FIRST one `"registered"`/`"crawl_start"` too — the first
        settled screen this crawl ever sees IS the moment a sacrificial
@@ -107,6 +116,8 @@ def _wrap_session_factory(session_factory, abort_check, log_fh, checkpoint_every
     def _factory():
         if abort_check is not None and abort_check():
             raise CrawlAborted("abort_check requested a stop")
+        if is_driver_fenced is not None and is_driver_fenced():
+            raise CrawlAborted("driver fenced by a human attach (WO-CLEANPREEMPT)")
         session = session_factory()
         counter[0] += 1
         if counter[0] == 1:
@@ -127,6 +138,7 @@ def run_live_crawl(
     path,
     log_path,
     abort_check=None,
+    is_driver_fenced=None,
     max_nodes=_DEFAULT_MAX_NODES,
     step_timeout=8.0,
     checkpoint_every=10,
@@ -165,17 +177,27 @@ def run_live_crawl(
     `abort_check`: an optional zero-arg callable, checked before every
     fresh session `crawl_menus()` asks for (see `_wrap_session_factory`)
     — the next screen boundary after it first returns True, never
-    mid-send. On an abort, `crawl_menus()` never returns at all (it has
-    no partial-result return path — its own `nodes_visited`/
-    `emitted_keys`/`send_log` locals are simply discarded when the
-    exception unwinds through it), so this function's own returned
-    `"nodes_visited"` is `None` and `"emitted_keys"`/`"send_log"` are
-    empty on the aborted path — only what was live-logged up to that
+    mid-send. `is_driver_fenced` (WO-CLEANPREEMPT): a second, independent
+    zero-arg callable checked in the exact same place — protocol.py's
+    `_dispatch_crawl_start` passes `_driver_was_fenced(server)`, so a `tw
+    attach` racing in mid-crawl (this dispatch reserves the driver slot
+    for the crawl's ENTIRE duration, same as replay/play) stops the crawl
+    at the next node boundary instead of continuing to emit keystrokes
+    under a human's nose. Either trigger raises the same internal
+    `CrawlAborted` and lands on the identical clean-stop path below —
+    `"aborted_reason"` in the returned dict (and the logged `"aborted"`
+    phase event) names WHICH one fired. On an abort, `crawl_menus()`
+    never returns at all (it has no partial-result return path — its own
+    `nodes_visited`/`emitted_keys`/`send_log` locals are simply discarded
+    when the exception unwinds through it), so this function's own
+    returned `"nodes_visited"` is `None` and `"emitted_keys"`/`"send_log"`
+    are empty on the aborted path — only what was live-logged up to that
     point (`"screens_seen"`) is genuinely known.
 
-    Returns `{"aborted": bool, "screens_seen": int, "nodes_visited":
-    int|None, "emitted_keys": [...], "send_log": [...]}`. Only
-    `CrawlSafetyError` (the startup gate) and whatever
+    Returns `{"aborted": bool, "aborted_reason": str|None, "screens_seen":
+    int, "nodes_visited": int|None, "emitted_keys": [...], "send_log":
+    [...]}` (`"aborted_reason"` is `None` on a normal, non-aborted
+    completion). Only `CrawlSafetyError` (the startup gate) and whatever
     `crawl_menus()`/`session_factory()` themselves raise for a genuine
     structural failure (logged as `"phase":"error"` first, then
     re-raised — never swallowed) escape this function; an ordinary abort
@@ -190,15 +212,16 @@ def run_live_crawl(
         _log_event(log_fh, "phase", phase="connect", profile=profile.name, max_nodes=max_nodes)
         screens_seen = [0]
         wrapped_factory = _wrap_session_factory(
-            session_factory, abort_check, log_fh, checkpoint_every, screens_seen
+            session_factory, abort_check, is_driver_fenced, log_fh, checkpoint_every, screens_seen
         )
 
         try:
             result = crawl_menus(wrapped_factory, path, max_nodes=max_nodes, step_timeout=step_timeout)
-        except CrawlAborted:
-            _log_event(log_fh, "phase", phase="aborted", screens_seen=screens_seen[0])
+        except CrawlAborted as exc:
+            _log_event(log_fh, "phase", phase="aborted", screens_seen=screens_seen[0], reason=str(exc))
             return {
                 "aborted": True,
+                "aborted_reason": str(exc),
                 "screens_seen": screens_seen[0],
                 "nodes_visited": None,
                 "emitted_keys": [],
@@ -210,6 +233,6 @@ def run_live_crawl(
 
         _log_event(log_fh, "summary", screens_seen=screens_seen[0], **result)
         _log_event(log_fh, "phase", phase="done", nodes_visited=result["nodes_visited"])
-        return {"aborted": False, "screens_seen": screens_seen[0], **result}
+        return {"aborted": False, "aborted_reason": None, "screens_seen": screens_seen[0], **result}
     finally:
         log_fh.close()

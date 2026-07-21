@@ -3,7 +3,7 @@ TWGS screen fixture (see tests/fixtures/, captured live per DESIGN.md §12)."""
 
 import os
 
-from twclient.classify import classify, classify_screen
+from twclient.classify import classify, classify_screen, is_probable_secret_prompt
 
 FIXTURE_DIR = os.path.join(os.path.dirname(__file__), "fixtures")
 
@@ -563,3 +563,70 @@ def test_classify_whole_text_also_recognizes_a_genuine_cim_report():
     with different arguments."""
     text = _load_fixture("cim_port_report.txt")
     assert classify(text) == "cim_report"
+
+
+# -- WO-CLEANPREEMPT (secret sub-diff): is_probable_secret_prompt() -- the
+# `tw attach` interactive keystroke path's own FAIL-SAFE secret detection,
+# deliberately separate from (and broader than) the `login_password` gate
+# anchor used by classify_screen()/login.py above. --------------------
+
+
+def test_is_probable_secret_prompt_matches_password():
+    assert is_probable_secret_prompt("Password?") is True
+
+
+def test_is_probable_secret_prompt_matches_pin():
+    assert is_probable_secret_prompt("Enter PIN:") is True
+    assert is_probable_secret_prompt("PIN number:") is True
+
+
+def test_is_probable_secret_prompt_matches_passcode_variants():
+    assert is_probable_secret_prompt("Enter your passcode:") is True
+    assert is_probable_secret_prompt("Enter your pass code:") is True
+
+
+def test_is_probable_secret_prompt_matches_access_code():
+    assert is_probable_secret_prompt("Access code:") is True
+
+
+def test_is_probable_secret_prompt_matches_a_bare_code_prompt():
+    assert is_probable_secret_prompt("Enter code:") is True
+
+
+def test_is_probable_secret_prompt_matches_verify():
+    assert is_probable_secret_prompt("Verify your identity:") is True
+
+
+def test_is_probable_secret_prompt_matches_secret():
+    assert is_probable_secret_prompt("Enter the secret word:") is True
+
+
+def test_is_probable_secret_prompt_is_case_insensitive():
+    assert is_probable_secret_prompt("PASSWORD?") is True
+    assert is_probable_secret_prompt("pin:") is True
+
+
+def test_is_probable_secret_prompt_word_boundary_avoids_pin_substring_false_positives():
+    # "pin" is word-boundaried specifically so it doesn't fire on
+    # ordinary words that merely CONTAIN it.
+    assert is_probable_secret_prompt("Spin the wheel!") is False
+    assert is_probable_secret_prompt("Pinpoint your location:") is False
+
+
+def test_is_probable_secret_prompt_false_for_ordinary_command_prompt():
+    assert is_probable_secret_prompt("Command [TL=00:00:00]:[1234] (?=Help)? :") is False
+
+
+def test_is_probable_secret_prompt_false_for_empty_or_missing_prompt():
+    assert is_probable_secret_prompt("") is False
+    assert is_probable_secret_prompt(None) is False
+
+
+def test_is_probable_secret_prompt_documented_residual_no_keyword_at_all():
+    """The documented KNOWN RESIDUAL, pinned down rather than left
+    implicit: a secret-entry prompt phrased with none of this
+    predicate's keywords has no signal it can key on -- this is a
+    best-effort heuristic over literal English text, not game-shape
+    understanding. This test exists so a future reader can see the gap
+    is real and intentional, not an oversight."""
+    assert is_probable_secret_prompt("Speak, friend, and enter:") is False
