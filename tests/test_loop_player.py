@@ -6,11 +6,14 @@ FakeWatchHub just captures broadcast_extra() calls into a list so
 progress-event shape/ordering is directly assertable.
 """
 
+import threading
 import time
 
 import pytest
 
+from twclient.autopilot import EconCaps
 from twclient.control_lock import MODE_AI_PILOT, MODE_AUTO_LOOP, ControlLock
+from twclient.ledger import snapshot_state
 from twclient.loop_player import LoopPlayer, LoopPlayerError
 from twclient.session import Session
 
@@ -79,22 +82,27 @@ class FakeLoopSession:
 
 class ObservingFakeLoopSession(FakeLoopSession):
     """WO-FA7a round 4: `FakeLoopSession` + the REAL `Session.
-    observe_credits` wired in (assigned directly off the class, not
-    reimplemented, same convention as tests/test_credits_supervision.py's
-    own fakes), so a test using this session exercises the same
-    hasattr-guarded `observe_credits()` call `LoopPlayer._run()`'s
-    floor-check makes against a real `Session` -- plain `FakeLoopSession`
-    predates the credits-supervision surface entirely and has no
-    `last_credits`/`last_credits_ts` at all, so the hasattr guard silently
-    skips it (every other existing test in this file keeps using the
-    plain fake unchanged)."""
+    observe_credits`/`credits_snapshot` wired in (assigned directly off the
+    class, not reimplemented, same convention as
+    tests/test_credits_supervision.py's own fakes), so a test using this
+    session exercises the same hasattr-guarded `observe_credits()`/
+    `credits_snapshot()` calls `LoopPlayer._run()`'s floor-check makes
+    against a real `Session` -- plain `FakeLoopSession` predates the
+    credits-supervision surface entirely and has no `last_credits`/
+    `last_credits_ts`/`lock` at all, so the hasattr guards silently skip it
+    (every other existing test in this file keeps using the plain fake
+    unchanged). `self.lock` (WO-FA-SAFE, Rook must-fix #3) is a plain
+    `threading.Lock`, the same shape `Session.lock` is -- both methods
+    acquire it internally."""
+
+    observe_credits = Session.observe_credits
+    credits_snapshot = Session.credits_snapshot
 
     def __init__(self, *a, **kw):
         super().__init__(*a, **kw)
+        self.lock = threading.Lock()
         self.last_credits = None
         self.last_credits_ts = None
-
-    observe_credits = Session.observe_credits
 
 
 class FakeWatchHub:
@@ -277,7 +285,15 @@ def test_pause_and_resume_raise_when_not_running():
 
 
 def test_floor_halts_before_a_cycle_that_would_start_at_or_below_it():
-    session = FakeLoopSession(screen="You have 100 credits.\nCommand [TL=00:00:08]:[1234] (?=Help)? :")
+    """WO-FA-SAFE: the floor-check now reads the STRICT last-known balance
+    (`session.credits_snapshot()`), not the loose `snapshot_state()` read
+    this test used to exercise via a plain, non-observing `FakeLoopSession`
+    -- a real `Session` (and any fake standing in for one) always has the
+    credits-supervision surface wired, so `ObservingFakeLoopSession` is the
+    correct fixture for a "happy path" floor test now. The floor-check's
+    own `observe_credits()` call captures a FRESH balance from this exact
+    render, so it reads as fresh regardless of `credits_stale_ms`."""
+    session = ObservingFakeLoopSession(screen="You have 100 credits.\nCommand [TL=00:00:08]:[1234] (?=Help)? :")
     lock = ControlLock()
     hub = FakeWatchHub()
     player = LoopPlayer(session, lock, hub)
@@ -288,6 +304,138 @@ def test_floor_halts_before_a_cycle_that_would_start_at_or_below_it():
     assert player.last_result == "floor_reached"
     assert player.cycles_done == 0
     assert session.sent == []  # never even attempted a cycle
+
+
+def test_floor_proceeds_on_a_fresh_confirmed_balance_strictly_above_it():
+    """The proceed path: a fresh, confirmed balance strictly greater than
+    `floor` must NOT halt -- the loop runs its cycles normally."""
+    session = ObservingFakeLoopSession(screen=_MAIN_COMMAND_SCREEN, cycle_delay_s=0.01)
+    lock = ControlLock()
+    hub = FakeWatchHub()
+    player = LoopPlayer(session, lock, hub)
+    session.observe_credits("You have 1,000 credits.\nCommand [TL=00:00:08]:[1234] (?=Help)? :")
+
+    player.start(_skill(n_steps=1), "test-loop", cycles=1, floor=200, force=True)  # _skill() has no start_anchor (TW-03)
+    assert _wait_until(lambda: not player.running)
+
+    assert player.last_result == "cycles_complete"
+    assert player.cycles_done == 1
+
+
+def test_floor_halts_credits_unknown_when_no_balance_was_ever_observed():
+    """Rook must-fix #5 (startup precondition): a run whose `floor` is set
+    must fail CLOSED, never fail open, when no balance has ever been
+    captured on this session -- `last_result` is the honest
+    `"credits_unknown"` signal, distinct from `"floor_reached"` (a KNOWN
+    too-low balance) so an operator can tell "never confirmed" apart from
+    "confirmed and below floor". The pre-fix loose read (`snapshot_state().
+    get("credits")`) failed OPEN on `None` (silently proceeded); this must
+    not."""
+    session = ObservingFakeLoopSession(screen=_MAIN_COMMAND_SCREEN)  # no "You have N credits" line anywhere
+    lock = ControlLock()
+    hub = FakeWatchHub()
+    player = LoopPlayer(session, lock, hub)
+
+    player.start(_skill(), "test-loop", cycles=5, floor=200)
+    assert _wait_until(lambda: not player.running)
+
+    assert player.last_result == "credits_unknown"
+    assert player.cycles_done == 0
+    assert session.sent == []
+
+
+def test_floor_halts_credits_unknown_on_a_session_without_the_supervision_surface():
+    """Defensive hasattr-fallback: a session lacking `credits_snapshot()`
+    entirely (a bare/legacy fake -- plain `FakeLoopSession` predates this
+    surface) must fail CLOSED exactly like a real session that never
+    captured a balance, never crash and never silently trust an absent
+    surface as "no floor configured"."""
+    session = FakeLoopSession(screen="You have 100 credits.\nCommand [TL=00:00:08]:[1234] (?=Help)? :")
+    lock = ControlLock()
+    hub = FakeWatchHub()
+    player = LoopPlayer(session, lock, hub)
+
+    player.start(_skill(), "test-loop", cycles=5, floor=200)
+    assert _wait_until(lambda: not player.running)
+
+    assert player.last_result == "credits_unknown"
+    assert player.cycles_done == 0
+
+
+def test_floor_halts_credits_unknown_on_a_stale_balance():
+    """Rook must-fix #4: a balance older than `caps.credits_stale_ms` must
+    be treated as unknown, never trusted no matter how comfortably above
+    (or below) `floor` it is -- the config value is what draws the line,
+    not a hardcoded window."""
+    session = ObservingFakeLoopSession(screen=_MAIN_COMMAND_SCREEN)  # this render carries no balance itself
+    session.observe_credits("You have 1,000 credits.\nCommand [TL=00:00:07]:[1234] (?=Help)? :")
+    time.sleep(0.05)  # the ONLY prior reading is now at least 50ms old
+    lock = ControlLock()
+    hub = FakeWatchHub()
+    player = LoopPlayer(session, lock, hub)
+
+    player.start(_skill(), "test-loop", cycles=5, floor=200, caps=EconCaps(credits_stale_ms=1))
+
+    assert _wait_until(lambda: not player.running)
+    assert player.last_result == "credits_unknown"
+    assert player.cycles_done == 0
+
+
+def test_floor_credits_stale_ms_is_config_driven_not_hardcoded():
+    """The same stale reading `test_floor_halts_credits_unknown_on_a_stale_
+    balance` above rejects at `credits_stale_ms=1` must be ACCEPTED as
+    fresh at a generous window -- proving the threshold genuinely comes
+    from `EconCaps`, not a hardcoded constant that happens to match the
+    default."""
+    session = ObservingFakeLoopSession(screen=_MAIN_COMMAND_SCREEN)
+    session.observe_credits("You have 1,000 credits.\nCommand [TL=00:00:07]:[1234] (?=Help)? :")
+    time.sleep(0.05)
+    lock = ControlLock()
+    hub = FakeWatchHub()
+    player = LoopPlayer(session, lock, hub)
+
+    player.start(
+        _skill(n_steps=1), "test-loop", cycles=1, floor=200, caps=EconCaps(credits_stale_ms=60_000), force=True,
+    )  # _skill() has no start_anchor (TW-03)
+
+    assert _wait_until(lambda: not player.running)
+    assert player.last_result == "cycles_complete"
+
+
+def test_floor_price_mask_below_floor_poc_reads_the_strict_balance_not_the_loose_price_quote():
+    """THE HUB'S MANDATORY PoC: a real, prior balance BELOW `floor` sits in
+    `session.last_credits` (freshly captured moments earlier, e.g. during
+    the arm sequence's own crawl login/dock screen); the CURRENT screen is
+    a pure port price-quote with NO balance line of its own, quoting a
+    price >= `floor`. The strict source (`credits_snapshot()`) must still
+    see the real sub-floor balance (non-clobber: this screen has nothing
+    to overwrite it with) and HALT -- contrasted directly against the
+    pre-fix loose reader (`state_parser.parse_state()`'s own `credits`
+    field, via `ledger.snapshot_state()`), which this fixture proves WOULD
+    have read the price quote as if it were a real, comfortably-above-
+    floor balance and proceeded."""
+    floor = 200
+    price_quote_screen = "We'll sell them for 2,214 credits.\nYour offer [2214] ? "
+    session = ObservingFakeLoopSession(screen=price_quote_screen)
+    session.observe_credits("You have 100 credits.\nCommand [TL=00:00:06]:[1234] (?=Help)? :")  # real bal < floor
+
+    # Sanity: the fixture genuinely exercises the masking shape -- the OLD
+    # loose reader IS fooled by this screen's price quote.
+    assert snapshot_state(price_quote_screen).get("credits") == 2214
+
+    lock = ControlLock()
+    hub = FakeWatchHub()
+    player = LoopPlayer(session, lock, hub)
+
+    player.start(_skill(), "test-loop", cycles=5, floor=floor)
+    assert _wait_until(lambda: not player.running)
+
+    assert player.last_result == "floor_reached", (
+        "the strict source must see the real 100cr balance (<= floor) and HALT, "
+        "never the price-quote-polluted 2214 a loose reader would have proceeded on"
+    )
+    assert player.cycles_done == 0
+    assert session.sent == []
 
 
 def test_floor_reached_break_still_feeds_the_credits_supervision_surface():

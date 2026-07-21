@@ -462,16 +462,33 @@ def dispatch(session, verb, args, server):
             trace_log = autopilot_engine.trace_log()
             if trace_log:
                 autopilot_trace = trace_log[-1]  # most-recent tick only -- see AutopilotEngine.trace_log()
-        # WO-FA7a revise 3 (mack-confirmed HIGH): snapshotted into a LOCAL
-        # once, here, BEFORE `time.monotonic()` is read below for
+        # WO-FA7a revise 3 (mack-confirmed HIGH), superseded by WO-FA-SAFE
+        # (hub-ratified revise, item 2): snapshotted into LOCALS once,
+        # here, BEFORE `time.monotonic()` is read below for
         # `credits_age_ms` -- a concurrent `observe_credits()` write
-        # landing a NEWER ts in the gap between reading `last_credits_ts`
-        # and reading `time.monotonic()` would otherwise make `now < ts`
+        # landing a NEWER ts in the gap between this snapshot and the
+        # later `time.monotonic()` call would otherwise make `now < ts`
         # possible, producing a negative "age" (mack: reproduced under
         # thread stress). Snapshotting first means a race can only ever
         # bias the reported age LARGER (staler), never negative -- the
         # field's whole point is a non-negative staleness signal.
-        _cts = getattr(session, "last_credits_ts", None)
+        #
+        # `_cbal`/`_cts` now come from ONE atomic `credits_snapshot()` call
+        # (session.py, Rook must-fix #3) rather than two SEPARATE unlocked
+        # `getattr()`s (`last_credits_ts` here, `last_credits` later at the
+        # `"credits"` key below) -- the two-getattr shape could itself
+        # return a torn pair (an old balance paired with a new ts, or vice
+        # versa) if a write landed between them; a single locked read
+        # closes that regardless of which field this dict happens to
+        # reference first. hasattr-guarded for a bare fake-session test
+        # double that predates the credits-supervision surface entirely
+        # (e.g. test_world_model_integration.py's FakeSession) -- reads as
+        # `(None, None)`, the same clean default the two separate
+        # `getattr()`s already gave it.
+        if hasattr(session, "credits_snapshot"):
+            _cbal, _cts = session.credits_snapshot()
+        else:
+            _cbal, _cts = None, None
         return {
             "ok": True,
             "connected": session.conn.connected,
@@ -500,20 +517,19 @@ def dispatch(session, verb, args, server):
             # docstring, session.py, for every site that feeds it -- the
             # two dispatch chokepoints below plus skills.py's replay_skill/
             # play_skill and crawl_driver.py), plus its own capture ts --
-            # getattr-guarded like sent_input/cursor in build_response()
-            # above, so a bare fake-session test double that predates these
-            # fields (e.g. test_world_model_integration.py's FakeSession)
-            # still gets a clean `None`/`None` rather than an
-            # AttributeError. `credits_ts` is a raw `time.monotonic()`
-            # reading -- only meaningful for cross-poll change-detection
-            # WITHIN this one daemon process (a caller comparing it to a
-            # PRIOR `credits_ts` it already holds), never as an absolute
-            # age: an external `tw status` caller (a separate process, or a
-            # fresh `tw` invocation) has no reference to the daemon's own
-            # monotonic clock to diff it against. `credits_age_ms` below is
-            # the externally-meaningful staleness signal -- see its own
-            # comment.
-            "credits": getattr(session, "last_credits", None),
+            # both sourced from the ONE `credits_snapshot()` read above
+            # (WO-FA-SAFE, item 2), so this pair is always internally
+            # consistent even under a concurrent `observe_credits()` write
+            # -- never two independently-racing `getattr()`s. `credits_ts`
+            # is a raw `time.monotonic()` reading -- only meaningful for
+            # cross-poll change-detection WITHIN this one daemon process (a
+            # caller comparing it to a PRIOR `credits_ts` it already
+            # holds), never as an absolute age: an external `tw status`
+            # caller (a separate process, or a fresh `tw` invocation) has
+            # no reference to the daemon's own monotonic clock to diff it
+            # against. `credits_age_ms` below is the externally-meaningful
+            # staleness signal -- see its own comment.
+            "credits": _cbal,
             "credits_ts": _cts,
             # WO-FA7a revise 2 (team-lead-caught contract gap): a COMPUTED
             # age, mirroring `idle_ms` above (`int((time.monotonic() -
@@ -522,11 +538,12 @@ def dispatch(session, verb, args, server):
             # value the caller can read on its own, with no daemon-clock
             # reference of its own needed. `None` when no balance has ever
             # been captured (`_cts` still `None`). Computed from the SAME
-            # `_cts` snapshot as `credits_ts` above (WO-FA7a revise 3,
-            # mack-confirmed HIGH) -- see its own comment for why a fresh
-            # `getattr` re-read here, after `time.monotonic()`, could
-            # otherwise go negative under a concurrent `observe_credits()`
-            # write.
+            # `_cts` snapshot as `credits_ts`/`credits` above (WO-FA7a
+            # revise 3 / WO-FA-SAFE item 2) -- see the snapshot's own
+            # comment for why capturing it BEFORE this `time.monotonic()`
+            # call, rather than re-reading it here, is what keeps this age
+            # from ever going negative under a concurrent
+            # `observe_credits()` write.
             "credits_age_ms": int((time.monotonic() - _cts) * 1000) if _cts is not None else None,
         }
 
@@ -1209,7 +1226,20 @@ def _dispatch_autopilot_start(server, session, args):
     docstring. `cash_floor`/`max_ticks` are the two caller-tunable knobs
     the WO asked for; every other `EconCaps`/`AutopilotLoop` default
     (turn_reserve, tick_interval_s, the loop's own hard tick ceiling)
-    stays untouched."""
+    stays untouched.
+
+    `credits_stale_ms` (WO-FA-SAFE, hub-ratified revise, item 3): a THIRD
+    caller-tunable `EconCaps` knob, threaded through exactly like
+    `cash_floor` -- so an operator can arm tighter (or looser) than the
+    15s default, and re-arm with a different value on a later `stop` ->
+    `start` (a fresh `EconCaps` forces `_get_or_build_autopilot_engine` to
+    rebuild the engine -- see that function's own docstring for why
+    `caps is not None` is what triggers a rebuild rather than reusing the
+    cached one). This is the ONLY caller-facing knob for the freshness
+    bound the credit-floor stop-loss (`AutopilotEngine._fresh_credits()`)
+    reads -- `loop_player.py`'s/`skills.play_skill()`'s own sibling gates
+    still only get the 15s default via their own CLI surfaces (a deferred
+    follow-on, not built here -- see their own docstrings)."""
     from . import credentials
     from .autopilot import AutopilotGateError, AutopilotLoop, AutopilotLoopError, EconCaps
     from .control_lock import ControlModeConflict
@@ -1227,7 +1257,13 @@ def _dispatch_autopilot_start(server, session, args):
         return {"ok": False, "error": "already_running"}
 
     cash_floor = args.get("cash_floor")
-    caps = EconCaps(cash_floor=cash_floor) if cash_floor is not None else None
+    credits_stale_ms = args.get("credits_stale_ms")
+    caps_kwargs = {}
+    if cash_floor is not None:
+        caps_kwargs["cash_floor"] = cash_floor
+    if credits_stale_ms is not None:
+        caps_kwargs["credits_stale_ms"] = credits_stale_ms
+    caps = EconCaps(**caps_kwargs) if caps_kwargs else None
     engine = _get_or_build_autopilot_engine(server, session, profile, caps=caps)
 
     loop_kwargs = {}

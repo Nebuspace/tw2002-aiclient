@@ -150,6 +150,40 @@ def test_autopilot_start_arms_the_loop_when_autonomous_then_stop_halts_it(fake_d
     assert fake_daemon.server.autopilot_loop.running is False
 
 
+def test_autopilot_start_threads_credits_stale_ms_into_the_engines_econcaps(fake_daemon, profiles_toml):
+    """WO-FA-SAFE (hub-ratified revise, item 3): `credits_stale_ms` is
+    threaded through `autopilot_start` exactly like `cash_floor` -- an
+    operator arming with an explicit override must get an engine whose
+    `EconCaps.credits_stale_ms` actually reflects it, not the 15s
+    default `DEFAULT_CREDITS_STALE_MS` would otherwise supply."""
+    resp = send_request(
+        fake_daemon.sock_path, "autopilot_start", {"profile": "armed", "credits_stale_ms": 42_000}
+    )
+    assert resp["ok"] is True
+
+    engine = fake_daemon.server.autopilot_engine
+    assert engine.caps.credits_stale_ms == 42_000
+
+    send_request(fake_daemon.sock_path, "autopilot_stop")
+    _wait_until(lambda: not fake_daemon.server.autopilot_loop.running)
+
+
+def test_autopilot_start_omitted_credits_stale_ms_keeps_the_default(fake_daemon, profiles_toml):
+    """Contrast case: omitting `credits_stale_ms` must NOT force an
+    `EconCaps` rebuild with some accidental override -- the engine keeps
+    `DEFAULT_CREDITS_STALE_MS` (15s), same as before this revise."""
+    from twclient.autopilot import DEFAULT_CREDITS_STALE_MS
+
+    resp = send_request(fake_daemon.sock_path, "autopilot_start", {"profile": "armed"})
+    assert resp["ok"] is True
+
+    engine = fake_daemon.server.autopilot_engine
+    assert engine.caps.credits_stale_ms == DEFAULT_CREDITS_STALE_MS
+
+    send_request(fake_daemon.sock_path, "autopilot_stop")
+    _wait_until(lambda: not fake_daemon.server.autopilot_loop.running)
+
+
 def test_autopilot_start_refuses_a_second_concurrent_run(fake_daemon, profiles_toml):
     first = send_request(fake_daemon.sock_path, "autopilot_start", {"profile": "armed"})
     assert first["ok"] is True

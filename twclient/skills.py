@@ -40,6 +40,29 @@ this codebase, and reusing it here would silently inflate
 belong to the ONE original recording) every time a recorded skill gets
 replayed. `ledger`/`session_id` default to `None` (no-op) so callers
 that don't wire them up yet keep working unchanged.
+
+**WO-FA-SAFE Site C (hub-ratified revise, 2026-07-21): `play_skill()`'s own
+credit-floor stop-loss is hardened to the SAME strict, fail-closed source as
+`loop_player.LoopPlayer`'s (Site A) and `autopilot.py`'s (Site B) sibling
+gates -- cipher and mack both reproduced this site's own price-mask defeat
+live before this revise.** The pre-cycle floor-check below used to read
+`ledger.snapshot_state(text).get("credits")` -- `state_parser.parse_state()`'s
+looser, price-pollutable `credits` field (a port's own price quote satisfies
+it just as well as a real balance), and failed OPEN (proceeded) on `None`.
+It now reads `session.credits_snapshot()` -- the SAME atomically-guarded
+`last_credits`/`last_credits_ts` pair `observe_credits()` maintains (see
+session.py) -- and is fail-CLOSED: halts with `"halted": "credits_unknown"`
+whenever the balance was never observed or is older than `credits_stale_ms`
+(a plain function parameter here, not an `EconCaps`/caps object --
+`play_skill()` is a standalone function with no config object of its own;
+defaults to `autopilot.DEFAULT_CREDITS_STALE_MS`, 15s), and only proceeds on
+a FRESH, confirmed balance strictly greater than `floor`. CLI-level
+tunability for `tw play`/`tw play_start` (threading `credits_stale_ms`
+through `protocol.py`'s dispatch args, the way `autopilot_start` now does
+for its own engine) is a DEFERRED follow-on, NOT built here -- every real
+caller today gets the 15s default. Same one-macro-cycle exposure bound and
+FA9 multiplayer arming-gate as the other two sites -- see `loop_player.py`'s
+module docstring for the full rationale, not repeated here.
 """
 
 import json
@@ -47,6 +70,7 @@ import re
 import time
 from pathlib import Path
 
+from .autopilot import DEFAULT_CREDITS_STALE_MS
 from .classify import classify_screen
 from .settle import send_and_confirm
 from .state_parser import parse_state
@@ -439,7 +463,7 @@ def replay_skill(
 
 def play_skill(
     session, skill, cycles, floor=None, params=None, step_timeout=8.0, force=False, ledger=None, session_id=None,
-    is_driver_fenced=None,
+    is_driver_fenced=None, credits_stale_ms=DEFAULT_CREDITS_STALE_MS,
 ):
     """Loop `replay_skill()` for automated unattended playback (11d),
     bounded by two independent rails: `cycles` (hard cap, itself capped
@@ -459,7 +483,13 @@ def play_skill(
     `replay_skill()`'s own `ReplayFenced` is caught here and reported as
     its own distinct `"halted": "human_fenced"` outcome, deliberately
     never folded into `"surprise"` (a human taking over is an orderly
-    preemption, not reality disagreeing with the recording)."""
+    preemption, not reality disagreeing with the recording).
+
+    `credits_stale_ms` (WO-FA-SAFE Site C, see module docstring): the
+    floor-check's freshness bound for `session.credits_snapshot()` --
+    defaults to `autopilot.DEFAULT_CREDITS_STALE_MS` (15s). Every real
+    caller today (`protocol._dispatch_play`) gets this default; CLI-level
+    tunability is a deferred follow-on, not built here."""
     if cycles > _MAX_PLAY_CYCLES:
         raise SkillError(f"cycles_exceeds_cap:{cycles}>{_MAX_PLAY_CYCLES}")
     trace = []
@@ -473,11 +503,30 @@ def play_skill(
             # hasattr-guarded for the same reason.
             if hasattr(session, "observe_credits"):
                 session.observe_credits(text)
-            from .ledger import snapshot_state
-
-            credits = snapshot_state(text).get("credits")
-            if credits is not None and credits <= floor:
-                return {"halted": "floor_reached", "cycles_completed": cycle, "credits": credits, "trace": trace}
+            # WO-FA-SAFE Site C: the STRICT last-known-balance stop-loss --
+            # see module docstring for the full rationale (replaces the
+            # loose `ledger.snapshot_state(text).get("credits")` read this
+            # line used to make). `credits_snapshot()` is an ATOMIC read
+            # (session.py) of the SAME `last_credits`/`last_credits_ts`
+            # pair `observe_credits()` just wrote above, from THIS render.
+            # hasattr-guarded the same way: a session lacking
+            # `credits_snapshot()` entirely reads as `(None, None)`, the
+            # same fail-closed shape as a real session that never captured
+            # a balance.
+            if hasattr(session, "credits_snapshot"):
+                bal, ts = session.credits_snapshot()
+            else:
+                bal, ts = None, None
+            age_ms = (time.monotonic() - ts) * 1000 if ts is not None else None
+            fresh = bal is not None and age_ms is not None and age_ms <= credits_stale_ms
+            if not fresh:
+                # Fail-CLOSED: unknown (never observed) or stale (older
+                # than credits_stale_ms) -- never assume a sub-floor
+                # balance is safe just because we can't currently confirm
+                # it.
+                return {"halted": "credits_unknown", "cycles_completed": cycle, "credits": bal, "trace": trace}
+            elif bal <= floor:
+                return {"halted": "floor_reached", "cycles_completed": cycle, "credits": bal, "trace": trace}
         try:
             results = replay_skill(
                 session,

@@ -225,3 +225,30 @@ def test_send_raw_uses_the_current_screen_at_send_time_not_a_stale_pre_wait_snap
     # stale pre-wait one, which would have wrongly read secret=False.
     assert calls == [(b"1", True)]
     assert session.last_sent_secret is True
+
+
+# -- WO-FA-SAFE (Rook must-fix #3): credits_snapshot()'s atomic read --------
+#
+# Direct unit tests against the REAL Session.observe_credits()/
+# credits_snapshot() (not a fake standing in for one) -- the thread-stress
+# proof of the ATOMICITY property itself lives in
+# tests/test_credits_supervision.py (mirroring that file's own established
+# convention for the WO-FA7a negative-age race); these are the plain,
+# non-concurrent shape proofs.
+
+
+def test_credits_snapshot_is_none_none_before_any_balance_observed(tmp_path):
+    session = Session(FAKE_HOST, FAKE_PORT, None, tmp_path)
+    assert session.credits_snapshot() == (None, None)
+
+
+def test_credits_snapshot_reflects_the_last_observed_balance(tmp_path):
+    session = Session(FAKE_HOST, FAKE_PORT, None, tmp_path)
+    session.observe_credits("You have 42,000 credits.\nCommand [TL=00:00:00]:[1] (?=Help)? :")
+
+    bal, ts = session.credits_snapshot()
+    assert bal == 42000
+    assert ts is not None
+    assert (bal, ts) == (session.last_credits, session.last_credits_ts), (
+        "credits_snapshot() must read the exact same pair observe_credits() wrote"
+    )

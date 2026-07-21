@@ -24,6 +24,7 @@ from twclient.autopilot import (
     Candidate,
     EconCaps,
     WorldSnapshot,
+    assess,
     decision_to_trace,
     maybe_auto_start,
     select,
@@ -33,6 +34,7 @@ from twclient.control_lock import MODE_AI_PILOT, MODE_AUTO_LOOP, MODE_HUMAN, Con
 from twclient.credentials import Profile
 from twclient.session import Session
 from twclient.ship_upgrade_decision import LoopEconomics, ShipSpec, UpgradeDecision
+from twclient.state_parser import parse_state
 
 _MAIN_COMMAND_SCREEN = "Command [TL=00:00:08]:[100] (?=Help)? :"
 
@@ -87,19 +89,25 @@ class FakeAutopilotSession:
 
 class ObservingFakeAutopilotSession(FakeAutopilotSession):
     """WO-FA7a round 5: `FakeAutopilotSession` + the REAL `Session.
-    observe_credits` wired in (assigned directly off the class, not
-    reimplemented -- same convention as test_loop_player.py's own
-    `ObservingFakeLoopSession`/test_credits_supervision.py's fakes), so a
-    test using this session exercises the same hasattr-guarded
-    `observe_credits()` call `dry_run_tick()`/`live_tick()` now make
-    against a real `Session`. Plain `FakeAutopilotSession` predates the
-    credits-supervision surface entirely and has no
-    `last_credits`/`last_credits_ts` at all, so the hasattr guard silently
-    skips it -- every other existing test in this file keeps using the
-    plain fake unchanged."""
+    observe_credits`/`credits_snapshot` wired in (assigned directly off the
+    class, not reimplemented -- same convention as test_loop_player.py's
+    own `ObservingFakeLoopSession`/test_credits_supervision.py's fakes), so
+    a test using this session exercises the same hasattr-guarded
+    `observe_credits()`/`credits_snapshot()` calls `dry_run_tick()`/
+    `live_tick()`'s `_fresh_credits()` (WO-FA-SAFE) now make against a real
+    `Session`. Plain `FakeAutopilotSession` predates the credits-
+    supervision surface entirely and has no `last_credits`/
+    `last_credits_ts`/`lock` at all, so the hasattr guards silently skip it
+    -- every other existing test in this file keeps using the plain fake
+    unchanged. `self.lock` (WO-FA-SAFE, Rook must-fix #3) is a plain
+    `threading.Lock`, the same shape `Session.lock` is."""
+
+    observe_credits = Session.observe_credits
+    credits_snapshot = Session.credits_snapshot
 
     def __init__(self, *a, **kw):
         super().__init__(*a, **kw)
+        self.lock = threading.Lock()
         self.last_credits = None
         self.last_credits_ts = None
 
@@ -546,15 +554,16 @@ def test_live_tick_sends_an_explore_target_the_live_screen_confirms_is_adjacent(
     assert session.sent == [("45", True, False)]
 
 
-# -- WO-FA7a round 5 (observe-only, hub-ruled scope A): the LAST autonomous
-# -- credits-render gap (mack's completeness sweep, repro
-# -- scratchpad/repro_fa7a_round4_autopilot_gap.py) -- dry_run_tick()/
-# -- live_tick() render the current settled screen every tick, the SAME
-# -- class of autonomous per-tick screen read replay_skill/play_skill/
-# -- LoopPlayer were already fixed for, but never fed the credits-
-# -- supervision surface at all until now. Observe-only: assess()'s own
-# -- loose parse_state()-based credits decision is untouched (human-gated
-# -- WO-FA-SAFE, out of scope here).
+# -- WO-FA7a round 5: the LAST autonomous credits-render gap (mack's
+# -- completeness sweep, repro scratchpad/repro_fa7a_round4_autopilot_gap.
+# -- py) -- dry_run_tick()/live_tick() render the current settled screen
+# -- every tick, the SAME class of autonomous per-tick screen read
+# -- replay_skill/play_skill/LoopPlayer were already fixed for, but never
+# -- fed the credits-supervision surface at all until now. WO-FA-SAFE has
+# -- since landed: `assess()`'s own credits decision is no longer the loose
+# -- `parse_state()` read this note originally deferred -- see
+# -- `AutopilotEngine._fresh_credits()`'s own docstring for the strict,
+# -- freshness-gated source it's fed from now.
 
 
 def test_dry_run_tick_feeds_the_credits_supervision_surface():
@@ -592,6 +601,153 @@ def test_live_tick_feeds_the_credits_supervision_surface():
     assert decision.send_outcome == "sent"
     assert session.last_credits == 300000
     assert session.last_credits_ts is not None
+
+
+# -- WO-FA-SAFE (hub-signed-off design + Rook must-fix #1/#3/#4): assess()'s
+# -- credits kwarg is now REQUIRED, strict, and freshness-gated -----------
+
+
+def test_assess_raises_when_credits_is_omitted():
+    """Rook must-fix #1: `assess()`'s `credits` is a REQUIRED keyword-only
+    argument with NO default and NO `parse_state()` fallback -- a caller
+    that omits it must fail LOUD, never silently revert to the loose
+    screen-scraped source this WO removed."""
+    try:
+        assess(_MAIN_COMMAND_SCREEN)
+        assert False, "assess() must raise when credits is omitted"
+    except TypeError as e:
+        assert "credits" in str(e)
+
+
+def test_dry_run_tick_price_mask_below_cash_floor_poc_reads_the_strict_balance():
+    """THE HUB'S MANDATORY PoC (tick-level twin of loop_player.py's own):
+    a real, prior balance BELOW `cash_floor` sits in `session.last_credits`
+    (captured moments earlier, e.g. the crawl login/dock screen); the
+    CURRENT screen is a pure port price-quote with NO balance line of its
+    own, quoting a price >= `cash_floor`. `assess()`'s strict `credits`
+    (`AutopilotEngine._fresh_credits()` -> `session.credits_snapshot()`)
+    must still see the real sub-floor balance (non-clobber: this screen has
+    nothing to overwrite it with) and `_score_upgrade()` must skip the
+    upgrade candidate on its cash-floor gate -- contrasted directly against
+    the pre-fix loose reader (`state_parser.parse_state()`'s own `credits`
+    field, sourced from THIS screen), which this fixture proves WOULD have
+    read the price quote as a comfortably-above-floor balance and let the
+    candidate through."""
+    price_quote_screen = "We'll sell them for 60,000 credits.\n5,000 turns left.\nYour offer [60000] ? "
+    session = ObservingFakeAutopilotSession(text=price_quote_screen)
+    session.observe_credits("You have 5,000 credits.\nCommand [TL=00:00:06]:[100] (?=Help)? :")  # real bal < cash_floor
+
+    # Sanity: the fixture genuinely exercises the masking shape -- the OLD
+    # loose reader IS fooled by this screen's price quote.
+    assert parse_state(price_quote_screen).get("credits") == 60000
+
+    profile = _make_profile(autonomous=False)
+    lock = ControlLock()
+    engine = AutopilotEngine(session, profile, lock)
+
+    decision = engine.dry_run_tick(
+        current_ship=_barge(), ship_catalog=(_cruiser(),), loop=_loop_econ(), stardock_route=(100, 150, 999),
+    )
+
+    assert all(c.kind != "upgrade" for c in decision.candidates), (
+        "the strict source must see the real 5,000cr balance (< cash_floor) and skip upgrade, "
+        "never the price-quote-polluted 60,000 a loose reader would have let through"
+    )
+    assert any("cash floor" in s for s in decision.skipped)
+    assert decision.snapshot.credits == 5000
+
+
+def test_dry_run_tick_skips_upgrade_when_no_balance_was_ever_observed():
+    """Fail-closed on `None`: a session that never captured any balance
+    must skip the upgrade candidate on the SAME `credits unknown` gate a
+    genuine parse gap already uses (mack M-b) -- never treated as "assume
+    it's fine"."""
+    text = "5,000 turns left.\n" + _MAIN_COMMAND_SCREEN  # no "You have N credits" line anywhere
+    session = ObservingFakeAutopilotSession(text=text)
+    profile = _make_profile(autonomous=False)
+    lock = ControlLock()
+    engine = AutopilotEngine(session, profile, lock)
+
+    decision = engine.dry_run_tick(
+        current_ship=_barge(), ship_catalog=(_cruiser(),), loop=_loop_econ(), stardock_route=(100, 150, 999),
+    )
+
+    assert all(c.kind != "upgrade" for c in decision.candidates)
+    assert any("credits unknown" in s for s in decision.skipped)
+    assert decision.snapshot.credits is None
+
+
+def test_dry_run_tick_credits_none_still_explores_never_halts():
+    """Phase-A explore-only-witness ARMING INVARIANT (mack's live repro,
+    made permanent): the ruled asymmetry between the two credit-gated
+    stop sites is loop_player HALTs on an unknown balance (a real per-
+    spend stop-loss), but the autopilot tick only skip-SPENDs -- it must
+    KEEP EXPLORING, never halt or no-op, when credits are unknown.
+    `explore` spends nothing (EXECUTE is navigation-only, see module
+    docstring), so a `None` balance has no reason to block it; only the
+    credits-gated `upgrade` candidate is skipped. Untested before this
+    revise despite being load-bearing for the hub's Phase-A witness."""
+    text = "5,000 turns left.\n" + _MAIN_COMMAND_SCREEN  # no "You have N credits" line anywhere
+    session = ObservingFakeAutopilotSession(text=text)
+    profile = _make_profile(autonomous=False)
+    lock = ControlLock()
+    engine = AutopilotEngine(session, profile, lock)
+
+    decision = engine.dry_run_tick(
+        current_ship=_barge(), ship_catalog=(_cruiser(),), loop=_loop_econ(), stardock_route=(100, 150, 999),
+        explore_next_sector=999,
+    )
+
+    assert decision.chosen is not None, "credits-unknown must not silently produce a no-op tick"
+    assert decision.chosen.kind == "explore", "explore spends nothing -- a None balance must not block it"
+    assert decision.snapshot.credits is None
+    assert all(c.kind != "upgrade" for c in decision.candidates)
+    assert any("credits unknown" in s for s in decision.skipped)
+
+
+def test_dry_run_tick_skips_upgrade_on_a_stale_balance():
+    """Rook must-fix #4: a real, KNOWN balance older than
+    `caps.credits_stale_ms` must be treated as unknown, never trusted no
+    matter how comfortably above the cash floor it is -- proves the
+    freshness gate actually fires end to end through `dry_run_tick()`, not
+    just in `_fresh_credits()` isolation."""
+    text = "5,000 turns left.\n" + _MAIN_COMMAND_SCREEN
+    session = ObservingFakeAutopilotSession(text=text)
+    session.observe_credits("You have 60,000 credits.\nCommand [TL=00:00:06]:[100] (?=Help)? :")
+    time.sleep(0.05)  # the only known balance is now at least 50ms old
+    profile = _make_profile(autonomous=False)
+    lock = ControlLock()
+    engine = AutopilotEngine(session, profile, lock, caps=EconCaps(credits_stale_ms=1))
+
+    decision = engine.dry_run_tick(
+        current_ship=_barge(), ship_catalog=(_cruiser(),), loop=_loop_econ(), stardock_route=(100, 150, 999),
+    )
+
+    assert all(c.kind != "upgrade" for c in decision.candidates)
+    assert any("credits unknown" in s for s in decision.skipped)
+    assert decision.snapshot.credits is None
+
+
+def test_dry_run_tick_credits_stale_ms_is_config_driven_not_hardcoded():
+    """The same stale reading `test_dry_run_tick_skips_upgrade_on_a_stale_
+    balance` above rejects at `credits_stale_ms=1` must be ACCEPTED as
+    fresh at a generous window -- proving the threshold genuinely comes
+    from `EconCaps`, not a hardcoded constant that happens to match the
+    default."""
+    text = "5,000 turns left.\n" + _MAIN_COMMAND_SCREEN
+    session = ObservingFakeAutopilotSession(text=text)
+    session.observe_credits("You have 60,000 credits.\nCommand [TL=00:00:06]:[100] (?=Help)? :")
+    time.sleep(0.05)
+    profile = _make_profile(autonomous=False)
+    lock = ControlLock()
+    engine = AutopilotEngine(session, profile, lock, caps=EconCaps(credits_stale_ms=60_000))
+
+    decision = engine.dry_run_tick(
+        current_ship=_barge(), ship_catalog=(_cruiser(),), loop=_loop_econ(), stardock_route=(100, 150, 999),
+    )
+
+    assert decision.chosen is not None and decision.chosen.kind == "upgrade"
+    assert decision.snapshot.credits == 60000
 
 
 def test_live_tick_holds_on_a_blank_gate_render_rather_than_trusting_the_stale_pre_text():
@@ -828,8 +984,16 @@ def test_decision_to_trace_matches_the_cross_seat_schema_on_a_multi_candidate_dr
     schema a sibling seat's Decisions-box viewer consumes: exact field
     names, genuine cr/turn for every scored candidate (never 0/guessed),
     gated=False for all three (nothing here was skipped or held), and the
-    correct winning `chosen` kind."""
-    session = FakeAutopilotSession(text="You have 60,000 credits.\n5,000 turns left.\n" + _MAIN_COMMAND_SCREEN)
+    correct winning `chosen` kind.
+
+    WO-FA-SAFE: `ObservingFakeAutopilotSession` (not the plain fake) --
+    `assess()`'s `credits` now comes from `_fresh_credits()`'s strict
+    `credits_snapshot()` read, fed by THIS tick's own `observe_credits()`
+    call on this same screen text, so the fixture needs the credits-
+    supervision surface wired to still resolve `cash=60_000`."""
+    session = ObservingFakeAutopilotSession(
+        text="You have 60,000 credits.\n5,000 turns left.\n" + _MAIN_COMMAND_SCREEN
+    )
     profile = _make_profile()
     lock = ControlLock()
     engine = AutopilotEngine(session, profile, lock)
@@ -968,11 +1132,16 @@ def test_disabled_profile_refuses_live_tick_and_sends_nothing():
 
 
 def test_disabled_profile_dry_run_tick_still_produces_a_full_decision_trace():
-    # credits/turns_left must be screen-derived (state_parser), same as
-    # every other consumer -- unlike hops/catalog/loop (world-model/
-    # game-data-derived, so caller-supplied), so this session's text
-    # carries a real parseable balance + turn count.
-    session = FakeAutopilotSession(text="You have 60,000 credits.\n5,000 turns left.\n" + _MAIN_COMMAND_SCREEN)
+    # turns_left must be screen-derived (state_parser), same as every other
+    # consumer -- unlike hops/catalog/loop (world-model/game-data-derived,
+    # so caller-supplied), so this session's text carries a real parseable
+    # turn count. credits is WO-FA-SAFE's strict `_fresh_credits()` source
+    # (session.credits_snapshot(), fed by this tick's own observe_credits()
+    # call below) -- ObservingFakeAutopilotSession, not the plain fake, so
+    # this screen's real balance actually reaches the decision.
+    session = ObservingFakeAutopilotSession(
+        text="You have 60,000 credits.\n5,000 turns left.\n" + _MAIN_COMMAND_SCREEN
+    )
     profile = _make_profile()
     lock = ControlLock()
     ledger = FakeLedger()

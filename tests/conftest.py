@@ -32,6 +32,7 @@ from twclient import env as _env
 from twclient.control_lock import ControlLock
 from twclient.daemon import CommandHandler, ThreadingUnixServer
 from twclient.loop_player import LoopPlayer
+from twclient.session import Session
 from twclient.watch import WatchHub
 
 
@@ -106,7 +107,21 @@ class FakeAttachSession:
     by a REAL `time.sleep(seconds * scale)`, so a full confirm (roughly
     debounce_ms + stability_pause_s of fake-clock time) costs about
     `scale * 0.5` real seconds -- `0.1` reproduces the original ~50ms
-    per cycle."""
+    per cycle.
+
+    `observe_credits`/`credits_snapshot` (WO-FA-SAFE) are the REAL
+    `Session` methods (assigned directly off the class, not reimplemented
+    -- same convention as tests/test_credits_supervision.py's/
+    test_loop_player.py's/test_autopilot.py's own fakes), so a test using
+    this session through the real dispatch/LoopPlayer/AutopilotEngine
+    paths exercises the same hasattr-guarded calls those call sites make
+    against a real `Session`, rather than silently falling through the
+    hasattr guard to a fail-closed `None`/`None` this fixture predated.
+    `self.lock` is a plain `threading.Lock`, the same shape `Session.lock`
+    is -- both methods acquire it internally."""
+
+    observe_credits = Session.observe_credits
+    credits_snapshot = Session.credits_snapshot
 
     def __init__(self, initial_screen="Command [TL=00:00:00]:[1234] (?=Help)? :", real_time_scale=0.0):
         self._screen = initial_screen
@@ -135,6 +150,9 @@ class FakeAttachSession:
         self._cursor = {"x": 0, "y": 0}
         self._pending_advance = False
         self._real_time_scale = real_time_scale
+        self.lock = threading.Lock()
+        self.last_credits = None
+        self.last_credits_ts = None
 
     def render(self):
         return self._screen.split("\n")

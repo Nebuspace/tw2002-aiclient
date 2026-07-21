@@ -660,7 +660,12 @@ def cmd_autopilot(args):
     elif args.action == "start":
         resp = send_request(
             "autopilot_start",
-            {"profile": args.profile, "max_ticks": args.max_ticks, "cash_floor": args.cash_floor},
+            {
+                "profile": args.profile,
+                "max_ticks": args.max_ticks,
+                "cash_floor": args.cash_floor,
+                "credits_stale_ms": args.credits_stale_ms,
+            },
         )
     else:
         resp = send_request("autopilot_stop", {})
@@ -994,6 +999,13 @@ def build_parser():
     sp.add_argument(
         "--cash-floor", dest="cash_floor", type=int, default=None,
         help="start only: override the upgrade-candidate cash floor in credits (default 10000)",
+    )
+    sp.add_argument(
+        "--credits-stale-ms", dest="credits_stale_ms", type=int, default=None,
+        help=(
+            "start only: override the credit-floor stop-loss's balance-freshness bound in ms "
+            "(default 15000) -- WO-FA-SAFE"
+        ),
     )
     add_json(sp)
     sp.set_defaults(func=cmd_autopilot)

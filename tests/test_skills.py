@@ -5,11 +5,14 @@ keyed by send(), mirroring FakeLoginSession's settle-detection surface
 doesn't need."""
 
 import json
+import threading
 import time
 
 import pytest
 
 from twclient import skills
+from twclient.ledger import snapshot_state
+from twclient.session import Session
 from twclient.settle import wait_for_settle
 
 
@@ -65,6 +68,31 @@ class FakeReplaySession:
     def send(self, text, enter=True, secret=False):
         self.sent.append((text, secret))
         self._pending_advance = True
+
+
+class ObservingFakeReplaySession(FakeReplaySession):
+    """WO-FA-SAFE Site C: `FakeReplaySession` + the REAL `Session.
+    observe_credits`/`credits_snapshot` wired in (assigned directly off
+    the class, not reimplemented -- same convention as
+    tests/test_loop_player.py's own `ObservingFakeLoopSession`/
+    tests/test_autopilot.py's `ObservingFakeAutopilotSession`), so a test
+    using this session exercises the same hasattr-guarded calls
+    `play_skill()`'s floor-check now makes against a real `Session`. Plain
+    `FakeReplaySession` predates the credits-supervision surface entirely
+    and has no `last_credits`/`last_credits_ts`/`lock` at all, so the
+    hasattr guards silently skip it -- every other existing test in this
+    file keeps using the plain fake unchanged. `self.lock` is a plain
+    `threading.Lock`, the same shape `Session.lock` is -- both methods
+    acquire it internally."""
+
+    observe_credits = Session.observe_credits
+    credits_snapshot = Session.credits_snapshot
+
+    def __init__(self, *a, **kw):
+        super().__init__(*a, **kw)
+        self.lock = threading.Lock()
+        self.last_credits = None
+        self.last_credits_ts = None
 
 
 class _RecordingLedger:
@@ -355,12 +383,125 @@ def test_play_skill_halts_on_surprise_mid_run():
 
 
 def test_play_skill_halts_on_floor_stop_loss():
-    session = FakeReplaySession(["You have 40 credits."])  # already at/below floor before cycle 0 even starts
+    """WO-FA-SAFE Site C: the floor-check now reads the STRICT last-known
+    balance (`session.credits_snapshot()`), not the loose `snapshot_state()`
+    read this test used to exercise via a plain, non-observing
+    `FakeReplaySession` -- a real `Session` (and any fake standing in for
+    one) always has the credits-supervision surface wired, so
+    `ObservingFakeReplaySession` is the correct fixture for a "happy path"
+    floor test now. The floor-check's own `observe_credits()` call
+    captures a FRESH balance from this exact render, so it reads as fresh
+    regardless of `credits_stale_ms`."""
+    session = ObservingFakeReplaySession(
+        ["You have 40 credits."]
+    )  # already at/below floor before cycle 0 even starts
     skill = _skill([{"input": "M", "wait_prompt": None, "expected_post_class": None}])
     result = skills.play_skill(session, skill, cycles=5, floor=50)
     assert result["halted"] == "floor_reached"
     assert result["cycles_completed"] == 0
     assert session.sent == []  # never even sent -- checked before the cycle ran
+
+
+def test_play_skill_halts_credits_unknown_when_no_balance_was_ever_observed():
+    """Fail-closed on `None`: a session that never captured any balance
+    must HALT with the honest `"credits_unknown"` signal, distinct from
+    `"floor_reached"` (a KNOWN too-low balance) -- the pre-fix loose read
+    (`snapshot_state().get("credits")`) failed OPEN on `None` (silently
+    proceeded, running to `cycles_complete`); this must not."""
+    session = ObservingFakeReplaySession(["Command [TL=00753:0/0/0/850]"])  # no balance line anywhere
+    skill = _skill([{"input": "M", "wait_prompt": None, "expected_post_class": None}])
+    result = skills.play_skill(session, skill, cycles=5, floor=50)
+    assert result["halted"] == "credits_unknown"
+    assert result["cycles_completed"] == 0
+    assert session.sent == []
+
+
+def test_play_skill_halts_credits_unknown_on_a_session_without_the_supervision_surface():
+    """Defensive hasattr-fallback: a session lacking `credits_snapshot()`
+    entirely (a bare/legacy fake -- plain `FakeReplaySession` predates this
+    surface) must fail CLOSED exactly like a real session that never
+    captured a balance, never crash and never silently trust an absent
+    surface as "no floor configured"."""
+    session = FakeReplaySession(["You have 40 credits."])
+    skill = _skill([{"input": "M", "wait_prompt": None, "expected_post_class": None}])
+    result = skills.play_skill(session, skill, cycles=5, floor=50)
+    assert result["halted"] == "credits_unknown"
+    assert result["cycles_completed"] == 0
+
+
+def test_play_skill_halts_credits_unknown_on_a_stale_balance():
+    """A real, KNOWN balance older than `credits_stale_ms` must be treated
+    as unknown, never trusted no matter how comfortably below `floor` it
+    is -- the parameter is what draws the line, not a hardcoded window."""
+    session = ObservingFakeReplaySession(["Command [TL=00753:0/0/0/850]"])  # this screen carries no balance itself
+    session.observe_credits("You have 40 credits.\nCommand [TL=00753:0/0/0/850]")
+    time.sleep(0.05)  # the ONLY prior reading is now at least 50ms old
+    skill = _skill([{"input": "M", "wait_prompt": None, "expected_post_class": None}])
+
+    result = skills.play_skill(session, skill, cycles=5, floor=50, credits_stale_ms=1)
+
+    assert result["halted"] == "credits_unknown"
+    assert result["cycles_completed"] == 0
+
+
+def test_play_skill_credits_stale_ms_is_config_driven_not_hardcoded():
+    """The same stale reading `test_play_skill_halts_credits_unknown_on_a_
+    stale_balance` above rejects at `credits_stale_ms=1` must be ACCEPTED
+    as fresh at a generous window -- proving the threshold genuinely comes
+    from the parameter, not a hardcoded constant that happens to match the
+    default."""
+    session = ObservingFakeReplaySession(["Command [TL=00753:0/0/0/850]"])
+    session.observe_credits("You have 40 credits.\nCommand [TL=00753:0/0/0/850]")
+    time.sleep(0.05)
+    skill = _skill([{"input": "M", "wait_prompt": None, "expected_post_class": None}])
+
+    result = skills.play_skill(session, skill, cycles=1, floor=10, credits_stale_ms=60_000, force=True)
+
+    assert result["halted"] == "cycles_complete"
+
+
+def test_play_skill_proceeds_on_a_fresh_confirmed_balance_strictly_above_floor():
+    """The proceed path: a fresh, confirmed balance strictly greater than
+    `floor` must NOT halt -- the run completes its cycles normally."""
+    session = ObservingFakeReplaySession(["Command [TL=00753:0/0/0/850]"])
+    session.observe_credits("You have 1,000 credits.\nCommand [TL=00753:0/0/0/850]")
+    skill = _skill([{"input": "M", "wait_prompt": None, "expected_post_class": None}])
+
+    result = skills.play_skill(session, skill, cycles=1, floor=50, force=True)
+
+    assert result["halted"] == "cycles_complete"
+
+
+def test_play_skill_price_mask_below_floor_poc_reads_the_strict_balance_not_the_loose_price_quote():
+    """THE HUB'S MANDATORY PoC (Site C twin of loop_player.py's own): a
+    real, prior balance BELOW `floor` sits in `session.last_credits`
+    (freshly captured moments earlier, e.g. during the arm sequence's own
+    crawl login/dock screen); the CURRENT screen is a pure port price-quote
+    with NO balance line of its own, quoting a price >= `floor`. The strict
+    source (`credits_snapshot()`) must still see the real sub-floor balance
+    (non-clobber: this screen has nothing to overwrite it with) and HALT --
+    contrasted directly against the pre-fix loose reader (`state_parser.
+    parse_state()`'s own `credits` field, via `ledger.snapshot_state()`),
+    which this fixture proves WOULD have read the price quote as if it
+    were a real, comfortably-above-floor balance and proceeded."""
+    floor = 200
+    price_quote_screen = "We'll sell them for 2,214 credits.\nYour offer [2214] ? "
+    session = ObservingFakeReplaySession([price_quote_screen])
+    session.observe_credits("You have 100 credits.\nCommand [TL=00753:0/0/0/850]")  # real bal < floor
+
+    # Sanity: the fixture genuinely exercises the masking shape -- the OLD
+    # loose reader IS fooled by this screen's price quote.
+    assert snapshot_state(price_quote_screen).get("credits") == 2214
+
+    skill = _skill([{"input": "M", "wait_prompt": None, "expected_post_class": None}])
+    result = skills.play_skill(session, skill, cycles=5, floor=floor)
+
+    assert result["halted"] == "floor_reached", (
+        "the strict source must see the real 100cr balance (<= floor) and HALT, "
+        "never the price-quote-polluted 2214 a loose reader would have proceeded on"
+    )
+    assert result["cycles_completed"] == 0
+    assert session.sent == []
 
 
 def test_play_skill_rejects_cycles_over_the_hard_cap():

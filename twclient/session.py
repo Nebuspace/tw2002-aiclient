@@ -225,11 +225,51 @@ class Session:
         screens; self-revealing anyway, since `credits_age_ms` (protocol.py
         `status` verb) just keeps growing while a human plays manually,
         which is the CORRECT signal for "no autonomous run is feeding
-        this" -- not a silent gap."""
+        this" -- not a silent gap.
+
+        ATOMIC WRITE (WO-FA-SAFE, Rook must-fix #3): both fields are set
+        under `self.lock` -- the same lock `render()`/`cursor_pos()` already
+        use to guard concurrent `Session` state -- so a reader can never
+        observe a torn (old-balance/new-ts) pair. Before this fix the two
+        assignments were unlocked, plain statements; a concurrent `tw
+        status` (read-only-always-allowed, calls `observe_credits()` on the
+        command thread) landing between them could read the OLD balance
+        alongside the NEW ts, understating the reported age -- for a
+        passive `status` display that's cosmetic, but the credit-floor
+        stop-loss decision sites (`loop_player.py`/`autopilot.py`) trust
+        this same pair to decide HALT-vs-proceed, where a falsely-fresh
+        stale balance is a real over-spend defeat. `credits_snapshot()`
+        below reads both fields back under the SAME lock -- callers that
+        need a non-torn pair (not just the write itself being atomic) must
+        use it rather than two separate `getattr()`s."""
         credits = credits_balance(text)
         if credits is not None:
-            self.last_credits = credits
-            self.last_credits_ts = time.monotonic()
+            with self.lock:
+                self.last_credits = credits
+                self.last_credits_ts = time.monotonic()
+
+    def credits_snapshot(self):
+        """Atomic `(last_credits, last_credits_ts)` read (WO-FA-SAFE, Rook
+        must-fix #3) -- both fields read under the SAME lock
+        `observe_credits()` writes them under, so a caller can never see a
+        torn pair (an old balance paired with a new ts, understating
+        staleness). This is the strict source the credit-floor stop-loss
+        decision sites use (`loop_player.py`'s per-cycle floor-check,
+        `autopilot.py`'s `dry_run_tick()`/`live_tick()` -> `assess()`) --
+        NOT `parse_state()`'s own looser `credits` field, which a port's
+        own price quote satisfies just as well (see `observe_credits()`'s
+        own docstring for why the source split exists at all).
+
+        Inherits `credits_balance()`'s documented FORGED-BALANCE residual
+        (state_parser.py, FA9-class roadmap prerequisite): a forged
+        in-band "You have N credits" broadcast landing after the real
+        balance line on some earlier screen would have already poisoned
+        `last_credits` at capture time, before this method ever runs --
+        SOLO-safe today (no other player exists on a crawl_sacrificial game
+        to author such a forgery); arming any consumer of this snapshot in
+        multiplayer REQUIRES WO-FA9 first."""
+        with self.lock:
+            return self.last_credits, self.last_credits_ts
 
     # -- settle-detection protocol (see settle.wait_for_settle) ------
 

@@ -102,6 +102,35 @@ rather than rederived from the trace dict, so this supplement changes
 no existing ledger-text behavior. `AutopilotEngine.trace_log()` (the
 bounded recent history) and `AutopilotLoop.snapshot()["last_trace"]`
 (the single latest tick) are the two read transports.
+
+**WO-FA-SAFE (hub-signed-off design + Rook architecture-approved): a
+strict, fail-closed credits source for `assess()`.** `assess()`'s
+`credits` kwarg is now REQUIRED (Rook must-fix #1) -- no default, no
+internal `parse_state()` fallback, a caller that omits it gets a loud
+`TypeError`. `AutopilotEngine.dry_run_tick()`/`live_tick()` feed it via
+`_fresh_credits()` (see that method's own docstring): `session.
+credits_snapshot()` (session.py, Rook must-fix #3's ATOMIC
+`(last_credits, last_credits_ts)` read), gated fresh only when no older
+than `caps.credits_stale_ms` (default 15s -- `DEFAULT_CREDITS_STALE_MS`,
+config-driven per `EconCaps`, never hardcoded). `_score_upgrade()`'s
+existing `credits is None` fail-closed skip then handles a stale/unknown
+reading exactly as it already handles a genuine parse gap.
+`_score_chain()` is NOT credits-gated at all (Rook must-fix #2 -- see that
+function's own comment: not a live spend-defeat today since `run_chain`'s
+candidate only MOVES, never buys in-line; FA4's future buy-flow owns the
+real per-spend gate). `sector`/`turns_left` stay `parse_state()`-sourced
+inside `assess()` -- only `credits` has a documented same-screen
+price-quote-shaped lookalike (`state_parser.py`'s module docstring), so
+only it needed the strict-source swap.
+
+Multiplayer arming-gate (Rook must-fix #6, written, not a footnote): this
+inherits `credits_balance()`'s documented FORGED-BALANCE residual
+(state_parser.py, FA9-class roadmap prerequisite) -- SOLO-safe today (no
+other player exists on a crawl_sacrificial game to author such a forgery);
+arming this engine's credits-gated candidates in multiplayer REQUIRES
+WO-FA9 first. `loop_player.LoopPlayer`'s own sibling floor-check
+(loop_player.py) shares this same `EconCaps.credits_stale_ms` field and
+the same arming-gate.
 """
 
 from __future__ import annotations
@@ -177,6 +206,27 @@ DEFAULT_KEEP_MIN_DEFENSE_FIGHTERS = 20
 # autonomously. Unused this phase; kept here (not deleted) so a later
 # spend-capable EXECUTE inherits the cap rather than reinventing it.
 DEFAULT_SURFACE_BEFORE_SPEND = 50_000
+# WO-FA-SAFE: the credit-floor stop-loss's freshness bound (Rook must-fix
+# #4) -- how old a `session.last_credits` reading is allowed to be before
+# `dry_run_tick()`/`live_tick()` must treat it as unknown rather than
+# trust it. This is a TIME backstop, not per-spend precision: it can trust
+# ONE balance across a whole macro-cycle's worth of spends (the reading
+# may predate the cycle's own last buy) -- a genuinely per-spend
+# "confirmed since the last buy" gate is FA4's buy-flow's own job, not
+# this module's. Config-driven (an `EconCaps` field, never hardcoded at a
+# call site) -- honesty note (mack LOW a, hub-ratified revise item 4): a
+# supervisor CAN tune it live, without a rebuild, via THIS module's own
+# `tw autopilot start --credits-stale-ms` (protocol.py's
+# `_dispatch_autopilot_start` threads it into a fresh `EconCaps`, exactly
+# like `cash_floor`). The SAME `EconCaps` field is also read by
+# `loop_player.LoopPlayer`'s sibling floor-check and `skills.play_skill()`
+# (its own `credits_stale_ms` parameter, defaulted from this constant) --
+# those two do NOT yet have CLI/dispatch-level tunability of their own
+# (`tw play`/`tw play_start` have no `--credits-stale-ms` flag); every
+# real caller there gets this 15s default until that follow-on lands. Do
+# not describe those two paths as "supervisor-tunable live" -- only the
+# autopilot arm path is, today.
+DEFAULT_CREDITS_STALE_MS = 15_000
 
 # Exploration's baseline EV (§11 "no idle", decision #4): picked whenever
 # nothing else scores higher, so a tick always has SOMETHING to do even
@@ -231,6 +281,11 @@ class EconCaps:
     cash_floor: int = DEFAULT_CASH_FLOOR
     keep_min_defense_fighters: int = DEFAULT_KEEP_MIN_DEFENSE_FIGHTERS
     surface_before_spend: int = DEFAULT_SURFACE_BEFORE_SPEND
+    # WO-FA-SAFE: the credit-floor stop-loss's freshness bound, shared by
+    # both decision sites (this module's own dry_run_tick()/live_tick() and
+    # loop_player.LoopPlayer's floor-check) -- see DEFAULT_CREDITS_STALE_MS
+    # above for the one-macro-cycle exposure this bound accepts.
+    credits_stale_ms: int = DEFAULT_CREDITS_STALE_MS
 
 
 @dataclass(frozen=True)
@@ -258,6 +313,7 @@ class WorldSnapshot:
 def assess(
     rendered_text: str,
     *,
+    credits: Optional[int],
     current_ship: Optional[ShipSpec] = None,
     hops: Sequence[TradeHop] = (),
     ship_catalog: Sequence[ShipSpec] = (),
@@ -270,11 +326,33 @@ def assess(
     """Read the CURRENT screen via `state_parser.parse_state()` and fold
     it together with the caller-supplied world-model-derived inputs into
     one `WorldSnapshot` -- SELECT never re-reads live state mid-decision,
-    it only ever sees this one immutable snapshot."""
+    it only ever sees this one immutable snapshot.
+
+    `credits` (WO-FA-SAFE, Rook must-fix #1): a REQUIRED keyword-only
+    argument with NO default and NO `parse_state()` fallback -- a caller
+    that omits it gets a loud `TypeError`, never a silent revert to the
+    loose source. This used to be `state.get("credits")`, sourced from
+    this same `parse_state()` call like `sector`/`turns_left` still are
+    below -- but `parse_state()`'s `credits` field falls back to a bare
+    "N credits" mention, which a port's own price quote satisfies just as
+    well as a real balance (see `state_parser.py`'s module docstring and
+    `session.observe_credits()`'s own docstring for the full rationale).
+    `sector`/`turns_left` stay `parse_state()`-sourced deliberately: unlike
+    credits, neither has a documented same-screen price-quote-shaped
+    lookalike that would misreport a wrong-but-plausible value, so the
+    asymmetry is a fix targeted at the actual pollutable field, not a
+    blanket credits/sector/turns policy change.
+
+    The caller (`AutopilotEngine.dry_run_tick()`/`live_tick()`) sources
+    this from `session.credits_snapshot()` -- the STRICT, freshness-gated
+    last-known balance -- never from this function's own `rendered_text`.
+    `_score_upgrade()`'s existing `credits is None` fail-closed skip then
+    applies unchanged to a stale/never-observed reading, exactly as it
+    already does to a genuine parse gap."""
     state = parse_state(rendered_text)
     return WorldSnapshot(
         sector=state.get("sector"),
-        credits=state.get("credits"),
+        credits=credits,
         turns_left=state.get("turns_left"),
         current_ship=current_ship,
         hops=tuple(hops),
@@ -340,6 +418,16 @@ class Decision:
 
 
 def _score_chain(snapshot: WorldSnapshot, caps: EconCaps) -> tuple[Optional[Candidate], Optional[str]]:
+    # WO-FA-SAFE (Rook must-fix #2): this function never reads
+    # `snapshot.credits` at all -- a None/stale balance does NOT skip a
+    # `run_chain` candidate today. That's NOT currently a live spend-
+    # defeat: `run_chain`'s chosen candidate only MOVES one hop
+    # (`live_tick()`'s EXECUTE is navigation-only, see module docstring),
+    # never an in-line buy. It becomes load-bearing the moment a real
+    # trade-loop driver exists -- FA4's buy-flow MUST gate the actual buy
+    # on the strict `credits_snapshot()` source + re-confirm the balance
+    # per-buy (the real per-spend precision belongs there, not here). Do
+    # NOT read this as "run_chain is credit-gated" -- it isn't.
     if not snapshot.hops:
         return None, None
     chain = longest_profit_chain(snapshot.hops)
@@ -741,27 +829,64 @@ class AutopilotEngine:
         # bounded ring that evicts old entries.
         self._tick_counter = 0
 
+    def _fresh_credits(self) -> Optional[int]:
+        """WO-FA-SAFE (hub-signed-off design + Rook must-fix #1): the
+        STRICT, freshness-gated credits source `assess()`'s now-required
+        `credits` kwarg is fed from at BOTH tick sites below -- replaces
+        `assess()`'s own former internal `parse_state(rendered_text).
+        get("credits")` read (price-pollutable: a port's own price quote
+        satisfies it just as well as a real balance). Reads
+        `session.credits_snapshot()` (session.py, Rook must-fix #3 -- an
+        ATOMIC `(last_credits, last_credits_ts)` pair, never two separate
+        unlocked attribute reads) and returns the balance ONLY when it's
+        both known and no older than `self.caps.credits_stale_ms` (default
+        15s -- see `DEFAULT_CREDITS_STALE_MS`'s own comment for the
+        one-macro-cycle exposure this bound accepts); `None` otherwise
+        (never observed, or stale). hasattr-guarded like every other
+        `credits_snapshot`/`observe_credits` call site -- a session lacking
+        the method reads as `(None, None)`, the same fail-closed shape as
+        a real session that never captured a balance.
+
+        `_score_upgrade()`'s existing `credits is None` fail-closed skip
+        (mack M-b) then applies unchanged -- this function narrows WHAT
+        counts as "known", it doesn't change how an unknown balance is
+        handled. `_score_chain()` never reads credits at all (Rook
+        must-fix #2 -- see that function's own comment) -- a stale/unknown
+        reading here does not affect a `run_chain` candidate's score.
+
+        Multiplayer arming-gate (Rook must-fix #6, written, not a
+        footnote): this inherits `credits_balance()`'s documented
+        FORGED-BALANCE residual (state_parser.py, FA9-class roadmap
+        prerequisite) -- a forged in-band "You have N credits" broadcast
+        poisons `last_credits` exactly like a real one. SOLO-safe today (no
+        other player exists on a crawl_sacrificial game to author such a
+        forgery); arming this engine's credits-gated candidates in
+        multiplayer REQUIRES WO-FA9 first."""
+        if hasattr(self.session, "credits_snapshot"):
+            bal, ts = self.session.credits_snapshot()
+        else:
+            bal, ts = None, None
+        age_ms = (time.monotonic() - ts) * 1000 if ts is not None else None
+        fresh = bal is not None and age_ms is not None and age_ms <= self.caps.credits_stale_ms
+        return bal if fresh else None
+
     def dry_run_tick(self, **assess_kwargs) -> Decision:
         """The pre-enablement proof surface (design decision #5):
         ASSESS + SELECT + RECORD, ZERO sends -- regardless of
         `self.enabled`. Reads (never writes) the LIVE interrupt history
         -- see class docstring's HIGH-3 note."""
         text = self.session.render_text(self.session.render())
-        # WO-FA7a round 5 (observe-only, hub-ruled scope A): feed the
-        # credits-supervision surface from this tick's own render, the
-        # same class of autonomous per-tick screen read replay_skill/
-        # play_skill/LoopPlayer were already fixed for. hasattr-guarded,
-        # mirroring every other call site (session.py/protocol.py/
-        # skills.py/crawl_driver.py/loop_player.py). Deliberately a
-        # DIFFERENT source than `assess()`'s own decision below (loose
-        # `parse_state()`-based credits, not the STRICT `credits_balance()`
-        # this observes) -- unifying them is the human-gated WO-FA-SAFE
-        # change (a spend-decision source swap, out of scope here); this
-        # round is observation-only, zero change to any `WorldSnapshot.
-        # credits`/`assess()` decision path.
+        # WO-FA7a round 5: feed the credits-supervision surface from this
+        # tick's own render, the same class of autonomous per-tick screen
+        # read replay_skill/play_skill/LoopPlayer were already fixed for.
+        # hasattr-guarded, mirroring every other call site (session.py/
+        # protocol.py/skills.py/crawl_driver.py/loop_player.py).
         if hasattr(self.session, "observe_credits"):
             self.session.observe_credits(text)
-        snapshot = assess(text, **assess_kwargs)
+        # WO-FA-SAFE: `assess()`'s `credits` now comes from THIS engine's
+        # own strict, freshness-gated read -- see `_fresh_credits()`'s own
+        # docstring -- never from `assess()`'s internal screen parse.
+        snapshot = assess(text, credits=self._fresh_credits(), **assess_kwargs)
         decision = select(snapshot, self.caps)
         with self._lock:
             interrupted = (
@@ -786,13 +911,13 @@ class AutopilotEngine:
         if not self.enabled:
             raise AutopilotGateError(f"autonomous_disabled:profile={getattr(self.profile, 'name', '?')}")
         pre_text = self.session.render_text(self.session.render())
-        # WO-FA7a round 5 (observe-only): same credits-supervision feed as
-        # dry_run_tick() above -- see its comment for the full rationale
-        # (deliberate source split vs. assess()'s own loose decision read,
-        # unification deferred to the human-gated WO-FA-SAFE change).
+        # WO-FA7a round 5: same credits-supervision feed as dry_run_tick()
+        # above -- see its comment for the full rationale.
         if hasattr(self.session, "observe_credits"):
             self.session.observe_credits(pre_text)
-        snapshot = assess(pre_text, **assess_kwargs)
+        # WO-FA-SAFE: same strict, freshness-gated source as dry_run_tick()
+        # -- see `_fresh_credits()`'s own docstring.
+        snapshot = assess(pre_text, credits=self._fresh_credits(), **assess_kwargs)
         decision = select(snapshot, self.caps)
 
         with self._lock:

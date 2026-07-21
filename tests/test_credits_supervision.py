@@ -61,11 +61,14 @@ class FakeSession:
     settled screens through the SAME session, exactly as a real daemon
     would across successive `tw do` calls.
 
-    `observe_credits` is the REAL `Session.observe_credits` (assigned
-    directly off the class, not reimplemented) -- see this module's own
-    docstring."""
+    `observe_credits`/`credits_snapshot` are the REAL `Session` methods
+    (assigned directly off the class, not reimplemented) -- see this
+    module's own docstring. `self.lock` (WO-FA-SAFE, Rook must-fix #3) is
+    a plain `threading.Lock`, the same shape `Session.lock` is -- both
+    methods acquire it internally, so this fake needs it too."""
 
     observe_credits = Session.observe_credits
+    credits_snapshot = Session.credits_snapshot
 
     def __init__(self, initial_text):
         self._text = initial_text
@@ -78,6 +81,9 @@ class FakeSession:
         self.t = 0.0
         self.sent = []
         self.history = []
+        self.lock = threading.Lock()
+        self.last_credits = None
+        self.last_credits_ts = None
 
     def set_screen(self, text):
         self._text = text
@@ -125,14 +131,15 @@ class _FakeAutoLoopSession:
     FOLLOWING `sleep()` call, matching `settle.send_and_confirm()`'s
     idle-detection needs -- a synchronous same-call bump would already be
     reflected in the `start_rx_count` `wait_for_settle` captures at its own
-    start, so it would never observe a NEW arrival). `observe_credits` is
-    the REAL `Session.observe_credits` (see `FakeSession` above) -- this
-    class exists locally (not cross-imported from test_skills.py, matching
-    this repo's own one-fixture-per-file convention) purely to drive
-    `replay_skill`/`play_skill` through a credits-bearing screen
-    transition."""
+    start, so it would never observe a NEW arrival). `observe_credits`/
+    `credits_snapshot` are the REAL `Session` methods (see `FakeSession`
+    above) -- this class exists locally (not cross-imported from
+    test_skills.py, matching this repo's own one-fixture-per-file
+    convention) purely to drive `replay_skill`/`play_skill` through a
+    credits-bearing screen transition."""
 
     observe_credits = Session.observe_credits
+    credits_snapshot = Session.credits_snapshot
 
     def __init__(self, screens):
         self.t = 0.0
@@ -142,6 +149,9 @@ class _FakeAutoLoopSession:
         self._i = 0
         self.sent = []
         self._pending_advance = False
+        self.lock = threading.Lock()
+        self.last_credits = None
+        self.last_credits_ts = None
 
     def clock(self):
         return self.t
@@ -410,3 +420,135 @@ def test_credits_age_ms_never_goes_negative_under_concurrent_access():
     assert reads[0] > 0, "sanity: the reader thread must have actually gotten some status reads in"
     assert not crashes, f"status dispatch must never crash under concurrent observe_credits writes: {crashes}"
     assert not negative_ages, f"credits_age_ms must never go negative: {negative_ages}"
+
+
+# -- WO-FA-SAFE, Rook must-fix #3: atomic last_credits/last_credits_ts ------
+
+
+def test_credits_snapshot_never_returns_a_torn_bal_ts_pair_under_concurrent_access(monkeypatch):
+    """`observe_credits()`'s write and `credits_snapshot()`'s read now share
+    `self.lock` (session.py) -- a reader can only ever see a FULLY-written
+    `(last_credits, last_credits_ts)` pair, never one field from a NEW
+    write spliced with the other field's OLD value. The dangerous
+    direction is an OLD (stale) balance paired with a NEW-looking ts --
+    that makes a stop-loss decision site (loop_player.py/autopilot.py)
+    trust a stale balance as fresh; the reverse (a NEW balance paired with
+    an OLD ts) merely looks stale, the safe fail-closed direction. Before
+    this fix, the two fields were written as two UNLOCKED statements, so a
+    caller reading them in bal-then-ts order (the opposite order from
+    protocol.py's own `status` verb, which reads ts-then-bal and so
+    happened to dodge the dangerous direction by luck of ordering, not by
+    design) was exposed to exactly this.
+
+    Forces the interleaving deterministically rather than trusting a real-
+    time race to reproduce reliably: a patched `time.monotonic` blocks (via
+    an `Event`) for the full duration `observe_credits()` holds its lock,
+    giving a concurrent reader thread every chance to acquire
+    `credits_snapshot()`'s lock mid-write if the two methods did NOT
+    actually share one. With the shared lock, every read must land on
+    exactly the OLD pair or exactly the NEW pair -- nothing in between."""
+    session = FakeSession(NO_CREDITS_SCREEN)
+    session.observe_credits("You have 100 credits.\nCommand [TL=00:00:00]:[100] (?=Help)? : ")
+    old_pair = (session.last_credits, session.last_credits_ts)
+    assert old_pair[0] == 100  # sanity: a real OLD pair exists to race against
+
+    writer_in_critical_section = threading.Event()
+    release_writer = threading.Event()
+    real_monotonic = _real_time.monotonic
+
+    def blocking_monotonic():
+        writer_in_critical_section.set()
+        release_writer.wait(timeout=2.0)
+        return real_monotonic()
+
+    reads = []
+    stop_reader = threading.Event()
+
+    def reader():
+        while not stop_reader.is_set():
+            reads.append(session.credits_snapshot())
+
+    reader_thread = threading.Thread(target=reader)
+    reader_thread.start()
+
+    monkeypatch.setattr(_real_time, "monotonic", blocking_monotonic)
+    writer_thread = threading.Thread(
+        target=lambda: session.observe_credits(
+            "You have 200 credits.\nCommand [TL=00:00:01]:[100] (?=Help)? : "
+        )
+    )
+    writer_thread.start()
+    assert writer_in_critical_section.wait(timeout=2.0), "sanity: the writer must have entered its locked section"
+    _real_time.sleep(0.05)  # give the reader thread several chances to race in before releasing the writer
+    monkeypatch.undo()  # restore the real time.monotonic before anything times a real duration again
+    release_writer.set()
+    writer_thread.join(timeout=2.0)
+
+    stop_reader.set()
+    reader_thread.join(timeout=2.0)
+
+    new_pair = (session.last_credits, session.last_credits_ts)
+    assert new_pair[0] == 200  # sanity: the write completed
+    assert reads, "sanity: the reader thread must have actually gotten some credits_snapshot() reads in"
+    torn = [pair for pair in reads if pair not in (old_pair, new_pair)]
+    assert not torn, f"credits_snapshot() must never return a torn bal/ts pair, got: {torn}"
+
+
+def test_status_verb_never_returns_a_torn_credits_pair_under_concurrent_access(monkeypatch):
+    """WO-FA-SAFE (hub-ratified revise, item 2): the SAME atomic-pairing
+    proof as `test_credits_snapshot_never_returns_a_torn_bal_ts_pair_under_
+    concurrent_access` above, but driven through the real `status` verb
+    dispatch -- proving `protocol.py`'s own `"credits"`/`"credits_ts"`
+    fields (now sourced from ONE `credits_snapshot()` call, not two
+    separate unlocked `getattr()`s) are internally consistent as a pair,
+    not just that `credits_age_ms` alone stays non-negative (the pre-
+    existing `test_credits_age_ms_never_goes_negative_under_concurrent_
+    access` proves that weaker property, through the SAME dispatch path,
+    but a non-negative age doesn't by itself rule out a torn bal/ts pair
+    that happens to still subtract to a non-negative number)."""
+    session = FakeSession(NO_CREDITS_SCREEN)
+    session.observe_credits("You have 100 credits.\nCommand [TL=00:00:00]:[100] (?=Help)? : ")
+    old_pair = (session.last_credits, session.last_credits_ts)
+    assert old_pair[0] == 100  # sanity: a real OLD pair exists to race against
+
+    writer_in_critical_section = threading.Event()
+    release_writer = threading.Event()
+    real_monotonic = _real_time.monotonic
+
+    def blocking_monotonic():
+        writer_in_critical_section.set()
+        release_writer.wait(timeout=2.0)
+        return real_monotonic()
+
+    reads = []
+    stop_reader = threading.Event()
+
+    def reader():
+        while not stop_reader.is_set():
+            status = protocol.dispatch(session, "status", {}, FakeServer())
+            reads.append((status["credits"], status["credits_ts"]))
+
+    reader_thread = threading.Thread(target=reader)
+    reader_thread.start()
+
+    monkeypatch.setattr(_real_time, "monotonic", blocking_monotonic)
+    writer_thread = threading.Thread(
+        target=lambda: session.observe_credits(
+            "You have 200 credits.\nCommand [TL=00:00:01]:[100] (?=Help)? : "
+        )
+    )
+    writer_thread.start()
+    assert writer_in_critical_section.wait(timeout=2.0), "sanity: the writer must have entered its locked section"
+    _real_time.sleep(0.05)  # give the reader thread several chances to race in before releasing the writer
+    monkeypatch.undo()  # restore the real time.monotonic before anything times a real duration again
+    release_writer.set()
+    writer_thread.join(timeout=2.0)
+
+    stop_reader.set()
+    reader_thread.join(timeout=2.0)
+
+    new_pair = (session.last_credits, session.last_credits_ts)
+    assert new_pair[0] == 200  # sanity: the write completed
+    assert reads, "sanity: the reader thread must have actually gotten some status() reads in"
+    torn = [pair for pair in reads if pair not in (old_pair, new_pair)]
+    assert not torn, f"status verb's credits/credits_ts must never be a torn pair, got: {torn}"
