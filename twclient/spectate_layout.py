@@ -142,6 +142,14 @@ MIN_LINES = 20
 OUTER_FRAME_PAD = 1  # per side
 # Titled LOG box needs ≥3 rows (border + 1 content + border).
 LOG_BOX_MIN_H = 3
+# DECISIONS/GOALS+CHAIN needs more room than LOG's bare floor before
+# splitting off is worth it at all -- its content (AUTO/App-AI-Hum +
+# GOALS + CHAIN, ~10 lines) reads as collapsed-to-nothing at a squeezed
+# 1-2-content-row band. `band_h` below is capped at 5, so this floor
+# equals that cap -- DECISIONS only ever appears at its full size, never
+# a smaller half-useful slice (below the floor, LOG claims the whole
+# leftover band instead -- one legible pane beats two illegible ones).
+DECISIONS_MIN_H = 5
 
 
 def frame_layout(lines: int, cols: int) -> dict:
@@ -232,7 +240,7 @@ def frame_layout(lines: int, cols: int) -> dict:
     if leftover >= LOG_BOX_MIN_H:
         band_h = min(5, leftover)
         band_y = status["y"] - (1 if control else 0) - band_h
-        if i_cols >= 60:
+        if i_cols >= 60 and leftover >= DECISIONS_MIN_H:
             # Decisions is a short placeholder panel; keep LOG wide enough
             # that settle+TX suffixes remain readable.
             dec_w = min(24, max(16, i_cols // 5))
@@ -854,12 +862,42 @@ def compose_autonomy_headline(ratio_data: dict | None = None) -> dict:
 # -- WO-P2 Primary Goals + Longest-Chain panels (pure layout) --------------
 
 
+def _chain_unit_for_source(source) -> str:
+    """'hops' for a genuine discovered trade-loop chain (a real sector
+    path -- chains.chain_as_library_row()'s "discovered" tag); 'steps'
+    for anything else (a recorded/mined skill's macro action count).
+    Both share the SAME "steps" wire field (protocol.py's list_skills /
+    chains.chain_as_library_row) -- this is the one place that decides
+    which word it actually means, so display text never conflates a
+    learned macro's step count with a trade-loop's hop count (WO-FA5a)."""
+    return "hops" if source == "discovered" else "steps"
+
+
+def chain_hop_count_and_unit(chain):
+    """(count, unit) for a chain-like value headed for the GOALS panel --
+    `chain` is either a genuine ProfitChain-like object (real `.hops`),
+    a "discovered" library-row dict (also real hops, just re-shaped by
+    chain_as_library_row), or a recorded/mined skill's library-row dict
+    (macro STEPS, not hops -- see _chain_unit_for_source). `count` is
+    None when there's nothing to show; `unit` falls back to "hops" when
+    there's no dict to read a `source` off (an object chain, or none)."""
+    if chain is None:
+        return None, "hops"
+    if hasattr(chain, "hops"):
+        return len(chain.hops), "hops"
+    if isinstance(chain, dict):
+        count = int(chain.get("steps") or 0) or None
+        return count, _chain_unit_for_source(chain.get("source"))
+    return None, "hops"
+
+
 class GoalsSnapshot:
     """Frozen-enough goals view for compose_primary_goals_lines (plain dict OK too)."""
 
     __slots__ = (
         "stardock_found", "stardock_sectors", "known_sectors", "formations",
-        "genesis_candidates", "longest_chain_hops", "upgrade_status", "holds_status",
+        "genesis_candidates", "longest_chain_hops", "longest_chain_unit",
+        "upgrade_status", "holds_status",
     )
 
     def __init__(
@@ -871,6 +909,7 @@ class GoalsSnapshot:
         formations: int = 0,
         genesis_candidates: int = 0,
         longest_chain_hops=None,
+        longest_chain_unit: str = "hops",
         upgrade_status: str = "—",
         holds_status: str = "—",
     ):
@@ -880,6 +919,7 @@ class GoalsSnapshot:
         self.formations = int(formations)
         self.genesis_candidates = int(genesis_candidates)
         self.longest_chain_hops = longest_chain_hops
+        self.longest_chain_unit = longest_chain_unit or "hops"
         self.upgrade_status = upgrade_status or "—"
         self.holds_status = holds_status or "—"
 
@@ -895,7 +935,7 @@ def compose_primary_goals_lines(snap, *, width: int = 22) -> list[str]:
         if snap.stardock_sectors else ""
     )
     chain = (
-        f"✓ {snap.longest_chain_hops}h"
+        f"✓ {snap.longest_chain_hops}{snap.longest_chain_unit[:1]}"
         if snap.longest_chain_hops
         else "·"
     )
@@ -933,16 +973,19 @@ def format_chain_summary(
         hops = len(getattr(chain, "hops", ()) or ())
         if not hops and sectors:
             hops = max(0, len(sectors) - 1)
+        unit = "hops"
     else:
         sectors = list(chain.get("sectors") or ())
         overall = chain.get("demo_profit")
         cr_turn = chain.get("profit_per_turn")
         hops = int(chain.get("steps") or max(0, len(sectors) - 1))
+        unit = _chain_unit_for_source(chain.get("source"))
 
     if not sectors:
         return ["(no chain yet)", "explore / mine first"]
 
     parts = []
+    numeric_sids = set()  # only the sids that actually parsed as int (see loop below)
     try:
         cur = int(current_sector) if current_sector is not None else None
     except (TypeError, ValueError):
@@ -953,12 +996,13 @@ def format_chain_summary(
         except (TypeError, ValueError):
             parts.append(str(sid))
             continue
+        numeric_sids.add(sid_i)
         if cur is not None and sid_i == cur:
             parts.append(f"★{sid_i}")
         else:
             parts.append(str(sid_i))
     path = "→".join(parts)
-    lines = [path[:cols], f"{hops} hops"]
+    lines = [path[:cols], f"{hops} {unit}"]
     metrics = []
     if overall is not None:
         try:
@@ -972,7 +1016,9 @@ def format_chain_summary(
             pass
     if metrics:
         lines.append(" ".join(metrics)[:cols])
-    if cur is not None and cur in {int(s) for s in sectors}:
+    # Reuses numeric_sids from the loop above -- a non-numeric sid (already
+    # tolerated there via str(sid)) must never re-crash a bare int(s) here.
+    if cur is not None and cur in numeric_sids:
         lines.append(f"here ★{cur}"[:cols])
     elif cur is not None:
         lines.append(f"here {cur} (off)"[:cols])
@@ -999,6 +1045,36 @@ def compose_phase2_side_panel(
         format_chain_summary(chain, current_sector=current_sector, cols=width)
     )
     return lines
+
+
+# -- WO-FA5a: DECISIONS pane rotation --------------------------------------
+#
+# The DECISIONS pane is ONE fixed region shared by three producers
+# (explore-mode ticks, a live autopilot trace, and this Phase-2
+# GOALS+CHAIN panel) -- whichever one is "active" used to win the pane
+# FOREVER: explore stays on until the operator cycles it back to off, and
+# a live trace keeps arriving on every status poll. GOALS+CHAIN has no
+# keybinding of its own to reclaim the pane, so it needs a standing
+# guarantee instead -- every ROTATION_PERIOD_S seconds it gets DWELL_S
+# seconds of the pane back, regardless of what's preempting it. Pure
+# function of wall-clock `now` -- no state to thread through the render
+# loop, no drift, trivially unit-testable without a terminal.
+#
+# 5s/12s (pixel's UX ruling): a shorter dwell read as too rushed to scan
+# a 5-7 line GOALS+CHAIN panel; this split gives trace ~58% of the cycle
+# (still dominant) and goals+chain ~42% -- a glance-at-strategy rhythm,
+# not a rushed flash.
+CHAIN_PANEL_ROTATION_PERIOD_S = 12.0
+CHAIN_PANEL_DWELL_S = 5.0
+
+
+def decisions_should_show_chain(now: float) -> bool:
+    """True during GOALS+CHAIN's periodic dwell window in the shared
+    DECISIONS pane's rotation cycle. Only meaningful while something
+    else (explore/trace) is actively preempting -- with nothing
+    preempting, GOALS+CHAIN already owns the pane outright and callers
+    don't need this at all."""
+    return (now % CHAIN_PANEL_ROTATION_PERIOD_S) < CHAIN_PANEL_DWELL_S
 
 
 def compose_decisions_placeholder() -> list[str]:
@@ -1107,7 +1183,19 @@ _MODE_BADGES = {
     "spectate": ("SPECTATE", "muted"),
 }
 
-CONTROL_HINTS = "M)ode  L)chains  E)xplore  Spc pause  X stop  P panic"
+CONTROL_HINTS = "M)ode  L)chains  E)xplore  Spc pause  X stop  P panic  attach:drive"
+# WO-FA5a fold (human-reported, live-witnessed 2026-07-21): pressing `M`
+# here only cycles ai_pilot<->spectate BY DESIGN (`tw attach` is the only
+# door into MODE_HUMAN -- control_lock.py's module docstring) -- but the
+# legend never told the operator that, so `M` looked broken/dead-ended.
+# "attach:drive" is a pure discoverability pointer, not a spectate
+# keybinding -- `tw attach` is a SEPARATE process/command, invoked
+# outside this TUI entirely, so it deliberately does NOT follow the
+# "KEY)verb" shape the other tokens use (that shape implies a keystroke
+# THIS screen would consume). Kept to Samantha's own compact wording so
+# the whole legend still fits the "minimal" reflow tier's control strip
+# (82 inner cols) without truncating the existing tokens -- see
+# test_control_strip_shows_the_attach_takeover_hint_under_a_fake_pty.
 PLAY_PROGRESS_BAR_WIDTH = 12
 
 
@@ -1235,10 +1323,11 @@ def format_loops_library_row(
     else:
         marker = " "
     tag = "DRAFT " if loop.get("draft") else ""
-    hops = int(loop.get("steps") or 0)
+    count = int(loop.get("steps") or 0)
+    unit = _chain_unit_for_source(loop.get("source"))
     row = (
         f"{marker} {tag}{loop['name']:<22} {loop.get('source', '?'):<9} "
-        f"{overall:>10} {cr_turn:>8} {cr_exec:>10} {hops:>3} hops"
+        f"{overall:>10} {cr_turn:>8} {cr_exec:>10} {count:>3} {unit}"
     )
     return row[: max(0, cols - 1)]
 
@@ -1252,9 +1341,12 @@ def format_loops_library_header(count: int) -> str:
 
 
 def format_longest_chain_banner(loop: dict, cols: int) -> str:
-    """Centerpiece callout for the longest-hop chain (TW-07 §22.2)."""
-    hops = int(loop.get("steps") or 0)
-    text = f"★ LONGEST CHAIN · {loop.get('name', '?')} · {hops} hops"
+    """Centerpiece callout for the longest chain (TW-07 §22.2) -- "hops"
+    for a genuine discovered trade-loop chain, "steps" for a recorded/
+    mined skill's macro (see _chain_unit_for_source)."""
+    count = int(loop.get("steps") or 0)
+    unit = _chain_unit_for_source(loop.get("source"))
+    text = f"★ LONGEST CHAIN · {loop.get('name', '?')} · {count} {unit}"
     return text[: max(0, cols - 1)]
 
 

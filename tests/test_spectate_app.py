@@ -34,7 +34,14 @@ import pytest
 from twclient import terminal
 from twclient import spectate_app as spectate_app_mod
 from twclient.spectate_app import _SEMANTIC_COLORS, _ColorPairs, _tone_attr
-from twclient.spectate_layout import compose_control_strip, frame_layout
+from twclient.spectate_layout import (
+    CHAIN_PANEL_DWELL_S,
+    CHAIN_PANEL_ROTATION_PERIOD_S,
+    MINIMAL_HEADER_MIN_COLS,
+    VIEWPORT_H,
+    compose_control_strip,
+    frame_layout,
+)
 
 from .conftest import FAKE_HOST
 
@@ -858,6 +865,30 @@ def test_control_strip_shows_the_ai_pilot_badge_and_hints_under_a_fake_pty():
     assert cell.reverse is True, f"mode badge should render reverse-video (badge look) -- cell: {cell!r}"
 
 
+def test_control_strip_shows_the_attach_takeover_hint_under_a_fake_pty():
+    """Human-reported discoverability gap (live witness, 2026-07-21): `M`
+    only cycles ai_pilot<->spectate by design -- the legend must point to
+    `tw attach` as the actual human-takeover door. Proven at the standard
+    witness geometry (36x112, right_gutter tier) via the pyte grid/buffer
+    (project convention, never ANSI-regex): the new hint renders AND the
+    pre-existing legend tokens are still fully intact, not truncated to
+    make room for it."""
+    rows, cols = 36, 112
+    captured = _run_fake_spectate_in_pty(
+        [_SAMPLE_EVENT], lambda buf: b"attach" in buf and b"drive" in buf,
+        timeout=8.0, rows=rows, cols=cols, fake_status=_status(),
+    )
+    grid = _pyte_grid(captured, rows, cols)
+    full_text = "\n".join(grid)
+    assert "attach:drive" in full_text, f"attach-takeover hint never rendered; grid:\n{full_text}"
+    # The existing legend must survive intact, right up to its last
+    # token -- a truncated "P pani" (or similar) would be exactly the
+    # new discoverability bug pixel warned against.
+    assert "M)ode" in full_text and "P panic" in full_text, (
+        f"pre-existing control hints got truncated to fit the new addition; grid:\n{full_text}"
+    )
+
+
 def test_control_strip_shows_the_auto_loop_badge_and_live_progress_bar_under_a_fake_pty():
     rows, cols = 36, 112
     play = {"running": True, "paused": False, "name": "demo-loop", "cycle": 2, "cycles_total": 5, "last_result": None}
@@ -1219,4 +1250,219 @@ def test_render_skips_outer_erase_on_anim_only_tick(monkeypatch):
     assert drawn["outer"] == 1
     assert drawn["viewport"] == 1
     assert drawn["doupdate"] == 2
+
+
+# ---------------------------------------------------------------------------
+# WO-FA5a — fetch_status() must pass through autopilot_trace
+# ---------------------------------------------------------------------------
+
+
+class _FakeAutopilotEngine:
+    """Minimal server.autopilot_engine double -- protocol.py's status verb
+    only ever calls .trace_log(), taking the most recent entry (see
+    protocol.py:463-468)."""
+
+    def __init__(self, trace):
+        self._trace = trace
+
+    def trace_log(self):
+        return [self._trace]
+
+
+def test_fetch_status_passes_through_autopilot_trace(fake_daemon):
+    """The Decisions pane's live-trace render (_render(), below) reads
+    status.get("autopilot_trace") -- but fetch_status()'s hand-picked
+    return dict used to DROP the key entirely even though protocol.py's
+    real status verb serves it (test_protocol_trainer_panel.py proves the
+    daemon side already works). RED against the old fetch_status: the key
+    was simply absent from the dict (not just None), so
+    `status["autopilot_trace"]` KeyErrors instead of returning the trace."""
+    trace = {"tick": 3, "context": {"sector": 5}, "candidates": [], "chosen": None}
+    fake_daemon.server.autopilot_engine = _FakeAutopilotEngine(trace)
+
+    status = spectate_app_mod.fetch_status(fake_daemon.sock_path)
+    assert status["autopilot_trace"] == trace
+
+
+def test_fetch_status_autopilot_trace_is_none_when_nothing_wired(fake_daemon):
+    status = spectate_app_mod.fetch_status(fake_daemon.sock_path)
+    assert status["autopilot_trace"] is None
+
+
+def test_fetch_status_connect_failure_still_carries_the_key():
+    """The unreachable-socket fallback dict must carry the SAME keys as
+    the success path (a caller must never special-case a missing key --
+    same null-safe convention protocol.py's status verb itself uses)."""
+    status = spectate_app_mod.fetch_status("/nonexistent/twd-test.sock", timeout=0.2)
+    assert status["autopilot_trace"] is None
+
+
+# ---------------------------------------------------------------------------
+# WO-FA5a — DECISIONS pane rotation: explore/trace must not PERMANENTLY
+# preempt the GOALS+CHAIN panel
+# ---------------------------------------------------------------------------
+
+
+def test_decisions_pane_rotation_reclaims_goals_chain_from_a_live_trace(monkeypatch):
+    """A live autopilot_trace used to fill DECISIONS forever. Confirm
+    _render() now yields the pane back to GOALS+CHAIN on
+    decisions_should_show_chain()'s periodic dwell window -- same
+    `status`/`phase2_cache` inputs, only `now` differs."""
+    captured = []
+
+    def fake_draw_decisions(win, region, lines, glyphs, palette, title=None):
+        captured.append((list(lines), title))
+
+    monkeypatch.setattr(spectate_app_mod, "_draw_decisions", fake_draw_decisions)
+    monkeypatch.setattr(curses, "doupdate", lambda: None)
+    # No world_id -> _build_goals_snapshot degrades to an empty
+    # GoalsSnapshot cleanly, no world_model I/O needed for this test.
+    monkeypatch.setattr(spectate_app_mod, "_resolve_world_id", lambda: None)
+
+    regions = {
+        "mode": "comfortable",
+        "outer": None, "header": None, "viewport": None, "gutter": None,
+        "decisions": {"y": 0, "x": 0, "h": 5, "w": 22, "title": "DECISIONS"},
+        "ticker": None, "control": None,
+    }
+    windows = {"decisions": object()}
+    status = {
+        "connected": True, "mode": "ai_pilot", "play": None,
+        "subscriber_count": 0, "host": None, "name": None,
+        "autopilot_trace": {"tick": 1, "context": {}, "candidates": [], "chosen": None},
+    }
+
+    class FakePalette:
+        def attr_for(self, *a, **k):
+            return 0
+
+    def render_at(now):
+        captured.clear()
+        spectate_app_mod._render(
+            windows, regions, dict(spectate_app_mod.DEFAULT_EVENT), {}, [], status,
+            FakePalette(), {}, now=now, anim_tick=0, idle_age=None, semantic="ok",
+            flash_active=False, got_content=True,
+            explore_mode="off", phase2_cache={"chain": None},
+        )
+        return captured[0]
+
+    # Outside the dwell window: the trace wins (unchanged behavior).
+    outside = CHAIN_PANEL_DWELL_S + 1.0  # past the dwell window, within the first cycle
+    _, title = render_at(now=outside)
+    assert title == "DECISIONS"
+
+    # Inside the dwell window (one full cycle later, proving the wrap):
+    # GOALS+CHAIN reclaims the pane.
+    inside = CHAIN_PANEL_ROTATION_PERIOD_S + 1.0
+    _, title = render_at(now=inside)
+    assert title == "GOALS"
+
+
+def test_decisions_pane_rotation_reclaims_goals_chain_from_explore_mode(monkeypatch):
+    """Same guarantee for explore mode (an operator-toggled, otherwise
+    indefinite preempt) as the live-trace case above."""
+    captured = []
+
+    def fake_draw_decisions(win, region, lines, glyphs, palette, title=None):
+        captured.append((list(lines), title))
+
+    monkeypatch.setattr(spectate_app_mod, "_draw_decisions", fake_draw_decisions)
+    monkeypatch.setattr(curses, "doupdate", lambda: None)
+    monkeypatch.setattr(spectate_app_mod, "_resolve_world_id", lambda: None)
+
+    regions = {
+        "mode": "comfortable",
+        "outer": None, "header": None, "viewport": None, "gutter": None,
+        "decisions": {"y": 0, "x": 0, "h": 5, "w": 22, "title": "DECISIONS"},
+        "ticker": None, "control": None,
+    }
+    windows = {"decisions": object()}
+    status = {
+        "connected": True, "mode": "ai_pilot", "play": None,
+        "subscriber_count": 0, "host": None, "name": None,
+        "autopilot_trace": None,
+    }
+
+    class FakePalette:
+        def attr_for(self, *a, **k):
+            return 0
+
+    def render_at(now):
+        captured.clear()
+        spectate_app_mod._render(
+            windows, regions, dict(spectate_app_mod.DEFAULT_EVENT), {}, [], status,
+            FakePalette(), {}, now=now, anim_tick=0, idle_age=None, semantic="ok",
+            flash_active=False, got_content=True,
+            explore_mode="mapfill", phase2_cache={"chain": None},
+        )
+        return captured[0]
+
+    # No world_id yet -> explore's own "set TW_WORLD_ID" copy, outside the dwell window.
+    outside = CHAIN_PANEL_DWELL_S + 1.0
+    lines, title = render_at(now=outside)
+    assert title is None
+    assert any("explore" in ln for ln in lines)
+
+    # Inside the dwell window: GOALS+CHAIN reclaims the pane even with
+    # explore mode still on.
+    inside = CHAIN_PANEL_ROTATION_PERIOD_S + 1.0
+    _, title = render_at(now=inside)
+    assert title == "GOALS"
+
+
+# ---------------------------------------------------------------------------
+# WO-FA5a — DECISIONS_MIN_H vanish, proven at the real curses render level
+# ---------------------------------------------------------------------------
+
+
+def test_decisions_pane_vanishes_below_its_height_floor_and_log_fills_the_band_under_a_fake_pty():
+    """Pixel-flagged proof gap: the geometry floor (DECISIONS_MIN_H) was
+    only proven at the pure frame_layout() level so far. Drive the REAL
+    curses render at a sub-floor size -- leftover == LOG_BOX_MIN_H, one
+    row short of DECISIONS_MIN_H (the same size
+    test_frame_layout_decisions_absent_below_its_height_floor proves at
+    the pure-layout level in test_spectate_layout.py) -- and confirm, via
+    the pyte grid/buffer (never ANSI-regex, project convention): (a) no
+    DECISIONS title renders anywhere, (b) the LOG box's own border spans
+    the FULL leftover band (not truncated by a phantom decisions split),
+    (c) the rest of the chrome (viewport border, HUD) still renders
+    cleanly at this reduced size -- no crash, no garbage."""
+    rows, cols = VIEWPORT_H + 6 + 2, MINIMAL_HEADER_MIN_COLS + 2  # 34 x 84 -- leftover == 3
+    regions = frame_layout(rows, cols)
+    assert regions["decisions"] is None  # sanity: this size really is sub-floor
+    ticker_region = regions["ticker"]
+    assert ticker_region is not None
+    viewport_region = regions["viewport"]
+    assert viewport_region["border"] is True
+
+    hud_tr = _GLYPHS["hud_tr"]
+    captured = _run_fake_spectate_in_pty(
+        [_SAMPLE_EVENT], lambda buf: hud_tr.encode("utf-8") in buf,
+        timeout=8.0, rows=rows, cols=cols,
+    )
+    grid = _pyte_grid(captured, rows, cols)
+    full_text = "\n".join(grid)
+
+    # (a) DECISIONS never rendered at this size.
+    assert "DECISIONS" not in full_text, (
+        f"DECISIONS pane rendered below its own height floor; grid:\n{full_text}"
+    )
+
+    # (b) LOG fills the WHOLE leftover band: its title renders, and its
+    # top border's right-corner glyph reaches the frame_layout-predicted
+    # right edge (x + w - 1) -- not a truncated, decisions-shared width.
+    assert "LOG" in full_text, f"LOG box never rendered; grid:\n{full_text}"
+    top_row = grid[ticker_region["y"]]
+    right_edge_col = ticker_region["x"] + ticker_region["w"] - 1
+    assert top_row[right_edge_col] == hud_tr, (
+        f"LOG box border does not reach the full leftover band's right edge "
+        f"(expected {hud_tr!r} at col {right_edge_col}); row was: {top_row!r}"
+    )
+
+    # (c) the rest of the chrome still rendered cleanly at this reduced size.
+    assert "CREDITS" in full_text, f"HUD did not render at this reduced size; grid:\n{full_text}"
+    assert grid[viewport_region["y"]][viewport_region["x"]] == _GLYPHS["viewport_tl"], (
+        f"viewport border did not render at this reduced size; "
+        f"row was: {grid[viewport_region['y']]!r}"
+    )
 

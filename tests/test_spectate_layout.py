@@ -6,16 +6,21 @@ renders the expected values.
 from twclient.spectate_layout import (
     CREDIT_FLASH_DURATION_S,
     CREDIT_TWEEN_DURATION_S,
+    CHAIN_PANEL_DWELL_S,
+    CHAIN_PANEL_ROTATION_PERIOD_S,
+    DECISIONS_MIN_H,
     FRESHNESS_STALE_S,
     FULL_GUTTER_MIN_COLS,
     GAME_H,
     GAME_W,
+    LOG_BOX_MIN_H,
     MINIMAL_HEADER_MIN_COLS,
     RIGHT_GUTTER_MIN_COLS,
     VIEWPORT_H,
     VIEWPORT_W,
     GoalsSnapshot,
     aggregate_world_metrics,
+    chain_hop_count_and_unit,
     compose_autonomy_headline,
     compose_dashboard,
     compose_decisions_placeholder,
@@ -25,6 +30,7 @@ from twclient.spectate_layout import (
     compose_port_panel,
     compose_primary_goals_lines,
     compute_autonomy_ratio,
+    decisions_should_show_chain,
     format_autonomy_counts,
     format_autonomy_lines,
     format_autopilot_trace_lines,
@@ -700,6 +706,130 @@ def test_compose_primary_goals_and_chain_highlight():
     assert "— GOALS —" in panel and "— CHAIN —" in panel
 
 
+# -- WO-FA5a: hops (a real trade-loop chain) vs steps (a learned macro) ----
+#
+# protocol.py's list_skills / chains.chain_as_library_row() share ONE wire
+# field ("steps") for two different concepts: a discovered ProfitChain's
+# sector-hop count, and a recorded/mined skill's macro action count.
+# chain_hop_count_and_unit()/_chain_unit_for_source() are the one place
+# that decides which word display text should use.
+
+
+def test_chain_hop_count_and_unit_object_chain_is_always_hops():
+    from twclient.chains import ProfitChain, TradeHop
+    chain = ProfitChain(
+        sectors=(1, 2, 1),
+        hops=(TradeHop(1, 2, "A", 10, 1), TradeHop(2, 1, "B", 10, 1)),
+        overall_profit=20, turns=2, cr_per_turn=10.0, cr_per_execution=20.0,
+    )
+    assert chain_hop_count_and_unit(chain) == (2, "hops")
+
+
+def test_chain_hop_count_and_unit_recorded_or_mined_dict_is_steps():
+    assert chain_hop_count_and_unit({"source": "recorded", "steps": 4}) == (4, "steps")
+    assert chain_hop_count_and_unit({"source": "mined", "steps": 6}) == (6, "steps")
+
+
+def test_chain_hop_count_and_unit_discovered_dict_is_hops():
+    assert chain_hop_count_and_unit({"source": "discovered", "steps": 5}) == (5, "hops")
+
+
+def test_chain_hop_count_and_unit_none_chain():
+    assert chain_hop_count_and_unit(None) == (None, "hops")
+
+
+def test_compose_primary_goals_lines_labels_steps_vs_hops():
+    steps_lines = compose_primary_goals_lines(GoalsSnapshot(
+        longest_chain_hops=4, longest_chain_unit="steps",
+    ))
+    assert any("4s" in ln for ln in steps_lines)
+    hops_lines = compose_primary_goals_lines(GoalsSnapshot(
+        longest_chain_hops=4, longest_chain_unit="hops",
+    ))
+    assert any("4h" in ln for ln in hops_lines)
+
+
+def test_format_chain_summary_dict_branch_labels_steps_vs_hops():
+    steps_lines = format_chain_summary(
+        {"sectors": [1, 2, 1], "steps": 2, "source": "recorded"}, cols=40,
+    )
+    assert any("2 steps" in ln for ln in steps_lines)
+    assert not any("hops" in ln for ln in steps_lines)
+    hops_lines = format_chain_summary(
+        {"sectors": [1, 2, 1], "steps": 2, "source": "discovered"}, cols=40,
+    )
+    assert any("2 hops" in ln for ln in hops_lines)
+
+
+def test_format_chain_summary_non_numeric_sector_does_not_crash_the_membership_check():
+    """Pixel-caught defect (pre-existing, in a function this WO touched):
+    the path-building loop already tolerates a non-numeric sid
+    (`str(sid)`, `continue`), but the later "here ★N" membership check
+    used to re-parse the SAME sectors with a bare `int(s)` and no guard
+    -- ValueError on a real terminal, crashing the whole spectate render.
+    A valid `current_sector` alongside a non-numeric sid must render
+    cleanly instead."""
+    lines = format_chain_summary(
+        {"sectors": [1, "warp-gate", 2, 1], "steps": 3, "source": "discovered"},
+        current_sector=2,
+        cols=40,
+    )
+    assert any("warp-gate" in ln for ln in lines)
+    assert any("here ★2" in ln for ln in lines)
+
+    # The object-chain branch takes a different code path but the same
+    # membership check -- prove it doesn't crash there either.
+    class _FakeChain:
+        sectors = (1, "warp-gate", 2, 1)
+        hops = ()
+        overall_profit = None
+        cr_per_turn = None
+
+    obj_lines = format_chain_summary(_FakeChain(), current_sector=2, cols=40)
+    assert any("here ★2" in ln for ln in obj_lines)
+
+
+# -- WO-FA5a: DECISIONS pane rotation (explore/trace must not PERMANENTLY
+# preempt GOALS+CHAIN) ------------------------------------------------------
+
+
+def test_decisions_should_show_chain_dwell_window_and_wraps():
+    assert decisions_should_show_chain(0.0) is True
+    assert decisions_should_show_chain(CHAIN_PANEL_DWELL_S - 0.01) is True
+    assert decisions_should_show_chain(CHAIN_PANEL_DWELL_S) is False
+    assert decisions_should_show_chain(CHAIN_PANEL_ROTATION_PERIOD_S - 0.01) is False
+    # Wraps: the SAME phase repeats every ROTATION_PERIOD_S, forever --
+    # explore/trace can never permanently keep GOALS+CHAIN off-screen.
+    assert decisions_should_show_chain(CHAIN_PANEL_ROTATION_PERIOD_S) is True
+    assert decisions_should_show_chain(3 * CHAIN_PANEL_ROTATION_PERIOD_S + 1.0) is True
+
+
+# -- WO-FA5a: DECISIONS/GOALS+CHAIN geometry floor --------------------------
+
+
+def test_frame_layout_decisions_absent_below_its_height_floor():
+    """Just enough leftover for a bare LOG box (LOG_BOX_MIN_H) but short of
+    DECISIONS_MIN_H -- LOG claims the whole band; a squeezed 1-2-content-row
+    DECISIONS pane (the "collapsed to nothing" defect) never appears.
+    inner leftover == LOG_BOX_MIN_H == 3 (mirrors
+    test_frame_layout_ticker_still_appears_with_enough_leftover_for_both's
+    same VIEWPORT_H + 6 + 2 size, which never asserted on `decisions`)."""
+    lines = VIEWPORT_H + 6 + 2
+    regions = frame_layout(lines, MINIMAL_HEADER_MIN_COLS + 2)
+    assert regions["decisions"] is None
+    assert regions["ticker"] is not None
+    assert regions["ticker"]["w"] == MINIMAL_HEADER_MIN_COLS  # full leftover width, no split
+
+
+def test_frame_layout_decisions_present_at_its_height_floor():
+    # inner leftover == DECISIONS_MIN_H == 5 (two rows more than the case above).
+    lines = VIEWPORT_H + 8 + 2
+    regions = frame_layout(lines, MINIMAL_HEADER_MIN_COLS + 2)
+    assert regions["decisions"] is not None
+    assert regions["decisions"]["h"] == DECISIONS_MIN_H
+    assert regions["ticker"] is not None
+
+
 def test_render_plain_includes_phase2_sections():
     text = render_plain({
         "main": ["hi"],
@@ -1063,6 +1193,24 @@ def test_compose_control_strip_shows_hints_when_idle():
     assert strip["tx"] == "→ -"
 
 
+def test_control_hints_points_to_tw_attach_for_human_takeover():
+    """Human-reported discoverability gap: `M` only cycles ai_pilot<->
+    spectate (by design -- `tw attach` is the only door into
+    MODE_HUMAN); the legend must say so, and the addition must not blow
+    the "minimal" tier's control-strip width budget (82 inner cols)."""
+    assert "attach" in CONTROL_HINTS and "drive" in CONTROL_HINTS
+    # Every pre-existing token must still be intact -- an addition that
+    # SILENTLY replaced/shortened one would be its own regression.
+    for token in ("M)ode", "L)chains", "E)xplore", "Spc pause", "X stop", "P panic"):
+        assert token in CONTROL_HINTS
+    # 82 == MINIMAL_HEADER_MIN_COLS -- the narrowest bordered-viewport tier
+    # the control strip still spans at full inner width; the shortest
+    # realistic badge+tx (ai_pilot/spectate/auto_loop, not the long
+    # MANUAL badge -- see the pty test's docstring) leaves ~14 cols of
+    # left margin before the right-aligned hints text starts.
+    assert len(CONTROL_HINTS) <= 82 - 14
+
+
 # -- Trainer Control Panel: Trade Loop Chains overlay (TW-07) ---------------
 
 
@@ -1077,22 +1225,36 @@ def test_format_loops_library_row_mined_shows_three_metrics():
     assert "+12.5/t" in row
     assert "+40" in row
     assert "DRAFT" in row
-    assert "3 hops" in row
+    # WO-FA5a: a mined SKILL's "steps" is a macro action count, not a
+    # trade-loop hop count -- must never be labeled "hops".
+    assert "3 steps" in row
+    assert "hops" not in row
 
 
 def test_format_loops_library_row_recorded_shows_overall_and_exec():
     loop = {"name": "recorded-loop", "source": "recorded", "demo_profit": 230, "steps": 5, "draft": False}
     row = format_loops_library_row(loop, selected=False, cols=100)
     assert "+230" in row
-    assert "5 hops" in row
+    assert "5 steps" in row
+    assert "hops" not in row
     assert "DRAFT" not in row
 
 
 def test_format_loops_library_row_no_profit_data_shows_dash():
     loop = {"name": "unknown-loop", "source": "recorded", "steps": 1, "draft": False}
     row = format_loops_library_row(loop, selected=False, cols=100)
-    assert "1 hops" in row
+    assert "1 steps" in row
     assert row.count("-") >= 1
+
+
+def test_format_loops_library_row_discovered_shows_hops():
+    """A genuine discovered trade-loop chain (chains.chain_as_library_row's
+    "discovered" tag) really does count sector hops -- the one `source`
+    that keeps the old "hops" wording."""
+    loop = {"name": "1→2→3", "source": "discovered", "demo_profit": 30, "steps": 3, "draft": False}
+    row = format_loops_library_row(loop, selected=False, cols=100)
+    assert "3 hops" in row
+    assert "steps" not in row
 
 
 def test_format_loops_library_row_selected_gets_a_marker():
@@ -1135,11 +1297,21 @@ def test_sort_trade_loop_chains_profit_desc():
 
 def test_longest_chain_steps_and_banner():
     loops = [
-        {"name": "short", "steps": 2, "demo_profit": 100},
-        {"name": "long", "steps": 7, "demo_profit": 1},
+        {"name": "short", "source": "recorded", "steps": 2, "demo_profit": 100},
+        {"name": "long", "source": "recorded", "steps": 7, "demo_profit": 1},
     ]
     assert longest_chain_steps(loops) == 7
     banner = format_longest_chain_banner(loops[1], cols=60)
     assert "LONGEST CHAIN" in banner
     assert "long" in banner
-    assert "7 hops" in banner
+    # WO-FA5a: a recorded skill's "steps" is a macro action count, not a
+    # trade-loop hop count -- must never be labeled "hops".
+    assert "7 steps" in banner
+    assert "hops" not in banner
+
+
+def test_longest_chain_banner_discovered_shows_hops():
+    loop = {"name": "1→2→3", "source": "discovered", "steps": 3, "demo_profit": 30}
+    banner = format_longest_chain_banner(loop, cols=60)
+    assert "3 hops" in banner
+    assert "steps" not in banner

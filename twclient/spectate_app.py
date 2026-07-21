@@ -40,6 +40,7 @@ from .spectate_layout import (
     TICKER_MAX,
     GoalsSnapshot,
     aggregate_world_metrics,
+    chain_hop_count_and_unit,
     compose_control_strip,
     compose_dashboard,
     compose_decisions_placeholder,
@@ -48,6 +49,7 @@ from .spectate_layout import (
     compose_phase2_side_panel,
     compose_port_panel,
     compute_autonomy_ratio,
+    decisions_should_show_chain,
     format_autonomy_lines,
     format_autopilot_trace_lines,
     format_idle_age,
@@ -243,6 +245,7 @@ def fetch_status(sock_path, timeout=3.0):
             "name": None,
             "mode": "ai_pilot",
             "play": None,
+            "autopilot_trace": None,
         }
     return {
         "connected": resp.get("connected", False),
@@ -255,6 +258,11 @@ def fetch_status(sock_path, timeout=3.0):
         # (protocol.py's "status" verb, control_lock.py/loop_player.py).
         "mode": resp.get("mode", "ai_pilot"),
         "play": resp.get("play"),
+        # WO-FA5a: passthrough -- protocol.py's status verb already serves
+        # this (WO-P2d cross-seat trace transport); dropping it here was
+        # the load-bearing bug that kept the Decisions pane's live
+        # autopilot-trace render (_render() below) from ever seeing it.
+        "autopilot_trace": resp.get("autopilot_trace"),
     }
 
 
@@ -382,12 +390,7 @@ def _build_goals_snapshot(world_id, chain=None):
         genesis = len(getattr(catalog, "genesis_candidates", ()) or ())
     except OSError:
         return GoalsSnapshot()
-    hops = None
-    if chain is not None:
-        if hasattr(chain, "hops"):
-            hops = len(chain.hops)
-        elif isinstance(chain, dict):
-            hops = int(chain.get("steps") or 0) or None
+    hops, chain_unit = chain_hop_count_and_unit(chain)
     # P1-b price schema (hub relay): None = unknown → never guess/zero.
     upgrade_status = "price?"
     try:
@@ -403,6 +406,7 @@ def _build_goals_snapshot(world_id, chain=None):
         formations=formations,
         genesis_candidates=genesis,
         longest_chain_hops=hops,
+        longest_chain_unit=chain_unit,
         upgrade_status=upgrade_status,
         holds_status="—",
     )
@@ -1364,7 +1368,25 @@ def _render(windows, regions, event, tracked, ticker_history, status, palette, g
     if regions.get("decisions") is not None and "decisions" in windows:
         decision_lines = compose_decisions_placeholder()
         panel_title = None
-        if explore_mode and explore_mode != "off":
+        cols = max(12, (regions["decisions"].get("w") or 22) - 4)
+        explore_active = bool(explore_mode and explore_mode != "off")
+        live_trace = (status or {}).get("autopilot_trace")
+        # WO-FA5a: explore/trace must not PERMANENTLY preempt GOALS+CHAIN
+        # -- with neither active, GOALS+CHAIN owns the pane outright;
+        # with one active, it still yields the pane back on
+        # decisions_should_show_chain()'s periodic dwell window instead
+        # of hiding the chain panel for as long as explore/trace stays on.
+        preempting = explore_active or bool(live_trace)
+        if not preempting or decisions_should_show_chain(now):
+            wid = _resolve_world_id()
+            chain = phase2_cache.get("chain")
+            goals = _build_goals_snapshot(wid, chain)
+            sector = (event.get("state") or {}).get("sector")
+            decision_lines = format_autonomy_lines(autonomy) + compose_phase2_side_panel(
+                goals, chain, current_sector=sector, width=cols,
+            )
+            panel_title = "GOALS"
+        elif explore_active:
             wid = _resolve_world_id()
             sector = (event.get("state") or {}).get("sector")
             plan = _explore_plan_for_mode(explore_mode, wid, sector)
@@ -1375,23 +1397,11 @@ def _render(windows, regions, event, tracked, ticker_history, status, palette, g
             else:
                 decision_lines = format_explore_decision_lines(explore_mode, plan)
         else:
-            # Live autopilot dry-run trace (when present) fills DECISIONS;
-            # otherwise Phase-2 GOALS+CHAIN + AUTO counts. Trace is render-
-            # only — never drives the game (execution stays OFF).
-            cols = max(12, (regions["decisions"].get("w") or 22) - 4)
-            live_trace = (status or {}).get("autopilot_trace")
-            if live_trace:
-                decision_lines = format_autopilot_trace_lines(live_trace, cols=cols)
-                panel_title = "DECISIONS"
-            else:
-                wid = _resolve_world_id()
-                chain = phase2_cache.get("chain")
-                goals = _build_goals_snapshot(wid, chain)
-                sector = (event.get("state") or {}).get("sector")
-                decision_lines = format_autonomy_lines(autonomy) + compose_phase2_side_panel(
-                    goals, chain, current_sector=sector, width=cols,
-                )
-                panel_title = "GOALS"
+            # Live autopilot dry-run trace fills DECISIONS outside
+            # GOALS+CHAIN's dwell window. Trace is render-only — never
+            # drives the game (execution stays OFF).
+            decision_lines = format_autopilot_trace_lines(live_trace, cols=cols)
+            panel_title = "DECISIONS"
         _draw_decisions(
             windows["decisions"], regions["decisions"],
             decision_lines, glyphs, palette, title=panel_title,
