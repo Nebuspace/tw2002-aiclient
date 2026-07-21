@@ -162,6 +162,15 @@ from .trade_driver import ChainRunResult, TradeDriverConfig, run_chain
 
 ACTOR = "trainer"
 
+
+def _is_unconfirmed_outcome(outcome: Optional[str]) -> bool:
+    """True for a bare `"unconfirmed"` or an instrumented
+    `"unconfirmed:<settle_reason>:<elapsed>"` (WO-SETTLE-FALSEPOS)."""
+    return outcome == "unconfirmed" or (
+        isinstance(outcome, str) and outcome.startswith("unconfirmed:")
+    )
+
+
 # The one live classification a bare sector-number send is safe against
 # -- see this module's own "HIGH-2" docstring note.
 _MOVEMENT_PROMPT_CLASS = "main_command"
@@ -782,7 +791,7 @@ def decision_to_trace(decision: Decision) -> dict:
 
     chosen_kind = decision.chosen.kind if decision.chosen is not None else None
     if chosen_kind is not None and decision.send_outcome and (
-        decision.send_outcome.startswith("held:") or decision.send_outcome == "unconfirmed"
+        decision.send_outcome.startswith("held:") or _is_unconfirmed_outcome(decision.send_outcome)
     ):
         entry = by_kind.get(chosen_kind)
         if entry is not None:
@@ -1079,13 +1088,16 @@ class AutopilotEngine:
         """Sends whatever `candidate` requires and returns `(confirmed,
         outcome_detail)`.
 
-        `"upgrade"`/`"explore"` (unchanged pre-WO-FA4 behavior): a single
-        bare `candidate.next_sector` keystroke via `send_and_confirm`,
-        `outcome_detail=None` -- the caller (`live_tick()`) falls back to
-        its own plain `"sent"`/`"unconfirmed"` labels exactly as before
-        this method grew a second return value (MED fix, mack + settle.
-        py's own contract: a `confirmed=False` desync must never be
-        silently treated as a successful send).
+        `"upgrade"`/`"explore"`: a single bare `candidate.next_sector`
+        keystroke via `send_and_confirm`. On `confirmed=True`,
+        `outcome_detail=None` (caller falls back to `"sent"`). On
+        `confirmed=False`, WO-SETTLE-FALSEPOS: explore may salvage to
+        `sent:settle_salvage:<reason>:<elapsed>` when the post-send
+        screen is still `main_command` and `parse_state` sector equals
+        the intended hop (false-positive idle/stability flake); otherwise
+        returns instrumented `unconfirmed:<reason>:<elapsed>` (upgrade
+        never salvages). Caller/`AutopilotLoop` treat any
+        `unconfirmed…` outcome as a desync halt.
 
         `"run_chain"` (WO-FA4): routes to `trade_driver.run_chain()` --
         the WHOLE chain (navigate/dock/buy/sell/repeat), synchronously,
@@ -1145,10 +1157,31 @@ class AutopilotEngine:
                 return True, f"sent:credits_delta={result.credits_delta:+d}"
             return False, f"held:{result.stop_reason}"
 
-        _reason, _elapsed, confirmed = send_and_confirm(
+        reason, elapsed, confirmed = send_and_confirm(
             self.session, str(candidate.next_sector), confirm_prompt=None, enter=True
         )
-        return confirmed, None
+        if confirmed:
+            return True, None
+
+        # WO-SETTLE-FALSEPOS (A): explore-only salvage for the live
+        # false-positive class (e.g. 173→119): settle idle+stability flake
+        # reports confirmed=False even though the warp landed — post-parse
+        # sector == intended hop AND screen still classifies main_command.
+        # Upgrade keeps the strict unconfirmed path (no salvage). Never
+        # weakens trade_driver / run_chain.
+        if candidate.kind == "explore" and candidate.next_sector is not None:
+            post_rows = self.session.render()
+            post_prompt = post_rows[-1].strip() if post_rows else ""
+            post_full = self.session.render_text(post_rows)
+            post_cls = classify_screen(post_full, post_prompt) if post_prompt else None
+            post_sector = parse_state(post_full).get("sector")
+            if post_cls == _MOVEMENT_PROMPT_CLASS and post_sector == candidate.next_sector:
+                return True, f"sent:settle_salvage:{reason}:{float(elapsed):.3f}"
+
+        # WO-SETTLE-FALSEPOS (B): instrument settle reason + elapsed so a
+        # future deep-dive can tell timeout vs idle-then-bytes without
+        # discarding send_and_confirm's first two return values.
+        return False, f"unconfirmed:{reason}:{float(elapsed):.3f}"
 
     def _chain_abort_requested(self) -> bool:
         """A-M1's live abort predicate for a whole-chain `run_chain` tick
@@ -1170,7 +1203,11 @@ class AutopilotEngine:
             tag = " [INTERRUPT]" if decision.interrupted else ""
             outcome = f" [{decision.send_outcome}]" if decision.send_outcome else ""
             intent = f"{prefix}{decision.reason}{tag}{outcome}: {decision.chosen.rationale}"
-        settled_class = "autopilot_tick_unconfirmed" if decision.send_outcome == "unconfirmed" else "autopilot_tick"
+        settled_class = (
+            "autopilot_tick_unconfirmed"
+            if _is_unconfirmed_outcome(decision.send_outcome)
+            else "autopilot_tick"
+        )
         self.ledger.record_do(
             pre_text,
             input_text,
@@ -1372,9 +1409,12 @@ class AutopilotLoop:
                 if self._stop.is_set():
                     break
                 outcome = self.last_decision.send_outcome
-                if outcome == "unconfirmed":
+                if _is_unconfirmed_outcome(outcome):
                     # MED fix: a real settle desync -- halt rather than
                     # tick blindly past it (settle.py's own contract).
+                    # WO-SETTLE-FALSEPOS: instrumented `unconfirmed:reason:elapsed`
+                    # still halts; salvaged explore warps never reach here
+                    # (they send_outcome as sent:settle_salvage:...).
                     self.last_error = "settle_unconfirmed: halted rather than ticking past a send/settle desync"
                     break
                 # FA4 cipher bank (post-land MED): a mid-offer HOLD that

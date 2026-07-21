@@ -806,7 +806,9 @@ def test_live_tick_marks_an_unconfirmed_send_rather_than_treating_it_as_success(
     engine = AutopilotEngine(session, profile, lock, ledger=ledger)
 
     decision = engine.live_tick(explore_next_sector=42)
-    assert decision.send_outcome == "unconfirmed"
+    # WO-SETTLE-FALSEPOS: instrumented unconfirmed:<reason>:<elapsed>
+    assert decision.send_outcome is not None
+    assert decision.send_outcome.startswith("unconfirmed:")
     assert ledger.calls[0]["settled_class"] == "autopilot_tick_unconfirmed"
 
 
@@ -822,6 +824,120 @@ def test_autopilot_loop_halts_after_an_unconfirmed_tick_rather_than_ticking_blin
     assert loop.ticks_done == 1
     assert loop.last_error is not None and "unconfirmed" in loop.last_error
     assert lock.mode == MODE_AI_PILOT  # released cleanly, not wedged
+
+
+# -- WO-SETTLE-FALSEPOS: explore salvage + instrumented unconfirmed ------
+
+
+_SECTOR_173_SCREEN = (
+    "Sector  : 173 in uncharted space.\n"
+    "Warps to Sector(s) :  13 - 119 - 801 - 4325 - 4741\n"
+    "Command [TL=00:00:00]:[173] (?=Help)? :"
+)
+_SECTOR_119_SCREEN = (
+    "Sector  : 119 in uncharted space.\n"
+    "Warps to Sector(s) :  173 - (2219) - (3746)\n"
+    "Command [TL=00:00:00]:[119] (?=Help)? :"
+)
+
+
+class ExploreWarpLandsDespiteSettleFlakeSession(FakeAutopilotSession):
+    """173→119 live shape: send flips the rendered screen to the target
+    sector (warp succeeded) but `send_and_confirm` is monkeypatched to
+    report confirmed=False (idle/stability flake)."""
+
+    def __init__(self):
+        super().__init__(text=_SECTOR_173_SCREEN)
+        self._post = _SECTOR_119_SCREEN
+
+    def send(self, text, enter=True, **kwargs):
+        super().send(text, enter=enter, **kwargs)
+        self._text = self._post
+
+
+def test_explore_salvages_false_positive_unconfirmed_when_post_sector_matches_intended_hop(monkeypatch):
+    """WO-SETTLE-FALSEPOS (A): 173→119 class — warp landed (post sector
+    == intended), class main_command, but settle reported unconfirmed.
+    Must treat as sent (salvage), NOT halt the loop."""
+    session = ExploreWarpLandsDespiteSettleFlakeSession()
+    profile = _make_profile(autonomous=True)
+    lock = ControlLock()
+    ledger = FakeLedger()
+    engine = AutopilotEngine(session, profile, lock, ledger=ledger)
+
+    def flake_confirm(sess, text, confirm_prompt=None, enter=True, **_kw):
+        sess.send(text, enter=enter)
+        return "idle", 0.15, False
+
+    monkeypatch.setattr(autopilot_mod, "send_and_confirm", flake_confirm)
+
+    decision = engine.live_tick(explore_next_sector=119)
+    assert decision.chosen is not None and decision.chosen.kind == "explore"
+    assert decision.send_outcome is not None
+    assert decision.send_outcome.startswith("sent:settle_salvage:idle:")
+    assert ledger.calls[0]["settled_class"] == "autopilot_tick"
+    assert session.sent == [("119", True, False)]
+
+
+def test_explore_unconfirmed_still_halts_when_post_sector_does_not_match(monkeypatch):
+    """WO-SETTLE-FALSEPOS Accept: genuine desync (wrong post sector)
+    still instrumented-unconfirmed + loop halt — salvage must not fire."""
+    session = FakeAutopilotSession(text=_SECTOR_173_SCREEN)
+    profile = _make_profile(autonomous=True)
+    lock = ControlLock()
+    ledger = FakeLedger()
+    engine = AutopilotEngine(session, profile, lock, ledger=ledger)
+
+    def flake_confirm(sess, text, confirm_prompt=None, enter=True, **_kw):
+        sess.send(text, enter=enter)
+        # Warp did NOT land — screen stays at 173
+        return "idle", 0.20, False
+
+    monkeypatch.setattr(autopilot_mod, "send_and_confirm", flake_confirm)
+
+    decision = engine.live_tick(explore_next_sector=119)
+    assert decision.send_outcome is not None
+    assert decision.send_outcome.startswith("unconfirmed:idle:")
+    assert ledger.calls[0]["settled_class"] == "autopilot_tick_unconfirmed"
+
+    # Loop must still halt on instrumented unconfirmed
+    engine2 = AutopilotEngine(FakeAutopilotSession(text=_SECTOR_173_SCREEN), profile, ControlLock())
+    monkeypatch.setattr(autopilot_mod, "send_and_confirm", flake_confirm)
+    loop = AutopilotLoop(engine2, lambda: {"explore_next_sector": 119}, tick_interval_s=0.01)
+    loop.start()
+    assert _wait_until(lambda: not loop.running)
+    assert loop.ticks_done == 1
+    assert loop.last_error is not None and "unconfirmed" in loop.last_error
+
+
+def test_autopilot_loop_does_not_halt_after_explore_settle_salvage(monkeypatch):
+    """Salvaged explore tick must NOT trip AutopilotLoop's unconfirmed halt."""
+    session = ExploreWarpLandsDespiteSettleFlakeSession()
+    profile = _make_profile(autonomous=True)
+    lock = ControlLock()
+    engine = AutopilotEngine(session, profile, lock)
+    ticks = {"n": 0}
+
+    def flake_confirm(sess, text, confirm_prompt=None, enter=True, **_kw):
+        sess.send(text, enter=enter)
+        return "idle", 0.11, False
+
+    monkeypatch.setattr(autopilot_mod, "send_and_confirm", flake_confirm)
+
+    def provider():
+        ticks["n"] += 1
+        # After first salvaged hop, stop requesting explore so the loop
+        # idles out via max_ticks rather than needing another warp screen.
+        if ticks["n"] == 1:
+            return {"explore_next_sector": 119}
+        return {}
+
+    loop = AutopilotLoop(engine, provider, tick_interval_s=0.01, max_ticks=3)
+    loop.start()
+    assert _wait_until(lambda: not loop.running)
+    assert loop.ticks_done >= 2, "salvage must not abort after tick 1"
+    assert loop.last_error is None
+    assert lock.mode == MODE_AI_PILOT
 
 
 @pytest.mark.parametrize(
@@ -1170,7 +1286,7 @@ def test_decision_to_trace_marks_an_unconfirmed_send_as_gated_with_chosen_none()
     assert trace["chosen"] is None
     explore_entry = next(c for c in trace["candidates"] if c["kind"] == "explore")
     assert explore_entry["gated"] is True
-    assert explore_entry["gate_reason"] == "unconfirmed"
+    assert explore_entry["gate_reason"].startswith("unconfirmed:")
 
 
 def test_tick_counter_is_monotonic_across_dry_run_and_live_calls_on_one_engine():
