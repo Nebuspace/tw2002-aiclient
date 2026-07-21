@@ -158,6 +158,7 @@ from .ship_upgrade_decision import (
     remaining_productive_turns,
 )
 from .state_parser import parse_state
+from .trade_driver import ChainRunResult, TradeDriverConfig, run_chain
 
 ACTOR = "trainer"
 
@@ -286,6 +287,28 @@ class EconCaps:
     # loop_player.LoopPlayer's floor-check) -- see DEFAULT_CREDITS_STALE_MS
     # above for the one-macro-cycle exposure this bound accepts.
     credits_stale_ms: int = DEFAULT_CREDITS_STALE_MS
+    # WO-FA4: after each hop's live buy+sell totals, `trade_driver.run_chain()`
+    # aborts the whole chain when realized margin falls at/below this floor
+    # (default 0 = any non-profitable hop) -- distinct from cash_floor, this
+    # stops a mis-ranked losing chain even while still above the reserve.
+    # Threaded straight into a fresh `TradeDriverConfig` at `_execute()`'s
+    # own `run_chain` call site -- see that method's docstring.
+    min_margin_per_hop: int = 0
+
+    def __post_init__(self) -> None:
+        # Cipher FA4: a negative cash_floor/turn_reserve, or a non-positive
+        # credits_stale_ms, silently defeats the stop-loss / turn-reserve /
+        # freshness gates via ordinary caller-supplied EconCaps kwargs (e.g.
+        # protocol.py's `autopilot_start` socket args) -- fail loud at
+        # construction rather than ever arming an unbound floor.
+        if self.cash_floor < 0:
+            raise ValueError("cash_floor must be >= 0")
+        if self.turn_reserve < 0:
+            raise ValueError("turn_reserve must be >= 0")
+        if self.credits_stale_ms <= 0:
+            raise ValueError("credits_stale_ms must be > 0")
+        if self.min_margin_per_hop < 0:
+            raise ValueError("min_margin_per_hop must be >= 0")
 
 
 @dataclass(frozen=True)
@@ -308,6 +331,16 @@ class WorldSnapshot:
     explore_next_sector: Optional[int] = None  # next frontier hop (map-fill / StarDock hunt), if any
     explore_mode: str = "explore"  # label only, for the decision trace rationale
     hostile_or_pvp: bool = False
+    # WO-FA4: threaded straight through from `_autopilot_snapshot_kwargs()`
+    # (protocol.py), never derived from `rendered_text` -- a chosen
+    # `run_chain` candidate needs these to actually DRIVE
+    # (`trade_driver.run_chain()`'s own `world_id`/`state_dir` params) since
+    # a bare `chains.TradeHop`/`ProfitChain` carries neither. `None` (no
+    # resolvable world_id yet) means `_execute()` can't drive a `run_chain`
+    # candidate this tick -- fails closed to a HOLD, never a guess at which
+    # world to read/write.
+    world_id: Optional[str] = None
+    state_dir: Optional[object] = None
 
 
 def assess(
@@ -322,6 +355,8 @@ def assess(
     explore_next_sector: Optional[int] = None,
     explore_mode: str = "explore",
     hostile_or_pvp: bool = False,
+    world_id: Optional[str] = None,
+    state_dir: Optional[object] = None,
 ) -> WorldSnapshot:
     """Read the CURRENT screen via `state_parser.parse_state()` and fold
     it together with the caller-supplied world-model-derived inputs into
@@ -362,6 +397,8 @@ def assess(
         explore_next_sector=explore_next_sector,
         explore_mode=explore_mode,
         hostile_or_pvp=hostile_or_pvp,
+        world_id=world_id,
+        state_dir=state_dir,
     )
 
 
@@ -828,6 +865,24 @@ class AutopilotEngine:
         # never-reused sequence even though `self.decisions` itself is a
         # bounded ring that evicts old entries.
         self._tick_counter = 0
+        # WO-FA4 (A-M1, the #1 arm-prerequisite): `AutopilotLoop.start()`
+        # installs `self._stop.is_set` here so a whole-chain `run_chain`
+        # tick can abort BETWEEN sends, not only at the next tick boundary.
+        # Deliberately NEVER falls back to `control_lock.is_driver_fenced()`
+        # -- that fence is structurally DEAD under MODE_AUTO_LOOP (mack's
+        # WO-FA4 finding: it only flips when `take_human()` finds
+        # `_driving` True, and `_driving` is only ever set by
+        # `acquire_driver()` -- the do/send-family dispatch path, never
+        # this engine's own `live_tick()`; `take_human()` refuses outright
+        # under MODE_AUTO_LOOP before ever reaching that branch). A caller
+        # driving `_execute()` standalone with no loop (so
+        # `_abort_requested` stays `None`) gets a permanently-False abort
+        # predicate, never a crash.
+        self._abort_requested: Optional[Callable[[], bool]] = None
+        # WO-FA4: bounded to the single most-recent `run_chain()` result --
+        # an introspection convenience only (e.g. a future status verb),
+        # never read by `decision_to_trace()`/the trace schema itself.
+        self._last_chain_result: Optional[ChainRunResult] = None
 
     def _fresh_credits(self) -> Optional[int]:
         """WO-FA-SAFE (hub-signed-off design + Rook must-fix #1): the
@@ -973,7 +1028,7 @@ class AutopilotEngine:
                     # sector's own warps.
                     decision = dataclasses.replace(decision, send_outcome="held:non_adjacent")
                 else:
-                    confirmed = self._execute(chosen)
+                    confirmed, outcome_detail = self._execute(chosen, snapshot)
                     post_text = self.session.render_text(self.session.render())
                     # WO-FA7a round 5 (observe-only): the freshest screen
                     # after any send this tick actually fires -- the most
@@ -982,8 +1037,24 @@ class AutopilotEngine:
                     # rationale).
                     if hasattr(self.session, "observe_credits"):
                         self.session.observe_credits(post_text)
-                    input_text = str(chosen.next_sector)
-                    decision = dataclasses.replace(decision, send_outcome="sent" if confirmed else "unconfirmed")
+                    # WO-FA4: a `run_chain` candidate's `_execute()` drives
+                    # many sends, not just `next_sector` -- record what
+                    # actually happened (the chain's own sector path +
+                    # realized credits_delta) rather than a misleadingly
+                    # narrow single number.
+                    if chosen.kind == "run_chain" and chosen.chain is not None:
+                        path = "->".join(str(s) for s in chosen.chain.sectors)
+                        result = self._last_chain_result
+                        if result is not None and result.credits_delta is not None:
+                            input_text = f"<run_chain:{path} credits_delta={result.credits_delta:+d}>"
+                        else:
+                            input_text = f"<run_chain:{path}>"
+                    else:
+                        input_text = str(chosen.next_sector)
+                    decision = dataclasses.replace(
+                        decision,
+                        send_outcome=outcome_detail if outcome_detail is not None else ("sent" if confirmed else "unconfirmed"),
+                    )
 
         with self._lock:
             self._tick_counter += 1
@@ -1004,11 +1075,41 @@ class AutopilotEngine:
         with self._lock:
             return [decision_to_trace(d) for d in self.decisions]
 
-    def _execute(self, candidate: Candidate) -> bool:
-        """Sends `candidate.next_sector` and returns whether
-        `send_and_confirm` actually CONFIRMED it landed (MED fix,
-        mack + settle.py's own contract: a `confirmed=False` desync must
-        never be silently treated as a successful send)."""
+    def _execute(self, candidate: Candidate, snapshot: Optional[WorldSnapshot] = None) -> tuple[bool, Optional[str]]:
+        """Sends whatever `candidate` requires and returns `(confirmed,
+        outcome_detail)`.
+
+        `"upgrade"`/`"explore"` (unchanged pre-WO-FA4 behavior): a single
+        bare `candidate.next_sector` keystroke via `send_and_confirm`,
+        `outcome_detail=None` -- the caller (`live_tick()`) falls back to
+        its own plain `"sent"`/`"unconfirmed"` labels exactly as before
+        this method grew a second return value (MED fix, mack + settle.
+        py's own contract: a `confirmed=False` desync must never be
+        silently treated as a successful send).
+
+        `"run_chain"` (WO-FA4): routes to `trade_driver.run_chain()` --
+        the WHOLE chain (navigate/dock/buy/sell/repeat), synchronously,
+        within this ONE call -- rather than the single-keystroke-per-tick
+        cadence the other two kinds still use (a deliberate scope change:
+        see trade_driver.py's own module docstring for why a multi-send
+        macro can't fit the old one-keystroke contract). `is_armed` reads
+        `self.enabled` LIVE (never a value captured once at construction
+        elsewhere) and `should_abort` reads `self._chain_abort_requested`
+        LIVE -- both REQUIRED, fail-closed predicates on `run_chain()`'s
+        own signature (A-C1/A-M1). `confirmed` is `result.completed`;
+        `outcome_detail` is `f"sent:credits_delta={...}"` on completion
+        (surfacing the realized credits delta, never just a bare "sent")
+        or `f"held:{result.stop_reason}"` otherwise -- matching this
+        module's existing `"held:..."` schema (`decision_to_trace()`
+        already treats any `"held:"`-prefixed `send_outcome` as "scored
+        but never became a real action", the correct bucket for every
+        trade_driver landmine stop). `snapshot` supplies the `world_id`/
+        `state_dir`/`turns_left` a chain run needs that a bare `Candidate`
+        doesn't carry -- `None`, or a snapshot with no resolvable
+        `world_id`/`turns_left` (a caller testing `_execute()` standalone,
+        or a live tick before `_autopilot_snapshot_kwargs()`'s trade lane
+        is wired) fails closed to a HOLD, never a guess at which world to
+        read/write -- `trade_driver.run_chain()` is never even called."""
         # Belt-and-braces: `select()` can only ever produce these three
         # kinds (see module docstring's Hard safety section) -- this
         # dispatch can never actually reach the else branch through
@@ -1017,10 +1118,47 @@ class AutopilotEngine:
         # kind, including one this module never intended to authorize.
         if candidate.kind not in ("run_chain", "upgrade", "explore"):
             raise AutopilotGateError(f"refused_unknown_candidate_kind:{candidate.kind}")
+
+        if candidate.kind == "run_chain":
+            if (
+                candidate.chain is None
+                or snapshot is None
+                or snapshot.world_id is None
+                or snapshot.turns_left is None
+            ):
+                return False, "held:run_chain_unavailable"
+            result = run_chain(
+                self.session,
+                candidate.chain,
+                world_id=snapshot.world_id,
+                state_dir=snapshot.state_dir,
+                turns_left=snapshot.turns_left,
+                caps=self.caps,
+                should_abort=self._chain_abort_requested,
+                is_armed=lambda: self.enabled,
+                config=TradeDriverConfig(min_margin_per_hop=self.caps.min_margin_per_hop),
+            )
+            self._last_chain_result = result
+            if result.completed:
+                if result.credits_delta is None:
+                    return True, "sent"
+                return True, f"sent:credits_delta={result.credits_delta:+d}"
+            return False, f"held:{result.stop_reason}"
+
         _reason, _elapsed, confirmed = send_and_confirm(
             self.session, str(candidate.next_sector), confirm_prompt=None, enter=True
         )
-        return confirmed
+        return confirmed, None
+
+    def _chain_abort_requested(self) -> bool:
+        """A-M1's live abort predicate for a whole-chain `run_chain` tick
+        -- `AutopilotLoop.start()` installs `self._abort_requested` as
+        `self._stop.is_set`, so `tw autopilot stop` reaches an in-flight
+        chain within one send-step (see class docstring's A-M1 note on
+        `self._abort_requested`). Permanently False when nothing installed
+        it (a caller driving `_execute()`/`live_tick()` standalone, no
+        `AutopilotLoop`) -- never an AttributeError/crash."""
+        return self._abort_requested is not None and bool(self._abort_requested())
 
     def _record(self, decision: Decision, *, pre_text: str, input_text: str, post_text: str, dry_run: bool) -> None:
         if self.ledger is None:
@@ -1155,6 +1293,14 @@ class AutopilotLoop:
             raise AutopilotLoopError("already_running")
         self.engine.control_lock.enter_auto_loop()  # raises ControlModeConflict on refusal
         self._stop.clear()
+        # A-M1: install the loop-stop kill switch into the engine so a
+        # whole-chain `run_chain` tick can abort BETWEEN sends, not only at
+        # the next tick boundary below -- see `_chain_abort_requested()`'s
+        # own docstring for why this (never `control_lock.is_driver_fenced`)
+        # is the real kill switch under MODE_AUTO_LOOP. Cleared in `_run`'s
+        # `finally` (even on crash/stop) so a stale callable never survives
+        # this loop's own lifetime.
+        self.engine._abort_requested = self._stop.is_set
         self.ticks_done = 0
         self.last_decision = None
         self.last_error = None
@@ -1162,12 +1308,20 @@ class AutopilotLoop:
         self._thread.start()
 
     def stop(self, join_timeout: float = 2.0) -> bool:
-        """Signals the loop to exit at its next tick boundary (never
-        aborts a tick mid-flight) and joins up to `join_timeout` seconds
-        -- mirrors `LoopPlayer.stop()`'s own contract exactly, including
+        """Signals the loop to exit ASAP and joins up to `join_timeout`
+        seconds -- mirrors `LoopPlayer.stop()`'s own contract, including
         why the join matters for a caller relying on "stop() returned =>
         control_lock is back to ai_pilot". Idempotent/safe when nothing
         is running.
+
+        WO-FA4 (A-M1): for a whole-chain `run_chain` tick, this same stop
+        event is also the engine's `should_abort` predicate
+        (`self.engine._abort_requested`, installed in `start()`) --
+        `trade_driver.run_chain()` checks it at every send-step choke
+        point, so a mid-chain abort halts within ONE send-step rather than
+        only at the next `_run()` tick boundary. A single in-flight
+        `send_and_confirm` still has to finish (its own settle timeout)
+        before the next check.
 
         Returns whether the thread had actually stopped by the time this
         returns (LOW fix, cipher: previously undocumented/unsignaled --
@@ -1211,6 +1365,12 @@ class AutopilotLoop:
                         self.engine._record_crash(exc)
                     break
                 self.ticks_done += 1
+                # A-M1: after a mid-chain abort the stop event is already
+                # set (a `run_chain` tick that HELD with stop_reason
+                # "aborted") -- leave immediately rather than sleeping out
+                # another full tick_interval_s first.
+                if self._stop.is_set():
+                    break
                 if self.last_decision.send_outcome == "unconfirmed":
                     # MED fix: a real settle desync -- halt rather than
                     # tick blindly past it (settle.py's own contract).
@@ -1218,6 +1378,7 @@ class AutopilotLoop:
                     break
                 time.sleep(self.tick_interval_s)
         finally:
+            self.engine._abort_requested = None
             with contextlib.suppress(ControlModeConflict):
                 self.engine.control_lock.leave_auto_loop()
 

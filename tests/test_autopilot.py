@@ -14,6 +14,8 @@ import math
 import threading
 import time
 
+import pytest
+
 from twclient import autopilot as autopilot_mod
 from twclient.autopilot import (
     EXPLORE_BASELINE_EV,
@@ -29,12 +31,13 @@ from twclient.autopilot import (
     maybe_auto_start,
     select,
 )
-from twclient.chains import TradeHop
+from twclient.chains import ProfitChain, TradeHop
 from twclient.control_lock import MODE_AI_PILOT, MODE_AUTO_LOOP, MODE_HUMAN, ControlLock
 from twclient.credentials import Profile
 from twclient.session import Session
 from twclient.ship_upgrade_decision import LoopEconomics, ShipSpec, UpgradeDecision
 from twclient.state_parser import parse_state
+from twclient.trade_driver import ChainRunResult
 
 _MAIN_COMMAND_SCREEN = "Command [TL=00:00:08]:[100] (?=Help)? :"
 
@@ -212,6 +215,25 @@ def test_select_picks_the_known_chain_when_nothing_else_beats_it():
     assert decision.chosen.ev_per_turn == 50.0
     kinds = {c.kind for c in decision.candidates}
     assert kinds == {"run_chain", "explore"}  # no upgrade candidate: empty ship_catalog
+
+
+def test_dry_run_tick_chooses_run_chain_and_never_sends():
+    """WO-FA4 dry-run accept criterion: a synthetic priced world (a known
+    profitable chain, ship sitting at the chain's own start sector) makes
+    `dry_run_tick()` CHOOSE `run_chain` -- and never sends a single byte,
+    regardless (the pre-enablement proof surface stays true even now that
+    `_execute()` can drive a whole multi-send chain)."""
+    session = FakeAutopilotSession(text="Sector  : 100\n1000 turns left.\nCommand [TL=00:00:08]:[100] (?=Help)? :")
+    profile = _make_profile(autonomous=False)
+    lock = ControlLock()
+    engine = AutopilotEngine(session, profile, lock)
+
+    decision = engine.dry_run_tick(hops=tuple(_profit_chain_hops(margin=50)))
+
+    assert decision.chosen is not None
+    assert decision.chosen.kind == "run_chain"
+    assert decision.chosen.next_sector == 200  # sitting at chain.sectors[0]==100
+    assert session.sent == []
 
 
 def test_select_picks_explore_when_no_chain_or_upgrade_known_no_idle():
@@ -801,6 +823,50 @@ def test_autopilot_loop_halts_after_an_unconfirmed_tick_rather_than_ticking_blin
     assert lock.mode == MODE_AI_PILOT  # released cleanly, not wedged
 
 
+# -- A-M1: AutopilotLoop installs its own stop-Event as the engine's -----
+# -- should_abort kill switch for a whole-chain run_chain tick -----------
+
+
+def test_autopilot_loop_start_installs_its_stop_event_as_the_engines_abort_seam():
+    """WO-FA4 (A-M1): `AutopilotLoop.start()` must install `self._stop.
+    is_set` onto the engine (never leave `_abort_requested` at its
+    permanently-False `None` default) -- this is the ONLY real kill
+    switch for an in-flight `run_chain` tick under MODE_AUTO_LOOP (see
+    `AutopilotEngine._chain_abort_requested()`'s own docstring for why
+    `control_lock.is_driver_fenced()` can never fire here)."""
+    session = FakeAutopilotSession()
+    profile = _make_profile(autonomous=True)
+    lock = ControlLock()
+    engine = AutopilotEngine(session, profile, lock)
+    assert engine._abort_requested is None
+
+    loop = AutopilotLoop(engine, lambda: {"explore_next_sector": 1}, tick_interval_s=0.01)
+    loop.start()
+    try:
+        assert engine._abort_requested == loop._stop.is_set
+        assert engine._chain_abort_requested() is False
+        loop._stop.set()
+        assert engine._chain_abort_requested() is True
+    finally:
+        loop.stop()
+    assert _wait_until(lambda: not loop.running)
+    # Cleared on the way out -- a stale callable must never survive this
+    # loop's own lifetime (e.g. a later standalone `_execute()` call on
+    # the same engine after this loop has stopped).
+    assert engine._abort_requested is None
+
+
+def test_autopilot_engine_chain_abort_requested_is_false_with_no_loop_installed():
+    """A caller driving `_execute()`/`live_tick()` standalone (no
+    `AutopilotLoop` ever called `start()`) must get a permanently-False
+    abort predicate, never a crash."""
+    session = FakeAutopilotSession()
+    profile = _make_profile(autonomous=True)
+    lock = ControlLock()
+    engine = AutopilotEngine(session, profile, lock)
+    assert engine._chain_abort_requested() is False
+
+
 # -- MED: a background crash must not die silently -----------------------
 
 
@@ -1180,6 +1246,162 @@ def test_enabled_profile_live_tick_actually_sends_through_send_and_confirm():
     assert session.sent == [("777", True, False)]
     assert ledger.calls[0]["input_text"] == "777"
     assert ledger.calls[0]["actor"] == "trainer"
+
+
+def test_econcaps_rejects_negative_floors_and_nonpositive_stale_ms():
+    """Cipher FA4: a socket-tunable EconCaps must fail loud rather than
+    silently disable the stop-loss / freshness / realized-margin floors
+    it exists to enforce."""
+    with pytest.raises(ValueError, match="cash_floor"):
+        EconCaps(cash_floor=-1)
+    with pytest.raises(ValueError, match="turn_reserve"):
+        EconCaps(turn_reserve=-1)
+    with pytest.raises(ValueError, match="credits_stale_ms"):
+        EconCaps(credits_stale_ms=0)
+    with pytest.raises(ValueError, match="min_margin_per_hop"):
+        EconCaps(min_margin_per_hop=-1)
+
+
+# -- WO-FA4: `run_chain` wiring at the `_execute()` choke point ----------
+
+
+def test_execute_run_chain_wires_live_is_armed_and_should_abort_and_min_margin(monkeypatch):
+    """WO-FA4: `_execute()`'s `run_chain` routing must hand `trade_driver.
+    run_chain()` the ENGINE's OWN live `is_armed`/`should_abort`
+    predicates (never a value captured once, and never the dead
+    `control_lock.is_driver_fenced()` -- see `_chain_abort_requested()`'s
+    own docstring) and thread `caps.min_margin_per_hop` into a fresh
+    `TradeDriverConfig` -- proven by capturing the exact kwargs
+    `run_chain()` was called with, not just its return value."""
+    captured = {}
+
+    def fake_run_chain(session, chain, **kwargs):
+        captured.update(kwargs)
+        return ChainRunResult(
+            completed=True, hops_completed=2, steps=10, credits_delta=1234, stop_reason="completed"
+        )
+
+    monkeypatch.setattr(autopilot_mod, "run_chain", fake_run_chain)
+
+    session = FakeAutopilotSession()
+    profile = _make_profile(autonomous=True)
+    lock = ControlLock()
+    engine = AutopilotEngine(session, profile, lock, caps=EconCaps(min_margin_per_hop=77))
+    chain = ProfitChain(
+        sectors=(100, 200, 100), hops=tuple(_profit_chain_hops(margin=50)),
+        overall_profit=100.0, turns=2, cr_per_turn=50.0, cr_per_execution=100.0,
+    )
+    candidate = Candidate(kind="run_chain", ev_per_turn=50.0, rationale="r", next_sector=200, chain=chain)
+    snapshot = WorldSnapshot(sector=100, credits=None, turns_left=500, world_id="w1", state_dir=None)
+
+    engine._abort_requested = lambda: False
+    confirmed, outcome = engine._execute(candidate, snapshot)
+
+    assert confirmed is True
+    assert outcome == "sent:credits_delta=+1234"
+    assert captured["world_id"] == "w1"
+    assert captured["turns_left"] == 500
+    assert captured["config"].min_margin_per_hop == 77
+    assert captured["is_armed"]() is True  # reflects engine.enabled live
+    assert captured["should_abort"]() is False
+
+    # should_abort is read LIVE (a bound method), not captured once at
+    # _execute()-call time -- flipping the loop-installed predicate AFTER
+    # the call must still show up.
+    engine._abort_requested = lambda: True
+    assert captured["should_abort"]() is True
+
+
+def test_execute_run_chain_holds_when_snapshot_lacks_world_id_or_turns_left():
+    """`run_chain()` must never even be CALLED with an unresolvable
+    world/turns -- fails closed to a HOLD, never a guess."""
+    session = FakeAutopilotSession()
+    profile = _make_profile(autonomous=True)
+    lock = ControlLock()
+    engine = AutopilotEngine(session, profile, lock)
+    chain = ProfitChain(
+        sectors=(100, 200, 100), hops=tuple(_profit_chain_hops(margin=50)),
+        overall_profit=100.0, turns=2, cr_per_turn=50.0, cr_per_execution=100.0,
+    )
+    candidate = Candidate(kind="run_chain", ev_per_turn=50.0, rationale="r", next_sector=200, chain=chain)
+
+    confirmed, outcome = engine._execute(candidate, None)
+    assert (confirmed, outcome) == (False, "held:run_chain_unavailable")
+
+    confirmed, outcome = engine._execute(
+        candidate, WorldSnapshot(sector=100, credits=None, turns_left=None, world_id="w1")
+    )
+    assert (confirmed, outcome) == (False, "held:run_chain_unavailable")
+    assert session.sent == []
+
+
+def test_execute_run_chain_holds_with_the_stop_reason_when_the_chain_never_completes(monkeypatch):
+    def fake_run_chain(session, chain, **kwargs):
+        return ChainRunResult(
+            completed=False, hops_completed=0, steps=3, credits_delta=None, stop_reason="cargo_stranded:0:sell:X"
+        )
+
+    monkeypatch.setattr(autopilot_mod, "run_chain", fake_run_chain)
+
+    session = FakeAutopilotSession()
+    profile = _make_profile(autonomous=True)
+    lock = ControlLock()
+    engine = AutopilotEngine(session, profile, lock)
+    chain = ProfitChain(
+        sectors=(100, 200, 100), hops=tuple(_profit_chain_hops(margin=50)),
+        overall_profit=100.0, turns=2, cr_per_turn=50.0, cr_per_execution=100.0,
+    )
+    candidate = Candidate(kind="run_chain", ev_per_turn=50.0, rationale="r", next_sector=200, chain=chain)
+    snapshot = WorldSnapshot(sector=100, credits=None, turns_left=500, world_id="w1")
+
+    confirmed, outcome = engine._execute(candidate, snapshot)
+    assert confirmed is False
+    assert outcome == "held:cargo_stranded:0:sell:X"
+
+
+def test_live_tick_run_chain_candidate_drives_the_trade_driver_and_records_credits_delta(monkeypatch):
+    """WO-FA4 end-to-end at `live_tick()`: a chosen `run_chain` candidate
+    must actually route through `trade_driver.run_chain()` (never a bare
+    single-keystroke `send_and_confirm`), and its realized `credits_delta`
+    must surface in `send_outcome`/the ledgered intent."""
+
+    def fake_run_chain(session, chain, **kwargs):
+        return ChainRunResult(
+            completed=True, hops_completed=2, steps=8, credits_delta=500, stop_reason="completed",
+            trace=("hop0 ...",),
+        )
+
+    monkeypatch.setattr(autopilot_mod, "run_chain", fake_run_chain)
+
+    session = FakeAutopilotSession(text="Sector : 100\n1000 turns left.\n" + _MAIN_COMMAND_SCREEN)
+    profile = _make_profile(autonomous=True)
+    lock = ControlLock()
+    ledger = FakeLedger()
+    engine = AutopilotEngine(session, profile, lock, ledger=ledger, session_id="s1")
+
+    decision = engine.live_tick(hops=tuple(_profit_chain_hops(margin=50)), world_id="w1", state_dir=None)
+
+    assert decision.chosen.kind == "run_chain"
+    assert decision.send_outcome == "sent:credits_delta=+500"
+    # trade_driver.run_chain was faked -- never a bare nav send_and_confirm.
+    assert session.sent == []
+    assert "credits_delta=+500" in ledger.calls[-1]["intent"]
+
+
+def test_live_tick_run_chain_candidate_holds_when_world_id_unresolved():
+    """Without a resolvable `world_id` (protocol.py's trade lane not
+    wired, or a bare fake-session test double), a chosen `run_chain`
+    candidate must HOLD rather than crash or fall back to a bare send."""
+    session = FakeAutopilotSession(text="Sector : 100\n1000 turns left.\n" + _MAIN_COMMAND_SCREEN)
+    profile = _make_profile(autonomous=True)
+    lock = ControlLock()
+    engine = AutopilotEngine(session, profile, lock)
+
+    decision = engine.live_tick(hops=tuple(_profit_chain_hops(margin=50)))
+
+    assert decision.chosen.kind == "run_chain"
+    assert decision.send_outcome == "held:run_chain_unavailable"
+    assert session.sent == []
 
 
 def test_execute_refuses_a_candidate_kind_outside_the_scorer_whitelist():

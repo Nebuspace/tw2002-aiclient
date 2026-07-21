@@ -184,6 +184,36 @@ def test_autopilot_start_omitted_credits_stale_ms_keeps_the_default(fake_daemon,
     _wait_until(lambda: not fake_daemon.server.autopilot_loop.running)
 
 
+def test_autopilot_start_threads_min_margin_per_hop(fake_daemon, profiles_toml):
+    """WO-FA4: `min_margin_per_hop` is threaded through exactly like
+    `cash_floor`/`credits_stale_ms` -- an operator arming with an
+    explicit override must get an engine whose `EconCaps.
+    min_margin_per_hop` actually reflects it."""
+    resp = send_request(
+        fake_daemon.sock_path, "autopilot_start", {"profile": "armed", "min_margin_per_hop": 50}
+    )
+    assert resp["ok"] is True
+    assert fake_daemon.server.autopilot_engine.caps.min_margin_per_hop == 50
+
+    send_request(fake_daemon.sock_path, "autopilot_stop")
+    _wait_until(lambda: not fake_daemon.server.autopilot_loop.running)
+
+
+def test_autopilot_start_rejects_a_negative_cash_floor(fake_daemon, profiles_toml):
+    """Cipher FA4: an invalid EconCaps arg must fail LOUD (named
+    `invalid_econ_caps:...`), never silently disable the stop-loss gate
+    it was meant to tune."""
+    resp = send_request(fake_daemon.sock_path, "autopilot_start", {"profile": "armed", "cash_floor": -1})
+    assert resp["ok"] is False
+    assert resp["error"].startswith("invalid_econ_caps:")
+    assert getattr(fake_daemon.server, "autopilot_loop", None) is None
+
+
+def test_autopilot_start_rejects_a_non_integer_max_ticks(fake_daemon, profiles_toml):
+    resp = send_request(fake_daemon.sock_path, "autopilot_start", {"profile": "armed", "max_ticks": "nope"})
+    assert resp == {"ok": False, "error": "invalid_max_ticks"}
+
+
 def test_autopilot_start_refuses_a_second_concurrent_run(fake_daemon, profiles_toml):
     first = send_request(fake_daemon.sock_path, "autopilot_start", {"profile": "armed"})
     assert first["ok"] is True
@@ -238,6 +268,64 @@ def test_autopilot_snapshot_kwargs_wires_the_explore_lane(monkeypatch, tmp_path)
     assert kwargs["explore_next_sector"] == 2
     assert kwargs["explore_mode"] == "hunt"  # StarDock not yet landmarked -- falls back to Map-fill frontier hunt
     assert kwargs["stardock_route"] is None
+
+
+def test_autopilot_snapshot_kwargs_wires_the_trade_hops_lane(monkeypatch, tmp_path):
+    """WO-FA4: with a real world_id + a known, direction-compatible port
+    pair already on disk, the helper hands back genuine `chains.TradeHop`
+    edges (via the cached `trade_adapter.build_trade_hops()`), not an
+    empty tuple -- proving the trade lane is really wired, not just
+    documented. Same direction-compatible pair `test_trade_adapter.py`'s
+    own `test_direction_compatible_pair_hand_computed_margins_and_best_
+    chain` uses."""
+    monkeypatch.setattr(world_model, "WORLD_DIR", tmp_path / "world")
+    session = FakeAttachSession(initial_screen="Sector  : 10\n\nCommand [TL=00:00:00]:[10] (?=Help)? : ")
+    session.auto_login_profile = "default"
+
+    profile = credentials.Profile(name="default", host=session.host, port=1, game_letter="A", handle="Trader1")
+    monkeypatch.setattr(credentials, "load_profile", lambda name: profile)
+
+    world_id = world_identity.world_id(session.host, profile.game_letter, profile.handle)
+    fresh_ts = world_model._now_iso()
+    world_model.upsert_sector(
+        world_id,
+        {
+            "sector_id": 10,
+            "warps": [11],
+            "port": {
+                "commodities": [
+                    {"name": "Equipment", "status": "selling", "amount": 100, "pct": 100},
+                    {"name": "Fuel Ore", "status": "buying", "amount": 100, "pct": 0},
+                ],
+                "last_seen_ts": fresh_ts,
+            },
+        },
+    )
+    world_model.upsert_sector(
+        world_id,
+        {
+            "sector_id": 11,
+            "warps": [10],
+            "port": {
+                "commodities": [
+                    {"name": "Fuel Ore", "status": "selling", "amount": 100, "pct": 100},
+                    {"name": "Equipment", "status": "buying", "amount": 100, "pct": 0},
+                ],
+                "last_seen_ts": fresh_ts,
+            },
+        },
+    )
+
+    kwargs = protocol._autopilot_snapshot_kwargs(session)
+    assert kwargs["world_id"] == world_id
+    by_key = {(h.frm, h.to, h.commodity) for h in kwargs["hops"]}
+    assert (10, 11, "Equipment") in by_key
+    assert (11, 10, "Fuel Ore") in by_key
+
+    # Cached, not rebuilt, on an immediate second call -- WO-FA4's own
+    # "refresh per-CYCLE, never per-tick" cache-cadence requirement.
+    second = protocol._autopilot_snapshot_kwargs(session)
+    assert second["hops"] == kwargs["hops"]
 
 
 class _FakeLoggerForSeed:

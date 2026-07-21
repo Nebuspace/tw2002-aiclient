@@ -1073,6 +1073,50 @@ def _dispatch_crawl_start(server, session, args):
 
 _AUTOPILOT_EXPLORE_TURN_BUDGET = 10  # matches spectate_app.py's own _explore_plan_for_mode budget
 
+# WO-FA4: `trade_adapter.build_trade_hops()` is O(ports^2) (not bounded --
+# FA3's own precompute measured ~9% of a 1000-port galaxy's cost even after
+# that fix), so it must be refreshed per-CYCLE, never per-tick, or a large
+# known galaxy would slow the tick->settle cadence into a sluggish witness
+# experience. A plain time-based TTL cache (mirrors `session.last_credits`/
+# `last_credits_ts`'s own attribute-pair convention, applied via
+# getattr/setattr rather than a session.py edit -- see `_cached_trade_hops()`
+# below) -- config-not-hardcoded per WO-FA4's explicit requirement, though
+# (like `credits_stale_ms` before WO-FA-SAFE) there is no CLI-level override
+# for it yet.
+_DEFAULT_TRADE_HOPS_CACHE_TTL_S = 60.0
+
+
+def _cached_trade_hops(session, world_id):
+    """Session-scoped cache of `trade_adapter.build_trade_hops()`'s output
+    -- rebuilt only once `_DEFAULT_TRADE_HOPS_CACHE_TTL_S` has elapsed since
+    the last build, or `world_id` changes (a fresh `tw ensure`/profile swap
+    mid-session). `getattr`/`setattr`-guarded on a plain
+    `session._trade_hops_cache` attribute rather than a session.py edit --
+    same "hasattr-guarded cross-module session extension" convention this
+    file already uses for `observe_credits`/`credits_snapshot`/
+    `cursor_pos`, just read-modify-write instead of read-only.
+    Swallow-and-log on a build failure (same convention as the seed
+    write/`plan_find_stardock` call in `_autopilot_snapshot_kwargs()`) -- an
+    availability hiccup here must never crash a tick; a stale cached value
+    (if any, for this same world_id) is kept rather than dropped to empty."""
+    from . import trade_adapter
+
+    now = time.monotonic()
+    cache = getattr(session, "_trade_hops_cache", None)
+    if (
+        cache is not None
+        and cache.get("world_id") == world_id
+        and (now - cache.get("ts", 0.0)) < _DEFAULT_TRADE_HOPS_CACHE_TTL_S
+    ):
+        return cache["hops"]
+    try:
+        hops, _note = trade_adapter.build_trade_hops(world_id)
+    except Exception as exc:  # noqa: BLE001 -- availability only, see docstring
+        _log_world_model_failure(session, "build_trade_hops", exc)
+        hops = cache["hops"] if cache is not None and cache.get("world_id") == world_id else ()
+    session._trade_hops_cache = {"world_id": world_id, "ts": now, "hops": hops}
+    return hops
+
 
 def _autopilot_snapshot_kwargs(session):
     """Best-effort LIVE `assess()` kwargs for one autopilot tick. Also
@@ -1089,23 +1133,31 @@ def _autopilot_snapshot_kwargs(session):
     `stardock_route` and `explore_next_sector`/`explore_mode` come from
     ONE consistent plan.
 
-    Deliberately does NOT populate `hops`/`ship_catalog`/`loop`/
-    `current_ship`: no adapter exists ANYWHERE in this codebase from
-    `world_model`'s stored sector/port data into `chains.TradeHop`
-    margins -- `spectate_app.py`'s own `_longest_chain_for_panel()`
-    docstring flags this exact gap ("World-model -> TradeHop margin
-    adapter needs absolute buy/sell prices (not yet on port commodity
-    records)"), and there is no current-ship-name introspection either
-    (`game_data.py`'s own module docstring: "this project has no
-    current-ship-name introspection yet"). Building either bridge is a
-    separate, substantially bigger effort than this wiring WO -- not
-    invented here unreviewed. Practical consequence: `select()`'s
-    `run_chain`/`upgrade` scorers always skip on a live daemon TODAY
-    (fail-closed by design, see their own `_score_*` functions), so a
-    live autopilot tick can currently only ever choose `"explore"` (or
-    nothing, before the first sector is ever parsed) -- see this
-    module's `_dispatch_autopilot_preview`/`_dispatch_autopilot_start`
-    docstrings, and report this honestly rather than paper over it.
+    WO-FA4 wires the `hops`/`world_id`/`state_dir` lane: `trade_adapter.
+    build_trade_hops()` (cached per-cycle, never per-tick -- see
+    `_cached_trade_hops()`) turns this session's `world_id`'s persisted
+    port records into `chains.TradeHop` edges, so `select()`'s `run_chain`
+    scorer can genuinely fire on a live daemon now (previously always
+    skipped -- see the paragraph below, kept for what's STILL not wired).
+    `world_id`/`state_dir` are threaded straight through (never derived
+    from `rendered_text`) so `AutopilotEngine._execute()` can actually
+    DRIVE a chosen `run_chain` candidate via `trade_driver.run_chain()`,
+    which needs both to resolve the known-graph navigation path a bare
+    `TradeHop` doesn't itself carry.
+
+    Deliberately does NOT populate `ship_catalog`/`loop`/`current_ship`:
+    no adapter exists ANYWHERE in this codebase from `world_model`'s
+    stored StarDock listings into `ship_upgrade_decision.ShipSpec`/
+    `LoopEconomics` -- `game_data.py`'s own module docstring: "this
+    project has no current-ship-name introspection yet". Building that
+    bridge is a separate, substantially bigger effort than this wiring WO
+    -- not invented here unreviewed. Practical consequence: `select()`'s
+    `upgrade` scorer still always skips on a live daemon today (fail-
+    closed by design, see `_score_upgrade()`), so a live autopilot tick
+    can currently only ever choose `"run_chain"`, `"explore"`, or nothing
+    (before the first sector is ever parsed) -- see this module's
+    `_dispatch_autopilot_preview`/`_dispatch_autopilot_start` docstrings,
+    and report this honestly rather than paper over it.
 
     Returns `{}` (every `assess()` default applies -- an all-empty
     `WorldSnapshot`) whenever `world_id`/the current sector can't be
@@ -1187,6 +1239,9 @@ def _autopilot_snapshot_kwargs(session):
         "stardock_route": plan.route,
         "explore_next_sector": plan.next_sector,
         "explore_mode": plan.mode,
+        "hops": _cached_trade_hops(session, world_id),
+        "world_id": world_id,
+        "state_dir": None,
     }
 
 
@@ -1278,7 +1333,19 @@ def _dispatch_autopilot_start(server, session, args):
     bound the credit-floor stop-loss (`AutopilotEngine._fresh_credits()`)
     reads -- `loop_player.py`'s/`skills.play_skill()`'s own sibling gates
     still only get the 15s default via their own CLI surfaces (a deferred
-    follow-on, not built here -- see their own docstrings)."""
+    follow-on, not built here -- see their own docstrings).
+
+    `min_margin_per_hop` (WO-FA4): a FOURTH caller-tunable `EconCaps` knob,
+    threaded through identically -- `trade_driver.run_chain()`'s realized-
+    margin abort (a `run_chain` candidate's own per-hop live buy/sell
+    totals, not the pre-execution pct-based estimate `chains.py`/
+    `trade_adapter.py` rank chains by) reads it via a fresh
+    `TradeDriverConfig` built at `AutopilotEngine._execute()`'s own
+    `run_chain` call site. An invalid `EconCaps`/`max_ticks` value (a
+    negative floor, a non-positive `credits_stale_ms`, a non-integer
+    `max_ticks`) is refused with a named `invalid_econ_caps:.../
+    invalid_max_ticks` error rather than ever silently disabling the gate
+    it was meant to tune (see `EconCaps.__post_init__`)."""
     from . import credentials
     from .autopilot import AutopilotGateError, AutopilotLoop, AutopilotLoopError, EconCaps
     from .control_lock import ControlModeConflict
@@ -1297,18 +1364,31 @@ def _dispatch_autopilot_start(server, session, args):
 
     cash_floor = args.get("cash_floor")
     credits_stale_ms = args.get("credits_stale_ms")
+    min_margin_per_hop = args.get("min_margin_per_hop")
     caps_kwargs = {}
     if cash_floor is not None:
         caps_kwargs["cash_floor"] = cash_floor
     if credits_stale_ms is not None:
         caps_kwargs["credits_stale_ms"] = credits_stale_ms
-    caps = EconCaps(**caps_kwargs) if caps_kwargs else None
+    if min_margin_per_hop is not None:
+        caps_kwargs["min_margin_per_hop"] = min_margin_per_hop
+    # WO-FA4 (cipher): a socket-tunable EconCaps must fail LOUD on an
+    # invalid value (a negative floor, a non-positive staleness bound --
+    # see EconCaps.__post_init__) rather than let a malformed caller arg
+    # silently disable a stop-loss/turn-reserve/realized-margin gate.
+    try:
+        caps = EconCaps(**caps_kwargs) if caps_kwargs else None
+    except (TypeError, ValueError) as e:
+        return {"ok": False, "error": f"invalid_econ_caps:{e}"}
     engine = _get_or_build_autopilot_engine(server, session, profile, caps=caps)
 
     loop_kwargs = {}
     max_ticks = args.get("max_ticks")
     if max_ticks is not None:
-        loop_kwargs["max_ticks"] = max_ticks
+        try:
+            loop_kwargs["max_ticks"] = int(max_ticks)
+        except (TypeError, ValueError):
+            return {"ok": False, "error": "invalid_max_ticks"}
     loop = AutopilotLoop(engine, lambda: _autopilot_snapshot_kwargs(session), **loop_kwargs)
     try:
         loop.start()
