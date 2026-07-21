@@ -263,3 +263,45 @@ def test_cycle_explore_mode_and_decision_lines():
     lines = format_explore_decision_lines("mapfill", plan)
     assert lines[0] == "MAP-FILL"
     assert "→9" in lines[1]
+
+
+def test_plan_map_fill_prefers_port_neighborhood_over_nearer_unrelated(tmp_path: Path):
+    """Accept-2 WO-PORT-CHAIN-SEED: seeded port fringe beats a depth-1 unrelated hop."""
+    wid = "test+portseed"
+    _seed(
+        wid,
+        tmp_path,
+        [
+            # current at 1: direct unmapped 99 (depth 1, no port)
+            {"sector_id": 1, "warps": [10, 99], "landmarks": []},
+            # known port at 10 with unmapped neighbor 11 (depth 2 from start)
+            {"sector_id": 10, "warps": [1, 11], "port": {"class": "BSB"}, "landmarks": []},
+        ],
+    )
+    plan = plan_map_fill(
+        wid, current_sector=1, turn_budget=10, epsilon=0.0, state_dir=tmp_path,
+        rng=random.Random(0),
+    )
+    assert plan.next_hop is not None
+    assert plan.next_hop.frm == 10
+    assert plan.next_hop.to == 11
+    assert plan.mode == "exploit"
+
+
+def test_plan_map_fill_falls_back_to_nearest_when_no_port_seeds(tmp_path: Path):
+    wid = "test+noports"
+    _seed(
+        wid,
+        tmp_path,
+        [
+            {"sector_id": 1, "warps": [2, 99], "landmarks": []},
+            {"sector_id": 2, "warps": [1, 50], "landmarks": []},
+        ],
+    )
+    plan = plan_map_fill(
+        wid, current_sector=1, turn_budget=10, epsilon=0.0, state_dir=tmp_path,
+    )
+    assert plan.next_hop is not None
+    # nearest depth-1 edges: 1→99 (and 2→50 is depth 2) — exploit picks depth-sorted first
+    assert plan.next_hop.to in (99, 50)
+    assert plan.next_hop.depth == 1

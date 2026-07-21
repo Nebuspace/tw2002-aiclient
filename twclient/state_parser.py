@@ -125,6 +125,14 @@ _YOU_HAVE_CREDITS_RE = re.compile(r"you\s+have\s+(\d[\d,]*)\s+credits\b", re.I)
 # cross into a second physical line; the whole label-through-value span
 # this regex matches is now guaranteed to stay on ONE line.
 _WARPS_RE = re.compile(r"^\s*warps?\s+to\s+sector\(s\)[ \t]*:?[ \t]*(.*)$", re.I | re.M)
+# Sector-status flyby port line (WO-PORT-CHAIN-SEED): "Ports : None" or
+# "Ports : Hammurabi Annex, Class 2 (BSB)". Same line-start + last-match
+# discipline as `_WARPS_RE` / `_SECTOR_RE`. Horizontal-whitespace-only
+# gaps so a soft-wrap / empty value cannot pull the next physical row.
+_PORTS_LINE_RE = re.compile(r"^\s*ports?\s*:[ \t]*(.*)$", re.I | re.M)
+# Trailing three-letter Buy/Sell class code when the status line literally
+# prints it -- e.g. "(BSB)". Never invent commodities from this code.
+_PORTS_CLASS_LETTER_RE = re.compile(r"\(([BS]{3})\)\s*$", re.I)
 _COMMODITIES = ("Fuel Ore", "Organics", "Equipment")
 # Real port-trade table columns: NAME  STATUS  TRADING  %-OF-MAX  ONBOARD
 # ("Fuel Ore   Buying    2650    100%       0") — three numbers per row,
@@ -374,6 +382,16 @@ def parse_state(rendered_text: str) -> dict:
         if warps:
             state["warps"] = warps
 
+    # WO-PORT-CHAIN-SEED: flyby presence from the sector-status "Ports :"
+    # line -- NOT commodities (those come only from a commerce report).
+    # "Ports : None" / blank → no port key (do not clear prior knowledge
+    # here; write_from_state only updates when "port" is present).
+    ports_lines = _PORTS_LINE_RE.findall(rendered_text)
+    if ports_lines:
+        flyby = _flyby_port_from_ports_line(ports_lines[-1])
+        if flyby is not None:
+            state["port"] = flyby
+
     # WO-FA2b REVISE (cipher F1 + mack convergent finding): commodity rows
     # are extracted ONLY from `_latest_commerce_report_block()` -- the
     # SAME contiguous block `is_genuine_port_report` validates -- never
@@ -402,9 +420,33 @@ def parse_state(rendered_text: str) -> dict:
                 }
             )
     if commodities:
-        state["port"] = {"commodities": commodities}
+        # Merge onto flyby presence when both appear on one screen (e.g.
+        # sector-status + docked commerce still in the viewport).
+        port = dict(state.get("port") or {})
+        port["commodities"] = commodities
+        state["port"] = port
 
     return state
+
+
+def _flyby_port_from_ports_line(value: str):
+    """Map a sector-status `Ports : …` value to a partial port dict, or
+    None when the line says there is no port.
+
+    Presence-only: never invents commodities. Optional `class` is set
+    ONLY when the line literally ends with a three-letter Buy/Sell code
+    in parens (e.g. `(BSB)`), matching CIM vocabulary -- a bare
+    `Class N` numeric label without that code yields presence with no
+    `class` key (avoids clobbering a later CIM letter-code with an int).
+    """
+    raw = (value or "").strip()
+    if not raw or raw.casefold() == "none":
+        return None
+    port = {}
+    m = _PORTS_CLASS_LETTER_RE.search(raw)
+    if m:
+        port["class"] = m.group(1).upper()
+    return port
 
 
 # -- Sector-write provenance for the world-model (mack round-3 residual,

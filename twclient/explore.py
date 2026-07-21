@@ -94,13 +94,33 @@ def frontier_edges(
     return frontier
 
 
+def known_port_sectors(
+    world_id: str,
+    *,
+    state_dir=None,
+) -> set[int]:
+    """Sector ids whose world-model `port` field is non-None (flyby or docked)."""
+    out: set[int] = set()
+    for rec in world_model.all_sectors(world_id, state_dir=state_dir):
+        if rec.get("port") is not None:
+            out.add(_sector_id(rec))
+    return out
+
+
 def pick_frontier_edge(
     frontier: Sequence[FrontierEdge],
     *,
     epsilon: float = 0.1,
     rng: Optional[random.Random] = None,
+    port_seed_frms: Optional[set[int]] = None,
 ) -> tuple[Optional[FrontierEdge], str]:
     """ε-greedy: usually nearest (exploit map-fill), occasionally random.
+
+    WO-PORT-CHAIN-SEED: when `port_seed_frms` is set, exploit prefers
+    frontier edges whose `frm` is a known-port sector (expand that port's
+    unmapped neighborhood for pair-hunt) over a nearer unrelated edge.
+    ε-explore still samples the full frontier so map-fill remains reachable.
+    Map-fill is the fallback when no seeded edge exists.
 
     Returns (edge, mode) where mode is explore|exploit|exhausted.
     """
@@ -110,6 +130,11 @@ def pick_frontier_edge(
     eps = max(0.0, min(1.0, float(epsilon)))
     if eps > 0 and r.random() < eps:
         return r.choice(list(frontier)), "explore"
+    seeds = port_seed_frms or set()
+    if seeds:
+        seeded = [e for e in frontier if e.frm in seeds]
+        if seeded:
+            return seeded[0], "exploit"  # nearest seeded (frontier pre-sorted)
     return frontier[0], "exploit"  # nearest by depth (sorted)
 
 
@@ -136,7 +161,10 @@ def plan_map_fill(
             turns_budget_remaining=0,
             mode="exhausted",
         )
-    edge, mode = pick_frontier_edge(frontier, epsilon=epsilon, rng=rng)
+    port_seeds = known_port_sectors(world_id, state_dir=state_dir)
+    edge, mode = pick_frontier_edge(
+        frontier, epsilon=epsilon, rng=rng, port_seed_frms=port_seeds,
+    )
     return MapFillPlan(
         next_hop=edge,
         frontier=tuple(frontier),

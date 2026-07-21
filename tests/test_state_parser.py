@@ -744,3 +744,50 @@ def test_parse_port_report_accepts_boundary_percentages_0_and_100():
     assert commodities["Fuel Ore"]["pct"] == 0
     assert commodities["Organics"]["pct"] == 100
     assert commodities["Equipment"]["pct"] == 50
+
+
+# -- WO-PORT-CHAIN-SEED: flyby Ports : presence --------------------------------
+
+def test_flyby_ports_line_records_presence_and_letter_class():
+    screen = (
+        "Sector  : 2429 in uncharted space.\n"
+        "Ports   : Hammurabi Annex, Class 2 (BSB)\n"
+        "Warps to Sector(s) :  (163) - (3142) - 4571\n"
+        "Command [TL=00:00:00]:[2429] (?=Help)? : "
+    )
+    state = parse_state(screen)
+    assert state["sector"] == 2429
+    assert state["port"] == {"class": "BSB"}
+    assert "commodities" not in state["port"]
+
+
+def test_flyby_ports_none_does_not_set_port_key():
+    screen = "Sector : 100\nPorts   : None\nCommand [TL=00:12:34]:[1000] (?=Help) ?"
+    state = parse_state(screen)
+    assert "port" not in state
+
+
+def test_flyby_ports_class_zero_without_letter_code_is_presence_only():
+    """Terran (Class 0) has no CIM letter code -- presence, no class key."""
+    screen = "Sector : 100\nPorts   : Terran (Class 0)\nCommand [TL=00:12:34]:[1000] (?=Help) ?"
+    state = parse_state(screen)
+    assert state["port"] == {}
+    assert "commodities" not in state["port"]
+
+
+def test_flyby_presence_merges_with_same_screen_commerce_commodities():
+    screen = (
+        "Sector : 100\n"
+        "Ports   : Terran (Class 0)\n"
+        "\n"
+        "Commerce report for Terran:\n"
+        "Fuel Ore   Buying     1200    75%\n"
+        "Organics   Selling     800    40%\n"
+        "Equipment  Buying      300    90%\n"
+        "\n"
+        "Command [TL=00:12:34]:[1000] (?=Help) ?"
+    )
+    state = parse_state(screen)
+    assert state["port"]["commodities"][0]["name"] == "Fuel Ore"
+    assert "class" not in state["port"]  # Class 0 line had no letter code
+

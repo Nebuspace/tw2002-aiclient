@@ -373,11 +373,16 @@ def write_from_state(world_id, parsed_state, state_dir=None, now=None):
     if "warps" in parsed_state:
         record["warps"] = list(parsed_state["warps"])
     if "port" in parsed_state:
+        # WO-PORT-CHAIN-SEED: flyby presence may supply a port dict with
+        # neither commodities nor class. Only emit nested keys that were
+        # actually observed -- an absent `commodities` must NOT write []
+        # and wipe a previously learned commerce-report row list.
         parsed_port = parsed_state["port"] or {}
         port_record = {
-            "commodities": [dict(c) for c in parsed_port.get("commodities", [])],
             "last_seen_ts": _now_iso(now),
         }
+        if "commodities" in parsed_port:
+            port_record["commodities"] = [dict(c) for c in parsed_port.get("commodities") or []]
         if "class" in parsed_port:
             port_record["class"] = parsed_port["class"]
         record["port"] = port_record

@@ -784,3 +784,28 @@ def test_module_level_paths_are_under_the_real_gitignored_state_dir():
     assert world_model.STATE_DIR.name == "state"
     assert world_model.WORLD_DIR.parent == world_model.STATE_DIR
     assert world_model.WORLD_DIR.name == "world"
+
+
+def test_write_from_state_flyby_presence_sets_port_without_wiping_commodities(tmp_path):
+    """Presence-only flyby must not emit commodities=[] and clobber a prior docked read."""
+    world_model.write_from_state(
+        WORLD_A,
+        {"sector": 42, "port": {"commodities": [{"name": "Equipment", "status": "buying", "amount": 1, "pct": 1}]}},
+        state_dir=tmp_path,
+    )
+    merged = world_model.write_from_state(
+        WORLD_A,
+        {"sector": 42, "port": {"class": "BSB"}},
+        state_dir=tmp_path,
+    )
+    assert merged["port"] is not None
+    assert merged["port"]["class"] == "BSB"
+    assert merged["port"]["commodities"][0]["name"] == "Equipment"
+
+
+def test_write_from_state_flyby_empty_presence_creates_port(tmp_path):
+    merged = world_model.write_from_state(
+        WORLD_A, {"sector": 7, "port": {}}, state_dir=tmp_path,
+    )
+    assert merged["port"] is not None
+    assert merged["port"]["class"] is None
