@@ -36,7 +36,8 @@ session as the player — full-screen, real color, your keystrokes going straigh
 to the game. No re-login, no restart; you inherit the session mid-flight. Press
 `Ctrl-]` and control hands cleanly back to the AI. A control lock guarantees
 exactly one driver at a time: while you hold the keyboard, the AI's commands are
-rejected outright.
+rejected outright, and taking over fences any AI command already in flight so
+control passes cleanly.
 
 **🔐 It logs itself in.** `tw ensure` is the one command for getting into the
 game: it spawns the daemon if needed, then drives registration or login all the
@@ -195,9 +196,6 @@ and the spectator/attach UIs against scripted sessions.
 
 - `state` parsing is a best-effort skeleton — extend the anchors in
   `twclient/state_parser.py` as new screen shapes turn up.
-- `tw attach` keystrokes are transcript-logged without redaction — fine for
-  normal play (you attach to an already-logged-in session), but don't type a
-  password into a mid-attach prompt.
 - `tw stop` only attempts the in-game QUIT from the main command prompt;
   elsewhere it just disconnects.
 
