@@ -710,8 +710,8 @@ def format_autonomy_lines(ratio_data: dict | None = None) -> list[str]:
 
 # -- WO-P2c Autopilot dry-run decision-trace (pure layout) -----------------
 
-# Provisional mock until Impl #1's revised autopilot SHA relays real field
-# names + transport. Hub negotiates; defensive .get() tolerates churn.
+# --snapshot / unit-test demo fixture (render proof surface). Live TUI trusts
+# status["autopilot_trace"] only — null → GOALS/"—", never this mock.
 PROVISIONAL_AUTOPILOT_TRACE = {
     "tick": 3,
     "context": {"turns_left": 220, "cash": 48000, "sector": 42},

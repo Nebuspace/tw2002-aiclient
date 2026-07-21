@@ -58,7 +58,6 @@ from .spectate_layout import (
     frame_layout,
     is_recent,
     longest_chain_steps,
-    PROVISIONAL_AUTOPILOT_TRACE,
     render_plain,
     sort_trade_loop_chains,
     stamp_world_metrics,
@@ -1482,13 +1481,16 @@ def run_snapshot(sock_path, pid_path, frames=1, settle_wait_s=8.0):
             dashboard["goals_chain"] = format_autonomy_lines(auto) + compose_phase2_side_panel(
                 goals, chain, current_sector=sector, width=40,
             )
-            # Inject provisional mock when status has no live trace yet —
-            # proves the Decisions renderer until #1's schema relays.
+            # Trust live transport (WO-P2d `autopilot_trace`). Null/missing →
+            # same GOALS path as the live TUI (honest until an engine exists).
+            # PROVISIONAL_AUTOPILOT_TRACE remains a unit-test / render-demo fixture.
             live_trace = status.get("autopilot_trace")
-            dashboard["decisions"] = format_autopilot_trace_lines(
-                live_trace if live_trace is not None else PROVISIONAL_AUTOPILOT_TRACE,
-                cols=40,
-            )
+            if live_trace is not None:
+                dashboard["decisions"] = format_autopilot_trace_lines(live_trace, cols=40)
+            else:
+                dashboard["decisions"] = format_autonomy_lines(auto) + compose_phase2_side_panel(
+                    goals, chain, current_sector=sector, width=40,
+                )
             print(render_plain(dashboard))
             print()
             printed += 1

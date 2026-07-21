@@ -44,7 +44,7 @@ def test_linear_current_and_reachable():
     assert s["current"]["star"] is True
     assert s["reachable_from_current"] == 3  # A,B,C
     assert s["dead_ends"] == ["C"]
-    assert s["orphans"] == ["A"]  # no incoming
+    assert s["orphans"] == []  # root A has outgoing — not an island
 
 
 def test_branching_and_cycle():
@@ -71,12 +71,21 @@ def test_off_map_current_honest():
     assert lines[1] == "here off-map"
 
 
-def test_orphan_node():
+def test_orphan_node_is_isolated_island():
     nodes = [_node("A", "Linked"), _node("Z", "Orphan")]
     edges = [_edge("A", "1", "A")]  # self-loop: A has out + in
     s = menu_map_summary(nodes, edges, current_sig="A")
-    assert s["orphans"] == ["Z"]
+    assert s["orphans"] == ["Z"]  # no-in AND no-out
     assert s["reachable_from_current"] == 1
+
+
+def test_root_with_outgoing_is_not_orphan():
+    nodes = [_node("ROOT", "Entry"), _node("B", "Child")]
+    edges = [_edge("ROOT", "1", "B")]
+    s = menu_map_summary(nodes, edges, current_sig="ROOT")
+    assert "ROOT" not in s["orphans"]
+    assert s["orphans"] == []
+    assert s["dead_ends"] == ["B"]
 
 
 def test_render_clips_at_22_and_expands_at_40():

@@ -58,8 +58,12 @@ def menu_map_summary(
     dead_ends = sorted(
         sig for sig in by_sig if not outgoing.get(sig)
     )
+    # Isolated islands only — no-in AND no-out. A map ROOT has no incoming
+    # but does have outgoing; flagging it as "orphan" was a false-positive.
     orphans = sorted(
-        sig for sig in by_sig if incoming.get(sig, 0) == 0
+        sig
+        for sig in by_sig
+        if incoming.get(sig, 0) == 0 and not outgoing.get(sig)
     )
 
     return {
@@ -92,11 +96,12 @@ def format_menu_map_lines(summary: Mapping[str, Any] | None, cols: int = 22) -> 
     reach = int(summary.get("reachable_from_current") or 0)
     dead = len(summary.get("dead_ends") or ())
     orphan = len(summary.get("orphans") or ())
+    reach_label = f"{reach}/{n}" if n else str(reach)
     # Prefer dead-ends on the coverage line; orphans at wider cols.
     if cols >= 28:
-        cover = f"{reach} reachable · {dead} dead-ends · {orphan} orphans"
+        cover = f"{reach_label} reachable · {dead} dead-ends · {orphan} orphans"
     else:
-        cover = f"{reach} reachable · {dead} dead-ends"
+        cover = f"{reach_label} reachable · {dead} dead-ends"
 
     return [header[:cols], here[:cols], cover[:cols]]
 
