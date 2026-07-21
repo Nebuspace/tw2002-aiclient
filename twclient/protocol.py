@@ -352,6 +352,18 @@ def dispatch(session, verb, args, server):
         watch_hub = getattr(server, "watch_hub", None)
         lock = getattr(server, "control_lock", None)
         player = getattr(server, "loop_player", None)
+        # Cross-seat trace transport (WO-P2d, additive/dry-run-only): no
+        # AutopilotEngine exists on a real daemon yet (P1-d auto-start is
+        # deliberately deferred -- see autopilot.py's own docstring), so
+        # this is `None` on every real daemon today; a caller (the
+        # spectate Decisions panel) must never special-case a missing key,
+        # same null-safe convention as `play` above.
+        autopilot_engine = getattr(server, "autopilot_engine", None)
+        autopilot_trace = None
+        if autopilot_engine is not None:
+            trace_log = autopilot_engine.trace_log()
+            if trace_log:
+                autopilot_trace = trace_log[-1]  # most-recent tick only -- see AutopilotEngine.trace_log()
         return {
             "ok": True,
             "connected": session.conn.connected,
@@ -372,6 +384,8 @@ def dispatch(session, verb, args, server):
             # fields default/None then), so a caller never has to
             # special-case "field missing" vs "nothing running".
             "play": player.snapshot() if player is not None else None,
+            # See autopilot_engine/autopilot_trace computed above.
+            "autopilot_trace": autopilot_trace,
         }
 
     if verb == "set_mode":

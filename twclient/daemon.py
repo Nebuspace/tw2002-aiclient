@@ -244,6 +244,12 @@ def main(argv=None):
     server.loop_player = LoopPlayer(
         session, server.control_lock, watch_hub, ledger=server.ledger, session_id=session.logger.session_id
     )
+    # §22/§23 Phase 1 autonomous goal-orchestrator (autopilot.py) -- reserved
+    # slot for the forthcoming P1-d auto-start hook (`autopilot.maybe_auto_start`,
+    # deliberately deferred, not wired here). Stays `None` until that lands;
+    # protocol.py's "status" handler already reads it null-safe (same
+    # getattr(..., None) convention as watch_hub/control_lock/loop_player).
+    server.autopilot_engine = None
     server.request_stop = lambda: threading.Thread(target=_shutdown, args=(server, session), daemon=True).start()
 
     try:

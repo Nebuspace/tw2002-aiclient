@@ -12,7 +12,11 @@ import time
 import pytest
 
 from twclient import ledger, skills
+from twclient.autopilot import AutopilotEngine, decision_to_trace
+from twclient.chains import TradeHop
 from twclient.control_lock import MODE_AI_PILOT, MODE_AUTO_LOOP
+from twclient.credentials import Profile
+from twclient.ship_upgrade_decision import LoopEconomics, ShipSpec
 
 from .conftest import send_request
 
@@ -291,3 +295,55 @@ def test_screen_response_carries_the_most_recently_sent_input(fake_daemon, fake_
     send_request(fake_daemon.sock_path, "do", {"input": "158"})
     resp = send_request(fake_daemon.sock_path, "screen")
     assert resp["sent_input"] == "158"
+
+
+# -- autopilot_trace in status (WO-P2d, cross-seat trace transport) ------
+#
+# Transport-only: no AutopilotEngine exists on a real daemon yet (P1-d
+# auto-start is deliberately deferred, see autopilot.py's own docstring) --
+# these tests prove the null-safe "nothing wired" path a real daemon takes
+# today, AND the populated path a caller gets once something (a future
+# P1-d hook, or a test like this one) attaches an engine to
+# server.autopilot_engine. Neither test starts a running/ticking engine --
+# dry_run_tick() only, execution stays off.
+
+def test_status_autopilot_trace_is_none_when_no_engine_is_wired(fake_daemon, fake_ledger_entries):
+    resp = send_request(fake_daemon.sock_path, "status")
+    assert resp["ok"] is True
+    assert resp["autopilot_trace"] is None
+
+
+def test_status_autopilot_trace_surfaces_the_engines_most_recent_dry_run_tick(fake_daemon, fake_ledger_entries):
+    """Attach a dry-ticked engine to the daemon's own session (mirroring
+    the eventual P1-d auto-start hook's shape, minus the auto-start
+    itself) and confirm `status` -- the real wire verb, not a direct
+    function call -- surfaces the exact `decision_to_trace()` schema."""
+    fake_daemon.session._screen = (
+        "You have 60,000 credits.\n5,000 turns left.\n" + _ANCHOR_SCREEN
+    )
+    profile = Profile(name="t", host="h", port=1, game_letter="A", handle="X", autonomous=False)
+    engine = AutopilotEngine(fake_daemon.session, profile, fake_daemon.control_lock)
+    decision = engine.dry_run_tick(
+        current_ship=ShipSpec(name="Prison Barge", cost=0, holds=20, turns_per_warp=6, fighters=10, shields=0),
+        ship_catalog=(
+            ShipSpec(name="Merchant Cruiser", cost=50_000, holds=75, turns_per_warp=3, fighters=100, shields=50),
+        ),
+        loop=LoopEconomics(margin_per_hold=100, turns_per_cycle=10, stock_capacity=100),
+        hops=(
+            TradeHop(frm=100, to=200, commodity="Fuel Ore", margin=50, turns=1),
+            TradeHop(frm=200, to=100, commodity="Organics", margin=50, turns=1),
+        ),
+        stardock_route=(100, 150, 999),
+        explore_next_sector=5,
+    )
+    fake_daemon.server.autopilot_engine = engine
+
+    resp = send_request(fake_daemon.sock_path, "status")
+    assert resp["ok"] is True
+    assert resp["autopilot_trace"] == decision_to_trace(decision)
+    # Sanity on the schema itself, not just self-consistency with the
+    # direct decision_to_trace() call above -- a multi-candidate tick
+    # really did score/win through the real dispatch path.
+    assert resp["autopilot_trace"]["chosen"] == "upgrade"
+    by_kind = {c["kind"]: c for c in resp["autopilot_trace"]["candidates"]}
+    assert set(by_kind) == {"run_chain", "upgrade", "explore"}
