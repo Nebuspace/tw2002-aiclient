@@ -385,3 +385,43 @@ def write_from_state(world_id, parsed_state, state_dir=None, now=None):
         record["threats"] = dict(parsed_state["threats"])
 
     return upsert_sector(world_id, record, state_dir=state_dir, now=now)
+
+
+def write_port_only(world_id, sector_id, parsed_port, state_dir=None, now=None):
+    """WO-FA2b write path: persist JUST a sector's `port` field, for an
+    EXPLICITLY-SUPPLIED `sector_id` -- the docked commerce-report case
+    `write_from_state()` can't handle, because the screen that observed
+    the port commodities carries no "Sector : N" line of its own to
+    derive a sector from (see state_parser.is_genuine_port_report's
+    module-level comment). The caller (protocol._write_world_model)
+    resolves `sector_id` from `state_parser.sector_from_command_prompt()`
+    -- THIS SAME SCREEN's own trailing ship Command prompt (WO-FA2b
+    REVISE: an earlier design anchored to a cross-screen
+    `session.last_genuine_sector` instead, but pyte's lack of scrollback
+    could let a long warp-then-dock burst scroll the sector-status line
+    off the settled grid before that anchor was ever set -- see that
+    function's own docstring for the fix).
+
+    `parsed_port` is `parse_state()`'s own `state["port"]` dict
+    (`{"commodities": [...]}`, the exact canon vocab shape -- see
+    world-model.md's Schema table) -- never re-derived or re-parsed
+    here (WO-FA2b's contract: reuse `parse_state()`'s existing commodity
+    extraction, never write a second row parser).
+
+    Only `commodities`/`last_seen_ts` are ever written to the `port`
+    sub-dict -- same as `write_from_state`'s own port mapping, and for
+    the same reason: a plain screen visit (docked or in-sector) never
+    observes a port's `class` at all, so this never supplies that
+    sub-key, letting `upsert_sector`'s nested `_merge_port` (mack
+    Finding 1) preserve whatever `class` a previous CIM `bulk_upsert`
+    already learned for this sector rather than clobbering it with an
+    explicit `None`. `warps`/`threats` are similarly untouched (absent
+    from `record` entirely) -- field-level upsert semantics preserve
+    whatever's already stored for this sector; a docked port visit says
+    nothing about either."""
+    port_record = {
+        "commodities": [dict(c) for c in parsed_port.get("commodities", [])],
+        "last_seen_ts": _now_iso(now),
+    }
+    record = {"sector_id": sector_id, "port": port_record}
+    return upsert_sector(world_id, record, state_dir=state_dir, now=now)

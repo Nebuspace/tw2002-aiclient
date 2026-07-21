@@ -13,7 +13,13 @@ from contextlib import contextmanager
 from . import world_identity, world_model
 from .classify import classify_screen
 from .control_lock import MODE_AI_PILOT, MODE_AUTO_LOOP, MODE_HUMAN, ControlModeConflict
-from .state_parser import is_genuine_sector_status, parse_port_report, parse_state
+from .state_parser import (
+    is_genuine_port_report,
+    is_genuine_sector_status,
+    parse_port_report,
+    parse_state,
+    sector_from_command_prompt,
+)
 
 
 def _control_lock_error(server):
@@ -225,15 +231,41 @@ def _write_world_model(session, text, prompt, parsed_state):
       data. Now gated on `classify_screen` returning the dedicated
       `cim_report` classification (see `classify._is_genuine_cim_report`'s
       docstring for what "genuine" means) -- text-matching the report's
-      own shape is never trusted as the provenance signal by itself."""
+      own shape is never trusted as the provenance signal by itself.
+    - The docked commerce-report mapping (WO-FA2b, world-model.md's
+      Write Hooks: "every parsed game-state read (sector, port
+      commodities) writes its sector's port field"): a docked "Commerce
+      report for <name>:" screen carries NO "Sector : N" line of its own
+      (see `state_parser.is_genuine_port_report`'s module comment for the
+      full rationale). WO-FA2b REVISE (mack CRITICAL): the original
+      design anchored this to a cross-screen `session.last_genuine_sector`
+      set the last time a genuine sector-status screen was parsed -- but
+      pyte has NO scrollback (a fixed viewport only), so a long
+      warp-then-dock burst can scroll the "Sector : N" line off the
+      settled grid before that branch ever runs, leaving the anchor
+      stale (or, on a fresh connection, unset) while the commerce report
+      still arrives -- misattributing real port data to a stale/wrong
+      sector, and never resetting across a `session.reconnect()` either.
+      Anchors instead to `state_parser.sector_from_command_prompt(text)`
+      -- THIS SAME SCREEN's own trailing ship Command prompt, which
+      (see that function's docstring) survives exactly the scroll-off
+      case that broke the cross-screen anchor. Gated on
+      `is_genuine_port_report(text)` AND a command-prompt sector actually
+      being present on this screen -- absent (an unusual dock flow, or a
+      classic-shape TWGS server with no `[NNNN]` segment) means there's
+      no sector to attribute the reading to -- silently skipped, same
+      "nothing to write, not a failure" convention `write_from_state`'s
+      own no-sector guard already uses; the write itself is still wrapped
+      in the same `except Exception` swallow-and-log guarantee as the
+      other two paths."""
     wid = _current_world_id(session)
     if wid is None:
         return
-    try:
-        if is_genuine_sector_status(text):
+    if is_genuine_sector_status(text):
+        try:
             world_model.write_from_state(wid, parsed_state)
-    except Exception as exc:  # noqa: BLE001 -- a world-model write must never fail the response
-        _log_world_model_failure(session, "write_from_state", exc)
+        except Exception as exc:  # noqa: BLE001 -- a world-model write must never fail the response
+            _log_world_model_failure(session, "write_from_state", exc)
 
     if classify_screen(text, prompt) == "cim_report":
         try:
@@ -242,6 +274,15 @@ def _write_world_model(session, text, prompt, parsed_state):
                 world_model.bulk_upsert(wid, records)
         except Exception as exc:  # noqa: BLE001 -- same guarantee for the batch path
             _log_world_model_failure(session, "bulk_upsert", exc)
+
+    if is_genuine_port_report(text):
+        anchor_sector = sector_from_command_prompt(text)
+        parsed_port = parsed_state.get("port")
+        if anchor_sector is not None and parsed_port:
+            try:
+                world_model.write_port_only(wid, anchor_sector, parsed_port)
+            except Exception as exc:  # noqa: BLE001 -- same guarantee for this path too
+                _log_world_model_failure(session, "write_port_only", exc)
 
 
 def build_response(session, rows=None, settled_reason=None, extra=None):

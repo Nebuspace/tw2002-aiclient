@@ -133,6 +133,62 @@ _COMMODITIES = ("Fuel Ore", "Organics", "Equipment")
 # amount (2650) and misreports it as a percentage.
 _COMMODITY_RE_TMPL = r"{name}\s+(buying|selling)\s+(\d[\d,]*)\s+(\d+)\s*%"
 
+# -- Docked commerce-report block scoping (WO-FA2b REVISE, cipher F1 + mack
+# convergent finding, 2026-07-21): `parse_state()`'s commodity extraction
+# used to `pattern.search(rendered_text)` per commodity -- FIRST match over
+# the WHOLE buffer, unscoped to any particular report and not even
+# last-match like every sibling field (sector/credits/warps) -- a straight
+# violation of this module's own hard rule. Before WO-FA2b nothing ever
+# PERSISTED a docked port read, so it was inert; `write_port_only` turns it
+# into real, persisted corruption the moment a stale/forged commodity
+# fragment sits ANYWHERE earlier in the buffer (a prior port visit's
+# scrollback, a forged chat line) -- cipher's two PoCs
+# (scratchpad/poc_commodity_stale.py, poc_commodity_full.py) and mack's
+# cross-block repro all confirmed the override. The fix: commodities are
+# extracted ONLY from the contiguous block immediately beneath the LATEST
+# commerce-report anchor line -- the SAME block `is_genuine_port_report`
+# (below) validates -- via this one shared helper, so the gate and the
+# written values always read the IDENTICAL block. Mirrors
+# `_latest_cim_report_lines`'s own last-match-anchored, contiguous-block
+# convention.
+_PORT_REPORT_HEADER_RE = re.compile(r"^\s*commerce\s+report\s+for\s+.+:", re.I)
+_PORT_REPORT_COLUMN_HEADER_RE = re.compile(
+    r"^\s*items\b.*\bstatus\b.*\btrading\b.*%\s*of\s*max\b.*\bonboard\b", re.I
+)
+
+
+def _latest_commerce_report_block(rendered_text: str) -> "list[str]":
+    """The contiguous non-blank lines immediately beneath the LATEST
+    commerce-report anchor line (the "Commerce report for <name>:" header,
+    or the "Items ... Status ... Trading ... % of max ... OnBoard" column
+    header printed just above the row table -- either qualifies, and
+    whichever sits CLOSER to the rows naturally wins the last-match scan
+    since it's textually later) -- `[]` when no anchor line is present at
+    all, or when the anchor is immediately followed by a blank line (an
+    empty/header-only report has no block worth reading). Shared by
+    `is_genuine_port_report` (is there a real row in this block at all?)
+    and `parse_state`'s commodity extraction (what does this block's row
+    actually say?) so both always agree on which block is "the" genuine
+    report -- see the section comment above for why that agreement is the
+    fix."""
+    lines = rendered_text.splitlines()
+
+    anchor_idx = None
+    for i, line in enumerate(lines):
+        if _PORT_REPORT_HEADER_RE.match(line) or _PORT_REPORT_COLUMN_HEADER_RE.match(line):
+            anchor_idx = i  # keep overwriting -- last match wins, same as is_genuine_sector_status
+
+    if anchor_idx is None:
+        return []
+
+    block = []
+    for line in lines[anchor_idx + 1 :]:
+        if not line.strip():
+            break  # the contiguous report block ends at the first blank line
+        block.append(line)
+    return block
+
+
 # -- Port-haggle state machine (DESIGN-v2.md §9, seeded from live-captured
 # haggle exchanges, 2026-07-19). Two shapes seen for the port's price
 # statement -- the opening quote AND every subsequent re-quote after a
@@ -284,17 +340,31 @@ def parse_state(rendered_text: str) -> dict:
         if warps:
             state["warps"] = warps
 
+    # WO-FA2b REVISE (cipher F1 + mack convergent finding): commodity rows
+    # are extracted ONLY from `_latest_commerce_report_block()` -- the
+    # SAME contiguous block `is_genuine_port_report` validates -- never
+    # from the whole buffer. The old `pattern.search(rendered_text)` was a
+    # FIRST match over the entire screen, unscoped and not even last-match
+    # like every sibling field here -- a stale/forged commodity fragment
+    # anywhere earlier in the buffer (a prior port visit's scrollback, a
+    # forged chat line) could override the genuine row while the gate
+    # still passed. See `_latest_commerce_report_block`'s own docstring.
+    block = _latest_commerce_report_block(rendered_text)
     commodities = []
     for name in _COMMODITIES:
         pattern = re.compile(_COMMODITY_RE_TMPL.format(name=re.escape(name)), re.I)
-        m = pattern.search(rendered_text)
-        if m:
+        last_match = None
+        for line in block:
+            m = pattern.search(line)
+            if m:
+                last_match = m  # keep overwriting -- last match wins WITHIN the block
+        if last_match:
             commodities.append(
                 {
                     "name": name,
-                    "status": m.group(1).lower(),
-                    "amount": int(m.group(2).replace(",", "")),
-                    "pct": int(m.group(3)),
+                    "status": last_match.group(1).lower(),
+                    "amount": int(last_match.group(2).replace(",", "")),
+                    "pct": int(last_match.group(3)),
                 }
             )
     if commodities:
@@ -375,6 +445,165 @@ def is_genuine_sector_status(rendered_text: str) -> bool:
         if _SECTOR_STATUS_SIBLING_RE.match(line):
             return True
     return False
+
+
+# -- Command-prompt sector anchor (WO-FA2b REVISE, 2026-07-21, replacing the
+# original cross-screen `session.last_genuine_sector` anchor) -----------------
+#
+# mack's CRITICAL finding: pyte is `pyte.Screen` (terminal.py) -- NO
+# scrollback, a fixed viewport only. A warp landing on a port sector
+# streams sector-arrival + auto-dock + commerce report as ONE continuous
+# burst; when that burst exceeds the viewport height, the "Sector : N"
+# line scrolls OFF the settled grid before the daemon ever gets a
+# settle-checkpoint on it alone -- `is_genuine_sector_status` then fails
+# closed, so a cross-call anchor (this WO's original design) goes stale,
+# and a LATER commerce report's real port data gets attributed to an
+# EARLIER, no-longer-current sector. A stale anchor also survives a
+# `session.reconnect()` (nothing resets it), compounding the same defect.
+#
+# The fix: carry NO cross-screen anchor at all -- the current sector is
+# available on the SAME settled screen the commerce report itself is on.
+# This live server's ship Command prompt is
+# "Command [TL=HH:MM:SS]:[NNNN] (?=Help)? :" (also "Computer command
+# [TL=...]:[NNNN]" for the computer subsystem prompt, `classify.py`'s own
+# "superset" precedent) -- [NNNN] is the CURRENT SECTOR, not turns-left
+# (turns-left is reported separately, see `_TURNS_LEFT_PLAIN_RE`) --
+# live-log-verified exact correlation across multiple sectors on the same
+# session (already this project's own established test convention --
+# `tests/test_protocol_trainer_panel.py`'s `_ANCHOR_SCREEN` literally
+# reuses the same number for both "Sector :" and this bracket). Crucially,
+# in the >25-line-burst CRITICAL case, the "Sector :" line scrolls away
+# but the commerce report + its OWN trailing Command prompt are the final
+# settled lines -- so this same-screen anchor is present exactly where
+# the old cross-screen one failed.
+#
+# LAST-match anchored, same discipline as every other field here: the
+# genuine trailing prompt is always the settle point (last on screen); a
+# forged earlier "Command [...]:[9999]" line is overridden by the real
+# one, same forgery-resistance precedent as credits/sector/warps.
+#
+# RESIDUAL (documented, not fixed here -- cipher re-verify, 2026-07-21):
+# taking `matches[-1]` is exactly what makes this forgery-resistant
+# against an EARLIER forged prompt (above), but it's the same shape that
+# makes it vulnerable to a LATER one -- a forged in-band
+# "Command [TL=...]:[NNNN]" fragment (a chat/broadcast/hail line
+# reproducing the prompt's own text) landing AFTER the real trailing
+# command prompt on the same settled screen would win last-match instead,
+# attributing the (now-genuine, post-fix) commerce-report data to a WRONG
+# sector. Bounded today the same way as its two siblings: SOLO-safe (no
+# other player exists on a crawl_sacrificial game to author such a
+# forgery). Live-realism UNCONFIRMED (unlike those siblings' own
+# confirmed repros): a well-behaved BBS door redisplays its own command
+# prompt after any interrupt/interjection, so the real prompt is normally
+# the LAST such match on a genuinely settled screen -- this residual
+# would need a hail/broadcast that renders strictly AFTER the settled
+# prompt without the door ever redisplaying it, which hasn't been
+# observed live. This is the THIRD instance of the same forged-last-match
+# residual family as `is_genuine_sector_status`'s FORGED-BLOCK residual
+# and `is_genuine_port_report`'s FORGED-COMMERCE residual (below) -- all
+# three are closed by the SAME anchor-to-live-prompt/exclusivity
+# hardening, tracked as ONE unified FA9-class roadmap prerequisite before
+# any autonomous run on a multiplayer/shared server, not three separate
+# fixes.
+_COMMAND_PROMPT_SECTOR_RE = re.compile(r"command\s*\[\s*tl\s*=[^\]]*\]\s*:\s*\[\s*(\d+)\s*\]", re.I)
+
+
+def sector_from_command_prompt(rendered_text: str) -> "int | None":
+    """The current sector, read off THIS screen's own trailing ship
+    Command prompt (`Command [TL=...]:[NNNN]`, or the computer
+    subsystem's `Computer command [TL=...]:[NNNN]`) -- see the section
+    comment above for why this replaced the cross-screen
+    `session.last_genuine_sector` anchor, and for the forged-last-match
+    residual this anchor shares with its two siblings. `None` when no
+    such prompt is on screen -- either a screen that isn't a command
+    prompt at all, or (mack's observation) a CLASSIC-shape TWGS server
+    whose Command prompt has no trailing `[NNNN]` bracket at all (e.g.
+    "Command [TL=00753:0/0/0/850] (?=Help)? :" -- TL is a plain turn
+    count, no second bracket): on such a server this always returns
+    `None`, so the docked-commerce write path this anchor feeds
+    (`protocol._write_world_model`) never fires there -- a fail-closed
+    COVERAGE trade-off (a missed write, never a wrong one), not a bug.
+    The live crawl_sacrificial target (tradewarsacademy) uses the
+    bracketed shape, so this is not a gap for that server. Callers must
+    treat a `None` return as "can't anchor," never guess."""
+    matches = _COMMAND_PROMPT_SECTOR_RE.findall(rendered_text)
+    if not matches:
+        return None
+    return int(matches[-1])
+
+
+# -- Docked commerce-report provenance for the world-model (WO-FA2b write
+# path, 2026-07-21) -----------------------------------------------------------
+#
+# The world-model canon (knowledge/architecture/world-model.md's Write
+# Hooks section) prescribes that "every parsed game-state read (sector,
+# port commodities) writes its sector's port field" -- but a DOCKED
+# commerce-report screen ("Commerce report for <port>: ...") carries NO
+# "Sector : N" line of its own to anchor a write to (see
+# `sector_from_command_prompt` above for the anchor this feeds instead).
+# `parse_state()` already extracts the commodity rows correctly
+# (`_COMMODITY_RE_TMPL`, live-confirmed against tests/fixtures/
+# port_commerce_report_gorram_primus.txt, scoped to the genuine block via
+# `_latest_commerce_report_block` -- see that helper's own docstring) --
+# the missing piece here is PROVENANCE: is this screen actually a real
+# docked commerce report, or just narrative TEXT that happens to mention
+# "Fuel Ore"/"Organics"/"Equipment" (the loose `classify.py` `port_trade`
+# content anchor's own keyword-only test, which exists to CLASSIFY a
+# screen for display, not to gate a world-model WRITE, and is
+# deliberately not reused here for that reason)?
+#
+# Shape-not-keyword, mirroring `is_genuine_sector_status`'s own
+# philosophy: genuine ⇔ `_latest_commerce_report_block()` (the contiguous
+# block beneath the LAST "Commerce report for <name>:" header, or the
+# column header printed just above the row table -- both real captured
+# shapes, see tests/fixtures/port_trade_screen.txt and
+# tests/fixtures/port_commerce_report_gorram_primus.txt) contains at
+# least one REAL commodity row -- the exact `_COMMODITY_RE_TMPL` shape
+# `parse_state()`'s own commodity extraction already requires (name +
+# buying/selling + a trading amount + a bounded percentage). A screen
+# merely NAMING a commodity in passing ("Rumor: they say this port deals
+# heavily in Equipment") has no reason to also reproduce a fully-shaped
+# trade row, so it fails this gate even though it would satisfy the loose
+# keyword-only `port_trade` classification.
+#
+# FORGED-COMMERCE RESIDUAL (documented, not fixed here -- mirrors the
+# FORGED-BLOCK RESIDUAL on `is_genuine_sector_status`'s own seed path,
+# protocol.py's `_autopilot_snapshot_kwargs`): this is a SHAPE check, not
+# a full provenance check -- a forged in-band chat/broadcast that
+# reproduces the header (or column header) line immediately followed by
+# a real-shaped commodity row still passes. With the same-screen anchor
+# above, a forged report now writes to the REAL current sector's port
+# (never an arbitrary/stale one) -- no longer a wrong-sector write, but
+# still writes FORGED commodity data under a real sector. Bounded today
+# the same way: SOLO-safe (no other player exists on a crawl_sacrificial
+# game to author such a forgery), becomes a HARD GATE prerequisite the
+# moment autonomous mode runs on a multiplayer/shared server (FA9-class
+# hardening, tracked as a roadmap prerequisite alongside
+# `is_genuine_sector_status`'s own residual) -- closing it would need the
+# same anchor-to-live-prompt/exclusivity hardening
+# `_is_genuine_cim_report`'s "nothing else shares the screen" discipline
+# uses, deliberately NOT attempted in this build.
+#
+# KNOWN RESIDUAL, LOW (mack, documented not fixed): this gate fails
+# CLOSED if a TWGS variant's column header differs enough that NEITHER
+# `_PORT_REPORT_HEADER_RE` nor `_PORT_REPORT_COLUMN_HEADER_RE` matches --
+# a genuine docked commerce report on such a variant would simply never
+# get its port data persisted (a missed write, never a wrong one). Extend
+# the anchor patterns here as new live commerce-report header shapes are
+# captured, same "extend as live play reveals more screen shapes"
+# convention this module's own top docstring already calls out.
+def is_genuine_port_report(rendered_text: str) -> bool:
+    """True only when `_latest_commerce_report_block()` (the contiguous
+    block beneath the LAST genuine commerce-report anchor line) contains
+    at least one real, fully-shaped commodity row (`_COMMODITY_RE_TMPL`).
+    See the section comment above for the provenance rationale, the
+    documented forged-commerce residual, and the LOW header-variant
+    residual."""
+    block = _latest_commerce_report_block(rendered_text)
+    commodity_row_patterns = [
+        re.compile(_COMMODITY_RE_TMPL.format(name=re.escape(name)), re.I) for name in _COMMODITIES
+    ]
+    return any(pattern.search(line) for line in block for pattern in commodity_row_patterns)
 
 
 # -- Batch/CIM port-report parsing (world-model canon,

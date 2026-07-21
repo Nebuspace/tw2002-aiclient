@@ -535,6 +535,69 @@ def test_bulk_upsert_repeat_batch_still_writes_and_advances_timestamps(tmp_path)
     assert all(after[i] != before[i] for i in range(1, 6))
 
 
+# -- write_port_only mapping (WO-FA2b docked-port write path) ---------------
+#
+# The docked commerce-report case: the SCREEN carries no sector of its
+# own, so the caller (protocol._write_world_model) resolves `sector_id`
+# externally (state_parser.sector_from_command_prompt(), WO-FA2b REVISE --
+# this SAME screen's own trailing Command prompt, not a cross-screen
+# anchor) and hands it in explicitly, rather than write_port_only deriving
+# one the way write_from_state() derives it from parsed_state["sector"].
+
+
+def test_write_port_only_writes_commodities_to_the_explicit_sector(tmp_path):
+    parsed_port = {
+        "commodities": [
+            {"name": "Fuel Ore", "status": "buying", "amount": 2850, "pct": 100},
+            {"name": "Organics", "status": "buying", "amount": 930, "pct": 100},
+            {"name": "Equipment", "status": "buying", "amount": 2720, "pct": 100},
+        ]
+    }
+    merged = world_model.write_port_only(WORLD_A, 4309, parsed_port, state_dir=tmp_path)
+    assert merged["sector_id"] == 4309
+    assert merged["port"]["commodities"] == parsed_port["commodities"]
+    assert merged["port"]["last_seen_ts"] is not None
+
+
+def test_write_port_only_never_touches_warps_or_threats_for_the_sector(tmp_path):
+    """A docked port visit observes nothing about warps/threats -- an
+    already-known warps list (from an earlier sector-status visit, or a
+    CIM bulk_upsert) must survive untouched, same field-level upsert
+    semantics as write_from_state()."""
+    world_model.upsert_sector(WORLD_A, {"sector_id": 4309, "warps": [4308, 4310]}, state_dir=tmp_path)
+    world_model.write_port_only(
+        WORLD_A, 4309, {"commodities": [{"name": "Fuel Ore", "status": "buying", "amount": 1, "pct": 1}]},
+        state_dir=tmp_path,
+    )
+    merged = world_model.get_sector(WORLD_A, 4309, state_dir=tmp_path)
+    assert merged["warps"] == [4308, 4310]
+
+
+def test_write_port_only_never_clobbers_a_previously_cim_learned_class(tmp_path):
+    """Mirrors write_from_state's own mack-Finding-1 guarantee: a class
+    already learned via a CIM bulk_upsert must survive a later docked
+    visit that (like every ordinary screen visit) never observes
+    `class` at all."""
+    world_model.bulk_upsert(
+        WORLD_A,
+        [{"sector_id": 4309, "port": {"class": "BBB", "commodities": []}}],
+        state_dir=tmp_path,
+    )
+    merged = world_model.write_port_only(
+        WORLD_A,
+        4309,
+        {"commodities": [{"name": "Fuel Ore", "status": "buying", "amount": 2850, "pct": 100}]},
+        state_dir=tmp_path,
+    )
+    assert merged["port"]["class"] == "BBB", "an unobserved class must never be clobbered by a docked-only write"
+    assert merged["port"]["commodities"][0]["name"] == "Fuel Ore"
+
+
+def test_write_port_only_actually_persists(tmp_path):
+    world_model.write_port_only(WORLD_A, 4309, {"commodities": []}, state_dir=tmp_path)
+    assert world_model.get_sector(WORLD_A, 4309, state_dir=tmp_path) is not None
+
+
 # -- per-sector hot path (mack Finding 3b: O(1), not O(total sectors)) -------
 
 def test_single_sector_upsert_cost_does_not_grow_with_total_known_sectors(tmp_path):

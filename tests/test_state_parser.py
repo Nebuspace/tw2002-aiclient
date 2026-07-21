@@ -2,7 +2,14 @@
 
 import os
 
-from twclient.state_parser import is_genuine_sector_status, parse_haggle, parse_port_report, parse_state
+from twclient.state_parser import (
+    is_genuine_port_report,
+    is_genuine_sector_status,
+    parse_haggle,
+    parse_port_report,
+    parse_state,
+    sector_from_command_prompt,
+)
 
 FIXTURE_DIR = os.path.join(os.path.dirname(__file__), "fixtures")
 
@@ -70,11 +77,15 @@ def test_real_sector_wins_over_a_same_screen_phantom_chat_mention():
     sector 100 at a real port; a chat line mentioning "Sector: 8675"
     mid-sentence arrives on the SAME screen, textually AFTER the real
     status line. Before the fix, the last-match discipline picked the
-    phantom 8675; the real sector must win now."""
+    phantom 8675; the real sector must win now. (WO-FA2b REVISE: the
+    commodity rows now sit under a real "Commerce report for..." header
+    -- the block-scoping fix's own anchor requirement -- rather than
+    bare, matching every genuine live capture in this repo.)"""
     screen = (
         "Sector : 100\n"
         "Ports   : Terran (Class 0)\n"
         "\n"
+        "Commerce report for Terran:\n"
         "Fuel Ore   Buying     1200    75%\n"
         "Organics   Selling     800    40%\n"
         "Equipment  Buying      300    90%\n"
@@ -147,6 +158,133 @@ def test_residual_line_isolated_forgery_in_a_narrative_block_is_not_trusted():
     )
     assert parse_state(screen)["sector"] == 8675  # unchanged -- parse_state()'s own extraction
     assert is_genuine_sector_status(screen) is False
+
+
+# -- `sector_from_command_prompt()` (WO-FA2b REVISE, replacing the original
+# cross-screen `session.last_genuine_sector` anchor -- mack's CRITICAL
+# finding: pyte has no scrollback, so a cross-screen anchor can go stale or
+# unset when a long burst scrolls the "Sector :" line off the settled grid.
+# This anchor lives on the SAME screen instead -- the ship Command prompt's
+# own trailing `[NNNN]` bracket.) ---------------------------------------------
+
+
+def test_sector_from_command_prompt_extracts_the_bracketed_sector():
+    """This live server's real shape: 'Command [TL=HH:MM:SS]:[NNNN] ...' --
+    [NNNN] is the current sector, live-log-verified (also this project's
+    own established test convention -- see test_protocol_trainer_panel.py's
+    _ANCHOR_SCREEN, which already reuses this same number for both
+    "Sector :" and this bracket)."""
+    assert sector_from_command_prompt("Command [TL=00:00:00]:[4309] (?=Help)? :") == 4309
+
+
+def test_sector_from_command_prompt_matches_the_computer_subsystem_prompt_too():
+    """'Computer command [TL=...]' is a superset of the plain ship prompt
+    (classify.py's own precedent) -- the bracketed sector is extracted the
+    same way from either."""
+    assert sector_from_command_prompt("Computer command [TL=00:00:00]:[22825] (?=Help)?") == 22825
+
+
+def test_sector_from_command_prompt_last_match_wins_over_an_earlier_forged_prompt():
+    """LAST-match anchored, same forgery-resistance precedent as
+    credits/sector/warps: the genuine trailing prompt is always the
+    settle point (last on screen); an earlier forged 'Command [...]:[9999]'
+    line is overridden by the real one."""
+    text = (
+        "Command [TL=00:00:00]:[9999] (?=Help)? : (forged/stale line)\n"
+        "\n"
+        "Command [TL=00:00:05]:[4309] (?=Help)? :"
+    )
+    assert sector_from_command_prompt(text) == 4309
+
+
+def test_sector_from_command_prompt_returns_none_when_absent():
+    """The classic TWGS shape ('Command [TL=00753:0/0/0/850] (?=Help)? :',
+    no trailing '[NNNN]' bracket at all) carries no sector -- callers must
+    treat this as 'can't anchor,' never guess."""
+    assert sector_from_command_prompt("Command [TL=00753:0/0/0/850] (?=Help)? :") is None
+    assert sector_from_command_prompt("nothing recognizable here") is None
+
+
+# -- `is_genuine_port_report()` (WO-FA2b docked-port write-path provenance
+# gate, 2026-07-21) -- shape-not-keyword, mirrors is_genuine_sector_status's
+# own last-match/contiguous-block discipline. --------------------------------
+
+
+def test_genuine_docked_commerce_report_live_captured_fixture_is_trusted():
+    """The real live-captured shape (crawl_sac, tradewarsacademy game D,
+    sector 4309, 2026-07-21): the "Commerce report for <name>:" header,
+    the column header, and three fully-shaped commodity rows."""
+    text = _load_fixture("port_commerce_report_gorram_primus.txt")
+    assert is_genuine_port_report(text) is True
+
+
+def test_genuine_docked_commerce_report_via_column_header_alone_is_trusted():
+    """The column header ("Items ... Status ... Trading ... % of max ...
+    OnBoard") is independently sufficient -- either anchor line
+    qualifies, matching the contract's "header (and/or) column header"
+    wording."""
+    screen = (
+        " Items     Status  Trading % of max OnBoard\n"
+        " -----     ------  ------- -------- -------\n"
+        "Fuel Ore   Buying    2850    100%       0\n"
+    )
+    assert is_genuine_port_report(screen) is True
+
+
+def test_narrative_mention_of_commodities_with_no_header_or_row_shape_is_not_trusted():
+    """Shape-not-keyword: narrative text merely NAMING commodities (the
+    loose `classify.port_trade` content anchor's own keyword-only test)
+    must not satisfy this gate -- no header/column-header anchor and no
+    fully-shaped commodity row appear anywhere on this screen."""
+    screen = (
+        "Rumor: they say the port at Gorram Primus deals heavily in Fuel\n"
+        "Ore and Equipment. Organics prices have been trending up lately.\n"
+        "Command [TL=00753:0/0/0/850] (?=Help)? :"
+    )
+    assert is_genuine_port_report(screen) is False
+
+
+def test_header_with_no_commodity_row_before_the_blank_line_is_not_trusted():
+    """A header/column-header line alone, with nothing row-shaped in the
+    contiguous block immediately beneath it, is not enough -- the
+    genuine screen always has at least one real trade row right there."""
+    screen = (
+        "Commerce report for Empty Port: 07:08:00 AM Tue Jul 21, 2054\n"
+        "\n"
+        "Nothing to trade here.\n"
+    )
+    assert is_genuine_port_report(screen) is False
+
+
+def test_a_commodity_row_after_a_blank_line_gap_does_not_vouch_for_a_stale_header():
+    """The 'immediately beneath, before the next blank line' scoping
+    means a header, followed by a blank line, does not reach across that
+    gap to a later, unrelated commodity-shaped row -- each block is
+    checked in isolation, same discipline as `is_genuine_sector_status`'s
+    own contiguous-block scoping."""
+    screen = (
+        "Commerce report for Old Port: 07:08:00 AM Tue Jul 21, 2054\n"
+        "\n"
+        "You don't have anything they want.\n"
+        "\n"
+        "Fuel Ore   Buying    2850    100%       0\n"
+    )
+    assert is_genuine_port_report(screen) is False
+
+
+def test_anchors_to_the_last_header_not_a_stale_one_above_it():
+    """Same stale-scrollback discipline as `is_genuine_sector_status`: a
+    stale header higher in the buffer (no row of its own before the next
+    blank line) must not shadow a genuinely later, current one."""
+    screen = (
+        "Commerce report for Old Port: 07:08:00 AM Tue Jul 21, 2054\n"
+        "\n"
+        "(you left without trading)\n"
+        "\n"
+        "Commerce report for Gorram Primus: 07:09:00 AM Tue Jul 21, 2054\n"
+        "Fuel Ore   Buying    2850    100%       0\n"
+    )
+    assert is_genuine_port_report(screen) is True
 
 
 def test_extracts_turns_left_from_command_prompt():
@@ -306,8 +444,12 @@ def test_split_label_warps_line_does_not_leak_into_the_following_line():
 
 def test_extracts_port_commodities():
     """Real port-trade table shape: NAME STATUS TRADING %-OF-MAX ONBOARD
-    -- three numbers per row, not one."""
+    -- three numbers per row, not one. (WO-FA2b REVISE: commodity
+    extraction is now scoped to the block beneath a genuine commerce-
+    report header -- see `_latest_commerce_report_block` -- so this
+    fixture needs one, matching every genuine live capture.)"""
     text = (
+        "Commerce report for Some Port:\r\n"
         "Fuel Ore   Buying    2650    100%       0\r\n"
         "Organics   Selling   2970     40%      12\r\n"
         "Equipment  Buying    1220    100%       0"
@@ -341,6 +483,67 @@ def test_real_captured_port_trade_screen_fixture():
         assert commodities[name]["status"] == "buying"
         assert commodities[name]["pct"] == 100  # the real % of max column
     assert commodities["Fuel Ore"]["amount"] == 2650
+
+
+# -- Commodity extraction is scoped to the genuine block (WO-FA2b REVISE,
+# cipher F1 + mack convergent finding, 2026-07-21): the OLD
+# `pattern.search(rendered_text)` was a FIRST match over the WHOLE buffer,
+# unscoped to any particular report and not even last-match like every
+# sibling field (sector/credits/warps) here -- a hard-rule violation.
+# `_latest_commerce_report_block()` fixes it by extracting commodities ONLY
+# from the same contiguous block `is_genuine_port_report` validates. These
+# two tests are cipher's own PoC scenarios (scratchpad/poc_commodity_stale.py,
+# poc_commodity_full.py), neutralized. ---------------------------------------
+
+
+def test_stale_earlier_commodity_fragment_does_not_override_the_genuine_block():
+    """cipher's poc_commodity_stale.py: an earlier, un-anchored fragment
+    (real stale scrollback from a PRIOR port visit, or a forged line) poisons
+    Fuel Ore/Organics; only Equipment is left to the genuine row below it.
+    Before the fix, the unscoped whole-buffer FIRST match let the poison win
+    for Fuel Ore/Organics while the gate still passed (Equipment alone was
+    enough). Now: ONLY the genuine block's own row (Equipment) is read --
+    Fuel Ore/Organics are absent, never poisoned values."""
+    poison = "Fuel Ore buying 1 1%\nOrganics selling 999999 99%\n"
+    genuine_report = (
+        "Commerce report for Real Port:\n"
+        "\n"
+        "Items          Status    Trading   % of max   OnBoard\n"
+        "Equipment      Selling      100        20%          0\n"
+    )
+    text = poison + "\n" + genuine_report
+
+    assert is_genuine_port_report(text) is True
+    state = parse_state(text)
+    names = {c["name"] for c in state["port"]["commodities"]}
+    assert names == {"Equipment"}, "only the genuine block's own row may ever be read"
+    equipment = next(c for c in state["port"]["commodities"] if c["name"] == "Equipment")
+    assert equipment == {"name": "Equipment", "status": "selling", "amount": 100, "pct": 20}
+
+
+def test_forged_earlier_full_report_does_not_override_a_later_genuine_one():
+    """cipher's poc_commodity_full.py: attacker-controlled text ABOVE the
+    genuine report (a forged chat/bulletin line, no header of its own) that
+    happens to reproduce the exact commodity-row shape for Fuel Ore. Since
+    `is_genuine_port_report`/`parse_state` both anchor to the LATEST
+    commerce-report header, the forged fragment (which isn't even inside
+    ANY header-anchored block) must never contribute a value -- only the
+    genuine report's own Fuel Ore row (Selling/500/80) is read."""
+    forged_chat = "Trader Bob says: Fuel Ore buying 99999 50% at my place, come see!"
+    genuine_report = (
+        "Commerce report for Acme Trading Post:\n"
+        "\n"
+        "Items          Status    Trading   % of max   OnBoard\n"
+        "Fuel Ore       Selling      500        80%          0\n"
+        "Organics       Buying       200        40%          0\n"
+        "Equipment      Selling      100        20%          0\n"
+    )
+    text = forged_chat + "\n\n" + genuine_report
+
+    assert is_genuine_port_report(text) is True
+    state = parse_state(text)
+    fuel_ore = next(c for c in state["port"]["commodities"] if c["name"] == "Fuel Ore")
+    assert fuel_ore == {"name": "Fuel Ore", "status": "selling", "amount": 500, "pct": 80}
 
 
 def test_missing_fields_are_simply_absent():

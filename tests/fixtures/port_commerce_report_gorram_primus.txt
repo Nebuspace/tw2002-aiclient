@@ -1,0 +1,12 @@
+Commerce report for Gorram Primus: 07:08:00 AM Tue Jul 21, 2054
+
+ Items     Status  Trading % of max OnBoard
+ -----     ------  ------- -------- -------
+Fuel Ore   Buying    2850    100%       0
+Organics   Buying     930    100%       0
+Equipment  Buying    2720    100%       0
+
+You don't have anything they want, and they don't have anything you can buy.
+You have 300 credits and 20 empty cargo holds.
+
+Command [TL=00:00:00]:[4309] (?=Help)? :

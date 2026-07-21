@@ -17,7 +17,8 @@ import os
 
 import pytest
 
-from twclient import credentials, protocol, world_model
+from twclient import credentials, protocol, state_parser, world_model
+from twclient.terminal import TerminalScreen
 
 FIXTURE_DIR = os.path.join(os.path.dirname(__file__), "fixtures")
 
@@ -266,7 +267,10 @@ def test_real_sector_wins_over_a_same_screen_phantom_chat_mention_end_to_end(iso
     dispatch path: the bot is REALLY in sector 100 at a real port; a
     same-screen chat line mentions "Sector: 8675" mid-sentence AFTER the
     real status line. The real port data must persist under the bot's
-    ACTUAL sector (100), never the phantom (8675)."""
+    ACTUAL sector (100), never the phantom (8675). (WO-FA2b REVISE: the
+    commodity rows now sit under a real "Commerce report for..." header
+    -- the block-scoping fix's own anchor requirement -- rather than
+    bare, matching every genuine live capture in this repo.)"""
     _write_profiles(
         isolated_world_store,
         {"alice": {"host": "bat.example.com", "port": 23, "game_letter": "A", "handle": "Alice"}},
@@ -275,6 +279,7 @@ def test_real_sector_wins_over_a_same_screen_phantom_chat_mention_end_to_end(iso
         "Sector : 100\n"
         "Ports   : Terran (Class 0)\n"
         "\n"
+        "Commerce report for Terran:\n"
         "Fuel Ore   Buying     1200    75%\n"
         "Organics   Selling     800    40%\n"
         "Equipment  Buying      300    90%\n"
@@ -564,6 +569,172 @@ def test_state_verb_also_bulk_ingests_a_genuine_cim_report(isolated_world_store)
     world_id = protocol._current_world_id(session)
     sectors = {s["sector_id"] for s in world_model.all_sectors(world_id)}
     assert {1234, 5001, 5678} <= sectors
+
+
+# -- (g) WO-FA2b: docked commerce-report write path -------------------------
+#
+# WO-FA2b REVISE (mack CRITICAL, cipher F1): the original design anchored
+# this write path to a cross-screen `session.last_genuine_sector`, set the
+# last time a genuine sector-status screen was parsed -- but pyte
+# (`twclient.terminal.TerminalScreen`) has NO scrollback, so a long
+# warp-then-dock burst can scroll the "Sector : N" line off the settled
+# grid before that ever happens, leaving the anchor stale or unset. The fix
+# anchors instead to THIS SAME SCREEN's own trailing Command prompt
+# (`state_parser.sector_from_command_prompt`) -- no cross-screen state at
+# all, so a single dispatch of a genuine commerce report is now sufficient.
+
+
+def test_docked_commerce_report_writes_port_to_its_own_command_prompt_sector(isolated_world_store):
+    """The full FA2b chain, single dispatch: a docked commerce-report
+    screen (the live-captured corpus, no "Sector : N" line of its own, but
+    its OWN trailing Command [TL=...]:[4309] prompt) writes its parsed
+    commodities to sector 4309 via the new write_port_only() path -- no
+    prior sector-status screen needed to seed an anchor. Exact DoD values
+    from the live capture."""
+    _write_profiles(
+        isolated_world_store,
+        {"alice": {"host": "bat.example.com", "port": 23, "game_letter": "A", "handle": "Alice"}},
+    )
+    session = FakeSession(
+        "bat.example.com", _load_fixture("port_commerce_report_gorram_primus.txt"), auto_login_profile="alice"
+    )
+
+    resp = protocol.dispatch(session, "do", {"input": "t"}, FakeServer())
+
+    assert resp["ok"] is True
+    world_id = protocol._current_world_id(session)
+    sector = world_model.get_sector(world_id, 4309)
+    assert sector is not None
+    commodities = {c["name"]: c for c in sector["port"]["commodities"]}
+    assert commodities["Fuel Ore"] == {"name": "Fuel Ore", "status": "buying", "amount": 2850, "pct": 100}
+    assert commodities["Organics"] == {"name": "Organics", "status": "buying", "amount": 930, "pct": 100}
+    assert commodities["Equipment"] == {"name": "Equipment", "status": "buying", "amount": 2720, "pct": 100}
+
+
+def test_forged_narrative_commodity_mention_does_not_write_port_data(isolated_world_store):
+    """A screen merely NAMING commodities in narrative text -- no genuine
+    header/column-header co-occurring with a fully-shaped commodity row
+    -- must write NOTHING, even though this screen's OWN command prompt
+    does carry a sector to anchor to (RED test for the shape-not-keyword
+    gate)."""
+    _write_profiles(
+        isolated_world_store,
+        {"alice": {"host": "bat.example.com", "port": 23, "game_letter": "A", "handle": "Alice"}},
+    )
+    forged_screen = (
+        "Rumor: they say the port at Gorram Primus deals heavily in Fuel\n"
+        "Ore and Equipment. Organics prices have been trending up lately.\n"
+        "Command [TL=00:00:00]:[4309] (?=Help)? :"
+    )
+    session = FakeSession("bat.example.com", forged_screen, auto_login_profile="alice")
+
+    resp = protocol.dispatch(session, "do", {"input": ""}, FakeServer())
+
+    assert resp["ok"] is True
+    world_id = protocol._current_world_id(session)
+    assert world_model.get_sector(world_id, 4309) is None, (
+        "a narrative-only commodity mention must never write port data, even with a real anchor present"
+    )
+
+
+def test_docked_commerce_report_with_no_command_prompt_sector_writes_nothing(isolated_world_store):
+    """A genuine commerce report with no trailing Command [TL=...]:[NNNN]
+    prompt on screen at all (an unusual dock flow, or a classic-shape TWGS
+    server with no bracketed sector) -- there is no sector to attribute
+    the reading to. The write is silently skipped -- never a crash, and no
+    phantom sector entry is created out of thin air."""
+    _write_profiles(
+        isolated_world_store,
+        {"alice": {"host": "bat.example.com", "port": 23, "game_letter": "A", "handle": "Alice"}},
+    )
+    no_prompt_screen = (
+        "Commerce report for Gorram Primus: 07:08:00 AM Tue Jul 21, 2054\n"
+        "\n"
+        " Items     Status  Trading % of max OnBoard\n"
+        " -----     ------  ------- -------- -------\n"
+        "Fuel Ore   Buying    2850    100%       0\n"
+    )
+    session = FakeSession("bat.example.com", no_prompt_screen, auto_login_profile="alice")
+    assert state_parser.sector_from_command_prompt(no_prompt_screen) is None  # sanity: no anchor on this screen
+
+    resp = protocol.dispatch(session, "do", {"input": ""}, FakeServer())
+
+    assert resp["ok"] is True
+    world_id = protocol._current_world_id(session)
+    assert world_model.all_sectors(world_id) == []
+
+
+def test_scroll_off_burst_writes_port_to_the_current_sector_not_a_stale_one(isolated_world_store):
+    """CRITICAL repro (mack, WO-FA2b REVISE): pyte is `pyte.Screen` -- NO
+    scrollback -- so a single continuous warp-into-597 + auto-dock +
+    commerce-report burst longer than the 25-line viewport scrolls the
+    "Sector : N" line off the settled grid entirely before settle-detection
+    ever gets a checkpoint on it alone. The OLD cross-screen
+    `session.last_genuine_sector` anchor design went stale in exactly this
+    case; the fix (anchoring to THIS SCREEN's own trailing Command prompt)
+    must still resolve the correct, CURRENT sector (597) even though
+    "Sector : 597" itself is long gone from the rendered buffer. Fed
+    through the REAL pyte-backed TerminalScreen (25-line viewport) so the
+    scroll-off is genuine emulator behavior, not a hand-truncated string."""
+    _write_profiles(
+        isolated_world_store,
+        {"alice": {"host": "bat.example.com", "port": 23, "game_letter": "A", "handle": "Alice"}},
+    )
+    burst_lines = [
+        "",
+        "<Re-Display>",
+        "",
+        "Sector  : 597 in uncharted space.",
+        "Ports   : New Berlin, Class 2 (BSB)",
+        "Warps to Sector(s) :  4309 - (200) - (300)",
+        "",
+        "Command [TL=00:00:00]:[597] (?=Help)? : P",
+        "",
+        "<A> Attack this Port",
+        "<T> Trade at this Port",
+        "<Q> Quit, nevermind",
+        "",
+        "Enter your choice [T] ? T",
+        "<Port>",
+        "",
+        "Docking...",
+        "One turn deducted, 1180 turns left.",
+        "",
+        "Commerce report for New Berlin: 07:09:00 AM Tue Jul 21, 2054",
+        "",
+        "-=-=-        Docking Log        -=-=-",
+        "No current ship docking log on file.",
+        "",
+        " Items     Status  Trading % of max OnBoard",
+        " -----     ------  ------- -------- -------",
+        "Fuel Ore   Buying    2650    100%       0",
+        "Organics   Buying    2970    100%       0",
+        "Equipment  Buying    1220    100%       0",
+        "",
+        "You have 300 credits and 20 empty cargo holds.",
+        "",
+        "Command [TL=00:00:00]:[597] (?=Help)? : ",
+    ]
+    assert len(burst_lines) > 25, "the repro requires a burst longer than pyte's 25-line viewport"
+    term = TerminalScreen(columns=80, lines=25)
+    term.feed(("\r\n".join(burst_lines)).encode("cp437"))
+    settled_text = "\n".join(term.render_cropped())
+
+    assert "Sector" not in settled_text, "sanity: the burst must actually scroll the Sector line off"
+    assert state_parser.sector_from_command_prompt(settled_text) == 597
+    assert state_parser.is_genuine_port_report(settled_text) is True
+
+    session = FakeSession("bat.example.com", settled_text, auto_login_profile="alice")
+    resp = protocol.dispatch(session, "do", {"input": ""}, FakeServer())
+
+    assert resp["ok"] is True
+    world_id = protocol._current_world_id(session)
+    sector_597 = world_model.get_sector(world_id, 597)
+    assert sector_597 is not None
+    assert sector_597["port"]["commodities"][0]["name"] == "Fuel Ore"
+    # 4309 only ever appears in the scrolled-off warps line -- never a
+    # write target under the new same-screen anchor.
+    assert world_model.get_sector(world_id, 4309) is None
 
 
 # -- game_knowledge (TW-25) coexists, no writer wired this wave -------------
