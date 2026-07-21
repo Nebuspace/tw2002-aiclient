@@ -24,6 +24,7 @@ from twclient.autopilot import (
     AutopilotLoop,
     AutopilotLoopError,
     Candidate,
+    Decision,
     EconCaps,
     WorldSnapshot,
     assess,
@@ -821,6 +822,42 @@ def test_autopilot_loop_halts_after_an_unconfirmed_tick_rather_than_ticking_blin
     assert loop.ticks_done == 1
     assert loop.last_error is not None and "unconfirmed" in loop.last_error
     assert lock.mode == MODE_AI_PILOT  # released cleanly, not wedged
+
+
+@pytest.mark.parametrize(
+    "held_outcome",
+    (
+        "held:over_budget:0:buy:Fuel Ore",
+        "held:credits_unknown:1:sell",
+    ),
+)
+def test_autopilot_loop_halts_on_mid_offer_held_stop_reasons_so_auto_loop_releases(held_outcome):
+    """FA4 cipher bank MED (post-land): mid-offer HOLDs that leave the
+    port's offer prompt on screen must stop AutopilotLoop (same release
+    seam as unconfirmed), not sleep into another tick still in
+    MODE_AUTO_LOOP."""
+    session = FakeAutopilotSession()
+    profile = _make_profile(autonomous=True)
+    lock = ControlLock()
+    engine = AutopilotEngine(session, profile, lock)
+
+    def fake_live_tick(**_kwargs):
+        return Decision(
+            ts=time.monotonic(),
+            candidates=(),
+            chosen=None,
+            reason="injected_mid_offer_hold",
+            send_outcome=held_outcome,
+        )
+
+    engine.live_tick = fake_live_tick  # type: ignore[method-assign]
+    loop = AutopilotLoop(engine, lambda: {}, tick_interval_s=0.01, max_ticks=5)
+    loop.start()
+
+    assert _wait_until(lambda: not loop.running)
+    assert loop.ticks_done == 1
+    assert loop.last_error == f"chain_held_halt:{held_outcome}"
+    assert lock.mode == MODE_AI_PILOT
 
 
 # -- A-M1: AutopilotLoop installs its own stop-Event as the engine's -----

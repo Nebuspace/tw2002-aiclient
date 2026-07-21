@@ -1371,10 +1371,23 @@ class AutopilotLoop:
                 # another full tick_interval_s first.
                 if self._stop.is_set():
                     break
-                if self.last_decision.send_outcome == "unconfirmed":
+                outcome = self.last_decision.send_outcome
+                if outcome == "unconfirmed":
                     # MED fix: a real settle desync -- halt rather than
                     # tick blindly past it (settle.py's own contract).
                     self.last_error = "settle_unconfirmed: halted rather than ticking past a send/settle desync"
+                    break
+                # FA4 cipher bank (post-land MED): a mid-offer HOLD that
+                # left the port's offer prompt on screen
+                # (`held:over_budget:` / `held:credits_unknown:`) must
+                # stop the loop so MODE_AUTO_LOOP releases promptly --
+                # otherwise the next tick can keep driving past a stuck
+                # dialogue. Same release seam as unconfirmed above.
+                if outcome is not None and (
+                    outcome.startswith("held:over_budget:")
+                    or outcome.startswith("held:credits_unknown:")
+                ):
+                    self.last_error = f"chain_held_halt:{outcome}"
                     break
                 time.sleep(self.tick_interval_s)
         finally:
