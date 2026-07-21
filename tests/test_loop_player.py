@@ -12,6 +12,7 @@ import pytest
 
 from twclient.control_lock import MODE_AI_PILOT, MODE_AUTO_LOOP, ControlLock
 from twclient.loop_player import LoopPlayer, LoopPlayerError
+from twclient.session import Session
 
 # A real classify.py anchor (same literal prompt test_spectate_app.py's
 # _SAMPLE_EVENT uses) -- classifies as "main_command", so replay_skill()
@@ -74,6 +75,26 @@ class FakeLoopSession:
 
     def render_text(self, rows=None):
         return "\n".join(rows if rows is not None else self.render())
+
+
+class ObservingFakeLoopSession(FakeLoopSession):
+    """WO-FA7a round 4: `FakeLoopSession` + the REAL `Session.
+    observe_credits` wired in (assigned directly off the class, not
+    reimplemented, same convention as tests/test_credits_supervision.py's
+    own fakes), so a test using this session exercises the same
+    hasattr-guarded `observe_credits()` call `LoopPlayer._run()`'s
+    floor-check makes against a real `Session` -- plain `FakeLoopSession`
+    predates the credits-supervision surface entirely and has no
+    `last_credits`/`last_credits_ts` at all, so the hasattr guard silently
+    skips it (every other existing test in this file keeps using the
+    plain fake unchanged)."""
+
+    def __init__(self, *a, **kw):
+        super().__init__(*a, **kw)
+        self.last_credits = None
+        self.last_credits_ts = None
+
+    observe_credits = Session.observe_credits
 
 
 class FakeWatchHub:
@@ -267,6 +288,35 @@ def test_floor_halts_before_a_cycle_that_would_start_at_or_below_it():
     assert player.last_result == "floor_reached"
     assert player.cycles_done == 0
     assert session.sent == []  # never even attempted a cycle
+
+
+def test_floor_reached_break_still_feeds_the_credits_supervision_surface():
+    """WO-FA7a round 4 (observe-only, hub-ruled scope A; mack's repro
+    scratchpad/repro_fa7a_revise3_loopplayer_gap.py, formalized): the
+    pre-cycle floor-check render is the single most supervision-relevant
+    screen this loop ever produces -- a `floor_reached` break exits right
+    here, on cycle 0, NEVER reaching `replay_skill()`'s own per-step
+    capture at all (WO-FA7a revise 3's coverage fix). Without
+    `LoopPlayer._run()`'s new `observe_credits()` call, `session.
+    last_credits` would stay `None` forever on exactly this path -- this
+    test goes RED without it (`ObservingFakeLoopSession` starts with
+    `last_credits=None` and NOTHING else in this run would ever set it)."""
+    session = ObservingFakeLoopSession(screen="You have 100 credits.\nCommand [TL=00:00:08]:[1234] (?=Help)? :")
+    lock = ControlLock()
+    hub = FakeWatchHub()
+    player = LoopPlayer(session, lock, hub)
+
+    player.start(_skill(), "test-loop", cycles=5, floor=200)
+    assert _wait_until(lambda: not player.running)
+
+    assert player.last_result == "floor_reached"
+    assert player.cycles_done == 0
+    assert session.sent == []  # never even attempted a cycle -- confirms this is the cycle-0 pre-check path
+    assert session.last_credits == 100, (
+        "the floor-triggering balance must reach the credits-supervision surface even though the "
+        "loop halted before replay_skill's own per-step capture ever ran"
+    )
+    assert session.last_credits_ts is not None
 
 
 def test_snapshot_reflects_live_progress():

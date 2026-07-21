@@ -185,6 +185,25 @@ class LoopPlayer:
                     break
                 if self.floor is not None:
                     text = self.session.render_text(self.session.render())
+                    # WO-FA7a round 4 (observe-only, hub-ruled scope A): feed
+                    # the credits-supervision surface from THIS render too --
+                    # it's the single most supervision-relevant screen this
+                    # loop ever produces, since a `floor_reached` break exits
+                    # right here, on cycle 0 if the floor is already crossed,
+                    # NEVER reaching replay_skill's own per-step capture at
+                    # all. hasattr-guarded, mirroring every other call site
+                    # (session.py/protocol.py/skills.py/crawl_driver.py).
+                    #
+                    # Deliberately a DIFFERENT source than the floor DECISION
+                    # immediately below (`snapshot_state()`'s looser
+                    # `parse_state()`-based credits, not the STRICT
+                    # `credits_balance()` this observes) -- unifying them is
+                    # the human-gated WO-FA-SAFE change (a spend-decision
+                    # source swap, out of scope here); this round is
+                    # observation-only, zero change to the floor-DECISION
+                    # line below.
+                    if hasattr(self.session, "observe_credits"):
+                        self.session.observe_credits(text)
                     credits = snapshot_state(text).get("credits")
                     if credits is not None and credits <= self.floor:
                         result = "floor_reached"

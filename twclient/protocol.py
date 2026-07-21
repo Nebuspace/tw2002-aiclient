@@ -320,6 +320,17 @@ def build_response(session, rows=None, settled_reason=None, extra=None):
     # _write_world_model()'s docstring for the swallow-guard this relies
     # on never being able to fail the response above.
     _write_world_model(session, text, prompt, parsed_state)
+    # WO-FA7a: passive credits-supervision capture, independent of
+    # _write_world_model()'s no-profile-means-no-write guard above -- see
+    # `Session.observe_credits()`'s own docstring (session.py) for why this
+    # is a sibling call, not folded inside `_write_world_model`, and for the
+    # full list of every other autonomous settled-screen site that also
+    # calls it (skills.py's replay_skill/play_skill, crawl_driver.py).
+    # hasattr-guarded like cursor/sent_input above -- a bare fake-session
+    # test double that predates this method doesn't have to grow it just
+    # to keep building a response.
+    if hasattr(session, "observe_credits"):
+        session.observe_credits(text)
     return resp
 
 
@@ -420,6 +431,12 @@ def dispatch(session, verb, args, server):
         # this effectively free on the common no-change-since-last-poll
         # case.
         _write_world_model(session, text, prompt, parsed_state)
+        # WO-FA7a: same passive credits capture as build_response() above
+        # -- `tw state` is explicitly the cheap-polling verb, so it must
+        # feed the credits-supervision surface too, not just build_response's
+        # do/read/screen path. hasattr-guarded, same reason as build_response.
+        if hasattr(session, "observe_credits"):
+            session.observe_credits(text)
         return {"ok": True, "state": parsed_state}
 
     if verb == "history":
@@ -445,6 +462,16 @@ def dispatch(session, verb, args, server):
             trace_log = autopilot_engine.trace_log()
             if trace_log:
                 autopilot_trace = trace_log[-1]  # most-recent tick only -- see AutopilotEngine.trace_log()
+        # WO-FA7a revise 3 (mack-confirmed HIGH): snapshotted into a LOCAL
+        # once, here, BEFORE `time.monotonic()` is read below for
+        # `credits_age_ms` -- a concurrent `observe_credits()` write
+        # landing a NEWER ts in the gap between reading `last_credits_ts`
+        # and reading `time.monotonic()` would otherwise make `now < ts`
+        # possible, producing a negative "age" (mack: reproduced under
+        # thread stress). Snapshotting first means a race can only ever
+        # bias the reported age LARGER (staler), never negative -- the
+        # field's whole point is a non-negative staleness signal.
+        _cts = getattr(session, "last_credits_ts", None)
         return {
             "ok": True,
             "connected": session.conn.connected,
@@ -467,6 +494,40 @@ def dispatch(session, verb, args, server):
             "play": player.snapshot() if player is not None else None,
             # See autopilot_engine/autopilot_trace computed above.
             "autopilot_trace": autopilot_trace,
+            # WO-FA7a passive credits-supervision surface (E2 supervised-run
+            # prerequisite): the last credits balance `Session.
+            # observe_credits()` saw on any settled screen (see its
+            # docstring, session.py, for every site that feeds it -- the
+            # two dispatch chokepoints below plus skills.py's replay_skill/
+            # play_skill and crawl_driver.py), plus its own capture ts --
+            # getattr-guarded like sent_input/cursor in build_response()
+            # above, so a bare fake-session test double that predates these
+            # fields (e.g. test_world_model_integration.py's FakeSession)
+            # still gets a clean `None`/`None` rather than an
+            # AttributeError. `credits_ts` is a raw `time.monotonic()`
+            # reading -- only meaningful for cross-poll change-detection
+            # WITHIN this one daemon process (a caller comparing it to a
+            # PRIOR `credits_ts` it already holds), never as an absolute
+            # age: an external `tw status` caller (a separate process, or a
+            # fresh `tw` invocation) has no reference to the daemon's own
+            # monotonic clock to diff it against. `credits_age_ms` below is
+            # the externally-meaningful staleness signal -- see its own
+            # comment.
+            "credits": getattr(session, "last_credits", None),
+            "credits_ts": _cts,
+            # WO-FA7a revise 2 (team-lead-caught contract gap): a COMPUTED
+            # age, mirroring `idle_ms` above (`int((time.monotonic() -
+            # session.last_rx) * 1000)`) rather than the raw `credits_ts` --
+            # the DoD's "ts exposes staleness" only actually holds for a
+            # value the caller can read on its own, with no daemon-clock
+            # reference of its own needed. `None` when no balance has ever
+            # been captured (`_cts` still `None`). Computed from the SAME
+            # `_cts` snapshot as `credits_ts` above (WO-FA7a revise 3,
+            # mack-confirmed HIGH) -- see its own comment for why a fresh
+            # `getattr` re-read here, after `time.monotonic()`, could
+            # otherwise go negative under a concurrent `observe_credits()`
+            # write.
+            "credits_age_ms": int((time.monotonic() - _cts) * 1000) if _cts is not None else None,
         }
 
     if verb == "set_mode":

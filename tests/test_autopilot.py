@@ -31,6 +31,7 @@ from twclient.autopilot import (
 from twclient.chains import TradeHop
 from twclient.control_lock import MODE_AI_PILOT, MODE_AUTO_LOOP, MODE_HUMAN, ControlLock
 from twclient.credentials import Profile
+from twclient.session import Session
 from twclient.ship_upgrade_decision import LoopEconomics, ShipSpec, UpgradeDecision
 
 _MAIN_COMMAND_SCREEN = "Command [TL=00:00:08]:[100] (?=Help)? :"
@@ -82,6 +83,27 @@ class FakeAutopilotSession:
 
     def render_text(self, rows=None):
         return "\n".join(rows) if rows is not None else self._text
+
+
+class ObservingFakeAutopilotSession(FakeAutopilotSession):
+    """WO-FA7a round 5: `FakeAutopilotSession` + the REAL `Session.
+    observe_credits` wired in (assigned directly off the class, not
+    reimplemented -- same convention as test_loop_player.py's own
+    `ObservingFakeLoopSession`/test_credits_supervision.py's fakes), so a
+    test using this session exercises the same hasattr-guarded
+    `observe_credits()` call `dry_run_tick()`/`live_tick()` now make
+    against a real `Session`. Plain `FakeAutopilotSession` predates the
+    credits-supervision surface entirely and has no
+    `last_credits`/`last_credits_ts` at all, so the hasattr guard silently
+    skips it -- every other existing test in this file keeps using the
+    plain fake unchanged."""
+
+    def __init__(self, *a, **kw):
+        super().__init__(*a, **kw)
+        self.last_credits = None
+        self.last_credits_ts = None
+
+    observe_credits = Session.observe_credits
 
 
 class NeverSettlesSession(FakeAutopilotSession):
@@ -522,6 +544,54 @@ def test_live_tick_sends_an_explore_target_the_live_screen_confirms_is_adjacent(
     decision = engine.live_tick(explore_next_sector=45)
     assert decision.send_outcome == "sent"
     assert session.sent == [("45", True, False)]
+
+
+# -- WO-FA7a round 5 (observe-only, hub-ruled scope A): the LAST autonomous
+# -- credits-render gap (mack's completeness sweep, repro
+# -- scratchpad/repro_fa7a_round4_autopilot_gap.py) -- dry_run_tick()/
+# -- live_tick() render the current settled screen every tick, the SAME
+# -- class of autonomous per-tick screen read replay_skill/play_skill/
+# -- LoopPlayer were already fixed for, but never fed the credits-
+# -- supervision surface at all until now. Observe-only: assess()'s own
+# -- loose parse_state()-based credits decision is untouched (human-gated
+# -- WO-FA-SAFE, out of scope here).
+
+
+def test_dry_run_tick_feeds_the_credits_supervision_surface():
+    """RED without the fix: `ObservingFakeAutopilotSession` starts at
+    `last_credits=None` and nothing else in a dry-run (zero sends) would
+    ever set it otherwise."""
+    text = "You have 300,000 credits.\nCommand [TL=00:00:08]:[100] (?=Help)? :"
+    session = ObservingFakeAutopilotSession(text=text)
+    profile = _make_profile(autonomous=False)
+    lock = ControlLock()
+    engine = AutopilotEngine(session, profile, lock)
+
+    engine.dry_run_tick()
+
+    assert session.last_credits == 300000
+    assert session.last_credits_ts is not None
+    assert session.sent == [], "sanity: dry_run_tick must still never send"
+
+
+def test_live_tick_feeds_the_credits_supervision_surface():
+    """Same proof through `live_tick()` -- a real send fires (this screen
+    classifies as the main command prompt, matching
+    `test_live_tick_sends_normally_when_the_live_screen_is_the_command_prompt`
+    above), so both the pre-execute AND post-execute render sites get
+    exercised; either is sufficient to satisfy this assertion since both
+    read the identical screen text here."""
+    text = "You have 300,000 credits.\nCommand [TL=00:00:08]:[100] (?=Help)? :"
+    session = ObservingFakeAutopilotSession(text=text)
+    profile = _make_profile(autonomous=True)
+    lock = ControlLock()
+    engine = AutopilotEngine(session, profile, lock)
+
+    decision = engine.live_tick(explore_next_sector=42)
+
+    assert decision.send_outcome == "sent"
+    assert session.last_credits == 300000
+    assert session.last_credits_ts is not None
 
 
 def test_live_tick_holds_on_a_blank_gate_render_rather_than_trusting_the_stale_pre_text():

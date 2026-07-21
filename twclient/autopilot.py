@@ -747,6 +747,20 @@ class AutopilotEngine:
         `self.enabled`. Reads (never writes) the LIVE interrupt history
         -- see class docstring's HIGH-3 note."""
         text = self.session.render_text(self.session.render())
+        # WO-FA7a round 5 (observe-only, hub-ruled scope A): feed the
+        # credits-supervision surface from this tick's own render, the
+        # same class of autonomous per-tick screen read replay_skill/
+        # play_skill/LoopPlayer were already fixed for. hasattr-guarded,
+        # mirroring every other call site (session.py/protocol.py/
+        # skills.py/crawl_driver.py/loop_player.py). Deliberately a
+        # DIFFERENT source than `assess()`'s own decision below (loose
+        # `parse_state()`-based credits, not the STRICT `credits_balance()`
+        # this observes) -- unifying them is the human-gated WO-FA-SAFE
+        # change (a spend-decision source swap, out of scope here); this
+        # round is observation-only, zero change to any `WorldSnapshot.
+        # credits`/`assess()` decision path.
+        if hasattr(self.session, "observe_credits"):
+            self.session.observe_credits(text)
         snapshot = assess(text, **assess_kwargs)
         decision = select(snapshot, self.caps)
         with self._lock:
@@ -772,6 +786,12 @@ class AutopilotEngine:
         if not self.enabled:
             raise AutopilotGateError(f"autonomous_disabled:profile={getattr(self.profile, 'name', '?')}")
         pre_text = self.session.render_text(self.session.render())
+        # WO-FA7a round 5 (observe-only): same credits-supervision feed as
+        # dry_run_tick() above -- see its comment for the full rationale
+        # (deliberate source split vs. assess()'s own loose decision read,
+        # unification deferred to the human-gated WO-FA-SAFE change).
+        if hasattr(self.session, "observe_credits"):
+            self.session.observe_credits(pre_text)
         snapshot = assess(pre_text, **assess_kwargs)
         decision = select(snapshot, self.caps)
 
@@ -830,6 +850,13 @@ class AutopilotEngine:
                 else:
                     confirmed = self._execute(chosen)
                     post_text = self.session.render_text(self.session.render())
+                    # WO-FA7a round 5 (observe-only): the freshest screen
+                    # after any send this tick actually fires -- the most
+                    # supervision-relevant read of the three sites in this
+                    # class (see dry_run_tick()'s comment for the full
+                    # rationale).
+                    if hasattr(self.session, "observe_credits"):
+                        self.session.observe_credits(post_text)
                     input_text = str(chosen.next_sector)
                     decision = dataclasses.replace(decision, send_outcome="sent" if confirmed else "unconfirmed")
 

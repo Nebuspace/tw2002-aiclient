@@ -119,6 +119,17 @@ def _wrap_session_factory(session_factory, abort_check, is_driver_fenced, log_fh
         if is_driver_fenced is not None and is_driver_fenced():
             raise CrawlAborted("driver fenced by a human attach (WO-CLEANPREEMPT)")
         session = session_factory()
+        # WO-FA7a revise 3 (mack's minor note): every fresh session handed
+        # back here IS a genuine settled screen this crawl observes (see
+        # this function's own docstring, point 2) -- feed the credits-
+        # supervision surface from it too, same convention as every other
+        # autonomous settled-screen site (see `Session.observe_credits()`'s
+        # docstring, session.py). hasattr-guarded, same "bare fake-session
+        # test double predates this" convention protocol.py's build_response()
+        # already uses -- test_crawl_driver.py's own minimal fake session
+        # doesn't need to grow it just to keep crawling.
+        if hasattr(session, "observe_credits"):
+            session.observe_credits(session.render_text(session.render()))
         counter[0] += 1
         if counter[0] == 1:
             _log_event(log_fh, "phase", phase="registered")

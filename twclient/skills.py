@@ -381,6 +381,20 @@ def replay_skill(
         rows = session.render()
         text = session.render_text(rows)
         prompt = rows[-1].strip() if rows else ""
+        # WO-FA7a revise 3 (mack-confirmed CRITICAL): replay_skill is the
+        # AUTO-LOOP driver's actual per-step engine (loop_player.py calls
+        # this directly every cycle) -- it never routed through protocol.py's
+        # `build_response()`, so the E2 supervised run's entire execution
+        # path left `tw status` credits permanently stale/None. Called on
+        # EVERY step regardless of outcome (unconfirmed/surprised/fenced
+        # all still rendered a real screen worth observing) -- see
+        # `Session.observe_credits()`'s own docstring (session.py).
+        # hasattr-guarded, same "bare fake-session test double predates
+        # this" convention protocol.py's build_response() already uses for
+        # cursor_pos/sent_input -- this module's own FakeReplaySession-style
+        # test doubles don't need to grow it just to keep replaying.
+        if hasattr(session, "observe_credits"):
+            session.observe_credits(text)
 
         # WO-CLEANPREEMPT: checked right here, the same "during/after
         # settle" point protocol.py's single-shot do/send fix checks at
@@ -453,6 +467,12 @@ def play_skill(
         if floor is not None:
             rows = session.render()
             text = session.render_text(rows)
+            # WO-FA7a revise 3: this pre-cycle floor-check render is a real
+            # settled screen too -- feed the credits-supervision surface
+            # from it, same as replay_skill's own per-step call above.
+            # hasattr-guarded for the same reason.
+            if hasattr(session, "observe_credits"):
+                session.observe_credits(text)
             from .ledger import snapshot_state
 
             credits = snapshot_state(text).get("credits")

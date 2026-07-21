@@ -227,6 +227,37 @@ def last_nonblank_line(text: str) -> str:
     return _last_nonblank_line(text)
 
 
+# FORGED-BALANCE RESIDUAL (documented, not fixed here -- cipher HIGH,
+# WO-FA7a revise 3, 2026-07-21): `_YOU_HAVE_CREDITS_RE` (line 77) is
+# UNanchored -- only `re.I`, no `^`/`re.MULTILINE` -- and, like every
+# sibling last-match field in this module, takes the LAST occurrence
+# anywhere in the whole rendered buffer. A forged in-band "You have N
+# credits" chat/broadcast line landing AFTER the real balance line on the
+# same settled screen therefore overrides it, in EITHER direction: cipher
+# PoC'd both an inflate (the caller believes a HIGHER balance than real)
+# and a deflate (a LOWER one) through the real dispatch path. The deflate
+# direction is the sharper one for THIS function's actual consumers below
+# -- it can MASK a real doubling event, suppressing WO-FA7b's 2x-stop
+# exactly when it matters most.
+#
+# TWO subsystems consume this function, both exposed to the same
+# residual, neither documented before this note: `protocol.py`'s
+# `Session.observe_credits()` (WO-FA7a's passive credits-supervision
+# surface, session.py) and `haggle.py`'s own credit-delta verification
+# (`haggle.py:174,235` -- `after_credits`/`before_credits`).
+#
+# Bounded today the same way as its three siblings: SOLO-safe (no other
+# player exists on a crawl_sacrificial game to author such a forgery).
+# This is the 4th instance of the same forged-last-match residual family
+# as `is_genuine_sector_status`'s FORGED-BLOCK residual,
+# `sector_from_command_prompt`'s own residual, and
+# `is_genuine_port_report`'s FORGED-COMMERCE residual (all above) -- a
+# one-off `^` anchor here would only shrink the surface (and risks
+# breaking a legitimately mid-line balance shape not yet captured live);
+# the real close is the SAME unified anchor-to-live-prompt/exclusivity
+# hardening already tracked as ONE FA9-class roadmap prerequisite before
+# any autonomous run on a multiplayer/shared server, not a fifth one-off
+# fix.
 def credits_balance(rendered_text: str) -> "int | None":
     """The STRICT "you have N credits" balance only -- unlike
     `parse_state()`'s `credits` field, this NEVER falls back to the
@@ -238,7 +269,10 @@ def credits_balance(rendered_text: str) -> "int | None":
     needs this narrower, unambiguous extraction rather than
     `parse_state()`'s caller-friendly-but-looser fallback chain.
     Last-match anchored, same stale-scrollback discipline as
-    `parse_state()`'s own `credits` field (see module docstring)."""
+    `parse_state()`'s own `credits` field (see module docstring) --
+    and, like every sibling last-match field, subject to the same
+    documented FORGED-BALANCE residual above (both consumers, the FA9
+    fold)."""
     matches = _YOU_HAVE_CREDITS_RE.findall(rendered_text)
     if not matches:
         return None

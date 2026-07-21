@@ -13,6 +13,7 @@ from .connection import TelnetConnection
 from .iac import TelnetHandler
 from .logging_util import TranscriptLogger
 from .settle import wait_for_settle
+from .state_parser import credits_balance
 from .terminal import TerminalScreen
 
 MIN_SEND_GAP_S = 0.15  # guardrail: no hammering the server
@@ -76,6 +77,26 @@ class Session:
         # ONLY ever set by send_raw(), defaulting False until the first
         # attach keystroke.
         self.last_sent_secret = False
+
+        # RX-side counterpart to last_sent/last_sent_ts above (WO-FA7a,
+        # credits-supervision surface): the most recent STRICT credits
+        # balance `observe_credits()` (below) found on any settled screen,
+        # so `tw status` can serve a passive "last known credits" reading
+        # to a polling caller (the E2 supervised-run hub, WO-FA7b) with
+        # zero new network I/O -- no polling send of its own, ever.
+        # Mirrors last_sent/last_sent_ts's field shape exactly: `None`
+        # until the first credits-bearing screen. Set ONLY by
+        # `observe_credits()`, never here directly (mirrors how
+        # last_sent/last_sent_ts are only ever written by send()/
+        # send_raw() above, not by __init__ again later) -- and, unlike
+        # last_sent, deliberately NEVER cleared by a later screen with no
+        # balance line, so a caller always sees the last genuine reading
+        # (with its own, correspondingly stale ts) rather than it
+        # vanishing. Credits are not secret -- this never goes near
+        # log_redacted() or either of the other two redaction sinks
+        # (ledger/last_sent) above.
+        self.last_credits = None
+        self.last_credits_ts = None
 
         self.history = []  # ring buffer of recent do/read events
         self._history_cap = 200
@@ -159,6 +180,56 @@ class Session:
         so any other thread reading it must take the same lock."""
         with self.lock:
             return self.terminal.cursor()
+
+    # -- credits supervision (WO-FA7a) --------------------------------
+
+    def observe_credits(self, text):
+        """Passive credits-supervision capture point: whenever `text` (any
+        settled screen this session has rendered) carries a STRICT "you
+        have N credits" balance (`state_parser.credits_balance()` -- NEVER
+        the looser `parse_state()`'s own `credits` field, which a port's
+        own price quote would satisfy just as well and misreport as a real
+        balance), mirrors it onto `last_credits`/`last_credits_ts` (see
+        those fields' own `__init__` comment). A screen with no balance
+        line at all (`credits_balance(text)` is `None`) leaves both fields
+        UNTOUCHED -- the whole non-clobber point: a caller can trust the
+        last-known balance (and its own, now-stale ts) stays visible
+        across intervening non-balance screens.
+
+        REFACTORED (WO-FA7a revise 3, mack-confirmed CRITICAL): this used
+        to live as a protocol.py-only helper (`_capture_credits`), called
+        from just the two `tw do`/`read`/`screen`/`state` dispatch
+        chokepoints -- but `replay_skill`/`play_skill` (skills.py, the
+        AUTO-LOOP driver's actual per-step engine) render and classify
+        every screen WITHOUT ever routing through protocol.py's
+        `build_response()`, so the E2 supervised-run's entire execution
+        path (AUTO_LOOP -> loop_player -> replay_skill) left `tw status`
+        credits permanently stale/None -- exactly the run this surface
+        exists to observe. Living here as a plain `Session` method (not a
+        protocol.py free function) lets skills.py call it directly without
+        importing protocol.py (which imports skills.py -- a straight
+        `from .protocol import _capture_credits` would circular-import).
+        Called from: `protocol.build_response()`, the `state` verb,
+        `skills.replay_skill()`'s per-step loop, `skills.play_skill()`'s
+        own per-cycle floor-check render, and `crawl_driver.py`'s
+        per-screen crawl factory -- every autonomous settled-screen site
+        this codebase has today.
+
+        KNOWN NON-COVERED PATH (WO-FA7a revise 3, mack HIGH #2, documented
+        not fixed): `tw attach`'s raw per-keystroke path (`daemon.py`'s
+        `_handle_attach` -> `send_raw()`) never calls this -- it's a raw,
+        UNsettled byte pass-through with no render/classify/build_response
+        step to hook, and attach is a HUMAN driving, not the autonomous E2
+        mode this surface exists for. Left uncovered deliberately rather
+        than adding a per-keystroke capture that would read mid-transition
+        screens; self-revealing anyway, since `credits_age_ms` (protocol.py
+        `status` verb) just keeps growing while a human plays manually,
+        which is the CORRECT signal for "no autonomous run is feeding
+        this" -- not a silent gap."""
+        credits = credits_balance(text)
+        if credits is not None:
+            self.last_credits = credits
+            self.last_credits_ts = time.monotonic()
 
     # -- settle-detection protocol (see settle.wait_for_settle) ------
 
