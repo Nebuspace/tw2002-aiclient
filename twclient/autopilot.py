@@ -136,6 +136,35 @@ ACTOR = "trainer"
 # -- see this module's own "HIGH-2" docstring note.
 _MOVEMENT_PROMPT_CLASS = "main_command"
 
+
+def _explore_target_confirmed_non_adjacent(gate_full: str, next_sector: int) -> bool:
+    """HIGH backstop (mack/cipher adversarial re-verify, 2026-07-21): the
+    PRIMARY fix for a non-adjacent explore warp lives in `explore.py`'s
+    `_adjacent_hop_toward()` -- a frontier edge's `frm` can be several
+    known hops from the ship's actual current sector, so the OLD code
+    (handing back the frontier's own far-side `to` sector directly)
+    could fire a bare warp at a target the ship can't reach in one hop.
+    This is the independent backstop for that fix regressing or being
+    bypassed by a caller that supplies `explore_next_sector` directly
+    (see e.g. this module's own tests): whenever the LIVE gate screen
+    POSITIVELY shows the current sector's own warps (the same "Warps to
+    Sector(s)" line/anchor `state_parser`/`explore` both already use),
+    `next_sector` must be a member of it.
+
+    Deliberately never true merely because no warps are parseable on
+    THIS particular render (`state_parser.parse_state()`'s `"warps"` key
+    absent) -- that would fail-closed on the vast majority of ordinary
+    ticks whose live screen doesn't happen to redisplay the sector-status
+    block at this exact moment, a much more aggressive gate than this
+    backstop is meant to be (unlike the turns_left/credits MED fixes in
+    `_score_chain`/`_score_upgrade`, which fail-closed on unknown because
+    THOSE candidates have no other adjacency-equivalent primary
+    correctness mechanism -- this one does, in `explore.py`). Only ever
+    refuses on a POSITIVELY confirmed mismatch."""
+    live_warps = parse_state(gate_full).get("warps")
+    return live_warps is not None and next_sector not in live_warps
+
+
 # -- Moderate econ caps (design decision #3 -- "looser economics, HARD
 # safety stops stay regardless of Moderate"). Module constants, tunable
 # by a caller via EconCaps below; these are the WO's proposed defaults.
@@ -790,6 +819,14 @@ class AutopilotEngine:
                     # blocking prompt (haggle, colonist-qty, fighter-deploy,
                     # ...) is actually live right now.
                     decision = dataclasses.replace(decision, send_outcome=f"held:not_main_command:{cls}")
+                elif chosen.kind == "explore" and _explore_target_confirmed_non_adjacent(
+                    gate_full, chosen.next_sector
+                ):
+                    # HIGH backstop -- see _explore_target_confirmed_non_adjacent's
+                    # own docstring: never fire a bare warp at a sector the
+                    # live screen positively shows isn't one of the current
+                    # sector's own warps.
+                    decision = dataclasses.replace(decision, send_outcome="held:non_adjacent")
                 else:
                     confirmed = self._execute(chosen)
                     post_text = self.session.render_text(self.session.render())

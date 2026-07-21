@@ -161,6 +161,14 @@ def test_find_stardock_arrived(tmp_path: Path):
 
 
 def test_find_stardock_hunts_via_map_fill(tmp_path: Path):
+    """HIGH fix (mack/cipher adversarial re-verify, 2026-07-21): the
+    nearest frontier edge (1→2 known, 2→99 unknown) is found FROM sector
+    2, not from the current sector 1 -- `next_sector` must be the valid
+    ADJACENT hop toward it (2, the only sector 1 can actually warp to
+    right now), never the frontier's own far-side target (99) directly.
+    `hunt.next_hop.to` still reports the RAW frontier target (99) --
+    that field is informational/display only, unaffected by this fix
+    (see `_adjacent_hop_toward`'s own docstring)."""
     wid = "test+sdhunt"
     _seed(
         wid,
@@ -176,9 +184,39 @@ def test_find_stardock_hunts_via_map_fill(tmp_path: Path):
     )
     assert plan.found is False
     assert plan.mode == "hunt"
-    assert plan.next_sector == 99
+    assert plan.next_sector == 2  # adjacent hop toward the frontier, NOT the far-side target 99
     assert plan.hunt is not None
     assert plan.hunt.next_hop is not None
+    assert plan.hunt.next_hop.to == 99
+
+
+def test_find_stardock_hunt_resolves_a_multi_hop_frontier_to_the_first_adjacent_step(tmp_path: Path):
+    """mack's exact repro: sector 1 warps to {2, 3} (both already
+    mapped), sector 3 warps to 99 (unmapped) -- the nearest/only
+    frontier edge is found FROM sector 3, two known hops from current
+    sector 1. The OLD code fired a bare warp straight at 99 (invalid --
+    not adjacent to 1 at all, the game would reject it and the loop
+    would spin toward max_ticks with zero progress). The fix must
+    resolve this to the FIRST hop of the known path toward 3 -- i.e. 3
+    itself, which genuinely IS one of sector 1's own listed warps."""
+    wid = "test+sdhunt-multihop"
+    _seed(
+        wid,
+        tmp_path,
+        [
+            {"sector_id": 1, "warps": [2, 3], "landmarks": []},
+            {"sector_id": 2, "warps": [1], "landmarks": []},
+            {"sector_id": 3, "warps": [99], "landmarks": []},
+        ],
+    )
+    plan = plan_find_stardock(
+        wid, current_sector=1, turn_budget=4, epsilon=0.0, state_dir=tmp_path,
+        rng=random.Random(0),
+    )
+    assert plan.found is False
+    assert plan.mode == "hunt"
+    assert plan.next_sector == 3  # adjacent (in sector 1's own warps), toward frm=3
+    assert plan.hunt.next_hop.frm == 3
     assert plan.hunt.next_hop.to == 99
 
 

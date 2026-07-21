@@ -228,6 +228,82 @@ def test_extracts_warps():
     assert state["warps"] == [12, 45, 99]
 
 
+def test_extracts_full_paren_wrapped_warps_list_real_screen_shape():
+    """WO-FA1 regression: the real live-server shape wraps each
+    destination sector in parens ("(379) - (597) - ..."), which the old
+    `[\\d\\s\\-]+` capture group couldn't even start matching (no `(` in
+    that class) -- `parse_state()` silently produced NO "warps" key at
+    all, not merely a truncated one, starving explore.py's frontier BFS
+    of every edge out of the current sector. All six destinations must
+    come through, regardless of the paren wrapping."""
+    text = (
+        "Sector  : 2335\n"
+        "Warps to Sector(s) :  (379) - (597) - (1302) - (3424) - (4069) - (4182)\n"
+        "Command [TL=00:12:34]:[1000] (?=Help) ?"
+    )
+    state = parse_state(text)
+    assert state["warps"] == [379, 597, 1302, 3424, 4069, 4182]
+
+
+def test_warps_anchors_to_last_match_not_a_stale_pre_warp_line():
+    """Same stale-scrollback discipline as sector/credits above: an OLD
+    "Warps to Sector(s)" block (a prior sector, still sitting in pyte's
+    unclaimed scrollback) must never outrank the CURRENT sector's warps
+    line further down the buffer."""
+    text = (
+        "Sector : 100\n"
+        "Warps to Sector(s) :  1 - 2 - 3\n"
+        "Command [TL=00:00:01]:[1000] (?=Help) ? 4182\n"
+        "Sector  : 4182\n"
+        "Warps to Sector(s) :  (379) - (597) - (1302)\n"
+        "Command [TL=00:00:02]:[1000] (?=Help) ?"
+    )
+    assert parse_state(text)["warps"] == [379, 597, 1302]
+
+
+def test_empty_warps_line_does_not_leak_into_a_later_unrelated_line():
+    """CRITICAL regression (mack/cipher adversarial re-verify, WO-FA1
+    revise): a genuinely EMPTY "Warps to Sector(s) :" line (nothing after
+    the colon, followed by a blank line) used to have its trailing `\\s*`
+    swallow the newlines and let the greedy `(.*)$` capture land on a
+    LATER, unrelated line instead -- this exact repro produced a bogus
+    `warps == [753, 0, 0, 0, 850]` scraped out of the turn-count/command
+    prompt line below. An empty warps line must produce NO "warps" key at
+    all (there's nothing there to extract), never a leaked value from
+    whatever text happens to follow it. This screen also passes
+    `is_genuine_sector_status` (see that function's docstring / the
+    forged-block residual note on the world-model seed path), so a
+    regression here would have poisoned the world-model on every tick."""
+    text = (
+        "Sector : 4182\n"
+        "Ports : None\n"
+        "Warps to Sector(s) :  \n"
+        "\n"
+        "Command [TL=00753:0/0/0/850] (?=Help)? :\n"
+    )
+    state = parse_state(text)
+    assert state.get("warps") in (None, [])
+    assert state["turns_left"] == 753  # sanity: the turn-count line itself still parses normally
+
+
+def test_split_label_warps_line_does_not_leak_into_the_following_line():
+    """CRITICAL regression, completed (cipher re-verify, WO-FA1 final
+    revise): the prior fix only converted the `\\s*` immediately BEFORE
+    the capture group -- the OTHER `\\s*` (between "Sector(s)" and the
+    optional colon) still crossed a newline. A forged/split shape (the
+    "Warps to Sector(s)" LABEL alone at line-start, with the colon +
+    digits pushed to the very next physical line -- e.g. a chat/broadcast
+    fragment reproducing the label) used to still capture the NEXT
+    line's digits (`[9001, 9002]`), even though they were never actually
+    part of the same logical warps line. Confirmed RED against the prior
+    `[ \\t]*(.*)$`-only fix. Neither `\\s*` may ever cross a linebreak now
+    -- a split label must yield NO warps key, not a value scraped from
+    whatever line happens to follow it."""
+    text = "Sector : 100\nWarps to Sector(s)\n:  (9001)-(9002)\nCommand :\n"
+    state = parse_state(text)
+    assert state.get("warps") in (None, [])
+
+
 def test_extracts_port_commodities():
     """Real port-trade table shape: NAME STATUS TRADING %-OF-MAX ONBOARD
     -- three numbers per row, not one."""

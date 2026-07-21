@@ -232,7 +232,10 @@ def plan_find_stardock(
         state_dir=state_dir,
         rng=rng,
     )
-    nxt = hunt.next_hop.to if hunt.next_hop is not None else None
+    # HIGH fix (see `_adjacent_hop_toward`'s own docstring): never hand
+    # back the frontier's own (possibly non-adjacent) `to` sector as
+    # `next_sector` -- resolve it to a valid single hop from `cur` first.
+    nxt = _adjacent_hop_toward(graph, cur, hunt.next_hop)
     return StarDockPlan(
         found=False,
         stardock_sectors=(),
@@ -287,7 +290,9 @@ def plan_find_formations(
             state_dir=state_dir,
             rng=rng,
         )
-        nxt = hunt.next_hop.to if hunt.next_hop is not None else None
+        # HIGH fix -- same non-adjacent-target defect as
+        # `plan_find_stardock`'s own hunt branch, see `_adjacent_hop_toward`.
+        nxt = _adjacent_hop_toward(graph, cur, hunt.next_hop)
         return FormationsPlan(
             found=False,
             targets=(),
@@ -446,3 +451,47 @@ def path_to_sector(
                 return tuple(path)
             q.append(nxt)
     return None
+
+
+def _adjacent_hop_toward(
+    graph: Mapping[int, Sequence[int]],
+    current: int,
+    edge: Optional[FrontierEdge],
+) -> Optional[int]:
+    """HIGH fix (mack/cipher adversarial re-verify, 2026-07-21): resolve a
+    frontier edge into a single VALID, ADJACENT next-hop from `current` --
+    never the frontier's own `to` sector directly.
+
+    `frontier_edges()` BFS-walks the KNOWN subgraph from the seed sector,
+    so a returned edge's `frm` is whichever known sector the unmapped
+    warp was actually found from -- not necessarily `current` itself
+    (the nearest frontier edge overall can be several known hops away).
+    `plan_find_stardock()`/`plan_find_formations()` used to hand back
+    `edge.to` as `next_sector` unconditionally, so a caller several hops
+    from the frontier would fire a bare warp straight at a sector it
+    can't actually reach in one hop -- an invalid send the game would
+    reject, spinning the loop toward `max_ticks` with no progress.
+
+    When `current == edge.frm`, `edge.to` genuinely IS one of `current`'s
+    own listed warps (safe, adjacent -- this is literally how a player
+    discovers a new sector for the first time). Otherwise, warp toward
+    `edge.frm` first: the FIRST hop of the shortest known path from
+    `current` to `edge.frm` is guaranteed adjacent to `current` (a real
+    entry in `graph[current]`) -- SELECT is stateless and re-plans fresh
+    every tick (see autopilot.py's own module docstring), so taking one
+    valid hop at a time toward the frontier, re-evaluated each tick, is
+    both correct and sufficient; it never needs to compute the WHOLE
+    remaining path up front.
+
+    Returns `None` (never guessed) when `edge` is `None`, or -- defensive
+    only, should be unreachable since `frontier_edges()` only ever
+    records a `frm` it actually reached via BFS from `current` -- when
+    `edge.frm` turns out unreachable from `current` on this graph."""
+    if edge is None:
+        return None
+    if current == edge.frm:
+        return edge.to
+    path = path_to_sector(graph, current, edge.frm)
+    if path is None or len(path) < 2:
+        return None
+    return path[1]

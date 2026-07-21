@@ -75,7 +75,56 @@ _CREDITS_AMOUNT_FIRST_RE = re.compile(r"(\d[\d,]*)\s+credits\b", re.I)
 # Checked first, ahead of the two generic shapes above — see module
 # docstring.
 _YOU_HAVE_CREDITS_RE = re.compile(r"you\s+have\s+(\d[\d,]*)\s+credits\b", re.I)
-_WARPS_RE = re.compile(r"warps?\s+to\s+sector\(s\)\s*:?\s*([\d\s\-]+)", re.I)
+# WO-FA1 root-fix (2026-07-21): the old `([\d\s\-]+)` capture group choked
+# on the REAL live screen shape, which wraps each destination in
+# parens -- "Warps to Sector(s) :  (379) - (597) - (1302) - (3424) -
+# (4069) - (4182)" -- "(" isn't in that character class, so the group
+# couldn't even start matching right after the label and `parse_state()`
+# silently dropped the "warps" key entirely (not merely truncated to the
+# first sector), starving `explore.py`'s frontier BFS of the very edges
+# it needs to ever pick a next hop. Anchored to line-start (`re.MULTILINE`,
+# mirrors `_SECTOR_STATUS_SIBLING_RE`'s own established convention for
+# this exact label) and captures the REST OF THE LINE verbatim,
+# punctuation and all -- `parse_state()` below then pulls every digit run
+# out of that captured text with a bare `\d+` findall, which is agnostic
+# to whichever separator shape (bare hyphens, paren-wrapped, mixed
+# spacing) a given TWGS variant happens to print. Same last-match
+# discipline as `_SECTOR_RE`/credits above: `parse_state()` takes the
+# LAST line match, not the first, so a stale scrollback "Warps to
+# Sector(s)" block from a prior sector never outranks the current one.
+#
+# CRITICAL fix (mack/cipher adversarial re-verify, 2026-07-21): the `\s*`
+# immediately before the capture group used to include `\n` (`\s` matches
+# any whitespace, newline included) -- on a genuinely EMPTY warps line
+# ("Warps to Sector(s) :  " with nothing after it, followed by a blank
+# line), that `\s*` happily consumed the newline(s) too and the greedy
+# `(.*)$` capture then landed on a LATER, unrelated line instead ("Command
+# [TL=00753:0/0/0/850] (?=Help)? :" -> a bogus warps=[753,0,0,0,850]).
+# Worse, this poisoned screen still passes `is_genuine_sector_status`
+# (the sibling-marker check only looks for the LABEL, not real content),
+# so the cold-start seed would have written the garbage into the world-
+# model every tick. `[ \t]*` (horizontal whitespace only, never `\n`)
+# closes this while changing nothing about the good-case parse: `.`
+# already can't cross a newline without DOTALL, so the label-to-capture
+# gap only ever needed to skip same-line spacing, never a linebreak.
+#
+# CRITICAL fix, completed (cipher re-verify, 2026-07-21): the prior fix
+# above only converted the `\s*` immediately BEFORE the capture group --
+# the `\s*` between `sector\(s\)` and the optional `:?` was still plain
+# `\s*` and still crossed a newline. Live repro: "Warps to Sector(s)"
+# alone on its own line (the LABEL, no colon), with ":  (9001)-(9002)"
+# pushed to the very next physical line, still captured `[9001, 9002]`
+# from that next line -- and since this is a distinct, later fragment on
+# the SAME screen as a genuine sector-status block, `is_genuine_sector_
+# status()` still returns True for the real block, so the cold-start
+# seed would persist the forged pair as if they were the real current
+# sector's warps (cipher's guard-defeat PoC: this also slips past the
+# HIGH backstop in autopilot.py, since that check re-parses the exact
+# same buffer and sees the identical forged fragment). Both post-
+# `sector(s)` `\s*` occurrences now use `[ \t]*` -- neither can ever
+# cross into a second physical line; the whole label-through-value span
+# this regex matches is now guaranteed to stay on ONE line.
+_WARPS_RE = re.compile(r"^\s*warps?\s+to\s+sector\(s\)[ \t]*:?[ \t]*(.*)$", re.I | re.M)
 _COMMODITIES = ("Fuel Ore", "Organics", "Equipment")
 # Real port-trade table columns: NAME  STATUS  TRADING  %-OF-MAX  ONBOARD
 # ("Fuel Ore   Buying    2650    100%       0") — three numbers per row,
@@ -210,9 +259,28 @@ def parse_state(rendered_text: str) -> dict:
     if matches:
         state["credits"] = int(matches[-1].replace(",", ""))
 
-    m = _WARPS_RE.search(rendered_text)
-    if m:
-        warps = [int(x) for x in re.findall(r"\d+", m.group(1))]
+    # KNOWN LIMITATION (mack MED, 2026-07-21, accepted -- not fixed here):
+    # a "Warps to Sector(s)" line long enough to hit an 80-col terminal's
+    # hard wrap (a full 6-destination list with several 5-digit sector
+    # numbers can just clear ~79/80 chars -- the WO-FA1 6-warp example
+    # above is only 71) soft-wraps onto the NEXT physical screen row with
+    # no real newline byte ever sent by the server -- pyte's own auto-wrap,
+    # not a logical line break. `session.render_text()` joins screen ROWS
+    # with "\n" regardless, so `_WARPS_RE`'s `(.*)$` (correctly, per the
+    # CRITICAL fix above, stopping at the first REAL newline) truncates
+    # mid-digit at that wrap boundary and drops the tail destination(s).
+    # Rejoining a soft-wrapped continuation would need a wrap-detection
+    # heuristic (row filled to full width + next row looking like a bare
+    # continuation, not a new label) that risks incorrectly merging two
+    # genuinely distinct 80-char-wide lines elsewhere in the buffer -- a
+    # bigger, riskier fix than this bounded, rare (galaxy-size-dependent)
+    # edge case warrants; a truncated warps list here degrades to "fewer
+    # known frontier edges this tick" (explore.py just sees a smaller
+    # adjacency list, never a wrong one), not a wrong/unsafe value.
+    # Revisit if a live galaxy is ever seen wide enough to trigger it.
+    warps_lines = _WARPS_RE.findall(rendered_text)
+    if warps_lines:
+        warps = [int(x) for x in re.findall(r"\d+", warps_lines[-1])]  # last match wins -- see _WARPS_RE comment
         if warps:
             state["warps"] = warps
 
@@ -273,6 +341,17 @@ def parse_state(rendered_text: str) -> dict:
 # start_anchor, ledger.py, protocol.py's replay start-anchor), are
 # UNCHANGED: those need the sector off any normal settled game screen,
 # not just a screen carrying a full sibling status block.
+#
+# RESIDUAL (documented, not fixed here -- mack/cipher adversarial
+# re-verify of WO-FA1, 2026-07-21): this is a shape check, not a
+# provenance check -- a forged in-band chat/broadcast that happens to
+# reproduce a "Sector : N" line immediately followed by a sibling marker
+# line (no blank line between) still passes. Bounded today by every
+# consumer of a `True` result here (see protocol.py's `_write_world_model`
+# and `_autopilot_snapshot_kwargs`'s cold-start seed for the full
+# blast-radius reasoning) -- becomes a HARD GATE prerequisite before any
+# autonomous run on a multiplayer/shared server, where another player
+# could actually author such a broadcast.
 def is_genuine_sector_status(rendered_text: str) -> bool:
     """True only when the sector `parse_state()` would anchor to (the
     LAST line-start "Sector : N" match, same discipline as `parse_state`

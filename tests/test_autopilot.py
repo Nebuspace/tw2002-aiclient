@@ -484,6 +484,46 @@ def test_live_tick_sends_normally_when_the_live_screen_is_the_command_prompt():
     # normally when the screen genuinely IS settled and unchanged.
 
 
+def test_live_tick_holds_a_non_adjacent_explore_target_the_live_screen_positively_contradicts():
+    """HIGH backstop sensitivity control (mack/cipher adversarial
+    re-verify, 2026-07-21): the live screen POSITIVELY shows the current
+    sector's own warps (12, 45, 99) via a real "Warps to Sector(s)" line
+    -- a forced explore target (777) that ISN'T among them must HOLD as
+    `held:non_adjacent`, never fire the bare send. RED if
+    `_explore_target_confirmed_non_adjacent`'s check is removed (would
+    otherwise send "777" through unconditionally, exactly like
+    `test_live_tick_sends_normally_when_the_live_screen_is_the_command_prompt`
+    above does for an unconstrained target)."""
+    text = "Warps to Sector(s) :  12 - 45 - 99\n" + _MAIN_COMMAND_SCREEN
+    session = FakeAutopilotSession(text=text)
+    profile = _make_profile(autonomous=True)
+    lock = ControlLock()
+    ledger = FakeLedger()
+    engine = AutopilotEngine(session, profile, lock, ledger=ledger)
+
+    decision = engine.live_tick(explore_next_sector=777)
+    assert decision.chosen.kind == "explore"
+    assert decision.send_outcome == "held:non_adjacent"
+    assert session.sent == [], "must NOT fire a bare warp the live screen positively contradicts"
+    assert "held" in ledger.calls[0]["intent"]
+
+
+def test_live_tick_sends_an_explore_target_the_live_screen_confirms_is_adjacent():
+    """Positive control for the same backstop: when the live screen's
+    own warps DO include the candidate's target, the send proceeds
+    normally -- the guard only ever refuses a POSITIVELY confirmed
+    mismatch, never a merely-plausible one."""
+    text = "Warps to Sector(s) :  12 - 45 - 99\n" + _MAIN_COMMAND_SCREEN
+    session = FakeAutopilotSession(text=text)
+    profile = _make_profile(autonomous=True)
+    lock = ControlLock()
+    engine = AutopilotEngine(session, profile, lock)
+
+    decision = engine.live_tick(explore_next_sector=45)
+    assert decision.send_outcome == "sent"
+    assert session.sent == [("45", True, False)]
+
+
 def test_live_tick_holds_on_a_blank_gate_render_rather_than_trusting_the_stale_pre_text():
     """cipher re-verify (2026-07-20), HIGH-2 TOCTOU + blank-screen bypass:
     the OLD code classified against the STALE tick-start `pre_text` render

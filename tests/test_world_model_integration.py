@@ -371,6 +371,34 @@ def test_genuine_sector_screen_with_warps_sibling_persists_correctly(isolated_wo
     assert sector["warps"] == [12, 45, 99]
 
 
+def test_genuine_sector_screen_with_full_paren_wrapped_warps_persists_all_six(isolated_world_store):
+    """WO-FA1 end-to-end propagation proof: the REAL live-server warps
+    shape (each destination paren-wrapped -- state_parser's old capture
+    group couldn't even start matching it, see that module's `_WARPS_RE`
+    comment) must make it, complete, all the way through `parse_state()`
+    -> the `_write_world_model()` write-hook -> the persisted sector --
+    never truncated to the first sector, never dropped entirely."""
+    _write_profiles(
+        isolated_world_store,
+        {"alice": {"host": "bat.example.com", "port": 23, "game_letter": "A", "handle": "Alice"}},
+    )
+    real_shape_screen = (
+        "Sector  : 2335\n"
+        "Ports   : None\n"
+        "Warps to Sector(s) :  (379) - (597) - (1302) - (3424) - (4069) - (4182)\n"
+        "Command [TL=00:12:34]:[1000] (?=Help) ?"
+    )
+    session = FakeSession("bat.example.com", real_shape_screen, auto_login_profile="alice")
+
+    resp = protocol.dispatch(session, "do", {"input": ""}, FakeServer())
+
+    assert resp["ok"] is True
+    world_id = protocol._current_world_id(session)
+    sector = world_model.get_sector(world_id, 2335)
+    assert sector is not None
+    assert sector["warps"] == [379, 597, 1302, 3424, 4069, 4182]
+
+
 def test_chat_only_screen_with_no_genuine_status_line_persists_nothing(isolated_world_store):
     """Adapted from mack's probe_f2_carveout.py: a screen whose ONLY
     "sector" mention is embedded in narrative/chat text (no genuine

@@ -18,7 +18,8 @@ import time
 import pytest
 
 from twclient import credentials, protocol, world_identity, world_model
-from twclient.control_lock import MODE_AI_PILOT, MODE_AUTO_LOOP
+from twclient.autopilot import AutopilotEngine
+from twclient.control_lock import MODE_AI_PILOT, MODE_AUTO_LOOP, ControlLock
 
 from .conftest import FakeAttachSession, send_request
 
@@ -205,5 +206,232 @@ def test_autopilot_snapshot_kwargs_wires_the_explore_lane(monkeypatch, tmp_path)
     assert kwargs["stardock_route"] is None
 
 
+class _FakeLoggerForSeed:
+    """Minimal stand-in for `logging_util.TranscriptLogger` -- mirrors
+    test_world_model_integration.py's own `FakeLogger`, the only surface
+    `_log_world_model_failure` actually calls."""
+
+    def __init__(self):
+        self.notes = []
+
+    def log_note(self, note):
+        self.notes.append(note)
+
+
+def test_autopilot_snapshot_kwargs_seed_swallows_a_corrupt_sector_file_and_logs(monkeypatch, tmp_path):
+    """MED fix (mack re-verify, 2026-07-21): a corrupt on-disk sector
+    file makes `plan_find_stardock()` (via `known_graph`/`all_sectors`)
+    raise `world_model.WorldModelError` -- a plain `Exception`, NOT an
+    `OSError`, so the old `except OSError` around this call let it
+    propagate uncaught, crashing the whole tick (both `autopilot_preview`
+    and the background `AutopilotLoop`'s `snapshot_provider`) over a pure
+    read-availability hiccup. Must swallow-and-log instead (same
+    convention as the write-hook immediately above it in this function)
+    and return `{}` -- no explore lane this tick, never a crash."""
+    monkeypatch.setattr(world_model, "WORLD_DIR", tmp_path / "world")
+    session = FakeAttachSession(initial_screen="Sector  : 1\n\nCommand [TL=00:00:00]:[1] (?=Help)? : ")
+    session.auto_login_profile = "default"
+    logger = _FakeLoggerForSeed()
+    session.logger = logger
+
+    profile = credentials.Profile(name="default", host=session.host, port=1, game_letter="A", handle="Trader1")
+    monkeypatch.setattr(credentials, "load_profile", lambda name: profile)
+
+    world_id = world_identity.world_id(session.host, profile.game_letter, profile.handle)
+    # A genuinely corrupt sector file -- same truncated-JSON technique
+    # test_world_model.py's own corrupt-file tests use.
+    path = world_model._sector_path(world_id, 1, state_dir=None)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text('{"sector_id": 1,', encoding="utf-8")
+
+    kwargs = protocol._autopilot_snapshot_kwargs(session)
+
+    assert kwargs == {}  # no crash, no explore lane this tick
+    assert any("plan_find_stardock" in note for note in logger.notes)
+
+
 def test_autopilot_snapshot_kwargs_empty_with_no_resolvable_world(fake_daemon):
     assert protocol._autopilot_snapshot_kwargs(fake_daemon.session) == {}
+
+
+# -- WO-FA1: full chain, state_parser -> cold-start seed -> explore BFS -----
+# -- -> a real autonomous live_tick send -------------------------------------
+
+
+def test_full_chain_real_warps_screen_seeds_world_model_and_drives_a_live_explore_send(
+    monkeypatch, tmp_path
+):
+    """No piece of the WO-FA1 chain is exercised together anywhere else:
+    a real (paren-wrapped, 6-destination) "Warps to Sector(s)" screen,
+    parsed fresh by `state_parser` (its own dedicated fix), cold-start-
+    seeded into the world-model by `_autopilot_snapshot_kwargs` (this is
+    the FIRST tick -- nothing was ever previously written for this
+    sector), turned into a frontier target by `explore.py`'s BFS, and
+    finally sent for real by an autonomous `AutopilotEngine.live_tick()`.
+    """
+    monkeypatch.setattr(world_model, "WORLD_DIR", tmp_path / "world")
+    screen = (
+        "Sector  : 2335\n"
+        "Ports   : None\n"
+        "Warps to Sector(s) :  (379) - (597) - (1302) - (3424) - (4069) - (4182)\n"
+        "Command [TL=00:00:08]:[100] (?=Help)? :"
+    )
+    session = FakeAttachSession(initial_screen=screen)
+    session.auto_login_profile = "armed"
+
+    profile = credentials.Profile(
+        name="armed", host=session.host, port=1, game_letter="A", handle="Trader1", autonomous=True
+    )
+    monkeypatch.setattr(credentials, "load_profile", lambda name: profile)
+
+    kwargs = protocol._autopilot_snapshot_kwargs(session)
+
+    # The cold-start seed must have written all 6 warps under 2335 --
+    # never truncated to the first, never dropped.
+    world_id = world_identity.world_id(session.host, profile.game_letter, profile.handle)
+    assert world_model.get_sector(world_id, 2335)["warps"] == [379, 597, 1302, 3424, 4069, 4182]
+
+    # None of the 6 destinations are mapped yet -- all are depth-1
+    # frontier edges from 2335; deterministic (epsilon=0.0) nearest pick
+    # is the lowest sector number, 379.
+    assert kwargs["explore_next_sector"] == 379
+    assert kwargs["explore_mode"] == "hunt"
+
+    lock = ControlLock()
+    engine = AutopilotEngine(session, profile, lock)
+    decision = engine.live_tick(**kwargs)
+
+    assert decision.chosen.kind == "explore"
+    assert decision.send_outcome == "sent"
+    assert session.sent == [("379", True, False)]
+
+
+# -- FA9 (pinned, not fixed in this revise): forged in-band sibling block --
+
+
+@pytest.mark.xfail(
+    reason=(
+        "FA9: is_genuine_sector_status provenance-hardening not yet built -- "
+        "a forged in-band Warps-to-Sector(s) fragment trailing a GENUINE "
+        "sector-status block on the SAME screen still wins parse_state()'s "
+        "last-match-wins and poisons the cold-start seed under the REAL "
+        "current sector; tracked as a multiplayer-arm prerequisite (see "
+        "state_parser.is_genuine_sector_status's RESIDUAL note / "
+        "protocol._autopilot_snapshot_kwargs's FORGED-BLOCK RESIDUAL note)."
+    ),
+    strict=False,
+)
+def test_forged_trailing_sibling_block_must_not_poison_the_seed_or_defeat_the_guard(
+    monkeypatch, tmp_path
+):
+    """Pins cipher's guard-defeat finding (`is_genuine_sector_status()` is a
+    SHAPE check, not a provenance check) against the CORRECT (hardened,
+    not-yet-built) behavior -- RED today, GREEN once FA9 lands.
+
+    The screen carries a REAL, genuine "Sector : 100" status block
+    (warps 12-45-99) followed later on the SAME screen by a WELL-FORMED
+    (not merely split-label -- that narrower regex leak is already closed
+    above) forged "Warps to Sector(s)" line an in-band chat/broadcast
+    fragment could carry. `is_genuine_sector_status()` still returns True
+    (the genuine block right after "Sector : 100" satisfies it), and
+    `parse_state()`'s deliberate last-match-wins (needed for the real
+    stale-scrollback case) currently lets the LATER, forged line win --
+    the cold-start seed persists the forged pair under the ship's real
+    current sector, `explore.py`'s frontier BFS treats it as a genuine
+    depth-1 edge FROM the current sector (`_adjacent_hop_toward`'s
+    `current == edge.frm` shortcut hands it back directly -- "safe by
+    construction" only when the world-model's belief about the current
+    sector's own warps is accurate), and the HIGH backstop guard
+    re-parses the SAME buffer and sees the identical forged fragment, so
+    it can't catch it either. Once FA9's provenance-hardening lands, the
+    genuine warps must win instead."""
+    monkeypatch.setattr(world_model, "WORLD_DIR", tmp_path / "world")
+    screen = (
+        "Sector  : 100\n"
+        "Ports   : None\n"
+        "Warps to Sector(s) : 12 - 45 - 99\n"
+        "\n"
+        "R Someone says: check this out\n"
+        "Warps to Sector(s) : 9001 - 9002\n"
+        "Command [TL=00:00:08]:[100] (?=Help)? :"
+    )
+    session = FakeAttachSession(initial_screen=screen)
+    session.auto_login_profile = "armed"
+
+    profile = credentials.Profile(
+        name="armed", host=session.host, port=1, game_letter="A", handle="Trader1", autonomous=True
+    )
+    monkeypatch.setattr(credentials, "load_profile", lambda name: profile)
+
+    kwargs = protocol._autopilot_snapshot_kwargs(session)
+
+    world_id = world_identity.world_id(session.host, profile.game_letter, profile.handle)
+    sector_rec = world_model.get_sector(world_id, 100)
+    assert sector_rec["warps"] == [12, 45, 99], (
+        "the seed must persist the GENUINE warps, never a forged trailing in-band fragment"
+    )
+    assert kwargs.get("explore_next_sector") not in (9001, 9002), (
+        "the frontier must never resolve to the forged targets"
+    )
+
+    lock = ControlLock()
+    engine = AutopilotEngine(session, profile, lock)
+    decision = engine.live_tick(**kwargs)
+    assert session.sent not in ([("9001", True, False)], [("9002", True, False)]), (
+        "must never fire a warp toward a forged in-band target"
+    )
+
+
+# -- Production-composition: socket -> AutopilotLoop -> seed -> send -------
+
+
+def test_autopilot_start_over_the_real_socket_drives_the_loop_through_the_seed_to_a_live_send(
+    fake_daemon, profiles_toml, monkeypatch, tmp_path
+):
+    """FIX 3 (hub addendum, WO-FA1 final revise): no single existing test
+    exercises the EXACT path production use (E2) will run --
+    `autopilot_start` dispatched over the REAL unix-domain socket -> a
+    background `AutopilotLoop` thread -> `_autopilot_snapshot_kwargs`'s
+    cold-start seed -> `explore.py`'s frontier BFS -> a real send through
+    `send_and_confirm`. The socket-level tests above use a bare session
+    with no resolvable world_id (empty kwargs every tick); the loop tests
+    in test_autopilot.py drive a fake `snapshot_provider` directly; the
+    full-chain test above calls `_autopilot_snapshot_kwargs()`/
+    `live_tick()` directly, bypassing both the socket AND the
+    `AutopilotLoop` thread. This is the one test that fires the WHOLE
+    production chain end-to-end, in one place."""
+    monkeypatch.setattr(world_model, "WORLD_DIR", tmp_path / "world")
+    fake_daemon.session._screen = (
+        "Sector  : 2335\n"
+        "Ports   : None\n"
+        "Warps to Sector(s) :  (379) - (597) - (1302) - (3424) - (4069) - (4182)\n"
+        "Command [TL=00:00:08]:[100] (?=Help)? :"
+    )
+    fake_daemon.session.auto_login_profile = "armed"
+
+    resp = send_request(fake_daemon.sock_path, "autopilot_start", {"profile": "armed", "max_ticks": 3})
+    assert resp["ok"] is True
+    assert resp["running"] is True
+
+    # 3 bounded ticks -- the first fires almost immediately (see
+    # AutopilotLoop._run()'s own tick-then-sleep ordering), the loop
+    # naturally finishes after ~2 real seconds (2 inter-tick sleeps).
+    finished = _wait_until(lambda: not fake_daemon.server.autopilot_loop.running, timeout=8.0)
+    assert finished, "the bounded 3-tick loop never finished in time"
+
+    status = send_request(fake_daemon.sock_path, "status")
+    assert status["mode"] == MODE_AI_PILOT  # leave_auto_loop() ran in the loop's own finally
+
+    assert fake_daemon.session.sent, "the socket->loop->seed->send chain never fired a single send"
+    # Every sent target must be one of the 6 genuine, adjacent warps --
+    # never a non-adjacent/garbage number -- proving the nav fix + the
+    # HIGH backstop guard both held across every tick, not just the first.
+    sent_targets = {int(text) for text, enter, secret in fake_daemon.session.sent}
+    assert sent_targets <= {379, 597, 1302, 3424, 4069, 4182}
+
+    # The world-model actually grew (the seed genuinely wrote it, not
+    # just a paper trail in the returned kwargs).
+    world_id = world_identity.world_id(fake_daemon.session.host, "A", "Trader2")
+    sector_rec = world_model.get_sector(world_id, 2335)
+    assert sector_rec is not None
+    assert sector_rec["warps"] == [379, 597, 1302, 3424, 4069, 4182]

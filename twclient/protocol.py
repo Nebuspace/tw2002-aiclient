@@ -917,7 +917,9 @@ _AUTOPILOT_EXPLORE_TURN_BUDGET = 10  # matches spectate_app.py's own _explore_pl
 
 
 def _autopilot_snapshot_kwargs(session):
-    """Best-effort LIVE `assess()` kwargs for one autopilot tick.
+    """Best-effort LIVE `assess()` kwargs for one autopilot tick. Also
+    seeds the world-model with THIS tick's current sector/warps before
+    planning off it -- see the "WO-FA1 cold-start seed" comment below.
 
     HONEST SCOPE NOTE (verified while wiring this, not assumed): this
     wires ONLY the explore/StarDock-hunt lane -- `world_id` -> a single
@@ -955,9 +957,53 @@ def _autopilot_snapshot_kwargs(session):
     if world_id is None:
         return {}
     text = session.render_text(session.render())
-    sector = parse_state(text).get("sector")
+    parsed = parse_state(text)
+    sector = parsed.get("sector")
     if sector is None:
         return {}
+
+    # WO-FA1 cold-start seed: guarantee the world-model already knows
+    # THIS tick's current sector + its (now-complete, see state_parser's
+    # WO-FA1 fix) warps BEFORE the frontier/route planners below read the
+    # graph. Without this, a tick whose own settled screen was never
+    # previously written via `_write_world_model` (e.g. the very first
+    # tick right after login, before any `tw do`/`tw read`/`tw screen`
+    # response happened to carry a genuine sector-status block) sees the
+    # current sector absent from `explore.known_graph()` entirely --
+    # `frontier_edges()` requires `start in graph` and returns [] outright
+    # -- so `explore_next_sector` stays None forever and the very first
+    # tick can never move. Reuses `_write_world_model`'s own single-sector
+    # write path/gate exactly (`is_genuine_sector_status` +
+    # `world_model.write_from_state`, same swallow-and-log failure
+    # handling) -- idempotent and safe to call every tick even when the
+    # same screen was already written moments earlier through the normal
+    # `build_response` hook.
+    #
+    # FORGED-BLOCK RESIDUAL (mack/cipher adversarial re-verify, 2026-07-21,
+    # documented not fixed here -- hub-tracked roadmap prerequisite): a
+    # forged in-band chat/broadcast text reproducing a "Sector : N" +
+    # sibling-marker block byte-for-byte can still pass
+    # `is_genuine_sector_status()` (a PRE-EXISTING gap in that function,
+    # not introduced by this seed -- see its own docstring's "residual"
+    # section) and get seeded here as if it were the ship's real position.
+    # BOUNDED today: HIGH-2's classify-gate still requires the LIVE screen
+    # to classify as `main_command` before any send at all, the (a)/(b)
+    # fixes above mean only an actually-adjacent target ever gets sent,
+    # and EXECUTE is explore-only (never Genesis/PvP/colonist-commitment)
+    # -- so a forged seed can misdirect exploration bookkeeping, never
+    # trigger an unsafe send. On a SOLO/isolated game there's no other
+    # player who could forge such a broadcast in the first place. This
+    # stops being merely "non-exploitable today" and becomes a HARD GATE
+    # the moment autonomous mode runs on a multiplayer/shared server --
+    # closing it needs anchor-to-live-prompt hardening in
+    # `is_genuine_sector_status()` itself, tracked as a roadmap
+    # prerequisite, deliberately NOT attempted in this revise.
+    if is_genuine_sector_status(text):
+        try:
+            world_model.write_from_state(world_id, parsed)
+        except Exception as exc:  # noqa: BLE001 -- best-effort seed only, see _write_world_model's own swallow-guard
+            _log_world_model_failure(session, "write_from_state", exc)
+
     from .explore import plan_find_stardock
 
     try:
@@ -967,7 +1013,17 @@ def _autopilot_snapshot_kwargs(session):
             turn_budget=_AUTOPILOT_EXPLORE_TURN_BUDGET,
             epsilon=0.0,  # deterministic nearest-frontier pick for the trainer -- see explore.py's pick_frontier_edge
         )
-    except OSError:
+    except Exception as exc:  # noqa: BLE001 -- MED fix (mack re-verify, 2026-07-21): a
+        # corrupt on-disk sector file raises `world_model.WorldModelError` (a
+        # plain Exception), which the old `except OSError` didn't catch --
+        # an uncaught raise here would have crashed the whole autopilot tick
+        # (both preview and the background AutopilotLoop's snapshot_provider)
+        # over a pure READ-availability hiccup with zero safety impact (the
+        # outer HIGH-2 classify-gate + the fail-closed autonomous gate are
+        # what actually guard every send; this is purely "can we plan a
+        # frontier at all"). Swallow-and-log, same convention as the seed
+        # write immediately above.
+        _log_world_model_failure(session, "plan_find_stardock", exc)
         return {}
     return {
         "stardock_route": plan.route,
