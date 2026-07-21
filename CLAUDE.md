@@ -78,8 +78,9 @@ invent a lint step.
 - **Single-connection, single-session daemon.** `run/twd.sock` + `run/twd.pid` live under this
   project directory regardless of the caller's CWD. The daemon refuses a second daemon via the
   pidfile; `control_lock.py` governs who may drive the one game connection — don't bypass it.
-- **`config/`, `run/`, `state/`, `logs/` are all gitignored.** `config/profiles.toml.example`
-  is the only tracked file under `config/`; real `profiles.toml` and `secrets.json` are local-only.
+- **`config/`, `run/`, `state/`, `logs/` are all gitignored.** The only tracked files under
+  `config/` are `config/profiles.toml.example` and `config/servers.toml` (the public game-server
+  catalog resolved by `tw servers list`); real `profiles.toml` and `secrets.json` are local-only.
 - **`wait_prompt` regexes are case-sensitive** (`settle.py` has no `re.IGNORECASE`) — a
   case-mismatched prompt regex silently times out instead of erroring.
 - **`state_parser.py` anchors to the LAST match in the buffer, not the first** — this is
