@@ -278,12 +278,19 @@ def main(argv=None):
     server.loop_player = LoopPlayer(
         session, server.control_lock, watch_hub, ledger=server.ledger, session_id=session.logger.session_id
     )
-    # §22/§23 Phase 1 autonomous goal-orchestrator (autopilot.py) -- reserved
-    # slot for the forthcoming P1-d auto-start hook (`autopilot.maybe_auto_start`,
-    # deliberately deferred, not wired here). Stays `None` until that lands;
-    # protocol.py's "status" handler already reads it null-safe (same
-    # getattr(..., None) convention as watch_hub/control_lock/loop_player).
+    # §22/§23 Phase 1 autonomous goal-orchestrator (autopilot.py) -- WO-P1-d
+    # wiring: `server.autopilot_engine` is lazily constructed/reused by
+    # protocol.py's `autopilot_preview`/`autopilot_start` dispatches (see
+    # `_get_or_build_autopilot_engine`), and `server.autopilot_loop` is set
+    # only once `autopilot_start` actually arms a background `AutopilotLoop`
+    # (mirrors `server.loop_player` above, but this one starts absent -- an
+    # AUTO_LOOP run only ever exists after an explicit `tw autopilot start`,
+    # never unconditionally like the always-on Trainer Control Panel driver).
+    # Both stay `None` until first used; protocol.py's "status" handler
+    # already reads autopilot_engine null-safe (same getattr(..., None)
+    # convention as watch_hub/control_lock/loop_player).
     server.autopilot_engine = None
+    server.autopilot_loop = None
     server.request_stop = lambda: threading.Thread(target=_shutdown, args=(server, session), daemon=True).start()
 
     try:

@@ -466,6 +466,16 @@ def dispatch(session, verb, args, server):
     if verb == "crawl_start":
         return _dispatch_crawl_start(server, session, args)
 
+    # -- WO-P1-d: §22/§23 autonomous goal-orchestrator (autopilot.py) ----
+    if verb == "autopilot_preview":
+        return _dispatch_autopilot_preview(server, session, args)
+
+    if verb == "autopilot_start":
+        return _dispatch_autopilot_start(server, session, args)
+
+    if verb == "autopilot_stop":
+        return _dispatch_autopilot_stop(server)
+
     # -- v2.1 item 11: macro/recording/pattern-learning verbs -----------
     if verb == "record_start":
         return _dispatch_record_start(server, session, args)
@@ -888,6 +898,201 @@ def _dispatch_crawl_start(server, session, args):
         except CrawlSafetyError as e:
             return {"ok": False, "error": str(e)}
         return {"ok": True, **result}
+
+
+# -- WO-P1-d: §22/§23 autonomous goal-orchestrator (autopilot.py) wiring ---
+#
+# `autopilot_preview` is the safe pre-enablement proof surface (dry-run,
+# NEVER sends, regardless of `profile.autonomous` -- see
+# `AutopilotEngine.dry_run_tick()`'s own docstring): it proves the real
+# ASSESS -> SELECT pipeline runs against the CURRENT live screen/world-
+# model, with zero risk. `autopilot_start`/`autopilot_stop` arm/halt the
+# background `AutopilotLoop` (mirrors `_dispatch_play_start`/
+# `_dispatch_play_stop`'s own shape one section up) -- `live_tick()`'s own
+# fail-closed gate (`AutopilotGateError` unless `profile.autonomous` is
+# True) is never bypassed here; this dispatch only ever constructs the
+# engine and calls `AutopilotLoop.start()`, which raises straight through.
+
+_AUTOPILOT_EXPLORE_TURN_BUDGET = 10  # matches spectate_app.py's own _explore_plan_for_mode budget
+
+
+def _autopilot_snapshot_kwargs(session):
+    """Best-effort LIVE `assess()` kwargs for one autopilot tick.
+
+    HONEST SCOPE NOTE (verified while wiring this, not assumed): this
+    wires ONLY the explore/StarDock-hunt lane -- `world_id` -> a single
+    read-only `explore.plan_find_stardock()` call, the exact same
+    planner + turn-budget convention `spectate_app.py`'s own
+    `_explore_plan_for_mode(mode="stardock")` already uses live (it
+    naturally falls back to a Map-fill frontier hunt when no StarDock is
+    landmarked yet -- see that function's own docstring), so both
+    `stardock_route` and `explore_next_sector`/`explore_mode` come from
+    ONE consistent plan.
+
+    Deliberately does NOT populate `hops`/`ship_catalog`/`loop`/
+    `current_ship`: no adapter exists ANYWHERE in this codebase from
+    `world_model`'s stored sector/port data into `chains.TradeHop`
+    margins -- `spectate_app.py`'s own `_longest_chain_for_panel()`
+    docstring flags this exact gap ("World-model -> TradeHop margin
+    adapter needs absolute buy/sell prices (not yet on port commodity
+    records)"), and there is no current-ship-name introspection either
+    (`game_data.py`'s own module docstring: "this project has no
+    current-ship-name introspection yet"). Building either bridge is a
+    separate, substantially bigger effort than this wiring WO -- not
+    invented here unreviewed. Practical consequence: `select()`'s
+    `run_chain`/`upgrade` scorers always skip on a live daemon TODAY
+    (fail-closed by design, see their own `_score_*` functions), so a
+    live autopilot tick can currently only ever choose `"explore"` (or
+    nothing, before the first sector is ever parsed) -- see this
+    module's `_dispatch_autopilot_preview`/`_dispatch_autopilot_start`
+    docstrings, and report this honestly rather than paper over it.
+
+    Returns `{}` (every `assess()` default applies -- an all-empty
+    `WorldSnapshot`) whenever `world_id`/the current sector can't be
+    resolved: manual play with no configured `--profile`, or before the
+    daemon has ever settled on a screen carrying a sector line."""
+    world_id = _current_world_id(session)
+    if world_id is None:
+        return {}
+    text = session.render_text(session.render())
+    sector = parse_state(text).get("sector")
+    if sector is None:
+        return {}
+    from .explore import plan_find_stardock
+
+    try:
+        plan = plan_find_stardock(
+            world_id,
+            current_sector=sector,
+            turn_budget=_AUTOPILOT_EXPLORE_TURN_BUDGET,
+            epsilon=0.0,  # deterministic nearest-frontier pick for the trainer -- see explore.py's pick_frontier_edge
+        )
+    except OSError:
+        return {}
+    return {
+        "stardock_route": plan.route,
+        "explore_next_sector": plan.next_sector,
+        "explore_mode": plan.mode,
+    }
+
+
+def _get_or_build_autopilot_engine(server, session, profile, caps=None):
+    """Lazily builds/reuses this daemon's ONE `AutopilotEngine` -- fills
+    `server.autopilot_engine`'s reserved slot (daemon.py) the first time
+    either `autopilot_preview` or `autopilot_start` is dispatched.
+
+    `preview` and `start` deliberately share the SAME engine instance
+    (never a disposable one-off per call) so `dry_run_tick()`'s own
+    `interrupted` flag genuinely answers "would this interrupt the real
+    driven history" against the actual `live_tick()` history -- exactly
+    the concurrent preview-vs-live-loop scenario `AutopilotEngine`'s own
+    class docstring (HIGH-3 note) already anticipates and is lock-guarded
+    against.
+
+    Rebuilt (replacing any cached engine, dropping its trace history)
+    whenever the requested profile differs from the cached one's name, or
+    `caps` is explicitly supplied -- both change state that's fixed at
+    construction (`self.enabled`/`self.caps`), so a fresh instance is the
+    only correct way to apply either change. Callers that would rebuild
+    while a loop bound to the OLD engine is still running must refuse
+    BEFORE calling this (see `_dispatch_autopilot_start`'s own
+    `already_running` guard) -- this function has no way to know about a
+    caller's separate `AutopilotLoop` object."""
+    from .autopilot import AutopilotEngine, EconCaps
+
+    existing = getattr(server, "autopilot_engine", None)
+    if existing is not None and caps is None and getattr(existing.profile, "name", None) == profile.name:
+        return existing
+    engine = AutopilotEngine(
+        session,
+        profile,
+        server.control_lock,
+        ledger=getattr(server, "ledger", None),
+        session_id=_current_session_id(session),
+        caps=caps if caps is not None else EconCaps(),
+    )
+    server.autopilot_engine = engine
+    return engine
+
+
+def _dispatch_autopilot_preview(server, session, args):
+    """`tw autopilot preview` -- the pre-enablement proof surface: ASSESS
+    the CURRENT live screen/world-model + SELECT the highest-EV candidate,
+    ZERO sends, regardless of the bound profile's `autonomous` flag (see
+    `AutopilotEngine.dry_run_tick()`). `profile` is required (unlike
+    `start`, there's no meaningful "run against whatever's cached"
+    default here on a cold daemon) so a caller always knows exactly whose
+    gate/world this decision was scored against."""
+    from .autopilot import decision_to_trace
+
+    profile_name = args.get("profile")
+    if not profile_name:
+        return {"ok": False, "error": "missing_profile"}
+    from . import credentials
+
+    try:
+        profile = credentials.load_profile(profile_name)
+    except credentials.CredentialError as e:
+        return {"ok": False, "error": str(e)}
+    engine = _get_or_build_autopilot_engine(server, session, profile)
+    decision = engine.dry_run_tick(**_autopilot_snapshot_kwargs(session))
+    return {"ok": True, "decision": decision_to_trace(decision)}
+
+
+def _dispatch_autopilot_start(server, session, args):
+    """`tw autopilot start` -- arms a background `AutopilotLoop` bound to
+    `profile`; returns immediately once armed (mirrors
+    `_dispatch_play_start`'s shape, not `_dispatch_play`'s synchronous
+    one). `AutopilotLoop.start()` -> `control_lock.enter_auto_loop()` is
+    the atomic mode authority (refuses under a human attach or an
+    already-running loop); `live_tick()`'s own `AutopilotGateError`
+    fail-closed gate (never bypassed here) is what actually decides
+    whether a single byte ever reaches the wire -- see that method's own
+    docstring. `cash_floor`/`max_ticks` are the two caller-tunable knobs
+    the WO asked for; every other `EconCaps`/`AutopilotLoop` default
+    (turn_reserve, tick_interval_s, the loop's own hard tick ceiling)
+    stays untouched."""
+    from . import credentials
+    from .autopilot import AutopilotGateError, AutopilotLoop, AutopilotLoopError, EconCaps
+    from .control_lock import ControlModeConflict
+
+    profile_name = args.get("profile")
+    if not profile_name:
+        return {"ok": False, "error": "missing_profile"}
+    try:
+        profile = credentials.load_profile(profile_name)
+    except credentials.CredentialError as e:
+        return {"ok": False, "error": str(e)}
+
+    existing_loop = getattr(server, "autopilot_loop", None)
+    if existing_loop is not None and existing_loop.running:
+        return {"ok": False, "error": "already_running"}
+
+    cash_floor = args.get("cash_floor")
+    caps = EconCaps(cash_floor=cash_floor) if cash_floor is not None else None
+    engine = _get_or_build_autopilot_engine(server, session, profile, caps=caps)
+
+    loop_kwargs = {}
+    max_ticks = args.get("max_ticks")
+    if max_ticks is not None:
+        loop_kwargs["max_ticks"] = max_ticks
+    loop = AutopilotLoop(engine, lambda: _autopilot_snapshot_kwargs(session), **loop_kwargs)
+    try:
+        loop.start()
+    except (AutopilotGateError, AutopilotLoopError, ControlModeConflict) as e:
+        return {"ok": False, "error": str(e)}
+    server.autopilot_loop = loop
+    return {"ok": True, **loop.snapshot()}
+
+
+def _dispatch_autopilot_stop(server):
+    """Also (like `_dispatch_play_stop`) a harmless no-op when nothing is
+    running -- never itself refused by whatever it's trying to release."""
+    loop = getattr(server, "autopilot_loop", None)
+    if loop is None:
+        return {"ok": False, "error": "autopilot_not_started"}
+    stopped = loop.stop()
+    return {"ok": True, "stopped": stopped, **loop.snapshot()}
 
 
 def _dispatch_list_skills(server, args):

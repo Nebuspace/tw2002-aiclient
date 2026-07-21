@@ -641,6 +641,34 @@ def cmd_autoloop(args):
         sys.exit(1)
 
 
+def cmd_autopilot(args):
+    """WO-P1-d: preview/start/stop the §22/§23 autonomous goal-orchestrator
+    (autopilot.py). `preview` is the safe pre-enablement proof surface --
+    dry-run only, NEVER sends, works regardless of the profile's
+    `autonomous` flag -- printing the ASSESS/SELECT decision (candidates,
+    the winner, why) it scored against the CURRENT live screen. `start`/
+    `stop` arm/halt the background AUTO_LOOP-mode driver: unlike `tw play`
+    (blocks until done), `start` returns immediately once armed -- watch
+    it live with `tw spectate`/`tw status`/`tw watch`. `start` only ever
+    actually sends once the bound profile's `autonomous` flag is True
+    (autopilot.py's own fail-closed gate; this CLI can't bypass it)."""
+    if args.action in ("preview", "start") and not args.profile:
+        print("ERROR: --profile is required for preview/start")
+        sys.exit(1)
+    if args.action == "preview":
+        resp = send_request("autopilot_preview", {"profile": args.profile})
+    elif args.action == "start":
+        resp = send_request(
+            "autopilot_start",
+            {"profile": args.profile, "max_ticks": args.max_ticks, "cash_floor": args.cash_floor},
+        )
+    else:
+        resp = send_request("autopilot_stop", {})
+    print_response(resp, args)
+    if not resp.get("ok"):
+        sys.exit(1)
+
+
 def cmd_spectate(args):
     from . import spectate_app
 
@@ -949,6 +977,26 @@ def build_parser():
     sp.add_argument("--step-timeout", type=float, default=8.0, help="per-step settle timeout (start only)")
     add_json(sp)
     sp.set_defaults(func=cmd_autoloop)
+
+    sp = sub.add_parser(
+        "autopilot",
+        help=(
+            "§22/§23 autonomous goal-orchestrator: preview (dry-run, safe, "
+            "no gate needed) / start / stop the background driver"
+        ),
+    )
+    sp.add_argument("action", choices=["preview", "start", "stop"])
+    sp.add_argument("--profile", default=None, help="profile name in config/profiles.toml (required for preview/start)")
+    sp.add_argument(
+        "--max-ticks", dest="max_ticks", type=int, default=None,
+        help="start only: cap on ticks this run executes (clamped to the engine's own hard ceiling)",
+    )
+    sp.add_argument(
+        "--cash-floor", dest="cash_floor", type=int, default=None,
+        help="start only: override the upgrade-candidate cash floor in credits (default 10000)",
+    )
+    add_json(sp)
+    sp.set_defaults(func=cmd_autopilot)
 
     sp = sub.add_parser(
         "crawl",
