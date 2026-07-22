@@ -333,6 +333,19 @@ def build_response(session, rows=None, settled_reason=None, extra=None):
         session.observe_credits(text)
     if hasattr(session, "observe_turns"):
         session.observe_turns(text)
+    # WO-FRAMES-0: persist full 80×25 raw grid for post-mortem grep
+    # (Option?/qty prompts). Optional on the session — tests without a
+    # recorder keep working; never fails the response.
+    recorder = getattr(session, "frame_recorder", None)
+    if recorder is not None:
+        recorder.record(
+            session,
+            cropped_rows=rows,
+            settled_reason=settled_reason,
+            classification=resp["classification"],
+            prompt=prompt,
+            state=parsed_state,
+        )
     return resp
 
 

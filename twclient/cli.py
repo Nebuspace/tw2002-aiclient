@@ -227,6 +227,91 @@ def cmd_log(args):
         print(ledger.render_trail_line(entry))
 
 
+def cmd_frames(args):
+    """WO-FRAMES-0: read-only post-mortem over state/frames/*.jsonl."""
+    from . import frame_recorder as fr
+
+    action = getattr(args, "frames_action", None) or "tail"
+    session = getattr(args, "session", "latest") or "latest"
+
+    if action == "tail":
+        frames = fr.read_frames(session)
+        n = getattr(args, "n", 20) or 20
+        frames = frames[-n:]
+        if getattr(args, "json", False):
+            print(json.dumps({"ok": True, "frames": frames, "count": len(frames)}))
+            return
+        if not frames:
+            print("(no frames -- daemon not recording yet, or wrong --session)")
+            return
+        for f in frames:
+            print(
+                f"#{f.get('seq')} {f.get('ts')} {f.get('classification')} "
+                f"prompt={f.get('prompt')!r} sent={f.get('sent_input')!r}"
+            )
+        return
+
+    if action == "show":
+        frames = fr.read_frames(session)
+        seq = int(args.seq)
+        match = next((f for f in frames if f.get("seq") == seq), None)
+        if match is None:
+            print(f"seq {seq} not found", file=sys.stderr)
+            sys.exit(1)
+        if getattr(args, "json", False):
+            print(json.dumps({"ok": True, "frame": match}))
+            return
+        raw = match.get("screen_raw") or []
+        print(f"# seq={match.get('seq')} ts={match.get('ts')} class={match.get('classification')}")
+        print(f"# prompt={match.get('prompt')!r} sent={match.get('sent_input')!r}")
+        for line in raw:
+            print(line)
+        return
+
+    if action == "grep":
+        hits = fr.grep_frames(args.pattern, session)
+        if getattr(args, "json", False):
+            print(json.dumps({"ok": True, "hits": hits, "count": len(hits)}))
+            return
+        if not hits:
+            print("(no matches)")
+            return
+        import re as _re
+
+        cre = _re.compile(args.pattern)
+        for f in hits:
+            print(
+                f"#{f.get('seq')} {f.get('ts')} {f.get('classification')} "
+                f"prompt={f.get('prompt')!r}"
+            )
+            for line in f.get("screen_raw") or []:
+                if cre.search(line):
+                    print(f"  | {line}")
+        return
+
+    if action == "diff":
+        frames = fr.read_frames(session)
+        by_seq = {f.get("seq"): f for f in frames}
+        a = by_seq.get(int(args.seq_a))
+        b = by_seq.get(int(args.seq_b))
+        if a is None or b is None:
+            print("seq not found", file=sys.stderr)
+            sys.exit(1)
+        delta = fr.diff_frames(a, b)
+        if getattr(args, "json", False):
+            print(json.dumps({"ok": True, "diff": delta, "count": len(delta)}))
+            return
+        if not delta:
+            print("(identical screen_raw)")
+            return
+        for line in delta:
+            print(line)
+        return
+
+    print(f"unknown frames action: {action}", file=sys.stderr)
+    sys.exit(2)
+
+
 def cmd_analyze(args):
     """TW-12 / §15.6 session-retro: group ledger decisions by pattern and
     rank profitable recurrers as candidates to codify. Reads the ledger
@@ -865,6 +950,36 @@ def build_parser():
     sp.add_argument("--n", type=int, default=20, help="most recent N entries (default: 20)")
     add_json(sp)
     sp.set_defaults(func=cmd_log)
+
+    frames_p = add_sub(
+        "frames",
+        help=(
+            "WO-FRAMES-0: post-mortem full 80x25 settle frames under state/frames/ "
+            "(tail/show/grep/diff; no daemon required)"
+        ),
+    )
+    frames_sub = frames_p.add_subparsers(dest="frames_action", required=True)
+    ft = frames_sub.add_parser("tail", parents=[run_dir_parent], help="last N frames (metadata)")
+    ft.add_argument("--session", default="latest", help="session id or 'latest' (default)")
+    ft.add_argument("-n", type=int, default=20, help="how many frames (default 20)")
+    add_json(ft)
+    ft.set_defaults(func=cmd_frames)
+    fs = frames_sub.add_parser("show", parents=[run_dir_parent], help="print one frame's screen_raw")
+    fs.add_argument("seq", type=int, help="frame sequence number")
+    fs.add_argument("--session", default="latest")
+    add_json(fs)
+    fs.set_defaults(func=cmd_frames)
+    fg = frames_sub.add_parser("grep", parents=[run_dir_parent], help="frames matching pattern in prompt/screen_raw")
+    fg.add_argument("pattern", help="substring/regex matched against prompt + screen_raw")
+    fg.add_argument("--session", default="latest")
+    add_json(fg)
+    fg.set_defaults(func=cmd_frames)
+    fd = frames_sub.add_parser("diff", parents=[run_dir_parent], help="line delta between two frame seqs")
+    fd.add_argument("seq_a", type=int)
+    fd.add_argument("seq_b", type=int)
+    fd.add_argument("--session", default="latest")
+    add_json(fd)
+    fd.set_defaults(func=cmd_frames)
 
     sp = add_sub("status", help="daemon alive? connected? idle-ms? classification? (includes run_dir)")
     add_json(sp)

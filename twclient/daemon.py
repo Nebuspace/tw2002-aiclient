@@ -17,6 +17,7 @@ import time
 from .classify import classify
 from .control_lock import ControlLock, ControlModeConflict
 from .credentials import get_password, save_password
+from .frame_recorder import FrameRecorder
 from .guardian import SessionGuardian
 from .ledger import LedgerWriter
 from .loop_player import LoopPlayer
@@ -268,6 +269,10 @@ def main(argv=None):
     # stay untouched).
     server.ledger = LedgerWriter()
     server.skill_recorder = SkillRecorder()
+    # WO-FRAMES-0: full-grid settle frames for post-mortem (Option?/qty).
+    # Attached on the session so protocol.build_response can append without
+    # threading server through every call site.
+    session.frame_recorder = FrameRecorder(session.logger.session_id)
     # Trainer Control Panel (TUI-POLISH-PLAN.md) -- the AUTO-LOOP
     # background driver (loop_player.py); always-on infrastructure like
     # control_lock above, not gated behind any capture-open flag.
