@@ -132,14 +132,17 @@ def format_ticker_history(events) -> list:
 
 def format_status_line(connected=False, subscriber_count=0, last_rx_age_s=None, daemon_pid=None, **_extra) -> str:
     # **_extra absorbs forward-compatible fields on the status dict (e.g.
-    # spectate_app.fetch_status()'s "host"/"name", added for the Phase 1
-    # header) that this snapshot-only status line doesn't render -- same
-    # "extend the dict, tolerate what you don't use" convention as
-    # format_sidebar's confidence/novelty fields above.
+    # spectate_app.fetch_status()'s "host"/"name"/"world_id") — WO-HUD-HOST-
+    # VISIBLE surfaces host (and world_id when known) so a wrong-daemon
+    # sock is obvious in --snapshot and plain status chrome, not only the
+    # interactive header.
     conn = "CONNECTED" if connected else "DISCONNECTED"
     age = f"{last_rx_age_s:.1f}s ago" if last_rx_age_s is not None else "-"
     pid = daemon_pid if daemon_pid is not None else "-"
-    return f"{conn} | subscribers: {subscriber_count} | last-rx: {age} | daemon pid: {pid}"
+    host = _extra.get("host") or "-"
+    wid = (_extra.get("world_id") or "").strip()
+    identity = f"host: {host}" + (f" | world: {wid}" if wid else "")
+    return f"{conn} | {identity} | subscribers: {subscriber_count} | last-rx: {age} | daemon pid: {pid}"
 
 
 def compose_dashboard(event: dict, ticker_history: list, status: dict) -> dict:

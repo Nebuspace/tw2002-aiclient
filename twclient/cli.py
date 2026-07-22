@@ -360,11 +360,19 @@ def cmd_players_next(args):
 
 def cmd_status(args):
     if not daemon_alive():
-        resp = {"ok": True, "daemon_running": False, "connected": False}
+        resp = {
+            "ok": True,
+            "daemon_running": False,
+            "connected": False,
+            # WO-CLI-DEFAULT-PROFILE-HINT: always echo which sock dir this
+            # CLI invocation targets (default run/ vs --run-dir).
+            "run_dir": str(_active_run_dir),
+        }
         print_response(resp, args)
         return
     resp = send_request("status", {})
     resp["daemon_running"] = True
+    resp["run_dir"] = str(_active_run_dir)
     print_response(resp, args)
 
 
@@ -858,7 +866,7 @@ def build_parser():
     add_json(sp)
     sp.set_defaults(func=cmd_log)
 
-    sp = add_sub("status", help="daemon alive? connected? idle-ms? classification?")
+    sp = add_sub("status", help="daemon alive? connected? idle-ms? classification? (includes run_dir)")
     add_json(sp)
     sp.set_defaults(func=cmd_status)
 
@@ -1080,7 +1088,9 @@ def build_parser():
         help=(
             "standalone spectator dashboard — run in your OWN terminal any time after "
             "`tw start`; attaches to the running daemon and watches live, decoupled from "
-            "whoever/whatever is driving, zero coordination needed"
+            "whoever/whatever is driving, zero coordination needed. "
+            "Use --run-dir PATH when the daemon is not on the default run/ socket "
+            "(host is also shown in the HUD header/status bar)."
         ),
     )
     sp.add_argument(

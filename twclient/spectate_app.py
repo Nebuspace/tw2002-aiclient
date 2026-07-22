@@ -955,12 +955,16 @@ def _draw_header_strip(win, cells, accent_attr, muted_attr, palette):
 
 
 def _format_header(event, status):
-    """`app · host · character · classification badge` (Phase 1 visual
-    E1) -- host/character come off the periodic `status` poll (daemon
-    knows the session identity), the badge off the live watch event."""
+    """`app · host · character · [world_id] · classification` (Phase 1 +
+    WO-HUD-HOST-VISIBLE) -- host/character/world come off the periodic
+    `status` poll (daemon session identity); badge off the live watch
+    event. Host is never omitted: a wrong sock must be obvious."""
     host = status.get("host") or "-"
     name = status.get("name") or "-"
+    wid = (status.get("world_id") or "").strip()
     badge = (event.get("classification") or "unknown").replace("_", " ").upper()
+    if wid:
+        return f"TW SPECTATE · {host} · {name} · {wid} · {badge}"
     return f"TW SPECTATE · {host} · {name} · {badge}"
 
 
@@ -1912,6 +1916,13 @@ def _render(windows, regions, event, tracked, ticker_history, status, palette, g
             stream_err = status.get("attach_error")
         elif reconnecting:
             stream_err = "reconnecting…"
+        # WO-HUD-HOST-VISIBLE: keep host on the status bar too (header can
+        # truncate on narrow terms; wrong-daemon must stay visible).
+        host_bit = status.get("host") or "-"
+        if stream_err:
+            stream_err = f"{host_bit}  ! {stream_err}"
+        else:
+            stream_err = host_bit
         _draw_status(
             windows["status"], regions["status"], connected, semantic,
             spinner_char, heartbeat_char, idle_text, flash_active, palette,

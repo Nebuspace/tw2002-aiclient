@@ -1,5 +1,6 @@
 """`tw --run-dir` wiring — default geek socket unchanged; alternate run dirs."""
 
+import json
 import sys
 from argparse import Namespace
 from unittest.mock import patch
@@ -131,3 +132,14 @@ def test_main_configures_run_dir_from_argv(monkeypatch):
     cli.main()
     assert seen["run_dir"] == "run/ona"
     assert seen["sock"] == PROJECT_ROOT / "run" / "ona" / "twd.sock"
+
+
+def test_cmd_status_includes_run_dir_when_daemon_down(capsys):
+    """WO-CLI-DEFAULT-PROFILE-HINT: status always reports which run_dir
+    this CLI targets so a wrong sock is obvious."""
+    cli._configure_run_paths("run/ona")
+    with patch.object(cli, "daemon_alive", return_value=False):
+        cli.cmd_status(Namespace(json=True))
+    out = json.loads(capsys.readouterr().out)
+    assert out["daemon_running"] is False
+    assert out["run_dir"].endswith("run/ona") or "run/ona" in out["run_dir"].replace("\\", "/")

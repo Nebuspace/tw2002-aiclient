@@ -205,18 +205,24 @@ def test_ticker_history_orphan_first_sent_does_not_false_pair():
 
 
 def test_status_line_connected():
-    line = format_status_line(connected=True, subscriber_count=2, last_rx_age_s=1.5, daemon_pid=4242)
+    line = format_status_line(
+        connected=True, subscriber_count=2, last_rx_age_s=1.5, daemon_pid=4242,
+        host="game.tw2002.net", world_id="game_tw2002_net__F__Ona",
+    )
     assert "CONNECTED" in line
     assert "DISCONNECTED" not in line
     assert "subscribers: 2" in line
     assert "1.5s ago" in line
     assert "4242" in line
+    assert "host: game.tw2002.net" in line
+    assert "world: game_tw2002_net__F__Ona" in line
 
 
 def test_status_line_disconnected_defaults():
     line = format_status_line()
     assert "DISCONNECTED" in line
     assert "subscribers: 0" in line
+    assert "host: -" in line
 
 
 def test_compose_dashboard_assembles_all_sections():
