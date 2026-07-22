@@ -43,6 +43,9 @@ from twclient.spectate_layout import (
     format_ticker_entry,
     format_trace_ev,
     PROVISIONAL_AUTOPILOT_TRACE,
+    CHAIN_VIZ_H,
+    compose_chain_bubbles,
+    chain_bubble_sectors,
     frame_layout,
     gauge_semantic,
     is_recent,
@@ -279,10 +282,13 @@ def test_frame_layout_right_gutter_tier_left_anchors_viewport():
         assert regions["decisions"]["x"] >= regions["ticker"]["x"] + regions["ticker"]["w"]
         assert gutter["h"] == vp["h"]  # gutter keeps full viewport height
     if regions.get("chain") is not None:
-        assert regions["chain"]["title"] == "CHAIN"
-        assert regions["chain"]["y"] == regions["ticker"]["y"]
-        assert regions["chain"]["h"] == regions["ticker"]["h"]
-        assert regions["chain"]["x"] >= regions["decisions"]["x"] + regions["decisions"]["w"]
+        # WO-TUI-CHAIN-BUBBLES: under viewport, centered on game window
+        assert regions["chain"]["title"] is None
+        assert regions["chain"]["border"] is False
+        assert regions["chain"]["h"] == CHAIN_VIZ_H
+        assert regions["chain"]["y"] == regions["viewport"]["y"] + regions["viewport"]["h"]
+        assert regions["chain"]["x"] == regions["viewport"]["x"]
+        assert regions["chain"]["w"] == regions["viewport"]["w"]
 
 
 def test_frame_layout_full_tier_centers_viewport_with_right_gutter():
@@ -295,14 +301,17 @@ def test_frame_layout_full_tier_centers_viewport_with_right_gutter():
     assert vp["x"] > 1  # centered inside inset, not left-anchored like right_gutter
     assert regions["outer"] is not None
     assert regions["outer"]["w"] == FULL_GUTTER_MIN_COLS + 2
-    # WO-TUI-CHAIN-BOX: full tier with spare leftover gets taller band + CHAIN
+    # WO-TUI-CHAIN-BUBBLES: under-viewport chain + LOG|DECISIONS band (no CHAIN col)
     assert regions["chain"] is not None
     assert regions["decisions"] is not None
-    assert regions["ticker"]["h"] == regions["decisions"]["h"] == regions["chain"]["h"]
+    assert regions["ticker"]["h"] == regions["decisions"]["h"]
     assert regions["ticker"]["h"] >= 5
     assert regions["decisions"]["w"] >= 20
     assert regions["decisions"]["w"] <= 32
-    assert regions["chain"]["title"] == "CHAIN"
+    assert regions["chain"]["h"] == CHAIN_VIZ_H
+    assert regions["chain"]["title"] is None
+    assert regions["chain"]["y"] == regions["viewport"]["y"] + regions["viewport"]["h"]
+    assert regions["chain"]["x"] == regions["viewport"]["x"]
 
 
 def test_frame_layout_viewport_never_stretched_beyond_native_grid():
@@ -573,7 +582,7 @@ def test_compose_hud_cells_dims_a_cell_past_the_staleness_threshold():
 def test_compose_hud_cells_turns_cell_ticks_down_a_live_timer():
     tracked = update_tracked_stats({}, {"state": {"turn_timer": "00:00:10"}}, now=0.0)
     cells = compose_hud_cells(tracked, now=4.0)
-    turns_cell = [c for c in cells if c["label"] == "REGEN"][0]
+    turns_cell = [c for c in cells if c["label"] == "TURNS"][0]
     assert turns_cell["value"] == "00:00:06"
 
 
@@ -905,9 +914,8 @@ def test_frame_layout_decisions_present_at_its_height_floor():
     assert regions["decisions"] is not None
     assert regions["decisions"]["h"] == DECISIONS_MIN_H
     assert regions["ticker"] is not None
-    assert regions["chain"] is not None
-    assert regions["chain"]["h"] == DECISIONS_MIN_H
-    assert regions["chain"]["title"] == "CHAIN"
+    # Leftover == DECISIONS_MIN_H is short of CHAIN_VIZ_H + LOG_BOX_MIN_H
+    assert regions["chain"] is None
 
 
 def test_frame_layout_band_grows_toward_double_height():
@@ -918,12 +926,15 @@ def test_frame_layout_band_grows_toward_double_height():
     regions = frame_layout(lines, FULL_GUTTER_MIN_COLS + 2)
     assert regions["ticker"]["h"] == 10
     assert regions["decisions"]["h"] == 10
-    assert regions["chain"]["h"] == 10
+    assert regions["chain"] is not None
+    assert regions["chain"]["h"] == CHAIN_VIZ_H
+    assert regions["chain"]["y"] == regions["viewport"]["y"] + regions["viewport"]["h"]
+    assert regions["chain"]["x"] == regions["viewport"]["x"]
+    assert regions["chain"]["w"] == regions["viewport"]["w"]
     assert 20 <= regions["decisions"]["w"] <= 32
     assert regions["ticker"]["x"] + regions["ticker"]["w"] == regions["decisions"]["x"]
-    assert regions["decisions"]["x"] + regions["decisions"]["w"] == regions["chain"]["x"]
-    assert regions["chain"]["x"] + regions["chain"]["w"] == regions["ticker"]["x"] + (
-        regions["ticker"]["w"] + regions["decisions"]["w"] + regions["chain"]["w"]
+    assert regions["decisions"]["x"] + regions["decisions"]["w"] == (
+        regions["ticker"]["x"] + regions["ticker"]["w"] + regions["decisions"]["w"]
     )
 
 
@@ -1167,7 +1178,7 @@ def test_turns_cell_shows_a_gauge_and_tone_once_a_max_is_known():
 def test_turns_cell_no_gauge_for_the_timer_variant():
     tracked = update_tracked_stats({}, {"state": {"turn_timer": "00:00:30"}}, now=0.0)
     cells = compose_hud_cells(tracked, now=0.0)
-    turns_cell = [c for c in cells if c["label"] == "REGEN"][0]
+    turns_cell = [c for c in cells if c["label"] == "TURNS"][0]
     assert turns_cell["gauge"] == ""
     assert turns_cell["tone"] is None
 
@@ -1413,3 +1424,50 @@ def test_longest_chain_banner_discovered_shows_hops():
     banner = format_longest_chain_banner(loop, cols=60)
     assert "3 hops" in banner
     assert "steps" not in banner
+
+
+# -- WO-TUI-CHAIN-BUBBLES: pure ASCII bubble-chain --------------------------
+
+
+def test_compose_chain_bubbles_empty_is_quiet_placeholder():
+    lines = compose_chain_bubbles(None, width=40)
+    assert len(lines) == CHAIN_VIZ_H
+    joined = "\n".join(lines)
+    assert "no trade loop yet" in joined
+    assert "╭" not in joined
+
+
+def test_compose_chain_bubbles_two_hop_accept_contract():
+    """Hub Accept visual contract (2-hop, ship at 100, classes known)."""
+    chain = {"sectors": (100, 200, 100)}  # closed cycle — drop repeat
+    assert chain_bubble_sectors(chain) == [100, 200]
+    lines = compose_chain_bubbles(
+        chain,
+        current_sector=100,
+        port_classes={100: "BSB", 200: "SSB"},
+        width=82,
+    )
+    assert len(lines) == CHAIN_VIZ_H
+    body = "\n".join(lines)
+    assert "100" in body and "200" in body
+    assert "BSB" in body and "SSB" in body
+    assert "═════" in body
+    assert "★" in body
+    # ★ under the active (100) bubble — left of the 200 sector id on mid row
+    mid = next(ln for ln in lines if "100" in ln and "200" in ln)
+    star_row = lines[-1]
+    assert star_row.index("★") < mid.index("200")
+
+
+def test_compose_chain_bubbles_grows_with_hop_count():
+    two = "".join(compose_chain_bubbles({"sectors": (1, 2)}, width=82))
+    three = "".join(compose_chain_bubbles({"sectors": (1, 2, 3)}, width=82))
+    assert two.count("═════") == 1
+    assert three.count("═════") == 2
+
+
+def test_compose_chain_bubbles_unknown_class_is_question_mark():
+    lines = compose_chain_bubbles({"sectors": (7, 8)}, port_classes={7: "BSB"}, width=40)
+    joined = "\n".join(lines)
+    assert "BSB" in joined
+    assert "?" in joined

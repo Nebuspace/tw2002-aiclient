@@ -144,14 +144,14 @@ MIN_LINES = 20
 OUTER_FRAME_PAD = 1  # per side
 # Titled LOG box needs ≥3 rows (border + 1 content + border).
 LOG_BOX_MIN_H = 3
-# Dedicated CHAIN / TRADE LOOP box (WO-TUI-CHAIN-BOX): border + ≥2
-# content rows + border so path / hops / +cr stay legible.
-CHAIN_BOX_MIN_W = 18
+# WO-TUI-CHAIN-BUBBLES: ASCII bubble-chain sits directly under the
+# viewport (not a bottom-band CHAIN column). 4 box rows + ★ marker row.
+CHAIN_VIZ_H = 5
 # DECISIONS/GOALS needs more room than LOG's bare floor before splitting
 # off is worth it -- AUTO/App-AI-Hum + GOALS reads as collapsed-to-nothing
 # at a squeezed 1-2-content-row band. `band_h` is capped at 10 (~2× the
-# old cap of 5); this floor is the minimum leftover before DECISIONS (and
-# CHAIN) split from LOG — below it, LOG claims the whole leftover band
+# old cap of 5); this floor is the minimum leftover before DECISIONS
+# splits from LOG — below it, LOG claims the whole leftover band
 # (one legible pane beats two illegible ones).
 DECISIONS_MIN_H = 5
 BAND_H_MAX = 10
@@ -185,9 +185,11 @@ def frame_layout(lines: int, cols: int) -> dict:
     log) -- so a narrow-but-tall terminal shows mode/TX/hints even when
     there's no room left for the ticker underneath it.
 
-    When a right HUD gutter is present and tall enough, the leftover band
-    below splits into titled LOG + DECISIONS + CHAIN boxes (WO-TUI-CHAIN-BOX).
-    The bottom log ("ticker") is always a titled "LOG" box when present.
+    When leftover height allows, a bubble-chain region sits directly under
+    the viewport (WO-TUI-CHAIN-BUBBLES), centered on the game window; the
+    remaining leftover band below splits into titled LOG + DECISIONS
+    (CHAIN column removed — width returned to LOG|DECISIONS). The bottom
+    log ("ticker") is always a titled "LOG" box when present.
     """
     if lines < MIN_LINES or cols < MIN_COLS:
         return {
@@ -237,29 +239,30 @@ def frame_layout(lines: int, cols: int) -> dict:
         control = {"y": status["y"] - 1, "x": ox, "w": i_cols, "h": 1}
         leftover -= 1
 
+    # Prefer bubble-chain under the viewport when both chain + a LOG
+    # band fit; otherwise keep LOG|DECISIONS and skip chain (never clip
+    # the game grid). Steal from the leftover band first.
+    chain = None
+    want_chain = leftover >= CHAIN_VIZ_H + LOG_BOX_MIN_H
+    if want_chain:
+        leftover -= CHAIN_VIZ_H
+
     ticker = None
     decisions = None
-    chain = None
-    # TW-08 / WO-TUI-CHAIN-BOX: leftover band hosts titled LOG; when wide
-    # enough, split side-by-side with DECISIONS + a dedicated CHAIN box so
-    # the HUD gutter stays full-height for ship stats + live-metrics + port.
+    # TW-08: leftover band hosts titled LOG; when tall/wide enough, split
+    # side-by-side with DECISIONS. HUD gutter stays full viewport height.
     if leftover >= LOG_BOX_MIN_H:
         band_h = min(BAND_H_MAX, leftover)
         band_y = status["y"] - (1 if control else 0) - band_h
         if i_cols >= 60 and leftover >= DECISIONS_MIN_H:
             # Wider DECISIONS (~2× old content rows via BAND_H_MAX); keep LOG
-            # wide enough that settle+TX suffixes remain readable; CHAIN is
-            # its own pane (not only a dwell slice inside DECISIONS).
+            # wide enough that settle/TX suffixes remain readable. Bottom
+            # CHAIN column is gone — its width returns to LOG|DECISIONS.
             dec_w = min(32, max(20, i_cols // 4))
-            chain_w = min(28, max(CHAIN_BOX_MIN_W, i_cols // 5))
-            # Keep LOG wide enough for settle/TX tails (ticker prefers the
-            # line end when truncating). Floor ~40 content + borders.
             log_floor = 42
-            if i_cols - dec_w - chain_w < log_floor:
-                chain_w = max(CHAIN_BOX_MIN_W, min(chain_w, i_cols - dec_w - log_floor))
-                if i_cols - dec_w - chain_w < log_floor:
-                    dec_w = max(20, min(dec_w, i_cols - chain_w - log_floor))
-            log_w = i_cols - dec_w - chain_w
+            if i_cols - dec_w < log_floor:
+                dec_w = max(20, min(dec_w, i_cols - log_floor))
+            log_w = i_cols - dec_w
             ticker = {
                 "y": band_y, "x": ox, "w": log_w, "h": band_h,
                 "title": "LOG", "border": True,
@@ -267,10 +270,6 @@ def frame_layout(lines: int, cols: int) -> dict:
             decisions = {
                 "y": band_y, "x": ox + log_w, "w": dec_w, "h": band_h,
                 "title": "DECISIONS", "border": True,
-            }
-            chain = {
-                "y": band_y, "x": ox + log_w + dec_w, "w": chain_w, "h": band_h,
-                "title": "CHAIN", "border": True,
             }
         else:
             ticker = {
@@ -308,6 +307,17 @@ def frame_layout(lines: int, cols: int) -> dict:
         "game_h": min(GAME_H, viewport_h - (2 if border else 0)),
     }
 
+    if want_chain:
+        # Centered on the game window (viewport), directly beneath it.
+        chain = {
+            "y": body_top + viewport_h,
+            "x": viewport_x,
+            "w": viewport_w,
+            "h": CHAIN_VIZ_H,
+            "title": None,
+            "border": False,
+        }
+
     return {
         "mode": mode,
         "message": None,
@@ -321,6 +331,7 @@ def frame_layout(lines: int, cols: int) -> dict:
         "control": control,
         "status": status,
     }
+
 
 
 # -- The persistent HUD accumulator (the operator's directive) ------------
@@ -408,8 +419,8 @@ def update_tracked_stats(tracked: dict, event: dict, now: float) -> dict:
         # This live server's Command prompt uses TL=HH:MM:SS (regen
         # countdown), NOT a turn count. Once a numeric turns_left has
         # been seen, never clobber the HUD count with that timer
-        # (WO-TUI-HUD-POLISH) — timer-only-before-count still lands as
-        # a distinct REGEN cell via _turns_cell.
+        # (WO-TUI-HUD-POLISH) — timer-only-before-count still renders
+        # in the TURNS cell (HH:MM:SS value, not a turn count).
         prev_turns = out.get("turns")
         if not (isinstance(prev_turns, tuple) and prev_turns and
                 isinstance(prev_turns[0], tuple) and prev_turns[0][0] == "count"):
@@ -557,20 +568,19 @@ def _turns_cell(tracked: dict, now: float, mark: str, bar_full: str, bar_empty: 
     age = max(0.0, now - ts)
     tone, gauge = None, ""
     if kind == "timer":
-        # Timer-only (no numeric turns_left yet): label REGEN so HH:MM:SS
-        # is never misread as a turn count (WO-TUI-HUD-POLISH).
+        # Timer-only (no numeric turns_left yet): show regen countdown
+        # in the TURNS cell; sticky-count in update_tracked_stats prevents
+        # TL=HH:MM:SS from clobbering a known turns_left (WO-TUI-HUD-POLISH).
         display = tick_down_timer(value, age)
-        label = "REGEN"
     else:
         display = f"{value:,}"
-        label = "TURNS"
         turns_max = tracked.get("_turns_max")
         if turns_max:  # 0/None -> no gauge, division-by-zero guard
             fraction = value / turns_max
             gauge = render_bar_meter(fraction, TURNS_GAUGE_WIDTH, bar_full, bar_empty)
             tone = gauge_semantic(fraction)
     return {
-        "label": label,
+        "label": "TURNS",
         "value": display,
         "freshness": format_freshness(age, mark),
         "stale": age >= FRESHNESS_STALE_S,
@@ -1091,6 +1101,169 @@ def format_chain_summary(
 def compose_longest_chain_panel(chain, *, current_sector=None, cols: int = 24) -> list[str]:
     """Alias used by the app — same body as format_chain_summary."""
     return format_chain_summary(chain, current_sector=current_sector, cols=cols)
+
+
+# -- WO-TUI-CHAIN-BUBBLES: literal bubble-chain under the viewport ---------
+#
+# Highlight contract: ★ centered under the active bubble (ship sector
+# match and/or active run_chain hop). Curses may ALSO reverse-video the
+# active bubble body; the pure composer only emits the ★ marker row.
+# Closed ProfitChain cycles drop the repeated closing = opening sector.
+
+_CHAIN_CONNECTOR = "═════"
+_CHAIN_EMPTY_PLACEHOLDER = "○ ○  no trade loop yet"
+
+
+def chain_bubble_sectors(chain) -> list:
+    """Unique hop-order sectors for bubble art (drop closed-cycle repeat)."""
+    if chain is None:
+        return []
+    if hasattr(chain, "sectors"):
+        sectors = list(chain.sectors or ())
+    elif isinstance(chain, dict):
+        sectors = list(chain.get("sectors") or ())
+    else:
+        return []
+    if len(sectors) >= 2 and sectors[0] == sectors[-1]:
+        sectors = sectors[:-1]
+    out = []
+    for sid in sectors:
+        try:
+            out.append(int(sid))
+        except (TypeError, ValueError):
+            continue
+    return out
+
+
+def _bubble_inner_w(sectors: list) -> int:
+    """Inner width between │ │ — enough for the widest sector id (min 4)."""
+    widest = max((len(str(s)) for s in sectors), default=3)
+    return max(4, widest)
+
+
+def _pad_center(text: str, width: int) -> str:
+    text = str(text)[:width]
+    pad = width - len(text)
+    left = pad // 2
+    return (" " * left) + text + (" " * (pad - left))
+
+
+def _center_block(lines: list[str], width: int, height: int) -> list[str]:
+    width = max(1, int(width))
+    height = max(1, int(height))
+    trimmed = [(ln or "")[:width] for ln in lines]
+    while len(trimmed) < height:
+        trimmed.append("")
+    trimmed = trimmed[:height]
+    out = []
+    for ln in trimmed:
+        pad = max(0, width - len(ln))
+        left = pad // 2
+        out.append((" " * left) + ln + (" " * (pad - left)))
+    return out
+
+
+def compose_chain_bubbles(
+    chain,
+    *,
+    current_sector=None,
+    port_classes=None,
+    width: int = 82,
+    active_sector=None,
+) -> list[str]:
+    """Pure ASCII bubble-chain (WO-TUI-CHAIN-BUBBLES).
+
+    Returns exactly ``CHAIN_VIZ_H`` lines, centered in ``width``. Empty
+    state is a quiet placeholder (no heavy box). Truncates left→right with
+    an ``… Nh`` suffix when the full chain exceeds ``width``.
+
+    ``port_classes`` maps sector_id → class string (e.g. ``BSB``); unknown
+    sectors render ``?`` — never invent commodities.
+    """
+    width = max(8, int(width))
+    port_classes = port_classes or {}
+    sectors = chain_bubble_sectors(chain)
+    if not sectors:
+        return _center_block([_CHAIN_EMPTY_PLACEHOLDER], width, CHAIN_VIZ_H)
+
+    try:
+        cur = int(current_sector) if current_sector is not None else None
+    except (TypeError, ValueError):
+        cur = None
+    if active_sector is not None and cur is None:
+        try:
+            cur = int(active_sector)
+        except (TypeError, ValueError):
+            cur = None
+
+    inner = _bubble_inner_w(sectors)
+    bubble_w = inner + 2  # │ + content + │
+    conn = _CHAIN_CONNECTOR
+    conn_w = len(conn)
+
+    def _one_bubble(sid: int) -> tuple[str, str, str, str]:
+        cls = port_classes.get(sid)
+        if cls is None or cls == "":
+            cls = "?"
+        cls = str(cls)[:inner]
+        top = "╭" + ("─" * inner) + "╮"
+        mid_sec = "│" + _pad_center(str(sid), inner) + "│"
+        mid_cls = "│" + _pad_center(cls, inner) + "│"
+        bot = "╰" + ("─" * inner) + "╯"
+        return top, mid_sec, mid_cls, bot
+
+    def _fit_count(n: int, truncated: bool) -> int:
+        """Width needed for n bubbles (+ optional … Nh suffix)."""
+        art = n * bubble_w + max(0, n - 1) * conn_w
+        if truncated:
+            # " … 12h" after the last shown bubble
+            art += 1 + len(f"… {len(sectors)}h")
+        return art
+
+    show_n = len(sectors)
+    truncated = False
+    while show_n > 1 and _fit_count(show_n, truncated=True) > width:
+        show_n -= 1
+        truncated = True
+    if show_n < len(sectors):
+        truncated = True
+    # If even one bubble + suffix won't fit, shrink to one bubble bare.
+    if _fit_count(show_n, truncated=truncated) > width:
+        show_n = 1
+        truncated = len(sectors) > 1
+
+    shown = sectors[:show_n]
+    tops, mids_s, mids_c, bots, stars = [], [], [], [], []
+    for i, sid in enumerate(shown):
+        t, ms, mc, b = _one_bubble(sid)
+        if i:
+            tops.append(" " * conn_w)
+            mids_s.append(conn)
+            mids_c.append(" " * conn_w)
+            bots.append(" " * conn_w)
+            stars.append(" " * conn_w)
+        tops.append(t)
+        mids_s.append(ms)
+        mids_c.append(mc)
+        bots.append(b)
+        stars.append(_pad_center("★" if cur is not None and sid == cur else " ", bubble_w))
+
+    top_ln = "".join(tops)
+    mid_s_ln = "".join(mids_s)
+    mid_c_ln = "".join(mids_c)
+    bot_ln = "".join(bots)
+    star_ln = "".join(stars)
+    if truncated:
+        suffix = f" … {len(sectors)}h"
+        mid_s_ln = mid_s_ln + suffix
+        # Keep other rows length-aligned for centering.
+        pad = len(suffix)
+        top_ln = top_ln + (" " * pad)
+        mid_c_ln = mid_c_ln + (" " * pad)
+        bot_ln = bot_ln + (" " * pad)
+        star_ln = star_ln + (" " * pad)
+
+    return _center_block([top_ln, mid_s_ln, mid_c_ln, bot_ln, star_ln], width, CHAIN_VIZ_H)
 
 
 def compose_phase2_side_panel(

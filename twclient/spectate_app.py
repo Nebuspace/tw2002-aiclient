@@ -46,15 +46,16 @@ from .spectate_layout import (
     compose_control_strip,
     compose_dashboard,
     compose_decisions_placeholder,
+    compose_chain_bubbles,
     compose_hud_cells,
     compose_live_metrics,
     compose_phase2_side_panel,
     compose_port_panel,
     compute_autonomy_ratio,
+    chain_bubble_sectors,
     decisions_should_show_chain,
     format_autonomy_lines,
     format_autopilot_trace_lines,
-    format_chain_summary,
     format_idle_age,
     format_loops_library_header,
     format_loops_library_row,
@@ -850,6 +851,41 @@ def _draw_outer_frame(win, region, glyphs, palette):
     win.noutrefresh()
 
 
+def _port_classes_for_chain(world_id, chain) -> dict:
+    """Map bubble sector ids → world-model port.class (never invent)."""
+    out = {}
+    if world_id is None:
+        return out
+    for sid in chain_bubble_sectors(chain):
+        try:
+            rec = world_model.get_sector(world_id, sid)
+        except Exception:
+            rec = None
+        port = (rec or {}).get("port") if isinstance(rec, dict) else None
+        if not isinstance(port, dict):
+            continue
+        cls = port.get("class")
+        if cls is None or cls == "":
+            continue
+        out[int(sid)] = str(cls)
+    return out
+
+
+def _draw_chain_viz(win, region, lines, palette):
+    """Borderless under-viewport bubble-chain (WO-TUI-CHAIN-BUBBLES)."""
+    win.erase()
+    h, w = region["h"], region["w"]
+    dim = palette.attr_for("cyan", "default", False) | curses.A_DIM
+    for row, line in enumerate(lines or ()):
+        if row >= h:
+            break
+        try:
+            win.addnstr(row, 0, line or "", max(0, w - 1), dim)
+        except curses.error:
+            pass
+    win.noutrefresh()
+
+
 def _draw_decisions(win, region, lines, glyphs, palette, title=None):
     """TW-08 Decisions box — titled + bordered; placeholder / explore /
     Phase-2 GOALS+CHAIN lines feed the same pane."""
@@ -1503,17 +1539,17 @@ def _render(windows, regions, event, tracked, ticker_history, status, palette, g
         )
 
     if regions.get("chain") is not None and "chain" in windows:
-        chain_cols = max(12, (regions["chain"].get("w") or 22) - 4)
+        chain_obj = phase2_cache.get("chain")
         sector = (event.get("state") or {}).get("sector")
-        chain_lines = format_chain_summary(
-            phase2_cache.get("chain"),
+        wid = _resolve_world_id()
+        chain_w = max(8, regions["chain"].get("w") or 82)
+        chain_lines = compose_chain_bubbles(
+            chain_obj,
             current_sector=sector,
-            cols=chain_cols,
+            port_classes=_port_classes_for_chain(wid, chain_obj),
+            width=chain_w,
         )
-        _draw_decisions(
-            windows["chain"], regions["chain"],
-            chain_lines, glyphs, palette, title="CHAIN",
-        )
+        _draw_chain_viz(windows["chain"], regions["chain"], chain_lines, palette)
 
     # Trainer Control Panel's control strip -- redraws every call (cheap,
     # same reasoning as the gutter/status above): the live AUTO-LOOP
