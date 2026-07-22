@@ -2043,3 +2043,65 @@ def test_compose_chain_bubbles_unknown_class_is_question_mark():
     joined = "\n".join(lines)
     assert "BSB" in joined
     assert "?" in joined
+
+
+def test_idle_prompt_should_offer_ai_pilot_blocking_after_threshold():
+    from twclient.spectate_layout import (
+        IDLE_PROMPT_THRESHOLD_S,
+        idle_prompt_should_offer,
+        format_idle_prompt_overlay_lines,
+    )
+
+    assert IDLE_PROMPT_THRESHOLD_S == 10.0
+    assert idle_prompt_should_offer(
+        mode="ai_pilot",
+        idle_age_s=12.0,
+        classification="pause_key",
+        prompt="[Pause]",
+    )
+    # Fighter Option? often classifies as sector_display — prompt shape wins.
+    assert idle_prompt_should_offer(
+        mode="ai_pilot",
+        idle_age_s=12.0,
+        classification="sector_display",
+        prompt="Option? (A=Attack, D=Defend, I=Ignore): [D] ?",
+    )
+    assert not idle_prompt_should_offer(
+        mode="spectate",
+        idle_age_s=12.0,
+        classification="pause_key",
+        prompt="[Pause]",
+    )
+    assert not idle_prompt_should_offer(
+        mode="ai_pilot",
+        idle_age_s=5.0,
+        classification="pause_key",
+        prompt="[Pause]",
+    )
+    assert not idle_prompt_should_offer(
+        mode="ai_pilot",
+        idle_age_s=12.0,
+        classification="main_command",
+        prompt="Command [TL=00:00:00]:[1234]",
+    )
+    lines = format_idle_prompt_overlay_lines(
+        prompt="Option?",
+        classification="sector_display",
+        idle_age_s=11.0,
+        buffer="A",
+        confirm=False,
+        secret=False,
+    )
+    assert any("AI PILOT WAITING" in L for L in lines)
+    assert any("Option?" in L for L in lines)
+    assert any("> A" in L for L in lines)
+    secret_lines = format_idle_prompt_overlay_lines(
+        prompt="Password?",
+        classification="login_password",
+        idle_age_s=11.0,
+        buffer="",
+        confirm=False,
+        secret=True,
+    )
+    assert any("secret" in L.lower() for L in secret_lines)
+    assert any("attach" in L.lower() for L in secret_lines)

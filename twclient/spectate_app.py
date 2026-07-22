@@ -57,11 +57,15 @@ from .spectate_layout import (
     format_autonomy_lines,
     format_autopilot_trace_lines,
     format_idle_age,
+    format_idle_prompt_overlay_lines,
     format_loops_library_header,
     format_loops_library_row,
     format_longest_chain_banner,
     format_ticker_history,
     frame_layout,
+    idle_prompt_fingerprint,
+    idle_prompt_looks_blocking,
+    idle_prompt_should_offer,
     is_recent,
     longest_chain_steps,
     render_plain,
@@ -72,6 +76,7 @@ from .spectate_layout import (
     update_tracked_stats,
     waiting_session_screen,
 )
+from .classify import is_probable_secret_prompt
 from .explore import (
     cycle_explore_mode,
     find_landmark_sectors,
@@ -1495,6 +1500,52 @@ def _draw_loops_library(stdscr, lines, cols, loops, selected, pending_cycles, co
     curses.doupdate()
 
 
+def _draw_idle_prompt_overlay(stdscr, lines, cols, overlay, palette, glyphs, idle_age_s):
+    """Centered modal when AI-PILOT has sat on a blocking prompt too long.
+    Same stdscr-replace pattern as `_draw_loops_library`."""
+    stdscr.erase()
+    accent_attr = palette.attr_for("cyan", "default", False)
+    warn_attr = palette.attr_for("brown", "default", True) | curses.A_BOLD
+    box_h = max(12, min(18, lines - 2))
+    box_w = max(40, min(cols - 2, 64))
+    box_y = max(0, (lines - box_h) // 2)
+    box_x = max(0, (cols - box_w) // 2)
+    _draw_box(
+        stdscr, box_y, box_x, box_h, box_w,
+        glyphs["hud_tl"], glyphs["hud_tr"], glyphs["hud_bl"], glyphs["hud_br"],
+        glyphs["hud_h"], glyphs["hud_v"], accent_attr,
+    )
+    text_lines = format_idle_prompt_overlay_lines(
+        prompt=overlay.get("prompt") or "",
+        classification=overlay.get("classification") or "",
+        idle_age_s=idle_age_s,
+        buffer=overlay.get("buffer") or "",
+        confirm=bool(overlay.get("confirm")),
+        secret=bool(overlay.get("secret")),
+        width=max(24, box_w - 4),
+    )
+    inner_x = box_x + 2
+    inner_w = max(1, box_w - 4)
+    row_y = box_y + 1
+    for i, line in enumerate(text_lines):
+        if row_y >= box_y + box_h - 1:
+            break
+        attr = curses.A_NORMAL
+        if i == 0:
+            attr = accent_attr | curses.A_BOLD
+        elif overlay.get("secret") and "secret" in line.lower():
+            attr = warn_attr
+        elif overlay.get("confirm") and line.startswith("Send "):
+            attr = warn_attr | curses.A_REVERSE
+        try:
+            stdscr.addnstr(row_y, inner_x, line, inner_w, attr)
+        except curses.error:
+            pass
+        row_y += 1
+    stdscr.noutrefresh()
+    curses.doupdate()
+
+
 def _build_windows(regions):
     """Persistent per-pane windows (Phase 0, motion E1) -- built ONCE
     per distinct `regions` shape (i.e. only on resize/reflow-tier
@@ -1555,13 +1606,57 @@ def _suspend_and_run_attach(stdscr):
     return error
 
 
-def _handle_key(ch, sock_path, status, library, explore_state=None, stdscr=None):
+def _handle_key(ch, sock_path, status, library, explore_state=None, stdscr=None, idle_prompt=None):
     """Trainer Control Panel keybindings -- mutates `library` (dict:
     open/loops/selected/pending_cycles/confirm), optional `explore_state`
-    ({"mode": off|mapfill|stardock|formations}), and `status` (only
-    "attach_error", see A/a below) in place. Returns True if this key
-    was consumed as a Trainer Control Panel command (caller should NOT
-    also treat it as detach/resize)."""
+    ({"mode": off|mapfill|stardock|formations}), optional `idle_prompt`
+    (AI-pilot idle overlay), and `status` (only "attach_error", see A/a
+    below) in place. Returns True if this key was consumed as a Trainer
+    Control Panel command (caller should NOT also treat it as
+    detach/resize)."""
+    if idle_prompt is not None and idle_prompt.get("open"):
+        # Esc always dismisses without sending.
+        if ch == 27:
+            idle_prompt["open"] = False
+            idle_prompt["confirm"] = False
+            idle_prompt["buffer"] = ""
+            idle_prompt["dismissed_key"] = idle_prompt_fingerprint(
+                idle_prompt.get("classification"), idle_prompt.get("prompt"),
+            )
+            return True
+        if idle_prompt.get("secret"):
+            # No typing / send path — attach only.
+            return True
+        if idle_prompt.get("confirm"):
+            if ch in (ord("y"), ord("Y")):
+                answer = (idle_prompt.get("buffer") or "").strip()
+                if answer and not idle_prompt.get("secret"):
+                    _send_control(sock_path, "do", {"input": answer})
+                idle_prompt["open"] = False
+                idle_prompt["confirm"] = False
+                idle_prompt["buffer"] = ""
+                idle_prompt["dismissed_key"] = idle_prompt_fingerprint(
+                    idle_prompt.get("classification"), idle_prompt.get("prompt"),
+                )
+            elif ch != -1:
+                idle_prompt["confirm"] = False
+            return True
+        if ch in (10, 13, curses.KEY_ENTER):
+            if (idle_prompt.get("buffer") or "").strip():
+                idle_prompt["confirm"] = True
+            return True
+        if ch in (curses.KEY_BACKSPACE, 127, 8):
+            buf = idle_prompt.get("buffer") or ""
+            idle_prompt["buffer"] = buf[:-1]
+            return True
+        # Printable ASCII only (no control chars / wide curses keys).
+        if 32 <= ch <= 126:
+            idle_prompt["buffer"] = (idle_prompt.get("buffer") or "") + chr(ch)
+            return True
+        if ch != -1:
+            return True
+        return True
+
     if library["open"]:
         if library.get("confirm") is not None:
             # y/N confirm gate (Enter alone must NEVER fire play_start --
@@ -1645,6 +1740,44 @@ def _handle_key(ch, sock_path, status, library, explore_state=None, stdscr=None)
     return False
 
 
+def _maybe_arm_idle_prompt(idle_prompt, status, event, idle_age):
+    """Open the overlay when AI-PILOT has idled on a blocking prompt.
+    Also closes it when the live screen is no longer a blocking wait."""
+    classification = (event or {}).get("classification") or status.get("classification") or ""
+    prompt = (event or {}).get("prompt") or status.get("prompt") or ""
+    fp = idle_prompt_fingerprint(classification, prompt)
+    mode = status.get("mode")
+
+    if idle_prompt.get("open"):
+        if mode != "ai_pilot" or not idle_prompt_looks_blocking(classification, prompt):
+            idle_prompt["open"] = False
+            idle_prompt["confirm"] = False
+            idle_prompt["buffer"] = ""
+            return
+        # Keep overlay fields synced if the same wait is still showing.
+        idle_prompt["prompt"] = prompt
+        idle_prompt["classification"] = classification
+        idle_prompt["secret"] = is_probable_secret_prompt(prompt)
+        return
+
+    if idle_prompt.get("dismissed_key") == fp:
+        return
+    if not idle_prompt_should_offer(
+        mode=mode,
+        idle_age_s=idle_age,
+        classification=classification,
+        prompt=prompt,
+    ):
+        return
+    idle_prompt["open"] = True
+    idle_prompt["prompt"] = prompt
+    idle_prompt["classification"] = classification
+    idle_prompt["buffer"] = ""
+    idle_prompt["confirm"] = False
+    idle_prompt["secret"] = is_probable_secret_prompt(prompt)
+    idle_prompt["armed_key"] = fp
+
+
 def _run(stdscr, client, sock_path, pid_path, unicode_ok):
     curses.curs_set(0)
     stdscr.nodelay(True)
@@ -1670,6 +1803,16 @@ def _run(stdscr, client, sock_path, pid_path, unicode_ok):
     prev_connected = None
     prev_reconnecting = False
     library = {"open": False, "loops": [], "selected": 0, "pending_cycles": 1, "confirm": None}
+    idle_prompt = {
+        "open": False,
+        "prompt": "",
+        "classification": "",
+        "buffer": "",
+        "confirm": False,
+        "secret": False,
+        "dismissed_key": None,
+        "armed_key": None,
+    }
     explore_state = {"mode": "off"}
     phase2_cache = {"chain": None, "chain_ts": 0.0}
 
@@ -1703,9 +1846,12 @@ def _run(stdscr, client, sock_path, pid_path, unicode_ok):
             if ch == 3:  # rare: raw-mode / harness delivered literal ^C
                 return  # always detach, even mid-overlay
             library_was_open = library["open"]
+            idle_prompt_was_open = idle_prompt["open"]
             prev_explore = explore_state["mode"]
             attach_key = ch in (ord("a"), ord("A"))
-            if _handle_key(ch, sock_path, status, library, explore_state, stdscr):
+            if _handle_key(
+                ch, sock_path, status, library, explore_state, stdscr, idle_prompt,
+            ):
                 pass  # Trainer Control Panel consumed it -- fall through to redraw
             elif ch in (ord("q"), ord("Q")):  # detach, don't touch the daemon
                 return
@@ -1722,7 +1868,10 @@ def _run(stdscr, client, sock_path, pid_path, unicode_ok):
                 # went away and came back) -- force a full repaint rather
                 # than waiting on the next event/status poll.
                 got_content = True
-            if library_was_open and not library["open"]:
+            if (
+                (library_was_open and not library["open"])
+                or (idle_prompt_was_open and not idle_prompt["open"])
+            ):
                 # The overlay draws straight onto stdscr, covering rows/
                 # cols the dashboard's persistent sub-windows (Phase 0)
                 # don't ALL redraw on a quiet frame (got_content-gated,
@@ -1774,6 +1923,11 @@ def _run(stdscr, client, sock_path, pid_path, unicode_ok):
                 # Intentionally NOT got_content for ordinary polls — only
                 # the connected-flip above may mark viewport dirty
                 # (WO-SPECTATE-FLICKER).
+                if idle_prompt["open"] and status.get("mode") != "ai_pilot":
+                    idle_prompt["open"] = False
+                    idle_prompt["confirm"] = False
+                    idle_prompt["buffer"] = ""
+                    chrome_dirty = True
 
             flash_active = now < flash_until
             if flash_active:
@@ -1805,6 +1959,18 @@ def _run(stdscr, client, sock_path, pid_path, unicode_ok):
                 curses.doupdate()
                 continue
 
+            idle_age = None
+            if status.get("last_rx_age_s") is not None:
+                idle_age = status["last_rx_age_s"] + (now - status_poll_ts)
+            if not library["open"]:
+                _maybe_arm_idle_prompt(idle_prompt, status, last_event, idle_age)
+
+            if idle_prompt["open"]:
+                _draw_idle_prompt_overlay(
+                    stdscr, lines, cols, idle_prompt, palette, glyphs, idle_age,
+                )
+                continue
+
             if library["open"]:
                 # The overlay REPLACES the normal dashboard entirely --
                 # background polling above still keeps `status`/events
@@ -1819,9 +1985,6 @@ def _run(stdscr, client, sock_path, pid_path, unicode_ok):
             if not (got_content or anim_due or chrome_dirty):
                 continue  # the idle-CPU win (Phase 0): nothing changed, nothing animating
 
-            idle_age = None
-            if status.get("last_rx_age_s") is not None:
-                idle_age = status["last_rx_age_s"] + (now - status_poll_ts)
             semantic = status_semantic(status.get("connected", False), idle_age)
 
             _render(

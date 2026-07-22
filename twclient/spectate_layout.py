@@ -2395,6 +2395,104 @@ def format_idle_age(age_s: float) -> str:
     return f"{minutes}m{seconds:02d}s"
 
 
+# Spectate idle-prompt overlay: AI-PILOT sat on a blocking question long
+# enough that the human may need to supply the answer (display + optional
+# one-shot `do`). Pure predicates — curses ownership stays in spectate_app.
+IDLE_PROMPT_THRESHOLD_S = 10.0
+IDLE_PROMPT_GATE_CLASSES = frozenset({
+    "pause_key",
+    "login_password",
+    "login_name",
+    "computer",
+    "menu",
+    "game_select",
+    "unknown",
+})
+
+
+def idle_prompt_fingerprint(classification, prompt) -> tuple:
+    """Stable key for dismiss / re-arm (same question = same fingerprint)."""
+    return (classification or "", (prompt or "").strip())
+
+
+def idle_prompt_looks_blocking(classification, prompt) -> bool:
+    """True when the settled screen is waiting on an answer (not a quiet
+    main_command). Fighter Option? often classifies as sector_display —
+    prompt shape still counts."""
+    p = (prompt or "").strip()
+    if not p:
+        return False
+    if classification in IDLE_PROMPT_GATE_CLASSES:
+        return True
+    if p.endswith("?"):
+        return True
+    low = p.lower()
+    if "option?" in low or "your choice" in low or "selection" in low:
+        return True
+    return False
+
+
+def idle_prompt_should_offer(
+    *,
+    mode,
+    idle_age_s,
+    classification,
+    prompt,
+    threshold_s: float = IDLE_PROMPT_THRESHOLD_S,
+) -> bool:
+    """When spectate should surface the idle-prompt overlay."""
+    if mode != "ai_pilot":
+        return False
+    if idle_age_s is None or idle_age_s < threshold_s:
+        return False
+    return idle_prompt_looks_blocking(classification, prompt)
+
+
+def format_idle_prompt_overlay_lines(
+    *,
+    prompt: str,
+    classification: str,
+    idle_age_s,
+    buffer: str,
+    confirm: bool,
+    secret: bool,
+    width: int = 56,
+) -> list:
+    """Plain text lines for the centered idle-prompt modal (no curses)."""
+    w = max(24, int(width))
+    age = format_idle_age(idle_age_s) if idle_age_s is not None else "?"
+    lines = [
+        " AI PILOT WAITING ",
+        f"idle {age} · mode ai_pilot · {classification or '?'}",
+        "",
+        "Pending question:",
+        (prompt or "(empty)").strip()[: w - 2],
+        "",
+    ]
+    if secret:
+        lines.extend([
+            "This looks like a secret prompt.",
+            "Use `tw attach` — spectate will not send it.",
+            "",
+            "Esc dismiss",
+        ])
+    elif confirm:
+        shown = (buffer or "").strip()
+        lines.extend([
+            f'Send "{shown}" to the game? y/N',
+            "",
+            "y send · any other key cancel · Esc dismiss",
+        ])
+    else:
+        typed = buffer if buffer is not None else ""
+        lines.extend([
+            f"> {typed}",
+            "",
+            "Type answer · Enter confirm · Esc dismiss",
+        ])
+    return lines
+
+
 _STALE_RX_THRESHOLD_S = 5.0
 
 

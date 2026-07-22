@@ -2132,6 +2132,88 @@ def test_handle_key_a_is_a_safe_noop_without_a_stdscr():
     assert "attach_error" not in status
 
 
+def test_idle_prompt_overlay_enter_then_y_sends_do(monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        spectate_app_mod,
+        "_send_control",
+        lambda sock, verb, args=None, timeout=3.0: calls.append({"verb": verb, "args": args}) or {"ok": True},
+    )
+    status = {"mode": "ai_pilot"}
+    library = {"open": False, "loops": [], "selected": 0, "pending_cycles": 1, "confirm": None}
+    idle = {
+        "open": True,
+        "prompt": "Option? (A=Attack)",
+        "classification": "sector_display",
+        "buffer": "A",
+        "confirm": False,
+        "secret": False,
+        "dismissed_key": None,
+        "armed_key": ("sector_display", "Option? (A=Attack)"),
+    }
+    assert spectate_app_mod._handle_key(10, "/x.sock", status, library, idle_prompt=idle) is True
+    assert idle["confirm"] is True
+    assert calls == []
+    assert spectate_app_mod._handle_key(ord("y"), "/x.sock", status, library, idle_prompt=idle) is True
+    assert idle["open"] is False
+    assert calls == [{"verb": "do", "args": {"input": "A"}}]
+
+
+def test_idle_prompt_overlay_secret_never_sends_do(monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        spectate_app_mod,
+        "_send_control",
+        lambda sock, verb, args=None, timeout=3.0: calls.append({"verb": verb, "args": args}) or {"ok": True},
+    )
+    status = {"mode": "ai_pilot"}
+    library = {"open": False, "loops": [], "selected": 0, "pending_cycles": 1, "confirm": None}
+    idle = {
+        "open": True,
+        "prompt": "Password?",
+        "classification": "login_password",
+        "buffer": "hunter2",
+        "confirm": True,
+        "secret": True,
+        "dismissed_key": None,
+        "armed_key": ("login_password", "Password?"),
+    }
+    # Typing while secret is open must be ignored; Esc dismisses.
+    assert spectate_app_mod._handle_key(ord("x"), "/x.sock", status, library, idle_prompt=idle) is True
+    assert idle["open"] is True
+    assert calls == []
+    assert spectate_app_mod._handle_key(27, "/x.sock", status, library, idle_prompt=idle) is True
+    assert idle["open"] is False
+    assert calls == []
+
+
+def test_maybe_arm_idle_prompt_opens_after_threshold():
+    idle = {
+        "open": False,
+        "prompt": "",
+        "classification": "",
+        "buffer": "",
+        "confirm": False,
+        "secret": False,
+        "dismissed_key": None,
+        "armed_key": None,
+    }
+    status = {"mode": "ai_pilot"}
+    event = {"classification": "pause_key", "prompt": "[Pause]"}
+    spectate_app_mod._maybe_arm_idle_prompt(idle, status, event, idle_age=4.0)
+    assert idle["open"] is False
+    spectate_app_mod._maybe_arm_idle_prompt(idle, status, event, idle_age=12.0)
+    assert idle["open"] is True
+    assert idle["prompt"] == "[Pause]"
+    # Quiet main_command closes an open overlay.
+    spectate_app_mod._maybe_arm_idle_prompt(
+        idle, status,
+        {"classification": "main_command", "prompt": "Command [TL=00:00:00]:[1]"},
+        idle_age=12.0,
+    )
+    assert idle["open"] is False
+
+
 def test_spectate_client_auto_reconnects_after_sock_recycle(monkeypatch):
     """WO-TUI-SPECTATE-RECONNECT: subscribe EOF (daemon recycle) must not
     leave SpectateClient permanently quiet — when the unix sock returns,
