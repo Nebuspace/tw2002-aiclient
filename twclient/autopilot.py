@@ -148,6 +148,11 @@ from typing import Callable, Optional, Sequence
 from .chains import ProfitChain, TradeHop, longest_profit_chain
 from .classify import classify_screen
 from .control_lock import MODE_HUMAN, ControlModeConflict
+from .fighter_toll_policy import (
+    DEFAULT_AUTO_ATTACK_MAX_ENEMY,
+    DEFAULT_FIGHTER_RESERVE,
+    decide_from_screen,
+)
 from .settle import send_and_confirm
 from .ship_upgrade_decision import (
     LoopEconomics,
@@ -303,6 +308,11 @@ class EconCaps:
     # Threaded straight into a fresh `TradeDriverConfig` at `_execute()`'s
     # own `run_chain` call site -- see that method's docstring.
     min_margin_per_hop: int = 0
+    # WO-FIGHTER-FLOOR-TOLL: small aboard reserve for deploy/sell clamps +
+    # Option? auto-resolve knobs (see fighter_toll_policy.py). Distinct from
+    # keep_min_defense_fighters (upgrade-path hostile floor, default 20).
+    fighter_reserve: int = DEFAULT_FIGHTER_RESERVE
+    fighter_auto_attack_max_enemy: int = DEFAULT_AUTO_ATTACK_MAX_ENEMY
 
     def __post_init__(self) -> None:
         # Cipher FA4: a negative cash_floor/turn_reserve, or a non-positive
@@ -318,6 +328,10 @@ class EconCaps:
             raise ValueError("credits_stale_ms must be > 0")
         if self.min_margin_per_hop < 0:
             raise ValueError("min_margin_per_hop must be >= 0")
+        if self.fighter_reserve < 0:
+            raise ValueError("fighter_reserve must be >= 0")
+        if self.fighter_auto_attack_max_enemy < 0:
+            raise ValueError("fighter_auto_attack_max_enemy must be >= 0")
 
 
 @dataclass(frozen=True)
@@ -998,7 +1012,15 @@ class AutopilotEngine:
         post_text = pre_text
         input_text = "<no-send>"
         chosen = decision.chosen
-        if chosen is not None and chosen.next_sector is not None:
+        # WO-FIGHTER-FLOOR-TOLL (folds WO-FIGHTER-AUTO-R): Option? dialogues
+        # classify as sector_display and would otherwise HOLD forever on
+        # HIGH-2. Resolve A/R THIS tick before any bare sector-number send.
+        # Never auto-Pay (P). Haggle / other non-Option? prompts fall through.
+        fighter_cleared = self._try_clear_fighter_option(pre_text)
+        if fighter_cleared is not None:
+            outcome, input_text, post_text = fighter_cleared
+            decision = dataclasses.replace(decision, send_outcome=outcome)
+        elif chosen is not None and chosen.next_sector is not None:
             # HIGH-2 gate-check TOCTOU fix (cipher re-verify, 2026-07-20):
             # ONE fresh render feeds BOTH the full-text and the prompt-line
             # the gate classifies against -- never reuse tick-start
@@ -1083,6 +1105,46 @@ class AutopilotEngine:
         docstring's HIGH-3 note."""
         with self._lock:
             return [decision_to_trace(d) for d in self.decisions]
+
+    def _try_clear_fighter_option(
+        self, screen_text: str
+    ) -> Optional[tuple[str, str, str]]:
+        """WO-FIGHTER-FLOOR-TOLL: if ``screen_text`` is a fighter toll
+        ``Option?`` dialogue, send Attack or Retreat and return
+        ``(send_outcome, input_text, post_text)``; otherwise ``None`` so
+        the normal HIGH-2 / navigation path runs.
+
+        Never sends ``P`` (toll pay). Unparsed Option? → hold outcome
+        (still a non-None return so we don't fire a bare sector number).
+        """
+        rows = screen_text.split("\n")
+        prompt = rows[-1].strip() if rows else ""
+        fo = decide_from_screen(
+            screen_text,
+            prompt,
+            reserve=self.caps.fighter_reserve,
+            max_enemy=self.caps.fighter_auto_attack_max_enemy,
+        )
+        if not fo.detected:
+            return None
+        if fo.key is None:
+            return (f"held:fighter_option:{fo.reason}", "<no-send>", screen_text)
+        _reason, _elapsed, confirmed = send_and_confirm(
+            self.session,
+            fo.key,
+            confirm_prompt=None,
+            enter=True,
+        )
+        post_text = self.session.render_text(self.session.render())
+        if hasattr(self.session, "observe_credits"):
+            self.session.observe_credits(post_text)
+        if confirmed:
+            return (f"sent:fighter_option:{fo.key}", fo.key, post_text)
+        return (
+            f"unconfirmed:fighter_option:{fo.key}:{_reason}:{float(_elapsed):.3f}",
+            fo.key,
+            post_text,
+        )
 
     def _execute(self, candidate: Candidate, snapshot: Optional[WorldSnapshot] = None) -> tuple[bool, Optional[str]]:
         """Sends whatever `candidate` requires and returns `(confirmed,

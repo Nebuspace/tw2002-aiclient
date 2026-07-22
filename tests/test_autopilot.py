@@ -522,6 +522,40 @@ def test_live_tick_holds_the_send_when_the_live_screen_is_not_the_command_prompt
     assert "held" in ledger.calls[0]["intent"]
 
 
+def test_live_tick_attacks_single_fighter_option_instead_of_holding():
+    """WO-FIGHTER-FLOOR-TOLL: Option? with yours>=theirs (few) → A, not
+    held:not_main_command:sector_display thrash."""
+    text = (
+        "Sector  : 8578 in uncharted space.\n"
+        "Your fighters: 5 vs. theirs: 1\n"
+        "Option? (A,D,I,R,P,S,?):?"
+    )
+    session = FakeAutopilotSession(text=text)
+    profile = _make_profile(autonomous=True)
+    engine = AutopilotEngine(session, profile, ControlLock())
+
+    decision = engine.live_tick(explore_next_sector=200)
+    assert session.sent == [("A", True, False)]
+    assert decision.send_outcome == "sent:fighter_option:A"
+
+
+def test_live_tick_retreats_zero_fighter_option_instead_of_holding():
+    """Folded WO-FIGHTER-AUTO-R: 0 vs 1 → R (never P)."""
+    text = (
+        "Sector  : 8578 in uncharted space.\n"
+        "Your fighters: 0 vs. theirs: 1\n"
+        "Option? (A,D,I,R,P,S,?):?"
+    )
+    session = FakeAutopilotSession(text=text)
+    profile = _make_profile(autonomous=True)
+    engine = AutopilotEngine(session, profile, ControlLock())
+
+    decision = engine.live_tick(explore_next_sector=200)
+    assert session.sent == [("R", True, False)]
+    assert decision.send_outcome == "sent:fighter_option:R"
+    assert all(t[0] != "P" for t in session.sent)
+
+
 def test_live_tick_sends_normally_when_the_live_screen_is_the_command_prompt():
     session = FakeAutopilotSession()  # default screen classifies as main_command
     profile = _make_profile(autonomous=True)
