@@ -122,6 +122,26 @@ def test_status_world_id_is_none_without_auto_login_profile(fake_daemon):
     assert send_request(fake_daemon.sock_path, "status")["world_id"] is None
 
 
+def test_status_world_id_stays_sticky_across_transient_profile_load_failure(
+    fake_daemon, profiles_toml, monkeypatch,
+):
+    """WO-STATUS-WORLD-ID: after a successful resolve, a mid-edit
+    CredentialError must not null out status.world_id while connected."""
+    fake_daemon.session.auto_login_profile = "default"
+    fake_daemon.session.host = "test.example"
+    profile = credentials.load_profile("default")
+    expected = world_identity.world_id(
+        fake_daemon.session.host, profile.game_letter, profile.handle
+    )
+    assert send_request(fake_daemon.sock_path, "status")["world_id"] == expected
+
+    def _boom(_name):
+        raise credentials.CredentialError("profiles.toml mid-write")
+
+    monkeypatch.setattr(credentials, "load_profile", _boom)
+    assert send_request(fake_daemon.sock_path, "status")["world_id"] == expected
+
+
 # -- autopilot_start / autopilot_stop ---------------------------------------
 
 

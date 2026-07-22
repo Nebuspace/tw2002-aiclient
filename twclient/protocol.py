@@ -161,20 +161,35 @@ def _current_world_id(session):
     different characters sharing a host+game -- no-key-means-no-write
     is the correct, safe default here, not a gap to paper over.
 
+    WO-STATUS-WORLD-ID: once a world_id has been successfully resolved
+    for this connection, it is sticky on the session (``_sticky_world_id``)
+    so a transient profiles.toml load failure or mid-edit CredentialError
+    does not flip ``tw status`` to ``world_id: null`` while still connected.
+    Sticky is only set after a successful resolve -- never invented.
+
     `getattr`-guarded on `auto_login_profile` like every other optional
     session surface this module reads (`server.watch_hub`,
     `session.cursor_pos`) -- absent on bare fake-session test doubles
     that predate it."""
+    sticky = getattr(session, "_sticky_world_id", None)
     profile_name = getattr(session, "auto_login_profile", None)
     if not profile_name:
-        return None
+        return sticky
     from . import credentials
 
     try:
         profile = credentials.load_profile(profile_name)
     except credentials.CredentialError:
-        return None
-    return world_identity.world_id(session.host, profile.game_letter, profile.handle)
+        return sticky
+    try:
+        wid = world_identity.world_id(session.host, profile.game_letter, profile.handle)
+    except world_identity.WorldIdentityError:
+        return sticky
+    try:
+        session._sticky_world_id = wid
+    except Exception:  # noqa: BLE001 -- bare fakes may reject new attrs
+        pass
+    return wid
 
 
 def _log_world_model_failure(session, where, exc):
