@@ -1165,6 +1165,29 @@ def test_chain_hop_count_and_unit_none_chain():
     assert chain_hop_count_and_unit(None) == (None, "hops")
 
 
+def test_chain_hop_count_and_unit_presence_seed_from_sectors():
+    """Presence-seed viz has sectors but historically omitted steps — GOALS
+    must still count hops so it matches the Trade Loop bubble panel."""
+    assert chain_hop_count_and_unit(
+        {"sectors": (123, 753, 8293, 123), "source": "presence_seed"}
+    ) == (3, "hops")
+    assert chain_hop_count_and_unit(
+        {"sectors": (10, 20, 30, 40), "source": "presence_seed"}
+    ) == (3, "hops")
+    # Explicit steps still wins when present.
+    assert chain_hop_count_and_unit(
+        {"sectors": (1, 2, 3), "source": "presence_seed", "steps": 2}
+    ) == (2, "hops")
+
+
+def test_compose_primary_goals_presence_seed_not_none_yet():
+    lines = compose_primary_goals_lines(GoalsSnapshot(
+        longest_chain_hops=3, longest_chain_unit="hops",
+    ), width=36)
+    assert any("Chain" in ln and "3 hops" in ln for ln in lines)
+    assert not any("none yet" in ln for ln in lines)
+
+
 def test_compose_primary_goals_lines_labels_steps_vs_hops():
     steps_lines = compose_primary_goals_lines(GoalsSnapshot(
         longest_chain_hops=4, longest_chain_unit="steps",

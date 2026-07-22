@@ -1428,32 +1428,62 @@ def compose_autonomy_headline(ratio_data: dict | None = None) -> dict:
 
 def _chain_unit_for_source(source) -> str:
     """'hops' for a genuine discovered trade-loop chain (a real sector
-    path -- chains.chain_as_library_row()'s "discovered" tag); 'steps'
-    for anything else (a recorded/mined skill's macro action count).
+    path -- chains.chain_as_library_row()'s "discovered" tag) and for
+    presence-seed port paths; 'steps' for recorded/mined skill macros.
     Both share the SAME "steps" wire field (protocol.py's list_skills /
     chains.chain_as_library_row) -- this is the one place that decides
     which word it actually means, so display text never conflates a
     learned macro's step count with a trade-loop's hop count (WO-FA5a)."""
-    return "hops" if source == "discovered" else "steps"
+    return "hops" if source in ("discovered", "presence_seed") else "steps"
+
+
+def _hop_count_from_sectors(sectors) -> int | None:
+    """Edge count along a sector path (closed cycle keeps the return hop)."""
+    try:
+        secs = [int(s) for s in (sectors or ())]
+    except (TypeError, ValueError):
+        return None
+    if len(secs) < 2:
+        return None
+    # Closed cycle (a…a): edges == len(path) - 1. Open path: same formula.
+    return len(secs) - 1
 
 
 def chain_hop_count_and_unit(chain):
     """(count, unit) for a chain-like value headed for the GOALS panel --
     `chain` is either a genuine ProfitChain-like object (real `.hops`),
     a "discovered" library-row dict (also real hops, just re-shaped by
-    chain_as_library_row), or a recorded/mined skill's library-row dict
+    chain_as_library_row), a presence-seed port path (``sectors``, no
+    commodities yet), or a recorded/mined skill's library-row dict
     (macro STEPS, not hops -- see _chain_unit_for_source). `count` is
     None when there's nothing to show; `unit` falls back to "hops" when
-    there's no dict to read a `source` off (an object chain, or none)."""
+    there's no dict to read a `source` off (an object chain, or none).
+
+    Presence seeds omit ``steps`` but still render in the Trade Loop
+    panel — derive hop count from ``sectors`` so GOALS never says
+    "none yet" while bubbles show a path.
+    """
     if chain is None:
         return None, "hops"
-    if hasattr(chain, "hops"):
-        return len(chain.hops), "hops"
+    if hasattr(chain, "hops") and chain.hops is not None:
+        try:
+            return len(chain.hops), "hops"
+        except TypeError:
+            pass
     if isinstance(chain, dict):
-        count = int(chain.get("steps") or 0) or None
-        return count, _chain_unit_for_source(chain.get("source"))
+        unit = _chain_unit_for_source(chain.get("source"))
+        if chain.get("steps") is not None:
+            try:
+                count = int(chain["steps"]) or None
+            except (TypeError, ValueError):
+                count = None
+            if count is not None:
+                return count, unit
+        count = _hop_count_from_sectors(chain.get("sectors"))
+        return count, unit if count is not None else "hops"
+    if hasattr(chain, "sectors"):
+        return _hop_count_from_sectors(getattr(chain, "sectors", None)), "hops"
     return None, "hops"
-
 
 class GoalsSnapshot:
     """Frozen-enough goals view for compose_primary_goals_lines (plain dict OK too)."""

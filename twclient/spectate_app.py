@@ -550,6 +550,7 @@ def _build_goals_snapshot(world_id, chain=None, *, tracked=None, status=None):
         fighters_count = status["fighters_aboard"]
 
     if not world_id:
+        hops, chain_unit = chain_hop_count_and_unit(chain)
         return GoalsSnapshot(
             turns_known=turns_known,
             turns_count=turns_count,
@@ -557,6 +558,8 @@ def _build_goals_snapshot(world_id, chain=None, *, tracked=None, status=None):
             credits_amount=credits_amount,
             fighters_known=fighters_known,
             fighters_count=fighters_count,
+            longest_chain_hops=hops,
+            longest_chain_unit=chain_unit,
         )
     try:
         dock = find_landmark_sectors(world_id, "StarDock")
@@ -567,6 +570,7 @@ def _build_goals_snapshot(world_id, chain=None, *, tracked=None, status=None):
         ships = game_data.list_ships(world_id)
         ship_prices_count = sum(1 for s in ships if getattr(s, "cost", 0) > 0)
     except OSError:
+        hops, chain_unit = chain_hop_count_and_unit(chain)
         return GoalsSnapshot(
             turns_known=turns_known,
             turns_count=turns_count,
@@ -574,6 +578,8 @@ def _build_goals_snapshot(world_id, chain=None, *, tracked=None, status=None):
             credits_amount=credits_amount,
             fighters_known=fighters_known,
             fighters_count=fighters_count,
+            longest_chain_hops=hops,
+            longest_chain_unit=chain_unit,
         )
     hops, chain_unit = chain_hop_count_and_unit(chain)
     # P1-b price schema (hub relay): None = unknown → never guess/zero.
@@ -694,7 +700,8 @@ def _presence_port_chain_seed(
 
     if best is None:
         return None
-    return {"sectors": best, "source": "presence_seed"}
+    hops = max(0, len(best) - 1)
+    return {"sectors": best, "source": "presence_seed", "steps": hops}
 
 
 def _chain_sectors_all_known_ports(chain, port_set: set[int]) -> bool:
