@@ -9,8 +9,8 @@ Each row is one strategic objective the client tracks or will track. **Goal type
 | Identification of Turns & Credit Count | Boolean | 100 | — | **Implemented** — `state_parser.parse_state()` reads `turns_left`; credits use the strict `session.credits_snapshot()` path (WO-FA-SAFE), never a loose screen parse. `hud_seed.seed_hud_after_join()` sends `<I>` once when either value is still unknown after login. |
 | Identification of type of ship flying | Boolean | 90 | turns/credits known | **Planned** — no current-ship introspection adapter exists yet (`game_data.py` module docstring). `ShipSpec` / `PlayerState` types exist for upgrade scoring but are not fed live. |
 | Location of StarDock | Boolean | 85 | explore (when unknown) | **Implemented** — `world_model` landmark records + `explore.find_landmark_sectors()`. Shown in GOALS (`✓ StarDock @…`). Autopilot explore lane hunts via `explore.plan_find_stardock()`. |
-| Identification of cost of other ships | Boolean | 80 | StarDock found | **Partial** — `introspector.py` parses StarDock shipyard listings; persistence lives in `game_data`. Not yet wired into `WorldSnapshot.ship_catalog`, so `_score_upgrade()` always skips on a live daemon. |
-| Identification of cost of cargo hold upgrades | Boolean | 75 | StarDock found | **Partial** — `game_data.persist_cargo_hold_price()` / `get_cargo_hold_price()` store the live per-hold quote. GOALS shows `upgrade N/h` when known, `price?` when not. |
+| Identification of cost of other ships | Boolean | 80 | StarDock found | **Partial** — `introspector.py` parses StarDock shipyard listings; persistence lives in `game_data`. GOALS **Ship prices** line shows `✓ N priced` from `list_ships()`; not yet wired into `WorldSnapshot.ship_catalog`, so `_score_upgrade()` always skips on a live daemon. |
+| Identification of cost of cargo hold upgrades | Boolean | 75 | StarDock found | **Partial** — `game_data.persist_cargo_hold_price()` / `get_cargo_hold_price()` store the live per-hold quote. GOALS **Hold price** line shows `✓ N/h` when known, `· price?` when not. |
 | Identification of cost of fighters | Boolean | 70 | StarDock found | **Planned** — fighter deploy/sell math exists (`fighter_toll_policy.py`) but StarDock fighter pricing is not a tracked goal yet. |
 | Purchase of Additional Cargo Holds | Boolean | 65 | hold price known, credits sufficient, `travel_cost_rt` (Planned) | **Planned** — upgrade *decision* logic exists (`ship_upgrade_decision.py`); autopilot EXECUTE is navigation-only today (no purchase keystrokes). |
 | Purchase of ship with Larger Cargo Holds | Boolean | 60 | ship catalog known, loop economics known, `travel_cost_rt` (Planned) | **Partial** — `_score_upgrade()` in `autopilot.py` scores a detour-to-StarDock upgrade by holds-only cr/turn EV, but live wiring lacks `current_ship`, `ship_catalog`, and `loop` inputs; travel feasibility is **one-way only** today (see § Execution travel cost). |
@@ -84,9 +84,9 @@ Each priority should come with a score that grades the priority on whether it is
 
 ### Two layers (design vs. what ships today)
 
-**Layer 1 — Goal status (informational).** The left-gutter **GOALS** section in spectate (`GoalsSnapshot` → `compose_primary_goals_lines()` in `spectate_layout.py`) renders each catalog item as a compact status line with glyphs: `✓` met, `·` in progress / unknown, `—` not applicable. This layer is **read-only context** for the operator — it does not pick the next action.
+**Layer 1 — Goal status (informational).** The left-gutter **GOALS** section in spectate (`GoalsSnapshot` → `compose_primary_goals_lines()` in `spectate_layout.py`) renders each strategic prerequisite on its own line with readable labels (Turns, Credits, StarDock, Map, Formations, Chain, Ship prices, Hold price) and status glyphs: `✓` known/met, `·` in progress / partial, `?` unknown. Turns and credits come from the HUD accumulator; ship catalog counts from `game_data.list_ships()`; hold upgrade quote from `get_cargo_hold_price()`. This layer is **read-only context** — it does not pick the next action.
 
-**Layer 2 — Action selection (EV weigh list).** The **PRIORITIES** section below GOALS shows the autopilot's ordered **effort candidates** for the current tick, ranked by **`priority_engine.recommend_actions()`** (RT travel + stay-vs-leave when chain/travel hints exist). Inputs are adapted from `status["autopilot_trace"]`, the panel chain object, and world-model StarDock/return paths (`spectate_layout.build_priority_engine_inputs()`). DECISIONS still shows trace detail from the same poll. Each line is ranked by expected value:
+**Layer 2 — Action selection (EV weigh list).** The **FOCUS** section below GOALS (same left PRIORITIES gutter; outer box title unchanged) shows the autopilot's ordered **effort candidates** for the current tick, ranked by **`priority_engine.recommend_actions()`** (RT travel + stay-vs-leave when chain/travel hints exist). Inputs are adapted from `status["autopilot_trace"]`, the panel chain object, and world-model StarDock/return paths (`spectate_layout.build_priority_engine_inputs()`). DECISIONS still shows trace detail from the same poll. Each line is ranked by expected value:
 
 ```
 1 Trade chain 550
@@ -145,8 +145,8 @@ Threat identification (mines/fighters) is catalogued but **not yet** a scorer in
 
 | Panel | Region key | Contents | Source module |
 |---|---|---|---|
-| GOALS | left PRIORITIES gutter (top) | StarDock, map size, formations, longest chain, upgrade/hold price hints | `spectate_app._build_goals_snapshot()` |
-| PRIORITIES (weigh list) | left PRIORITIES gutter (bottom) | Engine-ranked candidates 1…N (`⊘`, optional `RTNt`) | `compose_priorities_lines()` → `recommend_actions()` |
+| GOALS | left PRIORITIES gutter (top) | Turns/credits, StarDock, map, formations, chain, ship prices, hold price | `spectate_app._build_goals_snapshot()` |
+| FOCUS (weigh list) | left PRIORITIES gutter (bottom) | Engine-ranked candidates 1…N (`⊘`, optional `RTNt`) | `compose_priorities_lines()` → `recommend_actions()` |
 | DECISIONS | right column under HUD | Trace detail: chosen kind, rationales, gate reasons | `format_autopilot_trace_lines()` |
 | CHAIN | viewport bubble row | Longest chain sector path | `compose_chain_bubbles()` |
 

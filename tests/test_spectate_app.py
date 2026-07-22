@@ -1435,7 +1435,7 @@ def test_priorities_panel_owns_goals_with_chain_box(monkeypatch):
     assert "— GOALS —" not in dec[0][0]
     assert len(pri) == 1 and pri[0][1] == "PRIORITIES"
     assert "— GOALS —" in pri[0][0]
-    assert "— PRIORITIES —" in pri[0][0]
+    assert "— FOCUS —" in pri[0][0]
 
 
 def test_decisions_idle_never_shows_tw13_stub(monkeypatch):
@@ -1481,7 +1481,7 @@ def test_decisions_idle_never_shows_tw13_stub(monkeypatch):
     assert "trace" in joined or "explore" in joined or dec[0][0] == ["—"]
     assert len(pri) == 1
     assert "— GOALS —" in pri[0][0]
-    assert "— PRIORITIES —" in pri[0][0]
+    assert "— FOCUS —" in pri[0][0]
 
 
 def test_decisions_midwidth_fallback_shows_priorities_when_no_left_gutter(monkeypatch):
@@ -1521,7 +1521,7 @@ def test_decisions_midwidth_fallback_shows_priorities_when_no_left_gutter(monkey
     lines, title = captured[0]
     assert title == "PRIORITIES"
     assert "— GOALS —" in lines
-    assert "— PRIORITIES —" in lines
+    assert "— FOCUS —" in lines
     assert not any("TW-13" in ln or "coach" in ln.lower() for ln in lines)
 
 

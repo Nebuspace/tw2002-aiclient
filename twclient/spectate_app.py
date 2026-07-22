@@ -512,18 +512,55 @@ def _autonomy_from_ledger():
     return compute_autonomy_ratio(entries)
 
 
-def _build_goals_snapshot(world_id, chain=None):
+def _build_goals_snapshot(world_id, chain=None, *, tracked=None, status=None):
     """WO-P2-b: derive primary-goal status from engines + world-model (read-only)."""
+    tracked = tracked or {}
+    status = status or {}
+
+    turns_known = False
+    turns_count = None
+    turns_entry = tracked.get("turns")
+    if isinstance(turns_entry, tuple) and len(turns_entry) >= 1:
+        kind_value = turns_entry[0]
+        if isinstance(kind_value, tuple) and len(kind_value) == 2 and kind_value[0] == "count":
+            turns_known = True
+            turns_count = kind_value[1]
+    if not turns_known and status.get("turns_left") is not None:
+        turns_known = True
+        turns_count = status["turns_left"]
+
+    credits_known = False
+    credits_amount = None
+    credits_entry = tracked.get("credits")
+    if isinstance(credits_entry, tuple) and len(credits_entry) >= 1:
+        credits_known = True
+        credits_amount = credits_entry[0]
+    if not credits_known and status.get("credits") is not None:
+        credits_known = True
+        credits_amount = status["credits"]
+
     if not world_id:
-        return GoalsSnapshot()
+        return GoalsSnapshot(
+            turns_known=turns_known,
+            turns_count=turns_count,
+            credits_known=credits_known,
+            credits_amount=credits_amount,
+        )
     try:
         dock = find_landmark_sectors(world_id, "StarDock")
         graph = known_graph(world_id)
         catalog = catalog_world(world_id)
         formations = len(catalog.formations)
         genesis = len(getattr(catalog, "genesis_candidates", ()) or ())
+        ships = game_data.list_ships(world_id)
+        ship_prices_count = sum(1 for s in ships if getattr(s, "cost", 0) > 0)
     except OSError:
-        return GoalsSnapshot()
+        return GoalsSnapshot(
+            turns_known=turns_known,
+            turns_count=turns_count,
+            credits_known=credits_known,
+            credits_amount=credits_amount,
+        )
     hops, chain_unit = chain_hop_count_and_unit(chain)
     # P1-b price schema (hub relay): None = unknown → never guess/zero.
     upgrade_status = "price?"
@@ -534,6 +571,10 @@ def _build_goals_snapshot(world_id, chain=None):
     except (OSError, TypeError, ValueError):
         upgrade_status = "price?"
     return GoalsSnapshot(
+        turns_known=turns_known,
+        turns_count=turns_count,
+        credits_known=credits_known,
+        credits_amount=credits_amount,
         stardock_found=bool(dock),
         stardock_sectors=dock,
         known_sectors=len(graph),
@@ -541,6 +582,7 @@ def _build_goals_snapshot(world_id, chain=None):
         genesis_candidates=genesis,
         longest_chain_hops=hops,
         longest_chain_unit=chain_unit,
+        ship_prices_count=ship_prices_count,
         upgrade_status=upgrade_status,
         holds_status="—",
     )
@@ -1864,7 +1906,7 @@ def _render(windows, regions, event, tracked, ticker_history, status, palette, g
         elif not has_priorities:
             wid = _resolve_world_id(status)
             chain = phase2_cache.get("chain")
-            goals = _build_goals_snapshot(wid, chain)
+            goals = _build_goals_snapshot(wid, chain, tracked=tracked, status=status)
             sector = (event.get("state") or {}).get("sector")
             has_chain_box = regions.get("chain") is not None
             decision_lines = compose_priorities_panel(
@@ -1888,7 +1930,7 @@ def _render(windows, regions, event, tracked, ticker_history, status, palette, g
         pri_cols = max(8, (regions["priorities"].get("w") or 22) - 4)
         wid = _resolve_world_id(status)
         chain = phase2_cache.get("chain")
-        goals = _build_goals_snapshot(wid, chain)
+        goals = _build_goals_snapshot(wid, chain, tracked=tracked, status=status)
         sector = (event.get("state") or {}).get("sector")
         has_chain_box = regions.get("chain") is not None
         pri_lines = compose_priorities_panel(
@@ -2024,7 +2066,7 @@ def run_snapshot(sock_path, pid_path, frames=1, settle_wait_s=8.0):
             dashboard["autonomy"] = auto
             wid = _resolve_world_id(status)
             chain = _longest_chain_for_panel(sock_path)
-            goals = _build_goals_snapshot(wid, chain)
+            goals = _build_goals_snapshot(wid, chain, tracked=tracked, status=status)
             sector = (last_event.get("state") or {}).get("sector")
             # Trust live transport (WO-P2d `autopilot_trace`). Null/missing →
             # same GOALS path as the live TUI (honest until an engine exists).

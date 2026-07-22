@@ -1325,11 +1325,13 @@ def compose_priorities_panel(
     include_chain: bool = True,
     **priority_engine_kwargs,
 ) -> list[str]:
-    """Left-gutter PRIORITIES box: autonomy + GOALS (+ optional CHAIN) + weigh list.
+    """Left-gutter PRIORITIES box: autonomy + GOALS (+ optional CHAIN) + FOCUS list.
 
+    The outer TUI region stays titled PRIORITIES; inside, GOALS (strategic
+    prerequisites) and FOCUS (this-tick action ranking) are separate sections.
     DECISIONS owns trace/explore only; this panel always shows strategy context
     beside the game viewport (WO-TUI-PRIORITIES-LEFT / human 2026-07-22).
-    Weigh list order comes from ``priority_engine.recommend_actions()`` when
+    FOCUS order comes from ``priority_engine.recommend_actions()`` when
     trace/chain/travel hints are available (``priority_engine_kwargs``).
     """
     lines = list(autonomy_lines or [])
@@ -1342,7 +1344,10 @@ def compose_priorities_panel(
             include_chain=include_chain,
         )
     )
-    lines.append("— PRIORITIES —")
+    if lines and lines[-1]:
+        lines.append("")
+    focus_hdr = "— FOCUS —" if width >= 18 else "— NOW —"
+    lines.append(focus_hdr)
     lines.extend(
         compose_priorities_lines(
             trace,
@@ -1413,14 +1418,19 @@ class GoalsSnapshot:
     """Frozen-enough goals view for compose_primary_goals_lines (plain dict OK too)."""
 
     __slots__ = (
+        "turns_known", "turns_count", "credits_known", "credits_amount",
         "stardock_found", "stardock_sectors", "known_sectors", "formations",
         "genesis_candidates", "longest_chain_hops", "longest_chain_unit",
-        "upgrade_status", "holds_status",
+        "ship_prices_count", "upgrade_status", "holds_status",
     )
 
     def __init__(
         self,
         *,
+        turns_known: bool = False,
+        turns_count=None,
+        credits_known: bool = False,
+        credits_amount=None,
         stardock_found: bool = False,
         stardock_sectors=(),
         known_sectors: int = 0,
@@ -1428,9 +1438,14 @@ class GoalsSnapshot:
         genesis_candidates: int = 0,
         longest_chain_hops=None,
         longest_chain_unit: str = "hops",
+        ship_prices_count: int = 0,
         upgrade_status: str = "—",
         holds_status: str = "—",
     ):
+        self.turns_known = bool(turns_known)
+        self.turns_count = turns_count
+        self.credits_known = bool(credits_known)
+        self.credits_amount = credits_amount
         self.stardock_found = bool(stardock_found)
         self.stardock_sectors = tuple(stardock_sectors or ())
         self.known_sectors = int(known_sectors)
@@ -1438,35 +1453,151 @@ class GoalsSnapshot:
         self.genesis_candidates = int(genesis_candidates)
         self.longest_chain_hops = longest_chain_hops
         self.longest_chain_unit = longest_chain_unit or "hops"
+        self.ship_prices_count = int(ship_prices_count)
         self.upgrade_status = upgrade_status or "—"
         self.holds_status = holds_status or "—"
 
 
+def _goal_row(*, glyph: str, label: str, detail: str, width: int) -> str:
+    """One GOALS line: status glyph + readable label + detail."""
+    text = f"{glyph} {label} {detail}".strip()
+    return text[:width]
+
+
+def _goals_use_short_labels(width: int) -> bool:
+    return width < 26
+
+
 def compose_primary_goals_lines(snap, *, width: int = 22) -> list[str]:
-    """Primary-goals panel lines (WO-P2-b). Status glyphs: ✓ / · / —."""
+    """Primary-goals panel lines (WO-P2-b).
+
+    Readable strategic prerequisites — not action ranking. Glyphs: ✓ met/known,
+    · in progress / partial, ? unknown.
+    """
     width = max(12, int(width))
     if not isinstance(snap, GoalsSnapshot):
         snap = GoalsSnapshot(**(snap or {}))
-    dock = "✓" if snap.stardock_found else "·"
-    dock_detail = (
-        f"@{','.join(str(s) for s in snap.stardock_sectors[:3])}"
-        if snap.stardock_sectors else ""
+    short = _goals_use_short_labels(width)
+    lines: list[str] = []
+
+    if snap.turns_known and snap.turns_count is not None:
+        turns_detail = f"{int(snap.turns_count):,}"
+        turns_glyph = "✓"
+    else:
+        turns_detail = "unknown"
+        turns_glyph = "?"
+    lines.append(_goal_row(
+        glyph=turns_glyph,
+        label="Turns" if not short else "Trn",
+        detail=turns_detail,
+        width=width,
+    ))
+
+    if snap.credits_known and snap.credits_amount is not None:
+        credits_detail = f"{int(snap.credits_amount):,}"
+        credits_glyph = "✓"
+    else:
+        credits_detail = "unknown"
+        credits_glyph = "?"
+    lines.append(_goal_row(
+        glyph=credits_glyph,
+        label="Credits" if not short else "Cr",
+        detail=credits_detail,
+        width=width,
+    ))
+
+    if snap.stardock_found and snap.stardock_sectors:
+        dock_detail = f"@{','.join(str(s) for s in snap.stardock_sectors[:3])}"
+        dock_glyph = "✓"
+    elif snap.stardock_found:
+        dock_detail = "found"
+        dock_glyph = "✓"
+    else:
+        dock_detail = "not found"
+        dock_glyph = "·"
+    lines.append(_goal_row(
+        glyph=dock_glyph,
+        label="StarDock" if not short else "Dock",
+        detail=dock_detail,
+        width=width,
+    ))
+
+    map_label = "Map" if short else "Map"
+    map_detail = (
+        f"{snap.known_sectors} sec"
+        if short
+        else f"{snap.known_sectors} sectors"
     )
-    chain = (
-        f"✓ {snap.longest_chain_hops}{snap.longest_chain_unit[:1]}"
-        if snap.longest_chain_hops
-        else "·"
-    )
-    lines = [
-        f"{dock} StarDock {dock_detail}".rstrip(),
-        f"· map {snap.known_sectors}s · form {snap.formations}",
-        f"{chain} longest chain",
-        f"· upgrade {snap.upgrade_status}"[:width],
-        f"· holds {snap.holds_status}"[:width],
-    ]
+    lines.append(_goal_row(
+        glyph="·", label=map_label, detail=map_detail, width=width,
+    ))
+
+    form_label = "Formations" if not short else "Form"
+    form_detail = f"{snap.formations} found"
+    lines.append(_goal_row(
+        glyph="·" if snap.formations else "?",
+        label=form_label,
+        detail=form_detail,
+        width=width,
+    ))
+
     if snap.genesis_candidates:
-        lines.append(f"· genesis {snap.genesis_candidates}")
-    return [ln[:width] for ln in lines]
+        gen_label = "Genesis" if not short else "Gen"
+        gen_detail = (
+            f"{snap.genesis_candidates} cand"
+            if short
+            else f"{snap.genesis_candidates} candidates"
+        )
+        lines.append(_goal_row(
+            glyph="·", label=gen_label, detail=gen_detail, width=width,
+        ))
+
+    unit = snap.longest_chain_unit or "hops"
+    if snap.longest_chain_hops:
+        chain_glyph = "✓"
+        chain_detail = (
+            f"{snap.longest_chain_hops} {unit[:1]}"
+            if short
+            else f"{snap.longest_chain_hops} {unit}"
+        )
+    else:
+        chain_glyph = "·"
+        chain_detail = "none yet"
+    lines.append(_goal_row(
+        glyph=chain_glyph,
+        label="Chain" if not short else "Chain",
+        detail=chain_detail,
+        width=width,
+    ))
+
+    ships_label = "Ship prices" if not short else "Ships"
+    if snap.ship_prices_count > 0:
+        ships_glyph = "✓"
+        ships_detail = (
+            f"{snap.ship_prices_count} priced"
+            if not short
+            else f"{snap.ship_prices_count} ok"
+        )
+    else:
+        ships_glyph = "·"
+        ships_detail = "price?"
+    lines.append(_goal_row(
+        glyph=ships_glyph, label=ships_label, detail=ships_detail, width=width,
+    ))
+
+    hold_label = "Hold price" if not short else "Hold"
+    hold_quote = snap.upgrade_status
+    if hold_quote and hold_quote not in ("—", "price?"):
+        hold_glyph = "✓"
+        hold_detail = hold_quote
+    else:
+        hold_glyph = "·"
+        hold_detail = "price?"
+    lines.append(_goal_row(
+        glyph=hold_glyph, label=hold_label, detail=hold_detail, width=width,
+    ))
+
+    return lines
 
 
 def format_chain_summary(
@@ -2138,7 +2269,7 @@ def render_plain(dashboard: dict) -> str:
         lines.extend(dashboard["decisions"])
     if dashboard.get("priorities"):
         lines.append("-" * 80)
-        lines.append(" PRIORITIES — goals + weigh list")
+        lines.append(" PRIORITIES — goals + focus list")
         lines.append("-" * 80)
         lines.extend(dashboard["priorities"])
     lines.append("-" * 80)

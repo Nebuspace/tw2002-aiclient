@@ -898,12 +898,22 @@ def test_compose_hud_cells_appends_autonomy_when_provided():
 def test_compose_primary_goals_and_chain_highlight():
     from twclient.chains import ProfitChain, TradeHop
     lines = compose_primary_goals_lines(GoalsSnapshot(
+        turns_known=True, turns_count=220,
+        credits_known=True, credits_amount=48000,
         stardock_found=True, stardock_sectors=(4223,), known_sectors=40,
-        formations=2, longest_chain_hops=3, upgrade_status="HOLD",
+        formations=2, longest_chain_hops=3, longest_chain_unit="hops",
+        ship_prices_count=5, upgrade_status="1468/h",
         holds_status="85/125",
-    ))
-    assert any("StarDock" in ln and "✓" in ln for ln in lines)
-    assert any("4223" in ln for ln in lines)
+    ), width=36)
+    assert any("Turns" in ln and "220" in ln and "✓" in ln for ln in lines)
+    assert any("Credits" in ln and "48,000" in ln for ln in lines)
+    assert any("StarDock" in ln and "4223" in ln for ln in lines)
+    assert any("Formations" in ln and "2 found" in ln for ln in lines)
+    assert any("40 sectors" in ln for ln in lines)
+    assert any("3 hops" in ln for ln in lines)
+    assert any("Ship prices" in ln and "5 priced" in ln for ln in lines)
+    assert any("Hold price" in ln and "1468/h" in ln for ln in lines)
+    assert not any("form " in ln for ln in lines)
     chain = ProfitChain(
         sectors=(1, 2, 3, 1),
         hops=(
@@ -988,9 +998,9 @@ def test_compose_priorities_panel_folds_goals_and_weigh_list():
     )
     assert panel[0] == "AUTO 75%"
     assert "— GOALS —" in panel
-    assert "— PRIORITIES —" in panel
+    assert "— FOCUS —" in panel
     assert any("Trade chain" in ln for ln in panel)
-    assert panel.index("— GOALS —") < panel.index("— PRIORITIES —")
+    assert panel.index("— GOALS —") < panel.index("— FOCUS —")
 
 
 def test_compose_phase2_side_panel_does_not_fold_priorities():
@@ -1104,12 +1114,12 @@ def test_chain_hop_count_and_unit_none_chain():
 def test_compose_primary_goals_lines_labels_steps_vs_hops():
     steps_lines = compose_primary_goals_lines(GoalsSnapshot(
         longest_chain_hops=4, longest_chain_unit="steps",
-    ))
-    assert any("4s" in ln for ln in steps_lines)
+    ), width=30)
+    assert any("4 steps" in ln for ln in steps_lines)
     hops_lines = compose_primary_goals_lines(GoalsSnapshot(
         longest_chain_hops=4, longest_chain_unit="hops",
-    ))
-    assert any("4h" in ln for ln in hops_lines)
+    ), width=30)
+    assert any("4 hops" in ln for ln in hops_lines)
 
 
 def test_format_chain_summary_dict_branch_labels_steps_vs_hops():
@@ -1236,8 +1246,8 @@ def test_render_plain_includes_phase2_sections():
         "decisions": format_autopilot_trace_lines(PROVISIONAL_AUTOPILOT_TRACE, cols=40),
         "priorities": [
             "AUTO 75%", "App 30 / AI 10 · Hum 2",
-            "— GOALS —", "· map 9s",
-            "— PRIORITIES —", "1 Trade chain 550", "2 Upgrade 200",
+            "— GOALS —", "· Map 9 sec",
+            "— FOCUS —", "1 Trade chain 550", "2 Upgrade 200",
         ],
     })
     assert "METRICS" in text and "STATIONS" in text
