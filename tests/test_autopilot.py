@@ -201,9 +201,25 @@ def _cruiser():
 
 def _profit_chain_hops(margin=50):
     # A trivial 2-sector round trip, cr/turn = (margin*2)/(1+1) = margin.
+    # NOTE: only 2 hops — below priority_engine's MIN_CHAIN_LINKS_TO_EXECUTE (3).
+    # Use `_viable_chain_hops()` in tests that want the chain to WIN selection.
     return [
         TradeHop(frm=100, to=200, commodity="Fuel Ore", margin=margin, turns=1),
         TradeHop(frm=200, to=100, commodity="Organics", margin=margin, turns=1),
+    ]
+
+
+def _viable_chain_hops(margin=50):
+    # 5-sector cycle: meets MIN_CHAIN_LINKS_TO_EXECUTE (3) AND is ≥
+    # CHAIN_LINKS_PREFER_SEARCH_BELOW (5), so the priority engine
+    # treats it as executable AND prefers earn over explore.
+    # cr/turn = (margin*5)/(1+1+1+1+1) = margin.  sectors: 100→200→300→400→500→100.
+    return [
+        TradeHop(frm=100, to=200, commodity="Fuel Ore", margin=margin, turns=1),
+        TradeHop(frm=200, to=300, commodity="Organics", margin=margin, turns=1),
+        TradeHop(frm=300, to=400, commodity="Equipment", margin=margin, turns=1),
+        TradeHop(frm=400, to=500, commodity="Fuel Ore", margin=margin, turns=1),
+        TradeHop(frm=500, to=100, commodity="Organics", margin=margin, turns=1),
     ]
 
 
@@ -215,9 +231,12 @@ def _make_profile(name="t", autonomous=False):
 
 
 def test_select_picks_the_known_chain_when_nothing_else_beats_it():
+    # 5-hop chain: meets MIN_CHAIN_LINKS_TO_EXECUTE (3) AND is ≥
+    # CHAIN_LINKS_PREFER_SEARCH_BELOW (5), so the priority engine
+    # defers explore and focuses on the chain.
     snap = WorldSnapshot(
         sector=None, credits=None, turns_left=1000,
-        hops=tuple(_profit_chain_hops(margin=50)),
+        hops=tuple(_viable_chain_hops(margin=50)),
         explore_next_sector=999,
     )
     decision = select(snap)
@@ -472,10 +491,13 @@ def test_high1_poc5_over_rank_a_trivial_upgrade_never_beats_a_real_chain():
     candidate = ShipSpec(name="Barely-Bigger Skiff", cost=100, holds=51, turns_per_warp=1, fighters=10, shields=0)
     loop = _loop_econ()
     true_delta = (candidate.holds - current.holds) * loop.margin_per_hold / loop.turns_per_cycle  # 10
+    # Viable (3-hop) chain so the priority engine recognises it as active
+    # (chain_active=True) and gates the upgrade (return-path unknown →
+    # require_rt_when_chain_active fires), keeping run_chain as focus.
     snap = WorldSnapshot(
         sector=None, credits=60_000, turns_left=5000,
         current_ship=current, ship_catalog=(candidate,), loop=loop,
-        hops=tuple(_profit_chain_hops(margin=50)),  # a real chain, 5x the true upgrade delta
+        hops=tuple(_viable_chain_hops(margin=50)),  # a real chain, 5x the true upgrade delta
         stardock_route=(1,),  # known, at-dock -- this test is about the EV ranking, not travel feasibility
         explore_next_sector=1,
     )
@@ -507,6 +529,65 @@ def test_high1_poc6_ranking_is_stable_regardless_of_current_ships_warp():
             f"EV must be warp-stable regardless of current ship ({current.name})"
         )
         assert decision.chosen.kind == "upgrade", f"upgrade (550) must beat the chain (200) for {current.name}"
+
+
+# -- Priority engine wire: link-count / RT-aware select() override --------
+
+
+def test_select_priority_engine_prefers_explore_over_short_chain():
+    """A 2-hop chain is below MIN_CHAIN_LINKS_TO_EXECUTE (3); the priority
+    engine gates it and promotes explore when a frontier hop exists."""
+    snap = WorldSnapshot(
+        sector=None, credits=None, turns_left=1000,
+        hops=tuple(_profit_chain_hops(margin=50)),  # 2 hops — below execute floor
+        explore_next_sector=999,
+    )
+    decision = select(snap)
+    assert decision.chosen is not None
+    assert decision.chosen.kind == "explore", (
+        "priority engine should gate a 2-link chain and promote explore"
+    )
+    # run_chain is still a SCORED candidate (just demoted), not silently skipped
+    assert any(c.kind == "run_chain" for c in decision.candidates)
+    assert "priority engine" in decision.reason
+
+
+def test_select_priority_engine_gates_upgrade_when_chain_active_and_return_path_unknown():
+    """When a viable (≥5-hop) chain is active, the priority engine gates
+    upgrade because the return path from StarDock is unknown (RT fail-closed).
+    select() stays on run_chain even though upgrade has higher raw EV."""
+    snap = WorldSnapshot(
+        sector=None, credits=60_000, turns_left=5000,
+        current_ship=_barge(),
+        ship_catalog=(_cruiser(),),
+        loop=_loop_econ(),
+        hops=tuple(_viable_chain_hops(margin=50)),  # 5-hop: chain_active=True, prefers earn
+        stardock_route=(100, 150, 999),              # path known; return unknown
+        explore_next_sector=1,
+    )
+    decision = select(snap)
+    assert decision.chosen is not None
+    assert decision.chosen.kind == "run_chain", (
+        "upgrade must be RT-gated (no return path) when chain is active"
+    )
+    # upgrade candidate is still scored (just overridden)
+    assert any(c.kind == "upgrade" for c in decision.candidates)
+    assert "priority engine" in decision.reason
+
+
+def test_select_priority_engine_falls_back_to_ev_when_no_explore_and_short_chain():
+    """With a 2-hop chain and NO explore frontier, engine focus=None → fall
+    back to pure EV ranking → run_chain still wins (nothing else available)."""
+    snap = WorldSnapshot(
+        sector=None, credits=None, turns_left=1000,
+        hops=tuple(_profit_chain_hops(margin=50)),  # 2 hops but no explore fallback
+    )
+    decision = select(snap)
+    assert decision.chosen is not None
+    assert decision.chosen.kind == "run_chain", (
+        "with no explore available, engine focus=None, EV ranking preserved"
+    )
+    assert "highest EV" in decision.reason  # NOT a priority-engine override
 
 
 # -- HIGH-2: classify-gate before every send -----------------------------
@@ -1245,12 +1326,13 @@ def test_interrupt_history_tracks_only_live_ticks_never_dry_run_previews():
     # A parseable turn count is required -- _score_chain fails CLOSED
     # (MED fix) on an unknown turns_left, so the default bare screen
     # (no "turns left" text) would skip the chain candidate outright.
+    # Viable (3-hop) chain so the priority engine treats it as executable.
     session = FakeAutopilotSession(text="5,000 turns left.\n" + _MAIN_COMMAND_SCREEN)
     profile = _make_profile(autonomous=True)
     lock = ControlLock()
     engine = AutopilotEngine(session, profile, lock)
 
-    t1 = engine.live_tick(hops=tuple(_profit_chain_hops(margin=50)), explore_next_sector=999)
+    t1 = engine.live_tick(hops=tuple(_viable_chain_hops(margin=50)), explore_next_sector=999)
     assert t1.chosen.kind == "run_chain"
     assert t1.interrupted is False  # first live tick, nothing to interrupt
 
@@ -1259,7 +1341,7 @@ def test_interrupt_history_tracks_only_live_ticks_never_dry_run_previews():
     t2 = engine.dry_run_tick(explore_next_sector=999)
     assert t2.chosen.kind == "explore"
 
-    t3 = engine.live_tick(hops=tuple(_profit_chain_hops(margin=50)), explore_next_sector=999)
+    t3 = engine.live_tick(hops=tuple(_viable_chain_hops(margin=50)), explore_next_sector=999)
     assert t3.chosen.kind == "run_chain"
     assert t3.interrupted is False, (
         "the real driven history never left run_chain -- the intervening dry-run preview must not count"
@@ -1269,6 +1351,7 @@ def test_interrupt_history_tracks_only_live_ticks_never_dry_run_previews():
 def test_interrupt_fires_across_consecutive_live_ticks_when_ev_ranking_changes():
     # See the fail-closed note above -- a parseable turns_left is needed
     # for the chain candidate to be scored at all.
+    # Viable (3-hop) chain so the priority engine treats it as executable.
     session = FakeAutopilotSession(text="5,000 turns left.\n" + _MAIN_COMMAND_SCREEN)
     profile = _make_profile(autonomous=True)
     lock = ControlLock()
@@ -1278,7 +1361,7 @@ def test_interrupt_fires_across_consecutive_live_ticks_when_ev_ranking_changes()
     assert t1.chosen.kind == "explore"
     assert t1.interrupted is False
 
-    t2 = engine.live_tick(hops=tuple(_profit_chain_hops(margin=50)), explore_next_sector=999)
+    t2 = engine.live_tick(hops=tuple(_viable_chain_hops(margin=50)), explore_next_sector=999)
     assert t2.chosen.kind == "run_chain"
     assert t2.interrupted is True, "a higher-EV chain must INTERRUPT the prior explore pursuit"
 

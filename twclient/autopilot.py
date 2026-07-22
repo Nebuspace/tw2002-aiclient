@@ -702,12 +702,90 @@ def _score_explore(snapshot: WorldSnapshot) -> tuple[Optional[Candidate], Option
     )
 
 
+def _priority_engine_focus_kind(
+    snapshot: WorldSnapshot,
+    candidates: "list[Candidate]",
+    caps: EconCaps,
+) -> "Optional[str]":
+    """Consult ``priority_engine.recommend_actions`` for RT-aware /
+    link-count focus.  Extracts economics from the already-scored
+    *candidates* (so we never re-derive what the scorers computed).
+    Returns the focus kind string, or ``None`` to fall back to raw EV
+    ranking (fail-closed: any missing input or engine error → None)."""
+    from .priority_engine import recommend_actions  # local import; pure module
+
+    chain_c = next((c for c in candidates if c.kind == "run_chain"), None)
+    chain_cr: "Optional[float]" = chain_c.ev_per_turn if chain_c is not None else None
+    chain_cycle: "Optional[int]" = None
+    link_count: "Optional[int]" = None
+    at_start: bool = False
+    if chain_c is not None and chain_c.chain is not None:
+        link_count = len(chain_c.chain.hops)
+        at_start = bool(
+            snapshot.sector is not None
+            and chain_c.chain.sectors
+            and chain_c.chain.sectors[0] == snapshot.sector
+        )
+    if chain_cr is not None and snapshot.loop is not None:
+        chain_cycle = snapshot.loop.turns_per_cycle
+
+    upgrade_c = next((c for c in candidates if c.kind == "upgrade"), None)
+    upgrade_ev: "Optional[float]" = upgrade_c.ev_per_turn if upgrade_c is not None else None
+    upgrade_payback: "Optional[float]" = None
+    upgrade_name: "Optional[str]" = None
+    if upgrade_c is not None and upgrade_c.upgrade is not None:
+        upgrade_payback = upgrade_c.upgrade.projected_payback
+        if upgrade_c.upgrade.ship is not None:
+            upgrade_name = upgrade_c.upgrade.ship.name
+
+    hops_to_stardock: "Optional[int]" = None
+    if snapshot.stardock_route is not None:
+        hops_to_stardock = max(0, len(snapshot.stardock_route) - 1)
+
+    turns_per_warp = (
+        snapshot.current_ship.turns_per_warp
+        if snapshot.current_ship is not None
+        else 1
+    )
+    explore_available = any(c.kind == "explore" for c in candidates)
+
+    try:
+        rec = recommend_actions(
+            chain_cr_per_turn=chain_cr,
+            chain_cycle_turns=chain_cycle,
+            chain_link_count=link_count,
+            at_chain_start=at_start,
+            upgrade_extra_cr_per_turn=upgrade_ev,
+            upgrade_payback=upgrade_payback,
+            upgrade_ship_name=upgrade_name,
+            hops_to_stardock=hops_to_stardock,
+            # hops_return_to_work: WorldSnapshot has no graph -- engine
+            # will gate upgrade (require_rt_when_chain_active) when chain
+            # is active and this is unknown; correct fail-closed shape.
+            hops_return_to_work=None,
+            turns_per_warp=turns_per_warp,
+            turns_left=snapshot.turns_left,
+            turn_reserve=caps.turn_reserve,
+            explore_available=explore_available,
+        )
+        return rec.focus.kind if rec.focus is not None else None
+    except Exception:
+        return None  # fail-closed: preserve EV ranking on any engine error
+
+
 def select(snapshot: WorldSnapshot, caps: EconCaps = EconCaps()) -> Decision:
     """SELECT: score every candidate action from scratch and pick the
     highest expected-value one. Stateless -- see module docstring for why
     that's what makes interruption structural rather than a special case;
     `interrupted`/history-tracking is `AutopilotEngine`'s job, not this
-    function's."""
+    function's.
+
+    After raw EV ranking, ``priority_engine.recommend_actions`` is
+    consulted for RT-aware / link-count overrides (e.g. gate a short
+    chain when a frontier hop exists; stay on chain when the return path
+    from StarDock is unknown).  The override only fires when the engine
+    has a focus AND it disagrees with the EV winner; fail-closed when
+    inputs are insufficient."""
     candidates: list[Candidate] = []
     skipped: list[str] = []
 
@@ -726,12 +804,22 @@ def select(snapshot: WorldSnapshot, caps: EconCaps = EconCaps()) -> Decision:
         )
 
     ranked = sorted(candidates, key=lambda c: c.ev_per_turn, reverse=True)
+
+    # Priority engine override: RT-aware / link-count focus when available.
+    pe_focus = _priority_engine_focus_kind(snapshot, candidates, caps)
+    reason_prefix = "highest EV"
+    if pe_focus is not None and pe_focus != ranked[0].kind:
+        focus_cand = next((c for c in ranked if c.kind == pe_focus), None)
+        if focus_cand is not None:
+            ranked = [focus_cand] + [c for c in ranked if c.kind != pe_focus]
+            reason_prefix = "priority engine"
+
     chosen = ranked[0]
     return Decision(
         ts=time.time(),
         candidates=tuple(candidates),
         chosen=chosen,
-        reason=f"highest EV: {chosen.kind} ({chosen.ev_per_turn:.2f} cr/turn)",
+        reason=f"{reason_prefix}: {chosen.kind} ({chosen.ev_per_turn:.2f} cr/turn)",
         skipped=tuple(skipped),
         snapshot=snapshot,
     )
