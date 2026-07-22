@@ -912,7 +912,7 @@ def test_compose_primary_goals_and_chain_highlight():
     assert any("40 sectors" in ln for ln in lines)
     assert any("3 hops" in ln for ln in lines)
     assert any("Ship prices" in ln and "5 priced" in ln for ln in lines)
-    assert any("Hold price" in ln and "1468/h" in ln for ln in lines)
+    assert any("Hold upg" in ln and "1468/h" in ln for ln in lines)
     assert not any("form " in ln for ln in lines)
     chain = ProfitChain(
         sectors=(1, 2, 3, 1),

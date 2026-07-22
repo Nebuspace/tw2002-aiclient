@@ -1585,7 +1585,7 @@ def compose_primary_goals_lines(snap, *, width: int = 22) -> list[str]:
         glyph=ships_glyph, label=ships_label, detail=ships_detail, width=width,
     ))
 
-    hold_label = "Hold price" if not short else "Hold"
+    hold_label = "Hold upg" if not short else "Hold"
     hold_quote = snap.upgrade_status
     if hold_quote and hold_quote not in ("—", "price?"):
         hold_glyph = "✓"
