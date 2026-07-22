@@ -725,11 +725,24 @@ def test_interactive_spectate_ticker_flashes_newest_row_under_a_fake_pty():
     rows, cols = 36, 112
     events = [_credits_event(100000), _credits_event(100100)]
     captured = _run_fake_spectate_in_pty(
-        events, lambda buf: b"main_command" in buf and _COLOR_SET_SGR_RE.search(buf) is not None,
+        # Wait for the SECOND credits paint so the newest ticker row is
+        # still inside TICKER_FLASH_DURATION_S. Do not require
+        # "main_command" — LOG tail-truncates under the CHAIN three-pane
+        # band and may only show "n_command".
+        events,
+        lambda buf: b"100,100" in buf and b"(idle)" in buf and _COLOR_SET_SGR_RE.search(buf) is not None,
         timeout=8.0, rows=rows, cols=cols, event_gap_s=0.3,
     )
     grid = _pyte_grid(captured, rows, cols)
-    pos = _find_text(grid, "main_command")
+    # LOG prefers the line TAIL when truncating (settle/TX suffixes); with
+    # the WO-TUI-CHAIN-BOX three-pane band, the classification prefix may
+    # be clipped — match a settle token that remains visible. Prefer the
+    # LAST match (newest ticker row — the one that flashes).
+    pos = None
+    for r, row_text in enumerate(grid):
+        c = row_text.find("(idle)")
+        if c != -1:
+            pos = (r, c)
     assert pos is not None, f"ticker never rendered; grid:\n{chr(10).join(grid)}"
     screen = _pyte_screen(captured, rows, cols)
     row_cells = screen.buffer[pos[0]]

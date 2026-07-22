@@ -250,11 +250,13 @@ def frame_layout(lines: int, cols: int) -> dict:
             # its own pane (not only a dwell slice inside DECISIONS).
             dec_w = min(32, max(20, i_cols // 4))
             chain_w = min(28, max(CHAIN_BOX_MIN_W, i_cols // 5))
-            if i_cols - dec_w - chain_w < 24:
-                # Prefer LOG readability: shrink CHAIN then DECISIONS.
-                chain_w = max(CHAIN_BOX_MIN_W, min(chain_w, i_cols - dec_w - 24))
-                if i_cols - dec_w - chain_w < 24:
-                    dec_w = max(20, min(dec_w, i_cols - chain_w - 24))
+            # Keep LOG wide enough for settle/TX tails (ticker prefers the
+            # line end when truncating). Floor ~40 content + borders.
+            log_floor = 42
+            if i_cols - dec_w - chain_w < log_floor:
+                chain_w = max(CHAIN_BOX_MIN_W, min(chain_w, i_cols - dec_w - log_floor))
+                if i_cols - dec_w - chain_w < log_floor:
+                    dec_w = max(20, min(dec_w, i_cols - chain_w - log_floor))
             log_w = i_cols - dec_w - chain_w
             ticker = {
                 "y": band_y, "x": ox, "w": log_w, "h": band_h,
