@@ -1571,7 +1571,7 @@ def compose_primary_goals_lines(snap, *, width: int = 22) -> list[str]:
         width=width,
     ))
 
-    # Goal is the whole galaxy — known count is progress, not a finish line.
+    # Known sector count is exploration progress (galaxy size often unknown).
     if snap.galaxy_size and snap.galaxy_size > 0:
         pct = min(100, int(100 * snap.known_sectors / snap.galaxy_size))
         map_detail = (
@@ -1582,14 +1582,14 @@ def compose_primary_goals_lines(snap, *, width: int = 22) -> list[str]:
         map_glyph = "✓" if snap.known_sectors >= snap.galaxy_size else "·"
     else:
         map_detail = (
-            f"{snap.known_sectors} known"
+            f"{snap.known_sectors}"
             if short
-            else f"{snap.known_sectors} known (whole galaxy)"
+            else f"{snap.known_sectors} Sectors"
         )
         map_glyph = "·"
     lines.append(_goal_row(
         glyph=map_glyph,
-        label="Galaxy" if not short else "Gal",
+        label="Galaxy Exploration:" if not short else "Gal Exp:",
         detail=map_detail,
         width=width,
     ))
