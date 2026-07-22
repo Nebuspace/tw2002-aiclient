@@ -461,7 +461,9 @@ def _build_goals_snapshot(world_id, chain=None):
     )
 
 
-def _presence_port_chain_seed(world_id, *, max_hops: int = 3, state_dir=None):
+def _presence_port_chain_seed(
+    world_id, *, current_sector=None, max_hops: int = 3, state_dir=None,
+):
     """Viz-only seed when ports are known but TradeHops are empty.
 
     Flyby ``Ports:`` writes presence/class without commodities → zero
@@ -469,15 +471,22 @@ def _presence_port_chain_seed(world_id, *, max_hops: int = 3, state_dir=None):
     path (prefer adjacent), return a provisional ``{"sectors": ...,
     "source": "presence_seed"}`` for bubble art only — never invents
     commodities for ``run_chain``.
+
+    WO-TUI-CHAIN-VIZ-LIVE: when ``current_sector`` is a known port, prefer
+    an adjacent (or short-path) port pair that includes it so warping
+    port→port lights the under-viewport chain.
     """
     ports = sorted(known_port_sectors(world_id, state_dir=state_dir))
     if len(ports) < 2:
         return None
     graph = known_graph(world_id, state_dir=state_dir) or {}
     port_set = set(ports)
+    try:
+        cur = int(current_sector) if current_sector is not None else None
+    except (TypeError, ValueError):
+        cur = None
 
-    # Prefer a direct adjacent pair (one-way warp is enough for viz).
-    for a in ports:
+    def _adjacent_from(a: int):
         for b in graph.get(a) or ():
             try:
                 b = int(b)
@@ -485,23 +494,39 @@ def _presence_port_chain_seed(world_id, *, max_hops: int = 3, state_dir=None):
                 continue
             if b in port_set and b != a:
                 return {"sectors": (a, b), "source": "presence_seed"}
+        return None
 
-    # Else shortest path ≤ max_hops between any two ports.
+    # Prefer a pair anchored at the live sector when it is a known port.
+    if cur is not None and cur in port_set:
+        hit = _adjacent_from(cur)
+        if hit is not None:
+            return hit
+
+    # Prefer a direct adjacent pair (one-way warp is enough for viz).
+    for a in ports:
+        hit = _adjacent_from(a)
+        if hit is not None:
+            return hit
+
+    # Else shortest path ≤ max_hops between any two ports (prefer from cur).
+    starts = [cur] + [p for p in ports if p != cur] if cur in port_set else list(ports)
     best = None
-    for start in ports:
+    for start in starts:
+        if start is None:
+            continue
         queue = [(start, (start,))]
         seen = {start}
         while queue:
-            cur, path = queue.pop(0)
+            node, path = queue.pop(0)
             if len(path) - 1 > max_hops:
                 continue
-            if cur in port_set and cur != start and len(path) >= 2:
+            if node in port_set and node != start and len(path) >= 2:
                 if best is None or len(path) < len(best):
                     best = path
                 break  # BFS: first hit from this start is shortest
             if len(path) - 1 >= max_hops:
                 continue
-            for nxt in graph.get(cur) or ():
+            for nxt in graph.get(node) or ():
                 try:
                     nxt = int(nxt)
                 except (TypeError, ValueError):
@@ -515,7 +540,26 @@ def _presence_port_chain_seed(world_id, *, max_hops: int = 3, state_dir=None):
     return {"sectors": tuple(best), "source": "presence_seed"}
 
 
-def _longest_chain_for_panel(sock_path, status=None):
+def _sector_hint_from_status(status=None):
+    """Best-effort current sector from status / autopilot_trace context."""
+    if not status:
+        return None
+    st = status.get("state") or {}
+    if "sector" in st:
+        try:
+            return int(st["sector"])
+        except (TypeError, ValueError):
+            pass
+    ctx = ((status.get("autopilot_trace") or {}).get("context") or {})
+    if "sector" in ctx:
+        try:
+            return int(ctx["sector"])
+        except (TypeError, ValueError):
+            pass
+    return None
+
+
+def _longest_chain_for_panel(sock_path, status=None, current_sector=None):
     """Prefer a REAL discovered chain: FA3's world-model → TradeHop
     adapter (`trade_adapter.build_trade_hops()`, pct-based commodity
     pricing -- see that module's docstring) feeds TW-21's cycle finder
@@ -543,7 +587,8 @@ def _longest_chain_for_panel(sock_path, status=None):
     if lib is not None and chain_bubble_sectors(lib):
         return lib
     if wid:
-        seed = _presence_port_chain_seed(wid)
+        sector = current_sector if current_sector is not None else _sector_hint_from_status(status)
+        seed = _presence_port_chain_seed(wid, current_sector=sector)
         if seed is not None:
             return seed
     return lib

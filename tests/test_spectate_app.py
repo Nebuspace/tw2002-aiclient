@@ -1679,6 +1679,42 @@ def test_longest_chain_for_panel_seeds_when_library_lacks_sectors(monkeypatch, t
     assert "no trade loop yet" not in joined
 
 
+def test_presence_seed_prefers_current_sector_port(tmp_path, monkeypatch):
+    """Accept-3 LIVE: current sector on a presence-port path → that pair."""
+    from twclient import world_model
+    from twclient.spectate_layout import chain_bubble_sectors
+
+    store = tmp_path / "world"
+    monkeypatch.setattr(world_model, "WORLD_DIR", store)
+    wid = "seed_world"
+    # Lower ids would win a naive sorted scan; current=300 must win.
+    world_model.upsert_sector(
+        wid,
+        {"sector_id": 100, "warps": [200], "port": {"class": "BSB"}},
+        state_dir=store,
+    )
+    world_model.upsert_sector(
+        wid,
+        {"sector_id": 200, "warps": [100], "port": {"class": "SBB"}},
+        state_dir=store,
+    )
+    world_model.upsert_sector(
+        wid,
+        {"sector_id": 300, "warps": [400], "port": {"class": "BBB"}},
+        state_dir=store,
+    )
+    world_model.upsert_sector(
+        wid,
+        {"sector_id": 400, "warps": [300], "port": {"class": "SSS"}},
+        state_dir=store,
+    )
+    seed = spectate_app_mod._presence_port_chain_seed(
+        wid, current_sector=300, state_dir=store,
+    )
+    assert seed is not None
+    assert chain_bubble_sectors(seed) == [300, 400]
+
+
 def test_longest_chain_for_panel_still_prefers_profit_chain_over_seed(monkeypatch):
     """Real ProfitCycle wins; presence seed must not be consulted."""
     hops = (
