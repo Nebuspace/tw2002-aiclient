@@ -252,6 +252,7 @@ def fetch_status(sock_path, timeout=3.0):
             "mode": "ai_pilot",
             "play": None,
             "autopilot_trace": None,
+            "world_id": None,
         }
     return {
         "connected": resp.get("connected", False),
@@ -269,6 +270,7 @@ def fetch_status(sock_path, timeout=3.0):
         # the load-bearing bug that kept the Decisions pane's live
         # autopilot-trace render (_render() below) from ever seeing it.
         "autopilot_trace": resp.get("autopilot_trace"),
+        "world_id": resp.get("world_id"),
     }
 
 
@@ -344,12 +346,17 @@ class _ColorPairs:
         return attr | curses.color_pair(pair_id)
 
 
-def _resolve_world_id():
-    """Best-effort world_id for explore ticks without a daemon status field.
+def _resolve_world_id(status=None):
+    """Best-effort world_id for explore ticks and live METRICS.
 
-    Prefers TW_WORLD_ID; else the sole directory under state/world/.
-    Returns None when ambiguous or empty (Decisions stays on coach placeholder).
+    Prefers the daemon status field (session's active profile), then
+    TW_WORLD_ID, else the sole directory under state/world/. Returns None
+    when ambiguous or empty (Decisions stays on coach placeholder).
     """
+    if status:
+        wid = (status.get("world_id") or "").strip()
+        if wid:
+            return wid
     env = (os.environ.get("TW_WORLD_ID") or "").strip()
     if env:
         return env
@@ -363,9 +370,9 @@ def _resolve_world_id():
     return None
 
 
-def _stamp_live_world_metrics(tracked, now):
+def _stamp_live_world_metrics(tracked, now, status=None):
     """WO-P2-a: fill TW-08 metric keys from the world-model (read-only)."""
-    wid = _resolve_world_id()
+    wid = _resolve_world_id(status)
     if not wid:
         return tracked
     try:
@@ -418,7 +425,7 @@ def _build_goals_snapshot(world_id, chain=None):
     )
 
 
-def _longest_chain_for_panel(sock_path):
+def _longest_chain_for_panel(sock_path, status=None):
     """Prefer a REAL discovered chain: FA3's world-model → TradeHop
     adapter (`trade_adapter.build_trade_hops()`, pct-based commodity
     pricing -- see that module's docstring) feeds TW-21's cycle finder
@@ -427,7 +434,7 @@ def _longest_chain_for_panel(sock_path):
     "recorded", never "discovered") -- when there's no resolvable
     world_id, no hops yet, or no profitable cycle among them.
     """
-    wid = _resolve_world_id()
+    wid = _resolve_world_id(status)
     if wid:
         try:
             hops, _note = trade_adapter.build_trade_hops(wid)
@@ -1334,7 +1341,7 @@ def _run(stdscr, client, sock_path, pid_path, unicode_ok):
                 status = new_status
                 status_poll_ts = now
                 last_status_poll = now
-                phase2_cache["chain"] = _longest_chain_for_panel(sock_path)
+                phase2_cache["chain"] = _longest_chain_for_panel(sock_path, status)
                 phase2_cache["chain_ts"] = now
                 # Intentionally NOT got_content for ordinary polls — only
                 # the connected-flip above may mark viewport dirty
@@ -1406,7 +1413,7 @@ def _render(windows, regions, event, tracked, ticker_history, status, palette, g
     connected = status.get("connected", False)
     accent_attr = palette.attr_for("cyan", "default", True)
     muted_attr = curses.A_DIM if hasattr(curses, "A_DIM") else curses.A_NORMAL
-    tracked = _stamp_live_world_metrics(tracked, now)
+    tracked = _stamp_live_world_metrics(tracked, now, status)
     autonomy = _autonomy_from_ledger()
     phase2_cache = phase2_cache or {}
 
@@ -1509,7 +1516,7 @@ def _render(windows, regions, event, tracked, ticker_history, status, palette, g
             (not has_chain_box) and decisions_should_show_chain(now)
         )
         if show_goals:
-            wid = _resolve_world_id()
+            wid = _resolve_world_id(status)
             chain = phase2_cache.get("chain")
             goals = _build_goals_snapshot(wid, chain)
             sector = (event.get("state") or {}).get("sector")
@@ -1519,7 +1526,7 @@ def _render(windows, regions, event, tracked, ticker_history, status, palette, g
             )
             panel_title = "GOALS"
         elif explore_active:
-            wid = _resolve_world_id()
+            wid = _resolve_world_id(status)
             sector = (event.get("state") or {}).get("sector")
             plan = _explore_plan_for_mode(explore_mode, wid, sector)
             if wid is None:
@@ -1541,7 +1548,7 @@ def _render(windows, regions, event, tracked, ticker_history, status, palette, g
     if regions.get("chain") is not None and "chain" in windows:
         chain_obj = phase2_cache.get("chain")
         sector = (event.get("state") or {}).get("sector")
-        wid = _resolve_world_id()
+        wid = _resolve_world_id(status)
         chain_w = max(8, regions["chain"].get("w") or 82)
         chain_lines = compose_chain_bubbles(
             chain_obj,
@@ -1622,14 +1629,14 @@ def run_snapshot(sock_path, pid_path, frames=1, settle_wait_s=8.0):
             ticker_history.append(event)
             now = time.monotonic()
             tracked = update_tracked_stats(tracked, event, now)
-            tracked = _stamp_live_world_metrics(tracked, now)
             status = fetch_status(sock_path)
             status["daemon_pid"] = pid_path.read_text().strip() if pid_path.exists() else None
+            tracked = _stamp_live_world_metrics(tracked, now, status)
             dashboard = compose_dashboard(last_event, ticker_history, status)
             auto = _autonomy_from_ledger()
             dashboard["metrics"] = compose_live_metrics(tracked)
             dashboard["autonomy"] = auto
-            wid = _resolve_world_id()
+            wid = _resolve_world_id(status)
             chain = _longest_chain_for_panel(sock_path)
             goals = _build_goals_snapshot(wid, chain)
             sector = (last_event.get("state") or {}).get("sector")

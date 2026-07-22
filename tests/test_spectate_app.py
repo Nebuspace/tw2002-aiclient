@@ -40,6 +40,7 @@ from twclient.spectate_layout import (
     MINIMAL_HEADER_MIN_COLS,
     VIEWPORT_H,
     compose_control_strip,
+    compose_live_metrics,
     frame_layout,
 )
 
@@ -1331,7 +1332,7 @@ def test_decisions_pane_rotation_reclaims_goals_chain_from_a_live_trace(monkeypa
     monkeypatch.setattr(curses, "doupdate", lambda: None)
     # No world_id -> _build_goals_snapshot degrades to an empty
     # GoalsSnapshot cleanly, no world_model I/O needed for this test.
-    monkeypatch.setattr(spectate_app_mod, "_resolve_world_id", lambda: None)
+    monkeypatch.setattr(spectate_app_mod, "_resolve_world_id", lambda status=None: None)
 
     regions = {
         "mode": "comfortable",
@@ -1382,7 +1383,7 @@ def test_decisions_pane_rotation_reclaims_goals_chain_from_explore_mode(monkeypa
 
     monkeypatch.setattr(spectate_app_mod, "_draw_decisions", fake_draw_decisions)
     monkeypatch.setattr(curses, "doupdate", lambda: None)
-    monkeypatch.setattr(spectate_app_mod, "_resolve_world_id", lambda: None)
+    monkeypatch.setattr(spectate_app_mod, "_resolve_world_id", lambda status=None: None)
 
     regions = {
         "mode": "comfortable",
@@ -1494,7 +1495,7 @@ def test_longest_chain_for_panel_prefers_a_real_profit_chain(monkeypatch):
         chains.TradeHop(frm=1, to=2, commodity="Fuel Ore", margin=10.0, turns=2),
         chains.TradeHop(frm=2, to=1, commodity="Organics", margin=5.0, turns=2),
     )
-    monkeypatch.setattr(spectate_app_mod, "_resolve_world_id", lambda: "world1")
+    monkeypatch.setattr(spectate_app_mod, "_resolve_world_id", lambda status=None: "world1")
     monkeypatch.setattr(spectate_app_mod.trade_adapter, "build_trade_hops", lambda wid, **kw: (hops, None))
 
     def _boom(*a, **k):
@@ -1508,7 +1509,7 @@ def test_longest_chain_for_panel_prefers_a_real_profit_chain(monkeypatch):
 
 
 def test_longest_chain_for_panel_falls_back_when_world_id_missing(monkeypatch):
-    monkeypatch.setattr(spectate_app_mod, "_resolve_world_id", lambda: None)
+    monkeypatch.setattr(spectate_app_mod, "_resolve_world_id", lambda status=None: None)
     fake_loops = [{"name": "demo", "source": "mined", "steps": 3, "demo_profit": 100}]
     monkeypatch.setattr(
         spectate_app_mod, "_send_control",
@@ -1519,7 +1520,7 @@ def test_longest_chain_for_panel_falls_back_when_world_id_missing(monkeypatch):
 
 
 def test_longest_chain_for_panel_falls_back_when_no_hops_discoverable(monkeypatch):
-    monkeypatch.setattr(spectate_app_mod, "_resolve_world_id", lambda: "world1")
+    monkeypatch.setattr(spectate_app_mod, "_resolve_world_id", lambda status=None: "world1")
     monkeypatch.setattr(spectate_app_mod.trade_adapter, "build_trade_hops", lambda wid, **kw: ((), None))
     fake_loops = [{"name": "demo", "source": "mined", "steps": 3, "demo_profit": 100}]
     monkeypatch.setattr(
@@ -1534,7 +1535,7 @@ def test_longest_chain_for_panel_falls_back_when_hops_form_no_profitable_cycle(m
     """Hops exist but don't close into a profitable cycle -- an honest
     fallback to the library, never a fabricated chain."""
     hops = (chains.TradeHop(frm=1, to=2, commodity="Fuel Ore", margin=10.0, turns=2),)
-    monkeypatch.setattr(spectate_app_mod, "_resolve_world_id", lambda: "world1")
+    monkeypatch.setattr(spectate_app_mod, "_resolve_world_id", lambda status=None: "world1")
     monkeypatch.setattr(spectate_app_mod.trade_adapter, "build_trade_hops", lambda wid, **kw: (hops, None))
     fake_loops = [{"name": "demo", "source": "mined", "steps": 3, "demo_profit": 100}]
     monkeypatch.setattr(
@@ -1543,6 +1544,38 @@ def test_longest_chain_for_panel_falls_back_when_hops_form_no_profitable_cycle(m
     )
     result = spectate_app_mod._longest_chain_for_panel("/nonexistent.sock")
     assert result["name"] == "demo"
+
+
+# ---------------------------------------------------------------------------
+# WO-TUI-METRICS — active world_id when multiple world stores exist
+# ---------------------------------------------------------------------------
+
+
+def test_resolve_world_id_prefers_status_over_ambiguous_store(monkeypatch, tmp_path):
+    from twclient import world_model
+
+    store = tmp_path / "world"
+    (store / "world_a").mkdir(parents=True)
+    (store / "world_b").mkdir(parents=True)
+    monkeypatch.setattr(world_model, "WORLD_DIR", store)
+    assert spectate_app_mod._resolve_world_id() is None
+    assert spectate_app_mod._resolve_world_id({"world_id": "world_b"}) == "world_b"
+
+
+def test_stamp_live_world_metrics_uses_status_world_id(monkeypatch, tmp_path):
+    from twclient import world_model
+
+    store = tmp_path / "world"
+    wid = "active_world"
+    monkeypatch.setattr(world_model, "WORLD_DIR", store)
+    world_model.upsert_sector(wid, {"sector_id": 1}, state_dir=store)
+    world_model.upsert_sector(wid, {"sector_id": 2}, state_dir=store)
+    (store / "other_world").mkdir(parents=True)
+
+    tracked = spectate_app_mod._stamp_live_world_metrics({}, 1.0, {"world_id": wid})
+    rows = compose_live_metrics(tracked)
+    sectors_row = next(r for r in rows if r["label"] == "SECTORS")
+    assert sectors_row["value"] == "2"
 
 
 # ---------------------------------------------------------------------------

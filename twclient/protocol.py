@@ -549,6 +549,11 @@ def dispatch(session, verb, args, server):
             # from ever going negative under a concurrent
             # `observe_credits()` write.
             "credits_age_ms": int((time.monotonic() - _cts) * 1000) if _cts is not None else None,
+            # WO-TUI-METRICS: spectate's live METRICS gutter keys off the
+            # active session's world_id (see `_current_world_id()`); the
+            # sole-directory heuristic breaks once a second world store
+            # exists on disk (e.g. crawl_sac + crawl_geek both crawled).
+            "world_id": _current_world_id(session),
         }
 
     if verb == "set_mode":

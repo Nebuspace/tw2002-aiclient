@@ -105,6 +105,23 @@ def test_autopilot_preview_populates_the_daemons_reserved_engine_slot(fake_daemo
     assert status["autopilot_trace"]["chosen"] is None
 
 
+def test_status_includes_world_id_when_session_has_auto_login_profile(
+    fake_daemon, profiles_toml, monkeypatch,
+):
+    """Spectate METRICS keys off status.world_id once multiple world stores
+    exist -- the daemon must expose the active session's slug."""
+    fake_daemon.session.auto_login_profile = "default"
+    fake_daemon.session.host = "test.example"
+    profile = credentials.load_profile("default")
+    expected = world_identity.world_id(fake_daemon.session.host, profile.game_letter, profile.handle)
+    status = send_request(fake_daemon.sock_path, "status")
+    assert status["world_id"] == expected
+
+
+def test_status_world_id_is_none_without_auto_login_profile(fake_daemon):
+    assert send_request(fake_daemon.sock_path, "status")["world_id"] is None
+
+
 # -- autopilot_start / autopilot_stop ---------------------------------------
 
 
