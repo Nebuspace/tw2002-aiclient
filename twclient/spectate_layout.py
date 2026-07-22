@@ -1521,7 +1521,7 @@ def compose_primary_goals_lines(snap, *, width: int = 22) -> list[str]:
     """Primary-goals panel lines (WO-P2-b).
 
     Readable strategic prerequisites — not action ranking. Glyphs: ✓ met/known,
-    · in progress / partial, ? unknown.
+    · in progress / partial, ? unknown, ⊘ blocked (prerequisite unmet).
     """
     width = max(12, int(width))
     if not isinstance(snap, GoalsSnapshot):
@@ -1633,7 +1633,10 @@ def compose_primary_goals_lines(snap, *, width: int = 22) -> list[str]:
     ))
 
     ships_label = "Ship prices" if not short else "Ships"
-    if snap.ship_prices_count > 0:
+    if not snap.stardock_found:
+        ships_glyph = "⊘"
+        ships_detail = "need StarDock" if not short else "need dock"
+    elif snap.ship_prices_count > 0:
         ships_glyph = "✓"
         ships_detail = (
             f"{snap.ship_prices_count} priced"
@@ -1649,7 +1652,10 @@ def compose_primary_goals_lines(snap, *, width: int = 22) -> list[str]:
 
     hold_label = "Hold upg" if not short else "Hold"
     hold_quote = snap.upgrade_status
-    if hold_quote and hold_quote not in ("—", "price?"):
+    if not snap.stardock_found:
+        hold_glyph = "⊘"
+        hold_detail = "need StarDock" if not short else "need dock"
+    elif hold_quote and hold_quote not in ("—", "price?"):
         hold_glyph = "✓"
         hold_detail = hold_quote
     else:

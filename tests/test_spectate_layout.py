@@ -912,6 +912,33 @@ def test_compose_primary_goals_fighters_line():
     assert any("Fighters" in ln and "unknown" in ln and "?" in ln for ln in unknown_lines)
 
 
+def test_compose_primary_goals_ship_hold_prices_gated_without_stardock():
+    blocked = compose_primary_goals_lines(GoalsSnapshot(
+        stardock_found=False,
+        ship_prices_count=0,
+        upgrade_status="price?",
+    ), width=36)
+    assert any("Ship prices" in ln and "need StarDock" in ln and "⊘" in ln for ln in blocked)
+    assert any("Hold upg" in ln and "need StarDock" in ln and "⊘" in ln for ln in blocked)
+
+    hunting = compose_primary_goals_lines(GoalsSnapshot(
+        stardock_found=True, stardock_sectors=(100,),
+        ship_prices_count=0,
+        upgrade_status="price?",
+    ), width=36)
+    assert any("Ship prices" in ln and "price?" in ln and "·" in ln for ln in hunting)
+    assert any("Hold upg" in ln and "price?" in ln for ln in hunting)
+    assert not any("need StarDock" in ln for ln in hunting)
+
+    known = compose_primary_goals_lines(GoalsSnapshot(
+        stardock_found=True, stardock_sectors=(100,),
+        ship_prices_count=4,
+        upgrade_status="1500/h",
+    ), width=36)
+    assert any("Ship prices" in ln and "4 priced" in ln and "✓" in ln for ln in known)
+    assert any("Hold upg" in ln and "1500/h" in ln and "✓" in ln for ln in known)
+
+
 def test_update_tracked_stats_records_fighters_aboard():
     from twclient.spectate_layout import update_tracked_stats
 
