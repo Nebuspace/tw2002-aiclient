@@ -1067,34 +1067,44 @@ def _draw_hud_gutter(win, region, cells, metric_rows, port_rows, glyphs, palette
         row += 2  # label+value then freshness — no blank spacer (DECISIONS
         # shares this column; a 3-row stride clips METRICS — human 2026-07-22)
 
-    if metric_rows and row < h - 1:
+    content_bottom = h - 2  # row h-1 is the bottom border — never paint on it
+    port_reserve = (1 + len(port_rows)) if port_rows else 0
+
+    if metric_rows and row <= content_bottom:
         # WO-TUI-HUD-POLISH: readable METRICS — padded label column, one
         # metric per row. No blank spacer under the header: the gutter
         # height is shared with DECISIONS (+ PORT), and a blank line clips them.
-        try:
-            win.addnstr(row, col, "METRICS", max(0, w - col - 1), curses.A_BOLD)
-        except curses.error:
-            pass
-        row += 1
-        label_w = 10
-        for mrow in metric_rows:
-            if row >= h - 1:
-                break
-            text = f"{mrow['label']:<{label_w}}{mrow['value']}"
+        # When port commodity rows are present, trim METRICS from the bottom
+        # so PORT header + bar-meters still fit (autonomy already lives in
+        # PRIORITIES for the same reason — spectate_layout.format_autonomy_lines).
+        metrics_budget = max(0, content_bottom - row + 1 - port_reserve)
+        if metrics_budget >= 1:
             try:
-                win.addnstr(row, col, text, max(0, w - col - 1), curses.A_NORMAL)
+                win.addnstr(row, col, "METRICS", max(0, w - col - 1), curses.A_BOLD)
             except curses.error:
                 pass
             row += 1
+            metrics_budget -= 1
+            label_w = 10
+            for mrow in metric_rows:
+                if metrics_budget <= 0 or row > content_bottom:
+                    break
+                text = f"{mrow['label']:<{label_w}}{mrow['value']}"
+                try:
+                    win.addnstr(row, col, text, max(0, w - col - 1), curses.A_NORMAL)
+                except curses.error:
+                    pass
+                row += 1
+                metrics_budget -= 1
 
-    if port_rows and row < h - 1:
+    if port_rows and row <= content_bottom:
         try:
             win.addnstr(row, col, "PORT", max(0, w - col - 1), curses.A_BOLD)
         except curses.error:
             pass
         row += 1
         for prow in port_rows:
-            if row >= h - 1:
+            if row > content_bottom:
                 break
             tone_attr = _tone_attr(prow["tone"], palette, curses.A_NORMAL)
             text = f"{prow['name']:<10}{prow['bar']} {prow['pct']:>3}%"
