@@ -539,6 +539,24 @@ def test_live_tick_attacks_single_fighter_option_instead_of_holding():
     assert decision.send_outcome == "sent:fighter_option:A"
 
 
+def test_live_tick_attacks_newplayer_toll_without_pay_key():
+    """WO-FIGHTER-TOLL-NEWPLAYER: no-P Option? + 30 vs 1 clears, not held."""
+    text = (
+        "Sector  : 8578 in uncharted space.\n"
+        "You have to destroy the fighters\n"
+        "Your fighters: 30 vs. theirs: 1\n"
+        "Option? (A,D,I,R,S,?):?"
+    )
+    session = FakeAutopilotSession(text=text)
+    profile = _make_profile(autonomous=True)
+    engine = AutopilotEngine(session, profile, ControlLock())
+
+    decision = engine.live_tick(explore_next_sector=200)
+    assert session.sent == [("A", True, False)]
+    assert decision.send_outcome == "sent:fighter_option:A"
+    assert not (decision.send_outcome or "").startswith("held:not_main_command")
+
+
 def test_live_tick_retreats_zero_fighter_option_instead_of_holding():
     """Folded WO-FIGHTER-AUTO-R: 0 vs 1 → R (never P)."""
     text = (

@@ -22,6 +22,14 @@ _OPTION_SCREEN = (
     "Option? (A,D,I,R,P,S,?):?"
 )
 
+# Live TWGS toll omits Pay — matches hud_seed / Ona cold-start.
+_OPTION_SCREEN_NO_PAY = (
+    "Sector  : 8578 in uncharted space.\n"
+    "You have to destroy the fighters\n"
+    "Your fighters: {yours} vs. theirs: {theirs}\n"
+    "Option? (A,D,I,R,S,?):?"
+)
+
 
 def test_default_reserve_is_small_and_documented():
     assert DEFAULT_FIGHTER_RESERVE == 5
@@ -52,6 +60,18 @@ def test_parse_ignores_non_option_screens():
 def test_single_fighter_toll_attacks_when_reserve_allows():
     d = decide_from_screen(_OPTION_SCREEN.format(yours=5, theirs=1))
     assert d.detected is True
+    assert d.key == "A"
+    assert "attack_winnable" in d.reason
+
+
+def test_newplayer_toll_no_pay_prompt_attacks_favorable_odds():
+    """WO-FIGHTER-TOLL-NEWPLAYER: live Option? omits P; 30 vs 1 → Attack."""
+    text = _OPTION_SCREEN_NO_PAY.format(yours=30, theirs=1)
+    st = parse_fighter_option(text)
+    assert st.detected is True
+    assert st.yours == 30
+    assert st.theirs == 1
+    d = decide_from_screen(text)
     assert d.key == "A"
     assert "attack_winnable" in d.reason
 

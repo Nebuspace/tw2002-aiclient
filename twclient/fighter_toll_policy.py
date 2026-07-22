@@ -3,7 +3,8 @@
 Pure client-side logic (impl-tw2002-logic). No daemon I/O.
 
 Folds / supersedes the parked **WO-FIGHTER-AUTO-R** ticket: when the
-live screen is a corp-fighter toll `Option? (A,D,I,R,P,S,?):?` dialogue,
+live screen is a corp-fighter toll `Option? (A,D,I,R[,P],S,?):?` dialogue
+(Pay is omitted on some live tolls — regex treats ``P`` as optional),
 autopilot resolves it THIS tick (Attack when clearly winnable, else
 Retreat) instead of holding forever on `sector_display` and burning
 unlock→R→re-arm thrash.
@@ -33,8 +34,10 @@ DEFAULT_FIGHTER_RESERVE = 5
 # Auto-Attack only when enemy count is in this band (single/few).
 DEFAULT_AUTO_ATTACK_MAX_ENEMY = 3
 
+# Pay (P) is optional — live TWGS toll screens often show
+# ``Option? (A,D,I,R,S,?):?`` without a Pay key (see hud_seed / Ona cold-start).
 _OPTION_PROMPT_RE = re.compile(
-    r"Option\?\s*\(\s*A\s*,\s*D\s*,\s*I\s*,\s*R\s*,\s*P\s*,\s*S\s*,\s*\?\s*\)\s*:\s*\?",
+    r"Option\?\s*\(\s*A\s*,\s*D\s*,\s*I\s*,\s*R\s*(?:,\s*P\s*)?\s*,\s*S\s*,\s*\?\s*\)\s*:\s*\?",
     re.IGNORECASE,
 )
 _FIGHTER_VS_RE = re.compile(
