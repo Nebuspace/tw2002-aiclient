@@ -21,14 +21,40 @@ SOCK_PATH = RUN_DIR / "twd.sock"
 PID_PATH = RUN_DIR / "twd.pid"
 DAEMON_SCRIPT = PROJECT_ROOT / "twd"
 
+_active_run_dir = RUN_DIR
+_active_sock_path = SOCK_PATH
+_active_pid_path = PID_PATH
+
+
+def _resolve_run_dir(run_dir_arg):
+    """Resolve --run-dir to an absolute Path (default: PROJECT_ROOT/run)."""
+    if run_dir_arg is None:
+        return PROJECT_ROOT / "run"
+    p = Path(run_dir_arg)
+    if not p.is_absolute():
+        p = PROJECT_ROOT / p
+    return p
+
+
+def _paths_for_run_dir(run_dir):
+    """Return (sock_path, pid_path) for a daemon run directory."""
+    run_dir = Path(run_dir)
+    return run_dir / "twd.sock", run_dir / "twd.pid"
+
+
+def _configure_run_paths(run_dir_arg):
+    global _active_run_dir, _active_sock_path, _active_pid_path
+    _active_run_dir = _resolve_run_dir(run_dir_arg)
+    _active_sock_path, _active_pid_path = _paths_for_run_dir(_active_run_dir)
+
 
 def send_request(verb, args, timeout=15):
-    if not SOCK_PATH.exists():
+    if not _active_sock_path.exists():
         return {"ok": False, "error": "daemon_not_running"}
     s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     s.settimeout(timeout)
     try:
-        s.connect(str(SOCK_PATH))
+        s.connect(str(_active_sock_path))
         payload = json.dumps({"verb": verb, "args": args}) + "\n"
         s.sendall(payload.encode("utf-8"))
         buf = b""
@@ -50,10 +76,10 @@ def send_request(verb, args, timeout=15):
 
 
 def daemon_alive():
-    if not PID_PATH.exists():
+    if not _active_pid_path.exists():
         return False
     try:
-        pid = int(PID_PATH.read_text().strip())
+        pid = int(_active_pid_path.read_text().strip())
         os.kill(pid, 0)
         return True
     except (OSError, ValueError):
@@ -92,10 +118,10 @@ def print_response(resp, args):
 # -- verb implementations -------------------------------------------------
 
 def cmd_start(args):
-    RUN_DIR.mkdir(exist_ok=True)
+    _active_run_dir.mkdir(exist_ok=True)
     LOG_DIR.mkdir(exist_ok=True)
 
-    if daemon_alive() and SOCK_PATH.exists():
+    if daemon_alive() and _active_sock_path.exists():
         status = send_request("status", {})
         if status.get("ok"):
             print("(daemon already running)")
@@ -109,12 +135,12 @@ def cmd_start(args):
         print(f"ERROR: {e}")
         sys.exit(1)
 
-    daemon_log = open(RUN_DIR / "twd.stderr.log", "ab")
+    daemon_log = open(_active_run_dir / "twd.stderr.log", "ab")
     cmd = [
         str(DAEMON_SCRIPT),
         "--host", host,
         "--port", str(port),
-        "--run-dir", str(RUN_DIR),
+        "--run-dir", str(_active_run_dir),
         "--log-dir", str(LOG_DIR),
     ]
     if args.name:
@@ -129,10 +155,10 @@ def cmd_start(args):
     )
 
     deadline = time.time() + 10
-    while time.time() < deadline and not SOCK_PATH.exists():
+    while time.time() < deadline and not _active_sock_path.exists():
         time.sleep(0.1)
-    if not SOCK_PATH.exists():
-        print("ERROR: daemon failed to start (no socket after 10s) — see run/twd.stderr.log")
+    if not _active_sock_path.exists():
+        print(f"ERROR: daemon failed to start (no socket after 10s) — see {_active_run_dir / 'twd.stderr.log'}")
         sys.exit(1)
 
     resp = send_request("read", {"timeout": args.timeout}, timeout=args.timeout + 5)
@@ -359,7 +385,7 @@ def cmd_ensure(args):
     verb covers cold-start, mid-session, AND post-drop recovery."""
     from . import credentials
 
-    RUN_DIR.mkdir(exist_ok=True)
+    _active_run_dir.mkdir(exist_ok=True)
     LOG_DIR.mkdir(exist_ok=True)
 
     try:
@@ -368,13 +394,13 @@ def cmd_ensure(args):
         print(f"ERROR: {e}")
         sys.exit(1)
 
-    if not (daemon_alive() and SOCK_PATH.exists()):
-        daemon_log = open(RUN_DIR / "twd.stderr.log", "ab")
+    if not (daemon_alive() and _active_sock_path.exists()):
+        daemon_log = open(_active_run_dir / "twd.stderr.log", "ab")
         cmd = [
             str(DAEMON_SCRIPT),
             "--host", profile.host,
             "--port", str(profile.port),
-            "--run-dir", str(RUN_DIR),
+            "--run-dir", str(_active_run_dir),
             "--log-dir", str(LOG_DIR),
         ]
         subprocess.Popen(
@@ -386,10 +412,10 @@ def cmd_ensure(args):
             start_new_session=True,
         )
         deadline = time.time() + 10
-        while time.time() < deadline and not SOCK_PATH.exists():
+        while time.time() < deadline and not _active_sock_path.exists():
             time.sleep(0.1)
-        if not SOCK_PATH.exists():
-            print("ERROR: daemon failed to start (no socket after 10s) — see run/twd.stderr.log")
+        if not _active_sock_path.exists():
+            print(f"ERROR: daemon failed to start (no socket after 10s) — see {_active_run_dir / 'twd.stderr.log'}")
             sys.exit(1)
         # Let the fresh connection produce its first settled screen
         # before driving it — mirrors `tw start`.
@@ -576,7 +602,7 @@ def cmd_crawl(args):
     per-world path up front)."""
     from . import credentials
 
-    if not (daemon_alive() and SOCK_PATH.exists()):
+    if not (daemon_alive() and _active_sock_path.exists()):
         print("ERROR: daemon_not_running — start it first with `tw start`")
         sys.exit(1)
 
@@ -677,16 +703,16 @@ def cmd_autopilot(args):
 def cmd_spectate(args):
     from . import spectate_app
 
-    if not SOCK_PATH.exists():
+    if not _active_sock_path.exists():
         print("ERROR: daemon_not_running — start it first with `tw start`")
         sys.exit(1)
     if args.snapshot:
-        code = spectate_app.run_snapshot(SOCK_PATH, PID_PATH, frames=args.frames)
+        code = spectate_app.run_snapshot(_active_sock_path, _active_pid_path, frames=args.frames)
     else:
         if not sys.stdout.isatty():
             print("ERROR: tw spectate needs a real terminal (not a TTY) — use --snapshot for scripted/Bash use")
             sys.exit(1)
-        code = spectate_app.run_interactive(SOCK_PATH, PID_PATH)
+        code = spectate_app.run_interactive(_active_sock_path, _active_pid_path)
     sys.exit(code)
 
 
@@ -699,13 +725,13 @@ def cmd_attach(args):
     control-lock handshake."""
     from . import interactive_app
 
-    if not SOCK_PATH.exists():
+    if not _active_sock_path.exists():
         print("ERROR: daemon_not_running — start it first with `tw start`")
         sys.exit(1)
     if not sys.stdout.isatty():
         print("ERROR: tw attach needs a real terminal (not a TTY) — this verb is interactive-only")
         sys.exit(1)
-    code = interactive_app.run_interactive_attach(SOCK_PATH, PID_PATH)
+    code = interactive_app.run_interactive_attach(_active_sock_path, _active_pid_path)
     sys.exit(code)
 
 
@@ -715,12 +741,12 @@ def cmd_watch(args):
     this is capturable in a Bash transcript; with no --frames it runs
     until Ctrl-C (SIGINT cleanly closes the socket, detaching without
     touching the daemon or the game session)."""
-    if not SOCK_PATH.exists():
+    if not _active_sock_path.exists():
         print("ERROR: daemon_not_running")
         sys.exit(1)
     s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     try:
-        s.connect(str(SOCK_PATH))
+        s.connect(str(_active_sock_path))
         s.sendall((json.dumps({"verb": "subscribe", "args": {}}) + "\n").encode("utf-8"))
     except OSError as e:
         print(f"ERROR: connect_failed:{e}")
@@ -750,7 +776,23 @@ def cmd_watch(args):
 
 def build_parser():
     p = argparse.ArgumentParser(prog="tw")
+
+    run_dir_parent = argparse.ArgumentParser(add_help=False)
+    run_dir_parent.add_argument(
+        "--run-dir",
+        default=None,
+        metavar="PATH",
+        help=(
+            "daemon run directory (default: run/ under the project root; "
+            "e.g. run/ona for an isolated daemon socket)"
+        ),
+    )
+
     sub = p.add_subparsers(dest="verb", required=True)
+
+    def add_sub(name, **kwargs):
+        parents = list(kwargs.pop("parents", ()))
+        return sub.add_parser(name, parents=[run_dir_parent, *parents], **kwargs)
 
     def add_json(sp):
         sp.add_argument("--json", action="store_true", help="machine-parseable JSON output")
@@ -759,7 +801,7 @@ def build_parser():
         sp.add_argument("--enter", action="store_true", default=True, help="append \\r\\n (default)")
         sp.add_argument("--no-enter", dest="enter", action="store_false")
 
-    sp = sub.add_parser("start", help="spawn the daemon, connect, return the first settled screen")
+    sp = add_sub("start", help="spawn the daemon, connect, return the first settled screen")
     sp.add_argument("--host", default=None, help="defaults via TW2002_HOST / .env / profiles.toml -- see twclient/env.py")
     sp.add_argument("--port", type=int, default=None, help="defaults via TW2002_PORT / .env / profiles.toml -- see twclient/env.py")
     sp.add_argument("--name", default=None)
@@ -767,13 +809,13 @@ def build_parser():
     add_json(sp)
     sp.set_defaults(func=cmd_start)
 
-    sp = sub.add_parser("screen", help="current settled screen (non-destructive)")
+    sp = add_sub("screen", help="current settled screen (non-destructive)")
     sp.add_argument("--compact", action="store_true")
     sp.add_argument("--raw", action="store_true", help="uncropped 80x25 grid")
     add_json(sp)
     sp.set_defaults(func=cmd_screen)
 
-    sp = sub.add_parser("do", help="send input, wait for settle, return the new screen")
+    sp = add_sub("do", help="send input, wait for settle, return the new screen")
     sp.add_argument("input")
     add_enter(sp)
     sp.add_argument("--secret", action="store_true", help="password entry — never persisted to the transcript log")
@@ -782,29 +824,29 @@ def build_parser():
     add_json(sp)
     sp.set_defaults(func=cmd_do)
 
-    sp = sub.add_parser("send", help="raw send, no wait (rare/low-level)")
+    sp = add_sub("send", help="raw send, no wait (rare/low-level)")
     sp.add_argument("input")
     sp.add_argument("--secret", action="store_true", help="password entry — never persisted to the transcript log")
     add_enter(sp)
     add_json(sp)
     sp.set_defaults(func=cmd_send)
 
-    sp = sub.add_parser("read", help="wait-and-return without sending")
+    sp = add_sub("read", help="wait-and-return without sending")
     sp.add_argument("--wait-prompt", default=None)
     sp.add_argument("--timeout", type=float, default=8.0)
     add_json(sp)
     sp.set_defaults(func=cmd_read)
 
-    sp = sub.add_parser("state", help="parsed structured game-state only")
+    sp = add_sub("state", help="parsed structured game-state only")
     add_json(sp)
     sp.set_defaults(func=cmd_state)
 
-    sp = sub.add_parser("history", help="recent screens/commands")
+    sp = add_sub("history", help="recent screens/commands")
     sp.add_argument("--n", type=int, default=20)
     add_json(sp)
     sp.set_defaults(func=cmd_history)
 
-    sp = sub.add_parser(
+    sp = add_sub(
         "log",
         aliases=["trail"],
         help=(
@@ -816,15 +858,15 @@ def build_parser():
     add_json(sp)
     sp.set_defaults(func=cmd_log)
 
-    sp = sub.add_parser("status", help="daemon alive? connected? idle-ms? classification?")
+    sp = add_sub("status", help="daemon alive? connected? idle-ms? classification?")
     add_json(sp)
     sp.set_defaults(func=cmd_status)
 
-    sp = sub.add_parser("stop", help="graceful in-game QUIT, disconnect, daemon exit")
+    sp = add_sub("stop", help="graceful in-game QUIT, disconnect, daemon exit")
     add_json(sp)
     sp.set_defaults(func=cmd_stop)
 
-    sp = sub.add_parser(
+    sp = add_sub(
         "ensure",
         help=(
             "idempotent auto-login (B4) — the ONE command an LLM calls: classifies the "
@@ -839,7 +881,7 @@ def build_parser():
     add_json(sp)
     sp.set_defaults(func=cmd_ensure)
 
-    sp = sub.add_parser(
+    sp = add_sub(
         "record",
         help="bracket a named skill capture (C3): `tw record start [name]` ... play ... `tw record stop`",
     )
@@ -848,7 +890,7 @@ def build_parser():
     add_json(sp)
     sp.set_defaults(func=cmd_record)
 
-    sp = sub.add_parser(
+    sp = add_sub(
         "replay",
         help="re-issue a saved skill's steps, halting on divergence from what was recorded/mined",
     )
@@ -863,7 +905,7 @@ def build_parser():
     add_json(sp)
     sp.set_defaults(func=cmd_replay)
 
-    sp = sub.add_parser(
+    sp = add_sub(
         "mine",
         aliases=["patterns"],
         help="mine the Trace-Ledger (C10) for recurring profitable input-subsequences; proposes drafts",
@@ -872,7 +914,7 @@ def build_parser():
     add_json(sp)
     sp.set_defaults(func=cmd_mine)
 
-    sp = sub.add_parser(
+    sp = add_sub(
         "analyze",
         help=(
             "session-retro (TW-12 / §15.6): read a ledger slice, group recurring decisions, "
@@ -889,7 +931,7 @@ def build_parser():
     add_json(sp)
     sp.set_defaults(func=cmd_analyze)
 
-    sp = sub.add_parser(
+    sp = add_sub(
         "players",
         help=(
             "multi-character rotation bank (TW-31): list (default) / add / next -- pure "
@@ -905,7 +947,7 @@ def build_parser():
     players_sub = sp.add_subparsers(dest="players_action")
 
     sp_add = players_sub.add_parser(
-        "add", help="add a player from an existing config/profiles.toml profile"
+        "add", parents=[run_dir_parent], help="add a player from an existing config/profiles.toml profile"
     )
     sp_add.add_argument("profile", help="profile name in config/profiles.toml")
     sp_add.add_argument(
@@ -916,6 +958,7 @@ def build_parser():
 
     sp_next = players_sub.add_parser(
         "next",
+        parents=[run_dir_parent],
         help="who's up next in rotation order (least-recently-played among non-exhausted players)",
     )
     sp_next.add_argument(
@@ -924,7 +967,7 @@ def build_parser():
     )
     sp_next.set_defaults(func=cmd_players_next)
 
-    sp = sub.add_parser(
+    sp = add_sub(
         "play",
         help="run a learned skill autonomously for N cycles; halts on surprise or a rail (--cycles/--floor)",
     )
@@ -943,7 +986,7 @@ def build_parser():
     add_json(sp)
     sp.set_defaults(func=cmd_play)
 
-    sp = sub.add_parser(
+    sp = add_sub(
         "haggle",
         help=(
             "deterministic auto-haggle (DESIGN-v2 §9), NO LLM -- negotiates the OFFER "
@@ -959,7 +1002,7 @@ def build_parser():
     add_json(sp)
     sp.set_defaults(func=cmd_haggle)
 
-    sp = sub.add_parser(
+    sp = add_sub(
         "loops",
         help="list every learned loop (recorded/mined skills) with profit metadata -- the CLI twin of the in-TUI Learned-Loops Library",
     )
@@ -967,7 +1010,7 @@ def build_parser():
     add_json(sp)
     sp.set_defaults(func=cmd_loops)
 
-    sp = sub.add_parser(
+    sp = add_sub(
         "autoloop",
         help="start/stop/pause/resume the background AUTO-LOOP driver (Trainer Control Panel) -- unlike `tw play`, `start` returns immediately",
     )
@@ -983,7 +1026,7 @@ def build_parser():
     add_json(sp)
     sp.set_defaults(func=cmd_autoloop)
 
-    sp = sub.add_parser(
+    sp = add_sub(
         "autopilot",
         help=(
             "§22/§23 autonomous goal-orchestrator: preview (dry-run, safe, "
@@ -1010,7 +1053,7 @@ def build_parser():
     add_json(sp)
     sp.set_defaults(func=cmd_autopilot)
 
-    sp = sub.add_parser(
+    sp = add_sub(
         "crawl",
         help=(
             "TW-26: drive a hub-supervised menu crawl against a "
@@ -1027,12 +1070,12 @@ def build_parser():
     add_json(sp)
     sp.set_defaults(func=cmd_crawl)
 
-    sp = sub.add_parser("watch", help="tail the settle-edge push-stream (read-only spectator feed)")
+    sp = add_sub("watch", help="tail the settle-edge push-stream (read-only spectator feed)")
     sp.add_argument("--frames", type=int, default=None, help="exit after N events (default: until Ctrl-C)")
     add_json(sp)
     sp.set_defaults(func=cmd_watch)
 
-    sp = sub.add_parser(
+    sp = add_sub(
         "spectate",
         help=(
             "standalone spectator dashboard — run in your OWN terminal any time after "
@@ -1049,7 +1092,7 @@ def build_parser():
     sp.add_argument("--frames", type=int, default=1, help="with --snapshot, how many frames to print")
     sp.set_defaults(func=cmd_spectate)
 
-    sp = sub.add_parser(
+    sp = add_sub(
         "attach",
         help=(
             "interactive live console — take the keyboard and play as the player yourself, "
@@ -1060,13 +1103,13 @@ def build_parser():
     sp.set_defaults(func=cmd_attach)
 
     # WO-MS-1 — server catalog (announce-first shared cli.py edit)
-    servers_p = sub.add_parser("servers", help="list / inspect the config/servers.toml catalog")
+    servers_p = add_sub("servers", help="list / inspect the config/servers.toml catalog")
     servers_sub = servers_p.add_subparsers(dest="servers_cmd", required=True)
-    sp_list = servers_sub.add_parser("list", help="list all cataloged servers")
+    sp_list = servers_sub.add_parser("list", parents=[run_dir_parent], help="list all cataloged servers")
     sp_list.set_defaults(func=cmd_servers_list)
 
     # WO-MS-3 — read-only probe (announce-first shared cli.py edit)
-    sp = sub.add_parser(
+    sp = add_sub(
         "probe",
         help=(
             "read-only catalog probe: IAC negotiation only (L0); optional "
@@ -1106,6 +1149,7 @@ def build_parser():
 def main():
     parser = build_parser()
     args = parser.parse_args()
+    _configure_run_paths(args.run_dir)
     args.func(args)
 
 
