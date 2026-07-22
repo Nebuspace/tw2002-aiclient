@@ -67,6 +67,7 @@ from .spectate_layout import (
     render_plain,
     sort_trade_loop_chains,
     stamp_world_metrics,
+    seed_tracked_from_status,
     status_semantic,
     update_tracked_stats,
     waiting_session_screen,
@@ -76,6 +77,7 @@ from .explore import (
     find_landmark_sectors,
     format_explore_decision_lines,
     known_graph,
+    known_port_sectors,
     plan_find_formations,
     plan_find_stardock,
     plan_map_fill,
@@ -253,6 +255,8 @@ def fetch_status(sock_path, timeout=3.0):
             "play": None,
             "autopilot_trace": None,
             "world_id": None,
+            "credits": None,
+            "credits_age_ms": None,
         }
     return {
         "connected": resp.get("connected", False),
@@ -271,7 +275,39 @@ def fetch_status(sock_path, timeout=3.0):
         # autopilot-trace render (_render() below) from ever seeing it.
         "autopilot_trace": resp.get("autopilot_trace"),
         "world_id": resp.get("world_id"),
+        # WO-FA7a session credits — seed spectate HUD on connect/poll; watch
+        # events do not carry these top-level fields (only status does).
+        "credits": resp.get("credits"),
+        "credits_age_ms": resp.get("credits_age_ms"),
     }
+
+
+def fetch_parsed_state(sock_path, timeout=3.0):
+    """One-shot `state` verb — cheap parsed snapshot for connect-time HUD
+    backfill when the subscribe seed event hasn't landed yet."""
+    try:
+        s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        s.settimeout(timeout)
+        s.connect(str(sock_path))
+        s.sendall((json.dumps({"verb": "state", "args": {}}) + "\n").encode("utf-8"))
+        buf = b""
+        while not buf.endswith(b"\n"):
+            chunk = s.recv(65536)
+            if not chunk:
+                break
+            buf += chunk
+        s.close()
+        resp = json.loads(buf.decode("utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    if not resp.get("ok"):
+        return {}
+    return resp.get("state") or {}
+
+
+def _apply_status_hud_seed(tracked, status, now, *, parsed_state=None):
+    """Status poll + optional connect-time parsed state → tracked HUD."""
+    return seed_tracked_from_status(tracked, status, now, parsed_state=parsed_state)
 
 
 def _send_control(sock_path, verb, args=None, timeout=3.0):
@@ -425,6 +461,60 @@ def _build_goals_snapshot(world_id, chain=None):
     )
 
 
+def _presence_port_chain_seed(world_id, *, max_hops: int = 3, state_dir=None):
+    """Viz-only seed when ports are known but TradeHops are empty.
+
+    Flyby ``Ports:`` writes presence/class without commodities → zero
+    TradeHops → no ProfitChain. When ≥2 known ports share a short warp
+    path (prefer adjacent), return a provisional ``{"sectors": ...,
+    "source": "presence_seed"}`` for bubble art only — never invents
+    commodities for ``run_chain``.
+    """
+    ports = sorted(known_port_sectors(world_id, state_dir=state_dir))
+    if len(ports) < 2:
+        return None
+    graph = known_graph(world_id, state_dir=state_dir) or {}
+    port_set = set(ports)
+
+    # Prefer a direct adjacent pair (one-way warp is enough for viz).
+    for a in ports:
+        for b in graph.get(a) or ():
+            try:
+                b = int(b)
+            except (TypeError, ValueError):
+                continue
+            if b in port_set and b != a:
+                return {"sectors": (a, b), "source": "presence_seed"}
+
+    # Else shortest path ≤ max_hops between any two ports.
+    best = None
+    for start in ports:
+        queue = [(start, (start,))]
+        seen = {start}
+        while queue:
+            cur, path = queue.pop(0)
+            if len(path) - 1 > max_hops:
+                continue
+            if cur in port_set and cur != start and len(path) >= 2:
+                if best is None or len(path) < len(best):
+                    best = path
+                break  # BFS: first hit from this start is shortest
+            if len(path) - 1 >= max_hops:
+                continue
+            for nxt in graph.get(cur) or ():
+                try:
+                    nxt = int(nxt)
+                except (TypeError, ValueError):
+                    continue
+                if nxt in seen:
+                    continue
+                seen.add(nxt)
+                queue.append((nxt, path + (nxt,)))
+    if best is None:
+        return None
+    return {"sectors": tuple(best), "source": "presence_seed"}
+
+
 def _longest_chain_for_panel(sock_path, status=None):
     """Prefer a REAL discovered chain: FA3's world-model → TradeHop
     adapter (`trade_adapter.build_trade_hops()`, pct-based commodity
@@ -433,6 +523,9 @@ def _longest_chain_for_panel(sock_path, status=None):
     longest hop chain (live list_skills) -- honestly labeled ("mined"/
     "recorded", never "discovered") -- when there's no resolvable
     world_id, no hops yet, or no profitable cycle among them.
+
+    WO-TUI-CHAIN-VIZ-SEED: when library is also empty, seed bubble viz
+    from ≥2 known ports on a short warp path (presence/class only).
     """
     wid = _resolve_world_id(status)
     if wid:
@@ -444,7 +537,12 @@ def _longest_chain_for_panel(sock_path, status=None):
             chain = chains.longest_profit_chain(hops)
             if chain is not None:
                 return chain
-    return _longest_chain_library_fallback(sock_path)
+    lib = _longest_chain_library_fallback(sock_path)
+    if lib is not None:
+        return lib
+    if wid:
+        return _presence_port_chain_seed(wid)
+    return None
 
 
 def _longest_chain_library_fallback(sock_path):
@@ -1267,10 +1365,22 @@ def _run(stdscr, client, sock_path, pid_path, unicode_ok):
     last_status_poll = 0.0
     status_poll_ts = 0.0
     prev_connected = None
-    flash_until = 0.0
     library = {"open": False, "loops": [], "selected": 0, "pending_cycles": 1, "confirm": None}
     explore_state = {"mode": "off"}
     phase2_cache = {"chain": None, "chain_ts": 0.0}
+
+    # WO-SPECTATE-HUD-SEED: daemon session truth (FA7a credits + parsed
+    # state) before the first render — don't wait for a settle edge or the
+    # 1.5s status poll interval with a cold `tracked={}`.
+    connect_parsed = fetch_parsed_state(sock_path)
+    status = fetch_status(sock_path)
+    status["daemon_pid"] = pid_path.read_text().strip() if pid_path.exists() else None
+    now = time.monotonic()
+    tracked = _apply_status_hud_seed(tracked, status, now, parsed_state=connect_parsed)
+    last_status_poll = now
+    status_poll_ts = now
+    prev_connected = status.get("connected")
+    flash_until = 0.0
 
     windows = {}
     regions = None
@@ -1341,6 +1451,7 @@ def _run(stdscr, client, sock_path, pid_path, unicode_ok):
                 status = new_status
                 status_poll_ts = now
                 last_status_poll = now
+                tracked = _apply_status_hud_seed(tracked, status, now)
                 phase2_cache["chain"] = _longest_chain_for_panel(sock_path, status)
                 phase2_cache["chain_ts"] = now
                 # Intentionally NOT got_content for ordinary polls — only
@@ -1620,6 +1731,7 @@ def run_snapshot(sock_path, pid_path, frames=1, settle_wait_s=8.0):
     last_event = dict(DEFAULT_EVENT)
     printed = 0
     tracked = {}
+    connect_parsed = fetch_parsed_state(sock_path)
     try:
         while printed < frames:
             event = client.next_event(timeout=settle_wait_s)
@@ -1631,6 +1743,10 @@ def run_snapshot(sock_path, pid_path, frames=1, settle_wait_s=8.0):
             tracked = update_tracked_stats(tracked, event, now)
             status = fetch_status(sock_path)
             status["daemon_pid"] = pid_path.read_text().strip() if pid_path.exists() else None
+            tracked = _apply_status_hud_seed(
+                tracked, status, now,
+                parsed_state=connect_parsed if printed == 0 else None,
+            )
             tracked = _stamp_live_world_metrics(tracked, now, status)
             dashboard = compose_dashboard(last_event, ticker_history, status)
             auto = _autonomy_from_ledger()

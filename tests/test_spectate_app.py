@@ -193,6 +193,7 @@ if FAKE_STATUS is not None:
     # bar render correctly monkeypatches fetch_status() to return a
     # scripted dict instead of hitting a (nonexistent) socket.
     spectate_app.fetch_status = lambda sock_path, timeout=3.0: dict(FAKE_STATUS)
+    spectate_app.fetch_parsed_state = lambda sock_path, timeout=3.0: {{}}
 
 RECORD_PATH = {record_path!r}
 if RECORD_PATH is not None:
@@ -1310,6 +1311,39 @@ def test_fetch_status_connect_failure_still_carries_the_key():
     same null-safe convention protocol.py's status verb itself uses)."""
     status = spectate_app_mod.fetch_status("/nonexistent/twd-test.sock", timeout=0.2)
     assert status["autopilot_trace"] is None
+    assert status["credits"] is None
+    assert status["credits_age_ms"] is None
+
+
+def test_fetch_status_passes_through_fa7a_credits(fake_daemon):
+    """WO-SPECTATE-HUD-SEED: status already serves FA7a credits; fetch_status
+    must not drop them (same class of bug as autopilot_trace)."""
+    sess = fake_daemon.server.session
+    sess.observe_credits("You have 123,456 credits.\nCommand [TL=00:00:08]:[1027] (?=Help)? :")
+    status = spectate_app_mod.fetch_status(fake_daemon.sock_path)
+    assert status["credits"] == 123456
+    assert isinstance(status["credits_age_ms"], int)
+    assert status["credits_age_ms"] >= 0
+
+
+def test_spectate_seeds_hud_from_status_before_any_event_under_a_fake_pty():
+    """Spectate restart within a live daemon session must not show blank HUD
+    credits when status knows the balance — even before the subscribe stream
+    delivers its first settle edge."""
+    rows, cols = 36, 120
+    captured = _run_fake_spectate_in_pty(
+        [],  # no watch events at all
+        lambda buf: b"123,456" in buf,
+        timeout=8.0,
+        rows=rows,
+        cols=cols,
+        fake_status=_status(credits=123456, credits_age_ms=2500),
+    )
+    grid = _pyte_grid(captured, rows, cols)
+    full_text = "\n".join(grid)
+    assert re.search(r"CREDITS\s+123,456", full_text), (
+        f"HUD never seeded credits from status on cold connect; grid:\n{full_text}"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -1544,6 +1578,89 @@ def test_longest_chain_for_panel_falls_back_when_hops_form_no_profitable_cycle(m
     )
     result = spectate_app_mod._longest_chain_for_panel("/nonexistent.sock")
     assert result["name"] == "demo"
+
+
+# ---------------------------------------------------------------------------
+# WO-TUI-CHAIN-VIZ-SEED — presence-only adjacent ports seed bubble viz
+# ---------------------------------------------------------------------------
+
+
+def test_presence_port_chain_seed_adjacent_ports(tmp_path, monkeypatch):
+    """Two adjacent flyby ports (class only, no commodities) → seed sectors."""
+    from twclient import world_model
+    from twclient.spectate_layout import compose_chain_bubbles, chain_bubble_sectors
+
+    store = tmp_path / "world"
+    monkeypatch.setattr(world_model, "WORLD_DIR", store)
+    wid = "seed_world"
+    world_model.upsert_sector(
+        wid,
+        {"sector_id": 100, "warps": [200], "port": {"name": "A", "class": "BSB"}},
+        state_dir=store,
+    )
+    world_model.upsert_sector(
+        wid,
+        {"sector_id": 200, "warps": [100], "port": {"name": "B", "class": "SBB"}},
+        state_dir=store,
+    )
+    seed = spectate_app_mod._presence_port_chain_seed(wid, state_dir=store)
+    assert seed is not None
+    assert seed.get("source") == "presence_seed"
+    assert chain_bubble_sectors(seed) == [100, 200]
+    lines = compose_chain_bubbles(seed, port_classes={100: "BSB", 200: "SBB"}, width=40)
+    joined = "\n".join(lines)
+    assert "100" in joined and "200" in joined
+    assert "no trade loop yet" not in joined
+
+
+def test_longest_chain_for_panel_seeds_when_library_empty(monkeypatch, tmp_path):
+    """No ProfitChain + empty library → presence seed (not empty placeholder)."""
+    from twclient import world_model
+
+    store = tmp_path / "world"
+    monkeypatch.setattr(world_model, "WORLD_DIR", store)
+    wid = "seed_world"
+    world_model.upsert_sector(
+        wid,
+        {"sector_id": 10, "warps": [20], "port": {"class": "BBB"}},
+        state_dir=store,
+    )
+    world_model.upsert_sector(
+        wid,
+        {"sector_id": 20, "warps": [10], "port": {"class": "SSS"}},
+        state_dir=store,
+    )
+    monkeypatch.setattr(spectate_app_mod, "_resolve_world_id", lambda status=None: wid)
+    monkeypatch.setattr(spectate_app_mod.trade_adapter, "build_trade_hops", lambda w, **kw: ((), None))
+    monkeypatch.setattr(
+        spectate_app_mod, "_send_control",
+        lambda sock_path, verb, args=None, timeout=3.0: {"ok": True, "loops": []},
+    )
+    result = spectate_app_mod._longest_chain_for_panel("/nonexistent.sock")
+    assert isinstance(result, dict)
+    assert result.get("source") == "presence_seed"
+    assert list(result.get("sectors") or ())[:2] == [10, 20]
+
+
+def test_longest_chain_for_panel_still_prefers_profit_chain_over_seed(monkeypatch):
+    """Real ProfitCycle wins; presence seed must not be consulted."""
+    hops = (
+        chains.TradeHop(frm=1, to=2, commodity="Fuel Ore", margin=10.0, turns=2),
+        chains.TradeHop(frm=2, to=1, commodity="Organics", margin=5.0, turns=2),
+    )
+    monkeypatch.setattr(spectate_app_mod, "_resolve_world_id", lambda status=None: "world1")
+    monkeypatch.setattr(spectate_app_mod.trade_adapter, "build_trade_hops", lambda wid, **kw: (hops, None))
+
+    def _boom(*a, **k):
+        raise AssertionError("presence seed must not run when ProfitChain exists")
+
+    monkeypatch.setattr(spectate_app_mod, "_presence_port_chain_seed", _boom)
+    monkeypatch.setattr(
+        spectate_app_mod, "_send_control",
+        lambda *a, **k: (_ for _ in ()).throw(AssertionError("library must not run")),
+    )
+    result = spectate_app_mod._longest_chain_for_panel("/nonexistent.sock")
+    assert isinstance(result, chains.ProfitChain)
 
 
 # ---------------------------------------------------------------------------
