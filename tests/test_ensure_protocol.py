@@ -321,3 +321,45 @@ def test_ensure_refused_under_human_attach_arms_nothing_even_for_an_autonomous_p
     assert resp == {"ok": False, "error": "controller_locked_by_human"}
     assert session.sent == []
     assert getattr(server, "autopilot_loop", None) is None
+
+
+# -- WO-STATUS-WORLD-ID: mark_profile before post-login hud seed -----------
+
+
+def test_ensure_marks_profile_before_post_login_hud_seed(profiles_toml, monkeypatch):
+    """WO-STATUS-WORLD-ID: `mark_profile` must be called BEFORE the post-login
+    `seed_hud_after_join` so that concurrent `tw status` calls see a non-None
+    `world_id` during the I-probe's settle wait.
+
+    Without the fix, `auto_login_profile` is still None at the second
+    `seed_hud_after_join` call (the post-login seed), which means any status
+    poll during the up-to-8s settle window returns `world_id: None` even
+    though the session is fully logged in.
+
+    Two `seed_hud_after_join` calls happen in `_dispatch_ensure`:
+      1. Before `run_login` (at the early already-there shortcircuit check)
+         — `auto_login_profile` is correctly None here.
+      2. After `run_login` succeeds (the post-login re-seed)
+         — `auto_login_profile` must be set HERE (the fix)."""
+    import twclient.hud_seed as hud_seed_mod
+
+    profile_at_seed = []  # captures auto_login_profile at each seed_hud_after_join call
+    real_seed = hud_seed_mod.seed_hud_after_join
+
+    def capturing_seed(session):
+        profile_at_seed.append(getattr(session, "auto_login_profile", None))
+        return real_seed(session)
+
+    monkeypatch.setattr(hud_seed_mod, "seed_hud_after_join", capturing_seed)
+
+    session = _OneStepEnsureSession(_TARGET_SCREEN)
+    server = FakeServer()
+
+    resp = protocol.dispatch(session, "ensure", {"profile": "default"}, server)
+
+    assert resp["ok"] is True
+    assert resp["already_there"] is False  # genuine login ran, not the fast path
+    # Two seed calls: pre-login check (index 0) and post-login seed (index 1)
+    assert len(profile_at_seed) == 2
+    assert profile_at_seed[0] is None  # before run_login — expected None
+    assert profile_at_seed[1] == "default"  # mark_profile called BEFORE this seed

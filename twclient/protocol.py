@@ -1728,10 +1728,14 @@ def _dispatch_ensure(session, args):
         resp["error"] = f"login_failed:{e}"
         return resp
 
+    # Mark the profile immediately on login success — before the post-login
+    # hud I-probe — so concurrent status calls see world_id correctly
+    # during the probe's settle wait (WO-STATUS-WORLD-ID: the settle window
+    # was the only gap where auto_login_profile was still None mid-session).
+    session.mark_profile(profile.name)
     # Re-seed after login — the I-probe above may have run on a pre-login
     # screen; a post-login main_command still often lacks credits/turns.
     hud_seed = seed_hud_after_join(session)
-    session.mark_profile(profile.name)
     resp = build_response(
         session,
         extra={"steps": steps, "already_there": False, **hud_seed},
