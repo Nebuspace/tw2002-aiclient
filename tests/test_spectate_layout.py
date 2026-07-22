@@ -56,6 +56,7 @@ from twclient.spectate_layout import (
     status_semantic,
     tick_down_timer,
     update_tracked_stats,
+    seed_tracked_from_status,
     CONTROL_HINTS,
     compose_control_strip,
     format_loops_library_header,
@@ -521,6 +522,42 @@ def test_update_tracked_stats_computes_profit_as_delta_from_first_seen_credits()
 
     tracked = update_tracked_stats(tracked, {"state": {"credits": 99500}}, now=3.0)
     assert tracked["profit"] == (-500, 3.0)  # can go negative -- a real loss since session start
+
+
+def test_seed_tracked_from_status_fills_fa7a_credits_on_cold_start():
+    tracked = seed_tracked_from_status(
+        {},
+        {"credits": 250000, "credits_age_ms": 5000},
+        now=100.0,
+    )
+    assert tracked["credits"] == (250000, 95.0)
+    cells = compose_hud_cells(tracked, now=100.0)
+    assert [c for c in cells if c["label"] == "CREDITS"][0]["value"] == "250,000"
+
+
+def test_seed_tracked_from_status_backfills_missing_fields_without_clobbering():
+    tracked = update_tracked_stats({}, {"state": {"sector": 4406, "turns_left": 1200}}, now=1.0)
+    seeded = seed_tracked_from_status(
+        tracked,
+        {"credits": 99999, "credits_age_ms": 0},
+        now=5.0,
+        parsed_state={"sector": 9999, "turns_left": 1},
+    )
+    assert seeded["sector"] == (4406, 1.0)
+    assert seeded["turns"] == (("count", 1200), 1.0)
+    assert seeded["credits"] == (99999, 5.0)
+
+
+def test_seed_tracked_from_status_uses_parsed_state_when_tracked_empty():
+    tracked = seed_tracked_from_status(
+        {},
+        {"credits": None, "credits_age_ms": None},
+        now=2.0,
+        parsed_state={"sector": 22825, "turns_left": 4406, "cargo_holds_empty": 12},
+    )
+    assert tracked["sector"] == (22825, 2.0)
+    assert tracked["turns"] == (("count", 4406), 2.0)
+    assert tracked["cargo_holds_empty"] == (12, 2.0)
 
 
 def test_update_tracked_stats_is_pure_returns_new_dict():

@@ -472,6 +472,50 @@ def update_tracked_stats(tracked: dict, event: dict, now: float) -> dict:
     return out
 
 
+def seed_tracked_from_status(tracked: dict, status: dict, now: float, *, parsed_state: dict | None = None) -> dict:
+    """Backfill the HUD accumulator from daemon session truth on spectate
+    connect (and on each status poll for FA7a credits freshness).
+
+    `fetch_status()` already serves FA7a `credits`/`credits_age_ms`; watch
+    events from subscribe do NOT carry those top-level fields — only
+    `update_tracked_stats()` on the event stream left cold-start HUD cells
+    blank until a credits-bearing settle edge. This synthesizes the same
+    FA7a-shaped event `update_tracked_stats()` already understands.
+
+    Non-credit HUD fields (`sector`, `turns`, `cargo_holds_empty`) are filled
+    ONLY while still absent this spectate session — from optional
+    `parsed_state` (a one-shot `state` verb on connect) merged with any
+    `status["state"]` the daemon may serve later. Never clobbers values
+    events have already established."""
+    if not status:
+        return dict(tracked)
+    synthetic: dict = {}
+    credits = status.get("credits")
+    if credits is not None:
+        synthetic["credits"] = credits
+        age_ms = status.get("credits_age_ms")
+        if age_ms is not None:
+            synthetic["credits_age_ms"] = age_ms
+
+    merged = dict(parsed_state or {})
+    merged.update(status.get("state") or {})
+    state: dict = {}
+    if "sector" not in tracked and "sector" in merged:
+        state["sector"] = merged["sector"]
+    if "turns" not in tracked:
+        if "turns_left" in merged:
+            state["turns_left"] = merged["turns_left"]
+        elif "turn_timer" in merged:
+            state["turn_timer"] = merged["turn_timer"]
+    if "cargo_holds_empty" not in tracked and "cargo_holds_empty" in merged:
+        state["cargo_holds_empty"] = merged["cargo_holds_empty"]
+    if state:
+        synthetic["state"] = state
+    if not synthetic:
+        return dict(tracked)
+    return update_tracked_stats(tracked, synthetic, now)
+
+
 def format_freshness(age_s: float, mark: str = "✦") -> str:
     """`✦ Ns ago` (or the ASCII fallback mark) -- NON-NEGOTIABLE per the
     plan: an always-on value without freshness reads as silently-current,
