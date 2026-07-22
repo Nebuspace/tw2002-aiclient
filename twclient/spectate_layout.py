@@ -2418,7 +2418,8 @@ def idle_prompt_fingerprint(classification, prompt) -> tuple:
 def idle_prompt_looks_blocking(classification, prompt) -> bool:
     """True when the settled screen is waiting on an answer (not a quiet
     main_command). Fighter Option? often classifies as sector_display —
-    prompt shape still counts."""
+    prompt shape still counts. Used for copy/labeling; offer gating is
+    `idle_prompt_should_offer` (any long ai_pilot idle)."""
     p = (prompt or "").strip()
     if not p:
         return False
@@ -2440,12 +2441,21 @@ def idle_prompt_should_offer(
     prompt,
     threshold_s: float = IDLE_PROMPT_THRESHOLD_S,
 ) -> bool:
-    """When spectate should surface the idle-prompt overlay."""
+    """When spectate should surface the idle-prompt overlay.
+
+    Fires on any ai_pilot idle past the threshold with a non-empty prompt
+    — including quiet main_command. The original "blocking only" gate hid
+    the common stuck-autopilot case (Command prompt, no Option? on screen).
+    """
     if mode != "ai_pilot":
         return False
     if idle_age_s is None or idle_age_s < threshold_s:
         return False
-    return idle_prompt_looks_blocking(classification, prompt)
+    if not (prompt or "").strip():
+        return False
+    # classification reserved for callers/tests; offer does not require it.
+    _ = classification
+    return True
 
 
 def format_idle_prompt_overlay_lines(
@@ -2461,11 +2471,13 @@ def format_idle_prompt_overlay_lines(
     """Plain text lines for the centered idle-prompt modal (no curses)."""
     w = max(24, int(width))
     age = format_idle_age(idle_age_s) if idle_age_s is not None else "?"
+    blocking = idle_prompt_looks_blocking(classification, prompt)
+    label = "Pending question:" if blocking else "Current prompt (AI idle):"
     lines = [
         " AI PILOT WAITING ",
         f"idle {age} · mode ai_pilot · {classification or '?'}",
         "",
-        "Pending question:",
+        label,
         (prompt or "(empty)").strip()[: w - 2],
         "",
     ]

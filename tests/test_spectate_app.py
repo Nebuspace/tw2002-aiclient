@@ -2205,11 +2205,18 @@ def test_maybe_arm_idle_prompt_opens_after_threshold():
     spectate_app_mod._maybe_arm_idle_prompt(idle, status, event, idle_age=12.0)
     assert idle["open"] is True
     assert idle["prompt"] == "[Pause]"
-    # Quiet main_command closes an open overlay.
+    # Quiet main_command still keeps the overlay open while idle remains high.
     spectate_app_mod._maybe_arm_idle_prompt(
         idle, status,
         {"classification": "main_command", "prompt": "Command [TL=00:00:00]:[1]"},
         idle_age=12.0,
+    )
+    assert idle["open"] is True
+    # Idle drop (fresh RX) closes it.
+    spectate_app_mod._maybe_arm_idle_prompt(
+        idle, status,
+        {"classification": "main_command", "prompt": "Command [TL=00:00:00]:[1]"},
+        idle_age=2.0,
     )
     assert idle["open"] is False
 

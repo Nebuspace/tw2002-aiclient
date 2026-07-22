@@ -550,6 +550,7 @@ def dispatch(session, verb, args, server):
             "connected": session.conn.connected,
             "idle_ms": int((time.monotonic() - session.last_rx) * 1000),
             "classification": classify_screen(text, prompt),
+            "prompt": prompt,
             "host": session.host,
             "port": session.port,
             "name": session.name,

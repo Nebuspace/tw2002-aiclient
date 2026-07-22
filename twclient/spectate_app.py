@@ -64,7 +64,6 @@ from .spectate_layout import (
     format_ticker_history,
     frame_layout,
     idle_prompt_fingerprint,
-    idle_prompt_looks_blocking,
     idle_prompt_should_offer,
     is_recent,
     longest_chain_steps,
@@ -332,12 +331,16 @@ def fetch_status(sock_path, timeout=3.0):
             "credits_age_ms": None,
             "turns_left": None,
             "turns_age_ms": None,
+            "classification": None,
+            "prompt": None,
         }
     return {
         "connected": resp.get("connected", False),
         "subscriber_count": resp.get("subscribers", 0),
         "last_rx_age_s": (resp.get("idle_ms", 0) or 0) / 1000.0,
         "daemon_pid": None,  # filled by the caller, which knows the pidfile path
+        "classification": resp.get("classification"),
+        "prompt": resp.get("prompt"),
         "host": resp.get("host"),  # header chrome (Phase 1) -- app/host/character/classification
         "name": resp.get("name"),
         # Trainer Control Panel -- control-MODE + AUTO-LOOP live progress
@@ -1741,15 +1744,26 @@ def _handle_key(ch, sock_path, status, library, explore_state=None, stdscr=None,
 
 
 def _maybe_arm_idle_prompt(idle_prompt, status, event, idle_age):
-    """Open the overlay when AI-PILOT has idled on a blocking prompt.
-    Also closes it when the live screen is no longer a blocking wait."""
-    classification = (event or {}).get("classification") or status.get("classification") or ""
-    prompt = (event or {}).get("prompt") or status.get("prompt") or ""
+    """Open the overlay when AI-PILOT has idled long enough.
+    Closes when mode leaves ai_pilot, idle drops below threshold, or
+    the prompt disappears (not when the screen is merely main_command)."""
+    classification = (
+        status.get("classification")
+        or (event or {}).get("classification")
+        or ""
+    )
+    prompt = status.get("prompt") or (event or {}).get("prompt") or ""
     fp = idle_prompt_fingerprint(classification, prompt)
     mode = status.get("mode")
+    still_offer = idle_prompt_should_offer(
+        mode=mode,
+        idle_age_s=idle_age,
+        classification=classification,
+        prompt=prompt,
+    )
 
     if idle_prompt.get("open"):
-        if mode != "ai_pilot" or not idle_prompt_looks_blocking(classification, prompt):
+        if not still_offer:
             idle_prompt["open"] = False
             idle_prompt["confirm"] = False
             idle_prompt["buffer"] = ""
@@ -1762,12 +1776,7 @@ def _maybe_arm_idle_prompt(idle_prompt, status, event, idle_age):
 
     if idle_prompt.get("dismissed_key") == fp:
         return
-    if not idle_prompt_should_offer(
-        mode=mode,
-        idle_age_s=idle_age,
-        classification=classification,
-        prompt=prompt,
-    ):
+    if not still_offer:
         return
     idle_prompt["open"] = True
     idle_prompt["prompt"] = prompt

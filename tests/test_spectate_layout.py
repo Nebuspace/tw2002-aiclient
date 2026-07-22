@@ -2059,12 +2059,19 @@ def test_idle_prompt_should_offer_ai_pilot_blocking_after_threshold():
         classification="pause_key",
         prompt="[Pause]",
     )
-    # Fighter Option? often classifies as sector_display — prompt shape wins.
+    # Fighter Option? often classifies as sector_display — still offers.
     assert idle_prompt_should_offer(
         mode="ai_pilot",
         idle_age_s=12.0,
         classification="sector_display",
         prompt="Option? (A=Attack, D=Defend, I=Ignore): [D] ?",
+    )
+    # Quiet main_command ALSO offers — stuck autopilot sits here (live bug).
+    assert idle_prompt_should_offer(
+        mode="ai_pilot",
+        idle_age_s=12.0,
+        classification="main_command",
+        prompt="Command [TL=00:00:00]:[136] (?=Help)? :",
     )
     assert not idle_prompt_should_offer(
         mode="spectate",
@@ -2082,19 +2089,18 @@ def test_idle_prompt_should_offer_ai_pilot_blocking_after_threshold():
         mode="ai_pilot",
         idle_age_s=12.0,
         classification="main_command",
-        prompt="Command [TL=00:00:00]:[1234]",
+        prompt="",
     )
     lines = format_idle_prompt_overlay_lines(
-        prompt="Option?",
-        classification="sector_display",
+        prompt="Command [TL=00:00:00]:[136] (?=Help)? :",
+        classification="main_command",
         idle_age_s=11.0,
-        buffer="A",
+        buffer="",
         confirm=False,
         secret=False,
     )
     assert any("AI PILOT WAITING" in L for L in lines)
-    assert any("Option?" in L for L in lines)
-    assert any("> A" in L for L in lines)
+    assert any("Current prompt (AI idle):" in L for L in lines)
     secret_lines = format_idle_prompt_overlay_lines(
         prompt="Password?",
         classification="login_password",
