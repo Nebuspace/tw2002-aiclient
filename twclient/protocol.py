@@ -392,7 +392,7 @@ def dispatch(session, verb, args, server):
             resp = build_response(session, settled_reason=reason, extra={"elapsed": elapsed})
             history_args = {**args, "input": "<redacted>"} if secret else args
             session.record_history("do", history_args, resp["prompt"], resp["classification"], reason)
-            # WO-CLEANPREEMPT FIX 1 (cipher-confirmed Concern-1): explicit
+            # WO-CLEANPREEMPT FIX 1 (cipher-confirmed Concern-1): default
             # actor="ai", mirroring haggle's own explicit actor="trainer"
             # below -- NEVER `_current_actor()`'s live-mode derivation.
             # `_driving_dispatch` only ever reaches this line while THIS
@@ -401,14 +401,18 @@ def dispatch(session, verb, args, server):
             # check), so the true originating actor is unconditionally
             # "ai" regardless of whether mode has since flipped to
             # MODE_HUMAN (a fence, not a refusal -- see control_lock.py).
+            # Explicit args.actor=="human" is the spectate idle-prompt
+            # overlay escape hatch (operator answered from the TUI) --
+            # the future branch `_current_actor`'s docstring anticipated.
             # `_current_actor()`'s human-branch reading mode AT
             # LEDGER-WRITE TIME (post-fence) was the corrupted signal
             # spectate_layout.compute_autonomy_ratio() consumed --
             # `interrupted_by_human` is the correct, authoritative flag
             # for that instead.
+            ledger_actor = "human" if args.get("actor") == "human" else "ai"
             _record_ledger(
                 server, session, pre_text, text, secret, resp,
-                actor="ai", interrupted_by_human=_driver_was_fenced(server),
+                actor=ledger_actor, interrupted_by_human=_driver_was_fenced(server),
             )
             _record_skill_step(server, text, wait_prompt, resp["classification"], secret)
             return resp

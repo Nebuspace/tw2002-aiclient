@@ -129,6 +129,26 @@ def test_do_verb_leaves_interrupted_by_human_false_when_never_fenced_sensitivity
     assert entries[0]["interrupted_by_human"] is False
 
 
+def test_do_verb_explicit_actor_human_for_spectate_idle_overlay(tmp_path):
+    """Spectate idle-prompt overlay passes actor=human so autonomy
+    human-count increments; must NOT fall back to the hardcoded ai
+    default (and must still ignore live-mode derivation)."""
+    lock = ControlLock()
+    server = FakeServer()
+    server.control_lock = lock
+    ledger_path = tmp_path / "ledger.jsonl"
+    server.ledger = LedgerWriter(path=ledger_path)
+    session = FakeSession(logger=_FakeLogger("s-overlay-human"))
+
+    resp = protocol.dispatch(
+        session, "do", {"input": "A", "actor": "human"}, server,
+    )
+
+    assert resp["ok"] is True
+    entries = read_entries(path=ledger_path)
+    assert entries[0]["actor"] == "human"
+
+
 def test_send_verb_also_flags_interrupted_by_human_when_fenced_mid_flight(tmp_path):
     """The `send` verb shares `_record_ledger`'s same `interrupted_by_
     human` wiring (via `_driver_was_fenced()`) as `do` -- proven

@@ -1403,7 +1403,20 @@ def _draw_control_strip(win, region, strip, palette):
     win.noutrefresh()
 
 
-def _draw_loops_library(stdscr, lines, cols, loops, selected, pending_cycles, confirm, palette, glyphs):
+def _blank_dashboard_windows(windows):
+    """Erase persistent panes so a stdscr modal is not painted *under*
+    stale chain/viewport/control windows on doupdate (curses z-order)."""
+    if not windows:
+        return
+    for win in windows.values():
+        try:
+            win.erase()
+            win.noutrefresh()
+        except curses.error:
+            pass
+
+
+def _draw_loops_library(stdscr, lines, cols, loops, selected, pending_cycles, confirm, palette, glyphs, windows=None):
     """Trade Loop Chains overlay (`L`, TW-07) -- bordered centered modal
     listing every saved skill as a chain, drawn on stdscr (not a
     persistent pane: it appears/disappears on a keypress) while
@@ -1411,6 +1424,7 @@ def _draw_loops_library(stdscr, lines, cols, loops, selected, pending_cycles, co
     confirm gate (see _handle_key); Esc/L closes without side effects.
     Client-sorted by profit desc; longest-hop chain is celebrated as a
     ★ centerpiece above the list."""
+    _blank_dashboard_windows(windows)
     stdscr.erase()
     accent_attr = palette.attr_for("cyan", "default", False)
     celebrate_attr = palette.attr_for("brown", "default", True) | curses.A_BOLD
@@ -1503,9 +1517,10 @@ def _draw_loops_library(stdscr, lines, cols, loops, selected, pending_cycles, co
     curses.doupdate()
 
 
-def _draw_idle_prompt_overlay(stdscr, lines, cols, overlay, palette, glyphs, idle_age_s):
+def _draw_idle_prompt_overlay(stdscr, lines, cols, overlay, palette, glyphs, idle_age_s, windows=None):
     """Centered modal when AI-PILOT has sat on a blocking prompt too long.
     Same stdscr-replace pattern as `_draw_loops_library`."""
+    _blank_dashboard_windows(windows)
     stdscr.erase()
     accent_attr = palette.attr_for("cyan", "default", False)
     warn_attr = palette.attr_for("brown", "default", True) | curses.A_BOLD
@@ -1634,7 +1649,14 @@ def _handle_key(ch, sock_path, status, library, explore_state=None, stdscr=None,
             if ch in (ord("y"), ord("Y")):
                 answer = (idle_prompt.get("buffer") or "").strip()
                 if answer and not idle_prompt.get("secret"):
-                    _send_control(sock_path, "do", {"input": answer})
+                    # Operator answered from spectate — ledger as human so
+                    # autonomy ratio increments; then re-arm ai_pilot.
+                    _send_control(
+                        sock_path, "do",
+                        {"input": answer, "actor": "human"},
+                    )
+                    _send_control(sock_path, "set_mode", {"mode": "ai_pilot"})
+                    status["mode"] = "ai_pilot"
                 idle_prompt["open"] = False
                 idle_prompt["confirm"] = False
                 idle_prompt["buffer"] = ""
@@ -1977,6 +1999,7 @@ def _run(stdscr, client, sock_path, pid_path, unicode_ok):
             if idle_prompt["open"]:
                 _draw_idle_prompt_overlay(
                     stdscr, lines, cols, idle_prompt, palette, glyphs, idle_age,
+                    windows=windows,
                 )
                 continue
 
@@ -1988,6 +2011,7 @@ def _run(stdscr, client, sock_path, pid_path, unicode_ok):
                 _draw_loops_library(
                     stdscr, lines, cols, library["loops"], library["selected"], library["pending_cycles"],
                     library.get("confirm"), palette, glyphs,
+                    windows=windows,
                 )
                 continue
 

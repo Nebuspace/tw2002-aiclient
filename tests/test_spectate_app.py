@@ -2156,7 +2156,30 @@ def test_idle_prompt_overlay_enter_then_y_sends_do(monkeypatch):
     assert calls == []
     assert spectate_app_mod._handle_key(ord("y"), "/x.sock", status, library, idle_prompt=idle) is True
     assert idle["open"] is False
-    assert calls == [{"verb": "do", "args": {"input": "A"}}]
+    assert calls == [
+        {"verb": "do", "args": {"input": "A", "actor": "human"}},
+        {"verb": "set_mode", "args": {"mode": "ai_pilot"}},
+    ]
+    assert status["mode"] == "ai_pilot"
+
+
+def test_blank_dashboard_windows_erases_each_pane():
+    class FakeWin:
+        def __init__(self):
+            self.erased = False
+            self.refreshed = False
+
+        def erase(self):
+            self.erased = True
+
+        def noutrefresh(self):
+            self.refreshed = True
+
+    wins = {"chain": FakeWin(), "viewport": FakeWin()}
+    spectate_app_mod._blank_dashboard_windows(wins)
+    assert all(w.erased and w.refreshed for w in wins.values())
+    spectate_app_mod._blank_dashboard_windows(None)  # no-op
+    spectate_app_mod._blank_dashboard_windows({})
 
 
 def test_idle_prompt_overlay_secret_never_sends_do(monkeypatch):
