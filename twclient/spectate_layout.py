@@ -634,9 +634,10 @@ def compose_hud_cells(
 
 
 # TW-08 live-metrics array (structure now; values from world-model later via TW-06).
-# Fixed display order the operator named: Stations / Planets / Fighters /
-# Mines / Problem-sectors. Always emit a full shape so the HUD never jumps.
+# Fixed display order the operator named: Sectors mapped / Stations / Planets /
+# Fighters / Mines / Problem-sectors. Always emit a full shape so the HUD never jumps.
 _LIVE_METRIC_SPECS = (
+    ("sectors_mapped", "SECTORS"),
     ("stations_found", "STATIONS"),
     ("planets_found", "PLANETS"),
     ("fighters_seen", "FIGHTERS"),
@@ -674,6 +675,7 @@ def aggregate_world_metrics(sectors) -> dict:
     a problem when it has mines, any fighters sighting, or a one-way /
     warp-sink formation membership tag.
     """
+    sectors_mapped = len(sectors or ())
     stations = planets = fighters = mines = problems = 0
     for sec in sectors or ():
         threats = sec.get("threats") or {}
@@ -704,6 +706,7 @@ def aggregate_world_metrics(sectors) -> dict:
         if has_mines or has_fighters or has_problem_formation:
             problems += 1
     return {
+        "sectors_mapped": sectors_mapped,
         "stations_found": stations,
         "planets_found": planets,
         "fighters_seen": fighters,

@@ -587,13 +587,14 @@ def test_compose_hud_cells_turns_cell_shows_comma_formatted_count():
 def test_compose_live_metrics_placeholder_shape():
     rows = compose_live_metrics({})
     assert [r["label"] for r in rows] == [
-        "STATIONS", "PLANETS", "FIGHTERS", "MINES", "PROBLEMS",
+        "SECTORS", "STATIONS", "PLANETS", "FIGHTERS", "MINES", "PROBLEMS",
     ]
     assert all(r["value"] == "0" for r in rows)
 
 
 def test_compose_live_metrics_reads_tracked_tuple_values():
     tracked = {
+        "sectors_mapped": (100, 1.0),
         "stations_found": (12, 1.0),
         "planets_found": (3, 1.0),
         "fighters_seen": (40, 1.0),
@@ -602,9 +603,19 @@ def test_compose_live_metrics_reads_tracked_tuple_values():
     }
     by_label = {r["label"]: r["value"] for r in compose_live_metrics(tracked)}
     assert by_label == {
-        "STATIONS": "12", "PLANETS": "3", "FIGHTERS": "40",
+        "SECTORS": "100", "STATIONS": "12", "PLANETS": "3", "FIGHTERS": "40",
         "MINES": "2", "PROBLEMS": "1",
     }
+
+
+def test_aggregate_world_metrics_sectors_mapped_is_record_count():
+    sectors = [
+        {"sector_id": 1, "port": None, "threats": {}, "landmarks": [], "formation_membership": None},
+        {"sector_id": 2, "port": None, "threats": {}, "landmarks": [], "formation_membership": None},
+    ]
+    assert aggregate_world_metrics(sectors)["sectors_mapped"] == 2
+    assert aggregate_world_metrics([])["sectors_mapped"] == 0
+    assert aggregate_world_metrics(None)["sectors_mapped"] == 0
 
 
 def test_aggregate_world_metrics_counts_ports_threats_landmarks():
@@ -618,6 +629,7 @@ def test_aggregate_world_metrics_counts_ports_threats_landmarks():
     ]
     m = aggregate_world_metrics(sectors)
     assert m == {
+        "sectors_mapped": 3,
         "stations_found": 2,
         "planets_found": 1,
         "fighters_seen": 1,
@@ -635,6 +647,7 @@ def test_stamp_world_metrics_feeds_compose_live_metrics():
     ])
     tracked = stamp_world_metrics({}, metrics, now=9.0)
     by_label = {r["label"]: r["value"] for r in compose_live_metrics(tracked)}
+    assert by_label["SECTORS"] == "2"
     assert by_label["STATIONS"] == "1"
     assert by_label["MINES"] == "1"
     assert by_label["PROBLEMS"] == "1"
