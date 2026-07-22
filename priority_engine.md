@@ -18,7 +18,7 @@ Each row is one strategic objective the client tracks or will track. **Goal type
 | Location any "Special Formation" ideal for Planet placement | Range | 55 | map exploration | **Partial** — `formations.py` detects topology (dead-ends, bubbles, one-ways, warp-sinks) and tags `genesis_candidates`. GOALS shows formation + genesis counts. No deploy action. |
 | Place planet and use it to earn resources to sell | Boolean | 50 | genesis candidate chosen | **Planned** — genesis deploy is explicitly excluded from autopilot candidate kinds (safety whitelist). Doctrine lives in OKF (`knowledge/strategies/planet-colonization.md`). |
 | Map 100% of Galaxy | Range (target 100%) | 45 | — | **Partial** — GOALS line is **Galaxy Exploration:** `N Sectors` until total size known; then `N/total (pct%)`. Not a “map exactly N sectors” finish. `explore.known_graph()` + frontier BFS; galaxy size often unknown until fully mapped. |
-| Identification of Trade Loop Chains (longest chain) | Range | 40 | ports known | **Partial** — `chains.longest_profit_chain()` ranks by hop count then cr/turn. **Execute gate (engine):** `run_chain` requires ≥**3 links** (`len(ProfitChain.hops)`). **Earn vs search:** with frontier open, prefer explore while best chain is 3–4 links; prefer grind from **5+** links (`prefer_search_over_earn`). Autopilot `_score_chain` still allows 2-link until wired to engine. |
+| Identification of Trade Loop Chains (longest chain) | Range | 40 | ports known | **Partial** — `chains.longest_profit_chain()` ranks by hop count then cr/turn. **Execute gate (engine):** `run_chain` requires ≥**3 links** (`len(ProfitChain.hops)`). **Earn vs search:** once ≥3 links, prefer **grind** (fighters + holds); explore stays secondary. **Ship hull:** deferred until ≥**4 links**. Autopilot `_score_chain` still allows 2-link until wired to engine. |
 | Identification of Sector-based Threats (mines or fighters) | Boolean | 35 | sector visited | **Partial** — `world_model` persists `threats.mines` / `threats.fighters` per sector; HUD METRICS aggregate counts. Threats do not yet gate autopilot candidate scoring. |
 
 ### Trade loop chains (detail)
@@ -29,21 +29,22 @@ In code, a **TradeHop** is one directed port-to-port edge with positive margin; 
 
 ### When to execute a trade chain (earn vs search)
 
-**Link count** = `len(ProfitChain.hops)` (closed cycle). Max’s 3-link example (123→753→8293→123) is **3 hops**.
+**Link count** = `len(ProfitChain.hops)` (closed cycle). The 3-port example (123→753→8293→123) is **3 hops / 3 links** — the minimum to start trading. (A one-way walk of two edges is not the same as the closed-cycle link count.)
 
 | Rule | Threshold | Behavior |
 |---|---|---|
 | **Execute floor** | `< 3` links | `run_chain` **gated** — discovery only; FOCUS prefers explore |
-| **Search band** | `3–4` links + frontier | Execute *allowed*, but FOCUS prefers **explore** (hunt a longer chain before grinding) |
-| **Earn band** | `≥ 5` links, or no frontier | FOCUS prefers **run_chain** (grind; explore secondary) |
+| **Earn band** | `≥ 3` links | FOCUS prefers **run_chain** — grind for credits toward **fighters + cargo holds**; a longer/more profitable chain still ranks higher when found (`rank_chains`: hops then cr/turn) |
+| **Ship hull** | `< 4` links (with a known chain) | `upgrade` (ship) **gated** — defer StarDock hull purchase until ≥4-link (5-link is better still); holds/fighters first at 3-link |
+| **Ship hull** | `≥ 4` links | Ship upgrade may compete via RT stay-vs-leave as before |
 
-Constants: `MIN_CHAIN_LINKS_TO_EXECUTE = 3`, `CHAIN_LINKS_PREFER_SEARCH_BELOW = 5` in `priority_engine.py`. Planned refinements: map-% / port-count soft factors; stagnant-frontier → earn earlier; wire same gate into `autopilot._score_chain`.
+Constants: `MIN_CHAIN_LINKS_TO_EXECUTE = 3`, `CHAIN_LINKS_PREFER_SEARCH_BELOW = 3` (no hunt-before-grind band), `MIN_CHAIN_LINKS_FOR_SHIP_UPGRADE = 4` in `priority_engine.py`. Planned: map-% / port-count soft factors; wire same gates into `autopilot._score_chain` / hold-buy execute.
 
 ### Execution travel cost (distance to act)
 
 The catalog rows above describe *what* to achieve. Executing a priority also costs **turns to reach the action and return to interrupted work**. "StarDock found" (boolean) is not the same as "affordable to leave this chain right now."
 
-**Example (Max):** trading a profit chain and considering a bigger ship at StarDock. Before abandoning the chain you need: (1) which ship and its price, (2) how far StarDock is (hop count on the known graph), (3) a **round-trip** turn budget — warp out, buy at dock, warp **back to the chain you were working** — which is roughly **2× the one-way warp cost** (plus dock/menu turns not modeled yet). Only then can you compare stay-trading vs leave-for-upgrade.
+**Example:** trading a profit chain and considering a bigger ship at StarDock. Before abandoning the chain you need: (1) which ship and its price, (2) how far StarDock is (hop count on the known graph), (3) a **round-trip** turn budget — warp out, buy at dock, warp **back to the chain you were working** — which is roughly **2× the one-way warp cost** (plus dock/menu turns not modeled yet). Only then can you compare stay-trading vs leave-for-upgrade. Ship detours also wait until the best chain is ≥4 links (fighters/holds first at 3-link).
 
 #### One-way vs round-trip
 

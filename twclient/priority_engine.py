@@ -3,7 +3,7 @@
 Design brief: ``priority_engine.md`` (repo root of tw2002-aiclient).
 
 This module is the **driver** for "what should we focus on now?" It sits
-above the per-kind scorers in ``autopilot.py`` and adds Max's missing
+above the per-kind scorers in ``autopilot.py`` and adds the missing
 piece: **round-trip execution cost** before abandoning in-progress work
 (e.g. leave a trade chain for StarDock, buy a ship, come back).
 
@@ -33,14 +33,18 @@ FIGHTER_UNIT_PRICE_CLASS0: int = 100  # cr per fighter
 # reserve floor there, update this too.
 FIGHTER_SMALL_STACK: int = 5  # fighters
 
-# Max (2026-07-22): do not grind a trade loop until the best known chain
-# has at least this many links (``len(ProfitChain.hops)``). A 2-hop
-# back-and-forth is discovery progress, not an execute target.
+# Execute floor: grind only when the best known chain has at least this
+# many links (``len(ProfitChain.hops)``). A 2-port back-and-forth is
+# discovery progress, not an execute target. The human's 3-port example
+# (A→B→C→A) is 3 links — the minimum to start trading for cash.
 MIN_CHAIN_LINKS_TO_EXECUTE = 3
-# Below this length, still prefer explore (hunt a longer chain) when a
-# frontier hop exists — even though execute is *allowed* from
-# MIN_CHAIN_LINKS_TO_EXECUTE upward.
-CHAIN_LINKS_PREFER_SEARCH_BELOW = 5
+# Once execute is allowed, prefer *earning* (fighters + cargo holds) over
+# hunting a longer chain. Exploring remains a secondary candidate by EV.
+# (Previously 5: the 3–4 link "search band" delayed grinding.)
+CHAIN_LINKS_PREFER_SEARCH_BELOW = MIN_CHAIN_LINKS_TO_EXECUTE
+# Ship purchase / StarDock hull upgrade waits until the best chain is at
+# least this long — at 3-link, cash goes to fighters + holds first.
+MIN_CHAIN_LINKS_FOR_SHIP_UPGRADE = 4
 
 
 @dataclass(frozen=True)
@@ -159,11 +163,13 @@ def prefer_search_over_earn(
 
     Returns ``(prefer_explore, reason)``.
 
-    v0 heuristic (Max):
+    Policy (human 2026-07-23):
     - ``links < min_execute`` → must search (execute gated separately)
-    - ``min_execute <= links < prefer_search_below`` and frontier exists
-      → prefer explore (still *may* earn; FOCUS ranks explore first)
-    - ``links >= prefer_search_below`` or no frontier → prefer earn
+    - ``links >= min_execute`` → prefer earn (fighters/holds from the
+      chain we have); a longer/more profitable chain still ranks higher
+      when discovered, but we do not defer grinding to hunt one
+    - ``prefer_search_below`` defaults to ``min_execute`` (empty search
+      band). Callers may raise it to restore a hunt-before-grind window.
     """
     if chain_links < min_execute:
         return True, (
@@ -177,7 +183,8 @@ def prefer_search_over_earn(
     if not explore_available:
         return False, f"earn: {chain_links}-link chain; no frontier — grind"
     return False, (
-        f"earn: {chain_links}-link chain ≥ {prefer_search_below}; grind while exploring as secondary"
+        f"earn: {chain_links}-link chain ≥ {prefer_search_below}; "
+        f"grind for fighters/holds (explore secondary)"
     )
 
 
@@ -204,6 +211,7 @@ def recommend_actions(
     require_rt_when_chain_active: bool = True,
     min_chain_links_to_execute: int = MIN_CHAIN_LINKS_TO_EXECUTE,
     chain_links_prefer_search_below: int = CHAIN_LINKS_PREFER_SEARCH_BELOW,
+    min_chain_links_for_ship_upgrade: int = MIN_CHAIN_LINKS_FOR_SHIP_UPGRADE,
 ) -> PriorityRecommendation:
     """Rank ``run_chain`` / ``upgrade`` / ``explore`` with RT-aware upgrade gating.
 
@@ -212,6 +220,8 @@ def recommend_actions(
 
     ``chain_link_count`` is ``len(ProfitChain.hops)`` (a 3-link cycle has
     three hops). Execute requires ≥ ``min_chain_links_to_execute`` (default 3).
+    Ship hull upgrades wait until ≥ ``min_chain_links_for_ship_upgrade``
+    (default 4) so a 3-link chain funds fighters/holds first.
     """
     scores: list[PriorityScore] = []
     notes: list[str] = []
@@ -282,6 +292,8 @@ def recommend_actions(
             f"search: have {links}-link chain; need ≥{min_chain_links_to_execute} to execute"
         )
     else:
+        # Longer / higher-EV chains already win via chain_cr_per_turn
+        # (rank_chains prefers hop count then cr/turn before we get here).
         scores.append(
             PriorityScore(
                 kind="run_chain",
@@ -304,7 +316,7 @@ def recommend_actions(
             if prefer_search and explore_available:
                 notes.append(earn_vs_search)
 
-    # --- upgrade (RT-aware) ---
+    # --- upgrade (RT-aware); ship hull deferred until chain is long enough ---
     # Only treat chain as "active interrupted work" when execute is allowed.
     chain_active = (
         chain_cr_per_turn is not None
@@ -312,17 +324,40 @@ def recommend_actions(
         and links is not None
         and links >= min_chain_links_to_execute
     )
-    upgrade_score = _score_upgrade_priority(
-        upgrade_extra_cr_per_turn=upgrade_extra_cr_per_turn,
-        upgrade_payback=upgrade_payback,
-        upgrade_ship_name=upgrade_ship_name,
-        hops_to_stardock=hops_to_stardock,
-        hops_return_to_work=hops_return_to_work,
-        turns_per_warp=turns_per_warp,
-        productive=productive,
-        chain_cr_per_turn=chain_cr_per_turn if chain_active else None,
-        require_rt_when_chain_active=require_rt_when_chain_active and chain_active,
+    ship_deferred = (
+        links is not None
+        and links < min_chain_links_for_ship_upgrade
+        and chain_cr_per_turn is not None
     )
+    if ship_deferred:
+        upgrade_score = _UpgradeScoreBundle(
+            PriorityScore(
+                kind="upgrade",
+                ev_per_turn=None,
+                gated=True,
+                gate_reason=(
+                    f"upgrade: ship deferred until ≥{min_chain_links_for_ship_upgrade}-link "
+                    f"chain (have {links}); earn fighters/holds on current chain first"
+                ),
+                rationale="ship after longer chain; holds/fighters first",
+                weight=60,
+            ),
+            notes=(
+                f"ship upgrade gated: {links}-link < {min_chain_links_for_ship_upgrade}",
+            ),
+        )
+    else:
+        upgrade_score = _score_upgrade_priority(
+            upgrade_extra_cr_per_turn=upgrade_extra_cr_per_turn,
+            upgrade_payback=upgrade_payback,
+            upgrade_ship_name=upgrade_ship_name,
+            hops_to_stardock=hops_to_stardock,
+            hops_return_to_work=hops_return_to_work,
+            turns_per_warp=turns_per_warp,
+            productive=productive,
+            chain_cr_per_turn=chain_cr_per_turn if chain_active else None,
+            require_rt_when_chain_active=require_rt_when_chain_active and chain_active,
+        )
     scores.append(upgrade_score.score)
     if upgrade_score.stay_vs_leave:
         stay_vs_leave = upgrade_score.stay_vs_leave
@@ -457,7 +492,7 @@ def _score_upgrade_priority(
                     "need travel_cost_rt before leaving chain"
                 ),
                 travel_one_way=one_way,
-                rationale="RT incomplete (Max pre-flight)",
+                rationale="RT incomplete (pre-flight)",
                 weight=60,
             )
         )
@@ -551,7 +586,7 @@ def _score_upgrade_priority(
 
 
 # ---------------------------------------------------------------------------
-# Fighter affordability (Max 2026-07-22)
+# Fighter affordability
 # ---------------------------------------------------------------------------
 
 
@@ -559,13 +594,15 @@ def _score_upgrade_priority(
 class FighterAffordability:
     """Affordability verdict for buying a small fighter stack at a Class-0 port.
 
-    Spending priority rule (Max 2026-07-22):
+    Spending priority rule:
     1. Reserve ``trade_float`` first — working capital to fill holds and run
        the trade loop; never cut into it for discretionary combat spend.
     2. Upgrade holds (catalog weight 75) when quote is known and affordable
        — hold upgrades pay back every cycle; they outrank fighter buys (73).
     3. Buy fighters (weight 73) when stack is affordable after the float.
-    4. Buy ship (weight 60) — noted for completeness; lower priority.
+    4. Buy ship (weight 60) — noted for completeness; lower priority;
+       engine also defers hull until ≥4-link chain (see
+       ``MIN_CHAIN_LINKS_FOR_SHIP_UPGRADE``).
 
     Class-0 port (e.g. Sol, sector 1) is the primary source and is always
     reachable as the game start sector — **location is never the gate**.

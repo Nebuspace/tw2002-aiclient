@@ -153,13 +153,13 @@ def test_run_chain_gated_below_three_links():
     assert rec.focus.kind == "explore"
 
 
-def test_three_link_prefers_search_when_frontier_exists():
-    """Eligible to earn at 3 links, but hunt longer before grinding."""
+def test_three_link_prefers_earn_for_fighters_and_holds():
+    """At 3 links, grind the chain (cash for fighters/holds) — do not hunt first."""
     from twclient.priority_engine import prefer_search_over_earn
 
     prefer, reason = prefer_search_over_earn(chain_links=3, explore_available=True)
-    assert prefer is True
-    assert "hunt longer" in reason
+    assert prefer is False
+    assert "grind" in reason
 
     rec = recommend_actions(
         chain_cr_per_turn=550.0,
@@ -170,7 +170,51 @@ def test_three_link_prefers_search_when_frontier_exists():
     )
     chain = next(s for s in rec.ranked if s.kind == "run_chain")
     assert chain.gated is False
-    assert rec.focus.kind == "explore"
+    assert rec.focus.kind == "run_chain"
+
+
+def test_three_link_defers_ship_upgrade_until_four():
+    """Ship hull waits for ≥4-link; 3-link cash targets fighters/holds."""
+    rec = recommend_actions(
+        chain_cr_per_turn=550.0,
+        chain_cycle_turns=10,
+        chain_link_count=3,
+        at_chain_start=True,
+        upgrade_extra_cr_per_turn=400.0,
+        upgrade_payback=5.0,
+        upgrade_ship_name="Corporate Flagship",
+        hops_to_stardock=2,
+        hops_return_to_work=2,
+        turns_per_warp=2,
+        turns_left=2000,
+        turn_reserve=50,
+        explore_available=False,
+    )
+    upgrade = next(s for s in rec.ranked if s.kind == "upgrade")
+    assert upgrade.gated is True
+    assert "ship deferred" in (upgrade.gate_reason or "")
+    assert "≥4-link" in (upgrade.gate_reason or "")
+    assert rec.focus.kind == "run_chain"
+
+
+def test_four_link_allows_ship_upgrade_when_rt_beats_chain():
+    rec = recommend_actions(
+        chain_cr_per_turn=100.0,
+        chain_cycle_turns=10,
+        chain_link_count=4,
+        at_chain_start=True,
+        upgrade_extra_cr_per_turn=400.0,
+        upgrade_payback=5.0,
+        upgrade_ship_name="Corporate Flagship",
+        hops_to_stardock=2,
+        hops_return_to_work=2,
+        turns_per_warp=2,  # RT = 8t
+        turns_left=500,
+        turn_reserve=50,
+        explore_available=True,
+    )
+    assert rec.focus is not None
+    assert rec.focus.kind == "upgrade"
 
 
 def test_five_link_prefers_earn_over_explore():
@@ -185,7 +229,7 @@ def test_five_link_prefers_earn_over_explore():
 
 
 # ---------------------------------------------------------------------------
-# afford_fighters() — fighter affordability helper (Max 2026-07-22)
+# afford_fighters() — fighter affordability helper
 # ---------------------------------------------------------------------------
 
 
