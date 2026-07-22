@@ -1179,6 +1179,31 @@ def chain_bubble_sectors(chain) -> list:
     return out
 
 
+def filter_port_only_sectors(sectors, known_ports) -> list:
+    """WO-TUI-CHAIN-PORT-ONLY: keep hop order, drop non-port sector ids.
+
+    ``known_ports`` is an iterable of sector ids that have a world-model
+    port present. Intermediate empty warps must never become bubbles.
+    """
+    if known_ports is None:
+        return list(sectors)
+    allow = set()
+    for p in known_ports:
+        try:
+            allow.add(int(p))
+        except (TypeError, ValueError):
+            continue
+    out = []
+    for sid in sectors:
+        try:
+            sid = int(sid)
+        except (TypeError, ValueError):
+            continue
+        if sid in allow:
+            out.append(sid)
+    return out
+
+
 def _bubble_inner_w(sectors: list) -> int:
     """Inner width between │ │ — enough for the widest sector id (min 4)."""
     widest = max((len(str(s)) for s in sectors), default=3)
@@ -1214,6 +1239,7 @@ def compose_chain_bubbles(
     port_classes=None,
     width: int = 82,
     active_sector=None,
+    known_ports=None,
 ) -> list[str]:
     """Pure ASCII bubble-chain (WO-TUI-CHAIN-BUBBLES).
 
@@ -1223,10 +1249,13 @@ def compose_chain_bubbles(
 
     ``port_classes`` maps sector_id → class string (e.g. ``BSB``); unknown
     sectors render ``?`` — never invent commodities.
+
+    ``known_ports`` (WO-TUI-CHAIN-PORT-ONLY): when provided, only those
+    sector ids become bubbles — intermediate non-port warps are omitted.
     """
     width = max(8, int(width))
     port_classes = port_classes or {}
-    sectors = chain_bubble_sectors(chain)
+    sectors = filter_port_only_sectors(chain_bubble_sectors(chain), known_ports)
     if not sectors:
         return _center_block([_CHAIN_EMPTY_PLACEHOLDER], width, CHAIN_VIZ_H)
 

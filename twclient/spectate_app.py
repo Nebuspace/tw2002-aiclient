@@ -476,6 +476,10 @@ def _presence_port_chain_seed(
     that includes ``current_sector`` when it is a known port. UI width may
     still truncate via compose_chain_bubbles (``… Nh``); seed itself is
     not stuck at 2 hops. ``max_ports`` caps DFS length (default 12).
+
+    WO-TUI-CHAIN-PORT-ONLY: returned ``sectors`` are **only** known-port
+    ids — empty intermediate warps from the full-graph fallback are
+    stripped before return (never bubbled).
     """
     ports = sorted(known_port_sectors(world_id, state_dir=state_dir))
     if len(ports) < 2:
@@ -576,7 +580,11 @@ def _presence_port_chain_seed(
                     seen.add(nxt)
                     queue.append((nxt, path + (nxt,)))
 
-    if best is None or len(best) < 2:
+    if best is None:
+        return None
+    # Belt: never emit a non-port sector id (PORT-ONLY accept criterion).
+    best = tuple(s for s in best if s in port_set)
+    if len(best) < 2:
         return None
     return {"sectors": best, "source": "presence_seed"}
 
@@ -1753,11 +1761,18 @@ def _render(windows, regions, event, tracked, ticker_history, status, palette, g
         sector = (event.get("state") or {}).get("sector")
         wid = _resolve_world_id(status)
         chain_w = max(8, regions["chain"].get("w") or 82)
+        known_ports = None
+        if wid:
+            try:
+                known_ports = known_port_sectors(wid)
+            except OSError:
+                known_ports = None
         chain_lines = compose_chain_bubbles(
             chain_obj,
             current_sector=sector,
             port_classes=_port_classes_for_chain(wid, chain_obj),
             width=chain_w,
+            known_ports=known_ports,
         )
         _draw_chain_viz(windows["chain"], regions["chain"], chain_lines, palette)
 

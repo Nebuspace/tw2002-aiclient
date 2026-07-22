@@ -1503,6 +1503,13 @@ def test_compose_chain_bubbles_grows_with_hop_count():
     assert three.count("═════") == 2
 
 
+def test_filter_port_only_sectors_preserves_order():
+    from twclient.spectate_layout import filter_port_only_sectors
+
+    assert filter_port_only_sectors([10, 50, 20, 50], {10, 20}) == [10, 20]
+    assert filter_port_only_sectors([10, 20], None) == [10, 20]
+
+
 def test_compose_chain_bubbles_unknown_class_is_question_mark():
     lines = compose_chain_bubbles({"sectors": (7, 8)}, port_classes={7: "BSB"}, width=40)
     joined = "\n".join(lines)

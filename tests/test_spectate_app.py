@@ -1742,6 +1742,59 @@ def test_presence_seed_grows_beyond_two_ports(tmp_path, monkeypatch):
     assert "no trade loop yet" not in joined
 
 
+def test_presence_seed_omits_empty_intermediate_warps(tmp_path, monkeypatch):
+    """WO-TUI-CHAIN-PORT-ONLY: A→empty→B seeds [A,B], never bubbles empty."""
+    from twclient import world_model
+    from twclient.spectate_layout import chain_bubble_sectors, compose_chain_bubbles
+
+    store = tmp_path / "world"
+    monkeypatch.setattr(world_model, "WORLD_DIR", store)
+    wid = "port_only_world"
+    world_model.upsert_sector(
+        wid, {"sector_id": 100, "warps": [50], "port": {"class": "BSB"}}, state_dir=store,
+    )
+    world_model.upsert_sector(
+        wid, {"sector_id": 50, "warps": [100, 200], "port": None}, state_dir=store,
+    )
+    world_model.upsert_sector(
+        wid, {"sector_id": 200, "warps": [50], "port": {"class": "SBB"}}, state_dir=store,
+    )
+    seed = spectate_app_mod._presence_port_chain_seed(
+        wid, current_sector=100, state_dir=store, max_hops=3,
+    )
+    assert seed is not None
+    assert chain_bubble_sectors(seed) == [100, 200]
+    assert 50 not in chain_bubble_sectors(seed)
+    joined = "\n".join(
+        compose_chain_bubbles(
+            seed,
+            port_classes={100: "BSB", 200: "SBB"},
+            known_ports={100, 200},
+            width=40,
+        )
+    )
+    assert "100" in joined and "200" in joined
+    assert "50" not in joined
+
+
+def test_compose_chain_bubbles_drops_non_port_when_known_ports_set():
+    """Compose defense: non-port ids in a sector list never become bubbles."""
+    from twclient.spectate_layout import compose_chain_bubbles, chain_bubble_sectors
+
+    raw = {"sectors": (10, 99, 20), "source": "presence_seed"}
+    assert chain_bubble_sectors(raw) == [10, 99, 20]
+    joined = "\n".join(
+        compose_chain_bubbles(
+            raw,
+            port_classes={10: "BSB", 20: "SBB"},
+            known_ports={10, 20},
+            width=40,
+        )
+    )
+    assert "10" in joined and "20" in joined
+    assert "99" not in joined
+
+
 def test_longest_chain_for_panel_still_prefers_profit_chain_over_seed(monkeypatch):
     """Real ProfitCycle wins; presence seed must not be consulted."""
     hops = (
