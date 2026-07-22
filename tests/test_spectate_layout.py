@@ -26,6 +26,7 @@ from twclient.spectate_layout import (
     GoalsSnapshot,
     aggregate_world_metrics,
     chain_hop_count_and_unit,
+    compose_autonomy_footer_box,
     compose_autonomy_headline,
     compose_dashboard,
     compose_decisions_placeholder,
@@ -1041,7 +1042,7 @@ def test_compose_priorities_lines_empty_unknown_is_clear():
 
 
 def test_compose_priorities_panel_folds_goals_and_weigh_list():
-    """Left gutter: autonomy + GOALS + ordered priorities — never in DECISIONS."""
+    """Left gutter: GOALS + FOCUS + autonomy footer box — never in DECISIONS."""
     panel = compose_priorities_panel(
         GoalsSnapshot(known_sectors=9),
         None,
@@ -1050,11 +1051,33 @@ def test_compose_priorities_panel_folds_goals_and_weigh_list():
         width=36,
         include_chain=False,
     )
-    assert panel[0] == "AUTO 75%"
     assert "— GOALS —" in panel
     assert "— FOCUS —" in panel
     assert any("Trade chain" in ln for ln in panel)
     assert panel.index("— GOALS —") < panel.index("— FOCUS —")
+    # Autonomy is a nested footer box under FOCUS, not a header row.
+    assert panel[0] != "AUTO 75%"
+    auto_idx = next(i for i, ln in enumerate(panel) if "AUTO 75%" in ln)
+    assert auto_idx > panel.index("— FOCUS —")
+    assert panel[auto_idx - 1].startswith("╭")
+    assert panel[auto_idx + 1].startswith("│") and "App 30" in panel[auto_idx + 1]
+    assert panel[auto_idx + 2].startswith("╰")
+    # Centered: content is flanked by spaces inside the box.
+    assert panel[auto_idx].startswith("│")
+    assert panel[auto_idx].endswith("│")
+    assert panel[auto_idx].index("AUTO 75%") > 1
+
+
+def test_compose_autonomy_footer_box_centers_and_fits_width():
+    box = compose_autonomy_footer_box(
+        ["AUTO 100%", "App 5 / AI 0 · Hum 0"], width=28,
+    )
+    assert len(box) == 4
+    assert box[0].startswith("╭") and box[0].endswith("╮")
+    assert box[-1].startswith("╰") and box[-1].endswith("╯")
+    assert all(len(ln) == 28 for ln in box)
+    assert "AUTO 100%" in box[1]
+    assert box[1].index("AUTO 100%") > 1
 
 
 def test_compose_phase2_side_panel_does_not_fold_priorities():

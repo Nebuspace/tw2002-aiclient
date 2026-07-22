@@ -926,14 +926,43 @@ def format_autonomy_counts(ratio_data: dict | None = None) -> str:
 
 
 def format_autonomy_lines(ratio_data: dict | None = None) -> list[str]:
-    """GOALS-band lines: AUTO % plus the counts that define it (App/(App+AI)).
+    """Autonomy gauge lines: AUTO % plus the counts that define it (App/(App+AI)).
 
-    Kept out of the HUD METRICS gutter so PORT commodity meters stay unclipped.
-    Empty ledger → "—" for % and zero counts (no crash).
+    Rendered as a footer box at the bottom of PRIORITIES (see
+    ``compose_autonomy_footer_box``) — kept out of the HUD METRICS gutter so
+    PORT commodity meters stay unclipped. Empty ledger → "—" for % and zero
+    counts (no crash).
     """
     data = ratio_data or {}
     pct = data.get("pct_display") or "—"
     return [f"AUTO {pct}", format_autonomy_counts(data)]
+
+
+def compose_autonomy_footer_box(autonomy_lines=None, *, width: int = 22) -> list[str]:
+    """Centered nested box for the AUTO / App / AI / Hum footer.
+
+    Sits inside the PRIORITIES region under FOCUS — status chrome, not a
+    goal or weigh row. Uses the same rounded box glyphs as chain bubbles.
+    """
+    width = max(8, int(width))
+    raw = []
+    for ln in autonomy_lines or ():
+        if ln is None:
+            continue
+        text = str(ln).strip()
+        if text:
+            raw.append(text)
+    if not raw:
+        raw = ["AUTO —", format_autonomy_counts({})]
+
+    inner_w = max(4, width - 2)
+    body = []
+    for text in raw:
+        clipped = text[:inner_w]
+        body.append(f"│{_pad_center(clipped, inner_w)}│"[:width])
+    top = ("╭" + ("─" * inner_w) + "╮")[:width]
+    bot = ("╰" + ("─" * inner_w) + "╯")[:width]
+    return [top, *body, bot]
 
 
 # -- WO-P2c Autopilot dry-run decision-trace (pure layout) -----------------
@@ -1366,16 +1395,18 @@ def compose_priorities_panel(
     include_chain: bool = True,
     **priority_engine_kwargs,
 ) -> list[str]:
-    """Left-gutter PRIORITIES box: autonomy + GOALS (+ optional CHAIN) + FOCUS list.
+    """Left-gutter PRIORITIES box: GOALS (+ optional CHAIN) + FOCUS + AUTO footer.
 
     The outer TUI region stays titled PRIORITIES; inside, GOALS (strategic
     prerequisites) and FOCUS (this-tick action ranking) are separate sections.
-    DECISIONS owns trace/explore only; this panel always shows strategy context
-    beside the game viewport (WO-TUI-PRIORITIES-LEFT / human 2026-07-22).
-    FOCUS order comes from ``priority_engine.recommend_actions()`` when
-    trace/chain/travel hints are available (``priority_engine_kwargs``).
+    Autonomy (App/AI/Hum) is a centered nested footer box — status chrome,
+    not a goal/weigh item. DECISIONS owns trace/explore only; this panel
+    always shows strategy context beside the game viewport
+    (WO-TUI-PRIORITIES-LEFT / human 2026-07-22). FOCUS order comes from
+    ``priority_engine.recommend_actions()`` when trace/chain/travel hints
+    are available (``priority_engine_kwargs``).
     """
-    lines = list(autonomy_lines or [])
+    lines: list[str] = []
     lines.extend(
         compose_phase2_side_panel(
             goals_snap,
@@ -1397,6 +1428,10 @@ def compose_priorities_panel(
             **priority_engine_kwargs,
         )
     )
+    if autonomy_lines is not None:
+        if lines and lines[-1]:
+            lines.append("")
+        lines.extend(compose_autonomy_footer_box(autonomy_lines, width=width))
     return lines
 
 
