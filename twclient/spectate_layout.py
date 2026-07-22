@@ -921,11 +921,14 @@ def stamp_world_metrics(tracked: dict, metrics: dict, now: float) -> dict:
     return out
 
 
-def compute_autonomy_ratio(entries, *, window: int = 500, session_id=None) -> dict:
+def compute_autonomy_ratio(entries, *, window: int | None = None, session_id=None) -> dict:
     """§15.1 graduation gauge: trainer / (ai + trainer).
 
-    Human actions are counted for display but excluded from the ratio
-    denominator. Unknown/missing actor fields are ignored for ratio math.
+    Counts the full ledger by default (App / AI / Hum keep climbing).
+    Pass ``window=N`` only when a caller explicitly wants a trailing
+    slice. Human actions are counted for display but excluded from the
+    ratio denominator. Unknown/missing actor fields are ignored for
+    ratio math.
     """
     rows = list(entries or ())
     if session_id is not None:

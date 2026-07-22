@@ -837,6 +837,19 @@ def test_compute_autonomy_ratio_empty_and_window():
     assert data["pct_display"] == "100%"
 
 
+def test_compute_autonomy_ratio_default_counts_entire_ledger():
+    """PRIORITIES footer must climb forever — not a trailing 500-row window."""
+    # 400 ai + 200 trainer = 600 rows (would truncate under the old default).
+    entries = [{"actor": "ai"}] * 400 + [{"actor": "trainer"}] * 200
+    data = compute_autonomy_ratio(entries)
+    assert data["ai"] == 400
+    assert data["trainer"] == 200
+    assert data["human"] == 0
+    assert data["pct_display"] == "33%"
+    # Explicit None is the same as omitting window.
+    assert compute_autonomy_ratio(entries, window=None) == data
+
+
 def test_format_autonomy_lines_ties_pct_to_app_ai_counts():
     # App/(App+AI) = 30/(30+10) = 75% — counts ARE the ratio.
     data = compute_autonomy_ratio(
