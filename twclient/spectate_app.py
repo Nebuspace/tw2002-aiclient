@@ -1734,6 +1734,7 @@ def _render(windows, regions, event, tracked, ticker_history, status, palette, g
             decision_lines = format_autonomy_lines(autonomy) + compose_phase2_side_panel(
                 goals, chain, current_sector=sector, width=cols,
                 include_chain=not has_chain_box,
+                priorities_trace=live_trace,
             )
             panel_title = "GOALS"
         elif explore_active:
@@ -1863,18 +1864,20 @@ def run_snapshot(sock_path, pid_path, frames=1, settle_wait_s=8.0):
             chain = _longest_chain_for_panel(sock_path)
             goals = _build_goals_snapshot(wid, chain)
             sector = (last_event.get("state") or {}).get("sector")
-            dashboard["goals_chain"] = format_autonomy_lines(auto) + compose_phase2_side_panel(
-                goals, chain, current_sector=sector, width=40,
-            )
             # Trust live transport (WO-P2d `autopilot_trace`). Null/missing →
             # same GOALS path as the live TUI (honest until an engine exists).
             # PROVISIONAL_AUTOPILOT_TRACE remains a unit-test / render-demo fixture.
             live_trace = status.get("autopilot_trace")
+            dashboard["goals_chain"] = format_autonomy_lines(auto) + compose_phase2_side_panel(
+                goals, chain, current_sector=sector, width=40,
+                priorities_trace=live_trace,
+            )
             if live_trace:
                 dashboard["decisions"] = format_autopilot_trace_lines(live_trace, cols=40)
             else:
                 dashboard["decisions"] = format_autonomy_lines(auto) + compose_phase2_side_panel(
                     goals, chain, current_sector=sector, width=40,
+                    priorities_trace=None,
                 )
             print(render_plain(dashboard))
             print()

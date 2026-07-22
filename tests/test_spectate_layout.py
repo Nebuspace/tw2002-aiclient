@@ -30,6 +30,7 @@ from twclient.spectate_layout import (
     compose_phase2_side_panel,
     compose_port_panel,
     compose_primary_goals_lines,
+    compose_priorities_lines,
     compute_autonomy_ratio,
     decisions_should_show_chain,
     format_autonomy_counts,
@@ -827,6 +828,43 @@ def test_compose_primary_goals_and_chain_highlight():
         width=30,
     )
     assert "— GOALS —" in panel and "— CHAIN —" in panel
+    assert "— PRIORITIES —" in panel
+    assert panel[panel.index("— PRIORITIES —") + 1] == "—"
+
+
+# -- WO-TUI-PRIORITIES: ordered weigh list from autopilot_trace ------------
+
+
+def test_compose_priorities_lines_orders_by_ev_with_readable_labels():
+    lines = compose_priorities_lines(PROVISIONAL_AUTOPILOT_TRACE, width=40)
+    assert lines[0].startswith("1 ") and "Trade chain" in lines[0] and "550" in lines[0]
+    assert lines[1].startswith("2 ") and "Upgrade" in lines[1] and "200" in lines[1]
+    assert lines[2].startswith("3 ") and "Explore" in lines[2]
+    assert "⊘" in lines[2]  # gated explore
+    assert "run_chain" not in "\n".join(lines)
+
+
+def test_compose_priorities_lines_empty_unknown_is_clear():
+    assert compose_priorities_lines(None) == ["—"]
+    assert compose_priorities_lines({}) == ["—"]
+    assert compose_priorities_lines({"candidates": []}) == ["—"]
+    assert compose_priorities_lines("bogus") == ["—"]
+
+
+def test_compose_phase2_side_panel_folds_priorities_not_rival_panel():
+    panel = compose_phase2_side_panel(
+        GoalsSnapshot(known_sectors=3),
+        None,
+        width=36,
+        include_chain=False,
+        priorities_trace=PROVISIONAL_AUTOPILOT_TRACE,
+    )
+    assert panel.count("— GOALS —") == 1
+    assert "— PRIORITIES —" in panel
+    pri = panel[panel.index("— PRIORITIES —") + 1]
+    assert pri.startswith("1 ") and "Trade chain" in pri
+    # No second competing goals header
+    assert panel.count("— GOALS —") == 1
 
 
 # -- WO-FA5a: hops (a real trade-loop chain) vs steps (a learned macro) ----

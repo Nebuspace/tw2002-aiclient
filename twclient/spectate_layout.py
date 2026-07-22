@@ -953,6 +953,67 @@ def format_autopilot_trace_lines(trace, *, cols: int = 22) -> list[str]:
     return lines
 
 
+# -- WO-TUI-PRIORITIES: ordered weigh list folded into GOALS (not a rival panel)
+
+# Readable labels for autopilot candidate kinds — never dump raw enums alone.
+PRIORITY_KIND_LABELS = {
+    "run_chain": "Trade chain",
+    "upgrade": "Upgrade",
+    "explore": "Explore",
+}
+
+
+def priority_kind_label(kind) -> str:
+    """Human label for a planner/autopilot effort kind."""
+    if not kind or not isinstance(kind, str):
+        return "?"
+    return PRIORITY_KIND_LABELS.get(kind, kind.replace("_", " ").title())
+
+
+def _priority_ev_sort_key(candidate) -> tuple:
+    """Weigh order: highest known EV first; unknown EV last (never guess 0)."""
+    ev = _trace_field(candidate, "ev_cr_per_turn")
+    try:
+        ev_f = float(ev) if ev is not None else None
+    except (TypeError, ValueError):
+        ev_f = None
+    if ev_f is None or ev_f != ev_f:  # None or NaN
+        return (1, 0.0)
+    return (0, -ev_f)
+
+
+def compose_priorities_lines(trace, *, width: int = 22) -> list[str]:
+    """Ordered effort list (1…N) from ``autopilot_trace`` candidates.
+
+    Source of truth = status autopilot_trace (same poll as DECISIONS).
+    Sorted by EV weigh order; readable labels; gated marked ``⊘``.
+    Empty / missing / malformed → ``["—"]`` (clear unknown state).
+    """
+    width = max(8, int(width))
+    if trace is None:
+        return ["—"]
+    if isinstance(trace, dict) and not trace:
+        return ["—"]
+    if not isinstance(trace, dict) and not hasattr(trace, "candidates"):
+        return ["—"]
+
+    candidates = _trace_field(trace, "candidates") or ()
+    if not isinstance(candidates, (list, tuple)) or not candidates:
+        return ["—"]
+
+    ranked = sorted(candidates, key=_priority_ev_sort_key)
+    lines = []
+    for i, c in enumerate(ranked, start=1):
+        kind = _trace_field(c, "kind")
+        label = priority_kind_label(kind)
+        gated = bool(_trace_field(c, "gated"))
+        ev_s = format_trace_ev(_trace_field(c, "ev_cr_per_turn"))
+        mark = "⊘ " if gated else ""
+        body = f"{i} {mark}{label} {ev_s}"
+        lines.append(body[:width])
+    return lines or ["—"]
+
+
 def compose_autonomy_headline(ratio_data: dict | None = None) -> dict:
     """One HUD-shaped cell for the autonomy gauge (uniform with compose_hud_cells)."""
     data = ratio_data or {}
@@ -1346,14 +1407,20 @@ def compose_phase2_side_panel(
     current_sector=None,
     width: int = 22,
     include_chain: bool = True,
+    priorities_trace=None,
 ) -> list[str]:
-    """Combine GOALS (+ optional CHAIN) for the Decisions-band panel.
+    """Combine GOALS (+ PRIORITIES + optional CHAIN) for the Decisions-band panel.
 
     When a dedicated CHAIN region exists (WO-TUI-CHAIN-BOX), callers pass
     ``include_chain=False`` so DECISIONS keeps GOALS/autonomy only.
+
+    WO-TUI-PRIORITIES: ``priorities_trace`` (status autopilot_trace) folds an
+    ordered weigh list under GOALS — not a competing goal panel.
     """
     lines = ["— GOALS —"]
     lines.extend(compose_primary_goals_lines(goals_snap, width=width))
+    lines.append("— PRIORITIES —")
+    lines.extend(compose_priorities_lines(priorities_trace, width=width))
     if include_chain:
         lines.append("— CHAIN —")
         lines.extend(
