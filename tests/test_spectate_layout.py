@@ -11,6 +11,8 @@ from twclient.spectate_layout import (
     DECISIONS_MIN_H,
     FRESHNESS_STALE_S,
     FULL_GUTTER_MIN_COLS,
+    PRIORITIES_MIN_W,
+    PRIORITIES_W,
     GAME_H,
     GAME_W,
     HUD_GUTTER_W,
@@ -303,9 +305,11 @@ def test_frame_layout_full_tier_centers_viewport_with_right_gutter():
     assert vp["x"] > 1  # centered inside inset, not left-anchored like right_gutter
     assert regions["outer"] is not None
     assert regions["outer"]["w"] == FULL_GUTTER_MIN_COLS + 2
-    # WO-TUI-CHAIN-BUBBLES: under-viewport chain + LOG|DECISIONS band (no CHAIN col)
+    # WO-TUI-CHAIN-BUBBLES: under-viewport chain + LOG|PRIORITIES|DECISIONS band
     assert regions["chain"] is not None
     assert regions["decisions"] is not None
+    assert regions["priorities"] is not None
+    assert regions["priorities"]["title"] == "PRIORITIES"
     assert regions["ticker"]["h"] == regions["decisions"]["h"]
     assert regions["ticker"]["h"] >= 5
     assert regions["decisions"]["w"] >= 20
@@ -421,6 +425,8 @@ def test_frame_layout_tw08_regions_do_not_overlap_at_full_tier():
         regions["viewport"], regions["gutter"], regions["decisions"],
         regions["ticker"], regions["control"], regions["status"],
     ]
+    if regions.get("priorities") is not None:
+        panes.insert(3, regions["priorities"])
     if regions.get("chain") is not None:
         panes.insert(3, regions["chain"])
     if regions["header"] is not None:
@@ -828,8 +834,7 @@ def test_compose_primary_goals_and_chain_highlight():
         width=30,
     )
     assert "— GOALS —" in panel and "— CHAIN —" in panel
-    assert "— PRIORITIES —" in panel
-    assert panel[panel.index("— PRIORITIES —") + 1] == "—"
+    assert "— PRIORITIES —" not in panel
 
 
 # -- WO-TUI-PRIORITIES: ordered weigh list from autopilot_trace ------------
@@ -851,20 +856,39 @@ def test_compose_priorities_lines_empty_unknown_is_clear():
     assert compose_priorities_lines("bogus") == ["—"]
 
 
-def test_compose_phase2_side_panel_folds_priorities_not_rival_panel():
+def test_compose_phase2_side_panel_does_not_fold_priorities():
+    """PRIORITIES is its own TUI box — never a section inside GOALS."""
     panel = compose_phase2_side_panel(
         GoalsSnapshot(known_sectors=3),
         None,
         width=36,
         include_chain=False,
-        priorities_trace=PROVISIONAL_AUTOPILOT_TRACE,
     )
     assert panel.count("— GOALS —") == 1
-    assert "— PRIORITIES —" in panel
-    pri = panel[panel.index("— PRIORITIES —") + 1]
-    assert pri.startswith("1 ") and "Trade chain" in pri
-    # No second competing goals header
-    assert panel.count("— GOALS —") == 1
+    assert "— PRIORITIES —" not in panel
+    assert "Trade chain" not in "\n".join(panel)
+
+
+def test_frame_layout_full_tier_has_dedicated_priorities_box():
+    """Bottom band is LOG | PRIORITIES | DECISIONS at full tier."""
+    regions = frame_layout(42, FULL_GUTTER_MIN_COLS + 2)
+    assert regions["priorities"] is not None
+    assert regions["priorities"]["title"] == "PRIORITIES"
+    assert regions["priorities"]["border"] is True
+    assert regions["priorities"]["h"] == regions["decisions"]["h"]
+    assert regions["priorities"]["y"] == regions["decisions"]["y"]
+    assert regions["ticker"]["x"] + regions["ticker"]["w"] == regions["priorities"]["x"]
+    assert (
+        regions["priorities"]["x"] + regions["priorities"]["w"]
+        == regions["decisions"]["x"]
+    )
+    assert (
+        regions["decisions"]["x"] + regions["decisions"]["w"]
+        == regions["ticker"]["x"]
+        + regions["ticker"]["w"]
+        + regions["priorities"]["w"]
+        + regions["decisions"]["w"]
+    )
 
 
 # -- WO-FA5a: hops (a real trade-loop chain) vs steps (a learned macro) ----
@@ -1007,9 +1031,14 @@ def test_frame_layout_band_grows_toward_double_height():
     assert regions["chain"]["x"] == regions["viewport"]["x"]
     assert regions["chain"]["w"] == regions["viewport"]["w"]
     assert 20 <= regions["decisions"]["w"] <= 32
-    assert regions["ticker"]["x"] + regions["ticker"]["w"] == regions["decisions"]["x"]
+    assert regions["priorities"] is not None
+    assert regions["ticker"]["x"] + regions["ticker"]["w"] == regions["priorities"]["x"]
+    assert regions["priorities"]["x"] + regions["priorities"]["w"] == regions["decisions"]["x"]
     assert regions["decisions"]["x"] + regions["decisions"]["w"] == (
-        regions["ticker"]["x"] + regions["ticker"]["w"] + regions["decisions"]["w"]
+        regions["ticker"]["x"]
+        + regions["ticker"]["w"]
+        + regions["priorities"]["w"]
+        + regions["decisions"]["w"]
     )
 
 
@@ -1028,12 +1057,14 @@ def test_render_plain_includes_phase2_sections():
         },
         "decisions": format_autopilot_trace_lines(PROVISIONAL_AUTOPILOT_TRACE, cols=40),
         "goals_chain": ["AUTO 75%", "App 30 / AI 10 · Hum 2", "— GOALS —", "· map 9s"],
+        "priorities": ["1 Trade chain 550", "2 Upgrade 200"],
     })
     assert "METRICS" in text and "STATIONS" in text
     assert "AUTONOMY" in text and "75%" in text
     assert "App 30" in text and "AI 10" in text and "Hum 2" in text
     assert "DECISIONS" in text and "run_chain" in text and "550" in text
     assert "GOALS / CHAIN" in text
+    assert "PRIORITIES" in text and "Trade chain" in text
     # empty autonomy still renders cleanly
     empty = render_plain({
         "main": [], "sidebar": [], "ticker": [], "status": "ok",

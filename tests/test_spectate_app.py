@@ -1407,6 +1407,73 @@ def test_decisions_pane_rotation_reclaims_goals_chain_from_a_live_trace(monkeypa
     assert title == "GOALS"
 
 
+def test_decisions_pane_rotation_reclaims_goals_even_with_chain_box(monkeypatch):
+    """Chain-box presence must not permanently hide GOALS when a live
+    autopilot_trace is preempting (Max 2026-07-22 visibility bug)."""
+    captured = []
+
+    def fake_draw_decisions(win, region, lines, glyphs, palette, title=None):
+        captured.append((list(lines), title, region.get("title")))
+
+    monkeypatch.setattr(spectate_app_mod, "_draw_decisions", fake_draw_decisions)
+    monkeypatch.setattr(curses, "doupdate", lambda: None)
+    monkeypatch.setattr(spectate_app_mod, "_resolve_world_id", lambda status=None: None)
+
+    regions = {
+        "mode": "full",
+        "outer": None, "header": None, "viewport": None, "gutter": None,
+        "decisions": {"y": 0, "x": 24, "h": 8, "w": 28, "title": "DECISIONS"},
+        "priorities": {"y": 0, "x": 0, "h": 8, "w": 24, "title": "PRIORITIES"},
+        "chain": {"y": 0, "x": 0, "h": 5, "w": 82},
+        "ticker": None, "control": None,
+    }
+    windows = {"decisions": object(), "priorities": object()}
+    status = {
+        "connected": True, "mode": "ai_pilot", "play": None,
+        "subscriber_count": 0, "host": None, "name": None,
+        "autopilot_trace": {"tick": 1, "context": {}, "candidates": [], "chosen": None},
+    }
+
+    class FakePalette:
+        def attr_for(self, *a, **k):
+            return 0
+
+    def render_at(now):
+        captured.clear()
+        spectate_app_mod._render(
+            windows, regions, dict(spectate_app_mod.DEFAULT_EVENT), {}, [], status,
+            FakePalette(), {}, now=now, anim_tick=0, idle_age=None, semantic="ok",
+            flash_active=False, got_content=True,
+            explore_mode="off", phase2_cache={"chain": None},
+        )
+        goals_draws = [c for c in captured if c[2] == "DECISIONS" or c[1] in ("GOALS", "DECISIONS")]
+        # Prefer title override when present
+        for lines, title, rtitle in captured:
+            if title in ("GOALS", "DECISIONS") or (title is None and rtitle == "DECISIONS"):
+                return lines, title
+        return goals_draws[0][0], goals_draws[0][1]
+
+    outside = CHAIN_PANEL_DWELL_S + 1.0
+    _, title = render_at(now=outside)
+    assert title == "DECISIONS"
+
+    inside = CHAIN_PANEL_ROTATION_PERIOD_S + 1.0
+    _, title = render_at(now=inside)
+    assert title == "GOALS"
+
+    # PRIORITIES always drawn (independent of GOALS/DECISIONS preempt).
+    captured.clear()
+    spectate_app_mod._render(
+        windows, regions, dict(spectate_app_mod.DEFAULT_EVENT), {}, [], status,
+        FakePalette(), {}, now=outside, anim_tick=0, idle_age=None, semantic="ok",
+        flash_active=False, got_content=True,
+        explore_mode="off", phase2_cache={"chain": None},
+    )
+    pri_draws = [c for c in captured if c[1] == "PRIORITIES" or c[2] == "PRIORITIES"]
+    assert len(pri_draws) == 1
+    assert pri_draws[0][0] == ["—"]
+
+
 def test_decisions_pane_rotation_reclaims_goals_chain_from_explore_mode(monkeypatch):
     """Same guarantee for explore mode (an operator-toggled, otherwise
     indefinite preempt) as the live-trace case above."""

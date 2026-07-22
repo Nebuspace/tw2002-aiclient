@@ -155,6 +155,10 @@ CHAIN_VIZ_H = 5
 # (one legible pane beats two illegible ones).
 DECISIONS_MIN_H = 5
 BAND_H_MAX = 10
+# WO-TUI-PRIORITIES: dedicated bottom-band box (not folded into GOALS).
+# Title " PRIORITIES " + borders needs ~20 cols; keep weigh lines readable.
+PRIORITIES_W = 24
+PRIORITIES_MIN_W = 20
 
 
 def frame_layout(lines: int, cols: int) -> dict:
@@ -187,9 +191,10 @@ def frame_layout(lines: int, cols: int) -> dict:
 
     When leftover height allows, a bubble-chain region sits directly under
     the viewport (WO-TUI-CHAIN-BUBBLES), centered on the game window; the
-    remaining leftover band below splits into titled LOG + DECISIONS
-    (CHAIN column removed — width returned to LOG|DECISIONS). The bottom
-    log ("ticker") is always a titled "LOG" box when present.
+    remaining leftover band below splits into titled LOG + PRIORITIES +
+    DECISIONS when width allows (CHAIN column removed — width returned to
+    the band). The bottom log ("ticker") is always a titled "LOG" box when
+    present.
     """
     if lines < MIN_LINES or cols < MIN_COLS:
         return {
@@ -203,6 +208,7 @@ def frame_layout(lines: int, cols: int) -> dict:
             "viewport": None,
             "gutter": None,
             "decisions": None,
+            "priorities": None,
             "chain": None,
             "ticker": None,
             "control": None,
@@ -249,26 +255,47 @@ def frame_layout(lines: int, cols: int) -> dict:
 
     ticker = None
     decisions = None
+    priorities = None
     # TW-08: leftover band hosts titled LOG; when tall/wide enough, split
-    # side-by-side with DECISIONS. HUD gutter stays full viewport height.
+    # side-by-side with PRIORITIES + DECISIONS. HUD gutter stays full
+    # viewport height. PRIORITIES is its own box (Max 2026-07-22) — never
+    # folded into GOALS / never preempted by the DECISIONS slot rotation.
     if leftover >= LOG_BOX_MIN_H:
         band_h = min(BAND_H_MAX, leftover)
         band_y = status["y"] - (1 if control else 0) - band_h
         if i_cols >= 60 and leftover >= DECISIONS_MIN_H:
             # Wider DECISIONS (~2× old content rows via BAND_H_MAX); keep LOG
             # wide enough that settle/TX suffixes remain readable. Bottom
-            # CHAIN column is gone — its width returns to LOG|DECISIONS.
+            # CHAIN column is gone — its width returns to the band.
             dec_w = min(32, max(20, i_cols // 4))
-            log_floor = 42
-            if i_cols - dec_w < log_floor:
-                dec_w = max(20, min(dec_w, i_cols - log_floor))
-            log_w = i_cols - dec_w
+            log_floor = 36
+            pri_w = PRIORITIES_W
+            if i_cols - dec_w - pri_w < log_floor:
+                # Prefer keeping PRIORITIES: shrink dec, then pri, then drop pri.
+                room = i_cols - log_floor
+                if room >= PRIORITIES_MIN_W + 20:
+                    pri_w = PRIORITIES_MIN_W
+                    dec_w = max(20, min(dec_w, room - pri_w))
+                elif room >= 20:
+                    pri_w = 0
+                    dec_w = max(20, min(dec_w, room))
+                else:
+                    pri_w = 0
+                    dec_w = max(20, min(dec_w, i_cols - log_floor))
+            log_w = i_cols - dec_w - pri_w
             ticker = {
                 "y": band_y, "x": ox, "w": log_w, "h": band_h,
                 "title": "LOG", "border": True,
             }
+            x_cursor = ox + log_w
+            if pri_w > 0:
+                priorities = {
+                    "y": band_y, "x": x_cursor, "w": pri_w, "h": band_h,
+                    "title": "PRIORITIES", "border": True,
+                }
+                x_cursor += pri_w
             decisions = {
-                "y": band_y, "x": ox + log_w, "w": dec_w, "h": band_h,
+                "y": band_y, "x": x_cursor, "w": dec_w, "h": band_h,
                 "title": "DECISIONS", "border": True,
             }
         else:
@@ -326,6 +353,7 @@ def frame_layout(lines: int, cols: int) -> dict:
         "viewport": viewport,
         "gutter": gutter,
         "decisions": decisions,
+        "priorities": priorities,
         "chain": chain,
         "ticker": ticker,
         "control": control,
@@ -953,7 +981,7 @@ def format_autopilot_trace_lines(trace, *, cols: int = 22) -> list[str]:
     return lines
 
 
-# -- WO-TUI-PRIORITIES: ordered weigh list folded into GOALS (not a rival panel)
+# -- WO-TUI-PRIORITIES: ordered weigh list (dedicated PRIORITIES box)
 
 # Readable labels for autopilot candidate kinds — never dump raw enums alone.
 PRIORITY_KIND_LABELS = {
@@ -1407,20 +1435,17 @@ def compose_phase2_side_panel(
     current_sector=None,
     width: int = 22,
     include_chain: bool = True,
-    priorities_trace=None,
 ) -> list[str]:
-    """Combine GOALS (+ PRIORITIES + optional CHAIN) for the Decisions-band panel.
+    """Combine GOALS (+ optional CHAIN) for the Decisions-band panel.
 
     When a dedicated CHAIN region exists (WO-TUI-CHAIN-BOX), callers pass
     ``include_chain=False`` so DECISIONS keeps GOALS/autonomy only.
 
-    WO-TUI-PRIORITIES: ``priorities_trace`` (status autopilot_trace) folds an
-    ordered weigh list under GOALS — not a competing goal panel.
+    PRIORITIES lives in its own titled box (``regions["priorities"]``) —
+    never folded here (Max 2026-07-22).
     """
     lines = ["— GOALS —"]
     lines.extend(compose_primary_goals_lines(goals_snap, width=width))
-    lines.append("— PRIORITIES —")
-    lines.extend(compose_priorities_lines(priorities_trace, width=width))
     if include_chain:
         lines.append("— CHAIN —")
         lines.extend(
@@ -1766,6 +1791,11 @@ def render_plain(dashboard: dict) -> str:
         lines.append(" GOALS / CHAIN")
         lines.append("-" * 80)
         lines.extend(dashboard["goals_chain"])
+    if dashboard.get("priorities"):
+        lines.append("-" * 80)
+        lines.append(" PRIORITIES")
+        lines.append("-" * 80)
+        lines.extend(dashboard["priorities"])
     lines.append("-" * 80)
     lines.append(" EVENTS")
     lines.append("-" * 80)

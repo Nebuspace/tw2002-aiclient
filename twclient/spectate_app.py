@@ -51,6 +51,7 @@ from .spectate_layout import (
     compose_live_metrics,
     compose_phase2_side_panel,
     compose_port_panel,
+    compose_priorities_lines,
     compute_autonomy_ratio,
     chain_bubble_sectors,
     decisions_should_show_chain,
@@ -1297,7 +1298,7 @@ def _build_windows(regions):
     curses.newwin() itself fail just drops that one pane rather than
     crashing the whole loop."""
     windows = {}
-    for key in ("outer", "header", "viewport", "gutter", "decisions", "chain", "ticker", "control", "status"):
+    for key in ("outer", "header", "viewport", "gutter", "decisions", "priorities", "chain", "ticker", "control", "status"):
         r = regions.get(key)
         if r is None:
             continue
@@ -1723,9 +1724,9 @@ def _render(windows, regions, event, tracked, ticker_history, status, palette, g
         # old FA5a dwell requirement for chain visibility.
         has_chain_box = regions.get("chain") is not None
         preempting = explore_active or bool(live_trace)
-        show_goals = (not preempting) or (
-            (not has_chain_box) and decisions_should_show_chain(now)
-        )
+        # FA5a dwell always applies while preempting — chain-box presence must
+        # NOT permanently hide GOALS (bug: has_chain_box + live_trace ⇒ never).
+        show_goals = (not preempting) or decisions_should_show_chain(now)
         if show_goals:
             wid = _resolve_world_id(status)
             chain = phase2_cache.get("chain")
@@ -1734,7 +1735,6 @@ def _render(windows, regions, event, tracked, ticker_history, status, palette, g
             decision_lines = format_autonomy_lines(autonomy) + compose_phase2_side_panel(
                 goals, chain, current_sector=sector, width=cols,
                 include_chain=not has_chain_box,
-                priorities_trace=live_trace,
             )
             panel_title = "GOALS"
         elif explore_active:
@@ -1755,6 +1755,17 @@ def _render(windows, regions, event, tracked, ticker_history, status, palette, g
         _draw_decisions(
             windows["decisions"], regions["decisions"],
             decision_lines, glyphs, palette, title=panel_title,
+        )
+
+    # Dedicated PRIORITIES box — independent of DECISIONS/GOALS preempt.
+    if regions.get("priorities") is not None and "priorities" in windows:
+        pri_cols = max(8, (regions["priorities"].get("w") or 22) - 4)
+        pri_lines = compose_priorities_lines(
+            (status or {}).get("autopilot_trace"), width=pri_cols,
+        )
+        _draw_decisions(
+            windows["priorities"], regions["priorities"],
+            pri_lines, glyphs, palette, title="PRIORITIES",
         )
 
     if regions.get("chain") is not None and "chain" in windows:
@@ -1870,14 +1881,13 @@ def run_snapshot(sock_path, pid_path, frames=1, settle_wait_s=8.0):
             live_trace = status.get("autopilot_trace")
             dashboard["goals_chain"] = format_autonomy_lines(auto) + compose_phase2_side_panel(
                 goals, chain, current_sector=sector, width=40,
-                priorities_trace=live_trace,
             )
+            dashboard["priorities"] = compose_priorities_lines(live_trace, width=40)
             if live_trace:
                 dashboard["decisions"] = format_autopilot_trace_lines(live_trace, cols=40)
             else:
                 dashboard["decisions"] = format_autonomy_lines(auto) + compose_phase2_side_panel(
                     goals, chain, current_sector=sector, width=40,
-                    priorities_trace=None,
                 )
             print(render_plain(dashboard))
             print()
