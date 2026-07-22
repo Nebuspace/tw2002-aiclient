@@ -17,7 +17,7 @@ Each row is one strategic objective the client tracks or will track. **Goal type
 | Location any "Special Formation" ideal for Planet placement | Range | 55 | map exploration | **Partial** — `formations.py` detects topology (dead-ends, bubbles, one-ways, warp-sinks) and tags `genesis_candidates`. GOALS shows formation + genesis counts. No deploy action. |
 | Place planet and use it to earn resources to sell | Boolean | 50 | genesis candidate chosen | **Planned** — genesis deploy is explicitly excluded from autopilot candidate kinds (safety whitelist). Doctrine lives in OKF (`knowledge/strategies/planet-colonization.md`). |
 | Map 100% of Galaxy | Range (target 100%) | 45 | — | **Partial** — `explore.known_graph()` + map-fill BFS frontier (`explore.py`). GOALS shows `map Ns` (known sector count). No explicit %-of-galaxy scorer yet (galaxy size unknown until mapped). |
-| Identification of Trade Loop Chains (longest chain) | Range | 40 | ports known | **Partial** — `chains.longest_profit_chain()` ranks closed cycles by hop count then cr/turn. `trade_adapter.build_trade_hops()` builds edges from world-model ports (FA4). GOALS + chain bubble show longest chain; `run_chain` candidate fires when player sits at chain start. |
+| Identification of Trade Loop Chains (longest chain) | Range | 40 | ports known | **Partial** — `chains.longest_profit_chain()` ranks by hop count then cr/turn. **Execute gate (engine):** `run_chain` requires ≥**3 links** (`len(ProfitChain.hops)`). **Earn vs search:** with frontier open, prefer explore while best chain is 3–4 links; prefer grind from **5+** links (`prefer_search_over_earn`). Autopilot `_score_chain` still allows 2-link until wired to engine. |
 | Identification of Sector-based Threats (mines or fighters) | Boolean | 35 | sector visited | **Partial** — `world_model` persists `threats.mines` / `threats.fighters` per sector; HUD METRICS aggregate counts. Threats do not yet gate autopilot candidate scoring. |
 
 ### Trade loop chains (detail)
@@ -25,6 +25,18 @@ Each row is one strategic objective the client tracks or will track. **Goal type
 The smallest chain is determined by two sectors side by side with warp each direction where each sector has a port we can trade at. Two side by side allows player to warp back and forth to trade. Three allows player to warp up and down the chain trading at each port along the way. Sectors 123 → 753 → 8293 then 8293 → 753 → 123; this would be example of a 3-link chain. The player trades two times each direction.
 
 In code, a **TradeHop** is one directed port-to-port edge with positive margin; `longest_profit_chain()` searches for the best closed cycle (minimum two hops). Rank order: **hop count descending**, then **cr/turn descending** (`chains.py`, §16.2). The spectate CHAIN panel and bubble art visualize the current best chain; the autopilot `run_chain` candidate uses the same chain object but only emits a navigation keystroke when the ship is already at the normalized cycle start.
+
+### When to execute a trade chain (earn vs search)
+
+**Link count** = `len(ProfitChain.hops)` (closed cycle). Max’s 3-link example (123→753→8293→123) is **3 hops**.
+
+| Rule | Threshold | Behavior |
+|---|---|---|
+| **Execute floor** | `< 3` links | `run_chain` **gated** — discovery only; FOCUS prefers explore |
+| **Search band** | `3–4` links + frontier | Execute *allowed*, but FOCUS prefers **explore** (hunt a longer chain before grinding) |
+| **Earn band** | `≥ 5` links, or no frontier | FOCUS prefers **run_chain** (grind; explore secondary) |
+
+Constants: `MIN_CHAIN_LINKS_TO_EXECUTE = 3`, `CHAIN_LINKS_PREFER_SEARCH_BELOW = 5` in `priority_engine.py`. Planned refinements: map-% / port-count soft factors; stagnant-frontier → earn earlier; wire same gate into `autopilot._score_chain`.
 
 ### Execution travel cost (distance to act)
 

@@ -54,6 +54,7 @@ def test_recommend_gates_upgrade_without_return_path_while_chaining():
     rec = recommend_actions(
         chain_cr_per_turn=550.0,
         chain_cycle_turns=10,
+        chain_link_count=5,
         at_chain_start=True,
         upgrade_extra_cr_per_turn=200.0,
         upgrade_payback=15.0,
@@ -76,6 +77,7 @@ def test_recommend_stay_on_chain_when_rt_too_expensive():
     rec = recommend_actions(
         chain_cr_per_turn=550.0,
         chain_cycle_turns=10,
+        chain_link_count=5,
         at_chain_start=True,
         upgrade_extra_cr_per_turn=80.0,
         upgrade_payback=20.0,
@@ -97,6 +99,7 @@ def test_recommend_upgrade_when_payback_and_rt_beat_chain():
     rec = recommend_actions(
         chain_cr_per_turn=100.0,
         chain_cycle_turns=10,
+        chain_link_count=5,
         at_chain_start=True,
         upgrade_extra_cr_per_turn=400.0,
         upgrade_payback=5.0,
@@ -130,3 +133,48 @@ def test_recommend_gates_unknown_stardock_path():
     assert upgrade.gated is True
     assert "StarDock" in (upgrade.gate_reason or "")
     assert rec.focus.kind == "explore"
+
+
+def test_run_chain_gated_below_three_links():
+    rec = recommend_actions(
+        chain_cr_per_turn=400.0,
+        chain_cycle_turns=8,
+        chain_link_count=2,
+        turns_left=2000,
+        explore_available=True,
+    )
+    chain = next(s for s in rec.ranked if s.kind == "run_chain")
+    assert chain.gated is True
+    assert "≥3-link" in (chain.gate_reason or "")
+    assert rec.focus.kind == "explore"
+
+
+def test_three_link_prefers_search_when_frontier_exists():
+    """Eligible to earn at 3 links, but hunt longer before grinding."""
+    from twclient.priority_engine import prefer_search_over_earn
+
+    prefer, reason = prefer_search_over_earn(chain_links=3, explore_available=True)
+    assert prefer is True
+    assert "hunt longer" in reason
+
+    rec = recommend_actions(
+        chain_cr_per_turn=550.0,
+        chain_cycle_turns=10,
+        chain_link_count=3,
+        turns_left=2000,
+        explore_available=True,
+    )
+    chain = next(s for s in rec.ranked if s.kind == "run_chain")
+    assert chain.gated is False
+    assert rec.focus.kind == "explore"
+
+
+def test_five_link_prefers_earn_over_explore():
+    rec = recommend_actions(
+        chain_cr_per_turn=550.0,
+        chain_cycle_turns=10,
+        chain_link_count=5,
+        turns_left=2000,
+        explore_available=True,
+    )
+    assert rec.focus.kind == "run_chain"

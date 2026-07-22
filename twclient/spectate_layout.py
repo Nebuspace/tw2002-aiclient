@@ -1096,17 +1096,30 @@ def _chain_start_sector(chain) -> int | None:
 
 
 def _chain_engine_metrics(chain, *, current_sector=None):
-    """(cr_per_turn, cycle_turns, at_chain_start) from a chain-like value."""
+    """(cr_per_turn, cycle_turns, at_chain_start, link_count) from a chain-like value."""
     if chain is None:
-        return None, None, False
+        return None, None, False, None
     chain_cr = None
     chain_cycle = None
+    link_count = None
     if hasattr(chain, "cr_per_turn"):
         try:
             chain_cr = float(chain.cr_per_turn) if chain.cr_per_turn is not None else None
         except (TypeError, ValueError):
             chain_cr = None
         chain_cycle = getattr(chain, "turns", None)
+        hops = getattr(chain, "hops", None)
+        if hops is not None:
+            try:
+                link_count = len(hops)
+            except TypeError:
+                link_count = None
+        elif getattr(chain, "sectors", None) is not None:
+            try:
+                secs = chain.sectors
+                link_count = max(0, len(secs) - 1)
+            except TypeError:
+                link_count = None
     elif isinstance(chain, dict):
         ppt = chain.get("profit_per_turn")
         if ppt is not None:
@@ -1115,6 +1128,16 @@ def _chain_engine_metrics(chain, *, current_sector=None):
             except (TypeError, ValueError):
                 chain_cr = None
         chain_cycle = chain.get("turns")
+        if chain.get("steps") is not None:
+            try:
+                link_count = int(chain["steps"])
+            except (TypeError, ValueError):
+                link_count = None
+        elif chain.get("sectors") is not None:
+            try:
+                link_count = max(0, len(chain["sectors"]) - 1)
+            except TypeError:
+                link_count = None
     start = _chain_start_sector(chain)
     at_start = False
     if start is not None and current_sector is not None:
@@ -1122,7 +1145,7 @@ def _chain_engine_metrics(chain, *, current_sector=None):
             at_start = int(current_sector) == start
         except (TypeError, ValueError):
             at_start = False
-    return chain_cr, chain_cycle, at_start
+    return chain_cr, chain_cycle, at_start, link_count
 
 
 def _has_priority_inputs(trace, chain) -> bool:
@@ -1186,7 +1209,9 @@ def build_priority_engine_inputs(
         except (TypeError, ValueError):
             sector = None
 
-    chain_cr, chain_cycle, at_start = _chain_engine_metrics(chain, current_sector=sector)
+    chain_cr, chain_cycle, at_start, link_count = _chain_engine_metrics(
+        chain, current_sector=sector
+    )
     if chain_cr is None:
         run_c = _trace_candidate(trace, "run_chain")
         if run_c is not None and not bool(_trace_field(run_c, "gated")):
@@ -1196,6 +1221,16 @@ def build_priority_engine_inputs(
                     chain_cr = float(ev)
                 except (TypeError, ValueError):
                     pass
+            if link_count is None:
+                steps = _trace_field(run_c, "steps")
+                ch = _trace_field(run_c, "chain")
+                if steps is None and isinstance(ch, dict):
+                    steps = ch.get("steps")
+                if steps is not None:
+                    try:
+                        link_count = int(steps)
+                    except (TypeError, ValueError):
+                        pass
 
     upgrade_ev = None
     upgrade_payback = None
@@ -1227,6 +1262,7 @@ def build_priority_engine_inputs(
     return {
         "chain_cr_per_turn": chain_cr,
         "chain_cycle_turns": chain_cycle,
+        "chain_link_count": link_count,
         "at_chain_start": at_start,
         "upgrade_extra_cr_per_turn": upgrade_ev,
         "upgrade_payback": upgrade_payback,

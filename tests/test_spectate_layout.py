@@ -958,10 +958,11 @@ def test_compose_priorities_lines_engine_stay_vs_leave_demotes_upgrade():
     from twclient.priority_engine import recommend_actions
 
     trace = {"context": {"turns_left": 500, "sector": 10}, "candidates": []}
-    chain = {"sectors": [10, 20, 10], "profit_per_turn": 550.0, "turns": 10}
+    chain = {"sectors": [10, 20, 30, 40, 50, 10], "profit_per_turn": 550.0, "turns": 10, "steps": 5}
     rec = recommend_actions(
         chain_cr_per_turn=550.0,
         chain_cycle_turns=10,
+        chain_link_count=5,
         at_chain_start=True,
         upgrade_extra_cr_per_turn=80.0,
         upgrade_payback=20.0,
@@ -970,13 +971,12 @@ def test_compose_priorities_lines_engine_stay_vs_leave_demotes_upgrade():
         turns_per_warp=3,
         turns_left=500,
         turn_reserve=50,
-        explore_available=True,
+        explore_available=False,
     )
     lines = compose_priorities_lines(trace, chain=chain, width=40, priority_rec=rec)
     assert lines[0].startswith("1 ") and "Trade chain" in lines[0] and "550" in lines[0]
-    assert "Explore" in lines[1]
-    assert "Upgrade" in lines[2] and "⊘" in lines[2]
-    assert "RT" in lines[2]
+    assert "Upgrade" in lines[1] and "⊘" in lines[1]
+    assert "RT" in lines[1]
 
 
 def test_compose_priorities_lines_empty_unknown_is_clear():
