@@ -106,20 +106,26 @@ class Session:
         # caller re-specifying which credential to replay.
         self.auto_login_profile = None
 
-        # Safety fix: a real game-select prompt is answered exactly ONCE
-        # per TCP connection -- login.py's run_login refuses to send
-        # `profile.game_letter` a second time on this connection once
-        # this flips True, closing the `ensure`-mid-session stale-pyte-
-        # buffer misfire vector at the SOURCE (a stale game-select
-        # header/marker left over from earlier in the connection, plus a
-        # later ordinary screen sharing the same generic prompt, could
-        # otherwise get misclassified as game_select and re-answered
-        # with a blind keystroke) -- independent of any classify.py
-        # heuristic. PER-CONNECTION, not per-login-run: reset below in
-        # reconnect() so a genuinely fresh connection (guardian's D9
-        # reconnect-replay, or a fresh cold-start login) can still
-        # answer game-select normally.
+        # Safety fix: once login.py has genuinely CLEARED the real game-
+        # select screen on this TCP connection (sent the configured letter
+        # AND a later classification is no longer `game_select`), it
+        # refuses to send `profile.game_letter` again -- closing the
+        # `ensure`-mid-session stale-pyte-buffer misfire vector at the
+        # SOURCE (a stale game-select header/marker left over from earlier
+        # in the connection, plus a later ordinary screen sharing the same
+        # generic prompt, could otherwise get misclassified as game_select
+        # and re-answered with a blind keystroke) -- independent of any
+        # classify.py heuristic. NOT latched on send-confirm alone: a
+        # false-positive idle settle that leaves the CURRENT screen still
+        # classified as `game_select` must remain retryable. PER-
+        # CONNECTION, not per-login-run: reset below in reconnect() so a
+        # genuinely fresh connection (guardian's D9 reconnect-replay, or a
+        # fresh cold-start login) can still answer game-select normally.
         self.game_select_answered = False
+        # Set True the first time login.py sends `profile.game_letter` on
+        # this connection; used with `game_select_answered` above to know
+        # a non-`game_select` classification means we cleared, not skipped.
+        self.game_select_letter_sent = False
 
     def start(self, timeout=10):
         self.conn.connect(timeout=timeout)
@@ -147,8 +153,9 @@ class Session:
         self.conn = TelnetConnection(self.host, self.port, self.terminal, self.negotiator, logger=self.logger)
         self.lock = self.conn.lock
         # A fresh TCP connection gets its own fresh game-select allowance
-        # -- see the flag's own __init__ comment above.
+        # -- see the flags' own __init__ comment above.
         self.game_select_answered = False
+        self.game_select_letter_sent = False
         self.conn.connect(timeout=timeout)
 
     # -- rendering ---------------------------------------------------

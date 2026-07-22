@@ -209,6 +209,14 @@ def run_login(session, profile, get_password, save_password, target="main_comman
         if trace is not None:
             trace.append({"step": step, "classification": cls, "prompt": prompt})
 
+        # Cleared past game-select only once we've LEFT that screen after
+        # sending the configured letter at least once this connection --
+        # never on send-confirm alone (a false-positive idle settle can
+        # confirm while the CURRENT screen is still `game_select`, which
+        # would wedge ensure/automaton_stuck if latched there).
+        if cls != "game_select" and getattr(session, "game_select_letter_sent", False):
+            session.game_select_answered = True
+
         if cls == target:
             return cls, step
 
@@ -226,9 +234,15 @@ def run_login(session, profile, get_password, save_password, target="main_comman
             continue
 
         send_text, secret, wait_hint = action
+        # TWGS menu-style single-key selections (game_select's
+        # `Selection (? for menu):` / `Select a game :`) must NOT get a
+        # trailing CRLF -- settle.py's live phantom-blank-line hazard.
+        enter = cls != "game_select"
         _reason, _elapsed, confirmed = send_and_confirm(
-            session, send_text, confirm_prompt=wait_hint, enter=True, secret=secret, timeout_s=_STEP_SETTLE_TIMEOUT_S
+            session, send_text, confirm_prompt=wait_hint, enter=enter, secret=secret, timeout_s=_STEP_SETTLE_TIMEOUT_S
         )
+        if cls == "game_select":
+            session.game_select_letter_sent = True
         if not confirmed:
             # TW-02: the send went out, but the resulting screen was
             # never positively confirmed -- never assume it landed as
@@ -250,29 +264,6 @@ def run_login(session, profile, get_password, save_password, target="main_comman
 
         stagnant_rounds = 0
         last_signature = None
-        if cls == "game_select":
-            # Safety fix: latch the per-CONNECTION "answered" flag only
-            # once the send is actually CONFIRMED, never at decide-time
-            # (see _decide's game_select branch above). Latching earlier
-            # (mack/cipher, adversarial review) can PERMANENTLY wedge a
-            # real drop: a game_select send that fails outright (session.send()
-            # raising OSError -- propagates uncaught, this line is simply
-            # never reached, same as any other send-path exception) or
-            # merely goes unconfirmed (a transitional screen -- the
-            # hub-warp-animation shape, settle.py's own documented case)
-            # would latch True with the prompt never actually answered;
-            # since `conn.connected` stays True in both cases (only the
-            # reader thread / close()/reconnect() flip it), the one
-            # reset path (reconnect()) would never fire either, wedging
-            # this connection in automaton_stuck forever. Setting it only
-            # here -- after `confirmed` is already known True -- means an
-            # unconfirmed/failed attempt leaves the flag False, so the
-            # reactive classify-loop above re-answers on its own next
-            # iteration exactly like every other branch already does,
-            # while a genuinely confirmed answer still closes the
-            # stale-buffer over-match vector for the rest of this
-            # connection.
-            session.game_select_answered = True
 
     raise LoginError(f"automaton_exhausted_steps:{_MAX_STEPS}")
 
@@ -394,12 +385,13 @@ def _decide(cls, text, prompt, profile, state, get_password, save_password, sess
         # that predate this flag (matches this project's convention
         # elsewhere for optional session surfaces).
         #
-        # Only READS the flag -- never sets it here. An unconfirmed or
-        # outright-failed send must be free to retry itself on the next
-        # reactive loop iteration (exactly like every other branch in
-        # this table already does), so the flag is latched True by
-        # `run_login` itself, and only once `send_and_confirm` actually
-        # reports the send CONFIRMED (see run_login's own comment).
+        # Only READS `game_select_answered` -- never sets it here. That
+        # flag flips True only once run_login observes a non-`game_select`
+        # classification AFTER `game_select_letter_sent` (see run_login's
+        # loop prologue) -- never on send-confirm alone. While the CURRENT
+        # screen is still `game_select`, keep returning the configured
+        # letter so a false-positive confirm or TWGS timeout re-prompt
+        # can retry instead of wedging in automaton_stuck.
         if getattr(session, "game_select_answered", False):
             return None
         return profile.game_letter, False, None

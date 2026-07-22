@@ -23,6 +23,7 @@ def _noop_connect(self, timeout=10):
 def test_game_select_answered_defaults_false(tmp_path):
     session = Session(FAKE_HOST, FAKE_PORT, None, tmp_path)
     assert session.game_select_answered is False
+    assert session.game_select_letter_sent is False
 
 
 def test_reconnect_resets_game_select_answered_even_if_it_was_set(tmp_path, monkeypatch):
@@ -34,10 +35,12 @@ def test_reconnect_resets_game_select_answered_even_if_it_was_set(tmp_path, monk
     monkeypatch.setattr(TelnetConnection, "connect", _noop_connect)
     session = Session(FAKE_HOST, FAKE_PORT, None, tmp_path)
     session.game_select_answered = True  # models the prior connection's real answer
+    session.game_select_letter_sent = True
 
     session.reconnect()
 
     assert session.game_select_answered is False
+    assert session.game_select_letter_sent is False
 
 
 # -- WO-CLEANPREEMPT: send_raw()'s bounded fence-wait -----------------------

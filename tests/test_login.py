@@ -1443,3 +1443,143 @@ def test_game_select_answered_flag_only_latches_after_confirmed_not_on_an_unconf
     # resend -- both the identical game letter, never anything else.
     assert session.sent == [(profile.game_letter, False), (profile.game_letter, False)]
     assert session.game_select_answered is True
+
+
+class _EnterTrackingLoginSession(FakeLoginSession):
+    def send(self, text, enter=True, secret=False):
+        self.enter_flags = getattr(self, "enter_flags", [])
+        self.enter_flags.append(enter)
+        return super().send(text, enter=enter, secret=secret)
+
+
+def test_game_select_sends_the_configured_letter_without_trailing_enter():
+    profile = FakeProfile()
+    steps = [
+        {"screen": "<F> Bob the Builder\nSelect a game :", "expect": _is(profile.game_letter)},
+        {"screen": "Command [TL=00:00:00]:[1] (?=Help)? :", "expect": None},
+    ]
+    session = _EnterTrackingLoginSession(steps)
+    run_login(session, profile, get_password=lambda n: "x", save_password=lambda n, pw: None)
+    assert session.enter_flags == [False]
+
+
+class _SameScreenConfirmGameSelectSession:
+    """Models the live Mark-Van-Daele / TWGS banner-menu wedge: the first
+    game-letter send gets a false-positive idle confirm (bytes arrive, the
+    screen never leaves `game_select`), which MUST NOT latch
+    `game_select_answered` -- the automaton retries the letter on the
+    next reactive loop iteration instead of wedging in automaton_stuck."""
+
+    def __init__(self, steps):
+        self.t = 0.0
+        self.rx_count = 0
+        self.last_rx = 0.0
+        self._steps = steps
+        self._i = 0
+        self.sent = []
+        self._pending_arrivals = []
+        self._advance_after = False
+        self.game_select_answered = False
+        self.game_select_letter_sent = False
+
+    def clock(self):
+        return self.t
+
+    def sleep(self, seconds):
+        self.t += seconds
+        while self._pending_arrivals and self._pending_arrivals[0] <= self.t:
+            self._pending_arrivals.pop(0)
+            self.rx_count += 1
+            self.last_rx = self.t
+        if not self._pending_arrivals and self._advance_after and self._i < len(self._steps) - 1:
+            self._advance_after = False
+            self._i += 1
+
+    def render(self):
+        return self._steps[self._i]["screen"].split("\n")
+
+    def render_text(self, rows=None):
+        return "\n".join(rows) if rows is not None else self._steps[self._i]["screen"]
+
+    def wait_settle(self, wait_prompt=None, timeout=8.0, debounce_ms=350):
+        return wait_for_settle(self, wait_prompt=wait_prompt, timeout_s=timeout, debounce_ms=debounce_ms)
+
+    def send(self, text, enter=True, secret=False):
+        self.sent.append((text, secret))
+        step = self._steps[self._i]
+        if step.get("expect") is not None:
+            assert step["expect"](text, secret), f"unexpected send {text!r} secret={secret!r}"
+        attempts = step.get("_attempts", 0)
+        step["_attempts"] = attempts + 1
+        base = self.t
+        if step.get("confirm_same_screen") and attempts == 0:
+            self._pending_arrivals = [base + 0.05]
+            self._advance_after = False
+        else:
+            self._pending_arrivals = [base + 0.05]
+            self._advance_after = True
+
+
+def test_game_select_retries_letter_when_confirm_fires_but_screen_stays_game_select():
+    profile = FakeProfile()
+    banner_game_select_screen = (
+        "TradeWars Game Server\n"
+        "TWGS v2.20b\n"
+        "Server registered to twgs.test.example\n"
+        "<A> Sample Game One\n"
+        "<#> Players Online\n"
+        "<!> View game descriptions\n"
+        "<Q> Quit\n"
+        "Selection (? for menu):"
+    )
+    steps = [
+        {
+            "screen": banner_game_select_screen,
+            "expect": _is(profile.game_letter),
+            "confirm_same_screen": True,
+        },
+        {"screen": "T - Play Trade Wars 2002\nI - Introduction & Help\nEnter your choice:", "expect": _is("T")},
+        {"screen": "Command [TL=00:00:00]:[1] (?=Help)? :", "expect": None},
+    ]
+    session = _SameScreenConfirmGameSelectSession(steps)
+
+    cls, _ = run_login(session, profile, get_password=lambda n: "x", save_password=lambda n, pw: None)
+
+    assert cls == "main_command"
+    assert session.sent[:2] == [(profile.game_letter, False), (profile.game_letter, False)]
+    assert session.game_select_answered is True
+
+
+def test_game_select_banner_variant_retries_after_timeout_reprompt():
+    """TWGS can repaint the same banner menu with a timeout line while
+    still classifying as `game_select` -- ensure must keep sending the
+    configured letter, not wedge."""
+    profile = FakeProfile()
+    timeout_reprompt_screen = (
+        "TradeWars Game Server\n"
+        "TWGS v2.20b\n"
+        "Server registered to twgs.test.example\n"
+        "<A> Sample Game One\n"
+        "<#> Players Online\n"
+        "<!> View game descriptions\n"
+        "<Q> Quit\n"
+        "\n"
+        "Timed out waiting for input.\n"
+        "Selection (? for menu):"
+    )
+    steps = [
+        {
+            "screen": timeout_reprompt_screen,
+            "expect": _is(profile.game_letter),
+            "confirm_same_screen": True,
+        },
+        {"screen": "T - Play Trade Wars 2002\nI - Introduction & Help\nEnter your choice:", "expect": _is("T")},
+        {"screen": "Command [TL=00:00:00]:[1] (?=Help)? :", "expect": None},
+    ]
+    session = _SameScreenConfirmGameSelectSession(steps)
+
+    cls, _ = run_login(session, profile, get_password=lambda n: "x", save_password=lambda n, pw: None)
+
+    assert cls == "main_command"
+    assert session.sent[0] == (profile.game_letter, False)
+    assert session.game_select_answered is True
