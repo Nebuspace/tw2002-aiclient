@@ -221,15 +221,12 @@ def test_repeated_ensure_never_rearms_over_a_halted_loop(profiles_toml):
     assert server.control_lock.mode == MODE_AI_PILOT  # never resurrected into MODE_AUTO_LOOP
 
 
-def test_idempotent_already_there_ensure_never_auto_starts_even_when_armed_and_no_loop_stashed(profiles_toml):
-    """Bonus (condition (i) alone, isolated from (ii)): an ordinary
-    already-there `ensure` -- the login automaton never ran -- must never
-    auto-start, even for the "armed" (`autonomous=true`) profile and even
-    with `server.autopilot_loop` genuinely `None` (nothing to protect).
-    This is the OLD (pre-revise) gate's exact failure mode pinned RED:
-    the first cut of WO-FA6 gated on `classification == target` alone,
-    which this already-there response also satisfies -- it would have
-    armed here."""
+def test_idempotent_already_there_ensure_arms_when_armed_and_no_loop_stashed(profiles_toml):
+    """WO-AUTOPILOT-AFTER-ENSURE: mid-session already-there `ensure` with
+    `autonomous=true` and `autopilot_loop is None` MUST arm -- that is the
+    accept path ("ensure → autopilot without manual play"). Sticky-halt
+    still blocks re-arm when a halted loop is stashed (see
+    `test_repeated_ensure_never_rearms_over_a_halted_loop`)."""
     session = FakeAttachSession()  # default screen already classifies main_command
     server = FakeServer()
     server.control_lock = ControlLock()
@@ -238,8 +235,45 @@ def test_idempotent_already_there_ensure_never_auto_starts_even_when_armed_and_n
 
     assert resp["ok"] is True
     assert resp["already_there"] is True
-    assert getattr(server, "autopilot_loop", None) is None
-    assert server.control_lock.mode == MODE_AI_PILOT
+    loop = server.autopilot_loop
+    assert loop is not None
+    assert loop.running is True
+    assert server.control_lock.mode == MODE_AUTO_LOOP
+    assert loop.stop() is True
+
+
+def test_ensure_clears_fighter_option_then_arms_for_autonomous_profile(profiles_toml):
+    """WO-AUTOPILOT-AFTER-ENSURE: Option? (no Pay) before main_command —
+    ensure clears Attack once, reaches target, arms the loop."""
+    toll = (
+        "Your fighters: 30 vs. theirs: 1\n"
+        "Option? (A,D,I,R,S,?):?"
+    )
+    target = "Command [TL=00:00:00]:[1234] (?=Help)? :"
+
+    class _TollThenMain(FakeAttachSession):
+        def __init__(self):
+            super().__init__(initial_screen=toll)
+
+        def sleep(self, seconds):
+            advancing = self._pending_advance
+            super().sleep(seconds)
+            if advancing and self.sent and self.sent[-1][0] == "A":
+                self._screen = target
+
+    session = _TollThenMain()
+    server = FakeServer()
+    server.control_lock = ControlLock()
+
+    resp = protocol.dispatch(session, "ensure", {"profile": "armed"}, server)
+
+    assert resp["ok"] is True
+    assert "A" in [s[0] for s in session.sent]
+    loop = server.autopilot_loop
+    assert loop is not None
+    assert loop.running is True
+    assert server.control_lock.mode == MODE_AUTO_LOOP
+    assert loop.stop() is True
 
 
 def test_ensure_with_no_control_lock_at_all_arms_nothing(profiles_toml):

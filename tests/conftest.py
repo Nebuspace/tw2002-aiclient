@@ -122,6 +122,8 @@ class FakeAttachSession:
 
     observe_credits = Session.observe_credits
     credits_snapshot = Session.credits_snapshot
+    observe_turns = Session.observe_turns
+    turns_snapshot = Session.turns_snapshot
 
     def __init__(self, initial_screen="Command [TL=00:00:00]:[1234] (?=Help)? :", real_time_scale=0.0):
         self._screen = initial_screen
@@ -151,8 +153,13 @@ class FakeAttachSession:
         self._pending_advance = False
         self._real_time_scale = real_time_scale
         self.lock = threading.Lock()
-        self.last_credits = None
-        self.last_credits_ts = None
+        # Pre-seed sticky HUD values so ensure's seed_hud_after_join does
+        # not inject a spurious I-probe on every FakeAttachSession ensure
+        # (WO-HUD-CREDITS-TURNS-JOIN). Tests that need a probe unset these.
+        self.last_credits = 1000
+        self.last_credits_ts = 0.0
+        self.last_turns = 100
+        self.last_turns_ts = 0.0
         # Mirrors Session.auto_login_profile / mark_profile — ensure's
         # already_there path now always stamps the profile so status
         # world_id resolves (WO-TUI-PRIORITIES-DECISIONS-REGRESS).

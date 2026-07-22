@@ -610,27 +610,20 @@ def dispatch(session, verb, args, server):
             if lock_error is not None:
                 return lock_error
             resp = _dispatch_ensure(session, args)
-        # WO-FA6 (revised, mack HIGH): the design doc's "Auto-start-on-
-        # connect" -- wires autopilot.py's standalone `maybe_auto_start()`
-        # hook (P1-d) in, but ONLY for a GENUINE connect, never a routine
-        # re-`ensure` against an already-settled session. Two gates, both
-        # required:
+        # WO-FA6 / WO-AUTOPILOT-AFTER-ENSURE: post-ensure auto-start for
+        # `profile.autonomous` profiles. Fires on ANY successful `ensure`
+        # (genuine login OR already_there) so a mid-session `tw ensure`
+        # arms live_tick without a manual `autopilot start` / `play`.
         #
-        # (i) `resp["already_there"] is False` -- `_dispatch_ensure` ran
-        #     the login automaton for real (its `if cls == target:` fast
-        #     path at ~:1496 sets `already_there=True` and returns without
-        #     ever touching this session again). The FIRST cut of this WO
-        #     gated on `resp["classification"] == target` instead, which
-        #     is true on EVERY successful `ensure` including the idempotent
-        #     fast path -- mack's HIGH: a routine repeated `ensure` (e.g.
-        #     the daemon's own guardian polling, or a caller defensively
-        #     re-ensuring an already-connected session) kept re-firing the
-        #     hook on a session that never moved, silently resurrecting a
-        #     loop that had DELIBERATELY halted (see (ii) below and
-        #     `_maybe_auto_start_after_ensure`'s own docstring for the
-        #     sticky-halt half of this fix).
-        # (ii) `server.autopilot_loop is None` -- checked inside
-        #     `_maybe_auto_start_after_ensure` itself, not here.
+        # Sticky-halt is the sole anti-resurrect gate: checked inside
+        # `_maybe_auto_start_after_ensure` (`server.autopilot_loop is not
+        # None` -- running OR halted-with-last_error). A halted loop stays
+        # stashed until an explicit `autopilot_stop` clears it; routine
+        # re-ensure cannot silently re-arm over that brake (mack HIGH).
+        # The earlier genuine-connect-only gate (`already_there is False`)
+        # blocked the mid-session arm the WO accepts, and also false-
+        # negatived when a pre-classify HUD I-probe left the session
+        # already at target after a one-step login fixture.
         #
         # Deliberately fired AFTER the `with` block above has released the
         # active-driver slot, never from inside it: `AutopilotLoop.start()`
@@ -642,7 +635,7 @@ def dispatch(session, verb, args, server):
         # actually arming. Mirrors `_dispatch_autopilot_start`'s own shape:
         # that dispatch is likewise never wrapped in `_driving_dispatch`,
         # for the identical reason.
-        if resp.get("ok") and resp.get("already_there") is False:
+        if resp.get("ok"):
             _maybe_auto_start_after_ensure(server, session, args.get("profile"))
         return resp
 
@@ -1622,6 +1615,20 @@ def _dispatch_ensure(session, args):
     text = session.render_text(rows)
     prompt = rows[-1].strip() if rows else ""
     cls = classify_screen(text, prompt)
+
+    # WO-AUTOPILOT-AFTER-ENSURE: fighter toll Option? is not main_command,
+    # so ensure used to run_login → automaton_stuck and never armed the
+    # loop that owns Attack/Retreat. Clear one winnable/hopeless Option?
+    # when autonomous (same policy as live_tick; never Pay) so ensure can
+    # reach target and auto-start. Non-autonomous profiles leave the
+    # dialogue alone (human/attach owns the keystroke).
+    if cls != target and bool(getattr(profile, "autonomous", False)):
+        if _try_clear_fighter_option_once(session, text, prompt):
+            rows = session.render()
+            text = session.render_text(rows)
+            prompt = rows[-1].strip() if rows else ""
+            cls = classify_screen(text, prompt)
+
     if cls == target:
         # Attribute the world even on the no-op path — otherwise status
         # world_id stays None (spectate PRIORITIES/goals empty) whenever
@@ -1660,6 +1667,22 @@ def _dispatch_ensure(session, args):
         "ensure", {"profile": profile_name, "target": target}, resp["prompt"], resp["classification"], "ensure"
     )
     return resp
+
+
+def _try_clear_fighter_option_once(session, text, prompt) -> bool:
+    """Send one Attack/Retreat for a detected fighter ``Option?`` dialogue.
+
+    Returns True iff a keystroke was sent (caller should re-classify).
+    Never sends Pay. Unparsed / hold decisions return False (no send).
+    """
+    from .fighter_toll_policy import decide_from_screen
+    from .settle import send_and_confirm
+
+    fo = decide_from_screen(text, prompt)
+    if not fo.detected or fo.key is None:
+        return False
+    send_and_confirm(session, fo.key, confirm_prompt=None, enter=True)
+    return True
 
 
 def _maybe_auto_start_after_ensure(server, session, profile_name):
@@ -1712,11 +1735,10 @@ def _maybe_auto_start_after_ensure(server, session, profile_name):
     reading `last_error` directly), an operator investigates, an explicit
     `autopilot_stop` clears the stash (`_dispatch_autopilot_stop` doesn't
     special-case a halted loop -- it stops/reads it same as a running
-    one), and only THEN does a later genuine `ensure`/`autopilot_start`
-    see `autopilot_loop is None` again and re-arm. The call site's own
-    genuine-connect gate ((i) in its comment) narrows WHEN this hook
-    fires at all; this check is the second, independent half -- it must
-    hold regardless of how many genuine connects happen after a halt."""
+    one), and only THEN does a later `ensure`/`autopilot_start` see
+    `autopilot_loop is None` again and re-arm. The call site fires on
+    every successful ensure; this sticky-halt check is what keeps a
+    deliberate brake from being silently cleared."""
     if getattr(server, "autopilot_loop", None) is not None:
         return
     if not profile_name:
