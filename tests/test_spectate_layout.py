@@ -987,6 +987,17 @@ def test_frame_layout_decisions_hud_aligned_in_right_column():
     assert regions["ticker"]["w"] == FULL_GUTTER_MIN_COLS
 
 
+def test_frame_layout_hud_keeps_room_for_metrics():
+    """Decisions-in-HUD must not clip METRICS (HUD_GUTTER_MIN_H=10 regression)."""
+    regions = frame_layout(42, FULL_GUTTER_MIN_COLS + 2)
+    hud = regions["gutter"]
+    dec = regions["decisions"]
+    assert hud["h"] == HUD_GUTTER_MIN_H == VIEWPORT_H - DECISIONS_MIN_H
+    assert dec["h"] == DECISIONS_MIN_H
+    # 5 ship cells @ 2 rows from content row 2 → row 12; METRICS needs header+6.
+    assert hud["h"] - 2 >= 5 * 2 + 1 + 6
+
+
 def test_frame_layout_left_priorities_absent_below_left_gutter_floor():
     """Right HUD alone (118) — no left PRIORITIES until LEFT_GUTTER_MIN_COLS."""
     regions = frame_layout(42, RIGHT_GUTTER_MIN_COLS + 2)

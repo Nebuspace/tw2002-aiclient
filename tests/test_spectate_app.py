@@ -1438,6 +1438,93 @@ def test_priorities_panel_owns_goals_with_chain_box(monkeypatch):
     assert "— PRIORITIES —" in pri[0][0]
 
 
+def test_decisions_idle_never_shows_tw13_stub(monkeypatch):
+    """With left PRIORITIES present and no explore/trace — honest idle, not TW-13."""
+    captured = []
+
+    def fake_draw_decisions(win, region, lines, glyphs, palette, title=None):
+        captured.append((list(lines), title, region.get("title")))
+
+    monkeypatch.setattr(spectate_app_mod, "_draw_decisions", fake_draw_decisions)
+    monkeypatch.setattr(curses, "doupdate", lambda: None)
+    monkeypatch.setattr(spectate_app_mod, "_resolve_world_id", lambda status=None: None)
+
+    regions = {
+        "mode": "full",
+        "outer": None, "header": None, "viewport": None, "gutter": None,
+        "decisions": {"y": 0, "x": 24, "h": 8, "w": 28, "title": "DECISIONS"},
+        "priorities": {"y": 0, "x": 0, "h": 8, "w": 24, "title": "PRIORITIES"},
+        "ticker": None, "control": None,
+    }
+    windows = {"decisions": object(), "priorities": object()}
+    status = {
+        "connected": True, "mode": "ai_pilot", "play": None,
+        "subscriber_count": 0, "host": None, "name": None,
+        "autopilot_trace": None,
+    }
+
+    class FakePalette:
+        def attr_for(self, *a, **k):
+            return 0
+
+    spectate_app_mod._render(
+        windows, regions, dict(spectate_app_mod.DEFAULT_EVENT), {}, [], status,
+        FakePalette(), {}, now=0.0, anim_tick=0,
+        idle_age=None, semantic="ok", flash_active=False, got_content=True,
+        explore_mode="off", phase2_cache={"chain": None},
+    )
+    dec = [c for c in captured if c[2] == "DECISIONS"]
+    pri = [c for c in captured if c[1] == "PRIORITIES" or c[2] == "PRIORITIES"]
+    assert len(dec) == 1
+    joined = " ".join(dec[0][0]).lower()
+    assert "tw-13" not in joined and "coach" not in joined
+    assert "trace" in joined or "explore" in joined or dec[0][0] == ["—"]
+    assert len(pri) == 1
+    assert "— GOALS —" in pri[0][0]
+    assert "— PRIORITIES —" in pri[0][0]
+
+
+def test_decisions_midwidth_fallback_shows_priorities_when_no_left_gutter(monkeypatch):
+    """Without left PRIORITIES region, idle DECISIONS carries goals+weigh (not TW-13)."""
+    captured = []
+
+    def fake_draw_decisions(win, region, lines, glyphs, palette, title=None):
+        captured.append((list(lines), title))
+
+    monkeypatch.setattr(spectate_app_mod, "_draw_decisions", fake_draw_decisions)
+    monkeypatch.setattr(curses, "doupdate", lambda: None)
+    monkeypatch.setattr(spectate_app_mod, "_resolve_world_id", lambda status=None: None)
+
+    regions = {
+        "mode": "right_gutter",
+        "outer": None, "header": None, "viewport": None, "gutter": None,
+        "decisions": {"y": 0, "x": 0, "h": 8, "w": 28, "title": "DECISIONS"},
+        "ticker": None, "control": None,
+    }
+    windows = {"decisions": object()}
+    status = {
+        "connected": True, "mode": "ai_pilot", "play": None,
+        "subscriber_count": 0, "host": None, "name": None,
+        "autopilot_trace": None,
+    }
+
+    class FakePalette:
+        def attr_for(self, *a, **k):
+            return 0
+
+    spectate_app_mod._render(
+        windows, regions, dict(spectate_app_mod.DEFAULT_EVENT), {}, [], status,
+        FakePalette(), {}, now=0.0, anim_tick=0,
+        idle_age=None, semantic="ok", flash_active=False, got_content=True,
+        explore_mode="off", phase2_cache={"chain": None},
+    )
+    lines, title = captured[0]
+    assert title == "PRIORITIES"
+    assert "— GOALS —" in lines
+    assert "— PRIORITIES —" in lines
+    assert not any("TW-13" in ln or "coach" in ln.lower() for ln in lines)
+
+
 def test_decisions_keeps_explore_never_goals_title(monkeypatch):
     """Explore mode owns DECISIONS; GOALS never reclaim that pane."""
     captured = []

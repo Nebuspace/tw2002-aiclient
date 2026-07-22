@@ -997,12 +997,13 @@ def _draw_hud_gutter(win, region, cells, metric_rows, port_rows, glyphs, palette
                     win.addnstr(row + 1, col, extra, max(0, w - col - 1), value_attr)
                 except curses.error:
                     pass
-        row += 3  # 2 content lines + 1 blank spacer between cells
+        row += 2  # label+value then freshness — no blank spacer (DECISIONS
+        # shares this column; a 3-row stride clips METRICS — Max 2026-07-22)
 
     if metric_rows and row < h - 1:
         # WO-TUI-HUD-POLISH: readable METRICS — padded label column, one
         # metric per row. No blank spacer under the header: the gutter
-        # height is shared with PORT meters, and a blank line clips them.
+        # height is shared with DECISIONS (+ PORT), and a blank line clips them.
         try:
             win.addnstr(row, col, "METRICS", max(0, w - col - 1), curses.A_BOLD)
         except curses.error:
@@ -1710,11 +1711,14 @@ def _render(windows, regions, event, tracked, ticker_history, status, palette, g
         )
 
     if regions.get("decisions") is not None and "decisions" in windows:
+        # Honest idle (no TW-13) — seat 311c61a; mid-width falls back to
+        # goals+weigh when the left PRIORITIES gutter is absent.
         decision_lines = compose_decisions_placeholder()
         panel_title = None
         cols = max(12, (regions["decisions"].get("w") or 22) - 4)
         explore_active = bool(explore_mode and explore_mode != "off")
         live_trace = (status or {}).get("autopilot_trace")
+        has_priorities = regions.get("priorities") is not None
         if explore_active:
             wid = _resolve_world_id(status)
             sector = (event.get("state") or {}).get("sector")
@@ -1729,6 +1733,22 @@ def _render(windows, regions, event, tracked, ticker_history, status, palette, g
             # Live autopilot dry-run trace — render-only, never drives the game.
             decision_lines = format_autopilot_trace_lines(live_trace, cols=cols)
             panel_title = "DECISIONS"
+        elif not has_priorities:
+            wid = _resolve_world_id(status)
+            chain = phase2_cache.get("chain")
+            goals = _build_goals_snapshot(wid, chain)
+            sector = (event.get("state") or {}).get("sector")
+            has_chain_box = regions.get("chain") is not None
+            decision_lines = compose_priorities_panel(
+                goals,
+                chain,
+                live_trace,
+                autonomy_lines=format_autonomy_lines(autonomy),
+                current_sector=sector,
+                width=cols,
+                include_chain=not has_chain_box,
+            )
+            panel_title = "PRIORITIES"
         _draw_decisions(
             windows["decisions"], regions["decisions"],
             decision_lines, glyphs, palette, title=panel_title,

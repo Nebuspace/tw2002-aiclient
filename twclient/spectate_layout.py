@@ -211,7 +211,9 @@ DECISIONS_MIN_H = 5
 BAND_H_MAX = 10
 # WO-TUI-DECISIONS-HUD-ALIGN: when a right HUD gutter exists, DECISIONS
 # shares that column (HUD width, bottom aligned with the column base).
-HUD_GUTTER_MIN_H = 10
+# Prefer HUD: DECISIONS stays at DECISIONS_MIN_H so ship cells + METRICS
+# still fit (HUD_GUTTER_MIN_H=10 clipped METRICS — Max 2026-07-22).
+HUD_GUTTER_MIN_H = VIEWPORT_H - DECISIONS_MIN_H  # 21
 
 
 def frame_layout(lines: int, cols: int) -> dict:
