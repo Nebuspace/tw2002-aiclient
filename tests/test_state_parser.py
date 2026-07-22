@@ -310,6 +310,24 @@ def test_extracts_turns_left_plain_phrasing():
     assert parse_state("One turn deducted, 29990 turns left.")["turns_left"] == 29990
 
 
+def test_ship_info_turns_left_label_not_forged_from_sector_line():
+    """WO-HUD-CREDITS-TURNS-JOIN: ship-info `I` screen uses label-first
+    'Turns left : N'. A prior whitespace-crossing plain regex spanned the newline
+    and forged turns_left from 'Current Sector : 2594'."""
+    text = (
+        "Turns to Warp  : 3\n"
+        "Current Sector : 2594\n"
+        "Turns left     : 1622\n"
+        "Credits        : 300\n"
+    )
+    state = parse_state(text)
+    assert state["turns_left"] == 1622
+    assert state["sector"] == 2594
+    assert state["credits"] == 300
+    from twclient.state_parser import credits_balance
+    assert credits_balance(text) == 300
+
+
 def test_extracts_credits_label_first_shape():
     assert parse_state("Credits: 12,345")["credits"] == 12345
 

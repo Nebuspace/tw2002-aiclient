@@ -13,7 +13,7 @@ from .connection import TelnetConnection
 from .iac import TelnetHandler
 from .logging_util import TranscriptLogger
 from .settle import wait_for_settle
-from .state_parser import credits_balance
+from .state_parser import credits_balance, parse_state
 from .terminal import TerminalScreen
 
 MIN_SEND_GAP_S = 0.15  # guardrail: no hammering the server
@@ -97,6 +97,11 @@ class Session:
         # (ledger/last_sent) above.
         self.last_credits = None
         self.last_credits_ts = None
+        # WO-HUD-CREDITS-TURNS-JOIN: sticky turn COUNT (never TL timer),
+        # same non-clobber shape as last_credits — filled by
+        # observe_turns() from parse_state().turns_left when present.
+        self.last_turns = None
+        self.last_turns_ts = None
 
         self.history = []  # ring buffer of recent do/read events
         self._history_cap = 200
@@ -277,6 +282,24 @@ class Session:
         multiplayer REQUIRES WO-FA9 first."""
         with self.lock:
             return self.last_credits, self.last_credits_ts
+
+    def observe_turns(self, text):
+        """Sticky turn-COUNT capture (WO-HUD-CREDITS-TURNS-JOIN). Reads
+        `parse_state(text).turns_left` only — never `turn_timer` (TL=
+        HH:MM:SS is a regen countdown, not turns remaining). A screen
+        with no turn count leaves `last_turns`/`last_turns_ts` untouched
+        (same non-clobber contract as `observe_credits()`)."""
+        turns = parse_state(text).get("turns_left")
+        if turns is not None:
+            with self.lock:
+                self.last_turns = turns
+                self.last_turns_ts = time.monotonic()
+
+    def turns_snapshot(self):
+        """Atomic `(last_turns, last_turns_ts)` read — mirrors
+        `credits_snapshot()`."""
+        with self.lock:
+            return self.last_turns, self.last_turns_ts
 
     # -- settle-detection protocol (see settle.wait_for_settle) ------
 

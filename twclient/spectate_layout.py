@@ -598,7 +598,11 @@ def seed_tracked_from_status(tracked: dict, status: dict, now: float, *, parsed_
     if "sector" not in tracked and "sector" in merged:
         state["sector"] = merged["sector"]
     if "turns" not in tracked:
-        if "turns_left" in merged:
+        # Prefer sticky status turns_left (session.observe_turns) over a
+        # one-shot parsed_state that may be a fighter-toll screen with none.
+        if status.get("turns_left") is not None:
+            state["turns_left"] = status["turns_left"]
+        elif "turns_left" in merged:
             state["turns_left"] = merged["turns_left"]
         # Never seed TURNS from turn_timer (TL=HH:MM:SS ≠ turn count).
     if "cargo_holds_empty" not in tracked and "cargo_holds_empty" in merged:

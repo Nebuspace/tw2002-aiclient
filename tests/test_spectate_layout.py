@@ -639,6 +639,20 @@ def test_seed_tracked_from_status_uses_parsed_state_when_tracked_empty():
     assert tracked["cargo_holds_empty"] == (12, 2.0)
 
 
+def test_seed_tracked_from_status_prefers_status_turns_left():
+    """WO-HUD-CREDITS-TURNS-JOIN: sticky session turns via status beat a
+    empty/missing parsed fighter-toll screen."""
+    tracked = seed_tracked_from_status(
+        {},
+        {"credits": 300, "credits_age_ms": 0, "turns_left": 1622},
+        now=10.0,
+        parsed_state={"sector": 2594},
+    )
+    assert tracked["credits"] == (300, 10.0)
+    assert tracked["turns"] == (("count", 1622), 10.0)
+    assert tracked["sector"] == (2594, 10.0)
+
+
 def test_update_tracked_stats_is_pure_returns_new_dict():
     tracked = {}
     out = update_tracked_stats(tracked, {"state": {"sector": 1}}, now=1.0)

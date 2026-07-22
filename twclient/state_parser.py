@@ -63,7 +63,17 @@ _TURNS_RE = re.compile(r"\btl\s*=\s*(?!\d{2}:\d{2}:\d{2}\b)(\d+)", re.I)
 _TURN_TIMER_RE = re.compile(r"\btl\s*=\s*(\d{2}:\d{2}:\d{2})\b", re.I)
 # This live server never actually shows turns via TL= (see above) — the
 # real number shows up after docking instead: "29990 turns left."
-_TURNS_LEFT_PLAIN_RE = re.compile(r"(\d[\d,]*)\s+turns?\s+left", re.I)
+# Horizontal whitespace ONLY between the count and "turns left" — a plain
+# `\s+` crossed newlines and forged turns_left from the prior line's
+# sector id on ship-info screens ("Current Sector : 2594\nTurns left : 1622"
+# → turns_left=2594). Caught live WO-HUD-CREDITS-TURNS-JOIN.
+_TURNS_LEFT_PLAIN_RE = re.compile(r"(\d[\d,]*)[ \t]+turns?\s+left\b", re.I)
+# Ship-info / Computer readout label-first form (same live I-info screen):
+# "Turns left     : 1622"
+_TURNS_LEFT_LABEL_RE = re.compile(r"^\s*turns?\s+left\s*[:=]\s*(\d[\d,]*)", re.I | re.M)
+# Ship-info sector line — `_SECTOR_RE` only matches a bare "Sector : N"
+# line-start, not "Current Sector : N".
+_CURRENT_SECTOR_RE = re.compile(r"^\s*current\s+sector\s*[:=]\s*(\d+)", re.I | re.M)
 # Two shapes seen: a hypothetical "Credits: 12,345" label-first form, and
 # the real "You have 100,000 credits" amount-first form live servers
 # actually use — tried in that order.
@@ -267,21 +277,27 @@ def last_nonblank_line(text: str) -> str:
 # any autonomous run on a multiplayer/shared server, not a fifth one-off
 # fix.
 def credits_balance(rendered_text: str) -> "int | None":
-    """The STRICT "you have N credits" balance only -- unlike
+    """STRICT balance extraction for `Session.observe_credits()` -- unlike
     `parse_state()`'s `credits` field, this NEVER falls back to the
     generic "N credits" mention (`_CREDITS_AMOUNT_FIRST_RE`), which a
     port's own price quote ("We'll buy them for N credits.") would
     otherwise satisfy just as well and get misread as an actual
     balance. A haggle dialogue screen is dominated by exactly those
     price-quote sentences, so haggle.py's credit-delta verification
-    needs this narrower, unambiguous extraction rather than
-    `parse_state()`'s caller-friendly-but-looser fallback chain.
-    Last-match anchored, same stale-scrollback discipline as
-    `parse_state()`'s own `credits` field (see module docstring) --
-    and, like every sibling last-match field, subject to the same
-    documented FORGED-BALANCE residual above (both consumers, the FA9
-    fold)."""
+    needs this narrower extraction rather than `parse_state()`'s
+    caller-friendly-but-looser fallback chain.
+
+    Accepted shapes (last-match, stale-scrollback safe):
+      1. "You have N credits" (classic)
+      2. Label-first "Credits : N" / "Credits: N" (ship-info `I` screen —
+         WO-HUD-CREDITS-TURNS-JOIN; never a price quote)
+
+    Subject to the same documented FORGED-BALANCE residual as siblings
+    (FA9 fold).
+    """
     matches = _YOU_HAVE_CREDITS_RE.findall(rendered_text)
+    if not matches:
+        matches = _CREDITS_LABEL_FIRST_RE.findall(rendered_text)
     if not matches:
         return None
     return int(matches[-1].replace(",", ""))
@@ -336,6 +352,8 @@ def parse_state(rendered_text: str) -> dict:
     state = {}
 
     sectors = _SECTOR_RE.findall(rendered_text)
+    if not sectors:
+        sectors = _CURRENT_SECTOR_RE.findall(rendered_text)
     if sectors:
         state["sector"] = int(sectors[-1])
 
@@ -343,9 +361,15 @@ def parse_state(rendered_text: str) -> dict:
     if m:
         state["turns_left"] = int(m.group(1))
     else:
-        m = _TURNS_LEFT_PLAIN_RE.search(rendered_text)
-        if m:
-            state["turns_left"] = int(m.group(1).replace(",", ""))
+        plain = list(_TURNS_LEFT_PLAIN_RE.finditer(rendered_text))
+        label = list(_TURNS_LEFT_LABEL_RE.finditer(rendered_text))
+        # Prefer the bottom-most match across both phrasings (last-match
+        # hard-rule) so a stale "N turns left" above a live "Turns left : N"
+        # ship-info line cannot win.
+        candidates = [(m.end(), m.group(1)) for m in plain + label]
+        if candidates:
+            candidates.sort(key=lambda t: t[0])
+            state["turns_left"] = int(candidates[-1][1].replace(",", ""))
         else:
             m = _TURN_TIMER_RE.search(rendered_text)
             if m:

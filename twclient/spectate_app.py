@@ -323,6 +323,8 @@ def fetch_status(sock_path, timeout=3.0):
             "world_id": None,
             "credits": None,
             "credits_age_ms": None,
+            "turns_left": None,
+            "turns_age_ms": None,
         }
     return {
         "connected": resp.get("connected", False),
@@ -345,6 +347,8 @@ def fetch_status(sock_path, timeout=3.0):
         # events do not carry these top-level fields (only status does).
         "credits": resp.get("credits"),
         "credits_age_ms": resp.get("credits_age_ms"),
+        "turns_left": resp.get("turns_left"),
+        "turns_age_ms": resp.get("turns_age_ms"),
     }
 
 

@@ -331,6 +331,8 @@ def build_response(session, rows=None, settled_reason=None, extra=None):
     # to keep building a response.
     if hasattr(session, "observe_credits"):
         session.observe_credits(text)
+    if hasattr(session, "observe_turns"):
+        session.observe_turns(text)
     return resp
 
 
@@ -437,6 +439,8 @@ def dispatch(session, verb, args, server):
         # do/read/screen path. hasattr-guarded, same reason as build_response.
         if hasattr(session, "observe_credits"):
             session.observe_credits(text)
+        if hasattr(session, "observe_turns"):
+            session.observe_turns(text)
         return {"ok": True, "state": parsed_state}
 
     if verb == "history":
@@ -489,10 +493,22 @@ def dispatch(session, verb, args, server):
         # (e.g. test_world_model_integration.py's FakeSession) -- reads as
         # `(None, None)`, the same clean default the two separate
         # `getattr()`s already gave it.
+        if hasattr(session, "observe_credits"):
+            session.observe_credits(text)
+        if hasattr(session, "observe_turns"):
+            session.observe_turns(text)
+        # Snapshot AFTER the observe above (same thread) so a ship-info
+        # screen already on the viewport seeds status without a send.
+        # Still ONE atomic pair each — never two unlocked getattrs —
+        # then age is computed from that pair (WO-FA-SAFE race shape).
         if hasattr(session, "credits_snapshot"):
             _cbal, _cts = session.credits_snapshot()
         else:
             _cbal, _cts = None, None
+        if hasattr(session, "turns_snapshot"):
+            _tbal, _tts = session.turns_snapshot()
+        else:
+            _tbal, _tts = None, None
         return {
             "ok": True,
             "connected": session.conn.connected,
@@ -549,6 +565,10 @@ def dispatch(session, verb, args, server):
             # from ever going negative under a concurrent
             # `observe_credits()` write.
             "credits_age_ms": int((time.monotonic() - _cts) * 1000) if _cts is not None else None,
+            # WO-HUD-CREDITS-TURNS-JOIN: sticky turn COUNT for spectate HUD
+            # seed (mirrors credits/credits_age_ms). Never the TL timer.
+            "turns_left": _tbal,
+            "turns_age_ms": int((time.monotonic() - _tts) * 1000) if _tts is not None else None,
             # WO-TUI-METRICS: spectate's live METRICS gutter keys off the
             # active session's world_id (see `_current_world_id()`); the
             # sole-directory heuristic breaks once a second world store
@@ -1591,6 +1611,13 @@ def _dispatch_ensure(session, args):
         except OSError as e:
             return {"ok": False, "error": f"reconnect_failed:{e}"}
 
+    # WO-HUD-CREDITS-TURNS-JOIN: seed sticky credits/turns (I-probe if
+    # needed) BEFORE the already_there short-circuit — explore/fighter-
+    # toll screens omit both, and a no-op ensure would otherwise leave
+    # the spectate HUD at `-` forever.
+    from .hud_seed import seed_hud_after_join
+    hud_seed = seed_hud_after_join(session)
+
     rows = session.render()
     text = session.render_text(rows)
     prompt = rows[-1].strip() if rows else ""
@@ -1601,7 +1628,10 @@ def _dispatch_ensure(session, args):
         # ensure short-circuits after a recycle that left us already at
         # the target class (WO-TUI-PRIORITIES-DECISIONS-REGRESS).
         session.mark_profile(profile.name)
-        resp = build_response(session, extra={"already_there": True, "steps": 0})
+        resp = build_response(
+            session,
+            extra={"already_there": True, "steps": 0, **hud_seed},
+        )
         return resp
 
     try:
@@ -1613,13 +1643,19 @@ def _dispatch_ensure(session, args):
             target=target,
         )
     except LoginError as e:
-        resp = build_response(session, extra={"already_there": False})
+        resp = build_response(session, extra={"already_there": False, **hud_seed})
         resp["ok"] = False
         resp["error"] = f"login_failed:{e}"
         return resp
 
+    # Re-seed after login — the I-probe above may have run on a pre-login
+    # screen; a post-login main_command still often lacks credits/turns.
+    hud_seed = seed_hud_after_join(session)
     session.mark_profile(profile.name)
-    resp = build_response(session, extra={"steps": steps, "already_there": False})
+    resp = build_response(
+        session,
+        extra={"steps": steps, "already_there": False, **hud_seed},
+    )
     session.record_history(
         "ensure", {"profile": profile_name, "target": target}, resp["prompt"], resp["classification"], "ensure"
     )
