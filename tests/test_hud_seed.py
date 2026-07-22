@@ -67,23 +67,20 @@ def test_seed_hud_skips_probe_when_already_known(monkeypatch):
     assert out["turns_left"] == 99
 
 
-def test_seed_hud_probes_i_when_fighter_toll_lacks_stats(monkeypatch):
-    toll = "You have to destroy the fighters\nOption? (A,D,I,R,S,?):?"
-    info = (
-        "Current Sector : 2594\n"
-        "Turns left     : 1622\n"
-        "Credits        : 300\n"
+def test_seed_hud_defers_i_on_fighter_option_even_when_stats_unknown(monkeypatch):
+    """I on Option? is Info (not ship-info) and can scroll the vs-line off —
+    defer the probe; ensure/autopilot clear Attack/Retreat first."""
+    toll = (
+        "You have to destroy the fighters\n"
+        "Your fighters: 30 vs. theirs: 1\n"
         "Option? (A,D,I,R,S,?):?"
     )
-    session = _FakeSession([toll, info])
-
-    def fake_confirm(sess, text, **kwargs):
-        sess.send(text)
-        return "idle", 0.01, True
-
-    monkeypatch.setattr("twclient.hud_seed.send_and_confirm", fake_confirm)
+    session = _FakeSession([toll])
+    monkeypatch.setattr(
+        "twclient.hud_seed.send_and_confirm",
+        lambda *a, **k: (_ for _ in ()).throw(AssertionError("must not I-probe Option?")),
+    )
     out = seed_hud_after_join(session)
-    assert out["hud_seed_probed"] is True
-    assert session.sends == ["I"]
-    assert out["credits"] == 300
-    assert out["turns_left"] == 1622
+    assert out["hud_seed_probed"] is False
+    assert out["hud_seed_deferred"] == "fighter_option"
+    assert session.sends == []

@@ -1,11 +1,12 @@
 """Cold-join HUD seed — probe ship-info once when credits/turns unknown.
 
-WO-HUD-CREDITS-TURNS-JOIN: explore/fighter-toll screens often omit both
-a "You have N credits" line and a turn count, so FA7a + parse_state leave
-the spectate HUD at `-` forever unless something asks for ship info.
-`<I> Information on your ship` works at main_command AND at the fighter
-toll `Option? (A,D,I,…)` menu (live-proven). This module sends that one
-keystroke when either sticky value is still missing after login/ensure.
+WO-HUD-CREDITS-TURNS-JOIN: explore screens often omit both a "You have N
+credits" line and a turn count, so FA7a + parse_state leave the spectate
+HUD at `-` forever unless something asks for ship info. At main_command,
+`<I>` is ship-info — this module sends that one keystroke when either
+sticky value is still missing after login/ensure. On a fighter
+``Option?`` dialogue, ``I`` is Info (not ship-info) and must NOT be
+probed — deferred so Attack/Retreat can clear first.
 """
 
 from __future__ import annotations
