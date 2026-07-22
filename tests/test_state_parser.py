@@ -3,6 +3,7 @@
 import os
 
 from twclient.state_parser import (
+    fighters_aboard,
     is_genuine_port_report,
     is_genuine_sector_status,
     parse_haggle,
@@ -825,4 +826,38 @@ def test_flyby_presence_merges_with_same_screen_commerce_commodities():
     state = parse_state(screen)
     assert state["port"]["commodities"][0]["name"] == "Fuel Ore"
     assert "class" not in state["port"]  # Class 0 line had no letter code
+
+
+def test_fighters_aboard_from_ship_info_hfs_line():
+    text = (
+        "Current Sector : 100\n"
+        "Holds: 40  Fighters: 500  Shields: 200\n"
+        "Command [TL=00:12:34]:[1000] (?=Help) ?"
+    )
+    assert fighters_aboard(text) == 500
+    assert parse_state(text)["fighters_aboard"] == 500
+
+
+def test_fighters_aboard_from_toll_option_yours_vs_theirs():
+    text = (
+        "Fighters: 1 (belong to Corp#1, New Corp) [Toll]\n"
+        "Your fighters: 30 vs. theirs: 1\n"
+        "Option? (A,D,I,R,S,?):?"
+    )
+    assert fighters_aboard(text) == 30
+    assert parse_state(text)["fighters_aboard"] == 30
+
+
+def test_fighters_aboard_last_match_wins_on_ship_info():
+    text = (
+        "Holds: 10  Fighters: 5  Shields: 0\n"
+        "Holds: 40  Fighters: 30  Shields: 200\n"
+    )
+    assert fighters_aboard(text) == 30
+
+
+def test_fighters_aboard_absent_when_no_trustworthy_line():
+    text = "Fighters: 1 (belong to Corp#1, New Corp) [Toll]\nOption? (A,D,I,R,S,?):?"
+    assert fighters_aboard(text) is None
+    assert "fighters_aboard" not in parse_state(text)
 

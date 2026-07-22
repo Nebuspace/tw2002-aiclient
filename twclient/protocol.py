@@ -333,6 +333,8 @@ def build_response(session, rows=None, settled_reason=None, extra=None):
         session.observe_credits(text)
     if hasattr(session, "observe_turns"):
         session.observe_turns(text)
+    if hasattr(session, "observe_fighters"):
+        session.observe_fighters(text)
     # WO-FRAMES-0: persist full 80×25 raw grid for post-mortem grep
     # (Option?/qty prompts). Optional on the session — tests without a
     # recorder keep working; never fails the response.
@@ -454,6 +456,8 @@ def dispatch(session, verb, args, server):
             session.observe_credits(text)
         if hasattr(session, "observe_turns"):
             session.observe_turns(text)
+        if hasattr(session, "observe_fighters"):
+            session.observe_fighters(text)
         return {"ok": True, "state": parsed_state}
 
     if verb == "history":
@@ -522,6 +526,10 @@ def dispatch(session, verb, args, server):
             _tbal, _tts = session.turns_snapshot()
         else:
             _tbal, _tts = None, None
+        if hasattr(session, "fighters_snapshot"):
+            _fbal, _fts = session.fighters_snapshot()
+        else:
+            _fbal, _fts = None, None
         return {
             "ok": True,
             "connected": session.conn.connected,
@@ -582,6 +590,8 @@ def dispatch(session, verb, args, server):
             # seed (mirrors credits/credits_age_ms). Never the TL timer.
             "turns_left": _tbal,
             "turns_age_ms": int((time.monotonic() - _tts) * 1000) if _tts is not None else None,
+            "fighters_aboard": _fbal,
+            "fighters_age_ms": int((time.monotonic() - _fts) * 1000) if _fts is not None else None,
             # WO-TUI-METRICS: spectate's live METRICS gutter keys off the
             # active session's world_id (see `_current_world_id()`); the
             # sole-directory heuristic breaks once a second world store

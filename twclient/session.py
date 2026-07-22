@@ -102,6 +102,10 @@ class Session:
         # observe_turns() from parse_state().turns_left when present.
         self.last_turns = None
         self.last_turns_ts = None
+        # Sticky aboard-fighter count — filled by observe_fighters() from
+        # ship-info / toll Option? screens (parse_state().fighters_aboard).
+        self.last_fighters = None
+        self.last_fighters_ts = None
 
         self.history = []  # ring buffer of recent do/read events
         self._history_cap = 200
@@ -300,6 +304,23 @@ class Session:
         `credits_snapshot()`."""
         with self.lock:
             return self.last_turns, self.last_turns_ts
+
+    def observe_fighters(self, text):
+        """Sticky aboard-fighter capture. Reads `fighters_aboard(text)`
+        only — a screen with no aboard count leaves last_fighters untouched
+        (same non-clobber contract as observe_turns())."""
+        from .state_parser import fighters_aboard
+
+        aboard = fighters_aboard(text)
+        if aboard is not None:
+            with self.lock:
+                self.last_fighters = aboard
+                self.last_fighters_ts = time.monotonic()
+
+    def fighters_snapshot(self):
+        """Atomic `(last_fighters, last_fighters_ts)` read."""
+        with self.lock:
+            return self.last_fighters, self.last_fighters_ts
 
     # -- settle-detection protocol (see settle.wait_for_settle) ------
 

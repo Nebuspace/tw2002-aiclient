@@ -515,6 +515,9 @@ def update_tracked_stats(tracked: dict, event: dict, now: float) -> dict:
         if field in state:
             out[field] = (state[field], now)
 
+    if "fighters_aboard" in state:
+        out["fighters"] = (state["fighters_aboard"], now)
+
     if "turns_left" in state:
         new_turns = state["turns_left"]
         prev_max = out.get("_turns_max")
@@ -610,6 +613,8 @@ def seed_tracked_from_status(tracked: dict, status: dict, now: float, *, parsed_
         # Never seed TURNS from turn_timer (TL=HH:MM:SS ≠ turn count).
     if "cargo_holds_empty" not in tracked and "cargo_holds_empty" in merged:
         state["cargo_holds_empty"] = merged["cargo_holds_empty"]
+    if "fighters" not in tracked and status.get("fighters_aboard") is not None:
+        state["fighters_aboard"] = status["fighters_aboard"]
     if state:
         synthetic["state"] = state
     if not synthetic:
@@ -1459,6 +1464,7 @@ class GoalsSnapshot:
         "formations",
         "genesis_candidates", "longest_chain_hops", "longest_chain_unit",
         "ship_prices_count", "upgrade_status", "holds_status",
+        "fighters_known", "fighters_count",
     )
 
     def __init__(
@@ -1479,6 +1485,8 @@ class GoalsSnapshot:
         ship_prices_count: int = 0,
         upgrade_status: str = "—",
         holds_status: str = "—",
+        fighters_known: bool = False,
+        fighters_count=None,
     ):
         self.turns_known = bool(turns_known)
         self.turns_count = turns_count
@@ -1495,6 +1503,8 @@ class GoalsSnapshot:
         self.ship_prices_count = int(ship_prices_count)
         self.upgrade_status = upgrade_status or "—"
         self.holds_status = holds_status or "—"
+        self.fighters_known = bool(fighters_known)
+        self.fighters_count = fighters_count
 
 
 def _goal_row(*, glyph: str, label: str, detail: str, width: int) -> str:
@@ -1647,6 +1657,22 @@ def compose_primary_goals_lines(snap, *, width: int = 22) -> list[str]:
         hold_detail = "price?"
     lines.append(_goal_row(
         glyph=hold_glyph, label=hold_label, detail=hold_detail, width=width,
+    ))
+
+    ftr_label = "Fighters" if not short else "Ftr"
+    if snap.fighters_known and snap.fighters_count is not None:
+        n = int(snap.fighters_count)
+        if n > 0:
+            ftr_glyph = "✓"
+            ftr_detail = str(n)
+        else:
+            ftr_glyph = "·"
+            ftr_detail = "0 (need some)"
+    else:
+        ftr_glyph = "?"
+        ftr_detail = "unknown"
+    lines.append(_goal_row(
+        glyph=ftr_glyph, label=ftr_label, detail=ftr_detail, width=width,
     ))
 
     return lines

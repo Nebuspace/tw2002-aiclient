@@ -74,6 +74,17 @@ _TURNS_LEFT_LABEL_RE = re.compile(r"^\s*turns?\s+left\s*[:=]\s*(\d[\d,]*)", re.I
 # Ship-info sector line — `_SECTOR_RE` only matches a bare "Sector : N"
 # line-start, not "Current Sector : N".
 _CURRENT_SECTOR_RE = re.compile(r"^\s*current\s+sector\s*[:=]\s*(\d+)", re.I | re.M)
+# Ship-info / Computer readout: "Holds: 40  Fighters: 500  Shields: 200".
+# Deliberately NOT the corp toll banner ("Fighters: N (belong…)[Toll]").
+_SHIP_HFS_RE = re.compile(
+    r"Holds:\s*(\d[\d,]*)\s+Fighters:\s*(\d[\d,]*)\s+Shields:\s*(\d[\d,]*)",
+    re.I,
+)
+# Fighter toll Option? dialogue — aboard count only (not enemy toll count).
+_FIGHTER_ABOARD_VS_RE = re.compile(
+    r"Your\s+fighters\s*:\s*(\d+)\s+vs\.?\s*theirs\s*:\s*(\d+)",
+    re.I,
+)
 # Two shapes seen: a hypothetical "Credits: 12,345" label-first form, and
 # the real "You have 100,000 credits" amount-first form live servers
 # actually use — tried in that order.
@@ -348,6 +359,22 @@ def parse_haggle(rendered_text: str) -> dict:
     return haggle
 
 
+def fighters_aboard(rendered_text: str):
+    """Best-effort aboard-fighter count from ship-info or toll Option? screens.
+
+    Last-match-wins across both shapes (same discipline as turns/credits).
+    Returns ``None`` when no trustworthy aboard count is visible."""
+    candidates: list[tuple[int, int]] = []
+    for m in _SHIP_HFS_RE.finditer(rendered_text):
+        candidates.append((m.end(), int(m.group(2).replace(",", ""))))
+    for m in _FIGHTER_ABOARD_VS_RE.finditer(rendered_text):
+        candidates.append((m.end(), int(m.group(1))))
+    if not candidates:
+        return None
+    candidates.sort(key=lambda t: t[0])
+    return candidates[-1][1]
+
+
 def parse_state(rendered_text: str) -> dict:
     state = {}
 
@@ -468,6 +495,10 @@ def parse_state(rendered_text: str) -> dict:
         port = dict(state.get("port") or {})
         port["commodities"] = commodities
         state["port"] = port
+
+    aboard = fighters_aboard(rendered_text)
+    if aboard is not None:
+        state["fighters_aboard"] = aboard
 
     return state
 

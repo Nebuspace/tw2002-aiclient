@@ -895,6 +895,32 @@ def test_compose_hud_cells_appends_autonomy_when_provided():
     assert compose_autonomy_headline(None)["value"] == "—"
 
 
+def test_compose_primary_goals_fighters_line():
+    zero_lines = compose_primary_goals_lines(GoalsSnapshot(
+        fighters_known=True, fighters_count=0,
+    ), width=36)
+    assert any("Fighters" in ln and "0 (need some)" in ln and "·" in ln for ln in zero_lines)
+
+    ok_lines = compose_primary_goals_lines(GoalsSnapshot(
+        fighters_known=True, fighters_count=30,
+    ), width=36)
+    assert any("Fighters" in ln and "30" in ln and "✓" in ln for ln in ok_lines)
+
+    unknown_lines = compose_primary_goals_lines(GoalsSnapshot(
+        fighters_known=False,
+    ), width=36)
+    assert any("Fighters" in ln and "unknown" in ln and "?" in ln for ln in unknown_lines)
+
+
+def test_update_tracked_stats_records_fighters_aboard():
+    from twclient.spectate_layout import update_tracked_stats
+
+    tracked = update_tracked_stats({}, {
+        "state": {"fighters_aboard": 12},
+    }, now=100.0)
+    assert tracked["fighters"] == (12, 100.0)
+
+
 def test_compose_primary_goals_and_chain_highlight():
     from twclient.chains import ProfitChain, TradeHop
     lines = compose_primary_goals_lines(GoalsSnapshot(

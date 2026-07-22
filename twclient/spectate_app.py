@@ -539,12 +539,24 @@ def _build_goals_snapshot(world_id, chain=None, *, tracked=None, status=None):
         credits_known = True
         credits_amount = status["credits"]
 
+    fighters_known = False
+    fighters_count = None
+    fighters_entry = tracked.get("fighters")
+    if isinstance(fighters_entry, tuple) and len(fighters_entry) >= 1:
+        fighters_known = True
+        fighters_count = fighters_entry[0]
+    if not fighters_known and status.get("fighters_aboard") is not None:
+        fighters_known = True
+        fighters_count = status["fighters_aboard"]
+
     if not world_id:
         return GoalsSnapshot(
             turns_known=turns_known,
             turns_count=turns_count,
             credits_known=credits_known,
             credits_amount=credits_amount,
+            fighters_known=fighters_known,
+            fighters_count=fighters_count,
         )
     try:
         dock = find_landmark_sectors(world_id, "StarDock")
@@ -560,6 +572,8 @@ def _build_goals_snapshot(world_id, chain=None, *, tracked=None, status=None):
             turns_count=turns_count,
             credits_known=credits_known,
             credits_amount=credits_amount,
+            fighters_known=fighters_known,
+            fighters_count=fighters_count,
         )
     hops, chain_unit = chain_hop_count_and_unit(chain)
     # P1-b price schema (hub relay): None = unknown → never guess/zero.
@@ -585,6 +599,8 @@ def _build_goals_snapshot(world_id, chain=None, *, tracked=None, status=None):
         ship_prices_count=ship_prices_count,
         upgrade_status=upgrade_status,
         holds_status="—",
+        fighters_known=fighters_known,
+        fighters_count=fighters_count,
     )
 
 
