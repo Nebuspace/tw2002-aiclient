@@ -521,6 +521,32 @@ def test_been_on_today_interstitial_is_dismissed_with_blank_enter():
     assert cls == "main_command"
 
 
+def test_clear_avoids_prompt_defaults_to_n():
+    """Live 2026-07-22: Do you wish to clear some avoids? (Y/N) — keep avoids."""
+    profile = FakeProfile()
+    steps = [
+        {"screen": "Do you wish to clear some avoids? (Y/N)", "expect": _is("N")},
+        {"screen": "Command [TL=00:00:00]:[1] (?=Help)? :", "expect": None},
+    ]
+    session = FakeLoginSession(steps)
+    cls, _ = run_login(session, profile, get_password=lambda n: "x", save_password=lambda n, pw: None)
+    assert cls == "main_command"
+    assert session.sent == [("N", False)]
+
+
+def test_clear_avoids_prompt_y_when_profile_opts_in():
+    profile = FakeProfile()
+    profile.clear_avoids_on_login = True
+    steps = [
+        {"screen": "Do you wish to clear some avoids? (Y/N)", "expect": _is("Y")},
+        {"screen": "Command [TL=00:00:00]:[24146] (?=Help)? :", "expect": None},
+    ]
+    session = FakeLoginSession(steps)
+    cls, _ = run_login(session, profile, get_password=lambda n: "x", save_password=lambda n, pw: None)
+    assert cls == "main_command"
+    assert session.sent == [("Y", False)]
+
+
 def test_been_on_today_fixture_is_login_handled_not_classified_as_pause_key():
     """The live re-enter line is intentionally NOT folded into classify.py's
     pause_key anchor (stale-scrollback hazard on full-text fallback). The

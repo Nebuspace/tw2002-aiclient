@@ -28,7 +28,8 @@ game_select, char_create):
 Deliberately reactive/order-independent rather than a rigid step
 sequence: every iteration re-classifies the CURRENT screen and dispatches
 on that, so interstitials (pause_key, inactivity warnings, a `[Pause]`
-inserted at an unexpected point) never desync it. This is also what makes
+inserted at an unexpected point, "been on today", "clear some avoids?")
+never desync it. This is also what makes
 `ensure` (B4) idempotent for free -- calling it against a screen already
 mid-flow just resumes the unmet suffix.
 
@@ -113,6 +114,14 @@ _INACTIVITY_RE = re.compile(r"inactivity\s+warning|critical\s+inactivity", re.I)
 # prompt line (or the last non-empty line when the prompt is blank) -- NOT
 # on stale scrollback above an already-active main_command prompt.
 _BEEN_ON_TODAY_RE = re.compile(r"you\s+have\s+been\s+on\s+(?:the\s+game\s+)?today", re.I)
+# Live on game.tw2002.net (2026-07-22): after re-enter, TWGS may ask
+# whether to clear the avoid list. Optional Y/N — default N (keep avoids;
+# clearing would wipe trader navigation memory). Override via profile
+# ``clear_avoids_on_login = true``.
+_CLEAR_AVOIDS_RE = re.compile(
+    r"do\s+you\s+wish\s+to\s+clear\s+some\s+avoids\s*\?\s*\(\s*Y\s*/\s*N\s*\)",
+    re.I,
+)
 
 # -- sub-step text matches inside the NEW-registration branch that don't
 # warrant their own classify.py anchor (narrow, single-purpose, only ever
@@ -371,6 +380,10 @@ def _decide(cls, text, prompt, profile, state, get_password, save_password, sess
             break
     if _SHOW_LOG_RE.search(text):
         return "N", False, None
+    if _CLEAR_AVOIDS_RE.search(prompt) or _CLEAR_AVOIDS_RE.search(text):
+        # Keep avoids unless the profile explicitly opts in (rare).
+        clear = bool(getattr(profile, "clear_avoids_on_login", False))
+        return ("Y" if clear else "N"), False, None
     if _INACTIVITY_RE.search(text):
         # A keepalive nudge mid-automaton -- we're actively driving, so
         # this is defensive (the steady-state idle-keepalive is D10's
