@@ -114,6 +114,11 @@ ANIM_INTERVAL_S = 1.0 / ANIM_FPS
 IDLE_ANIM_INTERVAL_S = 0.5  # calm chrome refresh when disconnected / no player
 HEARTBEAT_PERIOD_S = 0.8  # slow breathing-dot toggle, distinct from the faster waiting spinner
 FLASH_DURATION_S = 0.4    # brief reverse-video pulse on a connect/disconnect transition
+# WO-TUI-SPECTATE-RECONNECT: when twd is recycled the unix sock vanishes and
+# the subscribe stream EOF's. Keep the curses loop alive and retry connect
+# with bounded exponential backoff until the sock returns.
+RECONNECT_INITIAL_S = 0.25
+RECONNECT_MAX_S = 3.0
 
 
 def _status_identity(status):
@@ -173,42 +178,106 @@ def _on_sigint(signum, frame):
 class SpectateClient:
     """Subscribes to the daemon's watch-stream and feeds parsed events
     into a Queue for a consumer (the curses loop, or --snapshot) to read.
-    Read-only: never sends anything on the subscribe connection."""
+    Read-only: never sends anything on the subscribe connection.
+
+    After a successful first connect, a supervisor thread owns the
+    subscribe socket: if the daemon recycles (sock EOF / connect refused),
+    it backs off and resubscribes when the sock returns — the curses loop
+    keeps running and picks up the fresh seed event without a relaunch.
+    """
 
     def __init__(self, sock_path):
         self.sock_path = str(sock_path)
         self.events = queue.Queue()
         self.connect_error = None
+        self.stream_alive = False
+        self.reconnecting = False
         self._sock = None
+        self._sock_lock = threading.Lock()
         self._stop = threading.Event()
         self._thread = None
 
     def connect(self):
-        try:
-            self._sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-            self._sock.connect(self.sock_path)
-            self._sock.sendall((json.dumps({"verb": "subscribe", "args": {}}) + "\n").encode("utf-8"))
-        except OSError as e:
-            self.connect_error = str(e)
+        """Open the first subscribe stream. Returns False if the sock is
+        not up yet (caller exits — initial connect is still fail-fast).
+        Once True, auto-reconnect survives later daemon recycles."""
+        if not self._open_subscribe():
             return False
-        self._thread = threading.Thread(target=self._reader_loop, daemon=True)
+        self.stream_alive = True
+        self.reconnecting = False
+        self._thread = threading.Thread(target=self._supervise, daemon=True)
         self._thread.start()
         return True
 
-    def _reader_loop(self):
-        f = self._sock.makefile("rb")
-        while not self._stop.is_set():
+    def _open_subscribe(self):
+        try:
+            sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            sock.connect(self.sock_path)
+            sock.sendall(
+                (json.dumps({"verb": "subscribe", "args": {}}) + "\n").encode("utf-8")
+            )
+        except OSError as e:
+            self.connect_error = str(e)
+            return False
+        with self._sock_lock:
+            self._sock = sock
+        self.connect_error = None
+        return True
+
+    def _close_sock(self):
+        with self._sock_lock:
+            sock = self._sock
+            self._sock = None
+        if sock is not None:
             try:
-                line = f.readline()
+                sock.close()
             except OSError:
-                break
-            if not line:
-                break
+                pass
+
+    def _read_until_drop(self):
+        with self._sock_lock:
+            sock = self._sock
+        if sock is None:
+            return
+        f = sock.makefile("rb")
+        try:
+            while not self._stop.is_set():
+                try:
+                    line = f.readline()
+                except OSError:
+                    break
+                if not line:
+                    break
+                try:
+                    event = json.loads(line.decode("utf-8"))
+                except json.JSONDecodeError:
+                    continue
+                self.events.put(event)
+        finally:
             try:
-                event = json.loads(line.decode("utf-8"))
-            except json.JSONDecodeError:
-                continue
-            self.events.put(event)
+                f.close()
+            except OSError:
+                pass
+            self._close_sock()
+            self.stream_alive = False
+
+    def _supervise(self):
+        backoff = RECONNECT_INITIAL_S
+        while not self._stop.is_set():
+            self._read_until_drop()
+            if self._stop.is_set():
+                break
+            self.reconnecting = True
+            while not self._stop.is_set():
+                time.sleep(backoff)
+                if self._open_subscribe():
+                    self.stream_alive = True
+                    self.reconnecting = False
+                    backoff = RECONNECT_INITIAL_S
+                    break
+                backoff = min(backoff * 1.5, RECONNECT_MAX_S)
+        self.reconnecting = False
+        self.stream_alive = False
 
     def next_event(self, timeout=0.1):
         try:
@@ -218,11 +287,9 @@ class SpectateClient:
 
     def close(self):
         self._stop.set()
-        if self._sock is not None:
-            try:
-                self._sock.close()
-            except OSError:
-                pass
+        self._close_sock()
+        if self._thread is not None and self._thread.is_alive():
+            self._thread.join(timeout=2.0)
 
 
 def fetch_status(sock_path, timeout=3.0):
@@ -1461,6 +1528,7 @@ def _run(stdscr, client, sock_path, pid_path, unicode_ok):
     last_status_poll = 0.0
     status_poll_ts = 0.0
     prev_connected = None
+    prev_reconnecting = False
     library = {"open": False, "loops": [], "selected": 0, "pending_cycles": 1, "confirm": None}
     explore_state = {"mode": "off"}
     phase2_cache = {"chain": None, "chain_ts": 0.0}
@@ -1533,6 +1601,17 @@ def _run(stdscr, client, sock_path, pid_path, unicode_ok):
                 ticker_history.append(event)
                 tracked = update_tracked_stats(tracked, event, time.monotonic())
                 got_content = True
+
+            # WO-TUI-SPECTATE-RECONNECT: subscribe drop → reconnecting chrome;
+            # sock return → force a full content redraw for the fresh seed.
+            reconnecting = bool(getattr(client, "reconnecting", False))
+            if reconnecting != prev_reconnecting:
+                chrome_dirty = True
+                if prev_reconnecting and not reconnecting:
+                    got_content = True
+                    # HUD seed as soon as the sock is back (don't wait 1.5s).
+                    last_status_poll = 0.0
+                prev_reconnecting = reconnecting
 
             now = time.monotonic()
             if now - last_status_poll > STATUS_POLL_INTERVAL_S:
@@ -1612,13 +1691,14 @@ def _run(stdscr, client, sock_path, pid_path, unicode_ok):
                 calm_idle=not connected,
                 explore_mode=explore_state["mode"],
                 phase2_cache=phase2_cache,
+                reconnecting=reconnecting,
             )
     finally:
         signal.signal(signal.SIGWINCH, prev_handler)
         signal.signal(signal.SIGINT, prev_sigint)
 
 
-def _render(windows, regions, event, tracked, ticker_history, status, palette, glyphs, now, anim_tick, idle_age, semantic, flash_active, got_content, calm_idle=False, explore_mode="off", phase2_cache=None):
+def _render(windows, regions, event, tracked, ticker_history, status, palette, glyphs, now, anim_tick, idle_age, semantic, flash_active, got_content, calm_idle=False, explore_mode="off", phase2_cache=None, reconnecting=False):
     connected = status.get("connected", False)
     accent_attr = palette.attr_for("cyan", "default", True)
     muted_attr = curses.A_DIM if hasattr(curses, "A_DIM") else curses.A_NORMAL
@@ -1812,10 +1892,16 @@ def _render(windows, regions, event, tracked, ticker_history, status, palette, g
             spinner_char = glyphs["spinner"][anim_tick % len(glyphs["spinner"])]
             heartbeat_char = glyphs["heartbeat"][int(now / HEARTBEAT_PERIOD_S) % len(glyphs["heartbeat"])]
         idle_text = format_idle_age(idle_age) if idle_age is not None else "-"
+        stream_err = None
+        # Prefer a real attach failure over the transient reconnect hint.
+        if status.get("attach_error"):
+            stream_err = status.get("attach_error")
+        elif reconnecting:
+            stream_err = "reconnecting…"
         _draw_status(
             windows["status"], regions["status"], connected, semantic,
             spinner_char, heartbeat_char, idle_text, flash_active, palette,
-            error_text=status.get("attach_error"),
+            error_text=stream_err,
         )
 
     curses.doupdate()

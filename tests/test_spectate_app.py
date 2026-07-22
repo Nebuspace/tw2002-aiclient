@@ -2131,3 +2131,96 @@ def test_handle_key_a_is_a_safe_noop_without_a_stdscr():
     assert consumed is True
     assert "attach_error" not in status
 
+
+def test_spectate_client_auto_reconnects_after_sock_recycle(monkeypatch):
+    """WO-TUI-SPECTATE-RECONNECT: subscribe EOF (daemon recycle) must not
+    leave SpectateClient permanently quiet — when the unix sock returns,
+    resubscribe and deliver the fresh seed event without relaunching."""
+    import shutil
+    import socket
+    import tempfile
+    import threading
+
+    monkeypatch.setattr(spectate_app_mod, "RECONNECT_INITIAL_S", 0.05)
+    monkeypatch.setattr(spectate_app_mod, "RECONNECT_MAX_S", 0.2)
+
+    # macOS AF_UNIX path cap (~104B) — pytest tmp_path is too deep.
+    sock_dir = tempfile.mkdtemp(prefix="twd-spec-")
+    sock_path = Path(sock_dir) / "s.sock"
+    try:
+        def serve_one_event(label, ready, hold_open=None):
+            if sock_path.exists():
+                sock_path.unlink()
+            srv = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            srv.bind(str(sock_path))
+            srv.listen(1)
+            srv.settimeout(8.0)
+            ready.set()
+            conn, _ = srv.accept()
+            buf = b""
+            while b"\n" not in buf:
+                chunk = conn.recv(4096)
+                if not chunk:
+                    break
+                buf += chunk
+            payload = {
+                "ok": True,
+                "screen": [label],
+                "state": {},
+                "classification": "main_command",
+                "sent_input": None,
+            }
+            conn.sendall((json.dumps(payload) + "\n").encode("utf-8"))
+            if hold_open is not None:
+                hold_open.wait(timeout=8.0)
+            try:
+                conn.close()
+            except OSError:
+                pass
+            try:
+                srv.close()
+            except OSError:
+                pass
+            try:
+                sock_path.unlink()
+            except FileNotFoundError:
+                pass
+
+        ready1 = threading.Event()
+        t1 = threading.Thread(target=serve_one_event, args=("GEN-1", ready1), daemon=True)
+        t1.start()
+        assert ready1.wait(2.0)
+
+        client = spectate_app_mod.SpectateClient(sock_path)
+        assert client.connect() is True
+        first = client.next_event(timeout=3.0)
+        assert first is not None
+        assert first.get("screen") == ["GEN-1"]
+
+        t1.join(timeout=3.0)
+        deadline = time.monotonic() + 3.0
+        while time.monotonic() < deadline and not client.reconnecting:
+            time.sleep(0.02)
+        assert client.reconnecting is True
+        assert client.stream_alive is False
+
+        ready2 = threading.Event()
+        hold2 = threading.Event()
+        t2 = threading.Thread(
+            target=serve_one_event, args=("GEN-2", ready2, hold2), daemon=True,
+        )
+        t2.start()
+        assert ready2.wait(2.0)
+
+        second = client.next_event(timeout=5.0)
+        assert second is not None
+        assert second.get("screen") == ["GEN-2"]
+        assert client.stream_alive is True
+        assert client.reconnecting is False
+
+        hold2.set()
+        client.close()
+        t2.join(timeout=3.0)
+    finally:
+        shutil.rmtree(sock_dir, ignore_errors=True)
