@@ -80,6 +80,13 @@ class CredentialError(Exception):
     (that's a legitimate None from get_password(), not an error)."""
 
 
+# Last successfully parsed Profile per (profiles_path, name). Used when
+# profiles.toml is mid-write/corrupt so long-lived clients (watch/spectate
+# status polls, guardian reconnect) can keep serving the last-good shape
+# instead of letting tomllib.TOMLDecodeError escape load_profile().
+_profile_cache = {}
+
+
 class Profile:
     def __init__(self, name, host, port, game_letter, handle=None, ship_name=None, planet_name=None, server=None,
                  allow_register=False, crawl_sacrificial=False, autonomous=False):
@@ -131,8 +138,13 @@ class Profile:
 def _load_toml(path):
     if not path.exists():
         return {}
-    with open(path, "rb") as f:
-        return tomllib.load(f)
+    try:
+        with open(path, "rb") as f:
+            return tomllib.load(f)
+    except tomllib.TOMLDecodeError as e:
+        raise CredentialError(
+            f"profiles_toml_parse_error:{path.name}:{e}"
+        ) from e
 
 
 def list_profiles(profiles_path=None):
@@ -140,7 +152,16 @@ def list_profiles(profiles_path=None):
 
 
 def load_profile(name, profiles_path=None, servers_path=None):
-    data = _load_toml(profiles_path or PROFILES_PATH)
+    path = profiles_path or PROFILES_PATH
+    cache_key = (str(path), name)
+    try:
+        data = _load_toml(path)
+    except CredentialError as e:
+        if str(e).startswith("profiles_toml_parse_error:"):
+            cached = _profile_cache.get(cache_key)
+            if cached is not None:
+                return cached
+        raise
     if name not in data:
         raise CredentialError(f"profile_not_found:{name}")
     p = data[name]
@@ -176,7 +197,7 @@ def load_profile(name, profiles_path=None, servers_path=None):
         missing.append("port")
     if missing:
         raise CredentialError(f"profile_incomplete:{name}:missing={missing}")
-    return Profile(
+    profile = Profile(
         name=name,
         host=host,
         port=port,
@@ -189,6 +210,8 @@ def load_profile(name, profiles_path=None, servers_path=None):
         crawl_sacrificial=crawl_sacrificial,
         autonomous=autonomous,
     )
+    _profile_cache[cache_key] = profile
+    return profile
 
 
 def _env_var_name(profile_name):

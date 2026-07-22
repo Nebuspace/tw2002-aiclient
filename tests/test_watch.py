@@ -6,6 +6,9 @@ background thread, matching the fake-clock style used for settle.py.
 import queue
 import time
 
+import pytest
+
+from twclient import credentials
 from twclient.watch import WatchHub
 
 
@@ -103,3 +106,29 @@ def test_subscriber_count_tracks_subscribe_and_unsubscribe():
     assert hub.subscriber_count() == 1
     hub.unsubscribe(q)
     assert hub.subscriber_count() == 0
+
+
+def test_maybe_emit_survives_transient_profiles_toml_parse_error(tmp_path):
+    """WO-PROFILES-TOML-PARSE-HARDEN: build_response() (via WatchHub)
+    must keep emitting when profiles.toml goes corrupt mid-session."""
+    good = (
+        '[default]\nhost="example.com"\nport=23\ngame_letter="F"\n'
+        'handle="AEGIS"\n'
+    )
+    p = tmp_path / "profiles.toml"
+    p.write_text(good, encoding="utf-8")
+    credentials.load_profile("default", profiles_path=p)
+    p.write_text(good + "[trunc", encoding="utf-8")
+
+    class SessionWithProfile(FakeSession):
+        auto_login_profile = "default"
+        host = "example.com"
+
+    session = SessionWithProfile(["hello"], last_rx=time.monotonic() - 1.0)
+    hub = WatchHub(session, debounce_ms=350)
+    q = hub.subscribe(queue.Queue)
+    q.get_nowait()  # seed event -- must not raise through build_response
+    session._rows = ["goodbye"]
+    hub._maybe_emit()
+    event = q.get_nowait()
+    assert event["screen"] == ["goodbye"]

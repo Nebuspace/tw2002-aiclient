@@ -142,6 +142,24 @@ def test_status_world_id_stays_sticky_across_transient_profile_load_failure(
     assert send_request(fake_daemon.sock_path, "status")["world_id"] == expected
 
 
+def test_status_world_id_stays_sticky_when_profiles_toml_is_corrupt_on_disk(
+    fake_daemon, profiles_toml, monkeypatch,
+):
+    """Same sticky guarantee as the monkeypatched CredentialError case,
+    but driven through real corrupt-on-disk profiles.toml parsing."""
+    fake_daemon.session.auto_login_profile = "default"
+    fake_daemon.session.host = "test.example"
+    profile = credentials.load_profile("default", profiles_path=profiles_toml)
+    expected = world_identity.world_id(
+        fake_daemon.session.host, profile.game_letter, profile.handle
+    )
+    assert send_request(fake_daemon.sock_path, "status")["world_id"] == expected
+
+    good = profiles_toml.read_text(encoding="utf-8")
+    profiles_toml.write_text(good + "[trunc", encoding="utf-8")
+    assert send_request(fake_daemon.sock_path, "status")["world_id"] == expected
+
+
 # -- autopilot_start / autopilot_stop ---------------------------------------
 
 

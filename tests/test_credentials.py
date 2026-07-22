@@ -10,6 +10,13 @@ import pytest
 from twclient import credentials
 
 
+@pytest.fixture(autouse=True)
+def _clear_profile_cache():
+    credentials._profile_cache.clear()
+    yield
+    credentials._profile_cache.clear()
+
+
 def _write_profiles(tmp_path, body):
     path = tmp_path / "profiles.toml"
     path.write_text(body, encoding="utf-8")
@@ -122,6 +129,44 @@ def test_list_profiles(tmp_path):
         '[alt]\nhost="y"\nport=23\ngame_letter="A"\nhandle="J"\n',
     )
     assert credentials.list_profiles(profiles_path=p) == ["alt", "default"]
+
+
+def test_corrupt_profiles_toml_raises_credential_error_not_toml_decode(tmp_path):
+    """WO-PROFILES-TOML-PARSE-HARDEN: tomllib failures must surface as
+    recoverable CredentialError, never escape as TOMLDecodeError."""
+    p = _write_profiles(
+        tmp_path,
+        '[default]\nhost="x"\nport=23\ngame_letter="F"\nhandle="H"\n[trunc',
+    )
+    with pytest.raises(credentials.CredentialError, match="profiles_toml_parse_error"):
+        credentials.load_profile("default", profiles_path=p)
+    with pytest.raises(credentials.CredentialError, match="profiles_toml_parse_error"):
+        credentials.list_profiles(profiles_path=p)
+
+
+def test_load_profile_returns_last_good_profile_on_transient_parse_error(tmp_path):
+    """Mid-write profiles.toml must not kill callers that already loaded
+    this profile successfully -- return the cached last-good shape."""
+    good = (
+        '[default]\nhost="example.com"\nport=23\ngame_letter="F"\n'
+        'handle="AEGIS"\n'
+    )
+    p = _write_profiles(tmp_path, good)
+    first = credentials.load_profile("default", profiles_path=p)
+    p.write_text(good + "[trunc", encoding="utf-8")
+    second = credentials.load_profile("default", profiles_path=p)
+    assert second is first
+    assert second.host == "example.com"
+    assert second.handle == "AEGIS"
+
+
+def test_load_profile_parse_error_without_cache_still_raises(tmp_path):
+    p = _write_profiles(
+        tmp_path,
+        '[default]\nhost="x"\nport=23\ngame_letter="F"\nhandle="H"\n[trunc',
+    )
+    with pytest.raises(credentials.CredentialError, match="profiles_toml_parse_error"):
+        credentials.load_profile("default", profiles_path=p)
 
 
 def test_get_password_returns_none_when_nothing_saved(tmp_path, monkeypatch):
