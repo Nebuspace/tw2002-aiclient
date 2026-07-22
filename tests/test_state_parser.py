@@ -770,6 +770,20 @@ def test_flyby_ports_none_sets_explicit_none_to_clear_prior_flyby():
     assert state["port"] is None
 
 
+def test_flyby_omitted_ports_line_on_genuine_sector_clears_port():
+    """This server omits the Ports line when the sector has no port."""
+    screen = (
+        "Sector  : 25948 in uncharted space.\n"
+        "Warps to Sector(s) :  8578 - 22211 - 24400\n"
+        "\n"
+        "Command [TL=00:00:00]:[25948] (?=Help)? : "
+    )
+    state = parse_state(screen)
+    assert state["sector"] == 25948
+    assert state["port"] is None
+    assert state["warps"] == [8578, 22211, 24400]
+
+
 def test_flyby_ports_class_zero_without_letter_code_is_presence_only():
     """Terran (Class 0) has no CIM letter code -- presence, no class key."""
     screen = "Sector : 100\nPorts   : Terran (Class 0)\nCommand [TL=00:12:34]:[1000] (?=Help) ?"

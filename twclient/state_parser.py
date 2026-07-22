@@ -382,16 +382,34 @@ def parse_state(rendered_text: str) -> dict:
         if warps:
             state["warps"] = warps
 
-    # WO-PORT-CHAIN-SEED: flyby presence from the sector-status "Ports :"
-    # line -- NOT commodities (those come only from a commerce report).
-    # "Ports : None" / blank → explicit `port: None` so write_from_state
-    # can CLEAR a prior flyby (WO-TUI-CHAIN-25948-FALSE-PORT). Absence of
-    # any Ports line still leaves the key unset (do not clear on
-    # unobserved).
-    ports_lines = _PORTS_LINE_RE.findall(rendered_text)
-    if ports_lines:
-        flyby = _flyby_port_from_ports_line(ports_lines[-1])
-        state["port"] = flyby  # dict presence, or None for "Ports : None"
+    # WO-PORT-CHAIN-SEED / WO-TUI-CHAIN-25948-FALSE-PORT: flyby presence
+    # from the sector-status "Ports :" line -- NOT commodities (those
+    # come only from a commerce report).
+    #
+    # Scope to the SAME contiguous status block under the LAST "Sector :"
+    # line that `is_genuine_sector_status` trusts -- never a whole-buffer
+    # Ports match (stale scrollback / prior hop). Within that block:
+    #   - "Ports : <name…>" → presence dict (optional class)
+    #   - "Ports : None" / blank → explicit port=None (clear prior flyby)
+    #   - Ports line ABSENT but block is genuine (Sector + Warps) → also
+    #     port=None: this live server omits the Ports line entirely when
+    #     the sector has no port (login/redisplay at 25948 showed Sector
+    #     + Warps only; key-absent left the BBS flyby ghost).
+    # Non-genuine screens leave the key unset (do not clear on unobserved).
+    block_lines = _latest_sector_status_block_lines(rendered_text)
+    if block_lines is not None:
+        ports_value = None
+        saw_ports_line = False
+        for line in block_lines:
+            m = _PORTS_LINE_RE.match(line)
+            if m:
+                saw_ports_line = True
+                ports_value = m.group(1)
+        if saw_ports_line:
+            state["port"] = _flyby_port_from_ports_line(ports_value)
+        elif any(_WARPS_RE.match(line) for line in block_lines):
+            # Genuine Sector+Warps, no Ports line → confirmed no port.
+            state["port"] = None
 
     # WO-FA2b REVISE (cipher F1 + mack convergent finding): commodity rows
     # are extracted ONLY from `_latest_commerce_report_block()` -- the
@@ -499,6 +517,28 @@ def _flyby_port_from_ports_line(value: str):
 # blast-radius reasoning) -- becomes a HARD GATE prerequisite before any
 # autonomous run on a multiplayer/shared server, where another player
 # could actually author such a broadcast.
+def _latest_sector_status_block_lines(rendered_text: str):
+    """Contiguous non-blank lines under the LAST line-start ``Sector : N``.
+
+    Same last-match + blank-line end discipline as
+    ``is_genuine_sector_status``. Returns ``None`` when no sector line
+    exists; otherwise the block body (may be empty).
+    """
+    lines = rendered_text.splitlines()
+    sector_idx = None
+    for i, line in enumerate(lines):
+        if _SECTOR_RE.match(line):
+            sector_idx = i
+    if sector_idx is None:
+        return None
+    block = []
+    for line in lines[sector_idx + 1 :]:
+        if not line.strip():
+            break
+        block.append(line)
+    return block
+
+
 def is_genuine_sector_status(rendered_text: str) -> bool:
     """True only when the sector `parse_state()` would anchor to (the
     LAST line-start "Sector : N" match, same discipline as `parse_state`
