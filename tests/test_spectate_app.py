@@ -1347,16 +1347,13 @@ def test_spectate_seeds_hud_from_status_before_any_event_under_a_fake_pty():
 
 
 # ---------------------------------------------------------------------------
-# WO-FA5a — DECISIONS pane rotation: explore/trace must not PERMANENTLY
-# preempt the GOALS+CHAIN panel
+# WO-TUI-GOALS-IN-PRIORITIES — GOALS live in left PRIORITIES; DECISIONS =
+# explore/trace only (no FA5a dwell reclaim onto DECISIONS).
 # ---------------------------------------------------------------------------
 
 
-def test_decisions_pane_rotation_reclaims_goals_chain_from_a_live_trace(monkeypatch):
-    """A live autopilot_trace used to fill DECISIONS forever. Confirm
-    _render() now yields the pane back to GOALS+CHAIN on
-    decisions_should_show_chain()'s periodic dwell window -- same
-    `status`/`phase2_cache` inputs, only `now` differs."""
+def test_decisions_keeps_trace_never_goals_title(monkeypatch):
+    """Live autopilot_trace fills DECISIONS; GOALS never reclaim that pane."""
     captured = []
 
     def fake_draw_decisions(win, region, lines, glyphs, palette, title=None):
@@ -1364,8 +1361,6 @@ def test_decisions_pane_rotation_reclaims_goals_chain_from_a_live_trace(monkeypa
 
     monkeypatch.setattr(spectate_app_mod, "_draw_decisions", fake_draw_decisions)
     monkeypatch.setattr(curses, "doupdate", lambda: None)
-    # No world_id -> _build_goals_snapshot degrades to an empty
-    # GoalsSnapshot cleanly, no world_model I/O needed for this test.
     monkeypatch.setattr(spectate_app_mod, "_resolve_world_id", lambda status=None: None)
 
     regions = {
@@ -1385,7 +1380,7 @@ def test_decisions_pane_rotation_reclaims_goals_chain_from_a_live_trace(monkeypa
         def attr_for(self, *a, **k):
             return 0
 
-    def render_at(now):
+    for now in (CHAIN_PANEL_DWELL_S + 1.0, CHAIN_PANEL_ROTATION_PERIOD_S + 1.0):
         captured.clear()
         spectate_app_mod._render(
             windows, regions, dict(spectate_app_mod.DEFAULT_EVENT), {}, [], status,
@@ -1393,23 +1388,13 @@ def test_decisions_pane_rotation_reclaims_goals_chain_from_a_live_trace(monkeypa
             flash_active=False, got_content=True,
             explore_mode="off", phase2_cache={"chain": None},
         )
-        return captured[0]
-
-    # Outside the dwell window: the trace wins (unchanged behavior).
-    outside = CHAIN_PANEL_DWELL_S + 1.0  # past the dwell window, within the first cycle
-    _, title = render_at(now=outside)
-    assert title == "DECISIONS"
-
-    # Inside the dwell window (one full cycle later, proving the wrap):
-    # GOALS+CHAIN reclaims the pane.
-    inside = CHAIN_PANEL_ROTATION_PERIOD_S + 1.0
-    _, title = render_at(now=inside)
-    assert title == "GOALS"
+        lines, title = captured[0]
+        assert title == "DECISIONS"
+        assert "— GOALS —" not in lines
 
 
-def test_decisions_pane_rotation_reclaims_goals_even_with_chain_box(monkeypatch):
-    """Chain-box presence must not permanently hide GOALS when a live
-    autopilot_trace is preempting (Max 2026-07-22 visibility bug)."""
+def test_priorities_panel_owns_goals_with_chain_box(monkeypatch):
+    """GOALS render in PRIORITIES; DECISIONS stays trace-titled."""
     captured = []
 
     def fake_draw_decisions(win, region, lines, glyphs, palette, title=None):
@@ -1438,45 +1423,23 @@ def test_decisions_pane_rotation_reclaims_goals_even_with_chain_box(monkeypatch)
         def attr_for(self, *a, **k):
             return 0
 
-    def render_at(now):
-        captured.clear()
-        spectate_app_mod._render(
-            windows, regions, dict(spectate_app_mod.DEFAULT_EVENT), {}, [], status,
-            FakePalette(), {}, now=now, anim_tick=0, idle_age=None, semantic="ok",
-            flash_active=False, got_content=True,
-            explore_mode="off", phase2_cache={"chain": None},
-        )
-        goals_draws = [c for c in captured if c[2] == "DECISIONS" or c[1] in ("GOALS", "DECISIONS")]
-        # Prefer title override when present
-        for lines, title, rtitle in captured:
-            if title in ("GOALS", "DECISIONS") or (title is None and rtitle == "DECISIONS"):
-                return lines, title
-        return goals_draws[0][0], goals_draws[0][1]
-
-    outside = CHAIN_PANEL_DWELL_S + 1.0
-    _, title = render_at(now=outside)
-    assert title == "DECISIONS"
-
-    inside = CHAIN_PANEL_ROTATION_PERIOD_S + 1.0
-    _, title = render_at(now=inside)
-    assert title == "GOALS"
-
-    # PRIORITIES always drawn (independent of GOALS/DECISIONS preempt).
-    captured.clear()
     spectate_app_mod._render(
         windows, regions, dict(spectate_app_mod.DEFAULT_EVENT), {}, [], status,
-        FakePalette(), {}, now=outside, anim_tick=0, idle_age=None, semantic="ok",
-        flash_active=False, got_content=True,
+        FakePalette(), {}, now=CHAIN_PANEL_ROTATION_PERIOD_S + 1.0, anim_tick=0,
+        idle_age=None, semantic="ok", flash_active=False, got_content=True,
         explore_mode="off", phase2_cache={"chain": None},
     )
-    pri_draws = [c for c in captured if c[1] == "PRIORITIES" or c[2] == "PRIORITIES"]
-    assert len(pri_draws) == 1
-    assert pri_draws[0][0] == ["—"]
+    dec = [c for c in captured if c[1] == "DECISIONS" or c[2] == "DECISIONS"]
+    pri = [c for c in captured if c[1] == "PRIORITIES" or c[2] == "PRIORITIES"]
+    assert len(dec) == 1 and dec[0][1] == "DECISIONS"
+    assert "— GOALS —" not in dec[0][0]
+    assert len(pri) == 1 and pri[0][1] == "PRIORITIES"
+    assert "— GOALS —" in pri[0][0]
+    assert "— PRIORITIES —" in pri[0][0]
 
 
-def test_decisions_pane_rotation_reclaims_goals_chain_from_explore_mode(monkeypatch):
-    """Same guarantee for explore mode (an operator-toggled, otherwise
-    indefinite preempt) as the live-trace case above."""
+def test_decisions_keeps_explore_never_goals_title(monkeypatch):
+    """Explore mode owns DECISIONS; GOALS never reclaim that pane."""
     captured = []
 
     def fake_draw_decisions(win, region, lines, glyphs, palette, title=None):
@@ -1503,7 +1466,7 @@ def test_decisions_pane_rotation_reclaims_goals_chain_from_explore_mode(monkeypa
         def attr_for(self, *a, **k):
             return 0
 
-    def render_at(now):
+    for now in (CHAIN_PANEL_DWELL_S + 1.0, CHAIN_PANEL_ROTATION_PERIOD_S + 1.0):
         captured.clear()
         spectate_app_mod._render(
             windows, regions, dict(spectate_app_mod.DEFAULT_EVENT), {}, [], status,
@@ -1511,19 +1474,10 @@ def test_decisions_pane_rotation_reclaims_goals_chain_from_explore_mode(monkeypa
             flash_active=False, got_content=True,
             explore_mode="mapfill", phase2_cache={"chain": None},
         )
-        return captured[0]
-
-    # No world_id yet -> explore's own "set TW_WORLD_ID" copy, outside the dwell window.
-    outside = CHAIN_PANEL_DWELL_S + 1.0
-    lines, title = render_at(now=outside)
-    assert title is None
-    assert any("explore" in ln for ln in lines)
-
-    # Inside the dwell window: GOALS+CHAIN reclaims the pane even with
-    # explore mode still on.
-    inside = CHAIN_PANEL_ROTATION_PERIOD_S + 1.0
-    _, title = render_at(now=inside)
-    assert title == "GOALS"
+        lines, title = captured[0]
+        assert title is None
+        assert any("explore" in ln for ln in lines)
+        assert "— GOALS —" not in lines
 
 
 # ---------------------------------------------------------------------------

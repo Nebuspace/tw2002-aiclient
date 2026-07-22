@@ -1067,6 +1067,36 @@ def compose_priorities_lines(trace, *, width: int = 22) -> list[str]:
     return lines or ["—"]
 
 
+def compose_priorities_panel(
+    goals_snap,
+    chain,
+    trace,
+    *,
+    autonomy_lines=None,
+    current_sector=None,
+    width: int = 22,
+    include_chain: bool = True,
+) -> list[str]:
+    """Left-gutter PRIORITIES box: autonomy + GOALS (+ optional CHAIN) + weigh list.
+
+    DECISIONS owns trace/explore only; this panel always shows strategy context
+    beside the game viewport (WO-TUI-PRIORITIES-LEFT / Max 2026-07-22).
+    """
+    lines = list(autonomy_lines or [])
+    lines.extend(
+        compose_phase2_side_panel(
+            goals_snap,
+            chain,
+            current_sector=current_sector,
+            width=width,
+            include_chain=include_chain,
+        )
+    )
+    lines.append("— PRIORITIES —")
+    lines.extend(compose_priorities_lines(trace, width=width))
+    return lines
+
+
 def compose_autonomy_headline(ratio_data: dict | None = None) -> dict:
     """One HUD-shaped cell for the autonomy gauge (uniform with compose_hud_cells)."""
     data = ratio_data or {}
@@ -1845,14 +1875,9 @@ def render_plain(dashboard: dict) -> str:
         lines.append(" DECISIONS — autopilot dry-run")
         lines.append("-" * 80)
         lines.extend(dashboard["decisions"])
-    if dashboard.get("goals_chain"):
-        lines.append("-" * 80)
-        lines.append(" GOALS / CHAIN")
-        lines.append("-" * 80)
-        lines.extend(dashboard["goals_chain"])
     if dashboard.get("priorities"):
         lines.append("-" * 80)
-        lines.append(" PRIORITIES")
+        lines.append(" PRIORITIES — goals + weigh list")
         lines.append("-" * 80)
         lines.extend(dashboard["priorities"])
     lines.append("-" * 80)

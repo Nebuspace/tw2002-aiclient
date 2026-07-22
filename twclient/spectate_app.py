@@ -49,12 +49,10 @@ from .spectate_layout import (
     compose_chain_bubbles,
     compose_hud_cells,
     compose_live_metrics,
-    compose_phase2_side_panel,
     compose_port_panel,
-    compose_priorities_lines,
+    compose_priorities_panel,
     compute_autonomy_ratio,
     chain_bubble_sectors,
-    decisions_should_show_chain,
     format_autonomy_lines,
     format_autopilot_trace_lines,
     format_idle_age,
@@ -1075,8 +1073,7 @@ def _draw_chain_viz(win, region, lines, palette):
 
 
 def _draw_decisions(win, region, lines, glyphs, palette, title=None):
-    """TW-08 Decisions box — titled + bordered; placeholder / explore /
-    Phase-2 GOALS+CHAIN lines feed the same pane."""
+    """Titled bordered pane — DECISIONS (trace/explore) or PRIORITIES."""
     win.erase()
     h, w = region["h"], region["w"]
     accent_attr = palette.attr_for("cyan", "default", False)
@@ -1703,25 +1700,7 @@ def _render(windows, regions, event, tracked, ticker_history, status, palette, g
         cols = max(12, (regions["decisions"].get("w") or 22) - 4)
         explore_active = bool(explore_mode and explore_mode != "off")
         live_trace = (status or {}).get("autopilot_trace")
-        # Dedicated CHAIN region (WO-TUI-CHAIN-BOX) always owns the trade-loop
-        # summary; DECISIONS then keeps GOALS / explore / trace without the
-        # old FA5a dwell requirement for chain visibility.
-        has_chain_box = regions.get("chain") is not None
-        preempting = explore_active or bool(live_trace)
-        # FA5a dwell always applies while preempting — chain-box presence must
-        # NOT permanently hide GOALS (bug: has_chain_box + live_trace ⇒ never).
-        show_goals = (not preempting) or decisions_should_show_chain(now)
-        if show_goals:
-            wid = _resolve_world_id(status)
-            chain = phase2_cache.get("chain")
-            goals = _build_goals_snapshot(wid, chain)
-            sector = (event.get("state") or {}).get("sector")
-            decision_lines = format_autonomy_lines(autonomy) + compose_phase2_side_panel(
-                goals, chain, current_sector=sector, width=cols,
-                include_chain=not has_chain_box,
-            )
-            panel_title = "GOALS"
-        elif explore_active:
+        if explore_active:
             wid = _resolve_world_id(status)
             sector = (event.get("state") or {}).get("sector")
             plan = _explore_plan_for_mode(explore_mode, wid, sector)
@@ -1731,9 +1710,8 @@ def _render(windows, regions, event, tracked, ticker_history, status, palette, g
                 decision_lines = ["E) explore on", "no sector yet"]
             else:
                 decision_lines = format_explore_decision_lines(explore_mode, plan)
-        else:
-            # Live autopilot dry-run trace fills DECISIONS outside
-            # GOALS's window. Trace is render-only — never drives the game.
+        elif live_trace:
+            # Live autopilot dry-run trace — render-only, never drives the game.
             decision_lines = format_autopilot_trace_lines(live_trace, cols=cols)
             panel_title = "DECISIONS"
         _draw_decisions(
@@ -1741,11 +1719,22 @@ def _render(windows, regions, event, tracked, ticker_history, status, palette, g
             decision_lines, glyphs, palette, title=panel_title,
         )
 
-    # Dedicated PRIORITIES box — independent of DECISIONS/GOALS preempt.
+    # Left-gutter PRIORITIES: goals + ordered weigh list (always visible).
     if regions.get("priorities") is not None and "priorities" in windows:
         pri_cols = max(8, (regions["priorities"].get("w") or 22) - 4)
-        pri_lines = compose_priorities_lines(
-            (status or {}).get("autopilot_trace"), width=pri_cols,
+        wid = _resolve_world_id(status)
+        chain = phase2_cache.get("chain")
+        goals = _build_goals_snapshot(wid, chain)
+        sector = (event.get("state") or {}).get("sector")
+        has_chain_box = regions.get("chain") is not None
+        pri_lines = compose_priorities_panel(
+            goals,
+            chain,
+            (status or {}).get("autopilot_trace"),
+            autonomy_lines=format_autonomy_lines(autonomy),
+            current_sector=sector,
+            width=pri_cols,
+            include_chain=not has_chain_box,
         )
         _draw_decisions(
             windows["priorities"], regions["priorities"],
@@ -1863,16 +1852,18 @@ def run_snapshot(sock_path, pid_path, frames=1, settle_wait_s=8.0):
             # same GOALS path as the live TUI (honest until an engine exists).
             # PROVISIONAL_AUTOPILOT_TRACE remains a unit-test / render-demo fixture.
             live_trace = status.get("autopilot_trace")
-            dashboard["goals_chain"] = format_autonomy_lines(auto) + compose_phase2_side_panel(
-                goals, chain, current_sector=sector, width=40,
+            dashboard["priorities"] = compose_priorities_panel(
+                goals,
+                chain,
+                live_trace,
+                autonomy_lines=format_autonomy_lines(auto),
+                current_sector=sector,
+                width=40,
             )
-            dashboard["priorities"] = compose_priorities_lines(live_trace, width=40)
             if live_trace:
                 dashboard["decisions"] = format_autopilot_trace_lines(live_trace, cols=40)
             else:
-                dashboard["decisions"] = format_autonomy_lines(auto) + compose_phase2_side_panel(
-                    goals, chain, current_sector=sector, width=40,
-                )
+                dashboard["decisions"] = compose_decisions_placeholder()
             print(render_plain(dashboard))
             print()
             printed += 1

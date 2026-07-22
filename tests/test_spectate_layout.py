@@ -35,6 +35,7 @@ from twclient.spectate_layout import (
     compose_port_panel,
     compose_primary_goals_lines,
     compose_priorities_lines,
+    compose_priorities_panel,
     compute_autonomy_ratio,
     decisions_should_show_chain,
     format_autonomy_counts,
@@ -874,6 +875,23 @@ def test_compose_priorities_lines_empty_unknown_is_clear():
     assert compose_priorities_lines("bogus") == ["—"]
 
 
+def test_compose_priorities_panel_folds_goals_and_weigh_list():
+    """Left gutter: autonomy + GOALS + ordered priorities — never in DECISIONS."""
+    panel = compose_priorities_panel(
+        GoalsSnapshot(known_sectors=9),
+        None,
+        PROVISIONAL_AUTOPILOT_TRACE,
+        autonomy_lines=["AUTO 75%", "App 30 / AI 10 · Hum 2"],
+        width=36,
+        include_chain=False,
+    )
+    assert panel[0] == "AUTO 75%"
+    assert "— GOALS —" in panel
+    assert "— PRIORITIES —" in panel
+    assert any("Trade chain" in ln for ln in panel)
+    assert panel.index("— GOALS —") < panel.index("— PRIORITIES —")
+
+
 def test_compose_phase2_side_panel_does_not_fold_priorities():
     """PRIORITIES is its own TUI box — never a section inside GOALS."""
     panel = compose_phase2_side_panel(
@@ -1103,15 +1121,18 @@ def test_render_plain_includes_phase2_sections():
             "human": 2,
         },
         "decisions": format_autopilot_trace_lines(PROVISIONAL_AUTOPILOT_TRACE, cols=40),
-        "goals_chain": ["AUTO 75%", "App 30 / AI 10 · Hum 2", "— GOALS —", "· map 9s"],
-        "priorities": ["1 Trade chain 550", "2 Upgrade 200"],
+        "priorities": [
+            "AUTO 75%", "App 30 / AI 10 · Hum 2",
+            "— GOALS —", "· map 9s",
+            "— PRIORITIES —", "1 Trade chain 550", "2 Upgrade 200",
+        ],
     })
     assert "METRICS" in text and "STATIONS" in text
     assert "AUTONOMY" in text and "75%" in text
     assert "App 30" in text and "AI 10" in text and "Hum 2" in text
     assert "DECISIONS" in text and "run_chain" in text and "550" in text
-    assert "GOALS / CHAIN" in text
-    assert "PRIORITIES" in text and "Trade chain" in text
+    assert "PRIORITIES" in text and "— GOALS —" in text and "Trade chain" in text
+    assert "GOALS / CHAIN" not in text
     # empty autonomy still renders cleanly
     empty = render_plain({
         "main": [], "sidebar": [], "ticker": [], "status": "ok",
