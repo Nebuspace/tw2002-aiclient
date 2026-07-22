@@ -1656,6 +1656,7 @@ class GoalsSnapshot:
         "genesis_candidates", "longest_chain_hops", "longest_chain_unit",
         "ship_prices_count", "upgrade_status", "holds_status",
         "fighters_known", "fighters_count",
+        "fighter_buy_status",
     )
 
     def __init__(
@@ -1678,6 +1679,7 @@ class GoalsSnapshot:
         holds_status: str = "—",
         fighters_known: bool = False,
         fighters_count=None,
+        fighter_buy_status: str = "",
     ):
         self.turns_known = bool(turns_known)
         self.turns_count = turns_count
@@ -1696,6 +1698,7 @@ class GoalsSnapshot:
         self.holds_status = holds_status or "—"
         self.fighters_known = bool(fighters_known)
         self.fighters_count = fighters_count
+        self.fighter_buy_status = str(fighter_buy_status) if fighter_buy_status else ""
 
 
 def _goal_row(*, glyph: str, label: str, detail: str, width: int, prefix: str = "") -> str:
@@ -1884,7 +1887,8 @@ def compose_primary_goals_lines(snap, *, width: int = 22) -> list[str]:
             ftr_detail = str(n)
         else:
             ftr_glyph = "·"
-            ftr_detail = "0 (need some)"
+            buy_label = snap.fighter_buy_status or "need some"
+            ftr_detail = f"0 ({buy_label})"
     else:
         ftr_glyph = "?"
         ftr_detail = "unknown"

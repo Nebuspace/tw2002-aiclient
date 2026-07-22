@@ -19,6 +19,20 @@ from typing import Mapping, Optional, Sequence
 
 from .explore import path_to_sector
 
+# ---------------------------------------------------------------------------
+# Fighter affordability constants (2026-07-22)
+# ---------------------------------------------------------------------------
+
+# Unit price at Class-0 ports (e.g. Sol, sector 1 — always reachable as start).
+# Source: GameBanshee / community guides.  UNVERIFIED against live game; treat as
+# a configurable placeholder until confirmed by an introspected Class-0 port screen.
+FIGHTER_UNIT_PRICE_CLASS0: int = 100  # cr per fighter
+
+# Small defensive stack to evaluate ("can I buy some fighters?").
+# Mirrors fighter_toll_policy.DEFAULT_FIGHTER_RESERVE — if you change the
+# reserve floor there, update this too.
+FIGHTER_SMALL_STACK: int = 5  # fighters
+
 # Max (2026-07-22): do not grind a trade loop until the best known chain
 # has at least this many links (``len(ProfitChain.hops)``). A 2-hop
 # back-and-forth is discovery progress, not an execute target.
@@ -533,4 +547,152 @@ def _score_upgrade_priority(
         ),
         stay_vs_leave=stay_msg,
         notes=notes,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Fighter affordability (Max 2026-07-22)
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class FighterAffordability:
+    """Affordability verdict for buying a small fighter stack at a Class-0 port.
+
+    Spending priority rule (Max 2026-07-22):
+    1. Reserve ``trade_float`` first — working capital to fill holds and run
+       the trade loop; never cut into it for discretionary combat spend.
+    2. Upgrade holds (catalog weight 75) when quote is known and affordable
+       — hold upgrades pay back every cycle; they outrank fighter buys (73).
+    3. Buy fighters (weight 73) when stack is affordable after the float.
+    4. Buy ship (weight 60) — noted for completeness; lower priority.
+
+    Class-0 port (e.g. Sol, sector 1) is the primary source and is always
+    reachable as the game start sector — **location is never the gate**.
+    The gate is credits vs competing spends.
+
+    ``fighter_unit_price=None`` means the price has not yet been captured
+    from a live Class-0 port screen; use ``FIGHTER_UNIT_PRICE_CLASS0`` as
+    the default placeholder until confirmed.
+    """
+
+    recommendation: str
+    """One of: ``buy_fighters`` | ``upgrade_holds`` | ``buy_ship`` |
+    ``keep_trade_float`` | ``insufficient_credits`` | ``price_unknown``."""
+
+    can_afford: Optional[bool]
+    """True/False when deterministic; None when a required input is unknown."""
+
+    fighter_stack_cost: Optional[int]
+    """Total cost for ``desired_count`` fighters; None when price unknown."""
+
+    discretionary: Optional[int]
+    """Credits available after reserving ``trade_float``; None when credits unknown."""
+
+    reason: str
+    """Human-readable verdict; suitable as a GOALS detail string."""
+
+
+def afford_fighters(
+    *,
+    credits: Optional[int],
+    fighter_unit_price: Optional[int] = FIGHTER_UNIT_PRICE_CLASS0,
+    desired_count: int = FIGHTER_SMALL_STACK,
+    hold_upgrade_quote: Optional[int] = None,
+    cheapest_ship_price: Optional[int] = None,
+    trade_float: Optional[int] = None,
+) -> FighterAffordability:
+    """Recommend the right spend given current credits and competing priorities.
+
+    All ``None`` inputs are fail-closed — never invented.  When credits or
+    ``fighter_unit_price`` is unknown, returns ``price_unknown`` rather than
+    guessing a verdict.
+
+    Rule summary:
+    - ``trade_float`` is reserved first (working capital; defaults 0 when None).
+    - ``hold_upgrade_quote`` known + affordable → ``upgrade_holds`` (weight 75 > 73).
+    - ``credits − trade_float >= fighter_stack_cost`` → ``buy_fighters``.
+    - Otherwise → ``insufficient_credits`` or ``keep_trade_float``.
+
+    ``cheapest_ship_price`` is accepted for future expansion but does not
+    influence the recommendation today (ship buy weight 60 < fighter 73).
+    """
+    desired_count = max(1, int(desired_count))
+
+    if credits is None:
+        return FighterAffordability(
+            recommendation="price_unknown",
+            can_afford=None,
+            fighter_stack_cost=None,
+            discretionary=None,
+            reason="credits unknown — cannot evaluate fighter buy",
+        )
+
+    if fighter_unit_price is None:
+        disc = int(credits) - int(trade_float or 0)
+        return FighterAffordability(
+            recommendation="price_unknown",
+            can_afford=None,
+            fighter_stack_cost=None,
+            discretionary=disc,
+            reason=(
+                "fighter unit price not yet captured from Class-0 screen; "
+                "Sol/Class-0 reachable — visit to confirm price"
+            ),
+        )
+
+    credits = int(credits)
+    fighter_unit_price = int(fighter_unit_price)
+    float_reserve = int(trade_float) if trade_float is not None else 0
+    stack_cost = fighter_unit_price * desired_count
+    discretionary = credits - float_reserve
+
+    if discretionary < 0:
+        return FighterAffordability(
+            recommendation="keep_trade_float",
+            can_afford=False,
+            fighter_stack_cost=stack_cost,
+            discretionary=discretionary,
+            reason=(
+                f"credits {credits:,}cr < trade_float {float_reserve:,}cr reserve; "
+                "preserve working capital before any combat spend"
+            ),
+        )
+
+    if discretionary < stack_cost:
+        shortfall = stack_cost - discretionary
+        return FighterAffordability(
+            recommendation="insufficient_credits",
+            can_afford=False,
+            fighter_stack_cost=stack_cost,
+            discretionary=discretionary,
+            reason=(
+                f"need {stack_cost:,}cr for {desired_count} fighters; "
+                f"have {discretionary:,}cr discretionary — short {shortfall:,}cr"
+            ),
+        )
+
+    # Discretionary covers the fighter stack.
+    # Holds upgrade (weight 75 > 73) takes priority when known + affordable.
+    if hold_upgrade_quote is not None and int(hold_upgrade_quote) <= discretionary:
+        return FighterAffordability(
+            recommendation="upgrade_holds",
+            can_afford=True,
+            fighter_stack_cost=stack_cost,
+            discretionary=discretionary,
+            reason=(
+                f"hold upgrade {int(hold_upgrade_quote):,}cr affordable and higher "
+                f"priority (weight 75 > 73) — upgrade holds before fighter buy"
+            ),
+        )
+
+    return FighterAffordability(
+        recommendation="buy_fighters",
+        can_afford=True,
+        fighter_stack_cost=stack_cost,
+        discretionary=discretionary,
+        reason=(
+            f"{desired_count} fighters × {fighter_unit_price:,}cr = {stack_cost:,}cr; "
+            f"have {discretionary:,}cr discretionary — go to Sol/Class-0 to buy"
+        ),
     )

@@ -1,6 +1,10 @@
 """Priority engine — RT travel + stay-vs-leave tests (WO-PRIORITY-ENGINE-0)."""
 
 from twclient.priority_engine import (
+    FIGHTER_SMALL_STACK,
+    FIGHTER_UNIT_PRICE_CLASS0,
+    FighterAffordability,
+    afford_fighters,
     compute_return_path,
     hops_of_path,
     recommend_actions,
@@ -178,3 +182,110 @@ def test_five_link_prefers_earn_over_explore():
         explore_available=True,
     )
     assert rec.focus.kind == "run_chain"
+
+
+# ---------------------------------------------------------------------------
+# afford_fighters() — fighter affordability helper (Max 2026-07-22)
+# ---------------------------------------------------------------------------
+
+
+def test_afford_fighters_unknown_credits_returns_price_unknown():
+    result = afford_fighters(credits=None)
+    assert result.recommendation == "price_unknown"
+    assert result.can_afford is None
+    assert result.fighter_stack_cost is None
+    assert result.discretionary is None
+
+
+def test_afford_fighters_unknown_unit_price_returns_price_unknown():
+    result = afford_fighters(credits=5000, fighter_unit_price=None)
+    assert result.recommendation == "price_unknown"
+    assert result.can_afford is None
+    assert result.discretionary == 5000
+
+
+def test_afford_fighters_basic_can_buy():
+    # 1000 credits, stack costs 5 × 100 = 500 — affordable
+    result = afford_fighters(credits=1000)
+    assert result.recommendation == "buy_fighters"
+    assert result.can_afford is True
+    assert result.fighter_stack_cost == FIGHTER_SMALL_STACK * FIGHTER_UNIT_PRICE_CLASS0
+    assert result.discretionary == 1000
+    assert "Sol" in result.reason or "Class-0" in result.reason
+
+
+def test_afford_fighters_insufficient_credits():
+    # 200 credits, stack = 500 — not affordable
+    result = afford_fighters(credits=200)
+    assert result.recommendation == "insufficient_credits"
+    assert result.can_afford is False
+    assert result.fighter_stack_cost == 500
+    assert result.discretionary == 200
+
+
+def test_afford_fighters_trade_float_blocks_buy():
+    # 600 credits, but trade_float=200 → discretionary=400 < 500 stack
+    result = afford_fighters(credits=600, trade_float=200)
+    assert result.recommendation == "insufficient_credits"
+    assert result.can_afford is False
+    assert result.discretionary == 400
+
+
+def test_afford_fighters_trade_float_exceeds_credits():
+    # Credits below trade_float floor
+    result = afford_fighters(credits=100, trade_float=500)
+    assert result.recommendation == "keep_trade_float"
+    assert result.can_afford is False
+    assert result.discretionary == -400
+
+
+def test_afford_fighters_holds_upgrade_higher_priority():
+    # 2000 cr, stack=500, hold quote=800 — holds affordable → holds first
+    result = afford_fighters(credits=2000, hold_upgrade_quote=800)
+    assert result.recommendation == "upgrade_holds"
+    assert result.can_afford is True
+    assert "75" in result.reason or "priority" in result.reason
+
+
+def test_afford_fighters_holds_not_affordable_so_buy_fighters():
+    # 600 cr, stack=500, hold quote=900 — hold NOT affordable, buy fighters
+    result = afford_fighters(credits=600, hold_upgrade_quote=900)
+    assert result.recommendation == "buy_fighters"
+    assert result.can_afford is True
+
+
+def test_afford_fighters_custom_stack_size_and_price():
+    # 10 fighters at 150 each = 1500; have 2000 → affordable
+    result = afford_fighters(credits=2000, fighter_unit_price=150, desired_count=10)
+    assert result.recommendation == "buy_fighters"
+    assert result.fighter_stack_cost == 1500
+    assert result.can_afford is True
+
+
+def test_afford_fighters_zero_trade_float_same_as_none():
+    result_none = afford_fighters(credits=1000, trade_float=None)
+    result_zero = afford_fighters(credits=1000, trade_float=0)
+    assert result_none.recommendation == result_zero.recommendation
+    assert result_none.discretionary == result_zero.discretionary
+
+
+def test_afford_fighters_goals_label_map():
+    """Verify GOALS labels map correctly from recommendation strings."""
+    label_map = {
+        "buy_fighters": "can buy",
+        "upgrade_holds": "holds first",
+        "keep_trade_float": "need credits",
+        "insufficient_credits": "need credits",
+        "price_unknown": "price?",
+    }
+    # Affordable case → "can buy"
+    r = afford_fighters(credits=1000)
+    assert label_map.get(r.recommendation) == "can buy"
+
+    # Insufficient → "need credits"
+    r = afford_fighters(credits=200)
+    assert label_map.get(r.recommendation) == "need credits"
+
+    # Unknown credits → "price?"
+    r = afford_fighters(credits=None)
+    assert label_map.get(r.recommendation) == "price?"

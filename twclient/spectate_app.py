@@ -83,6 +83,7 @@ from .explore import (
     plan_map_fill,
 )
 from .formations import catalog_world
+from .priority_engine import afford_fighters
 from . import chains
 from . import game_data
 from . import ledger
@@ -550,6 +551,26 @@ def _build_goals_snapshot(world_id, chain=None, *, tracked=None, status=None):
         fighters_known = True
         fighters_count = status["fighters_aboard"]
 
+    def _fighter_buy_label(hold_quote_cr=None):
+        """Affordability label for the GOALS fighters row when count is zero.
+
+        Credits are the gate — not StarDock / Class-0 location.
+        Sol (Class-0, sector 1) is always reachable as the game start sector.
+        """
+        if not (fighters_known and fighters_count is not None and int(fighters_count) == 0):
+            return ""
+        verdict = afford_fighters(
+            credits=int(credits_amount) if credits_known and credits_amount is not None else None,
+            hold_upgrade_quote=hold_quote_cr,
+        )
+        return {
+            "buy_fighters": "can buy",
+            "upgrade_holds": "holds first",
+            "keep_trade_float": "need credits",
+            "insufficient_credits": "need credits",
+            "price_unknown": "price?",
+        }.get(verdict.recommendation, "need some")
+
     if not world_id:
         hops, chain_unit = chain_hop_count_and_unit(chain)
         return GoalsSnapshot(
@@ -559,6 +580,7 @@ def _build_goals_snapshot(world_id, chain=None, *, tracked=None, status=None):
             credits_amount=credits_amount,
             fighters_known=fighters_known,
             fighters_count=fighters_count,
+            fighter_buy_status=_fighter_buy_label(),
             longest_chain_hops=hops,
             longest_chain_unit=chain_unit,
         )
@@ -579,16 +601,19 @@ def _build_goals_snapshot(world_id, chain=None, *, tracked=None, status=None):
             credits_amount=credits_amount,
             fighters_known=fighters_known,
             fighters_count=fighters_count,
+            fighter_buy_status=_fighter_buy_label(),
             longest_chain_hops=hops,
             longest_chain_unit=chain_unit,
         )
     hops, chain_unit = chain_hop_count_and_unit(chain)
     # P1-b price schema (hub relay): None = unknown → never guess/zero.
     upgrade_status = "price?"
+    hold_quote_for_goals = None
     try:
         hold_quote = game_data.get_cargo_hold_price(world_id)
         if hold_quote is not None and getattr(hold_quote, "cost_per_hold", None) is not None:
             upgrade_status = f"{int(hold_quote.cost_per_hold)}/h"
+            hold_quote_for_goals = int(hold_quote.cost_per_hold)
     except (OSError, TypeError, ValueError):
         upgrade_status = "price?"
     return GoalsSnapshot(
@@ -608,6 +633,7 @@ def _build_goals_snapshot(world_id, chain=None, *, tracked=None, status=None):
         holds_status="—",
         fighters_known=fighters_known,
         fighters_count=fighters_count,
+        fighter_buy_status=_fighter_buy_label(hold_quote_for_goals),
     )
 
 
