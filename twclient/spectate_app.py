@@ -998,7 +998,7 @@ def _draw_hud_gutter(win, region, cells, metric_rows, port_rows, glyphs, palette
                 except curses.error:
                     pass
         row += 2  # label+value then freshness — no blank spacer (DECISIONS
-        # shares this column; a 3-row stride clips METRICS — Max 2026-07-22)
+        # shares this column; a 3-row stride clips METRICS — human 2026-07-22)
 
     if metric_rows and row < h - 1:
         # WO-TUI-HUD-POLISH: readable METRICS — padded label column, one

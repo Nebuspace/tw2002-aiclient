@@ -212,7 +212,7 @@ BAND_H_MAX = 10
 # WO-TUI-DECISIONS-HUD-ALIGN: when a right HUD gutter exists, DECISIONS
 # shares that column (HUD width, bottom aligned with the column base).
 # Prefer HUD: DECISIONS stays at DECISIONS_MIN_H so ship cells + METRICS
-# still fit (HUD_GUTTER_MIN_H=10 clipped METRICS — Max 2026-07-22).
+# still fit (HUD_GUTTER_MIN_H=10 clipped METRICS — human 2026-07-22).
 HUD_GUTTER_MIN_H = VIEWPORT_H - DECISIONS_MIN_H  # 21
 
 
@@ -1129,7 +1129,7 @@ def compose_priorities_panel(
     """Left-gutter PRIORITIES box: autonomy + GOALS (+ optional CHAIN) + weigh list.
 
     DECISIONS owns trace/explore only; this panel always shows strategy context
-    beside the game viewport (WO-TUI-PRIORITIES-LEFT / Max 2026-07-22).
+    beside the game viewport (WO-TUI-PRIORITIES-LEFT / human 2026-07-22).
     """
     lines = list(autonomy_lines or [])
     lines.extend(
@@ -1580,7 +1580,7 @@ def compose_phase2_side_panel(
     ``include_chain=False`` so DECISIONS keeps GOALS/autonomy only.
 
     PRIORITIES lives in its own titled left-gutter box (``regions["priorities"]``) —
-    never folded here (Max 2026-07-22 / WO-TUI-PRIORITIES-LEFT).
+    never folded here (human 2026-07-22 / WO-TUI-PRIORITIES-LEFT).
     """
     lines = ["— GOALS —"]
     lines.extend(compose_primary_goals_lines(goals_snap, width=width))
