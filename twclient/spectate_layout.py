@@ -130,10 +130,12 @@ GAME_W, GAME_H = 80, 24
 # box-art the game itself draws; see _content_inset() in spectate_app.py.
 VIEWPORT_W, VIEWPORT_H = GAME_W + 2, GAME_H + 2  # 82 x 26
 
-HUD_GUTTER_W = 26  # exactly VIEWPORT_W + HUD_GUTTER_W = 108, the right_gutter floor below
+# WO-TUI-HUD-POLISH: wide enough for CREDITS value + freshness (+ spark)
+# on one line without wrap/truncate at full/right_gutter tiers.
+HUD_GUTTER_W = 36  # exactly VIEWPORT_W + HUD_GUTTER_W = 118, the right_gutter floor below
 MINIMAL_HEADER_MIN_COLS = 82   # == VIEWPORT_W: the floor at which a bordered viewport fits at all
-RIGHT_GUTTER_MIN_COLS = 108    # == VIEWPORT_W + HUD_GUTTER_W: viewport + one gutter, zero-margin fit
-FULL_GUTTER_MIN_COLS = 132     # right_gutter's fit PLUS a comfortable centered margin (visual symmetry)
+RIGHT_GUTTER_MIN_COLS = 118    # == VIEWPORT_W + HUD_GUTTER_W: viewport + one gutter, zero-margin fit
+FULL_GUTTER_MIN_COLS = 142     # right_gutter's fit PLUS a comfortable centered margin (visual symmetry)
 MIN_COLS = 60
 MIN_LINES = 20
 # TW-08: one-cell outer frame around the whole client. Layout math uses
@@ -403,9 +405,45 @@ def update_tracked_stats(tracked: dict, event: dict, now: float) -> dict:
         out["_turns_max"] = new_turns if prev_max is None else max(prev_max, new_turns)
         out["turns"] = (("count", new_turns), now)
     elif "turn_timer" in state:
-        out["turns"] = (("timer", state["turn_timer"]), now)
+        # This live server's Command prompt uses TL=HH:MM:SS (regen
+        # countdown), NOT a turn count. Once a numeric turns_left has
+        # been seen, never clobber the HUD count with that timer
+        # (WO-TUI-HUD-POLISH) — timer-only-before-count still lands as
+        # a distinct REGEN cell via _turns_cell.
+        prev_turns = out.get("turns")
+        if not (isinstance(prev_turns, tuple) and prev_turns and
+                isinstance(prev_turns[0], tuple) and prev_turns[0][0] == "count"):
+            out["turns"] = (("timer", state["turn_timer"]), now)
 
-    if "credits" in state:
+    # Prefer FA7a top-level strict balance (session.credits_snapshot /
+    # "you have N credits") over parse_state's looser state["credits"],
+    # which a port price quote satisfies just as well. When FA7a is
+    # present, use credits_age_ms so freshness tracks the daemon's
+    # last real observe — not every settle-edge rebroadcast.
+    fa7a_credits = event.get("credits")
+    if fa7a_credits is not None:
+        age_ms = event.get("credits_age_ms")
+        seen_ts = now - (age_ms / 1000.0) if isinstance(age_ms, (int, float)) else now
+        new_credits = fa7a_credits
+        prev_entry = tracked.get("credits")
+        baseline = out.get("_credits_baseline")
+        if baseline is None:
+            out["_credits_baseline"] = (new_credits, seen_ts)
+        else:
+            out["profit"] = (new_credits - baseline[0], seen_ts)
+        if prev_entry is not None and prev_entry[0] != new_credits:
+            out["_credits_flash"] = (new_credits - prev_entry[0], now)
+            out["_credits_tween"] = (prev_entry[0], new_credits, now)
+        if prev_entry is None or prev_entry[0] != new_credits:
+            series = list(out.get("_credit_series") or [])
+            series.append(new_credits)
+            out["_credit_series"] = series[-CREDIT_SPARK_WIDTH:]
+        out["credits"] = (new_credits, seen_ts)
+        out["_credits_from_fa7a"] = True
+    elif "credits" in state and not out.get("_credits_from_fa7a"):
+        # Cold / pre-FA7a path (tests + never-docked): allow state credits.
+        # Once FA7a has supplied a balance, ignore loose state credits so
+        # a port quote cannot replace the HUD.
         new_credits = state["credits"]
         prev_entry = tracked.get("credits")
         baseline = out.get("_credits_baseline")
@@ -519,16 +557,20 @@ def _turns_cell(tracked: dict, now: float, mark: str, bar_full: str, bar_empty: 
     age = max(0.0, now - ts)
     tone, gauge = None, ""
     if kind == "timer":
+        # Timer-only (no numeric turns_left yet): label REGEN so HH:MM:SS
+        # is never misread as a turn count (WO-TUI-HUD-POLISH).
         display = tick_down_timer(value, age)
+        label = "REGEN"
     else:
         display = f"{value:,}"
+        label = "TURNS"
         turns_max = tracked.get("_turns_max")
         if turns_max:  # 0/None -> no gauge, division-by-zero guard
             fraction = value / turns_max
             gauge = render_bar_meter(fraction, TURNS_GAUGE_WIDTH, bar_full, bar_empty)
             tone = gauge_semantic(fraction)
     return {
-        "label": "TURNS",
+        "label": label,
         "value": display,
         "freshness": format_freshness(age, mark),
         "stale": age >= FRESHNESS_STALE_S,

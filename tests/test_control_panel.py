@@ -47,7 +47,7 @@ pytestmark = [
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 VENV_PYTHON = PROJECT_ROOT / ".venv" / "bin" / "python3"
-PTY_ROWS, PTY_COLS = 36, 112  # right_gutter + TW-08 outer pad — inner 34×110
+PTY_ROWS, PTY_COLS = 36, 120  # right_gutter + TW-08 outer pad — inner 34×118 (== RIGHT_GUTTER_MIN_COLS)
 
 _BOOTSTRAP_TEMPLATE = """\
 import sys

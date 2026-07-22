@@ -13,6 +13,7 @@ from twclient.spectate_layout import (
     FULL_GUTTER_MIN_COLS,
     GAME_H,
     GAME_W,
+    HUD_GUTTER_W,
     LOG_BOX_MIN_H,
     MINIMAL_HEADER_MIN_COLS,
     RIGHT_GUTTER_MIN_COLS,
@@ -454,6 +455,54 @@ def test_update_tracked_stats_prefers_turns_left_and_falls_back_to_turn_timer():
     assert tracked["turns"] == (("timer", "00:04:12"), 1.0)
 
 
+def test_update_tracked_stats_count_survives_later_timer_only_screen():
+    """WO-TUI-HUD-POLISH: TL=HH:MM:SS must not clobber a known turns_left."""
+    tracked = update_tracked_stats({}, {"state": {"turns_left": 4406}}, now=1.0)
+    tracked = update_tracked_stats(tracked, {"state": {"turn_timer": "00:00:00", "sector": 4406}}, now=5.0)
+    assert tracked["turns"] == (("count", 4406), 1.0)
+    cells = compose_hud_cells(tracked, now=5.0)
+    turns = [c for c in cells if c["label"] == "TURNS"][0]
+    assert turns["value"] == "4,406"
+    assert not any(c["label"] == "REGEN" for c in cells)
+
+
+def test_update_tracked_stats_prefers_fa7a_credits_and_ignores_port_quote_state():
+    """FA7a top-level balance wins; loose state credits must not replace it."""
+    tracked = update_tracked_stats(
+        {}, {"credits": 100000, "credits_age_ms": 0, "state": {}}, now=10.0,
+    )
+    assert tracked["credits"] == (100000, 10.0)
+    tracked = update_tracked_stats(
+        tracked,
+        {"credits": 100000, "credits_age_ms": 3000, "state": {"credits": 42}},  # port quote
+        now=13.0,
+    )
+    assert tracked["credits"][0] == 100000
+    assert tracked["credits"][1] == 10.0  # age_ms=3000 → seen_ts=13-3
+    cells = compose_hud_cells(tracked, now=13.0)
+    assert [c for c in cells if c["label"] == "CREDITS"][0]["value"] == "100,000"
+
+
+def test_compose_hud_cells_credits_persist_when_absent_from_later_screen():
+    tracked = update_tracked_stats({}, {"state": {"credits": 87500}}, now=1.0)
+    tracked = update_tracked_stats(tracked, {"state": {"sector": 250}}, now=4.0)
+    cells = compose_hud_cells(tracked, now=4.0)
+    assert [c for c in cells if c["label"] == "CREDITS"][0]["value"] == "87,500"
+
+
+def test_hud_gutter_width_floor_fits_credits_freshness():
+    """WO-TUI-HUD-POLISH: pin HUD_GUTTER_W ≥34 and tier floors stay coherent."""
+    assert HUD_GUTTER_W >= 34
+    assert RIGHT_GUTTER_MIN_COLS == VIEWPORT_W + HUD_GUTTER_W
+    assert FULL_GUTTER_MIN_COLS >= RIGHT_GUTTER_MIN_COLS
+    regions = frame_layout(36, RIGHT_GUTTER_MIN_COLS + 2)
+    assert regions["mode"] == "right_gutter"
+    assert regions["gutter"]["w"] == HUD_GUTTER_W
+    regions = frame_layout(42, FULL_GUTTER_MIN_COLS + 2)
+    assert regions["mode"] == "full"
+    assert regions["gutter"]["w"] == HUD_GUTTER_W
+
+
 def test_update_tracked_stats_computes_profit_as_delta_from_first_seen_credits():
     tracked = update_tracked_stats({}, {"state": {"credits": 100000}}, now=1.0)
     assert "profit" not in tracked  # no baseline delta yet on the very first sighting
@@ -524,7 +573,7 @@ def test_compose_hud_cells_dims_a_cell_past_the_staleness_threshold():
 def test_compose_hud_cells_turns_cell_ticks_down_a_live_timer():
     tracked = update_tracked_stats({}, {"state": {"turn_timer": "00:00:10"}}, now=0.0)
     cells = compose_hud_cells(tracked, now=4.0)
-    turns_cell = [c for c in cells if c["label"] == "TURNS"][0]
+    turns_cell = [c for c in cells if c["label"] == "REGEN"][0]
     assert turns_cell["value"] == "00:00:06"
 
 
@@ -1105,7 +1154,7 @@ def test_turns_cell_shows_a_gauge_and_tone_once_a_max_is_known():
 def test_turns_cell_no_gauge_for_the_timer_variant():
     tracked = update_tracked_stats({}, {"state": {"turn_timer": "00:00:30"}}, now=0.0)
     cells = compose_hud_cells(tracked, now=0.0)
-    turns_cell = [c for c in cells if c["label"] == "TURNS"][0]
+    turns_cell = [c for c in cells if c["label"] == "REGEN"][0]
     assert turns_cell["gauge"] == ""
     assert turns_cell["tone"] is None
 

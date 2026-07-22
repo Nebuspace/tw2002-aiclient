@@ -798,15 +798,19 @@ def _draw_hud_gutter(win, region, cells, metric_rows, port_rows, glyphs, palette
         row += 3  # 2 content lines + 1 blank spacer between cells
 
     if metric_rows and row < h - 1:
+        # WO-TUI-HUD-POLISH: readable METRICS — padded label column, one
+        # metric per row. No blank spacer under the header: the gutter
+        # height is shared with PORT meters, and a blank line clips them.
         try:
             win.addnstr(row, col, "METRICS", max(0, w - col - 1), curses.A_BOLD)
         except curses.error:
             pass
         row += 1
+        label_w = 10
         for mrow in metric_rows:
             if row >= h - 1:
                 break
-            text = f"{mrow['label']:<8}{mrow['value']}"
+            text = f"{mrow['label']:<{label_w}}{mrow['value']}"
             try:
                 win.addnstr(row, col, text, max(0, w - col - 1), curses.A_NORMAL)
             except curses.error:
