@@ -7,6 +7,10 @@ it unit-testable without a real terminal; spectate_app.py owns the
 curses window management and calls these to get the text to draw.
 """
 
+from __future__ import annotations
+
+from typing import Sequence
+
 TICKER_MAX = 8
 DEFAULT_EVENT = {"screen": [], "color": [], "prompt": "", "classification": "connecting...", "state": {}}
 
@@ -2338,16 +2342,104 @@ def decisions_should_show_chain(now: float) -> bool:
 
 
 def compose_decisions_placeholder() -> list[str]:
-    """Idle DECISIONS copy when no live autopilot_trace is on status.
-
-    Honest empty state — not a TW-13 "coming soon" stub
-    (WO-TUI-PRIORITIES-DECISIONS-REGRESS).
-    """
+    """Idle DECISIONS copy when no live autopilot_trace and no coach
+    triggers fire. Honest empty state — not a TW-13 stub."""
     return [
-        "no live trace",
-        "(start autopilot",
-        " or explore: E)",
+        "—",
+        "Exploring…",
     ]
+
+
+def infer_coach_triggers(
+    *,
+    classification: str | None = None,
+    prompt: str | None = None,
+    fighters_aboard: int | None = None,
+    chain=None,
+    genesis_count: int = 0,
+    dead_end_count: int = 0,
+    explore_mode: str | None = None,
+    has_port: bool = False,
+) -> list[str]:
+    """Map live spectate context → ``StrategyCard.when_trigger`` ids.
+
+    Pure / fail-closed: unknown inputs simply omit that trigger. Returns
+    unique triggers in stable priority order for ``compose_decisions_coach``.
+    """
+    found: list[str] = []
+
+    def _add(trigger: str) -> None:
+        if trigger not in found:
+            found.append(trigger)
+
+    cls = (classification or "").strip()
+    prompt_l = (prompt or "").lower()
+
+    if has_port or cls in ("port_trade", "cim_report"):
+        _add("docked_at_port")
+    # 0 fighters → holds-first card (when_trigger=at_shipyard); also when
+    # the live prompt already looks like a shipyard/StarDock surface.
+    if fighters_aboard is not None and int(fighters_aboard) == 0:
+        _add("at_shipyard")
+    if "stardock" in prompt_l or "shipyard" in prompt_l:
+        _add("at_shipyard")
+    hop_n, _unit = chain_hop_count_and_unit(chain)
+    if hop_n is not None and hop_n >= 2:
+        _add("chain_opportunity")
+    if int(genesis_count or 0) > 0 or int(dead_end_count or 0) > 0:
+        _add("at_dead_end")
+    if explore_mode and explore_mode != "off":
+        _add("exploring_frontier")
+    if "option?" in prompt_l or "fighters to use" in prompt_l:
+        _add("toll_or_gate")
+    return found
+
+
+def compose_decisions_coach(
+    kb,
+    triggers: Sequence[str] | None,
+    *,
+    width: int = 22,
+    max_cards: int = 3,
+) -> list[str]:
+    """Render coaching callouts for active triggers (TW-13 Decisions).
+
+    ``kb`` is a ``CoachKB`` (or None). Cards with ``hypothesis_flags`` get
+    an ``(unverified)`` suffix — never strip KB text, never invent prose.
+    Empty / no-match → honest placeholder (same as ``compose_decisions_placeholder``).
+    """
+    width = max(8, int(width))
+    if kb is None or not triggers:
+        return compose_decisions_placeholder()
+
+    cards = []
+    seen_ids: set[str] = set()
+    for trigger in triggers:
+        for card in kb.by_trigger(trigger):
+            if card.id in seen_ids:
+                continue
+            seen_ids.add(card.id)
+            cards.append(card)
+    if not cards:
+        return compose_decisions_placeholder()
+
+    cards.sort(key=lambda c: (c.priority, c.id))
+    lines: list[str] = []
+    for card in cards[: max(1, int(max_cards))]:
+        title = card.title.strip() or card.id
+        if card.hypothesis_flags:
+            title = f"{title} (unverified)"
+        lines.append(title[:width])
+        what = (card.what or "").strip()
+        if what:
+            # Indent body; wrap by hard clip to panel width.
+            body = f" {what}"
+            lines.append(body[:width])
+        if card.steps:
+            step0 = str(card.steps[0]).strip()
+            if step0:
+                lines.append(f" → {step0}"[:width])
+    return lines or compose_decisions_placeholder()
 
 
 def compose_port_panel(event: dict, bar_full: str = "█", bar_empty: str = "░") -> list[dict]:

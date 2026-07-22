@@ -46,6 +46,7 @@ from .spectate_layout import (
     compose_control_strip,
     compose_dashboard,
     compose_decisions_placeholder,
+    compose_decisions_coach,
     compose_chain_bubbles,
     compose_formations_panel,
     compose_hud_cells,
@@ -65,6 +66,7 @@ from .spectate_layout import (
     frame_layout,
     idle_prompt_fingerprint,
     idle_prompt_should_offer,
+    infer_coach_triggers,
     is_recent,
     longest_chain_steps,
     render_plain,
@@ -101,6 +103,91 @@ import os
 # sibling module outside this lane) imports them from here directly, so
 # they stay part of this module's public surface even though
 # frame_layout() above is now the actual source of truth.
+
+_coach_kb_cache = None
+_coach_kb_load_attempted = False
+
+
+def _get_coach_kb():
+    """Load coaching KB once (fail-closed → None). Content is read-only."""
+    global _coach_kb_cache, _coach_kb_load_attempted
+    if _coach_kb_load_attempted:
+        return _coach_kb_cache
+    _coach_kb_load_attempted = True
+    try:
+        from .coach_kb import default_kb_paths, load_coach_kb
+        strategies_path, params_path = default_kb_paths()
+        _coach_kb_cache = load_coach_kb(strategies_path, params_path)
+    except (OSError, ValueError, json.JSONDecodeError, TypeError, KeyError):
+        _coach_kb_cache = None
+    return _coach_kb_cache
+
+
+def _fighters_aboard_hint(tracked, status, event):
+    """Best-effort fighters count for coach triggers (None = unknown)."""
+    fighters_entry = (tracked or {}).get("fighters")
+    if isinstance(fighters_entry, tuple) and len(fighters_entry) >= 1:
+        try:
+            return int(fighters_entry[0])
+        except (TypeError, ValueError):
+            pass
+    if status and status.get("fighters_aboard") is not None:
+        try:
+            return int(status["fighters_aboard"])
+        except (TypeError, ValueError):
+            pass
+    state = (event or {}).get("state") or {}
+    if state.get("fighters_aboard") is not None:
+        try:
+            return int(state["fighters_aboard"])
+        except (TypeError, ValueError):
+            pass
+    return None
+
+
+def _compose_coach_decision_lines(
+    *,
+    event,
+    status,
+    tracked,
+    phase2_cache,
+    explore_mode="off",
+    width=22,
+):
+    """TW-13: coach callouts when DECISIONS is idle (no explore / no trace)."""
+    state = (event or {}).get("state") or {}
+    prompt = (event or {}).get("prompt") or (status or {}).get("prompt") or ""
+    classification = (event or {}).get("classification") or ""
+    chain = (phase2_cache or {}).get("chain")
+    genesis_count = 0
+    dead_end_count = 0
+    wid = _resolve_world_id(status)
+    if wid:
+        try:
+            catalog = catalog_world(wid)
+            genesis_count = len(getattr(catalog, "genesis_candidates", ()) or ())
+            dead_end_count = len(catalog.by_kind("dead-end"))
+        except OSError:
+            pass
+    has_port = bool(
+        state.get("port")
+        or state.get("docked")
+        or (isinstance(state.get("commodities"), dict) and state.get("commodities"))
+    )
+    triggers = infer_coach_triggers(
+        classification=classification,
+        prompt=prompt,
+        fighters_aboard=_fighters_aboard_hint(tracked, status, event),
+        chain=chain,
+        genesis_count=genesis_count,
+        dead_end_count=dead_end_count,
+        explore_mode=explore_mode,
+        has_port=has_port,
+    )
+    return compose_decisions_coach(
+        _get_coach_kb(), triggers, width=width,
+    )
+
 
 STATUS_POLL_INTERVAL_S = 1.5
 # Decoupled animation tick (Phase 0, motion E2): liveness chrome (HUD
@@ -2127,8 +2214,8 @@ def _render(windows, regions, event, tracked, ticker_history, status, palette, g
         )
 
     if regions.get("decisions") is not None and "decisions" in windows:
-        # Honest idle (no TW-13) — seat 311c61a; mid-width falls back to
-        # goals+weigh when the left PRIORITIES gutter is absent.
+        # Explore / live trace own DECISIONS; otherwise coach callouts
+        # (TW-13). Mid-width without PRIORITIES still falls back to goals.
         decision_lines = compose_decisions_placeholder()
         panel_title = None
         cols = max(12, (regions["decisions"].get("w") or 22) - 4)
@@ -2167,6 +2254,16 @@ def _render(windows, regions, event, tracked, ticker_history, status, palette, g
                 **_priority_engine_travel_hints(wid, current_sector=sector),
             )
             panel_title = "PRIORITIES"
+        else:
+            decision_lines = _compose_coach_decision_lines(
+                event=event,
+                status=status,
+                tracked=tracked,
+                phase2_cache=phase2_cache or {},
+                explore_mode=explore_mode,
+                width=cols,
+            )
+            panel_title = "DECISIONS"
         _draw_decisions(
             windows["decisions"], regions["decisions"],
             decision_lines, glyphs, palette, title=panel_title,
@@ -2360,7 +2457,14 @@ def run_snapshot(sock_path, pid_path, frames=1, settle_wait_s=8.0):
             if live_trace:
                 dashboard["decisions"] = format_autopilot_trace_lines(live_trace, cols=40)
             else:
-                dashboard["decisions"] = compose_decisions_placeholder()
+                dashboard["decisions"] = _compose_coach_decision_lines(
+                    event=last_event,
+                    status=status,
+                    tracked=tracked,
+                    phase2_cache={"chain": chain},
+                    explore_mode="off",
+                    width=40,
+                )
             print(render_plain(dashboard))
             print()
             printed += 1

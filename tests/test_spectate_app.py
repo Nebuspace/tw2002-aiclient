@@ -1478,10 +1478,105 @@ def test_decisions_idle_never_shows_tw13_stub(monkeypatch):
     assert len(dec) == 1
     joined = " ".join(dec[0][0]).lower()
     assert "tw-13" not in joined and "coach" not in joined
-    assert "trace" in joined or "explore" in joined or dec[0][0] == ["—"]
+    # Idle: honest placeholder or coach titles (no stub phrase).
+    assert "—" in dec[0][0][0] or "exploring" in joined or len(dec[0][0]) >= 1
     assert len(pri) == 1
     assert "— GOALS —" in pri[0][0]
     assert "— FOCUS —" in pri[0][0]
+
+
+def test_decisions_shows_coach_on_zero_fighters(monkeypatch):
+    """TW-13: 0 fighters → holds-first coaching card in DECISIONS."""
+    captured = []
+
+    def fake_draw_decisions(win, region, lines, glyphs, palette, title=None):
+        captured.append((list(lines), title, region.get("title")))
+
+    monkeypatch.setattr(spectate_app_mod, "_draw_decisions", fake_draw_decisions)
+    monkeypatch.setattr(curses, "doupdate", lambda: None)
+    monkeypatch.setattr(spectate_app_mod, "_resolve_world_id", lambda status=None: None)
+    spectate_app_mod._coach_kb_cache = None
+    spectate_app_mod._coach_kb_load_attempted = False
+
+    regions = {
+        "mode": "full",
+        "outer": None, "header": None, "viewport": None, "gutter": None,
+        "decisions": {"y": 0, "x": 24, "h": 8, "w": 28, "title": "DECISIONS"},
+        "priorities": {"y": 0, "x": 0, "h": 8, "w": 24, "title": "PRIORITIES"},
+        "ticker": None, "control": None,
+    }
+    windows = {"decisions": object(), "priorities": object()}
+    status = {
+        "connected": True, "mode": "ai_pilot", "play": None,
+        "subscriber_count": 0, "host": None, "name": None,
+        "autopilot_trace": None,
+        "fighters_aboard": 0,
+    }
+
+    class FakePalette:
+        def attr_for(self, *a, **k):
+            return 0
+
+    spectate_app_mod._render(
+        windows, regions, dict(spectate_app_mod.DEFAULT_EVENT), {}, [], status,
+        FakePalette(), {}, now=0.0, anim_tick=0,
+        idle_age=None, semantic="ok", flash_active=False, got_content=True,
+        explore_mode="off", phase2_cache={"chain": None},
+    )
+    dec = [c for c in captured if c[2] == "DECISIONS"]
+    assert len(dec) == 1
+    joined = " ".join(dec[0][0]).lower()
+    assert "holds" in joined
+    assert "tw-13" not in joined
+    assert "coach" not in joined
+
+
+def test_decisions_coach_does_not_override_live_trace(monkeypatch):
+    """Live autopilot_trace still owns DECISIONS over coach."""
+    captured = []
+
+    def fake_draw_decisions(win, region, lines, glyphs, palette, title=None):
+        captured.append((list(lines), title, region.get("title")))
+
+    monkeypatch.setattr(spectate_app_mod, "_draw_decisions", fake_draw_decisions)
+    monkeypatch.setattr(curses, "doupdate", lambda: None)
+    monkeypatch.setattr(spectate_app_mod, "_resolve_world_id", lambda status=None: None)
+
+    regions = {
+        "mode": "full",
+        "outer": None, "header": None, "viewport": None, "gutter": None,
+        "decisions": {"y": 0, "x": 24, "h": 8, "w": 28, "title": "DECISIONS"},
+        "priorities": {"y": 0, "x": 0, "h": 8, "w": 24, "title": "PRIORITIES"},
+        "ticker": None, "control": None,
+    }
+    windows = {"decisions": object(), "priorities": object()}
+    status = {
+        "connected": True, "mode": "ai_pilot", "play": None,
+        "subscriber_count": 0, "host": None, "name": None,
+        "fighters_aboard": 0,
+        "autopilot_trace": {
+            "tick": 1,
+            "context": {},
+            "candidates": [],
+            "chosen": None,
+        },
+    }
+
+    class FakePalette:
+        def attr_for(self, *a, **k):
+            return 0
+
+    spectate_app_mod._render(
+        windows, regions, dict(spectate_app_mod.DEFAULT_EVENT), {}, [], status,
+        FakePalette(), {}, now=0.0, anim_tick=0,
+        idle_age=None, semantic="ok", flash_active=False, got_content=True,
+        explore_mode="off", phase2_cache={"chain": None},
+    )
+    dec = [c for c in captured if c[2] == "DECISIONS"]
+    assert len(dec) == 1
+    joined = " ".join(dec[0][0]).lower()
+    assert "holds" not in joined
+    assert "hold" in joined  # format_autopilot_trace_lines header when chosen is None
 
 
 def test_decisions_midwidth_fallback_shows_priorities_when_no_left_gutter(monkeypatch):

@@ -31,6 +31,8 @@ from twclient.spectate_layout import (
     compose_autonomy_headline,
     compose_dashboard,
     compose_decisions_placeholder,
+    compose_decisions_coach,
+    infer_coach_triggers,
     compose_formations_panel,
     compose_hud_cells,
     compose_live_metrics,
@@ -1515,7 +1517,37 @@ def test_compose_decisions_placeholder_is_nonempty_honest_idle():
     assert len(lines) >= 1
     joined = " ".join(lines).lower()
     assert "tw-13" not in joined
-    assert "trace" in joined or "autopilot" in joined or "explore" in joined
+    assert "coach" not in joined
+    assert "—" in lines[0] or "exploring" in joined
+
+
+def test_infer_coach_triggers_maps_context_to_existing_when_triggers():
+    assert infer_coach_triggers(has_port=True) == ["docked_at_port"]
+    assert "at_shipyard" in infer_coach_triggers(fighters_aboard=0)
+    assert "chain_opportunity" in infer_coach_triggers(
+        chain={"steps": 3, "source": "world"},
+    )
+    assert infer_coach_triggers() == []
+
+
+def test_compose_decisions_coach_trigger_and_empty():
+    from twclient.coach_kb import default_kb_paths, load_coach_kb
+
+    kb = load_coach_kb(*default_kb_paths())
+    empty = compose_decisions_coach(kb, [], width=28)
+    assert empty == compose_decisions_placeholder()
+    none_kb = compose_decisions_coach(None, ["docked_at_port"], width=28)
+    assert none_kb == compose_decisions_placeholder()
+
+    lines = compose_decisions_coach(kb, ["docked_at_port"], width=40)
+    joined = " ".join(lines).lower()
+    assert "pair trade" in joined or "trade loop" in joined
+    assert "(unverified)" in joined  # pair_trade_loop has hypothesis_flags
+    assert "tw-13" not in joined
+    assert "coach" not in joined
+
+    zero_f = compose_decisions_coach(kb, ["at_shipyard"], width=40)
+    assert any("holds" in ln.lower() for ln in zero_f)
 
 
 # -- tick_down_timer / format_idle_age / status_semantic --------------------
