@@ -244,10 +244,14 @@ def test_idempotent_already_there_ensure_arms_when_armed_and_no_loop_stashed(pro
 
 def test_ensure_clears_fighter_option_then_arms_for_autonomous_profile(profiles_toml):
     """WO-AUTOPILOT-AFTER-ENSURE: Option? (no Pay) before main_command —
-    ensure clears Attack once, reaches target, arms the loop."""
+    ensure clears Attack + qty once, reaches target, arms the loop."""
     toll = (
         "Your fighters: 30 vs. theirs: 1\n"
         "Option? (A,D,I,R,S,?):?"
+    )
+    qty = (
+        "Your fighters: 30 vs. theirs: 1\n"
+        "How many fighters do you wish to use (0 to 30) [0]?"
     )
     target = "Command [TL=00:00:00]:[1234] (?=Help)? :"
 
@@ -258,7 +262,12 @@ def test_ensure_clears_fighter_option_then_arms_for_autonomous_profile(profiles_
         def sleep(self, seconds):
             advancing = self._pending_advance
             super().sleep(seconds)
-            if advancing and self.sent and self.sent[-1][0] == "A":
+            if not advancing or not self.sent:
+                return
+            last = self.sent[-1][0]
+            if last == "A":
+                self._screen = qty
+            elif last.isdigit():
                 self._screen = target
 
     session = _TollThenMain()
@@ -268,7 +277,9 @@ def test_ensure_clears_fighter_option_then_arms_for_autonomous_profile(profiles_
     resp = protocol.dispatch(session, "ensure", {"profile": "armed"}, server)
 
     assert resp["ok"] is True
-    assert "A" in [s[0] for s in session.sent]
+    sent_keys = [s[0] for s in session.sent]
+    assert "A" in sent_keys
+    assert "1" in sent_keys
     loop = server.autopilot_loop
     assert loop is not None
     assert loop.running is True

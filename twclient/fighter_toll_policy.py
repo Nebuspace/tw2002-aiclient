@@ -13,6 +13,8 @@ Safety:
 - **Never auto-Pay (`P`)** — toll pay requires an explicit hub GO.
 - Reserve floor applies to deploy/sell quantity clamps (keep ≥N aboard).
 - Combat Attack uses whatever fighters are aboard; 0 fighters ⇒ Retreat.
+- After ``A``, answer ``How many fighters… [0]?`` with a non-zero
+  commit (empty Enter = 0 fighters = live ensure stick).
 
 Defaults (configurable via callers / `EconCaps`):
 - ``DEFAULT_FIGHTER_RESERVE = 5`` — small early-game floor so a lone
@@ -44,6 +46,17 @@ _FIGHTER_VS_RE = re.compile(
     r"Your\s+fighters\s*:\s*(\d+)\s+vs\.?\s*theirs\s*:\s*(\d+)",
     re.IGNORECASE,
 )
+# Corp toll banner when the vs-line has scrolled off pyte's viewport.
+_TOLL_ENEMY_RE = re.compile(
+    r"Fighters\s*:\s*(\d+)\s*\([^)]*\)\s*\[Toll\]",
+    re.IGNORECASE,
+)
+# After Attack, TWGS asks for a commit count (default [0] — empty Enter
+# spends 0 fighters and returns to Option?, which is the live Ona stick).
+_ATTACK_QTY_RE = re.compile(
+    r"How many fighters do you wish to use\s*\(\s*0\s+to\s+(\d+)\s*\)\s*\[(\d+)\]\s*\?",
+    re.IGNORECASE,
+)
 
 
 @dataclass(frozen=True)
@@ -67,18 +80,30 @@ class FighterOptionDecision:
 
 
 def parse_fighter_option(screen_text: str, prompt_line: str = "") -> FighterOptionState:
-    """Detect Option? dialogue + parse `Your fighters: N vs. theirs: M`."""
+    """Detect Option? dialogue + parse `Your fighters: N vs. theirs: M`.
+
+    Falls back to the corp ``Fighters: N (…)[Toll]`` banner for *theirs*
+    when the vs-line has left the viewport (live ensure stuck on Option?
+    with only the prompt still visible).
+    """
     blob = f"{screen_text}\n{prompt_line}"
     if not _OPTION_PROMPT_RE.search(blob):
         return FighterOptionState(detected=False)
     m = _FIGHTER_VS_RE.search(blob)
-    if not m:
-        return FighterOptionState(detected=True, yours=None, theirs=None)
-    return FighterOptionState(
-        detected=True,
-        yours=int(m.group(1)),
-        theirs=int(m.group(2)),
-    )
+    if m:
+        return FighterOptionState(
+            detected=True,
+            yours=int(m.group(1)),
+            theirs=int(m.group(2)),
+        )
+    toll = _TOLL_ENEMY_RE.search(blob)
+    if toll:
+        return FighterOptionState(
+            detected=True,
+            yours=None,
+            theirs=int(toll.group(1)),
+        )
+    return FighterOptionState(detected=True, yours=None, theirs=None)
 
 
 def max_deployable(
@@ -127,10 +152,12 @@ def decide_fighter_option(
             detected=False, key=None, reason="not_fighter_option"
         )
     if state.yours is None or state.theirs is None:
+        # Holding forever wedges ensure/autopilot on live Option? when the
+        # vs-line scrolled off. Cannot prove Attack → Retreat (never Pay).
         return FighterOptionDecision(
             detected=True,
-            key=None,
-            reason="unparsed_fighter_counts",
+            key="R",
+            reason="unparsed_retreat_safe",
             yours=state.yours,
             theirs=state.theirs,
         )
@@ -181,6 +208,91 @@ def decide_from_screen(
     """Parse + decide in one call (autopilot convenience)."""
     return decide_fighter_option(
         parse_fighter_option(screen_text, prompt_line),
+        reserve=reserve,
+        max_enemy=max_enemy,
+    )
+
+
+def parse_attack_qty_prompt(
+    screen_text: str, prompt_line: str = ""
+) -> Optional[tuple[int, int]]:
+    """Return ``(max_avail, default)`` for the Attack quantity sub-prompt."""
+    blob = f"{screen_text}\n{prompt_line}"
+    m = _ATTACK_QTY_RE.search(blob)
+    if not m:
+        return None
+    return int(m.group(1)), int(m.group(2))
+
+
+def attack_fighters_to_commit(
+    *,
+    yours: Optional[int],
+    theirs: Optional[int],
+    max_avail: int,
+) -> int:
+    """Fighters to commit on the qty prompt. Never returns 0 when max≥1."""
+    if max_avail < 1:
+        return 0
+    if theirs is not None and theirs >= 1:
+        return min(max(theirs, 1), max_avail)
+    if yours is not None and yours >= 1:
+        return min(yours, max_avail)
+    return max_avail
+
+
+def _vs_counts(screen_text: str, prompt_line: str = "") -> tuple[Optional[int], Optional[int]]:
+    """Parse yours/theirs from the vs-line or Toll banner (no Option? required)."""
+    blob = f"{screen_text}\n{prompt_line}"
+    m = _FIGHTER_VS_RE.search(blob)
+    if m:
+        return int(m.group(1)), int(m.group(2))
+    toll = _TOLL_ENEMY_RE.search(blob)
+    if toll:
+        return None, int(toll.group(1))
+    return None, None
+
+
+def next_fighter_option_input(
+    screen_text: str,
+    prompt_line: str = "",
+    *,
+    reserve: int = DEFAULT_FIGHTER_RESERVE,
+    max_enemy: int = DEFAULT_AUTO_ATTACK_MAX_ENEMY,
+) -> FighterOptionDecision:
+    """Prefer Attack qty sub-prompt over Option? when both are on screen.
+
+    Live Ona stick: ``A`` was sent, qty prompt appeared with default
+    ``[0]``, settle treated idle as done, and the next tick re-fired
+    ``A`` forever. Answering the qty prompt clears the fight.
+
+    Qty screens often omit the ``Option?`` line — still read the vs-line
+    so we commit ``theirs`` (not max_avail) when visible.
+    """
+    qty = parse_attack_qty_prompt(screen_text, prompt_line)
+    if qty is not None:
+        max_avail, _default = qty
+        yours, theirs = _vs_counts(screen_text, prompt_line)
+        n = attack_fighters_to_commit(
+            yours=yours, theirs=theirs, max_avail=max_avail
+        )
+        if n < 1:
+            return FighterOptionDecision(
+                detected=True,
+                key=None,
+                reason="attack_qty_unavailable",
+                yours=yours,
+                theirs=theirs,
+            )
+        return FighterOptionDecision(
+            detected=True,
+            key=str(n),
+            reason=f"attack_qty:{n}:max={max_avail}",
+            yours=yours,
+            theirs=theirs,
+        )
+    return decide_from_screen(
+        screen_text,
+        prompt_line,
         reserve=reserve,
         max_enemy=max_enemy,
     )

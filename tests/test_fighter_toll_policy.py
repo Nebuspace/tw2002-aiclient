@@ -93,12 +93,50 @@ def test_few_enemies_but_outgunned_retreats():
     assert d.key == "R"
 
 
-def test_unparsed_option_holds():
+def test_unparsed_option_retreats_safe():
+    """WO-OPTION-CLEAR-ENSURE: Option? without vs-line → R, never hold/Pay."""
     text = "Option? (A,D,I,R,P,S,?):?\n(no fighter counts here)"
     d = decide_from_screen(text)
     assert d.detected is True
-    assert d.key is None
-    assert d.reason == "unparsed_fighter_counts"
+    assert d.key == "R"
+    assert d.reason == "unparsed_retreat_safe"
+
+
+def test_toll_banner_without_vs_line_still_detects_theirs():
+    text = (
+        "Fighters: 1 (belong to Corp#1, New Corp) [Toll]\n"
+        "You have to destroy the fighters\n"
+        "Option? (A,D,I,R,S,?):?"
+    )
+    st = parse_fighter_option(text)
+    assert st.detected is True
+    assert st.theirs == 1
+    assert st.yours is None
+    d = decide_from_screen(text)
+    assert d.key == "R"
+    assert d.reason == "unparsed_retreat_safe"
+
+
+def test_attack_qty_prompt_preferred_over_option():
+    """Live Ona: qty prompt + stale Option? in buffer → answer qty, not re-A."""
+    from twclient.fighter_toll_policy import next_fighter_option_input
+
+    text = (
+        "Your fighters: 30 vs. theirs: 1\n"
+        "Option? (A,D,I,R,S,?):?\n"
+        "How many fighters do you wish to use (0 to 30) [0]?"
+    )
+    d = next_fighter_option_input(text)
+    assert d.key == "1"
+    assert d.reason.startswith("attack_qty:1:")
+
+
+def test_attack_qty_uses_max_when_counts_missing():
+    from twclient.fighter_toll_policy import next_fighter_option_input
+
+    text = "How many fighters do you wish to use (0 to 30) [0]?"
+    d = next_fighter_option_input(text)
+    assert d.key == "30"
 
 
 def test_decide_never_selects_pay_even_if_allow_pay_kwarg_present():

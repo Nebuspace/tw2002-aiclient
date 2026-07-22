@@ -151,7 +151,6 @@ from .control_lock import MODE_HUMAN, ControlModeConflict
 from .fighter_toll_policy import (
     DEFAULT_AUTO_ATTACK_MAX_ENEMY,
     DEFAULT_FIGHTER_RESERVE,
-    decide_from_screen,
 )
 from .settle import send_and_confirm
 from .ship_upgrade_decision import (
@@ -1168,16 +1167,18 @@ class AutopilotEngine:
         self, screen_text: str
     ) -> Optional[tuple[str, str, str]]:
         """WO-FIGHTER-FLOOR-TOLL: if ``screen_text`` is a fighter toll
-        ``Option?`` dialogue, send Attack or Retreat and return
-        ``(send_outcome, input_text, post_text)``; otherwise ``None`` so
-        the normal HIGH-2 / navigation path runs.
+        ``Option?`` dialogue (or Attack qty sub-prompt), send Attack /
+        Retreat / qty and return ``(send_outcome, input_text, post_text)``;
+        otherwise ``None`` so the normal HIGH-2 / navigation path runs.
 
-        Never sends ``P`` (toll pay). Unparsed Option? → hold outcome
-        (still a non-None return so we don't fire a bare sector number).
+        Never sends ``P`` (toll pay). Unparsed Option? → Retreat (safe).
+        After ``A``, answers the qty prompt when it appears.
         """
+        from .fighter_toll_policy import next_fighter_option_input
+
         rows = screen_text.split("\n")
         prompt = rows[-1].strip() if rows else ""
-        fo = decide_from_screen(
+        fo = next_fighter_option_input(
             screen_text,
             prompt,
             reserve=self.caps.fighter_reserve,
@@ -1187,20 +1188,41 @@ class AutopilotEngine:
             return None
         if fo.key is None:
             return (f"held:fighter_option:{fo.reason}", "<no-send>", screen_text)
+        # A/R are single-keystroke Option? menu — no trailing Enter; qty digits need it.
         _reason, _elapsed, confirmed = send_and_confirm(
             self.session,
             fo.key,
             confirm_prompt=None,
-            enter=True,
+            enter=fo.key.isdigit(),
         )
+        keys_sent = fo.key
+        if fo.key == "A":
+            post_mid = self.session.render_text(self.session.render())
+            rows2 = post_mid.split("\n")
+            prompt2 = rows2[-1].strip() if rows2 else ""
+            fo2 = next_fighter_option_input(
+                post_mid,
+                prompt2,
+                reserve=self.caps.fighter_reserve,
+                max_enemy=self.caps.fighter_auto_attack_max_enemy,
+            )
+            if fo2.detected and fo2.key is not None and fo2.key.isdigit():
+                send_and_confirm(
+                    self.session,
+                    fo2.key,
+                    confirm_prompt=None,
+                    enter=True,
+                )
+                keys_sent = f"{fo.key}+{fo2.key}"
+                confirmed = True
         post_text = self.session.render_text(self.session.render())
         if hasattr(self.session, "observe_credits"):
             self.session.observe_credits(post_text)
         if confirmed:
-            return (f"sent:fighter_option:{fo.key}", fo.key, post_text)
+            return (f"sent:fighter_option:{keys_sent}", keys_sent, post_text)
         return (
-            f"unconfirmed:fighter_option:{fo.key}:{_reason}:{float(_elapsed):.3f}",
-            fo.key,
+            f"unconfirmed:fighter_option:{keys_sent}:{_reason}:{float(_elapsed):.3f}",
+            keys_sent,
             post_text,
         )
 

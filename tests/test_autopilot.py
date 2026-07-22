@@ -545,7 +545,7 @@ def test_live_tick_attacks_single_fighter_option_instead_of_holding():
     engine = AutopilotEngine(session, profile, ControlLock())
 
     decision = engine.live_tick(explore_next_sector=200)
-    assert session.sent == [("A", True, False)]
+    assert session.sent == [("A", False, False)]
     assert decision.send_outcome == "sent:fighter_option:A"
 
 
@@ -562,10 +562,43 @@ def test_live_tick_attacks_newplayer_toll_without_pay_key():
     engine = AutopilotEngine(session, profile, ControlLock())
 
     decision = engine.live_tick(explore_next_sector=200)
-    assert session.sent == [("A", True, False)]
+    assert session.sent == [("A", False, False)]
     assert decision.send_outcome == "sent:fighter_option:A"
     assert not (decision.send_outcome or "").startswith("held:not_main_command")
 
+
+def test_live_tick_answers_attack_qty_after_a():
+    """WO-OPTION-CLEAR-ENSURE: after A, qty [0]? must get a non-zero commit."""
+    toll = (
+        "Sector  : 8578 in uncharted space.\n"
+        "Your fighters: 30 vs. theirs: 1\n"
+        "Option? (A,D,I,R,S,?):?"
+    )
+    qty = (
+        "Your fighters: 30 vs. theirs: 1\n"
+        "How many fighters do you wish to use (0 to 30) [0]?"
+    )
+    done = (
+        "Sector  : 8578 in uncharted space.\n"
+        "Command [TL=00:00:00]:[8578] (?=Help)? :"
+    )
+
+    class _AttackQtySession(FakeAutopilotSession):
+        def send(self, text, enter=True, secret=False):
+            super().send(text, enter=enter, secret=secret)
+            if text == "A":
+                self._text = qty
+            elif text.isdigit():
+                self._text = done
+
+    session = _AttackQtySession(text=toll)
+    profile = _make_profile(autonomous=True)
+    engine = AutopilotEngine(session, profile, ControlLock())
+
+    decision = engine.live_tick(explore_next_sector=200)
+    assert session.sent[0][0] == "A"
+    assert session.sent[1][0] == "1"
+    assert decision.send_outcome == "sent:fighter_option:A+1"
 
 def test_live_tick_seeds_hud_once_when_credits_turns_unknown():
     """WO-HUD-SEED-ON-EXPLORE: sector_display with no balance/turns → one I."""
@@ -608,7 +641,7 @@ def test_live_tick_retreats_zero_fighter_option_instead_of_holding():
     engine = AutopilotEngine(session, profile, ControlLock())
 
     decision = engine.live_tick(explore_next_sector=200)
-    assert session.sent == [("R", True, False)]
+    assert session.sent == [("R", False, False)]
     assert decision.send_outcome == "sent:fighter_option:R"
     assert all(t[0] != "P" for t in session.sent)
 

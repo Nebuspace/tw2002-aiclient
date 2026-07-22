@@ -1604,10 +1604,26 @@ def _dispatch_ensure(session, args):
         except OSError as e:
             return {"ok": False, "error": f"reconnect_failed:{e}"}
 
+    rows = session.render()
+    text = session.render_text(rows)
+    prompt = rows[-1].strip() if rows else ""
+    cls = classify_screen(text, prompt)
+
+    # WO-OPTION-CLEAR-ENSURE: clear fighter Option? BEFORE hud I-seed.
+    # Seed skips Option? when detected, but a prior mid-explore I-probe
+    # can already have scrolled the vs-line off the viewport — clear
+    # first so ensure is not wedged on unparsed counts.
+    if cls != target and bool(getattr(profile, "autonomous", False)):
+        if _try_clear_fighter_option_once(session, text, prompt):
+            rows = session.render()
+            text = session.render_text(rows)
+            prompt = rows[-1].strip() if rows else ""
+            cls = classify_screen(text, prompt)
+
     # WO-HUD-CREDITS-TURNS-JOIN: seed sticky credits/turns (I-probe if
     # needed) BEFORE the already_there short-circuit — explore/fighter-
     # toll screens omit both, and a no-op ensure would otherwise leave
-    # the spectate HUD at `-` forever.
+    # the spectate HUD at `-` forever. Runs after Option? clear.
     from .hud_seed import seed_hud_after_join
     hud_seed = seed_hud_after_join(session)
 
@@ -1615,19 +1631,6 @@ def _dispatch_ensure(session, args):
     text = session.render_text(rows)
     prompt = rows[-1].strip() if rows else ""
     cls = classify_screen(text, prompt)
-
-    # WO-AUTOPILOT-AFTER-ENSURE: fighter toll Option? is not main_command,
-    # so ensure used to run_login → automaton_stuck and never armed the
-    # loop that owns Attack/Retreat. Clear one winnable/hopeless Option?
-    # when autonomous (same policy as live_tick; never Pay) so ensure can
-    # reach target and auto-start. Non-autonomous profiles leave the
-    # dialogue alone (human/attach owns the keystroke).
-    if cls != target and bool(getattr(profile, "autonomous", False)):
-        if _try_clear_fighter_option_once(session, text, prompt):
-            rows = session.render()
-            text = session.render_text(rows)
-            prompt = rows[-1].strip() if rows else ""
-            cls = classify_screen(text, prompt)
 
     if cls == target:
         # Attribute the world even on the no-op path — otherwise status
@@ -1650,6 +1653,38 @@ def _dispatch_ensure(session, args):
             target=target,
         )
     except LoginError as e:
+        # Login can land on a fighter Option? the automaton does not know
+        # (WO-AUTOPILOT-AFTER-ENSURE live): clear once when autonomous,
+        # then treat main_command as ensure success so auto-start arms.
+        if bool(getattr(profile, "autonomous", False)):
+            rows = session.render()
+            text = session.render_text(rows)
+            prompt = rows[-1].strip() if rows else ""
+            if _try_clear_fighter_option_once(session, text, prompt):
+                rows = session.render()
+                text = session.render_text(rows)
+                prompt = rows[-1].strip() if rows else ""
+                cls = classify_screen(text, prompt)
+                if cls == target:
+                    hud_seed = seed_hud_after_join(session)
+                    session.mark_profile(profile.name)
+                    resp = build_response(
+                        session,
+                        extra={
+                            "steps": 0,
+                            "already_there": False,
+                            "fighter_option_cleared": True,
+                            **hud_seed,
+                        },
+                    )
+                    session.record_history(
+                        "ensure",
+                        {"profile": profile_name, "target": target},
+                        resp["prompt"],
+                        resp["classification"],
+                        "ensure",
+                    )
+                    return resp
         resp = build_response(session, extra={"already_there": False, **hud_seed})
         resp["ok"] = False
         resp["error"] = f"login_failed:{e}"
@@ -1670,18 +1705,27 @@ def _dispatch_ensure(session, args):
 
 
 def _try_clear_fighter_option_once(session, text, prompt) -> bool:
-    """Send one Attack/Retreat for a detected fighter ``Option?`` dialogue.
+    """Send Attack/Retreat (and Attack qty) for a fighter ``Option?``.
 
     Returns True iff a keystroke was sent (caller should re-classify).
-    Never sends Pay. Unparsed / hold decisions return False (no send).
+    Never sends Pay. After ``A``, answers ``How many fighters…`` when
+    that sub-prompt appears (empty Enter = 0 = live stick).
     """
-    from .fighter_toll_policy import decide_from_screen
+    from .fighter_toll_policy import next_fighter_option_input
     from .settle import send_and_confirm
 
-    fo = decide_from_screen(text, prompt)
+    fo = next_fighter_option_input(text, prompt)
     if not fo.detected or fo.key is None:
         return False
-    send_and_confirm(session, fo.key, confirm_prompt=None, enter=True)
+    # A/R are single-keystroke Option? menu — no trailing Enter; qty digits need it.
+    send_and_confirm(session, fo.key, confirm_prompt=None, enter=fo.key.isdigit())
+    if fo.key == "A":
+        rows = session.render()
+        text2 = session.render_text(rows)
+        prompt2 = rows[-1].strip() if rows else ""
+        fo2 = next_fighter_option_input(text2, prompt2)
+        if fo2.detected and fo2.key is not None and fo2.key.isdigit():
+            send_and_confirm(session, fo2.key, confirm_prompt=None, enter=True)
     return True
 
 

@@ -36,6 +36,11 @@ def seed_hud_after_join(session) -> dict:
 
     Returns a small dict for ensure/status extras: probed bool + values.
     Never raises — a failed probe must not break ensure's success path.
+
+    Skips the I-probe while a fighter ``Option?`` dialogue is on screen:
+    ``I`` is Info on that menu (not ship-info), and the probe can scroll
+    the ``Your fighters: N vs. theirs: M`` line off pyte's 25-line
+    viewport so ensure cannot Attack/Retreat.
     """
     try:
         text = session.render_text(session.render())
@@ -43,6 +48,18 @@ def seed_hud_after_join(session) -> dict:
         bal, turns = _snapshots(session)
         if bal is not None and turns is not None:
             return {"hud_seed_probed": False, "credits": bal, "turns_left": turns}
+
+        from .fighter_toll_policy import parse_fighter_option
+
+        rows = text.split("\n")
+        prompt = rows[-1].strip() if rows else ""
+        if parse_fighter_option(text, prompt).detected:
+            return {
+                "hud_seed_probed": False,
+                "hud_seed_deferred": "fighter_option",
+                "credits": bal,
+                "turns_left": turns,
+            }
 
         # Single-key ship-info — no trailing assumptions about leaving the
         # current dialogue; settle whatever screen I produces.
