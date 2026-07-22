@@ -919,8 +919,19 @@ def test_compose_primary_goals_ship_hold_prices_gated_without_stardock():
         ship_prices_count=0,
         upgrade_status="price?",
     ), width=36)
-    assert any("Ship prices" in ln and "need StarDock" in ln and "⊘" in ln for ln in blocked)
-    assert any("Hold upg" in ln and "need StarDock" in ln and "⊘" in ln for ln in blocked)
+    # Parent: StarDock not found
+    assert any("StarDock" in ln and "not found" in ln for ln in blocked)
+    # Indented children appear immediately after the StarDock parent row
+    dock_idx = next(i for i, ln in enumerate(blocked) if "StarDock" in ln and "not found" in ln)
+    assert blocked[dock_idx + 1].startswith("  ") and "⊘" in blocked[dock_idx + 1] and "Ship prices" in blocked[dock_idx + 1]
+    assert blocked[dock_idx + 2].startswith("  ") and "⊘" in blocked[dock_idx + 2] and "Hold upg" in blocked[dock_idx + 2]
+    # The explanatory text is now implied by the parent row — not repeated on each child
+    assert not any("need StarDock" in ln or "need dock" in ln for ln in blocked)
+    # Short-label variant
+    blocked_short = compose_primary_goals_lines(GoalsSnapshot(stardock_found=False), width=20)
+    dock_idx_s = next(i for i, ln in enumerate(blocked_short) if "Dock" in ln and "not found" in ln)
+    assert blocked_short[dock_idx_s + 1].startswith("  ") and "Ships" in blocked_short[dock_idx_s + 1]
+    assert blocked_short[dock_idx_s + 2].startswith("  ") and "Hold" in blocked_short[dock_idx_s + 2]
 
     hunting = compose_primary_goals_lines(GoalsSnapshot(
         stardock_found=True, stardock_sectors=(100,),

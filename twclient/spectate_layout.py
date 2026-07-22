@@ -1572,10 +1572,13 @@ class GoalsSnapshot:
         self.fighters_count = fighters_count
 
 
-def _goal_row(*, glyph: str, label: str, detail: str, width: int) -> str:
-    """One GOALS line: status glyph + readable label + detail."""
-    text = f"{glyph} {label} {detail}".strip()
-    return text[:width]
+def _goal_row(*, glyph: str, label: str, detail: str, width: int, prefix: str = "") -> str:
+    """One GOALS line: status glyph + readable label + detail.
+
+    prefix is prepended verbatim (no strip) — used for visually indented child rows.
+    """
+    inner = f"{glyph} {label} {detail}".strip()
+    return (prefix + inner)[:width]
 
 
 def _goals_use_short_labels(width: int) -> bool:
@@ -1635,6 +1638,26 @@ def compose_primary_goals_lines(snap, *, width: int = 22) -> list[str]:
         detail=dock_detail,
         width=width,
     ))
+
+    # Ship prices + hold upgrade both require StarDock Shipyards.  When the dock
+    # hasn't been found yet, show them as indented children of the StarDock row so
+    # the dependency is visually obvious.  When found, they promote to normal
+    # sibling rows in their own positions further below.
+    if not snap.stardock_found:
+        lines.append(_goal_row(
+            glyph="⊘",
+            label="Ship prices" if not short else "Ships",
+            detail="",
+            width=width,
+            prefix="  ",
+        ))
+        lines.append(_goal_row(
+            glyph="⊘",
+            label="Hold upg" if not short else "Hold",
+            detail="",
+            width=width,
+            prefix="  ",
+        ))
 
     # Known sector count is exploration progress (galaxy size often unknown).
     if snap.galaxy_size and snap.galaxy_size > 0:
@@ -1697,38 +1720,35 @@ def compose_primary_goals_lines(snap, *, width: int = 22) -> list[str]:
         width=width,
     ))
 
-    ships_label = "Ship prices" if not short else "Ships"
-    if not snap.stardock_found:
-        ships_glyph = "⊘"
-        ships_detail = "need StarDock" if not short else "need dock"
-    elif snap.ship_prices_count > 0:
-        ships_glyph = "✓"
-        ships_detail = (
-            f"{snap.ship_prices_count} priced"
-            if not short
-            else f"{snap.ship_prices_count} ok"
-        )
-    else:
-        ships_glyph = "·"
-        ships_detail = "price?"
-    lines.append(_goal_row(
-        glyph=ships_glyph, label=ships_label, detail=ships_detail, width=width,
-    ))
+    # When stardock not found these two rows were already emitted as indented
+    # children immediately below the StarDock parent row above.
+    if snap.stardock_found:
+        ships_label = "Ship prices" if not short else "Ships"
+        if snap.ship_prices_count > 0:
+            ships_glyph = "✓"
+            ships_detail = (
+                f"{snap.ship_prices_count} priced"
+                if not short
+                else f"{snap.ship_prices_count} ok"
+            )
+        else:
+            ships_glyph = "·"
+            ships_detail = "price?"
+        lines.append(_goal_row(
+            glyph=ships_glyph, label=ships_label, detail=ships_detail, width=width,
+        ))
 
-    hold_label = "Hold upg" if not short else "Hold"
-    hold_quote = snap.upgrade_status
-    if not snap.stardock_found:
-        hold_glyph = "⊘"
-        hold_detail = "need StarDock" if not short else "need dock"
-    elif hold_quote and hold_quote not in ("—", "price?"):
-        hold_glyph = "✓"
-        hold_detail = hold_quote
-    else:
-        hold_glyph = "·"
-        hold_detail = "price?"
-    lines.append(_goal_row(
-        glyph=hold_glyph, label=hold_label, detail=hold_detail, width=width,
-    ))
+        hold_label = "Hold upg" if not short else "Hold"
+        hold_quote = snap.upgrade_status
+        if hold_quote and hold_quote not in ("—", "price?"):
+            hold_glyph = "✓"
+            hold_detail = hold_quote
+        else:
+            hold_glyph = "·"
+            hold_detail = "price?"
+        lines.append(_goal_row(
+            glyph=hold_glyph, label=hold_label, detail=hold_detail, width=width,
+        ))
 
     ftr_label = "Fighters" if not short else "Ftr"
     if snap.fighters_known and snap.fighters_count is not None:
