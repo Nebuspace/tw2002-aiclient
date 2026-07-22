@@ -1904,8 +1904,20 @@ def test_resolve_world_id_prefers_status_over_ambiguous_store(monkeypatch, tmp_p
     (store / "world_a").mkdir(parents=True)
     (store / "world_b").mkdir(parents=True)
     monkeypatch.setattr(world_model, "WORLD_DIR", store)
+    monkeypatch.setattr(spectate_app_mod, "WORLD_DIR", store)
     assert spectate_app_mod._resolve_world_id() is None
     assert spectate_app_mod._resolve_world_id({"world_id": "world_b"}) == "world_b"
+
+
+def test_resolve_world_id_matches_host_when_multiple_worlds(monkeypatch, tmp_path):
+    store = tmp_path / "world"
+    (store / "twgs_geekm0nkey_com__F__Tumbleweed").mkdir(parents=True)
+    (store / "tradewarsacademy_com__D__Ironhand").mkdir(parents=True)
+    monkeypatch.setattr(spectate_app_mod, "WORLD_DIR", store)
+    assert (
+        spectate_app_mod._resolve_world_id({"host": "twgs.geekm0nkey.com"})
+        == "twgs_geekm0nkey_com__F__Tumbleweed"
+    )
 
 
 def test_stamp_live_world_metrics_uses_status_world_id(monkeypatch, tmp_path):

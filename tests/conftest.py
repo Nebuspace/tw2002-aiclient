@@ -153,6 +153,13 @@ class FakeAttachSession:
         self.lock = threading.Lock()
         self.last_credits = None
         self.last_credits_ts = None
+        # Mirrors Session.auto_login_profile / mark_profile — ensure's
+        # already_there path now always stamps the profile so status
+        # world_id resolves (WO-TUI-PRIORITIES-DECISIONS-REGRESS).
+        self.auto_login_profile = None
+
+    def mark_profile(self, profile_name):
+        self.auto_login_profile = profile_name
 
     def render(self):
         return self._screen.split("\n")

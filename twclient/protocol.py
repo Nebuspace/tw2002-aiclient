@@ -1596,6 +1596,11 @@ def _dispatch_ensure(session, args):
     prompt = rows[-1].strip() if rows else ""
     cls = classify_screen(text, prompt)
     if cls == target:
+        # Attribute the world even on the no-op path — otherwise status
+        # world_id stays None (spectate PRIORITIES/goals empty) whenever
+        # ensure short-circuits after a recycle that left us already at
+        # the target class (WO-TUI-PRIORITIES-DECISIONS-REGRESS).
+        session.mark_profile(profile.name)
         resp = build_response(session, extra={"already_there": True, "steps": 0})
         return resp
 

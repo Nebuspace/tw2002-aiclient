@@ -1185,10 +1185,12 @@ def test_render_plain_includes_phase2_sections():
     assert "App 0 / AI 0 · Hum 0" in empty
 
 
-def test_compose_decisions_placeholder_is_nonempty():
+def test_compose_decisions_placeholder_is_nonempty_honest_idle():
     lines = compose_decisions_placeholder()
     assert len(lines) >= 1
-    assert any("TW-13" in line or "coach" in line.lower() for line in lines)
+    joined = " ".join(lines).lower()
+    assert "tw-13" not in joined
+    assert "trace" in joined or "autopilot" in joined or "explore" in joined
 
 
 # -- tick_down_timer / format_idle_age / status_semantic --------------------

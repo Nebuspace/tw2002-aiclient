@@ -385,8 +385,10 @@ def _resolve_world_id(status=None):
     """Best-effort world_id for explore ticks and live METRICS.
 
     Prefers the daemon status field (session's active profile), then
-    TW_WORLD_ID, else the sole directory under state/world/. Returns None
-    when ambiguous or empty (Decisions stays on coach placeholder).
+    TW_WORLD_ID, else a unique directory under state/world/. When several
+    worlds exist, prefer the one whose id matches ``status["host"]``
+    (normalized) so a live geek/academy dual store still resolves.
+    Returns None when ambiguous or empty.
     """
     if status:
         wid = (status.get("world_id") or "").strip()
@@ -396,10 +398,23 @@ def _resolve_world_id(status=None):
     if env:
         return env
     try:
-        if WORLD_DIR.is_dir():
-            kids = sorted(p.name for p in WORLD_DIR.iterdir() if p.is_dir())
-            if len(kids) == 1:
-                return kids[0]
+        if not WORLD_DIR.is_dir():
+            return None
+        kids = sorted(p.name for p in WORLD_DIR.iterdir() if p.is_dir())
+        if len(kids) == 1:
+            return kids[0]
+        if len(kids) > 1 and status:
+            host = (status.get("host") or "").strip().lower()
+            if host:
+                # world_id uses underscores for dots: twgs.geek… → twgs_geek…
+                host_key = host.replace(".", "_")
+                matches = [k for k in kids if k.startswith(host_key + "__") or k.startswith(host_key + "_")]
+                if len(matches) == 1:
+                    return matches[0]
+                # looser: host slug appears at start of id
+                matches = [k for k in kids if k.startswith(host_key)]
+                if len(matches) == 1:
+                    return matches[0]
     except OSError:
         pass
     return None

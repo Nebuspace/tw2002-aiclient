@@ -1621,11 +1621,15 @@ def decisions_should_show_chain(now: float) -> bool:
 
 
 def compose_decisions_placeholder() -> list[str]:
-    """Decisions box content until TW-13 coaches land. Fixed copy so the
-    titled box proves the region is wired without inventing advice."""
+    """Idle DECISIONS copy when no live autopilot_trace is on status.
+
+    Honest empty state — not a TW-13 "coming soon" stub
+    (WO-TUI-PRIORITIES-DECISIONS-REGRESS).
+    """
     return [
-        "(coach pending)",
-        "TW-13 fills this",
+        "no live trace",
+        "(start autopilot",
+        " or explore: E)",
     ]
 
 
