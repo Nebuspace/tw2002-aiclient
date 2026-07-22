@@ -906,6 +906,44 @@ class AutopilotEngine:
         # an introspection convenience only (e.g. a future status verb),
         # never read by `decision_to_trace()`/the trace schema itself.
         self._last_chain_result: Optional[ChainRunResult] = None
+        # WO-HUD-SEED-ON-EXPLORE: at most one I-probe per engine lifetime
+        # when sticky credits/turns are still unknown mid-explore.
+        self._hud_seed_attempted = False
+
+    def _maybe_seed_hud_once(self) -> Optional[str]:
+        """WO-HUD-SEED-ON-EXPLORE: if credits or turns still unknown, run
+        `seed_hud_after_join` once (may send `I`). Never from dry_run.
+
+        Returns ``"sent:hud_seed:I"`` when this call actually probed (caller
+        must end the tick — one-keystroke-per-tick contract), else ``None``.
+        Latches `_hud_seed_attempted` so a failed/partial probe does not
+        spam I every tick.
+        """
+        if self._hud_seed_attempted:
+            return None
+        # Plain test fakes predate sticky snapshots — skip (don't I-spam).
+        if not (
+            hasattr(self.session, "credits_snapshot")
+            and hasattr(self.session, "turns_snapshot")
+        ):
+            self._hud_seed_attempted = True
+            return None
+        text = self.session.render_text(self.session.render())
+        if hasattr(self.session, "observe_credits"):
+            self.session.observe_credits(text)
+        if hasattr(self.session, "observe_turns"):
+            self.session.observe_turns(text)
+        bal, _ = self.session.credits_snapshot()
+        turns, _ = self.session.turns_snapshot()
+        if bal is not None and turns is not None:
+            self._hud_seed_attempted = True
+            return None
+        self._hud_seed_attempted = True
+        from .hud_seed import seed_hud_after_join
+        result = seed_hud_after_join(self.session)
+        if result.get("hud_seed_probed"):
+            return "sent:hud_seed:I"
+        return None
 
     def _fresh_credits(self) -> Optional[int]:
         """WO-FA-SAFE (hub-signed-off design + Rook must-fix #1): the
@@ -961,6 +999,8 @@ class AutopilotEngine:
         # protocol.py/skills.py/crawl_driver.py/loop_player.py).
         if hasattr(self.session, "observe_credits"):
             self.session.observe_credits(text)
+        if hasattr(self.session, "observe_turns"):
+            self.session.observe_turns(text)
         # WO-FA-SAFE: `assess()`'s `credits` now comes from THIS engine's
         # own strict, freshness-gated read -- see `_fresh_credits()`'s own
         # docstring -- never from `assess()`'s internal screen parse.
@@ -988,11 +1028,17 @@ class AutopilotEngine:
         note."""
         if not self.enabled:
             raise AutopilotGateError(f"autonomous_disabled:profile={getattr(self.profile, 'name', '?')}")
+        # WO-HUD-SEED-ON-EXPLORE: before assess, one I-probe if sticky
+        # credits/turns still unknown (sector_display streaks omit both).
+        # If we probed, this tick is done (one-keystroke contract).
+        seed_outcome = self._maybe_seed_hud_once()
         pre_text = self.session.render_text(self.session.render())
         # WO-FA7a round 5: same credits-supervision feed as dry_run_tick()
         # above -- see its comment for the full rationale.
         if hasattr(self.session, "observe_credits"):
             self.session.observe_credits(pre_text)
+        if hasattr(self.session, "observe_turns"):
+            self.session.observe_turns(pre_text)
         # WO-FA-SAFE: same strict, freshness-gated source as dry_run_tick()
         # -- see `_fresh_credits()`'s own docstring.
         snapshot = assess(pre_text, credits=self._fresh_credits(), **assess_kwargs)
@@ -1008,6 +1054,18 @@ class AutopilotEngine:
                 self._last_chosen_kind = decision.chosen.kind
         if interrupted:
             decision = dataclasses.replace(decision, interrupted=True)
+
+        if seed_outcome:
+            with self._lock:
+                self._tick_counter += 1
+                decision = dataclasses.replace(
+                    decision, tick=self._tick_counter, send_outcome=seed_outcome,
+                )
+                self.decisions.append(decision)
+            self._record(
+                decision, pre_text=pre_text, input_text="I", post_text=pre_text, dry_run=False,
+            )
+            return decision
 
         post_text = pre_text
         input_text = "<no-send>"

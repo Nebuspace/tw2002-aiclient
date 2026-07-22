@@ -108,14 +108,24 @@ class ObservingFakeAutopilotSession(FakeAutopilotSession):
 
     observe_credits = Session.observe_credits
     credits_snapshot = Session.credits_snapshot
+    observe_turns = Session.observe_turns
+    turns_snapshot = Session.turns_snapshot
 
-    def __init__(self, *a, **kw):
+    def __init__(self, *a, after_i_text=None, **kw):
         super().__init__(*a, **kw)
         self.lock = threading.Lock()
         self.last_credits = None
         self.last_credits_ts = None
+        self.last_turns = None
+        self.last_turns_ts = None
+        self._after_i_text = after_i_text
 
-    observe_credits = Session.observe_credits
+    def send(self, text, enter=True, secret=False):
+        super().send(text, enter=enter, secret=secret)
+        # WO-HUD-SEED-ON-EXPLORE: after I, swap to ship-info screen so
+        # seed_hud_after_join can observe credits/turns.
+        if text == "I" and self._after_i_text is not None:
+            self._text = self._after_i_text
 
 
 class NeverSettlesSession(FakeAutopilotSession):
@@ -555,6 +565,35 @@ def test_live_tick_attacks_newplayer_toll_without_pay_key():
     assert session.sent == [("A", True, False)]
     assert decision.send_outcome == "sent:fighter_option:A"
     assert not (decision.send_outcome or "").startswith("held:not_main_command")
+
+
+def test_live_tick_seeds_hud_once_when_credits_turns_unknown():
+    """WO-HUD-SEED-ON-EXPLORE: sector_display with no balance/turns → one I."""
+    explore = (
+        "Sector  : 1146 in uncharted space.\n"
+        "Warps to Sector(s) :  (10)\n"
+        "Command [TL=00:00:00]:[1146] (?=Help)? :"
+    )
+    info = (
+        "Current Sector : 1146\n"
+        "Turns left     : 1500\n"
+        "Credits        : 300\n"
+        "Command [TL=00:00:00]:[1146] (?=Help)? :"
+    )
+    session = ObservingFakeAutopilotSession(text=explore, after_i_text=info)
+    profile = _make_profile(autonomous=True)
+    engine = AutopilotEngine(session, profile, ControlLock())
+
+    d1 = engine.live_tick(explore_next_sector=10)
+    assert d1.send_outcome == "sent:hud_seed:I"
+    assert session.sent == [("I", True, False)]
+    assert session.last_credits == 300
+    assert session.last_turns == 1500
+
+    # Second tick: already seeded — no second I.
+    d2 = engine.live_tick(explore_next_sector=10)
+    assert session.sent.count(("I", True, False)) == 1
+    assert d2.send_outcome != "sent:hud_seed:I"
 
 
 def test_live_tick_retreats_zero_fighter_option_instead_of_holding():
