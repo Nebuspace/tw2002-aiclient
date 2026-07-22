@@ -909,7 +909,8 @@ def test_compose_primary_goals_and_chain_highlight():
     assert any("Credits" in ln and "48,000" in ln for ln in lines)
     assert any("StarDock" in ln and "4223" in ln for ln in lines)
     assert any("Formations" in ln and "2 found" in ln for ln in lines)
-    assert any("40 sectors" in ln for ln in lines)
+    assert any("Galaxy" in ln and "40 known" in ln for ln in lines)
+    assert not any("40 sectors" in ln for ln in lines)
     assert any("3 hops" in ln for ln in lines)
     assert any("Ship prices" in ln and "5 priced" in ln for ln in lines)
     assert any("Hold upg" in ln and "1468/h" in ln for ln in lines)
@@ -1246,7 +1247,7 @@ def test_render_plain_includes_phase2_sections():
         "decisions": format_autopilot_trace_lines(PROVISIONAL_AUTOPILOT_TRACE, cols=40),
         "priorities": [
             "AUTO 75%", "App 30 / AI 10 · Hum 2",
-            "— GOALS —", "· Map 9 sec",
+            "— GOALS —", "· Gal 9 known",
             "— FOCUS —", "1 Trade chain 550", "2 Upgrade 200",
         ],
     })

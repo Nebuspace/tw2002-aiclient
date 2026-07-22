@@ -1455,7 +1455,8 @@ class GoalsSnapshot:
 
     __slots__ = (
         "turns_known", "turns_count", "credits_known", "credits_amount",
-        "stardock_found", "stardock_sectors", "known_sectors", "formations",
+        "stardock_found", "stardock_sectors", "known_sectors", "galaxy_size",
+        "formations",
         "genesis_candidates", "longest_chain_hops", "longest_chain_unit",
         "ship_prices_count", "upgrade_status", "holds_status",
     )
@@ -1470,6 +1471,7 @@ class GoalsSnapshot:
         stardock_found: bool = False,
         stardock_sectors=(),
         known_sectors: int = 0,
+        galaxy_size=None,
         formations: int = 0,
         genesis_candidates: int = 0,
         longest_chain_hops=None,
@@ -1485,6 +1487,7 @@ class GoalsSnapshot:
         self.stardock_found = bool(stardock_found)
         self.stardock_sectors = tuple(stardock_sectors or ())
         self.known_sectors = int(known_sectors)
+        self.galaxy_size = int(galaxy_size) if galaxy_size else None
         self.formations = int(formations)
         self.genesis_candidates = int(genesis_candidates)
         self.longest_chain_hops = longest_chain_hops
@@ -1558,14 +1561,27 @@ def compose_primary_goals_lines(snap, *, width: int = 22) -> list[str]:
         width=width,
     ))
 
-    map_label = "Map" if short else "Map"
-    map_detail = (
-        f"{snap.known_sectors} sec"
-        if short
-        else f"{snap.known_sectors} sectors"
-    )
+    # Goal is the whole galaxy — known count is progress, not a finish line.
+    if snap.galaxy_size and snap.galaxy_size > 0:
+        pct = min(100, int(100 * snap.known_sectors / snap.galaxy_size))
+        map_detail = (
+            f"{snap.known_sectors}/{snap.galaxy_size} ({pct}%)"
+            if not short
+            else f"{snap.known_sectors}/{snap.galaxy_size}"
+        )
+        map_glyph = "✓" if snap.known_sectors >= snap.galaxy_size else "·"
+    else:
+        map_detail = (
+            f"{snap.known_sectors} known"
+            if short
+            else f"{snap.known_sectors} known (whole galaxy)"
+        )
+        map_glyph = "·"
     lines.append(_goal_row(
-        glyph="·", label=map_label, detail=map_detail, width=width,
+        glyph=map_glyph,
+        label="Galaxy" if not short else "Gal",
+        detail=map_detail,
+        width=width,
     ))
 
     form_label = "Formations" if not short else "Form"
