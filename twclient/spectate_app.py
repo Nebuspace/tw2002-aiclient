@@ -462,19 +462,20 @@ def _build_goals_snapshot(world_id, chain=None):
 
 
 def _presence_port_chain_seed(
-    world_id, *, current_sector=None, max_hops: int = 3, state_dir=None,
+    world_id, *, current_sector=None, max_hops: int = 3, max_ports: int = 12, state_dir=None,
 ):
     """Viz-only seed when ports are known but TradeHops are empty.
 
     Flyby ``Ports:`` writes presence/class without commodities → zero
-    TradeHops → no ProfitChain. When ≥2 known ports share a short warp
-    path (prefer adjacent), return a provisional ``{"sectors": ...,
-    "source": "presence_seed"}`` for bubble art only — never invents
-    commodities for ``run_chain``.
+    TradeHops → no ProfitChain. Returns a provisional
+    ``{"sectors": ..., "source": "presence_seed"}`` for bubble art only —
+    never invents commodities for ``run_chain``.
 
-    WO-TUI-CHAIN-VIZ-LIVE: when ``current_sector`` is a known port, prefer
-    an adjacent (or short-path) port pair that includes it so warping
-    port→port lights the under-viewport chain.
+    WO-TUI-CHAIN-VIZ-GROW: return the **longest** simple path in the
+    port-induced warp graph (direct port→port warps), preferring a path
+    that includes ``current_sector`` when it is a known port. UI width may
+    still truncate via compose_chain_bubbles (``… Nh``); seed itself is
+    not stuck at 2 hops. ``max_ports`` caps DFS length (default 12).
     """
     ports = sorted(known_port_sectors(world_id, state_dir=state_dir))
     if len(ports) < 2:
@@ -486,58 +487,98 @@ def _presence_port_chain_seed(
     except (TypeError, ValueError):
         cur = None
 
-    def _adjacent_from(a: int):
+    # Port-only adjacency (one-way warp between two known ports).
+    port_adj: dict[int, list[int]] = {p: [] for p in ports}
+    for a in ports:
         for b in graph.get(a) or ():
             try:
                 b = int(b)
             except (TypeError, ValueError):
                 continue
             if b in port_set and b != a:
-                return {"sectors": (a, b), "source": "presence_seed"}
-        return None
+                port_adj[a].append(b)
 
-    # Prefer a pair anchored at the live sector when it is a known port.
+    def _longest_from(start: int) -> tuple[int, ...]:
+        best: tuple[int, ...] = (start,)
+
+        def dfs(node: int, path: tuple[int, ...], used: set[int]) -> None:
+            nonlocal best
+            if len(path) > len(best):
+                best = path
+            if len(path) >= max_ports:
+                return
+            for nxt in port_adj.get(node) or ():
+                if nxt in used:
+                    continue
+                dfs(nxt, path + (nxt,), used | {nxt})
+
+        dfs(start, (start,), {start})
+        return best
+
+    # Prefer paths anchored at the live sector when it is a known port.
+    # Do NOT DFS from every port (port graphs can be large); try current
+    # first, then a small sample of ports that have outbound port-warps.
+    starts = []
     if cur is not None and cur in port_set:
-        hit = _adjacent_from(cur)
-        if hit is not None:
-            return hit
-
-    # Prefer a direct adjacent pair (one-way warp is enough for viz).
-    for a in ports:
-        hit = _adjacent_from(a)
-        if hit is not None:
-            return hit
-
-    # Else shortest path ≤ max_hops between any two ports (prefer from cur).
-    starts = [cur] + [p for p in ports if p != cur] if cur in port_set else list(ports)
-    best = None
-    for start in starts:
-        if start is None:
+        starts.append(cur)
+    for p in ports:
+        if p in starts:
             continue
-        queue = [(start, (start,))]
-        seen = {start}
-        while queue:
-            node, path = queue.pop(0)
-            if len(path) - 1 > max_hops:
-                continue
-            if node in port_set and node != start and len(path) >= 2:
-                if best is None or len(path) < len(best):
-                    best = path
-                break  # BFS: first hit from this start is shortest
-            if len(path) - 1 >= max_hops:
-                continue
-            for nxt in graph.get(node) or ():
-                try:
-                    nxt = int(nxt)
-                except (TypeError, ValueError):
-                    continue
-                if nxt in seen:
-                    continue
-                seen.add(nxt)
-                queue.append((nxt, path + (nxt,)))
+        if port_adj.get(p):
+            starts.append(p)
+        if len(starts) >= 8:
+            break
+
+    best: tuple[int, ...] | None = None
+    for start in starts:
+        path = _longest_from(start)
+        if len(path) < 2:
+            continue
+        # Prefer longer paths; ties break toward the current-sector-anchored start.
+        if best is None or len(path) > len(best):
+            best = path
+        elif (
+            len(path) == len(best)
+            and cur is not None
+            and cur in path
+            and cur not in best
+        ):
+            best = path
+
     if best is None:
+        # Fallback: shortest path via full warp graph (≤ max_hops) between
+        # any two ports — covers ports connected only through empty sectors.
+        starts2 = [cur] + [p for p in ports if p != cur] if cur in port_set else list(ports)
+        for start in starts2:
+            if start is None:
+                continue
+            queue = [(start, (start,))]
+            seen = {start}
+            while queue:
+                node, path = queue.pop(0)
+                if len(path) - 1 > max_hops:
+                    continue
+                if node in port_set and node != start and len(path) >= 2:
+                    # Collect only port sectors along the path.
+                    port_path = tuple(s for s in path if s in port_set)
+                    if len(port_path) >= 2 and (best is None or len(port_path) > len(best)):
+                        best = port_path
+                    break
+                if len(path) - 1 >= max_hops:
+                    continue
+                for nxt in graph.get(node) or ():
+                    try:
+                        nxt = int(nxt)
+                    except (TypeError, ValueError):
+                        continue
+                    if nxt in seen:
+                        continue
+                    seen.add(nxt)
+                    queue.append((nxt, path + (nxt,)))
+
+    if best is None or len(best) < 2:
         return None
-    return {"sectors": tuple(best), "source": "presence_seed"}
+    return {"sectors": best, "source": "presence_seed"}
 
 
 def _sector_hint_from_status(status=None):

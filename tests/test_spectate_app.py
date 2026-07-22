@@ -1715,6 +1715,33 @@ def test_presence_seed_prefers_current_sector_port(tmp_path, monkeypatch):
     assert chain_bubble_sectors(seed) == [300, 400]
 
 
+def test_presence_seed_grows_beyond_two_ports(tmp_path, monkeypatch):
+    """WO-TUI-CHAIN-VIZ-GROW: three contiguous presence ports → full path."""
+    from twclient import world_model
+    from twclient.spectate_layout import chain_bubble_sectors, compose_chain_bubbles
+
+    store = tmp_path / "world"
+    monkeypatch.setattr(world_model, "WORLD_DIR", store)
+    wid = "grow_world"
+    world_model.upsert_sector(
+        wid, {"sector_id": 10, "warps": [20], "port": {"class": "BSB"}}, state_dir=store,
+    )
+    world_model.upsert_sector(
+        wid, {"sector_id": 20, "warps": [10, 30], "port": {"class": "SBB"}}, state_dir=store,
+    )
+    world_model.upsert_sector(
+        wid, {"sector_id": 30, "warps": [20], "port": {"class": "BBB"}}, state_dir=store,
+    )
+    seed = spectate_app_mod._presence_port_chain_seed(
+        wid, current_sector=10, state_dir=store,
+    )
+    assert seed is not None
+    assert chain_bubble_sectors(seed) == [10, 20, 30]
+    joined = "\n".join(compose_chain_bubbles(seed, port_classes={10: "BSB", 20: "SBB", 30: "BBB"}, width=82))
+    assert "10" in joined and "20" in joined and "30" in joined
+    assert "no trade loop yet" not in joined
+
+
 def test_longest_chain_for_panel_still_prefers_profit_chain_over_seed(monkeypatch):
     """Real ProfitCycle wins; presence seed must not be consulted."""
     hops = (
