@@ -47,6 +47,7 @@ from twclient.spectate_layout import (
     format_sidebar,
     format_status_line,
     format_ticker_entry,
+    format_ticker_history,
     format_trace_ev,
     PROVISIONAL_AUTOPILOT_TRACE,
     CHAIN_VIZ_H,
@@ -159,6 +160,22 @@ def test_ticker_entry_pairs_the_sent_input_when_present():
 def test_ticker_entry_omits_tx_segment_when_absent():
     entry = format_ticker_entry(_event())
     assert "→" not in entry
+
+
+def test_ticker_history_pairs_sent_with_prior_prompt_not_landing():
+    """WO-TUI-LOG-QA-SKEW: answer attaches to the prompt it answered."""
+    events = [
+        _event(prompt="What is your name?", sent_input=None, classification="login"),
+        _event(prompt="ANSI graphics?", sent_input="F", classification="login"),
+        _event(prompt="Game? Tumbleweed", sent_input="Tumbleweed", classification="game_select"),
+    ]
+    lines = format_ticker_history(events)
+    assert "What is your name?" in lines[1]
+    assert "→F" in lines[1]
+    assert "— What is your name?  →F" in lines[1]
+    assert "⇒ ANSI graphics?" in lines[1]
+    assert "— ANSI graphics?  →Tumbleweed" in lines[2]
+    assert "— ANSI graphics?  →F" not in lines[1]
 
 
 def test_status_line_connected():

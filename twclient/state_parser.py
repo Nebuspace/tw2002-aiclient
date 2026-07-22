@@ -384,13 +384,14 @@ def parse_state(rendered_text: str) -> dict:
 
     # WO-PORT-CHAIN-SEED: flyby presence from the sector-status "Ports :"
     # line -- NOT commodities (those come only from a commerce report).
-    # "Ports : None" / blank → no port key (do not clear prior knowledge
-    # here; write_from_state only updates when "port" is present).
+    # "Ports : None" / blank → explicit `port: None` so write_from_state
+    # can CLEAR a prior flyby (WO-TUI-CHAIN-25948-FALSE-PORT). Absence of
+    # any Ports line still leaves the key unset (do not clear on
+    # unobserved).
     ports_lines = _PORTS_LINE_RE.findall(rendered_text)
     if ports_lines:
         flyby = _flyby_port_from_ports_line(ports_lines[-1])
-        if flyby is not None:
-            state["port"] = flyby
+        state["port"] = flyby  # dict presence, or None for "Ports : None"
 
     # WO-FA2b REVISE (cipher F1 + mack convergent finding): commodity rows
     # are extracted ONLY from `_latest_commerce_report_block()` -- the

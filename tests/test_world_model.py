@@ -436,6 +436,23 @@ def test_write_from_state_without_port_key_preserves_previously_known_port(tmp_p
     assert merged["port"]["commodities"][0]["name"] == "Equipment"
 
 
+def test_write_from_state_ports_none_clears_prior_flyby(tmp_path):
+    """WO-TUI-CHAIN-25948-FALSE-PORT: explicit port=None clears stale flyby."""
+    world_model.write_from_state(
+        WORLD_A,
+        {"sector": 25948, "port": {"class": "BBS"}},
+        state_dir=tmp_path,
+    )
+    assert world_model.get_sector(WORLD_A, 25948, state_dir=tmp_path)["port"]["class"] == "BBS"
+    merged = world_model.write_from_state(
+        WORLD_A,
+        {"sector": 25948, "warps": [8578], "port": None},
+        state_dir=tmp_path,
+    )
+    assert merged["port"] is None
+    assert world_model.get_sector(WORLD_A, 25948, state_dir=tmp_path)["port"] is None
+
+
 def test_write_from_state_actually_persists(tmp_path):
     world_model.write_from_state(WORLD_A, {"sector": 7}, state_dir=tmp_path)
     assert world_model.get_sector(WORLD_A, 7, state_dir=tmp_path) is not None

@@ -761,10 +761,13 @@ def test_flyby_ports_line_records_presence_and_letter_class():
     assert "commodities" not in state["port"]
 
 
-def test_flyby_ports_none_does_not_set_port_key():
+def test_flyby_ports_none_sets_explicit_none_to_clear_prior_flyby():
+    """WO-TUI-CHAIN-25948-FALSE-PORT: "Ports : None" must emit port=None
+    so write_from_state can clear a stale flyby (key-absent left ghosts)."""
     screen = "Sector : 100\nPorts   : None\nCommand [TL=00:12:34]:[1000] (?=Help) ?"
     state = parse_state(screen)
-    assert "port" not in state
+    assert "port" in state
+    assert state["port"] is None
 
 
 def test_flyby_ports_class_zero_without_letter_code_is_presence_only():

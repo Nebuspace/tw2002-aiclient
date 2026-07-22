@@ -66,21 +66,45 @@ def format_sidebar(event: dict) -> list[str]:
     return lines
 
 
-def format_ticker_entry(event: dict) -> str:
+def format_ticker_entry(event: dict, *, answered_prompt=None) -> str:
+    """One LOG/ticker row.
+
+    ``sent_input`` is the keystroke that *caused* this settle, but the
+    event's own ``prompt`` is the *landing* prompt after that send.
+    Pairing ``→sent`` with the landing prompt skews one-off in the LOG
+    (answer appears attached to the next question). When
+    ``answered_prompt`` is supplied (the prior event's prompt — the
+    question that was on screen when the send happened), the TX arrow
+    pairs with that answered prompt instead (WO-TUI-LOG-QA-SKEW).
+    """
     ts = event.get("ts", "")
     cls = event.get("classification", "unknown")
     reason = event.get("settled_reason", "-")
-    prompt = (event.get("prompt") or "").strip()[:40]
-    line = f"[{ts}] {cls} ({reason}) — {prompt}"
-    # TX channel ("Core transparency", TUI-POLISH-PLAN.md): pair the send
-    # that (likely) caused this settle with its outcome in one glance --
-    # `sent_input` rides on every build_response() now (protocol.py), so
-    # this is silently absent only for pre-TX-channel events (a bare
-    # dispatch-harness test's synthetic event dict).
+    landing = (event.get("prompt") or "").strip()[:40]
     sent = event.get("sent_input")
+    if sent and answered_prompt is not None:
+        answered = (answered_prompt or "").strip()[:40]
+        line = f"[{ts}] {cls} ({reason}) — {answered}  →{sent}"
+        if landing and landing != answered:
+            line = f"{line} ⇒ {landing}"
+        return line
+    line = f"[{ts}] {cls} ({reason}) — {landing}"
     if sent:
         line = f"{line}  →{sent}"
     return line
+
+
+def format_ticker_history(events) -> list:
+    """Format LOG rows with sent_input paired to the prior prompt."""
+    out = []
+    prev = None
+    for event in events or ():
+        answered = None
+        if event.get("sent_input") and prev is not None:
+            answered = prev.get("prompt")
+        out.append(format_ticker_entry(event, answered_prompt=answered))
+        prev = event
+    return out
 
 
 def format_status_line(connected=False, subscriber_count=0, last_rx_age_s=None, daemon_pid=None, **_extra) -> str:
@@ -109,7 +133,7 @@ def compose_dashboard(event: dict, ticker_history: list, status: dict) -> dict:
         "main": list(event.get("screen") or []),
         "main_color": event.get("color") or [],
         "sidebar": format_sidebar(event),
-        "ticker": [format_ticker_entry(e) for e in ticker_history[-TICKER_MAX:]],
+        "ticker": format_ticker_history(ticker_history[-TICKER_MAX:]),
         "status": format_status_line(**status),
     }
 

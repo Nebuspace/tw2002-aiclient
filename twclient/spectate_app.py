@@ -59,7 +59,7 @@ from .spectate_layout import (
     format_loops_library_header,
     format_loops_library_row,
     format_longest_chain_banner,
-    format_ticker_entry,
+    format_ticker_history,
     frame_layout,
     is_recent,
     longest_chain_steps,
@@ -1681,7 +1681,7 @@ def _render(windows, regions, event, tracked, ticker_history, status, palette, g
     # (motion B3) is still fading -- unlike the viewport, it needs a
     # couple of tick-driven redraws after the event that triggered it.
     if regions["ticker"] is not None and "ticker" in windows and (got_content or ticker_flashing):
-        lines = [format_ticker_entry(e) for e in ticker_history[-TICKER_MAX:]]
+        lines = format_ticker_history(ticker_history[-TICKER_MAX:])
         _draw_ticker(windows["ticker"], regions["ticker"], lines, ticker_flashing, palette, glyphs)
 
     # The HUD gutter and status bar redraw every call (they're both
