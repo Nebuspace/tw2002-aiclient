@@ -517,16 +517,9 @@ def update_tracked_stats(tracked: dict, event: dict, now: float) -> dict:
         prev_max = out.get("_turns_max")
         out["_turns_max"] = new_turns if prev_max is None else max(prev_max, new_turns)
         out["turns"] = (("count", new_turns), now)
-    elif "turn_timer" in state:
-        # This live server's Command prompt uses TL=HH:MM:SS (regen
-        # countdown), NOT a turn count. Once a numeric turns_left has
-        # been seen, never clobber the HUD count with that timer
-        # (WO-TUI-HUD-POLISH) — timer-only-before-count still renders
-        # in the TURNS cell (HH:MM:SS value, not a turn count).
-        prev_turns = out.get("turns")
-        if not (isinstance(prev_turns, tuple) and prev_turns and
-                isinstance(prev_turns[0], tuple) and prev_turns[0][0] == "count"):
-            out["turns"] = (("timer", state["turn_timer"]), now)
+    # turn_timer (TL=HH:MM:SS regen countdown) must NEVER fill the TURNS
+    # HUD slot — that slot is turn COUNT only (sticky last-known). Showing
+    # the timer there read as turns=00:00:00 (WO-TUI-HUD-TURNS-COUNT).
 
     # Prefer FA7a top-level strict balance (session.credits_snapshot /
     # "you have N credits") over parse_state's looser state["credits"],
@@ -607,8 +600,7 @@ def seed_tracked_from_status(tracked: dict, status: dict, now: float, *, parsed_
     if "turns" not in tracked:
         if "turns_left" in merged:
             state["turns_left"] = merged["turns_left"]
-        elif "turn_timer" in merged:
-            state["turn_timer"] = merged["turn_timer"]
+        # Never seed TURNS from turn_timer (TL=HH:MM:SS ≠ turn count).
     if "cargo_holds_empty" not in tracked and "cargo_holds_empty" in merged:
         state["cargo_holds_empty"] = merged["cargo_holds_empty"]
     if state:
@@ -711,20 +703,17 @@ def _turns_cell(tracked: dict, now: float, mark: str, bar_full: str, bar_empty: 
     if entry is None:
         return {"label": "TURNS", "value": "-", "freshness": "", "stale": False, "tone": None, "chip": "", "gauge": ""}
     (kind, value), ts = entry
+    # Legacy timer entries (pre-WO-TUI-HUD-TURNS-COUNT) → blank, not HH:MM:SS.
+    if kind != "count":
+        return {"label": "TURNS", "value": "-", "freshness": "", "stale": False, "tone": None, "chip": "", "gauge": ""}
     age = max(0.0, now - ts)
     tone, gauge = None, ""
-    if kind == "timer":
-        # Timer-only (no numeric turns_left yet): show regen countdown
-        # in the TURNS cell; sticky-count in update_tracked_stats prevents
-        # TL=HH:MM:SS from clobbering a known turns_left (WO-TUI-HUD-POLISH).
-        display = tick_down_timer(value, age)
-    else:
-        display = f"{value:,}"
-        turns_max = tracked.get("_turns_max")
-        if turns_max:  # 0/None -> no gauge, division-by-zero guard
-            fraction = value / turns_max
-            gauge = render_bar_meter(fraction, TURNS_GAUGE_WIDTH, bar_full, bar_empty)
-            tone = gauge_semantic(fraction)
+    display = f"{value:,}"
+    turns_max = tracked.get("_turns_max")
+    if turns_max:  # 0/None -> no gauge, division-by-zero guard
+        fraction = value / turns_max
+        gauge = render_bar_meter(fraction, TURNS_GAUGE_WIDTH, bar_full, bar_empty)
+        tone = gauge_semantic(fraction)
     return {
         "label": "TURNS",
         "value": display,

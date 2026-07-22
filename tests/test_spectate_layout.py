@@ -524,16 +524,16 @@ def test_update_tracked_stats_updates_only_fields_present_on_the_new_event():
     assert tracked["credits"] == (100, 1.0)  # untouched -- not in this event's state
 
 
-def test_update_tracked_stats_prefers_turns_left_and_falls_back_to_turn_timer():
+def test_update_tracked_stats_prefers_turns_left_and_ignores_turn_timer():
     tracked = update_tracked_stats({}, {"state": {"turns_left": 29990}}, now=1.0)
     assert tracked["turns"] == (("count", 29990), 1.0)
 
     tracked = update_tracked_stats({}, {"state": {"turn_timer": "00:04:12"}}, now=1.0)
-    assert tracked["turns"] == (("timer", "00:04:12"), 1.0)
+    assert "turns" not in tracked
 
 
 def test_update_tracked_stats_count_survives_later_timer_only_screen():
-    """WO-TUI-HUD-POLISH: TL=HH:MM:SS must not clobber a known turns_left."""
+    """WO-TUI-HUD-POLISH / WO-TUI-HUD-TURNS-COUNT: TL= must not clobber turns."""
     tracked = update_tracked_stats({}, {"state": {"turns_left": 4406}}, now=1.0)
     tracked = update_tracked_stats(tracked, {"state": {"turn_timer": "00:00:00", "sector": 4406}}, now=5.0)
     assert tracked["turns"] == (("count", 4406), 1.0)
@@ -541,6 +541,16 @@ def test_update_tracked_stats_count_survives_later_timer_only_screen():
     turns = [c for c in cells if c["label"] == "TURNS"][0]
     assert turns["value"] == "4,406"
     assert not any(c["label"] == "REGEN" for c in cells)
+
+
+def test_update_tracked_stats_timer_alone_leaves_turns_blank():
+    """WO-TUI-HUD-TURNS-COUNT: TURNS slot is count-only — never HH:MM:SS."""
+    tracked = update_tracked_stats({}, {"state": {"turn_timer": "00:00:00", "sector": 1}}, now=1.0)
+    assert "turns" not in tracked
+    cells = compose_hud_cells(tracked, now=1.0)
+    turns = [c for c in cells if c["label"] == "TURNS"][0]
+    assert turns["value"] == "-"
+    assert ":" not in turns["value"]
 
 
 def test_update_tracked_stats_prefers_fa7a_credits_and_ignores_port_quote_state():
@@ -685,11 +695,11 @@ def test_compose_hud_cells_dims_a_cell_past_the_staleness_threshold():
     assert [c for c in stale if c["label"] == "CREDITS"][0]["stale"] is True
 
 
-def test_compose_hud_cells_turns_cell_ticks_down_a_live_timer():
+def test_compose_hud_cells_turns_cell_ignores_live_timer():
     tracked = update_tracked_stats({}, {"state": {"turn_timer": "00:00:10"}}, now=0.0)
     cells = compose_hud_cells(tracked, now=4.0)
     turns_cell = [c for c in cells if c["label"] == "TURNS"][0]
-    assert turns_cell["value"] == "00:00:06"
+    assert turns_cell["value"] == "-"
 
 
 def test_compose_hud_cells_turns_cell_shows_comma_formatted_count():
@@ -1405,10 +1415,12 @@ def test_turns_cell_shows_a_gauge_and_tone_once_a_max_is_known():
     assert turns_cell["tone"] == "danger"  # 10% -> below the danger threshold
 
 
-def test_turns_cell_no_gauge_for_the_timer_variant():
-    tracked = update_tracked_stats({}, {"state": {"turn_timer": "00:00:30"}}, now=0.0)
+def test_turns_cell_legacy_timer_entry_renders_blank_not_hhmmss():
+    """Pre-count-only tracked shape must not paint HH:MM:SS into TURNS."""
+    tracked = {"turns": (("timer", "00:00:30"), 0.0)}
     cells = compose_hud_cells(tracked, now=0.0)
     turns_cell = [c for c in cells if c["label"] == "TURNS"][0]
+    assert turns_cell["value"] == "-"
     assert turns_cell["gauge"] == ""
     assert turns_cell["tone"] is None
 
