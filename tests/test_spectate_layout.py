@@ -1619,11 +1619,43 @@ def test_compose_chain_bubbles_grows_with_hop_count():
     assert three.count("═════") == 2
 
 
-def test_filter_port_only_sectors_preserves_order():
-    from twclient.spectate_layout import filter_port_only_sectors
+def test_longest_contiguous_port_run_splits_at_non_port():
+    from twclient.spectate_layout import longest_contiguous_port_run
 
-    assert filter_port_only_sectors([10, 50, 20, 50], {10, 20}) == [10, 20]
-    assert filter_port_only_sectors([10, 20], None) == [10, 20]
+    # Non-port breaks — do not bridge 10↔20 across 50.
+    assert longest_contiguous_port_run([10, 50, 20, 50], {10, 20}) == [10]
+    assert longest_contiguous_port_run([10, 20], None) == [10, 20]
+    # A(port)-B(no)-C(port)-D(port) → longest run is C,D (length beats prefer_sector).
+    assert longest_contiguous_port_run([1, 2, 3, 4], {1, 3, 4}) == [3, 4]
+    assert longest_contiguous_port_run(
+        [1, 2, 3, 4], {1, 3, 4}, prefer_sector=1,
+    ) == [3, 4]
+    assert longest_contiguous_port_run(
+        [1, 2, 3], {1, 3}, prefer_sector=1,
+    ) == [1]
+    # Four contiguous ports → length 4.
+    assert longest_contiguous_port_run([10, 20, 30, 40], {10, 20, 30, 40}) == [
+        10, 20, 30, 40,
+    ]
+
+
+def test_compose_chain_bubbles_contiguous_port_run_only():
+    """Non-port breaks chain; bubbles never bridge across empty warps."""
+    from twclient.spectate_layout import compose_chain_bubbles, chain_bubble_sectors
+
+    raw = {"sectors": (1, 2, 3, 4), "source": "presence_seed"}
+    assert chain_bubble_sectors(raw) == [1, 2, 3, 4]
+    joined = "\n".join(
+        compose_chain_bubbles(
+            raw,
+            port_classes={1: "BSB", 3: "SBB", 4: "BBB"},
+            known_ports={1, 3, 4},
+            width=82,
+        )
+    )
+    assert "3" in joined and "4" in joined
+    assert "1" not in joined
+    assert "2" not in joined
 
 
 def test_compose_chain_bubbles_unknown_class_is_question_mark():

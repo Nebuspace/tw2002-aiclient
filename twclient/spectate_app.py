@@ -478,9 +478,9 @@ def _presence_port_chain_seed(
     still truncate via compose_chain_bubbles (``… Nh``); seed itself is
     not stuck at 2 hops. ``max_ports`` caps DFS length (default 12).
 
-    WO-TUI-CHAIN-PORT-ONLY: returned ``sectors`` are **only** known-port
-    ids — empty intermediate warps from the full-graph fallback are
-    stripped before return (never bubbled).
+    WO-TUI-CHAIN-PORT-ONLY: returned ``sectors`` are a **contiguous**
+    port→port→port path in the warp graph — every hop is between two
+    known ports; empty intermediate warps never bridge a seed.
     """
     ports = sorted(known_port_sectors(world_id, state_dir=state_dir))
     if len(ports) < 2:
@@ -551,43 +551,20 @@ def _presence_port_chain_seed(
             best = path
 
     if best is None:
-        # Fallback: shortest path via full warp graph (≤ max_hops) between
-        # any two ports — covers ports connected only through empty sectors.
-        starts2 = [cur] + [p for p in ports if p != cur] if cur in port_set else list(ports)
-        for start in starts2:
-            if start is None:
-                continue
-            queue = [(start, (start,))]
-            seen = {start}
-            while queue:
-                node, path = queue.pop(0)
-                if len(path) - 1 > max_hops:
-                    continue
-                if node in port_set and node != start and len(path) >= 2:
-                    # Collect only port sectors along the path.
-                    port_path = tuple(s for s in path if s in port_set)
-                    if len(port_path) >= 2 and (best is None or len(port_path) > len(best)):
-                        best = port_path
-                    break
-                if len(path) - 1 >= max_hops:
-                    continue
-                for nxt in graph.get(node) or ():
-                    try:
-                        nxt = int(nxt)
-                    except (TypeError, ValueError):
-                        continue
-                    if nxt in seen:
-                        continue
-                    seen.add(nxt)
-                    queue.append((nxt, path + (nxt,)))
-
-    if best is None:
-        return None
-    # Belt: never emit a non-port sector id (PORT-ONLY accept criterion).
-    best = tuple(s for s in best if s in port_set)
-    if len(best) < 2:
         return None
     return {"sectors": best, "source": "presence_seed"}
+
+
+def _chain_sectors_all_known_ports(chain, port_set: set[int]) -> bool:
+    """True when every hop sector in ``chain`` is a known port."""
+    if not port_set:
+        return True
+    from twclient.spectate_layout import chain_bubble_sectors
+
+    sectors = chain_bubble_sectors(chain)
+    if not sectors:
+        return False
+    return all(int(s) in port_set for s in sectors)
 
 
 def _sector_hint_from_status(status=None):
@@ -624,6 +601,12 @@ def _longest_chain_for_panel(sock_path, status=None, current_sector=None):
     only).
     """
     wid = _resolve_world_id(status)
+    port_set: set[int] = set()
+    if wid:
+        try:
+            port_set = set(known_port_sectors(wid))
+        except OSError:
+            port_set = set()
     if wid:
         try:
             hops, _note = trade_adapter.build_trade_hops(wid)
@@ -631,11 +614,12 @@ def _longest_chain_for_panel(sock_path, status=None, current_sector=None):
             hops = ()
         if hops:
             chain = chains.longest_profit_chain(hops)
-            if chain is not None:
+            if chain is not None and _chain_sectors_all_known_ports(chain, port_set):
                 return chain
     lib = _longest_chain_library_fallback(sock_path)
     if lib is not None and chain_bubble_sectors(lib):
-        return lib
+        if not port_set or _chain_sectors_all_known_ports(lib, port_set):
+            return lib
     if wid:
         sector = current_sector if current_sector is not None else _sector_hint_from_status(status)
         seed = _presence_port_chain_seed(wid, current_sector=sector)

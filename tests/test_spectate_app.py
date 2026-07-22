@@ -1809,10 +1809,9 @@ def test_presence_seed_grows_beyond_two_ports(tmp_path, monkeypatch):
     assert "no trade loop yet" not in joined
 
 
-def test_presence_seed_omits_empty_intermediate_warps(tmp_path, monkeypatch):
-    """WO-TUI-CHAIN-PORT-ONLY: A→empty→B seeds [A,B], never bubbles empty."""
+def test_presence_seed_requires_direct_port_warps(tmp_path, monkeypatch):
+    """Ports linked only through an empty sector do not seed a chain."""
     from twclient import world_model
-    from twclient.spectate_layout import chain_bubble_sectors, compose_chain_bubbles
 
     store = tmp_path / "world"
     monkeypatch.setattr(world_model, "WORLD_DIR", store)
@@ -1829,23 +1828,11 @@ def test_presence_seed_omits_empty_intermediate_warps(tmp_path, monkeypatch):
     seed = spectate_app_mod._presence_port_chain_seed(
         wid, current_sector=100, state_dir=store, max_hops=3,
     )
-    assert seed is not None
-    assert chain_bubble_sectors(seed) == [100, 200]
-    assert 50 not in chain_bubble_sectors(seed)
-    joined = "\n".join(
-        compose_chain_bubbles(
-            seed,
-            port_classes={100: "BSB", 200: "SBB"},
-            known_ports={100, 200},
-            width=40,
-        )
-    )
-    assert "100" in joined and "200" in joined
-    assert "50" not in joined
+    assert seed is None
 
 
 def test_compose_chain_bubbles_drops_non_port_when_known_ports_set():
-    """Compose defense: non-port ids in a sector list never become bubbles."""
+    """Compose defense: non-port ids break contiguity — never bridge bubbles."""
     from twclient.spectate_layout import compose_chain_bubbles, chain_bubble_sectors
 
     raw = {"sectors": (10, 99, 20), "source": "presence_seed"}
@@ -1858,8 +1845,76 @@ def test_compose_chain_bubbles_drops_non_port_when_known_ports_set():
             width=40,
         )
     )
-    assert "10" in joined and "20" in joined
+    assert "10" in joined
+    assert "20" not in joined
     assert "99" not in joined
+
+
+def test_presence_seed_four_contiguous_ports(tmp_path, monkeypatch):
+    """Four direct port→port warps → seed length 4."""
+    from twclient import world_model
+    from twclient.spectate_layout import chain_bubble_sectors
+
+    store = tmp_path / "world"
+    monkeypatch.setattr(world_model, "WORLD_DIR", store)
+    wid = "four_port_world"
+    world_model.upsert_sector(
+        wid, {"sector_id": 10, "warps": [20], "port": {"class": "BSB"}}, state_dir=store,
+    )
+    world_model.upsert_sector(
+        wid, {"sector_id": 20, "warps": [10, 30], "port": {"class": "SBB"}}, state_dir=store,
+    )
+    world_model.upsert_sector(
+        wid, {"sector_id": 30, "warps": [20, 40], "port": {"class": "BBB"}}, state_dir=store,
+    )
+    world_model.upsert_sector(
+        wid, {"sector_id": 40, "warps": [30], "port": {"class": "SSS"}}, state_dir=store,
+    )
+    seed = spectate_app_mod._presence_port_chain_seed(wid, current_sector=10, state_dir=store)
+    assert seed is not None
+    assert chain_bubble_sectors(seed) == [10, 20, 30, 40]
+
+
+def test_longest_chain_for_panel_skips_profit_chain_with_non_port(monkeypatch, tmp_path):
+    """ProfitChain with a non-port sector → presence contiguous seed instead."""
+    from twclient import world_model
+    from twclient.spectate_layout import chain_bubble_sectors
+
+    store = tmp_path / "world"
+    monkeypatch.setattr(world_model, "WORLD_DIR", store)
+    wid = "mixed_world"
+    world_model.upsert_sector(
+        wid, {"sector_id": 10, "warps": [20], "port": {"class": "BSB"}}, state_dir=store,
+    )
+    world_model.upsert_sector(
+        wid, {"sector_id": 20, "warps": [10, 30], "port": {"class": "SBB"}}, state_dir=store,
+    )
+    world_model.upsert_sector(
+        wid, {"sector_id": 30, "warps": [20], "port": {"class": "BBB"}}, state_dir=store,
+    )
+    bad_chain = chains.ProfitChain(
+        sectors=(10, 99, 20, 30, 10),
+        hops=(),
+        overall_profit=100.0,
+        turns=4,
+        cr_per_turn=25.0,
+        cr_per_execution=100.0,
+    )
+    monkeypatch.setattr(spectate_app_mod, "_resolve_world_id", lambda status=None: wid)
+    monkeypatch.setattr(
+        spectate_app_mod.trade_adapter,
+        "build_trade_hops",
+        lambda w, **kw: ((chains.TradeHop(1, 2, "x", 1.0),), None),
+    )
+    monkeypatch.setattr(spectate_app_mod.chains, "longest_profit_chain", lambda hops: bad_chain)
+    monkeypatch.setattr(
+        spectate_app_mod, "_send_control",
+        lambda sock_path, verb, args=None, timeout=3.0: {"ok": True, "loops": []},
+    )
+    result = spectate_app_mod._longest_chain_for_panel("/nonexistent.sock")
+    assert isinstance(result, dict)
+    assert result.get("source") == "presence_seed"
+    assert chain_bubble_sectors(result) == [10, 20, 30]
 
 
 def test_longest_chain_for_panel_still_prefers_profit_chain_over_seed(monkeypatch):

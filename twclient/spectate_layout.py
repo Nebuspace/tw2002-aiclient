@@ -1294,10 +1294,21 @@ def chain_bubble_sectors(chain) -> list:
 
 
 def filter_port_only_sectors(sectors, known_ports) -> list:
-    """WO-TUI-CHAIN-PORT-ONLY: keep hop order, drop non-port sector ids.
+    """Deprecated alias — use :func:`longest_contiguous_port_run`."""
+    return longest_contiguous_port_run(sectors, known_ports)
 
-    ``known_ports`` is an iterable of sector ids that have a world-model
-    port present. Intermediate empty warps must never become bubbles.
+
+def longest_contiguous_port_run(
+    sectors,
+    known_ports,
+    *,
+    prefer_sector=None,
+) -> list:
+    """Longest contiguous subsequence where every sector is a known port.
+
+    A non-port (or unknown) sector is a **break** — it never appears in
+    the result and splits candidates. When two runs tie on length, prefer
+    the run containing ``prefer_sector`` (live ship sector).
     """
     if known_ports is None:
         return list(sectors)
@@ -1307,15 +1318,33 @@ def filter_port_only_sectors(sectors, known_ports) -> list:
             allow.add(int(p))
         except (TypeError, ValueError):
             continue
-    out = []
+    try:
+        cur = int(prefer_sector) if prefer_sector is not None else None
+    except (TypeError, ValueError):
+        cur = None
+
+    best: list[int] = []
+    run: list[int] = []
     for sid in sectors:
         try:
             sid = int(sid)
         except (TypeError, ValueError):
+            run = []
             continue
         if sid in allow:
-            out.append(sid)
-    return out
+            run.append(sid)
+            if len(run) > len(best):
+                best = run[:]
+            elif (
+                len(run) == len(best)
+                and cur is not None
+                and cur in run
+                and cur not in best
+            ):
+                best = run[:]
+        else:
+            run = []
+    return best
 
 
 def _bubble_inner_w(sectors: list) -> int:
@@ -1364,12 +1393,17 @@ def compose_chain_bubbles(
     ``port_classes`` maps sector_id → class string (e.g. ``BSB``); unknown
     sectors render ``?`` — never invent commodities.
 
-    ``known_ports`` (WO-TUI-CHAIN-PORT-ONLY): when provided, only those
-    sector ids become bubbles — intermediate non-port warps are omitted.
+    ``known_ports`` (WO-TUI-CHAIN-PORT-ONLY): when provided, bubbles
+    show the **longest contiguous run** of sector ids that are all known
+    ports — a non-port sector is a break, never bridged.
     """
     width = max(8, int(width))
     port_classes = port_classes or {}
-    sectors = filter_port_only_sectors(chain_bubble_sectors(chain), known_ports)
+    sectors = longest_contiguous_port_run(
+        chain_bubble_sectors(chain),
+        known_ports,
+        prefer_sector=current_sector if current_sector is not None else active_sector,
+    )
     if not sectors:
         return _center_block([_CHAIN_EMPTY_PLACEHOLDER], width, CHAIN_VIZ_H)
 
