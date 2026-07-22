@@ -217,9 +217,9 @@ BAND_H_MAX = 10
 # Prefer HUD: DECISIONS stays at DECISIONS_MIN_H so ship cells + METRICS
 # still fit (HUD_GUTTER_MIN_H=10 clipped METRICS — human 2026-07-22).
 HUD_GUTTER_MIN_H = VIEWPORT_H - DECISIONS_MIN_H  # 21
-# Left column: PRIORITIES (top) + FORMATIONS (bottom), mirroring HUD|DECISIONS.
+# Left column: PRIORITIES matches viewport height (room for AUTO footer);
+# FORMATIONS continues under it down to the LOG band (not carved from PRIORITIES).
 FORMATIONS_MIN_H = 6
-PRIORITIES_BODY_MIN_H = 10
 
 
 def frame_layout(lines: int, cols: int) -> dict:
@@ -386,31 +386,44 @@ def frame_layout(lines: int, cols: int) -> dict:
         viewport_x = ox
 
     if pri_w > 0:
-        # Split left column: PRIORITIES over FORMATIONS (mirror HUD|DECISIONS).
-        can_split = viewport_h >= FORMATIONS_MIN_H + PRIORITIES_BODY_MIN_H
-        form_h = 0
-        if can_split:
-            form_h = max(
-                FORMATIONS_MIN_H,
-                min(viewport_h // 3, viewport_h - PRIORITIES_BODY_MIN_H),
-            )
+        # PRIORITIES keeps full viewport height so GOALS/FOCUS/AUTO fit.
+        # FORMATIONS starts under PRIORITIES and fills down to the control/
+        # status floor. LOG (and the under-viewport band) sit to its right
+        # so the formations list is not starved to CHAIN_VIZ_H.
         priorities = {
             "y": body_top,
             "x": ox,
             "w": pri_w,
-            "h": viewport_h - form_h if form_h else viewport_h,
+            "h": viewport_h,
             "title": "PRIORITIES",
             "border": True,
         }
-        if form_h:
+        form_bottom = status["y"]
+        if control is not None:
+            form_bottom = control["y"]
+        form_y = body_top + viewport_h
+        form_h = form_bottom - form_y
+        if form_h >= FORMATIONS_MIN_H:
             formations = {
-                "y": body_top + priorities["h"],
+                "y": form_y,
                 "x": ox,
                 "w": pri_w,
                 "h": form_h,
                 "title": "FORMATIONS",
                 "border": True,
             }
+            if ticker is not None:
+                ticker["x"] = ox + pri_w
+                ticker["w"] = max(1, i_cols - pri_w)
+            # Bottom-band DECISIONS (no right-HUD split) also shifts right.
+            if (
+                decisions is not None
+                and gutter is None
+                and decisions.get("x") == ox
+            ):
+                # Was LOG|DECISIONS split across full width — keep DECISIONS
+                # on the right; LOG already inset above.
+                pass
 
     if gutter is not None:
         dec_h = max(DECISIONS_MIN_H, viewport_h - HUD_GUTTER_MIN_H)

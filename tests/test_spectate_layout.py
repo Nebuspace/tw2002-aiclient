@@ -375,11 +375,15 @@ def test_frame_layout_full_tier_centers_viewport_with_right_gutter():
     assert regions["priorities"]["title"] == "PRIORITIES"
     assert regions["formations"] is not None
     assert regions["formations"]["title"] == "FORMATIONS"
-    assert (
-        regions["priorities"]["h"] + regions["formations"]["h"]
-        == regions["viewport"]["h"]
-    )
+    assert regions["priorities"]["h"] == regions["viewport"]["h"]
     assert regions["formations"]["y"] == regions["priorities"]["y"] + regions["priorities"]["h"]
+    assert regions["formations"]["h"] >= FORMATIONS_MIN_H
+    # FORMATIONS fills down to the control strip; LOG sits to its right.
+    assert (
+        regions["formations"]["y"] + regions["formations"]["h"]
+        == regions["control"]["y"]
+    )
+    assert regions["ticker"]["x"] == regions["formations"]["x"] + regions["formations"]["w"]
     assert regions["priorities"]["x"] < regions["viewport"]["x"]
     assert regions["ticker"]["h"] >= 5
     assert regions["decisions"]["w"] == HUD_GUTTER_W
@@ -388,7 +392,7 @@ def test_frame_layout_full_tier_centers_viewport_with_right_gutter():
         regions["decisions"]["y"] + regions["decisions"]["h"]
         == regions["viewport"]["y"] + regions["viewport"]["h"]
     )
-    assert regions["ticker"]["w"] == FULL_GUTTER_MIN_COLS
+    assert regions["ticker"]["w"] == FULL_GUTTER_MIN_COLS - PRIORITIES_W
     assert regions["chain"]["h"] == CHAIN_VIZ_H
     assert regions["chain"]["title"] is None
     assert regions["chain"]["y"] == regions["viewport"]["y"] + regions["viewport"]["h"]
@@ -1188,8 +1192,12 @@ def test_frame_layout_full_tier_priorities_matches_hud_width():
     assert form is not None
     assert form["title"] == "FORMATIONS"
     assert form["w"] == PRIORITIES_W
-    assert pri["h"] + form["h"] == vp["h"]
+    assert pri["h"] == vp["h"]
     assert form["y"] == pri["y"] + pri["h"]
+    assert form["y"] + form["h"] == regions["control"]["y"]
+    assert form["h"] >= FORMATIONS_MIN_H
+    assert regions["ticker"]["x"] == form["x"] + form["w"]
+    assert regions["ticker"]["w"] == FULL_GUTTER_MIN_COLS - PRIORITIES_W
     assert hud["h"] + regions["decisions"]["h"] == vp["h"]
     assert pri["y"] == vp["y"] == hud["y"]
     assert pri["x"] + pri["w"] <= vp["x"]
@@ -1200,7 +1208,8 @@ def test_frame_layout_full_tier_priorities_matches_hud_width():
     assert dec["y"] == hud["y"] + hud["h"]
     assert dec["y"] + dec["h"] == vp["y"] + vp["h"]
     # Bottom band is LOG only — DECISIONS is in the right HUD column.
-    assert regions["ticker"]["w"] == FULL_GUTTER_MIN_COLS
+    # LOG is inset to the right of FORMATIONS.
+    assert regions["ticker"]["w"] == FULL_GUTTER_MIN_COLS - PRIORITIES_W
 
 
 def test_frame_layout_decisions_hud_aligned_in_right_column():
@@ -1215,7 +1224,7 @@ def test_frame_layout_decisions_hud_aligned_in_right_column():
     assert dec["y"] == hud["y"] + hud["h"]
     assert dec["y"] + dec["h"] == vp["y"] + vp["h"]
     assert dec["h"] == max(DECISIONS_MIN_H, vp["h"] - HUD_GUTTER_MIN_H)
-    assert regions["ticker"]["w"] == FULL_GUTTER_MIN_COLS
+    assert regions["ticker"]["w"] == FULL_GUTTER_MIN_COLS - PRIORITIES_W
 
 
 def test_frame_layout_hud_keeps_room_for_metrics():
@@ -1240,10 +1249,10 @@ def test_frame_layout_left_priorities_absent_below_left_gutter_floor():
     assert regions_left["priorities"]["w"] == PRIORITIES_MIN_W
     form = regions_left["formations"]
     assert form is not None
-    assert (
-        regions_left["priorities"]["h"] + form["h"]
-        == regions_left["viewport"]["h"]
-    )
+    assert regions_left["priorities"]["h"] == regions_left["viewport"]["h"]
+    assert form["y"] == regions_left["priorities"]["y"] + regions_left["priorities"]["h"]
+    assert form["y"] + form["h"] == regions_left["control"]["y"]
+    assert regions_left["ticker"]["x"] == form["x"] + form["w"]
 
 
 # -- WO-FA5a: hops (a real trade-loop chain) vs steps (a learned macro) ----
@@ -1409,18 +1418,20 @@ def test_frame_layout_band_grows_toward_double_height():
     assert regions["chain"]["y"] == regions["viewport"]["y"] + regions["viewport"]["h"]
     assert regions["chain"]["x"] == regions["viewport"]["x"]
     assert regions["chain"]["w"] == regions["viewport"]["w"]
-    # LOG spans full band; DECISIONS is in the right HUD column.
-    assert regions["ticker"]["w"] == FULL_GUTTER_MIN_COLS
+    # LOG sits beside FORMATIONS; DECISIONS is in the right HUD column.
+    assert regions["ticker"]["w"] == FULL_GUTTER_MIN_COLS - PRIORITIES_W
     assert (
         regions["decisions"]["y"] + regions["decisions"]["h"]
         == regions["viewport"]["y"] + regions["viewport"]["h"]
     )
     assert regions["priorities"] is not None
     assert regions["formations"] is not None
+    assert regions["priorities"]["h"] == regions["viewport"]["h"]
     assert (
-        regions["priorities"]["h"] + regions["formations"]["h"]
-        == regions["viewport"]["h"]
+        regions["formations"]["y"] + regions["formations"]["h"]
+        == regions["control"]["y"]
     )
+    assert regions["ticker"]["w"] == FULL_GUTTER_MIN_COLS - PRIORITIES_W
     assert regions["priorities"]["x"] < regions["viewport"]["x"]
 
 
