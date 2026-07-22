@@ -272,11 +272,16 @@ def test_frame_layout_right_gutter_tier_left_anchors_viewport():
     assert gutter is not None
     # viewport and gutter never overlap
     assert gutter["x"] >= vp["x"] + vp["w"]
-    # Decisions (when present) shares the leftover band with LOG, not the gutter
+    # Decisions/CHAIN (when present) share the leftover band with LOG, not the gutter
     if regions["decisions"] is not None and regions["ticker"] is not None:
         assert regions["decisions"]["y"] == regions["ticker"]["y"]
         assert regions["decisions"]["x"] >= regions["ticker"]["x"] + regions["ticker"]["w"]
         assert gutter["h"] == vp["h"]  # gutter keeps full viewport height
+    if regions.get("chain") is not None:
+        assert regions["chain"]["title"] == "CHAIN"
+        assert regions["chain"]["y"] == regions["ticker"]["y"]
+        assert regions["chain"]["h"] == regions["ticker"]["h"]
+        assert regions["chain"]["x"] >= regions["decisions"]["x"] + regions["decisions"]["w"]
 
 
 def test_frame_layout_full_tier_centers_viewport_with_right_gutter():
@@ -289,6 +294,14 @@ def test_frame_layout_full_tier_centers_viewport_with_right_gutter():
     assert vp["x"] > 1  # centered inside inset, not left-anchored like right_gutter
     assert regions["outer"] is not None
     assert regions["outer"]["w"] == FULL_GUTTER_MIN_COLS + 2
+    # WO-TUI-CHAIN-BOX: full tier with spare leftover gets taller band + CHAIN
+    assert regions["chain"] is not None
+    assert regions["decisions"] is not None
+    assert regions["ticker"]["h"] == regions["decisions"]["h"] == regions["chain"]["h"]
+    assert regions["ticker"]["h"] >= 5
+    assert regions["decisions"]["w"] >= 20
+    assert regions["decisions"]["w"] <= 32
+    assert regions["chain"]["title"] == "CHAIN"
 
 
 def test_frame_layout_viewport_never_stretched_beyond_native_grid():
@@ -396,6 +409,8 @@ def test_frame_layout_tw08_regions_do_not_overlap_at_full_tier():
         regions["viewport"], regions["gutter"], regions["decisions"],
         regions["ticker"], regions["control"], regions["status"],
     ]
+    if regions.get("chain") is not None:
+        panes.insert(3, regions["chain"])
     if regions["header"] is not None:
         panes.insert(0, regions["header"])
     rects = [_rect(p) for p in panes]
@@ -828,6 +843,26 @@ def test_frame_layout_decisions_present_at_its_height_floor():
     assert regions["decisions"] is not None
     assert regions["decisions"]["h"] == DECISIONS_MIN_H
     assert regions["ticker"] is not None
+    assert regions["chain"] is not None
+    assert regions["chain"]["h"] == DECISIONS_MIN_H
+    assert regions["chain"]["title"] == "CHAIN"
+
+
+def test_frame_layout_band_grows_toward_double_height():
+    """WO-TUI-CHAIN-BOX: band_h targets min(10, leftover) so LOG/DECISIONS
+    content rows roughly double vs the old min(5, leftover) cap."""
+    # Generous leftover well above BAND_H_MAX.
+    lines = VIEWPORT_H + 20 + 2
+    regions = frame_layout(lines, FULL_GUTTER_MIN_COLS + 2)
+    assert regions["ticker"]["h"] == 10
+    assert regions["decisions"]["h"] == 10
+    assert regions["chain"]["h"] == 10
+    assert 20 <= regions["decisions"]["w"] <= 32
+    assert regions["ticker"]["x"] + regions["ticker"]["w"] == regions["decisions"]["x"]
+    assert regions["decisions"]["x"] + regions["decisions"]["w"] == regions["chain"]["x"]
+    assert regions["chain"]["x"] + regions["chain"]["w"] == regions["ticker"]["x"] + (
+        regions["ticker"]["w"] + regions["decisions"]["w"] + regions["chain"]["w"]
+    )
 
 
 def test_render_plain_includes_phase2_sections():

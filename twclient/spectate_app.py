@@ -54,6 +54,7 @@ from .spectate_layout import (
     decisions_should_show_chain,
     format_autonomy_lines,
     format_autopilot_trace_lines,
+    format_chain_summary,
     format_idle_age,
     format_loops_library_header,
     format_loops_library_row,
@@ -1053,7 +1054,7 @@ def _build_windows(regions):
     curses.newwin() itself fail just drops that one pane rather than
     crashing the whole loop."""
     windows = {}
-    for key in ("outer", "header", "viewport", "gutter", "decisions", "ticker", "control", "status"):
+    for key in ("outer", "header", "viewport", "gutter", "decisions", "chain", "ticker", "control", "status"):
         r = regions.get(key)
         if r is None:
             continue
@@ -1459,19 +1460,22 @@ def _render(windows, regions, event, tracked, ticker_history, status, palette, g
         cols = max(12, (regions["decisions"].get("w") or 22) - 4)
         explore_active = bool(explore_mode and explore_mode != "off")
         live_trace = (status or {}).get("autopilot_trace")
-        # WO-FA5a: explore/trace must not PERMANENTLY preempt GOALS+CHAIN
-        # -- with neither active, GOALS+CHAIN owns the pane outright;
-        # with one active, it still yields the pane back on
-        # decisions_should_show_chain()'s periodic dwell window instead
-        # of hiding the chain panel for as long as explore/trace stays on.
+        # Dedicated CHAIN region (WO-TUI-CHAIN-BOX) always owns the trade-loop
+        # summary; DECISIONS then keeps GOALS / explore / trace without the
+        # old FA5a dwell requirement for chain visibility.
+        has_chain_box = regions.get("chain") is not None
         preempting = explore_active or bool(live_trace)
-        if not preempting or decisions_should_show_chain(now):
+        show_goals = (not preempting) or (
+            (not has_chain_box) and decisions_should_show_chain(now)
+        )
+        if show_goals:
             wid = _resolve_world_id()
             chain = phase2_cache.get("chain")
             goals = _build_goals_snapshot(wid, chain)
             sector = (event.get("state") or {}).get("sector")
             decision_lines = format_autonomy_lines(autonomy) + compose_phase2_side_panel(
                 goals, chain, current_sector=sector, width=cols,
+                include_chain=not has_chain_box,
             )
             panel_title = "GOALS"
         elif explore_active:
@@ -1486,13 +1490,25 @@ def _render(windows, regions, event, tracked, ticker_history, status, palette, g
                 decision_lines = format_explore_decision_lines(explore_mode, plan)
         else:
             # Live autopilot dry-run trace fills DECISIONS outside
-            # GOALS+CHAIN's dwell window. Trace is render-only — never
-            # drives the game (execution stays OFF).
+            # GOALS's window. Trace is render-only — never drives the game.
             decision_lines = format_autopilot_trace_lines(live_trace, cols=cols)
             panel_title = "DECISIONS"
         _draw_decisions(
             windows["decisions"], regions["decisions"],
             decision_lines, glyphs, palette, title=panel_title,
+        )
+
+    if regions.get("chain") is not None and "chain" in windows:
+        chain_cols = max(12, (regions["chain"].get("w") or 22) - 4)
+        sector = (event.get("state") or {}).get("sector")
+        chain_lines = format_chain_summary(
+            phase2_cache.get("chain"),
+            current_sector=sector,
+            cols=chain_cols,
+        )
+        _draw_decisions(
+            windows["chain"], regions["chain"],
+            chain_lines, glyphs, palette, title="CHAIN",
         )
 
     # Trainer Control Panel's control strip -- redraws every call (cheap,

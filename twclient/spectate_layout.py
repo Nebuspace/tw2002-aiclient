@@ -142,14 +142,17 @@ MIN_LINES = 20
 OUTER_FRAME_PAD = 1  # per side
 # Titled LOG box needs ≥3 rows (border + 1 content + border).
 LOG_BOX_MIN_H = 3
-# DECISIONS/GOALS+CHAIN needs more room than LOG's bare floor before
-# splitting off is worth it at all -- its content (AUTO/App-AI-Hum +
-# GOALS + CHAIN, ~10 lines) reads as collapsed-to-nothing at a squeezed
-# 1-2-content-row band. `band_h` below is capped at 5, so this floor
-# equals that cap -- DECISIONS only ever appears at its full size, never
-# a smaller half-useful slice (below the floor, LOG claims the whole
-# leftover band instead -- one legible pane beats two illegible ones).
+# Dedicated CHAIN / TRADE LOOP box (WO-TUI-CHAIN-BOX): border + ≥2
+# content rows + border so path / hops / +cr stay legible.
+CHAIN_BOX_MIN_W = 18
+# DECISIONS/GOALS needs more room than LOG's bare floor before splitting
+# off is worth it -- AUTO/App-AI-Hum + GOALS reads as collapsed-to-nothing
+# at a squeezed 1-2-content-row band. `band_h` is capped at 10 (~2× the
+# old cap of 5); this floor is the minimum leftover before DECISIONS (and
+# CHAIN) split from LOG — below it, LOG claims the whole leftover band
+# (one legible pane beats two illegible ones).
 DECISIONS_MIN_H = 5
+BAND_H_MAX = 10
 
 
 def frame_layout(lines: int, cols: int) -> dict:
@@ -180,10 +183,9 @@ def frame_layout(lines: int, cols: int) -> dict:
     log) -- so a narrow-but-tall terminal shows mode/TX/hints even when
     there's no room left for the ticker underneath it.
 
-    When a right HUD gutter is present and tall enough, its BOTTOM is
-    split off into a titled "DECISIONS" box (placeholder content until
-    TW-13). The bottom log ("ticker") is always a titled "LOG" box when
-    present.
+    When a right HUD gutter is present and tall enough, the leftover band
+    below splits into titled LOG + DECISIONS + CHAIN boxes (WO-TUI-CHAIN-BOX).
+    The bottom log ("ticker") is always a titled "LOG" box when present.
     """
     if lines < MIN_LINES or cols < MIN_COLS:
         return {
@@ -197,6 +199,7 @@ def frame_layout(lines: int, cols: int) -> dict:
             "viewport": None,
             "gutter": None,
             "decisions": None,
+            "chain": None,
             "ticker": None,
             "control": None,
             "status": None,
@@ -234,24 +237,36 @@ def frame_layout(lines: int, cols: int) -> dict:
 
     ticker = None
     decisions = None
-    # TW-08: leftover band hosts a titled LOG box; when wide enough, split
-    # the same band side-by-side with DECISIONS so the HUD gutter stays
-    # full-height for ship stats + live-metrics + port meters.
+    chain = None
+    # TW-08 / WO-TUI-CHAIN-BOX: leftover band hosts titled LOG; when wide
+    # enough, split side-by-side with DECISIONS + a dedicated CHAIN box so
+    # the HUD gutter stays full-height for ship stats + live-metrics + port.
     if leftover >= LOG_BOX_MIN_H:
-        band_h = min(5, leftover)
+        band_h = min(BAND_H_MAX, leftover)
         band_y = status["y"] - (1 if control else 0) - band_h
         if i_cols >= 60 and leftover >= DECISIONS_MIN_H:
-            # Decisions is a short placeholder panel; keep LOG wide enough
-            # that settle+TX suffixes remain readable.
-            dec_w = min(24, max(16, i_cols // 5))
-            log_w = i_cols - dec_w
+            # Wider DECISIONS (~2× old content rows via BAND_H_MAX); keep LOG
+            # wide enough that settle+TX suffixes remain readable; CHAIN is
+            # its own pane (not only a dwell slice inside DECISIONS).
+            dec_w = min(32, max(20, i_cols // 4))
+            chain_w = min(28, max(CHAIN_BOX_MIN_W, i_cols // 5))
+            if i_cols - dec_w - chain_w < 24:
+                # Prefer LOG readability: shrink CHAIN then DECISIONS.
+                chain_w = max(CHAIN_BOX_MIN_W, min(chain_w, i_cols - dec_w - 24))
+                if i_cols - dec_w - chain_w < 24:
+                    dec_w = max(20, min(dec_w, i_cols - chain_w - 24))
+            log_w = i_cols - dec_w - chain_w
+            ticker = {
+                "y": band_y, "x": ox, "w": log_w, "h": band_h,
+                "title": "LOG", "border": True,
+            }
             decisions = {
                 "y": band_y, "x": ox + log_w, "w": dec_w, "h": band_h,
                 "title": "DECISIONS", "border": True,
             }
-            ticker = {
-                "y": band_y, "x": ox, "w": log_w, "h": band_h,
-                "title": "LOG", "border": True,
+            chain = {
+                "y": band_y, "x": ox + log_w + dec_w, "w": chain_w, "h": band_h,
+                "title": "CHAIN", "border": True,
             }
         else:
             ticker = {
@@ -297,6 +312,7 @@ def frame_layout(lines: int, cols: int) -> dict:
         "viewport": viewport,
         "gutter": gutter,
         "decisions": decisions,
+        "chain": chain,
         "ticker": ticker,
         "control": control,
         "status": status,
@@ -1036,14 +1052,20 @@ def compose_phase2_side_panel(
     *,
     current_sector=None,
     width: int = 22,
+    include_chain: bool = True,
 ) -> list[str]:
-    """Combine GOALS + CHAIN for the Decisions-band panel (clipped by draw)."""
+    """Combine GOALS (+ optional CHAIN) for the Decisions-band panel.
+
+    When a dedicated CHAIN region exists (WO-TUI-CHAIN-BOX), callers pass
+    ``include_chain=False`` so DECISIONS keeps GOALS/autonomy only.
+    """
     lines = ["— GOALS —"]
     lines.extend(compose_primary_goals_lines(goals_snap, width=width))
-    lines.append("— CHAIN —")
-    lines.extend(
-        format_chain_summary(chain, current_sector=current_sector, cols=width)
-    )
+    if include_chain:
+        lines.append("— CHAIN —")
+        lines.extend(
+            format_chain_summary(chain, current_sector=current_sector, cols=width)
+        )
     return lines
 
 
