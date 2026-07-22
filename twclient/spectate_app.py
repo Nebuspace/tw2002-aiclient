@@ -524,8 +524,10 @@ def _longest_chain_for_panel(sock_path, status=None):
     "recorded", never "discovered") -- when there's no resolvable
     world_id, no hops yet, or no profitable cycle among them.
 
-    WO-TUI-CHAIN-VIZ-SEED: when library is also empty, seed bubble viz
-    from ≥2 known ports on a short warp path (presence/class only).
+    WO-TUI-CHAIN-VIZ-SEED: when library rows lack renderable sector
+    paths (``list_skills`` metadata has steps but no ``sectors``), seed
+    bubble viz from ≥2 known ports on a short warp path (presence/class
+    only).
     """
     wid = _resolve_world_id(status)
     if wid:
@@ -538,11 +540,13 @@ def _longest_chain_for_panel(sock_path, status=None):
             if chain is not None:
                 return chain
     lib = _longest_chain_library_fallback(sock_path)
-    if lib is not None:
+    if lib is not None and chain_bubble_sectors(lib):
         return lib
     if wid:
-        return _presence_port_chain_seed(wid)
-    return None
+        seed = _presence_port_chain_seed(wid)
+        if seed is not None:
+            return seed
+    return lib
 
 
 def _longest_chain_library_fallback(sock_path):
@@ -1377,6 +1381,8 @@ def _run(stdscr, client, sock_path, pid_path, unicode_ok):
     status["daemon_pid"] = pid_path.read_text().strip() if pid_path.exists() else None
     now = time.monotonic()
     tracked = _apply_status_hud_seed(tracked, status, now, parsed_state=connect_parsed)
+    phase2_cache["chain"] = _longest_chain_for_panel(sock_path, status)
+    phase2_cache["chain_ts"] = now
     last_status_poll = now
     status_poll_ts = now
     prev_connected = status.get("connected")

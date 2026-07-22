@@ -1642,6 +1642,43 @@ def test_longest_chain_for_panel_seeds_when_library_empty(monkeypatch, tmp_path)
     assert list(result.get("sectors") or ())[:2] == [10, 20]
 
 
+def test_longest_chain_for_panel_seeds_when_library_lacks_sectors(monkeypatch, tmp_path):
+    """Live failure: list_skills rows have steps but no sectors — seed viz."""
+    from twclient import world_model
+    from twclient.spectate_layout import chain_bubble_sectors, compose_chain_bubbles
+
+    store = tmp_path / "world"
+    monkeypatch.setattr(world_model, "WORLD_DIR", store)
+    wid = "seed_world"
+    world_model.upsert_sector(
+        wid,
+        {"sector_id": 100, "warps": [200], "port": {"class": "BSB"}},
+        state_dir=store,
+    )
+    world_model.upsert_sector(
+        wid,
+        {"sector_id": 200, "warps": [100], "port": {"class": "SBB"}},
+        state_dir=store,
+    )
+    monkeypatch.setattr(spectate_app_mod, "_resolve_world_id", lambda status=None: wid)
+    monkeypatch.setattr(spectate_app_mod.trade_adapter, "build_trade_hops", lambda w, **kw: ((), None))
+    # Mirrors protocol._dispatch_list_skills — metadata only, no sector path.
+    fake_loops = [{"name": "aegis_fuel_loop", "source": "mined", "steps": 7, "profit_per_turn": 1200.0}]
+    monkeypatch.setattr(
+        spectate_app_mod, "_send_control",
+        lambda sock_path, verb, args=None, timeout=3.0: {"ok": True, "loops": fake_loops},
+    )
+    result = spectate_app_mod._longest_chain_for_panel("/nonexistent.sock")
+    assert result.get("source") == "presence_seed"
+    assert chain_bubble_sectors(result) == [100, 200]
+    lines = compose_chain_bubbles(
+        result, port_classes={100: "BSB", 200: "SBB"}, width=40,
+    )
+    joined = "\n".join(lines)
+    assert "100" in joined and "200" in joined
+    assert "no trade loop yet" not in joined
+
+
 def test_longest_chain_for_panel_still_prefers_profit_chain_over_seed(monkeypatch):
     """Real ProfitCycle wins; presence seed must not be consulted."""
     hops = (
