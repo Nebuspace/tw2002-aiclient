@@ -183,14 +183,14 @@ VIEWPORT_W, VIEWPORT_H = GAME_W + 2, GAME_H + 2  # 82 x 26
 # WO-TUI-HUD-POLISH: wide enough for CREDITS value + freshness (+ spark)
 # on one line without wrap/truncate at full/right_gutter tiers.
 HUD_GUTTER_W = 36  # exactly VIEWPORT_W + HUD_GUTTER_W = 118, the right_gutter floor below
-# WO-TUI-PRIORITIES-LEFT: tall left gutter mirroring HUD (not bottom-band).
-# Title " PRIORITIES " + borders needs ~20 cols; keep weigh lines readable.
-PRIORITIES_W = 24
+# WO-TUI-PRIORITIES-LEFT: tall left gutter mirroring HUD width (not bottom-band).
+# Full tier matches HUD_GUTTER_W; narrow fold keeps PRIORITIES_MIN_W.
+PRIORITIES_W = HUD_GUTTER_W
 PRIORITIES_MIN_W = 20
 MINIMAL_HEADER_MIN_COLS = 82   # == VIEWPORT_W: the floor at which a bordered viewport fits at all
 RIGHT_GUTTER_MIN_COLS = 118    # == VIEWPORT_W + HUD_GUTTER_W: viewport + right HUD, zero-margin fit
 # full = viewport + both side gutters (PRIORITIES left + HUD right), zero-margin fit
-FULL_GUTTER_MIN_COLS = VIEWPORT_W + HUD_GUTTER_W + PRIORITIES_W  # 142
+FULL_GUTTER_MIN_COLS = VIEWPORT_W + HUD_GUTTER_W + PRIORITIES_W  # 154
 # left PRIORITIES appears once both side gutters + viewport fit (may shrink pri_w)
 LEFT_GUTTER_MIN_COLS = VIEWPORT_W + HUD_GUTTER_W + PRIORITIES_MIN_W  # 138
 MIN_COLS = 60
@@ -1069,7 +1069,7 @@ def priority_kind_label(kind) -> str:
 
 
 def _priority_ev_sort_key(candidate) -> tuple:
-    """Weigh order: highest known EV first; unknown EV last (never guess 0)."""
+    """Legacy trace-only weigh order: highest known EV first; unknown EV last."""
     ev = _trace_field(candidate, "ev_cr_per_turn")
     try:
         ev_f = float(ev) if ev is not None else None
@@ -1080,14 +1080,216 @@ def _priority_ev_sort_key(candidate) -> tuple:
     return (0, -ev_f)
 
 
-def compose_priorities_lines(trace, *, width: int = 22) -> list[str]:
-    """Ordered effort list (1…N) from ``autopilot_trace`` candidates.
+def _chain_start_sector(chain) -> int | None:
+    """Normalized cycle start for return-path math."""
+    if chain is None:
+        return None
+    sectors = list(getattr(chain, "sectors", None) or ())
+    if not sectors and isinstance(chain, dict):
+        sectors = list(chain.get("sectors") or ())
+    if not sectors:
+        return None
+    try:
+        return int(sectors[0])
+    except (TypeError, ValueError):
+        return None
 
-    Source of truth = status autopilot_trace (same poll as DECISIONS).
-    Sorted by EV weigh order; readable labels; gated marked ``⊘``.
-    Empty / missing / malformed → ``["—"]`` (clear unknown state).
+
+def _chain_engine_metrics(chain, *, current_sector=None):
+    """(cr_per_turn, cycle_turns, at_chain_start) from a chain-like value."""
+    if chain is None:
+        return None, None, False
+    chain_cr = None
+    chain_cycle = None
+    if hasattr(chain, "cr_per_turn"):
+        try:
+            chain_cr = float(chain.cr_per_turn) if chain.cr_per_turn is not None else None
+        except (TypeError, ValueError):
+            chain_cr = None
+        chain_cycle = getattr(chain, "turns", None)
+    elif isinstance(chain, dict):
+        ppt = chain.get("profit_per_turn")
+        if ppt is not None:
+            try:
+                chain_cr = float(ppt)
+            except (TypeError, ValueError):
+                chain_cr = None
+        chain_cycle = chain.get("turns")
+    start = _chain_start_sector(chain)
+    at_start = False
+    if start is not None and current_sector is not None:
+        try:
+            at_start = int(current_sector) == start
+        except (TypeError, ValueError):
+            at_start = False
+    return chain_cr, chain_cycle, at_start
+
+
+def _has_priority_inputs(trace, chain) -> bool:
+    """True when trace or chain can feed the priority engine."""
+    if chain is not None:
+        return True
+    if trace is None:
+        return False
+    if isinstance(trace, dict) and not trace:
+        return False
+    if not isinstance(trace, dict) and not hasattr(trace, "candidates"):
+        return False
+    candidates = _trace_field(trace, "candidates")
+    if isinstance(candidates, (list, tuple)) and candidates:
+        return True
+    ctx = _trace_field(trace, "context") or {}
+    return bool(ctx)
+
+
+def _trace_candidate(trace, kind: str):
+    """First autopilot_trace candidate entry for ``kind``."""
+    if not trace:
+        return None
+    for c in _trace_field(trace, "candidates") or ():
+        if _trace_field(c, "kind") == kind:
+            return c
+    return None
+
+
+def build_priority_engine_inputs(
+    trace,
+    chain=None,
+    *,
+    current_sector=None,
+    stardock_route=None,
+    graph=None,
+    turn_reserve: int = 0,
+    turns_per_warp: int = 1,
+    explore_available=None,
+) -> dict:
+    """Adapter: spectate-visible data → ``recommend_actions()`` kwargs.
+
+    Pulls turns/sector from trace context, chain economics from the panel
+    chain object (fallback: ungated trace EV), and optional world-model
+    travel legs (StarDock route + return-to-chain-start).
+    """
+    from .priority_engine import compute_return_path, hops_of_path
+
+    ctx = (_trace_field(trace, "context") or {}) if trace else {}
+    turns_left = ctx.get("turns_left")
+    if turns_left is not None:
+        try:
+            turns_left = int(turns_left)
+        except (TypeError, ValueError):
+            turns_left = None
+
+    sector = current_sector
+    if sector is None and ctx.get("sector") is not None:
+        try:
+            sector = int(ctx["sector"])
+        except (TypeError, ValueError):
+            sector = None
+
+    chain_cr, chain_cycle, at_start = _chain_engine_metrics(chain, current_sector=sector)
+    if chain_cr is None:
+        run_c = _trace_candidate(trace, "run_chain")
+        if run_c is not None and not bool(_trace_field(run_c, "gated")):
+            ev = _trace_field(run_c, "ev_cr_per_turn")
+            if ev is not None:
+                try:
+                    chain_cr = float(ev)
+                except (TypeError, ValueError):
+                    pass
+
+    upgrade_ev = None
+    upgrade_payback = None
+    upgrade_name = None
+    up_c = _trace_candidate(trace, "upgrade")
+    if up_c is not None:
+        ev = _trace_field(up_c, "ev_cr_per_turn")
+        if ev is not None and not bool(_trace_field(up_c, "gated")):
+            try:
+                upgrade_ev = float(ev)
+            except (TypeError, ValueError):
+                pass
+
+    hops_to_stardock = hops_of_path(stardock_route) if stardock_route is not None else None
+
+    hops_return = None
+    chain_start = _chain_start_sector(chain)
+    if graph and stardock_route and chain_start is not None and len(stardock_route) >= 1:
+        dock_sector = stardock_route[-1]
+        ret_path = compute_return_path(graph, dock_sector, chain_start)
+        hops_return = hops_of_path(ret_path)
+
+    if explore_available is None:
+        explore_available = False
+        ex_c = _trace_candidate(trace, "explore")
+        if ex_c is not None:
+            explore_available = not bool(_trace_field(ex_c, "gated"))
+
+    return {
+        "chain_cr_per_turn": chain_cr,
+        "chain_cycle_turns": chain_cycle,
+        "at_chain_start": at_start,
+        "upgrade_extra_cr_per_turn": upgrade_ev,
+        "upgrade_payback": upgrade_payback,
+        "upgrade_ship_name": upgrade_name,
+        "hops_to_stardock": hops_to_stardock,
+        "hops_return_to_work": hops_return,
+        "turns_per_warp": turns_per_warp,
+        "turns_left": turns_left,
+        "turn_reserve": turn_reserve,
+        "explore_available": explore_available,
+    }
+
+
+def recommend_priority_actions(trace, chain=None, **engine_kwargs):
+    """Run ``priority_engine.recommend_actions`` on spectate adapter inputs."""
+    from .priority_engine import recommend_actions
+
+    inputs = build_priority_engine_inputs(trace, chain, **engine_kwargs)
+    return recommend_actions(**inputs)
+
+
+def _compose_priorities_from_engine(rec, *, width: int) -> list[str]:
+    """Render engine-ranked ``PriorityScore`` rows for the weigh list."""
+    width = max(8, int(width))
+    lines = []
+    for i, score in enumerate(rec.ranked, start=1):
+        label = priority_kind_label(score.kind)
+        mark = "⊘ " if score.gated else ""
+        ev_s = format_trace_ev(score.ev_per_turn)
+        rt_hint = ""
+        if score.travel_cost_rt is not None and width >= 24:
+            rt_hint = f" RT{score.travel_cost_rt}t"
+        body = f"{i} {mark}{label} {ev_s}{rt_hint}"
+        lines.append(body[:width])
+    return lines or ["—"]
+
+
+def compose_priorities_lines(
+    trace,
+    *,
+    width: int = 22,
+    chain=None,
+    priority_rec=None,
+    **engine_kwargs,
+) -> list[str]:
+    """Ordered effort list (1…N) from the priority engine.
+
+    Uses ``recommend_actions()`` (RT travel + stay-vs-leave) when trace or
+    chain inputs exist; falls back to legacy trace-only EV sort only when
+    the engine cannot run. Gated rows carry ``⊘``; upgrade rows may show
+    ``RTNt`` when width allows.
     """
     width = max(8, int(width))
+    if trace is None and chain is None and priority_rec is None:
+        return ["—"]
+
+    if priority_rec is None and _has_priority_inputs(trace, chain):
+        priority_rec = recommend_priority_actions(trace, chain, **engine_kwargs)
+
+    if priority_rec is not None and priority_rec.ranked:
+        return _compose_priorities_from_engine(priority_rec, width=width)
+
+    # Legacy trace-only fallback (malformed trace with no chain context).
     if trace is None:
         return ["—"]
     if isinstance(trace, dict) and not trace:
@@ -1121,11 +1323,14 @@ def compose_priorities_panel(
     current_sector=None,
     width: int = 22,
     include_chain: bool = True,
+    **priority_engine_kwargs,
 ) -> list[str]:
     """Left-gutter PRIORITIES box: autonomy + GOALS (+ optional CHAIN) + weigh list.
 
     DECISIONS owns trace/explore only; this panel always shows strategy context
     beside the game viewport (WO-TUI-PRIORITIES-LEFT / human 2026-07-22).
+    Weigh list order comes from ``priority_engine.recommend_actions()`` when
+    trace/chain/travel hints are available (``priority_engine_kwargs``).
     """
     lines = list(autonomy_lines or [])
     lines.extend(
@@ -1138,7 +1343,14 @@ def compose_priorities_panel(
         )
     )
     lines.append("— PRIORITIES —")
-    lines.extend(compose_priorities_lines(trace, width=width))
+    lines.extend(
+        compose_priorities_lines(
+            trace,
+            width=width,
+            chain=chain,
+            **priority_engine_kwargs,
+        )
+    )
     return lines
 
 

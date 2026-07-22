@@ -933,12 +933,40 @@ def test_compose_primary_goals_and_chain_highlight():
 
 
 def test_compose_priorities_lines_orders_by_ev_with_readable_labels():
+    """Engine ranks ungated chain first; upgrade gated without payback."""
     lines = compose_priorities_lines(PROVISIONAL_AUTOPILOT_TRACE, width=40)
     assert lines[0].startswith("1 ") and "Trade chain" in lines[0] and "550" in lines[0]
-    assert lines[1].startswith("2 ") and "Upgrade" in lines[1] and "200" in lines[1]
+    assert lines[1].startswith("2 ") and "Upgrade" in lines[1]
+    assert "⊘" in lines[1]  # no payback in trace → engine gates upgrade
     assert lines[2].startswith("3 ") and "Explore" in lines[2]
-    assert "⊘" in lines[2]  # gated explore
+    assert "⊘" in lines[2]  # gated explore in fixture trace
     assert "run_chain" not in "\n".join(lines)
+
+
+def test_compose_priorities_lines_engine_stay_vs_leave_demotes_upgrade():
+    """RT stay-vs-leave gates upgrade below chain even when raw EV is higher."""
+    from twclient.priority_engine import recommend_actions
+
+    trace = {"context": {"turns_left": 500, "sector": 10}, "candidates": []}
+    chain = {"sectors": [10, 20, 10], "profit_per_turn": 550.0, "turns": 10}
+    rec = recommend_actions(
+        chain_cr_per_turn=550.0,
+        chain_cycle_turns=10,
+        at_chain_start=True,
+        upgrade_extra_cr_per_turn=80.0,
+        upgrade_payback=20.0,
+        hops_to_stardock=10,
+        hops_return_to_work=10,
+        turns_per_warp=3,
+        turns_left=500,
+        turn_reserve=50,
+        explore_available=True,
+    )
+    lines = compose_priorities_lines(trace, chain=chain, width=40, priority_rec=rec)
+    assert lines[0].startswith("1 ") and "Trade chain" in lines[0] and "550" in lines[0]
+    assert "Explore" in lines[1]
+    assert "Upgrade" in lines[2] and "⊘" in lines[2]
+    assert "RT" in lines[2]
 
 
 def test_compose_priorities_lines_empty_unknown_is_clear():
@@ -978,8 +1006,9 @@ def test_compose_phase2_side_panel_does_not_fold_priorities():
     assert "Trade chain" not in "\n".join(panel)
 
 
-def test_frame_layout_full_tier_has_left_priorities_gutter():
-    """WO-TUI-PRIORITIES-LEFT: PRIORITIES | game | HUD (not bottom-band)."""
+def test_frame_layout_full_tier_priorities_matches_hud_width():
+    """WO-TUI-PRIORITIES-LEFT: full tier PRIORITIES width == HUD_GUTTER_W."""
+    assert PRIORITIES_W == HUD_GUTTER_W
     regions = frame_layout(42, FULL_GUTTER_MIN_COLS + 2)
     pri = regions["priorities"]
     vp = regions["viewport"]
@@ -987,7 +1016,7 @@ def test_frame_layout_full_tier_has_left_priorities_gutter():
     assert pri is not None
     assert pri["title"] == "PRIORITIES"
     assert pri["border"] is True
-    assert pri["w"] == PRIORITIES_W
+    assert pri["w"] == PRIORITIES_W == HUD_GUTTER_W
     assert pri["h"] == vp["h"]
     assert hud["h"] + regions["decisions"]["h"] == vp["h"]
     assert pri["y"] == vp["y"] == hud["y"]

@@ -7,9 +7,9 @@ above the per-kind scorers in ``autopilot.py`` and adds Max's missing
 piece: **round-trip execution cost** before abandoning in-progress work
 (e.g. leave a trade chain for StarDock, buy a ship, come back).
 
-Pure logic — no daemon I/O. Autopilot may call ``recommend()`` / wire
-``rank_action_priorities()`` into ``select()``; spectate can render the
-ranked list later.
+Pure logic — no daemon I/O. Autopilot may call ``recommend_actions()`` / wire
+``rank_action_priorities()`` into ``select()``; spectate renders the ranked
+list via ``compose_priorities_lines()``.
 """
 
 from __future__ import annotations

@@ -65,7 +65,7 @@ Intended gate before `upgrade` beats `run_chain` on the Layer 2 weigh list — *
 2. **One-way path to StarDock known** — `stardock_route` with `len > 1` or at-dock (`len == 1`); unknown route fail-closes (`upgrade: stardock route unknown`).
 3. **Return path to chain start known** → compute **`travel_cost_rt`** ≈ `(hops_to_dock + hops_to_chain_start) × turns_per_warp` (same ship outbound; post-buy ship may differ — **Planned** refinement).
 4. **Turn budget** — `travel_cost_rt + projected_payback ≤ productive turns` (extends today's one-way `payback + travel_turns` check).
-5. **EV comparison** — credit chain profit forgone during RT travel: e.g. compare `chain.cr_per_turn × travel_cost_rt` (sunk window) against incremental gain after payback; **stay trading** if the chain wins (**Planned** — Layer 2 does not debit sunk chain EV today).
+5. **EV comparison** — credit chain profit forgone during RT travel: e.g. compare `chain.cr_per_turn × travel_cost_rt` (sunk window) against incremental gain after payback; **stay trading** if the chain wins (**Implemented** in `priority_engine.stay_vs_leave_upgrade()`; autopilot `_score_upgrade()` still one-way until wired).
 
 #### Layer 1 (GOALS) vs Layer 2 (PRIORITIES)
 
@@ -86,7 +86,7 @@ Each priority should come with a score that grades the priority on whether it is
 
 **Layer 1 — Goal status (informational).** The left-gutter **GOALS** section in spectate (`GoalsSnapshot` → `compose_primary_goals_lines()` in `spectate_layout.py`) renders each catalog item as a compact status line with glyphs: `✓` met, `·` in progress / unknown, `—` not applicable. This layer is **read-only context** for the operator — it does not pick the next action.
 
-**Layer 2 — Action selection (EV weigh list).** The **PRIORITIES** section below GOALS shows the autopilot's ordered **effort candidates** for the current tick, sourced from `status["autopilot_trace"]` (same poll as DECISIONS). Each line is ranked by expected value:
+**Layer 2 — Action selection (EV weigh list).** The **PRIORITIES** section below GOALS shows the autopilot's ordered **effort candidates** for the current tick, ranked by **`priority_engine.recommend_actions()`** (RT travel + stay-vs-leave when chain/travel hints exist). Inputs are adapted from `status["autopilot_trace"]`, the panel chain object, and world-model StarDock/return paths (`spectate_layout.build_priority_engine_inputs()`). DECISIONS still shows trace detail from the same poll. Each line is ranked by expected value:
 
 ```
 1 Trade chain 550
@@ -146,7 +146,7 @@ Threat identification (mines/fighters) is catalogued but **not yet** a scorer in
 | Panel | Region key | Contents | Source module |
 |---|---|---|---|
 | GOALS | left PRIORITIES gutter (top) | StarDock, map size, formations, longest chain, upgrade/hold price hints | `spectate_app._build_goals_snapshot()` |
-| PRIORITIES (weigh list) | left PRIORITIES gutter (bottom) | Ordered autopilot candidates 1…N | `compose_priorities_lines(autopilot_trace)` |
+| PRIORITIES (weigh list) | left PRIORITIES gutter (bottom) | Engine-ranked candidates 1…N (`⊘`, optional `RTNt`) | `compose_priorities_lines()` → `recommend_actions()` |
 | DECISIONS | right column under HUD | Trace detail: chosen kind, rationales, gate reasons | `format_autopilot_trace_lines()` |
 | CHAIN | viewport bubble row | Longest chain sector path | `compose_chain_bubbles()` |
 
@@ -166,7 +166,7 @@ When the terminal is too narrow for the left gutter (`cols < LEFT_GUTTER_MIN_COL
 | Ship upgrade decision | `ship_upgrade_decision.py` | Pure logic; needs live catalog bridge |
 | StarDock price capture | `introspector.py`, `game_data.py` | Ship list + cargo-hold quote persistence |
 | Threat persistence | `world_model.py`, `state_parser.py` | Per-sector `threats` on disk |
-| Spectate layout | `spectate_layout.py`, `spectate_app.py` | WO-TUI-PRIORITIES-LEFT |
+| Spectate layout | `spectate_layout.py`, `spectate_app.py` | WO-TUI-PRIORITIES-LEFT; PRIORITIES width = `HUD_GUTTER_W`; engine adapter in layout |
 
 **`twclient/priority_engine.py` exists** — call `recommend_actions(...)` for RT-aware focus. Autopilot `select()` is **not yet** delegated to it (thin wire = open gap #9).
 
@@ -194,5 +194,5 @@ Goal lines in GOALS still update from the world-model even when upgrade scoring 
 6. **Purchase / trade EXECUTE** — wire dock menus, haggle, and hold/ship buys (beyond navigation-only autopilot).
 7. **Planet colonization** — genesis deploy as a gated, human-approved candidate kind (never silent auto-deploy).
 8. **Live `travel_cost_rt` inputs** — populate return path StarDock → chain start on `WorldSnapshot`; feed engine from protocol snapshot kwargs.
-9. **Wire `autopilot.select()` → `priority_engine.recommend_actions()`** — single driver for focus; keep `_score_*` as input adapters or retire duplication.
+9. **Wire `autopilot.select()` → `priority_engine.recommend_actions()`** — single driver for live navigation; spectate PRIORITIES already uses the engine (2026-07-22).
 10. **GOALS pre-flight hints** — `RT ~Nt`, checklist glyph when chain active + StarDock known.

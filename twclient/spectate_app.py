@@ -670,6 +670,36 @@ def _sector_hint_from_status(status=None):
     return None
 
 
+def _priority_engine_travel_hints(world_id, *, current_sector=None):
+    """World-model legs for ``priority_engine`` (StarDock route + return graph).
+
+    Best-effort — OSError or missing sector yields partial kwargs only.
+    ``current_sector`` is passed separately to ``compose_priorities_panel``.
+    """
+    hints: dict = {}
+    if not world_id or current_sector is None:
+        return hints
+    try:
+        sector = int(current_sector)
+    except (TypeError, ValueError):
+        return hints
+    try:
+        graph = known_graph(world_id)
+        plan = plan_find_stardock(
+            world_id,
+            current_sector=sector,
+            turn_budget=9999,
+            epsilon=0.0,
+        )
+        hints["graph"] = graph
+        hints["stardock_route"] = plan.route
+        if plan.next_sector is not None:
+            hints["explore_available"] = True
+    except OSError:
+        pass
+    return hints
+
+
 def _longest_chain_for_panel(sock_path, status=None, current_sector=None):
     """Prefer a REAL discovered chain: FA3's world-model → TradeHop
     adapter (`trade_adapter.build_trade_hops()`, pct-based commodity
@@ -1845,6 +1875,7 @@ def _render(windows, regions, event, tracked, ticker_history, status, palette, g
                 current_sector=sector,
                 width=cols,
                 include_chain=not has_chain_box,
+                **_priority_engine_travel_hints(wid, current_sector=sector),
             )
             panel_title = "PRIORITIES"
         _draw_decisions(
@@ -1868,6 +1899,7 @@ def _render(windows, regions, event, tracked, ticker_history, status, palette, g
             current_sector=sector,
             width=pri_cols,
             include_chain=not has_chain_box,
+            **_priority_engine_travel_hints(wid, current_sector=sector),
         )
         _draw_decisions(
             windows["priorities"], regions["priorities"],
@@ -2005,6 +2037,7 @@ def run_snapshot(sock_path, pid_path, frames=1, settle_wait_s=8.0):
                 autonomy_lines=format_autonomy_lines(auto),
                 current_sector=sector,
                 width=40,
+                **_priority_engine_travel_hints(wid, current_sector=sector),
             )
             if live_trace:
                 dashboard["decisions"] = format_autopilot_trace_lines(live_trace, cols=40)
