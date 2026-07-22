@@ -934,7 +934,12 @@ class AutopilotEngine:
             self.session.observe_turns(text)
         bal, _ = self.session.credits_snapshot()
         turns, _ = self.session.turns_snapshot()
-        if bal is not None and turns is not None:
+        # Credits are the gate for autopilot decisions; turns alone are
+        # informational. A main_command screen showing credits but no
+        # explicit turn count should NOT trigger the I-probe — the TL=
+        # timestamp in the prompt conveys time-remaining, not a raw count
+        # `observe_turns` can parse. Skip probe when credits are known.
+        if bal is not None:
             self._hud_seed_attempted = True
             return None
         self._hud_seed_attempted = True
