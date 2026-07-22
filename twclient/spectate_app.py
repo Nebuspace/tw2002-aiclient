@@ -47,6 +47,7 @@ from .spectate_layout import (
     compose_dashboard,
     compose_decisions_placeholder,
     compose_chain_bubbles,
+    compose_formations_panel,
     compose_hud_cells,
     compose_live_metrics,
     compose_port_panel,
@@ -1475,7 +1476,7 @@ def _build_windows(regions):
     curses.newwin() itself fail just drops that one pane rather than
     crashing the whole loop."""
     windows = {}
-    for key in ("outer", "header", "viewport", "gutter", "decisions", "priorities", "chain", "ticker", "control", "status"):
+    for key in ("outer", "header", "viewport", "gutter", "decisions", "priorities", "formations", "chain", "ticker", "control", "status"):
         r = regions.get(key)
         if r is None:
             continue
@@ -1971,6 +1972,24 @@ def _render(windows, regions, event, tracked, ticker_history, status, palette, g
             pri_lines, glyphs, palette, title="PRIORITIES",
         )
 
+    if regions.get("formations") is not None and "formations" in windows:
+        form_cols = max(8, (regions["formations"].get("w") or 22) - 4)
+        form_inner_h = max(1, (regions["formations"].get("h") or 6) - 2)
+        wid = _resolve_world_id(status)
+        formation_list = ()
+        if wid:
+            try:
+                formation_list = catalog_world(wid).formations
+            except OSError:
+                formation_list = ()
+        form_lines = compose_formations_panel(
+            formation_list, width=form_cols, max_lines=form_inner_h,
+        )
+        _draw_decisions(
+            windows["formations"], regions["formations"],
+            form_lines, glyphs, palette, title="FORMATIONS",
+        )
+
     if regions.get("chain") is not None and "chain" in windows:
         chain_obj = phase2_cache.get("chain")
         sector = (event.get("state") or {}).get("sector")
@@ -2103,6 +2122,15 @@ def run_snapshot(sock_path, pid_path, frames=1, settle_wait_s=8.0):
                 current_sector=sector,
                 width=40,
                 **_priority_engine_travel_hints(wid, current_sector=sector),
+            )
+            formation_list = ()
+            if wid:
+                try:
+                    formation_list = catalog_world(wid).formations
+                except OSError:
+                    formation_list = ()
+            dashboard["formations"] = compose_formations_panel(
+                formation_list, width=40, max_lines=24,
             )
             if live_trace:
                 dashboard["decisions"] = format_autopilot_trace_lines(live_trace, cols=40)

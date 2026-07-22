@@ -9,6 +9,7 @@ from twclient.spectate_layout import (
     CHAIN_PANEL_DWELL_S,
     CHAIN_PANEL_ROTATION_PERIOD_S,
     DECISIONS_MIN_H,
+    FORMATIONS_MIN_H,
     FRESHNESS_STALE_S,
     FULL_GUTTER_MIN_COLS,
     LEFT_GUTTER_MIN_COLS,
@@ -30,6 +31,7 @@ from twclient.spectate_layout import (
     compose_autonomy_headline,
     compose_dashboard,
     compose_decisions_placeholder,
+    compose_formations_panel,
     compose_hud_cells,
     compose_live_metrics,
     compose_phase2_side_panel,
@@ -371,7 +373,13 @@ def test_frame_layout_full_tier_centers_viewport_with_right_gutter():
     assert regions["decisions"] is not None
     assert regions["priorities"] is not None
     assert regions["priorities"]["title"] == "PRIORITIES"
-    assert regions["priorities"]["h"] == regions["viewport"]["h"]
+    assert regions["formations"] is not None
+    assert regions["formations"]["title"] == "FORMATIONS"
+    assert (
+        regions["priorities"]["h"] + regions["formations"]["h"]
+        == regions["viewport"]["h"]
+    )
+    assert regions["formations"]["y"] == regions["priorities"]["y"] + regions["priorities"]["h"]
     assert regions["priorities"]["x"] < regions["viewport"]["x"]
     assert regions["ticker"]["h"] >= 5
     assert regions["decisions"]["w"] == HUD_GUTTER_W
@@ -913,6 +921,35 @@ def test_compose_primary_goals_fighters_line():
     assert any("Fighters" in ln and "unknown" in ln and "?" in ln for ln in unknown_lines)
 
 
+def test_compose_primary_goals_fighters_buy_status_labels():
+    """fighter_buy_status overrides 'need some' fallback when fighters count is zero."""
+    can_buy_lines = compose_primary_goals_lines(GoalsSnapshot(
+        fighters_known=True, fighters_count=0, fighter_buy_status="can buy",
+    ), width=36)
+    assert any("Fighters" in ln and "can buy" in ln and "·" in ln for ln in can_buy_lines)
+
+    holds_first_lines = compose_primary_goals_lines(GoalsSnapshot(
+        fighters_known=True, fighters_count=0, fighter_buy_status="holds first",
+    ), width=36)
+    assert any("Fighters" in ln and "holds first" in ln for ln in holds_first_lines)
+
+    need_credits_lines = compose_primary_goals_lines(GoalsSnapshot(
+        fighters_known=True, fighters_count=0, fighter_buy_status="need credits",
+    ), width=36)
+    assert any("Fighters" in ln and "need credits" in ln for ln in need_credits_lines)
+
+    price_q_lines = compose_primary_goals_lines(GoalsSnapshot(
+        fighters_known=True, fighters_count=0, fighter_buy_status="price?",
+    ), width=36)
+    assert any("Fighters" in ln and "price?" in ln for ln in price_q_lines)
+
+    # Empty fighter_buy_status falls back to "need some" (backward compat)
+    fallback_lines = compose_primary_goals_lines(GoalsSnapshot(
+        fighters_known=True, fighters_count=0, fighter_buy_status="",
+    ), width=36)
+    assert any("Fighters" in ln and "need some" in ln for ln in fallback_lines)
+
+
 def test_compose_primary_goals_ship_hold_prices_gated_without_stardock():
     blocked = compose_primary_goals_lines(GoalsSnapshot(
         stardock_found=False,
@@ -1091,6 +1128,38 @@ def test_compose_autonomy_footer_box_centers_and_fits_width():
     assert box[1].index("AUTO 100%") > 1
 
 
+def test_compose_formations_panel_lists_name_and_blurb():
+    from twclient.formations import Formation, DEAD_END, BUBBLE, ONE_WAY
+
+    lines = compose_formations_panel(
+        [
+            Formation(kind=DEAD_END, sectors=(42,), entrance=7, detail="single outbound warp"),
+            Formation(kind=BUBBLE, sectors=(10, 11, 12), entrance=10, detail="single-entrance pocket"),
+            Formation(kind=ONE_WAY, sectors=(5, 1), detail="5→1 with no reverse warp"),
+        ],
+        width=36,
+        max_lines=20,
+    )
+    joined = "\n".join(lines)
+    assert "Dead-end @42" in joined
+    assert "defend" in joined or "single outbound" in joined
+    assert "Bubble @" in joined
+    assert "One-way @" in joined
+    assert compose_formations_panel([], width=20) == ["(none yet — map warps)"]
+
+
+def test_compose_formations_panel_truncates_with_more():
+    from twclient.formations import Formation, DEAD_END
+
+    many = [
+        Formation(kind=DEAD_END, sectors=(i,), entrance=1, detail="single outbound warp")
+        for i in range(20)
+    ]
+    lines = compose_formations_panel(many, width=28, max_lines=5)
+    assert any(ln.startswith("+") and "more" in ln for ln in lines)
+    assert len(lines) <= 5
+
+
 def test_compose_phase2_side_panel_does_not_fold_priorities():
     """PRIORITIES is its own TUI box — never a section inside GOALS."""
     panel = compose_phase2_side_panel(
@@ -1115,7 +1184,12 @@ def test_frame_layout_full_tier_priorities_matches_hud_width():
     assert pri["title"] == "PRIORITIES"
     assert pri["border"] is True
     assert pri["w"] == PRIORITIES_W == HUD_GUTTER_W
-    assert pri["h"] == vp["h"]
+    form = regions["formations"]
+    assert form is not None
+    assert form["title"] == "FORMATIONS"
+    assert form["w"] == PRIORITIES_W
+    assert pri["h"] + form["h"] == vp["h"]
+    assert form["y"] == pri["y"] + pri["h"]
     assert hud["h"] + regions["decisions"]["h"] == vp["h"]
     assert pri["y"] == vp["y"] == hud["y"]
     assert pri["x"] + pri["w"] <= vp["x"]
@@ -1164,7 +1238,12 @@ def test_frame_layout_left_priorities_absent_below_left_gutter_floor():
     regions_left = frame_layout(42, LEFT_GUTTER_MIN_COLS + 2)
     assert regions_left["priorities"] is not None
     assert regions_left["priorities"]["w"] == PRIORITIES_MIN_W
-    assert regions_left["priorities"]["h"] == regions_left["viewport"]["h"]
+    form = regions_left["formations"]
+    assert form is not None
+    assert (
+        regions_left["priorities"]["h"] + form["h"]
+        == regions_left["viewport"]["h"]
+    )
 
 
 # -- WO-FA5a: hops (a real trade-loop chain) vs steps (a learned macro) ----
@@ -1337,7 +1416,11 @@ def test_frame_layout_band_grows_toward_double_height():
         == regions["viewport"]["y"] + regions["viewport"]["h"]
     )
     assert regions["priorities"] is not None
-    assert regions["priorities"]["h"] == regions["viewport"]["h"]
+    assert regions["formations"] is not None
+    assert (
+        regions["priorities"]["h"] + regions["formations"]["h"]
+        == regions["viewport"]["h"]
+    )
     assert regions["priorities"]["x"] < regions["viewport"]["x"]
 
 

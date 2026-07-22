@@ -217,6 +217,9 @@ BAND_H_MAX = 10
 # Prefer HUD: DECISIONS stays at DECISIONS_MIN_H so ship cells + METRICS
 # still fit (HUD_GUTTER_MIN_H=10 clipped METRICS — human 2026-07-22).
 HUD_GUTTER_MIN_H = VIEWPORT_H - DECISIONS_MIN_H  # 21
+# Left column: PRIORITIES (top) + FORMATIONS (bottom), mirroring HUD|DECISIONS.
+FORMATIONS_MIN_H = 6
+PRIORITIES_BODY_MIN_H = 10
 
 
 def frame_layout(lines: int, cols: int) -> dict:
@@ -270,6 +273,7 @@ def frame_layout(lines: int, cols: int) -> dict:
             "gutter": None,
             "decisions": None,
             "priorities": None,
+            "formations": None,
             "chain": None,
             "ticker": None,
             "control": None,
@@ -355,6 +359,7 @@ def frame_layout(lines: int, cols: int) -> dict:
     # Side gutters: PRIORITIES (left) | game | HUD (right). Never crush
     # the native viewport — left PRIORITIES only when both gutters fit.
     priorities = None
+    formations = None
     pri_w = 0
     if i_cols >= FULL_GUTTER_MIN_COLS:
         mode = "full"
@@ -381,10 +386,31 @@ def frame_layout(lines: int, cols: int) -> dict:
         viewport_x = ox
 
     if pri_w > 0:
+        # Split left column: PRIORITIES over FORMATIONS (mirror HUD|DECISIONS).
+        can_split = viewport_h >= FORMATIONS_MIN_H + PRIORITIES_BODY_MIN_H
+        form_h = 0
+        if can_split:
+            form_h = max(
+                FORMATIONS_MIN_H,
+                min(viewport_h // 3, viewport_h - PRIORITIES_BODY_MIN_H),
+            )
         priorities = {
-            "y": body_top, "x": ox, "w": pri_w, "h": viewport_h,
-            "title": "PRIORITIES", "border": True,
+            "y": body_top,
+            "x": ox,
+            "w": pri_w,
+            "h": viewport_h - form_h if form_h else viewport_h,
+            "title": "PRIORITIES",
+            "border": True,
         }
+        if form_h:
+            formations = {
+                "y": body_top + priorities["h"],
+                "x": ox,
+                "w": pri_w,
+                "h": form_h,
+                "title": "FORMATIONS",
+                "border": True,
+            }
 
     if gutter is not None:
         dec_h = max(DECISIONS_MIN_H, viewport_h - HUD_GUTTER_MIN_H)
@@ -431,6 +457,7 @@ def frame_layout(lines: int, cols: int) -> dict:
         "gutter": gutter,
         "decisions": decisions,
         "priorities": priorities,
+        "formations": formations,
         "chain": chain,
         "ticker": ticker,
         "control": control,
@@ -1433,6 +1460,105 @@ def compose_priorities_panel(
             lines.append("")
         lines.extend(compose_autonomy_footer_box(autonomy_lines, width=width))
     return lines
+
+
+# Doctrine blurbs (knowledge/doctrine/special-formations.md) — short why-it-matters.
+FORMATION_KIND_TITLE = {
+    "dead-end": "Dead-end",
+    "bubble": "Bubble",
+    "one-way": "One-way",
+    "warp-sink": "Warp sink",
+}
+FORMATION_KIND_WHY = {
+    "dead-end": "defend / hide planet",
+    "bubble": "sealed pocket / safe farm",
+    "one-way": "nav hazard — no reverse",
+    "warp-sink": "hazard — no way out",
+}
+
+
+def _formation_sectors_label(sectors, *, max_ids: int = 3) -> str:
+    try:
+        ids = [int(s) for s in (sectors or ())]
+    except (TypeError, ValueError):
+        return "?"
+    if not ids:
+        return "?"
+    shown = ids[:max_ids]
+    text = ",".join(str(s) for s in shown)
+    if len(ids) > max_ids:
+        text += "…"
+    return text
+
+
+def format_formation_entry(formation, *, width: int = 32) -> list[str]:
+    """One formation as 1–2 width-clipped lines (name @sectors, then why/detail)."""
+    width = max(8, int(width))
+    kind = getattr(formation, "kind", None)
+    if kind is None and isinstance(formation, dict):
+        kind = formation.get("kind")
+    kind = str(kind or "?")
+    title = FORMATION_KIND_TITLE.get(kind, kind)
+    if isinstance(formation, dict):
+        sectors = formation.get("sectors") or ()
+        detail = formation.get("detail") or ""
+        entrance = formation.get("entrance")
+    else:
+        sectors = getattr(formation, "sectors", ()) or ()
+        detail = getattr(formation, "detail", "") or ""
+        entrance = getattr(formation, "entrance", None)
+
+    where = _formation_sectors_label(sectors)
+    if entrance is not None and kind in ("dead-end", "bubble"):
+        head = f"{title} @{where} via {entrance}"
+    else:
+        head = f"{title} @{where}"
+    why = FORMATION_KIND_WHY.get(kind, "")
+    # Prefer detector detail when it adds more than the kind blurb.
+    blurb = str(detail).strip() if detail else why
+    if why and detail and why not in detail:
+        blurb = f"{why} · {detail}"
+    elif not blurb:
+        blurb = why or kind
+
+    lines = [head[:width]]
+    if blurb and width >= 16:
+        lines.append(("  " + blurb)[:width])
+    return lines
+
+
+def compose_formations_panel(formations, *, width: int = 32, max_lines: int = 12) -> list[str]:
+    """FORMATIONS box body — discovered topologies with short doctrine blurbs.
+
+    Truncates with ``+N more`` when entries exceed ``max_lines``. Empty catalog
+    shows a quiet placeholder (map more warps to detect shapes).
+    """
+    width = max(8, int(width))
+    max_lines = max(1, int(max_lines))
+    items = list(formations or ())
+    if not items:
+        return ["(none yet — map warps)"][:max_lines]
+
+    lines: list[str] = []
+    shown = 0
+    for i, formation in enumerate(items):
+        entry = format_formation_entry(formation, width=width)
+        remaining_after = max_lines - len(lines) - len(entry)
+        # Reserve one line for "+N more" when more formations follow.
+        need_more = i + 1 < len(items)
+        if need_more and remaining_after < 1:
+            left = len(items) - shown
+            if left > 0 and len(lines) < max_lines:
+                lines.append(f"+{left} more"[:width])
+            break
+        if len(lines) + len(entry) > max_lines:
+            left = len(items) - shown
+            if left > 0 and len(lines) < max_lines:
+                lines.append(f"+{left} more"[:width])
+            break
+        lines.extend(entry)
+        shown += 1
+    return lines[:max_lines]
 
 
 def compose_autonomy_headline(ratio_data: dict | None = None) -> dict:
@@ -2441,6 +2567,11 @@ def render_plain(dashboard: dict) -> str:
         lines.append(" PRIORITIES — goals + focus list")
         lines.append("-" * 80)
         lines.extend(dashboard["priorities"])
+    if dashboard.get("formations"):
+        lines.append("-" * 80)
+        lines.append(" FORMATIONS — discovered topologies")
+        lines.append("-" * 80)
+        lines.extend(dashboard["formations"])
     lines.append("-" * 80)
     lines.append(" EVENTS")
     lines.append("-" * 80)
