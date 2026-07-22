@@ -2163,6 +2163,7 @@ def _render(windows, regions, event, tracked, ticker_history, status, palette, g
                 current_sector=sector,
                 width=cols,
                 include_chain=not has_chain_box,
+                turns_left=(status or {}).get("turns_left"),
                 **_priority_engine_travel_hints(wid, current_sector=sector),
             )
             panel_title = "PRIORITIES"
@@ -2187,6 +2188,7 @@ def _render(windows, regions, event, tracked, ticker_history, status, palette, g
             current_sector=sector,
             width=pri_cols,
             include_chain=not has_chain_box,
+            turns_left=(status or {}).get("turns_left"),
             **_priority_engine_travel_hints(wid, current_sector=sector),
         )
         _draw_decisions(
@@ -2343,6 +2345,7 @@ def run_snapshot(sock_path, pid_path, frames=1, settle_wait_s=8.0):
                 autonomy_lines=format_autonomy_lines(auto),
                 current_sector=sector,
                 width=40,
+                turns_left=status.get("turns_left"),
                 **_priority_engine_travel_hints(wid, current_sector=sector),
             )
             formation_list = ()

@@ -1262,17 +1262,20 @@ def build_priority_engine_inputs(
     turn_reserve: int = 0,
     turns_per_warp: int = 1,
     explore_available=None,
+    turns_left=None,
 ) -> dict:
     """Adapter: spectate-visible data → ``recommend_actions()`` kwargs.
 
-    Pulls turns/sector from trace context, chain economics from the panel
-    chain object (fallback: ungated trace EV), and optional world-model
-    travel legs (StarDock route + return-to-chain-start).
+    Pulls turns/sector from trace context (or explicit ``turns_left`` from
+    daemon status / HUD), chain economics from the panel chain object
+    (fallback: ungated trace EV), and optional world-model travel legs
+    (StarDock route + return-to-chain-start).
     """
     from .priority_engine import compute_return_path, hops_of_path
 
     ctx = (_trace_field(trace, "context") or {}) if trace else {}
-    turns_left = ctx.get("turns_left")
+    if turns_left is None:
+        turns_left = ctx.get("turns_left")
     if turns_left is not None:
         try:
             turns_left = int(turns_left)

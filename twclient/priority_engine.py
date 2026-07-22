@@ -219,9 +219,9 @@ def recommend_actions(
     Unknowns fail-closed — never guess StarDock distance or return path.
 
     ``chain_link_count`` is ``len(ProfitChain.hops)`` (a 3-link cycle has
-    three hops). Execute requires ≥ ``min_chain_links_to_execute`` (default 3).
+    three hops). Execute requires ≥ ``min_chain_links_to_execute`` (default 2).
     Ship hull upgrades wait until ≥ ``min_chain_links_for_ship_upgrade``
-    (default 4) so a 3-link chain funds fighters/holds first.
+    (default 4) so a short chain funds fighters/holds first.
     """
     scores: list[PriorityScore] = []
     notes: list[str] = []
@@ -239,7 +239,33 @@ def recommend_actions(
         links = 0
 
     # --- run_chain ---
-    if chain_cr_per_turn is None:
+    # Presence-seed / port path ≥ execute floor but no priced cycle yet:
+    # ungate Trade above Explore (Max 2026-07-22). Autopilot still needs a
+    # real ProfitChain to keystroke-trade; this is FOCUS ranking only.
+    if (
+        chain_cr_per_turn is None
+        and links is not None
+        and links >= min_chain_links_to_execute
+    ):
+        pending_ev = float(explore_baseline_ev) * 2.0
+        scores.append(
+            PriorityScore(
+                kind="run_chain",
+                ev_per_turn=pending_ev,
+                gated=False,
+                rationale=(
+                    f"trade path {links}-link (prices pending — dock ports to price)"
+                ),
+                weight=40,
+            )
+        )
+        earn_vs_search = (
+            f"earn: {links}-link path known; price ports "
+            f"(explore secondary)"
+            if explore_available
+            else f"earn: {links}-link path known; no frontier"
+        )
+    elif chain_cr_per_turn is None:
         scores.append(
             PriorityScore(
                 kind="run_chain",

@@ -173,6 +173,23 @@ def test_two_link_prefers_earn_over_explore():
     assert rec.focus.kind == "run_chain"
 
 
+def test_two_link_path_pending_prices_ungates_over_explore():
+    """Presence-seed / unpriced port path ≥2 links: no ⊘; Trade above Explore."""
+    rec = recommend_actions(
+        chain_cr_per_turn=None,
+        chain_link_count=2,
+        turns_left=None,
+        explore_available=True,
+    )
+    chain = next(s for s in rec.ranked if s.kind == "run_chain")
+    assert chain.gated is False
+    assert "prices pending" in chain.rationale
+    assert rec.focus.kind == "run_chain"
+    explore = next(s for s in rec.ranked if s.kind == "explore")
+    assert explore.gated is False
+    assert chain.ev_per_turn > explore.ev_per_turn
+
+
 def test_three_link_prefers_earn_for_fighters_and_holds():
     """At 3 links, grind the chain (cash for fighters/holds) — do not hunt first."""
     from twclient.priority_engine import prefer_search_over_earn
