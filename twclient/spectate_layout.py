@@ -133,9 +133,16 @@ VIEWPORT_W, VIEWPORT_H = GAME_W + 2, GAME_H + 2  # 82 x 26
 # WO-TUI-HUD-POLISH: wide enough for CREDITS value + freshness (+ spark)
 # on one line without wrap/truncate at full/right_gutter tiers.
 HUD_GUTTER_W = 36  # exactly VIEWPORT_W + HUD_GUTTER_W = 118, the right_gutter floor below
+# WO-TUI-PRIORITIES-LEFT: tall left gutter mirroring HUD (not bottom-band).
+# Title " PRIORITIES " + borders needs ~20 cols; keep weigh lines readable.
+PRIORITIES_W = 24
+PRIORITIES_MIN_W = 20
 MINIMAL_HEADER_MIN_COLS = 82   # == VIEWPORT_W: the floor at which a bordered viewport fits at all
-RIGHT_GUTTER_MIN_COLS = 118    # == VIEWPORT_W + HUD_GUTTER_W: viewport + one gutter, zero-margin fit
-FULL_GUTTER_MIN_COLS = 142     # right_gutter's fit PLUS a comfortable centered margin (visual symmetry)
+RIGHT_GUTTER_MIN_COLS = 118    # == VIEWPORT_W + HUD_GUTTER_W: viewport + right HUD, zero-margin fit
+# full = viewport + both side gutters (PRIORITIES left + HUD right), zero-margin fit
+FULL_GUTTER_MIN_COLS = VIEWPORT_W + HUD_GUTTER_W + PRIORITIES_W  # 142
+# left PRIORITIES appears once both side gutters + viewport fit (may shrink pri_w)
+LEFT_GUTTER_MIN_COLS = VIEWPORT_W + HUD_GUTTER_W + PRIORITIES_MIN_W  # 138
 MIN_COLS = 60
 MIN_LINES = 20
 # TW-08: one-cell outer frame around the whole client. Layout math uses
@@ -155,10 +162,9 @@ CHAIN_VIZ_H = 5
 # (one legible pane beats two illegible ones).
 DECISIONS_MIN_H = 5
 BAND_H_MAX = 10
-# WO-TUI-PRIORITIES: dedicated bottom-band box (not folded into GOALS).
-# Title " PRIORITIES " + borders needs ~20 cols; keep weigh lines readable.
-PRIORITIES_W = 24
-PRIORITIES_MIN_W = 20
+# WO-TUI-DECISIONS-HUD-ALIGN: when a right HUD gutter exists, DECISIONS
+# shares that column (HUD width, bottom aligned with the column base).
+HUD_GUTTER_MIN_H = 10
 
 
 def frame_layout(lines: int, cols: int) -> dict:
@@ -175,8 +181,9 @@ def frame_layout(lines: int, cols: int) -> dict:
     Ladder (cols-driven; height degrades by dropping header/ticker, then
     the control strip, then the viewport's own border, before ever
     falling to "too_small"):
-      >=132  "full"          -- bordered viewport, CENTERED, + a right HUD gutter
-      >=108  "right_gutter"  -- bordered viewport (left-anchored) + a right HUD gutter
+      >=142  "full"          -- PRIORITIES | centered game | HUD (both side gutters)
+      >=118  "right_gutter"  -- bordered viewport (left-anchored) + right HUD;
+                               left PRIORITIES when cols >= LEFT_GUTTER_MIN_COLS (138)
       >=82   "minimal"       -- bordered viewport, centered, no side gutter
       >=60   "no_border"     -- viewport border dropped, game full-bleed/clipped
       else   "too_small"     -- refuse to render, existing message
@@ -191,10 +198,12 @@ def frame_layout(lines: int, cols: int) -> dict:
 
     When leftover height allows, a bubble-chain region sits directly under
     the viewport (WO-TUI-CHAIN-BUBBLES), centered on the game window; the
-    remaining leftover band below splits into titled LOG + PRIORITIES +
-    DECISIONS when width allows (CHAIN column removed — width returned to
-    the band). The bottom log ("ticker") is always a titled "LOG" box when
-    present.
+    remaining leftover band below splits into titled LOG + DECISIONS when
+    width allows (no right HUD gutter). With a right HUD gutter,
+    DECISIONS shares that column at HUD width with its bottom aligned to
+    the column base (WO-TUI-DECISIONS-HUD-ALIGN). PRIORITIES is a tall
+    left gutter (WO-TUI-PRIORITIES-LEFT), not a bottom-band column. The
+    bottom log ("ticker") is always a titled "LOG" box when present.
     """
     if lines < MIN_LINES or cols < MIN_COLS:
         return {
@@ -239,6 +248,7 @@ def frame_layout(lines: int, cols: int) -> dict:
         body_top = oy + 1
 
     leftover = body_lines - viewport_h - (1 if header else 0)
+    has_right_gutter = i_cols >= RIGHT_GUTTER_MIN_COLS
 
     control = None
     if leftover >= 1:
@@ -255,47 +265,33 @@ def frame_layout(lines: int, cols: int) -> dict:
 
     ticker = None
     decisions = None
-    priorities = None
     # TW-08: leftover band hosts titled LOG; when tall/wide enough, split
-    # side-by-side with PRIORITIES + DECISIONS. HUD gutter stays full
-    # viewport height. PRIORITIES is its own box (Max 2026-07-22) — never
-    # folded into GOALS / never preempted by the DECISIONS slot rotation.
+    # side-by-side with DECISIONS. Side gutters (PRIORITIES left / HUD right)
+    # stay full viewport height. PRIORITIES is never folded into GOALS and
+    # never preempted by the DECISIONS slot rotation.
     if leftover >= LOG_BOX_MIN_H:
         band_h = min(BAND_H_MAX, leftover)
         band_y = status["y"] - (1 if control else 0) - band_h
-        if i_cols >= 60 and leftover >= DECISIONS_MIN_H:
+        if (
+            not has_right_gutter
+            and i_cols >= 60
+            and leftover >= DECISIONS_MIN_H
+        ):
             # Wider DECISIONS (~2× old content rows via BAND_H_MAX); keep LOG
-            # wide enough that settle/TX suffixes remain readable. Bottom
-            # CHAIN column is gone — its width returns to the band.
+            # wide enough that settle/TX suffixes remain readable. When a
+            # right HUD gutter exists, DECISIONS moves into that column instead
+            # (WO-TUI-DECISIONS-HUD-ALIGN).
             dec_w = min(32, max(20, i_cols // 4))
             log_floor = 36
-            pri_w = PRIORITIES_W
-            if i_cols - dec_w - pri_w < log_floor:
-                # Prefer keeping PRIORITIES: shrink dec, then pri, then drop pri.
-                room = i_cols - log_floor
-                if room >= PRIORITIES_MIN_W + 20:
-                    pri_w = PRIORITIES_MIN_W
-                    dec_w = max(20, min(dec_w, room - pri_w))
-                elif room >= 20:
-                    pri_w = 0
-                    dec_w = max(20, min(dec_w, room))
-                else:
-                    pri_w = 0
-                    dec_w = max(20, min(dec_w, i_cols - log_floor))
-            log_w = i_cols - dec_w - pri_w
+            if i_cols - dec_w < log_floor:
+                dec_w = max(20, min(dec_w, i_cols - log_floor))
+            log_w = i_cols - dec_w
             ticker = {
                 "y": band_y, "x": ox, "w": log_w, "h": band_h,
                 "title": "LOG", "border": True,
             }
-            x_cursor = ox + log_w
-            if pri_w > 0:
-                priorities = {
-                    "y": band_y, "x": x_cursor, "w": pri_w, "h": band_h,
-                    "title": "PRIORITIES", "border": True,
-                }
-                x_cursor += pri_w
             decisions = {
-                "y": band_y, "x": x_cursor, "w": dec_w, "h": band_h,
+                "y": band_y, "x": ox + log_w, "w": dec_w, "h": band_h,
                 "title": "DECISIONS", "border": True,
             }
         else:
@@ -304,10 +300,21 @@ def frame_layout(lines: int, cols: int) -> dict:
                 "title": "LOG", "border": True,
             }
 
+    # Side gutters: PRIORITIES (left) | game | HUD (right). Never crush
+    # the native viewport — left PRIORITIES only when both gutters fit.
+    priorities = None
+    pri_w = 0
     if i_cols >= FULL_GUTTER_MIN_COLS:
         mode = "full"
+        pri_w = PRIORITIES_W
         gutter = {"y": body_top, "x": ox + i_cols - HUD_GUTTER_W, "w": HUD_GUTTER_W, "h": viewport_h}
-        viewport_x = ox + max(0, (i_cols - viewport_w - HUD_GUTTER_W) // 2)
+        middle = i_cols - pri_w - HUD_GUTTER_W
+        viewport_x = ox + pri_w + max(0, (middle - viewport_w) // 2)
+    elif i_cols >= LEFT_GUTTER_MIN_COLS:
+        mode = "right_gutter"
+        pri_w = PRIORITIES_MIN_W
+        gutter = {"y": body_top, "x": ox + i_cols - HUD_GUTTER_W, "w": HUD_GUTTER_W, "h": viewport_h}
+        viewport_x = ox + pri_w  # left-anchored after PRIORITIES
     elif i_cols >= RIGHT_GUTTER_MIN_COLS:
         mode = "right_gutter"
         gutter = {"y": body_top, "x": ox + i_cols - HUD_GUTTER_W, "w": HUD_GUTTER_W, "h": viewport_h}
@@ -320,6 +327,24 @@ def frame_layout(lines: int, cols: int) -> dict:
         mode = "no_border"
         gutter = None
         viewport_x = ox
+
+    if pri_w > 0:
+        priorities = {
+            "y": body_top, "x": ox, "w": pri_w, "h": viewport_h,
+            "title": "PRIORITIES", "border": True,
+        }
+
+    if gutter is not None:
+        dec_h = max(DECISIONS_MIN_H, viewport_h - HUD_GUTTER_MIN_H)
+        gutter["h"] = viewport_h - dec_h
+        decisions = {
+            "y": body_top + gutter["h"],
+            "x": gutter["x"],
+            "w": HUD_GUTTER_W,
+            "h": dec_h,
+            "title": "DECISIONS",
+            "border": True,
+        }
 
     viewport = {
         "y": body_top,
@@ -1441,8 +1466,8 @@ def compose_phase2_side_panel(
     When a dedicated CHAIN region exists (WO-TUI-CHAIN-BOX), callers pass
     ``include_chain=False`` so DECISIONS keeps GOALS/autonomy only.
 
-    PRIORITIES lives in its own titled box (``regions["priorities"]``) —
-    never folded here (Max 2026-07-22).
+    PRIORITIES lives in its own titled left-gutter box (``regions["priorities"]``) —
+    never folded here (Max 2026-07-22 / WO-TUI-PRIORITIES-LEFT).
     """
     lines = ["— GOALS —"]
     lines.extend(compose_primary_goals_lines(goals_snap, width=width))

@@ -11,11 +11,13 @@ from twclient.spectate_layout import (
     DECISIONS_MIN_H,
     FRESHNESS_STALE_S,
     FULL_GUTTER_MIN_COLS,
+    LEFT_GUTTER_MIN_COLS,
     PRIORITIES_MIN_W,
     PRIORITIES_W,
     GAME_H,
     GAME_W,
     HUD_GUTTER_W,
+    HUD_GUTTER_MIN_H,
     LOG_BOX_MIN_H,
     MINIMAL_HEADER_MIN_COLS,
     RIGHT_GUTTER_MIN_COLS,
@@ -280,11 +282,18 @@ def test_frame_layout_right_gutter_tier_left_anchors_viewport():
     assert gutter is not None
     # viewport and gutter never overlap
     assert gutter["x"] >= vp["x"] + vp["w"]
-    # Decisions/CHAIN (when present) share the leftover band with LOG, not the gutter
-    if regions["decisions"] is not None and regions["ticker"] is not None:
+    # Decisions lives in the right HUD column when a gutter exists.
+    if regions["decisions"] is not None and regions["gutter"] is not None:
+        dec = regions["decisions"]
+        hud = regions["gutter"]
+        assert dec["x"] == hud["x"]
+        assert dec["w"] == HUD_GUTTER_W == hud["w"]
+        assert dec["y"] == hud["y"] + hud["h"]
+        assert dec["y"] + dec["h"] == vp["y"] + vp["h"]
+        assert hud["h"] == vp["h"] - dec["h"]
+    elif regions["decisions"] is not None and regions["ticker"] is not None:
         assert regions["decisions"]["y"] == regions["ticker"]["y"]
         assert regions["decisions"]["x"] >= regions["ticker"]["x"] + regions["ticker"]["w"]
-        assert gutter["h"] == vp["h"]  # gutter keeps full viewport height
     if regions.get("chain") is not None:
         # WO-TUI-CHAIN-BUBBLES: under viewport, centered on game window
         assert regions["chain"]["title"] is None
@@ -305,15 +314,22 @@ def test_frame_layout_full_tier_centers_viewport_with_right_gutter():
     assert vp["x"] > 1  # centered inside inset, not left-anchored like right_gutter
     assert regions["outer"] is not None
     assert regions["outer"]["w"] == FULL_GUTTER_MIN_COLS + 2
-    # WO-TUI-CHAIN-BUBBLES: under-viewport chain + LOG|PRIORITIES|DECISIONS band
+    # WO-TUI-CHAIN-BUBBLES: under-viewport chain + LOG|DECISIONS band
+    # WO-TUI-PRIORITIES-LEFT: PRIORITIES is a tall left gutter (not bottom-band)
     assert regions["chain"] is not None
     assert regions["decisions"] is not None
     assert regions["priorities"] is not None
     assert regions["priorities"]["title"] == "PRIORITIES"
-    assert regions["ticker"]["h"] == regions["decisions"]["h"]
+    assert regions["priorities"]["h"] == regions["viewport"]["h"]
+    assert regions["priorities"]["x"] < regions["viewport"]["x"]
     assert regions["ticker"]["h"] >= 5
-    assert regions["decisions"]["w"] >= 20
-    assert regions["decisions"]["w"] <= 32
+    assert regions["decisions"]["w"] == HUD_GUTTER_W
+    assert regions["decisions"]["h"] >= DECISIONS_MIN_H
+    assert (
+        regions["decisions"]["y"] + regions["decisions"]["h"]
+        == regions["viewport"]["y"] + regions["viewport"]["h"]
+    )
+    assert regions["ticker"]["w"] == FULL_GUTTER_MIN_COLS
     assert regions["chain"]["h"] == CHAIN_VIZ_H
     assert regions["chain"]["title"] is None
     assert regions["chain"]["y"] == regions["viewport"]["y"] + regions["viewport"]["h"]
@@ -511,6 +527,8 @@ def test_hud_gutter_width_floor_fits_credits_freshness():
     """WO-TUI-HUD-POLISH: pin HUD_GUTTER_W ≥34 and tier floors stay coherent."""
     assert HUD_GUTTER_W >= 34
     assert RIGHT_GUTTER_MIN_COLS == VIEWPORT_W + HUD_GUTTER_W
+    assert FULL_GUTTER_MIN_COLS == VIEWPORT_W + HUD_GUTTER_W + PRIORITIES_W
+    assert LEFT_GUTTER_MIN_COLS == VIEWPORT_W + HUD_GUTTER_W + PRIORITIES_MIN_W
     assert FULL_GUTTER_MIN_COLS >= RIGHT_GUTTER_MIN_COLS
     regions = frame_layout(36, RIGHT_GUTTER_MIN_COLS + 2)
     assert regions["mode"] == "right_gutter"
@@ -869,26 +887,55 @@ def test_compose_phase2_side_panel_does_not_fold_priorities():
     assert "Trade chain" not in "\n".join(panel)
 
 
-def test_frame_layout_full_tier_has_dedicated_priorities_box():
-    """Bottom band is LOG | PRIORITIES | DECISIONS at full tier."""
+def test_frame_layout_full_tier_has_left_priorities_gutter():
+    """WO-TUI-PRIORITIES-LEFT: PRIORITIES | game | HUD (not bottom-band)."""
     regions = frame_layout(42, FULL_GUTTER_MIN_COLS + 2)
-    assert regions["priorities"] is not None
-    assert regions["priorities"]["title"] == "PRIORITIES"
-    assert regions["priorities"]["border"] is True
-    assert regions["priorities"]["h"] == regions["decisions"]["h"]
-    assert regions["priorities"]["y"] == regions["decisions"]["y"]
-    assert regions["ticker"]["x"] + regions["ticker"]["w"] == regions["priorities"]["x"]
-    assert (
-        regions["priorities"]["x"] + regions["priorities"]["w"]
-        == regions["decisions"]["x"]
-    )
-    assert (
-        regions["decisions"]["x"] + regions["decisions"]["w"]
-        == regions["ticker"]["x"]
-        + regions["ticker"]["w"]
-        + regions["priorities"]["w"]
-        + regions["decisions"]["w"]
-    )
+    pri = regions["priorities"]
+    vp = regions["viewport"]
+    hud = regions["gutter"]
+    assert pri is not None
+    assert pri["title"] == "PRIORITIES"
+    assert pri["border"] is True
+    assert pri["w"] == PRIORITIES_W
+    assert pri["h"] == vp["h"]
+    assert hud["h"] + regions["decisions"]["h"] == vp["h"]
+    assert pri["y"] == vp["y"] == hud["y"]
+    assert pri["x"] + pri["w"] <= vp["x"]
+    assert vp["x"] + vp["w"] <= hud["x"]
+    dec = regions["decisions"]
+    assert dec["x"] == hud["x"]
+    assert dec["w"] == HUD_GUTTER_W
+    assert dec["y"] == hud["y"] + hud["h"]
+    assert dec["y"] + dec["h"] == vp["y"] + vp["h"]
+    # Bottom band is LOG only — DECISIONS is in the right HUD column.
+    assert regions["ticker"]["w"] == FULL_GUTTER_MIN_COLS
+
+
+def test_frame_layout_decisions_hud_aligned_in_right_column():
+    """WO-TUI-DECISIONS-HUD-ALIGN: DECISIONS width matches HUD; bottom aligns."""
+    regions = frame_layout(42, FULL_GUTTER_MIN_COLS + 2)
+    dec = regions["decisions"]
+    hud = regions["gutter"]
+    vp = regions["viewport"]
+    assert dec is not None and hud is not None
+    assert dec["w"] == HUD_GUTTER_W == hud["w"]
+    assert dec["x"] == hud["x"]
+    assert dec["y"] == hud["y"] + hud["h"]
+    assert dec["y"] + dec["h"] == vp["y"] + vp["h"]
+    assert dec["h"] == max(DECISIONS_MIN_H, vp["h"] - HUD_GUTTER_MIN_H)
+    assert regions["ticker"]["w"] == FULL_GUTTER_MIN_COLS
+
+
+def test_frame_layout_left_priorities_absent_below_left_gutter_floor():
+    """Right HUD alone (118) — no left PRIORITIES until LEFT_GUTTER_MIN_COLS."""
+    regions = frame_layout(42, RIGHT_GUTTER_MIN_COLS + 2)
+    assert regions["mode"] == "right_gutter"
+    assert regions["gutter"] is not None
+    assert regions["priorities"] is None
+    regions_left = frame_layout(42, LEFT_GUTTER_MIN_COLS + 2)
+    assert regions_left["priorities"] is not None
+    assert regions_left["priorities"]["w"] == PRIORITIES_MIN_W
+    assert regions_left["priorities"]["h"] == regions_left["viewport"]["h"]
 
 
 # -- WO-FA5a: hops (a real trade-loop chain) vs steps (a learned macro) ----
@@ -1024,22 +1071,22 @@ def test_frame_layout_band_grows_toward_double_height():
     lines = VIEWPORT_H + 20 + 2
     regions = frame_layout(lines, FULL_GUTTER_MIN_COLS + 2)
     assert regions["ticker"]["h"] == 10
-    assert regions["decisions"]["h"] == 10
+    assert regions["decisions"]["h"] == max(DECISIONS_MIN_H, VIEWPORT_H - HUD_GUTTER_MIN_H)
+    assert regions["decisions"]["w"] == HUD_GUTTER_W
     assert regions["chain"] is not None
     assert regions["chain"]["h"] == CHAIN_VIZ_H
     assert regions["chain"]["y"] == regions["viewport"]["y"] + regions["viewport"]["h"]
     assert regions["chain"]["x"] == regions["viewport"]["x"]
     assert regions["chain"]["w"] == regions["viewport"]["w"]
-    assert 20 <= regions["decisions"]["w"] <= 32
-    assert regions["priorities"] is not None
-    assert regions["ticker"]["x"] + regions["ticker"]["w"] == regions["priorities"]["x"]
-    assert regions["priorities"]["x"] + regions["priorities"]["w"] == regions["decisions"]["x"]
-    assert regions["decisions"]["x"] + regions["decisions"]["w"] == (
-        regions["ticker"]["x"]
-        + regions["ticker"]["w"]
-        + regions["priorities"]["w"]
-        + regions["decisions"]["w"]
+    # LOG spans full band; DECISIONS is in the right HUD column.
+    assert regions["ticker"]["w"] == FULL_GUTTER_MIN_COLS
+    assert (
+        regions["decisions"]["y"] + regions["decisions"]["h"]
+        == regions["viewport"]["y"] + regions["viewport"]["h"]
     )
+    assert regions["priorities"] is not None
+    assert regions["priorities"]["h"] == regions["viewport"]["h"]
+    assert regions["priorities"]["x"] < regions["viewport"]["x"]
 
 
 def test_render_plain_includes_phase2_sections():
