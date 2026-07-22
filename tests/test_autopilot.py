@@ -202,17 +202,27 @@ def _cruiser():
 def _profit_chain_hops(margin=50):
     # A trivial 2-sector round trip, cr/turn = (margin*2)/(1+1) = margin.
     # NOTE: only 2 hops — below priority_engine's MIN_CHAIN_LINKS_TO_EXECUTE (3).
-    # Use `_viable_chain_hops()` in tests that want the chain to WIN selection.
+    # Use `_three_link_chain_hops()` / `_viable_chain_hops()` when the chain
+    # must be a live run_chain candidate.
     return [
         TradeHop(frm=100, to=200, commodity="Fuel Ore", margin=margin, turns=1),
         TradeHop(frm=200, to=100, commodity="Organics", margin=margin, turns=1),
     ]
 
 
+def _three_link_chain_hops(margin=50):
+    # Closed triangle: meets MIN_CHAIN_LINKS_TO_EXECUTE (3).
+    # cr/turn = (margin*3)/3 = margin.  sectors: 100→200→300→100.
+    return [
+        TradeHop(frm=100, to=200, commodity="Fuel Ore", margin=margin, turns=1),
+        TradeHop(frm=200, to=300, commodity="Organics", margin=margin, turns=1),
+        TradeHop(frm=300, to=100, commodity="Equipment", margin=margin, turns=1),
+    ]
+
+
 def _viable_chain_hops(margin=50):
-    # 5-sector cycle: meets MIN_CHAIN_LINKS_TO_EXECUTE (3) AND is ≥
-    # CHAIN_LINKS_PREFER_SEARCH_BELOW (5), so the priority engine
-    # treats it as executable AND prefers earn over explore.
+    # 5-sector cycle: meets MIN_CHAIN_LINKS_TO_EXECUTE (3); long enough
+    # that hop-count ranking prefers it over shorter discovery cycles.
     # cr/turn = (margin*5)/(1+1+1+1+1) = margin.  sectors: 100→200→300→400→500→100.
     return [
         TradeHop(frm=100, to=200, commodity="Fuel Ore", margin=margin, turns=1),
@@ -281,23 +291,26 @@ def test_select_reports_no_candidates_when_truly_nothing_available():
     assert decision.reason == "no_candidates"
 
 
-def test_select_picks_upgrade_over_a_weak_chain_when_upgrade_ev_is_higher():
+def test_select_picks_upgrade_when_no_executable_chain():
+    """2-link hops are discovery-only (`_score_chain` skips); upgrade
+    then beats explore on EV without a PE stay-on-chain override."""
     snap = WorldSnapshot(
         sector=None, credits=60_000, turns_left=5000,
         current_ship=_barge(),
         ship_catalog=(_cruiser(),),
         loop=_loop_econ(),
-        hops=tuple(_profit_chain_hops(margin=50)),  # weak chain: 50 cr/turn
+        hops=tuple(_profit_chain_hops(margin=50)),  # below execute floor
         stardock_route=(100, 150, 999),  # 2 hops to StarDock
         explore_next_sector=1,
     )
     decision = select(snap)
     assert decision.chosen is not None
     assert decision.chosen.kind == "upgrade"
-    # HIGH-1 formula: (75-20 holds) * 100 margin / 10 turns_per_cycle = 550 cr/turn, well above the 50cr/turn chain.
+    # HIGH-1 formula: (75-20 holds) * 100 margin / 10 turns_per_cycle = 550 cr/turn.
     assert decision.chosen.ev_per_turn == 550.0
     kinds = {c.kind for c in decision.candidates}
-    assert kinds == {"run_chain", "upgrade", "explore"}
+    assert kinds == {"upgrade", "explore"}
+    assert all(c.kind != "run_chain" for c in decision.candidates)
 
 
 def test_select_skips_upgrade_when_stardock_prices_are_unknown():
@@ -357,18 +370,46 @@ def test_upgrade_travel_cost_uses_current_ships_turns_per_warp_not_a_constant():
 
 
 def test_select_respects_turn_reserve_floor_for_chains():
+    # 3-link chain (turns=3) so the link-count floor is not what skips.
     snap = WorldSnapshot(
-        sector=None, credits=None, turns_left=52,  # productive = 52 - 50(default reserve) = 2 == chain.turns (2)
-        hops=tuple(_profit_chain_hops(margin=50)),
+        sector=None, credits=None, turns_left=53,  # productive = 53 - 50 = 3 == chain.turns
+        hops=tuple(_three_link_chain_hops(margin=50)),
     )
     # Exactly at the edge (productive == chain.turns) must still be eligible.
     decision = select(snap)
     assert any(c.kind == "run_chain" for c in decision.candidates)
 
-    tight = WorldSnapshot(sector=None, credits=None, turns_left=51, hops=tuple(_profit_chain_hops(margin=50)))
+    tight = WorldSnapshot(
+        sector=None, credits=None, turns_left=52,
+        hops=tuple(_three_link_chain_hops(margin=50)),
+    )
     decision2 = select(tight, EconCaps(turn_reserve=50))
     assert all(c.kind != "run_chain" for c in decision2.candidates)
     assert any("turn-reserve floor" in s for s in decision2.skipped)
+
+
+def test_score_chain_skips_below_min_chain_links_to_execute():
+    """WO-SCORE-CHAIN-FIX: 2-link cycles are discovery-only, not candidates."""
+    from twclient.autopilot import _score_chain
+    from twclient.priority_engine import MIN_CHAIN_LINKS_TO_EXECUTE
+
+    snap = WorldSnapshot(
+        sector=100, credits=None, turns_left=5000,
+        hops=tuple(_profit_chain_hops(margin=50)),
+    )
+    cand, reason = _score_chain(snap, EconCaps())
+    assert cand is None
+    assert reason is not None
+    assert f"≥{MIN_CHAIN_LINKS_TO_EXECUTE}-link" in reason
+    assert "have 2" in reason
+
+    ok_snap = WorldSnapshot(
+        sector=100, credits=None, turns_left=5000,
+        hops=tuple(_three_link_chain_hops(margin=50)),
+    )
+    cand2, reason2 = _score_chain(ok_snap, EconCaps())
+    assert cand2 is not None and cand2.kind == "run_chain"
+    assert reason2 is None
 
 
 # -- MED fail-closed: an UNKNOWN input must skip, never bypass a gate ----
@@ -379,10 +420,14 @@ def test_select_fails_closed_on_unknown_turns_left_for_chains():
     turn-BUDGET check entirely and let the chain through with the
     turn-reserve floor silently disabled. Must now skip the candidate
     outright instead."""
-    hops = (
-        TradeHop(frm=100, to=200, commodity="Fuel Ore", margin=50, turns=200),
-        TradeHop(frm=200, to=100, commodity="Organics", margin=50, turns=200),
-    )  # chain.turns = 400 -- would need an enormous budget
+    hops = tuple(
+        TradeHop(frm=a, to=b, commodity=c, margin=50, turns=200)
+        for a, b, c in (
+            (100, 200, "Fuel Ore"),
+            (200, 300, "Organics"),
+            (300, 100, "Equipment"),
+        )
+    )  # 3-link; chain.turns = 600 — link floor cleared, turn budget is the gate
     snap = WorldSnapshot(sector=None, credits=None, turns_left=None, hops=hops)
     decision = select(snap)
     assert all(c.kind != "run_chain" for c in decision.candidates)
@@ -535,8 +580,8 @@ def test_high1_poc6_ranking_is_stable_regardless_of_current_ships_warp():
 
 
 def test_select_priority_engine_prefers_explore_over_short_chain():
-    """A 2-hop chain is below MIN_CHAIN_LINKS_TO_EXECUTE (3); the priority
-    engine gates it and promotes explore when a frontier hop exists."""
+    """A 2-hop chain is below MIN_CHAIN_LINKS_TO_EXECUTE (3): `_score_chain`
+    skips it (discovery-only) and explore wins when a frontier hop exists."""
     snap = WorldSnapshot(
         sector=None, credits=None, turns_left=1000,
         hops=tuple(_profit_chain_hops(margin=50)),  # 2 hops — below execute floor
@@ -545,11 +590,10 @@ def test_select_priority_engine_prefers_explore_over_short_chain():
     decision = select(snap)
     assert decision.chosen is not None
     assert decision.chosen.kind == "explore", (
-        "priority engine should gate a 2-link chain and promote explore"
+        "2-link chain must not be a live candidate; explore should win"
     )
-    # run_chain is still a SCORED candidate (just demoted), not silently skipped
-    assert any(c.kind == "run_chain" for c in decision.candidates)
-    assert "priority engine" in decision.reason
+    assert all(c.kind != "run_chain" for c in decision.candidates)
+    assert any("≥3-link" in s or "discovery only" in s for s in decision.skipped)
 
 
 def test_select_priority_engine_gates_upgrade_when_chain_active_and_return_path_unknown():
@@ -576,18 +620,14 @@ def test_select_priority_engine_gates_upgrade_when_chain_active_and_return_path_
 
 
 def test_select_priority_engine_falls_back_to_ev_when_no_explore_and_short_chain():
-    """With a 2-hop chain and NO explore frontier, engine focus=None → fall
-    back to pure EV ranking → run_chain still wins (nothing else available)."""
+    """With a 3-link chain and NO explore frontier, earn wins on run_chain."""
     snap = WorldSnapshot(
         sector=None, credits=None, turns_left=1000,
-        hops=tuple(_profit_chain_hops(margin=50)),  # 2 hops but no explore fallback
+        hops=tuple(_three_link_chain_hops(margin=50)),
     )
     decision = select(snap)
     assert decision.chosen is not None
-    assert decision.chosen.kind == "run_chain", (
-        "with no explore available, engine focus=None, EV ranking preserved"
-    )
-    assert "highest EV" in decision.reason  # NOT a priority-engine override
+    assert decision.chosen.kind == "run_chain"
 
 
 # -- HIGH-2: classify-gate before every send -----------------------------

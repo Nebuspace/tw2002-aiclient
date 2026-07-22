@@ -487,11 +487,20 @@ def _score_chain(snapshot: WorldSnapshot, caps: EconCaps) -> tuple[Optional[Cand
     # on the strict `credits_snapshot()` source + re-confirm the balance
     # per-buy (the real per-spend precision belongs there, not here). Do
     # NOT read this as "run_chain is credit-gated" -- it isn't.
+    from .priority_engine import MIN_CHAIN_LINKS_TO_EXECUTE
+
     if not snapshot.hops:
         return None, None
     chain = longest_profit_chain(snapshot.hops)
     if chain is None:
         return None, "run_chain: no profitable cycle in known hops"
+    # Canon / priority_engine.md: < MIN_CHAIN_LINKS_TO_EXECUTE is discovery
+    # only — do not emit a live run_chain candidate (WO-SCORE-CHAIN-FIX).
+    if len(chain.hops) < MIN_CHAIN_LINKS_TO_EXECUTE:
+        return None, (
+            f"run_chain: need ≥{MIN_CHAIN_LINKS_TO_EXECUTE}-link chain "
+            f"(have {len(chain.hops)}) — discovery only"
+        )
     # MED fail-closed fix (mack M-a): an UNKNOWN turn budget must skip
     # this candidate outright, never silently disable the turn-reserve
     # floor the way `if turns_left is not None: <only then check>` used
