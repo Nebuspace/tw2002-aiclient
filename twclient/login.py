@@ -105,6 +105,14 @@ _STAGNANT_ROUNDS_LIMIT = 3
 # (DESIGN-v2.md §3 v2.1 item 3 + this project's session logs).
 _SHOW_LOG_RE = re.compile(r"show\s+today.?s\s+log", re.I)
 _INACTIVITY_RE = re.compile(r"inactivity\s+warning|critical\s+inactivity", re.I)
+# RETURNING re-enter interstitial observed live on game.tw2002.net: TWGS
+# shows "You have been on today ..." after password, sometimes alone after
+# `[Pause]` is dismissed -- it is NOT covered by the pause_key anchor (no
+# `[Pause]` / "press any key" on that beat), so without this it lands in
+# `unknown` and wedges ensure in automaton_stuck. Matched on the CURRENT
+# prompt line (or the last non-empty line when the prompt is blank) -- NOT
+# on stale scrollback above an already-active main_command prompt.
+_BEEN_ON_TODAY_RE = re.compile(r"you\s+have\s+been\s+on\s+(?:the\s+game\s+)?today", re.I)
 
 # -- sub-step text matches inside the NEW-registration branch that don't
 # warrant their own classify.py anchor (narrow, single-purpose, only ever
@@ -351,6 +359,16 @@ def _decide(cls, text, prompt, profile, state, get_password, save_password, sess
     # -- D7 nuisances first: these can interleave with any branch. -------
     if cls == "pause_key":
         return "", False, None
+    if _BEEN_ON_TODAY_RE.search(prompt):
+        return "", False, None
+    if cls == "unknown" and not prompt.strip():
+        for line in reversed(text.splitlines()):
+            stripped = line.strip()
+            if not stripped:
+                continue
+            if _BEEN_ON_TODAY_RE.search(stripped):
+                return "", False, None
+            break
     if _SHOW_LOG_RE.search(text):
         return "N", False, None
     if _INACTIVITY_RE.search(text):

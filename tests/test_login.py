@@ -510,6 +510,61 @@ def test_pause_key_interstitial_is_dismissed_with_blank_enter():
     assert cls == "main_command"
 
 
+def test_been_on_today_interstitial_is_dismissed_with_blank_enter():
+    profile = FakeProfile()
+    steps = [
+        {"screen": "You have been on today for 2 hours and 15 minutes.", "expect": _is("")},
+        {"screen": "Command [TL=00:00:00]:[1] (?=Help)? :", "expect": None},
+    ]
+    session = FakeLoginSession(steps)
+    cls, _ = run_login(session, profile, get_password=lambda n: "x", save_password=lambda n, pw: None)
+    assert cls == "main_command"
+
+
+def test_been_on_today_fixture_is_login_handled_not_classified_as_pause_key():
+    """The live re-enter line is intentionally NOT folded into classify.py's
+    pause_key anchor (stale-scrollback hazard on full-text fallback). The
+    login automaton's D7 been-on-today branch dismisses it instead."""
+    import os
+
+    fixture_path = os.path.join(os.path.dirname(__file__), "fixtures", "been_on_today_reenter_screen.txt")
+    with open(fixture_path, encoding="utf-8") as f:
+        text = f.read()
+    from twclient.classify import classify_screen
+
+    rows = text.splitlines()
+    prompt = rows[-1].strip() if rows else ""
+    assert classify_screen(text, prompt) == "unknown"
+    profile = FakeProfile()
+    steps = [
+        {"screen": text.rstrip("\n"), "expect": _is("")},
+        {"screen": "Command [TL=00:00:00]:[1] (?=Help)? :", "expect": None},
+    ]
+    cls, _ = run_login(
+        FakeLoginSession(steps), profile, get_password=lambda n: "x", save_password=lambda n, pw: None
+    )
+    assert cls == "main_command"
+
+
+def test_returning_reenter_past_pause_then_been_on_today():
+    """Live on game.tw2002.net: password -> `[Pause]` -> been-on-today line
+    (no pause_key anchor on that beat) -> main_command."""
+    profile = FakeProfile()
+    saved = {"default": "sAvEd123"}
+    steps = [
+        {"screen": "Password?", "expect": _is_secret("sAvEd123")},
+        {"screen": "You have been on today for 3 hours.\n  [Pause]", "expect": _is("")},
+        {"screen": "You have been on today for 3 hours.", "expect": _is("")},
+        {"screen": "Command [TL=00:00:00]:[24146] (?=Help)? :", "expect": None},
+    ]
+    session = FakeLoginSession(steps)
+    cls, _ = run_login(
+        session, profile, get_password=lambda n: saved.get(n), save_password=lambda n, pw: None
+    )
+    assert cls == "main_command"
+    assert session.sent == [("sAvEd123", True), ("", False), ("", False)]
+
+
 def test_inactivity_warning_gets_a_keepalive_keystroke_not_a_crash():
     profile = FakeProfile()
     steps = [
