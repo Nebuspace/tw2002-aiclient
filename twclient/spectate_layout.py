@@ -66,43 +66,66 @@ def format_sidebar(event: dict) -> list[str]:
     return lines
 
 
-def format_ticker_entry(event: dict, *, answered_prompt=None) -> str:
+def format_ticker_entry(
+    event: dict,
+    *,
+    answered_prompt=None,
+    answered_classification=None,
+) -> str:
     """One LOG/ticker row.
 
     ``sent_input`` is the keystroke that *caused* this settle, but the
-    event's own ``prompt`` is the *landing* prompt after that send.
-    Pairing ``→sent`` with the landing prompt skews one-off in the LOG
-    (answer appears attached to the next question). When
-    ``answered_prompt`` is supplied (the prior event's prompt — the
-    question that was on screen when the send happened), the TX arrow
-    pairs with that answered prompt instead (WO-TUI-LOG-QA-SKEW).
+    event's own ``prompt`` / ``classification`` are the *landing* after
+    that send. Pairing ``→sent`` with the landing prompt/class skews
+    one-off in the LOG (WO-TUI-LOG-QA-SKEW / WO-TUI-LOG-QA-LABELS).
+
+    When ``answered_prompt`` (and ideally ``answered_classification``)
+    are supplied from the prior event — the question that was on screen
+    when the send happened — the left class tag and the ``— prompt``
+    both describe the prompt that *received* the answer. Landing is
+    only an optional ``⇒ …`` suffix when it differs.
     """
     ts = event.get("ts", "")
-    cls = event.get("classification", "unknown")
+    landing_cls = event.get("classification", "unknown")
     reason = event.get("settled_reason", "-")
     landing = (event.get("prompt") or "").strip()[:40]
     sent = event.get("sent_input")
+
     if sent and answered_prompt is not None:
         answered = (answered_prompt or "").strip()[:40]
+        cls = answered_classification or "unknown"
         line = f"[{ts}] {cls} ({reason}) — {answered}  →{sent}"
         if landing and landing != answered:
             line = f"{line} ⇒ {landing}"
         return line
-    line = f"[{ts}] {cls} ({reason}) — {landing}"
-    if sent:
-        line = f"{line}  →{sent}"
-    return line
+
+    if sent and answered_prompt is None:
+        # Orphan TX (no prior event): never pretend the landing prompt
+        # was what we answered — show send + landing without a false pair.
+        line = f"[{ts}] ({reason})  →{sent}"
+        if landing:
+            line = f"{line} ⇒ {landing}"
+        return line
+
+    return f"[{ts}] {landing_cls} ({reason}) — {landing}"
 
 
 def format_ticker_history(events) -> list:
-    """Format LOG rows with sent_input paired to the prior prompt."""
+    """Format LOG rows with sent_input paired to the prior prompt+class."""
     out = []
     prev = None
     for event in events or ():
-        answered = None
+        answered = answered_cls = None
         if event.get("sent_input") and prev is not None:
             answered = prev.get("prompt")
-        out.append(format_ticker_entry(event, answered_prompt=answered))
+            answered_cls = prev.get("classification")
+        out.append(
+            format_ticker_entry(
+                event,
+                answered_prompt=answered,
+                answered_classification=answered_cls,
+            )
+        )
         prev = event
     return out
 

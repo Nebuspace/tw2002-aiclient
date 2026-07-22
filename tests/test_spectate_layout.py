@@ -153,8 +153,11 @@ def test_ticker_entry_truncates_long_prompts():
 
 
 def test_ticker_entry_pairs_the_sent_input_when_present():
-    entry = format_ticker_entry(_event(sent_input="158"))
-    assert entry.endswith("→158")
+    # Orphan TX (no answered_prompt): must not attach →sent to landing prompt
+    entry = format_ticker_entry(_event(sent_input="158", prompt="Command?"))
+    assert "→158" in entry
+    assert "— Command?  →158" not in entry
+    assert "⇒ Command?" in entry
 
 
 def test_ticker_entry_omits_tx_segment_when_absent():
@@ -170,12 +173,35 @@ def test_ticker_history_pairs_sent_with_prior_prompt_not_landing():
         _event(prompt="Game? Tumbleweed", sent_input="Tumbleweed", classification="game_select"),
     ]
     lines = format_ticker_history(events)
-    assert "What is your name?" in lines[1]
-    assert "→F" in lines[1]
     assert "— What is your name?  →F" in lines[1]
     assert "⇒ ANSI graphics?" in lines[1]
     assert "— ANSI graphics?  →Tumbleweed" in lines[2]
     assert "— ANSI graphics?  →F" not in lines[1]
+
+
+def test_ticker_history_left_class_is_answered_not_landing():
+    """WO-TUI-LOG-QA-LABELS: left class tag matches the prompt that got the answer."""
+    events = [
+        _event(prompt="What is your name?", sent_input=None, classification="name_prompt"),
+        _event(prompt="Use ANSI graphics?", sent_input="Tumbleweed", classification="ansi_prompt"),
+    ]
+    lines = format_ticker_history(events)
+    # Must read as name_prompt answering the name question — not ansi_prompt →Tumbleweed
+    assert "name_prompt" in lines[1]
+    assert "— What is your name?  →Tumbleweed" in lines[1]
+    assert "⇒ Use ANSI graphics?" in lines[1]
+    assert not lines[1].startswith("[") or "ansi_prompt" not in lines[1].split("—")[0]
+
+
+def test_ticker_history_orphan_first_sent_does_not_false_pair():
+    """First event with →sent and no prior must not claim landing was answered."""
+    events = [
+        _event(prompt="Use ANSI graphics?", sent_input="F", classification="ansi_prompt"),
+    ]
+    lines = format_ticker_history(events)
+    assert "→F" in lines[0]
+    assert "— Use ANSI graphics?  →F" not in lines[0]
+    assert "ansi_prompt" not in lines[0].split("→")[0] or "— Use ANSI graphics?" not in lines[0]
 
 
 def test_status_line_connected():
