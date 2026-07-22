@@ -33,17 +33,17 @@ FIGHTER_UNIT_PRICE_CLASS0: int = 100  # cr per fighter
 # reserve floor there, update this too.
 FIGHTER_SMALL_STACK: int = 5  # fighters
 
-# Execute floor: grind only when the best known chain has at least this
-# many links (``len(ProfitChain.hops)``). A 2-port back-and-forth is
-# discovery progress, not an execute target. The human's 3-port example
-# (A→B→C→A) is 3 links — the minimum to start trading for cash.
-MIN_CHAIN_LINKS_TO_EXECUTE = 3
-# Once execute is allowed, prefer *earning* (fighters + cargo holds) over
-# hunting a longer chain. Exploring remains a secondary candidate by EV.
-# (Previously 5: the 3–4 link "search band" delayed grinding.)
+# Execute floor: grind when the best known chain has at least this many
+# links (``len(ProfitChain.hops)``). Max (2026-07-22): a 2-hop chain
+# (two ports back-and-forth, or three sectors / two edges) is enough to
+# ungate Trade chain and prefer it over Explore. One-hop / empty stays
+# discovery-only.
+MIN_CHAIN_LINKS_TO_EXECUTE = 2
+# Once execute is allowed, prefer *earning* over hunting a longer chain.
+# Exploring remains a secondary candidate by EV.
 CHAIN_LINKS_PREFER_SEARCH_BELOW = MIN_CHAIN_LINKS_TO_EXECUTE
 # Ship purchase / StarDock hull upgrade waits until the best chain is at
-# least this long — at 3-link, cash goes to fighters + holds first.
+# least this long — at 2–3 links, cash goes to fighters + holds first.
 MIN_CHAIN_LINKS_FOR_SHIP_UPGRADE = 4
 
 

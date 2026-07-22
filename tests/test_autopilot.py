@@ -201,17 +201,22 @@ def _cruiser():
 
 def _profit_chain_hops(margin=50):
     # A trivial 2-sector round trip, cr/turn = (margin*2)/(1+1) = margin.
-    # NOTE: only 2 hops — below priority_engine's MIN_CHAIN_LINKS_TO_EXECUTE (3).
-    # Use `_three_link_chain_hops()` / `_viable_chain_hops()` when the chain
-    # must be a live run_chain candidate.
+    # Meets MIN_CHAIN_LINKS_TO_EXECUTE (2) — live run_chain candidate.
     return [
         TradeHop(frm=100, to=200, commodity="Fuel Ore", margin=margin, turns=1),
         TradeHop(frm=200, to=100, commodity="Organics", margin=margin, turns=1),
     ]
 
 
+def _one_link_discovery_hops(margin=50):
+    # Single edge — below execute floor (discovery only).
+    return [
+        TradeHop(frm=100, to=200, commodity="Fuel Ore", margin=margin, turns=1),
+    ]
+
+
 def _three_link_chain_hops(margin=50):
-    # Closed triangle: meets MIN_CHAIN_LINKS_TO_EXECUTE (3).
+    # Closed triangle: above MIN_CHAIN_LINKS_TO_EXECUTE (2).
     # cr/turn = (margin*3)/3 = margin.  sectors: 100→200→300→100.
     return [
         TradeHop(frm=100, to=200, commodity="Fuel Ore", margin=margin, turns=1),
@@ -292,14 +297,13 @@ def test_select_reports_no_candidates_when_truly_nothing_available():
 
 
 def test_select_picks_upgrade_when_no_executable_chain():
-    """2-link hops are discovery-only (`_score_chain` skips); upgrade
-    then beats explore on EV without a PE stay-on-chain override."""
+    """No profitable cycle → upgrade beats explore on EV."""
     snap = WorldSnapshot(
         sector=None, credits=60_000, turns_left=5000,
         current_ship=_barge(),
         ship_catalog=(_cruiser(),),
         loop=_loop_econ(),
-        hops=tuple(_profit_chain_hops(margin=50)),  # below execute floor
+        hops=tuple(_one_link_discovery_hops(margin=50)),  # no closed cycle
         stardock_route=(100, 150, 999),  # 2 hops to StarDock
         explore_next_sector=1,
     )
@@ -388,20 +392,17 @@ def test_select_respects_turn_reserve_floor_for_chains():
     assert any("turn-reserve floor" in s for s in decision2.skipped)
 
 
-def test_score_chain_skips_below_min_chain_links_to_execute():
-    """WO-SCORE-CHAIN-FIX: 2-link cycles are discovery-only, not candidates."""
+def test_score_chain_accepts_two_link_execute_floor():
+    """Execute floor is 2: a 2-hop round-trip is a live run_chain candidate."""
     from twclient.autopilot import _score_chain
-    from twclient.priority_engine import MIN_CHAIN_LINKS_TO_EXECUTE
 
     snap = WorldSnapshot(
         sector=100, credits=None, turns_left=5000,
         hops=tuple(_profit_chain_hops(margin=50)),
     )
     cand, reason = _score_chain(snap, EconCaps())
-    assert cand is None
-    assert reason is not None
-    assert f"≥{MIN_CHAIN_LINKS_TO_EXECUTE}-link" in reason
-    assert "have 2" in reason
+    assert cand is not None and cand.kind == "run_chain"
+    assert reason is None
 
     ok_snap = WorldSnapshot(
         sector=100, credits=None, turns_left=5000,
@@ -518,7 +519,7 @@ def test_high1_poc1_underrank_true_delta_beats_a_weak_chain():
     snap = WorldSnapshot(
         sector=None, credits=60_000, turns_left=5000,
         current_ship=current, ship_catalog=(candidate,), loop=loop,
-        hops=tuple(_profit_chain_hops(margin=25)),  # weak chain, deliberately below the true delta
+        hops=(),  # no chain — isolate upgrade EV vs explore
         stardock_route=(1,),  # known, at-dock -- this test is about the EV ranking, not travel feasibility
         explore_next_sector=1,
     )
@@ -579,21 +580,30 @@ def test_high1_poc6_ranking_is_stable_regardless_of_current_ships_warp():
 # -- Priority engine wire: link-count / RT-aware select() override --------
 
 
-def test_select_priority_engine_prefers_explore_over_short_chain():
-    """A 2-hop chain is below MIN_CHAIN_LINKS_TO_EXECUTE (3): `_score_chain`
-    skips it (discovery-only) and explore wins when a frontier hop exists."""
+def test_select_priority_engine_prefers_explore_when_no_cycle():
+    """A single directed hop cannot form a cycle — explore wins when a frontier exists."""
     snap = WorldSnapshot(
         sector=None, credits=None, turns_left=1000,
-        hops=tuple(_profit_chain_hops(margin=50)),  # 2 hops — below execute floor
+        hops=tuple(_one_link_discovery_hops(margin=50)),
         explore_next_sector=999,
     )
     decision = select(snap)
     assert decision.chosen is not None
-    assert decision.chosen.kind == "explore", (
-        "2-link chain must not be a live candidate; explore should win"
-    )
+    assert decision.chosen.kind == "explore"
     assert all(c.kind != "run_chain" for c in decision.candidates)
-    assert any("≥3-link" in s or "discovery only" in s for s in decision.skipped)
+
+
+def test_select_priority_engine_prefers_two_link_chain_over_explore():
+    """2-hop round-trip meets the execute floor: Trade chain beats Explore."""
+    snap = WorldSnapshot(
+        sector=None, credits=None, turns_left=1000,
+        hops=tuple(_profit_chain_hops(margin=50)),
+        explore_next_sector=999,
+    )
+    decision = select(snap)
+    assert decision.chosen is not None
+    assert decision.chosen.kind == "run_chain"
+    assert any(c.kind == "explore" for c in decision.candidates)
 
 
 def test_select_priority_engine_gates_upgrade_when_chain_active_and_return_path_unknown():

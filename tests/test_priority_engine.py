@@ -139,7 +139,28 @@ def test_recommend_gates_unknown_stardock_path():
     assert rec.focus.kind == "explore"
 
 
-def test_run_chain_gated_below_three_links():
+def test_run_chain_gated_below_two_links():
+    rec = recommend_actions(
+        chain_cr_per_turn=400.0,
+        chain_cycle_turns=8,
+        chain_link_count=1,
+        turns_left=2000,
+        explore_available=True,
+    )
+    chain = next(s for s in rec.ranked if s.kind == "run_chain")
+    assert chain.gated is True
+    assert "≥2-link" in (chain.gate_reason or "")
+    assert rec.focus.kind == "explore"
+
+
+def test_two_link_prefers_earn_over_explore():
+    """2-hop / 3-sector-style chain: ungate Trade chain and rank it above Explore."""
+    from twclient.priority_engine import prefer_search_over_earn
+
+    prefer, reason = prefer_search_over_earn(chain_links=2, explore_available=True)
+    assert prefer is False
+    assert "grind" in reason
+
     rec = recommend_actions(
         chain_cr_per_turn=400.0,
         chain_cycle_turns=8,
@@ -148,9 +169,8 @@ def test_run_chain_gated_below_three_links():
         explore_available=True,
     )
     chain = next(s for s in rec.ranked if s.kind == "run_chain")
-    assert chain.gated is True
-    assert "≥3-link" in (chain.gate_reason or "")
-    assert rec.focus.kind == "explore"
+    assert chain.gated is False
+    assert rec.focus.kind == "run_chain"
 
 
 def test_three_link_prefers_earn_for_fighters_and_holds():
