@@ -145,6 +145,25 @@ def test_real_captured_banner_game_select_menu_variant_fixture():
     assert classify_screen(text, prompt) == "game_select"
 
 
+def test_banner_game_select_with_timed_out_as_current_prompt_stays_game_select():
+    """WO-CLASSIFY-TIMED-OUT: TWGS appends ``Timed out...`` as the live
+    last line while Selection is still on screen — must stay game_select
+    so login retries the letter (not wedge as plain menu/unknown)."""
+    text = (
+        "TradeWars Game Server\n"
+        "TWGS v2.20b\n"
+        "Server registered to twgs.test.example\n"
+        "<A> Sample Game One\n"
+        "<#> Players Online\n"
+        "<!> View game descriptions\n"
+        "<Q> Quit\n"
+        "Selection (? for menu):\n"
+        "Timed out..."
+    )
+    assert classify_screen(text, "Timed out...") == "game_select"
+    assert classify(text) == "game_select"
+
+
 def test_banner_game_select_lookalike_without_the_twgs_banner_is_still_a_plain_menu():
     """Precision guard, mirroring the boxed-variant negative test above:
     a DIFFERENT TWGS lobby menu can share the exact same bracket style

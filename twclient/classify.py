@@ -51,6 +51,10 @@ _COMMAND_ECHO_LINE_RE = re.compile(r"command\s*\[\s*tl\s*=", re.I)
 # server, distinct from twgs.test.example's own "Select a game :"
 # wording -- see _is_twgs_boxed_game_select_menu below).
 _TWGS_SELECTION_PROMPT_RE = re.compile(r"selection\s*\(\s*\?\s*for\s*menu\s*\)\s*:", re.I)
+# WO-CLASSIFY-TIMED-OUT: TWGS may leave ``Timed out...`` (or
+# ``Timed out waiting for input.``) as the CURRENT last line while the
+# Selection prompt is still one line above — still game_select.
+_TWGS_TIMED_OUT_PROMPT_RE = re.compile(r"^Timed\s+out", re.I)
 _GAME_HEADER_LINE_RE = re.compile(r"^[^a-z0-9]*game[^a-z0-9]*$", re.I)
 # TWGS commonly renders two side-by-side boxes sharing ONE physical
 # terminal row (see the captured fixture: the "Game" box's header shares
@@ -101,6 +105,26 @@ def _range_has_no_dash_style_menu(lines, start, end):
     into a genuinely different CURRENT screen, not this one -- see
     tests/test_classify.py's stale-scrollback negative fixtures."""
     return not any(_DASH_OPTION_RE.search(lines[i]) for i in range(start, end + 1))
+
+
+def _selection_prompt_context(full_text: str, prompt_line: str) -> tuple[str, int]:
+    """Resolve the Selection prompt line + its index for game_select shape checks.
+
+    When the live prompt is a TWGS ``Timed out…`` line, walk upward for the
+    most recent ``Selection (? for menu):`` still on the pyte grid and use
+    that as the effective prompt (WO-CLASSIFY-TIMED-OUT).
+    """
+    lines = full_text.splitlines()
+    if not lines:
+        return (prompt_line or ""), -1
+    pl = prompt_line or ""
+    if _TWGS_SELECTION_PROMPT_RE.search(pl):
+        return pl, len(lines) - 1
+    if _TWGS_TIMED_OUT_PROMPT_RE.search(pl.strip()):
+        for i in range(len(lines) - 1, -1, -1):
+            if _TWGS_SELECTION_PROMPT_RE.search(lines[i]):
+                return lines[i].strip(), i
+    return pl, len(lines) - 1
 
 
 def _range_has_qualifying_game_select_menu(lines, start, end):
@@ -263,12 +287,12 @@ def _is_twgs_boxed_game_select_menu(full_text: str, prompt_line: str) -> bool:
     signal 2 and correctly falls through to the generic `menu` content
     anchor instead -- see tests/test_classify.py's negative-fixture
     pair for exactly that shape."""
+    prompt_line, prompt_idx = _selection_prompt_context(full_text, prompt_line)
     if not _TWGS_SELECTION_PROMPT_RE.search(prompt_line or ""):
         return False
     lines = full_text.splitlines()
-    if not lines:
+    if not lines or prompt_idx < 0:
         return False
-    prompt_idx = len(lines) - 1
     header_idx = None
     for i, line in enumerate(lines):
         if any(_GAME_HEADER_LINE_RE.match(cell.strip()) for cell in _BOX_VERTICAL_SEPARATOR_RE.split(line)):
@@ -344,12 +368,12 @@ def _is_twgs_server_banner_game_select_menu(full_text: str, prompt_line: str) ->
     correctly falls through to the generic `menu` content anchor
     instead -- see tests/test_classify.py's negative-fixture pair for
     exactly that shape."""
+    prompt_line, prompt_idx = _selection_prompt_context(full_text, prompt_line)
     if not _TWGS_SELECTION_PROMPT_RE.search(prompt_line or ""):
         return False
     lines = full_text.splitlines()
-    if not lines:
+    if not lines or prompt_idx < 0:
         return False
-    prompt_idx = len(lines) - 1
     title_idx = version_idx = registered_idx = None
     for i, line in enumerate(lines):
         if _TWGS_BANNER_TITLE_RE.search(line):

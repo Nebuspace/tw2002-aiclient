@@ -1664,3 +1664,36 @@ def test_game_select_banner_variant_retries_after_timeout_reprompt():
     assert cls == "main_command"
     assert session.sent[0] == (profile.game_letter, False)
     assert session.game_select_answered is True
+
+
+def test_game_select_retries_when_timed_out_is_the_live_prompt_line():
+    """WO-CLASSIFY-TIMED-OUT: current prompt is bare ``Timed out...`` with
+    Selection still above — login must still send the game letter."""
+    profile = FakeProfile()
+    timed_out_prompt_screen = (
+        "TradeWars Game Server\n"
+        "TWGS v2.20b\n"
+        "Server registered to twgs.test.example\n"
+        "<A> Sample Game One\n"
+        "<#> Players Online\n"
+        "<!> View game descriptions\n"
+        "<Q> Quit\n"
+        "Selection (? for menu):\n"
+        "Timed out..."
+    )
+    steps = [
+        {
+            "screen": timed_out_prompt_screen,
+            "expect": _is(profile.game_letter),
+            "confirm_same_screen": True,
+        },
+        {"screen": "T - Play Trade Wars 2002\nI - Introduction & Help\nEnter your choice:", "expect": _is("T")},
+        {"screen": "Command [TL=00:00:00]:[1] (?=Help)? :", "expect": None},
+    ]
+    session = _SameScreenConfirmGameSelectSession(steps)
+
+    cls, _ = run_login(session, profile, get_password=lambda n: "x", save_password=lambda n, pw: None)
+
+    assert cls == "main_command"
+    assert session.sent[0] == (profile.game_letter, False)
+    assert session.game_select_answered is True
