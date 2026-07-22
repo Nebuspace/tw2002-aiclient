@@ -1153,15 +1153,42 @@ def test_compose_formations_panel_lists_name_and_blurb():
 
 
 def test_compose_formations_panel_truncates_with_more():
-    from twclient.formations import Formation, DEAD_END
+    from twclient.formations import Formation, DEAD_END, BUBBLE, ONE_WAY, WARP_SINK
 
-    many = [
-        Formation(kind=DEAD_END, sectors=(i,), entrance=1, detail="single outbound warp")
-        for i in range(20)
+    # Four distinct kinds → 4 render items × 2 lines each = 8 lines, won't fit in 5.
+    formations = [
+        Formation(kind=DEAD_END, sectors=(1,), entrance=2),
+        Formation(kind=BUBBLE, sectors=(3, 4), entrance=3),
+        Formation(kind=ONE_WAY, sectors=(5, 6)),
+        Formation(kind=WARP_SINK, sectors=(7,)),
     ]
-    lines = compose_formations_panel(many, width=28, max_lines=5)
+    lines = compose_formations_panel(formations, width=28, max_lines=5)
     assert any(ln.startswith("+") and "more" in ln for ln in lines)
     assert len(lines) <= 5
+
+
+def test_compose_formations_panel_groups_same_kind():
+    from twclient.formations import Formation, BUBBLE, DEAD_END
+
+    # Multiple Bubbles should consolidate into one grouped line.
+    bubbles = [
+        Formation(kind=BUBBLE, sectors=(10, 11, 12), entrance=10),
+        Formation(kind=BUBBLE, sectors=(20, 21, 22), entrance=20),
+        Formation(kind=BUBBLE, sectors=(30, 31, 32), entrance=30),
+    ]
+    lines = compose_formations_panel(bubbles, width=36, max_lines=12)
+    joined = "\n".join(lines)
+    assert "x3" in joined
+    assert "Bubble" in joined
+    # Three separate "Bubble @" entries must NOT appear — it's consolidated.
+    assert joined.count("Bubble") == 1
+
+    # Single formation of its kind still renders normally (no "x1").
+    single = [Formation(kind=DEAD_END, sectors=(42,), entrance=7)]
+    single_lines = compose_formations_panel(single, width=36, max_lines=12)
+    single_joined = "\n".join(single_lines)
+    assert "x1" not in single_joined
+    assert "Dead-end @42" in single_joined
 
 
 def test_compose_phase2_side_panel_does_not_fold_priorities():

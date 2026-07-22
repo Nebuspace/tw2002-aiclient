@@ -1540,11 +1540,43 @@ def format_formation_entry(formation, *, width: int = 32) -> list[str]:
     return lines
 
 
+def _format_grouped_entry(kind: str, group: list, *, width: int = 32) -> list[str]:
+    """Condensed line for N>1 formations of the same kind: 'Bubble x3 @10,20,30…'
+
+    Key sectors shown are entrance sectors for bubble/dead-end (the approach
+    points), or the first sector of each formation for other kinds.
+    """
+    width = max(8, int(width))
+    title = FORMATION_KIND_TITLE.get(kind, kind)
+    n = len(group)
+    key_sectors: list[int] = []
+    for f in group:
+        if isinstance(f, dict):
+            ent = f.get("entrance")
+            secs = f.get("sectors") or ()
+        else:
+            ent = getattr(f, "entrance", None)
+            secs = getattr(f, "sectors", ()) or ()
+        if ent is not None and kind in ("dead-end", "bubble"):
+            key_sectors.append(int(ent))
+        elif secs:
+            key_sectors.append(int(secs[0]))
+    where = _formation_sectors_label(key_sectors)
+    head = f"{title} x{n} @{where}"
+    why = FORMATION_KIND_WHY.get(kind, "")
+    lines = [head[:width]]
+    if why and width >= 16:
+        lines.append(("  " + why)[:width])
+    return lines
+
+
 def compose_formations_panel(formations, *, width: int = 32, max_lines: int = 12) -> list[str]:
     """FORMATIONS box body — discovered topologies with short doctrine blurbs.
 
-    Truncates with ``+N more`` when entries exceed ``max_lines``. Empty catalog
-    shows a quiet placeholder (map more warps to detect shapes).
+    Same-kind formations are consolidated into one grouped entry (``Bubble x3
+    @10,20,30…``) so a box full of the same shape is legible. Truncates with
+    ``+N more`` when entries exceed ``max_lines``. Empty catalog shows a quiet
+    placeholder (map more warps to detect shapes).
     """
     width = max(8, int(width))
     max_lines = max(1, int(max_lines))
@@ -1552,20 +1584,46 @@ def compose_formations_panel(formations, *, width: int = 32, max_lines: int = 12
     if not items:
         return ["(none yet — map warps)"][:max_lines]
 
+    # Group same-kind formations; preserve first-seen kind order.
+    kind_order: list[str] = []
+    by_kind: dict[str, list] = {}
+    for f in items:
+        k = getattr(f, "kind", None)
+        if k is None and isinstance(f, dict):
+            k = f.get("kind")
+        k = str(k or "?")
+        if k not in by_kind:
+            kind_order.append(k)
+            by_kind[k] = []
+        by_kind[k].append(f)
+
+    # Render items: groups (N>1) render condensed; singletons render normally.
+    render_items: list[tuple[bool, str, object]] = []
+    for k in kind_order:
+        group = by_kind[k]
+        if len(group) > 1:
+            render_items.append((True, k, group))
+        else:
+            render_items.append((False, k, group[0]))
+
     lines: list[str] = []
     shown = 0
-    for i, formation in enumerate(items):
-        entry = format_formation_entry(formation, width=width)
+    for i, item in enumerate(render_items):
+        is_group, kind, data = item
+        if is_group:
+            entry = _format_grouped_entry(kind, data, width=width)  # type: ignore[arg-type]
+        else:
+            entry = format_formation_entry(data, width=width)
         remaining_after = max_lines - len(lines) - len(entry)
-        # Reserve one line for "+N more" when more formations follow.
-        need_more = i + 1 < len(items)
+        # Reserve one line for "+N more" when more entries follow.
+        need_more = i + 1 < len(render_items)
         if need_more and remaining_after < 1:
-            left = len(items) - shown
+            left = len(render_items) - shown
             if left > 0 and len(lines) < max_lines:
                 lines.append(f"+{left} more"[:width])
             break
         if len(lines) + len(entry) > max_lines:
-            left = len(items) - shown
+            left = len(render_items) - shown
             if left > 0 and len(lines) < max_lines:
                 lines.append(f"+{left} more"[:width])
             break
