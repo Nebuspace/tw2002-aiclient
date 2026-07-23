@@ -180,10 +180,17 @@ def _is_unconfirmed_outcome(outcome: Optional[str]) -> bool:
 # -- see this module's own "HIGH-2" docstring note.
 _MOVEMENT_PROMPT_CLASS = "main_command"
 _WARP_CONFIRM_CLASS = "warp_confirm"
+_PAUSE_KEY_CLASS = "pause_key"
 # Same anchor as classify.py's warp_confirm gate — prompt-line detect for
 # HUD deferral / clear path without re-running full-screen content anchors.
 _WARP_CONFIRM_RE = re.compile(
     r"do\s+you\s+really\s+want\s+to\s+warp\s+there\s*\?\s*\(\s*Y\s*/\s*N\s*\)",
+    re.I,
+)
+# Same anchor family as classify.py's pause_key gate — prompt-line detect
+# for HUD deferral (WO-AP-PAUSE-KEY).
+_PAUSE_KEY_RE = re.compile(
+    r"\[\s*pause\s*\]|press\s+.*\bkey\b|--\s*more\s*--",
     re.I,
 )
 # Candidate kinds whose next_sector send is Autopilot's own navigate intent
@@ -1146,10 +1153,10 @@ class AutopilotEngine:
         Cadence (mack): min interval between probe *attempts* equals
         ``caps.credits_stale_ms`` (default 15s) so a failed/partial probe
         cannot spam I every tick; age threshold for refresh is the same
-        bound (intervention/assess stale window). Fighter ``Option?``
-        and mid-warp ``warp_confirm`` defer without consuming the rate
-        limit. Never-observed fighters alone do not force a refresh
-        (credits-unknown still seeds).
+        bound (intervention/assess stale window). Fighter ``Option?``,
+        mid-warp ``warp_confirm``, and ``pause_key`` / ``[Pause]`` pager
+        defer without consuming the rate limit. Never-observed fighters
+        alone do not force a refresh (credits-unknown still seeds).
         """
         # Plain test fakes predate sticky snapshots — skip (don't I-spam).
         if not (
@@ -1201,8 +1208,8 @@ class AutopilotEngine:
         if not need:
             return None
 
-        # Fighter Option? / warp Y/N — I is wrong there; defer without
-        # rate-limit burn.
+        # Fighter Option? / warp Y/N / [Pause] pager — I is wrong there;
+        # defer without rate-limit burn.
         from .fighter_toll_policy import parse_fighter_option
 
         rows = text.split("\n")
@@ -1210,6 +1217,8 @@ class AutopilotEngine:
         if parse_fighter_option(text, prompt).detected:
             return None
         if _WARP_CONFIRM_RE.search(prompt):
+            return None
+        if _PAUSE_KEY_RE.search(prompt):
             return None
 
         self._last_hud_probe_mono = now
@@ -1408,101 +1417,109 @@ class AutopilotEngine:
         post_text = pre_text
         input_text = "<no-send>"
         chosen = decision.chosen
-        # WO-FIGHTER-FLOOR-TOLL (folds WO-FIGHTER-AUTO-R): Option? dialogues
-        # classify as sector_display and would otherwise HOLD forever on
-        # HIGH-2. Resolve A/R THIS tick before any bare sector-number send.
-        # Never auto-Pay (P). Haggle / other non-Option? prompts fall through.
-        fighter_cleared = self._try_clear_fighter_option(pre_text)
-        if fighter_cleared is not None:
-            outcome, input_text, post_text = fighter_cleared
+        # WO-AP-PAUSE-KEY: mid-run [Pause] / help pager — clear BEFORE
+        # fighter/warp/nav so AP cannot thrash no_candidates on help text.
+        # One Space keystroke, no trailing CR (live: tw do --no-enter space).
+        pause_cleared = self._try_clear_pause_key(pre_text)
+        if pause_cleared is not None:
+            outcome, input_text, post_text = pause_cleared
             decision = dataclasses.replace(decision, send_outcome=outcome)
-            # Post-Retreat avoidance: when we sent "R", record the current
-            # sector as avoided so the next tick's planner can't immediately
-            # re-target it (closing the escape-pod re-entry path).
-            if input_text == "R":
-                retreated_sector = parse_state(pre_text).get("sector")
-                if retreated_sector is not None:
-                    self._avoided_sectors.add(retreated_sector)
         else:
-            # WO-AP-WARP-CONFIRM: mid-warp Y/N used to mis-class as
-            # sector_display → held:not_main_command forever (live idle~131s).
-            warp_cleared = self._try_clear_warp_confirm(pre_text, chosen)
-            if warp_cleared is not None:
-                outcome, input_text, post_text = warp_cleared
+            # WO-FIGHTER-FLOOR-TOLL (folds WO-FIGHTER-AUTO-R): Option? dialogues
+            # classify as sector_display and would otherwise HOLD forever on
+            # HIGH-2. Resolve A/R THIS tick before any bare sector-number send.
+            # Never auto-Pay (P). Haggle / other non-Option? prompts fall through.
+            fighter_cleared = self._try_clear_fighter_option(pre_text)
+            if fighter_cleared is not None:
+                outcome, input_text, post_text = fighter_cleared
                 decision = dataclasses.replace(decision, send_outcome=outcome)
-            elif chosen is not None and chosen.next_sector is not None:
-                # Zero-fighter halt: if fighters freshly known == 0, hold this
-                # tick before spending a warp -- we can't fight any toll we'd
-                # encounter.  Fail-open on unknown/stale (never stalls explore
-                # solely due to a missing reading).
-                if self._zero_fighters_fresh():
-                    decision = dataclasses.replace(decision, send_outcome="held:zero_fighters")
-                else:
-                    # HIGH-2 gate-check TOCTOU fix (cipher re-verify, 2026-07-20):
-                    # ONE fresh render feeds BOTH the full-text and the prompt-line
-                    # the gate classifies against -- never reuse tick-start
-                    # `pre_text` (already stale by the time we reach the gate)
-                    # alongside a SECOND, later render's prompt line. Matches the
-                    # repo's own "one render feeds both" convention (see e.g.
-                    # login.py: `rows = session.render(); text =
-                    # session.render_text(rows)`). A blank gate render (no rows,
-                    # or an empty last line -- a screen-clear mid-transition, e.g.
-                    # a hub-warp) is ITSELF a HOLD: classify.py's own documented
-                    # last-resort fallback (`if not prompt_line: <gate-scan the
-                    # WHOLE full_text>`) would otherwise let a STALE main_command
-                    # string still sitting in `pre_text` green-light a send onto a
-                    # screen that was never actually confirmed settled at all --
-                    # cipher's PoC fired a real send this way through the old
-                    # stale-`pre_text`-plus-fresh-blank-prompt_line combination.
-                    gate_rows = self.session.render()
-                    gate_prompt = gate_rows[-1].strip() if gate_rows else ""
-                    if not gate_prompt:
-                        decision = dataclasses.replace(decision, send_outcome="held:blank_screen")
+                # Post-Retreat avoidance: when we sent "R", record the current
+                # sector as avoided so the next tick's planner can't immediately
+                # re-target it (closing the escape-pod re-entry path).
+                if input_text == "R":
+                    retreated_sector = parse_state(pre_text).get("sector")
+                    if retreated_sector is not None:
+                        self._avoided_sectors.add(retreated_sector)
+            else:
+                # WO-AP-WARP-CONFIRM: mid-warp Y/N used to mis-class as
+                # sector_display → held:not_main_command forever (live idle~131s).
+                warp_cleared = self._try_clear_warp_confirm(pre_text, chosen)
+                if warp_cleared is not None:
+                    outcome, input_text, post_text = warp_cleared
+                    decision = dataclasses.replace(decision, send_outcome=outcome)
+                elif chosen is not None and chosen.next_sector is not None:
+                    # Zero-fighter halt: if fighters freshly known == 0, hold this
+                    # tick before spending a warp -- we can't fight any toll we'd
+                    # encounter.  Fail-open on unknown/stale (never stalls explore
+                    # solely due to a missing reading).
+                    if self._zero_fighters_fresh():
+                        decision = dataclasses.replace(decision, send_outcome="held:zero_fighters")
                     else:
-                        gate_full = self.session.render_text(gate_rows)
-                        cls = classify_screen(gate_full, gate_prompt)
-                        if cls != _MOVEMENT_PROMPT_CLASS:
-                            # HIGH-2: the live screen isn't the movement prompt --
-                            # HOLD, never send a bare sector number into whatever
-                            # blocking prompt (haggle, colonist-qty, fighter-deploy,
-                            # ...) is actually live right now.
-                            decision = dataclasses.replace(decision, send_outcome=f"held:not_main_command:{cls}")
-                        elif chosen.kind == "explore" and _explore_target_confirmed_non_adjacent(
-                            gate_full, chosen.next_sector
-                        ):
-                            # HIGH backstop -- see _explore_target_confirmed_non_adjacent's
-                            # own docstring: never fire a bare warp at a sector the
-                            # live screen positively shows isn't one of the current
-                            # sector's own warps.
-                            decision = dataclasses.replace(decision, send_outcome="held:non_adjacent")
+                        # HIGH-2 gate-check TOCTOU fix (cipher re-verify, 2026-07-20):
+                        # ONE fresh render feeds BOTH the full-text and the prompt-line
+                        # the gate classifies against -- never reuse tick-start
+                        # `pre_text` (already stale by the time we reach the gate)
+                        # alongside a SECOND, later render's prompt line. Matches the
+                        # repo's own "one render feeds both" convention (see e.g.
+                        # login.py: `rows = session.render(); text =
+                        # session.render_text(rows)`). A blank gate render (no rows,
+                        # or an empty last line -- a screen-clear mid-transition, e.g.
+                        # a hub-warp) is ITSELF a HOLD: classify.py's own documented
+                        # last-resort fallback (`if not prompt_line: <gate-scan the
+                        # WHOLE full_text>`) would otherwise let a STALE main_command
+                        # string still sitting in `pre_text` green-light a send onto a
+                        # screen that was never actually confirmed settled at all --
+                        # cipher's PoC fired a real send this way through the old
+                        # stale-`pre_text`-plus-fresh-blank-prompt_line combination.
+                        gate_rows = self.session.render()
+                        gate_prompt = gate_rows[-1].strip() if gate_rows else ""
+                        if not gate_prompt:
+                            decision = dataclasses.replace(decision, send_outcome="held:blank_screen")
                         else:
-                            confirmed, outcome_detail = self._execute(chosen, snapshot)
-                            post_text = self.session.render_text(self.session.render())
-                            # WO-FA7a round 5 (observe-only): the freshest screen
-                            # after any send this tick actually fires -- the most
-                            # supervision-relevant read of the three sites in this
-                            # class (see dry_run_tick()'s comment for the full
-                            # rationale).
-                            if hasattr(self.session, "observe_credits"):
-                                self.session.observe_credits(post_text)
-                            # WO-FA4: a `run_chain` candidate's `_execute()` drives
-                            # many sends, not just `next_sector` -- record what
-                            # actually happened (the chain's own sector path +
-                            # realized credits_delta) rather than a misleadingly
-                            # narrow single number.
-                            if chosen.kind == "run_chain" and chosen.chain is not None:
-                                path = "->".join(str(s) for s in chosen.chain.sectors)
-                                result = self._last_chain_result
-                                if result is not None and result.credits_delta is not None:
-                                    input_text = f"<run_chain:{path} credits_delta={result.credits_delta:+d}>"
-                                else:
-                                    input_text = f"<run_chain:{path}>"
+                            gate_full = self.session.render_text(gate_rows)
+                            cls = classify_screen(gate_full, gate_prompt)
+                            if cls != _MOVEMENT_PROMPT_CLASS:
+                                # HIGH-2: the live screen isn't the movement prompt --
+                                # HOLD, never send a bare sector number into whatever
+                                # blocking prompt (haggle, colonist-qty, fighter-deploy,
+                                # ...) is actually live right now.
+                                decision = dataclasses.replace(decision, send_outcome=f"held:not_main_command:{cls}")
+                            elif chosen.kind == "explore" and _explore_target_confirmed_non_adjacent(
+                                gate_full, chosen.next_sector
+                            ):
+                                # HIGH backstop -- see _explore_target_confirmed_non_adjacent's
+                                # own docstring: never fire a bare warp at a sector the
+                                # live screen positively shows isn't one of the current
+                                # sector's own warps.
+                                decision = dataclasses.replace(decision, send_outcome="held:non_adjacent")
                             else:
-                                input_text = str(chosen.next_sector)
-                            decision = dataclasses.replace(
-                                decision,
-                                send_outcome=outcome_detail if outcome_detail is not None else ("sent" if confirmed else "unconfirmed"),
-                            )
+                                confirmed, outcome_detail = self._execute(chosen, snapshot)
+                                post_text = self.session.render_text(self.session.render())
+                                # WO-FA7a round 5 (observe-only): the freshest screen
+                                # after any send this tick actually fires -- the most
+                                # supervision-relevant read of the three sites in this
+                                # class (see dry_run_tick()'s comment for the full
+                                # rationale).
+                                if hasattr(self.session, "observe_credits"):
+                                    self.session.observe_credits(post_text)
+                                # WO-FA4: a `run_chain` candidate's `_execute()` drives
+                                # many sends, not just `next_sector` -- record what
+                                # actually happened (the chain's own sector path +
+                                # realized credits_delta) rather than a misleadingly
+                                # narrow single number.
+                                if chosen.kind == "run_chain" and chosen.chain is not None:
+                                    path = "->".join(str(s) for s in chosen.chain.sectors)
+                                    result = self._last_chain_result
+                                    if result is not None and result.credits_delta is not None:
+                                        input_text = f"<run_chain:{path} credits_delta={result.credits_delta:+d}>"
+                                    else:
+                                        input_text = f"<run_chain:{path}>"
+                                else:
+                                    input_text = str(chosen.next_sector)
+                                decision = dataclasses.replace(
+                                    decision,
+                                    send_outcome=outcome_detail if outcome_detail is not None else ("sent" if confirmed else "unconfirmed"),
+                                )
 
         with self._lock:
             self._tick_counter += 1
@@ -1583,6 +1600,40 @@ class AutopilotEngine:
         return (
             f"unconfirmed:fighter_option:{keys_sent}:{_reason}:{float(_elapsed):.3f}",
             keys_sent,
+            post_text,
+        )
+
+    def _try_clear_pause_key(
+        self, screen_text: str
+    ) -> Optional[tuple[str, str, str]]:
+        """WO-AP-PAUSE-KEY: mid-run ``[Pause]`` / help pager — send a single
+        Space with ``enter=False`` (no trailing CR; matches live recovery
+        ``tw do --no-enter`` space). One keystroke this tick.
+
+        Returns ``(send_outcome, input_text, post_text)`` or ``None``.
+        """
+        rows = screen_text.split("\n")
+        prompt = rows[-1].strip() if rows else ""
+        if not prompt:
+            return None
+        cls = classify_screen(screen_text, prompt)
+        if cls != _PAUSE_KEY_CLASS and not _PAUSE_KEY_RE.search(prompt):
+            return None
+        key = " "
+        _reason, _elapsed, confirmed = send_and_confirm(
+            self.session,
+            key,
+            confirm_prompt=None,
+            enter=False,
+        )
+        post_text = self.session.render_text(self.session.render())
+        if hasattr(self.session, "observe_credits"):
+            self.session.observe_credits(post_text)
+        if confirmed:
+            return (f"sent:pause_key:space", key, post_text)
+        return (
+            f"unconfirmed:pause_key:space:{_reason}:{float(_elapsed):.3f}",
+            key,
             post_text,
         )
 

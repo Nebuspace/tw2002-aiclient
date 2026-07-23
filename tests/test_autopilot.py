@@ -896,6 +896,61 @@ def test_live_tick_hud_refresh_defers_on_warp_confirm():
     assert decision.send_outcome == "sent:warp_confirm:Y:own_nav_intent"
 
 
+def test_live_tick_clears_pause_key_with_space_no_enter():
+    """WO-AP-PAUSE-KEY: [Pause] pager → Space with enter=False (not no_candidates thrash)."""
+    from twclient.classify import classify_screen
+
+    fixture = os.path.join(os.path.dirname(__file__), "fixtures", "pause_key_prompt.txt")
+    with open(fixture, encoding="utf-8") as f:
+        text = f.read().rstrip("\n")
+
+    class PauseClearingSession(FakeAutopilotSession):
+        def send(self, text, enter=True, secret=False):
+            super().send(text, enter=enter, secret=secret)
+            # After Space dismisses the pager, land on main_command.
+            if text == " " and enter is False:
+                self._text = _MAIN_COMMAND_SCREEN
+
+    session = PauseClearingSession(text=text)
+    pre_prompt = text.splitlines()[-1].strip()
+    assert classify_screen(text, pre_prompt) == "pause_key"
+
+    profile = _make_profile(autonomous=True)
+    engine = AutopilotEngine(session, profile, ControlLock())
+
+    decision = engine.live_tick(explore_next_sector=200)
+    assert session.sent == [(" ", False, False)]
+    assert decision.send_outcome == "sent:pause_key:space"
+    post_prompt = session._text.splitlines()[-1].strip()
+    assert classify_screen(session._text, post_prompt) == "main_command"
+    assert not (decision.send_outcome or "").startswith("held:")
+
+
+def test_live_tick_hud_refresh_defers_on_pause_key():
+    """WO-AP-PAUSE-KEY: stale HUD must not I-probe on the [Pause] pager."""
+    fixture = os.path.join(os.path.dirname(__file__), "fixtures", "pause_key_prompt.txt")
+    with open(fixture, encoding="utf-8") as f:
+        text = f.read().rstrip("\n")
+
+    class PauseClearingObservingSession(ObservingFakeAutopilotSession):
+        def send(self, text, enter=True, secret=False):
+            super().send(text, enter=enter, secret=secret)
+            if text == " " and enter is False:
+                self._text = _MAIN_COMMAND_SCREEN
+
+    session = PauseClearingObservingSession(text=text)
+    session.last_credits = 100
+    session.last_credits_ts = time.monotonic() - 60.0  # stale
+    profile = _make_profile(autonomous=True)
+    engine = AutopilotEngine(session, profile, ControlLock())
+    engine._last_hud_probe_mono = None
+
+    decision = engine.live_tick(explore_next_sector=200)
+    assert all(t[0] != "I" for t in session.sent), "must not I on pause_key"
+    assert session.sent == [(" ", False, False)]
+    assert decision.send_outcome == "sent:pause_key:space"
+
+
 # -- WO-escape-pod-reentry: three acceptance axes --------------------------
 
 

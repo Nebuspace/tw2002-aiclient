@@ -1,0 +1,8 @@
+Help for Command (?):
+  D - Redisplay the current sector
+  I - Ship Information
+  Q - Quit Game
+  ? - This help display
+
+Press any key to continue...
+  [Pause]
