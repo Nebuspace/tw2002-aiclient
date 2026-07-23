@@ -145,3 +145,46 @@ def test_decide_never_selects_pay_even_if_allow_pay_kwarg_present():
         allow_pay=True,
     )
     assert d.key == "R"
+
+
+def test_parse_fighter_option_does_not_detect_from_scrollback_when_prompt_line_given():
+    """Accept-3 root: after Retreat the Option? line may still appear in the
+    25-row pyte buffer above the new main_command prompt.  When
+    ``prompt_line`` is the live prompt (i.e. main_command), the detection
+    must NOT fire — only the actual interactive prompt line counts.
+
+    RED without the ``detect_in = prompt_line if prompt_line else blob``
+    anchoring in ``parse_fighter_option``: the old code searches the full
+    blob, which contains the stale Option? line in the scrollback.
+    """
+    scrollback_with_option = (
+        "Sector  : 2567 in uncharted space.\n"
+        "Fighters: 1 (belong to Corp#1, New Corp) [Toll]\n"
+        "Your fighters: 0 vs. theirs: 1\n"
+        "Option? (A,D,I,R,S,?):?\n"  # <- stale, already answered with R
+        "Retreating...\n"
+        "Moving to Sector 100..."
+    )
+    main_command_prompt = "Command [TL=00:00:08]:[100] (?=Help)? :"
+
+    st = parse_fighter_option(scrollback_with_option, main_command_prompt)
+    assert st.detected is False, (
+        "Option? in scrollback must not be detected when prompt_line is the "
+        "main_command prompt -- stale scrollback must not re-trigger a Retreat"
+    )
+
+
+def test_parse_attack_qty_does_not_detect_from_scrollback_when_prompt_line_given():
+    """Sibling to the Option? scrollback test: a qty sub-prompt in scrollback
+    (above the new main_command prompt) must not be re-answered.
+    """
+    from twclient.fighter_toll_policy import parse_attack_qty_prompt
+
+    scrollback_with_qty = (
+        "How many fighters do you wish to use (0 to 30) [0]?\n"
+        "Command [TL=00:00:08]:[100] (?=Help)? :"
+    )
+    main_command_prompt = "Command [TL=00:00:08]:[100] (?=Help)? :"
+
+    result = parse_attack_qty_prompt(scrollback_with_qty, main_command_prompt)
+    assert result is None, "qty prompt in scrollback must not match when prompt_line is main_command"

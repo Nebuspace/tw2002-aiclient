@@ -85,9 +85,18 @@ def parse_fighter_option(screen_text: str, prompt_line: str = "") -> FighterOpti
     Falls back to the corp ``Fighters: N (…)[Toll]`` banner for *theirs*
     when the vs-line has left the viewport (live ensure stuck on Option?
     with only the prompt still visible).
+
+    Detection anchors to ``prompt_line`` when provided (non-empty): the
+    Option? prompt must be the LIVE interactive prompt, not stale
+    scrollback left over from a dialogue we already cleared.  When no
+    ``prompt_line`` is given (caller-side default ``""``) the whole blob
+    is searched, preserving backward-compatibility for direct callers that
+    pass only ``screen_text``.  The vs-line / toll-banner search always
+    uses the full blob regardless.
     """
     blob = f"{screen_text}\n{prompt_line}"
-    if not _OPTION_PROMPT_RE.search(blob):
+    detect_in = prompt_line if prompt_line else blob
+    if not _OPTION_PROMPT_RE.search(detect_in):
         return FighterOptionState(detected=False)
     m = _FIGHTER_VS_RE.search(blob)
     if m:
@@ -216,9 +225,15 @@ def decide_from_screen(
 def parse_attack_qty_prompt(
     screen_text: str, prompt_line: str = ""
 ) -> Optional[tuple[int, int]]:
-    """Return ``(max_avail, default)`` for the Attack quantity sub-prompt."""
+    """Return ``(max_avail, default)`` for the Attack quantity sub-prompt.
+
+    Anchors detection to ``prompt_line`` when provided (same rationale as
+    ``parse_fighter_option``): the qty prompt must be the LIVE interactive
+    prompt, not scrollback from an already-answered Attack round.
+    """
     blob = f"{screen_text}\n{prompt_line}"
-    m = _ATTACK_QTY_RE.search(blob)
+    detect_in = prompt_line if prompt_line else blob
+    m = _ATTACK_QTY_RE.search(detect_in)
     if not m:
         return None
     return int(m.group(1)), int(m.group(2))

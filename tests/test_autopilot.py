@@ -777,6 +777,141 @@ def test_live_tick_retreats_zero_fighter_option_instead_of_holding():
     assert all(t[0] != "P" for t in session.sent)
 
 
+# -- WO-escape-pod-reentry: three acceptance axes --------------------------
+
+
+class _FightersObservingSession(ObservingFakeAutopilotSession):
+    """Extends ObservingFakeAutopilotSession with fighters_snapshot so the
+    zero-fighter halt gate in live_tick() can be exercised.  Uses the real
+    Session.observe_fighters / fighters_snapshot (same assignment idiom as
+    the credits/turns pair above)."""
+
+    observe_fighters = Session.observe_fighters
+    fighters_snapshot = Session.fighters_snapshot
+
+    def __init__(self, *a, **kw):
+        super().__init__(*a, **kw)
+        self.last_fighters = None
+        self.last_fighters_ts = None
+
+
+def test_live_tick_holds_when_fighters_freshly_known_zero():
+    """Accept-1: explore/re-warp does not proceed when fighters aboard == 0.
+
+    Screen carries a ship-info line that parse_state() can read as
+    fighters_aboard=0; live_tick() must HOLD with 'held:zero_fighters'.
+    The same screen classifies as main_command (HIGH-2 gate would pass) --
+    the zero-fighter gate fires BEFORE the HIGH-2 check, so the sector
+    number is never sent.
+
+    RED if ``_zero_fighters_fresh`` or the gate insertion are removed.
+    """
+    # Include a Credits line so the HUD-seed probe is skipped (it only
+    # fires when credits are unknown, and we want to reach the navigate gate).
+    # Holds/Fighters/Shields is the ship-info line state_parser reads for
+    # fighters_aboard; the credits line satisfies _maybe_seed_hud_once().
+    text = (
+        "Credits        : 5000\n"
+        "Holds: 40  Fighters: 0  Shields: 200\n"
+        + _MAIN_COMMAND_SCREEN
+    )
+    session = _FightersObservingSession(text=text)
+    profile = _make_profile(autonomous=True)
+    engine = AutopilotEngine(session, profile, ControlLock())
+
+    decision = engine.live_tick(explore_next_sector=42)
+
+    assert session.sent == [], "must NOT send a warp with 0 fighters"
+    assert decision.send_outcome == "held:zero_fighters"
+    # The explore candidate was still scored — just not executed.
+    assert decision.chosen is not None
+    assert decision.chosen.kind == "explore"
+    assert decision.chosen.next_sector == 42
+
+
+def test_live_tick_post_retreat_sector_avoided_next_tick():
+    """Accept-2: after Retreat on fighter Option?, sector is marked avoided
+    AND a subsequent tick targeting that sector is blocked.
+
+    Two-tick sequence:
+      Tick 1 — screen is Option? at sector 8578, yours=0 → R sent.
+               _avoided_sectors must contain 8578 afterwards.
+      Tick 2 — main_command screen; planner still suggests 8578 via
+               explore_next_sector=8578 → HELD because 8578 is avoided.
+
+    RED without the ``_avoided_sectors`` tracking and filter.
+    """
+    option_screen = (
+        "Sector  : 8578 in uncharted space.\n"
+        "Your fighters: 0 vs. theirs: 1\n"
+        "Option? (A,D,I,R,P,S,?):?"
+    )
+    retreat_done_screen = _MAIN_COMMAND_SCREEN  # back at previous sector
+
+    class _TwoStateSession(FakeAutopilotSession):
+        def send(self, text, enter=True, secret=False):
+            super().send(text, enter=enter, secret=secret)
+            if text == "R":
+                self._text = retreat_done_screen
+
+    session = _TwoStateSession(text=option_screen)
+    profile = _make_profile(autonomous=True)
+    engine = AutopilotEngine(session, profile, ControlLock())
+
+    # Tick 1: should send R and mark 8578 avoided.
+    d1 = engine.live_tick(explore_next_sector=8578)
+    assert session.sent == [("R", False, False)]
+    assert d1.send_outcome == "sent:fighter_option:R"
+    assert 8578 in engine._avoided_sectors, "retreated sector must be in _avoided_sectors"
+
+    # Same-tick re-warp already impossible via if/elif structure — confirm
+    # no extra send happened on tick 1.
+    assert len(session.sent) == 1
+
+    # Tick 2: planner still offers 8578, but it must be filtered to None
+    # so explore candidate has no next_sector → nothing to send → held.
+    d2 = engine.live_tick(explore_next_sector=8578)
+    assert len(session.sent) == 1, "must NOT warp to the avoided sector on tick 2"
+    # chosen is None or has no next_sector (explore_next_sector was filtered)
+    assert d2.chosen is None or d2.chosen.next_sector is None, (
+        "avoided sector must not become the chosen next_sector"
+    )
+
+
+def test_live_tick_no_stale_option_r_on_command_prompt():
+    """Accept-3: once the prompt is main_command (not Option?), the engine
+    must NOT re-send R from stale scrollback.
+
+    Screen has Option? text in the body (scrollback) but the last line
+    (the actual live prompt) is main_command — exactly the post-Retreat
+    pyte buffer shape.  live_tick() must send the warp sector number (the
+    intended explore action), NOT R.
+
+    RED without the prompt-line anchoring fix in ``parse_fighter_option``.
+    """
+    # Build a screen where Option? is in scrollback but command is the prompt.
+    command_prompt = "Command [TL=00:00:08]:[100] (?=Help)? :"
+    scrollback_option_on_command_screen = (
+        "Sector  : 2567 in uncharted space.\n"
+        "Your fighters: 0 vs. theirs: 1\n"
+        "Option? (A,D,I,R,S,?):?\n"   # stale, in scrollback
+        "Retreating...\n"
+        + command_prompt
+    )
+    session = FakeAutopilotSession(text=scrollback_option_on_command_screen)
+    profile = _make_profile(autonomous=True)
+    engine = AutopilotEngine(session, profile, ControlLock())
+
+    decision = engine.live_tick(explore_next_sector=99)
+
+    # The live prompt is main_command → no Option? clearing → warp to 99.
+    assert ("R", False, False) not in session.sent, (
+        "must NOT send R when the live prompt is main_command (Option? is scrollback)"
+    )
+    assert decision.send_outcome == "sent"
+    assert ("99", True, False) in session.sent
+
+
 def test_live_tick_sends_normally_when_the_live_screen_is_the_command_prompt():
     session = FakeAutopilotSession()  # default screen classifies as main_command
     profile = _make_profile(autonomous=True)
