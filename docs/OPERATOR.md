@@ -50,6 +50,8 @@ same daemon. For verbs and architecture, see the root [`README.md`](../README.md
 4. **Autopilot toggle:** on the play screen, `a` or `Space` flips Autopilot
    ON/OFF and persists `autopilot=` on the profile. ON arms the trainer; OFF
    leaves you in manual / AI-pilot territory without the background loop.
+   Default Autopilot is **continuous / uncapped** (no hidden 500-tick stop);
+   an explicit max-ticks ceiling remains an optional ops safety valve.
 
 5. **Attach (human drive):** `h` / `H` suspends play panels and hands the
    keyboard via the same engine as `./tw attach`. Prefer Autopilot OFF first —
@@ -109,6 +111,47 @@ profile has `autopilot=true`:
 `--no-auto-arm` skips post-ensure auto-start only for that `ensure` call. Re-arm
 explicitly after you confirm the seat is healthy.
 
+## Live seat recovery
+
+Current live ops seat uses the isolated run dir **`run/rogue`**. Always pass
+`--run-dir run/rogue` (or `TW_RUN_DIR=run/rogue`) on every `status` / `ensure` /
+`spectate` / `stop` for that seat — default `run/` is a different daemon.
+
+### Failure signatures
+
+Inspect with:
+
+```bash
+./tw status --run-dir run/rogue --json
+./tw spectate --run-dir run/rogue    # paints ! strip when intervention.needs_attention
+```
+
+| Signature | What you see |
+|---|---|
+| `game_select` | `classification` is `game_select`, and/or Autopilot `stop_reason` is `game_select` (door-select rejoin exhausted) |
+| Tick-cap stop (legacy / explicit ceiling) | Autopilot not running, `ticks_done` == 500, `stop_reason` `max_ticks_exhausted` — not the continuous default |
+| `explore_exhausted` | Autopilot `stop_reason` (or last decision reason) `explore_exhausted` — frontier idle, no hop |
+| Intervention attention | `intervention.needs_attention` true — spectate `! …` strip / play attention banner |
+
+Continuous Autopilot past 500 ticks with `running: true` is healthy under the
+uncapped default; do not recycle solely because `ticks_done` exceeded 500.
+
+### Recover
+
+Hub recycle connect/login **without** auto-arming Autopilot, verify, then
+re-arm:
+
+```bash
+./tw stop --run-dir run/rogue
+./tw ensure --profile rogue --run-dir run/rogue --no-auto-arm
+# confirm classification is main_command (not game_select), then re-arm:
+TW_RUN_DIR=run/rogue ./tw2002-aiclient   # Play → Autopilot ON
+```
+
+Same `--no-auto-arm` sequence as [Recycle with `--no-auto-arm`](#recycle-with---no-auto-arm);
+use it whenever any signature above leaves Autopilot stopped or the seat
+stuck off the main command prompt.
+
 ## Quick checklist
 
 | Goal | Command / key |
@@ -119,5 +162,7 @@ explicitly after you confirm the seat is healthy.
 | Watch (ops) | `./tw spectate [--run-dir …]` |
 | Human drive | play `h` or `./tw attach` (`Ctrl-]` out) |
 | Connect without Autopilot | `./tw ensure … --no-auto-arm` |
+| Live seat (current) | always `--run-dir run/rogue` / `TW_RUN_DIR=run/rogue` |
+| Halt / stuck recovery | see **Live seat recovery** (`game_select`, tick-cap 500, `explore_exhausted`, `needs_attention`) |
 | Daemon health | `./tw status [--run-dir …] [--json]` |
 | Clean shutdown | `./tw stop [--run-dir …]` |
