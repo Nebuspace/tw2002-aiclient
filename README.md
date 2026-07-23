@@ -100,6 +100,8 @@ One long-lived daemon, many short-lived windows into it:
 
 Deep architecture and rationale: see [`DESIGN.md`](DESIGN.md) and
 [`CLAUDE.md`](CLAUDE.md); canonical docs are being established in `knowledge/`.
+Day-to-day product + ops path (launcher → Autopilot → attach, run-dir isolation,
+`--no-auto-arm` recycle): [`docs/OPERATOR.md`](docs/OPERATOR.md).
 
 ---
 
