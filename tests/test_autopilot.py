@@ -296,6 +296,69 @@ def test_select_reports_no_candidates_when_truly_nothing_available():
     assert decision.reason == "no_candidates"
 
 
+def test_select_explore_recovery_candidate_when_frontier_hop_present():
+    """WO-EXPLORE-NO-CANDIDATES: densest/StarDock recovery hop is scored."""
+    snap = WorldSnapshot(
+        sector=1, credits=None, turns_left=1000,
+        explore_next_sector=2, explore_mode="recovery:densest",
+    )
+    decision = select(snap)
+    assert decision.chosen is not None
+    assert decision.chosen.kind == "explore"
+    assert decision.chosen.next_sector == 2
+    assert "recovery:densest" in decision.chosen.rationale
+
+
+def test_select_explore_exhausted_distinct_from_no_candidates():
+    """Gated halt reason must not collapse into blank no_candidates."""
+    snap = WorldSnapshot(
+        sector=2, credits=None, turns_left=1000,
+        explore_next_sector=None, explore_mode="exhausted",
+    )
+    decision = select(snap)
+    assert decision.chosen is None
+    assert decision.reason == "explore_exhausted"
+    assert any("explore_exhausted" in s for s in decision.skipped)
+
+
+def test_dry_run_exhausted_frontier_recovery_or_halt():
+    """Accept: dry-run with exhausted explore lane is recovery candidate OR
+    explore_exhausted — never a silent empty stop."""
+    session = FakeAutopilotSession()
+    profile = _make_profile(autonomous=True)
+    engine = AutopilotEngine(session, profile, ControlLock())
+    recovered = engine.dry_run_tick(
+        explore_next_sector=7, explore_mode="recovery:densest",
+    )
+    assert recovered.chosen is not None
+    assert recovered.chosen.kind == "explore"
+    assert recovered.chosen.next_sector == 7
+
+    halted = engine.dry_run_tick(explore_next_sector=None, explore_mode="exhausted")
+    assert halted.chosen is None
+    assert halted.reason == "explore_exhausted"
+
+
+def test_autopilot_loop_halts_on_explore_exhausted():
+    """Continuous AP must stop (with last_error) instead of thrashing."""
+    session = FakeAutopilotSession()
+    profile = _make_profile(autonomous=True)
+    lock = ControlLock()
+    engine = AutopilotEngine(session, profile, lock)
+    loop = AutopilotLoop(
+        engine,
+        lambda: {"explore_next_sector": None, "explore_mode": "exhausted"},
+        tick_interval_s=0.01,
+    )
+    loop.start()
+    assert _wait_until(lambda: not loop.running, timeout=3.0)
+    assert loop.stop_reason == "explore_exhausted"
+    assert loop.last_error is not None
+    assert "explore_exhausted" in loop.last_error
+    assert loop.last_decision is not None
+    assert loop.last_decision.reason == "explore_exhausted"
+
+
 def test_select_picks_upgrade_when_no_executable_chain():
     """No profitable cycle → upgrade beats explore on EV."""
     snap = WorldSnapshot(

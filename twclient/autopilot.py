@@ -704,20 +704,37 @@ def _score_upgrade(snapshot: WorldSnapshot, caps: EconCaps) -> tuple[Optional[Ca
 
 
 def _score_explore(snapshot: WorldSnapshot) -> tuple[Optional[Candidate], Optional[str]]:
-    if snapshot.explore_next_sector is None:
-        return None, "explore: no frontier/route target (exhausted)"
-    return (
-        Candidate(
-            kind="explore",
-            ev_per_turn=EXPLORE_BASELINE_EV,
-            rationale=(
-                f"keep exploring ({snapshot.explore_mode}) toward sector "
+    # WO-EXPLORE-NO-CANDIDATES: a concrete recovery hop (densest hub /
+    # StarDock) is a real explore candidate — never silent idle.
+    if snapshot.explore_next_sector is not None:
+        mode = snapshot.explore_mode or "explore"
+        if mode.startswith("recovery:"):
+            rationale = (
+                f"frontier recovery ({mode}) toward sector "
+                f"{snapshot.explore_next_sector}"
+            )
+        else:
+            rationale = (
+                f"keep exploring ({mode}) toward sector "
                 f"{snapshot.explore_next_sector} -- no idle (§11)"
+            )
+        return (
+            Candidate(
+                kind="explore",
+                ev_per_turn=EXPLORE_BASELINE_EV,
+                rationale=rationale,
+                next_sector=snapshot.explore_next_sector,
             ),
-            next_sector=snapshot.explore_next_sector,
-        ),
-        None,
-    )
+            None,
+        )
+    # Explicit gated halt (distinct from blank no_candidates): frontier
+    # gone and recovery also empty, or already at StarDock with no hop.
+    mode = (snapshot.explore_mode or "").strip()
+    if mode == "exhausted" or mode.startswith("recovery:"):
+        return None, "explore: explore_exhausted (no frontier/stardock/densest hop)"
+    if mode == "arrived":
+        return None, "explore: explore_exhausted (at StarDock; frontier idle)"
+    return None, "explore: no frontier/route target (exhausted)"
 
 
 def _priority_engine_focus_kind(
@@ -816,8 +833,16 @@ def select(snapshot: WorldSnapshot, caps: EconCaps = EconCaps()) -> Decision:
             skipped.append(skip_reason)
 
     if not candidates:
+        # WO-EXPLORE-NO-CANDIDATES: when the explore lane itself reports
+        # gated exhaustion, surface that distinctly from a blank world
+        # (no sector / never planned) so continuous AP can halt+attention
+        # instead of thrashing last_reason=no_candidates forever.
+        if any("explore_exhausted" in s for s in skipped):
+            reason = "explore_exhausted"
+        else:
+            reason = "no_candidates"
         return Decision(
-            ts=time.time(), candidates=(), chosen=None, reason="no_candidates",
+            ts=time.time(), candidates=(), chosen=None, reason=reason,
             skipped=tuple(skipped), snapshot=snapshot,
         )
 
@@ -1875,6 +1900,18 @@ class AutopilotLoop:
                 ):
                     self.last_error = f"game_select_unrecoverable:{outcome}"
                     self.stop_reason = "game_select"
+                    break
+                # WO-EXPLORE-NO-CANDIDATES: frontier + densest/StarDock
+                # recovery both empty — halt with last_error so
+                # intervention attention fires (not silent continuous thrash).
+                if (
+                    self.last_decision is not None
+                    and self.last_decision.reason == "explore_exhausted"
+                ):
+                    self.last_error = (
+                        "explore_exhausted: no frontier/stardock/densest recovery"
+                    )
+                    self.stop_reason = "explore_exhausted"
                     break
                 time.sleep(self.tick_interval_s)
             else:

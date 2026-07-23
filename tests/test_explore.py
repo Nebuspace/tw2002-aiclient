@@ -305,3 +305,82 @@ def test_plan_map_fill_falls_back_to_nearest_when_no_port_seeds(tmp_path: Path):
     # nearest depth-1 edges: 1→99 (and 2→50 is depth 2) — exploit picks depth-sorted first
     assert plan.next_hop.to in (99, 50)
     assert plan.next_hop.depth == 1
+
+
+def test_exhausted_recovery_warps_toward_densest_hub(tmp_path: Path):
+    """WO-EXPLORE-NO-CANDIDATES: fully mapped component → densest hop."""
+    from twclient.explore import plan_exhausted_recovery, plan_find_stardock
+
+    wid = "test+densest"
+    _seed(
+        wid,
+        tmp_path,
+        [
+            {"sector_id": 1, "warps": [2], "landmarks": []},
+            {"sector_id": 2, "warps": [1, 3, 4], "landmarks": []},  # densest
+            {"sector_id": 3, "warps": [2], "landmarks": []},
+            {"sector_id": 4, "warps": [2], "landmarks": []},
+        ],
+    )
+    recovery = plan_exhausted_recovery(
+        wid, current_sector=1, turn_budget=5, state_dir=tmp_path,
+    )
+    assert recovery.policy == "densest"
+    assert recovery.target_sector == 2
+    assert recovery.next_sector == 2
+
+    plan = plan_find_stardock(
+        wid, current_sector=1, turn_budget=5, epsilon=0.0, state_dir=tmp_path,
+    )
+    assert plan.mode == "recovery:densest"
+    assert plan.next_sector == 2
+
+
+def test_exhausted_recovery_prefers_stardock_when_landmark_known(tmp_path: Path):
+    from twclient.explore import plan_exhausted_recovery
+
+    wid = "test+recov-sd"
+    _seed(
+        wid,
+        tmp_path,
+        [
+            {"sector_id": 1, "warps": [2], "landmarks": []},
+            {"sector_id": 2, "warps": [1, 3, 9], "landmarks": []},  # denser than path to SD
+            {"sector_id": 3, "warps": [2], "landmarks": ["StarDock"]},
+            {"sector_id": 9, "warps": [2], "landmarks": []},
+        ],
+    )
+    recovery = plan_exhausted_recovery(
+        wid, current_sector=1, turn_budget=5, state_dir=tmp_path,
+    )
+    assert recovery.policy == "stardock"
+    assert recovery.target_sector == 3
+    assert recovery.next_sector == 2
+
+
+def test_exhausted_recovery_halts_when_already_at_densest(tmp_path: Path):
+    from twclient.explore import plan_exhausted_recovery, plan_find_stardock
+
+    wid = "test+at-densest"
+    _seed(
+        wid,
+        tmp_path,
+        [
+            {"sector_id": 1, "warps": [2], "landmarks": []},
+            {"sector_id": 2, "warps": [1, 3, 4], "landmarks": []},
+            {"sector_id": 3, "warps": [2], "landmarks": []},
+            {"sector_id": 4, "warps": [2], "landmarks": []},
+        ],
+    )
+    recovery = plan_exhausted_recovery(
+        wid, current_sector=2, turn_budget=5, state_dir=tmp_path,
+    )
+    assert recovery.policy == "halt"
+    assert recovery.next_sector is None
+    assert recovery.reason.startswith("explore_exhausted:")
+
+    plan = plan_find_stardock(
+        wid, current_sector=2, turn_budget=5, epsilon=0.0, state_dir=tmp_path,
+    )
+    assert plan.mode == "exhausted"
+    assert plan.next_sector is None

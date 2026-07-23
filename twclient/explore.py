@@ -184,7 +184,173 @@ class StarDockPlan:
     route: Optional[tuple[int, ...]]  # path on known graph when found
     next_sector: Optional[int]  # immediate next hop toward dock or frontier
     hunt: Optional[MapFillPlan]  # set when dock not yet landmark-cached
-    mode: str  # "route" | "hunt" | "arrived" | "exhausted"
+    mode: str  # "route" | "hunt" | "arrived" | "exhausted" | "recovery:stardock" | "recovery:densest"
+
+
+@dataclass(frozen=True)
+class RecoveryPlan:
+    """WO-EXPLORE-NO-CANDIDATES: what to do when the frontier is empty.
+
+    Policy order (never guessed prices; never invents warps):
+      1. ``stardock`` — hop toward a known StarDock landmark on the graph
+      2. ``densest`` — hop toward the highest out-degree reachable sector
+      3. ``halt`` — gated stop; no silent empty candidate list
+    """
+
+    next_sector: Optional[int]
+    target_sector: Optional[int]
+    policy: str  # "stardock" | "densest" | "halt"
+    reason: str
+
+
+def reachable_sectors(
+    graph: Mapping[int, Sequence[int]],
+    start: int,
+) -> set[int]:
+    """Known-subgraph BFS from ``start`` (only keys present in ``graph``)."""
+    if start not in graph:
+        return set()
+    seen = {start}
+    q: deque[int] = deque([start])
+    while q:
+        node = q.popleft()
+        for nxt in graph.get(node, ()):
+            if nxt in graph and nxt not in seen:
+                seen.add(nxt)
+                q.append(nxt)
+    return seen
+
+
+def densest_reachable_sector(
+    graph: Mapping[int, Sequence[int]],
+    start: int,
+) -> Optional[int]:
+    """Highest out-degree sector reachable from ``start`` on the known graph.
+
+    Tie-break: lowest sector id (stable, never random). Returns ``None``
+    when ``start`` is absent from the graph.
+    """
+    reachable = reachable_sectors(graph, start)
+    if not reachable:
+        return None
+    return max(reachable, key=lambda sid: (len(tuple(graph.get(sid, ()))), -sid))
+
+
+def plan_exhausted_recovery(
+    world_id: str,
+    *,
+    current_sector: int,
+    turn_budget: int = 1,
+    landmark: str = "StarDock",
+    state_dir=None,
+) -> RecoveryPlan:
+    """Recovery when Map-fill frontier / StarDock hunt has nothing left.
+
+    Never invents StarDock prices or unknown warps — only adjacent hops
+    along the known subgraph (same discipline as ``_adjacent_hop_toward``).
+    """
+    budget = max(0, int(turn_budget))
+    cur = int(current_sector)
+    graph = known_graph(world_id, state_dir=state_dir)
+    if budget <= 0:
+        return RecoveryPlan(
+            next_sector=None,
+            target_sector=None,
+            policy="halt",
+            reason="explore_exhausted:turn_budget",
+        )
+    if cur not in graph:
+        return RecoveryPlan(
+            next_sector=None,
+            target_sector=None,
+            policy="halt",
+            reason="explore_exhausted:current_unknown",
+        )
+
+    docks = tuple(find_landmark_sectors(world_id, landmark, state_dir=state_dir))
+    best_dock_path: Optional[tuple[int, ...]] = None
+    best_dock: Optional[int] = None
+    for dock in docks:
+        path = path_to_sector(graph, cur, dock)
+        if path is None:
+            continue
+        if best_dock_path is None or len(path) < len(best_dock_path):
+            best_dock_path = path
+            best_dock = dock
+    if best_dock_path is not None and len(best_dock_path) > 1:
+        return RecoveryPlan(
+            next_sector=best_dock_path[1],
+            target_sector=best_dock,
+            policy="stardock",
+            reason="recovery:stardock",
+        )
+
+    densest = densest_reachable_sector(graph, cur)
+    if densest is not None and densest != cur:
+        path = path_to_sector(graph, cur, densest)
+        if path is not None and len(path) > 1:
+            return RecoveryPlan(
+                next_sector=path[1],
+                target_sector=densest,
+                policy="densest",
+                reason="recovery:densest",
+            )
+
+    if best_dock is not None and best_dock == cur:
+        halt_reason = "explore_exhausted:at_stardock"
+    elif densest is not None and densest == cur:
+        halt_reason = "explore_exhausted:at_densest"
+    else:
+        halt_reason = "explore_exhausted:no_recovery_target"
+    return RecoveryPlan(
+        next_sector=None,
+        target_sector=densest if densest is not None else best_dock,
+        policy="halt",
+        reason=halt_reason,
+    )
+
+
+def _apply_recovery_to_stardock_plan(
+    plan: "StarDockPlan",
+    *,
+    world_id: str,
+    current_sector: int,
+    turn_budget: int,
+    landmark: str,
+    state_dir,
+) -> "StarDockPlan":
+    """When frontier/route yields no hop, attach densest/StarDock recovery.
+
+    Leaves ``arrived`` untouched (already at dock). ``mode="exhausted"``
+    after this means halt-with-attention for autopilot — never a silent
+    empty candidate list.
+    """
+    if plan.next_sector is not None or plan.mode == "arrived":
+        return plan
+    recovery = plan_exhausted_recovery(
+        world_id,
+        current_sector=current_sector,
+        turn_budget=turn_budget,
+        landmark=landmark,
+        state_dir=state_dir,
+    )
+    if recovery.next_sector is None:
+        return StarDockPlan(
+            found=plan.found,
+            stardock_sectors=plan.stardock_sectors,
+            route=plan.route,
+            next_sector=None,
+            hunt=plan.hunt,
+            mode="exhausted",
+        )
+    return StarDockPlan(
+        found=plan.found or recovery.policy == "stardock",
+        stardock_sectors=plan.stardock_sectors,
+        route=plan.route,
+        next_sector=recovery.next_sector,
+        hunt=plan.hunt,
+        mode=f"recovery:{recovery.policy}",
+    )
 
 
 def plan_find_stardock(
@@ -201,6 +367,10 @@ def plan_find_stardock(
 
     Does not write the world-model or emit keystrokes — callers that
     visit sectors (density scan / move) are what populate landmarks.
+
+    WO-EXPLORE-NO-CANDIDATES: when the frontier is exhausted (and we are
+    not already mid-route to a dock), attach densest / StarDock recovery
+    or leave ``mode="exhausted"`` for an explicit autopilot halt.
     """
     budget = max(0, int(turn_budget))
     docks = tuple(find_landmark_sectors(world_id, landmark, state_dir=state_dir))
@@ -217,13 +387,21 @@ def plan_find_stardock(
             if best is None or len(path) < len(best):
                 best = path
         if best is None:
-            return StarDockPlan(
+            plan = StarDockPlan(
                 found=True,
                 stardock_sectors=docks,
                 route=None,
                 next_sector=None,
                 hunt=None,
                 mode="exhausted",
+            )
+            return _apply_recovery_to_stardock_plan(
+                plan,
+                world_id=world_id,
+                current_sector=cur,
+                turn_budget=budget,
+                landmark=landmark,
+                state_dir=state_dir,
             )
         if len(best) == 1:
             return StarDockPlan(
@@ -264,13 +442,23 @@ def plan_find_stardock(
     # back the frontier's own (possibly non-adjacent) `to` sector as
     # `next_sector` -- resolve it to a valid single hop from `cur` first.
     nxt = _adjacent_hop_toward(graph, cur, hunt.next_hop)
-    return StarDockPlan(
+    plan = StarDockPlan(
         found=False,
         stardock_sectors=(),
         route=None,
         next_sector=nxt,
         hunt=hunt,
         mode="hunt" if nxt is not None else "exhausted",
+    )
+    if nxt is not None:
+        return plan
+    return _apply_recovery_to_stardock_plan(
+        plan,
+        world_id=world_id,
+        current_sector=cur,
+        turn_budget=budget,
+        landmark=landmark,
+        state_dir=state_dir,
     )
 
 
