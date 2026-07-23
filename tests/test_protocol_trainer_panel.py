@@ -378,9 +378,13 @@ def test_status_autopilot_trace_surfaces_the_engines_most_recent_dry_run_tick(fa
     # Sanity on the schema itself, not just self-consistency with the
     # direct decision_to_trace() call above -- a multi-candidate tick
     # really did score/win through the real dispatch path.
-    assert resp["autopilot_trace"]["chosen"] == "upgrade"
+    # Preference: priority_engine defers ship upgrade on a short executable
+    # chain (2-link < MIN_CHAIN_LINKS_FOR_SHIP_UPGRADE) even when raw upgrade
+    # EV is higher -- chosen is run_chain, not the EV winner.
+    assert resp["autopilot_trace"]["chosen"] == "run_chain"
     by_kind = {c["kind"]: c for c in resp["autopilot_trace"]["candidates"]}
     assert set(by_kind) == {"run_chain", "upgrade", "explore"}
+    assert by_kind["upgrade"]["ev_cr_per_turn"] == 550.0  # still scored, just not focus
 
 
 # -- intervention in status (WO-AICLIENT-WS5-INTERVENTION) ---------------
