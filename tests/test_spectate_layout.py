@@ -1065,9 +1065,20 @@ def test_compose_primary_goals_and_chain_highlight():
 
 
 def test_compose_priorities_lines_orders_by_ev_with_readable_labels():
-    """Engine ranks ungated chain first; upgrade gated without payback."""
-    lines = compose_priorities_lines(PROVISIONAL_AUTOPILOT_TRACE, width=40)
+    """Engine ranks ungated chain first; upgrade gated without payback.
+
+    Trace-only PROVISIONAL fixture has no chain hops — pass a ≥2-link chain
+    so FOCUS ungates Trade chain (presence-seed floor) instead of showing ⊘.
+    """
+    chain = {
+        "sectors": [1, 3, 1],
+        "profit_per_turn": 550.0,
+        "turns": 2,
+        "steps": 2,
+    }
+    lines = compose_priorities_lines(PROVISIONAL_AUTOPILOT_TRACE, chain=chain, width=40)
     assert lines[0].startswith("1 ") and "Trade chain" in lines[0] and "550" in lines[0]
+    assert "⊘" not in lines[0]
     assert lines[1].startswith("2 ") and "Upgrade" in lines[1]
     assert "⊘" in lines[1]  # no payback in trace → engine gates upgrade
     assert lines[2].startswith("3 ") and "Explore" in lines[2]
