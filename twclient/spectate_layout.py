@@ -226,6 +226,12 @@ HUD_GUTTER_MIN_H = VIEWPORT_H - DECISIONS_MIN_H  # 21
 # Left column: PRIORITIES matches viewport height (room for AUTO footer);
 # FORMATIONS continues under it down to the LOG band (not carved from PRIORITIES).
 FORMATIONS_MIN_H = 6
+# WO-FA8: MENU MAP (You-Are-Here ★ / off-map) sits above FORMATIONS when the
+# left column has room — border + 3 clip-safe ``format_menu_map_lines``.
+MENU_MAP_H = 5
+# Soft floor so we can still carve MENU MAP when leftover is tight
+# (FORMATIONS keeps at least a one-content-row bordered box).
+MENU_MAP_SOFT_FORMATIONS_MIN = 3
 
 
 def frame_layout(lines: int, cols: int, *, needs_attention: bool = False) -> dict:
@@ -284,6 +290,7 @@ def frame_layout(lines: int, cols: int, *, needs_attention: bool = False) -> dic
             "gutter": None,
             "decisions": None,
             "priorities": None,
+            "menumap": None,
             "formations": None,
             "chain": None,
             "ticker": None,
@@ -391,6 +398,7 @@ def frame_layout(lines: int, cols: int, *, needs_attention: bool = False) -> dic
     # Side gutters: PRIORITIES (left) | game | HUD (right). Never crush
     # the native viewport — left PRIORITIES only when both gutters fit.
     priorities = None
+    menumap = None
     formations = None
     pri_w = 0
     if i_cols >= FULL_GUTTER_MIN_COLS:
@@ -419,9 +427,8 @@ def frame_layout(lines: int, cols: int, *, needs_attention: bool = False) -> dic
 
     if pri_w > 0:
         # PRIORITIES keeps full viewport height so GOALS/FOCUS/AUTO fit.
-        # FORMATIONS starts under PRIORITIES and fills down to the control/
-        # status floor. LOG (and the under-viewport band) sit to its right
-        # so the formations list is not starved to CHAIN_VIZ_H.
+        # MENU MAP (You-Are-Here) + FORMATIONS stack under PRIORITIES down to
+        # the control/status floor. LOG sits to their right.
         priorities = {
             "y": body_top,
             "x": ox,
@@ -435,17 +442,32 @@ def frame_layout(lines: int, cols: int, *, needs_attention: bool = False) -> dic
             form_bottom = control["y"]
         elif intervention is not None:
             form_bottom = intervention["y"]
-        form_y = body_top + viewport_h
-        form_h = form_bottom - form_y
-        if form_h >= FORMATIONS_MIN_H:
-            formations = {
-                "y": form_y,
+        col_y = body_top + viewport_h
+        col_h = form_bottom - col_y
+        # Carve MENU MAP first when both panels fit (soft FORMATIONS floor).
+        if col_h >= MENU_MAP_H + MENU_MAP_SOFT_FORMATIONS_MIN:
+            menumap = {
+                "y": col_y,
                 "x": ox,
                 "w": pri_w,
-                "h": form_h,
+                "h": MENU_MAP_H,
+                "title": "MENU MAP",
+                "border": True,
+            }
+            col_y += MENU_MAP_H
+            col_h -= MENU_MAP_H
+        if col_h >= FORMATIONS_MIN_H or (
+            menumap is not None and col_h >= MENU_MAP_SOFT_FORMATIONS_MIN
+        ):
+            formations = {
+                "y": col_y,
+                "x": ox,
+                "w": pri_w,
+                "h": col_h,
                 "title": "FORMATIONS",
                 "border": True,
             }
+        if menumap is not None or formations is not None:
             if ticker is not None:
                 ticker["x"] = ox + pri_w
                 ticker["w"] = max(1, i_cols - pri_w)
@@ -504,6 +526,7 @@ def frame_layout(lines: int, cols: int, *, needs_attention: bool = False) -> dic
         "gutter": gutter,
         "decisions": decisions,
         "priorities": priorities,
+        "menumap": menumap,
         "formations": formations,
         "chain": chain,
         "ticker": ticker,
@@ -1609,6 +1632,13 @@ def _format_grouped_entry(kind: str, group: list, *, width: int = 32) -> list[st
     if why and width >= 16:
         lines.append(("  " + why)[:width])
     return lines
+
+
+def compose_menu_map_panel(summary, *, cols: int = 22) -> list[str]:
+    """WO-FA8: clip-safe You-Are-Here ★ / off-map lines for ops spectate."""
+    from .menu_map_view import format_menu_map_lines
+
+    return format_menu_map_lines(summary, cols=cols)
 
 
 def compose_formations_panel(formations, *, width: int = 32, max_lines: int = 12) -> list[str]:
@@ -2912,6 +2942,11 @@ def render_plain(dashboard: dict) -> str:
         lines.append(" FORMATIONS — discovered topologies")
         lines.append("-" * 80)
         lines.extend(dashboard["formations"])
+    if dashboard.get("menumap"):
+        lines.append("-" * 80)
+        lines.append(" MENU MAP — you-are-here")
+        lines.append("-" * 80)
+        lines.extend(dashboard["menumap"])
     lines.append("-" * 80)
     lines.append(" EVENTS")
     lines.append("-" * 80)

@@ -36,6 +36,7 @@ from twclient.spectate_layout import (
     compose_formations_panel,
     compose_hud_cells,
     compose_live_metrics,
+    compose_menu_map_panel,
     compose_phase2_side_panel,
     compose_port_panel,
     compose_primary_goals_lines,
@@ -376,10 +377,13 @@ def test_frame_layout_full_tier_centers_viewport_with_right_gutter():
     assert regions["decisions"] is not None
     assert regions["priorities"] is not None
     assert regions["priorities"]["title"] == "PRIORITIES"
+    assert regions["menumap"] is not None
+    assert regions["menumap"]["title"] == "MENU MAP"
     assert regions["formations"] is not None
     assert regions["formations"]["title"] == "FORMATIONS"
     assert regions["priorities"]["h"] == regions["viewport"]["h"]
-    assert regions["formations"]["y"] == regions["priorities"]["y"] + regions["priorities"]["h"]
+    assert regions["menumap"]["y"] == regions["priorities"]["y"] + regions["priorities"]["h"]
+    assert regions["formations"]["y"] == regions["menumap"]["y"] + regions["menumap"]["h"]
     assert regions["formations"]["h"] >= FORMATIONS_MIN_H
     # FORMATIONS fills down to the control strip; LOG sits to its right.
     assert (
@@ -1159,6 +1163,21 @@ def test_compose_autonomy_footer_box_centers_and_fits_width():
     assert box[1].index("AUTO 100%") > 1
 
 
+def test_compose_menu_map_panel_here_star_and_off_map():
+    """WO-FA8: spectate MENU MAP lines reuse menu_map_view clip-safe format."""
+    from twclient.menu_map_view import menu_map_summary
+
+    on = menu_map_summary(
+        [{"signature": "A", "label": "Shipyard"}],
+        [],
+        current_sig="A",
+    )
+    lines = compose_menu_map_panel(on, cols=22)
+    assert "★" in lines[1] and "Shipyard" in lines[1]
+    off = compose_menu_map_panel(None, cols=22)
+    assert "off-map" in off[1]
+
+
 def test_compose_formations_panel_lists_name_and_blurb():
     from twclient.formations import Formation, DEAD_END, BUBBLE, ONE_WAY
 
@@ -1247,7 +1266,11 @@ def test_frame_layout_full_tier_priorities_matches_hud_width():
     assert form["title"] == "FORMATIONS"
     assert form["w"] == PRIORITIES_W
     assert pri["h"] == vp["h"]
-    assert form["y"] == pri["y"] + pri["h"]
+    mmap = regions["menumap"]
+    assert mmap is not None
+    assert mmap["title"] == "MENU MAP"
+    assert mmap["y"] == pri["y"] + pri["h"]
+    assert form["y"] == mmap["y"] + mmap["h"]
     assert form["y"] + form["h"] == regions["control"]["y"]
     assert form["h"] >= FORMATIONS_MIN_H
     assert regions["ticker"]["x"] == form["x"] + form["w"]
@@ -1301,10 +1324,13 @@ def test_frame_layout_left_priorities_absent_below_left_gutter_floor():
     regions_left = frame_layout(42, LEFT_GUTTER_MIN_COLS + 2)
     assert regions_left["priorities"] is not None
     assert regions_left["priorities"]["w"] == PRIORITIES_MIN_W
+    mmap = regions_left["menumap"]
     form = regions_left["formations"]
+    assert mmap is not None
     assert form is not None
     assert regions_left["priorities"]["h"] == regions_left["viewport"]["h"]
-    assert form["y"] == regions_left["priorities"]["y"] + regions_left["priorities"]["h"]
+    assert mmap["y"] == regions_left["priorities"]["y"] + regions_left["priorities"]["h"]
+    assert form["y"] == mmap["y"] + mmap["h"]
     assert form["y"] + form["h"] == regions_left["control"]["y"]
     assert regions_left["ticker"]["x"] == form["x"] + form["w"]
 
@@ -1508,12 +1534,14 @@ def test_render_plain_includes_phase2_sections():
             "— GOALS —", "· Gal 9 known",
             "— FOCUS —", "1 Trade chain 550", "2 Upgrade 200",
         ],
+        "menumap": ["MAP 2n·1e", "here ★ Computer", "2/2 reachable · 1 dead-ends"],
     })
     assert "METRICS" in text and "STATIONS" in text
     assert "AUTONOMY" in text and "75%" in text
     assert "App 30" in text and "AI 10" in text and "Hum 2" in text
     assert "DECISIONS" in text and "run_chain" in text and "550" in text
     assert "PRIORITIES" in text and "— GOALS —" in text and "Trade chain" in text
+    assert "MENU MAP" in text and "here ★ Computer" in text
     assert "GOALS / CHAIN" not in text
     # empty autonomy still renders cleanly
     empty = render_plain({

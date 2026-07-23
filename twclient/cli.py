@@ -330,6 +330,59 @@ def cmd_analyze(args):
     print(analyze.format_report(report))
 
 
+def cmd_menumap(args):
+    """WO-FA8 / FA13: read-only menu-map inspector (coverage / orphans /
+    you-are-here). Never sends. Localizes the live screen when a daemon
+    is up; otherwise prints store-only with ``here off-map``."""
+    from . import credentials
+    from . import game_knowledge
+    from .menu_map_view import format_menu_map_report, menu_map_summary_from_store
+    from .menu_nav import localize
+
+    path = args.path
+    if not path and args.world_id:
+        path = str(game_knowledge.knowledge_path_for_world(args.world_id))
+    if not path and args.profile:
+        try:
+            profile = credentials.load_profile(args.profile)
+        except credentials.CredentialError as e:
+            print(f"ERROR: {e}")
+            sys.exit(1)
+        if not profile.handle:
+            print("ERROR: profile has no handle — pass --path or --world-id")
+            sys.exit(1)
+        path = str(game_knowledge.knowledge_path(
+            profile.host, profile.game_letter, profile.handle,
+        ))
+    if not path:
+        print("ERROR: need --path, --world-id, or --profile")
+        sys.exit(1)
+
+    current_sig = None
+    if daemon_alive() and _active_sock_path.exists():
+        resp = send_request("screen", {})
+        if resp.get("ok"):
+            screen_text = "\n".join(resp.get("screen") or [])
+            try:
+                node = localize(screen_text, path) if screen_text.strip() else None
+            except (OSError, ValueError, TypeError, KeyError):
+                node = None
+            if node:
+                current_sig = node.get("signature")
+
+    try:
+        summary = menu_map_summary_from_store(path, current_sig=current_sig)
+    except (OSError, ValueError, TypeError, KeyError, game_knowledge.GameKnowledgeError) as e:
+        print(f"ERROR: {e}")
+        sys.exit(1)
+
+    if getattr(args, "json", False):
+        print(json.dumps({"ok": True, "path": path, **summary}))
+        return
+    for line in format_menu_map_report(summary):
+        print(line)
+
+
 def cmd_servers_list(args):
     """WO-MS-1: print the config/servers.toml catalog (no live connections)."""
     from . import servers as servers_mod
@@ -1081,6 +1134,19 @@ def build_parser():
     sp.add_argument("--top", type=int, default=20, help="max candidates to print")
     add_json(sp)
     sp.set_defaults(func=cmd_analyze)
+
+    sp = add_sub(
+        "menumap",
+        help=(
+            "read-only menu-map inspector (WO-FA8/FA13): coverage, dead-ends, "
+            "orphans, and you-are-here ★ / off-map — never sends"
+        ),
+    )
+    sp.add_argument("--profile", default=None, help="profile name in config/profiles.toml (resolves per-world store)")
+    sp.add_argument("--world-id", dest="world_id", default=None, help="world_id slug under state/world/")
+    sp.add_argument("--path", default=None, help="game_knowledge.json path (overrides --profile/--world-id)")
+    add_json(sp)
+    sp.set_defaults(func=cmd_menumap)
 
     sp = add_sub(
         "players",

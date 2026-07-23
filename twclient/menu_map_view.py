@@ -106,6 +106,20 @@ def format_menu_map_lines(summary: Mapping[str, Any] | None, cols: int = 22) -> 
     return [header[:cols], here[:cols], cover[:cols]]
 
 
+def format_menu_map_report(summary: Mapping[str, Any] | None) -> list[str]:
+    """Full CLI report: clip-safe header + explicit dead-end/orphan lists."""
+    lines = format_menu_map_lines(summary, cols=80)
+    if not summary:
+        lines.append("dead-ends: (none)")
+        lines.append("orphans: (none)")
+        return lines
+    dead = list(summary.get("dead_ends") or ())
+    orphans = list(summary.get("orphans") or ())
+    lines.append("dead-ends: " + (", ".join(dead) if dead else "(none)"))
+    lines.append("orphans: " + (", ".join(orphans) if orphans else "(none)"))
+    return lines
+
+
 def menu_map_summary_from_store(path, current_sig: Optional[str] = None) -> dict[str, Any]:
     """Thin wrapper: load menu-map from ``game_knowledge``, then summarize."""
     from .game_knowledge import list_menu_edges, list_menu_nodes

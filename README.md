@@ -170,6 +170,7 @@ Everything takes `--json` for machine-parseable output.
 | `tw watch [--frames N]` | Tail the settle-edge event stream — the scripting-friendly sibling of `spectate`. |
 | `tw aiclient` | Product TUI alias for `./tw2002-aiclient` (launcher / play / Autopilot). |
 | `tw spectate` | Ops read-only curses dashboard (`--snapshot` for scripting). |
+| `tw menumap [--profile NAME \| --world-id ID \| --path PATH]` | Read-only menu-map inspector — coverage, orphans, you-are-here ★ / off-map. |
 | `tw attach` | Interactive live console — play the game yourself; `Ctrl-]` detaches. |
 | `tw loops [--include-drafts]` | List every learned loop with profit metadata. |
 | `tw autoloop {start,stop,pause,resume}` | Drive the background learned-loop player; returns immediately — watch progress in `spectate`. |

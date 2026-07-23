@@ -52,6 +52,7 @@ from .spectate_layout import (
     compose_hud_cells,
     compose_intervention_strip,
     compose_live_metrics,
+    compose_menu_map_panel,
     compose_port_panel,
     compose_priorities_panel,
     compute_autonomy_ratio,
@@ -607,6 +608,36 @@ def _resolve_world_id(status=None):
     except OSError:
         pass
     return None
+
+
+def _menu_map_summary_for_event(event, status=None):
+    """WO-FA8: localize live screen against the per-world menu-map store.
+
+    Read-only. Missing world / store / off-map localize → summary with
+    ``current is None`` (honest off-map), never a guessed node. Returns
+    ``None`` only when no world_id can be resolved (panel shows MAP —).
+    """
+    from . import game_knowledge
+    from .menu_map_view import menu_map_summary_from_store
+    from .menu_nav import localize
+
+    wid = _resolve_world_id(status)
+    if not wid:
+        return None
+
+    path = game_knowledge.knowledge_path_for_world(wid)
+    screen_text = "\n".join(event.get("screen") or [])
+    current_sig = None
+    try:
+        node = localize(screen_text, path) if screen_text.strip() else None
+    except (OSError, ValueError, TypeError, KeyError):
+        node = None
+    if node:
+        current_sig = node.get("signature")
+    try:
+        return menu_map_summary_from_store(path, current_sig=current_sig)
+    except (OSError, ValueError, TypeError, KeyError):
+        return None
 
 
 def _stamp_live_world_metrics(tracked, now, status=None):
@@ -1694,7 +1725,7 @@ def _build_windows(regions):
     curses.newwin() itself fail just drops that one pane rather than
     crashing the whole loop."""
     windows = {}
-    for key in ("outer", "header", "viewport", "gutter", "decisions", "priorities", "formations", "chain", "ticker", "control", "intervention", "status"):
+    for key in ("outer", "header", "viewport", "gutter", "decisions", "priorities", "menumap", "formations", "chain", "ticker", "control", "intervention", "status"):
         r = regions.get(key)
         if r is None:
             continue
@@ -2354,6 +2385,16 @@ def _render(windows, regions, event, tracked, ticker_history, status, palette, g
             form_lines, glyphs, palette, title="FORMATIONS",
         )
 
+    if regions.get("menumap") is not None and "menumap" in windows:
+        map_cols = max(8, (regions["menumap"].get("w") or 22) - 4)
+        map_lines = compose_menu_map_panel(
+            _menu_map_summary_for_event(event, status), cols=map_cols,
+        )
+        _draw_decisions(
+            windows["menumap"], regions["menumap"],
+            map_lines, glyphs, palette, title="MENU MAP",
+        )
+
     if regions.get("chain") is not None and "chain" in windows:
         chain_obj = phase2_cache.get("chain")
         sector = (event.get("state") or {}).get("sector")
@@ -2511,6 +2552,9 @@ def run_snapshot(sock_path, pid_path, frames=1, settle_wait_s=8.0):
                     formation_list = ()
             dashboard["formations"] = compose_formations_panel(
                 formation_list, width=40, max_lines=24,
+            )
+            dashboard["menumap"] = compose_menu_map_panel(
+                _menu_map_summary_for_event(last_event, status), cols=40,
             )
             if live_trace:
                 dashboard["decisions"] = format_autopilot_trace_lines(live_trace, cols=40)

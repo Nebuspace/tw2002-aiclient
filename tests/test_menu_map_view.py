@@ -2,6 +2,7 @@
 
 from twclient.menu_map_view import (
     format_menu_map_lines,
+    format_menu_map_report,
     menu_map_summary,
     menu_map_summary_from_store,
 )
@@ -116,3 +117,17 @@ def test_from_store_wrapper(tmp_path):
     assert s["node_count"] == 2
     assert s["current"]["label"] == "Computer"
     assert s["reachable_from_current"] == 2
+
+
+def test_format_menu_map_report_lists_coverage_and_orphans():
+    """FA13 CLI surface — report lines match fixture coverage/orphans."""
+    nodes = [_node("A", "Root"), _node("B", "Mid"), _node("Z", "Orphan")]
+    edges = [_edge("A", "1", "B")]
+    s = menu_map_summary(nodes, edges, current_sig="A")
+    report = format_menu_map_report(s)
+    joined = "\n".join(report)
+    assert "MAP 3n" in report[0]
+    assert "here ★ Root" in report[1]
+    assert "2/3 reachable" in joined
+    assert "orphans: Z" in joined
+    assert "dead-ends: B" in joined

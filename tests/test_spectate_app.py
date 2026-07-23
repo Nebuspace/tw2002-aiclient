@@ -44,7 +44,7 @@ from twclient.spectate_layout import (
     frame_layout,
 )
 
-from .conftest import FAKE_HOST
+from .conftest import FAKE_HOST, pty_curses_supported
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 TW_BIN = PROJECT_ROOT / "tw"
@@ -2560,3 +2560,104 @@ def test_spectate_client_exhausts_reconnect_and_sets_flag(monkeypatch):
         client.close()
     finally:
         shutil.rmtree(sock_dir, ignore_errors=True)
+
+
+# ---------------------------------------------------------------------------
+# WO-FA8 — MENU MAP You-Are-Here ★ / off-map in ops spectate
+# ---------------------------------------------------------------------------
+
+
+def test_menu_map_summary_localizes_star_and_off_map(tmp_path, monkeypatch):
+    from twclient import game_knowledge
+    from twclient.menu_sig import menu_signature
+
+    store = tmp_path / "world"
+    monkeypatch.setattr(spectate_app_mod, "WORLD_DIR", store)
+    wid = "test_host__a__pilot"
+    (store / wid).mkdir(parents=True)
+    path = game_knowledge.knowledge_path_for_world(wid, state_dir=tmp_path)
+    screen = "Computer Menu\n1) Status\n2) Ship\n"
+    sig = menu_signature(screen)
+    game_knowledge.upsert_menu_node(path, sig, label="Computer")
+    game_knowledge.upsert_menu_node(path, "other", label="Other")
+
+    monkeypatch.setattr(
+        game_knowledge, "knowledge_path_for_world",
+        lambda world_id_slug, state_dir=None: path,
+    )
+    event = {"screen": screen.splitlines()}
+    status = {"world_id": wid}
+    on = spectate_app_mod._menu_map_summary_for_event(event, status)
+    assert on["current"]["label"] == "Computer"
+    assert on["current"]["star"] is True
+
+    off = spectate_app_mod._menu_map_summary_for_event(
+        {"screen": ["totally unknown screen xyz"]}, status,
+    )
+    assert off["current"] is None
+
+
+def test_render_paints_menu_map_here_star(monkeypatch):
+    captured = []
+
+    def fake_draw_decisions(win, region, lines, glyphs, palette, title=None):
+        captured.append((title, list(lines)))
+
+    monkeypatch.setattr(spectate_app_mod, "_draw_decisions", fake_draw_decisions)
+    monkeypatch.setattr(curses, "doupdate", lambda: None)
+    monkeypatch.setattr(
+        spectate_app_mod, "_menu_map_summary_for_event",
+        lambda event, status=None: {
+            "node_count": 1, "edge_count": 0,
+            "current": {"signature": "A", "label": "Shipyard", "star": True},
+            "reachable_from_current": 1, "dead_ends": ["A"], "orphans": [],
+        },
+    )
+
+    regions = {
+        "mode": "full",
+        "outer": None, "header": None, "viewport": None, "gutter": None,
+        "decisions": None, "priorities": None, "chain": None,
+        "menumap": {"y": 0, "x": 0, "h": 5, "w": 22, "title": "MENU MAP"},
+        "formations": None, "ticker": None, "control": None,
+    }
+    windows = {"menumap": object()}
+    status = {"connected": True, "mode": "ai_pilot", "play": None,
+              "subscriber_count": 0, "host": None, "name": None}
+
+    class FakePalette:
+        def attr_for(self, *a, **k):
+            return 0
+
+    spectate_app_mod._render(
+        windows, regions, dict(spectate_app_mod.DEFAULT_EVENT), {}, [], status,
+        FakePalette(), {}, now=1.0, anim_tick=0, idle_age=None, semantic="ok",
+        flash_active=False, got_content=True,
+        explore_mode="off", phase2_cache={"chain": None},
+    )
+    titles = [t for t, _ in captured]
+    assert "MENU MAP" in titles
+    lines = next(ls for t, ls in captured if t == "MENU MAP")
+    assert any("★" in ln and "Shipyard" in ln for ln in lines)
+
+
+@pytest.mark.skipif(
+    not pty_curses_supported(),
+    reason="no controlling-terminal/pty support in this env",
+)
+def test_interactive_spectate_paints_menu_map_off_map_under_a_fake_pty():
+    """Wide terminal allocates MENU MAP; no world store → honest off-map."""
+    from twclient.spectate_layout import FULL_GUTTER_MIN_COLS
+
+    rows, cols = 42, FULL_GUTTER_MIN_COLS + 2
+    captured = _run_fake_spectate_in_pty(
+        [_SAMPLE_EVENT],
+        lambda buf: b"off-map" in buf or b"MENU MAP" in buf,
+        timeout=8.0,
+        rows=rows,
+        cols=cols,
+    )
+    text = captured.decode("utf-8", errors="replace")
+    assert "off-map" in text or "MENU MAP" in text, (
+        f"MENU MAP / off-map never painted; captured head:\n{text[:2000]}"
+    )
