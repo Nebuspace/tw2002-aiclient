@@ -32,6 +32,11 @@
 # root. For an isolated test seat (e.g. live `run/rogue/`), set env
 # `TW_RUN_DIR=run/rogue` (or an absolute path) before launching
 # `./tw2002-aiclient` / `tw aiclient`.
+#
+# Retired seats (lockout / discarded hosts): set `retired = true` so the
+# product launcher lists them after active profiles, greys them, and skips
+# select. Do NOT delete the section — world-models and secrets stay put.
+# Create-new still only offers catalog servers.
 
 [default]
 host = "your-twgs-host.example"
@@ -42,6 +47,7 @@ handle = "YourHandle"
 # planet_name = "MyWorld"
 # allow_register = true
 # autopilot = false
+# retired = false
 
 # Example catalog-backed profile (host/port filled from servers.toml):
 # [catalog_demo]
@@ -49,3 +55,10 @@ handle = "YourHandle"
 # game_letter = "F"
 # handle = "Demo"
 # autopilot = true
+
+# Example retired seat (still on disk; launcher greys + skips):
+# [old_seat]
+# server = "some_catalog_key"
+# game_letter = "A"
+# handle = "OldHandle"
+# retired = true

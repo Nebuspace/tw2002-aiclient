@@ -9,10 +9,35 @@ from pathlib import Path
 from twclient import credentials, servers
 
 
+def _retired_profile_names(profiles_path=None) -> set[str]:
+    """Names with ``retired = true`` in profiles.toml (launcher hygiene).
+
+    Profiles stay on disk (world-models preserved); the product launcher
+    greys them and skips select. Safe-by-omission: missing/false = active.
+    """
+    path = Path(profiles_path) if profiles_path else credentials.PROFILES_PATH
+    try:
+        data = credentials._load_toml(path)
+    except credentials.CredentialError:
+        return set()
+    return {
+        name
+        for name, body in data.items()
+        if isinstance(body, dict) and bool(body.get("retired", False))
+    }
+
+
 def list_launcher_rows(profiles_path=None, servers_path=None):
-    return credentials.list_profile_summaries(
+    """Launcher rows: active first, then retired (marked, still listed)."""
+    rows = credentials.list_profile_summaries(
         profiles_path=profiles_path, servers_path=servers_path
     )
+    retired = _retired_profile_names(profiles_path=profiles_path)
+    for row in rows:
+        row["retired"] = row["name"] in retired
+    # Active first (False < True), then name for stable order within each group.
+    rows.sort(key=lambda r: (bool(r.get("retired")), r["name"]))
+    return rows
 
 
 def list_server_keys(servers_path=None):

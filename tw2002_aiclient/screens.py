@@ -28,6 +28,25 @@ def _footer(win, text):
 # ---------------------------------------------------------------------------
 
 
+def _launcher_selectable(rows):
+    """Indices humans may confirm: active profiles + trailing Create row."""
+    create_i = len(rows)
+    return [i for i, row in enumerate(rows) if not row.get("retired")] + [create_i]
+
+
+def _launcher_step(idx, rows, delta):
+    """Move selection by delta, skipping retired (grey) rows."""
+    selectable = _launcher_selectable(rows)
+    if not selectable:
+        return 0
+    try:
+        pos = selectable.index(idx)
+    except ValueError:
+        # Landed on retired (e.g. after refresh) — snap toward nearest active.
+        pos = 0 if delta >= 0 else -1
+    return selectable[(pos + delta) % len(selectable)]
+
+
 def run_launcher(stdscr):
     """Return ('play', profile_name) | ('quit', None) | never returns create."""
     curses.curs_set(0)
@@ -36,7 +55,11 @@ def run_launcher(stdscr):
     while True:
         rows = adapters.list_launcher_rows()
         # Last row is always "+ Create new profile"
+        create_i = len(rows)
         total = len(rows) + 1
+        selectable = _launcher_selectable(rows)
+        if idx not in selectable:
+            idx = selectable[0] if selectable else 0
         idx = max(0, min(idx, total - 1))
         stdscr.erase()
         _safe_addstr(stdscr, 0, 0, " tw2002-aiclient", curses.A_BOLD)
@@ -49,12 +72,18 @@ def run_launcher(stdscr):
             marker = "›" if i == idx else " "
             ap = "Autopilot ON " if row["autopilot"] else "Autopilot OFF"
             handle = row["handle"] or row["name"]
-            line = f"  {marker} {handle:<12} {row['server']:<22} {row['game_letter']}   {ap}"
-            attr = curses.A_REVERSE if i == idx else curses.A_NORMAL
+            retired = bool(row.get("retired"))
+            tag = "  RETIRED" if retired else ""
+            line = f"  {marker} {handle:<12} {row['server']:<22} {row['game_letter']}   {ap}{tag}"
+            if retired:
+                attr = curses.A_DIM
+            elif i == idx:
+                attr = curses.A_REVERSE
+            else:
+                attr = curses.A_NORMAL
             _safe_addstr(stdscr, base + i, 0, line, attr)
             if row.get("error"):
                 _safe_addstr(stdscr, base + i, min(70, len(line) + 2), "!", curses.A_BOLD)
-        create_i = len(rows)
         create_attr = curses.A_REVERSE if idx == create_i else curses.A_NORMAL
         _safe_addstr(
             stdscr,
@@ -70,9 +99,9 @@ def run_launcher(stdscr):
         if ch in (ord("q"), 27):
             return "quit", None
         if ch in (curses.KEY_UP, ord("k")):
-            idx = (idx - 1) % total
+            idx = _launcher_step(idx, rows, -1)
         elif ch in (curses.KEY_DOWN, ord("j")):
-            idx = (idx + 1) % total
+            idx = _launcher_step(idx, rows, 1)
         elif ch in (ord("n"),):
             result = run_create_form(stdscr)
             if result == "created":
@@ -86,10 +115,15 @@ def run_launcher(stdscr):
                 if result == "created":
                     status = "profile created"
                     rows = adapters.list_launcher_rows()
-                    idx = max(0, len(rows) - 1)
+                    # Prefer last active profile; fall back to Create.
+                    active = [i for i, r in enumerate(rows) if not r.get("retired")]
+                    idx = active[-1] if active else len(rows)
             else:
                 if not rows:
                     status = "no profiles — create one"
+                    continue
+                if rows[idx].get("retired"):
+                    status = "retired — unselectable"
                     continue
                 return "play", rows[idx]["name"]
 

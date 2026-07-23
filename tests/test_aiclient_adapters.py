@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from tw2002_aiclient import adapters
+from tw2002_aiclient.screens import _launcher_selectable, _launcher_step
 
 
 class _FakeProfile:
@@ -148,3 +149,75 @@ def test_toggle_autopilot_and_sync_on(monkeypatch, tmp_path):
     assert out["autopilot"] is True
     assert state["ap"] is True
     assert calls == ["arm"]
+
+
+def _write_launcher_profiles(tmp_path, body: str) -> Path:
+    p = tmp_path / "profiles.toml"
+    p.write_text(body, encoding="utf-8")
+    return p
+
+
+def test_list_launcher_rows_active_first_and_marks_retired(tmp_path):
+    servers = tmp_path / "servers.toml"
+    servers.write_text(
+        '[servers.demo]\nhostname = "demo.example"\nport = 2002\n'
+        'transport = "telnet"\nfront_end = "direct"\nstatus = "listed"\n',
+        encoding="utf-8",
+    )
+    p = _write_launcher_profiles(
+        tmp_path,
+        '[zeta]\nserver = "demo"\ngame_letter = "Z"\nhandle = "Zeta"\n'
+        'retired = true\n'
+        '[alpha]\nserver = "demo"\ngame_letter = "A"\nhandle = "Alpha"\n'
+        'autopilot = true\n'
+        '[beta]\nserver = "demo"\ngame_letter = "B"\nhandle = "Beta"\n'
+        'retired = true\n',
+    )
+    rows = adapters.list_launcher_rows(profiles_path=p, servers_path=servers)
+    assert [r["name"] for r in rows] == ["alpha", "beta", "zeta"]
+    assert rows[0]["retired"] is False
+    assert rows[0]["autopilot"] is True
+    assert rows[1]["retired"] is True
+    assert rows[2]["retired"] is True
+
+
+def test_list_launcher_rows_omitted_retired_is_active(tmp_path):
+    servers = tmp_path / "servers.toml"
+    servers.write_text(
+        '[servers.demo]\nhostname = "demo.example"\nport = 2002\n'
+        'transport = "telnet"\nfront_end = "direct"\nstatus = "listed"\n',
+        encoding="utf-8",
+    )
+    p = _write_launcher_profiles(
+        tmp_path,
+        '[live]\nserver = "demo"\ngame_letter = "L"\nhandle = "Live"\n',
+    )
+    rows = adapters.list_launcher_rows(profiles_path=p, servers_path=servers)
+    assert len(rows) == 1
+    assert rows[0]["retired"] is False
+
+
+def test_launcher_selectable_skips_retired():
+    rows = [
+        {"name": "a", "retired": False},
+        {"name": "b", "retired": True},
+        {"name": "c", "retired": False},
+    ]
+    # Create index = 3
+    assert _launcher_selectable(rows) == [0, 2, 3]
+
+
+def test_launcher_step_skips_retired_rows():
+    rows = [
+        {"name": "a", "retired": False},
+        {"name": "b", "retired": True},
+        {"name": "c", "retired": False},
+    ]
+    # From active a (0) down → c (2), skipping retired b
+    assert _launcher_step(0, rows, 1) == 2
+    # From c down → Create (3)
+    assert _launcher_step(2, rows, 1) == 3
+    # From Create up → c
+    assert _launcher_step(3, rows, -1) == 2
+    # From a up → Create (wrap)
+    assert _launcher_step(0, rows, -1) == 3
