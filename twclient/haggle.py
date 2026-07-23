@@ -98,6 +98,20 @@ _RESOLUTION_LINE_RE = re.compile(_RESOLUTION_RE)
 # "How many holds?" at a multi-commodity port is never a bare-prompt
 # ambiguity; Command[TL= IS ambiguous when it's the sole content.
 _RESOLUTION_UNAMBIGUOUS_RE = re.compile(r"[Hh]ow\s+many\s+holds")
+# Live-captured acceptance phrases (module docstring) + the credits
+# balance line. Required alongside a trailing Command[TL= so a sector
+# header / other scrollback remnant cannot count as "acceptance context".
+_ACCEPTANCE_CONTEXT_RE = re.compile(
+    r"you have\s+[\d,]+\s+credits"
+    r"|we'll take"
+    r"|take them"
+    r"|i'll take"
+    r"|we'll buy them anyway"
+    r"|out of business"
+    r"|cheapskate"
+    r"|done,",
+    re.IGNORECASE,
+)
 
 
 class HaggleOutcome:
@@ -152,17 +166,20 @@ def _resolution_evidence(text):
     For the Command[TL= variant specifically, a bare Command[TL= as the
     SOLE non-blank content has no acceptance context and is
     DESYNC_FALLBACK, not a resolved deal. Additional non-blank content
-    on the screen (an acceptance phrase or credits line) is required --
-    "bare Command[TL= -> DESYNC_FALLBACK" hardening (TW-01)."""
+    alone is NOT enough (a sector-status remnant + Command is still the
+    4187-misfire class) -- require a live-captured acceptance phrase or
+    a credits-balance line somewhere on the screen
+    ("bare Command[TL= -> DESYNC_FALLBACK" hardening, TW-01)."""
     last = last_nonblank_line(text)
     if not _RESOLUTION_LINE_RE.search(last):
         return False
     if _RESOLUTION_UNAMBIGUOUS_RE.search(last):
         return True
-    # Command[TL= on the current line: require additional non-blank content
-    # before it. A screen whose only non-blank line IS the command prompt
-    # has no acceptance evidence -- it is DESYNC_FALLBACK.
-    return sum(1 for line in text.splitlines() if line.strip()) > 1
+    # Command[TL= on the current line: need real acceptance context, not
+    # just "some other non-blank line exists" (scrollback / sector header).
+    if sum(1 for line in text.splitlines() if line.strip()) <= 1:
+        return False
+    return bool(_ACCEPTANCE_CONTEXT_RE.search(text))
 
 
 def _credit_delta_price(before_credits, after_credits, direction):

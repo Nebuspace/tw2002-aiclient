@@ -405,6 +405,25 @@ def test_run_haggle_bare_command_prompt_only_after_accept_default_is_desync_fall
     assert result["final_price"] is None
 
 
+def test_run_haggle_sector_header_plus_command_is_desync_fallback():
+    # Residual after sole-content fix: any second non-blank line (e.g. a
+    # sector status remnant left in the crop) + trailing Command[TL= used
+    # to satisfy sum(non_blank)>1 and false-ACCEPT at our_ask. Acceptance
+    # context must be a real deal phrase / credits line.
+    responses = [
+        "Sector  4187 has a port.\nCommand [TL=00:00:00]:[4187] (?=Help)? : ",
+    ]
+    session = FakePortSession(
+        "We'll buy them for 4,187 credits.\nYour offer [4,187] ? ", _scripted(responses)
+    )
+
+    result = run_haggle(session, fair_value=4187, open_aggression_pct=0.0, round_cap=4)
+
+    assert result["outcome"] == HaggleOutcome.DESYNC_FALLBACK
+    assert result["resolved"] is False
+    assert result["final_price"] is None
+
+
 def test_run_haggle_desync_fallback_when_the_screen_never_settles_before_the_first_read():
     # The screen never stops changing at all (a sustained animation/
     # redraw) -- the freshness gate must time out and refuse to read/act
