@@ -22,6 +22,70 @@ from .state_parser import (
 )
 
 
+def _build_status_intervention(
+    *,
+    mode,
+    autopilot_status,
+    credits,
+    credits_age_ms,
+    fighters_aboard,
+    fighters_age_ms,
+    credits_stale_ms=None,
+):
+    """WS5 read-only intervention snapshot for AI spectators.
+
+    ``needs_attention`` is truthy only when autopilot has sticky-halted
+    (``last_error`` set while not running) or a human attach holds
+    MODE_HUMAN (trainer/autopilot cannot drive). Credit/fighter freshness
+    flags land in ``reasons`` for situational awareness but do not alone
+    raise ``needs_attention`` — same contract as autopilot's own fail-open
+    on unknown/stale readings until a halt actually fires.
+    """
+    if credits_stale_ms is None:
+        from .autopilot import DEFAULT_CREDITS_STALE_MS
+
+        credits_stale_ms = DEFAULT_CREDITS_STALE_MS
+
+    reasons = []
+    last_error = autopilot_status.get("last_error")
+    running = bool(autopilot_status.get("running"))
+
+    if last_error and not running:
+        reasons.append({"code": "autopilot_halted", "detail": last_error})
+
+    if mode == MODE_HUMAN:
+        reasons.append({"code": "human_attach_blocks_trainer"})
+
+    if credits is None:
+        reasons.append({"code": "credits_unknown"})
+    elif credits_age_ms is None or credits_age_ms > credits_stale_ms:
+        reasons.append(
+            {
+                "code": "credits_stale",
+                "detail": {"age_ms": credits_age_ms, "threshold_ms": credits_stale_ms},
+            }
+        )
+
+    if fighters_aboard is None:
+        reasons.append({"code": "fighters_unknown"})
+    elif fighters_age_ms is None or fighters_age_ms > credits_stale_ms:
+        reasons.append(
+            {
+                "code": "fighters_stale",
+                "detail": {"age_ms": fighters_age_ms, "threshold_ms": credits_stale_ms},
+            }
+        )
+
+    needs_attention = bool((last_error and not running) or mode == MODE_HUMAN)
+
+    return {
+        "needs_attention": needs_attention,
+        "reasons": reasons,
+        "autopilot": dict(autopilot_status),
+        "mode": mode,
+    }
+
+
 def _control_lock_error(server):
     """Shared do/send/play/replay/haggle/ensure MODE guard: None when the AI is
     free to drive (default, no server.control_lock at all in a bare
@@ -568,6 +632,22 @@ def dispatch(session, verb, args, server):
             _fbal, _fts = session.fighters_snapshot()
         else:
             _fbal, _fts = None, None
+        _mode = lock.mode if lock is not None else MODE_AI_PILOT
+        _credits_age_ms = (
+            int((time.monotonic() - _cts) * 1000) if _cts is not None else None
+        )
+        _turns_age_ms = int((time.monotonic() - _tts) * 1000) if _tts is not None else None
+        _fighters_age_ms = (
+            int((time.monotonic() - _fts) * 1000) if _fts is not None else None
+        )
+        _intervention = _build_status_intervention(
+            mode=_mode,
+            autopilot_status=autopilot_status,
+            credits=_cbal,
+            credits_age_ms=_credits_age_ms,
+            fighters_aboard=_fbal,
+            fighters_age_ms=_fighters_age_ms,
+        )
         return {
             "ok": True,
             "connected": session.conn.connected,
@@ -583,7 +663,7 @@ def dispatch(session, verb, args, server):
             # "ai_pilot" (default), "human" (a `tw attach` session has
             # the keyboard), "auto_loop" (LoopPlayer driving solo),
             # "spectate" (paused).
-            "mode": lock.mode if lock is not None else MODE_AI_PILOT,
+            "mode": _mode,
             # AUTO-LOOP live progress (Trainer Control Panel) -- present
             # even when nothing has ever run this daemon session (all
             # fields default/None then), so a caller never has to
@@ -626,13 +706,15 @@ def dispatch(session, verb, args, server):
             # call, rather than re-reading it here, is what keeps this age
             # from ever going negative under a concurrent
             # `observe_credits()` write.
-            "credits_age_ms": int((time.monotonic() - _cts) * 1000) if _cts is not None else None,
+            "credits_age_ms": _credits_age_ms,
             # WO-HUD-CREDITS-TURNS-JOIN: sticky turn COUNT for spectate HUD
             # seed (mirrors credits/credits_age_ms). Never the TL timer.
             "turns_left": _tbal,
-            "turns_age_ms": int((time.monotonic() - _tts) * 1000) if _tts is not None else None,
+            "turns_age_ms": _turns_age_ms,
             "fighters_aboard": _fbal,
-            "fighters_age_ms": int((time.monotonic() - _fts) * 1000) if _fts is not None else None,
+            "fighters_age_ms": _fighters_age_ms,
+            # WO-AICLIENT-WS5-INTERVENTION: read-only spectator/trainer feed.
+            "intervention": _intervention,
             # WO-TUI-METRICS: spectate's live METRICS gutter keys off the
             # active session's world_id (see `_current_world_id()`); the
             # sole-directory heuristic breaks once a second world store

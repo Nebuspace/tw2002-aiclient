@@ -997,7 +997,8 @@ def build_parser():
         "status",
         help=(
             "daemon alive? connected? idle-ms? classification? (includes run_dir; "
-            "--json adds autopilot {running,ticks_done,last_error,last_reason})"
+            "--json adds autopilot {running,ticks_done,last_error,last_reason} "
+            "and intervention {needs_attention,reasons,autopilot,mode})"
         ),
     )
     add_json(sp)

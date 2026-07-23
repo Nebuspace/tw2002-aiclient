@@ -214,6 +214,27 @@ def ensure_and_sync_autopilot(profile_name, *, run_dir=None, timeout=60.0):
     }
 
 
+def intervention_from_status(status_resp):
+    """Extract the WS5 ``intervention`` block from a ``tw status --json`` dict."""
+    if not isinstance(status_resp, dict):
+        return None
+    block = status_resp.get("intervention")
+    if isinstance(block, dict):
+        return block
+    return {
+        "needs_attention": False,
+        "reasons": [],
+        "autopilot": status_resp.get("autopilot")
+        or {
+            "running": False,
+            "ticks_done": 0,
+            "last_error": None,
+            "last_reason": None,
+        },
+        "mode": status_resp.get("mode") or "ai_pilot",
+    }
+
+
 def toggle_autopilot_and_sync(profile_name, *, run_dir=None):
     """Persist toggle, then arm/stop the live trainer to match."""
     profile = credentials.load_profile(profile_name)

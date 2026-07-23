@@ -14,7 +14,7 @@ import pytest
 from twclient import ledger, skills
 from twclient.autopilot import AutopilotEngine, decision_to_trace
 from twclient.chains import TradeHop
-from twclient.control_lock import MODE_AI_PILOT, MODE_AUTO_LOOP
+from twclient.control_lock import MODE_AI_PILOT, MODE_AUTO_LOOP, MODE_HUMAN
 from twclient.credentials import Profile
 from twclient.ship_upgrade_decision import LoopEconomics, ShipSpec
 
@@ -381,3 +381,99 @@ def test_status_autopilot_trace_surfaces_the_engines_most_recent_dry_run_tick(fa
     assert resp["autopilot_trace"]["chosen"] == "upgrade"
     by_kind = {c["kind"]: c for c in resp["autopilot_trace"]["candidates"]}
     assert set(by_kind) == {"run_chain", "upgrade", "explore"}
+
+
+# -- intervention in status (WO-AICLIENT-WS5-INTERVENTION) ---------------
+
+def test_status_intervention_clear_when_autopilot_running(fake_daemon, fake_ledger_entries):
+    """Healthy autopilot: needs_attention false; freshness unknowns may still appear."""
+    from twclient.autopilot import DEFAULT_CREDITS_STALE_MS
+
+    class _Loop:
+        running = True
+        ticks_done = 3
+        last_error = None
+        last_decision = type("D", (), {"reason": "explore"})()
+
+        def snapshot(self):
+            return {
+                "running": self.running,
+                "ticks_done": self.ticks_done,
+                "last_reason": self.last_decision.reason,
+                "last_error": self.last_error,
+                "last_trace": None,
+            }
+
+    fake_daemon.server.autopilot_loop = _Loop()
+    resp = send_request(fake_daemon.sock_path, "status")
+    assert resp["ok"] is True
+    iv = resp["intervention"]
+    assert iv["needs_attention"] is False
+    assert iv["mode"] == MODE_AI_PILOT
+    assert iv["autopilot"] == resp["autopilot"]
+    assert not any(r["code"] == "autopilot_halted" for r in iv["reasons"])
+    assert not any(r["code"] == "human_attach_blocks_trainer" for r in iv["reasons"])
+    assert DEFAULT_CREDITS_STALE_MS == 15_000
+
+
+def test_status_intervention_needs_attention_on_autopilot_sticky_halt(fake_daemon, fake_ledger_entries):
+    """Sticky halt: last_error set while loop not running raises needs_attention."""
+    halt_msg = "settle_unconfirmed: halted rather than ticking past a send/settle desync"
+
+    class _Loop:
+        running = False
+        ticks_done = 12
+        last_error = halt_msg
+        last_decision = None
+
+        def snapshot(self):
+            return {
+                "running": self.running,
+                "ticks_done": self.ticks_done,
+                "last_reason": None,
+                "last_error": self.last_error,
+                "last_trace": None,
+            }
+
+    fake_daemon.server.autopilot_loop = _Loop()
+    resp = send_request(fake_daemon.sock_path, "status")
+    iv = resp["intervention"]
+    assert iv["needs_attention"] is True
+    halted = [r for r in iv["reasons"] if r["code"] == "autopilot_halted"]
+    assert len(halted) == 1
+    assert halted[0]["detail"] == halt_msg
+    assert iv["autopilot"]["last_error"] == halt_msg
+    assert iv["autopilot"]["running"] is False
+
+
+def test_status_intervention_needs_attention_when_human_attached(fake_daemon, fake_ledger_entries):
+    fake_daemon.control_lock.take_human()
+    resp = send_request(fake_daemon.sock_path, "status")
+    iv = resp["intervention"]
+    assert iv["needs_attention"] is True
+    assert iv["mode"] == MODE_HUMAN
+    assert any(r["code"] == "human_attach_blocks_trainer" for r in iv["reasons"])
+    fake_daemon.control_lock.release_human()
+
+
+def test_status_intervention_credits_stale_is_informational_not_attention(fake_daemon, fake_ledger_entries):
+    """Stale credits flag reason without needs_attention when autopilot healthy."""
+    import time
+
+    from twclient.autopilot import DEFAULT_CREDITS_STALE_MS
+
+    now = time.monotonic()
+    fake_daemon.session.credits_snapshot = lambda: (
+        5000,
+        now - (DEFAULT_CREDITS_STALE_MS + 1000) / 1000.0,
+    )
+    fake_daemon.session.fighters_snapshot = lambda: (10, now)
+
+    resp = send_request(fake_daemon.sock_path, "status")
+    iv = resp["intervention"]
+    assert iv["needs_attention"] is False
+    stale = [r for r in iv["reasons"] if r["code"] == "credits_stale"]
+    assert len(stale) == 1
+    assert stale[0]["detail"]["threshold_ms"] == DEFAULT_CREDITS_STALE_MS
+    assert not any(r["code"] == "fighters_stale" for r in iv["reasons"])
+
