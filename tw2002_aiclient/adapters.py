@@ -162,7 +162,12 @@ def ensure_session(profile_name, *, run_dir=None, timeout=60.0):
 
 
 def arm_autopilot(profile_name, *, run_dir=None, max_ticks=None, cash_floor=None):
-    """``autopilot_start`` — fail-closed on profile.autonomous inside daemon."""
+    """``autopilot_start`` — fail-closed on profile.autonomous inside daemon.
+
+    ``max_ticks=None`` (default) arms a continuous run; pass an int to
+    apply an optional safety ceiling (see ``AutopilotLoop`` /
+    ``--max-ticks``).
+    """
     from twclient import cli as twcli
 
     run_dir = resolve_run_dir(profile_name=profile_name, run_dir=run_dir)

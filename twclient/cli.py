@@ -1188,7 +1188,11 @@ def build_parser():
     sp.add_argument("--profile", default=None, help="profile name in config/profiles.toml (required for preview/start)")
     sp.add_argument(
         "--max-ticks", dest="max_ticks", type=int, default=None,
-        help="start only: cap on ticks this run executes (clamped to the engine's own hard ceiling)",
+        help=(
+            "start only: optional safety cap on ticks this run executes "
+            "(default: continuous / uncapped until stop or halt; "
+            "pass e.g. 500 for the historic hard ceiling)"
+        ),
     )
     sp.add_argument(
         "--cash-floor", dest="cash_floor", type=int, default=None,

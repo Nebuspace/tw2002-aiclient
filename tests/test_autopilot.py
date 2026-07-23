@@ -1435,15 +1435,40 @@ def test_autopilot_loop_records_last_error_and_releases_the_lock_on_a_crash():
     assert "CRASHED" in ledger.calls[0]["intent"]
 
 
-# -- LOW: AutopilotLoop clamps its own run bounds ------------------------
+# -- AutopilotLoop tick bounds (WO-AP-MAX-TICKS-CONTINUOUS) ---------------
 
 
-def test_autopilot_loop_clamps_max_ticks_to_the_hard_cap():
+def test_autopilot_loop_default_is_continuous_uncapped():
+    """Product/ops start with no max_ticks must not inherit the old 500 ceiling."""
+    session = FakeAutopilotSession()
+    profile = _make_profile(autonomous=True)
+    lock = ControlLock()
+    engine = AutopilotEngine(session, profile, lock)
+    loop = AutopilotLoop(engine, lambda: {"explore_next_sector": 1})
+    assert loop.max_ticks is None
+
+
+def test_autopilot_loop_honors_explicit_max_ticks_without_hard_clamp():
+    """Explicit --max-ticks is the safety ceiling; no longer clamped to 500."""
     session = FakeAutopilotSession()
     profile = _make_profile(autonomous=True)
     lock = ControlLock()
     engine = AutopilotEngine(session, profile, lock)
     loop = AutopilotLoop(engine, lambda: {"explore_next_sector": 1}, max_ticks=999_999)
+    assert loop.max_ticks == 999_999
+
+
+def test_autopilot_loop_hard_max_ticks_constant_remains_available():
+    """Historic 500 ceiling stays as an opt-in constant operators can pass."""
+    from twclient.autopilot import _HARD_MAX_TICKS, _MAX_TICKS
+
+    assert _HARD_MAX_TICKS == 500
+    assert _MAX_TICKS == _HARD_MAX_TICKS
+    session = FakeAutopilotSession()
+    profile = _make_profile(autonomous=True)
+    lock = ControlLock()
+    engine = AutopilotEngine(session, profile, lock)
+    loop = AutopilotLoop(engine, lambda: {"explore_next_sector": 1}, max_ticks=_HARD_MAX_TICKS)
     assert loop.max_ticks == 500
 
 
@@ -1502,6 +1527,45 @@ def test_autopilot_loop_floors_a_non_positive_max_ticks_to_at_least_one():
     engine = AutopilotEngine(session, profile, lock)
     loop = AutopilotLoop(engine, lambda: {"explore_next_sector": 1}, max_ticks=-10)
     assert loop.max_ticks == 1
+
+
+def test_autopilot_loop_surfaces_max_ticks_exhausted_stop_reason():
+    """Capped run must exit with stop_reason=max_ticks_exhausted (not silent)."""
+    session = FakeAutopilotSession()
+    profile = _make_profile(autonomous=True)
+    lock = ControlLock()
+    engine = AutopilotEngine(session, profile, lock)
+    loop = AutopilotLoop(engine, lambda: {}, tick_interval_s=0.01, max_ticks=3)
+    loop.start()
+    assert _wait_until(lambda: not loop.running)
+    assert loop.ticks_done == 3
+    assert loop.stop_reason == "max_ticks_exhausted"
+    assert loop.snapshot()["stop_reason"] == "max_ticks_exhausted"
+    assert loop.snapshot()["max_ticks"] == 3
+    assert lock.mode == MODE_AI_PILOT
+
+
+def test_autopilot_loop_continuous_runs_past_historic_ceiling_until_stopped():
+    """Default continuous mode must be able to exceed the old 500 hard stop."""
+    session = FakeAutopilotSession()
+    profile = _make_profile(autonomous=True)
+    lock = ControlLock()
+    engine = AutopilotEngine(session, profile, lock)
+    # Prove the *bound* is continuous without waiting 501 real ticks:
+    # construct with None, then temporarily drive a tiny capped sibling
+    # is covered above; here assert default None and that stop() sets
+    # stop_reason rather than max_ticks_exhausted.
+    loop = AutopilotLoop(engine, lambda: {}, tick_interval_s=0.01)
+    assert loop.max_ticks is None
+    loop.start()
+    assert _wait_until(lambda: loop.ticks_done >= 2)
+    assert loop.running
+    assert loop.stop_reason is None
+    loop.stop()
+    assert _wait_until(lambda: not loop.running)
+    assert loop.stop_reason == "stopped"
+    assert loop.ticks_done >= 2
+    assert loop.last_error is None
 
 
 # -- HIGH-3: interrupt-history is LIVE-tick only, dry-run never pollutes -

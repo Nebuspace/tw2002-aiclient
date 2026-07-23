@@ -250,13 +250,15 @@ DEFAULT_CREDITS_STALE_MS = 15_000
 # outrank a genuine discovered chain/upgrade.
 EXPLORE_BASELINE_EV = 0.01
 
-# Hard cap on ticks a single AutopilotLoop background run will execute
-# before stopping on its own -- this repo's established ethos (mirrors
-# loop_player.py's own _MAX_CYCLES): an unattended background scheduler
-# must never be unbounded regardless of caller intent. `AutopilotLoop`
-# also clamps any caller-supplied `max_ticks` to this ceiling -- see its
-# own `__init__`.
-_MAX_TICKS = 500
+# Optional safety ceiling operators can pass via `--max-ticks` /
+# `autopilot_start.max_ticks`. Default AutopilotLoop runs are continuous
+# (max_ticks=None) until kill-switch / settle-desync / crash halt -- long
+# autonomy runs must not silent-exit at a hidden 500. Kept as a named
+# constant so ops still have a one-shot hard-cap option without inventing
+# a magic number.
+_HARD_MAX_TICKS = 500
+# Backward-compat alias (tests / older call sites may still import it).
+_MAX_TICKS = _HARD_MAX_TICKS
 
 # In-memory decision-trace bound (mack MED finding): `AutopilotEngine`
 # accumulates a `Decision` every tick for as long as it's alive -- an
@@ -1580,7 +1582,7 @@ class AutopilotLoop:
         snapshot_provider: Callable[[], dict],
         *,
         tick_interval_s: float = 1.0,
-        max_ticks: int = _MAX_TICKS,
+        max_ticks: Optional[int] = None,
     ):
         self.engine = engine
         self.snapshot_provider = snapshot_provider
@@ -1600,17 +1602,25 @@ class AutopilotLoop:
         # non-positive interval already floors to.
         interval = float(tick_interval_s)
         self.tick_interval_s = max(interval, _MIN_TICK_INTERVAL_S) if math.isfinite(interval) else _MIN_TICK_INTERVAL_S
-        # LOW fix (cipher re-verify, 2026-07-20): a negative/zero max_ticks
-        # survives the old `min(int(max_ticks), _MAX_TICKS)` unchanged
-        # (`min(-10, 500) == -10`), and `range(-10)` is empty -- a 0-tick,
-        # silently-"successful" no-op run that masks whatever caller bug
-        # passed a negative value in the first place. Floor to >=1 tick.
-        self.max_ticks = max(1, min(int(max_ticks), _MAX_TICKS))
+        # WO-AP-MAX-TICKS-CONTINUOUS: default None = continuous (kill-switch
+        # / settle-desync / crash still halt). An explicit int is the
+        # optional safety ceiling (floor >=1 so a negative/zero never
+        # becomes a silent 0-tick no-op -- cipher 2026-07-20). No longer
+        # auto-clamps every run to `_HARD_MAX_TICKS`; that constant remains
+        # the documented opt-in cap operators can pass.
+        if max_ticks is None:
+            self.max_ticks: Optional[int] = None
+        else:
+            self.max_ticks = max(1, int(max_ticks))
         self._thread: Optional[threading.Thread] = None
         self._stop = threading.Event()
         self.ticks_done = 0
         self.last_decision: Optional[Decision] = None
         self.last_error: Optional[str] = None
+        # Why the loop is no longer running (None while still live).
+        # Distinct from last_decision.reason (last tick's scorer pick) and
+        # last_error (crash / settle-desync / held halt).
+        self.stop_reason: Optional[str] = None
 
     @property
     def running(self) -> bool:
@@ -1640,6 +1650,7 @@ class AutopilotLoop:
         self.ticks_done = 0
         self.last_decision = None
         self.last_error = None
+        self.stop_reason = None
         self._thread = threading.Thread(target=self._run, daemon=True)
         self._thread.start()
 
@@ -1677,8 +1688,10 @@ class AutopilotLoop:
         return {
             "running": self.running,
             "ticks_done": self.ticks_done,
+            "max_ticks": self.max_ticks,  # None => continuous
             "last_reason": self.last_decision.reason if self.last_decision else None,
             "last_error": self.last_error,
+            "stop_reason": self.stop_reason,
             # Cross-seat trace supplement (2026-07-20): the status-field
             # transport option -- a caller polling this loop's own
             # snapshot() gets the last tick's structured trace for free,
@@ -1689,14 +1702,19 @@ class AutopilotLoop:
 
     def _run(self) -> None:
         try:
-            for _ in range(self.max_ticks):
+            # Continuous when max_ticks is None; otherwise stop after N
+            # ticks with an explicit stop_reason (never a silent exit that
+            # looks like last_reason exhaustion).
+            while self.max_ticks is None or self.ticks_done < self.max_ticks:
                 if self._stop.is_set():
+                    self.stop_reason = "stopped"
                     break
                 try:
                     kwargs = self.snapshot_provider()
                     self.last_decision = self.engine.live_tick(**kwargs)
                 except Exception as exc:  # noqa: BLE001 -- MED fix: never die silently, see class docstring
                     self.last_error = f"{type(exc).__name__}: {exc}\n{traceback.format_exc()}"
+                    self.stop_reason = "crashed"
                     with contextlib.suppress(Exception):
                         self.engine._record_crash(exc)
                     break
@@ -1706,6 +1724,7 @@ class AutopilotLoop:
                 # "aborted") -- leave immediately rather than sleeping out
                 # another full tick_interval_s first.
                 if self._stop.is_set():
+                    self.stop_reason = "stopped"
                     break
                 outcome = self.last_decision.send_outcome
                 if _is_unconfirmed_outcome(outcome):
@@ -1715,6 +1734,7 @@ class AutopilotLoop:
                     # still halts; salvaged explore warps never reach here
                     # (they send_outcome as sent:settle_salvage:...).
                     self.last_error = "settle_unconfirmed: halted rather than ticking past a send/settle desync"
+                    self.stop_reason = "settle_unconfirmed"
                     break
                 # FA4 cipher bank (post-land MED): a mid-offer HOLD that
                 # left the port's offer prompt on screen
@@ -1727,8 +1747,14 @@ class AutopilotLoop:
                     or outcome.startswith("held:credits_unknown:")
                 ):
                     self.last_error = f"chain_held_halt:{outcome}"
+                    self.stop_reason = "chain_held"
                     break
                 time.sleep(self.tick_interval_s)
+            else:
+                # while-else: exited because ticks_done reached max_ticks
+                # (not via break). Continuous mode never takes this branch.
+                if self.max_ticks is not None and self.stop_reason is None:
+                    self.stop_reason = "max_ticks_exhausted"
         finally:
             self.engine._abort_requested = None
             with contextlib.suppress(ControlModeConflict):
