@@ -80,6 +80,13 @@ _SHIP_HFS_RE = re.compile(
     r"Holds:\s*(\d[\d,]*)\s+Fighters:\s*(\d[\d,]*)\s+Shields:\s*(\d[\d,]*)",
     re.I,
 )
+# Ship-info `I` label-first line (same screen as Turns left / Credits):
+# "Fighters : 600" / "Fighters        : 600". Trailing $ rejects the corp
+# toll banner ("Fighters: 1 (belong…)[Toll]") which has more on the line.
+_FIGHTERS_LABEL_FIRST_RE = re.compile(
+    r"^\s*fighters\s*[:=]\s*(\d[\d,]*)\s*$",
+    re.I | re.M,
+)
 # Fighter toll Option? dialogue — aboard count only (not enemy toll count).
 _FIGHTER_ABOARD_VS_RE = re.compile(
     r"Your\s+fighters\s*:\s*(\d+)\s+vs\.?\s*theirs\s*:\s*(\d+)",
@@ -362,11 +369,17 @@ def parse_haggle(rendered_text: str) -> dict:
 def fighters_aboard(rendered_text: str):
     """Best-effort aboard-fighter count from ship-info or toll Option? screens.
 
-    Last-match-wins across both shapes (same discipline as turns/credits).
+    Accepted shapes (last-match, stale-scrollback safe):
+      1. Compact HFS line ``Holds: N  Fighters: N  Shields: N``
+      2. Info/`I` label-first ``Fighters : N`` (line-only; not toll banner)
+      3. Toll Option? ``Your fighters: N vs. theirs: M`` (aboard = yours)
+
     Returns ``None`` when no trustworthy aboard count is visible."""
     candidates: list[tuple[int, int]] = []
     for m in _SHIP_HFS_RE.finditer(rendered_text):
         candidates.append((m.end(), int(m.group(2).replace(",", ""))))
+    for m in _FIGHTERS_LABEL_FIRST_RE.finditer(rendered_text):
+        candidates.append((m.end(), int(m.group(1).replace(",", ""))))
     for m in _FIGHTER_ABOARD_VS_RE.finditer(rendered_text):
         candidates.append((m.end(), int(m.group(1))))
     if not candidates:

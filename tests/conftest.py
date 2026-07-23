@@ -124,6 +124,8 @@ class FakeAttachSession:
     credits_snapshot = Session.credits_snapshot
     observe_turns = Session.observe_turns
     turns_snapshot = Session.turns_snapshot
+    observe_fighters = Session.observe_fighters
+    fighters_snapshot = Session.fighters_snapshot
 
     def __init__(self, initial_screen="Command [TL=00:00:00]:[1234] (?=Help)? :", real_time_scale=0.0):
         self._screen = initial_screen
@@ -160,6 +162,10 @@ class FakeAttachSession:
         self.last_credits_ts = 0.0
         self.last_turns = 100
         self.last_turns_ts = 0.0
+        # Sticky fighters start unknown (None) — status intervention may
+        # report fighters_unknown until an Info/HFS screen is observed.
+        self.last_fighters = None
+        self.last_fighters_ts = None
         # Mirrors Session.auto_login_profile / mark_profile — ensure's
         # already_there path now always stamps the profile so status
         # world_id resolves (WO-TUI-PRIORITIES-DECISIONS-REGRESS).

@@ -21,6 +21,8 @@ def _observe(session, text: str) -> None:
         session.observe_credits(text)
     if hasattr(session, "observe_turns"):
         session.observe_turns(text)
+    if hasattr(session, "observe_fighters"):
+        session.observe_fighters(text)
 
 
 def _snapshots(session):

@@ -481,3 +481,29 @@ def test_status_intervention_credits_stale_is_informational_not_attention(fake_d
     assert stale[0]["detail"]["threshold_ms"] == DEFAULT_CREDITS_STALE_MS
     assert not any(r["code"] == "fighters_stale" for r in iv["reasons"])
 
+
+def test_status_seeds_fighters_aboard_from_info_screen(fake_daemon, fake_ledger_entries):
+    """WO-FIGHTERS-STATUS-FRESH: Info/`I` viewport stamps fighters; omits fighters_unknown."""
+    fake_daemon.session._screen = (
+        "Current Sector : 2594\n"
+        "Turns left     : 1622\n"
+        "Credits        : 300\n"
+        "Fighters       : 600\n"
+        "Command [TL=00:12:34]:[2594] (?=Help)? :"
+    )
+    # Clear sticky pre-seeds so observe_* must re-parse from the Info screen.
+    fake_daemon.session.last_credits = None
+    fake_daemon.session.last_credits_ts = None
+    fake_daemon.session.last_fighters = None
+    fake_daemon.session.last_fighters_ts = None
+
+    resp = send_request(fake_daemon.sock_path, "status")
+    assert resp["ok"] is True
+    assert resp["fighters_aboard"] == 600
+    assert resp["fighters_age_ms"] is not None
+    assert resp["fighters_age_ms"] >= 0
+    assert resp["credits"] == 300
+    iv = resp["intervention"]
+    assert not any(r["code"] == "fighters_unknown" for r in iv["reasons"])
+    assert not any(r["code"] == "credits_unknown" for r in iv["reasons"])
+    assert iv["needs_attention"] is False

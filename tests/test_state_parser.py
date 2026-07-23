@@ -838,6 +838,19 @@ def test_fighters_aboard_from_ship_info_hfs_line():
     assert parse_state(text)["fighters_aboard"] == 500
 
 
+def test_fighters_aboard_from_info_label_first_line():
+    """WO-FIGHTERS-STATUS-FRESH: ship-info `I` uses label-first 'Fighters : N'."""
+    text = (
+        "Current Sector : 2594\n"
+        "Turns left     : 1622\n"
+        "Credits        : 300\n"
+        "Fighters       : 600\n"
+        "Command [TL=00:12:34]:[2594] (?=Help)? :"
+    )
+    assert fighters_aboard(text) == 600
+    assert parse_state(text)["fighters_aboard"] == 600
+
+
 def test_fighters_aboard_from_toll_option_yours_vs_theirs():
     text = (
         "Fighters: 1 (belong to Corp#1, New Corp) [Toll]\n"

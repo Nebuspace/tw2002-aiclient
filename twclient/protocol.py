@@ -616,6 +616,8 @@ def dispatch(session, verb, args, server):
             session.observe_credits(text)
         if hasattr(session, "observe_turns"):
             session.observe_turns(text)
+        if hasattr(session, "observe_fighters"):
+            session.observe_fighters(text)
         # Snapshot AFTER the observe above (same thread) so a ship-info
         # screen already on the viewport seeds status without a send.
         # Still ONE atomic pair each — never two unlocked getattrs —
