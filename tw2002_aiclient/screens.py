@@ -331,8 +331,11 @@ def run_play(stdscr, profile_name):
         _safe_addstr(stdscr, 0, 0, " tw2002-aiclient — play", curses.A_BOLD)
         _safe_addstr(stdscr, 1, 0, f"  {profile.name} · {panels.get('mode', '?')}", curses.A_DIM)
         _safe_addstr(stdscr, 2, 0, f"  {panels.get('metrics', '')}", curses.A_BOLD)
-        if panels.get("needs_attention"):
-            _safe_addstr(stdscr, 3, 0, "  ! intervention needs attention", curses.A_BOLD)
+        banner = panels.get("attention_banner")
+        if banner:
+            _safe_addstr(stdscr, 3, 0, f"  {banner}", curses.A_BOLD)
+        elif panels.get("needs_attention"):
+            _safe_addstr(stdscr, 3, 0, "  ! needs attention", curses.A_BOLD)
 
         ap_label = "Autopilot ON " if ap_on else "Autopilot OFF"
         _safe_addstr(stdscr, 5, 0, f"  [{ap_label.strip()}]", curses.A_BOLD | curses.A_REVERSE)

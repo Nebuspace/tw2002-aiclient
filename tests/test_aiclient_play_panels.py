@@ -70,7 +70,12 @@ def test_compose_play_panels_attention_and_log():
         mode="human",
         intervention={
             "needs_attention": True,
-            "reasons": [{"code": "credits_stale", "detail": {"age_ms": 20000}}],
+            "reasons": [
+                {"code": "autopilot_halted", "detail": "credit floor"},
+                {"code": "fighters_unknown"},
+                {"code": "credits_stale", "detail": {"age_ms": 20000}},
+                {"code": "totally_new_code"},
+            ],
             "autopilot": {
                 "running": False,
                 "ticks_done": 9,
@@ -86,12 +91,33 @@ def test_compose_play_panels_attention_and_log():
             "last_reason": None,
         },
     )
-    panels = adapters.compose_play_panels(status, width=36)
+    panels = adapters.compose_play_panels(status, width=72)
     assert panels["needs_attention"] is True
+    assert panels["attention_banner"] == (
+        "! autopilot halted; fighters unknown; credits stale; totally_new_code"
+    )
+    assert panels["reason_labels"] == [
+        "autopilot halted",
+        "fighters unknown",
+        "credits stale",
+        "totally_new_code",
+    ]
     log = "\n".join(panels["log"])
-    assert "needs attention" in log
-    assert "credits_stale" in log
+    assert "autopilot halted" in log
+    assert "fighters unknown" in log
+    assert "credits stale" in log
+    assert "totally_new_code" in log
+    assert "credits_stale" not in log  # labeled, not raw snake_case
+    assert "fighters_unknown" not in log
     assert "credit floor" in log
+
+
+def test_intervention_reason_label_known_and_passthrough():
+    assert adapters.intervention_reason_label("fighters_unknown") == "fighters unknown"
+    assert adapters.intervention_reason_label("autopilot_halted") == "autopilot halted"
+    assert adapters.intervention_reason_label("custom_future") == "custom_future"
+    assert adapters.intervention_reason_label(None) == "?"
+    assert adapters.intervention_reason_label("") == "?"
 
 
 def test_goals_snapshot_from_status_unknowns():

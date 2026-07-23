@@ -239,6 +239,25 @@ def ensure_and_sync_autopilot(profile_name, *, run_dir=None, timeout=60.0):
     }
 
 
+# WS5 intervention reason codes → short human labels (display only; codes unchanged).
+INTERVENTION_REASON_LABELS = {
+    "autopilot_halted": "autopilot halted",
+    "human_attach_blocks_trainer": "human attach blocks trainer",
+    "credits_unknown": "credits unknown",
+    "credits_stale": "credits stale",
+    "fighters_unknown": "fighters unknown",
+    "fighters_stale": "fighters stale",
+}
+
+
+def intervention_reason_label(code) -> str:
+    """Map a reason ``code`` to a short label; unknown codes pass through."""
+    if code is None or code == "":
+        return "?"
+    text = str(code)
+    return INTERVENTION_REASON_LABELS.get(text, text)
+
+
 def intervention_from_status(status_resp):
     """Extract the WS5 ``intervention`` block from a ``tw status --json`` dict."""
     if not isinstance(status_resp, dict):
@@ -336,15 +355,15 @@ def compose_play_panels(status_resp, *, width: int = 36) -> dict:
     else:
         decisions = ["— DECISIONS —"] + compose_decisions_placeholder()
 
+    reason_labels = []
     log_lines = ["— LOG —"]
-    if intervention.get("needs_attention"):
-        log_lines.append("! needs attention")
     for reason in intervention.get("reasons") or []:
         if isinstance(reason, dict):
-            code = reason.get("code") or "?"
-            log_lines.append(f"· {code}"[:width])
+            label = intervention_reason_label(reason.get("code"))
         else:
-            log_lines.append(f"· {reason}"[:width])
+            label = intervention_reason_label(reason)
+        reason_labels.append(label)
+        log_lines.append(f"· {label}"[:width])
     last_err = ap.get("last_error")
     last_reason = ap.get("last_reason")
     if last_err:
@@ -354,10 +373,22 @@ def compose_play_panels(status_resp, *, width: int = 36) -> dict:
     if len(log_lines) == 1:
         log_lines.append("—")
 
+    needs_attention = bool(intervention.get("needs_attention"))
+    if needs_attention:
+        if reason_labels:
+            attention_banner = "! " + "; ".join(reason_labels)
+        else:
+            attention_banner = "! needs attention"
+        log_lines.insert(1, attention_banner)
+    else:
+        attention_banner = None
+
     return {
         "metrics": metrics,
         "mode": intervention.get("mode") or status_resp.get("mode") or "ai_pilot",
-        "needs_attention": bool(intervention.get("needs_attention")),
+        "needs_attention": needs_attention,
+        "attention_banner": attention_banner,
+        "reason_labels": reason_labels,
         "goals": goals,
         "focus": focus,
         "decisions": decisions,
