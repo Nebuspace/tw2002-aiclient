@@ -79,6 +79,7 @@ from twclient.spectate_layout import (
     format_tx_readout,
     longest_chain_steps,
     sort_trade_loop_chains,
+    compose_intervention_strip,
 )
 
 
@@ -1888,6 +1889,49 @@ def test_compose_control_strip_shows_hints_when_idle():
     strip = compose_control_strip("ai_pilot", None, None)
     assert strip["right"] == CONTROL_HINTS
     assert strip["tx"] == "→ -"
+
+
+def test_compose_intervention_strip_omits_when_healthy():
+    assert compose_intervention_strip(None) is None
+    assert compose_intervention_strip({}) is None
+    assert compose_intervention_strip({"intervention": {"needs_attention": False}}) is None
+    assert compose_intervention_strip({
+        "intervention": {
+            "needs_attention": False,
+            "reasons": [{"code": "fighters_unknown"}],
+        },
+    }) is None
+
+
+def test_compose_intervention_strip_paints_when_needs_attention():
+    text = compose_intervention_strip({
+        "intervention": {
+            "needs_attention": True,
+            "reasons": [
+                {"code": "autopilot_no_candidates"},
+                {"code": "fighters_unknown"},
+                {"code": "custom_future"},
+            ],
+        },
+    })
+    assert text == "! autopilot no candidates; fighters unknown; custom_future"
+    assert compose_intervention_strip({
+        "intervention": {"needs_attention": True, "reasons": []},
+    }) == "! needs attention"
+
+
+def test_frame_layout_allocates_intervention_row_only_when_attention():
+    healthy = frame_layout(36, 120)
+    assert healthy["intervention"] is None
+    assert healthy["control"] is not None
+    assert healthy["control"]["y"] + healthy["control"]["h"] == healthy["status"]["y"]
+
+    attn = frame_layout(36, 120, needs_attention=True)
+    assert attn["intervention"] is not None
+    assert attn["intervention"]["h"] == 1
+    assert attn["intervention"]["y"] + attn["intervention"]["h"] == attn["status"]["y"]
+    assert attn["control"] is not None
+    assert attn["control"]["y"] + attn["control"]["h"] == attn["intervention"]["y"]
 
 
 def test_control_hints_points_to_tw_attach_for_human_takeover():

@@ -880,6 +880,58 @@ def test_control_strip_shows_the_ai_pilot_badge_and_hints_under_a_fake_pty():
     assert cell.reverse is True, f"mode badge should render reverse-video (badge look) -- cell: {cell!r}"
 
 
+def test_intervention_strip_paints_when_needs_attention_under_a_fake_pty():
+    """WO-SPECTATE-INTERVENTION-STRIP: ops spectate surfaces halt without
+    the product play TUI when status.intervention.needs_attention."""
+    rows, cols = 36, 120
+    attn_status = _status(
+        mode="auto_loop",
+        intervention={
+            "needs_attention": True,
+            "reasons": [
+                {"code": "autopilot_no_candidates", "detail": "no_candidates"},
+            ],
+            "autopilot": {
+                "running": False,
+                "ticks_done": 12,
+                "last_error": None,
+                "last_reason": "no_candidates",
+                "stop_reason": "no_candidates",
+            },
+            "mode": "auto_loop",
+        },
+    )
+    captured = _run_fake_spectate_in_pty(
+        [_SAMPLE_EVENT],
+        lambda buf: b"autopilot no candidates" in buf,
+        timeout=8.0, rows=rows, cols=cols, fake_status=attn_status,
+    )
+    text = captured.decode("utf-8", errors="replace")
+    assert "autopilot no candidates" in text, (
+        f"intervention strip never rendered; captured:\n{text}"
+    )
+    assert "autopilot_no_candidates" not in text  # labeled, not raw code
+
+
+def test_intervention_strip_omitted_when_healthy_under_a_fake_pty():
+    rows, cols = 36, 120
+    healthy = _status(
+        intervention={
+            "needs_attention": False,
+            "reasons": [{"code": "fighters_unknown"}],
+            "mode": "ai_pilot",
+        },
+    )
+    captured = _run_fake_spectate_in_pty(
+        [_SAMPLE_EVENT], lambda buf: b"AI-PILOT" in buf,
+        timeout=8.0, rows=rows, cols=cols, fake_status=healthy,
+    )
+    text = captured.decode("utf-8", errors="replace")
+    assert "AI-PILOT" in text
+    assert "needs attention" not in text
+    assert "! fighters" not in text
+
+
 def test_control_strip_shows_the_attach_takeover_hint_under_a_fake_pty():
     """Human-reported discoverability gap (live witness, 2026-07-21): `M`
     only cycles ai_pilot<->spectate by design -- the legend must point to

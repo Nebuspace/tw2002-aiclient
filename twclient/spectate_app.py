@@ -50,6 +50,7 @@ from .spectate_layout import (
     compose_chain_bubbles,
     compose_formations_panel,
     compose_hud_cells,
+    compose_intervention_strip,
     compose_live_metrics,
     compose_port_panel,
     compose_priorities_panel,
@@ -1510,6 +1511,21 @@ def _draw_control_strip(win, region, strip, palette):
     win.noutrefresh()
 
 
+def _draw_intervention_strip(win, region, text, palette):
+    """WO-SPECTATE-INTERVENTION-STRIP: one-line warn row when
+    status.intervention.needs_attention — ops see Autopilot halt without
+    the product play TUI. ``text`` is compose_intervention_strip()'s
+    pre-composed line."""
+    win.erase()
+    w = region["w"]
+    warn_attr = _tone_attr("warn", palette, curses.A_BOLD) | curses.A_BOLD
+    try:
+        win.addnstr(0, 0, text, max(0, w - 1), warn_attr)
+    except curses.error:
+        pass
+    win.noutrefresh()
+
+
 def _blank_dashboard_windows(windows):
     """Erase persistent panes so a stdscr modal is not painted *under*
     stale chain/viewport/control windows on doupdate (curses z-order)."""
@@ -1678,7 +1694,7 @@ def _build_windows(regions):
     curses.newwin() itself fail just drops that one pane rather than
     crashing the whole loop."""
     windows = {}
-    for key in ("outer", "header", "viewport", "gutter", "decisions", "priorities", "formations", "chain", "ticker", "control", "status"):
+    for key in ("outer", "header", "viewport", "gutter", "decisions", "priorities", "formations", "chain", "ticker", "control", "intervention", "status"):
         r = regions.get(key)
         if r is None:
             continue
@@ -2083,7 +2099,10 @@ def _run(stdscr, client, sock_path, pid_path, unicode_ok):
                 last_anim = now
 
             lines, cols = stdscr.getmaxyx()
-            new_regions = frame_layout(lines, cols)
+            attn_text = compose_intervention_strip(status)
+            new_regions = frame_layout(
+                lines, cols, needs_attention=attn_text is not None,
+            )
             if new_regions != regions:
                 windows = _build_windows(new_regions)
                 regions = new_regions
@@ -2361,6 +2380,15 @@ def _render(windows, regions, event, tracked, ticker_history, status, palette, g
     if regions["control"] is not None and "control" in windows:
         strip = compose_control_strip(status.get("mode", "ai_pilot"), event.get("sent_input"), status.get("play"))
         _draw_control_strip(windows["control"], regions["control"], strip, palette)
+
+    # WO-SPECTATE-INTERVENTION-STRIP: one-line warn row when
+    # status.intervention.needs_attention (region only allocated then).
+    if regions.get("intervention") is not None and "intervention" in windows:
+        attn = compose_intervention_strip(status)
+        if attn:
+            _draw_intervention_strip(
+                windows["intervention"], regions["intervention"], attn, palette,
+            )
 
     if "status" in windows:
         if calm_idle:

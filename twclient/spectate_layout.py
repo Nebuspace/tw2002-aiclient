@@ -226,7 +226,7 @@ HUD_GUTTER_MIN_H = VIEWPORT_H - DECISIONS_MIN_H  # 21
 FORMATIONS_MIN_H = 6
 
 
-def frame_layout(lines: int, cols: int) -> dict:
+def frame_layout(lines: int, cols: int, *, needs_attention: bool = False) -> dict:
     """Pure reflow: given the terminal's current (lines, cols), decide
     which chrome fits and return named regions ({"y","x","w","h", ...})
     for spectate_app's curses renderer to build windows from. No
@@ -255,6 +255,11 @@ def frame_layout(lines: int, cols: int) -> dict:
     log) -- so a narrow-but-tall terminal shows mode/TX/hints even when
     there's no room left for the ticker underneath it.
 
+    "intervention" (WO-SPECTATE-INTERVENTION-STRIP) is likewise additive:
+    when ``needs_attention`` is true and leftover height allows, one row
+    sits directly above "status" (control shifts up one). Ops see Autopilot
+    halt without the product play TUI. Healthy status omits the region.
+
     When leftover height allows, a bubble-chain region sits directly under
     the viewport (WO-TUI-CHAIN-BUBBLES), centered on the game window; the
     remaining leftover band below splits into titled LOG + DECISIONS when
@@ -281,6 +286,7 @@ def frame_layout(lines: int, cols: int) -> dict:
             "chain": None,
             "ticker": None,
             "control": None,
+            "intervention": None,
             "status": None,
         }
 
@@ -310,10 +316,29 @@ def frame_layout(lines: int, cols: int) -> dict:
     leftover = body_lines - viewport_h - (1 if header else 0)
     has_right_gutter = i_cols >= RIGHT_GUTTER_MIN_COLS
 
+    # Bottom chrome stack (above status): intervention (optional) then
+    # control. Intervention claims first when attention is raised so a
+    # one-row leftover still surfaces the halt.
+    intervention = None
     control = None
-    if leftover >= 1:
-        control = {"y": status["y"] - 1, "x": ox, "w": i_cols, "h": 1}
+    chrome_below = 0
+    if needs_attention and leftover >= 1:
         leftover -= 1
+        chrome_below += 1
+    if leftover >= 1:
+        leftover -= 1
+        chrome_below += 1
+        want_control = True
+    else:
+        want_control = False
+    y_cursor = status["y"]
+    if needs_attention and chrome_below >= 1:
+        y_cursor -= 1
+        intervention = {"y": y_cursor, "x": ox, "w": i_cols, "h": 1}
+        chrome_below -= 1
+    if want_control and chrome_below >= 1:
+        y_cursor -= 1
+        control = {"y": y_cursor, "x": ox, "w": i_cols, "h": 1}
 
     # Prefer bubble-chain under the viewport when both chain + a LOG
     # band fit; otherwise keep LOG|DECISIONS and skip chain (never clip
@@ -329,9 +354,10 @@ def frame_layout(lines: int, cols: int) -> dict:
     # side-by-side with DECISIONS. Side gutters (PRIORITIES left / HUD right)
     # stay full viewport height. PRIORITIES is never folded into GOALS and
     # never preempted by the DECISIONS slot rotation.
+    bottom_chrome = (1 if intervention else 0) + (1 if control else 0)
     if leftover >= LOG_BOX_MIN_H:
         band_h = min(BAND_H_MAX, leftover)
-        band_y = status["y"] - (1 if control else 0) - band_h
+        band_y = status["y"] - bottom_chrome - band_h
         if (
             not has_right_gutter
             and i_cols >= 60
@@ -405,6 +431,8 @@ def frame_layout(lines: int, cols: int) -> dict:
         form_bottom = status["y"]
         if control is not None:
             form_bottom = control["y"]
+        elif intervention is not None:
+            form_bottom = intervention["y"]
         form_y = body_top + viewport_h
         form_h = form_bottom - form_y
         if form_h >= FORMATIONS_MIN_H:
@@ -478,6 +506,7 @@ def frame_layout(lines: int, cols: int) -> dict:
         "chain": chain,
         "ticker": ticker,
         "control": control,
+        "intervention": intervention,
         "status": status,
     }
 
@@ -2713,6 +2742,55 @@ def compose_control_strip(mode: str, sent_input, play: dict | None) -> dict:
         "tx": format_tx_readout(sent_input),
         "right": format_play_progress_or_hints(play),
     }
+
+
+# Layout-local copy of the play-client reason labels (adapters.py). Kept
+# here — not imported — so spectate_layout stays free of the product
+# package and adapters can keep importing this module without a cycle.
+_INTERVENTION_REASON_LABELS = {
+    "autopilot_halted": "autopilot halted",
+    "autopilot_no_candidates": "autopilot no candidates",
+    "autopilot_max_ticks_exhausted": "autopilot max ticks exhausted",
+    "autopilot_game_select": "autopilot game select",
+    "explore_exhausted": "explore exhausted",
+    "human_attach_blocks_trainer": "human attach blocks trainer",
+    "credits_unknown": "credits unknown",
+    "credits_stale": "credits stale",
+    "fighters_unknown": "fighters unknown",
+    "fighters_stale": "fighters stale",
+}
+
+
+def _intervention_reason_label(code) -> str:
+    if code is None or code == "":
+        return "?"
+    text = str(code)
+    return _INTERVENTION_REASON_LABELS.get(text, text)
+
+
+def compose_intervention_strip(status) -> str | None:
+    """One-line ops alert from ``status.intervention``, or None when healthy.
+
+    Mirrors the play client's attention banner shape (``! label; label``)
+    so ops spectate surfaces Autopilot halt without the product TUI.
+    Healthy / missing intervention omits the strip entirely.
+    """
+    if not isinstance(status, dict):
+        return None
+    block = status.get("intervention")
+    if not isinstance(block, dict):
+        return None
+    if not block.get("needs_attention"):
+        return None
+    labels = []
+    for reason in block.get("reasons") or []:
+        if isinstance(reason, dict):
+            labels.append(_intervention_reason_label(reason.get("code")))
+        else:
+            labels.append(_intervention_reason_label(reason))
+    if labels:
+        return "! " + "; ".join(labels)
+    return "! needs attention"
 
 
 def chain_overall_profit(loop: dict):
