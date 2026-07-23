@@ -358,6 +358,53 @@ def test_run_haggle_waits_for_a_fresh_settled_render_before_reading_the_opening_
     assert first_ask > 800  # negotiated off the REAL settled baseline, not the transitional screen
 
 
+def test_run_haggle_bare_command_prompt_only_after_ask_is_desync_fallback():
+    # "4187-misfire" exact shape: after sending our ask, the screen lands
+    # on ONLY a bare Command[TL= main-menu prompt with no preceding
+    # acceptance phrase or credits line. send_and_confirm's confirm_prompt
+    # still fires (whole-string re.search hits Command[TL=), and the offer
+    # prompt is gone -- but _resolution_evidence() must require MORE than
+    # just the bare prompt as the sole content. Pre-fix: the bare
+    # Command[TL= was the last non-blank line, _RESOLUTION_LINE_RE matched,
+    # _resolution_evidence() returned True, and final_price was set to
+    # our_ask -- a silent false ACCEPTED.
+    responses = [
+        "Command [TL=00:00:00]:[4187] (?=Help)? : ",
+    ]
+    session = FakePortSession(
+        "We'll buy them for 4,187 credits.\nYour offer [4,187] ? ", _scripted(responses)
+    )
+
+    result = run_haggle(session, fair_value=4187, open_aggression_pct=0.0, round_cap=4)
+
+    assert result["outcome"] == HaggleOutcome.DESYNC_FALLBACK
+    assert result["resolved"] is False
+    assert result["final_price"] is None
+
+
+def test_run_haggle_bare_command_prompt_only_after_accept_default_is_desync_fallback():
+    # Post-accept-stray bare-prompt shape: we've converged within threshold
+    # and sent the blank accept-default, but the response is ONLY a bare
+    # Command[TL= prompt -- no acceptance phrase, no credits line. The
+    # settle layer fires (Command[TL= is in _CONFIRM_RE), the offer prompt
+    # is gone -- pre-fix _resolution_evidence() returned True and reported
+    # ACCEPTED at current. No acceptance context means DESYNC_FALLBACK.
+    responses = [
+        "We'll buy them for 2,010 credits.\nYour offer [2,010] ? ",
+        "Command [TL=00:00:00]:[1] (?=Help)? : ",
+    ]
+    session = FakePortSession(
+        "We'll buy them for 2,000 credits.\nYour offer [2,000] ? ", _scripted(responses)
+    )
+
+    result = run_haggle(session, round_cap=4, accept_threshold_pct=5.0, open_aggression_pct=15.0)
+
+    assert session.sent[1] == ("", True, False)  # the accept-default was still sent
+    assert result["outcome"] == HaggleOutcome.DESYNC_FALLBACK
+    assert result["resolved"] is False
+    assert result["final_price"] is None
+
+
 def test_run_haggle_desync_fallback_when_the_screen_never_settles_before_the_first_read():
     # The screen never stops changing at all (a sustained animation/
     # redraw) -- the freshness gate must time out and refuse to read/act

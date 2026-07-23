@@ -93,6 +93,11 @@ _RESOLUTION_RE = r"Command\s*\[\s*TL\s*=|[Hh]ow\s+many\s+holds"
 _CONFIRM_RE = f"{_CONTINUE_RE}|{_RESOLUTION_RE}"
 
 _RESOLUTION_LINE_RE = re.compile(_RESOLUTION_RE)
+# Matches the unambiguous subset of _RESOLUTION_LINE_RE that is valid
+# evidence on its own, without requiring additional screen context.
+# "How many holds?" at a multi-commodity port is never a bare-prompt
+# ambiguity; Command[TL= IS ambiguous when it's the sole content.
+_RESOLUTION_UNAMBIGUOUS_RE = re.compile(r"[Hh]ow\s+many\s+holds")
 
 
 class HaggleOutcome:
@@ -142,8 +147,22 @@ def _resolution_evidence(text):
     is the check that turns a settle-layer "confirmed" into an honest
     "this is actually what's showing right now", the same "gate anchor"
     convention `state_parser.parse_haggle`'s own `current_default` check
-    already uses (checked against the last non-blank line only)."""
-    return bool(_RESOLUTION_LINE_RE.search(last_nonblank_line(text)))
+    already uses (checked against the last non-blank line only).
+
+    For the Command[TL= variant specifically, a bare Command[TL= as the
+    SOLE non-blank content has no acceptance context and is
+    DESYNC_FALLBACK, not a resolved deal. Additional non-blank content
+    on the screen (an acceptance phrase or credits line) is required --
+    "bare Command[TL= -> DESYNC_FALLBACK" hardening (TW-01)."""
+    last = last_nonblank_line(text)
+    if not _RESOLUTION_LINE_RE.search(last):
+        return False
+    if _RESOLUTION_UNAMBIGUOUS_RE.search(last):
+        return True
+    # Command[TL= on the current line: require additional non-blank content
+    # before it. A screen whose only non-blank line IS the command prompt
+    # has no acceptance evidence -- it is DESYNC_FALLBACK.
+    return sum(1 for line in text.splitlines() if line.strip()) > 1
 
 
 def _credit_delta_price(before_credits, after_credits, direction):
