@@ -2101,3 +2101,108 @@ def test_autopilot_loop_refuses_double_start():
     finally:
         loop.stop()
         assert _wait_until(lambda: not loop.running)
+
+
+# -- WO-AP-GAME-SELECT-RECOVER -------------------------------------------
+
+# Banner-variant fixture shape (same anchors as tests/fixtures/
+# game_select_menu_banner_variant.txt / test_login.py) — classifies as
+# game_select without pulling the large ANSI capture.
+_GAME_SELECT_BANNER = (
+    "TradeWars Game Server\n"
+    "TWGS v2.20b\n"
+    "Server registered to twgs.test.example\n"
+    "<A> Sample Game One\n"
+    "<#> Players Online\n"
+    "<!> View game descriptions\n"
+    "<Q> Quit\n"
+    "Selection (? for menu):"
+)
+
+
+def test_live_tick_recovers_game_select_to_main_command(monkeypatch):
+    """On game_select, one in-tick run_login rejoin reaches main_command."""
+    session = FakeAutopilotSession(text=_GAME_SELECT_BANNER)
+    session.game_select_answered = True  # mid-session latch already set
+    session.game_select_letter_sent = True
+    profile = _make_profile(autonomous=True)
+    engine = AutopilotEngine(session, profile, ControlLock())
+
+    def _fake_run_login(sess, prof, **kwargs):
+        assert prof.game_letter == "A"
+        assert sess.game_select_answered is False  # latch cleared for rejoin
+        assert kwargs.get("target") == "main_command"
+        sess._text = "Sector  : 100\n" + _MAIN_COMMAND_SCREEN
+        return "main_command", 3
+
+    monkeypatch.setattr("twclient.login.run_login", _fake_run_login)
+    decision = engine.live_tick(explore_next_sector=200)
+    assert decision.reason == "game_select_recover"
+    assert decision.send_outcome == "sent:game_select_recover:steps=3"
+    assert engine._game_select_recover_attempts == 0
+    # Must not have fallen through to a bare sector-number warp.
+    assert session.sent == []
+
+
+def test_live_tick_game_select_recover_failed_then_unrecoverable(monkeypatch):
+    """Failed rejoin retries up to _GAME_SELECT_RECOVER_MAX then unrecoverable."""
+    from twclient.login import LoginError
+
+    session = FakeAutopilotSession(text=_GAME_SELECT_BANNER)
+    profile = _make_profile(autonomous=True)
+    engine = AutopilotEngine(session, profile, ControlLock())
+    monkeypatch.setattr(
+        "twclient.login.run_login",
+        lambda *a, **k: (_ for _ in ()).throw(LoginError("automaton_stuck:game_select")),
+    )
+
+    d1 = engine.live_tick()
+    assert d1.send_outcome.startswith("held:game_select_recover_failed:")
+    assert engine._game_select_recover_attempts == 1
+
+    d2 = engine.live_tick()
+    assert d2.send_outcome.startswith("held:game_select_unrecoverable:")
+    assert engine._game_select_recover_attempts == 2
+
+
+def test_autopilot_loop_halts_on_game_select_unrecoverable(monkeypatch):
+    """Loop hard-halts with stop_reason=game_select (needs_attention path)."""
+    from twclient.login import LoginError
+
+    session = FakeAutopilotSession(text=_GAME_SELECT_BANNER)
+    profile = _make_profile(autonomous=True)
+    lock = ControlLock()
+    engine = AutopilotEngine(session, profile, lock)
+    # Exhaust budget in one tick: pretends prior failed attempt already counted.
+    engine._game_select_recover_attempts = autopilot_mod._GAME_SELECT_RECOVER_MAX - 1
+    monkeypatch.setattr(
+        "twclient.login.run_login",
+        lambda *a, **k: (_ for _ in ()).throw(LoginError("automaton_stuck")),
+    )
+    loop = AutopilotLoop(
+        engine, lambda: {}, tick_interval_s=0.01, max_ticks=5,
+    )
+    loop.start()
+    assert _wait_until(lambda: not loop.running, timeout=3.0)
+    assert loop.stop_reason == "game_select"
+    assert loop.last_error is not None
+    assert "game_select_unrecoverable" in loop.last_error
+    assert lock.mode == MODE_AI_PILOT  # MODE_AUTO_LOOP released
+
+
+def test_live_tick_never_spins_sector_send_on_game_select(monkeypatch):
+    """Regression: game_select must not reach HIGH-2 held:not_main thrash."""
+    session = FakeAutopilotSession(text=_GAME_SELECT_BANNER)
+    profile = _make_profile(autonomous=True)
+    engine = AutopilotEngine(session, profile, ControlLock())
+    monkeypatch.setattr(
+        "twclient.login.run_login",
+        lambda *a, **k: ("main_command", 1),
+    )
+    # Force run_login to leave screen as main_command for the return value,
+    # but keep session text as game_select until fake swaps — actually the
+    # recover path returns early; prove no sector number was sent.
+    decision = engine.live_tick(explore_next_sector=999)
+    assert decision.reason == "game_select_recover"
+    assert not any(t[0] == "999" for t in session.sent)
+    assert not (decision.send_outcome or "").startswith("held:not_main_command")

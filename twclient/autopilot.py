@@ -272,6 +272,13 @@ _MAX_DECISIONS_KEPT = 200
 # negative interval would busy-loop the background thread pointlessly.
 _MIN_TICK_INTERVAL_S = 0.001
 
+# WO-AP-GAME-SELECT-RECOVER: mid-run drift back to the TWGS door-select
+# "Selection (? for menu):" screen must NOT spin forever (held:not_main
+# / no_candidates thrash). Cap consecutive in-tick ensure/rejoin attempts;
+# exhaustion hard-halts the loop with stop_reason="game_select".
+_GAME_SELECT_RECOVER_MAX = 2
+_GAME_SELECT_CLASS = "game_select"
+
 
 class AutopilotGateError(Exception):
     """Raised by `AutopilotEngine.live_tick()`/`AutopilotLoop.start()`
@@ -1012,6 +1019,82 @@ class AutopilotEngine:
         # planner can't immediately re-target a sector we just fled.
         # Written only in live_tick(); no lock needed (single thread).
         self._avoided_sectors: set = set()
+        # WO-AP-GAME-SELECT-RECOVER: consecutive failed rejoin attempts
+        # while still classifying as game_select. Reset on successful
+        # return to main_command (or any non-game_select live class).
+        self._game_select_recover_attempts = 0
+
+    def _live_classification(self) -> tuple[Optional[str], str]:
+        """Classify the CURRENT screen from one fresh render.
+
+        Returns ``(classification_or_None, full_text)``. A blank prompt
+        line yields ``None`` — same HOLD posture as the HIGH-2 blank-screen
+        gate (never treat an empty last line as a settled class).
+        """
+        rows = self.session.render()
+        prompt = rows[-1].strip() if rows else ""
+        full = self.session.render_text(rows)
+        if not prompt:
+            return None, full
+        return classify_screen(full, prompt), full
+
+    def _recover_from_game_select(self) -> str:
+        """WO-AP-GAME-SELECT-RECOVER: one in-tick ensure/rejoin attempt.
+
+        Uses ``login.run_login`` (profile ``game_letter`` only — never
+        invents a catalog entry) with the existing credentials password
+        callbacks. Clears the per-connection ``game_select_answered``
+        latch so a genuine mid-session re-entry can resend the letter
+        (login's once-per-connection refuse is correct for stale-buffer
+        misfires during ensure; live AP drift back to Selection is a
+        real re-prompt on the same TCP connection).
+
+        ``allow_register`` stays whatever the profile says (default
+        False) — recovery never opts into character creation.
+
+        Returns a ``send_outcome`` string:
+        - ``sent:game_select_recover:...`` on reaching main_command
+        - ``held:game_select_recover_failed:...`` when attempts remain
+        - ``held:game_select_unrecoverable:...`` when the attempt budget
+          is exhausted (AutopilotLoop hard-halts on this prefix)
+        """
+        self._game_select_recover_attempts += 1
+        if hasattr(self.session, "game_select_answered"):
+            self.session.game_select_answered = False
+        if hasattr(self.session, "game_select_letter_sent"):
+            self.session.game_select_letter_sent = False
+
+        from . import credentials
+        from .login import LoginError, run_login
+
+        try:
+            final_cls, steps = run_login(
+                self.session,
+                self.profile,
+                get_password=credentials.get_password,
+                save_password=credentials.save_password,
+                target=_MOVEMENT_PROMPT_CLASS,
+            )
+        except LoginError as exc:
+            detail = str(exc)
+            post_cls, _ = self._live_classification()
+            # Partial rejoin that left a non-Selection, non-main screen
+            # (module-entry menu / name / password) must not fall through
+            # to the ordinary HIGH-2 hold thrash — escalate to halt.
+            if post_cls not in (None, _GAME_SELECT_CLASS, _MOVEMENT_PROMPT_CLASS):
+                return f"held:game_select_unrecoverable:{detail}:stuck={post_cls}"
+            if self._game_select_recover_attempts >= _GAME_SELECT_RECOVER_MAX:
+                return f"held:game_select_unrecoverable:{detail}"
+            return f"held:game_select_recover_failed:{detail}"
+
+        if final_cls == _MOVEMENT_PROMPT_CLASS:
+            self._game_select_recover_attempts = 0
+            return f"sent:game_select_recover:steps={steps}"
+
+        detail = f"class={final_cls}"
+        if self._game_select_recover_attempts >= _GAME_SELECT_RECOVER_MAX:
+            return f"held:game_select_unrecoverable:{detail}"
+        return f"held:game_select_recover_failed:{detail}"
 
     def _maybe_seed_hud_once(self) -> Optional[str]:
         """WO-HUD-SEED-ON-EXPLORE: if credits or turns still unknown, run
@@ -1158,6 +1241,41 @@ class AutopilotEngine:
         note."""
         if not self.enabled:
             raise AutopilotGateError(f"autonomous_disabled:profile={getattr(self.profile, 'name', '?')}")
+        # WO-AP-GAME-SELECT-RECOVER: door-select drift before any navigate
+        # / HUD seed — never thrash held:not_main_command:game_select or
+        # no_candidates on the Selection prompt.
+        live_cls, pre_text = self._live_classification()
+        if live_cls == _GAME_SELECT_CLASS:
+            recover_outcome = self._recover_from_game_select()
+            post_text = self.session.render_text(self.session.render())
+            decision = Decision(
+                ts=time.time(),
+                candidates=(),
+                chosen=None,
+                reason="game_select_recover",
+                send_outcome=recover_outcome,
+                snapshot=None,
+            )
+            with self._lock:
+                self._tick_counter += 1
+                decision = dataclasses.replace(decision, tick=self._tick_counter)
+                self.decisions.append(decision)
+            input_text = (
+                str(getattr(self.profile, "game_letter", "?"))
+                if recover_outcome.startswith("sent:")
+                else "<no-send>"
+            )
+            self._record(
+                decision,
+                pre_text=pre_text,
+                input_text=input_text,
+                post_text=post_text,
+                dry_run=False,
+            )
+            return decision
+        if live_cls is not None and live_cls != _GAME_SELECT_CLASS:
+            # Left the Selection screen (or never hit it) — clear streak.
+            self._game_select_recover_attempts = 0
         # WO-HUD-SEED-ON-EXPLORE: before assess, one I-probe if sticky
         # credits/turns still unknown (sector_display streaks omit both).
         # If we probed, this tick is done (one-keystroke contract).
@@ -1748,6 +1866,15 @@ class AutopilotLoop:
                 ):
                     self.last_error = f"chain_held_halt:{outcome}"
                     self.stop_reason = "chain_held"
+                    break
+                # WO-AP-GAME-SELECT-RECOVER: ensure/rejoin budget exhausted
+                # on the Selection prompt — hard-halt with attention
+                # rather than sleep/tick forever on door-select.
+                if outcome is not None and outcome.startswith(
+                    "held:game_select_unrecoverable"
+                ):
+                    self.last_error = f"game_select_unrecoverable:{outcome}"
+                    self.stop_reason = "game_select"
                     break
                 time.sleep(self.tick_interval_s)
             else:

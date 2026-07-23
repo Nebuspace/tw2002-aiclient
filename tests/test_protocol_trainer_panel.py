@@ -515,6 +515,35 @@ def test_status_intervention_needs_attention_on_max_ticks_exhausted(fake_daemon,
     assert iv["autopilot"]["running"] is False
 
 
+def test_status_intervention_needs_attention_on_game_select_halt(fake_daemon, fake_ledger_entries):
+    """WO-AP-GAME-SELECT-RECOVER: stop_reason=game_select → attention code."""
+
+    class _Loop:
+        running = False
+        ticks_done = 12
+        last_error = "game_select_unrecoverable:held:game_select_unrecoverable:automaton_stuck"
+        last_decision = type("D", (), {"reason": "game_select_recover"})()
+
+        def snapshot(self):
+            return {
+                "running": self.running,
+                "ticks_done": self.ticks_done,
+                "last_reason": self.last_decision.reason,
+                "last_error": self.last_error,
+                "stop_reason": "game_select",
+                "last_trace": None,
+            }
+
+    fake_daemon.server.autopilot_loop = _Loop()
+    resp = send_request(fake_daemon.sock_path, "status")
+    iv = resp["intervention"]
+    assert iv["needs_attention"] is True
+    codes = [r["code"] for r in iv["reasons"]]
+    assert "autopilot_game_select" in codes
+    assert iv["autopilot"]["stop_reason"] == "game_select"
+    assert iv["autopilot"]["running"] is False
+
+
 def test_status_intervention_running_no_candidates_is_not_attention(fake_daemon, fake_ledger_entries):
     """Still-running AP with last_reason=no_candidates stays healthy (continuous)."""
 
