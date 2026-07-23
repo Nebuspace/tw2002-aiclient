@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from twclient.spectate_layout import compose_intervention_strip
 from tw2002_aiclient import adapters
 
 
@@ -46,6 +47,7 @@ def test_compose_play_panels_metrics_and_goals_focus():
     assert any("GOALS" in ln for ln in panels["priorities"])
     assert any("FOCUS" in ln for ln in panels["priorities"])
     assert panels["needs_attention"] is False
+    assert panels["attention_banner"] is None  # healthy omits strip
     assert panels["mode"] == "auto_loop"
 
 
@@ -93,9 +95,12 @@ def test_compose_play_panels_attention_and_log():
     )
     panels = adapters.compose_play_panels(status, width=72)
     assert panels["needs_attention"] is True
-    assert panels["attention_banner"] == (
+    expected = (
         "! autopilot halted; fighters unknown; credits stale; totally_new_code"
     )
+    assert panels["attention_banner"] == expected
+    # Play banner == spectate strip (shared compose_intervention_strip).
+    assert panels["attention_banner"] == compose_intervention_strip(status)
     assert panels["reason_labels"] == [
         "autopilot halted",
         "fighters unknown",
@@ -110,6 +115,27 @@ def test_compose_play_panels_attention_and_log():
     assert "credits_stale" not in log  # labeled, not raw snake_case
     assert "fighters_unknown" not in log
     assert "credit floor" in log
+
+
+def test_compose_play_panels_attention_empty_reasons_matches_spectate():
+    """needs_attention with no reasons → same ``! needs attention`` fallback."""
+    status = _healthy_status(
+        intervention={
+            "needs_attention": True,
+            "reasons": [],
+            "autopilot": {
+                "running": False,
+                "ticks_done": 0,
+                "last_error": None,
+                "last_reason": None,
+            },
+            "mode": "human",
+        },
+    )
+    panels = adapters.compose_play_panels(status, width=40)
+    assert panels["needs_attention"] is True
+    assert panels["attention_banner"] == "! needs attention"
+    assert panels["attention_banner"] == compose_intervention_strip(status)
 
 
 def test_intervention_reason_label_known_and_passthrough():
@@ -173,6 +199,7 @@ def test_compose_play_panels_labels_new_halt_codes():
         "! autopilot no candidates; autopilot max ticks exhausted; "
         "autopilot game select; explore exhausted"
     )
+    assert panels["attention_banner"] == compose_intervention_strip(status)
     log = "\n".join(panels["log"])
     assert "autopilot_no_candidates" not in log
     assert "autopilot no candidates" in log

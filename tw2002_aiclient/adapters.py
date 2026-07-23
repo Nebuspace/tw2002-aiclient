@@ -323,6 +323,7 @@ def compose_play_panels(status_resp, *, width: int = 36) -> dict:
     """
     from twclient.spectate_layout import (
         compose_decisions_placeholder,
+        compose_intervention_strip,
         compose_primary_goals_lines,
         compose_priorities_lines,
         format_autopilot_trace_lines,
@@ -369,15 +370,11 @@ def compose_play_panels(status_resp, *, width: int = 36) -> dict:
     if len(log_lines) == 1:
         log_lines.append("—")
 
+    # Same strip formatter as ops spectate (``! label; …``); healthy → None.
     needs_attention = bool(intervention.get("needs_attention"))
-    if needs_attention:
-        if reason_labels:
-            attention_banner = "! " + "; ".join(reason_labels)
-        else:
-            attention_banner = "! needs attention"
+    attention_banner = compose_intervention_strip(status_resp)
+    if attention_banner:
         log_lines.insert(1, attention_banner)
-    else:
-        attention_banner = None
 
     return {
         "metrics": metrics,
