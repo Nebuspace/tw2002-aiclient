@@ -54,9 +54,12 @@ same daemon. For verbs and architecture, see the root [`README.md`](../README.md
    an explicit max-ticks ceiling remains an optional ops safety valve.
 
 5. **Attach (human drive):** `h` / `H` suspends play panels and hands the
-   keyboard via the same engine as `./tw attach`. Prefer Autopilot OFF first —
-   a running trainer holds the control lock and attach is refused. Detach with
-   `Ctrl-]`; play panels resume. Esc / `q` returns to the launcher.
+   keyboard via the same engine as `./tw attach`. If Autopilot is running,
+   attach **stops the runtime trainer** first (clears the live lock) so human
+   drive can take the keyboard — it does **not** write profile `autopilot=`
+   OFF (the play `a` / `Space` toggle still owns that). If the runtime stop
+   fails, attach is blocked. Detach with `Ctrl-]`; play panels resume.
+   Esc / `q` returns to the launcher.
 
 Play panels are read-only chrome; they never send game I/O. Only attach (or ops
 `./tw do` / Autopilot) drives the connection.
@@ -132,11 +135,20 @@ Inspect with:
 | Tick-cap stop (legacy / explicit ceiling) | Autopilot not running, `ticks_done` == 500, `stop_reason` `max_ticks_exhausted` — not the continuous default |
 | `explore_exhausted` | Autopilot `stop_reason` (or last decision reason) `explore_exhausted` — frontier idle, no hop |
 | Intervention attention | `intervention.needs_attention` true — spectate `! …` strip / play attention banner |
+| Unanswered warp Y/N | Prompt `Do you really want to warp there? (Y/N)` / `classification` `warp_confirm`; `idle_ms` rising; Autopilot still `running: true` (ticks may increment) but **not sending**. Tip `7dba009+` auto-answers on a recycled seat; keep this row for pre-tip binaries or any stuck gate |
 
 Continuous Autopilot past 500 ticks with `running: true` is healthy under the
 uncapped default; do not recycle solely because `ticks_done` exceeded 500.
 
 ### Recover
+
+**Unanswered warp Y/N** (manual clear when Autopilot is spinning on the gate):
+
+```bash
+# stop runtime Autopilot (product Play → Autopilot OFF, or daemon autopilot_stop)
+./tw do "Y" --run-dir run/rogue    # or "N" to decline the hop
+# then re-arm Autopilot, or hub-recycle with --no-auto-arm if the seat is wedged
+```
 
 Hub recycle connect/login **without** auto-arming Autopilot, verify, then
 re-arm:
@@ -163,6 +175,6 @@ stuck off the main command prompt.
 | Human drive | play `h` or `./tw attach` (`Ctrl-]` out) |
 | Connect without Autopilot | `./tw ensure … --no-auto-arm` |
 | Live seat (current) | always `--run-dir run/rogue` / `TW_RUN_DIR=run/rogue` |
-| Halt / stuck recovery | see **Live seat recovery** (`game_select`, tick-cap 500, `explore_exhausted`, `needs_attention`) |
+| Halt / stuck recovery | see **Live seat recovery** (`game_select`, tick-cap 500, `explore_exhausted`, `needs_attention`, unanswered warp Y/N) |
 | Daemon health | `./tw status [--run-dir …] [--json]` |
 | Clean shutdown | `./tw stop [--run-dir …]` |

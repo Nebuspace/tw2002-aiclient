@@ -495,3 +495,30 @@ def test_operator_doc_documents_password_defer():
     assert "secrets.json" in text
     assert "never writes one to `profiles.toml`" in text
     assert "env > secrets.json" in text
+
+
+def test_operator_doc_attach_stops_runtime_autopilot():
+    """WO-OPERATOR-DOC-ATTACH-STOP: cold-start attach matches ATTACH-STOPS."""
+    text = (Path(__file__).resolve().parents[1] / "docs" / "OPERATOR.md").read_text(
+        encoding="utf-8"
+    )
+    assert "stops the runtime trainer" in text
+    assert "does **not** write profile `autopilot=`" in text
+    assert "Prefer Autopilot OFF first" not in text
+    assert "attach is refused" not in text
+
+
+def test_operator_doc_warp_confirm_recovery_row():
+    """WO-OPERATOR-DOC-WARP-CONFIRM: live-seat signature + recover steps."""
+    text = (Path(__file__).resolve().parents[1] / "docs" / "OPERATOR.md").read_text(
+        encoding="utf-8"
+    )
+    assert "## Live seat recovery" in text
+    assert "### Failure signatures" in text
+    assert "Unanswered warp Y/N" in text
+    assert "warp_confirm" in text
+    assert "Do you really want to warp there? (Y/N)" in text
+    assert "idle_ms" in text
+    assert "not sending" in text
+    assert "### Recover" in text
+    assert './tw do "Y"' in text
