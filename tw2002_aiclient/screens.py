@@ -262,7 +262,16 @@ def _save_form(values, server_keys, server_idx):
 
 def run_play(stdscr, profile_name):
     curses.curs_set(0)
-    status = "Play shell ready — ensure/daemon wire is a follow-up (trainer toggle persists now)."
+    status = "Ensuring session…"
+    stdscr.erase()
+    _safe_addstr(stdscr, 0, 0, " tw2002-aiclient — play", curses.A_BOLD)
+    _safe_addstr(stdscr, 2, 0, f"  Profile   {profile_name}")
+    _safe_addstr(stdscr, 4, 0, f"  {status}", curses.A_DIM)
+    stdscr.refresh()
+
+    boot = adapters.ensure_and_sync_autopilot(profile_name)
+    status = boot.get("message") or ("ready" if boot.get("ok") else "ensure failed")
+
     while True:
         try:
             profile = adapters.load_profile(profile_name)
@@ -280,14 +289,19 @@ def run_play(stdscr, profile_name):
         server = profile.server or f"{profile.host}:{profile.port}"
         _safe_addstr(stdscr, 4, 0, f"  Server    {server}")
         _safe_addstr(stdscr, 5, 0, f"  Game      {profile.game_letter}")
+        _safe_addstr(
+            stdscr, 6, 0,
+            f"  Run dir   run/{profile.name}/",
+            curses.A_DIM,
+        )
 
         ap_label = "Autopilot ON " if ap_on else "Autopilot OFF"
-        _safe_addstr(stdscr, 7, 0, "  ┌──────────────────┐")
-        _safe_addstr(stdscr, 8, 0, f"  │  {ap_label:<16}│", curses.A_BOLD | curses.A_REVERSE)
-        _safe_addstr(stdscr, 9, 0, "  └──────────────────┘")
-        _safe_addstr(stdscr, 11, 0, "  a  toggle Autopilot (writes profiles.toml)")
-        _safe_addstr(stdscr, 12, 0, "  Esc/q  back to launcher")
-        _safe_addstr(stdscr, 14, 0, f"  {status}", curses.A_DIM)
+        _safe_addstr(stdscr, 8, 0, "  ┌──────────────────┐")
+        _safe_addstr(stdscr, 9, 0, f"  │  {ap_label:<16}│", curses.A_BOLD | curses.A_REVERSE)
+        _safe_addstr(stdscr, 10, 0, "  └──────────────────┘")
+        _safe_addstr(stdscr, 12, 0, "  a  toggle Autopilot (writes profiles.toml + arms/stops trainer)")
+        _safe_addstr(stdscr, 13, 0, "  Esc/q  back to launcher")
+        _safe_addstr(stdscr, 15, 0, f"  {status}", curses.A_DIM)
         _footer(stdscr, " AI spectates via tw status / ledger — does not pilot")
         stdscr.refresh()
 
@@ -296,7 +310,7 @@ def run_play(stdscr, profile_name):
             return "launcher"
         if ch in (ord("a"), ord("A"), ord(" ")):
             try:
-                adapters.set_autopilot(profile_name, not ap_on)
-                status = "Autopilot " + ("ON" if not ap_on else "OFF") + " — saved to profile"
+                result = adapters.toggle_autopilot_and_sync(profile_name)
+                status = result.get("message") or "toggled"
             except Exception as e:  # noqa: BLE001
                 status = f"toggle failed: {e}"
