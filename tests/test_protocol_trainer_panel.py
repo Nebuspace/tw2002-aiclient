@@ -311,6 +311,40 @@ def test_status_autopilot_trace_is_none_when_no_engine_is_wired(fake_daemon, fak
     resp = send_request(fake_daemon.sock_path, "status")
     assert resp["ok"] is True
     assert resp["autopilot_trace"] is None
+    assert resp["autopilot"] == {
+        "running": False,
+        "ticks_done": 0,
+        "last_error": None,
+        "last_reason": None,
+    }
+
+
+def test_status_autopilot_field_matches_loop_snapshot_when_armed(fake_daemon, fake_ledger_entries, profiles_toml=None):
+    """WO-STATUS-AUTOLOOP-FIELD: status.autopilot mirrors AutopilotLoop.snapshot keys."""
+    from twclient.autopilot import AutopilotLoop
+
+    class _Loop:
+        running = True
+        ticks_done = 7
+        last_error = None
+        last_decision = type("D", (), {"reason": "explore"})()
+
+        def snapshot(self):
+            return {
+                "running": self.running,
+                "ticks_done": self.ticks_done,
+                "last_reason": self.last_decision.reason,
+                "last_error": self.last_error,
+                "last_trace": None,
+            }
+
+    fake_daemon.server.autopilot_loop = _Loop()
+    resp = send_request(fake_daemon.sock_path, "status")
+    assert resp["ok"] is True
+    assert resp["autopilot"]["running"] is True
+    assert resp["autopilot"]["ticks_done"] == 7
+    assert resp["autopilot"]["last_reason"] == "explore"
+    assert resp["autopilot"]["last_error"] is None
 
 
 def test_status_autopilot_trace_surfaces_the_engines_most_recent_dry_run_tick(fake_daemon, fake_ledger_entries):

@@ -993,7 +993,13 @@ def build_parser():
     add_json(fd)
     fd.set_defaults(func=cmd_frames)
 
-    sp = add_sub("status", help="daemon alive? connected? idle-ms? classification? (includes run_dir)")
+    sp = add_sub(
+        "status",
+        help=(
+            "daemon alive? connected? idle-ms? classification? (includes run_dir; "
+            "--json adds autopilot {running,ticks_done,last_error,last_reason})"
+        ),
+    )
     add_json(sp)
     sp.set_defaults(func=cmd_status)
 

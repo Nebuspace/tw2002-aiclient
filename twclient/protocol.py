@@ -506,6 +506,25 @@ def dispatch(session, verb, args, server):
             trace_log = autopilot_engine.trace_log()
             if trace_log:
                 autopilot_trace = trace_log[-1]  # most-recent tick only -- see AutopilotEngine.trace_log()
+        # Explicit AutopilotLoop snapshot (WO-STATUS-AUTOLOOP-FIELD):
+        # consumers previously inferred running state from mode +
+        # autopilot_trace only. Always present; defaults when no loop.
+        autopilot_loop = getattr(server, "autopilot_loop", None)
+        if autopilot_loop is not None and hasattr(autopilot_loop, "snapshot"):
+            _ap_snap = autopilot_loop.snapshot()
+            autopilot_status = {
+                "running": bool(_ap_snap.get("running")),
+                "ticks_done": int(_ap_snap.get("ticks_done") or 0),
+                "last_error": _ap_snap.get("last_error"),
+                "last_reason": _ap_snap.get("last_reason"),
+            }
+        else:
+            autopilot_status = {
+                "running": False,
+                "ticks_done": 0,
+                "last_error": None,
+                "last_reason": None,
+            }
         # WO-FA7a revise 3 (mack-confirmed HIGH), superseded by WO-FA-SAFE
         # (hub-ratified revise, item 2): snapshotted into LOCALS once,
         # here, BEFORE `time.monotonic()` is read below for
@@ -572,6 +591,8 @@ def dispatch(session, verb, args, server):
             "play": player.snapshot() if player is not None else None,
             # See autopilot_engine/autopilot_trace computed above.
             "autopilot_trace": autopilot_trace,
+            # WO-STATUS-AUTOLOOP-FIELD: explicit loop snapshot (additive).
+            "autopilot": autopilot_status,
             # WO-FA7a passive credits-supervision surface (E2 supervised-run
             # prerequisite): the last credits balance `Session.
             # observe_credits()` saw on any settled screen (see its
