@@ -617,6 +617,8 @@ def test_high1_poc5_over_rank_a_trivial_upgrade_never_beats_a_real_chain():
 
 
 def test_high1_poc6_ranking_is_stable_regardless_of_current_ships_warp():
+    """Upgrade EV stays warp-stable; focus follows priority_engine (ship deferred
+    on a short executable chain), not raw EV — same preference as STATUS-TRACE-TEST-FIX."""
     candidate = ShipSpec(name="Merchant Cruiser", cost=1_000, holds=75, turns_per_warp=3, fighters=10, shields=0)
     loop = _loop_econ()
     chain_cr_per_turn = 200  # fixed, deliberately between the two OLD (buggy) coded deltas
@@ -637,7 +639,12 @@ def test_high1_poc6_ranking_is_stable_regardless_of_current_ships_warp():
         assert upgrade.ev_per_turn == true_delta == 550.0, (
             f"EV must be warp-stable regardless of current ship ({current.name})"
         )
-        assert decision.chosen.kind == "upgrade", f"upgrade (550) must beat the chain (200) for {current.name}"
+        # 2-link < MIN_CHAIN_LINKS_FOR_SHIP_UPGRADE: focus stays on run_chain
+        # even though upgrade EV (550) > chain (200). Chosen kind must also be
+        # warp-stable (same focus for both hulls).
+        assert decision.chosen.kind == "run_chain", (
+            f"priority engine must defer ship upgrade on short chain for {current.name}"
+        )
 
 
 # -- Priority engine wire: link-count / RT-aware select() override --------
@@ -1794,7 +1801,8 @@ def test_decision_to_trace_matches_the_cross_seat_schema_on_a_multi_candidate_dr
     schema a sibling seat's Decisions-box viewer consumes: exact field
     names, genuine cr/turn for every scored candidate (never 0/guessed),
     gated=False for all three (nothing here was skipped or held), and the
-    correct winning `chosen` kind.
+    priority-engine focus kind as `chosen` (run_chain on a short chain
+    even when upgrade EV is higher).
 
     WO-FA-SAFE: `ObservingFakeAutopilotSession` (not the plain fake) --
     `assess()`'s `credits` now comes from `_fresh_credits()`'s strict
@@ -1817,15 +1825,18 @@ def test_decision_to_trace_matches_the_cross_seat_schema_on_a_multi_candidate_dr
 
     assert trace["tick"] == 1
     assert trace["context"] == {"turns_left": 5000, "cash": 60_000, "sector": None}
-    assert trace["chosen"] == "upgrade"
+    # Preference: priority_engine defers ship upgrade on a short executable
+    # chain (2-link < MIN_CHAIN_LINKS_FOR_SHIP_UPGRADE) even when raw upgrade
+    # EV is higher -- chosen is run_chain, not the EV winner.
+    assert trace["chosen"] == "run_chain"
 
     by_kind = {c["kind"]: c for c in trace["candidates"]}
     assert set(by_kind) == {"run_chain", "upgrade", "explore"}
-    assert by_kind["upgrade"]["ev_cr_per_turn"] == 550.0
+    assert by_kind["upgrade"]["ev_cr_per_turn"] == 550.0  # still scored, just not focus
     assert by_kind["upgrade"]["gated"] is False
     assert by_kind["upgrade"]["gate_reason"] is None
     assert by_kind["run_chain"]["ev_cr_per_turn"] == 50.0
-    assert by_kind["run_chain"]["gated"] is False  # a valid, scored candidate that simply lost -- not gated
+    assert by_kind["run_chain"]["gated"] is False  # focus winner; not a skip/hold gate
     assert by_kind["explore"]["ev_cr_per_turn"] == EXPLORE_BASELINE_EV
 
 
@@ -1963,18 +1974,21 @@ def test_disabled_profile_dry_run_tick_still_produces_a_full_decision_trace():
         explore_next_sector=5,
     )
 
-    # Headline dry-run proof: all three candidate kinds scored, the
-    # correct one won, ZERO sends, and it's ledgered (actor=trainer).
+    # Headline dry-run proof: all three candidate kinds scored, priority
+    # engine focuses run_chain on a short executable chain (ship deferred),
+    # ZERO sends, and it's ledgered (actor=trainer).
     kinds = {c.kind for c in decision.candidates}
     assert kinds == {"run_chain", "upgrade", "explore"}
-    assert decision.chosen.kind == "upgrade"
-    assert decision.chosen.ev_per_turn == 550.0
+    assert decision.chosen.kind == "run_chain"
+    assert decision.chosen.ev_per_turn == 50.0
+    upgrade = next(c for c in decision.candidates if c.kind == "upgrade")
+    assert upgrade.ev_per_turn == 550.0  # still scored, just not focus
     assert session.sent == []
     assert len(ledger.calls) == 1
     assert ledger.calls[0]["actor"] == "trainer"
     assert ledger.calls[0]["input_text"] == "<dry-run:no-send>"
     assert "DRY-RUN" in ledger.calls[0]["intent"]
-    assert "upgrade" in ledger.calls[0]["intent"]
+    assert "run_chain" in ledger.calls[0]["intent"]
 
 
 def test_enabled_profile_live_tick_actually_sends_through_send_and_confirm():
