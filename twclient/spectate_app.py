@@ -207,11 +207,14 @@ ANIM_INTERVAL_S = 1.0 / ANIM_FPS
 IDLE_ANIM_INTERVAL_S = 0.5  # calm chrome refresh when disconnected / no player
 HEARTBEAT_PERIOD_S = 0.8  # slow breathing-dot toggle, distinct from the faster waiting spinner
 FLASH_DURATION_S = 0.4    # brief reverse-video pulse on a connect/disconnect transition
-# WO-TUI-SPECTATE-RECONNECT: when twd is recycled the unix sock vanishes and
-# the subscribe stream EOF's. Keep the curses loop alive and retry connect
-# with bounded exponential backoff until the sock returns.
+# WO-TUI-SPECTATE-RECONNECT / WO-SPECTATE-RECONNECT-LIVE: when twd is
+# recycled the unix sock vanishes and the subscribe stream EOF's. Keep the
+# curses loop alive and retry connect with bounded exponential backoff.
+# Attempt cap mirrors guardian._MAX_RECONNECT_ATTEMPTS (D9) — daemon-core
+# stays untouched; this is the public twin of that private constant.
 RECONNECT_INITIAL_S = 0.25
 RECONNECT_MAX_S = 3.0
+MAX_RECONNECT_ATTEMPTS = 5  # == guardian._MAX_RECONNECT_ATTEMPTS
 
 
 def _status_identity(status):
@@ -285,6 +288,7 @@ class SpectateClient:
         self.connect_error = None
         self.stream_alive = False
         self.reconnecting = False
+        self.reconnect_exhausted = False
         self._sock = None
         self._sock_lock = threading.Lock()
         self._stop = threading.Event()
@@ -293,11 +297,13 @@ class SpectateClient:
     def connect(self):
         """Open the first subscribe stream. Returns False if the sock is
         not up yet (caller exits — initial connect is still fail-fast).
-        Once True, auto-reconnect survives later daemon recycles."""
+        Once True, auto-reconnect retries later daemon recycles up to
+        ``MAX_RECONNECT_ATTEMPTS`` (then ``reconnect_exhausted``)."""
         if not self._open_subscribe():
             return False
         self.stream_alive = True
         self.reconnecting = False
+        self.reconnect_exhausted = False
         self._thread = threading.Thread(target=self._supervise, daemon=True)
         self._thread.start()
         return True
@@ -361,14 +367,29 @@ class SpectateClient:
             if self._stop.is_set():
                 break
             self.reconnecting = True
+            attempts = 0
+            reopened = False
             while not self._stop.is_set():
+                if attempts >= MAX_RECONNECT_ATTEMPTS:
+                    self.reconnect_exhausted = True
+                    self.connect_error = (
+                        f"reconnect exhausted after {MAX_RECONNECT_ATTEMPTS} attempts"
+                    )
+                    self.reconnecting = False
+                    self.stream_alive = False
+                    return
                 time.sleep(backoff)
+                attempts += 1
                 if self._open_subscribe():
                     self.stream_alive = True
                     self.reconnecting = False
+                    self.reconnect_exhausted = False
                     backoff = RECONNECT_INITIAL_S
+                    reopened = True
                     break
                 backoff = min(backoff * 1.5, RECONNECT_MAX_S)
+            if not reopened:
+                break
         self.reconnecting = False
         self.stream_alive = False
 
@@ -383,7 +404,6 @@ class SpectateClient:
         self._close_sock()
         if self._thread is not None and self._thread.is_alive():
             self._thread.join(timeout=2.0)
-
 
 def fetch_status(sock_path, timeout=3.0):
     """One-shot status-verb call on its OWN connection (the subscribe
@@ -2002,6 +2022,10 @@ def _run(stdscr, client, sock_path, pid_path, unicode_ok):
                 stdscr.noutrefresh()
                 got_content = True
 
+            # WO-SPECTATE-RECONNECT-LIVE: give up cleanly after max attempts.
+            if getattr(client, "reconnect_exhausted", False):
+                return "reconnect_exhausted"
+
             event = client.next_event(timeout=0.03)
             if event is not None:
                 last_event = event
@@ -2352,7 +2376,7 @@ def _render(windows, regions, event, tracked, ticker_history, status, palette, g
         if status.get("attach_error"):
             stream_err = status.get("attach_error")
         elif reconnecting:
-            stream_err = "reconnecting…"
+            stream_err = "Reconnecting…"
         # WO-HUD-HOST-VISIBLE: keep host on the status bar too (header can
         # truncate on narrow terms; wrong-daemon must stay visible).
         host_bit = status.get("host") or "-"
@@ -2381,12 +2405,18 @@ def run_interactive(sock_path, pid_path):
     # Must happen BEFORE curses.wrapper()/initscr() -- see
     # terminal.init_locale()'s docstring.
     unicode_ok = terminal.init_locale()
+    result = None
     try:
-        curses.wrapper(_run, client, sock_path, pid_path, unicode_ok)
+        result = curses.wrapper(_run, client, sock_path, pid_path, unicode_ok)
     except KeyboardInterrupt:
         pass
     finally:
         client.close()
+    if result == "reconnect_exhausted":
+        err = client.connect_error or "reconnect exhausted"
+        print(f"ERROR: spectate lost the daemon stream ({err}).")
+        print("Is the daemon running? (`tw status`) — relaunch spectate when it is.")
+        return 1
     return 0
 
 

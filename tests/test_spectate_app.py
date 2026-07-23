@@ -2431,3 +2431,80 @@ def test_spectate_client_auto_reconnects_after_sock_recycle(monkeypatch):
         t2.join(timeout=3.0)
     finally:
         shutil.rmtree(sock_dir, ignore_errors=True)
+
+
+def test_spectate_client_exhausts_reconnect_and_sets_flag(monkeypatch):
+    """WO-SPECTATE-RECONNECT-LIVE: after MAX_RECONNECT_ATTEMPTS failures,
+    stop retrying, clear reconnecting chrome, and set reconnect_exhausted
+    so the curses loop can exit cleanly."""
+    import shutil
+    import socket
+    import tempfile
+    import threading
+
+    monkeypatch.setattr(spectate_app_mod, "RECONNECT_INITIAL_S", 0.02)
+    monkeypatch.setattr(spectate_app_mod, "RECONNECT_MAX_S", 0.05)
+    monkeypatch.setattr(spectate_app_mod, "MAX_RECONNECT_ATTEMPTS", 3)
+
+    sock_dir = tempfile.mkdtemp(prefix="twd-spec-ex-")
+    sock_path = Path(sock_dir) / "s.sock"
+    try:
+        def serve_one_then_gone(ready):
+            if sock_path.exists():
+                sock_path.unlink()
+            srv = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            srv.bind(str(sock_path))
+            srv.listen(1)
+            srv.settimeout(8.0)
+            ready.set()
+            conn, _ = srv.accept()
+            buf = b""
+            while b"\n" not in buf:
+                chunk = conn.recv(4096)
+                if not chunk:
+                    break
+                buf += chunk
+            payload = {
+                "ok": True,
+                "screen": ["ONCE"],
+                "state": {},
+                "classification": "main_command",
+                "sent_input": None,
+            }
+            conn.sendall((json.dumps(payload) + "\n").encode("utf-8"))
+            try:
+                conn.close()
+            except OSError:
+                pass
+            try:
+                srv.close()
+            except OSError:
+                pass
+            try:
+                sock_path.unlink()
+            except FileNotFoundError:
+                pass
+
+        ready = threading.Event()
+        t = threading.Thread(target=serve_one_then_gone, args=(ready,), daemon=True)
+        t.start()
+        assert ready.wait(2.0)
+
+        client = spectate_app_mod.SpectateClient(sock_path)
+        assert client.connect() is True
+        first = client.next_event(timeout=3.0)
+        assert first is not None
+        assert first.get("screen") == ["ONCE"]
+        t.join(timeout=3.0)
+
+        deadline = time.monotonic() + 5.0
+        while time.monotonic() < deadline and not client.reconnect_exhausted:
+            time.sleep(0.02)
+        assert client.reconnect_exhausted is True
+        assert client.reconnecting is False
+        assert client.stream_alive is False
+        assert "exhausted" in (client.connect_error or "").lower()
+        client.close()
+    finally:
+        shutil.rmtree(sock_dir, ignore_errors=True)
