@@ -142,7 +142,8 @@ _FORM_FIELDS = (
     ("planet_name", "Planet (optional)", "text"),
     ("allow_register", "Allow register", "check"),
     ("autopilot", "Autopilot (Trainer)", "check"),
-    ("password", "Password (optional)", "secret"),
+    # Password is deferred: supply via secrets.json / TW2002_PASSWORD_<PROFILE>
+    # before first ensure — never collected here, never written to profiles.toml.
 )
 
 
@@ -158,7 +159,6 @@ def run_create_form(stdscr):
         "planet_name": "",
         "allow_register": False,
         "autopilot": False,
-        "password": "",
     }
     focus = 0
     server_idx = 0
@@ -188,11 +188,6 @@ def run_create_form(stdscr):
                 else:
                     shown = "(no servers in catalog)"
                 line = f"  {label:<22} {shown}"
-            elif kind == "secret":
-                shown = "*" * len(values[key]) if values[key] else "(none)"
-                if editing and selected:
-                    shown = "*" * len(edit_buf) + "_"
-                line = f"  {label:<22} {shown}"
             else:
                 shown = values[key]
                 if editing and selected:
@@ -200,7 +195,10 @@ def run_create_form(stdscr):
                 line = f"  {label:<22} {shown}"
             _safe_addstr(stdscr, y, 0, line, attr)
 
-        _footer(stdscr, " saves to config/profiles.toml · password → secrets.json")
+        _footer(
+            stdscr,
+            " saves to profiles.toml · password via secrets.json/env on first ensure",
+        )
         stdscr.refresh()
 
         ch = stdscr.getch()
@@ -247,7 +245,7 @@ def run_create_form(stdscr):
                 else:
                     server_idx = (server_idx + 1) % len(server_keys)
                 values["server"] = server_keys[server_idx]
-        elif kind in ("text", "secret") and ch in (ord("e"), curses.KEY_ENTER, 10, 13):
+        elif kind == "text" and ch in (ord("e"), curses.KEY_ENTER, 10, 13):
             editing = True
             edit_buf = values[key]
             curses.curs_set(1)
@@ -259,6 +257,7 @@ def run_create_form(stdscr):
 
 
 def _save_form(values, server_keys, server_idx):
+    """Persist non-secret profile shape only — password deferred to ensure."""
     name = (values.get("name") or "").strip()
     if not name:
         raise ValueError("profile id required")
@@ -284,9 +283,8 @@ def _save_form(values, server_keys, server_idx):
         allow_register=allow_register,
         autopilot=bool(values.get("autopilot")),
     )
-    pw = values.get("password") or ""
-    if pw:
-        adapters.save_password(name, pw)
+    # Intentionally no password write: first ensure uses get_password()
+    # (TW2002_PASSWORD_<PROFILE> env, else config/secrets.json).
 
 
 # ---------------------------------------------------------------------------

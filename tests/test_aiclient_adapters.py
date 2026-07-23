@@ -323,3 +323,76 @@ def test_suspend_and_attach_surfaces_failure_and_still_restores(monkeypatch, tmp
     err = adapters.suspend_and_attach(_FakeStdscr(), "rogue", run_dir=tmp_path)
     assert err == "locked_by_auto_loop"
     assert calls == ["reset_prog_mode", "clear", "refresh"]
+
+
+# ---------------------------------------------------------------------------
+# WO-CREATE-PASSWORD-DEFER — create form never collects / writes password
+# ---------------------------------------------------------------------------
+
+
+def test_create_form_fields_have_no_password():
+    from tw2002_aiclient.screens import _FORM_FIELDS
+
+    keys = [key for key, _label, _kind in _FORM_FIELDS]
+    assert "password" not in keys
+    kinds = {kind for _key, _label, kind in _FORM_FIELDS}
+    assert "secret" not in kinds
+
+
+def test_save_form_creates_profile_without_password(monkeypatch, tmp_path):
+    """Create path writes profiles.toml shape only — never secrets."""
+    from tw2002_aiclient import screens
+
+    created = []
+
+    monkeypatch.setattr(
+        adapters,
+        "create_profile",
+        lambda name, **kw: created.append((name, kw)),
+    )
+    # Adapter no longer exposes save_password; guard against regression.
+    assert not hasattr(adapters, "save_password")
+
+    screens._save_form(
+        {
+            "name": "newbie",
+            "handle": "Trader",
+            "game_letter": "A",
+            "ship_name": "",
+            "planet_name": "",
+            "allow_register": False,
+            "autopilot": True,
+            # Even if a stale UI stuffed password into values, save must ignore it.
+            "password": "MUST-NOT-BE-WRITTEN",
+        },
+        ["local"],
+        0,
+    )
+    assert len(created) == 1
+    name, kw = created[0]
+    assert name == "newbie"
+    assert "password" not in kw
+    assert kw["server"] == "local"
+    assert kw["autopilot"] is True
+
+
+def test_adapter_create_profile_refuses_password_kwarg():
+    with pytest.raises(TypeError, match="does not accept password"):
+        adapters.create_profile(
+            "x",
+            game_letter="A",
+            handle="h",
+            server="s",
+            password="nope",
+        )
+
+
+def test_operator_doc_documents_password_defer():
+    text = (Path(__file__).resolve().parents[1] / "docs" / "OPERATOR.md").read_text(
+        encoding="utf-8"
+    )
+    assert "Password is deferred at create" in text
+    assert "TW2002_PASSWORD_" in text
+    assert "secrets.json" in text
+    assert "never writes one to `profiles.toml`" in text
+    assert "env > secrets.json" in text

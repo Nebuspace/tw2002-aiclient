@@ -15,7 +15,8 @@ same daemon. For verbs and architecture, see the root [`README.md`](../README.md
 
    Edit `config/profiles.toml` with non-secret shape only (server catalog name /
    host / port / game letter / handle). Passwords stay in `config/secrets.json`
-   (chmod 600, gitignored) or `TW2002_PASSWORD_<PROFILE>` — never in argv or logs.
+   (chmod 600, gitignored) or `TW2002_PASSWORD_<PROFILE>` — never in argv,
+   profiles.toml, or logs.
 
 2. **Launcher:** start the product TUI (needs a real TTY).
 
@@ -26,9 +27,25 @@ same daemon. For verbs and architecture, see the root [`README.md`](../README.md
    Pick an existing profile, or **+ Create new profile** (catalog servers from
    `config/servers.toml`). Retired rows are grey / unselectable.
 
+   **Password is deferred at create.** The create-profile form collects only
+   non-secret shape (id / server / game letter / handle / optional ship &
+   planet / allow-register / Autopilot). It does **not** ask for a password and
+   never writes one to `profiles.toml`. Before the first `ensure` / Play,
+   supply credentials out-of-band:
+
+   | Source | How |
+   |---|---|
+   | Env (preferred for one-offs) | `TW2002_PASSWORD_<PROFILE>` — profile id uppercased, hyphens → underscores (e.g. profile `my-lane` → `TW2002_PASSWORD_MY_LANE`) |
+   | Secrets file | `config/secrets.json` chmod 600: `{"<profile>": {"password": "…"}}` |
+
+   Resolver precedence on login: **env > secrets.json**. Returning characters
+   need a stored password before Play; new registration (`allow_register`) can
+   generate and persist one via the existing ensure/login path. Never pass a
+   password on argv.
+
 3. **Play:** Enter opens the play screen. The client ensures the session
-   (spawn daemon if needed, login to the main command prompt) and syncs
-   Autopilot to the profile flag.
+   (spawn daemon if needed, login to the main command prompt using the
+   env/secrets password path above) and syncs Autopilot to the profile flag.
 
 4. **Autopilot toggle:** on the play screen, `a` or `Space` flips Autopilot
    ON/OFF and persists `autopilot=` on the profile. ON arms the trainer; OFF
@@ -97,6 +114,7 @@ explicitly after you confirm the seat is healthy.
 | Goal | Command / key |
 |---|---|
 | Product play | `./tw2002-aiclient` |
+| Create profile (no password field) | launcher **+ Create** → then env/`secrets.json` before Play |
 | Isolated live seat | `TW_RUN_DIR=run/rogue` or `--run-dir run/rogue` |
 | Watch (ops) | `./tw spectate [--run-dir …]` |
 | Human drive | play `h` or `./tw attach` (`Ctrl-]` out) |

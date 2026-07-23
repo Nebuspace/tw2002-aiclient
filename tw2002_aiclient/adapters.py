@@ -49,8 +49,19 @@ def server_label(key, servers_path=None):
     return f"{rec['key']}  {rec['hostname']}:{rec['port']}"
 
 
-def create_profile(**kwargs):
-    return credentials.create_profile(**kwargs)
+def create_profile(name, **kwargs):
+    """Create a profiles.toml section — non-secret shape only.
+
+    Password is never accepted here. Supply credentials out-of-band via
+    ``TW2002_PASSWORD_<PROFILE>`` or ``config/secrets.json`` before the
+    first ``ensure`` / play (see ``docs/OPERATOR.md``).
+    """
+    # Refuse accidental password kwargs so create cannot become a secret sink.
+    if "password" in kwargs:
+        raise TypeError(
+            "create_profile does not accept password — use secrets.json / env"
+        )
+    return credentials.create_profile(name, **kwargs)
 
 
 def set_autopilot(profile_name, enabled, profiles_path=None):
@@ -61,11 +72,6 @@ def load_profile(name, profiles_path=None, servers_path=None):
     return credentials.load_profile(
         name, profiles_path=profiles_path, servers_path=servers_path
     )
-
-
-def save_password(profile_name, password, secrets_path=None):
-    if password:
-        credentials.save_password(profile_name, password, secrets_path=secrets_path)
 
 
 def resolve_run_dir(profile_name=None, run_dir=None) -> Path:
