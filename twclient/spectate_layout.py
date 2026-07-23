@@ -2159,7 +2159,12 @@ def chain_bubble_sectors(chain) -> list:
 
 
 def filter_port_only_sectors(sectors, known_ports) -> list:
-    """Deprecated alias — use :func:`longest_contiguous_port_run`."""
+    """Deprecated alias — use :func:`longest_contiguous_port_run`.
+
+    PARKED 2026-07-23 (WO-FA14): zero callers; kept as a named shim so
+    older notes/tests that cite this name still resolve. Prefer
+    ``longest_contiguous_port_run`` for new code.
+    """
     return longest_contiguous_port_run(sectors, known_ports)
 
 
