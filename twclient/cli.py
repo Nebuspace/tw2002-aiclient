@@ -1230,7 +1230,8 @@ def build_parser():
         "aiclient",
         help=(
             "tw2002-aiclient product TUI — profile launcher, create form, "
-            "Autopilot ON/OFF (Trainer). Ops spectate remains `tw spectate`."
+            "Autopilot ON/OFF (Trainer). Same as ./tw2002-aiclient; "
+            "ops spectator remains `tw spectate`."
         ),
     )
     sp.set_defaults(func=cmd_aiclient)
@@ -1238,11 +1239,10 @@ def build_parser():
     sp = add_sub(
         "spectate",
         help=(
-            "standalone spectator dashboard — run in your OWN terminal any time after "
-            "`tw start`; attaches to the running daemon and watches live, decoupled from "
-            "whoever/whatever is driving, zero coordination needed. "
-            "Use --run-dir PATH when the daemon is not on the default run/ socket "
-            "(host is also shown in the HUD header/status bar)."
+            "ops spectator dashboard (backend CLI) — live read-only HUD after "
+            "`tw start`/`tw ensure`; product play UI is ./tw2002-aiclient. "
+            "Attaches to the running daemon, decoupled from whoever is driving. "
+            "Use --run-dir PATH when the daemon is not on the default run/ socket."
         ),
     )
     sp.add_argument(

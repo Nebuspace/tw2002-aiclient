@@ -13,6 +13,17 @@ AI grinds trade routes in the background, *you* get the fun parts: a live color
 dashboard to watch it fly, a keyboard to take over any time, and a client that
 quietly learns the profitable loops it sees.
 
+### Product vs ops
+
+| Surface | Role |
+|---|---|
+| `./tw2002-aiclient` | **Product TUI** — profile launcher, play screen, Autopilot ON/OFF. Human-facing client. |
+| `./tw` | **Backend / ops CLI** — daemon verbs (`ensure`, `do`, `status`, …), scripting, and ops surfaces. |
+| `./tw spectate` | **Ops spectator** — read-only live HUD for operators/scripts (`tw aiclient` is the product path). |
+| `./tw attach` | Take the keyboard on the shared session (also reachable from ops workflows). |
+
+Same daemon either way — one telnet connection. Prefer `./tw2002-aiclient` for day-to-day play; keep `./tw` for automation and ops.
+
 ---
 
 ## What it does
@@ -100,10 +111,17 @@ python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt     # one dependency: pyte
 ```
 
-`./tw` is self-locating — it runs from anywhere by absolute path, no venv
-activation needed.
+`./tw2002-aiclient` and `./tw` are self-locating — they run from anywhere by
+absolute path, no venv activation needed.
 
-**Get into the game** (recommended — handles daemon spawn, login/registration,
+**Product path** (launcher → create/select profile → play / Autopilot):
+
+```bash
+./tw2002-aiclient --help    # title: tw2002-aiclient; points at ./tw for ops
+./tw2002-aiclient           # curses product TUI (needs a real TTY)
+```
+
+**Ops / backend path** — get into the game (handles daemon spawn, login/registration,
 credential storage):
 
 ```bash
@@ -148,7 +166,8 @@ Everything takes `--json` for machine-parseable output.
 | `tw send "<input>"` | Raw send, no wait (low-level). |
 | `tw history [--n N]` | Recent events; full transcript in `logs/`. |
 | `tw watch [--frames N]` | Tail the settle-edge event stream — the scripting-friendly sibling of `spectate`. |
-| `tw spectate` | Live read-only curses dashboard (`--snapshot` prints frames to stdout for scripting). |
+| `tw aiclient` | Product TUI alias for `./tw2002-aiclient` (launcher / play / Autopilot). |
+| `tw spectate` | Ops read-only curses dashboard (`--snapshot` for scripting). |
 | `tw attach` | Interactive live console — play the game yourself; `Ctrl-]` detaches. |
 | `tw loops [--include-drafts]` | List every learned loop with profit metadata. |
 | `tw autoloop {start,stop,pause,resume}` | Drive the background learned-loop player; returns immediately — watch progress in `spectate`. |

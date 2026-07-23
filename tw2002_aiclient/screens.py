@@ -63,7 +63,7 @@ def run_launcher(stdscr):
             f"  {'›' if idx == create_i else ' '} + Create new profile",
             create_attr,
         )
-        _footer(stdscr, " product client · backend: twclient")
+        _footer(stdscr, " tw2002-aiclient · ops CLI: ./tw  ·  spectator: ./tw spectate")
         stdscr.refresh()
 
         ch = stdscr.getch()

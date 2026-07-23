@@ -2,10 +2,17 @@
 
 from __future__ import annotations
 
+import argparse
 import curses
 import sys
 
 from .screens import run_launcher, run_play
+
+_PROG = "tw2002-aiclient"
+_DESCRIPTION = (
+    "tw2002-aiclient — product TUI (profile launcher, play, Autopilot). "
+    "Backend/ops CLI remains ./tw (e.g. ./tw spectate, ./tw status, ./tw ensure)."
+)
 
 
 def _loop(stdscr):
@@ -33,6 +40,8 @@ def run():
 
 
 def main(argv=None):
+    parser = argparse.ArgumentParser(prog=_PROG, description=_DESCRIPTION)
+    parser.parse_args(argv)
     return run()
 
 
