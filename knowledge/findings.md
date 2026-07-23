@@ -37,10 +37,9 @@ driver as the live run-loop.
 **Canon:** `canon/architecture/session-engine.md` and `canon/engine/trace-ledger.md` (Code
 Divergence sections).
 
-Pre-rebirth `ledger.record_do()` used actor values among `ai` / `trainer` / `human` (default
-`"ai"`), treating LLM-decided sends as a live `ai` actor. Reborn send-time invariant: live senders
-are `{app, human}` only; AI authorship is provenance of a *rule*, not a ledger live-actor value.
-(Phrase for Proof index: actor enum ai trainer human vs app/human.)
+Pre-rebirth `ledger.record_do()` declared actor among ai / trainer / human (default `"ai"`),
+treating LLM-decided sends as a live `ai` value. Reborn send-time invariant: live senders are
+`{app, human}` only; AI authorship is provenance of a *rule*, not a ledger live-actor value.
 
 ### 4. Founding auto-haggle money-path defect
 
