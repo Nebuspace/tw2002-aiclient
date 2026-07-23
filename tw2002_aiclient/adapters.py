@@ -253,6 +253,10 @@ def ensure_and_sync_autopilot(profile_name, *, run_dir=None, timeout=60.0):
 # WS5 intervention reason codes → short human labels (display only; codes unchanged).
 INTERVENTION_REASON_LABELS = {
     "autopilot_halted": "autopilot halted",
+    "autopilot_no_candidates": "autopilot no candidates",
+    "autopilot_max_ticks_exhausted": "autopilot max ticks exhausted",
+    "autopilot_game_select": "autopilot game select",
+    "explore_exhausted": "explore exhausted",
     "human_attach_blocks_trainer": "human attach blocks trainer",
     "credits_unknown": "credits unknown",
     "credits_stale": "credits stale",

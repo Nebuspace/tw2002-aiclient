@@ -115,9 +115,68 @@ def test_compose_play_panels_attention_and_log():
 def test_intervention_reason_label_known_and_passthrough():
     assert adapters.intervention_reason_label("fighters_unknown") == "fighters unknown"
     assert adapters.intervention_reason_label("autopilot_halted") == "autopilot halted"
+    assert adapters.intervention_reason_label("autopilot_no_candidates") == (
+        "autopilot no candidates"
+    )
+    assert adapters.intervention_reason_label("autopilot_max_ticks_exhausted") == (
+        "autopilot max ticks exhausted"
+    )
+    assert adapters.intervention_reason_label("autopilot_game_select") == (
+        "autopilot game select"
+    )
+    assert adapters.intervention_reason_label("explore_exhausted") == "explore exhausted"
     assert adapters.intervention_reason_label("custom_future") == "custom_future"
     assert adapters.intervention_reason_label(None) == "?"
     assert adapters.intervention_reason_label("") == "?"
+
+
+def test_compose_play_panels_labels_new_halt_codes():
+    """Post INTERVENTION-AP-HALT-ATTENTION codes must label on compose."""
+    status = _healthy_status(
+        intervention={
+            "needs_attention": True,
+            "reasons": [
+                {"code": "autopilot_no_candidates", "detail": "no_candidates"},
+                {
+                    "code": "autopilot_max_ticks_exhausted",
+                    "detail": "max_ticks_exhausted",
+                },
+                {"code": "autopilot_game_select", "detail": "game_select"},
+                {"code": "explore_exhausted", "detail": "explore_exhausted"},
+            ],
+            "autopilot": {
+                "running": False,
+                "ticks_done": 12,
+                "last_error": None,
+                "last_reason": "no_candidates",
+                "stop_reason": "game_select",
+            },
+            "mode": "auto_loop",
+        },
+        autopilot={
+            "running": False,
+            "ticks_done": 12,
+            "last_error": None,
+            "last_reason": "no_candidates",
+            "stop_reason": "game_select",
+        },
+    )
+    panels = adapters.compose_play_panels(status, width=96)
+    assert panels["needs_attention"] is True
+    assert panels["reason_labels"] == [
+        "autopilot no candidates",
+        "autopilot max ticks exhausted",
+        "autopilot game select",
+        "explore exhausted",
+    ]
+    assert panels["attention_banner"] == (
+        "! autopilot no candidates; autopilot max ticks exhausted; "
+        "autopilot game select; explore exhausted"
+    )
+    log = "\n".join(panels["log"])
+    assert "autopilot_no_candidates" not in log
+    assert "autopilot no candidates" in log
+    assert "explore exhausted" in log
 
 
 def test_goals_snapshot_from_status_unknowns():
