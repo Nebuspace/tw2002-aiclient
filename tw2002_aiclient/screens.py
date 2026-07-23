@@ -344,16 +344,38 @@ def run_play(stdscr, profile_name):
         y += 1
         y += _draw_panel_block(stdscr, y, 0, panels.get("log") or [], max_lines=5)
 
-        _safe_addstr(stdscr, y + 1, 0, "  a  toggle Autopilot · Esc/q  launcher", curses.A_DIM)
+        _safe_addstr(
+            stdscr,
+            y + 1,
+            0,
+            "  h  attach (human) · a  toggle Autopilot · Esc/q  launcher",
+            curses.A_DIM,
+        )
         _safe_addstr(stdscr, y + 2, 0, f"  {status}", curses.A_DIM)
-        _footer(stdscr, " panels from tw status + spectate compose — AI does not pilot")
+        _footer(
+            stdscr,
+            " h attach · Ctrl-] detach · Autopilot OFF recommended · panels read-only",
+        )
         stdscr.refresh()
 
         ch = stdscr.getch()
         if ch in (27, ord("q")):
             stdscr.timeout(-1)
             return "launcher"
-        if ch in (ord("a"), ord("A"), ord(" ")):
+        if ch in (ord("h"), ord("H")):
+            # Human attach reuses tw attach / control_lock MODE_HUMAN.
+            # Autopilot OFF recommended (trainer AUTO_LOOP blocks attach).
+            tip = ""
+            if ap_on:
+                tip = " (Autopilot still ON — OFF recommended)"
+            stdscr.timeout(-1)
+            err = adapters.suspend_and_attach(stdscr, profile_name)
+            stdscr.timeout(1000)
+            if err:
+                status = f"{err}{tip}"
+            else:
+                status = f"detached · back to play{tip}"
+        elif ch in (ord("a"), ord("A"), ord(" ")):
             try:
                 result = adapters.toggle_autopilot_and_sync(profile_name)
                 status = result.get("message") or "toggled"

@@ -388,3 +388,64 @@ def toggle_autopilot_and_sync(profile_name, *, run_dir=None):
             + ("" if ok else f" ({ap_resp.get('error') or 'runtime sync failed'})")
         ),
     }
+
+
+def run_attach(profile_name=None, *, run_dir=None):
+    """Hand the keyboard via ``interactive_app`` (same engine as ``tw attach``).
+
+    Takes control_lock MODE_HUMAN for the attach connection lifetime;
+    keystrokes are human-only — the product spectator/play panels never
+    send game I/O. Caller must not own the terminal in an active curses
+    session; use ``suspend_and_attach`` from the play screen.
+
+    Autopilot OFF is recommended first: a running trainer holds
+    MODE_AUTO_LOOP and the daemon refuses attach (``locked_by_auto_loop``).
+    """
+    from twclient import cli as twcli
+    from twclient import interactive_app
+
+    run_dir = resolve_run_dir(profile_name=profile_name, run_dir=run_dir)
+    _configure(run_dir)
+    if not twcli._active_sock_path.exists():
+        return {"ok": False, "code": 1, "error": "daemon_not_running"}
+    code = interactive_app.run_interactive_attach(
+        twcli._active_sock_path, twcli._active_pid_path
+    )
+    return {
+        "ok": code == 0,
+        "code": int(code),
+        "error": None if code == 0 else f"attach exited {code}",
+        "message": "detached · back to play" if code == 0 else f"attach exited {code}",
+    }
+
+
+def suspend_and_attach(stdscr, profile_name=None, *, run_dir=None):
+    """Suspend outer curses, run ``tw attach`` engine, resume play panels.
+
+    Same def_prog_mode/endwin/reset idiom as ``spectate_app``'s A/a
+    path — but calls ``interactive_app`` in-process (thin wrap, no second
+    attach engine). Never raises into the play loop; failures become a
+    status string. Always restores curses via ``finally``.
+    """
+    import curses
+
+    error = None
+    curses.def_prog_mode()
+    curses.endwin()
+    try:
+        try:
+            result = run_attach(profile_name, run_dir=run_dir)
+        except Exception as e:  # noqa: BLE001 — surface on play status line
+            error = f"attach failed: {e}"
+            result = {"ok": False, "error": error}
+        else:
+            if not result.get("ok"):
+                error = result.get("error") or result.get("message") or "attach failed"
+    finally:
+        curses.reset_prog_mode()
+        try:
+            stdscr.clear()
+            stdscr.refresh()
+        except curses.error:
+            pass
+    return error

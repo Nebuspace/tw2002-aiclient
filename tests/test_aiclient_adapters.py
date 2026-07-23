@@ -221,3 +221,105 @@ def test_launcher_step_skips_retired_rows():
     assert _launcher_step(3, rows, -1) == 2
     # From a up → Create (wrap)
     assert _launcher_step(0, rows, -1) == 3
+
+
+def test_run_attach_delegates_to_interactive_app(monkeypatch, tmp_path):
+    """Thin wrap: configure run_dir, hand sock/pid to interactive_app."""
+    import twclient.cli as twcli
+    import twclient.interactive_app as interactive_app
+
+    sock = tmp_path / "twd.sock"
+    pid = tmp_path / "twd.pid"
+    sock.write_text("", encoding="utf-8")
+    pid.write_text("1\n", encoding="utf-8")
+    calls = []
+
+    monkeypatch.setattr(
+        adapters, "_configure",
+        lambda rd: calls.append(("cfg", str(rd))),
+    )
+    monkeypatch.setattr(twcli, "_active_sock_path", sock)
+    monkeypatch.setattr(twcli, "_active_pid_path", pid)
+    monkeypatch.setattr(
+        interactive_app,
+        "run_interactive_attach",
+        lambda s, p: calls.append(("attach", Path(s), Path(p))) or 0,
+    )
+
+    out = adapters.run_attach("rogue", run_dir=tmp_path)
+    assert out["ok"] is True
+    assert out["code"] == 0
+    assert ("cfg", str(tmp_path)) in calls
+    assert ("attach", sock, pid) in calls
+
+
+def test_run_attach_reports_daemon_not_running(monkeypatch, tmp_path):
+    import twclient.cli as twcli
+
+    missing = tmp_path / "nope.sock"
+    monkeypatch.setattr(adapters, "_configure", lambda rd: None)
+    monkeypatch.setattr(twcli, "_active_sock_path", missing)
+
+    out = adapters.run_attach("rogue", run_dir=tmp_path)
+    assert out["ok"] is False
+    assert out["error"] == "daemon_not_running"
+
+
+def test_suspend_and_attach_restores_curses(monkeypatch, tmp_path):
+    """Play-screen suspend idiom: endwin → attach → reset, never raise."""
+    import curses
+
+    calls = []
+    monkeypatch.setattr(curses, "def_prog_mode", lambda: calls.append("def_prog_mode"))
+    monkeypatch.setattr(curses, "endwin", lambda: calls.append("endwin"))
+    monkeypatch.setattr(curses, "reset_prog_mode", lambda: calls.append("reset_prog_mode"))
+    monkeypatch.setattr(
+        adapters,
+        "run_attach",
+        lambda name=None, run_dir=None: (
+            calls.append(("run_attach", name, str(run_dir))) or {"ok": True, "code": 0}
+        ),
+    )
+
+    class _FakeStdscr:
+        def clear(self):
+            calls.append("clear")
+
+        def refresh(self):
+            calls.append("refresh")
+
+    err = adapters.suspend_and_attach(_FakeStdscr(), "rogue", run_dir=tmp_path)
+    assert err is None
+    assert calls == [
+        "def_prog_mode",
+        "endwin",
+        ("run_attach", "rogue", str(tmp_path)),
+        "reset_prog_mode",
+        "clear",
+        "refresh",
+    ]
+
+
+def test_suspend_and_attach_surfaces_failure_and_still_restores(monkeypatch, tmp_path):
+    import curses
+
+    calls = []
+    monkeypatch.setattr(curses, "def_prog_mode", lambda: None)
+    monkeypatch.setattr(curses, "endwin", lambda: None)
+    monkeypatch.setattr(curses, "reset_prog_mode", lambda: calls.append("reset_prog_mode"))
+    monkeypatch.setattr(
+        adapters,
+        "run_attach",
+        lambda name=None, run_dir=None: {"ok": False, "error": "locked_by_auto_loop"},
+    )
+
+    class _FakeStdscr:
+        def clear(self):
+            calls.append("clear")
+
+        def refresh(self):
+            calls.append("refresh")
+
+    err = adapters.suspend_and_attach(_FakeStdscr(), "rogue", run_dir=tmp_path)
+    assert err == "locked_by_auto_loop"
+    assert calls == ["reset_prog_mode", "clear", "refresh"]
