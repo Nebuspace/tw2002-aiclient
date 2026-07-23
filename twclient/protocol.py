@@ -34,12 +34,21 @@ def _build_status_intervention(
 ):
     """WS5 read-only intervention snapshot for AI spectators.
 
-    ``needs_attention`` is truthy only when autopilot has sticky-halted
-    (``last_error`` set while not running) or a human attach holds
-    MODE_HUMAN (trainer/autopilot cannot drive). Credit/fighter freshness
-    flags land in ``reasons`` for situational awareness but do not alone
-    raise ``needs_attention`` — same contract as autopilot's own fail-open
-    on unknown/stale readings until a halt actually fires.
+    ``needs_attention`` is truthy when:
+    - autopilot sticky-halted (``last_error`` set while not running),
+    - autopilot stopped after frontier exhaustion (``last_reason``
+      ``no_candidates`` while not running) — code ``autopilot_no_candidates``,
+    - autopilot stopped on an explicit tick cap (``stop_reason``
+      ``max_ticks_exhausted`` while not running) — code
+      ``autopilot_max_ticks_exhausted``,
+    - or a human attach holds MODE_HUMAN (trainer/autopilot cannot drive).
+
+    Credit/fighter freshness flags land in ``reasons`` for situational
+    awareness but do not alone raise ``needs_attention`` — same contract
+    as autopilot's own fail-open on unknown/stale readings until a halt
+    actually fires. A still-running loop never raises attention for
+    ``no_candidates`` / ``max_ticks_exhausted`` (continuous ticks may
+    leave ``last_reason=no_candidates`` between recoveries).
     """
     if credits_stale_ms is None:
         from .autopilot import DEFAULT_CREDITS_STALE_MS
@@ -48,10 +57,21 @@ def _build_status_intervention(
 
     reasons = []
     last_error = autopilot_status.get("last_error")
+    last_reason = autopilot_status.get("last_reason")
+    stop_reason = autopilot_status.get("stop_reason")
     running = bool(autopilot_status.get("running"))
 
     if last_error and not running:
         reasons.append({"code": "autopilot_halted", "detail": last_error})
+
+    # Quiet stops that previously looked healthy (no last_error):
+    if not running and last_reason == "no_candidates":
+        reasons.append({"code": "autopilot_no_candidates", "detail": last_reason})
+
+    if not running and stop_reason == "max_ticks_exhausted":
+        reasons.append(
+            {"code": "autopilot_max_ticks_exhausted", "detail": stop_reason}
+        )
 
     if mode == MODE_HUMAN:
         reasons.append({"code": "human_attach_blocks_trainer"})
@@ -76,7 +96,12 @@ def _build_status_intervention(
             }
         )
 
-    needs_attention = bool((last_error and not running) or mode == MODE_HUMAN)
+    attention_halt = (not running) and bool(
+        last_error
+        or last_reason == "no_candidates"
+        or stop_reason == "max_ticks_exhausted"
+    )
+    needs_attention = bool(attention_halt or mode == MODE_HUMAN)
 
     return {
         "needs_attention": needs_attention,
@@ -581,6 +606,7 @@ def dispatch(session, verb, args, server):
                 "ticks_done": int(_ap_snap.get("ticks_done") or 0),
                 "last_error": _ap_snap.get("last_error"),
                 "last_reason": _ap_snap.get("last_reason"),
+                "stop_reason": _ap_snap.get("stop_reason"),
             }
         else:
             autopilot_status = {
@@ -588,6 +614,7 @@ def dispatch(session, verb, args, server):
                 "ticks_done": 0,
                 "last_error": None,
                 "last_reason": None,
+                "stop_reason": None,
             }
         # WO-FA7a revise 3 (mack-confirmed HIGH), superseded by WO-FA-SAFE
         # (hub-ratified revise, item 2): snapshotted into LOCALS once,

@@ -316,6 +316,7 @@ def test_status_autopilot_trace_is_none_when_no_engine_is_wired(fake_daemon, fak
         "ticks_done": 0,
         "last_error": None,
         "last_reason": None,
+        "stop_reason": None,
     }
 
 
@@ -405,6 +406,7 @@ def test_status_intervention_clear_when_autopilot_running(fake_daemon, fake_ledg
                 "ticks_done": self.ticks_done,
                 "last_reason": self.last_decision.reason,
                 "last_error": self.last_error,
+                "stop_reason": None,
                 "last_trace": None,
             }
 
@@ -416,6 +418,8 @@ def test_status_intervention_clear_when_autopilot_running(fake_daemon, fake_ledg
     assert iv["mode"] == MODE_AI_PILOT
     assert iv["autopilot"] == resp["autopilot"]
     assert not any(r["code"] == "autopilot_halted" for r in iv["reasons"])
+    assert not any(r["code"] == "autopilot_no_candidates" for r in iv["reasons"])
+    assert not any(r["code"] == "autopilot_max_ticks_exhausted" for r in iv["reasons"])
     assert not any(r["code"] == "human_attach_blocks_trainer" for r in iv["reasons"])
     assert DEFAULT_CREDITS_STALE_MS == 15_000
 
@@ -436,6 +440,7 @@ def test_status_intervention_needs_attention_on_autopilot_sticky_halt(fake_daemo
                 "ticks_done": self.ticks_done,
                 "last_reason": None,
                 "last_error": self.last_error,
+                "stop_reason": "settle_unconfirmed",
                 "last_trace": None,
             }
 
@@ -448,6 +453,93 @@ def test_status_intervention_needs_attention_on_autopilot_sticky_halt(fake_daemo
     assert halted[0]["detail"] == halt_msg
     assert iv["autopilot"]["last_error"] == halt_msg
     assert iv["autopilot"]["running"] is False
+
+
+def test_status_intervention_needs_attention_on_no_candidates_stop(fake_daemon, fake_ledger_entries):
+    """WO-INTERVENTION-AP-HALT-ATTENTION: quiet no_candidates stop is attention."""
+
+    class _Loop:
+        running = False
+        ticks_done = 42
+        last_error = None
+        last_decision = type("D", (), {"reason": "no_candidates"})()
+
+        def snapshot(self):
+            return {
+                "running": self.running,
+                "ticks_done": self.ticks_done,
+                "last_reason": self.last_decision.reason,
+                "last_error": self.last_error,
+                "stop_reason": "stopped",
+                "last_trace": None,
+            }
+
+    fake_daemon.server.autopilot_loop = _Loop()
+    resp = send_request(fake_daemon.sock_path, "status")
+    iv = resp["intervention"]
+    assert iv["needs_attention"] is True
+    codes = [r["code"] for r in iv["reasons"]]
+    assert "autopilot_no_candidates" in codes
+    assert "autopilot_halted" not in codes
+    assert iv["autopilot"]["last_reason"] == "no_candidates"
+    assert iv["autopilot"]["running"] is False
+
+
+def test_status_intervention_needs_attention_on_max_ticks_exhausted(fake_daemon, fake_ledger_entries):
+    """WO-INTERVENTION-AP-HALT-ATTENTION: tick-cap exit raises attention."""
+
+    class _Loop:
+        running = False
+        ticks_done = 500
+        last_error = None
+        last_decision = type("D", (), {"reason": "explore"})()
+
+        def snapshot(self):
+            return {
+                "running": self.running,
+                "ticks_done": self.ticks_done,
+                "last_reason": self.last_decision.reason,
+                "last_error": self.last_error,
+                "stop_reason": "max_ticks_exhausted",
+                "last_trace": None,
+            }
+
+    fake_daemon.server.autopilot_loop = _Loop()
+    resp = send_request(fake_daemon.sock_path, "status")
+    iv = resp["intervention"]
+    assert iv["needs_attention"] is True
+    capped = [r for r in iv["reasons"] if r["code"] == "autopilot_max_ticks_exhausted"]
+    assert len(capped) == 1
+    assert capped[0]["detail"] == "max_ticks_exhausted"
+    assert iv["autopilot"]["stop_reason"] == "max_ticks_exhausted"
+    assert iv["autopilot"]["running"] is False
+
+
+def test_status_intervention_running_no_candidates_is_not_attention(fake_daemon, fake_ledger_entries):
+    """Still-running AP with last_reason=no_candidates stays healthy (continuous)."""
+
+    class _Loop:
+        running = True
+        ticks_done = 10
+        last_error = None
+        last_decision = type("D", (), {"reason": "no_candidates"})()
+
+        def snapshot(self):
+            return {
+                "running": self.running,
+                "ticks_done": self.ticks_done,
+                "last_reason": self.last_decision.reason,
+                "last_error": self.last_error,
+                "stop_reason": None,
+                "last_trace": None,
+            }
+
+    fake_daemon.server.autopilot_loop = _Loop()
+    resp = send_request(fake_daemon.sock_path, "status")
+    iv = resp["intervention"]
+    assert iv["needs_attention"] is False
+    assert not any(r["code"] == "autopilot_no_candidates" for r in iv["reasons"])
+    assert not any(r["code"] == "autopilot_max_ticks_exhausted" for r in iv["reasons"])
 
 
 def test_status_intervention_needs_attention_when_human_attached(fake_daemon, fake_ledger_entries):
