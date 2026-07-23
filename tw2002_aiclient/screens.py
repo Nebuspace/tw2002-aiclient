@@ -355,7 +355,7 @@ def run_play(stdscr, profile_name):
         _safe_addstr(stdscr, y + 2, 0, f"  {status}", curses.A_DIM)
         _footer(
             stdscr,
-            " h attach · Ctrl-] detach · Autopilot OFF recommended · panels read-only",
+            " h attach (stops Autopilot) · Ctrl-] detach · panels read-only",
         )
         stdscr.refresh()
 
@@ -365,17 +365,14 @@ def run_play(stdscr, profile_name):
             return "launcher"
         if ch in (ord("h"), ord("H")):
             # Human attach reuses tw attach / control_lock MODE_HUMAN.
-            # Autopilot OFF recommended (trainer AUTO_LOOP blocks attach).
-            tip = ""
-            if ap_on:
-                tip = " (Autopilot still ON — OFF recommended)"
+            # run_attach stops runtime Autopilot first (no profile write-back).
             stdscr.timeout(-1)
             err = adapters.suspend_and_attach(stdscr, profile_name)
             stdscr.timeout(1000)
             if err:
-                status = f"{err}{tip}"
+                status = err
             else:
-                status = f"detached · back to play{tip}"
+                status = "detached · back to play"
         elif ch in (ord("a"), ord("A"), ord(" ")):
             try:
                 result = adapters.toggle_autopilot_and_sync(profile_name)

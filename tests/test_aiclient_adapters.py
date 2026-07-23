@@ -241,6 +241,20 @@ def test_run_attach_delegates_to_interactive_app(monkeypatch, tmp_path):
     monkeypatch.setattr(twcli, "_active_sock_path", sock)
     monkeypatch.setattr(twcli, "_active_pid_path", pid)
     monkeypatch.setattr(
+        adapters,
+        "poll_status",
+        lambda name=None, run_dir=None: {
+            "ok": True,
+            "mode": "ai_pilot",
+            "autopilot": {"running": False},
+        },
+    )
+    monkeypatch.setattr(
+        adapters,
+        "stop_autopilot",
+        lambda **k: (_ for _ in ()).throw(AssertionError("must not stop when AP idle")),
+    )
+    monkeypatch.setattr(
         interactive_app,
         "run_interactive_attach",
         lambda s, p: calls.append(("attach", Path(s), Path(p))) or 0,
@@ -249,8 +263,93 @@ def test_run_attach_delegates_to_interactive_app(monkeypatch, tmp_path):
     out = adapters.run_attach("rogue", run_dir=tmp_path)
     assert out["ok"] is True
     assert out["code"] == 0
+    assert out["autopilot_stopped"] is False
     assert ("cfg", str(tmp_path)) in calls
     assert ("attach", sock, pid) in calls
+
+
+def test_run_attach_stops_running_autopilot_before_attach(monkeypatch, tmp_path):
+    """Play attach with AP ON: stop runtime trainer, then take MODE_HUMAN.
+
+    Does not write profile Autopilot OFF — only clears the live lock.
+    """
+    import twclient.cli as twcli
+    import twclient.interactive_app as interactive_app
+
+    sock = tmp_path / "twd.sock"
+    pid = tmp_path / "twd.pid"
+    sock.write_text("", encoding="utf-8")
+    pid.write_text("1\n", encoding="utf-8")
+    calls = []
+    profile_writes = []
+
+    monkeypatch.setattr(adapters, "_configure", lambda rd: None)
+    monkeypatch.setattr(twcli, "_active_sock_path", sock)
+    monkeypatch.setattr(twcli, "_active_pid_path", pid)
+    monkeypatch.setattr(
+        adapters,
+        "poll_status",
+        lambda name=None, run_dir=None: {
+            "ok": True,
+            "mode": "auto_loop",
+            "autopilot": {"running": True, "ticks_done": 12},
+        },
+    )
+    monkeypatch.setattr(
+        adapters,
+        "stop_autopilot",
+        lambda run_dir=None, profile_name=None: (
+            calls.append(("stop", str(run_dir), profile_name)) or {"ok": True, "stopped": True}
+        ),
+    )
+    monkeypatch.setattr(
+        adapters,
+        "set_autopilot",
+        lambda *a, **k: profile_writes.append((a, k)),
+    )
+    monkeypatch.setattr(
+        interactive_app,
+        "run_interactive_attach",
+        lambda s, p: calls.append(("attach", Path(s), Path(p))) or 0,
+    )
+
+    out = adapters.run_attach("rogue", run_dir=tmp_path)
+    assert out["ok"] is True
+    assert out["autopilot_stopped"] is True
+    assert "Autopilot stopped" in out["message"]
+    assert profile_writes == []  # runtime stop only — no profile write-back
+    assert calls[0] == ("stop", str(tmp_path), "rogue")
+    assert calls[1] == ("attach", sock, pid)
+
+
+def test_run_attach_surfaces_autopilot_stop_failure(monkeypatch, tmp_path):
+    import twclient.cli as twcli
+    import twclient.interactive_app as interactive_app
+
+    sock = tmp_path / "twd.sock"
+    sock.write_text("", encoding="utf-8")
+    monkeypatch.setattr(adapters, "_configure", lambda rd: None)
+    monkeypatch.setattr(twcli, "_active_sock_path", sock)
+    monkeypatch.setattr(
+        adapters,
+        "poll_status",
+        lambda name=None, run_dir=None: {"ok": True, "autopilot": {"running": True}},
+    )
+    monkeypatch.setattr(
+        adapters,
+        "stop_autopilot",
+        lambda **k: {"ok": False, "error": "autopilot_stop_failed"},
+    )
+    monkeypatch.setattr(
+        interactive_app,
+        "run_interactive_attach",
+        lambda *a, **k: (_ for _ in ()).throw(AssertionError("must not attach")),
+    )
+
+    out = adapters.run_attach("rogue", run_dir=tmp_path)
+    assert out["ok"] is False
+    assert out["error"] == "autopilot_stop_failed"
+    assert out["autopilot_stopped"] is False
 
 
 def test_run_attach_reports_daemon_not_running(monkeypatch, tmp_path):

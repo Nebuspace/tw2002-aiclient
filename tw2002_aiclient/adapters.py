@@ -425,8 +425,10 @@ def run_attach(profile_name=None, *, run_dir=None):
     send game I/O. Caller must not own the terminal in an active curses
     session; use ``suspend_and_attach`` from the play screen.
 
-    Autopilot OFF is recommended first: a running trainer holds
-    MODE_AUTO_LOOP and the daemon refuses attach (``locked_by_auto_loop``).
+    If Autopilot is running, stop the runtime trainer first so
+    ``take_human`` is not refused with ``locked_by_auto_loop``. Does
+    **not** write profile Autopilot OFF — that remains the product
+    toggle; attach only clears the live lock.
     """
     from twclient import cli as twcli
     from twclient import interactive_app
@@ -435,14 +437,39 @@ def run_attach(profile_name=None, *, run_dir=None):
     _configure(run_dir)
     if not twcli._active_sock_path.exists():
         return {"ok": False, "code": 1, "error": "daemon_not_running"}
+
+    # Explicit stop-then-attach: MODE_AUTO_LOOP blocks take_human().
+    # Only when Autopilot reports running — LoopPlayer's AUTO_LOOP is a
+    # different stop verb; do not fail-closed on autopilot_not_started.
+    # Does not write profile Autopilot OFF.
+    stopped_ap = False
+    status = poll_status(profile_name, run_dir=run_dir)
+    ap = (status if isinstance(status, dict) else {}).get("autopilot") or {}
+    if bool(ap.get("running")):
+        stop_resp = stop_autopilot(run_dir=run_dir, profile_name=profile_name)
+        if not stop_resp.get("ok"):
+            err = stop_resp.get("error") or "autopilot_stop_failed"
+            return {
+                "ok": False,
+                "code": 1,
+                "error": err,
+                "autopilot_stopped": False,
+                "message": f"attach blocked — could not stop Autopilot ({err})",
+            }
+        stopped_ap = True
+
     code = interactive_app.run_interactive_attach(
         twcli._active_sock_path, twcli._active_pid_path
     )
+    msg = "detached · back to play" if code == 0 else f"attach exited {code}"
+    if stopped_ap and code == 0:
+        msg = "detached · Autopilot stopped for attach · back to play"
     return {
         "ok": code == 0,
         "code": int(code),
         "error": None if code == 0 else f"attach exited {code}",
-        "message": "detached · back to play" if code == 0 else f"attach exited {code}",
+        "autopilot_stopped": stopped_ap,
+        "message": msg,
     }
 
 
