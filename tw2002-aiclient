@@ -1,0 +1,7 @@
+#!/bin/sh
+''''exec "$(dirname "$0")"/.venv/bin/python3 "$0" "$@" # '''
+"""tw2002-aiclient — product TUI entry point."""
+from tw2002_aiclient.app import main
+
+if __name__ == "__main__":
+    raise SystemExit(main())

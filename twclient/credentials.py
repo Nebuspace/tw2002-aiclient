@@ -40,15 +40,15 @@ sacrificial-crawl profile is expected to set BOTH `crawl_sacrificial =
 true` and `allow_register = true` — the pairing is a caller/config
 convention, not enforced here; this field only gates the crawl half.
 
-**§22/§23 Phase 1 (WO-P1) autonomous orchestrator:** `Profile.autonomous`
-is a third, independent opt-in gate (default False, same safe-by-omission
-shape as `allow_register`/`crawl_sacrificial` above) — the fail-closed
-enablement flag `twclient/autopilot.py`'s `AutopilotEngine`/
-`maybe_auto_start()` hard-gate on before ANY autonomous send. Every
-profile that predates this field, and every profile that doesn't
-explicitly set it, keeps driving manually (or under `tw play`/AI-pilot)
-exactly as before — this field only turns on the trainer tick loop for a
-profile that has explicitly opted in.
+**§22/§23 Phase 1 (WO-P1) autonomous orchestrator / Autopilot (Trainer):**
+`Profile.autonomous` is the backend fail-closed opt-in gate (default False)
+that `twclient/autopilot.py`'s `AutopilotEngine` / `maybe_auto_start()`
+hard-gate on before ANY autonomous send. Product UX names this
+**Autopilot**; `profiles.toml` may set `autopilot = true` (preferred) or
+the legacy synonym `autonomous = true`. `Profile.autopilot` is an alias
+of `Profile.autonomous`. Every profile that predates this field, and every
+profile that doesn't explicitly set it, keeps driving manually exactly as
+before.
 """
 
 import json
@@ -89,7 +89,7 @@ _profile_cache = {}
 
 class Profile:
     def __init__(self, name, host, port, game_letter, handle=None, ship_name=None, planet_name=None, server=None,
-                 allow_register=False, crawl_sacrificial=False, autonomous=False):
+                 allow_register=False, crawl_sacrificial=False, autonomous=False, autopilot=None):
         self.name = name
         self.host = host
         self.port = int(port)
@@ -119,19 +119,27 @@ class Profile:
         # twclient/crawl_driver.py's module docstring for the A+C
         # protocol this is the code-enforced half of.
         self.crawl_sacrificial = bool(crawl_sacrificial)
-        # WO-P1: opt-in gate for the autonomous trainer tick loop --
-        # default False, same safe-by-omission shape as the two gates
-        # above. See twclient/autopilot.py's module docstring; that
-        # module's AutopilotEngine/maybe_auto_start() are the actual
-        # enforcement points -- this field only carries the operator's
-        # per-profile choice.
-        self.autonomous = bool(autonomous)
+        # WO-P1 / tw2002-aiclient: trainer Autopilot gate. Product key is
+        # `autopilot`; `autonomous` remains the backend attribute name.
+        if autopilot is None:
+            self.autonomous = bool(autonomous)
+        else:
+            self.autonomous = bool(autopilot)
+
+    @property
+    def autopilot(self):
+        return self.autonomous
+
+    @autopilot.setter
+    def autopilot(self, value):
+        self.autonomous = bool(value)
 
     def __repr__(self):
         return (
             f"Profile(name={self.name!r}, host={self.host!r}, port={self.port!r}, game_letter={self.game_letter!r}, "
             f"handle={self.handle!r}, server={self.server!r}, allow_register={self.allow_register!r}, "
-            f"crawl_sacrificial={self.crawl_sacrificial!r}, autonomous={self.autonomous!r})"
+            f"crawl_sacrificial={self.crawl_sacrificial!r}, autonomous={self.autonomous!r}, "
+            f"autopilot={self.autopilot!r})"
         )
 
 
@@ -180,7 +188,11 @@ def load_profile(name, profiles_path=None, servers_path=None):
             port = cport
     allow_register = bool(p.get("allow_register", False))
     crawl_sacrificial = bool(p.get("crawl_sacrificial", False))
-    autonomous = bool(p.get("autonomous", False))
+    # Prefer product key `autopilot`; legacy `autonomous` remains valid.
+    if "autopilot" in p:
+        autonomous = bool(p.get("autopilot"))
+    else:
+        autonomous = bool(p.get("autonomous", False))
     required = ["game_letter"]
     # WO-MS-4: `handle` stays required for every profile as before UNLESS
     # it has explicitly opted into `allow_register` -- only THAT shape (a
@@ -280,3 +292,228 @@ def secrets_file_mode_ok(secrets_path=None):
     if not path.exists():
         return True
     return stat.S_IMODE(os.stat(path).st_mode) == 0o600
+
+
+def _toml_quote(value):
+    return '"' + str(value).replace("\\", "\\\\").replace('"', '\\"') + '"'
+
+
+def _format_toml_value(value):
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, int) and not isinstance(value, bool):
+        return str(value)
+    return _toml_quote(value)
+
+
+def _iter_toml_sections(text):
+    """Yield (name|None, start, end) for each [section] and the preamble.
+
+    `name` is None for the leading comment/preamble block before the first
+    table. `end` is exclusive.
+    """
+    lines = text.splitlines(keepends=True)
+    sections = []
+    current_name = None
+    current_start = 0
+    offset = 0
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith("[") and stripped.endswith("]") and not stripped.startswith("[["):
+            inner = stripped[1:-1].strip()
+            if current_start < offset or current_name is not None or offset == 0:
+                sections.append((current_name, current_start, offset))
+            current_name = inner
+            current_start = offset
+        offset += len(line)
+    sections.append((current_name, current_start, len(text)))
+    # Drop empty preamble if file starts with a section.
+    if sections and sections[0][0] is None and sections[0][1] == sections[0][2]:
+        sections = sections[1:]
+    return sections
+
+
+def _set_key_in_section_text(section_text, key, value):
+    """Update or insert `key = value` inside one TOML table body (incl header)."""
+    lines = section_text.splitlines(keepends=True)
+    if not lines:
+        return section_text
+    key_re_prefix = f"{key} "
+    key_re_eq = f"{key}="
+    new_line = f"{key} = {_format_toml_value(value)}\n"
+    out = [lines[0]]  # keep [name] header
+    replaced = False
+    for line in lines[1:]:
+        stripped = line.lstrip()
+        if stripped.startswith("#") or not stripped.strip():
+            out.append(line)
+            continue
+        if stripped.startswith(key_re_prefix) or stripped.startswith(key_re_eq):
+            # Preserve indentation if any.
+            indent = line[: len(line) - len(line.lstrip())]
+            ending = "\n" if line.endswith("\n") else ""
+            out.append(f"{indent}{key} = {_format_toml_value(value)}{ending}")
+            replaced = True
+        else:
+            out.append(line)
+    if not replaced:
+        # Insert before trailing blank lines.
+        insert_at = len(out)
+        while insert_at > 1 and out[insert_at - 1].strip() == "":
+            insert_at -= 1
+        out.insert(insert_at, new_line if out[0].endswith("\n") or insert_at > 1 else new_line)
+    body = "".join(out)
+    if not body.endswith("\n"):
+        body += "\n"
+    return body
+
+
+def set_profile_autopilot(name, enabled, profiles_path=None):
+    """Persist Autopilot ON/OFF to profiles.toml (`autopilot =` key).
+
+    Also clears a legacy `autonomous =` line in the same section when present
+    so the product key is the sole source of truth after a write-back.
+    """
+    path = Path(profiles_path or PROFILES_PATH)
+    if not path.exists():
+        raise CredentialError(f"profiles_missing:{path}")
+    text = path.read_text(encoding="utf-8")
+    sections = _iter_toml_sections(text)
+    found = False
+    parts = []
+    for sec_name, start, end in sections:
+        chunk = text[start:end]
+        if sec_name == name:
+            found = True
+            chunk = _set_key_in_section_text(chunk, "autopilot", bool(enabled))
+            # Drop legacy synonym so load prefers the product key cleanly.
+            chunk = _remove_key_from_section_text(chunk, "autonomous")
+        parts.append(chunk)
+    if not found:
+        raise CredentialError(f"profile_not_found:{name}")
+    new_text = "".join(parts)
+    _atomic_write_text(path, new_text)
+    # Bust cache for this profile.
+    cache_key = (str(path), name)
+    _profile_cache.pop(cache_key, None)
+
+
+def _remove_key_from_section_text(section_text, key):
+    lines = section_text.splitlines(keepends=True)
+    if not lines:
+        return section_text
+    out = [lines[0]]
+    for line in lines[1:]:
+        stripped = line.lstrip()
+        if stripped.startswith(f"{key} ") or stripped.startswith(f"{key}="):
+            continue
+        out.append(line)
+    return "".join(out)
+
+
+def _atomic_write_text(path, text):
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = path.with_suffix(path.suffix + ".tmp")
+    tmp_path.write_text(text, encoding="utf-8")
+    os.replace(str(tmp_path), str(path))
+
+
+def create_profile(
+    name,
+    *,
+    game_letter,
+    handle=None,
+    server=None,
+    host=None,
+    port=None,
+    ship_name=None,
+    planet_name=None,
+    allow_register=False,
+    autopilot=False,
+    profiles_path=None,
+    servers_path=None,
+):
+    """Append a new profile section to profiles.toml. Raises if name exists."""
+    path = Path(profiles_path or PROFILES_PATH)
+    if not name or not str(name).strip():
+        raise CredentialError("profile_name_required")
+    name = str(name).strip()
+    if any(c.isspace() for c in name) or name.startswith("["):
+        raise CredentialError(f"profile_name_invalid:{name}")
+    existing = _load_toml(path) if path.exists() else {}
+    if name in existing:
+        raise CredentialError(f"profile_exists:{name}")
+    if not game_letter:
+        raise CredentialError("profile_incomplete:missing=['game_letter']")
+    if server is None and (host is None or port is None):
+        raise CredentialError("profile_incomplete:missing=['server'|'host'+'port']")
+    if not allow_register and not handle:
+        raise CredentialError("profile_incomplete:missing=['handle']")
+
+    fields = []
+    if server:
+        fields.append(("server", server))
+    if host is not None:
+        fields.append(("host", host))
+    if port is not None:
+        fields.append(("port", int(port)))
+    fields.append(("game_letter", str(game_letter).upper()[:1]))
+    if handle:
+        fields.append(("handle", handle))
+    if ship_name:
+        fields.append(("ship_name", ship_name))
+    if planet_name:
+        fields.append(("planet_name", planet_name))
+    if allow_register:
+        fields.append(("allow_register", True))
+    fields.append(("autopilot", bool(autopilot)))
+
+    block_lines = [f"[{name}]"]
+    for k, v in fields:
+        block_lines.append(f"{k} = {_format_toml_value(v)}")
+    block = "\n".join(block_lines) + "\n"
+
+    if path.exists():
+        text = path.read_text(encoding="utf-8")
+        if text and not text.endswith("\n"):
+            text += "\n"
+        if text and not text.endswith("\n\n"):
+            text += "\n"
+        text = text + block
+    else:
+        text = block
+    _atomic_write_text(path, text)
+    return load_profile(name, profiles_path=path, servers_path=servers_path)
+
+
+def list_profile_summaries(profiles_path=None, servers_path=None):
+    """Rows for the tw2002-aiclient launcher: name, server display, game, autopilot."""
+    path = profiles_path or PROFILES_PATH
+    rows = []
+    for name in list_profiles(profiles_path=path):
+        try:
+            profile = load_profile(name, profiles_path=path, servers_path=servers_path)
+            server_display = profile.server or profile.host
+            rows.append(
+                {
+                    "name": name,
+                    "handle": profile.handle or "",
+                    "server": server_display,
+                    "game_letter": profile.game_letter,
+                    "autopilot": bool(profile.autopilot),
+                    "error": None,
+                }
+            )
+        except CredentialError as e:
+            rows.append(
+                {
+                    "name": name,
+                    "handle": "",
+                    "server": "?",
+                    "game_letter": "?",
+                    "autopilot": False,
+                    "error": str(e),
+                }
+            )
+    return rows

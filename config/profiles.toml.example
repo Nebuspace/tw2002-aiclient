@@ -23,6 +23,10 @@
 # handle/ship_name/planet_name per registration attempt instead of
 # pinning one (see register_with_name_bank()). Any of those three fields
 # you DO set explicitly always wins over the bank draw.
+#
+# Autopilot (Trainer): `autopilot = true` opts the profile into the
+# trainer tick loop at session start (legacy synonym: `autonomous = true`).
+# The tw2002-aiclient play screen can flip this live and write it back here.
 
 [default]
 host = "your-twgs-host.example"
@@ -32,9 +36,11 @@ handle = "YourHandle"
 # ship_name = "MyShip"
 # planet_name = "MyWorld"
 # allow_register = true
+# autopilot = false
 
 # Example catalog-backed profile (host/port filled from servers.toml):
 # [catalog_demo]
 # server = "geekm0nkey_com"
 # game_letter = "F"
 # handle = "Demo"
+# autopilot = true

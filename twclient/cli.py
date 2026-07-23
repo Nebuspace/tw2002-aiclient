@@ -809,6 +809,14 @@ def cmd_spectate(args):
     sys.exit(code)
 
 
+def cmd_aiclient(args):
+    """Product TUI (tw2002-aiclient) — launcher / profiles / Autopilot."""
+    from tw2002_aiclient.app import run
+
+    sys.exit(run())
+
+
+
 def cmd_attach(args):
     """Interactive live console (companion to `tw spectate`, which stays
     read-only): take the keyboard and drive the daemon's single game
@@ -1197,6 +1205,15 @@ def build_parser():
     sp.add_argument("--frames", type=int, default=None, help="exit after N events (default: until Ctrl-C)")
     add_json(sp)
     sp.set_defaults(func=cmd_watch)
+
+    sp = add_sub(
+        "aiclient",
+        help=(
+            "tw2002-aiclient product TUI — profile launcher, create form, "
+            "Autopilot ON/OFF (Trainer). Ops spectate remains `tw spectate`."
+        ),
+    )
+    sp.set_defaults(func=cmd_aiclient)
 
     sp = add_sub(
         "spectate",

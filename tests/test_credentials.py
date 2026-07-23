@@ -235,3 +235,94 @@ def test_save_password_preserves_other_profiles(tmp_path):
     credentials.save_password("b", "pw-b", secrets_path=secrets_path)
     assert credentials.get_password("a", secrets_path=secrets_path) == "pw-a"
     assert credentials.get_password("b", secrets_path=secrets_path) == "pw-b"
+
+
+# -- Autopilot / autonomous synonym -----------------------------------------
+
+
+def test_autopilot_defaults_false(tmp_path):
+    p = _write_profiles(
+        tmp_path,
+        '[default]\nhost = "example.com"\nport = 23\ngame_letter = "F"\nhandle = "AEGIS"\n',
+    )
+    profile = credentials.load_profile("default", profiles_path=p)
+    assert profile.autopilot is False
+    assert profile.autonomous is False
+
+
+def test_autopilot_key_preferred_over_autonomous(tmp_path):
+    p = _write_profiles(
+        tmp_path,
+        '[default]\nhost = "example.com"\nport = 23\ngame_letter = "F"\nhandle = "AEGIS"\n'
+        "autonomous = true\nautopilot = false\n",
+    )
+    profile = credentials.load_profile("default", profiles_path=p)
+    assert profile.autopilot is False
+
+
+def test_legacy_autonomous_still_enables_autopilot(tmp_path):
+    p = _write_profiles(
+        tmp_path,
+        '[default]\nhost = "example.com"\nport = 23\ngame_letter = "F"\nhandle = "AEGIS"\n'
+        "autonomous = true\n",
+    )
+    profile = credentials.load_profile("default", profiles_path=p)
+    assert profile.autopilot is True
+    assert profile.autonomous is True
+
+
+def test_set_profile_autopilot_write_back(tmp_path):
+    p = _write_profiles(
+        tmp_path,
+        '# keep me\n[default]\nhost = "example.com"\nport = 23\ngame_letter = "F"\nhandle = "AEGIS"\n'
+        "autonomous = true\n",
+    )
+    credentials.set_profile_autopilot("default", False, profiles_path=p)
+    text = p.read_text(encoding="utf-8")
+    assert "autopilot = false" in text
+    assert "autonomous" not in text
+    assert text.startswith("# keep me")
+    profile = credentials.load_profile("default", profiles_path=p)
+    assert profile.autopilot is False
+
+
+def test_create_profile_appends_autopilot(tmp_path):
+    servers = tmp_path / "servers.toml"
+    servers.write_text(
+        '[servers.demo]\nhostname = "demo.example"\nport = 2002\n'
+        'transport = "telnet"\nfront_end = "direct"\nstatus = "listed"\n',
+        encoding="utf-8",
+    )
+    p = tmp_path / "profiles.toml"
+    profile = credentials.create_profile(
+        "fresh",
+        server="demo",
+        game_letter="B",
+        handle="Rook",
+        autopilot=True,
+        profiles_path=p,
+        servers_path=servers,
+    )
+    assert profile.handle == "Rook"
+    assert profile.autopilot is True
+    assert profile.host == "demo.example"
+    assert "autopilot = true" in p.read_text(encoding="utf-8")
+
+
+def test_list_profile_summaries(tmp_path):
+    servers = tmp_path / "servers.toml"
+    servers.write_text(
+        '[servers.demo]\nhostname = "demo.example"\nport = 2002\n'
+        'transport = "telnet"\nfront_end = "direct"\nstatus = "listed"\n',
+        encoding="utf-8",
+    )
+    p = _write_profiles(
+        tmp_path,
+        '[alpha]\nserver = "demo"\ngame_letter = "A"\nhandle = "Alpha"\nautopilot = true\n',
+    )
+    rows = credentials.list_profile_summaries(profiles_path=p, servers_path=servers)
+    assert len(rows) == 1
+    assert rows[0]["name"] == "alpha"
+    assert rows[0]["autopilot"] is True
+    assert rows[0]["server"] == "demo"
+
