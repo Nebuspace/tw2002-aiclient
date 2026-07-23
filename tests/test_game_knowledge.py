@@ -261,17 +261,6 @@ def test_upsert_menu_edge_refuses_empty_required_fields(tmp_path, missing_field)
         )
 
 
-def test_get_edges_from_returns_only_matching_adjacency(tmp_path):
-    path = tmp_path / "game_knowledge.json"
-    game_knowledge.upsert_menu_edge(path, "sig-a", "X", "sig-b")
-    game_knowledge.upsert_menu_edge(path, "sig-a", "Y", "sig-c")
-    game_knowledge.upsert_menu_edge(path, "sig-b", "Z", "sig-d")
-
-    from_a = game_knowledge.get_edges_from(path, "sig-a")
-    assert {e["key"] for e in from_a} == {"X", "Y"}
-    assert all(e["from_node"] == "sig-a" for e in from_a)
-
-
 # -- menu-map: path lookup (BFS) -------------------------------------------------
 
 def test_find_menu_path_trivial_same_node(tmp_path):

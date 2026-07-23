@@ -306,11 +306,6 @@ def list_menu_edges(path):
     return [dict(e) for e in load_knowledge(path)["menu_map"]["edges"]]
 
 
-def get_edges_from(path, signature):
-    """Adjacency query: every edge whose `from_node` is `signature`."""
-    return [e for e in list_menu_edges(path) if e["from_node"] == signature]
-
-
 def find_menu_path(path, from_signature, to_signature):
     """Shortest path (fewest edges) from `from_signature` to
     `to_signature`, as an ordered list of edge dicts a TW-28

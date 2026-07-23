@@ -114,6 +114,11 @@ def longest_profit_chain(
 
 
 def format_coach_callout(chain: ProfitChain) -> str:
+    """Operator-facing one-liner for a discovered profit chain.
+
+    PARKED 2026-07-23 (WO-FA14): scaffolding for FA12 / FA5b coach surface —
+    unit-tested, no production caller yet. Do not delete.
+    """
     n = max(0, len(chain.sectors) - 1)
     path = "→".join(str(s) for s in chain.sectors)
     profit = int(chain.overall_profit) if chain.overall_profit == int(chain.overall_profit) else chain.overall_profit
@@ -124,6 +129,12 @@ def format_coach_callout(chain: ProfitChain) -> str:
 
 
 def chain_as_library_row(chain: ProfitChain, *, name: Optional[str] = None) -> dict:
+    """Wire-shaped dict matching the skill-library row protocol.
+
+    PARKED 2026-07-23 (WO-FA14): scaffolding for FA12 / FA5b library surface —
+    unit-tested + referenced by spectate_layout comments; no production
+    caller yet. Do not delete.
+    """
     label = name or "→".join(str(s) for s in chain.sectors[:-1])
     return {
         "name": label,

@@ -33,6 +33,10 @@ def localize(screen_text: str, path) -> Optional[dict[str, Any]]:
 def plan_nav(screen_text: str, target_sig: str, path) -> dict[str, Any]:
     """Compose localize → ``find_menu_path`` → keystroke steps (or a typed fail).
 
+    PARKED 2026-07-23 (WO-FA14): FA8 wired ``localize`` into spectate/`tw menumap`;
+    this planner + daemon-side keystroke execution remain consumer-less
+    (unit-tested). Do not delete — router WO still owns the send half.
+
     Returns a dict:
       ``ok`` True + ``steps`` (list of ``{key,to_node,kind,desc}``, maybe empty
       if already there) + ``from_sig`` when localized;

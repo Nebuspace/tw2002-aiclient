@@ -2116,7 +2116,13 @@ def format_chain_summary(
 
 
 def compose_longest_chain_panel(chain, *, current_sector=None, cols: int = 24) -> list[str]:
-    """Alias used by the app — same body as format_chain_summary."""
+    """Thin alias of ``format_chain_summary`` (same body).
+
+    PARKED 2026-07-23 (WO-FA14): no live caller — the CHAIN box / FA5a path
+    uses ``format_chain_summary`` directly. Kept as a stable name for the
+    WO-TUI-CHAIN-BOX accept wording; do not delete without replacing that
+    contract reference.
+    """
     return format_chain_summary(chain, current_sector=current_sector, cols=cols)
 
 

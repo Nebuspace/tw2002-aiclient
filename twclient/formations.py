@@ -297,7 +297,11 @@ def catalog_world(
 
 
 def membership_map(catalog: FormationCatalog) -> dict[int, list[str]]:
-    """sector_id → formation kind tags (for world_model.formation_membership)."""
+    """sector_id → formation kind tags (for world_model.formation_membership).
+
+    PARKED 2026-07-23 (WO-FA14): TW-16 genesis-rec trio (optional-by-design) —
+    unit-tested; live spectate/explore only call ``catalog_world``. Do not delete.
+    """
     m: dict[int, list[str]] = {}
     for f in catalog.formations:
         for sid in f.sectors:
@@ -316,6 +320,9 @@ def write_membership(
     """Upsert `formation_membership` lists; returns sectors updated.
 
     Catalog-only side effect — still no Genesis / claim actions.
+
+    PARKED 2026-07-23 (WO-FA14): TW-16 genesis-rec trio (optional-by-design) —
+    unit-tested; no production caller yet. Do not delete.
     """
     mmap = membership_map(catalog)
     n = 0
@@ -330,5 +337,10 @@ def write_membership(
 
 
 def recommend_genesis(catalog: FormationCatalog) -> tuple[Formation, ...]:
-    """Operator-facing shortlist — identical to catalog.genesis_candidates."""
+    """Operator-facing shortlist — identical to catalog.genesis_candidates.
+
+    PARKED 2026-07-23 (WO-FA14): TW-16 genesis-rec trio (optional-by-design) —
+    no production caller yet (doctrine: LOCATE/CATALOG/RECOMMEND only).
+    Do not delete.
+    """
     return catalog.genesis_candidates
