@@ -44,6 +44,10 @@ def _build_status_intervention(
     - autopilot stopped after game_select rejoin exhaustion
       (``stop_reason`` ``game_select`` while not running) — code
       ``autopilot_game_select``,
+    - autopilot stopped after explore recovery exhaustion
+      (``stop_reason`` ``explore_exhausted`` while not running) — code
+      ``explore_exhausted`` (sticky ``autopilot_halted`` kept when
+      ``last_error`` is also set),
     - or a human attach holds MODE_HUMAN (trainer/autopilot cannot drive).
 
     Credit/fighter freshness flags land in ``reasons`` for situational
@@ -79,6 +83,9 @@ def _build_status_intervention(
     if not running and stop_reason == "game_select":
         reasons.append({"code": "autopilot_game_select", "detail": stop_reason})
 
+    if not running and stop_reason == "explore_exhausted":
+        reasons.append({"code": "explore_exhausted", "detail": stop_reason})
+
     if mode == MODE_HUMAN:
         reasons.append({"code": "human_attach_blocks_trainer"})
 
@@ -107,6 +114,7 @@ def _build_status_intervention(
         or last_reason == "no_candidates"
         or stop_reason == "max_ticks_exhausted"
         or stop_reason == "game_select"
+        or stop_reason == "explore_exhausted"
     )
     needs_attention = bool(attention_halt or mode == MODE_HUMAN)
 

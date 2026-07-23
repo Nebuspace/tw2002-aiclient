@@ -544,6 +544,40 @@ def test_status_intervention_needs_attention_on_game_select_halt(fake_daemon, fa
     assert iv["autopilot"]["running"] is False
 
 
+def test_status_intervention_needs_attention_on_explore_exhausted(fake_daemon, fake_ledger_entries):
+    """WO-INTERVENTION-EXPLORE-EXHAUSTED-CODE: dedicated reason + sticky halt."""
+    halt_msg = "explore_exhausted: no frontier/stardock/densest recovery"
+
+    class _Loop:
+        running = False
+        ticks_done = 88
+        last_error = halt_msg
+        last_decision = type("D", (), {"reason": "explore_exhausted"})()
+
+        def snapshot(self):
+            return {
+                "running": self.running,
+                "ticks_done": self.ticks_done,
+                "last_reason": self.last_decision.reason,
+                "last_error": self.last_error,
+                "stop_reason": "explore_exhausted",
+                "last_trace": None,
+            }
+
+    fake_daemon.server.autopilot_loop = _Loop()
+    resp = send_request(fake_daemon.sock_path, "status")
+    iv = resp["intervention"]
+    assert iv["needs_attention"] is True
+    codes = [r["code"] for r in iv["reasons"]]
+    assert "explore_exhausted" in codes
+    assert "autopilot_halted" in codes  # sticky halt kept when last_error set
+    exhausted = [r for r in iv["reasons"] if r["code"] == "explore_exhausted"]
+    assert len(exhausted) == 1
+    assert exhausted[0]["detail"] == "explore_exhausted"
+    assert iv["autopilot"]["stop_reason"] == "explore_exhausted"
+    assert iv["autopilot"]["running"] is False
+
+
 def test_status_intervention_running_no_candidates_is_not_attention(fake_daemon, fake_ledger_entries):
     """Still-running AP with last_reason=no_candidates stays healthy (continuous)."""
 
