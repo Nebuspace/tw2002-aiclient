@@ -1,64 +1,40 @@
-# Copy this file to profiles.toml (gitignored) and fill in real values.
-# profiles.toml holds NON-SECRET shape only — host/port/game-letter/handle.
-# Passwords NEVER go here; they live out-of-band in config/secrets.json
-# (auto-created, chmod 600) or an env var TW2002_PASSWORD_<PROFILE> —
-# see twclient/credentials.py.
+# profiles.toml.example — SHAPE TEMPLATE ONLY, tracked in git.
 #
-# host/port here are a fallback only: TW2002_HOST/TW2002_PORT (process
-# env or the gitignored repo-root .env) resolve first — see
-# twclient/env.py's resolution order.
+# This file documents the shape of a profile entry. It is NOT read by the
+# client at runtime. Your real, local profile table lives at
+# `config/profiles.toml` (gitignored — see .gitignore's B2 block) — copy
+# this file there and fill in your own values.
 #
-# WO-MS-1: optional `server = "<catalog-key>"` resolves hostname/port from
-# config/servers.toml when host/port are omitted (`tw servers list` shows
-# keys). Existing host/port fields still work unchanged (backcompat).
+# NO PASSWORD FIELD EXISTS HERE OR IN THE REAL profiles.toml. Per
+# canon/doctrine/secrets-and-credentials.md, a password's only on-disk
+# home is the separate, gitignored, chmod-600 `config/secrets.json` —
+# resolved at use-time by twclient/credentials.py's get_password(), never
+# read out of this table.
 #
-# ship_name / planet_name are optional; default to "<handle>Ship" /
-# "<handle>World" if omitted.
-#
-# WO-MS-4: `allow_register = true` opts a profile IN to automated
-# NEW-character registration -- default false/omitted means login.py
-# refuses to register (registration_not_permitted) rather than silently
-# creating a character. Only an allow_register profile may also omit
-# `handle` entirely: twclient/name_bank.py then draws a fresh
-# handle/ship_name/planet_name per registration attempt instead of
-# pinning one (see register_with_name_bank()). Any of those three fields
-# you DO set explicitly always wins over the bank draw.
-#
-# Autopilot (Trainer): `autopilot = true` opts the profile into the
-# trainer tick loop at session start (legacy synonym: `autonomous = true`).
-# The tw2002-aiclient play screen can flip this live and write it back here.
-#
-# Daemon socket (product client): default is shared `run/` under the project
-# root. For an isolated test seat (e.g. live `run/rogue/`), set env
-# `TW_RUN_DIR=run/rogue` (or an absolute path) before launching
-# `./tw2002-aiclient` / `tw aiclient`.
-#
-# Retired seats (lockout / discarded hosts): set `retired = true` so the
-# product launcher lists them after active profiles, greys them, and skips
-# select. Do NOT delete the section — world-models and secrets stay put.
-# Create-new still only offers catalog servers.
+# Fields:
+#   host              - server hostname (see config/servers.toml for the
+#                        public catalog, or set your own).
+#   port              - server port (int).
+#   game_letter       - the single-letter game selection at the TWGS menu.
+#   handle            - your character's login handle.
+#   ship_name         - optional; ship name override.
+#   planet_name       - optional; planet name override.
+#   allow_register    - opt-in gate for automated NEW-character
+#                        registration. Default false; leave false unless
+#                        you understand what it enables.
+#   crawl_sacrificial - opt-in gate marking this profile as a disposable,
+#                        zero-asset character safe for automated crawling.
+#                        Default false.
+#   autopilot         - opt-in gate for the Autopilot driver taking
+#                        autonomous actions on this profile. Default false.
 
-[default]
-host = "your-twgs-host.example"
-port = 23
-game_letter = "F"
-handle = "YourHandle"
+[example]
+host = "example.host"
+port = 2002
+game_letter = "A"
+handle = "character-one"
 # ship_name = "MyShip"
 # planet_name = "MyWorld"
-# allow_register = true
-# autopilot = false
-# retired = false
-
-# Example catalog-backed profile (host/port filled from servers.toml):
-# [catalog_demo]
-# server = "geekm0nkey_com"
-# game_letter = "F"
-# handle = "Demo"
-# autopilot = true
-
-# Example retired seat (still on disk; launcher greys + skips):
-# [old_seat]
-# server = "some_catalog_key"
-# game_letter = "A"
-# handle = "OldHandle"
-# retired = true
+allow_register = false
+crawl_sacrificial = false
+autopilot = false
