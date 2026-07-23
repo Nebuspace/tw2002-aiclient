@@ -43,11 +43,35 @@ def save_password(profile_name, password, secrets_path=None):
         credentials.save_password(profile_name, password, secrets_path=secrets_path)
 
 
-def default_run_dir_for_profile(profile_name: str) -> Path:
-    """Isolated daemon socket per profile: ``run/<profile>/``."""
-    from twclient.cli import PROJECT_ROOT
+def resolve_run_dir(profile_name=None, run_dir=None) -> Path:
+    """Daemon run directory for product play (WO-RUN-DIR-DEFAULT).
 
-    return PROJECT_ROOT / "run" / str(profile_name)
+    Priority:
+      1. explicit ``run_dir`` argument
+      2. ``TW_RUN_DIR`` env (absolute, or relative to project root) — opt-in
+         isolation e.g. ``TW_RUN_DIR=run/rogue`` for the live test seat
+      3. default ``run/`` under the project root (one shared runtime)
+    """
+    import os
+
+    from twclient.cli import PROJECT_ROOT, RUN_DIR
+
+    if run_dir is not None:
+        return Path(run_dir)
+    env = (os.environ.get("TW_RUN_DIR") or "").strip()
+    if env:
+        p = Path(env).expanduser()
+        return p if p.is_absolute() else (PROJECT_ROOT / p)
+    return Path(RUN_DIR)
+
+
+def default_run_dir_for_profile(profile_name: str) -> Path:
+    """Back-compat alias — prefer ``resolve_run_dir``.
+
+    Historically returned ``run/<profile>/``; product default is now shared
+    ``run/`` (isolation via ``TW_RUN_DIR``).
+    """
+    return resolve_run_dir(profile_name=profile_name)
 
 
 def _configure(run_dir: Path | str):
@@ -64,7 +88,7 @@ def ensure_session(profile_name, *, run_dir=None, timeout=60.0):
     """
     from twclient import cli as twcli
 
-    run_dir = Path(run_dir) if run_dir is not None else default_run_dir_for_profile(profile_name)
+    run_dir = resolve_run_dir(profile_name=profile_name, run_dir=run_dir)
     _configure(run_dir)
     twcli._active_run_dir.mkdir(parents=True, exist_ok=True)
     twcli.LOG_DIR.mkdir(exist_ok=True)
@@ -116,7 +140,7 @@ def arm_autopilot(profile_name, *, run_dir=None, max_ticks=None, cash_floor=None
     """``autopilot_start`` — fail-closed on profile.autonomous inside daemon."""
     from twclient import cli as twcli
 
-    run_dir = Path(run_dir) if run_dir is not None else default_run_dir_for_profile(profile_name)
+    run_dir = resolve_run_dir(profile_name=profile_name, run_dir=run_dir)
     _configure(run_dir)
     args = {"profile": profile_name, "max_ticks": max_ticks, "cash_floor": cash_floor}
     return twcli.send_request("autopilot_start", args)
@@ -126,10 +150,9 @@ def stop_autopilot(*, run_dir=None, profile_name=None):
     """``autopilot_stop`` — leaves session connected, mode back to AI_PILOT."""
     from twclient import cli as twcli
 
-    if run_dir is None and profile_name:
-        run_dir = default_run_dir_for_profile(profile_name)
-    if run_dir is not None:
-        _configure(run_dir)
+    if run_dir is None:
+        run_dir = resolve_run_dir(profile_name=profile_name)
+    _configure(run_dir)
     return twcli.send_request("autopilot_stop", {})
 
 
@@ -139,7 +162,7 @@ def ensure_and_sync_autopilot(profile_name, *, run_dir=None, timeout=60.0):
     Autopilot ON → ``autopilot_start`` (trainer on next loop boundary).
     Autopilot OFF → ``autopilot_stop`` (manual; safe if already stopped).
     """
-    run_dir = Path(run_dir) if run_dir is not None else default_run_dir_for_profile(profile_name)
+    run_dir = resolve_run_dir(profile_name=profile_name, run_dir=run_dir)
     ensure_resp = ensure_session(profile_name, run_dir=run_dir, timeout=timeout)
     if not ensure_resp.get("ok"):
         return {
@@ -196,7 +219,7 @@ def toggle_autopilot_and_sync(profile_name, *, run_dir=None):
     profile = credentials.load_profile(profile_name)
     new_on = not bool(profile.autopilot)
     set_autopilot(profile_name, new_on)
-    run_dir = Path(run_dir) if run_dir is not None else default_run_dir_for_profile(profile_name)
+    run_dir = resolve_run_dir(profile_name=profile_name, run_dir=run_dir)
     if new_on:
         ap_resp = arm_autopilot(profile_name, run_dir=run_dir)
         label = "ON"

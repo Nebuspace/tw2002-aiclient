@@ -291,7 +291,7 @@ def run_play(stdscr, profile_name):
         _safe_addstr(stdscr, 5, 0, f"  Game      {profile.game_letter}")
         _safe_addstr(
             stdscr, 6, 0,
-            f"  Run dir   run/{profile.name}/",
+            f"  Run dir   {adapters.resolve_run_dir(profile_name=profile.name)}",
             curses.A_DIM,
         )
 

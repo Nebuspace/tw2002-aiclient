@@ -27,6 +27,11 @@
 # Autopilot (Trainer): `autopilot = true` opts the profile into the
 # trainer tick loop at session start (legacy synonym: `autonomous = true`).
 # The tw2002-aiclient play screen can flip this live and write it back here.
+#
+# Daemon socket (product client): default is shared `run/` under the project
+# root. For an isolated test seat (e.g. live `run/rogue/`), set env
+# `TW_RUN_DIR=run/rogue` (or an absolute path) before launching
+# `./tw2002-aiclient` / `tw aiclient`.
 
 [default]
 host = "your-twgs-host.example"

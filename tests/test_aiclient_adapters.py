@@ -18,15 +18,36 @@ class _FakeProfile:
         self.port = port
 
 
-def test_default_run_dir_for_profile_is_run_slash_name(monkeypatch):
-    monkeypatch.setattr(
-        "twclient.cli.PROJECT_ROOT", Path("/tmp/twproj"), raising=False,
-    )
-    # Import path used inside the function:
+def test_resolve_run_dir_defaults_to_shared_run(monkeypatch):
     import twclient.cli as twcli
 
     monkeypatch.setattr(twcli, "PROJECT_ROOT", Path("/tmp/twproj"))
-    assert adapters.default_run_dir_for_profile("rogue") == Path("/tmp/twproj/run/rogue")
+    monkeypatch.setattr(twcli, "RUN_DIR", Path("/tmp/twproj/run"))
+    monkeypatch.delenv("TW_RUN_DIR", raising=False)
+    assert adapters.resolve_run_dir("rogue") == Path("/tmp/twproj/run")
+
+
+def test_resolve_run_dir_honors_tw_run_dir_env(monkeypatch):
+    import twclient.cli as twcli
+
+    monkeypatch.setattr(twcli, "PROJECT_ROOT", Path("/tmp/twproj"))
+    monkeypatch.setattr(twcli, "RUN_DIR", Path("/tmp/twproj/run"))
+    monkeypatch.setenv("TW_RUN_DIR", "run/rogue")
+    assert adapters.resolve_run_dir("anything") == Path("/tmp/twproj/run/rogue")
+
+
+def test_resolve_run_dir_explicit_wins_over_env(monkeypatch, tmp_path):
+    monkeypatch.setenv("TW_RUN_DIR", "run/rogue")
+    assert adapters.resolve_run_dir("x", run_dir=tmp_path / "custom") == tmp_path / "custom"
+
+
+def test_default_run_dir_for_profile_aliases_resolve(monkeypatch):
+    import twclient.cli as twcli
+
+    monkeypatch.setattr(twcli, "PROJECT_ROOT", Path("/tmp/twproj"))
+    monkeypatch.setattr(twcli, "RUN_DIR", Path("/tmp/twproj/run"))
+    monkeypatch.delenv("TW_RUN_DIR", raising=False)
+    assert adapters.default_run_dir_for_profile("rogue") == Path("/tmp/twproj/run")
 
 
 def test_ensure_and_sync_autopilot_off_stops_trainer(monkeypatch, tmp_path):
