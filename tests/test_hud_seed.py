@@ -84,3 +84,32 @@ def test_seed_hud_defers_i_on_fighter_option_even_when_stats_unknown(monkeypatch
     assert out["hud_seed_probed"] is False
     assert out["hud_seed_deferred"] == "fighter_option"
     assert session.sends == []
+
+
+def test_seed_hud_force_reprobes_even_when_already_known(monkeypatch):
+    """WO-AP-HUD-REFRESH: force=True sends I even when credits/turns known."""
+    known = (
+        "Current Sector : 10\n"
+        "Turns left     : 99\n"
+        "Credits        : 500\n"
+        "Command [TL=00:00:00]:[10] (?=Help)? :"
+    )
+    refreshed = (
+        "Current Sector : 10\n"
+        "Turns left     : 98\n"
+        "Credits        : 499\n"
+        "Command [TL=00:00:00]:[10] (?=Help)? :"
+    )
+    session = _FakeSession([known, refreshed])
+    calls = []
+
+    def _fake_send_and_confirm(sess, text, **kwargs):
+        calls.append(text)
+        sess.send(text)
+
+    monkeypatch.setattr("twclient.hud_seed.send_and_confirm", _fake_send_and_confirm)
+    out = seed_hud_after_join(session, force=True)
+    assert out["hud_seed_probed"] is True
+    assert calls == ["I"]
+    assert out["credits"] == 499
+    assert out["turns_left"] == 98

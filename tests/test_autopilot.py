@@ -858,6 +858,78 @@ class _FightersObservingSession(ObservingFakeAutopilotSession):
         self.last_fighters_ts = None
 
 
+def test_live_tick_refreshes_hud_when_credits_age_past_stale_ms():
+    """WO-AP-HUD-REFRESH: known-but-stale credits → force I; age drops.
+
+    Cadence: age threshold == caps.credits_stale_ms (here 50ms); min
+    probe interval is the same bound (no thrash on the immediate next
+    tick after a successful refresh).
+    """
+    explore = (
+        "Sector  : 1146 in uncharted space.\n"
+        "Warps to Sector(s) :  (10)\n"
+        "Command [TL=00:00:00]:[1146] (?=Help)? :"
+    )
+    info = (
+        "Current Sector : 1146\n"
+        "Turns left     : 1500\n"
+        "Credits        : 300\n"
+        "Holds: 40  Fighters: 12  Shields: 200\n"
+        "Command [TL=00:00:00]:[1146] (?=Help)? :"
+    )
+    session = _FightersObservingSession(text=explore, after_i_text=info)
+    # Prior known readings that have aged past the stale window.
+    session.observe_credits("Credits        : 300\n" + explore)
+    session.observe_fighters("Holds: 40  Fighters: 12  Shields: 200\n" + explore)
+    session.last_credits_ts = time.monotonic() - 0.2
+    session.last_fighters_ts = time.monotonic() - 0.2
+    aged_credits_ts = session.last_credits_ts
+    aged_fighters_ts = session.last_fighters_ts
+
+    profile = _make_profile(autonomous=True)
+    engine = AutopilotEngine(
+        session, profile, ControlLock(), caps=EconCaps(credits_stale_ms=50),
+    )
+
+    d1 = engine.live_tick(explore_next_sector=10)
+    assert d1.send_outcome == "sent:hud_refresh:I"
+    assert session.sent == [("I", True, False)]
+    assert session.last_credits == 300
+    assert session.last_fighters == 12
+    assert session.last_credits_ts > aged_credits_ts
+    assert session.last_fighters_ts > aged_fighters_ts
+    # Freshness: age now well under the stale threshold.
+    now = time.monotonic()
+    assert (now - session.last_credits_ts) * 1000 < 50
+    assert (now - session.last_fighters_ts) * 1000 < 50
+
+    # Immediate next tick: rate-limit + fresh readings → no second I.
+    session._text = explore  # back to explore (no balance line)
+    d2 = engine.live_tick(explore_next_sector=10)
+    assert session.sent.count(("I", True, False)) == 1
+    assert d2.send_outcome != "sent:hud_refresh:I"
+
+
+def test_live_tick_hud_refresh_defers_on_fighter_option_even_when_stale():
+    """WO-AP-HUD-REFRESH: Option? must not I-probe (I is Info there)."""
+    toll = (
+        "Sector  : 8578 in uncharted space.\n"
+        "Your fighters: 0 vs. theirs: 1\n"
+        "Option? (A,D,I,R,P,S,?):?"
+    )
+    session = ObservingFakeAutopilotSession(text=toll)
+    session.observe_credits("Credits        : 300\nCommand [TL=00:00:00]:[100] (?=Help)? :")
+    session.last_credits_ts = time.monotonic() - 1.0
+    profile = _make_profile(autonomous=True)
+    engine = AutopilotEngine(
+        session, profile, ControlLock(), caps=EconCaps(credits_stale_ms=50),
+    )
+
+    decision = engine.live_tick(explore_next_sector=200)
+    assert all(t[0] != "I" for t in session.sent), "must not I on Option?"
+    assert decision.send_outcome == "sent:fighter_option:R"
+
+
 def test_live_tick_holds_when_fighters_freshly_known_zero():
     """Accept-1: explore/re-warp does not proceed when fighters aboard == 0.
 

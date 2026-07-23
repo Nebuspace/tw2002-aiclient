@@ -1036,9 +1036,11 @@ class AutopilotEngine:
         # an introspection convenience only (e.g. a future status verb),
         # never read by `decision_to_trace()`/the trace schema itself.
         self._last_chain_result: Optional[ChainRunResult] = None
-        # WO-HUD-SEED-ON-EXPLORE: at most one I-probe per engine lifetime
-        # when sticky credits/turns are still unknown mid-explore.
-        self._hud_seed_attempted = False
+        # WO-HUD-SEED-ON-EXPLORE / WO-AP-HUD-REFRESH: last ship-info `I`
+        # probe monotonic time (None = never). Rate-limits re-probes to
+        # once per caps.credits_stale_ms so a failed observe cannot thrash
+        # I every tick; age-gated refresh reuses the same bound.
+        self._last_hud_probe_mono: Optional[float] = None
         # Sectors retreated from (fighter Option?) this engine run.
         # Excluded from explore_next_sector on subsequent ticks so the
         # planner can't immediately re-target a sector we just fled.
@@ -1122,43 +1124,85 @@ class AutopilotEngine:
         return f"held:game_select_recover_failed:{detail}"
 
     def _maybe_seed_hud_once(self) -> Optional[str]:
-        """WO-HUD-SEED-ON-EXPLORE: if credits or turns still unknown, run
-        `seed_hud_after_join` once (may send `I`). Never from dry_run.
+        """WO-HUD-SEED-ON-EXPLORE + WO-AP-HUD-REFRESH: ship-info `I` when
+        credits are unknown, or when sticky credits/fighters age past
+        ``caps.credits_stale_ms``. Never from dry_run.
 
-        Returns ``"sent:hud_seed:I"`` when this call actually probed (caller
-        must end the tick — one-keystroke-per-tick contract), else ``None``.
-        Latches `_hud_seed_attempted` so a failed/partial probe does not
-        spam I every tick.
+        Returns ``"sent:hud_seed:I"`` / ``"sent:hud_refresh:I"`` when this
+        call actually probed (caller must end the tick — one-keystroke-
+        per-tick contract), else ``None``.
+
+        Cadence (mack): min interval between probe *attempts* equals
+        ``caps.credits_stale_ms`` (default 15s) so a failed/partial probe
+        cannot spam I every tick; age threshold for refresh is the same
+        bound (intervention/assess stale window). Fighter ``Option?``
+        defers without consuming the rate limit. Never-observed fighters
+        alone do not force a refresh (credits-unknown still seeds).
         """
-        if self._hud_seed_attempted:
-            return None
         # Plain test fakes predate sticky snapshots — skip (don't I-spam).
         if not (
             hasattr(self.session, "credits_snapshot")
             and hasattr(self.session, "turns_snapshot")
         ):
-            self._hud_seed_attempted = True
             return None
+
+        now = time.monotonic()
+        stale_ms = self.caps.credits_stale_ms
+        if self._last_hud_probe_mono is not None:
+            if (now - self._last_hud_probe_mono) * 1000 < stale_ms:
+                return None
+
         text = self.session.render_text(self.session.render())
         if hasattr(self.session, "observe_credits"):
             self.session.observe_credits(text)
         if hasattr(self.session, "observe_turns"):
             self.session.observe_turns(text)
-        bal, _ = self.session.credits_snapshot()
-        turns, _ = self.session.turns_snapshot()
+        if hasattr(self.session, "observe_fighters"):
+            self.session.observe_fighters(text)
+
+        bal, cts = self.session.credits_snapshot()
         # Credits are the gate for autopilot decisions; turns alone are
         # informational. A main_command screen showing credits but no
-        # explicit turn count should NOT trigger the I-probe — the TL=
-        # timestamp in the prompt conveys time-remaining, not a raw count
-        # `observe_turns` can parse. Skip probe when credits are known.
-        if bal is not None:
-            self._hud_seed_attempted = True
+        # explicit turn count should NOT trigger the cold-seed I-probe —
+        # the TL= timestamp in the prompt conveys time-remaining, not a
+        # raw count `observe_turns` can parse.
+        need_force = False
+        if bal is None:
+            need = True
+        elif cts is None or (now - cts) * 1000 > stale_ms:
+            need = True
+            need_force = True
+        else:
+            need = False
+
+        if not need and hasattr(self.session, "fighters_snapshot"):
+            fighters, fts = self.session.fighters_snapshot()
+            # Known-but-stale only (never-observed alone does not thrash).
+            if (
+                fighters is not None
+                and fts is not None
+                and (now - fts) * 1000 > stale_ms
+            ):
+                need = True
+                need_force = True
+
+        if not need:
             return None
-        self._hud_seed_attempted = True
+
+        # Fighter Option? — I is Info there; defer without rate-limit burn.
+        from .fighter_toll_policy import parse_fighter_option
+
+        rows = text.split("\n")
+        prompt = rows[-1].strip() if rows else ""
+        if parse_fighter_option(text, prompt).detected:
+            return None
+
+        self._last_hud_probe_mono = now
         from .hud_seed import seed_hud_after_join
-        result = seed_hud_after_join(self.session)
+
+        result = seed_hud_after_join(self.session, force=need_force)
         if result.get("hud_seed_probed"):
-            return "sent:hud_seed:I"
+            return "sent:hud_refresh:I" if need_force else "sent:hud_seed:I"
         return None
 
     def _fresh_credits(self) -> Optional[int]:
@@ -1301,8 +1345,8 @@ class AutopilotEngine:
         if live_cls is not None and live_cls != _GAME_SELECT_CLASS:
             # Left the Selection screen (or never hit it) — clear streak.
             self._game_select_recover_attempts = 0
-        # WO-HUD-SEED-ON-EXPLORE: before assess, one I-probe if sticky
-        # credits/turns still unknown (sector_display streaks omit both).
+        # WO-HUD-SEED-ON-EXPLORE / WO-AP-HUD-REFRESH: before assess, I-probe
+        # if sticky credits unknown OR credits/fighters past stale age.
         # If we probed, this tick is done (one-keystroke contract).
         seed_outcome = self._maybe_seed_hud_once()
         pre_text = self.session.render_text(self.session.render())

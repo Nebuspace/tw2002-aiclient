@@ -1,4 +1,4 @@
-"""Cold-join HUD seed — probe ship-info once when credits/turns unknown.
+"""Cold-join / refresh HUD seed — probe ship-info via `I`.
 
 WO-HUD-CREDITS-TURNS-JOIN: explore screens often omit both a "You have N
 credits" line and a turn count, so FA7a + parse_state leave the spectate
@@ -7,6 +7,10 @@ HUD at `-` forever unless something asks for ship info. At main_command,
 sticky value is still missing after login/ensure. On a fighter
 ``Option?`` dialogue, ``I`` is Info (not ship-info) and must NOT be
 probed — deferred so Attack/Retreat can clear first.
+
+WO-AP-HUD-REFRESH: callers may pass ``force=True`` to re-probe even when
+credits/turns are already known (age-gated sticky refresh during long
+Autopilot explore runs). Fighter ``Option?`` deferral still applies.
 """
 
 from __future__ import annotations
@@ -34,8 +38,8 @@ def _snapshots(session):
     return bal, turns
 
 
-def seed_hud_after_join(session) -> dict:
-    """Observe current screen; if credits or turns still unknown, send `I`.
+def seed_hud_after_join(session, *, force: bool = False) -> dict:
+    """Observe current screen; if credits/turns unknown (or ``force``), send `I`.
 
     Returns a small dict for ensure/status extras: probed bool + values.
     Never raises — a failed probe must not break ensure's success path.
@@ -49,7 +53,7 @@ def seed_hud_after_join(session) -> dict:
         text = session.render_text(session.render())
         _observe(session, text)
         bal, turns = _snapshots(session)
-        if bal is not None and turns is not None:
+        if not force and bal is not None and turns is not None:
             return {"hud_seed_probed": False, "credits": bal, "turns_left": turns}
 
         from .fighter_toll_policy import parse_fighter_option
