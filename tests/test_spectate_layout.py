@@ -1909,12 +1909,16 @@ def test_compose_intervention_strip_paints_when_needs_attention():
             "needs_attention": True,
             "reasons": [
                 {"code": "autopilot_no_candidates"},
+                {"code": "explore_exhausted"},
                 {"code": "fighters_unknown"},
                 {"code": "custom_future"},
             ],
         },
     })
-    assert text == "! autopilot no candidates; fighters unknown; custom_future"
+    assert text == (
+        "! autopilot no candidates; explore exhausted; "
+        "fighters unknown; custom_future"
+    )
     assert compose_intervention_strip({
         "intervention": {"needs_attention": True, "reasons": []},
     }) == "! needs attention"

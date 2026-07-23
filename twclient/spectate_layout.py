@@ -11,6 +11,8 @@ from __future__ import annotations
 
 from typing import Sequence
 
+from twclient.intervention_labels import intervention_reason_label
+
 TICKER_MAX = 8
 DEFAULT_EVENT = {"screen": [], "color": [], "prompt": "", "classification": "connecting...", "state": {}}
 
@@ -2744,35 +2746,12 @@ def compose_control_strip(mode: str, sent_input, play: dict | None) -> dict:
     }
 
 
-# Layout-local copy of the play-client reason labels (adapters.py). Kept
-# here — not imported — so spectate_layout stays free of the product
-# package and adapters can keep importing this module without a cycle.
-_INTERVENTION_REASON_LABELS = {
-    "autopilot_halted": "autopilot halted",
-    "autopilot_no_candidates": "autopilot no candidates",
-    "autopilot_max_ticks_exhausted": "autopilot max ticks exhausted",
-    "autopilot_game_select": "autopilot game select",
-    "explore_exhausted": "explore exhausted",
-    "human_attach_blocks_trainer": "human attach blocks trainer",
-    "credits_unknown": "credits unknown",
-    "credits_stale": "credits stale",
-    "fighters_unknown": "fighters unknown",
-    "fighters_stale": "fighters stale",
-}
-
-
-def _intervention_reason_label(code) -> str:
-    if code is None or code == "":
-        return "?"
-    text = str(code)
-    return _INTERVENTION_REASON_LABELS.get(text, text)
-
-
 def compose_intervention_strip(status) -> str | None:
     """One-line ops alert from ``status.intervention``, or None when healthy.
 
     Mirrors the play client's attention banner shape (``! label; label``)
     so ops spectate surfaces Autopilot halt without the product TUI.
+    Labels come from ``twclient.intervention_labels`` (shared with play).
     Healthy / missing intervention omits the strip entirely.
     """
     if not isinstance(status, dict):
@@ -2785,9 +2764,9 @@ def compose_intervention_strip(status) -> str | None:
     labels = []
     for reason in block.get("reasons") or []:
         if isinstance(reason, dict):
-            labels.append(_intervention_reason_label(reason.get("code")))
+            labels.append(intervention_reason_label(reason.get("code")))
         else:
-            labels.append(_intervention_reason_label(reason))
+            labels.append(intervention_reason_label(reason))
     if labels:
         return "! " + "; ".join(labels)
     return "! needs attention"
