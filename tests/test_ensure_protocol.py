@@ -164,6 +164,28 @@ def test_ensure_genuine_connect_with_an_autonomous_profile_arms_the_loop_once(pr
     assert server.control_lock.mode == MODE_AI_PILOT
 
 
+def test_ensure_no_auto_arm_skips_start_for_autonomous_profile(profiles_toml):
+    """WO-ENSURE-NO-AUTO-ARM: ops recycle / connect-only must not surprise-arm
+    Autopilot when ``no_auto_arm`` is set, even if the profile is autonomous."""
+    session = _OneStepEnsureSession(_TARGET_SCREEN)
+    server = FakeServer()
+    server.control_lock = ControlLock()
+
+    resp = protocol.dispatch(
+        session,
+        "ensure",
+        {"profile": "armed", "no_auto_arm": True},
+        server,
+    )
+
+    assert resp["ok"] is True
+    assert resp["already_there"] is False
+    assert getattr(server, "autopilot_loop", None) is None
+    assert getattr(server, "autopilot_engine", None) is None
+    assert server.control_lock.mode == MODE_AI_PILOT
+    assert session.sent  # login still drove
+
+
 def test_ensure_reaching_target_with_the_shipped_default_profile_starts_and_sends_nothing(profiles_toml):
     """SAFETY (falsifiable): the ordinary "default" profile -- `autonomous`
     left at its safe-by-default `False`, the posture every profile

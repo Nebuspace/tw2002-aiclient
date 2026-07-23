@@ -516,7 +516,11 @@ def cmd_ensure(args):
 
     resp = send_request(
         "ensure",
-        {"target": args.target, "profile": args.profile},
+        {
+            "target": args.target,
+            "profile": args.profile,
+            "no_auto_arm": bool(getattr(args, "no_auto_arm", False)),
+        },
         timeout=args.timeout + 5,
     )
     print_response(resp, args)
@@ -1009,6 +1013,15 @@ def build_parser():
     sp.add_argument("target", nargs="?", default="main_command", help="target classification (default: main_command)")
     sp.add_argument("--profile", required=True, help="profile name in config/profiles.toml")
     sp.add_argument("--timeout", type=float, default=180.0, help="overall budget for the login automaton")
+    sp.add_argument(
+        "--no-auto-arm",
+        action="store_true",
+        dest="no_auto_arm",
+        help=(
+            "skip post-ensure Autopilot auto-start even when the profile has "
+            "autopilot/autonomous enabled (ops recycle / connect-only)"
+        ),
+    )
     add_json(sp)
     sp.set_defaults(func=cmd_ensure)
 

@@ -678,7 +678,7 @@ def dispatch(session, verb, args, server):
         # actually arming. Mirrors `_dispatch_autopilot_start`'s own shape:
         # that dispatch is likewise never wrapped in `_driving_dispatch`,
         # for the identical reason.
-        if resp.get("ok"):
+        if resp.get("ok") and not args.get("no_auto_arm"):
             _maybe_auto_start_after_ensure(server, session, args.get("profile"))
         return resp
 
