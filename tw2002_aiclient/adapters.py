@@ -235,6 +235,112 @@ def intervention_from_status(status_resp):
     }
 
 
+def poll_status(profile_name=None, *, run_dir=None):
+    """Read-only ``status`` poll for the product play screen."""
+    from twclient import cli as twcli
+
+    run_dir = resolve_run_dir(profile_name=profile_name, run_dir=run_dir)
+    _configure(run_dir)
+    try:
+        return twcli.send_request("status", {})
+    except Exception as e:  # noqa: BLE001 — surface as failed status for UI
+        return {"ok": False, "error": str(e)}
+
+
+def goals_snapshot_from_status(status_resp):
+    """Thin GoalsSnapshot from ``tw status`` fields (no world-model crawl)."""
+    from twclient.spectate_layout import GoalsSnapshot
+
+    status_resp = status_resp if isinstance(status_resp, dict) else {}
+    credits = status_resp.get("credits")
+    turns = status_resp.get("turns_left")
+    fighters = status_resp.get("fighters_aboard")
+    return GoalsSnapshot(
+        turns_known=turns is not None,
+        turns_count=turns,
+        credits_known=credits is not None,
+        credits_amount=credits,
+        fighters_known=fighters is not None,
+        fighters_count=fighters,
+    )
+
+
+def sector_from_status(status_resp):
+    """Best-effort current sector from the status prompt line."""
+    from twclient.state_parser import sector_from_command_prompt
+
+    if not isinstance(status_resp, dict):
+        return None
+    prompt = status_resp.get("prompt") or ""
+    return sector_from_command_prompt(prompt)
+
+
+def compose_play_panels(status_resp, *, width: int = 36) -> dict:
+    """Read-only play chrome from spectate compose helpers + status JSON.
+
+    Returns dict of panel title → list[str] plus a metrics strip.
+    Reuses ``spectate_layout`` — no duplicate chain/trade ranking.
+    """
+    from twclient.spectate_layout import (
+        compose_decisions_placeholder,
+        compose_primary_goals_lines,
+        compose_priorities_lines,
+        format_autopilot_trace_lines,
+    )
+
+    width = max(12, int(width))
+    status_resp = status_resp if isinstance(status_resp, dict) else {}
+    snap = goals_snapshot_from_status(status_resp)
+    trace = status_resp.get("autopilot_trace")
+    intervention = intervention_from_status(status_resp) or {}
+    ap = intervention.get("autopilot") or status_resp.get("autopilot") or {}
+
+    sector = sector_from_status(status_resp)
+    credits = status_resp.get("credits")
+    turns = status_resp.get("turns_left")
+    metrics = (
+        f"Sector {sector if sector is not None else '?'}  "
+        f"Credits {credits if credits is not None else '?'}  "
+        f"Turns {turns if turns is not None else '?'}"
+    )
+
+    goals = ["— GOALS —"] + compose_primary_goals_lines(snap, width=width)
+    focus = ["— FOCUS —"] + compose_priorities_lines(trace, width=width)
+    if trace:
+        decisions = ["— DECISIONS —"] + format_autopilot_trace_lines(trace, cols=width)
+    else:
+        decisions = ["— DECISIONS —"] + compose_decisions_placeholder()
+
+    log_lines = ["— LOG —"]
+    if intervention.get("needs_attention"):
+        log_lines.append("! needs attention")
+    for reason in intervention.get("reasons") or []:
+        if isinstance(reason, dict):
+            code = reason.get("code") or "?"
+            log_lines.append(f"· {code}"[:width])
+        else:
+            log_lines.append(f"· {reason}"[:width])
+    last_err = ap.get("last_error")
+    last_reason = ap.get("last_reason")
+    if last_err:
+        log_lines.append(f"halt: {last_err}"[:width])
+    elif last_reason:
+        log_lines.append(str(last_reason)[:width])
+    if len(log_lines) == 1:
+        log_lines.append("—")
+
+    return {
+        "metrics": metrics,
+        "mode": intervention.get("mode") or status_resp.get("mode") or "ai_pilot",
+        "needs_attention": bool(intervention.get("needs_attention")),
+        "goals": goals,
+        "focus": focus,
+        "decisions": decisions,
+        "log": log_lines,
+        "priorities": goals + [""] + focus,  # PRIORITIES chrome = GOALS+FOCUS
+    }
+
+
 def toggle_autopilot_and_sync(profile_name, *, run_dir=None):
     """Persist toggle, then arm/stop the live trainer to match."""
     profile = credentials.load_profile(profile_name)

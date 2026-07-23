@@ -256,8 +256,14 @@ def _save_form(values, server_keys, server_idx):
 
 
 # ---------------------------------------------------------------------------
-# Play (session stub + Autopilot toggle)
+# Play (live panels + Autopilot toggle)
 # ---------------------------------------------------------------------------
+
+
+def _draw_panel_block(stdscr, y, x, lines, *, max_lines=8, attr=curses.A_NORMAL):
+    for i, line in enumerate(lines[:max_lines]):
+        _safe_addstr(stdscr, y + i, x, f"  {line}", attr)
+    return min(len(lines), max_lines)
 
 
 def run_play(stdscr, profile_name):
@@ -271,42 +277,47 @@ def run_play(stdscr, profile_name):
 
     boot = adapters.ensure_and_sync_autopilot(profile_name)
     status = boot.get("message") or ("ready" if boot.get("ok") else "ensure failed")
+    stdscr.timeout(1000)  # refresh panels ~1Hz while idle
 
     while True:
         try:
             profile = adapters.load_profile(profile_name)
             ap_on = bool(profile.autopilot)
         except Exception as e:  # noqa: BLE001
+            stdscr.timeout(-1)
             stdscr.erase()
             _safe_addstr(stdscr, 0, 0, f" profile error: {e}")
             stdscr.getch()
             return "launcher"
 
+        live = adapters.poll_status(profile_name)
+        panels = adapters.compose_play_panels(live, width=40)
+
         stdscr.erase()
         _safe_addstr(stdscr, 0, 0, " tw2002-aiclient — play", curses.A_BOLD)
-        _safe_addstr(stdscr, 2, 0, f"  Profile   {profile.name}")
-        _safe_addstr(stdscr, 3, 0, f"  Handle    {profile.handle or '(name-bank)'}")
-        server = profile.server or f"{profile.host}:{profile.port}"
-        _safe_addstr(stdscr, 4, 0, f"  Server    {server}")
-        _safe_addstr(stdscr, 5, 0, f"  Game      {profile.game_letter}")
-        _safe_addstr(
-            stdscr, 6, 0,
-            f"  Run dir   {adapters.resolve_run_dir(profile_name=profile.name)}",
-            curses.A_DIM,
-        )
+        _safe_addstr(stdscr, 1, 0, f"  {profile.name} · {panels.get('mode', '?')}", curses.A_DIM)
+        _safe_addstr(stdscr, 2, 0, f"  {panels.get('metrics', '')}", curses.A_BOLD)
+        if panels.get("needs_attention"):
+            _safe_addstr(stdscr, 3, 0, "  ! intervention needs attention", curses.A_BOLD)
 
         ap_label = "Autopilot ON " if ap_on else "Autopilot OFF"
-        _safe_addstr(stdscr, 8, 0, "  ┌──────────────────┐")
-        _safe_addstr(stdscr, 9, 0, f"  │  {ap_label:<16}│", curses.A_BOLD | curses.A_REVERSE)
-        _safe_addstr(stdscr, 10, 0, "  └──────────────────┘")
-        _safe_addstr(stdscr, 12, 0, "  a  toggle Autopilot (writes profiles.toml + arms/stops trainer)")
-        _safe_addstr(stdscr, 13, 0, "  Esc/q  back to launcher")
-        _safe_addstr(stdscr, 15, 0, f"  {status}", curses.A_DIM)
-        _footer(stdscr, " AI spectates via tw status / ledger — does not pilot")
+        _safe_addstr(stdscr, 5, 0, f"  [{ap_label.strip()}]", curses.A_BOLD | curses.A_REVERSE)
+
+        y = 7
+        y += _draw_panel_block(stdscr, y, 0, panels.get("priorities") or [], max_lines=10)
+        y += 1
+        y += _draw_panel_block(stdscr, y, 0, panels.get("decisions") or [], max_lines=6)
+        y += 1
+        y += _draw_panel_block(stdscr, y, 0, panels.get("log") or [], max_lines=5)
+
+        _safe_addstr(stdscr, y + 1, 0, "  a  toggle Autopilot · Esc/q  launcher", curses.A_DIM)
+        _safe_addstr(stdscr, y + 2, 0, f"  {status}", curses.A_DIM)
+        _footer(stdscr, " panels from tw status + spectate compose — AI does not pilot")
         stdscr.refresh()
 
         ch = stdscr.getch()
         if ch in (27, ord("q")):
+            stdscr.timeout(-1)
             return "launcher"
         if ch in (ord("a"), ord("A"), ord(" ")):
             try:
@@ -314,3 +325,4 @@ def run_play(stdscr, profile_name):
                 status = result.get("message") or "toggled"
             except Exception as e:  # noqa: BLE001
                 status = f"toggle failed: {e}"
+        # ch == -1 → timeout refresh; any other key ignored
