@@ -46,6 +46,29 @@ def test_sector_display():
     assert classify("Sector  : 1234\r\nWarps to Sector(s):  1 - 2 - 3") == "sector_display"
 
 
+def test_warp_confirm_gate_wins_over_sector_display_body():
+    """WO-CLASSIFY-WARP-CONFIRM: live stall mis-classed as sector_display
+    because Sector: still sat above the Y/N — gate on the prompt line must
+    win."""
+    text = _load_fixture("warp_confirm_prompt.txt").rstrip("\n")
+    prompt = text.splitlines()[-1].strip()
+    assert prompt.startswith("Do you really want to warp there?")
+    assert classify_screen(text, prompt) == "warp_confirm"
+    assert classify(text) == "warp_confirm"
+
+
+def test_warp_confirm_stale_in_scrollback_does_not_poison_main_command():
+    """Prompt-line gate only — Y/N left in scrollback above Command must
+    not steal the live classification."""
+    text = (
+        "Sector  : 100 in uncharted space.\n"
+        "Do you really want to warp there? (Y/N)\n"
+        "Command [TL=00:00:00]:[100] (?=Help)? :"
+    )
+    prompt = "Command [TL=00:00:00]:[100] (?=Help)? :"
+    assert classify_screen(text, prompt) == "main_command"
+
+
 def test_port_trade():
     assert classify("Fuel Ore   Buying   50%\r\nOrganics   Selling  20%") == "port_trade"
 

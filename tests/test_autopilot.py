@@ -11,6 +11,7 @@ gate/mode-transition proofs.
 """
 
 import math
+import os
 import threading
 import time
 
@@ -845,6 +846,54 @@ def test_live_tick_retreats_zero_fighter_option_instead_of_holding():
     assert session.sent == [("R", False, False)]
     assert decision.send_outcome == "sent:fighter_option:R"
     assert all(t[0] != "P" for t in session.sent)
+
+
+def test_live_tick_confirms_warp_yn_when_explore_intent():
+    """WO-AP-WARP-CONFIRM: explore nav pending → Y (not held:sector_display)."""
+    fixture = os.path.join(os.path.dirname(__file__), "fixtures", "warp_confirm_prompt.txt")
+    with open(fixture, encoding="utf-8") as f:
+        text = f.read().rstrip("\n")
+    session = FakeAutopilotSession(text=text)
+    profile = _make_profile(autonomous=True)
+    engine = AutopilotEngine(session, profile, ControlLock())
+
+    decision = engine.live_tick(explore_next_sector=250)
+    assert session.sent == [("Y", True, False)]
+    assert decision.send_outcome == "sent:warp_confirm:Y:own_nav_intent"
+    assert not (decision.send_outcome or "").startswith("held:")
+
+
+def test_live_tick_declines_warp_yn_without_nav_intent():
+    """WO-AP-WARP-CONFIRM: no explore/nav candidate → N (clear stall safely)."""
+    text = (
+        "Sector  : 3034 in uncharted space.\n"
+        "Do you really want to warp there? (Y/N)"
+    )
+    session = FakeAutopilotSession(text=text)
+    profile = _make_profile(autonomous=True)
+    engine = AutopilotEngine(session, profile, ControlLock())
+
+    decision = engine.live_tick()  # no explore_next_sector / chain / upgrade
+    assert session.sent == [("N", True, False)]
+    assert decision.send_outcome == "sent:warp_confirm:N:no_nav_intent"
+
+
+def test_live_tick_hud_refresh_defers_on_warp_confirm():
+    """WO-AP-WARP-CONFIRM: stale HUD must not I-probe on the Y/N gate."""
+    text = (
+        "Sector  : 3034 in uncharted space.\n"
+        "Do you really want to warp there? (Y/N)"
+    )
+    session = ObservingFakeAutopilotSession(text=text)
+    session.last_credits = 100
+    session.last_credits_ts = time.monotonic() - 60.0  # stale
+    profile = _make_profile(autonomous=True)
+    engine = AutopilotEngine(session, profile, ControlLock())
+    engine._last_hud_probe_mono = None
+
+    decision = engine.live_tick(explore_next_sector=250)
+    assert all(t[0] != "I" for t in session.sent), "must not I on warp_confirm"
+    assert decision.send_outcome == "sent:warp_confirm:Y:own_nav_intent"
 
 
 # -- WO-escape-pod-reentry: three acceptance axes --------------------------

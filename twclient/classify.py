@@ -6,12 +6,12 @@ screen shapes.
 Anchors split into two kinds:
 
 - **Gate anchors** (pause_key, login_password, login_name, computer,
-  main_command): each represents a single, currently-active blocking
-  request. In real TW2002/TWGS play these are *always* the last thing
-  printed — the server is blocked waiting right there, so nothing else
-  follows until it's answered. That means a gate anchor should only ever
-  be trusted against the CURRENT prompt line; a match found only deeper
-  in the full screen is stale leftover text sitting in an unclaimed
+  warp_confirm, main_command): each represents a single, currently-active
+  blocking request. In real TW2002/TWGS play these are *always* the last
+  thing printed — the server is blocked waiting right there, so nothing
+  else follows until it's answered. That means a gate anchor should only
+  ever be trusted against the CURRENT prompt line; a match found only
+  deeper in the full screen is stale leftover text sitting in an unclaimed
   region of the terminal grid (pyte doesn't clear cells the server never
   overwrites), not a real gate. Caught live: a rules screen's decorative
   "[Pause]" marker stayed on screen, unclaimed, above an already-active
@@ -21,6 +21,9 @@ Anchors split into two kinds:
   subsystem prompt is literally "Computer command [TL=...]", a superset
   of the plain "Command [TL=...]" ship prompt, so main_command's pattern
   always matches it too — order is what lets the more specific one win.
+  `warp_confirm` is the mid-warp ``Do you really want to warp there?
+  (Y/N)`` gate (WO-CLASSIFY-WARP-CONFIRM): without it the Sector body
+  still matches `sector_display` and Autopilot held forever (live stall).
 - **Content anchors** (sector_display, port_trade, menu): describe what
   KIND of screen you're looking at, and legitimately live in the body a
   few lines above the prompt (e.g. "Sector : 1234" sits above a
@@ -480,6 +483,17 @@ _GATE_ANCHORS = [
     ("char_create", _regex_matcher(re.compile(r"start\s+a\s+new\s+character", re.I))),
     # Checked before main_command — see module docstring.
     ("computer", _regex_matcher(re.compile(r"computer\s+command", re.I))),
+    # Mid-warp Y/N (live stall 2026-07-23): must beat sector_display when
+    # the Sector body is still on screen above this prompt.
+    (
+        "warp_confirm",
+        _regex_matcher(
+            re.compile(
+                r"do\s+you\s+really\s+want\s+to\s+warp\s+there\s*\?\s*\(\s*Y\s*/\s*N\s*\)",
+                re.I,
+            )
+        ),
+    ),
     ("main_command", _regex_matcher(re.compile(r"command\s*\[\s*tl\s*=", re.I))),
 ]
 
