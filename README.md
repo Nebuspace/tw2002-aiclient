@@ -1,17 +1,17 @@
 # tw2002-aiclient
 
-> **Teach an AI to fly a starship from 1991 — then watch it get good.**
+> **A human-piloted trainer for TradeWars 2002 — teach the App screens; invite an AI teacher when you want proposals. The AI never live-drives.**
 
 [TradeWars 2002](https://en.wikipedia.org/wiki/TradeWars_2002) is the cult-classic
 BBS space-trading game: a raw telnet stream of ANSI art, cryptic menus, and
-haggling port merchants. It was never meant to be played by a machine.
+haggling port merchants. It was never meant to be automated.
 
-**tw2002-aiclient makes it playable by one.** A persistent daemon owns the telnet
-connection and a real terminal emulator; an LLM plays the game through a one-shot
-CLI — one command per turn, a settled screen back, ready to parse. And while the
-AI grinds trade routes in the background, *you* get the fun parts: a live color
-dashboard to watch it fly, a keyboard to take over any time, and a client that
-quietly learns the profitable loops it sees.
+**tw2002-aiclient** is the reborn trainer for that world. A persistent daemon owns
+the telnet connection and a real terminal emulator. **You** fly from the product
+TUI (`./tw2002-aiclient`). The App carries only screens it has been *taught*
+(deterministic macros / autopilot). An on-demand AI teacher may propose draft
+rules when invited — every rule is human-approved before it can fire. Live
+keystroke senders are `{app, human}` only.
 
 ### Product vs ops
 
@@ -27,29 +27,12 @@ Same daemon either way — one telnet connection. Prefer `./tw2002-aiclient` for
 
 ## What it does
 
-**🤖 An AI can actually play.** The core problem with driving a telnet game from
-an agent is that the stream never says "your turn." This client solves it with a
-settle-detection engine: `tw do "T"` sends a keystroke, waits until the screen has
-genuinely stopped changing, and returns the new screen plus a classification of
-the prompt it landed on — one command, one clean round trip. No timing guesswork,
-no half-drawn screens.
+**🕹️ You fly; the App carries taught screens.** The product surface is
+`./tw2002-aiclient` — launcher → play shell / cockpit. The human is the sovereign
+pilot. Deterministic App autopilot may run only on screens it has already been
+taught; on an unrecognized screen it **stops and hands the keyboard back**.
 
-**📺 Watch it play, live and in color.** `tw spectate` opens a curses dashboard
-in your own terminal: the game screen in its real ANSI colors, a parsed-state
-sidebar (credits, sector, turns), an event ticker, and a live readout of every
-keystroke the AI sends. It's a pure observer — run it any time, from any
-terminal, with zero coordination with whoever is driving. Any number of
-spectators can attach at once.
-
-**🕹️ Take the wheel whenever you want.** `tw attach` drops you into the live
-session as the player — full-screen, real color, your keystrokes going straight
-to the game. No re-login, no restart; you inherit the session mid-flight. Press
-`Ctrl-]` and control hands cleanly back to the AI. A control lock guarantees
-exactly one driver at a time: while you hold the keyboard, the AI's commands are
-rejected outright, and taking over fences any AI command already in flight so
-control passes cleanly.
-
-**🔐 It logs itself in.** `tw ensure` is the one command for getting into the
+**🔐 It logs itself in.** `tw ensure` is the one ops command for getting into the
 game: it spawns the daemon if needed, then drives registration or login all the
 way to the command prompt — picking the game, dismissing interstitials, even
 registering a brand-new character and generating its password. Credentials live
@@ -57,50 +40,59 @@ in a chmod-600 local store (or an env var) and are redacted everywhere: your
 password never appears in logs, argv, shell history, or any output. If the
 connection drops, a background guardian reconnects and logs back in by itself.
 
-**📈 It learns.** As the AI plays, the client records what works: a trace ledger,
-a macro record/replay engine, and a profit-miner that proposes profitable trade
-loops from what it has seen. Learned loops are browsable from the dashboard's
-built-in library (or `tw loops`), and `tw autoloop` hands one to a background
-player that flies it solo — pause, resume, or panic-stop from the spectator's
-control strip. The north star is an old-fashioned trainer: the AI teaches, the
-client is the trainee that graduates to solo flight.
+**📺 Ops visibility today.** `tw status` / `tw screen` / `tw stop` are the shipped
+one-shot ops verbs (plus `ensure`). They talk to the daemon over a unix socket —
+read-only for status/screen; stop shuts the daemon down. A future settle-aware
+`tw do` and long-lived `tw spectate` / `tw attach` surfaces are staged in
+[`WO-P2-OPS-VERB-SURFACE.md`](workorders/WO-P2-OPS-VERB-SURFACE.md) — **not** on
+`./tw --help` yet.
 
-**🧪 Built to be reliable.** Settle detection is the reliability core, and the
-whole stack — telnet negotiation, terminal emulation, classification, login
-automaton, control lock, learning engine — is covered by a large, fully
-network-free test suite driven by fake clocks and scripted sessions.
+**🤖 AI is a spectator-teacher, not a live pilot.** When invited, a retrospective
+AI teacher may propose draft rules or macros from history. Those drafts never
+fire live until a human approves them. There is no "AI drives" mode.
+
+**📈 Learning path (staged).** Trace ledger, macro record/replay, and loop mining
+are part of the trainer vision; product cockpit chrome is landing panel-by-panel
+under Phase-3 work orders. Do not expect `tw loops` / `tw autoloop` / a full
+spectate dashboard on tip today.
+
+**🧪 Built to be reliable.** Settle detection is the reliability core for any
+future drive verb, and the stack — telnet negotiation, terminal emulation,
+classification, login automaton, control lock, cockpit compose — is covered by a
+large, fully network-free test suite driven by fake clocks and scripted sessions.
 
 ---
 
 ## How it fits together
 
-One long-lived daemon, many short-lived windows into it:
+One long-lived daemon, short-lived windows into it:
 
 ```
-  AI agent ──── tw do / screen / state ────┐
-  (one-shot CLI verbs, one round trip)     │
-                                           ▼
-  you ──── tw spectate (watch) ────▶ ┌──────────────┐
-                                     │ twd (daemon) │ ── telnet ──▶ TW2002 server
-  you ──── tw attach (play) ───────▶ │  the ONE     │
-                                     │  connection  │
-  autoloop player (learned loops) ──▶└──────────────┘
+  you ──── ./tw2002-aiclient (play / cockpit) ──▶ ┌──────────────┐
+                                                   │ twd (daemon) │ ── telnet ──▶ TW2002 server
+  ops ─── tw ensure / status / screen / stop ───▶ │  the ONE     │
+                                                   │  connection  │
+  Coming: tw do · spectate · attach (see WO) ────▶└──────────────┘
 ```
 
 - **The daemon (`twd`)** owns the single telnet connection and a pyte terminal
-  emulator, watches for "settle edges" (the screen stopped changing and is new),
-  and serves everything over a local unix socket. You never run it directly.
+  emulator, watches for settle edges when a drive verb needs them, and serves
+  everything over a local unix socket. You never run it directly.
 - **The CLI (`tw`)** is stateless: every verb connects, asks, prints, exits.
-  That's what makes it drivable from an agent's shell, a script, or your hands.
-- **`spectate` and `attach`** are the human surfaces layered on the same daemon —
-  watch or drive, without disturbing the session.
-- **A control lock** arbitrates the one connection: AI pilot, human at the
-  keyboard, autoloop player, or nobody — exactly one driver at a time, always.
+  Shipped today: `ensure`, `status`, `screen`, `stop`. More verbs land one WO at
+  a time — see the Verb reference and the ops WO.
+- **Product play** is `./tw2002-aiclient`, not `./tw`. Future ops `spectate` /
+  `attach` (if wired) stay layered on the same daemon without disturbing the
+  session — they are **Coming**, not live.
+- **A control lock** arbitrates the one connection: App (taught autopilot) or
+  human at the keyboard — exactly one live driver at a time. The AI is never a
+  live driver.
 
-Deep architecture and rationale: see [`DESIGN.md`](DESIGN.md) and
-[`CLAUDE.md`](CLAUDE.md); canonical docs are being established in `knowledge/`.
-Day-to-day product + ops path (launcher → Autopilot → attach, run-dir isolation,
-`--no-auto-arm` recycle, live seat recovery): [`docs/OPERATOR.md`](docs/OPERATOR.md).
+Deep architecture and rationale: see [`CLAUDE.md`](CLAUDE.md) and `canon/`
+(north star: human sovereign · App taught-screen autopilot · AI teacher never
+live-drives). Day-to-day product + ops notes: [`docs/OPERATOR.md`](docs/OPERATOR.md)
+when present (some paths may still describe staged surfaces — prefer this README
++ `canon/` when they disagree).
 
 ---
 
@@ -115,7 +107,7 @@ python3 -m venv .venv
 `./tw2002-aiclient` and `./tw` are self-locating — they run from anywhere by
 absolute path, no venv activation needed.
 
-**Product path** (launcher → create/select profile → play / Autopilot):
+**Product path** (launcher → create/select profile → play / cockpit):
 
 ```bash
 ./tw2002-aiclient --help    # title: tw2002-aiclient; points at ./tw for ops
@@ -194,7 +186,7 @@ The suite is entirely network-free: telnet negotiation (including commands split
 across packet boundaries), terminal rendering, prompt classification against
 real captured fixtures, settle timing on a fake clock, the login automaton's
 registration and recovery branches, the control lock's one-driver guarantees,
-and the spectator/attach UIs against scripted sessions.
+and cockpit / play-shell compose against FakeClient and scripted sessions.
 
 ## Known limitations
 
@@ -204,11 +196,13 @@ and the spectator/attach UIs against scripted sessions.
   — extend anchors as new screen shapes turn up.
 - `tw stop` attempts in-game QUIT from the main command prompt when possible;
   elsewhere the daemon disconnects and exits.
+- Opening blurb / architecture prose used to narrate a live AI-pilot product;
+  this README follows reborn canon (`canon/architecture/north-star.md`).
 
 
 ## Going deeper
 
-- [`DESIGN.md`](DESIGN.md) — original architecture spec (CLI/daemon split,
-  socket protocol, settle detection) and its rationale.
-- [`CLAUDE.md`](CLAUDE.md) — module map and project conventions.
-- `knowledge/` — living canonical documentation, being established.
+- [`canon/`](canon/) — reborn OKF (start at [`canon/index.md`](canon/index.md) /
+  [`canon/architecture/north-star.md`](canon/architecture/north-star.md)).
+- [`CLAUDE.md`](CLAUDE.md) — seat, hard rules, setup.
+- [`workorders/`](workorders/) — ordered rebuild queue (WO-00…WO-17 + Phase-2/3 WOs).
