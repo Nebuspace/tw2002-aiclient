@@ -1,10 +1,20 @@
-"""SessionGuardian tests (DESIGN-v2 D9 reconnect+replay, D10 idle
-keepalive) — no network, no real threading: `_tick()` is called directly
-rather than starting the background thread, matching the fake-clock /
-direct-call style already used for settle.py and watch.py's tests."""
+"""SessionGuardian tests (WO-P2-027 reconnect+replay; WO-P2-028 keepalive deferred).
 
-from twclient.guardian import SessionGuardian
-from twclient.settle import wait_for_settle
+No network, no real threading: `_tick()` is called directly rather than
+starting the background thread, matching the fake-clock / direct-call
+style used for settle.py tests.
+
+Reconnect slice targets greenfield `tw2002_aiclient.session.guardian`.
+Keepalive tests stay collected but skipped until WO-P2-028 fills
+`_maybe_keepalive` (stubbed no-op on the 027 module).
+"""
+
+from __future__ import annotations
+
+import pytest
+
+from tw2002_aiclient.session.guardian import SessionGuardian
+from tw2002_aiclient.session.settle import wait_for_settle
 
 
 class FakeConn:
@@ -13,8 +23,7 @@ class FakeConn:
 
 
 class KeepaliveFakeSession:
-    """A stable, unchanging screen -- enough surface for
-    guardian._maybe_keepalive()."""
+    """Stable screen surface for guardian._maybe_keepalive() (WO-P2-028)."""
 
     def __init__(self, screen_text, last_rx):
         self._text = screen_text
@@ -39,14 +48,17 @@ class FakeProfile:
         self.handle = handle
         self.ship_name = "Vantage"
         self.planet_name = "Anchorage"
+        self.allow_register = False
+        self.clear_avoids_on_login = False
 
 
 class ReconnectFakeSession:
-    """An ordered-script double satisfying BOTH the guardian's reconnect
-    surface (.conn.connected, .auto_login_profile, .reconnect()) and
-    login.run_login's settle/send protocol -- same pattern as
-    tests/test_login.py's FakeLoginSession, kept independent here rather
-    than cross-imported."""
+    """Ordered-script double for guardian reconnect + login.run_login settle/send.
+
+    Screen advance on send is deferred to the next sleep() — required by
+    settle.send_and_confirm's idle path (rx_count must increase after the
+    settle poll starts). Matches tests/test_login.py FakeLoginSession.
+    """
 
     def __init__(self, steps, reconnect_outcomes=None):
         self.t = 0.0
@@ -59,6 +71,9 @@ class ReconnectFakeSession:
         self.auto_login_profile = None
         self._reconnect_outcomes = list(reconnect_outcomes or [])
         self.reconnect_calls = 0
+        self._pending_advance = False
+        self.game_select_answered = False
+        self.game_select_letter_sent = False
 
     def reconnect(self, timeout=10):
         self.reconnect_calls += 1
@@ -67,12 +82,20 @@ class ReconnectFakeSession:
             if outcome is not None:
                 raise outcome
         self.conn.connected = True
+        self.game_select_answered = False
+        self.game_select_letter_sent = False
 
     def clock(self):
         return self.t
 
     def sleep(self, seconds):
         self.t += seconds
+        if self._pending_advance:
+            self._pending_advance = False
+            if self._i < len(self._steps) - 1:
+                self._i += 1
+            self.rx_count += 1
+            self.last_rx = self.t
 
     def render(self):
         return self._steps[self._i]["screen"].split("\n")
@@ -81,7 +104,9 @@ class ReconnectFakeSession:
         return "\n".join(rows) if rows is not None else self._steps[self._i]["screen"]
 
     def wait_settle(self, wait_prompt=None, timeout=8.0, debounce_ms=350):
-        result = wait_for_settle(self, wait_prompt=wait_prompt, timeout_s=timeout, debounce_ms=debounce_ms)
+        result = wait_for_settle(
+            self, wait_prompt=wait_prompt, timeout_s=timeout, debounce_ms=debounce_ms
+        )
         step = self._steps[self._i]
         if step.get("auto_advance") and self._i < len(self._steps) - 1:
             self._i += 1
@@ -91,10 +116,7 @@ class ReconnectFakeSession:
 
     def send(self, text, enter=True, secret=False):
         self.sent.append((text, secret))
-        if self._i < len(self._steps) - 1:
-            self._i += 1
-        self.rx_count += 1
-        self.last_rx = self.t
+        self._pending_advance = True
 
 
 def _guardian(session, **kwargs):
@@ -110,24 +132,36 @@ def _guardian(session, **kwargs):
     )
 
 
-# -- D10 idle keepalive -----------------------------------------------------
+# -- D10 idle keepalive (WO-P2-028 — skip until keepalive is implemented) ---
 
+_KEEPALIVE_DEFER = pytest.mark.skip(
+    reason="WO-P2-028: idle keepalive stubbed in guardian; do not un-skip until 028"
+)
+
+
+@_KEEPALIVE_DEFER
 def test_keepalive_fires_on_idle_main_command():
-    session = KeepaliveFakeSession("Command [TL=00:00:00]:[1] (?=Help)? :", last_rx=-1000.0)
+    session = KeepaliveFakeSession(
+        "Command [TL=00:00:00]:[1] (?=Help)? :", last_rx=-1000.0
+    )
     g = _guardian(session, idle_keepalive_ms=100)
     g._tick()
     assert session.sent == [("", False)]
 
 
+@_KEEPALIVE_DEFER
 def test_keepalive_does_not_fire_below_idle_threshold():
     import time
 
-    session = KeepaliveFakeSession("Command [TL=00:00:00]:[1] (?=Help)? :", last_rx=time.monotonic())
+    session = KeepaliveFakeSession(
+        "Command [TL=00:00:00]:[1] (?=Help)? :", last_rx=time.monotonic()
+    )
     g = _guardian(session, idle_keepalive_ms=45_000)
     g._tick()
     assert session.sent == []
 
 
+@_KEEPALIVE_DEFER
 def test_keepalive_never_fires_on_password_screen_even_if_idle():
     session = KeepaliveFakeSession("Password?", last_rx=-1000.0)
     g = _guardian(session, idle_keepalive_ms=100)
@@ -135,21 +169,28 @@ def test_keepalive_never_fires_on_password_screen_even_if_idle():
     assert session.sent == []
 
 
+@_KEEPALIVE_DEFER
 def test_keepalive_never_fires_on_port_trade_screen_even_if_idle():
-    session = KeepaliveFakeSession("Fuel Ore   Buying   50%\nHow many holds of Fuel Ore do you want to buy [50]?", last_rx=-1000.0)
+    session = KeepaliveFakeSession(
+        "Fuel Ore   Buying   50%\nHow many holds of Fuel Ore do you want to buy [50]?",
+        last_rx=-1000.0,
+    )
     g = _guardian(session, idle_keepalive_ms=100)
     g._tick()
     assert session.sent == []
 
 
+@_KEEPALIVE_DEFER
 def test_keepalive_never_fires_on_unknown_screen_even_if_idle():
-    session = KeepaliveFakeSession("some totally unrecognized screen shape", last_rx=-1000.0)
+    session = KeepaliveFakeSession(
+        "some totally unrecognized screen shape", last_rx=-1000.0
+    )
     g = _guardian(session, idle_keepalive_ms=100)
     g._tick()
     assert session.sent == []
 
 
-# -- D9 reconnect + login-replay --------------------------------------------
+# -- D9 reconnect + login-replay (WO-P2-027) --------------------------------
 
 def test_reconnect_skipped_without_a_recorded_profile():
     session = ReconnectFakeSession(steps=[{"screen": "unused", "expect": None}])
@@ -169,7 +210,11 @@ def test_reconnect_replays_saved_password_login_to_main_command():
     session = ReconnectFakeSession(steps)
     session.auto_login_profile = "default"
     saved_calls = []
-    g = _guardian(session, get_password=lambda n: "sAvEd123", save_password=lambda n, pw: saved_calls.append(pw))
+    g = _guardian(
+        session,
+        get_password=lambda n: "sAvEd123",
+        save_password=lambda n, pw: saved_calls.append(pw),
+    )
     g._tick()
     assert session.reconnect_calls == 1
     assert session.conn.connected is True
@@ -187,7 +232,9 @@ def test_reconnect_retries_after_a_failed_attempt_then_succeeds():
         {"screen": "Password?", "expect": None},
         {"screen": "Command [TL=00:00:00]:[24146] (?=Help)? :", "expect": None},
     ]
-    session = ReconnectFakeSession(steps, reconnect_outcomes=[OSError("connection refused"), None])
+    session = ReconnectFakeSession(
+        steps, reconnect_outcomes=[OSError("connection refused"), None]
+    )
     session.auto_login_profile = "default"
     g = _guardian(session, max_reconnect_attempts=5)
     g._tick()
@@ -218,3 +265,20 @@ def test_reconnect_without_saved_password_surfaces_as_last_error_not_a_crash():
     g = _guardian(session, get_password=lambda n: None, max_reconnect_attempts=2)
     g._tick()  # must not raise
     assert "returning_no_saved_password" in g.last_reconnect_error
+    assert g.reconnect_count == 0
+
+
+def test_reconnect_unverified_screen_is_not_reported_as_success():
+    """Resume success iff verified main_command — unknown/stuck ≠ success."""
+    steps = [
+        {"screen": "What is your name?", "expect": None},
+        {"screen": "some totally unrecognized screen shape", "expect": None},
+    ]
+    session = ReconnectFakeSession(steps)
+    session.auto_login_profile = "default"
+    g = _guardian(session, max_reconnect_attempts=1)
+    g._tick()  # must not raise
+    assert session.reconnect_calls == 1
+    assert g.reconnect_count == 0
+    assert g.last_reconnect_error is not None
+    assert "automaton_stuck" in g.last_reconnect_error or "exhausted" in g.last_reconnect_error

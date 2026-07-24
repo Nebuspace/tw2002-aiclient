@@ -1,6 +1,6 @@
 # WO-P2-027 — Reconnect + login replay
 
-> Status: PLANNED (greenfield · **PREP DONE** 2026-07-24 · product execute blocked until a lifting HANDOFF)
+> Status: **EXECUTE DONE** 2026-07-24 (awaiting hub Accept) · PREP DONE earlier same day
 **Phase:** 2 · **Type:** build · **Depends:** WO-P2-020, WO-P2-023
 **Canon:** `canon/architecture/resilience-and-reconnect.md` (Drop Detection & Reconnect,
 Login-Replay & Resume Verification)

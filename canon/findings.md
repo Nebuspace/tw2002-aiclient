@@ -87,10 +87,9 @@ daemon owns lock + thin attach; ensure via `acquire_driver`. Collectable:
 **P2-026 settle (prep):** kernel already in `session/settle.py` + green `tests/test_settle.py`; execute
 likely verify + case-mismatch unit — see `workorders/WO-P2-026-settle-detection-baseline.md` §PREP.
 
-**P2-027 reconnect/replay (prep):** no live `guardian.py`; drop flag + `Session.reconnect` +
-`run_login`/`secret=True` already match — execute ports supervisor + rewrite
-`tests/test_guardian.py -k reconnect` (keepalive stays 028). See
-`workorders/WO-P2-027-reconnect-login-replay.md` §PREP.
+**P2-027 reconnect/replay (execute):** live `session/guardian.py` (D9 poll+reconnect+`run_login`;
+D10 keepalive stubbed for 028). Daemon DI start/stop. Collectable `test_guardian` — reconnect
+green; keepalive skipped until 028. See WO-P2-027.
 
 **P2-028 idle-keepalive (prep):** zero live D10; archive `_maybe_keepalive` matches mechanical
 canon; execute tags `sender=app` + rewrite `test_guardian -k keepalive` (5). See

@@ -7,13 +7,14 @@ via the pidfile at `<run-dir>/twd.pid` -- both project-rooted through
 `env.py` regardless of the caller's CWD, never reimplemented here.
 
 Ported from `archive/pre-rebirth-2026-07-23/code/twclient/daemon.py`
-(WO-P2-020, Wave-3 + WO-P2-025 control-lock wire). Still cut vs archive:
-`LedgerWriter`, `SkillRecorder`, `WatchHub`, `SessionGuardian`,
-`LoopPlayer`, `FrameRecorder` (`ledger.py`, `guardian.py`, `watch.py`,
-`loop_player.py`, `frame_recorder.py`, `autopilot.py`). Live verbs:
-`ensure`/`status`/`screen`/`stop` plus lifetime `attach` (control-lock
-hold). `subscribe` stays cut until `watch.py` lands. `protocol.dispatch()`
-reads server-side collaborators via `getattr(server, ..., None)`.
+(WO-P2-020, Wave-3 + WO-P2-025 control-lock wire + WO-P2-027 SessionGuardian
+D9 reconnect/replay). Still cut vs archive: `LedgerWriter`, `SkillRecorder`,
+`WatchHub`, `LoopPlayer`, `FrameRecorder` (`ledger.py`, `watch.py`,
+`loop_player.py`, `frame_recorder.py`, `autopilot.py`). Guardian D10
+keepalive stays stubbed until WO-P2-028. Live verbs: `ensure`/`status`/
+`screen`/`stop` plus lifetime `attach` (control-lock hold). `subscribe`
+stays cut until `watch.py` lands. `protocol.dispatch()` reads server-side
+collaborators via `getattr(server, ..., None)`.
 """
 
 import argparse
@@ -26,7 +27,9 @@ import time
 
 from . import env
 from .control_lock import ControlLock, ControlModeConflict
-from .protocol import dispatch
+from .credentials import get_password
+from .guardian import SessionGuardian
+from .protocol import _save_password, dispatch
 from .session import Session
 
 
@@ -127,6 +130,9 @@ def _shutdown(server, session):
     # Give the 'stop' response a moment to flush to the CLI client before
     # we tear the connection down.
     time.sleep(0.2)
+    guardian = getattr(server, "guardian", None)
+    if guardian is not None:
+        guardian.stop()
     _attempt_graceful_quit(session)
     session.close()
     server.shutdown()
@@ -251,8 +257,20 @@ def main(argv=None):
             pass
         sys.exit(1)
 
+    # D9 reconnect+login-replay (SessionGuardian) -- starts inert
+    # (session.auto_login_profile is None until a successful `ensure`
+    # records one) and stopped cleanly on daemon shutdown. D10 keepalive
+    # is stubbed inside guardian until WO-P2-028.
+    guardian = SessionGuardian(
+        session,
+        get_password=get_password,
+        save_password=_save_password,
+    )
+    guardian.start()
+
     server = ThreadingUnixServer(str(sock_path), CommandHandler)
     server.session = session
+    server.guardian = guardian
     # WO-P2-025: mode + active-driver slot (replaces the earlier ensure-only
     # `threading.Lock` drive_lock). Eager so every request sees one lock;
     # protocol `_driving_dispatch` uses acquire_driver/release_driver.
