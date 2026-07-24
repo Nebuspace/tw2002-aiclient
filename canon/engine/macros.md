@@ -1,0 +1,255 @@
+---
+type: System
+title: Macros — Taught Keystroke Sequences (record & deterministic replay)
+description: A macro is the unit a rule's do plays — a named parameterizable keystroke sequence captured from human demonstration and replayed deterministically, validating each step and halting the instant reality diverges.
+tags: [engine, macros, record, replay, halt-on-divergence, start-anchor, send-and-confirm, human-demonstrated, per-world, deterministic]
+timestamp: 2026-07-23T20:10:52Z
+---
+
+A macro is the smallest reusable unit of *doing* in the trainer: a named, ordered sequence of
+keystrokes — each paired with the screen it expects to land on — captured by watching **the human
+play**, and later replayed **deterministically**, one confirmed step at a time, halting the moment
+the game disagrees with what was recorded. It is the thing a rule's `do` actually issues (see
+[Rule–Macro Engine](/architecture/rule-macro-engine.md)); the rule decides *when*, the macro is
+*what gets pressed*.
+
+Two invariants govern everything below, and they are the whole reason this concept exists rather
+than a bare "replay these keys" loop:
+
+1. **Human-demonstrated, human-approved substrate — never AI-generated live.** Every macro's steps
+   came from a human hand at the keyboard (or, for a mined proposal, from the deterministic
+   ledger-miner) and every macro is inert until a human has approved it. Replay presses back exactly
+   what was taught; it never reasons, never invents a keystroke, never asks an LLM what to do next.
+   The AI has no live seat here — its only relationship to a macro is as a retrospective author of a
+   *draft* the human must bless (see [AI Teacher](/engine/ai-teacher.md)).
+2. **Never fire an unverified or destructive send.** A macro validates the world *before* its first
+   send (start-anchor) and confirms the screen *after* every send (send-and-confirm), and it
+   **stops** rather than pressing on the instant either check fails. Blind pumping — issuing the next
+   keystroke against a screen it has not positively confirmed is the one it thinks it is looking at —
+   is the exact failure this concept is built to make impossible.
+
+# Schema
+
+## What a macro is
+
+A macro is a named document with an ordered list of **steps** and a **start-anchor**. Each step is:
+
+| Field | Meaning |
+|---|---|
+| `input` | The keystroke(s) to send for this step (e.g. `"P"`, `"158"`, `""` for a bare Enter/accept-default). |
+| `wait_prompt` | An optional regex naming the screen shape this send should produce — the positive confirmation target. Case-sensitive (a mismatched pattern silently times out, never errors — see the Hard Rules). Most recorded steps carry none. |
+| `expected_post_class` | The screen *classification* recorded live at capture time (e.g. `port_trade`, `command_prompt`). Replay re-classifies the settled screen and compares. |
+
+The document also carries:
+
+| Field | Meaning |
+|---|---|
+| `name` | The macro's identity within its world's library. |
+| `start_anchor` | The sector the human was standing in when the sequence was recorded — the precondition every replay re-checks against the *current* sector before pressing anything. |
+| `source` | `recorded` (captured from a human `tw record` window) or `mined` (a deterministic candidate proposal — see [Candidate Mining](/engine/candidate-mining.md)). Both are inert until human-approved. |
+| `created_ts`, `mined_stats` | Provenance / the profitability stats a mined proposal was ranked by. |
+
+## Capture — recording the human's demonstration
+
+A capture window is bracketed by `tw record start [name]` … `tw record stop`. While it is open, **every
+keystroke the human plays is appended as a step** — its input, the screen classification it produced,
+and (when the human supplied one) a `wait_prompt` shape. `stop` writes exactly one artifact: the saved
+macro, stamped with the `start_anchor` sector the human was standing in when recording began.
+
+Capture honors the same redaction contract as the rest of the system: a `--secret` send (a password,
+or anything flagged secret) mid-capture is **dropped, never persisted** into a replayable macro. A
+credential must never live in a file that gets pressed back.
+
+The recording is a *human demonstration*, full stop. There is no live AI in the capture loop. A mined
+macro (`source: mined`) is the one non-recorded origin — the deterministic profit-miner proposing a
+recurring profitable ledger subsequence as a **draft** — and it too becomes a real, fireable macro only
+when a human approves it.
+
+## Parameterization — generalizing the numbers
+
+A macro is meant to be *reusable*, which means the concrete numbers a human typed during one
+demonstration (a hold count, an offer, a sector id) should be able to generalize into named parameters
+bound at replay time (e.g. `{qty}` → `50` on one run, `100` on another). Replay substitutes params into
+each step's `input` before sending; a step with no matching placeholder is sent verbatim, so a literal
+`{` in a keystroke never breaks a run.
+
+> **Code divergence (parameterization is replay-side only).** In `skills.py` today, capture records
+> each keystroke **literally** (`record_step` stores the raw input), and `_apply_params` only
+> substitutes where the stored input *already* contains a `{…}` placeholder. Recording never produces
+> placeholders, so numeric generalization currently requires a human to hand-edit the macro JSON. The
+> "numeric inputs generalizable" capability the target vision calls for is present at replay but has
+> **no capture-time generalization step** — a recorded macro replays the exact numbers it was taught
+> until edited. Recorded, not silently conformed.
+
+## Deterministic replay — one confirmed step at a time
+
+`tw replay <name>` re-issues a macro's steps in order and returns the per-step trace on full success.
+For each step, in order:
+
+1. **Send-and-confirm the keystroke.** The send routes through the session's send-and-confirm path
+   with the step's `wait_prompt` as the confirmation target (or an idle-plus-stability fallback when
+   the step has none). This is a *positive* confirmation: it returns `confirmed=False` on any desync —
+   a settle that only *looks* quiet mid-transition, or a target shape that never actually arrived.
+2. **Treat an unconfirmed send as a surprise.** If the send was not positively confirmed, replay
+   **halts immediately** — it does not then try to classify a screen it already knows is untrustworthy.
+3. **Re-classify and compare.** On a confirmed settle, replay classifies the new screen and compares
+   it to the step's `expected_post_class`. An `unknown` classification, or any mismatch against what
+   was recorded, is a divergence.
+4. **Halt on divergence — never blind-pump.** Any of the above surprises stops the run then and there,
+   carrying the full trace up to and including the failing step. Replay never presses the *next* step's
+   send against a screen that disagreed with the recording.
+
+Because the game is a live world that may have moved since the macro was taught, halting is the *normal,
+correct* outcome whenever reality no longer matches — not an error to suppress. A halted macro hands the
+moment back for escalation (see [Control & Escalation](/architecture/control-and-escalation.md)); it
+never guesses its way forward.
+
+## Replay-safety invariants (the two scars)
+
+Two live incidents are burned into this concept as named guards. Both are prescriptive: a macro that
+cannot honor them does not replay.
+
+### Start-anchor — refuse on context mismatch
+
+A macro's steps only make sense from the sector they were recorded in. A live incident once replayed a
+macro verbatim **from the wrong sector** and warped the ship off into a stale sector. So before the
+first send of *every* replay invocation (and therefore before every cycle of a repeating run), replay
+reads the current sector and validates it against the macro's `start_anchor`:
+
+- **Anchor present but the current sector differs** (or can't be read at all) → a live "reality
+  disagrees with the recording" surprise → **halt** (a start-anchor divergence, `step_i = -1`). This
+  is exactly the near-miss the guard exists to prevent, and it is **not** bypassable by force — forcing
+  past a *detected* mismatch is the danger itself.
+- **Anchor absent** (a legacy macro saved before anchor tracking existed, `start_anchor: null`) →
+  there is nothing to check against, so it **refuses to replay by default**. The only way past is an
+  explicit force — a deliberate operator override, never a silent unanchored replay.
+
+### Send-and-confirm — never auto-fire an unverified prompt
+
+The other scar is the **−75-alignment colonist misfire**: a send issued against a screen that only
+looked settled mid-transition, answering a prompt that was not the prompt it thought it was — a
+destructive, unverified action fired blind. The fix is structural and applies to every step: a send is
+issued and then its result is **positively confirmed** before anything downstream trusts the screen.
+An unconfirmed settle is itself a surprise that halts the run. This is what lets a macro *not* auto-fire
+an unverified or destructive prompt: it can only ever act on a screen it has confirmed is the one it
+expects, and if it cannot confirm, it stops and escalates rather than pressing on.
+
+Together the two invariants realize the fixed constraint: **start-anchor confirms the world before the
+first keystroke; send-and-confirm confirms every keystroke's result before the next.** A guard may
+always STOP and hand the human the keyboard instead of firing — stopping is a legitimate, first-class
+outcome, not a failure mode.
+
+## Per-world library keying
+
+Sectors, ports, and routes are properties of *one game world* — a macro recorded on one server is
+meaningless (and, via its start-anchor, unusable) on another. Macros are therefore stored per world,
+keyed by the world's identity, so a `start_anchor: 158` means sector 158 *of this world* and a macro
+named `ore-run` resolves to the one taught in the world it belongs to. The keying convention itself is
+owned by [World Identity](/engine/world-identity.md); this concept simply requires that a macro library
+is world-scoped, never a global namespace shared across servers.
+
+## Ledgering a replay
+
+Every step a macro replays is a real send with a real economic effect, so each produces a
+[Trace-Ledger](/engine/trace-ledger.md) row attributed to `actor = trainer` (a deterministic, no-LLM
+engine send — distinct from `ai`, the live-LLM path, and `human`, a direct operator keystroke), tagged
+with the run's `session_id`. This is what keeps a replayed buy that moved thousands of credits from
+being an invisible, unaccounted action — the ledger sees macro replays exactly as it sees any other
+play. (A replayed step is deliberately *not* tagged as a fresh capture; it is a replay of an already-
+captured macro, not a new recording.)
+
+## The repeating posture — where a macro *keeps* running
+
+A macro can be declared `scope: repeating` — a background posture where its sequence loops (a pair-trade
+that runs cycle after cycle until a stop condition). The macro *definition* and its per-step safety
+(start-anchor re-checked every cycle, send-and-confirm every step, halt-on-divergence) live here. The
+**run-loop that arms, drives, and bounds that repetition** — the human-arm gate, the stop-on-unknown
+mid-run contract, the depletion-guard that **STOPs and escalates rather than autonomously rotating** to
+a new target — is owned by [App Autopilot Model](/app-autopilot-model.md). This concept guarantees each
+*step* is safe; the autopilot model guarantees the *loop around them* stops on the unknown. That
+boundary is deliberate and not restated here.
+
+# Examples
+
+## A recorded macro (illustrative)
+
+```
+name: ore-run          world: <this world's identity>     source: recorded
+start_anchor: 158
+steps:
+  - input: "P"    wait_prompt: null            expected_post_class: port_trade
+  - input: "S"    wait_prompt: null            expected_post_class: port_sell_qty
+  - input: "50"   wait_prompt: "offer"         expected_post_class: port_offer
+  - input: ""     wait_prompt: null            expected_post_class: command_prompt   # accept-default
+```
+
+## Replay that halts on divergence
+
+```
+tw replay ore-run
+  step 0  send "P"   → confirmed, class port_trade        ✓ matches
+  step 1  send "S"   → confirmed, class port_sell_qty      ✓ matches
+  step 2  send "50"  → NOT confirmed (target "offer" never arrived)
+  → HALT (reason: confirm_failed) — trace returned through step 2; step 3 never sent
+```
+
+## Replay that halts on a start-anchor mismatch
+
+```
+tw replay ore-run          # ship is currently in sector 231, not 158
+  start-anchor check: current sector 231 ≠ anchor 158
+  → HALT (reason: start_anchor_mismatch, step -1) — nothing sent; force does NOT bypass a detected mismatch
+```
+
+# Findings — code divergences (docs win)
+
+Recorded per the reborn contract: where current code diverges from the target vision, the divergence is
+noted, not conformed away.
+
+- **Parameterization is replay-side only.** Capture stores literal keystrokes; numeric generalization
+  into named params requires hand-editing the macro JSON (detailed under *Parameterization* above).
+- **Autopilot's per-cycle EV select vs stop-on-unknown.** The broader autopilot run-loop historically
+  selected a live action per cycle by expected-value ranking over the current screen (a
+  priority-engine-driven "keep driving / never idle" posture) rather than replaying only *taught*
+  screens and STOPping on the unrecognized. Macro replay itself already halts on surprise (correct); the
+  divergence lives in the run-loop that wraps it and is owned/recorded by
+  [App Autopilot Model](/app-autopilot-model.md) — flagged here because a `scope: repeating` macro is
+  what that loop drives.
+- **The 78-turn haggle misfire.** A verified live incident where the port-negotiation resolver
+  auto-fired across ~78 turns of an unattended autopilot run — a real money-path defect and the
+  archetype of the "auto-fire an unverified action" class this concept's send-and-confirm invariant
+  exists to prevent. The guarded-resolver contract that hardens it is owned by
+  [Auto-Haggle](/engine/auto-haggle.md) / [Action-Safety Guards](/engine/action-safety-guards.md); it is
+  cited here as the money-path precedent for why replay never presses an unconfirmed send.
+- **Approval gate is enforced by file location, not an explicit flag.** A mined/AI-authored draft lives
+  in a separate `_drafts/` area and becomes replayable only when a human re-saves it into the blessed
+  library — the human-approval-before-fire invariant is real but is currently expressed as a filesystem
+  move rather than an in-macro `approved` field. Accurate, and noted so the invariant's *mechanism* is
+  not mistaken for a richer gate than exists.
+
+# Citations
+
+- Reborn vision (fixed constraints): the human is the sovereign pilot and escalation target; the app
+  plays back only taught screens and STOPs on the unknown; live keystroke senders are `{app, human}`
+  only; the AI is a retrospective, human-invoked author of *draft* rules, never a live keystroke; every
+  rule/macro is human-approved before it can fire; a guard may STOP and escalate instead of firing;
+  combat/PvP is human-gated and NPC-only.
+- Project canon — the three-actor North Star model (see [North Star](/architecture/north-star.md)); the
+  Rule–Macro Engine that owns *when* a macro fires (see
+  [Rule–Macro Engine](/architecture/rule-macro-engine.md)); the Hard Rules this concept sits beside
+  (secrets never touch logs/argv/repo and every password send is redacted; `wait_prompt` regexes are
+  case-sensitive; state anchors to the last match, not the first).
+- Reimagined from `knowledge/architecture/autonomy-loop.md` — the record/replay/skill substrate is
+  carried and **re-rooted**: the old framing mined *the AI's own keystrokes* into learned loops to
+  raise an autonomy ratio; the reborn framing captures *the human's demonstration* and treats replay as
+  playing back a taught, human-approved sequence — never AI-generated live. The autonomy-ratio gauge
+  that doc paired with attribution is deliberately not carried here; it is recast under
+  [Coverage Metrics](/engine/coverage-metrics.md).
+- Internal design history — the macro/skill record-replay substrate (DESIGN-v2 §3 item 11b/11d), and the
+  three named safety scars: TW-02 (send/settle race, the −75-alignment colonist misfire → send-and-
+  confirm), TW-03 (wrong-sector replay → start-anchor), TW-04 (replay-ledgering, `actor=trainer` rows).
+- Code modules (plain-text): `skills.py` (record/replay/play, start-anchor guard, halt-on-divergence,
+  parameter substitution, per-cycle stop-loss rails); `settle.py` (`send_and_confirm` — positive
+  confirmation vs idle-only, the stale-pre-send-match guard); `ledger.py` (`actor`/`session_id`
+  attribution, redaction); `classify.py` (post-step screen classification); `state_parser.py` (current-
+  sector read for the start-anchor check).

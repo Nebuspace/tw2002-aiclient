@@ -1,0 +1,401 @@
+---
+type: System
+title: Mode Line, Teach Hotkeys & the Escalation Handoff (UX)
+description: The cockpit interaction contract — the App/Human actor indicator, the M/A/R/T keys, the operate-the-app control cluster, and how STOP-and-handoff is presented to the human.
+tags: [surface, mode-line, teach-controls, escalation-handoff, human-approval, confirm-gate, prescriptive]
+timestamp: 2026-07-23T20:55:51Z
+---
+
+This is the cockpit's **interaction contract**: the small band of always-visible chrome that tells
+the human *who holds the keyboard right now*, the keys that let the human switch control and teach
+the app, the cluster of controls that operate the app's autopilot, and the banner that presents a
+STOP-and-handoff when autopilot meets a screen it cannot match. It owns **presentation**, not
+mechanics — the control state machine and the escalation reason-code catalog belong to
+[control-and-escalation](/architecture/control-and-escalation.md), which this surface renders from
+and defers to. This concept is prescriptive: it specifies the reborn dual-actor mode line, the teach
+loop the A/R/T keys drive, and the confirm-gated control cluster the trainer targets, and it records
+where the current code still carries the pre-reborn "AI drives" framing.
+
+# Schema
+
+## The mode line is a DUAL, not a triad
+
+The live keyboard is held by exactly one of **two** actors — **App** or **Human** — and the mode
+line shows which. There is **no third "AI drives" position.** The reborn trainer has exactly two
+live keystroke senders (`app`, `human`; see [trace-ledger](/engine/trace-ledger.md)); the AI is a
+retrospective, human-invoked *teacher* and never a live driver (see
+[ai-teacher](/engine/ai-teacher.md)), so it can never be the actor the mode line names.
+
+- **App** — the deterministic autopilot holds the keyboard and is playing only taught screens. It
+  stops and hands back the instant it meets an unrecognized screen.
+- **Human** — the human holds the keyboard directly (the live `tw attach` seat). Sovereign; the app
+  does not drive while Human holds control.
+
+The AI never appears *as a mode.* It surfaces only as a transient **teach-overlay indicator** — a
+badge shown while an Analyze (teach) pass is open — never as a control-line position and never
+implying the AI is on the wire. A read-only **Spectate** viewer is not a control holder at all: it
+takes no lock and drives nothing (see [spectate-and-attach](/surfaces/spectate-and-attach.md)), so
+it does not occupy the App/Human dual.
+
+## `M` — the App↔Human mode switch
+
+`M` is the single control-switch key: it toggles the live holder between **App** and **Human**.
+Switching **to Human is immediate and unrefusable** — the human always wins the keyboard the instant
+they ask for it, even mid-dispatch; a taught behavior caught mid-flight is fenced and yields cleanly
+rather than being interleaved. This is a presentation summary only; the guarantee and its clean-cutover
+mechanics live in [control-and-escalation](/architecture/control-and-escalation.md) and the
+control-lock. The mode line reflects the new holder the moment the switch lands.
+
+## The teach hotkeys — A / R / T are the three escalation/teach moves
+
+At an escalation moment (or any time the human wants to grow the repertoire), three keys map to the
+three teach moves the human can make. None of them is a live drive; all three feed the
+**human-approval teach loop**:
+
+- **`A` — Analyze.** Invoke the retrospective [AI teacher](/engine/ai-teacher.md) on the current
+  screen / escalation moment. The teacher reads the settled screen, parsed state, and surrounding
+  ledger *after the fact* and returns a **draft** guarded rule for the human to approve, edit, or
+  discard. On-demand only — the AI never proposes unless the human presses `A`. While a pass is open,
+  the teach-overlay indicator shows on the mode line.
+- **`R` — Record.** Capture a [macro](/engine/macros.md): record the human's own keystroke
+  demonstration as a replayable taught sequence. The captured macro is the `do` a rule will later
+  play.
+- **`T` — Assign-Trigger.** Bind a screen-match + guards to a recorded macro, producing a **proposed
+  rule** (`when(screen_match + guards) → do(macro)`; see
+  [rule-macro-engine](/architecture/rule-macro-engine.md)). Assigning a trigger drafts the rule; it
+  does not arm it to fire.
+
+All three produce **proposals, never live keystrokes.** Every proposed rule surfaces an
+**approve/reject** affordance and is **inert until the human approves it** — an unapproved draft
+cannot fire a single keystroke. AI proposals in particular are on-demand only (they exist only
+because the human pressed `A`).
+
+## The operate-the-APP control cluster (N5)
+
+The controls that *operate the app's autopilot* all live on this surface — the
+[trainer-cockpit](/surfaces/trainer-cockpit.md) only renders them in its frame; the behavior contract
+is owned here. The cluster is:
+
+- **The mode selector** — the `M` App↔Human switch above.
+- **Run / record / panic controls** — launch a taught run, record a macro (`R`), and a **panic**
+  control that halts *all* automation and parks the app in a non-driving paused state. What a run and
+  a panic actually arm and halt is [app-autopilot-model](/architecture/app-autopilot-model.md);
+  this surface owns how they are presented and gated.
+- **The Trade-Loop-Chains library popup** — a modal listing the taught trade-loop chains the human
+  can launch (see [trade-loops](/strategy/trade-loops.md)); selecting a chain arms a launch.
+- **The play-launch confirm** — see the confirm-gate below.
+
+### Confirm-gate — never one keystroke to live money
+
+**Arming a rule or launching a run is confirm-gated.** No single keystroke ever commits the app to
+spend live turns or credits: selecting a chain or launching a run **arms** a pending action and
+raises an explicit confirm prompt (a `y/N`-style gate that shows what will run and how many cycles);
+only a deliberate second confirm fires it. A bare Enter must never fire a launch. This is a
+non-negotiable money-path safety rule born of the **−75/−78-turn scars** — verified misfires where an
+unguarded live action burned turns — and it applies to every arm/launch affordance in the cluster.
+The FOCUS panel and any coaching suggestions are **ranked suggestions, never the app's chosen
+action**: they inform the human, they do not arm or launch anything (see
+[coaching-engine](/engine/coaching-engine.md)).
+
+## The STOP banner — a typed reason, keyboard→Human, and the three moves
+
+When autopilot meets a screen it cannot match, it STOPs and hands the keyboard to the human. This
+surface presents that handoff as a banner that carries:
+
+- **A typed reason code**, not free text. The banner renders the escalation's reason *code* resolved
+  through the enumerated catalog owned by
+  [control-and-escalation](/architecture/control-and-escalation.md) and implemented as
+  `INTERVENTION_REASON_LABELS` / `intervention_reason_label()` in `intervention_labels.py` — the
+  banner shows the code's short human label, never an ad-hoc string. (The catalog is open by
+  construction: an unrecognized code passes through as its own text, an empty code renders `"?"`.)
+- **Keyboard → Human.** The banner makes explicit that control has passed to the human — the mode
+  line reads Human — so the human is unambiguously the pilot.
+- **The three teach moves as affordances.** `A` / `R` / `T` are surfaced right at the STOP so the
+  human can immediately Analyze, Record, or Assign-Trigger to teach the screen that caused the halt —
+  turning the escalation into a durable rule for next time.
+
+## The coverage / auto meter — App-vs-Human live share
+
+The autonomy meter reports the **App-vs-Human live share**: of the live keystrokes/dispatches, how
+many the taught App handled versus how many the Human had to. This is the honest measure of how much
+of the *known* the app covers today (see [coverage-metrics](/engine/coverage-metrics.md)).
+
+**Any "AI" figure is a distinct TEACHING axis** — rules authored and approved — **never a live-drive
+share.** The AI's live keystroke share is definitionally **zero**, because the AI never drives. The
+meter must not present the AI as a third live-drive slice competing with App and Human; a
+teach-provenance number, if shown, is labeled and kept separate from the live share.
+
+# Examples
+
+## Mode line, healthy autopilot
+
+```
+[ APP ]  → K            AUTO 82%   App 41 / Hum 9        M)ode  A)nalyze  R)ecord  T)rigger  L)chains  P panic
+```
+The App holds the keyboard (dual: App or Human). The auto meter is App-vs-Human live share. No AI
+slice appears in the live share; the teach keys sit on the hint band.
+
+## The STOP-and-handoff banner
+
+```
+! STOP — autopilot halted            [ HUMAN — YOU HAVE CONTROL ]
+  reason: autopilot no candidates    keyboard handed to you
+  teach:  A)nalyze this screen   R)ecord a macro   T)assign a trigger
+```
+The reason is a typed code (`autopilot_no_candidates`) resolved to its short label; the mode line has
+flipped to Human; the three teach moves are offered as affordances on the halt.
+
+## Launching a taught run — the confirm gate
+
+```
+TRADE LOOP CHAINS
+  ▸ Ferren-Sol x3 (4 hops)
+  ─────────────────────────
+  Play "Ferren-Sol" x3 LIVE?  y/N        ← armed; a bare Enter does NOT fire
+```
+Selecting the chain *arms* a pending launch and raises an explicit `y/N` confirm. Only a deliberate
+`y` commits live turns — never one keystroke to live money.
+
+# Visual design & polish
+
+This section specifies the **look** of the interaction contract — the mode-line chip, the teach-hint
+band, the STOP banner, and the confirm-gate dialog — as a builder-aimable spec. Every concrete color
+and glyph is grounded to a module (or marked `[ASPIRATIONAL]` where it is reborn-intent not-yet-built).
+The color/glyph/border **dictionary** is shared across all four cockpit surfaces; this doc states the
+mode-line-specific slice inline and forward-references the shared concept
+[visual-language](/surfaces/visual-language.md) (a proposed 37th concept — treat as a forward-ref
+until it lands; the vocabulary below is the authoritative statement for this surface in the interim).
+
+## Color semantics — the mode indicator, teach overlay, and the one 7-tone table
+
+Every tint on this surface resolves through the single semantic table `_SEMANTIC_COLORS`
+(`spectate_app.py`) — one table, one meaning per tone on every surface. The seven tones:
+`ok` = green/**bold**, `warn` = yellow/**bold** (pyte names it `"brown"` but it renders ANSI-yellow),
+`danger` = red/**bold**, `info` = cyan/non-bold, `gain` = green/**bold**, `loss` = red/**bold**,
+`muted` = terminal-default/non-bold (genuinely uncolored — basic-8 has no grey). **Cyan is chrome,
+never data;** **reverse-video (`A_REVERSE`) is the single "selected / active / badge" signal** across
+the whole UI.
+
+**The mode-indicator colors** (`_MODE_BADGES`, `spectate_layout.py`; drawn reverse-video + tone-tinted
+in `_draw_control_strip`, `spectate_app.py`). The badge is a reverse-video chip so it reads as a chip,
+not text; the tone colors the chip:
+
+- **App (autopilot holds the keyboard)** — **green (`ok`)**. Green is "healthy / the taught app is
+  covering the known." (As-built the App holder is two badges — `AUTO-LOOP` at tone `ok`/green and the
+  legacy `AI-PILOT` at tone `info`/cyan; the reborn single **App** chip must land on **green**, and the
+  cyan `AI-PILOT` badge must retire — see Code divergence. `[ASPIRATIONAL]` for the unified App chip.)
+- **Human (the live `tw attach` seat holds the keyboard)** — **yellow (`warn`)**. The as-built label
+  is `MANUAL — YOU HAVE CONTROL` at tone `warn`. Yellow is deliberate, not an error: with the human
+  flying, autopilot is stood down and the surface is in its *attention-with-you* register — the human,
+  not the app, is the one thing that must not be ignored.
+- **The teach-overlay (AI) indicator** — **cyan (`info`)**, non-bold. `[ASPIRATIONAL]` — the reborn
+  teach badge shown *only* while an Analyze pass is open. Cyan places it firmly in the chrome/neutral
+  register: it is an overlay annotation, never a live-drive slice, and its non-bold cyan visually
+  separates it from the bold App/Human live-holder chips. It appears and vanishes with the pass.
+- **Spectate (not a dual member)** — **muted / plain** (`spectate` → tone `muted`). A read-only viewer
+  takes no lock, so its chip is deliberately uncolored — "nothing to see here," idle/parked, drawn
+  reverse-video like every badge but with no bold accent next to the App/Human chips.
+
+## Box-drawing, borders & titles
+
+The mode line and its neighbors ride **thin rounded HUD chrome** (`╭ ╮ ╰ ╯ ─ │`, cyan; `terminal.py`
+`glyph_set`), the lighter of the two-weight hierarchy — the heavier double-line `╔═╗` box is reserved
+for the live GAME viewport so the eye lands on the CP437 world first. The control strip itself is a
+single unbordered row (no box) sitting inside the outer double-line cyan frame; the **STOP /
+intervention strip** is likewise an unboxed single row led by a bare `!`. The **Trade-Loop-Chains
+library** is a titled modal that *replaces* the dashboard (`_draw_loops_library`, `spectate_app.py`),
+title drawn at col 2 in the shared cyan-title convention; its confirm line is an inset row inside that
+modal. Every glyph has an ASCII twin via the `unicode_ok` flag — an 80-col non-UTF-8 terminal loses
+fidelity, never information.
+
+## Spacing, alignment & hierarchy — the mode-line reading order
+
+The control strip lays out strictly **left-to-right** (`compose_control_strip` → `_draw_control_strip`):
+
+```
+[ APP ]      → 158                         M)ode  A)nalyze  R)ecord  T)rigger  L)chains  P panic
+└ chip ┘     └ TX readout ┘                └──────────────  hint band (right-aligned) ──────────────┘
+```
+
+1. **The mode chip is cell #1, hard-left** — *who holds the keyboard* is the highest-priority fact on
+   the strip, so it reads first, as a colored reverse-video chip.
+2. **The `→ TX` readout** (`format_tx_readout`) sits immediately right of the chip in the strip's normal
+   attribute (`A_NORMAL`, uncolored) — `→ 158` for the last sent keystroke, `→ -` when nothing is in
+   flight. It is the live "the app just pressed a key" channel, kept low-key (no tint) so it registers
+   as telemetry, not alarm.
+3. **The hint band is right-aligned** in **cyan** (`accent_attr`), the chrome accent — it is
+   affordance chrome, not data, so it wears the chrome color and yields the strip's center to the TX
+   channel. When a taught run is live, the band's slot is claimed instead by the AUTO-LOOP
+   cycle-progress bar (`Playing <name> ▸ cycle/total [███░░]`) — never both, there is only room for one.
+
+The reborn hint band is `M)ode  A)nalyze  R)ecord  T)rigger  L)chains  P panic`; every token uses the
+uniform `KEY)verb` shape so the hotkey letter is scannable at the head of each token. (As-built the
+band is `CONTROL_HINTS = "M)ode  L)chains  E)xplore  Spc pause  X stop  P panic  A)ttach"` — the A/R/T
+teach moves are not yet wired here; see Code divergence.)
+
+## The A / R / T / M hotkey affordances
+
+The four keys are surfaced as `KEY)verb` tokens on the hint band and — at a STOP — promoted to the
+banner's teach line. Their affordance styling:
+
+- **`M`** leads the band (the mode switch is the strip's own primary control, adjacent to the chip it
+  flips). A press flips the chip color the instant the switch lands (green↔yellow) — the color change
+  *is* the acknowledgement.
+- **`A` / `R` / `T`** are the teach triad; at an escalation they move off the band and onto the banner's
+  dedicated **`teach:`** line so the three moves sit right where the halt happened. On the calm band
+  they are ordinary cyan `KEY)verb` tokens; on the banner they inherit the banner's warn-bold weight.
+- Every affordance that *arms or launches* (a chain launch, a run) is confirm-gated (below) — the hint
+  token merely opens the gate; it never fires.
+
+## The STOP / escalation banner styling
+
+When autopilot halts, `compose_intervention_strip` (`spectate_layout.py`) emits a single line
+`! <label>; <label>` and `_draw_intervention_strip` (`spectate_app.py`) paints it **warn-tone
+(yellow) and BOLD** (the draw doubles `A_BOLD` on top of the `warn` tone for an unmissable weight),
+one row, **led by a bare `!`**, pinned **directly above the status bar**. The strip is allocated *only*
+when `intervention.needs_attention` is set, and it **claims leftover height first** — before the
+control strip, before the ticker — so a halt always surfaces even as the terminal shrinks
+(`frame_layout`). This is the concrete "calm-until-it-needs-you" mechanism: steady state shows no strip
+at all; a halt muscles a bold-yellow row ahead of everything optional.
+
+**The reason is a typed code, never free text.** Each label comes from the enumerated catalog —
+`intervention_reason_label()` / `INTERVENTION_REASON_LABELS` (`intervention_labels.py`) — rendering the
+code's short human label (e.g. `autopilot_no_candidates` → its label). The catalog is open by
+construction: an unrecognized code passes through as its own text; an **empty code renders `"?"`** — the
+banner never invents a message and never blanks. The full banner as reborn-specified carries three
+bands — the `! STOP` reason line (yellow-bold), the `[ HUMAN — YOU HAVE CONTROL ]` keyboard-handoff
+marker (the mode chip has flipped to the yellow Human register), and the `teach:` affordance line
+(`A)nalyze  R)ecord  T)assign`). Red is *not* used here — red is reserved for hard link-down (the
+viewport's own border reddens on disconnect); an autopilot halt is a **warning**, a screen it hasn't
+been taught yet, not a failure, so it wears yellow.
+
+## The confirm-gate dialog look
+
+Arming a live run is the one money-path moment, and it is styled to look like one. In the Trade-Loop
+library modal, selecting a chain **arms** a pending action and raises a single confirm line
+(`_draw_loops_library`, `spectate_app.py`):
+
+```
+Play "Ferren-Sol" x3 LIVE? y/N        ← danger-tone + reverse-video; a bare Enter does NOT fire
+```
+
+The line is drawn **`danger`-tone (red/bold) AND reverse-video** (`_tone_attr("danger", …) |
+A_REVERSE`) — the only place the interaction contract combines the loudest tone with the selection
+attr, precisely because it is the only place one keystroke could commit live turns. The prompt spells
+out *what* runs and *how many cycles* (`x3`), the `y/N` capitalization signals the safe default is No,
+and **Enter alone must never fire** — only a deliberate `y` commits. This is the −75/−78-turn-scar
+doctrine made visible: the redder-and-reversed styling is the surface saying *this one spends real
+money.* The same warn+reverse treatment marks the idle-prompt "Send…" line (`spectate_app.py`),
+the lighter sibling of the same "this input goes live" cue.
+
+## Liveness & motion on the strip
+
+The mode line is a "is it frozen?" surface, so it carries live cues even when nothing is being sent:
+
+- **The `→ TX` readout** flips between `→ 158` and `→ -` on every dispatch — the app's heartbeat of
+  *keys actually pressed*.
+- **The mode chip** flips color the instant `M` lands — immediate, unrefusable switch-to-Human shows as
+  an instant green→yellow chip flip, no lag.
+- **The classification pulse** (`_draw_header`, ~1.0s reverse) fires when the underlying screen class
+  changes — the coarse "something just changed" signal that often precedes a halt.
+- **The AUTO-LOOP progress bar** advances its `▸ cycle/total [███░░]` fill in the hint slot while a
+  taught run plays — the "watch it replay" payoff.
+
+All chrome animates decoupled from content (chrome at `ANIM_FPS=13`; the viewport redraws only on real
+events), so the strip breathes without churning the game screen.
+
+## Panel states — calm / alert / empty
+
+- **Calm (App healthy)** — green chip, quiet cyan hint band, no intervention strip, `→ -` or a settling
+  `→ N`. No color noise.
+- **Alert (halt)** — the yellow-bold `!` strip appears above the status bar and claims height first; the
+  chip has flipped to the yellow Human register; the teach triad is offered on the banner.
+- **Armed (confirm pending)** — the red+reverse `y/N` line is up; the surface is holding for a
+  deliberate second keystroke and will not commit on Enter.
+- **Empty / cold-join** — before a mode is known, the chip degrades sanely: an unrecognized/empty mode
+  renders `mode.upper()` or `"?"` (`format_mode_badge`) rather than crashing or blanking; the hint band
+  still shows. A read-only cold-join shows the muted **Spectate** chip — plainly "not a driver."
+
+## Responsive fold
+
+The control strip and its chip survive the cockpit fold ladder (`frame_layout`, `spectate_layout.py`).
+In the **`minimal`** tier (≥82 inner cols) there is no side gutter, so the mode line rides the packed
+header strip and the hint band abbreviates — but the tokens are chosen to fit **82 inner cols without
+truncating** (the as-built `CONTROL_HINTS` is length-budgeted to that width; a reborn band must hold the
+same budget). Height degrades **header → control → ticker → viewport-border** in that order, but the
+intervention strip's first-claim on leftover height means **a halt banner survives even as the control
+strip is squeezed** — the escalation is the last thing to fold, never the first. The body never scrolls
+horizontally: the hint band truncates from the right, it does not push the strip wider than the frame.
+See the shared fold ladder in [visual-language](/surfaces/visual-language.md) `[ASPIRATIONAL]` /
+[trainer-cockpit](/surfaces/trainer-cockpit.md) for the full threshold table.
+
+## Glyph / status-marker vocabulary (this surface's slice)
+
+- **`!`** — leads the STOP / intervention strip (the one-glyph "attention" mark).
+- **`→`** — the sent-keystroke / TX channel (`→ 158`, `→ -`).
+- **`▸`** — the armed/selected row marker in the chains library and the play-progress separator
+  (`Playing <name> ▸ cycle/total`).
+- **`?`** — an empty/unknown reason code in the banner, or an unknown mode in the chip.
+- **`█` / `░`** (`#` / `.` ASCII) — the AUTO-LOOP cycle-progress bar fill.
+- **`KEY)verb`** — the uniform hotkey-token shape on the hint band (`M)ode`, `A)nalyze`, …).
+
+The full cross-surface marker set (`✓ · ? ⊘ ★ ✦ ○ —` and the liveness glyphs) is the shared dictionary
+— see [visual-language](/surfaces/visual-language.md) `[ASPIRATIONAL]`; the markers above are the ones
+this surface actually renders.
+
+## Feel
+
+**Calm until it needs you, then unmissable.** The interaction contract is quiet at steady state — one
+green chip, a low-key `→` telemetry channel, a cyan hint band that reads as chrome — and it stays out of
+the way while the taught app covers the known. The instant autopilot meets an unknown screen the register
+flips hard: a bold-yellow `!` banner that claims height ahead of everything optional, the chip snapping to
+the yellow Human register, and the teach triad placed exactly where the halt happened. And the single
+place one keystroke could spend real money — the launch confirm — is dressed in the loudest tone the
+palette owns (red + reverse), because the surface would rather look alarming than let an unguarded Enter
+burn a turn. Terminal-native, semantic-monochrome-plus, honest: it names the actor, shows the keys it
+presses, and never invents a reason it doesn't have.
+
+# Code divergence
+
+The reborn contract above is the target; the current code still carries pre-reborn framing in four
+places (DOCS WIN — recorded, not silently reconciled):
+
+- **Mode badges are a four-way set that frames the app as AI.** `spectate_layout._MODE_BADGES` maps
+  `ai_pilot → "AI-PILOT"`, `auto_loop → "AUTO-LOOP"`, `human → "MANUAL — YOU HAVE CONTROL"`,
+  `spectate → "SPECTATE"`, and the underlying control-lock mode is literally named `ai_pilot`
+  (`control_lock.py`). The reborn mode line is an **App/Human dual**: the autopilot holder must read
+  **App** (deterministic autopilot), not "AI-PILOT", and the AI must never be a mode-line position.
+- **`M` does not toggle App↔Human here.** In `spectate_app._handle_key`, `M` cycles
+  `ai_pilot ↔ spectate` only (Human is reachable only by launching the separate `tw attach` process).
+  The reborn `M` is a single App↔Human switch with immediate, unrefusable switch-to-Human.
+- **`A`/`R`/`T` are not wired as the teach moves.** `spectate_app` binds `A` to *launch `tw attach`*
+  (not Analyze), and `R` (Record) and `T` (Assign-Trigger) are absent from the key handler entirely;
+  the `USERDOCS/aiclient_ui.md` sketch listed `A`/`R`/`T`/`M` but the teach loop behind them is not
+  implemented on this surface yet.
+- **The auto meter shows a live "AI" count.** `spectate_layout.format_autonomy_counts` renders
+  `"App {app} / AI {ai} · Hum {human}"` with a live `ai` (llm-pilot) count as a first-class slice.
+  The reborn meter is **App-vs-Human live share** with live AI ≡ 0; any AI figure is a separate
+  labeled teaching-provenance axis, not a live-drive slice.
+
+# Citations
+
+- [control-and-escalation](/architecture/control-and-escalation.md) — owns the control state machine,
+  the App↔Human/switch mechanics, and the escalation reason-code catalog this surface renders from
+  (defer, do not restate).
+- [rule-macro-engine](/architecture/rule-macro-engine.md) — the `when(screen_match + guards) → do(macro)`
+  data model the A/R/T keys assemble.
+- [app-autopilot-model](/architecture/app-autopilot-model.md) — what run/panic arm and halt.
+- [ai-teacher](/engine/ai-teacher.md) — the retrospective, on-demand teacher `A`/Analyze invokes.
+- [macros](/engine/macros.md) — the taught keystroke capture `R`/Record produces.
+- [coverage-metrics](/engine/coverage-metrics.md) — the App-vs-Human live-share meter and the
+  separate teach-provenance axis.
+- [trace-ledger](/engine/trace-ledger.md) — the `{app,human}` two-sender attribution the dual mode
+  line reflects.
+- [trainer-cockpit](/surfaces/trainer-cockpit.md) — renders this cluster and mode line in the frame.
+- [spectate-and-attach](/surfaces/spectate-and-attach.md) — the read-only viewer (no lock) versus the
+  live keyboard seat (`tw attach`, crash-safe lock release).
+- Code modules grounded against: `spectate_app.py` (`_handle_key`, control strip),
+  `spectate_layout.py` (`_MODE_BADGES`, `format_mode_badge`, `compose_control_strip`,
+  `format_autonomy_counts`, `compose_intervention_strip`), `control_lock.py` (the mode state
+  machine + `take_human` immediacy), `interactive_app.py` (`tw attach`, the live keyboard seat),
+  `intervention_labels.py` (the typed reason-code labels the STOP banner renders).
