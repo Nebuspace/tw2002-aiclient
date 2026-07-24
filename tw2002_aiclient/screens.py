@@ -301,6 +301,7 @@ class PlayShellScreen:
     def __init__(self, stdscr: curses.window, profile: ProfileRow) -> None:
         self.stdscr = stdscr
         self.profile = profile
+        self.status_line = ""  # set by app.py after the ensure_session() call
         self._chrome = curses.A_NORMAL
         self._init_colors()
 
@@ -337,6 +338,8 @@ class PlayShellScreen:
         _safe_addstr(self.stdscr, 6, 3, f"handle    {p.handle}", curses.A_NORMAL)
         _safe_addstr(self.stdscr, 7, 3, f"host      {host}", curses.A_NORMAL)
         _safe_addstr(self.stdscr, 8, 3, f"game      [{letter}]", curses.A_BOLD)
+        if self.status_line:
+            _safe_addstr(self.stdscr, 10, 3, self.status_line, curses.A_NORMAL)
         _safe_addstr(
             self.stdscr,
             max_y - 2,

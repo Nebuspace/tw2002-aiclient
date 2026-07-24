@@ -30,7 +30,46 @@ RULES:
 
 <!-- Items not yet resolved. -->
 
-<!-- (empty) -->
+### OPEN-003 — Config Bootstrap host/port: `profiles.toml [default]` literal vs server-catalog resolution — OPEN
+
+**Filed:** 2026-07-24
+**Filed by:** Samantha (impl-claudecode-aiclient), via WO-P2-020 Wave-1 review
+**Edge type:** Conflict (canon text vs greenfield config schema)
+
+**Question:**
+`canon/architecture/session-engine.md` Config Bootstrap specifies the host/port precedence ending in
+`config/profiles.toml [default]` — implying host/port are read *directly* from the `[default]`
+profile. But the greenfield config schema (`config/profiles.toml.example` + `config/servers.toml` +
+`tw2002_aiclient/session/credentials.py`) models a profile's connection coordinates PRIMARILY via a
+`server` field — a catalog key into `servers.toml`, documented as *preferred* — with `host`/`port`
+only as optional overrides; `credentials.list_profile_summaries()` already resolves
+profile → server-catalog → host/port. WO-P2-020's `env.py` implemented canon's literal text (a direct
+`[profile] host/port` read), which **cannot resolve the preferred `server = "…"` profile shape** (it
+hard-errors on it) and stands up a *second* host/port resolver diverging from `credentials.py`'s
+catalog-aware one.
+
+**Why it matters:**
+The daemon (`env.py`) and the TUI profile-picker (`credentials.py`) would disagree on where a profile
+connects; a catalog-only profile — the documented *preferred* shape — can't be daemon-resolved. Two
+divergent resolvers for the same fact is a latent inconsistency bug.
+
+**Options considered:**
+- **A (recommended):** `env.py`'s `profiles.toml` fallback resolves THROUGH the server catalog (reuse/
+  mirror `credentials.py`): profile → `server` key → `servers.toml` host/port, explicit `host`/`port`
+  as override. Update canon Config Bootstrap to state the catalog indirection. One resolver; honors the
+  schema's preferred field; a superset of canon's current text.
+- **B:** Canon is literal — daemon host/port bootstrap reads `profiles.toml [default]` host/port
+  directly; the server catalog is a TUI-only concern. (Contradicts `profiles.toml.example` naming
+  `server` the preferred field.)
+
+**Unambiguous kernel built while waiting:**
+WO-P2-020 proves via the CLI/env tier (`TW2002_HOST`/`TW2002_PORT`) — which canon and schema agree on
+and `env.py` implements correctly; the fake-harness proof does not exercise the
+`profiles.toml`-vs-catalog branch. Monk-A's canon-literal `env.py` fallback is retained as-is
+(conformant to canon's *current* text); no divergence silently "fixed." Resolution (Option A) is a
+follow-on refinement WO, not a 020 blocker.
+
+<!-- (end OPEN-003) -->
 
 ---
 

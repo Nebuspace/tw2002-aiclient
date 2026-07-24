@@ -6,6 +6,7 @@ import os
 
 import curses
 
+from tw2002_aiclient import adapters
 from tw2002_aiclient.screens import (
     BankViewScreen,
     CreateFormScreen,
@@ -132,6 +133,15 @@ def _run_create(stdscr: curses.window) -> str:
 def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
     """Bind profile to a fresh play-shell placeholder; Esc ends the binding."""
     play = PlayShellScreen(stdscr, profile)
+    play.status_line = "Ensuring session…"
+    play.draw()  # show the ensuring state during the (blocking) wait below
+    # no_auto_arm=True: ensure only reaches main_command and stops, even if
+    # the profile itself enables autopilot -- no surprise auto-arm here.
+    result = adapters.ensure_session(profile.name, no_auto_arm=True)
+    if result.ok:
+        play.status_line = f"session ready — {result.classification}"
+    else:
+        play.status_line = f"ensure failed — {result.reason}: {result.detail}"
     while True:
         play.draw()
         key = stdscr.getch()

@@ -3,7 +3,7 @@ TWGS screen fixture (see tests/fixtures/, captured live per DESIGN.md §12)."""
 
 import os
 
-from twclient.classify import classify, classify_screen, is_probable_secret_prompt
+from tw2002_aiclient.session.classify import classify, classify_screen, is_probable_secret_prompt
 
 FIXTURE_DIR = os.path.join(os.path.dirname(__file__), "fixtures")
 

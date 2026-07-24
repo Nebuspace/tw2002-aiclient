@@ -1,0 +1,396 @@
+"""Login Automaton (canon: `canon/architecture/login-automaton.md`).
+
+A classification-driven expect/respond engine that drives a cold (or
+mid-flow) TWGS-direct socket to the in-game `Command [TL=...]` prompt:
+
+  name prompt (blank -- "ENTER for none")
+    -> door-select menu ("Select a game :" -> game_letter)
+    -> module-entry menu ("T - Play Trade Wars 2002" -> "T")
+    -> "What is your name?" -> handle
+    -> "Use ANSI graphics?" -> Y
+    -> "Show today's log?" -> N
+    -> branch:
+         NEW:      "start a new character?" -> Y
+                    -> password CREATE (generate + save immediately,
+                       resend identically through any "didn't match"
+                       retries)
+                    -> "(N)ew Name or (B)BS Name" -> B
+                    -> ship name -> confirm -> planet name
+                    -> "Planet command" -> Q
+                    -> Command [TL=...]
+         RETURNING: password CHECK (saved credential, sent once; a
+                    wrong/stale saved password is a hard failure, never
+                    guessed/retried past _MAX_PASSWORD_RETRIES)
+                    -> Command [TL=...]
+
+Ported from `archive/pre-rebirth-2026-07-23/code/twclient/login.py`
+(WO-P2-020, Wave-3) -- reactive/order-independent by design: every
+iteration re-classifies the CURRENT screen and dispatches on that, so
+interstitials (pause_key, inactivity warnings, "been on today", "clear
+some avoids?") never desync it. This is also what makes `ensure`
+idempotent for free -- calling it against a screen already mid-flow just
+resumes the unmet suffix.
+
+**WO-P2-020 Wave-3 CUTS vs the archive module** (see this module's own
+inline comments for the exact archive line refs):
+  - `_resolve_front_end` / the server-catalog `front_end` (direct/bbs/auto)
+    gate (archive login.py:199-205, 288-346) -- depends on `servers.py`,
+    not ported. Every profile is driven as a direct TWGS connection; a
+    later WO can reintroduce the gate once a front-end catalog exists.
+  - `register_with_name_bank` + the `bank_draw` handle-collision branch
+    (archive login.py:456-469, 550-611) -- depends on `name_bank.py`, not
+    ported. A profile must set its own `handle` (or opt into
+    `allow_register` with a handle it's fine reusing every run); no
+    drawn-identity retry loop exists yet.
+  - `credentials.generate_password` (archive credentials.py:281-284) --
+    the ported `credentials.py` (WO-P0-005/WO-P1-012) only landed
+    read-side `get_password`. `_fresh_password()` below is a small local
+    mirror of the same CSPRNG/alnum/8-char shape until a follow-on WO
+    promotes it into `credentials.py` proper.
+
+The password NEVER touches this module's return values, exceptions, or
+any log call -- every send of it goes through `settle.send_and_confirm`'s
+underlying `session.send(..., secret=True)`, which routes to the
+transcript logger's redacted write (see
+`canon/doctrine/secrets-and-credentials.md`).
+"""
+
+import re
+
+from .classify import classify_screen
+from .settle import send_and_confirm
+
+_MAX_STEPS = 60
+_STEP_SETTLE_TIMEOUT_S = 12.0
+_MAX_PASSWORD_RETRIES = 6
+_STAGNANT_ROUNDS_LIMIT = 3
+
+# -- known nuisance interjections, matched on raw text regardless of
+# classification, checked before the main per-classification dispatch so
+# they can't desync any branch.
+_SHOW_LOG_RE = re.compile(r"show\s+today.?s\s+log", re.I)
+_INACTIVITY_RE = re.compile(r"inactivity\s+warning|critical\s+inactivity", re.I)
+# RETURNING re-enter interstitial: TWGS shows "You have been on today ..."
+# after password, sometimes alone after `[Pause]` is dismissed -- not
+# covered by the pause_key anchor, so without this it lands in `unknown`
+# and wedges the automaton in automaton_stuck. Matched on the CURRENT
+# prompt line (or the last non-empty line when the prompt is blank) --
+# NOT on stale scrollback above an already-active main_command prompt.
+_BEEN_ON_TODAY_RE = re.compile(r"you\s+have\s+been\s+on\s+(?:the\s+game\s+)?today", re.I)
+# After re-enter, TWGS may ask whether to clear the avoid list. Optional
+# Y/N -- default N (keep avoids; clearing would wipe trader navigation
+# memory). Override via profile `clear_avoids_on_login = true`.
+_CLEAR_AVOIDS_RE = re.compile(
+    r"do\s+you\s+wish\s+to\s+clear\s+some\s+avoids\s*\?\s*\(\s*Y\s*/\s*N\s*\)",
+    re.I,
+)
+
+# -- sub-step text matches inside the NEW-registration branch that don't
+# warrant their own classify.py anchor (narrow, single-purpose, only ever
+# meaningful mid-registration) -- matched against the CURRENT prompt line
+# only (never the whole screen -- pyte doesn't clear cells the server
+# never overwrites, so an earlier sub-step's own prompt text lingers
+# on-screen well after being answered; a whole-text match would re-fire
+# on that stale scrollback).
+_MODULE_ENTRY_MENU_RE = re.compile(r"T\s*-\s*Play\s+Trade\s*Wars\s*2002", re.I)
+_TRADER_NAME_CHOICE_RE = re.compile(r"\(N\)ew\s+Name\s+or\s+\(B\)BS\s+Name", re.I)
+_SHIP_NAME_PROMPT_RE = re.compile(r"name\s+your\s+ship", re.I)
+_SHIP_CONFIRM_RE = re.compile(r"is\s+what\s+you\s+want\s*\?", re.I)
+_PLANET_NAME_PROMPT_RE = re.compile(r"name\s+your\s+home\s+planet", re.I)
+_PLANET_NAME_BOX_RE = re.compile(r"^\[-+\]$")
+_PLANET_COMMAND_RE = re.compile(r"planet\s+command", re.I)
+_OUTER_NAME_PROMPT_RE = re.compile(r"enter\s+for\s+none", re.I)
+
+# -- NEW-branch prompt-coverage extension point -----------------------------
+#
+# (pattern, response) pairs checked only while `state["registering"]` is
+# True, after every established sub-step above -- so a real, currently
+# recognized step always wins first. Every response here must be a purely
+# cosmetic/non-committal (Y/N or similar) confirmation with NO game-state
+# effect -- never a GUESS at a gameplay-affecting choice. A pattern that
+# doesn't match anything here still falls through to the same
+# unrecognized-screen/`automaton_stuck` path every other unrecognized
+# screen already uses -- never guessed, never sent blind.
+_NEW_BRANCH_VARIANTS = [
+    (re.compile(r"enable\s+the\s+weekly\s+news\s+digest\??", re.I), "N"),
+]
+
+
+class LoginError(Exception):
+    """The automaton could not make progress toward the target
+    classification -- either a screen it doesn't recognize repeated
+    _STAGNANT_ROUNDS_LIMIT times running, the step budget ran out, or a
+    RETURNING login had no saved password / exhausted retries. Always
+    raised rather than guessing -- a stuck automaton must fail loudly,
+    never send a keystroke it isn't sure about."""
+
+
+class LoginProfile:
+    """Bounded profile shape `run_login()` needs to drive one login
+    (WO-P2-020 Wave-3 CUT vs archive credentials.py:90-143's `Profile`):
+    no server-catalog `server` key, `crawl_sacrificial`, or
+    `autonomous`/`autopilot` fields -- those belong to surfaces
+    (`servers.py`'s multi-front-end resolution, `autopilot.py`) that
+    haven't landed yet. `protocol.py`'s `ensure` handler builds one of
+    these straight from `config/profiles.toml`."""
+
+    def __init__(self, name, handle, game_letter, allow_register=False,
+                 ship_name=None, planet_name=None, clear_avoids_on_login=False):
+        self.name = name
+        self.handle = handle
+        self.game_letter = game_letter
+        self.allow_register = bool(allow_register)
+        self.ship_name = ship_name or (f"{handle}Ship" if handle else None)
+        self.planet_name = planet_name or (f"{handle}World" if handle else None)
+        self.clear_avoids_on_login = bool(clear_avoids_on_login)
+
+
+def run_login(session, profile, get_password, save_password, target="main_command", trace=None):
+    """Drive `session` from wherever it currently is to `target`
+    classification. `get_password(profile_name) -> str|None` and
+    `save_password(profile_name, password)` are injected (not imported
+    directly) so this stays network/credential-store-decoupled for tests
+    -- the live path (`protocol.py`) wires them to
+    `credentials.get_password` / a local secrets-file writer (see that
+    module's `_save_password`).
+
+    Returns `(final_classification, steps_taken)`. Raises `LoginError` on
+    failure to progress. Never returns without either reaching `target`
+    or raising."""
+    state = {
+        "registering": None,  # None = undetermined yet; True/False once char_create is (or isn't) seen
+        "password": None,
+        "password_attempts": 0,
+    }
+    stagnant_rounds = 0
+    last_signature = None
+
+    for step in range(_MAX_STEPS):
+        rows = session.render()
+        text = session.render_text(rows)
+        prompt = rows[-1].strip() if rows else ""
+        cls = classify_screen(text, prompt)
+
+        if trace is not None:
+            trace.append({"step": step, "classification": cls, "prompt": prompt})
+
+        # Cleared past game-select only once we've LEFT that screen after
+        # sending the configured letter at least once this connection --
+        # never on send-confirm alone (a false-positive idle settle can
+        # confirm while the CURRENT screen is still `game_select`, which
+        # would wedge in automaton_stuck if latched there).
+        if cls != "game_select" and getattr(session, "game_select_letter_sent", False):
+            session.game_select_answered = True
+
+        if cls == target:
+            return cls, step
+
+        action = _decide(cls, text, prompt, profile, state, get_password, save_password, session)
+
+        if action is None:
+            signature = (cls, prompt)
+            stagnant_rounds = stagnant_rounds + 1 if signature == last_signature else 0
+            last_signature = signature
+            if stagnant_rounds >= _STAGNANT_ROUNDS_LIMIT:
+                raise LoginError(f"automaton_stuck:classification={cls!r}:prompt={prompt!r}")
+            # Give a still-rendering multi-part screen a moment to finish
+            # arriving before we re-classify.
+            session.wait_settle(timeout=_STEP_SETTLE_TIMEOUT_S)
+            continue
+
+        send_text, secret, wait_hint = action
+        # TWGS menu-style single-key selections (game_select's "Select a
+        # game :") must NOT get a trailing CRLF -- settle.py's live
+        # phantom-blank-line hazard.
+        enter = cls != "game_select"
+        _reason, _elapsed, confirmed = send_and_confirm(
+            session, send_text, confirm_prompt=wait_hint, enter=enter, secret=secret, timeout_s=_STEP_SETTLE_TIMEOUT_S
+        )
+        if cls == "game_select":
+            session.game_select_letter_sent = True
+        if not confirmed:
+            # The send went out, but the resulting screen was never
+            # positively confirmed -- never assume it landed as intended.
+            # Folded into the SAME stagnation budget an unrecognized
+            # screen already uses: a genuinely transient settle-race (a
+            # slow multi-part redraw) gets a few more loop iterations to
+            # resolve itself via re-classification on the next pass,
+            # while a persistently failing confirm still hits the
+            # existing retry ceiling instead of spinning forever.
+            signature = (cls, prompt, "unconfirmed")
+            stagnant_rounds = stagnant_rounds + 1 if signature == last_signature else 0
+            last_signature = signature
+            if stagnant_rounds >= _STAGNANT_ROUNDS_LIMIT:
+                raise LoginError(
+                    f"automaton_send_unconfirmed:classification={cls!r}:prompt={prompt!r}:reason={_reason}"
+                )
+            continue
+
+        stagnant_rounds = 0
+        last_signature = None
+
+    raise LoginError(f"automaton_exhausted_steps:{_MAX_STEPS}")
+
+
+def _decide(cls, text, prompt, profile, state, get_password, save_password, session):
+    """Return `(send_text, secret, wait_prompt_hint)` for the current
+    screen, or `None` if nothing in the table matches (caller treats that
+    as possible-stagnation and re-polls). Order matters only where two
+    rules could otherwise both look plausible; see inline notes.
+
+    `session` is threaded through only for the game_select branch below
+    -- it READS the PER-CONNECTION `game_select_answered` flag (see
+    session.py), deliberately not folded into `state` (this function's
+    other bookkeeping) because the vector this guards against is a LATER
+    `run_login` call -- a later `ensure` against the SAME connection --
+    with its own fresh `state` dict; a per-run flag would never see the
+    earlier answer at all. This function only ever READS the flag, never
+    sets it: `run_login` itself latches it True, and only once the send
+    is actually CONFIRMED -- latching at decide-time, before the send is
+    even attempted, would be a wedge hazard an unconfirmed or
+    outright-failed send could never recover from."""
+
+    # -- nuisances first: these can interleave with any branch. ----------
+    if cls == "pause_key":
+        return "", False, None
+    if _BEEN_ON_TODAY_RE.search(prompt):
+        return "", False, None
+    if cls == "unknown" and not prompt.strip():
+        for line in reversed(text.splitlines()):
+            stripped = line.strip()
+            if not stripped:
+                continue
+            if _BEEN_ON_TODAY_RE.search(stripped):
+                return "", False, None
+            break
+    if _SHOW_LOG_RE.search(text):
+        return "N", False, None
+    if _CLEAR_AVOIDS_RE.search(prompt) or _CLEAR_AVOIDS_RE.search(text):
+        # Keep avoids unless the profile explicitly opts in (rare).
+        clear = bool(getattr(profile, "clear_avoids_on_login", False))
+        return ("Y" if clear else "N"), False, None
+    if _INACTIVITY_RE.search(text):
+        # A keepalive nudge mid-automaton -- harmless blank Enter resets
+        # the server's idle clock without altering any pending field entry.
+        return "", False, None
+
+    # -- outer BBS-level connection name vs. the TW2002 module's own
+    # character-handle prompt: both anchor to login_name, disambiguated
+    # by the exact wording captured live ("... (ENTER for none)").
+    if cls == "login_name":
+        if _OUTER_NAME_PROMPT_RE.search(prompt):
+            return "", False, None
+        return profile.handle, False, None
+
+    if cls == "ansi_prompt":
+        return "Y", False, None
+
+    if cls == "game_select":
+        # A real game-select prompt is answered exactly ONCE per TCP
+        # connection -- a SECOND `game_select` classification on this
+        # same connection is BY DEFINITION a misfire (most likely a
+        # stale pyte buffer from earlier in the connection, classified
+        # via a later ordinary screen sharing the same generic prompt),
+        # not a genuine second game-select screen to answer. Refusing
+        # here -- returning None, the same "nothing matched" signal any
+        # other unrecognized screen produces -- routes it through the
+        # SAME stagnation/`automaton_stuck` fail-loud path, never a blind
+        # keystroke.
+        if getattr(session, "game_select_answered", False):
+            return None
+        return profile.game_letter, False, None
+
+    if cls == "menu" and _MODULE_ENTRY_MENU_RE.search(text):
+        return "T", False, None
+
+    if cls == "char_create":
+        # Auto-creating a character on a real server is a policy call,
+        # not a pure mechanics one -- refuse BEFORE the "Y" that starts
+        # registration if the profile hasn't explicitly opted in. Checked
+        # every time this classification is seen, not just once, so a
+        # non-opted-in profile can never be talked into registering no
+        # matter how it got to this screen.
+        if not getattr(profile, "allow_register", False):
+            raise LoginError(
+                f"registration_not_permitted:profile={profile.name}:set allow_register=true to opt in"
+            )
+        # This prompt only appears when the handle was NOT found in the
+        # player database -- answering it is structurally always "yes,
+        # create one".
+        state["registering"] = True
+        return "Y", False, None
+
+    if cls == "login_password":
+        if state["registering"] is None:
+            # Reached a password gate without ever seeing char_create --
+            # the handle WAS found in the database. RETURNING branch.
+            state["registering"] = False
+
+        if state["registering"]:
+            if state["password"] is None:
+                state["password"] = get_password(profile.name) or _fresh_password()
+                # Saved the moment it's chosen, before the first send --
+                # maximally recoverable even if a later step fails. The
+                # value is fixed for the whole run, so an early save is
+                # never stale.
+                save_password(profile.name, state["password"])
+        else:
+            if state["password"] is None:
+                saved = get_password(profile.name)
+                if saved is None:
+                    raise LoginError(
+                        f"returning_no_saved_password:profile={profile.name}:handle={profile.handle}"
+                    )
+                state["password"] = saved
+
+        state["password_attempts"] += 1
+        if state["password_attempts"] > _MAX_PASSWORD_RETRIES:
+            raise LoginError(f"password_retries_exhausted:profile={profile.name}")
+        return state["password"], True, None
+
+    # These sub-step matches are against the CURRENT prompt line only
+    # (never the whole screen -- see the regexes' own module-level
+    # comment for the stale-scrollback trap this avoids).
+    if _TRADER_NAME_CHOICE_RE.search(prompt):
+        return "B", False, None
+
+    if _SHIP_NAME_PROMPT_RE.search(prompt):
+        return profile.ship_name, False, None
+
+    if _SHIP_CONFIRM_RE.search(prompt):
+        return "Y", False, None
+
+    # The planet-name prompt is the one sub-step whose current bottom
+    # line is a generic input-box marker ("[---...---]"), not text
+    # containing "planet" -- so it's matched with a compound condition
+    # instead: the box-marker SHAPE as the current prompt, plus the
+    # "name your home planet" wording anywhere in the full screen.
+    if _PLANET_NAME_BOX_RE.search(prompt) and _PLANET_NAME_PROMPT_RE.search(text):
+        return profile.planet_name, False, None
+
+    if _PLANET_COMMAND_RE.search(prompt):
+        return "Q", False, None
+
+    # Modded/variant-server NEW-branch extras. Scoped to
+    # state["registering"] so this can never fire for the RETURNING
+    # branch or before char_create has even been seen. Checked LAST,
+    # after every established sub-step above, so a real recognized step
+    # always takes priority.
+    if state["registering"]:
+        for pattern, response in _NEW_BRANCH_VARIANTS:
+            if pattern.search(prompt):
+                return response, False, None
+
+    return None
+
+
+def _fresh_password(length=8):
+    """WO-P2-020 Wave-3 CUT: mirrors archive credentials.py:281-284's
+    `generate_password` (CSPRNG, alnum-only, 8 chars) -- the ported
+    `credentials.py` only landed read-side `get_password` (Wave-1); this
+    stays a small local helper until a follow-on WO promotes it there."""
+    import secrets
+    import string
+
+    alphabet = string.ascii_letters + string.digits
+    return "".join(secrets.choice(alphabet) for _ in range(length))

@@ -1,6 +1,6 @@
 """Settle-detection timing tests with a fake clock — no real sleeping."""
 
-from twclient.settle import send_and_confirm, wait_for_settle, wait_until_settled
+from tw2002_aiclient.session.settle import send_and_confirm, wait_for_settle, wait_until_settled
 
 
 class ScriptedSession:
