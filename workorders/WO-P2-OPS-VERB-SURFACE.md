@@ -1,8 +1,8 @@
 # WO-P2-OPS-VERB-SURFACE — Ops CLI verb inventory + wire plan
 
-> Status: **WATCHHUB-PORT DONE** pending Accept · tip `78bb983`
+> Status: **slice E2 DONE** pending Accept · tip `1825758`
 > Seat: `impl-aiclient-cursor`
-> Refs: hub banked gap after WO-P0-TW-SHIM · `canon/architecture/cli-verbs.md` ·
+> Refs: hub banked gap · `canon/architecture/cli-verbs.md` ·
 > `canon/surfaces/spectate-and-attach.md`
 
 ## Goal
@@ -10,39 +10,34 @@
 Truth-align README with live `./tw --help`, inventory daemon/protocol vs CLI, and
 stage ordered execute slices to grow the verb table one WO at a time.
 
-## Live surface (post slice E / docs)
+## Live surface (post slice E2)
 
 ### CLI (`tw2002_aiclient/session/cli.py`)
 
 | Verb | Live? | Notes |
 |------|-------|-------|
 | `status` … `history` | **YES** | slices A–C |
+| `watch` | **YES** | **E2** · NDJSON/`print_response` tail over daemon `subscribe` · `--frames N` |
 | `start` | **NO** | slice D docs-only |
-| `watch` | **NO CLI** | **WatchHub substrate LIVE** (WO-P2-WATCHHUB-PORT) — daemon `subscribe` streams settle-edge events; `tw watch` CLI = slice E2 |
 | `state` | **NO** | deferred — `state_parser` not ported |
 
-`./tw --help` subparsers: `{status,ensure,screen,stop,do,send,read,history}`
-(unchanged — no fake `watch` verb).
+`./tw --help` subparsers:
+`{status,ensure,screen,stop,do,send,read,history,watch}`.
 
-### Slice E rationale (`tw watch` CLI) + WatchHub port
+### WatchHub + CLI
 
-Canon: settle-edge push-stream via `WatchHub` (`canon/surfaces/spectate-and-attach.md`).
-**WO-P2-WATCHHUB-PORT DONE:** `tw2002_aiclient/session/watch.py` + daemon hub
-start/stop + `_handle_subscribe` + `status.subscribers`. CLI `tw watch` still
-deferred (E2) so `./tw --help` stays honest until the NDJSON tail lands.
+**WO-P2-WATCHHUB-PORT:** `watch.py` + daemon `_handle_subscribe` + `status.subscribers`.
+**WO-P2-OPS-VERB-E2:** `tw watch` CLI — read-only lifetime stream; Ctrl-C / `--frames`
+closes the socket without driving the game.
 
 ## Recommended execute slices
 
 | Slice | Verbs | Status |
 |-------|-------|--------|
-| **A** | `screen` · `stop` | **DONE** |
-| **B** | `do` · `send` · `read` | **DONE** |
-| **C** | `history` · (`state` deferred) | **history DONE** · state banked |
-| **D** | `start` | **DONE (docs-only)** |
-| **E** | `watch` CLI | **docs-only** · substrate via **WATCHHUB-PORT** |
-| **E2** | `tw watch` CLI wire | queued (needs WatchHub — now live) |
-| **F–G** | spectate·attach / menumap… | queued (F needs WatchHub) |
+| **A–D** | … | **DONE** (D docs-only) |
+| **E** | `watch` honesty | **DONE (docs-only)** |
+| **WATCHHUB** | substrate | **DONE** |
+| **E2** | `tw watch` CLI | **DONE** pending Accept |
+| **F–G** | spectate·attach / menumap… | queued |
 
-**Accept for a docs slice:** README + WO honesty · no fake verb on help · STATUS
-disclosure. **Accept for a wire slice:** verb on help · FakeSession · path-leak ·
-full suite green.
+**Accept for a wire slice:** verb on help · FakeSession · path-leak · full suite green.

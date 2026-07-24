@@ -13,7 +13,7 @@ from tw2002_aiclient.session import cli
 
 # Keep in sync with README Verb reference (shipped) + cli.build_parser().
 _SHIPPED_VERBS = frozenset(
-    {"status", "ensure", "screen", "stop", "do", "send", "read", "history"}
+    {"status", "ensure", "screen", "stop", "do", "send", "read", "history", "watch"}
 )
 
 
@@ -27,6 +27,7 @@ def test_parser_shipped_verb_allowlist():
     send = parser.parse_args(["send", "x"])
     read = parser.parse_args(["read"])
     history = parser.parse_args(["history"])
+    watch = parser.parse_args(["watch"])
     assert status.func is cli.cmd_status
     assert ensure.func is cli.cmd_ensure
     assert screen.func is cli.cmd_screen
@@ -35,6 +36,7 @@ def test_parser_shipped_verb_allowlist():
     assert send.func is cli.cmd_send
     assert read.func is cli.cmd_read
     assert history.func is cli.cmd_history
+    assert watch.func is cli.cmd_watch
     # Subparser choices are exactly the live verb table.
     sub = next(
         a for a in parser._actions if getattr(a, "choices", None) is not None

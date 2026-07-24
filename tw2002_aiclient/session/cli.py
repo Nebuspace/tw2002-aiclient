@@ -1,10 +1,10 @@
-"""``tw`` — the one-shot CLI. Talks to ``twd`` over its unix socket.
+"""``tw`` — the backend/ops CLI. Talks to ``twd`` over its unix socket.
 
-Every verb is a single connect -> send JSON -> read JSON line -> disconnect
-round trip, so a Bash-driving agent never has to hold a socket open (see
-canon's `architecture/session-engine.md`, "The Unix-Socket JSON Verb
-Protocol"). Verb table starts empty (WO-P0-004) and grows one WO at a time;
-``ensure``/``status`` land here under WO-P2-020 -- APPEND new verbs to
+Most verbs are a single connect -> send JSON -> read JSON line -> disconnect
+round trip. ``tw watch`` is the exception: a lifetime ``subscribe`` stream
+(NDJSON settle-edge events) until ``--frames N`` or Ctrl-C (see canon
+`architecture/session-engine.md`). Verb table grows one WO at a time;
+``ensure``/``status`` land under WO-P2-020 -- APPEND new verbs to
 ``build_parser()``, never rewrite an already-landed one.
 """
 
@@ -361,6 +361,52 @@ def cmd_history(args):
     return 0 if resp.get("ok") else 1
 
 
+def cmd_watch(args):
+    """WO-P2-OPS-VERB-E2: tail the settle-edge push-stream (read-only).
+
+    Opens a lifetime ``subscribe`` connection — never sends game input.
+    ``--frames N`` exits after N events (transcript-friendly); otherwise
+    runs until Ctrl-C / disconnect. SIGINT closes the socket cleanly.
+    """
+    run_dir = _resolve_run_dir(args.run_dir)
+    sock_path = env.socket_path(run_dir)
+    if not sock_path.exists():
+        print("ERROR: daemon_not_running")
+        return 1
+    s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    try:
+        s.connect(str(sock_path))
+        s.sendall((json.dumps({"verb": "subscribe", "args": {}}) + "\n").encode("utf-8"))
+    except OSError as e:
+        print(f"ERROR: connect_failed:{e}")
+        s.close()
+        return 1
+    f = s.makefile("rb")
+    count = 0
+    try:
+        while True:
+            line = f.readline()
+            if not line:
+                break
+            try:
+                event = json.loads(line.decode("utf-8"))
+            except json.JSONDecodeError:
+                continue
+            print_response(event, args)
+            count += 1
+            if args.frames is not None and count >= args.frames:
+                break
+    except KeyboardInterrupt:
+        pass
+    finally:
+        try:
+            f.close()
+        except OSError:
+            pass
+        s.close()
+    return 0
+
+
 # -- parser -------------------------------------------------------------
 
 def build_parser() -> argparse.ArgumentParser:
@@ -474,6 +520,24 @@ def build_parser() -> argparse.ArgumentParser:
                      help="daemon run directory override (default: project-rooted run/)")
     sp.add_argument("--json", action="store_true", help="machine-parseable JSON output")
     sp.set_defaults(func=cmd_history)
+
+    sp = sub.add_parser(
+        "watch",
+        help="tail the settle-edge push-stream (read-only spectator feed)",
+    )
+    sp.add_argument(
+        "--frames",
+        type=int,
+        default=None,
+        metavar="N",
+        help="exit after N events (default: run until Ctrl-C)",
+    )
+    sp.add_argument("--run-dir", default=None, metavar="PATH", dest="run_dir",
+                     help="daemon run directory override (default: project-rooted run/)")
+    sp.add_argument("--json", action="store_true", help="machine-parseable JSON output")
+    sp.add_argument("--compact", action="store_true",
+                     help="screen only — omit prompt/class/settled footer")
+    sp.set_defaults(func=cmd_watch)
 
     return parser
 
