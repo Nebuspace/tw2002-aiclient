@@ -11,16 +11,17 @@ Authored from a 3-worker read-only fan-out (cockpit↔canon inventory · Accept/
 
 ## 0. Strategic framing (absorb before execute)
 
-- **Not materialized:** PWO-030…033 exist only as inventory rows; this PREP authors their Accept/Proof.
+- **Materialization:** PWO-030 EXECUTE WO → `workorders/WO-P3-030-play-chrome-nav.md` (2026-07-24). PWO-031…033 remain inventory+PREP only until Fable chrome execute.
 - **The live `tw2002_aiclient/screens.py` is a single-`stdscr` launcher — do NOT extend it for the frame.** `PlayShellScreen` (`screens.py:295-358`) is an explicit placeholder (`PLAY_SUBTITLE = "(placeholder — cockpit chrome is a later WO)"`): one single-line `stdscr.box()`, flat metadata rows, `status_line`, Esc footer.
 - **Proven geometry lives in the archive and is NOT importable** (`pyproject.toml` packages `tw2002_aiclient*` only; `import twclient` → ModuleNotFoundError). So the execute must **port `frame_layout` + the width constants into a NEW pure geometry function in `tw2002_aiclient`** (e.g. `tw2002_aiclient/cockpit/layout.py::frame_layout(lines, cols) -> regions`). Canon's constants (`VIEWPORT_W/H=82/26`, `PRIORITIES_W=HUD_GUTTER_W=36`, fold floors `154/138/118/82/60`) are the **target contract**, cited as numbers, not live symbols.
 
 ## 1. Per-PWO tightened Accept + Proof
 
-### PWO-030 — Play-chrome navigation (VERIFY; likely already satisfied)
+### PWO-030 — Play-chrome navigation (VERIFY; EXECUTE WO materialized)
+- **EXECUTE WO:** `workorders/WO-P3-030-play-chrome-nav.md` (Accept/Proof tightened to proveable-now; gaps banked).
 - **Live state:** DONE in substance — Esc→`"back"` (`screens.py:354`), clean launcher return (`app.py:151-152`), no transient carried back; `TW2002_HANDOFF_SMOKE` path at `app.py:180-199`.
-- **Accept:** Enter on a healthy launcher row → play shell with that profile's handle visible; Esc → clean launcher return (router `"back"`, not process exit); re-entry carries ZERO play-shell transient. **Daemon-survival (ADR-001 app-disposable/daemon-continuity):** Esc must NOT tear down the session — after return, `tw status` still reports the daemon alive/reattachable. **Out of scope (explicit):** the "Stop the daemon too? (Yes/No)" exit-confirm popup — canon assigns it to mode-line N5 (`trainer-cockpit.md:171-180`), Phase 5. 030 asserts only Esc→launcher with daemon survival.
-- **Proof:** Layer-B pty (mirror `test_interactive_app.py::_run_attach_in_pty`, 24×80, skip-guard): select+Enter → `_find_text(grid,"<handle>")`; Esc(27) → launcher reappears, play-only text gone; daemon-survival leg against an isolated FakeSession (assert session still live after Esc; never touch `run/twd.sock`).
+- **Accept (tightened):** Enter → handle visible; Esc → `"back"` + launcher reappears (no mid-nav process exit); zero play-shell transient on re-entry; Esc must not issue stop/teardown. **Out of scope:** N5 exit-confirm (Phase 5); cockpit chrome (031+).
+- **Proof (locked 2026-07-24):** `.venv/bin/python -m pytest tests/test_play_chrome_nav.py tests/test_play_esc_daemon_survival.py -q` (7 passed). Lane-1 Layer-B pty Esc↔launcher; lane-2 structural daemon-survival — `WO-P3-030-daemon-survival-VERIFY.md`. **GAP banked:** live FakeSession PID/sock still-alive e2e (over-claim without attach binding).
 
 ### PWO-031 — Outer border frame (BUILD)
 - **Live state:** MISSING — only single-line `stdscr.box()`; no double-line, no two-weight system.
