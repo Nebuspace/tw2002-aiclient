@@ -10,8 +10,8 @@ carries `"error"`.
 **WO-P2-020 Wave-3 SUBSET + WO-P2-025 control-lock + WO-P2-OPS-VERB-B** --
 ported from `archive/pre-rebirth-2026-07-23/code/twclient/protocol.py`.
 Live one-shot verbs: `ensure`, `status`, `screen`, `stop`, `do`, `send`,
-`read`. Lifetime `attach` is handled in `daemon.py` (not here).
-`history`/`state`/`set_mode`/`subscribe`/`crawl_start`/`autopilot_*`/
+`read`, `history`. Lifetime `attach` is handled in `daemon.py` (not here).
+`state`/`set_mode`/`subscribe`/`crawl_start`/`autopilot_*`/
 `record_*`/`replay`/`mine`/`play*`/`haggle`/`list_skills` remain later WOs
 -- `dispatch()` returns `unknown_verb` for them. Drive verbs
 (`ensure`/`do`/`send`) ride `_driving_dispatch` (acquire_driver /
@@ -215,6 +215,14 @@ def dispatch(session, verb, args, server):
         resp = build_response(session, settled_reason=reason, extra={"elapsed": elapsed})
         session.record_history("read", args, resp["prompt"], resp["classification"], reason)
         return resp
+
+    if verb == "history":
+        # WO-P2-OPS-VERB-C (partial): in-memory session history ring.
+        # `state` waits on state_parser port (absent) — not in this slice.
+        n = int(args.get("n", 20) or 20)
+        if n < 0:
+            n = 0
+        return {"ok": True, "history": list(session.history[-n:])}
 
     return {"ok": False, "error": f"unknown_verb:{verb}"}
 

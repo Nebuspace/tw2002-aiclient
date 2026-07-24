@@ -353,6 +353,14 @@ def cmd_read(args):
     return 0 if resp.get("ok") else 1
 
 
+def cmd_history(args):
+    """WO-P2-OPS-VERB-C: recent verb/prompt history from the live session ring."""
+    run_dir = _resolve_run_dir(args.run_dir)
+    resp = send_request("history", {"n": int(args.n)}, run_dir=run_dir)
+    print_response(resp, args)
+    return 0 if resp.get("ok") else 1
+
+
 # -- parser -------------------------------------------------------------
 
 def build_parser() -> argparse.ArgumentParser:
@@ -456,6 +464,16 @@ def build_parser() -> argparse.ArgumentParser:
                      help="daemon run directory override (default: project-rooted run/)")
     sp.add_argument("--json", action="store_true", help="machine-parseable JSON output")
     sp.set_defaults(func=cmd_read)
+
+    sp = sub.add_parser(
+        "history",
+        help="recent screens/commands from the live session history ring",
+    )
+    sp.add_argument("--n", type=int, default=20, help="max entries to return (default 20)")
+    sp.add_argument("--run-dir", default=None, metavar="PATH", dest="run_dir",
+                     help="daemon run directory override (default: project-rooted run/)")
+    sp.add_argument("--json", action="store_true", help="machine-parseable JSON output")
+    sp.set_defaults(func=cmd_history)
 
     return parser
 

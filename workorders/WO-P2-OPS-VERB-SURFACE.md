@@ -1,7 +1,7 @@
 # WO-P2-OPS-VERB-SURFACE — Ops CLI verb inventory + wire plan
 
-> Status: **slice B DONE** pending Accept · tip base `88b16ac`
-> Seat: `impl-aiclient-cursor` · execute slices grow one WO at a time
+> Status: **slice C partial** — `history` DONE pending Accept · `state` deferred
+> Seat: `impl-aiclient-cursor` · tip base `a9d40bd`
 > Refs: hub banked gap after WO-P0-TW-SHIM · `canon/architecture/cli-verbs.md`
 
 ## Goal
@@ -9,58 +9,38 @@
 Truth-align README with live `./tw --help`, inventory daemon/protocol vs CLI, and
 stage ordered execute slices to grow the verb table one WO at a time.
 
-## Live surface (post slice B)
+## Live surface (post slice C / history)
 
 ### CLI (`tw2002_aiclient/session/cli.py`)
 
 | Verb | Live? | Notes |
 |------|-------|-------|
-| `status` | **YES** | `cmd_status` · daemon status JSON |
-| `ensure` | **YES** | `cmd_ensure` · spawn+login · adapters path |
-| `screen` | **YES** | `cmd_screen` · WO-P2-OPS-VERB-A |
-| `stop` | **YES** | `cmd_stop` · WO-P2-OPS-VERB-A |
-| `do` | **YES** | `cmd_do` · WO-P2-OPS-VERB-B · settle + control_lock |
-| `send` | **YES** | `cmd_send` · WO-P2-OPS-VERB-B · no settle |
-| `read` | **YES** | `cmd_read` · WO-P2-OPS-VERB-B · settle, never sends |
+| `status` | **YES** | `cmd_status` |
+| `ensure` | **YES** | `cmd_ensure` |
+| `screen` | **YES** | slice A |
+| `stop` | **YES** | slice A |
+| `do` / `send` / `read` | **YES** | slice B |
+| `history` | **YES** | slice C · session ring · secret args redacted at record time |
+| `state` | **NO** | deferred — `state_parser` not ported (~900 LOC archive); no fake skeleton |
 
-`./tw --help` subparsers: `{status,ensure,screen,stop,do,send,read}`.
+`./tw --help` subparsers: `{status,ensure,screen,stop,do,send,read,history}`.
 
-### Protocol (`session/protocol.py` dispatch)
+### Protocol
 
-| Verb | Daemon handles? | CLI wired? |
-|------|-----------------|------------|
-| `status` | YES | YES |
-| `ensure` | YES | YES |
-| `screen` | YES | YES (slice A) |
-| `stop` | YES | YES (slice A) |
-| `do` | YES | YES (slice B) |
-| `send` | YES | YES (slice B) |
-| `read` | YES | YES (slice B) |
-
-Other aspirational README verbs (`state`, `history`, `watch`, `start`, `spectate`,
-`attach`, `menumap`, `loops`, `autoloop`, `aiclient`) are **not** on the greenfield
-CLI and must not be advertised as shipped.
-
-## Honesty
-
-README Product/ops + Quickstart + Verb reference track the shipped set; Coming
-points here for remaining slices.
+| Verb | Daemon | CLI |
+|------|--------|-----|
+| …A/B verbs… | YES | YES |
+| `history` | YES | YES |
+| `state` | NO | NO |
 
 ## Recommended execute slices
 
-| Slice | Verbs | Depends | Proof sketch |
-|-------|-------|---------|--------------|
-| **A** | `screen` · `stop` | protocol already present | **DONE** |
-| **B** | `do` · `send` · `read` | settle · control_lock | **DONE** — `tests/test_cli_ops_verb_b.py` |
-| **C** | `state` · `history` | state_parser / history ring | JSON schema · redaction |
-| **D** | `start` (explicit spawn) | env/run-dir | overlap with ensure — maybe docs-only |
-| **E** | `watch` | watch hub port | event stream |
-| **F** | `spectate` · `attach` | Fable TUI / control_lock | Layer-B pty · never scoop CC mid-chrome |
-| **G** | `menumap` · `loops` · `autoloop` | later engines | after world/priority ports |
+| Slice | Verbs | Status |
+|-------|-------|--------|
+| **A** | `screen` · `stop` | **DONE** |
+| **B** | `do` · `send` · `read` | **DONE** |
+| **C** | `history` · (`state` deferred) | **history DONE** · state banked |
+| **D–G** | start / watch / spectate·attach / menumap… | queued |
 
-**Accept for a wire slice:** verb on `./tw --help` · unit/FakeSession proof · path-leak ·
-README row moves from Coming → Verb reference in the same commit · **full suite green**.
-
-## Out of scope (honesty / inventory WO)
-
-Implementing any missing verb · touching `screens.py` / `cockpit/**`.
+**Accept for a wire slice:** verb on `./tw --help` · FakeSession proof · path-leak ·
+README + allowlist · **full suite green**.

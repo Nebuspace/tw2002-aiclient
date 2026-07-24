@@ -12,7 +12,9 @@ import pytest
 from tw2002_aiclient.session import cli
 
 # Keep in sync with README Verb reference (shipped) + cli.build_parser().
-_SHIPPED_VERBS = frozenset({"status", "ensure", "screen", "stop", "do", "send", "read"})
+_SHIPPED_VERBS = frozenset(
+    {"status", "ensure", "screen", "stop", "do", "send", "read", "history"}
+)
 
 
 def test_parser_shipped_verb_allowlist():
@@ -24,6 +26,7 @@ def test_parser_shipped_verb_allowlist():
     do = parser.parse_args(["do", "d"])
     send = parser.parse_args(["send", "x"])
     read = parser.parse_args(["read"])
+    history = parser.parse_args(["history"])
     assert status.func is cli.cmd_status
     assert ensure.func is cli.cmd_ensure
     assert screen.func is cli.cmd_screen
@@ -31,6 +34,7 @@ def test_parser_shipped_verb_allowlist():
     assert do.func is cli.cmd_do
     assert send.func is cli.cmd_send
     assert read.func is cli.cmd_read
+    assert history.func is cli.cmd_history
     # Subparser choices are exactly the live verb table.
     sub = next(
         a for a in parser._actions if getattr(a, "choices", None) is not None
