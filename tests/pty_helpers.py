@@ -9,6 +9,7 @@ Scope (thin harness only):
   - winsize + openpty spawn/capture
   - ordered mid-run keystroke injection
   - pyte replay → grid / find_text / cell attrs
+  - opt-in controlling-tty claim for live-resize / SIGWINCH proofs
 
 Out of scope (deliberate):
   - cockpit chrome product UI
@@ -18,6 +19,22 @@ Out of scope (deliberate):
 
 Skip-guard for curses-in-pty suites stays in ``tests.conftest.pty_curses_supported``
 (functional probe already greenfield). Re-exported here for one-stop imports.
+
+Controlling TTY / SIGWINCH (WO-P3-PTY-CTTY)
+-------------------------------------------
+Default spawn keeps ``start_new_session=True`` and does **not** claim the
+pty slave as the child's controlling terminal. Existing 030/cockpit Layer-B
+suites rely on that path and must stay unchanged.
+
+Live-resize tests that need ``SIGWINCH`` when the parent calls
+``set_winsize(master_fd, …)`` must opt in::
+
+    capture_pty(..., claim_ctty=True)
+    capture_pty_with_keys(..., claim_ctty=True)
+
+That path still uses ``start_new_session=True`` (session leader), then a
+``preexec_fn`` that ``ioctl(0, TIOCSCTTY)`` so the slave becomes the
+controlling tty and kernel window-size changes deliver ``SIGWINCH``.
 """
 
 from __future__ import annotations
@@ -46,6 +63,25 @@ COLOR_SET_SGR_RE = re.compile(rb"\x1b\[[0-9;]*(?:3[0-7]|4[0-7]|9[0-7]|10[0-7])m"
 DEFAULT_DETACH = b"q"
 
 
+def _claim_controlling_tty(slave_fd: int) -> None:
+    """Make ``slave_fd`` this process's controlling terminal (resize opt-in).
+
+    Default ``capture_pty*`` uses ``start_new_session=True`` alone — the child
+    is session-leader-ish via Popen but never claims the pty as ctty, so
+    ``SIGWINCH`` from a later ``TIOCSWINSZ`` on the master is never delivered.
+    Call this from ``preexec_fn`` when ``claim_ctty=True``.
+    """
+    os.setsid()
+    # TIOCSCTTY: claim controlling tty. Value is platform-constant; fcntl
+    # ioctl with arg 0 is the usual Unix form.
+    try:
+        fcntl.ioctl(slave_fd, termios.TIOCSCTTY, 0)
+    except (OSError, AttributeError):
+        # AttributeError if TIOCSCTTY missing; OSError if already claimed /
+        # unsupported — leave session without ctty (same as default path).
+        pass
+
+
 def set_winsize(fd: int, rows: int, cols: int) -> None:
     """``TIOCSWINSZ`` on a pty slave — required before curses initscr sees size."""
     fcntl.ioctl(fd, termios.TIOCSWINSZ, struct.pack("HHHH", rows, cols, 0, 0))
@@ -62,6 +98,7 @@ def capture_pty(
     env: dict[str, str] | None = None,
     detach_keys: bytes = DEFAULT_DETACH,
     drain_after_s: float = 5.0,
+    claim_ctty: bool = False,
 ) -> bytes:
     """Spawn ``argv`` in a pty; stream stdout until ``stop_condition`` or timeout.
 
@@ -69,21 +106,36 @@ def capture_pty(
     Ctrl-], etc.). Drains the master while waiting so a clean child exit
     isn't wedged on a full pty buffer (archive lesson from confirm-gate
     RECORD_PATH flows).
+
+    ``claim_ctty=False`` (default): ``start_new_session=True`` only — preserves
+    existing 030/cockpit Layer-B behavior (no SIGWINCH delivery).
+
+    ``claim_ctty=True``: child ``setsid`` + ``TIOCSCTTY`` so a later
+    ``set_winsize(master_fd, …)`` can deliver ``SIGWINCH`` for live-resize
+    proofs. Opt in only from resize tests.
     """
     master_fd, slave_fd = pty.openpty()
     set_winsize(slave_fd, rows, cols)
     child_env = dict(os.environ if env is None else env)
     child_env.setdefault("TERM", "xterm")
 
-    proc = subprocess.Popen(
-        list(argv),
-        stdin=slave_fd,
-        stdout=slave_fd,
-        stderr=slave_fd,
-        cwd=str(cwd) if cwd is not None else None,
-        env=child_env,
-        start_new_session=True,
-    )
+    popen_kwargs: dict[str, Any] = {
+        "stdin": slave_fd,
+        "stdout": slave_fd,
+        "stderr": slave_fd,
+        "cwd": str(cwd) if cwd is not None else None,
+        "env": child_env,
+    }
+    if claim_ctty:
+        # Slave must stay open in the child until ioctl; pass fd via closure.
+        def _preexec() -> None:
+            _claim_controlling_tty(slave_fd)
+
+        popen_kwargs["preexec_fn"] = _preexec
+    else:
+        popen_kwargs["start_new_session"] = True
+
+    proc = subprocess.Popen(list(argv), **popen_kwargs)
     os.close(slave_fd)
 
     captured = b""
@@ -124,6 +176,7 @@ def capture_pty_with_keys(
     env: dict[str, str] | None = None,
     detach_keys: bytes = DEFAULT_DETACH,
     drain_after_s: float = 5.0,
+    claim_ctty: bool = False,
 ) -> bytes:
     """Like ``capture_pty``, plus ordered mid-run keystroke injection.
 
@@ -132,21 +185,30 @@ def capture_pty_with_keys(
     strictly in order (step N never before step N-1). ``None`` entries are
     skipped. Mirrors archive ``_run_fake_spectate_and_type_in_pty`` /
     ``test_control_panel._drive_pty``.
+
+    ``claim_ctty`` — same contract as ``capture_pty`` (default off).
     """
     master_fd, slave_fd = pty.openpty()
     set_winsize(slave_fd, rows, cols)
     child_env = dict(os.environ if env is None else env)
     child_env.setdefault("TERM", "xterm")
 
-    proc = subprocess.Popen(
-        list(argv),
-        stdin=slave_fd,
-        stdout=slave_fd,
-        stderr=slave_fd,
-        cwd=str(cwd) if cwd is not None else None,
-        env=child_env,
-        start_new_session=True,
-    )
+    popen_kwargs: dict[str, Any] = {
+        "stdin": slave_fd,
+        "stdout": slave_fd,
+        "stderr": slave_fd,
+        "cwd": str(cwd) if cwd is not None else None,
+        "env": child_env,
+    }
+    if claim_ctty:
+        def _preexec() -> None:
+            _claim_controlling_tty(slave_fd)
+
+        popen_kwargs["preexec_fn"] = _preexec
+    else:
+        popen_kwargs["start_new_session"] = True
+
+    proc = subprocess.Popen(list(argv), **popen_kwargs)
     os.close(slave_fd)
 
     pending = [s for s in steps if s is not None]

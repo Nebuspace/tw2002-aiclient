@@ -67,3 +67,16 @@ def test_set_winsize_callable():
     # Smoke: symbol exists and is callable (real ioctl needs a pty fd —
     # capture_pty exercises that path when a Layer-B suite lands).
     assert callable(set_winsize)
+
+
+def test_claim_ctty_opt_in_is_documented_kwarg():
+    """Resize tests opt in via claim_ctty=True; default stays off (no SIGWINCH)."""
+    import inspect
+
+    from tests.pty_helpers import _claim_controlling_tty, capture_pty, capture_pty_with_keys
+
+    assert callable(_claim_controlling_tty)
+    for fn in (capture_pty, capture_pty_with_keys):
+        params = inspect.signature(fn).parameters
+        assert "claim_ctty" in params
+        assert params["claim_ctty"].default is False
