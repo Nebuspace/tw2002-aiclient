@@ -36,7 +36,7 @@ be disposable (see [Rolling-Pilot Operating Model](#rolling-pilot-operating-mode
 
 # One Package Tree
 
-*— per [ADR-001](/ADR/001-one-tree-embedded-session.md) (Proposed; Max ruling 2026-07-23), pending Accept*
+*— per [ADR-001](/ADR/001-one-tree-embedded-session.md) (Accepted 2026-07-24)*
 
 The two-process split above is a **process** boundary, not a **package** boundary: it does not
 imply, and must not be built as, two top-level importable packages. There is exactly one top-level
@@ -49,20 +49,22 @@ into one import tree does not collapse them to one process — `twd` and `tw` (a
 separate OS processes exactly as "The Two-Process Split" above specifies; this section is packaging
 shape only.
 
-The current on-disk scaffold (from WO-P0-003) still stands up `tw2002_aiclient/` and `twclient/` as
-two sibling top-level packages — a Phase-0 gap Max caught in review, not the target state. Relocating
-`twclient/*` into `tw2002_aiclient/session/*` and repointing every import path and console-script
-entry is deferred to a follow-on work order, gated on ADR-001 moving to Accepted (see ADR-001's
-Consequences for the itemized follow-on list, including the WO-P0/P1/P2 Proof-path updates and this
-document's own module Citations below, which are **not** rewritten by this section — they still
-correctly describe the current `twclient/*` layout until the relocate lands).
+This one-tree layout is **realized as of `4080a37`** (WO-P0-RELOCATE-SESSION, under ADR-001 Accepted):
+the sibling `twclient/` package is gone, the current stub modules (`cli.py`, `credentials.py`) now live
+under `tw2002_aiclient/session/*`, and `pyproject.toml` resolves the single `tw2002_aiclient*` package
+tree. The remaining daemon-core modules cataloged in `CLAUDE.md`'s Architecture map are built under
+`tw2002_aiclient/session/*` as they arrive. This document's module Citations below are being retargeted
+to their `tw2002_aiclient.session.*` paths as a follow-on; until that lands they name the modules by
+their historical `twclient/*` paths (see ADR-001's Consequences for the itemized follow-on list).
 
 **App-owned daemon lifecycle.** The aiclient app — the process the player actually runs — may
 start/ensure the daemon on entry (via `tw ensure`-equivalent machinery), so the player never has to
 invoke `twd` by hand. On the player's **exit** from the aiclient app, a confirm popup asks whether to
-stop the daemon along with the client — **"Stop the daemon too? (Yes / No)"** — rather than silently
-leaving a live game session either orphaned in the background or force-killed out from under a
-reattachable session. The popup itself is a surface concern; it is specified in
+stop the daemon along with the client — **"Stop the daemon too? (Yes / No)"**, defaulting to **No**
+(leave the daemon running, session reattachable) — rather than silently leaving a live game session
+either orphaned in the background or force-killed out from under a reattachable session. `tw stop`
+remains the deliberate, explicit full-stop verb for when the player does want to end the daemon too.
+The popup itself is a surface concern; it is specified in
 [the Trainer Cockpit](/surfaces/trainer-cockpit.md)'s "Exit flow" section, which this section
 cross-links as the UX home for the decision this lifecycle rule makes possible.
 
@@ -174,7 +176,7 @@ fallback host). This mirrors the env-first idiom credential resolution already u
 | Surface | What the engine owns | Where the boundary is |
 |---|---|---|
 | Two-process split | Persistent `twd` (connection + terminal + continuity); stateless `tw` one-shot verbs | Verb catalog → [CLI Verb Surface](/architecture/cli-verbs.md) |
-| One package tree *(ADR-001, Proposed)* | Single top-level `tw2002_aiclient`; daemon-core lives under `tw2002_aiclient/session/`; console scripts point into it | Exit-popup UX → [Trainer Cockpit](/surfaces/trainer-cockpit.md) |
+| One package tree *(ADR-001, Accepted)* | Single top-level `tw2002_aiclient`; daemon-core lives under `tw2002_aiclient/session/`; console scripts point into it | Exit-popup UX → [Trainer Cockpit](/surfaces/trainer-cockpit.md) |
 | Single-connection | Project-rooted `run/twd.pid` + `run/twd.sock`; pidfile refuses a 2nd daemon | — (hard invariant) |
 | JSON verb protocol | `{verb,args}` → one JSON line; `subscribe`/`attach` are lifetime-connections; bad request never crashes daemon | Settled-ness → [Settle Detection](/architecture/settle-detection.md) |
 | Transport | Raw socket + reader thread; hand-rolled IAC (stripped before pyte); CP437 80×25 pyte under lock; content-cropped render | — |

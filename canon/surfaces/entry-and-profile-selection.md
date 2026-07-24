@@ -139,7 +139,7 @@ means ending the current session's binding, not switching worlds under a live co
 This hand-off has a bookend at the other end of the session: when the operator exits the cockpit, a
 confirm popup asks whether to stop the daemon along with the client, rather than silently leaving a
 reattachable game session either orphaned or force-killed
-*(— per [ADR-001](/ADR/001-one-tree-embedded-session.md) (Proposed; Max ruling 2026-07-23), pending Accept)*. See
+*(— per [ADR-001](/ADR/001-one-tree-embedded-session.md) (Accepted 2026-07-24))*. See
 [the Trainer Cockpit](/surfaces/trainer-cockpit.md)'s "Exit flow" section for the full statement;
 this surface only launches the app the exit flow later closes.
 

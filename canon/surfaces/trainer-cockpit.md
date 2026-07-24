@@ -181,7 +181,7 @@ authoritative for everything on the control strip.
 
 ## Exit flow — stop the daemon too?
 
-*— per [ADR-001](/ADR/001-one-tree-embedded-session.md) (Proposed; Max ruling 2026-07-23), pending Accept*
+*— per [ADR-001](/ADR/001-one-tree-embedded-session.md) (Accepted 2026-07-24)*
 
 The aiclient app the operator is watching in this frame is not the daemon: `twd` is continuity, the
 app is disposable (see [Session Engine](/architecture/session-engine.md)'s Rolling-Pilot Operating
@@ -189,9 +189,13 @@ Model). That means quitting the cockpit is not automatically the same thing as e
 session — the daemon can keep the one telnet connection alive for a later reattach, or it can be
 stopped along with the client. The cockpit does not decide this silently either way: on the
 operator's exit from the app, a **confirm popup** asks — **"Stop the daemon too? (Yes / No)"** —
-before the app itself closes. The popup is a plain confirm-gate, the same weight as the launch
-confirm-gate mode-line-and-teach-controls specifies for arming a run: one explicit choice, never a
-silent default action taken on the operator's behalf.
+before the app itself closes. The popup **defaults to No** (leave the daemon running; the session
+stays reattachable) — the lower-risk, non-destructive outcome if the operator just hits Enter;
+stopping the daemon requires actively moving to and confirming **Yes**. `tw stop` is the deliberate,
+explicit verb for a full stop outside this flow. The popup is a plain confirm-gate, the same weight
+as the launch confirm-gate mode-line-and-teach-controls specifies for arming a run: one explicit
+choice always asked, never a silently *auto-applied* action — a stated default on the gate is not
+the same as skipping the gate.
 
 This mirrors [Entry & Profile Selection](/surfaces/entry-and-profile-selection.md)'s hand-off at the
 other end of the session: that surface hands a chosen profile *into* the cockpit at launch; this is

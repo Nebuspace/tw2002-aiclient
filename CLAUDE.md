@@ -28,7 +28,7 @@ An instance rooted **here** is an **IMPLEMENTER** seat in the Nebuspace dual —
 
 Build **only** through the ordered queue in `workorders/` — see `workorders/ULTRACODE-WO-INVENTORY.md` for the master list; start at the first unproven `WO-P0/P1/P2-*` item on a cold seat. Daemon-side safety items (TW-01…TW-30) stay in the parent Nebuspace `QUEUE.md`, not here.
 
-Phase 0 already shipped greenfield package stubs at repo root (`tw2002_aiclient/` + `twclient/`) — this is **greenfield-from-`canon/`, not a restore of archived code**. Per [ADR-001](canon/ADR/001-one-tree-embedded-session.md) (**Proposed**, not yet Accepted), the two sibling top-level packages are being consolidated into one `tw2002_aiclient` import tree with the daemon-core relocated under `tw2002_aiclient/session/`; until that relocation WO lands, `twclient/*` stays where it is and new daemon-core work continues to target it.
+Phase 0 already shipped greenfield package stubs at repo root (`tw2002_aiclient/` + `twclient/`) — this is **greenfield-from-`canon/`, not a restore of archived code**. Per [ADR-001](canon/ADR/001-one-tree-embedded-session.md) (**Accepted** 2026-07-24), the two sibling top-level packages are being consolidated into one `tw2002_aiclient` import tree with the daemon-core relocated under `tw2002_aiclient/session/`; until the follow-on relocation WO lands, `twclient/*` stays where it is and new daemon-core work continues to target it.
 
 ---
 

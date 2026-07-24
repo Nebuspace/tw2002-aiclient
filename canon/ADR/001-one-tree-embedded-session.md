@@ -14,7 +14,7 @@ Filename convention: `/ADR/001-one-tree-embedded-session.md`
 
 ## Status
 
-Proposed
+Accepted · Accepted 2026-07-24 by Max
 
 ---
 

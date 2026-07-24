@@ -5,4 +5,4 @@ current whenever an ADR is added, its status changes, or it is superseded.
 
 | # | Title | Status | Date |
 |---|-------|--------|------|
-| [001](001-one-tree-embedded-session.md) | One Package Tree, Embedded Session Engine | Proposed | 2026-07-23 |
+| [001](001-one-tree-embedded-session.md) | One Package Tree, Embedded Session Engine | Accepted | 2026-07-24 |
