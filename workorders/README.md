@@ -8,6 +8,8 @@ Grounded in the reborn OKF canon (`canon/`), especially `canon/surfaces/entry-an
 
 **Not here (legacy):** daemon QUEUE items from pre-rebirth docs are archived with the old tree — engine/doctrine work is proposed in the ultracode inventory, not the old `QUEUE.md`.
 
+**Path-leak gate:** both Implementer seats refuse commits that stage `/Users/<username>/` (or `/home/<username>/`) paths — Cursor via `.cursor/hooks.json` + `scripts/path-leak-scan.sh`; Claude Code via its PreToolUse hook.
+
 ## Legacy queue (WO-00…17 — reference only, see banner above)
 
 | # | File | One line |

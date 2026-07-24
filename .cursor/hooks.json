@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "hooks": {
+    "beforeShellExecution": [
+      {
+        "command": ".cursor/hooks/path-leak-gate.sh",
+        "failClosed": false
+      }
+    ]
+  }
+}
