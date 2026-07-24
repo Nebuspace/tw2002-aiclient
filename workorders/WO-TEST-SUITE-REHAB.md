@@ -8,9 +8,9 @@
 retired `twclient` package (uncollectable under greenfield) into **rewrite · delete · defer**
 buckets so Phase-2 work orders can schedule honest proof instead of drowning in collection ERRORS.
 
-**Progress:** inventory ACCEPTED (`7e75677`) · DELETE wave DONE (`915e4d8`) · **REWRITE-LIVE**
-(6 live-module tests) DONE — see tip SHA in STATUS. Remaining rewrite: credentials / control_lock /
-attach / ensure_protocol / login\* (gated). Defer still gated.
+**Progress:** inventory ACCEPTED (`7e75677`) · DELETE wave DONE (`915e4d8`) · REWRITE-LIVE DONE
+(`7b70279`) · **REWRITE-ENSURE** (ensure_protocol + cli_log) DONE — see tip SHA in STATUS.
+Remaining rewrite: credentials / control_lock / attach / TOCTOU / login\* (gated). Defer still gated.
 
 ---
 
@@ -50,8 +50,8 @@ importable. Any test that `import twclient` / `from twclient…` fails at **coll
 | **delete** | Pre-rebirth AI-pilot / learning-loop / autonomy-HUD coverage that **contradicts** north-star (AI never live-drives; no EV-every-tick driver). Do not rewrite onto greenfield. |
 | **defer** | Archive-only product surface (world model, trade, spectate, crawl, …) with no live module yet — keep file as reference until the owning product WO lands; then rewrite or delete under that WO. |
 
-**Counts (post-REWRITE-LIVE):** rewrite **10 remaining** (6 live done) · delete **0** · defer **50** ·
-collectable **12** · remaining uncollectable ≈ **60** · total `test_*.py` **72**.
+**Counts (post-REWRITE-ENSURE):** rewrite **8 remaining** · delete **0** · defer **50** ·
+collectable **14** · remaining uncollectable ≈ **58** · total `test_*.py` **72**.
 
 ---
 
