@@ -1,8 +1,8 @@
-"""TW-28 menu_nav localize + plan_nav — pure tests on synthetic maps."""
+"""Menu localize + plan_nav — pure tests on synthetic maps."""
 
-from twclient import game_knowledge
-from twclient.menu_nav import localize, plan_nav
-from twclient.menu_sig import menu_signature
+from tw2002_aiclient.menu import knowledge
+from tw2002_aiclient.menu.nav import localize, plan_nav
+from tw2002_aiclient.menu.sig import menu_signature
 
 SCREEN_A = "=== Computer ===\n(1) Status\n(2) Ship\n"
 SCREEN_B = "=== Ship Status ===\nHolds: 50\n(Q) Quit\n"
@@ -12,9 +12,9 @@ SCREEN_OFF = "=== Totally Unknown Prompt ===\n(Z) Zap\n"
 def _seed_map(path, screen_text, label, *edge_specs):
     """Upsert node for screen_text; optional edges as (from_sig, key, to_sig, kind)."""
     sig = menu_signature(screen_text)
-    game_knowledge.upsert_menu_node(path, sig, label=label)
+    knowledge.upsert_menu_node(path, sig, label=label)
     for frm, key, to, kind in edge_specs:
-        game_knowledge.upsert_menu_edge(path, frm, key, to, kind=kind)
+        knowledge.upsert_menu_edge(path, frm, key, to, kind=kind)
     return sig
 
 
@@ -52,7 +52,7 @@ def test_plan_nav_end_to_end(tmp_path):
     path = tmp_path / "game_knowledge.json"
     sig_a = _seed_map(path, SCREEN_A, "Computer")
     sig_b = _seed_map(path, SCREEN_B, "Ship")
-    game_knowledge.upsert_menu_edge(path, sig_a, "2", sig_b, kind="nav", desc="Ship")
+    knowledge.upsert_menu_edge(path, sig_a, "2", sig_b, kind="nav", desc="Ship")
 
     result = plan_nav(SCREEN_A, sig_b, path)
     assert result["ok"] is True
@@ -100,12 +100,12 @@ def test_plan_nav_shortest_of_branch(tmp_path):
     short = "shortsig___________"[:16]
     z = "zsig________________"[:16]
     for s, lab in [(mid1, "m1"), (mid2, "m2"), (short, "s"), (z, "z")]:
-        game_knowledge.upsert_menu_node(path, s, label=lab)
-    game_knowledge.upsert_menu_edge(path, sig_a, "1", mid1, kind="nav")
-    game_knowledge.upsert_menu_edge(path, mid1, "2", mid2, kind="nav")
-    game_knowledge.upsert_menu_edge(path, mid2, "3", z, kind="nav")
-    game_knowledge.upsert_menu_edge(path, sig_a, "9", short, kind="nav")
-    game_knowledge.upsert_menu_edge(path, short, "8", z, kind="info")
+        knowledge.upsert_menu_node(path, s, label=lab)
+    knowledge.upsert_menu_edge(path, sig_a, "1", mid1, kind="nav")
+    knowledge.upsert_menu_edge(path, mid1, "2", mid2, kind="nav")
+    knowledge.upsert_menu_edge(path, mid2, "3", z, kind="nav")
+    knowledge.upsert_menu_edge(path, sig_a, "9", short, kind="nav")
+    knowledge.upsert_menu_edge(path, short, "8", z, kind="info")
 
     result = plan_nav(SCREEN_A, z, path)
     assert result["ok"] is True

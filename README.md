@@ -72,7 +72,7 @@ One long-lived daemon, short-lived windows into it:
                                                    │ twd (daemon) │ ── telnet ──▶ TW2002 server
   ops ─── tw ensure/status/screen/stop/do/send/read ▶ │  the ONE     │
                                                    │  connection  │
-  Coming: tw spectate · attach (see WO) ──────────▶└──────────────┘
+  Coming: tw spectate (see WO) ───────────────────▶└──────────────┘
 ```
 
 - **The daemon (`twd`)** owns the single telnet connection and a pyte terminal
@@ -82,9 +82,9 @@ One long-lived daemon, short-lived windows into it:
   Shipped today: `ensure`, `status`, `screen`, `stop`, `do`, `send`, `read`,
   `history`, `watch`, `attach`. More verbs land one WO at a time — see the Verb
   reference and the ops WO.
-- **Product play** is `./tw2002-aiclient`, not `./tw`. Future ops `spectate` /
-  `attach` (if wired) stay layered on the same daemon without disturbing the
-  session — they are **Coming**, not live.
+- **Product play** is `./tw2002-aiclient`, not `./tw`. Future ops `spectate`
+  stays layered on the same daemon without disturbing the session — it is
+  **Coming**, not live (`attach` already ships thin).
 - **A control lock** arbitrates the one connection: App (taught autopilot) or
   human at the keyboard — exactly one live driver at a time. The AI is never a
   live driver.

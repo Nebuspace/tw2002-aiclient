@@ -15,22 +15,22 @@ related `loops` / `autoloop` / record·mine dependencies). **Do not wire.**
 | Piece | Tip | Archive |
 |-------|-----|---------|
 | `tw menumap` CLI | **MISSING** | `cmd_menumap` — read-only inspector over knowledge store + optional live `screen` localize |
-| `menu_map_view.py` | **MISSING** | ~131 LOC pure format/summary |
-| `menu_nav.py` / `menu_sig.py` | **MISSING** | ~76 + ~27 LOC |
+| `menu_map_view.py` | **LANDED** (`tw2002_aiclient.menu.map_view`, G0) | ~131 LOC pure format/summary |
+| `menu_nav.py` / `menu_sig.py` | **LANDED** (`tw2002_aiclient.menu.nav` / `.sig`, G0) | ~76 + ~27 LOC |
 | `menu_crawler.py` | **MISSING** | ~944 LOC crawl engine (writes knowledge; not the CLI itself) |
 | `tw loops` / `tw autoloop` | **MISSING** | CLI + `loop_player.py` ~369 LOC (needs control_lock + WatchHub — both live) |
 | `tw record` / `tw mine` | **MISSING** | skill capture / miner — feeds loops |
-| Banked ignored tests | `test_cli_menumap` · `test_menu_*` still `--ignore` (`twclient`) | ~1.6k LOC tests |
+| Banked ignored tests | `test_cli_menumap` · `test_menu_crawler` still `--ignore`; G0 unit tests live | ~1.6k LOC tests |
 
 **Live tip already usable by a future menumap:** `tw screen` / `tw status` /
-WatchHub / control_lock. **Missing substrate:** `game_knowledge` store path +
-menu_* modules (not under `session/` today).
+WatchHub / control_lock · G0 menu modules under `tw2002_aiclient.menu`.
+**Still missing for CLI:** `tw menumap` wire (G1) · crawler (G2).
 
 ## Recommended execute slices
 
 | Slice | Goal | Bound | Depends |
 |-------|------|-------|---------|
-| **G0** | Port `menu_sig` + `menu_nav` + `menu_map_view` (pure, read-only) + rehab unit tests | Small–medium (~230 LOC + tests) | knowledge path helper (thin) |
+| **G0** | Port `menu_sig` + `menu_nav` + `menu_map_view` (pure, read-only) + rehab unit tests — **LANDED** | Small–medium (~230 LOC + tests) | knowledge path helper (thin) |
 | **G1** | Wire `tw menumap` CLI (store-only + optional live localize via `screen`) · un-ignore `test_cli_menumap` | Small | G0 |
 | **G2** | Port `menu_crawler` (writes map) — separate from inspector; may need ensure/drive | Large (~944 LOC) | G0 · settle/do |
 | **G3** | `tw loops` list (protocol + CLI) — needs skill/loop store | Medium | record/mine or empty-honest |

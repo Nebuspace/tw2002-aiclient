@@ -1,6 +1,6 @@
-"""TW-28 menu-map inspector — pure tests on synthetic maps."""
+"""Menu-map inspector — pure tests on synthetic maps."""
 
-from twclient.menu_map_view import (
+from tw2002_aiclient.menu.map_view import (
     format_menu_map_lines,
     format_menu_map_report,
     menu_map_summary,
@@ -107,12 +107,12 @@ def test_render_clips_at_22_and_expands_at_40():
 
 
 def test_from_store_wrapper(tmp_path):
-    from twclient import game_knowledge
+    from tw2002_aiclient.menu import knowledge
 
     path = tmp_path / "game_knowledge.json"
-    game_knowledge.upsert_menu_node(path, "sig-a", label="Computer")
-    game_knowledge.upsert_menu_node(path, "sig-b", label="Ship")
-    game_knowledge.upsert_menu_edge(path, "sig-a", "2", "sig-b", kind="nav")
+    knowledge.upsert_menu_node(path, "sig-a", label="Computer")
+    knowledge.upsert_menu_node(path, "sig-b", label="Ship")
+    knowledge.upsert_menu_edge(path, "sig-a", "2", "sig-b", kind="nav")
     s = menu_map_summary_from_store(path, current_sig="sig-a")
     assert s["node_count"] == 2
     assert s["current"]["label"] == "Computer"
