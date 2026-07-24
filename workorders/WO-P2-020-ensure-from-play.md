@@ -1,6 +1,6 @@
 # WO-P2-020 — Ensure from play entry
 
-> Status: PLANNED (greenfield · HOLD-GATES-PENDING blocks execution until a lifting HANDOFF)
+> Status: DONE (shipped `53bfd08`, hub-Accepted 2026-07-24 — 96/95/96/93; proven on fake TWGS harness, adversarial-reviewed Cipher+Mack)
 **Phase:** 2 · **Type:** verify/build · **Depends:** WO-P1-016
 **Canon:** `canon/architecture/login-automaton.md`, `canon/architecture/session-engine.md`
 
