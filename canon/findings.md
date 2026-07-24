@@ -83,6 +83,9 @@ greenfield suite (0 collection ERRORS). Remove an ignore line when that file is 
 `test_attach_*` · optionally `test_clean_preempt` — listed under
 `workorders/WO-P2-025-control-lock-actor-tag.md` §PREP; still ignored until execute HANDOFF.
 
+**P2-026 settle (prep):** kernel already in `session/settle.py` + green `tests/test_settle.py`; execute
+likely verify + case-mismatch unit — see `workorders/WO-P2-026-settle-detection-baseline.md` §PREP.
+
 ## Run-dir override (WO-P2-021)
 
 **Canon:** `canon/architecture/session-engine.md` (Single-Connection Invariant).
