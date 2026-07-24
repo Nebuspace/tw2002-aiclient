@@ -127,6 +127,7 @@ fidelity but never meaning.
 | `⇒` | `⇒` (no swap) | the LOG "landing differs" suffix | `spectate_layout.py` |
 | `○ ○` | `○ ○` (no swap) | the empty-chain placeholder (`○ ○  no trade loop yet`) | `spectate_app.py` |
 | `—` (em-dash) | `—` (no swap) | an unknown/empty value, in place of a fabricated `-` or a blank | throughout HUD/GOALS/PRIORITIES rendering |
+| `×` | `×` (no swap) | dimensional multiply in gate/refusal copy (`C×L`, `60×20`) — same no-swap family as `·` / `—`; never ASCII `x` | `tw2002_aiclient/cockpit/layout.py::frame_layout` `too_small` `message` (≈97–102) |
 | `!` | `!` (no swap) | leads the STOP / intervention strip — the one-glyph "attention" mark | `compose_intervention_strip` |
 | `KEY)verb` | `KEY)verb` (no swap) | the uniform hotkey-token shape on the control-strip hint band (`M)ode`, `A)nalyze`, …) | `spectate_app.py` control strip |
 
@@ -207,6 +208,17 @@ terminal.
 | `no_border` | ≥60 | `MIN_COLS` | viewport border dropped, game full-bleed/clipped |
 | `too_small` | <60 | — | refuses to render: `Terminal too small (C×L) — need at least 60×20` |
 
+**Cockpit chrome tones (shipped tip `2a2d65c` — DOC-GAP closed here):**
+
+- **Row-1 profile strip** (`host · game-letter · handle`) is **data**, not chrome — render at
+  default **`A_NORMAL`** (untinted, non-bold). Cyan stays on the outer frame / instrument borders
+  only ("cyan is chrome, never data"). Code: `tw2002_aiclient/screens.py` PlayShellScreen.draw
+  strip `draw_lines(..., curses.A_NORMAL)` (≈381–387).
+- **`too_small` refusal** is a **gate statement**, not a warn/danger halt — tone **`info`
+  cyan+bold** (same attr as the outer-frame chrome pair). Code: `screens.py` PlayShellScreen.draw
+  `draw_refuse_message(..., self._outer_attr)` (≈363–364) where `_outer_attr` is cyan|bold
+  (`_init_colors`, ≈352–357).
+
 `[CODE NOTE]` The **archived** `twclient/spectate_layout.py::frame_layout`'s own docstring ladder
 comment states the `full` floor as `>=142`; the governing comparison actually gated in that code is
 `i_cols >= FULL_GUTTER_MIN_COLS`, which computes to **154** from the module's own
@@ -228,7 +240,8 @@ encodes that `>=154` floor directly — the rebuild this note asked for has happ
   itself — is always the last thing to survive a fold; unicode/ASCII glyph twins carry zero
   information loss by construction.
 - **`too_small` refuses rather than renders broken.** Below the floor, the frame states the problem
-  plainly instead of drawing a sheared layout.
+  plainly (info cyan+bold gate copy — see Cockpit chrome tones above) instead of drawing a sheared
+  layout.
 
 ## Aesthetic direction — the shared "feel"
 
@@ -293,7 +306,11 @@ could commit live turns. `y/N` capitalization signals the safe default; a bare E
 - **Responsive-fold ladder** — `spectate_layout.py` (`frame_layout`, `GAME_W`/`GAME_H`,
   `VIEWPORT_W`/`VIEWPORT_H`, `HUD_GUTTER_W`, `PRIORITIES_W`/`PRIORITIES_MIN_W`,
   `MINIMAL_HEADER_MIN_COLS`, `RIGHT_GUTTER_MIN_COLS`, `FULL_GUTTER_MIN_COLS`,
-  `LEFT_GUTTER_MIN_COLS`, `MIN_COLS`, `MIN_LINES`).
+  `LEFT_GUTTER_MIN_COLS`, `MIN_COLS`, `MIN_LINES`); reborn port
+  `tw2002_aiclient/cockpit/layout.py::frame_layout` (incl. `×` in `too_small` message).
+- **Cockpit strip / refuse tones (tip `2a2d65c`)** — `tw2002_aiclient/screens.py`
+  PlayShellScreen (`A_NORMAL` row-1 strip; `_outer_attr` cyan+bold on
+  `draw_refuse_message`).
 - **Consuming surfaces (the sentences to this dictionary)** —
   [The Trainer Cockpit](/surfaces/trainer-cockpit.md),
   [Mode Line & Teach Controls](/surfaces/mode-line-and-teach-controls.md),
@@ -306,6 +323,6 @@ could commit live turns. `y/N` capitalization signals the safe default; a bare E
 - **Redaction of the `→ TX` channel** —
   [Secrets & Credential Handling](/doctrine/secrets-and-credentials.md).
 - **Polish intent, cut list, BBS/DOS-door echo, dark-only theme** — `TUI-POLISH-PLAN.md`.
-- **Rebirth code location** — all cited symbols currently live under
-  `archive/pre-rebirth-2026-07-23/code/twclient/`; the project `CLAUDE.md` architecture map is the
-  forward-looking (post-rebuild) module list.
+- **Rebirth code location** — most cited symbols still live under
+  `archive/pre-rebirth-2026-07-23/code/twclient/`; reborn cockpit frame symbols cited above
+  (`cockpit/layout.py`, PlayShellScreen strip/refuse tones) live at tip under `tw2002_aiclient/`.
