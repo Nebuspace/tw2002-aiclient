@@ -72,6 +72,13 @@ never drive recommendations that contradict reborn `canon/`.
 
 ---
 
+## Stale `twclient` test collection (WO-TEST-SUITE-REHAB)
+
+**Symptom:** `pytest --collect-only` → ~78 `ERROR`s with `ModuleNotFoundError: No module named 'twclient'`.
+Greenfield uses `tw2002_aiclient.session.*`; the old package is archive-only. Rehab buckets (rewrite /
+delete / defer) live in `workorders/WO-TEST-SUITE-REHAB.md` — inventory only until a lifting HANDOFF
+executes deletes or rewrites.
+
 ## Run-dir override (WO-P2-021)
 
 **Canon:** `canon/architecture/session-engine.md` (Single-Connection Invariant).

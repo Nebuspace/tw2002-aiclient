@@ -10,6 +10,8 @@ Grounded in the reborn OKF canon (`canon/`), especially `canon/surfaces/entry-an
 
 **Path-leak gate:** both Implementer seats refuse commits that stage `/Users/<username>/` (or `/home/<username>/`) paths. Cursor tip ships `.cursor/hooks.json` with `failClosed: true` + `.cursor/hooks/path-leak-gate.sh`; **enable the commit backstop per clone** with `git config core.hooksPath scripts/githooks` (runs `scripts/githooks/pre-commit` → `scripts/path-leak-scan.sh`). Cursor agents may keep a local empty `hooks.json` overlay when the worker host cannot run command hooks — see `CLAUDE.md` Hard rules. Claude Code uses its PreToolUse hook.
 
+**Stale test suite:** most root `tests/test_*.py` still `import twclient` and fail at collection (`ModuleNotFoundError`) — inventory + rewrite/delete/defer plan in [WO-TEST-SUITE-REHAB.md](WO-TEST-SUITE-REHAB.md) (no deletes until a lifting HANDOFF).
+
 ## Legacy queue (WO-00…17 — reference only, see banner above)
 
 | # | File | One line |
