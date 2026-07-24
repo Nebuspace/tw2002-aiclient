@@ -29,8 +29,8 @@ Authored from a 3-worker read-only fan-out (cockpit↔canon inventory · Accept/
 
 ### PWO-032 — Character / profile strip (EXTEND)
 - **Live state:** PARTIAL — data present as a vertical list (`screens.py:337-340`), not a top band.
-- **Depends-on (verify first):** is `world_identity.world_id_from_profile` ported into `tw2002_aiclient/session/`? (archived today — buildability gate).
-- **Accept:** Row 1 (inside the outer frame) renders a character/profile strip `host · game-letter · handle` (with the `·` glyph), not the profile id alone; a broken/unresolved profile shows `?`/`—` for missing fields, no crash/blank; the strip truncates to line-tail at minimal tier, never wraps/h-scrolls.
+- **Depends-on — RESOLVED (2026-07-24, read-only check):** `world_identity.py`/`world_id_from_profile` is NOT ported (only a `protocol.py:42` comment notes it hasn't landed) — **but 032 does NOT need it.** The reborn `ProfileRow` (`screens.py:19-25`: `handle`/`server`/`game_letter`/`host`) + `credentials.list_profile_summaries()` already surface host·game·handle (the launcher composes it at `screens.py:231-233`). So 032 is buildable with existing reborn data; no world-identity port required.
+- **Accept:** Row 1 (inside the outer frame) renders a character/profile strip `host · game-letter · handle` (with the `·` glyph) sourced from the reborn `ProfileRow`/`credentials.list_profile_summaries()` (NOT the archived `world_id_from_profile`), not the profile id alone; a broken/unresolved profile shows `?`/`—` for missing fields, no crash/blank; the strip truncates to line-tail at minimal tier, never wraps/h-scrolls.
 - **Proof:** Layer-A — unit-test the pure strip-composer (fixture profile + broken profile → exact string + `?`/`—` fallbacks). Layer-B — pty: `_find_text` for `<host>`+`<handle>` on row 1; broken-profile run asserts `?`/`—` + no traceback.
 
 ### PWO-033 — Three-column body scaffolding (BUILD)
@@ -51,9 +51,9 @@ Authored from a 3-worker read-only fan-out (cockpit↔canon inventory · Accept/
 6. The intervention/STOP strip claims leftover height **first**, ahead of control strip + ticker (safety-legibility invariant).
 
 ## 4. Cross-cutting depends-on / decisions for the hub
-- **D1 — Test-suite rehab is a hard Depends-on.** The pty proof harnesses (`test_spectate_app.py`, `test_spectate_layout.py`, `test_interactive_app.py`, `test_aiclient_play_panels.py`) import `twclient.*` and don't import at root (`WO-TEST-SUITE-REHAB.md`). Each frame WO must either reuse a rehabbed harness OR ship a `tw2002_aiclient`-targeted pty helper — name which.
+- **D1 — Test-suite rehab is a hard Depends-on. CONFIRMED (2026-07-24):** all four pty proof harnesses (`test_spectate_app.py`, `test_spectate_layout.py`, `test_interactive_app.py`, `test_aiclient_play_panels.py`) still `import twclient` and don't import at root (`WO-TEST-SUITE-REHAB.md`). Each frame WO must either reuse a rehabbed harness OR ship a `tw2002_aiclient`-targeted pty helper — name which. **This is the gating sequencing item for the Layer-B (pty) proofs.**
 - **D2 — Introduce a reborn pure geometry function** (`frame_layout` analogue in `tw2002_aiclient`) so 031/033/039 geometry gets cheap Layer-A tests; without it the "no overlap / fold order" criteria stay soft.
-- **D3 — Verify `world_id_from_profile` is ported** before 032 is buildable.
+- **D3 — RESOLVED:** `world_id_from_profile` is NOT ported, but 032 does not need it — it builds from the reborn `ProfileRow`/`list_profile_summaries` (see PWO-032 above). No world-identity port on the Phase-3 critical path.
 - **D4 (DOCS-WIN, do in the port):** correct the canon-self-flagged stale fold-floor docstring `>=142` → `154` (`visual-language.md:210-214`).
 - **D5 (name, don't reintroduce):** archived `_MODE_BADGES` still carries an `ai_pilot→"AI-PILOT"` live-driver slot and a wrong-axis coverage meter (`trainer-cockpit.md:399-401,427-434`) — belong to the mode-line WO; the frame build must NOT reintroduce an AI-drives slot.
 - **D6 — Exit-confirm popup scoping:** the ADR-001 "Stop the daemon too? (Yes/No)" popup is canon-assigned to mode-line N5 (Phase 5), OUT of PWO-030. Confirmed here; noted so it doesn't fall through the 030↔N5 seam.
