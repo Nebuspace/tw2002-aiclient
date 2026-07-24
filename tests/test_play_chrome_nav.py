@@ -198,7 +198,7 @@ def test_run_play_esc_returns_back_without_stopping_fake_session(monkeypatch):
     # Play chrome was painted (handle visible) before Esc.
     joined = "\n".join(stdscr.lines)
     assert HANDLE in joined
-    assert "PLAY SHELL" in joined or PLAY_TITLE.strip() in joined
+    assert PLAY_TITLE.strip() in joined
     # PWO-051: the GAME viewport's placeholder text is gone -- at this
     # small (24x80, no_border) tier the center region draws nothing at all
     # rather than any flat placeholder line (PLAY_SUBTITLE was already

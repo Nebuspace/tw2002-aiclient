@@ -366,8 +366,8 @@ def test_full_tier_fresh_fixture_shows_value_and_freshness_stamp(
     normalized = hud_text.replace(",", "")
 
     assert "54321" in normalized, f"expected fresh CREDITS value in HUD box, got:\n{hud_text}"
-    assert "ago" in hud_text or "now" in hud_text, (
-        f"expected a freshness stamp ('… ago' / 'now') in HUD box, got:\n{hud_text}"
+    assert "ago" in hud_text, (
+        f"expected a freshness stamp ('… ago') in HUD box, got:\n{hud_text}"
     )
 
 

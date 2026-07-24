@@ -328,4 +328,4 @@ def test_reconnect_unverified_screen_is_not_reported_as_success():
     assert session.reconnect_calls == 1
     assert g.reconnect_count == 0
     assert g.last_reconnect_error is not None
-    assert "automaton_stuck" in g.last_reconnect_error or "exhausted" in g.last_reconnect_error
+    assert "automaton_stuck" in g.last_reconnect_error

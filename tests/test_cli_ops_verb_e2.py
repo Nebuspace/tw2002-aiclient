@@ -69,7 +69,7 @@ def test_cmd_watch_prints_seed_then_stops_at_frames(tmp_path, monkeypatch, capsy
         Namespace(frames=1, json=True, compact=False, run_dir=str(tmp_path))
     )
     assert rc == 0
-    assert b'"verb": "subscribe"' in fake.sent or b'"verb":"subscribe"' in fake.sent
+    assert b'"verb": "subscribe"' in fake.sent
     assert fake._closed is True
     out = capsys.readouterr().out.strip().splitlines()
     assert len(out) == 1

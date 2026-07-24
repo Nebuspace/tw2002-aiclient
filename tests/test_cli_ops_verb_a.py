@@ -50,9 +50,7 @@ class FakeServer:
 def test_parser_lists_screen_and_stop():
     parser = cli.build_parser()
     help_text = parser.format_help()
-    assert "{status,ensure,screen,stop}" in help_text or (
-        "screen" in help_text and "stop" in help_text
-    )
+    assert "screen" in help_text and "stop" in help_text
     screen = parser.parse_args(["screen", "--raw", "--compact", "--run-dir", "run/ona"])
     assert screen.func is cli.cmd_screen
     assert screen.raw is True

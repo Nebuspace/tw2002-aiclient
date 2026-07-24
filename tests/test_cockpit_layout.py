@@ -64,7 +64,7 @@ def _overlaps(a, b):
 def test_too_small_below_line_floor():
     regions = frame_layout(19, 200)
     assert regions["mode"] == "too_small"
-    assert "19" in regions["message"] or "resize" in regions["message"].lower()
+    assert "200×19" in regions["message"]
     for key in _REGION_KEYS:
         assert regions[key] is None
     assert regions["outer"] is None
