@@ -15,6 +15,7 @@ from tw2002_aiclient.cockpit import decisions as cockpit_decisions
 from tw2002_aiclient.cockpit import draw as cockpit_draw
 from tw2002_aiclient.cockpit import focus as cockpit_focus
 from tw2002_aiclient.cockpit import goals as cockpit_goals
+from tw2002_aiclient.cockpit import hud as cockpit_hud
 from tw2002_aiclient.cockpit.layout import frame_layout
 from tw2002_aiclient.cockpit.strip import compose_profile_strip_from_row
 from tw2002_aiclient.session import credentials
@@ -298,13 +299,6 @@ BANK_TITLE = " PLAYER BANK "
 # GAME panel content -- the live game viewport is a later WO (PREP §5); this
 # is the honest placeholder canon calls for, never fake/invented content.
 _GAME_PLACEHOLDER = "(placeholder — live game viewport wired in a later WO)"
-# Empty-state fill for the HUD box before its data-source WO (PWO-037)
-# lands -- GOALS, FOCUS (PWO-034/035), and now DECISIONS (PWO-036) all
-# compose their own honest-empty content from ``status`` directly (see
-# below); HUD alone has no cited empty string at this reduced scope, so it
-# gets the DoD's other approved honest-empty spelling to keep it visibly
-# distinct while staying inside canon's stated vocabulary.
-_HUD_EMPTY = "(none yet)"
 _LOGS_EMPTY = "(none yet)"
 # A raising composer (bad input surviving to a status field, a future
 # panel's own bug, ...) must never take the whole cockpit down with it --
@@ -321,6 +315,17 @@ _FOCUS_COMPOSE_FAILED = ["—"]
 # em-dash, so a compose-time crash still reads as "known-nothing, not a
 # bug" instead of visibly regressing to a shorter, differently-shaped panel.
 _DECISIONS_COMPOSE_FAILED = ["—", "Exploring…"]
+# HUD's own composer (PWO-037, ``cockpit.hud.compose_hud_cells``) already
+# defines its own honest-empty state -- every cell sticky ``"-"`` with no
+# freshness stamp, per-CELL rather than per-panel (canon
+# `trainer-cockpit.md` "The always-on HUD and its freshness": a cold cell
+# persists "-", never blank). The raising-composer fallback below is HUD's
+# own ``(text, stale)`` cell shape, not the plain string list GOALS/FOCUS/
+# DECISIONS use -- one honest-unknown, never-stale cell, reusing that same
+# plain-hyphen vocabulary rather than the other panels' em-dash (HUD's
+# sticky-unknown glyph is "-", not "—" -- ``cockpit.hud``'s own convention,
+# distinct on purpose).
+_HUD_COMPOSE_FAILED = [("-", False)]
 BOUNDARY_LINE_1 = (
     "Rotation multiplies YOUR own daily turns across INDEPENDENT characters."
 )
@@ -351,23 +356,33 @@ class PlayShellScreen:
     internally (unchanged key, pre-dating the split); DECISIONS is the new
     ``decisions`` region below it.
 
-    ``status_provider`` (PWO-034/035/036) is the shared data seam for every
-    panel that reads live daemon state -- GOALS and FOCUS in the left
-    gutter, DECISIONS in the right: a no-arg callable returning a
+    ``status_provider`` (PWO-034/035/036/037) is the shared data seam for
+    every panel that reads live daemon state -- GOALS and FOCUS in the left
+    gutter, HUD and DECISIONS in the right: a no-arg callable returning a
     ``status`` dict (the daemon ``status`` verb shape) or ``None``.
     Defaults to ``None`` -- with no provider set, ``cockpit.goals.
     compose_goals_lines`` renders every row honestly unknown,
-    ``cockpit.focus.compose_focus_lines`` renders its own honest-empty, and
+    ``cockpit.focus.compose_focus_lines`` renders its own honest-empty,
     ``cockpit.decisions.compose_decisions_lines`` renders its own
-    ``["—", "Exploring…"]`` honest-empty, rather than any panel going blank
-    or inventing content. Every panel reads the SAME single
-    ``status_provider()`` snapshot per draw -- one poll per tick (polled
-    whenever GOALS or DECISIONS is present this tier), not one per panel.
+    ``["—", "Exploring…"]`` honest-empty, and ``cockpit.hud.
+    compose_hud_cells`` renders every cell sticky ``"-"`` with no freshness
+    stamp, rather than any panel going blank or inventing content. Every
+    panel reads the SAME single ``status_provider()`` snapshot per draw --
+    one poll per tick, polled whenever ANY status-consuming region is
+    present this tier (``goals``, ``decisions``, OR ``right_gutter``/HUD --
+    never tied to any single one of them alone, so a fold that drops one or
+    two of the three can never silently starve whichever one survives).
     ``app.py`` is the one place that assigns a real provider; a raising
     provider never crashes the draw pass (``draw()`` catches around the
     call and falls back to ``None``, same honesty-over-crash convention as
-    ``adapters.ensure_session``). HUD itself does not yet read
-    ``status_provider`` -- its own data-source WO is PWO-037.
+    ``adapters.ensure_session``). HUD's own freshness dimming
+    (``curses.A_DIM`` on stale value rows only, per
+    ``cockpit.hud.FRESHNESS_STALE_S``) is drawn through
+    ``cockpit_draw.draw_lines_attrs`` -- the per-line-attr sibling of
+    ``draw_lines`` -- rather than ``draw_lines`` itself, since HUD is the
+    one panel where some lines in the same box need a different attr than
+    others (every other panel here still uses ``draw_lines``'s single flat
+    attr).
 
     Esc ends the binding and returns to the launcher — clean close, not a suspend.
     """
@@ -437,15 +452,29 @@ class PlayShellScreen:
         )
         decisions = regions["decisions"]
         # One status_provider() snapshot per draw, shared by every panel
-        # that reads it -- GOALS/FOCUS in the left gutter, DECISIONS in the
-        # right. Polled whenever EITHER `goals` or `decisions` is present
-        # this tier (they fold independently: `goals` gates on the left
-        # gutter's own pri_w > 0 check, `decisions` on the right gutter's
-        # has_right_gutter check -- a narrow right_gutter-only tier can
-        # have `goals is None` while `decisions` is still present, so the
-        # poll must not stay tied to `goals` alone), never a second call
-        # per panel.
-        if goals is not None or decisions is not None:
+        # that reads it -- GOALS/FOCUS in the left gutter, HUD/DECISIONS in
+        # the right. Polled whenever ANY of `goals`, `decisions`, OR
+        # `right_gutter` (HUD) is present this tier -- they fold
+        # independently (`goals` gates on the left gutter's own pri_w > 0
+        # check, `decisions` on the right gutter's own height contention
+        # against HUD_BOX_MIN_H, `right_gutter` on has_right_gutter alone),
+        # so the poll must never stay tied to any single one of them.
+        # `right_gutter` was added here (PWO-037) as the same class of gap
+        # that starved DECISIONS pre-036: layout.py's own stacked-gutter
+        # comment documents DECISIONS shrinking then dropping (`None`) once
+        # HUD alone consumes the right gutter's slot, which would leave
+        # `right_gutter` as the tier's ONLY live status consumer with both
+        # `goals` and `decisions` `None`. (A `frame_layout` probe across
+        # every reachable `(lines, cols)` at the CURRENT `MIN_LINES=20` /
+        # `HUD_BOX_MIN_H=12` constants found no tier where that actually
+        # happens -- `column_h` never falls below 14 at the MIN_LINES
+        # floor, 2 rows clear of HUD_BOX_MIN_H, so `decisions` always
+        # accompanies `right_gutter` today. This term is therefore
+        # defensive, not a live-bug fix -- same "latent guard" shape
+        # layout.py's own LOGS_MIN_H clamp already documents for a future
+        # floor change -- never a second `status_provider()` call per
+        # panel regardless.)
+        if goals is not None or decisions is not None or regions["right_gutter"] is not None:
             try:
                 status = self.status_provider() if self.status_provider is not None else None
             except Exception:  # noqa: BLE001 -- a raising provider must not crash the draw pass
@@ -496,7 +525,24 @@ class PlayShellScreen:
             self.stdscr, right, weight="thin", attr=self._chrome_attr,
             title="HUD", title_attr=self._chrome_attr, uok=uok,
         )
-        cockpit_draw.draw_lines(self.stdscr, right, [_HUD_EMPTY], curses.A_NORMAL)
+        if right is not None:
+            hud_inner_w = max(0, right["w"] - 2)
+            try:
+                hud_cells = cockpit_hud.compose_hud_cells(
+                    status, width=hud_inner_w, unicode_ok=uok
+                )
+            except Exception:  # noqa: BLE001 -- a raising panel must not crash the draw pass
+                hud_cells = _HUD_COMPOSE_FAILED
+        else:
+            hud_cells = []
+        # HUD dims only STALE VALUE rows (content stays data-tone, never a
+        # color swap -- "cyan is chrome, never data") -- the one panel
+        # needing draw_lines_attrs' per-line attr rather than draw_lines'
+        # single flat one.
+        hud_lines_attrs = [
+            (text, curses.A_DIM if stale else curses.A_NORMAL) for text, stale in hud_cells
+        ]
+        cockpit_draw.draw_lines_attrs(self.stdscr, right, hud_lines_attrs)
 
         cockpit_draw.draw_box(
             self.stdscr, decisions, weight="thin", attr=self._chrome_attr,

@@ -196,6 +196,48 @@ def draw_box(
         _safe_write(win, y, x + 2, f" {clipped_title} ", title_attr if title_attr is not None else attr)
 
 
+def draw_lines_attrs(
+    win: curses.window,
+    region: dict | None,
+    lines: Sequence[tuple[str, int]],
+    *,
+    boxed: bool = True,
+) -> None:
+    """Like ``draw_lines``, but each line carries its OWN curses attr rather
+    than one flat attr for the whole box -- the shape a panel needs when
+    only SOME of its lines should render differently from the rest (HUD's
+    freshness dimming: a stale value row's ``curses.A_DIM`` beside its
+    label's ``curses.A_NORMAL``, same box, PWO-037).
+
+    Identical inset math to ``draw_lines`` -- inset by one cell on every
+    side when ``boxed``, or filling the raw region when not -- and the
+    identical safety discipline: every line is clipped to the box's own
+    interior width via ``_clip_cells`` (cell-width-aware, never just the
+    window's edge -- an unclipped line would otherwise bleed past this
+    box's own right border) BEFORE reaching ``_safe_write``, which then
+    neutralizes embedded control characters and guards the underlying
+    ``addstr`` call. Both hazards this guards against are wire-reachable:
+    an untrusted free-text value can carry CJK/fullwidth glyphs (measured
+    in cells, not Python characters) or a raw control sequence (e.g. an
+    embedded ``\\n`` that would otherwise move the real terminal cursor and
+    escape the box). Lines beyond the available interior height are
+    silently dropped, same as ``draw_lines``.
+    """
+    if region is None or not lines:
+        return
+    y, x, w, h = region["y"], region["x"], region["w"], region["h"]
+    if boxed:
+        inner_y, inner_x, inner_w, inner_h = y + 1, x + 1, w - 2, h - 2
+    else:
+        inner_y, inner_x, inner_w, inner_h = y, x, w, h
+    if inner_w < 1 or inner_h < 1:
+        return
+    for i, (line, attr) in enumerate(lines):
+        if i >= inner_h:
+            break
+        _safe_write(win, inner_y + i, inner_x, _clip_cells(line, inner_w), attr)
+
+
 def draw_lines(
     win: curses.window,
     region: dict | None,
@@ -209,20 +251,13 @@ def draw_lines(
     separately via ``draw_box``), or filling the raw region when not
     (``no_border`` tier / the row-1 strip, which owns no border of its
     own). Lines beyond the available interior height are silently dropped;
-    each line is clipped to the interior width."""
-    if region is None or not lines:
-        return
-    y, x, w, h = region["y"], region["x"], region["w"], region["h"]
-    if boxed:
-        inner_y, inner_x, inner_w, inner_h = y + 1, x + 1, w - 2, h - 2
-    else:
-        inner_y, inner_x, inner_w, inner_h = y, x, w, h
-    if inner_w < 1 or inner_h < 1:
-        return
-    for i, line in enumerate(lines):
-        if i >= inner_h:
-            break
-        _safe_write(win, inner_y + i, inner_x, _clip_cells(line, inner_w), attr)
+    each line is clipped to the interior width.
+
+    Delegates to ``draw_lines_attrs`` with ``attr`` repeated for every
+    line -- the flat-attr convenience shape every existing caller
+    (GOALS/FOCUS/DECISIONS/the strip/GAME/LOGS) uses; behavior is
+    unchanged from before this delegation existed."""
+    draw_lines_attrs(win, region, [(line, attr) for line in lines], boxed=boxed)
 
 
 def draw_refuse_message(win: curses.window, message: str, attr: int) -> None:

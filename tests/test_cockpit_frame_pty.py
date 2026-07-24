@@ -32,6 +32,8 @@ from pathlib import Path
 
 import pytest
 
+import curses
+
 from tw2002_aiclient.cockpit import draw as cockpit_draw
 from tw2002_aiclient.cockpit.layout import frame_layout
 
@@ -471,8 +473,10 @@ def test_too_small_refuses_with_message_and_no_chrome(tmp_path):
 
 
 class _GridWin:
-    """Minimal fake curses window for testing ``draw_box`` in isolation:
-    records ``addstr`` writes into a 2D character grid. ``draw.py``'s
+    """Minimal fake curses window for testing ``draw_box``/``draw_lines*``
+    in isolation: records ``addstr`` writes into a 2D character grid, plus
+    the ``attr`` each write carried (needed by the ``draw_lines_attrs``
+    tests below; unused by the pre-existing title-clip test). ``draw.py``'s
     ``_safe_write`` only ever calls ``getmaxyx``/``addstr`` on its window
     argument, so this is a complete-enough double without real curses or a
     pty (mirrors ``tests/test_play_chrome_nav.py::_RecordingStdscr``'s
@@ -481,6 +485,7 @@ class _GridWin:
     def __init__(self, rows: int, cols: int) -> None:
         self.rows, self.cols = rows, cols
         self.grid = [[" "] * cols for _ in range(rows)]
+        self.attrs = [[0] * cols for _ in range(rows)]
 
     def getmaxyx(self) -> tuple[int, int]:
         return self.rows, self.cols
@@ -490,9 +495,13 @@ class _GridWin:
             col = x + i
             if 0 <= col < self.cols:
                 self.grid[y][col] = ch
+                self.attrs[y][col] = attr
 
     def row_text(self, y: int) -> str:
         return "".join(self.grid[y])
+
+    def attr_at(self, y: int, x: int) -> int:
+        return self.attrs[y][x]
 
 
 def test_draw_box_overlong_title_does_not_clobber_top_right_corner():
@@ -506,3 +515,61 @@ def test_draw_box_overlong_title_does_not_clobber_top_right_corner():
     row0 = win.row_text(0)
     assert row0[region["x"]] == "╭"  # top-left corner intact
     assert row0[region["x"] + region["w"] - 1] == "╮"  # top-right corner intact
+
+
+# ---------------------------------------------------------------------------
+# Pure logic unit tests: draw_lines_attrs (PWO-037 HUD-review REVISE) -- the
+# per-line-attr sibling of draw_lines, added so a panel can dim ONE line
+# in a box without bypassing draw.py's own sanitize/cell-clip choke point.
+# ---------------------------------------------------------------------------
+
+
+def test_draw_lines_attrs_applies_a_distinct_attr_per_line():
+    """draw_lines_attrs's whole reason to exist: two lines in the SAME box
+    render with two DIFFERENT curses attrs -- draw_lines's single flat attr
+    cannot express this (HUD's stale-value-row dimming, PWO-037)."""
+    win = _GridWin(10, 40)
+    region = {"y": 0, "x": 0, "w": 20, "h": 5}
+    cockpit_draw.draw_lines_attrs(
+        win, region, [("LABEL", curses.A_NORMAL), ("12,345 stale", curses.A_DIM)]
+    )
+
+    inner_y, inner_x = region["y"] + 1, region["x"] + 1
+    assert win.attr_at(inner_y, inner_x) == curses.A_NORMAL
+    assert win.attr_at(inner_y + 1, inner_x) == curses.A_DIM
+
+
+def test_draw_lines_attrs_clips_wide_glyphs_to_interior_cell_width():
+    """A CJK/fullwidth line (2 cells per glyph) must clip by DISPLAY WIDTH,
+    not Python-character count, or it bleeds past the box's own right
+    border -- the pure-unit equivalent of
+    ``tests/test_cockpit_frame_pty.py::test_cjk_heavy_status_line_preserves_logs_right_border``,
+    proven directly at the ``draw_lines_attrs`` call this time."""
+    win = _GridWin(10, 20)
+    region = {"y": 0, "x": 0, "w": 12, "h": 4}  # interior w = 10 cells
+    cockpit_draw.draw_box(win, region, weight="thin", attr=0, uok=True)
+    cockpit_draw.draw_lines_attrs(win, region, [("国" * 20, curses.A_NORMAL)])
+
+    row = win.row_text(1)
+    assert row[region["x"] + region["w"] - 1] == "│", (
+        "wide-glyph line bled past the box's own right border"
+    )
+
+
+def test_draw_lines_attrs_sanitizes_embedded_control_char():
+    """An embedded control character (\\n) must be neutralized to a plain
+    space by ``_safe_write``'s ``_sanitize_controls`` step. This fake window
+    is dumb (it never interprets ``\\n`` as a cursor move the way a real
+    terminal would), so the assertion is the literal character written at
+    that cell rather than row-bleed -- the LIVE-terminal row-bleed hazard
+    itself is proven by
+    ``tests/test_cockpit_frame_pty.py::test_embedded_newline_in_status_line_does_not_escape_box``."""
+    win = _GridWin(10, 40)
+    region = {"y": 0, "x": 0, "w": 20, "h": 5}
+    cockpit_draw.draw_lines_attrs(win, region, [("ab\ncd", curses.A_NORMAL)])
+
+    inner_y, inner_x = region["y"] + 1, region["x"] + 1
+    written = "".join(win.grid[inner_y][inner_x : inner_x + 5])
+    assert written == "ab cd", (
+        f"expected the embedded control char neutralized to a space, got {written!r}"
+    )
