@@ -79,6 +79,10 @@ never drive recommendations that contradict reborn `canon/`.
 `--ignore=`s every banked uncollectable file so `pytest --collect-only` / `pytest -q` run only the
 greenfield suite (0 collection ERRORS). Remove an ignore line when that file is rewritten/Accepted.
 
+**P2-025 rewrite-B (prep):** `test_control_lock` · `test_actor_attribution` · `test_tw04_toctou` ·
+`test_attach_*` · optionally `test_clean_preempt` — listed under
+`workorders/WO-P2-025-control-lock-actor-tag.md` §PREP; still ignored until execute HANDOFF.
+
 ## Run-dir override (WO-P2-021)
 
 **Canon:** `canon/architecture/session-engine.md` (Single-Connection Invariant).
