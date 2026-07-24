@@ -1,6 +1,6 @@
 # WO-P0-003 — Greenfield package scaffold
 
-> Status: PLANNED (greenfield · HOLD-GATES-PENDING blocks execution until a lifting HANDOFF)
+> Status: DONE — hub-Accepted 452d896 (2026-07-23)
 **Phase:** 0 · **Type:** bootstrap · **Depends:** —
 **Canon:** `canon/architecture/session-engine.md`
 

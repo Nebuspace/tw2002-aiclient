@@ -1,6 +1,6 @@
 # WO-P0-004 — Dev seat smoke
 
-> Status: PLANNED (greenfield · HOLD-GATES-PENDING blocks execution until a lifting HANDOFF)
+> Status: DONE — hub-Accepted 4554eb3 (2026-07-23)
 **Phase:** 0 · **Type:** verify · **Depends:** WO-P0-003
 **Canon:** `canon/architecture/cli-verbs.md`
 

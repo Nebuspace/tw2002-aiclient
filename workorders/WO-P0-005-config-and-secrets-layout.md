@@ -1,6 +1,6 @@
 # WO-P0-005 — Config and secrets layout
 
-> Status: PLANNED (greenfield · HOLD-GATES-PENDING blocks execution until a lifting HANDOFF)
+> Status: DONE — hub-Accepted 333530e (2026-07-23)
 **Phase:** 0 · **Type:** bootstrap · **Depends:** WO-P0-003
 **Canon:** `canon/doctrine/secrets-and-credentials.md`
 

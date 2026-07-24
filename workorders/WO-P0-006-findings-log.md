@@ -1,6 +1,6 @@
 # WO-P0-006 — Findings log (+ archive reference index)
 
-> Status: PLANNED (greenfield · HOLD-GATES-PENDING blocks execution until a lifting HANDOFF)
+> Status: DONE — hub-Accepted 34fb550 (2026-07-23)
 **Phase:** 0 · **Type:** docs-finding · **Depends:** WO-P0-004
 **Canon:** north-star conventions (`canon/architecture/north-star.md`), plus the divergence sections
 of `canon/architecture/session-engine.md`, `canon/architecture/control-and-escalation.md`,
