@@ -150,15 +150,17 @@ class LauncherScreen:
             self.stdscr,
             max_y - 2,
             3,
-            "↑/↓ select   Enter play/create   q quit",
+            "↑/↓ select   Enter play/create   b bank   q quit",
             self._chrome,
         )
         self.stdscr.refresh()
 
     def handle_key(self, key: int) -> str | None:
-        """Return ``quit`` / ``create`` / ``play`` / ``None``."""
+        """Return ``quit`` / ``create`` / ``play`` / ``bank`` / ``None``."""
         if key in (ord("q"), ord("Q")):
             return "quit"
+        if key in (ord("b"), ord("B")):
+            return "bank"
         n = self._n_items
         if key in (curses.KEY_UP, ord("k")):
             self.selected = (self.selected - 1) % n
@@ -181,6 +183,13 @@ class LauncherScreen:
 
 PLAY_TITLE = " PLAY SHELL "
 PLAY_SUBTITLE = " (placeholder — cockpit chrome is a later WO) "
+BANK_TITLE = " PLAYER BANK "
+BOUNDARY_LINE_1 = (
+    "Rotation multiplies YOUR own daily turns across INDEPENDENT characters."
+)
+BOUNDARY_LINE_2 = (
+    "Hard line: never transfer credits/cargo/assets between them."
+)
 
 
 class PlayShellScreen:
@@ -240,6 +249,99 @@ class PlayShellScreen:
     def handle_key(self, key: int) -> str | None:
         """Return ``back`` / ``quit`` / ``None``."""
         if key == 27:  # Esc — end binding, return to launcher
+            return "back"
+        if key in (ord("q"), ord("Q")):
+            return "quit"
+        return None
+
+
+class BankViewScreen:
+    """Credential-bank rotation touchpoint — metadata only (WO-P1-015)."""
+
+    def __init__(
+        self,
+        stdscr: curses.window,
+        entries: Sequence[dict[str, str]] | None = None,
+    ) -> None:
+        self.stdscr = stdscr
+        self.entries = list(entries or ())
+        self._chrome = curses.A_NORMAL
+        self._warn = curses.A_BOLD
+        self._init_colors()
+
+    def _init_colors(self) -> None:
+        if not curses.has_colors():
+            self._chrome = curses.A_BOLD
+            self._warn = curses.A_BOLD | curses.A_UNDERLINE
+            return
+        curses.start_color()
+        try:
+            curses.use_default_colors()
+        except curses.error:
+            pass
+        curses.init_pair(1, curses.COLOR_CYAN, -1)
+        curses.init_pair(2, curses.COLOR_YELLOW, -1)
+        self._chrome = curses.color_pair(1)
+        self._warn = curses.color_pair(2) | curses.A_BOLD
+
+    def draw(self) -> None:
+        self.stdscr.erase()
+        max_y, max_x = self.stdscr.getmaxyx()
+        if max_y >= 3 and max_x >= 10:
+            try:
+                self.stdscr.attron(self._chrome)
+                self.stdscr.box()
+                self.stdscr.attroff(self._chrome)
+            except curses.error:
+                pass
+            _safe_addstr(self.stdscr, 0, 2, TITLE, self._chrome | curses.A_BOLD)
+            _safe_addstr(self.stdscr, 1, 2, BANK_TITLE, self._chrome)
+
+        # Boundary shown at the touchpoint — never buried.
+        _safe_addstr(self.stdscr, 2, 3, BOUNDARY_LINE_1, self._warn)
+        _safe_addstr(self.stdscr, 3, 3, BOUNDARY_LINE_2, self._warn)
+
+        y = 5
+        header = (
+            f"{'name':<16} {'handle':<16} {'host':<24} "
+            f"{'game':<3} {'last_played':<21} turns"
+        )
+        _safe_addstr(self.stdscr, y, 3, header, self._chrome)
+        y += 1
+        if not self.entries:
+            _safe_addstr(
+                self.stdscr,
+                y,
+                3,
+                "(bank empty — add profiles; rotation history shows never / -)",
+                curses.A_DIM,
+            )
+        else:
+            for entry in self.entries:
+                if y >= max_y - 2:
+                    break
+                line = (
+                    f"{entry.get('name', '?'):<16} "
+                    f"{entry.get('handle', '?'):<16} "
+                    f"{entry.get('host', '?'):<24} "
+                    f"{entry.get('game_letter', '?'):<3} "
+                    f"{entry.get('last_played', 'never'):<21} "
+                    f"{entry.get('turns_state', '-')}"
+                )
+                _safe_addstr(self.stdscr, y, 3, line, curses.A_NORMAL)
+                y += 1
+
+        _safe_addstr(
+            self.stdscr,
+            max_y - 2,
+            3,
+            "Esc return to launcher",
+            self._chrome,
+        )
+        self.stdscr.refresh()
+
+    def handle_key(self, key: int) -> str | None:
+        if key == 27:
             return "back"
         if key in (ord("q"), ord("Q")):
             return "quit"

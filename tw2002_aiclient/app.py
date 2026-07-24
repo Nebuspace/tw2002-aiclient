@@ -7,12 +7,13 @@ import os
 import curses
 
 from tw2002_aiclient.screens import (
+    BankViewScreen,
     CreateFormScreen,
     LauncherScreen,
     PlayShellScreen,
     ProfileRow,
 )
-from tw2002_aiclient.session import credentials
+from tw2002_aiclient.session import credentials, player_bank
 
 
 def _rows_from_disk() -> list[ProfileRow]:
@@ -114,6 +115,18 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
             return action
 
 
+def _run_bank(stdscr: curses.window) -> str:
+    bank = BankViewScreen(stdscr, entries=player_bank.list_players())
+    while True:
+        bank.draw()
+        key = stdscr.getch()
+        if key == -1:
+            continue
+        action = bank.handle_key(key)
+        if action in ("back", "quit"):
+            return action
+
+
 def _run(stdscr: curses.window) -> None:
     try:
         curses.curs_set(0)
@@ -147,6 +160,33 @@ def _run(stdscr: curses.window) -> None:
         assert profile is not None
         PlayShellScreen(stdscr, profile).draw()
         return
+    # Bank smoke: draw bank view once (metadata + boundary) then exit.
+    if os.environ.get("TW2002_BANK_SMOKE") == "1":
+        # Seed demo profiles into the row model so bank rows aren't empty under DEMO.
+        if os.environ.get("TW2002_LAUNCHER_DEMO") == "1":
+            # list_players reads disk profiles; for smoke use explicit fixture entries.
+            entries = [
+                {
+                    "name": "scout-b",
+                    "handle": "NewPilot",
+                    "host": "game.a-net-online.lol",
+                    "game_letter": "B",
+                    "last_played": "never",
+                    "turns_state": "-",
+                },
+                {
+                    "name": "paladin-main",
+                    "handle": "PaladinPrime",
+                    "host": "tw2002.example.com",
+                    "game_letter": "A",
+                    "last_played": "2026-07-23",
+                    "turns_state": "ok",
+                },
+            ]
+            BankViewScreen(stdscr, entries=entries).draw()
+        else:
+            BankViewScreen(stdscr, entries=player_bank.list_players()).draw()
+        return
     while True:
         screen.draw()
         key = stdscr.getch()
@@ -155,6 +195,11 @@ def _run(stdscr: curses.window) -> None:
         action = screen.handle_key(key)
         if action == "quit":
             break
+        if action == "bank":
+            result = _run_bank(stdscr)
+            if result == "quit":
+                break
+            continue
         if action == "create":
             result = _run_create(stdscr)
             if result == "saved":
