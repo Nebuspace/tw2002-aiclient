@@ -10,8 +10,9 @@ buckets so Phase-2 work orders can schedule honest proof instead of drowning in 
 
 **Progress:** inventory ACCEPTED · DELETE · REWRITE-LIVE · REWRITE-ENSURE DONE ·
 **COLLECT-HYGIENE** — default `pytest.ini` `--ignore=` for remaining banked files (see tip SHA).
-Remaining rewrite bodies still on disk (credentials / control_lock / attach / login\* …) until
-owning WOs lift the ignore.
+Remaining rewrite bodies still on disk (credentials / control_lock / attach / login_redaction …)
+until owning WOs lift the ignore. **`tests/test_login.py` is NOT ignored** (hub carve-out —
+CC WO-P2-023); default collect stays clean once 023 lands the greenfield rewrite on tip.
 
 ---
 
