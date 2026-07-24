@@ -176,6 +176,8 @@ Types: `bootstrap` · `verify` · `build` · `extend` · `harden` · `docs-findi
 | PWO-040 | Semantic chrome colors **DONE** tip `f594b9e` | polish | 031 | 7-tone table | warn/danger/ok | TTY | mode-line · cockpit polish · visual-language |
 | PWO-041 | LOGS band **PARKED** (context HOLD · not DONE) | extend | 031·020 | Ledger tail redacted | lines appear | TTY + log | trace-ledger · cockpit |
 
+Banked hygiene (not a PWO id): **pty mid-flush settle** — PREP `workorders/WO-PTY-SETTLE-HYGIENE-PREP.md` (shared `settle_drain`; KEY_RESIZE separate).
+
 ### Phase 4 — Game viewport & watch surfaces
 
 | ID | Title | Type | Depends | Goal | Accept | Proof | Canon |

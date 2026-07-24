@@ -125,6 +125,7 @@ Authored from a 3-lane read-only fan-out (panels/ledger · HUD/fold/colors · de
 3. **Ignored tests** — false confidence from archive fixtures; Prefer new `tests/test_cockpit_panels_*.py`.
 4. **Ledger absence** — 041 may need a thin redacted ring-buffer before full trace-ledger port.
 5. **Secrets** — LOGS + any status dump: redaction sink mandatory.
+6. **Pty mid-flush** — banked settle/drain hygiene PREP: `workorders/WO-PTY-SETTLE-HYGIENE-PREP.md` (shared `settle_drain`; defer logsband until 041; KEY_RESIZE is a separate follow-on).
 
 ---
 
