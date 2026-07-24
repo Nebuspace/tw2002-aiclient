@@ -1,6 +1,20 @@
 """IAC stripping + negotiation tests — no network involved."""
 
-from twclient.iac import IAC, WILL, WONT, DO, DONT, SB, SE, TTYPE, NAWS, ECHO, SGA, TTYPE_SEND, TelnetHandler
+from tw2002_aiclient.session.iac import (
+    IAC,
+    WILL,
+    WONT,
+    DO,
+    DONT,
+    SB,
+    SE,
+    TTYPE,
+    NAWS,
+    ECHO,
+    SGA,
+    TTYPE_SEND,
+    TelnetHandler,
+)
 
 
 def test_plain_data_passes_through():
@@ -24,7 +38,6 @@ def test_do_ttype_replies_will_ttype():
 
 def test_ttype_subnegotiation_send_replies_with_terminal_type():
     h = TelnetHandler(terminal_type=b"ANSI")
-    # IAC SB TTYPE SEND IAC SE
     clean = h.feed(bytes([IAC, SB, TTYPE, TTYPE_SEND, IAC, SE]))
     assert clean == b""
     expected = bytes([IAC, SB, TTYPE, 0]) + b"ANSI" + bytes([IAC, SE])

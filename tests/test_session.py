@@ -1,17 +1,18 @@
-"""Session (twclient/session.py) unit tests -- no network. Constructing
-a bare `Session` never touches the network (only `.start()`/
-`.reconnect()` do, via `TelnetConnection.connect()`), so `test_reconnect_
-resets_game_select_answered` monkeypatches that one method to a no-op
-rather than pulling in a real socket -- same discipline as this
-project's other fakes that stay network-free."""
+"""Session unit tests — no network.
+
+Constructing a bare Session never touches the network (only .start()/
+.reconnect() do). Fence-wait tests use a duck-typed control_lock stub
+(control_lock.py is not yet ported under tw2002_aiclient.session).
+"""
 
 import threading
 import time
 
-from twclient import session as session_module
-from twclient.connection import TelnetConnection
-from twclient.control_lock import ControlLock
-from twclient.session import Session
+import pytest
+
+from tw2002_aiclient.session import session as session_module
+from tw2002_aiclient.session.connection import TelnetConnection
+from tw2002_aiclient.session.session import VALID_SENDERS, Session
 
 from .conftest import FAKE_HOST, FAKE_PORT
 
@@ -20,21 +21,34 @@ def _noop_connect(self, timeout=10):
     self.connected = True
 
 
+class _FenceStub:
+    """Minimal duck-type for Session.send_raw(control_lock=...)."""
+
+    def __init__(self, fenced=False):
+        self._fenced = fenced
+
+    def is_driver_fenced(self):
+        return self._fenced
+
+    def clear(self):
+        self._fenced = False
+
+
 def test_game_select_answered_defaults_false(tmp_path):
-    session = Session(FAKE_HOST, FAKE_PORT, None, tmp_path)
+    session = Session(FAKE_HOST, FAKE_PORT, "test", str(tmp_path))
     assert session.game_select_answered is False
     assert session.game_select_letter_sent is False
 
 
+def test_session_id_matches_logger(tmp_path):
+    session = Session(FAKE_HOST, FAKE_PORT, "test", str(tmp_path))
+    assert session.session_id == session.logger.session_id
+
+
 def test_reconnect_resets_game_select_answered_even_if_it_was_set(tmp_path, monkeypatch):
-    """Safety fix: the per-CONNECTION game-select allowance must come
-    back on a fresh connection -- guardian's D9 reconnect-replay (and a
-    fresh cold-start login) still need to answer a genuine game-select
-    prompt normally after a drop, even though the PRIOR connection had
-    already answered its own."""
     monkeypatch.setattr(TelnetConnection, "connect", _noop_connect)
-    session = Session(FAKE_HOST, FAKE_PORT, None, tmp_path)
-    session.game_select_answered = True  # models the prior connection's real answer
+    session = Session(FAKE_HOST, FAKE_PORT, "test", str(tmp_path))
+    session.game_select_answered = True
     session.game_select_letter_sent = True
 
     session.reconnect()
@@ -43,51 +57,56 @@ def test_reconnect_resets_game_select_answered_even_if_it_was_set(tmp_path, monk
     assert session.game_select_letter_sent is False
 
 
-# -- WO-CLEANPREEMPT: send_raw()'s bounded fence-wait -----------------------
-#
-# Direct unit tests against the REAL Session.send_raw() (not the
-# FakeAttachSession stand-in tests/conftest.py mirrors it with, and not
-# the full-daemon e2e proof in test_tw04_toctou.py) -- monkeypatches
-# TelnetConnection.send_bytes to a recording stub (bare `Session(...)`
-# construction never touches the network, same discipline as this
-# module's other tests) so the wait mechanics themselves are proven
-# against production code, isolated from any daemon/socket wiring.
+def test_send_rejects_invalid_sender(tmp_path, monkeypatch):
+    monkeypatch.setattr(TelnetConnection, "send_text", lambda *a, **k: None)
+    session = Session(FAKE_HOST, FAKE_PORT, "test", str(tmp_path))
+    with pytest.raises(ValueError, match="sender must be one of"):
+        session.send("A", sender="ai")
+
+
+def test_send_records_last_sent_and_sender(tmp_path, monkeypatch):
+    monkeypatch.setattr(TelnetConnection, "send_text", lambda *a, **k: None)
+    session = Session(FAKE_HOST, FAKE_PORT, "test", str(tmp_path))
+    session.send("M", sender="app")
+    assert session.last_sent == "M"
+    assert session.last_sender == "app"
+    assert session.last_sent_secret is False
+
+
+def test_send_secret_redacts_last_sent(tmp_path, monkeypatch):
+    monkeypatch.setattr(TelnetConnection, "send_text", lambda *a, **k: None)
+    session = Session(FAKE_HOST, FAKE_PORT, "test", str(tmp_path))
+    session.send("hunter2", secret=True, sender="app")
+    assert session.last_sent == "<redacted>"
+    assert session.last_sent_secret is True
 
 
 def test_send_raw_sends_immediately_when_control_lock_is_none(tmp_path, monkeypatch):
     sent = []
     monkeypatch.setattr(TelnetConnection, "send_bytes", lambda self, data, secret=False: sent.append(data))
-    session = Session(FAKE_HOST, FAKE_PORT, None, tmp_path)
+    session = Session(FAKE_HOST, FAKE_PORT, "test", str(tmp_path))
 
-    session.send_raw(b"H")  # no control_lock -- must be a complete no-op wait
+    session.send_raw(b"H")
 
     assert sent == [b"H"]
+    assert session.last_sender == "human"
 
 
 def test_send_raw_sends_immediately_when_the_lock_is_not_fenced(tmp_path, monkeypatch):
     sent = []
     monkeypatch.setattr(TelnetConnection, "send_bytes", lambda self, data, secret=False: sent.append(data))
-    session = Session(FAKE_HOST, FAKE_PORT, None, tmp_path)
-    lock = ControlLock()
+    session = Session(FAKE_HOST, FAKE_PORT, "test", str(tmp_path))
 
-    session.send_raw(b"H", control_lock=lock)
+    session.send_raw(b"H", control_lock=_FenceStub(fenced=False))
 
     assert sent == [b"H"]
 
 
 def test_send_raw_waits_for_the_fence_to_clear_before_sending(tmp_path, monkeypatch):
-    """The core WO-CLEANPREEMPT mechanic: a fenced dispatch holds the
-    keystroke off the wire until it releases -- proven here against the
-    real production `send_raw()`/`ControlLock`, independent of the
-    full-daemon e2e proof (test_tw04_toctou.py) or the FakeAttachSession
-    mirror (conftest.py)."""
     sent = []
     monkeypatch.setattr(TelnetConnection, "send_bytes", lambda self, data, secret=False: sent.append(data))
-    session = Session(FAKE_HOST, FAKE_PORT, None, tmp_path)
-    lock = ControlLock()
-    lock.acquire_driver()
-    lock.take_human()  # fences the in-flight "dispatch"
-    assert lock.is_driver_fenced() is True
+    session = Session(FAKE_HOST, FAKE_PORT, "test", str(tmp_path))
+    lock = _FenceStub(fenced=True)
 
     result = {}
 
@@ -97,12 +116,12 @@ def test_send_raw_waits_for_the_fence_to_clear_before_sending(tmp_path, monkeypa
 
     t = threading.Thread(target=send_call)
     t.start()
-    time.sleep(0.2)  # generous margin, matches this codebase's own convention
+    time.sleep(0.2)
 
     assert "done" not in result
     assert sent == []
 
-    lock.release_driver()  # the fenced dispatch finally releases
+    lock.clear()
     t.join(timeout=2.0)
 
     assert result.get("done") is True
@@ -110,29 +129,16 @@ def test_send_raw_waits_for_the_fence_to_clear_before_sending(tmp_path, monkeypa
 
 
 def test_send_raw_fence_wait_is_bounded_and_sends_anyway_once_the_bound_expires(tmp_path, monkeypatch):
-    """The wait is a courtesy ORDERING wait, never a second refusal path
-    -- a dispatch that never releases (already a violation of every
-    OTHER try/finally-paired guarantee in this codebase) can't strand a
-    human keystroke forever. Shrinks the bound/poll constants via
-    monkeypatch so this resolves fast rather than actually waiting the
-    real 10s default."""
     monkeypatch.setattr(session_module, "_FENCE_WAIT_TIMEOUT_S", 0.1)
     monkeypatch.setattr(session_module, "_FENCE_WAIT_POLL_S", 0.02)
     sent = []
     monkeypatch.setattr(TelnetConnection, "send_bytes", lambda self, data, secret=False: sent.append(data))
-    session = Session(FAKE_HOST, FAKE_PORT, None, tmp_path)
-    lock = ControlLock()
-    lock.acquire_driver()
-    lock.take_human()  # fenced, and deliberately NEVER released in this test
+    session = Session(FAKE_HOST, FAKE_PORT, "test", str(tmp_path))
+    lock = _FenceStub(fenced=True)  # never cleared
 
-    session.send_raw(b"H", control_lock=lock)  # must not hang forever
+    session.send_raw(b"H", control_lock=lock)
 
     assert sent == [b"H"]
-
-
-# -- WO-CLEANPREEMPT (secret sub-diff): send_raw()'s send-time secret
-# decision (cipher's proven leak: every attach keystroke was previously
-# logged unredacted regardless of what prompt it was answering) --------
 
 
 def test_send_raw_passes_secret_true_to_send_bytes_at_a_password_prompt(tmp_path, monkeypatch):
@@ -140,7 +146,7 @@ def test_send_raw_passes_secret_true_to_send_bytes_at_a_password_prompt(tmp_path
     monkeypatch.setattr(
         TelnetConnection, "send_bytes", lambda self, data, secret=False: calls.append((data, secret))
     )
-    session = Session(FAKE_HOST, FAKE_PORT, None, tmp_path)
+    session = Session(FAKE_HOST, FAKE_PORT, "test", str(tmp_path))
     session.terminal.feed(b"Password:")
 
     session.send_raw(b"H")
@@ -149,18 +155,9 @@ def test_send_raw_passes_secret_true_to_send_bytes_at_a_password_prompt(tmp_path
     assert session.last_sent_secret is True
 
 
-def test_send_raw_redacts_last_sent_at_a_password_prompt_the_third_sink(tmp_path, monkeypatch):
-    """The THIRD sink (hub-caught, follow-up to the log/ledger fix
-    above): `last_sent` feeds `protocol.build_response()`'s `sent_input`
-    field directly -- `tw watch`/`tw spectate`'s TX-channel and any
-    build_response-based verb read a secret keystroke through exactly
-    this attribute (see tests/test_attach_redaction.py's own protocol-
-    level proof). Mirrors `send()`'s own existing `"<redacted>" if
-    secret else text` redaction -- send_raw() already computes the same
-    `secret` reading for the log/ledger sinks; this is the SAME reading,
-    not a new derivation."""
+def test_send_raw_redacts_last_sent_at_a_password_prompt(tmp_path, monkeypatch):
     monkeypatch.setattr(TelnetConnection, "send_bytes", lambda self, data, secret=False: None)
-    session = Session(FAKE_HOST, FAKE_PORT, None, tmp_path)
+    session = Session(FAKE_HOST, FAKE_PORT, "test", str(tmp_path))
     session.terminal.feed(b"Password:")
 
     session.send_raw(b"H")
@@ -168,45 +165,34 @@ def test_send_raw_redacts_last_sent_at_a_password_prompt_the_third_sink(tmp_path
     assert session.last_sent == "<redacted>"
 
 
-def test_send_raw_passes_secret_false_at_an_ordinary_prompt_sensitivity_control(tmp_path, monkeypatch):
-    """Sensitivity control for the test above: an ordinary screen must
-    NOT be redacted -- proving the green result is a real signal keyed
-    on the screen's shape, not a check that always redacts."""
+def test_send_raw_passes_secret_false_at_an_ordinary_prompt(tmp_path, monkeypatch):
     calls = []
     monkeypatch.setattr(
         TelnetConnection, "send_bytes", lambda self, data, secret=False: calls.append((data, secret))
     )
-    session = Session(FAKE_HOST, FAKE_PORT, None, tmp_path)
+    session = Session(FAKE_HOST, FAKE_PORT, "test", str(tmp_path))
     session.terminal.feed(b"Command [TL=00:00:00]:[1] (?=Help)? :")
 
     session.send_raw(b"H")
 
     assert calls == [(b"H", False)]
     assert session.last_sent_secret is False
-    assert session.last_sent == "H"  # the third sink: not redacted here either
+    assert session.last_sent == "H"
 
 
 def test_send_raw_uses_the_current_screen_at_send_time_not_a_stale_pre_wait_snapshot(tmp_path, monkeypatch):
-    """mack's staleness finding: the screen can transition to a secret
-    prompt DURING send_raw()'s fence-wait -- the secret decision must
-    reflect the screen AT THE MOMENT THE BYTE IS SENT (right after the
-    wait resolves), never whatever it looked like before the wait
-    started. Simulated by mutating the session's own render() mid-wait,
-    proven against the real production send_raw()."""
     calls = []
     monkeypatch.setattr(
         TelnetConnection, "send_bytes", lambda self, data, secret=False: calls.append((data, secret))
     )
-    session = Session(FAKE_HOST, FAKE_PORT, None, tmp_path)
+    session = Session(FAKE_HOST, FAKE_PORT, "test", str(tmp_path))
     became_secret = threading.Event()
     monkeypatch.setattr(
         session,
         "render",
         lambda: ["Enter PIN:"] if became_secret.is_set() else ["Command [TL=00:00:00]:[1] (?=Help)? :"],
     )
-    lock = ControlLock()
-    lock.acquire_driver()
-    lock.take_human()  # fences the in-flight "dispatch"
+    lock = _FenceStub(fenced=True)
 
     result = {}
 
@@ -216,42 +202,26 @@ def test_send_raw_uses_the_current_screen_at_send_time_not_a_stale_pre_wait_snap
 
     t = threading.Thread(target=send_call)
     t.start()
-    time.sleep(0.15)  # still fenced -- the screen is still the ORDINARY one at this point
+    time.sleep(0.15)
     assert "done" not in result
 
-    became_secret.set()  # the screen transitions to a secret prompt WHILE still fenced
-    lock.release_driver()  # NOW the fence clears -- send_raw's render() happens after this
+    became_secret.set()
+    lock.clear()
     t.join(timeout=2.0)
 
     assert result.get("done") is True
-    # Redacted -- reflects the CURRENT (post-transition) screen, not the
-    # stale pre-wait one, which would have wrongly read secret=False.
     assert calls == [(b"1", True)]
     assert session.last_sent_secret is True
 
 
-# -- WO-FA-SAFE (Rook must-fix #3): credits_snapshot()'s atomic read --------
-#
-# Direct unit tests against the REAL Session.observe_credits()/
-# credits_snapshot() (not a fake standing in for one) -- the thread-stress
-# proof of the ATOMICITY property itself lives in
-# tests/test_credits_supervision.py (mirroring that file's own established
-# convention for the WO-FA7a negative-age race); these are the plain,
-# non-concurrent shape proofs.
+def test_valid_senders_are_app_and_human_only():
+    assert VALID_SENDERS == ("app", "human")
 
 
-def test_credits_snapshot_is_none_none_before_any_balance_observed(tmp_path):
-    session = Session(FAKE_HOST, FAKE_PORT, None, tmp_path)
-    assert session.credits_snapshot() == (None, None)
-
-
-def test_credits_snapshot_reflects_the_last_observed_balance(tmp_path):
-    session = Session(FAKE_HOST, FAKE_PORT, None, tmp_path)
-    session.observe_credits("You have 42,000 credits.\nCommand [TL=00:00:00]:[1] (?=Help)? :")
-
-    bal, ts = session.credits_snapshot()
-    assert bal == 42000
-    assert ts is not None
-    assert (bal, ts) == (session.last_credits, session.last_credits_ts), (
-        "credits_snapshot() must read the exact same pair observe_credits() wrote"
-    )
+def test_record_history_caps_at_history_cap(tmp_path):
+    session = Session(FAKE_HOST, FAKE_PORT, "test", str(tmp_path))
+    session._history_cap = 3
+    for i in range(5):
+        session.record_history("do", {"i": i}, ">", "unknown", "idle")
+    assert len(session.history) == 3
+    assert session.history[0]["args"]["i"] == 2

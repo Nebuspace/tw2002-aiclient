@@ -1,6 +1,9 @@
 """Transcript logger tests — no network involved."""
 
-from twclient.logging_util import TranscriptLogger
+import os
+import stat
+
+from tw2002_aiclient.session.logging_util import TranscriptLogger
 
 
 def test_log_raw_writes_content(tmp_path):
@@ -31,12 +34,23 @@ def test_log_redacted_custom_note(tmp_path):
 
 
 def test_log_note_writes_a_timestamped_diagnostic_line(tmp_path):
-    """TW-06/TW-25 Finding 4: the world-model write-hook's swallow-guard
-    routes here so a persistent failure leaves SOME operator-visible
-    trace instead of vanishing silently forever."""
     logger = TranscriptLogger(str(tmp_path))
-    logger.log_note("world_model write_from_state failed: WorldModelError('corrupt store')")
+    logger.log_note("side-effect failed: example")
     logger.close()
     content = open(logger.path, encoding="utf-8").read()
     assert "NOTE" in content
-    assert "world_model write_from_state failed" in content
+    assert "side-effect failed: example" in content
+
+
+def test_log_raw_empty_bytes_is_a_no_op(tmp_path):
+    logger = TranscriptLogger(str(tmp_path))
+    logger.log_raw("TX", b"")
+    logger.close()
+    content = open(logger.path, encoding="utf-8").read()
+    assert content == ""
+
+
+def test_transcript_file_is_owner_only_0600(tmp_path):
+    logger = TranscriptLogger(str(tmp_path))
+    logger.close()
+    assert stat.S_IMODE(os.stat(logger.path).st_mode) == 0o600

@@ -8,8 +8,9 @@
 retired `twclient` package (uncollectable under greenfield) into **rewrite · delete · defer**
 buckets so Phase-2 work orders can schedule honest proof instead of drowning in collection ERRORS.
 
-**Progress:** inventory ACCEPTED (`7e75677`) · DELETE wave executed (12 files removed — see §DELETE).
-**Still gated:** rewrite / defer execution until a lifting HANDOFF. No `session/login.py` (WO-P2-023).
+**Progress:** inventory ACCEPTED (`7e75677`) · DELETE wave DONE (`915e4d8`) · **REWRITE-LIVE**
+(6 live-module tests) DONE — see tip SHA in STATUS. Remaining rewrite: credentials / control_lock /
+attach / ensure_protocol / login\* (gated). Defer still gated.
 
 ---
 
@@ -49,8 +50,8 @@ importable. Any test that `import twclient` / `from twclient…` fails at **coll
 | **delete** | Pre-rebirth AI-pilot / learning-loop / autonomy-HUD coverage that **contradicts** north-star (AI never live-drives; no EV-every-tick driver). Do not rewrite onto greenfield. |
 | **defer** | Archive-only product surface (world model, trade, spectate, crawl, …) with no live module yet — keep file as reference until the owning product WO lands; then rewrite or delete under that WO. |
 
-**Counts (post-DELETE wave):** rewrite **16** · delete **0 remaining** (12 removed) · defer **50** ·
-collectable **6** · remaining uncollectable ≈ **66** · total `test_*.py` **72**.
+**Counts (post-REWRITE-LIVE):** rewrite **10 remaining** (6 live done) · delete **0** · defer **50** ·
+collectable **12** · remaining uncollectable ≈ **60** · total `test_*.py` **72**.
 
 ---
 
@@ -128,7 +129,7 @@ Grouped by pattern (individual files listed).
 ## Suggested execute slices (later HANDOFFs)
 
 1. ~~**Delete wave**~~ — DONE (WO-TEST-REHAB-DELETE).
-2. **Rewrite wave A** — connection / logging_util / session / terminal / iac / player_bank (modules live today).
+2. ~~**Rewrite wave A**~~ — connection / logging_util / session / terminal / iac / player_bank DONE.
 3. **Rewrite wave B** — control_lock + actor/TOCTOU/attach with WO-P2-025.
 4. **Login** — leave to WO-P2-023 (+ redaction follow-on).
 5. **Defer** — only reopen when the owning product WO lands.
