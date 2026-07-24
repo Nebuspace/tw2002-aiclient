@@ -44,18 +44,9 @@ from tw2002_aiclient.session import env as _env
 try:
     from tw2002_aiclient.session.control_lock import ControlLock
     from tw2002_aiclient.session.daemon import CommandHandler, ThreadingUnixServer
-    from tw2002_aiclient.session.loop_player import LoopPlayer
-    from tw2002_aiclient.session.session import Session
     from tw2002_aiclient.session.watch import WatchHub
 
-    _FAKE_DAEMON_IMPORTS_OK = all(
-        hasattr(Session, name)
-        for name in (
-            "observe_credits", "credits_snapshot",
-            "observe_turns", "turns_snapshot",
-            "observe_fighters", "fighters_snapshot",
-        )
-    )
+    _FAKE_DAEMON_IMPORTS_OK = True
 except ImportError:
     _FAKE_DAEMON_IMPORTS_OK = False
 
@@ -144,19 +135,8 @@ class FakeAttachSession:
     `self.lock` is a plain `threading.Lock`, the same shape `Session.lock`
     is -- both methods acquire it internally."""
 
-    # Guarded: only bind these off the real Session when it's ported
-    # far enough to have them (see _FAKE_DAEMON_IMPORTS_OK above) --
-    # this class still gets DEFINED either way (protocol.dispatch()'s
-    # do/send/status/screen surface below doesn't need them), only
-    # `fake_daemon` itself (which needs the full daemon-side stack)
-    # skips when they're missing.
-    if _FAKE_DAEMON_IMPORTS_OK:
-        observe_credits = Session.observe_credits
-        credits_snapshot = Session.credits_snapshot
-        observe_turns = Session.observe_turns
-        turns_snapshot = Session.turns_snapshot
-        observe_fighters = Session.observe_fighters
-        fighters_snapshot = Session.fighters_snapshot
+    # observe_*/snapshots deferred until Session grows those methods —
+    # attach protocol tests do not need them.
 
     def __init__(self, initial_screen="Command [TL=00:00:00]:[1234] (?=Help)? :", real_time_scale=0.0):
         self._screen = initial_screen
@@ -235,26 +215,15 @@ class FakeAttachSession:
     def wait_settle(self, wait_prompt=None, timeout=8.0, debounce_ms=350):
         return "idle", 0.0
 
-    def send(self, text, enter=True, secret=False):
+    def send(self, text, enter=True, secret=False, sender="app"):
         self.sent.append((text, enter, secret))
         self.last_sent = "<redacted>" if secret else text
         self.last_sent_ts = self.t
+        self.last_sender = sender
         self._pending_advance = True
 
-    def send_raw(self, data: bytes, control_lock=None):
-        # `control_lock` mirrors the real Session.send_raw()'s
-        # WO-CLEANPREEMPT signature (daemon.py's real _handle_attach
-        # always passes it) -- accepted here so the real
-        # CommandHandler._handle_attach code path works unmodified
-        # against this fake, honoring the same bounded fence-wait a real
-        # Session would (a no-op in every existing fake_daemon test,
-        # since none of them arrange a fenced driver first). Deliberately
-        # REAL wall-clock (time.monotonic()/time.sleep()), not this
-        # fake's own simulated `self.t` -- this wait is cross-thread
-        # synchronization against a REAL ControlLock shared with the
-        # daemon's other real threads, unrelated to the settle-detection
-        # fake-clock semantics `sleep()`/`self.t` model elsewhere in this
-        # fixture.
+    def send_raw(self, data: bytes, control_lock=None, sender="human"):
+        # Mirrors Session.send_raw signature (WO-CLEANPREEMPT + sender tag).
         if control_lock is not None:
             deadline = time.monotonic() + 10.0
             while control_lock.is_driver_fenced() and time.monotonic() < deadline:
@@ -262,6 +231,7 @@ class FakeAttachSession:
         self.raw_sent.append(data)
         self.last_sent = data.decode("latin-1", errors="replace")
         self.last_sent_ts = self.t
+        self.last_sender = sender
         self._pending_advance = True
 
     def record_history(self, verb, args, prompt, classification, settled_reason):
@@ -269,25 +239,20 @@ class FakeAttachSession:
 
 
 class _FakeDaemon:
-    """Mirrors daemon.py's main() wiring (real ThreadingUnixServer +
-    CommandHandler + WatchHub, production code unmodified) against a
-    FakeAttachSession -- a `tw attach` client also opens a `subscribe`
-    connection for its output side (interactive_app.SpectateClient), so
-    a WatchHub is real infrastructure here, not optional test scaffolding
-    (ledger/skill_recorder stay absent -- protocol.py's getattr(...,
-    None) convention already covers that)."""
+    """Real ThreadingUnixServer + CommandHandler + WatchHub against a
+    FakeAttachSession — enough for attach/subscribe protocol proofs.
+    LoopPlayer deferred (not required for F1 attach)."""
 
     def __init__(self, sock_path):
         self.sock_path = str(sock_path)
         self.session = FakeAttachSession()
         self.control_lock = ControlLock()
         self.watch_hub = WatchHub(self.session)
-        self.loop_player = LoopPlayer(self.session, self.control_lock, self.watch_hub)
         self.server = ThreadingUnixServer(self.sock_path, CommandHandler)
         self.server.session = self.session
         self.server.control_lock = self.control_lock
         self.server.watch_hub = self.watch_hub
-        self.server.loop_player = self.loop_player
+        self.server.request_stop = lambda: None
         self._thread = threading.Thread(target=self.server.serve_forever, daemon=True)
 
     def start(self):
@@ -295,7 +260,6 @@ class _FakeDaemon:
         self._thread.start()
 
     def stop(self):
-        self.loop_player.stop()  # signal only -- never blocks on the thread joining
         self.watch_hub.stop()
         self.server.shutdown()
         self.server.server_close()
@@ -304,17 +268,10 @@ class _FakeDaemon:
 
 @pytest.fixture
 def fake_daemon():
-    """A fresh isolated fake daemon per test, on its own temp socket --
-    never run/twd.sock, never the live game. AF_UNIX socket paths are
-    capped at ~104 bytes on macOS/BSD, well under what pytest's own
-    (deeply nested) tmp_path produces for a long test name -- a short
-    mkdtemp() under /tmp is used instead, purely for the socket."""
+    """Isolated fake daemon per test on a short /tmp unix socket path."""
     if not _FAKE_DAEMON_IMPORTS_OK:
         pytest.skip(
-            "fake_daemon needs tw2002_aiclient.session.{control_lock,loop_player,"
-            "watch} (not yet ported post-ADR-001) and Session's observe_*/"
-            "*_snapshot methods (WO-P2-020 Wave-4 test re-point; see "
-            "state-parser-not-yet-ported.md)"
+            "fake_daemon needs tw2002_aiclient.session.{control_lock,watch,daemon}"
         )
     sock_dir = tempfile.mkdtemp(prefix="twd-test-")
     try:

@@ -407,6 +407,67 @@ def cmd_watch(args):
     return 0
 
 
+def cmd_attach(args):
+    """WO-P2-OPS-VERB-F1: take control_lock and forward keystrokes (thin).
+
+    No curses screen paint yet (F2 spectate). Interactive mode needs a TTY
+    (cbreak until Ctrl-]). ``--keys`` sends latin-1 bytes then detaches —
+    for FakeDaemon / scripted proof without a TTY.
+    """
+    from .attach_client import DETACH_KEY, AttachInputConn
+
+    run_dir = _resolve_run_dir(args.run_dir)
+    sock_path = env.socket_path(run_dir)
+    if not sock_path.exists():
+        print("ERROR: daemon_not_running")
+        return 1
+
+    keys = getattr(args, "keys", None)
+    if keys is None and not sys.stdin.isatty():
+        print("ERROR: tw attach needs a real terminal (or pass --keys for scripted use)")
+        return 1
+
+    conn = AttachInputConn(sock_path)
+    if not conn.connect():
+        print(f"ERROR: {conn.error or 'attach_failed'}")
+        return 1
+
+    try:
+        if keys is not None:
+            # Scripted: interpret escapes lightly — \\r \\n \\xNN and raw chars.
+            data = keys.encode("utf-8").decode("unicode_escape").encode("latin-1", errors="ignore")
+            if data:
+                conn.send_key(data)
+            return 0
+
+        import termios
+        import tty
+
+        print("ATTACHED — Ctrl-] detach (thin attach: no live screen paint yet; use tw watch)", flush=True)
+        fd = sys.stdin.fileno()
+        old = termios.tcgetattr(fd)
+        try:
+            tty.setcbreak(fd)
+            while True:
+                ch = sys.stdin.read(1)
+                if not ch:
+                    break
+                code = ord(ch)
+                if code == DETACH_KEY:
+                    break
+                if ch in ("\n", "\r"):
+                    conn.send_key(b"\r\n")
+                else:
+                    conn.send_key(ch.encode("latin-1", errors="ignore"))
+        finally:
+            termios.tcsetattr(fd, termios.TCSADRAIN, old)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        conn.close()
+    return 0
+
+
 # -- parser -------------------------------------------------------------
 
 def build_parser() -> argparse.ArgumentParser:
@@ -538,6 +599,20 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--compact", action="store_true",
                      help="screen only — omit prompt/class/settled footer")
     sp.set_defaults(func=cmd_watch)
+
+    sp = sub.add_parser(
+        "attach",
+        help="take the keyboard (control-lock); thin attach — no curses paint yet",
+    )
+    sp.add_argument(
+        "--keys",
+        default=None,
+        metavar="BYTES",
+        help="scripted keystroke(s) then detach (unicode-escape; no TTY required)",
+    )
+    sp.add_argument("--run-dir", default=None, metavar="PATH", dest="run_dir",
+                     help="daemon run directory override (default: project-rooted run/)")
+    sp.set_defaults(func=cmd_attach)
 
     return parser
 

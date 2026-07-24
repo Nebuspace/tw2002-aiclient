@@ -18,7 +18,7 @@ keystroke senders are `{app, human}` only.
 | Surface | Role |
 |---|---|
 | `./tw2002-aiclient` | **Product TUI** — profile launcher, play shell / cockpit chrome. Human-facing client. |
-| `./tw` | **Backend / ops CLI** — shipped verbs today: `status`, `ensure`, `screen`, `stop`, `do`, `send`, `read`, `history`, `watch` (table grows one WO at a time). |
+| `./tw` | **Backend / ops CLI** — shipped verbs today: `status`, `ensure`, `screen`, `stop`, `do`, `send`, `read`, `history`, `watch`, `attach` (table grows one WO at a time). |
 
 Same daemon either way — one telnet connection. Prefer `./tw2002-aiclient` for day-to-day play; keep `./tw` for automation and ops. Further ops verbs (`spectate`, `attach`, …) are inventoried in [`workorders/WO-P2-OPS-VERB-SURFACE.md`](workorders/WO-P2-OPS-VERB-SURFACE.md) — not on `./tw --help` yet.
 
@@ -41,9 +41,9 @@ password never appears in logs, argv, shell history, or any output. If the
 connection drops, a background guardian reconnects and logs back in by itself.
 
 **📺 Ops visibility today.** `tw status` / `tw screen` / `tw stop` / `tw do` /
-`tw send` / `tw read` / `tw history` / `tw watch` (plus `ensure`) are the shipped
-ops verbs. They talk to the daemon over a unix socket. Long-lived `tw spectate` /
-`tw attach` and `tw state` (needs `state_parser`) are staged in
+`tw send` / `tw read` / `tw history` / `tw watch` / `tw attach` (plus `ensure`) are
+the shipped ops verbs. They talk to the daemon over a unix socket. Long-lived
+`tw spectate` and `tw state` (needs `state_parser`) are staged in
 [`WO-P2-OPS-VERB-SURFACE.md`](workorders/WO-P2-OPS-VERB-SURFACE.md) — **not** on
 `./tw --help` yet.
 
@@ -80,8 +80,8 @@ One long-lived daemon, short-lived windows into it:
   everything over a local unix socket. You never run it directly.
 - **The CLI (`tw`)** is stateless: every verb connects, asks, prints, exits.
   Shipped today: `ensure`, `status`, `screen`, `stop`, `do`, `send`, `read`,
-  `history`, `watch`. More verbs land one WO at a time — see the Verb reference
-  and the ops WO.
+  `history`, `watch`, `attach`. More verbs land one WO at a time — see the Verb
+  reference and the ops WO.
 - **Product play** is `./tw2002-aiclient`, not `./tw`. Future ops `spectate` /
   `attach` (if wired) stay layered on the same daemon without disturbing the
   session — they are **Coming**, not live.
@@ -148,15 +148,15 @@ Everything takes `--json` for machine-parseable output where applicable.
 | `tw read` | Wait for settle and return the screen without sending. |
 | `tw history [--n N]` | Recent verb/prompt entries from the live session history ring (secret inputs already redacted when recorded). |
 | `tw watch [--frames N]` | Tail the settle-edge push-stream (read-only `subscribe`). Prints each event; `--frames N` exits after N events (else Ctrl-C). |
+| `tw attach [--keys …]` | Take the control-lock and forward keystrokes (thin — no curses paint yet). TTY cbreak until Ctrl-]; `--keys` for scripted/non-TTY. |
 
 ### Coming (not on `./tw --help` yet)
 
-Remaining classic ops verbs (`start`, `state`, `spectate`, `attach`, …)
+Remaining classic ops verbs (`start`, `state`, `spectate`, …)
 are staged in
 [`WO-P2-OPS-VERB-SURFACE.md`](workorders/WO-P2-OPS-VERB-SURFACE.md)
-(slices A–C + E2 `watch` shipped; `state` deferred pending `state_parser`;
-**slice D `start` is docs-only**; WatchHub substrate live under daemon
-`subscribe`).
+(slices A–C + E2 `watch` + F1 `attach` shipped; `state` deferred; **slice D
+`start` docs-only**; spectate = F2).
 
 Notes worth knowing up front:
 
@@ -166,15 +166,12 @@ Notes worth knowing up front:
 - Product play / cockpit chrome is `./tw2002-aiclient`, not `./tw`.
 
 
-## Spectator / attach (Coming)
+## Spectator / attach
 
-`tw spectate` and `tw attach` are **not** on `./tw --help` yet. Substrate already
-live: WatchHub/`subscribe`, `tw watch`, and daemon `_handle_attach` (control_lock
-keystroke lifetime). Missing: curses CLIs — archive `interactive_app.py` (~294
-LOC) and `spectate_app`+`spectate_layout` (~5.5k LOC). Execute plan:
-[`WO-P2-OPS-VERB-F-PREP.md`](workorders/WO-P2-OPS-VERB-F-PREP.md) (F1 attach CLI →
-F2 spectate port). Product play / cockpit chrome remains `./tw2002-aiclient`
-(Phase-3 pace-down separate).
+`tw attach` is **shipped** (thin): control-lock + keystroke forward; no live
+screen paint yet — pair with `tw watch`. Full curses attach / `tw spectate`
+remain Coming — see [`WO-P2-OPS-VERB-F-PREP.md`](workorders/WO-P2-OPS-VERB-F-PREP.md)
+(F2). Product play / cockpit chrome remains `./tw2002-aiclient`.
 
 
 ## Tests
@@ -192,8 +189,9 @@ and cockpit / play-shell compose against FakeClient and scripted sessions.
 ## Known limitations
 
 - Live `./tw` verbs today are **`status` / `ensure` / `screen` / `stop` / `do` /
-  `send` / `read` / `history` / `watch`**; `tw state` waits on a `state_parser`
-  port; `tw start` is intentionally not wired (use `ensure`). Remaining slices in
+  `send` / `read` / `history` / `watch` / `attach`**; `tw state` waits on a
+  `state_parser` port; `tw start` / `tw spectate` intentionally not wired yet.
+  Remaining slices in
   [`WO-P2-OPS-VERB-SURFACE.md`](workorders/WO-P2-OPS-VERB-SURFACE.md) land one WO at a time.
 - `state` parsing (when wired) is a best-effort skeleton under `tw2002_aiclient.session`
   — extend anchors as new screen shapes turn up.

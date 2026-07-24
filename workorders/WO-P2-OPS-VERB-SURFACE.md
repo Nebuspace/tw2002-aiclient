@@ -39,7 +39,7 @@ closes the socket without driving the game.
 | **WATCHHUB** | substrate | **DONE** |
 | **E2** | `tw watch` CLI | **DONE** |
 | **F-PREP** | spectate·attach inventory | **DONE** — see `WO-P2-OPS-VERB-F-PREP.md` |
-| **F1** | thin `tw attach` CLI (daemon attach already live) | queued |
+| **F1** | thin `tw attach` CLI (daemon attach already live) | **DONE** pending Accept |
 | **F2a/b** | spectate_layout → spectate_app + `tw spectate` | queued (curses-heavy) |
 | **G** | menumap… | queued |
 
