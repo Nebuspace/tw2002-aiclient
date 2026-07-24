@@ -54,7 +54,7 @@ python3 -m venv .venv && .venv/bin/pip install -e .
 - **AI never live-drives.** Live senders are `{app, human}` only. Spectate is read-only. At escalation the human responds by hand, Records a macro, or Analyzes with the AI teacher — every rule is human-approved before it can fire.
 - **Single-connection, single-session daemon** (once the daemon module lands): one telnet socket; control-lock governs who may drive. Don't bypass it.
 - **`.claude/` and `.samantha/` are gitignored** (hub ruling) — framework install is local orchestration, not shippable client. Same for private journals (`DESIGN-v2.md`, `QUEUE.md`, etc. if reintroduced).
-- **Path-leak gate (both seats).** Do not commit operator-home absolute paths (`/Users/<username>/` or `/home/<username>/`). Claude Code enforces via PreToolUse; Cursor enforces via `.cursor/hooks.json` → `.cursor/hooks/path-leak-gate.sh` (scans staged diff on `git commit`) using `scripts/path-leak-scan.sh`. Dry-run: stage a file containing `/Users/…` and confirm the scanner exits 1.
+- **Path-leak gate (both seats).** Do not commit operator-home absolute paths (`/Users/<username>/` or `/home/<username>/`). Claude Code enforces via PreToolUse; Cursor enforces `.cursor/hooks.json` → `.cursor/hooks/path-leak-gate.sh` with **`failClosed: true`** (deny if the hook crashes/missing) plus a tracked git hook at `scripts/githooks/pre-commit` (enable once: `git config core.hooksPath scripts/githooks`). Scanner: `scripts/path-leak-scan.sh`. Dry-run: stage a file containing `/Users/…` and confirm the scanner exits 1.
 
 ---
 

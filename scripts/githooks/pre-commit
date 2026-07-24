@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# git pre-commit — fail-closed path-leak gate (tracked via core.hooksPath).
+# Enable once per clone: git config core.hooksPath scripts/githooks
+set -euo pipefail
+ROOT="$(git rev-parse --show-toplevel)"
+exec "$ROOT/scripts/path-leak-scan.sh"
