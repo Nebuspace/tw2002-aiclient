@@ -21,10 +21,18 @@ from __future__ import annotations
 
 # -- Canon constants (canon/surfaces/visual-language.md "Responsive-fold
 # ladder" + "Box-drawing hierarchy") -- the target contract for this port.
-VIEWPORT_W, VIEWPORT_H = 82, 26
+#
+# VIEWPORT_H is 27, not 26: the bordered viewport wraps the daemon's true
+# native pyte grid, which is 80x25 (``session/terminal.py``'s
+# ``Terminal(columns=80, lines=25)``), one border cell on every side, zero
+# inset -- so the bordered box itself needs 25 + 2 = 27 rows. The prior 26
+# was cockpit drift (an 80x24 assumption baked in before this port checked
+# the daemon's own terminal dims); the engine's 80x25 was always right, so
+# the cockpit grows to match it rather than the engine shrinking.
+VIEWPORT_W, VIEWPORT_H = 82, 27
 # Native content the bordered viewport wraps, zero inner padding on every
 # side (visual-language.md: "Viewport zero-inset is an invariant").
-GAME_W, GAME_H = VIEWPORT_W - 2, VIEWPORT_H - 2  # 80 x 24
+GAME_W, GAME_H = VIEWPORT_W - 2, VIEWPORT_H - 2  # 80 x 25
 
 HUD_GUTTER_W = 36
 PRIORITIES_W = HUD_GUTTER_W  # the left PRIORITIES gutter mirrors HUD width at the full tier

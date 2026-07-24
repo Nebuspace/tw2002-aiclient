@@ -29,7 +29,7 @@ built, or built differently from the reborn contract, is marked `[ASPIRATIONAL]`
 about the game's own native palette is marked `[HYPOTHESIS]` and must never be promoted to fact
 without live introspection.
 
-**Implementation honesty — GAME viewport:** the play-shell center is an honest **blank 80×24** shell
+**Implementation honesty — GAME viewport:** the play-shell center is an honest **blank 80×25** shell
 (**LIVE** · PWO-051 · tip `7af4dbd`); live pyte / settle-snapshot paint is **NOT** yet (PWO-052).
 Border STATE flip (danger non-bold / mono underline) is **LIVE** (P3-040). Do not read chrome-tones
 prose as implying live pyte paint in the center.
@@ -167,7 +167,7 @@ flag so every glyph has an ASCII twin:
 - **Viewport zero-inset is an invariant, not a style choice.** The `[GAME UI]` box is titled
   `" GAME "` with the border on row/col 0 and content at (1,1), **zero inner padding**
   (`_content_inset`, `spectate_app.py`). Any inward pad would shear the game's own CP437 box-art —
-  this is why `VIEWPORT_W/H = GAME_W+2, GAME_H+2` (82×26, from `GAME_W, GAME_H = 80, 24`) and never
+  this is why `VIEWPORT_W/H = GAME_W+2, GAME_H+2` (82×27, from `GAME_W, GAME_H = 80, 25`) and never
   a padded inset.
 - **Titled thin boxes** carry their title at `addnstr(0, 2, " TITLE ")` in cyan — the uniform
   titling convention every instrument box on every surface follows (`HUD`, `LOG`, `DECISIONS`,

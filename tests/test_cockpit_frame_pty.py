@@ -300,7 +300,7 @@ def test_full_tier_center_viewport_is_double_line_and_empty_panels_honest(_full_
     assert "placeholder" not in "\n".join(grid).lower()
 
     # GAME's own interior is honestly blank -- zero cells painted, matching
-    # the "empty 80x24" Accept criterion (PREP §PWO-051), not merely "no
+    # the "empty 80x25" Accept criterion (PREP §PWO-051), not merely "no
     # placeholder word present" (which an unrelated stray glyph could
     # satisfy too).
     interior_top = center["y"] + 1

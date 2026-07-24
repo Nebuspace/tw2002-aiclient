@@ -186,11 +186,12 @@ def test_center_never_exceeds_viewport_width_across_bordered_tiers():
 # carve are this module's own named constants, not magic numbers).
 
 
-def test_game_content_budget_is_80x24_at_full_tier_with_ample_height():
-    """At lines=40 the column band comfortably clears VIEWPORT_H (26) --
+def test_game_content_budget_is_80x25_at_full_tier_with_ample_height():
+    """At lines=40 the column band comfortably clears VIEWPORT_H (27) --
     see ``test_corner_and_edge_coords_at_40x160`` above, which already pins
-    ``center['h'] == 26`` at this exact size -- so the GAME interior lands
-    on its full GAME_W x GAME_H (80x24) budget, not a height-clipped one."""
+    ``center['h'] == VIEWPORT_H`` at this exact size -- so the GAME interior
+    lands on its full GAME_W x GAME_H (80x25) budget, not a height-clipped
+    one."""
     regions = frame_layout(40, FULL_GUTTER_MIN_COLS + 2)
     center = regions["center"]
     assert center["border"] is True
@@ -200,7 +201,7 @@ def test_game_content_budget_is_80x24_at_full_tier_with_ample_height():
 
 
 def test_game_content_budget_matches_across_every_bordered_tier():
-    """Same 80x24 interior budget at every bordered tier, not just 'full'
+    """Same 80x25 interior budget at every bordered tier, not just 'full'
     -- mirrors ``test_center_never_exceeds_viewport_width_across_bordered_
     tiers``'s own tier list, extended to the height side too."""
     for cols in (
@@ -252,7 +253,7 @@ def test_no_border_tier_center_dimensions_clip_to_layout_formula():
     assert center["h"] == min(GAME_H, _expected_column_h(lines))
 
     # Short (the real MIN_LINES floor): column_h (13) is now the binding
-    # height ceiling, below GAME_H (24).
+    # height ceiling, below GAME_H (25).
     lines, cols = MIN_LINES, MIN_COLS
     regions = frame_layout(lines, cols)
     assert regions["mode"] == "no_border"
@@ -270,7 +271,7 @@ def test_minimal_tier_center_height_clips_to_layout_formula():
     column_h)`` -- the BORDERED half of the same formula, ``layout.py``
     line 251), so its own height ceiling is checked separately from the
     ``no_border`` cases above at the real MIN_LINES floor, where
-    ``column_h`` (13) again binds below ``VIEWPORT_H`` (26)."""
+    ``column_h`` (13) again binds below ``VIEWPORT_H`` (27)."""
     regions = frame_layout(MIN_LINES, MINIMAL_HEADER_MIN_COLS + 2)
     assert regions["mode"] == "minimal"
     center = regions["center"]
@@ -296,23 +297,23 @@ def test_corner_and_edge_coords_at_40x160():
 
     # Left gutter is stacked GOALS (top, claims its own floor first) above
     # PRIORITIES (below, gets whatever height remains) as of PWO-034 —
-    # together they still span the same y=2..28 / h=26 slot the single
-    # PRIORITIES box occupied pre-PWO-034.
+    # together they still span the same y=2..(2+VIEWPORT_H) / h=VIEWPORT_H
+    # (2..29 / h=27) slot the single PRIORITIES box occupied pre-PWO-034.
     goals = regions["goals"]
     assert goals == {"y": 2, "x": 1, "w": 36, "h": GOALS_BOX_MIN_H}
 
     left = regions["left_gutter"]
-    assert left == {"y": 2 + GOALS_BOX_MIN_H, "x": 1, "w": 36, "h": 26 - GOALS_BOX_MIN_H}
+    assert left == {"y": 2 + GOALS_BOX_MIN_H, "x": 1, "w": 36, "h": VIEWPORT_H - GOALS_BOX_MIN_H}
 
     center = regions["center"]
-    assert center == {"y": 2, "x": 39, "w": 82, "h": 26, "border": True}
+    assert center == {"y": 2, "x": 39, "w": VIEWPORT_W, "h": VIEWPORT_H, "border": True}
 
     # Right gutter is stacked HUD (top, claims its own floor first) above
     # DECISIONS (below, gets whatever height remains) as of PWO-036 --
-    # together they still span the same y=2..28 / h=26 slot the single
-    # right_gutter box occupied pre-PWO-036. ``right_gutter`` keeps its key
-    # as the HUD sub-region (unchanged from pre-036 draw code); ``decisions``
-    # is the new sub-region below it.
+    # together they still span the same y=2..(2+VIEWPORT_H) / h=VIEWPORT_H
+    # (2..29 / h=27) slot the single right_gutter box occupied pre-PWO-036.
+    # ``right_gutter`` keeps its key as the HUD sub-region (unchanged from
+    # pre-036 draw code); ``decisions`` is the new sub-region below it.
     right = regions["right_gutter"]
     assert right == {"y": 2, "x": 123, "w": 36, "h": HUD_BOX_MIN_H}
 
@@ -321,7 +322,7 @@ def test_corner_and_edge_coords_at_40x160():
         "y": 2 + HUD_BOX_MIN_H,
         "x": 123,
         "w": 36,
-        "h": 26 - HUD_BOX_MIN_H,
+        "h": VIEWPORT_H - HUD_BOX_MIN_H,
     }
 
     # LOGS shifts up by one row from its pre-CONTROL_STRIP position (y=36)

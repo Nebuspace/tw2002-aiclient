@@ -34,7 +34,7 @@ owned elsewhere (see the N5 boundary).
 ┌ Character / Profile — host · game · character ──────────────────────────────┐
 │ [GOALS]        │                                    │ [HUD]                 │
 │  ✓ · ?  status │        [ GAME UI ]                  │  credits/sector/turns │
-│ ─────────────  │   native 80×24 zero-inset viewport  │  cargo · ✦ Ns ago     │
+│ ─────────────  │   native 80×25 zero-inset viewport  │  cargo · ✦ Ns ago     │
 │ [FOCUS]        │                                    │ ───────────────────── │
 │  ranked        │                                    │ [DECISIONS]           │
 │  suggestions   │  [CHAIN]  ○→○→○→○  bubble row       │  trace: kind · gates  │
@@ -67,8 +67,8 @@ owned elsewhere (see the N5 boundary).
 
 **Center column** — the app's window onto the game:
 
-- **`[GAME UI]`** — the **native 80×24 viewport, zero-inset**: the real TradeWars screen, bordered
-  to 82×26 (`VIEWPORT_W/H = GAME_W+2, GAME_H+2`) but never padded inward — the content area is always
+- **`[GAME UI]`** — the **native 80×25 viewport, zero-inset**: the real TradeWars screen, bordered
+  to 82×27 (`VIEWPORT_W/H = GAME_W+2, GAME_H+2`) but never padded inward — the content area is always
   the untouched native grid so what the operator sees is exactly what the app sees.
 - **`[CHAIN]`** — a bubble row visualizing the current best trade-loop cycle (`compose_chain_bubbles`
   over the same chain object the engine ranks), plus a You-Are-Here menu-map marker when the app is
@@ -161,7 +161,7 @@ pushed off-edge (`frame_layout`). The load-bearing breakpoints (from `VIEWPORT_W
 | ≥ `FULL_GUTTER_MIN_COLS` (154) | Full left gutter (GOALS/FOCUS/FORMATIONS) + viewport + right HUD gutter |
 | ≥ `LEFT_GUTTER_MIN_COLS` (138) | Narrow left gutter (`PRIORITIES_MIN_W` 20) still present + viewport + HUD |
 | ≥ `RIGHT_GUTTER_MIN_COLS` (118) | Viewport + right HUD only; **GOALS + FOCUS fold into the idle DECISIONS pane** |
-| ≥ `MINIMAL_HEADER_MIN_COLS` (82) | Bordered viewport alone (`== VIEWPORT_W`, the floor at which a framed 80×24 fits) |
+| ≥ `MINIMAL_HEADER_MIN_COLS` (82) | Bordered viewport alone (`== VIEWPORT_W`, the floor at which a framed 80×25 fits) |
 
 Below `LEFT_GUTTER_MIN_COLS` (138) the left-gutter GOALS and FOCUS panels **collapse into the idle
 DECISIONS pane** rather than disappearing — the operator keeps the status and the ranked suggestions,
@@ -287,7 +287,7 @@ The frame uses a deliberate **two-weight** border system (`terminal.py`, `GLYPHS
 - **Viewport zero-inset is an invariant, not a style choice.** The `[GAME UI]` box is titled
   `" GAME "` with the border on row/col 0 and content at (1,1), **zero inner padding**
   (`_content_inset`, `spectate_app.py`). Any inward pad would shear the game's own CP437 box-art —
-  this is why `VIEWPORT_W/H = GAME_W+2, GAME_H+2` (82×26) and never a padded inset.
+  this is why `VIEWPORT_W/H = GAME_W+2, GAME_H+2` (82×27) and never a padded inset.
 - **Titled thin boxes** carry their title at `addnstr(0, 2, " TITLE ")` in cyan: `HUD`, `LOG`,
   `DECISIONS`, `PRIORITIES`, `FORMATIONS`, `MENU MAP`, `TRADE LOOP CHAINS`.
 - **Chain bubbles** are rounded `╭─╮ │ ╰─╯` joined by a heavy `═════` connector (`_CHAIN_CONNECTOR`)
@@ -428,7 +428,7 @@ Concretely, a builder should aim for:
 |---|---|
 | Outer frame · strip · three-column body · fold | **LIVE** (PWO-031…033 · 039) |
 | GOALS · FOCUS · DECISIONS · HUD freshness · TX/liveness · tones · LOGS | **LIVE** (PWO-034…041 · tip `6391bb7`) |
-| Center `[GAME UI]` content | **LIVE** — blank 80×24 GAME shell (PWO-051 · tip `7af4dbd`); `_GAME_PLACEHOLDER` retired. Live pyte paint is **NOT** yet (PWO-052) |
+| Center `[GAME UI]` content | **LIVE** — blank 80×25 GAME shell (PWO-051 · tip `7af4dbd`); `_GAME_PLACEHOLDER` retired. Live pyte paint is **NOT** yet (PWO-052) |
 | Product watch-stream into play shell | **LIVE** subscribe (PWO-050 · `watchfeed.py` · tip `b211be2`); snapshot→paint is **NOT** (PWO-052) |
 | Mode line / teach A·R·T / STOP strip | **NOT** Phase 3 — Phase 5+ |
 | Coverage meter / chains library / formations | **NOT** on tip play shell (archive / later WOs) |

@@ -25,7 +25,7 @@ daemon/CLI split beneath them (see [the Session Engine](/architecture/session-en
 | `tw attach` (thin control-lock attach) | **LIVE** — no full curses paint yet |
 | `tw spectate` (ops curses HUD) | **MISSING** — **F2 HOLD** (Max-gated); do not invent |
 | Product play-shell watch subscribe | **LIVE** (PWO-050 · `watchfeed.py`) — shell hears settle-edge; no UI consume yet |
-| Product play-shell GAME shell | **LIVE** blank 80×24 (PWO-051); pyte viewport paint **NOT** (PWO-052) |
+| Product play-shell GAME shell | **LIVE** blank 80×25 (PWO-051); pyte viewport paint **NOT** (PWO-052) |
 | Product cockpit attach hotkey | **NOT DONE** — PWO-056+ |
 
 Target contracts below remain prescriptive for when those surfaces land.
@@ -196,7 +196,7 @@ reads the HUD as its frame. See [Visual Language](/surfaces/visual-language.md) 
 
 ## Spacing, alignment & crop geometry
 
-The GAME viewport content area is **always ≤ the native 80×24 grid, centered, never stretched** to
+The GAME viewport content area is **always ≤ the native 80×25 grid, centered, never stretched** to
 fill leftover space — `game_w = min(GAME_W, viewport_w - 2)` / `game_h = min(GAME_H, viewport_h - 2)`
 (`spectate_layout.py:505-506`); it is only *clipped* when a fold tier genuinely lacks room for the
 full native size. Because the daemon already crops the screen, `cropped(0,0) == native(0,0)` — the

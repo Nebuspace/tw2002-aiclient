@@ -124,6 +124,7 @@ if _FOLD_FIXTURE:
                     "focus": {{
                         "candidates": [
                             {{"kind": "run_chain", "ev_per_turn": 12.5, "gated": False}},
+                            {{"kind": "upgrade", "ev_per_turn": 5.0, "gated": False}},
                         ],
                     }},
                 }}
@@ -361,49 +362,54 @@ def test_narrow_tier_shows_decisions_title_and_folded_goals_focus_content(
 ):
     """Real-geometry finding (verified against the live composers before
     writing this assertion, not assumed): at the fold-active tier the
-    DECISIONS box's content budget plateaus at a hard ``inner_h == 12``
+    DECISIONS box's content budget plateaus at a hard ``inner_h == 13``
     ceiling -- ``layout.py``'s ``VIEWPORT_H``/``HUD_BOX_MIN_H`` constants
-    cap ``decisions["h"]`` at 14 (content 12) -- but only from **33
-    terminal rows up**; this test's own 40-row fixture (``NARROW_ROWS``)
-    sits safely on that plateau, so the assertions below are unaffected.
-    Below 33 rows the box actually SHRINKS with height (an adversarial-pass
-    sweep, corrected here after an earlier draft of this docstring
-    overclaimed "at ANY terminal height" without checking below 40 rows):
-    at a fold-active column, ``decisions["h"]`` climbs 1 row per terminal
-    row from ``lines=21`` (h=2, title-only -- ``draw_box``'s own
-    ``h < 2`` guard means ``lines=20`` -- the official too-small floor --
-    drops the box, border and all) up through ``lines=32`` (h=13, content
-    11) before plateauing to h=14/content=12 at ``lines=33``. This is
-    ``layout.py``'s pre-existing PWO-036 stacked-gutter height split (HUD
-    claims its floor first, DECISIONS gets whatever remains) -- unrelated
-    to this WO's own fold logic, column-independent, and present at
-    unfolded ``>=138``-col tiers too. It is NOT a WO-P3-039 regression
-    (before this WO, GOALS/FOCUS simply didn't exist below 138 cols at any
-    height, so there was nothing to compare against; the fold strictly
-    improves every reachable height ``>=22``) -- but it is disclosed to
-    the hub as a DECISIONS-height-policy follow-on (the low-height floor
-    and the 12-row ceiling below are the same design knob, both ends of
-    it) rather than patched in this wire-only WO.
+    cap ``decisions["h"]`` at 15 (content 13) -- but only from **34
+    terminal rows up** (``VIEWPORT_H`` grew 26->27 when the GAME viewport
+    was widened to the daemon's true native 80x25 grid, which pushed this
+    plateau's own onset up by one row too, from 33 to 34); this test's own
+    40-row fixture (``NARROW_ROWS``) sits safely on that plateau, so the
+    assertions below are unaffected. Below 34 rows the box actually SHRINKS
+    with height (an adversarial-pass sweep, corrected here after an earlier
+    draft of this docstring overclaimed "at ANY terminal height" without
+    checking below 40 rows): at a fold-active column, ``decisions["h"]``
+    climbs 1 row per terminal row from ``lines=21`` (h=2, title-only --
+    ``draw_box``'s own ``h < 2`` guard means ``lines=20`` -- the official
+    too-small floor -- drops the box, border and all) up through
+    ``lines=33`` (h=14, content 12) before plateauing to h=15/content=13 at
+    ``lines=34``. This is ``layout.py``'s pre-existing PWO-036 stacked-gutter
+    height split (HUD claims its floor first, DECISIONS gets whatever
+    remains) -- unrelated to this WO's own fold logic, column-independent,
+    and present at unfolded ``>=138``-col tiers too. It is NOT a WO-P3-039
+    regression (before this WO, GOALS/FOCUS simply didn't exist below 138
+    cols at any height, so there was nothing to compare against; the fold
+    strictly improves every reachable height ``>=22``) -- but it is
+    disclosed to the hub as a DECISIONS-height-policy follow-on (the
+    low-height floor and the 13-row ceiling below are the same design knob,
+    both ends of it) rather than patched in this wire-only WO.
 
     GOALS alone is a fixed, non-negotiable 10-line footprint (its own
     "GOALS" label + the canon-mandated 9 rows that "never vanish",
     ``goals.py``), and the trace section above it is never fewer than 1
     line once it carries a real candidate -- 1 + 10 == 11, leaving exactly
-    one more row at the 12-row plateau, which the fixture's one-candidate
-    ``autopilot_trace`` (kind "explore", chosen) fills as line 0 and the
-    "FOCUS" label claims as line 11 (the LAST visible row). FOCUS's own
-    rank-led content line (kind "run_chain" -> "Trade chain") is line 12 --
-    one past the ceiling -- so it is REAL, DOCUMENTED, INTENTIONAL
-    bottom-first shedding (fold.py's own module docstring: "FOCUS (last)
-    sheds before GOALS (middle) before the trace (first)"), not a wiring
-    bug. This test therefore proves what a real operator terminal actually
-    shows (GOALS' label + real content, FOCUS's own label) via the pty
-    capture, and separately proves the WIRE still threads the full
-    status+width through correctly (FOCUS's content line genuinely present
-    in the composed output, just shed by height) via a direct call to the
-    same composer with the same status/width below -- the same two-layer
-    split ``tests/test_cockpit_hud_pty.py`` uses between "what renders" and
-    "what pyte can prove" for its own A_DIM case.
+    two more rows at the 13-row plateau: the "FOCUS" label claims line 11,
+    and FOCUS's own rank-led first candidate (kind "run_chain" -> "Trade
+    chain") now fits at line 12 -- both visible on screen. Growing the
+    plateau by one row (26->27) means a single-candidate FOCUS fixture no
+    longer overflows the box at all, so this fixture carries a SECOND FOCUS
+    candidate (kind "upgrade" -> "Upgrade") purely to keep exercising real
+    shedding: that second candidate lands at line 13, one past the ceiling
+    -- REAL, DOCUMENTED, INTENTIONAL bottom-first shedding (fold.py's own
+    module docstring: "FOCUS (last) sheds before GOALS (middle) before the
+    trace (first)"), not a wiring bug. This test therefore proves what a
+    real operator terminal actually shows (GOALS' label + real content,
+    FOCUS's own label AND its first-ranked line) via the pty capture, and
+    separately proves the WIRE still threads the full status+width through
+    correctly (FOCUS's second candidate line genuinely present in the
+    composed output, just shed by height) via a direct call to the same
+    composer with the same status/width below -- the same two-layer split
+    ``tests/test_cockpit_hud_pty.py`` uses between "what renders" and "what
+    pyte can prove" for its own A_DIM case.
     """
     regions = frame_layout(NARROW_ROWS, NARROW_COLS)
     decisions = regions["decisions"]
@@ -420,6 +426,17 @@ def test_narrow_tier_shows_decisions_title_and_folded_goals_focus_content(
     # just the section label.
     assert "120" in decisions_text, f"expected the folded Turns value, got:\n{decisions_text}"
     assert "54,321" in decisions_text, f"expected the folded Credits value, got:\n{decisions_text}"
+    # FOCUS's first-ranked candidate now fits inside the (grown) 13-row
+    # plateau -- genuinely visible on screen, not shed.
+    assert "Trade chain" in decisions_text, (
+        f"expected FOCUS's first-ranked candidate line on screen, got:\n{decisions_text}"
+    )
+    # The fixture's SECOND candidate is the one this test relies on being
+    # shed -- if it ever starts appearing on screen too, the plateau grew
+    # again and this fixture (and the docstring above) need another look.
+    assert "Upgrade" not in decisions_text, (
+        f"expected FOCUS's second candidate to be shed past the plateau, got:\n{decisions_text}"
+    )
 
     # Companion proof (not pty-visible, see docstring above): the same
     # status dict and the same box width the wire actually used really did
@@ -439,12 +456,20 @@ def test_narrow_tier_shows_decisions_title_and_folded_goals_focus_content(
                     {"kind": "explore", "ev_cr_per_turn": 1.0, "gated": False, "rationale": "scouting"},
                 ],
             },
-            "focus": {"candidates": [{"kind": "run_chain", "ev_per_turn": 12.5, "gated": False}]},
+            "focus": {
+                "candidates": [
+                    {"kind": "run_chain", "ev_per_turn": 12.5, "gated": False},
+                    {"kind": "upgrade", "ev_per_turn": 5.0, "gated": False},
+                ],
+            },
         },
         width=width,
     )
     assert any("Trade chain" in line for line in composed), (
         f"expected a rank-led FOCUS line in the fold composer's own output, got: {composed}"
+    )
+    assert any("Upgrade" in line for line in composed), (
+        f"expected the second rank-led FOCUS line in the fold composer's own output, got: {composed}"
     )
     inner_h = decisions["h"] - 2
     assert len(composed) > inner_h, (

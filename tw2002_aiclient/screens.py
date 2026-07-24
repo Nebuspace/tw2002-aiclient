@@ -480,7 +480,7 @@ class PlayShellScreen:
     logsband.compose_logs_lines``, falling back to the ensure-session
     ``status_line`` only while no real tail exists yet -- see the LOGS
     paragraph below). The live game viewport render itself is a later WO
-    (PWO-052) -- GAME shows an honest blank 80x24 grid inside its
+    (PWO-052) -- GAME shows an honest blank 80x25 grid inside its
     double-line border today, zero inset, never placeholder text or fake
     content (PWO-051).
     Below the fold floor (``mode == "too_small"``) only the layout's
