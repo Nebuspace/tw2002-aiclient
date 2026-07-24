@@ -17,12 +17,11 @@ quietly learns the profitable loops it sees.
 
 | Surface | Role |
 |---|---|
-| `./tw2002-aiclient` | **Product TUI** — profile launcher, play screen, Autopilot ON/OFF. Human-facing client. |
-| `./tw` | **Backend / ops CLI** — daemon verbs (`ensure`, `do`, `status`, …), scripting, and ops surfaces. |
-| `./tw spectate` | **Ops spectator** — read-only live HUD for operators/scripts (`tw aiclient` is the product path). |
-| `./tw attach` | Take the keyboard on the shared session (also reachable from ops workflows). |
+| `./tw2002-aiclient` | **Product TUI** — profile launcher, play shell / cockpit chrome. Human-facing client. |
+| `./tw` | **Backend / ops CLI** — shipped verbs today: `status`, `ensure` (table grows one WO at a time). |
 
-Same daemon either way — one telnet connection. Prefer `./tw2002-aiclient` for day-to-day play; keep `./tw` for automation and ops.
+Same daemon either way — one telnet connection. Prefer `./tw2002-aiclient` for day-to-day play; keep `./tw` for automation and ops. Planned ops verbs (`do`, `spectate`, `attach`, …) are inventoried in [`workorders/WO-P2-OPS-VERB-SURFACE.md`](workorders/WO-P2-OPS-VERB-SURFACE.md) — not on `./tw --help` yet.
+
 
 ---
 
@@ -124,83 +123,62 @@ absolute path, no venv activation needed.
 ```
 
 **Ops / backend path** — get into the game (handles daemon spawn, login/registration,
-credential storage):
+credential storage) and check daemon health:
 
 ```bash
 cp config/profiles.toml.example config/profiles.toml   # once; set host/game/handle
 ./tw ensure --profile default
+./tw status
 ```
 
-**Play a turn, look around:**
+Further ops verbs (`do`, `screen`, `spectate`, `attach`, …) are **not shipped yet** —
+see [`workorders/WO-P2-OPS-VERB-SURFACE.md`](workorders/WO-P2-OPS-VERB-SURFACE.md).
 
-```bash
-./tw do "D" --wait-prompt "Command"    # send a key, get the settled screen back
-./tw screen --json                     # look without acting
-./tw state --json                      # just the parsed fields: sector, credits, turns…
-```
+## Verb reference (shipped)
 
-**Watch and join in, from any other terminal:**
-
-```bash
-./tw spectate     # live color dashboard — q to leave
-./tw attach       # take the keyboard — Ctrl-] to hand back
-```
-
-**Wind down cleanly:**
-
-```bash
-./tw stop         # in-game QUIT, disconnect, daemon exit
-```
-
-## Verb reference
-
-Everything takes `--json` for machine-parseable output.
+Everything takes `--json` for machine-parseable output where applicable.
 
 | Verb | What it does |
 |---|---|
 | `tw ensure [target] --profile NAME` | **Auto-login.** Idempotent: spawn daemon if needed, register or log in, land at the command prompt. Covers cold start, mid-session, and post-drop recovery. |
-| `tw do "<input>" [--wait-prompt REGEX]` | **The primary verb.** Send input, wait for the screen to settle, return the new screen + why it settled. |
-| `tw screen` | Current settled screen, prompt, classification — non-destructive. |
-| `tw state` | Parsed game state only (sector, credits, turns, port…), best-effort. |
-| `tw status` | Daemon alive? Connected? Who's driving? Always safe to run. |
-| `tw start [--host H --port P]` | Manual daemon spawn + connect (use `ensure` unless you need low-level control). |
-| `tw read [--wait-prompt REGEX]` | Wait-and-return without sending — for unsolicited server output. |
-| `tw send "<input>"` | Raw send, no wait (low-level). |
-| `tw history [--n N]` | Recent events; full transcript in `logs/`. |
-| `tw watch [--frames N]` | Tail the settle-edge event stream — the scripting-friendly sibling of `spectate`. |
-| `tw aiclient` | Product TUI alias for `./tw2002-aiclient` (launcher / play / Autopilot). |
-| `tw spectate` | Ops read-only curses dashboard (`--snapshot` for scripting). |
-| `tw menumap [--profile NAME \| --world-id ID \| --path PATH]` | Read-only menu-map inspector — coverage, orphans, you-are-here ★ / off-map. |
-| `tw attach` | Interactive live console — play the game yourself; `Ctrl-]` detaches. |
-| `tw loops [--include-drafts]` | List every learned loop with profit metadata. |
-| `tw autoloop {start,stop,pause,resume}` | Drive the background learned-loop player; returns immediately — watch progress in `spectate`. |
-| `tw stop` | Clean in-game quit, disconnect, daemon exit. |
+| `tw status` | Daemon alive? Connected? Classification / idle-ms / run_dir. Always safe to run. |
+
+### Coming (not on `./tw --help` yet)
+
+Daemon protocol already knows `screen` and `stop` in places; CLI wire + the rest of the
+classic ops table (`do`, `send`, `read`, `state`, `history`, `watch`, `spectate`,
+`attach`, …) is staged in [`WO-P2-OPS-VERB-SURFACE.md`](workorders/WO-P2-OPS-VERB-SURFACE.md).
 
 Notes worth knowing up front:
 
-- `--wait-prompt` regexes are **case-sensitive** — a case mismatch times out
-  silently rather than erroring.
 - The daemon is single-connection, single-session; its socket and pidfile live
-  under the project directory regardless of where you invoke `tw` from.
-- Plain CLI output is deliberately color-stripped (token-efficient for agents);
-  `tw spectate` is where the real ANSI colors live.
+  under the project directory (or `TW_RUN_DIR`) regardless of where you invoke `tw` from.
+- Plain CLI output is deliberately color-stripped (token-efficient for agents).
+- Product play / cockpit chrome is `./tw2002-aiclient`, not `./tw`.
+
 
 ## The spectator's control strip
 
-Inside `tw spectate`, a compact control strip lets you direct the client without
+> **Not shipped on tip yet.** Product cockpit chrome lives under `./tw2002-aiclient`;
+> a future `tw spectate` ops dashboard is planned — see
+> [`WO-P2-OPS-VERB-SURFACE.md`](workorders/WO-P2-OPS-VERB-SURFACE.md). The key table
+> below is the **target** control strip (archive/canon), not a live CLI surface.
+
+Inside a future `tw spectate`, a compact control strip lets you direct the client without
 leaving the dashboard:
 
 | Key | Action |
 |---|---|
-| `M` | Cycle mode: AI-PILOT ↔ SPECTATE |
+| `M` | Cycle mode (human / app — **no** AI-drives live mode) |
 | `L` | Open the Learned-Loops Library — pick a loop, set cycles, `Enter` to launch |
 | `Space` | Pause/resume the running auto-loop |
-| `X` | Stop the auto-loop, return to AI-PILOT |
-| `P` | Panic — halt everything, park in SPECTATE |
+| `X` | Stop the auto-loop |
+| `P` | Panic — halt everything |
 | `q` / `Ctrl-C` | Detach (the game keeps running) |
 
-These are control-plane actions only — nothing in `spectate` ever forwards a
-keystroke to the game. `tw attach` remains the only way to drive directly.
+These are control-plane actions only — nothing in spectate ever forwards a
+keystroke to the game. A future `tw attach` remains the only ops path to drive directly.
+
 
 ## Tests
 
@@ -216,10 +194,13 @@ and the spectator/attach UIs against scripted sessions.
 
 ## Known limitations
 
-- `state` parsing is a best-effort skeleton — extend the anchors in
-  `twclient/state_parser.py` as new screen shapes turn up.
-- `tw stop` only attempts the in-game QUIT from the main command prompt;
+- Live `./tw` verbs are **`status` / `ensure` only** until the wire slices in
+  [`WO-P2-OPS-VERB-SURFACE.md`](workorders/WO-P2-OPS-VERB-SURFACE.md) land.
+- `state` parsing (when wired) is a best-effort skeleton under `tw2002_aiclient.session`
+  — extend anchors as new screen shapes turn up.
+- A future `tw stop` should only attempt in-game QUIT from the main command prompt;
   elsewhere it just disconnects.
+
 
 ## Going deeper
 
