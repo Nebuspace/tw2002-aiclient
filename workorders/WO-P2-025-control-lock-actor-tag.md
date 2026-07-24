@@ -43,10 +43,12 @@ CC P2-024 · inventing EV autopilot.
 
 ### Accept (tightened draft for execute HANDOFF)
 
-- Mode enum / API exposes exactly `{human, app, spectate}` — **zero** `ai_pilot` / `MODE_AI_PILOT` in `tw2002_aiclient/`.
-- Every `Session.send` / `send_raw` path still only accepts `VALID_SENDERS`; protocol attach/do set sender correctly.
-- Concurrent second driver while human holds lock → typed refuse (`controller_locked_by_human` or `controller_busy`), never queue; adapters still map `controller_*` → `already_driving`.
-- Unit tests: mode transitions · fence courtesy wait · refuse-not-queue · no `"ai"` sender.
+- Mode enum / API exposes exactly `{human, app, spectate}` — **zero** `ai_pilot` / `MODE_AI_PILOT`; any `auto_loop` collapses to `app` (not a third drive mode).
+- Every `Session.send` / `send_raw` path still only accepts `VALID_SENDERS`; reject `"ai"` / `"trainer"`; protocol attach/do set sender correctly.
+- Spectate cannot acquire send (typed refuse, e.g. `spectate_read_only`).
+- Human claim always wins immediately (attach / escalation) — App cannot refuse or finish “one more” send.
+- Concurrent second driver while lock held → typed refuse (`controller_locked_by_human` / `controller_busy`), never queue; adapters still map `controller_*` → `already_driving`.
+- Unit tests: mode transitions · fence courtesy wait · refuse-not-queue · human preempt · no `"ai"`/`"trainer"` sender.
 - Rehab rewrite-B (below) collect+green OR still ignored with explicit defer note if ledger/attach incomplete.
 
 ### Proof (tightened draft)
@@ -68,7 +70,8 @@ rg -n "ai_pilot|MODE_AI_PILOT" tw2002_aiclient/   # expect no match
 | `tests/test_tw04_toctou.py` | Lock TOCTOU / race | Fold with refuse-not-queue |
 | `tests/test_attach_protocol.py` | Human attach + fence | Needs attach verb + lock |
 | `tests/test_attach_redaction.py` | Secret + attach path | Cipher-adjacent; after attach |
-| `tests/test_clean_preempt.py` | Human preempt | Defer-or-thin if preempt lands in 025 |
+
+**Not wave B:** `tests/test_clean_preempt.py` stays **DEFER** (rehab Play/TUI bucket) — reopen when protocol/ledger fence proofs land with/after 025.
 
 ---
 
