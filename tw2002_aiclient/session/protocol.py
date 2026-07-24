@@ -73,11 +73,12 @@ def dispatch(session, verb, args, server):
     if verb == "status":
         # WO-P2-020 Wave-3 CUT vs archive protocol.py:590-767: `mode`
         # (`control_lock.py` not ported), `subscribers`/`play`
-        # (`watch.py`/`loop_player.py` not ported), `autopilot`/
-        # `autopilot_trace` (`autopilot.py` not ported), `credits*`/
-        # `turns*`/`fighters*` (Session's observe_* methods cut in
-        # Wave-2), `intervention`, and `world_id` are all left off this
-        # response until their own work orders land. This deliberately
+        # (`watch.py`/`loop_player.py` not ported), full `autopilot_trace`
+        # (`autopilot.py` not ported), `credits*`/`turns*`/`fighters*`
+        # (Session's observe_* methods cut in Wave-2), `intervention`, and
+        # `world_id` are all left off this response until their own work
+        # orders land. WO-P2-022 adds a stub `autopilot: {running: false}`
+        # so status --json can prove ensure never arms. This deliberately
         # does NOT require `state_parser` (per this WO's context block).
         rows = session.render()
         text = session.render_text(rows)
@@ -91,6 +92,10 @@ def dispatch(session, verb, args, server):
             "host": session.host,
             "port": session.port,
             "name": session.name,
+            # WO-P2-022: autopilot.py is not ported — ensure never arms. Expose
+            # an honest "not driving" stub so `status --json` can prove Accept
+            # ("App is not actively driving") until the real autopilot surface lands.
+            "autopilot": {"running": False},
         }
 
     if verb == "stop":
@@ -262,6 +267,11 @@ def _dispatch_ensure(session, args, server):
 
         target = args.get("target", "main_command")
         profile_name = args.get("profile")
+        # WO-P2-022: `no_auto_arm` is accepted on the wire for symmetry with any
+        # future default-arm proposal, but ensure NEVER auto-arms today
+        # (`autopilot.py` not ported; `_maybe_auto_start_after_ensure` left out).
+        # When auto-arm returns, it MUST gate on `bool(args.get("no_auto_arm"))`.
+        _ = bool(args.get("no_auto_arm"))
         if not profile_name:
             return {"ok": False, "error": "missing_profile"}
 

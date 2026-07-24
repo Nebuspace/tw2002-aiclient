@@ -328,7 +328,7 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--profile", required=True, help="profile name in config/profiles.toml")
     sp.add_argument("--timeout", type=float, default=180.0, help="overall budget for the login automaton")
     sp.add_argument("--no-auto-arm", action="store_true", dest="no_auto_arm",
-                     help="skip post-ensure Autopilot auto-start even when the profile enables it")
+                     help="accepted no-op: ensure never auto-arms; flag confirms non-arming (symmetry with any future default-arm proposal)")
     sp.add_argument("--run-dir", default=None, metavar="PATH", dest="run_dir",
                      help="daemon run directory override (default: project-rooted run/)")
     sp.add_argument("--json", action="store_true", help="machine-parseable JSON output")
