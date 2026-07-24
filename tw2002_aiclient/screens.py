@@ -5,6 +5,7 @@ Credentials/secrets are never collected or shown on these surfaces.
 
 from __future__ import annotations
 
+import math
 import re
 import time
 from dataclasses import dataclass
@@ -19,6 +20,7 @@ from tw2002_aiclient.cockpit import fold as cockpit_fold
 from tw2002_aiclient.cockpit import goals as cockpit_goals
 from tw2002_aiclient.cockpit import hud as cockpit_hud
 from tw2002_aiclient.cockpit import liveness as cockpit_liveness
+from tw2002_aiclient.cockpit import tones as cockpit_tones
 from tw2002_aiclient.cockpit.layout import frame_layout
 from tw2002_aiclient.cockpit.strip import compose_profile_strip_from_row
 from tw2002_aiclient.session import credentials
@@ -42,17 +44,14 @@ SUBTITLE = " SELECT PROFILE "
 CREATE_CTA = "Create New Player"
 CREATE_TITLE = " CREATE NEW PLAYER "
 
-# Shared 7-tone table (visual-language / archived spectate_app._SEMANTIC_COLORS).
-# Values: (curses_fg_name, bold). "muted" = terminal default, non-bold.
-_SEMANTIC_COLORS: dict[str, tuple[str, bool]] = {
-    "ok": ("green", True),
-    "warn": ("yellow", True),
-    "danger": ("red", True),
-    "info": ("cyan", False),  # chrome only — never row data
-    "gain": ("green", True),
-    "loss": ("red", True),
-    "muted": ("default", False),
-}
+# Shared 7-tone table -- SOURCED FROM cockpit.tones.SEMANTIC_COLORS (WO-P3-040
+# single source of truth). screens.py used to fork its own literal copy of
+# this table; every curses-facing consumer here (LauncherScreen's
+# _TonePalette, PlayShellScreen's chrome/viewport-border colors) now resolves
+# tone names off cockpit.tones directly, so a tone-table edit there needs no
+# echo here. Values stay the pure (curses_fg_name, bold) shape tones.py
+# defines; "muted" = terminal default, non-bold.
+_SEMANTIC_COLORS: dict[str, tuple[str, bool]] = cockpit_tones.SEMANTIC_COLORS
 
 _COLOR_NAME_TO_CURSES = {
     "green": curses.COLOR_GREEN,
@@ -61,6 +60,91 @@ _COLOR_NAME_TO_CURSES = {
     "cyan": curses.COLOR_CYAN,
     "default": -1,
 }
+
+
+class _SharedPairs:
+    """Process-lifetime curses color-pair allocator -- the ONLY place
+    ``curses.init_pair``/``curses.start_color`` are called anywhere in this
+    module (WO-P3-040 REVISE, Mack CRITICAL finding).
+
+    ``curses`` color-pair NUMBERS are global to the whole terminal session,
+    not scoped per class or per screen instance. Before this fix, every
+    screen in this file hardcoded its OWN pair numbers with DIFFERENT
+    colors: ``_TonePalette`` (the launcher's 7-tone palette) allocated
+    pairs 1-7 sequentially at construction; ``PlayShellScreen``,
+    ``BankViewScreen``, and ``CreateFormScreen`` each separately called
+    ``curses.init_pair(1, ...)``/``curses.init_pair(2, ...)`` with their own
+    colors. Constructing a SECOND screen mid-session silently
+    **re-painted** whatever pair number(s) it happened to reuse -- and a
+    curses attr int returned by ``curses.color_pair(n)`` only encodes the
+    pair NUMBER, resolved to an actual color by the terminal at RENDER
+    time, never at the moment the attr int was computed. So a
+    previously-constructed screen's ALREADY-CACHED attr ints (e.g.
+    ``LauncherScreen``'s ``self._ok``/``self._warn``, set once in
+    ``__init__``) silently changed color out from under it the instant any
+    other screen reused that pair number for something else. Reproduced:
+    a launcher -> play -> Esc -> back round trip permanently repainted the
+    SAME launcher instance's warn row red and its ok row cyan for the rest
+    of the process (Mack's PoC) -- because ``PlayShellScreen`` happened to
+    reuse pairs 1/2 for its own info/danger colors.
+
+    The fix: exactly ONE process-lifetime allocator (this class, and the
+    module-level ``_shared_pairs`` instance below). It allocates a pair
+    number PER DISTINCT COLOR NAME on first request, caches it forever, and
+    every later request for that same name returns the SAME pair number --
+    so no two screens can ever collide, no matter how many are constructed
+    across the app's lifetime, and no matter which order. Two tones that
+    happen to share an fg name (``"ok"``/``"gain"`` both ``"green"``,
+    ``"danger"``/``"loss"`` both ``"red"``) now legitimately share ONE
+    underlying pair too -- a pure allocation-count optimization, not a
+    behavior change, since callers still apply their own bold flag on top
+    of the returned base attr.
+    """
+
+    def __init__(self) -> None:
+        self._pair_for_name: dict[str, int] = {}
+        self._next_pair = 1
+        self._started = False
+
+    def attr_for(self, color_name: str) -> int:
+        """Base (non-bold) curses attr for ``color_name``. ``"default"``
+        (or any name absent from ``_COLOR_NAME_TO_CURSES``) resolves to
+        ``curses.A_NORMAL`` without ever consuming a pair number -- there
+        is nothing to allocate for "no color". Never raises: a
+        ``curses.error`` from ``init_pair`` (e.g. the pair table is
+        exhausted) degrades that one call to ``curses.A_NORMAL`` rather
+        than crashing the draw pass, the same honesty-over-crash
+        convention every other curses-facing call in this module already
+        follows."""
+        if not curses.has_colors():
+            return curses.A_NORMAL
+        fg = _COLOR_NAME_TO_CURSES.get(color_name, -1)
+        if fg == -1:
+            return curses.A_NORMAL
+        cached = self._pair_for_name.get(color_name)
+        if cached is not None:
+            return curses.color_pair(cached)
+        if not self._started:
+            curses.start_color()
+            try:
+                curses.use_default_colors()
+            except curses.error:
+                pass
+            self._started = True
+        pair_n = self._next_pair
+        try:
+            curses.init_pair(pair_n, fg, -1)
+        except curses.error:
+            return curses.A_NORMAL
+        self._next_pair += 1
+        self._pair_for_name[color_name] = pair_n
+        return curses.color_pair(pair_n)
+
+
+# One process-lifetime allocator shared by every screen in this module --
+# see _SharedPairs' own docstring for why a per-class allocator corrupted
+# other screens' already-cached colors.
+_shared_pairs = _SharedPairs()
 
 # Thin-rounded HUD chrome (launcher has no live viewport — never double-line).
 _GLYPHS_UNICODE = {
@@ -145,23 +229,15 @@ class _TonePalette:
                 "muted": curses.A_NORMAL,
             }
             return
-        curses.start_color()
-        try:
-            curses.use_default_colors()
-        except curses.error:
-            pass
-        pair = 1
+        # Colors resolve through the ONE shared process-lifetime allocator
+        # (WO-P3-040 REVISE, Mack CRITICAL) -- no init_pair call here
+        # anymore. See _SharedPairs' own docstring for why a per-class
+        # allocator corrupted other screens' already-cached colors.
         for tone, (fg_name, bold) in _SEMANTIC_COLORS.items():
-            fg = _COLOR_NAME_TO_CURSES.get(fg_name, -1)
-            try:
-                curses.init_pair(pair, fg, -1)
-                attr = curses.color_pair(pair)
-            except curses.error:
-                attr = curses.A_NORMAL
+            attr = _shared_pairs.attr_for(fg_name)
             if bold:
                 attr |= curses.A_BOLD
             self._attrs[tone] = attr
-            pair += 1
 
     def attr(self, tone: str) -> int:
         return self._attrs.get(tone, curses.A_NORMAL)
@@ -347,6 +423,35 @@ _HUD_COMPOSE_FAILED = [("-", False)]
 # so a raising composer falls back to the empty string (renders as a blank
 # row this tick) rather than any invented placeholder text.
 _CONTROL_STRIP_COMPOSE_FAILED = ""
+
+
+def _resolve_last_rx_age_s(status: dict) -> float:
+    """``status["idle_ms"]`` (the real wire field,
+    ``tw2002_aiclient/session/protocol.py``'s ``status`` verb --
+    ``resp["idle_ms"] = int((time.monotonic() - session.last_rx) * 1000)``)
+    -> the ``last_rx_age_s`` seconds argument ``cockpit.tones.
+    status_semantic`` expects. Defensive, never raises: a missing/
+    non-numeric/non-finite/negative ``idle_ms`` all resolve to ``0.0``
+    (freshest-possible, never fabricated staleness) -- this mirrors
+    ``cockpit.tones``'s own ``_safe_rx_age`` policy of treating an unknown
+    age as "we don't know how old this is", not "confidently very stale".
+    Only reached once the caller has already confirmed a real, definite
+    ``connected`` bool is present (see ``PlayShellScreen.
+    _viewport_border_attr``'s honest-unknown gate) -- a missing/invalid
+    ``idle_ms`` on an otherwise-real status payload still degrades to
+    ``0.0`` rather than blocking the whole classification, since
+    ``status_semantic`` only escalates past "ok" on staleness while
+    ``connected`` is already ``True``."""
+    idle_ms = status.get("idle_ms")
+    try:
+        idle_ms = float(idle_ms)
+    except (TypeError, ValueError):
+        return 0.0
+    if not math.isfinite(idle_ms) or idle_ms < 0:
+        return 0.0
+    return idle_ms / 1000.0
+
+
 BOUNDARY_LINE_1 = (
     "Rotation multiplies YOUR own daily turns across INDEPENDENT characters."
 )
@@ -429,6 +534,17 @@ class PlayShellScreen:
     real refresh cadence (``app.py``'s 1 Hz ``stdscr.timeout(1000)``) is
     unchanged by this seam.
 
+    Every box border/title here renders in the ``"info"`` chrome tone
+    (cyan, non-bold) sourced from ``cockpit.tones.SEMANTIC_COLORS`` -- the
+    single source of truth (WO-P3-040) -- except the outer frame's own
+    bold exception and the GAME viewport border's own STATE flip: cyan
+    chrome by default, red non-bold the instant the same shared ``status``
+    snapshot carries a real, definite ``connected: False`` (see
+    ``_viewport_border_attr``). No mode badges and no gauge surface render
+    here -- both are out of scope for this WO (mode badges belong to the
+    N5 mode-line-and-teach-controls WO; ``gauge_semantic`` ships
+    classifier-only, with no wired consumer yet).
+
     Esc ends the binding and returns to the launcher — clean close, not a suspend.
     """
 
@@ -446,26 +562,85 @@ class PlayShellScreen:
         self._now_fn = now_fn  # WO-P3-038 -- resolved to time.monotonic at draw() time when unset
         self._outer_attr = curses.A_NORMAL
         self._chrome_attr = curses.A_NORMAL
+        self._viewport_danger_attr = curses.A_NORMAL  # WO-P3-040 -- set for real below
         self._init_colors()
 
     def _init_colors(self) -> None:
+        # Tone-table fg names -- sourced from cockpit.tones via the
+        # module-level _SEMANTIC_COLORS alias (WO-P3-040 single source of
+        # truth), never a hardcoded curses.COLOR_* literal. The table's own
+        # bold flags are deliberately NOT used below -- this class has its
+        # own bold policy (outer frame bold, everything else non-bold,
+        # including the viewport-border danger flip, which stays non-bold
+        # even though the table's "danger" entry is bold=True elsewhere).
+        info_fg_name, _unused_info_bold = _SEMANTIC_COLORS.get("info", ("cyan", False))
+        danger_fg_name, _unused_danger_bold = _SEMANTIC_COLORS.get("danger", ("red", True))
         if not curses.has_colors():
             # Monochrome: bold marks the outer frame apart from the thin
             # instrument chrome, same as the launcher's monochrome fallback.
+            # The viewport-border danger flip has no color to lean on here,
+            # so it gets its own non-bold underline -- distinct from both the
+            # bold-only outer frame and the plain chrome default, and never
+            # A_REVERSE (reserved as the one selection/badge signal,
+            # visual-language.md "load-bearing color rules").
             self._outer_attr = curses.A_BOLD
             self._chrome_attr = curses.A_NORMAL
+            self._viewport_danger_attr = curses.A_UNDERLINE
             return
-        curses.start_color()
-        try:
-            curses.use_default_colors()
-        except curses.error:
-            pass
-        curses.init_pair(1, curses.COLOR_CYAN, -1)
+        # Colors resolve through the ONE shared process-lifetime allocator
+        # (WO-P3-040 REVISE, Mack CRITICAL) -- no init_pair call here
+        # anymore. See _SharedPairs' own docstring for why a per-class
+        # allocator corrupted other screens' already-cached colors (this
+        # class's own former init_pair(1, ...)/init_pair(2, ...) calls were
+        # the reproduced culprit -- they silently repainted the launcher's
+        # already-cached pairs 1/2 the instant a PlayShellScreen was
+        # constructed mid-session).
         # Cyan is chrome, never data (visual-language.md); the outer frame is
         # the one bold exception -- every other border/title stays non-bold
         # "info" tone so the eye lands on the game viewport, not the frame.
-        self._chrome_attr = curses.color_pair(1)
-        self._outer_attr = curses.color_pair(1) | curses.A_BOLD
+        self._chrome_attr = _shared_pairs.attr_for(info_fg_name)
+        self._outer_attr = self._chrome_attr | curses.A_BOLD
+        # The viewport border's own STATE flip (visual-language.md "the
+        # viewport border is a STATE surface"): red, deliberately NON-bold
+        # per canon's own wording -- distinct from both the bold-cyan outer
+        # frame and the non-bold-cyan default chrome, never the tone table's
+        # own (red, bold=True) "danger" attr.
+        self._viewport_danger_attr = _shared_pairs.attr_for(danger_fg_name)
+
+    def _viewport_border_attr(self, status: dict | None) -> int:
+        """The GAME viewport border's own STATE flip (WO-P3-040, canon
+        `visual-language.md` "the viewport border is a STATE surface"):
+        cyan chrome by default, ``self._viewport_danger_attr`` (red,
+        non-bold) the instant the real daemon status verb reports
+        ``connected: False``.
+
+        HONEST-UNKNOWN RULE: ``cockpit.tones.status_semantic`` is only ever
+        called below with a genuinely real, definite ``connected`` bool read
+        straight off the wire (``tw2002_aiclient/session/protocol.py``'s
+        ``status`` dispatch -- ``resp["connected"] = session.conn.
+        connected``, always a real bool on an ``ok`` response). A non-dict
+        ``status`` (no provider set, or the provider returned/raised
+        nothing usable -- see ``draw()``'s own guard around the
+        ``status_provider()`` call), or a dict that lacks a real ``bool``
+        ``connected`` field (a malformed/partial payload), both leave the
+        border at its default chrome cyan -- this method never claims
+        danger without real data, matching every other panel's own
+        honest-unknown convention in this file.
+
+        Only the ``"danger"`` tone flips the border; ``"warn"``/``"ok"``
+        both render as the unchanged default chrome (canon's own wording
+        describes a strict connected/disconnected flip, not a three-way
+        gauge -- no gauge/badge surface is in scope for this WO)."""
+        if not isinstance(status, dict):
+            return self._chrome_attr
+        connected = status.get("connected")
+        if not isinstance(connected, bool):
+            return self._chrome_attr
+        last_rx_age_s = _resolve_last_rx_age_s(status)
+        tone = cockpit_tones.status_semantic(connected, last_rx_age_s)
+        if tone == "danger":
+            return self._viewport_danger_attr
+        return self._chrome_attr
 
     def draw(self) -> None:
         self.stdscr.erase()
@@ -551,6 +726,17 @@ class PlayShellScreen:
         # was already polling. No new gap, structurally -- not merely
         # unobserved at today's constants (unlike the `right_gutter` term
         # above, which IS a defensive/latent addition).
+        #
+        # The GAME viewport's own border-state flip (WO-P3-040,
+        # `_viewport_border_attr` below) is a SIXTH consumer of this same
+        # snapshot -- and, like the fold, needs no new term here either.
+        # `layout.py`'s own CONTROL_STRIP comment establishes `control_strip`
+        # is present at every reachable non-`too_small` size today,
+        # independent of fold `mode` (explicitly including the `no_border`
+        # tier where `center["border"]` is `False` and this new consumer
+        # never even runs). So every tier where `center["border"]` could be
+        # `True` already has `control_strip is not None` true and was
+        # already polling -- structurally, not merely unobserved.
         if (
             goals is not None
             or decisions is not None
@@ -592,9 +778,14 @@ class PlayShellScreen:
         center = regions["center"]
         if center is not None:
             if center["border"]:
+                # WO-P3-040: the viewport border's own STATE flip -- cyan
+                # chrome by default, red non-bold the instant a real,
+                # definite `connected: False` reaches us (honest-unknown
+                # otherwise; see `_viewport_border_attr`'s own docstring).
+                border_attr = self._viewport_border_attr(status)
                 cockpit_draw.draw_box(
-                    self.stdscr, center, weight="double", attr=self._chrome_attr,
-                    title="GAME", title_attr=self._chrome_attr, uok=uok,
+                    self.stdscr, center, weight="double", attr=border_attr,
+                    title="GAME", title_attr=border_attr, uok=uok,
                 )
                 cockpit_draw.draw_lines(self.stdscr, center, [_GAME_PLACEHOLDER], curses.A_NORMAL)
             else:
@@ -729,19 +920,18 @@ class BankViewScreen:
         self._init_colors()
 
     def _init_colors(self) -> None:
-        if not curses.has_colors():
-            self._chrome = curses.A_BOLD
-            self._warn = curses.A_BOLD | curses.A_UNDERLINE
-            return
-        curses.start_color()
-        try:
-            curses.use_default_colors()
-        except curses.error:
-            pass
-        curses.init_pair(1, curses.COLOR_CYAN, -1)
-        curses.init_pair(2, curses.COLOR_YELLOW, -1)
-        self._chrome = curses.color_pair(1)
-        self._warn = curses.color_pair(2) | curses.A_BOLD
+        # Reuses _TonePalette (WO-P3-040 REVISE, Mack single-source MEDIUM +
+        # CRITICAL pair-collision fix) instead of this screen's own former
+        # curses.init_pair(1, ...)/init_pair(2, ...) calls -- "chrome"/"warn"
+        # here mean exactly the tone table's "info"/"warn" tones (cyan
+        # non-bold / yellow bold), and _TonePalette's own monochrome
+        # fallback (bold "info", bold+underline "warn") is already
+        # byte-identical to this class's prior standalone mono fallback, so
+        # reusing it changes zero visible behavior while routing every pair
+        # allocation through the one shared, collision-free mechanism.
+        palette = _TonePalette()
+        self._chrome = palette.attr("info")
+        self._warn = palette.attr("warn")
 
     def draw(self) -> None:
         self.stdscr.erase()
@@ -873,19 +1063,13 @@ class CreateFormScreen:
         self._init_colors()
 
     def _init_colors(self) -> None:
-        if not curses.has_colors():
-            self._chrome = curses.A_BOLD
-            self._warn = curses.A_BOLD | curses.A_UNDERLINE
-            return
-        curses.start_color()
-        try:
-            curses.use_default_colors()
-        except curses.error:
-            pass
-        curses.init_pair(1, curses.COLOR_CYAN, -1)
-        curses.init_pair(2, curses.COLOR_YELLOW, -1)
-        self._chrome = curses.color_pair(1)
-        self._warn = curses.color_pair(2) | curses.A_BOLD
+        # Reuses _TonePalette -- see BankViewScreen._init_colors' own
+        # comment (WO-P3-040 REVISE, Mack single-source MEDIUM + CRITICAL
+        # pair-collision fix); identical "chrome"/"warn" mapping and
+        # byte-identical monochrome fallback, zero visible behavior change.
+        palette = _TonePalette()
+        self._chrome = palette.attr("info")
+        self._warn = palette.attr("warn")
 
     def _server_key(self) -> str:
         if not self.servers:
