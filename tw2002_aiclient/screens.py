@@ -1,6 +1,6 @@
 """Pre-cockpit launcher screens (WO-P1-010).
 
-No password field is ever rendered here — structural absence, not a filter.
+Credentials/secrets are never collected or shown on this surface.
 """
 
 from __future__ import annotations
@@ -13,7 +13,7 @@ import curses
 
 @dataclass(frozen=True)
 class ProfileRow:
-    """Non-secret profile summary for the picker. Never carries a password."""
+    """Non-secret profile summary for the picker (name/handle/server only)."""
 
     name: str
     handle: str

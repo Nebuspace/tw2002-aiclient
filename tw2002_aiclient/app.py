@@ -8,7 +8,7 @@ from tw2002_aiclient.screens import LauncherScreen, ProfileRow
 
 
 def _demo_profiles() -> list[ProfileRow]:
-    """Optional smoke rows when TW2002_LAUNCHER_DEMO=1 (no credentials / no passwords)."""
+    """Optional smoke rows when TW2002_LAUNCHER_DEMO=1 (local stubs only)."""
     import os
 
     if os.environ.get("TW2002_LAUNCHER_DEMO") != "1":
@@ -20,10 +20,16 @@ def _demo_profiles() -> list[ProfileRow]:
 
 
 def _run(stdscr: curses.window) -> None:
+    import os
+
     curses.curs_set(0)
     stdscr.keypad(True)
     stdscr.timeout(-1)
     screen = LauncherScreen(stdscr, profiles=_demo_profiles())
+    # Automated smoke: draw once and exit clean (hub/pty verify without interactive input).
+    if os.environ.get("TW2002_LAUNCHER_SMOKE") == "1":
+        screen.draw()
+        return
     while True:
         screen.draw()
         key = stdscr.getch()
