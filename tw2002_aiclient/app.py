@@ -1,4 +1,4 @@
-"""Curses app entry — pre-cockpit launcher + create form (WO-P1-010…012)."""
+"""Curses app entry — launcher ↔ create form ↔ play shell (WO-P1-010…016)."""
 
 from __future__ import annotations
 
@@ -6,7 +6,12 @@ import os
 
 import curses
 
-from tw2002_aiclient.screens import CreateFormScreen, LauncherScreen, ProfileRow
+from tw2002_aiclient.screens import (
+    CreateFormScreen,
+    LauncherScreen,
+    PlayShellScreen,
+    ProfileRow,
+)
 from tw2002_aiclient.session import credentials
 
 
@@ -96,6 +101,19 @@ def _run_create(stdscr: curses.window) -> str:
             return action
 
 
+def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
+    """Bind profile to a fresh play-shell placeholder; Esc ends the binding."""
+    play = PlayShellScreen(stdscr, profile)
+    while True:
+        play.draw()
+        key = stdscr.getch()
+        if key == -1:
+            continue
+        action = play.handle_key(key)
+        if action in ("back", "quit"):
+            return action
+
+
 def _run(stdscr: curses.window) -> None:
     try:
         curses.curs_set(0)
@@ -107,6 +125,27 @@ def _run(stdscr: curses.window) -> None:
     # Automated smoke: draw once and exit clean (hub/script verify without interactive input).
     if os.environ.get("TW2002_LAUNCHER_SMOKE") == "1":
         screen.draw()
+        return
+    # Hand-off smoke: draw launcher → enter first healthy row → draw play → exit.
+    if os.environ.get("TW2002_HANDOFF_SMOKE") == "1":
+        if not screen.profiles or screen.profiles[0].error:
+            # Ensure a row exists for Proof.
+            screen.set_profiles(
+                [
+                    ProfileRow(
+                        name="alpha",
+                        handle="Alpha",
+                        server="demo-a",
+                        host="demo-a.example",
+                        game_letter="B",
+                    )
+                ]
+            )
+        screen.selected = 0
+        screen.draw()
+        profile = screen.selected_profile()
+        assert profile is not None
+        PlayShellScreen(stdscr, profile).draw()
         return
     while True:
         screen.draw()
@@ -120,9 +159,21 @@ def _run(stdscr: curses.window) -> None:
             result = _run_create(stdscr)
             if result == "saved":
                 screen.set_profiles(_load_profiles())
-                # Prefer the newly created row when present; else stay on CTA.
                 if screen.profiles:
                     screen.selected = len(screen.profiles) - 1
+            try:
+                curses.curs_set(0)
+            except curses.error:
+                pass
+            continue
+        if action == "play":
+            profile = screen.selected_profile()
+            if profile is None:
+                continue
+            result = _run_play(stdscr, profile)
+            # Fresh launcher draw — no play-shell transient state carried back.
+            if result == "quit":
+                break
             try:
                 curses.curs_set(0)
             except curses.error:

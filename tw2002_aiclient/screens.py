@@ -150,13 +150,13 @@ class LauncherScreen:
             self.stdscr,
             max_y - 2,
             3,
-            "↑/↓ select   Enter open   q quit",
+            "↑/↓ select   Enter play/create   q quit",
             self._chrome,
         )
         self.stdscr.refresh()
 
     def handle_key(self, key: int) -> str | None:
-        """Return ``quit`` / ``create`` / ``None``."""
+        """Return ``quit`` / ``create`` / ``play`` / ``None``."""
         if key in (ord("q"), ord("Q")):
             return "quit"
         n = self._n_items
@@ -167,6 +167,82 @@ class LauncherScreen:
         elif key in (curses.KEY_ENTER, 10, 13):
             if self._is_cta(self.selected):
                 return "create"
+            row = self.profiles[self.selected]
+            if row.error:
+                return None  # broken row stays on launcher
+            return "play"
+        return None
+
+    def selected_profile(self) -> ProfileRow | None:
+        if self._is_cta(self.selected) or not self.profiles:
+            return None
+        return self.profiles[self.selected]
+
+
+PLAY_TITLE = " PLAY SHELL "
+PLAY_SUBTITLE = " (placeholder — cockpit chrome is a later WO) "
+
+
+class PlayShellScreen:
+    """Minimal play-shell placeholder bound to one launcher profile (WO-P1-016).
+
+    Esc ends the binding and returns to the launcher — clean close, not a suspend.
+    """
+
+    def __init__(self, stdscr: curses.window, profile: ProfileRow) -> None:
+        self.stdscr = stdscr
+        self.profile = profile
+        self._chrome = curses.A_NORMAL
+        self._init_colors()
+
+    def _init_colors(self) -> None:
+        if not curses.has_colors():
+            self._chrome = curses.A_BOLD
+            return
+        curses.start_color()
+        try:
+            curses.use_default_colors()
+        except curses.error:
+            pass
+        curses.init_pair(1, curses.COLOR_CYAN, -1)
+        self._chrome = curses.color_pair(1)
+
+    def draw(self) -> None:
+        self.stdscr.erase()
+        max_y, max_x = self.stdscr.getmaxyx()
+        if max_y >= 3 and max_x >= 10:
+            try:
+                self.stdscr.attron(self._chrome)
+                self.stdscr.box()
+                self.stdscr.attroff(self._chrome)
+            except curses.error:
+                pass
+            _safe_addstr(self.stdscr, 0, 2, TITLE, self._chrome | curses.A_BOLD)
+            _safe_addstr(self.stdscr, 1, 2, PLAY_TITLE, self._chrome)
+
+        p = self.profile
+        host = p.host or p.server or "?"
+        letter = p.game_letter or "—"
+        _safe_addstr(self.stdscr, 3, 3, PLAY_SUBTITLE, curses.A_DIM)
+        _safe_addstr(self.stdscr, 5, 3, f"profile   {p.name}", curses.A_NORMAL)
+        _safe_addstr(self.stdscr, 6, 3, f"handle    {p.handle}", curses.A_NORMAL)
+        _safe_addstr(self.stdscr, 7, 3, f"host      {host}", curses.A_NORMAL)
+        _safe_addstr(self.stdscr, 8, 3, f"game      [{letter}]", curses.A_BOLD)
+        _safe_addstr(
+            self.stdscr,
+            max_y - 2,
+            3,
+            "Esc return to launcher (ends binding)   q quit app",
+            self._chrome,
+        )
+        self.stdscr.refresh()
+
+    def handle_key(self, key: int) -> str | None:
+        """Return ``back`` / ``quit`` / ``None``."""
+        if key == 27:  # Esc — end binding, return to launcher
+            return "back"
+        if key in (ord("q"), ord("Q")):
+            return "quit"
         return None
 
 
