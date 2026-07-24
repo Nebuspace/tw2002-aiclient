@@ -1,6 +1,6 @@
 # WO-P2-OPS-VERB-SURFACE — Ops CLI verb inventory + wire plan
 
-> Status: **slice A DONE** 2026-07-24 · tip pending Accept · honesty PREP was `a2c3afb`
+> Status: **slice B DONE** pending Accept · tip base `88b16ac`
 > Seat: `impl-aiclient-cursor` · execute slices grow one WO at a time
 > Refs: hub banked gap after WO-P0-TW-SHIM · `canon/architecture/cli-verbs.md`
 
@@ -9,7 +9,7 @@
 Truth-align README with live `./tw --help`, inventory daemon/protocol vs CLI, and
 stage ordered execute slices to grow the verb table one WO at a time.
 
-## Live surface (post slice A)
+## Live surface (post slice B)
 
 ### CLI (`tw2002_aiclient/session/cli.py`)
 
@@ -17,10 +17,13 @@ stage ordered execute slices to grow the verb table one WO at a time.
 |------|-------|-------|
 | `status` | **YES** | `cmd_status` · daemon status JSON |
 | `ensure` | **YES** | `cmd_ensure` · spawn+login · adapters path |
-| `screen` | **YES** | `cmd_screen` · WO-P2-OPS-VERB-A · `--raw`/`--compact` |
-| `stop` | **YES** | `cmd_stop` · WO-P2-OPS-VERB-A · no-op if daemon down |
+| `screen` | **YES** | `cmd_screen` · WO-P2-OPS-VERB-A |
+| `stop` | **YES** | `cmd_stop` · WO-P2-OPS-VERB-A |
+| `do` | **YES** | `cmd_do` · WO-P2-OPS-VERB-B · settle + control_lock |
+| `send` | **YES** | `cmd_send` · WO-P2-OPS-VERB-B · no settle |
+| `read` | **YES** | `cmd_read` · WO-P2-OPS-VERB-B · settle, never sends |
 
-`./tw --help` subparsers: `{status,ensure,screen,stop}`.
+`./tw --help` subparsers: `{status,ensure,screen,stop,do,send,read}`.
 
 ### Protocol (`session/protocol.py` dispatch)
 
@@ -30,22 +33,25 @@ stage ordered execute slices to grow the verb table one WO at a time.
 | `ensure` | YES | YES |
 | `screen` | YES | YES (slice A) |
 | `stop` | YES | YES (slice A) |
+| `do` | YES | YES (slice B) |
+| `send` | YES | YES (slice B) |
+| `read` | YES | YES (slice B) |
 
-Other aspirational README verbs (`do`, `send`, `read`, `state`, `history`, `watch`,
-`start`, `spectate`, `attach`, `menumap`, `loops`, `autoloop`, `aiclient`) are **not**
-on the greenfield CLI and must not be advertised as shipped.
+Other aspirational README verbs (`state`, `history`, `watch`, `start`, `spectate`,
+`attach`, `menumap`, `loops`, `autoloop`, `aiclient`) are **not** on the greenfield
+CLI and must not be advertised as shipped.
 
-## Honesty (this WO)
+## Honesty
 
-README Product/ops + Quickstart + Verb reference trimmed to **shipped-only**, with a
-short **Coming** note pointing here for the wire queue.
+README Product/ops + Quickstart + Verb reference track the shipped set; Coming
+points here for remaining slices.
 
-## Recommended execute slices (next WOs — not this one)
+## Recommended execute slices
 
 | Slice | Verbs | Depends | Proof sketch |
 |-------|-------|---------|--------------|
-| **A** | `screen` · `stop` | protocol already present | **DONE** — `./tw --help` · `tests/test_cli_ops_verb_a.py` |
-| **B** | `do` · `send` · `read` | settle (`wait_prompt`) · control_lock | case-sensitive wait · TOCTOU |
+| **A** | `screen` · `stop` | protocol already present | **DONE** |
+| **B** | `do` · `send` · `read` | settle · control_lock | **DONE** — `tests/test_cli_ops_verb_b.py` |
 | **C** | `state` · `history` | state_parser / history ring | JSON schema · redaction |
 | **D** | `start` (explicit spawn) | env/run-dir | overlap with ensure — maybe docs-only |
 | **E** | `watch` | watch hub port | event stream |
@@ -53,8 +59,8 @@ short **Coming** note pointing here for the wire queue.
 | **G** | `menumap` · `loops` · `autoloop` | later engines | after world/priority ports |
 
 **Accept for a wire slice:** verb on `./tw --help` · unit/FakeSession proof · path-leak ·
-README row moves from Coming → Verb reference in the same commit.
+README row moves from Coming → Verb reference in the same commit · **full suite green**.
 
-## Out of scope (this WO)
+## Out of scope (honesty / inventory WO)
 
 Implementing any missing verb · touching `screens.py` / `cockpit/**`.

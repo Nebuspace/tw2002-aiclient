@@ -7,14 +7,16 @@ unix-domain socket. Request: `{"verb": "...", "args": {...}}`. Response:
 always has `"ok"`; on success carries verb-specific fields, on failure
 carries `"error"`.
 
-**WO-P2-020 Wave-3 SUBSET + WO-P2-025 control-lock wire** -- ported from
-`archive/pre-rebirth-2026-07-23/code/twclient/protocol.py`. Live one-shot
-verbs: `ensure`, `status`, `screen`, `stop`. Lifetime `attach` is handled
-in `daemon.py` (not here). `do`/`send`/`read`/`history`/`state`/`set_mode`/
-`subscribe`/`crawl_start`/`autopilot_*`/`record_*`/`replay`/`mine`/`play*`/
-`haggle`/`list_skills` remain later WOs -- `dispatch()` returns
-`unknown_verb` for them. Ensure rides `_driving_dispatch` (acquire_driver /
-release_driver) for refuse-not-queue.
+**WO-P2-020 Wave-3 SUBSET + WO-P2-025 control-lock + WO-P2-OPS-VERB-B** --
+ported from `archive/pre-rebirth-2026-07-23/code/twclient/protocol.py`.
+Live one-shot verbs: `ensure`, `status`, `screen`, `stop`, `do`, `send`,
+`read`. Lifetime `attach` is handled in `daemon.py` (not here).
+`history`/`state`/`set_mode`/`subscribe`/`crawl_start`/`autopilot_*`/
+`record_*`/`replay`/`mine`/`play*`/`haggle`/`list_skills` remain later WOs
+-- `dispatch()` returns `unknown_verb` for them. Drive verbs
+(`ensure`/`do`/`send`) ride `_driving_dispatch` (acquire_driver /
+release_driver) for refuse-not-queue. Live senders are `{app, human}` only
+(never AI).
 
 `build_response()` here is a bounded subset of archive protocol.py:407-470
 -- see its own docstring for the exact fields cut and why.
@@ -22,6 +24,7 @@ release_driver) for refuse-not-queue.
 
 import json
 import os
+import re
 import time
 from contextlib import contextmanager
 
@@ -159,6 +162,59 @@ def dispatch(session, verb, args, server):
         # ensure (`_maybe_auto_start_after_ensure`) still cut — no
         # autopilot.py.
         return _dispatch_ensure(session, args, server)
+
+    if verb == "do":
+        # WO-P2-OPS-VERB-B: send + wait_settle. Ledger/skill_step cut until
+        # those modules land — history ring + last_sender="app" still prove
+        # the drive path. wait_prompt is case-sensitive (settle.py HARD RULE).
+        with _driving_dispatch(server) as lock_error:
+            if lock_error is not None:
+                return lock_error
+            text = args.get("input", "")
+            enter = args.get("enter", True)
+            secret = args.get("secret", False)
+            wait_prompt = args.get("wait_prompt")
+            try:
+                session.send(text, enter=enter, secret=secret, sender="app")
+                reason, elapsed = session.wait_settle(
+                    wait_prompt=wait_prompt,
+                    timeout=args.get("timeout", 8.0),
+                    debounce_ms=args.get("debounce_ms", 350),
+                )
+            except re.error as e:
+                return {"ok": False, "error": f"bad_wait_prompt_regex:{e}"}
+            resp = build_response(session, settled_reason=reason, extra={"elapsed": elapsed})
+            history_args = {**args, "input": "<redacted>"} if secret else args
+            session.record_history(
+                "do", history_args, resp["prompt"], resp["classification"], reason
+            )
+            return resp
+
+    if verb == "send":
+        # WO-P2-OPS-VERB-B: raw send, no settle wait.
+        with _driving_dispatch(server) as lock_error:
+            if lock_error is not None:
+                return lock_error
+            text = args.get("input", "")
+            enter = args.get("enter", True)
+            secret = args.get("secret", False)
+            session.send(text, enter=enter, secret=secret, sender="app")
+            return build_response(session)
+
+    if verb == "read":
+        # WO-P2-OPS-VERB-B: wait-and-return, never sends (read-only).
+        wait_prompt = args.get("wait_prompt")
+        try:
+            reason, elapsed = session.wait_settle(
+                wait_prompt=wait_prompt,
+                timeout=args.get("timeout", 8.0),
+                debounce_ms=args.get("debounce_ms", 350),
+            )
+        except re.error as e:
+            return {"ok": False, "error": f"bad_wait_prompt_regex:{e}"}
+        resp = build_response(session, settled_reason=reason, extra={"elapsed": elapsed})
+        session.record_history("read", args, resp["prompt"], resp["classification"], reason)
+        return resp
 
     return {"ok": False, "error": f"unknown_verb:{verb}"}
 

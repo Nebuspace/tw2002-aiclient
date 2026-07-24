@@ -240,9 +240,18 @@ def ensure_raw(profile, *, target="main_command", timeout=180.0, no_auto_arm=Fal
 
         # Let the fresh connection produce its first settled screen
         # before driving it -- mirrors `tw start`'s post-spawn read.
+        # Cap the settle window so a slow/idle first screen cannot burn
+        # the whole ensure budget (WO-P2-OPS-VERB-B: `read` is live now;
+        # previously unknown_verb returned instantly and hid this hazard).
         remaining = deadline - time.monotonic()
-        if remaining > 0:
-            send_request("read", {"timeout": remaining}, timeout=remaining + 5, run_dir=run_dir)
+        settle_budget = min(remaining, 5.0)
+        if settle_budget > 0:
+            send_request(
+                "read",
+                {"timeout": settle_budget},
+                timeout=settle_budget + 5,
+                run_dir=run_dir,
+            )
 
     remaining = deadline - time.monotonic()
     if remaining <= 0:
@@ -287,6 +296,59 @@ def cmd_stop(args):
             print("daemon not running")
         return 0
     resp = send_request("stop", {}, run_dir=run_dir)
+    print_response(resp, args)
+    return 0 if resp.get("ok") else 1
+
+
+def cmd_do(args):
+    """WO-P2-OPS-VERB-B: send input, wait for settle, return the new screen."""
+    run_dir = _resolve_run_dir(args.run_dir)
+    timeout = float(args.timeout)
+    resp = send_request(
+        "do",
+        {
+            "input": args.input,
+            "enter": args.enter,
+            "secret": bool(args.secret),
+            "wait_prompt": args.wait_prompt,
+            "timeout": timeout,
+        },
+        timeout=timeout + 5,
+        run_dir=run_dir,
+    )
+    print_response(resp, args)
+    return 0 if resp.get("ok") else 1
+
+
+def cmd_send(args):
+    """WO-P2-OPS-VERB-B: raw send, no settle wait."""
+    run_dir = _resolve_run_dir(args.run_dir)
+    resp = send_request(
+        "send",
+        {
+            "input": args.input,
+            "enter": args.enter,
+            "secret": bool(args.secret),
+        },
+        run_dir=run_dir,
+    )
+    print_response(resp, args)
+    return 0 if resp.get("ok") else 1
+
+
+def cmd_read(args):
+    """WO-P2-OPS-VERB-B: wait-and-return without sending."""
+    run_dir = _resolve_run_dir(args.run_dir)
+    timeout = float(args.timeout)
+    resp = send_request(
+        "read",
+        {
+            "wait_prompt": args.wait_prompt,
+            "timeout": timeout,
+        },
+        timeout=timeout + 5,
+        run_dir=run_dir,
+    )
     print_response(resp, args)
     return 0 if resp.get("ok") else 1
 
@@ -349,6 +411,51 @@ def build_parser() -> argparse.ArgumentParser:
                      help="daemon run directory override (default: project-rooted run/)")
     sp.add_argument("--json", action="store_true", help="machine-parseable JSON output")
     sp.set_defaults(func=cmd_stop)
+
+    sp = sub.add_parser(
+        "do",
+        help="send input, wait for settle, return the new screen",
+    )
+    sp.add_argument("input", help="text to send (CRLF appended unless --no-enter)")
+    sp.add_argument("--no-enter", action="store_false", dest="enter",
+                     help="do not append CRLF after input")
+    sp.set_defaults(enter=True)
+    sp.add_argument("--secret", action="store_true",
+                     help="password entry — never persisted to the transcript log")
+    sp.add_argument("--wait-prompt", default=None, dest="wait_prompt",
+                     help="case-sensitive regex; settle waits until prompt matches")
+    sp.add_argument("--timeout", type=float, default=8.0, help="settle timeout seconds")
+    sp.add_argument("--run-dir", default=None, metavar="PATH", dest="run_dir",
+                     help="daemon run directory override (default: project-rooted run/)")
+    sp.add_argument("--json", action="store_true", help="machine-parseable JSON output")
+    sp.set_defaults(func=cmd_do)
+
+    sp = sub.add_parser(
+        "send",
+        help="raw send, no settle wait (rare / low-level)",
+    )
+    sp.add_argument("input", help="text to send (CRLF appended unless --no-enter)")
+    sp.add_argument("--no-enter", action="store_false", dest="enter",
+                     help="do not append CRLF after input")
+    sp.set_defaults(enter=True)
+    sp.add_argument("--secret", action="store_true",
+                     help="password entry — never persisted to the transcript log")
+    sp.add_argument("--run-dir", default=None, metavar="PATH", dest="run_dir",
+                     help="daemon run directory override (default: project-rooted run/)")
+    sp.add_argument("--json", action="store_true", help="machine-parseable JSON output")
+    sp.set_defaults(func=cmd_send)
+
+    sp = sub.add_parser(
+        "read",
+        help="wait for settle and return the screen without sending",
+    )
+    sp.add_argument("--wait-prompt", default=None, dest="wait_prompt",
+                     help="case-sensitive regex; settle waits until prompt matches")
+    sp.add_argument("--timeout", type=float, default=8.0, help="settle timeout seconds")
+    sp.add_argument("--run-dir", default=None, metavar="PATH", dest="run_dir",
+                     help="daemon run directory override (default: project-rooted run/)")
+    sp.add_argument("--json", action="store_true", help="machine-parseable JSON output")
+    sp.set_defaults(func=cmd_read)
 
     return parser
 
