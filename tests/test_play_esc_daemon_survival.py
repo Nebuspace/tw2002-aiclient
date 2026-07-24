@@ -38,6 +38,22 @@ def test_play_shell_esc_returns_back_not_quit():
     assert screen.handle_key(ord("x")) is None
 
 
+def _is_allowlisted_watchfeed_stop(node: ast.Attribute) -> bool:
+    """Adjudicated WO-P4-050: ``feed.stop()`` is the WatchFeed spectator
+    client's own lifecycle teardown (closes its local socket + joins its
+    reader thread; no daemon verb -- ``test_run_play_esc_issues_no_daemon_
+    stop_verb`` below still proves zero daemon-wire calls on the Esc
+    path). This is a precise, single-site allowlist, not a generic
+    object-aware relaxation of the guard: any OTHER stop/shutdown/kill-
+    shaped name in ``_run_play`` still trips it by design and must be
+    adjudicated the same way -- the guard's bluntness is the feature."""
+    return (
+        node.attr == "stop"
+        and isinstance(node.value, ast.Name)
+        and node.value.id == "feed"
+    )
+
+
 def test_run_play_source_never_calls_stop():
     """Static guard: ``_run_play`` body has no stop/teardown call sites."""
     src = Path(inspect.getsourcefile(app._run_play)).read_text(encoding="utf-8")
@@ -48,7 +64,9 @@ def test_run_play_source_never_calls_stop():
     attrs = {
         n.attr
         for n in ast.walk(fn)
-        if isinstance(n, ast.Attribute) and isinstance(n.ctx, ast.Load)
+        if isinstance(n, ast.Attribute)
+        and isinstance(n.ctx, ast.Load)
+        and not _is_allowlisted_watchfeed_stop(n)
     }
     names = {
         n.id for n in ast.walk(fn) if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Load)

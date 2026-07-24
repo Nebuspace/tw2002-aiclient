@@ -16,6 +16,7 @@ from tw2002_aiclient.screens import (
 )
 from tw2002_aiclient.session import cli as session_cli
 from tw2002_aiclient.session import credentials, env, player_bank
+from tw2002_aiclient.watchfeed import WatchFeed
 
 
 def _rows_from_disk() -> list[ProfileRow]:
@@ -173,8 +174,9 @@ def _daemon_status_provider(run_dir):
 
 def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
     """Bind profile to a fresh play-shell placeholder; Esc ends the binding."""
+    run_dir = env.resolve_run_dir()
     play = PlayShellScreen(stdscr, profile)
-    play.status_provider = _daemon_status_provider(env.resolve_run_dir())
+    play.status_provider = _daemon_status_provider(run_dir)
     play.status_line = "Ensuring session…"
     play.draw()  # show the ensuring state during the (blocking) wait below
     # no_auto_arm=True: ensure only reaches main_command and stops, even if
@@ -189,6 +191,13 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
     # status_provider() snapshot. -1 (the timeout tick) is deliberately never
     # routed into handle_key -- it isn't a real key, just a redraw prompt.
     stdscr.timeout(1000)
+    # WO-P4-050: the watch-stream client's lifecycle is scoped to this one
+    # play-shell binding -- started right before the loop, stopped in the
+    # `finally` below on every exit path (Esc/back, quit, or an exception
+    # unwinding out of the loop). Nothing reads the feed into the UI yet;
+    # this WO only owns start/stop, never painting.
+    feed = WatchFeed(run_dir=run_dir)
+    feed.start()
     try:
         while True:
             play.draw()
@@ -199,6 +208,7 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
             if action in ("back", "quit"):
                 return action
     finally:
+        feed.stop()
         stdscr.timeout(-1)  # restore blocking getch for the caller's own loop
 
 

@@ -182,7 +182,7 @@ Banked hygiene (not a PWO id): **pty mid-flush settle** — PREP `workorders/WO-
 
 | ID | Title | Type | Depends | Goal | Accept | Proof | Canon |
 |----|-------|------|---------|------|--------|-------|-------|
-| PWO-050 | Watch-stream subscribe — PREP `WO-P4-050-057-viewport-PREP.md` | build | 020 | Product reads settle stream | frames arrive | unit/live | spectate-and-attach |
+| PWO-050 | Watch-stream subscribe **DONE** 2026-07-24 (own commit, first past `861ea58`) | build | 020 | Product reads settle stream | frames arrive | unit/live | spectate-and-attach |
 | PWO-051 | Center 80×24 viewport shell — PREP (same) | build | 033·050 | Empty bordered 82×26 | geometry | TTY | trainer-cockpit GAME UI |
 | PWO-052 | Viewport render grid — PREP (same) | build | 051 | pyte cells drawn | matches spectate | side-by-side | spectate-and-attach color · visual-language |
 | PWO-053 | Viewport color parity — PREP (same) | harden | 052 | Color map == ops spectate | visual/diff | TTY | spectate… N3 · visual-language |
