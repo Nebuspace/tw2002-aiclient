@@ -1,89 +1,69 @@
 # tw2002-aiclient — Project Context
 
-An AI-native TradeWars 2002 telnet client: a persistent session daemon (`twd`) owns the ONE telnet
-connection + a pyte-emulated terminal, and a stateless one-shot CLI (`tw`) is what a Bash-driving
-LLM worker actually calls — one verb, one round trip, a settled screen back. It is explicitly
-**not built for human play** except through two dedicated human-facing surfaces (`tw spectate`,
-`tw attach`) layered on top of the same daemon.
+**Samantha's persona lives in the output-style** (`.claude/output-styles/samantha.md`), auto-loaded via `.claude/settings.json` (`outputStyle: Samantha`). This file is project context.
+
+---
+
+## This Repo
+
+**tw2002-aiclient** — a **human-piloted trainer** for TradeWars 2002. The operator flies; the app carries only screens it has been *taught* (deterministic autopilot / macros); a retrospective AI teacher may propose draft rules when invited. The AI **never live-drives**.
+
+This repo is in **rebirth** (2026-07-23): live tree is `canon/` (prescriptive OKF) + `workorders/` (master list `workorders/ULTRACODE-WO-INVENTORY.md`; Phase 0–2 materialized as `WO-P0/P1/P2-*.md`; `WO-00…WO-17` are LEGACY-SURFACE). Prior product code + old docs live under `archive/pre-rebirth-2026-07-23/` for reference/porting only. **DOCS WIN:** where archived code contradicts reborn canon, canon wins.
+
+An instance rooted **here** is an **IMPLEMENTER** seat in the Nebuspace dual — live identity is set by `SAMANTHA_IDENTITY` / the seat's presence file in the coord-dir. Current roster: **`impl-aiclient-cursor`** (Cursor · volume) and **`impl-claudecode-aiclient`** (Claude Code · premium) (registered in `Claude_Samantha/.samantha/DEPLOYMENTS.md`). The **ORCHESTRATOR** runs from `"$(git rev-parse --show-toplevel)"/../`. Claude Code/Cursor auto-loads ancestor `CLAUDE.md` files, so the parent Nebuspace coordination spec is in context — but **this file's seat definition is authoritative for cwd = here**.
+
+---
 
 ## Doc canon (read in this order)
 
-- **`DESIGN.md`** — the original v1 architecture spec: the CLI/daemon split, the unix-socket JSON
-  protocol, and the settle-detection design. Still accurate for what it covers, but its verb table
-  predates `ensure`/`spectate`/`attach`/`watch`/`autoloop`/`loops` — it is the foundation, not the
-  full current spec.
-- **`README.md`** — the quickstart: setup, the verb table, and the auto-login / spectate / attach
-  walkthroughs. Good for "how do I run this," not the spec of record.
-- The living canonical documentation is being established in `knowledge/` — treat it as
-  authoritative for everything it covers once populated.
+1. **`canon/architecture/north-star.md`** — vision & win condition (human sovereign · app taught-screen autopilot · AI teacher never live-drives).
+2. **`canon/index.md`** — the OKF bundle's entry point and full concept index. The bundle is the sole docs root (no second docs tree) and spans `canon/architecture/`, `canon/engine/`, `canon/surfaces/`, `canon/doctrine/`, `canon/strategy/`, plus `canon/ADR/` (decision records), `canon/DECISIONS.md` (open-questions workspace), and `canon/log.md`.
+3. Surface / engine / strategy concepts under `canon/surfaces/`, `canon/architecture/`, `canon/engine/`, `canon/doctrine/`, `canon/strategy/` as the WO scopes them.
+4. **`workorders/README.md`** — ordered product rebuild queue; each WO has Goal · Scope · Depends-on · Accept · Proof.
+5. **`archive/pre-rebirth-2026-07-23/`** — reference only (old AI-first framing in places). Port behavior only when a WO scopes it and canon defines the target contract.
 
-## Setup & commands
+---
+
+## How work proceeds
+
+Build **only** through the ordered queue in `workorders/` — see `workorders/ULTRACODE-WO-INVENTORY.md` for the master list; start at the first unproven `WO-P0/P1/P2-*` item on a cold seat. Daemon-side safety items (TW-01…TW-30) stay in the parent Nebuspace `QUEUE.md`, not here.
+
+Phase 0 already shipped greenfield package stubs at repo root (`tw2002_aiclient/` + `twclient/`) — this is **greenfield-from-`canon/`, not a restore of archived code**. Per [ADR-001](canon/ADR/001-one-tree-embedded-session.md) (**Proposed**, not yet Accepted), the two sibling top-level packages are being consolidated into one `tw2002_aiclient` import tree with the daemon-core relocated under `tw2002_aiclient/session/`; until that relocation WO lands, `twclient/*` stays where it is and new daemon-core work continues to target it.
+
+---
+
+## Setup & commands (as of rebirth)
+
+Greenfield package stubs exist at repo root today (`tw2002_aiclient/` product TUI, `twclient/` daemon-core — see the consolidation note above); `./tw`, `./twd`, `./tw2002-aiclient` launcher scripts and console-script wiring have not landed yet (no `[project.scripts]` in `pyproject.toml`). What runs today:
 
 ```bash
-python3 -m venv .venv
-.venv/bin/pip install -r requirements.txt   # single dependency: pyte>=0.8.2
+cd "$(git rev-parse --show-toplevel)"
+python3 -m venv .venv && .venv/bin/pip install -e .
+.venv/bin/python -m tw2002_aiclient   # placeholder TUI entry — TTY-gated, per WO-P0-003
 ```
 
-`./tw` and `./twd` are self-locating launcher scripts — an `sh` trampoline execs this project's
-`.venv` python, so they run from anywhere by absolute path, no `source .venv/bin/activate` needed.
-`twd` is normally spawned for you by `tw start`; you don't invoke it directly.
+- **Lint:** none configured — don't invent one.
+- **Tests:** when `tests/` returns to root, prefer `.venv/bin/python -m pytest tests/` (network-free). Don't invent a lint gate.
+- Never run `tw start`/`tw stop` against a session someone else may be driving without checking `tw status` first.
 
-Daily-driver verbs (full table in `README.md`):
-
-| Verb | What it does |
-|---|---|
-| `tw start [--host H --port P]` | Spawn the daemon, connect, negotiate, return the first settled screen. |
-| `tw do "<input>" [--wait-prompt REGEX] [--json]` | **The primary verb.** Send input, wait until settled, return the new screen + `settled_reason`. |
-| `tw screen [--json]` | Non-destructive: current settled screen, prompt, classification, state. |
-| `tw status [--json]` | Daemon alive? connected? idle-ms? current classification. Always safe/read-only — check this before `tw start`/`tw stop` if you're unsure whether a session is already live. |
-| `tw stop` | Best-effort in-game QUIT, disconnect, daemon exit. |
-
-Test: `.venv/bin/python -m pytest tests/` — network-free, fake-clock/fake-session driven (500+
-tests). One caveat: exactly two tests in `tests/test_spectate_app.py` are gated on the REAL
-`run/twd.sock` existing (`skipif` otherwise) — with a live daemon up they attach a real read-only
-spectator and can flake on whatever the live screen shows. Running the suite next to a live
-session, `--deselect` those two (grep `SOCK_PATH.exists` in that file for the current node ids).
-No linter is configured for this project (no `pyproject.toml`/`ruff.toml`/`.flake8`) — don't
-invent a lint step.
-
-## Architecture map (`twclient/`)
-
-- `daemon.py` — `twd`, the session daemon; owns the one telnet connection, serves the JSON socket protocol.
-- `cli.py` — `tw`, the one-shot CLI; every verb is connect → send JSON → read JSON line → disconnect.
-- `connection.py` / `iac.py` — the raw telnet socket + IAC (Interpret As Command) negotiation handling.
-- `session.py` — the live telnet+pyte state a daemon process owns; implements settle-detection bookkeeping.
-- `terminal.py` — pyte-backed 80x25 terminal emulator + token-efficient cropped rendering.
-- `settle.py` — settle detection (the reliability core): decides when a screen has stopped changing.
-- `classify.py` — screen classification via regex anchors on the rendered text.
-- `state_parser.py` — best-effort structured game-state extraction (credits/sector/turns/port/etc).
-- `protocol.py` — the JSON verb protocol shared by the daemon's socket server and the CLI.
-- `control_lock.py` — the control-mode state machine: who may drive the one game connection (`ai_pilot`/`human`/`spectate`/`auto_loop`).
-- `credentials.py` — the live secure credential store. (The unimported `credstore.py` duplicate was deleted 2026-07-19 — TW-18.)
-- `login.py` — the classification-driven login automaton (auto-login, NEW-vs-RETURNING branching).
-- `guardian.py` — reconnect + login-replay on drop, plus conservative idle-keepalive.
-- `haggle.py` — deterministic (no-LLM) auto-haggle for the port OFFER sub-dialogue.
-- `ledger.py` / `skills.py` / `miner.py` — the pattern-learning substrate: trace ledger, macro record/replay, and a profit-miner that proposes learned patterns.
-- `loop_player.py` — the background AUTO-LOOP driver for the Trainer Control Panel.
-- `watch.py` — the settle-edge push-stream engine behind `tw watch`/`tw spectate`.
-- `spectate_app.py` / `spectate_layout.py` — `tw spectate`, the read-only curses spectator dashboard (layout logic is pure/testable, separated from the curses I/O).
-- `interactive_app.py` — `tw attach`, the interactive live console that takes the keyboard.
-- `logging_util.py` — full session transcript logging, including the `log_redacted()` path every password send must use.
+---
 
 ## Hard rules
 
-- **Secrets never touch logs, argv, shell history, or the repo.** `config/secrets.json` is
-  chmod-600 and gitignored; `TW2002_PASSWORD_<PROFILE>` env var is checked first. Every password
-  send must route through `logging_util.py`'s `log_redacted()`. Never echo, log, or return a
-  password in any CLI response.
-- **Single-connection, single-session daemon.** `run/twd.sock` + `run/twd.pid` live under this
-  project directory regardless of the caller's CWD. The daemon refuses a second daemon via the
-  pidfile; `control_lock.py` governs who may drive the one game connection — don't bypass it.
-- **`config/`, `run/`, `state/`, `logs/` are all gitignored.** The only tracked files under
-  `config/` are `config/profiles.toml.example` and `config/servers.toml` (the public game-server
-  catalog resolved by `tw servers list`); real `profiles.toml` and `secrets.json` are local-only.
-- **`wait_prompt` regexes are case-sensitive** (`settle.py` has no `re.IGNORECASE`) — a
-  case-mismatched prompt regex silently times out instead of erroring.
-- **`state_parser.py` anchors to the LAST match in the buffer, not the first** — this is
-  deliberate (fixes a real stale-scrollback bug); don't "simplify" it back to first-match.
+- **Secrets never touch logs, argv, shell history, or the repo.** See `canon/doctrine/secrets-and-credentials.md`. `config/secrets.json` is chmod-600 + gitignored; `TW2002_PASSWORD_<PROFILE>` env-first. Every password send routes through the redaction sink. Public repo: no real personal names, handles, FQDNs, or usernames in committed artifacts.
+- **AI never live-drives.** Live senders are `{app, human}` only. Spectate is read-only. At escalation the human responds by hand, Records a macro, or Analyzes with the AI teacher — every rule is human-approved before it can fire.
+- **Single-connection, single-session daemon** (once the daemon module lands): one telnet socket; control-lock governs who may drive. Don't bypass it.
+- **`.claude/` and `.samantha/` are gitignored** (hub ruling) — framework install is local orchestration, not shippable client. Same for private journals (`DESIGN-v2.md`, `QUEUE.md`, etc. if reintroduced).
 
-Local development/agent configuration lives in the gitignored `CLAUDE.local.md`.
+---
+
+## Two-Instance Coordination (Implementer view)
+
+Full protocol = parent **`Nebuspace/CLAUDE.md`** + `.samantha/references/coordination-protocol/README.md` (M9 STAR).
+
+- **Identity:** set by `SAMANTHA_IDENTITY` / the seat's presence file in the coord-dir. Current roster: `impl-aiclient-cursor` (Cursor · volume) and `impl-claudecode-aiclient` (Claude Code · premium).
+- **Outbox / presence:** `"$(git rev-parse --show-toplevel)"/../.samantha/coord/<identity>.md` — your own seat's file only (e.g. `impl-aiclient-cursor.md` or `impl-claudecode-aiclient.md`).
+- **Watch only:** `orchestrator.md`
+- **Arm each session:** parent `coord-monitor.sh` + `heartbeat.sh` for this identity; confirm `coord-status.sh` → BOTH ALIVE.
+- **Cursor arming:** Shell `block_until_ms: 0`, `required_permissions: ["all"]`, and `notify_on_output` (deaf gap otherwise).
+- Commit only explicit paths; never `git add -A` / `git add .` in a shared tree. Never write secrets to the coord-dir.
