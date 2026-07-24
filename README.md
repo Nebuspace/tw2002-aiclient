@@ -153,27 +153,11 @@ Notes worth knowing up front:
 - Product play / cockpit chrome is `./tw2002-aiclient`, not `./tw`.
 
 
-## The spectator's control strip
+## Spectator / attach (Coming)
 
-> **Not shipped on tip yet.** Product cockpit chrome lives under `./tw2002-aiclient`;
-> a future `tw spectate` ops dashboard is planned — see
-> [`WO-P2-OPS-VERB-SURFACE.md`](workorders/WO-P2-OPS-VERB-SURFACE.md). The key table
-> below is the **target** control strip (archive/canon), not a live CLI surface.
-
-Inside a future `tw spectate`, a compact control strip lets you direct the client without
-leaving the dashboard:
-
-| Key | Action |
-|---|---|
-| `M` | Cycle mode (human / app — **no** AI-drives live mode) |
-| `L` | Open the Learned-Loops Library — pick a loop, set cycles, `Enter` to launch |
-| `Space` | Pause/resume the running auto-loop |
-| `X` | Stop the auto-loop |
-| `P` | Panic — halt everything |
-| `q` / `Ctrl-C` | Detach (the game keeps running) |
-
-These are control-plane actions only — nothing in spectate ever forwards a
-keystroke to the game. A future `tw attach` remains the only ops path to drive directly.
+`tw spectate` and `tw attach` are **not shipped** on `./tw --help` yet. Product
+play / cockpit chrome is `./tw2002-aiclient`. Ops spectate/attach wire is staged
+in [`WO-P2-OPS-VERB-SURFACE.md`](workorders/WO-P2-OPS-VERB-SURFACE.md) (slice F).
 
 
 ## Tests
