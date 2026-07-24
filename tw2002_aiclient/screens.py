@@ -20,6 +20,7 @@ from tw2002_aiclient.cockpit import fold as cockpit_fold
 from tw2002_aiclient.cockpit import goals as cockpit_goals
 from tw2002_aiclient.cockpit import hud as cockpit_hud
 from tw2002_aiclient.cockpit import liveness as cockpit_liveness
+from tw2002_aiclient.cockpit import logsband as cockpit_logsband
 from tw2002_aiclient.cockpit import tones as cockpit_tones
 from tw2002_aiclient.cockpit.layout import frame_layout
 from tw2002_aiclient.cockpit.strip import compose_profile_strip_from_row
@@ -378,7 +379,6 @@ BANK_TITLE = " PLAYER BANK "
 # GAME panel content -- the live game viewport is a later WO (PREP §5); this
 # is the honest placeholder canon calls for, never fake/invented content.
 _GAME_PLACEHOLDER = "(placeholder — live game viewport wired in a later WO)"
-_LOGS_EMPTY = "(none yet)"
 # A raising composer (bad input surviving to a status field, a future
 # panel's own bug, ...) must never take the whole cockpit down with it --
 # same honesty-over-crash fallback as an unreachable/raising status_provider
@@ -423,6 +423,14 @@ _HUD_COMPOSE_FAILED = [("-", False)]
 # so a raising composer falls back to the empty string (renders as a blank
 # row this tick) rather than any invented placeholder text.
 _CONTROL_STRIP_COMPOSE_FAILED = ""
+# LOGS' own composer (WO-P3-041, ``cockpit.logsband.compose_logs_lines``)
+# already defines its own single-line honest-empty state
+# (``cockpit_logsband.LOGS_EMPTY``) -- a raising composer reuses that exact
+# text rather than the other panels' em-dash, since LOGS never had an
+# em-dash "unknown" vocabulary to begin with (its own honest-empty already
+# reads as "known-nothing, not a bug"). Sliced to whatever height actually
+# fits at draw time -- see ``draw()``'s own LOGS block.
+_LOGS_COMPOSE_FAILED = [cockpit_logsband.LOGS_EMPTY]
 
 
 def _resolve_last_rx_age_s(status: dict) -> float:
@@ -471,8 +479,11 @@ class PlayShellScreen:
     (left gutter stacked GOALS above thin-rounded FOCUS | double-line
     GAME viewport | right gutter stacked thin-rounded HUD above thin-rounded
     DECISIONS, PWO-036), and the bottom thin-rounded LOGS band carrying the
-    ensure-session ``status_line``. The live game viewport itself is a later
-    WO -- GAME always shows an honest placeholder line, never fake content.
+    daemon's advancing session transcript tail (WO-P3-041, ``cockpit.
+    logsband.compose_logs_lines``, falling back to the ensure-session
+    ``status_line`` only while no real tail exists yet -- see the LOGS
+    paragraph below). The live game viewport itself is a later WO -- GAME
+    always shows an honest placeholder line, never fake content.
     Below the fold floor (``mode == "too_small"``) only the layout's
     refusal message is drawn. The left-gutter FOCUS box is the
     ``left_gutter`` region internally (unchanged region key -- only its
@@ -526,13 +537,34 @@ class PlayShellScreen:
     others (every other panel here still uses ``draw_lines``'s single flat
     attr).
 
-    ``now_fn`` (WO-P3-038) is a clock seam for the ``control_strip``
-    liveness cluster ONLY -- a no-arg callable returning a
-    ``time.monotonic()``-shaped float, defaulted at draw time (not
-    construction time) to the real ``time.monotonic`` when unset. Tests
-    inject a scripted clock so the heartbeat phase is deterministic; the
-    real refresh cadence (``app.py``'s 1 Hz ``stdscr.timeout(1000)``) is
-    unchanged by this seam.
+    ``now_fn`` (WO-P3-038, extended by WO-P3-041) is a clock seam shared by
+    the ``control_strip`` liveness cluster AND the LOGS newest-row flash
+    below -- a no-arg callable returning a ``time.monotonic()``-shaped
+    float, resolved ONCE per ``draw()`` call (not construction time) to the
+    real ``time.monotonic`` when unset, and reused for both consumers
+    rather than queried twice. Tests inject a scripted clock so the
+    heartbeat phase (and, per this WO, the flash decision) is
+    deterministic; the real refresh cadence (``app.py``'s 1 Hz
+    ``stdscr.timeout(1000)``) is unchanged by this seam.
+
+    LOGS (WO-P3-041, ``cockpit.logsband``): the SAME shared ``status``
+    snapshot's ``log_tail`` field composes the box's advancing transcript
+    (``compose_logs_lines``, newest-last, clipped to the box's one content
+    row today). While ``cockpit_logsband.newest_tail_entry(status)`` is
+    ``None`` -- no real daemon tail yet -- the box falls back to
+    ``self.status_line`` (the local ensure-session progress/error string
+    app.py sets) rather than the composer's own generic honest-empty
+    marker, so the pre-tail ensure-session feedback (notably a failure
+    reason) is never silently lost; once a real tail exists it supersedes
+    the fallback entirely. The newest row renders ``curses.A_BOLD`` for
+    ``cockpit_logsband.TICKER_FLASH_DURATION_S`` (1.0s, canon's LOGS/ticker
+    flash duration -- distinct from the CREDITS delta-chip's own 1.5s) after
+    a genuinely NEW newest entry is observed -- tracked as this instance's
+    own content-identity state (``_logs_last_newest`` /
+    ``_logs_newest_arrival_s``), since ``cockpit_logsband`` is a pure,
+    stateless composer with no draw-to-draw memory of its own. The
+    ``status_line`` fallback line never flashes (it is not real tail
+    content).
 
     Every box border/title here renders in the ``"info"`` chrome tone
     (cyan, non-bold) sourced from ``cockpit.tones.SEMANTIC_COLORS`` -- the
@@ -560,6 +592,12 @@ class PlayShellScreen:
         self.status_line = ""  # set by app.py after the ensure_session() call
         self.status_provider: Callable[[], dict | None] | None = None  # set by app.py (PWO-034)
         self._now_fn = now_fn  # WO-P3-038 -- resolved to time.monotonic at draw() time when unset
+        # LOGS newest-row flash (WO-P3-041): content-identity tracking across
+        # draw() calls -- cockpit.logsband is a pure, stateless composer (no
+        # clock, no draw-to-draw memory), so this instance is the only place
+        # "did a NEW line just arrive" can live. See draw()'s own LOGS block.
+        self._logs_last_newest: str | None = None
+        self._logs_newest_arrival_s: float | None = None
         self._outer_attr = curses.A_NORMAL
         self._chrome_attr = curses.A_NORMAL
         self._viewport_danger_attr = curses.A_NORMAL  # WO-P3-040 -- set for real below
@@ -737,6 +775,22 @@ class PlayShellScreen:
         # never even runs). So every tier where `center["border"]` could be
         # `True` already has `control_strip is not None` true and was
         # already polling -- structurally, not merely unobserved.
+        #
+        # LOGS (WO-P3-041, `cockpit.logsband.compose_logs_lines`) is a
+        # SEVENTH consumer of this same snapshot -- and, like the fold and
+        # the viewport-border flip above, needs no new term here either.
+        # `logs` (unlike `right_gutter`/`decisions`/`goals`) has no `None`
+        # branch of its own anywhere in `layout.py`'s non-`too_small` path
+        # -- `logs_h_actual` is computed unconditionally and is always
+        # >= 1 (LOGS claims its floor FIRST, before CONTROL_STRIP's own
+        # carve). So `logs` is present at every reachable non-`too_small`
+        # tier, the exact same footprint `control_strip` already has (see
+        # `layout.py`'s own CONTROL_STRIP_H comment) -- `regions
+        # ["control_strip"] is not None` in the guard below is therefore
+        # already true at every tier where LOGS itself is drawn, and
+        # LOGS's own status read (`status.get("log_tail")`,
+        # `cockpit_logsband.newest_tail_entry`) shares this SAME polled
+        # `status`, never a second `status_provider()` call.
         if (
             goals is not None
             or decisions is not None
@@ -853,14 +907,84 @@ class PlayShellScreen:
             decisions_lines = []
         cockpit_draw.draw_lines(self.stdscr, decisions, decisions_lines, curses.A_NORMAL)
 
+        # `now_fn` (WO-P3-038, extended WO-P3-041): resolved ONCE per draw,
+        # here -- `logs` is unconditionally present at every reachable
+        # non-`too_small` tier (see the poll-guard comment above), so
+        # hoisting this ahead of the LOGS block lets its own newest-row
+        # flash and CONTROL_STRIP's heartbeat below share the identical
+        # reading rather than each querying the clock separately.
+        try:
+            now_val = (self._now_fn or time.monotonic)()
+        except Exception:  # noqa: BLE001 -- a raising now_fn must not crash the draw pass
+            # Fall back to the REAL clock, not a frozen 0.0: the
+            # heartbeat's whole job is proving the draw loop is still
+            # running (canon "always breathing... so 'alive' reads even
+            # on a settled screen") -- the loop IS running (we got this
+            # far), so the true signal should survive a broken injected
+            # clock rather than lying still.
+            now_val = time.monotonic()
+
         logs = regions["logs"]
         cockpit_draw.draw_box(
             self.stdscr, logs, weight="thin", attr=self._chrome_attr,
             title="LOGS", title_attr=self._chrome_attr, uok=uok,
         )
-        cockpit_draw.draw_lines(
-            self.stdscr, logs, [self.status_line or _LOGS_EMPTY], curses.A_NORMAL
-        )
+        logs_inner_w = max(0, logs["w"] - 2)
+        logs_inner_h = max(0, logs["h"] - 2)
+        try:
+            current_newest = cockpit_logsband.newest_tail_entry(status)
+        except Exception:  # noqa: BLE001 -- a raising panel must not crash the draw pass
+            current_newest = None
+        has_real_tail = current_newest is not None
+        try:
+            logs_lines = cockpit_logsband.compose_logs_lines(
+                status, width=logs_inner_w, height=logs_inner_h
+            )
+        except Exception:  # noqa: BLE001 -- a raising panel must not crash the draw pass
+            logs_lines = _LOGS_COMPOSE_FAILED[:logs_inner_h]
+            has_real_tail = False  # a raising composer can't be trusted to carry real content
+        # `status_line` fallback (WO-P3-041): while there is no real daemon
+        # tail (`has_real_tail` False -- honest-empty OR a raising
+        # composer), surface app.py's own ensure-session progress/error
+        # text instead of the composer's generic marker, so that feedback
+        # (notably a failure reason) is never silently lost. Keyed off
+        # `has_real_tail` (derived from `newest_tail_entry`, independent of
+        # any width-driven truncation `compose_logs_lines` may have already
+        # applied to its OWN honest-empty text) rather than a fragile
+        # string comparison against the (possibly-clipped) composed line.
+        if not has_real_tail and self.status_line and logs_inner_h > 0:
+            logs_lines = [self.status_line[:logs_inner_w]] if logs_inner_w > 0 else [""]
+
+        # Newest-row flash (WO-P3-041, canon "the newest LOGS/ticker row
+        # flashes on arrival"): content-identity tracking is THIS
+        # instance's own state -- `cockpit_logsband` is a pure, stateless
+        # composer with no draw-to-draw memory. A changed `current_newest`
+        # (including a transition to/from `None`) is a fresh arrival;
+        # an unchanged one leaves the prior arrival timestamp untouched.
+        # Known limitation (accepted): a consecutive genuinely-new arrival
+        # with IDENTICAL text to the tracked newest does not re-flash
+        # (realistic under per-keystroke attach, repeated identical keys);
+        # ring churn at TAIL_MAX makes length-based detection equally
+        # blind. Canon's "just-arrived" wording doesn't promise per-
+        # duplicate flashes. Fix: session-side arrival counter (follow-on).
+        if current_newest != self._logs_last_newest:
+            self._logs_last_newest = current_newest
+            self._logs_newest_arrival_s = now_val if current_newest is not None else None
+        try:
+            logs_newest_flashing = cockpit_logsband.flash_active(
+                self._logs_newest_arrival_s, now=now_val
+            )
+        except Exception:  # noqa: BLE001 -- a raising helper must not crash the draw pass
+            logs_newest_flashing = False
+
+        logs_attrs = [(line, curses.A_NORMAL) for line in logs_lines]
+        if has_real_tail and logs_newest_flashing and logs_attrs:
+            # Only the bottom (newest) line ever flashes, and only when it
+            # is genuine tail content -- the `status_line` fallback line
+            # above never flashes (it is not a transcript arrival).
+            last_text, _ = logs_attrs[-1]
+            logs_attrs[-1] = (last_text, curses.A_BOLD)
+        cockpit_draw.draw_lines_attrs(self.stdscr, logs, logs_attrs)
 
         # CONTROL_STRIP (WO-P3-038): the frame's own bottom-most interior
         # row, a bare content row (no box -- same `boxed=False` shape as the
@@ -871,16 +995,6 @@ class PlayShellScreen:
         control_strip = regions["control_strip"]
         if control_strip is not None:
             cs_w = control_strip["w"]
-            try:
-                now_val = (self._now_fn or time.monotonic)()
-            except Exception:  # noqa: BLE001 -- a raising now_fn must not crash the draw pass
-                # Fall back to the REAL clock, not a frozen 0.0: the
-                # heartbeat's whole job is proving the draw loop is still
-                # running (canon "always breathing... so 'alive' reads even
-                # on a settled screen") -- the loop IS running (we got this
-                # far), so the true signal should survive a broken injected
-                # clock rather than lying still.
-                now_val = time.monotonic()
             try:
                 liveness_text = cockpit_liveness.compose_liveness_cluster(
                     status, now=now_val, width=cs_w, unicode_ok=uok

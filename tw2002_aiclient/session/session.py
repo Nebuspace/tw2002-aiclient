@@ -23,6 +23,7 @@ from .iac import TelnetHandler
 from .logging_util import TranscriptLogger
 from .settle import wait_for_settle
 from .terminal import TerminalScreen
+from .transcript_tail import TranscriptTail
 
 MIN_SEND_GAP_S = 0.15  # guardrail: no hammering the server
 
@@ -62,6 +63,17 @@ class Session:
         self.negotiator = TelnetHandler()
         self.logger = TranscriptLogger(log_dir)
         self.conn = TelnetConnection(self.host, self.port, self.terminal, self.negotiator, logger=self.logger)
+
+        # WO-P3-041: bounded redacted transcript ring for the cockpit's
+        # [LOGS] band (canon: trainer-cockpit.md), served on the `status`
+        # verb (protocol.py) as `log_tail`. Redaction happens AT INSERT,
+        # at the same send()/send_raw() choke points that already decide
+        # `secret` for the real transcript logger -- see transcript_tail.py's
+        # own docstring for why a payload can never reach it. Survives
+        # reconnect() (not reset there, unlike self.terminal/self.negotiator
+        # -- a dropped TCP connection is not a new operator-visible session,
+        # same reasoning as self.logger/self.history below).
+        self.tail = TranscriptTail()
 
         self.lock = self.conn.lock
         self.send_lock = threading.Lock()
@@ -253,6 +265,12 @@ class Session:
             self.last_sent_ts = self._last_send_time
             self.last_sender = sender
             self.last_sent_secret = secret
+            # Same `secret` decision that just gated conn.send_text()'s own
+            # log_redacted()/log_raw() choice, above -- never re-derived.
+            if secret:
+                self.tail.append_redacted()
+            else:
+                self.tail.append_line(f"{sender}> {text}")
 
     def send_raw(self, data: bytes, control_lock=None, sender="human"):
         """Exact-byte pass-through for interactive `tw attach` keystrokes
@@ -317,6 +335,12 @@ class Session:
             self.last_sent_ts = self._last_send_time
             self.last_sent_secret = secret
             self.last_sender = sender
+            # Same `secret` decision that just gated conn.send_bytes()'s own
+            # log_redacted()/log_raw() choice, above -- never re-derived.
+            if secret:
+                self.tail.append_redacted()
+            else:
+                self.tail.append_line(f"{sender}> {self.last_sent}")
 
     # -- history ---------------------------------------------------------
 

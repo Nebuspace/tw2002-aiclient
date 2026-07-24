@@ -153,6 +153,12 @@ def dispatch(session, verb, args, server):
             mode = getattr(lock, "mode", None)
             if isinstance(mode, str):
                 resp["mode"] = mode
+        # WO-P3-041: additive -- session.tail (transcript_tail.py) is
+        # always present on a real Session; getattr guards test doubles
+        # that predate this field (e.g. tests/test_watch.py's FakeSession)
+        # so this stays additive-only, never a new hard dependency.
+        tail = getattr(session, "tail", None)
+        resp["log_tail"] = tail.snapshot() if tail is not None else []
         return resp
 
     if verb == "stop":

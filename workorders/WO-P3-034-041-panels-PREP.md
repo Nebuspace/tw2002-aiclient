@@ -1,6 +1,6 @@
 # WO-P3-034…041 — Trainer-cockpit panels · PREP
 
-> Status: **034–040 DONE** on tip `f594b9e` · **041 PARKED** (Max context HOLD · session lane complete on disk / client lane partial · uncommitted) · DOC-GAP-P3-CHROME closed in `visual-language.md`
+> Status: **034–041 DONE** (034–040 on tip `f594b9e` · 041 in its own follow-on commit) · DOC-GAP-P3-CHROME closed in `visual-language.md`
 **Phase:** 3 · **Type:** PREP + execute status · **Seat:** execute was `impl-claudecode-aiclient` (Fable); inventory ticks `impl-aiclient-cursor`
 **Canon:** `canon/surfaces/trainer-cockpit.md` · `canon/surfaces/visual-language.md` · `canon/engine/priority-engine.md` · `canon/engine/trace-ledger.md` · coaching surfaces as cited
 **Refs:** `workorders/ULTRACODE-WO-INVENTORY.md` rows 170–177 · tip `f594b9e`
@@ -70,11 +70,11 @@ Authored from a 3-lane read-only fan-out (panels/ledger · HUD/fold/colors · de
 - **Proof:** Layer-A — tone→attr map + classifier unit tests. Layer-B — pty cell `.fg` / `.bold` for warn vs ok fixtures (never ANSI-regex).
 - **Hazards:** Game viewport stays server CP437 palette — semantic set is chrome-only (`visual-language.md`).
 
-### PWO-041 — LOGS band (EXTEND) — **PARKED 2026-07-24** (Max context HOLD · **not DONE** · tip remains `f594b9e`)
+### PWO-041 — LOGS band (EXTEND) — **DONE 2026-07-24** (impl-claudecode-aiclient · Fable · session-side `TranscriptTail` ring (`TAIL_MAX=100`, redact-at-insert, `append_redacted` structurally payload-proof, marker `<<secret input redacted>>` mirroring `logging_util` wording) served as additive `status["log_tail"]`; pure `cockpit.logsband` composer (newest-last, oldest-dropped-first clip, honest-empty `(none yet)`, full hostile-hardening family); screens wire with `status_line` fallback keyed off `has_real_tail`; newest-row flash `TICKER_FLASH_DURATION_S=1.0` per canon (dispatch's `CREDIT_FLASH 1.5` citation was wrong — DOCS WIN); shared hoisted `now_fn`; poll-guard seventh consumer, no new term (logs unconditional at every non-too_small tier). Mack adversarial pass 8/9 SOLID incl. whole-grid sentinel sweep (tightened post-review from LOGS-row-only) + ESC/CSI containment + 2.66M-append concurrency. Accepted limitation: duplicate-text arrival doesn't re-flash (follow-on: session-side arrival counter). Banked DOC-GAP: `status["prompt"]` receive-echo leak wording in secrets doctrine (pre-existing, hub lane).)
 - **Depends-on:** 031 · 020
-- **Live state (tip `f594b9e`):** **MISSING** on origin — no committed `[LOGS]` band. **Dirty WIP (do not touch / do not commit from Cursor):** session ring + `status["log_tail"]` complete on disk; client `cockpit/logsband.py` + screens wire partial. Hub re-OPENs CC to finish.
+- **Live state (tip):** **LIVE** — `tw2002_aiclient/session/transcript_tail.py` (ring) · `tw2002_aiclient/cockpit/logsband.py` (composer) · `screens.py` PlayShellScreen wire.
 - **Accept:** Full-width `[LOGS]` transcript tail; lines appear as session advances; **redacted** (passwords never shown); newest row flash OK per canon.
-- **Proof:** Layer-A — redaction unit + tail compose. Layer-B — pty `_find_text` for `LOGS` + a non-secret line; secret fixture asserts redaction marker, never raw password.
+- **Proof:** Layer-A — redaction unit + tail compose (`tests/test_transcript_tail.py`, `tests/test_cockpit_logsband.py`). Layer-B — pty `_find_text` for `LOGS` + a non-secret line; secret fixture asserts redaction marker AND grid-wide sentinel absence, never raw password (`tests/test_cockpit_logsband_pty.py`).
 - **Hazards:** Public-repo / secrets doctrine. Trace-ledger schema may be thin stub first — Accept requires redacted tail, not full Phase-9 ledger.
 
 ---

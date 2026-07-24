@@ -174,7 +174,7 @@ Types: `bootstrap` · `verify` · `build` · `extend` · `harden` · `docs-findi
 | PWO-038 | TX / liveness strip **DONE** tip `f594b9e` | build | 031 | “not frozen” signal | heartbeat glyph moves | TTY | trainer-cockpit liveness |
 | PWO-039 | Responsive fold **DONE** tip `f594b9e` | build | 031 | Collapse order per canon | no overlap small term | TTY resize | trainer-cockpit fold |
 | PWO-040 | Semantic chrome colors **DONE** tip `f594b9e` | polish | 031 | 7-tone table | warn/danger/ok | TTY | mode-line · cockpit polish · visual-language |
-| PWO-041 | LOGS band **PARKED** (context HOLD · not DONE) | extend | 031·020 | Ledger tail redacted | lines appear | TTY + log | trace-ledger · cockpit |
+| PWO-041 | LOGS band **DONE** 2026-07-24 (own commit, first past `61c1012`) | extend | 031·020 | Ledger tail redacted | lines appear | TTY + log | trace-ledger · cockpit |
 
 Banked hygiene (not a PWO id): **pty mid-flush settle** — PREP `workorders/WO-PTY-SETTLE-HYGIENE-PREP.md` (shared `settle_drain`; KEY_RESIZE separate).
 
