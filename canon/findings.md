@@ -91,9 +91,10 @@ likely verify + case-mismatch unit — see `workorders/WO-P2-026-settle-detectio
 D10 keepalive stubbed for 028). Daemon DI start/stop. Collectable `test_guardian` — reconnect
 green; keepalive skipped until 028. See WO-P2-027.
 
-**P2-028 idle-keepalive (execute):** `_maybe_keepalive` fires blank Enter only on
-`main_command` (`sender=app`); OFF when unsafe/disconnected/mid-reconnect; ≤1/window.
-`test_guardian` keepalive+reconnect collectable green. See WO-P2-028.
+**P3 harness rehab (D1 execute):** shared `tests/fake_client.py` + `tests/pty_helpers.py`
+(tw2002_aiclient-only; no `twclient`). Smoke collect green. Named Layer-B suites
+(`test_spectate_*` / `test_interactive_app` / `test_aiclient_play_panels`) stay ignored until
+owning PWO lifts them onto these helpers.
 
 ## Run-dir override (WO-P2-021)
 
