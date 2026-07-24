@@ -18,9 +18,9 @@ quietly learns the profitable loops it sees.
 | Surface | Role |
 |---|---|
 | `./tw2002-aiclient` | **Product TUI** — profile launcher, play shell / cockpit chrome. Human-facing client. |
-| `./tw` | **Backend / ops CLI** — shipped verbs today: `status`, `ensure` (table grows one WO at a time). |
+| `./tw` | **Backend / ops CLI** — shipped verbs today: `status`, `ensure`, `screen`, `stop` (table grows one WO at a time). |
 
-Same daemon either way — one telnet connection. Prefer `./tw2002-aiclient` for day-to-day play; keep `./tw` for automation and ops. Planned ops verbs (`do`, `spectate`, `attach`, …) are inventoried in [`workorders/WO-P2-OPS-VERB-SURFACE.md`](workorders/WO-P2-OPS-VERB-SURFACE.md) — not on `./tw --help` yet.
+Same daemon either way — one telnet connection. Prefer `./tw2002-aiclient` for day-to-day play; keep `./tw` for automation and ops. Further ops verbs (`do`, `spectate`, `attach`, …) are inventoried in [`workorders/WO-P2-OPS-VERB-SURFACE.md`](workorders/WO-P2-OPS-VERB-SURFACE.md) — not on `./tw --help` yet.
 
 
 ---
@@ -129,9 +129,11 @@ credential storage) and check daemon health:
 cp config/profiles.toml.example config/profiles.toml   # once; set host/game/handle
 ./tw ensure --profile default
 ./tw status
+./tw screen            # current settled screen (read-only)
+# ./tw stop            # graceful daemon shutdown when you're done
 ```
 
-Further ops verbs (`do`, `screen`, `spectate`, `attach`, …) are **not shipped yet** —
+Further ops verbs (`do`, `send`, `spectate`, `attach`, …) are **not shipped yet** —
 see [`workorders/WO-P2-OPS-VERB-SURFACE.md`](workorders/WO-P2-OPS-VERB-SURFACE.md).
 
 ## Verb reference (shipped)
@@ -142,12 +144,14 @@ Everything takes `--json` for machine-parseable output where applicable.
 |---|---|
 | `tw ensure [target] --profile NAME` | **Auto-login.** Idempotent: spawn daemon if needed, register or log in, land at the command prompt. Covers cold start, mid-session, and post-drop recovery. |
 | `tw status` | Daemon alive? Connected? Classification / idle-ms / run_dir. Always safe to run. |
+| `tw screen [--raw] [--compact]` | Current settled screen (non-destructive; never sends). |
+| `tw stop` | Graceful daemon shutdown (in-game QUIT when at main prompt; else disconnect). No-ops with a clear message if the daemon is already down. |
 
 ### Coming (not on `./tw --help` yet)
 
-Daemon protocol already knows `screen` and `stop` in places; CLI wire + the rest of the
-classic ops table (`do`, `send`, `read`, `state`, `history`, `watch`, `spectate`,
-`attach`, …) is staged in [`WO-P2-OPS-VERB-SURFACE.md`](workorders/WO-P2-OPS-VERB-SURFACE.md).
+Remaining classic ops verbs (`do`, `send`, `read`, `state`, `history`, `watch`,
+`spectate`, `attach`, …) are staged in
+[`WO-P2-OPS-VERB-SURFACE.md`](workorders/WO-P2-OPS-VERB-SURFACE.md) (slice A `screen`/`stop` shipped).
 
 Notes worth knowing up front:
 
@@ -194,8 +198,8 @@ and the spectator/attach UIs against scripted sessions.
 
 ## Known limitations
 
-- Live `./tw` verbs are **`status` / `ensure` only** until the wire slices in
-  [`WO-P2-OPS-VERB-SURFACE.md`](workorders/WO-P2-OPS-VERB-SURFACE.md) land.
+- Live `./tw` verbs today are **`status` / `ensure` / `screen` / `stop`**; remaining
+  slices in [`WO-P2-OPS-VERB-SURFACE.md`](workorders/WO-P2-OPS-VERB-SURFACE.md) land one WO at a time.
 - `state` parsing (when wired) is a best-effort skeleton under `tw2002_aiclient.session`
   — extend anchors as new screen shapes turn up.
 - A future `tw stop` should only attempt in-game QUIT from the main command prompt;

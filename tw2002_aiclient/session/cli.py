@@ -269,6 +269,28 @@ def cmd_ensure(args):
     return 0 if resp.get("ok") else 1
 
 
+def cmd_screen(args):
+    """WO-P2-OPS-VERB-A: current settled screen (read-only; never sends)."""
+    run_dir = _resolve_run_dir(args.run_dir)
+    resp = send_request("screen", {"raw": bool(args.raw)}, run_dir=run_dir)
+    print_response(resp, args)
+    return 0 if resp.get("ok") else 1
+
+
+def cmd_stop(args):
+    """WO-P2-OPS-VERB-A: ask the daemon to shut down (protocol already present)."""
+    run_dir = _resolve_run_dir(args.run_dir)
+    if not daemon_alive(run_dir):
+        if getattr(args, "json", False):
+            print(json.dumps({"ok": True, "daemon_running": False, "run_dir": str(run_dir)}))
+        else:
+            print("daemon not running")
+        return 0
+    resp = send_request("stop", {}, run_dir=run_dir)
+    print_response(resp, args)
+    return 0 if resp.get("ok") else 1
+
+
 # -- parser -------------------------------------------------------------
 
 def build_parser() -> argparse.ArgumentParser:
@@ -306,6 +328,27 @@ def build_parser() -> argparse.ArgumentParser:
                      help="daemon run directory override (default: project-rooted run/)")
     sp.add_argument("--json", action="store_true", help="machine-parseable JSON output")
     sp.set_defaults(func=cmd_ensure)
+
+    sp = sub.add_parser(
+        "screen",
+        help="current settled screen (non-destructive; never sends)",
+    )
+    sp.add_argument("--raw", action="store_true", help="uncropped pyte grid (session.render_raw)")
+    sp.add_argument("--compact", action="store_true",
+                     help="omit prompt/class footer after the screen rows")
+    sp.add_argument("--run-dir", default=None, metavar="PATH", dest="run_dir",
+                     help="daemon run directory override (default: project-rooted run/)")
+    sp.add_argument("--json", action="store_true", help="machine-parseable JSON output")
+    sp.set_defaults(func=cmd_screen)
+
+    sp = sub.add_parser(
+        "stop",
+        help="graceful daemon shutdown (in-game QUIT when at main prompt; else disconnect)",
+    )
+    sp.add_argument("--run-dir", default=None, metavar="PATH", dest="run_dir",
+                     help="daemon run directory override (default: project-rooted run/)")
+    sp.add_argument("--json", action="store_true", help="machine-parseable JSON output")
+    sp.set_defaults(func=cmd_stop)
 
     return parser
 
