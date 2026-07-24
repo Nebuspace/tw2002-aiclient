@@ -1,41 +1,40 @@
 # WO-P2-OPS-VERB-SURFACE — Ops CLI verb inventory + wire plan
 
-> Status: **slice D DONE (docs-only)** pending Accept · tip `82b4094`
+> Status: **slice E DONE (docs-only)** pending Accept · tip `135ee38`
 > Seat: `impl-aiclient-cursor`
-> Refs: hub banked gap after WO-P0-TW-SHIM · `canon/architecture/cli-verbs.md`
+> Refs: hub banked gap after WO-P0-TW-SHIM · `canon/architecture/cli-verbs.md` ·
+> `canon/surfaces/spectate-and-attach.md`
 
 ## Goal
 
 Truth-align README with live `./tw --help`, inventory daemon/protocol vs CLI, and
 stage ordered execute slices to grow the verb table one WO at a time.
 
-## Live surface (post slice D / docs)
+## Live surface (post slice E / docs)
 
 ### CLI (`tw2002_aiclient/session/cli.py`)
 
 | Verb | Live? | Notes |
 |------|-------|-------|
-| `status` | **YES** | |
-| `ensure` | **YES** | spawn-if-needed + login (`ensure_raw`) |
-| `screen` / `stop` | **YES** | slice A |
-| `do` / `send` / `read` | **YES** | slice B |
-| `history` | **YES** | slice C |
-| `start` | **NO** | **slice D docs-only** — see rationale below |
+| `status` … `history` | **YES** | slices A–C |
+| `start` | **NO** | slice D docs-only |
+| `watch` | **NO** | **slice E docs-only** — see rationale |
 | `state` | **NO** | deferred — `state_parser` not ported |
 
 `./tw --help` subparsers: `{status,ensure,screen,stop,do,send,read,history}`.
 
-### Slice D rationale (`tw start`)
+### Slice E rationale (`tw watch`)
 
-Canon lists `start` as spawn + first settled screen (no login). Archive
-`cmd_start` was **CLI-only** (spawn subprocess → `status`/`screen` or `read`) —
-there was never a protocol `start` verb. Greenfield `ensure_raw` already embeds
-that spawn + post-spawn capped `read` before the `ensure` round trip. Wiring a
-second spawn path risks scooping/diverging from `ensure` without a clear
-additive caller need (login-free host/port cold connect is rare vs profile
-`ensure`). **Decision:** keep `start` off `./tw --help`; document that cold
-start = `tw ensure --profile …`. Revisit only if a FakeSession-proven thin
-spawn CLI is requested with a concrete non-ensure caller.
+Canon: settle-edge push-stream via `WatchHub` (`canon/surfaces/spectate-and-attach.md`).
+Archive has `twclient/watch.py` (~113 LOC) + daemon `_handle_subscribe` lifetime
+stream + CLI `cmd_watch` NDJSON tail. Greenfield tip (`daemon.py` header):
+`WatchHub` / `watch.py` / `subscribe` **explicitly cut** until that module lands —
+no `watch.py` under `tw2002_aiclient/session/`. Wiring a real `tw watch` is a
+**multi-file substrate WO** (`watch.py` + daemon hub start/stop + subscribe
+handler + protocol/status `subscribers` + CLI stream), not a thin CLI add.
+**Decision (slice-D honesty bar):** keep `watch` off `./tw --help`; do not invent
+a fake one-shot/non-streaming verb. Bank a follow-on **WatchHub port** WO before
+CLI wire (feeds slice F spectate too).
 
 ## Recommended execute slices
 
@@ -45,7 +44,8 @@ spawn CLI is requested with a concrete non-ensure caller.
 | **B** | `do` · `send` · `read` | **DONE** |
 | **C** | `history` · (`state` deferred) | **history DONE** · state banked |
 | **D** | `start` | **DONE (docs-only)** |
-| **E–G** | watch / spectate·attach / menumap… | queued |
+| **E** | `watch` | **DONE (docs-only)** · WatchHub substrate banked |
+| **F–G** | spectate·attach / menumap… | queued (F needs WatchHub) |
 
 **Accept for a docs slice:** README + WO honesty · no fake verb on help · STATUS
 disclosure. **Accept for a wire slice:** verb on help · FakeSession · path-leak ·
