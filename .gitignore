@@ -35,3 +35,14 @@ config/*.local.*
 DESIGN-v2.md
 QUEUE.md
 TUI-POLISH-PLAN.md
+
+# Local-only / reference trees — never scoop into a public commit
+# (hub ruling WO-P3-HYGIENE-GITIGNORE, 2026-07-24). archive/ holds the
+# pre-rebirth product (secrets-adjacent); do not track or broad-add it.
+archive/
+workorders/drafts/
+.samantha-coord
+.samantha-identity
+*.code-workspace
+.cursor/rules/
+.cursor/sandbox.json
