@@ -207,11 +207,13 @@ terminal.
 | `no_border` | ≥60 | `MIN_COLS` | viewport border dropped, game full-bleed/clipped |
 | `too_small` | <60 | — | refuses to render: `Terminal too small (C×L) — need at least 60×20` |
 
-`[CODE NOTE]` `frame_layout`'s own docstring ladder comment states the `full` floor as `>=142`; the
-governing comparison actually gated in code is `i_cols >= FULL_GUTTER_MIN_COLS`, which computes to
-**154** from the module's own `VIEWPORT_W/HUD_GUTTER_W/PRIORITIES_W` constants — the docstring
-number is stale relative to the constant it describes. The table above states the constant-derived
-(behavior-governing) value; a rebuild should refresh the stale comment.
+`[CODE NOTE]` The **archived** `twclient/spectate_layout.py::frame_layout`'s own docstring ladder
+comment states the `full` floor as `>=142`; the governing comparison actually gated in that code is
+`i_cols >= FULL_GUTTER_MIN_COLS`, which computes to **154** from the module's own
+`VIEWPORT_W/HUD_GUTTER_W/PRIORITIES_W` constants — the archived docstring number was stale relative
+to the constant it describes. The table above states the constant-derived (behavior-governing)
+value; the reborn port, `tw2002_aiclient/cockpit/layout.py::frame_layout` (PWO-031/033), now
+encodes that `>=154` floor directly — the rebuild this note asked for has happened.
 
 **Graceful-collapse principle — applies on every surface, not just the cockpit:**
 

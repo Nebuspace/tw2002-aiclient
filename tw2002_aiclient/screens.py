@@ -11,6 +11,9 @@ from typing import Sequence
 
 import curses
 
+from tw2002_aiclient.cockpit import draw as cockpit_draw
+from tw2002_aiclient.cockpit.layout import frame_layout
+from tw2002_aiclient.cockpit.strip import compose_profile_strip_from_row
 from tw2002_aiclient.session import credentials
 
 
@@ -282,8 +285,24 @@ class LauncherScreen:
 
 
 PLAY_TITLE = " PLAY SHELL "
+# Retained for import compatibility (tests/test_play_chrome_nav.py imports
+# this name at module level) -- the chrome itself no longer draws this flat
+# placeholder line; the GAME panel's own honest placeholder line replaces
+# its purpose (PWO-031/033).
 PLAY_SUBTITLE = " (placeholder — cockpit chrome is a later WO) "
 BANK_TITLE = " PLAYER BANK "
+
+# GAME panel content -- the live game viewport is a later WO (PREP §5); this
+# is the honest placeholder canon calls for, never fake/invented content.
+_GAME_PLACEHOLDER = "(placeholder — live game viewport wired in a later WO)"
+# Empty-state fills for the PRIORITIES/HUD gutters before their data-source
+# WOs land -- canon (trainer-cockpit.md "Panel states"): "PRIORITIES shows
+# '—'"; HUD has no cited empty string at this reduced scope, so it gets the
+# DoD's other approved honest-empty spelling to keep the two panels visibly
+# distinct while both stay inside canon's stated vocabulary.
+_PRIORITIES_EMPTY = "—"
+_HUD_EMPTY = "(none yet)"
+_LOGS_EMPTY = "(none yet)"
 BOUNDARY_LINE_1 = (
     "Rotation multiplies YOUR own daily turns across INDEPENDENT characters."
 )
@@ -293,7 +312,19 @@ BOUNDARY_LINE_2 = (
 
 
 class PlayShellScreen:
-    """Minimal play-shell placeholder bound to one launcher profile (WO-P1-016).
+    """Trainer-cockpit frame bound to one launcher profile (WO-P1-016,
+    PWO-031/033).
+
+    Renders the two-weight bordered chrome from
+    ``cockpit.layout.frame_layout``: a cyan-bold double-line outer frame
+    titled ``PLAY SHELL``, the row-1 character/profile strip
+    (``cockpit.strip.compose_profile_strip_from_row``), a three-column body
+    (thin-rounded PRIORITIES gutter | double-line GAME viewport | thin-rounded
+    HUD gutter), and the bottom thin-rounded LOGS band carrying the
+    ensure-session ``status_line``. The live game viewport itself is a later
+    WO -- GAME always shows an honest placeholder line, never fake content.
+    Below the fold floor (``mode == "too_small"``) only the layout's refusal
+    message is drawn.
 
     Esc ends the binding and returns to the launcher — clean close, not a suspend.
     """
@@ -302,12 +333,16 @@ class PlayShellScreen:
         self.stdscr = stdscr
         self.profile = profile
         self.status_line = ""  # set by app.py after the ensure_session() call
-        self._chrome = curses.A_NORMAL
+        self._outer_attr = curses.A_NORMAL
+        self._chrome_attr = curses.A_NORMAL
         self._init_colors()
 
     def _init_colors(self) -> None:
         if not curses.has_colors():
-            self._chrome = curses.A_BOLD
+            # Monochrome: bold marks the outer frame apart from the thin
+            # instrument chrome, same as the launcher's monochrome fallback.
+            self._outer_attr = curses.A_BOLD
+            self._chrome_attr = curses.A_NORMAL
             return
         curses.start_color()
         try:
@@ -315,38 +350,78 @@ class PlayShellScreen:
         except curses.error:
             pass
         curses.init_pair(1, curses.COLOR_CYAN, -1)
-        self._chrome = curses.color_pair(1)
+        # Cyan is chrome, never data (visual-language.md); the outer frame is
+        # the one bold exception -- every other border/title stays non-bold
+        # "info" tone so the eye lands on the game viewport, not the frame.
+        self._chrome_attr = curses.color_pair(1)
+        self._outer_attr = curses.color_pair(1) | curses.A_BOLD
 
     def draw(self) -> None:
         self.stdscr.erase()
         max_y, max_x = self.stdscr.getmaxyx()
-        if max_y >= 3 and max_x >= 10:
-            try:
-                self.stdscr.attron(self._chrome)
-                self.stdscr.box()
-                self.stdscr.attroff(self._chrome)
-            except curses.error:
-                pass
-            _safe_addstr(self.stdscr, 0, 2, TITLE, self._chrome | curses.A_BOLD)
-            _safe_addstr(self.stdscr, 1, 2, PLAY_TITLE, self._chrome)
+        regions = frame_layout(max_y, max_x)
+        if regions["mode"] == "too_small":
+            cockpit_draw.draw_refuse_message(self.stdscr, regions["message"], self._outer_attr)
+            self.stdscr.refresh()
+            return
 
-        p = self.profile
-        host = p.host or p.server or "?"
-        letter = p.game_letter or "—"
-        _safe_addstr(self.stdscr, 3, 3, PLAY_SUBTITLE, curses.A_DIM)
-        _safe_addstr(self.stdscr, 5, 3, f"profile   {p.name}", curses.A_NORMAL)
-        _safe_addstr(self.stdscr, 6, 3, f"handle    {p.handle}", curses.A_NORMAL)
-        _safe_addstr(self.stdscr, 7, 3, f"host      {host}", curses.A_NORMAL)
-        _safe_addstr(self.stdscr, 8, 3, f"game      [{letter}]", curses.A_BOLD)
-        if self.status_line:
-            _safe_addstr(self.stdscr, 10, 3, self.status_line, curses.A_NORMAL)
-        _safe_addstr(
-            self.stdscr,
-            max_y - 2,
-            3,
-            "Esc return to launcher (ends binding)   q quit app",
-            self._chrome,
+        uok = cockpit_draw.unicode_ok()
+
+        # Outer frame -- double-line, cyan+bold, titled on its own top-border
+        # row (row 1 below it is fully claimed by the character/profile strip).
+        cockpit_draw.draw_box(
+            self.stdscr, regions["outer"], weight="double", attr=self._outer_attr,
+            title=PLAY_TITLE.strip(), title_attr=self._outer_attr, uok=uok,
         )
+
+        strip_region = regions["strip"]
+        strip_text = compose_profile_strip_from_row(
+            self.profile, width=strip_region["w"] if strip_region else 0, unicode_ok=uok
+        )
+        # Strip content is profile identity -- DATA, not chrome. Canon
+        # doctrine ("cyan is chrome, never data", visual-language.md) reads
+        # as an interim ruling here pending hub ratification of this
+        # concept's own promotion out of staged status; A_NORMAL (default
+        # fg, non-bold) keeps the row itself un-tinted while the outer
+        # frame's own border stays cyan around it.
+        cockpit_draw.draw_lines(self.stdscr, strip_region, [strip_text], curses.A_NORMAL, boxed=False)
+
+        left = regions["left_gutter"]
+        cockpit_draw.draw_box(
+            self.stdscr, left, weight="thin", attr=self._chrome_attr,
+            title="PRIORITIES", title_attr=self._chrome_attr, uok=uok,
+        )
+        cockpit_draw.draw_lines(self.stdscr, left, [_PRIORITIES_EMPTY], curses.A_NORMAL)
+
+        center = regions["center"]
+        if center is not None:
+            if center["border"]:
+                cockpit_draw.draw_box(
+                    self.stdscr, center, weight="double", attr=self._chrome_attr,
+                    title="GAME", title_attr=self._chrome_attr, uok=uok,
+                )
+                cockpit_draw.draw_lines(self.stdscr, center, [_GAME_PLACEHOLDER], curses.A_NORMAL)
+            else:
+                cockpit_draw.draw_lines(
+                    self.stdscr, center, [_GAME_PLACEHOLDER], curses.A_NORMAL, boxed=False
+                )
+
+        right = regions["right_gutter"]
+        cockpit_draw.draw_box(
+            self.stdscr, right, weight="thin", attr=self._chrome_attr,
+            title="HUD", title_attr=self._chrome_attr, uok=uok,
+        )
+        cockpit_draw.draw_lines(self.stdscr, right, [_HUD_EMPTY], curses.A_NORMAL)
+
+        logs = regions["logs"]
+        cockpit_draw.draw_box(
+            self.stdscr, logs, weight="thin", attr=self._chrome_attr,
+            title="LOGS", title_attr=self._chrome_attr, uok=uok,
+        )
+        cockpit_draw.draw_lines(
+            self.stdscr, logs, [self.status_line or _LOGS_EMPTY], curses.A_NORMAL
+        )
+
         self.stdscr.refresh()
 
     def handle_key(self, key: int) -> str | None:

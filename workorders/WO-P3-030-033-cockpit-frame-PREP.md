@@ -1,6 +1,6 @@
 # WO-P3-030…033 — Trainer-cockpit frame · PREP
 
-> Status: PREP (Phase 3 · authored on Opus 4.8 — **product build-wave is Fable-gated**, no cockpit chrome code until Max/harness switches this seat to Fable)
+> Status: EXECUTED (2026-07-24 · PWO-030 verified by impl-aiclient-cursor `baa2779`; PWO-031/032/033 built by impl-claudecode-aiclient **on Fable 5** per the carve-out — reborn `cockpit/` package (layout·strip·draw) + PlayShellScreen chrome-wire + 12 Layer-B pty proofs; two-phase adversarial gate (Mack×2 · Pixel×2) passed. D1 resolved via Cursor pty-helpers; D2 done; D3 confirmed; D4 canon hunk shipped; D5/D6 verified absent. Banked: pty_helpers SIGWINCH ctty gap — see seat STATUS.)
 **Phase:** 3 · **Type:** PREP (inventory + tightened Accept/Proof) · **Seat:** impl-claudecode-aiclient · **Model (execute):** Fable
 **Canon:** `canon/surfaces/trainer-cockpit.md` · `canon/surfaces/visual-language.md` · `canon/ADR/001-one-tree-embedded-session.md`
 **Refs:** `workorders/ULTRACODE-WO-INVENTORY.md` rows 166-169 · archive `.../twclient/spectate_layout.py` + `spectate_app.py` (port source, reference-only)
