@@ -35,6 +35,7 @@ _REGION_KEYS = (
     "right_gutter",
     "decisions",
     "logs",
+    "control_strip",
 )
 
 
@@ -210,15 +211,27 @@ def test_corner_and_edge_coords_at_40x160():
         "h": 26 - HUD_BOX_MIN_H,
     }
 
+    # LOGS shifts up by one row from its pre-CONTROL_STRIP position (y=36)
+    # -- CONTROL_STRIP (WO-P3-038) now claims the frame's own last interior
+    # row below it, carved out of the column band's slack, never out of
+    # LOGS' own height (still exactly 3, its unchanged floor).
     logs = regions["logs"]
-    assert logs == {"y": 36, "x": 1, "w": 158, "h": 3}
+    assert logs == {"y": 35, "x": 1, "w": 158, "h": 3}
+
+    control_strip = regions["control_strip"]
+    assert control_strip == {"y": 38, "x": 1, "w": 158, "h": 1}
 
     # every region stays inside the outer frame's inner inset
-    for region in (strip, goals, left, center, right, decisions, logs):
+    for region in (strip, goals, left, center, right, decisions, logs, control_strip):
         assert region["x"] >= 1
         assert region["y"] >= 1
         assert region["x"] + region["w"] <= 159
         assert region["y"] + region["h"] <= 39
+    # CONTROL_STRIP is the true bottom-most interior row -- directly below
+    # LOGS, no gap, and its own bottom edge sits exactly at the outer
+    # frame's inner inset (row 39 is the outer frame's own bottom border).
+    assert control_strip["y"] == logs["y"] + logs["h"]
+    assert control_strip["y"] + control_strip["h"] == 39
 
 
 # -- GOALS/PRIORITIES left-gutter stack (PWO-034) ------------------------
@@ -352,6 +365,73 @@ def test_hud_and_decisions_together_span_the_full_right_gutter_height():
         hud, decisions, center = regions["right_gutter"], regions["decisions"], regions["center"]
         total_h = hud["h"] + (decisions["h"] if decisions is not None else 0)
         assert total_h == center["h"]
+
+
+# -- CONTROL_STRIP bottom band (WO-P3-038) --------------------------------
+
+
+def test_control_strip_present_and_below_logs_at_min_lines_floor():
+    """At the real MIN_LINES=20 floor -- the smallest non-``too_small``
+    height -- CONTROL_STRIP is present (its `column_h > 1` carve condition
+    always holds here: rest_h=17, logs_h=LOGS_MIN_H=3, column_h=14 before
+    the carve), full inner width, directly below LOGS, one row tall."""
+    regions = frame_layout(MIN_LINES, FULL_GUTTER_MIN_COLS + 2)
+    logs, control_strip = regions["logs"], regions["control_strip"]
+    assert control_strip is not None
+    assert control_strip["h"] == 1
+    assert control_strip["w"] == logs["w"] == regions["strip"]["w"]
+    assert control_strip["x"] == logs["x"]
+    assert control_strip["y"] == logs["y"] + logs["h"]
+
+
+def test_control_strip_present_at_no_border_tier():
+    """Present/absent is deliberately decided by height alone, independent
+    of the column's fold `mode` -- CONTROL_STRIP is a full-width band like
+    `strip`/`logs`, not a gutter-tied instrument box, so it renders the same
+    at the narrowest bordered-viewport-dropped tier too."""
+    regions = frame_layout(MIN_LINES, MIN_COLS)
+    assert regions["mode"] == "no_border"
+    assert regions["control_strip"] is not None
+    assert regions["control_strip"]["h"] == 1
+
+
+def test_control_strip_never_shrinks_logs_below_its_own_floor(monkeypatch):
+    """LOGS' own height must never shrink because of CONTROL_STRIP's
+    addition -- proven directly by monkeypatching LOGS_MIN_H (mirroring the
+    existing GOALS_BOX_MIN_H/HUD_BOX_MIN_H "claims height first" tests'
+    monkeypatch shape) to a value the module itself would have to shrink to
+    fit, and confirming LOGS still gets exactly that shrunk value, unchanged
+    by CONTROL_STRIP's presence or absence."""
+    import tw2002_aiclient.cockpit.layout as layout_module
+
+    monkeypatch.setattr(layout_module, "LOGS_MIN_H", 10)
+    regions = layout_module.frame_layout(MIN_LINES, FULL_GUTTER_MIN_COLS + 2)
+    # rest_h=17, logs_h=min(10, max(1,16))=10 -- LOGS gets its full
+    # (monkeypatched) floor regardless of what CONTROL_STRIP does next.
+    assert regions["logs"]["h"] == 10
+
+
+def test_control_strip_drops_first_when_column_has_no_slack(monkeypatch):
+    """CONTROL_STRIP drops to ``None`` (never LOGS, never the column body
+    below its own >=1-row floor) once LOGS' own floor consumes the column
+    band down to exactly 1 row of slack. Monkeypatches LOGS_MIN_H large
+    enough to hit that clamp at the real MIN_LINES floor -- same latent-
+    guard-exercise shape as the sibling GOALS/HUD 'claims height first'
+    tests -- unreachable at today's real LOGS_MIN_H=3."""
+    import tw2002_aiclient.cockpit.layout as layout_module
+
+    monkeypatch.setattr(layout_module, "LOGS_MIN_H", 999)
+    regions = layout_module.frame_layout(MIN_LINES, FULL_GUTTER_MIN_COLS + 2)
+    # rest_h=17, logs_h=min(999, max(1,16))=16, column_h=max(1,17-16)=1 --
+    # column_h is not > 1, so CONTROL_STRIP's carve condition fails.
+    assert regions["logs"]["h"] == 16
+    assert regions["control_strip"] is None
+
+
+def test_control_strip_absent_in_too_small_mode():
+    regions = frame_layout(19, 200)
+    assert regions["mode"] == "too_small"
+    assert regions["control_strip"] is None
 
 
 # -- non-overlap property sweep -------------------------------------------

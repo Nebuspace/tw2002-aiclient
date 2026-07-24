@@ -563,11 +563,20 @@ def test_hud_stale_value_rows_dim_label_rows_stay_normal(monkeypatch):
 # ---------------------------------------------------------------------------
 
 
-def test_poll_guard_zero_calls_at_minimal_tier_with_no_status_consumer(monkeypatch):
+def test_poll_guard_one_call_at_minimal_tier_with_control_strip_as_sole_consumer(monkeypatch):
     """Real (not synthetic) tier: 100x25 lands in ``mode == "minimal"``,
     where ``goals``, ``decisions``, AND ``right_gutter`` are all ``None``
-    together (no side gutters at all) -- confirms the guard does not fire a
-    poll for a tier with nothing to feed."""
+    together (no side gutters at all). Before WO-P3-038 this tier polled
+    ZERO times (this test's own prior name/assertion, when the guard had
+    only three consumer classes) -- WO-P3-038 added ``control_strip`` as a
+    FOURTH consumer class, and unlike the ``right_gutter`` extension above
+    (defensive/latent at today's constants), ``control_strip`` is present
+    at every reachable non-``too_small`` tier (``layout.py``'s own
+    ``CONTROL_STRIP_H`` comment) -- INCLUDING this exact real tier. So this
+    tier now genuinely polls once, live, not defensively; see
+    ``tests/test_cockpit_liveness_pty.py``'s own poll-guard tests for the
+    WO-P3-038 side of this guard extension, and ``screens.py``'s own
+    comment on the 4th guard term for the full disclosure."""
     from tw2002_aiclient import screens as screens_mod
 
     monkeypatch.setattr(screens_mod.curses, "has_colors", lambda: False)
@@ -578,6 +587,7 @@ def test_poll_guard_zero_calls_at_minimal_tier_with_no_status_consumer(monkeypat
     assert regions["goals"] is None
     assert regions["decisions"] is None
     assert regions["right_gutter"] is None
+    assert regions["control_strip"] is not None
 
     profile = screens_mod.ProfileRow(
         name="alpha", handle=HANDLE, server="demo-a", host="demo-a.example", game_letter="B"
@@ -594,7 +604,10 @@ def test_poll_guard_zero_calls_at_minimal_tier_with_no_status_consumer(monkeypat
     screen.status_provider = _spy
     screen.draw()
 
-    assert calls == [], f"expected zero status_provider polls at a no-status-consumer tier, got {len(calls)}"
+    assert len(calls) == 1, (
+        f"expected exactly one status_provider poll now that control_strip is a "
+        f"live status consumer at this tier, got {len(calls)}"
+    )
 
 
 def test_poll_guard_fires_when_hud_is_sole_surviving_status_consumer(monkeypatch):

@@ -65,6 +65,14 @@ STRIP_H = 1
 # review-worthy floor, not a canon-cited constant.
 LOGS_MIN_H = 3
 
+# CONTROL_STRIP (WO-P3-038): a single bare content row, the bottom-most
+# interior row of the frame, below LOGS (canon `trainer-aiclient` mock,
+# `trainer-cockpit.md` ~line 46 -- "«control strip — mode badge · → TX ·
+# A/R/T · run/record/panic» (owned by mode-line-and-teach-controls — see N5
+# boundary)"). This WO renders only the row and its liveness cluster; the
+# mode badge / A/R/T keys / run-record-panic cluster belong to the N5 WO.
+CONTROL_STRIP_H = 1
+
 # GOALS box height (PWO-034): the authored line set is nine strategic
 # prerequisites -- Turns, Credits, StarDock, Map, Formations, Chain, Ship
 # prices, Hold price, Fighters (canon `trainer-cockpit.md` "Left gutter"
@@ -133,8 +141,10 @@ def frame_layout(lines: int, cols: int) -> dict:
     ``GOALS_BOX_MIN_H``; the right gutter itself is stacked HUD above
     DECISIONS per PWO-036, see ``HUD_BOX_MIN_H`` — ``right_gutter`` is the
     HUD sub-region, unchanged key, ``decisions`` is the new sub-region below
-    it), ``logs`` (the bottom full-width band). Every region is clamped to
-    at least 1x1 and stays inside ``outer``; siblings never overlap.
+    it), ``logs`` (the bottom full-width band), ``control_strip`` (WO-P3-038
+    — the single bare row below ``logs``, the frame's own last interior row;
+    see ``CONTROL_STRIP_H``). Every region is clamped to at least 1x1 and
+    stays inside ``outer``; siblings never overlap.
     """
     if lines < MIN_LINES or cols < MIN_COLS:
         return {
@@ -154,6 +164,7 @@ def frame_layout(lines: int, cols: int) -> dict:
             "right_gutter": None,
             "decisions": None,
             "logs": None,
+            "control_strip": None,
         }
 
     outer = {"y": 0, "x": 0, "w": cols, "h": lines}
@@ -177,7 +188,45 @@ def frame_layout(lines: int, cols: int) -> dict:
     # 2; a future floor change should revisit this arithmetic deliberately.
     logs_h = min(LOGS_MIN_H, max(1, rest_h - 1))
     column_h = max(1, rest_h - logs_h)
-    logs = {"y": rest_y + column_h, "x": ox, "w": i_cols, "h": rest_h - column_h}
+    logs_h_actual = rest_h - column_h  # LOGS' own height -- untouched by the CONTROL_STRIP carve below
+
+    # CONTROL_STRIP (WO-P3-038) claims its single row LAST, out of the
+    # COLUMN band's own slot only -- never LOGS'. `logs_h_actual` above is
+    # computed with the exact same expression this module used before this
+    # row existed, so LOGS never shrinks below its existing floor because of
+    # this addition (the "logs must never shrink" invariant holds by
+    # construction, not by a runtime check). It only carves into `column_h`,
+    # which already clamps to >=1 and — per the "leftover slot height...
+    # deliberately left unclaimed" note below — typically carries several
+    # rows of slack past `VIEWPORT_H` at real terminal sizes, so this rarely
+    # visibly shrinks GOALS/center/HUD either. `control_strip` drops to
+    # absent (``None``) rather than ever pulling the column band below its
+    # own >=1-row floor -- "control_strip drops first" under height
+    # pressure, never LOGS or the column body.
+    #
+    # Present/absent is decided purely by this height arithmetic,
+    # independent of the column's fold `mode` -- deliberately so: like
+    # `strip`/`logs`, CONTROL_STRIP is a full-width band, not a gutter-tied
+    # instrument box, so it renders the same whether or not a side gutter or
+    # the viewport border is present (`no_border` tier included). Under the
+    # real MIN_LINES=20 floor, `column_h` here is always > 1 before this
+    # carve runs (rest_h >= 17, logs_h == LOGS_MIN_H == 3, so
+    # column_h >= 14) — CONTROL_STRIP is therefore present at every
+    # reachable non-``too_small`` size today; the `None` branch is a latent
+    # guard, same shape as `LOGS_MIN_H`'s own clamp above, for a future
+    # floor change.
+    if column_h > 1:
+        control_strip_h = 1
+        column_h -= 1
+    else:
+        control_strip_h = 0
+
+    logs = {"y": rest_y + column_h, "x": ox, "w": i_cols, "h": logs_h_actual}
+    control_strip = (
+        {"y": rest_y + column_h + logs_h_actual, "x": ox, "w": i_cols, "h": control_strip_h}
+        if control_strip_h > 0
+        else None
+    )
 
     if i_cols >= FULL_GUTTER_MIN_COLS:
         mode = "full"
@@ -291,4 +340,5 @@ def frame_layout(lines: int, cols: int) -> dict:
         "right_gutter": right_gutter,
         "decisions": decisions,
         "logs": logs,
+        "control_strip": control_strip,
     }

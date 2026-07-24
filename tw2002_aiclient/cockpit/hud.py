@@ -348,7 +348,14 @@ def compose_hud_cells(
     """
     try:
         width = int(width)
-    except (TypeError, ValueError):
+    except Exception:
+        # Broad except, not just (TypeError, ValueError): int(float("inf"))
+        # raises OverflowError, and json.loads() accepts a bare `Infinity`
+        # literal by default, so a hostile wire width can legitimately be
+        # that exact float. Same family-standard widening as goals.py's
+        # `_safe_int` (post-Infinity-CRITICAL) and liveness.py's own width
+        # coercion (WO-P3-038) -- this module's never-raises framing
+        # otherwise had a real gap here.
         width = 0
 
     status = status if isinstance(status, dict) else {}

@@ -424,6 +424,17 @@ def test_width_none_never_raises_and_empties():
     assert [text for text, _stale in lines] == [""] * 10
 
 
+@pytest.mark.parametrize("bad_width", [float("inf"), float("-inf"), float("nan")])
+def test_width_non_finite_float_never_raises_and_empties(bad_width):
+    # int(float("inf")) raises OverflowError, not TypeError/ValueError --
+    # and a bare `Infinity`/`-Infinity`/`NaN` literal is valid JSON per
+    # json.loads()'s default parsing, so a hostile wire width can
+    # legitimately arrive as exactly this float.
+    lines = compose_hud_cells(_FULL_STATUS, width=bad_width)
+    assert len(lines) == 10
+    assert [text for text, _stale in lines] == [""] * 10
+
+
 def test_narrow_width_clips_mid_value():
     status = {"hud": {"credits": {"value": 987654, "age_s": 3.0}}}
     lines = compose_hud_cells(status, width=5)

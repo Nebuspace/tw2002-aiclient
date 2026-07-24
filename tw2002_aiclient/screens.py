@@ -6,6 +6,7 @@ Credentials/secrets are never collected or shown on these surfaces.
 from __future__ import annotations
 
 import re
+import time
 from dataclasses import dataclass
 from typing import Callable, Sequence
 
@@ -16,6 +17,7 @@ from tw2002_aiclient.cockpit import draw as cockpit_draw
 from tw2002_aiclient.cockpit import focus as cockpit_focus
 from tw2002_aiclient.cockpit import goals as cockpit_goals
 from tw2002_aiclient.cockpit import hud as cockpit_hud
+from tw2002_aiclient.cockpit import liveness as cockpit_liveness
 from tw2002_aiclient.cockpit.layout import frame_layout
 from tw2002_aiclient.cockpit.strip import compose_profile_strip_from_row
 from tw2002_aiclient.session import credentials
@@ -326,6 +328,12 @@ _DECISIONS_COMPOSE_FAILED = ["—", "Exploring…"]
 # sticky-unknown glyph is "-", not "—" -- ``cockpit.hud``'s own convention,
 # distinct on purpose).
 _HUD_COMPOSE_FAILED = [("-", False)]
+# CONTROL_STRIP's own composer (WO-P3-038, ``cockpit.liveness.
+# compose_liveness_cluster``) has no honest-empty convention of its own to
+# borrow -- it is a bare motion cluster, not a panel with an empty state --
+# so a raising composer falls back to the empty string (renders as a blank
+# row this tick) rather than any invented placeholder text.
+_CONTROL_STRIP_COMPOSE_FAILED = ""
 BOUNDARY_LINE_1 = (
     "Rotation multiplies YOUR own daily turns across INDEPENDENT characters."
 )
@@ -356,27 +364,30 @@ class PlayShellScreen:
     internally (unchanged key, pre-dating the split); DECISIONS is the new
     ``decisions`` region below it.
 
-    ``status_provider`` (PWO-034/035/036/037) is the shared data seam for
-    every panel that reads live daemon state -- GOALS and FOCUS in the left
-    gutter, HUD and DECISIONS in the right: a no-arg callable returning a
+    ``status_provider`` (PWO-034/035/036/037, WO-P3-038) is the shared data
+    seam for every panel that reads live daemon state -- GOALS and FOCUS in
+    the left gutter, HUD and DECISIONS in the right, and now the
+    ``control_strip`` liveness cluster (``cockpit.liveness.
+    compose_liveness_cluster``) at the bottom: a no-arg callable returning a
     ``status`` dict (the daemon ``status`` verb shape) or ``None``.
     Defaults to ``None`` -- with no provider set, ``cockpit.goals.
     compose_goals_lines`` renders every row honestly unknown,
     ``cockpit.focus.compose_focus_lines`` renders its own honest-empty,
     ``cockpit.decisions.compose_decisions_lines`` renders its own
-    ``["—", "Exploring…"]`` honest-empty, and ``cockpit.hud.
+    ``["—", "Exploring…"]`` honest-empty, ``cockpit.hud.
     compose_hud_cells`` renders every cell sticky ``"-"`` with no freshness
-    stamp, rather than any panel going blank or inventing content. Every
+    stamp, and ``compose_liveness_cluster`` renders its own idle ``→ -`` TX
+    read, rather than any panel going blank or inventing content. Every
     panel reads the SAME single ``status_provider()`` snapshot per draw --
     one poll per tick, polled whenever ANY status-consuming region is
-    present this tier (``goals``, ``decisions``, OR ``right_gutter``/HUD --
-    never tied to any single one of them alone, so a fold that drops one or
-    two of the three can never silently starve whichever one survives).
-    ``app.py`` is the one place that assigns a real provider; a raising
-    provider never crashes the draw pass (``draw()`` catches around the
-    call and falls back to ``None``, same honesty-over-crash convention as
-    ``adapters.ensure_session``). HUD's own freshness dimming
-    (``curses.A_DIM`` on stale value rows only, per
+    present this tier (``goals``, ``decisions``, ``right_gutter``/HUD, OR
+    ``control_strip`` -- never tied to any single one of them alone, so a
+    fold that drops some of the four can never silently starve whichever
+    one survives). ``app.py`` is the one place that assigns a real
+    provider; a raising provider never crashes the draw pass (``draw()``
+    catches around the call and falls back to ``None``, same
+    honesty-over-crash convention as ``adapters.ensure_session``). HUD's
+    own freshness dimming (``curses.A_DIM`` on stale value rows only, per
     ``cockpit.hud.FRESHNESS_STALE_S``) is drawn through
     ``cockpit_draw.draw_lines_attrs`` -- the per-line-attr sibling of
     ``draw_lines`` -- rather than ``draw_lines`` itself, since HUD is the
@@ -384,14 +395,29 @@ class PlayShellScreen:
     others (every other panel here still uses ``draw_lines``'s single flat
     attr).
 
+    ``now_fn`` (WO-P3-038) is a clock seam for the ``control_strip``
+    liveness cluster ONLY -- a no-arg callable returning a
+    ``time.monotonic()``-shaped float, defaulted at draw time (not
+    construction time) to the real ``time.monotonic`` when unset. Tests
+    inject a scripted clock so the heartbeat phase is deterministic; the
+    real refresh cadence (``app.py``'s 1 Hz ``stdscr.timeout(1000)``) is
+    unchanged by this seam.
+
     Esc ends the binding and returns to the launcher — clean close, not a suspend.
     """
 
-    def __init__(self, stdscr: curses.window, profile: ProfileRow) -> None:
+    def __init__(
+        self,
+        stdscr: curses.window,
+        profile: ProfileRow,
+        *,
+        now_fn: Callable[[], float] | None = None,
+    ) -> None:
         self.stdscr = stdscr
         self.profile = profile
         self.status_line = ""  # set by app.py after the ensure_session() call
         self.status_provider: Callable[[], dict | None] | None = None  # set by app.py (PWO-034)
+        self._now_fn = now_fn  # WO-P3-038 -- resolved to time.monotonic at draw() time when unset
         self._outer_attr = curses.A_NORMAL
         self._chrome_attr = curses.A_NORMAL
         self._init_colors()
@@ -474,7 +500,28 @@ class PlayShellScreen:
         # layout.py's own LOGS_MIN_H clamp already documents for a future
         # floor change -- never a second `status_provider()` call per
         # panel regardless.)
-        if goals is not None or decisions is not None or regions["right_gutter"] is not None:
+        #
+        # `control_strip` was added here (WO-P3-038) as a FOURTH consumer
+        # class -- and unlike `right_gutter` above, this one is LIVE, not
+        # defensive: `control_strip` is present at every reachable
+        # non-`too_small` tier today (layout.py's own CONTROL_STRIP_H
+        # comment), INCLUDING the `minimal` tier (82..117 inner cols) where
+        # `goals`/`decisions`/`right_gutter` are ALL `None` together (no
+        # side gutters at all). Before this term, that tier polled zero
+        # times per tick (see the now-updated
+        # `tests/test_cockpit_hud_pty.py::
+        # test_poll_guard_zero_calls_at_minimal_tier_with_no_status_consumer`,
+        # which the WO-P3-038 dispatch flags as a disclosed 5th-file touch);
+        # with `control_strip` present, that same real tier now needs
+        # exactly one poll so the liveness cluster's `→ TX` read is live
+        # rather than permanently idle-stub. Pinned by
+        # `tests/test_cockpit_liveness_pty.py`'s own poll-guard test.
+        if (
+            goals is not None
+            or decisions is not None
+            or regions["right_gutter"] is not None
+            or regions["control_strip"] is not None
+        ):
             try:
                 status = self.status_provider() if self.status_provider is not None else None
             except Exception:  # noqa: BLE001 -- a raising provider must not crash the draw pass
@@ -567,6 +614,38 @@ class PlayShellScreen:
         )
         cockpit_draw.draw_lines(
             self.stdscr, logs, [self.status_line or _LOGS_EMPTY], curses.A_NORMAL
+        )
+
+        # CONTROL_STRIP (WO-P3-038): the frame's own bottom-most interior
+        # row, a bare content row (no box -- same `boxed=False` shape as the
+        # row-1 profile strip) carrying ONLY the liveness cluster, right-
+        # aligned. Everything else the canon mock shows on this row (mode
+        # badge, A/R/T teach keys, run/record/panic cluster) belongs to the
+        # N5 mode-line-and-teach-controls WO -- left deliberately blank here.
+        control_strip = regions["control_strip"]
+        if control_strip is not None:
+            cs_w = control_strip["w"]
+            try:
+                now_val = (self._now_fn or time.monotonic)()
+            except Exception:  # noqa: BLE001 -- a raising now_fn must not crash the draw pass
+                # Fall back to the REAL clock, not a frozen 0.0: the
+                # heartbeat's whole job is proving the draw loop is still
+                # running (canon "always breathing... so 'alive' reads even
+                # on a settled screen") -- the loop IS running (we got this
+                # far), so the true signal should survive a broken injected
+                # clock rather than lying still.
+                now_val = time.monotonic()
+            try:
+                liveness_text = cockpit_liveness.compose_liveness_cluster(
+                    status, now=now_val, width=cs_w, unicode_ok=uok
+                )
+            except Exception:  # noqa: BLE001 -- a raising composer must not crash the draw pass
+                liveness_text = _CONTROL_STRIP_COMPOSE_FAILED
+            control_strip_lines = [liveness_text.rjust(cs_w)] if cs_w > 0 else [""]
+        else:
+            control_strip_lines = []
+        cockpit_draw.draw_lines(
+            self.stdscr, control_strip, control_strip_lines, curses.A_NORMAL, boxed=False
         )
 
         self.stdscr.refresh()
