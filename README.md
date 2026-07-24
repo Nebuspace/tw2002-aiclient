@@ -127,8 +127,11 @@ cp config/profiles.toml.example config/profiles.toml   # once; set host/game/han
 # ./tw stop            # graceful daemon shutdown when you're done
 ```
 
-Further ops verbs (`state`, `history`, `spectate`, `attach`, …) are **not shipped yet** —
-see [`workorders/WO-P2-OPS-VERB-SURFACE.md`](workorders/WO-P2-OPS-VERB-SURFACE.md).
+Further ops verbs (`start`, `state`, `watch`, `spectate`, `attach`, …) are **not
+shipped yet** — see
+[`workorders/WO-P2-OPS-VERB-SURFACE.md`](workorders/WO-P2-OPS-VERB-SURFACE.md).
+Cold start without a separate `tw start`: use `tw ensure --profile …` (it spawns
+the daemon when needed).
 
 ## Verb reference (shipped)
 
@@ -147,9 +150,13 @@ Everything takes `--json` for machine-parseable output where applicable.
 
 ### Coming (not on `./tw --help` yet)
 
-Remaining classic ops verbs (`state`, `watch`, `spectate`, `attach`, …) are staged
-in [`WO-P2-OPS-VERB-SURFACE.md`](workorders/WO-P2-OPS-VERB-SURFACE.md)
-(slices A–B + `history` from C shipped; `state` deferred pending `state_parser`).
+Remaining classic ops verbs (`start`, `state`, `watch`, `spectate`, `attach`, …)
+are staged in
+[`WO-P2-OPS-VERB-SURFACE.md`](workorders/WO-P2-OPS-VERB-SURFACE.md)
+(slices A–C shipped; `state` deferred pending `state_parser`; **slice D `start`
+is docs-only** — archive `start` was CLI spawn + first `read`/`screen` with no
+protocol verb; greenfield `ensure` already owns that spawn path, so a second
+CLI would duplicate without adding login-free semantics worth the fork risk).
 
 Notes worth knowing up front:
 
@@ -181,8 +188,9 @@ and cockpit / play-shell compose against FakeClient and scripted sessions.
 ## Known limitations
 
 - Live `./tw` verbs today are **`status` / `ensure` / `screen` / `stop` / `do` /
-  `send` / `read` / `history`**; `tw state` waits on a `state_parser` port.
-  Remaining slices in
+  `send` / `read` / `history`**; `tw state` waits on a `state_parser` port;
+  `tw start` is intentionally not wired (use `ensure` for cold spawn+login —
+  see slice D in the ops WO). Remaining slices in
   [`WO-P2-OPS-VERB-SURFACE.md`](workorders/WO-P2-OPS-VERB-SURFACE.md) land one WO at a time.
 - `state` parsing (when wired) is a best-effort skeleton under `tw2002_aiclient.session`
   — extend anchors as new screen shapes turn up.
