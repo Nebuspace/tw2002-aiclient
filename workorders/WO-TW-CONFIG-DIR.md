@@ -1,6 +1,6 @@
 # WO-TW-CONFIG-DIR — Config-dir env seam for credentials
 
-> Status: PLANNED (parked follow-on · no execute until a lifting HANDOFF)
+> Status: DONE (shipped `da1c875` 2026-07-24 — additive TW_CONFIG_DIR seam on credentials config paths, folded into OPEN-003-A; cross-process isolation proven; zero change to env-first password / chmod-600 / redaction.)
 **Phase:** 2 · **Type:** harden · **Depends:** WO-P2-020 (Accept)
 **Canon:** `canon/doctrine/secrets-and-credentials.md` · folds with OPEN-003 Option A (catalog-aware resolver)
 

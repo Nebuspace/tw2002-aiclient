@@ -1,6 +1,6 @@
 # WO-OPEN-003 — Host/port resolver consolidation (catalog-aware)
 
-> Status: PLANNED (Pending Max ratification of OPEN-003 Option A · no execute until a lifting HANDOFF)
+> Status: DONE (code shipped `da1c875` 2026-07-24 — one catalog-aware resolver + typed subtypes; Cipher CLEAN + Mack HIGH/LOW fixed. DECISIONS OPEN-003 stays OPEN/Pending until the human formally marks it RESOLVED/CLOSED.)
 **Phase:** 2 · **Type:** harden · **Depends:** WO-P2-020 (Accept) · OPEN-003 Option A Max GO
 **Canon:** `canon/DECISIONS.md` OPEN-003 · `canon/architecture/session-engine.md` (Config Bootstrap) ·
 `canon/surfaces/entry-and-profile-selection.md` · `canon/doctrine/secrets-and-credentials.md`
