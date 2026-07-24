@@ -152,11 +152,12 @@ Everything takes `--json` for machine-parseable output where applicable.
 
 ### Coming (not on `./tw --help` yet)
 
-Remaining classic ops verbs (`start`, `state`, `spectate`, …)
-are staged in
+Remaining classic ops verbs (`start`, `state`, `spectate`, `menumap`, `loops`,
+`autoloop`, …) are staged in
 [`WO-P2-OPS-VERB-SURFACE.md`](workorders/WO-P2-OPS-VERB-SURFACE.md)
-(slices A–C + E2 `watch` + F1 `attach` shipped; `state` deferred; **slice D
-`start` docs-only**; spectate = F2).
+(A–C + E2 `watch` + F1 `attach` shipped; **F2 spectate HOLD** until CC re-opens;
+**G-PREP** inventories menumap/loops — see
+[`WO-P2-OPS-VERB-G-PREP.md`](workorders/WO-P2-OPS-VERB-G-PREP.md)).
 
 Notes worth knowing up front:
 

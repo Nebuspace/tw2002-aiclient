@@ -1,9 +1,9 @@
 # WO-P2-OPS-VERB-SURFACE — Ops CLI verb inventory + wire plan
 
-> Status: **F-PREP DONE** pending Accept · tip `b9dc80d`
+> Status: **G-PREP DONE** pending Accept · tip `582c210`
 > Seat: `impl-aiclient-cursor`
-> Refs: hub banked gap · `canon/architecture/cli-verbs.md` ·
-> `canon/surfaces/spectate-and-attach.md` · `WO-P2-OPS-VERB-F-PREP.md`
+> Refs: · `WO-P2-OPS-VERB-F-PREP.md` · `WO-P2-OPS-VERB-G-PREP.md`
+> HOLD: F2 spectate until Max re-opens CC
 
 ## Goal
 
@@ -40,8 +40,10 @@ closes the socket without driving the game.
 | **E2** | `tw watch` CLI | **DONE** |
 | **F-PREP** | spectate·attach inventory | **DONE** — see `WO-P2-OPS-VERB-F-PREP.md` |
 | **F1** | thin `tw attach` CLI | **DONE** |
-| **F1b** | attach secret redaction proofs | **DONE** pending Accept (ledger still cut) |
-| **F2a/b** | spectate_layout → spectate_app + `tw spectate` | queued (curses-heavy) |
-| **G** | menumap… | queued |
+| **F1b** | attach secret redaction proofs | **DONE** (ledger sink banked) |
+| **F2a/b** | spectate_layout → spectate_app + `tw spectate` | **HOLD** — Max re-opens CC·Fable |
+| **G-PREP** | menumap / loops inventory | **DONE** — see `WO-P2-OPS-VERB-G-PREP.md` |
+| **G0–G1** | menu_* pure + `tw menumap` | queued (preferred next) |
+| **G2–G4** | crawler · loops · autoloop | queued |
 
 **Accept for a wire slice:** verb on help · FakeSession · path-leak · full suite green.
