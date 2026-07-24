@@ -26,6 +26,7 @@ def _rows_from_disk() -> list[ProfileRow]:
                 server=str(summary.get("server") or "?"),
                 host=str(summary.get("host") or summary.get("server") or "?"),
                 game_letter=str(summary.get("game_letter") or ""),
+                autopilot=bool(summary.get("autopilot")),
                 error=summary.get("error"),  # type: ignore[arg-type]
             )
         )
@@ -38,6 +39,7 @@ def _load_profiles() -> list[ProfileRow]:
     Env fixtures (disclose in STATUS):
     - ``TW2002_LAUNCHER_FIXTURE=broken`` — one broken row + healthy CTA
     - ``TW2002_LAUNCHER_FIXTURE=worldid`` — two same host+letter, different handle
+    - ``TW2002_LAUNCHER_FIXTURE=polish`` — muted + warn + ok(autopilot) for palette Proof
     - ``TW2002_LAUNCHER_DEMO=1`` — two healthy demo rows
     - default — ``credentials.list_profile_summaries()`` (may be empty)
     """
@@ -68,6 +70,31 @@ def _load_profiles() -> list[ProfileRow]:
                 server="example_one",
                 host="example.host",
                 game_letter="A",
+            ),
+        ]
+    if fixture == "polish":
+        return [
+            ProfileRow(
+                name="steady",
+                handle="Steady",
+                server="demo",
+                host="demo.example",
+                game_letter="A",
+            ),
+            ProfileRow(
+                name="broken-pilot",
+                handle="?",
+                server="?",
+                host="?",
+                error="missing game_letter",
+            ),
+            ProfileRow(
+                name="armed-cap",
+                handle="Armed",
+                server="demo",
+                host="demo.example",
+                game_letter="B",
+                autopilot=True,
             ),
         ]
     if os.environ.get("TW2002_LAUNCHER_DEMO") == "1":

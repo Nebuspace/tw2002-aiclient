@@ -123,6 +123,7 @@ def list_profile_summaries() -> list[dict[str, str | None]]:
                 "server": display_server,
                 "host": host,
                 "game_letter": game_letter,
+                "autopilot": bool(meta.get("autopilot")),
                 "error": error,
             }
         )

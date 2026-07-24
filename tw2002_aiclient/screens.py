@@ -23,6 +23,7 @@ class ProfileRow:
     server: str  # catalog key or bare host label
     game_letter: str = ""
     host: str = ""  # resolved host for world-identity display
+    autopilot: bool = False  # capability flag shown (ok tint) — not an armed run
     error: str | None = None  # parse failure — row stays visible (never dropped)
 
 
@@ -30,6 +31,59 @@ TITLE = " TW2002 AICLIENT "
 SUBTITLE = " SELECT PROFILE "
 CREATE_CTA = "Create New Player"
 CREATE_TITLE = " CREATE NEW PLAYER "
+
+# Shared 7-tone table (visual-language / archived spectate_app._SEMANTIC_COLORS).
+# Values: (curses_fg_name, bold). "muted" = terminal default, non-bold.
+_SEMANTIC_COLORS: dict[str, tuple[str, bool]] = {
+    "ok": ("green", True),
+    "warn": ("yellow", True),
+    "danger": ("red", True),
+    "info": ("cyan", False),  # chrome only — never row data
+    "gain": ("green", True),
+    "loss": ("red", True),
+    "muted": ("default", False),
+}
+
+_COLOR_NAME_TO_CURSES = {
+    "green": curses.COLOR_GREEN,
+    "yellow": curses.COLOR_YELLOW,
+    "red": curses.COLOR_RED,
+    "cyan": curses.COLOR_CYAN,
+    "default": -1,
+}
+
+# Thin-rounded HUD chrome (launcher has no live viewport — never double-line).
+_GLYPHS_UNICODE = {
+    "tl": "╭",
+    "tr": "╮",
+    "bl": "╰",
+    "br": "╯",
+    "h": "─",
+    "v": "│",
+    "sel": "▸",
+}
+_GLYPHS_ASCII = {
+    "tl": "+",
+    "tr": "+",
+    "bl": "+",
+    "br": "+",
+    "h": "-",
+    "v": "|",
+    "sel": ">",
+}
+
+
+def _unicode_ok() -> bool:
+    """ASCII force via ``TW2002_ASCII=1``; otherwise prefer UTF-8-capable locale."""
+    import os
+
+    if os.environ.get("TW2002_ASCII", "").strip() == "1":
+        return False
+    return True
+
+
+def _glyph_set() -> dict[str, str]:
+    return _GLYPHS_UNICODE if _unicode_ok() else _GLYPHS_ASCII
 
 
 def _safe_addstr(win: curses.window, y: int, x: int, text: str, attr: int = 0) -> None:
@@ -44,6 +98,64 @@ def _safe_addstr(win: curses.window, y: int, x: int, text: str, attr: int = 0) -
         pass
 
 
+def _draw_chrome_box(win: curses.window, attr: int) -> None:
+    """Thin-rounded (or ASCII twin) chrome box — cyan is chrome, never data."""
+    glyphs = _glyph_set()
+    try:
+        max_y, max_x = win.getmaxyx()
+    except curses.error:
+        return
+    if max_y < 2 or max_x < 2:
+        return
+    h, v = glyphs["h"], glyphs["v"]
+    _safe_addstr(win, 0, 0, glyphs["tl"] + h * (max_x - 2) + glyphs["tr"], attr)
+    for y in range(1, max_y - 1):
+        _safe_addstr(win, y, 0, v, attr)
+        _safe_addstr(win, y, max_x - 1, v, attr)
+    _safe_addstr(win, max_y - 1, 0, glyphs["bl"] + h * (max_x - 2) + glyphs["br"], attr)
+
+
+class _TonePalette:
+    """Resolve `_SEMANTIC_COLORS` tones to curses attrs (one table for the launcher)."""
+
+    def __init__(self) -> None:
+        self._attrs: dict[str, int] = {}
+        self._init()
+
+    def _init(self) -> None:
+        if not curses.has_colors():
+            # Monochrome: bold ≈ attention; underline ≈ warn; reverse still selection.
+            self._attrs = {
+                "ok": curses.A_BOLD,
+                "warn": curses.A_BOLD | curses.A_UNDERLINE,
+                "danger": curses.A_BOLD,
+                "info": curses.A_BOLD,
+                "gain": curses.A_BOLD,
+                "loss": curses.A_BOLD,
+                "muted": curses.A_NORMAL,
+            }
+            return
+        curses.start_color()
+        try:
+            curses.use_default_colors()
+        except curses.error:
+            pass
+        pair = 1
+        for tone, (fg_name, bold) in _SEMANTIC_COLORS.items():
+            fg = _COLOR_NAME_TO_CURSES.get(fg_name, -1)
+            try:
+                curses.init_pair(pair, fg, -1)
+                attr = curses.color_pair(pair)
+            except curses.error:
+                attr = curses.A_NORMAL
+            if bold:
+                attr |= curses.A_BOLD
+            self._attrs[tone] = attr
+            pair += 1
+
+    def attr(self, tone: str) -> int:
+        return self._attrs.get(tone, curses.A_NORMAL)
+
 class LauncherScreen:
     """Branded profile picker: titled list, ↑/↓ selection, ``q`` to quit.
 
@@ -55,9 +167,11 @@ class LauncherScreen:
         self.stdscr = stdscr
         self.profiles: list[ProfileRow] = list(profiles or ())
         self.selected = 0  # index into selectable items (profiles + trailing CTA)
-        self._chrome = curses.A_NORMAL
-        self._warn = curses.A_BOLD
-        self._init_colors()
+        self._palette = _TonePalette()
+        self._chrome = self._palette.attr("info")
+        self._warn = self._palette.attr("warn")
+        self._ok = self._palette.attr("ok")
+        self._muted = self._palette.attr("muted")
 
     def set_profiles(self, profiles: Sequence[ProfileRow]) -> None:
         self.profiles = list(profiles or ())
@@ -68,41 +182,29 @@ class LauncherScreen:
         # profiles (0..n) + Create CTA as last selectable
         return len(self.profiles) + 1
 
-    def _init_colors(self) -> None:
-        if not curses.has_colors():
-            self._chrome = curses.A_BOLD
-            self._warn = curses.A_BOLD | curses.A_UNDERLINE
-            return
-        curses.start_color()
-        try:
-            curses.use_default_colors()
-        except curses.error:
-            pass
-        curses.init_pair(1, curses.COLOR_CYAN, -1)
-        curses.init_pair(2, curses.COLOR_YELLOW, -1)
-        self._chrome = curses.color_pair(1)
-        self._warn = curses.color_pair(2) | curses.A_BOLD
-
     def _is_cta(self, index: int) -> bool:
         return index == len(self.profiles)
+
+    def _row_base_attr(self, row: ProfileRow) -> int:
+        if row.error:
+            return self._warn
+        if row.autopilot:
+            return self._ok
+        return self._muted
 
     def draw(self) -> None:
         self.stdscr.erase()
         max_y, max_x = self.stdscr.getmaxyx()
+        glyphs = _glyph_set()
         if max_y >= 3 and max_x >= 10:
-            try:
-                self.stdscr.attron(self._chrome)
-                self.stdscr.box()
-                self.stdscr.attroff(self._chrome)
-            except curses.error:
-                pass
+            _draw_chrome_box(self.stdscr, self._chrome)
             _safe_addstr(self.stdscr, 0, 2, TITLE, self._chrome | curses.A_BOLD)
             _safe_addstr(self.stdscr, 1, 2, SUBTITLE, self._chrome)
 
         list_top = 3
         y = list_top
 
-        # Column header when any healthy profile is present.
+        # Column header when any healthy profile is present (chrome, not data).
         if self.profiles and any(not p.error for p in self.profiles) and y < max_y - 2:
             _safe_addstr(
                 self.stdscr,
@@ -118,20 +220,18 @@ class LauncherScreen:
             if y >= max_y - 2:
                 break
             selected = i == self.selected
-            prefix = "▸ " if selected else "  "
+            prefix = f"{glyphs['sel']} " if selected else "  "
+            base = self._row_base_attr(row)
+            # A_REVERSE is the one selection convention — never a second scheme.
+            attr = (base | curses.A_REVERSE) if selected else base
             if row.error:
                 label = f"{row.name}  ·  ERROR: {row.error}"
-                base = self._warn
-                attr = (base | curses.A_REVERSE) if selected else base
                 _safe_addstr(self.stdscr, y, 3, prefix + label, attr)
             else:
                 host = row.host or row.server or "?"
                 letter = (row.game_letter or "—")[:1]
-                # Fixed columns: name · handle · host · [game] (game set off in bold).
                 left = f"{row.name:<14} {row.handle:<14} {host:<22} "
-                base = curses.A_NORMAL
-                attr = (base | curses.A_REVERSE) if selected else base
-                letter_attr = (curses.A_BOLD | curses.A_REVERSE) if selected else curses.A_BOLD
+                letter_attr = (attr | curses.A_BOLD) if selected else (base | curses.A_BOLD)
                 x = 3
                 _safe_addstr(self.stdscr, y, x, prefix + left, attr)
                 x += len(prefix + left)
@@ -143,7 +243,7 @@ class LauncherScreen:
             cta_index = len(self.profiles)
             selected = self.selected == cta_index
             attr = curses.A_REVERSE if selected else curses.A_BOLD
-            prefix = "▸ " if selected else "  "
+            prefix = f"{glyphs['sel']} " if selected else "  "
             _safe_addstr(self.stdscr, y, 3, prefix + CREATE_CTA, attr)
 
         _safe_addstr(
