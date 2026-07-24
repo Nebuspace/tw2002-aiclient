@@ -18,9 +18,16 @@ mid-flow) TWGS-direct socket to the in-game `Command [TL=...]` prompt:
                     -> ship name -> confirm -> planet name
                     -> "Planet command" -> Q
                     -> Command [TL=...]
-         RETURNING: password CHECK (saved credential, sent once; a
-                    wrong/stale saved password is a hard failure, never
-                    guessed/retried past _MAX_PASSWORD_RETRIES)
+         RETURNING: password CHECK (saved credential, sent EXACTLY ONCE;
+                    a wrong/stale/missing saved password is a hard,
+                    immediate failure -- the login_password gate
+                    reappearing after that one send is treated as a
+                    rejection and never re-sent, canon:
+                    login-automaton.md's fail-fast/lockout-safe ceiling.
+                    `_MAX_PASSWORD_RETRIES` only governs the NEW branch's
+                    "didn't match" re-TYPE retries below, which are
+                    legitimate confirm-round bounces, not rejections of
+                    an already-known-bad value)
                     -> Command [TL=...]
 
 Ported from `archive/pre-rebirth-2026-07-23/code/twclient/login.py`
@@ -64,6 +71,18 @@ _MAX_STEPS = 60
 _STEP_SETTLE_TIMEOUT_S = 12.0
 _MAX_PASSWORD_RETRIES = 6
 _STAGNANT_ROUNDS_LIMIT = 3
+# Path-specific grace for the RETURNING login_password reappearance only
+# (Mack HIGH follow-up) -- covers a realistic multi-hundred-ms-to-a-couple-
+# seconds slow/two-stage post-password transition (the regression test's
+# 0.6s resolves in round 1) while keeping total rejection detection
+# (this × _STAGNANT_ROUNDS_LIMIT ~= 7.5s) well inside `ensure_session`'s
+# 20s budget, so a genuine `returning_password_rejected` actually reaches
+# the caller instead of being pre-empted by that outer generic timeout.
+# Every OTHER stagnation path (unrecognized screens) keeps the longer
+# generic `_STEP_SETTLE_TIMEOUT_S` grace -- only this one narrow situation
+# is known to always resolve fast (a real screen change) or never (a
+# settled rejection), so it's the one safe to shorten.
+_RETURNING_REJECT_SETTLE_S = 2.5
 
 # -- known nuisance interjections, matched on raw text regardless of
 # classification, checked before the main per-classification dispatch so
@@ -191,11 +210,29 @@ def run_login(session, profile, get_password, save_password, target="main_comman
             signature = (cls, prompt)
             stagnant_rounds = stagnant_rounds + 1 if signature == last_signature else 0
             last_signature = signature
+            # RETURNING password gate reappearing (see _decide()'s own
+            # comment at this exact condition) is the one stagnation shape
+            # known to always resolve either FAST (a genuine slow/two-stage
+            # transition finishing) or NEVER (a settled rejection) -- so it
+            # gets the shorter, path-specific grace instead of the generic
+            # unrecognized-screen budget, keeping total detection time well
+            # inside `ensure_session`'s 20s caller budget (see
+            # `_RETURNING_REJECT_SETTLE_S`'s own module-level comment).
+            returning_reject = (
+                cls == "login_password" and state["registering"] is False and state["password"] is not None
+            )
             if stagnant_rounds >= _STAGNANT_ROUNDS_LIMIT:
+                if returning_reject:
+                    # Specific error over the generic one below so callers
+                    # can distinguish "wrong saved credential" from any
+                    # other stuck screen.
+                    raise LoginError(f"returning_password_rejected:profile={profile.name}")
                 raise LoginError(f"automaton_stuck:classification={cls!r}:prompt={prompt!r}")
             # Give a still-rendering multi-part screen a moment to finish
             # arriving before we re-classify.
-            session.wait_settle(timeout=_STEP_SETTLE_TIMEOUT_S)
+            session.wait_settle(
+                timeout=_RETURNING_REJECT_SETTLE_S if returning_reject else _STEP_SETTLE_TIMEOUT_S
+            )
             continue
 
         send_text, secret, wait_hint = action
@@ -334,18 +371,43 @@ def _decide(cls, text, prompt, profile, state, get_password, save_password, sess
                 # value is fixed for the whole run, so an early save is
                 # never stale.
                 save_password(profile.name, state["password"])
-        else:
-            if state["password"] is None:
-                saved = get_password(profile.name)
-                if saved is None:
-                    raise LoginError(
-                        f"returning_no_saved_password:profile={profile.name}:handle={profile.handle}"
-                    )
-                state["password"] = saved
+            # NEW branch: the create/repeat "didn't match" dance is a
+            # legitimate re-TYPE retry, not a rejection of an
+            # already-known-bad value -- keep the existing bounded budget.
+            state["password_attempts"] += 1
+            if state["password_attempts"] > _MAX_PASSWORD_RETRIES:
+                raise LoginError(f"password_retries_exhausted:profile={profile.name}")
+            return state["password"], True, None
 
+        # RETURNING branch (canon: login-automaton.md) -- the saved
+        # credential is sent EXACTLY ONCE, never re-sent. `state["password"]`
+        # already being set here means this same gate has already been
+        # answered once this run and reappeared anyway.
+        #
+        # Mack HIGH (adversarial review): raising HERE, immediately and
+        # unconditionally, false-rejects a genuinely valid login whenever
+        # the server's post-password response is slow/two-stage (an early
+        # byte, then the real next screen a couple hundred ms later) --
+        # this same reappearance is, for one instant, indistinguishable
+        # from a genuine rejection. Returning `None` instead (this
+        # function's own "nothing matched yet" signal) hands it to
+        # `run_login`'s EXISTING stagnant-rounds grace: a transient
+        # reappearance resolves within that grace once the real screen
+        # arrives (no action returned here means no re-send either --
+        # "sent once" still holds); a genuinely persistent, settled
+        # rejection exhausts the grace and `run_login` raises the specific
+        # `returning_password_rejected` error itself once `cls` is STILL
+        # `login_password` with this same state after
+        # `_STAGNANT_ROUNDS_LIMIT` rounds (see that raise site).
+        if state["password"] is not None:
+            return None
+        saved = get_password(profile.name)
+        if saved is None:
+            raise LoginError(
+                f"returning_no_saved_password:profile={profile.name}:handle={profile.handle}"
+            )
+        state["password"] = saved
         state["password_attempts"] += 1
-        if state["password_attempts"] > _MAX_PASSWORD_RETRIES:
-            raise LoginError(f"password_retries_exhausted:profile={profile.name}")
         return state["password"], True, None
 
     # These sub-step matches are against the CURRENT prompt line only

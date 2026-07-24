@@ -10,8 +10,25 @@ per line except the CURRENT prompt line (no trailing newline -- that's what
 makes it "the thing the server is blocked waiting on", per classify.py's
 own gate-anchor docstring).
 
-State machine (RETURNING flow only -- the primary path the WO cares about;
-NEW-registration is out of scope for this harness):
+Four scenario `mode`s (WO-P2-023): `"returning"` (default, described below),
+`"new"` (full NEW-registration arc -- char_create -> Y -> password CREATE
+(captures whatever the client sends, since the automaton GENERATES it --
+never checked against a fixed value -- and verifies the "repeat to verify"
+resend is byte-identical) -> trader name (B) -> ship name/confirm -> planet
+name -> planet command (Q) -> main_command; captured generated password
+exposed as `.generated_password`), `"refused"` (presents char_create then
+verifies the connection receives NOT ONE byte afterward -- login.py's
+`allow_register=False` guard raises BEFORE any send; result exposed as
+`.received_after_char_create`), and `"wrong_password"` (RETURNING pre-login,
+then re-presents `Password?` ONCE more after the client's single send --
+exercises the RETURNING branch's fail-fast, send-once ceiling, canon:
+`login-automaton.md`; the one received attempt recorded in
+`.received_passwords`). NEW-arc screen text lifted from the archive's own
+proven fixtures (`archive/pre-rebirth-2026-07-23/code/tests/test_login.py`'s
+`_new_registration_steps`), same discipline as the RETURNING text below.
+
+State machine (RETURNING flow -- the primary/default path; see above for the
+other three `mode`s):
 
   connect
     -> OUTER_NAME   "Please enter your name (ENTER for none):"
@@ -57,6 +74,7 @@ from __future__ import annotations
 
 import socket
 import threading
+import time
 
 
 class ScriptMismatch(Exception):
@@ -106,12 +124,40 @@ class FakeTWGS:
     control. Reusable across tests -- construct a fresh instance per test,
     never share one live server between tests."""
 
-    def __init__(self, *, handle: str, game_letter: str, password: str, host: str = "127.0.0.1"):
+    def __init__(
+        self,
+        *,
+        handle: str,
+        game_letter: str,
+        password: str,
+        host: str = "127.0.0.1",
+        mode: str = "returning",
+        ship_name: str | None = None,
+        planet_name: str | None = None,
+        post_password_delay_s: float = 0.0,
+    ):
         self.handle = handle
         self.game_letter = game_letter
         self.password = password
         self.host = host
+        self.mode = mode
+        self.ship_name = ship_name or f"{handle}Ship"
+        self.planet_name = planet_name or f"{handle}World"
+        # "returning" mode only (WO-P2-023 fail-fast fix, Mack HIGH):
+        # models a slow/two-stage post-password server response -- an
+        # early ack byte that still renders as the SAME `login_password`
+        # gate, held for this many seconds before the real next screen
+        # (welcome + main_command) arrives. 0.0 (default) is the
+        # already-proven instant-response shape every other test uses.
+        self.post_password_delay_s = post_password_delay_s
         self.errors: list[str] = []
+
+        # -- mode-specific outcomes, populated by the matching _run_* method
+        # (see module docstring) -- left at their default until that mode's
+        # script actually runs.
+        self.generated_password: str | None = None  # "new"
+        self.received_after_char_create: bool | None = None  # "refused"
+        self.received_passwords: list[str] = []  # "wrong_password"
 
         self._listener: socket.socket | None = None
         self._port: int | None = None
@@ -175,7 +221,20 @@ class FakeTWGS:
 
     def _run_script(self, conn: socket.socket):
         reader = _Reader(conn)
+        runner = {
+            "returning": self._run_returning,
+            "new": self._run_new,
+            "refused": self._run_refused,
+            "wrong_password": self._run_wrong_password,
+        }.get(self.mode)
+        if runner is None:
+            raise ValueError(f"unknown FakeTWGS mode: {self.mode!r}")
+        runner(conn, reader)
 
+    def _run_pre_login(self, conn: socket.socket, reader: "_Reader"):
+        """The 6 screens common to every mode -- outer name through
+        show-log -- identical regardless of which branch (RETURNING vs
+        NEW vs refused) comes next."""
         self._send(conn, "Please enter your name (ENTER for none):")
         self._expect_line(reader, expected="", label="outer_name")
 
@@ -194,12 +253,138 @@ class FakeTWGS:
         self._send(conn, "Show today's log? (Y/N) [N]")
         self._expect_line(reader, expected="N", label="show_log")
 
+    def _run_returning(self, conn: socket.socket, reader: "_Reader"):
+        self._run_pre_login(conn, reader)
+
         self._send(conn, "Password?")
         # The password is checked for exact match (correctness proof, not
         # just presence) but NEVER logged/printed/stored anywhere beyond
         # this local comparison -- see module docstring's redaction note.
         self._expect_line(reader, expected=self.password, label="login_password")
+        # Also recorded on `.received_passwords` (shared with wrong_password
+        # mode) so a test can assert "sent exactly once" against a concrete
+        # value rather than only the equality check above.
+        self.received_passwords.append(self.password)
 
+        if self.post_password_delay_s > 0:
+            # Slow/two-stage post-password response (WO-P2-023 fail-fast
+            # fix, Mack HIGH): an early ack that re-presents the SAME
+            # `login_password` gate -- the identical transient signal a
+            # genuine rejection produces -- held for `post_password_delay_s`
+            # before the REAL next screen arrives. Proves login.py's
+            # stagnation-grace resolves this correctly instead of
+            # false-rejecting a legitimate, merely-slow login.
+            self._send(conn, "Password?")
+            time.sleep(self.post_password_delay_s)
+
+        self._send_welcome_and_hold(conn)
+
+    def _run_new(self, conn: socket.socket, reader: "_Reader"):
+        """Full NEW-registration arc -- see module docstring. The password
+        CREATE/repeat screens ACCEPT/CAPTURE whatever the client sends
+        (the automaton GENERATES it, so a fixed-value check would always
+        fail) rather than comparing against `self.password`."""
+        self._run_pre_login(conn, reader)
+
+        self._send(
+            conn,
+            "You were not found in the player database.\r\n"
+            "Would you like to start a new character in this game?  (Type Y or N)",
+        )
+        self._expect_line(reader, expected="Y", label="char_create")
+
+        self._send(conn, "Please enter a password for this game account.\r\nPassword?")
+        self.generated_password = self._capture_line(reader, label="password_create")
+
+        self._send(conn, "Repeat password to verify.\r\nPassword?")
+        repeat = self._capture_line(reader, label="password_repeat")
+        if repeat != self.generated_password:
+            self.errors.append(
+                f"password_repeat: expected identical resend {self.generated_password!r}, got {repeat!r}"
+            )
+
+        self._send(
+            conn,
+            "Do you wish to make up a new Alias for your Trader Name,\r\n"
+            f"or would you rather use your BBS name of {self.handle}?\r\n"
+            "Use (N)ew Name or (B)BS Name [B] ?",
+        )
+        self._expect_line(reader, expected="B", label="trader_name_choice")
+
+        self._send(conn, "What do you want to name your ship? (30 letters)")
+        self._expect_line(reader, expected=self.ship_name, label="ship_name")
+
+        self._send(conn, f"{self.ship_name} is what you want?")
+        self._expect_line(reader, expected="Y", label="ship_confirm")
+
+        self._send(
+            conn,
+            "What do you want to name your home planet? (Class K-BE, Desert wasteland)\r\n"
+            "[---------------------------------------]",
+        )
+        self._expect_line(reader, expected=self.planet_name, label="planet_name")
+
+        self._send(conn, "Planet command (?=help) [D]")
+        self._expect_line(reader, expected="Q", label="planet_command")
+
+        self._send_welcome_and_hold(conn)
+
+    def _run_refused(self, conn: socket.socket, reader: "_Reader"):
+        """`allow_register=False`: char_create's hard-gate must raise
+        BEFORE sending a single byte -- proven by verifying the connection
+        receives NOTHING after this screen is presented (see module
+        docstring; `.received_after_char_create`)."""
+        self._run_pre_login(conn, reader)
+
+        self._send(
+            conn,
+            "You were not found in the player database.\r\n"
+            "Would you like to start a new character in this game?  (Type Y or N)",
+        )
+        self._expect_silence(conn, reader, wait_s=3.0, label="char_create_refused")
+
+        while not self._stop.is_set():
+            try:
+                chunk = conn.recv(4096)
+            except OSError:
+                return
+            if not chunk:
+                return
+
+    def _run_wrong_password(self, conn: socket.socket, reader: "_Reader"):
+        """RETURNING pre-login, then re-presents `Password?` ONCE more
+        after the client's single send -- exercising the RETURNING
+        branch's fail-fast, send-once ceiling (canon:
+        `login-automaton.md`): the automaton must treat this reappearance
+        as a rejection and raise immediately, never re-sending the
+        already-known-bad saved value. `.received_passwords` is populated
+        with exactly the one attempt for a correctly-behaving automaton --
+        a second entry would mean it re-sent instead of failing loud."""
+        self._run_pre_login(conn, reader)
+
+        self._send(conn, "Password?")
+        try:
+            line = reader.read_line().decode("cp437", errors="replace")
+        except ConnectionError:
+            return
+        self.received_passwords.append(line)
+
+        # Re-present the SAME gate -- the rejection signal the RETURNING
+        # branch's fail-fast ceiling reacts to. If the automaton instead
+        # re-sends (a regression), that 2nd send lands here uncounted --
+        # left unread, since the client is expected to have already
+        # raised and closed by the time anything more could arrive.
+        self._send(conn, "Password?")
+
+        while not self._stop.is_set():
+            try:
+                chunk = conn.recv(4096)
+            except OSError:
+                return
+            if not chunk:
+                return
+
+    def _send_welcome_and_hold(self, conn: socket.socket):
         # Terminal state: unsolicited welcome banner immediately followed
         # by the settled main_command prompt, ONE write -- see module
         # docstring. No trailing "\r\n" after the prompt: it's the
@@ -257,3 +442,39 @@ class FakeTWGS:
         got = reader.read_exact(len(expected.encode("cp437"))).decode("cp437", errors="replace")
         if got != expected:
             self.errors.append(f"{label}: expected {expected!r}, got {got!r}")
+
+    def _capture_line(self, reader: _Reader, *, label: str) -> str:
+        """Like `_expect_line`, but ACCEPTS whatever value arrives instead
+        of comparing against a fixed expectation -- used for the NEW-arc
+        CSPRNG-generated password, whose value this fake can't know ahead
+        of time (see module docstring)."""
+        got = reader.read_line().decode("cp437", errors="replace")
+        if not got:
+            self.errors.append(f"{label}: expected a non-empty password, got {got!r}")
+        return got
+
+    def _expect_silence(self, conn: socket.socket, reader: _Reader, *, wait_s: float, label: str):
+        """Verify NOT ONE byte arrives -- the `refused` mode's proof that
+        login.py's `allow_register=False` guard raises before any send.
+        Checks the reader's already-buffered bytes first (a pipelined
+        burst the client fired before this call even started waiting),
+        then blocks with a bounded socket timeout for anything arriving
+        during the wait window. Result recorded on
+        `.received_after_char_create` for the test to assert against, in
+        addition to the usual `.errors` entry on violation."""
+        if reader._buf:
+            self.errors.append(f"{label}: received unexpected bytes {bytes(reader._buf)!r} (expected none)")
+            self.received_after_char_create = True
+            return
+        conn.settimeout(wait_s)
+        try:
+            chunk = conn.recv(1)
+        except socket.timeout:
+            chunk = b""
+        finally:
+            conn.settimeout(None)
+        if chunk:
+            self.errors.append(f"{label}: received unexpected byte {chunk!r} (expected none)")
+            self.received_after_char_create = True
+        else:
+            self.received_after_char_create = False
