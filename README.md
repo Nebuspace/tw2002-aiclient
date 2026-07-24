@@ -169,9 +169,11 @@ Notes worth knowing up front:
 ## Spectator / attach
 
 `tw attach` is **shipped** (thin): control-lock + keystroke forward; no live
-screen paint yet — pair with `tw watch`. Full curses attach / `tw spectate`
-remain Coming — see [`WO-P2-OPS-VERB-F-PREP.md`](workorders/WO-P2-OPS-VERB-F-PREP.md)
-(F2). Product play / cockpit chrome remains `./tw2002-aiclient`.
+screen paint yet — pair with `tw watch`. Secret keystrokes at password/PIN
+prompts are redacted in the transcript log and `last_sent` via
+`Session.send_raw` (ledger/`record_attach_keystroke` still cut). Full curses
+attach / `tw spectate` remain Coming — see
+[`WO-P2-OPS-VERB-F-PREP.md`](workorders/WO-P2-OPS-VERB-F-PREP.md) (F2).
 
 
 ## Tests
