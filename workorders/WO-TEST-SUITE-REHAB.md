@@ -1,6 +1,6 @@
 # WO-TEST-SUITE-REHAB — Stale `twclient` test inventory + rehab plan
 
-> Status: PLANNED (inventory complete · no deletes/rewrites until a lifting HANDOFF)
+> Status: PLANNED (inventory SHIP `7e75677` · **DELETE wave DONE** · rewrite/defer still gated)
 **Phase:** 2 · **Type:** hygiene · **Depends:** WO-P2-020 (session package exists)
 **Canon:** `canon/architecture/north-star.md` · `canon/findings.md` (AI-pilot / EV-picker divergences)
 
@@ -8,9 +8,8 @@
 retired `twclient` package (uncollectable under greenfield) into **rewrite · delete · defer**
 buckets so Phase-2 work orders can schedule honest proof instead of drowning in collection ERRORS.
 
-**Scope (this inventory WO):** docs only — this file + optional README/findings one-liners.
-**Out of bounds until a later EXECUTE HANDOFF:** deleting or rewriting any test file · touching
-`session/login.py` (WO-P2-023 exclusive) · product code.
+**Progress:** inventory ACCEPTED (`7e75677`) · DELETE wave executed (12 files removed — see §DELETE).
+**Still gated:** rewrite / defer execution until a lifting HANDOFF. No `session/login.py` (WO-P2-023).
 
 ---
 
@@ -50,7 +49,8 @@ importable. Any test that `import twclient` / `from twclient…` fails at **coll
 | **delete** | Pre-rebirth AI-pilot / learning-loop / autonomy-HUD coverage that **contradicts** north-star (AI never live-drives; no EV-every-tick driver). Do not rewrite onto greenfield. |
 | **defer** | Archive-only product surface (world model, trade, spectate, crawl, …) with no live module yet — keep file as reference until the owning product WO lands; then rewrite or delete under that WO. |
 
-**Counts:** rewrite **16** · delete **12** · defer **50** · collectable **6** · total `test_*.py` **84**.
+**Counts (post-DELETE wave):** rewrite **16** · delete **0 remaining** (12 removed) · defer **50** ·
+collectable **6** · remaining uncollectable ≈ **66** · total `test_*.py` **72**.
 
 ---
 
@@ -77,24 +77,25 @@ importable. Any test that `import twclient` / `from twclient…` fails at **coll
 
 ---
 
-## DELETE (12) — north-star contradict / retired AI-first suite
+## DELETE (12) — DONE (WO-TEST-REHAB-DELETE)
 
-Do **not** port. When EXECUTE: remove (or move under archive tests if hub prefers retain-as-reference).
+Removed from root `tests/` (north-star contradict / retired AI-first). Archive still holds the
+pre-rebirth sources under `archive/pre-rebirth-2026-07-23/code/tests/` for reference.
 
 | File | Why |
 |------|-----|
-| `tests/test_autopilot.py` | AI-pilot / EV tick loop — findings §1–2 |
-| `tests/test_autopilot_protocol.py` | same |
-| `tests/test_loop_player.py` | auto-loop driver |
-| `tests/test_priority_engine.py` | EV-every-tick picker — findings §2 |
-| `tests/test_coach_kb.py` | coach-as-live-driver framing |
-| `tests/test_credits_supervision.py` | AI-pilot credits supervisor |
-| `tests/test_active_driver.py` | `MODE_AI_PILOT` / skills active-driver |
-| `tests/test_learning_candidates.py` | learning-loop (no on-demand Analyze WO yet) |
-| `tests/test_learning_comparator.py` | same |
-| `tests/test_learning_guards.py` | same |
-| `tests/test_learning_loop.py` | same |
-| `tests/test_spectate_autonomy_ledger.py` | autonomy-ratio AI HUD |
+| ~~`tests/test_autopilot.py`~~ | AI-pilot / EV tick loop — findings §1–2 |
+| ~~`tests/test_autopilot_protocol.py`~~ | same |
+| ~~`tests/test_loop_player.py`~~ | auto-loop driver |
+| ~~`tests/test_priority_engine.py`~~ | EV-every-tick picker — findings §2 |
+| ~~`tests/test_coach_kb.py`~~ | coach-as-live-driver framing |
+| ~~`tests/test_credits_supervision.py`~~ | AI-pilot credits supervisor |
+| ~~`tests/test_active_driver.py`~~ | `MODE_AI_PILOT` / skills active-driver |
+| ~~`tests/test_learning_candidates.py`~~ | learning-loop (no on-demand Analyze WO yet) |
+| ~~`tests/test_learning_comparator.py`~~ | same |
+| ~~`tests/test_learning_guards.py`~~ | same |
+| ~~`tests/test_learning_loop.py`~~ | same |
+| ~~`tests/test_spectate_autonomy_ledger.py`~~ | autonomy-ratio AI HUD |
 
 ---
 
@@ -124,9 +125,9 @@ Grouped by pattern (individual files listed).
 
 ---
 
-## Suggested execute slices (later HANDOFFs — not this WO)
+## Suggested execute slices (later HANDOFFs)
 
-1. **Delete wave** — remove the 12 DELETE files in one scoped commit (fast honesty win; unblocks collect noise).
+1. ~~**Delete wave**~~ — DONE (WO-TEST-REHAB-DELETE).
 2. **Rewrite wave A** — connection / logging_util / session / terminal / iac / player_bank (modules live today).
 3. **Rewrite wave B** — control_lock + actor/TOCTOU/attach with WO-P2-025.
 4. **Login** — leave to WO-P2-023 (+ redaction follow-on).
