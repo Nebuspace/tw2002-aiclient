@@ -231,6 +231,19 @@ def test_malformed_values_never_raise_and_degrade_to_unknown():
     assert lines[8] == f"? Fighters {UNKNOWN_DETAIL}"
 
 
+def test_raising_int_on_turns_left_never_raises():
+    # Mack's repro: int(value) calls value.__int__() for an arbitrary
+    # object — a hostile __int__ raising something other than
+    # TypeError/ValueError/OverflowError must still degrade to honest-
+    # unknown, not escape the composer's "never raises" contract.
+    class HostileInt:
+        def __int__(self):
+            raise RuntimeError("boom")
+
+    lines = compose_goals_lines({"turns_left": HostileInt()}, width=40)
+    assert lines[0] == f"? Turns {UNKNOWN_DETAIL}"
+
+
 _INT_BACKED_FIELDS = (
     "turns_left",
     "credits",

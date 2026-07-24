@@ -29,7 +29,7 @@ Authored from a 3-lane read-only fan-out (panels/ledger · HUD/fold/colors · de
 - **Proof:** Layer-A — pure compose from fixture `status` dict → exact lines (port archive `compose_play_panels` shape into `tw2002_aiclient`). Layer-B — pty+pyte: `_find_text` for `GOALS` title + a known label; FakeClient/status stub; never `run/twd.sock`.
 - **Hazards:** Don't invent a second priority engine; GOALS is Layer-1 status only (`priority-engine.md`). Don't block on ignored archive tests — rewrite onto helpers.
 
-### PWO-035 — FOCUS panel live (VERIFY/EXTEND)
+### PWO-035 — FOCUS panel live (VERIFY/EXTEND) — **DONE 2026-07-24** (impl-claudecode-aiclient · Fable · `cockpit/focus.py` ranked-suggestions composer + Layer-2 box retitled FOCUS per canon mock ruling; one shared status-poll/tick; gate: Mack clean + hostile-dunder hardening, Pixel ship-ready. `status["focus"]` wire bridge not built — honest-empty until the priority-engine port lands.)
 - **Depends-on:** 034
 - **Live state (tip):** **MISSING** (same placeholder).
 - **Accept:** **FOCUS** list is distinct from GOALS (suggestions / ranked candidates, not status); labels readable; gated candidates marked `⊘`; never auto-sends keys.

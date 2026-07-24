@@ -12,6 +12,7 @@ from typing import Callable, Sequence
 import curses
 
 from tw2002_aiclient.cockpit import draw as cockpit_draw
+from tw2002_aiclient.cockpit import focus as cockpit_focus
 from tw2002_aiclient.cockpit import goals as cockpit_goals
 from tw2002_aiclient.cockpit.layout import frame_layout
 from tw2002_aiclient.cockpit.strip import compose_profile_strip_from_row
@@ -296,21 +297,21 @@ BANK_TITLE = " PLAYER BANK "
 # GAME panel content -- the live game viewport is a later WO (PREP §5); this
 # is the honest placeholder canon calls for, never fake/invented content.
 _GAME_PLACEHOLDER = "(placeholder — live game viewport wired in a later WO)"
-# Empty-state fills for the PRIORITIES/HUD gutters before their data-source
-# WOs land -- canon (trainer-cockpit.md "Panel states"): "PRIORITIES shows
-# '—'"; HUD has no cited empty string at this reduced scope, so it gets the
-# DoD's other approved honest-empty spelling to keep the two panels visibly
-# distinct while both stay inside canon's stated vocabulary.
-_PRIORITIES_EMPTY = "—"
+# Empty-state fill for the HUD gutter before its data-source WO lands --
+# GOALS and FOCUS (PWO-034/035) now compose their own honest-empty content
+# from ``status`` directly (see below); HUD has no cited empty string at this
+# reduced scope, so it gets the DoD's other approved honest-empty spelling to
+# keep it visibly distinct while staying inside canon's stated vocabulary.
 _HUD_EMPTY = "(none yet)"
 _LOGS_EMPTY = "(none yet)"
 # A raising composer (bad input surviving to a status field, a future
 # panel's own bug, ...) must never take the whole cockpit down with it --
 # same honesty-over-crash fallback as an unreachable/raising status_provider
 # (Mack finding: the provider call was already guarded, the compose call
-# wasn't). One honest-unknown line, reusing the established em-dash glyph
-# rather than inventing a second "something broke" vocabulary.
+# wasn't). One honest-unknown line per panel, reusing the established
+# em-dash glyph rather than inventing a second "something broke" vocabulary.
 _GOALS_COMPOSE_FAILED = ["—"]
+_FOCUS_COMPOSE_FAILED = ["—"]
 BOUNDARY_LINE_1 = (
     "Rotation multiplies YOUR own daily turns across INDEPENDENT characters."
 )
@@ -327,21 +328,28 @@ class PlayShellScreen:
     ``cockpit.layout.frame_layout``: a cyan-bold double-line outer frame
     titled ``PLAY SHELL``, the row-1 character/profile strip
     (``cockpit.strip.compose_profile_strip_from_row``), a three-column body
-    (left gutter stacked GOALS above thin-rounded PRIORITIES | double-line
+    (left gutter stacked GOALS above thin-rounded FOCUS | double-line
     GAME viewport | thin-rounded HUD gutter), and the bottom thin-rounded
     LOGS band carrying the ensure-session ``status_line``. The live game
     viewport itself is a later WO -- GAME always shows an honest placeholder
     line, never fake content. Below the fold floor (``mode == "too_small"``)
-    only the layout's refusal message is drawn.
+    only the layout's refusal message is drawn. The left-gutter FOCUS box is
+    the ``left_gutter`` region internally (unchanged region key -- only its
+    drawn title and content are PWO-035; ``cockpit.layout``'s
+    PRIORITIES_W/PRIORITIES_MIN_W geometry constants are untouched).
 
-    ``status_provider`` (PWO-034) is the GOALS panel's data seam: a no-arg
-    callable returning a ``status`` dict (the daemon ``status`` verb shape)
-    or ``None``. Defaults to ``None`` -- with no provider set,
-    ``cockpit.goals.compose_goals_lines`` renders every row honestly
-    unknown rather than blank or invented. ``app.py`` is the one place that
-    assigns a real provider; a raising provider never crashes the draw pass
-    (``draw()`` catches around the call and falls back to ``None``, same
-    honesty-over-crash convention as ``adapters.ensure_session``).
+    ``status_provider`` (PWO-034/035) is the GOALS and FOCUS panels' shared
+    data seam: a no-arg callable returning a ``status`` dict (the daemon
+    ``status`` verb shape) or ``None``. Defaults to ``None`` -- with no
+    provider set, ``cockpit.goals.compose_goals_lines`` renders every row
+    honestly unknown and ``cockpit.focus.compose_focus_lines`` renders its
+    own honest-empty, rather than either panel going blank or inventing
+    content. Both panels read the SAME single ``status_provider()`` snapshot
+    per draw -- one poll per tick, not one per panel. ``app.py`` is the one
+    place that assigns a real provider; a raising provider never crashes the
+    draw pass (``draw()`` catches around the call and falls back to
+    ``None``, same honesty-over-crash convention as
+    ``adapters.ensure_session``).
 
     Esc ends the binding and returns to the launcher — clean close, not a suspend.
     """
@@ -409,6 +417,11 @@ class PlayShellScreen:
             self.stdscr, goals, weight="thin", attr=self._chrome_attr,
             title="GOALS", title_attr=self._chrome_attr, uok=uok,
         )
+        # One status_provider() snapshot per draw, shared by GOALS and FOCUS
+        # below -- `goals` is only ever None when `left_gutter` (FOCUS) is
+        # None too (cockpit.layout.frame_layout gates both on the same
+        # pri_w > 0 fold-tier check), so this single guarded poll covers
+        # both panels; FOCUS never triggers a second provider call.
         if goals is not None:
             try:
                 status = self.status_provider() if self.status_provider is not None else None
@@ -420,15 +433,24 @@ class PlayShellScreen:
             except Exception:  # noqa: BLE001 -- operator keeps control over panel-render failures
                 goals_lines = _GOALS_COMPOSE_FAILED
         else:
+            status = None
             goals_lines = []
         cockpit_draw.draw_lines(self.stdscr, goals, goals_lines, curses.A_NORMAL)
 
         left = regions["left_gutter"]
         cockpit_draw.draw_box(
             self.stdscr, left, weight="thin", attr=self._chrome_attr,
-            title="PRIORITIES", title_attr=self._chrome_attr, uok=uok,
+            title="FOCUS", title_attr=self._chrome_attr, uok=uok,
         )
-        cockpit_draw.draw_lines(self.stdscr, left, [_PRIORITIES_EMPTY], curses.A_NORMAL)
+        if left is not None:
+            left_inner_w = max(0, left["w"] - 2)
+            try:
+                focus_lines = cockpit_focus.compose_focus_lines(status, width=left_inner_w)
+            except Exception:  # noqa: BLE001 -- a raising panel must not crash the draw pass
+                focus_lines = _FOCUS_COMPOSE_FAILED
+        else:
+            focus_lines = []
+        cockpit_draw.draw_lines(self.stdscr, left, focus_lines, curses.A_NORMAL)
 
         center = regions["center"]
         if center is not None:

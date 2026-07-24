@@ -1,7 +1,7 @@
 """WO-P3-034 wire — GOALS panel + 1 Hz status_provider refresh, Layer-B.
 
 Real-curses pty + pyte replay (``tests.pty_helpers``) proves the *drawn*
-GOALS box the app.py wiring produces: a titled panel above PRIORITIES in
+GOALS box the app.py wiring produces: a titled panel above FOCUS in
 the left gutter, rendering nine honest-unknown lines with no provider
 attached, and a known label/value once a stubbed daemon ``status`` response
 is wired in. Layer-A coverage for the composer itself
@@ -260,16 +260,16 @@ def _fixture_capture(tmp_path_factory):
 
 
 @_PTY_SKIP
-def test_goals_title_visible_above_priorities(_no_provider_capture):
+def test_goals_title_visible_above_focus(_no_provider_capture):
     regions = frame_layout(ROWS, COLS)
-    goals, priorities = regions["goals"], regions["left_gutter"]
-    assert goals is not None and priorities is not None
+    goals, focus = regions["goals"], regions["left_gutter"]
+    assert goals is not None and focus is not None
     grid = pyte_grid(_no_provider_capture, ROWS, COLS)
 
     assert "GOALS" in grid[goals["y"]]
-    assert "PRIORITIES" in grid[priorities["y"]]
-    # GOALS sits strictly above PRIORITIES, matching the layout split.
-    assert goals["y"] < priorities["y"]
+    assert "FOCUS" in grid[focus["y"]]
+    # GOALS sits strictly above FOCUS, matching the layout split.
+    assert goals["y"] < focus["y"]
 
 
 @_PTY_SKIP
@@ -295,17 +295,17 @@ def test_no_provider_run_shows_all_unknown_honest_lines(_no_provider_capture):
 @_PTY_SKIP
 def test_stubbed_provider_shows_known_credits_label_and_value(_fixture_capture):
     regions = frame_layout(ROWS, COLS)
-    goals, priorities = regions["goals"], regions["left_gutter"]
+    goals, focus = regions["goals"], regions["left_gutter"]
     grid = pyte_grid(_fixture_capture, ROWS, COLS)
     text = "\n".join(grid)
 
     assert "GOALS" in grid[goals["y"]]
     assert "Credits" in text
     assert "54,321" in text
-    # PRIORITIES still present below GOALS -- the stub only touched GOALS's
+    # FOCUS still present below GOALS -- the stub only touched GOALS's
     # data source, not the panel split itself.
-    assert priorities is not None
-    assert "PRIORITIES" in grid[priorities["y"]]
+    assert focus is not None
+    assert "FOCUS" in grid[focus["y"]]
 
 
 # ---------------------------------------------------------------------------

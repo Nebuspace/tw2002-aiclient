@@ -96,19 +96,24 @@ def _safe_int(value: object) -> int | None:
     """Best-effort int coercion — ``None``/unparsable input becomes
     ``None`` (unknown) rather than raising.
 
-    ``OverflowError`` is caught alongside ``TypeError``/``ValueError``:
+    ``OverflowError`` is a specifically-documented wire-reachable case:
     Python's ``json`` module accepts bare ``Infinity``/``-Infinity`` by
     default (``allow_nan=True``), so a malformed daemon payload can hand
     this a real ``float('inf')`` — ``int(float('inf'))`` raises
     ``OverflowError``, not ``ValueError``, and a status field backed by
     that value must still degrade to unknown, not crash the composer.
     ``float('nan')`` already raises ``ValueError`` here, not
-    ``OverflowError``."""
+    ``OverflowError``. The catch is broadened to ``Exception`` (Mack's
+    review) as the never-raises *contract* backstop beyond that documented
+    case: ``int(value)`` calls ``value.__int__()`` for an arbitrary object,
+    and a hostile ``__int__`` that raises something else entirely (e.g. a
+    bare ``RuntimeError``) must still degrade to unknown, not escape this
+    composer."""
     if value is None:
         return None
     try:
         return int(value)
-    except (TypeError, ValueError, OverflowError):
+    except Exception:
         return None
 
 
@@ -170,6 +175,15 @@ def compose_goals_lines(status: dict | None, *, width: int) -> list[str]:
     individual field is independently coerced (see module docstring for the
     key mapping). The returned list always has exactly 9 lines, in canon
     order, each ``len(line) <= width``.
+
+    This never-raises contract covers any JSON-wire-shaped input — plain
+    dicts/lists and hostile *values* within them included (Mack's review:
+    a field whose ``__int__``/``__str__``/etc. raises still degrades
+    honestly). A ``status`` that is itself a ``dict`` *subclass* with a
+    raising ``.get()``/``__contains__`` is out of contract — the daemon's
+    real wire payload is always a plain ``json.loads()`` dict, never a
+    subclass, and that hazard is contained at the render layer (the
+    curses draw call) instead of here.
     """
     try:
         width = int(width)

@@ -243,7 +243,7 @@ def test_full_tier_panel_titles_at_expected_rows(_full_tier_capture):
     )
     assert left is not None and right is not None and center is not None and logs is not None
 
-    assert "PRIORITIES" in grid[left["y"]]
+    assert "FOCUS" in grid[left["y"]]
     assert "GAME" in grid[center["y"]]
     assert "HUD" in grid[right["y"]]
     assert "LOGS" in grid[logs["y"]]
@@ -291,7 +291,7 @@ def test_full_tier_center_viewport_is_double_line_and_empty_panels_honest(_full_
     # Empty panels state emptiness honestly -- never blank, never invented.
     assert "placeholder" in "\n".join(grid).lower()
     left = regions["left_gutter"]
-    assert "—" in grid[left["y"] + 1]  # PRIORITIES empty-state row
+    assert "—" in grid[left["y"] + 1]  # FOCUS empty-state row (no focus payload wired yet)
 
 
 # ---------------------------------------------------------------------------
@@ -319,7 +319,7 @@ def test_ascii_twin_closure_glyphs_no_unicode_leak(tmp_path):
     )
     assert corners == ("+", "+", "+", "+")
     assert "PLAY SHELL" in text
-    assert "PRIORITIES" in text and "GAME" in text and "HUD" in text and "LOGS" in text
+    assert "FOCUS" in text and "GAME" in text and "HUD" in text and "LOGS" in text
 
     for glyph in _DOUBLE_GLYPHS_UNICODE + _THIN_GLYPHS_UNICODE:
         assert glyph not in text
@@ -345,7 +345,7 @@ def test_narrow_run_left_gutter_absent_frame_flush_to_right_edge(tmp_path):
     text = "\n".join(grid)
 
     assert "PLAY SHELL" in text
-    assert "PRIORITIES" not in text  # left gutter shed at this tier
+    assert "FOCUS" not in text  # left gutter shed at this tier
     assert "HUD" not in text  # right gutter shed at this tier too (minimal)
 
     outer = regions["outer"]
@@ -459,7 +459,7 @@ def test_too_small_refuses_with_message_and_no_chrome(tmp_path):
     assert "Terminal too small" in text
     for glyph in _DOUBLE_GLYPHS_UNICODE + _THIN_GLYPHS_UNICODE:
         assert glyph not in text
-    assert "PRIORITIES" not in text
+    assert "FOCUS" not in text
     assert "GAME" not in text
     assert "HUD" not in text
     assert "LOGS" not in text
