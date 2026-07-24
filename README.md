@@ -202,8 +202,8 @@ and the spectator/attach UIs against scripted sessions.
   slices in [`WO-P2-OPS-VERB-SURFACE.md`](workorders/WO-P2-OPS-VERB-SURFACE.md) land one WO at a time.
 - `state` parsing (when wired) is a best-effort skeleton under `tw2002_aiclient.session`
   — extend anchors as new screen shapes turn up.
-- A future `tw stop` should only attempt in-game QUIT from the main command prompt;
-  elsewhere it just disconnects.
+- `tw stop` attempts in-game QUIT from the main command prompt when possible;
+  elsewhere the daemon disconnects and exits.
 
 
 ## Going deeper
