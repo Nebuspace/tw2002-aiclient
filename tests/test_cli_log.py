@@ -24,6 +24,7 @@ _SHIPPED_VERBS = frozenset(
         "history",
         "watch",
         "attach",
+        "menumap",
     }
 )
 
@@ -40,6 +41,7 @@ def test_parser_shipped_verb_allowlist():
     history = parser.parse_args(["history"])
     watch = parser.parse_args(["watch"])
     attach = parser.parse_args(["attach"])
+    menumap = parser.parse_args(["menumap", "--path", "x"])
     assert status.func is cli.cmd_status
     assert ensure.func is cli.cmd_ensure
     assert screen.func is cli.cmd_screen
@@ -50,6 +52,7 @@ def test_parser_shipped_verb_allowlist():
     assert history.func is cli.cmd_history
     assert watch.func is cli.cmd_watch
     assert attach.func is cli.cmd_attach
+    assert menumap.func is cli.cmd_menumap
     # Subparser choices are exactly the live verb table.
     sub = next(
         a for a in parser._actions if getattr(a, "choices", None) is not None

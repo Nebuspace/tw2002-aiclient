@@ -16,10 +16,23 @@ from pathlib import Path
 
 SCHEMA_VERSION = 1
 MENU_EDGE_KINDS = frozenset({"nav", "info", "action", "escape", "unknown"})
+KNOWLEDGE_FILENAME = "game_knowledge.json"
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+WORLD_STATE_DIR = _PROJECT_ROOT / "state" / "world"
 
 
 class GameKnowledgeError(Exception):
     pass
+
+
+def knowledge_path_for_world(world_id_slug, state_dir=None):
+    """Join ``state/world/<slug>/game_knowledge.json`` (no world_identity).
+
+    ``state_dir`` overrides the ``state/`` root (tests point at ``tmp_path``).
+    Pure path math — does not call credentials or world_identity.
+    """
+    base = Path(state_dir) / "world" if state_dir is not None else WORLD_STATE_DIR
+    return base / str(world_id_slug) / KNOWLEDGE_FILENAME
 
 
 def _now_iso():

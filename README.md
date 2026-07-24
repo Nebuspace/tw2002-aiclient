@@ -18,9 +18,9 @@ keystroke senders are `{app, human}` only.
 | Surface | Role |
 |---|---|
 | `./tw2002-aiclient` | **Product TUI** — profile launcher, play shell / cockpit chrome. Human-facing client. |
-| `./tw` | **Backend / ops CLI** — shipped verbs today: `status`, `ensure`, `screen`, `stop`, `do`, `send`, `read`, `history`, `watch`, `attach` (table grows one WO at a time). |
+| `./tw` | **Backend / ops CLI** — shipped verbs today: `status`, `ensure`, `screen`, `stop`, `do`, `send`, `read`, `history`, `watch`, `attach`, `menumap` (table grows one WO at a time). |
 
-Same daemon either way — one telnet connection. Prefer `./tw2002-aiclient` for day-to-day play; keep `./tw` for automation and ops. Further ops verbs (`spectate`, `attach`, …) are inventoried in [`workorders/WO-P2-OPS-VERB-SURFACE.md`](workorders/WO-P2-OPS-VERB-SURFACE.md) — not on `./tw --help` yet.
+Same daemon either way — one telnet connection. Prefer `./tw2002-aiclient` for day-to-day play; keep `./tw` for automation and ops. Further ops verbs (`spectate`, `loops`, …) are inventoried in [`workorders/WO-P2-OPS-VERB-SURFACE.md`](workorders/WO-P2-OPS-VERB-SURFACE.md) — not on `./tw --help` yet.
 
 
 ---
@@ -41,11 +41,11 @@ password never appears in logs, argv, shell history, or any output. If the
 connection drops, a background guardian reconnects and logs back in by itself.
 
 **📺 Ops visibility today.** `tw status` / `tw screen` / `tw stop` / `tw do` /
-`tw send` / `tw read` / `tw history` / `tw watch` / `tw attach` (plus `ensure`) are
-the shipped ops verbs. They talk to the daemon over a unix socket. Long-lived
-`tw spectate` and `tw state` (needs `state_parser`) are staged in
-[`WO-P2-OPS-VERB-SURFACE.md`](workorders/WO-P2-OPS-VERB-SURFACE.md) — **not** on
-`./tw --help` yet.
+`tw send` / `tw read` / `tw history` / `tw watch` / `tw attach` / `tw menumap`
+(plus `ensure`) are the shipped ops verbs. They talk to the daemon over a unix
+socket. Long-lived `tw spectate` and `tw state` (needs `state_parser`) are staged
+in [`WO-P2-OPS-VERB-SURFACE.md`](workorders/WO-P2-OPS-VERB-SURFACE.md) — **not**
+on `./tw --help` yet.
 
 **🤖 AI is a spectator-teacher, not a live pilot.** When invited, a retrospective
 AI teacher may propose draft rules or macros from history. Those drafts never
@@ -127,7 +127,7 @@ cp config/profiles.toml.example config/profiles.toml   # once; set host/game/han
 # ./tw stop            # graceful daemon shutdown when you're done
 ```
 
-Further ops verbs (`start`, `state`, `spectate`, `attach`, …) are **not
+Further ops verbs (`start`, `state`, `spectate`, `loops`, …) are **not
 shipped yet** — see
 [`workorders/WO-P2-OPS-VERB-SURFACE.md`](workorders/WO-P2-OPS-VERB-SURFACE.md).
 Cold start without a separate `tw start`: use `tw ensure --profile …` (it spawns
@@ -149,14 +149,15 @@ Everything takes `--json` for machine-parseable output where applicable.
 | `tw history [--n N]` | Recent verb/prompt entries from the live session history ring (secret inputs already redacted when recorded). |
 | `tw watch [--frames N]` | Tail the settle-edge push-stream (read-only `subscribe`). Prints each event; `--frames N` exits after N events (else Ctrl-C). |
 | `tw attach [--keys …]` | Take the control-lock and forward keystrokes (thin — no curses paint yet). TTY cbreak until Ctrl-]; `--keys` for scripted/non-TTY. |
+| `tw menumap --path FILE` | Read-only menu-map inspector (coverage / dead-ends / orphans / you-are-here ★). Optional live localize via `screen` when daemon up; never sends. `--world-id` joins `state/world/<slug>/game_knowledge.json`. |
 
 ### Coming (not on `./tw --help` yet)
 
-Remaining classic ops verbs (`start`, `state`, `spectate`, `menumap`, `loops`,
+Remaining classic ops verbs (`start`, `state`, `spectate`, `loops`,
 `autoloop`, …) are staged in
 [`WO-P2-OPS-VERB-SURFACE.md`](workorders/WO-P2-OPS-VERB-SURFACE.md)
-(A–C + E2 `watch` + F1 `attach` shipped; **F2 spectate HOLD** until CC re-opens;
-**G-PREP** inventories menumap/loops — see
+(A–C + E2 `watch` + F1 `attach` + G1 `menumap` shipped; **F2 spectate HOLD** until CC re-opens;
+**G-PREP** inventories loops — see
 [`WO-P2-OPS-VERB-G-PREP.md`](workorders/WO-P2-OPS-VERB-G-PREP.md)).
 
 Notes worth knowing up front:
@@ -192,7 +193,7 @@ and cockpit / play-shell compose against FakeClient and scripted sessions.
 ## Known limitations
 
 - Live `./tw` verbs today are **`status` / `ensure` / `screen` / `stop` / `do` /
-  `send` / `read` / `history` / `watch` / `attach`**; `tw state` waits on a
+  `send` / `read` / `history` / `watch` / `attach` / `menumap`**; `tw state` waits on a
   `state_parser` port; `tw start` / `tw spectate` intentionally not wired yet.
   Remaining slices in
   [`WO-P2-OPS-VERB-SURFACE.md`](workorders/WO-P2-OPS-VERB-SURFACE.md) land one WO at a time.

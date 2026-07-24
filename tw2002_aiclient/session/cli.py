@@ -407,6 +407,51 @@ def cmd_watch(args):
     return 0
 
 
+def cmd_menumap(args):
+    """WO-P2-OPS-VERB-G1: read-only menu-map inspector (coverage / orphans /
+    you-are-here). Never sends. Localizes the live screen when a daemon
+    is up; otherwise prints store-only with ``here off-map``."""
+    from tw2002_aiclient.menu import knowledge as menu_knowledge
+    from tw2002_aiclient.menu.map_view import (
+        format_menu_map_report,
+        menu_map_summary_from_store,
+    )
+    from tw2002_aiclient.menu.nav import localize
+
+    path = args.path
+    if not path and getattr(args, "world_id", None):
+        path = str(menu_knowledge.knowledge_path_for_world(args.world_id))
+    if not path:
+        print("ERROR: need --path or --world-id")
+        return 1
+
+    run_dir = _resolve_run_dir(getattr(args, "run_dir", None))
+    current_sig = None
+    if daemon_alive(run_dir):
+        resp = send_request("screen", {}, run_dir=run_dir)
+        if resp.get("ok"):
+            screen_text = "\n".join(resp.get("screen") or [])
+            try:
+                node = localize(screen_text, path) if screen_text.strip() else None
+            except (OSError, ValueError, TypeError, KeyError):
+                node = None
+            if node:
+                current_sig = node.get("signature")
+
+    try:
+        summary = menu_map_summary_from_store(path, current_sig=current_sig)
+    except (OSError, ValueError, TypeError, KeyError, menu_knowledge.GameKnowledgeError) as e:
+        print(f"ERROR: {e}")
+        return 1
+
+    if getattr(args, "json", False):
+        print(json.dumps({"ok": True, "path": path, **summary}))
+        return 0
+    for line in format_menu_map_report(summary):
+        print(line)
+    return 0
+
+
 def cmd_attach(args):
     """WO-P2-OPS-VERB-F1: take control_lock and forward keystrokes (thin).
 
@@ -613,6 +658,29 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--run-dir", default=None, metavar="PATH", dest="run_dir",
                      help="daemon run directory override (default: project-rooted run/)")
     sp.set_defaults(func=cmd_attach)
+
+    sp = sub.add_parser(
+        "menumap",
+        help=(
+            "read-only menu-map inspector: coverage, dead-ends, orphans, "
+            "and you-are-here ★ / off-map — never sends"
+        ),
+    )
+    sp.add_argument(
+        "--path",
+        default=None,
+        help="game_knowledge.json path (primary; required unless --world-id)",
+    )
+    sp.add_argument(
+        "--world-id",
+        dest="world_id",
+        default=None,
+        help="world_id slug under state/world/ (joins …/game_knowledge.json)",
+    )
+    sp.add_argument("--run-dir", default=None, metavar="PATH", dest="run_dir",
+                     help="daemon run directory override (default: project-rooted run/)")
+    sp.add_argument("--json", action="store_true", help="machine-parseable JSON output")
+    sp.set_defaults(func=cmd_menumap)
 
     return parser
 

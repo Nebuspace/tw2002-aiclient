@@ -43,7 +43,8 @@ closes the socket without driving the game.
 | **F1b** | attach secret redaction proofs | **DONE** (ledger sink banked) |
 | **F2a/b** | spectate_layout → spectate_app + `tw spectate` | **HOLD** — Max re-opens CC·Fable |
 | **G-PREP** | menumap / loops inventory | **DONE** — see `WO-P2-OPS-VERB-G-PREP.md` |
-| **G0–G1** | menu_* pure + `tw menumap` | queued (preferred next) |
+| **G0** | menu_* pure (sig/nav/map_view) | **DONE** |
+| **G1** | `tw menumap` CLI | **DONE** |
 | **G2–G4** | crawler · loops · autoloop | queued |
 
 **Accept for a wire slice:** verb on help · FakeSession · path-leak · full suite green.
