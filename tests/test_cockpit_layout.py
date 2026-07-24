@@ -15,6 +15,7 @@ import pytest
 from tw2002_aiclient.cockpit.layout import (
     FULL_GUTTER_MIN_COLS,
     GOALS_BOX_MIN_H,
+    HUD_BOX_MIN_H,
     LEFT_GUTTER_MIN_COLS,
     MIN_COLS,
     MIN_LINES,
@@ -26,7 +27,15 @@ from tw2002_aiclient.cockpit.layout import (
     frame_layout,
 )
 
-_REGION_KEYS = ("strip", "goals", "left_gutter", "center", "right_gutter", "logs")
+_REGION_KEYS = (
+    "strip",
+    "goals",
+    "left_gutter",
+    "center",
+    "right_gutter",
+    "decisions",
+    "logs",
+)
 
 
 def _present_regions(regions):
@@ -184,14 +193,28 @@ def test_corner_and_edge_coords_at_40x160():
     center = regions["center"]
     assert center == {"y": 2, "x": 39, "w": 82, "h": 26, "border": True}
 
+    # Right gutter is stacked HUD (top, claims its own floor first) above
+    # DECISIONS (below, gets whatever height remains) as of PWO-036 --
+    # together they still span the same y=2..28 / h=26 slot the single
+    # right_gutter box occupied pre-PWO-036. ``right_gutter`` keeps its key
+    # as the HUD sub-region (unchanged from pre-036 draw code); ``decisions``
+    # is the new sub-region below it.
     right = regions["right_gutter"]
-    assert right == {"y": 2, "x": 123, "w": 36, "h": 26}
+    assert right == {"y": 2, "x": 123, "w": 36, "h": HUD_BOX_MIN_H}
+
+    decisions = regions["decisions"]
+    assert decisions == {
+        "y": 2 + HUD_BOX_MIN_H,
+        "x": 123,
+        "w": 36,
+        "h": 26 - HUD_BOX_MIN_H,
+    }
 
     logs = regions["logs"]
     assert logs == {"y": 36, "x": 1, "w": 158, "h": 3}
 
     # every region stays inside the outer frame's inner inset
-    for region in (strip, goals, left, center, right, logs):
+    for region in (strip, goals, left, center, right, decisions, logs):
         assert region["x"] >= 1
         assert region["y"] >= 1
         assert region["x"] + region["w"] <= 159
@@ -256,6 +279,78 @@ def test_goals_and_priorities_together_span_the_full_left_gutter_height():
         regions = frame_layout(40, cols)
         goals, left, center = regions["goals"], regions["left_gutter"], regions["center"]
         total_h = goals["h"] + (left["h"] if left is not None else 0)
+        assert total_h == center["h"]
+
+
+# -- HUD/DECISIONS right-gutter stack (PWO-036) ---------------------------
+
+
+def test_hud_present_and_decisions_present_at_full_tier():
+    regions = frame_layout(40, FULL_GUTTER_MIN_COLS + 2)
+    assert regions["mode"] == "full"
+    hud, decisions = regions["right_gutter"], regions["decisions"]
+    assert hud is not None
+    assert hud["h"] == HUD_BOX_MIN_H
+    assert decisions is not None
+    # DECISIONS sits directly below HUD, same x, no gap.
+    assert decisions["y"] == hud["y"] + hud["h"]
+    assert decisions["x"] == hud["x"]
+    assert decisions["w"] == hud["w"]
+
+
+def test_hud_present_and_decisions_present_at_narrowed_right_gutter_tier():
+    regions = frame_layout(40, LEFT_GUTTER_MIN_COLS + 2)
+    assert regions["mode"] == "right_gutter"
+    hud, decisions = regions["right_gutter"], regions["decisions"]
+    assert hud is not None
+    assert hud["h"] == HUD_BOX_MIN_H
+    assert decisions is not None
+    assert decisions["y"] == hud["y"] + hud["h"]
+    assert decisions["x"] == hud["x"]
+
+
+def test_decisions_absent_when_right_gutter_absent():
+    regions = frame_layout(40, MINIMAL_HEADER_MIN_COLS + 2)
+    assert regions["right_gutter"] is None
+    assert regions["decisions"] is None
+
+
+def test_hud_claims_height_before_decisions_when_column_short(monkeypatch):
+    """A center_h shorter than HUD_BOX_MIN_H: HUD still renders (takes the
+    whole slot, clamped to what's available), DECISIONS drops to ``None``
+    rather than the two panels overlapping or HUD itself being starved
+    below DECISIONS. Unreachable under the real MIN_LINES=20 floor
+    (column_h there is always >= 14 > HUD_BOX_MIN_H=12), so this patches
+    the constant to exercise the degrade branch directly -- same
+    monkeypatch shape as ``test_goals_claims_height_before_priorities_
+    when_column_short``."""
+    import tw2002_aiclient.cockpit.layout as layout_module
+
+    monkeypatch.setattr(layout_module, "HUD_BOX_MIN_H", 999)
+    regions = layout_module.frame_layout(MIN_LINES, FULL_GUTTER_MIN_COLS + 2)
+    hud, decisions, center = regions["right_gutter"], regions["decisions"], regions["center"]
+    assert hud is not None
+    assert hud["h"] == center["h"]  # clamped to the whole available slot
+    assert decisions is None  # no height left for DECISIONS
+
+
+def test_hud_at_least_1x1_when_column_is_extremely_short(monkeypatch):
+    """Even a pathologically short slot still yields a >=1x1 HUD region,
+    never a 0-height/absent one, matching the layout's 'clamped to at least
+    1x1' invariant for every present region."""
+    import tw2002_aiclient.cockpit.layout as layout_module
+
+    monkeypatch.setattr(layout_module, "HUD_BOX_MIN_H", 999)
+    regions = layout_module.frame_layout(MIN_LINES, FULL_GUTTER_MIN_COLS + 2)
+    assert regions["right_gutter"]["h"] >= 1
+    assert regions["right_gutter"]["w"] >= 1
+
+
+def test_hud_and_decisions_together_span_the_full_right_gutter_height():
+    for cols in (FULL_GUTTER_MIN_COLS + 2, LEFT_GUTTER_MIN_COLS + 2, RIGHT_GUTTER_MIN_COLS + 2):
+        regions = frame_layout(40, cols)
+        hud, decisions, center = regions["right_gutter"], regions["decisions"], regions["center"]
+        total_h = hud["h"] + (decisions["h"] if decisions is not None else 0)
         assert total_h == center["h"]
 
 

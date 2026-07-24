@@ -36,7 +36,7 @@ Authored from a 3-lane read-only fan-out (panels/ledger · HUD/fold/colors · de
 - **Proof:** Layer-A — compose fixture with ≥2 ranked items + one gated → FOCUS lines ≠ GOALS lines. Layer-B — pty titles `FOCUS`/`PRIORITIES` visible when left gutter present (fold tier ≥138).
 - **Hazards:** FOCUS displays engine output only — does not *pick* unknown screens (later PWO-088). Collapse-into-DECISIONS at fold <138 is PWO-039's ladder; 035 Accept assumes full/wide tier unless testing fold.
 
-### PWO-036 — DECISIONS / coach tips panel (EXTEND)
+### PWO-036 — DECISIONS / coach tips panel (EXTEND) — **DONE 2026-07-24** (impl-claudecode-aiclient · Fable · `cockpit/decisions.py` composer (★/·/⊘, gate-wins-over-chosen, `["—","Exploring…"]` empty, imperative-denylist) + right-gutter HUD(12h)/DECISIONS stacked split + poll-guard fix (narrow-tier starvation) + Layer-B pty; lean Mack gate clean incl. e2e ESC-injection neutralization. Banked: coaching-engine callout = separate WO vs `coaching-engine.md`; world-model→DECISIONS metrics when ported; `ev_cr_per_turn`≠`ev_per_turn` upstream split documented — do not silently unify.)
 - **Depends-on:** 033 · 020
 - **Live state (tip):** **MISSING**.
 - **Accept:** DECISIONS / coach tips render read-only reasoning (`★` chosen · `·` other · `⊘` gated); **tips never send**; empty = `["—", "Exploring…"]` (or equivalent honest empty). No AI-drives badge (D5).

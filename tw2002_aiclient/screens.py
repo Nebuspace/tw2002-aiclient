@@ -11,6 +11,7 @@ from typing import Callable, Sequence
 
 import curses
 
+from tw2002_aiclient.cockpit import decisions as cockpit_decisions
 from tw2002_aiclient.cockpit import draw as cockpit_draw
 from tw2002_aiclient.cockpit import focus as cockpit_focus
 from tw2002_aiclient.cockpit import goals as cockpit_goals
@@ -297,11 +298,12 @@ BANK_TITLE = " PLAYER BANK "
 # GAME panel content -- the live game viewport is a later WO (PREP §5); this
 # is the honest placeholder canon calls for, never fake/invented content.
 _GAME_PLACEHOLDER = "(placeholder — live game viewport wired in a later WO)"
-# Empty-state fill for the HUD gutter before its data-source WO lands --
-# GOALS and FOCUS (PWO-034/035) now compose their own honest-empty content
-# from ``status`` directly (see below); HUD has no cited empty string at this
-# reduced scope, so it gets the DoD's other approved honest-empty spelling to
-# keep it visibly distinct while staying inside canon's stated vocabulary.
+# Empty-state fill for the HUD box before its data-source WO (PWO-037)
+# lands -- GOALS, FOCUS (PWO-034/035), and now DECISIONS (PWO-036) all
+# compose their own honest-empty content from ``status`` directly (see
+# below); HUD alone has no cited empty string at this reduced scope, so it
+# gets the DoD's other approved honest-empty spelling to keep it visibly
+# distinct while staying inside canon's stated vocabulary.
 _HUD_EMPTY = "(none yet)"
 _LOGS_EMPTY = "(none yet)"
 # A raising composer (bad input surviving to a status field, a future
@@ -312,6 +314,13 @@ _LOGS_EMPTY = "(none yet)"
 # em-dash glyph rather than inventing a second "something broke" vocabulary.
 _GOALS_COMPOSE_FAILED = ["—"]
 _FOCUS_COMPOSE_FAILED = ["—"]
+# DECISIONS' own composer already defines its honest-empty state as
+# ``["—", "Exploring…"]`` (canon `trainer-cockpit.md` "Panel states":
+# `DECISIONS shows ["—", "Exploring…"]`) -- the raising-composer fallback
+# mirrors that same two-line shape rather than the other panels' bare
+# em-dash, so a compose-time crash still reads as "known-nothing, not a
+# bug" instead of visibly regressing to a shorter, differently-shaped panel.
+_DECISIONS_COMPOSE_FAILED = ["—", "Exploring…"]
 BOUNDARY_LINE_1 = (
     "Rotation multiplies YOUR own daily turns across INDEPENDENT characters."
 )
@@ -329,27 +338,36 @@ class PlayShellScreen:
     titled ``PLAY SHELL``, the row-1 character/profile strip
     (``cockpit.strip.compose_profile_strip_from_row``), a three-column body
     (left gutter stacked GOALS above thin-rounded FOCUS | double-line
-    GAME viewport | thin-rounded HUD gutter), and the bottom thin-rounded
-    LOGS band carrying the ensure-session ``status_line``. The live game
-    viewport itself is a later WO -- GAME always shows an honest placeholder
-    line, never fake content. Below the fold floor (``mode == "too_small"``)
-    only the layout's refusal message is drawn. The left-gutter FOCUS box is
-    the ``left_gutter`` region internally (unchanged region key -- only its
+    GAME viewport | right gutter stacked thin-rounded HUD above thin-rounded
+    DECISIONS, PWO-036), and the bottom thin-rounded LOGS band carrying the
+    ensure-session ``status_line``. The live game viewport itself is a later
+    WO -- GAME always shows an honest placeholder line, never fake content.
+    Below the fold floor (``mode == "too_small"``) only the layout's
+    refusal message is drawn. The left-gutter FOCUS box is the
+    ``left_gutter`` region internally (unchanged region key -- only its
     drawn title and content are PWO-035; ``cockpit.layout``'s
-    PRIORITIES_W/PRIORITIES_MIN_W geometry constants are untouched).
+    PRIORITIES_W/PRIORITIES_MIN_W geometry constants are untouched). The
+    right-gutter HUD box is likewise still the ``right_gutter`` region
+    internally (unchanged key, pre-dating the split); DECISIONS is the new
+    ``decisions`` region below it.
 
-    ``status_provider`` (PWO-034/035) is the GOALS and FOCUS panels' shared
-    data seam: a no-arg callable returning a ``status`` dict (the daemon
-    ``status`` verb shape) or ``None``. Defaults to ``None`` -- with no
-    provider set, ``cockpit.goals.compose_goals_lines`` renders every row
-    honestly unknown and ``cockpit.focus.compose_focus_lines`` renders its
-    own honest-empty, rather than either panel going blank or inventing
-    content. Both panels read the SAME single ``status_provider()`` snapshot
-    per draw -- one poll per tick, not one per panel. ``app.py`` is the one
-    place that assigns a real provider; a raising provider never crashes the
-    draw pass (``draw()`` catches around the call and falls back to
-    ``None``, same honesty-over-crash convention as
-    ``adapters.ensure_session``).
+    ``status_provider`` (PWO-034/035/036) is the shared data seam for every
+    panel that reads live daemon state -- GOALS and FOCUS in the left
+    gutter, DECISIONS in the right: a no-arg callable returning a
+    ``status`` dict (the daemon ``status`` verb shape) or ``None``.
+    Defaults to ``None`` -- with no provider set, ``cockpit.goals.
+    compose_goals_lines`` renders every row honestly unknown,
+    ``cockpit.focus.compose_focus_lines`` renders its own honest-empty, and
+    ``cockpit.decisions.compose_decisions_lines`` renders its own
+    ``["—", "Exploring…"]`` honest-empty, rather than any panel going blank
+    or inventing content. Every panel reads the SAME single
+    ``status_provider()`` snapshot per draw -- one poll per tick (polled
+    whenever GOALS or DECISIONS is present this tier), not one per panel.
+    ``app.py`` is the one place that assigns a real provider; a raising
+    provider never crashes the draw pass (``draw()`` catches around the
+    call and falls back to ``None``, same honesty-over-crash convention as
+    ``adapters.ensure_session``). HUD itself does not yet read
+    ``status_provider`` -- its own data-source WO is PWO-037.
 
     Esc ends the binding and returns to the launcher — clean close, not a suspend.
     """
@@ -417,23 +435,31 @@ class PlayShellScreen:
             self.stdscr, goals, weight="thin", attr=self._chrome_attr,
             title="GOALS", title_attr=self._chrome_attr, uok=uok,
         )
-        # One status_provider() snapshot per draw, shared by GOALS and FOCUS
-        # below -- `goals` is only ever None when `left_gutter` (FOCUS) is
-        # None too (cockpit.layout.frame_layout gates both on the same
-        # pri_w > 0 fold-tier check), so this single guarded poll covers
-        # both panels; FOCUS never triggers a second provider call.
-        if goals is not None:
+        decisions = regions["decisions"]
+        # One status_provider() snapshot per draw, shared by every panel
+        # that reads it -- GOALS/FOCUS in the left gutter, DECISIONS in the
+        # right. Polled whenever EITHER `goals` or `decisions` is present
+        # this tier (they fold independently: `goals` gates on the left
+        # gutter's own pri_w > 0 check, `decisions` on the right gutter's
+        # has_right_gutter check -- a narrow right_gutter-only tier can
+        # have `goals is None` while `decisions` is still present, so the
+        # poll must not stay tied to `goals` alone), never a second call
+        # per panel.
+        if goals is not None or decisions is not None:
             try:
                 status = self.status_provider() if self.status_provider is not None else None
             except Exception:  # noqa: BLE001 -- a raising provider must not crash the draw pass
                 status = None
+        else:
+            status = None
+
+        if goals is not None:
             goals_inner_w = max(0, goals["w"] - 2)
             try:
                 goals_lines = cockpit_goals.compose_goals_lines(status, width=goals_inner_w)
             except Exception:  # noqa: BLE001 -- operator keeps control over panel-render failures
                 goals_lines = _GOALS_COMPOSE_FAILED
         else:
-            status = None
             goals_lines = []
         cockpit_draw.draw_lines(self.stdscr, goals, goals_lines, curses.A_NORMAL)
 
@@ -471,6 +497,22 @@ class PlayShellScreen:
             title="HUD", title_attr=self._chrome_attr, uok=uok,
         )
         cockpit_draw.draw_lines(self.stdscr, right, [_HUD_EMPTY], curses.A_NORMAL)
+
+        cockpit_draw.draw_box(
+            self.stdscr, decisions, weight="thin", attr=self._chrome_attr,
+            title="DECISIONS", title_attr=self._chrome_attr, uok=uok,
+        )
+        if decisions is not None:
+            decisions_inner_w = max(0, decisions["w"] - 2)
+            try:
+                decisions_lines = cockpit_decisions.compose_decisions_lines(
+                    status, width=decisions_inner_w
+                )
+            except Exception:  # noqa: BLE001 -- a raising panel must not crash the draw pass
+                decisions_lines = _DECISIONS_COMPOSE_FAILED
+        else:
+            decisions_lines = []
+        cockpit_draw.draw_lines(self.stdscr, decisions, decisions_lines, curses.A_NORMAL)
 
         logs = regions["logs"]
         cockpit_draw.draw_box(

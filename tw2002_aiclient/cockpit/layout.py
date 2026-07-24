@@ -9,11 +9,12 @@ archived ``twclient/spectate_layout.py::frame_layout`` reflow ladder, scoped
 down to what PWO-031/033 (+ PWO-034's GOALS/PRIORITIES stack) need: the
 outer frame, the row-1 character/profile strip band (PWO-032), the
 three-column body (left gutter, itself stacked GOALS above PRIORITIES |
-center game viewport | right HUD gutter), and the bottom LOGS band. The
-archived function's MENU MAP/FORMATIONS/DECISIONS/chain-bubble/control/
-intervention sub-regions belong to later WOs (mode-line, Phase 5) and are
-deliberately not ported here — see the module docstring on ``frame_layout``
-for the DOCS-WIN fold-floor correction this module encodes.
+center game viewport | right gutter, itself stacked HUD above DECISIONS
+per PWO-036), and the bottom LOGS band. The archived function's
+MENU MAP/FORMATIONS/chain-bubble/control/intervention sub-regions belong to
+later WOs (mode-line, Phase 5) and are deliberately not ported here — see
+the module docstring on ``frame_layout`` for the DOCS-WIN fold-floor
+correction this module encodes.
 """
 
 from __future__ import annotations
@@ -76,6 +77,33 @@ LOGS_MIN_H = 3
 GOALS_CONTENT_H = 9
 GOALS_BOX_MIN_H = GOALS_CONTENT_H + 2
 
+# HUD box height (PWO-036): the right gutter mirrors the left gutter's
+# stacked-panel shape — HUD stacks *above* DECISIONS (was the sole occupant
+# pre-PWO-036). Right-gutter prose calls HUD "the always-on live read" that
+# comes first in the gutter, and DECISIONS second (canon
+# `trainer-cockpit.md` "Right gutter" ~77-84) -- HUD is the priority
+# claimant here the same way GOALS is on the left: it claims its own
+# height floor first, DECISIONS gets whatever remains, shrinking or
+# dropping entirely rather than the two panels overlapping.
+#
+# HUD_CONTENT_H is grounded in the HUD's own cited cell inventory, not a
+# guess: canon's HUD section names five fixed-order fields --
+# CREDITS/SECTOR/TURNS/CARGO/PROFIT -- and states "SECTOR/TURNS/CARGO/
+# PROFIT follow in a uniform 2-row cell stride" (`trainer-cockpit.md`
+# "Spacing, alignment & hierarchy" ~306-310). The archived renderer this
+# doc cites (`spectate_app.py::_draw_hud_gutter`, ~1320-1344) confirms the
+# stride is uniform across all five cells, CREDITS included -- its extra
+# delta-chip/sparkline decorations render INLINE on the same two rows
+# (chip appended to the value row, sparkline appended to the freshness
+# row), not as additional rows. 5 cells x 2-row stride = 10 content rows;
+# PWO-037 (HUD freshness markers) is what actually fills these rows --
+# this WO reserves the geometry those cells need so the DECISIONS split
+# below never has to reflow again once 037 lands, the same forward-looking
+# spirit as GOALS_CONTENT_H reserving its own line count ahead of
+# state_parser wiring.
+HUD_CONTENT_H = 10
+HUD_BOX_MIN_H = HUD_CONTENT_H + 2
+
 
 def frame_layout(lines: int, cols: int) -> dict:
     """Pure reflow: given the terminal's current ``(lines, cols)``, decide
@@ -99,12 +127,14 @@ def frame_layout(lines: int, cols: int) -> dict:
 
     Regions returned: ``mode``, ``message`` (only set at ``too_small``),
     ``outer`` (the whole client), ``strip`` (row 1, the character/profile
-    band), ``goals``/``left_gutter``/``center``/``right_gutter`` (the
-    three-column body — each present only where its tier draws it; the left
-    gutter itself is stacked GOALS above PRIORITIES per PWO-034, see
-    ``GOALS_BOX_MIN_H``), ``logs`` (the bottom full-width band). Every
-    region is clamped to at least 1x1 and stays inside ``outer``; siblings
-    never overlap.
+    band), ``goals``/``left_gutter``/``center``/``right_gutter``/``decisions``
+    (the three-column body — each present only where its tier draws it; the
+    left gutter itself is stacked GOALS above PRIORITIES per PWO-034, see
+    ``GOALS_BOX_MIN_H``; the right gutter itself is stacked HUD above
+    DECISIONS per PWO-036, see ``HUD_BOX_MIN_H`` — ``right_gutter`` is the
+    HUD sub-region, unchanged key, ``decisions`` is the new sub-region below
+    it), ``logs`` (the bottom full-width band). Every region is clamped to
+    at least 1x1 and stays inside ``outer``; siblings never overlap.
     """
     if lines < MIN_LINES or cols < MIN_COLS:
         return {
@@ -122,6 +152,7 @@ def frame_layout(lines: int, cols: int) -> dict:
             "left_gutter": None,
             "center": None,
             "right_gutter": None,
+            "decisions": None,
             "logs": None,
         }
 
@@ -196,14 +227,44 @@ def frame_layout(lines: int, cols: int) -> dict:
         if pri_h > 0:
             left_gutter = {"y": rest_y + goals_h, "x": ox, "w": pri_w, "h": pri_h}
 
+    # The right gutter's ``center_h``-tall slot is itself stacked (PWO-036),
+    # mirroring the left gutter's GOALS-over-PRIORITIES split above: HUD
+    # claims up to ``HUD_BOX_MIN_H`` off the top first (right-gutter prose
+    # names HUD "the always-on live read" that comes first --
+    # `trainer-cockpit.md` "Right gutter" ~77-84 -- so it wins height
+    # contention the same way GOALS does on the left), DECISIONS gets
+    # whatever remains below it. HUD is present at 1x1-or-taller whenever
+    # the right gutter exists at all (``has_right_gutter``) — never dropped
+    # in favor of DECISIONS; DECISIONS is what shrinks, then drops
+    # (``None``) once HUD alone has consumed the whole slot. ``right_gutter``
+    # keeps its pre-PWO-036 key (it was the sole occupant, now it's the HUD
+    # sub-region) so ``screens.py``'s existing HUD draw call needs no key
+    # rename — same "reuse the existing key for the top-priority occupant"
+    # shape as ``left_gutter`` staying FOCUS's key after PWO-034.
+    #
+    # NOTE for the future Phase-5 intervention/STOP strip (frame PREP
+    # geometry guard #6): that strip claims height FIRST, ahead of every
+    # other region, when it lands -- this stacked-gutter shape does not
+    # preclude that; the strip's own floor will be carved out of ``rest_h``
+    # before this column split runs, same as LOGS is today.
     right_gutter = None
+    decisions = None
     if has_right_gutter:
+        hud_h = min(HUD_BOX_MIN_H, center_h)
         right_gutter = {
             "y": rest_y,
             "x": ox + i_cols - HUD_GUTTER_W,
             "w": HUD_GUTTER_W,
-            "h": center_h,
+            "h": hud_h,
         }
+        dec_h = center_h - hud_h
+        if dec_h > 0:
+            decisions = {
+                "y": rest_y + hud_h,
+                "x": ox + i_cols - HUD_GUTTER_W,
+                "w": HUD_GUTTER_W,
+                "h": dec_h,
+            }
 
     if mode == "full":
         left_edge = ox + pri_w
@@ -228,5 +289,6 @@ def frame_layout(lines: int, cols: int) -> dict:
         "left_gutter": left_gutter,
         "center": center,
         "right_gutter": right_gutter,
+        "decisions": decisions,
         "logs": logs,
     }
