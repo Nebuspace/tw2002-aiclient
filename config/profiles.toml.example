@@ -12,9 +12,10 @@
 # read out of this table.
 #
 # Fields:
-#   host              - server hostname (see config/servers.toml for the
-#                        public catalog, or set your own).
-#   port              - server port (int).
+#   server            - preferred: catalog key from config/servers.toml
+#                        (host/port resolve at load time from the catalog).
+#   host              - optional override hostname if not using `server`.
+#   port              - optional override port (int) if not using `server`.
 #   game_letter       - the single-letter game selection at the TWGS menu.
 #   handle            - your character's login handle.
 #   ship_name         - optional; ship name override.
@@ -29,8 +30,9 @@
 #                        autonomous actions on this profile. Default false.
 
 [example]
-host = "example.host"
-port = 2002
+server = "example_one"
+# host = "example.host"   # only if not using a catalog `server` key
+# port = 2002
 game_letter = "A"
 handle = "character-one"
 # ship_name = "MyShip"

@@ -1,4 +1,4 @@
-"""Curses app entry — routes a real TTY into the pre-cockpit launcher (WO-P1-010/011)."""
+"""Curses app entry — pre-cockpit launcher + create form (WO-P1-010…012)."""
 
 from __future__ import annotations
 
@@ -6,16 +6,32 @@ import os
 
 import curses
 
-from tw2002_aiclient.screens import LauncherScreen, ProfileRow
+from tw2002_aiclient.screens import CreateFormScreen, LauncherScreen, ProfileRow
+from tw2002_aiclient.session import credentials
+
+
+def _rows_from_disk() -> list[ProfileRow]:
+    rows: list[ProfileRow] = []
+    for summary in credentials.list_profile_summaries():
+        rows.append(
+            ProfileRow(
+                name=str(summary["name"]),
+                handle=str(summary.get("handle") or "?"),
+                server=str(summary.get("server") or "?"),
+                game_letter=str(summary.get("game_letter") or ""),
+                error=summary.get("error"),  # type: ignore[arg-type]
+            )
+        )
+    return rows
 
 
 def _load_profiles() -> list[ProfileRow]:
-    """Resolve launcher rows for smoke / fixtures (no credentials module yet).
+    """Resolve launcher rows: fixtures override disk for automated Proof.
 
     Env fixtures (disclose in STATUS):
-    - ``TW2002_LAUNCHER_FIXTURE=broken`` — one broken row (missing game_letter) + healthy CTA
+    - ``TW2002_LAUNCHER_FIXTURE=broken`` — one broken row + healthy CTA
     - ``TW2002_LAUNCHER_DEMO=1`` — two healthy demo rows
-    - default — empty list (cold join → Create CTA only)
+    - default — ``credentials.list_profile_summaries()`` (may be empty)
     """
     fixture = os.environ.get("TW2002_LAUNCHER_FIXTURE", "").strip().lower()
     if fixture == "broken":
@@ -32,11 +48,26 @@ def _load_profiles() -> list[ProfileRow]:
             ProfileRow(name="alpha", handle="Alpha", server="demo-a", game_letter="B"),
             ProfileRow(name="bravo", handle="Bravo", server="demo-b", game_letter="B"),
         ]
-    return []
+    return _rows_from_disk()
+
+
+def _run_create(stdscr: curses.window) -> str:
+    form = CreateFormScreen(stdscr)
+    while True:
+        form.draw()
+        key = stdscr.getch()
+        if key == -1:
+            continue
+        action = form.handle_key(key)
+        if action in ("saved", "cancel"):
+            return action
 
 
 def _run(stdscr: curses.window) -> None:
-    curses.curs_set(0)
+    try:
+        curses.curs_set(0)
+    except curses.error:
+        pass
     stdscr.keypad(True)
     stdscr.timeout(-1)
     screen = LauncherScreen(stdscr, profiles=_load_profiles())
@@ -52,6 +83,17 @@ def _run(stdscr: curses.window) -> None:
         action = screen.handle_key(key)
         if action == "quit":
             break
+        if action == "create":
+            result = _run_create(stdscr)
+            if result == "saved":
+                screen.set_profiles(_load_profiles())
+                # Prefer the newly created row when present; else stay on CTA.
+                if screen.profiles:
+                    screen.selected = len(screen.profiles) - 1
+            try:
+                curses.curs_set(0)
+            except curses.error:
+                pass
 
 
 def main() -> int:
