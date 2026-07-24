@@ -371,14 +371,11 @@ class LauncherScreen:
 PLAY_TITLE = " PLAY SHELL "
 # Retained for import compatibility (tests/test_play_chrome_nav.py imports
 # this name at module level) -- the chrome itself no longer draws this flat
-# placeholder line; the GAME panel's own honest placeholder line replaces
-# its purpose (PWO-031/033).
+# placeholder line; the GAME panel itself now draws an honest blank grid
+# (PWO-051) rather than any placeholder text (PWO-031/033).
 PLAY_SUBTITLE = " (placeholder — cockpit chrome is a later WO) "
 BANK_TITLE = " PLAYER BANK "
 
-# GAME panel content -- the live game viewport is a later WO (PREP §5); this
-# is the honest placeholder canon calls for, never fake/invented content.
-_GAME_PLACEHOLDER = "(placeholder — live game viewport wired in a later WO)"
 # A raising composer (bad input surviving to a status field, a future
 # panel's own bug, ...) must never take the whole cockpit down with it --
 # same honesty-over-crash fallback as an unreachable/raising status_provider
@@ -482,8 +479,10 @@ class PlayShellScreen:
     daemon's advancing session transcript tail (WO-P3-041, ``cockpit.
     logsband.compose_logs_lines``, falling back to the ensure-session
     ``status_line`` only while no real tail exists yet -- see the LOGS
-    paragraph below). The live game viewport itself is a later WO -- GAME
-    always shows an honest placeholder line, never fake content.
+    paragraph below). The live game viewport render itself is a later WO
+    (PWO-052) -- GAME shows an honest blank 80x24 grid inside its
+    double-line border today, zero inset, never placeholder text or fake
+    content (PWO-051).
     Below the fold floor (``mode == "too_small"``) only the layout's
     refusal message is drawn. The left-gutter FOCUS box is the
     ``left_gutter`` region internally (unchanged region key -- only its
@@ -829,23 +828,26 @@ class PlayShellScreen:
             focus_lines = []
         cockpit_draw.draw_lines(self.stdscr, left, focus_lines, curses.A_NORMAL)
 
+        # GAME viewport (PWO-051): an honest blank grid -- zero content is
+        # drawn into the interior on purpose (no placeholder text, no fake
+        # data; the live pyte/settle paint itself is PWO-052). At the
+        # bordered tiers only the double-line frame + title render, leaving
+        # the interior cells whatever `erase()` already left them (blank);
+        # at the `no_border` tier (`center["border"]` False) nothing is
+        # drawn at all -- the region stays reserved by `frame_layout`, same
+        # "reserved but unpainted" convention the tall-terminal gap band
+        # already uses elsewhere in this frame.
         center = regions["center"]
-        if center is not None:
-            if center["border"]:
-                # WO-P3-040: the viewport border's own STATE flip -- cyan
-                # chrome by default, red non-bold the instant a real,
-                # definite `connected: False` reaches us (honest-unknown
-                # otherwise; see `_viewport_border_attr`'s own docstring).
-                border_attr = self._viewport_border_attr(status)
-                cockpit_draw.draw_box(
-                    self.stdscr, center, weight="double", attr=border_attr,
-                    title="GAME", title_attr=border_attr, uok=uok,
-                )
-                cockpit_draw.draw_lines(self.stdscr, center, [_GAME_PLACEHOLDER], curses.A_NORMAL)
-            else:
-                cockpit_draw.draw_lines(
-                    self.stdscr, center, [_GAME_PLACEHOLDER], curses.A_NORMAL, boxed=False
-                )
+        if center is not None and center["border"]:
+            # WO-P3-040: the viewport border's own STATE flip -- cyan
+            # chrome by default, red non-bold the instant a real,
+            # definite `connected: False` reaches us (honest-unknown
+            # otherwise; see `_viewport_border_attr`'s own docstring).
+            border_attr = self._viewport_border_attr(status)
+            cockpit_draw.draw_box(
+                self.stdscr, center, weight="double", attr=border_attr,
+                title="GAME", title_attr=border_attr, uok=uok,
+            )
 
         right = regions["right_gutter"]
         cockpit_draw.draw_box(

@@ -281,6 +281,12 @@ def test_full_tier_strip_row_is_data_not_chrome_colored(_full_tier_capture):
 
 @_PTY_SKIP
 def test_full_tier_center_viewport_is_double_line_and_empty_panels_honest(_full_tier_capture):
+    """PWO-051: the GAME viewport's own honesty is a BLANK grid -- no
+    placeholder text, no fake content, just the double-line border around
+    empty interior cells (the live pyte/settle paint is PWO-052). FOCUS
+    states its own emptiness a different way -- an explicit em-dash row --
+    since it's a data panel with a real honest-empty composer, unlike GAME
+    which has no content composer at all yet."""
     regions = frame_layout(40, 160)
     screen = pyte_screen(_full_tier_capture, 40, 160)
     grid = list(screen.display)
@@ -290,8 +296,22 @@ def test_full_tier_center_viewport_is_double_line_and_empty_panels_honest(_full_
     top_y, left_x = center["y"], center["x"]
     assert screen.buffer[top_y][left_x].data == "╔"
 
-    # Empty panels state emptiness honestly -- never blank, never invented.
-    assert "placeholder" in "\n".join(grid).lower()
+    # The placeholder string is gone grid-wide (PWO-051 kill).
+    assert "placeholder" not in "\n".join(grid).lower()
+
+    # GAME's own interior is honestly blank -- zero cells painted, matching
+    # the "empty 80x24" Accept criterion (PREP §PWO-051), not merely "no
+    # placeholder word present" (which an unrelated stray glyph could
+    # satisfy too).
+    interior_top = center["y"] + 1
+    interior_bottom = center["y"] + center["h"] - 1  # exclusive of the bottom border row
+    interior_left = center["x"] + 1
+    interior_right = center["x"] + center["w"] - 1  # exclusive of the right border column
+    for row in range(interior_top, interior_bottom):
+        assert grid[row][interior_left:interior_right].strip() == "", (
+            f"GAME interior row {row} carries non-blank content"
+        )
+
     left = regions["left_gutter"]
     assert "—" in grid[left["y"] + 1]  # FOCUS empty-state row (no focus payload wired yet)
 

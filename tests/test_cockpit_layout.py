@@ -14,10 +14,12 @@ import pytest
 
 from tw2002_aiclient.cockpit.layout import (
     FULL_GUTTER_MIN_COLS,
+    GAME_H,
     GAME_W,
     GOALS_BOX_MIN_H,
     HUD_BOX_MIN_H,
     LEFT_GUTTER_MIN_COLS,
+    LOGS_MIN_H,
     MIN_COLS,
     MIN_LINES,
     MINIMAL_HEADER_MIN_COLS,
@@ -25,6 +27,8 @@ from tw2002_aiclient.cockpit.layout import (
     PRIORITIES_MIN_W,
     PRIORITIES_W,
     RIGHT_GUTTER_MIN_COLS,
+    STRIP_H,
+    VIEWPORT_H,
     VIEWPORT_W,
     frame_layout,
 )
@@ -168,6 +172,113 @@ def test_center_never_exceeds_viewport_width_across_bordered_tiers():
     ):
         regions = frame_layout(40, cols)
         assert regions["center"]["w"] == VIEWPORT_W
+
+
+# -- PWO-051: GAME viewport content budget (placeholder-kill) -----------
+#
+# PREP §PWO-051's Accept: "geometry matches VIEWPORT_W/H / GAME_W/H" -- the
+# GAME box's own INTERIOR content budget (one cell of border inset on every
+# side, per ``visual-language.md``'s "Viewport zero-inset is an invariant")
+# is exactly GAME_W x GAME_H whenever the center region has enough height to
+# reach its own VIEWPORT_H ceiling; below that it clips per the SAME formula
+# ``layout.py``'s own no_border branch uses (mirrored explicitly below,
+# never a hand-typed literal -- ``STRIP_H``/``LOGS_MIN_H``/the CONTROL_STRIP
+# carve are this module's own named constants, not magic numbers).
+
+
+def test_game_content_budget_is_80x24_at_full_tier_with_ample_height():
+    """At lines=40 the column band comfortably clears VIEWPORT_H (26) --
+    see ``test_corner_and_edge_coords_at_40x160`` above, which already pins
+    ``center['h'] == 26`` at this exact size -- so the GAME interior lands
+    on its full GAME_W x GAME_H (80x24) budget, not a height-clipped one."""
+    regions = frame_layout(40, FULL_GUTTER_MIN_COLS + 2)
+    center = regions["center"]
+    assert center["border"] is True
+    assert center["h"] == VIEWPORT_H  # the ceiling never binds at this size
+    assert center["w"] - 2 == GAME_W
+    assert center["h"] - 2 == GAME_H
+
+
+def test_game_content_budget_matches_across_every_bordered_tier():
+    """Same 80x24 interior budget at every bordered tier, not just 'full'
+    -- mirrors ``test_center_never_exceeds_viewport_width_across_bordered_
+    tiers``'s own tier list, extended to the height side too."""
+    for cols in (
+        FULL_GUTTER_MIN_COLS + 2,
+        LEFT_GUTTER_MIN_COLS + 2,
+        RIGHT_GUTTER_MIN_COLS + 2,
+        MINIMAL_HEADER_MIN_COLS + 2,
+    ):
+        regions = frame_layout(40, cols)
+        center = regions["center"]
+        assert center["border"] is True
+        assert center["w"] - 2 == GAME_W
+        assert center["h"] - 2 == GAME_H
+
+
+def _expected_column_h(lines: int) -> int:
+    """Mirrors ``frame_layout``'s own column-band height derivation
+    (``STRIP_H``/``LOGS_MIN_H``/the CONTROL_STRIP carve, ``layout.py``
+    lines ~175-222) -- computed here from the module's own named
+    constants, never a hand-typed literal, so this stays correct if any of
+    them ever change."""
+    i_lines = lines - 2 * OUTER_FRAME_PAD
+    rest_h = max(1, i_lines - STRIP_H)
+    logs_h = min(LOGS_MIN_H, max(1, rest_h - 1))
+    column_h = max(1, rest_h - logs_h)
+    if column_h > 1:
+        column_h -= 1  # CONTROL_STRIP's own single-row carve
+    return column_h
+
+
+def test_no_border_tier_center_dimensions_clip_to_layout_formula():
+    """``no_border`` tier's own width/height ceiling formula (``layout.py``
+    ~250-251: ``center_w = min(GAME_W, i_cols)``, ``center_h =
+    min(GAME_H, column_h)``) -- re-derived here at two sizes, one where
+    ``i_cols`` is the binding ceiling (narrow terminal) and one where
+    ``column_h`` is (short terminal), so both halves of each ``min()`` are
+    actually exercised rather than only ever hitting the same branch."""
+    # Narrow (raw MIN_COLS floor -- i_cols=58 < GAME_W=80): width ceiling
+    # binds on i_cols; height still has ample column_h (34, well above
+    # GAME_H) so it ceilings on GAME_H itself.
+    lines, cols = 40, MIN_COLS
+    regions = frame_layout(lines, cols)
+    assert regions["mode"] == "no_border"
+    i_cols = cols - 2 * OUTER_FRAME_PAD
+    assert i_cols < GAME_W  # confirms this size actually exercises the i_cols ceiling
+    center = regions["center"]
+    assert center["border"] is False
+    assert center["w"] == min(GAME_W, i_cols)
+    assert center["h"] == min(GAME_H, _expected_column_h(lines))
+
+    # Short (the real MIN_LINES floor): column_h (13) is now the binding
+    # height ceiling, below GAME_H (24).
+    lines, cols = MIN_LINES, MIN_COLS
+    regions = frame_layout(lines, cols)
+    assert regions["mode"] == "no_border"
+    expected_column_h = _expected_column_h(lines)
+    assert expected_column_h < GAME_H  # confirms this size exercises the column_h ceiling
+    center = regions["center"]
+    assert center["border"] is False
+    i_cols = cols - 2 * OUTER_FRAME_PAD
+    assert center["w"] == min(GAME_W, i_cols)
+    assert center["h"] == min(GAME_H, expected_column_h)
+
+
+def test_minimal_tier_center_height_clips_to_layout_formula():
+    """The ``minimal`` tier is still bordered (``center_h = min(VIEWPORT_H,
+    column_h)`` -- the BORDERED half of the same formula, ``layout.py``
+    line 251), so its own height ceiling is checked separately from the
+    ``no_border`` cases above at the real MIN_LINES floor, where
+    ``column_h`` (13) again binds below ``VIEWPORT_H`` (26)."""
+    regions = frame_layout(MIN_LINES, MINIMAL_HEADER_MIN_COLS + 2)
+    assert regions["mode"] == "minimal"
+    center = regions["center"]
+    assert center["border"] is True
+    expected_column_h = _expected_column_h(MIN_LINES)
+    assert expected_column_h < VIEWPORT_H
+    assert center["h"] == min(VIEWPORT_H, expected_column_h)
+    assert center["w"] == VIEWPORT_W
 
 
 # -- corner/edge coords at a specific size (40 x 160, full tier) ---------
