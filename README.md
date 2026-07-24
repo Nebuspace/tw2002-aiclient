@@ -70,9 +70,9 @@ One long-lived daemon, short-lived windows into it:
 ```
   you ──── ./tw2002-aiclient (play / cockpit) ──▶ ┌──────────────┐
                                                    │ twd (daemon) │ ── telnet ──▶ TW2002 server
-  ops ─── tw ensure/status/screen/stop/do/send/read ▶ │  the ONE     │
+  ops ─── tw ensure/status/…/watch/attach/menumap ▶│  the ONE     │
                                                    │  connection  │
-  Coming: tw spectate (see WO) ───────────────────▶└──────────────┘
+  Coming: tw spectate · start · state · loops … ──▶└──────────────┘
 ```
 
 - **The daemon (`twd`)** owns the single telnet connection and a pyte terminal
@@ -80,11 +80,11 @@ One long-lived daemon, short-lived windows into it:
   everything over a local unix socket. You never run it directly.
 - **The CLI (`tw`)** is stateless: every verb connects, asks, prints, exits.
   Shipped today: `ensure`, `status`, `screen`, `stop`, `do`, `send`, `read`,
-  `history`, `watch`, `attach`. More verbs land one WO at a time — see the Verb
-  reference and the ops WO.
-- **Product play** is `./tw2002-aiclient`, not `./tw`. Future ops `spectate`
-  stays layered on the same daemon without disturbing the session — it is
-  **Coming**, not live (`attach` already ships thin).
+  `history`, `watch`, `attach`, `menumap`. More verbs land one WO at a time —
+  see the Verb reference and the ops WO.
+- **Product play** is `./tw2002-aiclient`, not `./tw`. Thin `tw attach` /
+  `tw watch` / `tw menumap` already ship on the same daemon; full-curses
+  `tw spectate` (and `start` / `state` / `loops`) stay **Coming**.
 - **A control lock** arbitrates the one connection: App (taught autopilot) or
   human at the keyboard — exactly one live driver at a time. The AI is never a
   live driver.
@@ -156,8 +156,8 @@ Everything takes `--json` for machine-parseable output where applicable.
 Remaining classic ops verbs (`start`, `state`, `spectate`, `loops`,
 `autoloop`, …) are staged in
 [`WO-P2-OPS-VERB-SURFACE.md`](workorders/WO-P2-OPS-VERB-SURFACE.md)
-(A–C + E2 `watch` + F1 `attach` + G1 `menumap` shipped; **F2 spectate HOLD** until CC re-opens;
-**G-PREP** inventories loops — see
+(A–C + E2 `watch` + F1 `attach` + G1 `menumap` shipped; **F2 spectate** and
+**G2–G4** crawler/loops/autoloop **HOLD** until Max GO — see
 [`WO-P2-OPS-VERB-G-PREP.md`](workorders/WO-P2-OPS-VERB-G-PREP.md)).
 
 Notes worth knowing up front:
@@ -173,9 +173,9 @@ Notes worth knowing up front:
 `tw attach` is **shipped** (thin): control-lock + keystroke forward; no live
 screen paint yet — pair with `tw watch`. Secret keystrokes at password/PIN
 prompts are redacted in the transcript log and `last_sent` via
-`Session.send_raw` (ledger/`record_attach_keystroke` still cut). Full curses
-attach / `tw spectate` remain Coming — see
-[`WO-P2-OPS-VERB-F-PREP.md`](workorders/WO-P2-OPS-VERB-F-PREP.md) (F2).
+`Session.send_raw` (ledger/`record_attach_keystroke` still cut). Full-curses
+`tw spectate` remains Coming (F2 HOLD) — see
+[`WO-P2-OPS-VERB-F-PREP.md`](workorders/WO-P2-OPS-VERB-F-PREP.md).
 
 
 ## Tests
