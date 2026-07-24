@@ -7,6 +7,12 @@ and behave well enough for later frame WOs to build on.
 from __future__ import annotations
 
 import ast
+import os
+import pty
+import select
+import subprocess
+import sys
+import time
 from pathlib import Path
 
 from tests.fake_client import FakeClient
@@ -80,3 +86,91 @@ def test_claim_ctty_opt_in_is_documented_kwarg():
         params = inspect.signature(fn).parameters
         assert "claim_ctty" in params
         assert params["claim_ctty"].default is False
+
+
+_SIGWINCH_CHILD = (
+    "import signal, sys, time\n"
+    "got = []\n"
+    "def _h(s, f):\n"
+    "    got.append(1)\n"
+    "    sys.stdout.write('WINCH\\n')\n"
+    "    sys.stdout.flush()\n"
+    "signal.signal(signal.SIGWINCH, _h)\n"
+    "sys.stdout.write('READY\\n')\n"
+    "sys.stdout.flush()\n"
+    "deadline = time.monotonic() + 2.0\n"
+    "while time.monotonic() < deadline and not got:\n"
+    "    time.sleep(0.05)\n"
+    "sys.stdout.write('DONE\\n')\n"
+    "sys.stdout.flush()\n"
+)
+
+
+def _drive_sigwinch_probe(*, claim_ctty: bool) -> bytes:
+    """Tiny openpty driver mirroring capture_pty's claim_ctty branch."""
+    from tests.pty_helpers import _claim_controlling_tty
+
+    master_fd, slave_fd = pty.openpty()
+    set_winsize(slave_fd, 24, 80)
+    popen_kwargs: dict = {
+        "stdin": slave_fd,
+        "stdout": slave_fd,
+        "stderr": slave_fd,
+    }
+    if claim_ctty:
+        def _preexec() -> None:
+            _claim_controlling_tty(slave_fd)
+
+        popen_kwargs["preexec_fn"] = _preexec
+    else:
+        popen_kwargs["start_new_session"] = True
+
+    proc = subprocess.Popen([sys.executable, "-c", _SIGWINCH_CHILD], **popen_kwargs)
+    os.close(slave_fd)
+
+    captured = b""
+    resized = False
+    deadline = time.monotonic() + 4.0
+    try:
+        while time.monotonic() < deadline:
+            ready, _, _ = select.select([master_fd], [], [], 0.2)
+            if master_fd in ready:
+                try:
+                    chunk = os.read(master_fd, 4096)
+                except OSError:
+                    break
+                if not chunk:
+                    break
+                captured += chunk
+            if b"READY" in captured and not resized:
+                set_winsize(master_fd, 30, 100)
+                resized = True
+            if b"DONE" in captured:
+                break
+    finally:
+        if proc.poll() is None:
+            proc.kill()
+        try:
+            proc.wait(timeout=2)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.wait(timeout=2)
+        try:
+            os.close(master_fd)
+        except OSError:
+            pass
+    return captured
+
+
+def test_claim_ctty_delivers_sigwinch_on_master_resize():
+    """Opt-in ctty path: TIOCSWINSZ on master → SIGWINCH in child."""
+    out = _drive_sigwinch_probe(claim_ctty=True)
+    assert b"READY" in out
+    assert b"WINCH" in out
+
+
+def test_default_spawn_does_not_deliver_sigwinch():
+    """Default start_new_session=True path stays non-ctty (030/cockpit-safe)."""
+    out = _drive_sigwinch_probe(claim_ctty=False)
+    assert b"READY" in out
+    assert b"WINCH" not in out

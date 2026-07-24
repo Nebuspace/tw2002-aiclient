@@ -32,9 +32,11 @@ Live-resize tests that need ``SIGWINCH`` when the parent calls
     capture_pty(..., claim_ctty=True)
     capture_pty_with_keys(..., claim_ctty=True)
 
-That path still uses ``start_new_session=True`` (session leader), then a
-``preexec_fn`` that ``ioctl(0, TIOCSCTTY)`` so the slave becomes the
-controlling tty and kernel window-size changes deliver ``SIGWINCH``.
+That path skips ``start_new_session`` and instead runs ``preexec_fn`` →
+``os.setsid()`` + ``ioctl(slave_fd, TIOCSCTTY)`` so the slave becomes the
+controlling tty and a later ``set_winsize(master_fd, …)`` delivers
+``SIGWINCH``. Custom Layer-B drivers can also call
+``_claim_controlling_tty`` from their own ``preexec_fn``.
 """
 
 from __future__ import annotations
@@ -67,23 +69,18 @@ def _claim_controlling_tty(slave_fd: int) -> None:
     """Make ``slave_fd`` this process's controlling terminal (resize opt-in).
 
     Default ``capture_pty*`` uses ``start_new_session=True`` alone — the child
-    is session-leader-ish via Popen but never claims the pty as ctty, so
+    is a session leader via Popen but never claims the pty as ctty, so
     ``SIGWINCH`` from a later ``TIOCSWINSZ`` on the master is never delivered.
-    Call this from ``preexec_fn`` when ``claim_ctty=True``.
+    Call from ``preexec_fn`` when ``claim_ctty=True`` (do **not** also pass
+    ``start_new_session=True`` — this function calls ``setsid`` itself).
     """
     os.setsid()
-    # TIOCSCTTY: claim controlling tty. Value is platform-constant; fcntl
-    # ioctl with arg 0 is the usual Unix form.
-    try:
-        fcntl.ioctl(slave_fd, termios.TIOCSCTTY, 0)
-    except (OSError, AttributeError):
-        # AttributeError if TIOCSCTTY missing; OSError if already claimed /
-        # unsupported — leave session without ctty (same as default path).
-        pass
+    # TIOCSCTTY: claim controlling tty (usual Unix form: ioctl arg 0).
+    fcntl.ioctl(slave_fd, termios.TIOCSCTTY, 0)
 
 
 def set_winsize(fd: int, rows: int, cols: int) -> None:
-    """``TIOCSWINSZ`` on a pty slave — required before curses initscr sees size."""
+    """``TIOCSWINSZ`` on a pty fd — size for curses; master resize → SIGWINCH iff ctty."""
     fcntl.ioctl(fd, termios.TIOCSWINSZ, struct.pack("HHHH", rows, cols, 0, 0))
 
 
