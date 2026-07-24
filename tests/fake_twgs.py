@@ -27,6 +27,33 @@ exercises the RETURNING branch's fail-fast, send-once ceiling, canon:
 proven fixtures (`archive/pre-rebirth-2026-07-23/code/tests/test_login.py`'s
 `_new_registration_steps`), same discipline as the RETURNING text below.
 
+`"returning"`-only resume knobs (WO-P2-024, idempotent-resume proof, canon:
+`login-automaton.md`'s "Idempotent resume" section): `start_at=<step>`
+begins the CONNECTION already presenting a given pre-login screen (one of
+`_PRE_LOGIN_STEPS` below) as the very FIRST thing sent, skipping every
+earlier step entirely -- simulating a socket a prior partial drive already
+carried mid-flow, the shape a fresh `ensure` against an already-mid-flow
+session sees. Since the automaton is reactive/screen-keyed rather than
+step-counted (`_decide()` dispatches on the CURRENT classification only),
+it needs no special-casing to resume from here -- proving that IS the
+point. `restale_game_select=True` re-presents a STALE, un-cleared
+`"Select a game :"` screen once, right after the real game_select is
+answered and the flow has genuinely moved on to module_entry_menu -- a
+redraw/scrollback-glitch shape, not a second real door-select -- exercising
+`session.game_select_answered`'s no-double-answer refusal in `login.py`'s
+`_decide()` (returns `None`, the same "nothing matched" signal any other
+unrecognized screen produces, rather than re-sending the letter). Both
+raise `ValueError` at construction time if combined with a non-`"returning"`
+mode -- neither knob has meaning for the NEW/refused/wrong_password arcs.
+
+Every scripted step's received input is ALSO captured generically on
+`.received_inputs` (`dict[label, list[str]]`, append-only, same `label`
+strings passed to `_expect_line`/`_expect_key`/`_capture_line`) -- lets a
+test assert a given step fired EXACTLY ONCE (or not at all, for a skipped
+`start_at` prefix) without needing a dedicated field per step the way
+`.received_passwords`/`.generated_password` already are for the
+password-specific steps.
+
 State machine (RETURNING flow -- the primary/default path; see above for the
 other three `mode`s):
 
@@ -124,6 +151,18 @@ class FakeTWGS:
     control. Reusable across tests -- construct a fresh instance per test,
     never share one live server between tests."""
 
+    # The 6 pre-login screens, in their natural (cold-start) order -- see
+    # `_run_pre_login`'s `start_at` handling and the module docstring's
+    # resume-knobs paragraph.
+    _PRE_LOGIN_STEPS = (
+        "outer_name",
+        "game_select",
+        "module_entry_menu",
+        "login_name",
+        "ansi_prompt",
+        "show_log",
+    )
+
     def __init__(
         self,
         *,
@@ -135,6 +174,8 @@ class FakeTWGS:
         ship_name: str | None = None,
         planet_name: str | None = None,
         post_password_delay_s: float = 0.0,
+        start_at: str | None = None,
+        restale_game_select: bool = False,
     ):
         self.handle = handle
         self.game_letter = game_letter
@@ -150,6 +191,15 @@ class FakeTWGS:
         # (welcome + main_command) arrives. 0.0 (default) is the
         # already-proven instant-response shape every other test uses.
         self.post_password_delay_s = post_password_delay_s
+        # "returning" mode only (WO-P2-024 resume knobs -- see module
+        # docstring): fail loud at construction time rather than silently
+        # ignoring a knob that has no meaning for the other 3 arcs.
+        if (start_at is not None or restale_game_select) and mode != "returning":
+            raise ValueError("start_at/restale_game_select are only meaningful for mode='returning'")
+        if start_at is not None and start_at not in self._PRE_LOGIN_STEPS:
+            raise ValueError(f"unknown start_at step: {start_at!r} (expected one of {self._PRE_LOGIN_STEPS!r})")
+        self.start_at = start_at
+        self.restale_game_select = restale_game_select
         self.errors: list[str] = []
 
         # -- mode-specific outcomes, populated by the matching _run_* method
@@ -158,6 +208,9 @@ class FakeTWGS:
         self.generated_password: str | None = None  # "new"
         self.received_after_char_create: bool | None = None  # "refused"
         self.received_passwords: list[str] = []  # "wrong_password"
+        # Generic per-label capture, additive alongside the two fields
+        # above -- see module docstring's resume-knobs paragraph.
+        self.received_inputs: dict[str, list[str]] = {}
 
         self._listener: socket.socket | None = None
         self._port: int | None = None
@@ -234,24 +287,60 @@ class FakeTWGS:
     def _run_pre_login(self, conn: socket.socket, reader: "_Reader"):
         """The 6 screens common to every mode -- outer name through
         show-log -- identical regardless of which branch (RETURNING vs
-        NEW vs refused) comes next."""
-        self._send(conn, "Please enter your name (ENTER for none):")
-        self._expect_line(reader, expected="", label="outer_name")
+        NEW vs refused) comes next.
 
-        self._send(conn, f"<{self.game_letter}> Bob the Builder\r\nSelect a game :")
-        self._expect_key(reader, expected=self.game_letter, label="game_select")
+        `self.start_at` (returning-only, see module docstring) skips every
+        step BEFORE it entirely -- the connection's very first bytes are
+        the resumed screen, never the cold-start prefix -- proving the
+        automaton needs no special-casing to pick up mid-flow.
 
-        self._send(conn, "T - Play Trade Wars 2002\r\nI - Introduction & Help\r\nEnter your choice:")
-        self._expect_line(reader, expected="T", label="module_entry_menu")
+        `self.restale_game_select` (returning-only) re-presents a STALE,
+        un-cleared "Select a game :" screen once, right after the real
+        game_select has been answered and module_entry_menu's own reply
+        ("T") has been read -- i.e. the flow has genuinely LEFT
+        game_select already (the precondition `session.game_select_
+        answered` itself requires). No `_expect_*` read follows the stale
+        send: `login.py`'s `_decide()` refuses it (returns `None`), so the
+        client sends nothing back at all -- the server just holds long
+        enough for the automaton's own idle-settle grace to observe the
+        stale screen as genuinely settled (and for send_and_confirm's
+        confirm of the PRECEDING "T" send to resolve against it) before
+        moving on to the real next screen, `login_name`. The sleep here
+        is real wall-clock margin around `settle.py`'s 350ms debounce +
+        150ms stability-pause (send_and_confirm) so the stale screen is
+        never overwritten before either confirm can observe it settled.
+        """
+        steps = self._PRE_LOGIN_STEPS
+        if self.start_at is not None:
+            steps = steps[steps.index(self.start_at) :]
 
-        self._send(conn, "What is your name?")
-        self._expect_line(reader, expected=self.handle, label="login_name")
+        if "outer_name" in steps:
+            self._send(conn, "Please enter your name (ENTER for none):")
+            self._expect_line(reader, expected="", label="outer_name")
 
-        self._send(conn, "Use ANSI graphics?")
-        self._expect_line(reader, expected="Y", label="ansi_prompt")
+        if "game_select" in steps:
+            self._send(conn, f"<{self.game_letter}> Bob the Builder\r\nSelect a game :")
+            self._expect_key(reader, expected=self.game_letter, label="game_select")
 
-        self._send(conn, "Show today's log? (Y/N) [N]")
-        self._expect_line(reader, expected="N", label="show_log")
+        if "module_entry_menu" in steps:
+            self._send(conn, "T - Play Trade Wars 2002\r\nI - Introduction & Help\r\nEnter your choice:")
+            self._expect_line(reader, expected="T", label="module_entry_menu")
+
+            if self.restale_game_select:
+                self._send(conn, f"<{self.game_letter}> Bob the Builder\r\nSelect a game :")
+                time.sleep(1.0)
+
+        if "login_name" in steps:
+            self._send(conn, "What is your name?")
+            self._expect_line(reader, expected=self.handle, label="login_name")
+
+        if "ansi_prompt" in steps:
+            self._send(conn, "Use ANSI graphics?")
+            self._expect_line(reader, expected="Y", label="ansi_prompt")
+
+        if "show_log" in steps:
+            self._send(conn, "Show today's log? (Y/N) [N]")
+            self._expect_line(reader, expected="N", label="show_log")
 
     def _run_returning(self, conn: socket.socket, reader: "_Reader"):
         self._run_pre_login(conn, reader)
@@ -368,6 +457,7 @@ class FakeTWGS:
         except ConnectionError:
             return
         self.received_passwords.append(line)
+        self._record("login_password", line)
 
         # Re-present the SAME gate -- the rejection signal the RETURNING
         # branch's fail-fast ceiling reacts to. If the automaton instead
@@ -433,13 +523,24 @@ class FakeTWGS:
         # a real TWGS door's redraw discipline already keeps it.
         conn.sendall(("\x1b[2J\x1b[H" + text).encode("cp437", errors="replace"))
 
+    def _record(self, label: str, value: str):
+        """Generic per-label capture -- see module docstring's resume-knobs
+        paragraph. Additive alongside the mode-specific fields
+        (`.received_passwords`/`.generated_password`) already populated by
+        their own call sites; this fires on EVERY labeled read, across all
+        4 modes, so a test can assert "this step fired exactly once (or
+        zero times)" without a dedicated field per step."""
+        self.received_inputs.setdefault(label, []).append(value)
+
     def _expect_line(self, reader: _Reader, *, expected: str, label: str):
         got = reader.read_line().decode("cp437", errors="replace")
+        self._record(label, got)
         if got != expected:
             self.errors.append(f"{label}: expected {expected!r}, got {got!r}")
 
     def _expect_key(self, reader: _Reader, *, expected: str, label: str):
         got = reader.read_exact(len(expected.encode("cp437"))).decode("cp437", errors="replace")
+        self._record(label, got)
         if got != expected:
             self.errors.append(f"{label}: expected {expected!r}, got {got!r}")
 
@@ -449,6 +550,7 @@ class FakeTWGS:
         CSPRNG-generated password, whose value this fake can't know ahead
         of time (see module docstring)."""
         got = reader.read_line().decode("cp437", errors="replace")
+        self._record(label, got)
         if not got:
             self.errors.append(f"{label}: expected a non-empty password, got {got!r}")
         return got
