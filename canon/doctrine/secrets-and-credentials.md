@@ -3,7 +3,7 @@ type: Doctrine
 title: Secrets & Credential Handling
 description: The non-negotiable discipline for storing, resolving, redacting, and rotating the operator's game passwords and credentials — secrets never touch logs, argv, history, or the repo.
 tags: [doctrine, secrets, credentials, security, redaction, public-repo]
-timestamp: 2026-07-23T19:47:48Z
+timestamp: 2026-07-24T21:56:00Z
 ---
 
 A game password belongs to **the operator**, and to the operator alone. Nothing in this system —
@@ -145,13 +145,23 @@ Redaction sinks (a secret-bearing send uses one; none logs a byte count):
 or falls short of, the reborn target. They are documentation findings — this concept edits no
 code.)*
 
-1. **RX transcript is unredacted (TX-only redaction).** Redaction is enforced on the *send* side;
-   the receive-side reader logs every received frame verbatim. The no-leak guarantee on the RX
-   channel therefore relies on the standard telnet behavior that a password prompt suppresses
-   local echo and the server does not echo the secret. This holds for conventional TW2002 login
-   flows, but the invariant "secrets never touch logs" is *structurally* enforced only on TX; a
-   server that ever echoed a typed password back would capture it into the RX transcript. Recorded
-   here as the one honest boundary of the redaction guarantee.
+1. **RX transcript is unredacted (TX-only redaction) — and the same class can leave via the
+   live status verb.** Redaction is enforced on the *send* side; the receive-side reader logs
+   every received frame verbatim. The no-leak guarantee on the RX channel therefore relies on the
+   standard telnet behavior that a password prompt suppresses local echo and the server does not
+   echo the secret. This holds for conventional TW2002 login flows, but the invariant "secrets
+   never touch logs" is *structurally* enforced only on TX; a server that ever echoed a typed
+   password back would capture it into the RX transcript.
+
+   **Status-verb wire (Mack PoC, P3-041):** the same root cause is not limited to the on-disk
+   transcript log file. `status["prompt"]` (and any other response field that mirrors the live
+   pyte tail / last row) is built from the unredacted receive buffer (`session/protocol.py` /
+   `build_response`). An echoing server can therefore put secret bytes onto the **live status
+   JSON** consumed by cockpit / `tw status` / subscribers — even when TX redaction and the LOGS
+   ring (`log_tail`, redact-at-insert) are airtight. `fake_twgs` never echoes, so green e2e against
+   it does **not** prove this boundary. Recorded here as the honest scope of Code-Divergence #1;
+   a harden WO (redact-or-omit sensitive status fields) is **out of scope** for docs-only
+   touch-ups — this paragraph is the DOC-GAP close for naming.
 
 2. **The App can mint and persist a credential without a human typing it.** When a profile opts
    into automated NEW-character registration, the login automaton generates a password (CSPRNG,

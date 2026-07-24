@@ -182,14 +182,14 @@ Banked hygiene (not a PWO id): **pty mid-flush settle** — PREP `workorders/WO-
 
 | ID | Title | Type | Depends | Goal | Accept | Proof | Canon |
 |----|-------|------|---------|------|--------|-------|-------|
-| PWO-050 | Watch-stream subscribe | build | 020 | Product reads settle stream | frames arrive | unit/live | spectate-and-attach |
-| PWO-051 | Center 80×24 viewport shell | build | 033·050 | Empty bordered 82×26 | geometry | TTY | trainer-cockpit GAME UI |
-| PWO-052 | Viewport render grid | build | 051 | pyte cells drawn | matches spectate | side-by-side | spectate-and-attach color · visual-language |
-| PWO-053 | Viewport color parity | harden | 052 | Color map == ops spectate | visual/diff | TTY | spectate… N3 · visual-language |
-| PWO-054 | Disconnect viewport chrome | build | 051 | Warn/danger border when down | state visible | kill sock | trainer-cockpit states |
-| PWO-055 | Product spectate mode (read-only) | build | 050 | Watch without lock | no sends | TTY | spectate-and-attach · visual-language |
-| PWO-056 | Attach from cockpit | verify/build | 020 | `h` / attach takes lock | Human badge | TTY | spectate-and-attach |
-| PWO-057 | Detach returns App path | verify | 056 | Ctrl-] / detach | lock released | TTY | control-and-escalation |
+| PWO-050 | Watch-stream subscribe — PREP `WO-P4-050-057-viewport-PREP.md` | build | 020 | Product reads settle stream | frames arrive | unit/live | spectate-and-attach |
+| PWO-051 | Center 80×24 viewport shell — PREP (same) | build | 033·050 | Empty bordered 82×26 | geometry | TTY | trainer-cockpit GAME UI |
+| PWO-052 | Viewport render grid — PREP (same) | build | 051 | pyte cells drawn | matches spectate | side-by-side | spectate-and-attach color · visual-language |
+| PWO-053 | Viewport color parity — PREP (same) | harden | 052 | Color map == ops spectate | visual/diff | TTY | spectate… N3 · visual-language |
+| PWO-054 | Disconnect viewport chrome — PREP (same) | build | 051 | Warn/danger border when down | state visible | kill sock | trainer-cockpit states |
+| PWO-055 | Product spectate mode (read-only) — PREP (same · F2 ops CLI HOLD) | build | 050 | Watch without lock | no sends | TTY | spectate-and-attach · visual-language |
+| PWO-056 | Attach from cockpit — PREP (same) | verify/build | 020 | `h` / attach takes lock | Human badge | TTY | spectate-and-attach |
+| PWO-057 | Detach returns App path — PREP (same) | verify | 056 | Ctrl-] / detach | lock released | TTY | control-and-escalation |
 
 ### Phase 5 — Mode line, escalation, teach
 
