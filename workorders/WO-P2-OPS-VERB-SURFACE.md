@@ -1,6 +1,6 @@
 # WO-P2-OPS-VERB-SURFACE — Ops CLI verb inventory + wire plan
 
-> Status: **slice E DONE (docs-only)** pending Accept · tip `135ee38`
+> Status: **WATCHHUB-PORT DONE** pending Accept · tip `78bb983`
 > Seat: `impl-aiclient-cursor`
 > Refs: hub banked gap after WO-P0-TW-SHIM · `canon/architecture/cli-verbs.md` ·
 > `canon/surfaces/spectate-and-attach.md`
@@ -18,23 +18,18 @@ stage ordered execute slices to grow the verb table one WO at a time.
 |------|-------|-------|
 | `status` … `history` | **YES** | slices A–C |
 | `start` | **NO** | slice D docs-only |
-| `watch` | **NO** | **slice E docs-only** — see rationale |
+| `watch` | **NO CLI** | **WatchHub substrate LIVE** (WO-P2-WATCHHUB-PORT) — daemon `subscribe` streams settle-edge events; `tw watch` CLI = slice E2 |
 | `state` | **NO** | deferred — `state_parser` not ported |
 
-`./tw --help` subparsers: `{status,ensure,screen,stop,do,send,read,history}`.
+`./tw --help` subparsers: `{status,ensure,screen,stop,do,send,read,history}`
+(unchanged — no fake `watch` verb).
 
-### Slice E rationale (`tw watch`)
+### Slice E rationale (`tw watch` CLI) + WatchHub port
 
 Canon: settle-edge push-stream via `WatchHub` (`canon/surfaces/spectate-and-attach.md`).
-Archive has `twclient/watch.py` (~113 LOC) + daemon `_handle_subscribe` lifetime
-stream + CLI `cmd_watch` NDJSON tail. Greenfield tip (`daemon.py` header):
-`WatchHub` / `watch.py` / `subscribe` **explicitly cut** until that module lands —
-no `watch.py` under `tw2002_aiclient/session/`. Wiring a real `tw watch` is a
-**multi-file substrate WO** (`watch.py` + daemon hub start/stop + subscribe
-handler + protocol/status `subscribers` + CLI stream), not a thin CLI add.
-**Decision (slice-D honesty bar):** keep `watch` off `./tw --help`; do not invent
-a fake one-shot/non-streaming verb. Bank a follow-on **WatchHub port** WO before
-CLI wire (feeds slice F spectate too).
+**WO-P2-WATCHHUB-PORT DONE:** `tw2002_aiclient/session/watch.py` + daemon hub
+start/stop + `_handle_subscribe` + `status.subscribers`. CLI `tw watch` still
+deferred (E2) so `./tw --help` stays honest until the NDJSON tail lands.
 
 ## Recommended execute slices
 
@@ -44,7 +39,8 @@ CLI wire (feeds slice F spectate too).
 | **B** | `do` · `send` · `read` | **DONE** |
 | **C** | `history` · (`state` deferred) | **history DONE** · state banked |
 | **D** | `start` | **DONE (docs-only)** |
-| **E** | `watch` | **DONE (docs-only)** · WatchHub substrate banked |
+| **E** | `watch` CLI | **docs-only** · substrate via **WATCHHUB-PORT** |
+| **E2** | `tw watch` CLI wire | queued (needs WatchHub — now live) |
 | **F–G** | spectate·attach / menumap… | queued (F needs WatchHub) |
 
 **Accept for a docs slice:** README + WO honesty · no fake verb on help · STATUS

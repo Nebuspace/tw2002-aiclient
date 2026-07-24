@@ -10,8 +10,9 @@ carries `"error"`.
 **WO-P2-020 Wave-3 SUBSET + WO-P2-025 control-lock + WO-P2-OPS-VERB-B** --
 ported from `archive/pre-rebirth-2026-07-23/code/twclient/protocol.py`.
 Live one-shot verbs: `ensure`, `status`, `screen`, `stop`, `do`, `send`,
-`read`, `history`. Lifetime `attach` is handled in `daemon.py` (not here).
-`state`/`set_mode`/`subscribe`/`crawl_start`/`autopilot_*`/
+`read`, `history`. Lifetime `attach` / `subscribe` are handled in
+`daemon.py` (not here) — `subscribe` streams WatchHub settle-edge events
+(WO-P2-WATCHHUB-PORT). `state`/`set_mode`/`crawl_start`/`autopilot_*`/
 `record_*`/`replay`/`mine`/`play*`/`haggle`/`list_skills` remain later WOs
 -- `dispatch()` returns `unknown_verb` for them. Drive verbs
 (`ensure`/`do`/`send`) ride `_driving_dispatch` (acquire_driver /
@@ -127,12 +128,13 @@ def dispatch(session, verb, args, server):
         return build_response(session, rows=rows)
 
     if verb == "status":
-        # WO-P2-020 Wave-3 CUT vs archive: subscribers/play/credits*/turns*/
+        # WO-P2-020 Wave-3 CUT vs archive: play/credits*/turns*/
         # fighters*/intervention/world_id still deferred. Mode + autopilot
-        # stub are live enough for cockpit status.
+        # stub + subscribers (WatchHub) are live enough for cockpit status.
         rows = session.render()
         text = session.render_text(rows)
         prompt = rows[-1].strip() if rows else ""
+        watch_hub = getattr(server, "watch_hub", None)
         resp = {
             "ok": True,
             "connected": session.conn.connected,
@@ -144,6 +146,7 @@ def dispatch(session, verb, args, server):
             "name": session.name,
             # WO-P2-022: autopilot.py is not ported — ensure never arms.
             "autopilot": {"running": False},
+            "subscribers": watch_hub.subscriber_count() if watch_hub else 0,
         }
         lock = getattr(server, "control_lock", None)
         if lock is not None:

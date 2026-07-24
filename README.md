@@ -154,10 +154,9 @@ Remaining classic ops verbs (`start`, `state`, `watch`, `spectate`, `attach`, �
 are staged in
 [`WO-P2-OPS-VERB-SURFACE.md`](workorders/WO-P2-OPS-VERB-SURFACE.md)
 (slices A–C shipped; `state` deferred pending `state_parser`; **slice D `start`
-is docs-only** — archive `start` was CLI spawn + first `read`/`screen` with no
-protocol verb; greenfield `ensure` already owns that spawn path; **slice E
-`watch` is docs-only** — needs `WatchHub` / `watch.py` + daemon `subscribe`
-lifetime stream; inventing a fake non-streaming CLI would lie).
+is docs-only**; **WatchHub substrate live** — daemon `subscribe` streams
+settle-edge events; **`tw watch` CLI still Coming** until slice E2 so help
+stays honest).
 
 Notes worth knowing up front:
 
@@ -190,9 +189,9 @@ and cockpit / play-shell compose against FakeClient and scripted sessions.
 
 - Live `./tw` verbs today are **`status` / `ensure` / `screen` / `stop` / `do` /
   `send` / `read` / `history`**; `tw state` waits on a `state_parser` port;
-  `tw start` / `tw watch` are intentionally not wired (start → use `ensure`;
-  watch → needs `WatchHub`/`watch.py` + `subscribe` — see slices D/E in the ops
-  WO). Remaining slices in
+  `tw start` is intentionally not wired (use `ensure`); `tw watch` CLI waits on
+  slice E2 (WatchHub/`subscribe` substrate is live — see ops WO). Remaining
+  slices in
   [`WO-P2-OPS-VERB-SURFACE.md`](workorders/WO-P2-OPS-VERB-SURFACE.md) land one WO at a time.
 - `state` parsing (when wired) is a best-effort skeleton under `tw2002_aiclient.session`
   — extend anchors as new screen shapes turn up.

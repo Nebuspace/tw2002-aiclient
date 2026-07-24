@@ -9,17 +9,18 @@ via the pidfile at `<run-dir>/twd.pid` -- both project-rooted through
 Ported from `archive/pre-rebirth-2026-07-23/code/twclient/daemon.py`
 (WO-P2-020, Wave-3 + WO-P2-025 control-lock wire + WO-P2-027 SessionGuardian
 D9 reconnect/replay). Still cut vs archive: `LedgerWriter`, `SkillRecorder`,
-`WatchHub`, `LoopPlayer`, `FrameRecorder` (`ledger.py`, `watch.py`,
-`loop_player.py`, `frame_recorder.py`, `autopilot.py`). Guardian D10
-keepalive stays stubbed until WO-P2-028. Live verbs: `ensure`/`status`/
-`screen`/`stop` plus lifetime `attach` (control-lock hold). `subscribe`
-stays cut until `watch.py` lands. `protocol.dispatch()` reads server-side
-collaborators via `getattr(server, ..., None)`.
+`LoopPlayer`, `FrameRecorder` (`ledger.py`, `loop_player.py`,
+`frame_recorder.py`, `autopilot.py`). Guardian D10 keepalive stays
+stubbed until WO-P2-028. Live verbs: `ensure`/`status`/`screen`/`stop`
+plus lifetime `attach` (control-lock hold) and `subscribe` (WatchHub
+settle-edge stream — WO-P2-WATCHHUB-PORT). `protocol.dispatch()` reads
+server-side collaborators via `getattr(server, ..., None)`.
 """
 
 import argparse
 import json
 import os
+import queue
 import socketserver
 import sys
 import threading
@@ -31,6 +32,7 @@ from .credentials import get_password
 from .guardian import SessionGuardian
 from .protocol import _save_password, dispatch
 from .session import Session
+from .watch import WatchHub
 
 
 class ThreadingUnixServer(socketserver.ThreadingMixIn, socketserver.UnixStreamServer):
@@ -56,6 +58,12 @@ class CommandHandler(socketserver.StreamRequestHandler):
                 self._respond({"ok": False, "error": "invalid_request"})
                 continue
             verb = req.get("verb")
+            if verb == "subscribe":
+                # Lifetime connection: settle-edge stream until the socket
+                # drops (see _handle_subscribe). Read-only — never takes
+                # control_lock / never sends game input.
+                self._handle_subscribe()
+                return
             if verb == "attach":
                 # Lifetime connection: holds MODE_HUMAN until the socket
                 # drops (see _handle_attach). Never returns to one-shot
@@ -68,6 +76,21 @@ class CommandHandler(socketserver.StreamRequestHandler):
             except Exception as e:  # noqa: BLE001 -- a bad request must never kill the daemon
                 result = {"ok": False, "error": f"internal_error:{e}"}
             self._respond(result)
+
+    def _handle_subscribe(self):
+        hub = getattr(self.server, "watch_hub", None)
+        if hub is None:
+            self._respond({"ok": False, "error": "watch_hub_unavailable"})
+            return
+        q = hub.subscribe(queue.Queue)
+        try:
+            while True:
+                event = q.get()
+                self._respond(event)
+        except (BrokenPipeError, ConnectionResetError, OSError):
+            pass
+        finally:
+            hub.unsubscribe(q)
 
     def _handle_attach(self):
         """Thin `tw attach` — take_human for the connection lifetime;
@@ -133,6 +156,9 @@ def _shutdown(server, session):
     guardian = getattr(server, "guardian", None)
     if guardian is not None:
         guardian.stop()
+    watch_hub = getattr(server, "watch_hub", None)
+    if watch_hub is not None:
+        watch_hub.stop()
     _attempt_graceful_quit(session)
     session.close()
     server.shutdown()
@@ -268,9 +294,15 @@ def main(argv=None):
     )
     guardian.start()
 
+    # WO-P2-WATCHHUB-PORT: settle-edge push-stream for subscribe / future
+    # tw watch + spectate. Read-only hub — never drives the game.
+    watch_hub = WatchHub(session)
+    watch_hub.start()
+
     server = ThreadingUnixServer(str(sock_path), CommandHandler)
     server.session = session
     server.guardian = guardian
+    server.watch_hub = watch_hub
     # WO-P2-025: mode + active-driver slot (replaces the earlier ensure-only
     # `threading.Lock` drive_lock). Eager so every request sees one lock;
     # protocol `_driving_dispatch` uses acquire_driver/release_driver.

@@ -1,30 +1,30 @@
 """WatchHub settle-edge detection + subscriber fan-out — no network, no
-real threading: _maybe_emit() is called directly rather than starting the
+real threading: `_maybe_emit()` is called directly rather than starting the
 background thread, matching the fake-clock style used for settle.py.
+
+WO-P2-WATCHHUB-PORT: greenfield rewrite of the archive suite (imports
+`tw2002_aiclient.session.watch`). CLI `tw watch` not wired yet.
 """
+
+from __future__ import annotations
 
 import queue
 import time
 
-import pytest
-
-from twclient import credentials
-from twclient.watch import WatchHub
+from tw2002_aiclient.session.watch import WatchHub
 
 
 class FakeSession:
     """Just enough surface for protocol.build_response(): .render(),
-    .render_with_color(), .render_text(rows), .last_rx."""
+    .render_text(rows), .last_rx."""
 
     def __init__(self, rows, last_rx):
         self._rows = rows
         self.last_rx = last_rx
+        self.last_sent = None
 
     def render(self):
         return list(self._rows)
-
-    def render_with_color(self):
-        return list(self._rows), []  # no color data needed for these tests
 
     def render_text(self, rows=None):
         return "\n".join(rows if rows is not None else self._rows)
@@ -37,6 +37,7 @@ def test_subscribe_seeds_current_screen_immediately():
     seed = q.get_nowait()
     assert seed["screen"] == ["current screen"]
     assert "ts" in seed
+    assert seed["ok"] is True
 
 
 def test_no_emit_while_still_receiving_bytes():
@@ -108,27 +109,39 @@ def test_subscriber_count_tracks_subscribe_and_unsubscribe():
     assert hub.subscriber_count() == 0
 
 
-def test_maybe_emit_survives_transient_profiles_toml_parse_error(tmp_path):
-    """WO-PROFILES-TOML-PARSE-HARDEN: build_response() (via WatchHub)
-    must keep emitting when profiles.toml goes corrupt mid-session."""
-    good = (
-        '[default]\nhost="example.com"\nport=23\ngame_letter="F"\n'
-        'handle="AEGIS"\n'
-    )
-    p = tmp_path / "profiles.toml"
-    p.write_text(good, encoding="utf-8")
-    credentials.load_profile("default", profiles_path=p)
-    p.write_text(good + "[trunc", encoding="utf-8")
-
-    class SessionWithProfile(FakeSession):
-        auto_login_profile = "default"
-        host = "example.com"
-
-    session = SessionWithProfile(["hello"], last_rx=time.monotonic() - 1.0)
+def test_broadcast_extra_bypasses_settle_edge():
+    session = FakeSession(["hello"], last_rx=time.monotonic())
     hub = WatchHub(session, debounce_ms=350)
     q = hub.subscribe(queue.Queue)
-    q.get_nowait()  # seed event -- must not raise through build_response
-    session._rows = ["goodbye"]
-    hub._maybe_emit()
+    q.get_nowait()
+    hub.broadcast_extra({"ok": True, "kind": "extra", "n": 1})
     event = q.get_nowait()
-    assert event["screen"] == ["goodbye"]
+    assert event["kind"] == "extra"
+    assert "ts" in event
+
+
+def test_status_reports_subscriber_count():
+    from tw2002_aiclient.session import protocol
+
+    class _Conn:
+        connected = True
+
+    class _Session(FakeSession):
+        def __init__(self):
+            super().__init__(["Command [?]"], last_rx=time.monotonic())
+            self.conn = _Conn()
+            self.host = "127.0.0.1"
+            self.port = 23
+            self.name = "test"
+
+    class _Server:
+        def __init__(self, hub):
+            self.watch_hub = hub
+            self.control_lock = None
+
+    session = _Session()
+    hub = WatchHub(session)
+    hub.subscribe(queue.Queue)
+    resp = protocol.dispatch(session, "status", {}, _Server(hub))
+    assert resp["ok"] is True
+    assert resp["subscribers"] == 1
