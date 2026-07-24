@@ -3,7 +3,7 @@ type: System
 title: Spectate (Read-Only) & Attach (Interactive) Surfaces
 description: The two dedicated human-facing surfaces on the one daemon — Spectate watches without ever touching the game, and Attach takes the keyboard live under a crash-safe single-writer lock.
 tags: [surfaces, spectate, attach, watch-stream, control-lock, human-in-the-loop]
-timestamp: 2026-07-24T22:07:00Z
+timestamp: 2026-07-24T22:57:00Z
 ---
 
 The daemon owns exactly **one** telnet connection to the game, and the AI-native design drives it
@@ -16,7 +16,7 @@ surfaces and the settle-edge push-stream substrate they share; it does not speci
 state machine itself (see [Control & Escalation](/architecture/control-and-escalation.md)) or the
 daemon/CLI split beneath them (see [the Session Engine](/architecture/session-engine.md)).
 
-# Implementation status (tip `8f03289`)
+# Implementation status (tip `7af4dbd`)
 
 | Surface | Tip reality |
 |---|---|
@@ -24,7 +24,8 @@ daemon/CLI split beneath them (see [the Session Engine](/architecture/session-en
 | `tw watch` (ops CLI settle-edge tail) | **LIVE** |
 | `tw attach` (thin control-lock attach) | **LIVE** — no full curses paint yet |
 | `tw spectate` (ops curses HUD) | **MISSING** — **F2 HOLD** (Max-gated); do not invent |
-| Product play-shell spectate mode / viewport paint | **NOT DONE** — Phase 4 (PREP `WO-P4-050-057-viewport-PREP.md`; 050 in flight) |
+| Product play-shell watch subscribe | **LIVE** (PWO-050 · `watchfeed.py`) — shell hears settle-edge; no UI consume yet |
+| Product play-shell GAME shell | **LIVE** blank 80×24 (PWO-051); pyte viewport paint **NOT** (PWO-052) |
 | Product cockpit attach hotkey | **NOT DONE** — PWO-056+ |
 
 Target contracts below remain prescriptive for when those surfaces land.

@@ -3,7 +3,7 @@ type: System
 title: The Trainer Cockpit — Panels, HUD & Live-View Layout
 description: The framed oversight dashboard the operator watches — its panel inventory and regions, the always-on tracked-model HUD, the responsive fold, and the liveness signals that show at a glance what the app is doing.
 tags: [surfaces, cockpit, spectate, hud, layout, panels, focus, goals, decisions, coverage-meter, liveness, responsive-fold, hud-seed, prescriptive]
-timestamp: 2026-07-23T20:55:46Z
+timestamp: 2026-07-24T22:57:00Z
 ---
 
 The Trainer Cockpit is the single framed screen an operator keeps in front of them while the app
@@ -422,14 +422,14 @@ Concretely, a builder should aim for:
   rejected). The anti-gold-plating is itself part of the taste — cut list: light theme, powerline
   separators, pane intro-stagger, full-grid marquee (`TUI-POLISH-PLAN.md`).
 
-# Implementation status (tip `8f03289` · Phase 3 CLOSED · Phase 4 OPEN)
+# Implementation status (tip `7af4dbd` · Phase 3 CLOSED · Phase 4 OPEN)
 
 | Band | Tip reality |
 |---|---|
 | Outer frame · strip · three-column body · fold | **LIVE** (PWO-031…033 · 039) |
 | GOALS · FOCUS · DECISIONS · HUD freshness · TX/liveness · tones · LOGS | **LIVE** (PWO-034…041 · tip `6391bb7`) |
-| Center `[GAME UI]` content | **PLACEHOLDER** — `_GAME_PLACEHOLDER` in `screens.py`; live pyte paint is Phase 4 (PWO-051+) |
-| Product watch-stream into play shell | **IN FLIGHT / NOT DONE** — PWO-050 execute on CC; do not claim shipped |
+| Center `[GAME UI]` content | **LIVE** — blank 80×24 GAME shell (PWO-051 · tip `7af4dbd`); `_GAME_PLACEHOLDER` retired. Live pyte paint is **NOT** yet (PWO-052) |
+| Product watch-stream into play shell | **LIVE** subscribe (PWO-050 · `watchfeed.py` · tip `b211be2`); snapshot→paint is **NOT** (PWO-052) |
 | Mode line / teach A·R·T / STOP strip | **NOT** Phase 3 — Phase 5+ |
 | Coverage meter / chains library / formations | **NOT** on tip play shell (archive / later WOs) |
 
