@@ -1,6 +1,6 @@
 # Findings (DOCS-WIN)
 
-**Path choice:** `knowledge/findings.md` (greenfield `knowledge/` created for this file only).
+**Path choice:** `canon/findings.md` — inside the reborn OKF bundle. The legacy root `knowledge/` bundle is retired to `archive/knowledge/` (per WO-CANON-HYGIENE-KNOWLEDGE); `canon/` is the sole live OKF root.
 **Nature:** documentation-only. This file **edits no code** and imports nothing from `archive/`.
 **Updated:** 2026-07-23 (WO-P0-006).
 

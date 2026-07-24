@@ -14,4 +14,4 @@ dependencies = [
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["tw2002_aiclient*", "twclient*"]
+include = ["tw2002_aiclient*"]

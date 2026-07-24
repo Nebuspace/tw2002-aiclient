@@ -70,6 +70,8 @@ marked _(planned)_ are not yet written; entries marked ✅ written exist on disk
 
 See also [`/DECISIONS.md`](/DECISIONS.md) — the live open-questions workspace feeding future ADRs.
 
+* [Findings](/findings.md) — the DOCS-WIN divergence log: recorded code↔canon findings (`ai_pilot` mode · per-cycle EV picker · `{ai,trainer,human}` actor enum · 78-turn haggle) plus a reference index of the archived legacy bundle. — ✅ written
+
 # Conventions
 
 * **Hypothesis-tagging.** Every un-introspected game number carries `tags: [..., hypothesis]` and
