@@ -69,6 +69,21 @@ and `env.py` implements correctly; the fake-harness proof does not exercise the
 (conformant to canon's *current* text); no divergence silently "fixed." Resolution (Option A) is a
 follow-on refinement WO, not a 020 blocker.
 
+**Staging (2026-07-24 — WO-OPEN-003-DOCS, hub):** Hub leans **Option A** (one catalog-aware
+resolver; `servers.toml` preferred per greenfield schema). This is **Pending** — Max still ratifies
+before any product execute. Execute stub: `workorders/WO-OPEN-003-host-port-resolver.md` (PLANNED).
+Related parked seam: `workorders/WO-TW-CONFIG-DIR.md` (folds naturally with the same cleanup).
+
+**Option A (execute shape, draft):**
+1. Single shared resolver used by `env.py` / daemon bootstrap / cli profile connection /
+   `credentials.list_profile_summaries` — profile → optional explicit `host`/`port` override → else
+   `server` catalog key → `config/servers.toml`.
+2. Canon follow-on: update `session-engine.md` Config Bootstrap to state the catalog indirection
+   (docs win after Max GO).
+3. Collapse duplicate copies (today: env literal · cli `_resolve_profile_connection` · protocol
+   `_load_profile` catalog branch · credentials summaries) into one function.
+4. No change to env-first password / chmod-600 secrets / redaction; `TW_CONFIG_DIR` stays its own WO.
+
 <!-- (end OPEN-003) -->
 
 ---
