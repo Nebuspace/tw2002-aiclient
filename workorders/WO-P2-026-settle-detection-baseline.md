@@ -64,8 +64,17 @@ rg -n "IGNORECASE" tw2002_aiclient/session/settle.py   # expect no match on wait
 | File | Role under 026 |
 |------|----------------|
 | `tests/test_settle.py` | **Already greenfield / primary** — extend with case-mismatch + any Accept gaps |
-| Rehab ignored settle-adjacent | **None dedicated** in §REWRITE — guardian/skills that call settle stay DEFER until those modules port |
-| `tests/test_login.py` | Uses settle indirectly — **CC exclusive**; do not touch in 026 execute |
+| Rehab ignored settle-adjacent | **No dedicated settle unit suite** in §REWRITE — files that *call* settle (`guardian`, `skills`, `haggle`, …) stay **DEFER** until those modules port |
+| `tests/test_login.py` / `test_login_redaction.py` | Uses settle indirectly — **CC / later**; do not touch in 026 execute |
+
+### Edge cases (worker Accept tighten — keep explicit on execute)
+
+| Area | Must hold |
+|------|-----------|
+| timeout | Budget always caps; continuous rx denser than debounce → timeout, never pretend-settled |
+| debounce / stability | Idle from last byte; flicker fails `send_and_confirm` stability recheck |
+| secret | `secret=True` reaches `send`; payload not in settle reason |
+| concurrent | One waiter per session (control-lock / single caller) — full dual-waiter proof is P2-025 |
 
 ---
 
