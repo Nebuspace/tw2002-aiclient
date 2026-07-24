@@ -15,6 +15,7 @@ import curses
 from tw2002_aiclient.cockpit import decisions as cockpit_decisions
 from tw2002_aiclient.cockpit import draw as cockpit_draw
 from tw2002_aiclient.cockpit import focus as cockpit_focus
+from tw2002_aiclient.cockpit import fold as cockpit_fold
 from tw2002_aiclient.cockpit import goals as cockpit_goals
 from tw2002_aiclient.cockpit import hud as cockpit_hud
 from tw2002_aiclient.cockpit import liveness as cockpit_liveness
@@ -317,6 +318,18 @@ _FOCUS_COMPOSE_FAILED = ["—"]
 # em-dash, so a compose-time crash still reads as "known-nothing, not a
 # bug" instead of visibly regressing to a shorter, differently-shaped panel.
 _DECISIONS_COMPOSE_FAILED = ["—", "Exploring…"]
+# The responsive-fold composer (WO-P3-039, ``cockpit.fold.
+# compose_folded_decisions_lines``) defines its own all-empty state as the
+# same two-line ``["—", "Exploring…"]`` shape as unfolded DECISIONS (the
+# fold relocates GOALS+FOCUS content INTO the DECISIONS pane; it does not
+# invent a third empty-state vocabulary). A raising fold composer falls
+# back to the single em-dash line GOALS/FOCUS already use, not the two-line
+# shape -- a compose-time crash on the folded path is closer in spirit to
+# "one of several stacked sections failed" than "the whole panel is
+# honestly idle", so it reuses the plainer single-line fallback rather than
+# claiming the two-line honest-empty state that the real composer reserves
+# for "no data was folded in at all".
+_FOLD_COMPOSE_FAILED = ["—"]
 # HUD's own composer (PWO-037, ``cockpit.hud.compose_hud_cells``) already
 # defines its own honest-empty state -- every cell sticky ``"-"`` with no
 # freshness stamp, per-CELL rather than per-panel (canon
@@ -363,6 +376,19 @@ class PlayShellScreen:
     right-gutter HUD box is likewise still the ``right_gutter`` region
     internally (unchanged key, pre-dating the split); DECISIONS is the new
     ``decisions`` region below it.
+
+    Responsive fold (WO-P3-039, canon `trainer-cockpit.md` "Responsive
+    fold"): below ``layout.LEFT_GUTTER_MIN_COLS`` (138) the left gutter is
+    absent entirely (``regions["goals"] is None``) while the DECISIONS host
+    still survives -- GOALS and FOCUS relocate INTO the idle DECISIONS pane
+    rather than disappearing, via ``cockpit.fold.
+    compose_folded_decisions_lines`` in place of ``cockpit.decisions.
+    compose_decisions_lines`` for that one draw call. The DECISIONS box
+    title stays ``"DECISIONS"`` either way; only its content composer
+    switches, gated on ``goals is None`` (the exact fold-active condition --
+    see the DECISIONS draw call below). At >=138 cols nothing changes; below
+    ``RIGHT_GUTTER_MIN_COLS`` (118) ``decisions`` itself drops to ``None``
+    first, so there is no host left to fold into.
 
     ``status_provider`` (PWO-034/035/036/037, WO-P3-038) is the shared data
     seam for every panel that reads live daemon state -- GOALS and FOCUS in
@@ -516,6 +542,15 @@ class PlayShellScreen:
         # exactly one poll so the liveness cluster's `→ TX` read is live
         # rather than permanently idle-stub. Pinned by
         # `tests/test_cockpit_liveness_pty.py`'s own poll-guard test.
+        #
+        # Responsive fold (WO-P3-039) needs no FIFTH term here -- verified,
+        # not assumed. The fold-active condition below (`goals is None`
+        # while `decisions is not None`) is a strict subset of the existing
+        # `decisions is not None` term: fold-active can only ever be true
+        # when `decisions` is already present, so every fold-active tier
+        # was already polling. No new gap, structurally -- not merely
+        # unobserved at today's constants (unlike the `right_gutter` term
+        # above, which IS a defensive/latent addition).
         if (
             goals is not None
             or decisions is not None
@@ -597,12 +632,32 @@ class PlayShellScreen:
         )
         if decisions is not None:
             decisions_inner_w = max(0, decisions["w"] - 2)
-            try:
-                decisions_lines = cockpit_decisions.compose_decisions_lines(
-                    status, width=decisions_inner_w
-                )
-            except Exception:  # noqa: BLE001 -- a raising panel must not crash the draw pass
-                decisions_lines = _DECISIONS_COMPOSE_FAILED
+            # Responsive fold (WO-P3-039, canon `trainer-cockpit.md`
+            # "Responsive fold"): below `LEFT_GUTTER_MIN_COLS` (138) the
+            # left gutter is absent entirely (`goals is None`) while the
+            # right gutter/DECISIONS host still survives -- GOALS+FOCUS
+            # relocate INTO the idle DECISIONS pane rather than
+            # disappearing. `goals is None` (checked here, inside the
+            # already-established `decisions is not None` guard) is
+            # therefore the exact fold-active condition: at >=138 `goals`
+            # is present and this stays the unfolded path; below 118
+            # `decisions` itself drops to `None` first (no host to fold
+            # into -- nothing to wire, per canon's own ladder), so this
+            # branch is only ever reached at a genuine narrow-right tier.
+            if goals is None:
+                try:
+                    decisions_lines = cockpit_fold.compose_folded_decisions_lines(
+                        status, width=decisions_inner_w
+                    )
+                except Exception:  # noqa: BLE001 -- a raising panel must not crash the draw pass
+                    decisions_lines = _FOLD_COMPOSE_FAILED
+            else:
+                try:
+                    decisions_lines = cockpit_decisions.compose_decisions_lines(
+                        status, width=decisions_inner_w
+                    )
+                except Exception:  # noqa: BLE001 -- a raising panel must not crash the draw pass
+                    decisions_lines = _DECISIONS_COMPOSE_FAILED
         else:
             decisions_lines = []
         cockpit_draw.draw_lines(self.stdscr, decisions, decisions_lines, curses.A_NORMAL)

@@ -14,12 +14,14 @@ import pytest
 
 from tw2002_aiclient.cockpit.layout import (
     FULL_GUTTER_MIN_COLS,
+    GAME_W,
     GOALS_BOX_MIN_H,
     HUD_BOX_MIN_H,
     LEFT_GUTTER_MIN_COLS,
     MIN_COLS,
     MIN_LINES,
     MINIMAL_HEADER_MIN_COLS,
+    OUTER_FRAME_PAD,
     PRIORITIES_MIN_W,
     PRIORITIES_W,
     RIGHT_GUTTER_MIN_COLS,
@@ -481,3 +483,173 @@ def test_regions_never_overlap_across_a_size_sweep():
 def test_frame_layout_never_raises_across_extreme_sizes(lines, cols):
     regions = frame_layout(lines, cols)
     assert regions["mode"] in ("full", "right_gutter", "minimal", "no_border", "too_small")
+
+
+# -- PWO-039: five-boundary fold-ladder re-proof sweep ---------------------
+#
+# The boundary tests above each pin one or two facts per floor (mode + one
+# region's width, mostly). This sweep re-proves the SAME five floors --
+# 154/138/118/82/60 -- each at the floor and one column short of it, as one
+# full-fact matrix per boundary: mode, the presence/absence of every region
+# the PWO-039 fold composer cares about (goals/left_gutter/right_gutter/
+# decisions/control_strip), and the center viewport's x/w wherever that is
+# cleanly derivable from this module's own named constants (never a bare
+# re-typed magic number) -- new coverage the per-floor tests above don't
+# already assert in one place (e.g. no existing test pins `decisions`
+# presence/absence or center x specifically at the 118 or 60 floors).
+#
+# MIN_COLS=60 is the one floor of the five that is a RAW-cols gate, not an
+# inner-cols one -- `frame_layout` compares `cols < MIN_COLS` directly (see
+# its own too_small branch, and this file's "only the too_small gate is
+# checked against raw cols directly" precedent in the module comments
+# above) -- so unlike the other four floors, its "at floor"/"below floor"
+# cases below use the raw MIN_COLS value itself rather than MIN_COLS+2/+1;
+# using the same "+2" convention there would land 2 columns past the real
+# too_small edge and prove nothing about it.
+
+
+def test_pwo039_five_boundary_fold_ladder_sweep():
+    lines = 40
+    ox = OUTER_FRAME_PAD
+
+    def _facts(regions):
+        return {
+            "mode": regions["mode"],
+            "goals": regions["goals"] is not None,
+            "left_gutter": regions["left_gutter"] is not None,
+            "right_gutter": regions["right_gutter"] is not None,
+            "decisions": regions["decisions"] is not None,
+            "control_strip": regions["control_strip"] is not None,
+        }
+
+    # -- 154: FULL_GUTTER_MIN_COLS -- both gutters at full width -----------
+    at = frame_layout(lines, FULL_GUTTER_MIN_COLS + 2)
+    assert _facts(at) == {
+        "mode": "full",
+        "goals": True,
+        "left_gutter": True,
+        "right_gutter": True,
+        "decisions": True,
+        "control_strip": True,
+    }
+    # At exactly this floor, FULL_GUTTER_MIN_COLS == VIEWPORT_W + HUD_GUTTER_W
+    # + PRIORITIES_W by construction (the constant's own definition), so the
+    # "full" mode's centering math collapses to a left-anchor: center_x is
+    # exactly the left gutter's own width past the outer inset.
+    assert at["center"]["x"] == ox + PRIORITIES_W
+    assert at["center"]["w"] == VIEWPORT_W
+    assert at["center"]["border"] is True
+
+    below = frame_layout(lines, FULL_GUTTER_MIN_COLS + 1)
+    assert _facts(below) == {
+        "mode": "right_gutter",
+        "goals": True,
+        "left_gutter": True,
+        "right_gutter": True,
+        "decisions": True,
+        "control_strip": True,
+    }
+    assert below["center"]["x"] == ox + PRIORITIES_MIN_W
+    assert below["center"]["w"] == VIEWPORT_W
+    assert below["center"]["border"] is True
+
+    # -- 138: LEFT_GUTTER_MIN_COLS -- narrowed left gutter still fits ------
+    at = frame_layout(lines, LEFT_GUTTER_MIN_COLS + 2)
+    assert _facts(at) == {
+        "mode": "right_gutter",
+        "goals": True,
+        "left_gutter": True,
+        "right_gutter": True,
+        "decisions": True,
+        "control_strip": True,
+    }
+    assert at["center"]["x"] == ox + PRIORITIES_MIN_W
+    assert at["center"]["w"] == VIEWPORT_W
+
+    below = frame_layout(lines, LEFT_GUTTER_MIN_COLS + 1)
+    assert _facts(below) == {
+        "mode": "right_gutter",
+        "goals": False,
+        "left_gutter": False,
+        "right_gutter": True,
+        "decisions": True,
+        "control_strip": True,
+    }
+    assert below["center"]["x"] == ox
+    assert below["center"]["w"] == VIEWPORT_W
+
+    # -- 118: RIGHT_GUTTER_MIN_COLS -- viewport + right HUD only -----------
+    at = frame_layout(lines, RIGHT_GUTTER_MIN_COLS + 2)
+    assert _facts(at) == {
+        "mode": "right_gutter",
+        "goals": False,
+        "left_gutter": False,
+        "right_gutter": True,
+        "decisions": True,
+        "control_strip": True,
+    }
+    assert at["center"]["x"] == ox
+    assert at["center"]["w"] == VIEWPORT_W
+
+    below = frame_layout(lines, RIGHT_GUTTER_MIN_COLS + 1)
+    assert _facts(below) == {
+        "mode": "minimal",
+        "goals": False,
+        "left_gutter": False,
+        "right_gutter": False,
+        "decisions": False,
+        "control_strip": True,
+    }
+    # Minimal tier is always bordered at VIEWPORT_W regardless of i_cols
+    # (`center_w = VIEWPORT_W if border else ...`), centered within the
+    # available inner width.
+    assert below["center"]["w"] == VIEWPORT_W
+    assert below["center"]["border"] is True
+
+    # -- 82: MINIMAL_HEADER_MIN_COLS -- bordered viewport alone ------------
+    at = frame_layout(lines, MINIMAL_HEADER_MIN_COLS + 2)
+    assert _facts(at) == {
+        "mode": "minimal",
+        "goals": False,
+        "left_gutter": False,
+        "right_gutter": False,
+        "decisions": False,
+        "control_strip": True,
+    }
+    assert at["center"]["x"] == ox
+    assert at["center"]["w"] == VIEWPORT_W
+    assert at["center"]["border"] is True
+
+    below = frame_layout(lines, MINIMAL_HEADER_MIN_COLS + 1)
+    assert _facts(below) == {
+        "mode": "no_border",
+        "goals": False,
+        "left_gutter": False,
+        "right_gutter": False,
+        "decisions": False,
+        "control_strip": True,
+    }
+    assert below["center"]["x"] == ox
+    assert below["center"]["border"] is False
+    # no_border's own width formula: min(GAME_W, i_cols) -- i_cols here is
+    # one short of the 82 floor, i.e. 81, which is still >= GAME_W (80), so
+    # this lands on the GAME_W ceiling, not the i_cols term.
+    assert below["center"]["w"] == GAME_W
+
+    # -- 60: MIN_COLS -- a RAW-cols floor, not inner-cols (see note above) -
+    at = frame_layout(lines, MIN_COLS)
+    assert _facts(at) == {
+        "mode": "no_border",
+        "goals": False,
+        "left_gutter": False,
+        "right_gutter": False,
+        "decisions": False,
+        "control_strip": True,
+    }
+    assert at["center"]["x"] == ox
+    assert at["center"]["border"] is False
+
+    below = frame_layout(lines, MIN_COLS - 1)
+    assert below["mode"] == "too_small"
+    for key in ("goals", "left_gutter", "right_gutter", "decisions", "control_strip"):
+        assert below[key] is None
