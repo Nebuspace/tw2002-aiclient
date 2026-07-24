@@ -74,10 +74,10 @@ never drive recommendations that contradict reborn `canon/`.
 
 ## Stale `twclient` test collection (WO-TEST-SUITE-REHAB)
 
-**Symptom:** `pytest --collect-only` → `ModuleNotFoundError: No module named 'twclient'` on stale
-imports. Greenfield uses `tw2002_aiclient.session.*`; the old package is archive-only. Rehab plan:
-`workorders/WO-TEST-SUITE-REHAB.md` (inventory `7e75677`; DELETE wave removed 12 AI-pilot/learning
-tests — remaining ≈66 uncollectable until rewrite/defer slices).
+**Symptom:** stale tests still `import twclient` (archive-only). Rehab buckets live in
+`workorders/WO-TEST-SUITE-REHAB.md`. **Default honesty (WO-TEST-COLLECT-HYGIENE):** `pytest.ini`
+`--ignore=`s every banked uncollectable file so `pytest --collect-only` / `pytest -q` run only the
+greenfield suite (0 collection ERRORS). Remove an ignore line when that file is rewritten/Accepted.
 
 ## Run-dir override (WO-P2-021)
 

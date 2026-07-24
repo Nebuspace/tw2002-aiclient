@@ -8,9 +8,10 @@
 retired `twclient` package (uncollectable under greenfield) into **rewrite · delete · defer**
 buckets so Phase-2 work orders can schedule honest proof instead of drowning in collection ERRORS.
 
-**Progress:** inventory ACCEPTED (`7e75677`) · DELETE wave DONE (`915e4d8`) · REWRITE-LIVE DONE
-(`7b70279`) · **REWRITE-ENSURE** (ensure_protocol + cli_log) DONE — see tip SHA in STATUS.
-Remaining rewrite: credentials / control_lock / attach / TOCTOU / login\* (gated). Defer still gated.
+**Progress:** inventory ACCEPTED · DELETE · REWRITE-LIVE · REWRITE-ENSURE DONE ·
+**COLLECT-HYGIENE** — default `pytest.ini` `--ignore=` for remaining banked files (see tip SHA).
+Remaining rewrite bodies still on disk (credentials / control_lock / attach / login\* …) until
+owning WOs lift the ignore.
 
 ---
 
