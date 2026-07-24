@@ -1,7 +1,7 @@
 #!/bin/sh
 ''''exec "$(dirname "$0")"/.venv/bin/python3 "$0" "$@" # '''
-"""tw — one-shot CLI entry point. See DESIGN.md and README.md."""
-from twclient.cli import main
+"""tw — one-shot CLI entry point (ADR-001 session under tw2002_aiclient)."""
+from tw2002_aiclient.session.cli import main
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
