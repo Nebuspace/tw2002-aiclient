@@ -1,7 +1,8 @@
 """Honest greenfield gap proof: ``tw log`` / ``tw trail`` are not wired.
 
-Live ``cli.build_parser()`` exposes only ``status`` and ``ensure``.
-A ledger CLI verb waits on a later WO — do not invent one here.
+Live ``cli.build_parser()`` exposes the shipped ops verb table (see README Verb
+reference / ``WO-P2-OPS-VERB-SURFACE``). A ledger CLI verb waits on a later WO —
+do not invent one here.
 """
 
 from __future__ import annotations
@@ -10,18 +11,25 @@ import pytest
 
 from tw2002_aiclient.session import cli
 
+# Keep in sync with README Verb reference (shipped) + cli.build_parser().
+_SHIPPED_VERBS = frozenset({"status", "ensure", "screen", "stop"})
 
-def test_parser_has_status_and_ensure_only():
+
+def test_parser_shipped_verb_allowlist():
     parser = cli.build_parser()
     status = parser.parse_args(["status"])
     ensure = parser.parse_args(["ensure", "--profile", "x"])
+    screen = parser.parse_args(["screen"])
+    stop = parser.parse_args(["stop"])
     assert status.func is cli.cmd_status
     assert ensure.func is cli.cmd_ensure
+    assert screen.func is cli.cmd_screen
+    assert stop.func is cli.cmd_stop
     # Subparser choices are exactly the live verb table.
     sub = next(
         a for a in parser._actions if getattr(a, "choices", None) is not None
     )
-    assert set(sub.choices) == {"status", "ensure"}
+    assert set(sub.choices) == set(_SHIPPED_VERBS)
 
 
 def test_log_verb_is_not_wired():
