@@ -1,6 +1,6 @@
 # WO-P2-023 — Login NEW vs RETURNING
 
-> Status: PLANNED (greenfield · HOLD-GATES-PENDING blocks execution until a lifting HANDOFF)
+> Status: DONE (shipped `ea77249` 2026-07-24 — RETURNING fail-fast per canon; 5 test_login.py proofs on fake TWGS; adversarial Cipher+Mack, incl. Mack HIGH fail-fast false-positive fixed)
 **Phase:** 2 · **Type:** harden · **Depends:** WO-P2-020
 **Canon:** `canon/architecture/login-automaton.md` (NEW vs RETURNING)
 
