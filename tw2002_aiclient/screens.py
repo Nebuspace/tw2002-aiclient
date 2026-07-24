@@ -5,6 +5,7 @@ Credentials/secrets are never collected or shown on these surfaces.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import Sequence
 
@@ -158,6 +159,44 @@ _FORM_FIELDS: tuple[tuple[str, str, str], ...] = (
 )
 
 
+def validate_create_form(
+    *,
+    server: str,
+    game_letter: str,
+    handle: str,
+    catalog_keys: Sequence[str] | None = None,
+    existing_names: Sequence[str] | None = None,
+) -> str | None:
+    """UI-side create-form checks. Return an error string, or ``None`` if ok.
+
+    Does not write. Rejects empty game letter, unknown catalog server keys, and
+    duplicate profile section names (derived from handle when name is omitted).
+    """
+    game = (game_letter or "").strip()
+    if not game:
+        return "game letter required"
+    handle_s = (handle or "").strip()
+    if not handle_s:
+        return "handle required"
+    key = (server or "").strip()
+    if not key:
+        return "server catalog key required"
+    keys = set(catalog_keys) if catalog_keys is not None else {
+        str(s["key"]) for s in credentials.list_servers()
+    }
+    if key not in keys:
+        return f"unknown server catalog key: {key!r}"
+    section = re.sub(r"[^a-z0-9]+", "_", handle_s.lower()).strip("_") or "profile"
+    names = (
+        set(existing_names)
+        if existing_names is not None
+        else {str(r["name"]) for r in credentials.list_profile_summaries()}
+    )
+    if section in names:
+        return f"profile already exists: {section}"
+    return None
+
+
 class CreateFormScreen:
     """Catalog server + game_letter + handle → non-secret ``create_profile`` write."""
 
@@ -302,13 +341,28 @@ class CreateFormScreen:
         return None
 
     def _try_save(self) -> str | None:
+        # Snapshot field values first — a reject must leave them intact for correction.
+        server = self._server_key()
+        game_letter = self.values["game_letter"]
+        handle = self.values["handle"]
+        catalog_keys = [str(s["key"]) for s in self.servers]
+        err = validate_create_form(
+            server=server,
+            game_letter=game_letter,
+            handle=handle,
+            catalog_keys=catalog_keys,
+        )
+        if err:
+            self.error = err
+            # Values untouched — operator corrects the bad field only.
+            return None
         try:
             credentials.create_profile(
-                server=self._server_key(),
-                game_letter=self.values["game_letter"],
-                handle=self.values["handle"],
+                server=server,
+                game_letter=game_letter,
+                handle=handle,
             )
-        except Exception as exc:  # noqa: BLE001 — surface in TUI
+        except Exception as exc:  # noqa: BLE001 — surface in TUI; values preserved
             self.error = str(exc)
             return None
         return "saved"
