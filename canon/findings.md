@@ -86,6 +86,11 @@ greenfield suite (0 collection ERRORS). Remove an ignore line when that file is 
 **P2-026 settle (prep):** kernel already in `session/settle.py` + green `tests/test_settle.py`; execute
 likely verify + case-mismatch unit — see `workorders/WO-P2-026-settle-detection-baseline.md` §PREP.
 
+**P2-027 reconnect/replay (prep):** no live `guardian.py`; drop flag + `Session.reconnect` +
+`run_login`/`secret=True` already match — execute ports supervisor + rewrite
+`tests/test_guardian.py -k reconnect` (keepalive stays 028). See
+`workorders/WO-P2-027-reconnect-login-replay.md` §PREP.
+
 ## Run-dir override (WO-P2-021)
 
 **Canon:** `canon/architecture/session-engine.md` (Single-Connection Invariant).
