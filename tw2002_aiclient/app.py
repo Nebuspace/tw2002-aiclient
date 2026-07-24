@@ -194,10 +194,13 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
     # WO-P4-050: the watch-stream client's lifecycle is scoped to this one
     # play-shell binding -- started right before the loop, stopped in the
     # `finally` below on every exit path (Esc/back, quit, or an exception
-    # unwinding out of the loop). Nothing reads the feed into the UI yet;
-    # this WO only owns start/stop, never painting.
+    # unwinding out of the loop). WO-P4-052 wires its `snapshot` as the GAME
+    # viewport's `viewport_provider` (below) -- the existing 1 Hz
+    # `getch`/`draw` loop below remains the SOLE redraw owner; the feed's
+    # own background reader thread never wakes the UI on its own.
     feed = WatchFeed(run_dir=run_dir)
     feed.start()
+    play.viewport_provider = feed.snapshot
     try:
         while True:
             play.draw()

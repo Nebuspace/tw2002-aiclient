@@ -22,6 +22,7 @@ from tw2002_aiclient.cockpit import hud as cockpit_hud
 from tw2002_aiclient.cockpit import liveness as cockpit_liveness
 from tw2002_aiclient.cockpit import logsband as cockpit_logsband
 from tw2002_aiclient.cockpit import tones as cockpit_tones
+from tw2002_aiclient.cockpit import viewport as cockpit_viewport
 from tw2002_aiclient.cockpit.layout import frame_layout
 from tw2002_aiclient.cockpit.strip import compose_profile_strip_from_row
 from tw2002_aiclient.session import credentials
@@ -428,6 +429,13 @@ _CONTROL_STRIP_COMPOSE_FAILED = ""
 # reads as "known-nothing, not a bug"). Sliced to whatever height actually
 # fits at draw time -- see ``draw()``'s own LOGS block.
 _LOGS_COMPOSE_FAILED = [cockpit_logsband.LOGS_EMPTY]
+# GAME's own composer (WO-P4-052, ``cockpit.viewport.compose_viewport_lines``)
+# has no honest-empty TEXT of its own to reuse -- PWO-051 established the
+# panel's honest-empty state as a truly BLANK interior (no placeholder, no
+# marker glyph), unlike every panel above. A raising composer therefore
+# falls back to the SAME blank state, not a fallback string -- an empty
+# list draws nothing, exactly matching "no provider set" / "no event yet".
+_VIEWPORT_COMPOSE_FAILED: list[str] = []
 
 
 def _resolve_last_rx_age_s(status: dict) -> float:
@@ -479,10 +487,12 @@ class PlayShellScreen:
     daemon's advancing session transcript tail (WO-P3-041, ``cockpit.
     logsband.compose_logs_lines``, falling back to the ensure-session
     ``status_line`` only while no real tail exists yet -- see the LOGS
-    paragraph below). The live game viewport render itself is a later WO
-    (PWO-052) -- GAME shows an honest blank 80x25 grid inside its
-    double-line border today, zero inset, never placeholder text or fake
-    content (PWO-051).
+    paragraph below). The GAME viewport paints the live daemon screen
+    (WO-P4-052, ``cockpit.viewport.compose_viewport_lines``, fed by
+    ``viewport_provider``'s ``WatchFeed`` settle-edge snapshot) inside its
+    zero-inset double-line border; with no provider set, no event yet, or a
+    raising composer, the interior stays the honest blank 80x25 grid PWO-051
+    shipped -- never placeholder text or fake content.
     Below the fold floor (``mode == "too_small"``) only the layout's
     refusal message is drawn. The left-gutter FOCUS box is the
     ``left_gutter`` region internally (unchanged region key -- only its
@@ -590,6 +600,12 @@ class PlayShellScreen:
         self.profile = profile
         self.status_line = ""  # set by app.py after the ensure_session() call
         self.status_provider: Callable[[], dict | None] | None = None  # set by app.py (PWO-034)
+        # WO-P4-052: a no-arg callable returning a `WatchFeedSnapshot`-shaped
+        # object (duck-typed via `.latest_event` only -- this module never
+        # imports `WatchFeed` itself, see draw()'s own GAME viewport block).
+        # Set by app.py to `feed.snapshot` (WO-P4-050's `WatchFeed`); `None`
+        # here (the default) leaves the GAME interior blank, same as PWO-051.
+        self.viewport_provider: Callable[[], object] | None = None
         self._now_fn = now_fn  # WO-P3-038 -- resolved to time.monotonic at draw() time when unset
         # LOGS newest-row flash (WO-P3-041): content-identity tracking across
         # draw() calls -- cockpit.logsband is a pure, stateless composer (no
@@ -828,15 +844,15 @@ class PlayShellScreen:
             focus_lines = []
         cockpit_draw.draw_lines(self.stdscr, left, focus_lines, curses.A_NORMAL)
 
-        # GAME viewport (PWO-051): an honest blank grid -- zero content is
-        # drawn into the interior on purpose (no placeholder text, no fake
-        # data; the live pyte/settle paint itself is PWO-052). At the
-        # bordered tiers only the double-line frame + title render, leaving
-        # the interior cells whatever `erase()` already left them (blank);
-        # at the `no_border` tier (`center["border"]` False) nothing is
-        # drawn at all -- the region stays reserved by `frame_layout`, same
-        # "reserved but unpainted" convention the tall-terminal gap band
-        # already uses elsewhere in this frame.
+        # GAME viewport (PWO-051 shell, WO-P4-052 live paint). At the
+        # `no_border` tier (`center["border"]` False) nothing is drawn at
+        # all -- the region stays reserved by `frame_layout`, same "reserved
+        # but unpainted" convention the tall-terminal gap band already uses
+        # elsewhere in this frame. At the bordered tiers the double-line
+        # frame + title always render; the interior paints the live daemon
+        # screen when a real `viewport_provider` event is available, and
+        # otherwise stays exactly the honest blank grid PWO-051 shipped (no
+        # placeholder text, no fake data) -- see `_VIEWPORT_COMPOSE_FAILED`.
         center = regions["center"]
         if center is not None and center["border"]:
             # WO-P3-040: the viewport border's own STATE flip -- cyan
@@ -848,6 +864,37 @@ class PlayShellScreen:
                 self.stdscr, center, weight="double", attr=border_attr,
                 title="GAME", title_attr=border_attr, uok=uok,
             )
+            # One `viewport_provider()` poll per draw (mirrors
+            # `status_provider`'s own one-call-per-draw discipline) --
+            # only ever reached here, inside the already-established
+            # bordered-tier guard, so a `no_border` tier never polls at
+            # all. `event` is duck-typed off the snapshot's `.latest_event`
+            # attribute only -- this module never imports `WatchFeed` or
+            # `WatchFeedSnapshot` -- and a raising provider (or a hostile
+            # `.latest_event` property) degrades to `None`, never crashing
+            # the draw pass, same honesty-over-crash convention as
+            # `status_provider` above.
+            event = None
+            if self.viewport_provider is not None:
+                try:
+                    event = self.viewport_provider().latest_event
+                except Exception:  # noqa: BLE001 -- a raising provider must not crash the draw pass
+                    event = None
+            center_inner_w = max(0, center["w"] - 2)
+            center_inner_h = max(0, center["h"] - 2)
+            try:
+                viewport_lines = cockpit_viewport.compose_viewport_lines(
+                    event, width=center_inner_w, height=center_inner_h
+                )
+            except Exception:  # noqa: BLE001 -- a raising panel must not crash the draw pass
+                viewport_lines = _VIEWPORT_COMPOSE_FAILED
+            # Routes through the same `draw_lines` choke point every other
+            # panel uses -- control-char neutralization + cell-width-aware
+            # clipping (`cockpit.draw._safe_write`/`_clip_cells`), so
+            # hostile CSI/OSC bytes surviving into a game-screen cell can
+            # never escape this box the same way they can't escape any
+            # other panel's.
+            cockpit_draw.draw_lines(self.stdscr, center, viewport_lines, curses.A_NORMAL)
 
         right = regions["right_gutter"]
         cockpit_draw.draw_box(
