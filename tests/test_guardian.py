@@ -1,17 +1,11 @@
-"""SessionGuardian tests (WO-P2-027 reconnect+replay; WO-P2-028 keepalive deferred).
+"""SessionGuardian tests (WO-P2-027 reconnect+replay; WO-P2-028 keepalive).
 
 No network, no real threading: `_tick()` is called directly rather than
 starting the background thread, matching the fake-clock / direct-call
 style used for settle.py tests.
-
-Reconnect slice targets greenfield `tw2002_aiclient.session.guardian`.
-Keepalive tests stay collected but skipped until WO-P2-028 fills
-`_maybe_keepalive` (stubbed no-op on the 027 module).
 """
 
 from __future__ import annotations
-
-import pytest
 
 from tw2002_aiclient.session.guardian import SessionGuardian
 from tw2002_aiclient.session.settle import wait_for_settle
@@ -37,8 +31,8 @@ class KeepaliveFakeSession:
     def render_text(self, rows=None):
         return "\n".join(rows) if rows is not None else self._text
 
-    def send(self, text, enter=True, secret=False):
-        self.sent.append((text, secret))
+    def send(self, text, enter=True, secret=False, sender="app"):
+        self.sent.append((text, secret, sender))
 
 
 class FakeProfile:
@@ -114,7 +108,7 @@ class ReconnectFakeSession:
             self.last_rx = self.t
         return result
 
-    def send(self, text, enter=True, secret=False):
+    def send(self, text, enter=True, secret=False, sender="app"):
         self.sent.append((text, secret))
         self._pending_advance = True
 
@@ -132,24 +126,17 @@ def _guardian(session, **kwargs):
     )
 
 
-# -- D10 idle keepalive (WO-P2-028 — skip until keepalive is implemented) ---
+# -- D10 idle keepalive (WO-P2-028) ----------------------------------------
 
-_KEEPALIVE_DEFER = pytest.mark.skip(
-    reason="WO-P2-028: idle keepalive stubbed in guardian; do not un-skip until 028"
-)
-
-
-@_KEEPALIVE_DEFER
 def test_keepalive_fires_on_idle_main_command():
     session = KeepaliveFakeSession(
         "Command [TL=00:00:00]:[1] (?=Help)? :", last_rx=-1000.0
     )
     g = _guardian(session, idle_keepalive_ms=100)
     g._tick()
-    assert session.sent == [("", False)]
+    assert session.sent == [("", False, "app")]
 
 
-@_KEEPALIVE_DEFER
 def test_keepalive_does_not_fire_below_idle_threshold():
     import time
 
@@ -161,7 +148,6 @@ def test_keepalive_does_not_fire_below_idle_threshold():
     assert session.sent == []
 
 
-@_KEEPALIVE_DEFER
 def test_keepalive_never_fires_on_password_screen_even_if_idle():
     session = KeepaliveFakeSession("Password?", last_rx=-1000.0)
     g = _guardian(session, idle_keepalive_ms=100)
@@ -169,7 +155,6 @@ def test_keepalive_never_fires_on_password_screen_even_if_idle():
     assert session.sent == []
 
 
-@_KEEPALIVE_DEFER
 def test_keepalive_never_fires_on_port_trade_screen_even_if_idle():
     session = KeepaliveFakeSession(
         "Fuel Ore   Buying   50%\nHow many holds of Fuel Ore do you want to buy [50]?",
@@ -180,13 +165,75 @@ def test_keepalive_never_fires_on_port_trade_screen_even_if_idle():
     assert session.sent == []
 
 
-@_KEEPALIVE_DEFER
 def test_keepalive_never_fires_on_unknown_screen_even_if_idle():
     session = KeepaliveFakeSession(
         "some totally unrecognized screen shape", last_rx=-1000.0
     )
     g = _guardian(session, idle_keepalive_ms=100)
     g._tick()
+    assert session.sent == []
+
+
+def test_keepalive_never_fires_on_confirm_screen_even_if_idle():
+    session = KeepaliveFakeSession(
+        "Do you really want to warp there? (Y/N)", last_rx=-1000.0
+    )
+    g = _guardian(session, idle_keepalive_ms=100)
+    g._tick()
+    assert session.sent == []
+
+
+def test_keepalive_never_fires_on_combat_class_even_if_idle():
+    # Classifier has no dedicated combat gate today; pin Accept via injected class.
+    session = KeepaliveFakeSession(
+        "Command [TL=00:00:00]:[1] (?=Help)? :", last_rx=-1000.0
+    )
+    g = _guardian(
+        session,
+        idle_keepalive_ms=100,
+        classify_screen=lambda text, prompt: "combat",
+    )
+    g._tick()
+    assert session.sent == []
+
+
+def test_keepalive_at_most_one_per_idle_window():
+    session = KeepaliveFakeSession(
+        "Command [TL=00:00:00]:[1] (?=Help)? :", last_rx=-1000.0
+    )
+    g = _guardian(session, idle_keepalive_ms=100)
+    g._tick()
+    g._tick()
+    assert session.sent == [("", False, "app")]
+
+
+def test_keepalive_skipped_when_disconnected():
+    session = KeepaliveFakeSession(
+        "Command [TL=00:00:00]:[1] (?=Help)? :", last_rx=-1000.0
+    )
+    session.conn.connected = False
+    session.auto_login_profile = None  # reconnect no-op
+    g = _guardian(session, idle_keepalive_ms=100)
+    keepalive_calls = []
+    real = g._maybe_keepalive
+
+    def spy():
+        keepalive_calls.append(1)
+        return real()
+
+    g._maybe_keepalive = spy
+    g._tick()
+    assert keepalive_calls == []
+    assert session.sent == []
+
+
+def test_keepalive_skipped_during_reconnect_burst():
+    session = KeepaliveFakeSession(
+        "Command [TL=00:00:00]:[1] (?=Help)? :", last_rx=-1000.0
+    )
+    g = _guardian(session, idle_keepalive_ms=100)
+    g._reconnect_in_flight = True
+    g._maybe_keepalive()
     assert session.sent == []
 
 

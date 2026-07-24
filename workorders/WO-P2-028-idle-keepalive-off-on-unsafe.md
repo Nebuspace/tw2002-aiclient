@@ -1,6 +1,6 @@
 # WO-P2-028 — Idle-keepalive OFF on unsafe screens
 
-> Status: PLANNED (greenfield · **PREP DONE** 2026-07-24 · product execute blocked until a lifting HANDOFF)
+> Status: **EXECUTE DONE** 2026-07-24 (awaiting hub Accept) · PREP DONE earlier same day
 **Phase:** 2 · **Type:** harden · **Depends:** WO-P2-027
 **Canon:** `canon/architecture/resilience-and-reconnect.md` (Conservative Idle-Keepalive)
 

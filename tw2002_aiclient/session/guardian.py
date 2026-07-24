@@ -1,7 +1,8 @@
-"""SessionGuardian — D9 reconnect + login-replay (WO-P2-027).
+"""SessionGuardian — D9 reconnect + login-replay, and D10 conservative
+idle-keepalive (WO-P2-027 + WO-P2-028).
 
 Canon: `canon/architecture/resilience-and-reconnect.md` (Drop Detection &
-Reconnect, Login-Replay & Resume Verification).
+Reconnect, Login-Replay & Resume Verification, Conservative Idle-Keepalive).
 
 A single daemon thread polls session health every few seconds:
 
@@ -16,19 +17,23 @@ A single daemon thread polls session health every few seconds:
   screen. Escalate-to-Human keyboard handoff is a follow-up (canon Code
   Divergence); this module records the error and stops the burst.
 
-- **D10 idle-keepalive:** intentionally stubbed here. WO-P2-028 owns the
-  `main_command`-only blank Enter nudge. Constructor accepts
-  `idle_keepalive_ms` / `classify_screen` for archive API parity so 028
-  can fill `_maybe_keepalive` without a signature break; calling it is a
-  no-op until then.
+- **D10:** when the session has been idle past `idle_keepalive_ms` (default
+  45s, under the observed first inactivity warning), send a harmless blank
+  Enter — but ONLY when the current screen classifies as `main_command`.
+  Never on password / trade / confirm / combat / unknown (a stray Enter
+  could accept a default purchase or desync a credential prompt). Actor-
+  tagged `app`. ≤ one send per idle window (send resets the idle anchor).
+  Disconnected / reconnect-in-flight ticks never nudge (`_tick` routes
+  drops to D9; `_reconnect_in_flight` + connected guard block D10 mid-burst).
 """
 
 from __future__ import annotations
 
 import threading
+import time
 
 _POLL_INTERVAL_S = 2.0
-_IDLE_KEEPALIVE_MS = 45_000  # reserved for WO-P2-028; unused while stubbed
+_IDLE_KEEPALIVE_MS = 45_000  # comfortably under the observed 60s first warning
 _RECONNECT_BACKOFF_S = 3.0
 _MAX_RECONNECT_ATTEMPTS = 5
 
@@ -62,6 +67,13 @@ class SessionGuardian:
         self._thread = threading.Thread(target=self._loop, daemon=True)
         self.last_reconnect_error = None
         self.reconnect_count = 0
+        # Set for the whole reconnect+replay burst so D10 cannot nudge
+        # while connected has flipped True mid-login (password screen, etc.).
+        self._reconnect_in_flight = False
+        # Idle-window anchor for D10: after a keepalive send, suppress
+        # further nudges until idle rebuilds from this mono stamp (RX echo
+        # may also advance last_rx; we take the later of the two).
+        self._last_keepalive_mono = None
 
     def _resolve_load_profile(self):
         if self._load_profile is not None:
@@ -82,8 +94,6 @@ class SessionGuardian:
         return load_profile
 
     def _resolve_classify_screen(self):
-        # Kept for archive API parity; WO-P2-028 will use this from
-        # _maybe_keepalive. Unused while keepalive is stubbed.
         if self._classify_screen is not None:
             return self._classify_screen
         from .classify import classify_screen
@@ -126,41 +136,64 @@ class SessionGuardian:
         from .login import LoginError, run_login
 
         load_profile = self._resolve_load_profile()
-
-        for attempt in range(self.max_reconnect_attempts):
-            if self._stop.is_set():
-                return
-            try:
-                profile = load_profile(session.auto_login_profile)
-                session.reconnect()
-                # run_login succeeds only when classification == target
-                # (verified main_command); otherwise raises LoginError —
-                # no false success / blind keystrokes.
-                run_login(
-                    session,
-                    profile,
-                    get_password=self.get_password,
-                    save_password=self.save_password,
-                    target="main_command",
-                )
-                self.reconnect_count += 1
-                self.last_reconnect_error = None
-                return
-            except (OSError, LoginError) as e:
-                self.last_reconnect_error = str(e)
-                self._stop.wait(self.reconnect_backoff_s)
-        # Exhausted attempts -- give up until the next drop-detection
-        # tick naturally retries (still not connected, so _tick() will
-        # call back in here on the next poll). Fail-loud via
-        # last_reconnect_error; STOP+Human escalate wiring is follow-up.
+        self._reconnect_in_flight = True
+        try:
+            for attempt in range(self.max_reconnect_attempts):
+                if self._stop.is_set():
+                    return
+                try:
+                    profile = load_profile(session.auto_login_profile)
+                    session.reconnect()
+                    # run_login succeeds only when classification == target
+                    # (verified main_command); otherwise raises LoginError —
+                    # no false success / blind keystrokes.
+                    run_login(
+                        session,
+                        profile,
+                        get_password=self.get_password,
+                        save_password=self.save_password,
+                        target="main_command",
+                    )
+                    self.reconnect_count += 1
+                    self.last_reconnect_error = None
+                    return
+                except (OSError, LoginError) as e:
+                    self.last_reconnect_error = str(e)
+                    self._stop.wait(self.reconnect_backoff_s)
+            # Exhausted attempts -- give up until the next drop-detection
+            # tick naturally retries (still not connected, so _tick() will
+            # call back in here on the next poll). Fail-loud via
+            # last_reconnect_error; STOP+Human escalate wiring is follow-up.
+        finally:
+            self._reconnect_in_flight = False
 
     # -- D10 (WO-P2-028) ---------------------------------------------------
 
     def _maybe_keepalive(self):
-        """Stub — idle keepalive is owned by WO-P2-028.
+        session = self.session
+        # Drop path owns the poll: never nudge while disconnected or while
+        # reconnect+replay is mid-burst (connected may be True after
+        # reconnect() but before verified main_command).
+        if not session.conn.connected or self._reconnect_in_flight:
+            return
+        # Idle clock: later of last RX and last keepalive send so a fire
+        # resets the window even before the server echo updates last_rx.
+        idle_anchor = session.last_rx
+        if self._last_keepalive_mono is not None:
+            idle_anchor = max(idle_anchor, self._last_keepalive_mono)
+        idle_ms = (time.monotonic() - idle_anchor) * 1000
+        if idle_ms < self.idle_keepalive_ms:
+            return
+        text = session.render_text()
+        rows = session.render()
+        prompt = rows[-1].strip() if rows else ""
+        classify_screen = self._resolve_classify_screen()
 
-        Connected ticks reach here so the poll loop shape matches the
-        archive twin; no keystroke is sent until 028 fills this in.
-        `idle_keepalive_ms` / `_resolve_classify_screen` are reserved.
-        """
-        return
+        cls = classify_screen(text, prompt)
+        if cls != "main_command":
+            return  # conservative: only ever nudge the single safest screen
+        try:
+            session.send("", enter=True, secret=False, sender="app")
+            self._last_keepalive_mono = time.monotonic()
+        except OSError:
+            pass  # mid-drop — D9 picks it up next tick; do not stamp

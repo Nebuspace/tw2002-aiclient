@@ -91,9 +91,9 @@ likely verify + case-mismatch unit — see `workorders/WO-P2-026-settle-detectio
 D10 keepalive stubbed for 028). Daemon DI start/stop. Collectable `test_guardian` — reconnect
 green; keepalive skipped until 028. See WO-P2-027.
 
-**P2-028 idle-keepalive (prep):** zero live D10; archive `_maybe_keepalive` matches mechanical
-canon; execute tags `sender=app` + rewrite `test_guardian -k keepalive` (5). See
-`workorders/WO-P2-028-idle-keepalive-off-on-unsafe.md` §PREP.
+**P2-028 idle-keepalive (execute):** `_maybe_keepalive` fires blank Enter only on
+`main_command` (`sender=app`); OFF when unsafe/disconnected/mid-reconnect; ≤1/window.
+`test_guardian` keepalive+reconnect collectable green. See WO-P2-028.
 
 ## Run-dir override (WO-P2-021)
 
