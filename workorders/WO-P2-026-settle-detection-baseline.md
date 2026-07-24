@@ -1,6 +1,6 @@
 # WO-P2-026 — Settle detection baseline
 
-> Status: PLANNED (greenfield · **PREP DONE** 2026-07-24 · product execute blocked until lifting HANDOFF)
+> Status: **EXECUTE DONE** 2026-07-24 (awaiting hub Accept) · PREP DONE earlier same day · thin verify
 **Phase:** 2 · **Type:** verify/harden · **Depends:** WO-P2-020
 **Canon:** `canon/architecture/settle-detection.md`
 
@@ -55,9 +55,11 @@ Execute HANDOFF should be **verify + thin gaps**, not from-scratch port.
 ```bash
 cd "$(git rev-parse --show-toplevel)"
 .venv/bin/pytest tests/test_settle.py -q
-# add when execute: case-mismatch unit in test_settle.py
 rg -n "IGNORECASE" tw2002_aiclient/session/settle.py   # expect no match on wait_prompt compile
 ```
+
+**EXECUTE note (2026-07-24):** added `test_wait_prompt_case_mismatch_times_out_never_matches`.
+CLI `do` / `--wait-prompt` Proof lines **banked** — no `do` verb yet; pytest-first is Accept.
 
 ### Tests touch list
 

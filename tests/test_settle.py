@@ -68,6 +68,19 @@ def test_prompt_match_wins_immediately_even_before_any_sleep():
     assert elapsed == 0.0
 
 
+def test_wait_prompt_case_mismatch_times_out_never_matches():
+    """Canon invariant: wait_prompt is case-sensitive (no IGNORECASE).
+    A pattern that differs only in letter case must fall through to
+    timeout — never silently match the wrong screen.
+    """
+    s = ScriptedSession(text="Command [TL=0100] (?=Help)? :")
+    reason, elapsed = wait_for_settle(
+        s, wait_prompt=r"command \[tl=", timeout_s=0.5, poll_interval_s=0.05
+    )
+    assert reason == "timeout"
+    assert elapsed >= 0.5
+
+
 def test_prompt_match_arriving_later_beats_idle_and_timeout():
     s = ScriptedSession(
         byte_arrival_times=[0.1, 0.2],
