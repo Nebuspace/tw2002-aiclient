@@ -19,18 +19,25 @@ resolution** -- `run/`, `logs/`, `state/`, `config/` all resolve relative
 to the repo root regardless of the caller's CWD (see canon's Single-
 Connection Invariant, `canon/architecture/session-engine.md`), not
 relative to wherever `tw`/`twd` happened to be invoked from.
+
+`CONFIG_DIR`/`PROFILES_PATH` are re-exported straight from `credentials.py`
+(OPEN-003-A) rather than recomputed here -- `credentials.py` is the one
+place that resolves `TW_CONFIG_DIR`, so this module and `credentials.py`
+always agree on the config dir without a second copy of that resolution.
 """
 
 import os
 from pathlib import Path
 
+from . import credentials
+
 # session/env.py -> session -> tw2002_aiclient -> repo root
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 DOTENV_PATH = PROJECT_ROOT / ".env"
-CONFIG_DIR = PROJECT_ROOT / "config"
+CONFIG_DIR = credentials.CONFIG_DIR
 STATE_DIR = PROJECT_ROOT / "state"
 LOG_DIR = PROJECT_ROOT / "logs"
-PROFILES_PATH = CONFIG_DIR / "profiles.toml"
+PROFILES_PATH = credentials.PROFILES_PATH
 
 HOST_VAR = "TW2002_HOST"
 PORT_VAR = "TW2002_PORT"
@@ -85,43 +92,63 @@ def load_dotenv(path=None):
 
 
 def _load_profile_host_port(profile_name, profiles_path):
-    """Read `host`/`port` out of one `[profile_name]` table in
-    `profiles.toml` -- the simple, catalog-free shape canon specifies for
-    env.py's own fallback (a `[default]` section, host/port only). This
-    is deliberately narrower than the full profile system (server-catalog
-    keys, handle/game_letter validation, `Profile` objects): that richer
-    shape belongs to `credentials.py`, which callers needing a *named*
-    profile with autopilot/registration policy should use directly. Never
-    raises for a missing file or missing section -- only for a malformed
-    TOML file or a non-integer `port`, both real misconfigurations.
+    """Resolve tier 4 (the `[profile_name]` fallback) via the ONE shared
+    resolver, `credentials.resolve_profile_host_port` (OPEN-003-A) --
+    replacing this function's own narrow direct-TOML-read copy of the same
+    logic. A caller-supplied `profiles_path` (this module's own long-
+    standing test-isolation param, predating `TW_CONFIG_DIR`) is passed
+    straight through to the shared resolver's own `profiles_path=` keyword
+    (OPEN-003-A follow-up: `credentials.py` grew this param specifically so
+    no caller needs to mutate its module-level `PROFILES_PATH` global to
+    test-isolate a call -- a mutate-then-restore swap is a TOCTOU hazard
+    under `ThreadingUnixServer`'s `daemon_threads=True`, flagged by Cipher
+    + Mack).
+
+    Never raises for a profile/file/section that's simply ABSENT (the
+    file doesn't exist, or has no `[profile_name]` table, or the table
+    has no host/port/server at all) -- that's ordinary tier-4 "nothing
+    here" for a last-resort fallback, so it returns `(None, None)` and
+    lets `resolve_host_port`'s own actionable HOST_VAR/PORT_VAR message
+    fire. DOES raise `EnvResolutionError` when the profile DOES have
+    something there but it's broken (an unparseable port, or an
+    unresolvable `server=` catalog key, or unparseable TOML) --
+    swallowing THAT into a generic "not found" message would hide the
+    real misconfiguration from the operator. Distinguished by TYPE, via
+    `credentials.py`'s `ProfileNotFound`/`ProfileIncomplete` (absent) vs
+    `ProfileMalformed` (broken) subclasses of `ProfileConnectionError`
+    (OPEN-003-A follow-up) -- not by sniffing the exception's message
+    text.
     """
-    path = profiles_path or PROFILES_PATH
-    if not path.exists():
-        return None, None
     import tomllib
 
+    path = profiles_path or credentials.PROFILES_PATH
     try:
-        with open(path, "rb") as f:
-            data = tomllib.load(f)
+        return credentials.resolve_profile_host_port(profile_name, profiles_path=profiles_path)
+    except (credentials.ProfileNotFound, credentials.ProfileIncomplete):
+        # Absent or under-specified profile -- ordinary tier-4 "nothing
+        # here" for a last-resort fallback; fall through so
+        # resolve_host_port's own actionable HOST_VAR/PORT_VAR message
+        # fires, same as a missing file/section always has.
+        return None, None
+    except credentials.ProfileMalformed as e:
+        # Something WAS there but it's broken (bad port int, unknown
+        # server= catalog key, bad TOML) -- surface it directly rather
+        # than hiding it behind the generic fallback message. Names
+        # `path` explicitly (not just the exception's own message) so
+        # this stays actionable even if credentials.py's own wording
+        # ever stops naming the file itself.
+        raise EnvResolutionError(
+            f"{path}'s [{profile_name}] profile is misconfigured: {e} "
+            f"-- fix it in profiles.toml, or set {HOST_VAR}/{PORT_VAR} "
+            f"to override it."
+        ) from e
     except tomllib.TOMLDecodeError as e:
+        # Belt-and-braces: covers a bad-TOML profiles.toml in case
+        # credentials.py's resolver ever stops wrapping this itself as
+        # ProfileMalformed.
         raise EnvResolutionError(
             f"{path} is not valid TOML ({e}) -- fix it or remove it."
         ) from e
-    section = data.get(profile_name)
-    if not isinstance(section, dict):
-        return None, None
-    host = section.get("host")
-    port = section.get("port")
-    if port is not None:
-        try:
-            port = int(port)
-        except (TypeError, ValueError):
-            raise EnvResolutionError(
-                f"{path}'s [{profile_name}] port is not a valid integer "
-                f"({port!r}) -- fix it in profiles.toml, or set "
-                f"{PORT_VAR} to override it."
-            )
-    return host, port
 
 
 def resolve_host_port(cli_host=None, cli_port=None, profile_name="default",

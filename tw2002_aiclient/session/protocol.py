@@ -123,16 +123,17 @@ def dispatch(session, verb, args, server):
 
 def _load_profile(name):
     """Bounded profile loader (WO-P2-020 Wave-3 CUT vs archive
-    credentials.py:162-226's `load_profile`/`Profile`): no server-catalog
-    multi-front-end resolution beyond the plain host/port `list_servers()`
-    lookup the ported `credentials.py` (Wave-1) already exposes, and no
+    credentials.py:162-226's `load_profile`/`Profile`): no
     `crawl_sacrificial`/`autonomous` fields (`autopilot.py` hasn't
-    landed). Reads `config/profiles.toml` directly via `tomllib` since
-    the ported `credentials.py` (WO-P0-005/WO-P1-012) only exposes
-    read-only summaries (`list_profile_summaries`), not a raw section
-    lookup. Returns `(LoginProfile, None)` on success, `(None, error_str)`
-    on failure -- never raises, so `_dispatch_ensure` can turn a bad
-    profile into an ordinary `{"ok": False, ...}` response."""
+    landed). Reads `config/profiles.toml` directly via `tomllib` for the
+    game_letter/handle/allow_register fields since the ported
+    `credentials.py` (WO-P0-005/WO-P1-012) only exposes read-only
+    summaries (`list_profile_summaries`), not a raw section lookup --
+    host/port resolution itself is delegated to the ONE shared resolver,
+    `credentials.resolve_profile_host_port` (OPEN-003-A). Returns
+    `(LoginProfile, None)` on success, `(None, error_str)` on failure --
+    never raises, so `_dispatch_ensure` can turn a bad profile into an
+    ordinary `{"ok": False, ...}` response."""
     try:
         import tomllib
     except ImportError:  # pragma: no cover
@@ -161,18 +162,10 @@ def _load_profile(name):
     if missing:
         return None, f"profile_incomplete:{name}:missing={missing}"
 
-    host = p.get("host")
-    port = p.get("port")
-    server_key = p.get("server")
-    if server_key and (host is None or port is None):
-        catalog = {str(s["key"]): s for s in credentials.list_servers()}
-        rec = catalog.get(server_key)
-        if rec is None:
-            return None, f"profile_server_unresolved:{name}:unknown_server={server_key}"
-        host = host if host is not None else rec["host"]
-        port = port if port is not None else rec["port"]
-    if host is None or port is None:
-        return None, f"profile_incomplete:{name}:missing=['host_or_port']"
+    try:
+        host, port = credentials.resolve_profile_host_port(name)
+    except credentials.ProfileConnectionError as e:
+        return None, f"profile_connection_error:{name}:{e}"
 
     profile = LoginProfile(
         name=name,

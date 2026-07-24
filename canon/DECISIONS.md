@@ -84,6 +84,17 @@ Related parked seam: `workorders/WO-TW-CONFIG-DIR.md` (folds naturally with the 
    `_load_profile` catalog branch · credentials summaries) into one function.
 4. No change to env-first password / chmod-600 secrets / redaction; `TW_CONFIG_DIR` stays its own WO.
 
+**Resolution note (2026-07-24) — Pending.** Option A ruled and delegated to
+`impl-claudecode-aiclient` (Max, via the hub); executed via WO-OPEN-003-A alongside the parked
+`TW_CONFIG_DIR` seam. `canon/architecture/session-engine.md`'s Config Bootstrap section (and its
+Schema-table "Config bootstrap" row) is updated to describe the catalog indirection — the profile's
+`server` field, resolved through `config/servers.toml`, is the preferred host/port source, with an
+explicit profile `host`/`port` as an override — and to name the single shared resolver the daemon
+bootstrap, CLI, and `credentials.list_profile_summaries()` now all call, collapsing the 4 duplicate
+resolvers this item flagged. This item stays **OPEN/Pending** — the human/hub still owns moving it
+to RESOLVED/CLOSED formally (per the append-only + human-resolves rules above); this note records
+that the canon side of Option A execute is done.
+
 <!-- (end OPEN-003) -->
 
 ---

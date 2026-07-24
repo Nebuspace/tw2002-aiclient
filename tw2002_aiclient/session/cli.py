@@ -20,11 +20,6 @@ from pathlib import Path
 
 import argparse
 
-try:
-    import tomllib
-except ImportError:  # pragma: no cover -- pre-3.11 fallback, mirrors credentials.py
-    import tomli as tomllib  # type: ignore
-
 from . import credentials, env
 
 
@@ -45,47 +40,25 @@ def _resolve_run_dir(run_dir_arg: str | None) -> Path:
 
 
 def _resolve_profile_connection(profile_name: str) -> tuple[str, int]:
-    """Resolve `profile_name`'s (host, port) out of `config/profiles.toml`,
-    following a `server` catalog key into `config/servers.toml` when the
-    profile doesn't set an explicit host/port -- the same resolution
-    `credentials.list_profile_summaries()` performs for display, but that
-    helper never surfaces a resolved *port* (display-only), so it's
-    re-done here off the same on-disk sources (`credentials.PROFILES_PATH`,
-    `credentials.list_servers()`) rather than duplicating the catalog read.
+    """Resolve `profile_name`'s (host, port) via the ONE shared resolver,
+    `credentials.resolve_profile_host_port` (OPEN-003-A) -- replacing this
+    function's own local catalog/host-port read, a divergent copy of the
+    same logic `credentials.py`'s own docstring flags as superseded.
+    Re-raised as this module's own `ProfileResolutionError` so
+    `ensure_raw`'s existing `except ProfileResolutionError` catch (and any
+    caller monkeypatching this function directly) keeps working unchanged.
+
+    Precedence note (OPEN-003-A, no partial merge): a profile with a
+    `server` catalog key AND only one of `host`/`port` set no longer
+    merges the two -- the shared resolver treats explicit `host=`+`port=`
+    as an all-or-nothing override and otherwise resolves fully off the
+    catalog. Only affects a profile that mixes both forms, which was
+    never a documented/supported shape.
     """
-    profiles_path = credentials.PROFILES_PATH
-    if not profiles_path.exists():
-        raise ProfileResolutionError(f"{profiles_path} does not exist")
-    with open(profiles_path, "rb") as f:
-        data = tomllib.load(f)
-    section = data.get(profile_name)
-    if not isinstance(section, dict):
-        raise ProfileResolutionError(f"no [{profile_name}] section in {profiles_path}")
-
-    host = section.get("host")
-    port = section.get("port")
-    server_key = section.get("server")
-    if server_key and (host is None or port is None):
-        catalog = {str(s["key"]): s for s in credentials.list_servers()}
-        entry = catalog.get(str(server_key))
-        if entry is None:
-            raise ProfileResolutionError(
-                f"[{profile_name}] server={server_key!r} not found in config/servers.toml"
-            )
-        if host is None:
-            host = entry.get("host")
-        if port is None:
-            port = entry.get("port")
-
-    if not host:
-        raise ProfileResolutionError(
-            f"[{profile_name}] has no resolvable host -- set host= or a valid server= catalog key"
-        )
-    if not port:
-        raise ProfileResolutionError(
-            f"[{profile_name}] has no resolvable port -- set port= or a valid server= catalog key"
-        )
-    return str(host), int(port)
+    try:
+        return credentials.resolve_profile_host_port(profile_name)
+    except credentials.ProfileConnectionError as e:
+        raise ProfileResolutionError(str(e)) from e
 
 
 # -- daemon transport -----------------------------------------------------

@@ -168,8 +168,13 @@ sovereign line (App/Human dual, escalate-on-unknown) stays intact across worker 
 
 `tw start` resolves the game host/port through `env.py`, a pure-stdlib `.env` loader with a fixed
 precedence — explicit CLI arg → process environment (`TW2002_HOST`/`TW2002_PORT`) → repo-root
-`.env` → `config/profiles.toml` `[default]` → a hard error naming the missing variable (no silent
-fallback host). This mirrors the env-first idiom credential resolution already uses.
+`.env` → the named profile in `config/profiles.toml`, resolved via **one shared catalog-aware
+resolver**: the profile's `server` field (a catalog key into `config/servers.toml`) is the
+*preferred* source of host/port; an explicit `host`/`port` on the profile is an override, not a
+second read path → a hard error naming the missing variable (no silent fallback host). This mirrors
+the env-first idiom credential resolution already uses, and it is the same resolver `env.py`, the
+daemon bootstrap, the CLI's profile connection, and `credentials.list_profile_summaries()` all call
+— one function, not four divergent copies (ADR pending; see [OPEN-003](/DECISIONS.md)).
 
 # Schema
 
@@ -182,7 +187,7 @@ fallback host). This mirrors the env-first idiom credential resolution already u
 | Transport | Raw socket + reader thread; hand-rolled IAC (stripped before pyte); CP437 80×25 pyte under lock; content-cropped render | — |
 | Control-lock carrier | Exclusive active-driver slot (refuse-not-queue); instant human preemption via fencing; send-time `{app,human}`+`session_id` tag; boundary redaction | Drive policy → [Control & Escalation](/architecture/control-and-escalation.md); ledger schema → [Trace Ledger](/engine/trace-ledger.md) |
 | Rolling-pilot | Daemon = continuity; driving worker = disposable | — |
-| Config bootstrap | `env.py` host/port precedence chain | — |
+| Config bootstrap | `env.py` host/port precedence chain, terminating in one shared catalog-aware profile→`servers.toml` resolver | — |
 
 # Examples
 

@@ -18,10 +18,68 @@ except ImportError:  # pragma: no cover
 
 # session/credentials.py → session → tw2002_aiclient → repo root
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-CONFIG_DIR = PROJECT_ROOT / "config"
+
+
+def _resolve_config_dir() -> Path:
+    """Resolve the config directory, honoring `TW_CONFIG_DIR` (absolute,
+    or relative to `PROJECT_ROOT`); default `PROJECT_ROOT / "config"`.
+    Mirrors `env.py`'s `resolve_run_dir()`/`TW_RUN_DIR` idiom -- the same
+    env-override-at-import shape, so a subprocess spawned with
+    `TW_CONFIG_DIR` set in its environment (the daemon-spawn idiom
+    `cli.py` already uses for `TW_RUN_DIR`) sees the isolated dir the
+    moment this module is imported, without any accessor-function call.
+    """
+    override = os.environ.get("TW_CONFIG_DIR")
+    if not override:
+        return PROJECT_ROOT / "config"
+    p = Path(override)
+    return p if p.is_absolute() else (PROJECT_ROOT / p)
+
+
+CONFIG_DIR = _resolve_config_dir()
 SECRETS_PATH = CONFIG_DIR / "secrets.json"
 PROFILES_PATH = CONFIG_DIR / "profiles.toml"
 SERVERS_PATH = CONFIG_DIR / "servers.toml"
+
+
+class ProfileConnectionError(Exception):
+    """Raised when a profile's (host, port) cannot be resolved -- a
+    missing/malformed profile section, or a section with neither an
+    explicit host+port nor a resolvable `server` catalog key.
+
+    Callers that only need to know "did resolution fail" can catch this
+    base class (e.g. `list_profile_summaries`'s display fallback below).
+    Callers that need to react differently per failure kind (e.g.
+    `env.py` deciding whether a retry or a user-facing fix is
+    appropriate) should catch the specific subtype instead of
+    string-matching the message:
+
+      - `ProfileNotFound` -- `profiles.toml` itself, or the
+        `[profile_name]` section within it, is absent (or the section
+        isn't a table).
+      - `ProfileIncomplete` -- the section exists but declares neither a
+        usable explicit host+port pair nor a `server` catalog key.
+      - `ProfileMalformed` -- something the profile DID declare is
+        broken: `port` isn't a valid integer, `server` names a catalog
+        key that isn't in `servers.toml` (or whose entry has no
+        resolvable host/port), or `profiles.toml` itself isn't valid
+        TOML.
+    """
+
+
+class ProfileNotFound(ProfileConnectionError):
+    """`profiles.toml` or the `[profile_name]` section is absent."""
+
+
+class ProfileIncomplete(ProfileConnectionError):
+    """The section exists but has neither a usable host+port pair nor a
+    resolvable `server` catalog key."""
+
+
+class ProfileMalformed(ProfileConnectionError):
+    """A value the profile DID declare is broken: `port` isn't an int,
+    `server` names an unknown/incomplete catalog entry, or the on-disk
+    TOML itself doesn't parse."""
 
 
 def _env_var_name(profile: str) -> str:
@@ -50,11 +108,18 @@ def get_password(profile: str) -> str | None:
     return None
 
 
-def list_servers() -> list[dict[str, object]]:
-    """Return catalog rows from ``config/servers.toml`` (key, name, host, port)."""
-    if not SERVERS_PATH.exists():
+def list_servers(path: Path | None = None) -> list[dict[str, object]]:
+    """Return catalog rows from ``config/servers.toml`` (key, name, host, port).
+
+    `path` overrides `SERVERS_PATH` when given (default `None` = current
+    behavior, unchanged) -- lets `resolve_profile_host_port`'s own
+    `servers_path` parameter reach the catalog read without mutating the
+    module global.
+    """
+    path = path or SERVERS_PATH
+    if not path.exists():
         return []
-    with open(SERVERS_PATH, "rb") as f:
+    with open(path, "rb") as f:
         data = tomllib.load(f)
     servers = data.get("servers") or {}
     rows: list[dict[str, object]] = []
@@ -72,6 +137,114 @@ def list_servers() -> list[dict[str, object]]:
     return rows
 
 
+def _catalog(servers_path: Path | None = None) -> dict[str, dict[str, object]]:
+    """Server catalog keyed by catalog key -- the shared read both
+    `list_profile_summaries` (display) and `resolve_profile_host_port`
+    (connection resolution) build off `list_servers()`. `servers_path`
+    overrides `SERVERS_PATH` when given (default `None` = current
+    behavior, unchanged)."""
+    return {str(s["key"]): s for s in list_servers(servers_path)}
+
+
+def _valid_host(value: object) -> bool:
+    """A usable host: a non-empty string."""
+    return isinstance(value, str) and value != ""
+
+
+def _valid_port(value: object) -> bool:
+    """A usable port: a positive `int`. Explicitly excludes `bool` --
+    `bool` is a subclass of `int` in Python, so a TOML `port = true`
+    would otherwise silently pass an `isinstance(value, int)` check and
+    coerce to `1` (Mack adversarial-review HIGH)."""
+    return isinstance(value, int) and not isinstance(value, bool) and value > 0
+
+
+def resolve_profile_host_port(
+    profile_name: str,
+    *,
+    profiles_path: Path | None = None,
+    servers_path: Path | None = None,
+) -> tuple[str, int]:
+    """Resolve `profile_name`'s (host, port) out of `config/profiles.toml`.
+
+    `profiles_path`/`servers_path` override `PROFILES_PATH`/`SERVERS_PATH`
+    when given (default `None` = the module-level globals, current
+    behavior byte-identical) -- lets a caller like `env.py` test-isolate a
+    call by passing a path argument instead of mutating the module global
+    (a mutate-then-restore swap is a TOCTOU hazard under
+    `ThreadingUnixServer`'s `daemon_threads=True`).
+
+    Precedence (OPEN-003 Option A -- the one catalog-aware resolver,
+    superseding the divergent copies previously in `env.py`,
+    `cli._resolve_profile_connection`, and `protocol._load_profile`):
+
+      1. an explicit ``host`` AND ``port`` both set on the profile --
+         used as-is, even if a ``server`` catalog key is also present
+         (an explicit override always wins outright, no partial merge).
+         Both must be VALID (`_valid_host`/`_valid_port`) -- a present
+         but invalid value (empty host, port <= 0, or a bool port) is
+         `ProfileMalformed`, not silently accepted (Mack adversarial-
+         review HIGH: `host=""` + `port=2323` used to return `('', 2323)`,
+         and a TOML `port = true` coerced to `1`).
+      2. else a ``server`` catalog key present and resolvable in
+         `config/servers.toml` -- that catalog entry's (host, port),
+         held to the SAME validity check.
+      3. else `ProfileConnectionError`, naming the profile and what's
+         missing.
+
+    Raises `ProfileNotFound` / `ProfileIncomplete` / `ProfileMalformed`
+    (all `ProfileConnectionError`) -- see that base class's docstring
+    for exactly which subtype each failure kind raises.
+    """
+    profiles_path = profiles_path or PROFILES_PATH
+    if not profiles_path.exists():
+        raise ProfileNotFound(f"{profiles_path} does not exist")
+    try:
+        with open(profiles_path, "rb") as f:
+            data = tomllib.load(f)
+    except tomllib.TOMLDecodeError as e:
+        raise ProfileMalformed(f"{profiles_path} is not valid TOML ({e})") from e
+    section = data.get(profile_name)
+    if not isinstance(section, dict):
+        raise ProfileNotFound(f"no [{profile_name}] section in {profiles_path}")
+
+    host = section.get("host")
+    port = section.get("port")
+    if host is not None and port is not None:
+        problems = []
+        if not _valid_host(host):
+            problems.append(f"host={host!r} is not a non-empty string")
+        if not _valid_port(port):
+            problems.append(f"port={port!r} is not a positive integer")
+        if problems:
+            raise ProfileMalformed(f"[{profile_name}] " + "; ".join(problems))
+        return host, port
+
+    server_key = section.get("server")
+    if server_key:
+        effective_servers_path = servers_path or SERVERS_PATH
+        entry = _catalog(servers_path).get(str(server_key))
+        if entry is None:
+            raise ProfileMalformed(
+                f"[{profile_name}] server={server_key!r} not found in "
+                f"{effective_servers_path}"
+            )
+        catalog_host = entry.get("host")
+        catalog_port = entry.get("port")
+        if not _valid_host(catalog_host) or not _valid_port(catalog_port):
+            raise ProfileMalformed(
+                f"[{profile_name}]'s server={server_key!r} catalog entry in "
+                f"{effective_servers_path} has no resolvable host/port "
+                f"(host={catalog_host!r}, port={catalog_port!r})"
+            )
+        return catalog_host, catalog_port
+
+    raise ProfileIncomplete(
+        f"[{profile_name}] has no resolvable host/port -- set both host= and "
+        f"port=, or a valid server= catalog key, in {profiles_path}"
+    )
+
+
 def list_profile_summaries() -> list[dict[str, str | None]]:
     """Yield non-secret profile rows for the launcher (never includes secrets).
 
@@ -79,7 +252,7 @@ def list_profile_summaries() -> list[dict[str, str | None]]:
     resolved ``host`` (catalog host when ``server`` is a key, else explicit host),
     ``game_letter``, and optional ``error``.
     """
-    catalog = {str(s["key"]): s for s in list_servers()}
+    catalog = _catalog()
     if not PROFILES_PATH.exists():
         return []
     with open(PROFILES_PATH, "rb") as f:
@@ -110,12 +283,20 @@ def list_profile_summaries() -> list[dict[str, str | None]]:
         elif not handle and not meta.get("allow_register"):
             error = "missing handle"
         display_server = server or explicit_host or "?"
-        if server and server in catalog:
-            host = str(catalog[server].get("host") or server)
-        elif explicit_host:
-            host = explicit_host
-        else:
-            host = display_server
+        try:
+            # Reuse the shared resolver for the common case; it never
+            # raises for a merely-incomplete profile here because this
+            # is a *display* row (must not start raising) -- fall back
+            # to the legacy lenient lookup for any profile the strict
+            # resolver can't (yet) resolve.
+            host, _port = resolve_profile_host_port(name)
+        except ProfileConnectionError:
+            if server and server in catalog:
+                host = str(catalog[server].get("host") or server)
+            elif explicit_host:
+                host = explicit_host
+            else:
+                host = display_server
         rows.append(
             {
                 "name": name,
