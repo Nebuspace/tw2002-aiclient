@@ -1,6 +1,6 @@
 # WO-P2-022 — Ensure `--no-auto-arm`
 
-> Status: DONE — shipped (awaiting hub Accept; tip commit this STATUS)
+> Status: DONE — hub-Accepted b69708a (2026-07-24)
 **Phase:** 2 · **Type:** harden · **Depends:** WO-P2-020
 **Canon:** `canon/architecture/app-autopilot-model.md`, `canon/architecture/north-star.md` (The Win
 Condition — the human is never sidelined by a rising automation number)

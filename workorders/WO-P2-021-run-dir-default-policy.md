@@ -1,6 +1,6 @@
 # WO-P2-021 — Run-dir default policy
 
-> Status: DONE — hub-Accepted pending (shipped verify-first; tip commit this STATUS)
+> Status: DONE — hub-Accepted b924407 (2026-07-24)
 **Phase:** 2 · **Type:** harden · **Depends:** WO-P2-020
 **Canon:** `canon/architecture/session-engine.md` (Single-Connection Invariant)
 
