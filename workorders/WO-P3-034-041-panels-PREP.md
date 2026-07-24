@@ -1,10 +1,9 @@
 # WO-P3-034…041 — Trainer-cockpit panels · PREP
 
-> Status: **PREP** (Phase 3 · authored 2026-07-24 on Cursor · **product execute is Fable-gated on CC**)
-**Phase:** 3 · **Type:** PREP (inventory + tightened Accept/Proof) · **Seat:** `impl-aiclient-cursor`
-**Model (execute):** Fable on `impl-claudecode-aiclient` after PWO-031…033 frame lands
+> Status: **034–040 DONE** on tip `f594b9e` · **041 PARKED** (Max context HOLD · session lane complete on disk / client lane partial · uncommitted) · DOC-GAP-P3-CHROME closed in `visual-language.md`
+**Phase:** 3 · **Type:** PREP + execute status · **Seat:** execute was `impl-claudecode-aiclient` (Fable); inventory ticks `impl-aiclient-cursor`
 **Canon:** `canon/surfaces/trainer-cockpit.md` · `canon/surfaces/visual-language.md` · `canon/engine/priority-engine.md` · `canon/engine/trace-ledger.md` · coaching surfaces as cited
-**Refs:** `workorders/ULTRACODE-WO-INVENTORY.md` rows 170–177 · `WO-P3-030-033-cockpit-frame-PREP.md` (shape) · D1 helpers `49b21a1` · tip base `1fd316b`
+**Refs:** `workorders/ULTRACODE-WO-INVENTORY.md` rows 170–177 · tip `f594b9e`
 
 Authored from a 3-lane read-only fan-out (panels/ledger · HUD/fold/colors · depends/gates). **No product edited.** Ignore CC untracked `cockpit/**` / dirty `screens.py` WIP — live-state below is **committed tip** only.
 
@@ -71,9 +70,9 @@ Authored from a 3-lane read-only fan-out (panels/ledger · HUD/fold/colors · de
 - **Proof:** Layer-A — tone→attr map + classifier unit tests. Layer-B — pty cell `.fg` / `.bold` for warn vs ok fixtures (never ANSI-regex).
 - **Hazards:** Game viewport stays server CP437 palette — semantic set is chrome-only (`visual-language.md`).
 
-### PWO-041 — LOGS band (EXTEND)
+### PWO-041 — LOGS band (EXTEND) — **PARKED 2026-07-24** (Max context HOLD · **not DONE** · tip remains `f594b9e`)
 - **Depends-on:** 031 · 020
-- **Live state (tip):** **MISSING** (placeholder has no `[LOGS]` band). Ledger module not ported (`session/daemon.py` comments defer ledger).
+- **Live state (tip `f594b9e`):** **MISSING** on origin — no committed `[LOGS]` band. **Dirty WIP (do not touch / do not commit from Cursor):** session ring + `status["log_tail"]` complete on disk; client `cockpit/logsband.py` + screens wire partial. Hub re-OPENs CC to finish.
 - **Accept:** Full-width `[LOGS]` transcript tail; lines appear as session advances; **redacted** (passwords never shown); newest row flash OK per canon.
 - **Proof:** Layer-A — redaction unit + tail compose. Layer-B — pty `_find_text` for `LOGS` + a non-secret line; secret fixture asserts redaction marker, never raw password.
 - **Hazards:** Public-repo / secrets doctrine. Trace-ledger schema may be thin stub first — Accept requires redacted tail, not full Phase-9 ledger.

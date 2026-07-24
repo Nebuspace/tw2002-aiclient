@@ -3,7 +3,7 @@ type: Reference
 title: Visual Language — The Shared Color, Glyph & Border Vocabulary
 description: The single-source dictionary of color semantics, glyphs, box-drawing weights, liveness cues, and fold thresholds every cockpit surface renders with — the surfaces are the sentences, this is the dictionary.
 tags: [surfaces, visual-language, color-semantics, glyphs, box-drawing, liveness, responsive-fold, hud, spectate, prescriptive, reference]
-timestamp: 2026-07-23T22:49:29Z
+timestamp: 2026-07-24T21:07:00Z
 ---
 
 Four surfaces — [The Trainer Cockpit](/surfaces/trainer-cockpit.md),
@@ -63,9 +63,14 @@ across every surface — a surface never invents its own thresholds:
   reverse, the loudest combination the palette owns), the classification-change header pulse, the
   connect/disconnect status flash, and Attach's active status bar. There is no second "this is
   selected/active" convention anywhere in the bundle.
-- **The viewport border is a STATE surface.** It flips cyan → **red non-bold** the instant the
-  daemon reports `not connected` (`spectate_app.py`) — an unmissable "link down" cue drawn on the
-  frame itself, never touching game content.
+- **The viewport border is a STATE surface.** On a real `connected: False` it flips cyan chrome →
+  **danger fg without the table's bold** (red **non-bold** — a deliberate per-surface override of
+  `danger`'s red/bold row in the 7-tone table). Unmissable "link down" on the frame itself, never
+  touching game content. Code (tip `f594b9e`): `screens.py` PlayShellScreen `_viewport_border_attr`
+  / draw path. **Mono / color-unavailable interim:** the same disconnect flip uses `A_UNDERLINE`
+  **non-bold** (`_viewport_danger_attr = curses.A_UNDERLINE`) — `A_REVERSE` stays reserved for
+  selection/active; this underline path is an interim DOC-GAP until a stronger mono STATE cue is
+  ratified.
 
 ### Mode-badge colors — and the guarded absence
 
@@ -208,16 +213,21 @@ terminal.
 | `no_border` | ≥60 | `MIN_COLS` | viewport border dropped, game full-bleed/clipped |
 | `too_small` | <60 | — | refuses to render: `Terminal too small (C×L) — need at least 60×20` |
 
-**Cockpit chrome tones (shipped tip `2a2d65c` — DOC-GAP closed here):**
+**Cockpit chrome tones (shipped tip `f594b9e` — DOC-GAPs closed through WO-P3-040):**
 
 - **Row-1 profile strip** (`host · game-letter · handle`) is **data**, not chrome — render at
   default **`A_NORMAL`** (untinted, non-bold). Cyan stays on the outer frame / instrument borders
   only ("cyan is chrome, never data"). Code: `tw2002_aiclient/screens.py` PlayShellScreen.draw
-  strip `draw_lines(..., curses.A_NORMAL)` (≈381–387).
+  strip `draw_lines(..., curses.A_NORMAL)`.
 - **`too_small` refusal** is a **gate statement**, not a warn/danger halt — tone **`info`
   cyan+bold** (same attr as the outer-frame chrome pair). Code: `screens.py` PlayShellScreen.draw
-  `draw_refuse_message(..., self._outer_attr)` (≈363–364) where `_outer_attr` is cyan|bold
-  (`_init_colors`, ≈352–357).
+  `draw_refuse_message(..., self._outer_attr)` where `_outer_attr` is cyan|bold.
+- **GAME viewport border danger (STATUS surface)** — when `connected` is a definite `False`,
+  border attr is **red non-bold**: the surface overrides the shared `danger` row's bold bit so the
+  link-down cue stays distinct from outer-frame bold cyan and from bold danger used elsewhere
+  (credit-loss flash, live-play confirm). Honest-unknown / missing `connected` stays default cyan
+  chrome (classifier only consulted on a real bool). Mono interim: **`A_UNDERLINE` non-bold**
+  (see load-bearing rule above). Code: `cockpit/tones.py` + `screens.py` `_viewport_border_attr`.
 
 `[CODE NOTE]` The **archived** `twclient/spectate_layout.py::frame_layout`'s own docstring ladder
 comment states the `full` floor as `>=142`; the governing comparison actually gated in that code is
@@ -227,6 +237,13 @@ to the constant it describes. The table above states the constant-derived (behav
 value; the reborn port, `tw2002_aiclient/cockpit/layout.py::frame_layout` (PWO-031/033), now
 encodes that `>=154` floor directly — the rebuild this note asked for has happened.
 
+**Fold stack order below 138 (PWO-039 · tip `f594b9e`):** when the left gutter sheds, the
+right-gutter **DECISIONS** pane hosts the folded stack — title stays **`DECISIONS`** — in fixed
+order **trace → GOALS → FOCUS** (autopilot-trace lines unlabeled as the pane's own identity; then
+a bare `GOALS` label + digest; then a bare `FOCUS` label + ranked lines). Height-clip is
+**bottom-first**: FOCUS sheds before GOALS before trace. Code: `tw2002_aiclient/cockpit/fold.py`
+`compose_folded_decisions_lines`.
+
 **Graceful-collapse principle — applies on every surface, not just the cockpit:**
 
 - **The body never scrolls horizontally.** Content that cannot fit is *folded*, never pushed off the
@@ -234,8 +251,9 @@ encodes that `>=154` floor directly — the rebuild this note asked for has happ
   line-tail, a chain bubble truncates left→right with a `… Nh` marker, a launcher's columns
   `[ASPIRATIONAL]` collapse to a single stacked row rather than overflow.
 - **Panels shed by column budget in a fixed priority** (full gutters → narrow left gutter → right
-  HUD only → bordered viewport alone → unbordered viewport), with secondary content (e.g. GOALS +
-  FOCUS) folding *into* an idle neighbor pane before it is dropped outright.
+  HUD only → bordered viewport alone → unbordered viewport), with secondary content (GOALS +
+  FOCUS) folding *into* idle DECISIONS below 138 (stack order above) before either is dropped
+  outright.
 - **Degradation loses chrome and redundancy, never information.** The viewport — the live game
   itself — is always the last thing to survive a fold; unicode/ASCII glyph twins carry zero
   information loss by construction.
@@ -308,9 +326,13 @@ could commit live turns. `y/N` capitalization signals the safe default; a bare E
   `MINIMAL_HEADER_MIN_COLS`, `RIGHT_GUTTER_MIN_COLS`, `FULL_GUTTER_MIN_COLS`,
   `LEFT_GUTTER_MIN_COLS`, `MIN_COLS`, `MIN_LINES`); reborn port
   `tw2002_aiclient/cockpit/layout.py::frame_layout` (incl. `×` in `too_small` message).
-- **Cockpit strip / refuse tones (tip `2a2d65c`)** — `tw2002_aiclient/screens.py`
-  PlayShellScreen (`A_NORMAL` row-1 strip; `_outer_attr` cyan+bold on
-  `draw_refuse_message`).
+- **Cockpit strip / refuse / viewport-STATE tones (tip `f594b9e`)** —
+  `tw2002_aiclient/screens.py` PlayShellScreen (`A_NORMAL` row-1 strip; `_outer_attr`
+  cyan+bold on `draw_refuse_message`; `_viewport_border_attr` red non-bold /
+  mono `A_UNDERLINE`); `tw2002_aiclient/cockpit/tones.py` (`SEMANTIC_COLORS`,
+  `status_semantic` / `gauge_semantic`).
+- **Folded DECISIONS stack (tip `f594b9e`)** — `tw2002_aiclient/cockpit/fold.py`
+  `compose_folded_decisions_lines` (trace → GOALS → FOCUS; height-clip bottom-first).
 - **Consuming surfaces (the sentences to this dictionary)** —
   [The Trainer Cockpit](/surfaces/trainer-cockpit.md),
   [Mode Line & Teach Controls](/surfaces/mode-line-and-teach-controls.md),

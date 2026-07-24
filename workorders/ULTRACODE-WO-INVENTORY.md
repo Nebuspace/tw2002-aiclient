@@ -167,14 +167,14 @@ Types: `bootstrap` · `verify` · `build` · `extend` · `harden` · `docs-findi
 | PWO-031 | Outer border frame | build | 030 | Bordered regions | no overlap ≥80×24 | TTY resize | trainer-cockpit |
 | PWO-032 | Character strip | extend | 031·014 | Top identity strip | host/game/char | TTY | trainer-cockpit |
 | PWO-033 | Three-column body scaffolding | build | 031 | GOALS \| center \| HUD slots | labeled empty ok | TTY | trainer-cockpit |
-| PWO-034 | GOALS panel live | verify/extend | 033·020 | GOALS from status | updates ~1Hz | TTY | trainer-cockpit · priority-engine |
-| PWO-035 | FOCUS panel live | verify/extend | 034 | FOCUS distinct from GOALS | labels readable | TTY | trainer-cockpit |
-| PWO-036 | DECISIONS / coach tips panel | extend | 033·020 | Tips never send | read-only | TTY | coaching-engine |
-| PWO-037 | HUD freshness markers | build | 033 | stale/fresh tones | age visible | TTY | trainer-cockpit HUD |
-| PWO-038 | TX / liveness strip | build | 031 | “not frozen” signal | heartbeat glyph moves | TTY | trainer-cockpit liveness |
-| PWO-039 | Responsive fold | build | 031 | Collapse order per canon | no overlap small term | TTY resize | trainer-cockpit fold |
-| PWO-040 | Semantic chrome colors | polish | 031 | 7-tone table | warn/danger/ok | TTY | mode-line · cockpit polish · visual-language |
-| PWO-041 | LOGS band | extend | 031·020 | Ledger tail redacted | lines appear | TTY + log | trace-ledger · cockpit |
+| PWO-034 | GOALS panel live **DONE** tip `f594b9e` | verify/extend | 033·020 | GOALS from status | updates ~1Hz | TTY | trainer-cockpit · priority-engine |
+| PWO-035 | FOCUS panel live **DONE** tip `f594b9e` | verify/extend | 034 | FOCUS distinct from GOALS | labels readable | TTY | trainer-cockpit |
+| PWO-036 | DECISIONS / coach tips panel **DONE** tip `f594b9e` | extend | 033·020 | Tips never send | read-only | TTY | coaching-engine |
+| PWO-037 | HUD freshness markers **DONE** tip `f594b9e` | build | 033 | stale/fresh tones | age visible | TTY | trainer-cockpit HUD |
+| PWO-038 | TX / liveness strip **DONE** tip `f594b9e` | build | 031 | “not frozen” signal | heartbeat glyph moves | TTY | trainer-cockpit liveness |
+| PWO-039 | Responsive fold **DONE** tip `f594b9e` | build | 031 | Collapse order per canon | no overlap small term | TTY resize | trainer-cockpit fold |
+| PWO-040 | Semantic chrome colors **DONE** tip `f594b9e` | polish | 031 | 7-tone table | warn/danger/ok | TTY | mode-line · cockpit polish · visual-language |
+| PWO-041 | LOGS band **PARKED** (context HOLD · not DONE) | extend | 031·020 | Ledger tail redacted | lines appear | TTY + log | trace-ledger · cockpit |
 
 ### Phase 4 — Game viewport & watch surfaces
 
