@@ -1,6 +1,6 @@
 # WO-P1-014 — World-identity rows on the launcher
 
-> Status: PLANNED (greenfield · HOLD-GATES-PENDING blocks execution until a lifting HANDOFF)
+> Status: DONE — hub-Accepted e73b363 (2026-07-24)
 **Phase:** 1 · **Type:** extend · **Depends:** WO-P1-010
 **Canon:** `canon/surfaces/entry-and-profile-selection.md` (World identity on entry),
 `canon/engine/world-identity.md`

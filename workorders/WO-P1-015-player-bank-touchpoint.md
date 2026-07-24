@@ -1,6 +1,6 @@
 # WO-P1-015 — Player bank touchpoint
 
-> Status: PLANNED (greenfield · HOLD-GATES-PENDING blocks execution until a lifting HANDOFF)
+> Status: DONE — hub-Accepted 75b5b31 (2026-07-24)
 **Phase:** 1 · **Type:** extend · **Depends:** WO-P1-010
 **Canon:** `canon/surfaces/entry-and-profile-selection.md` (Multi-player rotation touchpoint, The
 hard boundary), `canon/doctrine/secrets-and-credentials.md` (The Credential Bank)

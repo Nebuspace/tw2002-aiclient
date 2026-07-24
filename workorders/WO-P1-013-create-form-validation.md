@@ -1,6 +1,6 @@
 # WO-P1-013 — Create form validation
 
-> Status: PLANNED (greenfield · HOLD-GATES-PENDING blocks execution until a lifting HANDOFF)
+> Status: DONE — hub-Accepted ce261a7 (2026-07-24)
 **Phase:** 1 · **Type:** harden · **Depends:** WO-P1-012
 **Canon:** `canon/surfaces/entry-and-profile-selection.md` (The new-player flow — required fields)
 

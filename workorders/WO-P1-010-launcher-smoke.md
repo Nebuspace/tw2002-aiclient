@@ -1,6 +1,6 @@
 # WO-P1-010 — Launcher smoke
 
-> Status: PLANNED (greenfield · HOLD-GATES-PENDING blocks execution until a lifting HANDOFF)
+> Status: DONE — hub-Accepted 1c2a88b (2026-07-24)
 **Phase:** 1 · **Type:** verify · **Depends:** WO-P0-004
 **Canon:** `canon/surfaces/entry-and-profile-selection.md`
 

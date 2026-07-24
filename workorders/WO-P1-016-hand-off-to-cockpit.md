@@ -1,6 +1,6 @@
 # WO-P1-016 — Hand-off to cockpit
 
-> Status: PLANNED (greenfield · HOLD-GATES-PENDING blocks execution until a lifting HANDOFF)
+> Status: DONE — hub-Accepted 1d5dacb (2026-07-24)
 **Phase:** 1 · **Type:** verify · **Depends:** WO-P1-010
 **Canon:** `canon/surfaces/entry-and-profile-selection.md` (Hand-off to the cockpit)
 

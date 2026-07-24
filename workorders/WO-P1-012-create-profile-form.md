@@ -1,6 +1,6 @@
 # WO-P1-012 — Create profile form
 
-> Status: PLANNED (greenfield · HOLD-GATES-PENDING blocks execution until a lifting HANDOFF)
+> Status: DONE — hub-Accepted f316c62 (2026-07-24)
 **Phase:** 1 · **Type:** verify/build · **Depends:** WO-P1-010
 **Canon:** `canon/surfaces/entry-and-profile-selection.md` (The new-player flow)
 

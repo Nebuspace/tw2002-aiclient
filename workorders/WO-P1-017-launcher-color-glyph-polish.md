@@ -1,6 +1,6 @@
 # WO-P1-017 — Launcher color/glyph polish
 
-> Status: PLANNED (greenfield · HOLD-GATES-PENDING blocks execution until a lifting HANDOFF)
+> Status: DONE — hub-Accepted aadf2aa (2026-07-24)
 **Phase:** 1 · **Type:** polish · **Depends:** WO-P1-010, WO-P1-011
 **Canon:** `canon/surfaces/entry-and-profile-selection.md` (Visual design & polish, Color semantics
 for the launcher), `canon/surfaces/visual-language.md`
