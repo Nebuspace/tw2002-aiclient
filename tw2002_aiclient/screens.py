@@ -7,11 +7,12 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import Sequence
+from typing import Callable, Sequence
 
 import curses
 
 from tw2002_aiclient.cockpit import draw as cockpit_draw
+from tw2002_aiclient.cockpit import goals as cockpit_goals
 from tw2002_aiclient.cockpit.layout import frame_layout
 from tw2002_aiclient.cockpit.strip import compose_profile_strip_from_row
 from tw2002_aiclient.session import credentials
@@ -303,6 +304,13 @@ _GAME_PLACEHOLDER = "(placeholder — live game viewport wired in a later WO)"
 _PRIORITIES_EMPTY = "—"
 _HUD_EMPTY = "(none yet)"
 _LOGS_EMPTY = "(none yet)"
+# A raising composer (bad input surviving to a status field, a future
+# panel's own bug, ...) must never take the whole cockpit down with it --
+# same honesty-over-crash fallback as an unreachable/raising status_provider
+# (Mack finding: the provider call was already guarded, the compose call
+# wasn't). One honest-unknown line, reusing the established em-dash glyph
+# rather than inventing a second "something broke" vocabulary.
+_GOALS_COMPOSE_FAILED = ["—"]
 BOUNDARY_LINE_1 = (
     "Rotation multiplies YOUR own daily turns across INDEPENDENT characters."
 )
@@ -319,12 +327,21 @@ class PlayShellScreen:
     ``cockpit.layout.frame_layout``: a cyan-bold double-line outer frame
     titled ``PLAY SHELL``, the row-1 character/profile strip
     (``cockpit.strip.compose_profile_strip_from_row``), a three-column body
-    (thin-rounded PRIORITIES gutter | double-line GAME viewport | thin-rounded
-    HUD gutter), and the bottom thin-rounded LOGS band carrying the
-    ensure-session ``status_line``. The live game viewport itself is a later
-    WO -- GAME always shows an honest placeholder line, never fake content.
-    Below the fold floor (``mode == "too_small"``) only the layout's refusal
-    message is drawn.
+    (left gutter stacked GOALS above thin-rounded PRIORITIES | double-line
+    GAME viewport | thin-rounded HUD gutter), and the bottom thin-rounded
+    LOGS band carrying the ensure-session ``status_line``. The live game
+    viewport itself is a later WO -- GAME always shows an honest placeholder
+    line, never fake content. Below the fold floor (``mode == "too_small"``)
+    only the layout's refusal message is drawn.
+
+    ``status_provider`` (PWO-034) is the GOALS panel's data seam: a no-arg
+    callable returning a ``status`` dict (the daemon ``status`` verb shape)
+    or ``None``. Defaults to ``None`` -- with no provider set,
+    ``cockpit.goals.compose_goals_lines`` renders every row honestly
+    unknown rather than blank or invented. ``app.py`` is the one place that
+    assigns a real provider; a raising provider never crashes the draw pass
+    (``draw()`` catches around the call and falls back to ``None``, same
+    honesty-over-crash convention as ``adapters.ensure_session``).
 
     Esc ends the binding and returns to the launcher — clean close, not a suspend.
     """
@@ -333,6 +350,7 @@ class PlayShellScreen:
         self.stdscr = stdscr
         self.profile = profile
         self.status_line = ""  # set by app.py after the ensure_session() call
+        self.status_provider: Callable[[], dict | None] | None = None  # set by app.py (PWO-034)
         self._outer_attr = curses.A_NORMAL
         self._chrome_attr = curses.A_NORMAL
         self._init_colors()
@@ -385,6 +403,25 @@ class PlayShellScreen:
         # fg, non-bold) keeps the row itself un-tinted while the outer
         # frame's own border stays cyan around it.
         cockpit_draw.draw_lines(self.stdscr, strip_region, [strip_text], curses.A_NORMAL, boxed=False)
+
+        goals = regions["goals"]
+        cockpit_draw.draw_box(
+            self.stdscr, goals, weight="thin", attr=self._chrome_attr,
+            title="GOALS", title_attr=self._chrome_attr, uok=uok,
+        )
+        if goals is not None:
+            try:
+                status = self.status_provider() if self.status_provider is not None else None
+            except Exception:  # noqa: BLE001 -- a raising provider must not crash the draw pass
+                status = None
+            goals_inner_w = max(0, goals["w"] - 2)
+            try:
+                goals_lines = cockpit_goals.compose_goals_lines(status, width=goals_inner_w)
+            except Exception:  # noqa: BLE001 -- operator keeps control over panel-render failures
+                goals_lines = _GOALS_COMPOSE_FAILED
+        else:
+            goals_lines = []
+        cockpit_draw.draw_lines(self.stdscr, goals, goals_lines, curses.A_NORMAL)
 
         left = regions["left_gutter"]
         cockpit_draw.draw_box(

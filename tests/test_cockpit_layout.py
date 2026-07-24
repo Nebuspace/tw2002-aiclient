@@ -14,6 +14,7 @@ import pytest
 
 from tw2002_aiclient.cockpit.layout import (
     FULL_GUTTER_MIN_COLS,
+    GOALS_BOX_MIN_H,
     LEFT_GUTTER_MIN_COLS,
     MIN_COLS,
     MIN_LINES,
@@ -25,7 +26,7 @@ from tw2002_aiclient.cockpit.layout import (
     frame_layout,
 )
 
-_REGION_KEYS = ("strip", "left_gutter", "center", "right_gutter", "logs")
+_REGION_KEYS = ("strip", "goals", "left_gutter", "center", "right_gutter", "logs")
 
 
 def _present_regions(regions):
@@ -170,8 +171,15 @@ def test_corner_and_edge_coords_at_40x160():
     strip = regions["strip"]
     assert strip == {"y": 1, "x": 1, "w": 158, "h": 1}
 
+    # Left gutter is stacked GOALS (top, claims its own floor first) above
+    # PRIORITIES (below, gets whatever height remains) as of PWO-034 —
+    # together they still span the same y=2..28 / h=26 slot the single
+    # PRIORITIES box occupied pre-PWO-034.
+    goals = regions["goals"]
+    assert goals == {"y": 2, "x": 1, "w": 36, "h": GOALS_BOX_MIN_H}
+
     left = regions["left_gutter"]
-    assert left == {"y": 2, "x": 1, "w": 36, "h": 26}
+    assert left == {"y": 2 + GOALS_BOX_MIN_H, "x": 1, "w": 36, "h": 26 - GOALS_BOX_MIN_H}
 
     center = regions["center"]
     assert center == {"y": 2, "x": 39, "w": 82, "h": 26, "border": True}
@@ -183,11 +191,72 @@ def test_corner_and_edge_coords_at_40x160():
     assert logs == {"y": 36, "x": 1, "w": 158, "h": 3}
 
     # every region stays inside the outer frame's inner inset
-    for region in (strip, left, center, right, logs):
+    for region in (strip, goals, left, center, right, logs):
         assert region["x"] >= 1
         assert region["y"] >= 1
         assert region["x"] + region["w"] <= 159
         assert region["y"] + region["h"] <= 39
+
+
+# -- GOALS/PRIORITIES left-gutter stack (PWO-034) ------------------------
+
+
+def test_goals_present_and_priorities_narrowed_at_right_gutter_tier():
+    regions = frame_layout(40, LEFT_GUTTER_MIN_COLS + 2)
+    assert regions["mode"] == "right_gutter"
+    goals, left = regions["goals"], regions["left_gutter"]
+    assert goals is not None
+    assert goals["w"] == PRIORITIES_MIN_W
+    assert goals["h"] == GOALS_BOX_MIN_H
+    assert left is not None
+    assert left["w"] == PRIORITIES_MIN_W
+    # PRIORITIES sits directly below GOALS, same x, no gap.
+    assert left["y"] == goals["y"] + goals["h"]
+    assert left["x"] == goals["x"]
+
+
+def test_goals_absent_when_left_gutter_absent():
+    regions = frame_layout(40, RIGHT_GUTTER_MIN_COLS + 2)
+    assert regions["left_gutter"] is None
+    assert regions["goals"] is None
+
+
+def test_goals_claims_height_before_priorities_when_column_short(monkeypatch):
+    """A center_h shorter than GOALS_BOX_MIN_H: GOALS still renders (takes
+    the whole slot, clamped to what's available), PRIORITIES drops to
+    ``None`` rather than the two panels overlapping or GOALS itself being
+    starved below PRIORITIES. Unreachable under the real MIN_LINES=20 floor
+    (column_h there is always >= 14 > GOALS_BOX_MIN_H=11), so this patches
+    the constant to exercise the degrade branch directly -- same latent-guard
+    shape as ``LOGS_MIN_H``'s own module comment."""
+    import tw2002_aiclient.cockpit.layout as layout_module
+
+    monkeypatch.setattr(layout_module, "GOALS_BOX_MIN_H", 999)
+    regions = layout_module.frame_layout(MIN_LINES, FULL_GUTTER_MIN_COLS + 2)
+    goals, left, center = regions["goals"], regions["left_gutter"], regions["center"]
+    assert goals is not None
+    assert goals["h"] == center["h"]  # clamped to the whole available slot
+    assert left is None  # no height left for PRIORITIES
+
+
+def test_goals_at_least_1x1_when_column_is_extremely_short(monkeypatch):
+    """Even a pathologically short slot still yields a >=1x1 GOALS region,
+    never a 0-height/absent one, matching the layout's 'clamped to at least
+    1x1' invariant for every present region."""
+    import tw2002_aiclient.cockpit.layout as layout_module
+
+    monkeypatch.setattr(layout_module, "GOALS_BOX_MIN_H", 999)
+    regions = layout_module.frame_layout(MIN_LINES, FULL_GUTTER_MIN_COLS + 2)
+    assert regions["goals"]["h"] >= 1
+    assert regions["goals"]["w"] >= 1
+
+
+def test_goals_and_priorities_together_span_the_full_left_gutter_height():
+    for cols in (FULL_GUTTER_MIN_COLS + 2, LEFT_GUTTER_MIN_COLS + 2):
+        regions = frame_layout(40, cols)
+        goals, left, center = regions["goals"], regions["left_gutter"], regions["center"]
+        total_h = goals["h"] + (left["h"] if left is not None else 0)
+        assert total_h == center["h"]
 
 
 # -- non-overlap property sweep -------------------------------------------

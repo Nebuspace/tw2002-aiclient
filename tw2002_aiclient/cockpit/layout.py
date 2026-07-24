@@ -6,10 +6,11 @@ current ``(lines, cols)`` and returns a plain regions dict; drawing those
 regions with real ``curses`` windows is a later WO. This mirrors
 ``tw2002_aiclient/cockpit/strip.py``'s no-curses discipline and ports the
 archived ``twclient/spectate_layout.py::frame_layout`` reflow ladder, scoped
-down to what PWO-031/033 need: the outer frame, the row-1 character/profile
-strip band (PWO-032), the three-column body (left PRIORITIES gutter | center
-game viewport | right HUD gutter), and the bottom LOGS band. The archived
-function's PRIORITIES/MENU MAP/FORMATIONS/DECISIONS/chain-bubble/control/
+down to what PWO-031/033 (+ PWO-034's GOALS/PRIORITIES stack) need: the
+outer frame, the row-1 character/profile strip band (PWO-032), the
+three-column body (left gutter, itself stacked GOALS above PRIORITIES |
+center game viewport | right HUD gutter), and the bottom LOGS band. The
+archived function's MENU MAP/FORMATIONS/DECISIONS/chain-bubble/control/
 intervention sub-regions belong to later WOs (mode-line, Phase 5) and are
 deliberately not ported here — see the module docstring on ``frame_layout``
 for the DOCS-WIN fold-floor correction this module encodes.
@@ -63,6 +64,18 @@ STRIP_H = 1
 # review-worthy floor, not a canon-cited constant.
 LOGS_MIN_H = 3
 
+# GOALS box height (PWO-034): the authored line set is nine strategic
+# prerequisites -- Turns, Credits, StarDock, Map, Formations, Chain, Ship
+# prices, Hold price, Fighters (canon `trainer-cockpit.md` "Left gutter"
+# GOALS bullet) -- plus its own top/bottom border. GOALS stacks *above*
+# PRIORITIES in the left gutter (was the sole occupant pre-PWO-034); GOALS
+# claims this height first and PRIORITIES gets whatever vertical room is
+# left, shrinking or dropping entirely rather than the two panels
+# overlapping or GOALS itself ever rendering short of its own floor when
+# any room exists at all.
+GOALS_CONTENT_H = 9
+GOALS_BOX_MIN_H = GOALS_CONTENT_H + 2
+
 
 def frame_layout(lines: int, cols: int) -> dict:
     """Pure reflow: given the terminal's current ``(lines, cols)``, decide
@@ -86,10 +99,12 @@ def frame_layout(lines: int, cols: int) -> dict:
 
     Regions returned: ``mode``, ``message`` (only set at ``too_small``),
     ``outer`` (the whole client), ``strip`` (row 1, the character/profile
-    band), ``left_gutter``/``center``/``right_gutter`` (the three-column
-    body — each present only where its tier draws it), ``logs`` (the
-    bottom full-width band). Every region is clamped to at least 1x1 and
-    stays inside ``outer``; siblings never overlap.
+    band), ``goals``/``left_gutter``/``center``/``right_gutter`` (the
+    three-column body — each present only where its tier draws it; the left
+    gutter itself is stacked GOALS above PRIORITIES per PWO-034, see
+    ``GOALS_BOX_MIN_H``), ``logs`` (the bottom full-width band). Every
+    region is clamped to at least 1x1 and stays inside ``outer``; siblings
+    never overlap.
     """
     if lines < MIN_LINES or cols < MIN_COLS:
         return {
@@ -103,6 +118,7 @@ def frame_layout(lines: int, cols: int) -> dict:
             ),
             "outer": None,
             "strip": None,
+            "goals": None,
             "left_gutter": None,
             "center": None,
             "right_gutter": None,
@@ -162,9 +178,23 @@ def frame_layout(lines: int, cols: int) -> dict:
     # scope; the archived module hands it to MENU MAP/FORMATIONS/DECISIONS
     # sub-panels a later WO will port), rather than silently reassigning it
     # to LOGS.
+    #
+    # The left gutter's ``center_h``-tall slot is itself stacked (PWO-034):
+    # GOALS claims up to ``GOALS_BOX_MIN_H`` off the top first, PRIORITIES
+    # gets whatever remains below it. GOALS is present at 1x1-or-taller
+    # whenever the slot exists at all (``pri_w > 0``) — never dropped in
+    # favor of PRIORITIES; PRIORITIES is what shrinks, then drops (``None``)
+    # once GOALS alone has consumed the whole slot. Same width for both
+    # (stacked, not side-by-side), so every existing PRIORITIES_W /
+    # PRIORITIES_MIN_W tier width stays unchanged.
+    goals = None
     left_gutter = None
     if pri_w > 0:
-        left_gutter = {"y": rest_y, "x": ox, "w": pri_w, "h": center_h}
+        goals_h = min(GOALS_BOX_MIN_H, center_h)
+        goals = {"y": rest_y, "x": ox, "w": pri_w, "h": goals_h}
+        pri_h = center_h - goals_h
+        if pri_h > 0:
+            left_gutter = {"y": rest_y + goals_h, "x": ox, "w": pri_w, "h": pri_h}
 
     right_gutter = None
     if has_right_gutter:
@@ -194,6 +224,7 @@ def frame_layout(lines: int, cols: int) -> dict:
         "message": None,
         "outer": outer,
         "strip": strip,
+        "goals": goals,
         "left_gutter": left_gutter,
         "center": center,
         "right_gutter": right_gutter,

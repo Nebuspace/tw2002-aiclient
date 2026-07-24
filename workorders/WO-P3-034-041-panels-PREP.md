@@ -22,7 +22,7 @@ Authored from a 3-lane read-only fan-out (panels/ledger · HUD/fold/colors · de
 
 ## 1. Per-PWO tightened Accept + Proof
 
-### PWO-034 — GOALS panel live (VERIFY/EXTEND)
+### PWO-034 — GOALS panel live (VERIFY/EXTEND) — **DONE 2026-07-24** (impl-claudecode-aiclient · Fable · `cockpit/goals.py` composer + stacked left-gutter split + 1 Hz `status_provider` wire; gate: Mack CRITICAL Infinity-crash + 15s-freeze fixed, Pixel clean; live cadence proven. Status wire carries no GOALS fields yet — all rows render honest-`?` until state_parser/world-model WOs land.)
 - **Depends-on:** 033 · 020 (status/ensure path)
 - **Live state (tip):** **MISSING** — PlayShellScreen shows profile metadata + `status_line` only (`screens.py` placeholder); no GOALS compose · no `adapters.compose_play_panels` in reborn `adapters.py`. Archive: `compose_play_panels` + `test_aiclient_play_panels.py` (still `import twclient`, ignored).
 - **Accept:** Left-gutter **GOALS** lines refresh from daemon `status` ~1 Hz with readable labels; empty state honest (`—` / `(none yet)`); never vanishes when unknown. Met/partial/unknown/blocked glyphs per `trainer-cockpit.md` GOALS status set (`✓`/`·`/`?`/`⊘`).

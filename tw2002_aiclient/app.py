@@ -14,7 +14,8 @@ from tw2002_aiclient.screens import (
     PlayShellScreen,
     ProfileRow,
 )
-from tw2002_aiclient.session import credentials, player_bank
+from tw2002_aiclient.session import cli as session_cli
+from tw2002_aiclient.session import credentials, env, player_bank
 
 
 def _rows_from_disk() -> list[ProfileRow]:
@@ -130,9 +131,50 @@ def _run_create(stdscr: curses.window) -> str:
             return action
 
 
+# Poll timeout for the GOALS status_provider (Mack finding, HIGH): must stay
+# well under the 1 Hz refresh cadence (app.py's own stdscr.timeout(1000)) so
+# a bound-but-not-accepting daemon socket can never wedge the whole play
+# loop -- Esc included -- behind send_request's much longer 15.0s transport
+# default, repeating every tick. An async poll (decoupling the daemon round
+# trip from the redraw tick entirely) is a banked follow-on; this bound is
+# the minimal fix that keeps the operator in control today.
+_STATUS_POLL_TIMEOUT_S = 1.0
+
+
+def _daemon_status_provider(run_dir):
+    """Build the play shell's GOALS ``status_provider`` (PWO-034): a no-arg
+    closure that polls the daemon's ``status`` verb and returns its dict, or
+    ``None`` on any non-``ok`` response.
+
+    Bounded and never-raising by construction -- ``session_cli.send_request``
+    itself never raises for an expected transport failure (its own
+    docstring: "always returns a dict") and early-returns
+    ``daemon_not_running`` without ever opening a socket when
+    ``run/twd.sock`` doesn't exist, so a play shell with no daemon attached
+    polls this once a second at zero cost. When a socket DOES exist but
+    nothing is accepting on it, the explicit ``_STATUS_POLL_TIMEOUT_S``
+    bound (rather than the transport's own much longer default) is what
+    keeps this poll -- and the play loop's own redraw/Esc handling around
+    it -- from freezing for multiple seconds per tick. Isolation for
+    automated Proof is the test's own responsibility (monkeypatch
+    ``session_cli.send_request`` before driving the app, mirroring how
+    every existing pty test stubs ``adapters.ensure_session`` rather than
+    this module branching on a test env var).
+    """
+
+    def _poll() -> dict | None:
+        resp = session_cli.send_request(
+            "status", {}, timeout=_STATUS_POLL_TIMEOUT_S, run_dir=run_dir
+        )
+        return resp if isinstance(resp, dict) and resp.get("ok") else None
+
+    return _poll
+
+
 def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
     """Bind profile to a fresh play-shell placeholder; Esc ends the binding."""
     play = PlayShellScreen(stdscr, profile)
+    play.status_provider = _daemon_status_provider(env.resolve_run_dir())
     play.status_line = "Ensuring session…"
     play.draw()  # show the ensuring state during the (blocking) wait below
     # no_auto_arm=True: ensure only reaches main_command and stops, even if
@@ -142,14 +184,22 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
         play.status_line = f"session ready — {result.classification}"
     else:
         play.status_line = f"ensure failed — {result.reason}: {result.detail}"
-    while True:
-        play.draw()
-        key = stdscr.getch()
-        if key == -1:
-            continue
-        action = play.handle_key(key)
-        if action in ("back", "quit"):
-            return action
+    # ~1 Hz GOALS refresh (PWO-034): a bounded getch() timeout wakes the loop
+    # even with no keypress, so the next draw() picks up a fresh
+    # status_provider() snapshot. -1 (the timeout tick) is deliberately never
+    # routed into handle_key -- it isn't a real key, just a redraw prompt.
+    stdscr.timeout(1000)
+    try:
+        while True:
+            play.draw()
+            key = stdscr.getch()
+            if key == -1:
+                continue
+            action = play.handle_key(key)
+            if action in ("back", "quit"):
+                return action
+    finally:
+        stdscr.timeout(-1)  # restore blocking getch for the caller's own loop
 
 
 def _run_bank(stdscr: curses.window) -> str:

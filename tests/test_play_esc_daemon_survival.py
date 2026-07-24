@@ -86,6 +86,9 @@ def test_run_play_esc_issues_no_daemon_stop_verb(monkeypatch):
         def getch(self) -> int:
             return self._keys.pop(0) if self._keys else -1
 
+        def timeout(self, _ms: int) -> None:
+            return None
+
         def erase(self) -> None:
             return None
 
