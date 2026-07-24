@@ -18,6 +18,7 @@ def _rows_from_disk() -> list[ProfileRow]:
                 name=str(summary["name"]),
                 handle=str(summary.get("handle") or "?"),
                 server=str(summary.get("server") or "?"),
+                host=str(summary.get("host") or summary.get("server") or "?"),
                 game_letter=str(summary.get("game_letter") or ""),
                 error=summary.get("error"),  # type: ignore[arg-type]
             )
@@ -30,6 +31,7 @@ def _load_profiles() -> list[ProfileRow]:
 
     Env fixtures (disclose in STATUS):
     - ``TW2002_LAUNCHER_FIXTURE=broken`` — one broken row + healthy CTA
+    - ``TW2002_LAUNCHER_FIXTURE=worldid`` — two same host+letter, different handle
     - ``TW2002_LAUNCHER_DEMO=1`` — two healthy demo rows
     - default — ``credentials.list_profile_summaries()`` (may be empty)
     """
@@ -40,13 +42,44 @@ def _load_profiles() -> list[ProfileRow]:
                 name="broken-pilot",
                 handle="?",
                 server="?",
+                host="?",
                 error="missing game_letter",
             )
         ]
+    if fixture == "worldid":
+        # Same host + game_letter, distinct handles — proves full world tuple is shown.
+        return [
+            ProfileRow(
+                name="pilot-one",
+                handle="PilotOne",
+                server="example_one",
+                host="example.host",
+                game_letter="A",
+            ),
+            ProfileRow(
+                name="pilot-two",
+                handle="PilotTwo",
+                server="example_one",
+                host="example.host",
+                game_letter="A",
+            ),
+        ]
     if os.environ.get("TW2002_LAUNCHER_DEMO") == "1":
         return [
-            ProfileRow(name="alpha", handle="Alpha", server="demo-a", game_letter="B"),
-            ProfileRow(name="bravo", handle="Bravo", server="demo-b", game_letter="B"),
+            ProfileRow(
+                name="alpha",
+                handle="Alpha",
+                server="demo-a",
+                host="demo-a.example",
+                game_letter="B",
+            ),
+            ProfileRow(
+                name="bravo",
+                handle="Bravo",
+                server="demo-b",
+                host="demo-b.example",
+                game_letter="B",
+            ),
         ]
     return _rows_from_disk()
 

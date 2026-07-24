@@ -73,7 +73,13 @@ def list_servers() -> list[dict[str, object]]:
 
 
 def list_profile_summaries() -> list[dict[str, str | None]]:
-    """Yield non-secret profile rows for the launcher (never includes secrets)."""
+    """Yield non-secret profile rows for the launcher (never includes secrets).
+
+    Each row includes ``name``, ``handle``, ``server`` (catalog key or bare host),
+    resolved ``host`` (catalog host when ``server`` is a key, else explicit host),
+    ``game_letter``, and optional ``error``.
+    """
+    catalog = {str(s["key"]): s for s in list_servers()}
     if not PROFILES_PATH.exists():
         return []
     with open(PROFILES_PATH, "rb") as f:
@@ -86,6 +92,7 @@ def list_profile_summaries() -> list[dict[str, str | None]]:
                     "name": name,
                     "handle": "?",
                     "server": "?",
+                    "host": "?",
                     "game_letter": "",
                     "error": "profile section is not a table",
                 }
@@ -94,19 +101,27 @@ def list_profile_summaries() -> list[dict[str, str | None]]:
         game_letter = str(meta.get("game_letter") or "").strip()
         handle = str(meta.get("handle") or "").strip()
         server = str(meta.get("server") or "").strip()
+        explicit_host = str(meta.get("host") or "").strip()
         error = None
         if not game_letter:
             error = "missing game_letter"
-        elif not server and not (meta.get("host") and meta.get("port")):
+        elif not server and not (explicit_host and meta.get("port")):
             error = "missing server (catalog key) or host+port"
         elif not handle and not meta.get("allow_register"):
             error = "missing handle"
-        display_server = server or str(meta.get("host") or "?")
+        display_server = server or explicit_host or "?"
+        if server and server in catalog:
+            host = str(catalog[server].get("host") or server)
+        elif explicit_host:
+            host = explicit_host
+        else:
+            host = display_server
         rows.append(
             {
                 "name": name,
                 "handle": handle or "?",
                 "server": display_server,
+                "host": host,
                 "game_letter": game_letter,
                 "error": error,
             }

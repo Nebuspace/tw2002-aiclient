@@ -16,12 +16,13 @@ from tw2002_aiclient.session import credentials
 
 @dataclass(frozen=True)
 class ProfileRow:
-    """Non-secret profile summary for the picker (name/handle/server only)."""
+    """Non-secret profile summary for the picker (world-identity columns)."""
 
     name: str
     handle: str
-    server: str
+    server: str  # catalog key or bare host label
     game_letter: str = ""
+    host: str = ""  # resolved host for world-identity display
     error: str | None = None  # parse failure — row stays visible (never dropped)
 
 
@@ -101,22 +102,40 @@ class LauncherScreen:
         list_top = 3
         y = list_top
 
+        # Column header when any healthy profile is present.
+        if self.profiles and any(not p.error for p in self.profiles) and y < max_y - 2:
+            _safe_addstr(
+                self.stdscr,
+                y,
+                5,
+                f"{'name':<14} {'handle':<14} {'host':<22} game",
+                self._chrome,
+            )
+            y += 1
+
         # Profile rows (including broken — never silently dropped).
         for i, row in enumerate(self.profiles):
             if y >= max_y - 2:
                 break
             selected = i == self.selected
+            prefix = "▸ " if selected else "  "
             if row.error:
                 label = f"{row.name}  ·  ERROR: {row.error}"
                 base = self._warn
+                attr = (base | curses.A_REVERSE) if selected else base
+                _safe_addstr(self.stdscr, y, 3, prefix + label, attr)
             else:
-                label = f"{row.name}  ·  {row.handle}  ·  {row.server}"
-                if row.game_letter:
-                    label += f"  [{row.game_letter}]"
+                host = row.host or row.server or "?"
+                letter = (row.game_letter or "—")[:1]
+                # Fixed columns: name · handle · host · [game] (game set off in bold).
+                left = f"{row.name:<14} {row.handle:<14} {host:<22} "
                 base = curses.A_NORMAL
-            attr = (base | curses.A_REVERSE) if selected else base
-            prefix = "▸ " if selected else "  "
-            _safe_addstr(self.stdscr, y, 3, prefix + label, attr)
+                attr = (base | curses.A_REVERSE) if selected else base
+                letter_attr = (curses.A_BOLD | curses.A_REVERSE) if selected else curses.A_BOLD
+                x = 3
+                _safe_addstr(self.stdscr, y, x, prefix + left, attr)
+                x += len(prefix + left)
+                _safe_addstr(self.stdscr, y, x, f"[{letter}]", letter_attr)
             y += 1
 
         # Create New Player CTA — sole content when the picker is empty.
