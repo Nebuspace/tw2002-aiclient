@@ -1,25 +1,24 @@
 """Thin proofs for session/protocol.py ``ensure`` dispatch.
 
-Live contract (post-rebirth): ``drive_lock`` → ``controller_busy`` on
-concurrent ensure; ``already_there`` fast path; no control_lock / AI_PILOT;
-no auto-arm; no hud_seed. Auto-arm / human-attach / MODE_* coverage is
-deferred to P2-025 (see also tests/test_ensure_no_auto_arm.py).
+Live contract (post WO-P2-025): ``control_lock.acquire_driver`` →
+``controller_busy`` (or human/spectate typed refuse) on concurrent ensure;
+``already_there`` fast path; no auto-arm; no hud_seed. ``do``/``send`` verbs
+still unknown_verb until their WOs land.
 """
 
 from __future__ import annotations
 
-import threading
-
 import pytest
 
 from tw2002_aiclient.session import credentials, protocol
+from tw2002_aiclient.session.control_lock import ControlLock
 
 from .conftest import FakeAttachSession
 
 
 class FakeServer:
-    """Bare server double — ``drive_lock`` is optional; ``_dispatch_ensure``
-    lazy-creates one when missing."""
+    """Bare server double — ``control_lock`` optional; unrestricted when
+    missing (harness convention matching ``_driving_dispatch``)."""
 
 
 @pytest.fixture
@@ -66,11 +65,11 @@ def test_ensure_profile_not_found(profiles_toml):
     assert resp["error"] == "profile_not_found:no_such_profile"
 
 
-def test_ensure_concurrent_drive_lock_returns_controller_busy(profiles_toml):
+def test_ensure_concurrent_control_lock_returns_controller_busy(profiles_toml):
     server = FakeServer()
-    lock = threading.Lock()
-    assert lock.acquire(blocking=False)
-    server.drive_lock = lock
+    lock = ControlLock()
+    lock.acquire_driver()
+    server.control_lock = lock
     try:
         resp = protocol.dispatch(
             FakeAttachSession(),
@@ -79,7 +78,37 @@ def test_ensure_concurrent_drive_lock_returns_controller_busy(profiles_toml):
             server,
         )
     finally:
-        lock.release()
+        lock.release_driver()
 
     assert resp["ok"] is False
     assert resp["error"] == "controller_busy"
+
+
+def test_ensure_refuses_while_human_attached(profiles_toml):
+    server = FakeServer()
+    lock = ControlLock()
+    lock.take_human()
+    server.control_lock = lock
+    resp = protocol.dispatch(
+        FakeAttachSession(),
+        "ensure",
+        {"profile": "default"},
+        server,
+    )
+    assert resp["ok"] is False
+    assert resp["error"] == "controller_locked_by_human"
+
+
+def test_ensure_refuses_while_spectate(profiles_toml):
+    server = FakeServer()
+    lock = ControlLock()
+    lock.set_mode("spectate")
+    server.control_lock = lock
+    resp = protocol.dispatch(
+        FakeAttachSession(),
+        "ensure",
+        {"profile": "default"},
+        server,
+    )
+    assert resp["ok"] is False
+    assert resp["error"] == "spectate_read_only"

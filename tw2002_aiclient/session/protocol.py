@@ -7,17 +7,14 @@ unix-domain socket. Request: `{"verb": "...", "args": {...}}`. Response:
 always has `"ok"`; on success carries verb-specific fields, on failure
 carries `"error"`.
 
-**WO-P2-020 Wave-3 SUBSET** -- ported from
-`archive/pre-rebirth-2026-07-23/code/twclient/protocol.py` (2011 lines,
-~30 verbs), this module carries only the four verbs the reborn
-`ensure`-to-`main_command` core needs: `ensure`, `status`, `screen`,
-`stop`. `do`/`send`/`read`/`history`/`state`/`set_mode`/`subscribe`/
-`attach`/`crawl_start`/`autopilot_*`/`record_*`/`replay`/`mine`/`play*`/
-`haggle`/`list_skills` are all later WOs -- `dispatch()` below returns
-`unknown_verb` for every one of them rather than silently no-opping.
-Every response field name below matches the archive's exact wire shape
-(`"screen"`, `"prompt"`, `"classification"`, ...) so `cli.py`'s matching
-client (ported from the same archive) composes against it unchanged.
+**WO-P2-020 Wave-3 SUBSET + WO-P2-025 control-lock wire** -- ported from
+`archive/pre-rebirth-2026-07-23/code/twclient/protocol.py`. Live one-shot
+verbs: `ensure`, `status`, `screen`, `stop`. Lifetime `attach` is handled
+in `daemon.py` (not here). `do`/`send`/`read`/`history`/`state`/`set_mode`/
+`subscribe`/`crawl_start`/`autopilot_*`/`record_*`/`replay`/`mine`/`play*`/
+`haggle`/`list_skills` remain later WOs -- `dispatch()` returns
+`unknown_verb` for them. Ensure rides `_driving_dispatch` (acquire_driver /
+release_driver) for refuse-not-queue.
 
 `build_response()` here is a bounded subset of archive protocol.py:407-470
 -- see its own docstring for the exact fields cut and why.
@@ -25,10 +22,15 @@ client (ported from the same archive) composes against it unchanged.
 
 import json
 import os
-import threading
 import time
+from contextlib import contextmanager
 
 from .classify import classify_screen
+from .control_lock import (
+    MODE_HUMAN,
+    MODE_SPECTATE,
+    ControlModeConflict,
+)
 
 
 def build_response(session, rows=None, settled_reason=None, extra=None):
@@ -61,6 +63,57 @@ def build_response(session, rows=None, settled_reason=None, extra=None):
     return resp
 
 
+def _control_lock_error(server):
+    """Fast, non-atomic MODE hint for App driving verbs.
+
+    None when App may claim the driver slot (no lock / mode app with no
+    auto_loop hold). Otherwise a typed refuse naming who holds the
+    keyboard. Atomic authority is still `acquire_driver()` inside
+    `_driving_dispatch` — this is only the common-case early exit.
+    """
+    lock = getattr(server, "control_lock", None)
+    if lock is None:
+        return None
+    if getattr(lock, "is_auto_loop_held", lambda: False)():
+        return {"ok": False, "error": "controller_locked_by_auto_loop"}
+    if lock.app_may_send():
+        return None
+    mode = lock.mode
+    if mode == MODE_HUMAN:
+        return {"ok": False, "error": "controller_locked_by_human"}
+    if mode == MODE_SPECTATE:
+        return {"ok": False, "error": "spectate_read_only"}
+    return {"ok": False, "error": f"controller_locked:{mode}"}
+
+
+@contextmanager
+def _driving_dispatch(server):
+    """Shared ensure/(future do/send) guard: mode hint + acquire_driver.
+
+    Second concurrent App driver → typed refuse (`controller_busy` /
+    `controller_locked_by_human` / `spectate_read_only` / …), never
+    queued. Bare harness with no `control_lock` stays unrestricted
+    (tests). Always release_driver on the way out.
+    """
+    lock_error = _control_lock_error(server)
+    if lock_error is not None:
+        yield lock_error
+        return
+    lock = getattr(server, "control_lock", None)
+    if lock is None:
+        yield None
+        return
+    try:
+        lock.acquire_driver()
+    except ControlModeConflict as e:
+        yield {"ok": False, "error": str(e)}
+        return
+    try:
+        yield None
+    finally:
+        lock.release_driver()
+
+
 def dispatch(session, verb, args, server):
     """The daemon's one dispatch chokepoint. A malformed/unrecognized
     `verb` is answered with a structured error, never an exception --
@@ -71,19 +124,13 @@ def dispatch(session, verb, args, server):
         return build_response(session, rows=rows)
 
     if verb == "status":
-        # WO-P2-020 Wave-3 CUT vs archive protocol.py:590-767: `mode`
-        # (`control_lock.py` not ported), `subscribers`/`play`
-        # (`watch.py`/`loop_player.py` not ported), full `autopilot_trace`
-        # (`autopilot.py` not ported), `credits*`/`turns*`/`fighters*`
-        # (Session's observe_* methods cut in Wave-2), `intervention`, and
-        # `world_id` are all left off this response until their own work
-        # orders land. WO-P2-022 adds a stub `autopilot: {running: false}`
-        # so status --json can prove ensure never arms. This deliberately
-        # does NOT require `state_parser` (per this WO's context block).
+        # WO-P2-020 Wave-3 CUT vs archive: subscribers/play/credits*/turns*/
+        # fighters*/intervention/world_id still deferred. Mode + autopilot
+        # stub are live enough for cockpit status.
         rows = session.render()
         text = session.render_text(rows)
         prompt = rows[-1].strip() if rows else ""
-        return {
+        resp = {
             "ok": True,
             "connected": session.conn.connected,
             "idle_ms": int((time.monotonic() - session.last_rx) * 1000),
@@ -92,30 +139,25 @@ def dispatch(session, verb, args, server):
             "host": session.host,
             "port": session.port,
             "name": session.name,
-            # WO-P2-022: autopilot.py is not ported — ensure never arms. Expose
-            # an honest "not driving" stub so `status --json` can prove Accept
-            # ("App is not actively driving") until the real autopilot surface lands.
+            # WO-P2-022: autopilot.py is not ported — ensure never arms.
             "autopilot": {"running": False},
         }
+        lock = getattr(server, "control_lock", None)
+        if lock is not None:
+            mode = getattr(lock, "mode", None)
+            if isinstance(mode, str):
+                resp["mode"] = mode
+        return resp
 
     if verb == "stop":
         server.request_stop()
         return {"ok": True, "stopping": True}
 
     if verb == "ensure":
-        # WO-P2-020 Wave-3 CUT vs archive protocol.py:791-802: the FULL
-        # `_driving_dispatch`/control-lock module (modes, human
-        # preemption/fencing, `controller_locked_by_human`/
-        # `controller_locked_by_auto_loop`) is NOT ported -- that's still
-        # `control_lock.py`'s own later work order. What IS ported (Mack
-        # adversarial-review fix, HIGH): a minimal per-daemon exclusive
-        # DRIVE LOCK, just enough to stop two concurrent `ensure` calls
-        # from interleaving sends onto the SAME login automaton run (a
-        # real ThreadingUnixServer trigger -- a caller retrying `ensure`
-        # after a timeout lands a 2nd driver thread against the still-live
-        # 1st). See `_dispatch_ensure`'s own docstring. The post-login
-        # `_maybe_auto_start_after_ensure` autopilot auto-arm
-        # (`autopilot.py` not ported) is still left out entirely.
+        # WO-P2-025: full control-lock via `_driving_dispatch` (replaces
+        # the earlier ensure-only `drive_lock`). Autopilot auto-arm after
+        # ensure (`_maybe_auto_start_after_ensure`) still cut — no
+        # autopilot.py.
         return _dispatch_ensure(session, args, server)
 
     return {"ok": False, "error": f"unknown_verb:{verb}"}
@@ -214,47 +256,17 @@ def _dispatch_ensure(session, args, server):
     at `target`, no-op. Else run the login automaton via the profile's
     stored/generated credential.
 
-    **Mack adversarial-review fix (HIGH, reproduced):** the whole body
-    below (fast-check included) now runs under a per-daemon exclusive
-    `server.drive_lock`. `ThreadingUnixServer` (daemon.py) is
-    `daemon_threads=True` -- without this, two concurrent `ensure`
-    connections (the real trigger: a caller's `ensure_session(timeout=..)`
-    times out client-side and retries while the FIRST daemon-side
-    `run_login` is still mid-flight) can both drive `run_login()` against
-    the SAME `Session` at once. Both threads' sends interleave onto the
-    ONE wire, desyncing it, yet -- because each thread's own local view of
-    "did my last send get confirmed" can still spuriously read true --
-    BOTH can return `ok=True`/`main_command`, a false-success double-drive
-    that violates the single-connection invariant just as surely as two
-    daemons would. `acquire(blocking=False)` makes a second concurrent
-    `ensure` fail FAST with a typed, non-blocking refusal instead of
-    queueing behind (and corrupting) the first -- refuse-not-queue, same
-    posture the full `control_lock.py` module will later generalize.
-    `getattr(...)`-lazy so a minimal test double `server` (one that never
-    pre-populates `drive_lock`, the way this module's OWN dispatch tests
-    might) still gets correct mutual exclusion rather than an
-    AttributeError.
+    **WO-P2-025:** whole body runs under `_driving_dispatch` (control_lock
+    `acquire_driver` / `release_driver`). Concurrent second ensure →
+    typed `controller_busy` (or human/spectate/auto_loop refuse), never
+    queued — folds the earlier ensure-only `drive_lock`. Bare harness
+    without `server.control_lock` stays unrestricted for unit tests.
+    Login sends use Session.send default `sender="app"` (no login edits).
+    """
+    with _driving_dispatch(server) as lock_error:
+        if lock_error is not None:
+            return lock_error
 
-    The `controller_busy` error string (not a locally-invented one) is
-    deliberate: `tw2002_aiclient/adapters.py::_classify_failure` already
-    maps any `error` starting with `"controller_"` to
-    `REASON_ALREADY_DRIVING`, carrying an explicit FLAG comment asking
-    this WO to confirm the daemon actually emits that vocabulary (per
-    `canon/architecture/session-engine.md`'s `ControlModeConflict`
-    naming: `controller_locked_by_human` / `controller_locked_by_auto_loop`
-    / `controller_busy`). This closes that flag now, ahead of
-    `control_lock.py` itself landing."""
-    lock = getattr(server, "drive_lock", None)
-    if lock is None:
-        lock = threading.Lock()
-        server.drive_lock = lock
-    if not lock.acquire(blocking=False):
-        return {
-            "ok": False,
-            "error": "controller_busy",
-            "detail": "another ensure/drive is already in progress on this daemon",
-        }
-    try:
         from . import credentials
         from .login import LoginError, run_login
 
@@ -306,5 +318,3 @@ def _dispatch_ensure(session, args, server):
 
         session.mark_profile(profile.name)
         return build_response(session, extra={"steps": steps, "already_there": False})
-    finally:
-        lock.release()

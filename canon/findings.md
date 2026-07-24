@@ -79,9 +79,10 @@ never drive recommendations that contradict reborn `canon/`.
 `--ignore=`s every banked uncollectable file so `pytest --collect-only` / `pytest -q` run only the
 greenfield suite (0 collection ERRORS). Remove an ignore line when that file is rewritten/Accepted.
 
-**P2-025 rewrite-B (prep):** `test_control_lock` · `test_actor_attribution` · `test_tw04_toctou` ·
-`test_attach_*` · optionally `test_clean_preempt` — listed under
-`workorders/WO-P2-025-control-lock-actor-tag.md` §PREP; still ignored until execute HANDOFF.
+**P2-025 control-lock (execute):** live `session/control_lock.py` modes `{app,human,spectate}`;
+daemon owns lock + thin attach; ensure via `acquire_driver`. Collectable:
+`test_control_lock` · `test_actor_attribution` · `test_tw04_toctou`. Attach rehab pair +
+`test_clean_preempt` remain ignored (DEFER). See WO-P2-025 §Lane 3 EXECUTE.
 
 **P2-026 settle (prep):** kernel already in `session/settle.py` + green `tests/test_settle.py`; execute
 likely verify + case-mismatch unit — see `workorders/WO-P2-026-settle-detection-baseline.md` §PREP.

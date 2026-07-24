@@ -1,12 +1,13 @@
-"""ControlLock (twclient/control_lock.py) — pure unit tests, no sockets,
-no threads started. See test_attach_protocol.py for the real-socket
-end-to-end handoff proof."""
+"""ControlLock (tw2002_aiclient.session.control_lock) — pure unit tests.
+
+Greenfield rewrite of the archive suite: modes are exactly
+{app, human, spectate}; auto_loop collapses to app.
+"""
 
 import pytest
 
-from twclient.control_lock import (
-    MODE_AI_PILOT,
-    MODE_AUTO_LOOP,
+from tw2002_aiclient.session.control_lock import (
+    MODE_APP,
     MODE_HUMAN,
     MODE_SPECTATE,
     ControlLock,
@@ -14,59 +15,73 @@ from twclient.control_lock import (
 )
 
 
-def test_ai_may_send_by_default():
+def test_app_may_send_by_default():
     lock = ControlLock()
-    assert lock.mode == MODE_AI_PILOT
-    assert lock.ai_may_send() is True
+    assert lock.mode == MODE_APP
+    assert lock.app_may_send() is True
+    assert lock.is_auto_loop_held() is False
 
 
-def test_take_human_blocks_ai():
+def test_exposed_modes_are_exactly_app_human_spectate():
+    lock = ControlLock()
+    seen = {lock.mode}
+    lock.set_mode(MODE_SPECTATE)
+    seen.add(lock.mode)
+    lock.set_mode(MODE_APP)
+    lock.take_human()
+    seen.add(lock.mode)
+    assert seen == {MODE_APP, MODE_HUMAN, MODE_SPECTATE}
+    assert "auto_loop" not in seen
+
+
+def test_take_human_blocks_app():
     lock = ControlLock()
     lock.take_human()
     assert lock.mode == MODE_HUMAN
-    assert lock.ai_may_send() is False
+    assert lock.app_may_send() is False
 
 
 def test_take_human_twice_raises():
     lock = ControlLock()
     lock.take_human()
-    with pytest.raises(ControlModeConflict):
+    with pytest.raises(ControlModeConflict) as exc_info:
         lock.take_human()
+    assert str(exc_info.value) == "already_attached"
 
 
-def test_release_human_returns_to_ai_pilot():
+def test_release_human_returns_to_app():
     lock = ControlLock()
     lock.take_human()
     lock.release_human()
-    assert lock.mode == MODE_AI_PILOT
-    assert lock.ai_may_send() is True
+    assert lock.mode == MODE_APP
+    assert lock.app_may_send() is True
 
 
 def test_release_human_is_safe_when_not_held():
     lock = ControlLock()
-    lock.release_human()  # must not raise
-    assert lock.mode == MODE_AI_PILOT
+    lock.release_human()
+    assert lock.mode == MODE_APP
 
 
 def test_take_human_again_after_release_succeeds():
     lock = ControlLock()
     lock.take_human()
     lock.release_human()
-    lock.take_human()  # must not raise -- a fresh attach after a clean detach
+    lock.take_human()
     assert lock.mode == MODE_HUMAN
 
 
-# -- set_mode() -- the future control panel's non-exclusive seam --------
+# -- set_mode() ----------------------------------------------------------
 
 def test_set_mode_switches_between_settable_modes():
     lock = ControlLock()
     lock.set_mode(MODE_SPECTATE)
     assert lock.mode == MODE_SPECTATE
-    assert lock.ai_may_send() is False  # paused, not just "not human"
+    assert lock.app_may_send() is False
 
-    lock.set_mode(MODE_AI_PILOT)
-    assert lock.mode == MODE_AI_PILOT
-    assert lock.ai_may_send() is True
+    lock.set_mode(MODE_APP)
+    assert lock.mode == MODE_APP
+    assert lock.app_may_send() is True
 
 
 def test_set_mode_rejects_unknown_mode_name():
@@ -75,19 +90,14 @@ def test_set_mode_rejects_unknown_mode_name():
         lock.set_mode("warp_speed")
 
 
-def test_set_mode_rejects_auto_loop_even_though_it_is_now_a_real_mode():
-    # MODE_AUTO_LOOP is a real, wired mode (see enter_auto_loop() below)
-    # but deliberately NOT set_mode()-settable -- only LoopPlayer.start()
-    # may enter it, so "auto_loop" is on without an actually-running
-    # player thread never happens. Must raise cleanly either way.
+def test_set_mode_rejects_auto_loop_alias():
+    # auto_loop collapses to app — not a settable mode string.
     lock = ControlLock()
     with pytest.raises(ValueError):
-        lock.set_mode(MODE_AUTO_LOOP)
+        lock.set_mode("auto_loop")
 
 
 def test_set_mode_cannot_enter_human_mode():
-    # MODE_HUMAN is exclusive/connection-scoped -- only take_human() can
-    # enter it, never a plain set_mode() call.
     lock = ControlLock()
     with pytest.raises(ValueError):
         lock.set_mode(MODE_HUMAN)
@@ -96,67 +106,73 @@ def test_set_mode_cannot_enter_human_mode():
 def test_set_mode_cannot_clobber_an_active_human_attach():
     lock = ControlLock()
     lock.take_human()
-    with pytest.raises(ControlModeConflict):
+    with pytest.raises(ControlModeConflict) as exc_info:
         lock.set_mode(MODE_SPECTATE)
-    assert lock.mode == MODE_HUMAN  # unchanged by the rejected attempt
+    assert str(exc_info.value) == "locked_by_human_attach"
+    assert lock.mode == MODE_HUMAN
 
 
 def test_set_mode_cannot_clobber_a_running_auto_loop():
     lock = ControlLock()
     lock.enter_auto_loop()
-    with pytest.raises(ControlModeConflict):
+    with pytest.raises(ControlModeConflict) as exc_info:
         lock.set_mode(MODE_SPECTATE)
-    assert lock.mode == MODE_AUTO_LOOP
+    assert str(exc_info.value) == "locked_by_auto_loop"
+    assert lock.mode == MODE_APP
+    assert lock.is_auto_loop_held() is True
 
 
-# -- enter_auto_loop()/leave_auto_loop() -- LoopPlayer's exclusive seam --
+# -- enter_auto_loop() / leave_auto_loop() — collapses to app ------------
 
-def test_enter_auto_loop_blocks_ai_and_is_observable():
+def test_enter_auto_loop_collapses_to_app():
     lock = ControlLock()
     lock.enter_auto_loop()
-    assert lock.mode == MODE_AUTO_LOOP
-    assert lock.ai_may_send() is False
+    assert lock.mode == MODE_APP
+    assert lock.is_auto_loop_held() is True
+    assert lock.app_may_send() is True
 
 
 def test_enter_auto_loop_twice_raises():
     lock = ControlLock()
     lock.enter_auto_loop()
-    with pytest.raises(ControlModeConflict):
+    with pytest.raises(ControlModeConflict) as exc_info:
         lock.enter_auto_loop()
+    assert str(exc_info.value) == "already_running"
 
 
 def test_enter_auto_loop_refuses_to_preempt_an_active_attach():
     lock = ControlLock()
     lock.take_human()
-    with pytest.raises(ControlModeConflict):
+    with pytest.raises(ControlModeConflict) as exc_info:
         lock.enter_auto_loop()
+    assert str(exc_info.value) == "locked_by_human_attach"
     assert lock.mode == MODE_HUMAN
 
 
-def test_take_human_refuses_to_preempt_a_running_auto_loop():
+def test_take_human_always_wins_over_auto_loop():
+    # Canon: human claim is unconditional — App (incl. auto_loop hold) cannot refuse.
     lock = ControlLock()
     lock.enter_auto_loop()
-    with pytest.raises(ControlModeConflict):
-        lock.take_human()
-    assert lock.mode == MODE_AUTO_LOOP
+    lock.take_human()
+    assert lock.mode == MODE_HUMAN
+    assert lock.is_auto_loop_held() is False
 
 
-def test_leave_auto_loop_returns_to_ai_pilot():
+def test_leave_auto_loop_clears_hold_keeps_app():
     lock = ControlLock()
     lock.enter_auto_loop()
     lock.leave_auto_loop()
-    assert lock.mode == MODE_AI_PILOT
-    assert lock.ai_may_send() is True
+    assert lock.mode == MODE_APP
+    assert lock.is_auto_loop_held() is False
+    assert lock.app_may_send() is True
 
 
-def test_leave_auto_loop_is_safe_when_not_the_current_mode():
-    # A stale/duplicate call from a finishing player thread must never
-    # clobber a DIFFERENT mode set legitimately in the meantime.
+def test_leave_auto_loop_is_safe_when_not_held():
     lock = ControlLock()
     lock.enter_auto_loop()
     lock.leave_auto_loop()
     lock.take_human()
-    lock.leave_auto_loop()  # stale call -- must not touch MODE_HUMAN
+    lock.leave_auto_loop()  # stale — must not touch MODE_HUMAN
     assert lock.mode == MODE_HUMAN
 
 
@@ -164,12 +180,12 @@ def test_enter_auto_loop_again_after_leave_succeeds():
     lock = ControlLock()
     lock.enter_auto_loop()
     lock.leave_auto_loop()
-    lock.enter_auto_loop()  # must not raise
-    assert lock.mode == MODE_AUTO_LOOP
+    lock.enter_auto_loop()
+    assert lock.mode == MODE_APP
+    assert lock.is_auto_loop_held() is True
 
 
-# -- acquire_driver()/release_driver()/is_driving() -- TW-04's exclusive
-# active-driver slot: at most one do/send-family dispatch mid-flight -----
+# -- acquire_driver() / release_driver() / is_driving() ------------------
 
 def test_is_driving_false_by_default():
     lock = ControlLock()
@@ -180,7 +196,7 @@ def test_acquire_driver_marks_is_driving_true():
     lock = ControlLock()
     lock.acquire_driver()
     assert lock.is_driving() is True
-    assert lock.mode == MODE_AI_PILOT  # orthogonal to mode -- still ai_pilot
+    assert lock.mode == MODE_APP
 
 
 def test_acquire_driver_twice_raises_controller_busy():
@@ -189,7 +205,7 @@ def test_acquire_driver_twice_raises_controller_busy():
     with pytest.raises(ControlModeConflict) as exc_info:
         lock.acquire_driver()
     assert str(exc_info.value) == "controller_busy"
-    assert lock.is_driving() is True  # unchanged by the rejected attempt
+    assert lock.is_driving() is True
 
 
 def test_release_driver_clears_is_driving():
@@ -201,7 +217,7 @@ def test_release_driver_clears_is_driving():
 
 def test_release_driver_is_safe_when_not_held():
     lock = ControlLock()
-    lock.release_driver()  # must not raise
+    lock.release_driver()
     assert lock.is_driving() is False
 
 
@@ -209,12 +225,9 @@ def test_acquire_driver_again_after_release_succeeds():
     lock = ControlLock()
     lock.acquire_driver()
     lock.release_driver()
-    lock.acquire_driver()  # must not raise
+    lock.acquire_driver()
     assert lock.is_driving() is True
 
-
-# -- TW-04's second incident: enter_auto_loop() must not preempt an
-# actively-driving ai_pilot dispatch -------------------------------------
 
 def test_enter_auto_loop_refuses_to_preempt_an_active_driver():
     lock = ControlLock()
@@ -222,33 +235,25 @@ def test_enter_auto_loop_refuses_to_preempt_an_active_driver():
     with pytest.raises(ControlModeConflict) as exc_info:
         lock.enter_auto_loop()
     assert str(exc_info.value) == "locked_by_active_driver"
-    assert lock.mode == MODE_AI_PILOT  # never transitioned
+    assert lock.mode == MODE_APP
+    assert lock.is_auto_loop_held() is False
 
     lock.release_driver()
-    lock.enter_auto_loop()  # succeeds once the driver releases
-    assert lock.mode == MODE_AUTO_LOOP
+    lock.enter_auto_loop()
+    assert lock.mode == MODE_APP
+    assert lock.is_auto_loop_held() is True
 
 
-def test_acquire_driver_refuses_when_auto_loop_wins_the_mode_race():
-    # P0 finding 2: protocol.py's _control_lock_error mode check and
-    # acquire_driver() used to be two separate lock acquisitions --
-    # enter_auto_loop() slipping in between them (the exact interleaving
-    # probe_driver_race.py demonstrates) used to leave acquire_driver()
-    # only checking self._driving, never re-checking mode, so a
-    # do-family dispatch could win the driver slot while AUTO-LOOP
-    # believed it held exclusive control. acquire_driver() must now
-    # refuse atomically the instant mode is no longer ai_pilot.
+def test_acquire_driver_refuses_when_auto_loop_holds():
     lock = ControlLock()
-    lock.enter_auto_loop()  # wins the mode race first
+    lock.enter_auto_loop()
     with pytest.raises(ControlModeConflict) as exc_info:
         lock.acquire_driver()
     assert str(exc_info.value) == "controller_locked_by_auto_loop"
-    assert lock.is_driving() is False  # the slot was never claimed
+    assert lock.is_driving() is False
 
 
-def test_acquire_driver_refuses_when_human_attach_wins_the_mode_race():
-    # The other interleaving mack's finding calls out: take_human()
-    # slipping in before acquire_driver() is called.
+def test_acquire_driver_refuses_when_human_attach_holds():
     lock = ControlLock()
     lock.take_human()
     with pytest.raises(ControlModeConflict) as exc_info:
@@ -257,15 +262,23 @@ def test_acquire_driver_refuses_when_human_attach_wins_the_mode_race():
     assert lock.is_driving() is False
 
 
-# -- WO-CLEANPREEMPT: take_human() fences an active driver instead of
-# refusing it, and never blocks/refuses on that account -----------------
+def test_acquire_driver_refuses_in_spectate():
+    lock = ControlLock()
+    lock.set_mode(MODE_SPECTATE)
+    with pytest.raises(ControlModeConflict) as exc_info:
+        lock.acquire_driver()
+    assert str(exc_info.value) == "spectate_read_only"
+    assert lock.is_driving() is False
+
+
+# -- WO-CLEANPREEMPT: fence courtesy ------------------------------------
 
 def test_take_human_never_refuses_while_driving():
     lock = ControlLock()
     lock.acquire_driver()
-    lock.take_human()  # must not raise -- the human always wins immediately
+    lock.take_human()
     assert lock.mode == MODE_HUMAN
-    assert lock.is_driving() is True  # the ai_pilot dispatch is untouched, just fenced
+    assert lock.is_driving() is True
     assert lock.is_driver_fenced() is True
 
 
@@ -296,33 +309,26 @@ def test_fresh_acquire_driver_after_a_fenced_release_starts_unfenced():
     lock.take_human()
     lock.release_driver()
     lock.release_human()
-    lock.acquire_driver()  # a brand new dispatch, unrelated to the earlier fence
+    lock.acquire_driver()
     assert lock.is_driver_fenced() is False
 
 
-def test_take_human_still_refuses_the_pre_existing_exclusive_modes_while_driving():
-    # The fence only changes the `_driving` interaction -- take_human()'s
-    # OTHER two refusals (already_attached, locked_by_auto_loop) are
-    # untouched by WO-CLEANPREEMPT.
-    lock = ControlLock()
-    lock.enter_auto_loop()
-    with pytest.raises(ControlModeConflict) as exc_info:
-        lock.take_human()
-    assert str(exc_info.value) == "locked_by_auto_loop"
-    assert lock.mode == MODE_AUTO_LOOP
-
-
 def test_driver_lock_never_leaks_after_a_dispatch_ends():
-    # Mode-transition/release proof: once a driver releases (mirroring a
-    # completed dispatch), BOTH the driver slot AND the mode machine are
-    # free again -- a stuck/leaked flag would wedge either take_human()
-    # or enter_auto_loop() forever.
     lock = ControlLock()
     lock.acquire_driver()
     lock.release_driver()
     assert lock.is_driving() is False
-    lock.take_human()  # must not raise -- nothing left held
+    lock.take_human()
     assert lock.mode == MODE_HUMAN
     lock.release_human()
-    lock.enter_auto_loop()  # must not raise either
-    assert lock.mode == MODE_AUTO_LOOP
+    lock.enter_auto_loop()
+    assert lock.mode == MODE_APP
+    assert lock.is_auto_loop_held() is True
+
+
+def test_no_legacy_drive_mode_symbols_exported():
+    import tw2002_aiclient.session.control_lock as mod
+
+    assert not hasattr(mod, "MODE_AUTO_LOOP")
+    assert getattr(mod, "MODE_APP") == "app"
+    assert {MODE_APP, MODE_HUMAN, MODE_SPECTATE} == {"app", "human", "spectate"}

@@ -4,6 +4,11 @@
 actual wire protocol via twclient.interactive_app.AttachInputConn
 (production code, unmodified) -- no curses, no pty (that's
 test_interactive_app.py's job), no network, never the live game.
+
+WO-P2-025 lane 3 DEFER (2026-07-24): live protocol.py has no attach verb
+(dispatch returns unknown_verb); daemon has no _handle_attach. Do not
+invent attach — reopen this rewrite when attach is wired. Still ignored
+in pytest.ini.
 """
 
 import time

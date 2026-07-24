@@ -1,6 +1,6 @@
 # WO-P2-025 — Control-lock + actor tag
 
-> Status: PLANNED (greenfield · **PREP DONE** 2026-07-24 · product execute blocked until lifting HANDOFF after P2-024)
+> Status: **EXECUTE DONE** 2026-07-24 (awaiting hub Accept) · PREP DONE earlier same day
 **Phase:** 2 · **Type:** harden · **Depends:** WO-P2-020 · **Preferred after:** WO-P2-024 (login/fake_twgs exclusive until Accept)
 **Canon:** `canon/architecture/control-and-escalation.md`, `canon/architecture/session-engine.md`
 (The Control-Lock as Keystroke Carrier), `canon/engine/trace-ledger.md` (Actor attribution)
@@ -72,6 +72,23 @@ rg -n "ai_pilot|MODE_AI_PILOT" tw2002_aiclient/   # expect no match
 | `tests/test_attach_redaction.py` | Secret + attach path | Cipher-adjacent; after attach |
 
 **Not wave B:** `tests/test_clean_preempt.py` stays **DEFER** (rehab Play/TUI bucket) — reopen when protocol/ledger fence proofs land with/after 025.
+
+---
+
+## Lane 3 EXECUTE — rewrite-B status (2026-07-24T06:00Z follow-up)
+
+**Gate flipped:** `control_lock.py` + greenfield `test_control_lock.py` landed (lane 1). Lane 3 completed remaining rewrites.
+
+| File | Status | Proof |
+|------|--------|-------|
+| `tests/test_control_lock.py` | **GREEN** (lane 1; aligned) | 37 passed |
+| `tests/test_actor_attribution.py` | **GREEN** rewritten | `last_sender` / `VALID_SENDERS` (no ledger) |
+| `tests/test_tw04_toctou.py` | **GREEN** rewritten | Axis 1 races + fence/`send_raw`; Axis 2 attach e2e DEFER |
+| `tests/test_attach_protocol.py` | **DEFER** | Docstring note; no attach verb — still `--ignore`d |
+| `tests/test_attach_redaction.py` | **DEFER** | Docstring note; Cipher-adjacent — still `--ignore`d |
+| `tests/test_clean_preempt.py` | **DEFER** | Out of wave B (unchanged) |
+
+`pytest.ini`: un-ignored control_lock / actor_attribution / tw04_toctou after 53 passed under `--override-ini=addopts=`. Drafts under `workorders/drafts/WO-P2-025-lane3/` are historical.
 
 ---
 

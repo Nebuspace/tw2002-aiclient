@@ -7,20 +7,13 @@ via the pidfile at `<run-dir>/twd.pid` -- both project-rooted through
 `env.py` regardless of the caller's CWD, never reimplemented here.
 
 Ported from `archive/pre-rebirth-2026-07-23/code/twclient/daemon.py`
-(WO-P2-020, Wave-3) -- **dependency-cut**: the archive daemon wires up
-`ControlLock`, `LedgerWriter`, `SkillRecorder`, `WatchHub`,
-`SessionGuardian`, `LoopPlayer`, and `FrameRecorder`, none of which have
-been ported yet (`control_lock.py`, `ledger.py`, `guardian.py`,
-`watch.py`, `loop_player.py`, `frame_recorder.py`, `autopilot.py` --
-archive daemon.py:18-27,246-298). This daemon serves only the four verbs
-`protocol.py`'s Wave-3 subset carries (`ensure`/`status`/`screen`/`stop`)
--- `subscribe`/`attach` (archive daemon.py:51-60,68-167, the two
-lifetime-connection verbs) are cut with them, since they exist purely to
-stream `watch_hub`/`control_lock` state that isn't wired here. A later WO
-re-adds each module and wires it onto `server` the same way; `protocol.
-dispatch()` already reads server-side collaborators via
-`getattr(server, ..., None)` so this daemon can grow into them without a
-rewrite.
+(WO-P2-020, Wave-3 + WO-P2-025 control-lock wire). Still cut vs archive:
+`LedgerWriter`, `SkillRecorder`, `WatchHub`, `SessionGuardian`,
+`LoopPlayer`, `FrameRecorder` (`ledger.py`, `guardian.py`, `watch.py`,
+`loop_player.py`, `frame_recorder.py`, `autopilot.py`). Live verbs:
+`ensure`/`status`/`screen`/`stop` plus lifetime `attach` (control-lock
+hold). `subscribe` stays cut until `watch.py` lands. `protocol.dispatch()`
+reads server-side collaborators via `getattr(server, ..., None)`.
 """
 
 import argparse
@@ -32,6 +25,7 @@ import threading
 import time
 
 from . import env
+from .control_lock import ControlLock, ControlModeConflict
 from .protocol import dispatch
 from .session import Session
 
@@ -59,12 +53,58 @@ class CommandHandler(socketserver.StreamRequestHandler):
                 self._respond({"ok": False, "error": "invalid_request"})
                 continue
             verb = req.get("verb")
+            if verb == "attach":
+                # Lifetime connection: holds MODE_HUMAN until the socket
+                # drops (see _handle_attach). Never returns to one-shot
+                # request/response on this connection.
+                self._handle_attach()
+                return
             args = req.get("args") or {}
             try:
                 result = dispatch(session, verb, args, self.server)
             except Exception as e:  # noqa: BLE001 -- a bad request must never kill the daemon
                 result = {"ok": False, "error": f"internal_error:{e}"}
             self._respond(result)
+
+    def _handle_attach(self):
+        """Thin `tw attach` — take_human for the connection lifetime;
+        each subsequent line is one raw keystroke frame `{"key": "..."}`
+        forwarded via `session.send_raw(..., control_lock=..., sender=
+        "human")`. Release on any exit so a crashed attach cannot wedge
+        MODE_HUMAN. Ledger/record_attach_keystroke deferred (no ledger).
+        """
+        lock = self.server.control_lock
+        session = self.server.session
+        try:
+            lock.take_human()
+        except ControlModeConflict as e:
+            self._respond({"ok": False, "error": str(e)})
+            return
+        try:
+            self._respond({"ok": True, "attached": True})
+            while True:
+                line = self.rfile.readline()
+                if not line:
+                    return
+                try:
+                    req = json.loads(line.decode("utf-8"))
+                except (json.JSONDecodeError, UnicodeDecodeError):
+                    self._respond({"ok": False, "error": "invalid_json"})
+                    continue
+                key = req.get("key")
+                if not isinstance(key, str):
+                    self._respond({"ok": False, "error": "missing_key"})
+                    continue
+                session.send_raw(
+                    key.encode("latin-1", errors="ignore"),
+                    control_lock=lock,
+                    sender="human",
+                )
+                self._respond({"ok": True})
+        except (BrokenPipeError, ConnectionResetError, OSError):
+            pass
+        finally:
+            lock.release_human()
 
     def _respond(self, obj):
         self.wfile.write((json.dumps(obj) + "\n").encode("utf-8"))
@@ -213,15 +253,11 @@ def main(argv=None):
 
     server = ThreadingUnixServer(str(sock_path), CommandHandler)
     server.session = session
-    # Mack HIGH fix -- see protocol.py::_dispatch_ensure's own docstring:
-    # the minimal exclusive drive-lock two concurrent `ensure` calls need
-    # so they can't interleave sends onto the one wire. Set eagerly here
-    # (rather than left to `_dispatch_ensure`'s lazy getattr fallback) so
-    # every real daemon process always has exactly one, created before any
-    # request can possibly race its own creation.
-    server.drive_lock = threading.Lock()
+    # WO-P2-025: mode + active-driver slot (replaces the earlier ensure-only
+    # `threading.Lock` drive_lock). Eager so every request sees one lock;
+    # protocol `_driving_dispatch` uses acquire_driver/release_driver.
+    server.control_lock = ControlLock()
     server.request_stop = lambda: threading.Thread(target=_shutdown, args=(server, session), daemon=True).start()
-
     try:
         server.serve_forever()
     finally:

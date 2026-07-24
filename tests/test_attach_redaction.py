@@ -10,6 +10,10 @@ read a secret attach keystroke through exactly this field, confirmed via
 `watch.py`'s own `build_response(self.session)` calls) -- not a
 hand-mirrored approximation of any of the three chains.
 
+WO-P2-025 lane 3 DEFER (2026-07-24): no live attach verb / record_attach_
+keystroke / ledger wire. Cipher-adjacent rewrite waits on attach + lock.
+Do not invent attach — still ignored in pytest.ini.
+
 Background: cipher's repro showed every `tw attach` keystroke was logged
 UNREDACTED regardless of what prompt it was answering (`connection.
 send_bytes` unconditionally `log_raw()`'d every byte) -- a human-typed

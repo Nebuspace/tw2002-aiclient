@@ -8,9 +8,10 @@ Ported from `archive/pre-rebirth-2026-07-23/code/twclient/session.py`
 (WO-P2-020, Wave-2) -- a BOUNDED port of the connect -> send -> render ->
 settle -> classify core only. See this module's own comments (marked
 "WO-P2-020 CUT") for what the archive coupled in that is deliberately NOT
-ported here (control_lock, the trace ledger, state_parser's credits/turns/
-fighters supervision) -- those land in later work orders once their own
-modules exist under `tw2002_aiclient/session/`.
+ported here (the trace ledger, state_parser's credits/turns/fighters
+supervision) -- those land in later work orders. `control_lock` is owned
+by the daemon and passed into `send_raw` when attach drives; this module
+only duck-types `is_driver_fenced()` at the send choke.
 """
 
 import threading
@@ -274,10 +275,10 @@ class Session:
         on the wire. Bounded by `_FENCE_WAIT_TIMEOUT_S` -- a courtesy
         ordering wait, never a second refusal path; the keystroke is
         always eventually sent even if the bound is reached. `None` (the
-        default) is a complete no-op -- WO-P2-020 CUT: the control-lock
-        module this collaborator comes from (`control_lock.py`) has not
-        been ported yet, so this parameter stays optional/duck-typed
-        exactly as it was in the archive; nothing here assumes it exists.
+        default) is a complete no-op. Duck-typed: only
+        `is_driver_fenced()` is required (real collaborator =
+        `tw2002_aiclient.session.control_lock.ControlLock`, owned by the
+        daemon and passed from attach).
 
         A raw keystroke has no `secret` flag of its own the way `send()`'s
         caller can supply one -- so THIS function decides it, fresh, every

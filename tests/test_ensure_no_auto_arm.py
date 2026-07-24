@@ -77,6 +77,8 @@ def test_adapters_ensure_session_forwards_no_auto_arm(monkeypatch):
 def test_dispatch_ensure_never_arms_even_when_profile_would(monkeypatch):
     """Bare ensure with autopilot-ish profile metadata still only logs in
     / returns already_there — no autopilot loop start side effect."""
+    from tw2002_aiclient.session.control_lock import ControlLock
+
     session = MagicMock()
     session.conn.connected = True
     session.last_rx = 0.0
@@ -86,8 +88,13 @@ def test_dispatch_ensure_never_arms_even_when_profile_would(monkeypatch):
     session.port = 23
     session.name = "twd"
 
-    server = MagicMock()
-    server.drive_lock = __import__("threading").Lock()
+    # Plain object — MagicMock invents a fake control_lock that breaks
+    # _control_lock_error's truthiness checks.
+    class FakeServer:
+        pass
+
+    server = FakeServer()
+    server.control_lock = ControlLock()
 
     # Profile loader returns a profile; already-at-target path taken.
     fake_profile = MagicMock()
@@ -113,6 +120,8 @@ def test_dispatch_ensure_never_arms_even_when_profile_would(monkeypatch):
 
 def test_status_json_reports_autopilot_not_running(monkeypatch):
     """WO-P2-022 Accept: after ensure, status --json shows App not driving."""
+    from tw2002_aiclient.session.control_lock import ControlLock, MODE_APP
+
     session = MagicMock()
     session.conn.connected = True
     session.last_rx = 0.0
@@ -121,8 +130,14 @@ def test_status_json_reports_autopilot_not_running(monkeypatch):
     session.host = "127.0.0.1"
     session.port = 23
     session.name = "twd"
-    server = MagicMock()
+
+    class FakeServer:
+        pass
+
+    server = FakeServer()
+    server.control_lock = ControlLock()
     monkeypatch.setattr(protocol, "classify_screen", lambda *_a, **_k: "main_command")
     resp = protocol.dispatch(session, "status", {}, server)
     assert resp["ok"] is True
     assert resp["autopilot"] == {"running": False}
+    assert resp["mode"] == MODE_APP
