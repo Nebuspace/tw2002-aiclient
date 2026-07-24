@@ -1,6 +1,6 @@
 # WO-P2-021 — Run-dir default policy
 
-> Status: PLANNED (greenfield · HOLD-GATES-PENDING blocks execution until a lifting HANDOFF)
+> Status: DONE — hub-Accepted pending (shipped verify-first; tip commit this STATUS)
 **Phase:** 2 · **Type:** harden · **Depends:** WO-P2-020
 **Canon:** `canon/architecture/session-engine.md` (Single-Connection Invariant)
 
@@ -10,6 +10,10 @@ per-profile subdirectory splintering the single-connection invariant.
 
 **Scope:** `tw2002_aiclient/session/daemon.py` (run-dir resolution), a short note in `knowledge/` (or the
 findings log from WO-P0-006) documenting the override.
+
+**Shipped (verify-first):** `env.resolve_run_dir()` + daemon/`cli` already project-rooted from WO-P2-020;
+rewrote `tests/test_env.py` + `tests/test_cli_run_dir.py` onto reborn APIs; documented `TW_RUN_DIR` in
+`canon/findings.md`. No per-profile splinter; pidfile refuse-when-held covered by `_claim_pidfile` tests.
 
 **Accept:**
 - Running `tw start`/`ensure` from an arbitrary CWD still writes `run/twd.pid`/`run/twd.sock` under

@@ -69,3 +69,18 @@ Top-level (as of WO-P0-006):
 
 Use for field-shape / behavior reference when a WO explicitly allows it. Never restore to repo root;
 never drive recommendations that contradict reborn `canon/`.
+
+---
+
+## Run-dir override (WO-P2-021)
+
+**Canon:** `canon/architecture/session-engine.md` (Single-Connection Invariant).
+
+The daemon's pidfile + socket home is the **project-rooted** `run/` directory
+(`run/twd.pid`, `run/twd.sock`), resolved via `tw2002_aiclient.session.env.resolve_run_dir()`
+regardless of caller CWD. The **sole documented override** is the environment variable
+`TW_RUN_DIR` (absolute, or relative to the project root). There is no silent per-profile
+`run/<profile>/` splinter under the default — one daemon, one `run/` home, matching the
+single-connection invariant. A second process pointed at the same run-dir is refused by the
+atomic pidfile claim; a different `TW_RUN_DIR` is an independent home (operator-chosen
+isolation, not automatic).

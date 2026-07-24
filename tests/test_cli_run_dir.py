@@ -1,22 +1,22 @@
-"""`tw --run-dir` wiring — default geek socket unchanged; alternate run dirs."""
+"""WO-P2-021 — CLI / daemon run-dir wiring against the reborn session API.
+
+Proves project-rooted default `run/`, `--run-dir` / `TW_RUN_DIR` overrides,
+and pidfile refuse-when-held — without needing a live TWGS.
+"""
+
+from __future__ import annotations
 
 import json
-import sys
+import os
 from argparse import Namespace
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 
-from twclient import cli
+from tw2002_aiclient.session import cli, daemon, env
 
-PROJECT_ROOT = cli.PROJECT_ROOT
-
-
-@pytest.fixture(autouse=True)
-def _reset_run_paths():
-    cli._configure_run_paths(None)
-    yield
-    cli._configure_run_paths(None)
+PROJECT_ROOT = env.PROJECT_ROOT
 
 
 def test_resolve_run_dir_default():
@@ -27,119 +27,85 @@ def test_resolve_run_dir_relative():
     assert cli._resolve_run_dir("run/ona") == PROJECT_ROOT / "run" / "ona"
 
 
-def test_paths_for_run_dir():
-    run_dir = PROJECT_ROOT / "run" / "ona"
-    sock, pid = cli._paths_for_run_dir(run_dir)
-    assert sock == run_dir / "twd.sock"
-    assert pid == run_dir / "twd.pid"
+def test_resolve_run_dir_absolute(tmp_path):
+    assert cli._resolve_run_dir(str(tmp_path / "custom")) == tmp_path / "custom"
 
 
-def test_parser_default_run_dir():
+def test_parser_default_run_dir_none():
     parser = cli.build_parser()
     args = parser.parse_args(["status"])
     assert args.run_dir is None
 
 
-def test_parser_run_dir_on_spectate():
+def test_parser_run_dir_on_status():
     parser = cli.build_parser()
-    args = parser.parse_args(["spectate", "--run-dir", "run/ona", "--snapshot"])
+    args = parser.parse_args(["status", "--run-dir", "run/ona"])
     assert args.run_dir == "run/ona"
-    assert args.func is cli.cmd_spectate
+    assert args.func is cli.cmd_status
 
 
-def test_configure_default_paths():
-    cli._configure_run_paths(None)
-    assert cli._active_sock_path == PROJECT_ROOT / "run" / "twd.sock"
-    assert cli._active_pid_path == PROJECT_ROOT / "run" / "twd.pid"
+def test_parser_run_dir_on_ensure():
+    parser = cli.build_parser()
+    args = parser.parse_args(["ensure", "--profile", "x", "--run-dir", "/tmp/alt"])
+    assert args.run_dir == "/tmp/alt"
+    assert args.func is cli.cmd_ensure
 
 
-def test_configure_ona_paths():
-    cli._configure_run_paths("run/ona")
-    assert cli._active_sock_path == PROJECT_ROOT / "run" / "ona" / "twd.sock"
-    assert cli._active_pid_path == PROJECT_ROOT / "run" / "ona" / "twd.pid"
-
-
-def test_send_request_uses_active_sock(tmp_path):
+def test_send_request_uses_resolved_run_dir(tmp_path):
     run_dir = tmp_path / "custom"
     run_dir.mkdir()
-    cli._configure_run_paths(str(run_dir))
-    resp = cli.send_request("status", {})
+    resp = cli.send_request("status", {}, run_dir=run_dir)
     assert resp == {"ok": False, "error": "daemon_not_running"}
 
 
-def test_cmd_spectate_passes_configured_paths(monkeypatch, tmp_path):
-    run_dir = tmp_path / "run" / "ona"
-    run_dir.mkdir(parents=True)
-    (run_dir / "twd.sock").touch()
-    cli._configure_run_paths(str(run_dir))
-
-    captured = {}
-
-    def fake_snapshot(sock_path, pid_path, frames=1):
-        captured["sock"] = sock_path
-        captured["pid"] = pid_path
-        return 0
-
-    monkeypatch.setattr("twclient.spectate_app.run_snapshot", fake_snapshot)
-    with pytest.raises(SystemExit) as exc:
-        cli.cmd_spectate(Namespace(snapshot=True, frames=1))
-    assert exc.value.code == 0
-    assert captured["sock"] == run_dir / "twd.sock"
-    assert captured["pid"] == run_dir / "twd.pid"
-
-
-def test_cmd_watch_connects_configured_sock(monkeypatch, tmp_path):
-    run_dir = tmp_path / "run" / "ona"
-    run_dir.mkdir(parents=True)
-    (run_dir / "twd.sock").touch()
-    cli._configure_run_paths(str(run_dir))
-
-    connected = {}
-
-    class FakeSocket:
-        def settimeout(self, _):
-            pass
-
-        def connect(self, path):
-            connected["path"] = path
-
-        def sendall(self, _):
-            pass
-
-        def makefile(self, _):
-            return self
-
-        def readline(self):
-            return b""
-
-        def close(self):
-            pass
-
-    monkeypatch.setattr(cli.socket, "socket", lambda *_: FakeSocket())
-    cli.cmd_watch(Namespace(frames=0, json=False))
-    assert connected["path"] == str(run_dir / "twd.sock")
-
-
-def test_main_configures_run_dir_from_argv(monkeypatch):
-    seen = {}
-
-    def fake_status(args):
-        seen["run_dir"] = args.run_dir
-        seen["sock"] = cli._active_sock_path
-
-    monkeypatch.setattr(cli, "cmd_status", fake_status)
-    monkeypatch.setattr(sys, "argv", ["tw", "status", "--run-dir", "run/ona"])
-    cli.main()
-    assert seen["run_dir"] == "run/ona"
-    assert seen["sock"] == PROJECT_ROOT / "run" / "ona" / "twd.sock"
-
-
-def test_cmd_status_includes_run_dir_when_daemon_down(capsys):
-    """WO-CLI-DEFAULT-PROFILE-HINT: status always reports which run_dir
-    this CLI targets so a wrong sock is obvious."""
-    cli._configure_run_paths("run/ona")
+def test_cmd_status_includes_run_dir_when_daemon_down(capsys, tmp_path):
+    args = Namespace(json=True, run_dir=str(tmp_path / "run" / "ona"))
     with patch.object(cli, "daemon_alive", return_value=False):
-        cli.cmd_status(Namespace(json=True))
+        cli.cmd_status(args)
     out = json.loads(capsys.readouterr().out)
     assert out["daemon_running"] is False
-    assert out["run_dir"].endswith("run/ona") or "run/ona" in out["run_dir"].replace("\\", "/")
+    assert "run/ona" in out["run_dir"].replace("\\", "/")
+
+
+def test_ensure_raw_propagates_tw_run_dir_to_spawn_env(monkeypatch, tmp_path):
+    """Daemon spawn must pass TW_RUN_DIR in the child env (not argv)."""
+    run_dir = tmp_path / "alt-run"
+    run_dir.mkdir()
+    seen = {}
+
+    def fake_popen(cmd, **kwargs):
+        seen["env"] = kwargs.get("env") or {}
+        seen["cwd"] = kwargs.get("cwd")
+        raise OSError("stop-after-capture")
+
+    monkeypatch.setattr(cli.subprocess, "Popen", fake_popen)
+    monkeypatch.setattr(cli, "_resolve_profile_connection", lambda _p: ("127.0.0.1", 23))
+    monkeypatch.setattr(cli, "daemon_alive", lambda _rd=None: False)
+
+    resp = cli.ensure_raw("scratch", timeout=1.0, run_dir=run_dir)
+    assert resp["ok"] is False
+    assert resp["error"] == "spawn_failed"
+    assert seen["env"][env.RUN_DIR_VAR] == str(run_dir)
+    assert seen["cwd"] == str(PROJECT_ROOT)
+
+
+def test_claim_pidfile_refuses_live_holder(tmp_path):
+    """WO-P2-021 Accept #3: pidfile guard holds independently per run-dir."""
+    pidfile = tmp_path / "twd.pid"
+    pidfile.write_text(str(os.getpid()), encoding="utf-8")
+    with pytest.raises(daemon._PidfileHeld) as exc:
+        daemon._claim_pidfile(pidfile)
+    assert exc.value.pid == os.getpid()
+
+
+def test_claim_pidfile_replaces_stale(tmp_path):
+    pidfile = tmp_path / "twd.pid"
+    pidfile.write_text("99999999", encoding="utf-8")  # almost-certainly dead
+    daemon._claim_pidfile(pidfile)
+    assert pidfile.read_text(encoding="utf-8").strip() == str(os.getpid())
+
+
+def test_default_has_no_per_profile_splinter(monkeypatch):
+    monkeypatch.delenv(env.RUN_DIR_VAR, raising=False)
+    assert cli._resolve_run_dir(None) == PROJECT_ROOT / "run"
+    assert "ona" not in str(cli._resolve_run_dir(None))

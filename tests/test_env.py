@@ -1,9 +1,15 @@
-"""`.env` loader + host/port resolution order tests (no network, tmp_path
-only, never touches the real repo-root .env or config/profiles.toml)."""
+""".env loader + host/port + run-dir resolution (no network).
+
+WO-P2-021: prove project-rooted `run/` regardless of CWD, `TW_RUN_DIR`
+override, and no silent per-profile splinter under the default.
+"""
+
+import os
+from pathlib import Path
 
 import pytest
 
-from twclient import env
+from tw2002_aiclient.session import env
 
 
 def _write_dotenv(tmp_path, body):
@@ -21,6 +27,7 @@ def _write_profiles(tmp_path, body):
 def _clear_env(monkeypatch):
     monkeypatch.delenv(env.HOST_VAR, raising=False)
     monkeypatch.delenv(env.PORT_VAR, raising=False)
+    monkeypatch.delenv(env.RUN_DIR_VAR, raising=False)
 
 
 # -- load_dotenv ------------------------------------------------------------
@@ -55,8 +62,6 @@ def test_load_dotenv_applies_values_to_os_environ(tmp_path, monkeypatch):
     _clear_env(monkeypatch)
     p = _write_dotenv(tmp_path, "TW2002_HOST=example.com\n")
     env.load_dotenv(p)
-    import os
-
     assert os.environ["TW2002_HOST"] == "example.com"
 
 
@@ -64,8 +69,6 @@ def test_load_dotenv_never_overwrites_existing_process_env(tmp_path, monkeypatch
     monkeypatch.setenv(env.HOST_VAR, "from-real-env")
     p = _write_dotenv(tmp_path, "TW2002_HOST=from-dotenv-file\n")
     env.load_dotenv(p)
-    import os
-
     assert os.environ[env.HOST_VAR] == "from-real-env"
 
 
@@ -118,9 +121,6 @@ def test_profiles_toml_is_the_last_resort(tmp_path, monkeypatch):
 
 
 def test_mixed_sources_resolve_independently_per_field(tmp_path, monkeypatch):
-    """host comes from an explicit CLI arg, port falls all the way
-    through to profiles.toml -- each field resolves through the chain
-    independently."""
     _clear_env(monkeypatch)
     dotenv_path = tmp_path / "nope.env"
     profiles_path = _write_profiles(
@@ -150,9 +150,6 @@ def test_raises_actionable_error_naming_port_var_when_only_port_unresolved(tmp_p
 
 
 def test_incomplete_profile_is_treated_as_unresolved_not_a_crash(tmp_path, monkeypatch):
-    """A profiles.toml missing the [default] section (or missing
-    required fields) must not raise CredentialError out of
-    resolve_host_port -- it's just one more exhausted source."""
     _clear_env(monkeypatch)
     dotenv_path = tmp_path / "nope.env"
     profiles_path = _write_profiles(tmp_path, '[other]\nhost="x"\nport=23\ngame_letter="F"\nhandle="H"\n')
@@ -160,12 +157,7 @@ def test_incomplete_profile_is_treated_as_unresolved_not_a_crash(tmp_path, monke
         env.resolve_host_port(profiles_path=profiles_path, dotenv_path=dotenv_path)
 
 
-# -- malformed port sources raise EnvResolutionError, never a naked crash --
-
 def test_malformed_env_port_raises_actionable_error_not_a_bare_valueerror(tmp_path, monkeypatch):
-    """TW2002_PORT=abc must not surface a naked ValueError traceback --
-    it's an actionable EnvResolutionError naming the var and the bad
-    value, same phrasing family as the other resolution errors."""
     _clear_env(monkeypatch)
     monkeypatch.setenv(env.HOST_VAR, "from-env")
     monkeypatch.setenv(env.PORT_VAR, "abc")
@@ -176,9 +168,6 @@ def test_malformed_env_port_raises_actionable_error_not_a_bare_valueerror(tmp_pa
 
 
 def test_malformed_profiles_toml_port_raises_actionable_error_not_a_bare_valueerror(tmp_path, monkeypatch):
-    """A profiles.toml [default] port that can't convert to int (e.g. a
-    quoted non-numeric string) must not surface a naked ValueError out
-    of credentials.Profile -- it's an actionable EnvResolutionError."""
     _clear_env(monkeypatch)
     dotenv_path = tmp_path / "nope.env"
     profiles_path = _write_profiles(
@@ -186,3 +175,41 @@ def test_malformed_profiles_toml_port_raises_actionable_error_not_a_bare_valueer
     )
     with pytest.raises(env.EnvResolutionError, match="profiles.toml"):
         env.resolve_host_port(profiles_path=profiles_path, dotenv_path=dotenv_path)
+
+
+# -- resolve_run_dir (WO-P2-021) --------------------------------------------
+
+def test_resolve_run_dir_defaults_to_project_rooted_run(monkeypatch):
+    monkeypatch.delenv(env.RUN_DIR_VAR, raising=False)
+    assert env.resolve_run_dir() == env.PROJECT_ROOT / "run"
+
+
+def test_resolve_run_dir_independent_of_cwd(monkeypatch, tmp_path):
+    """WO-P2-021 Accept: caller CWD must not move the default run/ home."""
+    monkeypatch.delenv(env.RUN_DIR_VAR, raising=False)
+    monkeypatch.chdir(tmp_path)
+    assert Path.cwd() == tmp_path
+    assert env.resolve_run_dir() == env.PROJECT_ROOT / "run"
+    assert env.socket_path() == env.PROJECT_ROOT / "run" / env.SOCK_NAME
+    assert env.pid_path() == env.PROJECT_ROOT / "run" / env.PID_NAME
+
+
+def test_resolve_run_dir_honors_absolute_tw_run_dir(monkeypatch, tmp_path):
+    alt = tmp_path / "alt-run"
+    monkeypatch.setenv(env.RUN_DIR_VAR, str(alt))
+    assert env.resolve_run_dir() == alt
+    assert env.socket_path() == alt / env.SOCK_NAME
+    assert env.pid_path() == alt / env.PID_NAME
+
+
+def test_resolve_run_dir_honors_relative_tw_run_dir(monkeypatch):
+    monkeypatch.setenv(env.RUN_DIR_VAR, "run/alt")
+    assert env.resolve_run_dir() == env.PROJECT_ROOT / "run" / "alt"
+
+
+def test_default_run_dir_is_not_per_profile(monkeypatch):
+    """WO-P2-021 Accept: with TW_RUN_DIR unset there is one shared run/,
+    never a silent run/<profile> splinter."""
+    monkeypatch.delenv(env.RUN_DIR_VAR, raising=False)
+    # resolve_run_dir takes no profile arg -- the API itself forbids splintering
+    assert env.resolve_run_dir() == env.PROJECT_ROOT / "run"
