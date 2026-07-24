@@ -3,7 +3,7 @@ type: Reference
 title: CLI Verb Surface — the tw Vocabulary
 description: The single catalog of every one-shot tw verb — its effect, key arguments, actor-class, and owning concept — anchored to the human-approval gate and the stop-on-unknown escalation.
 tags: [architecture, cli, verbs, reference, control]
-timestamp: 2026-07-23T19:47:49Z
+timestamp: 2026-07-24T22:07:00Z
 ---
 
 `tw` is the stateless one-shot CLI a Bash-driving caller — a human at a shell, a script, or the
