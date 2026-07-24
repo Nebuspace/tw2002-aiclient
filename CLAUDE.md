@@ -54,7 +54,17 @@ python3 -m venv .venv && .venv/bin/pip install -e .
 - **AI never live-drives.** Live senders are `{app, human}` only. Spectate is read-only. At escalation the human responds by hand, Records a macro, or Analyzes with the AI teacher — every rule is human-approved before it can fire.
 - **Single-connection, single-session daemon** (once the daemon module lands): one telnet socket; control-lock governs who may drive. Don't bypass it.
 - **`.claude/` and `.samantha/` are gitignored** (hub ruling) — framework install is local orchestration, not shippable client. Same for private journals (`DESIGN-v2.md`, `QUEUE.md`, etc. if reintroduced).
-- **Path-leak gate (both seats).** Do not commit operator-home absolute paths (`/Users/<username>/` or `/home/<username>/`). Claude Code enforces via PreToolUse; Cursor enforces `.cursor/hooks.json` → `.cursor/hooks/path-leak-gate.sh` with **`failClosed: true`** (deny if the hook crashes/missing) plus a tracked git hook at `scripts/githooks/pre-commit` (enable once: `git config core.hooksPath scripts/githooks`). Scanner: `scripts/path-leak-scan.sh`. Dry-run: stage a file containing `/Users/…` and confirm the scanner exits 1.
+- **Path-leak gate (both seats).** Do not commit operator-home absolute paths (`/Users/<username>/` or `/home/<username>/`).
+
+  **Dual-layer design (Cursor seat):**
+  1. **Tip / shared config** — `.cursor/hooks.json` wires `beforeShellExecution` → `.cursor/hooks/path-leak-gate.sh` with **`failClosed: true`** (deny if the hook crashes or is missing). Scanner: `scripts/path-leak-scan.sh`.
+  2. **Real commit backstop** — tracked `scripts/githooks/pre-commit` runs the same scanner. **Enable once per clone:**
+     ```bash
+     git config core.hooksPath scripts/githooks
+     ```
+  3. **Local agent overlay** — Cursor's worker extension host often cannot execute command hooks (`Shell execution is not available in the worker extension host`). Loading tip `failClosed: true` into the *live* Cursor config then denies **all** Shell tool calls, not only commits. Agents may keep a **local empty** `.cursor/hooks.json` (`"hooks": {}`) uncommitted overlay so Shell stays usable; tip still carries `failClosed: true`. The fail-closed guarantee for `git commit` is the githooks path above.
+
+  Claude Code enforces the same intent via its PreToolUse hook. Dry-run: stage a file containing `/Users/…` and confirm `scripts/path-leak-scan.sh` exits 1.
 
 ---
 
