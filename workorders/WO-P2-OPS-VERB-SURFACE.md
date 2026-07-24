@@ -1,9 +1,9 @@
 # WO-P2-OPS-VERB-SURFACE — Ops CLI verb inventory + wire plan
 
-> Status: **slice E2 DONE** pending Accept · tip `1825758`
+> Status: **F-PREP DONE** pending Accept · tip `b9dc80d`
 > Seat: `impl-aiclient-cursor`
 > Refs: hub banked gap · `canon/architecture/cli-verbs.md` ·
-> `canon/surfaces/spectate-and-attach.md`
+> `canon/surfaces/spectate-and-attach.md` · `WO-P2-OPS-VERB-F-PREP.md`
 
 ## Goal
 
@@ -37,7 +37,10 @@ closes the socket without driving the game.
 | **A–D** | … | **DONE** (D docs-only) |
 | **E** | `watch` honesty | **DONE (docs-only)** |
 | **WATCHHUB** | substrate | **DONE** |
-| **E2** | `tw watch` CLI | **DONE** pending Accept |
-| **F–G** | spectate·attach / menumap… | queued |
+| **E2** | `tw watch` CLI | **DONE** |
+| **F-PREP** | spectate·attach inventory | **DONE** — see `WO-P2-OPS-VERB-F-PREP.md` |
+| **F1** | thin `tw attach` CLI (daemon attach already live) | queued |
+| **F2a/b** | spectate_layout → spectate_app + `tw spectate` | queued (curses-heavy) |
+| **G** | menumap… | queued |
 
 **Accept for a wire slice:** verb on help · FakeSession · path-leak · full suite green.

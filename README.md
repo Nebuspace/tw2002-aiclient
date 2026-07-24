@@ -168,9 +168,13 @@ Notes worth knowing up front:
 
 ## Spectator / attach (Coming)
 
-`tw spectate` and `tw attach` are **not shipped** on `./tw --help` yet. Product
-play / cockpit chrome is `./tw2002-aiclient`. Ops spectate/attach wire is staged
-in [`WO-P2-OPS-VERB-SURFACE.md`](workorders/WO-P2-OPS-VERB-SURFACE.md) (slice F).
+`tw spectate` and `tw attach` are **not** on `./tw --help` yet. Substrate already
+live: WatchHub/`subscribe`, `tw watch`, and daemon `_handle_attach` (control_lock
+keystroke lifetime). Missing: curses CLIs — archive `interactive_app.py` (~294
+LOC) and `spectate_app`+`spectate_layout` (~5.5k LOC). Execute plan:
+[`WO-P2-OPS-VERB-F-PREP.md`](workorders/WO-P2-OPS-VERB-F-PREP.md) (F1 attach CLI →
+F2 spectate port). Product play / cockpit chrome remains `./tw2002-aiclient`
+(Phase-3 pace-down separate).
 
 
 ## Tests
