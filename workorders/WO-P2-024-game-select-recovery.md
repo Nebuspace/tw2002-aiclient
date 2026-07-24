@@ -1,6 +1,6 @@
 # WO-P2-024 — Game-select recovery
 
-> Status: PLANNED (greenfield · HOLD-GATES-PENDING blocks execution until a lifting HANDOFF)
+> Status: DONE (shipped `4b41908` 2026-07-24 — login.py unchanged: reactive design already resumes; proven by tests/test_login_resume.py 4 tests + fake_twgs resume API)
 **Phase:** 2 · **Type:** harden · **Depends:** WO-P2-020
 **Canon:** `canon/architecture/login-automaton.md` (The Automaton Is Reactive, Not a Script —
 idempotent resume)
