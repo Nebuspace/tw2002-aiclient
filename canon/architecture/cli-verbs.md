@@ -172,43 +172,37 @@ tw mine --min-support 3            # propose draft skills from the ledger
 # a human reviews and approves before anything the App plays back can ever fire
 ```
 
+# Implementation status (tip `8f03289` · live `./tw --help`)
+
+**LIVE ops verbs today:** `status`, `ensure`, `screen`, `stop`, `do`, `send`, `read`, `history`,
+`watch`, `attach`, `menumap`.
+
+**NOT on tip (HOLD / later phases — do not document as shipped):** `spectate` (**F2 HOLD**),
+`loops` / `autoloop` (**G2–G4 HOLD**), `start` (ensure covers spawn), `log`/`trail`, `frames`,
+`analyze`/`mine`, `record`/`replay`, `play`/`haggle`/`autopilot`/`crawl`, `players`/`servers`/`probe`,
+`aiclient` as a separate curses product entry (product is `./tw2002-aiclient`).
+
+The catalog tables below are the **prescriptive full vocabulary** (target). Prefer this status
+block when answering "what can I run right now?"
+
 # Code Divergence
 
-The verb list above is derived from `twclient/cli.py`; `README.md` and `DESIGN.md` both diverge
-from it, and one reborn-vision tension is flagged for a future work order.
+1. **Catalog vs tip help.** This concept still lists the full reborn/archive-derived verb set
+   (including teach / App-drive / spectate). Tip `8f03289` only ships the LIVE set above — honesty
+   gate: never claim a HOLD or unported verb is runnable.
 
-1. **`DESIGN.md`'s verb table is a frozen v1 subset.** It lists only nine verbs —
-   `start`/`screen`/`do`/`send`/`read`/`state`/`history`/`status`/`stop` — and predates the entire
-   post-v1 surface (`ensure`, `spectate`, `attach`, `watch`, `autoloop`, `loops`, `record`,
-   `replay`, `mine`, `analyze`, `menumap`, `players`, `play`, `haggle`, `autopilot`, `crawl`,
-   `aiclient`, `servers`, `probe`, `frames`, `log`). This is expected — `DESIGN.md` is the frozen
-   v1 foundation — but it is not the current verb spec. This catalog supersedes it.
+2. **Citations historically pointed at `twclient/cli.py`.** Authoritative tip parser is
+   `tw2002_aiclient/session/cli.py` (ADR-001 relocate). Archive paths remain port-source for verbs
+   not yet restored.
 
-2. **`README.md`'s verb table omits 13 shipped verbs.** README documents `ensure`/`do`/`screen`/
-   `state`/`status`/`start`/`read`/`send`/`history`/`watch`/`aiclient`/`spectate`/`menumap`/
-   `attach`/`loops`/`autoloop`/`stop`, but has **no row** for `record`, `replay`, `mine`
-   (`patterns`), `analyze`, `play`, `haggle`, `autopilot`, `crawl`, `players`, `frames`,
-   `log` (`trail`), `servers`, or `probe` — all present in `cli.py`. The teach path
-   (`record`/`analyze`/`mine`) and the whole App-drive family are undocumented in the quickstart.
-
-3. **`trail` and `patterns` are aliases, not distinct verbs.** `cli.py` defines `trail` as an alias
-   of `log` and `patterns` as an alias of `mine` (single `set_defaults(func=…)` each). Any surface
-   that lists them as separate verbs is describing one verb by two names.
-
-4. **`autopilot` is the reborn-vision tension to watch.** `tw autopilot {preview,start,stop}` wires
-   the §22/§23 *autonomous goal-orchestrator* (`autopilot.py`). Under reborn canon the App is a
+3. **`autopilot` is the reborn-vision tension to watch.** Under reborn canon the App is a
    **deterministic** autopilot that plays only taught, human-approved rules and **stops on any
-   unknown screen** — it does not "reason." Its safety posture is compatible with canon only if
-   `autopilot start` is pure guarded-rule playback with stop-on-unknown, never live inference; the
-   `preview` dry-run is already correctly `read-only`. This aligns with the standing
-   [Control & Escalation](/architecture/control-and-escalation.md) finding that `control_lock.py`'s
-   `MODE_AI_PILOT` live-drive mode has no canon equivalent as a drive mode. Documentation-only note
-   — no code is edited by this concept; the reconciliation is a separate work order.
+   unknown screen** — it does not "reason." Documentation-only note — reconciliation is a separate
+   work order; tip has no `tw autopilot` verb yet.
 
 # Citations
 
-[1] twclient/cli.py — `build_parser()`, the authoritative verb list (derived-from source)
-[2] README.md — quickstart verb table (2 tables; §"Daily-driver verbs")
-[3] DESIGN.md §3 — the v1 one-round-trip contract and the frozen v1 verb table
-[4] canon/architecture/control-and-escalation.md — actor model, approval gate, stop-on-unknown
-[5] tw2002-aiclient/CLAUDE.md — "Architecture map" + "Hard rules" (module ownership, invariants)
+[1] `tw2002_aiclient/session/cli.py` — `build_parser()`, tip authoritative LIVE verb list
+[2] `canon/architecture/control-and-escalation.md` — actor model, approval gate, stop-on-unknown
+[3] Archive `twclient/cli.py` — port-source for verbs not yet restored
+[4] Project `CLAUDE.md` — hard rules / seat context

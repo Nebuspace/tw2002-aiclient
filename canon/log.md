@@ -1,5 +1,13 @@
 # Canon — Change Log
 
+## 2026-07-24
+
+- **WO-OKF-STATUS-TRUTH (Phases 0–3).** Status-honesty pass: ADR-001 Consequences + index mark
+  one-tree **LIVE**; `trainer-cockpit` / `visual-language` / `spectate-and-attach` / `cli-verbs`
+  Implementation-status tables — Phase 3 chrome/LOGS shipped (`6391bb7`); GAME viewport still
+  placeholder; `tw spectate` F2 HOLD; secrets Code-Divergence #1 already names status-verb wire
+  (`8f03289`). Phase 4 product subscribe **not** claimed DONE.
+
 ## 2026-07-23
 
 - **Bundle founded — the reborn, human-centric vision.** Ground-up OKF bundle at `canon/`,

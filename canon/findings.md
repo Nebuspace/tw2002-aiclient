@@ -2,11 +2,13 @@
 
 **Path choice:** `canon/findings.md` — inside the reborn OKF bundle. The legacy root `knowledge/` bundle is retired to `archive/knowledge/` (per WO-CANON-HYGIENE-KNOWLEDGE); `canon/` is the sole live OKF root.
 **Nature:** documentation-only. This file **edits no code** and imports nothing from `archive/`.
-**Updated:** 2026-07-23 (WO-P0-006).
+**Updated:** 2026-07-24 (WO-OKF-STATUS-TRUTH) — tip packages live under `tw2002_aiclient/` /
+`tw2002_aiclient/session/` (ADR-001 relocate DONE). Pre-rebirth divergences below remain
+**port-source caution** (do not revive); they are not an inventory of missing tip modules.
 
 Central ledger of known **canon ↔ (pre-rebirth / port-source) code** divergences. Under
 greenfield rebuild, these are **targets to avoid / correct when reimplementing** — not an
-inventory of live root defects (the packages named below lived under
+inventory of live root defects (the packages named in older rows lived under
 `archive/pre-rebirth-2026-07-23/` and are not imported by the greenfield tree).
 
 ---

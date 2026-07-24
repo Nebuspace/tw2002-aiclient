@@ -66,7 +66,7 @@ marked _(planned)_ are not yet written; entries marked ✅ written exist on disk
 
 # Decisions & ADRs
 
-* [ADR-001 — One tree, embedded session](/ADR/001-one-tree-embedded-session.md) — Collapses the Phase-0 two-top-level-package scaffold into one `tw2002_aiclient` import tree with the daemon-core under `session/`, plus app-owned daemon lifecycle and an exit-time stop-the-daemon-too confirm popup. — _(Proposed)_
+* [ADR-001 — One tree, embedded session](/ADR/001-one-tree-embedded-session.md) — Collapses the Phase-0 two-top-level-package scaffold into one `tw2002_aiclient` import tree with the daemon-core under `session/`, plus app-owned daemon lifecycle and an exit-time stop-the-daemon-too confirm popup. — _(Accepted 2026-07-24 · tip one-tree LIVE)_
 
 See also [`/DECISIONS.md`](/DECISIONS.md) — the live open-questions workspace feeding future ADRs.
 

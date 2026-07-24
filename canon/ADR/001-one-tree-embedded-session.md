@@ -77,16 +77,22 @@ The exit-confirm popup makes the daemon's continuity an explicit, visible choice
 it matters (quitting the app) instead of an implicit side effect the player has to already know
 about.
 
-**Trade-offs accepted:** every module currently under `twclient/` must be physically relocated and
-every import path touching it updated — this is nontrivial mechanical churn deferred to a follow-on
-WO (below), not absorbed by this ADR. Until that WO lands, the repo still has the two-top-level-
-package scaffold on disk; this ADR documents the target, not yet the state of the tree.
+**Trade-offs accepted:** every module formerly under the Phase-0 `twclient/` sibling had to be
+relocated and every import path updated — nontrivial mechanical churn that was **executed** after
+Accept (WO-P0-RELOCATE-SESSION and follow-ons). **Tip reality (as of `8f03289` / Phase 0–3 CLOSED):**
+there is exactly one top-level importable package (`tw2002_aiclient*`); daemon/CLI live under
+`tw2002_aiclient/session/`; no sibling `twclient/` package remains on tip. This ADR's Status is
+**Accepted**; the Consequences below that still speak of "until that WO lands" / "scaffold on disk"
+are **historical** — the relocate is done.
 
 **New constraint introduced:** no future WO may add a second top-level importable package without a
 new ADR superseding this one. Console-script entry points must resolve into
 `tw2002_aiclient.session.*`, never a sibling root.
 
-**Follow-on work required (code-debt, deferred until this ADR is Accepted — do NOT build until then):**
+**Follow-on work (historical checklist — relocate DONE on tip):**
+
+The itemized relocate list that follows was the Accept-gated debt; it is retained as the record of
+what was moved, not as open work:
 
 1. **Relocate `twclient/` → `tw2002_aiclient/session/`.** Physically move every module currently
    under `twclient/` (`daemon.py`, `cli.py`, `connection.py`, `iac.py`, `session.py`, `terminal.py`,

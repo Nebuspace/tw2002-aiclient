@@ -3,7 +3,7 @@ type: System
 title: Session Engine
 description: The persistent daemon plus one-shot CLI that own the single telnet connection and terminal, serve the JSON verb protocol as the one contract, and carry every keystroke through the control-lock with an {app,human} send-time actor tag.
 tags: [architecture, session-engine, daemon, cli, transport, control-lock]
-timestamp: 2026-07-23T19:47:45Z
+timestamp: 2026-07-24T22:07:00Z
 ---
 
 The session engine is the substrate every other concept stands on: a persistent daemon (`twd`)
@@ -49,13 +49,12 @@ into one import tree does not collapse them to one process — `twd` and `tw` (a
 separate OS processes exactly as "The Two-Process Split" above specifies; this section is packaging
 shape only.
 
-This one-tree layout is **realized as of `4080a37`** (WO-P0-RELOCATE-SESSION, under ADR-001 Accepted):
-the sibling `twclient/` package is gone, the current stub modules (`cli.py`, `credentials.py`) now live
-under `tw2002_aiclient/session/*`, and `pyproject.toml` resolves the single `tw2002_aiclient*` package
-tree. The remaining daemon-core modules cataloged in `CLAUDE.md`'s Architecture map are built under
-`tw2002_aiclient/session/*` as they arrive. This document's module Citations below are being retargeted
-to their `tw2002_aiclient.session.*` paths as a follow-on; until that lands they name the modules by
-their historical `twclient/*` paths (see ADR-001's Consequences for the itemized follow-on list).
+This one-tree layout is **realized as of `4080a37`** (WO-P0-RELOCATE-SESSION, under ADR-001 Accepted)
+and remains the tip shape through Phase 3 CLOSED (`6391bb7`) / docs tip `8f03289`: the sibling
+`twclient/` package is gone; daemon/CLI modules live under `tw2002_aiclient/session/*`;
+`pyproject.toml` resolves the single `tw2002_aiclient*` package tree. Module Citations below that
+still name historical `twclient/*` paths are **port-source aliases** — prefer
+`tw2002_aiclient.session.*` when reading tip code.
 
 **App-owned daemon lifecycle.** The aiclient app — the process the player actually runs — may
 start/ensure the daemon on entry (via `tw ensure`-equivalent machinery), so the player never has to

@@ -19,12 +19,18 @@ value below and a surface doc's inline restatement of it ever drift, this concep
 single-source authority and the surface doc's copy is a stale echo to be corrected.
 
 Every concrete value below is grounded to the module and, where meaningfully stable, the symbol name
-that defines it. This is a **rebirth-era concept**: the canon is prescriptive and the code lives in
-`archive/pre-rebirth-2026-07-23/code/twclient/` pending its scoped rebuild — citations point at that
-archived source, which is the only place these symbols currently exist on disk. Anything not yet
-built, or built differently from the reborn contract, is marked `[ASPIRATIONAL]`; any unverified
-claim about the game's own native palette is marked `[HYPOTHESIS]` and must never be promoted to
-fact without live introspection.
+that defines it. **Rebirth tip (Phases 0–3 CLOSED through `6391bb7` / docs `8f03289`):** cockpit chrome
+composers, layout, tones, fold, and LOGS live under `tw2002_aiclient/cockpit/` and `screens.py`;
+session transport under `tw2002_aiclient/session/`. Citations still name many archive
+(`archive/pre-rebirth-2026-07-23/code/twclient/`) symbols where Phase 4+ viewport / spectate / mode-line
+ports have not landed — those remain the port-source until their WOs ship. Anything not yet built,
+or built differently from the reborn contract, is marked `[ASPIRATIONAL]`; any unverified claim about
+the game's own native palette is marked `[HYPOTHESIS]` and must never be promoted to fact without
+live introspection.
+
+**Implementation honesty — GAME viewport:** the play-shell center is still `_GAME_PLACEHOLDER`
+(Phase 4 · PWO-051+). Border STATE flip (danger non-bold / mono underline) is **LIVE** (P3-040).
+Do not read chrome-tones prose as implying live pyte paint in the center.
 
 # Schema
 

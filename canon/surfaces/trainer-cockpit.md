@@ -422,22 +422,38 @@ Concretely, a builder should aim for:
   rejected). The anti-gold-plating is itself part of the taste — cut list: light theme, powerline
   separators, pane intro-stagger, full-grid marquee (`TUI-POLISH-PLAN.md`).
 
+# Implementation status (tip `8f03289` · Phase 3 CLOSED · Phase 4 OPEN)
+
+| Band | Tip reality |
+|---|---|
+| Outer frame · strip · three-column body · fold | **LIVE** (PWO-031…033 · 039) |
+| GOALS · FOCUS · DECISIONS · HUD freshness · TX/liveness · tones · LOGS | **LIVE** (PWO-034…041 · tip `6391bb7`) |
+| Center `[GAME UI]` content | **PLACEHOLDER** — `_GAME_PLACEHOLDER` in `screens.py`; live pyte paint is Phase 4 (PWO-051+) |
+| Product watch-stream into play shell | **IN FLIGHT / NOT DONE** — PWO-050 execute on CC; do not claim shipped |
+| Mode line / teach A·R·T / STOP strip | **NOT** Phase 3 — Phase 5+ |
+| Coverage meter / chains library / formations | **NOT** on tip play shell (archive / later WOs) |
+
+Citations below that name only `spectate_app.py` / `spectate_layout.py` are **port-source** until the
+reborn module is cited; prefer `tw2002_aiclient/cockpit/*` for chrome that has already landed.
+
 # Code divergence
 
-- **Coverage meter counts the wrong axis.** `compute_autonomy_ratio()` /
-  `format_autonomy_counts()` in `spectate_layout.py` compute the live share as
+- **Coverage meter counts the wrong axis.** (Archive / future Phase-5+ surface.) `compute_autonomy_ratio()` /
+  `format_autonomy_counts()` in archived `spectate_layout.py` compute the live share as
   `trainer / (ai + trainer)` and render `App N / AI N · Hum N` with **AI inside the live
   denominator and Human excluded from it**. The reborn ruling (operator, 2026-07-23) is the
   inverse: the live meter is **App-vs-Human share**, and **AI live share is identically zero**
   (the teacher never sends live) — AI belongs on a separate teaching-provenance axis, not in the
   live meter. DOCS WIN — the meter math is recast in [coverage-metrics](/engine/coverage-metrics.md);
   this cell's `App/(App+AI)` formula and its `AI` live-denominator term are the recorded divergence.
-- **Mode badge may still carry an AI/auto-loop live position.** `format_mode_badge()` /
+  **Not on tip play shell today** — recorded so the port does not revive it.
+- **Mode badge may still carry an AI/auto-loop live position.** Archived `format_mode_badge()` /
   `_MODE_BADGES` render the control-strip mode from `control_lock`'s modes, which historically
   include `ai_pilot` / `auto_loop` alongside `human`. The reborn mode line is an **App/Human dual
   with no third "AI drives" slot** (AI shows only as a teach-overlay indicator). Any surviving
   AI-as-a-mode badge value is a divergence from that dual; the corrected contract is owned by
-  [mode-line-and-teach-controls](/surfaces/mode-line-and-teach-controls.md).
+  [mode-line-and-teach-controls](/surfaces/mode-line-and-teach-controls.md). Tip play shell has **no**
+  mode badges yet (Phase 5).
 
 # Citations
 
