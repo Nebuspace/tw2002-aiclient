@@ -30,7 +30,23 @@ RULES:
 
 <!-- Items not yet resolved. -->
 
-### OPEN-002 — Commit the remaining untracked `canon/**` / `workorders/**` bundles
+<!-- (empty) -->
+
+---
+
+## RESOLVED
+
+<!-- Items with a human decision on record. Waiting for ADR drafting or already captured. -->
+
+<!-- (empty — nothing resolved yet) -->
+
+---
+
+## CLOSED
+
+<!-- Items fully absorbed into canon (ADR accepted + canon updated). Safe to archive. -->
+
+### OPEN-002 — Commit the remaining untracked `canon/**` / `workorders/**` bundles — CLOSED
 
 **Filed:** 2026-07-24
 **Filed by:** Monk (via orchestrator WO-ADR-001-ACCEPT)
@@ -46,27 +62,13 @@ A blanket `git add -A`/`git add canon/**` would sweep in content that hasn't had
 commit decision, mixing unrelated bundles into one commit and losing the ability to review them
 individually.
 
-**Options considered:**
-Not yet drafted — parked pending Max's GO on scope/sequencing for the remaining bundles.
-
-**Unambiguous kernel built while waiting:**
-None — this item blocks only the *commit* step, not further canon drafting.
-
----
-
----
-
-## RESOLVED
-
-<!-- Items with a human decision on record. Waiting for ADR drafting or already captured. -->
-
-<!-- (empty — nothing resolved yet) -->
-
----
-
-## CLOSED
-
-<!-- Items fully absorbed into canon (ADR accepted + canon updated). Safe to archive. -->
+**Resolved (2026-07-24) — CLOSED.** Hub autonomously GO'd the bundle commits (already-authored docs,
+not a new design). `canon/**` committed in `e2fda40` — the full 37-concept bundle is tracked, 0
+untracked. Remaining `workorders/**` (README · ULTRACODE inventory · legacy WO-00…17 · remaining
+WO-P1) committed via WO-WORKORDERS-BUNDLE-COMMIT (explicit paths only, never `git add -A`; Cursor
+seat after CC reassignment). Remaining public-bound hygiene owed **before any push**: relativize
+the absolute `/Users/…` Proof-path `cd`/`.venv` lines across `CLAUDE.md` + `workorders/**` (banked
+LOW — the leak-gate-precedes-push discipline covers it).
 
 ### OPEN-001 — One package tree vs. the Phase-0 two-top-level-package scaffold — RESOLVED/CLOSED
 
