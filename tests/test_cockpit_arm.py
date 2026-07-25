@@ -162,18 +162,33 @@ def test_the_unknown_label_uses_canons_own_unknown_glyph():
     assert "?" not in ARM_OFF_LABEL
 
 
-def test_no_label_is_a_prefix_of_another():
-    """A width-pressure safety property with teeth. ``ARM OFF`` truncated
-    to ``ARM O`` must never be mistakable for a shortened ``ARM ON``, and
-    a bare ``ARM`` must not read as either. The composer renders the chip
-    all-or-nothing precisely so a truncation can't happen (proved in the
-    wiring suite); this pins the labels themselves so that guarantee is
-    not the only thing standing between an operator and a misread."""
+def test_a_truncated_label_can_never_impersonate_a_different_label():
+    """RENAMED and RE-JUSTIFIED (prior name:
+    ``test_no_label_is_a_prefix_of_another``, whose docstring claimed this
+    property was a safety layer beneath the all-or-nothing placement rule
+    -- it is not, and saying so was the more dangerous half of the error).
+
+    What this does NOT protect against, stated first so nobody relies on
+    it: all three labels share the prefix ``ARM ``, and ``ARM ON``/``ARM
+    OFF`` additionally share ``ARM O``. A truncated chip is therefore
+    genuinely ambiguous, and no self-labeling vocabulary can fix that,
+    since any such set shares the leading ``ARM``. The ONLY defense
+    against truncation is the all-or-nothing placement rule, pinned by
+    ``tests/test_cockpit_arm_wiring.py::test_the_arm_chip_is_all_or_
+    nothing_never_truncated``.
+
+    What this DOES pin, which is real and narrower: no truncation of any
+    label can come out exactly EQUAL to a different valid label. The chip
+    can read as incomplete; it can never read as a confident wrong state.
+    Asserted directly over every proper truncation rather than via the
+    prefix-free property that implies it, so the test states the guarantee
+    it actually makes."""
     labels = [ARM_ON_LABEL, ARM_OFF_LABEL, ARM_UNKNOWN_LABEL]
-    for a in labels:
-        for b in labels:
-            if a is not b:
-                assert not a.startswith(b), f"{a!r} starts with {b!r}"
+    for label in labels:
+        for n in range(1, len(label)):
+            assert label[:n] not in labels, (
+                f"{label!r} truncated to {label[:n]!r} impersonates a valid label"
+            )
 
 
 def test_every_label_is_plain_ascii_so_no_glyph_twin_is_needed():
