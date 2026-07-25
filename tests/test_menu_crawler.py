@@ -1,4 +1,12 @@
-"""Menu Crawler tests (TW-26) -- no network, mock/fixture screens only.
+"""Menu Crawler tests -- no network, mock/fixture screens only.
+
+Rehabilitated from the archived `twclient.menu_crawler` suite onto the
+reborn `tw2002_aiclient.menu.crawler`. The safety vocabulary and its
+accepted residuals are canon (`canon/engine/menu-map-and-introspection.md`,
+"The lexical layers are best-effort defense-in-depth"); the never-commit
+GUARANTEE itself lives in the driver and is proven in
+tests/test_crawl_driver.py, with the chokepoint sweep and the adversarial
+forge attempts in tests/test_menu_crawl_chokepoint.py.
 
 `FakeMenuSession` walks a BRANCHING graph (unlike FakeReplaySession/
 FakeLoginSession's linear scripts): `transitions[(node_id, sent_text)]`
@@ -18,7 +26,9 @@ edge is ever recorded as originating FROM the confirm/purchase screen."""
 
 import pytest
 
-from twclient import game_knowledge, menu_crawler
+from tw2002_aiclient.menu import crawler as menu_crawler
+from tw2002_aiclient.menu import knowledge as game_knowledge
+from tw2002_aiclient.menu.sig import menu_signature
 
 
 class FakeMenuSession:
@@ -671,7 +681,7 @@ def test_classify_option_label_quit_game_carve_out_is_never_safe():
 
 def test_safe_allowlist_and_state_changing_keys_are_disjoint():
     """Trivially assertable, per the TW-26 dispatch -- also asserted at
-    module import time (see menu_crawler.py's module-level assert), so
+    module import time (see crawler.py's module-level assert), so
     this is belt-and-braces documentation of the same guarantee."""
     assert menu_crawler.SAFE_ALLOWLIST & menu_crawler.STATE_CHANGING_KEYS == set()
 
@@ -919,7 +929,7 @@ def test_bare_enter_is_never_emitted_even_on_a_genuine_menu():
     assert emitted_keys == []
     assert send_log == [{
         "from_node": "confirm", "key": "", "label": "<bare Enter>",
-        "category": "bare_enter", "emitted": False,
+        "category": "bare_enter", "claimed_category": "bare_enter", "emitted": False,
     }]
 
 
@@ -936,9 +946,13 @@ def test_emit_key_if_safe_sends_a_safe_category():
     assert session.sent == [("V", False, False)]  # enter=False for a real key -- settle.py's own guidance
     assert emitted_keys == ["view"]
     assert text is not None and "Status" in text
+    # `claimed_category` is the caller's claim recorded beside the category
+    # the chokepoint itself RESOLVED -- identical on every honest path, and
+    # the thing that makes a forged claim visible rather than lost (see
+    # tests/test_menu_crawl_chokepoint.py).
     assert send_log == [{
         "from_node": "stardock_main", "key": "V", "label": "View Ship Status",
-        "category": "view", "emitted": True,
+        "category": "view", "claimed_category": "view", "emitted": True,
     }]
 
 
@@ -954,7 +968,7 @@ def test_emit_key_if_safe_never_sends_a_deny_category():
     assert emitted_keys == []
     assert send_log == [{
         "from_node": "shipyard_menu", "key": "B", "label": "Buy New Ship",
-        "category": "buy", "emitted": False,
+        "category": "buy", "claimed_category": "buy", "emitted": False,
     }]
 
 
@@ -1025,7 +1039,7 @@ def test_crawl_menus_never_commits_across_the_whole_graph(tmp_path):
     assert dangerous_emitted == []
     # and no confirm-prompt Y/N answer was ever sent from the sneaky
     # confirm screen specifically (it was never even enumerated).
-    confirm_sig = menu_crawler._signature(SCREENS["sneaky_confirm_screen"])
+    confirm_sig = menu_signature(SCREENS["sneaky_confirm_screen"])
     from_confirm_screen = [e for e in result["send_log"] if e["from_node"] == confirm_sig]
     assert from_confirm_screen == []
 
@@ -1090,7 +1104,7 @@ def test_crawl_menus_backs_out_of_a_screen_that_turns_out_to_be_a_confirm_prompt
     path = tmp_path / "game_knowledge.json"
     menu_crawler.crawl_menus(_session_factory, path, step_timeout=8.0)
 
-    confirm_sig = menu_crawler._signature(SCREENS["sneaky_confirm_screen"])
+    confirm_sig = menu_signature(SCREENS["sneaky_confirm_screen"])
     nodes = {n["signature"] for n in game_knowledge.list_menu_nodes(path)}
     assert confirm_sig in nodes  # recorded as existing
 
@@ -1293,7 +1307,7 @@ def test_crawl_menus_never_emits_bare_enter_on_a_commit_shaped_screen(tmp_path):
 
     # nothing -- including bare_enter -- was ever sent FROM the trap
     # screen itself: `screen_state` refused to enumerate it at all.
-    trap_sig = menu_crawler._signature(ADV_SCREENS["adv_reactor_trap"])
+    trap_sig = menu_signature(ADV_SCREENS["adv_reactor_trap"])
     from_trap = [e for e in result["send_log"] if e["from_node"] == trap_sig]
     assert from_trap == []
 
