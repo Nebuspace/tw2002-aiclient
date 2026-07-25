@@ -482,7 +482,9 @@ def cmd_attach(args):
             # Scripted: interpret escapes lightly — \\r \\n \\xNN and raw chars.
             data = keys.encode("utf-8").decode("unicode_escape").encode("latin-1", errors="ignore")
             if data:
-                conn.send_key(data)
+                if not conn.send_key(data):
+                    print("ERROR: send_failed")
+                    return 1
             return 0
 
         import termios
