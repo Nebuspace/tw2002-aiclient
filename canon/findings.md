@@ -110,3 +110,15 @@ regardless of caller CWD. The **sole documented override** is the environment va
 single-connection invariant. A second process pointed at the same run-dir is refused by the
 atomic pidfile claim; a different `TW_RUN_DIR` is an independent home (operator-chosen
 isolation, not automatic).
+
+---
+
+## Pending DOC-GAPs (Phase 4 close · unsigned)
+
+Logged at tip `bba53d4` (OKF-STATUS-TRUTH-056-057). **Pending** hub/Max canon — do not treat as signed prose.
+
+| ID | Gap | Tip reality |
+|---|---|---|
+| DOC-GAP-M-FROM-SPECTATE | Canon frames `M` as App↔Human; silent on Spectate→Human | Hub 056 ruling: Spectate→Human only; App-return deferred |
+| DOC-GAP-POST-DETACH-COPY | Canon silent on post-detach status copy | Shipped `"detached — spectating"` (dispatch-decided) |
+| HARDEN-ATTACH-SOCKET-TIMEOUT | Unbounded `AttachInputConn` socket read | Banked harden WO (product-reachable since 056) |
