@@ -117,9 +117,12 @@ isolation, not automatic).
 
 Logged at tip `bba53d4` (OKF-STATUS-TRUTH-056-057); Spectate reverse-vs-plain banked from CC PWO-060 mid-wave (hub @ 04:14:11Z); 061 Human→App + Ctrl-]@App-hold from kernel STATUS. **Pending** hub/Max canon — do not treat as signed prose.
 
+### Pending Max ruling stamp (2026-07-25 · Batch-1 · **not signed canon yet**)
+Hub relay `@ 09:12:51Z`: **`M` = Mode** — toggles App↔Human (closes B′ free-letter / C control-char shape). Matches Mode Switch intent. **Batch 1b still open:** while Human attached, TW **Move** also wants `M` — prior park "do not intercept `M` while attached"; product Human→App WO stays HOLD until Max 1b. Cursor docs-only note; no product invent.
+
 | ID | Gap | Tip reality |
 |---|---|---|
-| DOC-GAP-M-FROM-SPECTATE | Canon frames `M` as App↔Human; silent on Spectate→Human | Hub 056 ruling: Spectate→Human only; Human→App still **PARKED** Max B′/C · see `WO-P5-060-072-mode-teach-PREP.md` (061) |
+| DOC-GAP-M-FROM-SPECTATE | Canon frames `M` as App↔Human; silent on Spectate→Human | Hub 056: Spectate→Human only. **Batch-1:** Max `M`=Mode App↔Human (**Pending** canon stamp). Human→App product still **HOLD** until Batch 1b (attached Move vs Mode) · see PREP 061 |
 | DOC-GAP-POST-DETACH-COPY | Canon silent on post-detach status copy | Shipped `"detached — spectating"` (dispatch-decided) |
 | DOC-GAP-SPECTATE-REVERSE-VS-PLAIN | `mode-line-and-teach-controls.md:196-198` says Spectate chip reverse-video like every badge; `spectate-and-attach.md:262` (+ PWO-060 constraint) say muted/**plain** | **055 shipped plain**; 060 keeps Spectate plain; dual App/Human get reverse+tone. Do not resolve in 060. |
 | DOC-GAP-CTRL-RBRACKET-FROM-APP-HOLD | Ctrl-] from App-hold is a no-op today | 061 kernel pinned accidental behavior (`d4a8829`); any change must be deliberate · unruled |

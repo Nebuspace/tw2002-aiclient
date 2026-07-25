@@ -3,7 +3,7 @@
 > Status: **PREP + PWO-060 DONE + PWO-061 KERNEL DONE** 2026-07-25 · product tip `d4a8829` · seat `impl-aiclient-cursor` (OKF-STATUS-TRUTH-061-KERNEL)  
 > Phase: 5 · Type: PREP (inventory + tightened Accept/Proof) · Execute: hub HANDOFF to product seat after Accept  
 > Canon: `canon/surfaces/mode-line-and-teach-controls.md` · `canon/architecture/control-and-escalation.md` · `canon/engine/ai-teacher.md` · `canon/architecture/app-autopilot-model.md` · `canon/engine/coverage-metrics.md` · `canon/engine/macros.md` · `canon/architecture/rule-macro-engine.md`  
-> Refs: `ULTRACODE-WO-INVENTORY.md` Phase-5 rows · Phase 4 CLOSED (`bba53d4`) · PWO-060 (`2ca3154`) · PWO-061 kernel (`d4a8829`) · Pending DOC-GAP-M-FROM-SPECTATE · DOC-GAP-POST-DETACH-COPY · DOC-GAP-SPECTATE-REVERSE-VS-PLAIN · Human→App Max B′/C
+> Refs: `ULTRACODE-WO-INVENTORY.md` Phase-5 rows · Phase 4 CLOSED (`bba53d4`) · PWO-060 (`2ca3154`) · PWO-061 kernel (`d4a8829`) · Pending DOC-GAP-M-FROM-SPECTATE · DOC-GAP-POST-DETACH-COPY · DOC-GAP-SPECTATE-REVERSE-VS-PLAIN · **Max Batch-1:** `M`=Mode (Pending stamp) · **Batch 1b HOLD:** attached Move vs Mode
 
 **No product edited in this OKF tick.** Live-state below is tip **`d4a8829`** unless a row still says MISSING/PARKED. **Do not read 061 as CLOSED** — kernel only.
 
@@ -16,7 +16,7 @@
 - **Spectate is not a dual member** (canon) — muted `SPECTATE` is observation, not an App/Human toggle position. DOC-GAP-M-FROM-SPECTATE remains **Pending** (unsigned): shipped `M` is Spectate→Human; App↔Human return still owed here (061).
 - **AI never live-drives.** Retire any `AI-PILOT` / `ai_pilot` UI string. Teach overlay is cyan/info, transient, never a mode-line dual seat. App chip = **green (`ok`)** deterministic autopilot (aspirational→buildable Accept on 060).
 - **What 056/057 already satisfied:** Human/`MANUAL — YOU HAVE CONTROL` chip LIVE · `M` attach LIVE · Ctrl-] detach LIVE · no-send tripwire + attach allowlist LIVE · redaction on attach channel LIVE.
-- **What Phase 5 still owes:** Human→App entry (061 Accept #2 — **PARKED** Max B′/C) · A/R/T teach strip · STOP banner + reason codes · arm/confirm · N5 operate cluster · coverage meter (App-vs-Human, AI≠live slice).
+- **What Phase 5 still owes:** Human→App entry (061 Accept #2 — **Batch-1 shape:** Max `M`=Mode Pending stamp; **Batch 1b HOLD** attached Move vs Mode before product) · A/R/T teach strip · STOP banner + reason codes · arm/confirm · N5 operate cluster · coverage meter (App-vs-Human, AI≠live slice).
 - **F2 HOLD** — ops `tw spectate` CLI still Max-gated. **G2–G4 HOLD** unchanged.
 - **North-star** parked pending Max (1)(2) — this PREP does not unpark or invent one-cockpit prose beyond existing Phase-4 alignment.
 - **Archive** = port-source only (`spectate_app` / `spectate_layout` badges) — never `import twclient`.
@@ -33,7 +33,7 @@
 | Unified **App** chip (green / no AI-PILOT) | **LIVE** (PWO-060 · `APP` / `ok`+bold+reverse) | Strict gate LIVE; App→Human path proven (061 kernel); **Human→App still PARKED** — chip stays wire-UNREACHABLE from attached play until Max entry ruling |
 | `M` Spectate→Human attach | **LIVE** (PWO-056) | Hub 056 ruling |
 | `M` App-hold→Human | **LIVE** (PWO-061 KERNEL · `d4a8829`) | Existing 056 attach wiring; test-only pins; zero product delta |
-| Human→App entry trigger | **PARKED** (Max B′/C) | Do **not** intercept `M` while attached (TW Move); Accept #2 parked |
+| Human→App entry trigger | **HOLD** (Batch 1b) | Max Batch-1: `M`=Mode (**Pending** canon). Do **not** intercept `M` while attached until Max rules Move vs Mode |
 | Ctrl-] detach → SPECTATE | **LIVE** (PWO-057) | Esc≠detach; post-detach copy DOC-GAP Pending; Ctrl-] from App-hold = unruled no-op (pinned) |
 | Teach strip A / R / T affordances | **MISSING** | 066; keys unbound as teach moves |
 | Analyze (`A`) on-demand | **MISSING** | 069 · `ai-teacher.md` |
@@ -171,4 +171,4 @@ Pending (not blocking PREP Accept): DOC-GAP-M-FROM-SPECTATE · DOC-GAP-POST-DETA
 
 ## 5. Execute readiness
 
-**PWO-060 DONE** (`2ca3154`). **PWO-061 KERNEL DONE** (`d4a8829`) — App→Human proven; Human→App **PARKED** (Max B′/C). Remaining 062–072 still PREP until hub HANDOFF. Do **not** claim full 061 CLOSED. Cursor docs lane: OKF status-truth only; no product code in this tick.
+**PWO-060 DONE** (`2ca3154`). **PWO-061 KERNEL DONE** (`d4a8829`) — App→Human proven; Human→App **HOLD Batch 1b** (Max `M`=Mode Pending stamp; Move conflict open). Remaining 062–072 still PREP until hub HANDOFF. Do **not** claim full 061 CLOSED. Cursor docs lane: OKF status-truth only; no product code in this tick.
