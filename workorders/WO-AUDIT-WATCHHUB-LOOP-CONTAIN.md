@@ -1,8 +1,11 @@
 # WO-AUDIT-WATCHHUB-LOOP-CONTAIN — Contain WatchHub._loop exceptions
 
-> Status: **DRAFT** 2026-07-25 · from CC POLISH Zone-A BANK-P1 · tip `88004d8`  
+> Status: **EXECUTED / DONE** 2026-07-25 · product tip **`00cb9e8`** (CC · Fable 5) · docs stamp Cursor  
 > Type: harden · Priority: P1 · Lens: L3 / cleanup  
-> Refs: `session/watch.py:90-97` · guardian idiom `guardian.py:109-116` · polish analyze #6
+> Refs: `session/watch.py` · guardian idiom `guardian.py:109-116` · polish analyze #6
+
+## Tip verdict
+**DONE** on origin `00cb9e8` — `WatchHub._loop` uses guardian-style containment; `last_loop_error` records **type-name only** (no exception text); per-subscriber put containment; stop via `_stop.wait`. Proof: `tests/test_watch.py` (hostile raise / sentinel / thread-alive). Disclosed follow-on banked: status-verb wire for `last_loop_error` in `protocol.py` — not invented in this WO.
 
 ## Goal
 Wrap `WatchHub._loop()` so an uncaught raise in `_maybe_emit`/`_broadcast` cannot silently kill the watch thread forever (subscribers go dark with zero error).
@@ -21,7 +24,7 @@ No seat-key / attach / Human→App / F2. Tripwire untouched. Prefer guardian idi
 3. Suite fingerprint-bound green
 
 ## Proof
-Unit FakeHub · full suite · STATUS SHA. Push waits Accept.
+Unit FakeHub · full suite · STATUS SHA `00cb9e8` on origin. Push waits Accept (product already SHIPped).
 
 ## Refs
-CC POLISH-SAFE STATUS @ 05:27:02Z · hub Zone-A ACK
+CC POLISH-SAFE STATUS @ 05:27:02Z · hub Accept @ 05:41:33Z · Zone-A ACK
