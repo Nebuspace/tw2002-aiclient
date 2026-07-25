@@ -39,6 +39,7 @@ from __future__ import annotations
 import socket
 import struct
 import threading
+import time
 
 import pytest
 
@@ -218,36 +219,58 @@ def test_real_broken_pipe_never_leaves_an_unqualified_TX_claim(tmp_path):
     lsock = socket.socket()
     lsock.bind(("127.0.0.1", 0))
     lsock.listen(1)
+    csock = None
+    failed_payload = None
+    accepted = threading.Event()
 
     def peer():
-        conn, _ = lsock.accept()
-        conn.setsockopt(socket.SOL_SOCKET, socket.SO_LINGER, struct.pack("ii", 1, 0))
-        conn.close()
+        try:
+            conn, _ = lsock.accept()
+        except OSError:
+            return
+        accepted.set()
+        # RST only AFTER the handshake completed — SO_LINGER(0) during accept
+        # races xdist and can reset create_connection itself.
+        try:
+            conn.setsockopt(socket.SOL_SOCKET, socket.SO_LINGER, struct.pack("ii", 1, 0))
+            conn.close()
+        except OSError:
+            pass
 
     t = threading.Thread(target=peer, daemon=True)
     t.start()
-    csock = socket.create_connection(lsock.getsockname(), timeout=5)
-    csock.settimeout(None)
-    t.join(5)
+    try:
+        csock = socket.create_connection(lsock.getsockname(), timeout=5)
+        csock.settimeout(None)
+        assert accepted.wait(5), "peer never accepted"
+        t.join(5)
 
-    logger = TranscriptLogger(str(tmp_path))
-    conn = TelnetConnection(FAKE_HOST, FAKE_PORT, terminal=None, negotiator=None, logger=logger)
-    conn._sock = csock
+        logger = TranscriptLogger(str(tmp_path))
+        conn = TelnetConnection(FAKE_HOST, FAKE_PORT, terminal=None, negotiator=None, logger=logger)
+        conn._sock = csock
 
-    # A dead peer may absorb one write into the local buffer before the RST
-    # is observed, so probe with UNIQUE payloads until one genuinely raises;
-    # the assertions below are scoped to THAT payload, which makes this loop
-    # a setup detail rather than a fuzzy assertion.
-    failed_payload = None
-    for i in range(10):
-        candidate = f"PROBE{i}-{PLAIN}"
+        # A dead peer may absorb one write into the local buffer before the RST
+        # is observed, so probe with UNIQUE payloads until one genuinely raises;
+        # the assertions below are scoped to THAT payload, which makes this loop
+        # a setup detail rather than a fuzzy assertion.
+        for i in range(10):
+            candidate = f"PROBE{i}-{PLAIN}"
+            try:
+                conn.send_text(candidate, enter=False)
+            except OSError:
+                failed_payload = candidate
+                break
+    finally:
+        if csock is not None:
+            try:
+                csock.close()
+            except OSError:
+                pass
         try:
-            conn.send_text(candidate, enter=False)
+            lsock.close()
         except OSError:
-            failed_payload = candidate
-            break
-    csock.close()
-    lsock.close()
+            pass
+        t.join(1)
 
     assert failed_payload is not None, "could not provoke a real broken pipe"
     log_text = _read_log(logger)

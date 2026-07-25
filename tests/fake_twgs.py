@@ -99,9 +99,32 @@ proven-correct against the real automaton, not invented here.
 
 from __future__ import annotations
 
+import errno
 import socket
 import threading
 import time
+
+# Teardown races under pytest-xdist: stop() closes sockets while the accept
+# thread is mid-send/recv. Those OSErrors are not script failures — treat as
+# ordinary peer-closed, never append to `.errors` (which many tests assert empty).
+_TEARDOWN_ERRNOS = frozenset(
+    {
+        errno.EBADF,
+        errno.ECONNRESET,
+        errno.ENOTCONN,
+        errno.EPIPE,
+        getattr(errno, "ECONNABORTED", -1),
+        getattr(errno, "ESHUTDOWN", -1),
+    }
+)
+
+
+def _is_teardown_oserror(exc: BaseException) -> bool:
+    if isinstance(exc, ConnectionError):
+        return True
+    if not isinstance(exc, OSError):
+        return False
+    return exc.errno in _TEARDOWN_ERRNOS or exc.errno is None
 
 
 class ScriptMismatch(Exception):
@@ -124,7 +147,12 @@ class _Reader:
         self._buf = bytearray()
 
     def _fill(self):
-        chunk = self._sock.recv(4096)
+        try:
+            chunk = self._sock.recv(4096)
+        except OSError as e:
+            if _is_teardown_oserror(e):
+                raise ConnectionError("peer closed") from e
+            raise
         if not chunk:
             raise ConnectionError("peer closed")
         self._buf.extend(chunk)
@@ -242,7 +270,9 @@ class FakeTWGS:
 
     def stop(self):
         self._stop.set()
-        for sock in (self._listener, self._client_conn):
+        # Close client first so a blocked recv/send wakes; then the listener
+        # so a blocked accept returns. Join after both closes.
+        for sock in (self._client_conn, self._listener):
             if sock is None:
                 continue
             try:
@@ -255,12 +285,18 @@ class FakeTWGS:
                 pass
         if self._accept_thread is not None:
             self._accept_thread.join(timeout=5.0)
+        self._accept_thread = None
+        self._listener = None
+        self._client_conn = None
 
     # -- server loop -------------------------------------------------------
 
     def _accept_loop(self):
+        listener = self._listener
+        if listener is None:
+            return
         try:
-            conn, _addr = self._listener.accept()
+            conn, _addr = listener.accept()
         except OSError:
             return  # listener closed under us (stop() during teardown)
         self._client_conn = conn
@@ -268,8 +304,14 @@ class FakeTWGS:
             self._run_script(conn)
         except ConnectionError:
             pass  # ordinary peer-closed teardown -- not a script failure
+        except OSError as e:
+            if _is_teardown_oserror(e) or self._stop.is_set():
+                return
+            self.errors.append(f"{type(e).__name__}: {e}")
         except Exception as e:  # noqa: BLE001 -- a script bug must surface
             # via .errors, never crash this daemon thread silently.
+            if self._stop.is_set() and _is_teardown_oserror(e):
+                return
             self.errors.append(f"{type(e).__name__}: {e}")
 
     def _run_script(self, conn: socket.socket):
@@ -521,7 +563,13 @@ class FakeTWGS:
         # A real terminal session doesn't accumulate every screen forever
         # either; the clear keeps this fake's pyte buffer shaped the way
         # a real TWGS door's redraw discipline already keeps it.
-        conn.sendall(("\x1b[2J\x1b[H" + text).encode("cp437", errors="replace"))
+        payload = ("\x1b[2J\x1b[H" + text).encode("cp437", errors="replace")
+        try:
+            conn.sendall(payload)
+        except OSError as e:
+            if self._stop.is_set() or _is_teardown_oserror(e):
+                raise ConnectionError("peer closed") from e
+            raise
 
     def _record(self, label: str, value: str):
         """Generic per-label capture -- see module docstring's resume-knobs
