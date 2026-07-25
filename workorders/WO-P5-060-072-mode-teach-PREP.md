@@ -1,7 +1,7 @@
 # WO-P5-060…072 — Mode line, escalation & teach · PREP
 
-> Status: **PREP + PWO-060 DONE + PWO-061 DONE** 2026-07-25 · kernel `d4a8829` · entry product tip **`420430d`** (CC `WO-P5-061-ENTRY` · Accept #2 CLOSED on origin) · seat `impl-aiclient-cursor`  
-> Phase: 5 · Type: PREP (inventory + tightened Accept/Proof) · Execute: hub HANDOFF to product seat after Accept  
+> Status: **PREP + 060/061 DONE · 064 EXECUTING · 062/066 STAGED** 2026-07-25 · kernel `d4a8829` · entry **`420430d`** · entry-APP **`7c0e882`** · seat `impl-aiclient-cursor`  
+> Phase: 5 · Type: PREP (inventory + tightened Accept/Proof) · Execute: hub HANDOFF `@ 12:00:25Z` → CC; **serialize ruling `@ 12:02:18Z`:** **064 → 062 → 066** (no ∥; `control_seat`/`screens` contention)  
 > Canon: `canon/surfaces/mode-line-and-teach-controls.md` · `canon/architecture/control-and-escalation.md` · `canon/engine/ai-teacher.md` · `canon/architecture/app-autopilot-model.md` · `canon/engine/coverage-metrics.md` · `canon/engine/macros.md` · `canon/architecture/rule-macro-engine.md` · **ADR-002**  
 > Refs: `ULTRACODE-WO-INVENTORY.md` Phase-5 rows · Phase 4 CLOSED (`bba53d4`) · PWO-060 (`2ca3154`) · PWO-061 kernel (`d4a8829`) · **061-ENTRY `420430d`** · **Max Ruled Batch 1b:** Mode=Ctrl-A · attached `M`=Move · no printable Mode · **Batch 2/3:** `APP` chip · Spectate≠Mode · Ctrl-]@App-hold no-op · north-star SIGNED · log_note RETIRE · secrets never-live · entry chip=APP
 
@@ -35,14 +35,14 @@
 | App-hold→Human | **LIVE** (Ctrl-A · `420430d`) | Kernel `d4a8829` + entry Accept #2 |
 | Human→App entry trigger | **CLOSED** (`420430d`) | **Ctrl-A** = Mode; attached bare `M` = Move; no printable Mode |
 | Ctrl-] detach → SPECTATE | **LIVE** (PWO-057) | Esc≠detach; post-detach copy DOC-GAP Pending; Ctrl-] from App-hold = **Ruled** no-op stay App (Batch 2/3) |
-| Teach strip A / R / T affordances | **MISSING** | 066; keys unbound as teach moves |
+| Teach strip A / R / T affordances | **STAGED** | 066 · after 062 (serialize `@ 12:02:18Z`) |
 | Analyze (`A`) on-demand | **MISSING** | 069 · `ai-teacher.md` |
 | Record (`R`) macro wire | **MISSING** | 067 · `macros.md` |
 | Assign-trigger (`T`) scaffold | **MISSING** | 068 · `rule-macro-engine.md` |
 | Analyze draft → human approve | **MISSING** | 070 |
-| STOP banner + typed reason codes | **MISSING** | 064 · `control-and-escalation.md` catalog |
+| STOP banner + typed reason codes | **EXECUTING** | 064 · hub HANDOFF; first in serialize queue |
 | Intervention → Human keyboard | **PARTIAL** | Attach path LIVE; STOP-driven handoff **MISSING** (065) |
-| Autopilot/Trainer arm UI | **MISSING** | 062 · `app-autopilot-model.md` |
+| Autopilot/Trainer arm UI | **STAGED** | 062 · after 064 (serialize `@ 12:02:18Z`) |
 | Confirm-to-arm dialog | **MISSING** | 063 · mode-line confirm-gate |
 | N5 operate-the-app cluster | **MISSING** | 071; layout reserved control-strip left for N5 |
 | Coverage / auto meter (App-vs-Human) | **MISSING** | 072 · `coverage-metrics.md`; no live AI slice |
@@ -67,10 +67,11 @@
 - **Proof:** FakeClient/lock + chip flips + Move passthrough pin · origin `420430d` (log_note stack tip `4280d8a`).
 - **Hazards:** Do not steal 057 Ctrl-]. Do not loosen no-send tripwire. Esc≠detach.
 
-### PWO-062 — Autopilot/Trainer arm UI (EXTEND)
+### PWO-062 — Autopilot/Trainer arm UI (EXTEND) — **STAGED** 2026-07-25 (HANDOFF `@ 12:00:25Z` · serialize after 064 `@ 12:02:18Z`)
 - **Depends-on:** 060 · 020 daemon
+- **Live state:** **STAGED** — after 064 lands; product seat owns build; docs stamp only here.
 - **Accept:** Arm/disarm taught autopilot is **separate** from actor badge; ON/OFF + write-back visible; no silent arm.
-- **Proof:** FakeClient/status round-trip · TTY indicator.
+- **Proof:** FakeClient/status round-trip · TTY indicator · isolated-worktree cert + STATUS SHA (Push waits Accept).
 - **Hazards:** Arm ≠ take Human lock.
 
 ### PWO-063 — Confirm-to-arm dialog (BUILD)
@@ -79,10 +80,11 @@
 - **Proof:** Layer-A dialog compose · key matrix (y/N) · no silent arm inject.
 - **Hazards:** Loudest palette combo reserved for money/turns risk — match mode-line canon.
 
-### PWO-064 — STOP banner from reason codes (BUILD)
+### PWO-064 — STOP banner from reason codes (BUILD) — **EXECUTING** 2026-07-25 (hub HANDOFF `@ 12:00:25Z` → CC · first in serialize queue)
 - **Depends-on:** 060 · 020
+- **Live state:** **EXECUTING** — product seat building now; docs stamp only here.
 - **Accept:** STOP shows **typed** reason codes from control-and-escalation catalog only (no free-text invention); chip→Human; A/R/T affordances visible at halt (may stub wires until 066+).
-- **Proof:** Inject status/reason fixtures · catalog coverage table · no unknown code renders as invented prose.
+- **Proof:** Inject status/reason fixtures · catalog coverage table · no unknown code renders as invented prose · isolated cert + STATUS (Push waits Accept).
 - **Hazards:** Banner claims height ahead of optional panels; do not recolor GAME cells.
 
 ### PWO-065 — Intervention → Human keyboard (HARDEN)
@@ -91,10 +93,11 @@
 - **Proof:** FakeClient halt→Human · no `do`/`send` from App after STOP · tripwire still green.
 - **Hazards:** Distinct from voluntary `M`; do not conflate with Ctrl-] detach.
 
-### PWO-066 — Teach strip A/R/T visible (BUILD)
+### PWO-066 — Teach strip A/R/T visible (BUILD) — **STAGED** 2026-07-25 (HANDOFF `@ 12:00:25Z` · serialize after 062 `@ 12:02:18Z`)
 - **Depends-on:** 060
+- **Live state:** **STAGED** — after 062 lands; product seat owns build; docs stamp only here.
 - **Accept:** Labels/affordances for Analyze / Record / Assign-Trigger shown on mode line / STOP; keys reserved; **not** bound to attach/launch.
-- **Proof:** Composer unit · key intent map · grep that `A`≠attach.
+- **Proof:** Composer unit · key intent map · grep that `A`≠attach · isolated cert + STATUS (Push waits Accept).
 - **Hazards:** Archive bound `A`→attach — DOCS WIN, do not revive.
 
 ### PWO-067 — `R` Record macro wire (BUILD)
@@ -172,4 +175,4 @@ Pending (not blocking PREP Accept): DOC-GAP-M-FROM-SPECTATE · DOC-GAP-POST-DETA
 
 ## 5. Execute readiness
 
-**PWO-060 DONE** (`2ca3154`). **PWO-061 DONE** — kernel `d4a8829` + entry Accept #2 **`420430d`** on origin (Mode=Ctrl-A; attached `M`=Move; ADR-002). Stack tip includes log_note RETIRE `4280d8a` (historical `log_note` doc mentions stay — retire record). Remaining 062–072 still PREP until hub HANDOFF. Cursor docs lane: OKF status-truth only; no product code in this tick.
+**PWO-060 DONE** (`2ca3154`). **PWO-061 DONE** — kernel `d4a8829` + entry Accept #2 **`420430d`** (Mode=Ctrl-A; attached `M`=Move; ADR-002) · entry-APP **`7c0e882`**. log_note RETIRE `4280d8a` (historical mentions stay — retire record). **Serialize `@ 12:02:18Z`:** **064 EXECUTING** → **062 STAGED** → **066 STAGED** (no ∥; `control_seat`/`screens` contention). Also staged ⏳: 063 · 065 · 067–072. Named HOLD: OPEN-003 · F2 · G2–G4 Max-gated. Cursor docs: OKF status-truth only; no product `.py`.

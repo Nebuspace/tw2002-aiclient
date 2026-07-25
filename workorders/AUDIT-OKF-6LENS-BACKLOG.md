@@ -3,7 +3,7 @@
 > Seat: `impl-aiclient-cursor` · Tip: `59c4455` (audit drafts) atop `458d140` / product `d4a8829` · UTC: 2026-07-25T05:12Z  
 > HANDOFF: `AUDIT-OKF-6LENS` · **No product `.py` in this ticket**  
 > HOLDs honored: F2 · G2–G4 · auth/secrets (rotate CLOSED — archive never-live) · **Batch 1b CLOSED** (Ctrl-A Mode) · **Batch 2/3 CLOSED** (APP chip · Spectate≠Mode · Ctrl-]@App-hold no-op · north-star SIGNED · log_note RETIRE)  
-> Scout cross-check: inventory tip-map confirms 062–072 MISSING; 061/065 PARTIAL→**061 CLOSED**; 080 PARTIAL (`classify` LIVE, `state_parser` absent); **085/086 LIVE** (gated). **Closed since:** HARDEN-ATTACH `88004d8` · WatchHub `00cb9e8` · SAFE-ADDSTR `29fd76c` · GLYPH `8facad9` · SAFE-WIDTH `c0bdab7` · APP-LABEL docs-win · CTRL-]APP Ruled · mux Ctrl-A note · **RECONNECT `19a0a27`** · **CLI-KEYS `032bc12`** · **061-ENTRY `420430d`** · **log_note RETIRE `4280d8a`** · **ENTRY-APP `7c0e882`** · **stale-M docstring `ca1e078`→`276327e`** · **UNICODE-OK `922739b`**. Banked: none (CC product queue empty). Open Max-gated: OPEN-003 · F2/G2–G4.
+> Scout cross-check: inventory tip-map — **064 EXECUTING · 062/066 STAGED** (serialize 064→062→066); staged 063/065/067–072; 061 CLOSED; 080 PARTIAL; **085/086 LIVE** (gated). **Closed since:** HARDEN-ATTACH `88004d8` · WatchHub `00cb9e8` · SAFE-ADDSTR `29fd76c` · GLYPH `8facad9` · SAFE-WIDTH `c0bdab7` · APP-LABEL docs-win · CTRL-]APP Ruled · mux Ctrl-A note · **RECONNECT `19a0a27`** · **CLI-KEYS `032bc12`** · **061-ENTRY `420430d`** · **log_note RETIRE `4280d8a`** · **ENTRY-APP `7c0e882`** · **stale-M `ca1e078`→`276327e`** · **UNICODE-OK `922739b`** · **A-L1-052-TIP** (ULTRACODE 052 already DONE `de47a26`). Banked: none. Open Max-gated: OPEN-003 · F2/G2–G4.
 
 Committable twin: `workorders/AUDIT-OKF-6LENS-BACKLOG.md`. Draft WOs: `workorders/WO-AUDIT-*.md` (8).
 
@@ -11,7 +11,7 @@ Committable twin: `workorders/AUDIT-OKF-6LENS-BACKLOG.md`. Draft WOs: `workorder
 
 | Bucket | IDs | Notes |
 |---|---|---|
-| Phase-5 PREP | PWO-062…072 | `WO-P5-060-072-mode-teach-PREP.md` — MISSING on tip |
+| Phase-5 PREP | PWO-062…072 | `WO-P5-060-072-mode-teach-PREP.md` — **064 EXECUTING**; 062/066 STAGED (serialize); 063/065/067–072 staged |
 | Pending DOC-GAPs | POST-DETACH-COPY · SPECTATE-REVERSE-VS-PLAIN | `canon/findings.md` — M-FROM-SPECTATE SUPERSEDED · CTRL-RBRACKET **Ruled** · APP chip **Ruled** |
 | Banked harden | HARDEN-ATTACH-SOCKET-TIMEOUT | **DONE** tip `88004d8` (CC) · `WO-AUDIT-HARDEN-ATTACH` EXECUTED/DONE |
 | Zone-A harden | WATCHHUB-LOOP-CONTAIN | **DONE** tip `00cb9e8` · `WO-AUDIT-WATCHHUB-LOOP-CONTAIN` EXECUTED |
@@ -28,10 +28,10 @@ Committable twin: `workorders/AUDIT-OKF-6LENS-BACKLOG.md`. Draft WOs: `workorder
 ### L1 — Features in canon/PREP not built
 | ID | P | Gap | Paths | Depends |
 |---|---|---|---|---|
-| A-L1-052-TIP | P1 | ULTRACODE still says PWO-052 PREP while viewport PREP file stamps DONE | `ULTRACODE-WO-INVENTORY.md` | docs-only |
+| A-L1-052-TIP | P1 | ULTRACODE still says PWO-052 PREP while viewport PREP file stamps DONE | `ULTRACODE-WO-INVENTORY.md` | **CLOSED** — inventory row already **DONE** `de47a26` (no stale PREP claim) |
 | A-L1-025-LEDGER | P1 | PWO-025 Accept needs ledger actor tags; daemon still “LedgerWriter deferred” | `session/daemon.py` · future `ledger.py` | 041 partial |
 | A-L1-P6-PREP | P2 | Phase 6–9 lack tip-honest PREP like Phase 5 | `workorders/WO-P6-*-PREP.md` (new) | after 061 entry |
-| A-L1-062-072 | — | Arm/STOP/A·R·T/N5/coverage | (existing PREP) | 060/061 |
+| A-L1-062-072 | — | Arm/STOP/A·R·T/N5/coverage | (existing PREP) | **064 EXECUTING**; 062→066 staged |
 
 ### L2 — Code↔canon divergence
 | ID | P | Gap | Paths | Depends |
@@ -71,7 +71,7 @@ Committable twin: `workorders/AUDIT-OKF-6LENS-BACKLOG.md`. Draft WOs: `workorder
 ## Priority order (buildable overnight / morning)
 
 1. ~~**WO-AUDIT-HARDEN-ATTACH**~~ (**DONE** `88004d8` · WO tip-stamped)
-2. **WO-AUDIT-OKF-052-TIP** (P1 · docs honesty, Cursor)
+2. ~~**WO-AUDIT-OKF-052-TIP**~~ (**CLOSED** — ULTRACODE 052 DONE `de47a26`; no false PREP claim)
 3. **WO-AUDIT-P025-LEDGER-HONESTY** (P1 · docs+thin PREP; product later)
 4. **WO-AUDIT-P028-KEEPALIVE-STATUS** (P1 · tip inventory honesty / proof gap)
 5. **WO-AUDIT-LEGACY-WO-INDEX** (P2 · docs)

@@ -193,17 +193,17 @@ Banked hygiene (not a PWO id): **pty mid-flush settle** — PREP `workorders/WO-
 
 ### Phase 5 — Mode line, escalation, teach
 
-> PREP: `workorders/WO-P5-060-072-mode-teach-PREP.md` — Phase 4 CLOSED; **PWO-060 DONE** (`2ca3154`); **PWO-061 KERNEL DONE** (`d4a8829` · App→Human via `M`; Human→App **PARKED** Max B′/C); A·R·T / STOP / N5 / coverage still MISSING.
+> PREP: `workorders/WO-P5-060-072-mode-teach-PREP.md` — Phase 4 CLOSED; **PWO-060 DONE** (`2ca3154`); **PWO-061 CLOSED** (`420430d` · Ctrl-A Mode · ADR-002); entry-APP `7c0e882`; **serialize 064 → 062 → 066** (064 EXECUTING; 062/066 STAGED · hub `@ 12:02:18Z`); staged 063/065/067–072; OPEN-003 · F2 · G2–G4 Max-gated.
 
 | ID | Title | Type | Depends | Goal | Accept | Proof | Canon |
 |----|-------|------|---------|------|--------|-------|-------|
 | PWO-060 | App/Human badge (no AI mode) **DONE** 2026-07-25 (`2ca3154` · App XOR Human · strict gate) | extend | 030 | Dual only | no `ai_pilot` UI string | grep+TTY | mode-line-and-teach-controls |
-| PWO-061 | `M` mode switch — **KERNEL DONE** 2026-07-25 (`d4a8829` · App→Human; Human→App PARKED Max) | build | 060·056 | Toggle App↔Human | lock flips | TTY | control… Mode Switch |
-| PWO-062 | Autopilot/Trainer arm UI — PREP | extend | 060·020 | Separate from actor badge | ON/OFF + write-back | TTY | app-autopilot-model |
-| PWO-063 | Confirm-to-arm dialog — PREP | build | 062 | Arm requires explicit confirm | no silent arm | TTY | mode-line confirm-gate |
-| PWO-064 | STOP banner from reason codes — PREP | build | 060·020 | Typed labels only | catalog coverage | inject status | control… catalog |
-| PWO-065 | Intervention → Human keyboard — PREP | harden | 064·061 | STOP hands control | Human can type | live halt | control… escalate |
-| PWO-066 | Teach strip A/R/T visible — PREP | build | 060 | Affordances shown | labels present | TTY | mode-line A/R/T |
+| PWO-061 | Mode switch App↔Human **CLOSED** 2026-07-25 (`420430d` · Ctrl-A · ADR-002; kernel `d4a8829`) | build | 060·056 | Toggle App↔Human | lock flips | TTY | control… Mode Switch |
+| PWO-062 | Autopilot/Trainer arm UI — **STAGED** (after 064 · serialize `@ 12:02:18Z`) | extend | 060·020 | Separate from actor badge | ON/OFF + write-back | TTY | app-autopilot-model |
+| PWO-063 | Confirm-to-arm dialog — PREP (staged · needs 062) | build | 062 | Arm requires explicit confirm | no silent arm | TTY | mode-line confirm-gate |
+| PWO-064 | STOP banner from reason codes — **EXECUTING** (HANDOFF · first in serialize queue) | build | 060·020 | Typed labels only | catalog coverage | inject status | control… catalog |
+| PWO-065 | Intervention → Human keyboard — PREP (staged · needs 064) | harden | 064·061 | STOP hands control | Human can type | live halt | control… escalate |
+| PWO-066 | Teach strip A/R/T visible — **STAGED** (after 062 · serialize `@ 12:02:18Z`) | build | 060 | Affordances shown | labels present | TTY | mode-line A/R/T |
 | PWO-067 | `R` Record macro wire — PREP | build | 066 | Human-init record | macro file/ledger | TTY+cli | macros |
 | PWO-068 | `T` Assign-trigger scaffold — PREP | build | 066 | Bind screen→macro stub | no live drive | TTY | rule-macro-engine |
 | PWO-069 | `A` Analyze on-demand only — PREP | build | 066 | Never auto-fires | press required | TTY | ai-teacher |
