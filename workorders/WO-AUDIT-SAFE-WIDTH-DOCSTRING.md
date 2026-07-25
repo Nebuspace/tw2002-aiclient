@@ -1,21 +1,24 @@
 # WO-AUDIT-SAFE-WIDTH-DOCSTRING — Document `_safe_width` contract
 
-> Status: **DRAFT** 2026-07-25 · Zone-A micro-bank · tip `00cb9e8`  
+> Status: **DRAFT** 2026-07-25 · Zone-A micro-bank · product tip `bc535d8` **awaits origin** (CC Accept+rebase onto `01bac96`)  
 > Type: docs/polish · Priority: P3 · Lens: L4  
-> Refs: CC POLISH Zone-A bank · hub optional micro list
+> Refs: hub HANDOFF · `cockpit/control_seat.py` `_safe_width` · siblings `_safe_spectating` / `_safe_attached` / `_is_definitively_false`
+
+## Origin note
+CC product tip **`bc535d8`** (docstring-only) Accepted @ 06:56Z but **not yet on origin** — rebasing onto Cursor docs `01bac96`. This WO stays **DRAFT** until tip-honesty stamp after `ls-remote` shows the post-rebase SHA. Do not treat as EXECUTED yet.
 
 ## Goal
-Add/clarify the docstring on `_safe_width` (or equivalent cell-width helper) so call sites know clip vs measure semantics — no behavior change.
+Add the missing contract docstring on `control_seat._safe_width` matching its three siblings (honest-degrade / never-raises / cross-refs) — no behavior change.
 
 ## Scope
-- A: one helper docstring only (path confirmed at execute — likely `cockpit/draw.py` or `screens.py`)
+- A: `tw2002_aiclient/cockpit/control_seat.py` — `_safe_width` docstring only
 - B: no test change unless docstring asserts a false contract
 
 ## Constraints
-Docs/comment only unless hub opens a behavior WO. Stay clear of SAFE-ADDSTR mid-edit lanes until that WO CLOSES. No seat-key / Human→App.
+Docs/comment only. No seat-key / Human→App. Tip-honesty is a separate Cursor tick after origin lands.
 
 ## Accept
-Docstring matches actual clip/measure behavior; reviewers can cite it without reading call graph.
+Docstring present + sibling-parity; AST/behavior unchanged; suite green.
 
 ## Proof
-Diff review · suite green (no functional delta). Push waits Accept.
+STATUS SHA on origin after CC push · docs tip-honesty stamp. Push waits Accept.
