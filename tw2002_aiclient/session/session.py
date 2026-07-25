@@ -18,7 +18,7 @@ import threading
 import time
 
 from .classify import classify_screen, is_probable_secret_prompt
-from .connection import TelnetConnection
+from .connection import TelnetConnection, tx_failure_phrase
 from .iac import TelnetHandler
 from .logging_util import TranscriptLogger
 from .settle import wait_for_settle
@@ -272,6 +272,65 @@ class Session:
 
     # -- sending -------------------------------------------------------
 
+    def _tail_send(self, secret, display_line):
+        """Append one send to the LOGS-band ring, honoring the `secret`
+        decision the caller already made.
+
+        The single copy of this branch for both send choke points and both
+        their outcomes -- `secret` is consumed here, never derived (see
+        `transcript_tail.py`'s own docstring: `append_redacted()` cannot be
+        handed a payload even by mistake).
+        """
+        if secret:
+            self.tail.append_redacted()
+        else:
+            self.tail.append_line(display_line)
+
+    def _tail_send_failed(self, secret, display_line, exc):
+        """Record a send that did NOT complete, on the operator-visible
+        LOGS-band surface (WO-AUDIT-TX-RECORD-HONESTY, session-audit F6).
+
+        Before this, a failed send left the transcript LOG asserting a send
+        that never completed while this ring -- and `last_sent` -- recorded
+        nothing at all, so the two records of the same event permanently
+        disagreed. `connection.py` now writes an honest failure record; this
+        is the matching half. Silence here would be the SAME defect wearing
+        the opposite costume: bytes may genuinely have reached the server
+        (see connection.py's docstring, fact 1), and a LOGS band showing
+        nothing would erase that from the surface the operator actually
+        watches.
+
+        Two entries, deliberately: the ordinary send line first -- so the
+        evidence of what was attempted survives, redacted exactly as a
+        successful send of the same content would be -- then a payload-free
+        failure line. The failure line is built from `connection.
+        tx_failure_phrase()`, the same one home the transcript log's own tag
+        uses, so these two surfaces cannot drift apart again; it carries an
+        exception TYPE name and fixed text only, never `str(exc)` and never
+        any part of the send, so it is safe verbatim on the secret path too.
+
+        **Deliberate asymmetry with the transcript LOG, documented here so
+        it doesn't read as an oversight.** `connection.py` folds the failure
+        into the SINGLE record's own channel tag rather than writing a
+        second, retracting record; this ring does the opposite. The reason
+        is the redaction guarantee, not convenience: keeping the send line
+        as a plain `_tail_send()` call means EVERY secret-bearing entry that
+        ever reaches this ring still goes through `append_redacted()`, on
+        the failure path exactly as on the success path. Folding the failure
+        text into one line instead would mean either re-typing
+        `append_redacted()`'s marker wording here (the very drift
+        `transcript_tail.py` documents itself against) or routing a secret
+        send through `append_line()` -- which `tests/test_transcript_tail.py`
+        pins as explicitly NOT a guard. The log file has no equivalent
+        constraint (its `direction` tag is already a free-form parameter of
+        both sinks), and it is the surface where a long-lived, greppable,
+        tail-able file could genuinely separate a claim from its retraction;
+        this ring is written atomically under `send_lock` and rendered as
+        adjacent lines, newest-visible, in the cockpit's LOGS band.
+        """
+        self._tail_send(secret, display_line)
+        self.tail.append_line(f"<<send failed: {tx_failure_phrase(exc)}>>")
+
     def send(self, text, enter=True, secret=False, sender="app"):
         """Automated/scripted send -- text plus an optional auto-appended
         CRLF. `sender` is the canon `{app, human}` send-time actor tag
@@ -286,7 +345,20 @@ class Session:
             delta = now - self._last_send_time
             if delta < MIN_SEND_GAP_S:
                 time.sleep(MIN_SEND_GAP_S - delta)
-            self.conn.send_text(text, enter=enter, secret=secret)
+            # A send that raises leaves `last_sent`/`last_sent_ts`/
+            # `last_sender`/`last_sent_secret` and `_last_send_time`
+            # DELIBERATELY untouched, exactly as before this work order:
+            # they keep describing the last send that actually completed,
+            # which stays a true statement. Only the transcript surfaces
+            # (`conn`'s log, and the ring below) record the attempt --
+            # `last_sent` is a "what is the current state" field, not a
+            # record of history, and the same guardian.py already applies
+            # to its own keepalive stamp ("do not stamp" on OSError).
+            try:
+                self.conn.send_text(text, enter=enter, secret=secret)
+            except BaseException as exc:
+                self._tail_send_failed(secret, f"{sender}> {text}", exc)
+                raise
             self._last_send_time = time.monotonic()
             self.last_sent = "<redacted>" if secret else text
             self.last_sent_ts = self._last_send_time
@@ -294,10 +366,7 @@ class Session:
             self.last_sent_secret = secret
             # Same `secret` decision that just gated conn.send_text()'s own
             # log_redacted()/log_raw() choice, above -- never re-derived.
-            if secret:
-                self.tail.append_redacted()
-            else:
-                self.tail.append_line(f"{sender}> {text}")
+            self._tail_send(secret, f"{sender}> {text}")
 
     def send_raw(self, data: bytes, control_lock=None, sender="human"):
         """Exact-byte pass-through for interactive `tw attach` keystrokes
@@ -356,18 +425,24 @@ class Session:
             delta = now - self._last_send_time
             if delta < MIN_SEND_GAP_S:
                 time.sleep(MIN_SEND_GAP_S - delta)
-            self.conn.send_bytes(data, secret=secret)
+            # Display form computed up front so the failure path can record
+            # WHAT was attempted without assigning it to `last_sent` -- see
+            # send()'s own comment for why a failed send leaves `last_sent`
+            # and friends describing the last COMPLETED send instead.
+            display = "<redacted>" if secret else data.decode("latin-1", errors="replace")
+            try:
+                self.conn.send_bytes(data, secret=secret)
+            except BaseException as exc:
+                self._tail_send_failed(secret, f"{sender}> {display}", exc)
+                raise
             self._last_send_time = time.monotonic()
-            self.last_sent = "<redacted>" if secret else data.decode("latin-1", errors="replace")
+            self.last_sent = display
             self.last_sent_ts = self._last_send_time
             self.last_sent_secret = secret
             self.last_sender = sender
             # Same `secret` decision that just gated conn.send_bytes()'s own
             # log_redacted()/log_raw() choice, above -- never re-derived.
-            if secret:
-                self.tail.append_redacted()
-            else:
-                self.tail.append_line(f"{sender}> {self.last_sent}")
+            self._tail_send(secret, f"{sender}> {display}")
 
     # -- history ---------------------------------------------------------
 
