@@ -193,13 +193,13 @@ Banked hygiene (not a PWO id): **pty mid-flush settle** — PREP `workorders/WO-
 
 ### Phase 5 — Mode line, escalation, teach
 
-> PREP: `workorders/WO-P5-060-072-mode-teach-PREP.md` — Phase 4 CLOSED; **PWO-060 DONE** (`2ca3154`); **PWO-061 CLOSED** (`420430d` · Ctrl-A Mode · ADR-002); entry-APP `7c0e882`; **serialize 064 → 062 → 066** (**064 DONE `af62889`**; **062 EXECUTING**; 066 STAGED); staged 063/065/067–072; **OPEN-003 CLOSED** · ops spectate **RETIRED** · **G2 EXECUTING** (G3→G4 staged · Max GO `@ 13:15:00Z`).
+> PREP: `workorders/WO-P5-060-072-mode-teach-PREP.md` — Phase 4 CLOSED; **PWO-060 DONE** (`2ca3154`); **PWO-061 CLOSED** (`420430d` · Ctrl-A Mode · ADR-002); entry-APP `7c0e882`; **serialize 064 → 062 → 066** (**064 DONE `af62889`**; **062 DONE `b712637`**; 066 STAGED); staged 063/065/067–072; **OPEN-003 CLOSED** · ops spectate **RETIRED** · **G2 1/2 DONE `438ef10`** (2/2 in flight · Max GO `@ 13:15:00Z`).
 
 | ID | Title | Type | Depends | Goal | Accept | Proof | Canon |
 |----|-------|------|---------|------|--------|-------|-------|
 | PWO-060 | App/Human badge (no AI mode) **DONE** 2026-07-25 (`2ca3154` · App XOR Human · strict gate) | extend | 030 | Dual only | no `ai_pilot` UI string | grep+TTY | mode-line-and-teach-controls |
 | PWO-061 | Mode switch App↔Human **CLOSED** 2026-07-25 (`420430d` · Ctrl-A · ADR-002; kernel `d4a8829`) | build | 060·056 | Toggle App↔Human | lock flips | TTY | control… Mode Switch |
-| PWO-062 | Autopilot/Trainer arm UI — **EXECUTING** (after 064 · serialize · hub GO `@ 12:56:02Z`) | extend | 060·020 | Separate from actor badge | ON/OFF + write-back | TTY | app-autopilot-model |
+| PWO-062 | Autopilot/Trainer arm UI **DONE** 2026-07-25 (`b712637` · read-only ON/OFF/`?`) | extend | 060·020 | Separate from actor badge | ON/OFF + write-back | TTY | app-autopilot-model |
 | PWO-063 | Confirm-to-arm dialog — PREP (staged · needs 062) | build | 062 | Arm requires explicit confirm | no silent arm | TTY | mode-line confirm-gate |
 | PWO-064 | STOP banner from reason codes **DONE** 2026-07-25 (`af62889` · catalog-only · `?`/raw) | build | 060·020 | Typed labels only | catalog coverage | inject status | control… catalog |
 | PWO-065 | Intervention → Human keyboard — PREP (staged · needs 064) | harden | 064·061 | STOP hands control | Human can type | live halt | control… escalate |

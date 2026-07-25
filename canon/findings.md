@@ -150,11 +150,11 @@ Hub relay `@ 09:33:23Z`: on cockpit **entry**, chip must show **`APP`** to match
 | SECRETS-ARCHIVE-NEVER-LIVE | Rotate gate on archive secrets | **CLOSED** — Max: archive `secrets.json` never live; no rotate |
 
 ### Banked · session/ honesty audit (2026-07-25 · CC READ-ONLY · hub adjudicated `@ 12:15:44Z`)
-Source tip at audit: `922739b`. Product fixes: F1 CUT (CC ∥ 064) · F2 after F1 · F3/F4 staged · **F5 Ruled (B)** Max `@ 13:13:55Z` (carve-out pending) · **F6–F8 BANK** (this stamp) · **F9 BANK** (cockpit UTF-8).
+Source tip at audit: `922739b`. Product fixes: F1 DONE `7e13b7d` · F2/F3/F4 in flight · **F5 Ruled (B)** · **F6 DONE `c21cd1c`** · F7/F8 BANK · **F9 BANK** (cockpit UTF-8 · product WO pending).
 
 | ID | Gap | Tip reality |
 |---|---|---|
-| SESSION-F6-TRANSCRIPT-ORDER | `connection.py` logs payload *before* `sendall`; `session.py` appends after — broken pipe ⇒ records disagree | **BANKED** — no WO this wave |
+| SESSION-F6-TRANSCRIPT-ORDER | `connection.py` / `session.py` / `_send_raw`+TX-IAC log-AFTER `sendall`; fail path type/phrase only | **DONE** tip `c21cd1c` (Accepted; push gated w/ F2 B+C) — scope includes `_send_raw`/TX-IAC, not only the two banked files |
 | SESSION-F7-STATUS-DAEMON-RUNNING | `cli.py` `cmd_status` stamps `daemon_running: True` over failed round-trip (PID reuse) | **BANKED** — exit code stays honest; `--json` self-contradicts |
 | SESSION-F8-WATCH-FRAME-GAP | `cli.py` `tw watch` swallows unparseable frames; `--frames N` counts only parsed | **BANKED** — invisible gap on corruption |
 | SESSION-AUDIT-COVERAGE-GAP | `classify.py` (634 lines) unaudited except secret-prompt regex; also unread: `credentials` · `env` · `iac` · `terminal` · `player_bank` | **BANKED** — future audit WO must not inherit false coverage |
@@ -164,5 +164,6 @@ Source tip at audit: `922739b`. Product fixes: F1 CUT (CC ∥ 064) · F2 after F
 | SESSION-F1-MICRO-DOCSTRING | `cli.py:3-5` claims `tw watch` is **the** lifetime-stream exception | **BANKED** — false since attach holds a socket for session; one-line docs fix |
 | P5-064-STALE-INTERVENTION-PATH | Canon / archive tests cite `twclient/intervention_labels.py` | **BANKED** — live catalog is `cockpit/stopbanner.py` (`af62889`); archive path gone |
 | P5-064-SCREENS-BADGE-DOCSTRING | `screens.py` module docstring still says no dynamic App/Human mode badge | **BANKED** — stale vs 060 LIVE `control_seat` chip; hub cited ~`:713` (line may drift) |
-| F9-COCKPIT-UTF8-GARBAGE-FORWARD | Cockpit `getch()` path forwards each UTF-8 byte `<256` as its own `send_key` | **BANKED** — real-pty proof U+2192 → `[226,134,146]` all forwarded; distinct from `key>=256` ruling; serialize cockpit fix behind cli-encode contract (mirror refuse+tell) |
+| F9-COCKPIT-UTF8-GARBAGE-FORWARD | Cockpit `getch()` path forwards each UTF-8 byte `<256` as its own `send_key` | **BANKED** — real-pty proof U+2192 → `[226,134,146]` all forwarded; distinct from `key>=256` ruling; serialize cockpit fix behind cli-encode contract (mirror refuse+tell) · product WO-AUDIT-COCKPIT-UTF8-GETCH |
+| LOGIN-REDACTION-SUITE-NOT-RUNNING | `tests/test_login_redaction.py` still `import twclient` · pytest.ini `--ignore` | **BANKED** — suite not collecting; rehab under WO-TEST-SUITE-REHAB / greenfield rewrite before un-ignore |
 
