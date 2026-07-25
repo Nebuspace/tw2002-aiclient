@@ -195,7 +195,8 @@ Spectate is LIVE via PWO-055; see
 ## Tests
 
 ```bash
-.venv/bin/python -m pytest tests/
+.venv/bin/python -m pytest          # parallel by default (-n auto)
+.venv/bin/python -m pytest -n0      # serial / single-process debug
 ```
 
 The suite is entirely network-free: telnet negotiation (including commands split

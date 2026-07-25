@@ -49,7 +49,7 @@ python3 -m venv .venv && .venv/bin/pip install -e .
 ```
 
 - **Lint:** none configured — don't invent one.
-- **Tests:** when `tests/` returns to root, prefer `.venv/bin/python -m pytest tests/` (network-free). Don't invent a lint gate.
+- **Tests:** when `tests/` returns to root, prefer `.venv/bin/python -m pytest` (network-free; parallel by default via `-n auto`; use `-n0` for serial debug). Don't invent a lint gate.
 - Never run `tw start`/`tw stop` against a session someone else may be driving without checking `tw status` first.
 
 ---
