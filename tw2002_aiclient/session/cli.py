@@ -456,8 +456,14 @@ def cmd_attach(args):
     """WO-P2-OPS-VERB-F1: take control_lock and forward keystrokes (thin).
 
     No curses screen paint yet (F2 spectate). Interactive mode needs a TTY
-    (cbreak until Ctrl-]). ``--keys`` sends latin-1 bytes then detaches —
-    for FakeDaemon / scripted proof without a TTY.
+    (cbreak until Ctrl-], EOF, or a failed send). ``--keys`` sends latin-1
+    bytes then detaches — for FakeDaemon / scripted proof without a TTY.
+
+    The exit code is honest about delivery on BOTH paths: a ``send_key()``
+    returning False ends the session and returns 1 rather than continuing
+    to swallow the pilot's keystrokes behind an ``ATTACHED`` banner
+    (interactive: WO-AUDIT-ATTACH-SEND-KEY-BOOL; scripted ``--keys``:
+    WO-AUDIT-CLI-KEYS-IGNORE-RETURN).
     """
     from .attach_client import DETACH_KEY, AttachInputConn
 
@@ -493,6 +499,7 @@ def cmd_attach(args):
         print("ATTACHED — Ctrl-] detach (thin attach: no live screen paint yet; use tw watch)", flush=True)
         fd = sys.stdin.fileno()
         old = termios.tcgetattr(fd)
+        send_failed = False
         try:
             tty.setcbreak(fd)
             while True:
@@ -503,11 +510,24 @@ def cmd_attach(args):
                 if code == DETACH_KEY:
                     break
                 if ch in ("\n", "\r"):
-                    conn.send_key(b"\r\n")
+                    sent_ok = conn.send_key(b"\r\n")
                 else:
-                    conn.send_key(ch.encode("latin-1", errors="ignore"))
+                    sent_ok = conn.send_key(ch.encode("latin-1", errors="ignore"))
+                if not sent_ok:
+                    # Both send sites feed this ONE check deliberately:
+                    # fixing either alone is what left this loop dropping
+                    # the pilot's keystrokes while still showing ATTACHED
+                    # and exiting 0. Reported below rather than here so
+                    # the `finally:` has provably restored the terminal
+                    # before the operator reads the line (and so the outer
+                    # `finally: conn.close()` still releases the wire).
+                    send_failed = True
+                    break
         finally:
             termios.tcsetattr(fd, termios.TCSADRAIN, old)
+        if send_failed:
+            print("ERROR: send_failed — keystrokes are NOT reaching the game; attach ended")
+            return 1
     except KeyboardInterrupt:
         pass
     finally:
