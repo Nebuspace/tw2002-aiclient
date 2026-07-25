@@ -16,7 +16,7 @@
 - **Spectate is not a Mode** (Max Batch 2/3) — muted `SPECTATE` is observation chrome, not an App/Human toggle position. Default run = App/autopilot. **Entry chip = APP** (Max `@ 09:33:23Z` — match daemon `MODE_APP`, not SPECTATE). DOC-GAP-M-FROM-SPECTATE **CLOSED**.
 - **AI never live-drives.** Retire any `AI-PILOT` / `ai_pilot` UI string. Teach overlay is cyan/info, transient, never a mode-line dual seat. Chip text = **`APP`** (green/`ok`).
 - **What 056/057 already satisfied:** Human/`MANUAL — YOU HAVE CONTROL` chip LIVE · `M` attach LIVE · Ctrl-] detach LIVE · no-send tripwire + attach allowlist LIVE · redaction on attach channel LIVE.
-- **What Phase 5 still owes:** Human→App entry (061 Accept #2 — **Ruled:** Ctrl-A Mode; CC product HANDOFF live) · migrate Spectate→Human bare `M`→Ctrl-A · A/R/T teach strip · STOP banner + reason codes · arm/confirm · N5 operate cluster · coverage meter (App-vs-Human, AI≠live slice).
+- **What Phase 5 still owes:** A/R/T teach strip · STOP banner + reason codes · arm/confirm · N5 operate cluster · coverage meter (App-vs-Human, AI≠live slice). **061 Mode (Accept #2):** ruled closed as contract — Ctrl-A Mode both directions · attached `M`=Move · Spectate attach migrates off printable `M` · product tip **TBD** (CC building/REVISE).
 - **F2 HOLD** — ops `tw spectate` CLI still Max-gated. **G2–G4 HOLD** unchanged.
 - **North-star SIGNED** (Batch 2/3) — align to `north-star.md`; do not invent new one-cockpit prose beyond signed text.
 - **Archive** = port-source only (`spectate_app` / `spectate_layout` badges) — never `import twclient`.
@@ -59,11 +59,11 @@
 - **Proof:** Layer-A composer unit (label selection matrix) · `rg` gate no `ai_pilot`/`AI-PILOT` under `tw2002_aiclient/` · optional pty chip text.
 - **Hazards:** Do not unify Spectate into the dual. Do not rewrite `control_seat` signature unless proven necessary — extend alongside 056 pattern.
 
-### PWO-061 — Mode switch App↔Human (BUILD) — **KERNEL DONE** + **061-ENTRY GO** (Max Batch 1b CLOSED 2026-07-25)
+### PWO-061 — Mode switch App↔Human (BUILD) — **KERNEL DONE** + **Accept #2 CLOSING** (Max Batch 1b · ADR-002)
 - **Depends-on:** 060 · 056 (attach already Spectate→Human)
-- **Live state:** **PARTIAL** — App-hold→`M`→Human **LIVE** (kernel); Spectate→Human via bare `M` **LIVE** (056); Human→App **MISSING** until Ctrl-A product. Full WO **not CLOSED**.
-- **Max Ruled (Batch-1 + 1b · Pending signed canon prose):** Mode chord = **Ctrl-A**; attached bare `M` = TW Move; no single printable may be Mode; migrate Spectate attach off printable `M`.
-- **Accept (061-entry):** Ctrl-A toggles App↔Human · attached `M` reaches game · Spectate still reaches Human (via Ctrl-A after migrate) · suite green · tip inventory honest.
+- **Live state:** **Accept #2 CLOSING** — contract ruled: Mode = **Ctrl-A** both directions · attached bare `M` = TW Move · no printable Mode · Spectate attach migrates off `M` · Ctrl-]@App-hold = deliberate no-op stay App (Batch 2/3). Kernel App-hold→Human **LIVE** (`d4a8829`). Product entry tip = **TBD** (CC `WO-P5-061-ENTRY` mid-REVISE — amend this PREP when `ls-remote` shows the tip).
+- **Max Ruled (Batch-1 + 1b · ADR-002 Accepted):** Mode chord = **Ctrl-A**; attached bare `M` = TW Move; no single printable may be Mode; Spectate ≠ Mode dual.
+- **Accept (061-entry):** Ctrl-A toggles App↔Human · attached `M` reaches game · Spectate still reaches Human (via Ctrl-A after migrate) · suite green · tip inventory honest · single `MODE_KEY` source.
 - **Proof:** FakeClient/lock + chip flips + Move passthrough pin · Push waits Accept.
 - **Hazards:** Do not steal 057 Ctrl-]. Do not loosen no-send tripwire. Esc≠detach.
 
@@ -172,4 +172,4 @@ Pending (not blocking PREP Accept): DOC-GAP-M-FROM-SPECTATE · DOC-GAP-POST-DETA
 
 ## 5. Execute readiness
 
-**PWO-060 DONE** (`2ca3154`). **PWO-061 KERNEL DONE** (`d4a8829`) — App→Human proven; **Batch 1b CLOSED** (Mode=Ctrl-A; attached `M`=Move) — product HANDOFF to CC `WO-P5-061-ENTRY`. Remaining 062–072 still PREP until hub HANDOFF. Do **not** claim full 061 CLOSED until entry tip lands. Cursor docs lane: OKF status-truth only; no product code in this tick.
+**PWO-060 DONE** (`2ca3154`). **PWO-061 KERNEL DONE** (`d4a8829`). **Accept #2 contract CLOSED** (Batch 1b · ADR-002: Mode=Ctrl-A; attached `M`=Move) — product tip **TBD** until CC `WO-P5-061-ENTRY` lands on origin (amend SHA then). Remaining 062–072 still PREP until hub HANDOFF. Cursor docs lane: OKF status-truth only; no product code in this tick.
