@@ -219,3 +219,5 @@ must respect that invariant exactly.
 [3] twclient/classify.py (`classify_screen`, gate-vs-content anchors, game-select/interstitial recognition)
 [4] DESIGN-v2.md §B1/B2/B3 (login automaton, secure store, NEW-vs-RETURNING branch — internal planning history)
 [5] canon/log.md 2026-07-23 (reborn control-neutrality disposition for this concept)
+[6] canon/research/archive-port-patterns.md AP-03 (reactive loop pseudocode, nuisance table,
+    stagnant_rounds tracking, game_select_answered once-per-connection guard)

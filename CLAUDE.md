@@ -20,8 +20,10 @@ An instance rooted **here** is an **IMPLEMENTER** seat in the Nebuspace dual —
 2. **`canon/index.md`** — the OKF bundle's entry point and full concept index. The bundle is the sole docs root (no second docs tree) and spans `canon/architecture/`, `canon/engine/`, `canon/surfaces/`, `canon/doctrine/`, `canon/strategy/`, plus `canon/ADR/` (decision records), `canon/DECISIONS.md` (open-questions workspace), and `canon/log.md`.
 3. Surface / engine / strategy concepts under `canon/surfaces/`, `canon/architecture/`, `canon/engine/`, `canon/doctrine/`, `canon/strategy/` as the WO scopes them.
 4. **`workorders/README.md`** — ordered product rebuild queue; each WO has Goal · Scope · Depends-on · Accept · Proof.
-5. **Research evidence (required for classify / settle / screen-understanding):** [`canon/research/tw2002-screen-patterns.md`](canon/research/tw2002-screen-patterns.md) — see also [`workorders/BRIEF-OKF-SCREEN-PATTERNS.md`](workorders/BRIEF-OKF-SCREEN-PATTERNS.md). `research/raw/` is gitignored corpus only.
-6. **`archive/pre-rebirth-2026-07-23/`** — reference only (old AI-first framing in places). Port behavior only when a WO scopes it and canon defines the target contract.
+   **WO file gate (Max 2026-07-25):** every coord `🤝 HANDOFF [WO-…]` MUST have a matching `workorders/<WO-id>.md` (same id) written in the same hub action as the HANDOFF. No coord-only work orders.
+5. **Research evidence — screen patterns (required for classify / settle / screen-understanding):** [`canon/research/tw2002-screen-patterns.md`](canon/research/tw2002-screen-patterns.md) · brief [`workorders/BRIEF-OKF-SCREEN-PATTERNS.md`](workorders/BRIEF-OKF-SCREEN-PATTERNS.md). `research/raw/` is gitignored corpus only.
+6. **Research evidence — archive port patterns (required before cockpit/autopilot · teach A/R/T · settle polish · menu crawl · trade loops · world-model · login UX · priority ranking):** [`canon/research/archive-port-patterns.md`](canon/research/archive-port-patterns.md) (AP-01…AP-14) · brief [`workorders/BRIEF-OKF-ARCHIVE-PORT-PATTERNS.md`](workorders/BRIEF-OKF-ARCHIVE-PORT-PATTERNS.md). Hard pins in the brief; Negative patterns are firm.
+7. **`archive/pre-rebirth-2026-07-23/`** — reference only (old AI-first framing in places). Port behavior only when a WO scopes it and canon defines the target contract. Prefer the OKF extracts above over ad-hoc archive browsing.
 
 ---
 

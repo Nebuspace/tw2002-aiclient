@@ -195,6 +195,8 @@ autonomous-driver shape in three places; these are recorded, not conformed to:
   autonomous rotation).
 - Code module `chains.py` — `TradeHop`, `ProfitChain`, `find_profit_chains`, `rank_chains`
   (hop-count desc then cr/turn desc), the three-metric shape, `longest_profit_chain`.
+- canon/research/archive-port-patterns.md AP-07 (DFS chain-finder algorithm, cycle normalization,
+  rank_chains sort key, chain_as_library_row wire format).
 - Code module `trade_adapter.py` — world-model port records → `TradeHop` edges; the buy-at-`frm`
   (port selling) / sell-at-`to` (port buying) perspective rule; the amount-floor phantom-leg gate;
   the UNVERIFIED floor-price / linear stock-price model deferred to Port Economics.

@@ -182,3 +182,11 @@ Do not grow new architecture dumps at repo root — sole docs root is `canon/`. 
 
 Useful patterns extracted to [`/research/tw2002-screen-patterns.md`](/research/tw2002-screen-patterns.md).
 `research/*-FINDINGS.md` are redirects. Implementer brief: `workorders/BRIEF-OKF-SCREEN-PATTERNS.md`.
+
+### Archive Port Patterns — research doc landed (2026-07-25 · Monk WO-ARCHIVE-PATTERNS-INTO-CANON)
+
+**Canon addition:** `canon/research/archive-port-patterns.md` — 14 patterns (AP-01…AP-14) distilled from `archive/pre-rebirth-2026-07-23/code/twclient/`. No archive code restored to root; archive stays reference-only.
+
+**Key do-not-revive flags recorded here (cross-reference to Documented divergences §1/§2):** `ai_pilot` mode, `autonomous` profile flag, `actor="trainer"` ledger enum, EV-every-tick live run-loop, `LoopPlayer` autonomous loop — all in the Negative Patterns section of the new concept.
+
+**Cross-links added to:** `architecture/settle-detection.md` [7] · `architecture/login-automaton.md` [6] · `engine/world-model.md` (last bullet) · `strategy/trade-loops.md` (chains bullet). Implementer brief: `workorders/BRIEF-OKF-ARCHIVE-PORT-PATTERNS.md`.

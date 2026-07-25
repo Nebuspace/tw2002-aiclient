@@ -186,3 +186,17 @@ See `WO-ROOT-MD-INTO-CANON`.
 `canon/research/tw2002-screen-patterns.md`. Inform Implementers via
 `workorders/BRIEF-OKF-SCREEN-PATTERNS.md`. Raw dumps under `research/` are redirects;
 `research/raw/` stays gitignored corpus only.
+
+## Accepted — sole docs root: no `docs/` tree (Max 2026-07-25T21:03:14Z)
+
+**Ruling:** Delete `docs/`. Fold its content into the OKF bundle under `canon/`. No second documentation tree.
+
+**Disposition of current files:**
+- `docs/OPERATOR.md` → fold into OKF surfaces/architecture (entry + CLI / session cold-start) as prescriptive operator-facing concept prose — not a parallel guide.
+- `docs/community-sources.md` → new or extended canon concept under doctrine (or engine) for public catalog sources + honesty policy.
+
+**Do not** grow a non-OKF docs dump. README may keep a short pointer into `canon/` only.
+
+## Accepted — archive-port-patterns research doc (Max GO this session · 2026-07-25T21:53:00Z)
+
+**Decision:** Extract pre-rebirth archive patterns into `canon/research/archive-port-patterns.md` as an OKF Reference concept. Archive stays reference-only; no code restored to root. 14 patterns (AP-01…AP-14), 8 negative/do-not-port items. `canon/index.md` gets a Research section. Cross-links added to 4 existing concepts. Implementer brief at `workorders/BRIEF-OKF-ARCHIVE-PORT-PATTERNS.md`.

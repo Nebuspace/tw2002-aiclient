@@ -82,6 +82,8 @@ See also [`/DECISIONS.md`](/DECISIONS.md) — the live open-questions workspace 
 
 * [Findings](/findings.md) — the DOCS-WIN divergence log: recorded code↔canon findings (`ai_pilot` mode · per-cycle EV picker · `{ai,trainer,human}` actor enum · 78-turn haggle) plus a reference index of the archived legacy bundle. — ✅ written
 
+* [Archive Port Patterns](/research/archive-port-patterns.md) — Distilled algorithmic and structural patterns from `archive/pre-rebirth-2026-07-23/` (settle protocol, login automaton, skill record/replay, haggle, world-model store, chain finder, BFS explore, priority engine, cockpit layout, menu crawler, credits discipline, learning dry-run). Must-read before cockpit/autopilot spine, teach A/R/T, settle polish, menu crawl, trade loops, world model, login UX, and priority ranking WOs. — ✅ written
+
 # Conventions
 
 * **Hypothesis-tagging.** Every un-introspected game number carries `tags: [..., hypothesis]` and

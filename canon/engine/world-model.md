@@ -231,3 +231,5 @@ holds structurally. Two things worth recording:
 - `explore.py` — frontier BFS, shortest-path (`path_to_sector`) pathfinding primitive, exhausted-frontier recovery.
 - `state_parser.py` — the last-match anchoring discipline, the plain-visit and batch/CIM write mappings.
 - `formations.py` — the topology catalog (dead-end / bubble / one-way / warp-sink) and its parked membership-write trio.
+- canon/research/archive-port-patterns.md AP-06 (per-sector file layout, fcntl lock scope, atomic
+  rename pattern, field-level and nested-port merge algorithms, write_from_state class-omit rule).
