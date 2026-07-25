@@ -229,12 +229,16 @@ _GLYPHS_ASCII = {**cockpit_draw.THIN_ASCII, "sel": ">"}
 
 
 def _unicode_ok() -> bool:
-    """ASCII force via ``TW2002_ASCII=1``; otherwise prefer UTF-8-capable locale."""
-    import os
-
-    if os.environ.get("TW2002_ASCII", "").strip() == "1":
-        return False
-    return True
+    """Thin delegate onto ``cockpit.draw.unicode_ok`` (WO-AUDIT-UNICODE-OK-
+    DOCSTRING) -- this used to be a second, independent copy of the same
+    predicate, and its docstring had drifted to promise an "otherwise prefer
+    UTF-8-capable locale" fallback that the code never performed. There is no
+    locale inspection here or in ``draw``: ASCII is forced ONLY when
+    ``TW2002_ASCII`` strips to exactly ``"1"``; EVERY other value -- unset,
+    empty, ``"0"``, ``"01"``, ``"true"`` -- yields Unicode. Kept as a local
+    name so ``_glyph_set()`` below stays untouched.
+    """
+    return cockpit_draw.unicode_ok()
 
 
 def _glyph_set() -> dict[str, str]:
