@@ -134,6 +134,9 @@ Hub relay `@ 09:25:55Z`:
 5. **Archive `secrets.json` were never live** — no rotate required; close that gate.
 6. CC product-TUI model = Opus (product seat; noted for paper trail).
 
+### Ruled Max stamp (2026-07-25 · **entry chip = APP**)
+Hub relay `@ 09:33:23Z`: on cockpit **entry**, chip must show **`APP`** to match daemon `MODE_APP` — not SPECTATE. Closes the entry SPECTATE-vs-App honesty gap. Product = CC `WO-ENTRY-APP-CHIP`; docs stamp here.
+
 | ID | Gap | Tip reality |
 |---|---|---|
 | DOC-GAP-M-FROM-SPECTATE | Canon frames `M` as App↔Human; silent on Spectate→Human | **CLOSED / SUPERSEDED** (ADR-002 · Batch 1b + 2/3): Mode=Ctrl-A; attached `M`=Move; Spectate≠Mode |
