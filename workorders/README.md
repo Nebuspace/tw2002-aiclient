@@ -48,6 +48,14 @@ Grounded in the reborn OKF canon (`canon/`), especially `canon/surfaces/entry-an
 
 The legacy `WO-00…17` table above is Goal/Accept/Proof reference shape only — its Proof commands assume code at repo root that does not exist yet under greenfield; don't run them.
 
+## OPS-VERB per-slice files
+
+Phase-2 CLI verb surfacing (OPS-VERB A–G1) each have a dedicated WO file. The parent index is:
+
+→ **[`WO-P2-OPS-VERB-SURFACE.md`](WO-P2-OPS-VERB-SURFACE.md)** — index and Recommended-execute table
+
+Individual slice files: [`WO-P2-OPS-VERB-A.md`](WO-P2-OPS-VERB-A.md) · [`WO-P2-OPS-VERB-B.md`](WO-P2-OPS-VERB-B.md) · [`WO-P2-OPS-VERB-C.md`](WO-P2-OPS-VERB-C.md) · [`WO-P2-OPS-VERB-D.md`](WO-P2-OPS-VERB-D.md) · [`WO-P2-OPS-VERB-E.md`](WO-P2-OPS-VERB-E.md) · [`WO-P2-OPS-VERB-E2.md`](WO-P2-OPS-VERB-E2.md) · [`WO-P2-OPS-VERB-F-PREP.md`](WO-P2-OPS-VERB-F-PREP.md) · [`WO-P2-OPS-VERB-F1.md`](WO-P2-OPS-VERB-F1.md) · [`WO-P2-OPS-VERB-F1b.md`](WO-P2-OPS-VERB-F1b.md) · [`WO-P2-OPS-VERB-G-PREP.md`](WO-P2-OPS-VERB-G-PREP.md) · [`WO-P2-OPS-VERB-G0.md`](WO-P2-OPS-VERB-G0.md) · [`WO-P2-OPS-VERB-G1.md`](WO-P2-OPS-VERB-G1.md) · [`WO-P2-G2-MENU-CRAWLER.md`](WO-P2-G2-MENU-CRAWLER.md) · [`WO-P2-G3-LOOPS.md`](WO-P2-G3-LOOPS.md)
+
 ## Baseline (honest — greenfield)
 
 There is **no product code at repo root today**. `archive/pre-rebirth-2026-07-23/` holds a prior implementation (`app.py` curses router, `screens.py`, `adapters.py`) kept strictly as reference — it is never restored or imported. The greenfield rebuild starts from PWO-003 in the inventory; early PWOs are mostly **bootstrap + verify**, matching the legacy WOs' shape without their stale paths.

@@ -36,19 +36,23 @@ closes the socket without driving the game.
 
 ## Recommended execute slices
 
-| Slice | Verbs | Status |
-|-------|-------|--------|
-| **A–D** | … | **DONE** (D docs-only) |
-| **E** | `watch` honesty | **DONE (docs-only)** |
-| **WATCHHUB** | substrate | **DONE** |
-| **E2** | `tw watch` CLI | **DONE** |
-| **F-PREP** | spectate·attach inventory | **DONE** — see `WO-P2-OPS-VERB-F-PREP.md` |
-| **F1** | thin `tw attach` CLI | **DONE** |
-| **F1b** | attach secret redaction proofs | **DONE** (ledger sink banked) |
-| **F2a/b** | spectate_layout → spectate_app + `tw spectate` | **RETIRED / WONTBUILD** — Max `@ 13:13:55Z`; cockpit Spectate LIVE |
-| **G-PREP** | menumap / loops inventory | **DONE** — see `WO-P2-OPS-VERB-G-PREP.md` |
-| **G0** | menu_* pure (sig/nav/map_view) | **DONE** |
-| **G1** | `tw menumap` CLI | **DONE** |
-| **G2–G4** | crawler · loops · autoloop | **HOLD LIFTED** · **G2 EXECUTING** · G3→G4 staged (Max GO `@ 13:15:00Z`) |
+| Slice | Verbs | Status | File |
+|-------|-------|--------|------|
+| **A** | `tw screen` · `tw stop` | **DONE** | [WO-P2-OPS-VERB-A.md](WO-P2-OPS-VERB-A.md) |
+| **B** | `tw do` · `tw send` · `tw read` | **DONE** | [WO-P2-OPS-VERB-B.md](WO-P2-OPS-VERB-B.md) |
+| **C** | `tw history` | **DONE** | [WO-P2-OPS-VERB-C.md](WO-P2-OPS-VERB-C.md) |
+| **D** | `tw start` (docs-only) | **DONE (docs-only)** | [WO-P2-OPS-VERB-D.md](WO-P2-OPS-VERB-D.md) |
+| **E** | `tw watch` honesty (docs-only) | **DONE (docs-only)** | [WO-P2-OPS-VERB-E.md](WO-P2-OPS-VERB-E.md) |
+| **WATCHHUB** | substrate (WatchHub port) | **DONE** | [WO-P2-WATCHHUB-PORT.md](WO-P2-WATCHHUB-PORT.md) |
+| **E2** | `tw watch` CLI (NDJSON tail) | **DONE** | [WO-P2-OPS-VERB-E2.md](WO-P2-OPS-VERB-E2.md) |
+| **F-PREP** | spectate·attach inventory | **DONE** | [WO-P2-OPS-VERB-F-PREP.md](WO-P2-OPS-VERB-F-PREP.md) |
+| **F1** | thin `tw attach` CLI | **DONE** | [WO-P2-OPS-VERB-F1.md](WO-P2-OPS-VERB-F1.md) |
+| **F1b** | attach secret redaction proofs | **DONE** (ledger sink banked) | [WO-P2-OPS-VERB-F1b.md](WO-P2-OPS-VERB-F1b.md) |
+| **F2a/b** | spectate_layout → spectate_app + `tw spectate` | **RETIRED / WONTBUILD** — Max `@ 13:13:55Z`; cockpit Spectate LIVE | — |
+| **G-PREP** | menumap / loops inventory | **DONE** | [WO-P2-OPS-VERB-G-PREP.md](WO-P2-OPS-VERB-G-PREP.md) |
+| **G0** | menu_* pure (sig/nav/map_view) | **DONE** | [WO-P2-OPS-VERB-G0.md](WO-P2-OPS-VERB-G0.md) |
+| **G1** | `tw menumap` CLI | **DONE** | [WO-P2-OPS-VERB-G1.md](WO-P2-OPS-VERB-G1.md) |
+| **G2** | menu dialogue-graph crawler | **DONE** | [WO-P2-G2-MENU-CRAWLER.md](WO-P2-G2-MENU-CRAWLER.md) |
+| **G3** | `tw loops` list | **IN FLIGHT** | [WO-P2-G3-LOOPS.md](WO-P2-G3-LOOPS.md) |
 
 **Accept for a wire slice:** verb on help · FakeSession · path-leak · full suite green.
