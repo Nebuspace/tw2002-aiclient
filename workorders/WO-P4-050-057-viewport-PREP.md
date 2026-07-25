@@ -24,14 +24,14 @@
 
 ## 1. Tip inventory (vs archive)
 
-| Piece | Tip `de47a26` (`tw2002_aiclient`) | Notes |
+| Piece | Tip `eb59274` (`tw2002_aiclient`) | Notes |
 |---|---|---|
 | WatchHub / daemon `subscribe` | **LIVE** — `session/watch.py` · `daemon._handle_subscribe` | Settle-edge push stream |
 | `tw watch` CLI | **LIVE** — ops consumer of `subscribe` | **≠** product cockpit subscribe |
-| Session pyte terminal | **LIVE** — `session/terminal.py` (`color_map`, glyphs) | Daemon-side; cockpit paints glyphs (052); color wire = 053 |
-| Play shell center GAME | **LIVE** — mono glyph paint 80×25 (PWO-051 shell · PWO-052 paint) | Per-cell color **NOT** (053) |
+| Session pyte terminal | **LIVE** — `session/terminal.py` (`color_map`, glyphs) · bare `build_response` emits color | One-lock `render_with_color` |
+| Play shell center GAME | **LIVE** — glyph + per-cell color paint 80×25 (PWO-051…053) | Disconnect chrome = 054 |
 | Viewport border STATE flip | **LIVE** (P3-040) — cyan → red non-bold / mono underline on `connected: False` | 054 extends semantics already partially shipped |
-| Product watch-stream client | **LIVE** — `watchfeed.py` + play-shell snapshot→paint | 050+052 |
+| Product watch-stream client | **LIVE** — `watchfeed.py` + play-shell snapshot→paint | 050+052+053 |
 | Product spectate mode | **MISSING** | 055; F2 HOLD for *ops* spectate CLI |
 | Cockpit attach / detach keys | **MISSING** (Esc→launcher only; no `h` / Ctrl-] attach path) | 056–057; daemon attach protocol **LIVE** for `tw attach` ops |
 | Archive `spectate_app` / layout | gitignored archive | Port patterns only under execute WO |
@@ -60,7 +60,7 @@
 - **Proof:** Layer-A — fixture grid → exact drawn lines (clip/sanitize via `cockpit/draw`). Layer-B — pty `_find_text` for a known fixture glyph/string; side-by-side note vs archive spectate if useful.
 - **Hazards:** Don't reinterpret server palette here — that's 053. Hostility: CSI/OSC in cells must hit draw choke.
 
-### PWO-053 — Viewport color parity (HARDEN)
+### PWO-053 — Viewport color parity (HARDEN) — **DONE 2026-07-25** (impl-claudecode-aiclient · tip `eb59274` — one-lock `render_with_color` on bare `build_response`; `draw_runs`; process-global `_SharedPairs (fg,bg)`; pair exhaustion → A_NORMAL)
 - **Depends-on:** 052
 - **Accept:** Per-cell fg/bg/bold from `terminal.color_map()` (or equivalent) matches ops spectate contract / visual-language "server CP437 palette"; pair exhaustion degrades without crash.
 - **Proof:** Layer-A — color_map fixture → attr pairs. Layer-B — pty cell `.fg`/`.bold` vs fixture (not ANSI-regex).

@@ -19,20 +19,21 @@ value below and a surface doc's inline restatement of it ever drift, this concep
 single-source authority and the surface doc's copy is a stale echo to be corrected.
 
 Every concrete value below is grounded to the module and, where meaningfully stable, the symbol name
-that defines it. **Rebirth tip (Phases 0–3 CLOSED · Phase 4 open through `de47a26`):** cockpit chrome
+that defines it. **Rebirth tip (Phases 0–3 CLOSED · Phase 4 open through `eb59274`):** cockpit chrome
 composers, layout, tones, fold, and LOGS live under `tw2002_aiclient/cockpit/` and `screens.py`;
 session transport under `tw2002_aiclient/session/`; product watch subscribe under
-`tw2002_aiclient/watchfeed.py` (PWO-050); GAME mono paint under cockpit viewport (PWO-052). Citations
-still name many archive (`archive/pre-rebirth-2026-07-23/code/twclient/`) symbols where Phase 4+
-per-cell color / spectate / mode-line ports have not landed — those remain the port-source until
-their WOs ship. Anything not yet built, or built differently from the reborn contract, is marked
-`[ASPIRATIONAL]`; any unverified claim about the game's own native palette is marked `[HYPOTHESIS]`
-and must never be promoted to fact without live introspection.
+`tw2002_aiclient/watchfeed.py` (PWO-050); GAME glyph + per-cell color paint under cockpit viewport
+(PWO-052 · PWO-053). Citations still name many archive
+(`archive/pre-rebirth-2026-07-23/code/twclient/`) symbols where Phase 4+ spectate / mode-line ports
+have not landed — those remain the port-source until their WOs ship. Anything not yet built, or built
+differently from the reborn contract, is marked `[ASPIRATIONAL]`; any unverified claim about the
+game's own native palette is marked `[HYPOTHESIS]` and must never be promoted to fact without live
+introspection.
 
-**Implementation honesty — GAME viewport:** the play-shell center **paints** live settle-snapshot /
-pyte **glyphs** into the 80×25 GAME (**LIVE** · PWO-052 · tip `de47a26`); per-cell fg/bg/bold color
-parity is **NOT** yet (PWO-053). Border STATE flip (danger non-bold / mono underline) is **LIVE**
-(P3-040). Do not read chrome-tones prose as implying server-palette color in the center.
+**Implementation honesty — GAME viewport:** the play-shell center paints live settle-snapshot /
+pyte **glyphs and per-cell fg/bg/bold color** into the 80×25 GAME (**LIVE** · PWO-052 · PWO-053 ·
+tip `eb59274`). Border STATE flip (danger non-bold / mono underline) is **LIVE** (P3-040). Do not
+read chrome-tones prose as recoloring game cells with the 7-tone semantic table.
 
 # Schema
 

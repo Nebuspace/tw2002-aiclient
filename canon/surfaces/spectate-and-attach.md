@@ -16,7 +16,7 @@ surfaces and the settle-edge push-stream substrate they share; it does not speci
 state machine itself (see [Control & Escalation](/architecture/control-and-escalation.md)) or the
 daemon/CLI split beneath them (see [the Session Engine](/architecture/session-engine.md)).
 
-# Implementation status (tip `de47a26`)
+# Implementation status (tip `eb59274`)
 
 | Surface | Tip reality |
 |---|---|
@@ -24,8 +24,8 @@ daemon/CLI split beneath them (see [the Session Engine](/architecture/session-en
 | `tw watch` (ops CLI settle-edge tail) | **LIVE** |
 | `tw attach` (thin control-lock attach) | **LIVE** — no full curses paint yet |
 | `tw spectate` (ops curses HUD) | **MISSING** — **F2 HOLD** (Max-gated); do not invent |
-| Product play-shell watch subscribe | **LIVE** (PWO-050 · `watchfeed.py`) — settle-edge consumed for GAME paint (PWO-052) |
-| Product play-shell GAME viewport | **LIVE** mono glyph paint 80×25 (PWO-052 · tip `de47a26`); per-cell color **NOT** (PWO-053) |
+| Product play-shell watch subscribe | **LIVE** (PWO-050 · `watchfeed.py`) — settle-edge consumed for GAME paint (PWO-052/053) |
+| Product play-shell GAME viewport | **LIVE** glyph + per-cell color paint 80×25 (PWO-052 · PWO-053 · tip `eb59274`) |
 | Product cockpit attach hotkey | **NOT DONE** — PWO-056+ |
 
 Target contracts below remain prescriptive for when those surfaces land.
