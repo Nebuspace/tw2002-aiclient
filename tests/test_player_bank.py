@@ -62,6 +62,12 @@ def test_constants_and_paths():
     assert player_bank.TURNS_UNKNOWN == "-"
     assert player_bank.STATE_DIR.name == "state"
     assert player_bank.BANK_PATH.name == "player_bank.json"
+    # The truncation mark is one cell wide, so a marked value still fits the
+    # column exactly; and it is not one of the unknown markers, because "cut
+    # to fit" is not "unknown" and an operator acts on them differently.
+    assert player_bank.LAST_PLAYED_WIDTH == 21
+    assert len(player_bank.TRUNCATED) == 1
+    assert player_bank.TRUNCATED not in (player_bank.NEVER, player_bank.TURNS_UNKNOWN, "?")
 
 
 def test_list_players_empty_when_no_profiles_and_no_bank(tmp_path, monkeypatch):
@@ -155,14 +161,250 @@ def test_list_players_surfaces_bank_only_orphan_after_profile_removed(tmp_path, 
     assert rows[0]["last_played"] == "2026-01-01T00:00:00Z"
 
 
-def test_list_players_skips_profile_rows_with_error(tmp_path, monkeypatch):
+def test_list_players_surfaces_a_broken_profile_instead_of_dropping_it(
+    tmp_path, monkeypatch
+):
+    """Replaces ``test_list_players_skips_profile_rows_with_error``.
+
+    That test asserted the defect. "Skips" was the tell: a profile whose
+    summary carried an ``error`` vanished from the listing entirely, and the
+    bank view then painted the remaining rows as a complete table. That is the
+    same collapse this module's docstring exists to prevent -- "there is no
+    such character" and "that character's profile is broken" are different
+    facts an operator acts on differently, and they rendered alike (both:
+    absent).
+
+    Unlike the bank-unreadable case, there IS an honest row here: the bank was
+    read, so ``last_played``/``turns_state`` are real, and every identity
+    column this function cannot fill already has an established marker (``?``).
+    """
     _point_bank_at(tmp_path, monkeypatch)
     monkeypatch.setattr(
         credentials,
         "load_profile_summaries",
         lambda: [{"name": "broken", "error": "missing host", "handle": "X"}],
     )
-    assert player_bank.list_players() == []
+    rows = player_bank.list_players()
+    assert len(rows) == 1
+    row = rows[0]
+    assert row["name"] == "broken"
+    assert row["error"] == "missing host"
+    # Invents nothing it did not read -- the same `?` this function already
+    # uses, never a fabricated host or game letter.
+    assert row["host"] == "?"
+    assert row["game_letter"] == "?"
+    # The bank WAS read, so these two are honest, not manufactured.
+    assert row["last_played"] == player_bank.NEVER
+    assert row["turns_state"] == player_bank.TURNS_UNKNOWN
+
+
+def test_a_broken_profile_never_shrinks_the_listing_around_it(tmp_path, monkeypatch):
+    """The healthy rows keep their exact shape; only the broken row differs.
+
+    ``error`` is present on a broken row and ABSENT (not ``None``) on a healthy
+    one, so ``entry.get("error")`` is the surface's whole branch and a healthy
+    row's six-key contract is untouched.
+    """
+    _point_bank_at(tmp_path, monkeypatch)
+    monkeypatch.setattr(
+        credentials,
+        "load_profile_summaries",
+        lambda: [
+            {
+                "name": "good",
+                "handle": "GOODH",
+                "host": "good.test.example",
+                "game_letter": "A",
+            },
+            {"name": "broken", "error": "missing game_letter", "handle": "B"},
+        ],
+    )
+    rows = player_bank.list_players()
+    assert [r["name"] for r in rows] == ["good", "broken"]  # order preserved
+    assert rows[0] == {
+        "name": "good",
+        "handle": "GOODH",
+        "host": "good.test.example",
+        "game_letter": "A",
+        "last_played": player_bank.NEVER,
+        "turns_state": player_bank.TURNS_UNKNOWN,
+    }
+    assert "error" not in rows[0]
+    assert rows[1]["error"] == "missing game_letter"
+
+
+def test_a_broken_profile_shows_its_own_metadata_not_the_banks(tmp_path, monkeypatch):
+    """The nastier half of the drop: a broken profile that HAS a bank entry.
+
+    It did not vanish -- it came back through the bank-only loop below wearing
+    the BANK's stored ``handle``/``host``/``game_letter`` (the profile's own
+    were never consulted) and carrying no error at all, so a broken profile
+    rendered as an ordinary healthy character described by a different store.
+    That is a positive false claim, not merely an omission.
+
+    Exactly one row, identity from the profile, rotation from the bank.
+    """
+    _point_bank_at(
+        tmp_path,
+        monkeypatch,
+        {
+            "version": 1,
+            "players": [
+                {
+                    "name": "broken",
+                    "handle": "STALE-BANK-HANDLE",
+                    "host": "stale.bank.example",
+                    "game_letter": "Z",
+                    "last_played": "2026-07-23T12:00:00Z",
+                    "turns_state": "ok",
+                }
+            ],
+        },
+    )
+    monkeypatch.setattr(
+        credentials,
+        "load_profile_summaries",
+        lambda: [
+            {
+                "name": "broken",
+                "handle": "PROFILEH",
+                "host": "profile.test.example",
+                "game_letter": "",
+                "error": "missing game_letter",
+            }
+        ],
+    )
+    rows = player_bank.list_players()
+    assert len(rows) == 1, "the profile row and the bank row must not both emit"
+    row = rows[0]
+    assert row["error"] == "missing game_letter"
+    assert row["handle"] == "PROFILEH"
+    assert row["host"] == "profile.test.example"
+    assert "STALE-BANK-HANDLE" not in json.dumps(row)
+    assert "stale.bank.example" not in json.dumps(row)
+    # ...but the rotation columns are the bank's, because the bank is where
+    # they live and it was read.
+    assert row["last_played"] == "2026-07-23T12:00:00Z"
+    assert row["turns_state"] == "ok"
+
+
+# ---------------------------------------------------------------------------
+# Unmarked timestamp truncation (WO-PLAYERBANK-LISTING-HONESTY, defect B)
+#
+# `last_played` is cut to the launcher's column width. The cut itself is a
+# layout necessity; doing it SILENTLY was the defect -- a cut value read as a
+# whole one, and two different stored stamps rendered byte-identical.
+# ---------------------------------------------------------------------------
+
+_LONG_A = "2026-07-23T12:00:00.000001+00:00"  # 32 chars
+_LONG_B = "2026-07-23T12:00:00.000002+00:00"  # differs only at char 27
+
+
+def test_last_played_says_so_when_it_had_to_be_cut(tmp_path, monkeypatch):
+    _point_bank_at(
+        tmp_path,
+        monkeypatch,
+        {"version": 1, "players": [{"name": "alpha", "last_played": _LONG_A}]},
+    )
+    _one_profile(monkeypatch)
+    shown = player_bank.list_players()[0]["last_played"]
+    assert shown.endswith(player_bank.TRUNCATED)
+    assert shown != _LONG_A
+    # Column-preserving: never wider than the launcher's `last_played` field,
+    # so marking the cut cannot shove the `turns` column off its position.
+    assert len(shown) == player_bank.LAST_PLAYED_WIDTH
+    assert shown == _LONG_A[: player_bank.LAST_PLAYED_WIDTH - 1] + player_bank.TRUNCATED
+
+
+def test_two_stamps_that_differ_past_the_cut_no_longer_claim_to_be_whole(
+    tmp_path, monkeypatch
+):
+    """The bug as an operator meets it: two rows, one rendering.
+
+    Marking does not make them distinguishable -- the information really is
+    gone at this width -- but neither row now presents itself as the complete
+    stored value, which is the claim that was false.
+    """
+    _point_bank_at(
+        tmp_path,
+        monkeypatch,
+        {
+            "version": 1,
+            "players": [
+                {"name": "alpha", "last_played": _LONG_A},
+                {"name": "bravo", "last_played": _LONG_B},
+            ],
+        },
+    )
+    monkeypatch.setattr(
+        credentials,
+        "load_profile_summaries",
+        lambda: [
+            {"name": "alpha", "handle": "A", "host": "a.example", "game_letter": "A"},
+            {"name": "bravo", "handle": "B", "host": "b.example", "game_letter": "B"},
+        ],
+    )
+    shown = {r["name"]: r["last_played"] for r in player_bank.list_players()}
+    assert shown["alpha"].endswith(player_bank.TRUNCATED)
+    assert shown["bravo"].endswith(player_bank.TRUNCATED)
+    # The pre-fix rendering was this bare prefix, which reads as a complete
+    # fractional-second stamp and is what made the collision invisible.
+    assert shown["alpha"] != _LONG_A[: player_bank.LAST_PLAYED_WIDTH]
+    assert shown["bravo"] != _LONG_B[: player_bank.LAST_PLAYED_WIDTH]
+
+
+@pytest.mark.parametrize(
+    "stamp",
+    [
+        "2026-07-23T12:00:00Z",  # 20 -- the common case, room to spare
+        "2026-07-23T12:00:00.0Z",  # 22 -> must be cut
+        "x" * 21,  # exactly the width: fits, must NOT be marked
+        "x" * 22,  # one over: must be marked
+    ],
+)
+def test_a_last_played_is_marked_if_and_only_if_it_was_cut(
+    tmp_path, monkeypatch, stamp
+):
+    """A false truncation mark is its own lie -- the boundary is pinned."""
+    _point_bank_at(
+        tmp_path,
+        monkeypatch,
+        {"version": 1, "players": [{"name": "alpha", "last_played": stamp}]},
+    )
+    _one_profile(monkeypatch)
+    shown = player_bank.list_players()[0]["last_played"]
+    if len(stamp) <= player_bank.LAST_PLAYED_WIDTH:
+        assert shown == stamp
+        assert not shown.endswith(player_bank.TRUNCATED)
+    else:
+        assert shown.endswith(player_bank.TRUNCATED)
+        assert len(shown) == player_bank.LAST_PLAYED_WIDTH
+
+
+def test_the_bank_only_orphan_row_marks_its_truncation_too(tmp_path, monkeypatch):
+    """The second call site. Both loops cut ``last_played``; the rule is one
+    helper now precisely so a fix to one can never leave the other lying."""
+    _point_bank_at(
+        tmp_path,
+        monkeypatch,
+        {
+            "version": 1,
+            "players": [
+                {
+                    "name": "ghost",
+                    "handle": "GHOSTH",
+                    "host": "old.example",
+                    "game_letter": "A",
+                    "last_played": _LONG_A,
+                }
+            ],
+        },
+    )
+    monkeypatch.setattr(credentials, "load_profile_summaries", lambda: [])
+    rows = player_bank.list_players()
+    assert len(rows) == 1
+    assert rows[0]["last_played"].endswith(player_bank.TRUNCATED)
+    assert len(rows[0]["last_played"]) == player_bank.LAST_PLAYED_WIDTH
 
 
 def test_list_players_refuses_to_invent_never_rows_for_a_corrupt_bank(tmp_path, monkeypatch):

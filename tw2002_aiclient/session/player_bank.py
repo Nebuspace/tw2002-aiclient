@@ -46,6 +46,14 @@ documents, where one corrupt file among twenty leaves nineteen real rows worth
 listing (``loops/store.py`` records this exact asymmetry in-module). Here there
 is no uncontaminated partial listing to give — see :func:`list_players`.
 
+That total-failure rule is about a STORE that could not be read, and it must
+not be over-read as licence to drop individual rows. A profile the credential
+store flagged as broken is the opposite situation: the bank was read, so that
+row's rotation columns are real and it is listed, carrying its error
+(WO-PLAYERBANK-LISTING-HONESTY). Dropping it was the module's own thesis
+inverted one level down — "no such character" and "that character is broken"
+rendered alike. :func:`list_players` carries the full reasoning.
+
 ``Path.exists()`` is gone on purpose. It answers ``False`` when the *parent
 directory* is unreadable, which made "no bank" and "cannot reach the bank"
 indistinguishable at the very first line, before any of the ``try`` below could
@@ -71,6 +79,24 @@ BANK_PATH = STATE_DIR / "player_bank.json"
 # Honest empty-rotation sentinels (never fabricate a timestamp).
 NEVER = "never"
 TURNS_UNKNOWN = "-"
+
+# The launcher's bank table gives `last_played` exactly this many columns
+# (`screens.py`'s `f"{entry.get('last_played', 'never'):<21}"`, which pads but
+# does not clip), so a longer stored value must be cut here or the `turns`
+# column slides right. Cutting is a layout necessity; cutting SILENTLY was the
+# defect (WO-PLAYERBANK-LISTING-HONESTY) -- `2026-07-23T12:00:00+00:00` came
+# out as `2026-07-23T12:00:00+0`, which reads as a complete fractional-second
+# stamp, and any two stamps differing only past the cut rendered identical.
+#
+# TRUNCATED is what says a cut happened. It is deliberately NOT one of the
+# unknown markers above: `never`/`-`/`?` all mean "this value is absent", and
+# this value is present, read, and only partly shown -- a different fact with a
+# different next action (widen the view / read the file). `…` is this
+# codebase's existing "there is more" mark (`screens.py`'s `Exploring…`,
+# `app.py`'s `Ensuring session…`), one cell wide, and cannot be mistaken for
+# timestamp content, so a marked value still fits the column exactly.
+LAST_PLAYED_WIDTH = 21
+TRUNCATED = "…"
 
 # Why the bank could not be read. Coarse enough for a caller to branch on,
 # distinct where the operator's next action differs: fixing permissions,
@@ -172,11 +198,42 @@ def _load_bank_raw() -> dict:
     return data
 
 
+def _rotation_columns(stored: dict) -> tuple[str, str]:
+    """The two bank-sourced columns for one row: ``(last_played, turns_state)``.
+
+    ONE helper rather than a copy in each of :func:`list_players`' two loops.
+    Both loops cut ``last_played`` to the launcher's column width, so before
+    this there were two independent copies of a rule that has to agree -- and
+    a fix applied to one of them would have left the other still lying, which
+    is precisely the drift the sibling dedupe passes (WO-AUDIT-GLYPH-TABLE-
+    DEDUPE, WO-AUDIT-SAFE-ADDSTR-DEDUPE) exist to close.
+
+    Absent history stays ``never`` / ``-`` -- never a fabricated timestamp. A
+    present value too wide for the column is cut and MARKED (see
+    ``TRUNCATED``); it is never cut in silence, because a silently cut value
+    presents itself as the whole one.
+    """
+    last = stored.get("last_played")
+    if last in (None, ""):
+        last_played = NEVER
+    else:
+        text = str(last)
+        if len(text) <= LAST_PLAYED_WIDTH:
+            last_played = text
+        else:
+            last_played = text[: LAST_PLAYED_WIDTH - len(TRUNCATED)] + TRUNCATED
+    turns = stored.get("turns_state")
+    turns_state = TURNS_UNKNOWN if turns in (None, "") else str(turns)
+    return last_played, turns_state
+
+
 def list_players() -> list[dict[str, str]]:
     """Return metadata-only bank rows for the launcher touchpoint.
 
     Shape matches ``tw players list`` columns: name, handle, host, game_letter,
     last_played, turns_state. Missing rotation history uses ``never`` / ``-``.
+    A row for a profile the credential store flagged carries a seventh key,
+    ``error`` — see "Broken profiles" below.
 
     Raises :class:`BankUnreadable` when the bank could not be read, rather than
     returning a shorter list. There is no honest partial listing to fall back
@@ -191,9 +248,53 @@ def list_players() -> list[dict[str, str]]:
     ``load_profile_summaries``: an unreadable ``profiles.toml`` drops every
     profile-derived row, leaving a listing that renders as "(bank empty)" —
     a claim about contents, made out of two files, one of which nobody read.
-    The display twin ``list_profile_summaries`` answers that failure with a
-    diagnostic row this function would filter out as a broken profile, so
-    taking it here would trade the launcher's lie for this surface's.
+    The display twin ``list_profile_summaries`` cannot be substituted: it
+    answers that failure with ``_store_failure_row``, a diagnostic row named
+    for the failing FILE, which arriving here would be counted and rendered as
+    a *character* in the operator's bank — a fabricated player plus a count
+    nothing earned. Raising is this surface's answer to that failure; a row is
+    the launcher's.
+
+    Broken profiles (WO-PLAYERBANK-LISTING-HONESTY)
+    -----------------------------------------------
+    A profile whose summary carries an ``error`` is LISTED, with that ``error``
+    on the row. It used to be skipped, and the view then painted the surviving
+    rows as a whole bank — the same collapse this module's docstring exists to
+    prevent, one level down: "there is no such character" and "that character's
+    profile is broken" are different facts, an operator acts on only one of
+    them, and they rendered alike (both: absent). Worse where the name also had
+    a bank entry: the row did not vanish at all, it re-emerged from the
+    bank-only loop below wearing the BANK's stored handle/host/game letter and
+    no error mark, so a broken profile read as a healthy character described by
+    a store that was never the authority on it.
+
+    Unlike the bank-unreadable case above, an honest row genuinely exists here,
+    and that asymmetry is the whole justification: the bank WAS read, so
+    ``last_played`` / ``turns_state`` are real rather than manufactured, and
+    every identity column that could not be filled already degrades to this
+    function's own ``?``. Nothing is invented — no host, no handle, no game
+    letter — and the name is kept intact rather than parenthesised the way
+    ``credentials._store_failure_row`` mangles its own: that row has no real
+    name to protect, this one's name is the bank join key, the operator's
+    handle on which profile to repair, and its cross-reference to the launcher
+    list.
+
+    ``error`` is present only on a broken row — absent, not ``None``, on a
+    healthy one — so a healthy row's six-key shape is unchanged and
+    ``entry.get("error")`` is a surface's entire branch (the launcher already
+    branches exactly that way on ``ProfileRow.error``).
+
+    ⚠️ ``screens.py``'s ``BankViewScreen`` does NOT yet read ``error``: it
+    prints the six columns only, so a broken row currently renders as an
+    ordinary table row. Listing it is strictly better than dropping it, but the
+    fix is only complete once that screen grows the one branch its sibling
+    launcher list already has (``screens.py``'s ``if row.error:``). Until then
+    this docstring is the contract, not the screen.
+
+    The one row still dropped is a summary with no ``name`` at all. That is
+    structurally unreachable from ``load_profile_summaries`` (names are TOML
+    section keys) and there would be nothing to show or act on: no join key to
+    the bank, no identity to repair. It is a defensive guard, not a filter.
     """
     bank = _load_bank_raw()
     try:
@@ -213,35 +314,32 @@ def list_players() -> list[dict[str, str]]:
     rows: list[dict[str, str]] = []
     for summary in summaries:
         name = str(summary.get("name") or "")
-        if not name or summary.get("error"):
-            continue
-        stored = by_name.get(name, {})
-        last = stored.get("last_played")
-        if last is None or last == "":
-            last_played = NEVER
-        else:
-            last_played = str(last)[:21]
-        turns = stored.get("turns_state")
-        turns_state = TURNS_UNKNOWN if turns in (None, "") else str(turns)
-        rows.append(
-            {
-                "name": name,
-                "handle": str(summary.get("handle") or "?"),
-                "host": str(summary.get("host") or summary.get("server") or "?"),
-                "game_letter": str(summary.get("game_letter") or "?"),
-                "last_played": last_played,
-                "turns_state": turns_state,
-            }
-        )
+        if not name:
+            continue  # nothing to show, nothing to join on -- see the docstring
+        last_played, turns_state = _rotation_columns(by_name.get(name, {}))
+        row = {
+            "name": name,
+            "handle": str(summary.get("handle") or "?"),
+            "host": str(summary.get("host") or summary.get("server") or "?"),
+            "game_letter": str(summary.get("game_letter") or "?"),
+            "last_played": last_played,
+            "turns_state": turns_state,
+        }
+        error = summary.get("error")
+        if error:
+            # Only on broken rows, so a healthy row's shape is untouched and
+            # `.get("error")` is the whole branch a surface needs.
+            row["error"] = str(error)
+        rows.append(row)
     # Bank-only entries (profile removed) still surface as diagnosable rows.
+    # A broken profile is NOT one of these any more -- it emitted above, from
+    # its own store -- so this loop can no longer re-describe it out of the
+    # bank's stale copy.
     known = {r["name"] for r in rows}
     for name, stored in by_name.items():
         if name in known:
             continue
-        last = stored.get("last_played")
-        last_played = NEVER if last in (None, "") else str(last)[:21]
-        turns = stored.get("turns_state")
-        turns_state = TURNS_UNKNOWN if turns in (None, "") else str(turns)
+        last_played, turns_state = _rotation_columns(stored)
         rows.append(
             {
                 "name": name,
