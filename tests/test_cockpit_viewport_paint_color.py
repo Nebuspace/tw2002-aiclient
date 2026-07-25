@@ -229,8 +229,14 @@ def test_color_screen_count_mismatch_drops_color_but_still_paints_text(monkeypat
 
 
 def test_pair_exhaustion_degrades_to_uncolored_text_without_crash(monkeypatch):
-    # Chrome's own __init__ allocates 2 pairs (cyan info, red danger) --
-    # cap the table so NOTHING is left for GAME cells.
+    # Chrome's own __init__ ASKS for 3 pairs as of WO-P5-064 (cyan info,
+    # red danger, yellow warn for the STOP banner) -- cap the table so
+    # nothing is left for GAME cells. Under this cap chrome itself wins
+    # only the first two and its own warn ask degrades to A_NORMAL, which
+    # is the documented pair-exhaustion behavior for chrome too, not a
+    # setup error: what this test proves is that the GAME-cell side
+    # degrades to uncolored text without crashing, and it is starved
+    # either way.
     fake = _FakeCurses(color_pairs_limit=3)  # pairs 1, 2 allocatable; pair 0 reserved
     screen, win = _build_screen(monkeypatch, fake)
 
@@ -264,10 +270,20 @@ def test_chrome_colors_survive_repeated_game_cell_allocation_across_draws(monkey
 
     chrome_attr_at_init = screen._chrome_attr
     danger_attr_at_init = screen._viewport_danger_attr
-    # Chrome's own two pairs (info=cyan, danger=red) allocated at
-    # construction -- capture their init_pair calls to diff against later.
+    # Chrome's own pairs, allocated at construction -- capture their
+    # init_pair calls to diff against later. THREE as of WO-P5-064: the
+    # pre-existing info=cyan and danger=red, plus warn=yellow for the STOP
+    # banner's own attr (`_stop_banner_attr`). The count is a deliberate
+    # pin, not incidental: an UNEXPECTED growth here means some draw path
+    # started allocating chrome pairs it did not before, which is exactly
+    # the class of change that can starve the GAME-cell side of this same
+    # shared table. Note the warn pair is SHARED, not additional in the
+    # steady state -- `_control_strip_segment_attr` already resolves the
+    # same ("yellow", "default") key for the MANUAL/Human chip, so a
+    # session where the human ever attaches allocated it anyway; this WO
+    # only moves the allocation earlier, to construction.
     chrome_init_pair_calls = list(fake.init_pair_calls)
-    assert len(chrome_init_pair_calls) == 2
+    assert len(chrome_init_pair_calls) == 3
 
     # First draw: no game provider -- HUD/DECISIONS boxes paint with
     # chrome's attrs.

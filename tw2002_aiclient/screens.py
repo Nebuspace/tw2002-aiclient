@@ -22,6 +22,7 @@ from tw2002_aiclient.cockpit import goals as cockpit_goals
 from tw2002_aiclient.cockpit import hud as cockpit_hud
 from tw2002_aiclient.cockpit import liveness as cockpit_liveness
 from tw2002_aiclient.cockpit import logsband as cockpit_logsband
+from tw2002_aiclient.cockpit import stopbanner as cockpit_stopbanner
 from tw2002_aiclient.cockpit import tones as cockpit_tones
 from tw2002_aiclient.cockpit import viewport as cockpit_viewport
 from tw2002_aiclient.cockpit import viewport_color as cockpit_viewport_color
@@ -508,6 +509,16 @@ _LOGS_COMPOSE_FAILED = [cockpit_logsband.LOGS_EMPTY]
 # falls back to the SAME blank state, not a fallback string -- an empty
 # list draws nothing, exactly matching "no provider set" / "no event yet".
 _VIEWPORT_COMPOSE_FAILED: list[str] = []
+# The STOP banner's own composer (WO-P5-064, ``cockpit.stopbanner.
+# compose_stop_banner_lines``) has no honest-empty state either -- an
+# absent banner IS its calm state, and the banner only exists at all
+# because a halt was reported. A raising composer therefore falls back to
+# the bare attention glyph and nothing else: the operator still learns
+# that SOMETHING halted the run (the one fact the region's presence
+# already proves), and the reason slot stays empty rather than carrying
+# invented text -- the same never-invent rule the composer itself is
+# built around, applied to its own failure path.
+_STOP_BANNER_COMPOSE_FAILED = ["!"]
 
 
 def _validated_event_color_rows(event: object) -> list | None:
@@ -618,6 +629,22 @@ class PlayShellScreen:
     right-gutter HUD box is likewise still the ``right_gutter`` region
     internally (unchanged key, pre-dating the split); DECISIONS is the new
     ``decisions`` region below it.
+
+    The STOP banner (WO-P5-064, ``cockpit.stopbanner.
+    compose_stop_banner_lines``) is the frame's one CONDITIONAL region: an
+    unboxed warn-bold band between LOGS and the control strip, drawn only
+    while the shared ``status`` snapshot reports a raised escalation
+    (``intervention.needs_attention``), and absent entirely otherwise --
+    "calm until it needs you". Its three bands name why the taught
+    autopilot halted (a TYPED reason code resolved through the canon
+    catalog, never invented prose), who the wire says holds the keyboard,
+    and the A/R/T teach moves available at the halt (labels only -- their
+    wires are PWO-066+). Because its presence depends on live daemon state
+    rather than terminal size alone, ``draw()`` resolves the frame in two
+    passes: a size-only probe to decide whether any status consumer exists
+    this tier, the single ``status_provider()`` poll, then the final
+    ``frame_layout(..., needs_attention=...)`` -- see ``draw()``'s own
+    poll-guard comment.
 
     Responsive fold (WO-P3-039, canon `trainer-cockpit.md` "Responsive
     fold"): below ``layout.LEFT_GUTTER_MIN_COLS`` (138) the left gutter is
@@ -828,6 +855,15 @@ class PlayShellScreen:
         # even though the table's "danger" entry is bold=True elsewhere).
         info_fg_name, _unused_info_bold = _SEMANTIC_COLORS.get("info", ("cyan", False))
         danger_fg_name, _unused_danger_bold = _SEMANTIC_COLORS.get("danger", ("red", True))
+        # The STOP banner is the one surface on this screen that IS bold by
+        # canon rather than by this class's own policy: `mode-line-and-
+        # teach-controls.md` "The STOP / escalation banner styling" paints
+        # it "warn-tone (yellow) and BOLD ... an unmissable weight". Red is
+        # deliberately NOT used (canon reserves it for hard link-down; an
+        # autopilot halt is a screen it has not been taught yet, a warning,
+        # not a failure), and neither is A_REVERSE (reserved as the one
+        # selected/active/badge signal).
+        warn_fg_name, _unused_warn_bold = _SEMANTIC_COLORS.get("warn", ("yellow", True))
         if not curses.has_colors():
             # Monochrome: bold marks the outer frame apart from the thin
             # instrument chrome, same as the launcher's monochrome fallback.
@@ -839,6 +875,15 @@ class PlayShellScreen:
             self._outer_attr = curses.A_BOLD
             self._chrome_attr = curses.A_NORMAL
             self._viewport_danger_attr = curses.A_UNDERLINE
+            # No yellow to lean on here, so the honest remainder of
+            # canon's "warn-tone AND bold" is the bold half alone -- which
+            # still reads as weight against the plain chrome around it.
+            # Deliberately NOT the underline the viewport-border flip
+            # borrows in mono: that flip's own tone (danger) has no other
+            # way to distinguish itself from the bold outer frame, whereas
+            # bold alone already separates this banner from every
+            # A_NORMAL panel row on the screen.
+            self._stop_banner_attr = curses.A_BOLD
             return
         # Colors resolve through the ONE shared process-lifetime allocator
         # (WO-P3-040 REVISE, Mack CRITICAL) -- no init_pair call here
@@ -898,6 +943,13 @@ class PlayShellScreen:
             # dependent, not reachable via `_run()` today, pinned as a
             # defensive rule-fidelity guard regardless).
             self._viewport_danger_attr = curses.A_UNDERLINE
+        # Warn fg + bold, resolved through the ONE shared process-lifetime
+        # pair allocator like every other colored attr on this screen. If
+        # the allocation itself is unavailable (pair-table exhaustion),
+        # `attr_for` returns A_NORMAL and the banner degrades to the same
+        # bold-only weight the mono branch above uses -- honest without
+        # color, never silently losing its "this is a halt" weight.
+        self._stop_banner_attr = _shared_pairs.attr_for(warn_fg_name) | curses.A_BOLD
 
     def _viewport_border_attr(self, status: dict | None) -> int:
         """The GAME viewport border's own STATE flip (WO-P3-040, canon
@@ -976,33 +1028,6 @@ class PlayShellScreen:
             self.stdscr.refresh()
             return
 
-        uok = cockpit_draw.unicode_ok()
-
-        # Outer frame -- double-line, cyan+bold, titled on its own top-border
-        # row (row 1 below it is fully claimed by the character/profile strip).
-        cockpit_draw.draw_box(
-            self.stdscr, regions["outer"], weight="double", attr=self._outer_attr,
-            title=PLAY_TITLE.strip(), title_attr=self._outer_attr, uok=uok,
-        )
-
-        strip_region = regions["strip"]
-        strip_text = compose_profile_strip_from_row(
-            self.profile, width=strip_region["w"] if strip_region else 0, unicode_ok=uok
-        )
-        # Strip content is profile identity -- DATA, not chrome. Canon
-        # doctrine ("cyan is chrome, never data", visual-language.md) reads
-        # as an interim ruling here pending hub ratification of this
-        # concept's own promotion out of staged status; A_NORMAL (default
-        # fg, non-bold) keeps the row itself un-tinted while the outer
-        # frame's own border stays cyan around it.
-        cockpit_draw.draw_lines(self.stdscr, strip_region, [strip_text], curses.A_NORMAL, boxed=False)
-
-        goals = regions["goals"]
-        cockpit_draw.draw_box(
-            self.stdscr, goals, weight="thin", attr=self._chrome_attr,
-            title="GOALS", title_attr=self._chrome_attr, uok=uok,
-        )
-        decisions = regions["decisions"]
         # One status_provider() snapshot per draw, shared by every panel
         # that reads it -- GOALS/FOCUS in the left gutter, HUD/DECISIONS in
         # the right. Polled whenever ANY of `goals`, `decisions`, OR
@@ -1015,17 +1040,25 @@ class PlayShellScreen:
         # that starved DECISIONS pre-036: layout.py's own stacked-gutter
         # comment documents DECISIONS shrinking then dropping (`None`) once
         # HUD alone consumes the right gutter's slot, which would leave
-        # `right_gutter` as the tier's ONLY live status consumer with both
-        # `goals` and `decisions` `None`. (A `frame_layout` probe across
-        # every reachable `(lines, cols)` at the CURRENT `MIN_LINES=20` /
-        # `HUD_BOX_MIN_H=12` constants found no tier where that actually
-        # happens -- `column_h` never falls below 14 at the MIN_LINES
-        # floor, 2 rows clear of HUD_BOX_MIN_H, so `decisions` always
-        # accompanies `right_gutter` today. This term is therefore
-        # defensive, not a live-bug fix -- same "latent guard" shape
-        # layout.py's own LOGS_MIN_H clamp already documents for a future
-        # floor change -- never a second `status_provider()` call per
-        # panel regardless.)
+        # `right_gutter` as the tier's ONLY live status consumer with
+        # `decisions` `None`. When PWO-037 added this term it was
+        # DEFENSIVE: a `frame_layout` probe across every reachable
+        # `(lines, cols)` found no tier where `decisions` actually
+        # dropped while `right_gutter` survived (`column_h` never fell
+        # below 14 at the MIN_LINES=20 floor, 2 rows clear of
+        # HUD_BOX_MIN_H=12).
+        #
+        # WO-P5-064 made it LIVE. At a halt the INTERVENTION banner takes
+        # up to 3 rows out of the column band before the gutters are
+        # sized, so at 20..22 lines `column_h` falls to 10..12, `hud_h`
+        # consumes the whole right-gutter slot, and `decisions` really is
+        # `None` with `right_gutter` present -- exactly the state this
+        # term was written for, now reachable rather than hypothetical.
+        # (Probed directly across `lines` 20..44 at 160 cols: calm never
+        # produces it at any size; a halt produces it at 20, 21, and 22.)
+        # The guard needed no change -- it was already correct -- but it
+        # is no longer a latent one, and never a second
+        # `status_provider()` call per panel either way.
         #
         # `control_strip` was added here (WO-P3-038) as a FOURTH consumer
         # class -- and unlike `right_gutter` above, this one is LIVE, not
@@ -1078,9 +1111,31 @@ class PlayShellScreen:
         # LOGS's own status read (`status.get("log_tail")`,
         # `cockpit_logsband.newest_tail_entry`) shares this SAME polled
         # `status`, never a second `status_provider()` call.
+        #
+        # WO-P5-064 moved this poll UP, ahead of every draw call in this
+        # method, and split the frame resolution into two passes. The
+        # STOP banner's region is the first one whose PRESENCE depends on
+        # live daemon state (`intervention.needs_attention`) rather than
+        # on terminal size alone, and claiming its rows re-sizes the
+        # column band every other panel measures itself against -- so the
+        # geometry has to be final BEFORE the first box is drawn, and the
+        # status it depends on has to be read before that. The two
+        # `frame_layout` calls are both pure and cheap; the POLL is what
+        # this guard protects, and there is still exactly ONE of those per
+        # draw (pinned by `tests/test_cockpit_stopbanner_wiring.py::
+        # test_exactly_one_status_poll_per_draw_halt_or_not`).
+        #
+        # The guard needs no new term for the banner itself -- verified,
+        # not assumed: `control_strip` (already a term) is present at
+        # every reachable non-`too_small` tier, per `layout.py`'s own
+        # CONTROL_STRIP_H comment, so every tier that could raise a banner
+        # was already polling. The probe pass reads regions from the CALM
+        # layout, which is the correct side to guard on: a halt only ever
+        # takes rows away, so a consumer present in the final layout is
+        # always present in the probe too (never the reverse).
         if (
-            goals is not None
-            or decisions is not None
+            regions["goals"] is not None
+            or regions["decisions"] is not None
             or regions["right_gutter"] is not None
             or regions["control_strip"] is not None
         ):
@@ -1091,6 +1146,46 @@ class PlayShellScreen:
         else:
             status = None
 
+        # The final frame. A raising `needs_attention` (a hostile status
+        # payload reaching a shape the gate cannot read) degrades to the
+        # calm layout rather than crashing the draw pass -- same
+        # honesty-over-crash containment as every composer call below;
+        # the cost of getting this wrong is a missing banner for one
+        # tick, never a dead cockpit.
+        try:
+            halting = cockpit_stopbanner.needs_attention(status)
+        except Exception:  # noqa: BLE001 -- a raising gate must not crash the draw pass
+            halting = False
+        if halting:
+            regions = frame_layout(max_y, max_x, needs_attention=True)
+
+        uok = cockpit_draw.unicode_ok()
+
+        # Outer frame -- double-line, cyan+bold, titled on its own top-border
+        # row (row 1 below it is fully claimed by the character/profile strip).
+        cockpit_draw.draw_box(
+            self.stdscr, regions["outer"], weight="double", attr=self._outer_attr,
+            title=PLAY_TITLE.strip(), title_attr=self._outer_attr, uok=uok,
+        )
+
+        strip_region = regions["strip"]
+        strip_text = compose_profile_strip_from_row(
+            self.profile, width=strip_region["w"] if strip_region else 0, unicode_ok=uok
+        )
+        # Strip content is profile identity -- DATA, not chrome. Canon
+        # doctrine ("cyan is chrome, never data", visual-language.md) reads
+        # as an interim ruling here pending hub ratification of this
+        # concept's own promotion out of staged status; A_NORMAL (default
+        # fg, non-bold) keeps the row itself un-tinted while the outer
+        # frame's own border stays cyan around it.
+        cockpit_draw.draw_lines(self.stdscr, strip_region, [strip_text], curses.A_NORMAL, boxed=False)
+
+        goals = regions["goals"]
+        cockpit_draw.draw_box(
+            self.stdscr, goals, weight="thin", attr=self._chrome_attr,
+            title="GOALS", title_attr=self._chrome_attr, uok=uok,
+        )
+        decisions = regions["decisions"]
         if goals is not None:
             goals_inner_w = max(0, goals["w"] - 2)
             try:
@@ -1342,6 +1437,41 @@ class PlayShellScreen:
             last_text, _ = logs_attrs[-1]
             logs_attrs[-1] = (last_text, curses.A_BOLD)
         cockpit_draw.draw_lines_attrs(self.stdscr, logs, logs_attrs)
+
+        # INTERVENTION / STOP banner (WO-P5-064, canon
+        # `mode-line-and-teach-controls.md` "The STOP banner" + "The STOP /
+        # escalation banner styling"). Unboxed like the control strip and
+        # the row-1 profile strip -- canon is explicit that this is "an
+        # unboxed single row led by a bare `!`" (three rows in the reborn
+        # three-band form), not a titled instrument box. Present only when
+        # the same shared `status` snapshot reports a raised escalation,
+        # so the calm cockpit shows no banner at all rather than a
+        # reserved-but-empty band ("calm until it needs you").
+        #
+        # One flat warn+bold attr for all three rows, per canon's own
+        # `_draw_intervention_strip` grounding ("the draw doubles A_BOLD
+        # on top of the `warn` tone for an unmissable weight") -- so this
+        # is a plain `draw_lines` call, not the per-line `draw_lines_attrs`
+        # LOGS needs or the per-segment `draw_segment_line` the mode chip
+        # needs. The GAME viewport's own cells are untouched by any of
+        # this: the banner is chrome in its own region, never a re-tint of
+        # the operator's actual screen.
+        #
+        # A raising composer degrades to `_STOP_BANNER_COMPOSE_FAILED`
+        # (the bare `!`, no invented reason text) rather than crashing the
+        # draw pass or silently swallowing the halt -- same containment
+        # discipline as every other composer call in this method.
+        intervention = regions["intervention"]
+        if intervention is not None:
+            try:
+                banner_lines = cockpit_stopbanner.compose_stop_banner_lines(
+                    status, width=intervention["w"], height=intervention["h"]
+                )
+            except Exception:  # noqa: BLE001 -- a raising composer must not crash the draw pass
+                banner_lines = _STOP_BANNER_COMPOSE_FAILED[: intervention["h"]]
+            cockpit_draw.draw_lines(
+                self.stdscr, intervention, banner_lines, self._stop_banner_attr, boxed=False
+            )
 
         # CONTROL_STRIP (WO-P3-038, PWO-055, PWO-056, WO-P5-060,
         # WO-ENTRY-APP-CHIP): the frame's own bottom-most interior row, a

@@ -10,14 +10,25 @@ down to what PWO-031/033 (+ PWO-034's GOALS/PRIORITIES stack) need: the
 outer frame, the row-1 character/profile strip band (PWO-032), the
 three-column body (left gutter, itself stacked GOALS above PRIORITIES |
 center game viewport | right gutter, itself stacked HUD above DECISIONS
-per PWO-036), and the bottom LOGS band. The archived function's
-MENU MAP/FORMATIONS/chain-bubble/control/intervention sub-regions belong to
-later WOs (mode-line, Phase 5) and are deliberately not ported here — see
-the module docstring on ``frame_layout`` for the DOCS-WIN fold-floor
-correction this module encodes.
+per PWO-036), the bottom LOGS band, and — only while a halt is actually
+reported — the intervention/STOP banner (WO-P5-064, see
+``INTERVENTION_H``). The archived function's MENU MAP/FORMATIONS/
+chain-bubble sub-regions belong to later WOs and are deliberately not
+ported here — see the module docstring on ``frame_layout`` for the
+DOCS-WIN fold-floor correction this module encodes.
 """
 
 from __future__ import annotations
+
+# The banner's height is defined ONCE, by the composer that fills it --
+# imported here as an alias rather than re-spelled as a second literal, so
+# the region's height and the composer's band count cannot drift apart
+# (the same "one shared source, not two hand-kept-in-sync copies"
+# discipline ``cockpit.control_seat``'s own ``_compose_segments`` uses for
+# its two public composers). This is the only import this otherwise
+# dependency-free geometry module takes; ``cockpit.stopbanner`` is itself
+# pure and curses-free, so the no-``curses`` discipline above is intact.
+from .stopbanner import BANNER_H as INTERVENTION_H
 
 # -- Canon constants (canon/surfaces/visual-language.md "Responsive-fold
 # ladder" + "Box-drawing hierarchy") -- the target contract for this port.
@@ -121,7 +132,7 @@ HUD_CONTENT_H = 10
 HUD_BOX_MIN_H = HUD_CONTENT_H + 2
 
 
-def frame_layout(lines: int, cols: int) -> dict:
+def frame_layout(lines: int, cols: int, *, needs_attention: bool = False) -> dict:
     """Pure reflow: given the terminal's current ``(lines, cols)``, decide
     which cockpit-frame regions fit and return them as a plain dict —
     ``{"y", "x", "w", "h"}`` per region, no curses/terminal involved.
@@ -141,6 +152,16 @@ def frame_layout(lines: int, cols: int) -> dict:
     archived module's own convention — the fold within that mode is whether
     ``left_gutter`` is present, not a distinct mode name).
 
+    ``needs_attention`` (WO-P5-064) is the ONE piece of live daemon state
+    this otherwise size-only function takes: ``True`` while the daemon
+    reports a raised escalation (``cockpit.stopbanner.needs_attention``'s
+    own reading of ``status["intervention"]``). It is keyword-only and
+    defaults ``False``, so every pre-WO-P5-064 caller gets a
+    byte-identical result and the ``intervention`` region below stays
+    ``None`` — the banner is opt-in, never reserved-but-blank space.
+    Mirrors the archived ``spectate_layout.frame_layout``'s own
+    ``needs_attention`` parameter.
+
     Regions returned: ``mode``, ``message`` (only set at ``too_small``),
     ``outer`` (the whole client), ``strip`` (row 1, the character/profile
     band), ``goals``/``left_gutter``/``center``/``right_gutter``/``decisions``
@@ -149,9 +170,11 @@ def frame_layout(lines: int, cols: int) -> dict:
     ``GOALS_BOX_MIN_H``; the right gutter itself is stacked HUD above
     DECISIONS per PWO-036, see ``HUD_BOX_MIN_H`` — ``right_gutter`` is the
     HUD sub-region, unchanged key, ``decisions`` is the new sub-region below
-    it), ``logs`` (the bottom full-width band), ``control_strip`` (WO-P3-038
-    — the single bare row below ``logs``, the frame's own last interior row;
-    see ``CONTROL_STRIP_H``). Every region is clamped to at least 1x1 and
+    it), ``logs`` (the bottom full-width band), ``intervention`` (WO-P5-064
+    — the STOP banner, present only while ``needs_attention``; see
+    ``INTERVENTION_H``), ``control_strip`` (WO-P3-038 — the single bare row
+    below them both, the frame's own last interior row; see
+    ``CONTROL_STRIP_H``). Every region is clamped to at least 1x1 and
     stays inside ``outer``; siblings never overlap.
     """
     if lines < MIN_LINES or cols < MIN_COLS:
@@ -172,6 +195,7 @@ def frame_layout(lines: int, cols: int) -> dict:
             "right_gutter": None,
             "decisions": None,
             "logs": None,
+            "intervention": None,
             "control_strip": None,
         }
 
@@ -196,11 +220,13 @@ def frame_layout(lines: int, cols: int) -> dict:
     # 2; a future floor change should revisit this arithmetic deliberately.
     logs_h = min(LOGS_MIN_H, max(1, rest_h - 1))
     column_h = max(1, rest_h - logs_h)
-    logs_h_actual = rest_h - column_h  # LOGS' own height -- untouched by the CONTROL_STRIP carve below
+    logs_h_actual = rest_h - column_h  # LOGS' own height -- untouched by the INTERVENTION/CONTROL_STRIP carves below
 
-    # CONTROL_STRIP (WO-P3-038) claims its single row LAST, out of the
-    # COLUMN band's own slot only -- never LOGS'. `logs_h_actual` above is
-    # computed with the exact same expression this module used before this
+    # CONTROL_STRIP (WO-P3-038) claims its single row LAST -- after the
+    # INTERVENTION banner (WO-P5-064) below, which deliberately outranks
+    # it -- out of the COLUMN band's own slot only, never LOGS'.
+    # `logs_h_actual` above is computed with the exact same expression
+    # this module used before this
     # row existed, so LOGS never shrinks below its existing floor because of
     # this addition (the "logs must never shrink" invariant holds by
     # construction, not by a runtime check). It only carves into `column_h`,
@@ -218,11 +244,61 @@ def frame_layout(lines: int, cols: int) -> dict:
     # instrument box, so it renders the same whether or not a side gutter or
     # the viewport border is present (`no_border` tier included). Under the
     # real MIN_LINES=20 floor, `column_h` here is always > 1 before this
-    # carve runs (rest_h >= 17, logs_h == LOGS_MIN_H == 3, so
-    # column_h >= 14) — CONTROL_STRIP is therefore present at every
+    # carve runs (rest_h >= 17, logs_h == LOGS_MIN_H == 3, so column_h >=
+    # 14, and >= 11 even after the INTERVENTION banner has taken its own
+    # rows at a halt) — CONTROL_STRIP is therefore present at every
     # reachable non-``too_small`` size today; the `None` branch is a latent
     # guard, same shape as `LOGS_MIN_H`'s own clamp above, for a future
     # floor change.
+
+    # INTERVENTION/STOP banner (WO-P5-064). Claims its rows BEFORE the
+    # control strip below and NEVER out of LOGS' own slot -- canon's
+    # safety-legibility invariant (`mode-line-and-teach-controls.md`: the
+    # strip "claims leftover height first -- before the control strip,
+    # before the ticker -- so a halt always surfaces even as the terminal
+    # shrinks"; frame PREP geometry guard #6 states the same order,
+    # naming the control strip and ticker specifically). Under height
+    # pressure the control strip is what yields (`control_strip_h` falls
+    # to 0 below), never this banner and never LOGS.
+    #
+    # [DOCS-WIN correction to this module's own prior forecast] The NOTE
+    # that used to sit in the right-gutter block below predicted this
+    # strip would carve out of `rest_h` "ahead of every other region,
+    # ... same as LOGS is today" -- i.e. ahead of LOGS too. That would
+    # shrink LOGS below its own floor at tight sizes, which is exactly
+    # what the PREP's guard #6 does NOT ask for (it orders the banner
+    # ahead of the control strip and ticker, not ahead of LOGS) and what
+    # this module's own CONTROL_STRIP comment above establishes as an
+    # invariant. So the banner carves from `column_h`, after
+    # `logs_h_actual` is already fixed: LOGS' height is computed by the
+    # identical expression whether or not a halt is raised, so "LOGS
+    # never shrinks for the banner" holds by construction, not by a
+    # runtime check.
+    #
+    # What it DOES cost, stated plainly rather than absorbed silently:
+    # the rows come out of the column band, which the centre viewport and
+    # both gutters size themselves from (`center_h = min(VIEWPORT_H,
+    # column_h)`). At >= 37 lines the band still carries enough slack for
+    # the viewport's full VIEWPORT_H, so the banner is free; below that
+    # the viewport is already clipped by terminal height and the banner
+    # takes up to INTERVENTION_H more of it. That is the deliberate
+    # trade canon asks for ("a halt muscles a bold-yellow row ahead of
+    # everything optional") -- pinned by
+    # `tests/test_cockpit_stopbanner_wiring.py::
+    # test_the_banner_costs_the_center_viewport_rows_only_below_37_lines`
+    # so a future change that widens the cost fails loudly.
+    #
+    # `max(0, column_h - 1)` keeps the column band at >= 1 row: the
+    # banner shrinks (3 -> 2 -> 1) and finally drops entirely rather than
+    # consuming the whole body. At today's MIN_LINES=20 floor `column_h`
+    # is >= 14 before this carve, so the full 3-row banner always fits
+    # and the shrink/drop path is a latent guard for a future floor
+    # change -- same shape as `LOGS_MIN_H`'s own clamp above.
+    banner_h = 0
+    if needs_attention:
+        banner_h = min(INTERVENTION_H, max(0, column_h - 1))
+        column_h -= banner_h
+
     if column_h > 1:
         control_strip_h = 1
         column_h -= 1
@@ -230,8 +306,12 @@ def frame_layout(lines: int, cols: int) -> dict:
         control_strip_h = 0
 
     logs = {"y": rest_y + column_h, "x": ox, "w": i_cols, "h": logs_h_actual}
+    banner_y = rest_y + column_h + logs_h_actual
+    intervention = (
+        {"y": banner_y, "x": ox, "w": i_cols, "h": banner_h} if banner_h > 0 else None
+    )
     control_strip = (
-        {"y": rest_y + column_h + logs_h_actual, "x": ox, "w": i_cols, "h": control_strip_h}
+        {"y": banner_y + banner_h, "x": ox, "w": i_cols, "h": control_strip_h}
         if control_strip_h > 0
         else None
     )
@@ -299,11 +379,12 @@ def frame_layout(lines: int, cols: int) -> dict:
     # rename — same "reuse the existing key for the top-priority occupant"
     # shape as ``left_gutter`` staying FOCUS's key after PWO-034.
     #
-    # NOTE for the future Phase-5 intervention/STOP strip (frame PREP
-    # geometry guard #6): that strip claims height FIRST, ahead of every
-    # other region, when it lands -- this stacked-gutter shape does not
-    # preclude that; the strip's own floor will be carved out of ``rest_h``
-    # before this column split runs, same as LOGS is today.
+    # The Phase-5 intervention/STOP strip this block used to forecast has
+    # LANDED (WO-P5-064) -- it is the ``intervention`` region carved
+    # above, and this stacked-gutter shape needed no change to accommodate
+    # it. See that carve's own comment for where it actually claims its
+    # rows (out of ``column_h``, ahead of the control strip, never out of
+    # LOGS) and how that differs from what the forecast here predicted.
     right_gutter = None
     decisions = None
     if has_right_gutter:
@@ -348,5 +429,6 @@ def frame_layout(lines: int, cols: int) -> dict:
         "right_gutter": right_gutter,
         "decisions": decisions,
         "logs": logs,
+        "intervention": intervention,
         "control_strip": control_strip,
     }
