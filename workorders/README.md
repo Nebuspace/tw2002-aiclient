@@ -27,7 +27,7 @@ Grounded in the reborn OKF canon (`canon/`), especially `canon/surfaces/entry-an
 | 08 | [WO-08-human-attach.md](WO-08-human-attach.md) | **Verify** `h` attach · Ctrl-] detach · back to play |
 | 09 | [WO-09-world-identity-strip.md](WO-09-world-identity-strip.md) | **Extend** launcher/play header with host · game · character |
 | 10 | [WO-10-cockpit-outer-frame.md](WO-10-cockpit-outer-frame.md) | **Build** bordered outer frame per trainer-cockpit canon |
-| 11 | [WO-11-game-viewport-center.md](WO-11-game-viewport-center.md) | **Build** 80×24 native game viewport in play screen |
+| 11 | [WO-11-game-viewport-center.md](WO-11-game-viewport-center.md) | **Build** 80×25 native game viewport in play screen |
 | 12 | [WO-12-logs-panel.md](WO-12-logs-panel.md) | **Extend** full-width `[LOGS]` transcript tail |
 | 13 | [WO-13-mode-line-app-human.md](WO-13-mode-line-app-human.md) | **Extend** App/Human mode badge (not `ai_pilot` label) |
 | 14 | [WO-14-teach-hotkeys-scaffold.md](WO-14-teach-hotkeys-scaffold.md) | **Build** A/R/T teach affordances + on-demand-only guard |
