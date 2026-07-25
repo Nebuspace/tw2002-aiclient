@@ -9,6 +9,20 @@ Until Max rules the CLI-ASCII write-choke (MT-05), product strings are
 **not** silently scrubbed. Current tip still has known non-ASCII help
 strings — they live in ``KNOWN_NON_ASCII_HELP`` so a *new* offender fails
 this suite while the banked ones stay visible for the product WO.
+
+``KNOWN_NON_ASCII_HELP`` is a **PARKING BAY, not an accepted state.** Every
+string in it is a live ``tw --help`` crash under ``PYTHONIOENCODING=ascii``
+that is being *tolerated pending the open glyph ruling* (MT-05) — it is
+debt, deliberately parked and deliberately visible, never a design decision
+that these strings may carry non-ASCII. A green run of this suite therefore
+means "no NEW offenders", **not** "help is ASCII-clean". The bay is
+discharged by shrinking it to empty once Max rules; if it is still
+non-empty when you read this, the ruling is still open.
+
+Scale note: the bay holds **3 distinct strings** covering **4 parser
+occurrences** — the ``--secret`` help text is attached to both the ``do``
+and ``send`` subcommands, so entry count and offender count legitimately
+differ. Do not "fix" that mismatch by adding a duplicate entry.
 """
 
 from __future__ import annotations
