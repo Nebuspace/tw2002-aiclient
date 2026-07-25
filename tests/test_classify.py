@@ -1,5 +1,5 @@
 """Screen classifier tests: synthetic anchor coverage + a real captured
-TWGS screen fixture (see tests/fixtures/, captured live per DESIGN.md §12)."""
+TWGS screen fixture (see tests/fixtures/, captured live; see canon session-engine / screen-understanding)."""
 
 import os
 

@@ -106,6 +106,6 @@ Turn 41+: The prompt reappears. The app recognizes it, plays the macro, zero rea
 
 # Citations
 
-[1] USERDOCS/priority_engine.md (strategic-layer draft)
+[1] [/engine/priority-engine.md](/engine/priority-engine.md) (reborn strategic layer; folded from retired root `priority_engine.md` / USERDOCS draft)
 [2] USERDOCS/aiclient_ui.md (trainer-UI sketch)
 [3] canon/log.md 2026-07-23 (founding decision — the three ruled forks)

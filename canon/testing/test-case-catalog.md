@@ -149,7 +149,7 @@ Complete inventory of **2271 pytest test cases** across **129 modules** (`tests/
 | [`test_aiclient_adapters.py`](/testing/cases/test-aiclient-adapters.md) | 24 | BANKED | Unit tests for tw2002_aiclient ensure/autopilot adapters (mocked daemon). |
 | [`test_analyze.py`](/testing/cases/test-analyze.md) | 5 | BANKED | TW-12 session-retro analyzer tests — no network, synthetic ledger only. |
 | [`test_chains.py`](/testing/cases/test-chains.md) | 6 | BANKED | TW-21 longest-profit-chain algorithm tests (synthetic graphs). |
-| [`test_classify.py`](/testing/cases/test-classify.md) | 53 | active | Screen classifier tests: synthetic anchor coverage + a real captured TWGS screen fixture (see tests/fixtures/, captured live per DESIGN.md §12). |
+| [`test_classify.py`](/testing/cases/test-classify.md) | 53 | active | Screen classifier tests: synthetic anchor coverage + a real captured TWGS screen fixture (see tests/fixtures/, captured live (historical DoD; see session-engine / screen-understanding)). |
 | [`test_clean_preempt.py`](/testing/cases/test-clean-preempt.md) | 11 | BANKED | Clean preempt. |
 | [`test_control_lock.py`](/testing/cases/test-control-lock.md) | 37 | active | ControlLock (tw2002_aiclient.session.control_lock) — pure unit tests. |
 | [`test_control_panel.py`](/testing/cases/test-control-panel.md) | 6 | BANKED | Control panel. |

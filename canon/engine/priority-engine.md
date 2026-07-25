@@ -258,9 +258,10 @@ code diverges in these specific ways — recorded here so the divergence is visi
 
 # Citations
 
-- **Reimagined from:** the internal strategic-layer draft `USERDOCS/priority_engine.md` (priority
-  catalog, weight ladder, RT travel-cost model, two-layer IA) — re-rooted in the reborn vision; the
-  §22 capstone framing retired to app-autopilot-model, the never-idle framing retired.
+- **Reimagined from / folded:** root `priority_engine.md` + `USERDOCS/priority_engine.md` (priority
+  catalog, weight ladder, RT travel-cost model, two-layer IA) — content lives here; root file deleted
+  (Max GO 2026-07-25). Re-rooted in the reborn vision; the §22 capstone framing retired to
+  app-autopilot-model, the never-idle framing retired.
 - **Grounded in code:** `twclient/priority_engine.py` (`recommend_actions()`, `stay_vs_leave_upgrade()`,
   `travel_cost_rt_turns()`, `afford_fighters()`, the chain-link + fighter constants);
   `twclient/autopilot.py` (`select()`, `_score_chain/_upgrade/_explore()`, `EXPLORE_BASELINE_EV`,

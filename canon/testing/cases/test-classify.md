@@ -1,7 +1,7 @@
 ---
 type: Reference
 title: Test Cases — test_classify
-description: Screen classifier tests: synthetic anchor coverage + a real captured TWGS screen fixture (see tests/fixtures/, captured live per DESIGN.md §12).
+description: Screen classifier tests: synthetic anchor coverage + a real captured TWGS screen fixture (see tests/fixtures/, captured live (historical DoD from retired root DESIGN.md §12; owning concepts: session-engine / screen-understanding)).
 resource: repo://tw2002-aiclient/tests/test_classify.py
 tags: [testing, catalog, pytest, inventory]
 timestamp: 2026-07-25T14:10:13Z
@@ -9,7 +9,7 @@ timestamp: 2026-07-25T14:10:13Z
 
 # Test Cases — `tests/test_classify.py`
 
-_Screen classifier tests: synthetic anchor coverage + a real captured TWGS screen fixture (see tests/fixtures/, captured live per DESIGN.md §12)._
+_Screen classifier tests: synthetic anchor coverage + a real captured TWGS screen fixture (see tests/fixtures/, captured live (historical DoD; owning concepts: session-engine / screen-understanding))._
 
 | Test | Blurb |
 |------|-------|

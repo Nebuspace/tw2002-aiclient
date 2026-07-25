@@ -169,3 +169,13 @@ Max Accepted ADR-001 2026-07-24; exit-popup default = **No** (leave daemon runni
 `entry-and-profile-selection.md`, `CLAUDE.md`) updated to cite ADR-001 as Accepted and to state the
 exit-popup default. Physical package relocation remains explicitly deferred to the follow-on WO
 listed in ADR-001's Consequences — not executed by this closure.
+
+## Accepted — retire root DESIGN.md + priority_engine.md into OKF (Max 2026-07-25T21:21:27Z)
+
+**Ruling:** Fold repo-root `DESIGN.md` and `priority_engine.md` into `canon/` OKF and delete them from the git repo root. No architecture/strategy markdown at root.
+
+**Disposition:**
+- `DESIGN.md` — technical content already owned by session-engine / cli-verbs / settle-detection / north-star; MCP-ready-by-construction note folded into session-engine; AI-native-driver framing stays superseded.
+- `priority_engine.md` — already reimagined as `canon/engine/priority-engine.md`; citations retargeted; root deleted.
+
+See `WO-ROOT-MD-INTO-CANON`.

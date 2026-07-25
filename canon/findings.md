@@ -169,3 +169,12 @@ Source tip at audit: `922739b`. Product fixes: F1 DONE `7e13b7d` · F2/F3/F4 in 
 | F9-COCKPIT-UTF8-GARBAGE-FORWARD | Cockpit `getch()` path forwarded each UTF-8 byte `<256` as its own `send_key` | **DONE** tip `879280f` — refuse multi-byte UTF-8 getch + ungetch truncated lead; `WO-AUDIT-COCKPIT-UTF8-GETCH` CLOSED |
 | CLI-ASCII-WRITE-CHOKE | Non-UTF-8 stdout: `./tw --help` / `menumap` / `loops` crash mid-output on ★ / em-dash / … after attach-only ASCII banner fix `fec3ffe` | **BANKED** — docs do **not** close product. Reachable: `PYTHONIOENCODING=ascii\|latin-1` · `LC_ALL=en_US.ISO8859-1` · `LC_ALL=C` with UTF-8 mode **off** (bare `LC_ALL=C` does **not** crash — PEP 540). Product WO **STAGED** pending Max glyph ruling (A refuse / B NO-SWAP substitute / C other). MISSING-TESTS MT-05/06. Stub: `workorders/WO-AUDIT-CLI-ASCII-WRITE-CHOKE.md` |
 
+### Root markdown retirement (Max 2026-07-25)
+
+Repo-root `DESIGN.md` and `priority_engine.md` are **deleted**. Content ownership:
+
+- **DESIGN.md** → already prescribed by `/architecture/session-engine.md`, `cli-verbs.md`, `settle-detection.md`, north-star. Unique leftover: MCP-ready-by-construction note folded into session-engine. AI-live-driver framing remains superseded (Finding 1).
+- **priority_engine.md** → already the source material for `/engine/priority-engine.md` (reborn ranker, not EV-every-tick driver — Finding 2). Citations retargeted; root file removed.
+
+Do not grow new architecture dumps at repo root — sole docs root is `canon/`. Work order: `workorders/WO-ROOT-MD-INTO-CANON.md`.
+

@@ -479,8 +479,8 @@ reborn module is cited; prefer `tw2002_aiclient/cockpit/*` for chrome that has a
 - **Cold-join HUD seed** — `hud_seed.py` (`seed_hud_after_join`, the single `I` ship-info probe,
   fighter-`Option?` deferral, age-gated `force` re-probe).
 - **Reimagined from** — `USERDOCS/aiclient_ui.md` and the TUI sections of
-  `USERDOCS/priority_engine.md` (the original main-UI sketch and the GOALS/FOCUS two-layer panel
-  model), re-rooted in the reborn human-piloted vision with all "AI drives / AI as a mode" framing
-  struck.
+  [/engine/priority-engine.md](/engine/priority-engine.md) (GOALS/FOCUS two-layer panel model;
+  folded from retired root `priority_engine.md` / USERDOCS draft), re-rooted in the reborn
+  human-piloted vision with all "AI drives / AI as a mode" framing struck.
 - **Architecture map + hard rules** — the project `CLAUDE.md` (`spectate_app.py` /
   `spectate_layout.py` roles, read-only spectator, secrets-never-logged).

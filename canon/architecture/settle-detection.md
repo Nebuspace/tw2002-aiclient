@@ -228,4 +228,4 @@ order.
 [3] twclient/watch.py (`WatchHub` settle-edge push stream; explicit no-auto-handling boundary)
 [4] twclient/terminal.py (pyte-backed render the settle wait polls)
 [5] twclient/classify.py (`pause_key` and other gate anchors — interjection classification today)
-[6] DESIGN.md §6 (original settle-detection design); DESIGN-v2.md §8 (send/settle race, B4/B5)
+[6] Historical settle design (retired root `DESIGN.md` §6, now owned here); DESIGN-v2.md §8 (send/settle race, B4/B5 — internal planning history)

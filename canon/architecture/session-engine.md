@@ -34,6 +34,16 @@ Two processes, one connection:
 The split is deliberate: continuity lives in the daemon, so the thing that *decides* keystrokes can
 be disposable (see [Rolling-Pilot Operating Model](#rolling-pilot-operating-model) below).
 
+# MCP-ready by construction
+
+Game I/O lives entirely behind the daemon's unix-socket JSON verb protocol. A future MCP shim is a
+thin translator from MCP tool names (e.g. `tw_screen` / `tw_do` / `tw_state`) onto those same socket
+verbs — not a second session stack. CLI-first is the v1 surface; MCP is explicitly out of scope for
+v1 and does not change the protocol this concept owns. (Folded from the retired root `DESIGN.md`
+architecture decision; reborn north-star remains human-piloted trainer — MCP does not revive an
+AI-live-driver framing.)
+
+
 # One Package Tree
 
 *— per [ADR-001](/ADR/001-one-tree-embedded-session.md) (Accepted 2026-07-24)*
