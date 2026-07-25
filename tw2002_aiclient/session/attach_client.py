@@ -14,6 +14,23 @@ import socket
 
 DETACH_KEY = 29  # Ctrl-] — release control
 
+# Bounds every blocking op on the attach unix socket (connect, the
+# take_human ack read, every send) so a wedged daemon can never hang the
+# play cockpit mid-keystroke -- Cipher's WO-P4-056 audit finding. 5s is
+# generous for a local AF_UNIX round trip (sub-millisecond in the happy
+# path). Set once on the socket at connect() time; `send_key()` reuses the
+# same socket/file object, so no second call is needed. A timeout raises
+# `socket.timeout` (an `OSError` subclass), which the existing
+# `except OSError` handling below already turns into the identical honest
+# failure result a dead/refused socket produces -- no new exception types,
+# no retries. The archive's own `AttachInputConn`
+# (archive/pre-rebirth-2026-07-23/code/twclient/interactive_app.py) never
+# set a timeout either; that was a latent gap carried forward, not a
+# deliberate no-timeout design -- sibling archive client code
+# (twclient/probe.py, twclient/spectate_app.py) does use `settimeout` for
+# its own sockets.
+_SOCKET_TIMEOUT_S = 5.0
+
 
 class AttachInputConn:
     """Persistent socket dedicated to sending the operator's raw keystrokes
@@ -30,6 +47,7 @@ class AttachInputConn:
         control-lock is taken (or rejected)."""
         try:
             self._sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            self._sock.settimeout(_SOCKET_TIMEOUT_S)
             self._sock.connect(self.sock_path)
             self._file = self._sock.makefile("rwb")
             self._file.write((json.dumps({"verb": "attach", "args": {}}) + "\n").encode("utf-8"))
