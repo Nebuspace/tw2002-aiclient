@@ -11,6 +11,7 @@ time; ``ensure``/``status`` land under WO-P2-020 -- APPEND new verbs to
 
 from __future__ import annotations
 
+import errno
 import json
 import os
 import socket
@@ -97,14 +98,43 @@ def send_request(verb, args_payload, *, timeout=15.0, run_dir=None):
 
 
 def daemon_alive(run_dir=None):
+    """True when the pidfile names a process that still exists.
+
+    ``os.kill(pid, 0)`` distinguishes:
+    * success / ``PermissionError`` (EPERM) — process **exists** (we may
+      lack signal rights); treat as alive so ``ensure`` does not spawn a
+      second daemon (single-connection hard rule).
+    * ``ProcessLookupError`` (ESRCH) — no such process; treat as absent.
+    """
     pid_path = env.pid_path(run_dir)
     if not pid_path.exists():
         return False
     try:
-        pid = int(pid_path.read_text().strip())
+        raw = pid_path.read_text().strip()
+    except PermissionError:
+        # Pidfile exists but is unreadable — not the same as "no daemon".
+        # Conservative: assume held so ensure does not double-spawn.
+        return True
+    except OSError:
+        return False
+    try:
+        pid = int(raw)
+    except ValueError:
+        return False
+    try:
         os.kill(pid, 0)
         return True
-    except (OSError, ValueError):
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    except OSError as e:
+        # Some platforms surface ESRCH/EPERM as plain OSError + errno.
+        err = getattr(e, "errno", None)
+        if err == errno.ESRCH:
+            return False
+        if err == errno.EPERM:
+            return True
         return False
 
 
