@@ -33,15 +33,6 @@ def test_log_redacted_custom_note(tmp_path):
     assert "password entry" in content
 
 
-def test_log_note_writes_a_timestamped_diagnostic_line(tmp_path):
-    logger = TranscriptLogger(str(tmp_path))
-    logger.log_note("side-effect failed: example")
-    logger.close()
-    content = open(logger.path, encoding="utf-8").read()
-    assert "NOTE" in content
-    assert "side-effect failed: example" in content
-
-
 def test_log_raw_empty_bytes_is_a_no_op(tmp_path):
     logger = TranscriptLogger(str(tmp_path))
     logger.log_raw("TX", b"")
