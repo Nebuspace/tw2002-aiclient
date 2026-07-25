@@ -371,7 +371,8 @@ def cmd_watch(args):
     """WO-P2-OPS-VERB-E2: tail the settle-edge push-stream (read-only).
 
     Opens a lifetime ``subscribe`` connection — never sends game input.
-    ``--frames N`` exits after N events (transcript-friendly); otherwise
+    ``--frames N`` exits after N *parsed* events (transcript-friendly);
+    unparseable lines are reported and do not count toward N. Otherwise
     runs until Ctrl-C / disconnect. SIGINT closes the socket cleanly.
     """
     run_dir = _resolve_run_dir(args.run_dir)
@@ -397,6 +398,9 @@ def cmd_watch(args):
             try:
                 event = json.loads(line.decode("utf-8"))
             except json.JSONDecodeError:
+                # SESSION-F8 / MT-04: do not silently swallow corruption —
+                # operator-visible tell; --frames still counts only parsed.
+                print("ERROR: watch_frame_unparseable", file=sys.stderr)
                 continue
             print_response(event, args)
             count += 1

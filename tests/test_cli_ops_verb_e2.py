@@ -74,3 +74,58 @@ def test_cmd_watch_prints_seed_then_stops_at_frames(tmp_path, monkeypatch, capsy
     out = capsys.readouterr().out.strip().splitlines()
     assert len(out) == 1
     assert json.loads(out[0])["screen"] == ["seed"]
+
+
+def test_cmd_watch_reports_unparseable_frame_without_counting_toward_frames(
+    tmp_path, monkeypatch, capsys
+):
+    """SESSION-F8 / MT-04: corrupt NDJSON must not be a silent gap.
+
+    A bad line between two valid events must (a) print an operator-visible
+    ERROR and (b) leave ``--frames N`` counting only parsed events.
+    """
+    sock_path = tmp_path / "twd.sock"
+    sock_path.write_text("")
+
+    good = [
+        {"ok": True, "screen": ["a"], "prompt": "a", "classification": "unknown", "ts": "t0"},
+        {"ok": True, "screen": ["b"], "prompt": "b", "classification": "unknown", "ts": "t1"},
+    ]
+    payload = (
+        (json.dumps(good[0]) + "\n").encode("utf-8")
+        + b"{not-json\n"
+        + (json.dumps(good[1]) + "\n").encode("utf-8")
+    )
+
+    class FakeSock:
+        def __init__(self):
+            self.sent = b""
+            self._closed = False
+
+        def connect(self, path):
+            assert Path(path) == sock_path
+
+        def sendall(self, data):
+            self.sent += data
+
+        def makefile(self, mode):
+            assert mode == "rb"
+            return io.BytesIO(payload)
+
+        def close(self):
+            self._closed = True
+
+    fake = FakeSock()
+    monkeypatch.setattr(cli.env, "socket_path", lambda run_dir=None: sock_path)
+    monkeypatch.setattr(cli.socket, "socket", lambda *a, **k: fake)
+
+    rc = cli.cmd_watch(
+        Namespace(frames=2, json=True, compact=False, run_dir=str(tmp_path))
+    )
+    assert rc == 0
+    captured = capsys.readouterr()
+    assert "ERROR: watch_frame_unparseable" in captured.err
+    out = captured.out.strip().splitlines()
+    assert len(out) == 2
+    assert json.loads(out[0])["screen"] == ["a"]
+    assert json.loads(out[1])["screen"] == ["b"]
