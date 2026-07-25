@@ -3,7 +3,7 @@
 > Seat: `impl-aiclient-cursor` · Tip: `59c4455` (audit drafts) atop `458d140` / product `d4a8829` · UTC: 2026-07-25T05:12Z  
 > HANDOFF: `AUDIT-OKF-6LENS` · **No product `.py` in this ticket**  
 > HOLDs honored: F2 · G2–G4 · north-star · Human→App (Max B′/C) · auth/secrets  
-> Scout cross-check: inventory tip-map confirms 062–072 MISSING; 061/065 PARTIAL; 080 PARTIAL (`classify` LIVE, `state_parser` absent); **085/086 LIVE** (gated). **Closed since:** HARDEN-ATTACH `88004d8` · WatchHub `00cb9e8` · SAFE-ADDSTR `29fd76c` · GLYPH `8facad9` (WO tip-stamped EXECUTED). Banked: UNICODE-OK docstring · log_note Max · reconnect/cli-keys micros.
+> Scout cross-check: inventory tip-map confirms 062–072 MISSING; 061/065 PARTIAL; 080 PARTIAL (`classify` LIVE, `state_parser` absent); **085/086 LIVE** (gated). **Closed since:** HARDEN-ATTACH `88004d8` · WatchHub `00cb9e8` · SAFE-ADDSTR `29fd76c` · GLYPH `8facad9` · SAFE-WIDTH `c0bdab7`. Banked: UNICODE-OK · reconnect/cli-keys micros · Max Batch 1b · APP-LABEL PARKED.
 
 Committable twin: `workorders/AUDIT-OKF-6LENS-BACKLOG.md`. Draft WOs: `workorders/WO-AUDIT-*.md` (8).
 
