@@ -456,7 +456,7 @@ def test_run_play_source_has_no_send_capable_call_or_symbol():
     )
     # PWO-056 (WO-P4-056): `allowed=_is_allowlisted_attach_site` excuses
     # exactly `attach_conn.send_key(...)` -- the ONE forwarding call site
-    # this WO adds, reached only once the human's own `M` keypress has
+    # this WO adds, reached only once the human's own Ctrl-A keypress has
     # already taken the Human control lock. See that predicate's own
     # docstring for the full adjudication; every other send-capable shape
     # still trips this guard.
@@ -618,12 +618,53 @@ def test_screens_module_has_no_send_capable_call_or_symbol():
     assert not violations, f"screens.py must stay send-free; found: {violations}"
 
 
-def test_play_shell_screen_defaults_to_spectating(monkeypatch):
-    """Ties the AST guards above to the actual state flag they're meant to
-    protect: ``spectating`` is ``True`` -- the ONLY value reachable today
-    (no PWO-056 attach path exists yet to ever flip it). If a future
-    change flips this default without also legitimizing a gated send
-    path, this is the first thing that should go red."""
+def test_play_shell_screen_entry_state_is_app_hold_and_owns_no_send_path(monkeypatch):
+    """THE CANARY -- re-justified, deliberately NOT silenced (WO-ENTRY-APP-
+    CHIP, hub-ruled). It fired correctly on the very change it was built
+    to catch; this docstring records why the flip is legitimate, and the
+    assertions below keep their teeth.
+
+    RENAMED from ``test_play_shell_screen_defaults_to_spectating``, whose
+    premise was stale twice over: it asserted ``spectating`` is ``True``,
+    "the ONLY value reachable today (no PWO-056 attach path exists yet to
+    ever flip it)". PWO-056 shipped, and ``app.py::_run_play`` has been
+    writing both seat flags since.
+
+    THE CONTRACT (unchanged in substance): a flipped client-state default
+    is legitimate ONLY while it does not outrun the gated send path. The
+    gated path is exactly one adjudicated site -- ``attach_conn.send_key(
+    ...)`` in ``app.py::_run_play``, the sole shape
+    ``_is_allowlisted_attach_site`` above excuses, and reachable only
+    AFTER ``_attempt_attach`` obtains the daemon's Human control lock
+    (``session/control_lock.py::take_human``). Every other send-capable
+    shape still trips the AST guards above.
+
+    WHY THE FLIP IS LEGITIMATE NOW, on all three legs:
+      1. Owner-ruled, and canon already prescribed it --
+         ``canon/surfaces/mode-line-and-teach-controls.md:39`` ("Default
+         when the client runs = App/autopilot"), ratified in ADR-002. The
+         entry state is App-hold: both flags literally ``False``,
+         mirroring the daemon's own ``session/control_lock.py:59``
+         ``self._mode = MODE_APP``.
+      2. The send path was ALREADY adjudicated by PWO-056 and is
+         unchanged -- this WO adds no new send-capable shape, no new wire
+         verb, and no new call site.
+      3. App-hold is a strictly READ-ONLY client state, exactly as
+         Spectate was. Neither flag grants send: the ability to send comes
+         from holding ``attach_conn``, which only a human Ctrl-A keypress
+         can obtain. That is what the assertions below actually verify.
+
+    TEETH -- what still makes this the first thing to go red:
+      * either seat flag changing at entry, so a future silent re-flip
+        (in EITHER direction) must come back through this docstring;
+      * the class gaining a send-capable attribute on the instance -- a
+        runtime check the source-level AST guards above cannot make;
+      * and, the load-bearing one, the entry instance coming to OWN any
+        object that is itself send-capable. A change that handed the
+        cockpit a live attach connection at construction would grant send
+        WITHOUT adding a send verb to this class, sailing past every AST
+        guard in this file. That is precisely "a flipped default
+        outrunning the gated send path", and it goes red here."""
     monkeypatch.setattr(screens_mod.curses, "has_colors", lambda: False)
     profile = ProfileRow(
         name="alpha", handle="Alpha", server="demo-a", host="demo-a.example", game_letter="B",
@@ -634,7 +675,24 @@ def test_play_shell_screen_defaults_to_spectating(monkeypatch):
             return (40, 160)
 
     screen = PlayShellScreen(_NullWin(), profile)
-    assert screen.spectating is True
+
+    # App-hold: the entry state, mirroring daemon MODE_APP.
+    assert screen.spectating is False
+    assert screen.attached is False
+
+    # No send-capable symbol ON the instance -- the runtime counterpart of
+    # the source-level AST guards above.
+    for verb in ("send", "send_raw", "do", "send_key"):
+        assert not hasattr(screen, verb), f"PlayShellScreen grew a {verb!r} attribute"
+
+    # And nothing the entry instance OWNS is send-capable -- no live wire
+    # handle may exist before the human's own Ctrl-A takes the Human lock.
+    for name, value in vars(screen).items():
+        for verb in ("send_key", "send_raw"):
+            assert not hasattr(value, verb), (
+                f"entry-state attribute {name!r} owns a {verb!r} -- App-hold "
+                f"must grant no send path; only a human Ctrl-A may."
+            )
 
 
 # ---------------------------------------------------------------------------

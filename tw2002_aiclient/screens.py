@@ -699,26 +699,39 @@ class PlayShellScreen:
     badge belongs to the N5 mode-line-and-teach-controls WO;
     ``gauge_semantic`` ships classifier-only, with no wired consumer yet).
 
-    ``spectating`` (PWO-055, ``cockpit.control_seat``) is this instance's
-    own control-seat state -- ``True`` today, unconditionally, since this
-    screen has no send path at all (no `do`/`send`/`send_raw` verb reaches
-    the daemon from here; the only wire traffic is the read-only
-    ``status_provider`` poll and ``viewport_provider``'s subscribe feed).
+    ``spectating``/``attached`` (PWO-055/WO-P5-060, ``cockpit.
+    control_seat``) are this instance's own control-seat state. At entry
+    BOTH are ``False`` -- App-hold, the chip reading ``APP`` -- because
+    that is what the daemon itself is holding at that same instant:
+    ``session/control_lock.py:59`` constructs ``self._mode = MODE_APP``,
+    and nothing has called ``take_human()`` on a screen the human has not
+    yet pressed Ctrl-A on. Canon says the same thing prescriptively --
+    ``canon/surfaces/mode-line-and-teach-controls.md:39``, "Default when
+    the client runs = App/autopilot", ratified in ADR-002 -- so
+    WO-ENTRY-APP-CHIP is a code-to-canon correction: the prior
+    ``spectating = True`` entry default made the cockpit open by asserting
+    a state neither the daemon nor canon was in. Spectate survives as
+    post-detach observation chrome, NOT as a Mode (ADR-002: "observation
+    chrome only -- not a third dual position") -- ``app.py::_run_play``'s
+    Ctrl-] branch and its broken-wire fallback set ``spectating = True``,
+    and that is the only way this screen reaches the ``SPECTATE`` chip
+    at all. This screen still has
+    no send path of its own in ANY of these states (no `do`/`send`/
+    `send_raw` verb reaches the daemon from here; the only wire traffic
+    is the read-only ``status_provider`` poll and ``viewport_provider``'s
+    subscribe feed -- ``tests/test_spectate_no_send.py``'s structural
+    guards).
+
     The control-strip row's left side, which this docstring's own prior
-    revision left blank pending N5, now carries the honest
-    ``cockpit.control_seat.SPECTATE_LABEL`` marker in that same
-    already-``A_NORMAL`` (muted) row -- a single static label, not N5's
-    dynamic badge -- right up against wherever the liveness cluster's own
-    space begins, dropping out first if the row is too narrow for both (see
-    ``compose_control_strip_line``). PWO-056 (WO-P4-056, "attach from
-    cockpit") is this WO: it wires the Mode chord here (``handle_key``'s
-    own ``"attach"`` return value) to flip ``spectating`` to ``False`` in
-    ``app.py::_run_play`` on a successful daemon attach; ``cockpit.
-    control_seat``'s own "attached"/"Human" rendering is that same WO's
-    lane-B slice, landing alongside this one. The chord itself is
-    **Ctrl-A**, not `M` -- WO-P5-061-ENTRY (project owner ruling,
-    2026-07-25) moved it off `M` so bare `M` stays TradeWars' own Move
-    command, unintercepted, while attached.
+    revision left blank pending N5, carries the honest mode chip --
+    ``cockpit.control_seat``'s ``APP_LABEL``/``MANUAL_LABEL``/
+    ``SPECTATE_LABEL``, whichever is true -- right up against wherever
+    the liveness cluster's own space begins, dropping out first if the
+    row is too narrow for both (see ``compose_control_strip_line``). The
+    Mode chord (``handle_key``'s own ``"attach"`` return value, acted on
+    by ``app.py::_run_play``) is **Ctrl-A**, not `M` -- WO-P5-061-ENTRY
+    (project owner ruling, 2026-07-25) moved it off `M` so bare `M` stays
+    TradeWars' own Move command, unintercepted, while attached.
 
     Esc ends the binding and returns to the launcher — clean close, not a suspend.
     """
@@ -741,25 +754,39 @@ class PlayShellScreen:
         # here (the default) leaves the GAME interior blank, same as PWO-051.
         self.viewport_provider: Callable[[], object] | None = None
         # PWO-055 -- this cockpit instance's own relationship to the control
-        # seat: does IT currently hold the human control lock and forward
-        # keystrokes? Plain bool, not a three-value mode string -- see
-        # ``cockpit.control_seat``'s module docstring for why this is
-        # deliberately binary (spectating XOR attached) rather than mirroring
-        # the daemon's own wire-reported app/human/spectate ``status["mode"]``
-        # (a distinct, DAEMON-GLOBAL fact this instance never IS "app").
-        # Defaults ``True`` (pre-attach). PWO-056 (WO-P4-056, "attach from
-        # cockpit") flips this to ``False`` the moment the human's Ctrl-A
-        # keypress (canon `mode-line-and-teach-controls.md:40-47`'s App<->
-        # Human control-switch key -- moved off `M` onto Ctrl-A by WO-P5-
-        # 061-ENTRY, project owner ruling 2026-07-25) takes the daemon's
-        # Human control lock -- see ``handle_key``'s own ``"attach"``
-        # return value and ``app.py::_run_play``'s attach/forward/release
-        # wiring, which owns the actual daemon round trip. This class
-        # itself still has no send-capable call or symbol of its own
+        # seat: is IT currently parked in read-only observation? Plain bool,
+        # not a three-value mode string -- see ``cockpit.control_seat``'s
+        # module docstring for why the pair is deliberately per-client
+        # rather than mirroring the daemon's own wire-reported
+        # app/human/spectate ``status["mode"]`` (a distinct, DAEMON-GLOBAL
+        # fact).
+        #
+        # Defaults `False` (WO-ENTRY-APP-CHIP). This is a code-to-canon
+        # correction, not a new product decision: canon already says
+        # `mode-line-and-teach-controls.md:39` -- "Default when the client
+        # runs = App/autopilot" -- ratified in ADR-002 (Accepted
+        # 2026-07-25, `canon/ADR/002-mode-chord-ctrl-a.md:30`: "Spectate is
+        # not a Mode; default run = App/autopilot"). The code had drifted
+        # from it. Together with `attached`'s own `False`
+        # below this makes the entry state App-hold, whose chip reads
+        # `APP` -- the honest mirror of `session/control_lock.py:59`'s
+        # `self._mode = MODE_APP`, the seat the daemon genuinely holds
+        # before any Ctrl-A. The prior `True` default published SPECTATE
+        # at entry, a state the daemon was never in and which the ruling
+        # has since removed from the Mode vocabulary entirely.
+        #
+        # Only `app.py::_run_play` ever sets this `True`: the Ctrl-] detach
+        # branch and the broken-wire fallback, i.e. post-detach observation
+        # chrome, explicitly preserved by the same ruling. Ctrl-A (canon
+        # `mode-line-and-teach-controls.md:40-47`'s App<->Human
+        # control-switch key -- moved off `M` by WO-P5-061-ENTRY) is what
+        # takes/releases the daemon's Human lock; see ``handle_key``'s own
+        # ``"attach"`` return value. This class itself still has no
+        # send-capable call or symbol of its own in ANY of these states
         # (``tests/test_spectate_no_send.py``'s guards) -- it only ever
         # REPORTS the human's intent (``"attach"``) for ``app.py`` to act
         # on.
-        self.spectating: bool = True
+        self.spectating: bool = False
         # WO-P5-060 lane B: honest attach-state truth for the control-strip's
         # App/Human badge, mirroring `spectating`'s own plain-bool shape --
         # `app.py::_run_play` is the ONLY writer (attach success, the Ctrl-]
@@ -770,8 +797,10 @@ class PlayShellScreen:
         # negation (PWO-056's interim shape) so the two diverge for the
         # real third App state (App-hold: both `False`, reachable via
         # Ctrl-A as of WO-P5-061-ENTRY) without a silent coupling bug.
-        # Defaults `False` (pre-attach, matching `spectating`'s own
-        # pre-attach default of `True`).
+        # Defaults `False` -- unchanged by WO-ENTRY-APP-CHIP, but now it
+        # pairs with `spectating`'s own `False` above rather than its
+        # former `True`, so the entry state IS that third App-hold case
+        # (chip `APP`) instead of Spectate.
         self.attached: bool = False
         self._now_fn = now_fn  # WO-P3-038 -- resolved to time.monotonic at draw() time when unset
         # LOGS newest-row flash (WO-P3-041): content-identity tracking across
@@ -1310,19 +1339,23 @@ class PlayShellScreen:
             logs_attrs[-1] = (last_text, curses.A_BOLD)
         cockpit_draw.draw_lines_attrs(self.stdscr, logs, logs_attrs)
 
-        # CONTROL_STRIP (WO-P3-038, PWO-055, PWO-056, WO-P5-060): the frame's
-        # own bottom-most interior row, a bare content row (no box -- same
-        # `boxed=False` shape as the row-1 profile strip). Carries the
-        # liveness cluster, right-aligned (unchanged), and the honest seat
-        # label on the left, filling whatever room remains there --
-        # `cockpit.control_seat.SPECTATE_LABEL` while spectating (PWO-055),
-        # `MANUAL_LABEL` ("MANUAL — YOU HAVE CONTROL") once Ctrl-A has
-        # taken the Human lock (PWO-056; chord moved from `M` to Ctrl-A per
-        # WO-P5-061-ENTRY), or `APP_LABEL` when neither is true (WO-P5-060
-        # -- now genuinely reachable through this screen's own wiring, both
-        # as the daemon's own standing default and via Ctrl-A's Human->
-        # App-hold leg, WO-P5-061-ENTRY; see `control_seat`'s own module
-        # docstring).
+        # CONTROL_STRIP (WO-P3-038, PWO-055, PWO-056, WO-P5-060,
+        # WO-ENTRY-APP-CHIP): the frame's own bottom-most interior row, a
+        # bare content row (no box -- same `boxed=False` shape as the row-1
+        # profile strip). Carries the liveness cluster, right-aligned
+        # (unchanged), and the honest mode chip on the left, filling
+        # whatever room remains there -- `cockpit.control_seat.APP_LABEL`
+        # while neither flag is set (WO-P5-060), which as of
+        # WO-ENTRY-APP-CHIP is the ENTRY state itself, mirroring the
+        # daemon's own standing `MODE_APP` default
+        # (`session/control_lock.py:59`), and is also where Ctrl-A's
+        # Human->App-hold leg lands (WO-P5-061-ENTRY); `MANUAL_LABEL`
+        # ("MANUAL — YOU HAVE CONTROL") once Ctrl-A has taken the Human
+        # lock (PWO-056; chord moved from `M` to Ctrl-A per
+        # WO-P5-061-ENTRY); or `SPECTATE_LABEL` once `app.py`'s Ctrl-]
+        # detach / broken-wire fallback has parked this client in
+        # post-detach observation (PWO-055/PWO-057 -- observation chrome,
+        # not a Mode). See `control_seat`'s own module docstring.
         # `attached=self.attached` below is this WO's own call-site fix:
         # PWO-056's interim `attached=not self.spectating` derivation is
         # replaced with the REAL per-instance state `app.py::_run_play` now

@@ -218,7 +218,12 @@ def _attempt_attach(sock_path):
     cockpit -- called only from ``_run_play`` below, only in reaction to
     the human's own Ctrl-A keypress, from either Spectate or App-hold
     (``PlayShellScreen.handle_key``'s ``"attach"`` return value), never
-    automatic and never reachable from the read-only spectate default.
+    automatic and never reachable from a cockpit's own read-only entry
+    state -- which is App-hold, not Spectate, as of WO-ENTRY-APP-CHIP
+    (this docstring previously called it "the read-only spectate
+    default"; only the NAME of that state changed -- it is still equally
+    read-only, and this call site is still equally unreachable from it
+    without a human keypress).
 
     Returns ``(conn, None)`` on success -- the daemon's ``control_lock.
     mode`` is now ``MODE_HUMAN`` -- or ``(None, error)`` on ANY refusal or

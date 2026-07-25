@@ -25,13 +25,23 @@ Three layers, mirroring `tests/test_spectate_no_send.py`'s own shape:
      duplicated) rooted at a short `TW_RUN_DIR`/`twd.sock` -- the exact
      filename `env.socket_path()` resolves via `TW_RUN_DIR`, so the REAL
      run-dir resolution path is exercised end-to-end, not bypassed.
-     Proves the Ctrl-A keypress reaches the daemon, `spectating` flips,
-     the control-strip's SPECTATE chip drops and the `MANUAL_LABEL` badge
-     appears (``screens.py``'s ``attached=not self.spectating`` wiring),
-     an ordinary forwarded keystroke lands in the fake session's
-     `raw_sent`, a refusal is surfaced honestly (never silently treated
-     as success), and a broken mid-session connection falls back to
-     spectate rather than pretending the human still holds the lock.
+     Proves the Ctrl-A keypress reaches the daemon, the seat flags flip,
+     the control-strip's entry chip drops and the `MANUAL_LABEL` badge
+     appears (``screens.py`` passes the REAL ``attached`` field -- the old
+     ``attached=not self.spectating`` derivation named here previously was
+     replaced by WO-P5-060's own call-site fix), an ordinary forwarded
+     keystroke lands in the fake session's `raw_sent`, a refusal is
+     surfaced honestly (never silently treated as success), and a broken
+     mid-session connection falls back to spectate rather than pretending
+     the human still holds the lock.
+
+WO-ENTRY-APP-CHIP (project owner ruling, 2026-07-25): the chip a fresh
+cockpit paints is `APP`, not `SPECTATE` -- entry is App-hold, mirroring
+`session/control_lock.py:59`'s own `self._mode = MODE_APP`. Spectate is
+not a Mode; it is post-detach observation chrome, reached only through
+`app.py`'s Ctrl-] branch and its broken-wire fallback. Tests below that
+walk out of the entry state therefore assert the APP chip drops, not the
+SPECTATE chip.
 
 Esc/detach is explicitly OUT of scope (WO-P4-057, not built here). These
 tests pin that Esc (27) ALONE keeps its PRE-EXISTING play-shell-exit
@@ -148,8 +158,9 @@ class _RecordingStdscr:
     """Drivable fake stdscr -- getch/timeout (mirrors `tests/
     test_spectate_no_send.py`'s `_ScriptedStdscr`) PLUS addstr recording
     (mirrors `tests/test_cockpit_spectate.py`'s `_RecordingWin`), so one
-    drive proves BOTH that `spectating` flips in memory AND that the
-    control-strip's SPECTATE chip actually drops on screen."""
+    drive proves BOTH that the seat flags flip in memory AND that the
+    control-strip's chip actually changes on screen (the entry chip is
+    `APP` as of WO-ENTRY-APP-CHIP, not `SPECTATE`)."""
 
     def __init__(self, keys):
         self._keys = list(keys)
@@ -256,8 +267,13 @@ def test_run_play_ctrl_a_attaches_forwards_a_keystroke_and_esc_releases(monkeypa
         assert "attached" in play.status_line
 
         row_text = _control_strip_row_text(stdscr)
-        assert "SPECTATE" not in row_text  # chip dropped once attached
-        assert MANUAL_LABEL in row_text  # and the Human badge takes its place
+        # WO-ENTRY-APP-CHIP: the chip that must DROP here is APP -- that is
+        # what this drive started from. Asserting SPECTATE's absence alone
+        # (the pre-ruling form of this line) would now pass whether the
+        # attach repainted the row or not, since SPECTATE was never on it.
+        assert APP_LABEL not in row_text  # entry chip dropped once attached
+        assert "SPECTATE" not in row_text  # and no observation state was invented
+        assert MANUAL_LABEL in row_text  # the Human badge takes its place
 
         assert daemon.session.raw_sent == [b"d"]  # the one forwarded keystroke
 
@@ -355,14 +371,21 @@ def test_run_play_attach_refusal_is_honest_not_silent_success(monkeypatch):
         assert result == "back"
 
         play = captured[-1]
-        assert play.spectating is True  # refusal never flips it
+        # WO-ENTRY-APP-CHIP: the refusal must leave the ENTRY state exactly
+        # as it found it, and that state is now App-hold (both flags
+        # `False`), not Spectate. `app.py::_run_play`'s refusal branch
+        # writes only `status_line` -- it touches neither flag -- so this
+        # pair is the untouched entry default, which is the whole point:
+        # a refused attach must not move the seat.
+        assert play.spectating is False  # refusal never flips it
         assert play.attached is False  # WO-P5-060 lane B: never falsely claimed
         assert "attach refused" in play.status_line
         assert "already_attached" in play.status_line
 
         row_text = _control_strip_row_text(stdscr)
-        assert "SPECTATE" in row_text  # chip never dropped
+        assert APP_LABEL in row_text  # still the daemon's own seat -- chip unchanged
         assert MANUAL_LABEL not in row_text  # Human badge never falsely claimed
+        assert "SPECTATE" not in row_text  # nor invented an observation state
 
         assert daemon.session.raw_sent == []  # nothing was ever forwarded
 
@@ -405,42 +428,62 @@ def test_run_play_broken_attach_connection_falls_back_to_spectate_honestly(monke
     assert fake_conn.closed is True
 
 
-def test_control_strip_transitions_spectate_manual_and_back(monkeypatch):
+def test_control_strip_transitions_app_spectate_manual_and_back(monkeypatch):
     """Addendum pin (Samantha): the TRANSITION, not just an end state --
-    SPECTATE visible while spectating -> `MANUAL_LABEL` visible once
-    attached -> back to SPECTATE once `spectating` is true again.
     WO-P4-054 taught us a one-way assertion can't prove a state surface
     actually returns. Driven directly via `PlayShellScreen.spectating`/
-    `.attached` (not a real detach round trip through `app.py` -- the
-    actual detach mechanism is WO-P4-057's, not built here). WO-P5-060:
-    both fields are now driven together, mirroring how `app.py::_run_play`
-    always sets them as a pair -- `spectating` alone no longer implies
-    `attached`'s value (the pre-existing `attached=not self.spectating`
-    derivation this WO's own call-site fix replaced)."""
+    `.attached` (not a real detach round trip through `app.py`; the real
+    round trip is proven by `test_control_strip_chip_restores_to_spectate_
+    after_detach` below). WO-P5-060: both fields are driven together,
+    mirroring how `app.py::_run_play` always sets them as a pair --
+    `spectating` alone no longer implies `attached`'s value.
+
+    RENAMED (was `..._transitions_spectate_manual_and_back`) for
+    WO-ENTRY-APP-CHIP: the walk's first leg used to be SPECTATE, arriving
+    for free from the constructor's `spectating = True` default. That
+    default is now App-hold, so the walk gains a real APP leg at the front
+    and the SPECTATE legs are driven explicitly. The round trip it exists
+    to prove -- a chip that leaves and comes BACK -- is now proven for
+    SPECTATE and stated for all three chips:
+    APP (entry) -> SPECTATE -> MANUAL -> SPECTATE."""
     monkeypatch.setattr(curses, "has_colors", lambda: False)
     win = _RecordingStdscr([])
     screen = PlayShellScreen(win, _profile())
 
+    # Leg 1 -- entry: App-hold, mirroring the daemon's own MODE_APP default.
     screen.draw()
     row1 = _control_strip_row_text(win)
-    assert "SPECTATE" in row1
+    assert APP_LABEL in row1
+    assert "SPECTATE" not in row1
     assert MANUAL_LABEL not in row1
 
-    win.calls.clear()
-    screen.spectating = False
-    screen.attached = True
-    screen.draw()
-    row2 = _control_strip_row_text(win)
-    assert MANUAL_LABEL in row2
-    assert "SPECTATE" not in row2
-
+    # Leg 2 -- post-detach observation, driven explicitly.
     win.calls.clear()
     screen.spectating = True
     screen.attached = False
     screen.draw()
+    row2 = _control_strip_row_text(win)
+    assert "SPECTATE" in row2
+    assert MANUAL_LABEL not in row2
+    assert APP_LABEL not in row2
+
+    # Leg 3 -- the human takes the seat.
+    win.calls.clear()
+    screen.spectating = False
+    screen.attached = True
+    screen.draw()
     row3 = _control_strip_row_text(win)
-    assert "SPECTATE" in row3
-    assert MANUAL_LABEL not in row3
+    assert MANUAL_LABEL in row3
+    assert "SPECTATE" not in row3
+
+    # Leg 4 -- and Spectate genuinely COMES BACK, the point of the test.
+    win.calls.clear()
+    screen.spectating = True
+    screen.attached = False
+    screen.draw()
+    row4 = _control_strip_row_text(win)
+    assert "SPECTATE" in row4
+    assert MANUAL_LABEL not in row4
 
 
 # ---------------------------------------------------------------------------

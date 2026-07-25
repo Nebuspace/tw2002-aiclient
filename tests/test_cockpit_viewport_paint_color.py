@@ -156,7 +156,46 @@ def test_color_screen_count_mismatch_drops_color_but_still_paints_text(monkeypat
         "color": [[{"start": 0, "end": 4, "fg": "red", "bg": "default", "bold": False}]],
     }
 
-    pairs_calls_before = len(fake.init_pair_calls)  # chrome's own construction-time allocations
+    # WO-ENTRY-APP-CHIP -- this assertion is now made DIRECTLY rather than
+    # through an `init_pair`-count proxy. The proxy could not do the job it
+    # was written for, and that was true BEFORE this WO, not because of it:
+    # `curses.init_pair` only fires on a `_shared_pairs` cache MISS, and
+    # this fixture's game-cell run is `fg="red", bg="default"` -- the exact
+    # pair chrome already allocates for its own viewport-danger tone. A
+    # genuine game-cell allocation here would therefore be a cache HIT and
+    # add no `init_pair` call at all, so a count could sit green through
+    # the very leak this test exists to catch. (What surfaced the weakness
+    # was the entry chip going SPECTATE -> APP, which added one legitimate
+    # chrome allocation the count also could not attribute.)
+    #
+    # `run_attr` is the game-cell color resolver and NOTHING else calls it
+    # -- chrome resolves its own tones through `_shared_pairs.attr_for`
+    # directly (`screens.py:1185` is its only call site). Spying on it
+    # separates game-cell work from chrome work by CONSTRUCTION rather than
+    # by counting, so no color-name coincidence can confuse the two.
+    #
+    # Mechanism, corrected: this test's own comment used to say the
+    # mismatch is caught "before align_color_runs (let alone run_attr)
+    # ever saw a run". `align_color_runs` is in fact called
+    # UNCONDITIONALLY (`screens.py:1169`) -- what the guard does is hand it
+    # `color_rows=None`, which it degrades to an empty run list per row, so
+    # `run_attr` never receives a run. Both halves are pinned below.
+    align_args: list[object] = []
+    run_attr_calls: list[dict] = []
+    real_align = screens_mod.cockpit_viewport_color.align_color_runs
+    real_run_attr = screens_mod.cockpit_viewport_color.run_attr
+
+    def _spy_align(color_rows, lines, *a, **k):
+        align_args.append(color_rows)
+        return real_align(color_rows, lines, *a, **k)
+
+    def _spy_run_attr(pairs, run, *a, **k):
+        run_attr_calls.append(run)
+        return real_run_attr(pairs, run, *a, **k)
+
+    monkeypatch.setattr(screens_mod.cockpit_viewport_color, "align_color_runs", _spy_align)
+    monkeypatch.setattr(screens_mod.cockpit_viewport_color, "run_attr", _spy_run_attr)
+
     screen.viewport_provider = lambda: _Snapshot(event)
     screen.draw()
 
@@ -164,11 +203,16 @@ def test_color_screen_count_mismatch_drops_color_but_still_paints_text(monkeypat
     assert _calls_with_text(win, row0)
     assert _calls_with_text(win, row1)
 
-    # No color allocation was attempted for game cells at all -- the
-    # mismatch was caught one layer up, before align_color_runs (let alone
-    # run_attr) ever saw a run to resolve. Only chrome's own pre-existing
-    # pairs (allocated at __init__) may appear.
-    assert len(fake.init_pair_calls) == pairs_calls_before
+    # The mismatch was rejected one layer up: the aligner was handed `None`,
+    # never the raw color map.
+    assert align_args == [None], f"aligner should receive None on a mismatch; got {align_args!r}"
+
+    # And so no run ever reached the resolver -- the game-cell color path
+    # did no work at all.
+    assert run_attr_calls == [], (
+        f"mismatch should have dropped color before any run was resolved; "
+        f"run_attr saw: {run_attr_calls}"
+    )
 
     # And no cell painted the substring "SHOU" (the would-be colored
     # fragment) with a NON-zero attr -- if color leaked through despite

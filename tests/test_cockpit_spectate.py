@@ -237,7 +237,40 @@ def _control_strip_row_text(win: "_RecordingWin", rows: int, cols: int) -> str:
     return "".join(text for _x, text, _attr in _control_strip_row_calls(win, rows, cols))
 
 
-def test_default_spectating_true_renders_seat_label_in_control_strip(monkeypatch):
+def test_entry_default_renders_app_chip_matching_the_daemons_own_mode(monkeypatch):
+    """RENAMED + RE-JUSTIFIED (prior name: ``test_default_spectating_true_
+    renders_seat_label_in_control_strip``, whose premise -- "a fresh
+    cockpit is Spectating" -- is now FALSE).
+
+    WO-ENTRY-APP-CHIP is a code-to-canon correction, not a new product
+    decision. Canon has said this prescriptively all along --
+    ``canon/surfaces/mode-line-and-teach-controls.md:39``: "Default when
+    the client runs = App/autopilot" -- ratified in ADR-002 (Accepted
+    2026-07-25, ``canon/ADR/002-mode-chord-ctrl-a.md:30``: "Spectate is
+    not a Mode; default run = App/autopilot"; :39: "Spectate remains
+    observation chrome only -- not a third dual position"). The entry
+    chip must therefore report the seat-holder the DAEMON actually has at
+    that same instant, and that fact is citable, not assumed:
+    ``session/control_lock.py:59`` constructs ``self._mode = MODE_APP``,
+    and ``app.py::_run_play`` takes the Human lock only in response to a
+    Ctrl-A keypress that has not happened yet on a freshly-constructed
+    cockpit. So daemon truth at entry is App; the old ``spectating = True``
+    default made this screen open by asserting a state the daemon was not
+    in (and which the ruling has since removed from the Mode vocabulary
+    altogether).
+
+    App-hold is the client-side mirror of that daemon fact -- the literal
+    ``spectating is False and attached is False`` pair
+    ``control_seat.py``'s own ``_is_definitively_false`` gate requires
+    before it will render ``APP_LABEL`` at all. This test pins the whole
+    chain: the two entry fields, and the chip that actually reaches the
+    control-strip row because of them.
+
+    Spectate is NOT removed by this change -- it remains the post-detach
+    observation state (``app.py``'s Ctrl-] branch sets ``spectating =
+    True``); ``tests/test_cockpit_attach.py::test_control_strip_chip_
+    restores_to_spectate_after_detach`` proves it still paints, through a
+    real detach round trip."""
     from tw2002_aiclient import screens as screens_mod
 
     monkeypatch.setattr(screens_mod.curses, "has_colors", lambda: False)
@@ -248,30 +281,58 @@ def test_default_spectating_true_renders_seat_label_in_control_strip(monkeypatch
     win = _RecordingWin(FULL_ROWS, FULL_COLS)
     screen = screens_mod.PlayShellScreen(win, profile)
 
-    assert screen.spectating is True  # the documented default
+    # App-hold, both literally False -- the documented entry default.
+    assert screen.spectating is False
+    assert screen.attached is False
 
     screen.draw()
 
     row_text = _control_strip_row_text(win, FULL_ROWS, FULL_COLS)
-    assert "SPECTATE" in row_text
-    # the pre-existing liveness cluster must still be present -- the seat
-    # label must never crowd it out at a real, roomy terminal width.
+    assert APP_LABEL in row_text
+    assert SPECTATE_LABEL not in row_text  # the state the daemon is NOT in
+    assert MANUAL_LABEL not in row_text  # nor is the human holding the lock yet
+    # the pre-existing liveness cluster must still be present -- the mode
+    # chip must never crowd it out at a real, roomy terminal width.
     assert "→" in row_text
 
 
-def test_toggling_spectating_false_alone_now_renders_app_not_liveness_only(monkeypatch):
-    """RENAMED + REDOCUMENTED (pre-WO-P5-060 name: ..._removes_the_label,
-    docstring claimed a "falls back to liveness-only" outcome). That premise
-    depended on the old `attached=not self.spectating` derivation
-    (PWO-056), where flipping `spectating` off implicitly meant "attached."
-    WO-P5-060's own screens.py landing replaces that derivation with a real,
-    independent `self.attached` attribute (default `False`, never coupled
-    to `spectating`) -- so flipping ONLY `spectating` off, leaving
-    `attached` at its untouched default, now lands on the PWO-060 App
-    fallback (both flags genuinely, literally `False`), not liveness-only.
-    See test_toggling_spectating_false_and_attached_true_renders_manual
-    below for the genuine "switch to Human" scenario this test used to
-    stand in for."""
+def test_entry_default_mirrors_a_freshly_constructed_control_locks_own_mode():
+    """The other half of the citation above, executed rather than quoted:
+    a freshly-constructed ``ControlLock`` -- no ``take_human()``, no
+    ``enter_auto_loop()`` -- reports ``MODE_APP``, so the cockpit's own
+    entry App-hold pair is a reflection of a real daemon-side default, not
+    a client-side invention. Sibling of ``tests/test_cockpit_attach.py::
+    test_app_hold_daemon_seat_truth_default_mode_is_app_not_a_client_
+    fiction``; kept here so this file's entry-chip pin carries its own
+    daemon-truth leg rather than depending on a cross-file read."""
+    from tw2002_aiclient.session.control_lock import MODE_APP, ControlLock
+
+    assert ControlLock().mode == MODE_APP
+
+
+def test_returning_from_spectate_to_app_hold_renders_app_not_liveness_only(monkeypatch):
+    """RENAMED TWICE, and the reason matters both times.
+
+    Pre-WO-P5-060 it was ``..._removes_the_label`` and claimed a "falls
+    back to liveness-only" outcome -- a premise that died with the old
+    ``attached=not self.spectating`` derivation.
+
+    WO-P5-060 renamed it to ``test_toggling_spectating_false_alone_...``,
+    which was accurate only while ``spectating`` STARTED ``True``: the
+    assignment below was a genuine toggle off the entry default.
+    WO-ENTRY-APP-CHIP makes ``False`` the entry default, so "toggling
+    false" would now describe a no-op assignment -- a quietly false name.
+    What the test still genuinely covers is the RETURN leg: a client that
+    has been parked in post-detach Spectate (``app.py``'s Ctrl-] branch is
+    the real writer of ``spectating = True``) and then goes back to
+    App-hold must paint the App chip, not fall through to a liveness-only
+    row. So the Spectate starting state is now driven explicitly rather
+    than inherited from a default, and the walk is stated in full.
+
+    See ``test_toggling_spectating_false_and_attached_true_renders_manual``
+    below for the "switch to Human" scenario, and
+    ``test_entry_default_renders_app_chip_matching_the_daemons_own_mode``
+    above for the entry state this one no longer stands in for."""
     from tw2002_aiclient import screens as screens_mod
 
     monkeypatch.setattr(screens_mod.curses, "has_colors", lambda: False)
@@ -281,13 +342,22 @@ def test_toggling_spectating_false_alone_now_renders_app_not_liveness_only(monke
     )
     win = _RecordingWin(FULL_ROWS, FULL_COLS)
     screen = screens_mod.PlayShellScreen(win, profile)
+
+    # Post-detach observation state, driven explicitly -- no longer the
+    # constructor's own default.
+    screen.spectating = True
+    screen.attached = False
+    screen.draw()
+    assert SPECTATE_LABEL in _control_strip_row_text(win, FULL_ROWS, FULL_COLS)
+
+    win.calls.clear()
     screen.spectating = False
-    assert screen.attached is False  # untouched default -- both now literally False
+    assert screen.attached is False  # untouched -- both now literally False
 
     screen.draw()
 
     row_text = _control_strip_row_text(win, FULL_ROWS, FULL_COLS)
-    assert "SPECTATE" not in row_text
+    assert SPECTATE_LABEL not in row_text
     assert APP_LABEL in row_text
     assert MANUAL_LABEL not in row_text
     assert "→" in row_text
@@ -329,7 +399,16 @@ def test_control_strip_row_attr_is_muted_a_normal(monkeypatch):
     content call's attr, not just the last one -- the App/MANUAL chips
     legitimately carry a different (reverse-video+tone) attr of their own
     once PWO-061 makes them reachable; this test only pins the SPECTATE
-    case's own attr, which is unaffected by that."""
+    case's own attr, which is unaffected by that.
+
+    WO-ENTRY-APP-CHIP: the Spectate state is now driven EXPLICITLY below.
+    It used to be inherited from the constructor's `spectating = True`
+    default, so this test read as an entry-state assertion even though its
+    own docstring has always scoped itself to "the SPECTATE case"; with
+    App-hold the entry default, leaving that implicit would have silently
+    turned this into an assertion about the APP chip -- which legitimately
+    carries `A_BOLD | A_REVERSE` and would have gone red for the wrong
+    reason."""
     from tw2002_aiclient import screens as screens_mod
 
     monkeypatch.setattr(screens_mod.curses, "has_colors", lambda: False)
@@ -339,8 +418,11 @@ def test_control_strip_row_attr_is_muted_a_normal(monkeypatch):
     )
     win = _RecordingWin(FULL_ROWS, FULL_COLS)
     screen = screens_mod.PlayShellScreen(win, profile)
+    screen.spectating = True  # post-detach observation state, driven explicitly
+    screen.attached = False
     screen.draw()
 
+    assert SPECTATE_LABEL in _control_strip_row_text(win, FULL_ROWS, FULL_COLS)
     calls = _control_strip_row_calls(win, FULL_ROWS, FULL_COLS)
     assert all(attr == curses.A_NORMAL for _x, _t, attr in calls), calls
 
@@ -352,7 +434,14 @@ def test_raising_control_seat_composer_does_not_crash_draw_and_liveness_survives
     not crash the draw pass -- same containment discipline every other
     composer call in `draw()` already has -- and falls back to the
     pre-existing liveness-only right-justified row rather than an empty
-    one."""
+    one.
+
+    WO-ENTRY-APP-CHIP: the "no chip survived" assertion below now names
+    APP as well as SPECTATE. It used to name SPECTATE alone, which was
+    load-bearing only because SPECTATE was the entry chip -- with App-hold
+    the entry state, a SPECTATE-only absence check would pass whether the
+    fallback fired or not. The chip that WOULD be on this row absent the
+    fallback has to be the one whose absence is asserted."""
     from tw2002_aiclient import screens as screens_mod
 
     monkeypatch.setattr(screens_mod.curses, "has_colors", lambda: False)
@@ -371,7 +460,9 @@ def test_raising_control_seat_composer_does_not_crash_draw_and_liveness_survives
     screen.draw()  # must not raise
 
     row_text = _control_strip_row_text(win, FULL_ROWS, FULL_COLS)
-    assert "SPECTATE" not in row_text
+    assert APP_LABEL not in row_text  # the chip this entry state WOULD have painted
+    assert SPECTATE_LABEL not in row_text
+    assert MANUAL_LABEL not in row_text
     assert "→" in row_text
 
 
@@ -379,7 +470,16 @@ def test_minimal_tier_still_renders_the_label_no_side_gutters(monkeypatch):
     """CONTROL_STRIP is present at every reachable non-too_small tier
     (layout.py's own comment) including `minimal`, where GOALS/DECISIONS/
     right_gutter are all absent -- the seat label must still reach that
-    tier's control strip row."""
+    tier's control strip row.
+
+    WO-ENTRY-APP-CHIP: both chips are checked at this tier now. The
+    SPECTATE leg is what this test has always been about (it is this
+    file's own subject), but it used to arrive via the constructor's
+    `spectating = True` default; that default is now App-hold, so the
+    Spectate state is driven explicitly and the entry APP chip is checked
+    alongside it -- the tier's chip plumbing is chip-agnostic, and pinning
+    only one of them would leave the tier untested for whichever chip the
+    entry default happens to be."""
     from tw2002_aiclient import screens as screens_mod
 
     monkeypatch.setattr(screens_mod.curses, "has_colors", lambda: False)
@@ -394,10 +494,17 @@ def test_minimal_tier_still_renders_the_label_no_side_gutters(monkeypatch):
     )
     win = _RecordingWin(minimal_rows, minimal_cols)
     screen = screens_mod.PlayShellScreen(win, profile)
+
+    screen.draw()  # entry state -- App-hold
+    assert APP_LABEL in _control_strip_row_text(win, minimal_rows, minimal_cols)
+
+    win.calls.clear()
+    screen.spectating = True  # post-detach observation state
+    screen.attached = False
     screen.draw()
 
     row_text = _control_strip_row_text(win, minimal_rows, minimal_cols)
-    assert "SPECTATE" in row_text
+    assert SPECTATE_LABEL in row_text
 
 
 def test_handle_key_unchanged_no_new_keys_from_this_wo(monkeypatch):
