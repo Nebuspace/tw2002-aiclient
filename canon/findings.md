@@ -150,21 +150,22 @@ Hub relay `@ 09:33:23Z`: on cockpit **entry**, chip must show **`APP`** to match
 | SECRETS-ARCHIVE-NEVER-LIVE | Rotate gate on archive secrets | **CLOSED** — Max: archive `secrets.json` never live; no rotate |
 
 ### Banked · session/ honesty audit (2026-07-25 · CC READ-ONLY · hub adjudicated `@ 12:15:44Z`)
-Source tip at audit: `922739b`. Product fixes: F1 DONE `7e13b7d` · F2/F3/F4 in flight · **F5 Ruled (B)** · **F6 DONE `c21cd1c`** · F7/F8 BANK · **F9 BANK** (cockpit UTF-8 · product WO pending).
+Source tip at audit: `922739b`. Product fixes: F1 DONE `7e13b7d` · F2/F3/F4 in flight · **F5 Ruled (A)** · **F6 DONE `c21cd1c`** · F7/F8 BANK · **F9 DONE `879280f`** · CLI-ASCII write-choke BANK (Max ruling pending).
 
 | ID | Gap | Tip reality |
 |---|---|---|
 | SESSION-F6-TRANSCRIPT-ORDER | `connection.py` / `session.py` / `_send_raw`+TX-IAC log-AFTER `sendall`; fail path type/phrase only | **DONE** tip `c21cd1c` (Accepted; push gated w/ F2 B+C) — scope includes `_send_raw`/TX-IAC, not only the two banked files |
-| SESSION-F7-STATUS-DAEMON-RUNNING | `cli.py` `cmd_status` stamps `daemon_running: True` over failed round-trip (PID reuse) | **BANKED** — exit code stays honest; `--json` self-contradicts |
-| SESSION-F8-WATCH-FRAME-GAP | `cli.py` `tw watch` swallows unparseable frames; `--frames N` counts only parsed | **BANKED** — invisible gap on corruption |
-| SESSION-AUDIT-COVERAGE-GAP | `classify.py` (634 lines) unaudited except secret-prompt regex; also unread: `credentials` · `env` · `iac` · `terminal` · `player_bank` | **BANKED** — future audit WO must not inherit false coverage |
-| SESSION-F5-INTERNAL-ERROR-STR | `daemon.py` widest catch `internal_error:{e}` vs type-name-only siblings | **Ruled (A)** Max `@ 14:28:33Z` — wire type-name-only + local traceback; F5-B carve-out dead; CC `WO-AUDIT-F5-TYPE-NAME` |
-| LOGIN-REDACTION-SUITE-NOT-RUNNING | `tests/test_login_redaction.py` still `import twclient` · pytest.ini `--ignore` | **BANKED → REHAB soon** Max #3 `@ 14:31:06Z` — `WO-AUDIT-LOGIN-REDACTION-REHAB` queued **behind** F5-A + socket-mode + SURROGATE Accept/Push |
-| KEYS-ARGV-SHELL-HISTORY | `tw attach --keys` puts keystrokes on argv/process table/shell history; canon was silent; help/README lacked warn | **BANKED + docs warn** this tip — README + Invariant 1 hazard; argparse help draft for product (no `.py` here) |
+| SESSION-F7-STATUS-DAEMON-RUNNING | `cli.py` `cmd_status` stamps `daemon_running: True` over failed round-trip (PID reuse) | **BANKED** — exit code stays honest; `--json` self-contradicts · MISSING-TESTS MT-03 |
+| SESSION-F8-WATCH-FRAME-GAP | `cli.py` `tw watch` swallows unparseable frames; `--frames N` counts only parsed | **BANKED** — invisible gap on corruption · MISSING-TESTS MT-04 |
+| SESSION-AUDIT-COVERAGE-GAP | `classify.py` (634 lines) unaudited except secret-prompt regex; also unread: `credentials` · `env` · `iac` · `terminal` · `player_bank` | **BANKED** — future audit WO must not inherit false coverage · MISSING-TESTS MT-11 |
+| SESSION-F5-INTERNAL-ERROR-STR | `daemon.py` widest catch `internal_error:{e}` vs type-name-only siblings | **Ruled (A)** Max `@ 14:28:33Z` — wire type-name-only + local traceback; **DONE** tip via `WO-AUDIT-F5-TYPE-NAME` |
+| LOGIN-REDACTION-SUITE-NOT-RUNNING | `tests/test_login_redaction.py` still `import twclient` · pytest.ini `--ignore` | **BANKED → REHAB soon** Max #3 `@ 14:31:06Z` — `WO-AUDIT-LOGIN-REDACTION-REHAB` · MISSING-TESTS MT-02 |
+| KEYS-ARGV-SHELL-HISTORY | `tw attach --keys` puts keystrokes on argv/process table/shell history; canon was silent; help/README lacked warn | **BANKED + docs warn** — README + Invariant 1 hazard; argparse help draft for product |
 | SESSION-F1-ATTACH-SEND-KEY-BOOL | Interactive `tw attach` discarded `send_key` bool → silent ATTACHED black hole | **DONE** tip `7e13b7d` (was `4754dd4`) · `WO-AUDIT-ATTACH-SEND-KEY-BOOL` |
-| SESSION-F1-MICRO-SETTLE-NUDGE | `cli.py:249` discards `send_request("read")` dict | **BANKED** — benign settle-nudge; `ensure` at `:260` is checked gate |
-| SESSION-F1-MICRO-DOCSTRING | `cli.py:3-5` claims `tw watch` is **the** lifetime-stream exception | **BANKED** — false since attach holds a socket for session; one-line docs fix |
+| SESSION-F1-MICRO-SETTLE-NUDGE | `cli.py:249` discards `send_request("read")` dict | **BANKED** — benign settle-nudge; `ensure` at `:260` is checked gate · MISSING-TESTS MT-09 |
+| SESSION-F1-MICRO-DOCSTRING | `cli.py:3-5` claims `tw watch` is **the** lifetime-stream exception | **BANKED** — false since attach holds a socket for session; one-line docs fix · MISSING-TESTS MT-12 |
 | P5-064-STALE-INTERVENTION-PATH | Canon / archive tests cite `twclient/intervention_labels.py` | **BANKED** — live catalog is `cockpit/stopbanner.py` (`af62889`); archive path gone |
 | P5-064-SCREENS-BADGE-DOCSTRING | `screens.py` module docstring still says no dynamic App/Human mode badge | **BANKED** — stale vs 060 LIVE `control_seat` chip; hub cited ~`:713` (line may drift) |
-| F9-COCKPIT-UTF8-GARBAGE-FORWARD | Cockpit `getch()` path forwards each UTF-8 byte `<256` as its own `send_key` | **BANKED** — real-pty proof U+2192 → `[226,134,146]` all forwarded; distinct from `key>=256` ruling; serialize cockpit fix behind cli-encode contract (mirror refuse+tell) · product WO-AUDIT-COCKPIT-UTF8-GETCH |
+| F9-COCKPIT-UTF8-GARBAGE-FORWARD | Cockpit `getch()` path forwarded each UTF-8 byte `<256` as its own `send_key` | **DONE** tip `879280f` — refuse multi-byte UTF-8 getch + ungetch truncated lead; `WO-AUDIT-COCKPIT-UTF8-GETCH` CLOSED |
+| CLI-ASCII-WRITE-CHOKE | Non-UTF-8 stdout: `./tw --help` / `menumap` / `loops` crash mid-output on ★ / em-dash / … after attach-only ASCII banner fix `fec3ffe` | **BANKED** — docs do **not** close product. Reachable: `PYTHONIOENCODING=ascii\|latin-1` · `LC_ALL=en_US.ISO8859-1` · `LC_ALL=C` with UTF-8 mode **off** (bare `LC_ALL=C` does **not** crash — PEP 540). Product WO **STAGED** pending Max glyph ruling (A refuse / B NO-SWAP substitute / C other). MISSING-TESTS MT-05/06. Stub: `workorders/WO-AUDIT-CLI-ASCII-WRITE-CHOKE.md` |
 
