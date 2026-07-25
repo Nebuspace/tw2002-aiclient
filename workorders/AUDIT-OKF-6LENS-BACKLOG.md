@@ -3,7 +3,7 @@
 > Seat: `impl-aiclient-cursor` · Tip: `59c4455` (audit drafts) atop `458d140` / product `d4a8829` · UTC: 2026-07-25T05:12Z  
 > HANDOFF: `AUDIT-OKF-6LENS` · **No product `.py` in this ticket**  
 > HOLDs honored: F2 · G2–G4 · auth/secrets (rotate CLOSED — archive never-live) · **Batch 1b CLOSED** (Ctrl-A Mode) · **Batch 2/3 CLOSED** (APP chip · Spectate≠Mode · Ctrl-]@App-hold no-op · north-star SIGNED · log_note RETIRE)  
-> Scout cross-check: inventory tip-map confirms 062–072 MISSING; 061/065 PARTIAL→**061 CLOSED**; 080 PARTIAL (`classify` LIVE, `state_parser` absent); **085/086 LIVE** (gated). **Closed since:** HARDEN-ATTACH `88004d8` · WatchHub `00cb9e8` · SAFE-ADDSTR `29fd76c` · GLYPH `8facad9` · SAFE-WIDTH `c0bdab7` · APP-LABEL docs-win · CTRL-]APP Ruled · mux Ctrl-A note · **RECONNECT `19a0a27`** · **CLI-KEYS `032bc12`** · **061-ENTRY `420430d`** · **log_note RETIRE `4280d8a`** · **ENTRY-APP `7c0e882`** · **stale-M docstring `ca1e078`→`276327e`**. Banked: UNICODE-OK (CC product · in flight).
+> Scout cross-check: inventory tip-map confirms 062–072 MISSING; 061/065 PARTIAL→**061 CLOSED**; 080 PARTIAL (`classify` LIVE, `state_parser` absent); **085/086 LIVE** (gated). **Closed since:** HARDEN-ATTACH `88004d8` · WatchHub `00cb9e8` · SAFE-ADDSTR `29fd76c` · GLYPH `8facad9` · SAFE-WIDTH `c0bdab7` · APP-LABEL docs-win · CTRL-]APP Ruled · mux Ctrl-A note · **RECONNECT `19a0a27`** · **CLI-KEYS `032bc12`** · **061-ENTRY `420430d`** · **log_note RETIRE `4280d8a`** · **ENTRY-APP `7c0e882`** · **stale-M docstring `ca1e078`→`276327e`** · **UNICODE-OK `922739b`**. Banked: none (CC product queue empty). Open Max-gated: OPEN-003 · F2/G2–G4.
 
 Committable twin: `workorders/AUDIT-OKF-6LENS-BACKLOG.md`. Draft WOs: `workorders/WO-AUDIT-*.md` (8).
 
@@ -16,7 +16,7 @@ Committable twin: `workorders/AUDIT-OKF-6LENS-BACKLOG.md`. Draft WOs: `workorder
 | Banked harden | HARDEN-ATTACH-SOCKET-TIMEOUT | **DONE** tip `88004d8` (CC) · `WO-AUDIT-HARDEN-ATTACH` EXECUTED/DONE |
 | Zone-A harden | WATCHHUB-LOOP-CONTAIN | **DONE** tip `00cb9e8` · `WO-AUDIT-WATCHHUB-LOOP-CONTAIN` EXECUTED |
 | Zone-A polish | SAFE-ADDSTR / GLYPH | Both **DONE** (`29fd76c` / `8facad9`) · WOs EXECUTED |
-| Banked docs | UNICODE-OK-DOCSTRING | DRAFT `WO-AUDIT-UNICODE-OK-DOCSTRING` — stale locale claim |
+| Banked docs | UNICODE-OK-DOCSTRING | **DONE** tip `922739b` (CC · was `3404f81`) · `WO-AUDIT-UNICODE-OK-DOCSTRING` EXECUTED |
 | Max-ruled | 061 Accept #2 Human→App | **Batch 1b CLOSED** — Mode=Ctrl-A · attached `M`=Move · no printable Mode · CC product HANDOFF |
 | Max-ruled | Batch 2/3 cluster | **CLOSED** — `APP` chip · Spectate≠Mode · Ctrl-]@App-hold no-op · north-star SIGNED · log_note RETIRE · secrets never-live |
 | Max-ruled | Entry chip = APP | **DONE** tip `7c0e882` (CC · was `0537298`) — App-hold entry; chip `APP` · `WO-AUDIT-ENTRY-APP-CHIP` EXECUTED |
