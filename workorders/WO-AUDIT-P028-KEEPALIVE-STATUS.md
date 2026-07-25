@@ -1,8 +1,11 @@
 # WO-AUDIT-P028-KEEPALIVE-STATUS — D10 tip inventory honesty
 
-> Status: **DRAFT** 2026-07-25 · AUDIT-OKF-6LENS · tip `d4a8829`  
+> Status: **EXECUTED** 2026-07-25 · AUDIT docs tick · tip inventory **LIVE/DONE** (`4db92a1`)  
 > Type: docs / verify PREP · Priority: P1 · Lens: L3  
-> Refs: ULTRACODE PWO-028 · `session/guardian.py` (D9+D10)
+> Refs: ULTRACODE PWO-028 · `session/guardian.py` (D9+D10) · `tests/test_guardian.py` D10 suite
+
+## Tip verdict
+**LIVE / DONE** — D10 keepalive fires only on `main_command`; suppressed on password / port_trade / unknown / confirm / combat (+ disconnect / reconnect-in-flight). Proof: `tests/test_guardian.py` D10 block. ULTRACODE row stamped DONE (`4db92a1`). Sibling PWO-027 also stamped DONE (`e1f189c`) in the same honesty pass — same guardian module, same ship window.
 
 ## Goal
 Clarify whether PWO-028 (keepalive off on unsafe screens) is LIVE, PARTIAL, or MISSING on tip — guardian module claims D10; inventory row still bare PREP-era.

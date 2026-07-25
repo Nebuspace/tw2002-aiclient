@@ -156,8 +156,8 @@ Types: `bootstrap` · `verify` · `build` · `extend` · `harden` · `docs-findi
 | PWO-024 | Game-select recovery | harden | 020 | Stuck `game_select` recoverable | reach main_command | `tw do` / ensure | login-automaton |
 | PWO-025 | Control-lock + actor tag | harden | 020 | Every send tagged `{app,human}` | ledger rows actor∈{app,human} | ledger sample | control-and-escalation · trace-ledger |
 | PWO-026 | Settle detection baseline | verify/harden | 020 | Prompt/idle/timeout settle | no false ready | unit+live | settle-detection |
-| PWO-027 | Reconnect + login replay | build | 020 | Drop sock recovers | spectate/play survive recycle | stop sock / kill | resilience-and-reconnect |
-| PWO-028 | Idle keepalive off on unsafe | harden | 027 | Keepalive suppressed on unsafe screens | no keepalive on Option? | test | resilience… |
+| PWO-027 | Reconnect + login replay **DONE** 2026-07-24 (`e1f189c` · SessionGuardian D9) | build | 020 | Drop sock recovers | spectate/play survive recycle | stop sock / kill | resilience-and-reconnect |
+| PWO-028 | Idle keepalive off on unsafe **DONE** 2026-07-24 (`4db92a1` · D10 `main_command`-only) | harden | 027 | Keepalive suppressed on unsafe screens | no keepalive on Option? | test | resilience… |
 
 ### Phase 3 — Trainer cockpit frame
 
