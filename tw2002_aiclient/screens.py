@@ -570,6 +570,21 @@ BOUNDARY_LINE_2 = (
     "Hard line: never transfer credits/cargo/assets between them."
 )
 
+# Ctrl-A (ASCII 1) -- the Mode chord (ADR-002, Accepted 2026-07-25,
+# `canon/ADR/002-mode-chord-ctrl-a.md`; implemented here per WO-P5-061-
+# ENTRY), replacing `M`/`m`. `handle_key` is only ever reached for this
+# key while NOT attached (`app.py::_run_play` intercepts Ctrl-A itself,
+# earlier, whenever it IS attached -- that module imports `MODE_KEY` from
+# HERE rather than defining its own, so the two call sites can never
+# silently drift apart onto different keycodes), so returning
+# ``"attach"`` here unconditionally covers both legs of the toggle:
+# Spectate->Human and App-hold->Human. No printable key may ever be Mode
+# -- bare `M` is TradeWars' own Move command and must reach the game
+# untouched once attached. THIS is the single source of truth for the
+# keycode -- no leading underscore, since it is deliberately consumed
+# cross-module (unlike this file's other `_`-private constants).
+MODE_KEY = 1
+
 
 class PlayShellScreen:
     """Trainer-cockpit frame bound to one launcher profile (WO-P1-016,
@@ -696,11 +711,14 @@ class PlayShellScreen:
     dynamic badge -- right up against wherever the liveness cluster's own
     space begins, dropping out first if the row is too narrow for both (see
     ``compose_control_strip_line``). PWO-056 (WO-P4-056, "attach from
-    cockpit") is this WO: it wires the `M` key here (``handle_key``'s own
-    ``"attach"`` return value) to flip ``spectating`` to ``False`` in
+    cockpit") is this WO: it wires the Mode chord here (``handle_key``'s
+    own ``"attach"`` return value) to flip ``spectating`` to ``False`` in
     ``app.py::_run_play`` on a successful daemon attach; ``cockpit.
     control_seat``'s own "attached"/"Human" rendering is that same WO's
-    lane-B slice, landing alongside this one.
+    lane-B slice, landing alongside this one. The chord itself is
+    **Ctrl-A**, not `M` -- WO-P5-061-ENTRY (project owner ruling,
+    2026-07-25) moved it off `M` so bare `M` stays TradeWars' own Move
+    command, unintercepted, while attached.
 
     Esc ends the binding and returns to the launcher — clean close, not a suspend.
     """
@@ -730,26 +748,30 @@ class PlayShellScreen:
         # the daemon's own wire-reported app/human/spectate ``status["mode"]``
         # (a distinct, DAEMON-GLOBAL fact this instance never IS "app").
         # Defaults ``True`` (pre-attach). PWO-056 (WO-P4-056, "attach from
-        # cockpit") flips this to ``False`` the moment the human's `M`
-        # keypress (canon `mode-line-and-teach-controls.md:40-47`, the
-        # App<->Human control-switch key) takes the daemon's Human control
-        # lock -- see ``handle_key``'s own ``"attach"`` return value and
-        # ``app.py::_run_play``'s attach/forward/release wiring, which owns
-        # the actual daemon round trip. This class itself still has no
-        # send-capable call or symbol of its own (``tests/
-        # test_spectate_no_send.py``'s guards) -- it only ever REPORTS the
-        # human's intent (``"attach"``) for ``app.py`` to act on.
+        # cockpit") flips this to ``False`` the moment the human's Ctrl-A
+        # keypress (canon `mode-line-and-teach-controls.md:40-47`'s App<->
+        # Human control-switch key -- moved off `M` onto Ctrl-A by WO-P5-
+        # 061-ENTRY, project owner ruling 2026-07-25) takes the daemon's
+        # Human control lock -- see ``handle_key``'s own ``"attach"``
+        # return value and ``app.py::_run_play``'s attach/forward/release
+        # wiring, which owns the actual daemon round trip. This class
+        # itself still has no send-capable call or symbol of its own
+        # (``tests/test_spectate_no_send.py``'s guards) -- it only ever
+        # REPORTS the human's intent (``"attach"``) for ``app.py`` to act
+        # on.
         self.spectating: bool = True
         # WO-P5-060 lane B: honest attach-state truth for the control-strip's
         # App/Human badge, mirroring `spectating`'s own plain-bool shape --
         # `app.py::_run_play` is the ONLY writer (attach success, the Ctrl-]
-        # detach branch, and the broken-wire fallback all set this alongside
-        # `spectating`, never independently). Distinct from `not spectating`:
-        # this WO's own call-site fix stops deriving `attached` from
-        # `spectating`'s negation (PWO-056's interim shape) so the two can
-        # eventually diverge for a real third App state without a silent
-        # coupling bug. Defaults `False` (pre-attach, matching `spectating`'s
-        # own pre-attach default of `True`).
+        # detach branch, the Ctrl-A App-hold release branch, and the
+        # broken-wire fallback all set this alongside `spectating`, never
+        # independently). Distinct from `not spectating`: this WO's own
+        # call-site fix stops deriving `attached` from `spectating`'s
+        # negation (PWO-056's interim shape) so the two diverge for the
+        # real third App state (App-hold: both `False`, reachable via
+        # Ctrl-A as of WO-P5-061-ENTRY) without a silent coupling bug.
+        # Defaults `False` (pre-attach, matching `spectating`'s own
+        # pre-attach default of `True`).
         self.attached: bool = False
         self._now_fn = now_fn  # WO-P3-038 -- resolved to time.monotonic at draw() time when unset
         # LOGS newest-row flash (WO-P3-041): content-identity tracking across
@@ -1294,19 +1316,20 @@ class PlayShellScreen:
         # liveness cluster, right-aligned (unchanged), and the honest seat
         # label on the left, filling whatever room remains there --
         # `cockpit.control_seat.SPECTATE_LABEL` while spectating (PWO-055),
-        # `MANUAL_LABEL` ("MANUAL — YOU HAVE CONTROL") once `M` has taken
-        # the Human lock (PWO-056), or `APP_LABEL` when neither is true
-        # (WO-P5-060 -- not reachable through this screen's own wiring
-        # today, since `app.py` always sets `attached`/`spectating` to
-        # opposite values; see `control_seat`'s own module docstring).
+        # `MANUAL_LABEL` ("MANUAL — YOU HAVE CONTROL") once Ctrl-A has
+        # taken the Human lock (PWO-056; chord moved from `M` to Ctrl-A per
+        # WO-P5-061-ENTRY), or `APP_LABEL` when neither is true (WO-P5-060
+        # -- now genuinely reachable through this screen's own wiring, both
+        # as the daemon's own standing default and via Ctrl-A's Human->
+        # App-hold leg, WO-P5-061-ENTRY; see `control_seat`'s own module
+        # docstring).
         # `attached=self.attached` below is this WO's own call-site fix:
         # PWO-056's interim `attached=not self.spectating` derivation is
         # replaced with the REAL per-instance state `app.py::_run_play` now
-        # sets directly (attach success, Ctrl-] detach, and the broken-wire
-        # fallback all set `self.attached` alongside `self.spectating`,
-        # never coupled through negation) -- honest state, not a derived
-        # proxy, and the seam a genuine third App state (PWO-061's `M`
-        # switch) will eventually need. `compose_control_strip_segments`
+        # sets directly (attach success, Ctrl-] detach, Ctrl-A App-hold
+        # release, and the broken-wire fallback all set `self.attached`
+        # alongside `self.spectating`, never coupled through negation) --
+        # honest state, not a derived proxy. `compose_control_strip_segments`
         # (WO-P5-060) replaces the flat-string `compose_control_strip_line`
         # call here so the mode-badge chip can carry its OWN reverse-video+
         # tone attr (`_control_strip_segment_attr`) distinct from the row's
@@ -1359,19 +1382,30 @@ class PlayShellScreen:
 
         ``"attach"`` (PWO-056, WO-P4-056) is a pure INTENT signal -- this
         class has no send-capable call or symbol of its own (``tests/
-        test_spectate_no_send.py``'s guards). `M` is canon's single
-        App<->Human control-switch key (`mode-line-and-teach-controls.md:
-        40-47`); this cockpit's own standing state is Spectate, not App --
-        canon does not define what `M` does FROM Spectate (a flagged gap,
-        see this WO's own STATUS), so this signals the spectate->Human leg
-        only. ``app.py::_run_play`` is what actually takes the daemon's
-        Human control lock and flips ``self.spectating``.
+        test_spectate_no_send.py``'s guards). Ctrl-A (``MODE_KEY``, ASCII
+        1, defined at module scope above -- the ONE place this keycode is
+        assigned; `app.py` imports it from here rather than defining its
+        own, so the two call sites can never silently drift onto
+        different keycodes) is the Mode chord (ADR-002, Accepted
+        2026-07-25, `canon/ADR/002-mode-chord-ctrl-a.md`; implemented
+        here per WO-P5-061-ENTRY), superseding an earlier `M` draft
+        specifically so bare `M` stays free as TradeWars' own Move
+        command while attached: no single printable key may ever be
+        Mode. This method is only ever reached for Ctrl-A while NOT
+        attached (`app.py::_run_play` intercepts it itself, earlier,
+        whenever it IS attached), so returning ``"attach"`` here
+        unconditionally already covers BOTH legs of the toggle --
+        Spectate->Human and App-hold->Human -- through the one existing
+        attach call site; the Human->App-hold leg is `app.py`'s own new
+        branch, not this method's. ``app.py::_run_play`` is what actually
+        takes the daemon's Human control lock and flips
+        ``self.spectating``/``self.attached``.
         """
         if key == 27:  # Esc — end binding, return to launcher
             return "back"
         if key in (ord("q"), ord("Q")):
             return "quit"
-        if key in (ord("M"), ord("m")):
+        if key == MODE_KEY:
             return "attach"
         return None
 

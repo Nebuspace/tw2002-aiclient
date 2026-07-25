@@ -11,6 +11,7 @@ from tw2002_aiclient.screens import (
     BankViewScreen,
     CreateFormScreen,
     LauncherScreen,
+    MODE_KEY,
     PlayShellScreen,
     ProfileRow,
 )
@@ -141,6 +142,21 @@ def _run_create(stdscr: curses.window) -> str:
 # (WO-P4-057) -- distinct from Esc, which stays the interim safety exit.
 _DETACH_KEY = 29
 
+# Ctrl-A (ASCII 1) is the Mode chord -- ADR-002 (Accepted 2026-07-25,
+# `canon/ADR/002-mode-chord-ctrl-a.md`), implemented here per its own
+# explicit call-out (WO-P5-061-ENTRY): toggles the seat between App-hold
+# and Human in BOTH directions. Deliberately NOT a printable key: while
+# attached, bare `M` is TradeWars' own Move command and must reach the
+# game untouched -- "no single printable key may ever be Mode" (the ADR's
+# own words, since every printable belongs to the game's alphabet).
+# Distinct from Ctrl-] just above: Ctrl-] always lands on Spectate,
+# Ctrl-A always lands on App-hold. `MODE_KEY` itself is imported from
+# `screens.py` (see this module's own top import block) rather than
+# redefined here -- ONE keycode, ONE definition, so this attached-branch
+# intercept and `PlayShellScreen.handle_key`'s own Ctrl-A check can never
+# silently drift onto different keycodes (Samantha review, WO-P5-061-
+# ENTRY follow-up).
+
 # Poll timeout for the GOALS status_provider (Mack finding, HIGH): must stay
 # well under the 1 Hz refresh cadence (app.py's own stdscr.timeout(1000)) so
 # a bound-but-not-accepting daemon socket can never wedge the whole play
@@ -183,11 +199,13 @@ def _daemon_status_provider(run_dir):
 
 def _attempt_attach(sock_path):
     """Take the Human control lock for THIS cockpit instance -- PWO-056
-    (WO-P4-056), canon `mode-line-and-teach-controls.md:40-47`'s single
-    App<->Human `M` control-switch key. This cockpit's own standing state
-    is Spectate, not App (canon does not define what `M` does FROM
-    Spectate -- a flagged gap for the hub, not invented around here); this
-    wires the spectate->Human leg only: ``control_lock.take_human()`` via
+    (WO-P4-056). Canon `mode-line-and-teach-controls.md`'s App<->Human
+    control-switch key is **Ctrl-A** (ADR-002, Accepted 2026-07-25,
+    superseding an earlier `M` draft) so bare `M` stays free for
+    TradeWars' own Move command while attached -- no single printable key
+    may ever double as Mode. This cockpit's own standing state is
+    Spectate, not App; this wires
+    the spectate->Human leg only: ``control_lock.take_human()`` via
     the daemon's existing ``attach`` verb (``session/daemon.py::
     _handle_attach``), never a new lock-taking mechanism of our own.
 
@@ -198,9 +216,9 @@ def _attempt_attach(sock_path):
     test_play_esc_daemon_survival.py``): this is the ONE place
     ``AttachInputConn`` is ever constructed reachable from the product
     cockpit -- called only from ``_run_play`` below, only in reaction to
-    the human's own `M` keypress (``PlayShellScreen.handle_key``'s
-    ``"attach"`` return value), never automatic and never reachable from
-    the read-only spectate default.
+    the human's own Ctrl-A keypress, from either Spectate or App-hold
+    (``PlayShellScreen.handle_key``'s ``"attach"`` return value), never
+    automatic and never reachable from the read-only spectate default.
 
     Returns ``(conn, None)`` on success -- the daemon's ``control_lock.
     mode`` is now ``MODE_HUMAN`` -- or ``(None, error)`` on ANY refusal or
@@ -252,8 +270,10 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
     feed = WatchFeed(run_dir=run_dir)
     feed.start()
     play.viewport_provider = feed.snapshot
-    # PWO-056 (WO-P4-056): the attach connection, once the human's `M`
-    # keypress takes the Human control lock (`_attempt_attach` above).
+    # PWO-056 (WO-P4-056): the attach connection, once the human's Ctrl-A
+    # keypress takes the Human control lock (`_attempt_attach` above; the
+    # chord moved from `M` to Ctrl-A per WO-P5-061-ENTRY, see `MODE_KEY`
+    # imported above from `screens.py`, its single source of truth).
     # `None` here means spectating -- the loop below still routes every
     # key through `play.handle_key`, exactly as before this WO.
     attach_conn = None
@@ -266,18 +286,19 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
             if attach_conn is not None and key != 27:
                 # Attached: canon `mode-line-and-teach-controls.md:42-44`
                 # -- "the human always wins the keyboard" the instant
-                # they're attached -- so every key except Esc and Ctrl-]
-                # (the detach key, handled first below) is a live game
-                # keystroke, forwarded raw over the attach connection,
-                # never intercepted as a cockpit shortcut. `q`/`Q` in
-                # particular are ordinary printable game keystrokes once
-                # attached, NOT a reserved app-quit -- reserving them
-                # would silently take the keyboard away from the human
-                # the moment they typed an otherwise ordinary letter
-                # (Samantha REVISE, WO-P4-056; regression pinned by
-                # tests/test_cockpit_attach.py::
-                # test_run_play_forwards_q_and_shift_q_while_attached_
-                # only_esc_reserved).
+                # they're attached -- so every key except Esc, Ctrl-] (the
+                # detach key), and Ctrl-A (the Mode chord, both handled
+                # first below) is a live game keystroke, forwarded raw
+                # over the attach connection, never intercepted as a
+                # cockpit shortcut. `q`/`Q` -- and, as of WO-P5-061-ENTRY,
+                # plain `M` (TradeWars' own Move command) -- are ordinary
+                # printable game keystrokes once attached, NOT reserved
+                # shortcuts -- reserving them would silently take the
+                # keyboard away from the human the moment they typed an
+                # otherwise ordinary letter (Samantha REVISE, WO-P4-056;
+                # regression pinned by tests/test_cockpit_attach.py::
+                # test_run_play_forwards_q_shift_q_and_bare_m_while_attached_
+                # esc_and_ctrl_a_reserved).
                 #
                 # Esc alone stays reserved as the interim safety exit,
                 # unchanged by this WO: closing `attach_conn` in the
@@ -289,6 +310,23 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                 # (`_DETACH_KEY` above) as the real graceful-detach
                 # affordance (the archive's own `DETACH_KEY`,
                 # `interactive_app.py`), wired next (WO-P4-057).
+                if key == MODE_KEY:
+                    # Ctrl-A: hand the seat to App-hold -- deliberately
+                    # DIFFERENT from Ctrl-]'s Spectate target just below
+                    # (WO-P5-061-ENTRY, project owner ruling). Closing the
+                    # write connection releases the daemon's Human control
+                    # lock via the exact same crash-safe path Ctrl-]/Esc
+                    # already rely on (`daemon.py::_handle_attach`'s own
+                    # `finally: lock.release_human()`, which always lands
+                    # on MODE_APP -- `control_lock.py::release_human`'s
+                    # own docstring: "Idempotent -- always returns to
+                    # MODE_APP") -- never a new wire verb of our own.
+                    attach_conn.close()
+                    attach_conn = None
+                    play.spectating = False
+                    play.attached = False  # App-hold: neither Spectate nor Human
+                    play.status_line = "released to App — autopilot has the seat (Ctrl-A returns to Human)"
+                    continue
                 if key == _DETACH_KEY:
                     # Graceful detach: hand the keyboard back to
                     # Spectate deliberately, distinct from Esc's
@@ -358,7 +396,7 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                         attach_conn = conn
                         play.spectating = False
                         play.attached = True  # WO-P5-060 lane B: honest badge truth, alongside spectating
-                        play.status_line = "attached — you have control (M)"
+                        play.status_line = "attached — you have control (Ctrl-A returns to App)"
                     else:
                         play.status_line = f"attach refused — {error}"
                 continue

@@ -1,9 +1,19 @@
-"""WO-P4-056 lane A -- `M` attaches the cockpit to the daemon's Human
+"""WO-P4-056 lane A -- Ctrl-A attaches the cockpit to the daemon's Human
 control lock (canon `mode-line-and-teach-controls.md:40-47`).
+
+WO-P5-061-ENTRY (project owner ruling, 2026-07-25) moved the Mode chord
+off `M` onto **Ctrl-A** (ASCII 1): `M` is TradeWars' own Move command and
+must reach the game untouched once attached, so no single printable key
+may ever be Mode. Ctrl-A toggles App-hold/Spectate <-> Human in BOTH
+directions -- Spectate/App-hold -> Human via the pre-existing `handle_key`
+`"attach"` path (below), Human -> App-hold via a NEW branch in `app.py`'s
+own attached-key handling (see the dedicated section near the bottom of
+this file). This closes PWO-061 Accept #2 (Human->App entry), previously
+PARKED pending this exact ruling.
 
 Three layers, mirroring `tests/test_spectate_no_send.py`'s own shape:
 
-  1. Pure `PlayShellScreen.handle_key` proof -- `M`/`m` signal INTENT only
+  1. Pure `PlayShellScreen.handle_key` proof -- Ctrl-A signals INTENT only
      (`"attach"`); this class has no daemon I/O of its own (see `tests/
      test_spectate_no_send.py`'s guards) -- `app.py` is what acts on it.
   2. `app._attempt_attach` FakeClient proof against the `fake_daemon`
@@ -15,8 +25,8 @@ Three layers, mirroring `tests/test_spectate_no_send.py`'s own shape:
      duplicated) rooted at a short `TW_RUN_DIR`/`twd.sock` -- the exact
      filename `env.socket_path()` resolves via `TW_RUN_DIR`, so the REAL
      run-dir resolution path is exercised end-to-end, not bypassed.
-     Proves the `M` keypress reaches the daemon, `spectating` flips, the
-     control-strip's SPECTATE chip drops and the `MANUAL_LABEL` badge
+     Proves the Ctrl-A keypress reaches the daemon, `spectating` flips,
+     the control-strip's SPECTATE chip drops and the `MANUAL_LABEL` badge
      appears (``screens.py``'s ``attached=not self.spectating`` wiring),
      an ordinary forwarded keystroke lands in the fake session's
      `raw_sent`, a refusal is surfaced honestly (never silently treated
@@ -26,13 +36,14 @@ Three layers, mirroring `tests/test_spectate_no_send.py`'s own shape:
 Esc/detach is explicitly OUT of scope (WO-P4-057, not built here). These
 tests pin that Esc (27) ALONE keeps its PRE-EXISTING play-shell-exit
 meaning even while attached -- the one interim safety exit this WO relies
-on -- and that EVERY OTHER key, `q`/`Q` included, is a live game keystroke
-once attached: canon `mode-line-and-teach-controls.md:42-44` -- "the
-human always wins the keyboard" -- so reserving ordinary letters would be
-a real loss of control fidelity, not a theoretical one (Samantha REVISE,
-WO-P4-056). A real in-cockpit graceful detach affordance (canon
+on -- and that EVERY OTHER key, `q`/`Q`/`M`/`m` included, is a live game
+keystroke once attached: canon `mode-line-and-teach-controls.md:42-44` --
+"the human always wins the keyboard" -- so reserving ordinary letters
+would be a real loss of control fidelity, not a theoretical one (Samantha
+REVISE, WO-P4-056). A real in-cockpit graceful detach affordance (canon
 `spectate-and-attach.md:350` cites the archive's `Ctrl-]` precedent) is
-WO-P4-057's job, never invented here.
+WO-P4-057's job, never invented here. Ctrl-A itself IS now reserved while
+attached (WO-P5-061-ENTRY) -- the Mode chord, not a game keystroke.
 """
 
 from __future__ import annotations
@@ -72,13 +83,25 @@ def _profile() -> ProfileRow:
 # ---------------------------------------------------------------------------
 
 
-def test_handle_key_m_signals_attach_intent():
+def test_handle_key_ctrl_a_signals_attach_intent():
+    """WO-P5-061-ENTRY: Ctrl-A (ASCII 1) is the RULED Mode chord."""
     screen = PlayShellScreen.__new__(PlayShellScreen)
-    assert screen.handle_key(ord("M")) == "attach"
-    assert screen.handle_key(ord("m")) == "attach"
+    assert screen.handle_key(app.MODE_KEY) == "attach"
+    assert app.MODE_KEY == 1  # pin the literal too, not just the constant
 
 
-def test_handle_key_unrelated_keys_unaffected_by_m_addition():
+def test_handle_key_m_and_shift_m_no_longer_signal_attach_intent():
+    """WO-P5-061-ENTRY corollary: no single printable key may ever be
+    Mode -- `M`/`m` must NOT return `"attach"` anymore. This is the
+    behavior change that frees bare `M` to reach the game untouched as
+    TradeWars' own Move command once attached (see the dedicated
+    attached-`M`-forwards regression below)."""
+    screen = PlayShellScreen.__new__(PlayShellScreen)
+    assert screen.handle_key(ord("M")) is None
+    assert screen.handle_key(ord("m")) is None
+
+
+def test_handle_key_unrelated_keys_unaffected_by_ctrl_a_addition():
     screen = PlayShellScreen.__new__(PlayShellScreen)
     assert screen.handle_key(27) == "back"
     assert screen.handle_key(ord("q")) == "quit"
@@ -213,7 +236,8 @@ def _short_run_dir() -> Path:
     return Path(tempfile.mkdtemp(prefix="twd-attach-"))
 
 
-def test_run_play_m_attaches_forwards_a_keystroke_and_esc_releases(monkeypatch):
+def test_run_play_ctrl_a_attaches_forwards_a_keystroke_and_esc_releases(monkeypatch):
+    """WO-P5-061-ENTRY: Ctrl-A, not `M`, is the attach trigger."""
     run_dir = _short_run_dir()
     daemon = _FakeDaemon(run_dir / "twd.sock")
     daemon.start()
@@ -222,7 +246,7 @@ def test_run_play_m_attaches_forwards_a_keystroke_and_esc_releases(monkeypatch):
         _patch_common(monkeypatch)
         captured = _capture_play_instances(monkeypatch)
 
-        stdscr = _RecordingStdscr([ord("M"), ord("d"), 27])
+        stdscr = _RecordingStdscr([app.MODE_KEY, ord("d"), 27])
         result = app._run_play(stdscr, _profile())
         assert result == "back"
 
@@ -250,14 +274,23 @@ def test_run_play_m_attaches_forwards_a_keystroke_and_esc_releases(monkeypatch):
         shutil.rmtree(run_dir, ignore_errors=True)
 
 
-def test_run_play_forwards_q_and_shift_q_while_attached_only_esc_reserved(monkeypatch):
-    """Regression pin (Samantha REVISE, WO-P4-056): canon `mode-line-and-
-    teach-controls.md:42-44` -- "the human always wins the keyboard" the
-    instant they're attached, so `q`/`Q` are ordinary game keystrokes once
-    attached, not a reserved app-quit shortcut. Esc (27) alone is the
-    interim safety exit; the real detach affordance is WO-P4-057's
-    (`spectate-and-attach.md:350` cites the archive's `Ctrl-]` precedent
-    as what it should build toward, not `q`/`Q`)."""
+def test_run_play_forwards_q_shift_q_and_bare_m_while_attached_esc_and_ctrl_a_reserved(monkeypatch):
+    """Regression pin (Samantha REVISE, WO-P4-056), EXTENDED by WO-P5-061-
+    ENTRY: canon `mode-line-and-teach-controls.md:42-44` -- "the human
+    always wins the keyboard" the instant they're attached -- so `q`/`Q`
+    are ordinary game keystrokes once attached, not a reserved app-quit
+    shortcut, and (as of WO-P5-061-ENTRY) bare `M`/`m` are ALSO ordinary
+    game keystrokes -- TradeWars' own Move command -- never intercepted
+    while attached. This is the SAME `app.py:362-363` byte-forward branch
+    `q`/`Q` already took (`0 <= key < 256`), unchanged by this WO -- a
+    PRE-EXISTING fact, not new code; pinned here rather than rebuilt.
+
+    This test's own former name (`..._only_esc_reserved`) became FALSE the
+    moment Ctrl-A was carved out as a second reserved key (WO-P5-061-
+    ENTRY) -- renamed here, honestly, rather than left stale. Esc (27) and
+    Ctrl-A (the Mode chord) are now BOTH reserved while attached; Ctrl-]
+    (detach) stays reserved too, proven by the dedicated detach suite
+    below, not re-proven here."""
     run_dir = _short_run_dir()
     daemon = _FakeDaemon(run_dir / "twd.sock")
     daemon.start()
@@ -265,10 +298,12 @@ def test_run_play_forwards_q_and_shift_q_while_attached_only_esc_reserved(monkey
         monkeypatch.setenv("TW_RUN_DIR", str(run_dir))
         _patch_common(monkeypatch)
 
-        stdscr = _RecordingStdscr([ord("M"), ord("q"), ord("Q"), 27])
+        stdscr = _RecordingStdscr(
+            [app.MODE_KEY, ord("q"), ord("Q"), ord("M"), ord("m"), 27]
+        )
         result = app._run_play(stdscr, _profile())
         assert result == "back"
-        assert daemon.session.raw_sent == [b"q", b"Q"]
+        assert daemon.session.raw_sent == [b"q", b"Q", b"M", b"m"]
     finally:
         daemon.stop()
         shutil.rmtree(run_dir, ignore_errors=True)
@@ -291,7 +326,7 @@ def test_run_play_forwards_backspace_in_every_raw_form_as_canonical_bs(monkeypat
         _patch_common(monkeypatch)
 
         stdscr = _RecordingStdscr(
-            [ord("M"), curses.KEY_BACKSPACE, 127, 8, 27]
+            [app.MODE_KEY, curses.KEY_BACKSPACE, 127, 8, 27]
         )
         result = app._run_play(stdscr, _profile())
         assert result == "back"
@@ -306,8 +341,8 @@ def test_run_play_attach_refusal_is_honest_not_silent_success(monkeypatch):
     daemon = _FakeDaemon(run_dir / "twd.sock")
     daemon.start()
     try:
-        # Pre-attach from OUTSIDE the cockpit -- the cockpit's own M press
-        # must be refused, not silently treated as success.
+        # Pre-attach from OUTSIDE the cockpit -- the cockpit's own Ctrl-A
+        # press must be refused, not silently treated as success.
         blocker = AttachInputConn(daemon.sock_path)
         assert blocker.connect() is True
 
@@ -315,7 +350,7 @@ def test_run_play_attach_refusal_is_honest_not_silent_success(monkeypatch):
         _patch_common(monkeypatch)
         captured = _capture_play_instances(monkeypatch)
 
-        stdscr = _RecordingStdscr([ord("M"), 27])
+        stdscr = _RecordingStdscr([app.MODE_KEY, 27])
         result = app._run_play(stdscr, _profile())
         assert result == "back"
 
@@ -359,7 +394,7 @@ def test_run_play_broken_attach_connection_falls_back_to_spectate_honestly(monke
     _patch_common(monkeypatch)
     captured = _capture_play_instances(monkeypatch)
 
-    stdscr = _RecordingStdscr([ord("M"), ord("d"), 27])
+    stdscr = _RecordingStdscr([app.MODE_KEY, ord("d"), 27])
     result = app._run_play(stdscr, _profile())
     assert result == "back"
 
@@ -525,9 +560,9 @@ def test_detach_key_flips_spectating_true_and_signals_detach_and_releases_lock(m
         assert _wait_until(lambda: bool(captured)), "PlayShellScreen was never constructed"
         play = captured[-1]
 
-        stdscr.push(ord("M"))
-        assert _wait_until(lambda: play.spectating is False), "M never attached"
-        assert _wait_until(lambda: play.attached is True), "M never set attached True"
+        stdscr.push(app.MODE_KEY)
+        assert _wait_until(lambda: play.spectating is False), "Ctrl-A never attached"
+        assert _wait_until(lambda: play.attached is True), "Ctrl-A never set attached True"
         assert daemon.control_lock.mode == MODE_HUMAN
 
         stdscr.push(DETACH_KEY)
@@ -567,7 +602,7 @@ def test_detach_then_fresh_attach_succeeds_proving_lock_released(monkeypatch):
         assert _wait_until(lambda: bool(captured))
         play = captured[-1]
 
-        stdscr.push(ord("M"))
+        stdscr.push(app.MODE_KEY)
         assert _wait_until(lambda: play.spectating is False)
 
         stdscr.push(DETACH_KEY)
@@ -588,10 +623,10 @@ def test_detach_then_fresh_attach_succeeds_proving_lock_released(monkeypatch):
             "the probe's own close should release the lock again"
         )
 
-        # And the cockpit's own second `M`, through the real product path,
-        # succeeds too -- end to end, not just at the daemon.
-        stdscr.push(ord("M"))
-        assert _wait_until(lambda: play.spectating is False), "re-attach via M never succeeded"
+        # And the cockpit's own second Ctrl-A, through the real product
+        # path, succeeds too -- end to end, not just at the daemon.
+        stdscr.push(app.MODE_KEY)
+        assert _wait_until(lambda: play.spectating is False), "re-attach via Ctrl-A never succeeded"
         assert _wait_until(lambda: "attached" in play.status_line.lower())
 
         stdscr.push(27)
@@ -619,7 +654,7 @@ def test_no_send_after_detach_and_keys_route_through_handle_key_again(monkeypatc
         assert _wait_until(lambda: bool(captured))
         play = captured[-1]
 
-        stdscr.push(ord("M"))
+        stdscr.push(app.MODE_KEY)
         assert _wait_until(lambda: play.spectating is False)
 
         stdscr.push(ord("d"))  # baseline forwarded traffic while attached
@@ -665,7 +700,7 @@ def test_double_detach_is_a_safe_no_op(monkeypatch):
         assert _wait_until(lambda: bool(captured))
         play = captured[-1]
 
-        stdscr.push(ord("M"))
+        stdscr.push(app.MODE_KEY)
         assert _wait_until(lambda: play.spectating is False)
 
         stdscr.push(DETACH_KEY)
@@ -719,7 +754,7 @@ def test_detach_after_broken_wire_fallback_is_also_a_safe_no_op(monkeypatch, tmp
     _patch_common(monkeypatch)
     captured = _capture_play_instances(monkeypatch)
 
-    stdscr = _RecordingStdscr([ord("M"), ord("d"), DETACH_KEY, 27])
+    stdscr = _RecordingStdscr([app.MODE_KEY, ord("d"), DETACH_KEY, 27])
     result = app._run_play(stdscr, _profile())
     assert result == "back"
 
@@ -749,12 +784,12 @@ def test_esc_is_not_detach_still_ends_the_binding_via_finally_release(monkeypatc
         _patch_common(monkeypatch)
         captured = _capture_play_instances(monkeypatch)
 
-        stdscr = _RecordingStdscr([ord("M"), 27])
+        stdscr = _RecordingStdscr([app.MODE_KEY, 27])
         result = app._run_play(stdscr, _profile())
         assert result == "back"
 
         play = captured[-1]
-        # Esc's own status_line is still whatever the earlier `M` set --
+        # Esc's own status_line is still whatever the earlier Ctrl-A set --
         # never overwritten by a detach-style message, because
         # DETACH_KEY's branch never ran.
         assert "attached" in play.status_line.lower()
@@ -780,7 +815,7 @@ def test_control_strip_chip_restores_to_spectate_after_detach(monkeypatch):
         monkeypatch.setenv("TW_RUN_DIR", str(run_dir))
         _patch_common(monkeypatch)
 
-        stdscr = _RecordingStdscr([ord("M"), DETACH_KEY, 27])
+        stdscr = _RecordingStdscr([app.MODE_KEY, DETACH_KEY, 27])
         result = app._run_play(stdscr, _profile())
         assert result == "back"
 
@@ -815,7 +850,7 @@ def test_watchfeed_survives_detach_still_running_and_provider_still_bound(monkey
             "WatchFeed never came up before the drive could proceed"
         )
 
-        stdscr.push(ord("M"))
+        stdscr.push(app.MODE_KEY)
         assert _wait_until(lambda: play.spectating is False)
 
         stdscr.push(DETACH_KEY)
@@ -847,13 +882,17 @@ def test_watchfeed_survives_detach_still_running_and_provider_still_bound(monkey
 # attached=False` -- the 060 strict gate's one legitimate case) is a real,
 # correctly-behaving client state and pin every ruled transition around it.
 #
-# The Human->App-hold ENTRY trigger (Accept #2) is PARKED pending a Max
-# ruling -- nothing below builds, reserves a key, or invents a UI path for
-# it. Every test that needs to START in App-hold gets there the same way:
-# driving `play.spectating`/`play.attached` directly, exactly like the
-# pre-existing `test_control_strip_transitions_spectate_manual_and_back`
-# above already does for its own spectate<->manual walk -- the driven state
-# is the honest mechanism, not a claim that a real keypress reaches it today.
+# The Human->App-hold ENTRY trigger (Accept #2) was PARKED pending a
+# project owner ruling on the `M`-vs-Move conflict -- CLOSED by WO-P5-061-
+# ENTRY (2026-07-25, Ctrl-A), proven in the dedicated section below this
+# one. The tests immediately below still isolate the App-hold->Human LEG
+# by driving `play.spectating`/`play.attached` directly to reach the
+# App-hold starting state, exactly like the pre-existing
+# `test_control_strip_transitions_spectate_manual_and_back` above already
+# does for its own spectate<->manual walk -- that is a deliberate
+# isolation technique (test one leg of the toggle at a time), not a claim
+# that App-hold itself is unreachable by a real keypress; the very next
+# section proves it is.
 # ---------------------------------------------------------------------------
 
 
@@ -876,19 +915,22 @@ def test_app_hold_daemon_seat_truth_default_mode_is_app_not_a_client_fiction():
     assert lock.app_may_send() is True
 
 
-def test_app_hold_m_attaches_to_human_lock_and_manual_chip_renders(monkeypatch):
-    """Accept #1 (WO-P5-061): from App-hold (driven directly -- Accept #2's
-    ENTRY trigger is parked, see this section's own header comment), `M`
-    still reaches the exact same ``_attempt_attach`` path the shipped
-    Spectate->Human leg uses (``test_run_play_m_attaches_forwards_a_
-    keystroke_and_esc_releases`` above): ``PlayShellScreen.handle_key``
-    returns ``"attach"`` for `M`/`m` unconditionally, never gated on
-    ``self.spectating``/``self.attached`` (``screens.py::handle_key``), and
-    ``app.py::_run_play``'s own action handler only checks
-    ``attach_conn is None`` before calling ``_attempt_attach`` -- also
-    state-independent. Pins the daemon-side lock flip AND the rendered
-    MANUAL chip (warn + bold + reverse, the 060 attr path) together, not
-    just the label."""
+def test_app_hold_ctrl_a_attaches_to_human_lock_and_manual_chip_renders(monkeypatch):
+    """Accept #1 (WO-P5-061): from App-hold (driven directly here, exactly
+    as the pre-existing `test_control_strip_transitions_spectate_manual_
+    and_back` drives Spectate<->Human -- the ENTRY trigger for App-hold
+    ITSELF is a separate concern, closed below by WO-P5-061-ENTRY's own
+    dedicated section), Ctrl-A reaches the exact same ``_attempt_attach``
+    path the shipped Spectate->Human leg uses (``test_run_play_ctrl_a_
+    attaches_forwards_a_keystroke_and_esc_releases`` above):
+    ``PlayShellScreen.handle_key`` returns ``"attach"`` for Ctrl-A
+    unconditionally, never gated on ``self.spectating``/``self.attached``
+    (``screens.py::handle_key``), and ``app.py::_run_play``'s own action
+    handler only checks ``attach_conn is None`` before calling
+    ``_attempt_attach`` -- also state-independent. Pins the daemon-side
+    lock flip AND the rendered MANUAL chip (warn + bold + reverse, the 060
+    attr path) together, not just the label. (Renamed from `..._m_
+    attaches_...`: the chord is Ctrl-A now, WO-P5-061-ENTRY.)"""
     run_dir = _short_run_dir()
     daemon = _FakeDaemon(run_dir / "twd.sock")
     daemon.start()
@@ -902,16 +944,17 @@ def test_app_hold_m_attaches_to_human_lock_and_manual_chip_renders(monkeypatch):
         assert _wait_until(lambda: bool(captured)), "PlayShellScreen was never constructed"
         play = captured[-1]
 
-        # Drive to App-hold directly (Accept #2's entry is parked).
+        # Drive to App-hold directly -- this test isolates the App-hold->
+        # Human leg; the ENTRY trigger into App-hold is proven separately.
         play.spectating = False
         play.attached = False
         assert daemon.control_lock.mode == MODE_APP  # daemon-side default, unaffected by the client-only flip
 
-        stdscr.push(ord("M"))
-        assert _wait_until(lambda: play.attached is True), "M never attached from App-hold"
+        stdscr.push(app.MODE_KEY)
+        assert _wait_until(lambda: play.attached is True), "Ctrl-A never attached from App-hold"
         assert _wait_until(lambda: play.spectating is False)
         assert _wait_until(lambda: daemon.control_lock.mode == MODE_HUMAN), (
-            "daemon-side lock never flipped to MODE_HUMAN from the App-hold M press"
+            "daemon-side lock never flipped to MODE_HUMAN from the App-hold Ctrl-A press"
         )
         assert "attached" in play.status_line
 
@@ -931,23 +974,34 @@ def test_app_hold_m_attaches_to_human_lock_and_manual_chip_renders(monkeypatch):
         shutil.rmtree(run_dir, ignore_errors=True)
 
 
-def test_ctrl_bracket_from_app_hold_is_a_no_op_state_unchanged_unruled_edge(monkeypatch):
-    """Accept #4 (WO-P5-061): Ctrl-] FROM App-hold is currently UNRULED --
-    canon `spectate-and-attach.md:100-102` only names Ctrl-] as the
-    detach-while-attached affordance; it says nothing about App-hold (a
-    state canon does not yet define an ENTRY trigger for -- Accept #2,
-    PARKED). This test PINS the current, accidental behavior rather than a
-    designed one: with no attach ever taken, `attach_conn is None`, so
-    `_run_play`'s own `if attach_conn is not None and key != 27:` guard
-    (`app.py:266`) is False and the key falls all the way through to
-    `play.handle_key(29)` -- which has no branch for 29 at all
-    (`screens.py::handle_key` only matches 27/q/Q/M/m) -- returning
-    `None`, an ordinary unmapped-key no-op, identical in mechanism to the
-    already-shipped `test_double_detach_is_a_safe_no_op`'s second Ctrl-]
-    (that one from Spectate, this one from App-hold). If canon later rules
-    a distinct Ctrl-] meaning from App-hold, THIS test's own future
-    failure is the deliberate tripwire that forces the change to be
-    reviewed, not silently absorbed."""
+def test_ctrl_bracket_from_app_hold_is_a_no_op_state_unchanged_deliberately_ruled(monkeypatch):
+    """Accept #4 (WO-P5-061): Ctrl-] FROM App-hold is a DELIBERATE no-op --
+    owner ruling, 2026-07-25 ("Ctrl-] from App-hold = a deliberate no-op.
+    The client stays in App. Do NOT invent a Spectate transition from
+    App-hold."). This test's own PRIOR docstring (pre-ruling) called this
+    behavior UNRULED/accidental and warned that a future canon ruling
+    might require a code change; that framing is now OBSOLETE -- the
+    ruling landed and it matches the behavior already pinned below
+    exactly (no-op, stays App), so ONLY this docstring's justification
+    changes here, not the assertions, not the mechanism, and not the
+    behavior. This is still a DIFFERENT item from Accept #2 (the
+    Human->App-hold ENTRY trigger, CLOSED separately by WO-P5-061-ENTRY
+    via Ctrl-A -- see the dedicated section below this one); this test
+    covers Ctrl-] specifically, not Ctrl-A.
+
+    Mechanism (verified, not just asserted): with no attach ever taken,
+    `attach_conn is None`, so `_run_play`'s own `if attach_conn is not
+    None and key != 27:` guard (`app.py`) is False and the key falls all
+    the way through to `play.handle_key(29)` -- which has no branch for 29
+    at all (`screens.py::handle_key` only matches 27/q/Q/Ctrl-A -- no
+    longer M/m, WO-P5-061-ENTRY) -- returning `None`, an ordinary
+    unmapped-key no-op, identical in mechanism to the already-shipped
+    `test_double_detach_is_a_safe_no_op`'s second Ctrl-] (that one from
+    Spectate, this one from App-hold). Because the ruling already matches
+    this mechanism, NO new code is needed here -- only the honest
+    re-framing above; the ruling explicitly forbids inventing a Spectate
+    transition from App-hold, which this test also continues to guard
+    against (`play.spectating is False` below, unchanged)."""
     run_dir = _short_run_dir()
     daemon = _FakeDaemon(run_dir / "twd.sock")
     daemon.start()
@@ -981,6 +1035,186 @@ def test_ctrl_bracket_from_app_hold_is_a_no_op_state_unchanged_unruled_edge(monk
         assert play.status_line == status_before  # no status mutation either
         assert daemon.control_lock.mode == MODE_APP  # nothing was ever taken
         assert daemon.session.raw_sent == []  # no wire traffic
+    finally:
+        daemon.stop()
+        shutil.rmtree(run_dir, ignore_errors=True)
+
+
+# ---------------------------------------------------------------------------
+# WO-P5-061-ENTRY -- Ctrl-A Mode chord, Human -> App-hold leg. CLOSES
+# Accept #2 (Human->App entry), previously PARKED pending a project owner
+# ruling on the `M`-vs-Move conflict (see this file's own module docstring
+# and the App-hold kernel section above). Mirrors the existing Ctrl-]
+# detach suite's own 7-proof shape, but landing on App-hold instead of
+# Spectate -- the distinguishing behavior from Ctrl-].
+# ---------------------------------------------------------------------------
+
+
+def test_ctrl_a_from_human_releases_to_app_hold_not_spectate(monkeypatch):
+    """Accept #2 (WO-P5-061-ENTRY): Ctrl-A while attached hands the seat to
+    App-hold (`spectating=False, attached=False`) -- NOT Spectate, the
+    distinguishing behavior from Ctrl-]/DETACH_KEY (`test_detach_key_flips_
+    spectating_true_and_signals_detach_and_releases_lock` above). Proves
+    both the client-side field pair AND the daemon-side lock release back
+    to MODE_APP, through the exact same crash-safe path Ctrl-]/Esc already
+    use (`control_lock.py::release_human`'s own docstring: "Idempotent --
+    always returns to MODE_APP")."""
+    run_dir = _short_run_dir()
+    daemon = _FakeDaemon(run_dir / "twd.sock")
+    daemon.start()
+    try:
+        monkeypatch.setenv("TW_RUN_DIR", str(run_dir))
+        _patch_common(monkeypatch)
+        captured = _capture_play_instances(monkeypatch)
+
+        stdscr = _QueueStdscr()
+        thread, result_box = _drive_run_play_in_thread(stdscr, _profile())
+        assert _wait_until(lambda: bool(captured))
+        play = captured[-1]
+
+        stdscr.push(app.MODE_KEY)
+        assert _wait_until(lambda: play.attached is True), "Ctrl-A never attached"
+        assert _wait_until(lambda: daemon.control_lock.mode == MODE_HUMAN)
+
+        stdscr.push(app.MODE_KEY)
+        assert _wait_until(lambda: play.attached is False), "Ctrl-A never released to App-hold"
+        assert _wait_until(lambda: play.spectating is False), (
+            "Ctrl-A release must land on App-hold (spectating False), not Spectate"
+        )
+        assert _wait_until(lambda: "app" in play.status_line.lower()), (
+            f"status line never signaled App-hold: {play.status_line!r}"
+        )
+        assert "detach" not in play.status_line.lower()  # distinct from Ctrl-]'s own status text
+        assert _wait_until(lambda: daemon.control_lock.mode == MODE_APP), (
+            f"daemon-side lock never released after Ctrl-A (still {daemon.control_lock.mode!r})"
+        )
+
+        stdscr.push(ord("q"))  # App-hold routes back through handle_key -- deterministic sync point
+        thread.join(timeout=3.0)
+        assert result_box == ["quit"]
+    finally:
+        daemon.stop()
+        shutil.rmtree(run_dir, ignore_errors=True)
+
+
+def test_ctrl_a_release_then_fresh_attach_succeeds_proving_lock_released(monkeypatch):
+    """Mirrors `test_detach_then_fresh_attach_succeeds_proving_lock_
+    released` above -- the strongest form of "the lock is genuinely free":
+    an independent, freshly-constructed `_attempt_attach` succeeds
+    immediately after a Ctrl-A release, not just an un-raised assertion.
+    Also proves the toggle is genuinely BIDIRECTIONAL and repeatable (the
+    ruling's own words) -- a THIRD Ctrl-A, through the real product path,
+    re-attaches again after the release."""
+    run_dir = _short_run_dir()
+    daemon = _FakeDaemon(run_dir / "twd.sock")
+    daemon.start()
+    try:
+        monkeypatch.setenv("TW_RUN_DIR", str(run_dir))
+        _patch_common(monkeypatch)
+        captured = _capture_play_instances(monkeypatch)
+
+        stdscr = _QueueStdscr()
+        thread, result_box = _drive_run_play_in_thread(stdscr, _profile())
+        assert _wait_until(lambda: bool(captured))
+        play = captured[-1]
+
+        stdscr.push(app.MODE_KEY)
+        assert _wait_until(lambda: play.attached is True)
+
+        stdscr.push(app.MODE_KEY)
+        assert _wait_until(lambda: play.attached is False)
+        assert _wait_until(lambda: daemon.control_lock.mode == MODE_APP)
+
+        fresh_conn, fresh_error = app._attempt_attach(daemon.sock_path)
+        assert fresh_conn is not None, (
+            f"reattach refused -- lock was never released ({fresh_error!r})"
+        )
+        fresh_conn.close()
+        assert _wait_until(lambda: daemon.control_lock.mode == MODE_APP), (
+            "the probe's own close should release the lock again"
+        )
+
+        # And the cockpit's own THIRD Ctrl-A, through the real product
+        # path, re-attaches too -- proving the toggle is genuinely
+        # bidirectional and repeatable, not a one-shot mechanism.
+        stdscr.push(app.MODE_KEY)
+        assert _wait_until(lambda: play.attached is True), "re-attach via Ctrl-A never succeeded"
+        assert _wait_until(lambda: daemon.control_lock.mode == MODE_HUMAN)
+
+        stdscr.push(27)
+        thread.join(timeout=3.0)
+        assert result_box == ["back"]
+    finally:
+        daemon.stop()
+        shutil.rmtree(run_dir, ignore_errors=True)
+
+
+def test_ctrl_a_release_no_further_send_and_keys_route_through_handle_key_again(monkeypatch):
+    """Mirrors `test_no_send_after_detach_and_keys_route_through_handle_
+    key_again` above -- no wire traffic leaks after Ctrl-A hands the seat
+    to App-hold, and the next keys are ordinary `handle_key` routing
+    again (App-hold has no send path of its own -- `tests/
+    test_spectate_no_send.py`'s guards cover this class already, not
+    re-proven here)."""
+    run_dir = _short_run_dir()
+    daemon = _FakeDaemon(run_dir / "twd.sock")
+    daemon.start()
+    try:
+        monkeypatch.setenv("TW_RUN_DIR", str(run_dir))
+        _patch_common(monkeypatch)
+        captured = _capture_play_instances(monkeypatch)
+
+        stdscr = _QueueStdscr()
+        thread, result_box = _drive_run_play_in_thread(stdscr, _profile())
+        assert _wait_until(lambda: bool(captured))
+        play = captured[-1]
+
+        stdscr.push(app.MODE_KEY)
+        assert _wait_until(lambda: play.attached is True)
+
+        stdscr.push(ord("d"))  # baseline forwarded traffic while attached
+        assert _wait_until(lambda: daemon.session.raw_sent == [b"d"])
+
+        stdscr.push(app.MODE_KEY)
+        assert _wait_until(lambda: play.attached is False)
+        assert _wait_until(lambda: daemon.control_lock.mode == MODE_APP)
+
+        # Two keys, unmapped-then-quit -- same deterministic-sync idiom as
+        # the Ctrl-] detach suite's own proof 3 above.
+        stdscr.push(ord("x"))  # unmapped -- a safe no-op probe
+        stdscr.push(ord("q"))  # handle_key's quit shortcut
+        thread.join(timeout=3.0)
+        assert result_box == ["quit"]
+        assert daemon.session.raw_sent == [b"d"], (
+            f"unexpected post-release wire traffic: {daemon.session.raw_sent!r}"
+        )
+    finally:
+        daemon.stop()
+        shutil.rmtree(run_dir, ignore_errors=True)
+
+
+def test_app_hold_chip_renders_after_ctrl_a_release_from_human(monkeypatch):
+    """The paint-side counterpart: once Ctrl-A hands the seat back to
+    App-hold, the control strip shows the APP chip, not MANUAL/SPECTATE --
+    mirrors `test_control_strip_chip_restores_to_spectate_after_detach`'s
+    own shape for the Ctrl-] leg, proving the App-hold leg paints
+    correctly too, not just the in-memory field pair."""
+    run_dir = _short_run_dir()
+    daemon = _FakeDaemon(run_dir / "twd.sock")
+    daemon.start()
+    try:
+        monkeypatch.setenv("TW_RUN_DIR", str(run_dir))
+        _patch_common(monkeypatch)
+
+        stdscr = _RecordingStdscr([app.MODE_KEY, app.MODE_KEY, 27])
+        result = app._run_play(stdscr, _profile())
+        assert result == "back"
+
+        frame = _control_strip_frame(stdscr, FULL_ROWS, FULL_COLS)
+        joined = "".join(text for text, _attr in frame)
+        assert APP_LABEL in joined
+        assert MANUAL_LABEL not in joined
+        assert "SPECTATE" not in joined
     finally:
         daemon.stop()
         shutil.rmtree(run_dir, ignore_errors=True)

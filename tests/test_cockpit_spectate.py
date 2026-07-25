@@ -296,8 +296,8 @@ def test_toggling_spectating_false_alone_now_renders_app_not_liveness_only(monke
 def test_toggling_spectating_false_and_attached_true_renders_manual(monkeypatch):
     """The genuine "switch to Human" wiring proof WO-P5-060's own screens.py
     landing enables: both flags set independently and explicitly, the way
-    the real `M`/attach call sites do (`self.attached` is no longer derived
-    from `self.spectating`)."""
+    the real Ctrl-A/attach call sites do (WO-P5-061-ENTRY moved the chord
+    off `M`; `self.attached` is no longer derived from `self.spectating`)."""
     from tw2002_aiclient import screens as screens_mod
 
     monkeypatch.setattr(screens_mod.curses, "has_colors", lambda: False)
