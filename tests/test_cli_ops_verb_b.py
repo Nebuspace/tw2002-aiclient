@@ -32,6 +32,7 @@ class FakeSession:
         self._settle_reason = settle_reason
         self._settle_elapsed = settle_elapsed
         self.sent = []
+        self.settle_calls = []
 
     def render(self):
         return list(self._rows)
@@ -52,7 +53,17 @@ class FakeSession:
         self.last_sent = "<redacted>" if secret else text
         self.last_sender = sender
 
-    def wait_settle(self, wait_prompt=None, timeout=8.0, debounce_ms=350):
+    def wait_settle(self, wait_prompt=None, timeout=8.0, debounce_ms=350, prompt_requires_new_bytes=False):
+        # WO-DO-SETTLE-RX-GUARD: `prompt_requires_new_bytes` mirrors the
+        # real Session.wait_settle signature -- `do` passes it on every
+        # call. Recorded rather than acted on: this double returns a
+        # canned settle (no grid, no byte timeline, so it could not honour
+        # the guard even in principle), and the assertion that `do` sets
+        # it lives below. The guard's BEHAVIOUR is proven against a real
+        # Session in tests/test_do_settle_rx_guard.py.
+        self.settle_calls.append(
+            {"wait_prompt": wait_prompt, "prompt_requires_new_bytes": prompt_requires_new_bytes}
+        )
         if wait_prompt is not None:
             import re
 
@@ -161,6 +172,26 @@ def test_protocol_do_send_read_fake_session():
     read = protocol.dispatch(session, "read", {}, server)
     assert read["ok"] is True
     assert read["settled_reason"] == "idle"
+
+
+def test_do_asks_for_the_post_send_guard_and_read_does_not():
+    """WO-DO-SETTLE-RX-GUARD wiring: `do` is the only verb whose settle
+    follows a send of its own, so it is the only one that may require new
+    bytes before accepting a `wait_prompt` match. `read` sends nothing —
+    its t=0 return on a prompt that is already there is its CONTRACT, and
+    passing the guard there would be introducing a bug, not removing one.
+
+    Pinned as a pair on purpose: the negative half is what stops a later
+    "apply it everywhere for consistency" pass. What the flag DOES (a
+    real screen, a real byte timeline, real timing) is proven in
+    tests/test_do_settle_rx_guard.py — this only proves it is asked for
+    at the right call site and nowhere else."""
+    session = FakeSession(_MAIN)
+    protocol.dispatch(session, "do", {"input": "d", "wait_prompt": "Command"}, FakeServer())
+    assert session.settle_calls[-1]["prompt_requires_new_bytes"] is True
+
+    protocol.dispatch(session, "read", {"wait_prompt": "Command"}, FakeServer())
+    assert session.settle_calls[-1]["prompt_requires_new_bytes"] is False
 
 
 def test_protocol_do_refuses_when_human_holds_lock():

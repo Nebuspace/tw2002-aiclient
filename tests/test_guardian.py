@@ -97,9 +97,18 @@ class ReconnectFakeSession:
     def render_text(self, rows=None):
         return "\n".join(rows) if rows is not None else self._steps[self._i]["screen"]
 
-    def wait_settle(self, wait_prompt=None, timeout=8.0, debounce_ms=350):
+    def wait_settle(self, wait_prompt=None, timeout=8.0, debounce_ms=350, prompt_requires_new_bytes=False):
+        # WO-DO-SETTLE-RX-GUARD: threaded through rather than dropped.
+        # This double DELEGATES to the real `wait_for_settle` (it only
+        # adds the step-advance side effect), so silently discarding a
+        # settle parameter here would make it quietly lie about the
+        # primitive it is standing in for. No caller in this file sets it.
         result = wait_for_settle(
-            self, wait_prompt=wait_prompt, timeout_s=timeout, debounce_ms=debounce_ms
+            self,
+            wait_prompt=wait_prompt,
+            timeout_s=timeout,
+            debounce_ms=debounce_ms,
+            prompt_requires_new_bytes=prompt_requires_new_bytes,
         )
         step = self._steps[self._i]
         if step.get("auto_advance") and self._i < len(self._steps) - 1:

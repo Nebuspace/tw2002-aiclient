@@ -2,6 +2,8 @@
 
 After a send, the screen is "settled" on the FIRST of:
   (a) prompt  — --wait-prompt regex matches the rendered screen
+                (optionally ALSO requiring >=1 byte since the wait began,
+                via `prompt_requires_new_bytes` — see below)
   (b) idle    — no new bytes for debounce_ms, AND >=1 byte arrived since
                 the send (so we never call a screen "settled" before the
                 server has said anything at all)
@@ -93,6 +95,72 @@ a `wait_prompt` written to span rows (`--wait-prompt` is
 operator-supplied and free-form) matches under `"screen"` and can only
 ever time out under `"prompt_line"`, turning a false settle into a hang.
 Both halves are pinned as tests. Opt-in until canon rules.
+
+**Stale pre-send prompt match (`prompt_requires_new_bytes`,
+WO-DO-SETTLE-RX-GUARD):** a FOURTH window, orthogonal to the three above
+and to `match_scope` in particular.
+
+The prompt branch below has always been allowed to win at its own t=0,
+with no freshness clause at all -- while the idle branch immediately
+under it has carried one since this module was written (`got_new_bytes`:
+">=1 byte arrived since the wait began, so we never call a screen
+'settled' before the server has said anything"). For a caller that only
+ASKS about the current screen (the `read` verb, which sends nothing at
+all) that asymmetry is correct and load-bearing: "is this prompt there?"
+is answered instantly and truthfully by a prompt that is there. For a
+caller that SENT something first (`do`) it is a false settle, because
+the awaited prompt is routinely the SAME shape as the pre-send prompt --
+`Command [TL=` → `Command [TL=`, which is canon's own worked `tw do`
+example (`canon/architecture/session-engine.md`) and the single most
+common `do` this product issues. That call returned `("prompt", 0.0)`
+before the game had responded at all, handing the App
+`settled_reason: prompt` -- documented as the STRONGEST confirmation
+available, "quiet on a specific, named shape" -- over a screen that had
+not changed.
+
+`match_scope` cannot close this one. The stale-line defect above is
+about WHERE the regex is searched; here the awaited shape genuinely IS
+on the current prompt line, so it matches immediately under BOTH scopes.
+Only a freshness clause rejects it. Conversely this guard does not close
+the stale-line defect either (see the residual note below) -- the two are
+independent and each needs its own fix.
+
+`prompt_requires_new_bytes=True` gives the prompt branch the SAME
+`got_new_bytes` predicate the idle branch already applies, reusing the
+identical `start_rx_count` captured at wait entry rather than a second,
+separately-captured count that could disagree with it. Entry-capture is
+also the most faithful point available: `do` calls this immediately after
+`session.send()` returns, so the floor is "bytes on the wire after ours
+went out" -- bytes that arrived during `send()`'s own pre-write
+anti-hammer pause (a previous command still painting) are correctly
+counted as OLD, which a floor captured before the send would have
+mistaken for a response.
+
+It stays OPT-IN, and `False` remains the default, because the
+match-at-t0 contract is CORRECT for every current caller except `do`:
+`read` asks a read-only question about the screen as it stands;
+`send_and_confirm` applies its own equivalent guard one layer up (see its
+docstring's "Stale pre-send match guard") and relies on the inner wait
+returning the match so it can adjudicate; `login`'s bare settles supply
+no `wait_prompt` at all. Flipping the default would break `read`'s
+contract to fix `do`'s.
+
+Two costs, stated rather than discovered later:
+  1. A `do` whose game legitimately produces NO output now spends its
+     whole budget and returns `timeout` where it used to return `prompt`
+     instantly. That is the point -- `timeout` is canon's bounded "could
+     not confirm", and a `prompt` asserted over zero bytes of evidence is
+     a lie -- but it is a real latency change on that path, including
+     the degenerate zero-byte send (`input=""` with `enter=False`).
+  2. `rx_count` is a BYTE counter, so a single echoed keystroke satisfies
+     the guard while proving nothing about the screen. This is exactly
+     the residual `send_and_confirm`'s own guard has always carried, and
+     it is deliberately matched rather than "improved": what remains
+     after one echoed byte is the stale-LINE question above, whose fix is
+     `match_scope`, not a bigger byte threshold. (A "the render changed"
+     predicate was considered and rejected: a legitimate identical
+     repaint would then never settle, converting a false settle into a
+     genuine hang.)
 """
 
 import re
@@ -160,7 +228,14 @@ def wait_for_settle(
     timeout_s=8.0,
     poll_interval_s=0.04,
     match_scope=MATCH_SCOPE_SCREEN,
+    prompt_requires_new_bytes=False,
 ):
+    """`prompt_requires_new_bytes` gates the prompt branch on the same
+    ">=1 byte since this wait began" predicate the idle branch already
+    applies -- see the module docstring's "Stale pre-send prompt match"
+    section for why it exists, why it is opt-in, and what it does NOT
+    cover. Set it on a wait that FOLLOWS a send of your own; leave it off
+    for a read-only "is this prompt there?" question."""
     start = session.clock()
     start_rx_count = session.rx_count
     debounce_s = debounce_ms / 1000.0
@@ -180,14 +255,39 @@ def wait_for_settle(
     while True:
         now = session.clock()
         elapsed = now - start
+        # ONE freshness reading per poll, shared by both branches below --
+        # so the prompt branch's guard and the idle branch's own clause can
+        # never be satisfied by different notions of "new".
+        #
+        # Hoisting it above the prompt branch (it used to be read after
+        # the match attempt) is behaviour-neutral for the idle branch, not
+        # merely "close enough": a byte landing DURING `match_source()`'s
+        # locked render would be seen by a later read, but it also pushes
+        # `session.last_rx` past the `now` captured at the top of this
+        # poll, making `idle_for` negative -- so it could never have
+        # satisfied the debounce window in that same poll either way.
+        got_new_bytes = session.rx_count > start_rx_count
 
-        if prompt_re is not None and prompt_re.search(match_source()):
+        # Ordered rx-check-first deliberately: when the guard is on and
+        # nothing has arrived yet, this skips `match_source()` entirely,
+        # so a wait that is going to reject the match anyway never pays
+        # for a locked render it cannot use.
+        if (
+            prompt_re is not None
+            and (got_new_bytes or not prompt_requires_new_bytes)
+            and prompt_re.search(match_source())
+        ):
             return "prompt", elapsed
 
+        # Checked AFTER the prompt branch and BEFORE the idle one, exactly
+        # as before: the guard changes WHEN a prompt may win, never
+        # whether the budget still bounds the wait. A guarded wait whose
+        # bytes never arrive falls through to here and returns
+        # `timeout` -- canon's bounded "could not confirm" -- rather than
+        # waiting past it.
         if elapsed >= timeout_s:
             return "timeout", elapsed
 
-        got_new_bytes = session.rx_count > start_rx_count
         idle_for = now - session.last_rx
         if got_new_bytes and idle_for >= debounce_s:
             return "idle", elapsed

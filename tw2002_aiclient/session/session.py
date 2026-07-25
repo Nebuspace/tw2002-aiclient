@@ -267,8 +267,21 @@ class Session:
     def sleep(self, seconds):
         time.sleep(seconds)
 
-    def wait_settle(self, wait_prompt=None, timeout=8.0, debounce_ms=350):
-        return wait_for_settle(self, wait_prompt=wait_prompt, timeout_s=timeout, debounce_ms=debounce_ms)
+    def wait_settle(self, wait_prompt=None, timeout=8.0, debounce_ms=350, prompt_requires_new_bytes=False):
+        """`prompt_requires_new_bytes` is a pure pass-through to
+        `settle.wait_for_settle` -- this method holds no policy of its own
+        and must not acquire any, since `do` (which sets it) and `read`
+        (which must not) reach settle detection through this one door.
+        See that module's "Stale pre-send prompt match" docstring section.
+        Any test double standing in for a Session on the `do` path has to
+        accept this argument too."""
+        return wait_for_settle(
+            self,
+            wait_prompt=wait_prompt,
+            timeout_s=timeout,
+            debounce_ms=debounce_ms,
+            prompt_requires_new_bytes=prompt_requires_new_bytes,
+        )
 
     # -- sending -------------------------------------------------------
 

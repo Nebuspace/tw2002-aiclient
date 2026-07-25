@@ -212,7 +212,14 @@ class FakeAttachSession:
             self.rx_count += 1
             self.last_rx = self.t
 
-    def wait_settle(self, wait_prompt=None, timeout=8.0, debounce_ms=350):
+    def wait_settle(self, wait_prompt=None, timeout=8.0, debounce_ms=350, prompt_requires_new_bytes=False):
+        # WO-DO-SETTLE-RX-GUARD: `prompt_requires_new_bytes` mirrors the
+        # real Session.wait_settle signature -- protocol.py's `do` passes
+        # it on every call, so a double that omitted it would TypeError
+        # the whole verb. Unused here: this stub returns a canned settle
+        # rather than running wait_for_settle, so it has no prompt branch
+        # to guard. The guard's real behaviour is proven against a real
+        # Session in tests/test_do_settle_rx_guard.py.
         return "idle", 0.0
 
     def send(self, text, enter=True, secret=False, sender="app"):

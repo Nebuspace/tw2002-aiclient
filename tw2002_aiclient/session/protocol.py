@@ -196,6 +196,17 @@ def dispatch(session, verb, args, server):
         # WO-P2-OPS-VERB-B: send + wait_settle. Ledger/skill_step cut until
         # those modules land — history ring + last_sender="app" still prove
         # the drive path. wait_prompt is case-sensitive (settle.py HARD RULE).
+        #
+        # WO-DO-SETTLE-RX-GUARD: this is the ONE settle in the protocol
+        # that follows a send of our own, so it is the one that must not
+        # accept a `wait_prompt` the PRE-SEND screen already satisfied —
+        # `Command [TL=` → `Command [TL=` is canon's own worked example
+        # and returned `("prompt", 0.0)` before the game had responded at
+        # all. `prompt_requires_new_bytes=True` gives the prompt branch
+        # the same ">=1 byte since the send" clause the idle branch has
+        # always had. `read` below deliberately does NOT set it: it sends
+        # nothing, so returning immediately on a prompt that is already
+        # there is its correct contract, not the same defect.
         with _driving_dispatch(server) as lock_error:
             if lock_error is not None:
                 return lock_error
@@ -209,6 +220,7 @@ def dispatch(session, verb, args, server):
                     wait_prompt=wait_prompt,
                     timeout=args.get("timeout", 8.0),
                     debounce_ms=args.get("debounce_ms", 350),
+                    prompt_requires_new_bytes=True,
                 )
             except re.error as e:
                 return {"ok": False, "error": f"bad_wait_prompt_regex:{e}"}
