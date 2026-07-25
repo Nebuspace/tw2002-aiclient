@@ -1,4 +1,15 @@
-# TW2002 Community Sources
+---
+type: Doctrine
+title: Server Catalog Sources
+description: Public TWGS directory sources, catalog honesty policies, and verified counts for config/servers.toml and servers.inventory.json — no secrets.
+tags: [doctrine, servers, catalog, community, honesty]
+timestamp: 2026-07-25T21:10:00Z
+---
+
+Public provenance for the operator-facing server address book (`config/servers.toml`) and the
+research inventory (`config/servers.inventory.json`). Nothing here is secret or credentials-bearing.
+Catalog *membership* curation decisions (e.g. whether a dead archive_seed stays offered) are
+operator/product calls — this concept records signals and policy, not a liveness probe.
 
 Reference guide to the public sources used (and planned) for the server catalog
 and future prompt/menu pattern research.  Nothing in this file is secret or

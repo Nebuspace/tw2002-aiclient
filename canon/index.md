@@ -56,12 +56,14 @@ marked _(planned)_ are not yet written; entries marked ✅ written exist on disk
 * [Mode Line & Teach Controls](/surfaces/mode-line-and-teach-controls.md) — The cockpit interaction contract: the App/Human actor indicator, the Ctrl-A Mode chord + A/R/T keys, the operate-the-app control cluster, and how STOP-and-handoff is presented. — ✅ written
 * [Spectate & Attach](/surfaces/spectate-and-attach.md) — The two dedicated human-facing surfaces on the one daemon: watch read-only without touching, or take the live keyboard. — ✅ written
 * [Entry & Profile Selection](/surfaces/entry-and-profile-selection.md) — The pre-cockpit launcher: pick or create a player and choose the game server from the known catalog. — ✅ written
+* [Operator Cold Start](/surfaces/operator-cold-start.md) — Day-to-day cold-start: profiles, secrets placement, Mode/Spectate/Attach chords, run-dir isolation, and stuck-seat recovery. — ✅ written
 * [Visual Language](/surfaces/visual-language.md) — The shared color, glyph, box-drawing, liveness-cue, and responsive-fold dictionary every cockpit surface renders through — the surfaces are the sentences, this is the dictionary. — ✅ written
 
 # Doctrine
 
 * [Alignment & Conduct](/doctrine/alignment-and-conduct.md) — The protective-by-default constitution bounding what any rule may do to other players and what the AI teacher may even propose. — ✅ written
 * [Secrets & Credential Handling](/doctrine/secrets-and-credentials.md) — The non-negotiable discipline for storing, resolving, redacting, and rotating passwords and credentials. — ✅ written
+* [Server Catalog Sources](/doctrine/server-catalog-sources.md) — Public TWGS directory sources, catalog honesty policies, and verified counts for the operator address book. — ✅ written
 * [Action-Safety Guards](/doctrine/action-safety-guards.md) — The concrete byte-level guards that make "no autonomous destructive action" real — enforcing the sovereignty invariants control-and-escalation declares. — ✅ written
 
 # Testing

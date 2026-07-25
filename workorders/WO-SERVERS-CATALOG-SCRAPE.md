@@ -22,8 +22,7 @@ ClassicTW community forums as future scrape targets.
 |---|---|
 | `config/servers.toml` | **44** real public catalog entries; zero placeholders |
 | `config/servers.inventory.json` | Scrape inventory: **89** rows (47 non-dead + 42 dead) + community forum URLs |
-| `docs/community-sources.md` | ClassicTW, BBSGuide, MicroBlaster source notes + catalog policies + verified-count snapshot |
-| `docs/OPERATOR.md` | One-line pointer to community-sources.md added |
+| `canon/doctrine/server-catalog-sources.md` | ClassicTW, BBSGuide, MicroBlaster source notes + catalog policies + verified-count snapshot |
 
 ## Counts (re-counted from the tracked files at `d927e07`)
 - `servers.toml` entries: **44** unique `(host.lower(), port)`, no duplicate keys
@@ -64,7 +63,7 @@ scrape" — is **false for one of the three**:
 dead on its source and backed by no live/listed source, which contradicts the
 documented Dead-entries policy. Its inventory note has been corrected; the
 membership question is left open as a curation call.
-See `docs/community-sources.md` section 5.
+See `canon/doctrine/server-catalog-sources.md` section 5.
 
 ## Constraints honored
 - No product `.py` modified (app.py `example_one` refs are UI fixture helpers; no tests assert on them)

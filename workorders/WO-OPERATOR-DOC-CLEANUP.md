@@ -1,5 +1,7 @@
 # WO-OPERATOR-DOC-CLEANUP — docs/OPERATOR.md cleanup (Max-direct; isolated worktree)
 
+
+> **SUPERSEDED 2026-07-25** by **WO-DOCS-INTO-CANON** (Max Accepted): `docs/OPERATOR.md` content lives in `canon/surfaces/operator-cold-start.md`; the `docs/` tree is deleted. This WO remains historical.
 > Reconstructed from coord HANDOFF bodies (2026-07-25 backfill).
 > Status: **EXECUTED / DONE** 2026-07-25 · origin tip **`8b15299`** (hub-landed; was `23acadf` on isolated worktree)
 > Type: docs · Priority: P1 · Seat: hub/orchestrator (Max-direct commit)

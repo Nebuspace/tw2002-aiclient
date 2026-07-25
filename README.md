@@ -96,8 +96,10 @@ One long-lived daemon, short-lived windows into it:
 
 Deep architecture and rationale: see [`CLAUDE.md`](CLAUDE.md) and `canon/`
 (north star: human sovereign · App taught-screen autopilot · AI teacher never
-live-drives). Day-to-day product + ops notes: [`docs/OPERATOR.md`](docs/OPERATOR.md)
-(non-canon operator quickstart — prefer this README + `canon/` when they disagree).
+live-drives). Day-to-day cold-start (profiles, secrets, Mode chords, run-dir
+isolation): [`canon/surfaces/operator-cold-start.md`](canon/surfaces/operator-cold-start.md).
+Catalog / community directory sources:
+[`canon/doctrine/server-catalog-sources.md`](canon/doctrine/server-catalog-sources.md).
 
 ---
 

@@ -60,7 +60,7 @@ being asserted.
   that is dead on its source with no live/listed backing, contradicting the
   documented Dead-entries policy. Dropping or reclassifying it changes what an
   operator is offered — a curation call, not a docs call. Documented in
-  `docs/community-sources.md` section 5 and left to the catalog owner.
+  `canon/doctrine/server-catalog-sources.md` section 5 and left to the catalog owner.
 - **Personal-name-shaped content in the catalog.** Several tracked entries
   carry operator display names and hostnames that read as real personal names
   (one inventory `name` field is a full personal name; several hostnames embed
