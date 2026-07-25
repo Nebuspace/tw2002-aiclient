@@ -20,7 +20,7 @@ table of zero rows and zero is a count nobody was entitled to report.
 Layer-A coverage for the classification itself lives in
 ``tests/test_player_bank.py``; this file only proves the ``app.py`` catch and
 the ``screens.py`` render around it. Isolation: ``player_bank.BANK_PATH`` and
-``credentials.list_profile_summaries`` are both redirected inside the spawned
+``credentials.load_profile_summaries`` are both redirected inside the spawned
 process, so neither the real ``state/`` nor the real ``config/`` tree is read.
 """
 
@@ -79,7 +79,11 @@ from tw2002_aiclient.session import credentials, player_bank
 # Real file on disk, real conditions -- only WHICH file is redirected.
 player_bank.BANK_PATH = Path({bank_path!r})
 # No profiles, so every row on screen (or its absence) is about the bank.
-credentials.list_profile_summaries = lambda: []
+# The STRICT half is the one `list_players` reads (WO-AUDIT-CREDENTIALS-
+# LAUNCHER-CRASH): patching the display half here would leave the real
+# `config/` tree being read, and this suite would pass or fail depending on
+# whether the machine running it happens to have a profiles.toml.
+credentials.load_profile_summaries = lambda: []
 
 import curses
 

@@ -83,10 +83,17 @@ CAUSE_MALFORMED = "malformed"  # it parsed, and it is not a bank
 
 
 class BankUnreadable(Exception):
-    """The bank exists (or may exist) but could not be read.
+    """A store this listing is built from could not be read.
 
-    Never raised for a bank that is genuinely absent — that is a real negative
-    and the one case entitled to report zero players.
+    Usually the bank itself. It is also raised for a `profiles.toml` /
+    `servers.toml` that could not be read, because those rows are half of
+    the listing and dropping them silently is the same lie one file over
+    (WO-AUDIT-CREDENTIALS-LAUNCHER-CRASH); `path` names which store failed
+    and `reason` leads with its file name, so the surface's "bank could not
+    be read" headline is corrected by the line under it.
+
+    Never raised for a store that is genuinely absent — that is a real
+    negative and the one case entitled to report zero players.
 
     ``cause`` is one of the ``CAUSE_*`` constants; ``reason`` is the specific,
     operator-actionable detail ("Permission denied", "invalid JSON (Expecting
@@ -179,15 +186,32 @@ def list_players() -> list[dict[str, str]]:
     rotation history taken from a file nobody managed to read — and every
     bank-only row would silently vanish. Callers render the failure instead of
     a list; see ``app.py``'s bank view.
+
+    The same holds one file over, which is why this reads the STRICT
+    ``load_profile_summaries``: an unreadable ``profiles.toml`` drops every
+    profile-derived row, leaving a listing that renders as "(bank empty)" —
+    a claim about contents, made out of two files, one of which nobody read.
+    The display twin ``list_profile_summaries`` answers that failure with a
+    diagnostic row this function would filter out as a broken profile, so
+    taking it here would trade the launcher's lie for this surface's.
     """
     bank = _load_bank_raw()
+    try:
+        summaries = credentials.load_profile_summaries()
+    except (credentials.ProfileStoreUnreadable, credentials.ProfileStoreMalformed) as exc:
+        # `cause` maps straight through — credentials.py speaks this exact
+        # CAUSE_* vocabulary on purpose. The reason leads with the failing
+        # file's name because the surface headline says "bank".
+        raise BankUnreadable(
+            exc.cause, f"{Path(exc.path).name}: {exc.reason}", exc.path
+        ) from exc
     by_name = {
         str(p.get("name")): p
         for p in bank.get("players", [])
         if isinstance(p, dict) and p.get("name")
     }
     rows: list[dict[str, str]] = []
-    for summary in credentials.list_profile_summaries():
+    for summary in summaries:
         name = str(summary.get("name") or "")
         if not name or summary.get("error"):
             continue

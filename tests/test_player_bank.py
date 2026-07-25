@@ -39,13 +39,13 @@ def _point_bank_at(tmp_path, monkeypatch, body=None):
 
 
 def _no_profiles(monkeypatch):
-    monkeypatch.setattr(credentials, "list_profile_summaries", lambda: [])
+    monkeypatch.setattr(credentials, "load_profile_summaries", lambda: [])
 
 
 def _one_profile(monkeypatch):
     monkeypatch.setattr(
         credentials,
-        "list_profile_summaries",
+        "load_profile_summaries",
         lambda: [
             {
                 "name": "alpha",
@@ -66,7 +66,7 @@ def test_constants_and_paths():
 
 def test_list_players_empty_when_no_profiles_and_no_bank(tmp_path, monkeypatch):
     _point_bank_at(tmp_path, monkeypatch)
-    monkeypatch.setattr(credentials, "list_profile_summaries", lambda: [])
+    monkeypatch.setattr(credentials, "load_profile_summaries", lambda: [])
     assert player_bank.list_players() == []
 
 
@@ -74,7 +74,7 @@ def test_list_players_joins_profile_with_never_turns_when_bank_empty(tmp_path, m
     _point_bank_at(tmp_path, monkeypatch)
     monkeypatch.setattr(
         credentials,
-        "list_profile_summaries",
+        "load_profile_summaries",
         lambda: [
             {
                 "name": "alpha",
@@ -114,7 +114,7 @@ def test_list_players_merges_bank_rotation_fields(tmp_path, monkeypatch):
     )
     monkeypatch.setattr(
         credentials,
-        "list_profile_summaries",
+        "load_profile_summaries",
         lambda: [
             {
                 "name": "alpha",
@@ -147,7 +147,7 @@ def test_list_players_surfaces_bank_only_orphan_after_profile_removed(tmp_path, 
             ],
         },
     )
-    monkeypatch.setattr(credentials, "list_profile_summaries", lambda: [])
+    monkeypatch.setattr(credentials, "load_profile_summaries", lambda: [])
     rows = player_bank.list_players()
     assert len(rows) == 1
     assert rows[0]["name"] == "ghost"
@@ -159,7 +159,7 @@ def test_list_players_skips_profile_rows_with_error(tmp_path, monkeypatch):
     _point_bank_at(tmp_path, monkeypatch)
     monkeypatch.setattr(
         credentials,
-        "list_profile_summaries",
+        "load_profile_summaries",
         lambda: [{"name": "broken", "error": "missing host", "handle": "X"}],
     )
     assert player_bank.list_players() == []
@@ -197,7 +197,7 @@ def test_list_players_never_includes_password_keys(tmp_path, monkeypatch):
     )
     monkeypatch.setattr(
         credentials,
-        "list_profile_summaries",
+        "load_profile_summaries",
         lambda: [
             {
                 "name": "alpha",

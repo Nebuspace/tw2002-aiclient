@@ -64,6 +64,18 @@ class ProfileConnectionError(Exception):
         key that isn't in `servers.toml` (or whose entry has no
         resolvable host/port), or `profiles.toml` itself isn't valid
         TOML.
+      - `ProfileStoreUnreadable` -- a store this resolver reads
+        (`profiles.toml` or the `servers.toml` catalog) could not be
+        read AT ALL: denied, or the path is not a readable file. Its
+        content was never seen, so it is deliberately NOT a
+        `ProfileMalformed`.
+      - `ProfileStoreMalformed` -- a `ProfileMalformed` SUBTYPE: the
+        store was read and its content is unusable (not valid UTF-8,
+        not valid TOML, or valid TOML of the wrong shape).
+
+    Absence is never one of these. A store that was never written
+    raises `ProfileNotFound` (resolver) or lists as empty (summaries) --
+    the one negative anything here is entitled to report.
     """
 
 
@@ -80,6 +92,156 @@ class ProfileMalformed(ProfileConnectionError):
     """A value the profile DID declare is broken: `port` isn't an int,
     `server` names an unknown/incomplete catalog entry, or the on-disk
     TOML itself doesn't parse."""
+
+
+# Why a config store could not be read. Vocabulary deliberately identical to
+# `player_bank.CAUSE_*` (WO-AUDIT-PLAYER-BANK-STORE-HONESTY) rather than a
+# second dialect, because `player_bank.list_players()` maps ours straight
+# through onto its own `BankUnreadable` -- see the mapping there. Coarse
+# enough to branch on, distinct where the operator's next action differs:
+# fixing permissions, replacing a wrong path, and repairing a damaged
+# document are three different jobs, and `reason` narrows each one further.
+CAUSE_DENIED = "denied"  # we were not allowed to look
+CAUSE_UNUSABLE = "unusable"  # the path is not a readable file (e.g. a directory)
+CAUSE_CORRUPT = "corrupt"  # we looked, and the bytes are not a readable document
+CAUSE_MALFORMED = "malformed"  # it parsed, and it is not the table we needed
+
+
+class _StoreReadFailure:
+    """Shared payload for the two store-read failures below.
+
+    A mixin rather than a common base class because those two deliberately
+    sit in DIFFERENT places in the `ProfileConnectionError` family (see each
+    class) -- what they share is only the `(cause, reason, path)` payload,
+    not a position in the tree. `reason` is the bounded, operator-facing
+    detail; `path` names WHICH store failed, since this resolver reads two
+    (`profiles.toml` and the `servers.toml` catalog).
+
+    **`reason` never carries file content.** For an `OSError` it is the
+    libc `strerror`; for a decoder failure it is a TYPE NAME plus integer
+    positions only -- never `str(exc)`, whose message can quote the document
+    (`tomllib` renders a duplicated table's key: "Cannot declare ('alpha',)
+    twice"), and never the exception's own `doc`/`object` attribute, which
+    holds the ENTIRE failed-to-parse file. Same boundary the daemon's widest
+    catch took (WO-AUDIT-F5-TYPE-NAME): `profiles.toml` is not the secrets
+    file, but it lives in the same config directory and the same lane.
+    """
+
+    def __init__(self, cause: str, reason: str, path: object) -> None:
+        self.cause = cause
+        self.reason = reason
+        self.path = str(path)
+        super().__init__(f"{reason} ({self.path})")
+
+
+class ProfileStoreUnreadable(_StoreReadFailure, ProfileConnectionError):
+    """A config store this resolver needs exists (or may exist) but its
+    content was never seen at all: permission denied (on the file itself or
+    on the directory containing it), or the path is not a readable file (a
+    directory, a symlink loop, a stale mount).
+
+    Never raised for a store that is genuinely ABSENT -- that is a real
+    negative, and the only condition entitled to report zero profiles.
+
+    A direct child of `ProfileConnectionError` rather than of
+    `ProfileMalformed`: nothing here is malformed, because nothing here was
+    read. `cause` is `CAUSE_DENIED` or `CAUSE_UNUSABLE`.
+    """
+
+
+class ProfileStoreMalformed(_StoreReadFailure, ProfileMalformed):
+    """A config store was read and its content is not usable: not valid
+    UTF-8, not valid TOML, or valid TOML of the wrong shape.
+
+    A child of `ProfileMalformed` on purpose -- `env.py` already classifies
+    "unparseable TOML" as `ProfileMalformed` and surfaces it directly rather
+    than swallowing it into its generic "nothing here" fallback, and that
+    classification is exactly right for these. `cause` is `CAUSE_CORRUPT`
+    or `CAUSE_MALFORMED`.
+    """
+
+
+def _decoder_detail(exc: Exception) -> str:
+    """Bounded rendering of a decoder failure: type name + integer positions.
+
+    Deliberately NOT `str(exc)`. `tomllib`'s message can lift a key straight
+    out of the document, and both decoders keep the whole document on the
+    exception (`TOMLDecodeError.doc`, `UnicodeDecodeError.object`). Line /
+    column / byte offsets are integers -- they locate the damage without
+    quoting any of it. The position attributes are read through `getattr`
+    because `tomllib`'s `lineno`/`colno` are newer than the `tomli` fallback
+    this module imports on older interpreters; without them the type name
+    alone is still an honest answer.
+    """
+    name = type(exc).__name__
+    lineno = getattr(exc, "lineno", None)
+    colno = getattr(exc, "colno", None)
+    if isinstance(lineno, int) and isinstance(colno, int):
+        return f"{name} at line {lineno}, column {colno}"
+    start = getattr(exc, "start", None)
+    if isinstance(start, int):
+        return f"{name} at byte {start}"
+    return name
+
+
+def _load_toml_store(path: Path) -> dict[str, object] | None:
+    """Parse `path` as TOML. Return `None` iff the store is genuinely absent.
+
+    Every other condition raises `ProfileStoreUnreadable` (content never
+    seen) or `ProfileStoreMalformed` (content seen, unusable), so no caller
+    can mistake "I could not read it" for "there is nothing in it".
+
+    `Path.exists()` is deliberately absent here. It answers `False` when the
+    *parent directory* is unreadable, which is what made "no profiles" and
+    "cannot reach the profiles" indistinguishable at the launcher's first
+    line -- before any handler could reason about it (the same trap
+    `player_bank._load_bank_raw` documents). Opening the file and
+    classifying the failure is what keeps them apart: the same file under an
+    unreadable directory raises `PermissionError`, not `FileNotFoundError`
+    (proven by execution in `tests/test_credentials_store_honesty.py`).
+
+    A dangling symlink lands in the `None` branch, and honestly so: its
+    target does not exist, so there is no store content that went unread.
+    """
+    try:
+        with open(path, "rb") as f:
+            return tomllib.load(f)
+    except FileNotFoundError:
+        # The only real negative: nothing has ever written this store.
+        return None
+    except PermissionError as exc:
+        # Covers the file itself AND an unreadable parent directory. The
+        # reason must name WHICH object to fix: a directory-level denial
+        # reported as a bare "Permission denied" sends the operator to
+        # chmod a file that is already readable.
+        denied = exc.strerror or "permission denied"
+        parent = Path(path).parent
+        # X_OK is the traversal bit -- precisely what stops us reaching the
+        # file. A directory can be search-only (0o111) and the read succeeds.
+        if not os.access(parent, os.X_OK):
+            denied = f"{denied} on the containing directory: {parent}"
+        raise ProfileStoreUnreadable(CAUSE_DENIED, denied, path) from exc
+    except OSError as exc:
+        # IsADirectoryError, ELOOP, a stale mount... reason carries which.
+        # Caught after PermissionError because "I was not allowed to look"
+        # and "I looked and the path is unusable" are different situations
+        # sharing one exception base.
+        raise ProfileStoreUnreadable(
+            CAUSE_UNUSABLE, exc.strerror or "could not be opened", path
+        ) from exc
+    except UnicodeDecodeError as exc:
+        # `tomllib.load` decodes the bytes itself, so a non-UTF-8 store
+        # raises here. This is NOT an OSError and NOT a TOMLDecodeError --
+        # it subclasses ValueError, a *different* ValueError subclass from
+        # the TOML decoder, so it used to escape every handler in this
+        # module and take the launcher down with a traceback.
+        raise ProfileStoreMalformed(
+            CAUSE_CORRUPT, f"not valid UTF-8 ({_decoder_detail(exc)})", path
+        ) from exc
+    except tomllib.TOMLDecodeError as exc:
+        raise ProfileStoreMalformed(
+            CAUSE_CORRUPT, f"not valid TOML ({_decoder_detail(exc)})", path
+        ) from exc
 
 
 def _env_var_name(profile: str) -> str:
@@ -115,13 +277,35 @@ def list_servers(path: Path | None = None) -> list[dict[str, object]]:
     behavior, unchanged) -- lets `resolve_profile_host_port`'s own
     `servers_path` parameter reach the catalog read without mutating the
     module global.
+
+    An ABSENT catalog is still an empty list -- that is a genuine negative
+    and the shipped meaning of "no `servers.toml`". Every other failure
+    raises out of `_load_toml_store` instead of pretending the catalog is
+    empty, because an empty catalog is a claim: it makes every profile's
+    `server=` key look unknown and every host column fall back to the bare
+    key. A catalog nobody could read has not earned that claim.
+
+    (Deliberate non-change: a catalog file that parses but declares no
+    `[servers.*]` tables at all keeps returning `[]`, matching the absent
+    file rather than raising. `player_bank` raises on a missing `players`
+    key by the same reasoning that would raise here, but that state is
+    reachable in this tree -- an operator can legitimately keep an empty
+    catalog -- and no measured defect points at it. Noted so the asymmetry
+    is visible rather than accidental.)
     """
     path = path or SERVERS_PATH
-    if not path.exists():
+    data = _load_toml_store(path)
+    if data is None:
         return []
-    with open(path, "rb") as f:
-        data = tomllib.load(f)
     servers = data.get("servers") or {}
+    if not isinstance(servers, dict):
+        # `servers = 5` used to reach `.items()` and raise AttributeError
+        # straight through the launcher's first draw.
+        raise ProfileStoreMalformed(
+            CAUSE_MALFORMED,
+            f"'servers' is {type(servers).__name__}, expected a table",
+            path,
+        )
     rows: list[dict[str, object]] = []
     for key, meta in servers.items():
         if not isinstance(meta, dict):
@@ -194,16 +378,22 @@ def resolve_profile_host_port(
 
     Raises `ProfileNotFound` / `ProfileIncomplete` / `ProfileMalformed`
     (all `ProfileConnectionError`) -- see that base class's docstring
-    for exactly which subtype each failure kind raises.
+    for exactly which subtype each failure kind raises. The store read
+    itself adds `ProfileStoreUnreadable` (the file or its directory could
+    not be read at all) and `ProfileStoreMalformed` (a `ProfileMalformed`
+    subtype: the bytes are not valid UTF-8 / TOML).
+
+    `ProfileNotFound` is now reserved for a store that is genuinely absent.
+    It used to also fire for a profiles.toml sitting under an unreadable
+    directory -- `Path.exists()` answers `False` there -- telling the
+    operator "<path> does not exist" about a file that does, and sending
+    them to create a profile they already have (WO-AUDIT-CREDENTIALS-
+    LAUNCHER-CRASH).
     """
     profiles_path = profiles_path or PROFILES_PATH
-    if not profiles_path.exists():
+    data = _load_toml_store(profiles_path)
+    if data is None:
         raise ProfileNotFound(f"{profiles_path} does not exist")
-    try:
-        with open(profiles_path, "rb") as f:
-            data = tomllib.load(f)
-    except tomllib.TOMLDecodeError as e:
-        raise ProfileMalformed(f"{profiles_path} is not valid TOML ({e})") from e
     section = data.get(profile_name)
     if not isinstance(section, dict):
         raise ProfileNotFound(f"no [{profile_name}] section in {profiles_path}")
@@ -245,18 +435,34 @@ def resolve_profile_host_port(
     )
 
 
-def list_profile_summaries() -> list[dict[str, str | None]]:
-    """Yield non-secret profile rows for the launcher (never includes secrets).
+def load_profile_summaries() -> list[dict[str, str | None]]:
+    """Non-secret profile rows, or raise (never includes secrets).
+
+    The STRICT half of the pair; :func:`list_profile_summaries` is the
+    display half that cannot raise. Callers that render their own failure
+    (``player_bank.list_players``) take this one; callers that hand their
+    result straight to a screen take the other.
+
+    Raises `ProfileStoreUnreadable` / `ProfileStoreMalformed` when either
+    store this listing is built from -- ``profiles.toml`` or the
+    ``servers.toml`` catalog -- could not be read, rather than returning a
+    shorter list. There is no honest partial listing to fall back on in
+    either case. Without ``profiles.toml`` there are no rows at all; without
+    the catalog every ``server=`` key fails to resolve and the ``host``
+    column silently degrades to the bare catalog key -- a positive claim
+    about a host, taken from a file nobody managed to read.
+
+    An empty list means exactly one thing: both stores were read and there
+    are no profiles.
 
     Each row includes ``name``, ``handle``, ``server`` (catalog key or bare host),
     resolved ``host`` (catalog host when ``server`` is a key, else explicit host),
     ``game_letter``, and optional ``error``.
     """
     catalog = _catalog()
-    if not PROFILES_PATH.exists():
+    data = _load_toml_store(PROFILES_PATH)
+    if data is None:
         return []
-    with open(PROFILES_PATH, "rb") as f:
-        data = tomllib.load(f)
     rows: list[dict[str, str | None]] = []
     for name, meta in data.items():
         if not isinstance(meta, dict):
@@ -309,6 +515,60 @@ def list_profile_summaries() -> list[dict[str, str | None]]:
             }
         )
     return rows
+
+
+def _store_failure_row(exc: _StoreReadFailure) -> dict[str, str | None]:
+    """Render a store-read failure as one non-launchable diagnostic row.
+
+    Not a profile and not shaped like one: the name is the failing store's
+    file name in parentheses (no profile section can be called that -- the
+    create path constrains section names to ``[A-Za-z0-9_]+``), every other
+    field is this function's own ``?`` unknown marker, and ``error`` is set,
+    which is what makes the launcher refuse to launch it and tint it as a
+    fault. It invents no host, no handle and no game letter, because none
+    were read.
+
+    The row carries ``reason`` and not ``str(exc)``: the exception's text
+    appends the full store path, which on an 80-column launcher line would
+    push the operator's actual next action off the right edge. Callers that
+    want the path have the exception.
+    """
+    return {
+        "name": f"({Path(exc.path).name})",
+        "handle": "?",
+        "server": "?",
+        "host": "?",
+        "game_letter": "",
+        "autopilot": False,
+        "error": f"{exc.cause}: {exc.reason}",
+    }
+
+
+def list_profile_summaries() -> list[dict[str, str | None]]:
+    """Non-secret profile rows for the launcher; NEVER raises.
+
+    The display half of the pair (see :func:`load_profile_summaries`). The
+    launcher builds its screen straight off this call at startup, before the
+    operator can do anything at all, so a raise here is not an error message
+    -- it is a dead launcher. Three of the conditions below used to do
+    exactly that, and a fourth was worse: an unreadable config directory
+    returned ``[]``, which the launcher draws as "no characters yet, create
+    one" (WO-AUDIT-CREDENTIALS-LAUNCHER-CRASH).
+
+    A store that could not be read comes back as a single non-launchable
+    diagnostic row instead, so the failure is on screen and the empty list
+    keeps meaning what it says. The rows are NOT mixed: a listing that
+    could not be built is not partially shown -- see
+    :func:`load_profile_summaries` for why neither store failure leaves an
+    honest partial listing behind.
+
+    An empty list still means exactly one thing: both stores were read and
+    there are no profiles.
+    """
+    try:
+        return load_profile_summaries()
+    except (ProfileStoreUnreadable, ProfileStoreMalformed) as exc:
+        return [_store_failure_row(exc)]
 
 
 def _profile_section_name(handle: str) -> str:
