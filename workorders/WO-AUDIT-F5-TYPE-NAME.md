@@ -1,7 +1,7 @@
 # WO-AUDIT-F5-TYPE-NAME — Daemon widest catch: type-name-only on wire + local traceback log
 
 > Reconstructed from coord HANDOFF bodies (2026-07-25 backfill).
-> Status: **IN FLIGHT** 2026-07-25 · dispatched to CC daemon-lane (after F5-B product PARKED) · Max GO @ 10:27 ET
+> Status: **DONE (local / push waits Accept)** 2026-07-25 · tip **`84947be`** · dispatched CC daemon-lane, executed and committed
 > Type: harden · Priority: P0 · Lens: L2 code-vs-canon / info-leak
 > Refs: `tw2002_aiclient/session/daemon.py` `:76-77` · `canon/architecture/secrets-and-credentials.md` · F5 CC audit finding
 

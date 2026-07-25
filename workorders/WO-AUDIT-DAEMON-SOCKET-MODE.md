@@ -1,7 +1,7 @@
 # WO-AUDIT-DAEMON-SOCKET-MODE — Daemon listen socket owner-only mode (0o600)
 
 > Reconstructed from coord HANDOFF bodies (2026-07-25 backfill).
-> Status: **IN FLIGHT** 2026-07-25 · dispatched to CC daemon-lane after F5-A · Max GO @ 10:27 ET
+> Status: **DONE (local / push waits Accept)** 2026-07-25 · tip **`bef97e1`** · executed and committed after F5-A (`84947be`)
 > Type: harden · Priority: P0 · Lens: L2 code-vs-canon / access-control
 > Refs: `tw2002_aiclient/session/daemon.py` socket bind/listen · `canon/architecture/secrets-and-credentials.md` `0o600` precedent · Max GO
 
