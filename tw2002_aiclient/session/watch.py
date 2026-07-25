@@ -48,6 +48,9 @@ class WatchHub:
         # change, not a re-announcement of whatever's already on screen.
         self._last_emitted_hash = _screen_hash(session)
         self._thread = threading.Thread(target=self._loop, daemon=True)
+        # Type-name only -- see _loop's Cipher note. Readable in-process;
+        # wiring into the status verb is a disclosed follow-on, not built here.
+        self.last_loop_error = None
 
     def start(self):
         self._thread.start()
@@ -89,12 +92,21 @@ class WatchHub:
 
     def _loop(self):
         while not self._stop.is_set():
-            time.sleep(self.poll_interval_s)
-            with self._lock:
-                has_subscribers = bool(self._subscribers)
-            if not has_subscribers:
-                continue
-            self._maybe_emit()
+            self._stop.wait(self.poll_interval_s)
+            if self._stop.is_set():
+                return
+            try:
+                with self._lock:
+                    has_subscribers = bool(self._subscribers)
+                if not has_subscribers:
+                    continue
+                self._maybe_emit()
+            except Exception as e:  # noqa: BLE001 — a watch-hub hiccup must never kill the daemon
+                # Cipher: type-name only. Unexpected exceptions must not
+                # stash str(e) into last_loop_error -- the watch stream's
+                # screen bodies carry server-echoed input BY DESIGN, so
+                # exception text could embed payload/secret content.
+                self.last_loop_error = type(e).__name__
 
     def _maybe_emit(self):
         idle_for_ms = (time.monotonic() - self.session.last_rx) * 1000
@@ -112,4 +124,8 @@ class WatchHub:
         with self._lock:
             subs = list(self._subscribers)
         for q in subs:
-            q.put(event)
+            try:
+                q.put(event)
+            except Exception as e:  # noqa: BLE001 — one misbehaving subscriber queue must not abort delivery to the others
+                # Cipher: type-name only (see _loop) -- never str(e).
+                self.last_loop_error = type(e).__name__

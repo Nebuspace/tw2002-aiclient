@@ -126,6 +126,158 @@ def test_broadcast_extra_bypasses_settle_edge():
     assert "ts" in event
 
 
+def _wait_until(predicate, timeout=3.0, interval=0.01):
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if predicate():
+            return True
+        time.sleep(interval)
+    return predicate()
+
+
+class _HostileQueue:
+    """Subscriber-shaped double whose ``.put()`` explodes -- proves
+    ``_broadcast()``'s per-subscriber containment
+    (WO-AUDIT-WATCHHUB-LOOP-CONTAIN). The seed put (``subscribe()``'s
+    first call) is let through so construction via ``hub.subscribe()``
+    succeeds cleanly; every put after that raises."""
+
+    def __init__(self, message="hostile put"):
+        self._message = message
+        self._real = queue.Queue()
+        self._n = 0
+
+    def put(self, item):
+        self._n += 1
+        if self._n == 1:
+            self._real.put(item)
+            return
+        raise RuntimeError(self._message)
+
+    def get_nowait(self):
+        return self._real.get_nowait()
+
+
+def test_loop_survives_a_raising_tick():
+    """WO-AUDIT-WATCHHUB-LOOP-CONTAIN, proof 1. Pre-fix (HEAD blob, see
+    the WO's red-first evidence), a raising tick killed the background
+    thread outright and there was no ``last_loop_error`` field at all."""
+    session = FakeSession(["hello"], last_rx=time.monotonic() - 1.0)
+    hub = WatchHub(session, debounce_ms=50, poll_interval_s=0.01)
+    q = hub.subscribe(queue.Queue)
+    q.get_nowait()  # drain seed
+
+    real_maybe_emit = hub._maybe_emit
+    calls = {"n": 0}
+
+    def flaky_maybe_emit():
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise RuntimeError("boom")
+        return real_maybe_emit()
+
+    hub._maybe_emit = flaky_maybe_emit
+    hub.start()
+    try:
+        assert _wait_until(lambda: hub.last_loop_error is not None)
+        assert hub.last_loop_error == "RuntimeError"
+        assert hub._thread.is_alive()  # the loop kept going past the raise
+
+        session._rows = ["goodbye"]  # a subsequent, real emit still reaches the subscriber
+        event = q.get(timeout=3.0)
+        assert event["screen"] == ["goodbye"]
+    finally:
+        hub.stop()
+        hub._thread.join(timeout=3.0)
+
+
+def test_bad_subscriber_does_not_starve_the_rest():
+    """WO-AUDIT-WATCHHUB-LOOP-CONTAIN, proof 2. Pre-fix, the hostile
+    queue's raise propagated straight out of ``_maybe_emit()`` and the
+    good subscriber got nothing at all -- see the WO's red-first
+    evidence."""
+    session = FakeSession(["hello"], last_rx=time.monotonic() - 1.0)
+    hub = WatchHub(session, debounce_ms=50)
+    hostile_q = hub.subscribe(_HostileQueue)
+    good_q = hub.subscribe(queue.Queue)
+    hostile_q.get_nowait()  # drain seed
+    good_q.get_nowait()
+
+    session._rows = ["goodbye"]
+    hub._maybe_emit()  # must not raise despite the hostile subscriber
+
+    event = good_q.get_nowait()
+    assert event["screen"] == ["goodbye"]
+    assert hub.last_loop_error == "RuntimeError"
+
+
+def test_loop_tick_exception_text_never_leaks_into_last_loop_error():
+    """WO-AUDIT-WATCHHUB-LOOP-CONTAIN, proof 3 (Cipher rule): only the
+    exception's TYPE NAME is ever observable -- never its message text,
+    which could embed server-echoed screen content."""
+    fake_secret = "FAKE-SECRET-SENTINEL-XYZ"
+    session = FakeSession(["hello"], last_rx=time.monotonic() - 1.0)
+    hub = WatchHub(session, debounce_ms=50, poll_interval_s=0.01)
+    q = hub.subscribe(queue.Queue)
+    q.get_nowait()
+
+    def hostile_maybe_emit():
+        raise RuntimeError(fake_secret)
+
+    hub._maybe_emit = hostile_maybe_emit
+    hub.start()
+    try:
+        assert _wait_until(lambda: hub.last_loop_error is not None)
+        assert hub.last_loop_error == "RuntimeError"
+        assert fake_secret not in hub.last_loop_error
+    finally:
+        hub.stop()
+        hub._thread.join(timeout=3.0)
+
+
+def test_broadcast_exception_text_never_leaks_into_error_or_event():
+    """Same Cipher pin as above, at the ``_broadcast()`` containment
+    site: the sentinel must be absent from both ``last_loop_error`` and
+    the event delivered to the surviving subscriber."""
+    fake_secret = "FAKE-SECRET-SENTINEL-XYZ"
+    session = FakeSession(["hello"], last_rx=time.monotonic() - 1.0)
+    hub = WatchHub(session, debounce_ms=50)
+    hostile_q = hub.subscribe(lambda: _HostileQueue(fake_secret))
+    good_q = hub.subscribe(queue.Queue)
+    hostile_q.get_nowait()
+    good_q.get_nowait()
+
+    session._rows = ["goodbye"]
+    hub._maybe_emit()
+
+    event = good_q.get_nowait()
+    assert hub.last_loop_error == "RuntimeError"
+    assert fake_secret not in hub.last_loop_error
+    assert fake_secret not in str(event)
+
+
+def test_stop_returns_promptly_even_with_a_long_poll_interval():
+    """WO-AUDIT-WATCHHUB-LOOP-CONTAIN, proof 4. Pre-fix ``stop()``
+    blocked for the full ``poll_interval_s`` (a plain ``time.sleep``
+    loop can't be woken early) -- see the WO's red-first evidence
+    (~2.0s observed at ``poll_interval_s=2.0``). The ``wait()``-based
+    loop must return in well under that."""
+    session = FakeSession(["hello"], last_rx=time.monotonic())
+    hub = WatchHub(session, poll_interval_s=2.0)
+    hub.start()
+    try:
+        assert _wait_until(lambda: hub._thread.is_alive())
+        t0 = time.monotonic()
+        hub.stop()
+        hub._thread.join(timeout=5.0)
+        elapsed = time.monotonic() - t0
+        assert not hub._thread.is_alive()
+        assert elapsed < 1.0  # far under poll_interval_s -- proves the wait() is interruptible
+    finally:
+        hub.stop()
+        hub._thread.join(timeout=5.0)
+
+
 def test_status_reports_subscriber_count():
     from tw2002_aiclient.session import protocol
 
