@@ -1,7 +1,10 @@
 # Operator guide
 
-Short path for day-to-day use of the product TUI and the ops CLI against the
-same daemon. For verbs and architecture, see the root [`README.md`](../README.md).
+Day-to-day notes for the product TUI and the ops CLI against the same daemon.
+**This file is not OKF canon** — architecture, Mode, Spectate/Attach, and
+secrets doctrine live under [`canon/`](../canon/). CLI inventory and verb
+status live in the root [`README.md`](../README.md). When they disagree,
+prefer `canon/` + README.
 
 ## Product cold start
 
@@ -43,41 +46,46 @@ same daemon. For verbs and architecture, see the root [`README.md`](../README.md
    generate and persist one via the existing ensure/login path. Never pass a
    password on argv.
 
-3. **Play:** Enter opens the play screen. The client ensures the session
-   (spawn daemon if needed, login to the main command prompt using the
-   env/secrets password path above) and syncs Autopilot to the profile flag.
+3. **Play / cockpit:** Enter opens the play shell (framed cockpit). The client
+   ensures the session (spawn daemon if needed, login to the main command
+   prompt using the env/secrets password path above).
 
-4. **Autopilot toggle:** on the play screen, `a` or `Space` flips Autopilot
-   ON/OFF and persists `autopilot=` on the profile. ON arms the trainer; OFF
-   leaves you in manual / AI-pilot territory without the background loop.
-   Default Autopilot is **continuous / uncapped** (no hidden 500-tick stop);
-   an explicit max-ticks ceiling remains an optional ops safety valve.
+4. **App / Human (Mode):** the live driver is **App** (taught autopilot) or
+   **Human** (keyboard) — never an AI live driver. **Ctrl-A** is the Mode chord
+   (ADR-002): from Spectate or App-hold it attaches Human; while attached it
+   returns the seat to App. Bare `M` while attached is TradeWars Move, not Mode.
+   Detach from Human with **Ctrl-]** (canon detach key). Details:
+   [`canon/surfaces/spectate-and-attach.md`](../canon/surfaces/spectate-and-attach.md)
+   · [`canon/surfaces/mode-line-and-teach-controls.md`](../canon/surfaces/mode-line-and-teach-controls.md).
 
-5. **Attach (human drive):** `h` / `H` suspends play panels and hands the
-   keyboard via the same engine as `./tw attach`. If Autopilot is running,
-   attach **stops the runtime trainer** first (clears the live lock) so human
-   drive can take the keyboard — it does **not** write profile `autopilot=`
-   OFF (the play `a` / `Space` toggle still owns that). If the runtime stop
-   fails, attach is blocked. Detach with `Ctrl-]`; play panels resume.
-   Esc / `q` returns to the launcher.
+5. **Spectate:** read-only watch is **in-cockpit Spectate** (product path).
+   Ops `./tw spectate` is **RETIRED / WONTBUILD** (folded into the cockpit).
+   For a scripted settle-edge stream use `./tw watch` (see README).
 
-Play panels are read-only chrome; they never send game I/O. Only attach (or ops
-`./tw do` / Autopilot) drives the connection.
+6. **Attach (human drive):** taking Human via Ctrl-A (or `./tw attach`) uses the
+   daemon attach path. If Autopilot / App is running, attach **stops the runtime trainer**
+   first (clears the live lock) so human drive can take the keyboard —
+   it does **not** write profile `autopilot=` OFF (profile arm / disarm remains
+   a separate control). If the runtime stop fails, attach cannot proceed.
+   Detach with `Ctrl-]`; Esc may return toward the launcher depending on screen.
 
-## Ops spectator
+Play panels are read-only chrome; they never send game I/O. Only Human attach
+(or ops `./tw do` / App autopilot) drives the connection.
 
-For a live read-only HUD (operators / scripts), use the backend CLI — not the
-product TUI:
+## Ops CLI (same daemon)
 
 ```bash
-./tw spectate
-./tw spectate --run-dir run/rogue    # when the seat uses an isolated run dir
-./tw spectate --snapshot             # one-shot, scripting-friendly
+./tw status [--run-dir …] [--json]
+./tw ensure --profile NAME [--run-dir …] [--no-auto-arm]
+./tw attach [--run-dir …]          # Ctrl-] detach
+./tw watch [--run-dir …]           # NDJSON settle-edge stream (not full-curses HUD)
+./tw menumap …
+./tw do "…" --run-dir …
+./tw stop [--run-dir …]
 ```
 
-`spectate` never forwards keystrokes to the game. Control-strip keys (mode,
-loops, panic) are control-plane only; see the README spectator section.
-`./tw attach` (or play-screen `h`) remains the human driver path.
+Further verbs (`loops`, …) land via the G-sequence work orders — not every
+name on help is live yet; trust `./tw --help` and README over this file.
 
 ## Run-dir isolation (live seat)
 
@@ -89,36 +97,34 @@ default shared runtime.
 |---|---|
 | Env (product + adapters) | `TW_RUN_DIR=run/rogue ./tw2002-aiclient` |
 | CLI flag (ops) | `./tw status --run-dir run/rogue` |
-| Ensure / spectate / attach | `./tw ensure --profile rogue --run-dir run/rogue` |
+| Ensure / attach / watch | `./tw ensure --profile rogue --run-dir run/rogue` |
 
 Relative paths resolve from the project root. Always pass the same run dir to
-every verb that talks to that seat (`status`, `ensure`, `spectate`, `attach`,
-`stop`). `./tw status --json` reports `run_dir` so you can confirm which socket
-you hit — default `run/` may show `daemon_running=false` while an isolated seat
-is live elsewhere.
+every verb that talks to that seat. `./tw status --json` reports `run_dir` so
+you can confirm which socket you hit — default `run/` may show
+`daemon_running=false` while an isolated seat is live elsewhere.
 
 ## Recycle with `--no-auto-arm`
 
 When recycling a live seat (stop daemon, restart to a new tip, re-ensure) and
-you want connect/login **without** immediately arming Autopilot — even if the
-profile has `autopilot=true`:
+you want connect/login **without** immediately arming App autopilot — even if
+the profile has `autopilot=true`:
 
 ```bash
 ./tw stop --run-dir run/rogue
 ./tw ensure --profile rogue --run-dir run/rogue --no-auto-arm
-# verify screen / fighters / classification, then arm when ready:
-./tw2002-aiclient   # with TW_RUN_DIR=run/rogue, toggle Autopilot ON
-# or ops: start Autopilot via the product path / daemon autopilot_start
+# verify screen / classification, then arm when ready via the product path
+TW_RUN_DIR=run/rogue ./tw2002-aiclient
 ```
 
-`--no-auto-arm` skips post-ensure auto-start only for that `ensure` call. Re-arm
-explicitly after you confirm the seat is healthy.
+`--no-auto-arm` skips post-ensure auto-start only for that `ensure` call.
 
 ## Live seat recovery
 
-Current live ops seat uses the isolated run dir **`run/rogue`**. Always pass
-`--run-dir run/rogue` (or `TW_RUN_DIR=run/rogue`) on every `status` / `ensure` /
-`spectate` / `stop` for that seat — default `run/` is a different daemon.
+Current live ops seat often uses the isolated run dir **`run/rogue`**. Always
+pass `--run-dir run/rogue` (or `TW_RUN_DIR=run/rogue`) on every `status` /
+`ensure` / `attach` / `watch` / `stop` for that seat — default `run/` is a
+different daemon.
 
 ### Failure signatures
 
@@ -126,7 +132,7 @@ Inspect with:
 
 ```bash
 ./tw status --run-dir run/rogue --json
-./tw spectate --run-dir run/rogue    # paints ! strip when intervention.needs_attention
+./tw watch --run-dir run/rogue          # or in-cockpit Spectate attention chrome
 ```
 
 | Signature | What you see |
@@ -134,7 +140,7 @@ Inspect with:
 | `game_select` | `classification` is `game_select`, and/or Autopilot `stop_reason` is `game_select` (door-select rejoin exhausted) |
 | Tick-cap stop (legacy / explicit ceiling) | Autopilot not running, `ticks_done` == 500, `stop_reason` `max_ticks_exhausted` — not the continuous default |
 | `explore_exhausted` | Autopilot `stop_reason` (or last decision reason) `explore_exhausted` — frontier idle, no hop |
-| Intervention attention | `intervention.needs_attention` true — spectate `! …` strip / play attention banner |
+| Intervention attention | `intervention.needs_attention` true — cockpit attention chrome / STOP banner when typed reasons apply |
 | Unanswered warp Y/N | Prompt `Do you really want to warp there? (Y/N)` / `classification` `warp_confirm`; `idle_ms` rising; Autopilot still `running: true` (ticks may increment) but **not sending**. Tip `7dba009+` auto-answers on a recycled seat; keep this row for pre-tip binaries or any stuck gate |
 
 Continuous Autopilot past 500 ticks with `running: true` is healthy under the
@@ -145,24 +151,21 @@ uncapped default; do not recycle solely because `ticks_done` exceeded 500.
 **Unanswered warp Y/N** (manual clear when Autopilot is spinning on the gate):
 
 ```bash
-# stop runtime Autopilot (product Play → Autopilot OFF, or daemon autopilot_stop)
+# stop runtime Autopilot / release App hold first if needed (Ctrl-A / product arm)
 ./tw do "Y" --run-dir run/rogue    # or "N" to decline the hop
-# then re-arm Autopilot, or hub-recycle with --no-auto-arm if the seat is wedged
+# then re-arm App, or hub-recycle with --no-auto-arm if the seat is wedged
 ```
 
-Hub recycle connect/login **without** auto-arming Autopilot, verify, then
-re-arm:
+Hub recycle connect/login **without** auto-arming, verify, then re-arm:
 
 ```bash
 ./tw stop --run-dir run/rogue
 ./tw ensure --profile rogue --run-dir run/rogue --no-auto-arm
 # confirm classification is main_command (not game_select), then re-arm:
-TW_RUN_DIR=run/rogue ./tw2002-aiclient   # Play → Autopilot ON
+TW_RUN_DIR=run/rogue ./tw2002-aiclient
 ```
 
-Same `--no-auto-arm` sequence as [Recycle with `--no-auto-arm`](#recycle-with---no-auto-arm);
-use it whenever any signature above leaves Autopilot stopped or the seat
-stuck off the main command prompt.
+Same `--no-auto-arm` sequence as [Recycle with `--no-auto-arm`](#recycle-with---no-auto-arm).
 
 ## Quick checklist
 
@@ -170,11 +173,13 @@ stuck off the main command prompt.
 |---|---|
 | Product play | `./tw2002-aiclient` |
 | Create profile (no password field) | launcher **+ Create** → then env/`secrets.json` before Play |
+| Mode App ↔ Human | **Ctrl-A** (ADR-002); detach Human **Ctrl-]** |
+| In-cockpit Spectate | product path (ops `./tw spectate` RETIRED) |
 | Isolated live seat | `TW_RUN_DIR=run/rogue` or `--run-dir run/rogue` |
-| Watch (ops) | `./tw spectate [--run-dir …]` |
-| Human drive | play `h` or `./tw attach` (`Ctrl-]` out) |
+| Scripted watch stream | `./tw watch [--run-dir …]` |
+| Human drive (ops) | `./tw attach` (`Ctrl-]` out) |
 | Connect without Autopilot | `./tw ensure … --no-auto-arm` |
-| Live seat (current) | always `--run-dir run/rogue` / `TW_RUN_DIR=run/rogue` |
-| Halt / stuck recovery | see **Live seat recovery** (`game_select`, tick-cap 500, `explore_exhausted`, `needs_attention`, unanswered warp Y/N) |
+| Halt / stuck recovery | see **Live seat recovery** |
 | Daemon health | `./tw status [--run-dir …] [--json]` |
 | Clean shutdown | `./tw stop [--run-dir …]` |
+| Architecture / doctrine | `canon/` (not this file) |

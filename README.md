@@ -92,8 +92,7 @@ One long-lived daemon, short-lived windows into it:
 Deep architecture and rationale: see [`CLAUDE.md`](CLAUDE.md) and `canon/`
 (north star: human sovereign · App taught-screen autopilot · AI teacher never
 live-drives). Day-to-day product + ops notes: [`docs/OPERATOR.md`](docs/OPERATOR.md)
-when present (some paths may still describe staged surfaces — prefer this README
-+ `canon/` when they disagree).
+(non-canon operator quickstart — prefer this README + `canon/` when they disagree).
 
 ---
 
