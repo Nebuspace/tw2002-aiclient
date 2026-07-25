@@ -17,6 +17,11 @@ from pathlib import Path
 SCHEMA_VERSION = 1
 MENU_EDGE_KINDS = frozenset({"nav", "info", "action", "escape", "unknown"})
 KNOWLEDGE_FILENAME = "game_knowledge.json"
+
+# How a crawl ended. A map with NO recorded status is of UNKNOWN
+# provenance -- which is honest, and deliberately not the same as
+# "complete": nothing here ever lets a partial map read as a finished one.
+CRAWL_STATUS_VALUES = frozenset({"complete", "truncated", "aborted", "error"})
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 WORLD_STATE_DIR = _PROJECT_ROOT / "state" / "world"
 
@@ -179,6 +184,58 @@ def upsert_menu_edge(path, from_node, key, to_node, kind="nav", desc=None):
 
 def list_menu_edges(path):
     return [dict(e) for e in load_knowledge(path)["menu_map"]["edges"]]
+
+
+def record_crawl_status(
+    path,
+    *,
+    status,
+    reason=None,
+    nodes_visited=None,
+    frontier_remaining=None,
+):
+    """Stamp the menu map with the outcome of the crawl that produced it.
+
+    A crawl that half-completes -- aborted at a screen boundary, stopped
+    by the ``max_nodes`` rail, or failed structurally -- persists every
+    node and edge it discovered before stopping. Without this stamp a
+    consumer cannot tell that partial map apart from a finished one: an
+    unvisited frontier node looks exactly like a genuine dead-end. The
+    stamp is what keeps the write path honest.
+
+    Replaces any previous stamp -- the map describes one world, and the
+    most recent crawl is the one whose coverage the current node/edge set
+    reflects.
+    """
+    if status not in CRAWL_STATUS_VALUES:
+        raise GameKnowledgeError(
+            f"invalid crawl status {status!r} (expected one of {sorted(CRAWL_STATUS_VALUES)})"
+        )
+    path = Path(path)
+    with _knowledge_lock(path):
+        data = load_knowledge(path)
+        record = {
+            "status": status,
+            "reason": reason,
+            "nodes_visited": nodes_visited,
+            "frontier_remaining": frontier_remaining,
+            "ts": _now_iso(),
+        }
+        data["menu_map"]["last_crawl"] = record
+        save_knowledge(data, path)
+        return dict(record)
+
+
+def get_crawl_status(path):
+    """The last recorded crawl outcome, or ``None`` when the map's
+    provenance is unknown (no crawl ever stamped it).
+
+    ``None`` means exactly that -- unknown. It is never a completeness
+    claim; a caller that needs "is this map finished?" must check for an
+    explicit ``"complete"`` status.
+    """
+    record = load_knowledge(path)["menu_map"].get("last_crawl")
+    return dict(record) if isinstance(record, dict) else None
 
 
 def find_menu_path(path, from_signature, to_signature):
