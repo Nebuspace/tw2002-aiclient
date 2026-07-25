@@ -451,6 +451,17 @@ PLAY_TITLE = " PLAY SHELL "
 PLAY_SUBTITLE = " (placeholder — cockpit chrome is a later WO) "
 BANK_TITLE = " PLAYER BANK "
 
+# The bank view's two negatives, kept apart on screen because they are not the
+# same fact (WO-AUDIT-PLAYER-BANK-STORE-HONESTY). BANK_EMPTY_LINE is a claim --
+# "we read the bank and there is nothing in it" -- and only a successful read
+# earns it. BANK_UNREADABLE_* say the opposite: nothing was read, so no listing
+# and no count (not even zero) may be shown, because a count is a claim about
+# contents nobody saw. The reason line carries the operator's next action; see
+# player_bank.BankUnreadable's CAUSE_* vocabulary.
+BANK_EMPTY_LINE = "(bank empty — add profiles; rotation history shows never / -)"
+BANK_UNREADABLE_HEAD = "bank could not be read — this is NOT an empty bank"
+BANK_UNREADABLE_HINT = "no character list and no count can be shown: nothing here was read"
+
 # A raising composer (bad input surviving to a status field, a future
 # panel's own bug, ...) must never take the whole cockpit down with it --
 # same honesty-over-crash fallback as an unreachable/raising status_provider
@@ -1626,15 +1637,26 @@ class PlayShellScreen:
 
 
 class BankViewScreen:
-    """Credential-bank rotation touchpoint — metadata only (WO-P1-015)."""
+    """Credential-bank rotation touchpoint — metadata only (WO-P1-015).
+
+    ``error`` is the read-failure detail when the bank could not be read at all
+    (``player_bank.BankUnreadable``), and it is mutually exclusive with
+    ``entries``: an unreadable bank yielded no rows, so the screen renders the
+    failure *instead of* the table -- header included. Painting the column
+    header above nothing would imply a table with zero rows, which is the
+    count this screen is not entitled to report
+    (WO-AUDIT-PLAYER-BANK-STORE-HONESTY).
+    """
 
     def __init__(
         self,
         stdscr: curses.window,
         entries: Sequence[dict[str, str]] | None = None,
+        error: str | None = None,
     ) -> None:
         self.stdscr = stdscr
         self.entries = list(entries or ())
+        self.error = error
         self._chrome = curses.A_NORMAL
         self._warn = curses.A_BOLD
         self._init_colors()
@@ -1671,6 +1693,24 @@ class BankViewScreen:
         _safe_addstr(self.stdscr, 3, 3, BOUNDARY_LINE_2, self._warn)
 
         y = 5
+        if self.error:
+            # No header, no rows, no count -- the read failed, so the only
+            # honest thing on screen is why, and that this is not emptiness.
+            _safe_addstr(
+                self.stdscr, y, 3, BANK_UNREADABLE_HEAD, self._warn | curses.A_BOLD
+            )
+            _safe_addstr(self.stdscr, y + 1, 5, self.error, self._warn)
+            _safe_addstr(self.stdscr, y + 2, 3, BANK_UNREADABLE_HINT, curses.A_DIM)
+            _safe_addstr(
+                self.stdscr,
+                max_y - 2,
+                3,
+                "Esc return to launcher",
+                self._chrome,
+            )
+            self.stdscr.refresh()
+            return
+
         header = (
             f"{'name':<16} {'handle':<16} {'host':<24} "
             f"{'game':<3} {'last_played':<21} turns"
@@ -1682,7 +1722,7 @@ class BankViewScreen:
                 self.stdscr,
                 y,
                 3,
-                "(bank empty — add profiles; rotation history shows never / -)",
+                BANK_EMPTY_LINE,
                 curses.A_DIM,
             )
         else:

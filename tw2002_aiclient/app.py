@@ -414,8 +414,30 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
         stdscr.timeout(-1)  # restore blocking getch for the caller's own loop
 
 
+def _bank_view(stdscr: curses.window) -> BankViewScreen:
+    """Build the bank view, rendering a read failure as a failure.
+
+    The surface boundary for ``player_bank.BankUnreadable``
+    (WO-AUDIT-PLAYER-BANK-STORE-HONESTY) -- the ``cmd_menumap`` shape, where
+    the one-file store read aborts and the surface renders the error, rather
+    than the reader inventing an empty result. Both bank entry points go
+    through here so neither can drift back into showing "(bank empty)" for a
+    bank nobody could read.
+
+    ``cause`` leads the detail line because it is what tells the operator which
+    job this is -- fixing permissions, replacing a wrong path, or repairing a
+    damaged document -- and the exception's own text follows with the specific
+    reason and the offending path.
+    """
+    try:
+        entries = player_bank.list_players()
+    except player_bank.BankUnreadable as exc:
+        return BankViewScreen(stdscr, entries=(), error=f"{exc.cause}: {exc}")
+    return BankViewScreen(stdscr, entries=entries)
+
+
 def _run_bank(stdscr: curses.window) -> str:
-    bank = BankViewScreen(stdscr, entries=player_bank.list_players())
+    bank = _bank_view(stdscr)
     while True:
         bank.draw()
         key = stdscr.getch()
@@ -484,7 +506,7 @@ def _run(stdscr: curses.window) -> None:
             ]
             BankViewScreen(stdscr, entries=entries).draw()
         else:
-            BankViewScreen(stdscr, entries=player_bank.list_players()).draw()
+            _bank_view(stdscr).draw()
         return
     while True:
         screen.draw()
