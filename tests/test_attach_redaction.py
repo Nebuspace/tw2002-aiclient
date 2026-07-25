@@ -4,6 +4,11 @@ Proves ``Session.send_raw`` redacts the transcript LOG and ``last_sent``
 (→ ``build_response`` ``sent_input``) when the current prompt is a secret
 prompt. Ledger / ``record_attach_keystroke`` remain cut (no ``LedgerWriter``
 at tip) — STATUS discloses that gap; this suite does not invent a ledger.
+
+MT-01 / WO-AUDIT-ATTACH-REDACTION-FAILPATH also proves the **failure** path:
+a ``sendall`` that raises under a secret prompt must not leave the sentinel
+in the transcript, status JSON, or ``last_sent`` — and a falsification proves
+the suite would catch a leaky fail-path logger (F6 lesson).
 """
 
 from __future__ import annotations
@@ -12,6 +17,8 @@ import json
 import subprocess
 import threading
 import time
+
+import pytest
 
 from tw2002_aiclient.session import protocol
 from tw2002_aiclient.session.connection import TelnetConnection
@@ -27,6 +34,18 @@ SENTINEL = "HUNTER2SENTINEL"
 class _StubSocket:
     def sendall(self, data):
         pass
+
+
+class _DeadSocket:
+    """Always raises before claiming a completed send (attach fail-path)."""
+
+    def __init__(self, exc=None):
+        self.exc = exc or BrokenPipeError(32, "Broken pipe")
+        self.attempts = []
+
+    def sendall(self, data):
+        self.attempts.append(data)
+        raise self.exc
 
 
 def _grep_a_contains(path, needle):
@@ -202,3 +221,75 @@ def test_attach_ordinary_keystrokes_do_reach_the_status_verbs_log_tail(tmp_path)
     assert all(f"human> {ch}" in dumped for ch in plain)
     assert "redacted" not in dumped
     session.logger.close()
+
+
+# ---------------------------------------------------------------------------
+# MT-01 / WO-AUDIT-ATTACH-REDACTION-FAILPATH — failure-path redaction
+# ---------------------------------------------------------------------------
+
+
+def test_password_send_raw_that_fails_never_leaks_sentinel(tmp_path):
+    """Secret-prompt attach keystroke whose sendall raises must still redact.
+
+    Success-path suite used a no-op stub socket; F6 showed that is not enough.
+    """
+    session = _make_session(tmp_path, b"Password:")
+    session.conn._sock = _DeadSocket()
+
+    with pytest.raises(BrokenPipeError):
+        session.send_raw(SENTINEL.encode("latin-1"))
+
+    session.logger.close()
+    log_content = open(session.logger.path, encoding="utf-8").read()
+
+    assert "TX-FAILED" in log_content
+    assert "secret input redacted" in log_content
+    assert SENTINEL not in log_content
+    assert SENTINEL.encode() not in open(session.logger.path, "rb").read()
+    assert _grep_a_contains(session.logger.path, SENTINEL) is False
+    # Failed send leaves last_sent describing the last *completed* send.
+    assert session.last_sent is None
+    assert session.last_sent_secret is False
+    assert "bytes)" not in log_content
+
+
+def test_failed_secret_send_raw_never_reaches_status_json(tmp_path):
+    session = _make_session(tmp_path, b"Password:")
+    session.conn._sock = _DeadSocket()
+
+    with pytest.raises(BrokenPipeError):
+        session.send_raw(SENTINEL.encode("latin-1"))
+
+    resp = protocol.dispatch(session, "status", {}, _BareServer())
+    assert resp["ok"] is True
+    assert "<<secret input redacted>>" in resp["log_tail"]
+    assert any("send failed:" in line for line in resp["log_tail"])
+    dumped = json.dumps(resp)
+    assert SENTINEL not in dumped
+    assert build_response(session).get("sent_input") in (None, "")
+    session.logger.close()
+
+
+def test_falsification_failpath_log_gate_lets_sentinel_leak(tmp_path, monkeypatch):
+    """Red→green proof: if fail-path logging forgot secret, the suite notices."""
+
+    def _leaky_fail_send_bytes(self, data, secret=False):
+        try:
+            self._sock.sendall(data)
+        except BaseException:
+            if self.logger:
+                # Leak: raw payload on the failure path (the F6 blind spot).
+                self.logger.log_raw("TX-FAILED", data)
+            raise
+
+    monkeypatch.setattr(TelnetConnection, "send_bytes", _leaky_fail_send_bytes)
+    session = _make_session(tmp_path, b"Password:")
+    session.conn._sock = _DeadSocket()
+
+    with pytest.raises(BrokenPipeError):
+        session.send_raw(SENTINEL.encode("latin-1"))
+
+    session.logger.close()
+    log_content = open(session.logger.path, encoding="utf-8").read()
+    assert SENTINEL in log_content
+    assert _grep_a_contains(session.logger.path, SENTINEL) is True
