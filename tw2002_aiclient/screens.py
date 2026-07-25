@@ -9,6 +9,7 @@ import math
 import re
 import time
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Callable, Sequence
 
 import curses
@@ -1803,6 +1804,46 @@ def validate_create_form(
     return None
 
 
+def _create_error_text(exc: Exception) -> str:
+    """Operator-facing text for a rejected create-save.
+
+    A store-read failure is rendered from its OWN fields, never from
+    ``str(exc)``. ``credentials._StoreReadFailure.__init__`` appends the
+    store's full absolute path to the message, and this text is drawn as one
+    line at column 3, which ``cockpit.draw.safe_write`` clips to ``max_x -
+    x`` -- 77 cells on an 80-column form. Measured against a 51-character
+    store path, the corrupt and malformed messages render 103 and 90 cells;
+    a deeper install path overflows the denied one (73) as well.
+
+    The overflow is not merely cosmetic. The line is clipped from the RIGHT,
+    so the first thing to fall off is the store's BASENAME -- which is the
+    "WHICH of the two stores failed" that the path was being carried for in
+    the first place. The abs-path spelling is the one spelling of that
+    answer which cannot reliably fit on the screen it is written to.
+
+    So this renders the same two fields ``credentials._store_failure_row``
+    puts in the launcher's row, in that function's own spellings -- the
+    store's FILE NAME (the resolver reads two stores; ``path`` exists to say
+    which) and ``cause: reason``. That function's docstring already made
+    this call for its surface ("carries ``reason`` and not ``str(exc)``…
+    Callers that want the path have the exception"); the create form is the
+    adjacent surface rendering the identical failure, and it now agrees.
+
+    Everything else keeps ``str(exc)`` verbatim -- deliberately NOT a
+    blanket path-strip. ``create_profile``'s own ``ValueError``s ("unknown
+    server catalog key: 'demo'", "profile already exists: alpha") ARE the
+    operator's next action, and they carry no path to begin with.
+    """
+    if isinstance(
+        exc, (credentials.ProfileStoreUnreadable, credentials.ProfileStoreMalformed)
+    ):
+        # The two (and only two) `_StoreReadFailure` subclasses -- named as
+        # the public pair, matching `credentials.list_profile_summaries`'
+        # own catch, rather than reaching for the private mixin.
+        return f"({Path(exc.path).name}) {exc.cause}: {exc.reason}"
+    return str(exc)
+
+
 class CreateFormScreen:
     """Catalog server + game_letter + handle → non-secret ``create_profile`` write."""
 
@@ -1963,6 +2004,9 @@ class CreateFormScreen:
                 handle=handle,
             )
         except Exception as exc:  # noqa: BLE001 — surface in TUI; values preserved
-            self.error = str(exc)
+            # Still the widest possible catch, and still nothing but a
+            # message assignment: a form that raises loses the operator's
+            # typed input. Only the RENDERING moved -- see _create_error_text.
+            self.error = _create_error_text(exc)
             return None
         return "saved"
