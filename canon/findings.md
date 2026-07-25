@@ -148,3 +148,15 @@ Hub relay `@ 09:33:23Z`: on cockpit **entry**, chip must show **`APP`** to match
 | HARDEN-ATTACH-SOCKET-TIMEOUT | Unbounded `AttachInputConn` socket read | **DONE** tip `88004d8` (`settimeout(5.0)` + OSError containment) · out of Phase-5 PREP |
 | LOG-NOTE-RETIRE | Dead `log_note` helper | **Ruled RETIRE** — CC product delete; no silent keep |
 | SECRETS-ARCHIVE-NEVER-LIVE | Rotate gate on archive secrets | **CLOSED** — Max: archive `secrets.json` never live; no rotate |
+
+### Banked · session/ honesty audit (2026-07-25 · CC READ-ONLY · hub adjudicated `@ 12:15:44Z`)
+Source tip at audit: `922739b`. Product fixes: F1 CUT (CC ∥ 064) · F2 after F1 · F3/F4 staged · **F5 🧑‍⚖️ Max** (no patch) · **F6–F8 BANK** (this stamp).
+
+| ID | Gap | Tip reality |
+|---|---|---|
+| SESSION-F6-TRANSCRIPT-ORDER | `connection.py` logs payload *before* `sendall`; `session.py` appends after — broken pipe ⇒ records disagree | **BANKED** — no WO this wave |
+| SESSION-F7-STATUS-DAEMON-RUNNING | `cli.py` `cmd_status` stamps `daemon_running: True` over failed round-trip (PID reuse) | **BANKED** — exit code stays honest; `--json` self-contradicts |
+| SESSION-F8-WATCH-FRAME-GAP | `cli.py` `tw watch` swallows unparseable frames; `--frames N` counts only parsed | **BANKED** — invisible gap on corruption |
+| SESSION-AUDIT-COVERAGE-GAP | `classify.py` (634 lines) unaudited except secret-prompt regex; also unread: `credentials` · `env` · `iac` · `terminal` · `player_bank` | **BANKED** — future audit WO must not inherit false coverage |
+| SESSION-F5-INTERNAL-ERROR-STR | `daemon.py:76-77` widest catch returns `internal_error:{e}` (siblings type-name-only) | **🧑‍⚖️ Max** — DECISION-NEEDED; secrets leak UNVERIFIED; path disclosure VERIFIED |
+
