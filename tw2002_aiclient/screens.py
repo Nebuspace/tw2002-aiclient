@@ -13,6 +13,7 @@ from typing import Callable, Sequence
 
 import curses
 
+from tw2002_aiclient.cockpit import control_seat as cockpit_control_seat
 from tw2002_aiclient.cockpit import decisions as cockpit_decisions
 from tw2002_aiclient.cockpit import draw as cockpit_draw
 from tw2002_aiclient.cockpit import focus as cockpit_focus
@@ -680,10 +681,25 @@ class PlayShellScreen:
     bold exception and the GAME viewport border's own STATE flip: cyan
     chrome by default, red non-bold the instant the same shared ``status``
     snapshot carries a real, definite ``connected: False`` (see
-    ``_viewport_border_attr``). No mode badges and no gauge surface render
-    here -- both are out of scope for this WO (mode badges belong to the
-    N5 mode-line-and-teach-controls WO; ``gauge_semantic`` ships
-    classifier-only, with no wired consumer yet).
+    ``_viewport_border_attr``). No dynamic app/human mode badge and no gauge
+    surface render here -- both stay out of scope for this WO (the full
+    badge belongs to the N5 mode-line-and-teach-controls WO;
+    ``gauge_semantic`` ships classifier-only, with no wired consumer yet).
+
+    ``spectating`` (PWO-055, ``cockpit.control_seat``) is this instance's
+    own control-seat state -- ``True`` today, unconditionally, since this
+    screen has no send path at all (no `do`/`send`/`send_raw` verb reaches
+    the daemon from here; the only wire traffic is the read-only
+    ``status_provider`` poll and ``viewport_provider``'s subscribe feed).
+    The control-strip row's left side, which this docstring's own prior
+    revision left blank pending N5, now carries the honest
+    ``cockpit.control_seat.SPECTATE_LABEL`` marker in that same
+    already-``A_NORMAL`` (muted) row -- a single static label, not N5's
+    dynamic badge -- right up against wherever the liveness cluster's own
+    space begins, dropping out first if the row is too narrow for both (see
+    ``compose_control_strip_line``). PWO-056 (attach from cockpit) is what
+    will ever flip ``spectating`` to ``False`` and add its own "attached"
+    rendering alongside this one.
 
     Esc ends the binding and returns to the launcher — clean close, not a suspend.
     """
@@ -705,6 +721,18 @@ class PlayShellScreen:
         # Set by app.py to `feed.snapshot` (WO-P4-050's `WatchFeed`); `None`
         # here (the default) leaves the GAME interior blank, same as PWO-051.
         self.viewport_provider: Callable[[], object] | None = None
+        # PWO-055 -- this cockpit instance's own relationship to the control
+        # seat: does IT currently hold the human control lock and forward
+        # keystrokes? Plain bool, not a three-value mode string -- see
+        # ``cockpit.control_seat``'s module docstring for why this is
+        # deliberately binary (spectating XOR attached) rather than mirroring
+        # the daemon's own wire-reported app/human/spectate ``status["mode"]``
+        # (a distinct, DAEMON-GLOBAL fact this instance never IS "app").
+        # Defaults ``True`` -- today there is no send path at all (no `do`/
+        # `send`/`send_raw` verb reachable from this screen), so this cockpit
+        # is unconditionally spectating; PWO-056 (attach from cockpit) is
+        # what will ever set this to ``False``, on taking the lock.
+        self.spectating: bool = True
         self._now_fn = now_fn  # WO-P3-038 -- resolved to time.monotonic at draw() time when unset
         # LOGS newest-row flash (WO-P3-041): content-identity tracking across
         # draw() calls -- cockpit.logsband is a pure, stateless composer (no
@@ -1209,12 +1237,15 @@ class PlayShellScreen:
             logs_attrs[-1] = (last_text, curses.A_BOLD)
         cockpit_draw.draw_lines_attrs(self.stdscr, logs, logs_attrs)
 
-        # CONTROL_STRIP (WO-P3-038): the frame's own bottom-most interior
-        # row, a bare content row (no box -- same `boxed=False` shape as the
-        # row-1 profile strip) carrying ONLY the liveness cluster, right-
-        # aligned. Everything else the canon mock shows on this row (mode
-        # badge, A/R/T teach keys, run/record/panic cluster) belongs to the
-        # N5 mode-line-and-teach-controls WO -- left deliberately blank here.
+        # CONTROL_STRIP (WO-P3-038, PWO-055): the frame's own bottom-most
+        # interior row, a bare content row (no box -- same `boxed=False`
+        # shape as the row-1 profile strip). Carries the liveness cluster,
+        # right-aligned (unchanged), and now (PWO-055) the honest
+        # `cockpit.control_seat.SPECTATE_LABEL` marker on the left, filling
+        # whatever room remains there. The dynamic app/human mode badge,
+        # A/R/T teach keys, and run/record/panic cluster the canon mock
+        # shows on this row still belong to the N5 mode-line-and-teach-
+        # controls WO -- not built here; only the one static seat label is.
         control_strip = regions["control_strip"]
         if control_strip is not None:
             cs_w = control_strip["w"]
@@ -1224,7 +1255,13 @@ class PlayShellScreen:
                 )
             except Exception:  # noqa: BLE001 -- a raising composer must not crash the draw pass
                 liveness_text = _CONTROL_STRIP_COMPOSE_FAILED
-            control_strip_lines = [liveness_text.rjust(cs_w)] if cs_w > 0 else [""]
+            try:
+                control_strip_line = cockpit_control_seat.compose_control_strip_line(
+                    spectating=self.spectating, liveness_text=liveness_text, width=cs_w, unicode_ok=uok
+                )
+            except Exception:  # noqa: BLE001 -- a raising composer must not crash the draw pass
+                control_strip_line = liveness_text.rjust(cs_w) if cs_w > 0 else ""
+            control_strip_lines = [control_strip_line] if cs_w > 0 else [""]
         else:
             control_strip_lines = []
         cockpit_draw.draw_lines(
