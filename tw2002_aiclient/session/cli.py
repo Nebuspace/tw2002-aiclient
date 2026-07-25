@@ -150,11 +150,17 @@ def cmd_status(args):
         }
         print_response(resp, args)
         return 0
+    # SESSION-F7 / MT-03: pidfile-alive is not the same as a successful
+    # status round-trip (PID reuse / dead sock). Only claim daemon_running
+    # when the request itself succeeded.
     resp = send_request("status", {}, run_dir=run_dir)
-    resp["daemon_running"] = True
+    ok = bool(resp.get("ok"))
+    resp["daemon_running"] = ok
+    if not ok:
+        resp.setdefault("status_unreachable", True)
     resp["run_dir"] = str(run_dir)
     print_response(resp, args)
-    return 0 if resp.get("ok") else 1
+    return 0 if ok else 1
 
 
 def ensure_raw(profile, *, target="main_command", timeout=180.0, no_auto_arm=False, run_dir=None):
