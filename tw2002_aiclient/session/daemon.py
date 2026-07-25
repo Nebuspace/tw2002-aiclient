@@ -121,11 +121,40 @@ class CommandHandler(socketserver.StreamRequestHandler):
                 if not isinstance(key, str):
                     self._respond({"ok": False, "error": "missing_key"})
                     continue
-                session.send_raw(
-                    key.encode("latin-1", errors="ignore"),
-                    control_lock=lock,
-                    sender="human",
-                )
+                # WO-AUDIT-KEYDROP-HONESTY: never answer `{"ok": true}` for a
+                # keystroke that did not reach the wire. This was
+                # `key.encode("latin-1", errors="ignore")`, which turns any
+                # character above U+00FF into `b""`; `send_raw(b"")` then
+                # `sendall(b"")`s a no-op and we still claimed delivery.
+                # Three surfaces disagreed about that one non-event: the
+                # transcript log stayed silent, `last_sent` (served to every
+                # spectator) reported an empty send, and the LOGS tail gained
+                # a phantom `human> ` row.
+                #
+                # Both refusals below `continue`, exactly like `invalid_json`
+                # and `missing_key` above -- a key we cannot represent is a
+                # bad frame, never a reason to drop the operator's attach
+                # connection or release their MODE_HUMAN lock out from under
+                # them. Encoding is ALSO refused client-side before the wire
+                # (`cli.py::cmd_attach`), so these two errors are unreachable
+                # from the shipped client; they are the contract any other
+                # client gets, which is why they are stated rather than
+                # assumed.
+                try:
+                    data = key.encode("latin-1")
+                except UnicodeEncodeError:
+                    # The wire is healthy; THIS character has no 8-bit form.
+                    self._respond({"ok": False, "error": "unencodable_key"})
+                    continue
+                if not data:
+                    # Present, well-formed, and zero bytes long -- distinct
+                    # from `missing_key` (absent / not a string) because the
+                    # field IS there. Nothing reaches the game either way, so
+                    # `{"ok": true}` would be the same lie in a narrower
+                    # costume, phantom `human> ` row and all.
+                    self._respond({"ok": False, "error": "empty_key"})
+                    continue
+                session.send_raw(data, control_lock=lock, sender="human")
                 self._respond({"ok": True})
         except (BrokenPipeError, ConnectionResetError, OSError):
             pass
