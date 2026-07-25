@@ -253,15 +253,24 @@ def _glyph_set() -> dict[str, str]:
 
 
 def _safe_addstr(win: curses.window, y: int, x: int, text: str, attr: int = 0) -> None:
-    try:
-        max_y, max_x = win.getmaxyx()
-        if y < 0 or y >= max_y or x >= max_x:
-            return
-        clipped = text[: max(0, max_x - x - 1)]
-        if clipped:
-            win.addstr(y, x, clipped, attr)
-    except curses.error:
-        pass
+    """Thin delegate onto ``cockpit.draw.safe_write`` (WO-AUDIT-SAFE-ADDSTR-
+    DEDUPE) -- this used to be a separate, less-hardened local write
+    primitive; it is now the SAME choke every cockpit panel writes through,
+    kept as a local name so every launcher/bank/create-form call site below
+    (including the operator-typed ``edit_buf`` live-echo at the create form)
+    stays untouched. Two deliberate hardening-parity behavior changes this
+    brings to the launcher family, versus the old local clip:
+    (a) control characters in the written text are now neutralized to a
+    plain space before the write, where they previously reached ``addstr``
+    raw -- this is the path that renders the operator's own live-typed
+    field echo, so a raw control byte typed into a field could previously
+    move the real terminal cursor;
+    (b) text may now occupy the window's true last column, with the
+    resulting bottom-right-cell ``curses.error`` caught and ignored, where
+    the old clip stopped one column short of the window edge unconditionally.
+    Neither is a functional regression -- see ``cockpit.draw``'s own module
+    docstring for why both are the correct, already-proven behavior."""
+    cockpit_draw.safe_write(win, y, x, text, attr)
 
 
 def _draw_chrome_box(win: curses.window, attr: int) -> None:

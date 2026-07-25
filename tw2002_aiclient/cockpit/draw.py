@@ -10,11 +10,17 @@ bordered), thin-rounded for every instrument box (PRIORITIES/HUD/LOGS).
 Unicode/ASCII both switch on the single ``unicode_ok()`` flag below, mirroring
 ``screens.py``'s existing ``_unicode_ok()``/``TW2002_ASCII=1`` convention.
 
-Every write goes through ``_safe_write``: control-char neutralization, a
-cell-width-aware length clip (never reaches past the window's last display
-column -- east-asian-wide content is measured in terminal cells, not Python
-characters, stdlib-only via ``unicodedata``, no ``wcwidth`` dependency), and
-a ``try/except curses.error`` around the underlying ``addstr`` call. The clip
+``safe_write`` (module-public; ``_safe_write`` remains as an internal alias
+so existing in-module callers are untouched) is THE ONE coordinate-write
+primitive for every screen family in this project -- cockpit panels AND,
+per ``WO-AUDIT-SAFE-ADDSTR-DEDUPE``, ``screens.py``'s pre-cockpit launcher/
+bank/create-profile forms, which used to carry their own less-hardened
+``_safe_addstr`` twin. Every write goes through it: control-char
+neutralization, a cell-width-aware length clip (never reaches past the
+window's last display column -- east-asian-wide content is measured in
+terminal cells, not Python characters, stdlib-only via ``unicodedata``, no
+``wcwidth`` dependency), and a ``try/except curses.error`` around the
+underlying ``addstr`` call. The clip
 alone does not eliminate the classic curses "bottom-right cell" quirk --
 writing a box's own corner glyph at the window's true bottom-right cell
 (``max_y-1, max_x-1``) still raises ``curses.error`` after the character has
@@ -127,10 +133,12 @@ def _glyphs(weight: str, *, uok: bool) -> dict[str, str]:
     return THIN_UNICODE if uok else THIN_ASCII
 
 
-def _safe_write(win: curses.window, y: int, x: int, text: str, attr: int = 0) -> None:
+def safe_write(win: curses.window, y: int, x: int, text: str, attr: int = 0) -> None:
     """Bounded, guarded single write -- see the module docstring for why the
     corner-cell ``curses.error`` is caught rather than avoided by truncation,
-    and why control chars are neutralized before the cell-width clip."""
+    and why control chars are neutralized before the cell-width clip. THE
+    ONE coordinate-write primitive for every screen family -- see the
+    module docstring."""
     if not text:
         return
     try:
@@ -146,6 +154,11 @@ def _safe_write(win: curses.window, y: int, x: int, text: str, attr: int = 0) ->
         win.addstr(y, x, clipped, attr)
     except curses.error:
         pass  # bottom-right-cell throw is EXPECTED, not a bug (PREP §3 guard #1)
+
+
+# Internal alias -- every in-module caller below keeps spelling it
+# ``_safe_write``, unchanged by this WO's public export.
+_safe_write = safe_write
 
 
 def draw_box(
