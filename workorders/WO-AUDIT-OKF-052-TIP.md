@@ -1,8 +1,8 @@
 # WO-AUDIT-OKF-052-TIP — Inventory honesty for PWO-052
 
-> Status: **DRAFT** 2026-07-25 · AUDIT-OKF-6LENS · tip `458d140`  
+> Status: **EXECUTED** 2026-07-25 · AUDIT-OKF-6LENS docs tick · tip inventory aligned (`de47a26`)  
 > Type: docs · Priority: P1 · Lens: L1 features / honesty  
-> Refs: `WO-P4-050-057-viewport-PREP.md` (052 DONE) · `ULTRACODE-WO-INVENTORY.md` (still PREP)
+> Refs: `WO-P4-050-057-viewport-PREP.md` (052 DONE) · `ULTRACODE-WO-INVENTORY.md`
 
 ## Goal
 Align ULTRACODE Phase-4 row for PWO-052 with tip reality (glyph paint DONE; color was 053).

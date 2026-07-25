@@ -184,7 +184,7 @@ Banked hygiene (not a PWO id): **pty mid-flush settle** — PREP `workorders/WO-
 |----|-------|------|---------|------|--------|-------|-------|
 | PWO-050 | Watch-stream subscribe **DONE** 2026-07-24 (own commit, first past `861ea58`) | build | 020 | Product reads settle stream | frames arrive | unit/live | spectate-and-attach |
 | PWO-051 | Center 80×25 viewport shell **DONE** 2026-07-24 (own commit, first past `b211be2`; grown `bb780e0`) | build | 033·050 | Empty bordered 82×27 | geometry | TTY | trainer-cockpit GAME UI |
-| PWO-052 | Viewport render grid — PREP (same) | build | 051 | pyte cells drawn | matches spectate | side-by-side | spectate-and-attach color · visual-language |
+| PWO-052 | Viewport render grid **DONE** 2026-07-24 (`de47a26` · mono glyph; color → 053) | build | 051 | pyte cells drawn | matches spectate | side-by-side | spectate-and-attach color · visual-language |
 | PWO-053 | Viewport color parity **DONE** 2026-07-25 (`eb59274`) | harden | 052 | Color map == ops spectate | visual/diff | TTY | spectate… N3 · visual-language |
 | PWO-054 | Disconnect viewport chrome **DONE** 2026-07-25 (`6c7d834`) | build | 051 | Warn/danger border when down | state visible | kill sock | trainer-cockpit states |
 | PWO-055 | Product spectate mode (read-only) **DONE** 2026-07-25 (`37b3e99` · F2 ops CLI HOLD) | build | 050 | Watch without lock | no sends | TTY | spectate-and-attach · visual-language |
