@@ -17,7 +17,7 @@
 - **AI never live-drives.** Retire any `AI-PILOT` / `ai_pilot` UI string. Teach overlay is cyan/info, transient, never a mode-line dual seat. Chip text = **`APP`** (green/`ok`).
 - **What 056/057 already satisfied:** Human/`MANUAL — YOU HAVE CONTROL` chip LIVE · `M` attach LIVE · Ctrl-] detach LIVE · no-send tripwire + attach allowlist LIVE · redaction on attach channel LIVE.
 - **What Phase 5 still owes:** A/R/T teach strip · STOP banner + reason codes · arm/confirm · N5 operate cluster · coverage meter (App-vs-Human, AI≠live slice). **061 Mode (Accept #2):** **CLOSED** on origin `420430d` — Ctrl-A Mode both directions · attached `M`=Move · Spectate attach off printable `M` · single `MODE_KEY`.
-- **F2 HOLD** — ops `tw spectate` CLI still Max-gated. **G2–G4 HOLD** unchanged.
+- **Ops `tw spectate` CLI** — **RETIRED / WONTBUILD** (Max `@ 13:13:55Z`); spectate is in-cockpit only (PWO-055). **G2–G4 HOLD LIFTED** (Max GO whole sequence `@ 13:15:00Z`) — **G2 EXECUTING**; G3→G4 serialize behind G2.
 - **North-star SIGNED** (Batch 2/3) — align to `north-star.md`; do not invent new one-cockpit prose beyond signed text.
 - **Archive** = port-source only (`spectate_app` / `spectate_layout` badges) — never `import twclient`.
 - **D1 harness:** Layer-A pure compose + FakeClient; Layer-B pty when chip/tone geometry matters; never `run/twd.sock` in Accept.
@@ -166,7 +166,7 @@ Pending (not blocking PREP Accept): DOC-GAP-M-FROM-SPECTATE · DOC-GAP-POST-DETA
 1. **Do not invent Phase-5 product scope** beyond ULTRACODE 060–072 + canon cites above.
 2. **Spectate ≠ dual member** — chip may show SPECTATE when observing; `M` dual is App↔Human only once App can drive.
 3. **Tripwire** — any new send sites need precise allowlist adjudication; never loosen `test_spectate_no_send.py`.
-4. **F2 / G2–G4 HOLD** — no ops spectate CLI, no menu crawler.
+4. **Ops spectate RETIRED** — no ops `tw spectate` invent. **G2 EXECUTING** (menu crawler); do not invent G3/G4 product ahead of serialize.
 5. **North-star SIGNED** — align to signed `north-star.md`; no invent beyond that text without Max.
 6. **Archive badge vocabulary** — AI-PILOT / AUTO-LOOP / AI meter slice are recorded divergences to close, not revive.
 7. **Socket hang harden** remains banked — out of Phase-5 PREP execute unless hub assigns.
@@ -175,4 +175,4 @@ Pending (not blocking PREP Accept): DOC-GAP-M-FROM-SPECTATE · DOC-GAP-POST-DETA
 
 ## 5. Execute readiness
 
-**PWO-060 DONE** (`2ca3154`). **PWO-061 DONE** — kernel `d4a8829` + entry Accept #2 **`420430d`** (Mode=Ctrl-A; attached `M`=Move; ADR-002) · entry-APP **`7c0e882`**. log_note RETIRE `4280d8a` (historical mentions stay — retire record). **Serialize:** **064 DONE `af62889`** → **062 EXECUTING** → **066 STAGED** (no ∥; `control_seat`/`screens` contention). Also staged ⏳: 063 · 065 · 067–072. Named HOLD: OPEN-003 · F2 · G2–G4 Max-gated. Cursor docs: OKF status-truth only; no product `.py`.
+**PWO-060 DONE** (`2ca3154`). **PWO-061 DONE** — kernel `d4a8829` + entry Accept #2 **`420430d`** (Mode=Ctrl-A; attached `M`=Move; ADR-002) · entry-APP **`7c0e882`**. log_note RETIRE `4280d8a` (historical mentions stay — retire record). **Serialize:** **064 DONE `af62889`** → **062 EXECUTING** → **066 STAGED** (no ∥; `control_seat`/`screens` contention). Also staged ⏳: 063 · 065 · 067–072. **OPEN-003 CLOSED** · ops spectate **RETIRED** · **G2 EXECUTING** (G3→G4 staged). Cursor docs: OKF status-truth only; no product `.py`.

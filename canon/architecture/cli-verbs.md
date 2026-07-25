@@ -177,8 +177,8 @@ tw mine --min-support 3            # propose draft skills from the ledger
 **LIVE ops verbs today:** `status`, `ensure`, `screen`, `stop`, `do`, `send`, `read`, `history`,
 `watch`, `attach`, `menumap`.
 
-**NOT on tip (HOLD / later phases — do not document as shipped):** `spectate` (**F2 HOLD**),
-`loops` / `autoloop` (**G2–G4 HOLD**), `start` (ensure covers spawn), `log`/`trail`, `frames`,
+**NOT on tip (HOLD / later / retired — do not document as shipped):** `spectate` (**RETIRED / WONTBUILD** — Max `@ 13:13:55Z`; in-cockpit Spectate LIVE via PWO-055),
+`loops` / `autoloop` (**G3–G4 STAGED** behind G2; Max GO whole G-sequence `@ 13:15:00Z` · **G2 EXECUTING**), `start` (ensure covers spawn), `log`/`trail`, `frames`,
 `analyze`/`mine`, `record`/`replay`, `play`/`haggle`/`autopilot`/`crawl`, `players`/`servers`/`probe`,
 `aiclient` as a separate curses product entry (product is `./tw2002-aiclient`).
 

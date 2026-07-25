@@ -30,7 +30,23 @@ RULES:
 
 <!-- Items not yet resolved. -->
 
-### OPEN-003 — Config Bootstrap host/port: `profiles.toml [default]` literal vs server-catalog resolution — OPEN
+<!-- (empty — OPEN-003 formally CLOSED 2026-07-25) -->
+
+---
+
+## RESOLVED
+
+<!-- Items with a human decision on record. Waiting for ADR drafting or already captured. -->
+
+<!-- (empty — nothing resolved yet) -->
+
+---
+
+## CLOSED
+
+<!-- Items fully absorbed into canon (ADR accepted + canon updated). Safe to archive. -->
+
+### OPEN-003 — Config Bootstrap host/port: `profiles.toml [default]` literal vs server-catalog resolution — CLOSED
 
 **Filed:** 2026-07-24
 **Filed by:** Samantha (impl-claudecode-aiclient), via WO-P2-020 Wave-1 review
@@ -70,67 +86,24 @@ and `env.py` implements correctly; the fake-harness proof does not exercise the
 follow-on refinement WO, not a 020 blocker.
 
 **Staging (2026-07-24 — WO-OPEN-003-DOCS, hub):** Hub leans **Option A** (one catalog-aware
-resolver; `servers.toml` preferred per greenfield schema). This is **Pending** — Max still ratifies
-before any product execute. Execute stub: `workorders/WO-OPEN-003-host-port-resolver.md` (PLANNED).
-Related parked seam: `workorders/WO-TW-CONFIG-DIR.md` (folds naturally with the same cleanup).
+resolver; `servers.toml` preferred per greenfield schema). Execute stub:
+`workorders/WO-OPEN-003-host-port-resolver.md`. Related seam: `workorders/WO-TW-CONFIG-DIR.md`.
 
-**Option A (execute shape, draft):**
-1. Single shared resolver used by `env.py` / daemon bootstrap / cli profile connection /
-   `credentials.list_profile_summaries` — profile → optional explicit `host`/`port` override → else
-   `server` catalog key → `config/servers.toml`.
-2. Canon follow-on: update `session-engine.md` Config Bootstrap to state the catalog indirection
-   (docs win after Max GO).
-3. Collapse duplicate copies (today: env literal · cli `_resolve_profile_connection` · protocol
-   `_load_profile` catalog branch · credentials summaries) into one function.
-4. No change to env-first password / chmod-600 secrets / redaction; `TW_CONFIG_DIR` stays its own WO.
+**Option A execute (shipped `da1c875`):**
+1. **One catalog-aware resolver.** `credentials.resolve_profile_host_port` — profile → optional
+   explicit `host`/`port` override → else `server` key → `config/servers.toml`. `env.py` / `cli.py` /
+   `protocol.py` / `credentials.list_profile_summaries` all delegate (four resolvers collapsed).
+2. **Typed errors.** `ProfileConnectionError` subtypes (`ProfileNotFound` / `ProfileIncomplete` /
+   `ProfileMalformed`).
+3. **`TW_CONFIG_DIR`.** Additive env seam on credentials config paths; zero change to env-first
+   password / chmod-600 / redaction.
+4. **Canon.** `session-engine.md` Config Bootstrap states catalog indirection + shared resolver.
 
-**Resolution note (2026-07-24) — Pending.** Option A ruled and delegated to
-`impl-claudecode-aiclient` (Max, via the hub); executed via WO-OPEN-003-A alongside the parked
-`TW_CONFIG_DIR` seam. `canon/architecture/session-engine.md`'s Config Bootstrap section (and its
-Schema-table "Config bootstrap" row) is updated to describe the catalog indirection — the profile's
-`server` field, resolved through `config/servers.toml`, is the preferred host/port source, with an
-explicit profile `host`/`port` as an override — and to name the single shared resolver the daemon
-bootstrap, CLI, and `credentials.list_profile_summaries()` now all call, collapsing the 4 duplicate
-resolvers this item flagged. This item stays **OPEN/Pending** — the human/hub still owns moving it
-to RESOLVED/CLOSED formally (per the append-only + human-resolves rules above); this note records
-that the canon side of Option A execute is done.
-
-**CLOSE draft (2026-07-24) — Pending Max formal CLOSE.** Product execute for **Option A** shipped in
-`da1c875` (full SHA `da1c875e278f63aacecaaeef6fae1f6305d6a1b4`). WOs:
-`workorders/WO-OPEN-003-host-port-resolver.md` (DONE) and
-`workorders/WO-TW-CONFIG-DIR.md` (DONE; folded into the same commit). What landed:
-
-1. **Option A — one catalog-aware resolver.** `credentials.resolve_profile_host_port` is the single
-   shared path: profile → optional explicit `host`/`port` override → else `server` key →
-   `config/servers.toml`. `env.py` / `cli.py` / `protocol.py` / `credentials.list_profile_summaries`
-   all delegate to it (four divergent resolvers collapsed).
-2. **Typed errors.** Failures raise `ProfileConnectionError` subtypes
-   (`ProfileNotFound` / `ProfileIncomplete` / `ProfileMalformed`) so callers classify by type, not
-   message text; empty/`0` host/port validated as malformed on both branches.
-3. **`TW_CONFIG_DIR`.** Additive env seam on credentials config paths (default = repo `config/` when
-   unset) so spawned-daemon / harness tests can isolate config without monkeypatching. Zero change
-   to env-first password resolution, chmod-600 secrets, or redaction.
-4. **Canon.** `canon/architecture/session-engine.md` Config Bootstrap already states the catalog
-   indirection and names the shared resolver.
-
-This item remains **OPEN/Pending**. Do **not** mark RESOLVED or CLOSED until Max formally closes it
-(per the human-resolves rule above). This block is the CLOSE draft only.
+**Resolved (2026-07-25T13:13:55Z) — CLOSED.** Max formal CLOSE (hub relay `@ 13:13:55Z`): Option A
+already shipped `da1c875`; DECISIONS item CLOSED. No further ADR owed — canon + product already
+aligned.
 
 <!-- (end OPEN-003) -->
-
----
-
-## RESOLVED
-
-<!-- Items with a human decision on record. Waiting for ADR drafting or already captured. -->
-
-<!-- (empty — nothing resolved yet) -->
-
----
-
-## CLOSED
-
-<!-- Items fully absorbed into canon (ADR accepted + canon updated). Safe to archive. -->
 
 ### OPEN-002 — Commit the remaining untracked `canon/**` / `workorders/**` bundles — CLOSED
 

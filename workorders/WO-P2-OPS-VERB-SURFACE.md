@@ -3,7 +3,7 @@
 > Status: **G1 DONE** · tip `cbfb1e5` · README sync in flight
 > Seat: `impl-aiclient-cursor`
 > Refs: · `WO-P2-OPS-VERB-F-PREP.md` · `WO-P2-OPS-VERB-G-PREP.md`
-> HOLD: F2 spectate · G2–G4 crawler/loops/autoloop until Max GO
+> HOLD: ops `tw spectate` **RETIRED / WONTBUILD** (Max `@ 13:13:55Z`) · **G2 EXECUTING** · G3→G4 staged (Max GO whole sequence `@ 13:15:00Z`)
 
 ## Goal
 
@@ -22,7 +22,8 @@ stage ordered execute slices to grow the verb table one WO at a time.
 | `menumap` | **YES** | **G1** · read-only inspector over G0 menu store |
 | `start` | **NO** | slice D docs-only |
 | `state` | **NO** | deferred — `state_parser` not ported |
-| `spectate` / `loops` / `autoloop` | **NO** | F2 / G3–G4 **HOLD** |
+| `spectate` | **NO** | **RETIRED / WONTBUILD** — Max `@ 13:13:55Z`; in-cockpit Spectate LIVE |
+| `loops` / `autoloop` | **NO** | **G3–G4 STAGED** behind G2 (HOLD lifted `@ 13:15:00Z`) |
 
 `./tw --help` subparsers:
 `{status,ensure,screen,stop,do,send,read,history,watch,attach,menumap}`.
@@ -44,10 +45,10 @@ closes the socket without driving the game.
 | **F-PREP** | spectate·attach inventory | **DONE** — see `WO-P2-OPS-VERB-F-PREP.md` |
 | **F1** | thin `tw attach` CLI | **DONE** |
 | **F1b** | attach secret redaction proofs | **DONE** (ledger sink banked) |
-| **F2a/b** | spectate_layout → spectate_app + `tw spectate` | **HOLD** — Max re-opens CC·Fable |
+| **F2a/b** | spectate_layout → spectate_app + `tw spectate` | **RETIRED / WONTBUILD** — Max `@ 13:13:55Z`; cockpit Spectate LIVE |
 | **G-PREP** | menumap / loops inventory | **DONE** — see `WO-P2-OPS-VERB-G-PREP.md` |
 | **G0** | menu_* pure (sig/nav/map_view) | **DONE** |
 | **G1** | `tw menumap` CLI | **DONE** |
-| **G2–G4** | crawler · loops · autoloop | **HOLD** — Max GO |
+| **G2–G4** | crawler · loops · autoloop | **HOLD LIFTED** · **G2 EXECUTING** · G3→G4 staged (Max GO `@ 13:15:00Z`) |
 
 **Accept for a wire slice:** verb on help · FakeSession · path-leak · full suite green.

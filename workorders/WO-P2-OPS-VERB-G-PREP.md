@@ -3,7 +3,7 @@
 > Status: **DONE** pending Accept · tip `582c210`
 > Seat: `impl-aiclient-cursor`
 > Parent: `WO-P2-OPS-VERB-SURFACE.md` slice G
-> HOLD: F2 spectate parked (hub @ 14:46:58Z) until Max re-opens CC·Fable
+> HOLD: ops `tw spectate` **RETIRED / WONTBUILD** (Max `@ 13:13:55Z`) · **G2 EXECUTING** · G3→G4 staged (Max GO `@ 13:15:00Z`)
 
 ## Goal
 
@@ -24,7 +24,7 @@ related `loops` / `autoloop` / record·mine dependencies). **Do not wire.**
 
 **Live tip already usable by a future menumap:** `tw screen` / `tw status` /
 WatchHub / control_lock · G0 menu modules under `tw2002_aiclient.menu`.
-**G1 LANDED:** `tw menumap` CLI. **Still missing:** crawler (G2) · loops (G3+) .
+**G1 LANDED:** `tw menumap` CLI. **G2 EXECUTING** (menu crawler). **Still staged:** loops (G3+) · autoloop (G4).
 
 ## Recommended execute slices
 
@@ -32,7 +32,7 @@ WatchHub / control_lock · G0 menu modules under `tw2002_aiclient.menu`.
 |-------|------|-------|---------|
 | **G0** | Port `menu_sig` + `menu_nav` + `menu_map_view` (pure, read-only) + rehab unit tests — **LANDED** | Small–medium (~230 LOC + tests) | knowledge path helper (thin) |
 | **G1** | Wire `tw menumap` CLI (store-only + optional live localize via `screen`) · un-ignore `test_cli_menumap` — **LANDED** | Small | G0 |
-| **G2** | Port `menu_crawler` (writes map) — separate from inspector; may need ensure/drive | Large (~944 LOC) | G0 · settle/do |
+| **G2** | Port `menu_crawler` (writes map) — **EXECUTING** (Max GO `@ 13:15:00Z`; canon K3 legs) | Large (~944 LOC) | G0 · settle/do |
 | **G3** | `tw loops` list (protocol + CLI) — needs skill/loop store | Medium | record/mine or empty-honest |
 | **G4** | `tw autoloop` + `loop_player` — App drive; control_lock + WatchHub live | Large (~369+ LOC) | G3 · careful vs Max pace-down chrome |
 
@@ -42,7 +42,7 @@ crawler/autoloop.
 
 ## Out of scope (this PREP)
 
-Implementing G0–G4 · spectate F2 (HOLD) · chrome/cockpit · inventing empty stores.
+Implementing G3/G4 ahead of G2 Accept · inventing ops `tw spectate` (RETIRED) · inventing empty stores.
 
 ## Accept (this PREP)
 

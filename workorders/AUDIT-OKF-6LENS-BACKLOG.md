@@ -2,8 +2,8 @@
 
 > Seat: `impl-aiclient-cursor` · Tip: `59c4455` (audit drafts) atop `458d140` / product `d4a8829` · UTC: 2026-07-25T05:12Z  
 > HANDOFF: `AUDIT-OKF-6LENS` · **No product `.py` in this ticket**  
-> HOLDs honored: F2 · G2–G4 · auth/secrets (rotate CLOSED — archive never-live) · **Batch 1b CLOSED** (Ctrl-A Mode) · **Batch 2/3 CLOSED** (APP chip · Spectate≠Mode · Ctrl-]@App-hold no-op · north-star SIGNED · log_note RETIRE)  
-> Scout cross-check: inventory tip-map — **064 DONE `af62889` · 062 EXECUTING · 066 STAGED** (serialize 064→062→066); staged 063/065/067–072; 061 CLOSED; 080 PARTIAL; **085/086 LIVE** (gated). **Closed since:** HARDEN-ATTACH `88004d8` · WatchHub `00cb9e8` · SAFE-ADDSTR `29fd76c` · GLYPH `8facad9` · SAFE-WIDTH `c0bdab7` · APP-LABEL docs-win · CTRL-]APP Ruled · mux Ctrl-A note · **RECONNECT `19a0a27`** · **CLI-KEYS `032bc12`** · **061-ENTRY `420430d`** · **log_note RETIRE `4280d8a`** · **ENTRY-APP `7c0e882`** · **stale-M `ca1e078`→`276327e`** · **UNICODE-OK `922739b`** · **A-L1-052-TIP** · **F1 ATTACH-SEND-KEY-BOOL `7e13b7d`** · **064 STOP-banner `af62889`**. Banked: session-audit **F6–F8** + classify gap + F1 micros (`:249` · module docstring) + 064 micros (stale `twclient/intervention_labels.py` path · `screens.py` docstring still denies live App/Human badge). Open Max-gated: **F5** · OPEN-003 · F2/G2–G4. CC in flight: **062** · F2 after disjointness.
+> HOLDs honored: ops spectate **RETIRED** · auth/secrets (rotate CLOSED — archive never-live) · **Batch 1b CLOSED** (Ctrl-A Mode) · **Batch 2/3 CLOSED** (APP chip · Spectate≠Mode · Ctrl-]@App-hold no-op · north-star SIGNED · log_note RETIRE) · **OPEN-003 CLOSED** · **G2–G4 HOLD LIFTED** (G2 EXECUTING)  
+> Scout cross-check: inventory tip-map — **064 DONE `af62889` · 062 EXECUTING · 066 STAGED** (serialize 064→062→066); staged 063/065/067–072; 061 CLOSED; 080 PARTIAL; **085/086 LIVE** (gated). **Closed since:** HARDEN-ATTACH `88004d8` · WatchHub `00cb9e8` · SAFE-ADDSTR `29fd76c` · GLYPH `8facad9` · SAFE-WIDTH `c0bdab7` · APP-LABEL docs-win · CTRL-]APP Ruled · mux Ctrl-A note · **RECONNECT `19a0a27`** · **CLI-KEYS `032bc12`** · **061-ENTRY `420430d`** · **log_note RETIRE `4280d8a`** · **ENTRY-APP `7c0e882`** · **stale-M `ca1e078`→`276327e`** · **UNICODE-OK `922739b`** · **A-L1-052-TIP** · **F1 ATTACH-SEND-KEY-BOOL `7e13b7d`** · **064 STOP-banner `af62889`** · **OPEN-003**. Banked: session-audit **F6–F8** + classify gap + F1 micros + 064 micros + **F9** cockpit UTF-8 garbage-forward. **F5 Ruled B** (carve-out pending CC). Ops spectate **RETIRED**. **G2 EXECUTING**. CC in flight: **062** ∥ F2-daemon ∥ cli-encode ∥ F6 ∥ G2.
 
 Committable twin: `workorders/AUDIT-OKF-6LENS-BACKLOG.md`. Draft WOs: `workorders/WO-AUDIT-*.md` (8).
 
@@ -23,9 +23,13 @@ Committable twin: `workorders/AUDIT-OKF-6LENS-BACKLOG.md`. Draft WOs: `workorder
 | Phase 6 tip | PWO-080 PARTIAL · 085/086 LIVE · 081–084/087–088 MISSING | Fold into WO-AUDIT-PHASE6-PREP |
 | Orphan archive tests | `tests/test_spectate_app.py` etc. still `import twclient` + AI-PILOT expects | cleanup candidate (not product UI) |
 | Banked session-audit | F6–F8 · classify coverage gap | **BANKED** `@ 12:15Z` adjudicate · findings rows · no WO this wave |
-| Max-gated session | F5 daemon `internal_error:{e}` | **🧑‍⚖️** DECISION-NEEDED — no WO until Max |
+| Max-gated session | F5 daemon `internal_error:{e}` | **Ruled (B)** Max `@ 13:13:55Z` — carve-out pending CC · no align-to-A |
 | Session F1 | ATTACH-SEND-KEY-BOOL | **DONE** tip `7e13b7d` · `WO-AUDIT-ATTACH-SEND-KEY-BOOL` EXECUTED |
 | Phase-5 064 | STOP banner reason codes | **DONE** tip `af62889` · PREP/ULTRACODE tip-honesty |
+| OPEN-003 | host/port resolver | **CLOSED** Max `@ 13:13:55Z` · product `da1c875` |
+| Ops spectate F2 | `tw spectate` CLI | **RETIRED / WONTBUILD** Max `@ 13:13:55Z` — cockpit Spectate LIVE |
+| G2–G4 | crawler · loops · autoloop | **HOLD LIFTED** Max GO `@ 13:15:00Z` · **G2 EXECUTING** · G3→G4 staged |
+| F9 | cockpit UTF-8 garbage-forward | **BANKED** — behind cli-encode · findings row |
 
 ## Findings by lens (net-new / honesty)
 

@@ -150,7 +150,7 @@ Hub relay `@ 09:33:23Z`: on cockpit **entry**, chip must show **`APP`** to match
 | SECRETS-ARCHIVE-NEVER-LIVE | Rotate gate on archive secrets | **CLOSED** — Max: archive `secrets.json` never live; no rotate |
 
 ### Banked · session/ honesty audit (2026-07-25 · CC READ-ONLY · hub adjudicated `@ 12:15:44Z`)
-Source tip at audit: `922739b`. Product fixes: F1 CUT (CC ∥ 064) · F2 after F1 · F3/F4 staged · **F5 🧑‍⚖️ Max** (no patch) · **F6–F8 BANK** (this stamp).
+Source tip at audit: `922739b`. Product fixes: F1 CUT (CC ∥ 064) · F2 after F1 · F3/F4 staged · **F5 Ruled (B)** Max `@ 13:13:55Z` (carve-out pending) · **F6–F8 BANK** (this stamp) · **F9 BANK** (cockpit UTF-8).
 
 | ID | Gap | Tip reality |
 |---|---|---|
@@ -158,10 +158,11 @@ Source tip at audit: `922739b`. Product fixes: F1 CUT (CC ∥ 064) · F2 after F
 | SESSION-F7-STATUS-DAEMON-RUNNING | `cli.py` `cmd_status` stamps `daemon_running: True` over failed round-trip (PID reuse) | **BANKED** — exit code stays honest; `--json` self-contradicts |
 | SESSION-F8-WATCH-FRAME-GAP | `cli.py` `tw watch` swallows unparseable frames; `--frames N` counts only parsed | **BANKED** — invisible gap on corruption |
 | SESSION-AUDIT-COVERAGE-GAP | `classify.py` (634 lines) unaudited except secret-prompt regex; also unread: `credentials` · `env` · `iac` · `terminal` · `player_bank` | **BANKED** — future audit WO must not inherit false coverage |
-| SESSION-F5-INTERNAL-ERROR-STR | `daemon.py:76-77` widest catch returns `internal_error:{e}` (siblings type-name-only) | **🧑‍⚖️ Max** — DECISION-NEEDED; secrets leak UNVERIFIED; path disclosure VERIFIED |
+| SESSION-F5-INTERNAL-ERROR-STR | `daemon.py:76-77` widest catch returns `internal_error:{e}` (siblings type-name-only) | **Ruled (B)** Max `@ 13:13:55Z` — document carve-out (keep full `str(e)`); secrets leak UNVERIFIED · path disclosure VERIFIED; product carve-out = CC `WO-AUDIT-F5-CARVE-OUT` after F2-daemon |
 | SESSION-F1-ATTACH-SEND-KEY-BOOL | Interactive `tw attach` discarded `send_key` bool → silent ATTACHED black hole | **DONE** tip `7e13b7d` (was `4754dd4`) · `WO-AUDIT-ATTACH-SEND-KEY-BOOL` |
 | SESSION-F1-MICRO-SETTLE-NUDGE | `cli.py:249` discards `send_request("read")` dict | **BANKED** — benign settle-nudge; `ensure` at `:260` is checked gate |
 | SESSION-F1-MICRO-DOCSTRING | `cli.py:3-5` claims `tw watch` is **the** lifetime-stream exception | **BANKED** — false since attach holds a socket for session; one-line docs fix |
 | P5-064-STALE-INTERVENTION-PATH | Canon / archive tests cite `twclient/intervention_labels.py` | **BANKED** — live catalog is `cockpit/stopbanner.py` (`af62889`); archive path gone |
 | P5-064-SCREENS-BADGE-DOCSTRING | `screens.py` module docstring still says no dynamic App/Human mode badge | **BANKED** — stale vs 060 LIVE `control_seat` chip; hub cited ~`:713` (line may drift) |
+| F9-COCKPIT-UTF8-GARBAGE-FORWARD | Cockpit `getch()` path forwards each UTF-8 byte `<256` as its own `send_key` | **BANKED** — real-pty proof U+2192 → `[226,134,146]` all forwarded; distinct from `key>=256` ruling; serialize cockpit fix behind cli-encode contract (mirror refuse+tell) |
 

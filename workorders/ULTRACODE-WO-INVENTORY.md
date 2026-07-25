@@ -193,7 +193,7 @@ Banked hygiene (not a PWO id): **pty mid-flush settle** — PREP `workorders/WO-
 
 ### Phase 5 — Mode line, escalation, teach
 
-> PREP: `workorders/WO-P5-060-072-mode-teach-PREP.md` — Phase 4 CLOSED; **PWO-060 DONE** (`2ca3154`); **PWO-061 CLOSED** (`420430d` · Ctrl-A Mode · ADR-002); entry-APP `7c0e882`; **serialize 064 → 062 → 066** (**064 DONE `af62889`**; **062 EXECUTING**; 066 STAGED); staged 063/065/067–072; OPEN-003 · F2 · G2–G4 Max-gated.
+> PREP: `workorders/WO-P5-060-072-mode-teach-PREP.md` — Phase 4 CLOSED; **PWO-060 DONE** (`2ca3154`); **PWO-061 CLOSED** (`420430d` · Ctrl-A Mode · ADR-002); entry-APP `7c0e882`; **serialize 064 → 062 → 066** (**064 DONE `af62889`**; **062 EXECUTING**; 066 STAGED); staged 063/065/067–072; **OPEN-003 CLOSED** · ops spectate **RETIRED** · **G2 EXECUTING** (G3→G4 staged · Max GO `@ 13:15:00Z`).
 
 | ID | Title | Type | Depends | Goal | Accept | Proof | Canon |
 |----|-------|------|---------|------|--------|-------|-------|

@@ -38,7 +38,7 @@ pyte **glyphs and per-cell fg/bg/bold color** into the 80×25 GAME (**LIVE** · 
 Border STATE flip (danger non-bold / color-unavailable `A_UNDERLINE`) is **LIVE** and reconnect-proven
 (P3-040 · PWO-054 · tip `6c7d834`). In-cockpit spectate indicator is **LIVE** (muted `SPECTATE` ·
 PWO-055); attach/detach loop is **LIVE** (historically bare `M` · Ctrl-] · chip SPECTATE↔MANUAL · tip `bba53d4`; Mode chord = **Ctrl-A** per ADR-002);
-App/Human dual chips are **LIVE** (PWO-060 · tip `2ca3154`); ops `tw spectate` remains **F2 HOLD**.
+App/Human dual chips are **LIVE** (PWO-060 · tip `2ca3154`); ops `tw spectate` is **RETIRED / WONTBUILD** (Max `@ 13:13:55Z` — folded into cockpit Spectate).
 Do not read chrome-tones prose as recoloring game cells with the 7-tone semantic table.
 
 # Schema

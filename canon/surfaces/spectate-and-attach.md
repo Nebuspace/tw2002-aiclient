@@ -23,7 +23,7 @@ daemon/CLI split beneath them (see [the Session Engine](/architecture/session-en
 | WatchHub + daemon `subscribe` | **LIVE** (`tw2002_aiclient/session/watch.py`) |
 | `tw watch` (ops CLI settle-edge tail) | **LIVE** |
 | `tw attach` (thin control-lock attach) | **LIVE** — no full curses paint yet |
-| `tw spectate` (ops curses HUD) | **MISSING** — **F2 HOLD** (Max-gated); do not invent |
+| `tw spectate` (ops curses HUD) | **RETIRED / WONTBUILD** — Max `@ 13:13:55Z`; spectate folded into cockpit (PWO-055 LIVE). Do **not** invent ops `tw spectate` |
 | Product play-shell watch subscribe | **LIVE** (PWO-050 · `watchfeed.py`) — settle-edge consumed for GAME paint (PWO-052/053) |
 | Product play-shell GAME viewport | **LIVE** glyph + per-cell color paint 80×25 (PWO-052 · PWO-053); disconnect chrome **LIVE** (PWO-054) |
 | Product in-cockpit spectate state | **LIVE** (PWO-055) — `spectating` + muted `SPECTATE` chip + no-send tripwire |

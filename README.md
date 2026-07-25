@@ -153,11 +153,11 @@ Everything takes `--json` for machine-parseable output where applicable.
 
 ### Coming (not on `./tw --help` yet)
 
-Remaining classic ops verbs (`start`, `state`, `spectate`, `loops`,
+Remaining classic ops verbs (`start`, `state`, `loops`,
 `autoloop`, …) are staged in
 [`WO-P2-OPS-VERB-SURFACE.md`](workorders/WO-P2-OPS-VERB-SURFACE.md)
-(A–C + E2 `watch` + F1 `attach` + G1 `menumap` shipped; **F2 spectate** and
-**G2–G4** crawler/loops/autoloop **HOLD** until Max GO — see
+(A–C + E2 `watch` + F1 `attach` + G1 `menumap` shipped; ops `tw spectate`
+**RETIRED / WONTBUILD**; **G2 EXECUTING** · G3→G4 staged after Max GO — see
 [`WO-P2-OPS-VERB-G-PREP.md`](workorders/WO-P2-OPS-VERB-G-PREP.md)).
 
 Notes worth knowing up front:
@@ -174,7 +174,8 @@ Notes worth knowing up front:
 screen paint yet — pair with `tw watch`. Secret keystrokes at password/PIN
 prompts are redacted in the transcript log and `last_sent` via
 `Session.send_raw` (ledger/`record_attach_keystroke` still cut). Full-curses
-`tw spectate` remains Coming (F2 HOLD) — see
+Ops `tw spectate` is **RETIRED / WONTBUILD** (Max `@ 13:13:55Z`) — in-cockpit
+Spectate is LIVE via PWO-055; see
 [`WO-P2-OPS-VERB-F-PREP.md`](workorders/WO-P2-OPS-VERB-F-PREP.md).
 
 

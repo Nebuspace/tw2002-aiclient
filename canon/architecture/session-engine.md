@@ -173,7 +173,7 @@ resolver**: the profile's `server` field (a catalog key into `config/servers.tom
 second read path → a hard error naming the missing variable (no silent fallback host). This mirrors
 the env-first idiom credential resolution already uses, and it is the same resolver `env.py`, the
 daemon bootstrap, the CLI's profile connection, and `credentials.list_profile_summaries()` all call
-— one function, not four divergent copies (ADR pending; see [OPEN-003](/DECISIONS.md)).
+— one function, not four divergent copies ([OPEN-003 CLOSED](/DECISIONS.md) · tip `da1c875`).
 
 # Schema
 
