@@ -164,6 +164,33 @@ class Session:
         try:
             self.conn.close()
         except Exception:
+            # Deliberately broad AND silent -- both on purpose, not an
+            # oversight:
+            #  - BROAD: `self.conn` is already dead (that's WHY reconnect()
+            #    was called); tearing it down can raise near anything
+            #    depending on how the far end and the OS socket layer
+            #    react to closing an already-broken connection. Reconnect's
+            #    job is to land a working NEW connection, never to salvage
+            #    the old one, so no failure here may block the fresh
+            #    TelnetConnection built just below.
+            #  - SILENT: Cipher/redaction doctrine (canon: doctrine/
+            #    secrets-and-credentials.md) -- this session carries
+            #    TradeWars server payloads and operator-typed input, and
+            #    str(e) on an arbitrary exception could echo that content.
+            #    Same reasoning watch.py's WatchHub documents at its own
+            #    `except Exception as e` sites (type(e).__name__ only,
+            #    never str(e)). The parallel here is NOT that there's no
+            #    mechanism available -- `self.logger` (TranscriptLogger,
+            #    still open, passed into the fresh TelnetConnection just
+            #    below) is sitting right there and could easily be handed
+            #    a type name. It is deliberately NOT used for this
+            #    exception: the doctrine governs regardless of what
+            #    mechanism happens to be in scope, so nothing is recorded
+            #    at all, not even type(e).__name__. WatchHub has a field
+            #    and records type-name-only; reconnect has a logger and
+            #    records nothing -- same doctrine, two different surfaces.
+            # Narrowing this except to specific socket/OSError types is a
+            # SEPARATE hardening ticket -- deliberately NOT done here.
             pass
         self.terminal = TerminalScreen()
         self.negotiator = TelnetHandler()
