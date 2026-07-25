@@ -8,10 +8,12 @@ at tip) — STATUS discloses that gap; this suite does not invent a ledger.
 
 from __future__ import annotations
 
+import json
 import subprocess
 import threading
 import time
 
+from tw2002_aiclient.session import protocol
 from tw2002_aiclient.session.connection import TelnetConnection
 from tw2002_aiclient.session.control_lock import ControlLock
 from tw2002_aiclient.session.protocol import build_response
@@ -136,3 +138,67 @@ def test_staleness_secret_during_fence_wait_still_redacted(tmp_path):
     assert SENTINEL[0] not in _typed_content_from_log(log_content)
     assert "secret input redacted" in log_content
     assert session.last_sent == "<redacted>"
+
+
+# ---------------------------------------------------------------------------
+# WO-P4-056 lane B -- whole-surface sweep via the STATUS VERB
+# (tw2002_aiclient.session.protocol.dispatch), the exact wire shape the
+# product cockpit's status poll actually reads (protocol.py's "status"
+# verb additively serves session.tail as `log_tail`, WO-P3-041). Every test
+# above proves the LOGGER file / `last_sent` / `build_response()`
+# `sent_input` sinks; none of them round-trip a send_raw() secret keystroke
+# through the SAME verb the cockpit polls, nor sweep the WHOLE json-dumped
+# response rather than one field in isolation -- a field-scoped absence
+# assert only proves that ONE field is clean (this project's own WO-P3-041
+# Mack finding, cited in this WO's own dispatch). These tests close that
+# gap; they do not re-prove anything the tests above already cover.
+# ---------------------------------------------------------------------------
+
+
+class _BareServer:
+    """No `control_lock`/`watch_hub` -- protocol.py's status branch reads
+    both via `getattr(..., None)`; same shape as
+    tests/test_transcript_tail.py's own identically-named fixture (a
+    separate class in a separate module -- no cross-file coupling)."""
+
+
+def test_attach_secret_never_reaches_the_status_verbs_whole_json_response(tmp_path):
+    session = _make_session(tmp_path, b"Password:")
+    _type_via_send_raw(session, SENTINEL)
+
+    resp = protocol.dispatch(session, "status", {}, _BareServer())
+    assert resp["ok"] is True
+
+    # Positive signal first -- the marker actually fired once per typed
+    # character, so the absence assert below can't be vacuously true
+    # because nothing was ever redacted into this field at all.
+    assert resp["log_tail"] == ["<<secret input redacted>>"] * len(SENTINEL)
+
+    # Sentinel absent from the WHOLE status response -- the exact shape the
+    # cockpit's status poll / JSON encoder actually sees over the wire, not
+    # just the one field a narrower assert might have scoped to.
+    dumped = json.dumps(resp)
+    assert SENTINEL not in dumped
+    session.logger.close()
+
+
+def test_attach_ordinary_keystrokes_do_reach_the_status_verbs_log_tail(tmp_path):
+    """The mandatory asymmetry check, at the status-verb layer this time
+    (test_ordinary_command_prompt_is_not_redacted above already proves the
+    same asymmetry at the logger layer) -- confirms redaction is a live,
+    prompt-driven decision and not a blanket no-op that would make the
+    PRESENT/ABSENT pair above trivially true regardless of content."""
+    session = _make_session(tmp_path, b"Command [TL=00:00:00]:[1] (?=Help)? :")
+    plain = "HELLO"
+    _type_via_send_raw(session, plain)
+
+    resp = protocol.dispatch(session, "status", {}, _BareServer())
+    # send_raw() is exercised one byte at a time (see _type_via_send_raw),
+    # so each keystroke is its own tail entry -- the joined word never
+    # appears as one contiguous substring; the exact per-character list
+    # below is the real proof that ordinary content reaches the wire.
+    assert resp["log_tail"] == [f"human> {ch}" for ch in plain]
+    dumped = json.dumps(resp)
+    assert all(f"human> {ch}" in dumped for ch in plain)
+    assert "redacted" not in dumped
+    session.logger.close()

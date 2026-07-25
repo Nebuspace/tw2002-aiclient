@@ -52,6 +52,19 @@ below already yields ``""`` (silently drops out of the row) the moment
 ``spectating`` is falsy, so PWO-056 needs no rework of this module's
 signature, only an additional label of its own.
 
+**PWO-056 status (this module's half only, as of this WO's lane B dispatch):**
+``MANUAL_LABEL``/``attached_label()`` below land the promised "additional
+label of its own" -- ``seat_label``'s own signature is untouched, exactly as
+forecast. ``compose_control_strip_line`` gains one new keyword-only
+``attached`` parameter (default ``False``, so every existing caller's
+behavior is unchanged) rather than a signature rework -- see that function's
+own docstring for the priority rule when both are truthy. The DRAW-layer
+wiring (``PlayShellScreen`` gaining its own ``attached`` state and passing
+it here, alongside the actual `M`-key control-switch/keystroke-forward
+mechanics) is lane A's ``screens.py``/``app.py`` territory, not this
+module's -- as of this dispatch that wiring had not yet landed, so nothing
+in this file alone makes the badge appear on a real screen.
+
 Hardening family (matches ``liveness.py``/``hud.py``): every public function
 is never-raises regardless of input shape -- defense-in-depth here, since
 today's only real caller (``screens.py``) always hands a genuine ``bool``,
@@ -69,6 +82,30 @@ from __future__ import annotations
 # constant, not a Unicode/ASCII twin pair: plain ASCII text has no glyph
 # substitution to make, unlike `liveness.py`'s `→`/heartbeat/spinner glyphs.
 SPECTATE_LABEL = "SPECTATE"
+
+# Canon-cited verbatim, cross-checked identical across THREE independent
+# sources -- `canon/surfaces/spectate-and-attach.md` "Glyph & status-marker
+# vocabulary" (~262), `canon/surfaces/trainer-cockpit.md` "Glyph /
+# status-marker vocabulary" (~398), and `canon/surfaces/mode-line-and-
+# teach-controls.md` (~188, ~364, its own `_MODE_BADGES` citation) -- the
+# Human/attached mode-badge chip text, at tone `warn` (yellow); tone
+# resolution is the draw layer's job, same division of labor `SPECTATE_
+# LABEL` already keeps from this module. NOT the bracketed `[ HUMAN — YOU
+# HAVE CONTROL ]` variant `mode-line-and-teach-controls.md`'s own STOP-
+# escalation banner mockup uses (~141) -- that is a DIFFERENT surface (the
+# escalation handoff banner, N5's own territory), not this control-strip
+# mode-badge chip, which stays unbracketed exactly like `SPECTATE_LABEL`.
+#
+# Unlike `SPECTATE_LABEL`, this text is NOT plain ASCII -- it embeds the
+# em-dash `—`. Still a single constant, not a Unicode/ASCII twin pair,
+# because the em-dash is canon's own established NO-SWAP glyph (`canon/
+# surfaces/visual-language.md` glyph table: "— (em-dash) | — (no swap)"),
+# the same precedent `cockpit/strip.py`'s `MISSING_GAME_LETTER = "—"` and
+# `cockpit/goals.py`'s `UNKNOWN_DETAIL = "—"` already rely on elsewhere in
+# this package -- `unicode_ok` has no effect on this constant either, for a
+# different reason than `SPECTATE_LABEL`'s (ASCII-only vs. deliberately
+# un-swapped), but the same zero-effect result.
+MANUAL_LABEL = "MANUAL — YOU HAVE CONTROL"
 
 
 def _safe_spectating(value: object) -> bool:
@@ -97,6 +134,31 @@ def seat_label(spectating: object) -> str:
     return SPECTATE_LABEL if _safe_spectating(spectating) else ""
 
 
+def _safe_attached(value: object) -> bool:
+    """Best-effort truthiness for ``attached``. Mirrors ``_safe_spectating``'s
+    hardening shape but degrades an **unevaluable** input the OPPOSITE
+    direction: ``False``, not ``True``. ``_safe_spectating`` picks the calm
+    SPECTATE reading as its honest-unknown default specifically because that
+    is the LESS consequential of the two claims this module can render
+    (``SPECTATE`` says "nothing to see here"; a wrongly-rendered ``MANUAL —
+    YOU HAVE CONTROL`` is an operator-facing claim about who currently holds
+    the keyboard). An unevaluable ``attached`` must not invent that claim,
+    so it degrades to ``False`` (the label silently drops, same as any other
+    falsy input) rather than ``True``. Never raises."""
+    try:
+        return bool(value)
+    except Exception:
+        return False
+
+
+def attached_label(attached: object) -> str:
+    """The Human/attached seat's own honest label: ``MANUAL_LABEL`` while
+    ``attached`` is (or safely coerces to) truthy, ``""`` otherwise -- the
+    same silently-yields-the-row shape ``seat_label`` above uses for
+    SPECTATE. Never raises regardless of ``attached``'s type."""
+    return MANUAL_LABEL if _safe_attached(attached) else ""
+
+
 def _safe_width(value: object) -> int:
     try:
         width = int(value)
@@ -106,14 +168,31 @@ def _safe_width(value: object) -> int:
 
 
 def compose_control_strip_line(
-    *, spectating: object, liveness_text: object, width: object, unicode_ok: bool = True
+    *,
+    spectating: object,
+    liveness_text: object,
+    width: object,
+    unicode_ok: bool = True,
+    attached: object = False,
 ) -> str:
     """Compose the control-strip row's one content line: the seat label
-    (``seat_label(spectating)``) left-anchored, the already-composed
-    ``liveness_text`` (``cockpit.liveness.compose_liveness_cluster``'s own
-    output) right-anchored -- mirroring ``screens.py``'s pre-existing
-    ``liveness_text.rjust(cs_w)`` placement, now shared with the seat label
-    rather than the row's left half staying blank.
+    left-anchored, the already-composed ``liveness_text`` (``cockpit.
+    liveness.compose_liveness_cluster``'s own output) right-anchored --
+    mirroring ``screens.py``'s pre-existing ``liveness_text.rjust(cs_w)``
+    placement, now shared with the seat label rather than the row's left
+    half staying blank.
+
+    The seat label itself is ``attached_label(attached) or
+    seat_label(spectating)`` -- Human/attached wins whenever ``attached``
+    is truthy, falling back to the SPECTATE reading otherwise. In practice
+    the two are mutually exclusive by construction (the caller's own state
+    -- see the module docstring's PWO-056 note -- never sets both at once:
+    a single cockpit instance is either spectating or holds the seat, never
+    both), so this priority only matters on the defensive off-contract case
+    of a caller handing both truthy at once; Human wins there because a
+    wrongly-suppressed "YOU HAVE CONTROL" claim (the caller genuinely holds
+    the keyboard but the badge stays silent) is a worse failure than a
+    wrongly-suppressed passive SPECTATE one.
 
     The two clusters never collide: ``liveness_text`` (the pre-existing,
     operationally-load-bearing "is it frozen?" signal -- see
@@ -129,7 +208,8 @@ def compose_control_strip_line(
     ``unicode_ok`` is accepted for API uniformity with every sibling
     composer in this package (``liveness.py``, ``strip.py``) but has no
     effect here -- ``SPECTATE_LABEL`` is plain ASCII with no Unicode twin to
-    swap (see the module docstring).
+    swap, and ``MANUAL_LABEL``'s embedded em-dash is canon's own established
+    NO-SWAP glyph (see each constant's own module-level comment).
 
     Returns a string of exactly ``width`` characters when ``width > 0``
     (padding/truncation absorbed the same way ``str.rjust``/slicing
@@ -147,7 +227,7 @@ def compose_control_strip_line(
     text = text[-w:]  # defensive: never wider than the row itself
     right = text.rjust(w)
 
-    label = seat_label(spectating)
+    label = attached_label(attached) or seat_label(spectating)
     gap = w - len(text)
     if not label or gap <= 1:
         return right

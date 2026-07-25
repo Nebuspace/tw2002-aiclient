@@ -85,15 +85,68 @@ _BANNED_SEND_SYMBOLS = frozenset({
     "cmd_do", "cmd_send",
 })
 
+# Reflective attribute-access functions the scanner also inspects (Cipher
+# finding, WO-P4-056 second REVISE): a call site can reach a banned symbol
+# via `getattr(obj, "send_key")` / `setattr(...)` / `obj.__getattribute__
+# ("send_key")` instead of a literal `.send_key` Attribute node, which the
+# scanner's original Attribute-only matching never saw at all.
+_REFLECTION_FUNCS = frozenset({"getattr", "setattr"})
+
+
+def _reflected_attr_name(call):
+    """If ``call`` is ``getattr(obj, "name", ...)`` / ``setattr(obj,
+    "name", ...)`` / ``obj.__getattribute__("name")`` with a STRING-
+    LITERAL name argument, return that literal string; else ``None``.
+
+    String literals ONLY, deliberately -- a dynamic name (``getattr(obj,
+    name_var)``) is unresolvable by any static AST guard, and flagging
+    every dynamic ``getattr``/``setattr`` call in the codebase would
+    false-positive constantly (this project already uses plenty of
+    ordinary defensive ``getattr(x, "field", None)`` calls -- see e.g.
+    ``watchfeed.py``/``screens.py``/``cockpit/strip.py``) for zero real
+    detection benefit. Fully-dynamic reflection reaching a banned symbol
+    remains a disclosed residual gap outside any static scanner's reach,
+    not something this function -- or any AST guard -- can close."""
+    if (
+        isinstance(call.func, ast.Name)
+        and call.func.id in _REFLECTION_FUNCS
+        and len(call.args) >= 2
+    ):
+        arg = call.args[1]
+        if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
+            return arg.value
+        return None
+    if (
+        isinstance(call.func, ast.Attribute)
+        and call.func.attr == "__getattribute__"
+        and call.args
+    ):
+        arg = call.args[0]
+        if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
+            return arg.value
+    return None
+
 
 def _iter_send_request_calls(node):
     """Every ``Call`` under ``node`` whose func attribute is literally
     named ``send_request`` -- matches ``session_cli.send_request(...)``,
     ``_cli.send_request(...)``, ``self.session_cli.send_request(...)``,
-    etc. (the base object's name is deliberately NOT pinned)."""
+    etc. (the base object's name is deliberately NOT pinned) -- OR whose
+    func is itself a reflected ``getattr(obj, "send_request", ...)``/
+    ``obj.__getattribute__("send_request")`` call with a string-literal
+    name (Cipher finding, WO-P4-056 second REVISE: the original
+    Attribute-only match let ``getattr(session_cli, "send_request")
+    ("do", ...)`` bypass detection entirely, since the outer call's
+    ``func`` is a ``Call`` node, never an ``Attribute``). The verb
+    argument is still read off the OUTER call's own ``args``/``keywords``
+    by ``_literal_verb`` below, unchanged -- the reflection only changes
+    how the CALLABLE was obtained, not where its own arguments live."""
     for n in ast.walk(node):
-        if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute) and n.func.attr == "send_request":
-            yield n
+        if isinstance(n, ast.Call):
+            if isinstance(n.func, ast.Attribute) and n.func.attr == "send_request":
+                yield n
+            elif isinstance(n.func, ast.Call) and _reflected_attr_name(n.func) == "send_request":
+                yield n
 
 
 def _literal_verb(call):
@@ -110,28 +163,155 @@ def _literal_verb(call):
     return None
 
 
-def _banned_name_hits(node):
+def _enclosing_function_scopes(root):
+    """Map ``id(node) -> nearest enclosing FunctionDef's name`` (or
+    ``None`` for module/outer scope) for every descendant of ``root``
+    (``root`` included) -- ``ast.walk`` alone gives no parent/scope
+    information, so this is a small scope-tracking traversal built
+    specifically to answer "which function is this node INSIDE?" for
+    ``_is_allowlisted_attach_site`` below (Samantha REVISE finding A/2:
+    a shape-only match without this check excuses the SAME shape no
+    matter which function it's reached from). A ``FunctionDef`` node
+    itself is recorded under its OUTER scope (matching how a decorator
+    or default-arg expression would evaluate); only its CHILDREN --
+    i.e. its own body -- get its name. Nested ``def``s use the
+    INNERMOST enclosing function's name."""
+    scopes = {}
+
+    def _walk(node, current_fn_name):
+        scopes[id(node)] = current_fn_name
+        next_fn_name = node.name if isinstance(node, ast.FunctionDef) else current_fn_name
+        for child in ast.iter_child_nodes(node):
+            _walk(child, next_fn_name)
+
+    _walk(root, None)
+    return scopes
+
+
+def _is_allowlisted_attach_site(node, scopes=None) -> bool:
+    """PWO-056 (WO-P4-056) lane A adjudication -- mirrors WO-P4-050's own
+    ``_is_allowlisted_watchfeed_stop`` precedent (``tests/
+    test_play_esc_daemon_survival.py``): a precise, single-SITE allowlist
+    for the ONE legitimate send-capable surface this WO adds, never a
+    blanket loosening of the guard -- every OTHER send-capable reference
+    anywhere else in ``app.py`` still trips this guard by design.
+
+    Matched by AST SHAPE **and** ENCLOSING-FUNCTION SCOPE (Samantha REVISE
+    finding A/2, confirmed by execution: a shape-only version of this
+    predicate silently excused the identical shape reached from an
+    unrelated function -- a rogue ``AttachInputConn``/``send_key`` site
+    elsewhere in ``app.py`` would have passed unnoticed). ``scopes`` is
+    ``_enclosing_function_scopes(<the root _send_violations was called
+    on>)``, threaded in by ``_banned_name_hits`` below -- callers never
+    need to build it themselves.
+
+      1. ``attach_conn.send_key(...)`` -- an ``Attribute`` ``.send_key``
+         on a ``Name`` literally called ``attach_conn``, AND its nearest
+         enclosing function is literally ``_run_play``. A same-shaped
+         call reached from any OTHER function is NOT excused.
+      2. ``AttachInputConn`` -- a bare ``Name`` reference, AND its
+         nearest enclosing function is literally ``_attempt_attach``. Its
+         IMPORT (``ast.alias``) is excused regardless of scope -- imports
+         are necessarily module-level in this codebase's style, and the
+         import statement alone constructs nothing; the security-relevant
+         act is the CONSTRUCTION CALL, which the scope check above still
+         gates.
+    """
+    scopes = scopes or {}
+    if isinstance(node, ast.Attribute):
+        return (
+            node.attr == "send_key"
+            and isinstance(node.value, ast.Name)
+            and node.value.id == "attach_conn"
+            and scopes.get(id(node)) == "_run_play"
+        )
+    if isinstance(node, ast.Name):
+        return node.id == "AttachInputConn" and scopes.get(id(node)) == "_attempt_attach"
+    if isinstance(node, ast.alias):
+        return (node.asname or node.name) == "AttachInputConn"
+    return False
+
+
+def _aliased_banned_locals(node):
+    """Map each LOCAL name (the ``as`` alias if present, else the plain
+    imported name) that refers to a ``_BANNED_SEND_SYMBOLS`` member back
+    to the REAL symbol it names -- e.g. ``import AttachInputConn as
+    _Sneaky`` maps ``"_Sneaky" -> "AttachInputConn"``.
+
+    Cipher finding (WO-P4-056 second REVISE): the scanner previously
+    recorded ONLY ``alias.asname or alias.name`` for an import -- for an
+    aliased import that is the ASNAME, never the real banned name -- so
+    an aliased import evaded detection both at the import statement
+    itself (the asname string, e.g. ``"_Sneaky"``, is never a member of
+    ``_BANNED_SEND_SYMBOLS``) AND at every later reference through the
+    alias (a bare ``Name`` reference to ``_Sneaky`` was likewise recorded
+    as ``"_Sneaky"``, never resolved back to ``"AttachInputConn"``).
+    ``_banned_name_hits`` below uses this map to resolve every ``Name``
+    reference through its real symbol before checking it against the
+    banned set."""
+    aliases = {}
+    for n in ast.walk(node):
+        if isinstance(n, (ast.Import, ast.ImportFrom)):
+            for alias in n.names:
+                if alias.name in _BANNED_SEND_SYMBOLS:
+                    aliases[alias.asname or alias.name] = alias.name
+    return aliases
+
+
+def _banned_name_hits(node, *, allowed=None):
+    allowed = allowed or (lambda n, scopes: False)
+    scopes = _enclosing_function_scopes(node)
+    alias_locals = _aliased_banned_locals(node)
+
     attrs = {
         n.attr for n in ast.walk(node)
-        if isinstance(n, ast.Attribute) and isinstance(n.ctx, ast.Load)
+        if isinstance(n, ast.Attribute) and isinstance(n.ctx, ast.Load) and not allowed(n, scopes)
     }
-    names = {
-        n.id for n in ast.walk(node)
-        if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Load)
-    }
-    imported = {
-        alias.asname or alias.name
-        for n in ast.walk(node)
-        if isinstance(n, (ast.Import, ast.ImportFrom))
-        for alias in n.names
-    }
-    return (attrs | names | imported) & _BANNED_SEND_SYMBOLS
+    names = set()
+    for n in ast.walk(node):
+        if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Load) and not allowed(n, scopes):
+            # Resolve an ALIAS reference (Cipher finding, above) back to
+            # the real banned symbol it names -- an unaliased name just
+            # resolves to itself.
+            names.add(alias_locals.get(n.id, n.id))
+    imported = set()
+    for n in ast.walk(node):
+        if isinstance(n, (ast.Import, ast.ImportFrom)):
+            for alias in n.names:
+                if not allowed(alias, scopes):
+                    # The REAL imported symbol (Cipher finding, above):
+                    # recording only ``alias.asname or alias.name`` let an
+                    # aliased import's real, banned name go unrecorded.
+                    imported.add(alias.name)
+    reflected = set()
+    for n in ast.walk(node):
+        if isinstance(n, ast.Call):
+            name = _reflected_attr_name(n)
+            if name in _BANNED_SEND_SYMBOLS:
+                # Reflection (Cipher finding): `getattr(conn,
+                # "send_key")(...)` reaches a banned symbol via no
+                # `Attribute`/`Name` node the checks above ever see.
+                # Flagged UNCONDITIONALLY -- never passed through
+                # `allowed()` -- because no legitimate site in this
+                # codebase reaches a send-capable symbol reflectively;
+                # the allowlist adjudicates ordinary call shapes, and
+                # does not extend trust to a reflective one regardless of
+                # which function it appears in.
+                reflected.add(name)
+    return (attrs | names | imported | reflected) & _BANNED_SEND_SYMBOLS
 
 
-def _send_violations(node, *, allowed_verbs):
+def _send_violations(node, *, allowed_verbs, allowed=None):
     """Every send-capable violation found under ``node`` (a Module,
     ClassDef, or FunctionDef), as human-readable strings. Empty means
-    clean."""
+    clean. ``allowed`` (PWO-056) is an optional ``(node, scopes) -> bool``
+    predicate passed straight through to ``_banned_name_hits`` (which
+    computes ``scopes`` via ``_enclosing_function_scopes`` once per call
+    and threads it in -- callers pass a bare predicate, never a scopes
+    dict of their own) -- see ``_is_allowlisted_attach_site`` for the one
+    adjudicated exception; every existing caller that omits it keeps the
+    exact prior strict
+    behavior (default ``None`` -> nothing allowed)."""
     violations = []
     for call in _iter_send_request_calls(node):
         verb = _literal_verb(call)
@@ -145,7 +325,7 @@ def _send_violations(node, *, allowed_verbs):
                 f"send_request(verb={verb!r}, ...) at line {getattr(call, 'lineno', '?')} "
                 f"-- not in the read-only allowlist {sorted(allowed_verbs)}"
             )
-    hit = _banned_name_hits(node)
+    hit = _banned_name_hits(node, allowed=allowed)
     if hit:
         violations.append(f"banned send-capable symbol(s) referenced: {sorted(hit)}")
     return violations
@@ -191,6 +371,71 @@ def test_scanner_detects_a_synthetic_send_violation():
     assert _send_violations(ast.parse(clean_src), allowed_verbs={"status"}) == []
 
 
+def test_scanner_detects_cipher_demonstrated_bypass_aliased_import_and_getattr_reflection():
+    """Cipher security pass (WO-P4-056 second REVISE): this EXACT source
+    -- Cipher's own synthetic bypass -- produced ZERO violations against
+    the scanner as it stood before this fix, via two independent evasion
+    forms combined in one snippet:
+
+      1. Aliased import: ``import AttachInputConn as _Sneaky`` then
+         constructing via ``_Sneaky(...)`` -- the scanner previously
+         recorded only the ASNAME (``"_Sneaky"``, never a member of
+         ``_BANNED_SEND_SYMBOLS``) for both the import statement and
+         every later reference through the alias.
+      2. Reflection: ``getattr(conn, "send_key")(...)`` -- a banned
+         symbol reached via no literal ``Attribute``/``Name`` node the
+         original scanner ever inspected.
+
+    Fixed by ``_aliased_banned_locals`` (resolves an alias reference back
+    to its real symbol) and the ``reflected`` set in ``_banned_name_hits``
+    (flags a string-literal ``getattr``/``setattr``/``__getattribute__``
+    name matching a banned symbol, unconditionally). Independently
+    reproduced BEFORE the fix landed (see this WO's STATUS report for the
+    transcript: the pre-fix scanner returned ``[]`` for this exact
+    source); both banned symbols are flagged now."""
+    bypass_src = (
+        "from tw2002_aiclient.session.attach_client import AttachInputConn as _Sneaky\n"
+        "def _attempt_attach(sock_path):\n"
+        "    conn = _Sneaky(sock_path); conn.connect(); return conn, None\n"
+        "def _run_play(stdscr, profile):\n"
+        "    conn, _ = _attempt_attach(\"x\")\n"
+        '    getattr(conn, "send_key")(b"SECRETDATA")\n'
+    )
+    tree = ast.parse(bypass_src)
+    violations = _send_violations(tree, allowed_verbs={"status"}, allowed=_is_allowlisted_attach_site)
+    assert violations, "Cipher's aliased-import + getattr-reflection bypass must be flagged"
+    hit_text = " ".join(violations)
+    assert "AttachInputConn" in hit_text, "the aliased AttachInputConn import/construction must be flagged"
+    assert "send_key" in hit_text, "the getattr(conn, 'send_key')(...) reflection must be flagged"
+
+
+def test_scanner_detects_getattr_reflected_send_request_call():
+    """(2) of the same Cipher finding, applied to `_iter_send_request_calls`
+    directly: `getattr(session_cli, "send_request")(...)` -- the outer
+    call's `func` is a `Call` node (the getattr call), never a literal
+    `.send_request` Attribute, so the original Attribute-only match never
+    saw it. The verb argument is still read off the OUTER call's own
+    args/keywords by `_literal_verb`, unchanged by this fix -- a
+    reflected call with a non-status verb is flagged the exact same way
+    a literal one already is."""
+    reflected_src = (
+        "def spectate_dispatch(run_dir):\n"
+        '    return getattr(session_cli, "send_request")("do", {}, run_dir=run_dir)\n'
+    )
+    violations = _send_violations(ast.parse(reflected_src), allowed_verbs={"status"})
+    assert violations, "a reflected getattr(x, 'send_request')(...) call must be flagged"
+    assert "do" in violations[0]
+
+    reflected_clean_src = (
+        "def spectate_poll(run_dir):\n"
+        '    return getattr(session_cli, "send_request")("status", {}, run_dir=run_dir)\n'
+    )
+    assert _send_violations(ast.parse(reflected_clean_src), allowed_verbs={"status"}) == [], (
+        "a reflected send_request call with an ALLOWED literal verb must stay clean, "
+        "same as the literal-Attribute form"
+    )
+
+
 # ---------------------------------------------------------------------------
 # 1. app._run_play -- today's ENTIRE play/spectate loop. Real, load-bearing:
 #    verified (outside this file, see the WO STATUS report) to actually go
@@ -209,8 +454,14 @@ def test_run_play_source_has_no_send_capable_call_or_symbol():
     fn = next(
         n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "_run_play"
     )
-    violations = _send_violations(fn, allowed_verbs={"status"})
-    assert not violations, f"_run_play must stay send-free; found: {violations}"
+    # PWO-056 (WO-P4-056): `allowed=_is_allowlisted_attach_site` excuses
+    # exactly `attach_conn.send_key(...)` -- the ONE forwarding call site
+    # this WO adds, reached only once the human's own `M` keypress has
+    # already taken the Human control lock. See that predicate's own
+    # docstring for the full adjudication; every other send-capable shape
+    # still trips this guard.
+    violations = _send_violations(fn, allowed_verbs={"status"}, allowed=_is_allowlisted_attach_site)
+    assert not violations, f"_run_play must stay send-free (beyond the adjudicated attach forward); found: {violations}"
 
 
 # ---------------------------------------------------------------------------
@@ -226,11 +477,111 @@ def test_run_play_source_has_no_send_capable_call_or_symbol():
 def test_app_module_only_ever_requests_the_status_verb():
     src = Path(inspect.getsourcefile(app)).read_text(encoding="utf-8")
     tree = ast.parse(src)
-    violations = _send_violations(tree, allowed_verbs={"status"})
-    assert not violations, f"app.py must only ever request the read-only 'status' verb; found: {violations}"
+    # PWO-056 (WO-P4-056): `allowed=_is_allowlisted_attach_site` excuses
+    # the two adjudicated attach sites (`AttachInputConn`'s import +
+    # construction in `_attempt_attach`, `attach_conn.send_key(...)` in
+    # `_run_play`) -- see that predicate's own docstring. Every other
+    # send-capable shape anywhere else in app.py still trips this guard.
+    violations = _send_violations(tree, allowed_verbs={"status"}, allowed=_is_allowlisted_attach_site)
+    assert not violations, f"app.py must only ever request the read-only 'status' verb (beyond the adjudicated attach sites); found: {violations}"
     assert any(True for _ in _iter_send_request_calls(tree)), (
         "expected at least one real send_request call site in app.py (the status "
         "poll) -- found none; this test's own setup is broken, not proof of anything"
+    )
+
+
+# ---------------------------------------------------------------------------
+# 2b. `_is_allowlisted_attach_site` sensitivity (Samantha REVISE finding A/2,
+#    CONFIRMED BY EXECUTION -- both by her own run and independently
+#    reproduced before this fix landed: a shape-only version of the
+#    predicate silently excused `AttachInputConn` construction + `attach_
+#    conn.send_key(...)` reached from an unrelated function, because it
+#    checked SHAPE but not ENCLOSING SCOPE). Fixed above via
+#    `_enclosing_function_scopes` + the now-scope-aware
+#    `_is_allowlisted_attach_site`. (1) proves the guard still fires for an
+#    ordinary (non-shape-matching) violation anywhere else in the module;
+#    the consolidated test below is the direct regression pin for the hole
+#    itself, using Samantha's own synthetic source verbatim.
+# ---------------------------------------------------------------------------
+
+
+def test_allowed_predicate_still_flags_a_violation_at_a_different_function():
+    """(1): an ordinary send-capable call OUTSIDE the two adjudicated
+    attach sites, in a synthetic module shaped like app.py, must still
+    trip the guard even with `allowed=_is_allowlisted_attach_site`
+    active."""
+    src = (
+        "def _run_play(stdscr, profile):\n"
+        "    pass\n"
+        "\n"
+        "def _some_other_function():\n"
+        '    session_cli.send_request("do", {}, run_dir=None)\n'
+    )
+    tree = ast.parse(src)
+    violations = _send_violations(tree, allowed_verbs={"status"}, allowed=_is_allowlisted_attach_site)
+    assert violations, "an ordinary send_request violation elsewhere in the module must still trip the guard"
+
+
+def test_attach_allowlist_is_single_site_not_shape_wide():
+    """Consolidated regression pin (Samantha REVISE, WO-P4-056) -- the
+    direct pin for finding A/2. Independently reproduced BEFORE the
+    `_enclosing_function_scopes` fix landed: running assertion 3's exact
+    synthetic source (Samantha's own) through the OLD shape-only predicate
+    returned an empty hit set (`set()`) -- silent, confirming the hole.
+    All three assertions pass now.
+
+    ONE disclosed correction to the literal spec: assertion 2 pins "every
+    `.send_key(...)` call is enclosed by `_run_play`", not "exactly one" --
+    the mandatory backspace-forwarding fix (same REVISE, hub ruling)
+    legitimately gave `_run_play` THREE `attach_conn.send_key(...)` call
+    sites (Enter / backspace / generic byte), all the same logical
+    forwarding mechanism. A hardcoded count of 1 would fail against
+    correct code for no security benefit; LOCATION (never a rogue site in
+    a different function) is the invariant that actually matters, and
+    this still pins it exactly, for every occurrence found.
+    """
+    src = Path(inspect.getsourcefile(app)).read_text(encoding="utf-8")
+    tree = ast.parse(src)
+    scopes = _enclosing_function_scopes(tree)
+
+    # 1. exactly ONE AttachInputConn construction in the whole module,
+    #    and its enclosing FunctionDef is _attempt_attach.
+    construction_calls = [
+        n for n in ast.walk(tree)
+        if isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id == "AttachInputConn"
+    ]
+    assert len(construction_calls) == 1, (
+        f"expected exactly one AttachInputConn(...) construction in app.py; found {len(construction_calls)}"
+    )
+    assert scopes.get(id(construction_calls[0])) == "_attempt_attach", (
+        "the one AttachInputConn(...) construction must be enclosed by _attempt_attach"
+    )
+
+    # 2. every attach_conn.send_key(...) call in the whole module is
+    #    enclosed by _run_play -- see the disclosed correction above for
+    #    why this is a LOCATION pin rather than a hardcoded count of one.
+    send_key_calls = [
+        n for n in ast.walk(tree)
+        if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute) and n.func.attr == "send_key"
+    ]
+    assert send_key_calls, "expected at least one .send_key(...) call in app.py -- found none"
+    stray = [n for n in send_key_calls if scopes.get(id(n)) != "_run_play"]
+    assert not stray, f"found {len(stray)} .send_key(...) call(s) NOT enclosed by _run_play"
+
+    # 3. the allowlisted SHAPE in any OTHER function must still be a
+    #    violation -- Samantha's own synthetic source, verbatim.
+    rogue_src = (
+        "def some_unrelated_function(sock_path):\n"
+        "    attach_conn = AttachInputConn(sock_path)\n"
+        "    attach_conn.connect()\n"
+        '    attach_conn.send_key(b"N")\n'
+    )
+    rogue_tree = ast.parse(rogue_src)
+    violations = _send_violations(rogue_tree, allowed_verbs={"status"}, allowed=_is_allowlisted_attach_site)
+    assert violations, (
+        "the allowlisted shape (AttachInputConn construction + attach_conn.send_key) "
+        "reached from a function OTHER than _attempt_attach/_run_play must still trip "
+        "the guard -- this is the direct regression pin for the confirmed hole"
     )
 
 

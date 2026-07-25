@@ -697,9 +697,12 @@ class PlayShellScreen:
     already-``A_NORMAL`` (muted) row -- a single static label, not N5's
     dynamic badge -- right up against wherever the liveness cluster's own
     space begins, dropping out first if the row is too narrow for both (see
-    ``compose_control_strip_line``). PWO-056 (attach from cockpit) is what
-    will ever flip ``spectating`` to ``False`` and add its own "attached"
-    rendering alongside this one.
+    ``compose_control_strip_line``). PWO-056 (WO-P4-056, "attach from
+    cockpit") is this WO: it wires the `M` key here (``handle_key``'s own
+    ``"attach"`` return value) to flip ``spectating`` to ``False`` in
+    ``app.py::_run_play`` on a successful daemon attach; ``cockpit.
+    control_seat``'s own "attached"/"Human" rendering is that same WO's
+    lane-B slice, landing alongside this one.
 
     Esc ends the binding and returns to the launcher — clean close, not a suspend.
     """
@@ -728,10 +731,16 @@ class PlayShellScreen:
         # deliberately binary (spectating XOR attached) rather than mirroring
         # the daemon's own wire-reported app/human/spectate ``status["mode"]``
         # (a distinct, DAEMON-GLOBAL fact this instance never IS "app").
-        # Defaults ``True`` -- today there is no send path at all (no `do`/
-        # `send`/`send_raw` verb reachable from this screen), so this cockpit
-        # is unconditionally spectating; PWO-056 (attach from cockpit) is
-        # what will ever set this to ``False``, on taking the lock.
+        # Defaults ``True`` (pre-attach). PWO-056 (WO-P4-056, "attach from
+        # cockpit") flips this to ``False`` the moment the human's `M`
+        # keypress (canon `mode-line-and-teach-controls.md:40-47`, the
+        # App<->Human control-switch key) takes the daemon's Human control
+        # lock -- see ``handle_key``'s own ``"attach"`` return value and
+        # ``app.py::_run_play``'s attach/forward/release wiring, which owns
+        # the actual daemon round trip. This class itself still has no
+        # send-capable call or symbol of its own (``tests/
+        # test_spectate_no_send.py``'s guards) -- it only ever REPORTS the
+        # human's intent (``"attach"``) for ``app.py`` to act on.
         self.spectating: bool = True
         self._now_fn = now_fn  # WO-P3-038 -- resolved to time.monotonic at draw() time when unset
         # LOGS newest-row flash (WO-P3-041): content-identity tracking across
@@ -1237,15 +1246,21 @@ class PlayShellScreen:
             logs_attrs[-1] = (last_text, curses.A_BOLD)
         cockpit_draw.draw_lines_attrs(self.stdscr, logs, logs_attrs)
 
-        # CONTROL_STRIP (WO-P3-038, PWO-055): the frame's own bottom-most
-        # interior row, a bare content row (no box -- same `boxed=False`
-        # shape as the row-1 profile strip). Carries the liveness cluster,
-        # right-aligned (unchanged), and now (PWO-055) the honest
-        # `cockpit.control_seat.SPECTATE_LABEL` marker on the left, filling
-        # whatever room remains there. The dynamic app/human mode badge,
-        # A/R/T teach keys, and run/record/panic cluster the canon mock
-        # shows on this row still belong to the N5 mode-line-and-teach-
-        # controls WO -- not built here; only the one static seat label is.
+        # CONTROL_STRIP (WO-P3-038, PWO-055, PWO-056): the frame's own
+        # bottom-most interior row, a bare content row (no box -- same
+        # `boxed=False` shape as the row-1 profile strip). Carries the
+        # liveness cluster, right-aligned (unchanged), and the honest seat
+        # label on the left, filling whatever room remains there --
+        # `cockpit.control_seat.SPECTATE_LABEL` while spectating (PWO-055),
+        # `MANUAL_LABEL` ("MANUAL — YOU HAVE CONTROL") once `M` has taken
+        # the Human lock (PWO-056, ``attached=not self.spectating`` below
+        # -- the two are mutually exclusive by construction, never both
+        # truthy, per ``control_seat``'s own module docstring, so no new
+        # state field is needed on this class beyond the existing
+        # ``spectating`` bool). The dynamic App chip, A/R/T teach keys, and
+        # run/record/panic cluster the canon mock shows on this row still
+        # belong to the N5 mode-line-and-teach-controls WO -- not built
+        # here; only the two static seat labels are.
         control_strip = regions["control_strip"]
         if control_strip is not None:
             cs_w = control_strip["w"]
@@ -1257,7 +1272,8 @@ class PlayShellScreen:
                 liveness_text = _CONTROL_STRIP_COMPOSE_FAILED
             try:
                 control_strip_line = cockpit_control_seat.compose_control_strip_line(
-                    spectating=self.spectating, liveness_text=liveness_text, width=cs_w, unicode_ok=uok
+                    spectating=self.spectating, liveness_text=liveness_text, width=cs_w, unicode_ok=uok,
+                    attached=not self.spectating,
                 )
             except Exception:  # noqa: BLE001 -- a raising composer must not crash the draw pass
                 control_strip_line = liveness_text.rjust(cs_w) if cs_w > 0 else ""
@@ -1271,11 +1287,24 @@ class PlayShellScreen:
         self.stdscr.refresh()
 
     def handle_key(self, key: int) -> str | None:
-        """Return ``back`` / ``quit`` / ``None``."""
+        """Return ``back`` / ``quit`` / ``attach`` / ``None``.
+
+        ``"attach"`` (PWO-056, WO-P4-056) is a pure INTENT signal -- this
+        class has no send-capable call or symbol of its own (``tests/
+        test_spectate_no_send.py``'s guards). `M` is canon's single
+        App<->Human control-switch key (`mode-line-and-teach-controls.md:
+        40-47`); this cockpit's own standing state is Spectate, not App --
+        canon does not define what `M` does FROM Spectate (a flagged gap,
+        see this WO's own STATUS), so this signals the spectate->Human leg
+        only. ``app.py::_run_play`` is what actually takes the daemon's
+        Human control lock and flips ``self.spectating``.
+        """
         if key == 27:  # Esc — end binding, return to launcher
             return "back"
         if key in (ord("q"), ord("Q")):
             return "quit"
+        if key in (ord("M"), ord("m")):
+            return "attach"
         return None
 
 

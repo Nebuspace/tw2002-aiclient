@@ -16,6 +16,7 @@ from tw2002_aiclient.screens import (
 )
 from tw2002_aiclient.session import cli as session_cli
 from tw2002_aiclient.session import credentials, env, player_bank
+from tw2002_aiclient.session.attach_client import AttachInputConn
 from tw2002_aiclient.watchfeed import WatchFeed
 
 
@@ -172,6 +173,48 @@ def _daemon_status_provider(run_dir):
     return _poll
 
 
+def _attempt_attach(sock_path):
+    """Take the Human control lock for THIS cockpit instance -- PWO-056
+    (WO-P4-056), canon `mode-line-and-teach-controls.md:40-47`'s single
+    App<->Human `M` control-switch key. This cockpit's own standing state
+    is Spectate, not App (canon does not define what `M` does FROM
+    Spectate -- a flagged gap for the hub, not invented around here); this
+    wires the spectate->Human leg only: ``control_lock.take_human()`` via
+    the daemon's existing ``attach`` verb (``session/daemon.py::
+    _handle_attach``), never a new lock-taking mechanism of our own.
+
+    ALLOWLISTED SEND-CAPABLE SITE (adjudicated against ``tests/
+    test_spectate_no_send.py``'s banned-symbol scanner -- see that file's
+    own ``_is_allowlisted_attach_site``, mirroring WO-P4-050's
+    ``_is_allowlisted_watchfeed_stop`` precedent in ``tests/
+    test_play_esc_daemon_survival.py``): this is the ONE place
+    ``AttachInputConn`` is ever constructed reachable from the product
+    cockpit -- called only from ``_run_play`` below, only in reaction to
+    the human's own `M` keypress (``PlayShellScreen.handle_key``'s
+    ``"attach"`` return value), never automatic and never reachable from
+    the read-only spectate default.
+
+    Returns ``(conn, None)`` on success -- the daemon's ``control_lock.
+    mode`` is now ``MODE_HUMAN`` -- or ``(None, error)`` on ANY refusal or
+    failure. ``AttachInputConn.connect()`` already surfaces both a
+    daemon-side ``ControlModeConflict`` (e.g. ``"already_attached"`` --
+    ``take_human()``'s only conflict code; a ``controller_busy``-shaped
+    refusal is ``acquire_driver()``'s own vocabulary, a different lock
+    operation this verb never calls) AND a plain transport failure (e.g.
+    daemon not running -- ``"daemon_not_running"``/an ``OSError`` message)
+    through the identical ``.error`` string, so this wrapper does not
+    need to distinguish them further: "handled honestly" here means the
+    caller always learns WHY a refusal happened, never silently treats it
+    as success.
+    """
+    conn = AttachInputConn(sock_path)
+    if conn.connect():
+        return conn, None
+    error = conn.error or "attach_rejected"
+    conn.close()
+    return None, error
+
+
 def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
     """Bind profile to a fresh play-shell placeholder; Esc ends the binding."""
     run_dir = env.resolve_run_dir()
@@ -201,16 +244,100 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
     feed = WatchFeed(run_dir=run_dir)
     feed.start()
     play.viewport_provider = feed.snapshot
+    # PWO-056 (WO-P4-056): the attach connection, once the human's `M`
+    # keypress takes the Human control lock (`_attempt_attach` above).
+    # `None` here means spectating -- the loop below still routes every
+    # key through `play.handle_key`, exactly as before this WO.
+    attach_conn = None
     try:
         while True:
             play.draw()
             key = stdscr.getch()
             if key == -1:
                 continue
+            if attach_conn is not None and key != 27:
+                # Attached: canon `mode-line-and-teach-controls.md:42-44`
+                # -- "the human always wins the keyboard" the instant
+                # they're attached -- so EVERY key except Esc is a live
+                # game keystroke, forwarded raw over the attach
+                # connection, never intercepted as a cockpit shortcut.
+                # `q`/`Q` in particular are ordinary printable game
+                # keystrokes once attached, NOT a reserved app-quit --
+                # reserving them would silently take the keyboard away
+                # from the human the moment they typed an otherwise
+                # ordinary letter (Samantha REVISE, WO-P4-056; regression
+                # pinned by tests/test_cockpit_attach.py::
+                # test_run_play_forwards_q_and_shift_q_while_attached_
+                # only_esc_reserved).
+                #
+                # Esc alone stays reserved as the interim safety exit:
+                # closing `attach_conn` in the `finally` below releases
+                # the human lock daemon-side the same way a crashed `tw
+                # attach` already does (`daemon.py::_handle_attach`'s own
+                # `finally: lock.release_human()`). It is NOT the real
+                # detach affordance -- canon `spectate-and-attach.md:350`
+                # cites the archive's `Ctrl-]` (`DETACH_KEY`,
+                # `attach_client.py`) as that precedent; wiring an
+                # in-cockpit graceful detach-back-to-spectate (Ctrl-] or
+                # otherwise) is WO-P4-057's job, not built here.
+                if key in (curses.KEY_ENTER, 10, 13):
+                    sent_ok = attach_conn.send_key(b"\r\n")
+                elif key in (curses.KEY_BACKSPACE, 127, 8):
+                    # Backspace forwarding is MANDATORY (hub ruling,
+                    # WO-P4-056 REVISE) -- a human who cannot correct a
+                    # typo while holding the keyboard is materially
+                    # impaired. Which raw form `getch()` yields for the
+                    # physical Backspace key is terminal/terminfo
+                    # dependent (curses.KEY_BACKSPACE=263 if `kbs` is
+                    # translated, raw DEL 0x7F or raw BS 0x08 otherwise)
+                    # -- never assumed, all three are handled and
+                    # canonicalized to the ONE byte the archive's own
+                    # curses-attach precedent already established as
+                    # correct for this game
+                    # (`archive/pre-rebirth-2026-07-23/code/twclient/
+                    # interactive_app.py::_encode_key`, `if ch in
+                    # (curses.KEY_BACKSPACE, 127, 8): return b"\x08"`) --
+                    # ported verbatim rather than re-derived.
+                    sent_ok = attach_conn.send_key(b"\x08")
+                elif 0 <= key < 256:
+                    sent_ok = attach_conn.send_key(bytes([key]))
+                else:
+                    # Every OTHER curses special key (arrow/function key
+                    # etc.) has no single-byte raw form to forward --
+                    # silently dropped rather than sending garbage. Hub
+                    # ruling: explicitly acceptable to leave unforwarded
+                    # this WO, disclosed here and in STATUS, unlike
+                    # backspace above.
+                    sent_ok = True
+                if not sent_ok:
+                    # The connection broke mid-session (daemon gone,
+                    # socket reset, ...) -- honest failure containment,
+                    # not a detach decision: a human who thinks they still
+                    # have control when the wire is actually dead is a
+                    # worse state than falling back to spectate. Mirrors
+                    # `_attempt_attach`'s own "never silently look like
+                    # success" principle.
+                    attach_conn.close()
+                    attach_conn = None
+                    play.spectating = True
+                    play.status_line = "attach connection lost — spectating"
+                continue
             action = play.handle_key(key)
+            if action == "attach":
+                if attach_conn is None:
+                    conn, error = _attempt_attach(env.socket_path(run_dir))
+                    if conn is not None:
+                        attach_conn = conn
+                        play.spectating = False
+                        play.status_line = "attached — you have control (M)"
+                    else:
+                        play.status_line = f"attach refused — {error}"
+                continue
             if action in ("back", "quit"):
                 return action
     finally:
+        if attach_conn is not None:
+            attach_conn.close()
         feed.stop()
         stdscr.timeout(-1)  # restore blocking getch for the caller's own loop
 

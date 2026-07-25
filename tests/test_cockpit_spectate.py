@@ -17,7 +17,9 @@ import curses
 import pytest
 
 from tw2002_aiclient.cockpit.control_seat import (
+    MANUAL_LABEL,
     SPECTATE_LABEL,
+    attached_label,
     compose_control_strip_line,
     seat_label,
 )
@@ -334,3 +336,118 @@ def test_handle_key_unchanged_no_new_keys_from_this_wo(monkeypatch):
     assert screen.handle_key(ord("q")) == "quit"
     assert screen.handle_key(ord("h")) is None
     assert screen.handle_key(ord("x")) is None
+
+
+# ---------------------------------------------------------------------------
+# WO-P4-056 lane B -- the "Human"/attached badge PWO-056 forecast above.
+# Pure, Layer-A only: this file's own module docstring notes the DRAW-layer
+# wiring (PlayShellScreen gaining its own `attached` state and passing it
+# to `compose_control_strip_line`) is lane A's screens.py/app.py territory
+# and had not landed as of this dispatch -- no wiring-proof section (no
+# fake-window `PlayShellScreen.draw()` test) is added here for that reason;
+# see this WO's own STATUS report for the honest scope statement.
+# ---------------------------------------------------------------------------
+
+
+def test_manual_label_is_the_canon_cited_word():
+    assert MANUAL_LABEL == "MANUAL — YOU HAVE CONTROL"
+
+
+def test_attached_label_true_renders_the_label():
+    assert attached_label(True) == "MANUAL — YOU HAVE CONTROL"
+
+
+def test_attached_label_false_yields_empty():
+    assert attached_label(False) == ""
+
+
+@pytest.mark.parametrize("truthy", [1, "yes", object(), [1], {"a": 1}])
+def test_attached_label_any_truthy_value_renders_the_label(truthy):
+    assert attached_label(truthy) == MANUAL_LABEL
+
+
+@pytest.mark.parametrize("falsy", [0, "", [], {}, None])
+def test_attached_label_any_falsy_value_yields_empty(falsy):
+    assert attached_label(falsy) == ""
+
+
+def test_attached_label_unevaluable_input_degrades_to_no_claim():
+    # Opposite default from seat_label's own unevaluable case: an unknown
+    # `attached` must not invent the more consequential "you have control"
+    # claim -- see control_seat.py's own `_safe_attached` docstring.
+    assert attached_label(_HostileBool()) == ""
+
+
+def test_compose_control_strip_line_default_attached_is_false_backward_compat():
+    # Every pre-PWO-056 call site (screens.py's own, and every test above
+    # in this file) omits `attached` entirely -- the new parameter's
+    # default must reproduce the exact pre-existing behavior.
+    kwargs = dict(spectating=True, liveness_text="● ⠋ → -", width=40)
+    assert compose_control_strip_line(**kwargs) == compose_control_strip_line(
+        **kwargs, attached=False
+    )
+
+
+def test_attached_true_renders_manual_label_left_anchored():
+    line = compose_control_strip_line(
+        spectating=False, attached=True, liveness_text="● ⠋ → -", width=40
+    )
+    assert len(line) == 40
+    assert line.startswith(MANUAL_LABEL)
+    assert line.endswith("● ⠋ → -")
+
+
+def test_attached_true_wins_over_spectating_true():
+    # Off-contract (the two are mutually exclusive by construction -- see
+    # compose_control_strip_line's own docstring) but must resolve
+    # deterministically rather than crash or silently pick the calmer one.
+    line = compose_control_strip_line(
+        spectating=True, attached=True, liveness_text="x", width=40
+    )
+    assert MANUAL_LABEL in line
+    assert "SPECTATE" not in line
+
+
+def test_attached_false_and_spectating_false_renders_liveness_only():
+    liveness_text = "○ ⠹ → 158"
+    line = compose_control_strip_line(
+        spectating=False, attached=False, liveness_text=liveness_text, width=30
+    )
+    assert line == liveness_text.rjust(30)
+
+
+def test_manual_label_truncates_to_fit_a_narrow_gap_leaving_a_separator_column():
+    liveness_text = "x" * 15
+    line = compose_control_strip_line(
+        spectating=False, attached=True, liveness_text=liveness_text, width=20
+    )
+    assert len(line) == 20
+    # gap == 5: 4 columns for the label, 1 separator, 15 for liveness.
+    assert line == MANUAL_LABEL[:4] + " " + liveness_text
+    assert MANUAL_LABEL not in line  # truncated, not the full phrase
+
+
+def test_manual_label_drops_when_no_room_for_a_separator_column():
+    liveness_text = "x" * 20
+    line = compose_control_strip_line(
+        spectating=False, attached=True, liveness_text=liveness_text, width=20
+    )
+    assert line == liveness_text
+    assert "MANUAL" not in line
+
+
+def test_unicode_ok_flag_has_no_effect_on_manual_label_either():
+    # MANUAL_LABEL's embedded em-dash is canon's own NO-SWAP glyph (see
+    # control_seat.py's own MANUAL_LABEL comment) -- unicode_ok=False must
+    # not strip or substitute it.
+    kwargs = dict(spectating=False, attached=True, liveness_text="→ -", width=30)
+    assert compose_control_strip_line(**kwargs, unicode_ok=True) == compose_control_strip_line(
+        **kwargs, unicode_ok=False
+    )
+    assert "—" in compose_control_strip_line(**kwargs, unicode_ok=False)
+
+
+def test_never_raises_with_hostile_attached_argument_too():
+    compose_control_strip_line(
+        spectating=object(), attached=object(), liveness_text=object(), width="nope"
+    )
