@@ -21,6 +21,55 @@ from tw2002_aiclient.session.attach_client import AttachInputConn
 from tw2002_aiclient.watchfeed import WatchFeed
 
 
+def _utf8_multibyte_len(lead: int) -> int | None:
+    """Return expected byte length for a UTF-8 lead, else ``None``.
+
+    Hub-ruled WO-AUDIT-COCKPIT-UTF8-GETCH: leads ``0xC0``–``0xF4`` start a
+    multi-byte sequence that must be refused (not forwarded byte-by-byte).
+    Bare ``0x80``–``0xBF`` / ``0xF5``–``0xFF`` are *not* multi-byte leads —
+    those stay on the single-byte forward path (latin-1 acceptance).
+    """
+    if 0xC0 <= lead <= 0xDF:
+        return 2
+    if 0xE0 <= lead <= 0xEF:
+        return 3
+    if 0xF0 <= lead <= 0xF4:
+        return 4
+    return None
+
+
+def _refuse_utf8_getch_sequence(stdscr: curses.window, lead: int) -> str:
+    """Consume a multi-byte UTF-8 getch burst; return pure-ASCII status copy.
+
+    Forwards **zero** bytes. Notice names ``U+XXXX`` only — never a glyph
+    (secrets/operator doctrine: refuse notice must not echo the character).
+    """
+    expected = _utf8_multibyte_len(lead)
+    assert expected is not None
+    seq = bytearray([lead])
+    while len(seq) < expected:
+        nxt = stdscr.getch()
+        if nxt == -1:
+            break
+        if 0x80 <= nxt <= 0xBF:
+            seq.append(nxt)
+        else:
+            # Incomplete / truncated lead: the next getch already consumed a
+            # real keystroke (e.g. ASCII). Push it back so the normal attach
+            # key path sees it — never silent-swallow (hub REVISE @ 15:19:39Z).
+            unget = getattr(stdscr, "ungetch", None)
+            if callable(unget):
+                unget(nxt)
+            else:
+                curses.ungetch(nxt)
+            break
+    try:
+        cp = ord(bytes(seq).decode("utf-8"))
+        return f"unencodable keystroke U+{cp:04X} - not sent"
+    except UnicodeDecodeError:
+        return "unencodable keystroke - not sent"
+
+
 def _rows_from_disk() -> list[ProfileRow]:
     rows: list[ProfileRow] = []
     for summary in credentials.list_profile_summaries():
@@ -370,14 +419,26 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                     # ported verbatim rather than re-derived.
                     sent_ok = attach_conn.send_key(b"\x08")
                 elif 0 <= key < 256:
-                    sent_ok = attach_conn.send_key(bytes([key]))
+                    # WO-AUDIT-COCKPIT-UTF8-GETCH (hub-ruled): curses getch()
+                    # yields each UTF-8 byte as its own 0..255 int. Forwarding
+                    # every byte of a multi-byte keypress as N separate game
+                    # events is the F9 defect. Refuse the lead + consume
+                    # continuations; tell on status_line; keep the session.
+                    # Bare single-byte 0x80-0xFF (no multi-byte lead) still
+                    # forwards — deliberate divergence from a naive
+                    # "latin-1 encode the whole keypress" mirror of cli.py.
+                    if _utf8_multibyte_len(key) is not None:
+                        play.status_line = _refuse_utf8_getch_sequence(stdscr, key)
+                        sent_ok = True
+                    else:
+                        sent_ok = attach_conn.send_key(bytes([key]))
                 else:
                     # Every OTHER curses special key (arrow/function key
                     # etc.) has no single-byte raw form to forward --
                     # silently dropped rather than sending garbage. Hub
                     # ruling: explicitly acceptable to leave unforwarded
                     # this WO, disclosed here and in STATUS, unlike
-                    # backspace above.
+                    # backspace above. key >= 256 path untouched.
                     sent_ok = True
                 if not sent_ok:
                     # The connection broke mid-session (daemon gone,

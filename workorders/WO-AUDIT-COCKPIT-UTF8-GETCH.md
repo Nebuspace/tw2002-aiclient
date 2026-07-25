@@ -1,29 +1,26 @@
-# WO-AUDIT-COCKPIT-UTF8-GETCH — Cockpit getch() UTF-8 decode under ruled UTF-8 contract
+# WO-AUDIT-COCKPIT-UTF8-GETCH — refuse multi-byte UTF-8 getch bursts
 
-> Reconstructed from coord HANDOFF bodies (2026-07-25 backfill).
-> Status: **HANDOFF'd** 2026-07-25 · dispatched to Cursor in wave @ 13:29:19Z · in-flight (queued behind TEST-AUDIT as Max-priority)
-> Type: harden · Priority: P1 · Lens: L2 code-vs-canon / UTF-8 contract
-> Refs: `tw2002_aiclient/` cockpit/app.py getch path · `canon/surfaces/visual-language.md` UTF-8 contract
+> Status: **REVISE** 2026-07-25 · seat `impl-aiclient-cursor` · hub-ruled `@ 14:11:28Z` · REVISE `@ 15:19:39Z`  
+> Phase: audit / cockpit honesty · Type: harden  
+> Refs: F9 pty proof · hub UTF-8 contract (not literal cli latin-1 mirror)
 
 ## Goal
-Verify cockpit `getch()` correctly decodes multi-byte UTF-8 sequences under the ruled UTF-8 contract. `app.py` owns the getch path — confirmed free of CC live lanes (G3/SURROGATE on `cli.py`/`loops/`). Ruled UTF-8 contract is the canon governing what the cockpit keyboard reader must handle.
 
-## Scope
-- `tw2002_aiclient/app.py` / `cockpit/` — getch path; UTF-8 multi-byte decode
-- `tests/` — UTF-8 multi-byte keystroke layer (pure / pty)
-
-## Constraints
-- No fighting CC live lanes (G3/SURROGATE in `cli.py`/`loops/`)
-- Ruled UTF-8 contract: no invented encoding rules
-- Full suite green; path-leak
+One physical UTF-8 keypress must not become N forwarded game bytes.
 
 ## Accept
-1. Cockpit getch correctly handles multi-byte UTF-8 sequences per ruled contract
-2. No crash / silent-drop on valid UTF-8
-3. Full suite green
 
-## Proof
-UTF-8 keystroke unit test + optional pty; STATUS + SHA; Push waits Accept.
+1. Multi-byte getch sequence (lead `0xC0`–`0xF4` + continuations) → **refuse + tell** on status line · **zero** bytes forwarded · session stays alive
+2. Notice pure ASCII naming `U+XXXX` — never a glyph
+3. Bare single-byte `0x80`–`0xFF` still forwards (deliberate divergence from naive cli mirror)
+4. `key >= 256` path untouched · no silent-drop `else:` rewrite
+5. Suite green · red-first inject proof
+6. **REVISE:** incomplete lead + non-continuation next key → `ungetch` so the next keystroke still reaches the game (must not silent-swallow)
 
-## Refs
-hub HANDOFF wave @ 13:29:19Z · `visual-language.md` UTF-8 contract · `app.py` getch
+## Scope
+
+`tw2002_aiclient/app.py` attach key path + `tests/test_cockpit_utf8_getch.py`
+
+## Out
+
+`cli.py` · daemon · menu crawler
