@@ -123,8 +123,21 @@ def _log_dispatch_error(server, verb, exc):
 
 
 class ThreadingUnixServer(socketserver.ThreadingMixIn, socketserver.UnixStreamServer):
+    # No `allow_reuse_address` here, deliberately. It is a TCP-level flag:
+    # `TCPServer.server_bind` (which `UnixStreamServer` inherits unchanged --
+    # it defines no `server_bind` of its own) turns it into
+    # `setsockopt(SO_REUSEADDR)`, and unlike the neighbouring SO_REUSEPORT
+    # call in that same method, it is NOT gated to AF_INET/AF_INET6. So on an
+    # AF_UNIX socket the kernel accepts the option and ignores it: measured,
+    # `bind()` fails with EADDRINUSE against a stale node AND against a live
+    # one, identically with the flag set and unset.
+    #
+    # Setting it therefore bought nothing and implied something false -- that
+    # this class handles a leftover socket node. It does not. That protection
+    # lives in `main()`, which unlinks the stale node before binding; anyone
+    # who trusted this flag and removed that unlink would break daemon
+    # restart.
     daemon_threads = True
-    allow_reuse_address = True
 
     def server_bind(self):
         """Bind, then RE-ASSERT `SOCK_MODE` on the socket file.
@@ -475,6 +488,17 @@ def main(argv=None):
         print(f"twd: already running (pid {e.pid}); refusing second connection", file=sys.stderr)
         sys.exit(1)
 
+    # THE stale-socket protection -- load-bearing, not hygiene. `socketserver`
+    # contains no `unlink` call anywhere, so nothing below this line clears a
+    # leftover node: without this, a crashed daemon's orphaned socket file
+    # fails the next `bind()` with EADDRINUSE and `twd` never restarts. (The
+    # server class used to carry an `allow_reuse_address = True` implying
+    # otherwise; that is a TCP flag the kernel ignores on AF_UNIX -- see
+    # ThreadingUnixServer.)
+    #
+    # Unconditional unlink is safe only because the pidfile was claimed
+    # ABOVE: a genuinely live daemon holds it and we already exited, so the
+    # node reached here has no listener to orphan.
     if sock_path.exists():
         sock_path.unlink()
 
