@@ -181,13 +181,13 @@ in `_draw_control_strip`, `spectate_app.py`). The badge is a reverse-video chip 
 not text; the tone colors the chip:
 
 - **App (autopilot holds the keyboard)** — **green (`ok`)**. Green is "healthy / the taught app is
-  covering the known." (As-built the App holder is two badges — `AUTO-LOOP` at tone `ok`/green and the
-  legacy `AI-PILOT` at tone `info`/cyan; the reborn single **App** chip must land on **green**, and the
-  cyan `AI-PILOT` badge must retire — see Code divergence. `[ASPIRATIONAL]` for the unified App chip.)
+  covering the known." Tip play shell (PWO-060 · `2ca3154`) ships the unified **`APP`** chip at
+  tone `ok` + bold + reverse; archive still has two badges (`AUTO-LOOP` + legacy `AI-PILOT`) as
+  port-source only — do not revive the cyan AI-PILOT badge.
 - **Human (the live `tw attach` seat holds the keyboard)** — **yellow (`warn`)**. The as-built label
-  is `MANUAL — YOU HAVE CONTROL` at tone `warn`. Yellow is deliberate, not an error: with the human
-  flying, autopilot is stood down and the surface is in its *attention-with-you* register — the human,
-  not the app, is the one thing that must not be ignored.
+  is `MANUAL — YOU HAVE CONTROL` at tone `warn` (+ bold + reverse on tip dual). Yellow is deliberate,
+  not an error: with the human flying, autopilot is stood down and the surface is in its
+  *attention-with-you* register — the human, not the app, is the one thing that must not be ignored.
 - **The teach-overlay (AI) indicator** — **cyan (`info`)**, non-bold. `[ASPIRATIONAL]` — the reborn
   teach badge shown *only* while an Analyze pass is open. Cyan places it firmly in the chrome/neutral
   register: it is an overlay annotation, never a live-drive slice, and its non-bold cyan visually
@@ -357,17 +357,18 @@ presses, and never invents a reason it doesn't have.
 
 # Code divergence
 
-The reborn contract above is the target; the current code still carries pre-reborn framing in four
-places (DOCS WIN — recorded, not silently reconciled):
+The reborn contract above is the target; the current code still carries pre-reborn framing in places
+(DOCS WIN — recorded, not silently reconciled):
 
-- **Mode badges are a four-way set that frames the app as AI.** `spectate_layout._MODE_BADGES` maps
-  `ai_pilot → "AI-PILOT"`, `auto_loop → "AUTO-LOOP"`, `human → "MANUAL — YOU HAVE CONTROL"`,
-  `spectate → "SPECTATE"`, and the underlying control-lock mode is literally named `ai_pilot`
-  (`control_lock.py`). The reborn mode line is an **App/Human dual**: the autopilot holder must read
-  **App** (deterministic autopilot), not "AI-PILOT", and the AI must never be a mode-line position.
-- **`M` does not toggle App↔Human here.** In `spectate_app._handle_key`, `M` cycles
-  `ai_pilot ↔ spectate` only (Human is reachable only by launching the separate `tw attach` process).
-  The reborn `M` is a single App↔Human switch with immediate, unrefusable switch-to-Human.
+- **Archive mode badges are a four-way set that frames the app as AI.** Archived
+  `spectate_layout._MODE_BADGES` maps `ai_pilot → "AI-PILOT"`, `auto_loop → "AUTO-LOOP"`,
+  `human → "MANUAL — YOU HAVE CONTROL"`, `spectate → "SPECTATE"`. Tip play shell (PWO-060 ·
+  `2ca3154`) ships the reborn **App/Human dual** (`APP` XOR MANUAL) with an AST vocabulary gate —
+  archive AI-PILOT remains port-source only.
+- **`M` does not yet toggle App↔Human on tip.** Product `M` is Spectate→Human attach (PWO-056);
+  App↔Human return is **061**. Archive `spectate_app._handle_key` cycles `ai_pilot ↔ spectate` —
+  port-source only. The reborn `M` is a single App↔Human switch with immediate, unrefusable
+  switch-to-Human (canon; product lands in 061).
 - **`A`/`R`/`T` are not wired as the teach moves.** `spectate_app` binds `A` to *launch `tw attach`*
   (not Analyze), and `R` (Record) and `T` (Assign-Trigger) are absent from the key handler entirely;
   the `USERDOCS/aiclient_ui.md` sketch listed `A`/`R`/`T`/`M` but the teach loop behind them is not
@@ -376,6 +377,8 @@ places (DOCS WIN — recorded, not silently reconciled):
   `"App {app} / AI {ai} · Hum {human}"` with a live `ai` (llm-pilot) count as a first-class slice.
   The reborn meter is **App-vs-Human live share** with live AI ≡ 0; any AI figure is a separate
   labeled teaching-provenance axis, not a live-drive slice.
+- **App chip wire-reachability.** Composer + `play.attached` plumbing are LIVE (060); on today's
+  Spectate↔Human loop the App state is **wire-UNREACHABLE** until 061 introduces App-hold.
 
 # Citations
 

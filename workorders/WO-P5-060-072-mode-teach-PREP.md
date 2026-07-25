@@ -1,11 +1,11 @@
 # WO-P5-060…072 — Mode line, escalation & teach · PREP
 
-> Status: **PREP** 2026-07-25 · tip `cbc5d98` (product closed Phase 4 at `bba53d4`) · seat `impl-aiclient-cursor`  
+> Status: **PREP + PWO-060 DONE** 2026-07-25 · product tip `2ca3154` · seat `impl-aiclient-cursor` (OKF-STATUS-TRUTH-060)  
 > Phase: 5 · Type: PREP (inventory + tightened Accept/Proof) · Execute: hub HANDOFF to product seat after Accept  
 > Canon: `canon/surfaces/mode-line-and-teach-controls.md` · `canon/architecture/control-and-escalation.md` · `canon/engine/ai-teacher.md` · `canon/architecture/app-autopilot-model.md` · `canon/engine/coverage-metrics.md` · `canon/engine/macros.md` · `canon/architecture/rule-macro-engine.md`  
-> Refs: `ULTRACODE-WO-INVENTORY.md` Phase-5 rows · Phase 4 CLOSED (`bba53d4`) · Pending DOC-GAP-M-FROM-SPECTATE · DOC-GAP-POST-DETACH-COPY
+> Refs: `ULTRACODE-WO-INVENTORY.md` Phase-5 rows · Phase 4 CLOSED (`bba53d4`) · PWO-060 (`2ca3154`) · Pending DOC-GAP-M-FROM-SPECTATE · DOC-GAP-POST-DETACH-COPY · DOC-GAP-SPECTATE-REVERSE-VS-PLAIN
 
-**No product edited in this WO.** Live-state below is committed tip **`cbc5d98`** (docs atop product `bba53d4`) only.
+**No product edited in this OKF tick.** Live-state below is tip **`2ca3154`** (PWO-060 product) unless a row still says MISSING.
 
 ---
 
@@ -16,7 +16,7 @@
 - **Spectate is not a dual member** (canon) — muted `SPECTATE` is observation, not an App/Human toggle position. DOC-GAP-M-FROM-SPECTATE remains **Pending** (unsigned): shipped `M` is Spectate→Human; App↔Human return still owed here (061).
 - **AI never live-drives.** Retire any `AI-PILOT` / `ai_pilot` UI string. Teach overlay is cyan/info, transient, never a mode-line dual seat. App chip = **green (`ok`)** deterministic autopilot (aspirational→buildable Accept on 060).
 - **What 056/057 already satisfied:** Human/`MANUAL — YOU HAVE CONTROL` chip LIVE · `M` attach LIVE · Ctrl-] detach LIVE · no-send tripwire + attach allowlist LIVE · redaction on attach channel LIVE.
-- **What Phase 5 still owes:** unified App chip · App↔Human `M` when App can drive · A/R/T teach strip · STOP banner + reason codes · arm/confirm · N5 operate cluster · coverage meter (App-vs-Human, AI≠live slice).
+- **What Phase 5 still owes:** App↔Human `M` when App can drive (061 — also makes App chip **wire-REACHABLE**) · A/R/T teach strip · STOP banner + reason codes · arm/confirm · N5 operate cluster · coverage meter (App-vs-Human, AI≠live slice).
 - **F2 HOLD** — ops `tw spectate` CLI still Max-gated. **G2–G4 HOLD** unchanged.
 - **North-star** parked pending Max (1)(2) — this PREP does not unpark or invent one-cockpit prose beyond existing Phase-4 alignment.
 - **Archive** = port-source only (`spectate_app` / `spectate_layout` badges) — never `import twclient`.
@@ -26,13 +26,13 @@
 
 ## 1. Tip inventory (vs canon target)
 
-| Piece | Tip `cbc5d98` | Notes |
+| Piece | Tip `2ca3154` | Notes |
 |---|---|---|
 | Control-strip seat label SPECTATE | **LIVE** (PWO-055 · `cockpit/control_seat.py`) | Muted/plain; not a dual member |
-| Control-strip seat label MANUAL (Human) | **LIVE** (PWO-056) | `MANUAL — YOU HAVE CONTROL`; `_safe_attached` defaults False |
-| Unified **App** chip (green / no AI-PILOT) | **MISSING** | 060; archive `_MODE_BADGES` still cites AI-PILOT (port-source — do not revive) |
+| Control-strip seat label MANUAL (Human) | **LIVE** (PWO-056 · reverse+warn lift in 060) | `MANUAL — YOU HAVE CONTROL`; `_safe_attached` defaults False |
+| Unified **App** chip (green / no AI-PILOT) | **LIVE** (PWO-060 · `APP` / `ok`+bold+reverse) | Strict gate: App IFF `spectating is False and attached is False`; **wire-UNREACHABLE** on Spectate↔Human loop until 061 App-hold |
 | `M` Spectate→Human attach | **LIVE** (PWO-056) | Hub 056 ruling; not yet App↔Human |
-| `M` App↔Human toggle | **MISSING** | 061; needs App arm path + lock semantics |
+| `M` App↔Human toggle | **MISSING** | 061; needs App-hold path + lock semantics |
 | Ctrl-] detach → SPECTATE | **LIVE** (PWO-057) | Esc≠detach; post-detach copy DOC-GAP Pending |
 | Teach strip A / R / T affordances | **MISSING** | 066; keys unbound as teach moves |
 | Analyze (`A`) on-demand | **MISSING** | 069 · `ai-teacher.md` |
@@ -51,9 +51,9 @@
 
 ## 2. Per-PWO Accept + Proof
 
-### PWO-060 — App/Human badge (no AI mode) (EXTEND)
+### PWO-060 — App/Human badge (no AI mode) (EXTEND) — **DONE 2026-07-25** (impl-claudecode-aiclient · tip `2ca3154` — App XOR Human dual; `APP` chip green/`ok`+bold+reverse; MANUAL warn+bold+reverse; SPECTATE muted/plain; strict `is False` App gate; `play.attached` plumbed; vocabulary AST gate; App **wire-UNREACHABLE** until 061)
 - **Depends-on:** 030 frame · 055/056 seat labels (already LIVE)
-- **Live state:** SPECTATE + MANUAL LIVE; **App chip MISSING**; no `ai_pilot` string in product UI today (grep-clean aspirational — prove in Accept).
+- **Live state:** **LIVE** — `cockpit/control_seat.py` `APP_LABEL` / `compose_control_strip_segments` · `screens.py` / `draw.py` tone wiring · `app.py` `play.attached` · vocabulary gate + matrices.
 - **Accept:** Control strip can show **App** (green/`ok`) XOR **Human** (warn/MANUAL) as the dual; Spectate remains non-member muted label when not dual-driving; **zero** `AI-PILOT` / `ai_pilot` UI strings in product paths; teach-overlay indicator (if stubbed) is separate from dual.
 - **Proof:** Layer-A composer unit (label selection matrix) · `rg` gate no `ai_pilot`/`AI-PILOT` under `tw2002_aiclient/` · optional pty chip text.
 - **Hazards:** Do not unify Spectate into the dual. Do not rewrite `control_seat` signature unless proven necessary — extend alongside 056 pattern.
@@ -170,4 +170,4 @@ Pending (not blocking PREP Accept): DOC-GAP-M-FROM-SPECTATE · DOC-GAP-POST-DETA
 
 ## 5. Execute readiness
 
-PREP complete when Accept’d. First product HANDOFF expected: **PWO-060**. CC/product seat stays idle until hub posts that HANDOFF. Cursor docs lane may tick inventory PREP→READY notes after Accept — no product code in this WO.
+**PWO-060 DONE** on tip `2ca3154`. Next product feed: **PWO-061** (App↔Human `M` — also App chip wire-REACHABLE). Remaining 062–072 still PREP until hub HANDOFF. Cursor docs lane: OKF status-truth only; no product code in this tick.

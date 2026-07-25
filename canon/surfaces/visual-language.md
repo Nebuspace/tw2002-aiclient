@@ -19,14 +19,16 @@ value below and a surface doc's inline restatement of it ever drift, this concep
 single-source authority and the surface doc's copy is a stale echo to be corrected.
 
 Every concrete value below is grounded to the module and, where meaningfully stable, the symbol name
-that defines it. **Rebirth tip (Phases 0–3 CLOSED · Phase 4 CLOSED through `bba53d4`):** cockpit chrome
-composers, layout, tones, fold, and LOGS live under `tw2002_aiclient/cockpit/` and `screens.py`;
-session transport under `tw2002_aiclient/session/`; product watch subscribe under
-`tw2002_aiclient/watchfeed.py` (PWO-050); GAME glyph + per-cell color paint under cockpit viewport
-(PWO-052 · PWO-053); disconnect border round-trip + color-unavailable interim (PWO-054); in-cockpit
-`SPECTATE` chip (PWO-055); `M` attach + Ctrl-] detach (PWO-056 · PWO-057). Citations still name many
-archive (`archive/pre-rebirth-2026-07-23/code/twclient/`) symbols where Phase 5+ mode-line / teach
-ports have not landed — those remain the port-source until their WOs ship. Anything not yet built, or
+that defines it. **Rebirth tip (Phases 0–3 CLOSED · Phase 4 CLOSED through `bba53d4` · PWO-060
+`2ca3154`):** cockpit chrome composers, layout, tones, fold, and LOGS live under
+`tw2002_aiclient/cockpit/` and `screens.py`; session transport under `tw2002_aiclient/session/`;
+product watch subscribe under `tw2002_aiclient/watchfeed.py` (PWO-050); GAME glyph + per-cell color
+paint under cockpit viewport (PWO-052 · PWO-053); disconnect border round-trip + color-unavailable
+interim (PWO-054); in-cockpit `SPECTATE` chip (PWO-055); `M` attach + Ctrl-] detach (PWO-056 ·
+PWO-057); App XOR Human dual chips + vocabulary gate (PWO-060 — App chip **composer-LIVE**,
+**wire-UNREACHABLE** until 061 App-hold). Citations still name many archive
+(`archive/pre-rebirth-2026-07-23/code/twclient/`) symbols where Phase 5+ teach / STOP / arm ports
+have not landed — those remain the port-source until their WOs ship. Anything not yet built, or
 built differently from the reborn contract, is marked `[ASPIRATIONAL]`; any unverified claim about
 the game's own native palette is marked `[HYPOTHESIS]` and must never be promoted to fact without
 live introspection.
@@ -35,9 +37,9 @@ live introspection.
 pyte **glyphs and per-cell fg/bg/bold color** into the 80×25 GAME (**LIVE** · PWO-052 · PWO-053).
 Border STATE flip (danger non-bold / color-unavailable `A_UNDERLINE`) is **LIVE** and reconnect-proven
 (P3-040 · PWO-054 · tip `6c7d834`). In-cockpit spectate indicator is **LIVE** (muted `SPECTATE` ·
-PWO-055); attach/detach loop is **LIVE** (`M` · Ctrl-] · chip SPECTATE↔MANUAL · tip `bba53d4`); ops
-`tw spectate` remains **F2 HOLD**. Do not read chrome-tones prose as recoloring game cells with the
-7-tone semantic table.
+PWO-055); attach/detach loop is **LIVE** (`M` · Ctrl-] · chip SPECTATE↔MANUAL · tip `bba53d4`);
+App/Human dual chips are **LIVE** (PWO-060 · tip `2ca3154`); ops `tw spectate` remains **F2 HOLD**.
+Do not read chrome-tones prose as recoloring game cells with the 7-tone semantic table.
 
 # Schema
 
@@ -106,10 +108,10 @@ canonical here, not merely a per-surface style choice:
 only — [North Star](/architecture/north-star.md) and
 [Control & Escalation](/architecture/control-and-escalation.md) — with a strict on-demand-only teach
 overlay, never a live third seat. A mode-line position that reads "AI" as a *driving* state is a
-reborn-invariant violation on sight, on any surface, not a stylistic variance. `[CODE DIVERGENCE]`
-The archived build's `_MODE_BADGES` (`spectate_layout.py`) still carries an `ai_pilot → "AI-PILOT"`
-entry at tone `info` — a pre-reborn live-driver framing that must retire when this surface is
-rebuilt; see each surface doc's own Code divergence section for the render-site detail.
+reborn-invariant violation on sight, on any surface, not a stylistic variance. Tip play shell
+(PWO-060 · `2ca3154`) ships **App XOR Human** with an AST vocabulary gate; `[CODE DIVERGENCE]` the
+archived build's `_MODE_BADGES` (`spectate_layout.py`) still carries an `ai_pilot → "AI-PILOT"`
+entry at tone `info` — port-source only, do not revive.
 
 ### Per-cell game color is a distinct system
 

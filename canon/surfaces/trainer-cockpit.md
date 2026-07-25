@@ -422,7 +422,7 @@ Concretely, a builder should aim for:
   rejected). The anti-gold-plating is itself part of the taste — cut list: light theme, powerline
   separators, pane intro-stagger, full-grid marquee (`TUI-POLISH-PLAN.md`).
 
-# Implementation status (tip `bba53d4` · Phase 3 CLOSED · Phase 4 CLOSED)
+# Implementation status (tip `2ca3154` · Phase 3 CLOSED · Phase 4 CLOSED · PWO-060 DONE)
 
 | Band | Tip reality |
 |---|---|
@@ -432,7 +432,8 @@ Concretely, a builder should aim for:
 | Product watch-stream into play shell | **LIVE** subscribe (PWO-050) + snapshot→paint (PWO-052/053) |
 | Product in-cockpit spectate state | **LIVE** — muted `SPECTATE` chip + no-send tripwire (PWO-055); ops `tw spectate` still **F2 HOLD** |
 | Product attach / detach | **LIVE** — `M` attach · Ctrl-] detach · chip SPECTATE↔`MANUAL — YOU HAVE CONTROL` (PWO-056 · PWO-057 · tip `bba53d4`) |
-| Mode line / teach A·R·T / STOP strip | **NOT** — Phase 5+ |
+| App / Human dual chips (no AI-PILOT) | **LIVE** — `APP` XOR `MANUAL — YOU HAVE CONTROL` · strict gate · vocabulary AST (PWO-060 · tip `2ca3154`); App **wire-UNREACHABLE** until 061 App-hold |
+| Mode line teach A·R·T / STOP / arm / N5 / coverage | **NOT** — remaining Phase 5+ |
 | Coverage meter / chains library / formations | **NOT** on tip play shell (archive / later WOs) |
 
 Citations below that name only `spectate_app.py` / `spectate_layout.py` are **port-source** until the
@@ -452,10 +453,10 @@ reborn module is cited; prefer `tw2002_aiclient/cockpit/*` for chrome that has a
 - **Mode badge may still carry an AI/auto-loop live position.** Archived `format_mode_badge()` /
   `_MODE_BADGES` render the control-strip mode from `control_lock`'s modes, which historically
   include `ai_pilot` / `auto_loop` alongside `human`. The reborn mode line is an **App/Human dual
-  with no third "AI drives" slot** (AI shows only as a teach-overlay indicator). Any surviving
-  AI-as-a-mode badge value is a divergence from that dual; the corrected contract is owned by
-  [mode-line-and-teach-controls](/surfaces/mode-line-and-teach-controls.md). Tip play shell has **no**
-  mode badges yet (Phase 5).
+  with no third "AI drives" slot** (AI shows only as a teach-overlay indicator). Tip play shell
+  (PWO-060 · `2ca3154`) ships that dual (`APP` XOR MANUAL) with a vocabulary gate; archive
+  AI-as-a-mode badge values remain a recorded port-source divergence — do not revive. The corrected
+  contract is owned by [mode-line-and-teach-controls](/surfaces/mode-line-and-teach-controls.md).
 
 # Citations
 
