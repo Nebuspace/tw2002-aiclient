@@ -193,21 +193,23 @@ Banked hygiene (not a PWO id): **pty mid-flush settle** — PREP `workorders/WO-
 
 ### Phase 5 — Mode line, escalation, teach
 
+> PREP: `workorders/WO-P5-060-072-mode-teach-PREP.md` (tip `cbc5d98`) — Phase 4 CLOSED; Human MANUAL + `M` attach LIVE; App chip / App↔Human / A·R·T / STOP / N5 / coverage still MISSING.
+
 | ID | Title | Type | Depends | Goal | Accept | Proof | Canon |
 |----|-------|------|---------|------|--------|-------|-------|
-| PWO-060 | App/Human badge (no AI mode) | extend | 030 | Dual only | no `ai_pilot` UI string | grep+TTY | mode-line-and-teach-controls |
-| PWO-061 | `M` mode switch | build | 060·056 | Toggle App↔Human | lock flips | TTY | control… Mode Switch |
-| PWO-062 | Autopilot/Trainer arm UI | extend | 060·020 | Separate from actor badge | ON/OFF + write-back | TTY | app-autopilot-model |
-| PWO-063 | Confirm-to-arm dialog | build | 062 | Arm requires explicit confirm | no silent arm | TTY | mode-line confirm-gate |
-| PWO-064 | STOP banner from reason codes | build | 060·020 | Typed labels only | catalog coverage | inject status | control… catalog |
-| PWO-065 | Intervention → Human keyboard | harden | 064·061 | STOP hands control | Human can type | live halt | control… escalate |
-| PWO-066 | Teach strip A/R/T visible | build | 060 | Affordances shown | labels present | TTY | mode-line A/R/T |
-| PWO-067 | `R` Record macro wire | build | 066 | Human-init record | macro file/ledger | TTY+cli | macros |
-| PWO-068 | `T` Assign-trigger scaffold | build | 066 | Bind screen→macro stub | no live drive | TTY | rule-macro-engine |
-| PWO-069 | `A` Analyze on-demand only | build | 066 | Never auto-fires | press required | TTY | ai-teacher |
-| PWO-070 | Analyze draft → human approve | build | 069 | Draft not live | approval gate | TTY/cli | ai-teacher · doctrine |
-| PWO-071 | Operate-the-app cluster (N5) | build | 060 | Pause/resume/stop taught run | controls work | TTY | mode-line N5 |
-| PWO-072 | Coverage meter strip | build | 060·025 | Taught vs escalation share | `?` if unknown | TTY | coverage-metrics |
+| PWO-060 | App/Human badge (no AI mode) — PREP | extend | 030 | Dual only | no `ai_pilot` UI string | grep+TTY | mode-line-and-teach-controls |
+| PWO-061 | `M` mode switch — PREP | build | 060·056 | Toggle App↔Human | lock flips | TTY | control… Mode Switch |
+| PWO-062 | Autopilot/Trainer arm UI — PREP | extend | 060·020 | Separate from actor badge | ON/OFF + write-back | TTY | app-autopilot-model |
+| PWO-063 | Confirm-to-arm dialog — PREP | build | 062 | Arm requires explicit confirm | no silent arm | TTY | mode-line confirm-gate |
+| PWO-064 | STOP banner from reason codes — PREP | build | 060·020 | Typed labels only | catalog coverage | inject status | control… catalog |
+| PWO-065 | Intervention → Human keyboard — PREP | harden | 064·061 | STOP hands control | Human can type | live halt | control… escalate |
+| PWO-066 | Teach strip A/R/T visible — PREP | build | 060 | Affordances shown | labels present | TTY | mode-line A/R/T |
+| PWO-067 | `R` Record macro wire — PREP | build | 066 | Human-init record | macro file/ledger | TTY+cli | macros |
+| PWO-068 | `T` Assign-trigger scaffold — PREP | build | 066 | Bind screen→macro stub | no live drive | TTY | rule-macro-engine |
+| PWO-069 | `A` Analyze on-demand only — PREP | build | 066 | Never auto-fires | press required | TTY | ai-teacher |
+| PWO-070 | Analyze draft → human approve — PREP | build | 069 | Draft not live | approval gate | TTY/cli | ai-teacher · doctrine |
+| PWO-071 | Operate-the-app cluster (N5) — PREP | build | 060 | Pause/resume/stop taught run | controls work | TTY | mode-line N5 |
+| PWO-072 | Coverage meter strip — PREP | build | 060·025 | Taught vs escalation share | `?` if unknown | TTY | coverage-metrics |
 
 ### Phase 6 — APP autopilot + rule engine (backend-heavy)
 

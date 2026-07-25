@@ -119,6 +119,6 @@ Logged at tip `bba53d4` (OKF-STATUS-TRUTH-056-057). **Pending** hub/Max canon �
 
 | ID | Gap | Tip reality |
 |---|---|---|
-| DOC-GAP-M-FROM-SPECTATE | Canon frames `M` as App↔Human; silent on Spectate→Human | Hub 056 ruling: Spectate→Human only; App-return deferred |
+| DOC-GAP-M-FROM-SPECTATE | Canon frames `M` as App↔Human; silent on Spectate→Human | Hub 056 ruling: Spectate→Human only; App-return deferred · see `WO-P5-060-072-mode-teach-PREP.md` (061) |
 | DOC-GAP-POST-DETACH-COPY | Canon silent on post-detach status copy | Shipped `"detached — spectating"` (dispatch-decided) |
-| HARDEN-ATTACH-SOCKET-TIMEOUT | Unbounded `AttachInputConn` socket read | Banked harden WO (product-reachable since 056) |
+| HARDEN-ATTACH-SOCKET-TIMEOUT | Unbounded `AttachInputConn` socket read | Banked harden WO (product-reachable since 056) · out of Phase-5 PREP |
