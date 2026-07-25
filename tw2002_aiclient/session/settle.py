@@ -94,7 +94,20 @@ canon deviation rather than a fix; and the narrowing has a real cost --
 a `wait_prompt` written to span rows (`--wait-prompt` is
 operator-supplied and free-form) matches under `"screen"` and can only
 ever time out under `"prompt_line"`, turning a false settle into a hang.
-Both halves are pinned as tests. Opt-in until canon rules.
+Both halves are pinned as tests. Opt-in until canon rules -- which is
+also what canon itself now says: research/tw2002-screen-patterns.md
+P-SETTLE-LINE parks "which canon doc governs default `match_scope`" as an
+open question and rules "until ruled, do not flip defaults in a drive-by
+tip; pin prompt-line scope where a WO explicitly Accepts it."
+
+One caller has taken that opt-in: `protocol.dispatch`'s `do` verb
+(WO-DO-PROMPT-LINE-PIN), the one settle in the protocol that follows a
+send of its own. `read` reaches this module through the SAME
+`Session.wait_settle` door and deliberately keeps `"screen"` -- it sends
+nothing, so "is this shape anywhere on the screen I'm looking at?" is its
+honest question, and it is the only caller that can still express a
+cross-row `wait_prompt`. Two callers, one door, opposite values: that is
+why this is pinned per-call-site and a default could not serve it.
 
 **Stale pre-send prompt match (`prompt_requires_new_bytes`,
 WO-DO-SETTLE-RX-GUARD):** a FOURTH window, orthogonal to the three above
@@ -158,12 +171,30 @@ Two costs, stated rather than discovered later:
   2. `rx_count` is a BYTE counter, so a single echoed keystroke satisfies
      the guard while proving nothing about the screen. This is exactly
      the residual `send_and_confirm`'s own guard has always carried, and
-     it is deliberately matched rather than "improved": what remains
-     after one echoed byte is the stale-LINE question above, whose fix is
-     `match_scope`, not a bigger byte threshold. (A "the render changed"
-     predicate was considered and rejected: a legitimate identical
-     repaint would then never settle, converting a false settle into a
-     genuine hang.)
+     it is deliberately matched rather than "improved" with a bigger byte
+     threshold. (A "the render changed" predicate was considered and
+     rejected: a legitimate identical repaint would then never settle,
+     converting a false settle into a genuine hang.)
+
+     What remains after that one echoed byte splits in two, and
+     `match_scope` answers only ONE half -- stated here because an
+     earlier revision of this paragraph said flatly that the residual's
+     "fix is `match_scope`", which is half wrong and misleading exactly
+     where it matters most, on the verb that now sets both:
+       - **stale ROW** (awaited text sitting somewhere up the grid):
+         `match_scope="prompt_line"` does close it -- not by waiting for
+         the real prompt, but by withholding the `prompt` claim so the
+         settle resolves as `idle` instead. `do` pins this scope
+         (WO-DO-PROMPT-LINE-PIN).
+       - **equal prompt** (awaited text IS the pre-send prompt line):
+         `match_scope` does NOT close it and cannot. The echo lands ON
+         the very line being searched (`Command [TL=...]: P`), so the
+         window stays open identically under BOTH scopes -- measured, not
+         reasoned, in `tests/test_do_settle_rx_guard.py::test_prompt_line_
+         scope_does_not_close_the_equal_prompt_residual`.
+     So `do` carries both narrowings and is still not airtight; the
+     guard's own claim stays the narrow one it can actually keep -- a
+     settle is never asserted when the game has said NOTHING at all.
 """
 
 import re

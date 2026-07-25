@@ -29,6 +29,7 @@ from pathlib import Path
 import pytest
 
 from tw2002_aiclient.session import env as _env
+from tw2002_aiclient.session.settle import MATCH_SCOPE_SCREEN
 
 # Post-ADR-001, `twclient` relocated to `tw2002_aiclient.session` -- but
 # control_lock/loop_player/watch haven't landed there yet (WO-P2-020
@@ -212,14 +213,28 @@ class FakeAttachSession:
             self.rx_count += 1
             self.last_rx = self.t
 
-    def wait_settle(self, wait_prompt=None, timeout=8.0, debounce_ms=350, prompt_requires_new_bytes=False):
-        # WO-DO-SETTLE-RX-GUARD: `prompt_requires_new_bytes` mirrors the
-        # real Session.wait_settle signature -- protocol.py's `do` passes
-        # it on every call, so a double that omitted it would TypeError
+    def wait_settle(
+        self,
+        wait_prompt=None,
+        timeout=8.0,
+        debounce_ms=350,
+        prompt_requires_new_bytes=False,
+        match_scope=MATCH_SCOPE_SCREEN,
+    ):
+        # WO-DO-SETTLE-RX-GUARD / WO-DO-PROMPT-LINE-PIN:
+        # `prompt_requires_new_bytes` and `match_scope` mirror the real
+        # Session.wait_settle signature -- protocol.py's `do` passes BOTH
+        # on every call, so a double that omitted either would TypeError
         # the whole verb. Unused here: this stub returns a canned settle
         # rather than running wait_for_settle, so it has no prompt branch
-        # to guard. The guard's real behaviour is proven against a real
-        # Session in tests/test_do_settle_rx_guard.py.
+        # to guard and no regex to place. Their real behaviour is proven
+        # against a real Session in tests/test_do_settle_rx_guard.py.
+        #
+        # Note this double deliberately does NOT grow a
+        # `current_prompt_line()` to match: because it never delegates to
+        # `wait_for_settle`, `settle._match_source` is never reached, so
+        # the accessor `match_scope="prompt_line"` would demand is never
+        # asked for. A double that DOES delegate needs one.
         return "idle", 0.0
 
     def send(self, text, enter=True, secret=False, sender="app"):

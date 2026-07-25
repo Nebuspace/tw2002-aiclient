@@ -35,6 +35,7 @@ from .control_lock import (
     MODE_SPECTATE,
     ControlModeConflict,
 )
+from .settle import MATCH_SCOPE_PROMPT_LINE
 
 
 def build_response(session, rows=None, settled_reason=None, extra=None):
@@ -207,6 +208,41 @@ def dispatch(session, verb, args, server):
         # always had. `read` below deliberately does NOT set it: it sends
         # nothing, so returning immediately on a prompt that is already
         # there is its correct contract, not the same defect.
+        #
+        # WO-DO-PROMPT-LINE-PIN: `match_scope=MATCH_SCOPE_PROMPT_LINE` is
+        # a SECOND, independent narrowing on this same settle, closing the
+        # OTHER stale window — canon's P-SETTLE-LINE
+        # (`canon/research/tw2002-screen-patterns.md`): "New bytes since
+        # send do not prove the match is on new content — a stale copy of
+        # the target text elsewhere on the grid still hits... Do not treat
+        # whole-screen regex success as proof the *live* prompt matched."
+        # TradeWars is a scrolling BBS door, so the `Command [TL=` this
+        # `do` waits for is routinely STILL VISIBLE up the grid from two
+        # screens ago; a whole-screen search confirms against that row and
+        # hands the App `settled_reason: prompt` over a screen whose live
+        # prompt line is something else entirely.
+        #
+        # What this buys is precise, and smaller than it looks: the wait
+        # does NOT hold out for the real prompt. `wait_for_settle` returns
+        # on the FIRST of prompt/idle/timeout, so once the stale row stops
+        # matching, the keystroke echo plus one quiet debounce window
+        # legitimately satisfies the IDLE branch instead. The win is a
+        # DOWNGRADE OF THE CLAIM — `prompt` ("quiet on a specific, named
+        # shape", false here) becomes `idle` ("it went quiet; I never saw
+        # your shape", true here) — which is exactly canon's ordering of
+        # the three reasons. Measured both ways in
+        # tests/test_do_settle_rx_guard.py.
+        #
+        # Pinned HERE, at the call site, rather than defaulted in
+        # `settle.py` or `Session.wait_settle`: P-SETTLE-LINE leaves the
+        # DEFAULT an open canon question — "until ruled, do not flip
+        # defaults in a drive-by tip; pin prompt-line scope where a WO
+        # explicitly Accepts it" — and `read` below reaches settle through
+        # that same door needing the OPPOSITE value, so no default could
+        # serve both. The cost is the one settle.py states: a cross-row
+        # `wait_prompt` (operator-supplied and free-form) can no longer
+        # match on this verb and degrades to `timeout` — never to a wrong
+        # match. `read` keeps whole-screen scope and can still express it.
         with _driving_dispatch(server) as lock_error:
             if lock_error is not None:
                 return lock_error
@@ -221,6 +257,7 @@ def dispatch(session, verb, args, server):
                     timeout=args.get("timeout", 8.0),
                     debounce_ms=args.get("debounce_ms", 350),
                     prompt_requires_new_bytes=True,
+                    match_scope=MATCH_SCOPE_PROMPT_LINE,
                 )
             except re.error as e:
                 return {"ok": False, "error": f"bad_wait_prompt_regex:{e}"}

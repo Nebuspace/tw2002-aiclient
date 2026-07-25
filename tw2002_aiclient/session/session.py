@@ -21,7 +21,7 @@ from .classify import classify_screen, is_probable_secret_prompt
 from .connection import TelnetConnection, tx_failure_phrase
 from .iac import TelnetHandler
 from .logging_util import TranscriptLogger
-from .settle import wait_for_settle
+from .settle import MATCH_SCOPE_SCREEN, wait_for_settle
 from .terminal import TerminalScreen
 from .transcript_tail import TranscriptTail
 
@@ -276,20 +276,44 @@ class Session:
     def sleep(self, seconds):
         time.sleep(seconds)
 
-    def wait_settle(self, wait_prompt=None, timeout=8.0, debounce_ms=350, prompt_requires_new_bytes=False):
-        """`prompt_requires_new_bytes` is a pure pass-through to
-        `settle.wait_for_settle` -- this method holds no policy of its own
-        and must not acquire any, since `do` (which sets it) and `read`
-        (which must not) reach settle detection through this one door.
-        See that module's "Stale pre-send prompt match" docstring section.
-        Any test double standing in for a Session on the `do` path has to
-        accept this argument too."""
+    def wait_settle(
+        self,
+        wait_prompt=None,
+        timeout=8.0,
+        debounce_ms=350,
+        prompt_requires_new_bytes=False,
+        match_scope=MATCH_SCOPE_SCREEN,
+    ):
+        """`prompt_requires_new_bytes` and `match_scope` are pure
+        pass-throughs to `settle.wait_for_settle` -- this method holds no
+        policy of its own and must not acquire any, since `do` (which sets
+        both) and `read` (which must set neither) reach settle detection
+        through this one door. See that module's "Stale pre-send prompt
+        match" and "Stale-line match" docstring sections. Any test double
+        standing in for a Session on the `do` path has to accept these
+        arguments too.
+
+        `match_scope`'s default is `MATCH_SCOPE_SCREEN` -- the same value
+        `wait_for_settle` already defaults to, restated here only so the
+        door stays neutral rather than opinionated. It is deliberately NOT
+        `MATCH_SCOPE_PROMPT_LINE`: canon's P-SETTLE-LINE
+        (`canon/research/tw2002-screen-patterns.md`) leaves "which canon
+        doc governs default `match_scope`" an open question and rules
+        "until ruled, do not flip defaults in a drive-by tip; pin
+        prompt-line scope where a WO explicitly Accepts it." A default
+        here would be exactly the drive-by flip that forbids -- and would
+        silently take `read` with it, since `read` shares this door.
+        WO-DO-PROMPT-LINE-PIN therefore pins the scope at the `do` CALL
+        SITE in `protocol.py`, where the pin is visible and scoped to the
+        one verb that Accepts it.
+        """
         return wait_for_settle(
             self,
             wait_prompt=wait_prompt,
             timeout_s=timeout,
             debounce_ms=debounce_ms,
             prompt_requires_new_bytes=prompt_requires_new_bytes,
+            match_scope=match_scope,
         )
 
     # -- sending -------------------------------------------------------

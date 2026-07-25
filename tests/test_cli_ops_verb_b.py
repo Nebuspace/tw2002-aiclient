@@ -12,6 +12,7 @@ import pytest
 
 from tw2002_aiclient.session import cli, protocol
 from tw2002_aiclient.session.control_lock import ControlLock
+from tw2002_aiclient.session.settle import MATCH_SCOPE_PROMPT_LINE, MATCH_SCOPE_SCREEN
 
 
 class _FakeConn:
@@ -53,16 +54,29 @@ class FakeSession:
         self.last_sent = "<redacted>" if secret else text
         self.last_sender = sender
 
-    def wait_settle(self, wait_prompt=None, timeout=8.0, debounce_ms=350, prompt_requires_new_bytes=False):
-        # WO-DO-SETTLE-RX-GUARD: `prompt_requires_new_bytes` mirrors the
-        # real Session.wait_settle signature -- `do` passes it on every
-        # call. Recorded rather than acted on: this double returns a
-        # canned settle (no grid, no byte timeline, so it could not honour
-        # the guard even in principle), and the assertion that `do` sets
-        # it lives below. The guard's BEHAVIOUR is proven against a real
-        # Session in tests/test_do_settle_rx_guard.py.
+    def wait_settle(
+        self,
+        wait_prompt=None,
+        timeout=8.0,
+        debounce_ms=350,
+        prompt_requires_new_bytes=False,
+        match_scope=MATCH_SCOPE_SCREEN,
+    ):
+        # WO-DO-SETTLE-RX-GUARD / WO-DO-PROMPT-LINE-PIN:
+        # `prompt_requires_new_bytes` and `match_scope` mirror the real
+        # Session.wait_settle signature -- `do` passes both on every call.
+        # Recorded rather than acted on: this double returns a canned
+        # settle (no grid, no byte timeline, no prompt line, so it could
+        # honour neither even in principle), and the assertions that `do`
+        # sets them -- and that `read` sets neither -- live below. Their
+        # BEHAVIOUR is proven against a real Session in
+        # tests/test_do_settle_rx_guard.py.
         self.settle_calls.append(
-            {"wait_prompt": wait_prompt, "prompt_requires_new_bytes": prompt_requires_new_bytes}
+            {
+                "wait_prompt": wait_prompt,
+                "prompt_requires_new_bytes": prompt_requires_new_bytes,
+                "match_scope": match_scope,
+            }
         )
         if wait_prompt is not None:
             import re
@@ -192,6 +206,31 @@ def test_do_asks_for_the_post_send_guard_and_read_does_not():
 
     protocol.dispatch(session, "read", {"wait_prompt": "Command"}, FakeServer())
     assert session.settle_calls[-1]["prompt_requires_new_bytes"] is False
+
+
+def test_do_pins_prompt_line_scope_and_read_keeps_whole_screen():
+    """WO-DO-PROMPT-LINE-PIN wiring, the exact same pair-shape as the
+    guard above and for the same reason: these two verbs share ONE door
+    (`Session.wait_settle`) and need OPPOSITE values through it, which is
+    why the scope is pinned at the call site rather than defaulted.
+
+    `do` follows a send, so a `wait_prompt` matching a stale copy of the
+    target text up the grid is a false settle (canon P-SETTLE-LINE).
+    `read` sends nothing and answers "is this shape anywhere on the
+    screen I'm looking at?" — whole-screen is its contract, and it is the
+    only scope under which an operator's cross-row `--wait-prompt` can
+    match at all.
+
+    Wiring only. What the scope DOES to a real grid — `prompt` at 0.04 on
+    a stale row becoming `idle` at 0.40, and `read` still matching that
+    same stale row — is measured in tests/test_do_settle_rx_guard.py.
+    """
+    session = FakeSession(_MAIN)
+    protocol.dispatch(session, "do", {"input": "d", "wait_prompt": "Command"}, FakeServer())
+    assert session.settle_calls[-1]["match_scope"] == MATCH_SCOPE_PROMPT_LINE
+
+    protocol.dispatch(session, "read", {"wait_prompt": "Command"}, FakeServer())
+    assert session.settle_calls[-1]["match_scope"] == MATCH_SCOPE_SCREEN
 
 
 def test_protocol_do_refuses_when_human_holds_lock():
