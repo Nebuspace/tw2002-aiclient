@@ -109,15 +109,42 @@ def _load_profile_host_port(profile_name, profiles_path):
     has no host/port/server at all) -- that's ordinary tier-4 "nothing
     here" for a last-resort fallback, so it returns `(None, None)` and
     lets `resolve_host_port`'s own actionable HOST_VAR/PORT_VAR message
-    fire. DOES raise `EnvResolutionError` when the profile DOES have
-    something there but it's broken (an unparseable port, or an
-    unresolvable `server=` catalog key, or unparseable TOML) --
-    swallowing THAT into a generic "not found" message would hide the
-    real misconfiguration from the operator. Distinguished by TYPE, via
-    `credentials.py`'s `ProfileNotFound`/`ProfileIncomplete` (absent) vs
-    `ProfileMalformed` (broken) subclasses of `ProfileConnectionError`
+    fire. EVERYTHING ELSE raises `EnvResolutionError`: something WAS
+    there and we could not use it (an unparseable port, an unresolvable
+    `server=` catalog key, unparseable TOML, a store we were not allowed
+    to read at all) -- swallowing THAT into a generic "not found"
+    message would hide the real problem from the operator. Distinguished
+    by TYPE, via `credentials.py`'s `ProfileConnectionError` family
     (OPEN-003-A follow-up) -- not by sniffing the exception's message
     text.
+
+    The enumeration goes on the ABSENT side, and the loud side is caught
+    at the family BASE. That asymmetry is the whole design, not a
+    shortcut: the absent set is CLOSED -- `ProfileNotFound` /
+    `ProfileIncomplete`, and `ProfileConnectionError`'s own docstring
+    pins it, "Absence is never one of these" -- while the loud set is
+    OPEN and has already grown twice (`ProfileStoreUnreadable`,
+    `ProfileStoreMalformed`). While this function enumerated the loud
+    side instead (`except credentials.ProfileMalformed`), a new member
+    that was deliberately NOT a `ProfileMalformed` fell through every
+    handler here: `ProfileStoreUnreadable` is a direct child of the base
+    (nothing was read, so nothing can be called malformed), so a `chmod
+    000` `profiles.toml` -- or an unreadable `config/` around it -- left
+    `twd` dying at startup with an unhandled traceback in front of the
+    operator instead of an actionable line (WO-TWD-PROFILE-STORE-
+    UNREADABLE). Catching the base for everything that is not absent
+    makes the NEXT family member default to loud-and-actionable rather
+    than to a traceback. `tests/test_twd_profile_store_unreadable.py`
+    walks the family recursively and holds the closed set closed.
+
+    The message claims nothing about the profile's CONTENT -- a store
+    nobody could read is not "misconfigured" -- and leans on `{e}`,
+    which for a store-read failure already renders "<reason> (<store
+    that failed>)". That parenthetical is load-bearing because this path
+    also reaches the `servers.toml` CATALOG through
+    `resolve_profile_host_port`, not just `profiles.toml`. `path` is
+    still named explicitly so the line stays actionable for the failures
+    whose own text names no file at all (a bad `port=` value).
     """
     import tomllib
 
@@ -130,22 +157,27 @@ def _load_profile_host_port(profile_name, profiles_path):
         # resolve_host_port's own actionable HOST_VAR/PORT_VAR message
         # fires, same as a missing file/section always has.
         return None, None
-    except credentials.ProfileMalformed as e:
-        # Something WAS there but it's broken (bad port int, unknown
-        # server= catalog key, bad TOML) -- surface it directly rather
-        # than hiding it behind the generic fallback message. Names
-        # `path` explicitly (not just the exception's own message) so
-        # this stays actionable even if credentials.py's own wording
-        # ever stops naming the file itself.
+    except credentials.ProfileConnectionError as e:
+        # NOT absent, so something WAS there and we could not use it: a
+        # bad port int, an unknown server= catalog key, bad TOML, or a
+        # store we were never allowed to open. Surface it directly
+        # rather than hiding it behind the generic fallback message.
+        # The BASE, deliberately -- see this function's docstring: a
+        # future family member lands here and stays actionable instead
+        # of escaping as a traceback. Names `path` explicitly (not just
+        # the exception's own message) so this stays actionable even if
+        # credentials.py's own wording ever stops naming the file
+        # itself, and says only that the profile "could not be used" --
+        # an unread store has earned no claim about its content.
         raise EnvResolutionError(
-            f"{path}'s [{profile_name}] profile is misconfigured: {e} "
-            f"-- fix it in profiles.toml, or set {HOST_VAR}/{PORT_VAR} "
+            f"{path}'s [{profile_name}] profile could not be used: {e} "
+            f"-- fix the problem it reports, or set {HOST_VAR}/{PORT_VAR} "
             f"to override it."
         ) from e
     except tomllib.TOMLDecodeError as e:
         # Belt-and-braces: covers a bad-TOML profiles.toml in case
         # credentials.py's resolver ever stops wrapping this itself as
-        # ProfileMalformed.
+        # a ProfileConnectionError.
         raise EnvResolutionError(
             f"{path} is not valid TOML ({e}) -- fix it or remove it."
         ) from e

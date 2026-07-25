@@ -474,8 +474,16 @@ def test_a_genuinely_absent_store_is_still_profile_not_found(cfg):
 def test_the_two_store_failures_sit_in_different_places_in_the_family(cfg):
     """Both are ``ProfileConnectionError``, so ``cli.py`` / ``protocol.py``
     (which catch the base) inherit both. Only the content failure is a
-    ``ProfileMalformed``, which is what ``env.py`` branches on to decide
-    between "nothing here, fall through" and "something is broken, say so"."""
+    ``ProfileMalformed``.
+
+    ``env.py`` used to branch on ``ProfileMalformed`` to decide between
+    "nothing here, fall through" and "something is broken, say so", which is
+    precisely why ``ProfileStoreUnreadable`` — correctly NOT a
+    ``ProfileMalformed`` — escaped it as a startup traceback. It now
+    enumerates the closed absent side and catches the base for the rest; the
+    positions asserted below are what make that split legible, and
+    ``tests/test_twd_profile_store_unreadable.py`` holds it.
+    """
     assert issubclass(credentials.ProfileStoreUnreadable, credentials.ProfileConnectionError)
     assert issubclass(credentials.ProfileStoreMalformed, credentials.ProfileConnectionError)
     assert issubclass(credentials.ProfileStoreMalformed, credentials.ProfileMalformed)
