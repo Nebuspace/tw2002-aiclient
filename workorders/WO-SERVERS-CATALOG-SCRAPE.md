@@ -25,6 +25,15 @@ ClassicTW community forums as future scrape targets.
 - Inventory dead entries: sourced from MicroBlaster graveyard
 - Deduped away: NoWhere TWGS → Joes Tavern; Star Killer's TWGS + Viper's Pit TWGS → Star Killer's Ice9
 
+## Archive merge — 2026-07-25
+
+3 entries from `archive/pre-rebirth-2026-07-23` (WO-MS-1 catalog, snapshot 2026-07-20) added to `servers.toml` (41→44) and `servers.inventory.json` (86→89) as `status=archive_seed`:
+- `eclipsebbs.com:2002` — Eclipse BBS — sources=seed,telnetbbsguide
+- `polarwireless.ca:2002` — Crawford Intl Online Gaming — sources=classictw
+- `twgs.exiled.org:2002` — Alpha Quadrant Invasion — sources=classictw
+
+These were confirmed absent from the 2026-07-25 greenfield scrape (verified of 39-archive dedup check).
+
 ## Constraints honored
 - No product `.py` modified (app.py `example_one` refs are UI fixture helpers; no tests assert on them)
 - No `/Users/` paths in any written file

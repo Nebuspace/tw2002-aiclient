@@ -84,3 +84,4 @@ listing are included in the catalog with `status=listed_bbsguide`.
 | **Liveness** | The catalog is a **curated snapshot**, not a liveness probe.  Entries go stale.  Treat it as a starting-point address book. |
 | **No credentials** | Neither `servers.toml` nor `servers.inventory.json` contains passwords, API keys, or any secret. |
 | **Scrape date** | 2026-07-25 UTC.  Re-scrape MicroBlaster and BBSGuide periodically to refresh stale entries. |
+| **Archive merge (2026-07-25)** | 3 entries from `archive/pre-rebirth-2026-07-23` catalog (WO-MS-1, snapshot 2026-07-20) merged into `servers.toml` and `servers.inventory.json` as `status=archive_seed`.  These were present in the pre-rebirth inventory but absent from the 2026-07-25 greenfield scrape: `eclipsebbs.com:2002` (seed/telnetbbsguide), `polarwireless.ca:2002` (classictw — Crawford Intl Online Gaming), `twgs.exiled.org:2002` (classictw — Alpha Quadrant Invasion). |

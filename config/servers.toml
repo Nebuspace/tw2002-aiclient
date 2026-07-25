@@ -276,3 +276,28 @@ name = "Zot TWGS"
 host = "tw2002.zot.org"
 port = 2002
 description = "status=listed_bbsguide; sources=bbsguide"
+
+# ---------------------------------------------------------------------------
+# Archive pre-rebirth merge — 2026-07-25
+# 3 entries present in archive/pre-rebirth-2026-07-23 catalog (WO-MS-1,
+# snapshot 2026-07-20) but absent from the 2026-07-25 greenfield scrape.
+# Source: archive/pre-rebirth-2026-07-23/config/config/servers.toml
+# ---------------------------------------------------------------------------
+
+[servers.eclipsebbs]
+name = "Eclipse BBS"
+host = "eclipsebbs.com"
+port = 2002
+description = "status=archive_seed; sources=seed,telnetbbsguide; source=archive-pre-rebirth; last seen online 2026-07-20"
+
+[servers.polarwireless]
+name = "Crawford Intl Online Gaming"
+host = "polarwireless.ca"
+port = 2002
+description = "status=archive_seed; sources=classictw; source=archive-pre-rebirth; Crawford Intl Online Gaming"
+
+[servers.exiled]
+name = "Alpha Quadrant Invasion"
+host = "twgs.exiled.org"
+port = 2002
+description = "status=archive_seed; sources=classictw; source=archive-pre-rebirth; Alpha Quadrant Invasion"
