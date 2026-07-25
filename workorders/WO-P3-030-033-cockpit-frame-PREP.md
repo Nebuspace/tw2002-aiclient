@@ -45,7 +45,11 @@ Authored from a 3-worker read-only fan-out (cockpit↔canon inventory · Accept/
 
 ## 3. Geometry guard list (bake into 031/033 Accept)
 1. Every cell write `addnstr(y, x, text, max(0, w-x-1), attr)` inside `try/except curses.error`; borders via a shared `_draw_box` with per-side try/except — the bottom-right-cell throw is EXPECTED, not a bug.
-2. Viewport content = **full 80×25 `raw_display()`** (not `render_cropped()`) at inset (1,1), **clipped not scaled/inset**; zip with `color_map()` by row index (identical bbox).
+2. Viewport content = game grid at inset (1,1), **clipped not scaled/inset**. Do **not** zip
+   `raw_display()` with a separately captured `color_map()` — those are different boxes
+   (full vs cropped) and that zip is the silent misalignment class. Prefer
+   **`render_with_color()` under one lock** (one capture, one bbox) — the live
+   `build_response` / WatchFeed path.
 3. **Fold, never horizontal-scroll:** width-tiered panel shedding; clamp every region ≥1×1 before `newwin`; a failed `newwin` drops that one pane, never the loop.
 4. Min-size ladder from the **constants** (not the stale `>=142` docstring): full≥154 · 138 · 118 · 82 · 60 · refuse<60.
 5. Persistent per-pane windows rebuilt **only** on `KEY_RESIZE`/tier-change (`update_lines_cols()` first); batch `noutrefresh()` + one `doupdate()`; decouple the ~13fps chrome tick from the event-driven viewport redraw (no per-frame `newwin`/full `erase()` of static chrome).
