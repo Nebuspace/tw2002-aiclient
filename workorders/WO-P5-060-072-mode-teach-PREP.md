@@ -30,10 +30,10 @@
 |---|---|---|
 | Control-strip seat label SPECTATE | **LIVE** (PWO-055 · `cockpit/control_seat.py`) | Observation chrome only; **entry must show APP** (Max `@ 09:33:23Z`) not SPECTATE |
 | Control-strip seat label MANUAL (Human) | **LIVE** (PWO-056 · reverse+warn lift in 060) | `MANUAL — YOU HAVE CONTROL`; `_safe_attached` defaults False |
-| Unified **App** chip (green / no AI-PILOT) | **LIVE** (PWO-060 · `APP` / `ok`+bold+reverse) | Strict gate LIVE; App→Human path proven (061 kernel); **Human→App wire via Ctrl-A** — product HANDOFF `WO-P5-061-ENTRY` (CC) |
-| `M` Spectate→Human attach | **LIVE** (PWO-056) · **migrate** | Hub 056 bare `M` today; Max 1b: migrate attach Mode to Ctrl-A (same WO or follow-on) |
-| `M` App-hold→Human | **LIVE** (PWO-061 KERNEL · `d4a8829`) | Existing 056 attach wiring; test-only pins; zero product delta — retarget to Ctrl-A under 061-entry |
-| Human→App entry trigger | **GO** (Batch 1b CLOSED) | **Ruled:** Ctrl-A = Mode; attached bare `M` = TW Move passthrough; no printable Mode |
+| Unified **App** chip (green / no AI-PILOT) | **LIVE** (PWO-060 · `APP` / `ok`+bold+reverse) | Strict gate LIVE; App→Human path proven (061 kernel); Human→App = **Ctrl-A** (tip `420430d`) |
+| Spectate→Human attach | **LIVE** (Ctrl-A · `420430d`) | Migrated off printable `M` |
+| App-hold→Human | **LIVE** (Ctrl-A · `420430d`) | Kernel `d4a8829` + entry Accept #2 |
+| Human→App entry trigger | **CLOSED** (`420430d`) | **Ctrl-A** = Mode; attached bare `M` = Move; no printable Mode |
 | Ctrl-] detach → SPECTATE | **LIVE** (PWO-057) | Esc≠detach; post-detach copy DOC-GAP Pending; Ctrl-] from App-hold = **Ruled** no-op stay App (Batch 2/3) |
 | Teach strip A / R / T affordances | **MISSING** | 066; keys unbound as teach moves |
 | Analyze (`A`) on-demand | **MISSING** | 069 · `ai-teacher.md` |
@@ -59,12 +59,12 @@
 - **Proof:** Layer-A composer unit (label selection matrix) · `rg` gate no `ai_pilot`/`AI-PILOT` under `tw2002_aiclient/` · optional pty chip text.
 - **Hazards:** Do not unify Spectate into the dual. Do not rewrite `control_seat` signature unless proven necessary — extend alongside 056 pattern.
 
-### PWO-061 — Mode switch App↔Human (BUILD) — **KERNEL DONE** + **Accept #2 CLOSING** (Max Batch 1b · ADR-002)
+### PWO-061 — Mode switch App↔Human (BUILD) — **DONE** 2026-07-25 (kernel `d4a8829` + entry tip **`420430d`** · ADR-002)
 - **Depends-on:** 060 · 056 (attach already Spectate→Human)
-- **Live state:** **Accept #2 CLOSING** — contract ruled: Mode = **Ctrl-A** both directions · attached bare `M` = TW Move · no printable Mode · Spectate attach migrates off `M` · Ctrl-]@App-hold = deliberate no-op stay App (Batch 2/3). Kernel App-hold→Human **LIVE** (`d4a8829`). Product entry tip = **TBD** (CC `WO-P5-061-ENTRY` mid-REVISE — amend this PREP when `ls-remote` shows the tip).
+- **Live state:** **CLOSED** on origin `420430d` — Mode = **Ctrl-A** both directions · attached bare `M` = TW Move · no printable Mode · Spectate attach off `M` · Ctrl-]@App-hold = deliberate no-op stay App (Batch 2/3) · single `MODE_KEY` (`screens` → `app` import).
 - **Max Ruled (Batch-1 + 1b · ADR-002 Accepted):** Mode chord = **Ctrl-A**; attached bare `M` = TW Move; no single printable may be Mode; Spectate ≠ Mode dual.
-- **Accept (061-entry):** Ctrl-A toggles App↔Human · attached `M` reaches game · Spectate still reaches Human (via Ctrl-A after migrate) · suite green · tip inventory honest · single `MODE_KEY` source.
-- **Proof:** FakeClient/lock + chip flips + Move passthrough pin · Push waits Accept.
+- **Accept (061-entry):** Ctrl-A toggles App↔Human · attached `M` reaches game · Spectate still reaches Human (via Ctrl-A) · suite green · tip inventory honest · single `MODE_KEY` source — **met** on `420430d`.
+- **Proof:** FakeClient/lock + chip flips + Move passthrough pin · origin `420430d` (log_note stack tip `4280d8a`).
 - **Hazards:** Do not steal 057 Ctrl-]. Do not loosen no-send tripwire. Esc≠detach.
 
 ### PWO-062 — Autopilot/Trainer arm UI (EXTEND)
@@ -172,4 +172,4 @@ Pending (not blocking PREP Accept): DOC-GAP-M-FROM-SPECTATE · DOC-GAP-POST-DETA
 
 ## 5. Execute readiness
 
-**PWO-060 DONE** (`2ca3154`). **PWO-061 KERNEL DONE** (`d4a8829`). **Accept #2 contract CLOSED** (Batch 1b · ADR-002: Mode=Ctrl-A; attached `M`=Move) — product tip **TBD** until CC `WO-P5-061-ENTRY` lands on origin (amend SHA then). Remaining 062–072 still PREP until hub HANDOFF. Cursor docs lane: OKF status-truth only; no product code in this tick.
+**PWO-060 DONE** (`2ca3154`). **PWO-061 DONE** — kernel `d4a8829` + entry Accept #2 **`420430d`** on origin (Mode=Ctrl-A; attached `M`=Move; ADR-002). Stack tip includes log_note RETIRE `4280d8a` (historical `log_note` doc mentions stay — retire record). Remaining 062–072 still PREP until hub HANDOFF. Cursor docs lane: OKF status-truth only; no product code in this tick.
