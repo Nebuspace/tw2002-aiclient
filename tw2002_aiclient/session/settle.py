@@ -139,10 +139,13 @@ mistaken for a response.
 It stays OPT-IN, and `False` remains the default, because the
 match-at-t0 contract is CORRECT for every current caller except `do`:
 `read` asks a read-only question about the screen as it stands;
-`send_and_confirm` applies its own equivalent guard one layer up (see its
+`send_and_confirm` applies a guard of its own one layer up (see its
 docstring's "Stale pre-send match guard") and relies on the inner wait
-returning the match so it can adjudicate; `login`'s bare settles supply
-no `wait_prompt` at all. Flipping the default would break `read`'s
+returning the match so it can adjudicate -- SIMILAR but measurably not
+equivalent, since it floors on `rx_count` as of before its `send()`
+rather than as of wait entry (measured head-to-head in
+`tests/test_settle_send_confirm_freshness.py`); `login`'s bare settles
+supply no `wait_prompt` at all. Flipping the default would break `read`'s
 contract to fix `do`'s.
 
 Two costs, stated rather than discovered later:
@@ -390,9 +393,13 @@ def send_and_confirm(
       `send_and_confirm` closes this itself (rather than touching
       `wait_for_settle`'s contract): a "prompt" match is only accepted
       once `session.rx_count` has increased past the count captured
-      right after `send()` -- i.e. genuinely new bytes have landed since
-      this send -- mirroring the idle path's own `got_new_bytes`
-      discipline one layer up. A match against unchanged, pre-send
+      immediately BEFORE `send()` -- i.e. bytes have landed since this
+      send was begun -- echoing, but NOT equal to, the idle path's own
+      `got_new_bytes` discipline one layer up, which takes its floor at
+      wait entry instead. See the `rx_at_send` comment below for what
+      the difference between those two floors actually costs, and
+      `tests/test_settle_send_confirm_freshness.py` for the head-to-head
+      measurement of it. A match against unchanged, pre-send
       content is discarded exactly like a premature idle: one poll tick
       is advanced (since a wait_for_settle call that matches at its own
       t=0 never sleeps internally) and the wait resumes against the
@@ -431,16 +438,31 @@ def send_and_confirm(
     # keystroke -- bytes already on the wire cannot be un-sent (this
     # module's founding scar).
     match_source = _match_source(session, match_scope) if confirm_prompt is not None else None
-    # Captured BEFORE send(), not after: some fake-session test doubles
-    # (the historical synchronous-bump convention) bump rx_count
-    # SYNCHRONOUSLY inside send() itself, so a baseline captured after
-    # send() returns would already include that bump and make even a
-    # genuinely fresh response look "stale" against itself. Capturing
-    # before send() is correct either way: for a synchronous-bump fake,
-    # send()'s own bump then registers as "new since rx_at_send"; for a
-    # realistic deferred-response session (real Session, or a fake
-    # staging arrivals only inside sleep()), rx_count simply doesn't move
-    # until a genuine later arrival does.
+    # Captured BEFORE send(), not after -- a DIFFERENT floor from the one
+    # `wait_for_settle(prompt_requires_new_bytes=True)` takes at wait
+    # entry, and NOT interchangeable with it. The two look like copies of
+    # one idea and are not; the difference is measured head-to-head in
+    # `tests/test_settle_send_confirm_freshness.py` (WO-SEND-CONFIRM-RX-
+    # DEDUP), which also pins today's behaviour so a future "dedupe" has
+    # to be a decision rather than a tidy-up.
+    #
+    # Why before: some fake-session test doubles (the historical
+    # synchronous-bump convention -- `tests/test_haggle.py` and siblings)
+    # bump rx_count SYNCHRONOUSLY inside send() itself and never again, so
+    # a floor taken after send() returns swallows the entire response and
+    # can never be cleared at all.
+    #
+    # What that costs, stated rather than discovered later: send() is not
+    # instantaneous -- it may sleep up to MIN_SEND_GAP_S for the
+    # anti-hammer guardrail, then write the socket and the transcript log,
+    # all while the reader thread keeps moving rx_count. A byte landing in
+    # THAT window belongs to whatever was already painting, but this floor
+    # counts it as new, so a `confirm_prompt` that already matches the
+    # PRE-send screen is accepted at elapsed 0.0. The module docstring's
+    # `prompt_requires_new_bytes` section argues the wait-entry floor is
+    # the faithful one for precisely this reason. Both claims are true of
+    # their own caller; which floor THIS one should use is a canon
+    # question, deliberately left open here rather than settled silently.
     rx_at_send = session.rx_count
     session.send(text, enter=enter, secret=secret)
     start = session.clock()
