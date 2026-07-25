@@ -24,14 +24,14 @@
 
 ## 1. Tip inventory (vs archive)
 
-| Piece | Tip `6391bb7` (`tw2002_aiclient`) | Notes |
+| Piece | Tip `de47a26` (`tw2002_aiclient`) | Notes |
 |---|---|---|
 | WatchHub / daemon `subscribe` | **LIVE** — `session/watch.py` · `daemon._handle_subscribe` | Settle-edge push stream |
 | `tw watch` CLI | **LIVE** — ops consumer of `subscribe` | **≠** product cockpit subscribe |
-| Session pyte terminal | **LIVE** — `session/terminal.py` (`color_map`, glyphs) | Daemon-side; cockpit does not yet paint it |
-| Play shell center GAME | **PLACEHOLDER** — `screens.py` `_GAME_PLACEHOLDER` in bordered/unbordered center | Kills placeholder = 051+052 |
+| Session pyte terminal | **LIVE** — `session/terminal.py` (`color_map`, glyphs) | Daemon-side; cockpit paints glyphs (052); color wire = 053 |
+| Play shell center GAME | **LIVE** — mono glyph paint 80×25 (PWO-051 shell · PWO-052 paint) | Per-cell color **NOT** (053) |
 | Viewport border STATE flip | **LIVE** (P3-040) — cyan → red non-bold / mono underline on `connected: False` | 054 extends semantics already partially shipped |
-| Product watch-stream client | **MISSING** — PlayShell has no `subscribe` reader / settle-edge redraw | 050 |
+| Product watch-stream client | **LIVE** — `watchfeed.py` + play-shell snapshot→paint | 050+052 |
 | Product spectate mode | **MISSING** | 055; F2 HOLD for *ops* spectate CLI |
 | Cockpit attach / detach keys | **MISSING** (Esc→launcher only; no `h` / Ctrl-] attach path) | 056–057; daemon attach protocol **LIVE** for `tw attach` ops |
 | Archive `spectate_app` / layout | gitignored archive | Port patterns only under execute WO |
@@ -54,7 +54,7 @@
 - **Proof:** Layer-A — layout regions + content cell budget 80×24. Layer-B — pty: no placeholder text; title `GAME` present; narrow/no_border tiers still sane.
 - **Hazards:** Don't paint real pyte yet (052). Don't break Esc→launcher / ADR-001.
 
-### PWO-052 — Viewport render grid (BUILD)
+### PWO-052 — Viewport render grid (BUILD) — **DONE 2026-07-24** (impl-claudecode-aiclient · tip `de47a26` — mono glyph paint into 80×25 GAME via WatchFeed snapshot; top-drop under height pressure; per-cell color deferred to 053)
 - **Depends-on:** 051 · session terminal / settle payload
 - **Accept:** pyte (or settle snapshot grid) cells drawn into center; updates on settle-edge (050); ASCII/unicode glyph twin policy honored where chrome meets game edge.
 - **Proof:** Layer-A — fixture grid → exact drawn lines (clip/sanitize via `cockpit/draw`). Layer-B — pty `_find_text` for a known fixture glyph/string; side-by-side note vs archive spectate if useful.

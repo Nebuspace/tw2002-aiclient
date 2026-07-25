@@ -422,14 +422,14 @@ Concretely, a builder should aim for:
   rejected). The anti-gold-plating is itself part of the taste — cut list: light theme, powerline
   separators, pane intro-stagger, full-grid marquee (`TUI-POLISH-PLAN.md`).
 
-# Implementation status (tip `7af4dbd` · Phase 3 CLOSED · Phase 4 OPEN)
+# Implementation status (tip `de47a26` · Phase 3 CLOSED · Phase 4 OPEN)
 
 | Band | Tip reality |
 |---|---|
 | Outer frame · strip · three-column body · fold | **LIVE** (PWO-031…033 · 039) |
 | GOALS · FOCUS · DECISIONS · HUD freshness · TX/liveness · tones · LOGS | **LIVE** (PWO-034…041 · tip `6391bb7`) |
-| Center `[GAME UI]` content | **LIVE** — blank 80×25 GAME shell (PWO-051 · tip `7af4dbd`); `_GAME_PLACEHOLDER` retired. Live pyte paint is **NOT** yet (PWO-052) |
-| Product watch-stream into play shell | **LIVE** subscribe (PWO-050 · `watchfeed.py` · tip `b211be2`); snapshot→paint is **NOT** (PWO-052) |
+| Center `[GAME UI]` content | **LIVE** — settle-snapshot / pyte glyph paint into 80×25 GAME (PWO-052 · tip `de47a26`); per-cell color still **NOT** (PWO-053) |
+| Product watch-stream into play shell | **LIVE** subscribe (PWO-050) + snapshot→paint (PWO-052 · tip `de47a26`) |
 | Mode line / teach A·R·T / STOP strip | **NOT** Phase 3 — Phase 5+ |
 | Coverage meter / chains library / formations | **NOT** on tip play shell (archive / later WOs) |
 
