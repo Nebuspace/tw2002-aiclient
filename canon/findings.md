@@ -123,4 +123,4 @@ Logged at tip `bba53d4` (OKF-STATUS-TRUTH-056-057); Spectate reverse-vs-plain ba
 | DOC-GAP-POST-DETACH-COPY | Canon silent on post-detach status copy | Shipped `"detached — spectating"` (dispatch-decided) |
 | DOC-GAP-SPECTATE-REVERSE-VS-PLAIN | `mode-line-and-teach-controls.md:196-198` says Spectate chip reverse-video like every badge; `spectate-and-attach.md:262` (+ PWO-060 constraint) say muted/**plain** | **055 shipped plain**; 060 keeps Spectate plain; dual App/Human get reverse+tone. Do not resolve in 060. |
 | DOC-GAP-CTRL-RBRACKET-FROM-APP-HOLD | Ctrl-] from App-hold is a no-op today | 061 kernel pinned accidental behavior (`d4a8829`); any change must be deliberate · unruled |
-| HARDEN-ATTACH-SOCKET-TIMEOUT | Unbounded `AttachInputConn` socket read | Banked harden WO (product-reachable since 056) · out of Phase-5 PREP |
+| HARDEN-ATTACH-SOCKET-TIMEOUT | Unbounded `AttachInputConn` socket read | **DONE** tip `88004d8` (`settimeout(5.0)` + OSError containment) · out of Phase-5 PREP |

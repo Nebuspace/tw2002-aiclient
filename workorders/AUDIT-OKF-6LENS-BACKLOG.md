@@ -13,7 +13,7 @@ Committable twin: `workorders/AUDIT-OKF-6LENS-BACKLOG.md`. Draft WOs: `workorder
 |---|---|---|
 | Phase-5 PREP | PWO-062…072 | `WO-P5-060-072-mode-teach-PREP.md` — MISSING on tip |
 | Pending DOC-GAPs | M-FROM-SPECTATE · POST-DETACH-COPY · SPECTATE-REVERSE-VS-PLAIN · CTRL-RBRACKET-FROM-APP-HOLD | `canon/findings.md` unsigned |
-| Banked harden | HARDEN-ATTACH-SOCKET-TIMEOUT | **DONE** tip `88004d8` (CC) · WO-AUDIT-HARDEN-ATTACH draft remains contract checklist |
+| Banked harden | HARDEN-ATTACH-SOCKET-TIMEOUT | **DONE** tip `88004d8` (CC) · `WO-AUDIT-HARDEN-ATTACH` EXECUTED/DONE |
 | Zone-A harden | WATCHHUB-LOOP-CONTAIN | **DONE** tip `00cb9e8` · `WO-AUDIT-WATCHHUB-LOOP-CONTAIN` EXECUTED |
 | Zone-A polish | SAFE-ADDSTR / GLYPH | SAFE-ADDSTR = CC in flight; GLYPH queued after |
 | Max-parked | 061 Accept #2 Human→App | B′ vs C — no key invented overnight |
@@ -67,7 +67,7 @@ Committable twin: `workorders/AUDIT-OKF-6LENS-BACKLOG.md`. Draft WOs: `workorder
 
 ## Priority order (buildable overnight / morning)
 
-1. **WO-AUDIT-HARDEN-ATTACH** (P0 · CC may already be on it per POLISH-SAFE)
+1. ~~**WO-AUDIT-HARDEN-ATTACH**~~ (**DONE** `88004d8` · WO tip-stamped)
 2. **WO-AUDIT-OKF-052-TIP** (P1 · docs honesty, Cursor)
 3. **WO-AUDIT-P025-LEDGER-HONESTY** (P1 · docs+thin PREP; product later)
 4. **WO-AUDIT-P028-KEEPALIVE-STATUS** (P1 · tip inventory honesty / proof gap)
