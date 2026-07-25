@@ -54,3 +54,8 @@ research/raw/
 /TWGS*.EXE
 /TWGS*.exe
 /TOOLS100.zip
+
+# Editable-install build artifact. `CLAUDE.md` tells every operator to run
+# `pip install -e .`, so this appears in every clone and was permanent
+# untracked noise until it was ignored.
+*.egg-info/

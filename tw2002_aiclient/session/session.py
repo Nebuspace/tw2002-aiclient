@@ -109,9 +109,18 @@ class Session:
         # here so a daemon-side attach handler can read the SAME decision
         # back after the call and thread it into a ledger row, rather than
         # re-deriving it a second, potentially-stale way. `send()`'s own
-        # `secret` argument is caller-supplied and unrelated to this --
-        # this attribute is ONLY ever set by send_raw(), defaulting False
-        # until the first attach keystroke.
+        # `secret` argument is caller-supplied, and BOTH senders record it
+        # here: `send()` and `send_raw()` each assign this attribute from
+        # their own `secret` argument. Defaults False until the first send
+        # of either kind.
+        #
+        # This comment previously claimed `send_raw()` was the ONLY writer.
+        # That was false -- AST-verified, the attribute is stored in
+        # `__init__`, `send()` and `send_raw()` -- and it cost a lane a
+        # wrong test assertion, because the reader trusted the comment over
+        # the code. Corrected rather than deleted so the trap is legible:
+        # an attribute described as single-writer is exactly the kind of
+        # claim a caller will build an inference on.
         self.last_sent_secret = False
 
         self.history = []  # ring buffer of recent do/read events
