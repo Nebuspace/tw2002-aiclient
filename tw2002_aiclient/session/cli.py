@@ -493,12 +493,49 @@ def cmd_menumap(args):
     return 0
 
 
+def _arm_lossless_stdin():
+    """Make ``sys.stdin`` park an undecodable byte as a PEP 383 surrogate
+    instead of raising, and report whether stdin is now lossless.
+
+    ``cmd_attach`` forwards the operator's keystrokes to an **8-bit** game
+    wire, so every byte the terminal delivers is potentially meaningful --
+    but ``sys.stdin`` decodes to ``str`` first, under whatever codec the
+    ambient locale picked, and a *strict* handler turns a byte it cannot
+    decode into a ``UnicodeDecodeError``. Measured, not assumed: that error
+    also discards the rest of the chunk the wrapper had already read, so a
+    ``0xFF`` typed just before ``Q`` loses BOTH -- catching the exception and
+    continuing would silently eat keystrokes, which is the exact class of
+    harm this whole verb keeps being fixed for. Preventing the error is the
+    only honest option, so we ask for ``surrogateescape`` up front.
+
+    ``reconfigure()`` is only legal before the stream's first read, which is
+    why this is called before the cbreak loop and nowhere else. It is a
+    no-op when stdin already decodes with ``surrogateescape`` (the default
+    on a UTF-8 or coerced-C locale), and it returns False rather than
+    raising for a stdin that cannot be reconfigured at all -- a test double,
+    or a stream something upstream already read. ``io.UnsupportedOperation``
+    subclasses both ``ValueError`` and ``OSError``, so it needs no import
+    here; ``TypeError`` covers a double with an incompatible signature.
+    """
+    stream = sys.stdin
+    if getattr(stream, "errors", None) == "surrogateescape":
+        return True
+    reconfigure = getattr(stream, "reconfigure", None)
+    if reconfigure is None:
+        return False
+    try:
+        reconfigure(errors="surrogateescape")
+    except (TypeError, ValueError, OSError):
+        return False
+    return getattr(stream, "errors", None) == "surrogateescape"
+
+
 def cmd_attach(args):
     """WO-P2-OPS-VERB-F1: take control_lock and forward keystrokes (thin).
 
     No curses screen paint yet (F2 spectate). Interactive mode needs a TTY
     (cbreak until Ctrl-], EOF, or a failed send). ``--keys`` sends latin-1
-    bytes then detaches — for FakeDaemon / scripted proof without a TTY.
+    bytes then detaches -- for FakeDaemon / scripted proof without a TTY.
 
     The exit code is honest about delivery on BOTH paths: a ``send_key()``
     returning False ends the session and returns 1 rather than continuing
@@ -519,6 +556,28 @@ def cmd_attach(args):
     transport", not "every key you pressed reached the game" -- an
     unencodable key is reported inline, at the moment it happens, which is
     the only surface the operator has here (thin attach paints no screen).
+
+    ``--keys`` takes the FIRST register, not the second: an unencodable key
+    there is rc 1, because there is no live session to protect and a script
+    must be able to detect non-arrival. Nothing is sent at all in that case
+    -- a partial send would put DIFFERENT bytes on the wire than were asked
+    for, which is worse than sending none.
+
+    Two properties this function holds deliberately, both easy to break by
+    accident and both pinned by test:
+
+    * **Every operator-facing string here is pure ASCII.** This is the one
+      code path whose whole subject is a terminal that cannot represent
+      some character, and it is reached on exactly the 8-bit and ascii
+      terminals where a non-ASCII byte in our OWN output raises
+      ``UnicodeEncodeError`` and kills the verb. The banner used to carry
+      an em-dash and did precisely that on a latin-1 or ascii stdout: the
+      operator lost attach before they could press a key, while the
+      carefully-ASCII refusal notice thirty lines below never got to fire.
+      An ASCII-only rule for the whole function is the property; a
+      hand-checked line is not.
+    * **A byte the terminal could not decode is still delivered.** See
+      ``_arm_lossless_stdin`` and the surrogate branch in the loop.
     """
     from .attach_client import DETACH_KEY, AttachInputConn
 
@@ -540,8 +599,121 @@ def cmd_attach(args):
 
     try:
         if keys is not None:
-            # Scripted: interpret escapes lightly — \\r \\n \\xNN and raw chars.
-            data = keys.encode("utf-8").decode("unicode_escape").encode("latin-1", errors="ignore")
+            # Scripted: interpret escapes lightly -- \r \n \xNN and raw chars
+            # (the contract README.md documents for this flag).
+            #
+            # THE ROOT DEFECT WAS NOT A DROP, IT WAS A DOUBLE ENCODE. The old
+            # chain began `keys.encode("utf-8")`, and `unicode_escape` is a
+            # LATIN-1-based codec: it decodes each BYTE to one codepoint. So a
+            # UTF-8 multi-byte sequence came back as one character per byte,
+            # every one of them latin-1-representable, and the final encode
+            # shipped them all. `errors="ignore"` therefore almost never
+            # fired -- the branch was not dropping non-ASCII input, it was
+            # MANGLING it, silently, with rc 0:
+            #
+            #     --keys with a raw U+00FF  ->  wire b"\xc3\xbf"   (two bytes)
+            #     the same key interactively ->  wire b"\xff"     (one byte)
+            #
+            # One character asked for, two bytes delivered, and the two halves
+            # of the same verb disagreeing about a byte class an 8-bit
+            # TradeWars wire is made of. Fixing only the visible drops would
+            # have left every non-ASCII `--keys` value still going out as
+            # mojibake -- a fix that passes its own tests while the real bug
+            # runs on.
+            #
+            # So the FIRST encode is `latin-1`, not `utf-8`: encode the
+            # operator's characters to the 8-bit bytes the game wire actually
+            # takes, and hand `unicode_escape` the operator's OWN bytes
+            # instead of a UTF-8 re-encoding of them. `unicode_escape` stays,
+            # because the documented `\r` / `\n` / `\xNN` forms are its whole
+            # job -- and it is now correct rather than incidentally lossy,
+            # since latin-1 is exactly the code page it decodes back with.
+            # The round trip is now an identity on every character the wire
+            # can carry.
+            #
+            # Its `surrogateescape` handler covers the other half: argv
+            # reaches Python already decoded by the OS-encoding codec with
+            # PEP 383, so a raw 8-bit byte on the command line
+            # (`--keys $'\xff'`) arrives as the lone surrogate U+DCFF, and
+            # this maps it straight back to its byte. Strict raised
+            # UnicodeEncodeError there and killed the verb with an uncaught
+            # traceback. Identical recovery to the interactive loop below.
+            #
+            # The LAST encode is STRICT (it was `errors="ignore"`), which is
+            # what makes a genuinely unencodable key visible instead of
+            # silent. Both surviving failure shapes exited 0 before:
+            #   full drop     `--keys '\u2192'`  -> sent nothing, rc 0,
+            #                                       indistinguishable from
+            #                                       `--keys ""`
+            #   partial drop  `--keys 'a\u2192b'` -> sent b"ab", rc 0 -- not
+            #                                       nothing, but DIFFERENT
+            #                                       bytes than asked for
+            #
+            # ONE `except UnicodeEncodeError` covers both encodes deliberately,
+            # because they are the same question asked of two populations:
+            #   * first encode  -- a RAW character the wire cannot carry
+            #                      (`--keys '\u2192'`), which used to be mangled
+            #                      into its UTF-8 bytes. `e.start` indexes argv.
+            #   * last encode   -- a character an ESCAPE produced. There are
+            #                      FOUR such forms, not two (brute-forced, not
+            #                      reasoned):
+            #                        \uXXXX      -> up to U+FFFF
+            #                        \UXXXXXXXX  -> up to U+10FFFF
+            #                        \N{NAME}    -> any named codepoint
+            #                        \400-\777   -> U+0100-U+01FF  (octal
+            #                                      escape overflow)
+            #                      `e.start` indexes the escape-DECODED keys.
+            # Both hand us the offending index and codepoint for free, which
+            # the length comparison originally specified could not have done.
+            #
+            # A useful consequence of encoding latin-1 FIRST: a backslash
+            # immediately before an unencodable character (`--keys 'a\\u2192b'`)
+            # is refused at the first encode rather than becoming ambiguous.
+            # Nothing here ever manufactures escape text, so nothing can be
+            # re-read as an escape the operator did not write.
+            #
+            # UnicodeDecodeError is the other half, and a different failure:
+            # an escape that cannot be decoded AT ALL -- a trailing backslash,
+            # or a truncated \x \u \U \N -- which was also an uncaught
+            # traceback. Reported in the same register; nothing is sent.
+            try:
+                data = (
+                    keys.encode("latin-1", errors="surrogateescape")
+                    .decode("unicode_escape")
+                    .encode("latin-1")
+                )
+            except UnicodeEncodeError as e:
+                # Codepoint, never the glyph: same rule and same reasons as
+                # the interactive notice below.
+                print(
+                    f"ERROR: key U+{ord(e.object[e.start]):04X} at index "
+                    f"{e.start} has no 8-bit encoding for this game "
+                    "connection; nothing was sent"
+                )
+                return 1
+            except UnicodeDecodeError as e:
+                # `e.start` here is a BYTE offset into the encoded argv, a
+                # different unit from the branch above; named as such rather
+                # than blurred into one word for both.
+                #
+                # `e.reason` and `e.start` ONLY -- never `str(e)` and never
+                # `e.object`. Both `UnicodeDecodeError.object` and the
+                # analogous `JSONDecodeError.doc` hold the ENTIRE input that
+                # failed to parse, and neither is rendered by `str(e)`, so
+                # reaching for the whole exception here would quietly widen a
+                # one-line diagnostic into an echo of the operator's full
+                # `--keys` argument. `e.reason` is a short fixed codec string
+                # ("\\ at end of string", "truncated \\uXXXX escape").
+                print(
+                    f"ERROR: --keys could not be decoded ({e.reason}) at byte "
+                    f"index {e.start}; nothing was sent"
+                )
+                return 1
+            # `if data:` is now ONLY the deliberate `--keys ""` pin (032bc12):
+            # "you asked for nothing" stays distinguishable from "everything
+            # you asked for was thrown away", which is no longer reachable --
+            # a dropped character raises above instead of arriving here as an
+            # empty payload. Do not "simplify" this away.
             if data:
                 if not conn.send_key(data):
                     print("ERROR: send_failed")
@@ -551,14 +723,42 @@ def cmd_attach(args):
         import termios
         import tty
 
-        print("ATTACHED — Ctrl-] detach (thin attach: no live screen paint yet; use tw watch)", flush=True)
+        # Before the first read, and before the banner: see
+        # `_arm_lossless_stdin`. Its result is deliberately not branched on --
+        # a stdin that refuses to become lossless still attaches, and the
+        # `UnicodeDecodeError` backstop in the loop below is what covers it.
+        _arm_lossless_stdin()
+
+        # PURE ASCII, and it has to stay that way -- this line used to carry
+        # an em-dash and killed `tw attach` outright on a latin-1 or ascii
+        # stdout, before the operator could press a single key. See the
+        # ASCII property in this function's docstring.
+        print("ATTACHED -- Ctrl-] detach (thin attach: no live screen paint yet; use tw watch)", flush=True)
         fd = sys.stdin.fileno()
         old = termios.tcgetattr(fd)
         send_failed = False
+        undecodable_stdin = None
         try:
             tty.setcbreak(fd)
             while True:
-                ch = sys.stdin.read(1)
+                try:
+                    ch = sys.stdin.read(1)
+                except UnicodeDecodeError as e:
+                    # BACKSTOP, not the live path: `_arm_lossless_stdin`
+                    # above normally makes this unreachable by parking an
+                    # undecodable byte as a surrogate instead of raising.
+                    # Reached only when stdin could not be reconfigured.
+                    #
+                    # It ENDS the session rather than continuing, and that is
+                    # the honest choice even though a lone bad key is
+                    # survivable elsewhere in this loop: measured, a strict
+                    # decode error also discards the rest of the chunk the
+                    # wrapper had already read, so "report and keep going"
+                    # would silently swallow keystrokes the operator had
+                    # already typed. Continuing would recreate the exact
+                    # defect this verb keeps being fixed for.
+                    undecodable_stdin = e
+                    break
                 if not ch:
                     break
                 code = ord(ch)
@@ -566,13 +766,34 @@ def cmd_attach(args):
                     break
                 if ch in ("\n", "\r"):
                     payload = b"\r\n"
+                elif 0xDC80 <= code <= 0xDCFF:
+                    # A byte stdin's decoder could NOT decode, parked as a
+                    # lone PEP 383 surrogate: U+DC80-U+DCFF *is* byte
+                    # 0x80-0xFF, by that PEP's definition. Recover it and
+                    # SEND it -- it is deliverable, and it is precisely the
+                    # byte class an 8-bit TradeWars wire is made of (an
+                    # 8-bit Meta terminal, a latin-1 host, a pasted latin-1
+                    # blob). The refusal below used to catch these and name
+                    # them "U+DCFF", a codepoint that exists on no keyboard
+                    # and that the operator never pressed: wrong twice, once
+                    # for refusing a deliverable key and once for the name.
+                    #
+                    # Unambiguous: a lone surrogate cannot arrive from a
+                    # terminal any other way (it has no UTF-8 form), so this
+                    # branch cannot capture a character the operator meant
+                    # literally. Surrogates outside DC80-DCFF are not
+                    # PEP 383 escapes and fall through to the refusal below.
+                    payload = bytes([code - 0xDC00])
                 else:
                     try:
                         payload = ch.encode("latin-1")
                     except UnicodeEncodeError:
-                        # A key the game's 8-bit wire cannot carry (a curly
-                        # quote, an em-dash, an emoji -- typically pasted, not
-                        # typed). `errors="ignore"` used to turn it into b"",
+                        # A GENUINE character the game's 8-bit wire cannot
+                        # carry (a curly quote, an em-dash, an emoji --
+                        # typically pasted, not typed), as opposed to the
+                        # undecodable BYTE handled by the branch above, which
+                        # is deliverable and is sent.
+                        # `errors="ignore"` used to turn it into b"",
                         # which the daemon answered `{"ok": true}`: the
                         # keystroke vanished with every surface reporting
                         # success. Decided HERE, before the wire, because the
@@ -590,18 +811,43 @@ def cmd_attach(args):
                         #
                         # The codepoint is named, never the glyph. cbreak has
                         # ECHO off and this session may be sitting on a game
-                        # password prompt (canon/doctrine/secrets-and-
-                        # credentials.md: "a refused key is never echoed
-                        # verbatim"), and echoing raw unvetted input back into
-                        # a raw-mode terminal is its own hazard.
+                        # password prompt, so the keystroke itself may be part
+                        # of a secret.
                         #
-                        # ASCII-only on purpose, unlike this file's other
-                        # operator lines (which use an em-dash): this is the
-                        # one message that fires BECAUSE something could not be
-                        # represented, so it must not itself depend on the
-                        # terminal rendering a non-ASCII character. It also
-                        # makes "the glyph was not echoed" a checkable property
-                        # of the line rather than a claim.
+                        # CITATION CORRECTED: this used to cite canon's "a
+                        # refused key is never echoed verbatim". That clause is
+                        # real but is about something else entirely -- it lives
+                        # in "The Credential Bank -- metadata only (TW-31)" and
+                        # governs a rejected notes-dict KEY NAME, not a
+                        # keystroke. The clauses that actually govern here are
+                        # in the same doctrine (canon/doctrine/secrets-and-
+                        # credentials.md): the section "Redaction: the send
+                        # path, and its one honest boundary", which extends the
+                        # redaction contract to "a raw human keystroke typed
+                        # into an interactive attach session that happens to
+                        # land on a password prompt"; its Schema row for the TX
+                        # raw-byte send channel ("interactive attach
+                        # keystroke", redacted, decided fresh at send time);
+                        # and the worked Example "A password typed into a live
+                        # attach session". The reasoning never changed -- only
+                        # the clause it points at, which was wrong.
+                        #
+                        # Naming the CODEPOINT is safe and stays: any character
+                        # reaching this branch is by construction not
+                        # latin-1-representable, so it cannot be a byte of a
+                        # working password on an 8-bit telnet game. Echoing the
+                        # raw glyph back into a raw-mode terminal would be an
+                        # independent hazard anyway (combining marks, bidi
+                        # overrides).
+                        #
+                        # ASCII-only, like every other operator string in this
+                        # function now is (see the docstring's ASCII property).
+                        # This message carries the rule's sharpest case -- it
+                        # fires BECAUSE something could not be represented, so
+                        # it must not itself depend on the terminal rendering a
+                        # non-ASCII character. It also makes "the glyph was not
+                        # echoed" a checkable property of the line rather than
+                        # a claim.
                         print(
                             f"NOT SENT: key U+{ord(ch):04X} has no 8-bit "
                             "encoding for this game connection (still attached)",
@@ -622,7 +868,17 @@ def cmd_attach(args):
         finally:
             termios.tcsetattr(fd, termios.TCSADRAIN, old)
         if send_failed:
-            print("ERROR: send_failed — keystrokes are NOT reaching the game; attach ended")
+            print("ERROR: send_failed -- keystrokes are NOT reaching the game; attach ended")
+            return 1
+        if undecodable_stdin is not None:
+            # Same "report after the terminal is restored" discipline as
+            # send_failed above. Reports the terminal's own codec by name,
+            # because that is the thing the operator has to change.
+            print(
+                f"ERROR: this terminal's input encoding "
+                f"({undecodable_stdin.encoding}, strict) cannot carry an "
+                "8-bit key; attach ended"
+            )
             return 1
     except KeyboardInterrupt:
         pass
@@ -765,7 +1021,13 @@ def build_parser() -> argparse.ArgumentParser:
 
     sp = sub.add_parser(
         "attach",
-        help="take the keyboard (control-lock); thin attach — no curses paint yet",
+        # ASCII, for the same reason cmd_attach's own strings are: `tw attach
+        # --help` and `tw --help` both print this line, and on the ascii or
+        # latin-1 terminal where attach's encoding behaviour actually matters
+        # a non-ASCII glyph here crashes the help output instead. (The other
+        # verbs' help strings in this parser still carry em-dashes and have
+        # the same exposure -- out of this WO's scope, reported not fixed.)
+        help="take the keyboard (control-lock); thin attach -- no curses paint yet",
     )
     sp.add_argument(
         "--keys",
