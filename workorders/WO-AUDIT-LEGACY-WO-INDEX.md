@@ -1,6 +1,6 @@
 # WO-AUDIT-LEGACY-WO-INDEX — WO-00…17 vs ULTRACODE map honesty
 
-> Status: **DRAFT** 2026-07-25 · AUDIT-OKF-6LENS · tip `458d140`  
+> Status: **EXECUTED** 2026-07-25 · AUDIT-OKF-6LENS docs tick · README live-queue banner tightened  
 > Type: docs · Priority: P2 · Lens: L4 cleanup  
 > Refs: `ULTRACODE-WO-INVENTORY.md` §Mapping · `workorders/WO-00`…`WO-17`
 

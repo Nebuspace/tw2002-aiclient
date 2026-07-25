@@ -1,5 +1,7 @@
 # tw2002-aiclient — product work orders
 
+**Live execute queue:** [`ULTRACODE-WO-INVENTORY.md`](ULTRACODE-WO-INVENTORY.md) (PWO-*) + Phase PREPs (`WO-P*-PREP.md`) + hub-Accepted `WO-AUDIT-*.md` / `WO-P*-*.md` files. **Do not treat `WO-00`…`WO-17` as executable.**
+
 **Master list: [`ULTRACODE-WO-INVENTORY.md`](ULTRACODE-WO-INVENTORY.md).** Build proceeds **greenfield from `canon/`** — `archive/pre-rebirth-2026-07-23/` is reference-only and is never restored to root (Max GO, WO-ULTRACODE-ADOPT, 2026-07-23). The inventory holds the canon coverage matrix and ~85 executable phased PWOs (Phase 0–9); Phase 0–2 are being materialized as real files (`WO-P0-*.md`, `WO-P1-*.md`, `WO-P2-*.md`) as they're built out — this queue table will point at those as they land.
 
 Grounded in the reborn OKF canon (`canon/`), especially `canon/surfaces/entry-and-profile-selection.md`, `trainer-cockpit.md`, and `mode-line-and-teach-controls.md`.
