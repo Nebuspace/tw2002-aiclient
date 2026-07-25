@@ -1,10 +1,11 @@
 # AICLIENT OKF 6-lens audit backlog
 
-> Seat: `impl-aiclient-cursor` · Tip: `458d140` docs / `d4a8829` product · UTC: 2026-07-25T05:09Z  
+> Seat: `impl-aiclient-cursor` · Tip: `59c4455` (audit drafts) atop `458d140` / product `d4a8829` · UTC: 2026-07-25T05:12Z  
 > HANDOFF: `AUDIT-OKF-6LENS` · **No product `.py` in this ticket**  
-> HOLDs honored: F2 · G2–G4 · north-star · Human→App (Max B′/C) · auth/secrets
+> HOLDs honored: F2 · G2–G4 · north-star · Human→App (Max B′/C) · auth/secrets  
+> Scout cross-check: inventory tip-map confirms 062–072 MISSING; 061/065 PARTIAL; 080 PARTIAL (`classify` LIVE, `state_parser` absent); **085/086 LIVE** (gated); HARDEN-ATTACH still open. Dedup HARDEN vs CC POLISH-SAFE in-flight.
 
-Committable twin: `workorders/AUDIT-OKF-6LENS-BACKLOG.md`. Draft WOs: `workorders/WO-AUDIT-*.md`.
+Committable twin: `workorders/AUDIT-OKF-6LENS-BACKLOG.md`. Draft WOs: `workorders/WO-AUDIT-*.md` (8).
 
 ## Already queued (dedup — do not re-WO)
 
@@ -12,9 +13,10 @@ Committable twin: `workorders/AUDIT-OKF-6LENS-BACKLOG.md`. Draft WOs: `workorder
 |---|---|---|
 | Phase-5 PREP | PWO-062…072 | `WO-P5-060-072-mode-teach-PREP.md` — MISSING on tip |
 | Pending DOC-GAPs | M-FROM-SPECTATE · POST-DETACH-COPY · SPECTATE-REVERSE-VS-PLAIN · CTRL-RBRACKET-FROM-APP-HOLD | `canon/findings.md` unsigned |
-| Banked harden | HARDEN-ATTACH-SOCKET-TIMEOUT | Finding row; drafted as WO-AUDIT-HARDEN-ATTACH |
+| Banked harden | HARDEN-ATTACH-SOCKET-TIMEOUT | Finding row; drafted as WO-AUDIT-HARDEN-ATTACH · **CC may own overnight** |
 | Max-parked | 061 Accept #2 Human→App | B′ vs C — no key invented overnight |
-| Phase 6–9 inventory | PWO-080…115 | ULTRACODE rows — PREP inventory still coarse |
+| Phase 6 tip | PWO-080 PARTIAL · 085/086 LIVE · 081–084/087–088 MISSING | Fold into WO-AUDIT-PHASE6-PREP |
+| Orphan archive tests | `tests/test_spectate_app.py` etc. still `import twclient` + AI-PILOT expects | cleanup candidate (not product UI) |
 
 ## Findings by lens (net-new / honesty)
 
