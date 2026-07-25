@@ -34,7 +34,7 @@
 | `M` Spectate→Human attach | **LIVE** (PWO-056) · **migrate** | Hub 056 bare `M` today; Max 1b: migrate attach Mode to Ctrl-A (same WO or follow-on) |
 | `M` App-hold→Human | **LIVE** (PWO-061 KERNEL · `d4a8829`) | Existing 056 attach wiring; test-only pins; zero product delta — retarget to Ctrl-A under 061-entry |
 | Human→App entry trigger | **GO** (Batch 1b CLOSED) | **Ruled:** Ctrl-A = Mode; attached bare `M` = TW Move passthrough; no printable Mode |
-| Ctrl-] detach → SPECTATE | **LIVE** (PWO-057) | Esc≠detach; post-detach copy DOC-GAP Pending; Ctrl-] from App-hold = unruled no-op (pinned) |
+| Ctrl-] detach → SPECTATE | **LIVE** (PWO-057) | Esc≠detach; post-detach copy DOC-GAP Pending; Ctrl-] from App-hold = **Ruled** no-op stay App (Batch 2/3) |
 | Teach strip A / R / T affordances | **MISSING** | 066; keys unbound as teach moves |
 | Analyze (`A`) on-demand | **MISSING** | 069 · `ai-teacher.md` |
 | Record (`R`) macro wire | **MISSING** | 067 · `macros.md` |
