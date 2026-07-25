@@ -28,13 +28,19 @@ An instance rooted **here** is an **IMPLEMENTER** seat in the Nebuspace dual —
 
 Build **only** through the ordered queue in `workorders/` — see `workorders/ULTRACODE-WO-INVENTORY.md` for the master list; start at the first unproven `WO-P0/P1/P2-*` item on a cold seat. Daemon-side safety items (TW-01…TW-30) stay in the parent Nebuspace `QUEUE.md`, not here.
 
-Phase 0 already shipped greenfield package stubs at repo root (`tw2002_aiclient/` + `twclient/`) — this is **greenfield-from-`canon/`, not a restore of archived code**. Per [ADR-001](canon/ADR/001-one-tree-embedded-session.md) (**Accepted** 2026-07-24), the two sibling top-level packages are being consolidated into one `tw2002_aiclient` import tree with the daemon-core relocated under `tw2002_aiclient/session/`; until the follow-on relocation WO lands, `twclient/*` stays where it is and new daemon-core work continues to target it.
+Phase 0 shipped a greenfield package at repo root — this is **greenfield-from-`canon/`, not a
+restore of archived code**. Per [ADR-001](canon/ADR/001-one-tree-embedded-session.md)
+(**Accepted** 2026-07-24 · **DONE**), the codebase is **one** `tw2002_aiclient` import tree: product
+TUI at the package root and daemon-core under `tw2002_aiclient/session/`. The old sibling top-level
+`twclient/` package is **gone** — do not target it; new daemon-core work goes under `session/`.
 
 ---
 
 ## Setup & commands (as of rebirth)
 
-Greenfield package stubs exist at repo root today (`tw2002_aiclient/` product TUI, `twclient/` daemon-core — see the consolidation note above); `./tw`, `./twd`, `./tw2002-aiclient` launcher scripts and console-script wiring have not landed yet (no `[project.scripts]` in `pyproject.toml`). What runs today:
+One package tree at repo root today (`tw2002_aiclient/` — product TUI + `session/` daemon-core per
+ADR-001); `./tw`, `./twd`, `./tw2002-aiclient` launcher scripts and console-script wiring may still
+be landing per WO Proof sections. What runs today:
 
 ```bash
 cd "$(git rev-parse --show-toplevel)"
