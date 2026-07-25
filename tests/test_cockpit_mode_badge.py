@@ -335,3 +335,44 @@ def test_xor_at_the_wire_exactly_one_chip_ever_renders(monkeypatch):
             label for label in (SPECTATE_LABEL, MANUAL_LABEL, APP_LABEL) if label in joined
         }
         assert present == {expected_label}, (spectating, attached, present)
+
+
+def test_app_hold_to_manual_walk_app_chip_before_manual_after_never_both(monkeypatch):
+    """WO-P5-061 Accept #6: a single screen instance walked App-hold ->
+    (the `M`/attach-success field flip `app.py::_run_play` performs) ->
+    MANUAL, at the rendered-chip level. Proves APP renders BEFORE the
+    transition and MANUAL AFTER, and that the two never co-render in
+    either frame -- the same XOR guarantee ``test_xor_at_the_wire_exactly_
+    one_chip_ever_renders`` above already proves per-state, now proven
+    ACROSS a transition on one instance. The `M` keypress itself (the real
+    daemon round trip) is exercised end-to-end by ``tests/
+    test_cockpit_attach.py::
+    test_app_hold_m_attaches_to_human_lock_and_manual_chip_renders``; this
+    test isolates the PAINT side only, mirroring how ``test_control_strip_
+    transitions_spectate_manual_and_back`` (same sibling file) drives
+    ``spectating``/``attached`` directly rather than a real attach round
+    trip."""
+    monkeypatch.setattr(curses, "has_colors", lambda: False)
+    win = _RecordingWin(FULL_ROWS, FULL_COLS)
+    screen = PlayShellScreen(win, _profile())
+
+    screen.spectating = False
+    screen.attached = False  # App-hold -- driven directly, Accept #2 entry is parked
+    screen.draw()
+    frame_before = _control_strip_frame(win, FULL_ROWS, FULL_COLS)
+    joined_before = "".join(text for text, _attr in frame_before)
+    present_before = {
+        label for label in (SPECTATE_LABEL, MANUAL_LABEL, APP_LABEL) if label in joined_before
+    }
+    assert present_before == {APP_LABEL}
+
+    win.calls.clear()
+    screen.spectating = False
+    screen.attached = True  # the M/attach-success flip -- app.py's own two-field set
+    screen.draw()
+    frame_after = _control_strip_frame(win, FULL_ROWS, FULL_COLS)
+    joined_after = "".join(text for text, _attr in frame_after)
+    present_after = {
+        label for label in (SPECTATE_LABEL, MANUAL_LABEL, APP_LABEL) if label in joined_after
+    }
+    assert present_after == {MANUAL_LABEL}

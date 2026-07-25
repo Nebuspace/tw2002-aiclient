@@ -47,14 +47,15 @@ from pathlib import Path
 
 from tw2002_aiclient import adapters, app
 from tw2002_aiclient.adapters import EnsureResult
-from tw2002_aiclient.cockpit.control_seat import MANUAL_LABEL
+from tw2002_aiclient.cockpit.control_seat import APP_LABEL, MANUAL_LABEL
 from tw2002_aiclient.cockpit.layout import frame_layout
 from tw2002_aiclient.screens import PlayShellScreen, ProfileRow
 from tw2002_aiclient.session.attach_client import DETACH_KEY, AttachInputConn
-from tw2002_aiclient.session.control_lock import MODE_APP, MODE_HUMAN
+from tw2002_aiclient.session.control_lock import ControlLock, MODE_APP, MODE_HUMAN
 from tw2002_aiclient.watchfeed import WatchFeed
 
 from .conftest import _FakeDaemon
+from .test_cockpit_mode_badge import _control_strip_frame
 
 HANDLE = "Alpha"
 FULL_ROWS, FULL_COLS = 40, 160
@@ -836,6 +837,150 @@ def test_watchfeed_survives_detach_still_running_and_provider_still_bound(monkey
         stdscr.push(27)
         thread.join(timeout=3.0)
         assert result_box == ["back"]
+    finally:
+        daemon.stop()
+        shutil.rmtree(run_dir, ignore_errors=True)
+
+
+# ---------------------------------------------------------------------------
+# WO-P5-061 -- App-hold kernel: prove App-hold (`spectating=False,
+# attached=False` -- the 060 strict gate's one legitimate case) is a real,
+# correctly-behaving client state and pin every ruled transition around it.
+#
+# The Human->App-hold ENTRY trigger (Accept #2) is PARKED pending a Max
+# ruling -- nothing below builds, reserves a key, or invents a UI path for
+# it. Every test that needs to START in App-hold gets there the same way:
+# driving `play.spectating`/`play.attached` directly, exactly like the
+# pre-existing `test_control_strip_transitions_spectate_manual_and_back`
+# above already does for its own spectate<->manual walk -- the driven state
+# is the honest mechanism, not a claim that a real keypress reaches it today.
+# ---------------------------------------------------------------------------
+
+
+def test_app_hold_daemon_seat_truth_default_mode_is_app_not_a_client_fiction():
+    """Kernel item 1: control_lock.py's own default construction is
+    ``self._mode = MODE_APP`` (``control_lock.py:59``), and
+    ``app_may_send()`` (``control_lock.py:75-82``) reads ``True`` the
+    instant ``mode == MODE_APP`` -- that method's own docstring: "Spectate
+    and Human never grant App send." With no ``take_human()`` ever called
+    and no ``enter_auto_loop()`` hold taken, ``MODE_APP`` is the daemon's
+    OWN standing seat-holder default, not a client-side invention. The
+    client's App-hold mirror (``spectating is False and attached is
+    False``, the exact pair ``cockpit.control_seat.py``'s
+    ``_is_definitively_false`` gate requires before it will render the
+    ``APP_LABEL`` chip at all -- see that module's own
+    ``_resolve_label_and_tone`` docstring) is therefore an honest
+    reflection of a real daemon-side fact, not a client fiction."""
+    lock = ControlLock()
+    assert lock.mode == MODE_APP
+    assert lock.app_may_send() is True
+
+
+def test_app_hold_m_attaches_to_human_lock_and_manual_chip_renders(monkeypatch):
+    """Accept #1 (WO-P5-061): from App-hold (driven directly -- Accept #2's
+    ENTRY trigger is parked, see this section's own header comment), `M`
+    still reaches the exact same ``_attempt_attach`` path the shipped
+    Spectate->Human leg uses (``test_run_play_m_attaches_forwards_a_
+    keystroke_and_esc_releases`` above): ``PlayShellScreen.handle_key``
+    returns ``"attach"`` for `M`/`m` unconditionally, never gated on
+    ``self.spectating``/``self.attached`` (``screens.py::handle_key``), and
+    ``app.py::_run_play``'s own action handler only checks
+    ``attach_conn is None`` before calling ``_attempt_attach`` -- also
+    state-independent. Pins the daemon-side lock flip AND the rendered
+    MANUAL chip (warn + bold + reverse, the 060 attr path) together, not
+    just the label."""
+    run_dir = _short_run_dir()
+    daemon = _FakeDaemon(run_dir / "twd.sock")
+    daemon.start()
+    try:
+        monkeypatch.setenv("TW_RUN_DIR", str(run_dir))
+        _patch_common(monkeypatch)
+        captured = _capture_play_instances(monkeypatch)
+
+        stdscr = _QueueStdscr()
+        thread, result_box = _drive_run_play_in_thread(stdscr, _profile())
+        assert _wait_until(lambda: bool(captured)), "PlayShellScreen was never constructed"
+        play = captured[-1]
+
+        # Drive to App-hold directly (Accept #2's entry is parked).
+        play.spectating = False
+        play.attached = False
+        assert daemon.control_lock.mode == MODE_APP  # daemon-side default, unaffected by the client-only flip
+
+        stdscr.push(ord("M"))
+        assert _wait_until(lambda: play.attached is True), "M never attached from App-hold"
+        assert _wait_until(lambda: play.spectating is False)
+        assert _wait_until(lambda: daemon.control_lock.mode == MODE_HUMAN), (
+            "daemon-side lock never flipped to MODE_HUMAN from the App-hold M press"
+        )
+        assert "attached" in play.status_line
+
+        frame = _control_strip_frame(stdscr, FULL_ROWS, FULL_COLS)
+        joined = "".join(text for text, _attr in frame)
+        assert APP_LABEL not in joined  # App chip must not survive the attach
+        assert MANUAL_LABEL in joined
+        label_text, label_attr = frame[0]
+        assert label_text.startswith(MANUAL_LABEL)
+        assert label_attr == curses.A_BOLD | curses.A_REVERSE  # mono path -- _patch_common forces has_colors False
+
+        stdscr.push(27)
+        thread.join(timeout=3.0)
+        assert result_box == ["back"]
+    finally:
+        daemon.stop()
+        shutil.rmtree(run_dir, ignore_errors=True)
+
+
+def test_ctrl_bracket_from_app_hold_is_a_no_op_state_unchanged_unruled_edge(monkeypatch):
+    """Accept #4 (WO-P5-061): Ctrl-] FROM App-hold is currently UNRULED --
+    canon `spectate-and-attach.md:100-102` only names Ctrl-] as the
+    detach-while-attached affordance; it says nothing about App-hold (a
+    state canon does not yet define an ENTRY trigger for -- Accept #2,
+    PARKED). This test PINS the current, accidental behavior rather than a
+    designed one: with no attach ever taken, `attach_conn is None`, so
+    `_run_play`'s own `if attach_conn is not None and key != 27:` guard
+    (`app.py:266`) is False and the key falls all the way through to
+    `play.handle_key(29)` -- which has no branch for 29 at all
+    (`screens.py::handle_key` only matches 27/q/Q/M/m) -- returning
+    `None`, an ordinary unmapped-key no-op, identical in mechanism to the
+    already-shipped `test_double_detach_is_a_safe_no_op`'s second Ctrl-]
+    (that one from Spectate, this one from App-hold). If canon later rules
+    a distinct Ctrl-] meaning from App-hold, THIS test's own future
+    failure is the deliberate tripwire that forces the change to be
+    reviewed, not silently absorbed."""
+    run_dir = _short_run_dir()
+    daemon = _FakeDaemon(run_dir / "twd.sock")
+    daemon.start()
+    try:
+        monkeypatch.setenv("TW_RUN_DIR", str(run_dir))
+        _patch_common(monkeypatch)
+        captured = _capture_play_instances(monkeypatch)
+
+        stdscr = _QueueStdscr()
+        thread, result_box = _drive_run_play_in_thread(stdscr, _profile())
+        assert _wait_until(lambda: bool(captured))
+        play = captured[-1]
+        # Wait for the constructor-time transient ("Ensuring session…") to
+        # settle before capturing the baseline -- the drive thread keeps
+        # running concurrently past `_wait_until(lambda: bool(captured))`,
+        # so a bare read right after that would race `_run_play`'s own
+        # post-`ensure_session()` status_line write.
+        assert _wait_until(lambda: play.status_line not in ("", "Ensuring session…"))
+
+        play.spectating = False
+        play.attached = False
+        status_before = play.status_line
+
+        stdscr.push(DETACH_KEY)
+        stdscr.push(ord("q"))  # deterministic sync point, mirrors proof 3/4's own idiom above
+        thread.join(timeout=3.0)
+        assert result_box == ["quit"]
+
+        assert play.spectating is False  # unchanged
+        assert play.attached is False  # unchanged
+        assert play.status_line == status_before  # no status mutation either
+        assert daemon.control_lock.mode == MODE_APP  # nothing was ever taken
+        assert daemon.session.raw_sent == []  # no wire traffic
     finally:
         daemon.stop()
         shutil.rmtree(run_dir, ignore_errors=True)
