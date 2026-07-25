@@ -742,6 +742,17 @@ class PlayShellScreen:
         # test_spectate_no_send.py``'s guards) -- it only ever REPORTS the
         # human's intent (``"attach"``) for ``app.py`` to act on.
         self.spectating: bool = True
+        # WO-P5-060 lane B: honest attach-state truth for the control-strip's
+        # App/Human badge, mirroring `spectating`'s own plain-bool shape --
+        # `app.py::_run_play` is the ONLY writer (attach success, the Ctrl-]
+        # detach branch, and the broken-wire fallback all set this alongside
+        # `spectating`, never independently). Distinct from `not spectating`:
+        # this WO's own call-site fix stops deriving `attached` from
+        # `spectating`'s negation (PWO-056's interim shape) so the two can
+        # eventually diverge for a real third App state without a silent
+        # coupling bug. Defaults `False` (pre-attach, matching `spectating`'s
+        # own pre-attach default of `True`).
+        self.attached: bool = False
         self._now_fn = now_fn  # WO-P3-038 -- resolved to time.monotonic at draw() time when unset
         # LOGS newest-row flash (WO-P3-041): content-identity tracking across
         # draw() calls -- cockpit.logsband is a pure, stateless composer (no
@@ -869,6 +880,39 @@ class PlayShellScreen:
         if tone == "danger":
             return self._viewport_danger_attr
         return self._chrome_attr
+
+    def _control_strip_segment_attr(self, tone: object) -> int:
+        """Resolve one ``compose_control_strip_segments`` tone (``"ok"``,
+        ``"warn"``, or ``None``) to a curses attr for the control-strip's
+        mode-badge chip (WO-P5-060). ``"ok"``/``"warn"`` resolve their
+        SEMANTIC_COLORS fg (green/yellow, ``_SEMANTIC_COLORS`` sourced from
+        ``cockpit.tones``, the single source of truth) through the ONE
+        shared process-lifetime pair allocator (``_shared_pairs`` -- see its
+        own class docstring for why a second allocator would corrupt other
+        screens' already-cached colors), with ``curses.A_BOLD |
+        curses.A_REVERSE`` layered on top -- canon's badge law
+        (``mode-line-and-teach-controls.md:179-181``: reverse-video is the
+        one "selected/active/badge" signal) applied to BOTH dual chips (App
+        AND Human), not just the newly-added App side, so the pair's visual
+        register stays matched rather than splitting App-reversed/
+        MANUAL-flat. Any other tone (``None`` -- SPECTATE, or the liveness
+        cluster's own non-label segment) stays plain ``curses.A_NORMAL``,
+        unreversed, exactly like every pre-existing chip on this row.
+
+        Mono/pair-exhaustion degrade (WO-P4-054 interim family): when the
+        color allocation itself is unavailable (``_shared_pairs.attr_for``
+        returns bare ``curses.A_NORMAL`` -- no color support, or the
+        process-lifetime pair table is exhausted), the chip still carries
+        ``A_BOLD | A_REVERSE`` on top of that ``A_NORMAL`` base -- an
+        attribute-only badge, honest without color, rather than silently
+        losing its "this is a chip" signal entirely. Never raises: an
+        unrecognized/hostile ``tone`` degrades to the same plain
+        ``A_NORMAL`` as ``None``."""
+        if tone not in ("ok", "warn"):
+            return curses.A_NORMAL
+        fg_name, _unused_bold = _SEMANTIC_COLORS.get(tone, ("default", False))
+        base = _shared_pairs.attr_for(fg_name)
+        return base | curses.A_BOLD | curses.A_REVERSE
 
     def draw(self) -> None:
         self.stdscr.erase()
@@ -1246,22 +1290,39 @@ class PlayShellScreen:
             logs_attrs[-1] = (last_text, curses.A_BOLD)
         cockpit_draw.draw_lines_attrs(self.stdscr, logs, logs_attrs)
 
-        # CONTROL_STRIP (WO-P3-038, PWO-055, PWO-056): the frame's own
-        # bottom-most interior row, a bare content row (no box -- same
+        # CONTROL_STRIP (WO-P3-038, PWO-055, PWO-056, WO-P5-060): the frame's
+        # own bottom-most interior row, a bare content row (no box -- same
         # `boxed=False` shape as the row-1 profile strip). Carries the
         # liveness cluster, right-aligned (unchanged), and the honest seat
         # label on the left, filling whatever room remains there --
         # `cockpit.control_seat.SPECTATE_LABEL` while spectating (PWO-055),
         # `MANUAL_LABEL` ("MANUAL — YOU HAVE CONTROL") once `M` has taken
-        # the Human lock (PWO-056, ``attached=not self.spectating`` below
-        # -- the two are mutually exclusive by construction, never both
-        # truthy, per ``control_seat``'s own module docstring, so no new
-        # state field is needed on this class beyond the existing
-        # ``spectating`` bool). The dynamic App chip, A/R/T teach keys, and
-        # run/record/panic cluster the canon mock shows on this row still
-        # belong to the N5 mode-line-and-teach-controls WO -- not built
-        # here; only the two static seat labels are.
+        # the Human lock (PWO-056), or `APP_LABEL` when neither is true
+        # (WO-P5-060 -- not reachable through this screen's own wiring
+        # today, since `app.py` always sets `attached`/`spectating` to
+        # opposite values; see `control_seat`'s own module docstring).
+        # `attached=self.attached` below is this WO's own call-site fix:
+        # PWO-056's interim `attached=not self.spectating` derivation is
+        # replaced with the REAL per-instance state `app.py::_run_play` now
+        # sets directly (attach success, Ctrl-] detach, and the broken-wire
+        # fallback all set `self.attached` alongside `self.spectating`,
+        # never coupled through negation) -- honest state, not a derived
+        # proxy, and the seam a genuine third App state (PWO-061's `M`
+        # switch) will eventually need. `compose_control_strip_segments`
+        # (WO-P5-060) replaces the flat-string `compose_control_strip_line`
+        # call here so the mode-badge chip can carry its OWN reverse-video+
+        # tone attr (`_control_strip_segment_attr`) distinct from the row's
+        # plain liveness cluster -- drawn through `draw_segment_line`, the
+        # segment-capable sibling of `draw_lines`/`draw_lines_attrs`. A
+        # raising composer degrades to the pre-existing liveness-only
+        # right-justified row (never crashes the draw pass), same
+        # containment discipline as every other composer call in this
+        # method. The A/R/T teach keys and run/record/panic cluster the
+        # canon mock shows on this row still belong to the N5
+        # mode-line-and-teach-controls WO -- not built here.
         control_strip = regions["control_strip"]
+        control_strip_segments: list[tuple[str, int]] | None = None
+        control_strip_fallback_lines: list[str] = []
         if control_strip is not None:
             cs_w = control_strip["w"]
             try:
@@ -1271,18 +1332,27 @@ class PlayShellScreen:
             except Exception:  # noqa: BLE001 -- a raising composer must not crash the draw pass
                 liveness_text = _CONTROL_STRIP_COMPOSE_FAILED
             try:
-                control_strip_line = cockpit_control_seat.compose_control_strip_line(
-                    spectating=self.spectating, liveness_text=liveness_text, width=cs_w, unicode_ok=uok,
-                    attached=not self.spectating,
+                raw_segments = cockpit_control_seat.compose_control_strip_segments(
+                    spectating=self.spectating, attached=self.attached,
+                    liveness_text=liveness_text, width=cs_w, unicode_ok=uok,
                 )
+                control_strip_segments = [
+                    (str(text), self._control_strip_segment_attr(tone))
+                    for text, tone in raw_segments
+                ]
             except Exception:  # noqa: BLE001 -- a raising composer must not crash the draw pass
-                control_strip_line = liveness_text.rjust(cs_w) if cs_w > 0 else ""
-            control_strip_lines = [control_strip_line] if cs_w > 0 else [""]
+                control_strip_segments = None
+            if control_strip_segments is None:
+                fallback_line = liveness_text.rjust(cs_w) if cs_w > 0 else ""
+                control_strip_fallback_lines = [fallback_line] if cs_w > 0 else [""]
+        if control_strip_segments is not None:
+            cockpit_draw.draw_segment_line(
+                self.stdscr, control_strip, control_strip_segments, boxed=False
+            )
         else:
-            control_strip_lines = []
-        cockpit_draw.draw_lines(
-            self.stdscr, control_strip, control_strip_lines, curses.A_NORMAL, boxed=False
-        )
+            cockpit_draw.draw_lines(
+                self.stdscr, control_strip, control_strip_fallback_lines, curses.A_NORMAL, boxed=False
+            )
 
         self.stdscr.refresh()
 

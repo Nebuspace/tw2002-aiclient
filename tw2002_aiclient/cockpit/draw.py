@@ -418,6 +418,81 @@ def draw_lines(
     draw_lines_attrs(win, region, [(line, attr) for line in lines], boxed=boxed)
 
 
+def draw_segment_line(
+    win: curses.window,
+    region: dict | None,
+    segments: Sequence[tuple[str, int]],
+    *,
+    boxed: bool = False,
+) -> None:
+    """Render ONE row composed of ordered ``(text, attr)`` segments, each run
+    painted with its own curses attr -- the shape ``draw_lines_attrs`` (one
+    attr per whole LINE) can't express when a SINGLE line needs different
+    attrs on different spans (WO-P5-060: the control strip's App/Human
+    mode-badge chip needs its own reverse-video+tone attr distinct from the
+    row's liveness cluster, which stays plain).
+
+    Segments are written left-to-right through the SAME ``_clip_cells``/
+    ``_safe_write`` choke every other draw in this module uses, with the
+    row's own interior width budget (``inner_w``, identical inset math to
+    ``draw_lines``/``draw_lines_attrs``: inset one cell on every side when
+    ``boxed``, or filling the raw region when not) tracked as a single
+    running ``remaining`` counter carried ACROSS segment boundaries -- never
+    reset per segment. This is deliberate, not incidental: clipping each
+    segment against the row's remaining budget in order produces the
+    IDENTICAL result ``_clip_cells`` would produce on the segments'
+    concatenated string in one call (a strict left-to-right cell-budget
+    walk is associative across a string split at any character boundary),
+    so a later segment can never render past where the earlier segments'
+    own combined width already used up the row, and a wide/CJK character
+    straddling where the row's budget runs out is dropped whole rather than
+    split -- same discipline ``_clip_cells`` itself already guarantees
+    within one string. Each segment's text is sanitized (control chars ->
+    plain space, alignment-preserving) BEFORE its own clip, same order as
+    every other write here, so an embedded control character can't move
+    the real cursor and escape whatever box this row sits in, and a
+    CJK/fullwidth character is measured in display cells, not Python
+    characters -- both hazards the module docstring documents in general
+    the same way they apply to a single unsegmented line.
+
+    Only the region's own FIRST content row is ever written -- this
+    primitive draws exactly one line, unlike ``draw_lines``/
+    ``draw_lines_attrs``, which fan a whole list of lines down the box.
+    ``region is None`` or an empty ``segments`` sequence is a silent no-op,
+    matching every sibling draw call's shape. A malformed individual
+    segment (not a 2-tuple, or a non-``str`` text) is silently dropped --
+    degrading that ONE run to nothing rather than raising or voiding the
+    rest of the row, the same per-run tolerance ``draw_runs``'s own
+    ``_coerce_run`` establishes for its per-run malformed-entry case."""
+    if region is None or not segments:
+        return
+    y, x, w, h = region["y"], region["x"], region["w"], region["h"]
+    if boxed:
+        inner_y, inner_x, inner_w, inner_h = y + 1, x + 1, w - 2, h - 2
+    else:
+        inner_y, inner_x, inner_w, inner_h = y, x, w, h
+    if inner_w < 1 or inner_h < 1:
+        return
+    cursor_x = inner_x
+    remaining = inner_w
+    for item in segments:
+        if remaining <= 0:
+            break
+        try:
+            text, attr = item
+        except (TypeError, ValueError):
+            continue
+        if not isinstance(text, str):
+            continue
+        clipped = _clip_cells(_sanitize_controls(text), remaining)
+        if not clipped:
+            continue
+        _safe_write(win, inner_y, cursor_x, clipped, attr)
+        used = sum(_cell_width(ch) for ch in clipped)
+        cursor_x += used
+        remaining -= used
+
+
 def draw_refuse_message(win: curses.window, message: str, attr: int) -> None:
     """``mode == "too_small"``: render the layout's refusal message and
     nothing else (no chrome glyphs, no panels) -- caller must ``erase()``

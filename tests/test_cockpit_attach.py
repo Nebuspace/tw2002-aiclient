@@ -151,12 +151,31 @@ class _RecordingStdscr:
 
 
 def _control_strip_row_text(win) -> str:
+    """Reconstruct the control-strip row's LAST-drawn frame as one string.
+
+    WO-P5-060: the row is now drawn via `draw_segment_line`, which emits
+    ONE `addstr` call PER SEGMENT (each segment carries its own curses
+    attr, so they can't be combined into a single call) rather than the
+    pre-existing single whole-line call `draw_lines` made -- so a bare
+    `row_calls[-1]` (the old technique) now only sees the LAST segment
+    (typically the liveness cluster), silently dropping the mode-badge
+    label segment that precedes it. Every fresh `draw()` pass' leftmost
+    write for this row always starts at the row's own left edge
+    (`control_strip["x"]`, unboxed) -- whether via one fallback call or
+    several segment calls -- so the LAST occurrence of that x-offset marks
+    where the most recent frame's own writes begin; everything from there
+    onward (this row's `calls` are appended in strict left-to-right
+    cursor order within one frame) concatenates back into that frame's
+    full visible row text, robust to however many `addstr` calls composed
+    it."""
     regions = frame_layout(FULL_ROWS, FULL_COLS)
     control_strip = regions["control_strip"]
     assert control_strip is not None
-    row_calls = [text for (y, _x, text, _a) in win.calls if y == control_strip["y"]]
+    row_x = control_strip["x"]  # boxed=False -- no inset, this IS the write x
+    row_calls = [(x, text) for (y, x, text, _a) in win.calls if y == control_strip["y"]]
     assert row_calls, "expected an addstr call on the control strip row"
-    return row_calls[-1]
+    last_frame_start = max(i for i, (x, _t) in enumerate(row_calls) if x == row_x)
+    return "".join(text for _x, text in row_calls[last_frame_start:])
 
 
 def _capture_play_instances(monkeypatch):
@@ -208,6 +227,7 @@ def test_run_play_m_attaches_forwards_a_keystroke_and_esc_releases(monkeypatch):
 
         play = captured[-1]
         assert play.spectating is False
+        assert play.attached is True  # WO-P5-060 lane B: honest badge truth
         assert "attached" in play.status_line
 
         row_text = _control_strip_row_text(stdscr)
@@ -300,6 +320,7 @@ def test_run_play_attach_refusal_is_honest_not_silent_success(monkeypatch):
 
         play = captured[-1]
         assert play.spectating is True  # refusal never flips it
+        assert play.attached is False  # WO-P5-060 lane B: never falsely claimed
         assert "attach refused" in play.status_line
         assert "already_attached" in play.status_line
 
@@ -343,6 +364,7 @@ def test_run_play_broken_attach_connection_falls_back_to_spectate_honestly(monke
 
     play = captured[-1]
     assert play.spectating is True  # fell back, not stuck "attached"
+    assert play.attached is False  # WO-P5-060 lane B: honest badge truth, alongside spectating
     assert "attach connection lost" in play.status_line
     assert fake_conn.closed is True
 
@@ -352,9 +374,13 @@ def test_control_strip_transitions_spectate_manual_and_back(monkeypatch):
     SPECTATE visible while spectating -> `MANUAL_LABEL` visible once
     attached -> back to SPECTATE once `spectating` is true again.
     WO-P4-054 taught us a one-way assertion can't prove a state surface
-    actually returns. Driven directly via `PlayShellScreen.spectating`
-    (not a real detach round trip through `app.py` -- the actual detach
-    mechanism is WO-P4-057's, not built here)."""
+    actually returns. Driven directly via `PlayShellScreen.spectating`/
+    `.attached` (not a real detach round trip through `app.py` -- the
+    actual detach mechanism is WO-P4-057's, not built here). WO-P5-060:
+    both fields are now driven together, mirroring how `app.py::_run_play`
+    always sets them as a pair -- `spectating` alone no longer implies
+    `attached`'s value (the pre-existing `attached=not self.spectating`
+    derivation this WO's own call-site fix replaced)."""
     monkeypatch.setattr(curses, "has_colors", lambda: False)
     win = _RecordingStdscr([])
     screen = PlayShellScreen(win, _profile())
@@ -366,6 +392,7 @@ def test_control_strip_transitions_spectate_manual_and_back(monkeypatch):
 
     win.calls.clear()
     screen.spectating = False
+    screen.attached = True
     screen.draw()
     row2 = _control_strip_row_text(win)
     assert MANUAL_LABEL in row2
@@ -373,6 +400,7 @@ def test_control_strip_transitions_spectate_manual_and_back(monkeypatch):
 
     win.calls.clear()
     screen.spectating = True
+    screen.attached = False
     screen.draw()
     row3 = _control_strip_row_text(win)
     assert "SPECTATE" in row3
@@ -498,10 +526,12 @@ def test_detach_key_flips_spectating_true_and_signals_detach_and_releases_lock(m
 
         stdscr.push(ord("M"))
         assert _wait_until(lambda: play.spectating is False), "M never attached"
+        assert _wait_until(lambda: play.attached is True), "M never set attached True"
         assert daemon.control_lock.mode == MODE_HUMAN
 
         stdscr.push(DETACH_KEY)
         assert _wait_until(lambda: play.spectating is True), "Ctrl-] never detached"
+        assert _wait_until(lambda: play.attached is False), "Ctrl-] never cleared attached"
         assert _wait_until(lambda: "detach" in play.status_line.lower()), (
             f"status line never signaled detach: {play.status_line!r}"
         )
@@ -654,6 +684,7 @@ def test_double_detach_is_a_safe_no_op(monkeypatch):
         assert result_box == ["quit"], "double-detach broke the drive thread"
 
         assert play.spectating is True
+        assert play.attached is False  # WO-P5-060 lane B: unaffected by the no-op second detach
         assert play.status_line == status_after_first_detach
         assert daemon.control_lock.mode == MODE_APP
         assert daemon.session.raw_sent == []  # never any forwarded traffic at all
@@ -693,6 +724,7 @@ def test_detach_after_broken_wire_fallback_is_also_a_safe_no_op(monkeypatch, tmp
 
     play = captured[-1]
     assert play.spectating is True
+    assert play.attached is False  # WO-P5-060 lane B: still false after the no-op Ctrl-]
     assert play.status_line == "attach connection lost — spectating"
     assert fake_conn.closed is True
 

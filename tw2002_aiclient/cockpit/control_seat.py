@@ -65,6 +65,46 @@ mechanics) is lane A's ``screens.py``/``app.py`` territory, not this
 module's -- as of this dispatch that wiring had not yet landed, so nothing
 in this file alone makes the badge appear on a real screen.
 
+**PWO-060 status (App/Human badge, no AI mode -- this dispatch's own
+contribution):** ``APP_LABEL``/``app_label()`` add the dual's third and
+final chip -- the App holder, canon's ``[ APP ]`` (green/``ok``,
+``canon/surfaces/mode-line-and-teach-controls.md`` ~133, ~183-186). App has
+no boolean of its own the way Spectate/Human do: it is the terminal
+fallback of the selection priority -- "whichever holds the seat when
+neither the passive Spectate reading nor the more consequential Human/
+attached claim applies" -- because this per-client module still tracks only
+the two booleans documented above (``spectating``, ``attached``), never the
+daemon-global ``status["mode"]`` field, for the same reason already given:
+conflating them would let this cockpit's own indicator claim a fact that
+isn't this instance's own. Today's only real caller (``screens.py``) always
+passes ``attached=not self.spectating``, so the App branch (reached only
+when BOTH are falsy) is off-contract/unreachable in production as of this
+dispatch -- reaching it live is PWO-061's job (the `M` App-Human switch),
+which needs new screens.py state this WO does not add. ``compose_control_
+strip_line``'s label-selection priority is extended (no signature change)
+from ``attached_label(attached) or seat_label(spectating)`` to additionally
+fall back ``... or app_label()`` -- this is a deliberate, flagged behavior
+change for that previously-off-contract both-falsy input (three pre-PWO-060
+tests pinned the old "liveness only" reading for it; they're updated in
+this dispatch with a comment explaining why, since the old reading was
+merely the accidental absence of a third state, not a guaranteed contract).
+The new ``compose_control_strip_segments`` (ordered ``(text, tone)``
+segments for the draw layer to per-run-color, ``tone`` one of ``"ok"``/
+``"warn"``/``None``) and ``compose_control_strip_line`` now BOTH delegate to
+one private ``_compose_segments`` helper -- the "byte-identical
+concatenation" invariant between the two public functions is therefore
+structurally guaranteed (one shared code path, not two hand-kept-in-sync
+ones), not merely asserted by a test. See ``SendMessage`` to team-lead
+(pre-build) for the two contract points this resolution deviates from the
+literal PWO-060 dispatch text on: (1) selection priority is attached >
+spectating > App, matching the ALREADY-SHIPPED ``compose_control_strip_
+line`` priority and its own passing test, not the dispatch's literal
+"spectating first" wording, which would have disagreed with the shipped
+line-composer on the both-truthy case and broken the concatenation
+invariant; (2) the App branch's reachability required this small additive
+change to ``compose_control_strip_line`` itself (see above), which the
+dispatch's literal text did not call out.
+
 Hardening family (matches ``liveness.py``/``hud.py``): every public function
 is never-raises regardless of input shape -- defense-in-depth here, since
 today's only real caller (``screens.py``) always hands a genuine ``bool``,
@@ -106,6 +146,36 @@ SPECTATE_LABEL = "SPECTATE"
 # different reason than `SPECTATE_LABEL`'s (ASCII-only vs. deliberately
 # un-swapped), but the same zero-effect result.
 MANUAL_LABEL = "MANUAL — YOU HAVE CONTROL"
+
+# PWO-060 (WO-P5-060, "App/Human badge, no AI mode") -- the dual's third
+# chip. Canon-cited verbatim, uppercase and unbracketed: `canon/surfaces/
+# mode-line-and-teach-controls.md`'s own healthy-autopilot mock (~133)
+# renders `[ APP ]`, but -- exactly like `MANUAL_LABEL` above vs. that same
+# doc's bracketed STOP-banner mock (~141) -- the bracket there is the DRAWN
+# CHIP's reverse-video presentation (the draw layer's job), not this raw
+# label constant; this module stays unbracketed like every sibling label
+# here. Cross-checked against the archive's own unbracketed badge literals
+# (`archive/pre-rebirth-2026-07-23/code/twclient/spectate_layout.py:2717-
+# 2722` `_MODE_BADGES` -- `"AUTO-LOOP"`, `"MANUAL — YOU HAVE CONTROL"`,
+# `"SPECTATE"` are all bare, unbracketed strings), the same precedent
+# `MANUAL_LABEL`/`SPECTATE_LABEL` already follow.
+#
+# "APP" is a NEW single chip, not a reuse of either as-built literal: canon
+# (~183-186) is explicit that the App holder is *currently* two separate
+# as-built badges -- `AUTO-LOOP` (tone `ok`/green) and the legacy `AI-PILOT`
+# (tone `info`/cyan) -- and mandates the reborn trainer unify them into one
+# green chip while the cyan `AI-PILOT` badge retires outright. Per that same
+# citation, this constant's color is `ok` (green) -- resolved by the draw
+# layer, same division of labor `SPECTATE_LABEL`/`MANUAL_LABEL` already
+# keep from this module; this module's own job is only the text. NEVER
+# `"AI-PILOT"` or `"AUTO-LOOP"` as a label/value here or anywhere in this
+# module -- canon (~184-186) retires both; citing the ban in this comment
+# is fine, using either string as a value is not (Accept: zero `AI-PILOT`/
+# `ai_pilot` strings in product paths).
+#
+# Plain ASCII, like `SPECTATE_LABEL` -- no Unicode/ASCII twin to swap,
+# `unicode_ok` has no effect on this constant either.
+APP_LABEL = "APP"
 
 
 def _safe_spectating(value: object) -> bool:
@@ -159,12 +229,137 @@ def attached_label(attached: object) -> str:
     return MANUAL_LABEL if _safe_attached(attached) else ""
 
 
+def app_label() -> str:
+    """The App seat's own honest label: always ``APP_LABEL`` -- unlike
+    ``seat_label``/``attached_label`` this takes no argument, because App
+    has no boolean of its own for this module to read. It is the terminal
+    fallback of ``_compose_segments``'s selection priority below: "whichever
+    holds the seat when neither the passive Spectate reading nor the more
+    consequential Human/attached claim applies" (see the module docstring's
+    PWO-060 note for why this is deliberately not sourced from the
+    daemon-global ``status["mode"]`` field). Never empty, never raises."""
+    return APP_LABEL
+
+
 def _safe_width(value: object) -> int:
     try:
         width = int(value)
     except Exception:
         return 0
     return width if width > 0 else 0
+
+
+def _is_definitively_false(value: object) -> bool:
+    """True only for the literal ``bool`` singleton ``False`` -- an ``is``
+    identity check, which calls no dunder method (no ``__eq__``, no
+    ``__bool__``), so it cannot be fooled or made to raise by a hostile
+    object. This is a DIFFERENT, STRICTER reading than ``_safe_spectating``/
+    ``_safe_attached``'s own ``bool()``-coercion truthiness -- that
+    convention legitimately treats ``None``/``0``/``""``/``[]``/``{}`` as
+    cleanly falsy for ``seat_label``/``attached_label``'s OWN purposes and
+    stays unchanged (see each helper's own docstring). This stricter check
+    exists only to gate the App fallback in ``_resolve_label_and_tone``
+    below: App is an ADDITIONAL AFFIRMATIVE CLAIM ("the deterministic
+    autopilot holds the keyboard"), not a passive absence like the
+    liveness-only row it can replace, so it must never be inferred from a
+    coerced, degraded, or merely-falsy-shaped reading of either flag --
+    only from the caller's own state machine unambiguously handing a real
+    ``False``. The PWO-060 sibling of ``_safe_attached``'s own "an unknown
+    must not invent the consequential 'you have control' claim" principle,
+    applied one level up. Never raises."""
+    return value is False
+
+
+def _resolve_label_and_tone(spectating: object, attached: object) -> tuple[str, str | None]:
+    """Single source of truth for which chip is showing and its tone --
+    both ``compose_control_strip_line`` and ``compose_control_strip_segments``
+    call this (via ``_compose_segments`` below) so the two can never drift
+    apart. Priority: ``attached_label(attached) or seat_label(spectating)``,
+    falling back to ``app_label()`` only when BOTH are empty AND
+    ``_is_definitively_false`` holds for both raw inputs -- Human wins over
+    Spectate wins over App, and App additionally requires unambiguous proof
+    neither of the other two applies.
+
+    The Human-over-Spectate tie-break is the ALREADY-SHIPPED ``compose_
+    control_strip_line`` priority (PWO-056's own shipped behavior, not a
+    PWO-060 invention), not the PWO-060 dispatch's literal "spectating
+    first" wording -- kept as-is because reordering it would disagree with
+    this module's own passing test (``test_attached_true_wins_over_
+    spectating_true``) on the off-contract both-truthy case, and because a
+    wrongly-suppressed "YOU HAVE CONTROL" claim is a worse failure than a
+    wrongly-suppressed passive SPECTATE one (same reasoning ``attached_
+    label``'s own docstring already gives).
+
+    The App gate (team-lead-mandated hardening, added after initial PWO-060
+    review): it is NOT enough for ``attached_label(attached) or seat_label(
+    spectating)`` to evaluate empty -- that can happen via ``_safe_
+    spectating``/``_safe_attached``'s own degrade paths (e.g. ``None``, a
+    non-bool falsy-shaped value like ``0``/``""``, or a raising/unevaluable
+    ``attached`` degrading to "not attached"), none of which are proof that
+    App genuinely holds the seat. Only literal ``spectating is False and
+    attached is False`` clears the bar -- see ``_is_definitively_false``'s
+    own docstring. Any other combination that empties both labels (e.g.
+    ``spectating=None, attached=None``, or ``spectating=False, attached=``
+    a raising object) falls through to an empty ``label`` instead, which
+    ``_compose_segments`` renders as the liveness-only row -- the same
+    "unknown state must not invent a claim" outcome ``_safe_attached``
+    already established for MANUAL, now also holding for App.
+
+    Tone vocabulary (draw layer's per-run coloring input, PWO-060):
+    ``"ok"`` on the App chip, ``"warn"`` on the MANUAL/Human chip, ``None``
+    on the SPECTATE chip (canon: Spectate stays muted/plain, never
+    restyled) and on any dropped/empty label. Never raises."""
+    label = attached_label(attached) or seat_label(spectating)
+    if not label and _is_definitively_false(spectating) and _is_definitively_false(attached):
+        label = app_label()
+    if label == MANUAL_LABEL:
+        return label, "warn"
+    if label == APP_LABEL:
+        return label, "ok"
+    return label, None  # SPECTATE_LABEL (muted/plain) or "" (no claim at all)
+
+
+def _compose_segments(
+    *,
+    spectating: object,
+    attached: object,
+    liveness_text: object,
+    width: object,
+) -> list[tuple[str, str | None]]:
+    """Shared core: builds the ordered ``(text, tone)`` segments both public
+    composers below return (``compose_control_strip_line`` joins them back
+    into one string; ``compose_control_strip_segments`` returns them as-is).
+    At most two segments -- ``(label, tone)`` then ``(rest, None)`` -- or
+    one bare ``(liveness_only, None)`` segment when the label is dropped for
+    width pressure OR is empty. The latter is a real, reachable outcome as
+    of the App gate (see ``_resolve_label_and_tone``'s own docstring): a
+    degraded/unknown/non-``bool`` reading of ``spectating``/``attached``
+    (e.g. both ``None``) empties both ``attached_label``/``seat_label`` yet
+    fails the stricter ``_is_definitively_false`` App-eligibility check, so
+    the row correctly degrades to liveness-only rather than inventing any
+    claim -- this is not a defensive-only branch. This is also the XOR
+    structural guarantee PWO-060 asks for: since there is never more than
+    one label segment, at most one tone-carrying (non-``None``) segment can
+    ever appear in the result, so App and MANUAL can never co-render
+    regardless of input. Never raises; returns ``[]`` when ``width`` is not
+    a usable positive ``int`` (mirrors ``compose_control_strip_line``'s
+    pre-existing ``""`` return for the same case, since ``"".join([]) ==
+    ""``)."""
+    w = _safe_width(width)
+    if w <= 0:
+        return []
+
+    text = liveness_text if isinstance(liveness_text, str) else ""
+    text = text[-w:]  # defensive: never wider than the row itself
+    right = text.rjust(w)
+
+    label, tone = _resolve_label_and_tone(spectating, attached)
+    gap = w - len(text)
+    if not label or gap <= 1:
+        return [(right, None)]
+
+    label = label[: gap - 1]  # leave >=1 blank column of separation
+    return [(label, tone), (right[len(label):], None)]
 
 
 def compose_control_strip_line(
@@ -180,36 +375,35 @@ def compose_control_strip_line(
     liveness.compose_liveness_cluster``'s own output) right-anchored --
     mirroring ``screens.py``'s pre-existing ``liveness_text.rjust(cs_w)``
     placement, now shared with the seat label rather than the row's left
-    half staying blank.
-
-    The seat label itself is ``attached_label(attached) or
-    seat_label(spectating)`` -- Human/attached wins whenever ``attached``
-    is truthy, falling back to the SPECTATE reading otherwise. In practice
-    the two are mutually exclusive by construction (the caller's own state
-    -- see the module docstring's PWO-056 note -- never sets both at once:
-    a single cockpit instance is either spectating or holds the seat, never
-    both), so this priority only matters on the defensive off-contract case
-    of a caller handing both truthy at once; Human wins there because a
-    wrongly-suppressed "YOU HAVE CONTROL" claim (the caller genuinely holds
-    the keyboard but the badge stays silent) is a worse failure than a
-    wrongly-suppressed passive SPECTATE one.
+    half staying blank. Implemented as ``"".join(text for text, _tone in
+    _compose_segments(...))`` -- see that function and ``_resolve_label_
+    and_tone`` for the full selection-priority rule (PWO-055/056/060).
 
     The two clusters never collide: ``liveness_text`` (the pre-existing,
     operationally-load-bearing "is it frozen?" signal -- see
     ``liveness.py``) always keeps its full space. The seat label only fills
     whatever blank columns remain to its left, truncated to fit, and drops
-    entirely (the row degrades to ``liveness_text.rjust(width)`` alone,
-    matching this WO's pre-existing behavior) the instant there is not at
-    least one free column of separation. This mirrors the same
-    "secondary content yields, primary content survives" precedent
-    ``layout.py``'s own ``control_strip`` region drops before ``logs``
-    under height pressure.
+    entirely (the row degrades to ``liveness_text.rjust(width)`` alone) the
+    instant there is not at least one free column of separation. This
+    mirrors the same "secondary content yields, primary content survives"
+    precedent ``layout.py``'s own ``control_strip`` region drops before
+    ``logs`` under height pressure.
+
+    PWO-060 note: when both ``spectating`` and ``attached`` are falsy, the
+    label is now ``APP_LABEL`` rather than dropped -- a deliberate,
+    additive extension of the priority chain (``... or app_label()``), not
+    a regression. That input combo was previously off-contract/unreachable
+    through the only real caller (``screens.py`` always passes ``attached=
+    not self.spectating``, so the two are never both false there today);
+    three pre-PWO-060 tests pinned the old accidental "liveness only"
+    reading for it and are updated in this WO with a comment explaining why.
 
     ``unicode_ok`` is accepted for API uniformity with every sibling
     composer in this package (``liveness.py``, ``strip.py``) but has no
-    effect here -- ``SPECTATE_LABEL`` is plain ASCII with no Unicode twin to
-    swap, and ``MANUAL_LABEL``'s embedded em-dash is canon's own established
-    NO-SWAP glyph (see each constant's own module-level comment).
+    effect here -- ``SPECTATE_LABEL``/``APP_LABEL`` are plain ASCII with no
+    Unicode twin to swap, and ``MANUAL_LABEL``'s embedded em-dash is canon's
+    own established NO-SWAP glyph (see each constant's own module-level
+    comment).
 
     Returns a string of exactly ``width`` characters when ``width > 0``
     (padding/truncation absorbed the same way ``str.rjust``/slicing
@@ -219,18 +413,41 @@ def compose_control_strip_line(
     content -- a non-``str`` ``liveness_text`` degrades to ``""`` rather
     than crashing.
     """
-    w = _safe_width(width)
-    if w <= 0:
-        return ""
+    segments = _compose_segments(
+        spectating=spectating, attached=attached, liveness_text=liveness_text, width=width
+    )
+    return "".join(text for text, _tone in segments)
 
-    text = liveness_text if isinstance(liveness_text, str) else ""
-    text = text[-w:]  # defensive: never wider than the row itself
-    right = text.rjust(w)
 
-    label = attached_label(attached) or seat_label(spectating)
-    gap = w - len(text)
-    if not label or gap <= 1:
-        return right
+def compose_control_strip_segments(
+    *,
+    spectating: object = True,
+    attached: object = False,
+    liveness_text: object = "",
+    width: object = 0,
+    unicode_ok: object = True,
+) -> list[tuple[str, str | None]]:
+    """PWO-060: the draw layer's per-run-color view of the same control-strip
+    row ``compose_control_strip_line`` renders as one flat string -- ordered
+    ``(text, tone)`` segments whose concatenation is BYTE-IDENTICAL to
+    ``compose_control_strip_line``'s output for the same inputs, for every
+    input, by construction: both functions delegate to the same
+    ``_compose_segments`` helper above, so there are never two independently
+    hand-kept-in-sync code paths that could drift apart. ``tone`` is one of
+    ``"ok"`` (App chip), ``"warn"`` (MANUAL/Human chip), or ``None``
+    (SPECTATE chip, or any non-label segment such as the liveness cluster or
+    the inter-column separator) -- see ``_resolve_label_and_tone``'s own
+    docstring for the full tone vocabulary and the App-never-co-renders-
+    with-MANUAL structural guarantee.
 
-    label = label[: gap - 1]  # leave >=1 blank column of separation
-    return (label + right[len(label):])[:w]
+    ``unicode_ok`` is accepted for API uniformity with ``compose_control_
+    strip_line`` and every sibling composer in this package but has no
+    effect here, for the same reason given on that function.
+
+    Returns ``[]`` when ``width`` is not a usable positive ``int``
+    (``"".join`` over ``[]`` is ``""``, matching ``compose_control_strip_
+    line``'s own empty-string return for the same case). Never raises
+    regardless of any argument's type or content."""
+    return _compose_segments(
+        spectating=spectating, attached=attached, liveness_text=liveness_text, width=width
+    )

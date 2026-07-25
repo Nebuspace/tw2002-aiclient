@@ -17,10 +17,13 @@ import curses
 import pytest
 
 from tw2002_aiclient.cockpit.control_seat import (
+    APP_LABEL,
     MANUAL_LABEL,
     SPECTATE_LABEL,
+    app_label,
     attached_label,
     compose_control_strip_line,
+    compose_control_strip_segments,
     seat_label,
 )
 from tw2002_aiclient.cockpit.layout import frame_layout
@@ -80,22 +83,32 @@ def test_combines_label_left_and_liveness_right_with_full_width_result():
 
 
 def test_not_spectating_renders_liveness_only_right_justified():
+    # spectating=False with `attached` at its default (False) is the
+    # PWO-060 App fallback -- both flags falsy is now App, not a bare
+    # liveness-only row. See test_neither_spectating_nor_attached_renders_
+    # app_label_left_anchored (PWO-060 section) for the dedicated App test;
+    # this one keeps its original name/scope (spectating=False specifically
+    # does not render SPECTATE) but its liveness-only assertion is gone.
     line = compose_control_strip_line(spectating=False, liveness_text="● ⠋ → -", width=40)
     assert len(line) == 40
     assert "SPECTATE" not in line
     assert line.endswith("● ⠋ → -")
-    assert line == "● ⠋ → -".rjust(40)
 
 
 def test_matches_prior_behavior_when_not_spectating_and_width_positive():
-    # Pre-PWO-055 wiring was exactly `liveness_text.rjust(cs_w)` -- pin the
-    # equivalence explicitly for the not-spectating case so a future change
-    # to this module can't silently regress the pre-existing liveness-only
-    # rendering PWO-056 will still rely on once it flips `spectating=False`.
+    # RETIRED premise (pre-PWO-060): this test used to pin that not-
+    # spectating renders exactly `liveness_text.rjust(cs_w)` -- true only
+    # because "spectating=False, attached=False" was previously an
+    # off-contract combo with no defined rendering of its own. PWO-060
+    # gives that combo real meaning (App, the dual's third/terminal chip --
+    # see control_seat.py's own module docstring), so the old "matches
+    # prior behavior" premise is retired, not merely broken: the row must
+    # now show the App label rather than bare liveness.
     liveness_text = "○ ⠹ → 158"
-    assert compose_control_strip_line(
-        spectating=False, liveness_text=liveness_text, width=30
-    ) == liveness_text.rjust(30)
+    line = compose_control_strip_line(spectating=False, liveness_text=liveness_text, width=30)
+    assert line != liveness_text.rjust(30)
+    assert line.startswith(APP_LABEL)
+    assert line.endswith(liveness_text)
 
 
 def test_zero_or_negative_width_yields_empty_string():
@@ -192,13 +205,36 @@ class _RecordingWin:
         return None
 
 
-def _control_strip_row_text(win: "_RecordingWin", rows: int, cols: int) -> str:
+def _control_strip_row_calls(
+    win: "_RecordingWin", rows: int, cols: int
+) -> list[tuple[int, str, int]]:
+    """All of THIS row's own content ``addstr`` calls, sorted left-to-right
+    by x -- excludes the outer double-line frame's own left/right border
+    columns (drawn at ``x`` outside ``control_strip``'s own ``[x, x+w)``
+    span, which coincidentally land on the same ``y`` as the control
+    strip's own row -- both edges must be bounded, not just the left one,
+    or the right border leaks through as a trailing call). WO-P5-060 note:
+    ``draw_segment_line`` (``cockpit/draw.py``) writes ONE ``addstr`` call
+    PER SEGMENT rather than one call for the whole row -- a real,
+    deliberate landed change (the mode-badge chip now needs its own
+    reverse-video+tone attr distinct from the plain liveness cluster), not
+    a bug -- so callers here must reconstruct the row from every content
+    call in x-order, not assume there is exactly one."""
     regions = frame_layout(rows, cols)
     control_strip = regions["control_strip"]
     assert control_strip is not None
-    row_calls = [text for (y, _x, text, _a) in win.calls if y == control_strip["y"]]
-    assert row_calls, "expected an addstr call on the control strip row"
-    return row_calls[-1]
+    lo, hi = control_strip["x"], control_strip["x"] + control_strip["w"]
+    calls = sorted(
+        (x, text, attr)
+        for (y, x, text, attr) in win.calls
+        if y == control_strip["y"] and lo <= x < hi
+    )
+    assert calls, "expected an addstr call on the control strip row"
+    return calls
+
+
+def _control_strip_row_text(win: "_RecordingWin", rows: int, cols: int) -> str:
+    return "".join(text for _x, text, _attr in _control_strip_row_calls(win, rows, cols))
 
 
 def test_default_spectating_true_renders_seat_label_in_control_strip(monkeypatch):
@@ -223,11 +259,19 @@ def test_default_spectating_true_renders_seat_label_in_control_strip(monkeypatch
     assert "→" in row_text
 
 
-def test_toggling_spectating_false_removes_the_label(monkeypatch):
-    """Forward-compat proof for PWO-056: flipping the bool (the only change
-    056 needs to make to reach this module) removes the SPECTATE marker and
-    falls back to exactly the pre-PWO-055 liveness-only row -- 056 does not
-    need to touch this module's signature to add its own attached state."""
+def test_toggling_spectating_false_alone_now_renders_app_not_liveness_only(monkeypatch):
+    """RENAMED + REDOCUMENTED (pre-WO-P5-060 name: ..._removes_the_label,
+    docstring claimed a "falls back to liveness-only" outcome). That premise
+    depended on the old `attached=not self.spectating` derivation
+    (PWO-056), where flipping `spectating` off implicitly meant "attached."
+    WO-P5-060's own screens.py landing replaces that derivation with a real,
+    independent `self.attached` attribute (default `False`, never coupled
+    to `spectating`) -- so flipping ONLY `spectating` off, leaving
+    `attached` at its untouched default, now lands on the PWO-060 App
+    fallback (both flags genuinely, literally `False`), not liveness-only.
+    See test_toggling_spectating_false_and_attached_true_renders_manual
+    below for the genuine "switch to Human" scenario this test used to
+    stand in for."""
     from tw2002_aiclient import screens as screens_mod
 
     monkeypatch.setattr(screens_mod.curses, "has_colors", lambda: False)
@@ -238,18 +282,54 @@ def test_toggling_spectating_false_removes_the_label(monkeypatch):
     win = _RecordingWin(FULL_ROWS, FULL_COLS)
     screen = screens_mod.PlayShellScreen(win, profile)
     screen.spectating = False
+    assert screen.attached is False  # untouched default -- both now literally False
 
     screen.draw()
 
     row_text = _control_strip_row_text(win, FULL_ROWS, FULL_COLS)
     assert "SPECTATE" not in row_text
+    assert APP_LABEL in row_text
+    assert MANUAL_LABEL not in row_text
+    assert "→" in row_text
+
+
+def test_toggling_spectating_false_and_attached_true_renders_manual(monkeypatch):
+    """The genuine "switch to Human" wiring proof WO-P5-060's own screens.py
+    landing enables: both flags set independently and explicitly, the way
+    the real `M`/attach call sites do (`self.attached` is no longer derived
+    from `self.spectating`)."""
+    from tw2002_aiclient import screens as screens_mod
+
+    monkeypatch.setattr(screens_mod.curses, "has_colors", lambda: False)
+
+    profile = screens_mod.ProfileRow(
+        name="alpha", handle=HANDLE, server="demo-a", host="demo-a.example", game_letter="B"
+    )
+    win = _RecordingWin(FULL_ROWS, FULL_COLS)
+    screen = screens_mod.PlayShellScreen(win, profile)
+    screen.spectating = False
+    screen.attached = True
+
+    screen.draw()
+
+    row_text = _control_strip_row_text(win, FULL_ROWS, FULL_COLS)
+    assert "SPECTATE" not in row_text
+    assert APP_LABEL not in row_text
+    assert MANUAL_LABEL in row_text
     assert "→" in row_text
 
 
 def test_control_strip_row_attr_is_muted_a_normal(monkeypatch):
     """Canon: Spectate is "muted / plain" -- achieved here for free because
-    the whole control-strip row already draws in `curses.A_NORMAL` (default
-    fg, non-bold); this pins that no new attr plumbing crept in."""
+    every content segment on this row draws in `curses.A_NORMAL` (default
+    fg, non-bold) while `spectating` is the active chip; this pins that no
+    new attr plumbing crept in for the SPECTATE case specifically. WO-P5-060
+    note: `draw_segment_line` now writes one `addstr` call PER SEGMENT
+    (see `_control_strip_row_calls`'s own docstring), so this checks EVERY
+    content call's attr, not just the last one -- the App/MANUAL chips
+    legitimately carry a different (reverse-video+tone) attr of their own
+    once PWO-061 makes them reachable; this test only pins the SPECTATE
+    case's own attr, which is unaffected by that."""
     from tw2002_aiclient import screens as screens_mod
 
     monkeypatch.setattr(screens_mod.curses, "has_colors", lambda: False)
@@ -261,18 +341,18 @@ def test_control_strip_row_attr_is_muted_a_normal(monkeypatch):
     screen = screens_mod.PlayShellScreen(win, profile)
     screen.draw()
 
-    regions = frame_layout(FULL_ROWS, FULL_COLS)
-    control_strip = regions["control_strip"]
-    row_attrs = [attr for (y, _x, _t, attr) in win.calls if y == control_strip["y"]]
-    assert row_attrs, "expected an addstr call on the control strip row"
-    assert row_attrs[-1] == curses.A_NORMAL
+    calls = _control_strip_row_calls(win, FULL_ROWS, FULL_COLS)
+    assert all(attr == curses.A_NORMAL for _x, _t, attr in calls), calls
 
 
 def test_raising_control_seat_composer_does_not_crash_draw_and_liveness_survives(monkeypatch):
-    """A raising `compose_control_strip_line` must not crash the draw pass
-    -- same containment discipline every other composer call in `draw()`
-    already has -- and falls back to the pre-existing liveness-only
-    right-justified row rather than an empty one."""
+    """A raising `compose_control_strip_segments` (WO-P5-060: this is the
+    function `draw()` actually calls now, replacing the flat-string
+    `compose_control_strip_line` call this test used to monkeypatch) must
+    not crash the draw pass -- same containment discipline every other
+    composer call in `draw()` already has -- and falls back to the
+    pre-existing liveness-only right-justified row rather than an empty
+    one."""
     from tw2002_aiclient import screens as screens_mod
 
     monkeypatch.setattr(screens_mod.curses, "has_colors", lambda: False)
@@ -280,7 +360,7 @@ def test_raising_control_seat_composer_does_not_crash_draw_and_liveness_survives
     def _raise(*a, **k):
         raise RuntimeError("composer is broken")
 
-    monkeypatch.setattr(screens_mod.cockpit_control_seat, "compose_control_strip_line", _raise)
+    monkeypatch.setattr(screens_mod.cockpit_control_seat, "compose_control_strip_segments", _raise)
 
     profile = screens_mod.ProfileRow(
         name="alpha", handle=HANDLE, server="demo-a", host="demo-a.example", game_letter="B"
@@ -408,12 +488,18 @@ def test_attached_true_wins_over_spectating_true():
     assert "SPECTATE" not in line
 
 
-def test_attached_false_and_spectating_false_renders_liveness_only():
+def test_attached_false_and_spectating_false_renders_app_label():
+    # RENAMED from ..._renders_liveness_only (pre-PWO-060): both flags
+    # falsy is now the documented App fallback, not liveness-only -- see
+    # test_matches_prior_behavior_when_not_spectating_and_width_positive's
+    # comment above for the full "retired premise" explanation.
     liveness_text = "○ ⠹ → 158"
     line = compose_control_strip_line(
         spectating=False, attached=False, liveness_text=liveness_text, width=30
     )
-    assert line == liveness_text.rjust(30)
+    assert line != liveness_text.rjust(30)
+    assert line.startswith(APP_LABEL)
+    assert line.endswith(liveness_text)
 
 
 def test_manual_label_truncates_to_fit_a_narrow_gap_leaving_a_separator_column():
@@ -451,3 +537,383 @@ def test_never_raises_with_hostile_attached_argument_too():
     compose_control_strip_line(
         spectating=object(), attached=object(), liveness_text=object(), width="nope"
     )
+
+
+# ---------------------------------------------------------------------------
+# WO-P5-060 lane A -- the App chip and compose_control_strip_segments.
+# Pure, Layer-A only: no wiring-proof section here (screens.py wiring is
+# lane B's own territory, run concurrently against the pinned API this
+# module exposes -- see control_seat.py's own PWO-060 module-docstring
+# note, including the two points flagged to the team lead pre-build: the
+# selection priority stays attached > spectating > App (matching the
+# ALREADY-SHIPPED compose_control_strip_line priority pinned above by
+# test_attached_true_wins_over_spectating_true), not the dispatch's
+# literal "spectating first" wording, and compose_control_strip_line
+# itself gained the App fallback branch so the concatenation invariant
+# below can hold across the full input matrix.
+# ---------------------------------------------------------------------------
+
+
+def test_app_label_is_the_canon_cited_word():
+    assert APP_LABEL == "APP"
+
+
+def test_app_label_function_always_returns_the_label():
+    # Unlike seat_label/attached_label, app_label() takes no argument --
+    # App is the terminal fallback, never independently toggled.
+    assert app_label() == "APP"
+
+
+def test_app_label_never_the_retired_vocabulary():
+    assert APP_LABEL not in ("AI-PILOT", "AUTO-LOOP")
+
+
+# --- Selection matrix (explicit, readable cases) ---------------------------
+
+
+def test_selection_matrix_spectating_true_attached_false_is_spectate():
+    line = compose_control_strip_line(spectating=True, attached=False, liveness_text="x", width=30)
+    assert line.startswith(SPECTATE_LABEL)
+
+
+def test_selection_matrix_spectating_false_attached_true_is_manual():
+    line = compose_control_strip_line(spectating=False, attached=True, liveness_text="x", width=30)
+    assert line.startswith(MANUAL_LABEL)
+
+
+def test_selection_matrix_spectating_false_attached_false_is_app():
+    line = compose_control_strip_line(spectating=False, attached=False, liveness_text="x", width=30)
+    assert line.startswith(APP_LABEL)
+
+
+def test_selection_matrix_both_truthy_attached_wins_not_app_not_spectate():
+    # Off-contract (056's own precedent: the caller's real state never sets
+    # both truthy), but must resolve deterministically -- attached wins,
+    # matching the pre-existing test_attached_true_wins_over_spectating_true.
+    line = compose_control_strip_line(spectating=True, attached=True, liveness_text="x", width=30)
+    assert line.startswith(MANUAL_LABEL)
+    assert APP_LABEL not in line
+    assert SPECTATE_LABEL not in line
+
+
+def test_neither_spectating_nor_attached_renders_app_label_left_anchored():
+    line = compose_control_strip_line(
+        spectating=False, attached=False, liveness_text="● ⠋ → -", width=40
+    )
+    assert len(line) == 40
+    assert line.startswith(APP_LABEL)
+    assert line.endswith("● ⠋ → -")
+    assert MANUAL_LABEL not in line
+    assert SPECTATE_LABEL not in line
+
+
+# --- compose_control_strip_segments -- tone assignment ---------------------
+
+
+def test_segments_app_chip_carries_ok_tone():
+    segs = compose_control_strip_segments(
+        spectating=False, attached=False, liveness_text="x", width=30
+    )
+    label_segs = [seg for seg in segs if seg[0].strip() == APP_LABEL]
+    assert label_segs, segs
+    assert label_segs[0][1] == "ok"
+
+
+def test_segments_manual_chip_carries_warn_tone():
+    segs = compose_control_strip_segments(
+        spectating=False, attached=True, liveness_text="x", width=30
+    )
+    label_segs = [seg for seg in segs if seg[0].strip() == MANUAL_LABEL]
+    assert label_segs, segs
+    assert label_segs[0][1] == "warn"
+
+
+def test_segments_spectate_chip_carries_no_tone_stays_plain():
+    # Explicit hub constraint: SPECTATE stays a None/plain segment, never
+    # restyled, even though this composer now carries a tone channel.
+    segs = compose_control_strip_segments(
+        spectating=True, attached=False, liveness_text="x", width=30
+    )
+    label_segs = [seg for seg in segs if seg[0].strip() == SPECTATE_LABEL]
+    assert label_segs, segs
+    assert label_segs[0][1] is None
+
+
+def test_segments_default_arguments_are_spectating_true_attached_false():
+    # Pinned defaults from the dispatch's own signature -- calling with no
+    # kwargs at all must behave like the documented spectating=True default.
+    assert compose_control_strip_segments(liveness_text="x", width=30) == (
+        compose_control_strip_segments(spectating=True, attached=False, liveness_text="x", width=30)
+    )
+
+
+def test_segments_invalid_width_returns_empty_list():
+    assert compose_control_strip_segments(spectating=True, liveness_text="x", width=0) == []
+    assert compose_control_strip_segments(spectating=True, liveness_text="x", width=-5) == []
+    assert compose_control_strip_segments(
+        spectating=True, liveness_text="x", width=float("nan")
+    ) == []
+
+
+def test_segments_unicode_ok_flag_has_no_effect():
+    kwargs = dict(spectating=False, attached=False, liveness_text="→ -", width=25)
+    assert compose_control_strip_segments(
+        **kwargs, unicode_ok=True
+    ) == compose_control_strip_segments(**kwargs, unicode_ok=False)
+
+
+def test_segments_never_raises_on_wildly_hostile_arguments():
+    compose_control_strip_segments(
+        spectating=object(), attached=object(), liveness_text=object(), width="nope"
+    )
+
+
+# --- Concatenation invariant -- the anti-drift guarantee --------------------
+
+
+_CONCAT_FLAG_VALUES = [True, False]
+_CONCAT_WIDTHS = [0, 1, 2, 3, 4, 5, 8, 15, 20, 30, 40, 60]
+_CONCAT_LIVENESS_TEXTS = ["", "x", "x" * 15, "x" * 20, "● ⠋ → -", "○ ⠹ → 158"]
+
+
+@pytest.mark.parametrize("spectating", _CONCAT_FLAG_VALUES)
+@pytest.mark.parametrize("attached", _CONCAT_FLAG_VALUES)
+@pytest.mark.parametrize("width", _CONCAT_WIDTHS)
+@pytest.mark.parametrize("liveness_text", _CONCAT_LIVENESS_TEXTS)
+def test_segments_concatenation_matches_compose_control_strip_line(
+    spectating, attached, width, liveness_text
+):
+    line = compose_control_strip_line(
+        spectating=spectating, attached=attached, liveness_text=liveness_text, width=width
+    )
+    segs = compose_control_strip_segments(
+        spectating=spectating, attached=attached, liveness_text=liveness_text, width=width
+    )
+    assert "".join(text for text, _tone in segs) == line
+    # XOR structural pin, folded into the same sweep: never more than one
+    # tone-carrying (App or MANUAL) segment.
+    toned = [seg for seg in segs if seg[1] is not None]
+    assert len(toned) <= 1
+
+
+# --- Width-pressure behavior for the App chip (mirrors the SPECTATE and
+# MANUAL drop-policy tests above) -------------------------------------------
+
+
+def test_app_label_drops_when_no_room_for_a_separator_column():
+    liveness_text = "x" * 20
+    line = compose_control_strip_line(
+        spectating=False, attached=False, liveness_text=liveness_text, width=20
+    )
+    assert line == liveness_text
+    assert APP_LABEL not in line
+
+
+def test_app_label_drops_when_gap_is_exactly_one_column():
+    liveness_text = "x" * 19
+    line = compose_control_strip_line(
+        spectating=False, attached=False, liveness_text=liveness_text, width=20
+    )
+    assert line == liveness_text.rjust(20)
+    assert APP_LABEL not in line
+
+
+def test_app_label_truncates_to_fit_a_narrow_gap_leaving_a_separator_column():
+    # APP_LABEL is 3 chars; gap == 3 leaves only 2 columns for the label.
+    liveness_text = "x" * 17
+    line = compose_control_strip_line(
+        spectating=False, attached=False, liveness_text=liveness_text, width=20
+    )
+    assert len(line) == 20
+    assert line == APP_LABEL[:2] + " " + liveness_text
+
+
+def test_app_label_renders_in_full_with_a_generous_gap():
+    liveness_text = "x" * 15
+    line = compose_control_strip_line(
+        spectating=False, attached=False, liveness_text=liveness_text, width=20
+    )
+    assert len(line) == 20
+    # gap == 5: APP_LABEL (3 chars) fits whole, 1 separator, 15 liveness.
+    assert line == APP_LABEL + "  " + liveness_text
+
+
+def test_app_label_empty_liveness_text_still_fits_label_alone():
+    line = compose_control_strip_line(spectating=False, attached=False, liveness_text="", width=20)
+    assert len(line) == 20
+    assert line.strip() == APP_LABEL
+
+
+# --- Degrade matrix, incl. garbage/raising inputs ---------------------------
+
+
+_DEGRADE_MATRIX_INPUTS = [
+    True, False, None, 1, 0, "", "x", object(), [], [1], {}, {"a": 1}, _HostileBool(),
+]
+
+
+@pytest.mark.parametrize("spectating", _DEGRADE_MATRIX_INPUTS)
+@pytest.mark.parametrize("attached", _DEGRADE_MATRIX_INPUTS)
+def test_degrade_matrix_label_matches_priority_oracle_and_never_raises(spectating, attached):
+    width = 60
+    # Oracle: the module's own already-tested primitives, not a
+    # reimplementation of their truthiness logic in this test -- plus the
+    # team-lead-mandated App-eligibility gate folded in explicitly (App
+    # only when BOTH raw inputs are the literal `False` singleton, never a
+    # coerced/degraded/garbage falsy reading -- see control_seat.py's own
+    # `_is_definitively_false`). Unlike the pre-hardening version of this
+    # oracle, `expected_label` can now legitimately be `""` (neither claim
+    # survives, e.g. spectating=None, attached=None) -- that is a real,
+    # correct outcome (liveness-only), not a gap in the oracle.
+    expected_label = attached_label(attached) or seat_label(spectating)
+    if not expected_label and spectating is False and attached is False:
+        expected_label = app_label()
+
+    line = compose_control_strip_line(
+        spectating=spectating, attached=attached, liveness_text="x", width=width
+    )
+    segs = compose_control_strip_segments(
+        spectating=spectating, attached=attached, liveness_text="x", width=width
+    )
+
+    assert "".join(text for text, _tone in segs) == line  # concatenation invariant, per-case
+
+    if expected_label == MANUAL_LABEL:
+        assert line.startswith(MANUAL_LABEL)
+    elif expected_label == APP_LABEL:
+        assert line.startswith(APP_LABEL)
+    elif expected_label == SPECTATE_LABEL:
+        assert line.startswith(SPECTATE_LABEL)
+    else:
+        assert expected_label == ""
+        assert MANUAL_LABEL not in line
+        assert APP_LABEL not in line
+        assert SPECTATE_LABEL not in line
+
+    toned = [seg for seg in segs if seg[1] is not None]
+    assert len(toned) <= 1  # XOR: App and MANUAL never co-render
+
+    assert "AI-PILOT" not in line
+    assert "AUTO-LOOP" not in line
+    assert not any("AI-PILOT" in text or "AUTO-LOOP" in text for text, _tone in segs)
+
+
+# --- Degrade DIRECTION pin (team-lead-mandated, post-review addendum):
+# for EVERY garbage/None/raising input combination, the resolved label
+# must NEVER be App -- the 060 sibling of 056's own "an unknown must never
+# invent the 'you have control' claim" (_safe_attached's own docstring),
+# now also holding for App's own affirmative claim. -------------------------
+
+
+def test_app_renders_iff_literal_false_on_both_axes_self_contained():
+    """The PRIMARY pin for the App-eligibility gate -- deliberately
+    SELF-CONTAINED: it hardcodes the expected outcome directly from the raw
+    matrix inputs via `is False` identity checks and never imports or calls
+    `seat_label`/`attached_label`/`app_label`/`_is_definitively_false` as an
+    oracle. The oracle-driven tests elsewhere in this file (e.g. test_
+    degrade_matrix_label_matches_priority_oracle_and_never_raises) would
+    silently keep agreeing with a future change that loosens the App gate
+    AND its own oracle computation together in the same commit -- this test
+    can't be fooled that way, because it never reads the gate's own
+    implementation at all, only `compose_control_strip_line`'s/`compose_
+    control_strip_segments`'s observable output. Swept across the full
+    13x13 degrade matrix (garbage/None/raising included on both axes)."""
+    width = 60
+    for spectating in _DEGRADE_MATRIX_INPUTS:
+        for attached in _DEGRADE_MATRIX_INPUTS:
+            expect_app = spectating is False and attached is False
+
+            line = compose_control_strip_line(
+                spectating=spectating, attached=attached, liveness_text="x", width=width
+            )
+            segs = compose_control_strip_segments(
+                spectating=spectating, attached=attached, liveness_text="x", width=width
+            )
+
+            assert (APP_LABEL in line) == expect_app, (spectating, attached, line)
+            app_seg_present = any(APP_LABEL in text for text, _tone in segs)
+            assert app_seg_present == expect_app, (spectating, attached, segs)
+            ok_tone_present = any(tone == "ok" for _text, tone in segs)
+            assert ok_tone_present == expect_app, (spectating, attached, segs)
+
+
+def test_degrade_direction_never_invents_app_from_unknown_or_garbage_state():
+    width = 60
+    for spectating in _DEGRADE_MATRIX_INPUTS:
+        for attached in _DEGRADE_MATRIX_INPUTS:
+            if spectating is False and attached is False:
+                continue  # the one legitimate App case -- covered elsewhere
+            line = compose_control_strip_line(
+                spectating=spectating, attached=attached, liveness_text="x", width=width
+            )
+            segs = compose_control_strip_segments(
+                spectating=spectating, attached=attached, liveness_text="x", width=width
+            )
+            assert APP_LABEL not in line, (spectating, attached, line)
+            assert not any(APP_LABEL in text for text, _tone in segs), (spectating, attached, segs)
+
+
+def test_both_none_never_renders_app_or_any_other_claim():
+    # None cleanly coerces to False for seat_label/attached_label's OWN
+    # purposes (their established convention, unchanged by this WO), but
+    # is not the literal `False` singleton the App gate requires -- the
+    # row must degrade to liveness-only, not invent any of the three chips.
+    line = compose_control_strip_line(spectating=None, attached=None, liveness_text="x", width=60)
+    assert APP_LABEL not in line
+    assert MANUAL_LABEL not in line
+    assert SPECTATE_LABEL not in line
+
+
+@pytest.mark.parametrize("falsy_non_bool", [0, "", [], {}])
+def test_falsy_but_non_bool_spectating_never_clears_the_app_bar(falsy_non_bool):
+    # 0/""/[]/{} are cleanly falsy for seat_label's own purposes but are
+    # NOT the literal `False` singleton -- must not clear the App bar even
+    # paired with a genuinely False attached.
+    line = compose_control_strip_line(
+        spectating=falsy_non_bool, attached=False, liveness_text="x", width=60
+    )
+    assert APP_LABEL not in line
+
+
+def test_raising_attached_with_definitively_false_spectating_never_renders_app():
+    # The sharpest case: `attached` is unevaluable (raises) and degrades to
+    # "not attached" (`_safe_attached`'s own existing, unchanged
+    # philosophy) while `spectating` is genuinely, literally False. Before
+    # this hardening, both `attached_label`/`seat_label` would evaluate
+    # empty and the OLD (ungated) fallback would have invented App here --
+    # the gate must suppress it since `attached`'s own truthiness was never
+    # actually confirmed.
+    line = compose_control_strip_line(
+        spectating=False, attached=_HostileBool(), liveness_text="x", width=60
+    )
+    assert APP_LABEL not in line
+    assert MANUAL_LABEL not in line
+
+
+def test_degrade_matrix_never_raises_at_narrow_and_zero_widths_too():
+    # Same matrix, tiny/degenerate widths -- the drop/degrade paths, not
+    # just the roomy one the main matrix test above uses.
+    for spectating in _DEGRADE_MATRIX_INPUTS:
+        for attached in _DEGRADE_MATRIX_INPUTS:
+            for width in (0, -1, 1, 2, 3, float("nan"), float("inf"), "nope"):
+                line = compose_control_strip_line(
+                    spectating=spectating, attached=attached, liveness_text="x", width=width
+                )
+                segs = compose_control_strip_segments(
+                    spectating=spectating, attached=attached, liveness_text="x", width=width
+                )
+                assert "".join(text for text, _tone in segs) == line
+
+
+# --- Vocabulary ban, standalone --------------------------------------------
+
+
+def test_no_retired_vocabulary_anywhere_in_module_constants():
+    from tw2002_aiclient.cockpit import control_seat as control_seat_mod
+
+    for name in ("SPECTATE_LABEL", "MANUAL_LABEL", "APP_LABEL"):
+        value = getattr(control_seat_mod, name)
+        assert "AI-PILOT" not in value
+        assert "AUTO-LOOP" not in value
+        assert "ai_pilot" not in value
+        assert "auto_loop" not in value

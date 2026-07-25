@@ -304,6 +304,7 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                     attach_conn.close()
                     attach_conn = None
                     play.spectating = True
+                    play.attached = False  # WO-P5-060 lane B: honest badge truth, alongside spectating
                     play.status_line = "detached — spectating"
                     continue
                 if key in (curses.KEY_ENTER, 10, 13):
@@ -346,6 +347,7 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                     attach_conn.close()
                     attach_conn = None
                     play.spectating = True
+                    play.attached = False  # WO-P5-060 lane B: honest badge truth, alongside spectating
                     play.status_line = "attach connection lost — spectating"
                 continue
             action = play.handle_key(key)
@@ -355,6 +357,7 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                     if conn is not None:
                         attach_conn = conn
                         play.spectating = False
+                        play.attached = True  # WO-P5-060 lane B: honest badge truth, alongside spectating
                         play.status_line = "attached — you have control (M)"
                     else:
                         play.status_line = f"attach refused — {error}"
