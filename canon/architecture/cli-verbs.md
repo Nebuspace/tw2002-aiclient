@@ -172,13 +172,23 @@ tw mine --min-support 3            # propose draft skills from the ledger
 # a human reviews and approves before anything the App plays back can ever fire
 ```
 
-# Implementation status (tip `8f03289` · live `./tw --help`)
+# Implementation status (tip `879280f` + WO-P2-G3 · live `./tw --help`)
 
 **LIVE ops verbs today:** `status`, `ensure`, `screen`, `stop`, `do`, `send`, `read`, `history`,
-`watch`, `attach`, `menumap`.
+`watch`, `attach`, `menumap`, `loops`.
+
+`loops` (**G3**) landed as two slices — a read-only store reader/composer
+(`tw2002_aiclient/loops/`), then the CLI wire. It is a **daemon-free read**: no protocol verb, no
+socket, no `--run-dir`. Its only flag is canon's `--include-drafts`, and drafts stay tagged
+`[DRAFT]` because they are inert until a human promotes them
+([Candidate Mining](/engine/candidate-mining.md)). Exit code follows the read, not the row count:
+an **unreadable** store exits **1** (a scripted caller must never read "no loops" out of a store
+nobody could read); a **partial** read lists what it read, is marked INCOMPLETE, and exits 0. That
+mapping is an implementation choice this concept does not yet rule on — it is recorded here, not
+derived from canon.
 
 **NOT on tip (HOLD / later / retired — do not document as shipped):** `spectate` (**RETIRED / WONTBUILD** — Max `@ 13:13:55Z`; in-cockpit Spectate LIVE via PWO-055),
-`loops` / `autoloop` (**G3–G4 STAGED** behind G2; Max GO whole G-sequence `@ 13:15:00Z` · **G2 EXECUTING**), `start` (ensure covers spawn), `log`/`trail`, `frames`,
+`autoloop` (**G4 STAGED** behind G3; Max GO whole G-sequence `@ 13:15:00Z` · **G2 EXECUTING**), `start` (ensure covers spawn), `log`/`trail`, `frames`,
 `analyze`/`mine`, `record`/`replay`, `play`/`haggle`/`autopilot`/`crawl`, `players`/`servers`/`probe`,
 `aiclient` as a separate curses product entry (product is `./tw2002-aiclient`).
 
@@ -188,7 +198,7 @@ block when answering "what can I run right now?"
 # Code Divergence
 
 1. **Catalog vs tip help.** This concept still lists the full reborn/archive-derived verb set
-   (including teach / App-drive / spectate). Tip `8f03289` only ships the LIVE set above — honesty
+   (including teach / App-drive / spectate). Tip `879280f` only ships the LIVE set above — honesty
    gate: never claim a HOLD or unported verb is runnable.
 
 2. **Citations historically pointed at `twclient/cli.py`.** Authoritative tip parser is

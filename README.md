@@ -18,9 +18,9 @@ keystroke senders are `{app, human}` only.
 | Surface | Role |
 |---|---|
 | `./tw2002-aiclient` | **Product TUI** — profile launcher, play shell / cockpit chrome. Human-facing client. |
-| `./tw` | **Backend / ops CLI** — shipped verbs today: `status`, `ensure`, `screen`, `stop`, `do`, `send`, `read`, `history`, `watch`, `attach`, `menumap` (table grows one WO at a time). |
+| `./tw` | **Backend / ops CLI** — shipped verbs today: `status`, `ensure`, `screen`, `stop`, `do`, `send`, `read`, `history`, `watch`, `attach`, `menumap`, `loops` (table grows one WO at a time). |
 
-Same daemon either way — one telnet connection. Prefer `./tw2002-aiclient` for day-to-day play; keep `./tw` for automation and ops. Further ops verbs (`spectate`, `loops`, …) are inventoried in [`workorders/WO-P2-OPS-VERB-SURFACE.md`](workorders/WO-P2-OPS-VERB-SURFACE.md) — not on `./tw --help` yet.
+Same daemon either way — one telnet connection. Prefer `./tw2002-aiclient` for day-to-day play; keep `./tw` for automation and ops. Further ops verbs (`spectate`, `autoloop`, …) are inventoried in [`workorders/WO-P2-OPS-VERB-SURFACE.md`](workorders/WO-P2-OPS-VERB-SURFACE.md) — not on `./tw --help` yet.
 
 
 ---
@@ -41,9 +41,11 @@ password never appears in logs, argv, shell history, or any output. If the
 connection drops, a background guardian reconnects and logs back in by itself.
 
 **📺 Ops visibility today.** `tw status` / `tw screen` / `tw stop` / `tw do` /
-`tw send` / `tw read` / `tw history` / `tw watch` / `tw attach` / `tw menumap`
-(plus `ensure`) are the shipped ops verbs. They talk to the daemon over a unix
-socket. Long-lived `tw spectate` and `tw state` (needs `state_parser`) are staged
+`tw send` / `tw read` / `tw history` / `tw watch` / `tw attach` / `tw menumap` /
+`tw loops` (plus `ensure`) are the shipped ops verbs. Most talk to the daemon
+over a unix socket; `tw loops` and (absent a live localize) `tw menumap` read
+their own on-disk stores instead, so they answer with the daemon stopped.
+Long-lived `tw spectate` and `tw state` (needs `state_parser`) are staged
 in [`WO-P2-OPS-VERB-SURFACE.md`](workorders/WO-P2-OPS-VERB-SURFACE.md) — **not**
 on `./tw --help` yet.
 
@@ -70,9 +72,9 @@ One long-lived daemon, short-lived windows into it:
 ```
   you ──── ./tw2002-aiclient (play / cockpit) ──▶ ┌──────────────┐
                                                    │ twd (daemon) │ ── telnet ──▶ TW2002 server
-  ops ─── tw ensure/status/…/watch/attach/menumap ▶│  the ONE     │
+  ops ─── tw ensure/status/…/attach/menumap/loops ▶│  the ONE     │
                                                    │  connection  │
-  Coming: tw spectate · start · state · loops … ──▶└──────────────┘
+  Coming: tw spectate · start · state · autoloop ─▶└──────────────┘
 ```
 
 - **The daemon (`twd`)** owns the single telnet connection and a pyte terminal
@@ -80,11 +82,14 @@ One long-lived daemon, short-lived windows into it:
   everything over a local unix socket. You never run it directly.
 - **The CLI (`tw`)** is stateless: every verb connects, asks, prints, exits.
   Shipped today: `ensure`, `status`, `screen`, `stop`, `do`, `send`, `read`,
-  `history`, `watch`, `attach`, `menumap`. More verbs land one WO at a time —
-  see the Verb reference and the ops WO.
+  `history`, `watch`, `attach`, `menumap`, `loops`. More verbs land one WO at a
+  time — see the Verb reference and the ops WO. (`menumap` and `loops` are
+  daemon-free reads: they read their own on-disk stores, so they work with the
+  daemon stopped.)
 - **Product play** is `./tw2002-aiclient`, not `./tw`. Thin `tw attach` /
-  `tw watch` / `tw menumap` already ship on the same daemon; full-curses
-  `tw spectate` (and `start` / `state` / `loops`) stay **Coming**.
+  `tw watch` / `tw menumap` / `tw loops` already ship on the same daemon;
+  full-curses `tw spectate` (and `start` / `state` / `autoloop`) stay
+  **Coming**.
 - **A control lock** arbitrates the one connection: App (taught autopilot) or
   human at the keyboard — exactly one live driver at a time. The AI is never a
   live driver.
@@ -149,14 +154,16 @@ Everything takes `--json` for machine-parseable output where applicable.
 | `tw watch [--frames N]` | Tail the settle-edge push-stream (read-only `subscribe`). Prints each event; `--frames N` exits after N events (else Ctrl-C). |
 | `tw attach [--keys …]` | Take the control-lock and forward keystrokes (thin — no curses paint yet). TTY cbreak until Ctrl-]; `--keys` for scripted/non-TTY. **Warning:** `--keys` puts those bytes on **argv / process table / shell history** — never put a password or PIN there; use interactive attach (redacted) or env/`secrets.json` for credentials. |
 | `tw menumap --path FILE` | Read-only menu-map inspector (coverage / dead-ends / orphans / you-are-here ★). Optional live localize via `screen` when daemon up; never sends. `--world-id` joins `state/world/<slug>/game_knowledge.json`. |
+| `tw loops [--include-drafts]` | List the learned-loop (taught-macro) store in `state/skills/` — name, provenance, profit metadata, step count. Daemon-free; never sends. Drafts are inert until a human promotes them, so they list only on `--include-drafts` and are tagged `[DRAFT]`. An unreadable store never renders as an empty one: the report says so and the verb exits **1** (a partial read lists what it read, is marked INCOMPLETE, and exits 0). |
 
 ### Coming (not on `./tw --help` yet)
 
-Remaining classic ops verbs (`start`, `state`, `loops`,
+Remaining classic ops verbs (`start`, `state`,
 `autoloop`, …) are staged in
 [`WO-P2-OPS-VERB-SURFACE.md`](workorders/WO-P2-OPS-VERB-SURFACE.md)
-(A–C + E2 `watch` + F1 `attach` + G1 `menumap` shipped; ops `tw spectate`
-**RETIRED / WONTBUILD**; **G2 EXECUTING** · G3→G4 staged after Max GO — see
+(A–C + E2 `watch` + F1 `attach` + G1 `menumap` + G3 `loops` shipped; ops
+`tw spectate` **RETIRED / WONTBUILD**; **G2 EXECUTING** · G4 staged behind
+G3 — see
 [`WO-P2-OPS-VERB-G-PREP.md`](workorders/WO-P2-OPS-VERB-G-PREP.md)).
 
 Notes worth knowing up front:
@@ -200,7 +207,8 @@ and cockpit / play-shell compose against FakeClient and scripted sessions.
 ## Known limitations
 
 - Live `./tw` verbs today are **`status` / `ensure` / `screen` / `stop` / `do` /
-  `send` / `read` / `history` / `watch` / `attach` / `menumap`**; `tw state` waits on a
+  `send` / `read` / `history` / `watch` / `attach` / `menumap` / `loops`**;
+  `tw state` waits on a
   `state_parser` port; `tw start` / `tw spectate` intentionally not wired yet.
   Remaining slices in
   [`WO-P2-OPS-VERB-SURFACE.md`](workorders/WO-P2-OPS-VERB-SURFACE.md) land one WO at a time.

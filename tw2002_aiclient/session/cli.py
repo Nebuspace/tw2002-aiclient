@@ -493,6 +493,66 @@ def cmd_menumap(args):
     return 0
 
 
+def cmd_loops(args):
+    """WO-P2-G3: read-only listing of the taught-macro ("learned loop") store.
+
+    Daemon-free by canon -- ``canon/architecture/cli-verbs.md:36-38`` lists
+    ``loops`` among the reads that "read on-disk artifacts directly, so they
+    work with the daemon stopped". So there is no socket round trip here and
+    no ``--run-dir``: nothing this verb reports comes from the session, and a
+    run-dir flag would imply the listing depends on which daemon is up.
+
+    Deliberately thin. ``loops/store.read_loop_store`` decides what is TRUE
+    and ``loops/list_view.format_loops_report`` decides how it READS; this
+    function chooses only the exit code. No store logic lives here -- a
+    second opinion about what an empty store means is exactly the drift the
+    engine-first split exists to prevent, and the in-TUI Learned-Loops
+    Library is meant to share the same composer.
+
+    Exit code -- the one decision this wire makes, and it follows the
+    reader's ``status``, never the row count:
+
+    * ``unreadable`` -> **1**. Nothing was established, so a scripted caller
+      must never be able to read "no loops" out of a store nobody could
+      read; ``tw loops || echo none`` is the shape that would otherwise lie
+      silently.
+    * ``partial``    -> **0**. The listing genuinely succeeded for the
+      documents it could read: the rows are real, and the report already
+      carries INCOMPLETE plus a named reason per failure -- strictly more
+      than an exit code can carry.
+    * ``ok`` (populated, empty, or never-written) -> **0**.
+
+    Canon does not rule on that mapping (``cli-verbs.md``'s catalog stops at
+    args and actor-class), so it is an evaluator UX call, recorded here so a
+    later canon ruling has something explicit to overturn. It matches
+    ``cmd_menumap``'s shape: non-zero when the report itself failed, zero
+    when only a part of it is unavailable AND says so on the surface.
+
+    Drafts are inert until a human promotes them
+    (``canon/engine/candidate-mining.md``), so they are consulted only on
+    explicit ``--include-drafts``, and the composer prefixes every draft row
+    ``[DRAFT]`` so an inert proposal can never read as an armed macro.
+    """
+    from tw2002_aiclient.loops.list_view import format_loops_report
+    from tw2002_aiclient.loops.store import read_loop_store
+
+    result = read_loop_store(include_drafts=bool(getattr(args, "include_drafts", False)))
+
+    if getattr(args, "json", False):
+        # The reader's result verbatim. No ``ok: True`` is synthesized over
+        # it: ``cmd_menumap`` can carry that flag because its report either
+        # builds or errors out, but here a success flag sitting next to
+        # ``status: partial``/``unreadable`` is the exact claim the verb did
+        # not earn. ``status`` is the field a caller branches on -- and it
+        # has to, because ``loops: []`` is structurally identical for an
+        # empty store and an unreadable one.
+        print(json.dumps(result))
+    else:
+        for line in format_loops_report(result):
+            print(line)
+    return 1 if result.get("status") == "unreadable" else 0
+
+
 def _arm_lossless_stdin():
     """Make ``sys.stdin`` park an undecodable byte as a PEP 383 surrogate
     instead of raising, and report whether stdin is now lossless.
@@ -1061,6 +1121,28 @@ def build_parser() -> argparse.ArgumentParser:
                      help="daemon run directory override (default: project-rooted run/)")
     sp.add_argument("--json", action="store_true", help="machine-parseable JSON output")
     sp.set_defaults(func=cmd_menumap)
+
+    sp = sub.add_parser(
+        "loops",
+        # ASCII, deliberately. `tw --help` prints every verb's help line
+        # through the terminal's own codec, so one non-ASCII glyph here
+        # raises UnicodeEncodeError instead of printing help on an ascii or
+        # latin-1 terminal -- the exposure `attach`'s help comment above
+        # records for the em-dashed verbs that shipped before it. Not
+        # widened here.
+        help=(
+            "list the learned-loop (taught-macro) store -- names, provenance, "
+            "profit metadata; reads state/skills directly, never sends"
+        ),
+    )
+    sp.add_argument(
+        "--include-drafts",
+        action="store_true",
+        dest="include_drafts",
+        help="also list mined drafts, tagged [DRAFT] (inert until a human promotes them)",
+    )
+    sp.add_argument("--json", action="store_true", help="machine-parseable JSON output")
+    sp.set_defaults(func=cmd_loops)
 
     return parser
 

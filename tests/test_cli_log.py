@@ -25,6 +25,9 @@ _SHIPPED_VERBS = frozenset(
         "watch",
         "attach",
         "menumap",
+        # WO-P2-G3 slice 2/2 -- `tw loops`, the daemon-free learned-loop
+        # listing. Behaviour: tests/test_cli_loops.py.
+        "loops",
     }
 )
 
@@ -42,6 +45,7 @@ def test_parser_shipped_verb_allowlist():
     watch = parser.parse_args(["watch"])
     attach = parser.parse_args(["attach"])
     menumap = parser.parse_args(["menumap", "--path", "x"])
+    loops = parser.parse_args(["loops"])
     assert status.func is cli.cmd_status
     assert ensure.func is cli.cmd_ensure
     assert screen.func is cli.cmd_screen
@@ -53,6 +57,7 @@ def test_parser_shipped_verb_allowlist():
     assert watch.func is cli.cmd_watch
     assert attach.func is cli.cmd_attach
     assert menumap.func is cli.cmd_menumap
+    assert loops.func is cli.cmd_loops
     # Subparser choices are exactly the live verb table.
     sub = next(
         a for a in parser._actions if getattr(a, "choices", None) is not None

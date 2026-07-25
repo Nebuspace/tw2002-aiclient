@@ -462,18 +462,32 @@ def test_real_mined_draft_reports_the_stat_it_actually_has():
 
 
 # --------------------------------------------------------------------------
-# The WO's honesty bar: the verb is not advertised until it is Accepted
+# The WO's honesty bar: the verb is advertised once, and only once, it runs
 # --------------------------------------------------------------------------
 
 
-def test_loops_stays_off_help_until_the_cli_wire_is_accepted():
-    """WO-P2-OPS-VERB-G-PREP: "keep `loops` / `autoloop` off `./tw --help`
-    until the matching slice Accepts". FLIP THIS TEST when the CLI wire
-    lands -- it is a deliberate tripwire on the unwired state, not a
-    permanent assertion that the verb should never exist."""
+def test_loops_is_on_help_now_that_the_cli_wire_landed():
+    """FLIPPED by WO-P2-G3 slice 2/2, as its own docstring instructed.
+
+    Until the wire landed this asserted ``"loop" not in help_text`` --
+    WO-P2-OPS-VERB-G-PREP's tripwire on the unwired state ("keep `loops` /
+    `autoloop` off `./tw --help` until the matching slice Accepts"), so that
+    ``./tw --help`` could never advertise a verb that did not run. It was
+    never a claim the verb should not exist, and leaving it pinning a
+    condition slice 2 makes false would have been a test certifying a lie in
+    the other direction.
+
+    ``autoloop`` (G4) is still unwired and stays off help -- asserted below,
+    so the flip does not quietly wave through the verb behind this one.
+    Behaviour lives in ``tests/test_cli_loops.py``; this stays the
+    advertised-surface pin.
+    """
     help_text = cli.build_parser().format_help()
 
-    # Pins the help text is real, so the absence below cannot pass vacuously
-    # on an empty/exploded render.
+    # Unchanged control leg: pins the help text is real, so neither the
+    # presence nor the absence below can pass vacuously on an empty or
+    # exploded render.
     assert "menumap" in help_text
-    assert "loop" not in help_text
+    assert "loops" in help_text
+    assert cli.build_parser().parse_args(["loops"]).func is cli.cmd_loops
+    assert "autoloop" not in help_text
