@@ -159,4 +159,9 @@ Source tip at audit: `922739b`. Product fixes: F1 CUT (CC ∥ 064) · F2 after F
 | SESSION-F8-WATCH-FRAME-GAP | `cli.py` `tw watch` swallows unparseable frames; `--frames N` counts only parsed | **BANKED** — invisible gap on corruption |
 | SESSION-AUDIT-COVERAGE-GAP | `classify.py` (634 lines) unaudited except secret-prompt regex; also unread: `credentials` · `env` · `iac` · `terminal` · `player_bank` | **BANKED** — future audit WO must not inherit false coverage |
 | SESSION-F5-INTERNAL-ERROR-STR | `daemon.py:76-77` widest catch returns `internal_error:{e}` (siblings type-name-only) | **🧑‍⚖️ Max** — DECISION-NEEDED; secrets leak UNVERIFIED; path disclosure VERIFIED |
+| SESSION-F1-ATTACH-SEND-KEY-BOOL | Interactive `tw attach` discarded `send_key` bool → silent ATTACHED black hole | **DONE** tip `7e13b7d` (was `4754dd4`) · `WO-AUDIT-ATTACH-SEND-KEY-BOOL` |
+| SESSION-F1-MICRO-SETTLE-NUDGE | `cli.py:249` discards `send_request("read")` dict | **BANKED** — benign settle-nudge; `ensure` at `:260` is checked gate |
+| SESSION-F1-MICRO-DOCSTRING | `cli.py:3-5` claims `tw watch` is **the** lifetime-stream exception | **BANKED** — false since attach holds a socket for session; one-line docs fix |
+| P5-064-STALE-INTERVENTION-PATH | Canon / archive tests cite `twclient/intervention_labels.py` | **BANKED** — live catalog is `cockpit/stopbanner.py` (`af62889`); archive path gone |
+| P5-064-SCREENS-BADGE-DOCSTRING | `screens.py` module docstring still says no dynamic App/Human mode badge | **BANKED** — stale vs 060 LIVE `control_seat` chip; hub cited ~`:713` (line may drift) |
 

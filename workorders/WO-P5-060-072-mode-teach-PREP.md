@@ -1,9 +1,9 @@
 # WO-P5-060…072 — Mode line, escalation & teach · PREP
 
-> Status: **PREP + 060/061 DONE · 064 EXECUTING · 062/066 STAGED** 2026-07-25 · kernel `d4a8829` · entry **`420430d`** · entry-APP **`7c0e882`** · seat `impl-aiclient-cursor`  
-> Phase: 5 · Type: PREP (inventory + tightened Accept/Proof) · Execute: hub HANDOFF `@ 12:00:25Z` → CC; **serialize ruling `@ 12:02:18Z`:** **064 → 062 → 066** (no ∥; `control_seat`/`screens` contention)  
+> Status: **PREP + 060/061 DONE · 064 DONE `af62889` · 062 EXECUTING · 066 STAGED** 2026-07-25 · kernel `d4a8829` · entry **`420430d`** · entry-APP **`7c0e882`** · seat `impl-aiclient-cursor`  
+> Phase: 5 · Type: PREP (inventory + tightened Accept/Proof) · Execute: hub HANDOFF `@ 12:00:25Z` → CC; **serialize ruling `@ 12:02:18Z`:** **064 → 062 → 066** (no ∥; `control_seat`/`screens` contention); **064 CLOSED** origin `af62889` · **062** in flight  
 > Canon: `canon/surfaces/mode-line-and-teach-controls.md` · `canon/architecture/control-and-escalation.md` · `canon/engine/ai-teacher.md` · `canon/architecture/app-autopilot-model.md` · `canon/engine/coverage-metrics.md` · `canon/engine/macros.md` · `canon/architecture/rule-macro-engine.md` · **ADR-002**  
-> Refs: `ULTRACODE-WO-INVENTORY.md` Phase-5 rows · Phase 4 CLOSED (`bba53d4`) · PWO-060 (`2ca3154`) · PWO-061 kernel (`d4a8829`) · **061-ENTRY `420430d`** · **Max Ruled Batch 1b:** Mode=Ctrl-A · attached `M`=Move · no printable Mode · **Batch 2/3:** `APP` chip · Spectate≠Mode · Ctrl-]@App-hold no-op · north-star SIGNED · log_note RETIRE · secrets never-live · entry chip=APP
+> Refs: `ULTRACODE-WO-INVENTORY.md` Phase-5 rows · Phase 4 CLOSED (`bba53d4`) · PWO-060 (`2ca3154`) · PWO-061 kernel (`d4a8829`) · **061-ENTRY `420430d`** · **Max Ruled Batch 1b:** Mode=Ctrl-A · attached `M`=Move · no printable Mode · **Batch 2/3:** `APP` chip · Spectate≠Mode · Ctrl-]@App-hold no-op · north-star SIGNED · log_note RETIRE · secrets never-live · entry chip=APP · **PWO-064 `af62889`**
 
 **No product edited in this OKF tick.** Inventory reflects **ruled contract** (ADR-002 + Batch 1b/2/3) and origin tip **`420430d`** (061-ENTRY; stacked log_note `4280d8a`). Do **not** scrub historical `log_note` doc mentions — they are the retire record.
 
@@ -40,9 +40,9 @@
 | Record (`R`) macro wire | **MISSING** | 067 · `macros.md` |
 | Assign-trigger (`T`) scaffold | **MISSING** | 068 · `rule-macro-engine.md` |
 | Analyze draft → human approve | **MISSING** | 070 |
-| STOP banner + typed reason codes | **EXECUTING** | 064 · hub HANDOFF; first in serialize queue |
+| STOP banner + typed reason codes | **DONE** | 064 · origin **`af62889`** (catalog-only · unknown→`?`/raw · Accept #3 chip/banner split → 065) |
 | Intervention → Human keyboard | **PARTIAL** | Attach path LIVE; STOP-driven handoff **MISSING** (065) |
-| Autopilot/Trainer arm UI | **STAGED** | 062 · after 064 (serialize `@ 12:02:18Z`) |
+| Autopilot/Trainer arm UI | **EXECUTING** | 062 · after 064 (serialize `@ 12:02:18Z`; CC in flight) |
 | Confirm-to-arm dialog | **MISSING** | 063 · mode-line confirm-gate |
 | N5 operate-the-app cluster | **MISSING** | 071; layout reserved control-strip left for N5 |
 | Coverage / auto meter (App-vs-Human) | **MISSING** | 072 · `coverage-metrics.md`; no live AI slice |
@@ -67,9 +67,9 @@
 - **Proof:** FakeClient/lock + chip flips + Move passthrough pin · origin `420430d` (log_note stack tip `4280d8a`).
 - **Hazards:** Do not steal 057 Ctrl-]. Do not loosen no-send tripwire. Esc≠detach.
 
-### PWO-062 — Autopilot/Trainer arm UI (EXTEND) — **STAGED** 2026-07-25 (HANDOFF `@ 12:00:25Z` · serialize after 064 `@ 12:02:18Z`)
+### PWO-062 — Autopilot/Trainer arm UI (EXTEND) — **EXECUTING** 2026-07-25 (serialize after 064 · hub GO `@ 12:56:02Z`)
 - **Depends-on:** 060 · 020 daemon
-- **Live state:** **STAGED** — after 064 lands; product seat owns build; docs stamp only here.
+- **Live state:** **EXECUTING** — product seat building now; docs stamp only here.
 - **Accept:** Arm/disarm taught autopilot is **separate** from actor badge; ON/OFF + write-back visible; no silent arm.
 - **Proof:** FakeClient/status round-trip · TTY indicator · isolated-worktree cert + STATUS SHA (Push waits Accept).
 - **Hazards:** Arm ≠ take Human lock.
@@ -80,12 +80,12 @@
 - **Proof:** Layer-A dialog compose · key matrix (y/N) · no silent arm inject.
 - **Hazards:** Loudest palette combo reserved for money/turns risk — match mode-line canon.
 
-### PWO-064 — STOP banner from reason codes (BUILD) — **EXECUTING** 2026-07-25 (hub HANDOFF `@ 12:00:25Z` → CC · first in serialize queue)
+### PWO-064 — STOP banner from reason codes (BUILD) — **DONE** 2026-07-25 (impl-claudecode-aiclient · tip **`af62889`**)
 - **Depends-on:** 060 · 020
-- **Live state:** **EXECUTING** — product seat building now; docs stamp only here.
-- **Accept:** STOP shows **typed** reason codes from control-and-escalation catalog only (no free-text invention); chip→Human; A/R/T affordances visible at halt (may stub wires until 066+).
-- **Proof:** Inject status/reason fixtures · catalog coverage table · no unknown code renders as invented prose · isolated cert + STATUS (Push waits Accept).
-- **Hazards:** Banner claims height ahead of optional panels; do not recolor GAME cells.
+- **Live state:** **CLOSED** on origin `af62889` — `cockpit/stopbanner.py` catalog + open resolver (`?`/raw passthrough) · `screens.py` / `layout.py` paint · Accept #3: Band-2 `[ HUMAN — YOU HAVE CONTROL ]` gated on `mode == "human"` (chip/banner unify = **065**).
+- **Accept:** STOP shows **typed** reason codes from control-and-escalation catalog only (no free-text invention); chip→Human deferred honestly to 065; A/R/T affordances visible at halt (may stub wires until 066+) — **met** on `af62889` per hub Accept.
+- **Proof:** Inject status/reason fixtures · catalog coverage table · no unknown code renders as invented prose · origin `af62889`.
+- **Hazards:** Banner claims height ahead of optional panels; do not recolor GAME cells. Catalog home is `cockpit/stopbanner.py` (not archive `twclient/intervention_labels.py`).
 
 ### PWO-065 — Intervention → Human keyboard (HARDEN)
 - **Depends-on:** 064 · 061
@@ -175,4 +175,4 @@ Pending (not blocking PREP Accept): DOC-GAP-M-FROM-SPECTATE · DOC-GAP-POST-DETA
 
 ## 5. Execute readiness
 
-**PWO-060 DONE** (`2ca3154`). **PWO-061 DONE** — kernel `d4a8829` + entry Accept #2 **`420430d`** (Mode=Ctrl-A; attached `M`=Move; ADR-002) · entry-APP **`7c0e882`**. log_note RETIRE `4280d8a` (historical mentions stay — retire record). **Serialize `@ 12:02:18Z`:** **064 EXECUTING** → **062 STAGED** → **066 STAGED** (no ∥; `control_seat`/`screens` contention). Also staged ⏳: 063 · 065 · 067–072. Named HOLD: OPEN-003 · F2 · G2–G4 Max-gated. Cursor docs: OKF status-truth only; no product `.py`.
+**PWO-060 DONE** (`2ca3154`). **PWO-061 DONE** — kernel `d4a8829` + entry Accept #2 **`420430d`** (Mode=Ctrl-A; attached `M`=Move; ADR-002) · entry-APP **`7c0e882`**. log_note RETIRE `4280d8a` (historical mentions stay — retire record). **Serialize:** **064 DONE `af62889`** → **062 EXECUTING** → **066 STAGED** (no ∥; `control_seat`/`screens` contention). Also staged ⏳: 063 · 065 · 067–072. Named HOLD: OPEN-003 · F2 · G2–G4 Max-gated. Cursor docs: OKF status-truth only; no product `.py`.
