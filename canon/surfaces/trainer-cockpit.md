@@ -422,7 +422,7 @@ Concretely, a builder should aim for:
   rejected). The anti-gold-plating is itself part of the taste — cut list: light theme, powerline
   separators, pane intro-stagger, full-grid marquee (`TUI-POLISH-PLAN.md`).
 
-# Implementation status (tip `2ca3154` · Phase 3 CLOSED · Phase 4 CLOSED · PWO-060 DONE)
+# Implementation status (tip `d4a8829` · Phase 3 CLOSED · Phase 4 CLOSED · PWO-060 DONE · PWO-061 KERNEL)
 
 | Band | Tip reality |
 |---|---|
@@ -432,7 +432,8 @@ Concretely, a builder should aim for:
 | Product watch-stream into play shell | **LIVE** subscribe (PWO-050) + snapshot→paint (PWO-052/053) |
 | Product in-cockpit spectate state | **LIVE** — muted `SPECTATE` chip + no-send tripwire (PWO-055); ops `tw spectate` still **F2 HOLD** |
 | Product attach / detach | **LIVE** — `M` attach · Ctrl-] detach · chip SPECTATE↔`MANUAL — YOU HAVE CONTROL` (PWO-056 · PWO-057 · tip `bba53d4`) |
-| App / Human dual chips (no AI-PILOT) | **LIVE** — `APP` XOR `MANUAL — YOU HAVE CONTROL` · strict gate · vocabulary AST (PWO-060 · tip `2ca3154`); App **wire-UNREACHABLE** until 061 App-hold |
+| App / Human dual chips (no AI-PILOT) | **LIVE** — `APP` XOR `MANUAL — YOU HAVE CONTROL` · strict gate · vocabulary AST (PWO-060 · tip `2ca3154`) |
+| App-hold → Human (`M`) | **LIVE** (PWO-061 KERNEL · `d4a8829` · test-only pins; existing 056 path) — Human→App entry **PARKED** (Max B′/C); full 061 **not CLOSED** |
 | Mode line teach A·R·T / STOP / arm / N5 / coverage | **NOT** — remaining Phase 5+ |
 | Coverage meter / chains library / formations | **NOT** on tip play shell (archive / later WOs) |
 

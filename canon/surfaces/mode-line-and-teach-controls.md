@@ -365,10 +365,11 @@ The reborn contract above is the target; the current code still carries pre-rebo
   `human → "MANUAL — YOU HAVE CONTROL"`, `spectate → "SPECTATE"`. Tip play shell (PWO-060 ·
   `2ca3154`) ships the reborn **App/Human dual** (`APP` XOR MANUAL) with an AST vocabulary gate —
   archive AI-PILOT remains port-source only.
-- **`M` does not yet toggle App↔Human on tip.** Product `M` is Spectate→Human attach (PWO-056);
-  App↔Human return is **061**. Archive `spectate_app._handle_key` cycles `ai_pilot ↔ spectate` —
-  port-source only. The reborn `M` is a single App↔Human switch with immediate, unrefusable
-  switch-to-Human (canon; product lands in 061).
+- **`M` does not yet fully toggle App↔Human on tip.** Product: Spectate→Human (PWO-056) and
+  App-hold→Human (PWO-061 KERNEL · `d4a8829`) are LIVE; Human→App entry is **PARKED** (Max B′/C —
+  do not intercept `M` while attached / TW Move). Archive `spectate_app._handle_key` cycles
+  `ai_pilot ↔ spectate` — port-source only. Canon’s single App↔Human `M` with immediate
+  switch-to-Human remains the target; product entry path awaits Max.
 - **`A`/`R`/`T` are not wired as the teach moves.** `spectate_app` binds `A` to *launch `tw attach`*
   (not Analyze), and `R` (Record) and `T` (Assign-Trigger) are absent from the key handler entirely;
   the `USERDOCS/aiclient_ui.md` sketch listed `A`/`R`/`T`/`M` but the teach loop behind them is not
@@ -377,8 +378,10 @@ The reborn contract above is the target; the current code still carries pre-rebo
   `"App {app} / AI {ai} · Hum {human}"` with a live `ai` (llm-pilot) count as a first-class slice.
   The reborn meter is **App-vs-Human live share** with live AI ≡ 0; any AI figure is a separate
   labeled teaching-provenance axis, not a live-drive slice.
-- **App chip wire-reachability.** Composer + `play.attached` plumbing are LIVE (060); on today's
-  Spectate↔Human loop the App state is **wire-UNREACHABLE** until 061 introduces App-hold.
+- **App chip wire-reachability.** Composer + `play.attached` plumbing are LIVE (060); App→Human via
+  `M` is proven (061 kernel). Human→App entry remains **PARKED** — on the Spectate↔Human loop the
+  App chip stays wire-UNREACHABLE until Max rules B′/C. Ctrl-] from App-hold is an unruled no-op
+  (pinned; see findings).
 
 # Citations
 
