@@ -49,3 +49,8 @@ workorders/drafts/
 
 # Research corpora (ClassicTW helpers, TWGS Windows binaries) — never commit
 research/raw/
+
+# Accidental root drops of TWGS Windows packages (move to research/raw/twgs/)
+/TWGS*.EXE
+/TWGS*.exe
+/TOOLS100.zip
