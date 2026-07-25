@@ -242,6 +242,30 @@ def app_label() -> str:
 
 
 def _safe_width(value: object) -> int:
+    """Best-effort coercion of ``width`` to a non-negative ``int`` column
+    count. A cleanly ``int()``-coercible value that lands **positive** is
+    returned as the coerced int (a float like ``3.7`` truncates toward zero
+    via plain ``int()``, same as ordinary Python). Every other shape --
+    zero, negative, or an outright unevaluable input -- degrades to ``0``.
+
+    The ``except Exception`` (not just ``TypeError``/``ValueError``) is
+    this module's own instance of the family-standard ``OverflowError``
+    widening already documented on ``goals.py``'s ``_safe_int``, ``hud.py``'s
+    own width coercion, and ``liveness.py``'s (WO-P3-038): ``int(value)``
+    calls ``value.__int__()``, and ``int(float("inf"))`` raises
+    ``OverflowError`` rather than ``ValueError`` -- a case JSON's default
+    ``allow_nan=True`` makes wire-reachable -- so a plain ``(TypeError,
+    ValueError)`` catch would leave a real gap here too.
+
+    Unlike ``_safe_spectating``/``_safe_attached`` above, there is no
+    direction to pick between two competing claims here: ``0`` is the
+    single claim-least reading for a width -- "this chip has no room to
+    render anything" -- so a garbage or raising ``value`` never gets to
+    claim more room than it can prove. ``_compose_segments`` below treats
+    any ``0`` the same way regardless of which path produced it (an
+    outright exception, or a cleanly-coerced non-positive int), returning
+    ``[]`` rather than guessing a fallback width. Never raises regardless
+    of ``value``'s type."""
     try:
         width = int(value)
     except Exception:
