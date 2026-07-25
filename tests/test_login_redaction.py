@@ -1,568 +1,1270 @@
-"""Cipher security gate (2026-07-20): sentinel-password redaction proof
-across the TW-02 `send_and_confirm` login/password swap (a2e99f6).
+"""Login-path credential redaction — the FAILURE half (WO-AUDIT-LOGIN-REDACTION-REHAB).
 
-Background: a2e99f6 replaced login.py's password send from a bare
-`session.send()` + idle-only `wait_settle()` to `settle.send_and_confirm`,
-which adds a NEW behavior vs the old path -- a settle-confirm buffer
-read-back after the send. This file proves a KNOWN SENTINEL password never
-lands in cleartext in any of:
-  (a) the session transcript log (twclient/logging_util.py)
-  (b) the send_and_confirm confirm-echo buffer read (twclient/settle.py)
-  (c) run_login's own return value / raised LoginError text (what
-      protocol.py's `_dispatch_ensure` folds straight into the CLI's JSON
-      response)
-  (d) a replay-ledger `record_do` entry -- proven EMPIRICALLY, not just by
-      reading source: drives the REAL `twclient.protocol.dispatch()` entry
-      point (the actual `tw ensure` call graph) end-to-end with a REAL
-      `twclient.ledger.LedgerWriter` wired to `server.ledger`, and confirms
-      zero ledger entries are ever written for the login/password flow --
-      `dispatch()`'s "ensure" branch (protocol.py:413-424) never calls
-      `_record_ledger` at all, only "do"/"send"/replay/trainer do (grep
-      confirms every `_record_ledger` call site; the empirical test proves
-      it by spying on `_record_ledger` directly AND by checking the ledger
-      file was never created). guardian.py's D9 reconnect-replay caller is
-      likewise ledger-free and funnels through the exact same
-      `run_login`/LoginError text this file proves sentinel-free (sink (c)).
-      A dedicated falsification proves this check is a real signal: it CAN
-      catch a leak, by simulating the hypothetical bug of ledgering a
-      password send with the secret flag forgotten.
+`session/login.py`'s module docstring makes a four-part claim in prose:
 
-**Methodology note (hub feedback, 2026-07-20): plain shell `grep` on a
-session transcript can be FALSE-CLEAN.** A transcript log can legitimately
-contain NUL/control/ANSI bytes (real RX traffic does), and GNU/BSD grep's
-standard `-I` flag (`--binary-files=without-match`: "treat a binary-
-looking file as never matching") makes a single NUL byte before the
-needle enough to silently report "no match" even when the needle IS
-present -- confirmed deterministically (`test_demonstrates_plain_grep_
-without_dash_a_is_a_false_negative_risk`): `grep -I -qF` exits 1
-(false-clean) on such a file while `grep -a -qF` exits 0. This is not
-hypothetical for this exact working environment either: Claude Code's own
-Bash-tool `grep` resolves to a shell FUNCTION (confirmed via `type grep`
-this session) that hardcodes `-I` on every invocation -- an operator who
-naively ran `grep <sentinel> logs/session-*.log` INTERACTIVELY inside a
-Claude Code session would be silently exposed to exactly this false
-negative. Every log-content check in this file therefore either uses
-Python-level `open(...).read()`/`open(..., "rb").read()` + `in` (a
-`subprocess.run(...)` call, and Python's own string/bytes containment,
-both bypass that shell function and any `-I`-style binary-skip heuristic
-entirely) or explicit `grep -a` via `_grep_a_contains()` -- never a bare
-interactive-shell `grep`.
+    "The password NEVER touches this module's return values, exceptions, or
+     any log call"
 
-`SentinelLoginSession` deliberately reuses the REAL
-`twclient.connection.TelnetConnection.send_text` (the actual secret/
-non-secret branch, connection.py:71-80) against a REAL
-`twclient.logging_util.TranscriptLogger` writing to a real tmp file --
-not a hand-mirrored approximation of that branch -- so the log-transcript
-assertions below exercise production code, not just this test's own idea
-of what it does.
+`tests/test_login.py` pins the transcript-log third of that on four *successful*
+or cleanly-refused arcs. Nothing collected pinned the **exceptions** third at
+all — this file was on `pytest.ini`'s banked-rehab ignore list still importing
+the deleted `twclient` package, so it looked like coverage while running zero
+tests. This is the rehab, and the exception sink is its centre.
+
+**Why every scenario here drives a real failure.** A sibling suite
+(`tests/test_attach_redaction.py`) is a good suite with a genuine falsification
+test, and it stayed 8/8 GREEN while the forbidden defect sat in the send
+*failure* path — because every one of its tests drives a *successful* send. A
+green suite says nothing about a path it never exercises. So the scenarios below
+are: a rejected password, a credential store that is malformed, one that is not
+valid UTF-8, one that cannot be read at all, a send that dies on the wire
+mid-password, an unrecognized screen after the password, the NEW branch's retry
+ceiling, and a store that fails on the *save* side rather than the read side.
+
+**The four sinks** each scenario is swept for:
+
+1. **return value** — `run_login`'s `(classification, steps)` tuple.
+2. **exception** — `LoginError` *and anything else that escapes `run_login`*,
+   rendered every way this codebase renders an exception (`str`, f-string,
+   `traceback.format_exception`, type name, and the `__cause__`/`__context__`
+   chain). Two of the scenarios below raise something that is NOT a
+   `LoginError` at all, which is exactly why the sweep is written against
+   "whatever escaped" rather than against a type.
+3. **transcript sinks** — the `TranscriptLogger` file (as text, as raw bytes,
+   and via `grep -a`), plus the live LOGS-band ring, `last_sent`, and the whole
+   JSON-dumped `status` / `ensure` wire response.
+4. **ledger sink** — there is no ledger module in the reborn tree
+   (`loops/store.py` says so outright), so a name-scoped assertion would prove
+   nothing about a sink that does not exist. Instead every byte the run left on
+   disk under its own tmp root is swept, minus the one sanctioned home
+   (`config/secrets.json`). Same claim without the name, and a ledger that
+   lands later is covered the day it first writes a file.
+
+**Canaries, not just the password.** A decoder's own text can carry document
+content, and the leak depends on the error's SHAPE rather than on the file:
+measured this session, `tomllib` renders a duplicate table as
+``Cannot declare ('canary_key',) twice`` — lifting a name straight out of the
+document — while a duplicate *key* renders ``Cannot overwrite a value`` and
+leaks nothing. `JSONDecodeError.doc` and `UnicodeDecodeError.object` hold the
+ENTIRE failed-to-parse file. `config/secrets.json` is parsed on `run_login`'s
+own path, so the store failures below plant a canary KEY and a canary VALUE
+(a sibling profile's stored credential) inside the failing document alongside
+the sentinel, and assert against all three.
+
+**Methodology note (carried forward from the archived suite).** A plain shell
+`grep` on a transcript can be FALSE-CLEAN: real RX traffic legitimately carries
+NUL/control bytes, and grep's `-I` ("treat a binary-looking file as never
+matching") makes one NUL ahead of the needle enough to report "no match". Every
+shell-level check here goes through `_grep_a_contains` (`grep -a -F`), and every
+in-process check uses Python containment on text AND on raw bytes.
 """
 
+from __future__ import annotations
+
+import contextlib
+import json
+import os
+import shutil
+import socket
 import subprocess
+import tempfile
+import threading
+import traceback
+from pathlib import Path
 
 import pytest
 
-from twclient import credentials, protocol
-from twclient.connection import TelnetConnection
-from twclient.ledger import LedgerWriter, read_entries
-from twclient.login import LoginError, _decide, run_login
-from twclient.logging_util import TranscriptLogger
-from twclient.settle import wait_for_settle
+from tw2002_aiclient.session import credentials, login, protocol
+from tw2002_aiclient.session.connection import TelnetConnection
+from tw2002_aiclient.session.session import Session
 
-from .conftest import FAKE_HOST, FAKE_PORT
-from .test_login import FakeProfile, _is, _is_secret
+from .fake_twgs import FakeTWGS
 
-SENTINEL = "S3NT1NEL_PW_xyz"
+# The credential under test. Deliberately does NOT contain the substring
+# "password": `classify.py`'s `login_password` gate anchor is exactly
+# `re.compile(r"password", re.I)` against the current prompt line, so a
+# sentinel containing it would change the automaton's own classification the
+# moment a server echoed it back (the echo scenario below).
+SENTINEL = "S3NT1NEL-LOGIN-PW-4d91c7"
+# A sibling profile inside the SAME secrets.json: the key names it, the value
+# is its stored credential. Both are document content, and a decoder message
+# that quotes the document quotes one of these long before it quotes the
+# profile actually being logged in.
+CANARY_KEY = "canary-sibling-profile-7b3e02"
+CANARY_VALUE = "canary-sibling-pw-9f4a15"
+
+# Every needle, for the sweeps. A store-failure scenario never sends the
+# password at all, so the canaries are what make those sweeps non-vacuous:
+# they are provably inside the document the decoder just choked on.
+NEEDLES = (SENTINEL, CANARY_KEY, CANARY_VALUE)
+
+PROFILE = "redaction"
+HANDLE = "AEGIS"
+GAME_LETTER = "F"
 
 
-def _grep_a_contains(path, needle):
-    """The non-vacuous shell-level absence/presence check: `grep -a`
-    (force-text) + `-F` (fixed string, no regex-metachar surprises) +
-    `-q` (exit-code only). See the module docstring's methodology note --
-    a bare `grep` can silently miss a real match in a control-byte-laden
-    transcript."""
-    result = subprocess.run(["grep", "-a", "-q", "-F", needle, str(path)])
-    return result.returncode == 0
+# ---------------------------------------------------------------------------
+# the credential store — real files, real failures
+# ---------------------------------------------------------------------------
 
 
-class _StubSocket:
-    """Discards every byte instead of touching a real network socket --
-    TelnetConnection.send_text() only ever calls `.sendall()` on it."""
+def _good_secrets_text() -> str:
+    """A well-formed store holding the sentinel plus the canary sibling."""
+    return json.dumps(
+        {
+            PROFILE: {"password": SENTINEL},
+            CANARY_KEY: {"password": CANARY_VALUE},
+        },
+        indent=2,
+    )
+
+
+def _malformed_secrets_text() -> str:
+    """Valid-looking JSON, truncated mid-object -- `json.load` raises
+    `JSONDecodeError`, whose `.doc` holds the whole document. Shaped so the
+    canary sits AFTER the sentinel and BEFORE the damage, i.e. a message that
+    quoted "the part it was reading" would quote a credential."""
+    return _good_secrets_text().rstrip()[:-2]
+
+
+def _non_utf8_secrets_bytes() -> bytes:
+    """The same well-formed document with a lone 0xFF appended.
+    `credentials.get_password` opens with `encoding="utf-8"`, so the decode
+    fails during the READ -- a `UnicodeDecodeError`, which is neither an
+    `OSError` nor a `JSONDecodeError`, and whose `.object` is the entire file."""
+    return _good_secrets_text().encode("utf-8") + b"\xff"
+
+
+def _write_secrets(cfg: Path, *, text: str | None = None, raw: bytes | None = None) -> Path:
+    """Write a real `secrets.json` at mode 0600 (doctrine: the secrets file is
+    created and re-asserted 0600 on every write) and return its path."""
+    path = cfg / "secrets.json"
+    path.write_bytes(raw if raw is not None else (text or "").encode("utf-8"))
+    os.chmod(path, 0o600)
+    return path
+
+
+@pytest.fixture
+def cfg(tmp_path, monkeypatch):
+    """A real config dir with `credentials`' module-level paths pointed at it.
+
+    Those globals are resolved at import time, so `TW_CONFIG_DIR` alone would
+    not move them in an already-imported process -- the same reason
+    `tests/test_daemon_internal_error_typename.py` monkeypatches the resolved
+    paths directly. `protocol._save_password` reads `credentials.SECRETS_PATH`
+    at call time too, so the write side follows this fixture as well.
+    """
+    d = tmp_path / "config"
+    d.mkdir()
+    monkeypatch.setattr(credentials, "CONFIG_DIR", d)
+    monkeypatch.setattr(credentials, "SECRETS_PATH", d / "secrets.json")
+    monkeypatch.setattr(credentials, "PROFILES_PATH", d / "profiles.toml")
+    monkeypatch.setattr(credentials, "SERVERS_PATH", d / "servers.toml")
+    return d
+
+
+# ---------------------------------------------------------------------------
+# the sinks
+# ---------------------------------------------------------------------------
+
+
+def _grep_a_contains(path, needle: str) -> bool:
+    """`grep -a` (force text) + `-F` (fixed string) + exit-code only. See the
+    module docstring: a bare `grep` can silently miss a real match in a
+    control-byte-laden transcript."""
+    return subprocess.run(["grep", "-a", "-q", "-F", "--", needle, str(path)]).returncode == 0
+
+
+def _transcript_logs(log_dir: Path) -> list[Path]:
+    logs = sorted(Path(log_dir).glob("session-*.log"))
+    assert logs, "expected the session to have written a transcript log"
+    return logs
+
+
+def _exception_renderings(exc: BaseException) -> dict[str, str]:
+    """Every way this codebase renders an exception, applied to whatever
+    escaped `run_login`.
+
+    `repr()` is deliberately NOT in this set, and that omission is a measured
+    decision rather than an oversight: `repr(UnicodeDecodeError)` renders
+    `args`, and `args[1]` is the ENTIRE undecodable file (proven by execution
+    in `test_residual_an_undecodable_store_still_carries_the_whole_document`).
+    Nothing on the login path reprs an exception today -- `daemon.py` puts
+    `type(e).__name__` on the wire and `traceback.format_exc()` in the
+    owner-only local log, and `guardian.py` renders `str(e)` for its typed
+    catch and a type name for its broad one -- so this set is what the product
+    can actually emit, and the residual is pinned separately.
+    """
+    chain: list[BaseException] = []
+    seen = set()
+    cur: BaseException | None = exc
+    while cur is not None and id(cur) not in seen:
+        seen.add(id(cur))
+        chain.append(cur)
+        cur = cur.__cause__ or cur.__context__
+    return {
+        "str(exc)": str(exc),
+        'f"{exc}"': f"{exc}",
+        "type(exc).__name__": type(exc).__name__,
+        "exc.__cause__/__context__ chain": " | ".join(str(e) for e in chain),
+        "traceback.format_exception": "".join(
+            traceback.format_exception(type(exc), exc, exc.__traceback__)
+        ),
+    }
+
+
+def _live_sinks(session, server=None) -> dict[str, str]:
+    """The in-process carriers a ledger row (or a cockpit poll) is built from:
+    the LOGS-band ring, the TX `last_sent` triple, the recent-history ring, and
+    the WHOLE json-dumped `status` response -- swept as one blob rather than
+    field by field, because a field-scoped absence assert only ever proves that
+    one field is clean."""
+    status = protocol.dispatch(session, "status", {}, server or _BareServer())
+    return {
+        "session.tail (LOGS band)": json.dumps(session.tail.snapshot()),
+        "session.last_sent": json.dumps(
+            [session.last_sent, session.last_sender, session.last_sent_secret]
+        ),
+        "session.history": json.dumps(session.history),
+        "status verb (whole response)": json.dumps(status),
+        "build_response (whole response)": json.dumps(protocol.build_response(session)),
+    }
+
+
+def _transcript_sinks(log_dir: Path) -> dict[str, str]:
+    sinks = {}
+    for path in _transcript_logs(log_dir):
+        raw = path.read_bytes()
+        sinks[f"transcript text {path.name}"] = raw.decode("utf-8", errors="replace")
+        # A bytes-level check catches an escaped/partial form that a decoded
+        # read could smooth over; `latin-1` is total, so nothing is dropped.
+        sinks[f"transcript bytes {path.name}"] = raw.decode("latin-1")
+    return sinks
+
+
+def _on_disk_sinks(root: Path, sanctioned: Path) -> dict[str, str]:
+    """Every byte this run left on disk under `root`, EXCEPT the one sanctioned
+    home for a credential.
+
+    The honest stand-in for the archived suite's replay-LEDGER sink: there is no
+    ledger module in the reborn tree, so a name-scoped assertion would prove
+    nothing about a sink that does not exist yet. Sweeping whatever the run
+    actually wrote makes the same claim without the name -- and a ledger landing
+    later is covered the day it first writes a file, with no edit here.
+    """
+    sanctioned = sanctioned.resolve()
+    sinks = {}
+    for path in sorted(Path(root).rglob("*")):
+        if not path.is_file() or path.resolve() == sanctioned:
+            continue
+        try:
+            sinks[f"on-disk {path.relative_to(root)}"] = path.read_bytes().decode("latin-1")
+        except OSError:
+            # An unreadable file is one this run could not have written a
+            # secret into either (the chmod-000 scenario plants exactly one).
+            continue
+    return sinks
+
+
+def _assert_absent(sinks: dict[str, str], needles=NEEDLES):
+    for name, text in sinks.items():
+        for needle in needles:
+            assert needle not in text, f"credential material leaked into {name}"
+
+
+def _assert_transcript_marker_fired(log_dir: Path, expected: int | None = None):
+    """The non-vacuity bookend for every transcript assertion in this file: an
+    absence alone cannot tell "properly redacted" from "this path never logged
+    anything at all" -- a dead call site would pass just as silently."""
+    body = "".join(p.read_text(encoding="utf-8", errors="replace") for p in _transcript_logs(log_dir))
+    count = body.count("secret input redacted")
+    if expected is None:
+        assert count >= 1, "no redaction marker fired -- the secret send never happened"
+    else:
+        assert count == expected, f"expected {expected} redaction markers, got {count}"
+
+
+class _BareServer:
+    """No `control_lock` / `watch_hub` -- `protocol.py`'s status branch reads
+    both via `getattr(..., None)`, and `_driving_dispatch` treats a missing
+    lock as unrestricted. Same convention as the identically-named local
+    fixtures in `tests/test_attach_redaction.py` / `tests/test_transcript_tail.py`
+    (separate classes in separate modules -- no cross-file coupling)."""
+
+
+# ---------------------------------------------------------------------------
+# a scripted server that starts AT the password gate
+# ---------------------------------------------------------------------------
+
+
+class _ScriptedTWGS:
+    """A minimal single-connection scripted telnet server, local to this file.
+
+    NOT a replacement for `tests/fake_twgs.py`. That harness scripts the whole
+    6-screen cold-start arc, which is the right shape for proving the automaton
+    -- and `tests/test_login.py` already does. Every scenario HERE begins at the
+    password gate instead, because the pre-login prefix costs ~3.5s per test and
+    exercises nothing this file proves. Starting mid-flow is legitimate rather
+    than a shortcut: `run_login` is reactive (it re-classifies the CURRENT
+    screen every iteration), which is precisely what
+    `tests/test_login_resume.py` proves.
+
+    A step is `(send, read)`: `send` is the screen text (or a callable handed
+    the last line read, for the echo scenario), `read` says whether to consume a
+    CRLF-terminated reply before moving on. Screens carry the same leading
+    `ESC[2J ESC[H` a real TWGS door's redraw discipline provides -- without it
+    pyte accumulates every screen forever and stale scrollback re-matches the
+    automaton's nuisance regexes (both failure shapes are documented at
+    `fake_twgs.py`'s own `_send`).
+    """
+
+    def __init__(self, script, host: str = "127.0.0.1"):
+        self._script = list(script)
+        self.host = host
+        self.received: list[str] = []
+        self.errors: list[str] = []
+        self._listener: socket.socket | None = None
+        self._port: int | None = None
+        self._conn: socket.socket | None = None
+        self._thread: threading.Thread | None = None
+        self._stop = threading.Event()
+
+    @property
+    def port(self) -> int:
+        if self._port is None:
+            raise RuntimeError("_ScriptedTWGS not started")
+        return self._port
+
+    def __enter__(self) -> "_ScriptedTWGS":
+        self._listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self._listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        self._listener.bind((self.host, 0))
+        self._listener.listen(1)
+        self._port = self._listener.getsockname()[1]
+        self._thread = threading.Thread(target=self._serve, daemon=True)
+        self._thread.start()
+        return self
+
+    def __exit__(self, *exc_info):
+        self._stop.set()
+        for sock in (self._listener, self._conn):
+            if sock is None:
+                continue
+            with contextlib.suppress(OSError):
+                sock.shutdown(socket.SHUT_RDWR)
+            with contextlib.suppress(OSError):
+                sock.close()
+        if self._thread is not None:
+            self._thread.join(timeout=5.0)
+
+    def _serve(self):
+        try:
+            conn, _addr = self._listener.accept()
+        except OSError:
+            return
+        self._conn = conn
+        buf = bytearray()
+        last = ""
+        try:
+            for send, read in self._script:
+                text = send(last) if callable(send) else send
+                if text is not None:
+                    conn.sendall(("\x1b[2J\x1b[H" + text).encode("cp437", errors="replace"))
+                if not read:
+                    continue
+                while b"\r\n" not in buf:
+                    chunk = conn.recv(4096)
+                    if not chunk:
+                        raise ConnectionError("peer closed")
+                    buf.extend(chunk)
+                line, _, rest = bytes(buf).partition(b"\r\n")
+                buf = bytearray(rest)
+                last = line.decode("cp437", errors="replace")
+                self.received.append(last)
+            while not self._stop.is_set():  # hold the connection open and quiet
+                if not conn.recv(4096):
+                    return
+        except (ConnectionError, OSError):
+            return
+        except Exception as e:  # noqa: BLE001 -- a script bug must surface, never vanish
+            self.errors.append(f"{type(e).__name__}: {e}")
+
+
+_PASSWORD_SCREEN = "Password?"
+_MAIN_COMMAND_SCREEN = "Command [TL=00:00:00]:[24146] (?=Help)? :"
+_CHAR_CREATE_SCREEN = (
+    "You were not found in the player database.\r\n"
+    "Would you like to start a new character in this game?  (Type Y or N)"
+)
+
+
+@contextlib.contextmanager
+def _session_against(port: int, log_dir: Path):
+    """A real `Session` over a real loopback socket -- no mocked session."""
+    session = Session("127.0.0.1", port, PROFILE, str(log_dir))
+    session.start(timeout=10)
+    try:
+        yield session
+    finally:
+        session.close()
+
+
+def _profile(**kw) -> login.LoginProfile:
+    kw.setdefault("name", PROFILE)
+    kw.setdefault("handle", HANDLE)
+    kw.setdefault("game_letter", GAME_LETTER)
+    return login.LoginProfile(**kw)
+
+
+def _run(session, *, get_password=None, save_password=None, allow_register=False, **kw):
+    """Drive the REAL `run_login` with the REAL live wiring by default --
+    `credentials.get_password` (env-first, then the chmod-600 store) and
+    `protocol._save_password`, exactly what `protocol._dispatch_ensure` and
+    `daemon.main()` inject. A scenario that needs to observe or perturb one of
+    them passes its own."""
+    return login.run_login(
+        session,
+        _profile(allow_register=allow_register, **kw),
+        get_password=get_password or credentials.get_password,
+        save_password=save_password or protocol._save_password,
+    )
+
+
+# ---------------------------------------------------------------------------
+# 1. the green control -- the full cold-start arc, real store, every sink
+# ---------------------------------------------------------------------------
+
+
+def test_successful_returning_login_keeps_the_credential_out_of_every_sink(cfg, tmp_path):
+    """The positive control the failure sweeps below are measured against: the
+    whole 6-screen cold-start arc through `tests/fake_twgs.py`, resolving the
+    sentinel out of a REAL chmod-600 `secrets.json` via the REAL
+    `credentials.get_password` -- not an injected closure."""
+    store = _write_secrets(cfg, text=_good_secrets_text())
+    fake = FakeTWGS(handle=HANDLE, game_letter=GAME_LETTER, password=SENTINEL, mode="returning")
+    logs = tmp_path / "logs"
+
+    with fake, _session_against(fake.port, logs) as session:
+        cls, steps = _run(session)
+        sinks = {
+            "run_login return value": json.dumps([cls, steps]),
+            **_live_sinks(session),
+        }
+        session.logger.close()
+        sinks.update(_transcript_sinks(logs))
+        sinks.update(_on_disk_sinks(tmp_path, store))
+
+    assert not fake.errors, fake.errors
+    assert cls == "main_command"
+    # Non-vacuity: the credential really did travel, so every absence below is
+    # about a sink that had something to redact.
+    assert fake.received_passwords == [SENTINEL]
+    assert store.read_text(encoding="utf-8").count(SENTINEL) == 1
+    _assert_absent(sinks)
+    _assert_transcript_marker_fired(logs, expected=1)
+    # The secret decision the LOGS-band ring consumed (and that any future
+    # ledger row would read back) really was live for this send -- so the
+    # redacted `last_sent` above is redaction, not an unset default.
+    assert session.last_sent == "<redacted>"
+    assert session.last_sent_secret is True
+    for path in _transcript_logs(logs):
+        assert _grep_a_contains(path, SENTINEL) is False
+
+
+# ---------------------------------------------------------------------------
+# 2. FAILURE -- the returning-flow rejection path
+# ---------------------------------------------------------------------------
+
+
+def test_rejected_password_keeps_the_credential_out_of_every_sink(cfg, tmp_path, monkeypatch):
+    """The server re-presents the SAME password gate after the single send --
+    canon's fail-fast, send-once rejection signal (`login-automaton.md`). The
+    automaton raises `returning_password_rejected` having sent the credential
+    exactly once, and none of the four sinks may carry it.
+
+    `_RETURNING_REJECT_SETTLE_S` is shortened from 2.5s to 0.3s: it is a
+    settle-grace BUDGET, not the behavior under test (the rejection still
+    requires the full `_STAGNANT_ROUNDS_LIMIT` rounds, and
+    `tests/test_login.py::test_wrong_saved_password_fails_fast_never_reaches_main_command`
+    pins the real timing against the real fake server)."""
+    monkeypatch.setattr(login, "_RETURNING_REJECT_SETTLE_S", 0.3)
+    store = _write_secrets(cfg, text=_good_secrets_text())
+    script = [(_PASSWORD_SCREEN, True), (_PASSWORD_SCREEN, False)]
+    logs = tmp_path / "logs"
+
+    with _ScriptedTWGS(script) as server, _session_against(server.port, logs) as session:
+        with pytest.raises(login.LoginError) as excinfo:
+            _run(session)
+        sinks = {
+            **_exception_renderings(excinfo.value),
+            **_live_sinks(session),
+        }
+        session.logger.close()
+        sinks.update(_transcript_sinks(logs))
+        sinks.update(_on_disk_sinks(tmp_path, store))
+
+    assert not server.errors, server.errors
+    assert "returning_password_rejected" in str(excinfo.value)
+    assert server.received == [SENTINEL]  # sent exactly once -- and it DID travel
+    _assert_absent(sinks)
+    _assert_transcript_marker_fired(logs, expected=1)
+    # The shell-level check on a FAILURE path too, not only on the green one:
+    # the transcript here carries real RX control bytes (the fake's own ANSI
+    # clear-and-home before every screen), which is exactly the file shape a
+    # bare `grep` would skip as "binary" and report falsely clean.
+    for path in _transcript_logs(logs):
+        assert b"\x1b" in path.read_bytes()
+        assert _grep_a_contains(path, SENTINEL) is False
+
+
+# ---------------------------------------------------------------------------
+# 3. FAILURE -- a store that was read fine, for a profile that has no entry
+# ---------------------------------------------------------------------------
+
+
+def test_no_saved_password_error_never_quotes_the_store_it_just_read(cfg, tmp_path):
+    """`returning_no_saved_password` embeds the profile name and handle. The
+    store WAS read successfully here and holds a sibling profile's credential,
+    so this is the shape where an error built from "what I found in the file"
+    would leak somebody else's password rather than the caller's."""
+    store = _write_secrets(cfg, text=json.dumps({CANARY_KEY: {"password": CANARY_VALUE}}))
+    logs = tmp_path / "logs"
+
+    with _ScriptedTWGS([(_PASSWORD_SCREEN, False)]) as server, _session_against(
+        server.port, logs
+    ) as session:
+        with pytest.raises(login.LoginError) as excinfo:
+            _run(session)
+        sinks = {**_exception_renderings(excinfo.value), **_live_sinks(session)}
+        session.logger.close()
+        sinks.update(_transcript_sinks(logs))
+        sinks.update(_on_disk_sinks(tmp_path, store))
+
+    assert "returning_no_saved_password" in str(excinfo.value)
+    assert server.received == []  # nothing was ever sent -- there was nothing to send
+    # Non-vacuity: the canary credential really is in the file that was read.
+    assert CANARY_VALUE in store.read_text(encoding="utf-8")
+    _assert_absent(sinks)
+
+
+# ---------------------------------------------------------------------------
+# 4-6. FAILURE -- the store itself fails, at the password gate
+# ---------------------------------------------------------------------------
+
+
+def _drive_store_failure(tmp_path, logs) -> tuple[BaseException, dict[str, str]]:
+    """Drive `run_login` to the password gate against whatever store the caller
+    planted, and return `(what escaped, every sink)`.
+
+    Nothing is caught by type here, because "whatever escapes" IS the claim
+    under test: `run_login`'s contract says it raises `LoginError`, and all
+    three of these paths break that contract with the credential store's own
+    exception -- two of which are not even an `OSError`, so no typed handler
+    between here and the daemon's widest catch sees them. Each CALLER pins the
+    exact type it expected immediately after, so an unrelated raise (a typo in
+    this file, say) cannot slip through this net and be swept as clean.
+    """
+    with _ScriptedTWGS([(_PASSWORD_SCREEN, False)]) as server, _session_against(
+        server.port, logs
+    ) as session:
+        with pytest.raises(BaseException) as excinfo:  # noqa: PT011 -- see the docstring
+            _run(session)
+        assert server.received == [], "the store failed before any send -- nothing may have gone out"
+        sinks = {**_exception_renderings(excinfo.value), **_live_sinks(session)}
+        session.logger.close()
+        sinks.update(_transcript_sinks(logs))
+    return excinfo.value, sinks
+
+
+def test_malformed_secrets_file_never_renders_the_document_it_failed_to_parse(cfg, tmp_path):
+    """A truncated `secrets.json`. `json.load` raises `JSONDecodeError`, whose
+    `.doc` attribute holds the ENTIRE file -- every profile's credential, not
+    just the one being logged in. The assertion is against the canary KEY and
+    the canary VALUE as well as the sentinel, because a decoder message that
+    quotes the document quotes whatever it was reading at the damage, which is
+    not necessarily the profile the caller asked for."""
+    store = _write_secrets(cfg, text=_malformed_secrets_text())
+    logs = tmp_path / "logs"
+    exc, sinks = _drive_store_failure(tmp_path, logs)
+    sinks.update(_on_disk_sinks(tmp_path, store))
+
+    assert isinstance(exc, json.JSONDecodeError)
+    # Non-vacuity, twice over: the exception really is carrying the document
+    # (so a renderer that reached for it WOULD leak), and the document really
+    # does contain all three needles.
+    assert all(needle in exc.doc for needle in NEEDLES)
+    assert all(needle in store.read_text(encoding="utf-8") for needle in NEEDLES)
+    _assert_absent(sinks)
+
+
+def test_non_utf8_secrets_file_never_renders_the_document_it_failed_to_decode(cfg, tmp_path):
+    """One 0xFF byte appended to a well-formed store. `credentials.get_password`
+    opens with `encoding="utf-8"`, so this fails in the READ, as a
+    `UnicodeDecodeError` -- neither an `OSError` nor a `JSONDecodeError`, i.e.
+    it escapes every typed handler between here and the daemon's widest catch.
+    `.object` holds the entire file."""
+    store = _write_secrets(cfg, raw=_non_utf8_secrets_bytes())
+    logs = tmp_path / "logs"
+    exc, sinks = _drive_store_failure(tmp_path, logs)
+    sinks.update(_on_disk_sinks(tmp_path, store))
+
+    assert isinstance(exc, UnicodeDecodeError)
+    assert all(needle.encode() in exc.object for needle in NEEDLES)
+    _assert_absent(sinks)
+
+
+@pytest.mark.skipif(
+    hasattr(os, "geteuid") and os.geteuid() == 0,
+    reason="root bypasses the 0000 mode, so the read would succeed and prove nothing",
+)
+def test_unreadable_secrets_file_never_renders_the_document_it_could_not_read(cfg, tmp_path):
+    """Mode 0000 on the FILE, with the config directory left readable so
+    `SECRETS_PATH.exists()` still answers True and the open is genuinely
+    attempted. A `PermissionError` escapes -- an `OSError`, so unlike the two
+    above it IS caught by `guardian.py`'s typed `except (OSError, LoginError)`,
+    which keeps `str(e)` on purpose. That message carries the store's PATH, not
+    its contents; the path's own disclosure is a separate, already-pinned
+    concern (`tests/test_daemon_internal_error_typename.py`), and the wire test
+    below re-proves it stays off the wire on this path too."""
+    store = _write_secrets(cfg, text=_good_secrets_text())
+    os.chmod(store, 0o000)
+    logs = tmp_path / "logs"
+    try:
+        exc, sinks = _drive_store_failure(tmp_path, logs)
+    finally:
+        os.chmod(store, 0o600)
+    sinks.update(_on_disk_sinks(tmp_path, store))
+
+    assert isinstance(exc, PermissionError)
+    assert all(needle in store.read_text(encoding="utf-8") for needle in NEEDLES)
+    _assert_absent(sinks)
+
+
+def test_residual_an_undecodable_store_still_carries_the_whole_document(cfg):
+    """HAZARD RECORD, not an approval.
+
+    Measured: the `UnicodeDecodeError` that escapes `credentials.get_password`
+    renders CLEAN through `str()` and through `traceback.format_exception()`
+    -- which is why the sweeps above pass and why nothing leaks on the daemon
+    path today -- but its `args[1]` IS the entire undecodable file, so `repr()`
+    and `f"{exc!r}"` render every credential in the store verbatim.
+
+    **The trap is that the obvious probe is the one that does NOT leak.** The
+    same store, malformed rather than undecodable, raises `JSONDecodeError`,
+    whose `args` is only its message: `repr()` there is clean, while `.doc`
+    still holds the whole file. So the exposure depends on the error's SHAPE,
+    not on the file -- exactly the asymmetry `credentials._load_toml_store`
+    already documents for `tomllib` (a duplicate TABLE quotes a key out of the
+    document; a duplicate KEY quotes nothing). Both halves are asserted below
+    so a future reader cannot check the cheap one and conclude "safe".
+
+    Pinned rather than left implicit for two reasons. It is what makes the
+    absence assertions above non-vacuous -- the document is right there in the
+    object; the guard is that nothing renders it that way. And it is one
+    `repr()` away from disclosure: `menu/crawl_driver.py` already writes
+    `repr(exc)` into a persisted status file and a log for its own broad catch,
+    harmless today only because the crawl path has no login wiring.
+
+    The fix, if this is closed, is the one `credentials._load_toml_store`
+    already applies to the TOML side: catch the decoder failure and re-raise a
+    typed error carrying a bounded `_decoder_detail` (type name + integer
+    offsets) instead of the exception that owns the document. `get_password`
+    has no such wrapper. Closing it should update THIS test.
+    """
+    _write_secrets(cfg, raw=_non_utf8_secrets_bytes())
+    with pytest.raises(UnicodeDecodeError) as excinfo:
+        credentials.get_password(PROFILE)
+
+    exc = excinfo.value
+    for needle in NEEDLES:
+        assert needle not in str(exc)
+        assert needle not in "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
+        assert needle in repr(exc), "if repr() stopped leaking, the hole was closed -- update this test"
+        assert needle in repr(exc.args)
+
+    # The half that does NOT leak through repr -- same store, different damage.
+    _write_secrets(cfg, text=_malformed_secrets_text())
+    with pytest.raises(json.JSONDecodeError) as excinfo:
+        credentials.get_password(PROFILE)
+
+    malformed = excinfo.value
+    for needle in NEEDLES:
+        assert needle not in repr(malformed), "repr is clean HERE -- do not generalize from it"
+        assert needle in malformed.doc, "...while the document is still on the exception"
+
+
+# ---------------------------------------------------------------------------
+# 7. FAILURE -- the send itself dies, mid-password
+# ---------------------------------------------------------------------------
+
+
+class _DeadSocket:
+    """A socket double whose `sendall` always raises, having transmitted
+    nothing. Same deterministic stand-in `tests/test_tx_record_honesty.py`
+    uses for the real broken pipe it separately proves against a live peer --
+    a genuine network failure would add nondeterminism without adding
+    evidence."""
 
     def __init__(self):
-        self.sent_bytes = []
+        self.attempts = []
 
     def sendall(self, data):
-        self.sent_bytes.append(data)
+        self.attempts.append(data)
+        raise BrokenPipeError(32, "Broken pipe")
+
+    # `Session.close()` reaches these during teardown; `TelnetConnection.close`
+    # only guards OSError, so a double missing them raises AttributeError out
+    # of the context manager and masks the result under test.
+    def shutdown(self, how):
+        pass
+
+    def close(self):
+        pass
 
 
-class SentinelLoginSession:
-    """`FakeLoginSession` (tests/test_login.py) with one change: `send()`
-    routes through the REAL `TelnetConnection.send_text` against a REAL
-    `TranscriptLogger`, instead of test_login.py's own bare
-    `self.sent.append((text, secret))` bookkeeping. Also records every
-    `render_text()` call's return value, so the settle-confirm buffer-read
-    sink (send_and_confirm's own regex-match path in settle.py) can be
-    grepped for the sentinel across the WHOLE run, not just reasoned about
-    from source."""
+def test_send_failure_during_the_password_step_keeps_the_credential_out_of_every_sink(cfg, tmp_path):
+    """The failure path that made a sibling suite blind: every one of ITS tests
+    drove a *successful* send, so a defect in the failure branch stayed green.
 
-    def __init__(self, steps, logger):
-        self.t = 0.0
-        self.rx_count = 0
-        self.last_rx = 0.0
-        self._steps = steps
-        self._i = 0
-        self.sent = []  # [(text, secret), ...] -- same bookkeeping shape as FakeLoginSession
-        self._pending_advance = False
-        self.last_sent = None
-        self.render_text_calls = []
-        self._conn = TelnetConnection(FAKE_HOST, FAKE_PORT, terminal=None, negotiator=None, logger=logger)
-        self._conn._sock = _StubSocket()
+    The socket is killed at the exact moment the credential is about to go out
+    -- from inside the `get_password` call, which `_decide` makes immediately
+    before returning the send action. `connection.send_text` then writes its
+    honest `TX-FAILED` record (`WO-AUDIT-TX-RECORD-HONESTY`) and re-raises, so
+    an `OSError` -- not a `LoginError` -- escapes `run_login`. The failure
+    record must be redacted exactly like a successful one: marker only, no
+    payload, no byte count."""
+    _write_secrets(cfg, text=_good_secrets_text())
+    logs = tmp_path / "logs"
+    dead = _DeadSocket()
 
-    # -- settle-detection protocol surface (matches Session) -------------
-    def clock(self):
-        return self.t
+    with _ScriptedTWGS([(_PASSWORD_SCREEN, False)]) as server, _session_against(
+        server.port, logs
+    ) as session:
 
-    def sleep(self, seconds):
-        self.t += seconds
-        if self._pending_advance:
-            self._pending_advance = False
-            if self._i < len(self._steps) - 1:
-                self._i += 1
-            self.rx_count += 1
-            self.last_rx = self.t
+        def kill_then_resolve(name):
+            session.conn._sock = dead
+            return credentials.get_password(name)
 
-    def render(self):
-        return self._steps[self._i]["screen"].split("\n")
+        with pytest.raises(OSError) as excinfo:
+            _run(session, get_password=kill_then_resolve)
+        sinks = {**_exception_renderings(excinfo.value), **_live_sinks(session)}
+        session.logger.close()
+        sinks.update(_transcript_sinks(logs))
+        sinks.update(_on_disk_sinks(tmp_path, credentials.SECRETS_PATH))
 
-    def render_text(self, rows=None):
-        text = "\n".join(rows) if rows is not None else self._steps[self._i]["screen"]
-        self.render_text_calls.append(text)
-        return text
-
-    def wait_settle(self, wait_prompt=None, timeout=8.0, debounce_ms=350):
-        result = wait_for_settle(self, wait_prompt=wait_prompt, timeout_s=timeout, debounce_ms=debounce_ms)
-        step = self._steps[self._i]
-        if step.get("auto_advance") and self._i < len(self._steps) - 1:
-            self._i += 1
-            self.rx_count += 1
-            self.last_rx = self.t
-        return result
-
-    # -- driving -----------------------------------------------------------
-    def send(self, text, enter=True, secret=False):
-        self.sent.append((text, secret))
-        step = self._steps[self._i]
-        if step.get("expect") is not None:
-            assert step["expect"](text, secret), f"step {self._i}: unexpected send {text!r} secret={secret!r}"
-        self._conn.send_text(text, enter=enter, secret=secret)  # REAL production code path
-        self.last_sent = "<redacted>" if secret else text
-        self._pending_advance = True
+    # Non-vacuity: the credential really was handed to the socket layer.
+    assert dead.attempts and SENTINEL.encode() in dead.attempts[0]
+    assert not isinstance(excinfo.value, login.LoginError)
+    _assert_absent(sinks)
+    body = "".join(p.read_text(encoding="utf-8", errors="replace") for p in _transcript_logs(logs))
+    assert "TX-FAILED" in body and "secret input redacted" in body
+    # No byte count on the failure record either -- a length is itself a leak
+    # (doctrine, invariant 2). `log_redacted` takes no content parameter, so
+    # this asserts the FAILED record went to that sink and not to `log_raw`.
+    assert f"{len(SENTINEL) + 2} bytes" not in body
 
 
-def _returning_login_steps(profile, password):
-    """Byte-for-byte the RETURNING-login script test_login.py's own
-    `test_returning_login_uses_saved_password_and_skips_registration`
-    already proves (tests/test_login.py:463-473), parametrized by
-    password value so this file can drive it with SENTINEL instead of a
-    literal test string."""
-    return [
-        {"screen": "Please enter your name (ENTER for none):", "expect": _is("")},
-        {"screen": "<F> Bob the Builder\nSelect a game :", "expect": _is(profile.game_letter)},
-        {"screen": "T - Play Trade Wars 2002\nI - Introduction & Help\nEnter your choice:", "expect": _is("T")},
-        {"screen": "What is your name?", "expect": _is(profile.handle)},
-        {"screen": "Use ANSI graphics?", "expect": _is("Y")},
-        {"screen": "Show today's log? (Y/N) [N]", "expect": _is("N")},
-        # No char_create prompt at all -- the handle WAS found (RETURNING).
-        {"screen": "Password?", "expect": _is_secret(password)},
-        {"screen": f"Hello {profile.handle}, welcome to:", "expect": None, "auto_advance": True},
-        {"screen": "Command [TL=00:00:00]:[24146] (?=Help)? :", "expect": None},
+# ---------------------------------------------------------------------------
+# 8-9. FAILURE -- the NEW branch: retry ceiling, and a save-side store failure
+# ---------------------------------------------------------------------------
+
+
+def test_new_branch_retry_exhaustion_keeps_the_credential_out_of_every_sink(cfg, tmp_path):
+    """The NEW-registration branch's bounded "didn't match" re-TYPE budget,
+    driven past its ceiling: the server keeps re-presenting the create/repeat
+    password screen until `password_retries_exhausted` fires.
+
+    The credential here is resolved from the real store (login.py's
+    `get_password(...) or _fresh_password()`), so the sentinel -- not an
+    unpredictable CSPRNG value -- is what is sent on all seven attempts and
+    what every sink is swept for."""
+    store = _write_secrets(cfg, text=_good_secrets_text())
+    rounds = login._MAX_PASSWORD_RETRIES + 1
+    script = [(_CHAR_CREATE_SCREEN, True)] + [
+        ("Please enter a password for this game account.\r\nPassword?", True) for _ in range(rounds)
     ]
+    logs = tmp_path / "logs"
 
+    with _ScriptedTWGS(script) as server, _session_against(server.port, logs) as session:
+        with pytest.raises(login.LoginError) as excinfo:
+            _run(session, allow_register=True)
+        sinks = {**_exception_renderings(excinfo.value), **_live_sinks(session)}
+        session.logger.close()
+        sinks.update(_transcript_sinks(logs))
+        sinks.update(_on_disk_sinks(tmp_path, store))
 
-def _run_returning_login(tmp_path, password=SENTINEL, log_dir=None):
-    logger = TranscriptLogger(str(log_dir or tmp_path))
-    profile = FakeProfile()
-    saved = {"default": password}
-    session = SentinelLoginSession(_returning_login_steps(profile, password), logger)
-    cls, taken = run_login(session, profile, get_password=lambda n: saved.get(n), save_password=lambda n, pw: None)
-    logger.close()
-    return session, logger, cls, taken
-
-
-def _run_returning_login_with_realistic_rx_noise(tmp_path, password=SENTINEL):
-    """Same as `_run_returning_login`, plus one extra REAL `log_raw("RX", ...)`
-    call injecting a NUL pad byte + an ANSI cursor-reposition escape --
-    a stand-in for the kind of post-login screen redraw a real TWGS server
-    legitimately sends -- so the resulting transcript is NOT pure ASCII
-    text, and a plain (non `-a`) `grep` absence-check would be unsafe
-    against it (see module docstring's methodology note)."""
-    logger = TranscriptLogger(str(tmp_path))
-    profile = FakeProfile()
-    saved = {"default": password}
-    session = SentinelLoginSession(_returning_login_steps(profile, password), logger)
-    cls, taken = run_login(session, profile, get_password=lambda n: saved.get(n), save_password=lambda n, pw: None)
-    logger.log_raw("RX", b"\x1b[2J\x1b[H\x00Welcome back, trader!\r\n")
-    logger.close()
-    return session, logger, cls, taken
-
-
-# -- (a) transcript log -----------------------------------------------------
-
-
-def test_green_sentinel_absent_from_log_transcript_with_redaction_on(tmp_path):
-    session, logger, cls, _taken = _run_returning_login(tmp_path)
-    assert cls == "main_command"
-    content = open(logger.path, encoding="utf-8").read()
-    assert SENTINEL not in content
-    # An "absence" assertion alone can't distinguish "properly redacted"
-    # from "this code path never ran / never logged anything at all" (a
-    # dead call site would pass just as silently) -- confirm log_redacted's
-    # own marker actually fired.
-    assert "secret input redacted" in content
-    # Also never present as a repr/escaped form (e.g. inside a bytes repr
-    # or partial-match fragment).
-    assert SENTINEL.encode() not in open(logger.path, "rb").read()
-
-
-# -- (b) settle-confirm buffer read -----------------------------------------
-
-
-def test_green_sentinel_absent_from_settle_confirm_buffer_reads(tmp_path):
-    session, _logger, cls, _taken = _run_returning_login(tmp_path)
-    assert cls == "main_command"
-    assert session.render_text_calls  # sanity: the run actually read screens
-    for text in session.render_text_calls:
-        assert SENTINEL not in text
-
-
-def test_login_password_step_passes_no_confirm_prompt_to_send_and_confirm():
-    """Point 4 of the gate, proven directly against the real `_decide`
-    (not inferred from reading login.py:428-468): the login_password
-    branch always returns `wait_hint=None`, so `send_and_confirm`'s ONLY
-    `render_text()`-for-regex-matching branch (settle.py:208-246, gated on
-    `confirm_prompt is not None`) is structurally never entered for a
-    password send -- it can only ever confirm via the idle+stability path
-    (settle.py:248-262), which never regex-matches or otherwise inspects
-    render_text() content at all."""
-    profile = FakeProfile()
-    state = {"registering": False, "password": None, "password_attempts": 0, "bank_draw": False}
-    send_text, secret, wait_hint = _decide(
-        "login_password",
-        "Password?",
-        "Password?",
-        profile,
-        state,
-        get_password=lambda n: SENTINEL,
-        save_password=lambda n, pw: None,
-        session=None,
-    )
-    assert send_text == SENTINEL
-    assert secret is True
-    assert wait_hint is None
-
-
-# -- (c) run_login return value / raised error text -------------------------
-
-
-def test_green_sentinel_absent_from_run_login_success_return_value(tmp_path):
-    _session, _logger, cls, taken = _run_returning_login(tmp_path)
-    assert SENTINEL not in cls
-    assert SENTINEL not in str(taken)
-
-
-def test_green_sentinel_absent_from_login_error_text_on_retry_exhaustion(tmp_path):
-    """Forces `password_retries_exhausted` with the sentinel active as the
-    RETURNING-branch saved credential, and checks the raised LoginError's
-    own text -- this is exactly what `_dispatch_ensure` (protocol.py:941-
-    945) folds verbatim into `resp["error"]`, the CLI's JSON response."""
-    profile = FakeProfile()
-    saved = {"default": SENTINEL}
-    # RETURNING branch: password re-sent every step (server keeps re-asking,
-    # e.g. a wrong/stale saved credential), never advancing past
-    # login_password -- exhausts _MAX_PASSWORD_RETRIES (6).
-    steps = [{"screen": "Password?", "expect": _is_secret(SENTINEL)}]
-    logger = TranscriptLogger(str(tmp_path))
-    session = SentinelLoginSession(steps, logger)
-    with pytest.raises(LoginError) as excinfo:
-        run_login(session, profile, get_password=lambda n: saved.get(n), save_password=lambda n, pw: None)
-    logger.close()
+    assert not server.errors, server.errors
     assert "password_retries_exhausted" in str(excinfo.value)
-    assert SENTINEL not in str(excinfo.value)
-    log_content = open(logger.path, encoding="utf-8").read()
-    assert SENTINEL not in log_content
+    assert server.received == ["Y"] + [SENTINEL] * login._MAX_PASSWORD_RETRIES
+    _assert_absent(sinks)
+    _assert_transcript_marker_fired(logs, expected=login._MAX_PASSWORD_RETRIES)
 
 
-def test_green_sentinel_absent_from_automaton_stuck_error_text(tmp_path):
-    """A DIFFERENT failure shape: the password send is confirmed, but the
-    NEXT screen is never recognized (automaton_stuck) -- the resulting
-    LoginError text embeds the CURRENT (unrecognized) screen's classification
-    and prompt (login.py:222), not the password step's, but this proves
-    that shape is sentinel-free too, in case a future unrecognized screen
-    ever echoes something server-controlled back at this stage."""
-    profile = FakeProfile()
-    saved = {"default": SENTINEL}
-    steps = [
-        {"screen": "Password?", "expect": _is_secret(SENTINEL)},
-        {"screen": "Some unrecognized post-login screen ###", "expect": None},
-    ]
-    logger = TranscriptLogger(str(tmp_path))
-    session = SentinelLoginSession(steps, logger)
-    with pytest.raises(LoginError) as excinfo:
-        run_login(session, profile, get_password=lambda n: saved.get(n), save_password=lambda n, pw: None)
-    logger.close()
+def test_malformed_store_on_the_SAVE_path_never_renders_the_document(cfg, tmp_path):
+    """The other half of the store's exposure: `protocol._save_password` --
+    the live writer `_dispatch_ensure` and `daemon.main()` inject -- reads the
+    existing `secrets.json` with `json.load` before merging. A malformed store
+    therefore raises on the WRITE side too, at a different call site from
+    `get_password`, and on the NEW branch this happens BEFORE the first send
+    (login.py saves the moment the value is chosen)."""
+    store = _write_secrets(cfg, text=_malformed_secrets_text())
+    logs = tmp_path / "logs"
+
+    with _ScriptedTWGS([(_CHAR_CREATE_SCREEN, True), (_PASSWORD_SCREEN, False)]) as server, (
+        _session_against(server.port, logs)
+    ) as session:
+        with pytest.raises(json.JSONDecodeError) as excinfo:
+            # get_password is injected here ONLY to make the value under test a
+            # known sentinel rather than a CSPRNG one; the failing call is the
+            # real `protocol._save_password` on the real malformed file.
+            _run(session, get_password=lambda name: SENTINEL, allow_register=True)
+        sinks = {**_exception_renderings(excinfo.value), **_live_sinks(session)}
+        session.logger.close()
+        sinks.update(_transcript_sinks(logs))
+        sinks.update(_on_disk_sinks(tmp_path, store))
+
+    assert server.received == ["Y"], "the save failed before the credential could be sent"
+    assert all(needle in excinfo.value.doc for needle in NEEDLES)
+    _assert_absent(sinks)
+
+
+def test_registration_refused_error_never_quotes_the_store_it_never_read(cfg, tmp_path):
+    """`registration_not_permitted` -- the char_create hard gate, raised before
+    a single byte goes out. The store is never even opened on this path, which
+    is precisely why it is worth sweeping: an error built by a future edit that
+    "helpfully" reported whether a credential exists would have to read it."""
+    store = _write_secrets(cfg, text=_good_secrets_text())
+    logs = tmp_path / "logs"
+
+    with _ScriptedTWGS([(_CHAR_CREATE_SCREEN, False)]) as server, _session_against(
+        server.port, logs
+    ) as session:
+        with pytest.raises(login.LoginError) as excinfo:
+            _run(session, allow_register=False)
+        sinks = {**_exception_renderings(excinfo.value), **_live_sinks(session)}
+        session.logger.close()
+        sinks.update(_transcript_sinks(logs))
+        sinks.update(_on_disk_sinks(tmp_path, store))
+
+    assert "registration_not_permitted" in str(excinfo.value)
+    assert server.received == []  # not even the "Y"
+    _assert_absent(sinks)
+
+
+def test_unconfirmed_password_sends_keep_the_credential_out_of_every_sink(cfg, tmp_path, monkeypatch):
+    """`automaton_send_unconfirmed`: the credential goes out, and the resulting
+    screen is never positively confirmed. Reachable only on the NEW branch --
+    RETURNING sends once and never re-sends, so its repeat lands on the
+    rejection path instead -- and it is the one error text carrying the SETTLE
+    layer's own `reason` alongside the classification and prompt.
+
+    Four secret sends, none confirmed, every one of which must still be
+    redacted: this is the shape where a "diagnostics on the unhappy path"
+    instinct would be most tempting. `_STEP_SETTLE_TIMEOUT_S` is shortened
+    because an unconfirmed send costs the FULL settle budget by definition."""
+    monkeypatch.setattr(login, "_STEP_SETTLE_TIMEOUT_S", 0.6)
+    store = _write_secrets(cfg, text=_good_secrets_text())
+    # The server answers char_create, presents the password prompt ONCE, then
+    # goes silent -- reading each re-send without ever painting a new screen,
+    # so no send can be confirmed.
+    script = [(_CHAR_CREATE_SCREEN, True), (_PASSWORD_SCREEN, True)] + [(None, True)] * 3
+    logs = tmp_path / "logs"
+
+    with _ScriptedTWGS(script) as server, _session_against(server.port, logs) as session:
+        with pytest.raises(login.LoginError) as excinfo:
+            _run(session, allow_register=True)
+        sinks = {**_exception_renderings(excinfo.value), **_live_sinks(session)}
+        session.logger.close()
+        sinks.update(_transcript_sinks(logs))
+        sinks.update(_on_disk_sinks(tmp_path, store))
+
+    assert "automaton_send_unconfirmed" in str(excinfo.value)
+    assert server.received == ["Y"] + [SENTINEL] * 4
+    _assert_absent(sinks)
+    _assert_transcript_marker_fired(logs, expected=4)
+
+
+# ---------------------------------------------------------------------------
+# 10-11. FAILURE -- an unrecognized screen after the password step
+# ---------------------------------------------------------------------------
+
+
+def test_automaton_stuck_after_the_password_step_keeps_the_credential_out_of_every_sink(
+    cfg, tmp_path, monkeypatch
+):
+    """`automaton_stuck` is the one `LoginError` that embeds server-controlled
+    text verbatim: `f"automaton_stuck:classification={cls!r}:prompt={prompt!r}"`,
+    which `_dispatch_ensure` folds straight into `resp["error"]`. Against a
+    server behaving as canon assumes (a password prompt suppresses echo), that
+    text is credential-free -- proven here rather than reasoned about.
+
+    `_STEP_SETTLE_TIMEOUT_S` is shortened because a silent server means each
+    stagnation round waits out the FULL settle budget (12s x 3). It is a
+    timing budget, not the behavior under test."""
+    monkeypatch.setattr(login, "_STEP_SETTLE_TIMEOUT_S", 1.0)
+    store = _write_secrets(cfg, text=_good_secrets_text())
+    script = [(_PASSWORD_SCREEN, True), ("Some unrecognized post-login screen ###", False)]
+    logs = tmp_path / "logs"
+
+    with _ScriptedTWGS(script) as server, _session_against(server.port, logs) as session:
+        with pytest.raises(login.LoginError) as excinfo:
+            _run(session)
+        sinks = {**_exception_renderings(excinfo.value), **_live_sinks(session)}
+        session.logger.close()
+        sinks.update(_transcript_sinks(logs))
+        sinks.update(_on_disk_sinks(tmp_path, store))
+
     assert "automaton_stuck" in str(excinfo.value)
-    assert SENTINEL not in str(excinfo.value)
+    assert server.received == [SENTINEL]
+    _assert_absent(sinks)
+    _assert_transcript_marker_fired(logs, expected=1)
 
 
-# -- MANDATORY falsification: prove the green results above are a real signal ----
+def test_residual_an_echoing_server_puts_the_typed_credential_into_the_error_text(
+    cfg, tmp_path, monkeypatch
+):
+    """HAZARD RECORD, not an approval.
+
+    Canon (`doctrine/secrets-and-credentials.md`, Code Divergence #1) states the
+    RX-side no-leak guarantee honestly: redaction is structural on TX only, and
+    the receive channel is transcribed verbatim, so the guarantee rests on the
+    telnet property that a password prompt suppresses echo. That divergence is
+    already recorded for the transcript file and for the live status verb.
+
+    This measures it on a THIRD surface canon does not yet name -- the login
+    automaton's own error text. When the server echoes the credential onto the
+    current prompt line and then stalls, the screen classifies `unknown`, the
+    stagnation ceiling fires, and `automaton_stuck` quotes that prompt line
+    verbatim; `_dispatch_ensure` folds the result into `resp["error"]`, which is
+    the CLI's JSON. So `login.py`'s module docstring ("The password NEVER
+    touches this module's ... exceptions") is not true of an echoing server.
+
+    Pinned so the boundary is visible rather than assumed, and so a future
+    reader knows this shape was driven rather than argued about. Reported, not
+    fixed: the fix is a scope call above this file (redact-or-omit the prompt in
+    the raised text), and it changes what the operator sees on every stuck
+    login, not just this one.
+    """
+    monkeypatch.setattr(login, "_STEP_SETTLE_TIMEOUT_S", 1.0)
+    _write_secrets(cfg, text=_good_secrets_text())
+    # Step 2 echoes back exactly what the client sent -- the one server
+    # behavior canon's RX guarantee assumes will never happen.
+    script = [(_PASSWORD_SCREEN, True), (lambda last: last, False)]
+    logs = tmp_path / "logs"
+
+    with _ScriptedTWGS(script) as server, _session_against(server.port, logs) as session:
+        with pytest.raises(login.LoginError) as excinfo:
+            _run(session)
+        session.logger.close()
+
+    assert server.received == [SENTINEL]
+    assert "automaton_stuck" in str(excinfo.value)
+    assert SENTINEL in str(excinfo.value), (
+        "if the error text is now credential-free on an echoing server, the "
+        "divergence was closed -- update this test"
+    )
+    # The TX side is still airtight even here: the send itself was redacted,
+    # and what reached the transcript came back from the server, on RX.
+    body = "".join(p.read_text(encoding="utf-8", errors="replace") for p in _transcript_logs(logs))
+    assert "secret input redacted" in body
+    assert "RX" in body
 
 
-def test_falsification_bypassed_redaction_leaks_sentinel_into_log_RED(tmp_path, monkeypatch):
-    """Temporarily patches `TelnetConnection.send_text` to take the
-    `log_raw` branch UNCONDITIONALLY -- as if connection.py:76's
-    `if secret:` redaction gate were removed/bypassed -- and confirms the
-    SAME scenario that was green above now goes RED (the sentinel appears
-    in the transcript log). A green test that can't be made to fail this
-    way would prove nothing. `monkeypatch` reverts this automatically at
-    teardown; twclient/connection.py is never edited on disk."""
-
-    def _leaky_send_text(self, text, enter=True, secret=False):
-        data = text.encode("utf-8", errors="replace")
-        if enter:
-            data += b"\r\n"
-        self.logger.log_raw("TX", data)  # BUG (simulated): redaction gate removed
-        self._sock.sendall(data)
-
-    monkeypatch.setattr(TelnetConnection, "send_text", _leaky_send_text)
-
-    session, logger, cls, _taken = _run_returning_login(tmp_path)
-    assert cls == "main_command"  # the login itself still completes identically
-    content = open(logger.path, encoding="utf-8").read()
-    assert SENTINEL in content  # RED: the leak is caught by this same test shape
-    # Confirm this is actually a *content* leak, not merely losing the
-    # redaction marker -- the raw password text is present verbatim.
-    secret_sends = [t for t, s in session.sent if s]
-    assert secret_sends == [SENTINEL]
-    assert SENTINEL in content
+# ---------------------------------------------------------------------------
+# 12. the wire -- a real daemon, a real unix socket, real store failures
+# ---------------------------------------------------------------------------
 
 
-def test_falsification_confirms_default_send_text_still_redacts(tmp_path):
-    """Sanity bookend to the RED test above: with NO monkeypatch, the
-    identical scenario is green again in the SAME test module/process --
-    proving the RED result above was caused by the monkeypatch, not by
-    process-wide state the previous test left behind."""
-    session, logger, cls, _taken = _run_returning_login(tmp_path)
-    assert cls == "main_command"
-    content = open(logger.path, encoding="utf-8").read()
-    assert SENTINEL not in content
-    assert "secret input redacted" in content
+class _Daemon:
+    """A real `ThreadingUnixServer` + `CommandHandler` + run-dir error log,
+    wired to a REAL telnet `Session` -- the same shape
+    `tests/test_daemon_internal_error_typename.py` uses, differing only in that
+    its session is real, because the claim here is about a real login driving a
+    real credential store.
 
+    Whether the store's exception reaches a client is a WIRE claim and cannot be
+    proven by calling `dispatch()` directly: the handler's widest catch is the
+    thing under test, and it lives one layer above `dispatch`."""
 
-# -- (a) transcript log, non-vacuous shell-level check (hub feedback) -------
-
-
-def test_demonstrates_plain_grep_without_dash_a_is_a_false_negative_risk(tmp_path):
-    """NOT a test of this project's code -- a grounding/documentation test
-    proving the hub's methodology flag is real and concretely identifying
-    its mechanism, so the `grep -a` usage below (and this module's
-    docstring) is justified rather than cargo-culted.
-
-    Root cause, confirmed against THIS session: Claude Code's own Bash
-    tool resolves `grep` to a shell FUNCTION (`type grep`), not the system
-    binary -- and that function hardcodes `-I` (`--binary-files=
-    without-match`, i.e. GNU/BSD grep's standard "treat a binary-looking
-    file as never matching" flag) on every invocation. A `subprocess.run`
-    call from Python (as `_grep_a_contains` uses, and as this test uses
-    below) bypasses that shell function entirely and calls the real `grep`
-    binary directly -- but an operator who instead typed `grep <sentinel>
-    logs/session-*.log` INTERACTIVELY inside a Claude Code Bash-tool
-    session would silently be running with `-I` baked in, and would miss
-    a real leak in any transcript containing a NUL/control byte (a
-    realistic occurrence -- see `_run_returning_login_with_realistic_rx_noise`).
-
-    Reproduced directly with the real `-I` flag (deterministic and
-    portable -- no dependency on any particular shell's function
-    definitions, ugrep vs GNU grep, or this specific host): a single NUL
-    byte ahead of the needle is enough to make `grep -I -qF` report "no
-    match" (returncode != 0) even though the needle IS present, while
-    `grep -a -qF` correctly reports a match (returncode == 0)."""
-    p = tmp_path / "synthetic_binary.log"
-    p.write_bytes(b"[RX]\x00" + SENTINEL.encode() + b"\r\n")
-
-    ignore_binary = subprocess.run(["grep", "-I", "-q", "-F", SENTINEL, str(p)])
-    forced_text = subprocess.run(["grep", "-a", "-q", "-F", SENTINEL, str(p)])
-
-    assert ignore_binary.returncode != 0  # false-clean: misses a needle that IS there
-    assert forced_text.returncode == 0  # -a correctly finds it
-    assert _grep_a_contains(p, SENTINEL) is True  # this file's own helper agrees
-
-
-def test_green_sentinel_absent_via_grep_a_non_vacuous_check(tmp_path):
-    """The real login-redaction transcript, re-verified with the
-    non-vacuous shell-level method (`grep -a -qF`) instead of (or in
-    addition to) the Python-level `open(...).read()` + `in` checks used
-    elsewhere in this file -- against a transcript deliberately made
-    non-ASCII (a NUL pad byte + ANSI cursor-reposition escape injected via
-    a REAL `log_raw("RX", ...)` call, standing in for a real post-login
-    screen redraw) so this isn't a vacuous pass against an all-ASCII file
-    that could never have tripped grep's binary-file heuristic either
-    way."""
-    session, logger, cls, _taken = _run_returning_login_with_realistic_rx_noise(tmp_path)
-    assert cls == "main_command"
-    raw = open(logger.path, "rb").read()
-    assert b"\x00" in raw  # sanity: the file really does contain binary-ish noise
-    assert _grep_a_contains(logger.path, SENTINEL) is False
-    assert "secret input redacted" in raw.decode("utf-8", errors="replace")
-
-
-# -- (d) replay-ledger `record_do` entry -- empirical proof ------------------
-
-
-class _EnsureFakeConn:
-    """Just enough of TelnetConnection's surface for `_dispatch_ensure`'s
-    `session.conn.connected` check (protocol.py:919) -- mirrors
-    conftest.py's own `_FakeConn`."""
-
-    def __init__(self):
-        self.connected = True
-
-
-class _EnsureFakeServer:
-    """Bare `server` double matching test_ensure_protocol.py's own
-    `FakeServer` convention (no `.control_lock` -- `_driving_dispatch`
-    treats that as unrestricted), plus a REAL `LedgerWriter` so this test
-    can prove the ledger sink empirically instead of by reading source."""
-
-    def __init__(self, ledger):
-        self.ledger = ledger
-
-
-class EnsureDispatchSentinelSession(SentinelLoginSession):
-    """`SentinelLoginSession` plus the extra surface
-    `protocol.dispatch()`/`build_response()`/`_dispatch_ensure()` need
-    beyond `run_login`'s own settle-detection protocol (`.conn.connected`,
-    `render_with_color()`, `cursor_pos()`, `record_history()`,
-    `mark_profile()`) -- so the `ensure` verb can be driven through the
-    REAL production `protocol.dispatch()` entry point end-to-end (the
-    actual `tw ensure` call graph), not just `run_login` in isolation."""
-
-    def __init__(self, steps, logger):
-        super().__init__(steps, logger)
-        self.host = FAKE_HOST
-        self.port = FAKE_PORT
-        self.name = None
-        self.conn = _EnsureFakeConn()
-        self.history = []
-        self.auto_login_profile = None
-
-    def render_with_color(self):
-        return self.render(), []
-
-    def cursor_pos(self):
-        return {"x": 0, "y": 0}
-
-    def record_history(self, verb, args, prompt, classification, settled_reason):
-        self.history.append(
-            {
-                "verb": verb,
-                "args": args,
-                "prompt": prompt,
-                "classification": classification,
-                "settled_reason": settled_reason,
-            }
+    def __init__(self, run_dir: Path, session):
+        from tw2002_aiclient.session.control_lock import ControlLock
+        from tw2002_aiclient.session.daemon import (
+            CommandHandler,
+            ThreadingUnixServer,
+            _open_error_log,
         )
 
-    def mark_profile(self, profile_name):
-        self.auto_login_profile = profile_name
+        self.run_dir = Path(run_dir)
+        self.sock_path = str(self.run_dir / "s.sock")
+        self.server = ThreadingUnixServer(self.sock_path, CommandHandler)
+        self.server.session = session
+        self.server.control_lock = ControlLock()
+        self.server.watch_hub = None
+        self.server.request_stop = lambda: None
+        self.error_log = _open_error_log(self.run_dir)
+        self.server.error_log = self.error_log
+        self._thread = threading.Thread(target=self.server.serve_forever, daemon=True)
+        self._thread.start()
+
+    def request(self, verb, args, timeout=30.0):
+        s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        s.settimeout(timeout)
+        s.connect(self.sock_path)
+        try:
+            s.sendall((json.dumps({"verb": verb, "args": args}) + "\n").encode("utf-8"))
+            buf = b""
+            while not buf.endswith(b"\n"):
+                chunk = s.recv(65536)
+                assert chunk, "daemon closed the connection instead of answering"
+                buf += chunk
+        finally:
+            s.close()
+        # The RAW frame too: disclosure is about every byte that crossed, not
+        # just the field a narrower assert would have scoped to.
+        return json.loads(buf.decode("utf-8")), buf.decode("utf-8")
+
+    def log_text(self) -> str:
+        from tw2002_aiclient.session.daemon import ERRLOG_NAME
+
+        path = self.run_dir / ERRLOG_NAME
+        return path.read_text(encoding="utf-8", errors="replace") if path.exists() else ""
+
+    def stop(self):
+        self.server.shutdown()
+        self.server.server_close()
+        self._thread.join(timeout=5)
+        self.error_log.close()
 
 
-def test_green_sentinel_absent_from_ledger_across_real_dispatch_ensure(tmp_path, monkeypatch):
-    """Empirical (not merely static) proof of sink (d): drives the REAL
-    `twclient.protocol.dispatch()` entry point for the "ensure" verb --
-    the actual production call graph a `tw ensure` CLI invocation goes
-    through -- with a REAL `twclient.ledger.LedgerWriter` wired to
-    `server.ledger`, and confirms zero ledger entries are EVER written for
-    the login/password flow. Two independent checks: (1) the ledger file
-    itself was never created at all (LedgerWriter.append() is the only
-    thing that ever writes to it), and (2) a direct spy on
-    `protocol._record_ledger` recorded zero calls."""
-    profiles_path = tmp_path / "profiles.toml"
-    profiles_path.write_text('[default]\nhost = "test.example"\nport = 2002\ngame_letter = "F"\nhandle = "AEGIS"\n')
-    monkeypatch.setattr(credentials, "PROFILES_PATH", profiles_path)
-    monkeypatch.setattr(credentials, "get_password", lambda name, secrets_path=None: SENTINEL)
-    save_calls = []
-    monkeypatch.setattr(
-        credentials, "save_password", lambda name, pw, secrets_path=None: save_calls.append((name, pw))
+@pytest.fixture
+def run_dir():
+    """A SHORT run-dir: pytest's `tmp_path` is long enough to blow AF_UNIX's
+    ~104-byte address limit, which is why conftest's own fake daemon and the F5
+    suite both use `mkdtemp`."""
+    d = tempfile.mkdtemp(prefix="twd-login-redact-")
+    try:
+        yield Path(d)
+    finally:
+        shutil.rmtree(d, ignore_errors=True)
+
+
+@pytest.mark.parametrize(
+    "label, kind",
+    [
+        ("malformed", "malformed"),
+        ("non-utf8", "non_utf8"),
+        ("unreadable", "unreadable"),
+    ],
+)
+def test_store_failures_never_reach_the_wire_or_the_local_error_log(
+    cfg, tmp_path, run_dir, label, kind
+):
+    """End-to-end over a real AF_UNIX socket: `tw ensure` against a store that
+    fails at the password gate. The escaping exception is neither a
+    `LoginError` (so `_dispatch_ensure` does not catch it) nor an `OSError` in
+    two of three cases, so it lands in `daemon.py`'s widest catch -- which puts
+    the TYPE NAME on the wire and `traceback.format_exc()` in the owner-only
+    local log.
+
+    Both are swept. The local-log half is the load-bearing one: `format_exc()`
+    is the only rendering on this path that COULD have carried the document,
+    and the exception is provably carrying it (see the residual test above)."""
+    if kind == "unreadable" and hasattr(os, "geteuid") and os.geteuid() == 0:
+        pytest.skip("root bypasses the 0000 mode")
+
+    if kind == "malformed":
+        store = _write_secrets(cfg, text=_malformed_secrets_text())
+    elif kind == "non_utf8":
+        store = _write_secrets(cfg, raw=_non_utf8_secrets_bytes())
+    else:
+        store = _write_secrets(cfg, text=_good_secrets_text())
+        os.chmod(store, 0o000)
+
+    logs = tmp_path / "logs"
+    try:
+        with _ScriptedTWGS([(_PASSWORD_SCREEN, False)]) as server, _session_against(
+            server.port, logs
+        ) as session:
+            (cfg / "profiles.toml").write_text(
+                f'[{PROFILE}]\nhost = "127.0.0.1"\nport = {server.port}\n'
+                f'game_letter = "{GAME_LETTER}"\nhandle = "{HANDLE}"\n',
+                encoding="utf-8",
+            )
+            daemon = _Daemon(run_dir, session)
+            try:
+                resp, raw = daemon.request("ensure", {"profile": PROFILE})
+                log_body = daemon.log_text()
+            finally:
+                daemon.stop()
+            session.logger.close()
+    finally:
+        os.chmod(store, 0o600)
+
+    assert resp["ok"] is False
+    prefix, _, payload = resp["error"].partition(":")
+    assert prefix == "internal_error"
+    assert payload.isidentifier(), f"a message rode the wire, not a type name: {payload!r}"
+    _assert_absent(
+        {
+            f"wire frame ({label})": raw,
+            f"local error log ({label})": log_body,
+            **_transcript_sinks(logs),
+            **_on_disk_sinks(tmp_path, store),
+        }
+    )
+    # Non-vacuity: the daemon really did handle a raise (the log has the frame
+    # chain), and the store really does hold all three needles.
+    assert "Traceback (most recent call last):" in log_body
+    os.chmod(store, 0o600)
+    # Bytes, not text: one of these three stores is deliberately not valid
+    # UTF-8, which is the whole point of that parametrization.
+    planted = store.read_bytes()
+    assert all(needle.encode() in planted for needle in NEEDLES)
+
+
+def test_a_rejected_password_never_reaches_the_wire(cfg, tmp_path, run_dir, monkeypatch):
+    """The rejection path again, this time through the REAL `ensure` verb over
+    a real socket. `_dispatch_ensure` catches `LoginError` and folds its text
+    into `resp["error"] = f"login_failed:{e}"` -- a structured, expected answer
+    rather than the widest catch, so this sweeps the shape an operator actually
+    sees when a saved credential has gone stale."""
+    monkeypatch.setattr(login, "_RETURNING_REJECT_SETTLE_S", 0.3)
+    store = _write_secrets(cfg, text=_good_secrets_text())
+    logs = tmp_path / "logs"
+
+    with _ScriptedTWGS([(_PASSWORD_SCREEN, True), (_PASSWORD_SCREEN, False)]) as server, (
+        _session_against(server.port, logs)
+    ) as session:
+        (cfg / "profiles.toml").write_text(
+            f'[{PROFILE}]\nhost = "127.0.0.1"\nport = {server.port}\n'
+            f'game_letter = "{GAME_LETTER}"\nhandle = "{HANDLE}"\n',
+            encoding="utf-8",
+        )
+        daemon = _Daemon(run_dir, session)
+        try:
+            resp, raw = daemon.request("ensure", {"profile": PROFILE})
+            log_body = daemon.log_text()
+        finally:
+            daemon.stop()
+        session.logger.close()
+
+    assert resp["ok"] is False
+    assert "login_failed:returning_password_rejected" in resp["error"]
+    assert server.received == [SENTINEL]  # it really was sent
+    _assert_absent(
+        {
+            "wire frame": raw,
+            "local error log": log_body,
+            **_transcript_sinks(logs),
+            **_on_disk_sinks(tmp_path, store),
+        }
     )
 
-    record_ledger_calls = []
-    real_record_ledger = protocol._record_ledger
 
-    def _spy_record_ledger(*args, **kwargs):
-        record_ledger_calls.append((args, kwargs))
-        return real_record_ledger(*args, **kwargs)
-
-    monkeypatch.setattr(protocol, "_record_ledger", _spy_record_ledger)
-
-    profile_for_script = credentials.load_profile("default")  # sanity: real profile load works
-    logger = TranscriptLogger(str(tmp_path / "logs"))
-    session = EnsureDispatchSentinelSession(_returning_login_steps(profile_for_script, SENTINEL), logger)
-
-    ledger_path = tmp_path / "state" / "ledger.jsonl"
-    server = _EnsureFakeServer(ledger=LedgerWriter(path=ledger_path))
-
-    resp = protocol.dispatch(session, "ensure", {"profile": "default"}, server)
-    logger.close()
-
-    assert resp["ok"] is True
-    assert resp["classification"] == "main_command"
-    assert record_ledger_calls == []  # (2): never called
-    assert not ledger_path.exists()  # (1): nothing was ever appended -- file never created
-    log_content = open(logger.path, encoding="utf-8").read()
-    assert SENTINEL not in log_content
+# ---------------------------------------------------------------------------
+# MANDATORY falsification -- inject the leak, in both directions
+# ---------------------------------------------------------------------------
 
 
-def test_ledger_record_do_redacts_secret_input_and_prompt(tmp_path):
-    """Floor check on ledger.py's OWN redaction, independent of the
-    "ensure never reaches it" finding above: if some OTHER verb
-    (do/send/replay/trainer) ever legitimately ledgers a secret-flagged
-    send, `record_do` redacts both `input` and `prompt` -- confirmed
-    against the REAL `LedgerWriter`/`read_entries`, not by reading source."""
-    ledger_path = tmp_path / "ledger.jsonl"
-    writer = LedgerWriter(path=ledger_path)
-    writer.record_do(
-        pre_text="Password?",
-        input_text=SENTINEL,
-        secret=True,
-        post_text="Command [TL=00:00:00]:[1] (?=Help)? :",
-        settled_class="main_command",
+def _leaky_log_tx(self, channel, data, secret, exc):
+    """`connection.py`'s `_log_tx` with the `if secret:` redaction choke
+    removed -- the single branch every send on both channels and BOTH outcomes
+    routes through. Patched in, never edited on disk; `monkeypatch` reverts at
+    teardown."""
+    if not self.logger:
+        return
+    from tw2002_aiclient.session.connection import _tx_direction
+
+    self.logger.log_raw(_tx_direction(channel, exc), data)
+
+
+def _drive_rejection(tmp_path, cfg):
+    """The rejection scenario, reusable by both falsification directions."""
+    _write_secrets(cfg, text=_good_secrets_text())
+    logs = tmp_path / "logs"
+    with _ScriptedTWGS([(_PASSWORD_SCREEN, True), (_PASSWORD_SCREEN, False)]) as server, (
+        _session_against(server.port, logs)
+    ) as session:
+        with pytest.raises(login.LoginError):
+            _run(session)
+        session.logger.close()
+    return logs, server
+
+
+def test_falsification_removing_the_redaction_choke_leaks_on_the_FAILURE_path_RED(
+    cfg, tmp_path, monkeypatch
+):
+    """The direction that matters most here. A sibling suite's falsification
+    passed while the defect sat in the failure branch, because every test it
+    ran drove a SUCCESSFUL send -- so this injects the defect and drives the
+    scenario that FAILS: a rejected password, ending in `LoginError`.
+
+    Without this, "the failure paths are clean" would rest on tests that have
+    never been shown capable of going red at all."""
+    monkeypatch.setattr(login, "_RETURNING_REJECT_SETTLE_S", 0.3)
+    monkeypatch.setattr(TelnetConnection, "_log_tx", _leaky_log_tx)
+    logs, server = _drive_rejection(tmp_path, cfg)
+
+    body = "".join(p.read_text(encoding="utf-8", errors="replace") for p in _transcript_logs(logs))
+    assert server.received == [SENTINEL]
+    assert SENTINEL in body  # RED: the leak is caught by this file's own sweep shape
+    assert "secret input redacted" not in body
+    with pytest.raises(AssertionError):
+        _assert_absent(_transcript_sinks(logs))
+
+
+def test_falsification_the_same_failure_path_is_green_again_once_the_choke_is_restored(
+    cfg, tmp_path, monkeypatch
+):
+    """Bookend to the RED test above, in the SAME module/process: with no
+    patch, the identical rejection scenario is clean -- so the red result was
+    caused by the injection, not by state a previous test left behind."""
+    monkeypatch.setattr(login, "_RETURNING_REJECT_SETTLE_S", 0.3)
+    logs, server = _drive_rejection(tmp_path, cfg)
+
+    assert server.received == [SENTINEL]
+    _assert_absent(_transcript_sinks(logs))
+    _assert_transcript_marker_fired(logs, expected=1)
+
+
+def test_falsification_removing_the_redaction_choke_leaks_on_the_SUCCESS_path_RED(
+    cfg, tmp_path, monkeypatch
+):
+    """The same injection against the green control, so the falsification
+    covers both the path that completes and the path that fails."""
+    monkeypatch.setattr(TelnetConnection, "_log_tx", _leaky_log_tx)
+    _write_secrets(cfg, text=_good_secrets_text())
+    fake = FakeTWGS(handle=HANDLE, game_letter=GAME_LETTER, password=SENTINEL, mode="returning")
+    logs = tmp_path / "logs"
+
+    with fake, _session_against(fake.port, logs) as session:
+        cls, _steps = _run(session)
+        session.logger.close()
+
+    assert cls == "main_command"  # the login still completes identically
+    body = "".join(p.read_text(encoding="utf-8", errors="replace") for p in _transcript_logs(logs))
+    assert SENTINEL in body
+    assert "secret input redacted" not in body
+
+
+def test_falsification_the_on_disk_sweep_can_actually_find_a_planted_credential(cfg, tmp_path):
+    """The ledger-sink stand-in has to be shown capable of failing: a sweep that
+    walks a tree and finds nothing proves nothing unless it would have found
+    something. Plants the sentinel in an ordinary file under the run's own tmp
+    root -- the shape a ledger row, a checkpoint, or a crash dump would take --
+    and confirms the sweep goes red, while the sanctioned store carrying the
+    same value stays exempt."""
+    store = _write_secrets(cfg, text=_good_secrets_text())
+    (tmp_path / "state").mkdir()
+    (tmp_path / "state" / "ledger.jsonl").write_text(
+        json.dumps({"input": SENTINEL, "prompt": "Password?"}) + "\n", encoding="utf-8"
     )
-    entries = read_entries(path=ledger_path)
-    assert len(entries) == 1
-    assert entries[0]["input"] == "<redacted>"
-    assert entries[0]["prompt"] == "<redacted>"
-    raw = open(ledger_path, encoding="utf-8").read()
-    assert SENTINEL not in raw
-    assert _grep_a_contains(ledger_path, SENTINEL) is False
 
+    with pytest.raises(AssertionError, match="ledger.jsonl"):
+        _assert_absent(_on_disk_sinks(tmp_path, store))
 
-def test_falsification_ledger_would_leak_sentinel_if_secret_flag_forgotten_RED(tmp_path):
-    """Falsification for the LEDGER sink specifically -- the one the hub
-    flagged as most likely to be missed. Simulates the hypothetical bug of
-    ledgering a password send WITHOUT the secret flag (`secret=False`) and
-    confirms the ledger file/`read_entries()` WOULD actually surface the
-    sentinel in that case -- proving the "ensure never reaches the ledger"
-    finding and the redaction check above are real signals, not artifacts
-    of a check that could never fail."""
-    ledger_path = tmp_path / "ledger.jsonl"
-    writer = LedgerWriter(path=ledger_path)
-    writer.record_do(
-        pre_text="Password?",
-        input_text=SENTINEL,
-        secret=False,  # BUG (simulated): secret flag forgotten/bypassed
-        post_text="Command [TL=00:00:00]:[1] (?=Help)? :",
-        settled_class="main_command",
-    )
-    entries = read_entries(path=ledger_path)
-    assert entries[0]["input"] == SENTINEL  # RED: the leak is caught
-    assert _grep_a_contains(ledger_path, SENTINEL) is True
+    # ...and the sanctioned store, holding the very same value, is exempt --
+    # otherwise every sweep in this file would be red for the wrong reason.
+    (tmp_path / "state" / "ledger.jsonl").unlink()
+    _assert_absent(_on_disk_sinks(tmp_path, store))
+    assert SENTINEL in store.read_text(encoding="utf-8")
