@@ -213,17 +213,19 @@ Banked hygiene (not a PWO id): **pty mid-flush settle** — PREP `workorders/WO-
 
 ### Phase 6 — APP autopilot + rule engine (backend-heavy)
 
+> PREP: `workorders/WO-P6-080-088-autopilot-PREP.md` (tip `5b848f0`) — classify LIVE; state_parser MISSING; 085/086 LIVE gated; 081–084/087–088 MISSING. Do not invent Phase-5 chrome.
+
 | ID | Title | Type | Depends | Goal | Accept | Proof | Canon |
 |----|-------|------|---------|------|--------|-------|-------|
-| PWO-080 | Screen class + state parse | verify/harden | 020 | Settled→{class,state} | fixtures green | pytest | screen-understanding |
-| PWO-081 | Guarded rule schema | build | 080 | when+guards→macro | load/store | unit | rule-macro-engine |
-| PWO-082 | Macro capture + replay halt | build | 067·081 | Divergence halts | test+live | macros |
-| PWO-083 | Autopilot loop stop-on-unknown | harden | 081·064 | Unknown→STOP | no guess send | unit+live | app-autopilot-model |
-| PWO-084 | Re-validate every cycle | harden | 083 | Multi-cycle re-match | halt on drift | unit | app-autopilot-model |
-| PWO-085 | Remove/replace MODE_AI_PILOT | harden | 060·083 | Finding closed or mode gone | no live ai sender | grep+tests | control divergence |
-| PWO-086 | Actor enum {app,human} only | harden | 025 | No `ai` live actor | ledger invariant | tests | conventions |
-| PWO-087 | Auto-haggle as guarded rule | harden | 081 | Built-in rule archetype | haggle tests | pytest+live | auto-haggle |
-| PWO-088 | Priority engine ranks taught only | harden | 081·034 | Never picks unknown screens | unit | priority-engine |
+| PWO-080 | Screen class + state parse — **PARTIAL** (classify LIVE; state_parser MISSING) | verify/harden | 020 | Settled→{class,state} | fixtures green | pytest | screen-understanding |
+| PWO-081 | Guarded rule schema — PREP | build | 080 | when+guards→macro | load/store | unit | rule-macro-engine |
+| PWO-082 | Macro capture + replay halt — PREP | build | 067·081 | Divergence halts | test+live | macros |
+| PWO-083 | Autopilot loop stop-on-unknown — PREP | harden | 081·064 | Unknown→STOP | no guess send | unit+live | app-autopilot-model |
+| PWO-084 | Re-validate every cycle — PREP | harden | 083 | Multi-cycle re-match | halt on drift | unit | app-autopilot-model |
+| PWO-085 | Remove/replace MODE_AI_PILOT **LIVE gated** (product; residual test rehab) | harden | 060·083 | Finding closed or mode gone | no live ai sender | grep+tests | control divergence |
+| PWO-086 | Actor enum {app,human} only **LIVE** (`VALID_SENDERS`) | harden | 025 | No `ai` live actor | ledger invariant | tests | conventions |
+| PWO-087 | Auto-haggle as guarded rule — PREP | harden | 081 | Built-in rule archetype | haggle tests | pytest+live | auto-haggle |
+| PWO-088 | Priority engine ranks taught only — PREP | harden | 081·034 | Never picks unknown screens | unit | priority-engine |
 
 ### Phase 7 — World stores & learning substrate
 

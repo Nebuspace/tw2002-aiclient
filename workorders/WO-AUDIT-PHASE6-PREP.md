@@ -1,8 +1,8 @@
 # WO-AUDIT-PHASE6-PREP — Tip inventory for PWO-080…088
 
-> Status: **DRAFT** 2026-07-25 · AUDIT-OKF-6LENS · tip `d4a8829`  
+> Status: **EXECUTED** 2026-07-25 · PREP file landed `WO-P6-080-088-autopilot-PREP.md` · inventory Phase-6 blurb  
 > Type: PREP docs · Priority: P2 · Lens: L1  
-> Refs: ULTRACODE Phase 6 · canon `app-autopilot-model` · `rule-macro-engine` · `screen-understanding`
+> Refs: ULTRACODE Phase 6 · tip `5b848f0` / product `d4a8829`
 
 ## Goal
 Produce a Phase-6 PREP (inventory + tightened Accept/Proof) mirroring Phase-5 PREP — tip LIVE/MISSING/PARTIAL for 080–088 — **without inventing product scope**.
