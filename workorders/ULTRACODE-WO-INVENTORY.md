@@ -154,7 +154,7 @@ Types: `bootstrap` · `verify` · `build` · `extend` · `harden` · `docs-findi
 | PWO-022 | Ensure `--no-auto-arm` | harden | 020 | Ensure never surprise-arms trainer | AP off after ensure flag | status | app-autopilot-model |
 | PWO-023 | Login NEW vs RETURNING | harden | 020 | Branches over secure store | both paths proven | live or fixture | login-automaton |
 | PWO-024 | Game-select recovery | harden | 020 | Stuck `game_select` recoverable | reach main_command | `tw do` / ensure | login-automaton |
-| PWO-025 | Control-lock + actor tag | harden | 020 | Every send tagged `{app,human}` | ledger rows actor∈{app,human} | ledger sample | control-and-escalation · trace-ledger |
+| PWO-025 | Control-lock + actor tag **PARTIAL** — lock+`VALID_SENDERS` LIVE; **LedgerWriter / attach ledger MISSING** (`daemon.py` deferred) | harden | 020 | Every send tagged `{app,human}` | ledger rows actor∈{app,human} | ledger sample | control-and-escalation · trace-ledger |
 | PWO-026 | Settle detection baseline | verify/harden | 020 | Prompt/idle/timeout settle | no false ready | unit+live | settle-detection |
 | PWO-027 | Reconnect + login replay **DONE** 2026-07-24 (`e1f189c` · SessionGuardian D9) | build | 020 | Drop sock recovers | spectate/play survive recycle | stop sock / kill | resilience-and-reconnect |
 | PWO-028 | Idle keepalive off on unsafe **DONE** 2026-07-24 (`4db92a1` · D10 `main_command`-only) | harden | 027 | Keepalive suppressed on unsafe screens | no keepalive on Option? | test | resilience… |
