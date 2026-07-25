@@ -1,11 +1,11 @@
 # WO-P5-060…072 — Mode line, escalation & teach · PREP
 
-> Status: **PREP + PWO-060 DONE + PWO-061 KERNEL DONE** 2026-07-25 · product tip `d4a8829` · seat `impl-aiclient-cursor` (OKF-STATUS-TRUTH-061-KERNEL)  
+> Status: **PREP + PWO-060 DONE + PWO-061 KERNEL DONE + 061-ENTRY Accept #2 CLOSING** 2026-07-25 · kernel `d4a8829` · entry product tip **TBD** (CC `WO-P5-061-ENTRY` mid-REVISE — amend SHA when `ls-remote` shows it) · seat `impl-aiclient-cursor`  
 > Phase: 5 · Type: PREP (inventory + tightened Accept/Proof) · Execute: hub HANDOFF to product seat after Accept  
-> Canon: `canon/surfaces/mode-line-and-teach-controls.md` · `canon/architecture/control-and-escalation.md` · `canon/engine/ai-teacher.md` · `canon/architecture/app-autopilot-model.md` · `canon/engine/coverage-metrics.md` · `canon/engine/macros.md` · `canon/architecture/rule-macro-engine.md`  
-> Refs: `ULTRACODE-WO-INVENTORY.md` Phase-5 rows · Phase 4 CLOSED (`bba53d4`) · PWO-060 (`2ca3154`) · PWO-061 kernel (`d4a8829`) · **Max Ruled Batch 1b:** Mode=Ctrl-A · attached `M`=Move · no printable Mode · **Batch 2/3:** `APP` chip · Spectate≠Mode · Ctrl-]@App-hold no-op · north-star SIGNED · log_note RETIRE · secrets never-live
+> Canon: `canon/surfaces/mode-line-and-teach-controls.md` · `canon/architecture/control-and-escalation.md` · `canon/engine/ai-teacher.md` · `canon/architecture/app-autopilot-model.md` · `canon/engine/coverage-metrics.md` · `canon/engine/macros.md` · `canon/architecture/rule-macro-engine.md` · **ADR-002**  
+> Refs: `ULTRACODE-WO-INVENTORY.md` Phase-5 rows · Phase 4 CLOSED (`bba53d4`) · PWO-060 (`2ca3154`) · PWO-061 kernel (`d4a8829`) · **Max Ruled Batch 1b:** Mode=Ctrl-A · attached `M`=Move · no printable Mode · **Batch 2/3:** `APP` chip · Spectate≠Mode · Ctrl-]@App-hold no-op · north-star SIGNED · log_note RETIRE · secrets never-live · entry chip=APP
 
-**No product edited in this OKF tick.** Live-state below is tip **`d4a8829`** unless a row still says MISSING/PARKED. **Do not read 061 as CLOSED** — kernel only.
+**No product edited in this OKF tick.** Inventory below reflects **ruled contract** (ADR-002 + Batch 1b/2/3). Product entry tip SHA = **TBD** until origin carries CC's 061-ENTRY tip — do not invent a landed SHA.
 
 ---
 
