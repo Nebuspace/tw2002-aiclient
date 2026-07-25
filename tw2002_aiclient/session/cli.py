@@ -1,10 +1,11 @@
 """``tw`` — the backend/ops CLI. Talks to ``twd`` over its unix socket.
 
 Most verbs are a single connect -> send JSON -> read JSON line -> disconnect
-round trip. ``tw watch`` is the exception: a lifetime ``subscribe`` stream
-(NDJSON settle-edge events) until ``--frames N`` or Ctrl-C (see canon
-`architecture/session-engine.md`). Verb table grows one WO at a time;
-``ensure``/``status`` land under WO-P2-020 -- APPEND new verbs to
+round trip. Lifetime socket holds are the exceptions: ``tw watch`` keeps a
+``subscribe`` stream open (NDJSON settle-edge events) until ``--frames N`` or
+Ctrl-C, and ``tw attach`` holds a session socket for interactive keystrokes
+(see canon `architecture/session-engine.md`). Verb table grows one WO at a
+time; ``ensure``/``status`` land under WO-P2-020 -- APPEND new verbs to
 ``build_parser()``, never rewrite an already-landed one.
 """
 
