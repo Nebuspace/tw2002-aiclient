@@ -1,24 +1,278 @@
-# servers.toml — public game-server catalog, tracked in git.
+# servers.toml — public TradeWars 2002 game-server catalog, tracked in git.
 #
-# A minimal, non-secret directory of known-public TradeWars 2002 servers.
-# Contains no credentials of any kind — just connection coordinates a
-# profile in your local, gitignored config/profiles.toml may reference.
+# Curated snapshot of known-public TWGS servers.  Contains NO credentials —
+# only connection coordinates (host / port) that anyone can look up from the
+# same public sources listed below.
 #
-# Greenfield-authored placeholder rows below; extend with real public
-# entries as they're curated. Fields:
-#   name        - display name for the server.
-#   host        - hostname or IP to connect to.
-#   port        - telnet port.
-#   description - short human-readable note about the server.
+# Sources (scraped 2026-07-25 UTC):
+#   microblaster  — microblaster.net Servers.aspx live-listing
+#   bbsguide      — telnetbbsguide.com TWGS software category
+#
+# Dedup rule: (host.lower(), port) is the canonical key.  When both sources
+# list the same endpoint the MicroBlaster display-name wins.  BBS Guide
+# entries unique to that list are included as-is.
+#
+# Telnet default port is 23; all other ports are explicit in the source data.
+# This file is a curated snapshot — entries go stale; it is NOT a liveness
+# probe.  Use it as a starting-point address book, not a guarantee of uptime.
+#
+# Fields
+#   name        — display name
+#   host        — hostname or IP
+#   port        — telnet port
+#   description — short note; includes source tag(s) and status=listed
 
-[servers.example_one]
-name = "Example Server One"
-host = "example.host"
+# ---------------------------------------------------------------------------
+# MicroBlaster live-listing  (19 entries — status=listed as of scrape date)
+# ---------------------------------------------------------------------------
+
+[servers.a_net_online]
+name = "A-Net Online"
+host = "game.a-net-online.lol"
 port = 2002
-description = "Placeholder public catalog entry — replace with a real server."
+description = "status=listed; sources=microblaster,bbsguide"
 
-[servers.example_two]
-name = "Example Server Two"
-host = "example2.host"
+[servers.abandoned_stardock]
+name = "Abandoned Stardock"
+host = "abandonedstardock.ddns.net"
+port = 2002
+description = "status=listed; sources=microblaster,bbsguide"
+
+[servers.academy_of_tradewars]
+name = "Academy of TradeWars"
+host = "tradewarsacademy.com"
+port = 2002
+description = "status=listed; sources=microblaster,bbsguide"
+
+[servers.constructive_chaos]
+name = "ConstructiveChaos TWGS"
+host = "conchaos.synchro.net"
+port = 2002
+description = "status=listed; sources=microblaster,bbsguide"
+
+[servers.error_404]
+name = "Error 404 BBS"
+host = "error404bbs.ddns.net"
+port = 24
+description = "status=listed; sources=microblaster,bbsguide"
+
+[servers.gone_rogue]
+name = "Gone Rogue"
+host = "roguetw.net"
+port = 2002
+description = "status=listed; sources=microblaster,bbsguide"
+
+[servers.joes_tavern]
+name = "Joes Tavern"
+host = "joestavern.ddns.net"
+port = 2002
+description = "status=listed; sources=microblaster,bbsguide (listed as NoWhere TWGS on bbsguide)"
+
+[servers.microblaster_network]
+name = "MicroBlaster Network"
+host = "twgs.microblaster.net"
+port = 2002
+description = "status=listed; sources=microblaster"
+
+[servers.moon_base_alpha]
+name = "Moon Base Alpha"
+host = "mba.dnsalias.com"
+port = 2002
+description = "status=listed; sources=microblaster,bbsguide"
+
+[servers.mtl_geek]
+name = "MTL Geek"
+host = "mtlgeek.synchro.net"
+port = 2002
+description = "status=listed; sources=microblaster,bbsguide"
+
+[servers.noverdu]
+name = "Noverdu"
+host = "noverdu.com"
+port = 2002
+description = "status=listed; sources=microblaster"
+
+[servers.orreli_bbs]
+name = "Orreli BBS"
+host = "bbs.orreli.net"
+port = 2002
+description = "status=listed; sources=microblaster"
+
+[servers.sector_31]
+name = "Sector 31"
+host = "sector31.lorfinglab.com"
+port = 2002
+description = "status=listed; sources=microblaster"
+
+[servers.star_killers_ice9]
+name = "Star Killer's Ice9"
+host = "sk-twgs.com"
+port = 2002
+description = "status=listed; sources=microblaster,bbsguide (bbsguide lists as Star Killer's TWGS and Viper's Pit TWGS — same endpoint)"
+
+[servers.city_on_the_edge]
+name = "The City on the Edge of Forever"
+host = "interzone.annexia.xyz"
+port = 2002
+description = "status=listed; sources=microblaster,bbsguide"
+
+[servers.third_age]
+name = "Third Age"
+host = "3rdagetwgs.freeddns.org"
+port = 2002
+description = "status=listed; sources=microblaster,bbsguide"
+
+[servers.thunder_storm]
+name = "Thunder Storm"
+host = "thunder-storm.ca"
+port = 52002
+description = "status=listed; sources=microblaster,bbsguide; non-standard port 52002"
+
+[servers.wildcats_castle]
+name = "Wildcat's Castle"
+host = "bbs.wccastle.net"
+port = 2424
+description = "status=listed; sources=microblaster; non-standard port 2424"
+
+[servers.worlds_apart]
+name = "Worlds Apart"
+host = "tw.worldsapart.net"
+port = 2002
+description = "status=listed; sources=microblaster,bbsguide"
+
+# ---------------------------------------------------------------------------
+# BBS Guide — additional entries not in MicroBlaster live listing
+# (status=listed_bbsguide — appeared in telnetbbsguide.com TWGS category)
+# ---------------------------------------------------------------------------
+
+[servers.brians_blog]
+name = "Brian's Blog TWGS"
+host = "tw2002.briancmoses.com"
 port = 23
-description = "Placeholder public catalog entry — replace with a real server."
+description = "status=listed_bbsguide; sources=bbsguide; telnet default port"
+
+[servers.cbaxyz]
+name = "Cbaxyz TWGS"
+host = "tdod.org"
+port = 2002
+description = "status=listed_bbsguide; sources=bbsguide"
+
+[servers.crusty_chicken]
+name = "Crusty Chicken TWGS"
+host = "stream.thecrustychicken.com"
+port = 23
+description = "status=listed_bbsguide; sources=bbsguide; telnet default port"
+
+[servers.darkmatters]
+name = "DarkMatter's TWGS"
+host = "twgs.geekm0nkey.com"
+port = 23
+description = "status=listed_bbsguide; sources=bbsguide; telnet default port; also appears in microblaster graveyard"
+
+[servers.desert_rats]
+name = "Desert Rats Sanctuary TWGS"
+host = "bbs.kn6q.org"
+port = 2002
+description = "status=listed_bbsguide; sources=bbsguide"
+
+[servers.furmen_services]
+name = "Furmen Services TWGS"
+host = "furmenservices.net"
+port = 2002
+description = "status=listed_bbsguide; sources=bbsguide"
+
+[servers.intergalactic_loading_dock]
+name = "Intergalactic Loading Dock TWGS"
+host = "ild-tw.com"
+port = 2002
+description = "status=listed_bbsguide; sources=bbsguide"
+
+[servers.internetkings]
+name = "Internetking's Tradewar 2002 Server"
+host = "tw.internetking.us"
+port = 23
+description = "status=listed_bbsguide; sources=bbsguide; telnet default port"
+
+[servers.interstellar]
+name = "Interstellar TWGS"
+host = "70.122.245.201"
+port = 2002
+description = "status=listed_bbsguide; sources=bbsguide; IP address endpoint"
+
+[servers.jumpstart]
+name = "Jumpstart TWGS"
+host = "exciter.ws"
+port = 2002
+description = "status=listed_bbsguide; sources=bbsguide"
+
+[servers.mark_van_daele]
+name = "Mark Van Daele's TWGS"
+host = "game.tw2002.net"
+port = 23
+description = "status=listed_bbsguide; sources=bbsguide; telnet default port; appears in microblaster graveyard as tw2002.net"
+
+[servers.memphis_tw]
+name = "Memphis TW TWGS"
+host = "bbs.memphistw.org"
+port = 2002
+description = "status=listed_bbsguide; sources=bbsguide"
+
+[servers.microblaster_twgs]
+name = "MicroBlaster TWGS"
+host = "microblaster.net"
+port = 2002
+description = "status=listed_bbsguide; sources=bbsguide; distinct endpoint from microblaster_network (twgs.microblaster.net)"
+
+[servers.mozys_swamp]
+name = "Mozy's Swamp and Red Dwarf TWGS"
+host = "bbs.mozysswamp.org"
+port = 24
+description = "status=listed_bbsguide; sources=bbsguide; port 24"
+
+[servers.netpoint]
+name = "Netpoint TWGS"
+host = "netpoint.webhop.me"
+port = 2002
+description = "status=listed_bbsguide; sources=bbsguide"
+
+[servers.neutral_zone]
+name = "Neutral Zone TWGS"
+host = "countsflix.com"
+port = 2002
+description = "status=listed_bbsguide; sources=bbsguide"
+
+[servers.outta_control_hackers]
+name = "Outta Control Hackers TWGS"
+host = "bbs.securesyncsolutions.com"
+port = 2002
+description = "status=listed_bbsguide; sources=bbsguide"
+
+[servers.pirates_cove]
+name = "Pirate's Cove TWGS"
+host = "38.188.130.43"
+port = 23
+description = "status=listed_bbsguide; sources=bbsguide; IP address endpoint; telnet default port"
+
+[servers.quest]
+name = "Quest TWGS"
+host = "thequesttwgs.game-host.org"
+port = 23
+description = "status=listed_bbsguide; sources=bbsguide; telnet default port; appears in microblaster graveyard"
+
+[servers.roysdon_net]
+name = "Roysdon.net TWGS"
+host = "tw2002.roysdon.net"
+port = 2002
+description = "status=listed_bbsguide; sources=bbsguide"
+
+[servers.sursum_corda]
+name = "Sursum Corda TWGS"
+host = "sursum-corda.com"
+port = 2002
+description = "status=listed_bbsguide; sources=bbsguide; microblaster graveyard has different endpoint bbs.sursum-corda.com:23"
+
+[servers.zot]
+name = "Zot TWGS"
+host = "tw2002.zot.org"
+port = 2002
+description = "status=listed_bbsguide; sources=bbsguide"

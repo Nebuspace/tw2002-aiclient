@@ -1,0 +1,648 @@
+{
+  "scraped_at_utc": "2026-07-25T00:00:00Z",
+  "telnet_default_port": 23,
+  "notes": "Union of MicroBlaster Servers.aspx live-listing and telnetbbsguide.com TWGS software category. Dead entries sourced from MicroBlaster server graveyard (type=dead query + individual ServerDetail pages). Dedup key: (host.lower(), port). MicroBlaster display-name preferred when both sources list the same endpoint.",
+  "sources": [
+    {
+      "id": "microblaster",
+      "name": "MicroBlaster.net — TWGS Server Directory",
+      "url": "http://www.microblaster.net/Servers.aspx",
+      "notes": "Live listing at Servers.aspx. Dead/graveyard entries accessed via type=dead query and individual ServerDetail pages (e.g. serverid=328 → artbatista.com:23)."
+    },
+    {
+      "id": "bbsguide",
+      "name": "Telnet BBS Guide — TWGS Software Category",
+      "url": "https://www.telnetbbsguide.com/bbs/software/twgs/",
+      "notes": "37 TWGS-tagged entries scraped. Port 23 applied as telnet default when source page omits port. Each entry has an individual detail URL."
+    }
+  ],
+  "community_forums": {
+    "manual_docs_url": "https://www.classictw.com/viewforum.php?f=7",
+    "helpers_scripts_url": "https://www.classictw.com/viewforum.php?f=15",
+    "notes": "ClassicTW.com is the primary community hub for TW2002 documentation and tooling. Forum f=7 (Manual / Docs) contains glossaries, wiki pointers, and newbie guides. Forum f=15 (Helpers & Scripts) has trainers, helper programs, and automation scripts — a future source for prompt/menu pattern mining. URLs omit session sid= parameter for durability. Not scraped in this inventory pass."
+  },
+  "servers": [
+    {
+      "name": "A-Net Online",
+      "host": "game.a-net-online.lol",
+      "port": 2002,
+      "status": "listed",
+      "sources": ["microblaster", "bbsguide"],
+      "notes": "BBSGuide also lists bbs.a-net.online:2002 and bbs.a-net.online:23 as alternate endpoints for same BBS."
+    },
+    {
+      "name": "Abandoned Stardock",
+      "host": "abandonedstardock.ddns.net",
+      "port": 2002,
+      "status": "listed",
+      "sources": ["microblaster", "bbsguide"]
+    },
+    {
+      "name": "Academy of TradeWars",
+      "host": "tradewarsacademy.com",
+      "port": 2002,
+      "status": "listed",
+      "sources": ["microblaster", "bbsguide"]
+    },
+    {
+      "name": "ConstructiveChaos TWGS",
+      "host": "conchaos.synchro.net",
+      "port": 2002,
+      "status": "listed",
+      "sources": ["microblaster", "bbsguide"]
+    },
+    {
+      "name": "Error 404 BBS",
+      "host": "error404bbs.ddns.net",
+      "port": 24,
+      "status": "listed",
+      "sources": ["microblaster", "bbsguide"]
+    },
+    {
+      "name": "Gone Rogue",
+      "host": "roguetw.net",
+      "port": 2002,
+      "status": "listed",
+      "sources": ["microblaster", "bbsguide"]
+    },
+    {
+      "name": "Joes Tavern",
+      "host": "joestavern.ddns.net",
+      "port": 2002,
+      "status": "listed",
+      "sources": ["microblaster", "bbsguide"],
+      "notes": "BBSGuide lists same endpoint as 'NoWhere TWGS'. MicroBlaster name wins per dedup rule."
+    },
+    {
+      "name": "MicroBlaster Network",
+      "host": "twgs.microblaster.net",
+      "port": 2002,
+      "status": "listed",
+      "sources": ["microblaster"]
+    },
+    {
+      "name": "Moon Base Alpha",
+      "host": "mba.dnsalias.com",
+      "port": 2002,
+      "status": "listed",
+      "sources": ["microblaster", "bbsguide"]
+    },
+    {
+      "name": "MTL Geek",
+      "host": "mtlgeek.synchro.net",
+      "port": 2002,
+      "status": "listed",
+      "sources": ["microblaster", "bbsguide"]
+    },
+    {
+      "name": "Noverdu",
+      "host": "noverdu.com",
+      "port": 2002,
+      "status": "listed",
+      "sources": ["microblaster"]
+    },
+    {
+      "name": "Orreli BBS",
+      "host": "bbs.orreli.net",
+      "port": 2002,
+      "status": "listed",
+      "sources": ["microblaster"]
+    },
+    {
+      "name": "Sector 31",
+      "host": "sector31.lorfinglab.com",
+      "port": 2002,
+      "status": "listed",
+      "sources": ["microblaster"]
+    },
+    {
+      "name": "Star Killer's Ice9",
+      "host": "sk-twgs.com",
+      "port": 2002,
+      "status": "listed",
+      "sources": ["microblaster", "bbsguide"],
+      "notes": "BBSGuide lists same endpoint twice: as 'Star Killer's TWGS' and 'Viper's Pit TWGS'. All three deduplicate to this single entry."
+    },
+    {
+      "name": "The City on the Edge of Forever",
+      "host": "interzone.annexia.xyz",
+      "port": 2002,
+      "status": "listed",
+      "sources": ["microblaster", "bbsguide"]
+    },
+    {
+      "name": "Third Age",
+      "host": "3rdagetwgs.freeddns.org",
+      "port": 2002,
+      "status": "listed",
+      "sources": ["microblaster", "bbsguide"]
+    },
+    {
+      "name": "Thunder Storm",
+      "host": "thunder-storm.ca",
+      "port": 52002,
+      "status": "listed",
+      "sources": ["microblaster", "bbsguide"],
+      "notes": "Non-standard port 52002."
+    },
+    {
+      "name": "Wildcat's Castle",
+      "host": "bbs.wccastle.net",
+      "port": 2424,
+      "status": "listed",
+      "sources": ["microblaster"],
+      "notes": "Non-standard port 2424."
+    },
+    {
+      "name": "Worlds Apart",
+      "host": "tw.worldsapart.net",
+      "port": 2002,
+      "status": "listed",
+      "sources": ["microblaster", "bbsguide"]
+    },
+    {
+      "name": "Brian's Blog TWGS",
+      "host": "tw2002.briancmoses.com",
+      "port": 23,
+      "status": "listed_bbsguide",
+      "sources": ["bbsguide"]
+    },
+    {
+      "name": "Cbaxyz TWGS",
+      "host": "tdod.org",
+      "port": 2002,
+      "status": "listed_bbsguide",
+      "sources": ["bbsguide"]
+    },
+    {
+      "name": "Crusty Chicken TWGS",
+      "host": "stream.thecrustychicken.com",
+      "port": 23,
+      "status": "listed_bbsguide",
+      "sources": ["bbsguide"]
+    },
+    {
+      "name": "DarkMatter's TWGS",
+      "host": "twgs.geekm0nkey.com",
+      "port": 23,
+      "status": "listed_bbsguide",
+      "sources": ["bbsguide"],
+      "notes": "Also appears in MicroBlaster graveyard — may be dead."
+    },
+    {
+      "name": "Desert Rats Sanctuary TWGS",
+      "host": "bbs.kn6q.org",
+      "port": 2002,
+      "status": "listed_bbsguide",
+      "sources": ["bbsguide"]
+    },
+    {
+      "name": "Furmen Services TWGS",
+      "host": "furmenservices.net",
+      "port": 2002,
+      "status": "listed_bbsguide",
+      "sources": ["bbsguide"]
+    },
+    {
+      "name": "Intergalactic Loading Dock TWGS",
+      "host": "ild-tw.com",
+      "port": 2002,
+      "status": "listed_bbsguide",
+      "sources": ["bbsguide"]
+    },
+    {
+      "name": "Internetking's Tradewar 2002 Server",
+      "host": "tw.internetking.us",
+      "port": 23,
+      "status": "listed_bbsguide",
+      "sources": ["bbsguide"]
+    },
+    {
+      "name": "Interstellar TWGS",
+      "host": "70.122.245.201",
+      "port": 2002,
+      "status": "listed_bbsguide",
+      "sources": ["bbsguide"],
+      "notes": "IP address endpoint — may rotate."
+    },
+    {
+      "name": "Jumpstart TWGS",
+      "host": "exciter.ws",
+      "port": 2002,
+      "status": "listed_bbsguide",
+      "sources": ["bbsguide"]
+    },
+    {
+      "name": "Mark Van Daele's TWGS",
+      "host": "game.tw2002.net",
+      "port": 23,
+      "status": "listed_bbsguide",
+      "sources": ["bbsguide"],
+      "notes": "MicroBlaster graveyard lists same host as 'tw2002.net' (dead)."
+    },
+    {
+      "name": "Memphis TW TWGS",
+      "host": "bbs.memphistw.org",
+      "port": 2002,
+      "status": "listed_bbsguide",
+      "sources": ["bbsguide"]
+    },
+    {
+      "name": "MicroBlaster TWGS",
+      "host": "microblaster.net",
+      "port": 2002,
+      "status": "listed_bbsguide",
+      "sources": ["bbsguide"],
+      "notes": "Distinct from MicroBlaster Network (twgs.microblaster.net:2002) which is in the MB live listing."
+    },
+    {
+      "name": "Mozy's Swamp and Red Dwarf TWGS",
+      "host": "bbs.mozysswamp.org",
+      "port": 24,
+      "status": "listed_bbsguide",
+      "sources": ["bbsguide"]
+    },
+    {
+      "name": "Netpoint TWGS",
+      "host": "netpoint.webhop.me",
+      "port": 2002,
+      "status": "listed_bbsguide",
+      "sources": ["bbsguide"]
+    },
+    {
+      "name": "Neutral Zone TWGS",
+      "host": "countsflix.com",
+      "port": 2002,
+      "status": "listed_bbsguide",
+      "sources": ["bbsguide"]
+    },
+    {
+      "name": "NoWhere TWGS",
+      "host": "joestavern.ddns.net",
+      "port": 2002,
+      "status": "listed_bbsguide",
+      "sources": ["bbsguide"],
+      "notes": "Deduped with MicroBlaster 'Joes Tavern' — same (host.lower(), port). Not a separate catalog entry; recorded here for inventory completeness."
+    },
+    {
+      "name": "Outta Control Hackers TWGS",
+      "host": "bbs.securesyncsolutions.com",
+      "port": 2002,
+      "status": "listed_bbsguide",
+      "sources": ["bbsguide"]
+    },
+    {
+      "name": "Pirate's Cove TWGS",
+      "host": "38.188.130.43",
+      "port": 23,
+      "status": "listed_bbsguide",
+      "sources": ["bbsguide"],
+      "notes": "IP address endpoint — may rotate."
+    },
+    {
+      "name": "Quest TWGS",
+      "host": "thequesttwgs.game-host.org",
+      "port": 23,
+      "status": "listed_bbsguide",
+      "sources": ["bbsguide"],
+      "notes": "Also appears in MicroBlaster graveyard (dead). BBSGuide listing kept."
+    },
+    {
+      "name": "Roysdon.net TWGS",
+      "host": "tw2002.roysdon.net",
+      "port": 2002,
+      "status": "listed_bbsguide",
+      "sources": ["bbsguide"]
+    },
+    {
+      "name": "Star Killer's TWGS",
+      "host": "sk-twgs.com",
+      "port": 2002,
+      "status": "listed_bbsguide",
+      "sources": ["bbsguide"],
+      "notes": "Deduped with MicroBlaster 'Star Killer's Ice9' — same endpoint. Not a separate catalog entry."
+    },
+    {
+      "name": "Sursum Corda TWGS",
+      "host": "sursum-corda.com",
+      "port": 2002,
+      "status": "listed_bbsguide",
+      "sources": ["bbsguide"],
+      "notes": "MicroBlaster graveyard has different endpoint: bbs.sursum-corda.com:23 (dead)."
+    },
+    {
+      "name": "Viper's Pit TWGS",
+      "host": "sk-twgs.com",
+      "port": 2002,
+      "status": "listed_bbsguide",
+      "sources": ["bbsguide"],
+      "notes": "Deduped with MicroBlaster 'Star Killer's Ice9' — same endpoint. Not a separate catalog entry."
+    },
+    {
+      "name": "Zot TWGS",
+      "host": "tw2002.zot.org",
+      "port": 2002,
+      "status": "listed_bbsguide",
+      "sources": ["bbsguide"]
+    },
+    {
+      "name": "(1987) Paranor BBS Tradewars 2002",
+      "host": "71.7.154.249",
+      "port": 2303,
+      "status": "dead",
+      "sources": ["microblaster"]
+    },
+    {
+      "name": "1 Lucky Nerd",
+      "host": "lkynrd73.synchro.net",
+      "port": 2002,
+      "status": "dead",
+      "sources": ["microblaster"]
+    },
+    {
+      "name": "A2K4",
+      "host": "a2k4.com",
+      "port": 2002,
+      "status": "dead",
+      "sources": ["microblaster"]
+    },
+    {
+      "name": "Adept BBS TWGS",
+      "host": "adeptbbs.com",
+      "port": 2002,
+      "status": "dead",
+      "sources": ["microblaster"]
+    },
+    {
+      "name": "Adept Online Ent.",
+      "host": "adeptbbs.com",
+      "port": 23,
+      "status": "dead",
+      "sources": ["microblaster"]
+    },
+    {
+      "name": "AlleyCat! BBS TWGS",
+      "host": "alleycat.synchro.net",
+      "port": 2002,
+      "status": "dead",
+      "sources": ["microblaster"]
+    },
+    {
+      "name": "Amiga Underground",
+      "host": "amigaunderground.com",
+      "port": 2002,
+      "status": "dead",
+      "sources": ["microblaster"]
+    },
+    {
+      "name": "Another TW2002 Server",
+      "host": "tw2002.silliman.net",
+      "port": 2002,
+      "status": "dead",
+      "sources": ["microblaster"]
+    },
+    {
+      "name": "Area 51",
+      "host": "gate.area51twgs.com",
+      "port": 2002,
+      "status": "dead",
+      "sources": ["microblaster"]
+    },
+    {
+      "name": "Area 51 TWGS",
+      "host": "area51twgs.ddns.net",
+      "port": 2002,
+      "status": "dead",
+      "sources": ["microblaster"]
+    },
+    {
+      "name": "Banshee County",
+      "host": "18.206.74.229",
+      "port": 23,
+      "status": "dead",
+      "sources": ["microblaster"]
+    },
+    {
+      "name": "Banshee County",
+      "host": "35.174.133.144",
+      "port": 2002,
+      "status": "dead",
+      "sources": ["microblaster"]
+    },
+    {
+      "name": "Battlestar twgs",
+      "host": "battlestarbbs.dyndns.org",
+      "port": 2002,
+      "status": "dead",
+      "sources": ["microblaster"]
+    },
+    {
+      "name": "BBS-Style Tradewars",
+      "host": "192.136.166.138",
+      "port": 23,
+      "status": "dead",
+      "sources": ["microblaster"]
+    },
+    {
+      "name": "Bento Box",
+      "host": "bentoboxbbs.com",
+      "port": 23,
+      "status": "dead",
+      "sources": ["microblaster"]
+    },
+    {
+      "name": "Bitterplace",
+      "host": "tradewars.bitterplace.com",
+      "port": 23232,
+      "status": "dead",
+      "sources": ["microblaster"]
+    },
+    {
+      "name": "Black Sun",
+      "host": "blacksun.synchro.net",
+      "port": 23,
+      "status": "dead",
+      "sources": ["microblaster"]
+    },
+    {
+      "name": "Blackfair's Manor",
+      "host": "blackf.synchro.net",
+      "port": 2002,
+      "status": "dead",
+      "sources": ["microblaster"]
+    },
+    {
+      "name": "Blast From The Past",
+      "host": "blastfrompast.no-ip.org",
+      "port": 23,
+      "status": "dead",
+      "sources": ["microblaster"]
+    },
+    {
+      "name": "Blast From The Past",
+      "host": "syndicatelink.servegame.com",
+      "port": 2002,
+      "status": "dead",
+      "sources": ["microblaster"]
+    },
+    {
+      "name": "Blast From The Past Game Server",
+      "host": "212.162.151.235",
+      "port": 2002,
+      "status": "dead",
+      "sources": ["microblaster"]
+    },
+    {
+      "name": "Boilermaker",
+      "host": "tw2002.undo.it",
+      "port": 23,
+      "status": "dead",
+      "sources": ["microblaster"]
+    },
+    {
+      "name": "BoobTube",
+      "host": "bbs.foodvault.net",
+      "port": 23,
+      "status": "dead",
+      "sources": ["microblaster"]
+    },
+    {
+      "name": "BrianMoses.net",
+      "host": "tw2002.brianmoses.net",
+      "port": 23,
+      "status": "dead",
+      "sources": ["microblaster"]
+    },
+    {
+      "name": "Brotherhood of Groovyness",
+      "host": "b-o-g.net",
+      "port": 23,
+      "status": "dead",
+      "sources": ["microblaster"]
+    },
+    {
+      "name": "Byrgenwerth tw2002",
+      "host": "tw.hollensbe.org",
+      "port": 2002,
+      "status": "dead",
+      "sources": ["microblaster"]
+    },
+    {
+      "name": "Central Ontario Remote",
+      "host": "centralontarioremote.net",
+      "port": 2002,
+      "status": "dead",
+      "sources": ["microblaster"]
+    },
+    {
+      "name": "Central Ontario Remote BBS",
+      "host": "centralontarioremote.com",
+      "port": 2002,
+      "status": "dead",
+      "sources": ["microblaster"]
+    },
+    {
+      "name": "Chaos",
+      "host": "chaos-twgs.com",
+      "port": 23,
+      "status": "dead",
+      "sources": ["microblaster"]
+    },
+    {
+      "name": "Christian Fellowship",
+      "host": "cfbbs.dtdns.net",
+      "port": 23,
+      "status": "dead",
+      "sources": ["microblaster"]
+    },
+    {
+      "name": "CircleSoft Entertainment",
+      "host": "twgs.jmp.cx",
+      "port": 2002,
+      "status": "dead",
+      "sources": ["microblaster"]
+    },
+    {
+      "name": "CJ's Place",
+      "host": "cjsplace.thruhere.net",
+      "port": 2002,
+      "status": "dead",
+      "sources": ["microblaster"]
+    },
+    {
+      "name": "Classic TradeWars (EIS)",
+      "host": "twgs.classictw.com",
+      "port": 2002,
+      "status": "dead",
+      "sources": ["microblaster"]
+    },
+    {
+      "name": "Colorado Springs Central Net",
+      "host": "cscnet1.net",
+      "port": 2002,
+      "status": "dead",
+      "sources": ["microblaster"]
+    },
+    {
+      "name": "Cool Blue BBS",
+      "host": "twgs.mywire.org",
+      "port": 2002,
+      "status": "dead",
+      "sources": ["microblaster"]
+    },
+    {
+      "name": "CrNet",
+      "host": "tw2002.crnet.net",
+      "port": 2002,
+      "status": "dead",
+      "sources": ["microblaster"]
+    },
+    {
+      "name": "Cruncher's",
+      "host": "crunchers-twgs.com",
+      "port": 2002,
+      "status": "dead",
+      "sources": ["microblaster"]
+    },
+    {
+      "name": "DarkMatter",
+      "host": "twgs.geekm0nkey.com",
+      "port": 23,
+      "status": "dead",
+      "sources": ["microblaster"],
+      "notes": "Same endpoint listed as active on BBSGuide. Conflicting signals."
+    },
+    {
+      "name": "Tradewars Game World",
+      "host": "artbatista.com",
+      "port": 23,
+      "status": "dead",
+      "sources": ["microblaster"],
+      "notes": "Graveyard ServerDetail page (serverid=328)."
+    },
+    {
+      "name": "tw2002.net",
+      "host": "game.tw2002.net",
+      "port": 23,
+      "status": "dead",
+      "sources": ["microblaster"],
+      "notes": "Same endpoint listed as active on BBSGuide as 'Mark Van Daele's TWGS'. Conflicting signals."
+    },
+    {
+      "name": "The Quest",
+      "host": "thequesttwgs.game-host.org",
+      "port": 23,
+      "status": "dead",
+      "sources": ["microblaster"],
+      "notes": "Same endpoint listed on BBSGuide as 'Quest TWGS'. Conflicting signals."
+    },
+    {
+      "name": "Sursum Corda!",
+      "host": "bbs.sursum-corda.com",
+      "port": 23,
+      "status": "dead",
+      "sources": ["microblaster"],
+      "notes": "Different endpoint from BBSGuide's sursum-corda.com:2002."
+    }
+  ]
+}

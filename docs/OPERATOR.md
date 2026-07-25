@@ -29,6 +29,7 @@ prefer `canon/` + README.
 
    Pick an existing profile, or **+ Create new profile** (catalog servers from
    `config/servers.toml`). Retired rows are grey / unselectable.
+   Public server sources and community links: [`docs/community-sources.md`](community-sources.md).
 
    **Password is deferred at create.** The create-profile form collects only
    non-secret shape (id / server / game letter / handle / optional ship &
