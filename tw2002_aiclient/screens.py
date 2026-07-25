@@ -219,24 +219,13 @@ class _SharedPairs:
 _shared_pairs = _SharedPairs()
 
 # Thin-rounded HUD chrome (launcher has no live viewport — never double-line).
-_GLYPHS_UNICODE = {
-    "tl": "╭",
-    "tr": "╮",
-    "bl": "╰",
-    "br": "╯",
-    "h": "─",
-    "v": "│",
-    "sel": "▸",
-}
-_GLYPHS_ASCII = {
-    "tl": "+",
-    "tr": "+",
-    "bl": "+",
-    "br": "+",
-    "h": "-",
-    "v": "|",
-    "sel": ">",
-}
+# Per WO-AUDIT-GLYPH-TABLE-DEDUPE: cockpit.draw's THIN_UNICODE/THIN_ASCII are
+# THE single source for the six box-drawing keys (tl/tr/bl/br/h/v) — imported
+# and extended here, never re-typed, so the two tables cannot drift. ``sel``
+# is the launcher's own addition on top: the cockpit chrome has no
+# selection-triangle concept, only the launcher's row-picker does.
+_GLYPHS_UNICODE = {**cockpit_draw.THIN_UNICODE, "sel": "▸"}
+_GLYPHS_ASCII = {**cockpit_draw.THIN_ASCII, "sel": ">"}
 
 
 def _unicode_ok() -> bool:
