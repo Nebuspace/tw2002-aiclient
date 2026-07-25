@@ -133,6 +133,14 @@ def _run_create(stdscr: curses.window) -> str:
             return action
 
 
+# Ctrl-] (ASCII 29, the classic telnet escape) is canon's own designated
+# graceful detach key -- `spectate-and-attach.md:100-102` ("The detach key
+# is Ctrl-] ... deliberately not q or Ctrl-C, because those are live
+# TradeWars menu commands"), mirroring the archive's own `DETACH_KEY`
+# precedent (`interactive_app.py`). Wired in `_run_play` below
+# (WO-P4-057) -- distinct from Esc, which stays the interim safety exit.
+_DETACH_KEY = 29
+
 # Poll timeout for the GOALS status_provider (Mack finding, HIGH): must stay
 # well under the 1 Hz refresh cadence (app.py's own stdscr.timeout(1000)) so
 # a bound-but-not-accepting daemon socket can never wedge the whole play
@@ -258,28 +266,46 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
             if attach_conn is not None and key != 27:
                 # Attached: canon `mode-line-and-teach-controls.md:42-44`
                 # -- "the human always wins the keyboard" the instant
-                # they're attached -- so EVERY key except Esc is a live
-                # game keystroke, forwarded raw over the attach
-                # connection, never intercepted as a cockpit shortcut.
-                # `q`/`Q` in particular are ordinary printable game
-                # keystrokes once attached, NOT a reserved app-quit --
-                # reserving them would silently take the keyboard away
-                # from the human the moment they typed an otherwise
-                # ordinary letter (Samantha REVISE, WO-P4-056; regression
-                # pinned by tests/test_cockpit_attach.py::
+                # they're attached -- so every key except Esc and Ctrl-]
+                # (the detach key, handled first below) is a live game
+                # keystroke, forwarded raw over the attach connection,
+                # never intercepted as a cockpit shortcut. `q`/`Q` in
+                # particular are ordinary printable game keystrokes once
+                # attached, NOT a reserved app-quit -- reserving them
+                # would silently take the keyboard away from the human
+                # the moment they typed an otherwise ordinary letter
+                # (Samantha REVISE, WO-P4-056; regression pinned by
+                # tests/test_cockpit_attach.py::
                 # test_run_play_forwards_q_and_shift_q_while_attached_
                 # only_esc_reserved).
                 #
-                # Esc alone stays reserved as the interim safety exit:
-                # closing `attach_conn` in the `finally` below releases
-                # the human lock daemon-side the same way a crashed `tw
-                # attach` already does (`daemon.py::_handle_attach`'s own
-                # `finally: lock.release_human()`). It is NOT the real
-                # detach affordance -- canon `spectate-and-attach.md:350`
-                # cites the archive's `Ctrl-]` (`DETACH_KEY`,
-                # `attach_client.py`) as that precedent; wiring an
-                # in-cockpit graceful detach-back-to-spectate (Ctrl-] or
-                # otherwise) is WO-P4-057's job, not built here.
+                # Esc alone stays reserved as the interim safety exit,
+                # unchanged by this WO: closing `attach_conn` in the
+                # `finally` below releases the human lock daemon-side the
+                # same way a crashed `tw attach` already does
+                # (`daemon.py::_handle_attach`'s own `finally:
+                # lock.release_human()`). Esc is NOT the detach key --
+                # canon `spectate-and-attach.md:100-102` names Ctrl-]
+                # (`_DETACH_KEY` above) as the real graceful-detach
+                # affordance (the archive's own `DETACH_KEY`,
+                # `interactive_app.py`), wired next (WO-P4-057).
+                if key == _DETACH_KEY:
+                    # Graceful detach: hand the keyboard back to
+                    # Spectate deliberately, distinct from Esc's
+                    # whole-binding exit above. Closing the write
+                    # connection is what releases the daemon's Human
+                    # control lock -- the SAME crash-safe path a
+                    # dropped/killed attach already takes
+                    # (`daemon.py::_handle_attach`'s own `finally:
+                    # lock.release_human()`, canon
+                    # `spectate-and-attach.md:91-96`) -- never a new
+                    # wire verb of our own; detach is a close, never a
+                    # send.
+                    attach_conn.close()
+                    attach_conn = None
+                    play.spectating = True
+                    play.status_line = "detached — spectating"
+                    continue
                 if key in (curses.KEY_ENTER, 10, 13):
                     sent_ok = attach_conn.send_key(b"\r\n")
                 elif key in (curses.KEY_BACKSPACE, 127, 8):

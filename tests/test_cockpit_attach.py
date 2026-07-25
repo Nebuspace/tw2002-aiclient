@@ -38,8 +38,10 @@ WO-P4-057's job, never invented here.
 from __future__ import annotations
 
 import curses
+import queue
 import shutil
 import tempfile
+import threading
 import time
 from pathlib import Path
 
@@ -48,8 +50,9 @@ from tw2002_aiclient.adapters import EnsureResult
 from tw2002_aiclient.cockpit.control_seat import MANUAL_LABEL
 from tw2002_aiclient.cockpit.layout import frame_layout
 from tw2002_aiclient.screens import PlayShellScreen, ProfileRow
-from tw2002_aiclient.session.attach_client import AttachInputConn
+from tw2002_aiclient.session.attach_client import DETACH_KEY, AttachInputConn
 from tw2002_aiclient.session.control_lock import MODE_APP, MODE_HUMAN
+from tw2002_aiclient.watchfeed import WatchFeed
 
 from .conftest import _FakeDaemon
 
@@ -374,3 +377,433 @@ def test_control_strip_transitions_spectate_manual_and_back(monkeypatch):
     row3 = _control_strip_row_text(win)
     assert "SPECTATE" in row3
     assert MANUAL_LABEL not in row3
+
+
+# ---------------------------------------------------------------------------
+# WO-P4-057 -- graceful Ctrl-] detach: attached -> spectating, lock genuinely
+# released daemon-side, further keys route back through play.handle_key.
+#
+# The plain list-driven `_RecordingStdscr` above is sufficient when a test
+# only needs the FINAL state after a whole scripted key sequence runs to
+# completion (`_run_play` doesn't return until "back"/"quit", so there is no
+# way to pause mid-drive with a never-blocking fake without spinning). Some
+# proofs below genuinely need to pause mid-drive -- e.g. "the lock is
+# released" is asynchronous on the daemon's OWN reader thread noticing EOF,
+# not synchronous with the client's `attach_conn.close()` -- so this section
+# adds a blocking-queue stdscr variant and drives `_run_play` on a background
+# thread, mirroring `test_run_play_m_attaches_forwards_a_keystroke_and_esc_
+# releases`'s own bounded-poll idiom for daemon-side lock release, just
+# interleaved with key pushes instead of asserted only once at the very end.
+# ---------------------------------------------------------------------------
+
+
+class _QueueStdscr:
+    """Blocking-queue-driven fake stdscr -- `getch()` pulls from a
+    `queue.Queue`, returning -1 (the existing "no key, redraw" tick,
+    matching `_RecordingStdscr`'s exhausted-list behavior) on a short poll
+    timeout rather than spinning forever waiting on a key nobody has pushed
+    yet. Lets a driving THREAD sit genuinely parked between pushes so a
+    test can pause mid-drive and poll condition-driven state (daemon lock
+    mode, `play.spectating`, ...) before pushing the next key -- something
+    the plain list-driven `_RecordingStdscr` above cannot do without
+    spinning at 100% CPU on its own never-blocking `getch()`."""
+
+    def __init__(self):
+        self._q: "queue.Queue[int]" = queue.Queue()
+        self.calls: list[tuple[int, int, str, int]] = []
+
+    def push(self, key: int) -> None:
+        self._q.put(key)
+
+    def getch(self):
+        try:
+            return self._q.get(timeout=0.05)
+        except queue.Empty:
+            return -1
+
+    def timeout(self, _ms):
+        return None
+
+    def getmaxyx(self):
+        return (FULL_ROWS, FULL_COLS)
+
+    def erase(self):
+        return None
+
+    def addstr(self, y, x, text, attr=0):
+        self.calls.append((y, x, text, attr))
+
+    def refresh(self):
+        return None
+
+
+def _drive_run_play_in_thread(stdscr, profile):
+    """Runs `app._run_play` on a background thread so a test can push keys
+    and poll condition-driven state IN BETWEEN them. Returns ``(thread,
+    result_box)`` -- ``result_box`` is populated with the single
+    ``"back"``/``"quit"`` result once the thread finishes; the caller must
+    push a terminating key and ``thread.join()`` itself."""
+    result_box: list[str] = []
+
+    def _run():
+        result_box.append(app._run_play(stdscr, profile))
+
+    thread = threading.Thread(target=_run, daemon=True)
+    thread.start()
+    return thread, result_box
+
+
+def _wait_until(predicate, timeout=3.0, interval=0.02) -> bool:
+    """Bounded condition-driven poll -- never a bare sleep standing in for
+    a state transition. Returns the predicate's own final truthiness
+    (never raises itself)."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if predicate():
+            return True
+        time.sleep(interval)
+    return bool(predicate())
+
+
+def _capture_watchfeed_instances(monkeypatch):
+    """Spy on `WatchFeed.__init__`, mirroring `_capture_play_instances`
+    above -- `_run_play` never exposes its `feed` instance externally."""
+    captured: list[WatchFeed] = []
+    orig_init = WatchFeed.__init__
+
+    def _spy(self, *a, **k):
+        orig_init(self, *a, **k)
+        captured.append(self)
+
+    monkeypatch.setattr(WatchFeed, "__init__", _spy)
+    return captured
+
+
+# --- Proof 1: detach happens ------------------------------------------------
+
+
+def test_detach_key_flips_spectating_true_and_signals_detach_and_releases_lock(monkeypatch):
+    run_dir = _short_run_dir()
+    daemon = _FakeDaemon(run_dir / "twd.sock")
+    daemon.start()
+    try:
+        monkeypatch.setenv("TW_RUN_DIR", str(run_dir))
+        _patch_common(monkeypatch)
+        captured = _capture_play_instances(monkeypatch)
+
+        stdscr = _QueueStdscr()
+        thread, result_box = _drive_run_play_in_thread(stdscr, _profile())
+        assert _wait_until(lambda: bool(captured)), "PlayShellScreen was never constructed"
+        play = captured[-1]
+
+        stdscr.push(ord("M"))
+        assert _wait_until(lambda: play.spectating is False), "M never attached"
+        assert daemon.control_lock.mode == MODE_HUMAN
+
+        stdscr.push(DETACH_KEY)
+        assert _wait_until(lambda: play.spectating is True), "Ctrl-] never detached"
+        assert _wait_until(lambda: "detach" in play.status_line.lower()), (
+            f"status line never signaled detach: {play.status_line!r}"
+        )
+        assert _wait_until(lambda: daemon.control_lock.mode == MODE_APP), (
+            f"daemon-side lock never released after detach (still {daemon.control_lock.mode!r})"
+        )
+
+        stdscr.push(27)  # Esc -- end the drive; already spectating, so this
+        # is the ordinary back-to-launcher exit, not a second detach
+        # (attach_conn is already None by this point).
+        thread.join(timeout=3.0)
+        assert result_box == ["back"]
+    finally:
+        daemon.stop()
+        shutil.rmtree(run_dir, ignore_errors=True)
+
+
+# --- Proof 2: lock genuinely released -- a FRESH attach succeeds -----------
+
+
+def test_detach_then_fresh_attach_succeeds_proving_lock_released(monkeypatch):
+    run_dir = _short_run_dir()
+    daemon = _FakeDaemon(run_dir / "twd.sock")
+    daemon.start()
+    try:
+        monkeypatch.setenv("TW_RUN_DIR", str(run_dir))
+        _patch_common(monkeypatch)
+        captured = _capture_play_instances(monkeypatch)
+
+        stdscr = _QueueStdscr()
+        thread, result_box = _drive_run_play_in_thread(stdscr, _profile())
+        assert _wait_until(lambda: bool(captured))
+        play = captured[-1]
+
+        stdscr.push(ord("M"))
+        assert _wait_until(lambda: play.spectating is False)
+
+        stdscr.push(DETACH_KEY)
+        assert _wait_until(lambda: play.spectating is True)
+        assert _wait_until(lambda: daemon.control_lock.mode == MODE_APP)
+
+        # Strongest form: a genuinely FRESH `_attempt_attach` (mirrors
+        # Layer 2's own take/held/conflict proof above), independent of
+        # this cockpit instance's own bookkeeping, succeeds immediately.
+        # A not-raised assertion would not be enough -- only a SUCCESSFUL
+        # independent re-acquire proves the daemon's own lock is free.
+        fresh_conn, fresh_error = app._attempt_attach(daemon.sock_path)
+        assert fresh_conn is not None, (
+            f"reattach refused -- lock was never released ({fresh_error!r})"
+        )
+        fresh_conn.close()
+        assert _wait_until(lambda: daemon.control_lock.mode == MODE_APP), (
+            "the probe's own close should release the lock again"
+        )
+
+        # And the cockpit's own second `M`, through the real product path,
+        # succeeds too -- end to end, not just at the daemon.
+        stdscr.push(ord("M"))
+        assert _wait_until(lambda: play.spectating is False), "re-attach via M never succeeded"
+        assert _wait_until(lambda: "attached" in play.status_line.lower())
+
+        stdscr.push(27)
+        thread.join(timeout=3.0)
+        assert result_box == ["back"]
+    finally:
+        daemon.stop()
+        shutil.rmtree(run_dir, ignore_errors=True)
+
+
+# --- Proof 3: no send after detach; keys route back through handle_key -----
+
+
+def test_no_send_after_detach_and_keys_route_through_handle_key_again(monkeypatch):
+    run_dir = _short_run_dir()
+    daemon = _FakeDaemon(run_dir / "twd.sock")
+    daemon.start()
+    try:
+        monkeypatch.setenv("TW_RUN_DIR", str(run_dir))
+        _patch_common(monkeypatch)
+        captured = _capture_play_instances(monkeypatch)
+
+        stdscr = _QueueStdscr()
+        thread, result_box = _drive_run_play_in_thread(stdscr, _profile())
+        assert _wait_until(lambda: bool(captured))
+        play = captured[-1]
+
+        stdscr.push(ord("M"))
+        assert _wait_until(lambda: play.spectating is False)
+
+        stdscr.push(ord("d"))  # baseline forwarded traffic while attached
+        assert _wait_until(lambda: daemon.session.raw_sent == [b"d"])
+
+        stdscr.push(DETACH_KEY)
+        assert _wait_until(lambda: play.spectating is True)
+        assert _wait_until(lambda: daemon.control_lock.mode == MODE_APP)
+
+        # Two keys, unmapped-then-quit -- `q` only ever resolves to "quit"
+        # via `play.handle_key`; attach-forwarding never returns a "quit"
+        # action (it `continue`s unconditionally). Observing "quit" is
+        # therefore a deterministic proof BOTH keys re-entered the
+        # handle_key path, at the exact synchronization point
+        # (thread.join()) that also proves no further traffic arrived --
+        # no bare sleep needed to "prove an absence".
+        stdscr.push(ord("x"))  # unmapped -- a safe no-op probe
+        stdscr.push(ord("q"))  # handle_key's quit shortcut
+        thread.join(timeout=3.0)
+        assert result_box == ["quit"]
+        assert daemon.session.raw_sent == [b"d"], (
+            f"unexpected post-detach wire traffic: {daemon.session.raw_sent!r}"
+        )
+    finally:
+        daemon.stop()
+        shutil.rmtree(run_dir, ignore_errors=True)
+
+
+# --- Proof 4: idempotent double-detach --------------------------------------
+
+
+def test_double_detach_is_a_safe_no_op(monkeypatch):
+    run_dir = _short_run_dir()
+    daemon = _FakeDaemon(run_dir / "twd.sock")
+    daemon.start()
+    try:
+        monkeypatch.setenv("TW_RUN_DIR", str(run_dir))
+        _patch_common(monkeypatch)
+        captured = _capture_play_instances(monkeypatch)
+
+        stdscr = _QueueStdscr()
+        thread, result_box = _drive_run_play_in_thread(stdscr, _profile())
+        assert _wait_until(lambda: bool(captured))
+        play = captured[-1]
+
+        stdscr.push(ord("M"))
+        assert _wait_until(lambda: play.spectating is False)
+
+        stdscr.push(DETACH_KEY)
+        assert _wait_until(lambda: play.spectating is True)
+        assert _wait_until(lambda: daemon.control_lock.mode == MODE_APP)
+        status_after_first_detach = play.status_line
+
+        # A second Ctrl-] while ALREADY spectating: `attach_conn` is
+        # already `None` by construction, so this key falls through to
+        # `play.handle_key(29)` -- unmapped, returns `None`, same as any
+        # other stray key -- rather than re-running the detach branch at
+        # all (that branch is gated on `attach_conn is not None`). No
+        # exception, no further state change, no wire traffic.
+        stdscr.push(DETACH_KEY)
+        stdscr.push(ord("q"))  # deterministic sync point, see proof 3
+        thread.join(timeout=3.0)
+        assert result_box == ["quit"], "double-detach broke the drive thread"
+
+        assert play.spectating is True
+        assert play.status_line == status_after_first_detach
+        assert daemon.control_lock.mode == MODE_APP
+        assert daemon.session.raw_sent == []  # never any forwarded traffic at all
+    finally:
+        daemon.stop()
+        shutil.rmtree(run_dir, ignore_errors=True)
+
+
+def test_detach_after_broken_wire_fallback_is_also_a_safe_no_op(monkeypatch, tmp_path):
+    """Proof 4 addendum: a Ctrl-] pressed AFTER an already-broken attach
+    connection has fallen back to spectate (app.py's own `sent_ok=False`
+    path, pinned by the sibling `test_run_play_broken_attach_connection_
+    falls_back_to_spectate_honestly` above) must ALSO be a safe no-op --
+    `attach_conn` is already `None` by the time DETACH_KEY is seen, so it
+    takes the exact same `attach_conn is None` fall-through proved above,
+    without needing a real daemon/threaded drive for this cheap variant."""
+
+    class _FlakyConn:
+        def __init__(self):
+            self.closed = False
+
+        def send_key(self, data):
+            return False  # every forward fails
+
+        def close(self):
+            self.closed = True
+
+    fake_conn = _FlakyConn()
+    monkeypatch.setattr(app, "_attempt_attach", lambda sock_path: (fake_conn, None))
+    monkeypatch.setenv("TW_RUN_DIR", str(tmp_path))  # no daemon -- WatchFeed's own connect fails, contained
+    _patch_common(monkeypatch)
+    captured = _capture_play_instances(monkeypatch)
+
+    stdscr = _RecordingStdscr([ord("M"), ord("d"), DETACH_KEY, 27])
+    result = app._run_play(stdscr, _profile())
+    assert result == "back"
+
+    play = captured[-1]
+    assert play.spectating is True
+    assert play.status_line == "attach connection lost — spectating"
+    assert fake_conn.closed is True
+
+
+# --- Proof 5: Esc is not detach ---------------------------------------------
+
+
+def test_esc_is_not_detach_still_ends_the_binding_via_finally_release(monkeypatch):
+    """Regression pin: Esc (27) stays the pre-existing, DIFFERENT exit --
+    it ends the whole play-shell binding (`_run_play` returns `"back"`),
+    not merely a detach back to spectate, and the daemon-side lock is
+    still released through the `finally` block's own `attach_conn.close()`
+    (WO-P4-056's mechanism), never through DETACH_KEY's dedicated branch."""
+    assert DETACH_KEY != 27  # the two exits must never collide
+
+    run_dir = _short_run_dir()
+    daemon = _FakeDaemon(run_dir / "twd.sock")
+    daemon.start()
+    try:
+        monkeypatch.setenv("TW_RUN_DIR", str(run_dir))
+        _patch_common(monkeypatch)
+        captured = _capture_play_instances(monkeypatch)
+
+        stdscr = _RecordingStdscr([ord("M"), 27])
+        result = app._run_play(stdscr, _profile())
+        assert result == "back"
+
+        play = captured[-1]
+        # Esc's own status_line is still whatever the earlier `M` set --
+        # never overwritten by a detach-style message, because
+        # DETACH_KEY's branch never ran.
+        assert "attached" in play.status_line.lower()
+        assert "detach" not in play.status_line.lower()
+
+        deadline = time.monotonic() + 2.0
+        while time.monotonic() < deadline and daemon.control_lock.mode == MODE_HUMAN:
+            time.sleep(0.02)
+        assert daemon.control_lock.mode == MODE_APP  # released via finally, same as WO-P4-056
+    finally:
+        daemon.stop()
+        shutil.rmtree(run_dir, ignore_errors=True)
+
+
+# --- Proof 6: control-strip chip restores to SPECTATE after detach ---------
+
+
+def test_control_strip_chip_restores_to_spectate_after_detach(monkeypatch):
+    run_dir = _short_run_dir()
+    daemon = _FakeDaemon(run_dir / "twd.sock")
+    daemon.start()
+    try:
+        monkeypatch.setenv("TW_RUN_DIR", str(run_dir))
+        _patch_common(monkeypatch)
+
+        stdscr = _RecordingStdscr([ord("M"), DETACH_KEY, 27])
+        result = app._run_play(stdscr, _profile())
+        assert result == "back"
+
+        row_text = _control_strip_row_text(stdscr)  # LAST control-strip draw
+        assert "SPECTATE" in row_text
+        assert MANUAL_LABEL not in row_text
+    finally:
+        daemon.stop()
+        shutil.rmtree(run_dir, ignore_errors=True)
+
+
+# --- Proof 7: the WatchFeed / viewport wiring survives detach untouched ----
+
+
+def test_watchfeed_survives_detach_still_running_and_provider_still_bound(monkeypatch):
+    run_dir = _short_run_dir()
+    daemon = _FakeDaemon(run_dir / "twd.sock")
+    daemon.start()
+    try:
+        monkeypatch.setenv("TW_RUN_DIR", str(run_dir))
+        _patch_common(monkeypatch)
+        captured_plays = _capture_play_instances(monkeypatch)
+        captured_feeds = _capture_watchfeed_instances(monkeypatch)
+
+        stdscr = _QueueStdscr()
+        thread, result_box = _drive_run_play_in_thread(stdscr, _profile())
+        assert _wait_until(lambda: captured_plays and captured_feeds)
+        play = captured_plays[-1]
+        feed = captured_feeds[-1]
+
+        assert _wait_until(lambda: feed.snapshot().running is True), (
+            "WatchFeed never came up before the drive could proceed"
+        )
+
+        stdscr.push(ord("M"))
+        assert _wait_until(lambda: play.spectating is False)
+
+        stdscr.push(DETACH_KEY)
+        assert _wait_until(lambda: play.spectating is True)
+        assert _wait_until(lambda: daemon.control_lock.mode == MODE_APP)
+
+        # Proven WHILE the drive thread is still parked inside the loop --
+        # not after teardown, where `finally: feed.stop()` would trivially
+        # make `running` False regardless of what detach itself did.
+        assert feed.snapshot().running is True
+        # `==`, not `is` -- a bound method (`feed.snapshot`) is a fresh
+        # wrapper object on every attribute access, so identity comparison
+        # is almost always False even for the SAME underlying instance
+        # method; bound methods implement `__eq__` to compare `__self__`
+        # + `__func__`, which is the actual "still the same binding" proof.
+        assert play.viewport_provider == feed.snapshot
+        assert play.viewport_provider.__self__ is feed  # and explicitly the same feed instance
+
+        stdscr.push(27)
+        thread.join(timeout=3.0)
+        assert result_box == ["back"]
+    finally:
+        daemon.stop()
+        shutil.rmtree(run_dir, ignore_errors=True)
