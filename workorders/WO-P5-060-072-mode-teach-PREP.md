@@ -1,11 +1,11 @@
 # WO-P5-060…072 — Mode line, escalation & teach · PREP
 
-> Status: **PREP + PWO-060 DONE + PWO-061 KERNEL DONE + 061-ENTRY Accept #2 CLOSING** 2026-07-25 · kernel `d4a8829` · entry product tip **TBD** (CC `WO-P5-061-ENTRY` mid-REVISE — amend SHA when `ls-remote` shows it) · seat `impl-aiclient-cursor`  
+> Status: **PREP + PWO-060 DONE + PWO-061 DONE** 2026-07-25 · kernel `d4a8829` · entry product tip **`420430d`** (CC `WO-P5-061-ENTRY` · Accept #2 CLOSED on origin) · seat `impl-aiclient-cursor`  
 > Phase: 5 · Type: PREP (inventory + tightened Accept/Proof) · Execute: hub HANDOFF to product seat after Accept  
 > Canon: `canon/surfaces/mode-line-and-teach-controls.md` · `canon/architecture/control-and-escalation.md` · `canon/engine/ai-teacher.md` · `canon/architecture/app-autopilot-model.md` · `canon/engine/coverage-metrics.md` · `canon/engine/macros.md` · `canon/architecture/rule-macro-engine.md` · **ADR-002**  
-> Refs: `ULTRACODE-WO-INVENTORY.md` Phase-5 rows · Phase 4 CLOSED (`bba53d4`) · PWO-060 (`2ca3154`) · PWO-061 kernel (`d4a8829`) · **Max Ruled Batch 1b:** Mode=Ctrl-A · attached `M`=Move · no printable Mode · **Batch 2/3:** `APP` chip · Spectate≠Mode · Ctrl-]@App-hold no-op · north-star SIGNED · log_note RETIRE · secrets never-live · entry chip=APP
+> Refs: `ULTRACODE-WO-INVENTORY.md` Phase-5 rows · Phase 4 CLOSED (`bba53d4`) · PWO-060 (`2ca3154`) · PWO-061 kernel (`d4a8829`) · **061-ENTRY `420430d`** · **Max Ruled Batch 1b:** Mode=Ctrl-A · attached `M`=Move · no printable Mode · **Batch 2/3:** `APP` chip · Spectate≠Mode · Ctrl-]@App-hold no-op · north-star SIGNED · log_note RETIRE · secrets never-live · entry chip=APP
 
-**No product edited in this OKF tick.** Inventory below reflects **ruled contract** (ADR-002 + Batch 1b/2/3). Product entry tip SHA = **TBD** until origin carries CC's 061-ENTRY tip — do not invent a landed SHA.
+**No product edited in this OKF tick.** Inventory reflects **ruled contract** (ADR-002 + Batch 1b/2/3) and origin tip **`420430d`** (061-ENTRY; stacked log_note `4280d8a`). Do **not** scrub historical `log_note` doc mentions — they are the retire record.
 
 ---
 
@@ -16,7 +16,7 @@
 - **Spectate is not a Mode** (Max Batch 2/3) — muted `SPECTATE` is observation chrome, not an App/Human toggle position. Default run = App/autopilot. **Entry chip = APP** (Max `@ 09:33:23Z` — match daemon `MODE_APP`, not SPECTATE). DOC-GAP-M-FROM-SPECTATE **CLOSED**.
 - **AI never live-drives.** Retire any `AI-PILOT` / `ai_pilot` UI string. Teach overlay is cyan/info, transient, never a mode-line dual seat. Chip text = **`APP`** (green/`ok`).
 - **What 056/057 already satisfied:** Human/`MANUAL — YOU HAVE CONTROL` chip LIVE · `M` attach LIVE · Ctrl-] detach LIVE · no-send tripwire + attach allowlist LIVE · redaction on attach channel LIVE.
-- **What Phase 5 still owes:** A/R/T teach strip · STOP banner + reason codes · arm/confirm · N5 operate cluster · coverage meter (App-vs-Human, AI≠live slice). **061 Mode (Accept #2):** ruled closed as contract — Ctrl-A Mode both directions · attached `M`=Move · Spectate attach migrates off printable `M` · product tip **TBD** (CC building/REVISE).
+- **What Phase 5 still owes:** A/R/T teach strip · STOP banner + reason codes · arm/confirm · N5 operate cluster · coverage meter (App-vs-Human, AI≠live slice). **061 Mode (Accept #2):** **CLOSED** on origin `420430d` — Ctrl-A Mode both directions · attached `M`=Move · Spectate attach off printable `M` · single `MODE_KEY`.
 - **F2 HOLD** — ops `tw spectate` CLI still Max-gated. **G2–G4 HOLD** unchanged.
 - **North-star SIGNED** (Batch 2/3) — align to `north-star.md`; do not invent new one-cockpit prose beyond signed text.
 - **Archive** = port-source only (`spectate_app` / `spectate_layout` badges) — never `import twclient`.
