@@ -40,6 +40,23 @@ def test_knowledge_path_for_world_joins_under_state(tmp_path):
 
 
 def test_cmd_menumap_prints_coverage_orphans_matching_fixture(tmp_path, capsys, monkeypatch):
+    """UPDATED by WO-AUDIT-CLI-MENUMAP-LOOKUP (F4): this test used to assert
+    ``here off-map`` with the daemon DOWN, and to build its expected output
+    with ``current_sig=None`` and no reason.
+
+    That was asserting the defect. With no daemon there is no live screen,
+    ``localize()`` is never called, and nothing about the player's position
+    was ever established -- so ``off-map``, which canon reserves for
+    localize's own None ("STOP, escalate, never navigate blind",
+    canon/engine/menu-map-and-introspection.md:298-302), was a claim the verb
+    had not earned. The daemon-down case now renders ``here ? no daemon
+    (store only)``.
+
+    Everything this test was actually FOR -- that the printed report matches
+    the store summary exactly, with real coverage/dead-end/orphan lines -- is
+    unchanged and still asserted; only the you-are-here expectation moved,
+    and the expected-output builder now passes the same reason the CLI does.
+    """
     path = tmp_path / "game_knowledge.json"
     menu_knowledge.upsert_menu_node(path, "sig-a", label="Computer")
     menu_knowledge.upsert_menu_node(path, "sig-b", label="Ship")
@@ -52,13 +69,16 @@ def test_cmd_menumap_prints_coverage_orphans_matching_fixture(tmp_path, capsys, 
     out = capsys.readouterr().out
     expected = "\n".join(
         format_menu_map_report(
-            menu_map_summary_from_store(path, current_sig=None),
+            menu_map_summary_from_store(
+                path, current_sig=None, here_unknown="no daemon (store only)"
+            ),
         )
     )
     assert out.strip() == expected
     assert "orphans: sig-z" in out
     assert "dead-ends: sig-b" in out
-    assert "here off-map" in out
+    assert "here ? no daemon (store only)" in out
+    assert "off-map" not in out, "with no daemon, nothing looked -- so nothing may claim off-map"
     assert "3n" in out
 
 

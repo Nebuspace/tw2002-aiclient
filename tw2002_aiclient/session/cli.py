@@ -409,8 +409,24 @@ def cmd_watch(args):
 
 def cmd_menumap(args):
     """WO-P2-OPS-VERB-G1: read-only menu-map inspector (coverage / orphans /
-    you-are-here). Never sends. Localizes the live screen when a daemon
-    is up; otherwise prints store-only with ``here off-map``."""
+    you-are-here). Never sends. Localizes the live screen when a daemon is up.
+
+    The you-are-here line has THREE states, not two, because "we looked and
+    you are not on the map" and "we never managed to look" are different
+    facts and the operator can act on only one of them:
+
+    * ``here ★ <label>`` -- localized.
+    * ``here off-map``   -- ``localize()`` ran and returned None. Canon's
+      escalate-don't-navigate-blind signal, and the ONLY case entitled to
+      this line.
+    * ``here ? <reason>`` -- the lookup never happened: no daemon, an
+      unusable ``screen`` response, a blank screen, or a raised lookup.
+
+    The exit code stays 0 for all three: the map report itself succeeded
+    (counts, coverage, dead-ends, orphans are all real), and only the
+    you-are-here marker is unavailable. A scripted caller that needs to
+    branch on it reads ``here_unknown`` from ``--json``.
+    """
     from tw2002_aiclient.menu import knowledge as menu_knowledge
     from tw2002_aiclient.menu.map_view import (
         format_menu_map_report,
@@ -427,19 +443,44 @@ def cmd_menumap(args):
 
     run_dir = _resolve_run_dir(getattr(args, "run_dir", None))
     current_sig = None
-    if daemon_alive(run_dir):
+    # Why we could not localize, or None once localize actually answered.
+    # Every branch below that leaves `current_sig` unset names itself here:
+    # four separate ways of FAILING TO LOOK used to render byte-for-byte
+    # identically to a genuine "you are off the map", which is a claim about
+    # the player's position that none of them established. Canon reserves
+    # off-map for localize's own None -- "STOP, escalate, never navigate
+    # blind" (canon/engine/menu-map-and-introspection.md:298-302) -- so the
+    # other four get `here ? <reason>` instead.
+    here_unknown = None
+    if not daemon_alive(run_dir):
+        here_unknown = "no daemon (store only)"
+    else:
         resp = send_request("screen", {}, run_dir=run_dir)
-        if resp.get("ok"):
+        if not resp.get("ok"):
+            here_unknown = f"screen unavailable: {resp.get('error') or 'unknown error'}"
+        else:
             screen_text = "\n".join(resp.get("screen") or [])
-            try:
-                node = localize(screen_text, path) if screen_text.strip() else None
-            except (OSError, ValueError, TypeError, KeyError):
-                node = None
-            if node:
-                current_sig = node.get("signature")
+            if not screen_text.strip():
+                # The 4th path, undocumented before this WO: daemon up, the
+                # `screen` verb ok, but nothing on the screen to localize --
+                # `localize` is never called, so it never said off-map.
+                here_unknown = "screen is blank"
+            else:
+                try:
+                    node = localize(screen_text, path)
+                except (OSError, ValueError, TypeError, KeyError) as e:
+                    here_unknown = f"lookup failed: {type(e).__name__}"
+                else:
+                    if node:
+                        current_sig = node.get("signature")
+                    # else: localize really did answer None. That IS off-map,
+                    # the one case that has always been entitled to say so --
+                    # `here_unknown` stays None.
 
     try:
-        summary = menu_map_summary_from_store(path, current_sig=current_sig)
+        summary = menu_map_summary_from_store(
+            path, current_sig=current_sig, here_unknown=here_unknown
+        )
     except (OSError, ValueError, TypeError, KeyError, menu_knowledge.GameKnowledgeError) as e:
         print(f"ERROR: {e}")
         return 1
@@ -464,6 +505,20 @@ def cmd_attach(args):
     to swallow the pilot's keystrokes behind an ``ATTACHED`` banner
     (interactive: WO-AUDIT-ATTACH-SEND-KEY-BOOL; scripted ``--keys``:
     WO-AUDIT-CLI-KEYS-IGNORE-RETURN).
+
+    Non-delivery is therefore reported in TWO different registers, because
+    there are two different conditions and only one of them is fatal:
+
+    * **transport failure** (``send_key()`` -> False) -- the wire is dead,
+      nothing further will get through: report and END the session, rc 1.
+    * **unencodable key** (interactive only) -- the wire is fine, but that
+      character has no 8-bit encoding for the game: report and KEEP GOING,
+      rc still 0 on a clean detach. Nothing is put on the wire for it.
+
+    So on the interactive path rc 0 means "nothing was dropped by the
+    transport", not "every key you pressed reached the game" -- an
+    unencodable key is reported inline, at the moment it happens, which is
+    the only surface the operator has here (thin attach paints no screen).
     """
     from .attach_client import DETACH_KEY, AttachInputConn
 
@@ -510,9 +565,50 @@ def cmd_attach(args):
                 if code == DETACH_KEY:
                     break
                 if ch in ("\n", "\r"):
-                    sent_ok = conn.send_key(b"\r\n")
+                    payload = b"\r\n"
                 else:
-                    sent_ok = conn.send_key(ch.encode("latin-1", errors="ignore"))
+                    try:
+                        payload = ch.encode("latin-1")
+                    except UnicodeEncodeError:
+                        # A key the game's 8-bit wire cannot carry (a curly
+                        # quote, an em-dash, an emoji -- typically pasted, not
+                        # typed). `errors="ignore"` used to turn it into b"",
+                        # which the daemon answered `{"ok": true}`: the
+                        # keystroke vanished with every surface reporting
+                        # success. Decided HERE, before the wire, because the
+                        # client already knows the character is unencodable.
+                        #
+                        # NOT the `send_failed` path below, deliberately: that
+                        # one means the wire is broken and nothing will ever
+                        # get through, so ending attach is right. This one
+                        # means the wire is FINE and one character cannot be
+                        # represented -- ending the session over a pasted
+                        # em-dash would be a worse harm than the silent drop,
+                        # and the human is the sovereign pilot here
+                        # (canon/architecture/north-star.md). So: tell them,
+                        # send nothing, keep the keyboard.
+                        #
+                        # The codepoint is named, never the glyph. cbreak has
+                        # ECHO off and this session may be sitting on a game
+                        # password prompt (canon/doctrine/secrets-and-
+                        # credentials.md: "a refused key is never echoed
+                        # verbatim"), and echoing raw unvetted input back into
+                        # a raw-mode terminal is its own hazard.
+                        #
+                        # ASCII-only on purpose, unlike this file's other
+                        # operator lines (which use an em-dash): this is the
+                        # one message that fires BECAUSE something could not be
+                        # represented, so it must not itself depend on the
+                        # terminal rendering a non-ASCII character. It also
+                        # makes "the glyph was not echoed" a checkable property
+                        # of the line rather than a claim.
+                        print(
+                            f"NOT SENT: key U+{ord(ch):04X} has no 8-bit "
+                            "encoding for this game connection (still attached)",
+                            flush=True,
+                        )
+                        continue
+                sent_ok = conn.send_key(payload)
                 if not sent_ok:
                     # Both send sites feed this ONE check deliberately:
                     # fixing either alone is what left this loop dropping

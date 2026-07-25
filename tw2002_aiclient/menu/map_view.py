@@ -14,8 +14,25 @@ def menu_map_summary(
     nodes: Sequence[Mapping[str, Any]],
     edges: Sequence[Mapping[str, Any]],
     current_sig: Optional[str] = None,
+    here_unknown: Optional[str] = None,
 ) -> dict[str, Any]:
-    """PURE map stats. ``current_sig`` unknown/None → ``current`` is None (off-map)."""
+    """PURE map stats. ``current_sig`` unknown/None → ``current`` is None (off-map).
+
+    ``here_unknown`` separates the two things a ``current`` of None used to
+    mean at once. Canon's contract is that ``localize()`` returning None means
+    **off-map** -- "STOP, escalate, never navigate blind"
+    (`canon/engine/menu-map-and-introspection.md:298-302`). But a caller that
+    never got to *ask* localize -- no daemon, an unusable ``screen`` response,
+    a blank screen, a raised lookup -- also arrives here with None, and
+    rendering that as "off-map" asserts a fact nobody established.
+
+    So: ``here_unknown=None`` means "we looked and you are genuinely off-map";
+    a non-empty string is the *reason we could not look*, rendered with canon's
+    unknown glyph ``?`` instead of the off-map claim (`?` = unknown,
+    `canon/surfaces/visual-language.md:141`; "the system never lies or
+    invents", `:289`). Passing it alongside a resolvable ``current_sig`` is
+    meaningless and is ignored -- a located ``★`` outranks any reason.
+    """
     by_sig: dict[str, Mapping[str, Any]] = {}
     for node in nodes:
         sig = node.get("signature")
@@ -70,6 +87,10 @@ def menu_map_summary(
         "node_count": len(by_sig),
         "edge_count": len(edges),
         "current": current,
+        # Only meaningful while `current` is None; cleared when we actually
+        # located the player, so no consumer can render "★ here" and "could
+        # not look" from the same summary.
+        "here_unknown": None if current is not None else (here_unknown or None),
         "reachable_from_current": reachable,
         "dead_ends": dead_ends,
         "orphans": orphans,
@@ -80,7 +101,14 @@ def format_menu_map_lines(summary: Mapping[str, Any] | None, cols: int = 22) -> 
     """Clip-safe inspector lines for a ``menu_map_summary`` result."""
     cols = max(8, int(cols))
     if not summary:
-        return ["MAP —"[:cols], "here off-map"[:cols]]
+        # Swept alongside the `current is None` branch below, same defect:
+        # no summary at all is the LEAST informed state there is, and it was
+        # the one asserting the player's position most confidently. Nothing
+        # in the live tree passes a falsy summary today (`tw menumap` always
+        # builds one), so this is a dormant branch -- but it is dormant, not
+        # correct, and leaving the identical claim two lines from its fixed
+        # twin is how a defect grows back.
+        return ["MAP —"[:cols], "here ? no map"[:cols]]
 
     n = int(summary.get("node_count") or 0)
     e = int(summary.get("edge_count") or 0)
@@ -88,7 +116,14 @@ def format_menu_map_lines(summary: Mapping[str, Any] | None, cols: int = 22) -> 
 
     current = summary.get("current")
     if current is None:
-        here = "here off-map"
+        # "off-map" is a CLAIM about where the player is; it is only honest
+        # when a lookup actually ran and came back empty. When the summary
+        # carries a reason we could not look, say that instead -- `?` is
+        # canon's unknown glyph and has no ASCII twin to diverge from.
+        # Coerced with str() rather than trusted: this reason reaches here
+        # from a caller-supplied field, same discipline as `label` below.
+        reason = summary.get("here_unknown")
+        here = f"here ? {str(reason)}" if reason else "here off-map"
     else:
         label = str(current.get("label") or current.get("signature") or "?")
         here = f"here ★ {label}"
@@ -120,7 +155,11 @@ def format_menu_map_report(summary: Mapping[str, Any] | None) -> list[str]:
     return lines
 
 
-def menu_map_summary_from_store(path, current_sig: Optional[str] = None) -> dict[str, Any]:
+def menu_map_summary_from_store(
+    path,
+    current_sig: Optional[str] = None,
+    here_unknown: Optional[str] = None,
+) -> dict[str, Any]:
     """Thin wrapper: load menu-map from knowledge store, then summarize."""
     from .knowledge import list_menu_edges, list_menu_nodes
 
@@ -128,4 +167,5 @@ def menu_map_summary_from_store(path, current_sig: Optional[str] = None) -> dict
         list_menu_nodes(path),
         list_menu_edges(path),
         current_sig=current_sig,
+        here_unknown=here_unknown,
     )
