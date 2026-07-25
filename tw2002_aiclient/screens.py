@@ -758,6 +758,45 @@ class PlayShellScreen:
         # frame and the non-bold-cyan default chrome, never the tone table's
         # own (red, bold=True) "danger" attr.
         self._viewport_danger_attr = _shared_pairs.attr_for(danger_fg_name)
+        if self._viewport_danger_attr == curses.A_NORMAL:
+            # WO-P4-054 Gap 2, DOCS-WIN (canon `visual-language.md:75-82`
+            # "the viewport border is a STATE surface" -- "Mono /
+            # color-unavailable interim: the same disconnect flip uses
+            # A_UNDERLINE non-bold"). Canon scopes that interim to "color
+            # unavailable" for the danger flip itself, not literally
+            # `has_colors() == False` and not "danger happens to match
+            # chrome" -- this branch is the code catching up to what canon
+            # already prescribes for a route it had missed. Within this
+            # branch `has_colors()` is already True (the mono path
+            # returned above) and `danger_fg_name` always resolves to a
+            # real color ("red", via cockpit.tones' own default), so
+            # WO-P4-053's `_SharedPairs.attr_for` returning
+            # `curses.A_NORMAL` here can ONLY mean the pair allocation
+            # itself failed (process-lifetime pair-table exhaustion, or
+            # any other curses.error on init_pair) -- `curses.color_pair(n)`
+            # is never 0 for a real allocated n >= 1. Testing the danger
+            # attr directly (rather than comparing it to `_chrome_attr`)
+            # also covers the case where chrome's own earlier allocation
+            # happened to succeed while danger's failed -- unreachable via
+            # the real app's `_TonePalette()`-before-`PlayShellScreen`
+            # construction order today (danger is always allocated before
+            # chrome there, so a chrome-succeeds/danger-fails split can't
+            # occur -- verified empirically), but this reads as the rule
+            # canon actually states rather than a proxy for it, and stays
+            # correct if that construction order ever changes. Left
+            # unhandled, an allocation failure here would silently erase
+            # the viewport border's disconnect signal (every existing test
+            # asserts attr == self._viewport_danger_attr, so a collapse to
+            # curses.A_NORMAL -- whatever chrome happened to get -- would
+            # pass every one of them vacuously). Empirically reproduced
+            # both ways: WO-P4-054's own
+            # test_shared_pair_exhaustion_reproduces_and_is_fixed_by_underline_interim
+            # (both colors exhaust together, the real-app-reachable case)
+            # and test_danger_only_allocation_failure_still_gets_underline_interim
+            # (chrome succeeds, danger alone fails -- construction-order
+            # dependent, not reachable via `_run()` today, pinned as a
+            # defensive rule-fidelity guard regardless).
+            self._viewport_danger_attr = curses.A_UNDERLINE
 
     def _viewport_border_attr(self, status: dict | None) -> int:
         """The GAME viewport border's own STATE flip (WO-P3-040, canon

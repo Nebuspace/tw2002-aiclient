@@ -113,12 +113,36 @@ def _fake_ensure(profile, **kwargs):
 adapters.ensure_session = _fake_ensure
 
 _TONE_FIXTURE = os.environ.get("TW2002_TEST_TONE_FIXTURE", "")
-if _TONE_FIXTURE:
+# Gap 1 (WO-P4-054): a status-PHASE FILE the outer test process rewrites
+# mid-flight, mirroring tests/test_cockpit_liveness_pty.py's own
+# controlled-clock-file idiom -- lets a single continuously-driven process
+# walk a real connected -> disconnected -> connected cycle instead of only
+# ever proving one-way fixtures. Opt-in (empty unless a reconnect-cycle
+# driver sets it), so every existing static _TONE_FIXTURE scenario above is
+# untouched.
+_TONE_STATUS_FILE = os.environ.get("TW2002_TEST_TONE_STATUS_FILE", "")
+_RECONNECT_PHASES = {{
+    "recon_a": {{"ok": True, "connected": True, "idle_ms": 1000, "credits": 555666, "turns_left": 40}},
+    "recon_b": {{"ok": True, "connected": False, "idle_ms": 999999, "credits": 666777, "turns_left": 50}},
+    "recon_c": {{"ok": True, "connected": True, "idle_ms": 1000, "credits": 777888, "turns_left": 60}},
+}}
+if _TONE_FIXTURE or _TONE_STATUS_FILE:
+    from pathlib import Path as _Path
+
     from tw2002_aiclient.session import cli as session_cli
 
     def _fake_send_request(verb, args_payload=None, *, timeout=15.0, run_dir=None):
         if verb != "status":
             return {{"ok": False, "error": "unsupported_verb_in_test_stub"}}
+        if _TONE_STATUS_FILE:
+            try:
+                phase = _Path(_TONE_STATUS_FILE).read_text().strip()
+            except OSError:
+                phase = ""
+            fixture = _RECONNECT_PHASES.get(phase)
+            if fixture is not None:
+                return dict(fixture)
+            return {{"ok": False, "error": "unknown_reconnect_phase"}}
         if _TONE_FIXTURE == "connected":
             # Fresh (idle_ms well under the 5.0s STALE_RX_THRESHOLD_S) ->
             # status_semantic("ok") -> the viewport border stays default
@@ -485,6 +509,185 @@ def test_ascii_mode_disconnected_flip_same_tone_as_unicode_mode(_ascii_disconnec
 
 
 # ---------------------------------------------------------------------------
+# (d2) Gap 1 (WO-P4-054): reconnect transition through the real curses draw.
+# A one-way disconnect fixture (like (b) above) cannot prove the border
+# EVER returns to chrome -- if the attr were latched on the instance after
+# the first danger, every one-way test would still pass and the border
+# would never come back. This drives ONE continuously-running process
+# through a real connected -> disconnected -> connected cycle via a
+# status-PHASE FILE the outer process rewrites mid-flight (mirrors
+# tests/test_cockpit_liveness_pty.py's own controlled-clock-file idiom),
+# capturing a full-buffer snapshot at each phase only once that phase's own
+# distinguishing credits value is actually visible on screen -- condition-
+# driven via find_text, never a fixed sleep standing in for the transition
+# itself (the settle window after each write only lets the real ~1 Hz
+# redraw loop flush a frame that already carries the new phase's data, the
+# same "let a tick land" wait every sibling pty suite already uses).
+# ---------------------------------------------------------------------------
+
+
+def _drive_reconnect_cycle_pty(tmp_path: Path, timeout: float = 16.0) -> tuple[bytes, bytes, bytes]:
+    bootstrap = tmp_path / "tone_reconnect_cycle_bootstrap.py"
+    bootstrap.write_text(_BOOTSTRAP.format(project_root=str(PROJECT_ROOT)), encoding="utf-8")
+    isolated_run_dir = tmp_path / "isolated_run"
+    isolated_run_dir.mkdir(exist_ok=True)
+    status_file = tmp_path / "recon_phase.txt"
+    status_file.write_text("recon_a", encoding="utf-8")
+
+    master_fd, slave_fd = pty.openpty()
+    set_winsize(slave_fd, FULL_ROWS, FULL_COLS)
+    env = dict(os.environ)
+    env["TERM"] = "xterm"
+    env["TW2002_LAUNCHER_DEMO"] = "1"
+    env["TW_RUN_DIR"] = str(isolated_run_dir)
+    env["TW2002_TEST_TONE_STATUS_FILE"] = str(status_file)
+    env.pop("TW2002_ASCII", None)
+    env.pop("TW2002_TEST_TONE_FIXTURE", None)
+    env.pop("TW2002_HANDOFF_SMOKE", None)
+    env.pop("TW2002_LAUNCHER_SMOKE", None)
+    env.pop("TW2002_BANK_SMOKE", None)
+
+    proc = subprocess.Popen(
+        [sys.executable, str(bootstrap)],
+        stdin=slave_fd,
+        stdout=slave_fd,
+        stderr=slave_fd,
+        cwd=str(PROJECT_ROOT),
+        env=env,
+        start_new_session=True,
+    )
+    os.close(slave_fd)
+
+    captured = b""
+    capture_a: bytes | None = None
+    capture_b: bytes | None = None
+    capture_c: bytes | None = None
+    phase = "wait_launcher"
+    deadline = time.monotonic() + timeout
+    try:
+        while time.monotonic() < deadline:
+            ready, _, _ = select.select([master_fd], [], [], 0.2)
+            if master_fd in ready:
+                try:
+                    chunk = os.read(master_fd, 65536)
+                except OSError:
+                    break
+                if not chunk:
+                    break
+                captured += chunk
+
+            grid = pyte_grid(captured, FULL_ROWS, FULL_COLS)
+
+            if phase == "wait_launcher":
+                if find_text(grid, "SELECT PROFILE") and find_text(grid, HANDLE):
+                    os.write(master_fd, b"\r")
+                    phase = "wait_a"
+            elif phase == "wait_a":
+                if find_text(grid, "555,666"):
+                    captured = _settle(master_fd, captured, 1.6)
+                    capture_a = captured
+                    status_file.write_text("recon_b", encoding="utf-8")
+                    phase = "wait_b"
+            elif phase == "wait_b":
+                if find_text(grid, "666,777"):
+                    captured = _settle(master_fd, captured, 1.6)
+                    capture_b = captured
+                    status_file.write_text("recon_c", encoding="utf-8")
+                    phase = "wait_c"
+            elif phase == "wait_c":
+                if find_text(grid, "777,888"):
+                    captured = _settle(master_fd, captured, 1.6)
+                    capture_c = captured
+                    os.write(master_fd, b"q")
+                    phase = "done"
+                    break
+        if phase != "done":
+            try:
+                os.write(master_fd, b"q")
+            except OSError:
+                pass
+    finally:
+        drain_deadline = time.monotonic() + 5.0
+        while time.monotonic() < drain_deadline and proc.poll() is None:
+            ready, _, _ = select.select([master_fd], [], [], 0.2)
+            if master_fd in ready:
+                try:
+                    chunk = os.read(master_fd, 65536)
+                except OSError:
+                    break
+                if not chunk:
+                    break
+                captured += chunk
+        if proc.poll() is None:
+            proc.kill()
+        try:
+            proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.wait(timeout=5)
+        try:
+            os.close(master_fd)
+        except OSError:
+            pass
+
+    assert (
+        phase == "done" and capture_a is not None and capture_b is not None and capture_c is not None
+    ), (
+        f"reconnect-cycle pty drive stalled in phase={phase!r}; last grid:\n"
+        + "\n".join(pyte_grid(captured, FULL_ROWS, FULL_COLS))
+    )
+    return capture_a, capture_b, capture_c
+
+
+@pytest.fixture(scope="module")
+def _reconnect_cycle_capture(tmp_path_factory):
+    tmp_path = tmp_path_factory.mktemp("tone_reconnect_cycle")
+    return _drive_reconnect_cycle_pty(tmp_path)
+
+
+@_PTY_SKIP
+def test_pty_viewport_border_returns_to_identical_chrome_cell_after_reconnect(_reconnect_cycle_capture):
+    """The border must return to the IDENTICAL rendered cyan cell after a
+    real reconnect -- not merely 'also cyan' (which a latched-then-partial
+    -reset bug could still satisfy), the same fg AND bold as the very first
+    connected frame."""
+    capture_a, capture_b, capture_c = _reconnect_cycle_capture
+    regions = frame_layout(FULL_ROWS, FULL_COLS)
+    center = regions["center"]
+
+    screen_a = pyte_screen(capture_a, FULL_ROWS, FULL_COLS)
+    screen_b = pyte_screen(capture_b, FULL_ROWS, FULL_COLS)
+    screen_c = pyte_screen(capture_c, FULL_ROWS, FULL_COLS)
+
+    cell_a = screen_a.buffer[center["y"]][center["x"]]
+    cell_b = screen_b.buffer[center["y"]][center["x"]]
+    cell_c = screen_c.buffer[center["y"]][center["x"]]
+
+    assert cell_a.fg == "cyan" and not cell_a.bold, f"phase A (connected) sanity: got fg={cell_a.fg!r} bold={cell_a.bold!r}"
+    assert cell_b.fg == "red" and not cell_b.bold, (
+        f"phase B (disconnected) must render the real danger flip: got fg={cell_b.fg!r} bold={cell_b.bold!r}"
+    )
+    assert cell_c.fg == cell_a.fg and cell_c.bold == cell_a.bold, (
+        "phase C (reconnected) must return to the IDENTICAL chrome cell as phase A, "
+        f"got fg={cell_c.fg!r} bold={cell_c.bold!r} vs initial fg={cell_a.fg!r} bold={cell_a.bold!r}"
+    )
+
+    # Each capture really is the phase it claims to be (distinguishing
+    # content actually landed), not a stale replay of a prior phase.
+    grid_a = pyte_grid(capture_a, FULL_ROWS, FULL_COLS)
+    grid_b = pyte_grid(capture_b, FULL_ROWS, FULL_COLS)
+    grid_c = pyte_grid(capture_c, FULL_ROWS, FULL_COLS)
+    assert any("555,666" in row for row in grid_a)
+    assert any("666,777" in row for row in grid_b)
+    assert any("777,888" in row for row in grid_c)
+
+    # "GAME" title text never moves outside the game cells for any phase.
+    assert "GAME" in grid_a[center["y"]]
+    assert "GAME" in grid_b[center["y"]]
+    assert "GAME" in grid_c[center["y"]]
+
+
+# ---------------------------------------------------------------------------
 # (e) Esc -> back / q -> quit unchanged -- the tone wiring adds no new key
 # handling. Mirrors tests/test_cockpit_fold_pty.py's own regression leg.
 # ---------------------------------------------------------------------------
@@ -616,6 +819,197 @@ def test_viewport_border_attr_stale_but_connected_stays_chrome_not_danger(monkey
     screen = _make_screen(monkeypatch)
     attr = screen._viewport_border_attr({"connected": True, "idle_ms": 999_000})  # 999s, well past 5.0s
     assert attr == screen._chrome_attr
+
+
+# ---------------------------------------------------------------------------
+# Gap 1 (WO-P4-054): the reconnect direction, unit level. Every disconnect
+# assertion above is a single fresh call on a fresh screen -- a set of
+# one-way tests cannot prove the border ever returns to chrome. If the attr
+# were ever latched/cached on the instance after the first danger, every
+# test above would still pass and the border would never come back. These
+# call _viewport_border_attr repeatedly on the SAME instance across a real
+# cyan -> danger -> cyan cycle (and a longer oscillation), asserting the
+# return is IDENTICAL to the very first chrome call, not merely "also
+# chrome".
+# ---------------------------------------------------------------------------
+
+
+def test_viewport_border_attr_round_trips_cyan_danger_cyan_on_reconnect(monkeypatch):
+    screen = _make_screen(monkeypatch)
+    connected_status = {"connected": True, "idle_ms": 0}
+    disconnected_status = {"connected": False, "idle_ms": 0}
+
+    first_chrome = screen._viewport_border_attr(connected_status)
+    assert first_chrome == screen._chrome_attr
+
+    danger = screen._viewport_border_attr(disconnected_status)
+    assert danger == screen._viewport_danger_attr
+    assert danger != first_chrome
+
+    second_chrome = screen._viewport_border_attr(connected_status)
+    assert second_chrome == first_chrome, (
+        "the border must return to the SAME chrome attr on reconnect, not stay latched on danger"
+    )
+
+
+def test_viewport_border_attr_survives_five_cycle_oscillation(monkeypatch):
+    """A "flips once then latches" bug could still survive a single round
+    trip if it only breaks on the SECOND transition onward -- oscillate
+    five full cycles and assert every single call, not just the
+    endpoints."""
+    screen = _make_screen(monkeypatch)
+    connected_status = {"connected": True, "idle_ms": 0}
+    disconnected_status = {"connected": False, "idle_ms": 0}
+
+    for cycle in range(5):
+        attr = screen._viewport_border_attr(connected_status)
+        assert attr == screen._chrome_attr, f"cycle {cycle}: expected chrome on connected"
+        attr = screen._viewport_border_attr(disconnected_status)
+        assert attr == screen._viewport_danger_attr, f"cycle {cycle}: expected danger on disconnected"
+
+
+# ---------------------------------------------------------------------------
+# Gap 2 (WO-P4-054): vacuous-pass hazard. Every disconnect assertion in this
+# file (and the pty tests above) checks `attr == screen._viewport_danger_attr`.
+# If `_chrome_attr` and `_viewport_danger_attr` were EVER equal, all of
+# those assertions would pass vacuously while the border silently signaled
+# nothing at all. WO-P4-053's `_SharedPairs.attr_for` degrades ANY color it
+# cannot allocate a pair for (process-lifetime pair-table exhaustion, or any
+# other curses.error on init_pair) to the SAME curses.A_NORMAL fallback --
+# so two DIFFERENT color names (info/cyan, danger/red) could in principle
+# both land on that identical fallback.
+# ---------------------------------------------------------------------------
+
+
+def _patch_fake_curses_color_support(monkeypatch, screens_mod, *, color_pairs_limit):
+    """Monkeypatch just enough of the real ``curses`` module (screens.py's
+    own module-level ``curses`` reference) to drive ``_SharedPairs.attr_for``
+    through its REAL allocation logic with ``has_colors()`` True and a
+    controlled ``COLOR_PAIRS`` ceiling, without needing a live terminal --
+    ``start_color``/``use_default_colors``/``init_pair`` all SUCCEED (unlike
+    a plain pytest process with no ``initscr()``, where they'd raise
+    ``curses.error`` immediately and mask the specific COLOR_PAIRS-exhaustion
+    branch this probes), and ``color_pair(n)`` returns a distinct sentinel
+    per pair number so two REAL allocations can never coincidentally compare
+    equal. Also swaps in a fresh ``_SharedPairs`` instance so this test's
+    allocation history can't leak into (or be polluted by) any other test's
+    use of the module-level singleton.
+    """
+    monkeypatch.setattr(screens_mod.curses, "has_colors", lambda: True)
+    monkeypatch.setattr(screens_mod.curses, "start_color", lambda: None)
+    monkeypatch.setattr(screens_mod.curses, "use_default_colors", lambda: None)
+    monkeypatch.setattr(screens_mod.curses, "COLOR_PAIRS", color_pairs_limit, raising=False)
+    monkeypatch.setattr(screens_mod.curses, "init_pair", lambda n, fg, bg: None)
+    monkeypatch.setattr(screens_mod.curses, "color_pair", lambda n: 1000 + n)
+    monkeypatch.setattr(screens_mod, "_shared_pairs", screens_mod._SharedPairs())
+
+
+def test_shared_pair_exhaustion_reproduces_and_is_fixed_by_underline_interim(monkeypatch):
+    """Empirical probe: with a small, deterministic COLOR_PAIRS ceiling (3)
+    and the REAL app's own allocation order ahead of PlayShellScreen's
+    construction (LauncherScreen's own ``_TonePalette`` 7-tone iteration,
+    which every real launcher -> play navigation exercises first), does the
+    collapse actually reproduce? Observed (see report): yes -- both
+    info/cyan and danger/red exhaust the shared pair table and would
+    otherwise return the identical ``curses.A_NORMAL`` fallback. The fix
+    (``screens.py`` ``_init_colors``) detects that collapse and reuses the
+    SAME mono-mode underline interim (``curses.A_UNDERLINE``) rather than
+    inventing a second STATE convention."""
+    from tw2002_aiclient import screens as screens_mod
+
+    _patch_fake_curses_color_support(monkeypatch, screens_mod, color_pairs_limit=3)
+
+    # Mirrors the real app's own construction order: LauncherScreen's
+    # 7-tone palette always builds first (launcher -> play navigation),
+    # consuming pairs for green/yellow before PlayShellScreen ever asks for
+    # cyan/red.
+    screens_mod._TonePalette()
+
+    profile = screens_mod.ProfileRow(
+        name="alpha", handle=HANDLE, server="demo-a", host="demo-a.example", game_letter="B"
+    )
+    screen = screens_mod.PlayShellScreen(_NullWin(FULL_ROWS, FULL_COLS), profile)
+
+    assert screen._chrome_attr == curses.A_NORMAL, (
+        "sanity: this test's premise is that chrome ALSO exhausts under this ceiling+order -- "
+        f"got {screen._chrome_attr!r}; the exhaustion condition did not reproduce as expected"
+    )
+    assert screen._viewport_danger_attr == curses.A_UNDERLINE, (
+        f"expected the collapse-guard fix to fall back to the mono interim underline, "
+        f"got {screen._viewport_danger_attr!r}"
+    )
+    assert screen._viewport_danger_attr != screen._chrome_attr, (
+        "the vacuous-pass hazard: chrome and danger attrs must never be equal"
+    )
+
+
+def test_danger_only_allocation_failure_still_gets_underline_interim(monkeypatch):
+    """REVISE (team-lead, WO-P4-054): a narrower ``danger == chrome`` guard
+    misses the state one allocation slot removed from the both-fail
+    collapse above -- chrome's own allocation SUCCEEDS, danger's ALONE
+    fails. That split requires chrome (info/cyan) to be requested and
+    allocated BEFORE danger (danger/red) against a fresh, shared
+    allocator -- ``PlayShellScreen._init_colors``'s own two lines request
+    them in exactly that order, so this reproduces by constructing
+    ``PlayShellScreen`` as the FIRST-EVER caller into a fresh
+    ``_SharedPairs`` (skipping ``_TonePalette()``, unlike the sibling test
+    above).
+
+    Verified NOT reachable via the real app's own ``_run()`` entry point
+    (``app.py``) today: ``LauncherScreen`` -- and therefore its own
+    ``_TonePalette`` 7-tone iteration, which requests danger/red BEFORE
+    info/cyan -- always constructs first, and allocation is monotonic (a
+    failed request never advances the shared pointer), so under that real
+    order danger can only fail at or before the same ceiling chrome does.
+    This test exists as a defensive, construction-order-independent pin of
+    the RULE canon actually states ("color unavailable" on the danger
+    attr itself) rather than of a reachable live scenario -- proving the
+    generalized ``self._viewport_danger_attr == curses.A_NORMAL`` guard
+    doesn't quietly depend on which allocation happened first."""
+    from tw2002_aiclient import screens as screens_mod
+
+    _patch_fake_curses_color_support(monkeypatch, screens_mod, color_pairs_limit=2)
+
+    # Deliberately NO _TonePalette() here -- PlayShellScreen must be the
+    # first-ever consumer of this fresh allocator so its own chrome-then-
+    # danger request order is what's exercised.
+    profile = screens_mod.ProfileRow(
+        name="alpha", handle=HANDLE, server="demo-a", host="demo-a.example", game_letter="B"
+    )
+    screen = screens_mod.PlayShellScreen(_NullWin(FULL_ROWS, FULL_COLS), profile)
+
+    assert screen._chrome_attr != curses.A_NORMAL, (
+        "sanity: this test's premise is that chrome ALONE succeeds under this ceiling+order -- "
+        f"got {screen._chrome_attr!r}; the split-allocation condition did not reproduce as expected"
+    )
+    assert screen._viewport_danger_attr == curses.A_UNDERLINE, (
+        "expected the generalized guard (danger attr tested directly, not compared to chrome) to "
+        f"still catch a lone danger-allocation failure, got {screen._viewport_danger_attr!r}"
+    )
+    assert screen._viewport_danger_attr != screen._chrome_attr
+
+
+def test_chrome_and_danger_attrs_are_never_equal_guard(monkeypatch):
+    """Required regardless of whether exhaustion reproduces on any given
+    terminal: pin chrome/danger as genuinely DISTINCT in mono mode AND in a
+    REAL (non-exhausted, generously-sized) color-pair allocation -- this
+    guard must fail loudly the instant that invariant breaks, closing the
+    vacuous-pass hazard for good."""
+    mono_screen = _make_screen(monkeypatch)
+    assert mono_screen._chrome_attr != mono_screen._viewport_danger_attr
+
+    from tw2002_aiclient import screens as screens_mod
+
+    _patch_fake_curses_color_support(monkeypatch, screens_mod, color_pairs_limit=64)
+    screens_mod._TonePalette()
+    profile = screens_mod.ProfileRow(
+        name="alpha", handle=HANDLE, server="demo-a", host="demo-a.example", game_letter="B"
+    )
+    color_screen = screens_mod.PlayShellScreen(_NullWin(FULL_ROWS, FULL_COLS), profile)
+    assert color_screen._chrome_attr != color_screen._viewport_danger_attr
+    # And neither is the underline-interim fallback value -- proves this
+    # branch hit genuine distinct pair allocation, not the collapse-guard.
+    assert color_screen._viewport_danger_attr != curses.A_UNDERLINE
 
 
 # ---------------------------------------------------------------------------
