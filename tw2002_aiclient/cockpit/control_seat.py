@@ -78,11 +78,17 @@ attached claim applies" -- because this per-client module still tracks only
 the two booleans documented above (``spectating``, ``attached``), never the
 daemon-global ``status["mode"]`` field, for the same reason already given:
 conflating them would let this cockpit's own indicator claim a fact that
-isn't this instance's own. Today's only real caller (``screens.py``) always
-passes ``attached=not self.spectating``, so the App branch (reached only
-when BOTH are falsy) is off-contract/unreachable in production as of this
-dispatch -- reaching it live is PWO-061's job (the `M` App-Human switch),
-which needs new screens.py state this WO does not add. ``compose_control_
+isn't this instance's own. When PWO-060 landed, the only real caller
+(``screens.py``) still derived ``attached=not self.spectating``, so the
+App branch (reached only when BOTH are falsy) was off-contract/
+unreachable in production, and reaching it live was left to the Ctrl-A
+App-Human switch (``screens.MODE_KEY``, ADR-002). All of that has since
+shipped: ``screens.py`` now passes ``attached=self.attached`` directly
+(WO-P5-060), the Ctrl-A switch landed in WO-P5-061-ENTRY, and
+WO-ENTRY-APP-CHIP made App-hold the cockpit's ENTRY state
+(``spectating=False, attached=False``) -- so the both-falsy input is
+no longer hypothetical but the DEFAULT rendering path, hit every time
+the cockpit opens. ``compose_control_
 strip_line``'s label-selection priority is extended (no signature change)
 from ``attached_label(attached) or seat_label(spectating)`` to additionally
 fall back ``... or app_label()`` -- this is a deliberate, flagged behavior
