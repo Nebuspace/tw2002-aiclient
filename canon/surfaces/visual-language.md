@@ -24,7 +24,7 @@ that defines it. **Rebirth tip (Phases 0–3 CLOSED · Phase 4 CLOSED through `b
 `tw2002_aiclient/cockpit/` and `screens.py`; session transport under `tw2002_aiclient/session/`;
 product watch subscribe under `tw2002_aiclient/watchfeed.py` (PWO-050); GAME glyph + per-cell color
 paint under cockpit viewport (PWO-052 · PWO-053); disconnect border round-trip + color-unavailable
-interim (PWO-054); in-cockpit `SPECTATE` chip (PWO-055); `M` attach + Ctrl-] detach (PWO-056 ·
+interim (PWO-054); in-cockpit `SPECTATE` chip (PWO-055); Mode attach + Ctrl-] detach (PWO-056 ·
 PWO-057); App XOR Human dual chips + vocabulary gate (PWO-060 — App chip **composer-LIVE**,
 **wire-UNREACHABLE** until 061 App-hold). Citations still name many archive
 (`archive/pre-rebirth-2026-07-23/code/twclient/`) symbols where Phase 5+ teach / STOP / arm ports
@@ -37,7 +37,7 @@ live introspection.
 pyte **glyphs and per-cell fg/bg/bold color** into the 80×25 GAME (**LIVE** · PWO-052 · PWO-053).
 Border STATE flip (danger non-bold / color-unavailable `A_UNDERLINE`) is **LIVE** and reconnect-proven
 (P3-040 · PWO-054 · tip `6c7d834`). In-cockpit spectate indicator is **LIVE** (muted `SPECTATE` ·
-PWO-055); attach/detach loop is **LIVE** (`M` · Ctrl-] · chip SPECTATE↔MANUAL · tip `bba53d4`);
+PWO-055); attach/detach loop is **LIVE** (historically bare `M` · Ctrl-] · chip SPECTATE↔MANUAL · tip `bba53d4`; Mode chord = **Ctrl-A** per ADR-002);
 App/Human dual chips are **LIVE** (PWO-060 · tip `2ca3154`); ops `tw spectate` remains **F2 HOLD**.
 Do not read chrome-tones prose as recoloring game cells with the 7-tone semantic table.
 
@@ -149,7 +149,7 @@ fidelity but never meaning.
 | `—` (em-dash) | `—` (no swap) | an unknown/empty value, in place of a fabricated `-` or a blank | throughout HUD/GOALS/PRIORITIES rendering |
 | `×` | `×` (no swap) | dimensional multiply in gate/refusal copy (`C×L`, `60×20`) — same no-swap family as `·` / `—`; never ASCII `x` | `tw2002_aiclient/cockpit/layout.py::frame_layout` `too_small` `message` (≈97–102) |
 | `!` | `!` (no swap) | leads the STOP / intervention strip — the one-glyph "attention" mark | `compose_intervention_strip` |
-| `KEY)verb` | `KEY)verb` (no swap) | the uniform hotkey-token shape on the control-strip hint band (`M)ode`, `A)nalyze`, …) | `spectate_app.py` control strip |
+| `KEY)verb` | `KEY)verb` (no swap) | the uniform hotkey-token shape on the control-strip hint band (`^A)ode`, `A)nalyze`, …) | `spectate_app.py` control strip |
 
 **Motion glyphs** (see the Liveness-cue catalog below for full behavior): spinner `⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏`
 (ASCII `|/-\`) · heartbeat `●`/`○` (ASCII `*`/`.`) · sparkline `▁▂▃▄▅▆▇█` (ASCII `.-=#`) ·
@@ -299,7 +299,7 @@ the taste, not an omission (`TUI-POLISH-PLAN.md`).
 ## A calm cockpit reading (App healthy, nothing to see)
 
 ```
-[ APP ]      → 158                         M)ode  A)nalyze  R)ecord  T)rigger  L)chains  P panic
+[ APP ]      → 158                         ^A)ode  A)nalyze  R)ecord  T)rigger  L)chains  P panic
   ^ green, reverse-video chip     ^ uncolored TX telemetry    ^ cyan chrome hint band, right-aligned
 ```
 No intervention strip is drawn; the spinner is frozen at frame `[0]`; only the heartbeat and the

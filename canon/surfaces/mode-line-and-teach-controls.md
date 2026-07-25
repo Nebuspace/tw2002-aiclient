@@ -1,7 +1,7 @@
 ---
 type: System
 title: Mode Line, Teach Hotkeys & the Escalation Handoff (UX)
-description: The cockpit interaction contract — the App/Human actor indicator, the M/A/R/T keys, the operate-the-app control cluster, and how STOP-and-handoff is presented to the human.
+description: The cockpit interaction contract — the App/Human actor indicator, the Ctrl-A Mode chord and A/R/T keys, the operate-the-app control cluster, and how STOP-and-handoff is presented to the human.
 tags: [surface, mode-line, teach-controls, escalation-handoff, human-approval, confirm-gate, prescriptive]
 timestamp: 2026-07-23T20:55:51Z
 ---
@@ -39,14 +39,15 @@ holder: it takes no lock and drives nothing (see [spectate-and-attach](/surfaces
 so it does not occupy the App/Human dual. Default when the client runs = App/autopilot. **Ctrl-]
 from App-hold = deliberate no-op stay App** (Max Batch 2/3; do not invent a Spectate transition).
 
-## `M` — the App↔Human mode switch
+## `Ctrl-A` — the App↔Human Mode switch
 
-`M` is the single control-switch key: it toggles the live holder between **App** and **Human**.
-Switching **to Human is immediate and unrefusable** — the human always wins the keyboard the instant
-they ask for it, even mid-dispatch; a taught behavior caught mid-flight is fenced and yields cleanly
-rather than being interleaved. This is a presentation summary only; the guarantee and its clean-cutover
-mechanics live in [control-and-escalation](/architecture/control-and-escalation.md) and the
-control-lock. The mode line reflects the new holder the moment the switch lands.
+**Ctrl-A** is the Mode chord (ADR-002): it toggles the live holder between **App** and **Human**.
+No single printable may be Mode. While Human is attached, bare `M` is TW Move (passthrough), not
+Mode. Switching **to Human is immediate and unrefusable** — the human always wins the keyboard the
+instant they ask for it, even mid-dispatch; a taught behavior caught mid-flight is fenced and yields
+cleanly rather than being interleaved. This is a presentation summary only; the guarantee and its
+clean-cutover mechanics live in [control-and-escalation](/architecture/control-and-escalation.md)
+and the control-lock. The mode line reflects the new holder the moment the switch lands.
 
 ## The teach hotkeys — A / R / T are the three escalation/teach moves
 
@@ -78,7 +79,7 @@ The controls that *operate the app's autopilot* all live on this surface — the
 [trainer-cockpit](/surfaces/trainer-cockpit.md) only renders them in its frame; the behavior contract
 is owned here. The cluster is:
 
-- **The mode selector** — the `M` App↔Human switch above.
+- **The mode selector** — the Ctrl-A App↔Human Mode switch above.
 - **Run / record / panic controls** — launch a taught run, record a macro (`R`), and a **panic**
   control that halts *all* automation and parks the app in a non-driving paused state. What a run and
   a panic actually arm and halt is [app-autopilot-model](/architecture/app-autopilot-model.md);
@@ -132,7 +133,7 @@ teach-provenance number, if shown, is labeled and kept separate from the live sh
 ## Mode line, healthy autopilot
 
 ```
-[ APP ]  → K            AUTO 82%   App 41 / Hum 9        M)ode  A)nalyze  R)ecord  T)rigger  L)chains  P panic
+[ APP ]  → K            AUTO 82%   App 41 / Hum 9        ^A)ode  A)nalyze  R)ecord  T)rigger  L)chains  P panic
 ```
 The App holds the keyboard (dual: App or Human). The auto meter is App-vs-Human live share. No AI
 slice appears in the live share; the teach keys sit on the hint band.
@@ -215,7 +216,7 @@ fidelity, never information.
 The control strip lays out strictly **left-to-right** (`compose_control_strip` → `_draw_control_strip`):
 
 ```
-[ APP ]      → 158                         M)ode  A)nalyze  R)ecord  T)rigger  L)chains  P panic
+[ APP ]      → 158                         ^A)ode  A)nalyze  R)ecord  T)rigger  L)chains  P panic
 └ chip ┘     └ TX readout ┘                └──────────────  hint band (right-aligned) ──────────────┘
 ```
 
@@ -230,19 +231,19 @@ The control strip lays out strictly **left-to-right** (`compose_control_strip` �
    channel. When a taught run is live, the band's slot is claimed instead by the AUTO-LOOP
    cycle-progress bar (`Playing <name> ▸ cycle/total [███░░]`) — never both, there is only room for one.
 
-The reborn hint band is `M)ode  A)nalyze  R)ecord  T)rigger  L)chains  P panic`; every token uses the
-uniform `KEY)verb` shape so the hotkey letter is scannable at the head of each token. (As-built the
-band is `CONTROL_HINTS = "M)ode  L)chains  E)xplore  Spc pause  X stop  P panic  A)ttach"` — the A/R/T
-teach moves are not yet wired here; see Code divergence.)
+The reborn hint band is `^A)ode  A)nalyze  R)ecord  T)rigger  L)chains  P panic`; every token uses the
+uniform `KEY)verb` shape so the hotkey letter is scannable at the head of each token (`^A` = Ctrl-A
+Mode per ADR-002). (As-built the band is still `CONTROL_HINTS = "M)ode  L)chains  E)xplore  Spc pause
+X stop  P panic  A)ttach"` until 061-entry lands — tip honesty; see Code divergence.)
 
-## The A / R / T / M hotkey affordances
+## The A / R / T / Mode hotkey affordances
 
 The four keys are surfaced as `KEY)verb` tokens on the hint band and — at a STOP — promoted to the
 banner's teach line. Their affordance styling:
 
-- **`M`** leads the band (the mode switch is the strip's own primary control, adjacent to the chip it
-  flips). A press flips the chip color the instant the switch lands (green↔yellow) — the color change
-  *is* the acknowledgement.
+- **Ctrl-A (`^A)ode`)** leads the band (the Mode switch is the strip's own primary control, adjacent
+  to the chip it flips). A press flips the chip color the instant the switch lands (green↔yellow) —
+  the color change *is* the acknowledgement. Attached bare `M` is Move, not Mode.
 - **`A` / `R` / `T`** are the teach triad; at an escalation they move off the band and onto the banner's
   dedicated **`teach:`** line so the three moves sit right where the halt happened. On the calm band
   they are ordinary cyan `KEY)verb` tokens; on the banner they inherit the banner's warn-bold weight.
@@ -296,7 +297,7 @@ The mode line is a "is it frozen?" surface, so it carries live cues even when no
 
 - **The `→ TX` readout** flips between `→ 158` and `→ -` on every dispatch — the app's heartbeat of
   *keys actually pressed*.
-- **The mode chip** flips color the instant `M` lands — immediate, unrefusable switch-to-Human shows as
+- **The mode chip** flips color the instant Ctrl-A lands — immediate, unrefusable switch-to-Human shows as
   an instant green→yellow chip flip, no lag.
 - **The classification pulse** (`_draw_header`, ~1.0s reverse) fires when the underlying screen class
   changes — the coarse "something just changed" signal that often precedes a halt.
@@ -339,7 +340,7 @@ See the shared fold ladder in [visual-language](/surfaces/visual-language.md) `[
   (`Playing <name> ▸ cycle/total`).
 - **`?`** — an empty/unknown reason code in the banner, or an unknown mode in the chip.
 - **`█` / `░`** (`#` / `.` ASCII) — the AUTO-LOOP cycle-progress bar fill.
-- **`KEY)verb`** — the uniform hotkey-token shape on the hint band (`M)ode`, `A)nalyze`, …).
+- **`KEY)verb`** — the uniform hotkey-token shape on the hint band (`^A)ode`, `A)nalyze`, …).
 
 The full cross-surface marker set (`✓ · ? ⊘ ★ ✦ ○ —` and the liveness glyphs) is the shared dictionary
 — see [visual-language](/surfaces/visual-language.md) `[ASPIRATIONAL]`; the markers above are the ones
@@ -367,11 +368,10 @@ The reborn contract above is the target; the current code still carries pre-rebo
   `human → "MANUAL — YOU HAVE CONTROL"`, `spectate → "SPECTATE"`. Tip play shell (PWO-060 ·
   `2ca3154`) ships the reborn **App/Human dual** (`APP` XOR MANUAL) with an AST vocabulary gate —
   archive AI-PILOT remains port-source only.
-- **`M` does not yet fully toggle App↔Human on tip.** Product: Spectate→Human (PWO-056) and
-  App-hold→Human (PWO-061 KERNEL · `d4a8829`) are LIVE; Human→App entry is **PARKED** (Max B′/C —
-  do not intercept `M` while attached / TW Move). Archive `spectate_app._handle_key` cycles
-  `ai_pilot ↔ spectate` — port-source only. Canon’s single App↔Human `M` with immediate
-  switch-to-Human remains the target; product entry path awaits Max.
+- **Mode does not yet fully toggle App↔Human on tip.** Product: Spectate→Human was bare `M` (PWO-056);
+  App-hold→Human (PWO-061 KERNEL · `d4a8829`) is LIVE; Human→App entry = **Ctrl-A** (Batch 1b /
+  ADR-002; CC `WO-P5-061-ENTRY`). Attached bare `M` = Move. Archive `spectate_app._handle_key` cycles
+  `ai_pilot ↔ spectate` — port-source only. Canon's App↔Human Mode is Ctrl-A.
 - **`A`/`R`/`T` are not wired as the teach moves.** `spectate_app` binds `A` to *launch `tw attach`*
   (not Analyze), and `R` (Record) and `T` (Assign-Trigger) are absent from the key handler entirely;
   the `USERDOCS/aiclient_ui.md` sketch listed `A`/`R`/`T`/`M` but the teach loop behind them is not

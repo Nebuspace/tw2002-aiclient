@@ -136,7 +136,7 @@ Hub relay `@ 09:25:55Z`:
 
 | ID | Gap | Tip reality |
 |---|---|---|
-| DOC-GAP-M-FROM-SPECTATE | Canon frames `M` as App↔Human; silent on Spectate→Human | **SUPERSEDED** (Batch 1b + 2/3): Mode=Ctrl-A; attached `M`=Move; Spectate≠Mode — no Spectate-`M` leg left to define |
+| DOC-GAP-M-FROM-SPECTATE | Canon frames `M` as App↔Human; silent on Spectate→Human | **CLOSED / SUPERSEDED** (ADR-002 · Batch 1b + 2/3): Mode=Ctrl-A; attached `M`=Move; Spectate≠Mode |
 | DOC-GAP-POST-DETACH-COPY | Canon silent on post-detach status copy | Shipped `"detached — spectating"` (dispatch-decided) |
 | DOC-GAP-SPECTATE-REVERSE-VS-PLAIN | `mode-line-and-teach-controls.md:196-198` says Spectate chip reverse-video like every badge; `spectate-and-attach.md:262` (+ PWO-060 constraint) say muted/**plain** | **055 shipped plain**; 060 keeps Spectate plain; dual App/Human get reverse+tone. Do not resolve in 060. |
 | DOC-GAP-CTRL-RBRACKET-FROM-APP-HOLD | Ctrl-] from App-hold is a no-op today | **Ruled** Batch 2/3: deliberate **no-op stay App** (CC pins product; no Spectate invent) |

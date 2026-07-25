@@ -15,7 +15,7 @@ marked _(planned)_ are not yet written; entries marked ✅ written exist on disk
 # Architecture
 
 * [North Star](/architecture/north-star.md) — The reborn vision: a human-piloted TradeWars trainer whose app autopilots the screens it has been taught, escalates every unknown to the human, and lets an observing AI codify responses into its growing repertoire. — ✅ written
-* [Control & Escalation](/architecture/control-and-escalation.md) — The App/Human live control dual (plus read-only Spectate), the `M` mode toggle, the escalate-on-unknown STOP→handoff, and the enumerated escalation reason-code catalog. — ✅ written
+* [Control & Escalation](/architecture/control-and-escalation.md) — The App/Human live control dual (plus read-only Spectate observation), the Ctrl-A Mode toggle, the escalate-on-unknown STOP→handoff, and the enumerated escalation reason-code catalog. — ✅ written
 * [Session Engine](/architecture/session-engine.md) — The daemon + one-shot-CLI split that owns the single telnet connection and terminal, serves the JSON verb protocol, and carries every keystroke through the control-lock with an `{app,human}` actor tag. — ✅ written
 * [CLI Verb Surface](/architecture/cli-verbs.md) — The single reference catalog of every one-shot `tw` verb: what it does, its arguments, whether it drives / reads / teaches, and which concept owns its behavior. — ✅ written
 * [Settle Detection & Screen Readiness](/architecture/settle-detection.md) — How the engine decides a screen has stopped changing and is safe to act on, absorbing known interjections without mistaking them for novel screens. — ✅ written
@@ -53,7 +53,7 @@ marked _(planned)_ are not yet written; entries marked ✅ written exist on disk
 # Surfaces
 
 * [The Trainer Cockpit](/surfaces/trainer-cockpit.md) — The framed oversight dashboard: panels, HUD, fold, always-on live state, and what the app is doing. — ✅ written
-* [Mode Line & Teach Controls](/surfaces/mode-line-and-teach-controls.md) — The cockpit interaction contract: the App/Human actor indicator, the M/A/R/T keys, the operate-the-app control cluster, and how STOP-and-handoff is presented. — ✅ written
+* [Mode Line & Teach Controls](/surfaces/mode-line-and-teach-controls.md) — The cockpit interaction contract: the App/Human actor indicator, the Ctrl-A Mode chord + A/R/T keys, the operate-the-app control cluster, and how STOP-and-handoff is presented. — ✅ written
 * [Spectate & Attach](/surfaces/spectate-and-attach.md) — The two dedicated human-facing surfaces on the one daemon: watch read-only without touching, or take the live keyboard. — ✅ written
 * [Entry & Profile Selection](/surfaces/entry-and-profile-selection.md) — The pre-cockpit launcher: pick or create a player and choose the game server from the known catalog. — ✅ written
 * [Visual Language](/surfaces/visual-language.md) — The shared color, glyph, box-drawing, liveness-cue, and responsive-fold dictionary every cockpit surface renders through — the surfaces are the sentences, this is the dictionary. — ✅ written
@@ -67,6 +67,7 @@ marked _(planned)_ are not yet written; entries marked ✅ written exist on disk
 # Decisions & ADRs
 
 * [ADR-001 — One tree, embedded session](/ADR/001-one-tree-embedded-session.md) — Collapses the Phase-0 two-top-level-package scaffold into one `tw2002_aiclient` import tree with the daemon-core under `session/`, plus app-owned daemon lifecycle and an exit-time stop-the-daemon-too confirm popup. — _(Accepted 2026-07-24 · tip one-tree LIVE)_
+* [ADR-002 — Mode chord Ctrl-A](/ADR/002-mode-chord-ctrl-a.md) — Mode = Ctrl-A; no printable Mode; attached `M` = Move; Spectate ≠ Mode dual. — _(Accepted 2026-07-25 · Max Batch 1b/2/3)_
 
 See also [`/DECISIONS.md`](/DECISIONS.md) — the live open-questions workspace feeding future ADRs.
 

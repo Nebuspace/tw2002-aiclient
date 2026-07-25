@@ -8,33 +8,34 @@ timestamp: 2026-07-23T18:55:04Z
 
 Live control of the one game connection is a **dual**, not a triad: **App** (deterministic
 autopilot) and **Human** (sovereign pilot) are the only two actors that ever hold the keyboard.
-**Spectate** is a third, non-driving observation mode. The **AI** sits outside this rotation
-entirely — it is a retrospective, human-invoked teach overlay, never a live driver. This concept
-specifies the control-flow mechanics behind [the North Star](/architecture/north-star.md)'s three
-actors; it does not specify rule/macro internals (see
-[the Rule–Macro Engine](/architecture/rule-macro-engine.md)) or the keystroke-ledger substrate
-(see [the Session Engine](/architecture/session-engine.md)).
+**Spectate** is read-only observation chrome — **not a Mode** and not a third dual seat (ADR-002).
+The **AI** sits outside this rotation entirely — it is a retrospective, human-invoked teach overlay,
+never a live driver. This concept specifies the control-flow mechanics behind
+[the North Star](/architecture/north-star.md)'s three actors; it does not specify rule/macro
+internals (see [the Rule–Macro Engine](/architecture/rule-macro-engine.md)) or the keystroke-ledger
+substrate (see [the Session Engine](/architecture/session-engine.md)).
 
 # The Control Dual
 
 - **App** drives by matching the current screen against its guarded, prioritized rule set and
   playing back a macro on a match. Zero AI reasoning runs per cycle — recognition and playback are
-  mechanical lookups, not inference.
+  mechanical lookups, not inference. Default when the client runs = App/autopilot.
 - **Human** is the sovereign pilot. The human holds the keyboard whenever the app cannot recognize
-  the screen in front of it, and also by an explicit mode switch at any time, for any reason. The
+  the screen in front of it, and also by an explicit Mode switch at any time, for any reason. The
   human's claim on the keyboard is never conditional on the app's failure — it is unconditional.
-- **Spectate** drives nothing. It is a read-only observation mode a client can attach in without
-  ever entering the control rotation at all.
+- **Spectate** drives nothing. It is read-only observation chrome a client can use without ever
+  entering the App/Human Mode dual.
 - **AI teach overlay** is not a control mode and never appears in the mode line as a thing that
   "drives." It is invoked by the human, after the fact, to review what just happened and propose a
   rule. It never emits a live keystroke, and it is never offered the keyboard.
 
 # The Mode Switch
 
-A single toggle (`M` in the trainer UI — see [Trainer UI](/surfaces/trainer-ui.md)) switches live
-control between **App** and **Human**. There is no third position on that toggle for "AI drives" —
-the AI has no seat in the mode switch at all. Switching to Human is always immediate and always
-succeeds; the app never gets to refuse or negotiate for the keyboard.
+Mode is **Ctrl-A** in the trainer UI (ADR-002 — see [Mode Line](/surfaces/mode-line-and-teach-controls.md)).
+It toggles live control between **App** and **Human**. There is no third position on that toggle for
+"AI drives" — the AI has no seat in the mode switch at all. No single printable may be Mode; while
+Human is attached, bare `M` is TW Move (passthrough), not Mode. Switching to Human is always
+immediate and always succeeds; the app never gets to refuse or negotiate for the keyboard.
 
 # Escalate-on-Unknown
 
@@ -126,9 +127,9 @@ recorded here as divergence — the doc is not conformed down to the current cod
 
 | mode | who drives | how entered | emits live keystrokes? |
 |---|---|---|---|
-| App (autopilot) | App | default control state; `M` toggle from Human; a running background loop | Yes — macro playback only, on a recognized screen |
-| Human | Human | escalation handoff on an unrecognized screen; explicit `M` toggle; attaching interactively at any time | Yes — the human's own input |
-| Spectate | nobody | explicit read-only attach | No |
+| App (autopilot) | App | default control state; Ctrl-A Mode from Human; a running background loop | Yes — macro playback only, on a recognized screen |
+| Human | Human | escalation handoff on an unrecognized screen; explicit Ctrl-A Mode; attaching interactively at any time | Yes — the human's own input |
+| Spectate | nobody | observation chrome (not a Mode dual seat) | No |
 | AI teach overlay | nobody (not a control mode) | human invokes "Analyze" at/after an escalation | No — proposes a rule for human approval; never sends |
 
 # Examples
@@ -149,11 +150,11 @@ A mode-switch example, independent of any escalation:
 
 ```
 1. App is driving, mid-session, nothing unrecognized has happened.
-2. The Human hits M (mode switch) because he wants to fly a stretch of the game by hand.
+2. The Human hits Ctrl-A (Mode) because he wants to fly a stretch of the game by hand.
    The switch succeeds immediately — App never gets to finish "one more macro" first.
-3. Human plays several turns directly. No rule is written unless the Human explicitly
-   chooses to Record one of those turns.
-4. The Human hits M again to hand control back to App, which resumes autopiloting from
+3. Human plays several turns directly. Bare `M` reaches the game as Move. No rule is written
+   unless the Human explicitly chooses to Record one of those turns.
+4. The Human hits Ctrl-A again to hand control back to App, which resumes autopiloting from
    whatever screen is now on screen.
 ```
 
