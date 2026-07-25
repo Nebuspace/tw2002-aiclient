@@ -138,6 +138,52 @@ def test_no_summary_at_all_is_the_least_informed_state_not_a_position_claim():
         assert "off-map" not in lines[1], falsy
 
 
+def test_no_summary_at_all_claims_no_CONTENTS_either():
+    """The report half of the branch directly above, deliberately left by the
+    lane that fixed the ``format_menu_map_lines`` twin because it moves the
+    report's line SHAPE, which was outside that order.
+
+    ``format_menu_map_report`` appended ``dead-ends: (none)`` and
+    ``orphans: (none)`` under the honest ``here ? no map``. ``(none)`` is a
+    claim about CONTENTS, and with no summary there are no contents to have
+    counted -- the operator could not tell "I looked and there were none"
+    from "I could not look". Same dormancy as its twin: ``cmd_menumap``
+    always builds a summary or returns 1 before printing, so this pins a
+    DORMANT branch, not a live bug.
+
+    The shape is ``loops.list_view.format_loops_report``'s, not a new one:
+    that reader's falsy branch emits its unknown headline and then "**No
+    empty line and no count**, because none was earned"
+    (``loops/list_view.py:119-120``). So the lists are OMITTED -- not
+    rendered empty, and not decorated with a fourth "unknown" phrasing that
+    would only restate what ``here ? no map`` already said.
+    """
+    for falsy in (None, {}):
+        report = format_menu_map_report(falsy)
+
+        # The rule: with nothing established, the report adds NOTHING to the
+        # header the lines composer already made honest.
+        assert report == format_menu_map_lines(falsy, cols=80), falsy
+        # Pinned literally too, so a reworded header cannot let both sides of
+        # the assert above move together and keep this green.
+        assert report == ["MAP —", "here ? no map"], falsy
+        joined = "\n".join(report)
+        for claim in ("(none)", "dead-ends:", "orphans:"):
+            assert claim not in joined, (claim, falsy)
+
+
+def test_a_genuinely_empty_map_still_earns_the_none_claim():
+    """The other direction, and the one that keeps the fix above from being an
+    over-correction: an empty store was READ, and a read that found nothing
+    is entitled to say so. ``(none)`` stays exactly where it was earned."""
+    s = menu_map_summary([], [])
+    report = format_menu_map_report(s)
+    joined = "\n".join(report)
+
+    assert "dead-ends: (none)" in joined
+    assert "orphans: (none)" in joined
+
+
 def test_the_full_report_carries_the_reason_too():
     s = menu_map_summary(NODES, EDGES, here_unknown="lookup failed: ValueError")
     report = format_menu_map_report(s)

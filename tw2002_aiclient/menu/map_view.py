@@ -145,8 +145,16 @@ def format_menu_map_report(summary: Mapping[str, Any] | None) -> list[str]:
     """Full CLI report: clip-safe header + explicit dead-end/orphan lists."""
     lines = format_menu_map_lines(summary, cols=80)
     if not summary:
-        lines.append("dead-ends: (none)")
-        lines.append("orphans: (none)")
+        # The report half of the branch fixed above. `(none)` is a claim about
+        # CONTENTS, and with no summary there are no contents to have counted
+        # -- the operator could not tell "I looked and there were none" from
+        # "I could not look". The house already settled this exact state one
+        # module over: `loops.list_view.format_loops_report`'s falsy branch
+        # emits its unknown headline and then "**No empty line and no count**,
+        # because none was earned" (`loops/list_view.py:119-120`). So the lists
+        # are OMITTED rather than rendered empty -- and rather than decorated
+        # with a fourth "unknown" phrasing, which would only restate what the
+        # `MAP —` header and `here ? no map` above already say.
         return lines
     dead = list(summary.get("dead_ends") or ())
     orphans = list(summary.get("orphans") or ())
