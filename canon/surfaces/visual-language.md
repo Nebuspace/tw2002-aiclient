@@ -93,7 +93,7 @@ The mode indicator's tone is the single highest-priority piece of color on the m
 canonical here, not merely a per-surface style choice:
 
 - **App** (deterministic autopilot holds the keyboard) — **green (`ok`)**. Healthy; the taught app
-  is covering the known.
+  is covering the known. **Chip glyph text = `APP`** (Max Batch 2/3; match `APP_LABEL="APP"`).
 - **Human** (the live `tw attach` seat holds the keyboard) — **yellow (`warn`)**. Deliberate, not an
   error: with the human flying, autopilot is stood down and the surface is in its
   attention-with-you register — the human is the one thing that must not be ignored.

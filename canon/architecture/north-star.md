@@ -4,7 +4,12 @@ title: North Star — The Human-Piloted Trainer
 description: tw2002-aiclient is a human-piloted trainer whose app autopilots the screens it has been taught, escalates every unknown to the human, and lets an observing AI codify the human's responses into its growing repertoire.
 tags: [vision, north-star, human-in-the-loop, escalation, trainer]
 timestamp: 2026-07-23T18:03:04Z
+status: SIGNED
 ---
+
+> **SIGNED** Max 2026-07-25 (Batch 2/3) — this file (+ settled AI on-demand-only in teacher concepts)
+> is accepted vision. Align freely; do **not** invent new one-cockpit prose beyond this text without
+> a new Max ask.
 
 tw2002-aiclient is a **human-piloted trainer** for TradeWars 2002 — not an AI that plays the
 game. The human flies; the app carries the load it has already been taught how to carry; the AI

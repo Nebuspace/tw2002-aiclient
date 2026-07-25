@@ -3,7 +3,7 @@
 > Status: **PREP + PWO-060 DONE + PWO-061 KERNEL DONE** 2026-07-25 · product tip `d4a8829` · seat `impl-aiclient-cursor` (OKF-STATUS-TRUTH-061-KERNEL)  
 > Phase: 5 · Type: PREP (inventory + tightened Accept/Proof) · Execute: hub HANDOFF to product seat after Accept  
 > Canon: `canon/surfaces/mode-line-and-teach-controls.md` · `canon/architecture/control-and-escalation.md` · `canon/engine/ai-teacher.md` · `canon/architecture/app-autopilot-model.md` · `canon/engine/coverage-metrics.md` · `canon/engine/macros.md` · `canon/architecture/rule-macro-engine.md`  
-> Refs: `ULTRACODE-WO-INVENTORY.md` Phase-5 rows · Phase 4 CLOSED (`bba53d4`) · PWO-060 (`2ca3154`) · PWO-061 kernel (`d4a8829`) · Pending DOC-GAP-M-FROM-SPECTATE · DOC-GAP-POST-DETACH-COPY · DOC-GAP-SPECTATE-REVERSE-VS-PLAIN · **Max Ruled:** Mode=Ctrl-A · attached `M`=Move · no printable Mode · **Batch 1b CLOSED**
+> Refs: `ULTRACODE-WO-INVENTORY.md` Phase-5 rows · Phase 4 CLOSED (`bba53d4`) · PWO-060 (`2ca3154`) · PWO-061 kernel (`d4a8829`) · **Max Ruled Batch 1b:** Mode=Ctrl-A · attached `M`=Move · no printable Mode · **Batch 2/3:** `APP` chip · Spectate≠Mode · Ctrl-]@App-hold no-op · north-star SIGNED · log_note RETIRE · secrets never-live
 
 **No product edited in this OKF tick.** Live-state below is tip **`d4a8829`** unless a row still says MISSING/PARKED. **Do not read 061 as CLOSED** — kernel only.
 
@@ -13,12 +13,12 @@
 
 - **Phase 4 CLOSED** — human play loop LIVE: spectate → `M` attach → play → Ctrl-] detach → spectate (`bba53d4`).
 - **Phase 5 owns presentation of the App/Human dual + teach/escalation**, not a second cockpit. One play shell; in-surface chrome.
-- **Spectate is not a dual member** (canon) — muted `SPECTATE` is observation, not an App/Human toggle position. DOC-GAP-M-FROM-SPECTATE remains **Pending** (unsigned): shipped `M` is Spectate→Human; App↔Human return still owed here (061).
-- **AI never live-drives.** Retire any `AI-PILOT` / `ai_pilot` UI string. Teach overlay is cyan/info, transient, never a mode-line dual seat. App chip = **green (`ok`)** deterministic autopilot (aspirational→buildable Accept on 060).
+- **Spectate is not a Mode** (Max Batch 2/3) — muted `SPECTATE` is observation chrome, not an App/Human toggle position. Default run = App/autopilot. DOC-GAP-M-FROM-SPECTATE **SUPERSEDED**.
+- **AI never live-drives.** Retire any `AI-PILOT` / `ai_pilot` UI string. Teach overlay is cyan/info, transient, never a mode-line dual seat. Chip text = **`APP`** (green/`ok`).
 - **What 056/057 already satisfied:** Human/`MANUAL — YOU HAVE CONTROL` chip LIVE · `M` attach LIVE · Ctrl-] detach LIVE · no-send tripwire + attach allowlist LIVE · redaction on attach channel LIVE.
 - **What Phase 5 still owes:** Human→App entry (061 Accept #2 — **Ruled:** Ctrl-A Mode; CC product HANDOFF live) · migrate Spectate→Human bare `M`→Ctrl-A · A/R/T teach strip · STOP banner + reason codes · arm/confirm · N5 operate cluster · coverage meter (App-vs-Human, AI≠live slice).
 - **F2 HOLD** — ops `tw spectate` CLI still Max-gated. **G2–G4 HOLD** unchanged.
-- **North-star** parked pending Max (1)(2) — this PREP does not unpark or invent one-cockpit prose beyond existing Phase-4 alignment.
+- **North-star SIGNED** (Batch 2/3) — align to `north-star.md`; do not invent new one-cockpit prose beyond signed text.
 - **Archive** = port-source only (`spectate_app` / `spectate_layout` badges) — never `import twclient`.
 - **D1 harness:** Layer-A pure compose + FakeClient; Layer-B pty when chip/tone geometry matters; never `run/twd.sock` in Accept.
 
@@ -164,7 +164,7 @@ Pending (not blocking PREP Accept): DOC-GAP-M-FROM-SPECTATE · DOC-GAP-POST-DETA
 2. **Spectate ≠ dual member** — chip may show SPECTATE when observing; `M` dual is App↔Human only once App can drive.
 3. **Tripwire** — any new send sites need precise allowlist adjudication; never loosen `test_spectate_no_send.py`.
 4. **F2 / G2–G4 HOLD** — no ops spectate CLI, no menu crawler.
-5. **North-star unsigned** — no edits to parked one-cockpit draft / `north-star.md` without Max.
+5. **North-star SIGNED** — align to signed `north-star.md`; no invent beyond that text without Max.
 6. **Archive badge vocabulary** — AI-PILOT / AUTO-LOOP / AI meter slice are recorded divergences to close, not revive.
 7. **Socket hang harden** remains banked — out of Phase-5 PREP execute unless hub assigns.
 

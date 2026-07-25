@@ -27,15 +27,17 @@ retrospective, human-invoked *teacher* and never a live driver (see
 [ai-teacher](/engine/ai-teacher.md)), so it can never be the actor the mode line names.
 
 - **App** — the deterministic autopilot holds the keyboard and is playing only taught screens. It
-  stops and hands back the instant it meets an unrecognized screen.
+  stops and hands back the instant it meets an unrecognized screen. **Chip text = `APP`** (Max
+  Batch 2/3 docs-win; shipped `APP_LABEL="APP"`) — actor prose may still say App.
 - **Human** — the human holds the keyboard directly (the live `tw attach` seat). Sovereign; the app
   does not drive while Human holds control.
 
 The AI never appears *as a mode.* It surfaces only as a transient **teach-overlay indicator** — a
 badge shown while an Analyze (teach) pass is open — never as a control-line position and never
-implying the AI is on the wire. A read-only **Spectate** viewer is not a control holder at all: it
-takes no lock and drives nothing (see [spectate-and-attach](/surfaces/spectate-and-attach.md)), so
-it does not occupy the App/Human dual.
+implying the AI is on the wire. A read-only **Spectate** viewer is not a Mode and not a control
+holder: it takes no lock and drives nothing (see [spectate-and-attach](/surfaces/spectate-and-attach.md)),
+so it does not occupy the App/Human dual. Default when the client runs = App/autopilot. **Ctrl-]
+from App-hold = deliberate no-op stay App** (Max Batch 2/3; do not invent a Spectate transition).
 
 ## `M` — the App↔Human mode switch
 
@@ -379,9 +381,8 @@ The reborn contract above is the target; the current code still carries pre-rebo
   The reborn meter is **App-vs-Human live share** with live AI ≡ 0; any AI figure is a separate
   labeled teaching-provenance axis, not a live-drive slice.
 - **App chip wire-reachability.** Composer + `play.attached` plumbing are LIVE (060); App→Human via
-  `M` is proven (061 kernel). Human→App entry remains **PARKED** — on the Spectate↔Human loop the
-  App chip stays wire-UNREACHABLE until Max rules B′/C. Ctrl-] from App-hold is an unruled no-op
-  (pinned; see findings).
+  Mode is proven (061 kernel). Human→App entry = **Ctrl-A** (Batch 1b Ruled; CC `WO-P5-061-ENTRY`).
+  Chip text **`APP`**. Ctrl-] from App-hold = **Ruled no-op stay App** (Batch 2/3). Spectate≠Mode.
 - **Ctrl-A Mode · multiplexer prefix (operator note).** Max Batch 1b Mode chord is Ctrl-A. GNU
   `screen` (default) / often-rebinding `tmux` eat Ctrl-A before the trainer sees it — Mode looks
   dead with no on-screen error. Escape the mux (`Ctrl-A a` in screen) or rebind; do not invent a

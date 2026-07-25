@@ -125,10 +125,22 @@ Hub relay `@ 09:12:51Z` + `@ 09:17:56Z`:
 4. Batch-1 shape (not B′/C) closed earlier; **Batch 1b CLOSED** — HOLD lifts for 061-entry product under this contract. Spectate→Human bare `M` (056) should migrate to Ctrl-A (same WO or follow-on) so printable Mode does not remain. Ctrl-] detach unchanged. Cursor docs-only note; no signed north-star invent.
 5. **Operator hazard (banked, not a second Mode key):** Ctrl-A is GNU `screen`'s default command prefix (and a common `tmux` rebind). Inside that multiplexer, Mode never reaches the app — use the mux escape (e.g. `Ctrl-A a`) or rebind. Unknown whether TradeWars itself consumes Ctrl-A.
 
+### Ruled Max stamp (2026-07-25 · **Batch 2/3 CLOSED** · Pending FEATURES prose where noted)
+Hub relay `@ 09:25:55Z`:
+1. **Chip spelling = `APP`** (not Title-case App) — docs-win; match shipped `APP_LABEL="APP"`; no product rename.
+2. **Spectate is not a Mode.** Default client run = autopilot (App). Spectate is observation chrome, not a third dual seat. **Ctrl-] from App-hold = deliberate no-op stay App** (do not invent Spectate transition).
+3. **`log_note` → RETIRE** — product delete is CC (`WO-AUDIT-LOG-NOTE-RETIRE`); docs note only here.
+4. **North-star SIGNED** — current `canon/architecture/north-star.md` (+ AI on-demand-only in teacher concepts) is Max-accepted; invent-HOLD lifts for *aligning* to it; do not invent new one-cockpit prose beyond signed text without a new Max ask.
+5. **Archive `secrets.json` were never live** — no rotate required; close that gate.
+6. CC product-TUI model = Opus (product seat; noted for paper trail).
+
 | ID | Gap | Tip reality |
 |---|---|---|
-| DOC-GAP-M-FROM-SPECTATE | Canon frames `M` as App↔Human; silent on Spectate→Human | Hub 056: Spectate→Human via bare `M` today. **Ruled:** Mode=Ctrl-A; attached `M`=Move; migrate Spectate attach to Ctrl-A (061-entry / follow-on). Unsigned canon prose until hub stamps FEATURES |
+| DOC-GAP-M-FROM-SPECTATE | Canon frames `M` as App↔Human; silent on Spectate→Human | **SUPERSEDED** (Batch 1b + 2/3): Mode=Ctrl-A; attached `M`=Move; Spectate≠Mode — no Spectate-`M` leg left to define |
 | DOC-GAP-POST-DETACH-COPY | Canon silent on post-detach status copy | Shipped `"detached — spectating"` (dispatch-decided) |
 | DOC-GAP-SPECTATE-REVERSE-VS-PLAIN | `mode-line-and-teach-controls.md:196-198` says Spectate chip reverse-video like every badge; `spectate-and-attach.md:262` (+ PWO-060 constraint) say muted/**plain** | **055 shipped plain**; 060 keeps Spectate plain; dual App/Human get reverse+tone. Do not resolve in 060. |
-| DOC-GAP-CTRL-RBRACKET-FROM-APP-HOLD | Ctrl-] from App-hold is a no-op today | 061 kernel pinned accidental behavior (`d4a8829`); any change must be deliberate · unruled |
+| DOC-GAP-CTRL-RBRACKET-FROM-APP-HOLD | Ctrl-] from App-hold is a no-op today | **Ruled** Batch 2/3: deliberate **no-op stay App** (CC pins product; no Spectate invent) |
+| DOC-GAP-APP-CHIP-SPELLING | Canon short **App** vs shipped `APP` | **Ruled** Batch 2/3: chip text **`APP`**; actor prose may still say App |
 | HARDEN-ATTACH-SOCKET-TIMEOUT | Unbounded `AttachInputConn` socket read | **DONE** tip `88004d8` (`settimeout(5.0)` + OSError containment) · out of Phase-5 PREP |
+| LOG-NOTE-RETIRE | Dead `log_note` helper | **Ruled RETIRE** — CC product delete; no silent keep |
+| SECRETS-ARCHIVE-NEVER-LIVE | Rotate gate on archive secrets | **CLOSED** — Max: archive `secrets.json` never live; no rotate |
