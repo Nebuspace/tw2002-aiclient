@@ -382,6 +382,10 @@ The reborn contract above is the target; the current code still carries pre-rebo
   `M` is proven (061 kernel). Human→App entry remains **PARKED** — on the Spectate↔Human loop the
   App chip stays wire-UNREACHABLE until Max rules B′/C. Ctrl-] from App-hold is an unruled no-op
   (pinned; see findings).
+- **Ctrl-A Mode · multiplexer prefix (operator note).** Max Batch 1b Mode chord is Ctrl-A. GNU
+  `screen` (default) / often-rebinding `tmux` eat Ctrl-A before the trainer sees it — Mode looks
+  dead with no on-screen error. Escape the mux (`Ctrl-A a` in screen) or rebind; do not invent a
+  second Mode key. See findings Ruled stamp.
 
 # Citations
 

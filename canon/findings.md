@@ -123,6 +123,7 @@ Hub relay `@ 09:12:51Z` + `@ 09:17:56Z`:
 2. **While Human attached, bare `M` = TW Move** — passthrough to the game.
 3. **Principle:** no **single printable** may be Mode (same collision class as `M` / game alphabet).
 4. Batch-1 shape (not B′/C) closed earlier; **Batch 1b CLOSED** — HOLD lifts for 061-entry product under this contract. Spectate→Human bare `M` (056) should migrate to Ctrl-A (same WO or follow-on) so printable Mode does not remain. Ctrl-] detach unchanged. Cursor docs-only note; no signed north-star invent.
+5. **Operator hazard (banked, not a second Mode key):** Ctrl-A is GNU `screen`'s default command prefix (and a common `tmux` rebind). Inside that multiplexer, Mode never reaches the app — use the mux escape (e.g. `Ctrl-A a`) or rebind. Unknown whether TradeWars itself consumes Ctrl-A.
 
 | ID | Gap | Tip reality |
 |---|---|---|
