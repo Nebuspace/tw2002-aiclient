@@ -96,10 +96,10 @@ session is requested only at a screen boundary, never mid-send.
 recorded-not-pressed edge is written ``kind="action"`` and the real
 category rides in the edge's ``desc`` (``"buy: Buy New Ship"`` vs
 ``"unknown: K----"``) — the distinction is never lost. The store's own
-``MENU_EDGE_KINDS`` currently accepts a wider set (it also lists
-``"escape"`` and ``"unknown"``); canon is prescriptive, so this module
-writes only the canon three and asserts at import that they remain
-acceptable to the store.
+``MENU_EDGE_KINDS`` now holds exactly those three (it briefly also
+accepted ``"escape"`` and ``"unknown"`` — code drift canon never defined,
+which this module already declined to write); an import-time assert pins
+the two sets equal so neither can drift from canon again.
 """
 
 import re
@@ -277,14 +277,20 @@ assert not (SAFE_ALLOWLIST & STATE_CHANGING_KEYS), (
     "menu.crawler: SAFE_ALLOWLIST and STATE_CHANGING_KEYS must stay disjoint"
 )
 
-# Canon's edge schema is exactly these three (no "unknown" kind). The
-# store currently accepts a wider set; canon is prescriptive, so this
-# module writes only these and checks at import that the store still
-# accepts them -- introspected from the store's own constant rather than
-# assumed.
+# Canon's edge schema is exactly these three (no "unknown" kind), and the
+# store's vocabulary is checked at import to be exactly the same set --
+# introspected from the store's own constant rather than assumed.
+#
+# EQUALITY, not containment, and that is the point. The store once accepted
+# a wider set ("escape"/"unknown"); a containment check stayed happily green
+# throughout, because everything canon defines was still in there. Only
+# equality can see the failure mode that actually happened -- the store
+# growing a kind canon never defined, which would let a recorded-not-pressed
+# option persist as its own kind instead of folding its category into `desc`.
 CANON_EDGE_KINDS = frozenset({"nav", "info", "action"})
-assert CANON_EDGE_KINDS <= MENU_EDGE_KINDS, (
-    "menu.crawler: the knowledge store no longer accepts canon's nav|info|action edge kinds"
+assert CANON_EDGE_KINDS == MENU_EDGE_KINDS, (
+    "menu.crawler: the knowledge store's edge vocabulary has drifted from canon's "
+    f"nav|info|action -- store has {sorted(MENU_EDGE_KINDS)}"
 )
 
 _NAV_CATEGORIES = frozenset({"back", "previous"})

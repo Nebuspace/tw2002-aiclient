@@ -15,7 +15,19 @@ from collections import deque
 from pathlib import Path
 
 SCHEMA_VERSION = 1
-MENU_EDGE_KINDS = frozenset({"nav", "info", "action", "escape", "unknown"})
+
+# Canon's three-value enum, exactly -- `canon/engine/menu-map-and-introspection.md`
+# is prescriptive: "The edge `kind` is a three-value enum -- nav | info | action".
+# There is deliberately NO "unknown" kind: an option the crawler could not prove
+# safe is recorded `kind="action"` with its real category folded into `desc`
+# ("unknown: K----"), so the distinction rides in `desc` rather than widening
+# this vocabulary. A fourth kind here would let that fold silently stop
+# happening, which is the exact information-shape canon forbids.
+#
+# Gates WRITES only. `load_knowledge` never validates a stored edge's kind, so
+# narrowing this set cannot make a previously-readable map unreadable --
+# pinned by tests/test_menu_knowledge_edge_kinds.py.
+MENU_EDGE_KINDS = frozenset({"nav", "info", "action"})
 KNOWLEDGE_FILENAME = "game_knowledge.json"
 
 # How a crawl ended. A map with NO recorded status is of UNKNOWN
