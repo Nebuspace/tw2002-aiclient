@@ -67,7 +67,7 @@ from tw2002_aiclient.session.session import Session
 from tw2002_aiclient.session.settle import wait_for_settle
 
 from .conftest import FAKE_HOST, FAKE_PORT
-from .test_settle_real_screen import RealScreenSession, _wire
+from .test_settle_real_screen import _LEAVE_PORT, _PORT_REDRAW, RealScreenSession, _wire
 
 _FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -302,17 +302,27 @@ def test_do_accepts_a_single_echoed_byte_as_new_bytes(command_prompt_session):
     `len(data)`), so the server echoing the keystroke -- one byte, before
     it has painted anything at all -- is enough to open the gate, after
     which the whole-screen search finds the pre-send `Command [TL=` still
-    sitting there. What is left is therefore the SAME residual
-    `send_and_confirm`'s own `rx_count > rx_at_send` guard has always had
+    sitting there. What is left is the same GUARD weakness
+    `send_and_confirm`'s own `rx_count > rx_at_send` clause has always had
     (`test_settle_real_screen.py::test_send_and_confirm_false_confirms_on_
-    the_stale_line_despite_the_rx_guard`), and it is the `match_scope`
-    question, not this one: narrowing the search to the current prompt
-    line is what rejects a shape the send did not produce. Matching
-    `send_and_confirm`'s guard byte-for-byte is a deliberate choice --
-    a stronger predicate here (N bytes? a changed render?) would be a
-    second, weaker copy of what `match_scope` does properly, and a
-    changed-render predicate would turn a legitimate identical repaint
-    into a timeout.
+    the_stale_line_despite_the_rx_guard`).
+
+    **`match_scope` does NOT close this residual, and an earlier revision
+    of this docstring said it did.** That claim holds only for the
+    stale-ROW shape, where the awaited text sits somewhere up the grid.
+    Here the awaited text IS the pre-send prompt line, so the echo lands
+    on that very line (`Command [TL=...]: P`) and keeps matching under
+    `"prompt_line"` exactly as it does under `"screen"` -- measured, not
+    reasoned: `test_prompt_line_scope_does_not_close_the_equal_prompt_
+    residual` below. That is this module's own opening point (an awaited
+    prompt equal to the pre-send prompt matches under BOTH scopes) and
+    `settle.py`'s ("`match_scope` cannot close this one"); nothing on the
+    scope axis rescues it. Only a stronger freshness predicate could, and
+    matching `send_and_confirm`'s guard byte-for-byte is a deliberate
+    choice: a stronger one here (N bytes? a changed render?) would be a
+    second, weaker copy of what `match_scope` does for the stale-ROW
+    case, and a changed-render predicate would turn a legitimate
+    identical repaint into a timeout.
 
     The guard's own claim is narrower and it fully delivers it: a settle
     can no longer be asserted when the game has said *nothing whatsoever*.
@@ -337,6 +347,182 @@ def test_do_accepts_a_single_echoed_byte_as_new_bytes(command_prompt_session):
     screen = "\n".join(resp["screen"])
     assert _PRE_SEND_MARKER in screen
     assert _RESPONSE_MARKER not in screen
+
+
+# -- the OTHER stale window on this same verb: a row up the grid -----------
+#
+# Everything above is the EQUAL-PROMPT shape (awaited text == pre-send
+# prompt line). The stale-ROW shape is the other half of `do`'s settle
+# story and canon now names it: research/tw2002-screen-patterns.md
+# P-SETTLE-LINE -- "New bytes since send do not prove the match is on new
+# content; a stale copy of the target text elsewhere on the grid still
+# hits... Do not treat whole-screen regex success as proof the *live*
+# prompt matched."
+#
+# `test_settle_real_screen.py` proves that shape at the `wait_for_settle`
+# layer. Nothing proved it at the `do` VERB, with this verb's
+# `prompt_requires_new_bytes=True` also in play -- which is the
+# combination that actually ships on the drive path.
+
+
+@pytest.fixture
+def stale_row_session(tmp_path, monkeypatch):
+    """The same real capture as `command_prompt_session`, carried one more
+    step of the same real flow (operator re-enters the port) so the
+    awaited `Command [TL=` is UP THE GRID and the current prompt line is
+    the port menu. Same priming `test_settle_real_screen.py`'s
+    `port_menu_session` uses; rebuilt here because this module needs the
+    socket-capturing `wire_writes` shape `protocol.dispatch` is driven
+    through."""
+    wire_writes = []
+    monkeypatch.setattr(
+        TelnetConnection,
+        "send_text",
+        lambda self, text, enter=True, secret=False: wire_writes.append((text, enter, secret)),
+    )
+    session = RealScreenSession(tmp_path)
+    session.wire_writes = wire_writes
+
+    rows = [line.rstrip() for line in (_FIXTURES / "port_trade_screen.txt").read_text().splitlines()]
+    session.feed_now(_wire("\n".join(rows[:-1]) + "\n"))
+    session.feed_now(_wire(rows[-1] + " "))
+    session.feed_now(_wire("P\n"))
+    session.feed_now(_wire(_PORT_REDRAW))
+    session.feed_now(_wire("Enter your choice [T] ? "))
+
+    # Preconditions, asserted rather than assumed -- and the mirror image
+    # of `command_prompt_session`'s: the awaited shape is on the grid but
+    # is NOT the current prompt, so here the two scopes CAN disagree.
+    assert re.search(COMMAND_PROMPT_RE, session.render_text())
+    assert not re.search(COMMAND_PROMPT_RE, session.current_prompt_line())
+    assert session.current_prompt_line() == "Enter your choice [T] ?"
+    return session
+
+
+def _schedule_the_real_command_prompt(session, at):
+    """The screen the caller is actually waiting for: leaving the port
+    menu lands back on a NEW `Command [TL=` prompt."""
+    session.schedule(at, _wire(_LEAVE_PORT))
+    session.schedule(at, _wire(_NEW_COMMAND_PROMPT))
+
+
+def test_do_false_settles_on_a_command_prompt_left_up_the_grid(stale_row_session):
+    """P-SETTLE-LINE on the live drive path, pinned as it behaves TODAY.
+
+    `do` sends `Q` and waits for `Command \\[TL=` while the port menu is on
+    screen and a `Command [TL=` from two screens ago is still plainly
+    visible up the grid (TradeWars is a scrolling BBS door; it does not
+    clear between screens, and `pyte.Screen` keeps no history buffer, so
+    this is the visible grid, not a scrollback leak).
+
+    The rx guard does not save it: `rx_count` is a byte counter, so the
+    single echoed keystroke opens the gate, and the whole-screen search
+    then matches the stale row. The App is handed `settled_reason:
+    prompt` -- documented as the STRONGEST confirmation, "quiet on a
+    specific, named shape" -- at t=0.04, for a screen whose live prompt
+    line is the port menu and whose real `Command [TL=` does not arrive
+    until t=3.0.
+
+    Pinned rather than fixed: `do` cannot currently REQUEST prompt-line
+    scope (`Session.wait_settle` has no `match_scope` parameter to pass
+    one through), and P-SETTLE-LINE forbids closing the gap by flipping a
+    default -- "which canon doc governs default `match_scope`" is an open
+    question, "until ruled, do not flip defaults in a drive-by tip; pin
+    prompt-line scope where a WO explicitly Accepts it."
+    """
+    session = stale_row_session
+    # The keystroke echo -- one byte, all the guard requires.
+    session.schedule(0.04, _wire("Q"))
+    # The screen the caller is actually waiting for, much later.
+    _schedule_the_real_command_prompt(session, at=3.0)
+
+    resp = protocol.dispatch(
+        session,
+        "do",
+        {"input": "Q", "wait_prompt": COMMAND_PROMPT_RE, "timeout": 8.0},
+        _NoLockServer(),
+    )
+
+    assert resp["settled_reason"] == "prompt"  # <-- the false settle
+    assert resp["elapsed"] < 0.5  # long before the real prompt at t=3.0
+    # ...and this is the screen the App was actually handed:
+    assert not re.search(COMMAND_PROMPT_RE, resp["prompt"])
+    assert not re.search(COMMAND_PROMPT_RE, session.current_prompt_line())
+
+
+def test_prompt_line_scope_withholds_the_strongest_reason_on_the_stale_row(stale_row_session):
+    """What pinning `do` to prompt-line scope would actually buy -- stated
+    precisely, because it is NOT "the wait holds out for the real prompt".
+
+    Issued exactly as `do` issues it (`session.send(...)` then the settle,
+    with `prompt_requires_new_bytes=True`), only with the scope narrowed.
+    `wait_for_settle` returns on the FIRST of prompt/idle/timeout, so once
+    the stale row stops matching, the echo byte plus a quiet debounce
+    window legitimately satisfies the IDLE branch at ~0.4s.
+
+    So the win is a downgrade of the CLAIM, not a longer wait: `prompt`
+    ("quiet on a specific, named shape" -- false here) becomes `idle`
+    ("it went quiet; I never saw your shape" -- true here). That is
+    exactly canon's ordering of the three reasons, and it is what
+    P-SETTLE-LINE's "do not treat whole-screen regex success as proof the
+    live prompt matched" buys on this path.
+    """
+    session = stale_row_session
+    session.schedule(0.04, _wire("Q"))
+    _schedule_the_real_command_prompt(session, at=3.0)
+
+    session.send("Q", enter=True, secret=False, sender="app")
+    reason, elapsed = wait_for_settle(
+        session,
+        wait_prompt=COMMAND_PROMPT_RE,
+        timeout_s=8.0,
+        prompt_requires_new_bytes=True,
+        match_scope="prompt_line",
+    )
+
+    assert reason == "idle"  # NOT "prompt" -- the strongest claim is withheld
+    assert 0.35 <= elapsed < 0.5  # the echo at 0.04 + the 350ms debounce
+    assert not re.search(COMMAND_PROMPT_RE, session.current_prompt_line())
+
+
+def test_prompt_line_scope_does_not_close_the_equal_prompt_residual(command_prompt_session):
+    """The other half of the same truth, so the scope fix is never
+    oversold: on the EQUAL-PROMPT shape, narrowing the scope changes
+    nothing at all.
+
+    `settle.py` asserts this in prose ("`match_scope` cannot close this
+    one... the awaited shape genuinely IS on the current prompt line, so
+    it matches immediately under BOTH scopes") and this module's own
+    docstring opens with it, but nothing executed it. It matters because
+    the tempting reading of `test_do_accepts_a_single_echoed_byte_as_new_
+    bytes` is "the `match_scope` fix will close that residual too" -- it
+    will not, and a future reader who assumes otherwise would think the
+    stale-pre-send window was shut when it is still open.
+
+    Same timeline as that test: the echo lands, the real screen never
+    arrives. Under `"prompt_line"` the echo appends to the prompt line
+    itself (`Command [TL=...]: P`), which still satisfies the regex.
+    """
+    session = command_prompt_session
+    session.schedule(0.04, _wire("P"))  # echo only; the response never comes
+
+    session.send("P", enter=True, secret=False, sender="app")
+    reason, elapsed = wait_for_settle(
+        session,
+        wait_prompt=COMMAND_PROMPT_RE,
+        timeout_s=8.0,
+        prompt_requires_new_bytes=True,
+        match_scope="prompt_line",
+    )
+
+    assert reason == "prompt"  # unchanged by the narrowing
+    assert elapsed < 0.2
+    # The awaited shape really is on the prompt line -- with the echo on
+    # the end of it -- which is why no scope choice can reject it...
+    assert re.search(COMMAND_PROMPT_RE, session.current_prompt_line())
+    assert session.current_prompt_line().endswith("P")
+    # ...while the response the send was supposed to produce never landed.
+    assert _RESPONSE_MARKER not in session.render_text()
 
 
 # -- `read` is a different question and must be untouched ------------------
