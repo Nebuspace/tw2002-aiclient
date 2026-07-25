@@ -42,6 +42,12 @@ from .watch import WatchHub
 
 ERRLOG_NAME = "twd.errors.log"
 
+# WO-AUDIT-DAEMON-SOCKET-MODE. Owner-only, because ANY process that can
+# connect to `twd.sock` can send ANY verb -- `do`, `send`, `attach`, `stop`
+# -- straight onto the operator's live game connection. There is no
+# authentication on the wire; reaching the socket IS the authorization.
+SOCK_MODE = 0o600
+
 
 def _open_error_log(run_dir):
     """Open the daemon's owner-only local diagnostic sink.
@@ -119,6 +125,49 @@ def _log_dispatch_error(server, verb, exc):
 class ThreadingUnixServer(socketserver.ThreadingMixIn, socketserver.UnixStreamServer):
     daemon_threads = True
     allow_reuse_address = True
+
+    def server_bind(self):
+        """Bind, then RE-ASSERT `SOCK_MODE` on the socket file.
+
+        `socket.bind()` on AF_UNIX creates the node at `0o777 & ~umask`, so
+        without this the control socket's permissions were whatever the
+        operator's shell happened to be set to. Measured against a real
+        spawned daemon before this override existed:
+
+            umask 0o022 -> twd.sock 0o755   (other: r-x -- no connect)
+            umask 0o002 -> twd.sock 0o775   (group: rwx -- GROUP CONNECTS)
+            umask 0o000 -> twd.sock 0o777   (other: rwx -- ANYONE CONNECTS)
+
+        Those bits are not decorative: AF_UNIX `connect()` is permission-
+        checked, and the bit it needs is **write**. Verified by execution on
+        this platform -- same uid throughout, so the owner class matched
+        every time: `0o600` connects, `0o400` (read, no write) raises
+        `PermissionError`, `0o200` (write only) connects, `0o000` raises,
+        and `0o077` raises even though group+other are `rwx`, because the
+        owner class is matched first. That is why `0o755` still denied
+        `other` (r-x, no w) while `0o775` let the whole group in.
+        `SOCK_MODE = 0o600` leaves group and other with no bits at all, so
+        neither class has the write bit `connect()` requires.
+
+        `chmod` rather than a `umask` dance around the bind: `os.umask()` is
+        process-global, and by the time `main()` constructs this server the
+        guardian and WatchHub threads are already running -- a sibling
+        thread creating a file (or worse, a directory) inside that window
+        would inherit the daemon's temporary umask. Trading a microsecond
+        local race for an occasional unusable `0o600` directory is a bad
+        trade. The residual is disclosed rather than hidden: between
+        `bind()` and this `chmod()` the node briefly carries the umask
+        default. Closing it properly means an owner-only run-dir, which
+        raises a multi-user question this WO is explicitly not allowed to
+        answer.
+
+        Raises rather than warns if the `chmod` fails. A daemon that cannot
+        secure its control socket must not serve on it -- an access-control
+        assertion that silently no-ops is worse than none, because it reads
+        like protection.
+        """
+        super().server_bind()
+        os.chmod(self.server_address, SOCK_MODE)
 
 
 class CommandHandler(socketserver.StreamRequestHandler):
