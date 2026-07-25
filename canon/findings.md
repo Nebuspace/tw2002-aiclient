@@ -178,3 +178,7 @@ Repo-root `DESIGN.md` and `priority_engine.md` are **deleted**. Content ownershi
 
 Do not grow new architecture dumps at repo root — sole docs root is `canon/`. Work order: `workorders/WO-ROOT-MD-INTO-CANON.md`.
 
+### Screen-pattern research → OKF (Max 2026-07-25)
+
+Useful patterns extracted to [`/research/tw2002-screen-patterns.md`](/research/tw2002-screen-patterns.md).
+`research/*-FINDINGS.md` are redirects. Implementer brief: `workorders/BRIEF-OKF-SCREEN-PATTERNS.md`.

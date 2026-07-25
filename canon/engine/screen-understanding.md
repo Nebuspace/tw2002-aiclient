@@ -298,3 +298,5 @@ LAST-match   -> credits = 100,485  (correct)
     never touch logs/argv/repo, single-connection pidfile.
 [6] `.samantha/plans/okf-final-vision-map.md` — `engine/screen-understanding.md` spec
     (must-cover, cross-links, CARRY-WITH-CHANGES A6/A7 disposition).
+
+- **Interop patterns (required):** [TW2002 Screen Patterns](/research/tw2002-screen-patterns.md) — P-BLOCK, P-QTY, P-GATES, P-PORT-MASK, P-BANNER, …

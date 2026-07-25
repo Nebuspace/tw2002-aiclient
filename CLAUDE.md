@@ -20,7 +20,8 @@ An instance rooted **here** is an **IMPLEMENTER** seat in the Nebuspace dual —
 2. **`canon/index.md`** — the OKF bundle's entry point and full concept index. The bundle is the sole docs root (no second docs tree) and spans `canon/architecture/`, `canon/engine/`, `canon/surfaces/`, `canon/doctrine/`, `canon/strategy/`, plus `canon/ADR/` (decision records), `canon/DECISIONS.md` (open-questions workspace), and `canon/log.md`.
 3. Surface / engine / strategy concepts under `canon/surfaces/`, `canon/architecture/`, `canon/engine/`, `canon/doctrine/`, `canon/strategy/` as the WO scopes them.
 4. **`workorders/README.md`** — ordered product rebuild queue; each WO has Goal · Scope · Depends-on · Accept · Proof.
-5. **`archive/pre-rebirth-2026-07-23/`** — reference only (old AI-first framing in places). Port behavior only when a WO scopes it and canon defines the target contract.
+5. **Research evidence (required for classify / settle / screen-understanding):** [`canon/research/tw2002-screen-patterns.md`](canon/research/tw2002-screen-patterns.md) — see also [`workorders/BRIEF-OKF-SCREEN-PATTERNS.md`](workorders/BRIEF-OKF-SCREEN-PATTERNS.md). `research/raw/` is gitignored corpus only.
+6. **`archive/pre-rebirth-2026-07-23/`** — reference only (old AI-first framing in places). Port behavior only when a WO scopes it and canon defines the target contract.
 
 ---
 

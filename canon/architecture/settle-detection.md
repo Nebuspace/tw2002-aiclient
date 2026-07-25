@@ -229,3 +229,5 @@ order.
 [4] twclient/terminal.py (pyte-backed render the settle wait polls)
 [5] twclient/classify.py (`pause_key` and other gate anchors — interjection classification today)
 [6] Historical settle design (retired root `DESIGN.md` §6, now owned here); DESIGN-v2.md §8 (send/settle race, B4/B5 — internal planning history)
+
+[7] [/research/tw2002-screen-patterns.md](/research/tw2002-screen-patterns.md) (P-SETTLE-LINE · P-SUPPRESS — prompt-line scope + suppressed sub-prompts)

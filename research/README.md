@@ -1,6 +1,8 @@
-# Research (local)
+# Research corpus (local)
 
-Tracked notes may land here. **Binaries and downloaded helper archives go under
-`research/raw/` (gitignored) — never commit them.**
+**Findings live in OKF:** [`canon/research/tw2002-screen-patterns.md`](../canon/research/tw2002-screen-patterns.md)
+(required reading for classify / settle). Implementer brief:
+[`workorders/BRIEF-OKF-SCREEN-PATTERNS.md`](../workorders/BRIEF-OKF-SCREEN-PATTERNS.md).
 
-See `docs/community-sources.md` for ClassicTW forum links and catalog policy.
+**Binaries and downloaded helper archives** go under `research/raw/` (**gitignored**) —
+never commit them. Do not re-mine TWGS installer EXEs (negative result is canon).

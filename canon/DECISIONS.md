@@ -179,3 +179,10 @@ listed in ADR-001's Consequences — not executed by this closure.
 - `priority_engine.md` — already reimagined as `canon/engine/priority-engine.md`; citations retargeted; root deleted.
 
 See `WO-ROOT-MD-INTO-CANON`.
+
+## Accepted — extract research patterns into OKF (Max 2026-07-25)
+
+**Ruling:** Extract useful patterns from the helper + TWGS research findings into
+`canon/research/tw2002-screen-patterns.md`. Inform Implementers via
+`workorders/BRIEF-OKF-SCREEN-PATTERNS.md`. Raw dumps under `research/` are redirects;
+`research/raw/` stays gitignored corpus only.
