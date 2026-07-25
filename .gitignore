@@ -46,3 +46,6 @@ workorders/drafts/
 *.code-workspace
 .cursor/rules/
 .cursor/sandbox.json
+
+# Research corpora (ClassicTW helpers, TWGS Windows binaries) — never commit
+research/raw/
