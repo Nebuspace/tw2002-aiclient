@@ -23,6 +23,13 @@ what the operator uses to choose which credential; this concept is the disciplin
    to a CLI response, never written to a transcript log, never committed. The two on-disk homes
    below are the *only* places a secret is permitted to rest.
 
+   **Operator hazard (tip honesty · 2026-07-25):** `tw attach --keys …` *does* place its payload on
+   argv / shell history by design (scripted/non-TTY automation). That flag is therefore **not a
+   credential channel** — never put a password or PIN in `--keys`. Prefer interactive attach (secret
+   prompts hit the redaction sink) or env / chmod-600 `secrets.json`. Draft argparse help copy for
+   product (no `.py` in this docs tick):
+   `scripted keystrokes then detach (unicode-escape; no TTY). NEVER a password — lands in argv/history.`
+
 2. **Every password send routes through the redaction sink.** A keystroke that carries a secret
    is logged as a redaction marker, never as its bytes — and never with a byte count, since a
    length is itself a leak. There is exactly one redaction primitive

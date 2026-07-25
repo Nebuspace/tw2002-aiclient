@@ -12,7 +12,7 @@ Committable twin: `workorders/AUDIT-OKF-6LENS-BACKLOG.md`. Draft WOs: `workorder
 | Bucket | IDs | Notes |
 |---|---|---|
 | Phase-5 PREP | PWO-062…072 | `WO-P5-060-072-mode-teach-PREP.md` — **064/062 DONE**; 066 STAGED; 063/065/067–072 staged |
-| Banked session-audit | F7–F8 · classify coverage gap · login-redaction suite | **BANKED** · F6 **DONE** `c21cd1c` |
+| Banked session-audit | F7–F8 · classify coverage gap · login-redaction suite | F6 **DONE** `c21cd1c` · login-redaction **REHAB soon** (behind F5/socket/SURROGATE) · `--keys` argv warn docs this wave |
 | Pending DOC-GAPs | POST-DETACH-COPY · SPECTATE-REVERSE-VS-PLAIN | `canon/findings.md` — M-FROM-SPECTATE SUPERSEDED · CTRL-RBRACKET **Ruled** · APP chip **Ruled** |
 | Banked harden | HARDEN-ATTACH-SOCKET-TIMEOUT | **DONE** tip `88004d8` (CC) · `WO-AUDIT-HARDEN-ATTACH` EXECUTED/DONE |
 | Zone-A harden | WATCHHUB-LOOP-CONTAIN | **DONE** tip `00cb9e8` · `WO-AUDIT-WATCHHUB-LOOP-CONTAIN` EXECUTED |

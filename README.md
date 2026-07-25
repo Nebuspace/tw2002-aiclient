@@ -147,7 +147,7 @@ Everything takes `--json` for machine-parseable output where applicable.
 | `tw read` | Wait for settle and return the screen without sending. |
 | `tw history [--n N]` | Recent verb/prompt entries from the live session history ring (secret inputs already redacted when recorded). |
 | `tw watch [--frames N]` | Tail the settle-edge push-stream (read-only `subscribe`). Prints each event; `--frames N` exits after N events (else Ctrl-C). |
-| `tw attach [--keys …]` | Take the control-lock and forward keystrokes (thin — no curses paint yet). TTY cbreak until Ctrl-]; `--keys` for scripted/non-TTY. |
+| `tw attach [--keys …]` | Take the control-lock and forward keystrokes (thin — no curses paint yet). TTY cbreak until Ctrl-]; `--keys` for scripted/non-TTY. **Warning:** `--keys` puts those bytes on **argv / process table / shell history** — never put a password or PIN there; use interactive attach (redacted) or env/`secrets.json` for credentials. |
 | `tw menumap --path FILE` | Read-only menu-map inspector (coverage / dead-ends / orphans / you-are-here ★). Optional live localize via `screen` when daemon up; never sends. `--world-id` joins `state/world/<slug>/game_knowledge.json`. |
 
 ### Coming (not on `./tw --help` yet)
@@ -172,7 +172,14 @@ Notes worth knowing up front:
 `tw attach` is **shipped** (thin): control-lock + keystroke forward; no live
 screen paint yet — pair with `tw watch`. Secret keystrokes at password/PIN
 prompts are redacted in the transcript log and `last_sent` via
-`Session.send_raw` (ledger/`record_attach_keystroke` still cut). Full-curses
+`Session.send_raw` (ledger/`record_attach_keystroke` still cut).
+
+**`--keys` hazard:** scripted keystrokes are ordinary CLI argv. They land in
+shell history and the process table. Do **not** pass passwords/PINs via
+`--keys` — that path is for non-secret automation only. Interactive attach
+keeps secret prompts on the redaction sink (Invariant 1 in
+[`canon/doctrine/secrets-and-credentials.md`](canon/doctrine/secrets-and-credentials.md)).
+
 Ops `tw spectate` is **RETIRED / WONTBUILD** (Max `@ 13:13:55Z`) — in-cockpit
 Spectate is LIVE via PWO-055; see
 [`WO-P2-OPS-VERB-F-PREP.md`](workorders/WO-P2-OPS-VERB-F-PREP.md).
