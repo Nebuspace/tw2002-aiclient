@@ -266,6 +266,17 @@ def wait_for_settle(
         # `session.last_rx` past the `now` captured at the top of this
         # poll, making `idle_for` negative -- so it could never have
         # satisfied the debounce window in that same poll either way.
+        #
+        # The PROMPT branch is a different story and the scoping above is
+        # deliberate: with the guard ON, a byte landing during that same
+        # render WAS counted under the old ordering and is NOT counted
+        # now, so the prompt cannot win this poll and wins the next one
+        # instead. That is not neutral -- it is strictly MORE conservative
+        # on the guarded path, bounded by one poll tick, and it errs
+        # toward never asserting a settle on less evidence. Stated rather
+        # than left to be inferred from the idle-branch proof, because a
+        # reader who assumes "neutral" applies to both branches would be
+        # assuming exactly the half that changed.
         got_new_bytes = session.rx_count > start_rx_count
 
         # Ordered rx-check-first deliberately: when the guard is on and
