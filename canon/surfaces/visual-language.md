@@ -3,7 +3,7 @@ type: Reference
 title: Visual Language — The Shared Color, Glyph & Border Vocabulary
 description: The single-source dictionary of color semantics, glyphs, box-drawing weights, liveness cues, and fold thresholds every cockpit surface renders with — the surfaces are the sentences, this is the dictionary.
 tags: [surfaces, visual-language, color-semantics, glyphs, box-drawing, liveness, responsive-fold, hud, spectate, prescriptive, reference]
-timestamp: 2026-07-25T03:00:00Z
+timestamp: 2026-07-25T04:02:00Z
 ---
 
 Four surfaces — [The Trainer Cockpit](/surfaces/trainer-cockpit.md),
@@ -19,24 +19,25 @@ value below and a surface doc's inline restatement of it ever drift, this concep
 single-source authority and the surface doc's copy is a stale echo to be corrected.
 
 Every concrete value below is grounded to the module and, where meaningfully stable, the symbol name
-that defines it. **Rebirth tip (Phases 0–3 CLOSED · Phase 4 open through `37b3e99`):** cockpit chrome
+that defines it. **Rebirth tip (Phases 0–3 CLOSED · Phase 4 CLOSED through `bba53d4`):** cockpit chrome
 composers, layout, tones, fold, and LOGS live under `tw2002_aiclient/cockpit/` and `screens.py`;
 session transport under `tw2002_aiclient/session/`; product watch subscribe under
 `tw2002_aiclient/watchfeed.py` (PWO-050); GAME glyph + per-cell color paint under cockpit viewport
 (PWO-052 · PWO-053); disconnect border round-trip + color-unavailable interim (PWO-054); in-cockpit
-`SPECTATE` chip (PWO-055). Citations still name many archive
-(`archive/pre-rebirth-2026-07-23/code/twclient/`) symbols where Phase 4+ attach / mode-line ports
-have not landed — those remain the port-source until their WOs ship. Anything not yet built, or built
-differently from the reborn contract, is marked `[ASPIRATIONAL]`; any unverified claim about the
-game's own native palette is marked `[HYPOTHESIS]` and must never be promoted to fact without live
-introspection.
+`SPECTATE` chip (PWO-055); `M` attach + Ctrl-] detach (PWO-056 · PWO-057). Citations still name many
+archive (`archive/pre-rebirth-2026-07-23/code/twclient/`) symbols where Phase 5+ mode-line / teach
+ports have not landed — those remain the port-source until their WOs ship. Anything not yet built, or
+built differently from the reborn contract, is marked `[ASPIRATIONAL]`; any unverified claim about
+the game's own native palette is marked `[HYPOTHESIS]` and must never be promoted to fact without
+live introspection.
 
 **Implementation honesty — GAME viewport:** the play-shell center paints live settle-snapshot /
 pyte **glyphs and per-cell fg/bg/bold color** into the 80×25 GAME (**LIVE** · PWO-052 · PWO-053).
 Border STATE flip (danger non-bold / color-unavailable `A_UNDERLINE`) is **LIVE** and reconnect-proven
 (P3-040 · PWO-054 · tip `6c7d834`). In-cockpit spectate indicator is **LIVE** (muted `SPECTATE` ·
-PWO-055 · tip `37b3e99`); ops `tw spectate` remains **F2 HOLD**. Do not read chrome-tones prose as
-recoloring game cells with the 7-tone semantic table.
+PWO-055); attach/detach loop is **LIVE** (`M` · Ctrl-] · chip SPECTATE↔MANUAL · tip `bba53d4`); ops
+`tw spectate` remains **F2 HOLD**. Do not read chrome-tones prose as recoloring game cells with the
+7-tone semantic table.
 
 # Schema
 

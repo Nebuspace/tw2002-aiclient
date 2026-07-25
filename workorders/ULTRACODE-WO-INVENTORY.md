@@ -188,8 +188,8 @@ Banked hygiene (not a PWO id): **pty mid-flush settle** — PREP `workorders/WO-
 | PWO-053 | Viewport color parity **DONE** 2026-07-25 (`eb59274`) | harden | 052 | Color map == ops spectate | visual/diff | TTY | spectate… N3 · visual-language |
 | PWO-054 | Disconnect viewport chrome **DONE** 2026-07-25 (`6c7d834`) | build | 051 | Warn/danger border when down | state visible | kill sock | trainer-cockpit states |
 | PWO-055 | Product spectate mode (read-only) **DONE** 2026-07-25 (`37b3e99` · F2 ops CLI HOLD) | build | 050 | Watch without lock | no sends | TTY | spectate-and-attach · visual-language |
-| PWO-056 | Attach from cockpit — PREP (same) | verify/build | 020 | `h` / attach takes lock | Human badge | TTY | spectate-and-attach |
-| PWO-057 | Detach returns App path — PREP (same) | verify | 056 | Ctrl-] / detach | lock released | TTY | control-and-escalation |
+| PWO-056 | Attach from cockpit **DONE** 2026-07-25 (`2c2decc` · `M`) | verify/build | 020 | `M` attach takes lock | Human badge | TTY | spectate-and-attach |
+| PWO-057 | Detach returns App/Spectate path **DONE** 2026-07-25 (`bba53d4` · Ctrl-]) | verify | 056 | Ctrl-] / detach | lock released | TTY | control-and-escalation |
 
 ### Phase 5 — Mode line, escalation, teach
 

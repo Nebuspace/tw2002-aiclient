@@ -16,7 +16,7 @@ surfaces and the settle-edge push-stream substrate they share; it does not speci
 state machine itself (see [Control & Escalation](/architecture/control-and-escalation.md)) or the
 daemon/CLI split beneath them (see [the Session Engine](/architecture/session-engine.md)).
 
-# Implementation status (tip `37b3e99`)
+# Implementation status (tip `bba53d4` · Phase 4 CLOSED)
 
 | Surface | Tip reality |
 |---|---|
@@ -26,10 +26,11 @@ daemon/CLI split beneath them (see [the Session Engine](/architecture/session-en
 | `tw spectate` (ops curses HUD) | **MISSING** — **F2 HOLD** (Max-gated); do not invent |
 | Product play-shell watch subscribe | **LIVE** (PWO-050 · `watchfeed.py`) — settle-edge consumed for GAME paint (PWO-052/053) |
 | Product play-shell GAME viewport | **LIVE** glyph + per-cell color paint 80×25 (PWO-052 · PWO-053); disconnect chrome **LIVE** (PWO-054) |
-| Product in-cockpit spectate state | **LIVE** (PWO-055 · tip `37b3e99`) — `spectating` + muted `SPECTATE` chip + no-send tripwire; leave = attach (056) |
-| Product cockpit attach hotkey | **NOT DONE** — PWO-056+ |
+| Product in-cockpit spectate state | **LIVE** (PWO-055) — `spectating` + muted `SPECTATE` chip + no-send tripwire |
+| Product cockpit attach (`M`) | **LIVE** (PWO-056 · tip `2c2decc`) — Human lock + chip → `MANUAL — YOU HAVE CONTROL` |
+| Product cockpit detach (Ctrl-]) | **LIVE** (PWO-057 · tip `bba53d4`) — lock released · SPECTATE restored · Esc≠detach |
 
-Target contracts below remain prescriptive for when those surfaces land.
+Target contracts below remain prescriptive for ops F2 / Phase-5 surfaces not yet on tip.
 
 # Spectate — the read-only observation surface
 

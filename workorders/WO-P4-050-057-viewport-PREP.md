@@ -24,7 +24,7 @@
 
 ## 1. Tip inventory (vs archive)
 
-| Piece | Tip `37b3e99` (`tw2002_aiclient`) | Notes |
+| Piece | Tip `bba53d4` (`tw2002_aiclient`) | Notes |
 |---|---|---|
 | WatchHub / daemon `subscribe` | **LIVE** — `session/watch.py` · `daemon._handle_subscribe` | Settle-edge push stream |
 | `tw watch` CLI | **LIVE** — ops consumer of `subscribe` | **≠** product cockpit subscribe |
@@ -33,7 +33,7 @@
 | Viewport border STATE flip | **LIVE** (P3-040 · PWO-054) — cyan ↔ danger non-bold; color-unavailable → `A_UNDERLINE` | Reconnect + silent-border guard proven |
 | Product watch-stream client | **LIVE** — `watchfeed.py` + play-shell snapshot→paint | 050+052+053 |
 | Product spectate mode | **LIVE** — in-cockpit `spectating` + muted `SPECTATE` chip + no-send tripwire (PWO-055) | F2 HOLD for *ops* `tw spectate` CLI |
-| Cockpit attach / detach keys | **MISSING** (Esc→launcher only; no attach hotkey yet) | 056–057; daemon attach protocol **LIVE** for `tw attach` ops |
+| Cockpit attach / detach keys | **LIVE** — `M` attach · Ctrl-] (ASCII 29) detach (PWO-056 · PWO-057 · tip `bba53d4`) | Loop: spectate → attach → detach → spectate |
 | Archive `spectate_app` / layout | gitignored archive | Port patterns only under execute WO |
 
 ---
@@ -80,18 +80,29 @@
 - **Proof:** Static assert no send path; FakeClient subscribe-only; TTY mode indicator if N5 not ready — honest muted/`—` OK.
 - **Hazards:** **F2 HOLD** — if execute would require lifting ops spectate CLI, **STOP and ❓**; stay cockpit-only.
 
-### PWO-056 — Attach from cockpit (VERIFY/BUILD)
+### PWO-056 — Attach from cockpit (VERIFY/BUILD) — **DONE 2026-07-25** (impl-claudecode-aiclient · tip `2c2decc` — `M` takes Human lock via `AttachInputConn`; chip flip SPECTATE→`MANUAL — YOU HAVE CONTROL`; keystrokes through redaction; scope-checked single-site allowlist on 055 tripwire; Cipher alias/`getattr` holes closed; Esc≠detach; backspace forwarded; `q` is game input while attached)
 - **Depends-on:** 020 attach protocol · preferably 052
-- **Live state:** Daemon attach + `tw attach` CLI LIVE; cockpit keybind **MISSING**.
-- **Accept:** Documented hotkey (canon `h` / mode-line — confirm against mode-line doc at execute) takes Human lock; Human badge path (may stub badge until P5-060); keystrokes go attach channel with secret redaction.
+- **Live state:** **LIVE** — `app.py` `_attempt_attach` / `_run_play` attach loop · `screens.py` `M` intent · `cockpit/control_seat.py` `attached_label` · `tests/test_cockpit_attach.py` · `tests/test_spectate_no_send.py` allowlist.
+- **Accept:** Documented hotkey (shipped **`M`**) takes Human lock; Human badge path (may stub badge until P5-060); keystrokes go attach channel with secret redaction.
 - **Proof:** FakeClient control_lock transitions; redaction sentinel; Esc/detach interaction owned by 057.
 - **Hazards:** Don't bypass control_lock. Secrets doctrine / prompt-echo DOC-GAP is separate (canon only until a harden WO).
 
-### PWO-057 — Detach returns App path (VERIFY)
+### PWO-057 — Detach returns App path (VERIFY) — **DONE 2026-07-25** (impl-claudecode-aiclient · tip `bba53d4` — Ctrl-] ASCII 29 closes attach → daemon `release_human` · `spectating=True` · SPECTATE chip restored · no send after detach · Esc→launcher unchanged / not detach · double-detach idempotent by construction · tripwire untouched; Phase 4 CLOSED)
 - **Depends-on:** 056
+- **Live state:** **LIVE** — `app.py` `_DETACH_KEY = 29` · `tests/test_cockpit_attach.py` detach legs.
 - **Accept:** Detach (canon Ctrl-] / documented key) releases lock; returns App-capable path without zombie lock; viewport keeps updating if subscribe still up.
 - **Proof:** Lock released assert; no send after detach; Esc→launcher still clean.
 - **Hazards:** Double-detach / mid-settle detach.
+
+---
+
+## Pending DOC-GAPs (hub · unsigned — do not invent prose)
+
+| ID | Gap | Notes |
+|---|---|---|
+| DOC-GAP-M-FROM-SPECTATE | Canon frames `M` as App↔Human dual; does not define Spectate→Human | Hub 056 ruling: Spectate→Human only; App-return = 057/Phase-5 follow-on. **Pending** Max-gated canon if dual-member doctrine changes. |
+| DOC-GAP-POST-DETACH-COPY | Canon silent on post-detach status copy | Shipped dispatch-decided `"detached — spectating"` — **Pending** canon-pin. |
+| HARDEN-ATTACH-SOCKET-TIMEOUT | Unbounded `AttachInputConn` socket read | Banked harden WO; newly product-reachable since 056. |
 
 ---
 
@@ -123,4 +134,4 @@
 
 ## 5. Execute readiness
 
-All of **050–057 = PREP only** on this seat. First CC execute: **PWO-050**. Cursor idle under F2·G2–G4 after this PREP CLOSES unless hub feeds docs WOs.
+**Phase 4 CLOSED** on tip `bba53d4` (PWO-050–057). Human play loop LIVE: spectate → `M` attach → play → Ctrl-] detach → spectate. Next product feed is Phase 5 (mode line / escalation / teach) — hub HANDOFF only; do not invent Phase-5 scope. Cursor docs lane: status-truth + Pending DOC-GAPs above.
