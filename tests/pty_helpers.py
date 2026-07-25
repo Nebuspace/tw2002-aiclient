@@ -37,6 +37,14 @@ That path skips ``start_new_session`` and instead runs ``preexec_fn`` →
 controlling tty and a later ``set_winsize(master_fd, …)`` delivers
 ``SIGWINCH``. Custom Layer-B drivers can also call
 ``_claim_controlling_tty`` from their own ``preexec_fn``.
+
+Terminal environment (WO-AUDIT-PTY-TERM-INHERITANCE)
+----------------------------------------------------
+A test must control the terminal it is testing, so the child's terminal
+type is **assigned, never inherited**. See ``DEFAULT_TERM`` and
+``_GEOMETRY_ENV_VARS`` below for the two variables involved and the
+measurements behind them; ``term=`` is the one deliberate override
+channel, and ``rows=``/``cols=`` is the only size channel.
 """
 
 from __future__ import annotations
@@ -63,6 +71,62 @@ COLOR_SET_SGR_RE = re.compile(rb"\x1b\[[0-9;]*(?:3[0-7]|4[0-7]|9[0-7]|10[0-7])m"
 # Default detach for spectate-style loops (``q``). Attach uses Ctrl-] —
 # pass ``detach_keys=bytes([29])`` instead.
 DEFAULT_DETACH = b"q"
+
+# Terminal type every capture_pty* child gets unless a caller names another
+# with ``term=``. It is ASSIGNED, never ``setdefault``-ed: a ``setdefault``
+# respects an inherited ``TERM``, so a pty test drove whatever terminal the
+# invoking shell happened to export. Measured on this tree, same code, only
+# ``TERM`` changed:
+#
+#     TERM=xterm-256color   cup=True    tests/test_bank_unreadable_pty.py  4 passed
+#     TERM=dumb             cup=False   tests/test_bank_unreadable_pty.py  4 FAILED
+#     TERM=<unset>          curses.setupterm() fails
+#
+# Without ``cup`` curses cannot address the cursor, so panel content never
+# lands where pyte replays it while line-drawing chrome still emits — the
+# symptom is a chrome-only grid and a content assertion failing on the
+# terminal rather than on the product.
+#
+# ``"xterm"`` is not arbitrary: it is what the rest of this suite already
+# standardises on — ``tests/conftest.py::pty_curses_supported`` probes with
+# ``TERM="xterm"``, and every local ``_drive_pty`` in the cockpit/spectate
+# Layer-B modules sets ``env["TERM"] = "xterm"``. Helper-driven and
+# locally-driven pty tests therefore prove against one terminal.
+DEFAULT_TERM = "xterm"
+
+# Stripped from every child env. ncurses honours these ABOVE the pty's real
+# winsize, so an ambient exported ``COLUMNS`` silently resizes a test's
+# terminal. Measured on a 24x80 pty: no vars → ``curses.COLS`` 80;
+# ``COLUMNS=200`` → 200; ``LINES=50`` → 50 rows. The child would then paint
+# a geometry the ``pyte_grid(captured, rows, cols)`` replay does not read.
+# ``rows=``/``cols=`` (→ ``TIOCSWINSZ``) is this harness's only size channel;
+# a test that wants a different size says so there.
+_GEOMETRY_ENV_VARS = ("LINES", "COLUMNS")
+
+
+def _child_environment(env: dict[str, str] | None, term: str | None) -> dict[str, str]:
+    """Child env with a *decided* terminal — never an ambient one.
+
+    ``term`` is assigned over whatever ``env`` (or ``os.environ``) carries.
+    That deliberately outranks a caller-supplied ``env=`` too: the one caller
+    in-tree that passes ``env=`` builds it as ``dict(os.environ, …)`` to pin
+    an unrelated variable, so its ``TERM`` is still ambient inheritance
+    wearing an explicit-looking coat. A caller that genuinely wants another
+    terminal — e.g. proving behaviour under a poor one — passes ``term=``,
+    which cannot be confused with a leak.
+
+    ``term=None`` removes ``TERM`` entirely: the deliberate "no terminal type
+    at all" case, where ``curses.setupterm()`` fails. Every value of ``term``
+    yields a known child terminal; none of them inherits one.
+    """
+    child_env = dict(os.environ if env is None else env)
+    if term is None:
+        child_env.pop("TERM", None)
+    else:
+        child_env["TERM"] = term
+    for var in _GEOMETRY_ENV_VARS:
+        child_env.pop(var, None)
+    return child_env
 
 
 def _claim_controlling_tty(slave_fd: int) -> None:
@@ -93,6 +157,7 @@ def capture_pty(
     cols: int = 80,
     cwd: str | Path | None = None,
     env: dict[str, str] | None = None,
+    term: str | None = DEFAULT_TERM,
     detach_keys: bytes = DEFAULT_DETACH,
     drain_after_s: float = 5.0,
     claim_ctty: bool = False,
@@ -104,6 +169,10 @@ def capture_pty(
     isn't wedged on a full pty buffer (archive lesson from confirm-gate
     RECORD_PATH flows).
 
+    ``term`` — the child's ``TERM``, assigned over ``env``/``os.environ``
+    (``None`` unsets it). See ``_child_environment``; ``LINES``/``COLUMNS``
+    never reach the child, ``rows``/``cols`` set the size.
+
     ``claim_ctty=False`` (default): ``start_new_session=True`` only — preserves
     existing 030/cockpit Layer-B behavior (no SIGWINCH delivery).
 
@@ -113,8 +182,7 @@ def capture_pty(
     """
     master_fd, slave_fd = pty.openpty()
     set_winsize(slave_fd, rows, cols)
-    child_env = dict(os.environ if env is None else env)
-    child_env.setdefault("TERM", "xterm")
+    child_env = _child_environment(env, term)
 
     popen_kwargs: dict[str, Any] = {
         "stdin": slave_fd,
@@ -171,6 +239,7 @@ def capture_pty_with_keys(
     cols: int = 80,
     cwd: str | Path | None = None,
     env: dict[str, str] | None = None,
+    term: str | None = DEFAULT_TERM,
     detach_keys: bytes = DEFAULT_DETACH,
     drain_after_s: float = 5.0,
     claim_ctty: bool = False,
@@ -183,12 +252,11 @@ def capture_pty_with_keys(
     skipped. Mirrors archive ``_run_fake_spectate_and_type_in_pty`` /
     ``test_control_panel._drive_pty``.
 
-    ``claim_ctty`` — same contract as ``capture_pty`` (default off).
+    ``term`` / ``claim_ctty`` — same contract as ``capture_pty``.
     """
     master_fd, slave_fd = pty.openpty()
     set_winsize(slave_fd, rows, cols)
-    child_env = dict(os.environ if env is None else env)
-    child_env.setdefault("TERM", "xterm")
+    child_env = _child_environment(env, term)
 
     popen_kwargs: dict[str, Any] = {
         "stdin": slave_fd,
