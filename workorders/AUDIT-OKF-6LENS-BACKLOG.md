@@ -2,8 +2,8 @@
 
 > Seat: `impl-aiclient-cursor` · Tip: `59c4455` (audit drafts) atop `458d140` / product `d4a8829` · UTC: 2026-07-25T05:12Z  
 > HANDOFF: `AUDIT-OKF-6LENS` · **No product `.py` in this ticket**  
-> HOLDs honored: F2 · G2–G4 · north-star · Human→App (Max B′/C) · auth/secrets  
-> Scout cross-check: inventory tip-map confirms 062–072 MISSING; 061/065 PARTIAL; 080 PARTIAL (`classify` LIVE, `state_parser` absent); **085/086 LIVE** (gated). **Closed since:** HARDEN-ATTACH `88004d8` · WatchHub `00cb9e8` · SAFE-ADDSTR `29fd76c` · GLYPH `8facad9` · SAFE-WIDTH `c0bdab7`. Banked: UNICODE-OK · reconnect/cli-keys micros · Max Batch 1b · APP-LABEL PARKED.
+> HOLDs honored: F2 · G2–G4 · north-star · auth/secrets · APP-LABEL PARKED · **Batch 1b CLOSED** (Ctrl-A Mode)  
+> Scout cross-check: inventory tip-map confirms 062–072 MISSING; 061/065 PARTIAL; 080 PARTIAL (`classify` LIVE, `state_parser` absent); **085/086 LIVE** (gated). **Closed since:** HARDEN-ATTACH `88004d8` · WatchHub `00cb9e8` · SAFE-ADDSTR `29fd76c` · GLYPH `8facad9` · SAFE-WIDTH `c0bdab7`. Banked: UNICODE-OK · reconnect/cli-keys micros (CC wave) · APP-LABEL PARKED.
 
 Committable twin: `workorders/AUDIT-OKF-6LENS-BACKLOG.md`. Draft WOs: `workorders/WO-AUDIT-*.md` (8).
 
@@ -17,7 +17,7 @@ Committable twin: `workorders/AUDIT-OKF-6LENS-BACKLOG.md`. Draft WOs: `workorder
 | Zone-A harden | WATCHHUB-LOOP-CONTAIN | **DONE** tip `00cb9e8` · `WO-AUDIT-WATCHHUB-LOOP-CONTAIN` EXECUTED |
 | Zone-A polish | SAFE-ADDSTR / GLYPH | Both **DONE** (`29fd76c` / `8facad9`) · WOs EXECUTED |
 | Banked docs | UNICODE-OK-DOCSTRING | DRAFT `WO-AUDIT-UNICODE-OK-DOCSTRING` — stale locale claim |
-| Max-parked | 061 Accept #2 Human→App | B′ vs C — no key invented overnight |
+| Max-ruled | 061 Accept #2 Human→App | **Batch 1b CLOSED** — Mode=Ctrl-A · attached `M`=Move · no printable Mode · CC product HANDOFF |
 | Phase 6 tip | PWO-080 PARTIAL · 085/086 LIVE · 081–084/087–088 MISSING | Fold into WO-AUDIT-PHASE6-PREP |
 | Orphan archive tests | `tests/test_spectate_app.py` etc. still `import twclient` + AI-PILOT expects | cleanup candidate (not product UI) |
 

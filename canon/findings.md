@@ -117,12 +117,16 @@ isolation, not automatic).
 
 Logged at tip `bba53d4` (OKF-STATUS-TRUTH-056-057); Spectate reverse-vs-plain banked from CC PWO-060 mid-wave (hub @ 04:14:11Z); 061 Human→App + Ctrl-]@App-hold from kernel STATUS. **Pending** hub/Max canon — do not treat as signed prose.
 
-### Pending Max ruling stamp (2026-07-25 · Batch-1 · **not signed canon yet**)
-Hub relay `@ 09:12:51Z`: **`M` = Mode** — toggles App↔Human (closes B′ free-letter / C control-char shape). Matches Mode Switch intent. **Batch 1b still open:** while Human attached, TW **Move** also wants `M` — prior park "do not intercept `M` while attached"; product Human→App WO stays HOLD until Max 1b. Cursor docs-only note; no product invent.
+### Ruled Max stamp (2026-07-25 · Batch-1 + **1b CLOSED** · Pending signed canon prose)
+Hub relay `@ 09:12:51Z` + `@ 09:17:56Z`:
+1. **Mode chord = Ctrl-A** (TTY; not Ctrl-M/⌘M). Toggles App↔Human both directions once App can hold the seat.
+2. **While Human attached, bare `M` = TW Move** — passthrough to the game.
+3. **Principle:** no **single printable** may be Mode (same collision class as `M` / game alphabet).
+4. Batch-1 shape (not B′/C) closed earlier; **Batch 1b CLOSED** — HOLD lifts for 061-entry product under this contract. Spectate→Human bare `M` (056) should migrate to Ctrl-A (same WO or follow-on) so printable Mode does not remain. Ctrl-] detach unchanged. Cursor docs-only note; no signed north-star invent.
 
 | ID | Gap | Tip reality |
 |---|---|---|
-| DOC-GAP-M-FROM-SPECTATE | Canon frames `M` as App↔Human; silent on Spectate→Human | Hub 056: Spectate→Human only. **Batch-1:** Max `M`=Mode App↔Human (**Pending** canon stamp). Human→App product still **HOLD** until Batch 1b (attached Move vs Mode) · see PREP 061 |
+| DOC-GAP-M-FROM-SPECTATE | Canon frames `M` as App↔Human; silent on Spectate→Human | Hub 056: Spectate→Human via bare `M` today. **Ruled:** Mode=Ctrl-A; attached `M`=Move; migrate Spectate attach to Ctrl-A (061-entry / follow-on). Unsigned canon prose until hub stamps FEATURES |
 | DOC-GAP-POST-DETACH-COPY | Canon silent on post-detach status copy | Shipped `"detached — spectating"` (dispatch-decided) |
 | DOC-GAP-SPECTATE-REVERSE-VS-PLAIN | `mode-line-and-teach-controls.md:196-198` says Spectate chip reverse-video like every badge; `spectate-and-attach.md:262` (+ PWO-060 constraint) say muted/**plain** | **055 shipped plain**; 060 keeps Spectate plain; dual App/Human get reverse+tone. Do not resolve in 060. |
 | DOC-GAP-CTRL-RBRACKET-FROM-APP-HOLD | Ctrl-] from App-hold is a no-op today | 061 kernel pinned accidental behavior (`d4a8829`); any change must be deliberate · unruled |

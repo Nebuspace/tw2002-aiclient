@@ -3,7 +3,7 @@
 > Status: **PREP + PWO-060 DONE + PWO-061 KERNEL DONE** 2026-07-25 · product tip `d4a8829` · seat `impl-aiclient-cursor` (OKF-STATUS-TRUTH-061-KERNEL)  
 > Phase: 5 · Type: PREP (inventory + tightened Accept/Proof) · Execute: hub HANDOFF to product seat after Accept  
 > Canon: `canon/surfaces/mode-line-and-teach-controls.md` · `canon/architecture/control-and-escalation.md` · `canon/engine/ai-teacher.md` · `canon/architecture/app-autopilot-model.md` · `canon/engine/coverage-metrics.md` · `canon/engine/macros.md` · `canon/architecture/rule-macro-engine.md`  
-> Refs: `ULTRACODE-WO-INVENTORY.md` Phase-5 rows · Phase 4 CLOSED (`bba53d4`) · PWO-060 (`2ca3154`) · PWO-061 kernel (`d4a8829`) · Pending DOC-GAP-M-FROM-SPECTATE · DOC-GAP-POST-DETACH-COPY · DOC-GAP-SPECTATE-REVERSE-VS-PLAIN · **Max Batch-1:** `M`=Mode (Pending stamp) · **Batch 1b HOLD:** attached Move vs Mode
+> Refs: `ULTRACODE-WO-INVENTORY.md` Phase-5 rows · Phase 4 CLOSED (`bba53d4`) · PWO-060 (`2ca3154`) · PWO-061 kernel (`d4a8829`) · Pending DOC-GAP-M-FROM-SPECTATE · DOC-GAP-POST-DETACH-COPY · DOC-GAP-SPECTATE-REVERSE-VS-PLAIN · **Max Ruled:** Mode=Ctrl-A · attached `M`=Move · no printable Mode · **Batch 1b CLOSED**
 
 **No product edited in this OKF tick.** Live-state below is tip **`d4a8829`** unless a row still says MISSING/PARKED. **Do not read 061 as CLOSED** — kernel only.
 
@@ -16,7 +16,7 @@
 - **Spectate is not a dual member** (canon) — muted `SPECTATE` is observation, not an App/Human toggle position. DOC-GAP-M-FROM-SPECTATE remains **Pending** (unsigned): shipped `M` is Spectate→Human; App↔Human return still owed here (061).
 - **AI never live-drives.** Retire any `AI-PILOT` / `ai_pilot` UI string. Teach overlay is cyan/info, transient, never a mode-line dual seat. App chip = **green (`ok`)** deterministic autopilot (aspirational→buildable Accept on 060).
 - **What 056/057 already satisfied:** Human/`MANUAL — YOU HAVE CONTROL` chip LIVE · `M` attach LIVE · Ctrl-] detach LIVE · no-send tripwire + attach allowlist LIVE · redaction on attach channel LIVE.
-- **What Phase 5 still owes:** Human→App entry (061 Accept #2 — **Batch-1 shape:** Max `M`=Mode Pending stamp; **Batch 1b HOLD** attached Move vs Mode before product) · A/R/T teach strip · STOP banner + reason codes · arm/confirm · N5 operate cluster · coverage meter (App-vs-Human, AI≠live slice).
+- **What Phase 5 still owes:** Human→App entry (061 Accept #2 — **Ruled:** Ctrl-A Mode; CC product HANDOFF live) · migrate Spectate→Human bare `M`→Ctrl-A · A/R/T teach strip · STOP banner + reason codes · arm/confirm · N5 operate cluster · coverage meter (App-vs-Human, AI≠live slice).
 - **F2 HOLD** — ops `tw spectate` CLI still Max-gated. **G2–G4 HOLD** unchanged.
 - **North-star** parked pending Max (1)(2) — this PREP does not unpark or invent one-cockpit prose beyond existing Phase-4 alignment.
 - **Archive** = port-source only (`spectate_app` / `spectate_layout` badges) — never `import twclient`.
@@ -30,10 +30,10 @@
 |---|---|---|
 | Control-strip seat label SPECTATE | **LIVE** (PWO-055 · `cockpit/control_seat.py`) | Muted/plain; not a dual member |
 | Control-strip seat label MANUAL (Human) | **LIVE** (PWO-056 · reverse+warn lift in 060) | `MANUAL — YOU HAVE CONTROL`; `_safe_attached` defaults False |
-| Unified **App** chip (green / no AI-PILOT) | **LIVE** (PWO-060 · `APP` / `ok`+bold+reverse) | Strict gate LIVE; App→Human path proven (061 kernel); **Human→App still PARKED** — chip stays wire-UNREACHABLE from attached play until Max entry ruling |
-| `M` Spectate→Human attach | **LIVE** (PWO-056) | Hub 056 ruling |
-| `M` App-hold→Human | **LIVE** (PWO-061 KERNEL · `d4a8829`) | Existing 056 attach wiring; test-only pins; zero product delta |
-| Human→App entry trigger | **HOLD** (Batch 1b) | Max Batch-1: `M`=Mode (**Pending** canon). Do **not** intercept `M` while attached until Max rules Move vs Mode |
+| Unified **App** chip (green / no AI-PILOT) | **LIVE** (PWO-060 · `APP` / `ok`+bold+reverse) | Strict gate LIVE; App→Human path proven (061 kernel); **Human→App wire via Ctrl-A** — product HANDOFF `WO-P5-061-ENTRY` (CC) |
+| `M` Spectate→Human attach | **LIVE** (PWO-056) · **migrate** | Hub 056 bare `M` today; Max 1b: migrate attach Mode to Ctrl-A (same WO or follow-on) |
+| `M` App-hold→Human | **LIVE** (PWO-061 KERNEL · `d4a8829`) | Existing 056 attach wiring; test-only pins; zero product delta — retarget to Ctrl-A under 061-entry |
+| Human→App entry trigger | **GO** (Batch 1b CLOSED) | **Ruled:** Ctrl-A = Mode; attached bare `M` = TW Move passthrough; no printable Mode |
 | Ctrl-] detach → SPECTATE | **LIVE** (PWO-057) | Esc≠detach; post-detach copy DOC-GAP Pending; Ctrl-] from App-hold = unruled no-op (pinned) |
 | Teach strip A / R / T affordances | **MISSING** | 066; keys unbound as teach moves |
 | Analyze (`A`) on-demand | **MISSING** | 069 · `ai-teacher.md` |
@@ -59,12 +59,13 @@
 - **Proof:** Layer-A composer unit (label selection matrix) · `rg` gate no `ai_pilot`/`AI-PILOT` under `tw2002_aiclient/` · optional pty chip text.
 - **Hazards:** Do not unify Spectate into the dual. Do not rewrite `control_seat` signature unless proven necessary — extend alongside 056 pattern.
 
-### PWO-061 — `M` mode switch App↔Human (BUILD) — **KERNEL DONE 2026-07-25** (impl-claudecode-aiclient · tip `d4a8829` — test-only; App-hold daemon-TRUE; App→Human via existing `M`/056 path; Accept #2 Human→App **DISCLOSED-PARKED** pending Max B′/C; Ctrl-] from App-hold pinned unruled no-op)
+### PWO-061 — Mode switch App↔Human (BUILD) — **KERNEL DONE** + **061-ENTRY GO** (Max Batch 1b CLOSED 2026-07-25)
 - **Depends-on:** 060 · 056 (attach already Spectate→Human)
-- **Live state:** **PARTIAL** — App-hold→`M`→Human **LIVE** (kernel proofs); Spectate→Human **LIVE**; Human→App entry **PARKED** (no key invented). Full WO **not CLOSED**.
-- **Accept:** When App can hold the seat, `M` toggles App↔Human per `control-and-escalation.md` (switch-to-Human immediate/unrefusable); Spectate→Human path remains; do not invent unsigned Spectate↔App dual. Resolve DOC-GAP-M-FROM-SPECTATE only via hub/Max-signed canon — until then keep hub 056 ruling. **Hub 061 mid-wave:** do not intercept `M` while attached (TW Move).
-- **Proof:** FakeClient lock transitions App↔Human · chip flip App↔MANUAL · regression: Spectate→Human still works · `q` still game input while Human.
-- **Hazards:** Do not steal 057 Ctrl-]. Do not loosen no-send tripwire — App send path (if any) needs precise allowlist later (Phase 6).
+- **Live state:** **PARTIAL** — App-hold→`M`→Human **LIVE** (kernel); Spectate→Human via bare `M` **LIVE** (056); Human→App **MISSING** until Ctrl-A product. Full WO **not CLOSED**.
+- **Max Ruled (Batch-1 + 1b · Pending signed canon prose):** Mode chord = **Ctrl-A**; attached bare `M` = TW Move; no single printable may be Mode; migrate Spectate attach off printable `M`.
+- **Accept (061-entry):** Ctrl-A toggles App↔Human · attached `M` reaches game · Spectate still reaches Human (via Ctrl-A after migrate) · suite green · tip inventory honest.
+- **Proof:** FakeClient/lock + chip flips + Move passthrough pin · Push waits Accept.
+- **Hazards:** Do not steal 057 Ctrl-]. Do not loosen no-send tripwire. Esc≠detach.
 
 ### PWO-062 — Autopilot/Trainer arm UI (EXTEND)
 - **Depends-on:** 060 · 020 daemon
@@ -171,4 +172,4 @@ Pending (not blocking PREP Accept): DOC-GAP-M-FROM-SPECTATE · DOC-GAP-POST-DETA
 
 ## 5. Execute readiness
 
-**PWO-060 DONE** (`2ca3154`). **PWO-061 KERNEL DONE** (`d4a8829`) — App→Human proven; Human→App **HOLD Batch 1b** (Max `M`=Mode Pending stamp; Move conflict open). Remaining 062–072 still PREP until hub HANDOFF. Do **not** claim full 061 CLOSED. Cursor docs lane: OKF status-truth only; no product code in this tick.
+**PWO-060 DONE** (`2ca3154`). **PWO-061 KERNEL DONE** (`d4a8829`) — App→Human proven; **Batch 1b CLOSED** (Mode=Ctrl-A; attached `M`=Move) — product HANDOFF to CC `WO-P5-061-ENTRY`. Remaining 062–072 still PREP until hub HANDOFF. Do **not** claim full 061 CLOSED until entry tip lands. Cursor docs lane: OKF status-truth only; no product code in this tick.
