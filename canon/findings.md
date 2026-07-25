@@ -144,6 +144,7 @@ Hub relay `@ 09:33:23Z`: on cockpit **entry**, chip must show **`APP`** to match
 | DOC-GAP-SPECTATE-REVERSE-VS-PLAIN | `mode-line-and-teach-controls.md:196-198` says Spectate chip reverse-video like every badge; `spectate-and-attach.md:262` (+ PWO-060 constraint) say muted/**plain** | **055 shipped plain**; 060 keeps Spectate plain; dual App/Human get reverse+tone. Do not resolve in 060. |
 | DOC-GAP-CTRL-RBRACKET-FROM-APP-HOLD | Ctrl-] from App-hold is a no-op today | **Ruled** Batch 2/3: deliberate **no-op stay App** (CC pins product; no Spectate invent) |
 | DOC-GAP-APP-CHIP-SPELLING | Canon short **App** vs shipped `APP` | **Ruled** Batch 2/3: chip text **`APP`**; actor prose may still say App |
+| DOC-GAP-ENTRY-CHIP-SPECTATE | Fresh cockpit entry showed SPECTATE while daemon MODE_APP | **Ruled** `@ 09:33:23Z`: entry chip = **APP** (match daemon); CC `WO-ENTRY-APP-CHIP` |
 | HARDEN-ATTACH-SOCKET-TIMEOUT | Unbounded `AttachInputConn` socket read | **DONE** tip `88004d8` (`settimeout(5.0)` + OSError containment) · out of Phase-5 PREP |
 | LOG-NOTE-RETIRE | Dead `log_note` helper | **Ruled RETIRE** — CC product delete; no silent keep |
 | SECRETS-ARCHIVE-NEVER-LIVE | Rotate gate on archive secrets | **CLOSED** — Max: archive `secrets.json` never live; no rotate |

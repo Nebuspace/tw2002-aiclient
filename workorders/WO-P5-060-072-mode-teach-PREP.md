@@ -13,7 +13,7 @@
 
 - **Phase 4 CLOSED** — human play loop LIVE: spectate → `M` attach → play → Ctrl-] detach → spectate (`bba53d4`).
 - **Phase 5 owns presentation of the App/Human dual + teach/escalation**, not a second cockpit. One play shell; in-surface chrome.
-- **Spectate is not a Mode** (Max Batch 2/3) — muted `SPECTATE` is observation chrome, not an App/Human toggle position. Default run = App/autopilot. DOC-GAP-M-FROM-SPECTATE **SUPERSEDED**.
+- **Spectate is not a Mode** (Max Batch 2/3) — muted `SPECTATE` is observation chrome, not an App/Human toggle position. Default run = App/autopilot. **Entry chip = APP** (Max `@ 09:33:23Z` — match daemon `MODE_APP`, not SPECTATE). DOC-GAP-M-FROM-SPECTATE **CLOSED**.
 - **AI never live-drives.** Retire any `AI-PILOT` / `ai_pilot` UI string. Teach overlay is cyan/info, transient, never a mode-line dual seat. Chip text = **`APP`** (green/`ok`).
 - **What 056/057 already satisfied:** Human/`MANUAL — YOU HAVE CONTROL` chip LIVE · `M` attach LIVE · Ctrl-] detach LIVE · no-send tripwire + attach allowlist LIVE · redaction on attach channel LIVE.
 - **What Phase 5 still owes:** Human→App entry (061 Accept #2 — **Ruled:** Ctrl-A Mode; CC product HANDOFF live) · migrate Spectate→Human bare `M`→Ctrl-A · A/R/T teach strip · STOP banner + reason codes · arm/confirm · N5 operate cluster · coverage meter (App-vs-Human, AI≠live slice).
@@ -28,7 +28,7 @@
 
 | Piece | Tip `d4a8829` | Notes |
 |---|---|---|
-| Control-strip seat label SPECTATE | **LIVE** (PWO-055 · `cockpit/control_seat.py`) | Muted/plain; not a dual member |
+| Control-strip seat label SPECTATE | **LIVE** (PWO-055 · `cockpit/control_seat.py`) | Observation chrome only; **entry must show APP** (Max `@ 09:33:23Z`) not SPECTATE |
 | Control-strip seat label MANUAL (Human) | **LIVE** (PWO-056 · reverse+warn lift in 060) | `MANUAL — YOU HAVE CONTROL`; `_safe_attached` defaults False |
 | Unified **App** chip (green / no AI-PILOT) | **LIVE** (PWO-060 · `APP` / `ok`+bold+reverse) | Strict gate LIVE; App→Human path proven (061 kernel); **Human→App wire via Ctrl-A** — product HANDOFF `WO-P5-061-ENTRY` (CC) |
 | `M` Spectate→Human attach | **LIVE** (PWO-056) · **migrate** | Hub 056 bare `M` today; Max 1b: migrate attach Mode to Ctrl-A (same WO or follow-on) |

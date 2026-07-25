@@ -19,6 +19,7 @@ Committable twin: `workorders/AUDIT-OKF-6LENS-BACKLOG.md`. Draft WOs: `workorder
 | Banked docs | UNICODE-OK-DOCSTRING | DRAFT `WO-AUDIT-UNICODE-OK-DOCSTRING` — stale locale claim |
 | Max-ruled | 061 Accept #2 Human→App | **Batch 1b CLOSED** — Mode=Ctrl-A · attached `M`=Move · no printable Mode · CC product HANDOFF |
 | Max-ruled | Batch 2/3 cluster | **CLOSED** — `APP` chip · Spectate≠Mode · Ctrl-]@App-hold no-op · north-star SIGNED · log_note RETIRE · secrets never-live |
+| Max-ruled | Entry chip = APP | **Ruled** `@ 09:33:23Z` — match daemon `MODE_APP`; not SPECTATE at idle entry · CC `WO-ENTRY-APP-CHIP` |
 | Phase 6 tip | PWO-080 PARTIAL · 085/086 LIVE · 081–084/087–088 MISSING | Fold into WO-AUDIT-PHASE6-PREP |
 | Orphan archive tests | `tests/test_spectate_app.py` etc. still `import twclient` + AI-PILOT expects | cleanup candidate (not product UI) |
 
@@ -35,7 +36,7 @@ Committable twin: `workorders/AUDIT-OKF-6LENS-BACKLOG.md`. Draft WOs: `workorder
 ### L2 — Code↔canon divergence
 | ID | P | Gap | Paths | Depends |
 |---|---|---|---|---|
-| A-L2-M-CANON | P0 | Canon M-from-Human example vs TW Move + 056 all-printables (hub ruled; Max entry) | `control-and-escalation.md` · `mode-line…` | Max |
+| A-L2-M-CANON | P0 | Canon M-from-Human example vs TW Move + 056 all-printables (hub ruled; Max entry) | `control-and-escalation.md` · `mode-line…` | **CLOSED** ADR-002 fold |
 | A-L2-SPECTATE-RV | P2 | Reverse-video vs plain Spectate chip | findings DOC-GAP | Max/hub |
 | A-L2-APP-LABEL | P2 | Canon short **App** vs shipped `APP` chip string | `control_seat.py` · mode-line | **Ruled** Batch 2/3 docs-win `APP` |
 
