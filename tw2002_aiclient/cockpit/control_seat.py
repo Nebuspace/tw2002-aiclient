@@ -60,10 +60,12 @@ forecast. ``compose_control_strip_line`` gains one new keyword-only
 behavior is unchanged) rather than a signature rework -- see that function's
 own docstring for the priority rule when both are truthy. The DRAW-layer
 wiring (``PlayShellScreen`` gaining its own ``attached`` state and passing
-it here, alongside the actual `M`-key control-switch/keystroke-forward
-mechanics) is lane A's ``screens.py``/``app.py`` territory, not this
-module's -- as of this dispatch that wiring had not yet landed, so nothing
-in this file alone makes the badge appear on a real screen.
+it here, alongside the actual Ctrl-A control-switch/keystroke-forward
+mechanics -- ``screens.MODE_KEY``, ADR-002) is lane A's ``screens.py``/
+``app.py`` territory, not this module's. That wiring has since landed
+(PWO-056 attach, PWO-057 detach, Ctrl-A Mode chord), so the badge does
+appear on a real screen -- via those modules, not via anything this file
+does alone.
 
 **PWO-060 status (App/Human badge, no AI mode -- this dispatch's own
 contribution):** ``APP_LABEL``/``app_label()`` add the dual's third and
