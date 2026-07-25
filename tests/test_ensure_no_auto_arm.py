@@ -83,6 +83,11 @@ def test_dispatch_ensure_never_arms_even_when_profile_would(monkeypatch):
     session.conn.connected = True
     session.last_rx = 0.0
     session.render.return_value = ["Command [TL=1000]"]
+    # WO-P4-053: build_response()'s bare-rows path (the already_there
+    # branch this test exercises) now calls render_with_color() instead
+    # of render() -- a bare MagicMock() return value isn't a (rows,
+    # color) pair to unpack, so this must be configured explicitly.
+    session.render_with_color.return_value = (["Command [TL=1000]"], [])
     session.render_text.return_value = "Command [TL=1000]"
     session.host = "127.0.0.1"
     session.port = 23

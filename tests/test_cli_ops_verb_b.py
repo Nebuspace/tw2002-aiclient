@@ -36,6 +36,11 @@ class FakeSession:
     def render(self):
         return list(self._rows)
 
+    def render_with_color(self):
+        # WO-P4-053: build_response's bare-rows path (do/send/read all
+        # call it with no rows) now takes both from here in one call.
+        return self.render(), []
+
     def render_raw(self):
         return list(self._rows)
 

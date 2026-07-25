@@ -238,6 +238,164 @@ def draw_lines_attrs(
         _safe_write(win, inner_y + i, inner_x, _clip_cells(line, inner_w), attr)
 
 
+def _cell_index_map(text: str) -> list[tuple[int, int]]:
+    """``(cell_start, cell_width)`` for every character of ``text``, in
+    order -- the per-character cell-column table ``_slice_by_cell`` walks
+    to pull out a sub-line span without slicing a wide character in
+    half. Shares ``_cell_width``'s East-Asian-Wide/Fullwidth-is-2-cells
+    rule with every other clip in this module."""
+    out: list[tuple[int, int]] = []
+    used = 0
+    for ch in text:
+        w = _cell_width(ch)
+        out.append((used, w))
+        used += w
+    return out
+
+
+def _slice_by_cell(
+    text: str, cell_map: list[tuple[int, int]], start: int, end: int
+) -> tuple[int | None, str]:
+    """The substring of ``text`` whose characters fall FULLY within the
+    cell-column range ``[start, end)`` -- a character straddling either
+    edge (most concretely a wide glyph whose 2-cell span only partly
+    overlaps the run) is dropped whole rather than sliced, same
+    discipline as ``_clip_cells``. ``cell_map`` is ``_cell_index_map(text)``
+    for this same string, passed in so painting several runs against one
+    line only pays the walk once.
+
+    Returns ``(offset, substring)`` -- ``offset`` is the cell-column of
+    the FIRST character actually included, which can be greater than
+    ``start`` when the character sitting at ``start`` itself got dropped
+    (e.g. ``start`` lands inside a wide glyph's own 2-cell span, so that
+    glyph is skipped and the substring begins at the next real
+    character). A caller writing the substring MUST use this returned
+    offset as its screen x-position, never the raw ``start`` -- writing
+    at ``start`` in that dropped-leading-character case would place the
+    surviving text one cell to the left of where it actually sits on the
+    line. ``(None, "")`` when nothing in range survives."""
+    out = []
+    offset = None
+    for ch, (cell_start, cell_w) in zip(text, cell_map):
+        if cell_start >= end:
+            break
+        if cell_start >= start and cell_start + cell_w <= end:
+            if offset is None:
+                offset = cell_start
+            out.append(ch)
+    return offset, "".join(out)
+
+
+def _coerce_run(run) -> tuple[int, int, int] | None:
+    """Best-effort ``(start, end, attr)`` int coercion for one run dict --
+    ``None`` on anything unusable: not a dict, a missing ``start``/``end``,
+    a non-finite/unparsable numeric (``int(float("nan"))``/``int(float
+    ("inf"))`` both raise, one ``ValueError`` and one ``OverflowError`` --
+    see this project's own "``_safe_int`` must catch ``OverflowError``"
+    lesson), or an empty/inverted span (``end <= start``). A run missing
+    ``attr`` entirely defaults to ``0`` -- indistinguishable from the
+    uncolored base layer ``draw_runs`` already painted, so that's a safe
+    default rather than a reason to drop the run."""
+    if not isinstance(run, dict):
+        return None
+    try:
+        start = int(run["start"])
+        end = int(run["end"])
+        attr = int(run.get("attr", 0))
+    except (KeyError, TypeError, ValueError, OverflowError):
+        return None
+    if end <= start:
+        return None
+    return start, end, attr
+
+
+def draw_runs(
+    win: curses.window,
+    region: dict | None,
+    lines: Sequence[tuple[str, Sequence[dict] | None]],
+    *,
+    boxed: bool = True,
+) -> None:
+    """Per-RUN, sub-line curses attrs -- the shape a color-aware panel
+    needs when DIFFERENT SPANS of the same line carry different attrs
+    (TWGS SGR color runs painted onto the GAME viewport, WO-P4-053),
+    where ``draw_lines`` (one attr for the whole box) and
+    ``draw_lines_attrs`` (one attr per LINE) both fall short.
+
+    ``lines`` pairs each line's full text with its own run list -- each
+    run a ``{"start", "end" (exclusive), "attr"}`` dict describing a
+    cell-column span within THAT line, the same run shape
+    ``TerminalScreen.color_map()`` emits (see that method's own
+    docstring: rows/runs are meant to be zipped by index against the
+    SAME rows a caller got from ``render_with_color()``). Every line is
+    first written in full at ``attr=0`` -- the same safe write
+    ``draw_lines_attrs`` would produce for it -- and each VALID run is
+    then overlaid on top with its own attr. That means a line with no
+    runs, an empty run list, or a run list that doesn't fully cover the
+    line's width all still render their complete text; only the color
+    is missing wherever no valid run says otherwise. A malformed
+    individual run entry (missing/wrong-typed keys, an empty or inverted
+    span, a non-finite numeric) is silently dropped by ``_coerce_run`` --
+    degrading that one span to the uncolored base layer -- rather than
+    raising or voiding the rest of the line. Never raises, same
+    hardening family as every other draw in this module.
+
+    Identical inset math to ``draw_lines``/``draw_lines_attrs``: inset by
+    one cell on every side when ``boxed``, filling the raw region when
+    not; lines beyond the available interior height are silently
+    dropped. A run's own span is clipped to the visible interior bounds
+    (cell-width-aware, via ``_slice_by_cell`` -- never just the window's
+    edge, matching ``draw_box``'s title-clip reasoning) BEFORE reaching
+    ``_safe_write``, so a run straddling the region's right edge
+    truncates cleanly instead of bleeding past this box's own border;
+    ``_safe_write`` itself still neutralizes control characters and
+    guards the underlying ``addstr`` call, same as every other write
+    here.
+    """
+    if region is None or not lines:
+        return
+    y, x, w, h = region["y"], region["x"], region["w"], region["h"]
+    if boxed:
+        inner_y, inner_x, inner_w, inner_h = y + 1, x + 1, w - 2, h - 2
+    else:
+        inner_y, inner_x, inner_w, inner_h = y, x, w, h
+    if inner_w < 1 or inner_h < 1:
+        return
+    for i, item in enumerate(lines):
+        if i >= inner_h:
+            break
+        try:
+            text, runs = item
+        except (TypeError, ValueError):
+            continue
+        if not isinstance(text, str):
+            continue
+        row_y = inner_y + i
+        # Base layer: the full line, uncolored -- guarantees content is
+        # never lost even when every run below turns out unusable.
+        _safe_write(win, row_y, inner_x, _clip_cells(text, inner_w), 0)
+        if not runs:
+            continue
+        try:
+            run_list = list(runs)
+        except TypeError:
+            continue
+        cell_map = _cell_index_map(text)
+        for raw_run in run_list:
+            coerced = _coerce_run(raw_run)
+            if coerced is None:
+                continue
+            start, end, attr = coerced
+            vis_start = max(0, start)
+            vis_end = min(end, inner_w)
+            if vis_end <= vis_start:
+                continue
+            offset, segment = _slice_by_cell(text, cell_map, vis_start, vis_end)
+            if not segment:
+                continue
+            _safe_write(win, row_y, inner_x + offset, segment, attr)
+
+
 def draw_lines(
     win: curses.window,
     region: dict | None,

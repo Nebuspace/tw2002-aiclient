@@ -38,9 +38,7 @@ from .control_lock import (
 
 
 def build_response(session, rows=None, settled_reason=None, extra=None):
-    """WO-P2-020 Wave-3 CUT vs archive protocol.py:407-470: `color`
-    (`session.render_with_color()` -- present on session.py but paired
-    here with no color-consuming surface yet), `state`
+    """WO-P2-020 Wave-3 CUT vs archive protocol.py:407-470: `state`
     (`state_parser.parse_state` -- not ported, per this WO's Wave-2
     memory note), `cursor` (`session.cursor_pos()` -- the attach surface
     that reads it hasn't landed), the `world_identity`/`world_model`
@@ -48,9 +46,29 @@ def build_response(session, rows=None, settled_reason=None, extra=None):
     (Session methods cut in Wave-2), and the `frame_recorder` post-mortem
     hook are all left off this response until their own work orders land.
     `sent_input` is kept -- it's a plain `Session` attribute (session.py,
-    Wave-2), zero extra dependency."""
+    Wave-2), zero extra dependency.
+
+    WO-P4-053: `color` is back, additive, but ONLY on the bare-`rows`
+    path -- every caller here except `screen`'s `raw` branch (`do`,
+    `send`, `read`, `ensure`, and `watch.py`'s seed-subscribe/settle-edge
+    emit) already calls this with no `rows`, so they all pick up `color`
+    for free. That bare path takes BOTH rows and color from
+    `session.render_with_color()`, which
+    captures them under ONE lock acquisition -- see that method's own
+    docstring for why calling `render()` and a separate `color_map()`
+    read is a RACE (a byte arriving between the two calls shifts the
+    content bounding box, producing a color map that no longer lines up
+    with the text it's supposed to paint). When the CALLER already
+    supplied `rows` (only `screen`'s one-shot `raw` path today), a
+    matching color map can no longer be safely derived from that same
+    snapshot, so `color` is omitted entirely rather than pairing the
+    caller's rows with a color map captured moments later against
+    whatever the screen has become since -- honest absence over a
+    plausible-but-misaligned map. Do not "fix" this asymmetry by adding
+    a second `terminal.color_map()` read on the `rows`-supplied path."""
+    color = None
     if rows is None:
-        rows = session.render()
+        rows, color = session.render_with_color()
     text = session.render_text(rows)
     prompt = rows[-1].strip() if rows else ""
     resp = {
@@ -60,6 +78,8 @@ def build_response(session, rows=None, settled_reason=None, extra=None):
         "classification": classify_screen(text, prompt),
         "sent_input": getattr(session, "last_sent", None),
     }
+    if color is not None:
+        resp["color"] = color
     if settled_reason is not None:
         resp["settled_reason"] = settled_reason
     if extra:

@@ -23,6 +23,7 @@ from tw2002_aiclient.cockpit import liveness as cockpit_liveness
 from tw2002_aiclient.cockpit import logsband as cockpit_logsband
 from tw2002_aiclient.cockpit import tones as cockpit_tones
 from tw2002_aiclient.cockpit import viewport as cockpit_viewport
+from tw2002_aiclient.cockpit import viewport_color as cockpit_viewport_color
 from tw2002_aiclient.cockpit.layout import frame_layout
 from tw2002_aiclient.cockpit.strip import compose_profile_strip_from_row
 from tw2002_aiclient.session import credentials
@@ -61,7 +62,18 @@ _COLOR_NAME_TO_CURSES = {
     "red": curses.COLOR_RED,
     "cyan": curses.COLOR_CYAN,
     "default": -1,
+    # GAME-cell vocabulary (WO-P4-053 draw-seam merge) -- pyte's own color
+    # names, sourced from cockpit.viewport_color.PYTE_TO_CURSES_COLOR
+    # rather than re-declared here, so that table stays the one source of
+    # truth for "pyte name -> curses int". "brown" is pyte's own ANSI-
+    # yellow quirk (see that module's docstring); chrome's tone table never
+    # emits it (tones.py uses the plain string "yellow" instead), so the
+    # two vocabularies add up with no colliding key, both resolving the
+    # same COLOR_YELLOW int under their own distinct name.
+    **cockpit_viewport_color.PYTE_TO_CURSES_COLOR,
 }
+
+_UNSET = object()  # cache-miss sentinel -- distinguishes "never attempted" from "cached failure" (None)
 
 
 class _SharedPairs:
@@ -92,54 +104,111 @@ class _SharedPairs:
 
     The fix: exactly ONE process-lifetime allocator (this class, and the
     module-level ``_shared_pairs`` instance below). It allocates a pair
-    number PER DISTINCT COLOR NAME on first request, caches it forever, and
-    every later request for that same name returns the SAME pair number --
-    so no two screens can ever collide, no matter how many are constructed
-    across the app's lifetime, and no matter which order. Two tones that
-    happen to share an fg name (``"ok"``/``"gain"`` both ``"green"``,
-    ``"danger"``/``"loss"`` both ``"red"``) now legitimately share ONE
-    underlying pair too -- a pure allocation-count optimization, not a
-    behavior change, since callers still apply their own bold flag on top
-    of the returned base attr.
+    number PER DISTINCT COLOR COMBINATION on first request, caches it
+    forever, and every later request for that same combination returns the
+    SAME pair number -- so no two screens can ever collide, no matter how
+    many are constructed across the app's lifetime, and no matter which
+    order. Two tones that happen to share a combination (``"ok"``/``"gain"``
+    both ``("green", "default")``, ``"danger"``/``"loss"`` both
+    ``("red", "default")``) now legitimately share ONE underlying pair too
+    -- a pure allocation-count optimization, not a behavior change, since
+    callers still apply their own bold flag on top of the returned base
+    attr.
+
+    WO-P4-053 draw-seam merge: the cache key widened from a bare ``str``
+    fg-color-name to a ``tuple[str, str]`` ``(fg_name, bg_name)`` so the
+    GAME viewport's per-cell colors (which need a real ``bg``, e.g. a
+    highlighted status line) can share this SAME allocator instead of a
+    second, independently-counting one -- two allocators would reopen the
+    exact pair-number-collision bug this class exists to eliminate, this
+    time between chrome and game cells rather than between two screens.
+    Every existing single-name chrome caller (``attr_for(fg_name)``) is
+    unaffected: ``bg_name`` defaults to ``"default"``, which resolves to
+    curses' ``-1`` sentinel exactly like the old hardcoded
+    ``curses.init_pair(pair_n, fg, -1)`` did, so chrome's cache keys,
+    allocated pair numbers, and returned attrs are byte-for-byte identical
+    to before this widening.
+
+    This merge also absorbed ``cockpit.viewport_color``'s reference
+    ``GameCellPairs`` (now deleted -- a second live allocator was never
+    meant to ship) along with its two hardening upgrades, applied here for
+    every caller, chrome included: a proactive ``curses.COLOR_PAIRS`` bound
+    check (skip the doomed ``init_pair`` call entirely once the table is
+    known-full) and CACHING a failed allocation rather than retrying it on
+    every call. ``COLOR_PAIRS`` is a fixed terminal capability for the
+    process's lifetime, so a failure can never later succeed -- retrying
+    it as a ``curses.error`` exception on every single call would be
+    needless overhead, harmless for chrome's handful of one-time
+    construction-time lookups but real waste for GAME-cell resolution,
+    which runs once per colored run, per redraw, of a live scrolling
+    screen.
     """
 
     def __init__(self) -> None:
-        self._pair_for_name: dict[str, int] = {}
+        self._pair_for_key: dict[tuple[str, str], int | None] = {}
         self._next_pair = 1
         self._started = False
 
-    def attr_for(self, color_name: str) -> int:
-        """Base (non-bold) curses attr for ``color_name``. ``"default"``
-        (or any name absent from ``_COLOR_NAME_TO_CURSES``) resolves to
-        ``curses.A_NORMAL`` without ever consuming a pair number -- there
-        is nothing to allocate for "no color". Never raises: a
-        ``curses.error`` from ``init_pair`` (e.g. the pair table is
-        exhausted) degrades that one call to ``curses.A_NORMAL`` rather
-        than crashing the draw pass, the same honesty-over-crash
-        convention every other curses-facing call in this module already
-        follows."""
+    def attr_for(self, fg_name: object, bg_name: object = "default") -> int:
+        """Base (non-bold) curses attr for the ``(fg_name, bg_name)``
+        color-name combination. ``bg_name`` defaults to ``"default"`` for
+        chrome's existing single-name callers (zero behavior change --
+        see the class docstring). ``"default"`` (or any name absent from
+        ``_COLOR_NAME_TO_CURSES``, including a hostile non-``str`` name)
+        means terminal-default for that side, NOT a forced color -- if
+        BOTH sides resolve to default, nothing is colored at all and no
+        pair is allocated for it. Never raises: no color support, an
+        exhausted pair table (checked proactively via
+        ``curses.COLOR_PAIRS`` when available, and reactively via a
+        ``curses.error`` catch around ``curses.init_pair`` either way), or
+        any other curses failure all degrade this call to
+        ``curses.A_NORMAL`` rather than crashing the draw pass, the same
+        honesty-over-crash convention every other curses-facing call in
+        this module already follows."""
         if not curses.has_colors():
             return curses.A_NORMAL
-        fg = _COLOR_NAME_TO_CURSES.get(color_name, -1)
-        if fg == -1:
+        fg = _COLOR_NAME_TO_CURSES.get(fg_name, -1) if isinstance(fg_name, str) else -1
+        bg = _COLOR_NAME_TO_CURSES.get(bg_name, -1) if isinstance(bg_name, str) else -1
+        if fg == -1 and bg == -1:
             return curses.A_NORMAL
-        cached = self._pair_for_name.get(color_name)
-        if cached is not None:
-            return curses.color_pair(cached)
+
+        # Hostile non-str names already collapsed to -1 above; normalize
+        # the CACHE key the same way so it stays a plain, always-hashable
+        # (str, str) tuple regardless of what was actually passed in (a
+        # hostile unhashable fg_name/bg_name -- e.g. a list -- must never
+        # reach a dict-key position).
+        fg_key = fg_name if isinstance(fg_name, str) else "default"
+        bg_key = bg_name if isinstance(bg_name, str) else "default"
+        key = (fg_key, bg_key)
+
+        cached = self._pair_for_key.get(key, _UNSET)
+        if cached is not _UNSET:
+            return curses.A_NORMAL if cached is None else curses.color_pair(cached)
+
         if not self._started:
-            curses.start_color()
+            try:
+                curses.start_color()
+            except curses.error:
+                pass
             try:
                 curses.use_default_colors()
             except curses.error:
                 pass
             self._started = True
+
+        limit = getattr(curses, "COLOR_PAIRS", None)
+        if limit is not None and self._next_pair >= limit:
+            self._pair_for_key[key] = None
+            return curses.A_NORMAL
+
         pair_n = self._next_pair
         try:
-            curses.init_pair(pair_n, fg, -1)
+            curses.init_pair(pair_n, fg, bg)
         except curses.error:
+            self._pair_for_key[key] = None
             return curses.A_NORMAL
         self._next_pair += 1
-        self._pair_for_name[color_name] = pair_n
+        self._pair_for_key[key] = pair_n
         return curses.color_pair(pair_n)
 
 
@@ -436,6 +505,36 @@ _LOGS_COMPOSE_FAILED = [cockpit_logsband.LOGS_EMPTY]
 # falls back to the SAME blank state, not a fallback string -- an empty
 # list draws nothing, exactly matching "no provider set" / "no event yet".
 _VIEWPORT_COMPOSE_FAILED: list[str] = []
+
+
+def _validated_event_color_rows(event: object) -> list | None:
+    """WO-P4-053: the RAW, untransformed ``event["color"]`` when it is
+    genuinely usable for THIS SAME capture, else ``None``.
+
+    Checked here -- one layer above
+    ``cockpit.viewport_color.align_color_runs`` -- because that function
+    has no way to detect a same-length-but-wrong-capture color map from
+    inside itself (see its own CALLER CONTRACT section: a screen with a
+    genuinely shorter/longer color map than its own ``screen`` would
+    silently slice the WRONG rows against the surviving text, no crash, no
+    empty result, every row's color just off by however many rows are
+    missing). "Usable" means: ``event`` is a ``dict``, ``event["screen"]``
+    and ``event["color"]`` are both ``list``/``tuple``, and their lengths
+    match EXACTLY -- checked against the RAW ``screen`` here, before
+    ``compose_viewport_lines``'s own top-drop/clip runs, since a
+    legitimately-longer screen that top-drops down to the viewport's
+    height is not a mismatch. Never raises; any shape that doesn't hold
+    degrades to ``None`` (uncolored, never a guess) -- same
+    honesty-over-plausible-guess convention as every other panel here."""
+    if not isinstance(event, dict):
+        return None
+    raw_screen = event.get("screen")
+    raw_color = event.get("color")
+    if not isinstance(raw_screen, (list, tuple)) or not isinstance(raw_color, (list, tuple)):
+        return None
+    if len(raw_color) != len(raw_screen):
+        return None
+    return raw_color
 
 
 def _resolve_last_rx_age_s(status: dict) -> float:
@@ -888,13 +987,49 @@ class PlayShellScreen:
                 )
             except Exception:  # noqa: BLE001 -- a raising panel must not crash the draw pass
                 viewport_lines = _VIEWPORT_COMPOSE_FAILED
-            # Routes through the same `draw_lines` choke point every other
-            # panel uses -- control-char neutralization + cell-width-aware
-            # clipping (`cockpit.draw._safe_write`/`_clip_cells`), so
-            # hostile CSI/OSC bytes surviving into a game-screen cell can
-            # never escape this box the same way they can't escape any
-            # other panel's.
-            cockpit_draw.draw_lines(self.stdscr, center, viewport_lines, curses.A_NORMAL)
+            # WO-P4-053: per-cell TWGS color. `color_rows` is the RAW event
+            # color map, validated ONE LAYER UP against the raw `screen`
+            # (see `_validated_event_color_rows`'s own docstring for why
+            # `align_color_runs` itself cannot make this call) -- a `None`
+            # here (absent color, e.g. the one-shot `screen` raw path never
+            # emits one, or a count mismatch) degrades every row to an
+            # empty run list, i.e. uncolored text, never a raise, never a
+            # guess.
+            color_rows = _validated_event_color_rows(event)
+            try:
+                aligned_runs = cockpit_viewport_color.align_color_runs(color_rows, viewport_lines)
+            except Exception:  # noqa: BLE001 -- a raising aligner must not crash the draw pass
+                aligned_runs = [[] for _ in viewport_lines]
+            # Resolve each aligned run's (fg, bg, bold) to a concrete curses
+            # attr through the SAME `_shared_pairs` allocator every chrome
+            # color already uses (WO-P4-053 draw-seam merge -- see
+            # `_SharedPairs`' own docstring for why a second allocator here
+            # would reopen the pair-number-collision bug it exists to
+            # eliminate). `run_attr` never raises by its own contract; the
+            # `try/except` below is the same defensive belt-and-suspenders
+            # every other composer call in this method already wears.
+            runs_lines: list[tuple[str, list[dict]]] = []
+            for text, runs in zip(viewport_lines, aligned_runs):
+                resolved_runs: list[dict] = []
+                for run in runs:
+                    try:
+                        attr = cockpit_viewport_color.run_attr(_shared_pairs, run)
+                    except Exception:  # noqa: BLE001 -- a raising resolver must not crash the draw pass
+                        continue
+                    resolved_runs.append({"start": run["start"], "end": run["end"], "attr": attr})
+                runs_lines.append((text, resolved_runs))
+            # Routes through `draw_runs` -- the per-run-attr choke point
+            # `draw_lines`/`draw_lines_attrs` themselves don't cover --
+            # which still shares their `cockpit.draw._safe_write`/
+            # `_clip_cells` guard for both the uncolored base layer and
+            # every color run overlaid on top, so hostile CSI/OSC bytes
+            # surviving into a game-screen cell can never escape this box
+            # the same way they can't escape any other panel's. A row whose
+            # run list ends up empty (no color captured, or dropped by the
+            # validation above) still paints its full text via `draw_runs`'
+            # own uncolored base layer -- content is never lost to a color
+            # failure.
+            cockpit_draw.draw_runs(self.stdscr, center, runs_lines)
 
         right = regions["right_gutter"]
         cockpit_draw.draw_box(

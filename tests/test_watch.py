@@ -16,7 +16,7 @@ from tw2002_aiclient.session.watch import WatchHub
 
 class FakeSession:
     """Just enough surface for protocol.build_response(): .render(),
-    .render_text(rows), .last_rx."""
+    .render_with_color(), .render_text(rows), .last_rx."""
 
     def __init__(self, rows, last_rx):
         self._rows = rows
@@ -25,6 +25,12 @@ class FakeSession:
 
     def render(self):
         return list(self._rows)
+
+    def render_with_color(self):
+        # WO-P4-053: build_response's bare-rows path now takes both from
+        # here in one call -- no color fixture is exercised by this
+        # module's settle-edge tests, so an empty color map is enough.
+        return self.render(), []
 
     def render_text(self, rows=None):
         return "\n".join(rows if rows is not None else self._rows)
