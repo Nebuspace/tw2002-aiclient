@@ -113,13 +113,14 @@ isolation, not automatic).
 
 ---
 
-## Pending DOC-GAPs (Phase 4 close · unsigned)
+## Pending DOC-GAPs (Phase 4–5 · unsigned)
 
-Logged at tip `bba53d4` (OKF-STATUS-TRUTH-056-057); Spectate reverse-vs-plain banked from CC PWO-060 mid-wave (hub @ 04:14:11Z). **Pending** hub/Max canon — do not treat as signed prose.
+Logged at tip `bba53d4` (OKF-STATUS-TRUTH-056-057); Spectate reverse-vs-plain banked from CC PWO-060 mid-wave (hub @ 04:14:11Z); 061 Human→App + Ctrl-]@App-hold from kernel STATUS. **Pending** hub/Max canon — do not treat as signed prose.
 
 | ID | Gap | Tip reality |
 |---|---|---|
-| DOC-GAP-M-FROM-SPECTATE | Canon frames `M` as App↔Human; silent on Spectate→Human | Hub 056 ruling: Spectate→Human only; App-return deferred · see `WO-P5-060-072-mode-teach-PREP.md` (061) |
+| DOC-GAP-M-FROM-SPECTATE | Canon frames `M` as App↔Human; silent on Spectate→Human | Hub 056 ruling: Spectate→Human only; Human→App still **PARKED** Max B′/C · see `WO-P5-060-072-mode-teach-PREP.md` (061) |
 | DOC-GAP-POST-DETACH-COPY | Canon silent on post-detach status copy | Shipped `"detached — spectating"` (dispatch-decided) |
 | DOC-GAP-SPECTATE-REVERSE-VS-PLAIN | `mode-line-and-teach-controls.md:196-198` says Spectate chip reverse-video like every badge; `spectate-and-attach.md:262` (+ PWO-060 constraint) say muted/**plain** | **055 shipped plain**; 060 keeps Spectate plain; dual App/Human get reverse+tone. Do not resolve in 060. |
+| DOC-GAP-CTRL-RBRACKET-FROM-APP-HOLD | Ctrl-] from App-hold is a no-op today | 061 kernel pinned accidental behavior (`d4a8829`); any change must be deliberate · unruled |
 | HARDEN-ATTACH-SOCKET-TIMEOUT | Unbounded `AttachInputConn` socket read | Banked harden WO (product-reachable since 056) · out of Phase-5 PREP |

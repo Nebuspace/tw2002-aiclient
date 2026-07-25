@@ -193,12 +193,12 @@ Banked hygiene (not a PWO id): **pty mid-flush settle** — PREP `workorders/WO-
 
 ### Phase 5 — Mode line, escalation, teach
 
-> PREP: `workorders/WO-P5-060-072-mode-teach-PREP.md` — Phase 4 CLOSED; **PWO-060 DONE** (`2ca3154`); App↔Human / A·R·T / STOP / N5 / coverage still MISSING. App chip wire-REACHABLE only after 061.
+> PREP: `workorders/WO-P5-060-072-mode-teach-PREP.md` — Phase 4 CLOSED; **PWO-060 DONE** (`2ca3154`); **PWO-061 KERNEL DONE** (`d4a8829` · App→Human via `M`; Human→App **PARKED** Max B′/C); A·R·T / STOP / N5 / coverage still MISSING.
 
 | ID | Title | Type | Depends | Goal | Accept | Proof | Canon |
 |----|-------|------|---------|------|--------|-------|-------|
 | PWO-060 | App/Human badge (no AI mode) **DONE** 2026-07-25 (`2ca3154` · App XOR Human · strict gate) | extend | 030 | Dual only | no `ai_pilot` UI string | grep+TTY | mode-line-and-teach-controls |
-| PWO-061 | `M` mode switch — PREP | build | 060·056 | Toggle App↔Human | lock flips | TTY | control… Mode Switch |
+| PWO-061 | `M` mode switch — **KERNEL DONE** 2026-07-25 (`d4a8829` · App→Human; Human→App PARKED Max) | build | 060·056 | Toggle App↔Human | lock flips | TTY | control… Mode Switch |
 | PWO-062 | Autopilot/Trainer arm UI — PREP | extend | 060·020 | Separate from actor badge | ON/OFF + write-back | TTY | app-autopilot-model |
 | PWO-063 | Confirm-to-arm dialog — PREP | build | 062 | Arm requires explicit confirm | no silent arm | TTY | mode-line confirm-gate |
 | PWO-064 | STOP banner from reason codes — PREP | build | 060·020 | Typed labels only | catalog coverage | inject status | control… catalog |
