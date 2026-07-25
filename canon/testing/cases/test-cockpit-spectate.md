@@ -1,15 +1,15 @@
 ---
 type: Reference
-title: Test Cases — Cockpit Spectate
-description: PWO-055 -- product spectate state, Layer-A + a cheap fake-window wiring.
+title: Test Cases — test_cockpit_spectate
+description: Cockpit spectate.
 resource: repo://tw2002-aiclient/tests/test_cockpit_spectate.py
 tags: [testing, catalog, pytest, inventory]
-timestamp: 2026-07-25T14:07:30Z
+timestamp: 2026-07-25T14:10:13Z
 ---
 
 # Test Cases — `tests/test_cockpit_spectate.py`
 
-_PWO-055 -- product spectate state, Layer-A + a cheap fake-window wiring_
+_Cockpit spectate._
 
 | Test | Blurb |
 |------|-------|
@@ -31,14 +31,14 @@ _PWO-055 -- product spectate state, Layer-A + a cheap fake-window wiring_
 | `test_empty_liveness_text_and_spectating_still_fits_label_alone` | Empty liveness text and spectating still fits label alone. |
 | `test_unicode_ok_flag_has_no_effect_ascii_only_label` | Unicode ok flag has no effect ascii only label. |
 | `test_never_raises_on_wildly_hostile_arguments` | Never raises on wildly hostile arguments. |
-| `test_entry_default_renders_app_chip_matching_the_daemons_own_mode` | RENAMED + RE-JUSTIFIED (prior name: ``test_default_spectating_true_. |
-| `test_entry_default_mirrors_a_freshly_constructed_control_locks_own_mode` | The other half of the citation above, executed rather than quoted:. |
+| `test_entry_default_renders_app_chip_matching_the_daemons_own_mode` | Entry default renders app chip matching the daemons own mode. |
+| `test_entry_default_mirrors_a_freshly_constructed_control_locks_own_mode` | Entry default mirrors a freshly constructed control locks own mode. |
 | `test_returning_from_spectate_to_app_hold_renders_app_not_liveness_only` | RENAMED TWICE, and the reason matters both times. |
-| `test_toggling_spectating_false_and_attached_true_renders_manual` | The genuine "switch to Human" wiring proof WO-P5-060's own screens. |
-| `test_control_strip_row_attr_is_muted_a_normal` | Canon: Spectate is "muted / plain" -- achieved here for free because. |
-| `test_raising_control_seat_composer_does_not_crash_draw_and_liveness_survives` | A raising `compose_control_strip_segments` (WO-P5-060: this is the. |
-| `test_minimal_tier_still_renders_the_label_no_side_gutters` | CONTROL_STRIP is present at every reachable non-too_small tier. |
-| `test_handle_key_unchanged_no_new_keys_from_this_wo` | PWO-055 adds no keyboard handling of its own (spectate is the. |
+| `test_toggling_spectating_false_and_attached_true_renders_manual` | Toggling spectating false and attached true renders manual. |
+| `test_control_strip_row_attr_is_muted_a_normal` | Control strip row attr is muted a normal. |
+| `test_raising_control_seat_composer_does_not_crash_draw_and_liveness_survives` | Raising control seat composer does not crash draw and liveness survives. |
+| `test_minimal_tier_still_renders_the_label_no_side_gutters` | Minimal tier still renders the label no side gutters. |
+| `test_handle_key_unchanged_no_new_keys_from_this_wo` | PWO-055 adds no keyboard handling of its own (spectate is the passive default, not a toggled affordance yet -- that's PWO-056's `h`). |
 | `test_manual_label_is_the_canon_cited_word` | Manual label is the canon cited word. |
 | `test_attached_label_true_renders_the_label` | Attached label true renders the label. |
 | `test_attached_label_false_yields_empty` | Attached label false yields empty. |
@@ -75,7 +75,7 @@ _PWO-055 -- product spectate state, Layer-A + a cheap fake-window wiring_
 | `test_app_label_renders_in_full_with_a_generous_gap` | App label renders in full with a generous gap. |
 | `test_app_label_empty_liveness_text_still_fits_label_alone` | App label empty liveness text still fits label alone. |
 | `test_degrade_matrix_label_matches_priority_oracle_and_never_raises` | Degrade matrix label matches priority oracle and never raises. |
-| `test_app_renders_iff_literal_false_on_both_axes_self_contained` | The PRIMARY pin for the App-eligibility gate -- deliberately. |
+| `test_app_renders_iff_literal_false_on_both_axes_self_contained` | App renders iff literal false on both axes self contained. |
 | `test_degrade_direction_never_invents_app_from_unknown_or_garbage_state` | Degrade direction never invents app from unknown or garbage state. |
 | `test_both_none_never_renders_app_or_any_other_claim` | Both none never renders app or any other claim. |
 | `test_falsy_but_non_bool_spectating_never_clears_the_app_bar` | Falsy but non bool spectating never clears the app bar. |

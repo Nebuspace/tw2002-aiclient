@@ -1,15 +1,15 @@
 ---
 type: Reference
-title: Test Cases — Protocol Build Response Color
-description: WO-P4-053 — ``protocol.
+title: Test Cases — test_protocol_build_response_color
+description: Protocol build response color.
 resource: repo://tw2002-aiclient/tests/test_protocol_build_response_color.py
 tags: [testing, catalog, pytest, inventory]
-timestamp: 2026-07-25T14:07:30Z
+timestamp: 2026-07-25T14:10:13Z
 ---
 
 # Test Cases — `tests/test_protocol_build_response_color.py`
 
-_WO-P4-053 — ``protocol.build_response()`` color wiring._
+_Protocol build response color._
 
 | Test | Blurb |
 |------|-------|

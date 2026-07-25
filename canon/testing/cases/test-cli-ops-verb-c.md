@@ -1,15 +1,15 @@
 ---
 type: Reference
-title: Test Cases — Cli Ops Verb C
-description: WO-P2-OPS-VERB-C — ``tw history`` (session ring).
+title: Test Cases — test_cli_ops_verb_c
+description: Cli ops verb c.
 resource: repo://tw2002-aiclient/tests/test_cli_ops_verb_c.py
 tags: [testing, catalog, pytest, inventory]
-timestamp: 2026-07-25T14:07:30Z
+timestamp: 2026-07-25T14:10:13Z
 ---
 
 # Test Cases — `tests/test_cli_ops_verb_c.py`
 
-_WO-P2-OPS-VERB-C — ``tw history`` (session ring). ``tw state`` deferred._
+_Cli ops verb c._
 
 | Test | Blurb |
 |------|-------|

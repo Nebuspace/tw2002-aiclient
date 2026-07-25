@@ -1,10 +1,10 @@
 ---
 type: Reference
-title: Test Cases — Cockpit Fold
+title: Test Cases — test_cockpit_fold
 description: Pure responsive-fold composer tests (WO-P3-039, Layer-A).
 resource: repo://tw2002-aiclient/tests/test_cockpit_fold.py
 tags: [testing, catalog, pytest, inventory]
-timestamp: 2026-07-25T14:07:30Z
+timestamp: 2026-07-25T14:10:13Z
 ---
 
 # Test Cases — `tests/test_cockpit_fold.py`
@@ -29,5 +29,5 @@ _Pure responsive-fold composer tests (WO-P3-039, Layer-A)._
 | `test_width_clip_sweep_every_line_within_budget` | Width clip sweep every line within budget. |
 | `test_width_zero_or_negative_empties_every_line_keeping_shape` | Width zero or negative empties every line keeping shape. |
 | `test_hostile_width_never_raises` | Hostile width never raises. |
-| `test_width_zero_goals_only_status_collapses_due_to_fixed_line_count_quirk` | Documented quirk (module docstring): GOALS always returns exactly 9. |
+| `test_width_zero_goals_only_status_collapses_due_to_fixed_line_count_quirk` | Width zero goals only status collapses due to fixed line count quirk. |
 | `test_reuses_child_composers_verbatim_not_a_reimplementation` | Reuses child composers verbatim not a reimplementation. |

@@ -1,10 +1,10 @@
 ---
 type: Reference
-title: Test Cases — Cockpit Viewport Paint Pty
+title: Test Cases — test_cockpit_viewport_paint_pty
 description: WO-P4-052, lane B -- GAME viewport LIVE PAINT, real-curses pty proof.
 resource: repo://tw2002-aiclient/tests/test_cockpit_viewport_paint_pty.py
 tags: [testing, catalog, pytest, inventory]
-timestamp: 2026-07-25T14:07:30Z
+timestamp: 2026-07-25T14:10:13Z
 ---
 
 # Test Cases — `tests/test_cockpit_viewport_paint_pty.py`

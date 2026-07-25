@@ -1,10 +1,10 @@
 ---
 type: Reference
-title: Test Cases — Logging Util
+title: Test Cases — test_logging_util
 description: Transcript logger tests — no network involved.
 resource: repo://tw2002-aiclient/tests/test_logging_util.py
 tags: [testing, catalog, pytest, inventory]
-timestamp: 2026-07-25T14:07:30Z
+timestamp: 2026-07-25T14:10:13Z
 ---
 
 # Test Cases — `tests/test_logging_util.py`

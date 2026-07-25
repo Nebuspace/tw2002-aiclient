@@ -1,10 +1,10 @@
 ---
 type: Reference
-title: Test Cases — Cli Run Dir
+title: Test Cases — test_cli_run_dir
 description: WO-P2-021 — CLI / daemon run-dir wiring against the reborn session API.
 resource: repo://tw2002-aiclient/tests/test_cli_run_dir.py
 tags: [testing, catalog, pytest, inventory]
-timestamp: 2026-07-25T14:07:30Z
+timestamp: 2026-07-25T14:10:13Z
 ---
 
 # Test Cases — `tests/test_cli_run_dir.py`

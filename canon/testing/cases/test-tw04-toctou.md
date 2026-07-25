@@ -1,10 +1,10 @@
 ---
 type: Reference
-title: Test Cases — Tw04 Toctou
+title: Test Cases — test_tw04_toctou
 description: TW-04 TOCTOU / refuse-not-queue probes (WO-P2-025).
 resource: repo://tw2002-aiclient/tests/test_tw04_toctou.py
 tags: [testing, catalog, pytest, inventory]
-timestamp: 2026-07-25T14:07:30Z
+timestamp: 2026-07-25T14:10:13Z
 ---
 
 # Test Cases — `tests/test_tw04_toctou.py`

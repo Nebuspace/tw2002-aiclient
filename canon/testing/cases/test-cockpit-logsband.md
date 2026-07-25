@@ -1,10 +1,10 @@
 ---
 type: Reference
-title: Test Cases — Cockpit Logsband
+title: Test Cases — test_cockpit_logsband
 description: Pure LOGS-band composer tests (WO-P3-041, Layer-A).
 resource: repo://tw2002-aiclient/tests/test_cockpit_logsband.py
 tags: [testing, catalog, pytest, inventory]
-timestamp: 2026-07-25T14:07:30Z
+timestamp: 2026-07-25T14:10:13Z
 ---
 
 # Test Cases — `tests/test_cockpit_logsband.py`

@@ -1,17 +1,17 @@
 ---
 type: Reference
-title: Test Cases — Protocol Trainer Panel
-description: Trainer Control Panel protocol verbs (TUI-POLISH-PLAN.
+title: Test Cases — test_protocol_trainer_panel
+description: Protocol trainer panel.
 resource: repo://tw2002-aiclient/tests/test_protocol_trainer_panel.py
 tags: [testing, catalog, pytest, inventory]
-timestamp: 2026-07-25T14:07:30Z
+timestamp: 2026-07-25T14:10:13Z
 ---
 
-# Test Cases — `tests/test_protocol_trainer_panel.py` — **BANKED** (excluded from default test run; awaiting rehabilitation)
+# Test Cases — `tests/test_protocol_trainer_panel.py`
 
-> **BANKED** — this module is excluded from the default pytest run via `pytest.ini --ignore`. Cases are catalogued for completeness; they will not run until a rehabilitation work order rewrites or removes the ignore.
+_Protocol trainer panel._
 
-_Trainer Control Panel protocol verbs (TUI-POLISH-PLAN.md) -- list_skills_
+> **BANKED** — excluded from the default pytest run via `pytest.ini --ignore`. Catalogued for completeness.
 
 | Test | Blurb |
 |------|-------|
@@ -34,8 +34,8 @@ _Trainer Control Panel protocol verbs (TUI-POLISH-PLAN.md) -- list_skills_
 | `test_do_response_redacts_sent_input_for_a_secret_send` | Do response redacts sent input for a secret send. |
 | `test_screen_response_carries_the_most_recently_sent_input` | Screen response carries the most recently sent input. |
 | `test_status_autopilot_trace_is_none_when_no_engine_is_wired` | Status autopilot trace is none when no engine is wired. |
-| `test_status_autopilot_field_matches_loop_snapshot_when_armed` | WO-STATUS-AUTOLOOP-FIELD: status. |
-| `test_status_autopilot_trace_surfaces_the_engines_most_recent_dry_run_tick` | Attach a dry-ticked engine to the daemon's own session (mirroring. |
+| `test_status_autopilot_field_matches_loop_snapshot_when_armed` | WO-STATUS-AUTOLOOP-FIELD: status.autopilot mirrors AutopilotLoop.snapshot keys. |
+| `test_status_autopilot_trace_surfaces_the_engines_most_recent_dry_run_tick` | Status autopilot trace surfaces the engines most recent dry run tick. |
 | `test_status_intervention_clear_when_autopilot_running` | Healthy autopilot: needs_attention false; freshness unknowns may still appear. |
 | `test_status_intervention_needs_attention_on_autopilot_sticky_halt` | Sticky halt: last_error set while loop not running raises needs_attention. |
 | `test_status_intervention_needs_attention_on_no_candidates_stop` | WO-INTERVENTION-AP-HALT-ATTENTION: quiet no_candidates stop is attention. |

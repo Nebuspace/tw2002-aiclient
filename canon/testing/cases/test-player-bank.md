@@ -1,10 +1,10 @@
 ---
 type: Reference
-title: Test Cases — Player Bank
+title: Test Cases — test_player_bank
 description: Player bank stub tests (WO-P1-015) — metadata-only list_players.
 resource: repo://tw2002-aiclient/tests/test_player_bank.py
 tags: [testing, catalog, pytest, inventory]
-timestamp: 2026-07-25T14:07:30Z
+timestamp: 2026-07-25T14:10:13Z
 ---
 
 # Test Cases — `tests/test_player_bank.py`

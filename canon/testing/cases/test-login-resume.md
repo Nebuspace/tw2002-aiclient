@@ -1,15 +1,15 @@
 ---
 type: Reference
-title: Test Cases — Login Resume
-description: Login Automaton idempotent-resume proof (WO-P2-024): drives the REAL.
+title: Test Cases — test_login_resume
+description: Login resume.
 resource: repo://tw2002-aiclient/tests/test_login_resume.py
 tags: [testing, catalog, pytest, inventory]
-timestamp: 2026-07-25T14:07:30Z
+timestamp: 2026-07-25T14:10:13Z
 ---
 
 # Test Cases — `tests/test_login_resume.py`
 
-_Login Automaton idempotent-resume proof (WO-P2-024): drives the REAL_
+_Login resume._
 
 | Test | Blurb |
 |------|-------|

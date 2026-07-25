@@ -1,17 +1,17 @@
 ---
 type: Reference
-title: Test Cases — Probe
+title: Test Cases — test_probe
 description: WO-MS-3 probe tests — classification, polite envelope, L0/L1 invariants.
 resource: repo://tw2002-aiclient/tests/test_probe.py
 tags: [testing, catalog, pytest, inventory]
-timestamp: 2026-07-25T14:07:30Z
+timestamp: 2026-07-25T14:10:13Z
 ---
 
-# Test Cases — `tests/test_probe.py` — **BANKED** (excluded from default test run; awaiting rehabilitation)
-
-> **BANKED** — this module is excluded from the default pytest run via `pytest.ini --ignore`. Cases are catalogued for completeness; they will not run until a rehabilitation work order rewrites or removes the ignore.
+# Test Cases — `tests/test_probe.py`
 
 _WO-MS-3 probe tests — classification, polite envelope, L0/L1 invariants._
+
+> **BANKED** — excluded from the default pytest run via `pytest.ini --ignore`. Catalogued for completeness.
 
 | Test | Blurb |
 |------|-------|
@@ -25,5 +25,5 @@ _WO-MS-3 probe tests — classification, polite envelope, L0/L1 invariants._
 | `test_l1_refuses_cr_on_bbs_banner` | L1 refuses cr on bbs banner. |
 | `test_non_telnet_transport_skipped` | Non telnet transport skipped. |
 | `test_unreachable` | Unreachable. |
-| `test_l0_source_has_no_bare_cr_send` | Static guard: L0 helper `_send_iac_only` is the only TX on L0 reads;. |
+| `test_l0_source_has_no_bare_cr_send` | Static guard: L0 helper `_send_iac_only` is the only TX on L0 reads; bare `sendall(b"\r")` appears only under the menu/L1 branch. |
 | `test_patch_catalog_status` | Patch catalog status. |

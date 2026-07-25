@@ -1,10 +1,10 @@
 ---
 type: Reference
-title: Test Cases — Cockpit Viewport Paint
+title: Test Cases — test_cockpit_viewport_paint
 description: Layer-A tests for the GAME viewport paint composer (WO-P4-052).
 resource: repo://tw2002-aiclient/tests/test_cockpit_viewport_paint.py
 tags: [testing, catalog, pytest, inventory]
-timestamp: 2026-07-25T14:07:30Z
+timestamp: 2026-07-25T14:10:13Z
 ---
 
 # Test Cases — `tests/test_cockpit_viewport_paint.py`
@@ -26,7 +26,7 @@ _Layer-A tests for the GAME viewport paint composer (WO-P4-052)._
 | `test_width_or_height_non_positive_is_empty` | Width or height non positive is empty. |
 | `test_hostile_width_height_types_degrade_to_empty_not_raise` | Hostile width height types degrade to empty not raise. |
 | `test_draw_calls_viewport_provider_exactly_once_and_paints_its_content` | Draw calls viewport provider exactly once and paints its content. |
-| `test_draw_paints_nothing_when_no_provider_set` | Matches PWO-051's own contract, re-proven here at the paint call. |
+| `test_draw_paints_nothing_when_no_provider_set` | Draw paints nothing when no provider set. |
 | `test_draw_paints_nothing_when_provider_returns_none_event` | Draw paints nothing when provider returns none event. |
 | `test_raising_provider_does_not_crash_draw_and_leaves_interior_blank` | Raising provider does not crash draw and leaves interior blank. |
-| `test_provider_returning_object_without_latest_event_does_not_crash_draw` | A provider that doesn't honor the ``WatchFeedSnapshot`` duck-type. |
+| `test_provider_returning_object_without_latest_event_does_not_crash_draw` | Provider returning object without latest event does not crash draw. |

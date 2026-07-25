@@ -1,15 +1,15 @@
 ---
 type: Reference
-title: Test Cases — Cockpit Viewport Color
-description: Tests for the pure pyte-color-run -> curses-attr mapping (WO-P4-053.
+title: Test Cases — test_cockpit_viewport_color
+description: Cockpit viewport color.
 resource: repo://tw2002-aiclient/tests/test_cockpit_viewport_color.py
 tags: [testing, catalog, pytest, inventory]
-timestamp: 2026-07-25T14:07:30Z
+timestamp: 2026-07-25T14:10:13Z
 ---
 
 # Test Cases — `tests/test_cockpit_viewport_color.py`
 
-_Tests for the pure pyte-color-run -> curses-attr mapping (WO-P4-053_
+_Cockpit viewport color._
 
 | Test | Blurb |
 |------|-------|

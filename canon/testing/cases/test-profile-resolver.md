@@ -1,15 +1,15 @@
 ---
 type: Reference
-title: Test Cases — Profile Resolver
-description: OPEN-003-A -- the shared catalog-aware profile resolver.
+title: Test Cases — test_profile_resolver
+description: Profile resolver.
 resource: repo://tw2002-aiclient/tests/test_profile_resolver.py
 tags: [testing, catalog, pytest, inventory]
-timestamp: 2026-07-25T14:07:30Z
+timestamp: 2026-07-25T14:10:13Z
 ---
 
 # Test Cases — `tests/test_profile_resolver.py`
 
-_OPEN-003-A -- the shared catalog-aware profile resolver_
+_Profile resolver._
 
 | Test | Blurb |
 |------|-------|
@@ -19,7 +19,7 @@ _OPEN-003-A -- the shared catalog-aware profile resolver_
 | `test_resolve_missing_profile_section_raises` | Resolve missing profile section raises. |
 | `test_resolve_missing_profiles_file_raises` | Resolve missing profiles file raises. |
 | `test_resolve_unknown_server_catalog_key_raises` | Resolve unknown server catalog key raises. |
-| `test_tw_config_dir_isolation_across_process_boundary` | The exact cross-process gap the seam closes: a daemon spawned with. |
-| `test_env_var_still_wins_over_profile` | `TW2002_HOST`/`TW2002_PORT` outrank profiles. |
-| `test_env_and_credentials_agree_on_catalog_only_profile` | Cross-caller consistency check for OPEN-003-A: once `env. |
-| `test_resolver_never_writes_a_secrets_file` | This resolver deals only in host/port -- confirm no secrets. |
+| `test_tw_config_dir_isolation_across_process_boundary` | Tw config dir isolation across process boundary. |
+| `test_env_var_still_wins_over_profile` | Env var still wins over profile. |
+| `test_env_and_credentials_agree_on_catalog_only_profile` | Env and credentials agree on catalog only profile. |
+| `test_resolver_never_writes_a_secrets_file` | This resolver deals only in host/port -- confirm no secrets.json is ever created as a side effect of resolving a profile. |

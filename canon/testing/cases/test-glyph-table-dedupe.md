@@ -1,15 +1,15 @@
 ---
 type: Reference
-title: Test Cases — Glyph Table Dedupe
-description: Proof lane for ``WO-AUDIT-GLYPH-TABLE-DEDUPE``: ``screens.
+title: Test Cases — test_glyph_table_dedupe
+description: Glyph table dedupe.
 resource: repo://tw2002-aiclient/tests/test_glyph_table_dedupe.py
 tags: [testing, catalog, pytest, inventory]
-timestamp: 2026-07-25T14:07:30Z
+timestamp: 2026-07-25T14:10:13Z
 ---
 
 # Test Cases — `tests/test_glyph_table_dedupe.py`
 
-_Proof lane for ``WO-AUDIT-GLYPH-TABLE-DEDUPE``: ``screens.py``'s launcher_
+_Glyph table dedupe._
 
 | Test | Blurb |
 |------|-------|

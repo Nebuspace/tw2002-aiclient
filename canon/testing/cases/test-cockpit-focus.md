@@ -1,10 +1,10 @@
 ---
 type: Reference
-title: Test Cases — Cockpit Focus
+title: Test Cases — test_cockpit_focus
 description: Pure FOCUS-panel composer tests (PWO-035, Layer-A).
 resource: repo://tw2002-aiclient/tests/test_cockpit_focus.py
 tags: [testing, catalog, pytest, inventory]
-timestamp: 2026-07-25T14:07:30Z
+timestamp: 2026-07-25T14:10:13Z
 ---
 
 # Test Cases — `tests/test_cockpit_focus.py`

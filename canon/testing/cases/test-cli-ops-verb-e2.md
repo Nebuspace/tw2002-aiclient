@@ -1,15 +1,15 @@
 ---
 type: Reference
-title: Test Cases — Cli Ops Verb E2
-description: WO-P2-OPS-VERB-E2 — ``tw watch`` NDJSON / settle-edge tail over subscribe.
+title: Test Cases — test_cli_ops_verb_e2
+description: Cli ops verb e2.
 resource: repo://tw2002-aiclient/tests/test_cli_ops_verb_e2.py
 tags: [testing, catalog, pytest, inventory]
-timestamp: 2026-07-25T14:07:30Z
+timestamp: 2026-07-25T14:10:13Z
 ---
 
 # Test Cases — `tests/test_cli_ops_verb_e2.py`
 
-_WO-P2-OPS-VERB-E2 — ``tw watch`` NDJSON / settle-edge tail over subscribe._
+_Cli ops verb e2._
 
 | Test | Blurb |
 |------|-------|

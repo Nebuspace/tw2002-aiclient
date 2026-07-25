@@ -1,15 +1,15 @@
 ---
 type: Reference
-title: Test Cases — Watch
-description: WatchHub settle-edge detection + subscriber fan-out — no network, no.
+title: Test Cases — test_watch
+description: Watch.
 resource: repo://tw2002-aiclient/tests/test_watch.py
 tags: [testing, catalog, pytest, inventory]
-timestamp: 2026-07-25T14:07:30Z
+timestamp: 2026-07-25T14:10:13Z
 ---
 
 # Test Cases — `tests/test_watch.py`
 
-_WatchHub settle-edge detection + subscriber fan-out — no network, no_
+_Watch._
 
 | Test | Blurb |
 |------|-------|
@@ -23,7 +23,7 @@ _WatchHub settle-edge detection + subscriber fan-out — no network, no_
 | `test_broadcast_extra_bypasses_settle_edge` | Broadcast extra bypasses settle edge. |
 | `test_loop_survives_a_raising_tick` | WO-AUDIT-WATCHHUB-LOOP-CONTAIN, proof 1. |
 | `test_bad_subscriber_does_not_starve_the_rest` | WO-AUDIT-WATCHHUB-LOOP-CONTAIN, proof 2. |
-| `test_loop_tick_exception_text_never_leaks_into_last_loop_error` | WO-AUDIT-WATCHHUB-LOOP-CONTAIN, proof 3 (Cipher rule): only the. |
-| `test_broadcast_exception_text_never_leaks_into_error_or_event` | Same Cipher pin as above, at the ``_broadcast()`` containment. |
+| `test_loop_tick_exception_text_never_leaks_into_last_loop_error` | Loop tick exception text never leaks into last loop error. |
+| `test_broadcast_exception_text_never_leaks_into_error_or_event` | Broadcast exception text never leaks into error or event. |
 | `test_stop_returns_promptly_even_with_a_long_poll_interval` | WO-AUDIT-WATCHHUB-LOOP-CONTAIN, proof 4. |
 | `test_status_reports_subscriber_count` | Status reports subscriber count. |

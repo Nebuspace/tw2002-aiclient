@@ -1,10 +1,10 @@
 ---
 type: Reference
-title: Test Cases — Menu Map View
+title: Test Cases — test_menu_map_view
 description: Menu-map inspector — pure tests on synthetic maps.
 resource: repo://tw2002-aiclient/tests/test_menu_map_view.py
 tags: [testing, catalog, pytest, inventory]
-timestamp: 2026-07-25T14:07:30Z
+timestamp: 2026-07-25T14:10:13Z
 ---
 
 # Test Cases — `tests/test_menu_map_view.py`
@@ -21,4 +21,4 @@ _Menu-map inspector — pure tests on synthetic maps._
 | `test_root_with_outgoing_is_not_orphan` | Root with outgoing is not orphan. |
 | `test_render_clips_at_22_and_expands_at_40` | Render clips at 22 and expands at 40. |
 | `test_from_store_wrapper` | From store wrapper. |
-| `test_format_menu_map_report_lists_coverage_and_orphans` | FA13 CLI surface — report lines match fixture coverage/orphans. |
+| `test_format_menu_map_report_lists_coverage_and_orphans` | Format menu map report lists coverage and orphans. |

@@ -1,17 +1,17 @@
 ---
 type: Reference
-title: Test Cases — Spectate Layout
-description: Spectator dashboard layout tests — pure functions, no curses/terminal.
+title: Test Cases — test_spectate_layout
+description: Spectator dashboard layout tests — pure functions, no curses/terminal involved.
 resource: repo://tw2002-aiclient/tests/test_spectate_layout.py
 tags: [testing, catalog, pytest, inventory]
-timestamp: 2026-07-25T14:07:30Z
+timestamp: 2026-07-25T14:10:13Z
 ---
 
-# Test Cases — `tests/test_spectate_layout.py` — **BANKED** (excluded from default test run; awaiting rehabilitation)
+# Test Cases — `tests/test_spectate_layout.py`
 
-> **BANKED** — this module is excluded from the default pytest run via `pytest.ini --ignore`. Cases are catalogued for completeness; they will not run until a rehabilitation work order rewrites or removes the ignore.
+_Spectator dashboard layout tests — pure functions, no curses/terminal involved._
 
-_Spectator dashboard layout tests — pure functions, no curses/terminal_
+> **BANKED** — excluded from the default pytest run via `pytest.ini --ignore`. Catalogued for completeness.
 
 | Test | Blurb |
 |------|-------|
@@ -20,7 +20,7 @@ _Spectator dashboard layout tests — pure functions, no curses/terminal_
 | `test_sidebar_prefers_turns_left_over_turn_timer_when_both_absent_is_fine` | Sidebar prefers turns left over turn timer when both absent is fine. |
 | `test_sidebar_renders_port_commodities` | Sidebar renders port commodities. |
 | `test_sidebar_omits_missing_fields_gracefully` | Sidebar omits missing fields gracefully. |
-| `test_sidebar_renders_confidence_and_novelty_when_present` | Forward-compatible with a future A5 confidence/novelty score --. |
+| `test_sidebar_renders_confidence_and_novelty_when_present` | Sidebar renders confidence and novelty when present. |
 | `test_ticker_entry_format` | Ticker entry format. |
 | `test_ticker_entry_truncates_long_prompts` | Ticker entry truncates long prompts. |
 | `test_ticker_entry_pairs_the_sent_input_when_present` | Ticker entry pairs the sent input when present. |
@@ -33,7 +33,7 @@ _Spectator dashboard layout tests — pure functions, no curses/terminal_
 | `test_compose_dashboard_assembles_all_sections` | Compose dashboard assembles all sections. |
 | `test_compose_dashboard_caps_ticker_to_max_recent` | Compose dashboard caps ticker to max recent. |
 | `test_compose_dashboard_handles_no_event_yet` | Compose dashboard handles no event yet. |
-| `test_compose_dashboard_carries_color_map_alongside_main_text` | D13: main_color rides alongside main so a curses renderer can zip. |
+| `test_compose_dashboard_carries_color_map_alongside_main_text` | Compose dashboard carries color map alongside main text. |
 | `test_compose_dashboard_defaults_main_color_when_absent` | Compose dashboard defaults main color when absent. |
 | `test_render_plain_includes_all_sections_and_is_a_single_string` | Render plain includes all sections and is a single string. |
 | `test_render_plain_handles_empty_dashboard_without_crashing` | Render plain handles empty dashboard without crashing. |
@@ -44,15 +44,15 @@ _Spectator dashboard layout tests — pure functions, no curses/terminal_
 | `test_frame_layout_full_tier_centers_viewport_with_right_gutter` | Frame layout full tier centers viewport with right gutter. |
 | `test_frame_layout_viewport_never_stretched_beyond_native_grid` | Frame layout viewport never stretched beyond native grid. |
 | `test_frame_layout_status_bar_always_present_and_pinned_to_last_inner_row` | Frame layout status bar always present and pinned to last inner row. |
-| `test_frame_layout_drops_header_before_border_under_height_pressure` | Exactly enough body height for a bordered viewport and nothing. |
+| `test_frame_layout_drops_header_before_border_under_height_pressure` | Frame layout drops header before border under height pressure. |
 | `test_frame_layout_adds_header_once_there_is_a_spare_line` | Frame layout adds header once there is a spare line. |
 | `test_frame_layout_too_small_has_no_control_region` | Frame layout too small has no control region. |
 | `test_frame_layout_control_strip_sits_directly_above_status_when_present` | Frame layout control strip sits directly above status when present. |
-| `test_frame_layout_control_strip_takes_priority_over_ticker_for_scarce_leftover` | Exactly one spare body row (not enough for BOTH control and a. |
+| `test_frame_layout_control_strip_takes_priority_over_ticker_for_scarce_leftover` | Frame layout control strip takes priority over ticker for scarce leftover. |
 | `test_frame_layout_ticker_still_appears_with_enough_leftover_for_both` | Frame layout ticker still appears with enough leftover for both. |
 | `test_frame_layout_is_a_pure_function_of_its_inputs` | Frame layout is a pure function of its inputs. |
-| `test_frame_layout_tw08_regions_do_not_overlap_at_full_tier` | TW-08 geometry proof: outer / viewport / gutter / decisions /. |
-| `test_update_tracked_stats_persists_fields_across_events_lacking_them` | The exact bug this replaces: format_sidebar's `if "credits" in. |
+| `test_frame_layout_tw08_regions_do_not_overlap_at_full_tier` | Frame layout tw08 regions do not overlap at full tier. |
+| `test_update_tracked_stats_persists_fields_across_events_lacking_them` | The exact bug this replaces: format_sidebar's `if "credits" in state` silently DROPPED credits on a credits-less screen. |
 | `test_update_tracked_stats_updates_only_fields_present_on_the_new_event` | Update tracked stats updates only fields present on the new event. |
 | `test_update_tracked_stats_prefers_turns_left_and_ignores_turn_timer` | Update tracked stats prefers turns left and ignores turn timer. |
 | `test_update_tracked_stats_count_survives_later_timer_only_screen` | WO-TUI-HUD-POLISH / WO-TUI-HUD-TURNS-COUNT: TL= must not clobber turns. |
@@ -64,7 +64,7 @@ _Spectator dashboard layout tests — pure functions, no curses/terminal_
 | `test_seed_tracked_from_status_fills_fa7a_credits_on_cold_start` | Seed tracked from status fills fa7a credits on cold start. |
 | `test_seed_tracked_from_status_backfills_missing_fields_without_clobbering` | Seed tracked from status backfills missing fields without clobbering. |
 | `test_seed_tracked_from_status_uses_parsed_state_when_tracked_empty` | Seed tracked from status uses parsed state when tracked empty. |
-| `test_seed_tracked_from_status_prefers_status_turns_left` | WO-HUD-CREDITS-TURNS-JOIN: sticky session turns via status beat a. |
+| `test_seed_tracked_from_status_prefers_status_turns_left` | WO-HUD-CREDITS-TURNS-JOIN: sticky session turns via status beat a empty/missing parsed fighter-toll screen. |
 | `test_update_tracked_stats_is_pure_returns_new_dict` | Update tracked stats is pure returns new dict. |
 | `test_update_tracked_stats_handles_none_event` | Update tracked stats handles none event. |
 | `test_format_freshness_shows_now_for_sub_second_age` | Format freshness shows now for sub second age. |
@@ -109,15 +109,15 @@ _Spectator dashboard layout tests — pure functions, no curses/terminal_
 | `test_chain_hop_count_and_unit_recorded_or_mined_dict_is_steps` | Chain hop count and unit recorded or mined dict is steps. |
 | `test_chain_hop_count_and_unit_discovered_dict_is_hops` | Chain hop count and unit discovered dict is hops. |
 | `test_chain_hop_count_and_unit_none_chain` | Chain hop count and unit none chain. |
-| `test_chain_hop_count_and_unit_presence_seed_from_sectors` | Presence-seed viz has sectors but historically omitted steps — GOALS. |
+| `test_chain_hop_count_and_unit_presence_seed_from_sectors` | Presence-seed viz has sectors but historically omitted steps — GOALS must still count hops so it matches the Trade Loop bubble panel. |
 | `test_compose_primary_goals_presence_seed_not_none_yet` | Compose primary goals presence seed not none yet. |
 | `test_compose_primary_goals_lines_labels_steps_vs_hops` | Compose primary goals lines labels steps vs hops. |
 | `test_format_chain_summary_dict_branch_labels_steps_vs_hops` | Format chain summary dict branch labels steps vs hops. |
-| `test_format_chain_summary_non_numeric_sector_does_not_crash_the_membership_check` | Pixel-caught defect (pre-existing, in a function this WO touched):. |
+| `test_format_chain_summary_non_numeric_sector_does_not_crash_the_membership_check` | Format chain summary non numeric sector does not crash the membership check. |
 | `test_decisions_should_show_chain_dwell_window_and_wraps` | Decisions should show chain dwell window and wraps. |
-| `test_frame_layout_decisions_absent_below_its_height_floor` | Just enough leftover for a bare LOG box (LOG_BOX_MIN_H) but short of. |
+| `test_frame_layout_decisions_absent_below_its_height_floor` | Frame layout decisions absent below its height floor. |
 | `test_frame_layout_decisions_present_at_its_height_floor` | Frame layout decisions present at its height floor. |
-| `test_frame_layout_band_grows_toward_double_height` | WO-TUI-CHAIN-BOX: band_h targets min(10, leftover) so LOG/DECISIONS. |
+| `test_frame_layout_band_grows_toward_double_height` | WO-TUI-CHAIN-BOX: band_h targets min(10, leftover) so LOG/DECISIONS content rows roughly double vs the old min(5, leftover) cap. |
 | `test_render_plain_includes_phase2_sections` | Render plain includes phase2 sections. |
 | `test_compose_decisions_placeholder_is_nonempty_honest_idle` | Compose decisions placeholder is nonempty honest idle. |
 | `test_infer_coach_triggers_maps_context_to_existing_when_triggers` | Infer coach triggers maps context to existing when triggers. |
@@ -151,7 +151,7 @@ _Spectator dashboard layout tests — pure functions, no curses/terminal_
 | `test_non_credits_non_turns_cells_carry_neutral_extras` | Non credits non turns cells carry neutral extras. |
 | `test_compose_port_panel_empty_when_no_port_in_state` | Compose port panel empty when no port in state. |
 | `test_compose_port_panel_renders_one_row_per_commodity_with_bar_and_tone` | Compose port panel renders one row per commodity with bar and tone. |
-| `test_compose_port_panel_does_not_persist_across_events` | Deliberate design choice (see compose_port_panel's docstring): a. |
+| `test_compose_port_panel_does_not_persist_across_events` | Compose port panel does not persist across events. |
 | `test_format_mode_badge_known_modes` | Format mode badge known modes. |
 | `test_format_mode_badge_unknown_mode_degrades_gracefully` | Format mode badge unknown mode degrades gracefully. |
 | `test_format_mode_badge_handles_falsy_mode` | Format mode badge handles falsy mode. |
@@ -166,11 +166,11 @@ _Spectator dashboard layout tests — pure functions, no curses/terminal_
 | `test_compose_intervention_strip_omits_when_healthy` | Compose intervention strip omits when healthy. |
 | `test_compose_intervention_strip_paints_when_needs_attention` | Compose intervention strip paints when needs attention. |
 | `test_frame_layout_allocates_intervention_row_only_when_attention` | Frame layout allocates intervention row only when attention. |
-| `test_control_hints_points_to_tw_attach_for_human_takeover` | Human-reported discoverability gap: `M` only cycles ai_pilot<->. |
+| `test_control_hints_points_to_tw_attach_for_human_takeover` | Control hints points to tw attach for human takeover. |
 | `test_format_loops_library_row_mined_shows_three_metrics` | Format loops library row mined shows three metrics. |
 | `test_format_loops_library_row_recorded_shows_overall_and_exec` | Format loops library row recorded shows overall and exec. |
 | `test_format_loops_library_row_no_profit_data_shows_dash` | Format loops library row no profit data shows dash. |
-| `test_format_loops_library_row_discovered_shows_hops` | A genuine discovered trade-loop chain (chains. |
+| `test_format_loops_library_row_discovered_shows_hops` | Format loops library row discovered shows hops. |
 | `test_format_loops_library_row_selected_gets_a_marker` | Format loops library row selected gets a marker. |
 | `test_format_loops_library_row_longest_gets_star` | Format loops library row longest gets star. |
 | `test_format_loops_library_row_truncates_to_cols` | Format loops library row truncates to cols. |

@@ -1,10 +1,10 @@
 ---
 type: Reference
-title: Test Cases — Attach Protocol
+title: Test Cases — test_attach_protocol
 description: Attach control-lock handoff over a real unix socket + FakeAttachSession.
 resource: repo://tw2002-aiclient/tests/test_attach_protocol.py
 tags: [testing, catalog, pytest, inventory]
-timestamp: 2026-07-25T14:07:30Z
+timestamp: 2026-07-25T14:10:13Z
 ---
 
 # Test Cases — `tests/test_attach_protocol.py`

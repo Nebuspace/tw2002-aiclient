@@ -1,17 +1,17 @@
 ---
 type: Reference
-title: Test Cases — Protocol Haggle
-description: protocol.
+title: Test Cases — test_protocol_haggle
+description: Protocol haggle.
 resource: repo://tw2002-aiclient/tests/test_protocol_haggle.py
 tags: [testing, catalog, pytest, inventory]
-timestamp: 2026-07-25T14:07:30Z
+timestamp: 2026-07-25T14:10:13Z
 ---
 
-# Test Cases — `tests/test_protocol_haggle.py` — **BANKED** (excluded from default test run; awaiting rehabilitation)
+# Test Cases — `tests/test_protocol_haggle.py`
 
-> **BANKED** — this module is excluded from the default pytest run via `pytest.ini --ignore`. Cases are catalogued for completeness; they will not run until a rehabilitation work order rewrites or removes the ignore.
+_Protocol haggle._
 
-_protocol.py's `haggle` verb dispatch -- no network, a scripted fake_
+> **BANKED** — excluded from the default pytest run via `pytest.ini --ignore`. Catalogued for completeness.
 
 | Test | Blurb |
 |------|-------|

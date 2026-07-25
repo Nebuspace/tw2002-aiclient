@@ -1,10 +1,10 @@
 ---
 type: Reference
-title: Test Cases — Cockpit Viewport Pty
+title: Test Cases — test_cockpit_viewport_pty
 description: WO-P4-051, lane B -- GAME viewport shell, real-curses pty proof.
 resource: repo://tw2002-aiclient/tests/test_cockpit_viewport_pty.py
 tags: [testing, catalog, pytest, inventory]
-timestamp: 2026-07-25T14:07:30Z
+timestamp: 2026-07-25T14:10:13Z
 ---
 
 # Test Cases — `tests/test_cockpit_viewport_pty.py`

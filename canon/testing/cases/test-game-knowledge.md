@@ -1,17 +1,17 @@
 ---
 type: Reference
-title: Test Cases — Game Knowledge
-description: Game Knowledge Store tests (TW-25) -- no network, tmp_path only,.
+title: Test Cases — test_game_knowledge
+description: Game Knowledge Store tests (TW-25) -- no network, tmp_path only, never touches the real config/ or state/ directories.
 resource: repo://tw2002-aiclient/tests/test_game_knowledge.py
 tags: [testing, catalog, pytest, inventory]
-timestamp: 2026-07-25T14:07:30Z
+timestamp: 2026-07-25T14:10:13Z
 ---
 
-# Test Cases — `tests/test_game_knowledge.py` — **BANKED** (excluded from default test run; awaiting rehabilitation)
+# Test Cases — `tests/test_game_knowledge.py`
 
-> **BANKED** — this module is excluded from the default pytest run via `pytest.ini --ignore`. Cases are catalogued for completeness; they will not run until a rehabilitation work order rewrites or removes the ignore.
+_Game Knowledge Store tests (TW-25) -- no network, tmp_path only, never touches the real config/ or state/ directories._
 
-_Game Knowledge Store tests (TW-25) -- no network, tmp_path only,_
+> **BANKED** — excluded from the default pytest run via `pytest.ini --ignore`. Catalogued for completeness.
 
 | Test | Blurb |
 |------|-------|
@@ -43,7 +43,7 @@ _Game Knowledge Store tests (TW-25) -- no network, tmp_path only,_
 | `test_find_menu_path_returns_none_when_unreachable` | Find menu path returns none when unreachable. |
 | `test_find_menu_path_ignores_cycles` | Find menu path ignores cycles. |
 | `test_upsert_game_data_row_stamps_source_and_last_verified_ts` | Upsert game data row stamps source and last verified ts. |
-| `test_upsert_game_data_row_preserves_list_valued_fields` | special_abilities is explicitly a list-of-string field per. |
+| `test_upsert_game_data_row_preserves_list_valued_fields` | Upsert game data row preserves list valued fields. |
 | `test_upsert_game_data_row_same_key_updates_in_place` | Upsert game data row same key updates in place. |
 | `test_upsert_game_data_row_refuses_unknown_table` | Upsert game data row refuses unknown table. |
 | `test_upsert_game_data_row_refuses_empty_key` | Upsert game data row refuses empty key. |
@@ -52,9 +52,9 @@ _Game Knowledge Store tests (TW-25) -- no network, tmp_path only,_
 | `test_get_game_data_row_returns_none_when_unseen` | Get game data row returns none when unseen. |
 | `test_get_game_data_row_returns_a_copy_not_a_live_reference` | Get game data row returns a copy not a live reference. |
 | `test_list_game_data_rows_scoped_to_its_own_table` | List game data rows scoped to its own table. |
-| `test_cross_world_isolation_menu_map_never_bleeds_between_worlds` | Two different characters on the same host+game are two. |
+| `test_cross_world_isolation_menu_map_never_bleeds_between_worlds` | Two different characters on the same host+game are two different worlds (per world_identity's contract) -- their menu-maps must never bleed into each other. |
 | `test_cross_world_isolation_game_data_never_bleeds_between_worlds` | Cross world isolation game data never bleeds between worlds. |
-| `test_cross_world_isolation_same_host_and_game_different_handle_is_a_different_world` | The precise collision this store must avoid: host+game_letter. |
+| `test_cross_world_isolation_same_host_and_game_different_handle_is_a_different_world` | Cross world isolation same host and game different handle is a different world. |
 | `test_knowledge_lock_real_flock_blocks_second_acquirer_until_released` | Knowledge lock real flock blocks second acquirer until released. |
-| `test_real_concurrent_menu_node_upsert_across_many_threads_never_loses_an_update` | Acceptance bar (mirrors player_bank. |
+| `test_real_concurrent_menu_node_upsert_across_many_threads_never_loses_an_update` | Real concurrent menu node upsert across many threads never loses an update. |
 | `test_real_concurrent_game_data_row_upsert_across_many_threads_never_loses_an_update` | Real concurrent game data row upsert across many threads never loses an update. |

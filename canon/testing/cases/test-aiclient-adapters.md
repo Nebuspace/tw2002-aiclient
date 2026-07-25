@@ -1,17 +1,17 @@
 ---
 type: Reference
-title: Test Cases — Aiclient Adapters
+title: Test Cases — test_aiclient_adapters
 description: Unit tests for tw2002_aiclient ensure/autopilot adapters (mocked daemon).
 resource: repo://tw2002-aiclient/tests/test_aiclient_adapters.py
 tags: [testing, catalog, pytest, inventory]
-timestamp: 2026-07-25T14:07:30Z
+timestamp: 2026-07-25T14:10:13Z
 ---
 
-# Test Cases — `tests/test_aiclient_adapters.py` — **BANKED** (excluded from default test run; awaiting rehabilitation)
-
-> **BANKED** — this module is excluded from the default pytest run via `pytest.ini --ignore`. Cases are catalogued for completeness; they will not run until a rehabilitation work order rewrites or removes the ignore.
+# Test Cases — `tests/test_aiclient_adapters.py`
 
 _Unit tests for tw2002_aiclient ensure/autopilot adapters (mocked daemon)._
+
+> **BANKED** — excluded from the default pytest run via `pytest.ini --ignore`. Catalogued for completeness.
 
 | Test | Blurb |
 |------|-------|
@@ -34,7 +34,7 @@ _Unit tests for tw2002_aiclient ensure/autopilot adapters (mocked daemon)._
 | `test_suspend_and_attach_restores_curses` | Play-screen suspend idiom: endwin → attach → reset, never raise. |
 | `test_suspend_and_attach_surfaces_failure_and_still_restores` | Suspend and attach surfaces failure and still restores. |
 | `test_create_form_fields_have_no_password` | Create form fields have no password. |
-| `test_save_form_creates_profile_without_password` | Create path writes profiles. |
+| `test_save_form_creates_profile_without_password` | Create path writes profiles.toml shape only — never secrets. |
 | `test_adapter_create_profile_refuses_password_kwarg` | Adapter create profile refuses password kwarg. |
 | `test_operator_doc_documents_password_defer` | Operator doc documents password defer. |
 | `test_operator_doc_attach_stops_runtime_autopilot` | WO-OPERATOR-DOC-ATTACH-STOP: cold-start attach matches ATTACH-STOPS. |

@@ -1,10 +1,10 @@
 ---
 type: Reference
-title: Test Cases — Guardian
+title: Test Cases — test_guardian
 description: SessionGuardian tests (WO-P2-027 reconnect+replay; WO-P2-028 keepalive).
 resource: repo://tw2002-aiclient/tests/test_guardian.py
 tags: [testing, catalog, pytest, inventory]
-timestamp: 2026-07-25T14:07:30Z
+timestamp: 2026-07-25T14:10:13Z
 ---
 
 # Test Cases — `tests/test_guardian.py`

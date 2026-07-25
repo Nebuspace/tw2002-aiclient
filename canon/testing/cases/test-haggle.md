@@ -1,17 +1,17 @@
 ---
 type: Reference
-title: Test Cases — Haggle
-description: Deterministic auto-haggle tests (DESIGN-v2.
+title: Test Cases — test_haggle
+description: Haggle.
 resource: repo://tw2002-aiclient/tests/test_haggle.py
 tags: [testing, catalog, pytest, inventory]
-timestamp: 2026-07-25T14:07:30Z
+timestamp: 2026-07-25T14:10:13Z
 ---
 
-# Test Cases — `tests/test_haggle.py` — **BANKED** (excluded from default test run; awaiting rehabilitation)
+# Test Cases — `tests/test_haggle.py`
 
-> **BANKED** — this module is excluded from the default pytest run via `pytest.ini --ignore`. Cases are catalogued for completeness; they will not run until a rehabilitation work order rewrites or removes the ignore.
+_Haggle._
 
-_Deterministic auto-haggle tests (DESIGN-v2.md §9) -- no network, a_
+> **BANKED** — excluded from the default pytest run via `pytest.ini --ignore`. Catalogued for completeness.
 
 | Test | Blurb |
 |------|-------|

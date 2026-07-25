@@ -1,10 +1,10 @@
 ---
 type: Reference
-title: Test Cases — Menu Sig
-description: menu.
+title: Test Cases — test_menu_sig
+description: menu.sig.menu_signature — the shared, pure signature primitive.
 resource: repo://tw2002-aiclient/tests/test_menu_sig.py
 tags: [testing, catalog, pytest, inventory]
-timestamp: 2026-07-25T14:07:30Z
+timestamp: 2026-07-25T14:10:13Z
 ---
 
 # Test Cases — `tests/test_menu_sig.py`

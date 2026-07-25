@@ -1,17 +1,17 @@
 ---
 type: Reference
-title: Test Cases — Ship Upgrade Decision
+title: Test Cases — test_ship_upgrade_decision
 description: TW-30 ship-upgrade decision engine — unit coverage for all five §24 learnings.
 resource: repo://tw2002-aiclient/tests/test_ship_upgrade_decision.py
 tags: [testing, catalog, pytest, inventory]
-timestamp: 2026-07-25T14:07:30Z
+timestamp: 2026-07-25T14:10:13Z
 ---
 
-# Test Cases — `tests/test_ship_upgrade_decision.py` — **BANKED** (excluded from default test run; awaiting rehabilitation)
-
-> **BANKED** — this module is excluded from the default pytest run via `pytest.ini --ignore`. Cases are catalogued for completeness; they will not run until a rehabilitation work order rewrites or removes the ignore.
+# Test Cases — `tests/test_ship_upgrade_decision.py`
 
 _TW-30 ship-upgrade decision engine — unit coverage for all five §24 learnings._
+
+> **BANKED** — excluded from the default pytest run via `pytest.ini --ignore`. Catalogued for completeness.
 
 | Test | Blurb |
 |------|-------|

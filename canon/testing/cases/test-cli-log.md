@@ -1,15 +1,15 @@
 ---
 type: Reference
-title: Test Cases — Cli Log
-description: Honest greenfield gap proof: ``tw log`` / ``tw trail`` are not wired.
+title: Test Cases — test_cli_log
+description: Cli log.
 resource: repo://tw2002-aiclient/tests/test_cli_log.py
 tags: [testing, catalog, pytest, inventory]
-timestamp: 2026-07-25T14:07:30Z
+timestamp: 2026-07-25T14:10:13Z
 ---
 
 # Test Cases — `tests/test_cli_log.py`
 
-_Honest greenfield gap proof: ``tw log`` / ``tw trail`` are not wired._
+_Cli log._
 
 | Test | Blurb |
 |------|-------|

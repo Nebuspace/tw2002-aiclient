@@ -1,17 +1,17 @@
 ---
 type: Reference
-title: Test Cases — Cli Haggle Wiring
-description: `tw haggle` CLI verb wiring -- argparse only (dispatch itself needs a.
+title: Test Cases — test_cli_haggle_wiring
+description: `tw haggle` CLI verb wiring -- argparse only (dispatch itself needs a live daemon and is exercised at the protocol layer instead, see tests/test_protocol_haggle.py).
 resource: repo://tw2002-aiclient/tests/test_cli_haggle_wiring.py
 tags: [testing, catalog, pytest, inventory]
-timestamp: 2026-07-25T14:07:30Z
+timestamp: 2026-07-25T14:10:13Z
 ---
 
-# Test Cases — `tests/test_cli_haggle_wiring.py` — **BANKED** (excluded from default test run; awaiting rehabilitation)
+# Test Cases — `tests/test_cli_haggle_wiring.py`
 
-> **BANKED** — this module is excluded from the default pytest run via `pytest.ini --ignore`. Cases are catalogued for completeness; they will not run until a rehabilitation work order rewrites or removes the ignore.
+_`tw haggle` CLI verb wiring -- argparse only (dispatch itself needs a live daemon and is exercised at the protocol layer instead, see tests/test_protocol_haggle.py)._
 
-_`tw haggle` CLI verb wiring -- argparse only (dispatch itself needs a_
+> **BANKED** — excluded from the default pytest run via `pytest.ini --ignore`. Catalogued for completeness.
 
 | Test | Blurb |
 |------|-------|

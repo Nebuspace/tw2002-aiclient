@@ -1,15 +1,15 @@
 ---
 type: Reference
-title: Test Cases — Cockpit Viewport Paint Color
-description: Wire-level tests: ``PlayShellScreen.
+title: Test Cases — test_cockpit_viewport_paint_color
+description: Cockpit viewport paint color.
 resource: repo://tw2002-aiclient/tests/test_cockpit_viewport_paint_color.py
 tags: [testing, catalog, pytest, inventory]
-timestamp: 2026-07-25T14:07:30Z
+timestamp: 2026-07-25T14:10:13Z
 ---
 
 # Test Cases — `tests/test_cockpit_viewport_paint_color.py`
 
-_Wire-level tests: ``PlayShellScreen.draw()`` actually PAINTS TWGS color_
+_Cockpit viewport paint color._
 
 | Test | Blurb |
 |------|-------|

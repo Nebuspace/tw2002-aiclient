@@ -1,15 +1,15 @@
 ---
 type: Reference
-title: Test Cases — Screens Shared Pairs
-description: Tests for ``screens.
+title: Test Cases — test_screens_shared_pairs
+description: Screens shared pairs.
 resource: repo://tw2002-aiclient/tests/test_screens_shared_pairs.py
 tags: [testing, catalog, pytest, inventory]
-timestamp: 2026-07-25T14:07:30Z
+timestamp: 2026-07-25T14:10:13Z
 ---
 
 # Test Cases — `tests/test_screens_shared_pairs.py`
 
-_Tests for ``screens.py``'s ``_SharedPairs`` -- the ONE process-lifetime_
+_Screens shared pairs._
 
 | Test | Blurb |
 |------|-------|

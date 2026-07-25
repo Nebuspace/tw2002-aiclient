@@ -2,6 +2,10 @@
 
 ## 2026-07-25
 
+- **Test Case Catalog blurbs re-generated** — anti-truncation rule (complete docstring sentence or name-derived English); hub + 129 case files refreshed. Tip follows `6189dce` structure.
+
+## 2026-07-25
+
 - **Test Case Catalog (OKF).** Founded `canon/testing/` bundle: hub at `test-case-catalog.md` and 129 per-module OKF case files under `cases/`. Catalogues all 2271 pytest tests (1263 active · 1008 banked across 46 modules) with one-sentence blurbs derived from docstrings or test names. BANKED modules annotated per `pytest.ini --ignore`. Added Testing section to `canon/index.md`.
 
 ## 2026-07-24

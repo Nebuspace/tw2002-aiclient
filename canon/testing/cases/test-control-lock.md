@@ -1,10 +1,10 @@
 ---
 type: Reference
-title: Test Cases — Control Lock
-description: ControlLock (tw2002_aiclient.
+title: Test Cases — test_control_lock
+description: ControlLock (tw2002_aiclient.session.control_lock) — pure unit tests.
 resource: repo://tw2002-aiclient/tests/test_control_lock.py
 tags: [testing, catalog, pytest, inventory]
-timestamp: 2026-07-25T14:07:30Z
+timestamp: 2026-07-25T14:10:13Z
 ---
 
 # Test Cases — `tests/test_control_lock.py`

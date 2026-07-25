@@ -1,10 +1,10 @@
 ---
 type: Reference
-title: Test Cases — Pty Helpers Smoke
+title: Test Cases — test_pty_helpers_smoke
 description: WO-P3-HARNESS-REHAB D1 lane-3 — smallest Accept proof for pty helpers.
 resource: repo://tw2002-aiclient/tests/test_pty_helpers_smoke.py
 tags: [testing, catalog, pytest, inventory]
-timestamp: 2026-07-25T14:07:30Z
+timestamp: 2026-07-25T14:10:13Z
 ---
 
 # Test Cases — `tests/test_pty_helpers_smoke.py`

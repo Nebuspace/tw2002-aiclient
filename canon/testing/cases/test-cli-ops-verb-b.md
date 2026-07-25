@@ -1,15 +1,15 @@
 ---
 type: Reference
-title: Test Cases — Cli Ops Verb B
-description: WO-P2-OPS-VERB-B — CLI + protocol for ``tw do`` / ``tw send`` / ``tw read``.
+title: Test Cases — test_cli_ops_verb_b
+description: Cli ops verb b.
 resource: repo://tw2002-aiclient/tests/test_cli_ops_verb_b.py
 tags: [testing, catalog, pytest, inventory]
-timestamp: 2026-07-25T14:07:30Z
+timestamp: 2026-07-25T14:10:13Z
 ---
 
 # Test Cases — `tests/test_cli_ops_verb_b.py`
 
-_WO-P2-OPS-VERB-B — CLI + protocol for ``tw do`` / ``tw send`` / ``tw read``._
+_Cli ops verb b._
 
 | Test | Blurb |
 |------|-------|

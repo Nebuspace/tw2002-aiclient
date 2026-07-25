@@ -1,10 +1,10 @@
 ---
 type: Reference
-title: Test Cases — Cockpit Stopbanner
+title: Test Cases — test_cockpit_stopbanner
 description: WO-P5-064 Layer-A -- the STOP banner composed from TYPED reason codes.
 resource: repo://tw2002-aiclient/tests/test_cockpit_stopbanner.py
 tags: [testing, catalog, pytest, inventory]
-timestamp: 2026-07-25T14:07:30Z
+timestamp: 2026-07-25T14:10:13Z
 ---
 
 # Test Cases — `tests/test_cockpit_stopbanner.py`
@@ -14,12 +14,12 @@ _WO-P5-064 Layer-A -- the STOP banner composed from TYPED reason codes._
 | Test | Blurb |
 |------|-------|
 | `test_every_canon_reason_code_renders_its_canon_label` | Every canon reason code renders its canon label. |
-| `test_module_catalog_matches_canon_exactly_no_extra_no_missing` | The module's own map is the catalog, whole -- a code added to the. |
+| `test_module_catalog_matches_canon_exactly_no_extra_no_missing` | Module catalog matches canon exactly no extra no missing. |
 | `test_unknown_code_passes_through_as_its_own_text_never_invented_prose` | Unknown code passes through as its own text never invented prose. |
-| `test_unknown_code_never_borrows_any_catalog_label` | The sharp edge of the same rule: not merely "some text appears",. |
-| `test_empty_and_none_codes_render_the_canon_question_mark` | canon: "an empty code renders ``"? |
-| `test_a_halt_with_no_reasons_at_all_still_states_the_halt_with_a_question_mark` | ``needs_attention`` set but an empty ``reasons`` list: there IS no. |
-| `test_label_lookup_is_case_sensitive_and_does_not_fuzzy_match` | ``AUTOPILOT_HALTED`` is a DIFFERENT code from ``autopilot_halted``;. |
+| `test_unknown_code_never_borrows_any_catalog_label` | Unknown code never borrows any catalog label. |
+| `test_empty_and_none_codes_render_the_canon_question_mark` | Empty and none codes render the canon question mark. |
+| `test_a_halt_with_no_reasons_at_all_still_states_the_halt_with_a_question_mark` | A halt with no reasons at all still states the halt with a question mark. |
+| `test_label_lookup_is_case_sensitive_and_does_not_fuzzy_match` | Label lookup is case sensitive and does not fuzzy match. |
 | `test_no_halt_renders_no_banner_at_all` | No halt renders no banner at all. |
 | `test_needs_attention_true_is_the_only_thing_that_raises_the_banner` | Needs attention true is the only thing that raises the banner. |
 | `test_bare_string_reasons_are_accepted_like_dict_reasons` | Bare string reasons are accepted like dict reasons. |
@@ -35,9 +35,9 @@ _WO-P5-064 Layer-A -- the STOP banner composed from TYPED reason codes._
 | `test_height_folds_from_the_bottom_reason_line_survives_last` | Height folds from the bottom reason line survives last. |
 | `test_no_room_renders_nothing_rather_than_a_partial_glyph` | No room renders nothing rather than a partial glyph. |
 | `test_every_line_fits_the_given_width` | Every line fits the given width. |
-| `test_non_positive_width_keeps_the_line_count_and_empties_each_line` | Mirrors ``goals. |
+| `test_non_positive_width_keeps_the_line_count_and_empties_each_line` | Non positive width keeps the line count and empties each line. |
 | `test_a_narrow_banner_still_leads_with_the_attention_glyph` | A narrow banner still leads with the attention glyph. |
 | `test_hostile_payloads_never_raise_and_never_blank_the_halt` | Hostile payloads never raise and never blank the halt. |
 | `test_hostile_width_degrades_rather_than_raising` | Hostile width degrades rather than raising. |
 | `test_hostile_height_degrades_rather_than_raising` | Hostile height degrades rather than raising. |
-| `test_a_hostile_reason_entry_is_contained_and_its_siblings_still_render` | Per-item containment, the same shape ``goals. |
+| `test_a_hostile_reason_entry_is_contained_and_its_siblings_still_render` | A hostile reason entry is contained and its siblings still render. |

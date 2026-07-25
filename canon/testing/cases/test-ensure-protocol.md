@@ -1,15 +1,15 @@
 ---
 type: Reference
-title: Test Cases — Ensure Protocol
-description: Thin proofs for session/protocol.
+title: Test Cases — test_ensure_protocol
+description: Ensure protocol.
 resource: repo://tw2002-aiclient/tests/test_ensure_protocol.py
 tags: [testing, catalog, pytest, inventory]
-timestamp: 2026-07-25T14:07:30Z
+timestamp: 2026-07-25T14:10:13Z
 ---
 
 # Test Cases — `tests/test_ensure_protocol.py`
 
-_Thin proofs for session/protocol.py ``ensure`` dispatch._
+_Ensure protocol._
 
 | Test | Blurb |
 |------|-------|

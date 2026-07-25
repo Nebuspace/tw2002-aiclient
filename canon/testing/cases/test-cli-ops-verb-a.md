@@ -1,15 +1,15 @@
 ---
 type: Reference
-title: Test Cases — Cli Ops Verb A
-description: WO-P2-OPS-VERB-A — CLI wire for ``tw screen`` / ``tw stop``.
+title: Test Cases — test_cli_ops_verb_a
+description: Cli ops verb a.
 resource: repo://tw2002-aiclient/tests/test_cli_ops_verb_a.py
 tags: [testing, catalog, pytest, inventory]
-timestamp: 2026-07-25T14:07:30Z
+timestamp: 2026-07-25T14:10:13Z
 ---
 
 # Test Cases — `tests/test_cli_ops_verb_a.py`
 
-_WO-P2-OPS-VERB-A — CLI wire for ``tw screen`` / ``tw stop``._
+_Cli ops verb a._
 
 | Test | Blurb |
 |------|-------|

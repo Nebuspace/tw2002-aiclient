@@ -1,10 +1,10 @@
 ---
 type: Reference
-title: Test Cases — Env
+title: Test Cases — test_env
 description: .env loader + host/port + run-dir resolution (no network).
 resource: repo://tw2002-aiclient/tests/test_env.py
 tags: [testing, catalog, pytest, inventory]
-timestamp: 2026-07-25T14:07:30Z
+timestamp: 2026-07-25T14:10:13Z
 ---
 
 # Test Cases — `tests/test_env.py`
@@ -33,4 +33,4 @@ _.env loader + host/port + run-dir resolution (no network)._
 | `test_resolve_run_dir_independent_of_cwd` | WO-P2-021 Accept: caller CWD must not move the default run/ home. |
 | `test_resolve_run_dir_honors_absolute_tw_run_dir` | Resolve run dir honors absolute tw run dir. |
 | `test_resolve_run_dir_honors_relative_tw_run_dir` | Resolve run dir honors relative tw run dir. |
-| `test_default_run_dir_is_not_per_profile` | WO-P2-021 Accept: with TW_RUN_DIR unset there is one shared run/,. |
+| `test_default_run_dir_is_not_per_profile` | WO-P2-021 Accept: with TW_RUN_DIR unset there is one shared run/, never a silent run/<profile> splinter. |

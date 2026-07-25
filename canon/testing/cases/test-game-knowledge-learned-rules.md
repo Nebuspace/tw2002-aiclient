@@ -1,17 +1,17 @@
 ---
 type: Reference
-title: Test Cases — Game Knowledge Learned Rules
+title: Test Cases — test_game_knowledge_learned_rules
 description: Learned-rule store tests — offline, tmp_path only.
 resource: repo://tw2002-aiclient/tests/test_game_knowledge_learned_rules.py
 tags: [testing, catalog, pytest, inventory]
-timestamp: 2026-07-25T14:07:30Z
+timestamp: 2026-07-25T14:10:13Z
 ---
 
-# Test Cases — `tests/test_game_knowledge_learned_rules.py` — **BANKED** (excluded from default test run; awaiting rehabilitation)
-
-> **BANKED** — this module is excluded from the default pytest run via `pytest.ini --ignore`. Cases are catalogued for completeness; they will not run until a rehabilitation work order rewrites or removes the ignore.
+# Test Cases — `tests/test_game_knowledge_learned_rules.py`
 
 _Learned-rule store tests — offline, tmp_path only._
+
+> **BANKED** — excluded from the default pytest run via `pytest.ini --ignore`. Catalogued for completeness.
 
 | Test | Blurb |
 |------|-------|

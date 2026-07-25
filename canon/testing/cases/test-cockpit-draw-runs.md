@@ -1,15 +1,15 @@
 ---
 type: Reference
-title: Test Cases — Cockpit Draw Runs
-description: ``cockpit.
+title: Test Cases — test_cockpit_draw_runs
+description: Cockpit draw runs.
 resource: repo://tw2002-aiclient/tests/test_cockpit_draw_runs.py
 tags: [testing, catalog, pytest, inventory]
-timestamp: 2026-07-25T14:07:30Z
+timestamp: 2026-07-25T14:10:13Z
 ---
 
 # Test Cases — `tests/test_cockpit_draw_runs.py`
 
-_``cockpit.draw.draw_runs`` -- per-run, sub-line curses attrs (WO-P4-053)._
+_Cockpit draw runs._
 
 | Test | Blurb |
 |------|-------|

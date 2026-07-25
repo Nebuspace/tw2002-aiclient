@@ -1,10 +1,10 @@
 ---
 type: Reference
-title: Test Cases — Cockpit Hud
+title: Test Cases — test_cockpit_hud
 description: Pure HUD-panel composer tests (PWO-037, Layer-A).
 resource: repo://tw2002-aiclient/tests/test_cockpit_hud.py
 tags: [testing, catalog, pytest, inventory]
-timestamp: 2026-07-25T14:07:30Z
+timestamp: 2026-07-25T14:10:13Z
 ---
 
 # Test Cases — `tests/test_cockpit_hud.py`

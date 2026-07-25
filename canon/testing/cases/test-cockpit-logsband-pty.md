@@ -1,15 +1,15 @@
 ---
 type: Reference
-title: Test Cases — Cockpit Logsband Pty
-description: WO-P3-041 wire -- LOGS band advancing transcript tail + newest-row flash,.
+title: Test Cases — test_cockpit_logsband_pty
+description: WO-P3-041 wire -- LOGS band advancing transcript tail + newest-row flash, Layer-B.
 resource: repo://tw2002-aiclient/tests/test_cockpit_logsband_pty.py
 tags: [testing, catalog, pytest, inventory]
-timestamp: 2026-07-25T14:07:30Z
+timestamp: 2026-07-25T14:10:13Z
 ---
 
 # Test Cases — `tests/test_cockpit_logsband_pty.py`
 
-_WO-P3-041 wire -- LOGS band advancing transcript tail + newest-row flash,_
+_WO-P3-041 wire -- LOGS band advancing transcript tail + newest-row flash, Layer-B._
 
 | Test | Blurb |
 |------|-------|
@@ -25,5 +25,5 @@ _WO-P3-041 wire -- LOGS band advancing transcript tail + newest-row flash,_
 | `test_real_tail_supersedes_status_line_fallback` | Real tail supersedes status line fallback. |
 | `test_flash_state_persists_across_unchanged_newest_then_resets_on_change` | Flash state persists across unchanged newest then resets on change. |
 | `test_flash_state_resets_when_tail_reverts_to_honest_empty` | Flash state resets when tail reverts to honest empty. |
-| `test_raising_now_fn_does_not_crash_draw_and_logs_still_renders` | Mirrors tests/test_cockpit_liveness_pty. |
+| `test_raising_now_fn_does_not_crash_draw_and_logs_still_renders` | Raising now fn does not crash draw and logs still renders. |
 | `test_raising_status_provider_falls_back_to_honest_state` | Raising status provider falls back to honest state. |
