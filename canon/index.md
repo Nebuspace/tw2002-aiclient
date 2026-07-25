@@ -64,6 +64,10 @@ marked _(planned)_ are not yet written; entries marked ✅ written exist on disk
 * [Secrets & Credential Handling](/doctrine/secrets-and-credentials.md) — The non-negotiable discipline for storing, resolving, redacting, and rotating passwords and credentials. — ✅ written
 * [Action-Safety Guards](/doctrine/action-safety-guards.md) — The concrete byte-level guards that make "no autonomous destructive action" real — enforcing the sovereignty invariants control-and-escalation declares. — ✅ written
 
+# Testing
+
+* [Test Case Catalog](/testing/test-case-catalog.md) — Inventory of every pytest case in tw2002-aiclient (2271 tests · 129 modules): one-sentence blurb per test, grouped by subsystem; BANKED modules annotated. — ✅ written
+
 # Decisions & ADRs
 
 * [ADR-001 — One tree, embedded session](/ADR/001-one-tree-embedded-session.md) — Collapses the Phase-0 two-top-level-package scaffold into one `tw2002_aiclient` import tree with the daemon-core under `session/`, plus app-owned daemon lifecycle and an exit-time stop-the-daemon-too confirm popup. — _(Accepted 2026-07-24 · tip one-tree LIVE)_
