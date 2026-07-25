@@ -13,6 +13,7 @@ from typing import Callable, Sequence
 
 import curses
 
+from tw2002_aiclient.cockpit import arm as cockpit_arm
 from tw2002_aiclient.cockpit import control_seat as cockpit_control_seat
 from tw2002_aiclient.cockpit import decisions as cockpit_decisions
 from tw2002_aiclient.cockpit import draw as cockpit_draw
@@ -988,8 +989,11 @@ class PlayShellScreen:
 
     def _control_strip_segment_attr(self, tone: object) -> int:
         """Resolve one ``compose_control_strip_segments`` tone (``"ok"``,
-        ``"warn"``, or ``None``) to a curses attr for the control-strip's
-        mode-badge chip (WO-P5-060). ``"ok"``/``"warn"`` resolve their
+        ``"warn"``, or ``None``) to a curses attr for a control-strip chip
+        (WO-P5-060 the mode badge; WO-P5-062 the autopilot ARM chip routes
+        through this same helper rather than growing a second attr path,
+        so the two chips can never drift into different badge
+        treatments). ``"ok"``/``"warn"`` resolve their
         SEMANTIC_COLORS fg (green/yellow, ``_SEMANTIC_COLORS`` sourced from
         ``cockpit.tones``, the single source of truth) through the ONE
         shared process-lifetime pair allocator (``_shared_pairs`` -- see its
@@ -1000,9 +1004,13 @@ class PlayShellScreen:
         one "selected/active/badge" signal) applied to BOTH dual chips (App
         AND Human), not just the newly-added App side, so the pair's visual
         register stays matched rather than splitting App-reversed/
-        MANUAL-flat. Any other tone (``None`` -- SPECTATE, or the liveness
-        cluster's own non-label segment) stays plain ``curses.A_NORMAL``,
-        unreversed, exactly like every pre-existing chip on this row.
+        MANUAL-flat. Any other tone stays plain ``curses.A_NORMAL``,
+        unreversed. Three things reach this helper carrying ``None``
+        today: the SPECTATE chip (canon: deliberately uncolored), a
+        PROVEN-disarmed ARM chip (WO-P5-062 -- same "nothing to see here"
+        register, and the only arm reading that earns it), and every
+        non-label segment such as the liveness cluster and the inter-chip
+        separator.
 
         Mono/pair-exhaustion degrade (WO-P4-054 interim family): when the
         color allocation itself is unavailable (``_shared_pairs.attr_for``
@@ -1474,11 +1482,13 @@ class PlayShellScreen:
             )
 
         # CONTROL_STRIP (WO-P3-038, PWO-055, PWO-056, WO-P5-060,
-        # WO-ENTRY-APP-CHIP): the frame's own bottom-most interior row, a
-        # bare content row (no box -- same `boxed=False` shape as the row-1
-        # profile strip). Carries the liveness cluster, right-aligned
-        # (unchanged), and the honest mode chip on the left, filling
-        # whatever room remains there -- `cockpit.control_seat.APP_LABEL`
+        # WO-ENTRY-APP-CHIP, WO-P5-062): the frame's own bottom-most
+        # interior row, a bare content row (no box -- same `boxed=False`
+        # shape as the row-1 profile strip). Carries three things: the
+        # liveness cluster, right-aligned (unchanged); the honest mode
+        # chip hard-left; and, immediately right of it, the autopilot ARM
+        # chip (WO-P5-062, wired further down). The mode chip fills
+        # whatever room remains -- `cockpit.control_seat.APP_LABEL`
         # while neither flag is set (WO-P5-060), which as of
         # WO-ENTRY-APP-CHIP is the ENTRY state itself, mirroring the
         # daemon's own standing `MODE_APP` default
@@ -1519,10 +1529,48 @@ class PlayShellScreen:
                 )
             except Exception:  # noqa: BLE001 -- a raising composer must not crash the draw pass
                 liveness_text = _CONTROL_STRIP_COMPOSE_FAILED
+            # The autopilot ARM chip (WO-P5-062) -- the row's SECOND chip,
+            # answering a different question from the seat chip beside it:
+            # `may the taught autopilot act`, not `who holds the keyboard`.
+            # Canon needs both at once (`canon/architecture/
+            # app-autopilot-model.md` "Arm-Confirm": an armed run STOPs and
+            # hands the keyboard back on the first unrecognized screen, so
+            # armed-but-not-driving is routine, not a contradiction).
+            #
+            # `status` here is the SAME snapshot every other panel in this
+            # draw already shares -- never a second poll. The poll guard
+            # above needed no new term for it, verified rather than
+            # assumed: this consumer only ever runs inside `control_strip
+            # is not None`, and `regions["control_strip"] is not None` is
+            # already one of that guard's four terms.
+            #
+            # NOTHING in this cockpit can originate an arm state. There is
+            # no local arm flag to flip and `compose_arm_chip` takes only
+            # the daemon's payload, so `ARM ON` cannot appear as a side
+            # effect of any keystroke, mode switch, attach, or detach --
+            # the "no silent arm" guarantee is structural here, not a
+            # discipline someone has to remember. Arming also never
+            # touches the control lock: this is a read of reported state,
+            # and the seat chip beside it is composed from wholly separate
+            # inputs (`self.spectating`/`self.attached`).
+            #
+            # Read-only round trip, honestly: `session/protocol.py`'s
+            # `status` verb reports the autopilot block as a hardcoded
+            # disarmed literal ("autopilot.py is not ported — ensure never
+            # arms") and carries no arm/disarm verb, so today this chip
+            # always renders `ARM OFF` against a live daemon and `ARM ?`
+            # with none. That is the truthful reading of what the daemon
+            # reports; when the run-loop and its verb land, this wiring
+            # needs no change.
+            try:
+                arm_chip = cockpit_arm.compose_arm_chip(status)
+            except Exception:  # noqa: BLE001 -- a raising composer must not crash the draw pass
+                arm_chip = None
             try:
                 raw_segments = cockpit_control_seat.compose_control_strip_segments(
                     spectating=self.spectating, attached=self.attached,
                     liveness_text=liveness_text, width=cs_w, unicode_ok=uok,
+                    arm_chip=arm_chip,
                 )
                 control_strip_segments = [
                     (str(text), self._control_strip_segment_attr(tone))

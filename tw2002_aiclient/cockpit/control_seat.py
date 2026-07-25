@@ -9,9 +9,18 @@ plain strings only, curses/attribute handling belongs to the draw layer
 Scope (load-bearing, do not re-derive): this is deliberately **not** the N5
 mode-line-and-teach-controls WO. ``cockpit/layout.py``'s own ``CONTROL_STRIP``
 comment reserves that row's mode badge / A/R/T teach keys / run-record-panic
-cluster for N5 -- this module renders exactly one thing, a static "SPECTATE"
-label, with no color state machine, no App/Human dynamic badge, no teach
-affordances. Canon grounding for the one thing it does render:
+cluster for N5.
+
+**Scope as it stands today** (the paragraph above described this module at
+PWO-055, when it rendered exactly one static "SPECTATE" label with no tone
+and no dynamic badge; that has not been true since PWO-056, and the stale
+present tense is corrected here rather than left to mislead -- WO-P5-062):
+this module renders the SEAT chip as a three-way selection (SPECTATE /
+MANUAL / APP) with a tone name per chip, and places one caller-supplied ARM
+chip beside it. It still owns no teach affordances, no run/record/panic
+cluster, and no color RESOLUTION (tone names only -- curses attrs stay the
+draw layer's job). Each addition is recorded in its own dated note below.
+Canon grounding for the original static label:
 
 - ``canon/surfaces/visual-language.md`` "Mode-badge colors" (~98-99):
   "**Spectate** (not a dual member; takes no lock) — **muted / plain**.
@@ -113,10 +122,35 @@ invariant; (2) the App branch's reachability required this small additive
 change to ``compose_control_strip_line`` itself (see above), which the
 dispatch's literal text did not call out.
 
+**WO-P5-062 status (autopilot ARM chip -- this dispatch's own
+contribution):** the row gains a SECOND chip, placed immediately right of
+the seat chip. It answers a different question -- *may the taught
+autopilot act* -- from the seat chip's *who holds the keyboard*, and the
+two are orthogonal by canon: ``canon/architecture/app-autopilot-model.md``
+"Arm-Confirm" describes an armed run that STOPs and hands the keyboard
+back on the first unrecognized screen, so armed-but-not-driving is a
+routine state the strip must be able to show. Collapsing them into one
+chip would make it unrepresentable.
+
+This module does NOT resolve the arm state. It takes a pre-resolved
+``(text, tone)`` pair through the new keyword-only ``arm_chip`` parameter
+(default ``None``, so every pre-existing caller's row stays byte-identical
+-- no signature rework, the same additive shape PWO-056 used for
+``attached``), and ``cockpit/arm.py`` owns the extraction from the
+daemon's status payload. That division is not incidental: it is what keeps
+the commitment this docstring makes above -- that this module never
+sources a chip from daemon-global ``status`` -- intact while still letting
+the row carry a daemon-global fact. The arm state genuinely IS a
+daemon-global fact (unlike ``status["mode"]``, it is not a claim about
+which client holds the seat), so reporting it verbatim is honest; reading
+it HERE would still be the wrong home for it.
+
 Hardening family (matches ``liveness.py``/``hud.py``): every public function
 is never-raises regardless of input shape -- defense-in-depth here, since
-today's only real caller (``screens.py``) always hands a genuine ``bool``,
-the same "latent guard" shape ``layout.py``'s own ``LOGS_MIN_H`` clamp and
+today's only real caller (``screens.py``) hands well-formed values on
+every parameter: genuine ``bool``s for ``spectating``/``attached``, and a
+well-formed ``(text, tone)`` pair or ``None`` for ``arm_chip``. The same
+"latent guard" shape ``layout.py``'s own ``LOGS_MIN_H`` clamp and
 ``tones.py``'s hostile-input branches already document elsewhere in this
 codebase.
 
@@ -125,6 +159,20 @@ read-only observation of the seat's own state, never a command.
 """
 
 from __future__ import annotations
+
+# WO-P5-062: the inter-chip gutter, IMPORTED rather than re-spelled. The
+# gap is a shared fact between the module that owns the ARM chip and the
+# module that places it, and a value read in two files gets exactly one
+# home -- two independent copies is how the pair silently drifts to
+# different widths later. Sibling-relative import, matching `focus.py`/
+# `decisions.py`/`fold.py`'s own `from .goals import ...` convention.
+# `arm.py` imports nothing at all, so there is no cycle here.
+#
+# This is the ONLY thing this module takes from `arm.py`: the arm STATE
+# never enters here. `screens.py` resolves the chip and hands this module
+# the finished `(text, tone)` pair, keeping the seat composer blind to
+# daemon-global status exactly as the module docstring above commits to.
+from .arm import ARM_GAP as _ARM_SEPARATOR
 
 # Canon-cited verbatim (see module docstring) -- deliberately a single
 # constant, not a Unicode/ASCII twin pair: plain ASCII text has no glyph
@@ -351,32 +399,88 @@ def _resolve_label_and_tone(spectating: object, attached: object) -> tuple[str, 
     return label, None  # SPECTATE_LABEL (muted/plain) or "" (no claim at all)
 
 
+def _safe_arm_chip(value: object) -> tuple[str, str | None]:
+    """Best-effort coercion of the caller-supplied ``arm_chip`` to a
+    ``(text, tone)`` pair, degrading any unusable shape to ``("", None)``
+    -- which this module's placement rule below treats exactly like "no
+    arm chip was supplied at all", so the row simply carries the seat chip
+    and the liveness cluster as it did before WO-P5-062.
+
+    The expected value is ``cockpit.arm.compose_arm_chip``'s own return: a
+    2-tuple of a ``str`` text and a ``str``-or-``None`` tone. This module
+    never inspects the daemon's status payload to produce it -- see the
+    module docstring for why the seat composer stays deliberately blind to
+    daemon-global state, a discipline WO-P5-062 keeps by taking the chip
+    pre-resolved rather than taking the payload.
+
+    Degrading to "no chip" (rather than to some placeholder text) is the
+    claim-least reading, matching ``_safe_width``'s own "never let a
+    garbage input claim more room than it can prove" convention: a
+    malformed pair is not evidence of any arm state, and the arm module's
+    own ``ARM ?`` already covers the case where the daemon's payload is
+    unusable but the wiring itself is sound. Never raises regardless of
+    ``value``'s type."""
+    try:
+        text, tone = value  # a 2-element unpack; anything else raises
+    except Exception:  # noqa: BLE001 -- an unusable chip must not crash the row
+        return "", None
+    if not isinstance(text, str) or not text:
+        return "", None
+    if tone is not None and not isinstance(tone, str):
+        return text, None
+    return text, tone
+
+
 def _compose_segments(
     *,
     spectating: object,
     attached: object,
     liveness_text: object,
     width: object,
+    arm_chip: object = None,
 ) -> list[tuple[str, str | None]]:
     """Shared core: builds the ordered ``(text, tone)`` segments both public
     composers below return (``compose_control_strip_line`` joins them back
     into one string; ``compose_control_strip_segments`` returns them as-is).
-    At most two segments -- ``(label, tone)`` then ``(rest, None)`` -- or
-    one bare ``(liveness_only, None)`` segment when the label is dropped for
-    width pressure OR is empty. The latter is a real, reachable outcome as
-    of the App gate (see ``_resolve_label_and_tone``'s own docstring): a
+
+    Layout, left to right: the seat chip, then (WO-P5-062) the ARM chip
+    separated by ``cockpit.arm.ARM_GAP``, then the right-justified liveness
+    cluster. Either chip may be absent; when both are, the row is the bare
+    ``(liveness_only, None)`` segment it has always been. That last case is
+    a real, reachable outcome rather than a defensive-only branch: a
     degraded/unknown/non-``bool`` reading of ``spectating``/``attached``
     (e.g. both ``None``) empties both ``attached_label``/``seat_label`` yet
-    fails the stricter ``_is_definitively_false`` App-eligibility check, so
-    the row correctly degrades to liveness-only rather than inventing any
-    claim -- this is not a defensive-only branch. This is also the XOR
-    structural guarantee PWO-060 asks for: since there is never more than
-    one label segment, at most one tone-carrying (non-``None``) segment can
-    ever appear in the result, so App and MANUAL can never co-render
-    regardless of input. Never raises; returns ``[]`` when ``width`` is not
-    a usable positive ``int`` (mirrors ``compose_control_strip_line``'s
-    pre-existing ``""`` return for the same case, since ``"".join([]) ==
-    ""``)."""
+    fails the stricter ``_is_definitively_false`` App-eligibility check
+    (see ``_resolve_label_and_tone``), so the row correctly degrades to
+    liveness-only rather than inventing any claim.
+
+    PWO-060's XOR structural guarantee is unchanged by the ARM chip: there
+    is still never more than one SEAT label segment, so App and MANUAL can
+    never co-render regardless of input. The ARM chip is a SECOND
+    tone-carrying segment by design, not a violation of that guarantee --
+    it answers a different question (may the taught autopilot act) than the
+    seat chip (who holds the keyboard), and canon needs both representable
+    at once, including the armed-but-not-driving combination the run-loop
+    produces every time it STOPs and hands the keyboard back
+    (``canon/architecture/app-autopilot-model.md`` "Arm-Confirm").
+
+    Priority under width pressure, in order: the liveness cluster keeps its
+    full space (the pre-existing, operationally load-bearing "is it
+    frozen?" signal), then the seat chip -- canon: "the mode chip is cell
+    #1, hard-left -- *who holds the keyboard* is the highest-priority fact
+    on the strip" (``mode-line-and-teach-controls.md`` ~223) -- then the
+    ARM chip. The seat chip truncates to fit as it always has; the ARM
+    chip is **all-or-nothing** and never truncates. That asymmetry is
+    deliberate: a clipped seat label is still unambiguous (``MANUAL — YOU
+    HAVE C``), whereas a clipped ``ARM ON`` could read as ``ARM O`` and be
+    resolved by the reader as the opposite state. Dropping the chip is an
+    honest absence of information; truncating it would be wrong
+    information, which on this particular claim is the more expensive
+    failure.
+
+    Never raises; returns ``[]`` when ``width`` is not a usable positive
+    ``int`` (mirrors ``compose_control_strip_line``'s pre-existing ``""``
+    return for the same case, since ``"".join([]) == ""``)."""
     w = _safe_width(width)
     if w <= 0:
         return []
@@ -385,13 +489,31 @@ def _compose_segments(
     text = text[-w:]  # defensive: never wider than the row itself
     right = text.rjust(w)
 
-    label, tone = _resolve_label_and_tone(spectating, attached)
-    gap = w - len(text)
-    if not label or gap <= 1:
+    # >=1 blank column of separation from the liveness cluster, so the two
+    # halves of the row can never abut.
+    budget = w - len(text) - 1
+    if budget <= 0:
         return [(right, None)]
 
-    label = label[: gap - 1]  # leave >=1 blank column of separation
-    return [(label, tone), (right[len(label):], None)]
+    label, tone = _resolve_label_and_tone(spectating, attached)
+    arm_text, arm_tone = _safe_arm_chip(arm_chip)
+
+    left: list[tuple[str, str | None]] = []
+    used = 0
+    if label:
+        label = label[:budget]
+        left.append((label, tone))
+        used = len(label)
+    if arm_text:
+        separator = _ARM_SEPARATOR if used else ""
+        if used + len(separator) + len(arm_text) <= budget:
+            if separator:
+                left.append((separator, None))
+            left.append((arm_text, arm_tone))
+            used += len(separator) + len(arm_text)
+    if not left:
+        return [(right, None)]
+    return left + [(right[used:], None)]
 
 
 def compose_control_strip_line(
@@ -401,6 +523,7 @@ def compose_control_strip_line(
     width: object,
     unicode_ok: bool = True,
     attached: object = False,
+    arm_chip: object = None,
 ) -> str:
     """Compose the control-strip row's one content line: the seat label
     left-anchored, the already-composed ``liveness_text`` (``cockpit.
@@ -422,13 +545,23 @@ def compose_control_strip_line(
     ``logs`` under height pressure.
 
     PWO-060 note: when both ``spectating`` and ``attached`` are falsy, the
-    label is now ``APP_LABEL`` rather than dropped -- a deliberate,
-    additive extension of the priority chain (``... or app_label()``), not
-    a regression. That input combo was previously off-contract/unreachable
-    through the only real caller (``screens.py`` always passes ``attached=
-    not self.spectating``, so the two are never both false there today);
-    three pre-PWO-060 tests pinned the old accidental "liveness only"
-    reading for it and are updated in this WO with a comment explaining why.
+    label is ``APP_LABEL`` rather than dropped -- a deliberate, additive
+    extension of the priority chain (``... or app_label()``), not a
+    regression. Three pre-PWO-060 tests pinned the old accidental
+    "liveness only" reading for that input and were updated in that WO
+    with a comment explaining why.
+
+    (CORRECTED WO-P5-062 -- the two sentences that used to sit here said
+    the both-falsy combo was "off-contract/unreachable through the only
+    real caller", because ``screens.py`` "always passes ``attached=not
+    self.spectating``, so the two are never both false there today". Both
+    halves stopped being true within a day of being written and were
+    never revised: WO-P5-060 replaced that derivation with the real
+    per-instance ``attached=self.attached``, and WO-ENTRY-APP-CHIP made
+    both-falsy the cockpit's ENTRY state -- so it is now the DEFAULT
+    rendering path, hit every time the cockpit opens. This module's own
+    docstring above already records that correctly; this docstring
+    contradicted it.)
 
     ``unicode_ok`` is accepted for API uniformity with every sibling
     composer in this package (``liveness.py``, ``strip.py``) but has no
@@ -444,9 +577,18 @@ def compose_control_strip_line(
     ``float("inf")``). Never raises regardless of any argument's type or
     content -- a non-``str`` ``liveness_text`` degrades to ``""`` rather
     than crashing.
+
+    WO-P5-062 note: ``arm_chip`` is the optional ``(text, tone)`` pair
+    ``cockpit.arm.compose_arm_chip`` produces, placed immediately right of
+    the seat chip. Its default of ``None`` renders a row BYTE-IDENTICAL to
+    the pre-WO-P5-062 output for every other input, so no existing caller
+    changes behavior by not passing it. See ``_compose_segments`` for the
+    placement and width-pressure rules, and ``_safe_arm_chip`` for how an
+    unusable pair degrades.
     """
     segments = _compose_segments(
-        spectating=spectating, attached=attached, liveness_text=liveness_text, width=width
+        spectating=spectating, attached=attached, liveness_text=liveness_text,
+        width=width, arm_chip=arm_chip,
     )
     return "".join(text for text, _tone in segments)
 
@@ -458,6 +600,7 @@ def compose_control_strip_segments(
     liveness_text: object = "",
     width: object = 0,
     unicode_ok: object = True,
+    arm_chip: object = None,
 ) -> list[tuple[str, str | None]]:
     """PWO-060: the draw layer's per-run-color view of the same control-strip
     row ``compose_control_strip_line`` renders as one flat string -- ordered
@@ -466,11 +609,20 @@ def compose_control_strip_segments(
     input, by construction: both functions delegate to the same
     ``_compose_segments`` helper above, so there are never two independently
     hand-kept-in-sync code paths that could drift apart. ``tone`` is one of
-    ``"ok"`` (App chip), ``"warn"`` (MANUAL/Human chip), or ``None``
-    (SPECTATE chip, or any non-label segment such as the liveness cluster or
-    the inter-column separator) -- see ``_resolve_label_and_tone``'s own
-    docstring for the full tone vocabulary and the App-never-co-renders-
-    with-MANUAL structural guarantee.
+    ``"ok"`` (App chip), ``"warn"`` (MANUAL/Human chip, and the ARM chip
+    whenever the autopilot is not PROVEN disarmed -- WO-P5-062), or
+    ``None`` (SPECTATE chip, a proven-disarmed ARM chip, or any non-label
+    segment such as the liveness cluster and the inter-chip separator) --
+    see ``_resolve_label_and_tone``'s own docstring for the seat tone
+    vocabulary and the App-never-co-renders-with-MANUAL structural
+    guarantee, and ``cockpit.arm.arm_tone`` for the ARM chip's own.
+
+    ``arm_chip`` (WO-P5-062) is the optional ``(text, tone)`` pair
+    ``cockpit.arm.compose_arm_chip`` produces. It may legitimately
+    co-render with ANY seat chip, including a tone-carrying one: the two
+    answer different questions, so a result carrying two non-``None``
+    tones is correct here and is NOT a widening of the seat chips' own XOR
+    (see ``_compose_segments``, which still emits at most one seat label).
 
     ``unicode_ok`` is accepted for API uniformity with ``compose_control_
     strip_line`` and every sibling composer in this package but has no
@@ -481,5 +633,6 @@ def compose_control_strip_segments(
     line``'s own empty-string return for the same case). Never raises
     regardless of any argument's type or content."""
     return _compose_segments(
-        spectating=spectating, attached=attached, liveness_text=liveness_text, width=width
+        spectating=spectating, attached=attached, liveness_text=liveness_text,
+        width=width, arm_chip=arm_chip,
     )

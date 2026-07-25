@@ -408,7 +408,22 @@ def test_control_strip_row_attr_is_muted_a_normal(monkeypatch):
     App-hold the entry default, leaving that implicit would have silently
     turned this into an assertion about the APP chip -- which legitimately
     carries `A_BOLD | A_REVERSE` and would have gone red for the wrong
-    reason."""
+    reason.
+
+    WO-P5-062 (NARROWED, and narrowed to what this docstring has always
+    claimed to pin): the assertion below used to sweep EVERY content call
+    on the row. That was a sound implementation of "the SPECTATE case's
+    own attr" only for as long as the seat chip was the row's sole
+    tone-carrying candidate. WO-P5-062 adds the autopilot ARM chip beside
+    it -- a genuinely independent fact with its own tone (`ARM ?` renders
+    `A_BOLD | A_REVERSE` at the unknown reading) -- so the whole-row sweep
+    now fails for a chip this test was never about, the third time this
+    same over-reach has surfaced here. The check is therefore scoped to
+    the SPECTATE segment itself, which is the canon claim (`visual-
+    language.md`: Spectate is muted/plain, deliberately uncolored). It
+    keeps its teeth: BOLD and REVERSE are asserted absent individually, so
+    a future change that promoted the SPECTATE chip to a badge still goes
+    red here rather than passing on a loosened assertion."""
     from tw2002_aiclient import screens as screens_mod
 
     monkeypatch.setattr(screens_mod.curses, "has_colors", lambda: False)
@@ -424,7 +439,14 @@ def test_control_strip_row_attr_is_muted_a_normal(monkeypatch):
 
     assert SPECTATE_LABEL in _control_strip_row_text(win, FULL_ROWS, FULL_COLS)
     calls = _control_strip_row_calls(win, FULL_ROWS, FULL_COLS)
-    assert all(attr == curses.A_NORMAL for _x, _t, attr in calls), calls
+    spectate_calls = [(x, t, attr) for x, t, attr in calls if SPECTATE_LABEL in t]
+    assert spectate_calls, (
+        f"the SPECTATE chip was not drawn as its own segment; row was {calls!r}"
+    )
+    for _x, _t, attr in spectate_calls:
+        assert attr == curses.A_NORMAL, calls
+        assert not attr & curses.A_BOLD, calls
+        assert not attr & curses.A_REVERSE, calls
 
 
 def test_raising_control_seat_composer_does_not_crash_draw_and_liveness_survives(monkeypatch):
