@@ -422,14 +422,15 @@ Concretely, a builder should aim for:
   rejected). The anti-gold-plating is itself part of the taste — cut list: light theme, powerline
   separators, pane intro-stagger, full-grid marquee (`TUI-POLISH-PLAN.md`).
 
-# Implementation status (tip `eb59274` · Phase 3 CLOSED · Phase 4 OPEN)
+# Implementation status (tip `37b3e99` · Phase 3 CLOSED · Phase 4 OPEN)
 
 | Band | Tip reality |
 |---|---|
 | Outer frame · strip · three-column body · fold | **LIVE** (PWO-031…033 · 039) |
 | GOALS · FOCUS · DECISIONS · HUD freshness · TX/liveness · tones · LOGS | **LIVE** (PWO-034…041 · tip `6391bb7`) |
-| Center `[GAME UI]` content | **LIVE** — settle-snapshot glyph + per-cell color paint into 80×25 GAME (PWO-052 · PWO-053 · tip `eb59274`) |
-| Product watch-stream into play shell | **LIVE** subscribe (PWO-050) + snapshot→paint (PWO-052/053 · tip `eb59274`) |
+| Center `[GAME UI]` content | **LIVE** — settle-snapshot glyph + per-cell color paint into 80×25 GAME (PWO-052 · PWO-053); disconnect border round-trip **LIVE** (PWO-054 · `6c7d834`) |
+| Product watch-stream into play shell | **LIVE** subscribe (PWO-050) + snapshot→paint (PWO-052/053) |
+| Product in-cockpit spectate state | **LIVE** — muted `SPECTATE` chip + no-send tripwire (PWO-055 · tip `37b3e99`); ops `tw spectate` still **F2 HOLD** |
 | Mode line / teach A·R·T / STOP strip | **NOT** Phase 3 — Phase 5+ |
 | Coverage meter / chains library / formations | **NOT** on tip play shell (archive / later WOs) |
 

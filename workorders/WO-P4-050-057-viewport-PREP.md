@@ -24,16 +24,16 @@
 
 ## 1. Tip inventory (vs archive)
 
-| Piece | Tip `eb59274` (`tw2002_aiclient`) | Notes |
+| Piece | Tip `37b3e99` (`tw2002_aiclient`) | Notes |
 |---|---|---|
 | WatchHub / daemon `subscribe` | **LIVE** — `session/watch.py` · `daemon._handle_subscribe` | Settle-edge push stream |
 | `tw watch` CLI | **LIVE** — ops consumer of `subscribe` | **≠** product cockpit subscribe |
 | Session pyte terminal | **LIVE** — `session/terminal.py` (`color_map`, glyphs) · bare `build_response` emits color | One-lock `render_with_color` |
-| Play shell center GAME | **LIVE** — glyph + per-cell color paint 80×25 (PWO-051…053) | Disconnect chrome = 054 |
-| Viewport border STATE flip | **LIVE** (P3-040) — cyan → red non-bold / mono underline on `connected: False` | 054 extends semantics already partially shipped |
+| Play shell center GAME | **LIVE** — glyph + per-cell color paint 80×25 (PWO-051…053) | Disconnect chrome **LIVE** (054) |
+| Viewport border STATE flip | **LIVE** (P3-040 · PWO-054) — cyan ↔ danger non-bold; color-unavailable → `A_UNDERLINE` | Reconnect + silent-border guard proven |
 | Product watch-stream client | **LIVE** — `watchfeed.py` + play-shell snapshot→paint | 050+052+053 |
-| Product spectate mode | **MISSING** | 055; F2 HOLD for *ops* spectate CLI |
-| Cockpit attach / detach keys | **MISSING** (Esc→launcher only; no `h` / Ctrl-] attach path) | 056–057; daemon attach protocol **LIVE** for `tw attach` ops |
+| Product spectate mode | **LIVE** — in-cockpit `spectating` + muted `SPECTATE` chip + no-send tripwire (PWO-055) | F2 HOLD for *ops* `tw spectate` CLI |
+| Cockpit attach / detach keys | **MISSING** (Esc→launcher only; no attach hotkey yet) | 056–057; daemon attach protocol **LIVE** for `tw attach` ops |
 | Archive `spectate_app` / layout | gitignored archive | Port patterns only under execute WO |
 
 ---
@@ -66,15 +66,16 @@
 - **Proof:** Layer-A — color_map fixture → attr pairs. Layer-B — pty cell `.fg`/`.bold` vs fixture (not ANSI-regex).
 - **Hazards:** Semantic 7-tone table is **chrome only** — never recolor game cells with `ok`/`danger`.
 
-### PWO-054 — Disconnect viewport chrome (BUILD / VERIFY)
+### PWO-054 — Disconnect viewport chrome (BUILD / VERIFY) — **DONE 2026-07-25** (impl-claudecode-aiclient · tip `6c7d834` — VERIFY: reconnect cyan↔danger round-trip + 5-cycle + continuous pty reconnect leg; silent-border guard via DOCS-WIN `A_UNDERLINE` when danger attr == `A_NORMAL` / color-unavailable, matching `visual-language.md`; honest-unknown stays cyan; no third border STATE; "reconnecting" copy still absent / vacuous)
 - **Depends-on:** 051 · P3-040 tones
-- **Live state:** `_viewport_border_attr` already flips danger non-bold on `connected: False`.
+- **Live state:** **LIVE** — `PlayShellScreen._viewport_border_attr` · `tests/test_cockpit_tones_pty.py` reconnect + exhaustion legs.
 - **Accept:** Documented + proven: disconnect → danger border (non-bold / mono underline interim); reconnect → cyan chrome; honest-unknown stays cyan. Any additional "reconnecting" copy stays outside game cells.
 - **Proof:** Existing tones/pty pins + one dedicated kill-sock or FakeClient `connected: False` leg if not already covered.
 - **Hazards:** Don't invent a second STATE convention. Height policy / fold unchanged.
 
-### PWO-055 — Product spectate mode (read-only) (BUILD)
+### PWO-055 — Product spectate mode (read-only) (BUILD) — **DONE 2026-07-25** (impl-claudecode-aiclient · tip `37b3e99` — in-cockpit STATE of the one play shell: `PlayShellScreen.spectating` default `True` + pure `cockpit/control_seat.py` muted `SPECTATE` chip (liveness-priority collision); AST no-send tripwire `tests/test_spectate_no_send.py` (method-name `send_request`, detector meta-test, whole-`app.py` guard) for 056 allowlist; user-facing leave *is* attach (056) — hub Accept pin; **does not** ship ops `tw spectate` CLI)
 - **Depends-on:** 050 · preferably 052
+- **Live state:** **LIVE** — `cockpit/control_seat.py` · `PlayShellScreen.spectating` · `tests/test_cockpit_spectate.py` · `tests/test_spectate_no_send.py`.
 - **Accept:** Cockpit can enter a read-only spectate *mode* (watch without lock); **no sends**; badge/muted per visual-language Spectate. **Does not** ship `tw spectate` CLI.
 - **Proof:** Static assert no send path; FakeClient subscribe-only; TTY mode indicator if N5 not ready — honest muted/`—` OK.
 - **Hazards:** **F2 HOLD** — if execute would require lifting ops spectate CLI, **STOP and ❓**; stay cockpit-only.
