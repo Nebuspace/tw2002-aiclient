@@ -438,6 +438,7 @@ def _compose_segments(
     liveness_text: object,
     width: object,
     arm_chip: object = None,
+    conn_chip: object = None,
 ) -> list[tuple[str, str | None]]:
     """Shared core: builds the ordered ``(text, tone)`` segments both public
     composers below return (``compose_control_strip_line`` joins them back
@@ -511,6 +512,18 @@ def _compose_segments(
                 left.append((separator, None))
             left.append((arm_text, arm_tone))
             used += len(separator) + len(arm_text)
+    # WO-PLAY-CONN-TOGGLE: CONN chip — placed right of the ARM chip, same
+    # all-or-nothing-never-truncate rule: a clipped "CONN" could read as
+    # "CON" (unrelated), worse than absent. Reuses `_safe_arm_chip` for
+    # input coercion (same `(str, str|None)` tuple contract).
+    conn_text, conn_tone = _safe_arm_chip(conn_chip)
+    if conn_text:
+        separator = _ARM_SEPARATOR if used else ""
+        if used + len(separator) + len(conn_text) <= budget:
+            if separator:
+                left.append((separator, None))
+            left.append((conn_text, conn_tone))
+            used += len(separator) + len(conn_text)
     if not left:
         return [(right, None)]
     return left + [(right[used:], None)]
@@ -524,6 +537,7 @@ def compose_control_strip_line(
     unicode_ok: bool = True,
     attached: object = False,
     arm_chip: object = None,
+    conn_chip: object = None,
 ) -> str:
     """Compose the control-strip row's one content line: the seat label
     left-anchored, the already-composed ``liveness_text`` (``cockpit.
@@ -588,7 +602,7 @@ def compose_control_strip_line(
     """
     segments = _compose_segments(
         spectating=spectating, attached=attached, liveness_text=liveness_text,
-        width=width, arm_chip=arm_chip,
+        width=width, arm_chip=arm_chip, conn_chip=conn_chip,
     )
     return "".join(text for text, _tone in segments)
 
@@ -601,6 +615,7 @@ def compose_control_strip_segments(
     width: object = 0,
     unicode_ok: object = True,
     arm_chip: object = None,
+    conn_chip: object = None,
 ) -> list[tuple[str, str | None]]:
     """PWO-060: the draw layer's per-run-color view of the same control-strip
     row ``compose_control_strip_line`` renders as one flat string -- ordered
@@ -634,5 +649,5 @@ def compose_control_strip_segments(
     regardless of any argument's type or content."""
     return _compose_segments(
         spectating=spectating, attached=attached, liveness_text=liveness_text,
-        width=width, arm_chip=arm_chip,
+        width=width, arm_chip=arm_chip, conn_chip=conn_chip,
     )

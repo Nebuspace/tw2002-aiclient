@@ -466,6 +466,56 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                     else:
                         play.status_line = f"attach refused — {error}"
                 continue
+            if action == "conn_activate":
+                # WO-PLAY-CONN-TOGGLE: poll a fresh snapshot for the truthful
+                # connection state BEFORE acting -- the cached status from
+                # the last draw may be up to 1 s old, and we must not
+                # disconnect an already-disconnected session or skip a
+                # reconnect because a stale "connected=True" lingered.
+                #
+                # Failure direction (CC review / Rule 3 lane): unknown
+                # status must NOT silently become "disconnected" and fire
+                # ensure/reconnect. Only act on an explicit True/False.
+                known_connected: bool | None = None
+                try:
+                    if play.status_provider is not None:
+                        current_status = play.status_provider()
+                        if (
+                            isinstance(current_status, dict)
+                            and "connected" in current_status
+                            and isinstance(current_status.get("connected"), bool)
+                        ):
+                            known_connected = current_status["connected"]
+                except Exception:  # noqa: BLE001 — refuse live action; do not crash
+                    known_connected = None
+                if known_connected is None:
+                    play.status_line = "connection state unknown — not acting"
+                elif known_connected:
+                    # Disconnect: close the daemon's telnet socket without
+                    # stopping the daemon.  The ensure path (below, on next
+                    # activate) will reconnect.
+                    # footgun-safe: uses the same run_dir as ensure_session,
+                    # so --run-dir isolation is preserved (ADR-001 / WO
+                    # constraint).
+                    play.status_line = "disconnecting…"
+                    play.draw()
+                    ok = adapters.disconnect_session(run_dir=run_dir)
+                    play.status_line = "disconnected" if ok else "disconnect failed"
+                else:
+                    # Reconnect: ensure_session already calls
+                    # session.reconnect() when session.conn.connected is
+                    # False, then replays login (WO-P2-027 path).
+                    play.status_line = "reconnecting…"
+                    play.draw()
+                    result = adapters.ensure_session(
+                        profile.name, no_auto_arm=True, run_dir=run_dir
+                    )
+                    if result.ok:
+                        play.status_line = f"reconnected — {result.classification}"
+                    else:
+                        play.status_line = f"reconnect failed — {result.reason}: {result.detail}"
+                play._conn_focused = False  # return chip to resting state after action
+                continue
             if action in ("back", "quit"):
                 return action
     finally:

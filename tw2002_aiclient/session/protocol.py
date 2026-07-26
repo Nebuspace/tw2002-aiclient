@@ -524,6 +524,19 @@ def dispatch(session, verb, args, server):
         server.request_stop()
         return {"ok": True, "stopping": True}
 
+    if verb == "disconnect":
+        # WO-PLAY-CONN-TOGGLE: close the telnet connection without stopping
+        # the daemon. The `ensure` verb's own reconnect path (`session.
+        # reconnect()`) is what the UI uses to re-establish a connection
+        # after a disconnect or a host-side timeout/drop. Same silence
+        # discipline as `session.reconnect()`'s close() exception: a dead
+        # connection can raise near anything on close.
+        try:
+            session.conn.close()
+        except Exception:  # noqa: BLE001 — already-dead socket, silence per reconnect convention
+            pass
+        return {"ok": True, "disconnected": True}
+
     if verb == "ensure":
         # WO-P2-025: full control-lock via `_driving_dispatch` (replaces
         # the earlier ensure-only `drive_lock`). Autopilot auto-arm after

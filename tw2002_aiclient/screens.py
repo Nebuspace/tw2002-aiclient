@@ -855,6 +855,12 @@ class PlayShellScreen:
         self._chrome_attr = curses.A_NORMAL
         self._viewport_danger_attr = curses.A_NORMAL  # WO-P3-040 -- set for real below
         self._init_colors()
+        # WO-PLAY-CONN-TOGGLE: keyboard focus for the CONN chip in the
+        # control strip.  Arrow keys cycle focus; Enter activates (returns
+        # "conn_activate" from handle_key).  False = no chip focused (the
+        # default, unintrusive state).  Reset to False after activation in
+        # app.py so the strip returns to its resting appearance.
+        self._conn_focused: bool = False
 
     def _init_colors(self) -> None:
         # Tone-table fg names -- sourced from cockpit.tones via the
@@ -1031,11 +1037,48 @@ class PlayShellScreen:
         losing its "this is a chip" signal entirely. Never raises: an
         unrecognized/hostile ``tone`` degrades to the same plain
         ``A_NORMAL`` as ``None``."""
-        if tone not in ("ok", "warn"):
+        if tone not in ("ok", "warn", "danger"):
+            # Any other tone (None, SPECTATE's muted, separators, liveness)
+            # stays plain A_NORMAL — unreversed, no badge treatment.
             return curses.A_NORMAL
         fg_name, _unused_bold = _SEMANTIC_COLORS.get(tone, ("default", False))
         base = _shared_pairs.attr_for(fg_name)
         return base | curses.A_BOLD | curses.A_REVERSE
+
+    def _compose_conn_chip(
+        self, status: "dict | None", focused: bool
+    ) -> "tuple[str, str | None]":
+        """WO-PLAY-CONN-TOGGLE: compose the ``(text, tone)`` pair for the
+        CONN chip in the control strip.
+
+        Reads ``status["connected"]`` (the real bool the daemon reports on
+        the ``status`` verb -- ``session.conn.connected``).  Three outcomes:
+
+        * ``True``  → ``("CONN", "ok")`` green, or ``("[CONN]", "ok")``
+          when focused (brackets = focus cursor, plain ASCII, no swap).
+        * ``False`` → ``("DISC", "danger")`` red, or ``("[DISC]", "danger")``
+          when focused.
+        * Unknown (non-dict status, missing/non-bool field) →
+          ``("DISC?", "warn")`` / ``("[DISC?]", "warn")`` — unknown state
+          treated as "attention needed" per the established honest-unknown
+          convention, NOT as "connected".
+
+        Tone matches the viewport border flip (``_viewport_border_attr``):
+        ``"ok"`` / ``"danger"`` / ``"warn"`` -- draw layer resolves to
+        green/red/yellow through ``_control_strip_segment_attr``, which was
+        extended in this same WO to accept ``"danger"`` alongside ``"ok"``
+        and ``"warn"``.  Never raises regardless of ``status``'s shape.
+        """
+        if isinstance(status, dict):
+            connected = status.get("connected")
+        else:
+            connected = None
+        if connected is True:
+            return ("[CONN]" if focused else "CONN", "ok")
+        if connected is False:
+            return ("[DISC]" if focused else "DISC", "danger")
+        # Unknown / no provider / provider raised
+        return ("[DISC?]" if focused else "DISC?", "warn")
 
     def draw(self) -> None:
         self.stdscr.erase()
@@ -1576,11 +1619,16 @@ class PlayShellScreen:
                 arm_chip = cockpit_arm.compose_arm_chip(status)
             except Exception:  # noqa: BLE001 -- a raising composer must not crash the draw pass
                 arm_chip = None
+            # WO-PLAY-CONN-TOGGLE: the CONN chip reads status["connected"]
+            # (the same shared snapshot every other consumer uses -- no
+            # second status_provider() call) and reflects the focus state.
+            conn_chip = self._compose_conn_chip(status, self._conn_focused)
             try:
                 raw_segments = cockpit_control_seat.compose_control_strip_segments(
                     spectating=self.spectating, attached=self.attached,
                     liveness_text=liveness_text, width=cs_w, unicode_ok=uok,
                     arm_chip=arm_chip,
+                    conn_chip=conn_chip,
                 )
                 control_strip_segments = [
                     (str(text), self._control_strip_segment_attr(tone))
@@ -1632,6 +1680,18 @@ class PlayShellScreen:
             return "quit"
         if key == MODE_KEY:
             return "attach"
+        # WO-PLAY-CONN-TOGGLE: arrow keys toggle focus to/from the CONN
+        # chip in the control strip.  Any arrow direction cycles the single
+        # focusable control (currently only CONN); future WOs that add more
+        # focusable controls can extend this into a focus-ring.
+        if key in (curses.KEY_LEFT, curses.KEY_RIGHT, curses.KEY_UP, curses.KEY_DOWN):
+            self._conn_focused = not self._conn_focused
+            return None
+        # Enter activates the currently-focused control (only CONN today).
+        if key in (curses.KEY_ENTER, 10, 13):
+            if self._conn_focused:
+                return "conn_activate"
+            return None
         return None
 
 
