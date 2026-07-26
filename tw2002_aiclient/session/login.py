@@ -309,13 +309,22 @@ def run_login(session, profile, get_password, save_password, target="main_comman
                     # other stuck screen.
                     raise LoginError(f"returning_password_rejected:profile={profile.name}")
                 # The unrecognized screen itself is NOT quoted here -- see
-                # `LoginStalled`. The operator still has it: the same
-                # `ensure` failure response carries `prompt`, `screen` and
-                # `classification` from `build_response`, so nothing is
-                # lost on that surface by refusing to make a second copy
-                # of it inside the error string, and every renderer that
-                # has no screen beside it (the guardian field, a log line,
-                # a persisted status file) stops being a credential sink.
+                # `LoginStalled`. Every renderer that has no screen beside
+                # it (the guardian field, a log line, a persisted status
+                # file) stops being a credential sink.
+                #
+                # This comment used to add "the operator still has it: the
+                # same `ensure` failure response carries `prompt`, `screen`
+                # and `classification` from `build_response`". Two thirds of
+                # that is no longer true and the change was deliberate: canon
+                # `DECISIONS.md` C.2 ruled the screen mirror out of
+                # structured ensure diagnostics, so
+                # `protocol._login_failure_response` now returns
+                # `classification` (this same closed vocabulary) WITHOUT
+                # `screen` or `prompt`. The operator's screen is still the
+                # operator's -- via a live attach, the `screen` verb, or a
+                # `subscribe` feed -- it just no longer rides the failure
+                # payload.
                 raise LoginStalled("automaton_stuck", cls, step)
             # Give a still-rendering multi-part screen a moment to finish
             # arriving before we re-classify.

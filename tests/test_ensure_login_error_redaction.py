@@ -23,23 +23,39 @@ an operator sees:
    traceback, the wire frame, `guardian.last_reconnect_error`) is safe by
    construction rather than individually sanitised. Gated below by
    `test_the_stuck_error_text_no_longer_copies_the_echoed_prompt`.
-2. **the screen mirror** — `_dispatch_ensure`'s `LoginError` branch answers with
-   a full `build_response()`, whose ``screen`` field is the whole rendered
-   buffer. An echoing server leaves the credential in that buffer, so it rides
-   the response even on the rejection path, where the error text is provably
-   clean. **STILL OPEN, deliberately.** The screen mirror carries the credential
-   because the SERVER ECHOED IT and this app is a screen mirror; whether a
-   mirror may show what the server painted is a product ruling, not a mechanical
-   fix. If it is ruled by-design, its `xfail` below must be DELETED, not
-   flipped.
+2. **the screen mirror** — `_dispatch_ensure`'s `LoginError` branch answered
+   with a full `build_response()`, whose ``screen`` field is the whole rendered
+   buffer and whose ``prompt`` is its last row. An echoing server leaves the
+   credential in that buffer, so it rode the response even on the rejection
+   path, where the error text is provably clean.
+   **CLOSED (WO-MT-07-CARRIER-2).** Ruled by canon `DECISIONS.md` §C.2
+   (2026-07-26): structured ensure diagnostics — screen mirror in error
+   payloads, CLI JSON, logs, persisted reason strings — must not carry
+   server-echoed credentials, while the live TUI paint of the telnet stream
+   may still show what the server painted. So the failure branch now answers
+   with `protocol._login_failure_response`, which never builds a mirror:
+   ``screen``, ``prompt`` and ``color`` are gone, ``classification`` (closed
+   vocabulary) and ``sent_input`` (already `"<redacted>"`) stay, and an
+   explicit ``screen_withheld`` marker makes the omission honest rather than
+   silently missing. Both fields mattered: on the STALL path the echoed
+   credential IS the prompt line, so closing ``screen`` alone would have moved
+   the leak one field left rather than closing it.
 
-Carrier 2 is pinned as `xfail(strict=True)` so the day it is closed the test
-fails loudly and asks to be flipped, instead of passing forever. Carrier 1's
-former pins are now green gates: closure is measured, not assumed, and it is
-measured by the SINK SET rather than by one string — the human branch of
+Both carriers' `xfail(strict=True)` pins have been FLIPPED to green gates
+(flipped, not deleted — §C.2 ruled fix, and deletion was the branch reserved
+for a by-design ruling). Closure is measured, not assumed, and it is measured
+by the SINK SET rather than by one string — the human branch of
 `cli.print_response` prints only ``error`` + ``detail`` for ``ok: False``, so
-that sink is the error text's own fingerprint among the four, and it is the one
-that went clean.
+that sink is the error text's own fingerprint among the four. Carrier 1 dropped
+it; carrier 2 dropped the remaining two, and the set is now empty.
+
+**The other half of the ruling is pinned too.** §C.2 permits the live paint,
+and over-applying the redaction into the cockpit/attach path would damage the
+product's core purpose, so
+`test_the_live_paint_path_still_shows_what_the_server_painted` asserts that
+after the same failed ensure the session's pyte buffer AND the shared
+`protocol.build_response()` still carry what the server painted. It is the one
+test here whose PASSING condition is finding the sentinel.
 
 **What is already covered elsewhere, and is not re-proven here.**
 `tests/test_login_redaction.py` sweeps the login path's four sinks (return
@@ -54,18 +70,25 @@ there) but "does it reach the JSON a client is handed" (answered here).
 **Non-vacuity.** An absence assertion is worthless if the sweep cannot find
 anything. The sweep helper here (`_carriers` / `_assert_absent`, over the
 sinks `_drive_ensure` collects) is the SAME one in every test in this file,
-with the same needle — and it demonstrably fires, on
-this exact surface, in the two `xfail` tests below. That is a stronger bookend
-than an injected defect would be: the green tests and the leaking tests differ
-only in the server's echo behavior, not in the instrument. The harness itself
-is guarded by the green control test: if the scripted server, the daemon, or
-the session wiring broke, the control goes RED rather than quietly turning
-every sweep into a no-op.
+with the same needle. Now that both carriers are closed, nothing in the file
+leaks on its own any more, so the bookend is explicit:
+`test_restoring_the_mirror_puts_the_credential_back_on_the_surface`
+monkeypatches the PRE-FIX failure answer back in — changing nothing else, not
+the server, not the scenario, not the instrument — and measures the credential
+returning to exactly the two sinks the historical measurement named. Every
+scenario also proves the server really echoed, against `_Run.painted` (the
+daemon's own buffer) rather than against a response field, so "absent" always
+means "kept out", never "was never there". The harness itself is guarded by
+the green control test: if the scripted server, the daemon, or the session
+wiring broke, the control goes RED rather than quietly turning every sweep
+into a no-op.
 
 **Sinks swept.** The `ensure_raw` dict is serialised with `json.dumps` rather
-than key-checked, because a nested carrier (`screen` is a list of rows,
-`detail` is a sibling string) passes a shallow check and still crosses the
-wire. Both `cli.print_response` renderings are captured too — `--json`
+than key-checked, because a nested carrier passes a shallow check and still
+crosses the wire — that is precisely how carrier 2 was found (`screen` was a
+list of rows; `detail` is a sibling string). The serialisation sweep stays the
+instrument even though the failure answer is flat today, since the next field
+added to it will not be. Both `cli.print_response` renderings are captured too — `--json`
 (`json.dumps(resp)`) and the human-readable branch, which for `ok: False`
 prints only `error` + `detail` and is therefore a strictly narrower surface
 than the JSON one. The daemon's owner-only local error log is swept alongside,
@@ -83,10 +106,12 @@ import tempfile
 import threading
 from pathlib import Path
 from types import SimpleNamespace
+from typing import NamedTuple
 
 import pytest
 
-from tw2002_aiclient.session import cli, credentials, env, login
+from tw2002_aiclient.session import cli, credentials, env, login, protocol
+from tw2002_aiclient.session.protocol import build_response
 from tw2002_aiclient.session.session import Session
 
 # The credential under test. Deliberately does NOT contain the substring
@@ -395,8 +420,33 @@ def _render(resp: dict) -> dict[str, str]:
     }
 
 
-def _drive_ensure(cfg: Path, run_dir: Path, logs: Path, script):
-    """Run one scenario end to end and return `(resp, sinks, server)`.
+class _Run(NamedTuple):
+    """One scenario's measurements.
+
+    `resp` / `sinks` / `server` are the surface under test and its instrument.
+    `painted` and `live` are the OTHER side of the ruling and are deliberately
+    NOT sinks -- see their fields below and `_assert_absent`'s own note.
+    """
+
+    resp: dict
+    sinks: dict[str, str]
+    server: "_ScriptedTWGS"
+    # What the daemon's own pyte buffer held at the moment it answered -- i.e.
+    # what the server actually painted. The credential being HERE is the
+    # scenario working, not a leak: canon `DECISIONS.md` C.2 rules that a live
+    # attach/cockpit may show what the server painted. It is what makes every
+    # absence assertion in this file non-vacuous now that `resp` no longer
+    # carries a screen to look in.
+    painted: list[str]
+    # `protocol.build_response(session)` taken against that same buffer -- the
+    # exact call `screen`, `do`, `send`, `read` and the WatchHub seed /
+    # settle-edge emit (the cockpit viewport's feed) make. Kept so the
+    # PERMITTED half of C.2 is pinned by execution rather than by promise.
+    live: dict
+
+
+def _drive_ensure(cfg: Path, run_dir: Path, logs: Path, script) -> _Run:
+    """Run one scenario end to end and return a `_Run`.
 
     Real scripted telnet server -> real `Session` -> real daemon on the real
     socket path -> real `cli.ensure_raw` -> real `cli.print_response`. Nothing
@@ -410,6 +460,11 @@ def _drive_ensure(cfg: Path, run_dir: Path, logs: Path, script):
         try:
             resp = cli.ensure_raw(PROFILE, timeout=60.0, run_dir=run_dir)
             log_body = daemon.log_text()
+            # Both taken BEFORE teardown, against the same buffer the daemon
+            # just answered from -- a snapshot read after `session.close()`
+            # would prove nothing about the moment under test.
+            painted = session.render()
+            live = build_response(session)
         finally:
             daemon.stop()
             session.close()
@@ -417,7 +472,7 @@ def _drive_ensure(cfg: Path, run_dir: Path, logs: Path, script):
     _assert_no_daemon_was_spawned(run_dir)
     assert not server.errors, server.errors
     sinks = {**_render(resp), "daemon local error log": log_body}
-    return resp, sinks, server
+    return _Run(resp=resp, sinks=sinks, server=server, painted=painted, live=live)
 
 
 def _carriers(sinks: dict[str, str], needle: str) -> list[str]:
@@ -427,6 +482,14 @@ def _carriers(sinks: dict[str, str], needle: str) -> list[str]:
 
 
 def _assert_absent(sinks: dict[str, str]):
+    """Sweep the sinks a copy can LEAVE the session through.
+
+    `_Run.painted` and `_Run.live` are deliberately never passed here. They are
+    the session's own buffer and the live-paint response built from it -- canon
+    `DECISIONS.md` C.2 permits those to show what the server painted, and
+    sweeping them would turn this file into an argument for sanitising the
+    operator's own screen, which the ruling explicitly refuses.
+    """
     for needle in NEEDLES:
         hits = _carriers(sinks, needle)
         assert not hits, f"{needle!r} reached: {', '.join(hits)}"
@@ -443,20 +506,24 @@ def test_a_rejected_credential_stays_off_the_ensure_surface(cfg, tmp_path, run_d
 
     Against a server behaving as canon assumes -- a password prompt suppresses
     echo -- the credential is sent, rejected, and appears in NOTHING the client
-    receives: not the `error` string, not the `screen` mirror, not the
-    `sent_input` field, not either `print_response` rendering.
+    receives: not the `error` string, not the `sent_input` field, not either
+    `print_response` rendering. (Since WO-MT-07-CARRIER-2 there is no `screen`
+    mirror on this answer at all -- `test_the_ensure_failure_answer_carries_
+    only_bounded_fields` is what pins that structurally.)
 
     This is also the harness's own control. Every absence assertion in this
-    file is measured with the same instrument, and the two `xfail` tests below
-    show that instrument firing; this test is what goes RED if the scripted
-    server, the daemon wiring, or the session ever stops driving a real login
-    at all, instead of every sweep silently becoming a no-op.
+    file is measured with the same instrument, and
+    `test_restoring_the_mirror_puts_the_credential_back_on_the_surface` shows
+    that instrument firing; this test is what goes RED if the scripted server,
+    the daemon wiring, or the session ever stops driving a real login at all,
+    instead of every sweep silently becoming a no-op.
     """
     _write_secrets(cfg, text=_good_secrets_text())
     logs = tmp_path / "logs"
     script = [(PASSWORD_SCREEN, True), (PASSWORD_SCREEN, False)]
 
-    resp, sinks, server = _drive_ensure(cfg, run_dir, logs, script)
+    run = _drive_ensure(cfg, run_dir, logs, script)
+    resp, sinks, server = run.resp, run.sinks, run.server
 
     # Non-vacuity: the credential really was resolved from the real store and
     # really did go out on the wire. An absence proved on a login that never
@@ -509,9 +576,10 @@ def test_a_broken_credential_store_stays_off_the_ensure_surface(
 
     logs = tmp_path / "logs"
     try:
-        resp, sinks, _server = _drive_ensure(cfg, run_dir, logs, [(PASSWORD_SCREEN, False)])
+        run = _drive_ensure(cfg, run_dir, logs, [(PASSWORD_SCREEN, False)])
     finally:
         os.chmod(store, 0o600)
+    resp, sinks = run.resp, run.sinks
 
     assert resp["ok"] is False
     prefix, _, payload = resp["error"].partition(":")
@@ -535,9 +603,9 @@ def test_the_stuck_error_text_no_longer_copies_the_echoed_prompt(cfg, tmp_path, 
     """CARRIER 1, closed and gated: the app no longer makes a COPY of the
     credential into a diagnostic string.
 
-    Same scenario as the `xfail` immediately below -- the server echoes the
-    credential and stalls, so the stagnation ceiling fires -- but scoped to the
-    carrier this WO owns. `login.LoginStalled` carries `classification` (a
+    Same scenario as the whole-sink sweep immediately below -- the server
+    echoes the credential and stalls, so the stagnation ceiling fires -- but
+    scoped to carrier 1. `login.LoginStalled` carries `classification` (a
     closed vocabulary: `classify_screen` answers `unknown` for anything it
     cannot name, never a slice of the screen) and `step`, and has no field the
     prompt could ride in.
@@ -545,36 +613,45 @@ def test_the_stuck_error_text_no_longer_copies_the_echoed_prompt(cfg, tmp_path, 
     **The assertion that proves it is the SINK SET, not a string.** For
     ``ok: False`` `cli.print_response`'s human branch prints only ``error`` and
     ``detail``, so ``tw ensure stdout`` is the error text's own fingerprint
-    among the four sinks. Measured on this exact scenario:
+    among the four sinks. Measured on this exact scenario, across both WOs:
 
-        before  ensure_raw() returned dict, tw ensure --json stdout, tw ensure stdout
-        after   ensure_raw() returned dict, tw ensure --json stdout
+        WO-MT-07-FIX       before  returned dict, --json stdout, ensure stdout
+                           after   returned dict, --json stdout
+        WO-MT-07-CARRIER-2 after   (none)
 
-    The dropped sink is carrier 1. The two that remain are carrier 2 -- the
-    `screen`/`prompt` mirror `build_response()` attaches to the failure answer,
-    which is out of this WO's scope and awaiting a product ruling. Asserting
-    the set EXACTLY, rather than only the absence, makes this one test fail in
-    both directions: if the error text ever quotes the prompt again the human
-    sink comes back, and if the screen mirror is ever changed underneath this
-    WO the remaining pair shrinks. That second half is the "carrier 2 unchanged"
-    proof, measured rather than promised.
+    The sink dropped by the first fix is carrier 1. The pair that survived it
+    was carrier 2 -- the `screen`/`prompt` mirror `build_response()` used to
+    attach to the failure answer -- and `DECISIONS.md` C.2 has since ruled it
+    out too, so the set is now empty. Asserting the set EXACTLY, rather than
+    only the absence, is what makes this test fail in BOTH directions: if the
+    error text ever quotes the prompt again, or the mirror ever comes back,
+    the named sink reappears and this goes red pointing at which one.
 
     **Diagnosability survives, and this asserts it positively.** An absence
     test that passed because the automaton stopped reporting anything would be
     a regression wearing a green tick, so the error is required to still name
     the failure mode AND the classification.
+
+    **Where the non-vacuity moved.** This used to prove the server echoed by
+    looking in `resp["screen"]`. That field is gone, so the echo is now proved
+    against `run.painted` -- the daemon's OWN pyte buffer at the moment it
+    answered. That is a strictly better instrument for this file's question:
+    it separates "the server painted the credential" (true, permitted, and
+    what makes the sweep meaningful) from "a copy of it left the session"
+    (false, and the whole point).
     """
     _write_secrets(cfg, text=_good_secrets_text())
     logs = tmp_path / "logs"
     script = [(PASSWORD_SCREEN, True), (lambda last: CLEAR + last, False)]
 
-    resp, sinks, server = _drive_ensure(cfg, run_dir, logs, script)
+    run = _drive_ensure(cfg, run_dir, logs, script)
+    resp, sinks, server = run.resp, run.sinks, run.server
 
     # Non-vacuity: the credential really was resolved from the real store, sent
     # on the wire, and echoed back onto the screen -- an absence proved against
     # a screen that never held it would be worth nothing.
     assert server.received == [SENTINEL]
-    assert any(SENTINEL in "".join(row) for row in resp["screen"]), (
+    assert any(SENTINEL in row for row in run.painted), (
         "the server did not echo -- this scenario stopped being the one under test"
     )
 
@@ -587,11 +664,8 @@ def test_the_stuck_error_text_no_longer_copies_the_echoed_prompt(cfg, tmp_path, 
     assert SENTINEL not in resp["error"]
     assert SENTINEL not in sinks["tw ensure stdout"]
 
-    # Carrier 1 closed AND carrier 2 untouched, in one measurement.
-    assert _carriers(sinks, SENTINEL) == [
-        "ensure_raw() returned dict",
-        "tw ensure --json stdout",
-    ]
+    # Both carriers closed, in one measurement.
+    assert _carriers(sinks, SENTINEL) == []
     # The sibling profile never crosses on any path, carrier or not.
     assert _carriers(sinks, CANARY_KEY) == []
     assert _carriers(sinks, CANARY_VALUE) == []
@@ -638,25 +712,11 @@ def test_no_raise_site_in_login_quotes_what_the_server_painted(cfg):
 
 
 # ---------------------------------------------------------------------------
-# THE FINDING -- an echoing server, the screen mirror (carrier 2)
+# CARRIER 2 -- CLOSED (WO-MT-07-CARRIER-2, canon DECISIONS.md C.2)
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "MEASURED LEAK, pending a human ruling -- CARRIER 2 ONLY, since "
-        "WO-MT-07-FIX. The error-text carrier is CLOSED and the two assertions "
-        "above _assert_absent now PASS (login.LoginStalled cannot carry the "
-        "prompt), so what still fails this whole-sink sweep is resp['prompt'] "
-        "and resp['screen'] -- the mirror build_response() attaches to the "
-        "failure answer. Same carrier as the test below, reached down a "
-        "different path (stall rather than rejection), which is why closing it "
-        "must flip BOTH or neither. If the mirror is ruled by-design, DELETE "
-        "this xfail; do not flip it. strict=True so it fails loudly either way."
-    ),
-)
-def test_an_echoing_server_puts_the_credential_on_the_ensure_surface(
+def test_an_echoing_server_no_longer_reaches_the_ensure_surface_on_the_stall_path(
     cfg, tmp_path, run_dir
 ):
     """The echoing-server case MT-07 names, driven to the operator's JSON.
@@ -668,21 +728,22 @@ def test_an_echoing_server_puts_the_credential_on_the_ensure_surface(
     does echo puts the typed credential on the current prompt line; the screen
     then classifies `unknown` and the stagnation ceiling fires.
 
-    **What this test measures CHANGED under WO-MT-07-FIX, and the change is
-    the point.** It was originally red on both carriers at once: the raised
+    **This test has been red twice and is now green, and the history is the
+    point.** Originally it failed on both carriers at once: the raised
     `automaton_stuck` quoted the prompt line verbatim AND the response mirrored
-    the screen. The first is now closed at the source, so the two assertions
-    before the sweep PASS and the sweep fails on the mirror alone -- the same
-    isolation-by-construction the rejection-path test below uses, arrived at
-    from the other direction. It stays `xfail(strict=True)` rather than being
-    flipped, because the carrier it now reports is carrier 2, whose ruling is
-    not this WO's to pre-empt; `test_the_stuck_error_text_no_longer_copies_the_
-    echoed_prompt` above is the green gate for the half that WAS closed.
+    the screen. WO-MT-07-FIX closed the first at the source (`LoginStalled`),
+    leaving it `xfail(strict=True)` on the mirror alone. `DECISIONS.md` C.2
+    then ruled the mirror out of structured ensure diagnostics, and
+    WO-MT-07-CARRIER-2 closed it in `protocol._login_failure_response`. The
+    `xfail` was flipped rather than deleted because the ruling was FIX, not
+    by-design -- deletion was the branch reserved for the other answer.
 
-    Keeping this whole-sink sweep on the stall path (rather than re-scoping it
-    to the error text and calling it green) is deliberate: the mirror leaks
-    down BOTH paths, and a pin that only covered the rejection path would go
-    quiet about this one.
+    Keeping this whole-sink sweep on the stall path (rather than folding it
+    into the rejection-path test) is deliberate: the mirror rode BOTH paths,
+    and a pin that only covered one would go quiet about the other. The stall
+    path is also the harsher of the two, because here the echoed credential is
+    the CURRENT prompt line -- so it was `resp["prompt"]`, not only
+    `resp["screen"]`, that carried it.
     """
     _write_secrets(cfg, text=_good_secrets_text())
     logs = tmp_path / "logs"
@@ -690,32 +751,27 @@ def test_an_echoing_server_puts_the_credential_on_the_ensure_surface(
     # one server behavior canon's RX guarantee assumes will never happen.
     script = [(PASSWORD_SCREEN, True), (lambda last: CLEAR + last, False)]
 
-    resp, sinks, server = _drive_ensure(cfg, run_dir, logs, script)
+    run = _drive_ensure(cfg, run_dir, logs, script)
+    resp, sinks, server = run.resp, run.sinks, run.server
 
     assert server.received == [SENTINEL]
     assert "login_failed:automaton_stuck" in resp["error"]
-    # CARRIER 1, CLOSED -- both of these PASS, and they are what isolates the
-    # screen mirror as the sole remaining carrier on this path. The human
-    # branch of print_response prints only error + detail for ok:False, so a
-    # clean `tw ensure stdout` IS a clean error text.
+    # Non-vacuity: the echo really did land, and it landed on the CURRENT
+    # prompt line -- the field that used to carry it.
+    assert SENTINEL in run.painted[-1], (
+        "the echo is not on the prompt line -- this scenario stopped being the "
+        "one that isolates resp['prompt'] as a carrier"
+    )
+    # CARRIER 1, CLOSED. The human branch of print_response prints only
+    # error + detail for ok:False, so a clean `tw ensure stdout` IS a clean
+    # error text.
     assert SENTINEL not in resp["error"]
     assert SENTINEL not in sinks["tw ensure stdout"]
+    # CARRIER 2, CLOSED -- and the sweep is whole-sink, so this covers both.
     _assert_absent(sinks)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "MEASURED LEAK, pending a human ruling -- SECOND, independent carrier. "
-        "On the rejection path the error text is provably clean, and the "
-        "credential still reaches the client inside resp['screen'], the full "
-        "rendered buffer build_response() attaches to _dispatch_ensure's "
-        "failure answer. Redacting login.py's error text alone would NOT close "
-        "this; whether a screen mirror may show what the server painted is a "
-        "product ruling, not a mechanical fix. strict=True so it flips loudly."
-    ),
-)
-def test_an_echoing_server_leaks_through_the_screen_mirror_alone(
+def test_an_echoing_server_no_longer_leaks_through_the_screen_mirror_alone(
     cfg, tmp_path, run_dir
 ):
     """The screen-mirror carrier, isolated by construction rather than by
@@ -729,16 +785,25 @@ def test_an_echoing_server_leaks_through_the_screen_mirror_alone(
     specific `returning_password_rejected` -- whose text carries only the
     profile name.
 
-    So the first assertion below PASSES: the error string is clean. The only
-    thing left holding the credential is `resp["screen"]`, the whole rendered
-    buffer `build_response()` attaches to every failure answer. That is what
-    makes this a separate finding from the error-text leak rather than a second
-    view of it, and why closing that one would leave this one open.
+    So the first assertion below PASSES, and always did: the error string is
+    clean. The only thing that ever held the credential here was
+    `resp["screen"]`, the whole rendered buffer `build_response()` used to
+    attach to every failure answer. That is what made this a separate finding
+    from the error-text leak rather than a second view of it, and why
+    WO-MT-07-FIX closed that one and left this one open.
 
-    Note which rendering suffers: `--json` carries the screen, while the
-    human-readable branch of `print_response` prints only `error` + `detail`
-    for `ok: False` and stays clean. The leak is on the machine-readable
-    surface -- the one spectators and status consumers actually parse.
+    **CLOSED by WO-MT-07-CARRIER-2** (canon `DECISIONS.md` C.2): the failure
+    branch answers with `protocol._login_failure_response`, which never builds
+    a mirror at all. Note which rendering used to suffer: `--json` carried the
+    screen, while the human-readable branch of `print_response` prints only
+    `error` + `detail` for `ok: False` and was always clean. The leak was on
+    the machine-readable surface -- the one spectators and status consumers
+    actually parse -- which is exactly the surface C.2 rules on, and the
+    opposite end from the live paint it leaves alone.
+
+    The prompt line is a clean `Password?` on this path, so this test says
+    nothing about `resp["prompt"]`; the stall-path test above is what covers
+    that field.
     """
     _write_secrets(cfg, text=_good_secrets_text())
     logs = tmp_path / "logs"
@@ -747,11 +812,291 @@ def test_an_echoing_server_leaks_through_the_screen_mirror_alone(
         (lambda last: f"{last}\r\nInvalid password.\r\nPassword?", False),
     ]
 
-    resp, sinks, server = _drive_ensure(cfg, run_dir, logs, script)
+    run = _drive_ensure(cfg, run_dir, logs, script)
+    resp, sinks, server = run.resp, run.sinks, run.server
 
     assert server.received == [SENTINEL]
+    # Non-vacuity, and it is what makes this carrier's isolation structural:
+    # the credential IS on the grid, and it is NOT on the prompt line.
+    assert any(SENTINEL in row for row in run.painted), (
+        "the server did not echo -- this scenario stopped being the one under test"
+    )
+    assert SENTINEL not in run.painted[-1], (
+        "the echo landed on the prompt line -- this scenario no longer isolates "
+        "the screen mirror from the prompt field"
+    )
     # The error text really is clean on this path -- this is the assertion that
-    # isolates the screen mirror as the sole remaining carrier.
+    # isolates the screen mirror as the sole carrier that ever existed here.
     assert "login_failed:returning_password_rejected" in resp["error"]
     assert SENTINEL not in resp["error"]
     _assert_absent(sinks)
+
+
+# ---------------------------------------------------------------------------
+# THE OTHER HALF OF THE RULING -- what C.2 deliberately does NOT redact
+# ---------------------------------------------------------------------------
+
+
+def test_the_live_paint_path_still_shows_what_the_server_painted(cfg, tmp_path, run_dir):
+    """C.2's carve-out, executable: the fix redacts what LEAVES the session,
+    never what the operator's own eyes see.
+
+    `DECISIONS.md` C.2 rules on structured ensure diagnostics -- "screen mirror
+    in error payloads, CLI JSON, logs, persisted reason strings" -- and in the
+    same breath permits the live TUI paint of the telnet stream to show what
+    the server painted, because that is the human looking at their own game.
+    Over-applying the redaction into the cockpit/attach paint would damage the
+    product's whole purpose, so the boundary is pinned by execution rather than
+    by intention: after the SAME failed ensure whose response is now clean,
+
+      * the session's own pyte buffer still holds the echoed credential
+        (`run.painted`) -- nothing sanitised the terminal, and
+      * `protocol.build_response(session)` still mirrors it (`run.live`) --
+        that is the exact call `screen`, `do`, `send`, `read` and the WatchHub
+        seed / settle-edge emit make, and the settle-edge emit is what feeds
+        `watchfeed.py` -> `cockpit/viewport.py`'s `event["screen"]`, i.e. the
+        live paint itself.
+
+    So this test is the one place in the file where finding the sentinel is
+    the PASSING condition. If a future change starts scrubbing the buffer or
+    the shared `build_response`, this goes red first and names the ruling --
+    which is the failure mode worth catching, because it would be invisible to
+    every other test here (they all only get stricter when that happens).
+
+    The scenario is the rejection path rather than the stall path so the echo
+    sits in the body of the screen: that isolates the `screen` mirror, the
+    field the live viewport actually paints.
+    """
+    _write_secrets(cfg, text=_good_secrets_text())
+    logs = tmp_path / "logs"
+    script = [
+        (PASSWORD_SCREEN, True),
+        (lambda last: f"{last}\r\nInvalid password.\r\nPassword?", False),
+    ]
+
+    run = _drive_ensure(cfg, run_dir, logs, script)
+
+    # The ensure answer is clean (that is the rest of this file's subject) ...
+    assert run.resp["ok"] is False
+    _assert_absent(run.sinks)
+
+    # ... and the live paint is UNCHANGED. Both halves in one measurement, so
+    # neither can be "fixed" by breaking the other.
+    assert any(SENTINEL in row for row in run.painted), (
+        "the session's own screen no longer holds what the server painted -- "
+        "DECISIONS.md C.2 permits the live paint to show it; redacting the "
+        "buffer itself is the over-application the ruling forbids"
+    )
+    assert any(SENTINEL in row for row in run.live["screen"]), (
+        "protocol.build_response() stopped mirroring the buffer -- that call "
+        "feeds `screen`/`do`/`send`/`read` and the WatchHub emit behind the "
+        "cockpit viewport, none of which C.2 rules on"
+    )
+    assert SENTINEL in json.dumps(run.live), (
+        "the live-paint response no longer carries it in any field"
+    )
+
+
+# ---------------------------------------------------------------------------
+# THE SHAPE OF THE FIX -- pinned by key set and by structure
+# ---------------------------------------------------------------------------
+
+
+def test_the_ensure_failure_answer_carries_only_bounded_fields(cfg, tmp_path, run_dir):
+    """The failure answer's field set, asserted EXACTLY.
+
+    The sweeps above are content assertions: they go red when a credential
+    reaches a sink, which needs the day's scripted server to have echoed. This
+    is the structural complement -- it goes red the moment an unbounded field
+    is re-attached to the failure answer, echo or no echo, and it is therefore
+    what protects the fix from a well-meaning "restore the diagnostic context"
+    edit that happens to be tested against a polite server.
+
+    The expected set is written out here rather than imported from
+    `protocol.py`: a test that reads the module's own constant would follow any
+    edit to it and pin nothing.
+
+    Every field is bounded by construction, and that is the property under
+    test, not the count:
+
+      `ok` / `already_there`   booleans
+      `error`                  `login.py`'s own vocabulary -- and since
+                               WO-MT-07-FIX, `LoginStalled` is structurally
+                               incapable of carrying screen text
+      `classification`         `classify_screen`'s CLOSED vocabulary; `unknown`
+                               for anything it cannot name, never a slice of
+                               the screen
+      `sent_input`             `"<redacted>"` for a secret send, app-originated
+                               text otherwise -- never receive-buffer content
+      `screen_withheld`        a closed literal saying WHY the mirror is absent
+
+    `screen` is asserted absent by KEY rather than by value, and the key is
+    omitted rather than set to a marker string on purpose: a caller doing
+    `"\\n".join(resp["screen"])` must fail loudly, not silently join the
+    characters of a `"<withheld>"` placeholder into plausible-looking text.
+    """
+    _write_secrets(cfg, text=_good_secrets_text())
+    logs = tmp_path / "logs"
+    script = [(PASSWORD_SCREEN, True), (PASSWORD_SCREEN, False)]
+
+    run = _drive_ensure(cfg, run_dir, logs, script)
+    resp = run.resp
+
+    assert resp["ok"] is False
+    assert set(resp) == {
+        "ok",
+        "error",
+        "classification",
+        "sent_input",
+        "already_there",
+        "screen_withheld",
+    }
+    assert "screen" not in resp
+    assert "prompt" not in resp
+    assert "color" not in resp
+    assert resp["screen_withheld"] == "login_failure"
+    assert resp["already_there"] is False
+    # Diagnosability, positively: the operator still learns WHICH screen the
+    # automaton gave up on. An empty/None classification would satisfy every
+    # absence assertion in this file and be a regression.
+    assert resp["classification"] == "login_password"
+
+
+def test_the_failure_answer_is_built_without_reaching_for_the_mirror():
+    """Structural tripwire on the SHAPE of the fix, in the same family as
+    `test_no_raise_site_in_login_quotes_what_the_server_painted`.
+
+    The behavioral pins above cover the code that exists today. This covers the
+    edit that would undo it: `_dispatch_ensure`'s `LoginError` handler and
+    `_login_failure_response` are walked and refused if either calls
+    `build_response` (the exact regression -- that call IS carrier 2) or names
+    a mirror field as a dict key / subscript assignment.
+
+    Deliberately narrow: it does NOT forbid `build_response` in `protocol.py`
+    at large, because every SUCCESS path and every other verb must keep calling
+    it -- C.2 rules on the failure payload, not on the mirror.
+
+    **Known limit, stated rather than implied:** this reads the AST of two
+    named regions, so a leak routed through a helper defined elsewhere, or
+    through an alias (`from .protocol import build_response as _br`), slips
+    through. It is a tripwire on the obvious regression, not a proof of
+    absence -- the proof is the whole-sink sweeps above.
+    """
+    import ast
+    import inspect
+
+    from tw2002_aiclient.session import protocol as protocol_module
+
+    mirror_fields = {"screen", "prompt", "color"}
+    tree = ast.parse(inspect.getsource(protocol_module))
+    funcs = {n.name: n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)}
+
+    builder = funcs["_login_failure_response"]
+    handlers = [
+        h
+        for h in ast.walk(funcs["_dispatch_ensure"])
+        if isinstance(h, ast.ExceptHandler)
+        and "LoginError" in ast.dump(h.type or ast.Constant(value=None))
+    ]
+    assert handlers, "no `except LoginError` in _dispatch_ensure -- this pin lost its subject"
+
+    for region, label in [(builder, "_login_failure_response"), (handlers[0], "except LoginError")]:
+        called = set()
+        for n in ast.walk(region):
+            if not isinstance(n, ast.Call):
+                continue
+            # Both spellings: the bare same-module call a regression would
+            # actually use, and the qualified `protocol.build_response(...)`
+            # form a refactor could arrive at.
+            if isinstance(n.func, ast.Name):
+                called.add(n.func.id)
+            elif isinstance(n.func, ast.Attribute):
+                called.add(n.func.attr)
+        assert "build_response" not in called, (
+            f"{label} calls build_response() -- that response mirrors the whole "
+            "receive buffer, which on an echoing server IS the credential "
+            "(canon DECISIONS.md C.2)"
+        )
+
+    keys = {
+        k.value
+        for d in ast.walk(builder)
+        if isinstance(d, ast.Dict)
+        for k in d.keys
+        if isinstance(k, ast.Constant)
+    }
+    assert not (keys & mirror_fields), (
+        f"_login_failure_response names mirror field(s) {sorted(keys & mirror_fields)} "
+        "as response keys"
+    )
+    stored = {
+        n.slice.value
+        for n in ast.walk(builder)
+        if isinstance(n, ast.Subscript) and isinstance(n.slice, ast.Constant)
+    }
+    assert not (stored & mirror_fields), (
+        f"_login_failure_response assigns mirror field(s) {sorted(stored & mirror_fields)} "
+        "onto the response"
+    )
+
+
+# ---------------------------------------------------------------------------
+# MANDATORY falsification -- put the mirror back, watch the sweep fire
+# ---------------------------------------------------------------------------
+
+
+def _leaky_login_failure_response(session, error_text):
+    """`_dispatch_ensure`'s PRE-FIX failure answer, verbatim (protocol.py at
+    297abc1, the commit this WO branched from):
+
+        resp = build_response(session, extra={"already_there": False})
+        resp["ok"] = False
+        resp["error"] = f"login_failed:{e}"
+
+    Patched in with `monkeypatch`, never edited on disk -- the same idiom
+    `tests/test_login_redaction.py`'s `_leaky_log_tx` uses, and for the same
+    reason: the fix stays applied on disk for the whole run, so nothing else
+    (a concurrent xdist worker included) can observe a half-reverted tree.
+    """
+    resp = build_response(session, extra={"already_there": False})
+    resp["ok"] = False
+    resp["error"] = error_text
+    return resp
+
+
+def test_restoring_the_mirror_puts_the_credential_back_on_the_surface(
+    cfg, tmp_path, run_dir, monkeypatch
+):
+    """The bookend every absence assertion in this file needs.
+
+    A green sweep proves nothing unless the sweep can go red. Re-attach the
+    pre-fix mirror to the failure answer -- changing nothing else, not the
+    server, not the scenario, not the instrument -- and the credential is back
+    on the operator's JSON, in exactly the two sinks the historical measurement
+    named. That reproduces carrier 2 on demand instead of relying on a
+    `git`-archaeology claim, and it is what makes
+    `test_an_echoing_server_no_longer_leaks_through_the_screen_mirror_alone`
+    (the same scenario, unpatched) a measurement rather than a hope.
+
+    `_assert_absent` is exercised directly through `pytest.raises` rather than
+    only checking `_carriers`: the helper is the thing every other test in this
+    file trusts, so it is the thing this proves fires.
+    """
+    monkeypatch.setattr(protocol, "_login_failure_response", _leaky_login_failure_response)
+    _write_secrets(cfg, text=_good_secrets_text())
+    logs = tmp_path / "logs"
+    script = [
+        (PASSWORD_SCREEN, True),
+        (lambda last: f"{last}\r\nInvalid password.\r\nPassword?", False),
+    ]
+
+    run = _drive_ensure(cfg, run_dir, logs, script)
+
+    # The mirror is back, and with it the leak -- named sink by sink.
+    assert "screen" in run.resp
+    assert _carriers(run.sinks, SENTINEL) == [
+        "ensure_raw() returned dict",
+        "tw ensure --json stdout",
+    ]
+    with pytest.raises(AssertionError, match=SENTINEL):
+        _assert_absent(run.sinks)

@@ -393,6 +393,83 @@ def _save_password(profile_name, password):
     os.chmod(path, 0o600)
 
 
+def _login_failure_response(session, error_text):
+    """The `ensure` FAILURE answer — bounded by construction, never a mirror
+    of the receive buffer (canon `DECISIONS.md` §C.2, ruled 2026-07-26).
+
+    **The carrier this exists to close.** This branch used to answer with a
+    full `build_response()`, whose `screen` is the entire rendered buffer and
+    whose `prompt` is its last row. On a server that ECHOES at the password
+    gate — the behavior canon's RX-side no-leak guarantee openly rests on
+    never happening (`canon/doctrine/secrets-and-credentials.md`, Code
+    Divergence #1) — those two fields ARE the operator's credential, and they
+    rode the `--json` response, `adapters.EnsureResult.raw`, and anything
+    that persists either. Measured end to end through the real daemon socket
+    and the real CLI, not reasoned about:
+    `tests/test_ensure_login_error_redaction.py`. `prompt` mattered as much as
+    `screen`: on the STALL path the current prompt line is exactly the echoed
+    line `login.LoginStalled` was created to keep out of the error text, so
+    closing `screen` alone would have moved the leak one field to the left.
+
+    **The line §C.2 draws is whether the mirror LEAVES the session**, not
+    whether the app may look at it. A live `attach` / cockpit paint may show
+    whatever the server painted — that is the human's own eyes on their own
+    game — so this function is deliberately the ONLY place the mirror is
+    dropped. `screen`, `status`, `do`, `send`, `read` and the WatchHub
+    seed/settle-edge emit still call `build_response()` unchanged, and the
+    session's own pyte buffer is not sanitised (pinned by
+    `test_the_live_paint_path_still_shows_what_the_server_painted`).
+
+    **Unconditional, never gated on "did a secret go out".** Deciding to
+    redact only when the app recognises a secret prompt fails open in exactly
+    the scenario under test: the echo mutates the screen, so
+    `classify_screen` answers `unknown` rather than `login_password`, and the
+    NEW-registration stall reaches this branch AFTER the credential is on the
+    wire. Redaction that depends on recognition is redaction that stops the
+    day recognition does. An ensure that FAILED simply does not mirror the
+    buffer.
+
+    **Why omit rather than mask.** Masking would need the plaintext at this
+    layer, and this layer deliberately does not have it — `session.last_sent`
+    is already `"<redacted>"` for a `secret=True` send and the credential
+    itself lives only inside `run_login`'s frame. Threading it out here to
+    scrub a buffer would widen the secret's blast radius to serve a
+    diagnostic. It would also be fail-OPEN even then, for the reasons
+    `LoginStalled`'s own docstring gives about the error text and which apply
+    verbatim to the buffer: pyte wraps at the column boundary, an echo can be
+    partially overwritten, and the grid may hold a SIBLING profile's secret or
+    one the human typed into an earlier attach — screen content this process
+    never held a copy of to match against. A mask that misses ships the
+    credential wearing a redacted look, which is worse than either honest
+    answer.
+
+    **What it still carries, and why each is bounded.** `classification` is
+    `classify.classify_screen`'s CLOSED vocabulary — `unknown` for anything it
+    cannot name, never a slice of the screen — so the operator still learns
+    WHICH screen the automaton gave up on; `error` still names the failure
+    mode (and, via `LoginStalled`, its own classification and step). No
+    length, shape, or character-class digest of the prompt line is offered in
+    the mirror's place: doctrine invariant 2 counts a length as a leak in its
+    own right, and `LoginStalled` already refused exactly that digest.
+    `screen_withheld` is honest absence rather than a silently missing key —
+    a consumer can tell "withheld here" from "this verb never had one", and
+    the key is omitted rather than set to a marker STRING so a caller doing
+    `"\\n".join(resp["screen"])` fails loudly instead of joining characters.
+    """
+    rows = session.render()
+    text = session.render_text(rows)
+    return {
+        "ok": False,
+        "error": error_text,
+        "classification": classify_screen(text, rows[-1].strip() if rows else ""),
+        # Already "<redacted>" for a secret send (session.py) and app-
+        # originated text otherwise -- never receive-buffer content.
+        "sent_input": getattr(session, "last_sent", None),
+        "already_there": False,
+        "screen_withheld": "login_failure",
+    }
+
+
 def _dispatch_ensure(session, args, server):
     """B4: idempotent `ensure` -- classify the current screen; if already
     at `target`, no-op. Else run the login automaton via the profile's
@@ -453,10 +530,9 @@ def _dispatch_ensure(session, args, server):
                 target=target,
             )
         except LoginError as e:
-            resp = build_response(session, extra={"already_there": False})
-            resp["ok"] = False
-            resp["error"] = f"login_failed:{e}"
-            return resp
+            # NOT build_response() -- see `_login_failure_response`'s docstring
+            # and canon `DECISIONS.md` C.2. The success paths below keep it.
+            return _login_failure_response(session, f"login_failed:{e}")
 
         session.mark_profile(profile.name)
         return build_response(session, extra={"steps": steps, "already_there": False})
