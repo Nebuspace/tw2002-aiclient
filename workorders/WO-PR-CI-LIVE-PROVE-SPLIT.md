@@ -1,6 +1,6 @@
 # WO-PR-CI-LIVE-PROVE-SPLIT
 
-**Status:** **HOLD** · Max pace-down (local restart) · **orchestrator-owned** — implement from hub seat as soon as HOLD lifts (Cursor may draft workflows under hub review; seats do not self-dispatch)  
+**Status:** **IN FLIGHT** · hub-seeded branch `wo/PR-CI-LIVE-PROVE-SPLIT` · CC implementer · hub merges (carte blanche DEC-08)  
 **Posted:** 2026-07-26 · Max rulings: PR return · GHA suite · secrets bank · laptop-default live · `live_login` · reconcile-before-resume · hub branch+WO seed · hub merge · **live-prove required check** · **no new HANDOFF until prior PR checks pass**  
 **Supersedes:** [`WO-CI-GITHUB-ACTIONS-SUITE`](WO-CI-GITHUB-ACTIONS-SUITE.md) (folded here)  
 **Repo:** `Nebuspace/tw2002-aiclient` (**PUBLIC**)  
