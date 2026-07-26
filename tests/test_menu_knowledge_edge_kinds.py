@@ -24,6 +24,8 @@ import pytest
 from tw2002_aiclient.menu import map_view, nav
 from tw2002_aiclient.menu.knowledge import (
     MENU_EDGE_KINDS,
+    SAFE_MENU_WALK_KINDS,
+    UNEXPLORED_MENU_NODE,
     GameKnowledgeError,
     find_menu_path,
     list_menu_edges,
@@ -169,3 +171,29 @@ def test_the_error_message_names_the_accepted_set(tmp_path):
         assert kind in message
     # ...and must not advertise a kind the store no longer takes.
     assert "unknown" not in message
+
+
+def test_find_menu_path_refuses_when_unexplored_has_outgoing_edges(tmp_path):
+    """Pin: safe-kinds-only is named where BFS silently depended on it.
+
+    Scout finding (WO-FIND-MENU-PATH-KIND-FILTER-SCOUT): BFS has no kind
+    filter; safety is emergent from action→<unexplored> with no outgoing
+    edges from that sentinel. Hand-edit / second writer that gives the
+    sentinel an outgoing edge would otherwise route through an action
+    edge. The interim assert must fail loudly instead.
+    """
+    assert SAFE_MENU_WALK_KINDS == frozenset({"nav", "info"})
+    path = tmp_path / "game_knowledge.json"
+    upsert_menu_edge(path, "sig-a", "1", "sig-b", kind="nav")
+    upsert_menu_edge(
+        path, "sig-a", "B", UNEXPLORED_MENU_NODE, kind="action", desc="buy"
+    )
+    # Well-formed store: nav target still reachable; sink stays terminal.
+    assert [e["key"] for e in find_menu_path(path, "sig-a", "sig-b")] == ["1"]
+
+    # Violate the emergent property the router does not otherwise enforce.
+    upsert_menu_edge(
+        path, UNEXPLORED_MENU_NODE, "!", "sig-beyond", kind="nav"
+    )
+    with pytest.raises(AssertionError, match="safe-kinds-only"):
+        find_menu_path(path, "sig-a", "sig-beyond")

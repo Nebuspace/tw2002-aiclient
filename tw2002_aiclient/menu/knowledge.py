@@ -28,6 +28,13 @@ SCHEMA_VERSION = 1
 # narrowing this set cannot make a previously-readable map unreadable --
 # pinned by tests/test_menu_knowledge_edge_kinds.py.
 MENU_EDGE_KINDS = frozenset({"nav", "info", "action"})
+# Canon walk set — nav|info only. `action` is gated like a taught rule
+# (menu-map-and-introspection.md). Kept here so the invariant below can
+# name it; find_menu_path does NOT filter by kind (see that function).
+SAFE_MENU_WALK_KINDS = frozenset({"nav", "info"})
+# Same sentinel crawler.py writes for recorded-not-pressed action edges.
+# Duplicated (not imported) so this store module stays free of crawler.
+UNEXPLORED_MENU_NODE = "<unexplored>"
 KNOWLEDGE_FILENAME = "game_knowledge.json"
 
 # How a crawl ended. A map with NO recorded status is of UNKNOWN
@@ -251,9 +258,29 @@ def get_crawl_status(path):
 
 
 def find_menu_path(path, from_signature, to_signature):
+    """BFS over every stored edge — no kind filter.
+
+    Canon says pathfinding may route only through ``SAFE_MENU_WALK_KINDS``
+    (nav|info). This function does not enforce that. Safety is **emergent**:
+    the crawler records every ``action`` edge to ``UNEXPLORED_MENU_NODE`` and
+    never writes ``from_node=<unexplored>``, so an action edge is a terminal
+    sink rather than a hop. The assert below names that dependency so a
+    second writer / press-the-unexplored crawler fails loudly instead of
+    silently walking an action edge (WO-FIND-MENU-PATH-KIND-FILTER-SCOUT).
+    Full kind-filter design belongs to a separate router WO.
+    """
     if from_signature == to_signature:
         return []
     edges = list_menu_edges(path)
+    # safe-kinds-only invariant (emergent): <unexplored> must stay a sink.
+    assert not any(
+        edge.get("from_node") == UNEXPLORED_MENU_NODE for edge in edges
+    ), (
+        "safe-kinds-only invariant: find_menu_path BFS has no kind filter; "
+        "safety requires <unexplored> to be a terminal sink (no outgoing edges). "
+        f"Walk set is {sorted(SAFE_MENU_WALK_KINDS)}; action is gated. "
+        "See WO-FIND-MENU-PATH-KIND-FILTER-SCOUT."
+    )
     adjacency = {}
     for edge in edges:
         adjacency.setdefault(edge["from_node"], []).append(edge)
