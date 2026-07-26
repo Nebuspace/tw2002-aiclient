@@ -255,3 +255,15 @@ Harmless until a haggle/trade module lands; this clears the gate so one can.
 
 Do not leave `"prompt": rows[-1]` feeding both sides unchanged. Thin follow-on WO OK.
 
+**Correction (CC STATUS `a2e42d4`):** HUD does **not** read `status["prompt"]` — live paint is subscribe/`build_response` screen. Conflict was at the **verb boundary**, not two consumers of one field. Fix = stop structured `status` carrying a live-paint-only field. Heuristic redaction rejected (echoed credential fails `is_probable_secret_prompt` — unconditional omit).
+
+### C.2.2 — `tw watch --json` (hub 2026-07-26 · Max carte blanche)
+
+**Ruled:** `tw watch --json` is the **live-paint / subscribe export** by purpose — may carry full `build_response`-shaped screen events. Redirecting it to a file is an operator choice equivalent to capturing the terminal. Do **not** gut spectate under C.2.1. Document honesty in doctrine/cli-verbs when convenient.
+
+### X1.1 — Current-sector sources (hub 2026-07-26 · Max carte blanche · CC X1 STATUS)
+
+**Ruled:** For `state` / replay anchor checks, **only the command-prompt bracket** is admitted as current sector. The `Sector : N` status line is **not** admitted (warp-confirm / computer remote display ambiguity — wrong read satisfies the guard; missing read only halts). Widening requires a new DECISION + live warp-confirm capture — not fixture assumption. Aligns macros.md "missed write, never a wrong one."
+
+
+
