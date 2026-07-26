@@ -619,11 +619,27 @@ def test_a_halt_arrives_at_the_cockpit_stop_banner_as_its_own_reason_code(
     """The whole path: player -> runner -> ``status`` verb -> the cockpit
     banner an operator actually reads.
 
-    The banner's resolver is open by construction, so a code with no label
-    yet renders as its own text -- which is why the raw code is asserted
-    IN the rendered line. A halt that arrived as ``autopilot halted`` (or
-    as nothing at all) would pass a test that only checked
-    ``needs_attention``."""
+    The status payload carries the raw ``code`` (asserted below); the
+    rendered banner carries whatever ``stopbanner.intervention_reason_label``
+    resolves that code to (WO-HALT-BANNER-LABEL-VOCAB gave all three of
+    these parametrizations real labels, not the raw code). Deriving the
+    expected text from the product's own resolver -- rather than
+    hardcoding the label string here -- means a reword updates test and
+    product together, and this still fails loudly if the banner stops
+    mentioning the halted reason at all (renders a generic/unrelated line,
+    or drops band 1 entirely): the exact old bug this test exists to catch
+    -- "A halt that arrived as ``autopilot halted`` (or as nothing at all)
+    would pass a test that only checked ``needs_attention``."
+
+    What this assertion does NOT cover, by construction (it derives
+    ``expected`` from the same resolver the banner itself calls): a
+    catalog entry going missing for THIS code. That regression collapses
+    the label back to the raw code on both sides of the assertion at
+    once, so it stays silent here -- catching it is
+    ``test_cockpit_stopbanner.py``'s job
+    (``test_every_loop_player_halt_reason_has_a_human_label``'s
+    ``label != code``, pinned against every ``HALT_REASONS`` member
+    independent of this file)."""
     write_macro(tmp_path, "ore-run", ONE_STEP, anchor=anchor)
     session = WireSession(screens)
     lock = ControlLock()
@@ -640,7 +656,8 @@ def test_a_halt_arrives_at_the_cockpit_stop_banner_as_its_own_reason_code(
     }, label
     assert stopbanner.needs_attention(status) is True, label
     banner = stopbanner.compose_stop_banner_lines(status, width=120, height=3)
-    assert any(expected_reason in line for line in banner), banner
+    expected_label = stopbanner.intervention_reason_label(expected_reason)
+    assert any(expected_label in line for line in banner), banner
 
     # ...and the run itself agrees, in its own verb.
     run = protocol.dispatch(session, "autoloop_status", {}, server)["run"]
