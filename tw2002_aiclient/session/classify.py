@@ -215,12 +215,38 @@ def _range_has_no_dash_style_menu(lines, start, end):
     return not any(_DASH_OPTION_RE.search(lines[i]) for i in range(start, end + 1))
 
 
+def _is_twgs_chrome_footer_line(line: str) -> bool:
+    """True when ``line`` is TWGS box-drawing chrome, not a textual prompt.
+
+    Live a-net game-select often settles with the bottom border as the last
+    line and never paints ``Selection (? for menu):`` onto the 80×25 grid
+    (WO-ANET-STEP5-LIVE-BYTES). That chrome must not be treated as an
+    unrelated gate, and must not block banner ``game_select`` when the
+    door body (banner + ``#``/``!`` options) is otherwise complete.
+    """
+    s = (line or "").rstrip("\n")
+    if len(s.strip()) < 20:
+        return False
+    if _TWGS_SELECTION_PROMPT_RE.search(s):
+        return False
+    if _TWGS_TIMED_OUT_PROMPT_RE.search(s.strip()):
+        return False
+    letters = sum(1 for c in s if c.isalpha())
+    if letters / max(len(s), 1) > 0.12:
+        return False
+    return bool(_BANNER_ART_LINE_RE.search(s))
+
+
 def _selection_prompt_context(full_text: str, prompt_line: str) -> tuple[str, int]:
     """Resolve the Selection prompt line + its index for game_select shape checks.
 
     When the live prompt is a TWGS ``Timed out…`` line, walk upward for the
     most recent ``Selection (? for menu):`` still on the pyte grid and use
     that as the effective prompt (WO-CLASSIFY-TIMED-OUT).
+
+    When the live prompt is box-drawing chrome (a-net settle with Selection
+    absent from the grid), walk for Selection; if none, keep the chrome
+    last line as the bottom bound of the door (WO-ANET-STEP5-LIVE-BYTES).
     """
     lines = full_text.splitlines()
     if not lines:
@@ -232,6 +258,11 @@ def _selection_prompt_context(full_text: str, prompt_line: str) -> tuple[str, in
         for i in range(len(lines) - 1, -1, -1):
             if _TWGS_SELECTION_PROMPT_RE.search(lines[i]):
                 return lines[i].strip(), i
+    if _is_twgs_chrome_footer_line(pl) or _is_twgs_chrome_footer_line(lines[-1]):
+        for i in range(len(lines) - 1, -1, -1):
+            if _TWGS_SELECTION_PROMPT_RE.search(lines[i]):
+                return lines[i].strip(), i
+        return (pl or lines[-1].strip()), len(lines) - 1
     return pl, len(lines) - 1
 
 
@@ -430,7 +461,9 @@ def _is_twgs_server_banner_game_select_menu(full_text: str, prompt_line: str) ->
 
     Trusted only on the combination of ALL SIX signals:
     1. the CURRENT prompt line is the generic selection prompt (not
-       just present anywhere in stale scrollback);
+       just present anywhere in stale scrollback) -- **or**, when
+       Selection is absent from the entire grid, the last line is
+       TWGS box-drawing chrome (live a-net settle; WO-ANET-STEP5-LIVE-BYTES);
     2. "TradeWars Game Server" appears somewhere on screen;
     3. a "TWGS v<version>" version string appears somewhere on screen;
     4. a "Server registered to ..." line appears somewhere on screen,
@@ -475,10 +508,16 @@ def _is_twgs_server_banner_game_select_menu(full_text: str, prompt_line: str) ->
     instead -- see tests/test_classify.py's negative-fixture pair for
     exactly that shape."""
     prompt_line, prompt_idx = _selection_prompt_context(full_text, prompt_line)
-    if not _TWGS_SELECTION_PROMPT_RE.search(prompt_line or ""):
-        return False
     lines = full_text.splitlines()
     if not lines or prompt_idx < 0:
+        return False
+    selection_prompt = bool(_TWGS_SELECTION_PROMPT_RE.search(prompt_line or ""))
+    chrome_footer_settle = (
+        not selection_prompt
+        and _is_twgs_chrome_footer_line(prompt_line or "")
+        and not any(_TWGS_SELECTION_PROMPT_RE.search(line) for line in lines)
+    )
+    if not selection_prompt and not chrome_footer_settle:
         return False
     title_idx = version_idx = registered_idx = None
     for i, line in enumerate(lines):

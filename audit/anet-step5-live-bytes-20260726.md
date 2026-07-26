@@ -2,30 +2,40 @@
 
 **Tip under test:** `814d50c` / `origin/main`  
 **Bank capture dir:** `/tmp/tw2002-live-ensure-matrix-20260726T0801Z/reprove/anet-step5-capture-185955Z/` (outside git)  
-**Files:** `live_step5_screen.txt` · `ensure.json` · `classify_result.txt` · `screen.json`
+**Files:** `live_step5_screen.txt` · `ensure.json` · `classify_result.txt` · `screen.json`  
+**Seat follow-on:** Cursor classify/fixture fix on PR #22
 
 ## Experiment result (decisive)
 
 | Check | Result |
 |---|---|
 | `ensure` error | `login_failed:automaton_stuck:classification='menu':step=5` |
-| `classify_screen(live_bytes)` | **`menu`** |
-| Committed fixture classify | `game_select` (prior) |
-| Live lines / fixture lines | 23 / 26 |
+| `classify_screen(live_bytes)` @ capture tip | **`menu`** |
+| Prior committed fixture (with Selection) | `game_select` |
+| Live lines / that fixture lines | 23 / 26 |
 | Unified diff hunk lines | 52 |
 
-**Verdict:** live step-5 bytes classify as **`menu`**, not `game_select`. The committed fixture is **not representative** of what `ensure` meets at step 5. Fault is **at/before classification of the live paint** (option 1 in WO) — not “downstream of a correct game_select.”
+**Verdict:** live step-5 bytes classify as **`menu`**, not `game_select`. The Selection-ending fixture is **not representative**. Fault is **classification of the live paint** — not “downstream of a correct game_select.”
 
-**Next (Cursor):** redacted fixture from live bytes (or bounds fix driven by live layout) + pins; do **not** invent a new `screen_class` without hub GO. Diff live vs fixture for the structural delta (banner/box/option tokens).
+## Structural delta (live vs Selection fixture)
 
-No credentials or full frames in this note.
+| Signal | Live capture | Old fixture |
+|---|---|---|
+| TWGS version + registered | yes | yes |
+| Art-embedded `Trade Wars 2002 Game Server` | yes | simplified box |
+| `<#>` / `<!>` options | yes | yes |
+| `Selection (? for menu):` | **absent** | **last line** |
+| Last / prompt line | box-drawing **chrome** | Selection |
 
-## Structural delta (Cursor + hub)
+Banner/boxed detectors required Selection → live fell through to `menu`.
 
-Live paint has TWGS header + boxed **Trade Wars 2002 Game Server** + `<A>`…`<Q>` game rows, but **no `Selection (? for menu):` prompt line** (prompt is box art). Committed fixture **ends with Selection**. Banner/boxed `game_select` detectors require Selection → live falls through to **`menu`**.
+## Product fix (this tip — no invent)
 
-That is the classify-layer miss after `WO-ANET-BANNER-LAYOUT` (fixture green, live red).
+- Carve-out in `_is_twgs_server_banner_game_select_menu`: when Selection is **absent from the entire grid** and the prompt is TWGS chrome footer, still accept banner + `#`/`!` body (same exclusivity guards).
+- Live-derived fixture: `tests/fixtures/game_select_menu_banner_anet_live_chrome.txt` (sanitized).
+- Pins: live chrome → `game_select`; adversarial textual non-Selection prompt stays `menu`.
+- Old Selection-ending fixture kept green.
 
-## Hub GO (DEC-09)
+**Explicit non-claim until hub live-prove:** ensure NEW/RETURNING → `main_command` on a-net after this tip.
 
-Evidence-backed fix **within existing `game_select` class** is authorized: accept this live layout (redacted fixture from bank `live_step5_screen.txt` + detector bounds so Selection is not mandatory when banner+option grid present). **No new `screen_class`.** Pins required.
+No credentials or full unsanitized frames in this note.
