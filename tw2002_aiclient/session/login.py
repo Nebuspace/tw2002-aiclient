@@ -108,6 +108,13 @@ _RETURNING_REJECT_SETTLE_S = 2.5
 # they can't desync any branch.
 _SHOW_LOG_RE = re.compile(r"show\s+today.?s\s+log", re.I)
 _INACTIVITY_RE = re.compile(r"inactivity\s+warning|critical\s+inactivity", re.I)
+# Live a-net Star Wars (letter C): after MODULE_ENTRY ``T`` the host prints
+# this closed-game refusal then returns the player to TWGS game_select
+# (hub capture anet-postpause-194645Z). Fail loud — never loop door↔Play.
+_CLOSED_GAME_RE = re.compile(
+    r"this\s+is\s+a\s+closed\s+game|request\s+a\s+player\s+account\s+from\s+the\s+game\s+administrator",
+    re.I,
+)
 # RETURNING re-enter interstitial: TWGS shows "You have been on today ..."
 # after password, sometimes alone after `[Pause]` is dismissed -- not
 # covered by the pause_key anchor, so without this it lands in `unknown`
@@ -131,6 +138,57 @@ _CLEAR_AVOIDS_RE = re.compile(
 # on-screen well after being answered; a whole-text match would re-fire
 # on that stale scrollback).
 _MODULE_ENTRY_MENU_RE = re.compile(r"T\s*-\s*Play\s+Trade\s*Wars\s*2002", re.I)
+_ENTER_YOUR_CHOICE_RE = re.compile(r"enter\s+your\s+choice\s*:", re.I)
+
+
+def _option_block_above_prompt(text: str, prompt: str) -> str:
+    """Lines of the CURRENT option list attached to ``prompt`` (or the last
+    ``Enter your choice:`` in ``text``).
+
+    Walks upward from that prompt line and stops at the first blank once any
+    option line has been collected — so stale scrollback above a blank
+    separator is excluded. Same structural discipline as classify's
+    ``_range_has_no_dash_style_menu`` (mirror direction); no magic line count.
+    """
+    lines = (text or "").splitlines()
+    if not lines:
+        return ""
+    prompt_key = (prompt or "").strip().lower()
+    idx = None
+    for i in range(len(lines) - 1, -1, -1):
+        stripped = lines[i].strip().lower()
+        if prompt_key and prompt_key in stripped:
+            idx = i
+            break
+        if _ENTER_YOUR_CHOICE_RE.search(lines[i]):
+            idx = i
+            break
+    if idx is None:
+        return ""
+    collected: list[str] = []
+    for i in range(idx - 1, -1, -1):
+        if not lines[i].strip():
+            if collected:
+                break
+            continue
+        collected.append(lines[i])
+    collected.reverse()
+    return "\n".join(collected)
+
+
+def _is_module_entry_menu(text: str, prompt: str) -> bool:
+    """True only when the CURRENT menu offers ``T - Play Trade Wars 2002``.
+
+    Whole-screen search is unsafe: pyte leaves prior doors' text in the
+    grid. Scope to the option block above the current prompt so a stale
+    ``T - Play`` above a blank separator cannot vouch for a later menu.
+    Live a-net module-entry lists T/I/S *and* H/M/X in the SAME block —
+    that must still return True (hub 194056Z capture).
+    """
+    window = _option_block_above_prompt(text, prompt)
+    return bool(window and _MODULE_ENTRY_MENU_RE.search(window))
+
+
 _TRADER_NAME_CHOICE_RE = re.compile(r"\(N\)ew\s+Name\s+or\s+\(B\)BS\s+Name", re.I)
 _SHIP_NAME_PROMPT_RE = re.compile(r"name\s+your\s+ship", re.I)
 _SHIP_CONFIRM_RE = re.compile(r"is\s+what\s+you\s+want\s*\?", re.I)
@@ -147,6 +205,41 @@ _OUTER_NAME_PROMPT_RE = re.compile(r"enter\s+for\s+none", re.I)
 # re-printed prompt by the time it's next classified, never on the current
 # prompt line itself.
 _OUTER_NAME_REJECTED_RE = re.compile(r"login\s+name\s+is\s+required", re.I)
+
+# Classes that mean we have TRULY left the server game door after sending
+# ``profile.game_letter``. A mid-paint flash to ``unknown`` / generic
+# ``menu`` must NOT latch ``game_select_answered`` -- that is the wedge
+# behind live a-net ``automaton_stuck:classification='game_select':step=12``
+# after the chrome-footer classify fix (WO-ANET-GAME-SELECT-LETTER-STEP12):
+# letter sends, a transitional frame briefly leaves ``game_select``, the
+# latch fires, the door reappears, and ``_decide`` refuses to re-send.
+_POST_GAME_SELECT_PROGRESS = frozenset(
+    {
+        "login_name",
+        "login_password",
+        "ansi_prompt",
+        "char_create",
+        "pause_key",
+        "main_command",
+        "money_prompt",
+    }
+)
+
+
+def _left_game_select_for_real(cls, text, prompt=""):
+    """True when ``cls`` is genuine post-door progress, not a paint flash.
+
+    ``prompt`` is the CURRENT bottom-row prompt, forwarded to
+    ``_is_module_entry_menu`` so its ``_option_block_above_prompt`` anchor
+    can scope the option list correctly (same discipline as ``_decide``'s
+    menu branch).
+    """
+    if cls in _POST_GAME_SELECT_PROGRESS:
+        return True
+    if cls == "menu" and _is_module_entry_menu(text or "", prompt or ""):
+        return True
+    return False
+
 
 # -- NEW-branch prompt-coverage extension point -----------------------------
 #
@@ -291,12 +384,36 @@ def run_login(session, profile, get_password, save_password, target="main_comman
         if trace is not None:
             trace.append({"step": step, "classification": cls, "prompt": prompt})
 
-        # Cleared past game-select only once we've LEFT that screen after
-        # sending the configured letter at least once this connection --
-        # never on send-confirm alone (a false-positive idle settle can
-        # confirm while the CURRENT screen is still `game_select`, which
-        # would wedge in automaton_stuck if latched there).
-        if cls != "game_select" and getattr(session, "game_select_letter_sent", False):
+        # Door re-entry: if game_select is PERSISTENTLY classified while
+        # ``game_select_answered`` is True (stagnant_rounds >= 1 at the top
+        # of this iteration), the host has genuinely returned to the door
+        # after the automaton had already left it -- clear both flags so the
+        # configured letter can re-send.
+        #
+        # Requires stagnant_rounds >= 1 (not 0): a single transient stale
+        # redraw (``restale_game_select`` test shape) reaches this check with
+        # stagnant_rounds == 0 (the preceding send reset it to 0) and then
+        # has its settle wait interrupted by the next real screen arriving,
+        # so it NEVER accumulates a second consecutive None-return for the
+        # same signature.  Stagnant_rounds == 0 is the exclusion gap that
+        # keeps the stale-redraw test green while still recovering a genuine
+        # persistent re-entry on the second stagnant iteration.
+        if (
+            cls == "game_select"
+            and getattr(session, "game_select_answered", False)
+            and stagnant_rounds >= 1
+        ):
+            session.game_select_answered = False
+            session.game_select_letter_sent = False
+
+        # Cleared past game-select only once we've LEFT that screen for a
+        # known post-door class after sending the configured letter --
+        # never on send-confirm alone, and never on a mid-paint flash to
+        # ``unknown`` / generic ``menu`` (WO-ANET-GAME-SELECT-LETTER-STEP12).
+        if (
+            getattr(session, "game_select_letter_sent", False)
+            and _left_game_select_for_real(cls, text, prompt)
+        ):
             session.game_select_answered = True
 
         if cls == target:
@@ -409,7 +526,14 @@ def _decide(cls, text, prompt, profile, state, get_password, save_password, sess
 
     # -- nuisances first: these can interleave with any branch. ----------
     if cls == "pause_key":
+        # Closed-game refusal often shares the screen with ``[Pause]``
+        # (a-net live). Detect BEFORE dismissing the pause so we do not
+        # loop forever via door re-entry (hub 194645Z).
+        if _CLOSED_GAME_RE.search(text or ""):
+            raise LoginError(f"game_closed:profile={profile.name}")
         return "", False, None
+    if _CLOSED_GAME_RE.search(text or ""):
+        raise LoginError(f"game_closed:profile={profile.name}")
     if _BEEN_ON_TODAY_RE.search(prompt):
         return "", False, None
     if cls == "unknown" and not prompt.strip():
@@ -480,7 +604,7 @@ def _decide(cls, text, prompt, profile, state, get_password, save_password, sess
             return None
         return profile.game_letter, False, None
 
-    if cls == "menu" and _MODULE_ENTRY_MENU_RE.search(text):
+    if cls == "menu" and _is_module_entry_menu(text, prompt):
         return "T", False, None
 
     if cls == "char_create":

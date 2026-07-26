@@ -227,6 +227,7 @@ class FakeTWGS:
         post_password_delay_s: float = 0.0,
         start_at: str | None = None,
         restale_game_select: bool = False,
+        reentry_game_select: bool = False,
         outer_name_reject_times: int = 0,
         outer_name_reject_then_silent: bool = False,
     ):
@@ -253,6 +254,19 @@ class FakeTWGS:
             raise ValueError(f"unknown start_at step: {start_at!r} (expected one of {self._PRE_LOGIN_STEPS!r})")
         self.start_at = start_at
         self.restale_game_select = restale_game_select
+        # "returning" mode only (WO-ANET-GAME-SELECT-LETTER-STEP12 door
+        # re-entry knob): after the first module_entry_menu ``T`` is read,
+        # the host presents game_select THREE MORE TIMES (with small pauses so
+        # the automaton's stagnation counter can accumulate ≥ 1), then expects
+        # the configured letter a SECOND time before resuming the normal flow.
+        # Simulates a host that kicks the player back to the door after the
+        # initial game selection (e.g. a closed game or an error).  Mutually
+        # exclusive with ``restale_game_select``; both raise at construction.
+        if reentry_game_select and mode != "returning":
+            raise ValueError("reentry_game_select is only meaningful for mode='returning'")
+        if reentry_game_select and restale_game_select:
+            raise ValueError("reentry_game_select and restale_game_select are mutually exclusive")
+        self.reentry_game_select = reentry_game_select
         # "returning" mode only (WO-MICRO-LOGIN-BLANK-REJECT rejection
         # knobs -- see module docstring): same fail-loud-at-construction
         # discipline as the resume knobs above.
@@ -501,6 +515,25 @@ class FakeTWGS:
             if self.restale_game_select:
                 self._send(conn, f"<{self.game_letter}> Bob the Builder\r\nSelect a game :")
                 time.sleep(1.0)
+
+            if self.reentry_game_select:
+                # Door re-entry (WO-ANET-GAME-SELECT-LETTER-STEP12): simulate
+                # the host returning to the door-select screen after the first
+                # game selection (e.g. a closed game kicks the player back).
+                # THREE game_select frames are sent with short pauses so the
+                # automaton's stagnation counter accumulates ≥ 1 at the start
+                # of the third iteration -- the threshold that triggers the
+                # flag-clear in ``run_login``.  After the flags are cleared
+                # the automaton re-sends the letter; this `_expect_key` reads
+                # that second send before the normal flow resumes from
+                # module_entry_menu.
+                for _ in range(3):
+                    self._send(conn, f"<{self.game_letter}> Bob the Builder\r\nSelect a game :")
+                    time.sleep(0.5)
+                self._expect_key(reader, expected=self.game_letter, label="game_select")
+                # Resume from module_entry_menu for the second pass.
+                self._send(conn, "T - Play Trade Wars 2002\r\nI - Introduction & Help\r\nEnter your choice:")
+                self._expect_line(reader, expected="T", label="module_entry_menu")
 
         if "login_name" in steps:
             self._send(conn, "What is your name?")

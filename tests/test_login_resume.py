@@ -153,7 +153,153 @@ def test_no_double_answer_after_stale_game_select_redraw(tmp_path):
     assert fake.received_passwords == [password]
 
 
-# -- 4: a second run_login() on the same session is a no-op --------------
+def test_game_select_answered_latch_ignores_unknown_flash():
+    """WO-ANET-GAME-SELECT-LETTER-STEP12: mid-paint ``unknown`` / generic
+    ``menu`` must not count as leaving the door; real post-door classes do."""
+    assert not login._left_game_select_for_real("unknown", "")
+    assert not login._left_game_select_for_real("menu", "<A> Lobby option")
+    assert not login._left_game_select_for_real("game_select", "Selection (? for menu):")
+    assert login._left_game_select_for_real("login_name", "Enter your name:")
+    assert login._left_game_select_for_real("ansi_prompt", "Ansi [Y/n]?")
+    assert login._left_game_select_for_real(
+        "menu",
+        "T - Play Trade Wars 2002\nI - Introduction & Help\nX - Exit\nEnter your choice:",
+        "Enter your choice:",
+    )
+
+
+def test_anet_hmx_access_menu_does_not_send_module_entry_t():
+    """H/M/X-only current block must not fire MODULE_ENTRY ``T`` when a
+    stale ``T - Play`` sits above a blank separator (scoped window)."""
+    # Stale module-entry text still on the grid (scrollback), then an
+    # H/M/X-only access menu as the CURRENT option block.
+    text = (
+        "T - Play Trade Wars 2002\n"
+        "I - Introduction & Help\n"
+        "X - Exit\n"
+        "\n"
+        "   H - High scores\n"
+        "   M - View Access Modes\n"
+        "   X - Exit\n"
+        "\n"
+        "Enter your choice:\n"
+    )
+    prompt = "Enter your choice:"
+    assert not login._is_module_entry_menu(text, prompt)
+    profile = login.LoginProfile(
+        name="anet_hmx", handle="Proof", game_letter="C", allow_register=True
+    )
+    state = {"registering": None, "password": None, "password_attempts": 0, "outer_name_handle_tried": False}
+
+    class _S:
+        game_select_answered = True
+        game_select_letter_sent = True
+
+    action = login._decide(
+        "menu", text, prompt, profile, state, lambda n: None, lambda n, p: None, _S()
+    )
+    assert action is None
+
+
+def test_module_entry_menu_still_sends_t_when_t_play_is_current():
+    """Live a-net shape (hub 194056Z): T/I/S/H/M/X in ONE block → send T."""
+    text = (
+        "==-- Trade Wars 2002 --==\n"
+        "T - Play Trade Wars 2002\n"
+        "I - Introduction & Help\n"
+        "S - View Game Settings\n"
+        "H - High scores\n"
+        "M - View Access Modes\n"
+        "X - Exit\n"
+        "\n"
+        "Enter your choice:\n"
+    )
+    prompt = "Enter your choice:"
+    assert login._is_module_entry_menu(text, prompt)
+    profile = login.LoginProfile(
+        name="mod_entry", handle="Proof", game_letter="C", allow_register=True
+    )
+    state = {"registering": None, "password": None, "password_attempts": 0, "outer_name_handle_tried": False}
+
+    class _S:
+        game_select_answered = False
+        game_select_letter_sent = False
+
+    action = login._decide(
+        "menu", text, prompt, profile, state, lambda n: None, lambda n, p: None, _S()
+    )
+    assert action == ("T", False, None)
+
+
+def test_closed_game_refusal_fails_loud():
+    """a-net Star Wars (hub 194645Z): closed-game text must not loop door↔Play."""
+    text = (
+        "I'm sorry, but this is a closed game.  You must request a player "
+        "account from the game administrator before joining this game.\n"
+        "[Pause]\n"
+    )
+    prompt = "[Pause]"
+    profile = login.LoginProfile(
+        name="proof_anet", handle="Proof", game_letter="C", allow_register=True
+    )
+    state = {"registering": None, "password": None, "password_attempts": 0, "outer_name_handle_tried": False}
+
+    class _S:
+        game_select_answered = True
+        game_select_letter_sent = True
+
+    try:
+        login._decide(
+            "pause_key", text, prompt, profile, state, lambda n: None, lambda n, p: None, _S()
+        )
+    except login.LoginError as e:
+        assert "game_closed" in str(e)
+        assert "proof_anet" in str(e)
+    else:
+        raise AssertionError("expected LoginError game_closed")
+
+
+# -- 4: door re-entry (host returns to game_select after answered=True) ---
+
+def test_door_reentry_sends_letter_again(tmp_path):
+    """After the automaton has truly left game_select (game_select_answered=True
+    latched on module_entry_menu), the host can return to the door-select
+    screen (e.g. a closed-game bounce).  run_login must detect the persistent
+    re-appearance (stagnant_rounds >= 1 at the start of a loop iteration),
+    clear the flags, and re-send the configured letter so the flow can proceed.
+
+    Distinct from test_no_double_answer_after_stale_game_select_redraw: the
+    stale-redraw path is transient (one frame, then login_name arrives before
+    the stagnation counter increments) and must NOT re-send the letter.  This
+    test exercises the persistent-re-entry branch where game_select persists
+    across multiple settle cycles.
+    """
+    handle, game_letter, password = "AEGIS", "F", "sAvEd123Test"
+    fake = FakeTWGS(
+        handle=handle, game_letter=game_letter, password=password,
+        mode="returning", reentry_game_select=True,
+    )
+
+    with fake, _session_against(fake, tmp_path) as session:
+        profile = login.LoginProfile(
+            name="reentry", handle=handle, game_letter=game_letter, allow_register=False
+        )
+        saved = {"reentry": password}
+
+        cls, _steps = login.run_login(
+            session, profile,
+            get_password=lambda n: saved.get(n),
+            save_password=lambda n, pw: None,
+        )
+
+    assert not fake.errors, fake.errors
+    assert cls == "main_command"
+    # The letter reached the server exactly TWICE: once for the original
+    # game_select and once after the door re-entry flags were cleared.
+    assert fake.received_inputs["game_select"] == [game_letter, game_letter]
+
+
+# -- 5: a second run_login() on the same session is a no-op --------------
 
 def test_second_run_login_is_idempotent_at_main_command(tmp_path):
     handle, game_letter, password = "AEGIS", "F", "sAvEd123Test"
