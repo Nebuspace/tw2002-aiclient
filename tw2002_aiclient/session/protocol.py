@@ -139,6 +139,134 @@ def _driving_dispatch(server):
         lock.release_driver()
 
 
+def _status_response(session, server):
+    """The `status` verb's answer -- bounded by construction, and deliberately
+    NOT a mirror of the receive buffer (canon `DECISIONS.md` §C.2, ruled
+    2026-07-26; the leak itself is named in `canon/doctrine/
+    secrets-and-credentials.md` Code Divergence #1, "Status-verb wire").
+
+    **The carrier this exists to close.** This branch used to answer with
+    `"prompt": rows[-1].strip()` -- the live pyte tail, verbatim
+    receive-buffer content. On a server that ECHOES at the password gate (the
+    behavior canon's RX-side no-leak guarantee openly rests on never
+    happening) that line IS the operator's credential, and it rode every
+    `status` round trip: `tw status`, `tw status --json`, and any spectator
+    holding the socket. Measured end to end through the real daemon socket and
+    the real CLI, not reasoned about:
+    `tests/test_status_prompt_redaction.py`. Note there is no
+    "human-readable is narrower" carve-out here the way there is for `ensure`'s
+    failure answer: a `status` response has no `screen` key, so BOTH branches
+    of `cli.print_response` fall through to `json.dumps(resp)` -- every
+    `tw status` invocation serialises the whole dict.
+
+    **The split §C.2 asks for is already carried by the VERB, not by the
+    field.** `status` is the structured/diagnostic verb -- a spectator parses
+    it. The live paint of the telnet stream is `screen` (one-shot),
+    `subscribe` (the WatchHub stream behind `watchfeed.py` ->
+    `cockpit/viewport.py`), `attach`, and the `do`/`send`/`read` answers --
+    every one of them `build_response()`, which is untouched and still mirrors
+    the buffer in full. The defect was that `status` DUPLICATED a live-paint
+    field onto the structured answer; the fix is to stop duplicating it, not
+    to add machinery that disambiguates two consumers of one field. There is
+    no second consumer to disambiguate: no cockpit panel reads
+    `status["prompt"]` -- `goals`/`focus`/`hud`/`arm`/`stopbanner`/`logsband`
+    and `screens.py`'s own status read are pinned byte-identical with and
+    without the field by
+    `test_no_cockpit_panel_changes_when_the_prompt_field_disappears`, and the
+    viewport's rows come from the subscribe event, never from here.
+    (`cockpit/control_seat.py` mentions `status["mode"]` in prose but its
+    composers take primitives, not the status dict, so it is not a consumer of
+    this response at all.)
+
+    **Unconditional, never gated on "does this prompt look secret".**
+    `classify.py`'s `login_password` gate anchor is literally
+    `re.compile(r"password", re.I)`, and `is_probable_secret_prompt()` is a
+    wider word list over the same idea. Both are heuristics, and both fail
+    OPEN in exactly the scenario under test: an echoing server REPLACES the
+    word "password" on that line with the credential, so the recogniser
+    answers `unknown` and a recognition-gated redactor would hand the secret
+    straight through. Redaction that depends on recognition is redaction that
+    stops the day recognition does -- the same argument
+    `_login_failure_response` makes, and the reason this function relies on no
+    heuristic at all.
+
+    **Why omit rather than mask.** Masking would need the plaintext at this
+    layer, and this layer deliberately does not have it (`session.last_sent` is
+    already `"<redacted>"` for a `secret=True` send; the credential lives only
+    inside `run_login`'s frame). It would also be fail-OPEN even then: pyte
+    wraps at the column boundary, an echo can be partially overwritten, and the
+    grid may hold a SIBLING profile's secret or one the human typed into an
+    earlier attach -- content this process never held a copy of to match
+    against. A mask that misses ships the credential wearing a redacted look.
+
+    **What it still carries, and why each is bounded.** `classification` is
+    `classify.classify_screen`'s CLOSED vocabulary -- a label from the anchor
+    tables or `unknown`, never a slice of the screen -- so an operator still
+    learns WHICH screen the session is sitting on, which is the diagnostic
+    `prompt` was mostly serving. `connected`/`idle_ms`/`subscribers`/`port` are
+    scalars; `host`/`port`/`name` come from the PROFILE, not the receive
+    buffer; `autopilot` is a literal; `mode` is the control lock's own closed
+    vocabulary. `log_tail` is the one remaining screen-adjacent field and it is
+    safe for a structural reason rather than a filtering one: `transcript_tail.
+    TranscriptTail` is TX-only and redact-at-INSERT -- `append_redacted()`
+    cannot accept a payload at all -- so no receive-side byte can enter that
+    ring. Do not add an RX feed to it without re-opening this ruling.
+
+    No length, shape, or character-class digest of the prompt line is offered
+    in its place: doctrine invariant 2 counts a length as a leak in its own
+    right, and `login.LoginStalled` already refused exactly that digest.
+    `prompt_withheld` is honest absence rather than a silently missing key -- a
+    consumer can tell "withheld here" from "this daemon never had one" -- and
+    the key is omitted rather than set to a marker STRING so a caller doing
+    `resp["prompt"]` fails loudly instead of formatting `"<withheld>"` into a
+    plausible-looking line. A consumer that genuinely needs the live line asks
+    the verb whose job it is: `screen`, or `subscribe`.
+
+    **Forward note (the archive's real consumer).** `adapters.
+    sector_from_status()` in the pre-rebirth tree derived the current SECTOR by
+    re-parsing `status["prompt"]` (`Command [TL=...]:[2642]`) client-side. When
+    the world-identity strip lands, that number must arrive as a bounded
+    daemon-side derivation (an int on `state`/`status`), never by shipping the
+    raw prompt line for a client to re-parse -- otherwise this carrier comes
+    back wearing a feature's clothes.
+    """
+    # WO-P2-020 Wave-3 CUT vs archive: play/credits*/turns*/
+    # fighters*/intervention/world_id still deferred. Mode + autopilot
+    # stub + subscribers (WatchHub) are live enough for cockpit status.
+    rows = session.render()
+    text = session.render_text(rows)
+    # Local only, and used ONLY to scope `classify_screen`'s gate anchors to
+    # the current prompt line (classify.py's stale-scrollback discipline).
+    # It is deliberately not a key below -- see this function's docstring.
+    prompt_line = rows[-1].strip() if rows else ""
+    watch_hub = getattr(server, "watch_hub", None)
+    resp = {
+        "ok": True,
+        "connected": session.conn.connected,
+        "idle_ms": int((time.monotonic() - session.last_rx) * 1000),
+        "classification": classify_screen(text, prompt_line),
+        "prompt_withheld": "structured_mirror",
+        "host": session.host,
+        "port": session.port,
+        "name": session.name,
+        # WO-P2-022: autopilot.py is not ported — ensure never arms.
+        "autopilot": {"running": False},
+        "subscribers": watch_hub.subscriber_count() if watch_hub else 0,
+    }
+    lock = getattr(server, "control_lock", None)
+    if lock is not None:
+        mode = getattr(lock, "mode", None)
+        if isinstance(mode, str):
+            resp["mode"] = mode
+    # WO-P3-041: additive -- session.tail (transcript_tail.py) is
+    # always present on a real Session; getattr guards test doubles
+    # that predate this field (e.g. tests/test_watch.py's FakeSession)
+    # so this stays additive-only, never a new hard dependency.
+    tail = getattr(session, "tail", None)
+    resp["log_tail"] = tail.snapshot() if tail is not None else []
+    return resp
+
+
 def dispatch(session, verb, args, server):
     """The daemon's one dispatch chokepoint. A malformed/unrecognized
     `verb` is answered with a structured error, never an exception --
@@ -149,38 +277,11 @@ def dispatch(session, verb, args, server):
         return build_response(session, rows=rows)
 
     if verb == "status":
-        # WO-P2-020 Wave-3 CUT vs archive: play/credits*/turns*/
-        # fighters*/intervention/world_id still deferred. Mode + autopilot
-        # stub + subscribers (WatchHub) are live enough for cockpit status.
-        rows = session.render()
-        text = session.render_text(rows)
-        prompt = rows[-1].strip() if rows else ""
-        watch_hub = getattr(server, "watch_hub", None)
-        resp = {
-            "ok": True,
-            "connected": session.conn.connected,
-            "idle_ms": int((time.monotonic() - session.last_rx) * 1000),
-            "classification": classify_screen(text, prompt),
-            "prompt": prompt,
-            "host": session.host,
-            "port": session.port,
-            "name": session.name,
-            # WO-P2-022: autopilot.py is not ported — ensure never arms.
-            "autopilot": {"running": False},
-            "subscribers": watch_hub.subscriber_count() if watch_hub else 0,
-        }
-        lock = getattr(server, "control_lock", None)
-        if lock is not None:
-            mode = getattr(lock, "mode", None)
-            if isinstance(mode, str):
-                resp["mode"] = mode
-        # WO-P3-041: additive -- session.tail (transcript_tail.py) is
-        # always present on a real Session; getattr guards test doubles
-        # that predate this field (e.g. tests/test_watch.py's FakeSession)
-        # so this stays additive-only, never a new hard dependency.
-        tail = getattr(session, "tail", None)
-        resp["log_tail"] = tail.snapshot() if tail is not None else []
-        return resp
+        # NOT build_response() -- see `_status_response`'s docstring and canon
+        # `DECISIONS.md` §C.2. `screen` just above (and `do`/`send`/`read`/the
+        # WatchHub emit below) keep the full mirror; `status` is the
+        # structured answer a spectator parses.
+        return _status_response(session, server)
 
     if verb == "stop":
         server.request_stop()

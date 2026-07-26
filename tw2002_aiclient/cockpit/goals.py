@@ -27,7 +27,7 @@ throughout HUD/GOALS/PRIORITIES rendering").
 Status-dict field mapping (WO-P3-034a). ``status`` is the daemon's ``status``
 verb response shape (``tw2002_aiclient/session/protocol.py::dispatch()``).
 As of this WO, that response carries ``connected``/``idle_ms``/
-``classification``/``prompt``/``host``/``port``/``name``/``autopilot``/
+``classification``/``host``/``port``/``name``/``autopilot``/
 ``mode`` only — **none** of the fields below are populated yet
 (``state_parser``/world-model are not ported; see the WO-P2-020 Wave-3 CUT
 note in ``protocol.py``). Every row therefore renders honestly unknown
