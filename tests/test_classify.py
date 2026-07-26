@@ -109,22 +109,29 @@ def test_login_password_real_prompts_still_classify():
 
 
 def test_login_password_refuses_help_utility_mentions():
-    """WO-CLASSIFY-LOGIN-PASSWORD-NARROW Accept 1 — bare ``password`` in
-    non-login chrome must not steal the class when it is the active
-    prompt line. Before: login_password. After: not login_password
-    (money_prompt / unknown / other as appropriate)."""
+    """WO-CLASSIFY-LOGIN-PASSWORD-NARROW Accept 1 + WO-CLASSIFY-PASSWORD-
+    LENGTH-UNKNOWN — bare ``password`` in non-login chrome must not steal
+    login_password, and password-length / help-about-password chrome must
+    not land on incidental money_prompt either. Honest class: unknown
+    (halt by unknown-is-first-class, not NEVER_AUTO money_prompt breadth)."""
     helpish = "How many characters in your password?"
     assert classify_screen("", helpish) != "login_password"
     assert classify(helpish) != "login_password"
-    # Still a quantity question → money_prompt wins among gates.
-    assert classify_screen("", helpish) == "money_prompt"
+    assert classify_screen("", helpish) != "money_prompt"
+    assert classify(helpish) != "money_prompt"
+    assert classify_screen("", helpish) == "unknown"
+    assert classify(helpish) == "unknown"
 
     utility = "Utility Menu — password recovery tools (? for help):"
     assert classify_screen("", utility) != "login_password"
     assert classify(utility) != "login_password"
+    assert classify_screen("", utility) != "money_prompt"
+    assert classify_screen("", utility) == "unknown"
 
     chrome = "See the password section of the help file:"
     assert classify_screen("", chrome) != "login_password"
+    assert classify_screen("", chrome) != "money_prompt"
+    assert classify_screen("", chrome) == "unknown"
 
 
 def test_sector_display():
@@ -1260,6 +1267,10 @@ def test_money_prompt_claims_the_quantity_and_transfer_shapes(prompt):
         # "how many" as ordinary informational prose, not a solicitation:
         # no terminal ? or :, so the line-anchored pattern declines.
         "You have no idea how many sectors are out there",
+        # DELIBERATE NON-CLAIM 3 (WO-CLASSIFY-PASSWORD-LENGTH-UNKNOWN).
+        # Quantity-shaped but about a password — post-C-02 residual that
+        # used to halt via incidental money_prompt; now honest unknown.
+        "How many characters in your password?",
     ],
 )
 def test_money_prompt_declines_what_it_deliberately_does_not_claim(prompt):
