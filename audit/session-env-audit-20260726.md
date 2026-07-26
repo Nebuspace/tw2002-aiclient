@@ -46,7 +46,9 @@ TW_RUN_DIR='   '           -> socket '<PROJECT_ROOT>/   /twd.sock'
 
 **Why this is MED rather than cosmetic.** The module's own docstring states the purpose: *"`tw`/`twd` invoked from any directory resolve to the same `run/` home, **per the Single-Connection Invariant**."* That invariant is enforced by **path agreement** — one socket, one pidfile, one daemon. Two callers that believe they share a run-dir but differ by an invisible character get **two daemons and two sockets**, and neither can see the other's control lock. `tw status` would report nothing running while a daemon holds the connection.
 
-The realistic source is not exotic: a `.env` line, a shell export, or a copied command with a trailing newline or stray space. **The failure is silent and the difference is invisible in most terminals.**
+The realistic source is not exotic: a shell export, a systemd/Docker env file (CRLF line endings), or a copied command with a trailing newline or stray space. **The failure is silent and the difference is invisible in most terminals.**
+
+> **Correction (WO-RUN-DIR-NORMALISE, same day).** This paragraph originally listed *"a `.env` line"* first among the realistic sources. **That was wrong** — `load_dotenv` in this same module already applies `key.strip()` and `value.strip()` before anything reaches `os.environ` (`env.py:192-198`), so a project `.env` **cannot** produce this defect. Verified by execution: a line reading `TW_RUN_DIR=  /tmp/spaced  ` lands in `os.environ` as `'/tmp/spaced'`. The finding stands on the remaining sources; only the attribution was incorrect. Caught by the lane implementing the fix, which checked the claim instead of inheriting it.
 
 **Suggested follow-on:** `WO-RUN-DIR-NORMALISE` — strip surrounding whitespace before the `is_absolute()` test, and treat a whitespace-only override as unset (with the same fallback as `""`). A pin should assert `resolve_run_dir()` is identical for `"/x"`, `" /x"`, `"/x "` and `"/x\n"`.
 
