@@ -1,6 +1,6 @@
 # WO-P2-G4-X5-STOP-LOSS-FLOOR
 
-**Status:** OPEN · Claude Code preferred · deferrable if X1 refuses `--floor`  
+**Status:** DONE · origin `470ed3c`  
 **Posted:** 2026-07-26 · M3 slice X5 (stub)
 
 ## Goal

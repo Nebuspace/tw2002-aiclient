@@ -1,6 +1,6 @@
 # WO-P2-G4-X6-TW-RECORD-WRITER
 
-**Status:** OPEN · Claude Code preferred · independent of protocol.py  
+**Status:** DONE · origin `13f34a8`  
 **Posted:** 2026-07-26 · M3 slice X6 (stub)
 
 ## Goal

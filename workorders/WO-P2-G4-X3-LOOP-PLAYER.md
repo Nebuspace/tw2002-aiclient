@@ -1,6 +1,6 @@
 # WO-P2-G4-X3-LOOP-PLAYER
 
-**Status:** OPEN · Claude Code preferred · depends on X1 (anchor read) + X2 (loader)  
+**Status:** DONE · origin `a7dbf22`  
 **Posted:** 2026-07-26 · M3 slice X3 (stub)
 
 ## Goal

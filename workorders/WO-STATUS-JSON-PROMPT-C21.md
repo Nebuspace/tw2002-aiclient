@@ -1,6 +1,6 @@
 # WO-STATUS-JSON-PROMPT-C21
 
-**Status:** OPEN · Claude Code preferred (secrets-adjacent · follows MT-07)  
+**Status:** DONE · origin `a2e42d4` (product) · doctrine close `2f11e4d`  
 **Posted:** 2026-07-26 · DECISIONS §C.2.1
 
 ## Goal

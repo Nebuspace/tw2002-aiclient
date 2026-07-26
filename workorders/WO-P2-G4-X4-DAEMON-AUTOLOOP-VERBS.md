@@ -1,6 +1,6 @@
 # WO-P2-G4-X4-DAEMON-AUTOLOOP-VERBS
 
-**Status:** OPEN · Claude Code preferred · **blocked until** `protocol.py` free of C.2.1 / sequenced with X1  
+**Status:** DONE · origin `344991e`  
 **Posted:** 2026-07-26 · M3 slice X4 (stub)
 
 ## Goal

@@ -1,6 +1,6 @@
 # WO-MACROS-MD-EXAMPLE-CLASS
 
-**Status:** OPEN · docs/canon · Cursor or CC · banked from X3 STATUS `a7dbf22`  
+**Status:** DONE · origin `50307a7` (example already aligned: `main_command` / `money_prompt` / `port_trade`)  
 **Posted:** 2026-07-26T06:24Z
 
 ## Goal

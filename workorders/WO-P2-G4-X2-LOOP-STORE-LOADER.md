@@ -1,6 +1,6 @@
 # WO-P2-G4-X2-LOOP-STORE-LOADER
 
-**Status:** OPEN · Claude Code · buildable NOW (zero contention)  
+**Status:** DONE · origin `3489865`  
 **Posted:** 2026-07-26 · parent G4 blocked-on-substrate report
 
 ## Goal
