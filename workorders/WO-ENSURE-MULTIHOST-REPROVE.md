@@ -1,9 +1,10 @@
 # WO-ENSURE-MULTIHOST-REPROVE
 
-**Status:** IN FLIGHT · Cursor seat · hub-seeded `wo/ENSURE-MULTIHOST-REPROVE`  
+**Status:** PREP READY · Cursor Accept artifact on tip · awaiting hub laptop live cells + `live-prove`  
 **Posted:** 2026-07-26 · sprint critical path **[4]** after letter + a-net banner DONE  
 **Depends:** current `origin/main` tip; micro NEW cell may stay FAIL until `WO-MICRO-LOGIN-BLANK-REJECT` merges — **do not block other hosts on micro**  
-**Seat:** Cursor prepares Accept artifact + runner notes; **hub runs live laptop prove** (Lane 3) and posts `live-prove`
+**Seat:** Cursor prepares Accept artifact + runner notes; **hub runs live laptop prove** (Lane 3) and posts `live-prove`  
+**Prep artifacts:** `audit/live-ensure-matrix-reprove-20260726.md` · `audit/hub-live-ensure-reprove-checklist-20260726.md`
 
 ## Goal
 
