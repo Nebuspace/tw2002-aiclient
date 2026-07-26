@@ -216,9 +216,13 @@ def _decoder_detail(exc: Exception) -> str:
     `UnicodeDecodeError.object` -- the last of which `repr()` renders in
     full). Line / column / byte offsets are integers -- they locate the
     damage without quoting any of it. The position attributes are read
-    through `getattr` because `tomllib`'s `lineno`/`colno` are newer than the
-    `tomli` fallback this module imports on older interpreters; without them
-    the type name alone is still an honest answer.
+    through `getattr` because `tomllib`'s `lineno`/`colno` only exist as
+    attributes on newer interpreters (3.14+); on 3.11–3.13 (GHA suite
+    Python) they are absent and the coordinates live only inside the
+    message as ``(at line N, column M)``. When attrs are missing we scrape
+    **those integers alone** via a bounded regex — never interpolate the
+    rest of `str(exc)`, which can carry document keys. Without any
+    coordinates the type name alone is still an honest answer.
 
     Used for the secrets store as well as the config stores, and reached from
     `env.py` for the `.env` overlay -- ONE rendering of a decoder failure in
@@ -232,6 +236,14 @@ def _decoder_detail(exc: Exception) -> str:
     start = getattr(exc, "start", None)
     if isinstance(start, int):
         return f"{name} at byte {start}"
+    # 3.11–3.13 tomllib: coords only in the message text.
+    text = str(exc)
+    m = re.search(r"\bat line (\d+), column (\d+)\b", text)
+    if m:
+        return f"{name} at line {int(m.group(1))}, column {int(m.group(2))}"
+    m = re.search(r"\bat byte (\d+)\b", text)
+    if m:
+        return f"{name} at byte {int(m.group(1))}"
     return name
 
 

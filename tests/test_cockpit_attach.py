@@ -1001,10 +1001,17 @@ def test_app_hold_ctrl_a_attaches_to_human_lock_and_manual_chip_renders(monkeypa
         )
         assert "attached" in play.status_line
 
+        # Paint is async to the lock flip — wait for MANUAL before asserting
+        # APP is gone (GHA flake: assert ran on a still-APP frame).
+        def _manual_chip_painted() -> bool:
+            frame = _control_strip_frame(stdscr, FULL_ROWS, FULL_COLS)
+            joined = "".join(text for text, _attr in frame)
+            return MANUAL_LABEL in joined and APP_LABEL not in joined
+
+        assert _wait_until(_manual_chip_painted), (
+            "MANUAL chip never replaced APP after App-hold Ctrl-A attach"
+        )
         frame = _control_strip_frame(stdscr, FULL_ROWS, FULL_COLS)
-        joined = "".join(text for text, _attr in frame)
-        assert APP_LABEL not in joined  # App chip must not survive the attach
-        assert MANUAL_LABEL in joined
         label_text, label_attr = frame[0]
         assert label_text.startswith(MANUAL_LABEL)
         assert label_attr == curses.A_BOLD | curses.A_REVERSE  # mono path -- _patch_common forces has_colors False

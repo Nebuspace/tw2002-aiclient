@@ -512,9 +512,14 @@ def test_unreadable_parent_directory_is_not_an_absent_bank(tmp_path, monkeypatch
     monkeypatch.setattr(player_bank, "BANK_PATH", bank_path)
     os.chmod(state_dir, 0o000)
     try:
-        # The premise: exists() really does lie here. If this ever stops being
-        # true the test above it is no longer proving what it claims.
-        assert bank_path.exists() is False
+        # Premise: exists() does not report True for a bank behind a closed
+        # door. macOS historically returns False (swallows PermissionError);
+        # Linux GHA raises PermissionError from exists() itself. Either way
+        # is the collapse we fence — neither is an honest "bank present".
+        try:
+            assert bank_path.exists() is False
+        except PermissionError:
+            pass
         with pytest.raises(player_bank.BankUnreadable) as caught:
             player_bank._load_bank_raw()
     finally:

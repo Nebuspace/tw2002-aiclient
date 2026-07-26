@@ -67,6 +67,9 @@ from pathlib import Path
 
 import pytest
 
+pytestmark = pytest.mark.pty_ui
+
+
 import curses
 
 from tw2002_aiclient.cockpit.layout import frame_layout
