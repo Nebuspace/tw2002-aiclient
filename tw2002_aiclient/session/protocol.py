@@ -11,7 +11,8 @@ carries `"error"`.
 ported from `archive/pre-rebirth-2026-07-23/code/twclient/protocol.py`.
 Live one-shot verbs: `ensure`, `status`, `screen`, `stop`, `do`, `send`,
 `read`, `history`, `state`, `autoloop_start`, `autoloop_stop`,
-`autoloop_status`. Lifetime `attach` / `subscribe` are handled in
+`autoloop_status`, `explore_start`, `explore_stop`, `explore_status`.
+Lifetime `attach` / `subscribe` are handled in
 `daemon.py` (not here) — `subscribe` streams WatchHub settle-edge events
 (WO-P2-WATCHHUB-PORT). `set_mode`/`crawl_start`/`autopilot_*`/
 `record_*`/`replay`/`mine`/`play*`/`haggle`/`list_skills` remain later WOs
@@ -35,6 +36,7 @@ import time
 from contextlib import contextmanager
 
 from . import autoloop
+from . import sector_explore
 from .classify import classify_screen
 from .control_lock import (
     MODE_HUMAN,
@@ -398,6 +400,45 @@ def _state_response(session):
     }
 
 
+def _explore_runner(server):
+    return getattr(server, "sector_explore", None)
+
+
+def _dispatch_explore_start(args, server):
+    runner = _explore_runner(server)
+    if runner is None:
+        return {"ok": False, "error": "explore_unavailable"}
+    unsupported = sorted(set(args) - sector_explore.ARGS_EXPLORE_START)
+    if unsupported:
+        return {"ok": False, "error": f"unsupported_arg:{unsupported[0]}"}
+    world_id = args.get("world_id")
+    min_sectors = args.get("min_sectors", sector_explore.DEFAULT_MIN_DISTINCT_SECTORS)
+    turn_budget = args.get("turn_budget", sector_explore.DEFAULT_TURN_BUDGET)
+    try:
+        snapshot = runner.start(
+            world_id,
+            min_sectors=min_sectors,
+            turn_budget=turn_budget,
+        )
+    except sector_explore.ExploreRefused as exc:
+        return {"ok": False, "error": str(exc)}
+    return {"ok": True, "started": True, **sector_explore.explore_run_wire(snapshot)}
+
+
+def _dispatch_explore_stop(server):
+    runner = _explore_runner(server)
+    if runner is None:
+        return {"ok": False, "error": "explore_unavailable"}
+    snapshot = runner.stop()
+    return {"ok": True, "stopping": True, **sector_explore.explore_run_wire(snapshot)}
+
+
+def _dispatch_explore_status(server):
+    runner = _explore_runner(server)
+    lock = getattr(server, "control_lock", None)
+    return {"ok": True, **sector_explore.explore_run_wire(sector_explore.observe_explore(runner, lock))}
+
+
 def _autoloop_runner(server):
     """The daemon's background player, or ``None``.
 
@@ -667,6 +708,15 @@ def dispatch(session, verb, args, server):
 
     if verb == "autoloop_status":
         return _dispatch_autoloop_status(server)
+
+    if verb == "explore_start":
+        return _dispatch_explore_start(args, server)
+
+    if verb == "explore_stop":
+        return _dispatch_explore_stop(server)
+
+    if verb == "explore_status":
+        return _dispatch_explore_status(server)
 
     if verb == "history":
         # WO-P2-OPS-VERB-C (partial): in-memory session history ring.

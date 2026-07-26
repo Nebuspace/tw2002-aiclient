@@ -35,6 +35,7 @@ import traceback
 
 from . import env
 from .autoloop import AutoLoopRunner
+from .sector_explore import ExploreRunner
 from .control_lock import ControlLock, ControlModeConflict
 from .credentials import get_password
 from .guardian import SessionGuardian
@@ -391,6 +392,9 @@ def _shutdown(server, session):
     autoloop = getattr(server, "autoloop", None)
     if autoloop is not None:
         autoloop.stop()
+    explore = getattr(server, "sector_explore", None)
+    if explore is not None:
+        explore.stop()
     guardian = getattr(server, "guardian", None)
     if guardian is not None:
         guardian.stop()
@@ -574,6 +578,11 @@ def main(argv=None):
         session,
         server.control_lock,
         log_error=lambda exc: _log_dispatch_error(server, "autoloop", exc),
+    )
+    server.sector_explore = ExploreRunner(
+        session,
+        server.control_lock,
+        log_error=lambda exc: _log_dispatch_error(server, "sector_explore", exc),
     )
     server.request_stop = lambda: threading.Thread(target=_shutdown, args=(server, session), daemon=True).start()
     try:
