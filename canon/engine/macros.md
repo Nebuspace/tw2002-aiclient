@@ -38,7 +38,7 @@ A macro is a named document with an ordered list of **steps** and a **start-anch
 |---|---|
 | `input` | The keystroke(s) to send for this step (e.g. `"P"`, `"158"`, `""` for a bare Enter/accept-default). |
 | `wait_prompt` | An optional regex naming the screen shape this send should produce — the positive confirmation target. Case-sensitive (a mismatched pattern silently times out, never errors — see the Hard Rules). Most recorded steps carry none. |
-| `expected_post_class` | The screen *classification* recorded live at capture time (e.g. `port_trade`, `command_prompt`). Replay re-classifies the settled screen and compares. |
+| `expected_post_class` | The screen *classification* recorded live at capture time (e.g. `port_trade`, `main_command`) — one of `classify_screen()`'s own emitted classes ([Screen Understanding](/engine/screen-understanding.md)), never an invented finer-grained label. Replay re-classifies the settled screen and compares. |
 
 The document also carries:
 
@@ -173,24 +173,31 @@ boundary is deliberate and not restated here.
 
 ## A recorded macro (illustrative)
 
+Every `expected_post_class` below is a real class `classify_screen()` can actually return — there is
+no finer-grained class for "the sell-quantity sub-prompt" or "the offer sub-prompt" specifically. The
+quantity question ("How many holds of Fuel Ore… [12]?") classifies `money_prompt`; the offer/negotiation
+screen that follows is not separately claimed (`Your offer [N] ?` is deliberately left to
+[Auto-Haggle](/engine/auto-haggle.md), never to `money_prompt` — [Screen
+Understanding](/engine/screen-understanding.md)), so it keeps the port's own `port_trade` content-anchor
+identity instead of earning a class of its own:
+
 ```
 name: ore-run          world: <this world's identity>     source: recorded
 start_anchor: 158
 steps:
   - input: "P"    wait_prompt: null            expected_post_class: port_trade
-  - input: "S"    wait_prompt: null            expected_post_class: port_sell_qty
-  - input: "50"   wait_prompt: "offer"         expected_post_class: port_offer
-  - input: ""     wait_prompt: null            expected_post_class: command_prompt   # accept-default
+  - input: "S"    wait_prompt: null            expected_post_class: money_prompt   # "How many holds...?"
+  - input: "50"   wait_prompt: "offer"         expected_post_class: port_trade     # offer/negotiation screen
+  - input: ""     wait_prompt: null            expected_post_class: main_command   # accept-default
 ```
 
 ## Replay that halts on divergence
 
 ```
 tw replay ore-run
-  step 0  send "P"   → confirmed, class port_trade        ✓ matches
-  step 1  send "S"   → confirmed, class port_sell_qty      ✓ matches
-  step 2  send "50"  → NOT confirmed (target "offer" never arrived)
-  → HALT (reason: confirm_failed) — trace returned through step 2; step 3 never sent
+  step 0  send "P"   → confirmed, class port_trade   ✓ matches
+  step 1  send "S"   → NOT confirmed (the quantity screen never settled)
+  → HALT (reason: confirm_failed) — trace returned through step 1; steps 2-3 never sent
 ```
 
 ## Replay that halts on a start-anchor mismatch
@@ -226,6 +233,27 @@ noted, not conformed away.
   library — the human-approval-before-fire invariant is real but is currently expressed as a filesystem
   move rather than an in-macro `approved` field. Accurate, and noted so the invariant's *mechanism* is
   not mistaken for a richer gate than exists.
+- **The never-auto-action gate defers §A.2's taught-chain exemption — by design, not by omission.**
+  [Screen Understanding](/engine/screen-understanding.md)'s ruled tension-resolution (`DECISIONS.md`
+  §A.2, Max carte blanche 2026-07-26) says never-auto-action "means no unattended freestyle, and
+  human-armed guarded rules are exempt — auto-haggle and taught quantity chains may answer their own
+  shapes." §A.2 itself closes on a forward-looking note, not a present obligation: **"Harmless until a
+  haggle/trade module lands; this clears the gate so one can."** The ruling clears a gate for a future
+  module — it does not obligate today's replay guard to open it. The shipped guard
+  (`tw2002_aiclient/loops/player.py`'s `_gate()`) halts on *any* screen classified `money_prompt`
+  unconditionally (`reason: never_auto_action`), including a step inside a recorded, human-taught macro
+  — see the illustrative `ore-run` example above, and `test_a_macro_recorded_to_answer_a_money_prompt_still_halts_there`,
+  whose own docstring calls this "the intended behaviour until the arming substrate exists." This is a
+  correctly-sequenced deferral, recorded here as still-open rather than closed: the exemption §A.2
+  grants is conditioned on *human* arming, and no mechanism yet exists that can attest a human — rather
+  than the loop itself — authorized a given firing. Closing this gap is a code change, not a doc one —
+  and it must **not** be closed by adding a loop-settable bypass flag to `_gate()` (a `force`-style
+  carve-out for `money_prompt`): a flag the replay loop itself could set to answer its own money
+  question would **be** the loop arming itself, exactly the self-arming §A.2 forbids. The autoloop wire
+  verb applies the same reasoning to its own `force` parameter, refusing it outright rather than merely
+  ignoring it, because a socket verb has no way to attest that a human, rather than the loop, is behind
+  the request. Whatever surface eventually implements this exemption must itself be a human-attested
+  one; `_gate()`'s current unconditional refusal is the correct default until that surface exists.
 
 # Citations
 

@@ -136,18 +136,23 @@ inbox.
 
 # Examples
 
+Every class named below is one `classify_screen()` actually emits ([Screen
+Understanding](/engine/screen-understanding.md)) — the offer/negotiation step keeps the port's own
+`port_trade` content-anchor identity rather than earning a class of its own, the same reason
+[Macros](/engine/macros.md)'s own illustrative recording does.
+
 ```
 Ledger slice (illustrative — a trade round repeated across a session):
-  port_trade   input "T"    → port_offer     reward {}
-  port_offer   input "158"  → port_trade     reward {d_credits: +230, d_turns: 0}
-  port_trade   input "M4223"→ sector          reward {d_turns: -1}
+  port_trade   input "T"    → port_trade      reward {}
+  port_trade   input "158"  → port_trade      reward {d_credits: +230, d_turns: 0}
+  port_trade   input "M4223"→ sector_display  reward {d_turns: -1}
   ... (the same three-step shape recurs 6× this session, offer numeral varies) ...
 
 Miner groups on (pre_class, <NUM>-normalized input-tuple, post_class):
-  key = (port_trade, ("T", "<NUM>", "M4223"), sector)   support = 6
+  key = (port_trade, ("T", "<NUM>", "M4223"), sector_display)   support = 6
 
 Ranked candidate:
-  #1  n=6   ~230 cr/action  [port_trade → sector]   "T" → "<NUM>" → "M4223"
+  #1  n=6   ~230 cr/action  [port_trade → sector_display]   "T" → "<NUM>" → "M4223"
       start_anchor: sector 4223
       → written as an INERT draft at state/skills/_drafts/mined-0-T__NUM__M4223
 

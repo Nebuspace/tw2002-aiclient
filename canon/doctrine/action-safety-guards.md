@@ -134,9 +134,20 @@ which owns the run-loop; here they are named as safety rails.
   an unbounded assumption.
 
 - **Stop-loss.** A credit floor halts the loop, read from the *strict* last-known confirmed
-  balance and fail-closed: an unknown or stale balance HALTs (`credits_unknown`) rather than
-  arming an unbounded floor. In multiplayer, where a hostile server frame could forge a balance
-  line, arming this stop-loss carries a documented forged-balance caveat and its own arming gate.
+  balance and fail-closed: an unknown or stale balance HALTs rather than arming an unbounded
+  floor — and "unknown or stale" is four distinct codes, not one collapsed label, because each
+  wants a different repair. Never observed (`credits_unknown`) and observed too long ago
+  (`credits_stale`) are kept separate for the reason [control &
+  escalation](/architecture/control-and-escalation.md)'s own catalog enumerates them
+  separately: never-observed means the arm sequence never showed a balance at all, stale means it
+  did and the run has since drifted away from it. The run-loop guard adds two more, distinct from
+  both: an adapter answer that is not a usable balance at all (`credits_unreadable` — e.g. a raw
+  tuple or a non-int, never truthiness-tested as if it were a healthy reading), and a genuine
+  reading at or below the line (`floor_reached`, the depletion outcome itself, not a desync).
+  `floor_reached` and `credits_unreadable` do not yet carry a cockpit label and render as their
+  raw code on the STOP banner — a real gap, banked here, not closed by this doctrine. In
+  multiplayer, where a hostile server frame could forge a balance line, arming this stop-loss
+  carries a documented forged-balance caveat and its own arming gate.
 
 - **Hazard-halt.** A zero-fighter state, an unrecoverable game-select, or a settle-desync the
   settle layer marks as never-safe-to-proceed all hard-halt the loop to escalation rather than
@@ -250,8 +261,12 @@ deploy/sell clamps, retreat-when-unreadable
 [4] twclient/crawl_driver.py — `crawl_sacrificial` startup gate, boundary-aligned abort /
 driver-fence, safe-emit chokepoint (via twclient/menu_crawler.py)
 [5] twclient/loop_player.py + twclient/autopilot.py — turn-budget hard cap, strict-balance
-stop-loss (fail-closed `credits_unknown`), hazard/novelty halts, arm-confirm launch gate
+stop-loss (fail-closed on any answer that is not a fresh above-floor balance), hazard/novelty
+halts, arm-confirm launch gate
 [6] twclient/priority_engine.py — `explore_baseline_ev` never-idle EV floor (Code Divergence #2)
 [7] twclient/control_lock.py — `MODE_AI_PILOT` live-drive mode (Code Divergence #3)
 [8] CLAUDE.md — Hard rules (send-path redaction, single-connection daemon, case-sensitive
 wait_prompt, last-match state_parser anchoring)
+[9] tw2002_aiclient/loops/player.py (`_check_floor`) — the reborn stop-loss guard that actually
+ships this rail today, as four distinct fail-closed codes: `HALT_CREDITS_UNKNOWN`,
+`HALT_CREDITS_STALE`, `HALT_CREDITS_UNREADABLE`, `HALT_FLOOR_REACHED`
