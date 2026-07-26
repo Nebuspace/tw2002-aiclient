@@ -1,6 +1,6 @@
 # WO-ANET-BANNER-LAYOUT
 
-**Status:** OPEN · READY · product (`session/classify.py`) · **Cursor seat** · ungated after letter live-prove (a-net still menu@5 on NEW path; #6 ensure cycle reached main_command on RETURNING — banner detectors still owed for game_select)
+**Status:** IN FLIGHT · Cursor seat · WO-ANET-BANNER-LAYOUT
 **Posted:** 2026-07-26 · from the live-ensure diagnosis (`4f7449f`)
 
 ## Goal

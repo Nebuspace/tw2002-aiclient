@@ -1,0 +1,26 @@
+TWGS v2.20b                                               www.vendor.example
+
+Server registered to Example Net Online
+Supports up to 7 games and 6 nodes
+
+
+████████████████████████████████████████████████████████████
+█                                                          █
+█                                                          █
+█                                                          █
+█                                                          █
+█                                                          █
+█                                                          █
+█                                                          █
+║████████████ Trade Wars 2002 Game Server ████████████████║
+║                  Example Net Online BBS                  ║
+║                                                          ║
+║   <A> Sample Game Alpha      <F> Sample Game Foxtrot     ║
+║   <B> Sample Game Bravo      <G> Sample Game Golf        ║
+║   <C> Sample Game Charlie    <#> View Players Online     ║
+║   <D> Sample Game Delta      <!> View Game Descriptions  ║
+║   <E> Sample Game Echo       <Q> Quit / Logoff           ║
+║                                                          ║
+████████████████████████████████████████████████████████████
+
+Selection (? for menu):

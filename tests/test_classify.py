@@ -217,6 +217,51 @@ def test_real_captured_banner_game_select_menu_variant_fixture():
     assert classify_screen(text, prompt) == "game_select"
 
 
+def test_anet_boxed_title_banner_game_select_fixture():
+    """Fourth TWGS game-select layout (WO-ANET-BANNER-LAYOUT): digit-token
+    title embedded in ANSI art ~13 rows below the plain version/registered
+    pair. Regex alone is insufficient — proximity must admit art-embedded
+    titles without raising the raw line ceiling."""
+    text = _load_fixture("game_select_menu_banner_anet_boxed_title.txt")
+    rows = text.splitlines()
+    prompt = rows[-1].strip() if rows else ""
+    assert classify(text) == "game_select"
+    assert classify_screen(text, prompt) == "game_select"
+
+
+def test_digit_token_title_in_prose_far_from_banner_pair_is_not_game_select():
+    """Adversarial for WO-ANET-BANNER-LAYOUT: fixing the digit-token regex
+    must NOT admit a title quoted in plain prose 13 rows below the
+    version/registered pair (no box/block art on the title line)."""
+    text = (
+        "TWGS v2.20b\n"
+        "\n"
+        "Server registered to twgs.test.example\n"
+        "\n"
+        "HELP: Connecting to a TWGS server\n"
+        "When you connect you'll see a title like:\n"
+        "\n"
+        "\n"
+        "\n"
+        "\n"
+        "\n"
+        "\n"
+        "\n"
+        "Trade Wars 2002 Game Server\n"
+        "That's just documentation.\n"
+        "\n"
+        "<A> Next help topic\n"
+        "<B> Previous help topic\n"
+        "<#> View Players Online\n"
+        "<!> View Game Descriptions\n"
+        "Selection (? for menu):"
+    )
+    rows = text.splitlines()
+    prompt = rows[-1].strip()
+    assert classify(text) == "menu"
+    assert classify_screen(text, prompt) == "menu"
+
+
 def test_banner_game_select_with_timed_out_as_current_prompt_stays_game_select():
     """WO-CLASSIFY-TIMED-OUT: TWGS appends ``Timed out...`` as the live
     last line while Selection is still on screen — must stay game_select
@@ -1266,6 +1311,7 @@ _EXPECTED_FIXTURE_CLASSES = {
     "game_select_menu.mojibake-before.txt": ("game_select", "game_select"),
     "game_select_menu.txt": ("game_select", "game_select"),
     "game_select_menu_banner_variant.txt": ("game_select", "game_select"),
+    "game_select_menu_banner_anet_boxed_title.txt": ("game_select", "game_select"),
     "game_select_menu_boxed_variant.txt": ("game_select", "game_select"),
     "opening_screen.txt": ("login_name", "login_name"),
     "pause_key_prompt.txt": ("pause_key", "pause_key"),
