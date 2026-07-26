@@ -976,6 +976,36 @@ def classify(rendered_text: str) -> str:
     checks), but prefer classify_screen() for a live rendered screen where
     stale unclaimed grid content can produce a false gate match.
 
+    SAFETY CONTRACT (WO-CLASSIFY-API-PARITY-PLAIN-TIMEOUT, "enforce" over
+    "align" -- audit/session-classify-audit-coverage-20260726.md C-01,
+    amended per the 2026-07-26T21:17Z CC probe): every `_GATE_ANCHORS`
+    matcher in the loop below runs against the FULL `rendered_text`, never
+    a single current-prompt line -- unlike `classify_screen()`, which
+    scopes gate anchors to the live prompt specifically. That makes THIS
+    function stale-scrollback-blind on EVERY gate anchor, not merely the
+    `game_select` shape the audit named (parity with `classify_screen()`
+    already holds there, but only because the ordinary whole-text
+    `game_select` anchor matches independent of the missing
+    `_is_plain_timed_out_game_select` pre-pass -- see
+    tests/test_classify.py's
+    `test_plain_game_select_with_timed_out_as_current_prompt_stays_game_select`).
+    The real, broader divergence -- a STALE "Select a game :" line still
+    fooling this function into `game_select` where `classify_screen()`
+    correctly reads `menu` -- is pinned by that same file's
+    `test_stale_plain_game_select_bleeding_into_module_entry_menu_with_timed_out_is_not_game_select`.
+    Bolting the missing pre-pass on here would satisfy only the one named
+    shape while leaving every other gate anchor stale-blind, and would
+    falsely read as "parity enforced" -- so the fix is structural instead:
+    tests/test_classify_api_parity.py sweeps the whole product tree and
+    fails if anything under `tw2002_aiclient/` (other than this file) ever
+    imports this bare name; grep already confirms zero product-tree
+    consumers today (every real call site uses `classify_screen` --
+    Session.classify(), menu/crawler.py, loops/player.py,
+    loops/recorder.py, session/guardian.py, session/protocol.py,
+    session/login.py). This function stays exactly what the paragraph
+    above already said: for a single isolated string (tests, one-off
+    checks), never a live rendered screen.
+
     `cim_report` is checked before everything else, same rationale as
     classify_screen() below (see `_is_genuine_cim_report`'s docstring) --
     it needs the FULL text to evaluate (a genuine report's own prompt
