@@ -1,6 +1,6 @@
 # WO-SESSION-CLASSIFY-AUDIT-COVERAGE
 
-**Status:** READY FOR HUB COMMIT · Cursor · report on disk · `wo/SESSION-CLASSIFY-AUDIT`  
+**Status:** READY FOR REVIEW · tip `2bfd8c5` · Cursor · `wo/SESSION-CLASSIFY-AUDIT`  
 **Posted:** 2026-07-26 · from `canon/findings.md` SESSION-AUDIT-COVERAGE-GAP / MT-11  
 **Report:** `audit/session-classify-audit-coverage-20260726.md`
 
