@@ -154,7 +154,7 @@ Source tip at audit: `922739b`. Product fixes: F1 DONE `7e13b7d` · F2/F3/F4 in 
 
 | ID | Gap | Tip reality |
 |---|---|---|
-| SESSION-F6-TRANSCRIPT-ORDER | `connection.py` / `session.py` / `_send_raw`+TX-IAC log-AFTER `sendall`; fail path type/phrase only | **DONE** tip `c21cd1c` (Accepted; push gated w/ F2 B+C) — scope includes `_send_raw`/TX-IAC, not only the two banked files |
+| SESSION-F6-TRANSCRIPT-ORDER | `connection.py` / `session.py` / `_send_raw`+TX-IAC log-AFTER `sendall`; fail path type/phrase only | **DONE** origin `a33825a` (orphan preserve `c21cd1c` — do not rebuild) — scope includes `_send_raw`/TX-IAC, not only the two banked files |
 | SESSION-F7-STATUS-DAEMON-RUNNING | `cli.py` `cmd_status` stamps `daemon_running: True` over failed round-trip (PID reuse) | **BANKED** — exit code stays honest; `--json` self-contradicts · MISSING-TESTS MT-03 |
 | SESSION-F8-WATCH-FRAME-GAP | `cli.py` `tw watch` swallows unparseable frames; `--frames N` counts only parsed | **BANKED** — invisible gap on corruption · MISSING-TESTS MT-04 |
 | SESSION-AUDIT-COVERAGE-GAP | `classify.py` (634 lines) unaudited except secret-prompt regex; also unread: `credentials` · `env` · `iac` · `terminal` · `player_bank` | **BANKED** — future audit WO must not inherit false coverage · MISSING-TESTS MT-11 |
