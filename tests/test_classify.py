@@ -229,6 +229,38 @@ def test_anet_boxed_title_banner_game_select_fixture():
     assert classify_screen(text, prompt) == "game_select"
 
 
+def test_anet_live_chrome_footer_game_select_fixture():
+    """Live a-net step-5 door (WO-ANET-STEP5-LIVE-BYTES): same banner+art
+    title+#/! options as the boxed-title layout, but Selection never
+    appears on the grid — last line is box-drawing chrome. Fixture derived
+    from hub capture 185955Z (sanitized). Must not invent a new class."""
+    text = _load_fixture("game_select_menu_banner_anet_live_chrome.txt")
+    rows = text.splitlines()
+    prompt = rows[-1].strip() if rows else ""
+    assert "Selection" not in text
+    assert classify(text) == "game_select"
+    assert classify_screen(text, prompt) == "game_select"
+
+
+def test_anet_banner_with_textual_non_selection_prompt_is_not_game_select():
+    """Adversarial: chrome-footer carve-out must not fire when the last line
+    is a real textual prompt other than Selection (e.g. Enter your choice)."""
+    text = (
+        "TWGS v2.20b\n"
+        "\n"
+        "Server registered to Example Net Online\n"
+        "\n"
+        "▐═▐ Trade Wars 2002 Game Server ▐\n"
+        "▐·▐   <A> Sample Alpha     <F> Sample Foxtrot\n"
+        "▐≡▐   <B> Sample Bravo     <G> Sample Golf\n"
+        "▐╗▐   <C> Sample Charlie   <#> View Players Online\n"
+        "▐╝▐   <D> Sample Delta     <!> View Game Descriptions\n"
+        "▐╦▐   <E> Sample Echo      <Q> Quit / Logoff\n"
+        "Enter your choice:\n"
+    )
+    assert classify_screen(text, "Enter your choice:") == "menu"
+
+
 def test_digit_token_title_in_prose_far_from_banner_pair_is_not_game_select():
     """Adversarial for WO-ANET-BANNER-LAYOUT: fixing the digit-token regex
     must NOT admit a title quoted in plain prose 13 rows below the
@@ -1312,6 +1344,7 @@ _EXPECTED_FIXTURE_CLASSES = {
     "game_select_menu.txt": ("game_select", "game_select"),
     "game_select_menu_banner_variant.txt": ("game_select", "game_select"),
     "game_select_menu_banner_anet_boxed_title.txt": ("game_select", "game_select"),
+    "game_select_menu_banner_anet_live_chrome.txt": ("game_select", "game_select"),
     "game_select_menu_boxed_variant.txt": ("game_select", "game_select"),
     "opening_screen.txt": ("login_name", "login_name"),
     "pause_key_prompt.txt": ("pause_key", "pause_key"),
