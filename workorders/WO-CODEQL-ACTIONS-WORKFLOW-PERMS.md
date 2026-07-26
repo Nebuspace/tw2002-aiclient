@@ -1,6 +1,6 @@
 # WO-CODEQL-ACTIONS-WORKFLOW-PERMS
 
-**Status:** OPEN · READY · hub/Cursor mechanical · banked from code-scanning sweep  
+**Status:** IN FLIGHT · Cursor · `wo/CODEQL-ACTIONS-PERMS` (from clean main — not CC PR #2 tree)  
 **Posted:** 2026-07-26 · GitHub code scanning alert #1  
 **Alert:** https://github.com/Nebuspace/tw2002-aiclient/security/code-scanning/1  
 **Rule:** `actions/missing-workflow-permissions` (warning)  
