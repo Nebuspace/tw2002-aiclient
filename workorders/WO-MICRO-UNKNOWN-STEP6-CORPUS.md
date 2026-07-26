@@ -1,6 +1,6 @@
 # WO-MICRO-UNKNOWN-STEP6-CORPUS
 
-**Status:** OPEN · READY · **critical path for Max ensure bar** · CC preferred · banked hub discovery 2026-07-26
+**Status:** READY-FOR-REVIEW · Cursor corpus tip · **critical path for Max ensure bar** · banked hub discovery 2026-07-26
 **Posted:** 2026-07-26 · from `audit/live-ensure-matrix-20260726.md` follow-up #1
 **Escalation:** same stall shape on micro (`unknown`@6) · a-net (`menu`@5) · xeno/exiled (`unknown`@5) — treat as **login-flow coverage gap**, not three one-off hosts. Max bar: NEW+RETURNING → `main_command` on a handful of servers.
 
