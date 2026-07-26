@@ -1,6 +1,6 @@
 # WO-HALT-BANNER-LABEL-VOCAB
 
-**Status:** **DONE** · origin `f3b2067` (`f3b2067c2b5df5b920efeb6a3d3be646847c5b71`) · product (`cockpit/stopbanner.py` + pins + escalation catalog) · Cursor seat 2026-07-26
+**Status:** **DONE** · origin `54f38e6` (`54f38e6a053d7898eebd862c7cf3869cd85afac4`) · product (`cockpit/stopbanner.py` + pins + escalation catalog) · Cursor seat 2026-07-26
 **Posted:** 2026-07-26 · hub batch: 13 of 16 halt reason codes render RAW
 **Max ruling (1A):** expand human vocab for the 13 · **unmapped stay RAW** (not loud)
 
@@ -20,5 +20,5 @@ Unmapped codes remain RAW (do not invent loud wrappers).
 
 ## Proof
 
-Max ruling 1A. Tip `f3b2067`. All 16 `HALT_REASONS` labelled; unmapped still RAW.
+Max ruling 1A. Tip `54f38e6`. All 16 `HALT_REASONS` labelled; unmapped still RAW.
 `pytest tests/test_cockpit_stopbanner.py tests/test_credits_floor.py::test_which_of_the_new_codes_canon_already_has_a_label_for -n0`.
