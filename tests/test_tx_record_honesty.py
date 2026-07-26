@@ -215,13 +215,23 @@ def test_a_successful_sendall_only_proves_local_acceptance_not_peer_delivery():
 def test_real_broken_pipe_never_leaves_an_unqualified_TX_claim(tmp_path):
     """The headline behavior, end to end on a REAL socket with a REAL broken
     pipe: whatever the transcript says about a send that failed, it must not
-    be the same unqualified `TX` record a successful send gets."""
+    be the same unqualified `TX` record a successful send gets.
+
+    Connect-side barrier (WO-TEST-FAKE-SERVER-SOCKET-FLAKE reopen): the peer
+    must not SO_LINGER(0)-RST until *after* ``create_connection`` returns.
+    RST'ing in the accept thread as soon as ``accept`` returns races the
+    client's handshake completion (Errno 54 inside ``create_connection``) —
+    the post-``34a41b4`` flake CC measured under load / once serially. The
+    ``client_connected`` gate makes that race structurally impossible.
+    """
     lsock = socket.socket()
     lsock.bind(("127.0.0.1", 0))
     lsock.listen(1)
     csock = None
     failed_payload = None
     accepted = threading.Event()
+    client_connected = threading.Event()
+    peer_rst_done = threading.Event()
 
     def peer():
         try:
@@ -229,20 +239,30 @@ def test_real_broken_pipe_never_leaves_an_unqualified_TX_claim(tmp_path):
         except OSError:
             return
         accepted.set()
-        # RST only AFTER the handshake completed — SO_LINGER(0) during accept
-        # races xdist and can reset create_connection itself.
+        # Wait until the client holds a fully returned create_connection
+        # socket — only then is an RST a broken-*pipe* setup, not a
+        # broken-*connect*.
+        if not client_connected.wait(5):
+            try:
+                conn.close()
+            except OSError:
+                pass
+            return
         try:
             conn.setsockopt(socket.SOL_SOCKET, socket.SO_LINGER, struct.pack("ii", 1, 0))
             conn.close()
         except OSError:
             pass
+        peer_rst_done.set()
 
     t = threading.Thread(target=peer, daemon=True)
     t.start()
     try:
         csock = socket.create_connection(lsock.getsockname(), timeout=5)
         csock.settimeout(None)
+        client_connected.set()
         assert accepted.wait(5), "peer never accepted"
+        assert peer_rst_done.wait(5), "peer never RST'd after client connect"
         t.join(5)
 
         logger = TranscriptLogger(str(tmp_path))
@@ -288,6 +308,61 @@ def test_real_broken_pipe_never_leaves_an_unqualified_TX_claim(tmp_path):
     assert "TX-FAILED" in header, f"failed send got an unqualified header: {header!r}"
     assert "delivery unconfirmed" in header
     assert "BrokenPipeError" in header or "ConnectionResetError" in header
+
+
+def test_connect_side_rst_before_client_connected_fails_create_connection():
+    """Forced-repro of the connect-side flake shape (Accept bar).
+
+    Peer ``accept`` → immediate SO_LINGER RST → close listener, *then* the
+    client is released to dial. ``create_connection`` fails every time
+    (Errno 54 / refused / reset). This is the sequenced form of the race
+    CC saw under load when RST overlapped the client's handshake — red
+    every time without depending on scheduler luck.
+    """
+    lsock = socket.socket()
+    lsock.bind(("127.0.0.1", 0))
+    lsock.listen(1)
+    addr = lsock.getsockname()
+    peer_torn_down = threading.Event()
+    # Sacrificial dialer so accept() fires before we tear the listener down.
+    sacrificial_done = threading.Event()
+
+    def peer():
+        try:
+            conn, _ = lsock.accept()
+        except OSError:
+            peer_torn_down.set()
+            return
+        try:
+            conn.setsockopt(socket.SOL_SOCKET, socket.SO_LINGER, struct.pack("ii", 1, 0))
+            conn.close()
+        except OSError:
+            pass
+        try:
+            lsock.close()
+        except OSError:
+            pass
+        peer_torn_down.set()
+
+    def sacrificial_client():
+        try:
+            s = socket.create_connection(addr, timeout=2)
+            s.close()
+        except OSError:
+            pass
+        sacrificial_done.set()
+
+    t = threading.Thread(target=peer, daemon=True)
+    t.start()
+    sc = threading.Thread(target=sacrificial_client, daemon=True)
+    sc.start()
+    assert peer_torn_down.wait(5), "peer never tore down"
+    assert sacrificial_done.wait(5)
+    t.join(2)
+    sc.join(2)
+
+    with pytest.raises(OSError):
+        socket.create_connection(addr, timeout=1)
 
 
 # ---------------------------------------------------------------------------

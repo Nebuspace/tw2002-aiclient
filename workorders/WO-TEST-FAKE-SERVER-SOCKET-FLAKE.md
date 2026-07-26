@@ -1,6 +1,6 @@
 # WO-TEST-FAKE-SERVER-SOCKET-FLAKE
 
-**Status:** OPEN · REOPENED 2026-07-26 · Cursor preferred (tests lane)  
+**Status:** DONE · tip pending (connect-side barrier + forced-repro)  
 **Prior:** `34a41b4` landed PARTIAL (`.errors` xdist poison fixed) · CLOSED banner @ `7afcbcf` **reverted** — 4 post-fix reds after tip (≥1 serial).  
 **Posted:** 2026-07-25 IDLE-KICK refill (CC disclosure)
 
