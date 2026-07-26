@@ -19,3 +19,13 @@
 **Next (Cursor):** redacted fixture from live bytes (or bounds fix driven by live layout) + pins; do **not** invent a new `screen_class` without hub GO. Diff live vs fixture for the structural delta (banner/box/option tokens).
 
 No credentials or full frames in this note.
+
+## Structural delta (Cursor + hub)
+
+Live paint has TWGS header + boxed **Trade Wars 2002 Game Server** + `<A>`…`<Q>` game rows, but **no `Selection (? for menu):` prompt line** (prompt is box art). Committed fixture **ends with Selection**. Banner/boxed `game_select` detectors require Selection → live falls through to **`menu`**.
+
+That is the classify-layer miss after `WO-ANET-BANNER-LAYOUT` (fixture green, live red).
+
+## Hub GO (DEC-09)
+
+Evidence-backed fix **within existing `game_select` class** is authorized: accept this live layout (redacted fixture from bank `live_step5_screen.txt` + detector bounds so Selection is not mandatory when banner+option grid present). **No new `screen_class`.** Pins required.
