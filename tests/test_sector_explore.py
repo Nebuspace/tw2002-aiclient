@@ -47,18 +47,29 @@ def _command_screen(sector: int, warps: list[int] | None = None) -> str:
 class ExploreMapSession(FakeAttachSession):
     """Scripted main_command screens; warps on numeric send when adjacent."""
 
-    def __init__(self, *, sector: int, graph: dict[int, list[int]], state_dir: Path):
+    def __init__(
+        self,
+        *,
+        sector: int,
+        graph: dict[int, list[int]],
+        state_dir: Path,
+        sync_world_model: bool = True,
+    ):
         self._sector = sector
         self._graph = {int(k): [int(w) for w in v] for k, v in graph.items()}
         self._state_dir = state_dir
+        self._sync_world_model = sync_world_model
         super().__init__(
             initial_screen=_command_screen(sector, self._graph.get(sector, [])),
         )
         self.rx_count = 1
         self.last_rx = -10.0
-        self._sync_sector()
+        if self._sync_world_model:
+            self._sync_sector()
 
     def _sync_sector(self) -> None:
+        if not self._sync_world_model:
+            return
         warps = self._graph.get(self._sector, [])
         world_model.upsert_sector(
             WORLD,
@@ -134,6 +145,32 @@ def test_explore_halts_on_unknown_screen(tmp_path: Path):
     assert report is not None
     assert report.outcome == OUTCOME_HALTED
     assert report.reason == HALT_UNRECOGNIZED_SCREEN
+
+
+def test_explore_ingests_warps_from_screen_empty_world_discovers_hop(tmp_path: Path):
+    """Live ingest: empty world_model + warps on screen → planner sees frontier hop."""
+    graph = {1: [2], 2: [1]}
+    session = ExploreMapSession(
+        sector=1,
+        graph=graph,
+        state_dir=tmp_path,
+        sync_world_model=False,
+    )
+    assert world_model.all_sectors(WORLD, state_dir=tmp_path) == []
+    lock = ControlLock()
+    runner = sector_explore.ExploreRunner(session, lock, state_dir=tmp_path)
+    runner.start(WORLD, min_sectors=2, turn_budget=10)
+    runner._thread.join(timeout=15)
+    report = runner.snapshot().report
+    assert report is not None, runner.snapshot()
+    assert report.outcome == OUTCOME_COMPLETED, (
+        f"reason={report.reason!r} distinct={report.distinct_sectors} sends={report.sends_issued}"
+    )
+    assert report.distinct_sectors >= 2
+    assert report.sends_issued >= 1
+    sector_one = world_model.get_sector(WORLD, 1, state_dir=tmp_path)
+    assert sector_one is not None
+    assert 2 in (sector_one.get("warps") or [])
 
 
 def test_protocol_explore_start_and_status(tmp_path: Path):

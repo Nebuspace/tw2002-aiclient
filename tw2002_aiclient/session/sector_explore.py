@@ -12,6 +12,7 @@ import time
 from dataclasses import dataclass, replace
 from typing import Optional, Set
 
+from .. import world_model
 from ..explore import known_graph, map_fill_warp_target
 from ..loops.player import (
     HALT_ABORTED,
@@ -24,7 +25,11 @@ from ..loops.player import (
 )
 from .classify import NEVER_AUTO_ACTION_CLASSES, classify_screen
 from .control_lock import ControlLock, ControlModeConflict
-from .state_parser import OUTCOME_READ, read_current_sector
+from .state_parser import (
+    OUTCOME_READ,
+    read_current_sector,
+    read_warps_from_sector_status,
+)
 from . import settle as _settle
 
 __all__ = [
@@ -133,6 +138,21 @@ def _gate_screen(full_text: str, prompt_line: str) -> Optional[str]:
     if klass != MOVEMENT_SCREEN_CLASS:
         return HALT_UNRECOGNIZED_SCREEN
     return None
+
+
+def _ingest_settled_sector(
+    world_id: str,
+    *,
+    sector_id: int,
+    full_text: str,
+    state_dir,
+) -> None:
+    """Persist sector + warps from a settled main_command screen."""
+    parsed: dict = {"sector": int(sector_id)}
+    warps = read_warps_from_sector_status(full_text)
+    if warps is not None:
+        parsed["warps"] = warps
+    world_model.write_from_state(world_id, parsed, state_dir=state_dir)
 
 
 def _adjacent_warp_allowed(graph, current: int, target: int) -> bool:
@@ -277,6 +297,12 @@ class ExploreRunner:
                     break
                 current = int(sector_read.sector)
                 distinct.add(current)
+                _ingest_settled_sector(
+                    report.world_id,
+                    sector_id=current,
+                    full_text=full_text,
+                    state_dir=self._state_dir,
+                )
                 if len(distinct) >= report.min_sectors:
                     outcome = OUTCOME_COMPLETED
                     reason = None

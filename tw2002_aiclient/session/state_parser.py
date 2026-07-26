@@ -253,6 +253,7 @@ __all__ = [
     "credits_never_observed",
     "read_credits_balance",
     "read_current_sector",
+    "read_warps_from_sector_status",
     "sector_unreadable",
     "sector_wire",
 ]
@@ -680,6 +681,36 @@ def credits_never_observed() -> CreditsSnapshot:
     rather than hand-rolled at each of its call sites -- the same reason
     :func:`sector_unreadable` exists."""
     return CreditsSnapshot(outcome=OUTCOME_ABSENT)
+
+
+# ---------------------------------------------------------------------------
+# Warp list on a genuine sector-status line (world-model ingest helper)
+# ---------------------------------------------------------------------------
+
+_WARPS_STATUS_LINE_RE = re.compile(
+    r"^Warps to Sector\(s\)\s*:?\s*(.*)$",
+    re.I | re.M,
+)
+
+
+def read_warps_from_sector_status(rendered_text) -> Optional[list[int]]:
+    """Destinations from the LAST ``Warps to Sector(s) :`` status line.
+
+    Returns ``None`` when no such line appears (caller should not write
+    warps). Returns ``[]`` when the line is present but empty. Matches
+    paren-wrapped and plain ``N - M`` shapes from settled main_command
+    screens — last-match over the grid, same discipline as full
+    ``parse_state()`` warps extraction.
+    """
+    if not isinstance(rendered_text, str):
+        return None
+    matches = list(_WARPS_STATUS_LINE_RE.finditer(rendered_text))
+    if not matches:
+        return None
+    tail = matches[-1].group(1).strip()
+    if not tail:
+        return []
+    return [int(m.group(0)) for m in re.finditer(r"\d+", tail)]
 
 
 # ---------------------------------------------------------------------------
