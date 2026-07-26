@@ -16,27 +16,44 @@ therefore normally a widening -- and this WO's whole safety claim is that
 that branches on a class refuses this one, so the proof has to live where
 the consumers are, not where the label is.
 
-The four sites that branch on `classify_screen`'s answer, enumerated by
-reading them rather than assumed:
+Written inventory (WO-NEVER-AUTO-ACTION-CONSUMER-AUDIT / C-06) — every
+sender that uses classification to choose keystrokes, enumerated by
+reading the tree rather than assumed. Durable twin:
+`audit/never-auto-action-consumer-audit-20260726.md`.
 
-  - `menu.crawler.screen_state`      -- refusal list (proven in
-                                        tests/test_menu_crawler.py)
-  - `session.guardian._maybe_keepalive` -- acts on `main_command` only
-  - `session.login._decide`          -- a positive table; anything absent
-                                        returns None (= no keystroke)
-  - `session.protocol` ensure        -- `cls == target` equality only
+  1. `menu/crawler.py` · `screen_state`
+       -- (a) `_NON_MENU_GATE_CLASSES` unions `NEVER_AUTO_ACTION_CLASSES`
+  2. `loops/player.py` · `_gate` (taught-macro / arm fire via autoloop)
+       -- (a) `klass in NEVER_AUTO_ACTION_CLASSES` → halt
+  3. `session/guardian.py` · `_maybe_keepalive`
+       -- (b) `main_command`-only whitelist
+  4. `session/daemon.py` · `_attempt_graceful_quit`
+       -- (b) `main_command`-only whitelist
+  5. `session/login.py` · `_decide`
+       -- (b) positive table; absent class → None (no keystroke)
+  6. `session/protocol.py` · `_dispatch_ensure`
+       -- (b) `cls == target` with default `target="main_command"`
+
+Cockpit `arm.py` is presentation-only (no classify, no send). Taught-run
+fire is consumer #2 only. Operator `do`/`send` report class; they do not
+choose keystrokes from it.
 
 The shape they share is the load-bearing part: every one is a POSITIVE
 match on a named class, or a denylist. Not one of them is of the form
 "act unless the class is unknown". That is what makes a new label unable
-to enable an action anywhere, and `test_no_consumer_acts_on_merely_being_
-recognized` below is the tripwire on a fifth consumer arriving that breaks
-the pattern.
+to enable an action anywhere. The inventory frozenset + marker pin below
+is the tripwire on a seventh consumer arriving that omits the refuse.
 """
+
+from __future__ import annotations
+
+from pathlib import Path
 
 import pytest
 
+from tw2002_aiclient.loops import player as player_mod
 from tw2002_aiclient.menu import crawler as menu_crawler
+from tw2002_aiclient.session import daemon as daemon_mod
 from tw2002_aiclient.session import login as login_module
 from tw2002_aiclient.session.classify import NEVER_AUTO_ACTION_CLASSES, classify_screen
 from tw2002_aiclient.session.guardian import SessionGuardian
@@ -47,6 +64,46 @@ MONEY_SCREEN = (
     "Holds cost 1,468 credits each, for a total of 29,360 credits to fill them all.\n"
     "-=-=-        End of Cargo Hold Upgrade Quote        -=-=-\n"
     "\n" + MONEY_PROMPT
+)
+
+# Relative to `tw2002_aiclient/`. Marker must appear in source: dropping the
+# refuse (or rewriting past the marker without updating this map) fails the
+# inventory pin before a behavioral gap can hide.
+_INVENTORIED_CONSUMERS: dict[str, str] = {
+    "menu/crawler.py": "NEVER_AUTO_ACTION_CLASSES",
+    "loops/player.py": "NEVER_AUTO_ACTION_CLASSES",
+    "session/guardian.py": '!= "main_command"',
+    "session/daemon.py": '!= "main_command"',
+    "session/login.py": "def _decide",
+    "session/protocol.py": 'target = args.get("target", "main_command")',
+}
+
+# Modules that may mention classify + send symbols without being a
+# classification→send *decision* site (wrappers, reporters, capture).
+_CLASSIFY_SEND_ALLOWLIST = frozenset(
+    {
+        "session/classify.py",  # defines the labels; does not send
+        "session/session.py",  # Session.classify / Session.send primitives
+        "session/settle.py",  # settle helpers used by send_and_confirm
+        "session/protocol.py",  # inventoried (ensure); also reports class
+        "session/login.py",  # inventoried
+        "session/guardian.py",  # inventoried
+        "session/daemon.py",  # inventoried
+        "session/autoloop.py",  # port only; player owns refusal
+        "session/cli.py",  # CLI surface; does not choose from class
+        "loops/player.py",  # inventoried
+        "loops/recorder.py",  # records expected_post_class; no class→send
+        "menu/crawler.py",  # inventoried
+    }
+)
+
+_PKG_ROOT = Path(__file__).resolve().parents[1] / "tw2002_aiclient"
+_CLASSIFY_HINTS = ("classify_screen", ".classify(", "session.classify")
+_SEND_HINTS = (
+    ".send(",
+    "send_and_confirm",
+    "send_raw",
+    "session.send",
 )
 
 
@@ -71,8 +128,25 @@ class _KeepaliveSession:
     def render_text(self, rows=None):
         return "\n".join(rows) if rows is not None else self._text
 
-    def send(self, text, enter=True, secret=False, sender="app"):
-        self.sent.append((text, secret, sender))
+    def send(self, text, enter=True, redact=False, sender="app"):
+        self.sent.append((text, redact, sender))
+
+
+class _QuitSession:
+    """Minimal surface `_attempt_graceful_quit` reads."""
+
+    def __init__(self, classification: str):
+        self._classification = classification
+        self.sent = []
+
+    def classify(self):
+        return self._classification
+
+    def send(self, text, enter=True, redact=False, sender="app"):
+        self.sent.append(text)
+
+    def wait_settle(self, timeout=2.0):
+        return ("idle", 0.0)
 
 
 class _FakeProfile:
@@ -101,8 +175,21 @@ def test_the_crawler_refuses_to_enumerate_a_money_prompt():
     assert menu_crawler.screen_state(MONEY_SCREEN, MONEY_PROMPT) == "unsafe"
 
 
+def test_the_taught_loop_player_refuses_a_money_prompt():
+    """Consumer 2. Taught-macro / cockpit arm fire: `_gate` is the choke
+    before every send. A money screen at a boundary must halt with
+    `HALT_NEVER_AUTO_ACTION` — including a macro whose own
+    `expected_post_class` named the money prompt (see
+    tests/test_loop_player.py for the mid-loop / recorded-answer proofs)."""
+    observation = player_mod._Observation(klass="money_prompt")
+    assert player_mod._gate(observation) == player_mod.HALT_NEVER_AUTO_ACTION
+    # Anti-drift: the player refuses via the shared frozenset, not a
+    # restated "money_prompt" literal that could diverge from classify.
+    assert player_mod.NEVER_AUTO_ACTION_CLASSES is NEVER_AUTO_ACTION_CLASSES
+
+
 def test_the_guardian_never_nudges_a_money_prompt():
-    """Consumer 2. The idle keepalive sends a bare Enter, which on a
+    """Consumer 3. The idle keepalive sends a bare Enter, which on a
     quantity prompt is not a no-op at all: canon's P-QTY is precisely
     about `[12]`-style brackets that Enter ACCEPTS. `_maybe_keepalive`
     acts on `main_command` and nothing else, so the nudge cannot land
@@ -121,8 +208,18 @@ def test_the_guardian_never_nudges_a_money_prompt():
     assert session.sent == []
 
 
+def test_graceful_quit_never_keys_a_money_prompt():
+    """Consumer 4. Daemon shutdown's best-effort `Q`/`Y` is gated on
+    `main_command` only. A money prompt must produce zero sends — Enter
+    on a quantity bracket, or `Q` mid-purchase, is exactly the hazard
+    never-auto-action exists to forbid."""
+    session = _QuitSession("money_prompt")
+    daemon_mod._attempt_graceful_quit(session)
+    assert session.sent == []
+
+
 def test_the_login_automaton_has_no_keystroke_for_a_money_prompt():
-    """Consumer 3. `login._decide` is a positive table: a class it does
+    """Consumer 5. `login._decide` is a positive table: a class it does
     not name returns None, which routes through the caller's stagnation
     budget to a fail-loud `automaton_stuck` rather than to a guess. A
     money prompt has no entry, so the automaton escalates."""
@@ -165,10 +262,70 @@ def test_no_consumer_acts_on_merely_being_recognized(forbidden):
 
 
 def test_ensure_never_treats_a_money_prompt_as_a_reached_target():
-    """Consumer 4. `protocol`'s ensure verb decides "already there" by
+    """Consumer 6. `protocol`'s ensure verb decides "already there" by
     `cls == target`, and its target is `main_command`. An equality against
     a named class cannot be satisfied by a different named class -- pinned
     here because the *shape* is what protects the pin, and a future
     rewrite to "cls is not unknown" would silently pass a money screen off
     as a ready session."""
     assert classify_screen(MONEY_SCREEN, MONEY_PROMPT) != "main_command"
+
+
+def test_inventoried_consumers_still_carry_their_refuse_marker():
+    """Accept §3 / Scope tripwire: if a listed consumer drops its refuse
+    (deletes the frozenset import, widens past `main_command`, etc.) this
+    fails before a behavioral regression has to be rediscovered live."""
+    missing = []
+    for rel, marker in _INVENTORIED_CONSUMERS.items():
+        path = _PKG_ROOT / rel
+        text = path.read_text(encoding="utf-8")
+        if marker not in text:
+            missing.append(f"{rel} missing marker {marker!r}")
+    assert missing == [], "; ".join(missing)
+
+
+def test_inventory_frozenset_matches_audit_table():
+    """The map above IS the Accept inventory — keep it exact. Adding a
+    consumer requires a row here AND a refuse marker AND (usually) a
+    behavioral pin in this file."""
+    assert frozenset(_INVENTORIED_CONSUMERS) == frozenset(
+        {
+            "menu/crawler.py",
+            "loops/player.py",
+            "session/guardian.py",
+            "session/daemon.py",
+            "session/login.py",
+            "session/protocol.py",
+        }
+    )
+
+
+def test_no_uninventoried_classify_send_module():
+    """Fails when a new package module both references classify and an App
+    send symbol without appearing in the inventory/allowlist — the C-06
+    "fifth consumer" gap restated as a pin."""
+    offenders = []
+    for path in sorted(_PKG_ROOT.rglob("*.py")):
+        rel = path.relative_to(_PKG_ROOT).as_posix()
+        if rel in _CLASSIFY_SEND_ALLOWLIST or rel in _INVENTORIED_CONSUMERS:
+            continue
+        text = path.read_text(encoding="utf-8")
+        if not any(h in text for h in _CLASSIFY_HINTS):
+            continue
+        if not any(h in text for h in _SEND_HINTS):
+            continue
+        offenders.append(rel)
+    assert offenders == [], (
+        "new classification→send module(s) not in the NEVER_AUTO_ACTION "
+        f"inventory/allowlist: {offenders}. Add a refuse + inventory row "
+        "(see audit/never-auto-action-consumer-audit-20260726.md)."
+    )
+
+
+def test_cockpit_arm_is_not_a_classify_send_consumer():
+    """C-06 named taught-rule / cockpit arm. Arm is presentation-only:
+    no classify import, no send. Fire path is consumer #2 (player)."""
+    arm_src = (_PKG_ROOT / "cockpit" / "arm.py").read_text(encoding="utf-8")
+    assert "classify" not in arm_src
+    assert ".send(" not in arm_src
+    assert "send_and_confirm" not in arm_src
