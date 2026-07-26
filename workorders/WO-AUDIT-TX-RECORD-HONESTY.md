@@ -1,8 +1,9 @@
 # WO-AUDIT-TX-RECORD-HONESTY — Session TX-record / transcript-log secrets honesty (F6)
 
 > Reconstructed from coord HANDOFF bodies (2026-07-25 backfill).
-> Status: **DONE (unpushed)** 2026-07-25 · tip **`c21cd1c`** (CC; push gated with F2/F6 lane gate)
-> Type: harden · Phase: audit · Seat: impl-claudecode-aiclient
+> Status: **DONE** · origin **`a33825a`** (landed on main; tests evolved further — `50ff65f`, `34a41b4`)
+> Note: preserve orphan **`c21cd1c`** on `preserve/g2-safe-emit-orphan` is the same Goal by another route — **not** the stamp tip; do not rebuild.
+> Type: harden · Phase: audit · Seat: impl-claudecode-aiclient (land) · stamp corrected by impl-aiclient-cursor 2026-07-26
 > Refs: `canon/engine/session-engine.md:146-153` · `connection.py` · `session.py` · `test_tx_record_honesty.py`
 
 ## Goal
@@ -23,13 +24,13 @@ Three sinks named in canon §146-153: transcript log · ledger row · `sent_inpu
 ## Accept
 - `test_tx_record_honesty.py` passes: no raw credential in transcript log
 - `test_tx_record_honesty.py` passes: no raw credential in TX-record output
-- Suite green at `c21cd1c`
+- Suite green at landing tip `a33825a` (main); preserve orphan `c21cd1c` is historical only
 
 ## Proof
 ```bash
-git show --stat c21cd1c
+git show --stat a33825a
 pytest tests/test_tx_record_honesty.py -v
 ```
 
 ## Refs
-CC STATUS @ 13:45:26Z · SHA `c21cd1c` (806 insertions) · `canon/engine/session-engine.md:146-153` · push gated on F2/F6 window
+CC STATUS @ 13:45:26Z · land tip `a33825a` · preserve orphan `c21cd1c` · `canon/engine/session-engine.md:146-153` · hub REVISE 2026-07-26T11:43:05Z
