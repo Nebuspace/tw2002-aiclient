@@ -68,3 +68,17 @@ Neither has ever been executed. They are not expected failures — they are **un
 4. **xeno** — no live attempt; the halt stands on the existing fingerprint
 
 Cool-off before a-net is not a formality. A host that has just refused connections will produce a failure that looks like a product defect and is not.
+
+## Hub confirming wave 2026-07-26T19:55:40Z (tip `a5cfdda`)
+
+Isolated bank `/tmp/tw2002-live-ensure-matrix-20260726T0801Z` · cells `reprove/confirm-195540Z/`.
+
+| Cell | Profile | Result | classification | steps |
+|---|---|---|---|---|
+| rogue-new | proof_rogue_new | PASS | main_command | 9 |
+| rogue-returning | proof_rogue | PASS | main_command | 9 |
+| micro-new | proof_micro | PASS | main_command | 9 |
+| anet-A-new | proof_anet (letter A) | PASS | main_command | 10 |
+
+**≥3-host ensure bar confirmed on tip.** micro RETURNING / a-net RETURNING still not run (honest unknown).
+
