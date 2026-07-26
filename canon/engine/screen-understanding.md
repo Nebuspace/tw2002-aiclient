@@ -83,7 +83,12 @@ return — because a misspelled pin forbids nothing while every consumer stays g
 bank-transfer shape is a HYPOTHESIS named by the ruling and not yet observed. `Your offer [N] ?` is
 deliberately **not** claimed by `money_prompt` — [auto-haggle](/engine/auto-haggle.md) owns that
 shape prescriptively, and claiming it here would silently overrule a different Accepted concept.
-That tension is unresolved and is recorded in `DECISIONS.md`.
+
+**That tension is now RULED** (`DECISIONS.md` §A.2, Max carte blanche 2026-07-26): never-auto-action
+means **no unattended freestyle**, and **human-armed guarded rules are exempt** — auto-haggle and
+taught quantity chains may answer their own shapes. So `Your offer [N] ?` must stay unclaimed by
+`money_prompt`: the abstention above is the ruling's requirement, not a gap awaiting one. What
+`money_prompt` forbids is an *unattended* answer to a money question the app was never taught.
 
 The live entry point is `classify_screen(full_text, prompt_line)`: it evaluates gate anchors
 against the **prompt line only**, content anchors against the whole screen, and gate anchors

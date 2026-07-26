@@ -231,3 +231,19 @@ Max delegated the standing 🧑‍⚖️ parked gates to hub (Samantha). Treat t
 ### F — Throwaway-worktree lifecycle (Proposed → Accepted with CC amendments)
 
 Accepted: owner removes on Accept/abandon; `preserve/<wo-id>` if tip ∉ origin; hub mass-prune only after `🧹 PRUNE-INTENT` + seat ACK; **never remove a LOCKED worktree** (lock carries PID; `kill -0` detects stale); soft ceiling **12 is a reporting trigger**, not a removal trigger (CC amendment B). Hub may lift 🧹 PRUNE PAUSED after seats ACK this Accept note.
+
+### A.2 clarification — never-auto-action vs auto-haggle (hub 2026-07-26 · Max carte blanche)
+
+**Ruled:** never-auto-action means **no unattended freestyle** on money/quantity screens — not a ban on **human-armed, guarded, taught** money-path rules.
+
+- Unattended App / crawler / invent-a-keystroke: **still refuse** (`money_prompt` + `_UNSAFE` / `NEVER_AUTO_ACTION_CLASSES`).
+- Human-armed autopilot with an explicit taught/guarded rule (auto-haggle answering `Your offer [N] ?`, bounded quantity chain steps): **exempt** — those concepts remain Accepted.
+- `Your offer [N] ?` may stay unclassified as `money_prompt` (or later earn a dedicated haggle class that is auto-action-eligible when armed). Do **not** fold haggle offers into never-auto-action `money_prompt` without a new DECISION.
+
+Harmless until a haggle/trade module lands; this clears the gate so one can.
+
+### C.2 — Ensure screen-mirror / echoed credential (hub 2026-07-26 · Max carte blanche)
+
+**Ruled:** Structured ensure diagnostics (screen mirror in error payloads, CLI JSON, logs, persisted reason strings) must **not** carry server-echoed credentials. Live TUI paint of the telnet stream may show what the server painted (human eyes on the game). MT-07 carrier 2 = **fix** (redact), not delete-xfail-as-design.
+
+
