@@ -91,6 +91,42 @@ def test_login_password():
     assert classify("Password:") == "login_password"
 
 
+def test_login_password_real_prompts_still_classify():
+    """WO-CLASSIFY-LOGIN-PASSWORD-NARROW Accept 2 — FakeTWGS / login
+    automaton shapes must keep classifying as login_password after the
+    bare-substring gate was tightened."""
+    for prompt in (
+        "Password:",
+        "Password?",
+        "Please enter a password for this game account.",
+        "Please enter your password:",
+        "Enter your password:",
+        "Repeat password to verify.",
+        "Your password?",
+    ):
+        assert classify_screen("", prompt) == "login_password", prompt
+        assert classify(prompt) == "login_password", prompt
+
+
+def test_login_password_refuses_help_utility_mentions():
+    """WO-CLASSIFY-LOGIN-PASSWORD-NARROW Accept 1 — bare ``password`` in
+    non-login chrome must not steal the class when it is the active
+    prompt line. Before: login_password. After: not login_password
+    (money_prompt / unknown / other as appropriate)."""
+    helpish = "How many characters in your password?"
+    assert classify_screen("", helpish) != "login_password"
+    assert classify(helpish) != "login_password"
+    # Still a quantity question → money_prompt wins among gates.
+    assert classify_screen("", helpish) == "money_prompt"
+
+    utility = "Utility Menu — password recovery tools (? for help):"
+    assert classify_screen("", utility) != "login_password"
+    assert classify(utility) != "login_password"
+
+    chrome = "See the password section of the help file:"
+    assert classify_screen("", chrome) != "login_password"
+
+
 def test_sector_display():
     assert classify("Sector  : 1234\r\nWarps to Sector(s):  1 - 2 - 3") == "sector_display"
 
@@ -1225,7 +1261,11 @@ def test_money_prompt_is_the_last_gate_so_no_driven_class_can_lose_a_screen():
     "prompt, driven_class",
     [
         ("How many holds? Command [TL=00751:0/0/0/850]:", "main_command"),
-        ("How many characters in your password?", "login_password"),
+        # login_password used to collide here via bare ``password`` on
+        # "How many characters in your password?" — that false positive
+        # is refused by WO-CLASSIFY-LOGIN-PASSWORD-NARROW; no remaining
+        # money∩login_password shape is a real login gate, so the
+        # driven-gate pin covers main_command + pause_key only.
         ("How many? Press any key to continue:", "pause_key"),
     ],
 )
