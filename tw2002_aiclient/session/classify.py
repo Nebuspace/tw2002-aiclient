@@ -750,7 +750,7 @@ def _is_genuine_cim_report(full_text: str) -> bool:
 #   same spirit as this module's other constructed grammars; tighten or
 #   widen it when a real bank capture lands.
 #
-# TWO DELIBERATE NON-CLAIMS, recorded so they read as decisions:
+# THREE DELIBERATE NON-CLAIMS, recorded so they read as decisions:
 #
 #   1. `Your offer [N]?` is NOT claimed, even though it is unambiguously a
 #      money prompt. That exact shape is already owned, prescriptively, by
@@ -766,6 +766,18 @@ def _is_genuine_cim_report(full_text: str) -> bool:
 #      the rest of the app it KNOWS what a screen is, and canon
 #      (screen-understanding, "The Unknown Is First-Class") is explicit
 #      that a confident wrong answer is worse than `unknown`.
+#   3. Password-length / help-about-password chrome that matches the
+#      QUANTITY shape only because it asks "How many …?" about a password
+#      (e.g. "How many characters in your password?"). Post C-02
+#      (WO-CLASSIFY-LOGIN-PASSWORD-NARROW) these no longer steal
+#      `login_password`; they then landed on `money_prompt` and halted via
+#      `NEVER_AUTO_ACTION_CLASSES` — **safe by accident** (C-06 consumers),
+#      not by vocabulary honesty (WO-CLASSIFY-PASSWORD-LENGTH-UNKNOWN).
+#      That residual was incidental: these are not money questions. Leave
+#      them as `unknown` so halt is by the unknown-is-first-class contract,
+#      not by `money_prompt` breadth surviving a future tighten. C-02 and
+#      C-06 remain a load-bearing pair for real money screens; this carve
+#      only refuses borrowing that pair for non-money password chrome.
 #
 # `re.MULTILINE` deliberately: both patterns are line-anchored, so on
 # `classify_screen`'s last-resort whole-text scan (no prompt line at all)
@@ -776,13 +788,22 @@ _MONEY_PROMPT_TRANSFER_RE = re.compile(
     r"^(?=.*\bcredits?\b)(?=.*\b(?:transfer|deposit|withdraw)\b).*[?:]\s*$",
     re.I | re.M,
 )
+# Quantity-shaped lines that also name ``password`` are help chrome, not
+# money — see deliberate non-claim 3 above.
+_MONEY_PROMPT_PASSWORD_CHROME_RE = re.compile(r"\bpassword\b", re.I)
 
 
 def _is_money_prompt(text: str) -> bool:
     """Is this a quantity / money / bank-transfer question the server is
     blocked on? See the table above for each shape's provenance and for
-    the two shapes deliberately NOT claimed."""
-    return bool(_MONEY_PROMPT_QUANTITY_RE.search(text) or _MONEY_PROMPT_TRANSFER_RE.search(text))
+    the shapes deliberately NOT claimed."""
+    if _MONEY_PROMPT_TRANSFER_RE.search(text):
+        return True
+    for match in _MONEY_PROMPT_QUANTITY_RE.finditer(text):
+        if _MONEY_PROMPT_PASSWORD_CHROME_RE.search(match.group(0)):
+            continue
+        return True
+    return False
 
 
 # login_password — real login-automaton password gates only.
@@ -796,6 +817,10 @@ def _is_money_prompt(text: str) -> bool:
 # redaction only. Match the shapes FakeTWGS / live login actually emit:
 # bare ``Password?`` / ``Password:``, ``Please enter a/your password…``,
 # ``Enter [your] password…``, ``Repeat password…``.
+#
+# Post-C-02 follow-on (WO-CLASSIFY-PASSWORD-LENGTH-UNKNOWN): the password-
+# length quantity chrome that C-02 freed from this gate must not lean on
+# incidental `money_prompt` breadth either — see money_prompt non-claim 3.
 _LOGIN_PASSWORD_RE = re.compile(
     r"(?:"
     r"^\s*password\s*[?:]\s*$"
