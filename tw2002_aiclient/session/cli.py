@@ -276,20 +276,59 @@ def ensure_raw(profile, *, target="main_command", timeout=180.0, no_auto_arm=Fal
                 "detail": f"daemon failed to start (no socket after {timeout:.0f}s) -- see {daemon_log_path}",
             }
 
-        # Let the fresh connection produce its first settled screen
-        # before driving it -- mirrors `tw start`'s post-spawn read.
-        # Cap the settle window so a slow/idle first screen cannot burn
-        # the whole ensure budget (WO-P2-OPS-VERB-B: `read` is live now;
-        # previously unknown_verb returned instantly and hid this hazard).
-        remaining = deadline - time.monotonic()
-        settle_budget = min(remaining, 5.0)
-        if settle_budget > 0:
-            send_request(
+        # Let the fresh connection produce its first settled screen before
+        # driving it -- mirrors `tw start`'s post-spawn read. This round
+        # trip IS the readiness proof, NOT the `sock_path.exists()` check
+        # above: a unix socket FILE exists as soon as `bind()` runs, before
+        # anything is `accept()`-ing on it, so file presence proves nothing
+        # about whether the daemon can actually answer yet
+        # (WO-ENSURE-SPAWN-READINESS). Its result MUST be read and checked --
+        # a discarded not-ready answer here used to fall straight through to
+        # the real `ensure` round trip below, which met the same not-ready
+        # daemon and surfaced `empty_response` to the operator as though a
+        # *remote* game server had failed, when the cause was purely local
+        # startup timing. Retry the same probe -- budgeted inside the SAME
+        # `deadline` used above, never extended -- until it actually
+        # succeeds or the budget is gone; cap each attempt so a slow/idle
+        # first screen cannot burn the whole budget in one shot
+        # (WO-P2-OPS-VERB-B: `read` is live now; previously unknown_verb
+        # returned instantly and hid this hazard).
+        settle_ok = False
+        last_settle_resp = None
+        while True:
+            remaining = deadline - time.monotonic()
+            settle_budget = min(remaining, 5.0)
+            if settle_budget <= 0:
+                break
+            last_settle_resp = send_request(
                 "read",
                 {"timeout": settle_budget},
                 timeout=settle_budget + 5,
                 run_dir=run_dir,
             )
+            if last_settle_resp.get("ok"):
+                settle_ok = True
+                break
+            time.sleep(0.1)
+
+        if not settle_ok and last_settle_resp is not None:
+            # The socket FILE showed up (the exists() gate above passed),
+            # but no round trip against it ever succeeded before the budget
+            # ran out -- distinguishable from the "no socket at all" branch
+            # above (same `spawn_failed` code, different `detail`, matching
+            # this function's existing two-cause `spawn_failed` idiom) and
+            # never surfaced as the raw `empty_response`/`connect_failed*`
+            # wire error a caller would otherwise misread as a remote
+            # failure.
+            return {
+                "ok": False,
+                "error": "spawn_failed",
+                "detail": (
+                    "daemon socket present but never answered a round trip "
+                    f"after {timeout:.0f}s -- see {daemon_log_path} "
+                    f"(last probe error: {last_settle_resp.get('error')!r})"
+                ),
+            }
 
     remaining = deadline - time.monotonic()
     if remaining <= 0:
