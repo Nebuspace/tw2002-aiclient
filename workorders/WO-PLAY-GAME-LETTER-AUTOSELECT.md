@@ -1,6 +1,6 @@
 # WO-PLAY-GAME-LETTER-AUTOSELECT
 
-**Status:** IN FLIGHT · HOLD lifted (DEC-03) · Cursor lane · hub-seeded after PR-CI
+**Status:** DONE · tip `208807d` · Cursor lane · hub-seeded after PR-CI
 **Posted:** 2026-07-26 · Max live report (Manual + timed-out game board; profile `game_letter` never sent)  
 **Seat (when lifted):** prefer Claude Code for login/ensure path · Cursor for chrome-adjacent honesty only if lanes split  
 **Related (do not merge):** `WO-ANET-BANNER-LAYOUT` · `WO-MICRO-LOGIN-BLANK-REJECT` · `WO-XENO-FINGERPRINT` · ensure bar 1/4 · `autopilot_game_select` halt (canon — **different** from ensure)
