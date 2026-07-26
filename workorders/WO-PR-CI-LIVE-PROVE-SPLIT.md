@@ -40,7 +40,7 @@ No real passwords in git history. Public Actions logs never print secret values.
 | G | **Reconcile + commit + push all outstanding code to `main` BEFORE any implementer gets back to work** after restart is done. |
 | H | **Orchestrator creates the branch** the implementer works from, and **commits the workorders/ Markdown** into that branch before HANDOFF. |
 | I | When done, **orchestrator merges the PR to `main`** after Actions complete; the PR contains **WO markdown + implementation** as one encapsulated unit. |
-| J | Branch protection requires offline **`suite`** + **`live-prove`**. **`live-prove` turns green only when the orchestrator posts it** after actually running live tests on the laptop (docs-only may post `n/a` with explicit reason). Not Max click-through; not an auto-green no-op job. |
+| J | Branch protection requires offline **`suite`** + **`live-prove`**. **`live-prove` turns green only when the orchestrator posts it** after a **multi-server / multi-character** laptop prove (≥3 hosts, NEW+RETURNING — see § What live-prove means); docs/CI-infra may post `n/a` with explicit reason. Not Max click-through; not an auto-green no-op job; not a single-host rubber stamp. |
 | K | **No new HANDOFF** until the prior PR for that seat (or the single in-flight PR, if one-at-a-time globally) **has passed required checks** — serial dispatch; idle beats melting the laptop. |
 
 ---
@@ -49,29 +49,44 @@ No real passwords in git history. Public Actions logs never print secret values.
 
 **Problem:** GitHub cannot see the laptop. **Requirement:** merge to `main` must be impossible until someone who ran the live tests says so — and that someone is the **orchestrator**, not Max.
 
+### What `live-prove` *means* (Max 2026-07-26 — multi-server / multi-character)
+
+In the PR-coordinator rhythm, `live-prove` is **not** “one happy path on the server we always use.” It is a **diversity gate**: prove the change against **live TWGS** across **multiple servers** and **multiple characters**, so we do not silently design for a single banner / menu dialect / game-select shape.
+
+**Default bar (product PRs that touch login · ensure · classify · play · session · reconnect):**
+
+| Axis | Minimum | Notes |
+|---|---|---|
+| **Servers** | **≥ 3** distinct catalog hosts (`config/servers.toml`) | Hub picks; **rotate** over time. Prefer known-different stall/menu shapes when choosing (anet / rogue / micro / xeno / …). |
+| **Characters** | **≥ 1 NEW** (create / first-time) **and** **≥ 1 RETURNING** (pre-existing profile) | Spread across the chosen servers — not all NEW on one host and all RETURNING on another if avoidable. |
+| **Depth** | Exercise the WO's Accept path, plus enough of connect → login → post-login to catch server-specific drift | Ensure-bar WOs: aim NEW+RETURNING → `main_command` on the chosen set. Narrower WOs: smoke the touched surface on each cell. |
+| **Evidence** | `live-prove` summary lists **host keys**, **NEW/RETURNING counts**, tip SHA, commands — **no secrets** | Example: `hosts: a_net_online, gone_rogue, microblaster_network · NEW:2 RETURNING:3 · tip abc1234`. |
+
+**Hub picks the set** each merge — Max does not prescribe the exact trio. The invariant is diversity, not a fixed forever-list.
+
+**When `n/a` is still honest:** docs / protocol / CI-infra / pure offline (no live socket path). Summary must say why. **Do not** `n/a` a login/ensure/play PR because “suite was green.”
+
+**Lighter bar (optional, hub-judged):** a tiny pure-client change with no server-sensitive surface may use **≥ 2** servers + NEW+RETURNING once — still multi-host. Record the judgment in the summary. Prefer the default ≥3 when unsure.
+
 ### Mechanism (hub has access; Max does not need to click)
 
-1. **Ruleset / branch protection** on `main`: required status checks = `suite` (GHA) **and** `live-prove` (hub-posted Check Run).
+1. **Ruleset / branch protection** on `main`: required status checks = `suite` (GHA) **and** `live-prove` (hub-posted Check Run or Commit Status).
 2. **No workflow may mark `live-prove` success automatically** on every PR (that would be a rubber stamp). Do **not** use a Max-only Environment approval as the primary gate (Max is not running the live tests).
-3. After the hub runs laptop live prove (`pytest -m live_login` and/or isolated `ensure` / matrix cells for that PR's Accept), the hub posts a **Check Run** (or Commit Status) named exactly `live-prove` on the PR head SHA via `gh` / GitHub API, with:
-   - `conclusion: success` only if live Accept passed (or honest **`n/a`** for docs/protocol-only PRs — body must say why live was skipped),
-   - `conclusion: failure` if live failed,
-   - summary text: hosts, NEW/RETURNING, tip SHA, command lines — **no secrets**.
-4. Example (illustrative — exact API in implement tip):
+3. After the hub runs the multi-server / multi-character laptop prove (and/or `pytest -m live_login` cells that encode the same bar), the hub posts a check named exactly `live-prove` on the PR head SHA via `scripts/hub-live-prove-check.sh`, with:
+   - `success` only if the diversity bar passed (or honest **`n/a`** — body must say why live was skipped),
+   - `failure` if any required cell failed,
+   - summary text: hosts, NEW/RETURNING counts, tip SHA, command lines — **no secrets**.
+4. Example:
 
 ```bash
-# after laptop live prove on PR head $SHA
-gh api "repos/Nebuspace/tw2002-aiclient/check-runs" -f name=live-prove \
-  -f head_sha="$SHA" -f status=completed -f conclusion=success \
-  -f output[title]='Orchestrator laptop live prove' \
-  -f output[summary]='…redacted N-of-M…'
+# after multi-server laptop prove on PR head $SHA
+./scripts/hub-live-prove-check.sh "$SHA" success \
+  "hosts: a_net_online, gone_rogue, microblaster_network · NEW:2 RETURNING:3 · tip ${SHA:0:7}"
 ```
 
-5. **Hub merge ritual (ordered):** offline `suite` green → run live on laptop (or honest docs/CI-infra `n/a`) → `scripts/hub-live-prove-check.sh` → `gh pr merge` → **`scripts/hub-wo-merge-cleanup.sh wo/<ID> [worktree…]`** (delete remote+local `wo/*` branch + worktrees; refuse if tip ∉ `origin/main`). Never merge if `live-prove` is missing/pending/red. Never leave a merged `wo/*` branch on origin.
-6. **Auth:** Max provisions a credential the **orchestrator agent can use** (`gh auth` on the hub machine, or a fine-grained PAT / GitHub App with `checks:write` + contents/PR read — **not** committed to the repo). Document name-only in the secret-bank map; rotate if leaked.
-7. **Anti-cheat:** CI must not ship a job that always concludes `live-prove` success. Optional later: webhook or script that fails the check if summary is empty.
-
-This is the hard assurance: **merge is branch-protected on a check only the hub can raise, and the hub's standing rule is to raise it only after live tests (or explicit n/a).**
+5. **Hub merge ritual (ordered):** offline `suite` green → **multi-server live prove** (or honest docs/CI-infra `n/a`) → `scripts/hub-live-prove-check.sh` → `gh pr merge` → **`scripts/hub-wo-merge-cleanup.sh wo/<ID> [worktree…]`**. Never merge if `live-prove` is missing/pending/red. Never leave a merged `wo/*` branch on origin.
+6. **Auth:** Max provisions a credential the **orchestrator agent can use** (`gh auth` on the hub machine, or a fine-grained PAT / GitHub App with `checks:write` — **not** committed). Document name-only in the secret-bank map.
+7. **Anti-cheat:** CI must not ship a job that always concludes `live-prove` success. Empty summary / single-host-only summary on a product PR is a **failed ritual** even if the API accepts it — hub must not post `success` in that case.
 
 ---
 
@@ -110,9 +125,9 @@ This is the hard assurance: **merge is branch-protected on a check only the hub 
 ### Lane 3 — Orchestrator laptop live prove (DEFAULT at merge)
 
 - After PR offline CI is green + seat STATUS + hub design Accept (cipher/mack when required):
-  - Hub runs **`pytest -m live_login`** and/or isolated live ensure / matrix cells from Max's machine (existing discipline: `--run-dir`, no default-daemon footgun).
-  - Results → Accept note / matrix row / merge GO.
-- Live fails on laptop ⇒ **do not merge** on CI-green alone for ensure-bar WOs.
+  - Hub runs the **diversity gate**: ≥3 live catalog servers, ≥1 NEW + ≥1 RETURNING characters (hub picks/rotates), exercising the WO Accept path (plus `pytest -m live_login` cells when they encode the same bar). Existing discipline: `--run-dir`, no default-daemon footgun.
+  - Results → Accept note / matrix row / `hub-live-prove-check.sh` summary → merge GO.
+- Live fails on laptop ⇒ **do not merge** on CI-green alone for ensure-bar / login / play WOs.
 - Optional later: hub may *also* arm Lane 2 for a second opinion — never the only gate for M1–M3 until Max re-rules.
 
 ---

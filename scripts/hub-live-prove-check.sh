@@ -23,6 +23,13 @@
 #
 # Hub merge ritual (ordered): suite green → this script → gh pr merge →
 #   ./scripts/hub-wo-merge-cleanup.sh wo/<ID> [worktree…]
+#
+# Diversity gate (Max 2026-07-26): product PRs need multi-server /
+# multi-character evidence in SUMMARY — ≥3 catalog hosts, ≥1 NEW + ≥1
+# RETURNING — e.g.:
+#   hosts: a_net_online, gone_rogue, microblaster_network · NEW:2 RETURNING:3
+# Single-host-only is not a valid success summary for login/ensure/play PRs.
+# Docs/CI-infra may use n/a with an explicit reason.
 
 set -euo pipefail
 
