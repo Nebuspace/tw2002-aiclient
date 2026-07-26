@@ -3,16 +3,27 @@
 **Status:** OPEN · product (`session/cli.py`) · Claude Code lane · banked 2026-07-26
 **Posted:** 2026-07-26 · root-caused from the live ensure matrix (2 of 5 cells)
 
-## Scope correction vs the banking request
+## Scope — wide, and resting on the CODE not the matrix (amended 2026-07-26)
 
-The hub banked this as *"`empty_response` **after stop→re-ensure**"*. **That framing is too narrow and a fix built to it would leave half the defect standing.** The hub's own outcomes table records `game.a-net-online.lol`'s **first** ensure — before any stop — as `empty_response`. Observed both ways:
+Hub ruling: **keep wide**. But the evidence this WO originally cited has been partly withdrawn, and
+the record is corrected here rather than quietly left standing.
 
-```
-twgs.microblaster.net : ensure -> real stall (step 6)    | stop + re-ensure -> empty_response
-game.a-net-online.lol : ensure -> empty_response         | stop + re-ensure -> real stall (step 5)
-```
+**Withdrawn.** The first draft claimed *"two hosts, opposite orders"* and *"2 of 5 cells"*, resting on
+`game.a-net-online.lol`'s **first** ensure returning `empty_response`. The seat that ran the matrix
+subsequently described that artifact as a **discarded, sandbox-poisoned retry** and reported a-net as
+`menu`@step5 on both attempts. **That data point is contested and is not relied on here.**
 
-**Two hosts, opposite orders, same symptom.** The common factor is a **freshly spawned daemon**, not a preceding stop. Scope is spawn readiness generally.
+**Uncontested live symptom:** exactly one — `twgs.microblaster.net`, `empty_response` on the
+**post-stop re-ensure**.
+
+**Why the scope stays wide anyway, and it is not the matrix that justifies it:** the defect below is
+read directly out of `cli.py`. A readiness probe whose result is discarded is wrong at **first
+spawn** and **after a stop** identically — same line, same fix, same failure mode. Narrowing the WO
+to the post-stop path would leave the identical bug reachable on the other path and look finished.
+**If the frequency turns out to be one cell in five, the code defect is unchanged; only its
+observed rate is.**
+
+Do not cite frequency numbers from this WO. Cite the code.
 
 ## Goal
 
@@ -47,8 +58,9 @@ only the evidence is dropped.
 
 `empty_response` maps to `REASON_CONNECT_FAILED` (`adapters.py:40`) — a **local** condition. Left as
 is, it lands in operator-facing results as though a **third-party server** failed. The live matrix
-produced exactly that: two hosts carrying an `empty_response` row that says nothing about them.
-**A false claim about someone else's service, and a real defect of ours buried underneath it.**
+produced exactly that: an `empty_response` row filed against a host it says nothing about.
+**A false claim about someone else's service, with a real defect of ours buried underneath it** —
+and that hazard does not depend on how often the race fires, only on it being reachable at all.
 
 ## Scope
 
