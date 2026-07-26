@@ -77,6 +77,11 @@ python3 -m venv .venv && .venv/bin/pip install -e .
 
 ---
 
+- **Throwaway-worktree lifecycle (RATIFIED this project 2026-07-26 · Max GO still pending for the `Claude_Samantha` framework backport):** after hub Accept (tip on `origin/main`) or abandon, the owning seat `git worktree remove`s in that STATUS turn — clean-as-you-go. Preserve tip as `preserve/<wo-id>` if not on origin. Hub mass-prune forbidden without `🧹 PRUNE-INTENT` + seat ACKs. Soft ceiling 12 worktrees/repo.
+  - **Step 2b — preserve the lane notebook before removing.** Merge any worktree-local lane notes (e.g. `.claude/agent-memory/<agent>/` entries that exist only in that worktree) into the shared notebook **and its index** first. **Unlocked + every dirty file blob-reachable in history is necessary, not sufficient** — a worktree can pass both and still be the only home of a night's accumulated lessons (incident 2026-07-26: 8 worktrees cleared the reap test while holding 38 unmerged notes between them).
+  - **The live-lane signal is the lock FILE's presence, not the pid recorded inside it.** One agent host serves many lanes, so the same pid appears in unrelated lanes' lock files and "pid alive" proves nothing about *this* lane.
+  - Merging an index is **append-only**: a worktree's own `MEMORY.md` is usually a short delta, not a full index, so copying it over the shared one destroys everything it does not mention.
+
 ## Two-Instance Coordination (Implementer view)
 
 Full protocol = parent **`Nebuspace/CLAUDE.md`** + `.samantha/references/coordination-protocol/README.md` (M9 STAR).
