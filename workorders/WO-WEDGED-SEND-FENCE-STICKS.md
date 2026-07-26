@@ -1,7 +1,17 @@
 # WO-WEDGED-SEND-FENCE-STICKS
 
-**Status:** OPEN · READY · product (`session/connection.py` + `session/autoloop.py`) · banked from Cipher review
+**Status:** READY FOR HUB COMMIT · Cursor · `wo/WEDGED-SEND-FENCE` · tip `b56ec56`  
 **Posted:** 2026-07-26 · Cipher MEDIUM on `WO-CONTROL-LOCK-AUTOLOOP-FENCE`
+
+## Fix landed (this tip)
+
+- `TelnetConnection.force_unblock_sends()` — shutdown socket to wake blocked `sendall` (does **not** clear fences).
+- `Session.send_raw` — after courtesy fence bound, if still fenced → force-unblock + short absorb wait.
+- `AutoLoopRunner.stop` — after join timeout, force-unblock so `_run`'s `finally` can `leave_auto_loop`.
+- Pins: `tests/test_wedged_send_fence.py`.
+
+**Generation token:** preserves wedged predecessor fence (does not heal); see test + Accept note in the pin file.
+
 
 ## Goal
 

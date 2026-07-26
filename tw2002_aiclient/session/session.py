@@ -48,6 +48,11 @@ MIN_SEND_GAP_S = 0.15  # guardrail: no hammering the server
 # keystroke is sent regardless once the bound expires.
 _FENCE_WAIT_TIMEOUT_S = 10.0
 _FENCE_WAIT_POLL_S = 0.02
+# After the courtesy bound, if the fence is STILL raised, the predecessor is
+# almost certainly wedged inside blocking ``sendall`` (WO-WEDGED-SEND-FENCE-
+# STICKS). Unblocking the socket lets its ``finally`` clear the fence; this
+# short second poll is only to absorb that release, not a second 10s tax.
+_FENCE_UNBLOCK_WAIT_S = 1.0
 
 # canon: architecture/session-engine.md "Send-time actor tag `{app, human}`
 # + `session_id`" -- the only two live senders in the reborn model (the AI
@@ -561,6 +566,16 @@ class Session:
             deadline = time.monotonic() + _FENCE_WAIT_TIMEOUT_S
             while control_lock.is_driver_fenced() and time.monotonic() < deadline:
                 time.sleep(_FENCE_WAIT_POLL_S)
+            # Bound expired and still fenced: do NOT clear the fence here
+            # (that would be a second driver / TOCTOU against a live wire
+            # writer). Unblock the socket so the wedged run's own finally
+            # can ``leave_auto_loop``; generation tokens already prevent a
+            # later run from laundering this fence away (see control_lock).
+            if control_lock.is_driver_fenced():
+                self.conn.force_unblock_sends()
+                unblock_deadline = time.monotonic() + _FENCE_UNBLOCK_WAIT_S
+                while control_lock.is_driver_fenced() and time.monotonic() < unblock_deadline:
+                    time.sleep(_FENCE_WAIT_POLL_S)
         prompt_line = self.current_prompt_line()
         secret = is_probable_secret_prompt(prompt_line)
         with self.send_lock:

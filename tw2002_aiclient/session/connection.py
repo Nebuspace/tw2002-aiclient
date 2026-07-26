@@ -254,13 +254,33 @@ class TelnetConnection:
             raise
         self._log_tx(TX_CHANNEL, data, secret, None)
 
+    def force_unblock_sends(self):
+        """Wake a peer thread blocked in ``sendall`` / ``recv`` (WO-WEDGED-SEND-FENCE-STICKS).
+
+        The telnet socket is created with ``settimeout(None)`` (blocking, no
+        send budget). A wedged ``sendall`` never returns, so an auto-loop
+        thread stuck there never reaches ``leave_auto_loop`` in its
+        ``finally`` -- and the human wind-down fence stays raised forever.
+
+        This method does **not** clear any control-lock fence or hold: that
+        remains the blocked run's own ``finally``. It only shuts the socket
+        down so the OS unblocks the waiter; the run then fails the send,
+        exits through ``finally``, and releases its generation normally.
+        Idempotent. Safe when already closed / never connected.
+        """
+        sock = self._sock
+        if sock is None:
+            return
+        try:
+            sock.shutdown(socket.SHUT_RDWR)
+        except OSError:
+            pass
+        self.connected = False
+
     def close(self):
         self._stop.set()
+        self.force_unblock_sends()
         if self._sock is not None:
-            try:
-                self._sock.shutdown(socket.SHUT_RDWR)
-            except OSError:
-                pass
             try:
                 self._sock.close()
             except OSError:
