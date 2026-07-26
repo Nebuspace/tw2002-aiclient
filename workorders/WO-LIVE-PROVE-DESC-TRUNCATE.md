@@ -1,6 +1,6 @@
 # WO-LIVE-PROVE-DESC-TRUNCATE — Truncate live-prove description to ≤140 chars
 
-**Status:** READY · LOW · Cursor
+**Status:** IN PROGRESS · Cursor · WAVE-POST-SPRINT Lane A
 **Posted:** 2026-07-26
 **Seat:** Cursor
 
