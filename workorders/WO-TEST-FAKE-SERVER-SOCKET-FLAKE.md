@@ -1,6 +1,6 @@
 # WO-TEST-FAKE-SERVER-SOCKET-FLAKE
 
-**Status:** OPEN · Cursor preferred (tests lane)  
+**Status:** DONE · origin `34a41b4`  
 **Posted:** 2026-07-25 IDLE-KICK refill (CC disclosure)
 
 ## Goal

@@ -1,6 +1,6 @@
 # WO-MT-12-WATCH-DOCSTRING
 
-**Status:** OPEN · Cursor  
+**Status:** DONE · origin `9110a95`  
 **Posted:** 2026-07-25T20:04:13Z
 
 ## Goal

@@ -1,6 +1,6 @@
 # WO-DAEMON-ALIVE-EPERM
 
-**Status:** OPEN · Cursor · P0  
+**Status:** DONE · origin `17adc2a`  
 **Posted:** 2026-07-25T20:30:06Z
 
 ## Goal

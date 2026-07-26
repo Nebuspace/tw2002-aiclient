@@ -1,6 +1,6 @@
 # WO-DOCS-INTO-CANON
 
-**Status:** OPEN · Cursor  
+**Status:** DONE · origin `3733d9c`  
 **Posted:** 2026-07-25T21:03:14Z
 
 ## Goal

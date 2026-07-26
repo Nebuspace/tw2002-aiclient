@@ -1,6 +1,6 @@
 # WO-SCREENS-CREATE-FORM-SPLIT
 
-**Status:** OPEN · Cursor preferred (product TUI)  
+**Status:** DONE · origin `2c2d600` (Accept tip `ea1a536`; circular-import follow-on `f0f1592`)  
 **Posted:** 2026-07-25 IDLE-KICK refill (CC quality gate)
 
 ## Goal
