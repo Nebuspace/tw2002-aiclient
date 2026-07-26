@@ -60,6 +60,22 @@ any log call -- every send of it goes through `settle.send_and_confirm`'s
 underlying `session.send(..., secret=True)`, which routes to the
 transcript logger's redacted write (see
 `canon/doctrine/secrets-and-credentials.md`).
+
+That claim about EXCEPTIONS used to be false against one specific server
+behavior, and is now true structurally rather than by luck: two raise
+sites quoted the observed prompt line verbatim, and on a server that
+echoes a password prompt that line IS the credential (measured end to
+end into the CLI's JSON -- `tests/test_ensure_login_error_redaction.py`).
+Both now raise `LoginStalled`, which cannot carry screen text at all; see
+that class for the full account. No raise site in this module interpolates
+anything the server painted -- only closed-vocabulary classifications,
+config-sourced profile fields, and integers.
+
+The ONE place this module still copies observed text is the opt-in
+`trace` list a caller may hand `run_login` (each entry records the
+verbatim prompt). Nothing on the product path passes one today; a caller
+that starts to must treat it as screen-grade data, not as a safe
+diagnostic string.
 """
 
 import re
@@ -142,6 +158,71 @@ class LoginError(Exception):
     RETURNING login had no saved password / exhausted retries. Always
     raised rather than guessing -- a stuck automaton must fail loudly,
     never send a keystroke it isn't sure about."""
+
+
+class LoginStalled(LoginError):
+    """The automaton stopped making progress: either a screen it does not
+    recognize repeated `_STAGNANT_ROUNDS_LIMIT` times running, or a send
+    whose resulting screen was never positively confirmed that many times
+    running. Carries WHY and WHERE -- never WHAT WAS ON THE SCREEN.
+
+    **Why a type instead of an f-string.** Both raise sites used to quote
+    the observed prompt line verbatim
+    (`f"automaton_stuck:classification={cls!r}:prompt={prompt!r}"`), and
+    `protocol._dispatch_ensure` folds whatever escapes here into
+    `resp["error"]` -- printed by BOTH `cli.print_response` branches and
+    stored by `guardian._maybe_reconnect` in `last_reconnect_error`. On a
+    server that ECHOES at a password prompt -- precisely the behavior
+    canon's RX-side no-leak guarantee openly rests on never happening
+    (`canon/doctrine/secrets-and-credentials.md`, Code Divergence #1) --
+    that prompt line IS the operator's credential. So the app made a fresh
+    COPY of the secret into a diagnostic string that nothing required, and
+    handed it to every downstream renderer. Driven end to end through the
+    real daemon socket and the real CLI, not reasoned about:
+    `tests/test_ensure_login_error_redaction.py`.
+
+    Closed at the SOURCE, the way `credentials.SecretStoreUnreadable` and
+    `env.DotenvUnreadable` were: an error INCAPABLE of carrying the payload
+    makes every existing and future renderer safe by construction --
+    `str`, `repr`, `args`, the traceback, the wire frame, the guardian
+    field -- where sanitising each renderer is whack-a-mole against a
+    growing set of callers, and a scrub of the raised text could never be
+    sound anyway (a wrapped or partially-echoed credential, a SIBLING
+    profile's secret painted earlier in the session, or a secret typed by
+    hand into an attach are all screen content this module never held a
+    copy of to match against).
+
+    Everything it does carry is bounded by construction:
+      `code`           one of this module's own two literals
+      `classification` `classify.classify_screen`'s CLOSED vocabulary --
+                       anything it cannot name is `unknown`, never a slice
+                       of the screen
+      `step`           the automaton's own loop counter
+      `settle_reason`  `settle.wait_for_settle`'s own token
+                       (`prompt`/`idle`/`timeout`)
+
+    Deliberately NO length, shape, or character-class summary of the
+    prompt: doctrine invariant 2 counts a length as a leak in its own
+    right, and any such digest would be a partial disclosure of exactly
+    the bytes this type exists to keep out.
+
+    A subclass of `LoginError` rather than a sibling, because every caller
+    that already catches `LoginError` (`protocol._dispatch_ensure`,
+    `guardian._maybe_reconnect`, `daemon.py`'s widest catch) must keep
+    catching these unchanged -- this narrows what the error CARRIES, not
+    what it MEANS. The `code:key=value:` message shape is preserved so the
+    substring-matching consumers keep working.
+    """
+
+    def __init__(self, code, classification, step, settle_reason=None):
+        self.code = code
+        self.classification = classification
+        self.step = step
+        self.settle_reason = settle_reason
+        detail = f"{code}:classification={classification!r}:step={step}"
+        if settle_reason is not None:
+            detail = f"{detail}:reason={settle_reason}"
+        super().__init__(detail)
 
 
 class LoginProfile:
@@ -227,7 +308,15 @@ def run_login(session, profile, get_password, save_password, target="main_comman
                     # can distinguish "wrong saved credential" from any
                     # other stuck screen.
                     raise LoginError(f"returning_password_rejected:profile={profile.name}")
-                raise LoginError(f"automaton_stuck:classification={cls!r}:prompt={prompt!r}")
+                # The unrecognized screen itself is NOT quoted here -- see
+                # `LoginStalled`. The operator still has it: the same
+                # `ensure` failure response carries `prompt`, `screen` and
+                # `classification` from `build_response`, so nothing is
+                # lost on that surface by refusing to make a second copy
+                # of it inside the error string, and every renderer that
+                # has no screen beside it (the guardian field, a log line,
+                # a persisted status file) stops being a credential sink.
+                raise LoginStalled("automaton_stuck", cls, step)
             # Give a still-rendering multi-part screen a moment to finish
             # arriving before we re-classify.
             session.wait_settle(
@@ -258,8 +347,13 @@ def run_login(session, profile, get_password, save_password, target="main_comman
             stagnant_rounds = stagnant_rounds + 1 if signature == last_signature else 0
             last_signature = signature
             if stagnant_rounds >= _STAGNANT_ROUNDS_LIMIT:
-                raise LoginError(
-                    f"automaton_send_unconfirmed:classification={cls!r}:prompt={prompt!r}:reason={_reason}"
+                # Same carrier as `automaton_stuck` above, and strictly
+                # worse: this branch is reached on the NEW-registration
+                # path AFTER the credential has been sent, so the echoing
+                # server's copy of it is the likeliest thing on the prompt
+                # line. `_reason` is settle.py's own closed token and stays.
+                raise LoginStalled(
+                    "automaton_send_unconfirmed", cls, step, settle_reason=_reason
                 )
             continue
 

@@ -971,30 +971,38 @@ def test_automaton_stuck_after_the_password_step_keeps_the_credential_out_of_eve
     _assert_transcript_marker_fired(logs, expected=1)
 
 
-def test_residual_an_echoing_server_puts_the_typed_credential_into_the_error_text(
+def test_an_echoing_server_no_longer_reaches_the_login_error_text(
     cfg, tmp_path, monkeypatch
 ):
-    """HAZARD RECORD, not an approval.
+    """CLOSED GATE. This test was, until WO-MT-07-FIX, the opposite assertion --
+    a HAZARD RECORD asserting ``SENTINEL in str(excinfo.value)``, with a message
+    telling whoever closed the divergence to come here and update it. This is
+    that update, and the direction of travel is the point: the leak was measured
+    first and pinned positively, so closing it had to fail loudly.
 
     Canon (`doctrine/secrets-and-credentials.md`, Code Divergence #1) states the
     RX-side no-leak guarantee honestly: redaction is structural on TX only, and
     the receive channel is transcribed verbatim, so the guarantee rests on the
     telnet property that a password prompt suppresses echo. That divergence is
-    already recorded for the transcript file and for the live status verb.
+    real and is NOT closed here -- the transcript and the screen still carry
+    what an echoing server painted, and the last two assertions below keep
+    saying so.
 
-    This measures it on a THIRD surface canon does not yet name -- the login
-    automaton's own error text. When the server echoes the credential onto the
-    current prompt line and then stalls, the screen classifies `unknown`, the
-    stagnation ceiling fires, and `automaton_stuck` quotes that prompt line
-    verbatim; `_dispatch_ensure` folds the result into `resp["error"]`, which is
-    the CLI's JSON. So `login.py`'s module docstring ("The password NEVER
-    touches this module's ... exceptions") is not true of an echoing server.
+    What IS closed is the third surface, the one the app built itself: the login
+    automaton's own error text. `automaton_stuck` used to quote the observed
+    prompt line verbatim, so on an echoing server the app made a fresh COPY of
+    the credential into a diagnostic string and `_dispatch_ensure` folded it
+    into `resp["error"]` -- the CLI's JSON. `login.LoginStalled` cannot carry
+    screen text, which is why this sweeps every EXCEPTION rendering rather than
+    only `str()`: the fix is structural, so it must hold for `repr`, the
+    `__cause__`/`__context__` chain and the formatted traceback too, not just
+    for the one rendering that happened to be checked.
 
-    Pinned so the boundary is visible rather than assumed, and so a future
-    reader knows this shape was driven rather than argued about. Reported, not
-    fixed: the fix is a scope call above this file (redact-or-omit the prompt in
-    the raised text), and it changes what the operator sees on every stuck
-    login, not just this one.
+    Deliberately NOT swept here: the transcript and the live screen. Those are
+    Code Divergence #1's own territory (RX is verbatim by design) and asserting
+    their cleanliness would be asserting something canon says is false. The
+    ensure/CLI JSON surface is swept end-to-end in
+    `tests/test_ensure_login_error_redaction.py`.
     """
     monkeypatch.setattr(login, "_STEP_SETTLE_TIMEOUT_S", 1.0)
     _write_secrets(cfg, text=_good_secrets_text())
@@ -1006,16 +1014,32 @@ def test_residual_an_echoing_server_puts_the_typed_credential_into_the_error_tex
     with _ScriptedTWGS(script) as server, _session_against(server.port, logs) as session:
         with pytest.raises(login.LoginError) as excinfo:
             _run(session)
+        # Non-vacuity, captured while the session is still open: the credential
+        # really is on the screen at the moment of the raise. Without this the
+        # absence below would also pass on a run where the echo never happened.
+        screen_text = session.render_text(session.render())
         session.logger.close()
 
     assert server.received == [SENTINEL]
-    assert "automaton_stuck" in str(excinfo.value)
-    assert SENTINEL in str(excinfo.value), (
-        "if the error text is now credential-free on an echoing server, the "
-        "divergence was closed -- update this test"
+    assert SENTINEL in screen_text, (
+        "the server did not echo -- this test stopped measuring the hazard it "
+        "was written for"
     )
-    # The TX side is still airtight even here: the send itself was redacted,
-    # and what reached the transcript came back from the server, on RX.
+
+    # Diagnosability survives the redaction: the operator is still told WHICH
+    # failure and WHERE the automaton was. An absence that passed because the
+    # error went silent would be a regression wearing a green tick.
+    assert isinstance(excinfo.value, login.LoginStalled)
+    assert "automaton_stuck" in str(excinfo.value)
+    assert "classification='unknown'" in str(excinfo.value)
+
+    # The closed carrier, swept across every rendering this codebase performs.
+    for name, body in _exception_renderings(excinfo.value).items():
+        assert SENTINEL not in body, f"the credential reached {name}"
+
+    # Unchanged and still honest: TX redaction held, and what reached the
+    # transcript came back from the server on RX -- Code Divergence #1, not a
+    # regression of this fix.
     body = "".join(p.read_text(encoding="utf-8", errors="replace") for p in _transcript_logs(logs))
     assert "secret input redacted" in body
     assert "RX" in body
