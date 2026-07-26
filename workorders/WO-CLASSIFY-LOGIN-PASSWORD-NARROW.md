@@ -1,6 +1,6 @@
 # WO-CLASSIFY-LOGIN-PASSWORD-NARROW
 
-**Status:** OPEN · READY · offline · Cursor preferred  
+**Status:** DONE · PR #36 · origin `7130871`  
 **Posted:** 2026-07-26 · from `audit/session-classify-audit-coverage-20260726.md` C-02  
 **Base tip:** `origin/main` (`3fa3493` or newer)
 

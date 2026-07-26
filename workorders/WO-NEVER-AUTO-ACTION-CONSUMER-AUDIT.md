@@ -1,6 +1,6 @@
 # WO-NEVER-AUTO-ACTION-CONSUMER-AUDIT
 
-**Status:** OPEN · READY · offline · Cursor preferred  
+**Status:** DONE · PR #34 · origin `3fa3493`  
 **Posted:** 2026-07-26 · from `audit/session-classify-audit-coverage-20260726.md` C-06  
 **Base tip:** `origin/main` (`94a29f4` or newer)
 

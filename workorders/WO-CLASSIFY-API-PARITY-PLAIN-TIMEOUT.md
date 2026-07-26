@@ -1,6 +1,6 @@
 # WO-CLASSIFY-API-PARITY-PLAIN-TIMEOUT
 
-**Status:** OPEN · READY · offline · Claude Code preferred · Accept amended 2026-07-26T21:17Z (CC probe)  
+**Status:** DONE · PR #38 · origin `29025dd`  
 **Posted:** 2026-07-26 · from `audit/session-classify-audit-coverage-20260726.md` C-01  
 **Base tip:** `origin/main` (`0809902` or newer)
 

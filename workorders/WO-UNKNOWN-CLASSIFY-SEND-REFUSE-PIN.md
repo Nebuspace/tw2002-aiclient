@@ -1,6 +1,6 @@
 # WO-UNKNOWN-CLASSIFY-SEND-REFUSE-PIN
 
-**Status:** OPEN · READY · offline · Cursor preferred (or CC)  
+**Status:** DONE · PR #42 · origin `ac4955b`  
 **Posted:** 2026-07-26 · CC 21:50:58Z after #40 (hub merged before reading — follow-on, not revert)
 
 ## Goal

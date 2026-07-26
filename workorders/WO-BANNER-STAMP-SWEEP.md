@@ -1,6 +1,6 @@
 # WO-BANNER-STAMP-SWEEP
 
-**Status:** IN PROGRESS · Cursor · `wo/BANNER-STAMP-SWEEP`
+**Status:** DONE · Cursor · `wo/BANNER-STAMP-SWEEP`
 **Posted:** 2026-07-26 · P0 HANDOFF claimed by impl-aiclient-cursor
 
 ## Goal

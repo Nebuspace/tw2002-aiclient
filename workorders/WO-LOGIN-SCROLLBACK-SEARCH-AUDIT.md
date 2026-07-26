@@ -1,6 +1,6 @@
 # WO-LOGIN-SCROLLBACK-SEARCH-AUDIT
 
-**Status:** IN PROGRESS · Cursor · `wo/LOGIN-SCROLLBACK-SEARCH-AUDIT` · tip `b06fbe4`
+**Status:** DONE · PR #31 · origin `94a29f4` (was IN PROGRESS · Cursor · `wo/LOGIN-SCROLLBACK-SEARCH-AUDIT` · tip `b06fbe4`)
 **Posted:** 2026-07-26 · IDLE scout by impl-aiclient-cursor after Explore HOLD
 **Amended:** 2026-07-26T20:55:00Z · hub fold — CC scout additions (#4, #5); Cursor retains build lane
 
