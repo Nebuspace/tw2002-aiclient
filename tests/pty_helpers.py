@@ -376,9 +376,10 @@ def terminate_session_group(
     ``finally`` in the killing process, so this cleanup never even runs,
     and the isolated child is simply reparented to init. ``os.killpg``
     is the *preferred* ordinary-path sweep for the whole GROUP -- but it
-    is **not** an unconditional guarantee: curses-in-pty children under
-    ``start_new_session=True`` reliably raise ``PermissionError`` on
-    Darwin (WO-TUI-KILLPG-EPERM-CURSES-PTY; sleep controls do not). On
+    is **not** an unconditional guarantee: this suite's curses-in-pty
+    harness under ``start_new_session=True`` reliably raises
+    ``PermissionError`` on Darwin (WO-TUI-KILLPG-EPERM-CURSES-PTY;
+    sleep controls and minimal curses+setsid alone do not). On
     EPERM this helper warns loudly and falls back to a direct-child kill
     only -- grandchildren in that group are **not** reaped by this call.
 
@@ -477,10 +478,10 @@ def terminate_session_group(
         except ProcessLookupError:
             pass
         except PermissionError:
-            # Known platform carve-out (WO-TUI-KILLPG-EPERM-CURSES-PTY):
-            # curses-in-pty + start_new_session=True reliably EPERM on
-            # Darwin; plain sleep children with the same spawn shape do
-            # not. Kernel/curses mechanism not fully isolated -- see
+            # Known suite-harness carve-out (WO-TUI-KILLPG-EPERM-CURSES-PTY):
+            # this suite's curses-in-pty teardown reliably EPERM on Darwin;
+            # plain sleep and minimal curses+setsid alone do not (CC 18:42Z).
+            # Further harness ingredient unidentified — see
             # audit/killpg-eperm-curses-pty-20260726.md. Keep LOUD: a
             # silent direct-child-only fallback looks identical to a
             # healthy killpg run and hides the orphan-latent path.
