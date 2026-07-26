@@ -1,6 +1,6 @@
 # WO-TUI-HELP-ARGV
 
-**Status:** OPEN · READY · product fix (banked from README discovery)  
+**Status:** **DONE** · PR #27 · `5120a04`  
 **Posted:** 2026-07-26
 
 ## Goal
