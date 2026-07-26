@@ -160,23 +160,27 @@ class Session:
 
         # Safety fix (archive): once the login automaton has genuinely
         # CLEARED the real game-select screen on this TCP connection (sent
-        # the configured letter AND a later classification is no longer
-        # `game_select`), it refuses to send `profile.game_letter` again --
-        # closing the `ensure`-mid-session stale-pyte-buffer misfire vector
-        # at the SOURCE (a stale game-select header/marker left over from
-        # earlier in the connection, plus a later ordinary screen sharing
-        # the same generic prompt, could otherwise get misclassified as
-        # game_select and re-answered with a blind keystroke) -- independent
-        # of any classify.py heuristic. NOT latched on send-confirm alone: a
-        # false-positive idle settle that leaves the CURRENT screen still
-        # classified as `game_select` must remain retryable. PER-CONNECTION,
-        # not per-login-run: reset below in reconnect() so a genuinely fresh
+        # the configured letter AND a later classification is a known
+        # post-door progress class -- login_name / module-entry menu /
+        # etc., not a mid-paint ``unknown`` flash), it refuses to send
+        # `profile.game_letter` again -- closing the `ensure`-mid-session
+        # stale-pyte-buffer misfire vector at the SOURCE (a stale
+        # game-select header/marker left over from earlier in the
+        # connection, plus a later ordinary screen sharing the same
+        # generic prompt, could otherwise get misclassified as
+        # game_select and re-answered with a blind keystroke) --
+        # independent of any classify.py heuristic. NOT latched on
+        # send-confirm alone, and NOT on a transient non-door class
+        # (WO-ANET-GAME-SELECT-LETTER-STEP12): a false-positive settle
+        # that leaves the CURRENT screen still classified as
+        # `game_select` must remain retryable. PER-CONNECTION, not
+        # per-login-run: reset below in reconnect() so a genuinely fresh
         # connection (a D9 reconnect-replay, or a fresh cold-start login)
         # can still answer game-select normally.
         self.game_select_answered = False
         # Set True the first time the login automaton sends
         # `profile.game_letter` on this connection; used with
-        # `game_select_answered` above to know a non-`game_select`
+        # `game_select_answered` above to know a real post-door
         # classification means we cleared, not skipped.
         self.game_select_letter_sent = False
 

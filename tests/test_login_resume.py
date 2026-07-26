@@ -153,6 +153,19 @@ def test_no_double_answer_after_stale_game_select_redraw(tmp_path):
     assert fake.received_passwords == [password]
 
 
+def test_game_select_answered_latch_ignores_unknown_flash():
+    """WO-ANET-GAME-SELECT-LETTER-STEP12: mid-paint ``unknown`` / generic
+    ``menu`` must not count as leaving the door; real post-door classes do."""
+    assert not login._left_game_select_for_real("unknown", "")
+    assert not login._left_game_select_for_real("menu", "<A> Lobby option")
+    assert not login._left_game_select_for_real("game_select", "Selection (? for menu):")
+    assert login._left_game_select_for_real("login_name", "Enter your name:")
+    assert login._left_game_select_for_real("ansi_prompt", "Ansi [Y/n]?")
+    assert login._left_game_select_for_real(
+        "menu", "T - Play Trade Wars 2002\nD - ...\n"
+    )
+
+
 # -- 4: a second run_login() on the same session is a no-op --------------
 
 def test_second_run_login_is_idempotent_at_main_command(tmp_path):

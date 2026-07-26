@@ -148,6 +148,35 @@ _OUTER_NAME_PROMPT_RE = re.compile(r"enter\s+for\s+none", re.I)
 # prompt line itself.
 _OUTER_NAME_REJECTED_RE = re.compile(r"login\s+name\s+is\s+required", re.I)
 
+# Classes that mean we have TRULY left the server game door after sending
+# ``profile.game_letter``. A mid-paint flash to ``unknown`` / generic
+# ``menu`` must NOT latch ``game_select_answered`` -- that is the wedge
+# behind live a-net ``automaton_stuck:classification='game_select':step=12``
+# after the chrome-footer classify fix (WO-ANET-GAME-SELECT-LETTER-STEP12):
+# letter sends, a transitional frame briefly leaves ``game_select``, the
+# latch fires, the door reappears, and ``_decide`` refuses to re-send.
+_POST_GAME_SELECT_PROGRESS = frozenset(
+    {
+        "login_name",
+        "login_password",
+        "ansi_prompt",
+        "char_create",
+        "pause_key",
+        "main_command",
+        "money_prompt",
+    }
+)
+
+
+def _left_game_select_for_real(cls, text):
+    """True when ``cls`` is genuine post-door progress, not a paint flash."""
+    if cls in _POST_GAME_SELECT_PROGRESS:
+        return True
+    if cls == "menu" and _MODULE_ENTRY_MENU_RE.search(text or ""):
+        return True
+    return False
+
+
 # -- NEW-branch prompt-coverage extension point -----------------------------
 #
 # (pattern, response) pairs checked only while `state["registering"]` is
@@ -291,12 +320,14 @@ def run_login(session, profile, get_password, save_password, target="main_comman
         if trace is not None:
             trace.append({"step": step, "classification": cls, "prompt": prompt})
 
-        # Cleared past game-select only once we've LEFT that screen after
-        # sending the configured letter at least once this connection --
-        # never on send-confirm alone (a false-positive idle settle can
-        # confirm while the CURRENT screen is still `game_select`, which
-        # would wedge in automaton_stuck if latched there).
-        if cls != "game_select" and getattr(session, "game_select_letter_sent", False):
+        # Cleared past game-select only once we've LEFT that screen for a
+        # known post-door class after sending the configured letter --
+        # never on send-confirm alone, and never on a mid-paint flash to
+        # ``unknown`` / generic ``menu`` (WO-ANET-GAME-SELECT-LETTER-STEP12).
+        if (
+            getattr(session, "game_select_letter_sent", False)
+            and _left_game_select_for_real(cls, text)
+        ):
             session.game_select_answered = True
 
         if cls == target:
