@@ -25,11 +25,12 @@ ceiling, and a store that fails on the *save* side rather than the read side.
 
 1. **return value** — `run_login`'s `(classification, steps)` tuple.
 2. **exception** — `LoginError` *and anything else that escapes `run_login`*,
-   rendered every way this codebase renders an exception (`str`, f-string,
-   `traceback.format_exception`, type name, and the `__cause__`/`__context__`
-   chain). Two of the scenarios below raise something that is NOT a
-   `LoginError` at all, which is exactly why the sweep is written against
-   "whatever escaped" rather than against a type.
+   rendered every way this codebase renders an exception (`str`, `repr`, both
+   f-string forms, `traceback.format_exception`, type name, and the
+   `__cause__`/`__context__` chain). Two of the scenarios below raise something
+   that is NOT a `LoginError` at all, which is exactly why the sweep is written
+   against "whatever escaped" rather than against a type. `repr` joined the set
+   with WO-SECRETS-REPR-GET-PASSWORD-REHAB — see `_exception_renderings`.
 3. **transcript sinks** — the `TranscriptLogger` file (as text, as raw bytes,
    and via `grep -a`), plus the live LOGS-band ring, `last_sent`, and the whole
    JSON-dumped `status` / `ensure` wire response.
@@ -185,15 +186,23 @@ def _exception_renderings(exc: BaseException) -> dict[str, str]:
     """Every way this codebase renders an exception, applied to whatever
     escaped `run_login`.
 
-    `repr()` is deliberately NOT in this set, and that omission is a measured
-    decision rather than an oversight: `repr(UnicodeDecodeError)` renders
-    `args`, and `args[1]` is the ENTIRE undecodable file (proven by execution
-    in `test_residual_an_undecodable_store_still_carries_the_whole_document`).
-    Nothing on the login path reprs an exception today -- `daemon.py` puts
-    `type(e).__name__` on the wire and `traceback.format_exc()` in the
-    owner-only local log, and `guardian.py` renders `str(e)` for its typed
-    catch and a type name for its broad one -- so this set is what the product
-    can actually emit, and the residual is pinned separately.
+    `repr()` used to be deliberately EXCLUDED here, and the exclusion was a
+    measured decision rather than an oversight: `repr(UnicodeDecodeError)`
+    renders `args`, and `args[1]` was the ENTIRE undecodable secrets file. The
+    omission was defensible only because nothing on the login path reprs an
+    exception -- `daemon.py` puts `type(e).__name__` on the wire and
+    `traceback.format_exc()` in the owner-only local log, and `guardian.py`
+    renders `str(e)` for its typed catch and a type name for its broad one --
+    while `menu/crawl_driver.py` DOES repr, into a persisted file, one caller
+    away.
+
+    WO-SECRETS-REPR-GET-PASSWORD-REHAB closed that at the source:
+    `credentials.get_password` now raises a bounded
+    `credentials.SecretStoreUnreadable` instead of the decoder's own
+    exception, so `repr()` is a rendering the product may safely perform and
+    it belongs in this set. The residual -- the cause still owns the buffer,
+    and nothing renders it -- is pinned in
+    `tests/test_secrets_store_redaction.py`.
     """
     chain: list[BaseException] = []
     seen = set()
@@ -204,7 +213,9 @@ def _exception_renderings(exc: BaseException) -> dict[str, str]:
         cur = cur.__cause__ or cur.__context__
     return {
         "str(exc)": str(exc),
+        "repr(exc)": repr(exc),
         'f"{exc}"': f"{exc}",
+        'f"{exc!r}"': f"{exc!r}",
         "type(exc).__name__": type(exc).__name__,
         "exc.__cause__/__context__ chain": " | ".join(str(e) for e in chain),
         "traceback.format_exception": "".join(
@@ -582,17 +593,23 @@ def test_malformed_secrets_file_never_renders_the_document_it_failed_to_parse(cf
     just the one being logged in. The assertion is against the canary KEY and
     the canary VALUE as well as the sentinel, because a decoder message that
     quotes the document quotes whatever it was reading at the damage, which is
-    not necessarily the profile the caller asked for."""
+    not necessarily the profile the caller asked for.
+
+    Post-WO-SECRETS-REPR-GET-PASSWORD-REHAB the escaping type is
+    `credentials.SecretStoreUnreadable`, not the decoder's own exception; the
+    `JSONDecodeError` that still owns the document is its `__cause__`."""
     store = _write_secrets(cfg, text=_malformed_secrets_text())
     logs = tmp_path / "logs"
     exc, sinks = _drive_store_failure(tmp_path, logs)
     sinks.update(_on_disk_sinks(tmp_path, store))
 
-    assert isinstance(exc, json.JSONDecodeError)
-    # Non-vacuity, twice over: the exception really is carrying the document
-    # (so a renderer that reached for it WOULD leak), and the document really
-    # does contain all three needles.
-    assert all(needle in exc.doc for needle in NEEDLES)
+    assert isinstance(exc, credentials.SecretStoreUnreadable)
+    assert exc.cause == credentials.CAUSE_CORRUPT
+    # Non-vacuity, twice over: the underlying exception really is carrying the
+    # document (so a renderer that reached through to it WOULD leak), and the
+    # document really does contain all three needles.
+    assert isinstance(exc.__cause__, json.JSONDecodeError)
+    assert all(needle in exc.__cause__.doc for needle in NEEDLES)
     assert all(needle in store.read_text(encoding="utf-8") for needle in NEEDLES)
     _assert_absent(sinks)
 
@@ -601,15 +618,23 @@ def test_non_utf8_secrets_file_never_renders_the_document_it_failed_to_decode(cf
     """One 0xFF byte appended to a well-formed store. `credentials.get_password`
     opens with `encoding="utf-8"`, so this fails in the READ, as a
     `UnicodeDecodeError` -- neither an `OSError` nor a `JSONDecodeError`, i.e.
-    it escapes every typed handler between here and the daemon's widest catch.
-    `.object` holds the entire file."""
+    it used to escape every typed handler between here and the daemon's widest
+    catch. `.object` holds the entire file, and `repr()` renders it.
+
+    This is the shape WO-SECRETS-REPR-GET-PASSWORD-REHAB closed:
+    `get_password` now classifies it into a bounded
+    `credentials.SecretStoreUnreadable`, which is why `repr()` is in the sweep
+    above at all. The buffer-owning exception survives as `__cause__`, and the
+    assertions below keep both halves visible."""
     store = _write_secrets(cfg, raw=_non_utf8_secrets_bytes())
     logs = tmp_path / "logs"
     exc, sinks = _drive_store_failure(tmp_path, logs)
     sinks.update(_on_disk_sinks(tmp_path, store))
 
-    assert isinstance(exc, UnicodeDecodeError)
-    assert all(needle.encode() in exc.object for needle in NEEDLES)
+    assert isinstance(exc, credentials.SecretStoreUnreadable)
+    assert exc.cause == credentials.CAUSE_CORRUPT
+    assert isinstance(exc.__cause__, UnicodeDecodeError)
+    assert all(needle.encode() in exc.__cause__.object for needle in NEEDLES)
     _assert_absent(sinks)
 
 
@@ -618,14 +643,24 @@ def test_non_utf8_secrets_file_never_renders_the_document_it_failed_to_decode(cf
     reason="root bypasses the 0000 mode, so the read would succeed and prove nothing",
 )
 def test_unreadable_secrets_file_never_renders_the_document_it_could_not_read(cfg, tmp_path):
-    """Mode 0000 on the FILE, with the config directory left readable so
-    `SECRETS_PATH.exists()` still answers True and the open is genuinely
-    attempted. A `PermissionError` escapes -- an `OSError`, so unlike the two
-    above it IS caught by `guardian.py`'s typed `except (OSError, LoginError)`,
-    which keeps `str(e)` on purpose. That message carries the store's PATH, not
-    its contents; the path's own disclosure is a separate, already-pinned
-    concern (`tests/test_daemon_internal_error_typename.py`), and the wire test
-    below re-proves it stays off the wire on this path too."""
+    """Mode 0000 on the FILE, with the config directory left readable so the
+    open is genuinely attempted.
+
+    A bare `PermissionError` used to escape here -- an `OSError`, so unlike the
+    two above it was caught by `guardian.py`'s typed
+    `except (OSError, LoginError)`, which keeps `str(e)` on purpose and would
+    therefore stash the store's absolute PATH into `last_reconnect_error`.
+    Post-WO-SECRETS-REPR-GET-PASSWORD-REHAB the escaping type is
+    `credentials.SecretStoreUnreadable`, which is NOT an `OSError`, so that
+    typed branch no longer fires and guardian's broad catch records a bare
+    `guardian_tick_error:SecretStoreUnreadable` instead -- a deliberate
+    narrowing, not a lost message: the actionable reason is on the exception
+    (`exc.reason`) and reaches the owner-only local log via the traceback.
+
+    Neither shape ever carried file CONTENTS; the path's own disclosure is a
+    separate, already-pinned concern
+    (`tests/test_daemon_internal_error_typename.py`), and the wire test below
+    re-proves it stays off the wire on this path too."""
     store = _write_secrets(cfg, text=_good_secrets_text())
     os.chmod(store, 0o000)
     logs = tmp_path / "logs"
@@ -635,62 +670,78 @@ def test_unreadable_secrets_file_never_renders_the_document_it_could_not_read(cf
         os.chmod(store, 0o600)
     sinks.update(_on_disk_sinks(tmp_path, store))
 
-    assert isinstance(exc, PermissionError)
+    assert isinstance(exc, credentials.SecretStoreUnreadable)
+    assert exc.cause == credentials.CAUSE_DENIED
+    assert not isinstance(exc, OSError), (
+        "guardian's typed `except (OSError, LoginError)` keeps str(e) -- a "
+        "secrets-store failure must not land there"
+    )
+    assert isinstance(exc.__cause__, PermissionError)
     assert all(needle in store.read_text(encoding="utf-8") for needle in NEEDLES)
     _assert_absent(sinks)
 
 
-def test_residual_an_undecodable_store_still_carries_the_whole_document(cfg):
-    """HAZARD RECORD, not an approval.
+def test_an_undecodable_store_no_longer_reaches_the_caller_as_the_decoder_error(cfg):
+    """CLOSED RECORD — this test previously pinned the hazard; it now pins the fix.
 
-    Measured: the `UnicodeDecodeError` that escapes `credentials.get_password`
-    renders CLEAN through `str()` and through `traceback.format_exception()`
-    -- which is why the sweeps above pass and why nothing leaks on the daemon
-    path today -- but its `args[1]` IS the entire undecodable file, so `repr()`
-    and `f"{exc!r}"` render every credential in the store verbatim.
+    What was measured here: the `UnicodeDecodeError` that escaped
+    `credentials.get_password` rendered CLEAN through `str()` and through
+    `traceback.format_exception()` -- which is why every sweep above passed and
+    why nothing leaked on the daemon path -- but its `args[1]` IS the entire
+    undecodable file, so `repr()` and `f"{exc!r}"` rendered every credential in
+    the store verbatim, and `menu/crawl_driver.py` writes `repr(exc)` into a
+    PERSISTED status file. The old docstring said "closing it should update THIS
+    test"; WO-SECRETS-REPR-GET-PASSWORD-REHAB (DECISIONS §C) closed it.
 
-    **The trap is that the obvious probe is the one that does NOT leak.** The
-    same store, malformed rather than undecodable, raises `JSONDecodeError`,
-    whose `args` is only its message: `repr()` there is clean, while `.doc`
-    still holds the whole file. So the exposure depends on the error's SHAPE,
-    not on the file -- exactly the asymmetry `credentials._load_toml_store`
-    already documents for `tomllib` (a duplicate TABLE quotes a key out of the
-    document; a duplicate KEY quotes nothing). Both halves are asserted below
-    so a future reader cannot check the cheap one and conclude "safe".
+    `get_password` now classifies the decoder failure into a bounded
+    `credentials.SecretStoreUnreadable` carrying `_decoder_detail` (type name +
+    integer offset), exactly as `credentials._load_toml_store` already did for
+    the TOML side. Both renderings are clean, which is the whole claim.
 
-    Pinned rather than left implicit for two reasons. It is what makes the
-    absence assertions above non-vacuous -- the document is right there in the
-    object; the guard is that nothing renders it that way. And it is one
-    `repr()` away from disclosure: `menu/crawl_driver.py` already writes
-    `repr(exc)` into a persisted status file and a log for its own broad catch,
-    harmless today only because the crawl path has no login wiring.
+    **The trap that made this subtle is kept visible.** The same store,
+    malformed rather than undecodable, raises `JSONDecodeError`, whose `args` is
+    only its message: `repr()` there was ALWAYS clean, while `.doc` still holds
+    the whole file. The exposure depends on the error's SHAPE, not on the file --
+    the same asymmetry `_load_toml_store` documents for `tomllib` (a duplicate
+    TABLE quotes a key out of the document; a duplicate KEY quotes nothing). Both
+    halves stay asserted so a future reader cannot check the cheap one and
+    conclude "safe".
 
-    The fix, if this is closed, is the one `credentials._load_toml_store`
-    already applies to the TOML side: catch the decoder failure and re-raise a
-    typed error carrying a bounded `_decoder_detail` (type name + integer
-    offsets) instead of the exception that owns the document. `get_password`
-    has no such wrapper. Closing it should update THIS test.
+    The buffer-owning exception survives as `__cause__` and is asserted to still
+    own the document -- that is what keeps every absence here non-vacuous, and
+    the residual is stated in full in `tests/test_secrets_store_redaction.py`.
     """
     _write_secrets(cfg, raw=_non_utf8_secrets_bytes())
-    with pytest.raises(UnicodeDecodeError) as excinfo:
+    with pytest.raises(credentials.SecretStoreUnreadable) as excinfo:
         credentials.get_password(PROFILE)
 
     exc = excinfo.value
     for needle in NEEDLES:
         assert needle not in str(exc)
+        assert needle not in repr(exc), (
+            "the decode error's buffer is back in a rendering the product "
+            "performs -- crawl_driver.py persists repr(exc)"
+        )
+        assert needle not in f"{exc!r}"
         assert needle not in "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
-        assert needle in repr(exc), "if repr() stopped leaking, the hole was closed -- update this test"
-        assert needle in repr(exc.args)
+        # Non-vacuity: the document really is still one attribute away.
+        assert needle.encode() in exc.__cause__.object
+        assert needle in repr(exc.__cause__)
 
-    # The half that does NOT leak through repr -- same store, different damage.
+    # The half that never leaked through repr -- same store, different damage.
     _write_secrets(cfg, text=_malformed_secrets_text())
-    with pytest.raises(json.JSONDecodeError) as excinfo:
+    with pytest.raises(credentials.SecretStoreUnreadable) as excinfo:
         credentials.get_password(PROFILE)
 
     malformed = excinfo.value
     for needle in NEEDLES:
-        assert needle not in repr(malformed), "repr is clean HERE -- do not generalize from it"
-        assert needle in malformed.doc, "...while the document is still on the exception"
+        assert needle not in repr(malformed)
+        assert needle not in repr(malformed.__cause__), (
+            "repr is clean HERE -- do not generalize from it"
+        )
+        assert needle in malformed.__cause__.doc, (
+            "...while the document is still on the underlying exception"
+        )
 
 
 # ---------------------------------------------------------------------------

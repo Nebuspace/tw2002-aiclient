@@ -108,14 +108,16 @@ CAUSE_MALFORMED = "malformed"  # it parsed, and it is not the table we needed
 
 
 class _StoreReadFailure:
-    """Shared payload for the two store-read failures below.
+    """Shared payload for the store-read failures below.
 
-    A mixin rather than a common base class because those two deliberately
-    sit in DIFFERENT places in the `ProfileConnectionError` family (see each
-    class) -- what they share is only the `(cause, reason, path)` payload,
-    not a position in the tree. `reason` is the bounded, operator-facing
-    detail; `path` names WHICH store failed, since this resolver reads two
-    (`profiles.toml` and the `servers.toml` catalog).
+    A mixin rather than a common base class because they deliberately sit in
+    DIFFERENT places in the exception tree (see each class) -- two inside the
+    `ProfileConnectionError` family, and `SecretStoreUnreadable` outside it
+    entirely, because a secrets-store failure is not a host/port resolution
+    failure. What they share is only the `(cause, reason, path)` payload, not
+    a position in the tree. `reason` is the bounded, operator-facing detail;
+    `path` names WHICH store failed, since this module reads three
+    (`profiles.toml`, the `servers.toml` catalog, and `secrets.json`).
 
     **`reason` never carries file content.** For an `OSError` it is the
     libc `strerror`; for a decoder failure it is a TYPE NAME plus integer
@@ -161,17 +163,66 @@ class ProfileStoreMalformed(_StoreReadFailure, ProfileMalformed):
     """
 
 
+class SecretStoreUnreadable(_StoreReadFailure, Exception):
+    """`config/secrets.json` exists (or may exist) and could not be turned
+    into a credential table: permission denied (on the file itself or on the
+    directory containing it), the path is not a readable file, the bytes are
+    not valid UTF-8, they are not valid JSON, or they parse to something that
+    is not an object.
+
+    Never raised for a store that is genuinely ABSENT. A profile with no
+    stored credential anywhere is the NORMAL state of a character that has
+    never been registered (doctrine invariant 3, "absence is not an error"),
+    and `get_password` still answers `None` for it -- the one negative this
+    module is entitled to report about the secrets store.
+
+    **Why this type exists at all, and why it is not the decoder's own
+    exception.** `repr()` of a `UnicodeDecodeError` renders `args`, and
+    `args[1]` IS the entire buffer that failed to decode -- for this file,
+    every profile's stored password, not only the one being resolved
+    (measured: a 200 KB store rendered a 200,153-character `repr()`).
+    `get_password` used to let that exception escape. Nothing on the login
+    path reprs an exception, which is why no leak was ever observed there --
+    but `menu/crawl_driver.py` writes `repr(exc)` into a PERSISTED status
+    file and a JSONL log for its own broad catch, so the pattern was one
+    caller away from a durable, on-disk disclosure of the whole store
+    (driven end to end in `tests/test_secrets_store_redaction.py`). The
+    exposure depends on the error's SHAPE, not on the file: the same store,
+    malformed rather than undecodable, raises `JSONDecodeError`, whose
+    `repr()` is clean while `.doc` still holds the document -- so checking
+    the cheap case and concluding "safe" is exactly the trap.
+
+    Deliberately a direct child of `Exception` rather than of
+    `ProfileConnectionError`: that family answers "this profile's (host,
+    port) could not be resolved", and its own docstring pins what its members
+    mean. A missing password is not a connection-resolution failure, and
+    `env._load_profile_host_port` catches that family's BASE for everything
+    that is not absent -- inheriting would silently reroute a secrets-store
+    failure into a host/port error message. Same call `env.DotenvUnreadable`
+    made for the `.env` overlay: reuse the `CAUSE_*` vocabulary and the
+    bounded renderer, not the tree.
+
+    `cause` is one of `CAUSE_DENIED` / `CAUSE_UNUSABLE` / `CAUSE_CORRUPT` /
+    `CAUSE_MALFORMED`; `reason` is bounded and NEVER carries file content.
+    """
+
+
 def _decoder_detail(exc: Exception) -> str:
     """Bounded rendering of a decoder failure: type name + integer positions.
 
     Deliberately NOT `str(exc)`. `tomllib`'s message can lift a key straight
-    out of the document, and both decoders keep the whole document on the
-    exception (`TOMLDecodeError.doc`, `UnicodeDecodeError.object`). Line /
-    column / byte offsets are integers -- they locate the damage without
-    quoting any of it. The position attributes are read through `getattr`
-    because `tomllib`'s `lineno`/`colno` are newer than the `tomli` fallback
-    this module imports on older interpreters; without them the type name
-    alone is still an honest answer.
+    out of the document, and every decoder here keeps the whole document on
+    the exception (`TOMLDecodeError.doc`, `JSONDecodeError.doc`,
+    `UnicodeDecodeError.object` -- the last of which `repr()` renders in
+    full). Line / column / byte offsets are integers -- they locate the
+    damage without quoting any of it. The position attributes are read
+    through `getattr` because `tomllib`'s `lineno`/`colno` are newer than the
+    `tomli` fallback this module imports on older interpreters; without them
+    the type name alone is still an honest answer.
+
+    Used for the secrets store as well as the config stores, and reached from
+    `env.py` for the `.env` overlay -- ONE rendering of a decoder failure in
+    this codebase, not several that can drift.
     """
     name = type(exc).__name__
     lineno = getattr(exc, "lineno", None)
@@ -249,21 +300,115 @@ def _env_var_name(profile: str) -> str:
     return f"TW2002_PASSWORD_{safe}"
 
 
+def _load_secret_store(path: Path) -> dict[str, object] | None:
+    """Parse `path` as the JSON secrets store. Return `None` iff the store is
+    genuinely absent.
+
+    Every other condition raises `SecretStoreUnreadable`, so no caller can
+    mistake "I could not read it" for "there is no credential in it". The
+    same contract `_load_toml_store` holds for the config stores, applied to
+    the one file that actually holds passwords -- and with the extra
+    requirement that the raised error carry a BOUNDED reason rather than the
+    decoder's own exception (see `SecretStoreUnreadable` for what `repr()` of
+    that exception renders).
+
+    `Path.exists()` is deliberately absent here, and its removal is the
+    behavioral half of this function. It answers `False` when the *parent
+    directory* is unreadable, so a perfectly good `secrets.json` under a
+    `chmod 000` `config/` used to make `get_password` return `None` -- a
+    silent, positive claim that the operator has no stored credential, made
+    about a file nobody managed to open. On the RETURNING branch that
+    surfaces as `returning_no_saved_password` (sending the operator to
+    re-register a character they already have); on the NEW branch
+    `get_password(...) or _fresh_password()` mints a fresh CSPRNG password
+    off the back of it. Opening the file and classifying the failure is what
+    keeps absent and unreadable apart -- the same trap, and the same fix,
+    that `_load_toml_store` and `env.load_dotenv` document. Dropping the
+    `exists()` pre-check also closes the TOCTOU gap between the two calls.
+
+    A dangling symlink lands in the `None` branch, and honestly so: its
+    target does not exist, so there is no store content that went unread.
+    """
+    try:
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+    except FileNotFoundError:
+        # The only real negative: no credential has ever been stored here.
+        return None
+    except PermissionError as exc:
+        # Covers the file itself AND an unreadable parent directory. The
+        # reason must name WHICH object to fix: a directory-level denial
+        # reported as a bare "Permission denied" sends the operator to chmod
+        # a file that is already readable. Wording matches the two sibling
+        # loaders rather than inventing a second phrasing of the same advice.
+        denied = exc.strerror or "permission denied"
+        parent = Path(path).parent
+        # X_OK is the traversal bit -- precisely what stops us reaching the
+        # file. A directory can be search-only (0o111) and the read succeeds.
+        if not os.access(parent, os.X_OK):
+            denied = f"{denied} on the containing directory: {parent}"
+        raise SecretStoreUnreadable(CAUSE_DENIED, denied, path) from exc
+    except OSError as exc:
+        # IsADirectoryError, ELOOP, a stale mount. Caught after
+        # PermissionError because "I was not allowed to look" and "I looked
+        # and the path is unusable" are different operator jobs sharing one
+        # exception base.
+        raise SecretStoreUnreadable(
+            CAUSE_UNUSABLE, exc.strerror or "could not be opened", path
+        ) from exc
+    except UnicodeDecodeError as exc:
+        # The decode happens in the io layer, before `json` sees anything, so
+        # this is NOT a JSONDecodeError and NOT an OSError -- it subclasses
+        # ValueError, which is why it used to escape every handler between
+        # here and the daemon's widest catch. `_decoder_detail` renders a
+        # type name plus an integer offset; `str(exc)` names one byte value
+        # and `repr(exc)` renders the ENTIRE store.
+        raise SecretStoreUnreadable(
+            CAUSE_CORRUPT, f"not valid UTF-8 ({_decoder_detail(exc)})", path
+        ) from exc
+    except json.JSONDecodeError as exc:
+        # A DIFFERENT ValueError subclass from the one above, and a different
+        # exposure: `repr()` is clean here while `.doc` holds the whole
+        # document. Rendered through the same bounded helper so the two
+        # shapes cannot drift apart.
+        raise SecretStoreUnreadable(
+            CAUSE_CORRUPT, f"not valid JSON ({_decoder_detail(exc)})", path
+        ) from exc
+    if not isinstance(data, dict):
+        # `[...]` at the top level used to reach `data.get(profile)` and
+        # raise a bare AttributeError two lines later. Same check, and the
+        # same content-free wording, `list_servers` already applies to a
+        # wrong-shaped `servers` table.
+        raise SecretStoreUnreadable(
+            CAUSE_MALFORMED,
+            f"top level is {type(data).__name__}, expected an object",
+            path,
+        )
+    return data
+
+
 def get_password(profile: str) -> str | None:
     """Resolve `profile`'s password: env-first, then the secrets file.
 
-    Never raises for a merely-absent credential -- returns None, which is
-    the expected state for a profile that has no stored/overridden
-    credential anywhere.
+    Returns `None` for a merely-ABSENT credential -- no `TW2002_PASSWORD_*`
+    override, no store, or no entry for this profile. That is the expected
+    state of a character that has never been registered, and it is the only
+    negative this function reports (doctrine invariant 3).
+
+    Raises `SecretStoreUnreadable` when the store is present but could not be
+    read or parsed. That error carries a bounded `(cause, reason, path)` and
+    never the decoder's own exception, whose `repr()` / `.object` / `.doc`
+    hold the entire store. Callers that only need "is there a credential"
+    still read `None`; callers that need to tell "no credential" from "could
+    not look" now can.
     """
     env_val = os.environ.get(_env_var_name(profile))
     if env_val:
         return env_val
 
-    if not SECRETS_PATH.exists():
+    data = _load_secret_store(SECRETS_PATH)
+    if data is None:
         return None
-    with open(SECRETS_PATH, encoding="utf-8") as f:
-        data = json.load(f)
     entry = data.get(profile)
     if isinstance(entry, dict) and entry.get("password"):
         return entry["password"]
