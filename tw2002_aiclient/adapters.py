@@ -100,6 +100,26 @@ def ensure_session(
     return EnsureResult(ok=False, reason=_classify_failure(resp), detail=_failure_detail(resp), raw=resp)
 
 
+def disconnect_session(*, run_dir: "Path | None" = None) -> bool:
+    """WO-PLAY-CONN-TOGGLE: close the daemon's telnet connection without
+    stopping the daemon process.  Returns ``True`` on success (the daemon
+    reported ``"disconnected": True``), ``False`` on any transport or
+    protocol failure.  Never raises.
+
+    The companion re-entry path is the existing ``ensure_session()``: the
+    daemon's ``ensure`` verb already calls ``session.reconnect()`` when
+    ``session.conn.connected`` is ``False``, so ``ensure_session()`` after a
+    ``disconnect_session()`` is the correct reconnect sequence — no new
+    reconnect verb is needed.
+    """
+    resolved_run_dir = run_dir or _env.resolve_run_dir()
+    try:
+        resp = _cli.send_request("disconnect", {}, run_dir=resolved_run_dir)
+        return bool(resp.get("ok"))
+    except Exception:  # noqa: BLE001 — transport failure, caller checks the bool
+        return False
+
+
 def _classify_failure(resp: dict) -> str:
     error = str(resp.get("error") or "")
     reason = _REASON_BY_DAEMON_ERROR.get(error)
