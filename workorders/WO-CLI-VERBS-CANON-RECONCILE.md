@@ -1,6 +1,13 @@
 # WO-CLI-VERBS-CANON-RECONCILE
 
-**Status:** OPEN · docs/canon · Claude Code (self-claimed post-M3) · same-day drift from M3
+**Status:** **DONE** · origin `26dbcb1` · docs/canon · Claude Code (self-claimed post-M3) · same-day drift from M3
+
+> **Also closed by this tip:** [`WO-CLI-VERBS-AUTOLOOP-HONESTY`](WO-CLI-VERBS-AUTOLOOP-HONESTY.md)
+> is **SUPERSEDED** — its scope was fully absorbed here, and its own Goal text had gone stale (it
+> said `floor` was "refused until enforced", true at X4 and false an hour later at X5).
+> **A fourth divergence was found that this WO did not name:** `state` was catalogued, shipped as a
+> wire verb, and sat in **neither** status bucket — surfaced by arithmetic (12 live + 17 not-on-tip
+> = 29, against 30 catalogued), not by inspection.
 **Posted:** 2026-07-26 · after M3 closed at `13f34a8`
 
 ## Goal

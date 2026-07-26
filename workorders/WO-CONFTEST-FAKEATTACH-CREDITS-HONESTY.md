@@ -1,6 +1,13 @@
 # WO-CONFTEST-FAKEATTACH-CREDITS-HONESTY
 
-**Status:** OPEN · tests/fixture honesty · Claude Code · banked by hub 2026-07-26T09:18Z
+**Status:** **DONE** · origin `ca8108a` · tests/fixture honesty · Claude Code · banked by hub 2026-07-26T09:18Z
+
+> **Outcome: option (b).** The methods stay deliberately absent and both prose sites now say so.
+> Option (a) — attaching the real `Session` methods — was tried and **reverted**: a class attribute
+> is inherited by every subclass, so it defeats `test_a_floor_is_still_refused_when_this_session_cannot_enforce_it`,
+> which asserts `not hasattr(session, "credits_snapshot")` precisely to make "this runtime cannot
+> enforce a floor" a genuine condition. **The absence is load-bearing**, and the docstring had been
+> instructing the one change that silently disarms a fail-closed proof.
 **Posted:** 2026-07-26 · after M3 close `13f34a8`, reconcile `26dbcb1`
 
 ## Goal
