@@ -1,6 +1,6 @@
 # WO-LOAD-DOTENV-PERMISSION-HONESTY
 
-**Status:** OPEN · Claude Code preferred (env honesty; mirrors ProfileStoreUnreadable)  
+**Status:** DONE · origin `909ab01`  
 **Posted:** 2026-07-26T00:55:00Z
 
 ## Goal

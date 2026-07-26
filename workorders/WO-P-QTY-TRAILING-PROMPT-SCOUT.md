@@ -1,6 +1,6 @@
 # WO-P-QTY-TRAILING-PROMPT-SCOUT
 
-**Status:** OPEN · Claude Code · scout only  
+**Status:** DONE (scout; widening landed) · origin `78f5ac9`  
 **Posted:** 2026-07-26T00:55:00Z
 
 ## Goal

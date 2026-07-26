@@ -1,6 +1,6 @@
 # WO-SECRETS-REPR-GET-PASSWORD-REHAB
 
-**Status:** OPEN · Claude Code preferred (secrets lane)  
+**Status:** DONE · origin `f6fee24`  
 **Posted:** 2026-07-26 (Max carte blanche §C)
 
 ## Goal

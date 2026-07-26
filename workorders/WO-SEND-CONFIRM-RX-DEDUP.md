@@ -1,6 +1,6 @@
 # WO-SEND-CONFIRM-RX-DEDUP
 
-**Status:** OPEN · Claude Code  
+**Status:** DONE (verdict: DO NOT DEDUPE) · origin `078d864`  
 **Posted:** 2026-07-25T20:04:13Z
 
 ## Goal

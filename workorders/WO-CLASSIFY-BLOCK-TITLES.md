@@ -1,6 +1,6 @@
 # WO-CLASSIFY-BLOCK-TITLES
 
-**Status:** OPEN · UNPARKED · EXECUTE (Max carte blanche → hub ruled 2026-07-26)  
+**Status:** DONE · origin `47e52ce`  
 **Posted:** ~2026-07-25 (CC tip built; push parked 18:37:06Z) · **Unparked:** 2026-07-26
 
 ## Goal

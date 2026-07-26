@@ -1,6 +1,6 @@
 # WO-MT-07-ENSURE-LOGIN-JSON-REDACTION
 
-**Status:** OPEN · Claude Code (diagnosis-first OK)  
+**Status:** PARTIAL — carrier 1 DONE origin `297abc1` · carrier 2 IN FLIGHT (C.2)  
 **Posted:** 2026-07-25T20:04:13Z
 
 ## Goal

@@ -1,6 +1,6 @@
 # WO-TWD-PROFILE-STORE-UNREADABLE
 
-**Status:** OPEN · Claude Code preferred (discovered)  
+**Status:** DONE · origin `c263f16`  
 **Posted:** 2026-07-25 — CC incident outcome item 9
 
 ## Goal

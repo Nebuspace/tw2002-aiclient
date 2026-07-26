@@ -1,6 +1,6 @@
 # WO-P2-G4-AUTOLOOP
 
-**Status:** OPEN · Claude Code preferred (App drive / control_lock)  
+**Status:** CLOSED — BLOCKED ON SUBSTRATE (zero code, by design) · X1-X6 named  
 **Posted:** 2026-07-26T00:55:00Z  
 **Depends:** G3 `tw loops` on help (landed `1c084e5` / `385b176`)
 
@@ -8,30 +8,12 @@
 
 Ship `tw autoloop` (+ `loop_player` substrate as needed): App drives a taught loop under control_lock, stops on unknown / escalate, never invents loops.
 
-## Scope
+## Outcome (2026-07-26T03:17:33Z CC)
 
-- `tw2002_aiclient/` loop player / autoloop CLI wire
-- `tests/` proving empty / one-shot / stop-on-unknown
-- Allowlist + README honesty when verb lands on `./tw --help`
+**Blocked:** canon requires current-sector read before every replay send — `state_parser` / `state` verb **absent**. Accept #2 structurally unreachable. Macro store has no guard/arm fields → §A.2 human-armed exemption unexpressible for `tw autoloop <name>`.
 
-## Constraints
-
-- Max GO G2→G3→G4 already given (`@ 13:15:00Z`); still **no** crawl_sacrificial live enable
-- Stop-on-unknown inviolable; AI never live-drives
-- Hands off Max live attach if a play HEADS-UP is active
-- Announce before shared `cli.py` collisions with Cursor
-
-## Accept
-
-1. `tw autoloop` listed on help only when real
-2. Plays a taught loop; refuses / honest error when none / unreadable
-3. Unrecognized screen → stop, no guessed keys
-4. Suite green for targeted + related loops tests
-
-## Proof
-
-STATUS + SHA · targeted pytest · help surface before/after.
+**Follow-on slices (M3):** X1 state read · **X2 loader (GO)** · X3 player · X4 daemon+verbs · X5 floor · X6 record writer. See coord STATUS + `WO-P2-G4-X2-LOOP-STORE-LOADER.md`.
 
 ## Refs
 
-`WO-P2-OPS-VERB-G-PREP.md` G4 · `WO-P2-G3-LOOPS.md` · north-star · control-and-escalation · M3 playable milestone
+CC STATUS 2026-07-26T03:17:33Z · hub Accept blocked-on-substrate · north-star · macros.md start_anchor
