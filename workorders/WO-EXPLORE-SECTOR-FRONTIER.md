@@ -1,8 +1,8 @@
 # WO-EXPLORE-SECTOR-FRONTIER
 
-**Status:** **HOLD** · Max pace-down · also blocked on ensure bar (M1–M3) — do **not** dispatch until hub lifts HOLD **and** NEW/RETURNING → `main_command` proven on the target host  
+**Status:** **IN PROGRESS** · Cursor · M4 (automatic sector exploration)  
 **Posted:** 2026-07-26 · Max milestone M4 (automatic sector exploration)  
-**Seat (when lifted):** CC preferred (live App send + planner) · Cursor for chrome/status honesty if split  
+**Seat:** Cursor · M4 (`wo/EXPLORE-SECTOR-FRONTIER`)  
 **Depends:** ensure → `main_command` on target host · `WO-CONTROL-LOCK-AUTOLOOP-FENCE` Accepted · G4 LoopPlayer / state-sector substrate (DONE)
 
 ## Goal
