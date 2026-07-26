@@ -233,6 +233,18 @@ noted, not conformed away.
   library — the human-approval-before-fire invariant is real but is currently expressed as a filesystem
   move rather than an in-macro `approved` field. Accurate, and noted so the invariant's *mechanism* is
   not mistaken for a richer gate than exists.
+- **Capture ships today as a manifest writer, not the live start/stop bracket described above.**
+  The *Capture* section above (`tw record start [name] … tw record stop`, keystrokes appended live
+  as steps) is this concept's original target design. What shipped (WO-P2-G4-X6, tip `13f34a8`) is
+  `tw record <manifest>`: a **daemon-free** writer that reads an **already-assembled** JSON
+  demonstration manifest (built by hand or script from real `tw do`/`tw screen --json` output) and
+  turns it into a stored macro — there is no live bracket, no `start`/`stop` subcommand, and no
+  keystroke-to-step transcription while a session runs. The lane disclosed this as a deliberate,
+  correctly-scoped first step and the hub Accepted it as honest; wiring a live `tw attach` session
+  directly into the recorder is real, named future work the X6 WO's own scope excluded, not an
+  abandonment of the target above. See [CLI Verb Surface](/architecture/cli-verbs.md)'s
+  Implementation status for the mirrored note and the exact shipped arguments
+  (`tw2002_aiclient/loops/recorder.py`, `cmd_record` in `tw2002_aiclient/session/cli.py`).
 - **The never-auto-action gate defers §A.2's taught-chain exemption — by design, not by omission.**
   [Screen Understanding](/engine/screen-understanding.md)'s ruled tension-resolution (`DECISIONS.md`
   §A.2, Max carte blanche 2026-07-26) says never-auto-action "means no unattended freestyle, and
@@ -281,3 +293,6 @@ noted, not conformed away.
   confirmation vs idle-only, the stale-pre-send-match guard); `ledger.py` (`actor`/`session_id`
   attribution, redaction); `classify.py` (post-step screen classification); `state_parser.py` (current-
   sector read for the start-anchor check).
+- Greenfield tip modules (importable, WO-P2-G4): `tw2002_aiclient/loops/recorder.py` (`LoopRecorder`
+  — the shipped X6 manifest writer); `cmd_record` in `tw2002_aiclient/session/cli.py` (the CLI
+  wrapper); see [CLI Verb Surface](/architecture/cli-verbs.md) for the full shipped-vs-catalog note.

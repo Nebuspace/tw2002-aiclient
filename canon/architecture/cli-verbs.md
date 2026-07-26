@@ -122,7 +122,7 @@ daemon socket) are available on essentially every verb and are omitted for brevi
 
 | verb | one-line effect | key args | actor-class | owning concept |
 |---|---|---|---|---|
-| `record {start,stop}` | Bracket a named skill capture — every `do` sent while open becomes a step; `stop` saves a replayable skill. | `name` (start) | `teach` | [Rule–Macro Engine](/architecture/rule-macro-engine.md) |
+| `record <manifest>` | Write a taught macro from an **already-captured** JSON demonstration manifest — daemon-free, never sends. Shipped shape (X6); see [Implementation status](#implementation-status) and [Macros](/engine/macros.md)'s Findings for how this differs from the live start/stop bracket capture this row originally specified. | `manifest` (path) `--draft` | `teach` | [Rule–Macro Engine](/architecture/rule-macro-engine.md) |
 | `analyze <session>` | Session-retro: group recurring ledger decisions, rank profitable ones as candidates to codify (proposes, never applies). | `--min-support` `--top` | `teach` | [Rule–Macro Engine](/architecture/rule-macro-engine.md) |
 | `mine` (alias `patterns`) | Mine the Trace-Ledger for recurring profitable input-subsequences; proposes drafts under `state/skills/_drafts/`. | `--min-support` | `teach` | [Rule–Macro Engine](/architecture/rule-macro-engine.md) |
 
@@ -172,10 +172,10 @@ tw mine --min-support 3            # propose draft skills from the ledger
 # a human reviews and approves before anything the App plays back can ever fire
 ```
 
-# Implementation status (tip `879280f` + WO-P2-G3 · live `./tw --help`)
+# Implementation status (tip `13f34a8` + M3 WO-P2-G4 X1–X6 · live `./tw --help`)
 
 **LIVE ops verbs today:** `status`, `ensure`, `screen`, `stop`, `do`, `send`, `read`, `history`,
-`watch`, `attach`, `menumap`, `loops`.
+`watch`, `attach`, `menumap`, `loops`, `record`.
 
 `loops` (**G3**) landed as two slices — a read-only store reader/composer
 (`tw2002_aiclient/loops/`), then the CLI wire. It is a **daemon-free read**: no protocol verb, no
@@ -187,10 +187,42 @@ nobody could read); a **partial** read lists what it read, is marked INCOMPLETE,
 mapping is an implementation choice this concept does not yet rule on — it is recorded here, not
 derived from canon.
 
-**NOT on tip (HOLD / later / retired — do not document as shipped):** `spectate` (**RETIRED / WONTBUILD** — Max `@ 13:13:55Z`; in-cockpit Spectate LIVE via PWO-055),
-`autoloop` (**G4 STAGED** behind G3; Max GO whole G-sequence `@ 13:15:00Z` · **G2 EXECUTING**), `start` (ensure covers spawn), `log`/`trail`, `frames`,
-`analyze`/`mine`, `record`/`replay`, `play`/`haggle`/`autopilot`/`crawl`, `players`/`servers`/`probe`,
-`aiclient` as a separate curses product entry (product is `./tw2002-aiclient`).
+`record` (**X6**) shipped as a **manifest writer, not the catalog's `{start,stop}` bracket
+capture** above — canon had not caught up to a deliberate, disclosed, hub-Accepted shape
+difference until this pass. It takes one positional `manifest` (a JSON document assembled by hand
+or by script from real `tw do`/`tw screen --json` output — see `cmd_record`'s docstring for the
+exact recipe) and `--draft` (write to `state/skills/_drafts/` instead of the blessed store);
+daemon-free like `loops` above — no `--run-dir`, never opens a socket, never sends. Wiring a
+*live* `tw attach` session directly into the recorder, so keystrokes become steps as they are
+pressed, is real future work X6's own scope explicitly excluded, not a change of target — see
+[Macros](/engine/macros.md)'s Findings for the mirrored note.
+
+**NOT on tip as a `tw` CLI verb (HOLD / later / retired — do not document as shipped):**
+`spectate` (**RETIRED / WONTBUILD** — Max `@ 13:13:55Z`; in-cockpit Spectate LIVE via PWO-055),
+`start` (ensure covers spawn), `log`/`trail`, `frames`, `analyze`/`mine`, `replay`,
+`play`/`haggle`/`autopilot`/`crawl`, `players`/`servers`/`probe`, `aiclient` as a separate curses
+product entry (product is `./tw2002-aiclient`). `record` moved off this list into LIVE above —
+X6 shipped it.
+
+**WIRE-ONLY (a daemon protocol verb exists; no `tw` CLI subparser wraps it — not runnable from a
+shell today, only over the daemon's own socket protocol):**
+
+- **`state`** (**X1**, `protocol.py` `verb == "state"`) — the parsed current-sector read replay's
+  start-anchor guard depends on. `WO-P2-G4-X1-STATE-SECTOR-READ` scoped a CLI wrapper as optional
+  ("+ thin CLI if honesty requires") and none landed.
+- **`autoloop_start` / `autoloop_stop` / `autoloop_status`** (**X4/X5**, `protocol.py`) — the
+  background AUTO-LOOP player. **Not** the catalog's four-verb `{start,stop,pause,resume}`
+  surface below: three wire verbs shipped, and `pause`/`resume` fall through to `unknown_verb` —
+  argued down, not silently dropped (X4's own commit message: "Pause and resume are controls on a
+  REPEATING loop; with one pass there is no cycle boundary to pause at, and a mid-macro pause is
+  an indefinite hold on a half-executed transaction — a new safety surface with no contract and no
+  rails"). Of the catalog row's key args, only `name` and `floor` are accepted
+  (`autoloop.ARGS_AUTOLOOP_START`), and `floor` is genuinely **enforced** since X5 — a floored run
+  halts fail-closed on `credits_unknown`/`credits_stale` rather than merely being remembered.
+  `cycles`, `param`, and `force` are **refused** as `unsupported_arg`, never silently ignored — a
+  caller asking for ten cycles and getting one would have been lied to by a surface that looked
+  like it agreed. No `tw autoloop` CLI subparser exists at X4, X5, or X6; the catalog row states
+  the full future target, this paragraph states wire-level reality today.
 
 The catalog tables below are the **prescriptive full vocabulary** (target). Prefer this status
 block when answering "what can I run right now?"
@@ -198,7 +230,7 @@ block when answering "what can I run right now?"
 # Code Divergence
 
 1. **Catalog vs tip help.** This concept still lists the full reborn/archive-derived verb set
-   (including teach / App-drive / spectate). Tip `879280f` only ships the LIVE set above — honesty
+   (including teach / App-drive / spectate). Tip `13f34a8` only ships the LIVE set above — honesty
    gate: never claim a HOLD or unported verb is runnable.
 
 2. **Citations historically pointed at `twclient/cli.py`.** Authoritative tip parser is
@@ -210,9 +242,26 @@ block when answering "what can I run right now?"
    unknown screen** — it does not "reason." Documentation-only note — reconciliation is a separate
    work order; tip has no `tw autopilot` verb yet.
 
+4. **`record`'s catalog row now documents a shape that was deliberately shipped different from
+   what this concept originally specified.** X6's manifest writer (see Implementation status
+   above) replaced the originally-catalogued live `{start,stop}` bracket capture as the *first*
+   step, not the final one — the lane disclosed the gap and the hub Accepted it as an honest,
+   correctly-scoped increment; live-attach capture is deferred, real future work, not abandoned
+   target. This is this concept's first instance of DOCS WIN running in reverse: a genuinely
+   Accepted shipped-shape difference that canon must catch up to, rather than code drifting from a
+   canon that stayed right. `autoloop`'s wire-vs-CLI split (Implementation status above) and its
+   `pause`/`resume` refusal are the same class of finding — recorded there rather than repeated
+   here.
+
 # Citations
 
 [1] `tw2002_aiclient/session/cli.py` — `build_parser()`, tip authoritative LIVE verb list
 [2] `canon/architecture/control-and-escalation.md` — actor model, approval gate, stop-on-unknown
 [3] Archive `twclient/cli.py` — port-source for verbs not yet restored
 [4] Project `CLAUDE.md` — hard rules / seat context
+[5] `tw2002_aiclient/session/protocol.py` — `dispatch()`, the wire-verb chokepoint (`state`,
+    `autoloop_start`/`_stop`/`_status`) and each verb's accepted/refused argument set
+[6] `tw2002_aiclient/session/autoloop.py` — `ARGS_AUTOLOOP_START`, the X4/X5 refusal reasoning for
+    `cycles`/`param`/`force`/`pause`/`resume`
+[7] `tw2002_aiclient/loops/recorder.py` + `cmd_record` (`tw2002_aiclient/session/cli.py`) — the X6
+    manifest-based recorder's real shape
