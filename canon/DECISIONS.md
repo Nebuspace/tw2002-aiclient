@@ -246,4 +246,12 @@ Harmless until a haggle/trade module lands; this clears the gate so one can.
 
 **Ruled:** Structured ensure diagnostics (screen mirror in error payloads, CLI JSON, logs, persisted reason strings) must **not** carry server-echoed credentials. Live TUI paint of the telnet stream may show what the server painted (human eyes on the game). MT-07 carrier 2 = **fix** (redact), not delete-xfail-as-design.
 
+### C.2.1 — `tw status` prompt dual-use (hub 2026-07-26 · Max carte blanche)
+
+**Ruled:** Split by **consumer**, not by one shared field meaning both things.
+
+- **Live cockpit / HUD paint** may show the current prompt line (permitted live paint).
+- **`tw status --json`** (and any structured spectator/export) must **not** echo credential-shaped or secret-prompt content — omit `prompt`, or replace with redacted / classification-only when secret-prompt heuristics fire. Classification stays.
+
+Do not leave `"prompt": rows[-1]` feeding both sides unchanged. Thin follow-on WO OK.
 
