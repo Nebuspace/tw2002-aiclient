@@ -1,7 +1,17 @@
 # WO-LIVE-ENSURE-MATRIX
 
-**Status:** OPEN · Cursor preferred · **Max GO 2026-07-26** — prove game-select + NEW + RETURNING on live servers  
+**Status:** DONE · Cursor seat · closed 2026-07-26T09:38Z hub · report `audit/live-ensure-matrix-20260726.md`  
 **Posted:** 2026-07-26T07:46Z
+
+### Matrix summary (redacted)
+
+| Server | Letter | NEW | RETURNING | Error type |
+|---|---|---|---|---|
+| `roguetw.net:2002` | A | **PASS** (`main_command`) | **PASS** (`main_command`) | — |
+| `twgs.microblaster.net:2002` | B | **FAIL** (`unknown`@step6) | **SKIP** (no persist) | remote classify · recovery `empty_response` local |
+| `game.a-net-online.lol:2002` | C | **FAIL** (`menu`@step5) | **SKIP** (no persist) | first `empty_response` local · recovery `menu`@step5 remote |
+
+Secrets keys: `proof_rogue` only. Tip base ≥ `ca8108a`/`50bbc46`. Micro stall frame: **gone** under `/tmp`. Follow-ups: micro classify corpus · a-net menu/game_select · ensure spawn-readiness (`WO-ENSURE-SPAWN-READINESS`).
 
 ## Goal
 
