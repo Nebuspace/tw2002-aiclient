@@ -42,6 +42,60 @@ def _resolve_run_dir(run_dir_arg: str | None) -> Path:
     return p if p.is_absolute() else (env.PROJECT_ROOT / p)
 
 
+def _config_isolation_active() -> bool:
+    """True when the operator isolated config away from project ``config/``.
+
+    ``TW_CONFIG_DIR`` is the live signal (env-first). We also treat a resolved
+    ``credentials.CONFIG_DIR`` that is not the project default as isolation —
+    same axis, in case a test reloads credentials against a tmp dir.
+    Isolating config does **not** isolate the daemon socket (``run/`` /
+    ``TW_RUN_DIR`` / ``--run-dir``); that mismatch is the matrix footgun.
+    """
+    if os.environ.get("TW_CONFIG_DIR"):
+        return True
+    default = (env.PROJECT_ROOT / "config").resolve()
+    try:
+        return Path(credentials.CONFIG_DIR).resolve() != default
+    except OSError:
+        return True
+
+
+def _guard_run_dir_footgun(args) -> int | None:
+    """Fail closed when config is isolated but the run-dir axis is not named.
+
+    WO-CLI-RUN-DIR-FOOTGUN-WARN: ``TW_CONFIG_DIR`` (or a non-default config
+    dir) without ``--run-dir`` / ``TW_RUN_DIR`` would silently target the
+    default daemon socket — including ``status`` / ``stop`` / ``ensure``.
+    Refuse before any socket touch; print the path that *would* have been
+    used so the operator can pass it deliberately.
+
+    Returns an exit code when blocked; ``None`` when the call may proceed.
+    """
+    if getattr(args, "run_dir", None) is not None:
+        return None
+    if os.environ.get(env.RUN_DIR_VAR):
+        return None
+    if not _config_isolation_active():
+        return None
+    would_target = _resolve_run_dir(None)
+    detail = (
+        "TW_CONFIG_DIR (or a non-default config dir) is set, but --run-dir "
+        "was not given and TW_RUN_DIR is unset. Isolating config does NOT "
+        f"isolate the daemon socket. Would have targeted run-dir: {would_target}. "
+        "Pass --run-dir PATH (or set TW_RUN_DIR) to name the intended daemon."
+    )
+    if getattr(args, "json", False):
+        print(json.dumps({
+            "ok": False,
+            "error": "run_dir_required_under_config_isolation",
+            "detail": detail,
+            "run_dir": str(would_target),
+        }))
+    else:
+        print(f"ERROR: {detail}", file=sys.stderr)
+    return 2
+
+
 def _resolve_profile_connection(profile_name: str) -> tuple[str, int]:
     """Resolve `profile_name`'s (host, port) via the ONE shared resolver,
     `credentials.resolve_profile_host_port` (OPEN-003-A) -- replacing this
@@ -170,6 +224,9 @@ def print_response(resp, args):
 # -- verb implementations ----------------------------------------------------
 
 def cmd_status(args):
+    blocked = _guard_run_dir_footgun(args)
+    if blocked is not None:
+        return blocked
     run_dir = _resolve_run_dir(args.run_dir)
     if not daemon_alive(run_dir):
         resp = {
@@ -343,6 +400,9 @@ def ensure_raw(profile, *, target="main_command", timeout=180.0, no_auto_arm=Fal
 
 
 def cmd_ensure(args):
+    blocked = _guard_run_dir_footgun(args)
+    if blocked is not None:
+        return blocked
     run_dir = _resolve_run_dir(args.run_dir)
     resp = ensure_raw(
         args.profile,
@@ -365,6 +425,9 @@ def cmd_screen(args):
 
 def cmd_stop(args):
     """WO-P2-OPS-VERB-A: ask the daemon to shut down (protocol already present)."""
+    blocked = _guard_run_dir_footgun(args)
+    if blocked is not None:
+        return blocked
     run_dir = _resolve_run_dir(args.run_dir)
     if not daemon_alive(run_dir):
         if getattr(args, "json", False):
@@ -1155,7 +1218,8 @@ def build_parser() -> argparse.ArgumentParser:
         help="daemon alive? connected? idle-ms? classification? (includes run_dir)",
     )
     sp.add_argument("--run-dir", default=None, metavar="PATH", dest="run_dir",
-                     help="daemon run directory override (default: project-rooted run/)")
+                     help="daemon run directory override (required when TW_CONFIG_DIR "
+                          "isolates config -- config isolation does not move the socket)")
     sp.add_argument("--json", action="store_true", help="machine-parseable JSON output")
     sp.set_defaults(func=cmd_status)
 
@@ -1175,7 +1239,8 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--no-auto-arm", action="store_true", dest="no_auto_arm",
                      help="accepted no-op: ensure never auto-arms; flag confirms non-arming (symmetry with any future default-arm proposal)")
     sp.add_argument("--run-dir", default=None, metavar="PATH", dest="run_dir",
-                     help="daemon run directory override (default: project-rooted run/)")
+                     help="daemon run directory override (required when TW_CONFIG_DIR "
+                          "isolates config -- config isolation does not move the socket)")
     sp.add_argument("--json", action="store_true", help="machine-parseable JSON output")
     sp.set_defaults(func=cmd_ensure)
 
@@ -1196,7 +1261,8 @@ def build_parser() -> argparse.ArgumentParser:
         help="graceful daemon shutdown (in-game QUIT when at main prompt; else disconnect)",
     )
     sp.add_argument("--run-dir", default=None, metavar="PATH", dest="run_dir",
-                     help="daemon run directory override (default: project-rooted run/)")
+                     help="daemon run directory override (required when TW_CONFIG_DIR "
+                          "isolates config -- config isolation does not move the socket)")
     sp.add_argument("--json", action="store_true", help="machine-parseable JSON output")
     sp.set_defaults(func=cmd_stop)
 

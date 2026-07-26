@@ -84,6 +84,9 @@ The authoritative verb list is `twclient/cli.py`'s `build_parser()` — this tab
 (README/DESIGN drift is recorded under [Code Divergence](#code-divergence) below). Key args lists
 only the load-bearing flags; `--json` (machine output) and `--run-dir PATH` (target a non-default
 daemon socket) are available on essentially every verb and are omitted for brevity.
+**Footgun:** `TW_CONFIG_DIR` isolates config only — it does **not** move the daemon socket.
+`status` / `stop` / `ensure` without `--run-dir` (and without `TW_RUN_DIR`) **fail closed** when
+config is isolated, and print the run-dir path they would have targeted (WO-CLI-RUN-DIR-FOOTGUN-WARN).
 
 ## Daily-driver verbs
 
