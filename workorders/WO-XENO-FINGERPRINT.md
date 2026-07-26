@@ -1,6 +1,6 @@
 # WO-XENO-FINGERPRINT
 
-**Status:** READY-FOR-REVIEW · tip `1dab0e1` · Cursor · investigate-first · queued after fence 3A
+**Status:** DONE · Phase-1 · merged #17 squash `f5bfc50` · Phase-2 Exiled `[A]` game_select shape remains Max-gated
 **Posted:** 2026-07-26 · from the live-ensure diagnosis (`4f7449f`)
 
 ## Goal

@@ -361,7 +361,7 @@ _find_text = find_text
 def terminate_session_group(
     proc: subprocess.Popen, *, wait_timeout: float = 5.0, grace_s: float = 0.0
 ) -> None:
-    """Kill ``proc``'s entire session/process group, not just its direct PID.
+    """Attempt to kill ``proc``'s session/process group; degrade honestly on EPERM.
 
     Every pty spawn in this suite uses ``start_new_session=True`` (or the
     ``claim_ctty=True`` preexec's own ``os.setsid()`` in
@@ -375,9 +375,12 @@ def terminate_session_group(
     SPIN Defect 2): a full-suite run that gets SIGTERM'd skips every
     ``finally`` in the killing process, so this cleanup never even runs,
     and the isolated child is simply reparented to init. ``os.killpg``
-    targets the whole GROUP in one signal instead of just the one PID --
-    the ordinary-path fix for every OTHER exit (normal completion, a test
-    failure, a bounded timeout).
+    is the *preferred* ordinary-path sweep for the whole GROUP -- but it
+    is **not** an unconditional guarantee: curses-in-pty children under
+    ``start_new_session=True`` reliably raise ``PermissionError`` on
+    Darwin (WO-TUI-KILLPG-EPERM-CURSES-PTY; sleep controls do not). On
+    EPERM this helper warns loudly and falls back to a direct-child kill
+    only -- grandchildren in that group are **not** reaped by this call.
 
     ``grace_s`` (default 0 -- no change from prior behaviour): wait up to
     this long for the DIRECT child to exit on its own before signalling
@@ -385,10 +388,11 @@ def terminate_session_group(
     they were swapped onto this helper (e.g. ``tests/
     attach_terminal_harness.py``, which gave a real ``tw attach`` process 5
     real seconds to unwind before any kill). This is a courtesy to the
-    direct child only -- the group is still swept unconditionally below
-    whether or not the grace period was needed, because Defect 2 is
-    precisely the case where the direct child DID exit cleanly (on its own,
-    inside or outside any grace window) while something it spawned did not.
+    direct child only -- the preferred path still *attempts* a group
+    sweep below whether or not the grace period was needed, because Defect 2
+    is precisely the case where the direct child DID exit cleanly (on its
+    own, inside or outside any grace window) while something it spawned did
+    not. (EPERM carve-out may still reduce that attempt to a direct kill.)
 
     The group signal below is unconditional -- **not** gated on
     ``proc.poll()``. The prior ``if proc.poll() is None: killpg()`` guard
@@ -473,13 +477,13 @@ def terminate_session_group(
         except ProcessLookupError:
             pass
         except PermissionError:
-            # Observed intermittently in one sandboxed dev environment,
-            # not reproduced in 40 independent trials elsewhere (pre- and
-            # post-reap) on the same code -- root cause NOT isolated, kept
-            # honest rather than claimed understood. Made LOUD rather than
-            # a silent fallback: a CI run where killpg is denied must not
-            # look identical to a healthy one (a silent direct-child-only
-            # fallback IS the orphan-leaking behaviour this WO removes).
+            # Known platform carve-out (WO-TUI-KILLPG-EPERM-CURSES-PTY):
+            # curses-in-pty + start_new_session=True reliably EPERM on
+            # Darwin; plain sleep children with the same spawn shape do
+            # not. Kernel/curses mechanism not fully isolated -- see
+            # audit/killpg-eperm-curses-pty-20260726.md. Keep LOUD: a
+            # silent direct-child-only fallback looks identical to a
+            # healthy killpg run and hides the orphan-latent path.
             warnings.warn(
                 f"terminate_session_group: os.killpg({proc.pid}, SIGKILL) "
                 "raised PermissionError -- falling back to a direct-child "

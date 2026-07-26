@@ -487,3 +487,41 @@ def test_every_terminate_session_group_call_site_has_a_setsid_spawn():
         "evidence in scope — killpg here could hit OUR OWN process group: "
         + ", ".join(failures)
     )
+
+
+# ---------------------------------------------------------------------------
+# WO-TUI-KILLPG-EPERM-CURSES-PTY — EPERM path must stay loud; carve-out must
+# still terminate the direct child (audit/killpg-eperm-curses-pty-20260726.md).
+# ---------------------------------------------------------------------------
+
+
+def test_terminate_session_group_eperm_warns_and_kills_direct_child(monkeypatch):
+    """Injected PermissionError on killpg must RuntimeWarn and still kill."""
+    master_fd, slave_fd = pty.openpty()
+    proc = subprocess.Popen(
+        [sys.executable, "-c", "import time; time.sleep(30)"],
+        stdin=slave_fd,
+        stdout=slave_fd,
+        stderr=slave_fd,
+        start_new_session=True,
+    )
+    os.close(slave_fd)
+    os.close(master_fd)
+
+    def _boom(pgid, sig):
+        raise PermissionError(1, "Operation not permitted")
+
+    monkeypatch.setattr(os, "killpg", _boom)
+
+    with pytest.warns(RuntimeWarning, match="PermissionError"):
+        terminate_session_group(proc, wait_timeout=2.0)
+
+    assert proc.poll() is not None, "direct child must terminate on EPERM fallback"
+    assert _wait_until_gone(proc.pid, timeout=2.0)
+
+
+def test_terminate_session_group_doc_does_not_overclaim_whole_group():
+    """Carve-out honesty: docstring must admit EPERM degrade (WO-TUI-KILLPG-EPERM)."""
+    doc = terminate_session_group.__doc__ or ""
+    assert "PermissionError" in doc or "EPERM" in doc
+    assert "not** an unconditional guarantee" in doc or "not an unconditional guarantee" in doc
