@@ -25,9 +25,9 @@ Three product fixes landed, each proven live rather than by fixture:
 
 | Host | Letter | NEW | RETURNING | Notes |
 |---|---|---|---|---|
-| `roguetw.net:2002` | A | **PASS** `main_command` | **PASS** `main_command` | Proven on `7e43af6`. **Not re-run on `a5cfdda`** — see regression gate below. |
-| `twgs.microblaster.net:2002` | B | **PASS** `main_command` | **not yet run** | NEW proven post-merge. RETURNING is newly possible — a credential now exists where none did this morning. |
-| `game.a-net-online.lol:2002` | A | **PASS** `main_command` | **not yet run** | Letter **A**. Bank profile is configured **C**, which is a **closed game** — see below. |
+| `roguetw.net:2002` | A | **PASS** `main_command` 9 steps | **PASS** `main_command` 9 steps | Confirmed on `a5cfdda` hub wave 2026-07-26T19:55:40Z. |
+| `twgs.microblaster.net:2002` | B | **PASS** `main_command` 9 steps | **not yet run** | NEW confirmed on `a5cfdda` hub wave. RETURNING: credential exists, not yet run (honest unknown). |
+| `game.a-net-online.lol:2002` | A | **PASS** `main_command` 10 steps | **not yet run** | Letter **A**. Bank profile **A** (was C, corrected bank-side — see open item 1). RETURNING not yet run (honest unknown). |
 | xeno / `twgs.exiled.org:2002` | — | **N-A** honest halt | **N-A** | Untaught square-bracket door, fingerprinted. Phase-2 is Max-gated. **A halt is a result, not a gap.** |
 
 **≥3-host bar:** met — rogue, micro and a-net each reach `main_command`, with xeno a documented halt.
@@ -44,30 +44,23 @@ The a-net profile was configured with letter **C**. The door does offer `<C>`, b
 
 Recorded because the distinction cost real time and is easy to repeat: *the config has C*, *the door offers C*, and *the C game is playable* are three different claims, and only the third settles whether the letter is the problem. Checking the first two and stopping produces a confident wrong answer — it did here.
 
-### 2. `a5cfdda` has not been re-proved on the hosts that were already green
-
-rogue and micro were proven on **earlier tips**. `WO-ANET-GAME-SELECT-LETTER-STEP12` changed `login.py`'s menu branch, which **every host traverses**.
-
-**The confirming wave should run rogue and micro first, as regression gates, before a-net.** They are the only cells that can show whether the shared-path change was safe, and they were green before it landed. Running a-net alone would confirm the fix while leaving a break in the working hosts invisible.
-
-### 3. Record classification **and** step, never a bare PASS/FAIL
+### 2. Record classification **and** step, never a bare PASS/FAIL
 
 `menu`@5 → `game_select`@12 was the single most useful datum of the day: it showed the banner fix had *worked* and moved the wall, which a bare FAIL would have hidden. A cell that records only PASS/FAIL cannot distinguish "no progress" from "progress, new door".
 
-### 4. micro RETURNING and a-net RETURNING are first runs
+### 3. micro RETURNING and a-net RETURNING are first runs
 
 Neither has ever been executed. They are not expected failures — they are **unknowns**, and should be reported as whatever they turn out to be rather than assumed to mirror NEW. Registration inserts screens a returning login never sees; the reverse also holds.
 
 ---
 
-## Suggested order for the confirming wave
+## Remaining cells (post hub wave)
 
-1. **rogue** NEW + RETURNING — regression gate
-2. **micro** NEW + RETURNING — regression gate, and RETURNING is a first run
-3. **a-net** NEW + RETURNING on letter **A** — last, and after cool-off: the host refused connections following a probe burst earlier today
-4. **xeno** — no live attempt; the halt stands on the existing fingerprint
+rogue NEW + RETURNING, micro NEW, and a-net NEW are confirmed on `a5cfdda`. The following cells have not yet been run:
 
-Cool-off before a-net is not a formality. A host that has just refused connections will produce a failure that looks like a product defect and is not.
+1. **micro RETURNING** — credential exists; first-ever run
+2. **a-net RETURNING** on letter **A** — first-ever run; cool-off before attempting (host has refused connections following probe bursts)
+3. **xeno** — no live attempt planned; honest halt stands on existing fingerprint. Phase-2 is Max-gated.
 
 ## Hub confirming wave 2026-07-26T19:55:40Z (tip `a5cfdda`)
 
