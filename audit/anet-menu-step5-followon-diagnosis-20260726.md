@@ -17,9 +17,11 @@ No passwords, handles, or live screen dumps in this file.
 | (b) game-select ↔ `menu` **mislabel** | **Confirmed** — prior live frame + direct `classify_screen` call |
 | (c) ensure-step expectation mismatch alone | **Secondary** — ensure stagnates because login has no rule for "menu that is the door"; root is (b) |
 
-**Product classify gap for this layout was already closed** by `WO-ANET-BANNER-LAYOUT` (merged earlier today) without inventing a new class — widened title regex + coherent proximity for boxed title. Tip fixture `tests/fixtures/game_select_menu_banner_anet_boxed_title.txt` + `test_anet_boxed_title_banner_game_select_fixture` pin `classify_screen` → `game_select`.
+**Product classify gap for this layout was addressed** by `WO-ANET-BANNER-LAYOUT` (merged earlier today) without inventing a new class — widened title regex + coherent proximity for boxed title. Tip fixture `tests/fixtures/game_select_menu_banner_anet_boxed_title.txt` + `test_anet_boxed_title_banner_game_select_fixture` pin `classify_screen` → `game_select`.
 
-**This tip does not invent a screen class and does not re-widen classify.** Remaining Accept gap: optional **live** re-ensure on a-net NEW at current tip (N-of-M) — blocked here on Shell + no coord-posted ephemeral bank path yet.
+**Honesty bound (CC 18:20:54Z — accepted):** fixture + prior live frame prove the **mislabel mechanism** and that the **boxed-title banner shape** now classifies as `game_select`. They do **not** by themselves prove a-net **NEW** (registration) step5 at current tip — PR #7 live-prove qualified NEW+RETURNING for rogue only; a-net/micro were unqualified. Registration can insert screens a RETURNING login never shows. **NEW path = not directly re-proved this tip.**
+
+**This tip does not invent a screen class and does not re-widen classify.** Live NEW vs RETURNING diff via `proof_anet` under the ephemeral bank is the cheap discriminator (Shell blocked on this seat).
 
 ---
 
@@ -39,12 +41,12 @@ No passwords, handles, or live screen dumps in this file.
 
 - Not a drive-by proximity ceiling raise (stall note warned; ANET WO used coherent-signal shape instead).
 - Not micro `unknown`@step6 (different root — blank-name reject; see same stall doc Result 1 / `WO-MICRO-*`).
-- Not live ensure in this STATUS — ask hub for ephemeral bank path in coord if Max wants N-of-M proof at tip.
+- Not live ensure in this STATUS — bank path now known (`/tmp/tw2002-live-ensure-matrix-20260726T0801Z`); Shell no-exit blocked the run on this seat.
 
 ---
 
 ## Accept shape for this tip
 
-**Diagnosis complete (docs):** mislabel (b) confirmed; fix already shipped via ANET banner WO; no further classify invent under 5A.
+**Diagnosis complete (docs):** mislabel (b) confirmed on prior capture; boxed-title banner classifies as `game_select` at tip via fixture; **no classify invent under 5A**.
 
-**Optional follow:** hub/Max live `tw ensure` a-net NEW (+ RETURNING via `proof_anet`) against tip ≥ `8d8b1d6` with `TW_CONFIG_DIR=/tmp/tw2002-live-ensure-matrix-20260726T0801Z` and an isolated `TW_RUN_DIR` — expect `game_select` then progress past step5 (or honest fail with new redacted frame). Bank path posted in coord 18:20Z (keys only); Cursor Shell no-exit blocked the live attempt on this seat. Not required for docs Accept under 5A.
+**Explicit non-claim:** a-net **NEW** path at tip **not directly re-proved** (fixture ≠ registration step5; PR #7 live-prove did not qualify a-net NEW). Stronger Accept = one live NEW (+ RETURNING) under `TW_CONFIG_DIR=/tmp/tw2002-live-ensure-matrix-20260726T0801Z` + isolated `TW_RUN_DIR` — hub/Max or Shell recovery. Bank path posted in coord 18:20Z (keys only).
