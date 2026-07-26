@@ -245,13 +245,15 @@ def test_broken_profile_at_minimal_width_no_exception():
 def test_from_row_uses_host_over_server():
     row = SimpleNamespace(host="resolved.example.net", server="catalog-key", game_letter="B", handle="Nav")
     result = compose_profile_strip_from_row(row, width=80)
-    assert result.startswith("resolved.example.net")
+    # Exact host token (not startswith) — CodeQL py/incomplete-url-substring-sanitization
+    assert result.split(f" {SEP} ", 1)[0] == "resolved.example.net"
+    assert "catalog-key" not in result
 
 
 def test_from_row_falls_back_to_server_when_host_missing():
     row = SimpleNamespace(host="", server="catalog-key", game_letter="B", handle="Nav")
     result = compose_profile_strip_from_row(row, width=80)
-    assert result.startswith("catalog-key")
+    assert result.split(f" {SEP} ", 1)[0] == "catalog-key"
 
 
 def test_from_row_missing_attributes_no_crash():
