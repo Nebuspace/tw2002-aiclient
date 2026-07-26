@@ -1,7 +1,8 @@
 # WO-LOGIN-SCROLLBACK-SEARCH-AUDIT
 
-**Status:** READY · Cursor · `wo/LOGIN-SCROLLBACK-SEARCH-AUDIT` · tip `84bbd65`
+**Status:** IN PROGRESS · Cursor · `wo/LOGIN-SCROLLBACK-SEARCH-AUDIT` · tip `b06fbe4`
 **Posted:** 2026-07-26 · IDLE scout by impl-aiclient-cursor after Explore HOLD
+**Amended:** 2026-07-26T20:55:00Z · hub fold — CC scout additions (#4, #5); Cursor retains build lane
 
 ## Goal
 
@@ -60,9 +61,27 @@ All three criteria must be met:
    `_INACTIVITY_RE`) — one test per site asserting the RE fires when the phrase appears in the body
    of `text` (not just the last line), verifying the intentional reach is preserved.
 
+4. **`_INACTIVITY_RE` "harmless blank" claim falsified.** The WO-seed comment calls the blank-Enter
+   response "harmless." This must be tested: a test that passes stale inactivity text with a
+   *different* live prompt (simulating pyte lingering) must NOT produce a blank send. If the test
+   shows it does (i.e., the RE still fires on stale text), delete "harmless" from the comment and
+   apply the same bounded-retry fix as `WO-MICRO-LOGIN-BLANK-REJECT`. If the test shows it is safe
+   (RE only fires when the inactivity warning is the fresh current screen content), the "harmless"
+   claim is confirmed and the test is the pin.
+
+5. **Prompt-gate durability pins for two already-safe sites.**
+   - `_OUTER_NAME_REJECTED_RE` (~line 563): gated under `_OUTER_NAME_PROMPT_RE.search(prompt)`.
+     Add a pin that passes the rejection text in `text` with a *non-matching* `prompt` and asserts
+     NO action is taken (i.e., the outer-name rejection does not fire when the prompt gate is absent).
+   - `_PLANET_NAME_PROMPT_RE` (~line 697): gated under `_PLANET_NAME_BOX_RE.search(prompt)`.
+     Add a pin that passes the planet-name text in `text` with a `prompt` that does NOT match the
+     box RE and asserts NO planet-naming action fires.
+   Both pins must fail if the respective prompt gate is removed.
+
 **Falsifiable definition of done:**
 `pytest tests/ -x` passes; grep confirms no `.search(text)` call on `_CLEAR_AVOIDS_RE` remains
-unscoped (or a comment+test documents why it is safe); two new pin tests present and green.
+unscoped (or a comment+test documents why it is safe); four new pin tests present and green
+(SHOW_LOG, INACTIVITY/harmless-claim, OUTER_NAME prompt-gate, PLANET_NAME prompt-gate).
 
 ## Out of scope
 
@@ -75,7 +94,8 @@ unscoped (or a comment+test documents why it is safe); two new pin tests present
 ## Proof
 
 STATUS + short SHA · output of `pytest tests/ -x` (all green) · grep confirming
-`.search(text)` disposition on each of the four sites · two new pin-test names cited.
+`.search(text)` disposition on each of the four sites · four new pin-test names cited
+(SHOW_LOG · INACTIVITY-harmless · OUTER_NAME-prompt-gate · PLANET_NAME-prompt-gate).
 
 ## Refs
 
@@ -84,5 +104,9 @@ STATUS + short SHA · output of `pytest tests/ -x` (all green) · grep confirmin
 - `tw2002_aiclient/session/login.py:547-556` — `_next_action_inner` decision path (four sites)
 - `tw2002_aiclient/session/login.py:697` — `_PLANET_NAME` hybrid
 - PR #23 (`a5cfdda`) — `MODULE_ENTRY` fix via `_option_block_above_prompt`
+- `tw2002_aiclient/session/login.py:563` — `_OUTER_NAME_REJECTED_RE` gated under `_OUTER_NAME_PROMPT_RE.search(prompt)`
+- `tw2002_aiclient/session/login.py:697` — `_PLANET_NAME_PROMPT_RE` gated under `_PLANET_NAME_BOX_RE.search(prompt)`
+- `WO-MICRO-LOGIN-BLANK-REJECT` — bounded-retry pattern for blank-send risk (reference for Accept #4)
 - impl-aiclient-cursor STATUS 2026-07-26T20:49:00Z (IDLE scout report)
-- hub seed 2026-07-26T20:49:50Z
+- impl-claudecode-aiclient scout 2026-07-26T20:53:58Z (additions #4 + #5)
+- hub seed 2026-07-26T20:49:50Z · hub fold 2026-07-26T20:55:00Z
