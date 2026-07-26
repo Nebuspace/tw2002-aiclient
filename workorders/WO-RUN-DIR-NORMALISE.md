@@ -84,6 +84,18 @@ in the XML; source-tree md5 fingerprint identical before/after the full run (no 
 `scripts/path-leak-scan.sh --file` clean on both changed files. Full detail in the STATUS
 report to `orchestrator.md`.
 
+**Independent seat certification (the run the merge rests on).** The numbers above are the
+implementing lane's own run. The seat re-ran the red-first from scratch rather than
+accepting that report — reverting `env.py` to `main`'s copy and re-running the pins gave
+**6 failures**, one more than the lane's summary listed (`rejects_embedded_newline` was
+absent from its report), after which the file was restored byte-identical before
+certifying. Seat junitxml: **3521 tests, 0 failures, 0 errors, 2 skipped** — one *fewer*
+skip than the lane's run. The delta is the conditional PTY/curses skip, which depends on
+TTY availability in the executing environment, not on this change: the seat run therefore
+*executed* one more test than the lane's. Recorded rather than reconciled to a single
+number, because the two runs are genuinely different runs and flattening them would hide
+which one the Accept is resting on.
+
 ## Refs
 `audit/session-env-audit-20260726.md` E-01 (defect), E-03 (whitespace-only precedent) ·
 dispatch from team-lead 2026-07-26 · hub ruling (loud-reject over silent-strip,
