@@ -33,6 +33,8 @@ reading the tree rather than assumed. Durable twin:
        -- (b) positive table; absent class → None (no keystroke)
   6. `session/protocol.py` · `_dispatch_ensure`
        -- (b) `cls == target` with default `target="main_command"`
+  7. `session/sector_explore.py` · `_gate_screen` (ExploreRunner map-fill)
+       -- (a) `klass in NEVER_AUTO_ACTION_CLASSES` → halt
 
 Cockpit `arm.py` is presentation-only (no classify, no send). Taught-run
 fire is consumer #2 only. Operator `do`/`send` report class; they do not
@@ -78,6 +80,7 @@ _INVENTORIED_CONSUMERS: dict[str, str] = {
     "session/daemon.py": '!= "main_command"',
     "session/login.py": "def _decide",
     "session/protocol.py": 'target = args.get("target", "main_command")',
+    "session/sector_explore.py": "NEVER_AUTO_ACTION_CLASSES",
 }
 
 # Modules that may mention classify + send symbols without being a
@@ -362,6 +365,7 @@ def test_inventory_frozenset_matches_audit_table():
             "session/daemon.py",
             "session/login.py",
             "session/protocol.py",
+            "session/sector_explore.py",
         }
     )
 

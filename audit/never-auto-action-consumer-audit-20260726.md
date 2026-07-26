@@ -30,6 +30,7 @@ scope (status / read / history / HUD chips).
 | 4 | `session/daemon.py` · `_attempt_graceful_quit` | Best-effort `Q` / `Y` on shutdown | **(b)** `session.classify() != "main_command"` → return | `test_graceful_quit_never_keys_a_money_prompt` |
 | 5 | `session/login.py` · `_decide` | Login automaton positive table | **(b)** unrecognized class (incl. `money_prompt`) → `None` (no keystroke) | `test_the_login_automaton_has_no_keystroke_for_a_money_prompt` · `test_no_consumer_acts_on_merely_being_recognized` |
 | 6 | `session/protocol.py` · `_dispatch_ensure` | "Already there?" before login replay | **(b)** `cls == target` with default `target="main_command"` | `test_ensure_never_treats_a_money_prompt_as_a_reached_target` |
+| 7 | `session/sector_explore.py` · `_gate_screen` | ExploreRunner warp hops from `main_command` only | **(a)** `klass in NEVER_AUTO_ACTION_CLASSES` → `HALT_NEVER_AUTO_ACTION` | `test_inventoried_consumers_still_carry_their_refuse_marker` · structural inventory pin (#7 additive — see below) |
 
 ### Taught-rule / cockpit arm (C-06 residual)
 
@@ -66,8 +67,18 @@ appearing in the inventory frozenset — the "fifth consumer" trap C-06 named.
 
 ---
 
+## Additive correction (2026-07-26 · PR #49 structural pins)
+
+Row **#7** (`session/sector_explore.py` · ExploreRunner) was omitted from the
+original six-consumer verdict when Explore was still HOLD. The refuse shape was
+already present in product code (`klass in NEVER_AUTO_ACTION_CLASSES` in
+`_gate_screen`); this entry **extends** the inventory without rewriting rows
+1–6 or retracting the prior refuse analysis for those sites.
+
+---
+
 ## Verdict
 
-C-06 **CLOSED** for this tip: every classification→send consumer is
-inventoried, refuse-shaped, and pinned. No product classify vocab change;
-Explore HOLD; no live connects.
+C-06 **CLOSED** for this tip (rows 1–7): every classification→send consumer is
+inventoried, refuse-shaped, and pinned. No product classify vocab change; no
+live connects required for this inventory extension.

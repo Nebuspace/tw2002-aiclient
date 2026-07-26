@@ -26,7 +26,7 @@ import time
 
 import pytest
 
-from twclient import world_model
+from tw2002_aiclient import world_model
 
 
 WORLD_A = "hostA__F__ALPHA"
