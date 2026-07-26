@@ -1,6 +1,6 @@
 # WO-ANET-BANNER-LAYOUT
 
-**Status:** IN FLIGHT · Cursor seat · WO-ANET-BANNER-LAYOUT
+**Status:** DONE · merged #7 `381190b` · a-net boxed-title TWGS banner detectors on main
 **Posted:** 2026-07-26 · from the live-ensure diagnosis (`4f7449f`)
 
 ## Goal

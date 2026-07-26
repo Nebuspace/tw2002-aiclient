@@ -1,6 +1,6 @@
 # WO-TUI-KILLPG-EPERM-CURSES-PTY
 
-**Status:** OPEN · READY · banked from CC disclosure correction 2026-07-26T18:02:30Z  
+**Status:** IN FLIGHT · Cursor seat · hub-seeded `wo/TUI-KILLPG-EPERM-CURSES-PTY` · depends on TUI-SPIN DONE on main  
 **Depends:** `WO-TUI-DEAD-TERMINAL-SPIN` landed (PR #2) — loud `warnings.warn` on EPERM is the instrument  
 **Seat:** CC preferred (isolation already done on that lane)
 
