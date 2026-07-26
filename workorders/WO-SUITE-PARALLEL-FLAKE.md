@@ -1,7 +1,28 @@
 # WO-SUITE-PARALLEL-FLAKE
 
-**Status:** OPEN · tests · Claude Code lane · self-banked 2026-07-26
+**Status:** **DONE** · origin `f6432a1` · tests · Claude Code lane · self-banked 2026-07-26
 **Posted:** 2026-07-26 · after `61bdea2`
+
+> **Both diagnoses in this WO were WRONG. The corrections are the finding.**
+>
+> **Test A:** this WO quoted `0.5 <= elapsed < 0.6` as the fragile assertion. Those bounds belong to
+> **sibling tests that virtualize `clock()`/`sleep()`** — deterministic, incapable of flaking however
+> tight they look. The real-clock test's actual bound was **`elapsed < 0.001`** (one millisecond),
+> measured reaching **0.106** in an organic repro. *A file can mix virtual-clock and real-clock
+> fixtures; grep the fixture for `def clock`/`def sleep` overrides before trusting any wall-clock
+> flake attribution.*
+>
+> **Test B:** the `.errors`-poisoning lead (added mid-build) was also wrong. `34a41b4` already
+> classifies EBADF as teardown-safe on that path — **present, not missing.** The real race bypasses
+> `.errors`: `_expect_silence`'s bounded `recv(1)` against `stop()`'s socket close, behind an
+> `except socket.timeout` that never sees the `OSError: EBADF` the platform raises (**18/30** in a
+> forced loop). *A prior fix's pinning tests only exercised one mode — a fix's test coverage can be
+> narrower than its own reasoning.*
+>
+> **Fix:** a `threading.Event` set in a `finally` across every exit path, awaited before teardown —
+> **not a lock**, because serializing would have made the symptom vanish without naming the contender.
+> **Disclosed limit:** Test B was never reproduced end-to-end organically (~35 runs); it rests on a
+> structural argument plus an isolated forced repro, not on "it stopped failing."
 
 ## Goal
 
