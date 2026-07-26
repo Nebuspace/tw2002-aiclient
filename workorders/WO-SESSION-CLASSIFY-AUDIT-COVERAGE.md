@@ -1,7 +1,8 @@
 # WO-SESSION-CLASSIFY-AUDIT-COVERAGE
 
-**Status:** OPEN · READY · READ-ONLY audit report · CC or Cursor · banked hub discovery 2026-07-26
-**Posted:** 2026-07-26 · from `canon/findings.md` SESSION-AUDIT-COVERAGE-GAP / MT-11
+**Status:** READY FOR HUB COMMIT · Cursor · report on disk · `wo/SESSION-CLASSIFY-AUDIT`  
+**Posted:** 2026-07-26 · from `canon/findings.md` SESSION-AUDIT-COVERAGE-GAP / MT-11  
+**Report:** `audit/session-classify-audit-coverage-20260726.md`
 
 ## Goal
 
