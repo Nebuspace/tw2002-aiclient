@@ -840,7 +840,35 @@ def _report_dead_terminal(exc: DeadTerminalError) -> None:
         pass
 
 
-def main() -> int:
+_USAGE = """\
+usage: tw2002-aiclient [-h]
+
+Human-piloted TradeWars 2002 trainer (curses cockpit).
+
+options:
+  -h, --help  show this help message and exit
+
+Run with no arguments in a real terminal to open the profile picker.
+Ops/automation: use ./tw --help
+"""
+
+
+def main(argv: list[str] | None = None) -> int:
+    """Product TUI entry. ``--help`` / ``-h`` print usage and exit 0
+    without entering ``curses.wrapper`` (WO-TUI-HELP-ARGV).
+    """
+    if argv is None:
+        argv = sys.argv[1:]
+    if any(a in ("-h", "--help") for a in argv):
+        print(_USAGE, end="" if _USAGE.endswith("\n") else "\n")
+        return 0
+    if argv:
+        print(
+            f"tw2002-aiclient: unexpected argument: {argv[0]!r}",
+            file=sys.stderr,
+        )
+        print("Try 'tw2002-aiclient --help' for usage.", file=sys.stderr)
+        return 2
     try:
         curses.wrapper(_run)
     except DeadTerminalError as exc:
