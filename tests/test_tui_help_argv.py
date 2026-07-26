@@ -12,7 +12,6 @@ import pytest
 from tw2002_aiclient import app
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-LAUNCHER = PROJECT_ROOT / "tw2002-aiclient"
 
 
 @pytest.mark.parametrize("flag", ["--help", "-h"])
@@ -41,10 +40,10 @@ def test_unknown_argv_exits_2_without_curses(monkeypatch, capsys):
     assert "unexpected argument" in err
 
 
-@pytest.mark.skipif(not LAUNCHER.is_file(), reason="launcher script missing")
-def test_launcher_help_subprocess_exits_0():
+def test_module_help_subprocess_exits_0():
+    """CI has no checkout ``.venv``; exercise the same entry as ``python -m``."""
     proc = subprocess.run(
-        [str(LAUNCHER), "--help"],
+        [sys.executable, "-m", "tw2002_aiclient", "--help"],
         cwd=str(PROJECT_ROOT),
         capture_output=True,
         text=True,
