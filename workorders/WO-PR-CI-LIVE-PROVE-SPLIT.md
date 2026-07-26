@@ -84,7 +84,18 @@ In the PR-coordinator rhythm, `live-prove` is **not** “one happy path on the s
   "hosts: a_net_online, gone_rogue, microblaster_network · NEW:2 RETURNING:3 · tip ${SHA:0:7}"
 ```
 
-5. **Hub merge ritual (ordered):** offline `suite` green → **multi-server live prove** (or honest docs/CI-infra `n/a`) → `scripts/hub-live-prove-check.sh` → `gh pr merge` → **`scripts/hub-wo-merge-cleanup.sh wo/<ID> [worktree…]`**. Never merge if `live-prove` is missing/pending/red. Never leave a merged `wo/*` branch on origin.
+5. **Hub merge ritual (ordered):** offline `suite` green → **code-scanning sweep** (step 0 below — does not block) → **multi-server live prove** (or honest docs/CI-infra `n/a`) → `scripts/hub-live-prove-check.sh` → `gh pr merge` → **`scripts/hub-wo-merge-cleanup.sh wo/<ID> [worktree…]`**. Never merge if `live-prove` is missing/pending/red. Never leave a merged `wo/*` branch on origin.
+
+### Code-scanning sweep (step 0 — lagging indicator, not a gate)
+
+GitHub code scanning alerts usually appear on **`main` after merge**, with scan lag. Waiting for them post-merge stalls the loop; checking the *current* PR's alerts pre-merge is usually empty. Instead:
+
+1. At the **start** of each hub merge ritual (suite already green on the PR about to merge), run `scripts/hub-code-scanning-sweep.sh`.
+2. **New** open alerts vs the last-seen set → treat as coming from **recently merged** work (~PR N−1 / N−2), **not** from the PR you are about to merge.
+3. Bank remediation WO(s) / HANDOFF when a seat is free. **Do not block** the current merge.
+4. State file (outside the public repo): orchestrator `.samantha/coord/code-scanning-seen.json` via `CODE_SCANNING_SEEN_FILE` or `NEBUSPACE_ROOT` (see script header).
+
+Anti-patterns: required-check on alert count; holding merge for CodeQL to finish scanning the tip you just landed; pretending PR alert APIs are the gate unless Max enables true pre-merge alert publication.
 6. **Auth:** Max provisions a credential the **orchestrator agent can use** (`gh auth` on the hub machine, or a fine-grained PAT / GitHub App with `checks:write` — **not** committed). Document name-only in the secret-bank map.
 7. **Anti-cheat:** CI must not ship a job that always concludes `live-prove` success. Empty summary / single-host-only summary on a product PR is a **failed ritual** even if the API accepts it — hub must not post `success` in that case.
 
