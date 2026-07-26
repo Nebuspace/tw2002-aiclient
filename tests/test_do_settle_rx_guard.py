@@ -252,8 +252,27 @@ def test_do_returns_on_real_wall_clock_time_when_the_game_says_nothing(tmp_path,
     before = time.monotonic()
     reason, elapsed = session.wait_settle(wait_prompt=COMMAND_PROMPT_RE, timeout=0.3)
     assert reason == "prompt"
-    assert elapsed < 0.001  # the first poll, before any sleep -- microseconds
-    assert time.monotonic() - before < 0.05
+    # Both bounds below are loosened, not removed (WO-SUITE-PARALLEL-FLAKE).
+    # Reproduced ORGANICALLY (not synthetically) under this suite's own
+    # `-n auto` plus ordinary background CPU load: a live `pytest` run of
+    # THIS test, on this unmodified code, failed the old `elapsed < 0.001`
+    # with `elapsed = 0.1064327250351198` -- ~106ms between two
+    # `session.clock()` calls with only a regex match in between, on the
+    # UNGUARDED counterfactual path that has no `session.sleep()` call at
+    # all in between them. That gap is ambient scheduling delay, not this
+    # code spinning through work; a dedicated same-machine measurement
+    # (2000 calls to the same production path, synthetic `-n auto`-shaped
+    # contention) separately saw the outer wrap below reach 0.0982s.
+    # Honest limit of these new bounds: once real noise reaches ~100ms, a
+    # bound loose enough to survive it can no longer cleanly tell "matched
+    # instantly" apart from "matched after exactly one extra
+    # `session.sleep(0.04)` poll cycle" -- that one-cycle regression is a
+    # real, accepted loss of resolution here. What both bounds still catch
+    # clearly: several extra cycles, or a "fell through to the full
+    # budget" regression (elapsed >=0.3s) -- an order of magnitude beyond
+    # either new ceiling.
+    assert elapsed < 0.2  # the first poll, before any sleep -- was 0.001
+    assert time.monotonic() - before < 0.35  # was 0.05
 
     started = time.monotonic()
     resp = protocol.dispatch(

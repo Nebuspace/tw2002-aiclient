@@ -25,6 +25,19 @@ config/profiles.toml
 config/secrets.json
 config/*.local.*
 
+# tests/test_ensure_from_play.py's `_temporary_profile()` flock-serializes
+# sibling xdist processes writing to the REAL config/profiles.toml (see
+# that module's own docstring for why it can't be tmp_path-isolated) --
+# best-effort-unlinked in a `finally`, so under -n auto a `git status` can
+# catch it mid-window before that cleanup runs. Confirmed NOT covered by
+# the patterns above (`git status` after `touch`ing it showed `??`, not
+# nothing) -- neither a literal-path nor a `*.local.*` match. Structurally
+# unreachable would be better (the module's own flagged follow-on:
+# TW_CONFIG_DIR isolation), but it must stay adjacent to the real
+# profiles.toml path for the flock to serialize against, so ignore it here
+# instead (WO-SUITE-PARALLEL-FLAKE, dispatcher-flagged 2026-07-26).
+config/.profiles-test.lock
+
 # OS cruft + stray logs outside the tracked logs/ dir (Cipher's
 # forward-looking gap, 2026-07-19).
 .DS_Store

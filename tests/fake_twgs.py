@@ -245,6 +245,11 @@ class FakeTWGS:
         self._accept_thread: threading.Thread | None = None
         self._client_conn: socket.socket | None = None
         self._stop = threading.Event()
+        # "refused" mode only: set once `_expect_silence` has concluded and
+        # `.received_after_char_create` is authoritatively assigned -- see
+        # `wait_for_silence_check`'s own docstring for the teardown race
+        # this closes (WO-SUITE-PARALLEL-FLAKE).
+        self._silence_checked = threading.Event()
 
     @property
     def port(self) -> int:
@@ -288,6 +293,36 @@ class FakeTWGS:
         self._accept_thread = None
         self._listener = None
         self._client_conn = None
+
+    def wait_for_silence_check(self, timeout: float = 5.0) -> bool:
+        """`"refused"` mode only: block until `_expect_silence` has concluded
+        and `.received_after_char_create` is authoritatively set. Callers
+        MUST await this (inside their own `with fake, ...:` block, before
+        any teardown) before reading `.received_after_char_create` --
+        skipping it reopens a genuine teardown race measured on this exact
+        platform (WO-SUITE-PARALLEL-FLAKE, forced repro: 18/30 in a tight
+        loop): `stop()`'s own explicit `shutdown()`+`close()` on
+        `_client_conn` -- necessary so it can wake the OTHER 3 modes'
+        unbounded `conn.recv(4096)` hold-loops, which have no timeout of
+        their own -- races `_expect_silence`'s BOUNDED `recv(wait_s=3.0)`
+        if that recv is still in flight when `stop()` runs. A close from
+        another thread while a thread is blocked in `recv()` on the SAME
+        fd measured `OSError: [Errno 9] Bad file descriptor` on this
+        platform/Python, not `socket.timeout` -- the one exception
+        `_expect_silence`'s own except clause catches -- so the OSError
+        propagated uncaught, `_accept_loop`'s catch-all swallowed it
+        (`self._stop.is_set()` is already true by then), and
+        `.received_after_char_create` was left at its `None` `__init__`
+        default instead of `True`/`False`. `None is False` then failed the
+        caller's assertion -- intermittently, since the race only fires
+        when `stop()` happens to reach the socket while the recv is still
+        genuinely blocked, which needs enough scheduling delay to be rare
+        under a light/serial load and common under `-n auto` CPU
+        contention. This wait removes the race structurally rather than
+        narrowing its window: nothing else touches the connection while a
+        caller is blocked here, so `_expect_silence`'s own recv can only
+        ever end in the two outcomes its except clause already handles."""
+        return self._silence_checked.wait(timeout)
 
     # -- server loop -------------------------------------------------------
 
@@ -611,20 +646,31 @@ class FakeTWGS:
         then blocks with a bounded socket timeout for anything arriving
         during the wait window. Result recorded on
         `.received_after_char_create` for the test to assert against, in
-        addition to the usual `.errors` entry on violation."""
-        if reader._buf:
-            self.errors.append(f"{label}: received unexpected bytes {bytes(reader._buf)!r} (expected none)")
-            self.received_after_char_create = True
-            return
-        conn.settimeout(wait_s)
+        addition to the usual `.errors` entry on violation.
+
+        The whole body runs under a `finally` that sets `_silence_checked`
+        -- see `wait_for_silence_check`'s docstring for why a caller MUST
+        wait on that event (inside its own `with fake, ...:` block) before
+        relying on `.received_after_char_create`: this method's own
+        `except socket.timeout` cannot also catch the teardown-close race
+        `wait_for_silence_check` exists to prevent from ever reaching this
+        method in the first place."""
         try:
-            chunk = conn.recv(1)
-        except socket.timeout:
-            chunk = b""
+            if reader._buf:
+                self.errors.append(f"{label}: received unexpected bytes {bytes(reader._buf)!r} (expected none)")
+                self.received_after_char_create = True
+                return
+            conn.settimeout(wait_s)
+            try:
+                chunk = conn.recv(1)
+            except socket.timeout:
+                chunk = b""
+            finally:
+                conn.settimeout(None)
+            if chunk:
+                self.errors.append(f"{label}: received unexpected byte {chunk!r} (expected none)")
+                self.received_after_char_create = True
+            else:
+                self.received_after_char_create = False
         finally:
-            conn.settimeout(None)
-        if chunk:
-            self.errors.append(f"{label}: received unexpected byte {chunk!r} (expected none)")
-            self.received_after_char_create = True
-        else:
-            self.received_after_char_create = False
+            self._silence_checked.set()

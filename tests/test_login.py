@@ -204,6 +204,19 @@ def test_registration_refused_raises_before_any_char_create_send(tmp_path):
                 session, profile, get_password=lambda n: None, save_password=lambda n, pw: None
             )
 
+        # Synchronize on the server's own observation window BEFORE this
+        # `with` block's teardown runs (`session.close()` then
+        # `fake.stop()`). Skipping this reopens a genuine teardown race
+        # (WO-SUITE-PARALLEL-FLAKE, forced repro measured 18/30): `stop()`
+        # must forcibly close the connection to wake the OTHER 3 modes'
+        # unbounded recv loops, and that same close can race
+        # `_expect_silence`'s own bounded recv if it is still in flight --
+        # see `FakeTWGS.wait_for_silence_check`'s docstring for the
+        # measured failure mode this closes.
+        assert fake.wait_for_silence_check(timeout=5.0), (
+            "FakeTWGS never finished observing post-char_create silence"
+        )
+
     assert not fake.errors, fake.errors
     # Not even the "Y" -- the automaton's allow_register guard raises
     # before returning any action at all (see login.py's char_create
