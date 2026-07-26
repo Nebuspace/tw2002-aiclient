@@ -1,6 +1,6 @@
 # WO-P3-HYGIENE-GITIGNORE — Stop public scoop of local trees
 
-> Status: **EXECUTE DONE** 2026-07-24 (awaiting hub Accept)
+> Status: **DONE** · origin `1fd316b` (hub Accept stamp 2026-07-26 · was EXECUTE DONE awaiting Accept)
 > Seat: `impl-aiclient-cursor` · docs/gitignore only
 > Ruling: orchestrator @ 2026-07-24T10:36:48Z — **(a) gitignore archive — mandatory**
 

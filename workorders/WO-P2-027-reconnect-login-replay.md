@@ -1,6 +1,6 @@
 # WO-P2-027 — Reconnect + login replay
 
-> Status: **EXECUTE DONE** 2026-07-24 (awaiting hub Accept) · PREP DONE earlier same day
+> Status: **DONE** · origin `e1f189c` (hub Accept stamp 2026-07-26 · was EXECUTE DONE awaiting Accept)
 **Phase:** 2 · **Type:** build · **Depends:** WO-P2-020, WO-P2-023
 **Canon:** `canon/architecture/resilience-and-reconnect.md` (Drop Detection & Reconnect,
 Login-Replay & Resume Verification)

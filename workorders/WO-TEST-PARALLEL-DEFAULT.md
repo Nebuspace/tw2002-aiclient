@@ -1,6 +1,6 @@
 # WO-TEST-PARALLEL-DEFAULT
 
-**Status:** DONE (tip pending Accept/land)  
+**Status:** DONE · origin `80923a6`  
 **Goal:** Make `pytest-xdist` `-n auto` the default; serial escape `-n0`.
 
 ## Changes

@@ -1,7 +1,7 @@
 # WO-P2-G4-X6-TW-RECORD-WRITER
 
 **Status:** DONE · origin `13f34a8`  
-**Posted:** 2026-07-26 · M3 slice X6 (stub)
+**Posted:** 2026-07-26 · M3 slice X6
 
 ## Goal
 

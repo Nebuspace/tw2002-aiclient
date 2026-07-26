@@ -1,6 +1,6 @@
 # WO-P2-026 — Settle detection baseline
 
-> Status: **EXECUTE DONE** 2026-07-24 (awaiting hub Accept) · PREP DONE earlier same day · thin verify
+> Status: **DONE** · origin `2feb8b4` (hub Accept stamp 2026-07-26 · was EXECUTE DONE awaiting Accept)
 **Phase:** 2 · **Type:** verify/harden · **Depends:** WO-P2-020
 **Canon:** `canon/architecture/settle-detection.md`
 

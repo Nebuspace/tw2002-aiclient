@@ -1,6 +1,6 @@
 # WO-P2-025 — Control-lock + actor tag
 
-> Status: **EXECUTE DONE** 2026-07-24 (awaiting hub Accept) · PREP DONE earlier same day
+> Status: **DONE** · origin `190bd09` (hub Accept stamp 2026-07-26 · was EXECUTE DONE awaiting Accept)
 **Phase:** 2 · **Type:** harden · **Depends:** WO-P2-020 · **Preferred after:** WO-P2-024 (login/fake_twgs exclusive until Accept)
 **Canon:** `canon/architecture/control-and-escalation.md`, `canon/architecture/session-engine.md`
 (The Control-Lock as Keystroke Carrier), `canon/engine/trace-ledger.md` (Actor attribution)

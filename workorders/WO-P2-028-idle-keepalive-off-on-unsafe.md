@@ -1,6 +1,6 @@
 # WO-P2-028 — Idle-keepalive OFF on unsafe screens
 
-> Status: **EXECUTE DONE** 2026-07-24 (awaiting hub Accept) · PREP DONE earlier same day
+> Status: **DONE** · origin `4db92a1` (hub Accept stamp 2026-07-26 · was EXECUTE DONE awaiting Accept)
 **Phase:** 2 · **Type:** harden · **Depends:** WO-P2-027
 **Canon:** `canon/architecture/resilience-and-reconnect.md` (Conservative Idle-Keepalive)
 

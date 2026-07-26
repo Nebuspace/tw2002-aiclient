@@ -1,6 +1,6 @@
 # WO-P2-OPS-VERB-F-PREP — Spectate / attach inventory (no UI wire)
 
-> Status: **DONE** pending Accept · tip `b9dc80d`
+> Status: **DONE** · origin `9b66ec6` (hub Accept stamp 2026-07-26 · PREP docs tip; `b9dc80d` was watch wire not this PREP)
 > Seat: `impl-aiclient-cursor`
 > Parent: `WO-P2-OPS-VERB-SURFACE.md` slice F
 > Refs: `canon/surfaces/spectate-and-attach.md` · WatchHub `1825758` · `tw watch` `b9dc80d`

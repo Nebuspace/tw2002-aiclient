@@ -1,6 +1,6 @@
 # WO-P0-TW-SHIM — Root `tw` / `twd` ADR-001 import fix
 
-> Status: **EXECUTE DONE** 2026-07-24 (awaiting hub Accept)
+> Status: **DONE** · origin `38a6050` (hub Accept stamp 2026-07-26 · was EXECUTE DONE awaiting Accept)
 > Seat: `impl-aiclient-cursor` · URGENT POC unblock
 > Tip base: `3d7e32c`
 

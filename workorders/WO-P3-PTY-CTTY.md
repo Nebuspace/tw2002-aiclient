@@ -1,6 +1,6 @@
 # WO-P3-PTY-CTTY — Opt-in controlling tty for live-resize pty proofs
 
-> Status: **EXECUTE DONE** 2026-07-24 (awaiting hub Accept)
+> Status: **DONE** · origin `914a0a1` (hub Accept stamp 2026-07-26 · was EXECUTE DONE awaiting Accept)
 > Seat: `impl-aiclient-cursor`
 > Tip base: `2a2d65c`
 

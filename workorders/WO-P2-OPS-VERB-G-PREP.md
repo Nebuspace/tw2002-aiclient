@@ -1,6 +1,6 @@
 # WO-P2-OPS-VERB-G-PREP — Menumap / loops inventory (no wire)
 
-> Status: **DONE** pending Accept · tip `582c210`
+> Status: **DONE** · origin `d70520b` (hub Accept stamp 2026-07-26 · PREP docs tip; `582c210` was attach redaction not this PREP)
 > Seat: `impl-aiclient-cursor`
 > Parent: `WO-P2-OPS-VERB-SURFACE.md` slice G
 > HOLD: ops `tw spectate` **RETIRED / WONTBUILD** (Max `@ 13:13:55Z`) · **G2 EXECUTING** · G3→G4 staged (Max GO `@ 13:15:00Z`)

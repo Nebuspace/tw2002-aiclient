@@ -1,6 +1,6 @@
 # WO-P3-030 — Play-chrome navigation (VERIFY)
 
-> Status: **EXECUTE DONE** 2026-07-24 (awaiting hub Accept)
+> Status: **DONE** · origin `baa2779` (hub Accept stamp 2026-07-26 · was EXECUTE DONE awaiting Accept)
 > Seat: `impl-aiclient-cursor` · verify-only · **no** Fable chrome (031–033)
 > Depends: PREP `WO-P3-030-033-cockpit-frame-PREP.md` §PWO-030 · D1 harness `49b21a1`
 > Out of scope: double-line frame / gutters / fold · exit-confirm popup (Phase 5 / N5)

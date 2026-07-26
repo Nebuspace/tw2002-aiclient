@@ -1,6 +1,6 @@
 # WO-P3-HARNESS-REHAB — Layer-B pty helpers (D1)
 
-> Status: **EXECUTE DONE** 2026-07-24 (awaiting hub Accept)
+> Status: **DONE** · origin `49b21a1` (hub Accept stamp 2026-07-26 · was EXECUTE DONE awaiting Accept)
 **Phase:** 3 · **Type:** test-rehab · **Depends:** Phase-3 cockpit PREP D1
 **Goal:** Unblock Phase-3 Layer-B proofs — shared FakeClient + pty/pyte helpers import
 `tw2002_aiclient` only (no archive `twclient`).
