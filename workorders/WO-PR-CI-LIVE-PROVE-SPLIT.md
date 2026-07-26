@@ -1,6 +1,7 @@
 # WO-PR-CI-LIVE-PROVE-SPLIT
 
-**Status:** **IN FLIGHT** · hub reclaim 2026-07-26 · Phase 1 CI implemented (suite.yml + live_login marker + hub-live-prove-check.sh) · awaiting offline CI green + hub `live-prove` post before merge  
+**Status:** **DONE** · merged PR #1 → `main` @ `91a0561` · suite green · `live-prove` n/a (CI-infra, Commit Status) · `wo/PR-CI-LIVE-PROVE-SPLIT` deleted via cleanup ritual  
+
 **Posted:** 2026-07-26 · Max rulings: PR return · GHA suite · secrets bank · laptop-default live · `live_login` · reconcile-before-resume · hub branch+WO seed · hub merge · **live-prove required check** · **no new HANDOFF until prior PR checks pass**  
 **Supersedes:** [`WO-CI-GITHUB-ACTIONS-SUITE`](WO-CI-GITHUB-ACTIONS-SUITE.md) (folded here)  
 **Repo:** `Nebuspace/tw2002-aiclient` (**PUBLIC**)  
@@ -66,7 +67,7 @@ gh api "repos/Nebuspace/tw2002-aiclient/check-runs" -f name=live-prove \
   -f output[summary]='…redacted N-of-M…'
 ```
 
-5. **Hub merge ritual (ordered):** offline `suite` green → run live on laptop → post `live-prove` → `gh pr merge`. Never merge if `live-prove` is missing/pending/red.
+5. **Hub merge ritual (ordered):** offline `suite` green → run live on laptop (or honest docs/CI-infra `n/a`) → `scripts/hub-live-prove-check.sh` → `gh pr merge` → **`scripts/hub-wo-merge-cleanup.sh wo/<ID> [worktree…]`** (delete remote+local `wo/*` branch + worktrees; refuse if tip ∉ `origin/main`). Never merge if `live-prove` is missing/pending/red. Never leave a merged `wo/*` branch on origin.
 6. **Auth:** Max provisions a credential the **orchestrator agent can use** (`gh auth` on the hub machine, or a fine-grained PAT / GitHub App with `checks:write` + contents/PR read — **not** committed to the repo). Document name-only in the secret-bank map; rotate if leaked.
 7. **Anti-cheat:** CI must not ship a job that always concludes `live-prove` success. Optional later: webhook or script that fails the check if summary is empty.
 
