@@ -1,6 +1,6 @@
 # WO-EXPLORE-SECTOR-FRONTIER
 
-**Status:** **IN PROGRESS** · Cursor · M4 (automatic sector exploration)  
+**Status:** **DONE** · PR #49 · `6ea004b` · M4 sector exploration complete  
 **Posted:** 2026-07-26 · Max milestone M4 (automatic sector exploration)  
 **Seat:** Cursor · M4 (`wo/EXPLORE-SECTOR-FRONTIER`)  
 **Depends:** ensure → `main_command` on target host · `WO-CONTROL-LOCK-AUTOLOOP-FENCE` Accepted · G4 LoopPlayer / state-sector substrate (DONE)

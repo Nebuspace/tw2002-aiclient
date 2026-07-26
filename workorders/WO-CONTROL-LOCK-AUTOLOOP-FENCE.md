@@ -1,6 +1,6 @@
 # WO-CONTROL-LOCK-AUTOLOOP-FENCE
 
-**Status:** OPEN · HIGH · READY · Max ruled **3A** 2026-07-26 · CC preferred (safety)
+**Status:** **DONE** · `d72bdd7` · autoloop fence on take_human landed
 **Posted:** 2026-07-26T07:24Z
 **Max ruling (3A):** **Fence** — `take_human` must stop/hold autoloop (not docs-only).
 

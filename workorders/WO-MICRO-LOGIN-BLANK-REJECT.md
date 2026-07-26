@@ -1,6 +1,6 @@
 # WO-MICRO-LOGIN-BLANK-REJECT
 
-**Status:** OPEN · READY · product (`session/login.py`) · Claude Code lane · queued after fence 3A
+**Status:** **DONE** · PR #24 · `61a581f`
 **Posted:** 2026-07-26 · from the live-ensure diagnosis (`4f7449f`, `audit/live-ensure-stall-diagnosis-20260726.md`)
 
 ## Goal

@@ -1,7 +1,7 @@
 # WO-P2-G3-LOOPS — tw loops list (store read, empty-honest)
 
 > Reconstructed from coord HANDOFF bodies (2026-07-25 backfill).
-> Status: **IN FLIGHT** 2026-07-25 · engine committed local **`31c871f`** (CC; Push waits Accept) · CLI wire pending `cli.py` ownership after SURROGATE-ASCII
+> Status: **DONE** · tip `1c084e5` · `tw loops` live on main (2/2 CLI + engine)
 > Type: build · Phase: 2 · Seat: impl-claudecode-aiclient (Fable)
 > Refs: `WO-P2-OPS-VERB-G-PREP.md` G3 · `canon/engine/macros.md` · ULTRACODE-WO-INVENTORY.md Phase 2
 

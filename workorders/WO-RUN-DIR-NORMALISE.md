@@ -1,6 +1,6 @@
 # WO-RUN-DIR-NORMALISE — Refuse a dirty TW_RUN_DIR override at the choke point
 
-> Status: **BUILT — awaiting hub commit** 2026-07-26 · built in an isolated worker tree
+> Status: **DONE** · PR #50 · `e7c3a27` · loud-reject dirty TW_RUN_DIR landed
 > (`worker-git-deny-hook` blocks `git worktree`/`fetch` for this seat; rsync + `.git`
 > symlink substitute per `[[prefix-tree-via-rsync-plus-git-show]]`) · not yet on origin
 > Type: harden · Priority: MED (per audit E-01) · Lens: L2 code-vs-canon (session-env-audit-20260726)

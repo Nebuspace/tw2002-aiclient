@@ -1,6 +1,6 @@
 # WO-README-PLAYER-VOICE
 
-**Status:** IN FLIGHT · Claude Code **side-subagent** (parallel to blank-reject) · hub-seeded `wo/README-PLAYER-VOICE`  
+**Status:** **DONE** · PR #21 · `39080f0`  
 **Posted:** 2026-07-26 · Max ask — README is techno / deprecated / ops-verb soup; humans run one trainer client  
 **Seat:** `impl-claudecode-aiclient` — **dispatch a subagent**; do **not** pause or dilute `WO-MICRO-LOGIN-BLANK-REJECT`
 
