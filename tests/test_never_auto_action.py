@@ -65,6 +65,8 @@ MONEY_SCREEN = (
     "-=-=-        End of Cargo Hold Upgrade Quote        -=-=-\n"
     "\n" + MONEY_PROMPT
 )
+# Quantity-shaped password chrome — classifies as `unknown` (not money_prompt).
+PASSWORD_LENGTH_PROMPT = "How many characters in your password?"
 
 # Relative to `tw2002_aiclient/`. Marker must appear in source: dropping the
 # refuse (or rewriting past the marker without updating this map) fails the
@@ -259,6 +261,70 @@ def test_no_consumer_acts_on_merely_being_recognized(forbidden):
         )
         is None
     )
+
+
+def test_no_consumer_acts_on_unknown():
+    """Canonical escalate-first property for ``unknown``, asserted not assumed.
+
+    Canon (``engine/screen-understanding.md``, "The Unknown Is First-Class")
+    makes ``unknown`` escalate-first. Inventoried classify→send consumers are
+    positive-match or denylist shapes — never "act unless unknown" — so none
+    may send on ``unknown``. This pin is an explicit assertion of that
+    property (mirror of ``test_no_consumer_acts_on_merely_being_recognized``),
+    not a membership of ``unknown`` in ``NEVER_AUTO_ACTION_CLASSES`` (that
+    set is recognized-but-forbidden only).
+
+    Password-length chrome (WO-CLASSIFY-PASSWORD-LENGTH-UNKNOWN / #40) is the
+    concrete exemplar: correct class ``unknown``, not ``money_prompt``.
+    """
+    assert classify_screen("", PASSWORD_LENGTH_PROMPT) == "unknown"
+    assert "unknown" not in NEVER_AUTO_ACTION_CLASSES
+
+    # Consumer 1: crawler enumerates only ``menu``; unknown must not be menu.
+    assert menu_crawler.screen_state("", PASSWORD_LENGTH_PROMPT) != "menu"
+
+    # Consumer 2: taught-loop gate stops unrecognized screens; that is
+    # escalate-on-unknown, not HALT_NEVER_AUTO_ACTION.
+    observation = player_mod._Observation(klass="unknown")
+    assert player_mod._gate(observation) == player_mod.HALT_UNRECOGNIZED_SCREEN
+    assert player_mod._gate(observation) != player_mod.HALT_NEVER_AUTO_ACTION
+
+    # Consumer 3: keepalive is main_command-only.
+    session = _KeepaliveSession(PASSWORD_LENGTH_PROMPT)
+    guardian = SessionGuardian(
+        session,
+        get_password=lambda n: "unused",
+        save_password=lambda n, pw: None,
+        load_profile=lambda n: _FakeProfile(),
+        reconnect_backoff_s=0,
+        idle_keepalive_ms=1,
+    )
+    guardian._tick()
+    assert session.sent == []
+
+    # Consumer 4: graceful quit is main_command-only.
+    quit_session = _QuitSession("unknown")
+    daemon_mod._attempt_graceful_quit(quit_session)
+    assert quit_session.sent == []
+
+    # Consumer 5: login automaton is a positive table; unknown → None.
+    state = {"registering": None, "password": None, "password_attempts": 0}
+    assert (
+        login_module._decide(
+            "unknown",
+            "",
+            PASSWORD_LENGTH_PROMPT,
+            _FakeProfile(),
+            state,
+            lambda name: None,
+            lambda name, pw: None,
+            session=None,
+        )
+        is None
+    )
+
+    # Consumer 6: ensure reaches target only on equality with main_command.
+    assert classify_screen("", PASSWORD_LENGTH_PROMPT) != "main_command"
 
 
 def test_ensure_never_treats_a_money_prompt_as_a_reached_target():

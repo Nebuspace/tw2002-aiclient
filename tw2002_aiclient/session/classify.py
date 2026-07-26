@@ -771,13 +771,17 @@ def _is_genuine_cim_report(full_text: str) -> bool:
 #      (e.g. "How many characters in your password?"). Post C-02
 #      (WO-CLASSIFY-LOGIN-PASSWORD-NARROW) these no longer steal
 #      `login_password`; they then landed on `money_prompt` and halted via
-#      `NEVER_AUTO_ACTION_CLASSES` — **safe by accident** (C-06 consumers),
-#      not by vocabulary honesty (WO-CLASSIFY-PASSWORD-LENGTH-UNKNOWN).
-#      That residual was incidental: these are not money questions. Leave
-#      them as `unknown` so halt is by the unknown-is-first-class contract,
-#      not by `money_prompt` breadth surviving a future tighten. C-02 and
-#      C-06 remain a load-bearing pair for real money screens; this carve
-#      only refuses borrowing that pair for non-money password chrome.
+#      `NEVER_AUTO_ACTION_CLASSES` — historically safe by accident (C-06),
+#      not by vocabulary honesty. WO-CLASSIFY-PASSWORD-LENGTH-UNKNOWN
+#      re-aims them to `unknown`: correct class; escalate-first per canon
+#      ("The Unknown Is First-Class"). Consumers are positive-match /
+#      denylist — none act on `unknown` (pinned in
+#      tests/test_never_auto_action.py). Do not put `unknown` in
+#      NEVER_AUTO (that set is recognized-but-forbidden). These are not
+#      money questions; leave them unknown so safety does not depend on
+#      `money_prompt` breadth surviving a future tighten. C-02 and C-06
+#      remain a load-bearing pair for real money screens; this carve only
+#      refuses borrowing that pair for non-money password chrome.
 #
 # `re.MULTILINE` deliberately: both patterns are line-anchored, so on
 # `classify_screen`'s last-resort whole-text scan (no prompt line at all)
