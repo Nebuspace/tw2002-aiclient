@@ -1,6 +1,6 @@
 # WO-XENO-FINGERPRINT
 
-**Status:** OPEN · READY · investigate-first · Claude Code lane · queued after fence 3A
+**Status:** READY-FOR-REVIEW · tip `1dab0e1` · Cursor · investigate-first · queued after fence 3A
 **Posted:** 2026-07-26 · from the live-ensure diagnosis (`4f7449f`)
 
 ## Goal
