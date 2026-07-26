@@ -1757,10 +1757,25 @@ class BankViewScreen:
 
 
 # Create-form cluster lives in create_form_screen.py (WO-SCREENS-CREATE-FORM-SPLIT).
-# Re-export so existing ``from tw2002_aiclient.screens import …`` callers stay stable.
-from tw2002_aiclient.create_form_screen import (  # noqa: E402
-    CreateFormScreen,
-    _FORM_FIELDS,
-    _create_error_text,
-    validate_create_form,
+# Lazy re-export: create_form_screen imports chrome helpers from this module, so an
+# eager import here is a circular ImportError when create_form_screen loads first.
+_CREATE_FORM_EXPORTS = (
+    "CreateFormScreen",
+    "_FORM_FIELDS",
+    "_create_error_text",
+    "validate_create_form",
 )
+
+
+def __getattr__(name: str):  # noqa: D401 — PEP 562 module attribute hook
+    if name in _CREATE_FORM_EXPORTS:
+        from tw2002_aiclient import create_form_screen as _cfs
+
+        value = getattr(_cfs, name)
+        globals()[name] = value
+        return value
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+def __dir__() -> list[str]:
+    return sorted(set(globals()) | set(_CREATE_FORM_EXPORTS))
