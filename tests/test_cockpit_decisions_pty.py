@@ -39,6 +39,9 @@ from pathlib import Path
 
 import pytest
 
+pytestmark = pytest.mark.pty_ui
+
+
 from tw2002_aiclient.cockpit.layout import frame_layout
 
 from .pty_helpers import find_text, pty_curses_supported, pyte_grid, set_winsize

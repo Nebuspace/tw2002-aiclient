@@ -43,6 +43,9 @@ from pathlib import Path
 
 import pytest
 
+pytestmark = pytest.mark.pty_ui
+
+
 from tw2002_aiclient.cockpit.arm import ARM_OFF_LABEL, ARM_ON_LABEL, ARM_UNKNOWN_LABEL
 from tw2002_aiclient.cockpit.control_seat import APP_LABEL
 

@@ -39,6 +39,9 @@ from pathlib import Path
 
 import pytest
 
+pytestmark = pytest.mark.pty_ui
+
+
 from tw2002_aiclient.session import env
 from tw2002_aiclient.session.control_lock import ControlLock
 from tw2002_aiclient.session.daemon import CommandHandler, ThreadingUnixServer

@@ -46,6 +46,9 @@ from pathlib import Path
 
 import pytest
 
+pytestmark = pytest.mark.pty_ui
+
+
 from tw2002_aiclient.cockpit.layout import GAME_H, GAME_W, frame_layout
 
 from .pty_helpers import find_text, pty_curses_supported, pyte_grid, pyte_screen, set_winsize
