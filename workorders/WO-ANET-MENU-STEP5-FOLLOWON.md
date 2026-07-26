@@ -1,8 +1,9 @@
 # WO-ANET-MENU-STEP5-FOLLOWON
 
-**Status:** OPEN · READY · Max ruled **5A** 2026-07-26 · folds into login-stall pattern (CC)
-**Posted:** 2026-07-26 · from matrix follow-up #2 + `audit/a-net-menu-step5-game-select-hypothesis-20260726.md`
-**Max ruling (5A):** GO classify/ensure **investigation** (capture first; **no new `screen_class` invent** without a second Max GO).
+**Status:** READY FOR REVIEW · tip `7994a37` · Cursor · `wo/ANET-MENU-STEP5`  
+**Posted:** 2026-07-26 · from matrix follow-up #2 + `audit/a-net-menu-step5-game-select-hypothesis-20260726.md`  
+**Max ruling (5A):** GO classify/ensure **investigation** (capture first; **no new `screen_class` invent** without a second Max GO).  
+**Report:** `audit/anet-menu-step5-followon-diagnosis-20260726.md` — verdict **(b) mislabel**; fix already on main via `WO-ANET-BANNER-LAYOUT`; no invent this tip.
 
 ## Goal
 
