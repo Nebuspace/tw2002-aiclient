@@ -1,6 +1,6 @@
 # WO-SCREENS-BADGE-DOCSTRING-STALE
 
-**Status:** OPEN · READY · docs honesty · Cursor · banked hub discovery 2026-07-26
+**Status:** READY FOR REVIEW · Cursor · `wo/SCREENS-BADGE-DOCSTRING` · tip `92fbb81`
 **Posted:** 2026-07-26 · from `canon/findings.md` P5-064-SCREENS-BADGE-DOCSTRING
 
 ## Goal
