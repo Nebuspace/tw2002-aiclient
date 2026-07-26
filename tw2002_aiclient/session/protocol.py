@@ -10,9 +10,9 @@ carries `"error"`.
 **WO-P2-020 Wave-3 SUBSET + WO-P2-025 control-lock + WO-P2-OPS-VERB-B** --
 ported from `archive/pre-rebirth-2026-07-23/code/twclient/protocol.py`.
 Live one-shot verbs: `ensure`, `status`, `screen`, `stop`, `do`, `send`,
-`read`, `history`. Lifetime `attach` / `subscribe` are handled in
+`read`, `history`, `state`. Lifetime `attach` / `subscribe` are handled in
 `daemon.py` (not here) — `subscribe` streams WatchHub settle-edge events
-(WO-P2-WATCHHUB-PORT). `state`/`set_mode`/`crawl_start`/`autopilot_*`/
+(WO-P2-WATCHHUB-PORT). `set_mode`/`crawl_start`/`autopilot_*`/
 `record_*`/`replay`/`mine`/`play*`/`haggle`/`list_skills` remain later WOs
 -- `dispatch()` returns `unknown_verb` for them. Drive verbs
 (`ensure`/`do`/`send`) ride `_driving_dispatch` (acquire_driver /
@@ -36,12 +36,22 @@ from .control_lock import (
     ControlModeConflict,
 )
 from .settle import MATCH_SCOPE_PROMPT_LINE
+from .state_parser import (
+    REASON_SESSION_DISCONNECTED,
+    read_current_sector,
+    sector_unreadable,
+    sector_wire,
+)
 
 
 def build_response(session, rows=None, settled_reason=None, extra=None):
-    """WO-P2-020 Wave-3 CUT vs archive protocol.py:407-470: `state`
-    (`state_parser.parse_state` -- not ported, per this WO's Wave-2
-    memory note), `cursor` (`session.cursor_pos()` -- the attach surface
+    """WO-P2-020 Wave-3 CUT vs archive protocol.py:407-470: `state` (the
+    archive folded a `parse_state()` dict into every drive answer; the
+    reborn read lives on its own `state` verb instead -- see
+    `_state_response` -- and is deliberately NOT duplicated onto this
+    response, for the same reason `status` stopped duplicating a
+    live-paint field onto the structured answer),
+    `cursor` (`session.cursor_pos()` -- the attach surface
     that reads it hasn't landed), the `world_identity`/`world_model`
     write hooks, `observe_credits`/`observe_turns`/`observe_fighters`
     (Session methods cut in Wave-2), and the `frame_recorder` post-mortem
@@ -222,13 +232,16 @@ def _status_response(session, server):
     plausible-looking line. A consumer that genuinely needs the live line asks
     the verb whose job it is: `screen`, or `subscribe`.
 
-    **Forward note (the archive's real consumer).** `adapters.
+    **Forward note (the archive's real consumer) -- now answered.** `adapters.
     sector_from_status()` in the pre-rebirth tree derived the current SECTOR by
-    re-parsing `status["prompt"]` (`Command [TL=...]:[2642]`) client-side. When
-    the world-identity strip lands, that number must arrive as a bounded
-    daemon-side derivation (an int on `state`/`status`), never by shipping the
-    raw prompt line for a client to re-parse -- otherwise this carrier comes
-    back wearing a feature's clothes.
+    re-parsing `status["prompt"]` (`Command [TL=...]:[2642]`) client-side; this
+    docstring required that the number instead arrive as a bounded daemon-side
+    derivation, never by shipping the raw prompt line for a client to re-parse.
+    WO-P2-G4-X1 landed it: `_state_response` below answers the `state` verb
+    with `state_parser.sector_wire()`, whose every value is an int or a member
+    of that module's closed vocabularies. `status` is unchanged and grew no
+    sector field -- a spectator wanting the sector asks the verb whose job it
+    is, exactly as it does for the live line.
     """
     # WO-P2-020 Wave-3 CUT vs archive: play/credits*/turns*/
     # fighters*/intervention/world_id still deferred. Mode + autopilot
@@ -265,6 +278,87 @@ def _status_response(session, server):
     tail = getattr(session, "tail", None)
     resp["log_tail"] = tail.snapshot() if tail is not None else []
     return resp
+
+
+def _state_response(session):
+    """The `state` verb's answer: parsed structured game-state, read-only
+    (`canon/architecture/cli-verbs.md:104`).
+
+    Today that is exactly one field -- the ship's current sector, the
+    precondition `canon/engine/macros.md` requires every macro replay to
+    re-check "before pressing anything". Credits / turns / warps / port are
+    NOT here: each needs its own provenance argument (the archive's `TL=`
+    field alone carried a live defect where an `HH:MM:SS` countdown was read
+    as a turn count and silently reported `turns_left=0`), and shipping five
+    fields at one field's depth is how a best-effort read becomes a
+    believed one. The `state` envelope is where they land when their own WOs
+    do.
+
+    **Three outcomes reach the wire, never two.** `state_parser` returns a
+    verdict, not a number-or-None, and `sector_wire()` keeps the three apart
+    on the wire by nesting: `state["sector"]` is an OBJECT with an
+    `outcome`, and the `sector` key inside it exists only on `read`. An
+    archive-shaped client doing `state["sector"]` gets a dict where it
+    expected an int and fails -- and failing is the safe direction for a
+    value that gates every send, since a start-anchor comparison against a
+    dict cannot accidentally succeed.
+
+    **A dead socket is `unreadable`, never a number.** With the connection
+    down, pyte still holds the last frame the server painted, prompt bracket
+    and all -- so the text-level read would happily resolve a sector that
+    describes where the ship WAS. That is the one failure direction canon
+    forbids outright (`macros.md`: the start-anchor halt "is **not**
+    bypassable by force -- forcing past a *detected* mismatch is the danger
+    itself"), because a stale-but-matching sector is worse than no sector:
+    it satisfies the guard. `_dispatch_ensure` already refuses to classify
+    across the same hazard in its own words ("a stale pyte buffer would
+    misclassify a frozen last-seen frame as 'current'"); this is that rule
+    applied to the sector. It is checked BEFORE the render, so no number is
+    derived and then discarded.
+
+    **Read-only: no `_driving_dispatch`, no send.** `state` acquires no
+    driver slot, for the same reason `read`/`history`/`status` do not -- it
+    puts nothing on the wire, so it cannot conflict with whoever holds the
+    keyboard, and a spectator must be able to poll it. Making a read verb
+    take the control lock would also mean a poll could be refused with
+    `controller_locked_by_human`, turning "the human is playing" into
+    "unreadable", which is a fourth outcome nobody asked for.
+
+    **Settling is the caller's, not this verb's.** `state` is the
+    cheap-polling verb (the archive says so outright) and does not wait: it
+    reports what is on the grid right now. Canon puts screen understanding
+    downstream of settle detection, so a caller that needs a settled read
+    settles first (`read`, or `do`'s own wait) and then polls here. The
+    honest consequence is that a poll landing mid-paint sees a half-written
+    prompt -- which is `unreadable/damaged_command_prompt`, not a guess and
+    not a silent absence.
+
+    One `render()`, threaded into `render_text()` -- calling `render()` and
+    then `render_text()` with no rows would be two independent lock
+    acquisitions with a byte able to arrive between them, the same race
+    `session.render_with_color()`'s docstring documents for text+color.
+    `classification` rides along because it is `classify_screen`'s CLOSED
+    vocabulary (the same bounded diagnostic `_status_response` and
+    `_login_failure_response` both keep) and because it is what lets a
+    consumer tell the CLASSIC-server case apart from any other `absent`:
+    `main_command` + `absent` is "a command prompt that states no sector".
+    The live prompt line itself is NOT a key here -- see `_status_response`.
+    """
+    if not session.conn.connected:
+        return {
+            "ok": True,
+            "state": {"sector": sector_wire(sector_unreadable(REASON_SESSION_DISCONNECTED))},
+            "connected": False,
+        }
+    rows = session.render()
+    text = session.render_text(rows)
+    prompt_line = rows[-1].strip() if rows else ""
+    return {
+        "ok": True,
+        "state": {"sector": sector_wire(read_current_sector(prompt_line))},
+        "classification": classify_screen(text, prompt_line),
+        "connected": True,
+    }
 
 
 def dispatch(session, verb, args, server):
@@ -395,9 +489,15 @@ def dispatch(session, verb, args, server):
         session.record_history("read", args, resp["prompt"], resp["classification"], reason)
         return resp
 
+    if verb == "state":
+        # WO-P2-G4-X1: read-only parsed game-state. NOT build_response() and
+        # NOT _driving_dispatch() -- see `_state_response`'s docstring for
+        # both, and for why a dead socket answers `unreadable` rather than
+        # reading a sector off the frozen frame.
+        return _state_response(session)
+
     if verb == "history":
         # WO-P2-OPS-VERB-C (partial): in-memory session history ring.
-        # `state` waits on state_parser port (absent) — not in this slice.
         n = int(args.get("n", 20) or 20)
         if n < 0:
             n = 0

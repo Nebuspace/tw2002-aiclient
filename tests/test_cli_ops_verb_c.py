@@ -1,4 +1,8 @@
-"""WO-P2-OPS-VERB-C — ``tw history`` (session ring). ``tw state`` deferred."""
+"""WO-P2-OPS-VERB-C — ``tw history`` (session ring). The ``state`` protocol
+verb landed later, in WO-P2-G4-X1; this file keeps only the "it is not a
+stub" pin, and ``tests/test_state_sector_read.py`` owns the read's contract.
+There is still no ``tw state`` CLI subcommand — X1 deliberately added no CLI
+surface (the daemon verb is the consumer-facing contract)."""
 
 from __future__ import annotations
 
@@ -69,7 +73,34 @@ def test_protocol_history_returns_tail():
     assert session.history[0]["args"]["input"] == "<redacted>"
 
 
-def test_protocol_state_still_unknown():
-    """state_parser not ported — do not invent a fake state verb."""
+def test_protocol_state_is_a_real_read_not_a_stub():
+    """Was ``test_protocol_state_still_unknown`` — "state_parser not ported,
+    do not invent a fake state verb". WO-P2-G4-X1 ported it, so the pin
+    changes from "the verb does not exist" to "the verb does not FAKE it",
+    which is the same intent against a landed implementation.
+
+    Two halves, and the second is the one the original was guarding. This
+    file's ``FakeSession`` renders the screen ``"x"``, which carries no
+    current-sector claim at all — so a stub returning a plausible number
+    would show up here immediately. Full coverage of the read itself lives
+    in ``tests/test_state_sector_read.py``.
+    """
     resp = protocol.dispatch(FakeSession(), "state", {}, FakeServer())
-    assert resp == {"ok": False, "error": "unknown_verb:state"}
+    assert resp["ok"] is True
+    # A screen that says nothing is answered "absent", and no number is
+    # invented to fill the hole.
+    assert resp["state"]["sector"] == {"outcome": "absent"}
+
+    class _AtACommandPrompt(FakeSession):
+        def render(self):
+            return ["Command [TL=00:00:00]:[4309] (?=Help)? :"]
+
+        def render_text(self, rows=None):
+            return "Command [TL=00:00:00]:[4309] (?=Help)? :"
+
+    real = protocol.dispatch(_AtACommandPrompt(), "state", {}, FakeServer())
+    assert real["state"]["sector"] == {
+        "outcome": "read",
+        "sector": 4309,
+        "source": "command_prompt",
+    }

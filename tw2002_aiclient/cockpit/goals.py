@@ -29,8 +29,11 @@ verb response shape (``tw2002_aiclient/session/protocol.py::dispatch()``).
 As of this WO, that response carries ``connected``/``idle_ms``/
 ``classification``/``host``/``port``/``name``/``autopilot``/
 ``mode`` only — **none** of the fields below are populated yet
-(``state_parser``/world-model are not ported; see the WO-P2-020 Wave-3 CUT
-note in ``protocol.py``). Every row therefore renders honestly unknown
+(``state_parser``'s credits/turns/fighters side and the world-model are not
+ported; see the WO-P2-020 Wave-3 CUT note in ``protocol.py``. WO-P2-G4-X1
+landed ``state_parser`` for the CURRENT SECTOR only, and deliberately on its
+own read-only ``state`` verb rather than on ``status`` — no field below
+changed). Every row therefore renders honestly unknown
 against today's real daemon until those land. The key names chosen here
 mirror the archive's established convention
 (``archive/pre-rebirth-2026-07-23/code/tw2002_aiclient/adapters.py::
