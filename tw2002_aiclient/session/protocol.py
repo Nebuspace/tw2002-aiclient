@@ -10,11 +10,16 @@ carries `"error"`.
 **WO-P2-020 Wave-3 SUBSET + WO-P2-025 control-lock + WO-P2-OPS-VERB-B** --
 ported from `archive/pre-rebirth-2026-07-23/code/twclient/protocol.py`.
 Live one-shot verbs: `ensure`, `status`, `screen`, `stop`, `do`, `send`,
-`read`, `history`, `state`. Lifetime `attach` / `subscribe` are handled in
+`read`, `history`, `state`, `autoloop_start`, `autoloop_stop`,
+`autoloop_status`. Lifetime `attach` / `subscribe` are handled in
 `daemon.py` (not here) — `subscribe` streams WatchHub settle-edge events
 (WO-P2-WATCHHUB-PORT). `set_mode`/`crawl_start`/`autopilot_*`/
 `record_*`/`replay`/`mine`/`play*`/`haggle`/`list_skills` remain later WOs
--- `dispatch()` returns `unknown_verb` for them. Drive verbs
+-- `dispatch()` returns `unknown_verb` for them, and so do canon's
+`autoloop pause`/`resume` (`cli-verbs.md:135`): both are controls on a
+REPEATING loop, and WO-P2-G4-X4 ships one pass (`session/autoloop.py`,
+"One pass"). An honest `unknown_verb` beats a verb that accepts a pause
+it cannot perform. Drive verbs
 (`ensure`/`do`/`send`) ride `_driving_dispatch` (acquire_driver /
 release_driver) for refuse-not-queue. Live senders are `{app, human}` only
 (never AI).
@@ -29,6 +34,7 @@ import re
 import time
 from contextlib import contextmanager
 
+from . import autoloop
 from .classify import classify_screen
 from .control_lock import (
     MODE_HUMAN,
@@ -215,7 +221,11 @@ def _status_response(session, server):
     learns WHICH screen the session is sitting on, which is the diagnostic
     `prompt` was mostly serving. `connected`/`idle_ms`/`subscribers`/`port` are
     scalars; `host`/`port`/`name` come from the PROFILE, not the receive
-    buffer; `autopilot` is a literal; `mode` is the control lock's own closed
+    buffer; `autopilot` is one bool, and `intervention` (WO-P2-G4-X4) is one
+    bool plus a code drawn from `loops/player.py`'s closed halt vocabulary --
+    `session/autoloop.py` states why nothing derived from the receive buffer,
+    from a macro's recorded keystrokes, or from server-side paths can reach
+    either; `mode` is the control lock's own closed
     vocabulary. `log_tail` is the one remaining screen-adjacent field and it is
     safe for a structural reason rather than a filtering one: `transcript_tail.
     TranscriptTail` is TX-only and redact-at-INSERT -- `append_redacted()`
@@ -244,8 +254,8 @@ def _status_response(session, server):
     is, exactly as it does for the live line.
     """
     # WO-P2-020 Wave-3 CUT vs archive: play/credits*/turns*/
-    # fighters*/intervention/world_id still deferred. Mode + autopilot
-    # stub + subscribers (WatchHub) are live enough for cockpit status.
+    # fighters*/world_id still deferred. Mode + arm state + intervention +
+    # subscribers (WatchHub) are live enough for cockpit status.
     rows = session.render()
     text = session.render_text(rows)
     # Local only, and used ONLY to scope `classify_screen`'s gate anchors to
@@ -253,6 +263,16 @@ def _status_response(session, server):
     # It is deliberately not a key below -- see this function's docstring.
     prompt_line = rows[-1].strip() if rows else ""
     watch_hub = getattr(server, "watch_hub", None)
+    lock = getattr(server, "control_lock", None)
+    # WO-P2-G4-X4: ONE observation of the arm state, feeding BOTH fields
+    # below. `autopilot.running` used to be the hardcoded literal
+    # `{"running": False}` ("autopilot.py is not ported — ensure never
+    # arms"), which was true then and would be a fabricated safety claim
+    # now that `session/autoloop.py` can genuinely arm. Taken as a single
+    # snapshot rather than two reads because the arm chip and the STOP
+    # banner would otherwise be able to describe two different instants --
+    # see `autoloop.observe`.
+    arm = autoloop.observe(getattr(server, "autoloop", None), lock)
     resp = {
         "ok": True,
         "connected": session.conn.connected,
@@ -262,11 +282,15 @@ def _status_response(session, server):
         "host": session.host,
         "port": session.port,
         "name": session.name,
-        # WO-P2-022: autopilot.py is not ported — ensure never arms.
-        "autopilot": {"running": False},
+        "autopilot": autoloop.arm_block(arm),
         "subscribers": watch_hub.subscriber_count() if watch_hub else 0,
     }
-    lock = getattr(server, "control_lock", None)
+    # Omitted entirely when there is no halt to report (see
+    # `autoloop.intervention_block`), so a daemon that has never run a
+    # loop answers exactly as it did before this field existed.
+    intervention = autoloop.intervention_block(arm)
+    if intervention is not None:
+        resp["intervention"] = intervention
     if lock is not None:
         mode = getattr(lock, "mode", None)
         if isinstance(mode, str):
@@ -359,6 +383,92 @@ def _state_response(session):
         "classification": classify_screen(text, prompt_line),
         "connected": True,
     }
+
+
+def _autoloop_runner(server):
+    """The daemon's background player, or ``None``.
+
+    `getattr` for the same reason `watch_hub` / `control_lock` are read
+    that way: a bare unit-test harness builds the server by hand. A verb
+    that needs one answers `autoloop_unavailable` rather than pretending
+    a daemon without a player can arm."""
+    return getattr(server, "autoloop", None)
+
+
+def _dispatch_autoloop_start(args, server):
+    """WO-P2-G4-X4: arm the background player for ONE pass of one taught
+    macro. Returns as soon as the run is live (canon `cli-verbs.md`:
+    "`start` returns immediately").
+
+    **Unsupported args are REFUSED, not ignored** (`autoloop.
+    ARGS_AUTOLOOP_START`). `cycles` is the one that matters: this slice
+    plays one pass, and the rails that make repetition safe -- the
+    stop-loss floor above all -- are not built. Accepting `cycles=10` and
+    running once would be a surface agreeing to something it does not do,
+    and `--floor` is the same failure with money attached ("accepting a
+    floor you cannot enforce is forbidden"). `force` is refused for a
+    different reason: it waives a MISSING start-anchor, canon allows only
+    an explicit human waiver, and a socket verb cannot confirm a human is
+    behind it -- a daemon granting itself that waiver is the self-arming
+    canon forbids.
+
+    Contrast `ensure`'s `no_auto_arm`, which is accepted and unused: the
+    behaviour it asks for is exactly what happens, so accepting it lies
+    about nothing.
+    """
+    runner = _autoloop_runner(server)
+    if runner is None:
+        return {"ok": False, "error": "autoloop_unavailable"}
+    unsupported = sorted(set(args) - autoloop.ARGS_AUTOLOOP_START)
+    if unsupported:
+        return {"ok": False, "error": f"unsupported_arg:{unsupported[0]}"}
+    name = args.get("name")
+    if not isinstance(name, str) or not name.strip():
+        return {"ok": False, "error": "missing_name"}
+    try:
+        snapshot = runner.start(name)
+    except autoloop.AutoLoopRefused as e:
+        # Typed code, already in the runner's / control lock's / loader's
+        # own vocabulary -- never re-spelled here.
+        return {"ok": False, "error": str(e)}
+    return {"ok": True, "started": True, **autoloop.run_wire(snapshot)}
+
+
+def _dispatch_autoloop_stop(server):
+    """Stand the run down. Idempotent, and never refuses.
+
+    The player's arm predicate is what actually stops the run -- within
+    one send-step, with an `operator_stop` halt of its own rather than
+    somebody else's reason code. This verb does not touch the control
+    lock: the run releases its own hold as it dies (`autoloop.py`, "One
+    release path"), so a stop cannot drop the App's exclusivity out from
+    under a step still in flight.
+    """
+    runner = _autoloop_runner(server)
+    if runner is None:
+        return {"ok": False, "error": "autoloop_unavailable"}
+    snapshot = runner.stop()
+    return {"ok": True, "stopping": True, **autoloop.run_wire(snapshot)}
+
+
+def _dispatch_autoloop_status(server):
+    """The run report: read-only, no driver slot, no send.
+
+    Same reasoning as `state`/`read`/`history` -- it puts nothing on the
+    wire, so it cannot conflict with whoever holds the keyboard, and a
+    spectator must be able to poll it while the human plays. Making it
+    take the control lock would let "the human is playing" come back as
+    a refusal to answer.
+
+    Kept OFF the `status` verb rather than folded into it (§C.2.1's split
+    by consumer): `status["autopilot"]` is the arm chip's source and
+    `status["intervention"]` is the STOP banner's, each one field with
+    one job. The whole run record -- outcome, `sends_issued`, timestamps
+    -- is a third consumer's question and gets its own verb.
+    """
+    runner = _autoloop_runner(server)
+    lock = getattr(server, "control_lock", None)
+    return {"ok": True, **autoloop.run_wire(autoloop.observe(runner, lock))}
 
 
 def dispatch(session, verb, args, server):
@@ -495,6 +605,22 @@ def dispatch(session, verb, args, server):
         # both, and for why a dead socket answers `unreadable` rather than
         # reading a sector off the frozen frame.
         return _state_response(session)
+
+    if verb == "autoloop_start":
+        # WO-P2-G4-X4. NOT `_driving_dispatch`: a background run's
+        # exclusivity is the control lock's OTHER hold (`enter_auto_loop`,
+        # taken inside the runner), and taking the per-dispatch driver
+        # slot here would make the two mutually exclusive -- `start` would
+        # hold `_driving` and then be refused its own
+        # `locked_by_active_driver`. The refusals a caller can hit are the
+        # same set either way; they come from `enter_auto_loop` instead.
+        return _dispatch_autoloop_start(args, server)
+
+    if verb == "autoloop_stop":
+        return _dispatch_autoloop_stop(server)
+
+    if verb == "autoloop_status":
+        return _dispatch_autoloop_status(server)
 
     if verb == "history":
         # WO-P2-OPS-VERB-C (partial): in-memory session history ring.

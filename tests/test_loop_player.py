@@ -43,6 +43,7 @@ from tw2002_aiclient.loops import player as player_mod
 from tw2002_aiclient.loops.loader import Loop, LoopStep, load_loop
 from tw2002_aiclient.loops.player import (
     FORCEABLE_HALTS,
+    HALT_ABORTED,
     HALT_CONFIRM_FAILED,
     HALT_CURRENT_SECTOR_ABSENT,
     HALT_CURRENT_SECTOR_UNREADABLE,
@@ -172,11 +173,12 @@ class ScriptedSession:
     settle-before-you-look ordering provable rather than assumed.
     """
 
-    def __init__(self, screens, confirmations=None, settles=None, fences=None):
+    def __init__(self, screens, confirmations=None, settles=None, fences=None, aborts=None):
         self.screens = list(screens)
         self.confirmations = list(confirmations) if confirmations is not None else None
         self.settles = list(settles) if settles is not None else None
         self.fences = list(fences) if fences is not None else None
+        self.aborts = list(aborts) if aborts is not None else None
         self.calls: list[str] = []
         self.sends: list[tuple[str, object]] = []
 
@@ -200,6 +202,10 @@ class ScriptedSession:
     def is_driver_fenced(self) -> bool:
         self.calls.append("is_driver_fenced")
         return self._pop(self.fences, False)
+
+    def should_abort(self) -> bool:
+        self.calls.append("should_abort")
+        return self._pop(self.aborts, False)
 
     def send_and_confirm(self, keystrokes, wait_prompt):
         self.calls.append("send_and_confirm")
@@ -275,6 +281,10 @@ TWO_STEPS = [("P", None, "port_trade"), ("1", None, "main_command")]
         ("money prompt", {"screens": [MONEY]}, {}, False, HALT_NEVER_AUTO_ACTION),
         # The human has the keyboard.
         ("fenced", {"screens": [ANCHOR_158], "fences": [True]}, {}, False, HALT_FENCED),
+        # The run was stood down before it ever pressed anything. A
+        # DIFFERENT cell from "fenced" on purpose: `fences` stays default
+        # here, so the fence branch is provably not what stopped it.
+        ("aborted", {"screens": [ANCHOR_158], "aborts": [True]}, {}, False, HALT_ABORTED),
         # The stream never settled, so there is nothing safe to read.
         ("never settles", {"screens": [ANCHOR_158], "settles": [False]}, {}, False, HALT_SETTLE_FAILED),
         # Wrong sector: THE incident the start-anchor guard exists for.
@@ -306,6 +316,8 @@ TWO_STEPS = [("P", None, "port_trade"), ("1", None, "main_command")]
          HALT_UNRECOGNIZED_SCREEN),
         ("gate-only fence", {"screens": [ANCHOR_158], "fences": [True]}, {"start_anchor": None},
          True, HALT_FENCED),
+        ("gate-only abort", {"screens": [ANCHOR_158], "aborts": [True]}, {"start_anchor": None},
+         True, HALT_ABORTED),
     ],
 )
 def test_a_refusal_before_the_first_send_costs_zero_bytes(
@@ -340,7 +352,7 @@ def test_a_malformed_port_also_costs_zero_bytes():
     so a defect that would surface at boundary 3 surfaces at boundary 0
     first -- with nothing on the wire.
     """
-    for missing in ("settle", "screen", "is_driver_fenced"):
+    for missing in ("settle", "screen", "is_driver_fenced", "should_abort"):
         inner = ScriptedSession(screens=[ANCHOR_158, ANCHOR_158])
         with pytest.raises(AttributeError):
             replay_loop(make_loop(ONE_STEP), PortWithout(inner, missing))
@@ -636,6 +648,37 @@ def test_a_fence_mid_loop_stops_within_one_send_step():
     assert session.sends == [("P", None)]
 
 
+def test_an_abort_mid_loop_stops_within_one_send_step():
+    """Canon's disarm clause, literally: "disarming (stopping) reaches an
+    in-flight run within one step, not only at the next cycle boundary"
+    (``app-autopilot-model.md`` §"Arm-Confirm").
+
+    ``fences`` is left at its default so the fence branch demonstrably is
+    NOT what stopped this -- a stop proven by a guard the operator did not
+    trip is not a proof of the stop."""
+    session = ScriptedSession(
+        screens=[ANCHOR_158, PORT, ANCHOR_158], aborts=[False, True]
+    )
+    result = replay_loop(make_loop(TWO_STEPS), session)
+
+    assert result.reason == HALT_ABORTED
+    # Step 0's own post-boundary -- one send happened, the second never did.
+    assert result.halted_at == 0
+    assert session.sends == [("P", None)]
+    assert "is_driver_fenced" in session.calls  # asked, and answered False
+
+
+def test_a_fence_outranks_an_abort_in_the_reported_reason():
+    """Both true at once is a real state (the operator hits stop as the
+    human attaches). One code has to be reported; canon's most-sovereign
+    fact is that somebody is at the keyboard."""
+    session = NoSendSession(screens=[ANCHOR_158], fences=[True], aborts=[True])
+    result = replay_loop(make_loop(ONE_STEP), session)
+
+    assert result.reason == HALT_FENCED
+    assert session.sends == []
+
+
 # --------------------------------------------------------------------------
 # 5. Settle before you look
 # --------------------------------------------------------------------------
@@ -660,7 +703,7 @@ def test_every_read_is_preceded_by_a_settle():
 
     # And the shape of a whole run: settle/read/gate at each boundary, one
     # send between consecutive boundaries, never a send before a boundary.
-    boundary = ["settle", "screen", "is_driver_fenced"]
+    boundary = ["settle", "screen", "is_driver_fenced", "should_abort"]
     assert session.calls == boundary + ["send_and_confirm"] + boundary + [
         "send_and_confirm"
     ] + boundary
@@ -721,7 +764,13 @@ def test_an_unconfirmed_send_halts_without_classifying_the_screen():
     assert result.steps[-1].confirmed is False
     assert result.steps[-1].observed_class is None
     # One boundary, one send, and then nothing -- no second settle/read.
-    assert session.calls == ["settle", "screen", "is_driver_fenced", "send_and_confirm"]
+    assert session.calls == [
+        "settle",
+        "screen",
+        "is_driver_fenced",
+        "should_abort",
+        "send_and_confirm",
+    ]
 
 
 @pytest.mark.parametrize(
@@ -1014,6 +1063,7 @@ def test_the_reason_vocabulary_is_closed_and_fully_reachable():
         HALT_SETTLE_FAILED,
         HALT_SCREEN_UNREADABLE,
         HALT_FENCED,
+        HALT_ABORTED,
         HALT_NEVER_AUTO_ACTION,
         HALT_UNRECOGNIZED_SCREEN,
         HALT_START_ANCHOR_MISSING,

@@ -12,10 +12,12 @@ on the wire (WO-AUDIT-F5-TYPE-NAME). It is not part of the run-dir contract
 
 Ported from `archive/pre-rebirth-2026-07-23/code/twclient/daemon.py`
 (WO-P2-020, Wave-3 + WO-P2-025 control-lock wire + WO-P2-027 SessionGuardian
-D9 reconnect/replay). Still cut vs archive: `LedgerWriter`, `SkillRecorder`,
-`LoopPlayer`, `FrameRecorder` (`ledger.py`, `loop_player.py`,
-`frame_recorder.py`, `autopilot.py`). Guardian D10 keepalive stays
-stubbed until WO-P2-028. Live verbs: `ensure`/`status`/`screen`/`stop`
+D9 reconnect/replay + WO-P2-G4-X4 background loop player). Still cut vs
+archive: `LedgerWriter`, `SkillRecorder`, `FrameRecorder` (`ledger.py`,
+`frame_recorder.py`, `autopilot.py`); the archive's `loop_player.py` is
+re-rooted as `loops/player.py` (X3) driven by `session/autoloop.py` (X4),
+one pass per start rather than a bounded cycle loop. Guardian D10 keepalive
+stays stubbed until WO-P2-028. Live verbs: `ensure`/`status`/`screen`/`stop`
 plus lifetime `attach` (control-lock hold) and `subscribe` (WatchHub
 settle-edge stream — WO-P2-WATCHHUB-PORT). `protocol.dispatch()` reads
 server-side collaborators via `getattr(server, ..., None)`.
@@ -32,6 +34,7 @@ import time
 import traceback
 
 from . import env
+from .autoloop import AutoLoopRunner
 from .control_lock import ControlLock, ControlModeConflict
 from .credentials import get_password
 from .guardian import SessionGuardian
@@ -379,6 +382,15 @@ def _shutdown(server, session):
     # Give the 'stop' response a moment to flush to the CLI client before
     # we tear the connection down.
     time.sleep(0.2)
+    # WO-P2-G4-X4: stand any background run down FIRST. It is the only
+    # thing here that can still be pressing keys, and `_attempt_graceful_
+    # quit()` below sends `Q`/`Y` -- two drivers on one wire is exactly
+    # what the exclusive hold exists to prevent, and a half-played macro
+    # racing a quit sequence is the worst version of it. `stop()` waits
+    # (bounded) for the run to actually die before returning.
+    autoloop = getattr(server, "autoloop", None)
+    if autoloop is not None:
+        autoloop.stop()
     guardian = getattr(server, "guardian", None)
     if guardian is not None:
         guardian.stop()
@@ -551,6 +563,18 @@ def main(argv=None):
     # `threading.Lock` drive_lock). Eager so every request sees one lock;
     # protocol `_driving_dispatch` uses acquire_driver/release_driver.
     server.control_lock = ControlLock()
+    # WO-P2-G4-X4: the background loop player. Built AFTER the control
+    # lock because it takes that exact instance -- it is the only
+    # production caller of `enter_auto_loop()`, and the reason `status`'s
+    # arm field is now the runtime's own answer instead of a literal.
+    # Its `log_error` hook routes a player crash's traceback to the same
+    # owner-only sink a dispatch exception uses; the wire sees a type
+    # name either way.
+    server.autoloop = AutoLoopRunner(
+        session,
+        server.control_lock,
+        log_error=lambda exc: _log_dispatch_error(server, "autoloop", exc),
+    )
     server.request_stop = lambda: threading.Thread(target=_shutdown, args=(server, session), daemon=True).start()
     try:
         server.serve_forever()

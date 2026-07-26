@@ -129,6 +129,31 @@ send. A mid-paint read would at best yield ``unreadable`` (a halt) and at
 worst a plausible-wrong sector that satisfies the anchor check -- which is
 the live incident ``macros.md`` was written to prevent.
 
+The two ways the human takes it back
+------------------------------------
+Canon asks for both at the same choke-point: "A per-step **abort
+predicate** and **arm predicate** are checked at the same choke-point as
+every other guard, so a human's STOP (or a disarm) halts an in-flight
+chain within one send-step" (``app-autopilot-model.md`` §"Chain
+Execution"). They are two port methods and two reason codes, not one:
+
+* ``is_driver_fenced()`` -> ``human_attach_blocks_trainer`` -- somebody
+  has the keyboard and is typing into the game right now.
+* ``should_abort()`` -> ``operator_stop`` -- the run was stood down.
+  Nobody is driving; the App simply stopped.
+
+Collapsing them would save a branch and cost the operator the one thing
+the STOP banner exists to tell them. It would also hand a driver an
+attractive way to implement "stop": withdraw the App's own authority and
+let the fence branch fire -- which reports an attach that never happened.
+The predicates are separate here so that no driver has to choose between
+stopping and telling the truth about why.
+
+Neither is a cycle-boundary check. Both are read at EVERY boundary, which
+is what makes canon's "within one send-step" literal rather than
+aspirational, and what makes them work on a run that has exactly one
+cycle. (X4's ``session/autoloop.py`` is the first driver to wire them.)
+
 The never-auto refusal (§A.2)
 -----------------------------
 ``classify.NEVER_AUTO_ACTION_CLASSES`` is refused at every boundary,
@@ -208,6 +233,7 @@ from .loader import Loop, LoopStep
 
 __all__ = [
     "FORCEABLE_HALTS",
+    "HALT_ABORTED",
     "HALT_CONFIRM_FAILED",
     "HALT_CURRENT_SECTOR_ABSENT",
     "HALT_CURRENT_SECTOR_UNREADABLE",
@@ -250,6 +276,12 @@ HALT_SCREEN_UNREADABLE = "screen_unreadable"
 # human-sovereignty preemption. Canon's catalog names this code verbatim,
 # so it is the one halt here that already has a rendered label.
 HALT_FENCED = "human_attach_blocks_trainer"
+# human-sovereignty preemption, the OTHER half -- see "The two ways the
+# human takes it back" in the module docstring. Kept a separate code from
+# HALT_FENCED because they are different events with different repairs:
+# somebody is now typing into the game (fenced) vs. nobody is, the run was
+# called off (aborted).
+HALT_ABORTED = "operator_stop"
 # guard-STOP -- `classify.NEVER_AUTO_ACTION_CLASSES` (DECISIONS §A.2).
 HALT_NEVER_AUTO_ACTION = "never_auto_action"
 # novelty-halt -- classify could not name the screen. Canon's central
@@ -274,6 +306,7 @@ HALT_REASONS = frozenset({
     HALT_SETTLE_FAILED,
     HALT_SCREEN_UNREADABLE,
     HALT_FENCED,
+    HALT_ABORTED,
     HALT_NEVER_AUTO_ACTION,
     HALT_UNRECOGNIZED_SCREEN,
     HALT_START_ANCHOR_MISSING,
@@ -399,7 +432,44 @@ class ReplaySession(Protocol):
         §"Chain Execution": the abort predicate is checked "at the same
         choke-point as every other guard"). Human sovereignty is not a
         thing the App negotiates: the moment the human holds the keyboard,
-        the App stops pressing, whatever screen is showing."""
+        the App stops pressing, whatever screen is showing.
+
+        **An adapter must not wire this to ``ControlLock.is_driver_fenced()``
+        alone.** That flag is set by ``take_human()`` only when an App
+        *dispatch* held the driver slot (``_driving``), and a background
+        run holds ``enter_auto_loop()`` instead -- so an attach during a
+        loop leaves it ``False`` and this predicate would answer "not
+        fenced" while a human types into the game. The authority a loop
+        driver must re-read is its own exclusive hold; see
+        ``session/autoloop.py``'s port for the wiring."""
+
+    def should_abort(self) -> bool:
+        """Has the run been called off? ``True`` halts the replay.
+
+        The arm predicate's other face, and canon requires it at exactly
+        this choke-point: "A per-step **abort predicate** and **arm
+        predicate** are checked at the same choke-point as every other
+        guard, so a human's STOP (or a disarm) halts an in-flight chain
+        within one send-step" (``app-autopilot-model.md`` §"Chain
+        Execution"), and "the runtime is armed by the human's confirmed
+        decision and re-reads that arm state at its own send choke-point,
+        so disarming (stopping) reaches an in-flight run within one step,
+        not only at the next cycle boundary" (§"Arm-Confirm").
+
+        Held APART from :meth:`is_driver_fenced` rather than folded into
+        it, because the two produce different reason codes and an operator
+        acts on the code: :data:`HALT_FENCED` says a human is at the
+        keyboard right now, :data:`HALT_ABORTED` says the run was stood
+        down and nobody is driving. A driver that implemented "stop" by
+        yanking its own hold and letting the fence branch fire would
+        report an attach that never happened -- a false claim on the one
+        surface whose whole job is to say truthfully why the App stopped.
+
+        Required, like every other method here: an adapter that omits it
+        raises at boundary 0, before any send. A default-to-"not aborted"
+        lookup would make a driver that forgot to wire its stop
+        UNSTOPPABLE, which is the wrong direction for a predicate whose
+        entire purpose is to end a run."""
 
 
 # ---------------------------------------------------------------------------
@@ -505,6 +575,7 @@ class _Observation:
     klass: Optional[str] = None
     sector: Optional[SectorRead] = None
     fenced: bool = False
+    aborted: bool = False
     failure: Optional[str] = None
 
 
@@ -552,6 +623,7 @@ def _observe(session) -> _Observation:
         klass=classify_screen(full_text, prompt_line),
         sector=read_current_sector(prompt_line),
         fenced=bool(session.is_driver_fenced()),
+        aborted=bool(session.should_abort()),
     )
 
 
@@ -573,6 +645,12 @@ def _gate(observation: _Observation) -> Optional[str]:
         return observation.failure
     if observation.fenced:
         return HALT_FENCED
+    # The arm predicate, re-read at the send choke-point. Ordered below the
+    # fence only for reporting: if a human attached AND the run was stood
+    # down, "a human is at the keyboard" is the more sovereign fact and the
+    # more urgent one for the operator to see.
+    if observation.aborted:
+        return HALT_ABORTED
     # DECISIONS §A.2. Derived from `classify.NEVER_AUTO_ACTION_CLASSES`,
     # never restated -- a class added there is refused here the same day.
     if observation.klass in NEVER_AUTO_ACTION_CLASSES:
