@@ -43,8 +43,21 @@ CANON_CATALOG = {
     "human_attach_blocks_trainer": "human attach blocks trainer",
     "credits_unknown": "credits unknown",
     "credits_stale": "credits stale",
+    "credits_unreadable": "credits unreadable",
     "fighters_unknown": "fighters unknown",
     "fighters_stale": "fighters stale",
+    "settle_failed": "settle failed",
+    "screen_unreadable": "screen unreadable",
+    "operator_stop": "operator stop",
+    "never_auto_action": "never auto action",
+    "unrecognized_screen": "unrecognized screen",
+    "start_anchor_missing": "start anchor missing",
+    "start_anchor_mismatch": "start anchor mismatch",
+    "current_sector_absent": "current sector absent",
+    "current_sector_unreadable": "current sector unreadable",
+    "confirm_failed": "confirm failed",
+    "post_class": "post class",
+    "floor_reached": "floor reached",
 }
 
 WIDE = 120
@@ -96,7 +109,7 @@ def test_unknown_code_passes_through_as_its_own_text_never_invented_prose():
 
 def test_unknown_code_never_borrows_any_catalog_label():
     """The sharp edge of the same rule: not merely "some text appears",
-    but that NONE of the ten real labels leaks in as a guessed
+    but that NONE of the catalog labels leaks in as a guessed
     explanation for a code the catalog has never seen."""
     rendered = "\n".join(
         stopbanner.compose_stop_banner_lines(_halt("wormhole_collapse"), width=WIDE)
@@ -105,6 +118,33 @@ def test_unknown_code_never_borrows_any_catalog_label():
         assert label not in rendered, (
             f"unknown code borrowed the catalog label {label!r} -- invented prose"
         )
+
+
+def test_every_loop_player_halt_reason_has_a_human_label():
+    """WO-HALT-BANNER-LABEL-VOCAB / Max 1A: all 16 LoopPlayer HALT_REASONS
+    resolve to a short human label (the 13 that used to render RAW plus the
+    3 that already had one)."""
+    from tw2002_aiclient.loops.player import HALT_REASONS
+
+    for code in sorted(HALT_REASONS):
+        label = stopbanner.intervention_reason_label(code)
+        assert code in stopbanner.INTERVENTION_REASON_LABELS, (
+            f"{code!r} still unmapped -- would render RAW on the STOP banner"
+        )
+        assert label == stopbanner.INTERVENTION_REASON_LABELS[code]
+        assert label != code, f"{code!r} mapped to itself (RAW), not a human label"
+
+
+def test_unmapped_code_stays_raw_not_a_loud_wrapper():
+    """Max 1A: unmapped stay RAW — never invent a loud 'unlabelled code'
+    wrapper around an unknown identifier."""
+    raw = "brand_new_halt_cause_xyz"
+    assert stopbanner.intervention_reason_label(raw) == raw
+    lines = stopbanner.compose_stop_banner_lines(_halt(raw), width=WIDE)
+    assert lines[0] == f"! STOP — {raw}"
+    assert "unlabelled" not in lines[0].lower()
+    assert "unknown reason" not in lines[0].lower()
+    assert lines[0] != "! STOP — ?"
 
 
 def test_empty_and_none_codes_render_the_canon_question_mark():

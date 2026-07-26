@@ -163,8 +163,24 @@ INTERVENTION_REASON_LABELS = {
     "human_attach_blocks_trainer": "human attach blocks trainer",
     "credits_unknown": "credits unknown",
     "credits_stale": "credits stale",
+    "credits_unreadable": "credits unreadable",
     "fighters_unknown": "fighters unknown",
     "fighters_stale": "fighters stale",
+    # LoopPlayer HALT_REASONS that previously rendered RAW (Max ruling 1A /
+    # WO-HALT-BANNER-LABEL-VOCAB 2026-07-26). Unmapped codes still pass through
+    # as their own text — never a loud "unlabelled" wrapper.
+    "settle_failed": "settle failed",
+    "screen_unreadable": "screen unreadable",
+    "operator_stop": "operator stop",
+    "never_auto_action": "never auto action",
+    "unrecognized_screen": "unrecognized screen",
+    "start_anchor_missing": "start anchor missing",
+    "start_anchor_mismatch": "start anchor mismatch",
+    "current_sector_absent": "current sector absent",
+    "current_sector_unreadable": "current sector unreadable",
+    "confirm_failed": "confirm failed",
+    "post_class": "post class",
+    "floor_reached": "floor reached",
 }
 
 # Canon's own empty/unknown marker -- "an empty code renders ``"?"``"

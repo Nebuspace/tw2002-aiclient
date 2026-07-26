@@ -100,15 +100,29 @@ express:
 | `autopilot_max_ticks_exhausted` | autopilot max ticks exhausted | **depletion** — the per-run tick budget is spent; stop and let the human decide whether to continue |
 | `autopilot_game_select` | autopilot game select | **hazard** — autopilot reached a game-select / session-boundary screen it must not auto-answer; the human owns that choice |
 | `human_attach_blocks_trainer` | human attach blocks trainer | **human-sovereignty preemption** — a human attached interactively, so the trainer yields the keyboard unconditionally |
+| `operator_stop` | operator stop | **human-sovereignty preemption** — the run was stood down (nobody necessarily typing; distinct from attach-fence) |
 | `credits_unknown` | credits unknown | **desync** — the credits field of the world-model could not be read; autopilot will not act on an unknown balance |
 | `credits_stale` | credits stale | **desync** — the last-known credits value is too old to trust for a decision |
+| `credits_unreadable` | credits unreadable | **desync** — the credits port answered something that is not a readable snapshot (adapter fault, not "never observed") |
 | `fighters_unknown` | fighters unknown | **desync** — the fighters field of the world-model could not be read |
 | `fighters_stale` | fighters stale | **desync** — the last-known fighters value is too old to trust for a decision |
+| `settle_failed` | settle failed | **desync** — the port could not reach a settled screen inside its budget |
+| `screen_unreadable` | screen unreadable | **desync** — settled, but no readable screen was returned |
+| `confirm_failed` | confirm failed | **desync** — send-and-confirm never positively confirmed the post-send screen |
+| `never_auto_action` | never auto action | **guard-STOP** — screen is in `NEVER_AUTO_ACTION_CLASSES` (money prompt / DECISIONS §A.2) |
+| `unrecognized_screen` | unrecognized screen | **novelty-halt** — classify could not name the screen; first unrecognized frame halts |
+| `start_anchor_missing` | start anchor missing | **guard-STOP** — recording carries no start-anchor (the only forceable halt) |
+| `start_anchor_mismatch` | start anchor mismatch | **guard-STOP** — current sector ≠ recorded start-anchor |
+| `current_sector_absent` | current sector absent | **guard-STOP** — anchor check needed, screen makes no sector claim |
+| `current_sector_unreadable` | current sector unreadable | **guard-STOP** — anchor check needed, sector claim could not be resolved |
+| `post_class` | post class | **guard-STOP** — post-step classification diverged from the recorded expected class |
+| `floor_reached` | floor reached | **depletion** — credits balance at or below the armed floor |
 
 The catalog is **open by construction**: `intervention_reason_label()` passes an unrecognized code
 through as its own text (and maps an empty/`None` code to `"?"`), so a new STOP cause can ship a new
 code before a label exists without breaking any surface — it simply renders as the raw code until a
-label is added.
+label is added. **Unmapped codes stay RAW** (Max ruling 1A / WO-HALT-BANNER-LABEL-VOCAB) — never a
+loud "unlabelled code" wrapper.
 
 The **mode-line-and-teach-controls** surface renders the STOP banner from this typed catalog: it
 takes the escalation's reason *code*, resolves it through `intervention_reason_label()`, and shows

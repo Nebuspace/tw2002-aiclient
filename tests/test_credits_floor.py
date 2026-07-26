@@ -526,29 +526,26 @@ def test_every_new_halt_code_is_in_the_closed_vocabulary():
 
 
 def test_which_of_the_new_codes_canon_already_has_a_label_for():
-    """Pinned as the CURRENT state, not as an approval of it.
-
-    ``credits_unknown`` and ``credits_stale`` are in canon's escalation
-    catalog and render as prose. ``floor_reached`` and ``credits_unreadable``
-    are not, so the banner shows them raw -- which is the catalog working as
-    canon says it should ("open by construction ... a new STOP cause can
-    ship a new code before a label exists"), and legible either way. Adding
-    labels for them is a canon edit, owed and not taken here: this file
-    records what an operator sees today so the gap is visible rather than
-    assumed away.
+    """WO-HALT-BANNER-LABEL-VOCAB / Max 1A: floor_reached and
+    credits_unreadable now carry human labels (they used to render RAW).
+    credits_unknown / credits_stale were already labelled.
     """
     labels = stopbanner.INTERVENTION_REASON_LABELS
     assert labels[HALT_CREDITS_UNKNOWN] == "credits unknown"
     assert labels[HALT_CREDITS_STALE] == "credits stale"
-    assert HALT_FLOOR_REACHED not in labels
-    assert HALT_CREDITS_UNREADABLE not in labels
+    assert labels[HALT_FLOOR_REACHED] == "floor reached"
+    assert labels[HALT_CREDITS_UNREADABLE] == "credits unreadable"
 
-    for code in (HALT_FLOOR_REACHED, HALT_CREDITS_UNREADABLE):
+    for code, expected in (
+        (HALT_FLOOR_REACHED, "floor reached"),
+        (HALT_CREDITS_UNREADABLE, "credits unreadable"),
+    ):
         status = {"intervention": {"needs_attention": True, "reasons": [{"code": code}]}}
         banner = "\n".join(
             stopbanner.compose_stop_banner_lines(status, width=120, height=3)
         )
-        assert code in banner, banner
+        assert expected in banner, banner
+        assert code not in banner, banner  # human label, not RAW identifier
 
 
 # ==========================================================================
