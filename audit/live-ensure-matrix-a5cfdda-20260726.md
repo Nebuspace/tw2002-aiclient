@@ -21,14 +21,28 @@ Three product fixes landed, each proven live rather than by fixture:
 
 ---
 
-## Cell state on `a5cfdda`
+## Cell state — confirming wave `confirm-195540Z`, this lineage
 
-| Host | Letter | NEW | RETURNING | Notes |
+Four cells were run. All four reached `main_command`.
+
+| Cell | Profile | Letter | Classification | Steps |
 |---|---|---|---|---|
-| `roguetw.net:2002` | A | **PASS** `main_command` 9 steps | **PASS** `main_command` 9 steps | Confirmed on `a5cfdda` hub wave 2026-07-26T19:55:40Z. |
-| `twgs.microblaster.net:2002` | B | **PASS** `main_command` 9 steps | **not yet run** | NEW confirmed on `a5cfdda` hub wave. RETURNING: credential exists, not yet run (honest unknown). |
-| `game.a-net-online.lol:2002` | A | **PASS** `main_command` 10 steps | **not yet run** | Letter **A**. Bank profile **A** (was C, corrected bank-side — see open item 1). RETURNING not yet run (honest unknown). |
-| xeno / `twgs.exiled.org:2002` | — | **N-A** honest halt | **N-A** | Untaught square-bracket door, fingerprinted. Phase-2 is Max-gated. **A halt is a result, not a gap.** |
+| rogue NEW | `proof_rogue_new` | A | `main_command` | 9 |
+| rogue RETURNING | `proof_rogue` | A | `main_command` | 9 |
+| micro NEW | `proof_micro` | B | `main_command` | 9 |
+| a-net NEW | `proof_anet` | A | `main_command` | 10 |
+
+**"4/4" means these four cells — not four hosts.** xeno was not among them; it did not run and correctly halts (below).
+
+### Not run, and honestly unknown
+
+| Cell | Status |
+|---|---|
+| micro RETURNING | **Never executed.** Newly possible — a credential exists where none did before this date. |
+| a-net RETURNING | **Never executed.** |
+| xeno / `twgs.exiled.org:2002` | **N-A — honest halt.** Untaught square-bracket door, fingerprinted. Phase-2 is Max-gated. **A halt is a result, not a gap.** |
+
+These are unknowns rather than expected passes. Registration inserts screens a returning login never sees, and the reverse holds too — neither direction may be assumed from the other.
 
 **≥3-host bar:** met — rogue, micro and a-net each reach `main_command`, with xeno a documented halt.
 
@@ -44,34 +58,35 @@ The a-net profile was configured with letter **C**. The door does offer `<C>`, b
 
 Recorded because the distinction cost real time and is easy to repeat: *the config has C*, *the door offers C*, and *the C game is playable* are three different claims, and only the third settles whether the letter is the problem. Checking the first two and stopping produces a confident wrong answer — it did here.
 
-### 2. Record classification **and** step, never a bare PASS/FAIL
+### 2. The regression gate — asked, then answered
+
+rogue and micro had been proven on **earlier tips**, and `WO-ANET-GAME-SELECT-LETTER-STEP12` changed `login.py`'s menu branch, which **every host traverses**. They were the only cells that could show whether that shared-path change was safe, so the wave was ordered to run them *first* — a-net alone would have confirmed its own fix while leaving a break in the working hosts invisible.
+
+**Answered: both re-proved on this lineage — rogue NEW and RETURNING and micro NEW all `main_command`@9.** The shared-path change did not regress the hosts that were already green.
+
+The question is kept rather than deleted, because the answer is only meaningful with it.
+
+### 3. Record classification **and** step, never a bare PASS/FAIL
 
 `menu`@5 → `game_select`@12 was the single most useful datum of the day: it showed the banner fix had *worked* and moved the wall, which a bare FAIL would have hidden. A cell that records only PASS/FAIL cannot distinguish "no progress" from "progress, new door".
 
-### 3. micro RETURNING and a-net RETURNING are first runs
+### 4. The remaining cells are first runs, not formalities
 
-Neither has ever been executed. They are not expected failures — they are **unknowns**, and should be reported as whatever they turn out to be rather than assumed to mirror NEW. Registration inserts screens a returning login never sees; the reverse also holds.
+micro RETURNING and a-net RETURNING are tabled above as never-executed. When they are run they should be reported as whatever they turn out to be — a NEW pass is not evidence for a RETURNING pass in either direction.
 
 ---
 
-## Remaining cells (post hub wave)
+## The confirming wave — order used, and what remains
 
-rogue NEW + RETURNING, micro NEW, and a-net NEW are confirmed on `a5cfdda`. The following cells have not yet been run:
+1. **rogue** NEW + RETURNING — regression gate · **run, both `main_command`@9**
+2. **micro** NEW — regression gate · **run, `main_command`@9**. RETURNING **still outstanding**
+3. **a-net** NEW on letter **A** — last, after cool-off · **run, `main_command`@10**. RETURNING **still outstanding**
+4. **xeno** — no live attempt; the halt stands on the existing fingerprint
 
-1. **micro RETURNING** — credential exists; first-ever run
-2. **a-net RETURNING** on letter **A** — first-ever run; cool-off before attempting (host has refused connections following probe bursts)
-3. **xeno** — no live attempt planned; honest halt stands on existing fingerprint. Phase-2 is Max-gated.
+Cool-off before a-net is not a formality. A host that has just refused connections will produce a failure that looks like a product defect and is not.
 
-## Hub confirming wave 2026-07-26T19:55:40Z (tip `a5cfdda`)
+---
 
-Isolated bank `/tmp/tw2002-live-ensure-matrix-20260726T0801Z` · cells `reprove/confirm-195540Z/`.
+## Provenance
 
-| Cell | Profile | Result | classification | steps |
-|---|---|---|---|---|
-| rogue-new | proof_rogue_new | PASS | main_command | 9 |
-| rogue-returning | proof_rogue | PASS | main_command | 9 |
-| micro-new | proof_micro | PASS | main_command | 9 |
-| anet-A-new | proof_anet (letter A) | PASS | main_command | 10 |
-
-**≥3-host ensure bar confirmed on tip.** micro RETURNING / a-net RETURNING still not run (honest unknown).
-
+Cells for the confirming wave above were run by the hub at **2026-07-26T19:55:40Z** on tip `a5cfdda`, under the isolated bank with per-cell run-dirs beneath `reprove/confirm-195540Z/`. Raw `ensure` JSON stays in the bank, outside this repo.
