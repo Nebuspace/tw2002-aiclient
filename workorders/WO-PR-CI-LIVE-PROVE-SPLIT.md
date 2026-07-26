@@ -57,16 +57,16 @@ In the PR-coordinator rhythm, `live-prove` is **not** “one happy path on the s
 
 | Axis | Minimum | Notes |
 |---|---|---|
-| **Servers** | **≥ 3** distinct catalog hosts (`config/servers.toml`) | Hub picks; **rotate** over time. Prefer known-different stall/menu shapes when choosing (anet / rogue / micro / xeno / …). |
-| **Characters** | **≥ 1 NEW** (create / first-time) **and** **≥ 1 RETURNING** (pre-existing profile) | Spread across the chosen servers — not all NEW on one host and all RETURNING on another if avoidable. |
-| **Depth** | Exercise the WO's Accept path, plus enough of connect → login → post-login to catch server-specific drift | Ensure-bar WOs: aim NEW+RETURNING → `main_command` on the chosen set. Narrower WOs: smoke the touched surface on each cell. |
-| **Evidence** | `live-prove` summary lists **host keys**, **NEW/RETURNING counts**, tip SHA, commands — **no secrets** | Example: `hosts: a_net_online, gone_rogue, microblaster_network · NEW:2 RETURNING:3 · tip abc1234`. |
+| **Servers** | **≥ 3** distinct catalog hosts exercised | Hub picks/rotates. Prefer known-different stall/menu shapes (anet / rogue / micro / xeno / …). |
+| **Characters (across the run)** | **≥ 1 NEW** and **≥ 1 RETURNING** *somewhere in the set* | Not “both on every host.” NEW only where registration can succeed; RETURNING only where a credential **already exists**. Untestable cells → list as `SKIP:reason` in the summary (not silent omit). |
+| **Depth** | Exercise the WO's Accept path on each exercised host | Ensure-bar: push toward `main_command` where the cell allows. |
+| **Evidence** | Summary lists host keys, NEW/RETURNING counts, skips, tip SHA — **no secrets** | Example: `hosts: gone_rogue(N+R), a_net_online(N), micro(SKIP:no-cred) · NEW:2 RETURNING:1 · tip abc1234`. |
 
-**Hub picks the set** each merge — Max does not prescribe the exact trio. The invariant is diversity, not a fixed forever-list.
+**Hub picks the set** — Max’s intent is diversity (not one pet server), not an impossible 3×both matrix.
 
-**When `n/a` is still honest:** docs / protocol / CI-infra / pure offline (no live socket path). Summary must say why. **Do not** `n/a` a login/ensure/play PR because “suite was green.”
+**When `n/a` is still honest:** docs / protocol / CI-infra / **product PRs that cannot affect live login/classify/ensure** (e.g. TUI dead-terminal CPU guard with offline exit+CPU proof). Summary must say why. **Do not** `n/a` a login/ensure/classify PR because “suite was green.”
 
-**Lighter bar (optional, hub-judged):** a tiny pure-client change with no server-sensitive surface may use **≥ 2** servers + NEW+RETURNING once — still multi-host. Record the judgment in the summary. Prefer the default ≥3 when unsure.
+**Unmeetable ≠ lower the principle:** if ensure blockers leave fewer than 3 exercisable hosts, live-prove stays **failure/pending** with that stated — or Max temporarily narrows the floor. Do not invent RETURNING on hosts that never registered.
 
 ### Mechanism (hub has access; Max does not need to click)
 
