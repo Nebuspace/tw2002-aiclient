@@ -1,6 +1,6 @@
 # WO-ENSURE-MULTIHOST-REPROVE
 
-**Status:** PREP READY · Cursor Accept artifact on tip · awaiting hub laptop live cells + `live-prove`  
+**Status:** DONE · hub live RETURNING wave `returning-sprint-2312Z` on tip `9bffbf8` · audit `live-ensure-matrix-returning-sprint-2312Z-20260726.md`
 **Posted:** 2026-07-26 · sprint critical path **[4]** after letter + a-net banner DONE  
 **Depends:** current `origin/main` tip; micro NEW cell may stay FAIL until `WO-MICRO-LOGIN-BLANK-REJECT` merges — **do not block other hosts on micro**  
 **Seat:** Cursor prepares Accept artifact + runner notes; **hub runs live laptop prove** (Lane 3) and posts `live-prove`  
