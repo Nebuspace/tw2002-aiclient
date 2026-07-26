@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import os
+import sys
+import time
 
 import curses
 
@@ -19,6 +21,165 @@ from tw2002_aiclient.session import cli as session_cli
 from tw2002_aiclient.session import credentials, env, player_bank
 from tw2002_aiclient.session.attach_client import AttachInputConn
 from tw2002_aiclient.watchfeed import WatchFeed
+
+
+class DeadTerminalError(Exception):
+    """The controlling terminal is gone -- see ``_DeadTerminalGuard`` below.
+
+    Raised out of every getch() loop in this module instead of ever
+    returning once the terminal is confirmed gone; caught once in
+    ``main()``. Propagating as a plain exception (rather than returning a
+    sentinel) means it unwinds through ``_run_play``'s own ``finally``
+    (control-lock release, ``WatchFeed.stop()``, terminal-mode restore)
+    exactly like any other exception, and ``curses.wrapper``'s own
+    ``try/finally`` (no ``except`` clause -- it always re-raises) restores
+    the terminal before this propagates out of ``main()``.
+    """
+
+
+# WO-TUI-DEAD-TERMINAL-SPIN: `getch()` returning -1 conflates two states --
+# "no key yet, my configured timeout elapsed exactly as armed" (the
+# legitimate idle tick -- once a second at the play loop's own
+# `stdscr.timeout(1000)`, or, per ncurses' own semantics, essentially NEVER
+# in the three `timeout(-1)` (blocking) loops below, where a legitimate -1
+# has no defined occurrence at all -- ncurses documents -1/ERR in blocking
+# mode only as an error/EOF condition) and "the controlling terminal is
+# gone -- every subsequent read() now returns EOF instantly, forever". A
+# dead pty can't be told apart from an idle one by the return value alone.
+# Live incident 2026-07-26: 11 orphaned `curses.wrapper(_run)` processes,
+# ~1094% combined CPU, up to 22h45m.
+#
+# TWO signals, COMBINED so neither can misfire alone (Samantha review,
+# 2026-07-26 -- an earlier version treated them as independently
+# sufficient; see the combining-rule paragraph below for why that was
+# wrong):
+#
+#   1. A FAST -1: elapsed under `_DEAD_TERMINAL_FAST_S` (10ms). A dead
+#      terminal's read() returns EOF in microseconds regardless of the
+#      requested timeout. The throttled play loop's own ~1000ms idle tick
+#      and `_QueueStdscr`'s (`tests/test_cockpit_attach.py`) deliberate
+#      ~50ms poll both clear that floor comfortably and are the genuinely
+#      slow, legitimate case this guard must never trip on -- a SLOW -1
+#      never counts as evidence of anything, orphaned or not (see below).
+#
+#      Several OTHER in-tree test doubles instead return -1 with NO delay
+#      at all once their scripted key list is exhausted -- plain
+#      `self._keys.pop(0) if self._keys else -1`, called back-to-back with
+#      no sleep in between: `tests/test_cockpit_attach.py:170`, `tests/
+#      test_cockpit_utf8_getch.py:34`, `tests/test_play_esc_daemon_
+#      survival.py:105`, `tests/test_spectate_no_send.py:790` (the first
+#      sits in the very same file as `_QueueStdscr` above). Those -1s DO
+#      clear the fast floor and are indistinguishable, by this guard's own
+#      measurement, from a dead terminal. They do not trip
+#      `DeadTerminalError` today for a narrower reason than "fast enough to
+#      still count as idle": every one of their scripted key lists ends in
+#      an exit key (Esc / `q`) that returns control to the caller before
+#      the streak reaches `_DEAD_TERMINAL_STREAK` (3). A test double that
+#      scripted MORE idle redraws after its last real key than the streak
+#      threshold would correctly raise -- an unbroken fast -1 stream is
+#      exactly the incident shape, whether it comes from a dead terminal or
+#      a test double standing in for one, and that is intended, not a gap.
+#      Requiring `_DEAD_TERMINAL_STREAK` (3) consecutive fast returns
+#      rather than one is what keeps a single legitimate -1 (the normal
+#      idle tick, or one stray interrupted read) from ever tripping this on
+#      its own -- required by this WO's own constraint.
+#
+#   2. `os.getppid() == 1` -- our real parent is gone and init reparented
+#      us. This is the literal mechanism of the incident:
+#      `start_new_session=True` (tests/pty_helpers.py) gives a pty-spawned
+#      child its own session, so when whatever spawned it dies, the child
+#      is simply reparented to init rather than signalled -- and the SAME
+#      reparenting happens for a plain interactive session when its
+#      controlling shell dies from a tty hangup (ssh drop / closed window
+#      / killed tmux pane), since the shell was this process's direct
+#      parent. macOS has no `PR_SET_PDEATHSIG`; polling this is the
+#      portable substitute.
+#
+# COMBINING RULE: being orphaned lowers the required fast-streak from 3
+# down to 1 -- it is NEVER sufficient by itself, and a fast streak is
+# NEVER waived by itself either. An earlier version fired on
+# `os.getppid() == 1` alone, independent of elapsed time -- reviewed and
+# rejected: it would kill a legitimately backgrounded session whose
+# terminal is still fully valid the instant its ORIGINAL parent exits
+# (e.g. `sh -c './tw &'` from a non-session-leader subshell reparents to
+# init immediately, but the terminal itself is untouched) -- that
+# session's own perfectly normal ~1s idle tick would be misread as proof
+# of a dead terminal. Requiring a FAST -1 even when orphaned closes that
+# hole for free: a healthy, still-attached terminal never produces a fast
+# -1, orphaned or not. A pure AND (always require the full streak
+# regardless of orphan status) was ALSO considered and rejected: it would
+# defeat this WO's own literal proof requirement -- closing the pty
+# master alone, with the spawning process staying alive throughout (as
+# `tests/test_dead_terminal_spin.py`'s own master-fd-close tests do, and
+# as this WO's Proof section requires), is not "orphaned", so a pure AND
+# would never fire there. The two live-incident signals (100% CPU spin ==
+# fast, reparented == orphaned) already coincide by construction, so
+# lowering the threshold to 1 when orphaned costs nothing against the
+# actual incident while closing the false-positive gap above.
+#
+# An EARLIER design measured elapsed time as a FRACTION of whatever
+# `stdscr.timeout(...)` was armed with, rather than this fixed floor. Two
+# reasons it was rejected: it gave no signal at all for the three
+# blocking-mode loops (`timeout(-1)` has no finite value to take a fraction
+# of), and at the play loop's 1000ms timeout a 5% fraction (50ms) collided
+# almost exactly with `_QueueStdscr`'s own legitimate 50ms tick, which is
+# real wall-clock (`queue.Queue.get(timeout=0.05)`), not synthetic -- a
+# flaky false-positive waiting to happen. An ABSOLUTE floor works
+# uniformly across every call site below, independent of which
+# `stdscr.timeout()` happens to be armed.
+_DEAD_TERMINAL_STREAK = 3
+_DEAD_TERMINAL_FAST_S = 0.01
+
+
+class _DeadTerminalGuard:
+    """One instance per getch() loop -- tracks consecutive too-fast -1s.
+
+    See the module-level comment above for the full argument. Call
+    :meth:`check` immediately after every `stdscr.getch()` via
+    :func:`_guarded_getch`, never directly.
+    """
+
+    def __init__(self) -> None:
+        self._streak = 0
+
+    def check(self, key: int, elapsed_s: float) -> None:
+        if key != -1:
+            self._streak = 0
+            return
+        if elapsed_s >= _DEAD_TERMINAL_FAST_S:
+            # A genuinely slow -1 is never evidence on its own, orphaned
+            # or not -- see the module comment's "combining rule".
+            self._streak = 0
+            return
+        self._streak += 1
+        orphaned = os.getppid() == 1
+        required = 1 if orphaned else _DEAD_TERMINAL_STREAK
+        if self._streak >= required:
+            detail = (
+                "reparented to init"
+                if orphaned
+                else f"{self._streak} consecutive fast returns"
+            )
+            raise DeadTerminalError(
+                f"getch() returned -1 in under "
+                f"{_DEAD_TERMINAL_FAST_S * 1000:.0f}ms ({detail}) — "
+                "controlling terminal is gone"
+            )
+
+
+def _guarded_getch(stdscr: curses.window, guard: _DeadTerminalGuard) -> int:
+    """`stdscr.getch()`, checked for a dead controlling terminal.
+
+    Raises `DeadTerminalError` instead of ever returning once the terminal
+    is confirmed gone (see `_DeadTerminalGuard` above) -- every
+    `while True: ...; getch(); if key == -1: continue` loop in this module
+    calls this instead of `stdscr.getch()` directly, so the one fix lives
+    in one place.
+    """
+    t0 = time.monotonic()
+    key = stdscr.getch()
+    guard.check(key, time.monotonic() - t0)
+    return key
 
 
 def _utf8_multibyte_len(lead: int) -> int | None:
@@ -173,9 +334,10 @@ def _load_profiles() -> list[ProfileRow]:
 
 def _run_create(stdscr: curses.window) -> str:
     form = CreateFormScreen(stdscr)
+    guard = _DeadTerminalGuard()
     while True:
         form.draw()
-        key = stdscr.getch()
+        key = _guarded_getch(stdscr, guard)
         if key == -1:
             continue
         action = form.handle_key(key)
@@ -331,10 +493,11 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
     # `None` here means spectating -- the loop below still routes every
     # key through `play.handle_key`, exactly as before this WO.
     attach_conn = None
+    guard = _DeadTerminalGuard()
     try:
         while True:
             play.draw()
-            key = stdscr.getch()
+            key = _guarded_getch(stdscr, guard)
             if key == -1:
                 continue
             if attach_conn is not None and key != 27:
@@ -549,9 +712,10 @@ def _bank_view(stdscr: curses.window) -> BankViewScreen:
 
 def _run_bank(stdscr: curses.window) -> str:
     bank = _bank_view(stdscr)
+    guard = _DeadTerminalGuard()
     while True:
         bank.draw()
-        key = stdscr.getch()
+        key = _guarded_getch(stdscr, guard)
         if key == -1:
             continue
         action = bank.handle_key(key)
@@ -619,9 +783,10 @@ def _run(stdscr: curses.window) -> None:
         else:
             _bank_view(stdscr).draw()
         return
+    guard = _DeadTerminalGuard()
     while True:
         screen.draw()
-        key = stdscr.getch()
+        key = _guarded_getch(stdscr, guard)
         if key == -1:
             continue
         action = screen.handle_key(key)
@@ -657,6 +822,33 @@ def _run(stdscr: curses.window) -> None:
                 pass
 
 
+def _report_dead_terminal(exc: DeadTerminalError) -> None:
+    """Best-effort diagnostic for a dead-terminal clean exit.
+
+    Extracted from ``main()`` so it can be unit-tested directly (a real
+    dead pty needs a real subprocess to reproduce; a broken ``sys.stderr``
+    does not). Never lets a failed print turn a clean shutdown into an
+    uncaught second traceback -- confirmed empirically (Samantha review,
+    2026-07-26, ``pty.fork()`` + close the master + print from the
+    child): writing to the SAME terminal that just died raises ``OSError:
+    [Errno 5] Input/output error``. The exit itself is what matters; this
+    diagnostic is opportunistic only.
+    """
+    try:
+        print(f"tw2002-aiclient: {exc}", file=sys.stderr)
+    except OSError:
+        pass
+
+
 def main() -> int:
-    curses.wrapper(_run)
+    try:
+        curses.wrapper(_run)
+    except DeadTerminalError as exc:
+        # curses.wrapper's own `finally` (no `except` -- see its source)
+        # has already restored the terminal by the time this runs, so
+        # _report_dead_terminal's print reaches the operator's own
+        # remaining terminal (a not-yet-fully-dropped ssh session) or a
+        # log -- never a raw traceback for what is an environment
+        # condition (WO-TUI-DEAD-TERMINAL-SPIN), not an app bug.
+        _report_dead_terminal(exc)
     return 0

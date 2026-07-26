@@ -36,6 +36,7 @@ from pathlib import Path
 import pytest
 
 from tests.conftest import _FAKE_DAEMON_IMPORTS_OK, _FakeDaemon
+from tests.pty_helpers import terminate_session_group
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -145,11 +146,12 @@ def run_attach_on_terminal(daemon, tmp_path, *, env_overrides, keys,
                     pass  # child already gone
             if proc.poll() is not None and not ready:
                 break
-        try:
-            proc.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-            proc.kill()
-            proc.wait()
+        # grace_s=5.0 restores the voluntary-exit window the old
+        # `proc.wait(timeout=5)` gave a real `tw attach` process before any
+        # kill (this is the one call site that had one -- the other two
+        # `terminate_session_group` sites in this suite killed immediately
+        # even before this helper existed, so they are unchanged).
+        terminate_session_group(proc, grace_s=5.0)
         # Drain whatever the child wrote just before exiting.
         drain_until = time.monotonic() + 1.0
         while time.monotonic() < drain_until:

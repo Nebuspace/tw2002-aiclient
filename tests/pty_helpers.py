@@ -54,10 +54,12 @@ import os
 import pty
 import re
 import select
+import signal
 import struct
 import subprocess
 import termios
 import time
+import warnings
 from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any
@@ -356,8 +358,154 @@ _pyte_grid = pyte_grid
 _find_text = find_text
 
 
+def terminate_session_group(
+    proc: subprocess.Popen, *, wait_timeout: float = 5.0, grace_s: float = 0.0
+) -> None:
+    """Kill ``proc``'s entire session/process group, not just its direct PID.
+
+    Every pty spawn in this suite uses ``start_new_session=True`` (or the
+    ``claim_ctty=True`` preexec's own ``os.setsid()`` in
+    ``_claim_controlling_tty`` above) so the child can never steal the
+    runner's controlling terminal (WO-P3-PTY-CTTY) -- deliberate and
+    correct. The same isolation means a bare ``proc.kill()`` (``SIGKILL``
+    to the direct child PID only) never reaches anything THAT child itself
+    spawned, and a signal to *pytest's own* process group never reaches
+    this session at all -- the mechanism behind the 2026-07-26 incident's
+    11 orphaned ``curses.wrapper(_run)`` processes (WO-TUI-DEAD-TERMINAL-
+    SPIN Defect 2): a full-suite run that gets SIGTERM'd skips every
+    ``finally`` in the killing process, so this cleanup never even runs,
+    and the isolated child is simply reparented to init. ``os.killpg``
+    targets the whole GROUP in one signal instead of just the one PID --
+    the ordinary-path fix for every OTHER exit (normal completion, a test
+    failure, a bounded timeout).
+
+    ``grace_s`` (default 0 -- no change from prior behaviour): wait up to
+    this long for the DIRECT child to exit on its own before signalling
+    anything, mirroring the graceful-exit window some callers had before
+    they were swapped onto this helper (e.g. ``tests/
+    attach_terminal_harness.py``, which gave a real ``tw attach`` process 5
+    real seconds to unwind before any kill). This is a courtesy to the
+    direct child only -- the group is still swept unconditionally below
+    whether or not the grace period was needed, because Defect 2 is
+    precisely the case where the direct child DID exit cleanly (on its own,
+    inside or outside any grace window) while something it spawned did not.
+
+    The group signal below is unconditional -- **not** gated on
+    ``proc.poll()``. The prior ``if proc.poll() is None: killpg()`` guard
+    was itself Defect 2's bug: it skipped the whole-group signal exactly
+    when the direct child had ALREADY exited (the common, clean-exit case),
+    which is exactly when a grandchild it spawned earlier is most likely to
+    be the only thing left alive. A process group is a kernel object that
+    persists as long as any member is alive, independent of whether its
+    original leader has already exited and been reaped -- so ``killpg``
+    still reaches a surviving grandchild even after the direct child (the
+    group leader) is gone.
+
+    Every call site's ``proc`` is documented (and expected) to have been
+    spawned with ``start_new_session=True`` or the ``claim_ctty`` preexec's
+    own ``setsid()`` -- both make the child its own session AND process
+    group leader, so ``pgid == proc.pid``. That invariant is CHECKED, not
+    assumed, on every call (see ``_is_group_leader`` below) -- a docstring
+    claim that "every site setsid's" is exactly the kind of enumeration
+    claim that has been wrong before, so a call whose child did NOT setsid
+    degrades to a direct-child-only kill instead of blindly trusting it.
+
+    A naive ``os.getpgid(proc.pid) == proc.pid`` check at CLEANUP time (as
+    opposed to spawn time) has its own trap once the child has already
+    exited and been reaped (the common, clean-exit case this fix exists
+    for): ``os.getpgid`` on a reaped pid raises ``ProcessLookupError``
+    (measured) -- there is no live pid left to query. Treating that as
+    "not a leader, skip the signal" would skip the signal in exactly the
+    case that matters most (a live grandchild in a now-leaderless group).
+    Treating it as "assume it WAS a leader" is the safe direction instead:
+    if it really did setsid, any surviving members are still reachable via
+    ``killpg(proc.pid, ...)``; if it never setsid'd and is now reaped,
+    ``proc.pid`` is not a real pgid for anything and ``killpg`` on it is a
+    harmless ``ProcessLookupError`` no-op -- never our own group, because a
+    NON-setsid'd child's pgid is OUR OWN pgid, not its own pid, so the only
+    way ``killpg(proc.pid, ...)`` could hit our own group is the
+    astronomically unlikely coincidence of ``proc.pid`` itself matching
+    our pgid number.
+
+    Never raises: ``os.killpg`` racing an already-fully-reaped group (no
+    member left alive at all) is swallowed exactly like ``Popen.kill()``
+    already swallows "already dead" for the direct-PID form this replaces.
+    """
+    if grace_s > 0:
+        try:
+            proc.wait(timeout=grace_s)
+        except subprocess.TimeoutExpired:
+            pass
+
+    def _is_group_leader() -> bool:
+        """True iff ``proc`` really did setsid (pgid == its own pid).
+
+        Checked while the child is STILL ALIVE where possible -- a
+        post-reap re-check (`os.getpgid(proc.pid)` at cleanup time,
+        gated on `proc.poll()`) was tried and rejected: once the pid is
+        reaped, `os.getpgid` raises `ProcessLookupError` regardless of
+        whether it really was a leader, so that check degrades to "not a
+        leader" in exactly the exit-0-with-live-grandchild case this fix
+        exists for. `ProcessLookupError` here instead means "can no
+        longer verify, but a real leader's group -- if any -- is still
+        reachable via killpg(proc.pid, ...); a non-leader's would never
+        have been proc.pid to begin with" -- so it degrades to True
+        (assume leader), the safe direction for THIS check specifically.
+        """
+        try:
+            return os.getpgid(proc.pid) == proc.pid
+        except ProcessLookupError:
+            return True
+
+    def _signal_group() -> None:
+        if not _is_group_leader():
+            # This child's own pgid is OUR pgid (it never setsid'd) --
+            # killpg(proc.pid, ...) here would target proc.pid as if it
+            # were a group id, which is not our own group (that group IS
+            # reachable as os.getpgid(0), a different number from
+            # proc.pid) and essentially never resolves to anything real,
+            # but it is also not a signal this helper is entitled to send
+            # on this child's behalf. Direct-kill only.
+            proc.kill()
+            return
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        except PermissionError:
+            # Observed intermittently in one sandboxed dev environment,
+            # not reproduced in 40 independent trials elsewhere (pre- and
+            # post-reap) on the same code -- root cause NOT isolated, kept
+            # honest rather than claimed understood. Made LOUD rather than
+            # a silent fallback: a CI run where killpg is denied must not
+            # look identical to a healthy one (a silent direct-child-only
+            # fallback IS the orphan-leaking behaviour this WO removes).
+            warnings.warn(
+                f"terminate_session_group: os.killpg({proc.pid}, SIGKILL) "
+                "raised PermissionError -- falling back to a direct-child "
+                "kill only; anything else in this process group is NOT "
+                "reaped by this call",
+                RuntimeWarning,
+                stacklevel=2,
+            )
+            try:
+                proc.kill()
+            except ProcessLookupError:
+                pass
+
+    _signal_group()
+    try:
+        proc.wait(timeout=wait_timeout)
+    except subprocess.TimeoutExpired:
+        _signal_group()
+        try:
+            proc.wait(timeout=wait_timeout)
+        except subprocess.TimeoutExpired:
+            pass
+
+
 def _drain_until_exit(proc: subprocess.Popen, master_fd: int, drain_after_s: float) -> bytes:
-    """Drain master while waiting for child exit; kill if still alive."""
+    """Drain master while waiting for child exit; kill its whole session if still alive."""
     extra = b""
     drain_deadline = time.monotonic() + drain_after_s
     while time.monotonic() < drain_deadline and proc.poll() is None:
@@ -370,13 +518,7 @@ def _drain_until_exit(proc: subprocess.Popen, master_fd: int, drain_after_s: flo
             if not chunk:
                 break
             extra += chunk
-    if proc.poll() is None:
-        proc.kill()
-    try:
-        proc.wait(timeout=5)
-    except subprocess.TimeoutExpired:
-        proc.kill()
-        proc.wait(timeout=5)
+    terminate_session_group(proc)
     return extra
 
 

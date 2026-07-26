@@ -31,6 +31,11 @@ import pytest
 from tw2002_aiclient.session import env as _env
 from tw2002_aiclient.session.settle import MATCH_SCOPE_SCREEN
 
+# Top-level import is safe here (no cycle): `pty_helpers` only imports THIS
+# module lazily, inside `pty_curses_supported()`'s own function body, never
+# at its own module load time.
+from tests.pty_helpers import terminate_session_group
+
 # Post-ADR-001, `twclient` relocated to `tw2002_aiclient.session` -- but
 # control_lock/loop_player/watch haven't landed there yet (WO-P2-020
 # Wave-4 only ports settle/classify's own dependency, env), and the
@@ -401,12 +406,7 @@ def pty_curses_supported():
                         break
                 except OSError:
                     break
-        if proc.poll() is None:
-            proc.kill()
-        try:
-            proc.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-            pass
+        terminate_session_group(proc)
         return proc.returncode == 0
     finally:
         if slave_fd != -1:

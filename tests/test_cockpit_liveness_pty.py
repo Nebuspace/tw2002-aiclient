@@ -56,7 +56,13 @@ import curses
 from tw2002_aiclient.cockpit import liveness as cockpit_liveness
 from tw2002_aiclient.cockpit.layout import frame_layout
 
-from .pty_helpers import find_text, pty_curses_supported, pyte_grid, set_winsize
+from .pty_helpers import (
+    find_text,
+    pty_curses_supported,
+    pyte_grid,
+    set_winsize,
+    terminate_session_group,
+)
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 HANDLE = "Alpha"
@@ -269,13 +275,7 @@ def _drive_liveness_pty(
                 if not chunk:
                     break
                 captured += chunk
-        if proc.poll() is None:
-            proc.kill()
-        try:
-            proc.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-            proc.kill()
-            proc.wait(timeout=5)
+        terminate_session_group(proc)
         try:
             os.close(master_fd)
         except OSError:
