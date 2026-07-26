@@ -5,11 +5,13 @@
 
 ## Goal
 
-`WO-CLASSIFY-PASSWORD-LENGTH-UNKNOWN` (#40) correctly re-aims password-length chrome to `unknown`. That screen now halts by **omission** (no consumer matches `unknown`), not by C-06's explicit `money_prompt` refuse pins.
+`WO-CLASSIFY-PASSWORD-LENGTH-UNKNOWN` (#40) correctly re-aims password-length chrome to `unknown`. That screen halts because **`unknown` is canon's escalate trigger** (`engine/screen-understanding.md`, "The Unknown Is First-Class") and every consumer is a positive match on a named class or a denylist — never "act unless unknown". It does **not** halt via C-06's `money_prompt` refuse pins, and it is **not** unguarded.
 
-Pin the premise: **no classify→send consumer acts on `unknown`** — convert safety-by-omission into safety-by-assertion (mirror C-06's `test_no_consumer_acts_on_merely_being_recognized` shape).
+**Corrected premise (CC 2026-07-26T21:56:07Z).** This WO was requested on the mistaken belief that `unknown` was safe only by omission. It is not: `tests/test_never_auto_action.py` already states and pins the consumer shape that guarantees it.
 
-Also: qualify any "halt by contract" wording in audit/#40 Accept residue — honest: correct class; halt by omission until this pin lands.
+Assert the canonical property explicitly: **no classify→send consumer acts on `unknown`** (mirroring C-06's `test_no_consumer_acts_on_merely_being_recognized` shape). Worth landing not because a gap exists, but because a property stated in canon and implied by a consumer shape should fail a test when it stops being true, rather than needing reconstruction from a module docstring.
+
+Also: #40's original "halt by contract" wording was closer to correct than the "omission" correction applied to it — the contract is canon's escalate-first rule.
 
 ## Scope
 
@@ -21,7 +23,7 @@ Also: qualify any "halt by contract" wording in audit/#40 Accept residue — hon
 
 1. Pin(s): every inventoried classify→send consumer refuses / no-ops on `unknown` (no keystroke send).
 2. Pin fails if a consumer gains an `unknown` send path.
-3. Audit/chain note mentions #40 moved a screen out of the pinned refuse class into omission-until-this-pin.
+3. Audit/chain note records that #40 moved a screen from one pinned halt (`money_prompt` denylist) to another (`unknown` escalate-first) — two mechanisms, both guarded.
 4. pytest green.
 
 ## Refs
