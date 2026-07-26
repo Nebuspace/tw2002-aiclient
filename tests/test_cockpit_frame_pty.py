@@ -14,10 +14,14 @@ display width, and an embedded control character (``\n``) that would
 otherwise move the real terminal cursor and escape the writing box entirely.
 
 Isolation: ``adapters.ensure_session`` is stubbed inside the spawned
-process; no live ``run/twd.sock`` is ever touched. Assertions read pyte
-grid text and ``screen.buffer[r][c]`` cell attrs only -- never an
-ANSI-escape regex (PREP §2 hard constraint). One test (title-clip) is a
-pure logic unit test against a minimal fake window and needs no pty.
+process; ``TW_RUN_DIR`` always points at an isolated per-test tmp
+directory so the real (unstubbed) ``WatchFeed`` / status-provider path
+can never reach the project's own ``run/twd.sock`` (WO-TEST-COCKPIT-
+FRAME-PTY-ISOLATE — ambient daemon must not paint the GAME viewport).
+Assertions read pyte grid text and ``screen.buffer[r][c]`` cell attrs
+only -- never an ANSI-escape regex (PREP §2 hard constraint). One test
+(title-clip) is a pure logic unit test against a minimal fake window
+and needs no pty.
 """
 
 from __future__ import annotations
@@ -110,12 +114,17 @@ def _drive_cockpit_frame_pty(
     """
     bootstrap = tmp_path / f"cockpit_frame_bootstrap_{rows}x{cols}_{int(ascii_mode)}.py"
     bootstrap.write_text(_BOOTSTRAP.format(project_root=str(PROJECT_ROOT)), encoding="utf-8")
+    isolated_run_dir = tmp_path / "isolated_run"
+    isolated_run_dir.mkdir(exist_ok=True)
 
     master_fd, slave_fd = pty.openpty()
     set_winsize(slave_fd, rows, cols)
     env = dict(os.environ)
     env["TERM"] = "xterm"
     env["TW2002_LAUNCHER_DEMO"] = "1"
+    # Same as test_cockpit_viewport_pty / tones / logsband: ensure-stub alone
+    # is not enough — WatchFeed still opens resolve_run_dir()/twd.sock.
+    env["TW_RUN_DIR"] = str(isolated_run_dir)
     if ascii_mode:
         env["TW2002_ASCII"] = "1"
     else:

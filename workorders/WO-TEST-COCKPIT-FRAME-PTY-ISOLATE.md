@@ -1,6 +1,6 @@
 # WO-TEST-COCKPIT-FRAME-PTY-ISOLATE
 
-**Status:** OPEN · Cursor preferred (tests lane)  
+**Status:** DONE (this tip) · Cursor preferred (tests lane)  
 **Posted:** 2026-07-26T00:55:00Z
 
 ## Goal
