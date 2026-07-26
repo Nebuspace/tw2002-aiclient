@@ -143,6 +143,11 @@ _TWGS_SELECTION_PROMPT_RE = re.compile(r"selection\s*\(\s*\?\s*for\s*menu\s*\)\s
 # ``Timed out waiting for input.``) as the CURRENT last line while the
 # Selection prompt is still one line above — still game_select.
 _TWGS_TIMED_OUT_PROMPT_RE = re.compile(r"^Timed\s+out", re.I)
+# Gate-anchor phrase for the PLAIN ``Select a game :`` variant. Named here
+# (same pattern as the ``game_select`` entry in ``_GATE_ANCHORS``) so
+# ``_is_plain_timed_out_game_select`` can reuse it rather than duplicate the
+# literal — avoids the two drifting apart if the gate anchor is ever tightened.
+_PLAIN_GAME_SELECT_RE = re.compile(r"select\s+a\s+game", re.I)
 _GAME_HEADER_LINE_RE = re.compile(r"^[^a-z0-9]*game[^a-z0-9]*$", re.I)
 # TWGS commonly renders two side-by-side boxes sharing ONE physical
 # terminal row (see the captured fixture: the "Game" box's header shares
@@ -482,6 +487,46 @@ def _is_twgs_server_banner_game_select_menu(full_text: str, prompt_line: str) ->
     if not _range_has_qualifying_game_select_menu(lines, banner_last_idx + 1, prompt_idx - 1):
         return False
     return _range_has_no_menu_after_game_select_markers(lines, banner_last_idx + 1, prompt_idx - 1)
+
+
+def _is_plain_timed_out_game_select(full_text: str, prompt_line: str) -> bool:
+    """The plain ``Select a game :`` variant when TWGS appends ``Timed out...``
+    as the live last line (WO-PLAY-GAME-LETTER-AUTOSELECT).
+
+    ``Select a game :`` normally fires the ``game_select`` gate anchor against
+    the current prompt line.  When TWGS appends ``Timed out...`` as the final
+    line (host timed out waiting for the game choice), the gate anchor no
+    longer sees it — the prompt is ``Timed out...``, not ``Select a game :``.
+
+    Mirrors the timed-out resolution ``_selection_prompt_context`` applies for
+    the TWGS ``Selection (? for menu):`` variants: walk upward from the
+    timed-out last line and look for the ``Select a game`` anchor text above
+    it.  The TWGS boxed and banner variants are handled by their own functions
+    (which call ``_selection_prompt_context`` and then require the TWGS
+    selection prompt); this function covers ONLY the plain variant where the
+    gate anchor phrase itself is the on-screen prompt line immediately before
+    the ``Timed out...`` line.
+
+    Stale-scrollback guard (same discipline as ``_is_twgs_boxed_game_select_menu``
+    / ``_is_twgs_server_banner_game_select_menu``): if a structurally DIFFERENT
+    TWGS menu (the module-entry menu's dash-style options -- "T - Play Trade
+    Wars 2002") appears BETWEEN the found ``Select a game`` line and the
+    ``Timed out...`` prompt, the ``Select a game`` text is stale scrollback
+    bleeding into a genuinely different current screen, NOT a live
+    game-select screen -- refuse.  See ``_range_has_no_dash_style_menu`` and
+    tests/test_classify.py's stale-plain-game-select negative fixtures.
+    """
+    if not _TWGS_TIMED_OUT_PROMPT_RE.search((prompt_line or "").strip()):
+        return False
+    lines = full_text.splitlines()
+    # Walk upward from the second-to-last line (skipping the Timed out… line).
+    for i in range(len(lines) - 2, -1, -1):
+        if _PLAIN_GAME_SELECT_RE.search(lines[i]):
+            # Found the ``Select a game`` line -- now check that nothing
+            # between it and the Timed out… prompt looks like a
+            # structurally different, already-known TWGS menu shape.
+            return _range_has_no_dash_style_menu(lines, i + 1, len(lines) - 2)
+    return False
 
 
 def _is_exclusive_closed_block(full_text: str, header_re, footer_re) -> bool:
@@ -875,8 +920,10 @@ def classify_screen(full_text: str, prompt_line: str) -> str:
     docstring)."""
     if _is_genuine_cim_report(full_text):
         return "cim_report"
-    if _is_twgs_boxed_game_select_menu(full_text, prompt_line) or _is_twgs_server_banner_game_select_menu(
-        full_text, prompt_line
+    if (
+        _is_twgs_boxed_game_select_menu(full_text, prompt_line)
+        or _is_twgs_server_banner_game_select_menu(full_text, prompt_line)
+        or _is_plain_timed_out_game_select(full_text, prompt_line)
     ):
         return "game_select"
     if prompt_line:

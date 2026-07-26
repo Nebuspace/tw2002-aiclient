@@ -236,6 +236,71 @@ def test_banner_game_select_with_timed_out_as_current_prompt_stays_game_select()
     assert classify(text) == "game_select"
 
 
+def test_plain_game_select_with_timed_out_as_current_prompt_stays_game_select():
+    """WO-PLAY-GAME-LETTER-AUTOSELECT: the PLAIN ``Select a game :`` variant
+    (no TWGS box, no TWGS server banner) when TWGS appends ``Timed out...`` as
+    the live last line must still classify as ``game_select`` so the login
+    automaton sends ``profile.game_letter`` rather than wedging as ``menu``.
+
+    Mirror of ``test_banner_game_select_with_timed_out_as_current_prompt_stays_game_select``
+    for the plain variant. Root-cause pin: before the fix, classify_screen()
+    returned ``menu`` here (gate anchor fired against the prompt only; ``Timed
+    out...`` doesn't match ``select a game``), causing the login automaton to
+    stagnate and hand Manual to the operator without ever sending the letter."""
+    text = (
+        "<A> Alien Retribution [20kS, 25kT]\n"
+        "<B> Star Control II   [20kS, 10kT]\n"
+        "<F> Bob the Builder   [30kS, 30kT, NO PVP]\n"
+        "<!> Description menu  <Q> Quit (Disconnect)\n"
+        "Select a game :\n"
+        "Timed out..."
+    )
+    assert classify_screen(text, "Timed out...") == "game_select"
+    # classify() full-text scan already worked (gate anchor fires on whole text);
+    # this is the regression pin for the classify_screen() prompt-line path only.
+    assert classify(text) == "game_select"
+
+
+def test_plain_game_select_timed_out_alternate_wording():
+    """``Timed out waiting for input.`` is the longer TWGS timeout phrase —
+    same root cause, same fix (``_TWGS_TIMED_OUT_PROMPT_RE`` already matches
+    both wordings; this confirms the plain-variant timed-out handler sees it)."""
+    text = (
+        "<A> Game Alpha\n"
+        "<F> Bob the Builder\n"
+        "<Q> Quit\n"
+        "Select a game :\n"
+        "Timed out waiting for input."
+    )
+    assert classify_screen(text, "Timed out waiting for input.") == "game_select"
+
+
+def test_stale_plain_game_select_bleeding_into_module_entry_menu_with_timed_out_is_not_game_select():
+    """Stale-scrollback precision guard for the plain variant
+    (WO-PLAY-GAME-LETTER-AUTOSELECT, mirrors the boxed/banner negative fixtures).
+
+    A stale ``Select a game :`` left in the pyte buffer from an EARLIER login
+    step can sit above the genuine CURRENT screen (the module-entry menu:
+    ``T - Play Trade Wars 2002``) which itself then receives a ``Timed out...``
+    prompt.  The plain-variant timed-out helper must NOT mistake the stale
+    phrase for a live game-select prompt -- the dash-style menu option between
+    the stale ``Select a game :`` line and the ``Timed out...`` line is the
+    tell.  This would send the configured letter as an unintended keystroke on
+    the wrong screen if it misfired as ``game_select``."""
+    text = (
+        "<A> Alien Retribution [20kS, 25kT]\n"  # stale game-select body
+        "<F> Bob the Builder   [30kS, 30kT]\n"   # stale game-select body
+        "Select a game :\n"                        # stale prompt -- must NOT vouch
+        "T - Play Trade Wars 2002\n"              # CURRENT module-entry menu (dash-style)
+        "I - Introduction & Help\n"
+        "Enter your choice:\n"
+        "Timed out..."
+    )
+    # Must be ``menu`` (the current screen's own content anchor), never ``game_select``.
+    assert classify_screen(text, "Timed out...") == "menu"
+    assert classify(text) == "game_select"  # classify() scans whole text, no prompt discipline
+
+
 def test_banner_game_select_lookalike_without_the_twgs_banner_is_still_a_plain_menu():
     """Precision guard, mirroring the boxed-variant negative test above:
     a DIFFERENT TWGS lobby menu can share the exact same bracket style
