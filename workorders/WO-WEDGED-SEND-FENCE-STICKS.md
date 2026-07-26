@@ -1,6 +1,6 @@
 # WO-WEDGED-SEND-FENCE-STICKS
 
-**Status:** READY FOR HUB COMMIT · Cursor · `wo/WEDGED-SEND-FENCE` · tip `b56ec56`  
+**Status:** DONE · PR #14 · origin `8d8b1d6` (was READY FOR HUB COMMIT · Cursor · `wo/WEDGED-SEND-FENCE` · tip `b56ec56`)  
 **Posted:** 2026-07-26 · Cipher MEDIUM on `WO-CONTROL-LOCK-AUTOLOOP-FENCE`
 
 ## Fix landed (this tip)

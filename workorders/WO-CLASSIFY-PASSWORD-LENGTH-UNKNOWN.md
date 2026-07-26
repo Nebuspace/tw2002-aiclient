@@ -1,6 +1,6 @@
 # WO-CLASSIFY-PASSWORD-LENGTH-UNKNOWN
 
-**Status:** OPEN · BANKED · offline · not urgent (post C-02 residual)  
+**Status:** DONE · PR #40 · origin `60365fa`  
 **Posted:** 2026-07-26 · CC framing 21:33:55Z + Cursor ACK 21:35:00Z  
 **Depends:** `WO-CLASSIFY-LOGIN-PASSWORD-NARROW` on main (`7130871`)
 

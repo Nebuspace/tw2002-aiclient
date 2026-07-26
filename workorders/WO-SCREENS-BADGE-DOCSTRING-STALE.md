@@ -1,6 +1,6 @@
 # WO-SCREENS-BADGE-DOCSTRING-STALE
 
-**Status:** READY FOR REVIEW · Cursor · `wo/SCREENS-BADGE-DOCSTRING` · tip `92fbb81`
+**Status:** DONE · PR #11 · origin `924cfaa` (was READY FOR REVIEW · Cursor · `wo/SCREENS-BADGE-DOCSTRING` · tip `92fbb81`)
 **Posted:** 2026-07-26 · from `canon/findings.md` P5-064-SCREENS-BADGE-DOCSTRING
 
 ## Goal
