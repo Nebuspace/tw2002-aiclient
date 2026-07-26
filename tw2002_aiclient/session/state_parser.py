@@ -1,10 +1,13 @@
-"""Read the ship's CURRENT SECTOR off a settled screen -- the precondition
-every macro replay re-checks before it presses anything.
+"""Read the two game-state facts a safety rail needs off a settled screen:
+the ship's CURRENT SECTOR (the precondition every macro replay re-checks
+before it presses anything) and its CREDITS BALANCE (the number the
+stop-loss floor halts on).
 
-WO-P2-G4-X1. Pure and deterministic: this module takes text and returns a
-verdict. It holds no session, opens no socket, and cannot send a keystroke
-(a test enforces that by AST scan rather than asserting it). Comparing the
-answer to a macro's ``start_anchor``, and deciding what to do about the
+WO-P2-G4-X1 (sector) and WO-P2-G4-X5 (credits). Pure and deterministic:
+this module takes text and returns a verdict. It holds no session, opens
+no socket, and cannot send a keystroke (a test enforces that by AST scan
+rather than asserting it). Comparing the answer to a macro's
+``start_anchor`` or to a run's floor, and deciding what to do about the
 comparison, belongs to the player (X3) and is deliberately absent here.
 
 Canon
@@ -131,6 +134,86 @@ canon question (does ``Sector : N`` on a settled non-``warp_confirm`` screen
 mean *current*?) and wants a live capture of the warp-confirm screen to
 settle it -- not a drive-by regex.
 
+The credits balance (X5), and the one source it will not accept
+---------------------------------------------------------------
+:func:`read_credits_balance` answers the SAME three outcomes about a
+different field, and it exists for the stop-loss rail
+(``canon/doctrine/action-safety-guards.md`` §"Structural rails": "A credit
+floor halts the loop, read from the *strict* last-known confirmed balance
+and fail-closed"). "Strict" is the load-bearing word and it is the entire
+reason this function is not a two-line regex:
+
+``canon/research/archive-port-patterns.md`` AP-13 states the rule outright
+-- *"Using ``parse_state()`` for a cash-floor stop-loss means the stop-loss
+can be defeated by a price quote on the wrong screen -- exactly what
+happened live before this was fixed."* The archive's looser ``credits``
+field matched a bare ``(\\d[\\d,]*)\\s+credits`` anywhere on the grid, and a
+port's own haggle sentence (``We'll buy them for 2,214 credits.``) satisfies
+that just as well as a real balance. A haggle screen is *made of* those
+sentences, so the loose form does not merely risk a wrong number -- it
+reliably reports the wrong number on precisely the screens where money is
+being spent. **That pattern is therefore absent from this module, and the
+pin is enforced against the COMPILED patterns rather than the source text:
+a test walks every ``re.Pattern`` this module defines and asserts none of
+them matches a real captured price-quote line.** (Source-text scanning
+would trip over this very paragraph, which has to name the shape to explain
+it -- the docstrings-are-nodes trap.)
+
+Two shapes are accepted, both of which state a balance and neither of which
+a price quote can wear:
+
+* ``You have N credits`` -- the classic post-transaction / info line.
+* ``Credits : N`` (label-first, ``:`` or ``=``) -- the ship-info ``I``
+  screen.
+
+Both are content anchors (they live in the body, not on the prompt line),
+so unlike the sector bracket they are whole-screen, LAST-match per canon's
+Last-Match Invariant -- and the last match is taken by POSITION across both
+patterns together, not by trying one pattern's matches before the other's.
+The archive tried ``You have`` first and fell back to the label form only
+when it found none, which is a PRIORITY order wearing a last-match's
+clothes: a stale ``You have`` line up the grid outranked a fresher
+``Credits :`` below it. (The same priority/position confusion the archive's
+own ``parse_haggle`` had to fix for quotes: "position-sorted, not
+regex-priority-sorted".)
+
+``[ \\t]`` throughout, never ``\\s`` -- the sector half of this module
+documents why (the archive's ``\\s+`` "crossed newlines and forged
+turns_left from the prior line's sector id"), and here the input is a whole
+multi-line screen by contract, so it is a live hazard rather than
+belt-and-braces.
+
+**The damage check is narrower than the read, deliberately.** A label-first
+claim that opened and did not resolve (``Credits    :`` with the number not
+yet painted) is ``unreadable``. A half-painted ``You have 100,4`` has no
+prefix that is unambiguously a balance -- ``You have 3 fighters`` wears the
+same opening -- so it is reported ``absent``, and that is a disclosed
+narrowing rather than a claim of completeness. Nothing is lost safely-wise:
+both non-read outcomes leave :meth:`Session.observe_credits`'s sticky value
+untouched, the previous reading keeps aging, and the floor's staleness gate
+is what catches a screen that has stopped stating a balance.
+
+**FORGED-BALANCE RESIDUAL, inherited and not closed here.** Both patterns
+are unanchored last-match over the whole grid, so an in-band ``You have N
+credits`` authored by another player (chat, broadcast, hail) landing after
+the genuine line overrides it -- in EITHER direction, and the *inflating*
+direction is the dangerous one: ``loops/player.py``'s ``_check_floor`` halts
+only when ``balance > floor`` is false, so a forged HIGH number reads as
+comfortably above the floor and the run proceeds while the real balance may
+already be below it -- the stop-loss defeated, not merely dodged. It is
+also self-sustaining rather than a one-shot risk: ``Session.observe_credits``
+re-stamps the sticky reading's age on every settled screen that matches, so
+an attacker repeating the forge (a looped broadcast) keeps the balance
+looking fresh and the staleness gate never fires either. The *deflating*
+direction only trips a spurious ``floor_reached`` halt -- safe-by-design,
+since halting is this module's correct failure mode, but a real availability
+cost, not a masked balance. Canon knows this and gates on it: "In
+multiplayer, where a hostile server frame could forge a balance line, arming
+this stop-loss carries a documented forged-balance caveat and its own
+arming gate" (``action-safety-guards.md``). SOLO-safe today; **this repo has
+no solo/multiplayer signal to gate on, so that arming gate is NOT built here
+and is owed.**
+
 What is NOT checked
 -------------------
 The VALUE is not range-checked, deliberately and symmetrically with
@@ -144,6 +227,7 @@ and not the other is how the halves stop agreeing.
 
 from __future__ import annotations
 
+import math
 import re
 from dataclasses import dataclass
 from typing import Optional
@@ -154,12 +238,20 @@ __all__ = [
     "OUTCOME_UNREADABLE",
     "OUTCOMES",
     "REASON_DAMAGED_COMMAND_PROMPT",
+    "REASON_DAMAGED_CREDITS_LABEL",
     "REASON_NOT_TEXT",
     "REASON_SESSION_DISCONNECTED",
     "REASONS",
+    "SNAPSHOT_OUTCOMES",
     "SOURCE_COMMAND_PROMPT",
+    "SOURCE_CREDITS_LABEL",
+    "SOURCE_YOU_HAVE_CREDITS",
     "SOURCES",
+    "CreditsRead",
+    "CreditsSnapshot",
     "SectorRead",
+    "credits_never_observed",
+    "read_credits_balance",
     "read_current_sector",
     "sector_unreadable",
     "sector_wire",
@@ -184,7 +276,17 @@ OUTCOME_UNREADABLE = "unreadable"
 OUTCOMES = frozenset({OUTCOME_READ, OUTCOME_ABSENT, OUTCOME_UNREADABLE})
 
 SOURCE_COMMAND_PROMPT = "command_prompt"
-SOURCES = frozenset({SOURCE_COMMAND_PROMPT})
+# The two accepted credits shapes, named individually rather than folded
+# into one `credits` source: an operator reading a halt wants to know
+# WHICH line the balance came off, and the two have different provenance
+# (a post-transaction message vs. the ship-info screen).
+SOURCE_YOU_HAVE_CREDITS = "you_have_credits"
+SOURCE_CREDITS_LABEL = "credits_label"
+SOURCES = frozenset({
+    SOURCE_COMMAND_PROMPT,
+    SOURCE_YOU_HAVE_CREDITS,
+    SOURCE_CREDITS_LABEL,
+})
 
 # A damaged anchor: the prompt line opened a sector bracket and the number
 # did not resolve out of it. Reachable in ordinary operation, not merely
@@ -197,11 +299,24 @@ REASON_NOT_TEXT = "not_text"
 # grid is a FROZEN last-seen frame and its bracket names where the ship was,
 # not where it is. See `protocol._state_response`.
 REASON_SESSION_DISCONNECTED = "session_disconnected"
+# A damaged balance: a label-first credits claim (`Credits    :`) opened and
+# the number did not resolve out of it. Reachable in ordinary operation for
+# the same reason as its sector sibling -- a render taken mid-paint.
+REASON_DAMAGED_CREDITS_LABEL = "damaged_credits_label"
 REASONS = frozenset({
     REASON_DAMAGED_COMMAND_PROMPT,
+    REASON_DAMAGED_CREDITS_LABEL,
     REASON_NOT_TEXT,
     REASON_SESSION_DISCONNECTED,
 })
+
+# What the RUNTIME (as opposed to one screen) can say about the balance.
+# Two, not three: a sticky store either holds a reading or it does not, and
+# there is no third "the store was damaged" state a `CreditsSnapshot` could
+# honestly report about itself. A port that answers with something that is
+# not a `CreditsSnapshot` at all is an ADAPTER fault and is named by the
+# player's own halt vocabulary, not by an outcome invented here.
+SNAPSHOT_OUTCOMES = frozenset({OUTCOME_READ, OUTCOME_ABSENT})
 
 
 # ---------------------------------------------------------------------------
@@ -360,6 +475,211 @@ def read_current_sector(prompt_line) -> SectorRead:
         sector=int(values[-1].group(1)),
         source=SOURCE_COMMAND_PROMPT,
     )
+
+
+# ---------------------------------------------------------------------------
+# The credits balance (X5) -- what ONE screen said
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class CreditsRead:
+    """What a screen was able to say about the pilot's balance.
+
+    The same three outcomes, the same ``__post_init__`` enforcement, and the
+    same deliberate omissions as :class:`SectorRead` -- no ``__bool__``, no
+    ``ok``, no ``or``-friendly default -- for the same reason: a caller must
+    pass through the outcome to obtain a number, so "we could not read the
+    balance" has no expression that quietly folds into "the balance is
+    fine". On a stop-loss that fold IS the defeat.
+    """
+
+    outcome: str
+    balance: Optional[int] = None
+    source: Optional[str] = None
+    reason: Optional[str] = None
+
+    def __post_init__(self) -> None:
+        if self.outcome not in OUTCOMES:
+            raise ValueError(f"outcome {self.outcome!r} is not one of {sorted(OUTCOMES)}")
+        read = self.outcome == OUTCOME_READ
+        if read != (self.balance is not None):
+            raise ValueError(
+                "a balance accompanies exactly the 'read' outcome -- "
+                f"got outcome={self.outcome!r} with balance={self.balance!r}"
+            )
+        if read != (self.source is not None):
+            raise ValueError(
+                "a source accompanies exactly the 'read' outcome -- "
+                f"got outcome={self.outcome!r} with source={self.source!r}"
+            )
+        if (self.outcome == OUTCOME_UNREADABLE) != (self.reason is not None):
+            raise ValueError(
+                "a reason accompanies exactly the 'unreadable' outcome -- "
+                f"got outcome={self.outcome!r} with reason={self.reason!r}"
+            )
+        # `isinstance(True, int)` holds, so an unguarded int check would let
+        # `balance=True` through as one credit -- the trap `SectorRead`,
+        # `loops.loader._validate_anchor` and `loops.store._finite_number`
+        # all document on their own halves of a comparison.
+        if self.balance is not None and (
+            isinstance(self.balance, bool) or not isinstance(self.balance, int)
+        ):
+            raise ValueError(f"balance must be an int, got {type(self.balance).__name__}")
+        if self.source is not None and self.source not in SOURCES:
+            raise ValueError(f"source {self.source!r} is not one of {sorted(SOURCES)}")
+        if self.reason is not None and self.reason not in REASONS:
+            raise ValueError(f"reason {self.reason!r} is not one of {sorted(REASONS)}")
+
+
+# ONE label prefix, two patterns built from it -- the `_BRACKET_PREFIX`
+# discipline the sector half of this module uses, and for the same reason:
+# "opened" and "resolved" cannot drift into describing different shapes if
+# neither is written twice.
+#
+# The `You have N credits` shape gets no OPEN pattern at all. There is no
+# prefix of it that unambiguously promises a balance (`You have 3 fighters`
+# opens identically), so inventing one would report `unreadable` on ordinary
+# screens. The docstring states that narrowing; the consequence is only ever
+# a non-write, never a wrong number.
+_CREDITS_LABEL_PREFIX = r"credits?[ \t]*[:=]"
+_CREDITS_LABEL_OPEN_RE = re.compile(_CREDITS_LABEL_PREFIX, re.I)
+_CREDITS_LABEL_VALUE_RE = re.compile(_CREDITS_LABEL_PREFIX + r"[ \t]*(\d[\d,]*)", re.I)
+_YOU_HAVE_CREDITS_RE = re.compile(r"you[ \t]+have[ \t]+(\d[\d,]*)[ \t]+credits?\b", re.I)
+
+
+def read_credits_balance(rendered_text) -> CreditsRead:
+    """The pilot's balance, per this screen, from a STRICT source only.
+
+    ``rendered_text`` is a whole settled screen (``Session.render_text()``),
+    not a single line: unlike the sector bracket, a balance is a body
+    statement and there is no prompt-line scoping available to narrow it.
+    That is the honest reason this function is more exposed to the
+    forged-balance residual than its sector sibling, and the docstring says
+    so rather than implying parity.
+
+    Returns a :class:`CreditsRead`, always -- it does not raise, because
+    ``absent`` is the ordinary answer for nearly every screen in the game
+    and an exception per render would train a caller to swallow it.
+
+    Settling is the caller's job, exactly as it is for
+    :func:`read_current_sector`.
+    """
+    if not isinstance(rendered_text, str):
+        return CreditsRead(outcome=OUTCOME_UNREADABLE, reason=REASON_NOT_TEXT)
+
+    # Position-sorted across BOTH patterns -- see the module docstring for
+    # why a per-pattern priority order is not last-match.
+    found = [
+        (m.end(), m.group(1), SOURCE_YOU_HAVE_CREDITS)
+        for m in _YOU_HAVE_CREDITS_RE.finditer(rendered_text)
+    ]
+    found += [
+        (m.end(), m.group(1), SOURCE_CREDITS_LABEL)
+        for m in _CREDITS_LABEL_VALUE_RE.finditer(rendered_text)
+    ]
+    opens = [m.end() for m in _CREDITS_LABEL_OPEN_RE.finditer(rendered_text)]
+
+    if not found:
+        # A label opened with nothing resolved anywhere is a damaged claim;
+        # no label at all is a screen that simply says nothing about money.
+        if opens:
+            return CreditsRead(
+                outcome=OUTCOME_UNREADABLE, reason=REASON_DAMAGED_CREDITS_LABEL
+            )
+        return CreditsRead(outcome=OUTCOME_ABSENT)
+
+    found.sort(key=lambda item: item[0])
+    last_end, raw, source = found[-1]
+    if opens and max(opens) > last_end:
+        # Last-match applied to the DAMAGE check too, not only to the value:
+        # a resolved balance earlier on the grid does not rehabilitate a
+        # damaged claim printed after it. Reading the earlier number here
+        # would be first-match-wins by the back door -- and on this field it
+        # would hand the floor a balance from before the spend.
+        return CreditsRead(
+            outcome=OUTCOME_UNREADABLE, reason=REASON_DAMAGED_CREDITS_LABEL
+        )
+
+    return CreditsRead(
+        outcome=OUTCOME_READ,
+        balance=int(raw.replace(",", "")),
+        source=source,
+    )
+
+
+# ---------------------------------------------------------------------------
+# The credits balance (X5) -- what the RUNTIME knows right now
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class CreditsSnapshot:
+    """The last balance this session observed, and how old it is.
+
+    Produced by :meth:`Session.credits_snapshot`, consumed by the player's
+    floor check. Two fields travel together and are validated together
+    because reading them apart is the documented defeat: the archive's own
+    fix note records a concurrent poll landing between the two assignments
+    and pairing "an OLD balance alongside the NEW ts, understating the
+    reported age -- ... where a falsely-fresh stale balance is a real
+    over-spend defeat."
+
+    ``age_s`` is a *seconds* duration rather than a timestamp on purpose.
+    A timestamp would have to be compared against a clock, and the consumer
+    (a pure decision function in ``loops/player.py``) has no clock and must
+    not acquire one -- two clocks either side of this value is exactly how a
+    freshness check silently stops being one.
+
+    ``absent`` means nothing has EVER been observed. It is a genuine
+    negative about the observation history, never a claim that the balance
+    is zero, and the floor treats it as ``credits_unknown``.
+
+    No ``__bool__``, no ``ok`` -- same omission as its two siblings.
+    """
+
+    outcome: str
+    balance: Optional[int] = None
+    age_s: Optional[float] = None
+
+    def __post_init__(self) -> None:
+        if self.outcome not in SNAPSHOT_OUTCOMES:
+            raise ValueError(
+                f"outcome {self.outcome!r} is not one of {sorted(SNAPSHOT_OUTCOMES)}"
+            )
+        read = self.outcome == OUTCOME_READ
+        if read != (self.balance is not None):
+            raise ValueError(
+                "a balance accompanies exactly the 'read' outcome -- "
+                f"got outcome={self.outcome!r} with balance={self.balance!r}"
+            )
+        if read != (self.age_s is not None):
+            raise ValueError(
+                "an age accompanies exactly the 'read' outcome -- "
+                f"got outcome={self.outcome!r} with age_s={self.age_s!r}"
+            )
+        if self.balance is not None and (
+            isinstance(self.balance, bool) or not isinstance(self.balance, int)
+        ):
+            raise ValueError(f"balance must be an int, got {type(self.balance).__name__}")
+        if self.age_s is not None:
+            # NaN is the danger here, not a type error. `nan > stale` is
+            # False, so an un-guarded staleness ladder reads a NaN age as
+            # PERFECTLY FRESH and arms an unbounded floor -- the silent
+            # direction. Rejected at construction AND re-checked positively
+            # at the decision site, because one of the two is a defence and
+            # both together are a property.
+            if isinstance(self.age_s, bool) or not isinstance(self.age_s, (int, float)):
+                raise ValueError(f"age_s must be a number, got {type(self.age_s).__name__}")
+            if not math.isfinite(self.age_s) or self.age_s < 0:
+                raise ValueError(f"age_s must be finite and non-negative, got {self.age_s!r}")
+
+
+def credits_never_observed() -> CreditsSnapshot:
+    """The ``absent`` snapshot, constructed through the validated type
+    rather than hand-rolled at each of its call sites -- the same reason
+    :func:`sector_unreadable` exists."""
+    return CreditsSnapshot(outcome=OUTCOME_ABSENT)
 
 
 # ---------------------------------------------------------------------------

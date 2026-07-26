@@ -8,8 +8,11 @@ Ported from `archive/pre-rebirth-2026-07-23/code/twclient/session.py`
 (WO-P2-020, Wave-2) -- a BOUNDED port of the connect -> send -> render ->
 settle -> classify core only. See this module's own comments (marked
 "WO-P2-020 CUT") for what the archive coupled in that is deliberately NOT
-ported here (the trace ledger, state_parser's credits/turns/fighters
-supervision) -- those land in later work orders. `control_lock` is owned
+ported here (the trace ledger, state_parser's turns/fighters supervision)
+-- those land in later work orders. **Credits supervision landed in
+WO-P2-G4-X5** (`observe_credits`/`credits_snapshot` below): it is the
+substrate the stop-loss floor reads, and a floor without it would be a
+flag the runtime cannot enforce. `control_lock` is owned
 by the daemon and passed into `send_raw` when attach drives; this module
 only duck-types `is_driver_fenced()` at the send choke.
 """
@@ -22,6 +25,12 @@ from .connection import TelnetConnection, tx_failure_phrase
 from .iac import TelnetHandler
 from .logging_util import TranscriptLogger
 from .settle import MATCH_SCOPE_SCREEN, wait_for_settle
+from .state_parser import (
+    OUTCOME_READ,
+    CreditsSnapshot,
+    credits_never_observed,
+    read_credits_balance,
+)
 from .terminal import TerminalScreen
 from .transcript_tail import TranscriptTail
 
@@ -99,6 +108,19 @@ class Session:
         # use, never the real password text.
         self.last_sent = None
         self.last_sent_ts = None
+        # RX-side counterpart to last_sent/last_sent_ts (WO-P2-G4-X5): the
+        # most recent STRICT credits balance any settled screen stated, plus
+        # the monotonic instant it was seen. Written ONLY by
+        # observe_credits() and read ONLY through credits_snapshot(), both
+        # under self.lock -- never touched directly by anything else, which
+        # is what makes the pair non-tearable. `None`/`None` until the first
+        # balance-bearing screen, and DELIBERATELY never cleared by a later
+        # screen that states no balance: a reading that vanished would look
+        # to the floor exactly like one that was never taken, and the two
+        # want different repairs. Credits are not secret -- this pair goes
+        # nowhere near the redaction sinks above.
+        self.last_credits = None
+        self.last_credits_ts = None
         # The {app,human} tag actually applied to `last_sent`, alongside it
         # -- so a later ledger-row writer can read (text, sender, ts) back
         # as one atomic-enough triple without re-deriving the sender.
@@ -259,6 +281,81 @@ class Session:
         daemon's response-building choke point (Wave-3) drives off of."""
         rows = self.render()
         return classify_screen(self.render_text(rows), rows[-1].strip() if rows else "")
+
+    # -- credits supervision (WO-P2-G4-X5) ---------------------------
+    #
+    # The stop-loss rail's whole substrate. Canon
+    # (`doctrine/action-safety-guards.md` §"Structural rails") requires the
+    # floor to be "read from the *strict* last-known confirmed balance and
+    # fail-closed: an unknown or stale balance HALTs". These two methods are
+    # "last-known" and "how stale"; the fail-closed decision itself lives in
+    # `loops/player.py`, which owns every refusal.
+
+    def observe_credits(self, text):
+        """Capture a STRICT balance off a settled screen, if this one states
+        one. Called from every settled-render site the App drives.
+
+        **Non-clobber.** A screen that states no balance leaves the sticky
+        pair untouched, so an intervening command prompt does not erase what
+        the last port screen said -- it just lets the reading age, which is
+        what `credits_snapshot()` reports and what the floor's staleness gate
+        acts on. A screen whose balance claim is DAMAGED
+        (`state_parser.OUTCOME_UNREADABLE`, a render taken mid-paint) is
+        likewise not written: "I could not finish reading it" is not a
+        balance, and collapsing it into one is the defect this repo has now
+        fixed six times.
+
+        **Strict, never `parse_state()`'s looser field.** The extraction is
+        `state_parser.read_credits_balance`, which refuses the bare
+        "N credits" mention a port's own price quote satisfies. AP-13 states
+        why in one sentence: using the loose field for a cash floor "means
+        the stop-loss can be defeated by a price quote on the wrong screen --
+        exactly what happened live before this was fixed."
+
+        **Both fields under ONE lock hold.** `self.lock` is the same lock
+        `render()` takes, so a concurrent reader can never see a torn pair.
+        The archive shipped these as two unlocked statements and had to fix
+        it: a reader landing between them pairs an OLD balance with a NEW
+        timestamp, understating the age, "where a falsely-fresh stale balance
+        is a real over-spend defeat."
+        """
+        read = read_credits_balance(text)
+        if read.outcome != OUTCOME_READ:
+            return
+        with self.lock:
+            self.last_credits = read.balance
+            self.last_credits_ts = time.monotonic()
+
+    def credits_snapshot(self):
+        """What this session knows about the balance right now, as a
+        validated `state_parser.CreditsSnapshot`.
+
+        Returns an AGE, not a timestamp, and computes it here -- inside the
+        same lock hold that reads the pair. The consumer is a pure decision
+        function with no clock of its own, and handing it a raw `monotonic()`
+        stamp would put the subtraction on the far side of a module boundary
+        where a second clock could creep in. One clock, one hold, one value.
+
+        `absent` when nothing has ever been observed. That is the honest
+        answer and the floor turns it into a HALT (`credits_unknown`) -- it
+        is never softened into "assume we're fine", which is the whole point
+        of a stop-loss.
+        """
+        with self.lock:
+            balance = self.last_credits
+            ts = self.last_credits_ts
+            if balance is None or ts is None:
+                return credits_never_observed()
+            # max(0.0, ...) rather than trusting the subtraction: the
+            # CreditsSnapshot type rejects a negative age (it would read as
+            # fresher-than-now, the fail-OPEN direction), and a clamp here
+            # keeps a monotonic hiccup from raising out of a status read.
+            # It can only ever make the age look OLDER, never younger.
+            return CreditsSnapshot(
+                outcome=OUTCOME_READ,
+                balance=balance,
+                age_s=max(0.0, time.monotonic() - ts),
+            )
 
     # -- settle-detection protocol (see settle.wait_for_settle) ------
 

@@ -198,17 +198,53 @@ shortcut, for the reason ``SectorRead`` gives for the same omission: a
 caller must pass through the outcome to learn anything, and there is no
 expression that quietly folds "halted" into "fine".
 
+The stop-loss floor (X5) -- a run-loop rail, checked at THIS choke-point
+-----------------------------------------------------------------------
+``floor`` is an optional credit floor. It is **not** this module's policy:
+like ``force``, and like the arm/abort predicates, it is a required
+EXTERNAL input the run-loop supplies (``app-autopilot-model.md``
+§"Arm-Confirm": the arm gate is "a required, external input to the loop,
+not an internal self-check the loop could grant itself"). What this module
+owns is the *check*, and it owns it for one reason: this is the only place
+in the codebase where a send can be stopped **before** it happens. Canon
+asks for exactly that placement -- "a below-floor balance STOPS before it
+buys" (§"Chain Execution") -- and a floor enforced anywhere else would be a
+floor checked after the money moved.
+
+So the division mirrors ``should_abort()`` exactly: ``session/autoloop.py``
+decides *whether a run is floored and at what number*; this module refuses
+the send. It is re-read at EVERY boundary, not only at entry, because a
+taught macro spends between boundaries and a once-at-launch check is a
+floor that stops nothing after step 0. Boundary 0's check is
+simultaneously canon's arm-confirm rail -- "a legitimate run instant-dies
+rather than arming blind" -- and needs no separate code path to be that.
+
+Fail-closed is the whole content of a stop-loss, so the ladder in
+:func:`_check_floor` halts on every answer that is not an affirmative
+above-floor reading: never observed (``credits_unknown``), observed too
+long ago (``credits_stale``), an adapter that answered with something that
+is not a :class:`~tw2002_aiclient.session.state_parser.CreditsSnapshot` at
+all (``credits_unreadable``), or a genuine reading at or below the number
+(``floor_reached``). There is no branch that proceeds on an unknown
+balance, and none that can be reached with ``floor`` set and the port's
+:meth:`ReplaySession.credits` unasked.
+
+A run with **no** floor never calls :meth:`ReplaySession.credits` at all --
+the archive's own rule, kept because it is what lets every port written
+before this parameter existed keep working unchanged, and what makes
+"a floor was requested" and "credits were consulted" the same event.
+
 What this slice is NOT
 ----------------------
-There is no cycle count and no repetition here, and that is a boundary,
-not an omission. ``scope: repeating`` is driven by the run-loop, which owns
-the rails that make repetition safe -- turn-budget clamp, stop-loss floor,
-hazard-halt, arm-confirm (``action-safety-guards.md`` §"Structural rails",
-``app-autopilot-model.md`` §"Background AUTO-LOOP Posture"). A ``cycles=N``
-parameter here would ship the repetition without any of them, which is the
-dangerous half on its own. A caller that wants N cycles calls this N times
-and gets canon's per-cycle start-anchor re-check for free, exactly as the
-archived ``play_skill`` got it from ``replay_skill``.
+There is still no cycle count and no repetition here, and that is a
+boundary, not an omission. ``scope: repeating`` is driven by the run-loop,
+which owns the remaining rails -- turn-budget clamp, hazard-halt,
+arm-confirm as a launch gate (``action-safety-guards.md`` §"Structural
+rails", ``app-autopilot-model.md`` §"Background AUTO-LOOP Posture"). A
+``cycles=N`` parameter here would ship the repetition without them, which
+is the dangerous half on its own. A caller that wants N cycles calls this N
+times and gets canon's per-cycle start-anchor re-check for free, exactly as
+the archived ``play_skill`` got it from ``replay_skill``.
 
 Also absent, deliberately: no ledger rows (``macros.md`` §"Ledgering a
 replay" -- ``actor=trainer``), no parameter substitution (``_apply_params``
@@ -218,6 +254,7 @@ serializer. Each belongs to a slice that owns its own surface.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from typing import Optional, Protocol
 
@@ -226,18 +263,24 @@ from ..session.state_parser import (
     OUTCOME_ABSENT,
     OUTCOME_READ,
     OUTCOME_UNREADABLE,
+    CreditsSnapshot,
     SectorRead,
     read_current_sector,
 )
 from .loader import Loop, LoopStep
 
 __all__ = [
+    "CREDITS_STALE_MS",
     "FORCEABLE_HALTS",
     "HALT_ABORTED",
     "HALT_CONFIRM_FAILED",
+    "HALT_CREDITS_STALE",
+    "HALT_CREDITS_UNKNOWN",
+    "HALT_CREDITS_UNREADABLE",
     "HALT_CURRENT_SECTOR_ABSENT",
     "HALT_CURRENT_SECTOR_UNREADABLE",
     "HALT_FENCED",
+    "HALT_FLOOR_REACHED",
     "HALT_NEVER_AUTO_ACTION",
     "HALT_POST_CLASS",
     "HALT_REASONS",
@@ -301,6 +344,32 @@ HALT_CONFIRM_FAILED = "confirm_failed"
 # guard-STOP -- the archive's spelling for an ordinary post-step
 # classification divergence (AP-04: `ReplayDivergence.reason == "post_class"`).
 HALT_POST_CLASS = "post_class"
+# depletion -- the balance is AT OR BELOW the floor the run was armed with.
+# Canon names this code in `app-autopilot-model.md`'s own citation of the
+# archived loop-player ("`floor_reached` / `credits_unknown`"), so it is
+# carried verbatim rather than re-spelled.
+HALT_FLOOR_REACHED = "floor_reached"
+# desync -- canon's escalation catalog, verbatim, including its gloss:
+# "the credits field ... could not be read; autopilot will not act on an
+# unknown balance". Here that means no balance has EVER been observed.
+HALT_CREDITS_UNKNOWN = "credits_unknown"
+# desync -- also canon's catalog, verbatim: "the last-known credits value is
+# too old to trust for a decision". Kept a SEPARATE code from
+# `credits_unknown` because canon enumerates both and because they want
+# different repairs: never-observed means the arm sequence never showed a
+# balance, stale means it did and the run has since drifted away from it.
+# (`action-safety-guards.md` compresses the pair into one spelling in one
+# sentence; the catalog in `control-and-escalation.md` is the enumeration,
+# and `cockpit/stopbanner.py` already carries a label for each.)
+HALT_CREDITS_STALE = "credits_stale"
+# desync -- the port answered `credits()` with something that is not a
+# `CreditsSnapshot`. An ADAPTER fault rather than a game state, kept
+# distinct for exactly the reason HALT_SCREEN_UNREADABLE is: "could not
+# read" and "read, and it says nothing" want different repairs. This is the
+# code a port that forwarded a raw `(balance, ts)` tuple would earn --
+# every such tuple is truthy, and a truthiness test would have read one as
+# a healthy balance.
+HALT_CREDITS_UNREADABLE = "credits_unreadable"
 
 HALT_REASONS = frozenset({
     HALT_SETTLE_FAILED,
@@ -315,7 +384,22 @@ HALT_REASONS = frozenset({
     HALT_CURRENT_SECTOR_UNREADABLE,
     HALT_CONFIRM_FAILED,
     HALT_POST_CLASS,
+    HALT_FLOOR_REACHED,
+    HALT_CREDITS_UNKNOWN,
+    HALT_CREDITS_STALE,
+    HALT_CREDITS_UNREADABLE,
 })
+
+# How old a balance may be and still gate a send. AP-13's number
+# (`credits_stale_ms`, default 15s) and AP-13's own disclosure of what it
+# buys: the reading "may predate the current cycle's last buy by up to
+# `credits_stale_ms`", so this is a TIME backstop, not per-spend precision.
+# A genuinely per-spend "confirmed since the last buy" gate belongs to the
+# buy flow, which does not exist yet. Deliberately NOT exposed on the wire:
+# a knob is only worth shipping once something enforces it per-spend, and
+# the archive's own honesty note records that its CLI never threaded one
+# either.
+CREDITS_STALE_MS = 15_000
 
 # The whole content of `force`, as data rather than as scattered branches.
 #
@@ -471,6 +555,31 @@ class ReplaySession(Protocol):
         UNSTOPPABLE, which is the wrong direction for a predicate whose
         entire purpose is to end a run."""
 
+    def credits(self) -> CreditsSnapshot:
+        """What the runtime knows about the balance RIGHT NOW: a
+        :class:`~tw2002_aiclient.session.state_parser.CreditsSnapshot`.
+
+        Required **iff** the run was given a ``floor``; unreached, and
+        therefore unnecessary, on an unfloored run. :func:`replay_loop`
+        refuses a floor handed to a port that cannot answer this, at entry
+        and before any observation, so "a floor was accepted" and "a floor
+        can be enforced" are the same condition rather than two hopes.
+
+        An I/O fact, not a decision. The port reports the last balance and
+        HOW OLD it is; whether that age is fresh enough, and whether the
+        number clears the floor, are decided here -- the same split of
+        labour every other method on this protocol follows. An adapter over
+        the daemon core implements this with ``Session.credits_snapshot()``.
+
+        **Return the snapshot object, never the underlying pair.** The
+        archived session exposed ``(last_credits, last_credits_ts)`` and
+        forwarding that is the obvious adapter -- but a non-empty tuple is
+        truthy whatever it holds, and ``(None, None)`` is the one that
+        matters: a driver leaning on truthiness would read "never observed"
+        as a healthy balance and blow straight through the floor. Anything
+        that is not a ``CreditsSnapshot`` halts the run
+        (:data:`HALT_CREDITS_UNREADABLE`); it is never interpreted."""
+
 
 # ---------------------------------------------------------------------------
 # What a caller gets back
@@ -570,6 +679,13 @@ class _Observation:
     ``failure`` is set when the boundary could not be established at all,
     in which case ``klass`` and ``sector`` are ``None`` and nothing
     downstream may read them.
+
+    ``credits`` is whatever the port answered, UNVALIDATED and deliberately
+    untyped here -- an observation records what an adapter said, and
+    :func:`_check_floor` is what decides whether that was an answer. It is
+    ``None`` on an unfloored run, which is a different fact from an adapter
+    answering ``None``, and the two never meet: this field is only ever read
+    when a floor was requested.
     """
 
     klass: Optional[str] = None
@@ -577,6 +693,7 @@ class _Observation:
     fenced: bool = False
     aborted: bool = False
     failure: Optional[str] = None
+    credits: object = None
 
 
 def _is_screen(value) -> bool:
@@ -594,7 +711,7 @@ def _is_screen(value) -> bool:
     )
 
 
-def _observe(session) -> _Observation:
+def _observe(session, *, want_credits: bool = False) -> _Observation:
     """Settle, read, classify -- in that order, always.
 
     The order is the safety property, not a convenience: ``state`` is the
@@ -619,11 +736,20 @@ def _observe(session) -> _Observation:
     if not _is_screen(screen):
         return _Observation(failure=HALT_SCREEN_UNREADABLE)
     full_text, prompt_line = screen
+    # AFTER `screen()`, never before, and the order is load-bearing rather
+    # than tidy: an adapter captures the balance off the render `screen()`
+    # takes, so asking for credits first would answer from the PREVIOUS
+    # boundary -- a reading from before the send this boundary is about to
+    # gate. Asked at all only when a floor is in play (see the module
+    # docstring), so every port written before this method existed keeps
+    # working on an unfloored run.
+    credits = session.credits() if want_credits else None
     return _Observation(
         klass=classify_screen(full_text, prompt_line),
         sector=read_current_sector(prompt_line),
         fenced=bool(session.is_driver_fenced()),
         aborted=bool(session.should_abort()),
+        credits=credits,
     )
 
 
@@ -658,6 +784,69 @@ def _gate(observation: _Observation) -> Optional[str]:
     if observation.klass == "unknown":
         return HALT_UNRECOGNIZED_SCREEN
     return None
+
+
+def _check_floor(credits, floor: Optional[int], stale_ms: int) -> Optional[str]:
+    """May the App spend at this boundary? ``None`` means yes.
+
+    Pure, so the whole stop-loss ladder is testable without a session, a
+    clock, or a socket -- and so that every branch below can be reached
+    directly rather than only through a scripted run.
+
+    **Every path except one halts.** The single non-halting path requires
+    all four of: a floor was set, the port answered with a real
+    :class:`CreditsSnapshot`, that snapshot carries an affirmative reading,
+    that reading is young enough, and the number is strictly above the
+    floor. Anything else -- an absent history, an age past the window, an
+    adapter that answered with a tuple, a balance at or below the line --
+    stops the run. There is deliberately no "assume we're fine" branch,
+    because a stop-loss that proceeds on an unknown balance is not a
+    stop-loss (``action-safety-guards.md``: "an unknown or stale balance
+    HALTs ... rather than arming an unbounded floor").
+
+    Written as POSITIVE gates, never as ``if not fresh``. ``age_s`` is a
+    float, and a NaN slipping in makes ``age > limit`` False -- reading as
+    perfectly fresh, the fail-OPEN direction, on the one comparison whose
+    whole job is to fail closed. ``CreditsSnapshot`` already rejects a NaN
+    at construction; this re-checks because the two together are a property
+    and either alone is only a defence.
+
+    ``floor is None`` returns ``None`` immediately: an unfloored run has
+    nothing to check and must not be made to depend on a balance it never
+    asked about.
+    """
+    if floor is None:
+        return None
+    if not isinstance(credits, CreditsSnapshot):
+        # Includes `None` (a driver that set a floor and forgot to wire the
+        # port) and every tuple shape (all truthy). Never interpreted.
+        return HALT_CREDITS_UNREADABLE
+    if credits.outcome != OUTCOME_READ:
+        # `absent` -- nothing has ever stated a balance. Canon's arm-confirm
+        # rail lands here at boundary 0: "the arm sequence must have shown a
+        # confirmed balance before a floored run will start, or a legitimate
+        # run instant-dies rather than arming blind."
+        return HALT_CREDITS_UNKNOWN
+    age_s = credits.age_s
+    fresh = (
+        isinstance(age_s, (int, float))
+        and not isinstance(age_s, bool)
+        and math.isfinite(age_s)
+        and 0 <= age_s <= stale_ms / 1000.0
+    )
+    if not fresh:
+        return HALT_CREDITS_STALE
+    balance = credits.balance
+    if not isinstance(balance, int) or isinstance(balance, bool):
+        # Unreachable through a genuine snapshot (its `__post_init__` pairs
+        # the two), and here for the reason `_check_start_anchor`'s fourth
+        # branch is: the failure it guards is asymmetric. A non-int reaching
+        # the comparison below would be decided by whatever `>` does with
+        # it, and on this field that is money.
+        return HALT_CREDITS_UNREADABLE
+    # Strictly above, matching the archived rail (`bal <= floor` halts): a
+    # floor of 500 means "stop at 500", not "stop below 500".
+    return None if balance > floor else HALT_FLOOR_REACHED
 
 
 def _check_start_anchor(loop: Loop, read: Optional[SectorRead], force: bool) -> Optional[str]:
@@ -725,7 +914,14 @@ def _trace(index: int, step: LoopStep, confirmed: bool, observed_class: Optional
     )
 
 
-def replay_loop(loop: Loop, session, *, force: bool = False) -> ReplayResult:
+def replay_loop(
+    loop: Loop,
+    session,
+    *,
+    force: bool = False,
+    floor: Optional[int] = None,
+    credits_stale_ms: int = CREDITS_STALE_MS,
+) -> ReplayResult:
     """Replay one taught macro against a live session, one confirmed step
     at a time, halting the instant reality disagrees.
 
@@ -745,13 +941,29 @@ def replay_loop(loop: Loop, session, *, force: bool = False) -> ReplayResult:
     ``force`` waives exactly one halt -- a macro with no recorded anchor
     (:data:`FORCEABLE_HALTS`). It cannot waive a mismatch, an absent read,
     or an unreadable one, and no argument here can enable a
-    never-auto-action screen.
+    never-auto-action screen. It does not touch the floor: a credit floor
+    is not a recording artifact, it is live money, and there is nothing
+    about it that "there was nothing to check against" could ever describe.
+
+    ``floor`` is an optional credit floor, re-checked at EVERY boundary --
+    see the module docstring. ``None`` (the default) means no floor was
+    requested and :meth:`ReplaySession.credits` is never called. A floor
+    handed to a port that cannot answer credits raises **at entry**, before
+    any observation: accepting a floor this run could not enforce is the one
+    failure the rail exists to make impossible, so it is refused where it
+    cannot be missed rather than discovered as an ``AttributeError`` at the
+    first boundary.
+
+    ``credits_stale_ms`` is how old a balance may be and still gate a send
+    (:data:`CREDITS_STALE_MS`). A caller cannot widen it to infinity by
+    accident: a non-positive value is refused at entry, because a window
+    that never expires is a stop-loss with the staleness gate removed.
 
     Returns a :class:`ReplayResult` and does not raise for any game
     outcome; halting is the normal, correct answer whenever the world has
-    moved. It raises only for a caller bug (a wrong ``loop`` type), and
-    that raise costs zero bytes because it happens before the first
-    observation.
+    moved. It raises only for a caller bug (a wrong ``loop`` type, an
+    unenforceable floor), and every such raise costs zero bytes because it
+    happens before the first observation.
     """
     if not isinstance(loop, Loop):
         raise TypeError(
@@ -759,6 +971,36 @@ def replay_loop(loop: Loop, session, *, force: bool = False) -> ReplayResult:
             f"got {type(loop).__name__}. Load it with load_loop() rather than passing "
             "raw JSON: the loader's validation is what makes these steps pressable."
         )
+    if floor is not None:
+        # The type check is the rail, not politeness. `True` is an int in
+        # Python and would arm a floor of 1; a float would compare fine and
+        # then never be the number anyone typed.
+        if isinstance(floor, bool) or not isinstance(floor, int):
+            raise TypeError(
+                "replay_loop's floor is a credit balance and must be an int -- "
+                f"got {type(floor).__name__}. A floor that is not a number is a "
+                "floor nothing can enforce."
+            )
+        if not callable(getattr(session, "credits", None)):
+            raise TypeError(
+                "replay_loop was given floor=%r but this port cannot observe credits "
+                "(no callable credits()). A floor accepted here would be a flag that "
+                "reads as a safety feature and stops nothing -- refused instead."
+                % (floor,)
+            )
+        if not isinstance(credits_stale_ms, int) or isinstance(credits_stale_ms, bool):
+            raise TypeError(
+                "credits_stale_ms must be an int (milliseconds) -- got "
+                f"{type(credits_stale_ms).__name__}."
+            )
+        if credits_stale_ms <= 0:
+            raise ValueError(
+                f"credits_stale_ms must be positive -- got {credits_stale_ms}. A "
+                "non-positive window rejects every reading, so every floored run "
+                "would instant-halt `credits_stale` -- safe, but a rail that always "
+                "fires is a rail nobody can use, and it should be refused where the "
+                "caller can see it rather than at the first boundary."
+            )
 
     traces: list[StepTrace] = []
     sends_issued = 0
@@ -774,10 +1016,21 @@ def replay_loop(loop: Loop, session, *, force: bool = False) -> ReplayResult:
             anchor_read=anchor,
         )
 
+    want_credits = floor is not None
+
     # ---- boundary 0: the only boundary that also checks the anchor ----
-    observation = _observe(session)
+    observation = _observe(session, want_credits=want_credits)
     anchor_read = observation.sector
     reason = _gate(observation)
+    if reason is None:
+        # The floor sits between the gate and the anchor, and the placement
+        # is a REPORTING choice like every other order in this ladder: the
+        # gate's facts (a human at the keyboard, a screen that could not be
+        # established) outrank a balance, and the floor is grouped with the
+        # gate because both are re-read at every boundary while the anchor
+        # is a one-time pre-flight. Every branch halts, so nothing is less
+        # safe whichever fires first.
+        reason = _check_floor(observation.credits, floor, credits_stale_ms)
     if reason is None:
         reason = _check_start_anchor(loop, anchor_read, force)
     if reason is not None:
@@ -808,8 +1061,16 @@ def replay_loop(loop: Loop, session, *, force: bool = False) -> ReplayResult:
             traces.append(_trace(index, step, confirmed=False, observed_class=None))
             return halted(HALT_CONFIRM_FAILED, index, anchor_read)
 
-        observation = _observe(session)
+        observation = _observe(session, want_credits=want_credits)
         reason = _gate(observation)
+        if reason is None:
+            # Re-checked here, not only at boundary 0, and this call is the
+            # difference between a stop-loss and a decoration: a taught macro
+            # spends BETWEEN boundaries, so a floor checked once at launch
+            # would watch the balance cross the line and press on. Boundary
+            # i+1 is step i+1's pre-send check (see "Boundaries, not phases"),
+            # so refusing here refuses the next send before it happens.
+            reason = _check_floor(observation.credits, floor, credits_stale_ms)
         if reason is None and observation.klass != step.expected_post_class:
             # An ordinary divergence: the screen is one the app can name,
             # it is simply not the one this step recorded. Checked AFTER

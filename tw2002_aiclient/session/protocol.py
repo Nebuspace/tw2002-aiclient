@@ -258,6 +258,19 @@ def _status_response(session, server):
     # subscribers (WatchHub) are live enough for cockpit status.
     rows = session.render()
     text = session.render_text(rows)
+    # WO-P2-G4-X5: the HUMAN-driven half of credits supervision. Every
+    # `do`/`read`/`screen`/`status` answer passes through here, so this is
+    # where a balance the operator saw while flying by hand becomes the
+    # arm-confirm precondition a later floored run needs ("the arm sequence
+    # must have shown a confirmed balance before a floored run will start").
+    # The App-driven half is `autoloop._ReplayPort.screen()`; both feed the
+    # same sticky pair, and neither decides anything -- capture only.
+    # `callable`-guarded like `session.tail` below, for the same bare test
+    # harnesses; a session that cannot observe leaves the balance `absent`,
+    # which is a HALT on any floored run rather than a shrug.
+    observe_credits = getattr(session, "observe_credits", None)
+    if callable(observe_credits):
+        observe_credits(text)
     # Local only, and used ONLY to scope `classify_screen`'s gate anchors to
     # the current prompt line (classify.py's stale-scrollback discipline).
     # It is deliberately not a key below -- see this function's docstring.
@@ -402,15 +415,28 @@ def _dispatch_autoloop_start(args, server):
 
     **Unsupported args are REFUSED, not ignored** (`autoloop.
     ARGS_AUTOLOOP_START`). `cycles` is the one that matters: this slice
-    plays one pass, and the rails that make repetition safe -- the
-    stop-loss floor above all -- are not built. Accepting `cycles=10` and
-    running once would be a surface agreeing to something it does not do,
-    and `--floor` is the same failure with money attached ("accepting a
-    floor you cannot enforce is forbidden"). `force` is refused for a
-    different reason: it waives a MISSING start-anchor, canon allows only
-    an explicit human waiver, and a socket verb cannot confirm a human is
-    behind it -- a daemon granting itself that waiver is the self-arming
-    canon forbids.
+    plays one pass, and two of the four rails that make repetition safe --
+    turn-budget and hazard-halt -- are still not built (see
+    `autoloop.py`'s "One pass" for the standing tally). Accepting
+    `cycles=10` and running once would be a surface agreeing to something
+    it does not do. `force` is refused for a different reason: it waives a
+    MISSING start-anchor, canon allows only an explicit human waiver, and
+    a socket verb cannot confirm a human is behind it -- a daemon granting
+    itself that waiver is the self-arming canon forbids.
+
+    **`floor` is now ACCEPTED, and only because it is now ENFORCED**
+    (WO-P2-G4-X5). X4 refused it on the rule that "accepting a floor you
+    cannot enforce is forbidden" -- the rule has not moved; the runtime
+    has. A floored run observes credits off every settled render it takes,
+    re-checks the number before every send, and halts fail-closed
+    (`credits_unknown` / `credits_stale`) when it cannot establish one. The
+    validation here is deliberately narrow and refuses rather than coerces:
+    a bool would arm a floor of 1 (`isinstance(True, int)`), a float would
+    compare fine and never be the number anyone typed, and a negative floor
+    is a stop-loss that cannot stop. `runner.start` then makes the final
+    refusal -- `floor_unsupported` -- if the daemon's own session cannot
+    observe credits at all, so acceptance at this layer never outruns
+    enforcement at that one.
 
     Contrast `ensure`'s `no_auto_arm`, which is accepted and unused: the
     behaviour it asks for is exactly what happens, so accepting it lies
@@ -425,8 +451,15 @@ def _dispatch_autoloop_start(args, server):
     name = args.get("name")
     if not isinstance(name, str) or not name.strip():
         return {"ok": False, "error": "missing_name"}
+    floor = args.get("floor")
+    if floor is not None and (isinstance(floor, bool) or not isinstance(floor, int)):
+        # Checked here as well as in `runner.start` because JSON is where
+        # the wrong type actually arrives: a client sending `"floor": true`
+        # or `"floor": 500.0` gets a named refusal instead of a run armed
+        # with something that is not the number it meant.
+        return {"ok": False, "error": "invalid_floor"}
     try:
-        snapshot = runner.start(name)
+        snapshot = runner.start(name, floor=floor)
     except autoloop.AutoLoopRefused as e:
         # Typed code, already in the runner's / control lock's / loader's
         # own vocabulary -- never re-spelled here.

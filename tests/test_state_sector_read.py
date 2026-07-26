@@ -690,7 +690,17 @@ def test_the_state_parser_cannot_send_a_keystroke():
 def test_the_state_parser_is_pure_and_imports_nothing_live():
     """It reads text and returns a verdict: no filesystem, no clock, no
     session. That is what lets a caller trust that two identical screens
-    produce two identical answers."""
+    produce two identical answers.
+
+    ``math`` joined the allowlist with WO-P2-G4-X5's ``CreditsSnapshot``,
+    which rejects a NaN age at construction (``nan > limit`` is False, so an
+    un-guarded staleness ladder reads a NaN as perfectly fresh). It is a
+    pure-function module and carries none of the three things this test
+    actually forbids -- so the forbidden set is now named OUTRIGHT below
+    rather than left as whatever the allowlist happens to exclude. An
+    allowlist that only ever grows stops meaning anything; the denylist is
+    what keeps the claim in the docstring true.
+    """
     tree = ast.parse(STATE_PARSER_SRC.read_text(encoding="utf-8"))
     imported = set()
     for node in ast.walk(tree):
@@ -698,7 +708,11 @@ def test_the_state_parser_is_pure_and_imports_nothing_live():
             imported.update(a.name.split(".")[0] for a in node.names)
         elif isinstance(node, ast.ImportFrom):
             imported.add((node.module or "").split(".")[0])
-    assert imported <= {"re", "dataclasses", "typing", "__future__"}, imported
+    assert imported <= {"math", "re", "dataclasses", "typing", "__future__"}, imported
+    # The three the docstring names, spelled out so a future allowlist entry
+    # cannot quietly admit one of them.
+    for forbidden in ("time", "datetime", "os", "pathlib", "shutil", "socket", "subprocess"):
+        assert forbidden not in imported, forbidden
 
 
 def test_no_player_and_no_anchor_comparison_snuck_in():

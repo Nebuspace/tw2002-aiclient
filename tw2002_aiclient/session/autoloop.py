@@ -83,25 +83,44 @@ maintains, and it is checked at the same boundary as every other guard.
 lock's own ``is_driver_fenced()`` is still ``False`` at the moment the
 run halts -- i.e. that the naive wiring would have sent.)
 
-One pass, and why there is no ``cycles``
-----------------------------------------
-A ``start`` runs ONE pass of one taught macro and stops. Repetition is
-not built here, because the rails that make repetition safe are not: the
-stop-loss floor (X5) is unbuilt, and canon requires a run's floor check
-to be fail-closed ("an unknown or stale balance HALTs") before a loop may
-repeat. Shipping N cycles without it would ship the dangerous half alone.
-When the rails land, N cycles is N invocations of ``replay_loop`` and
+One pass, and why there is STILL no ``cycles``
+----------------------------------------------
+A ``start`` runs ONE pass of one taught macro and stops. X5 landed the
+stop-loss floor, which was one of the four rails canon names for a
+*repeating* surface (``action-safety-guards.md`` §"Structural rails") --
+and it is deliberately NOT the thing that unlocks repetition, because it
+is one rail and not the set. Standing today:
+
+* **stop-loss** -- built (below, and enforced at the player's send
+  choke-point).
+* **novelty-halt** -- built (X3 halts on the first unrecognized frame).
+* **turn-budget** -- NOT built. There is no turns observation in this tree
+  at all, so canon's "a run whose turn budget is *unknown* fails closed"
+  has nothing to read.
+* **hazard-halt** -- NOT built. Zero-fighter state, an unrecoverable
+  game-select, and a never-safe-to-proceed settle-desync are all
+  unimplemented.
+
+Two of four is not a set of rails; shipping N cycles on it would ship the
+dangerous half of repetition just as surely as shipping it on none. When
+the remaining two land, N cycles is N invocations of ``replay_loop`` and
 gets canon's per-cycle start-anchor re-check for free -- which is
 precisely why X3 refused a ``cycles`` parameter and why this module does
 not smuggle one in as a ``for`` loop.
 
 The consequence for the wire is stated rather than hidden: ``cycles``,
-``floor``, ``force`` and ``param`` are **refused**, not ignored. A caller
-that asks for ten cycles and gets one, or asks for a credit floor that
-nothing enforces, has been lied to by a surface that looked like it
-agreed. (``ensure``'s ``no_auto_arm`` is accepted-and-unused for the
-opposite reason: the behaviour it asks for -- never auto-arm -- is
-exactly what happens.)
+``force`` and ``param`` are **refused**, not ignored. A caller that asks
+for ten cycles and gets one has been lied to by a surface that looked like
+it agreed. ``floor`` is the one that changed sides, and only because the
+thing behind it changed: X4 refused it precisely because "accepting a
+credit floor that nothing enforces" is that same lie with money attached,
+and it is accepted here **only** now that a floored run genuinely observes
+credits, re-checks them before every send, and halts fail-closed when it
+cannot. A ``floor`` this daemon could not enforce is still refused -- see
+:meth:`AutoLoopRunner.start`, which will not arm one against a session
+that cannot answer ``credits_snapshot()``. (``ensure``'s ``no_auto_arm``
+is accepted-and-unused for a third reason: the behaviour it asks for --
+never auto-arm -- is exactly what happens.)
 
 What leaves this module
 -----------------------
@@ -176,12 +195,33 @@ STOP_JOIN_TIMEOUT_S = 5.0
 
 # The complete arg vocabulary of `autoloop_start`. Anything else is
 # refused; see "One pass" in the module docstring for why silence would
-# be the dishonest option.
-ARGS_AUTOLOOP_START = frozenset({"name"})
+# be the dishonest option. `floor` is here because X5 built the rail
+# behind it -- an arg earns a place in this set by being enforced, never
+# by being plausible.
+ARGS_AUTOLOOP_START = frozenset({"name", "floor"})
 
 
 def _utc_now() -> str:
     return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+
+
+def _can_observe_credits(session) -> bool:
+    """Can this session answer the stop-loss's one question?
+
+    Both halves are required and neither implies the other: ``observe_
+    credits`` is what fills the sticky balance and ``credits_snapshot`` is
+    what reads it back. A session with only the reader would answer
+    ``absent`` forever -- fail-closed, but a run that instant-dies every
+    time is worse than a refusal that says why, and canon's arm-confirm
+    rail asks for exactly that ("preconditions unconfirmed => instant-die,
+    never arm blind").
+
+    ``callable`` rather than ``hasattr``: an attribute that exists and is
+    not a function would pass a presence check and then raise at the first
+    boundary, which is the failure this gate exists to move earlier."""
+    return callable(getattr(session, "observe_credits", None)) and callable(
+        getattr(session, "credits_snapshot", None)
+    )
 
 
 def _lock_held(control_lock) -> bool:
@@ -228,6 +268,13 @@ class RunReport:
     error: Optional[str] = None
     stop_requested: bool = False
     finished_at: Optional[str] = None
+    # The floor this run was armed with, or `None` for an unfloored run.
+    # Reported rather than kept private because "is a stop-loss actually
+    # in force, and at what number" is a question an operator watching a
+    # money-path run has to be able to answer from the surface -- and
+    # because a floor that is invisible on the report is indistinguishable
+    # from one that was silently dropped.
+    floor: Optional[int] = None
 
     @property
     def halted(self) -> bool:
@@ -315,6 +362,10 @@ def run_wire(snapshot: AutoLoopSnapshot) -> dict:
             "stop_requested": report.stop_requested,
             "started_at": report.started_at,
             "finished_at": report.finished_at,
+            # An int or `null`, never omitted: `null` here is the positive
+            # statement "this run had no stop-loss", which an operator needs
+            # to be able to read as clearly as they read a number.
+            "floor": report.floor,
         },
     }
 
@@ -397,9 +448,50 @@ class _ReplayPort:
         race ``Session.render_with_color()`` documents. Here it would be
         worse than a mismatched colour map: the classification and the
         sector read would describe two different screens, and the sector
-        is what the start-anchor guard compares."""
+        is what the start-anchor guard compares.
+
+        This is also the run's CREDITS capture point, and it has to be:
+        a background replay renders and classifies every screen without
+        ever passing through ``protocol.build_response()``, so a run driven
+        from here would leave the sticky balance frozen at whatever the last
+        human ``do`` saw -- ageing quietly past the staleness window while
+        the macro spent. (That is not hypothetical; the archive shipped
+        exactly that gap and had to move the capture out of ``protocol.py``
+        for the same reason.) Capturing off the SAME render the boundary
+        was decided on is what makes "the balance behind this decision" and
+        "the screen behind this decision" the same instant.
+
+        Unconditional, not gated on whether this run has a floor: the
+        capture is a cheap parse with no decision attached, and a sticky
+        balance that only updates on floored runs would be a different
+        surface depending on how the last run was armed."""
         rows = self._session.render()
-        return self._session.render_text(rows), (rows[-1].strip() if rows else "")
+        text = self._session.render_text(rows)
+        observe = getattr(self._session, "observe_credits", None)
+        if callable(observe):
+            # `getattr`-guarded exactly like `_lock_held`, for the bare test
+            # harnesses that predate this method. Fail-closed either way: a
+            # session that cannot observe leaves the balance `absent`, and
+            # `absent` is a HALT on any floored run -- never a shrug.
+            observe(text)
+        return text, (rows[-1].strip() if rows else "")
+
+    def credits(self) -> object:
+        """The session's own sticky balance, forwarded WHOLE.
+
+        No unpacking, no ``(balance, ts)`` pair, no age computed here: the
+        snapshot is already the validated type the player's floor check
+        demands, and every tuple shape is truthy, so an adapter that
+        "helpfully" flattened this would hand a truthiness test a healthy-
+        looking answer for a balance nobody ever observed.
+
+        Reached only on a floored run -- ``replay_loop`` does not call it
+        otherwise -- and ``AutoLoopRunner.start`` has already refused to arm
+        a floor against a session that cannot answer, so the attribute is
+        present by the time this runs. Deliberately UNguarded for that
+        reason: a ``getattr`` default here would invent an answer at the one
+        call site whose whole job is to report a real one."""
+        return self._session.credits_snapshot()
 
     def send_and_confirm(self, keystrokes: str, wait_prompt: Optional[str]) -> bool:
         """THE wire call. Returns the third element of the settle layer's
@@ -506,8 +598,9 @@ class AutoLoopRunner:
 
     # -- writes ---------------------------------------------------------
 
-    def start(self, name: str) -> AutoLoopSnapshot:
-        """Arm and run ONE pass of the macro called ``name``.
+    def start(self, name: str, floor: Optional[int] = None) -> AutoLoopSnapshot:
+        """Arm and run ONE pass of the macro called ``name``, optionally
+        under a credit floor.
 
         Returns as soon as the thread is running (canon: "``start``
         returns immediately"). Raises :class:`AutoLoopRefused` -- having
@@ -518,15 +611,48 @@ class AutoLoopRunner:
         unconfirmed precondition. Nothing is ever armed for a run that
         cannot start.
 
+        **A floor this daemon cannot enforce is refused here**
+        (``floor_unsupported``), before the lock is entered and before a
+        thread exists. That refusal is the point of the whole slice: an
+        unenforceable floor accepted at this layer would render on the run
+        report as a live stop-loss, and the operator would be reading a
+        safety claim nothing behind it can make. It is checked against the
+        SESSION's ability to observe credits rather than against a config
+        flag, so it cannot be satisfied by asserting it.
+
+        Note what is NOT checked here: whether a balance has actually been
+        observed yet. That is boundary 0's job inside the run, and it
+        belongs there because boundary 0 settles and renders first -- so it
+        decides on a reading taken after the run began, not on whatever was
+        sticky when the operator typed the verb. A run armed with a floor
+        and no balance in hand halts ``credits_unknown`` at boundary 0
+        having sent nothing, which is canon's instant-die with a typed
+        reason attached rather than a bare refusal.
+
         Drafts are not consulted (``include_drafts`` is left at its
         default and is not exposed on the wire): a draft is an inert
         proposal awaiting human approval, and approval is expressed by
         file location. A background driver playing an unapproved macro
         would be the human-approval gate failing open.
         """
+        if floor is not None:
+            # `True` is an int and would arm a floor of 1 -- the same trap
+            # every other numeric field in this tree documents on its own
+            # half. A float is refused rather than coerced: a credit balance
+            # is a whole number, and silently rounding a caller's floor is
+            # how the enforced number stops being the requested one.
+            if isinstance(floor, bool) or not isinstance(floor, int):
+                raise AutoLoopRefused("invalid_floor")
+            if floor < 0:
+                # A negative floor can never be crossed, so it is a stop-loss
+                # that structurally cannot stop -- the decorative flag this
+                # slice exists to forbid, wearing a number.
+                raise AutoLoopRefused("invalid_floor")
+            if not _can_observe_credits(self._session):
+                raise AutoLoopRefused("floor_unsupported")
         loop = self._load(name)
         stop = threading.Event()
-        report = RunReport(loop=loop.name, started_at=_utc_now())
+        report = RunReport(loop=loop.name, started_at=_utc_now(), floor=floor)
         thread = threading.Thread(
             target=self._run,
             args=(loop, stop, report),
@@ -641,7 +767,11 @@ class AutoLoopRunner:
         sends: Optional[int] = None
         error: Optional[str] = None
         try:
-            result = replay_loop(loop, port)
+            # `report.floor` rather than a second stored field: the report
+            # IS this run's record of what it was armed with, so the number
+            # the player enforces and the number the operator reads cannot
+            # be two different values.
+            result = replay_loop(loop, port, floor=report.floor)
         except Exception as exc:  # noqa: BLE001 -- an adapter fault must still release
             # TYPE NAME only on anything a client can read; the text and
             # frame chain go to the daemon's owner-only local log

@@ -1001,8 +1001,17 @@ def test_the_player_cannot_acquire_a_session():
     ``loops/`` unable to reach the game on its own."""
     parameters = inspect.signature(replay_loop).parameters
     assert parameters["session"].default is inspect.Parameter.empty
-    assert list(parameters) == ["loop", "session", "force"]
-    assert parameters["force"].kind is inspect.Parameter.KEYWORD_ONLY
+    assert list(parameters) == ["loop", "session", "force", "floor", "credits_stale_ms"]
+    for keyword in ("force", "floor", "credits_stale_ms"):
+        assert parameters[keyword].kind is inspect.Parameter.KEYWORD_ONLY, keyword
+    # WO-P2-G4-X5: the floor is OFF by default and the freshness window is
+    # not. A `floor` that defaulted to anything but None would arm a rail
+    # every existing caller never asked for; a `credits_stale_ms` that
+    # defaulted to None would be a freshness gate with no window.
+    assert parameters["floor"].default is None
+    assert parameters["credits_stale_ms"].default == player_mod.CREDITS_STALE_MS
+    assert isinstance(player_mod.CREDITS_STALE_MS, int)
+    assert player_mod.CREDITS_STALE_MS > 0
 
 
 def test_no_run_loop_snuck_in():
@@ -1072,13 +1081,27 @@ def test_the_reason_vocabulary_is_closed_and_fully_reachable():
         HALT_CURRENT_SECTOR_UNREADABLE,
         HALT_CONFIRM_FAILED,
         HALT_POST_CLASS,
+        # WO-P2-G4-X5's stop-loss rail. Reachability for these four is
+        # proven in tests/test_credits_floor.py, which drives a real
+        # `replay_loop` to each one and cross-checks this set against the
+        # codes it actually observed -- this file lists them so the closed
+        # vocabulary stays in one visible place.
+        player_mod.HALT_FLOOR_REACHED,
+        player_mod.HALT_CREDITS_UNKNOWN,
+        player_mod.HALT_CREDITS_STALE,
+        player_mod.HALT_CREDITS_UNREADABLE,
     }
     assert reported == HALT_REASONS
     # Canon's and the archive's own spellings, carried rather than re-coined.
     assert HALT_START_ANCHOR_MISMATCH == "start_anchor_mismatch"
     assert HALT_CONFIRM_FAILED == "confirm_failed"
     assert HALT_POST_CLASS == "post_class"
-    # The one code canon's catalog already renders a label for.
+    assert player_mod.HALT_FLOOR_REACHED == "floor_reached"
+    assert player_mod.HALT_CREDITS_UNKNOWN == "credits_unknown"
+    assert player_mod.HALT_CREDITS_STALE == "credits_stale"
+    # The codes canon's catalog already renders a label for.
     from tw2002_aiclient.cockpit.stopbanner import INTERVENTION_REASON_LABELS
 
     assert HALT_FENCED in INTERVENTION_REASON_LABELS
+    assert player_mod.HALT_CREDITS_UNKNOWN in INTERVENTION_REASON_LABELS
+    assert player_mod.HALT_CREDITS_STALE in INTERVENTION_REASON_LABELS

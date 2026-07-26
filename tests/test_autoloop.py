@@ -992,12 +992,19 @@ def test_a_broken_error_sink_never_takes_the_release_down(tmp_path):
 # --------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("arg", ["cycles", "floor", "force", "param", "include_drafts"])
+@pytest.mark.parametrize("arg", ["cycles", "force", "param", "include_drafts"])
 def test_a_knob_this_runtime_cannot_honour_is_refused_not_ignored(tmp_path, arg):
-    """Accepting ``cycles=10`` and running once, or a ``--floor`` nothing
-    enforces, is a surface agreeing to something it does not do. Contrast
-    ``ensure``'s ``no_auto_arm``, which is accepted and unused precisely
-    because the behaviour it asks for is what happens."""
+    """Accepting ``cycles=10`` and running once is a surface agreeing to
+    something it does not do. Contrast ``ensure``'s ``no_auto_arm``, which
+    is accepted and unused precisely because the behaviour it asks for is
+    what happens.
+
+    ``floor`` left this list in WO-P2-G4-X5 and only because the rail
+    behind it was built -- see :func:`test_a_floor_is_still_refused_when_
+    this_session_cannot_enforce_it` immediately below, which is the same
+    property re-pinned at the layer where it now lives, and
+    ``tests/test_credits_floor.py`` for the enforcement itself.
+    """
     write_macro(tmp_path, "ore-run", ONE_STEP)
     session = WireSession([ANCHOR_158[0]])
     lock = ControlLock()
@@ -1006,6 +1013,31 @@ def test_a_knob_this_runtime_cannot_honour_is_refused_not_ignored(tmp_path, arg)
     resp = protocol.dispatch(session, "autoloop_start", {"name": "ore-run", arg: 3}, server)
 
     assert resp == {"ok": False, "error": f"unsupported_arg:{arg}"}
+    assert lock.is_auto_loop_held() is False
+    assert session.sent == []
+
+
+def test_a_floor_is_still_refused_when_this_session_cannot_enforce_it(tmp_path):
+    """The X4 rule, unmoved: a floor is refused unless something enforces it.
+
+    ``WireSession`` deliberately has no ``observe_credits``/
+    ``credits_snapshot`` -- it is the harness X4 shipped, from before the
+    substrate existed -- so this is a genuine "this runtime cannot honour
+    that" case rather than a mocked one, and the daemon says so by name
+    instead of arming a decorative number. Zero arm, zero bytes.
+    """
+    write_macro(tmp_path, "ore-run", ONE_STEP)
+    session = WireSession([ANCHOR_158[0]])
+    lock = ControlLock()
+    server = Server(session, lock, make_runner(tmp_path, session, lock))
+
+    assert not hasattr(session, "credits_snapshot")
+
+    resp = protocol.dispatch(
+        session, "autoloop_start", {"name": "ore-run", "floor": 500}, server
+    )
+
+    assert resp == {"ok": False, "error": "floor_unsupported"}
     assert lock.is_auto_loop_held() is False
     assert session.sent == []
 
