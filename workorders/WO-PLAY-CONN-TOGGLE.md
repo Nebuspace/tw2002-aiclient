@@ -1,6 +1,6 @@
 # WO-PLAY-CONN-TOGGLE
 
-**Status:** **HOLD** · Max pace-down (local app restart) · do **not** dispatch until hub lifts HOLD  
+**Status:** IN FLIGHT · HOLD lifted (DEC-03) · Cursor lane · hub-seeded after letter merge
 **Posted:** 2026-07-26 · Max live report (timed-out game board; no obvious reconnect; Connected not actionable)  
 **Seat (when lifted):** Cursor preferred (play chrome / `screens.py` / control_seat) · CC if daemon reconnect verbs needed  
 **Related:** `WO-PLAY-GAME-LETTER-AUTOSELECT` (sibling — auto letter) · `WO-P2-027` reconnect/login-replay · `WO-P3-030` play chrome · guardian reconnect
