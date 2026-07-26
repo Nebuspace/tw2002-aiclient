@@ -25,9 +25,10 @@ python3 -m venv .venv
 
 ```bash
 ./tw2002-aiclient
+./tw2002-aiclient --help   # usage, exit 0 — does not open the TUI
 ```
 
-That's the one command. It opens a profile picker in your terminal (needs a real TTY, not a
+That's the one command. Bare invoke opens a profile picker in your terminal (needs a real TTY, not a
 pipe or a plain log):
 
 - **No profiles yet?** The picker's only option is **Create New Player** — pick a server from
