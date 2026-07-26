@@ -920,6 +920,132 @@ def test_an_ordinary_informational_menu_is_still_crawlable():
     assert menu_crawler.screen_state(text, "(Q)uit to Sector") == "menu"
 
 
+# -- P-QTY: a trailing "?" is as real a default-answer token as ":" -----------
+#
+# `_TRAILING_DEFAULT_BRACKET_RE` admitted "[N]:" but not "[N] ?", and
+# TradeWars writes both (canon/research/tw2002-screen-patterns.md, P-QTY:
+# "other quantity prompts use bracketed DEFAULTS ([12], [100]) that Enter
+# accepts" -- the shape, not the punctuation after it, is the tell).
+#
+# Every screen below is REPLAYED FROM THE ARCHIVED SESSION CORPUS, never
+# invented: 91 captured transcripts fed back through the real
+# TelnetHandler -> pyte pipeline, 11,240 settled prompt frames (frames the
+# operator actually answered). Measured cost of admitting "?": 12 of those
+# 11,240 frames change state, ALL "other" -> "unsafe", ZERO
+# "menu" -> "unsafe" -- so the crawler loses no screen it was actually
+# exploring, which the menu non-regression below is the pin for.
+#
+# Read the honest size of this: `screen_state`'s two consumers both branch
+# on `!= "menu"`, so "other" and "unsafe" are behaviourally identical to
+# the crawler TODAY. This is a correctness pin that restores the regex's
+# stated intent and gives the money prompts a second independent leg -- it
+# is not a live safety fix, and the tests below should not be read as one.
+
+_STOP_PROMPT = "Stop in this sector (Y,N,E,I,R,S,D,P,?) (?=Help) [N] ?"
+_STOP_SCREEN = (
+    "Auto Warping to sector 11311\n"
+    "\n"
+    "Sector  : 11311 in uncharted space.\n"
+    "Ports   : Great Chauchat, Class 7 (SSS)\n"
+    "Warps to Sector(s) :  4 - 20459 - 20589 - 23091\n"
+    "\n"
+    + _STOP_PROMPT
+)
+
+
+def test_a_captured_trailing_question_default_prompt_is_refused():
+    """RED before the "?" widening, green after -- and on a REAL captured
+    shape, not a constructed one. The autopilot's "Stop in this sector
+    ... [N] ?" interrupt is the single shape in the whole corpus whose
+    classification the widening actually changes (12 of 11,240 settled
+    frames). Its only tell is the trailing "[N] ?" default-answer token,
+    which a ":"-only trailer could not see."""
+    assert menu_crawler.screen_state(_STOP_SCREEN, _STOP_PROMPT) == "unsafe"
+
+
+def test_the_trailing_question_prompt_is_refused_by_SHAPE_alone():
+    """The isolation that makes the test above a pin on the regex rather
+    than a coincidence. On this captured screen NONE of the other legs
+    fire: the whole-screen keyword scan finds nothing (there is no
+    "purchase"/"confirm"/"are you sure"/y-n-slash wording anywhere in an
+    autopilot movement burst), `classify` calls it an ordinary
+    `sector_display`, and the free-input leg does not match either. Strip
+    the trailing-bracket leg and this screen is crawlable again -- which
+    is exactly what it was before the widening."""
+    assert not any(p.search(_STOP_SCREEN) for p in menu_crawler._UNSAFE_SCREEN_PATTERNS)
+    assert (
+        classify.classify_screen(_STOP_SCREEN, _STOP_PROMPT)
+        not in menu_crawler._NON_MENU_GATE_CLASSES
+    )
+    assert not menu_crawler._FREE_INPUT_PROMPT_RE.search(_STOP_PROMPT)
+    assert menu_crawler._TRAILING_DEFAULT_BRACKET_RE.search(_STOP_PROMPT)
+
+
+_SHIPYARD_PROMPT = "<Shipyards> Your option (?) ?"
+_SHIPYARD_SCREEN = (
+    "You have 403,537 credits.\n"
+    + _SHIPYARD_PROMPT + "\n"
+    "You can't seem to find anyone to talk to.\n"
+    "You have 403,537 credits.\n"
+    + _SHIPYARD_PROMPT
+)
+
+
+def test_a_captured_navigable_menu_survives_the_widening():
+    """The cost side, on real data instead of a synthetic menu: a
+    genuinely navigable captured StarDock Shipyards menu whose OWN active
+    prompt line ENDS IN "?" must still classify "menu". This is the
+    regression the widening could plausibly have caused and did not --
+    "?" is admitted only as a trailer AFTER a square-bracket default
+    token, never as a bare sentence-ending question mark. Measured across
+    the corpus: the count of "menu"-classified frames is identical before
+    and after (12 of 11,240), so the widening cannot have quietly turned
+    the crawler into a no-op."""
+    assert menu_crawler.screen_state(_SHIPYARD_SCREEN, _SHIPYARD_PROMPT) == "menu"
+
+
+_HAGGLE_PROMPT = "Your offer [1,016] ?"
+_HAGGLE_SCREEN = (
+    "We are selling up to 2730.  You have 0 in your holds.\n"
+    "How many holds of Fuel Ore do you want to buy [75]?\n"
+    "Agreed, 75 units.\n"
+    "\n"
+    "We'll sell them for 1,016 credits.\n"
+    + _HAGGLE_PROMPT
+)
+
+
+def test_the_comma_grouped_default_is_a_KNOWN_uncovered_shape():
+    """A latent hole, pinned DELIBERATELY UNFIXED so it stays legible.
+
+    The port haggle's "Your offer [1,016] ?" is the single most common
+    money prompt in the corpus (899 of 11,240 settled frames), and its
+    thousands-separator comma puts it outside the bracket payload class --
+    which is alnum-only ON PURPOSE, because that restriction is the only
+    thing keeping an ordinary status bracket like "[TL=00:00:00]" from
+    matching. Admitting commas was measured against the corpus: it buys
+    ZERO additional state changes (every such frame is already refused)
+    and spends the payload restriction that makes this check structural.
+    So the hole stays open, and the assertion below is a tripwire -- a
+    future widening of the payload class turns this test red, which is
+    the point: read this docstring before spending that restriction.
+
+    The second half is the part worth staring at. This screen IS refused,
+    but by the whole-screen KEYWORD leg alone -- single-legged coverage of
+    the exact prompt family canon calls escalate-only (P-QTY /
+    DECISIONS.md A.2). That is the measured shape of this module's real
+    defense in depth, and it is the reverse of what the source comments
+    used to describe."""
+    assert not menu_crawler._TRAILING_DEFAULT_BRACKET_RE.search(_HAGGLE_PROMPT)
+    assert not menu_crawler._FREE_INPUT_PROMPT_RE.search(_HAGGLE_PROMPT)
+    assert menu_crawler.screen_state(_HAGGLE_SCREEN, _HAGGLE_PROMPT) == "unsafe"
+    assert any(p.search(_HAGGLE_SCREEN) for p in menu_crawler._UNSAFE_SCREEN_PATTERNS)
+    assert (
+        classify.classify_screen(_HAGGLE_SCREEN, _HAGGLE_PROMPT)
+        not in menu_crawler._NON_MENU_GATE_CLASSES
+    )
+
+
 # -- residual breach, closed by the 2026-07-19 hardening pass ------------------
 # (team-lead's second-round review): a bare vertical Y/N-shaped confirm has
 # its LAST line be an ordinary bracket-option line, so `_is_menu_select_prompt`

@@ -327,9 +327,35 @@ class MenuCrawlError(Exception):
 # `classify` has no anchors for these (its taxonomy is login / pause /
 # sector / port / menu, a different concern), so this module names them.
 # Deliberately broad: any one matching ANYWHERE on the screen marks the
-# whole screen unsafe to crawl from. An additional layer, not the sole
-# gate -- see `_is_commit_shaped_prompt` for the structural,
-# keyword-independent one.
+# whole screen unsafe to crawl from.
+#
+# THIS IS THE LOAD-BEARING LEG, not a supplement to the structural one --
+# a correction, because this comment used to say the opposite ("an
+# additional layer, not the sole gate"). Measured by replaying 91 archived
+# session transcripts through the real render pipeline (11,240 settled
+# prompt frames the operator answered): of the 6,548 frames `screen_state`
+# refuses, this keyword scan is the SOLE reason for 2,990 of them -- an
+# order of magnitude more than the structural prompt-shape leg's 271, and
+# more than the classify-class leg's 694. It carries, alone, the entire
+# 899-frame "Your offer [N] ?" port-haggle family that canon marks
+# escalate-only (P-QTY / DECISIONS.md A.2); on those frames the structural
+# leg contributed literally nothing before the trailing-"?" widening
+# below, and still carries only 115 of the 899 after it.
+#
+# Two consequences, both real:
+#   * narrowing this list is a SAFETY edit, however cosmetic it looks. The
+#     tests that force it empty and demand a money screen still be refused
+#     (tests/test_menu_crawler.py) exist because of that, and they are the
+#     only thing standing under most of these frames;
+#   * it is still a pure denylist over unbounded natural language, so it
+#     is best-effort by construction (module docstring). Being the biggest
+#     leg and being a complete one are different claims -- this is the
+#     first and not the second, which is precisely why the never-commit
+#     GUARANTEE lives outside this module in the driver.
+#
+# See `_is_commit_shaped_prompt` for the structural, keyword-independent
+# leg -- narrower in reach, and valuable for being INDEPENDENT of wording
+# rather than for volume.
 _UNSAFE_SCREEN_PATTERNS = (
     re.compile(r"\(\s*y\s*/\s*n\s*\)", re.I),
     re.compile(r"\[\s*y\s*/\s*n\s*\]", re.I),
@@ -375,21 +401,52 @@ _NON_MENU_GATE_CLASSES = frozenset({
 
 # Structural, keyword-independent commit-shape detection on the ACTIVE
 # prompt line (the single line the server is actually blocked on). The
-# whole-screen keyword scan above is a pure denylist with no notion of
-# which line is live, so ordinary menu chrome sharing a screen with a real
-# commit prompt ("(V)iew Ship Status" alongside "Proceed? [Yes]") dodges
-# every keyword and enumerates as an ordinary menu. These two catch the
-# SHAPE instead, independent of wording.
+# whole-screen keyword scan above has no notion of which line is live, so
+# ordinary menu chrome sharing a screen with a real commit prompt
+# ("(V)iew Ship Status" alongside "Proceed? [Yes]") dodges every keyword
+# and enumerates as an ordinary menu. These two catch the SHAPE instead,
+# independent of wording.
+#
+# What this leg is NOT: the robust backstop under a weak keyword list.
+# This comment used to imply that ordering and the corpus says otherwise
+# (see the keyword scan's own comment for the numbers) -- these two
+# patterns are the SOLE reason 271 of 6,548 refused frames are refused,
+# against the keyword scan's 2,990. The right way to read the pair is
+# COMPLEMENTARY, not ranked: this leg is narrow but wording-independent
+# and prompt-line-scoped, which is the only thing that catches a commit
+# prompt phrased in vocabulary nobody thought to deny; the keyword scan is
+# broad but blind to which line is live. Neither is the other's safety
+# net, and the never-commit guarantee is not either of them (module
+# docstring: it is the driver's sacrificial-profile gate plus the
+# boundary-aligned abort).
 _TRAILING_DEFAULT_BRACKET_RE = re.compile(
-    # "...? [Y]:" / "...[Yes]" / "...[0]:" -- a trailing SQUARE-bracket
-    # default-answer token. Square brackets are this game's convention for
-    # a suggested/default VALUE; this module's own menu OPTIONS are always
-    # paren/angle brackets ("(Q)uit"), never square, which is what lets
-    # this stay structural instead of colliding with an ordinary
-    # bracket-option line. The bracket content is restricted to short
-    # alnum-only text so a status bracket like "[TL=00:00:00]"
-    # (punctuation inside) never matches.
-    r"\[\s*[a-zA-Z0-9]{1,10}\s*\]\s*:?\s*$"
+    # "...? [Y]:" / "...[Yes]" / "...[0]:" / "...[N] ?" -- a trailing
+    # SQUARE-bracket default-answer token. Square brackets are this game's
+    # convention for a suggested/default VALUE; this module's own menu
+    # OPTIONS are always paren/angle brackets ("(Q)uit"), never square,
+    # which is what lets this stay structural instead of colliding with an
+    # ordinary bracket-option line.
+    #
+    # BOTH trailers, ":" and "?", because TradeWars writes both and the
+    # punctuation after the token is not the tell -- the token is. The "?"
+    # arm was measured before it was added, replaying 91 archived session
+    # transcripts back through the real TelnetHandler -> pyte pipeline
+    # (11,240 settled prompt frames the operator actually answered): it
+    # changes 12 of them, ALL "other" -> "unsafe", and ZERO
+    # "menu" -> "unsafe" -- the crawler gives up no screen it was actually
+    # exploring. What it buys is a SECOND leg under prompts the keyword
+    # scan ABOVE was carrying alone (see `_UNSAFE_SCREEN_PATTERNS`' own
+    # comment): the port haggle's "Your offer [550] ?" family, 899 frames.
+    #
+    # The payload class stays alnum-only, deliberately, and that is what
+    # keeps the comma-grouped majority of that same haggle family --
+    # "Your offer [4,710] ?" -- OUT. Measured, admitting commas buys zero
+    # additional state changes (every such frame is already refused by
+    # keyword) while spending the one restriction that keeps an ordinary
+    # status bracket like "[TL=00:00:00]" (punctuation inside) from
+    # matching. So it is a KNOWN, deliberately-open hole, not an oversight;
+    # tests/test_menu_crawler.py pins it as one.
+    r"\[\s*[a-zA-Z0-9]{1,10}\s*\]\s*[:?]?\s*$"
 )
 _FREE_INPUT_PROMPT_RE = re.compile(
     # "Enter quantity to buy:" / "How many fighters to deploy:" -- a
