@@ -407,10 +407,46 @@ def resolve_run_dir():
     `PROJECT_ROOT`); defaults to `PROJECT_ROOT / "run"`. Independent of
     the caller's CWD either way -- `tw`/`twd` invoked from any directory
     resolve to the same `run/` home, per the Single-Connection Invariant.
+
+    A whitespace-only override (including `""`) is treated as unset, same
+    as a missing var -- both readings land on the identical safe default,
+    so there is nothing to protect against (WO-RUN-DIR-NORMALISE, E-03).
+
+    A NON-empty override with leading/trailing whitespace, OR a `\n`/`\r`
+    anywhere in it (edge or embedded), is REFUSED, not silently repaired:
+    `Path(" /tmp/x").is_absolute()` is False, so a stray leading space
+    would otherwise turn an intended absolute path into a *different*,
+    PROJECT_ROOT-relative one -- two callers that believe they share a
+    run/ home would land on different directories, silently defeating
+    the Single-Connection Invariant this function exists to uphold
+    (WO-RUN-DIR-NORMALISE, E-01; hub-ratified 2026-07-26, overruling this
+    module's own earlier `.strip()` suggestion). The realistic source is
+    a shell export, a systemd/Docker env file (CRLF line endings), or a
+    copied command with a trailing newline -- never a project `.env`
+    line, since `load_dotenv` already strips both key and value before
+    either reaches `os.environ`. A plain INTERNAL space is a real, legal
+    path component and is left alone -- only edge whitespace and any
+    `\n`/`\r` are refused, since no legitimate run-dir path ever contains
+    a raw newline or carriage return. Refusing loudly (rather than
+    stripping and moving on) surfaces the anomaly at its source instead
+    of masking it: `.strip()` would recover from this ONE call site, but
+    the same malformed-env-var pipeline could just as easily be polluting
+    a var this module cannot auto-repair.
     """
     override = os.environ.get(RUN_DIR_VAR)
-    if not override:
+    if not override or not override.strip():
         return PROJECT_ROOT / "run"
+    if override != override.strip() or "\n" in override or "\r" in override:
+        raise EnvResolutionError(
+            f"{RUN_DIR_VAR} contains stray whitespace or a newline/carriage-"
+            f"return character ({override!r}) -- a leading space silently turns "
+            f"an absolute path into a PROJECT_ROOT-relative one, splitting the "
+            f"run/ directory two callers expect to share. Fix the value at its "
+            f"source: check for accidental quoting, a trailing newline from how "
+            f"the .env line or shell export was written, or Windows-style line "
+            f"endings in an env file -- rather than guessing which characters "
+            f"were intended."
+        )
     p = Path(override)
     return p if p.is_absolute() else (PROJECT_ROOT / p)
 

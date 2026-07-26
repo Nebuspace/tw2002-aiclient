@@ -5,6 +5,7 @@ override, and no silent per-profile splinter under the default.
 """
 
 import os
+import re
 from pathlib import Path
 
 import pytest
@@ -213,3 +214,87 @@ def test_default_run_dir_is_not_per_profile(monkeypatch):
     monkeypatch.delenv(env.RUN_DIR_VAR, raising=False)
     # resolve_run_dir takes no profile arg -- the API itself forbids splintering
     assert env.resolve_run_dir() == env.PROJECT_ROOT / "run"
+
+
+# -- resolve_run_dir: refuse a dirty override (WO-RUN-DIR-NORMALISE) -------
+#
+# A stray leading space makes `Path(" /tmp/x").is_absolute()` return False,
+# so an absolute override silently resolves under PROJECT_ROOT instead --
+# two callers that believe they share a run/ home land on different
+# directories, defeating the Single-Connection Invariant. Refused loudly
+# rather than silently repaired (hub-ratified 2026-07-26, overruling the
+# audit's own earlier `.strip()` suggestion): see resolve_run_dir's
+# docstring for why.
+
+def test_resolve_run_dir_rejects_leading_whitespace(monkeypatch):
+    monkeypatch.setenv(env.RUN_DIR_VAR, " /tmp/twrun")
+    with pytest.raises(env.EnvResolutionError, match="stray whitespace or a newline"):
+        env.resolve_run_dir()
+
+
+def test_resolve_run_dir_rejects_trailing_whitespace(monkeypatch):
+    monkeypatch.setenv(env.RUN_DIR_VAR, "/tmp/twrun ")
+    with pytest.raises(env.EnvResolutionError, match="stray whitespace or a newline"):
+        env.resolve_run_dir()
+
+
+def test_resolve_run_dir_rejects_trailing_newline(monkeypatch):
+    monkeypatch.setenv(env.RUN_DIR_VAR, "/tmp/twrun\n")
+    with pytest.raises(env.EnvResolutionError, match="stray whitespace or a newline"):
+        env.resolve_run_dir()
+
+
+def test_resolve_run_dir_rejects_embedded_newline(monkeypatch):
+    """Not just an edge case -- a `\\n` in the MIDDLE of the value (e.g. a
+    botched multi-line env-file value) is refused too, since no legitimate
+    run-dir path ever contains a raw newline."""
+    monkeypatch.setenv(env.RUN_DIR_VAR, "/tmp/tw\nrun")
+    with pytest.raises(env.EnvResolutionError, match="stray whitespace or a newline"):
+        env.resolve_run_dir()
+
+
+def test_resolve_run_dir_rejects_embedded_carriage_return(monkeypatch):
+    """Same for an embedded `\\r` -- the CRLF-line-ending failure mode, not
+    only at the tail of the value."""
+    monkeypatch.setenv(env.RUN_DIR_VAR, "/tmp/tw\rrun")
+    with pytest.raises(env.EnvResolutionError, match="stray whitespace or a newline"):
+        env.resolve_run_dir()
+
+
+def test_resolve_run_dir_error_names_the_stray_whitespace(monkeypatch):
+    """The message must make the invisible visible -- repr(), not the raw
+    string, since the audit found the whitespace difference invisible in
+    most terminals."""
+    monkeypatch.setenv(env.RUN_DIR_VAR, " /tmp/twrun")
+    with pytest.raises(env.EnvResolutionError, match=re.escape(repr(" /tmp/twrun"))):
+        env.resolve_run_dir()
+
+
+def test_resolve_run_dir_whitespace_only_is_unset(monkeypatch):
+    """E-03's own reasoning extended: a whitespace-only override is
+    indistinguishable from "operator cleared it" once stripped, so both
+    land on the same safe default rather than raising."""
+    monkeypatch.setenv(env.RUN_DIR_VAR, "   ")
+    assert env.resolve_run_dir() == env.PROJECT_ROOT / "run"
+
+
+def test_resolve_run_dir_empty_string_still_unset(monkeypatch):
+    """Regression pin: "" must keep behaving as unset after the fix."""
+    monkeypatch.setenv(env.RUN_DIR_VAR, "")
+    assert env.resolve_run_dir() == env.PROJECT_ROOT / "run"
+
+
+def test_resolve_run_dir_clean_absolute_path_unaffected(monkeypatch, tmp_path):
+    """A well-formed override is untouched by the new whitespace check."""
+    alt = tmp_path / "alt-run"
+    monkeypatch.setenv(env.RUN_DIR_VAR, str(alt))
+    assert env.resolve_run_dir() == alt
+
+
+def test_resolve_run_dir_internal_space_is_not_flagged(monkeypatch, tmp_path):
+    """A plain internal SPACE is a real, supported POSIX path component and
+    is left alone -- only edge whitespace and any embedded `\\n`/`\\r` are
+    refused (see the embedded-newline/CR pins above)."""
+    alt = tmp_path / "alt run"
+    monkeypatch.setenv(env.RUN_DIR_VAR, str(alt))
+    assert env.resolve_run_dir() == alt
