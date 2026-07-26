@@ -10,6 +10,15 @@ Resolution precedence for the game server host/port (highest to lowest):
   5. no silent fallback host -- raises `EnvResolutionError` naming the
      missing variable
 
+An ABSENT `.env` is silent and falls straight through -- tier 3 is an
+optional overlay and most runs have none. An UNREADABLE `.env` is not
+absent, and this module refuses to treat it as such
+(WO-LOAD-DOTENV-PERMISSION-HONESTY): it is held by `resolve_host_port`
+and raised as an `EnvResolutionError` iff resolution actually reaches
+tier 3, i.e. iff tiers 1-2 did not already settle host AND port. See
+`resolve_host_port` for why that condition, and not "always", is the
+honest rule.
+
 This mirrors the env-first idiom `credentials.py` already uses for
 `TW2002_PASSWORD_<PROFILE>` (env checked before the on-disk store), just
 applied to host/port instead of the password.
@@ -55,6 +64,40 @@ class EnvResolutionError(Exception):
     """Raised when host/port cannot be resolved from any source."""
 
 
+class DotenvUnreadable(EnvResolutionError):
+    """The `.env` overlay exists (or may exist) but its content was never
+    seen: permission denied on the file or on the directory containing it,
+    the path is not a readable file, or the bytes are not valid UTF-8.
+
+    Never raised for a genuinely ABSENT `.env`. Absence is the routine
+    state of an optional overlay -- most runs have no `.env` at all -- and
+    it is the one negative this loader is entitled to report, which it does
+    by returning `{}`.
+
+    An `EnvResolutionError` SUBCLASS on purpose, and that is the fail-safe
+    half: `daemon.main` catches exactly `EnvResolutionError` around host/
+    port resolution, so even a caller that never learns this type by name
+    still reaches the operator as a `twd: <line>` rather than as a
+    traceback. Same direction c263f16 chose for the profile-store family --
+    a new failure defaults to loud-and-actionable, never to an escape.
+
+    `cause` reuses `credentials.CAUSE_*` rather than inventing a second
+    dialect for the same three operator jobs (fix permissions, replace a
+    wrong path, repair a damaged file). `reason` is bounded and NEVER
+    carries file content: a `.env` legitimately holds a
+    `TW2002_PASSWORD_<PROFILE>` value (env-first credentials, see
+    `canon/doctrine/secrets-and-credentials.md`), so a decode failure is
+    rendered as a type name plus integer positions only -- never
+    `str(exc)`, and never `exc.object`, which holds the entire file.
+    """
+
+    def __init__(self, cause, reason, path):
+        self.cause = cause
+        self.reason = reason
+        self.path = str(path)
+        super().__init__(f"{reason} ({self.path})")
+
+
 def load_dotenv(path=None):
     """Parse a simple `KEY=VALUE` `.env` file into `os.environ`.
 
@@ -69,12 +112,84 @@ def load_dotenv(path=None):
     Returns the dict of key/value pairs found in the file (regardless of
     whether they were actually applied to `os.environ`), so callers can
     inspect what the file itself declared.
+
+    An ABSENT file returns `{}`, silently, and that is deliberate: having
+    no `.env` is the ordinary state of an optional overlay, not a condition
+    worth a word. Every OTHER failure raises `DotenvUnreadable` instead,
+    because `{}` is a CLAIM -- "this file declared nothing" -- and a file
+    nobody managed to read has not earned it.
+
+    `Path.exists()` is deliberately gone from this function. It was the one
+    call that made those two answers indistinguishable, and it did so in
+    BOTH directions at once (WO-LOAD-DOTENV-PERMISSION-HONESTY):
+
+      * a `chmod 000` `.env` -- `exists()` answers True, and the following
+        `read_text()` then raised a bare `PermissionError` straight out of
+        `resolve_host_port`. `daemon.main` catches only
+        `EnvResolutionError`, so `twd` died at startup with a full
+        traceback in front of the operator: the identical shape c263f16
+        had just fixed one function over, for `profiles.toml`.
+      * a perfectly readable `.env` under an unreadable DIRECTORY --
+        `exists()` answers False there, so this returned `{}` and startup
+        went on to report "could not resolve the game server host", which
+        sends the operator off to write a `.env` they already have.
+
+    Opening the file and classifying the failure is what holds absent and
+    unreadable apart -- the same trap, and the same fix, that
+    `credentials._load_toml_store` documents for the profile store.
+
+    A dangling symlink lands in the absent branch (its `open` raises
+    ENOENT), and honestly so: the target does not exist, so there is no
+    content that went unread.
     """
     path = path or DOTENV_PATH
-    if not path.exists():
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            text = f.read()
+    except FileNotFoundError:
+        # The only real negative: there is no `.env` here at all.
         return {}
+    except PermissionError as exc:
+        # Covers the file itself AND an unreadable parent directory. The
+        # reason must name WHICH object to fix: a directory-level denial
+        # reported as a bare "Permission denied" sends the operator to
+        # chmod a file that is already readable.
+        denied = exc.strerror or "permission denied"
+        parent = Path(path).parent
+        # X_OK is the traversal bit -- precisely what stops us reaching the
+        # file. A directory can be search-only (0o111) and the read still
+        # succeeds. Wording deliberately identical to
+        # `credentials._load_toml_store`'s rather than a second phrasing of
+        # the same advice; it is duplicated instead of shared because
+        # `credentials.py` is the human-gated secrets lane and read-only to
+        # this work order.
+        if not os.access(parent, os.X_OK):
+            denied = f"{denied} on the containing directory: {parent}"
+        raise DotenvUnreadable(credentials.CAUSE_DENIED, denied, path) from exc
+    except OSError as exc:
+        # A directory named `.env`, an ELOOP symlink, a stale mount. Caught
+        # after PermissionError because "I was not allowed to look" and "I
+        # looked, and the path is unusable" are different operator jobs
+        # sharing one exception base.
+        raise DotenvUnreadable(
+            credentials.CAUSE_UNUSABLE, exc.strerror or "could not be opened", path
+        ) from exc
+    except UnicodeDecodeError as exc:
+        # NOT an OSError -- it subclasses ValueError, so it escaped this
+        # function entirely too, by a different door than the
+        # PermissionError above. `_decoder_detail` renders a type name plus
+        # integer offsets and nothing else; `str(exc)` and `exc.object`
+        # would both put bytes from a file that can legitimately hold a
+        # password into an operator-facing line. Reached through
+        # `credentials` rather than copied so there is ONE rendering of a
+        # decoder failure in this codebase, not two that can drift.
+        raise DotenvUnreadable(
+            credentials.CAUSE_CORRUPT,
+            f"not valid UTF-8 ({credentials._decoder_detail(exc)})",
+            path,
+        ) from exc
     values = {}
-    for raw_line in path.read_text(encoding="utf-8").splitlines():
+    for raw_line in text.splitlines():
         line = raw_line.strip()
         if not line or line.startswith("#") or "=" not in line:
             continue
@@ -191,8 +306,47 @@ def resolve_host_port(cli_host=None, cli_port=None, profile_name="default",
     `default=None` -- i.e. only non-None when the caller actually passed
     `--host`/`--port`. Raises `EnvResolutionError` with an actionable
     message (naming the missing env var) if nothing resolves.
+
+    An UNREADABLE `.env` is HELD here, not raised on sight, and becomes an
+    error iff resolution actually reaches the tier that file would have
+    supplied (WO-LOAD-DOTENV-PERMISSION-HONESTY). The condition is exactly
+    the `host is None or port is None` branch that already exists below,
+    because that branch IS the question "did tiers 1-2 settle this?":
+
+      * if they did, the unread file could not have changed the answer --
+        it is outranked by both, its values would have been ignored even
+        if we had read them, and reporting it would fail a startup over a
+        file that was irrelevant to the outcome. `--host/--port` is
+        documented as tier 1; a tier-3 file must not defeat it.
+      * if they did NOT, the unread file is precisely the next thing that
+        would have been consulted, so proceeding means answering from a
+        LOWER tier (`profiles.toml`) than the one the operator actually
+        configured. That is not a cosmetic fault here: host/port is a
+        connect target, and silently connecting to a different server than
+        the `.env` names is a real wrong answer for a game with persistent
+        per-server character state. So: loud, before tier 4 is consulted.
+
+    That asymmetry is also what keeps this from bricking anyone. An
+    operator with a root-owned `.env` left over from some earlier
+    experiment has three ways out, one of them printed in the message
+    itself: `twd --host H --port P`, `TW2002_HOST=... TW2002_PORT=... twd`,
+    or removing the file (which needs write on the DIRECTORY, not on the
+    root-owned file). Raising unconditionally instead would take the first
+    two away and leave only the ones requiring `sudo` -- which is why
+    "always loud" was rejected, not because loudness is wrong.
+
+    The policy is deliberately isolated to the one `if dotenv_failure`
+    below: `load_dotenv`'s own honesty (absent vs unreadable) does not
+    depend on it, so a later ruling that this should warn-and-fall-through
+    instead changes that single branch and nothing else.
     """
-    load_dotenv(dotenv_path)
+    try:
+        load_dotenv(dotenv_path)
+        dotenv_failure = None
+    except DotenvUnreadable as e:
+        # Held, not raised -- tiers 1-2 may still settle this, and if they
+        # do, a file we could not read could not have mattered.
+        dotenv_failure = e
 
     host = cli_host
     port = cli_port
@@ -211,6 +365,20 @@ def resolve_host_port(cli_host=None, cli_port=None, profile_name="default",
                 )
 
     if host is None or port is None:
+        if dotenv_failure is not None:
+            # Tiers 1-2 did not settle it, so the file we could not read is
+            # the very next thing that would have been consulted. Falling
+            # through to tier 4 here would answer from a source the
+            # operator's own `.env` outranks -- see this function's
+            # docstring. `{dotenv_failure}` already renders
+            # "<reason> (<the .env that failed>)", so the path is named
+            # without repeating it.
+            raise EnvResolutionError(
+                f"the .env overlay could not be read: {dotenv_failure} -- fix "
+                f"the problem it reports, or remove the file; or pass "
+                f"--host/--port or set {HOST_VAR}/{PORT_VAR}, which outrank "
+                f".env and resolve without it."
+            ) from dotenv_failure
         profile_host, profile_port = _load_profile_host_port(profile_name, profiles_path)
         if host is None:
             host = profile_host
