@@ -26,10 +26,10 @@ No credentials, handles, FQDNs beyond public game hosts, or screen dumps in this
 
 | Server | Letter | NEW | RETURNING | Error class / notes | Live-proved by |
 |---|---|---|---|---|---|
-| `roguetw.net:2002` | A | **PENDING** | **PENDING** | Prior: both PASS @ `main_command` (matrix 09:38Z) | hub |
-| `game.a-net-online.lol:2002` | C | **PENDING** | **PENDING** | Prior durable NEW FAIL `menu`@step5 (pre-banner fix); tip has `WO-ANET-BANNER-LAYOUT` — **NEW path not yet live-reproved** | hub |
-| `twgs.microblaster.net:2002` | B | **DEFER** until blank-reject on main · else honest FAIL/SKIP | **SKIP** if no persist | Prior: `unknown`@step6 blank-name reject → silence; product fix = CC `login.py` | hub (post-merge) |
-| xeno / exiled | — | **N-A / honest halt** | **N-A** | Phase-1 fingerprint: square-bracket door → `unknown`@step6; **no invent** | hub or prior capture cite |
+| `roguetw.net:2002` | A | **PASS** (`main_command`) | **PASS** (`main_command`) | Tip `7e43af6` · isolated run-dirs under bank `reprove/` · regression clean | hub 18:53–18:55Z |
+| `game.a-net-online.lol:2002` | C | **FAIL** (`menu`@step5) | **FAIL** (`menu`@step5) | Same class as prior wave despite `WO-ANET-BANNER-LAYOUT` + letter on main — `login_failed:automaton_stuck:classification='menu':step=5`. **Not inventing**; bank follow-on diagnosis WO. | hub 18:55Z |
+| `twgs.microblaster.net:2002` | B | **DEFER** until blank-reject on main | **SKIP** | CC `WO-MICRO-LOGIN-BLANK-REJECT` still open | hub (post-merge) |
+| xeno / exiled | — | **N-A / honest halt** | **N-A** | Phase-1 fingerprint stands; no invent this wave | prior capture |
 
 **Accept bar:** ≥3 hosts **attempted**; each cell NEW and/or RETURNING with outcome + error class; PASS cites `main_command` under isolated run-dir; FAIL is honest (blank-reject residual · untaught door · remote stall) — no invent.
 
@@ -74,3 +74,19 @@ See `audit/live-ensure-matrix-20260726.md` — tip base ≥ `ca8108a` / `50bbc46
 - N-of-M: ________  
 - Cells deferred: ________  
 - live-prove posted: ________  
+
+
+---
+
+## Hub live wave 2026-07-26T18:53Z (tip `7e43af6`)
+
+| Cell | Result |
+|---|---|
+| rogue RETURNING `proof_rogue` | PASS `main_command` |
+| rogue NEW `proof_rogue_new` | PASS `main_command` |
+| a-net NEW `proof_anet` | FAIL `menu`@step5 |
+| a-net RETURNING `proof_anet` | FAIL `menu`@step5 (same stuck class) |
+| micro | DEFER (blank-reject) |
+| xeno | N-A honest halt |
+
+**≥3 hosts attempted:** rogue · a-net · micro(deferred)/xeno(N-A) — Accept bar for *attempt* met; **M1–M3 on a-net not yet green**. Follow-on: diagnose a-net `menu`@5 on tip with banner+letter present (capture before classify invent).
