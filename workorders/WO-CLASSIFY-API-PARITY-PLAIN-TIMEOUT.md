@@ -1,29 +1,37 @@
 # WO-CLASSIFY-API-PARITY-PLAIN-TIMEOUT
 
-**Status:** OPEN · READY · offline · Claude Code preferred  
+**Status:** OPEN · READY · offline · Claude Code preferred · Accept amended 2026-07-26T21:17Z (CC probe)  
 **Posted:** 2026-07-26 · from `audit/session-classify-audit-coverage-20260726.md` C-01  
-**Base tip:** `origin/main` (`94a29f4` or newer)
+**Base tip:** `origin/main` (`0809902` or newer)
 
 ## Goal
 
-Close the divergence where `classify_screen` runs `_is_plain_timed_out_game_select` but bare `classify()` does not — so Timed Out + Select-a-game shapes cannot silently disagree across call sites.
+Close the honest hazard around bare `classify()` vs `classify_screen` — **not** by chasing unreachable whole-text “parity,” but by making the live-path contract load-bearing.
+
+## What the audit got right / wrong (CC probe 21:16:27Z)
+
+- **True:** `classify()` does not call `_is_plain_timed_out_game_select`; `classify_screen` does.
+- **Not the bite:** On the plain Timed Out + Select-a-game shape where the helper is load-bearing, both APIs still returned `game_select` (whole-text anchor path). Adding the helper alone is consequentialness-light.
+- **Actual unsafe divergence (stale scrollback):** stale `"Select a game :"` above a different live prompt → `classify_screen(text, prompt) -> menu` (correct) vs `classify(whole_text) -> game_select` (wrong). Same defect class as login whole-grid false `T`: match with nothing establishing the screen is current.
 
 ## Scope
 
-- `tw2002_aiclient/session/classify.py` — align `classify()` pre-pass with `classify_screen`, **or** document + enforce “live path must use `classify_screen`” with a lint/pin that catches bare-`classify()` misuse on that shape
-- Pins for parity (same fixture → same class from both entry points, or intentional single-entry-point enforcement)
-- **Out:** Explore HOLD · invent new screen classes · live proves · unrelated classify narrowings (C-02/C-03 are separate WOs)
+- `tw2002_aiclient/session/classify.py` docstring / contract for `classify()`
+- Pins + any small enforcement (lint/test) that live rendered-screen callers use `classify_screen`
+- Optional: add the missing plain-timeout helper to `classify()` **only if** it helps a documented one-string use case — not as the primary Accept
+- **Out:** Explore HOLD · invent classes · live proves · C-02/C-03 · rewriting all of classify
 
-## Accept
+## Accept (amended)
 
-1. Either `classify()` gains the plain-timeout pre-pass used by `classify_screen`, or callers/tests prove live path cannot use bare `classify()` for that shape and the divergence is documented as intentional with a failing pin if someone reintroduces the unsafe call pattern.
-2. Pin covers Timed Out + Select-a-game fixture(s) for the chosen strategy.
-3. `pytest tests/test_classify.py` (and any new pin file) green.
+1. **Contract first:** Document that `classify()` is structurally stale-blind (no prompt) and must not be used on a live rendered screen / automaton path. Name the stale `Select a game` counterexample.
+2. **Enforce:** Pin(s) that fail if a live path (Session / ensure / login automaton / cockpit send that classifies a screen) calls bare `classify()` instead of `classify_screen` — or prove no such caller exists and pin a representative stale-scrollback case showing `classify` ≠ `classify_screen`.
+3. **Do not** treat “add `_is_plain_timed_out_game_select` to `classify()`” as sufficient Accept by itself.
+4. `pytest` green for touched tests.
 
 ## Proof
 
-STATUS + SHA · strategy chosen (align vs enforce) · pin names · pytest excerpt.
+STATUS + SHA · contract wording cite · pin names · stale-scrollback divergence pin (or live-caller inventory) · pytest excerpt.
 
 ## Refs
 
-`audit/session-classify-audit-coverage-20260726.md` C-01 · `classify.py` `classify` vs `classify_screen`
+`audit/session-classify-audit-coverage-20260726.md` C-01 · CC HEADS-UP 2026-07-26T21:16:27Z · `classify.py` `classify` vs `classify_screen`
