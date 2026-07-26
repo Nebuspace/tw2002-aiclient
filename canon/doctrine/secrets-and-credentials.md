@@ -170,6 +170,28 @@ code.)*
    a harden WO (redact-or-omit sensitive status fields) is **out of scope** for docs-only
    touch-ups — this paragraph is the DOC-GAP close for naming.
 
+   **RESOLVED 2026-07-26** (`DECISIONS.md` §C.2 / §C.2.1 / §C.2.2 — Max carte blanche). The
+   harden WOs landed, and the family is now split **by whether the mirror leaves the session**:
+
+   - **`ensure` failure payloads — CLOSED.** Both carriers. The error text no longer interpolates
+     the observed prompt (`LoginStalled` is structurally incapable of holding screen text,
+     `297abc1`), and the failure answer is built by `_login_failure_response`, which never calls
+     `build_response` — so there is no `screen` / `prompt` / `color` mirror to forget to redact
+     (`0150838`).
+   - **`tw status` JSON — OMITTED.** `_status_response` carries `classification` and
+     `prompt_withheld`, never the painted line (`a2e42d4`). The omission is **unconditional**:
+     recognition-gating it fails OPEN, because an echoing server *replaces* the word `password`
+     with the credential, so both `is_probable_secret_prompt` and `classify_screen` answer
+     "not a secret prompt" about a line that is nothing but a secret.
+   - **`tw watch --json` — CARVED OUT (§C.2.2).** It is the live-paint export *by purpose*, so it
+     may carry `screen`. Live TUI paint of the telnet stream is the human's own eyes on their own
+     game; what must redact is a **structured mirror that leaves the session**.
+
+   Still open, and named rather than implied: a future world-identity strip must deliver the
+   current sector as a **bounded daemon-side integer**, never a raw line for a client to
+   re-parse — the archive derived it by re-parsing `status["prompt"]`, which is exactly how this
+   carrier would come back.
+
 2. **The App can mint and persist a credential without a human typing it.** When a profile opts
    into automated NEW-character registration, the login automaton generates a password (CSPRNG,
    short alnum) and persists it to the secrets file itself, before the human ever sees it. This is
