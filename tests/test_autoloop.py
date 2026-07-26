@@ -12,8 +12,9 @@ The claims this suite exists to establish, in the order they matter:
    proven structurally (the hold is a disjunct of the answer, read inside
    the runner's own mutex) rather than by sampling, because sampling two
    moving facts cannot prove a claim about one instant.
-2. **One acquisition path.** ``enter_auto_loop()`` has exactly one
-   production call site, and ``stop`` is not a second release path.
+2. **Two App drivers, no third acquisition path.** ``enter_auto_loop()``
+   is acquired only from the known drivers ``autoloop.py`` and
+   ``sector_explore.py``; ``stop`` is not a second release path.
 3. **Stop-on-unknown survives the daemon boundary.** A halt arrives at
    the operator's cockpit STOP banner as its own typed reason code -- not
    a retry, not a swallowed error, and not somebody else's code.
@@ -464,8 +465,11 @@ def test_enter_auto_loop_has_exactly_one_production_call_site():
             if isinstance(node, ast.Constant) and node.value == "enter_auto_loop":
                 reflective_sites.append((path.name, node.lineno))
 
-    assert [name for name, _ in attribute_sites] == ["autoloop.py"], attribute_sites
-    assert len(attribute_sites) == 1, attribute_sites
+    assert sorted(name for name, _ in attribute_sites) == [
+        "autoloop.py",
+        "sector_explore.py",
+    ], attribute_sites
+    assert len(attribute_sites) == 2, attribute_sites
     # `control_lock.py` names it in prose only; a string LITERAL of the
     # method name anywhere is a reflection door and must be deliberate.
     assert reflective_sites == [], reflective_sites
