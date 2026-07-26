@@ -1,12 +1,13 @@
 # WO-MICRO-UNKNOWN-STEP6-CORPUS
 
-**Status:** OPEN · READY · docs + optional live recapture · Cursor or CC · banked hub discovery 2026-07-26
+**Status:** OPEN · READY · **critical path for Max ensure bar** · CC preferred · banked hub discovery 2026-07-26
 **Posted:** 2026-07-26 · from `audit/live-ensure-matrix-20260726.md` follow-up #1
+**Escalation:** same stall shape on micro (`unknown`@6) · a-net (`menu`@5) · xeno/exiled (`unknown`@5) — treat as **login-flow coverage gap**, not three one-off hosts. Max bar: NEW+RETURNING → `main_command` on a handful of servers.
 
 ## Goal
 
-Produce a **redacted** corpus artifact for `twgs.microblaster.net` NEW ensure stall:
-`login_failed:automaton_stuck:classification='unknown':step=6` — enough for a later classify
+Produce a **redacted** corpus artifact for the step 5–6 login stall (start with reachable frames —
+prefer operator `xeno`/exiled if Max authorizes capture; else micro) — enough for a later classify
 decision **without inventing a screen class in this WO**.
 
 ## Scope

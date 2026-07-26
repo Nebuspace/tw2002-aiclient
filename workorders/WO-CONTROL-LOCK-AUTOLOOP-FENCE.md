@@ -1,11 +1,12 @@
 # WO-CONTROL-LOCK-AUTOLOOP-FENCE
 
-**Status:** OPEN · HIGH · safety substrate · banked from X4 STATUS `344991e`  
+**Status:** OPEN · HIGH · READY · Max ruled **3A** 2026-07-26 · CC preferred (safety)
 **Posted:** 2026-07-26T07:24Z
+**Max ruling (3A):** **Fence** — `take_human` must stop/hold autoloop (not docs-only).
 
 ## Goal
 
-Close the `ControlLock` gap X4 discovered: `take_human()` only raises `_driver_fenced` when `_driving` is set. A background autoloop holds `enter_auto_loop`, not `_driving` — so `is_driver_fenced()` stays False while a human is typing. X4's player works around by asking "is my hold still mine?"; the lock itself should not lie.
+Close the `ControlLock` gap X4 discovered: `take_human()` only raises `_driver_fenced` when `_driving` is set. A background autoloop holds `enter_auto_loop`, not `_driving` — so `is_driver_fenced()` stays False while a human is typing. X4's player works around by asking "is my hold still mine?"; the lock itself should not lie. **Product fence required.**
 
 ## Scope
 
