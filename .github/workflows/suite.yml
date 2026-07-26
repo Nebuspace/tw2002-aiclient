@@ -36,20 +36,21 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        # Node 24–native action majors (Node 20 runner deprecation 2025-09).
+        uses: actions/checkout@v5
         with:
           # test_safe_addstr_choke (and kin) `git show <historical-sha>:…` — default
           # shallow clone cannot see those objects (GHA failure: exit 128).
           fetch-depth: 0
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           # Minimum version from pyproject.toml requires-python = ">=3.10"
           python-version: "3.11"
 
       - name: Cache pip
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.cache/pip
           key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt', 'requirements-dev.txt') }}
@@ -73,7 +74,7 @@ jobs:
 
       - name: Upload test results on failure
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: pytest-results
           path: |
