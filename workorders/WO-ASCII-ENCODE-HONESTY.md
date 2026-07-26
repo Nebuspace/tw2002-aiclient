@@ -1,7 +1,8 @@
 # WO-ASCII-ENCODE-HONESTY
 
-**Status:** OPEN · Claude Code preferred  
-**Posted:** 2026-07-26 (Max carte blanche §B)
+**Status:** DONE  
+**Posted:** 2026-07-26 (Max carte blanche §B)  
+**Landed:** tip (see STATUS)
 
 ## Goal
 
@@ -28,3 +29,9 @@ Targeted pytest + STATUS + SHA.
 ## Refs
 
 Max carte blanche 2026-07-26 §B · prior ASCII audit WOs
+
+## Done notes
+
+- Argparse `help=` scrubbed to ASCII twins (`--` / `*` / `...`); inventory bay emptied.
+- `session/tty_encode.py` — substitute-or-loud `print_tty` for operator report lines (`menumap`, `loops`).
+- `TelnetConnection.send_text` encodes utf-8 **strict** (no `errors="replace"`).

@@ -109,16 +109,11 @@ def test_loops_is_advertised_on_help_next_to_the_other_read_only_inspectors():
 def test_the_loops_help_strings_do_not_widen_the_ascii_help_crash():
     """``tw --help`` is printed through the terminal's own codec, so a
     non-ASCII glyph in a help string raises ``UnicodeEncodeError`` on an
-    ascii/latin-1 terminal instead of printing help -- the exposure
-    ``cmd_attach``'s help comment already records for the em-dashed verbs
-    that shipped before it.
+    ascii/latin-1 terminal instead of printing help.
 
-    Honest scope: this test does NOT claim ``tw --help`` works on such a
-    terminal. Measured on this tip, ``PYTHONIOENCODING=ascii ./tw --help``
-    already dies on ``menumap``'s ``★`` well before it reaches ``loops``.
-    All this pins is that the newest verb did not add another glyph to that
-    pile -- ``tw loops --help`` alone does print under ascii. Fixing the
-    pre-existing ones is a separate WO."""
+    WO-ASCII-ENCODE-HONESTY scrubbed the parser tree to ASCII; this pin keeps
+    ``loops`` from re-widening the surface.
+    """
     parser = cli.build_parser()
     sub = next(a for a in parser._actions if getattr(a, "choices", None) is not None)
     entry = next(a for a in sub._choices_actions if a.dest == "loops")

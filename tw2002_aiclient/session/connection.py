@@ -206,7 +206,10 @@ class TelnetConnection:
         self._log_tx(TX_IAC_CHANNEL, data, False, None)
 
     def send_text(self, text: str, enter: bool = True, secret: bool = False):
-        data = text.encode("utf-8", errors="replace")
+        # TX: utf-8 strict -- never silent-replace (DECISIONS §B). Surrogates /
+        # bad code points must fail loud at the send choke rather than land
+        # as U+FFFD on the wire looking like a successful operator action.
+        data = text.encode("utf-8")
         if enter:
             data += b"\r\n"
         # BaseException, not OSError: the record must be written for ANY

@@ -23,6 +23,7 @@ from pathlib import Path
 import argparse
 
 from . import credentials, env
+from .tty_encode import print_tty
 
 
 class ProfileResolutionError(Exception):
@@ -479,7 +480,7 @@ def cmd_menumap(args):
     if not path and getattr(args, "world_id", None):
         path = str(menu_knowledge.knowledge_path_for_world(args.world_id))
     if not path:
-        print("ERROR: need --path or --world-id")
+        print_tty("ERROR: need --path or --world-id")
         return 1
 
     run_dir = _resolve_run_dir(getattr(args, "run_dir", None))
@@ -523,14 +524,16 @@ def cmd_menumap(args):
             path, current_sig=current_sig, here_unknown=here_unknown
         )
     except (OSError, ValueError, TypeError, KeyError, menu_knowledge.GameKnowledgeError) as e:
-        print(f"ERROR: {e}")
+        print_tty(f"ERROR: {e}")
         return 1
 
     if getattr(args, "json", False):
+        # JSON stays raw Unicode (machine codecs); operator text lines go
+        # through print_tty so ★ / — / · never silent-drop on ASCII TTYs.
         print(json.dumps({"ok": True, "path": path, **summary}))
         return 0
     for line in format_menu_map_report(summary):
-        print(line)
+        print_tty(line)
     return 0
 
 
@@ -590,7 +593,7 @@ def cmd_loops(args):
         print(json.dumps(result))
     else:
         for line in format_loops_report(result):
-            print(line)
+            print_tty(line)
     return 1 if result.get("status") == "unreadable" else 0
 
 
@@ -1056,7 +1059,7 @@ def build_parser() -> argparse.ArgumentParser:
                      help="do not append CRLF after input")
     sp.set_defaults(enter=True)
     sp.add_argument("--secret", action="store_true",
-                     help="password entry — never persisted to the transcript log")
+                     help="password entry -- never persisted to the transcript log")
     sp.add_argument("--wait-prompt", default=None, dest="wait_prompt",
                      help="case-sensitive regex; settle waits until prompt matches")
     sp.add_argument("--timeout", type=float, default=8.0, help="settle timeout seconds")
@@ -1074,7 +1077,7 @@ def build_parser() -> argparse.ArgumentParser:
                      help="do not append CRLF after input")
     sp.set_defaults(enter=True)
     sp.add_argument("--secret", action="store_true",
-                     help="password entry — never persisted to the transcript log")
+                     help="password entry -- never persisted to the transcript log")
     sp.add_argument("--run-dir", default=None, metavar="PATH", dest="run_dir",
                      help="daemon run directory override (default: project-rooted run/)")
     sp.add_argument("--json", action="store_true", help="machine-parseable JSON output")
@@ -1117,7 +1120,7 @@ def build_parser() -> argparse.ArgumentParser:
                      help="daemon run directory override (default: project-rooted run/)")
     sp.add_argument("--json", action="store_true", help="machine-parseable JSON output")
     sp.add_argument("--compact", action="store_true",
-                     help="screen only — omit prompt/class/settled footer")
+                     help="screen only -- omit prompt/class/settled footer")
     sp.set_defaults(func=cmd_watch)
 
     sp = sub.add_parser(
@@ -1125,9 +1128,9 @@ def build_parser() -> argparse.ArgumentParser:
         # ASCII, for the same reason cmd_attach's own strings are: `tw attach
         # --help` and `tw --help` both print this line, and on the ascii or
         # latin-1 terminal where attach's encoding behaviour actually matters
-        # a non-ASCII glyph here crashes the help output instead. (The other
-        # verbs' help strings in this parser still carry em-dashes and have
-        # the same exposure -- out of this WO's scope, reported not fixed.)
+        # a non-ASCII glyph here crashes the help output instead. WO-ASCII-
+        # ENCODE-HONESTY scrubbed the remaining help/epilog offenders the
+        # same way -- format_help() must stay pure ASCII.
         help="take the keyboard (control-lock); thin attach -- no curses paint yet",
     )
     sp.add_argument(
@@ -1144,7 +1147,7 @@ def build_parser() -> argparse.ArgumentParser:
         "menumap",
         help=(
             "read-only menu-map inspector: coverage, dead-ends, orphans, "
-            "and you-are-here ★ / off-map — never sends"
+            "and you-are-here * / off-map -- never sends"
         ),
     )
     sp.add_argument(
@@ -1156,7 +1159,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--world-id",
         dest="world_id",
         default=None,
-        help="world_id slug under state/world/ (joins …/game_knowledge.json)",
+        help="world_id slug under state/world/ (joins .../game_knowledge.json)",
     )
     sp.add_argument("--run-dir", default=None, metavar="PATH", dest="run_dir",
                      help="daemon run directory override (default: project-rooted run/)")
@@ -1165,12 +1168,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     sp = sub.add_parser(
         "loops",
-        # ASCII, deliberately. `tw --help` prints every verb's help line
-        # through the terminal's own codec, so one non-ASCII glyph here
-        # raises UnicodeEncodeError instead of printing help on an ascii or
-        # latin-1 terminal -- the exposure `attach`'s help comment above
-        # records for the em-dashed verbs that shipped before it. Not
-        # widened here.
+        # ASCII, deliberately -- same discipline as attach/menumap help.
         help=(
             "list the learned-loop (taught-macro) store -- names, provenance, "
             "profit metadata; reads state/skills directly, never sends"
