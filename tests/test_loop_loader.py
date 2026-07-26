@@ -728,10 +728,25 @@ def test_non_json_files_are_not_candidates(tmp_path):
 
 # Symbols that can put a keystroke on the wire, in the shape
 # tests/test_spectate_no_send.py already established for the cockpit.
+#
+# `send_and_confirm` was added by WO-P2-G4-X3. It is deliberately IN this
+# set even though the player is allowed exactly one of them: the pin is
+# stronger when the player's single send is REPORTED by the same scanner
+# that forbids the others, rather than invisible to it. A blocklist that
+# did not name the one call that actually reaches the wire would pass on
+# the player for the wrong reason.
 _SEND_SYMBOLS = frozenset({
     "send_key", "send_raw", "send_request", "sendall", "send",
     "AttachInputConn", "attach_client", "cmd_do", "cmd_send", "write",
+    "send_and_confirm",
 })
+
+# `loops/` modules that must not reach the transport AT ALL -- the strict
+# pin, unchanged from G3/X2. `player.py` is the sole module held to the
+# different (and separately proven) pin in tests/test_loop_player.py; it is
+# named there, not merely skipped here, so the exclusion cannot be silent.
+_READ_ONLY_MODULES = frozenset({"__init__.py", "store.py", "loader.py", "list_view.py"})
+_PLAYER_MODULE = "player.py"
 
 
 def _reflected_name(call):
@@ -755,13 +770,24 @@ def _reflected_name(call):
     return None
 
 
-def _send_violations(source: str) -> list[str]:
+def _send_violations(source: str, allow_session_modules=frozenset()) -> list[str]:
     """Every way this scanner knows of to reach the wire from a module.
 
     Two layers, and the FIRST is the load-bearing one: a module that cannot
     import the transport cannot send through it, whatever it names its
     variables. The symbol blocklist is the backstop for a send path that
     somehow arrives without importing ``session``.
+
+    ``allow_session_modules`` waives the import ban for named ``session``
+    submodules, and ONLY in the single relative spelling ``from ..session.X
+    import ...`` -- an absolute ``import tw2002_aiclient.session.X`` stays a
+    violation, so the waiver cannot be reached by a second route. It exists
+    for ``loops/player.py``, which canon requires to DERIVE closed
+    vocabularies from ``classify`` / ``state_parser`` rather than restate
+    them. The waiver is not taken on trust: the caller that passes it also
+    runs this scanner over the waived modules themselves (see
+    ``tests/test_loop_player.py``), so a send appearing in one of them fails
+    there rather than silently widening the pin here.
     """
     tree = ast.parse(source)
     bad: list[str] = []
@@ -773,7 +799,10 @@ def _send_violations(source: str) -> list[str]:
                     bad.append(f"import {alias.name}")
         elif isinstance(node, ast.ImportFrom):
             mod = node.module or ""
-            if mod.split(".")[0] in {"socket", "telnetlib"} or "session" in mod.split("."):
+            parts = mod.split(".")
+            if len(parts) == 2 and parts[0] == "session" and parts[1] in allow_session_modules:
+                continue
+            if parts[0] in {"socket", "telnetlib"} or "session" in parts:
                 bad.append(f"from {mod} import ...")
             # `from ..session import cli` -- a relative hop out of the package.
             if node.level and node.level > 1:
@@ -789,24 +818,33 @@ def _send_violations(source: str) -> list[str]:
     return bad
 
 
-def test_the_loops_package_still_cannot_send_a_keystroke(tmp_path):
-    """``loops/__init__.py`` claims "nothing in this package can send a
-    keystroke". This is the claim, enforced rather than asserted.
+def test_the_read_modules_still_cannot_send_a_keystroke(tmp_path):
+    """``loops/__init__.py`` claims the read modules "still cannot send at
+    all". This is that claim, enforced rather than asserted.
 
     It is also the guarantee that keeps this lane disjoint from the live
-    ``protocol.py`` lane: ``loops/`` reaching into ``session/`` is exactly
-    the edge that would couple them.
+    ``protocol.py`` lane: a READ module in ``loops/`` reaching into
+    ``session/`` is exactly the edge that would couple them.
+
+    ``player.py`` (WO-P2-G4-X3) is held to a different pin, proven in
+    ``tests/test_loop_player.py``. The exclusion is by NAME, and the
+    coverage assertion below is an equality rather than a superset: a new
+    module dropped into ``loops/`` fails here until someone decides,
+    explicitly, which of the two pins it belongs under. That is what stops
+    the strict pin from being escaped by simply adding a file.
     """
     scanned = sorted(LOOPS_PKG.glob("*.py"))
-    assert {p.name for p in scanned} >= {"__init__.py", "store.py", "loader.py"}
+    assert {p.name for p in scanned} == _READ_ONLY_MODULES | {_PLAYER_MODULE}
 
     for path in scanned:
+        if path.name == _PLAYER_MODULE:
+            continue
         assert _send_violations(path.read_text(encoding="utf-8")) == [], path.name
 
     # The prose pin the WO requires stays in place, in its own words.
     from tw2002_aiclient import loops as loops_pkg
 
-    assert "send a keystroke" in (loops_pkg.__doc__ or "")
+    assert "cannot send at all" in (loops_pkg.__doc__ or "")
 
 
 def test_the_no_send_scanner_actually_fires():
@@ -818,8 +856,31 @@ def test_the_no_send_scanner_actually_fires():
     assert _send_violations("import socket") != []
     assert _send_violations("conn.send_raw('P')") != []
     assert _send_violations("getattr(conn, 'send_key')('P')") != []
+    assert _send_violations("port.send_and_confirm('P', None)") != []
     # ... and stays quiet on what this package actually does.
     assert _send_violations("from .store import _read_document\nimport os, re, json") == []
+
+
+def test_the_session_import_waiver_is_narrow():
+    """The waiver `player.py` relies on, pinned from the other side.
+
+    It must open exactly one door and no more: the relative
+    ``from ..session.<allowed> import ...`` spelling, for a NAMED module
+    only. Everything else about the session import ban has to keep firing,
+    or the waiver becomes a general-purpose hole the day someone passes a
+    wider set.
+    """
+    allow = frozenset({"classify"})
+    assert _send_violations("from ..session.classify import classify_screen", allow) == []
+    # A different session module is still refused, even under a waiver.
+    assert _send_violations("from ..session.protocol import build_response", allow) != []
+    # The absolute spelling of the very same allowed module is still refused.
+    assert _send_violations("import tw2002_aiclient.session.classify", allow) != []
+    assert _send_violations("from tw2002_aiclient.session.classify import x", allow) != []
+    # The waiver never touches the symbol blocklist.
+    assert _send_violations("from ..session.classify import x\nc.sendall(b'P')", allow) != []
+    # Or the transport ban.
+    assert _send_violations("import socket", allow) != []
 
 
 def _existence_probes(source: str) -> list[str]:
