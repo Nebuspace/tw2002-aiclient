@@ -3,7 +3,10 @@
 A classification-driven expect/respond engine that drives a cold (or
 mid-flow) TWGS-direct socket to the in-game `Command [TL=...]` prompt:
 
-  name prompt (blank -- "ENTER for none")
+  name prompt (blank -- "ENTER for none"; if THIS particular host
+             explicitly rejects the blank, one bounded retry with the
+             profile's own handle instead -- WO-MICRO-LOGIN-BLANK-REJECT,
+             see `_OUTER_NAME_REJECTED_RE`)
     -> door-select menu ("Select a game :" -> game_letter)
     -> module-entry menu ("T - Play Trade Wars 2002" -> "T")
     -> "What is your name?" -> handle
@@ -135,6 +138,15 @@ _PLANET_NAME_PROMPT_RE = re.compile(r"name\s+your\s+home\s+planet", re.I)
 _PLANET_NAME_BOX_RE = re.compile(r"^\[-+\]$")
 _PLANET_COMMAND_RE = re.compile(r"planet\s+command", re.I)
 _OUTER_NAME_PROMPT_RE = re.compile(r"enter\s+for\s+none", re.I)
+# WO-MICRO-LOGIN-BLANK-REJECT: some hosts advertise "(ENTER for none)" and
+# then explicitly refuse the blank the canon-correct send supplies --
+# captured live against twgs.microblaster.net (see
+# audit/micro-unknown-step6-corpus-20260726.md). Matched against the WHOLE
+# screen (not just the current prompt line), the same discipline as
+# `_SHOW_LOG_RE` above: the rejection text sits a line or more ABOVE the
+# re-printed prompt by the time it's next classified, never on the current
+# prompt line itself.
+_OUTER_NAME_REJECTED_RE = re.compile(r"login\s+name\s+is\s+required", re.I)
 
 # -- NEW-branch prompt-coverage extension point -----------------------------
 #
@@ -261,6 +273,11 @@ def run_login(session, profile, get_password, save_password, target="main_comman
         "registering": None,  # None = undetermined yet; True/False once char_create is (or isn't) seen
         "password": None,
         "password_attempts": 0,
+        # WO-MICRO-LOGIN-BLANK-REJECT: has the bounded outer-name-gate
+        # retry (blank, then ONE retry with the profile's handle) already
+        # spent its one retry this run? See `_decide()`'s `login_name`
+        # branch.
+        "outer_name_handle_tried": False,
     }
     stagnant_rounds = 0
     last_signature = None
@@ -419,6 +436,29 @@ def _decide(cls, text, prompt, profile, state, get_password, save_password, sess
     # by the exact wording captured live ("... (ENTER for none)").
     if cls == "login_name":
         if _OUTER_NAME_PROMPT_RE.search(prompt):
+            if _OUTER_NAME_REJECTED_RE.search(text):
+                # WO-MICRO-LOGIN-BLANK-REJECT: this same outer gate is
+                # re-printed AND the host has explicitly told us why --
+                # "A login name is required." -- so the canon-correct
+                # blank we just sent was refused. A host demanding a name
+                # is telling us plainly what it wants: retry ONCE with the
+                # profile's own handle rather than resending the same
+                # blank forever (captured live against
+                # twgs.microblaster.net -- see
+                # audit/micro-unknown-step6-corpus-20260726.md).
+                if state["outer_name_handle_tried"]:
+                    # The one bounded retry is already spent and this same
+                    # gate is STILL rejecting -- do not keep guessing.
+                    # Fail loud with a NAME that says what the host did,
+                    # never the generic unknown/automaton_stuck shape (see
+                    # this WO's Accept). Only `profile.name` (a config
+                    # value, not screen text) is interpolated, matching
+                    # every other plain `LoginError` raise in this
+                    # function (`registration_not_permitted`,
+                    # `returning_password_rejected`, etc.).
+                    raise LoginError(f"login_name_rejected:profile={profile.name}")
+                state["outer_name_handle_tried"] = True
+                return profile.handle, False, None
             return "", False, None
         return profile.handle, False, None
 

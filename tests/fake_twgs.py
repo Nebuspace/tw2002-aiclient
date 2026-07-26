@@ -46,6 +46,29 @@ unrecognized screen produces, rather than re-sending the letter). Both
 raise `ValueError` at construction time if combined with a non-`"returning"`
 mode -- neither knob has meaning for the NEW/refused/wrong_password arcs.
 
+`"returning"`-only rejection knobs (WO-MICRO-LOGIN-BLANK-REJECT, canon:
+`audit/micro-unknown-step6-corpus-20260726.md`): `outer_name_reject_times=<N>`
+makes the very first pre-login screen -- the outer `"Please enter your name
+(ENTER for none):"` gate -- reject the client's first `N` sends instead of
+accepting the first one unconditionally, re-presenting the SAME prompt after
+each rejection (`"A login name is required."` + the prompt again), then
+accepting whatever the client sends on send `N+1` and proceeding to
+`game_select` as usual. `outer_name_reject_then_silent=True` changes what
+happens on the LAST scripted rejection (send `N`): instead of the ordinary
+reject-then-reprompt, the host prints ONLY the rejection line and never
+reprompts at all -- captured live against `twgs.microblaster.net`, where the
+gate rejected three sends with a reprompt each time and then went completely
+silent on the fourth, wedging the (pre-fix) automaton in
+`automaton_stuck:classification='unknown'`. Every reply is also validated
+against the login automaton's OWN documented policy (blank on the first
+send, the profile's handle on every rejected retry after that) rather than
+merely recorded, so a regressed automaton that keeps re-sending blank shows
+up as a `ScriptMismatch` on `.errors`, not just a silently-wrong
+`.received_inputs`. Both knobs raise `ValueError` at construction time if
+combined with a non-`"returning"` mode, same as `start_at`/
+`restale_game_select`; `outer_name_reject_then_silent=True` with
+`outer_name_reject_times=0` is also refused (nothing to make silent).
+
 Every scripted step's received input is ALSO captured generically on
 `.received_inputs` (`dict[label, list[str]]`, append-only, same `label`
 strings passed to `_expect_line`/`_expect_key`/`_capture_line`) -- lets a
@@ -204,6 +227,8 @@ class FakeTWGS:
         post_password_delay_s: float = 0.0,
         start_at: str | None = None,
         restale_game_select: bool = False,
+        outer_name_reject_times: int = 0,
+        outer_name_reject_then_silent: bool = False,
     ):
         self.handle = handle
         self.game_letter = game_letter
@@ -228,6 +253,19 @@ class FakeTWGS:
             raise ValueError(f"unknown start_at step: {start_at!r} (expected one of {self._PRE_LOGIN_STEPS!r})")
         self.start_at = start_at
         self.restale_game_select = restale_game_select
+        # "returning" mode only (WO-MICRO-LOGIN-BLANK-REJECT rejection
+        # knobs -- see module docstring): same fail-loud-at-construction
+        # discipline as the resume knobs above.
+        if (outer_name_reject_times or outer_name_reject_then_silent) and mode != "returning":
+            raise ValueError(
+                "outer_name_reject_times/outer_name_reject_then_silent are only meaningful for mode='returning'"
+            )
+        if outer_name_reject_times < 0:
+            raise ValueError(f"outer_name_reject_times must be >= 0, got {outer_name_reject_times!r}")
+        if outer_name_reject_then_silent and outer_name_reject_times < 1:
+            raise ValueError("outer_name_reject_then_silent=True needs outer_name_reject_times >= 1")
+        self.outer_name_reject_times = outer_name_reject_times
+        self.outer_name_reject_then_silent = outer_name_reject_then_silent
         self.errors: list[str] = []
 
         # -- mode-specific outcomes, populated by the matching _run_* method
@@ -361,10 +399,18 @@ class FakeTWGS:
             raise ValueError(f"unknown FakeTWGS mode: {self.mode!r}")
         runner(conn, reader)
 
-    def _run_pre_login(self, conn: socket.socket, reader: "_Reader"):
+    def _run_pre_login(self, conn: socket.socket, reader: "_Reader") -> bool:
         """The 6 screens common to every mode -- outer name through
         show-log -- identical regardless of which branch (RETURNING vs
         NEW vs refused) comes next.
+
+        Returns `True` if the arc completed normally and the caller should
+        proceed to whatever comes next; `False` if it was diverted into a
+        permanent, silent hold (`self.outer_name_reject_then_silent`'s
+        corpus-mirroring shape, below) -- a caller that ignores a `False`
+        return and keeps scripting anyway would send bytes into a
+        connection this method has already committed to leaving silent
+        forever.
 
         `self.start_at` (returning-only, see module docstring) skips every
         step BEFORE it entirely -- the connection's very first bytes are
@@ -386,14 +432,63 @@ class FakeTWGS:
         is real wall-clock margin around `settle.py`'s 350ms debounce +
         150ms stability-pause (send_and_confirm) so the stale screen is
         never overwritten before either confirm can observe it settled.
+
+        `self.outer_name_reject_times`/`self.outer_name_reject_then_silent`
+        (returning-only, WO-MICRO-LOGIN-BLANK-REJECT -- see module
+        docstring) reject the outer name gate's first N sends instead of
+        accepting the very first one: the login automaton's own documented
+        policy is blank on the first send, then the profile's handle on
+        every subsequent retry, so each reply is checked against exactly
+        that rather than merely recorded (a regressed automaton that keeps
+        re-sending blank surfaces as a `ScriptMismatch` on `.errors`).
         """
         steps = self._PRE_LOGIN_STEPS
         if self.start_at is not None:
             steps = steps[steps.index(self.start_at) :]
 
         if "outer_name" in steps:
+            rejects_remaining = self.outer_name_reject_times
+            attempt = 0
+            # The reject line and its re-prompt are sent as ONE combined
+            # `_send()` (matching `game_select`/`module_entry_menu` below,
+            # each of which also combines a header line with its prompt)
+            # -- `_send()`'s own leading ANSI clear-screen means a rejection
+            # sent as its OWN separate `_send()` would be wiped by the
+            # very next `_send()` (the re-prompt) before the client ever
+            # renders both together, and `_OUTER_NAME_REJECTED_RE` would
+            # never see it.
             self._send(conn, "Please enter your name (ENTER for none):")
-            self._expect_line(reader, expected="", label="outer_name")
+            while True:
+                got = reader.read_line().decode("cp437", errors="replace")
+                self._record("outer_name", got)
+                expected = "" if attempt == 0 else self.handle
+                if got != expected:
+                    self.errors.append(
+                        f"outer_name (send {attempt + 1}): expected {expected!r}, got {got!r}"
+                    )
+                attempt += 1
+                if rejects_remaining <= 0:
+                    break  # accepted -- fall through to game_select below
+                rejects_remaining -= 1
+                if rejects_remaining == 0 and self.outer_name_reject_then_silent:
+                    # Corpus shape (WO-MICRO-LOGIN-BLANK-REJECT, captured
+                    # live against twgs.microblaster.net -- see
+                    # audit/micro-unknown-step6-corpus-20260726.md): the
+                    # LAST scripted rejection carries NO re-prompt at all --
+                    # the host just goes silent, unlike every earlier
+                    # rejection which re-asked. Hold the connection open
+                    # and quiet forever, same discipline as
+                    # `_send_welcome_and_hold`.
+                    self._send(conn, "A login name is required.")
+                    while not self._stop.is_set():
+                        try:
+                            chunk = conn.recv(4096)
+                        except OSError:
+                            return False
+                        if not chunk:
+                            return False
+                    return False
+                self._send(conn, "A login name is required.\r\nPlease enter your name (ENTER for none):")
 
         if "game_select" in steps:
             self._send(conn, f"<{self.game_letter}> Bob the Builder\r\nSelect a game :")
@@ -419,8 +514,11 @@ class FakeTWGS:
             self._send(conn, "Show today's log? (Y/N) [N]")
             self._expect_line(reader, expected="N", label="show_log")
 
+        return True
+
     def _run_returning(self, conn: socket.socket, reader: "_Reader"):
-        self._run_pre_login(conn, reader)
+        if not self._run_pre_login(conn, reader):
+            return  # diverted into a permanent silent hold -- nothing more to script
 
         self._send(conn, "Password?")
         # The password is checked for exact match (correctness proof, not
@@ -450,7 +548,8 @@ class FakeTWGS:
         CREATE/repeat screens ACCEPT/CAPTURE whatever the client sends
         (the automaton GENERATES it, so a fixed-value check would always
         fail) rather than comparing against `self.password`."""
-        self._run_pre_login(conn, reader)
+        if not self._run_pre_login(conn, reader):
+            return  # diverted into a permanent silent hold -- nothing more to script
 
         self._send(
             conn,
@@ -500,7 +599,8 @@ class FakeTWGS:
         BEFORE sending a single byte -- proven by verifying the connection
         receives NOTHING after this screen is presented (see module
         docstring; `.received_after_char_create`)."""
-        self._run_pre_login(conn, reader)
+        if not self._run_pre_login(conn, reader):
+            return  # diverted into a permanent silent hold -- nothing more to script
 
         self._send(
             conn,
@@ -526,7 +626,8 @@ class FakeTWGS:
         already-known-bad saved value. `.received_passwords` is populated
         with exactly the one attempt for a correctly-behaving automaton --
         a second entry would mean it re-sent instead of failing loud."""
-        self._run_pre_login(conn, reader)
+        if not self._run_pre_login(conn, reader):
+            return  # diverted into a permanent silent hold -- nothing more to script
 
         self._send(conn, "Password?")
         try:
