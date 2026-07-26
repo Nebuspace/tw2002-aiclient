@@ -89,6 +89,23 @@ SOURCE_VALUES = frozenset({"recorded", "mined"})
 STORE_DIRNAME = "skills"
 DRAFTS_DIRNAME = "_drafts"
 
+# Why something could not be read. Vocabulary and VALUES deliberately
+# identical to `session/credentials.py`'s `CAUSE_*` (and `player_bank`'s
+# before it) rather than a second dialect -- coarse enough to branch on,
+# distinct where the operator's next action differs: fixing permissions,
+# replacing a wrong path, and repairing a damaged document are three
+# different jobs, and `reason` narrows each one further.
+#
+# Redefined here rather than imported because `loops/` deliberately imports
+# nothing from `session/` -- that disjointness is what keeps this package
+# structurally incapable of reaching the wire (see `loops/__init__.py`), and
+# it is worth four duplicated string constants. Identical values mean a
+# future unification is a re-export, never a translation table.
+CAUSE_DENIED = "denied"  # we were not allowed to look
+CAUSE_UNUSABLE = "unusable"  # the path is not a readable file (e.g. a directory)
+CAUSE_CORRUPT = "corrupt"  # we looked, and the bytes are not a readable document
+CAUSE_MALFORMED = "malformed"  # it parsed, and it is not the document we needed
+
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 STATE_DIR = _PROJECT_ROOT / "state"
 
@@ -128,40 +145,56 @@ def _finite_number(value) -> Optional[float]:
     return number if math.isfinite(number) else None
 
 
-def _read_document(path: Path) -> tuple[Optional[dict], Optional[str]]:
-    """``(document, None)`` on a usable macro doc, ``(None, reason)`` on one
-    this reader refuses to present as a loop.
+def _read_document(path: Path) -> tuple[Optional[dict], Optional[str], Optional[str]]:
+    """``(document, None, None)`` on a usable macro doc, ``(None, reason,
+    cause)`` on one this reader refuses to present as a loop.
 
     The reasons are deliberately specific -- an operator who is told a file is
-    unreadable can only act on it if they know what is wrong with it.
+    unreadable can only act on it if they know what is wrong with it. The
+    ``cause`` is the same detail coarsened into a value a CALLER can branch
+    on without sniffing the reason string; ``loops/loader.py`` uses it to
+    tell "I was not allowed to look" from "this is not a macro" when it has
+    to decide whether a miss was honestly established.
 
     ``OSError`` is caught alongside the JSON errors on purpose: the archive
     reader caught only its own ``SkillError``, so a permission-denied file (or
     a directory named ``*.json``) escaped as an ``OSError`` and took the whole
     listing down instead of being reported as one unreadable file.
+
+    This is the ONE document-admission gate in the package. The listing
+    (`_read_root`) and the single-loop loader both come through it, so the
+    minimum bar for "this is a macro at all" -- a usable identity and a step
+    list -- cannot drift between what `tw loops` shows and what a player is
+    allowed to load.
     """
     try:
         with open(path, encoding="utf-8") as handle:
             document = json.load(handle)
     except json.JSONDecodeError as exc:
-        return None, f"invalid JSON ({exc.msg}, line {exc.lineno})"
+        return None, f"invalid JSON ({exc.msg}, line {exc.lineno})", CAUSE_CORRUPT
     except UnicodeDecodeError:
-        return None, "not valid UTF-8"
+        return None, "not valid UTF-8", CAUSE_CORRUPT
+    except PermissionError as exc:
+        return None, exc.strerror or "permission denied", CAUSE_DENIED
     except OSError as exc:
-        return None, exc.strerror or "could not be opened"
+        return None, exc.strerror or "could not be opened", CAUSE_UNUSABLE
 
     if not isinstance(document, dict):
-        return None, f"top-level shape is {type(document).__name__}, expected an object"
+        return (
+            None,
+            f"top-level shape is {type(document).__name__}, expected an object",
+            CAUSE_MALFORMED,
+        )
     # `name` is the macro's identity -- what a human types to replay it. The
     # filename is NOT a substitute: the writer sanitizes names into stems, so
     # a stem is a lossy derivation, and adopting one would be inventing an
     # identity for a document that does not carry it.
     name = document.get("name")
     if not isinstance(name, str) or not name.strip():
-        return None, "missing a usable 'name'"
+        return None, "missing a usable 'name'", CAUSE_MALFORMED
     if not isinstance(document.get("steps"), list):
-        return None, "missing a usable 'steps' list"
-    return document, None
+        return None, "missing a usable 'steps' list", CAUSE_MALFORMED
+    return document, None, None
 
 
 def _row(document: Mapping[str, Any], *, draft: bool) -> dict[str, Any]:
@@ -236,7 +269,9 @@ def _read_root(directory: Path, *, draft: bool) -> dict[str, Any]:
         root["reason"] = exc.strerror or "could not be listed"
         return root
     for path in [directory / name for name in sorted(names) if name.endswith(".json")]:
-        document, reason = _read_document(path)
+        # `cause` is for the single-loop loader's honest-miss decision; the
+        # listing renders `reason`, which is strictly more specific.
+        document, reason, _cause = _read_document(path)
         if document is None:
             # Named, never silently skipped. The archive's `continue` here is
             # what let a store of entirely corrupt files report as an empty
