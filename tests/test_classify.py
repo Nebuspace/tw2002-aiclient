@@ -371,6 +371,10 @@ def test_plain_game_select_with_timed_out_as_current_prompt_stays_game_select():
     assert classify_screen(text, "Timed out...") == "game_select"
     # classify() full-text scan already worked (gate anchor fires on whole text);
     # this is the regression pin for the classify_screen() prompt-line path only.
+    # WO-CLASSIFY-API-PARITY-PLAIN-TIMEOUT (ratified "enforce"): this is the
+    # coincidental agreement classify()'s own docstring now documents explicitly --
+    # not evidence classify() is generally safe to call on live screen text; see
+    # the stale-scrollback negative just below for the case where it disagrees.
     assert classify(text) == "game_select"
 
 
@@ -399,7 +403,20 @@ def test_stale_plain_game_select_bleeding_into_module_entry_menu_with_timed_out_
     phrase for a live game-select prompt -- the dash-style menu option between
     the stale ``Select a game :`` line and the ``Timed out...`` line is the
     tell.  This would send the configured letter as an unintended keystroke on
-    the wrong screen if it misfired as ``game_select``."""
+    the wrong screen if it misfired as ``game_select``.
+
+    WO-CLASSIFY-API-PARITY-PLAIN-TIMEOUT (ratified "enforce" over "align",
+    audit/session-classify-audit-coverage-20260726.md C-01, amended per the
+    2026-07-26T21:17Z CC probe): this is the load-bearing evidence for that
+    ruling. ``classify()``'s own gate-anchor loop scans the WHOLE text with
+    no prompt-line discipline at all, so it misreads the stale ``Select a
+    game :`` line as ``game_select`` below -- a structurally BIGGER hole
+    than the audit's one-line finding (a missing
+    ``_is_plain_timed_out_game_select`` pre-pass), and not something that
+    pre-pass could have fixed. See ``classify()``'s own docstring
+    (classify.py) and tests/test_classify_api_parity.py's structural sweep,
+    which fails the whole suite if any PRODUCT-TREE caller ever reaches for
+    this bare function instead of ``classify_screen()``."""
     text = (
         "<A> Alien Retribution [20kS, 25kT]\n"  # stale game-select body
         "<F> Bob the Builder   [30kS, 30kT]\n"   # stale game-select body
@@ -411,7 +428,11 @@ def test_stale_plain_game_select_bleeding_into_module_entry_menu_with_timed_out_
     )
     # Must be ``menu`` (the current screen's own content anchor), never ``game_select``.
     assert classify_screen(text, "Timed out...") == "menu"
-    assert classify(text) == "game_select"  # classify() scans whole text, no prompt discipline
+    # classify() scans whole text, no prompt discipline -- this is the KNOWN,
+    # intentional divergence WO-CLASSIFY-API-PARITY-PLAIN-TIMEOUT documents and
+    # structurally refuses to let spread to any product-tree caller (see
+    # tests/test_classify_api_parity.py).
+    assert classify(text) == "game_select"
 
 
 def test_banner_game_select_lookalike_without_the_twgs_banner_is_still_a_plain_menu():
