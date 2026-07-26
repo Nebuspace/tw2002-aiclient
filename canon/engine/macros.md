@@ -16,12 +16,15 @@ the game disagrees with what was recorded. It is the thing a rule's `do` actuall
 Two invariants govern everything below, and they are the whole reason this concept exists rather
 than a bare "replay these keys" loop:
 
-1. **Human-demonstrated, human-approved substrate — never AI-generated live.** Every macro's steps
-   came from a human hand at the keyboard (or, for a mined proposal, from the deterministic
-   ledger-miner) and every macro is inert until a human has approved it. Replay presses back exactly
-   what was taught; it never reasons, never invents a keystroke, never asks an LLM what to do next.
-   The AI has no live seat here — its only relationship to a macro is as a retrospective author of a
-   *draft* the human must bless (see [AI Teacher](/engine/ai-teacher.md)).
+1. **Human-demonstrated substrate — never AI-generated live.** Every macro's steps came from a human
+   hand at the keyboard (or, for a mined proposal, from the deterministic ledger-miner). A **recorded**
+   demonstration lands **blessed by default** — the capture itself is the approval (Max ruling
+   2026-07-26: blessed-by-default is OK; do not require a second promote step for `tw record`).
+   **Mined / AI-authored** proposals stay **drafts** under `_drafts/` and fire only after a human
+   promotes them into the blessed store. Replay presses back exactly what was taught; it never
+   reasons, never invents a keystroke, never asks an LLM what to do next. The AI has no live seat
+   here — its only relationship to a macro is as a retrospective author of a *draft* the human must
+   bless (see [AI Teacher](/engine/ai-teacher.md)).
 2. **Never fire an unverified or destructive send.** A macro validates the world *before* its first
    send (start-anchor) and confirms the screen *after* every send (send-and-confirm), and it
    **stops** rather than pressing on the instant either check fails. Blind pumping — issuing the next
@@ -46,7 +49,7 @@ The document also carries:
 |---|---|
 | `name` | The macro's identity within its world's library. |
 | `start_anchor` | The sector the human was standing in when the sequence was recorded — the precondition every replay re-checks against the *current* sector before pressing anything. |
-| `source` | `recorded` (captured from a human `tw record` window) or `mined` (a deterministic candidate proposal — see [Candidate Mining](/engine/candidate-mining.md)). Both are inert until human-approved. |
+| `source` | `recorded` (captured from a human `tw record` window — lands **blessed by default**; `--draft` opt-out writes `_drafts/`) or `mined` (a deterministic candidate proposal — see [Candidate Mining](/engine/candidate-mining.md); always draft / inert until a human promotes it). |
 | `created_ts`, `mined_stats` | Provenance / the profitability stats a mined proposal was ranked by. |
 
 ## Capture — recording the human's demonstration
@@ -60,10 +63,11 @@ Capture honors the same redaction contract as the rest of the system: a `--secre
 or anything flagged secret) mid-capture is **dropped, never persisted** into a replayable macro. A
 credential must never live in a file that gets pressed back.
 
-The recording is a *human demonstration*, full stop. There is no live AI in the capture loop. A mined
-macro (`source: mined`) is the one non-recorded origin — the deterministic profit-miner proposing a
-recurring profitable ledger subsequence as a **draft** — and it too becomes a real, fireable macro only
-when a human approves it.
+The recording is a *human demonstration*, full stop. There is no live AI in the capture loop. Saving a
+recorded macro blesses it by default (`LoopRecorder.save(blessed=True)`; CLI `--draft` for the inert
+path). A mined macro (`source: mined`) is the one non-recorded origin — the deterministic profit-miner
+proposing a recurring profitable ledger subsequence as a **draft** — and that draft becomes fireable
+only when a human promotes it into the blessed store.
 
 ## Parameterization — generalizing the numbers
 
@@ -228,11 +232,14 @@ noted, not conformed away.
   exists to prevent. The guarded-resolver contract that hardens it is owned by
   [Auto-Haggle](/engine/auto-haggle.md) / [Action-Safety Guards](/engine/action-safety-guards.md); it is
   cited here as the money-path precedent for why replay never presses an unconfirmed send.
-- **Approval gate is enforced by file location, not an explicit flag.** A mined/AI-authored draft lives
-  in a separate `_drafts/` area and becomes replayable only when a human re-saves it into the blessed
-  library — the human-approval-before-fire invariant is real but is currently expressed as a filesystem
-  move rather than an in-macro `approved` field. Accurate, and noted so the invariant's *mechanism* is
-  not mistaken for a richer gate than exists.
+- **Approval gate is enforced by file location, not an explicit flag — and recorded macros are blessed
+  by default (Max ruling 2026-07-26).** A mined/AI-authored draft lives in a separate `_drafts/` area
+  and becomes replayable only when a human re-saves it into the blessed library. A human `tw record`
+  (without `--draft`) writes straight into the blessed store — the demonstration *is* the approval;
+  there is no second promote step. The gate is real for machine-authored provenance and is expressed
+  as filesystem location rather than an in-macro `approved` field. (Older prose that said "every macro
+  is inert until approved" was wrong for the recorded default path; code already defaulted
+  `blessed=True` — this concept now matches.)
 - **Capture ships today as a manifest writer, not the live start/stop bracket described above.**
   The *Capture* section above (`tw record start [name] … tw record stop`, keystrokes appended live
   as steps) is this concept's original target design. What shipped (WO-P2-G4-X6, tip `13f34a8`) is

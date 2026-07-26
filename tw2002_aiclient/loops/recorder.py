@@ -91,47 +91,37 @@ changes) -- rather than from new live-attach instrumentation this WO does
 not build. See ``cmd_record``'s own docstring for the manifest shape and
 the follow-up work this leaves on the table.
 
-Blessed, not draft -- the design call this WO was asked to argue
+Blessed, not draft -- the design call (Max-ruled 2026-07-26)
 ------------------------------------------------------------------
-``canon/engine/macros.md`` §Schema says of ``source``: "``recorded``
-(captured from a human ``tw record`` window) or ``mined`` (a deterministic
-candidate proposal)... Both are inert until human-approved." Read in
-isolation that sentence could argue for landing every capture in
-``_drafts/`` regardless of source. This module does not read it that way,
-and here is why:
+``canon/engine/macros.md`` now documents **blessed-by-default** for a
+human ``tw record``: the demonstration *is* the approval. Mined /
+AI-authored proposals stay drafts under ``_drafts/`` until a human
+promotes them. (Older macros.md prose that said "Both are inert until
+human-approved" for recorded *and* mined was the conflict this default
+resolved against -- Max ruling WO-BLESSED-MACRO-DEFAULT: align docs to
+code; do not flip the recorder to inert.)
 
-* The very same schema table pairs "RECORDING a macro" with "MINING a
-  DRAFT" -- a deliberate word choice, in one sentence, that already treats
-  the two origins differently.
-* ``loader.py``'s own docstring, written by the lane that had to reason
-  about approval most carefully, states the mechanism plainly: "Approval
-  is expressed by file location... a mined/AI-authored draft lives in a
-  separate ``_drafts/`` area and becomes replayable only when a human
-  re-saves it into the blessed library." Every phrase there is about
-  MINED/AI-authored provenance -- the gate this codebase actually built
-  exists to keep an AI-authored or machine-mined proposal inert, never to
-  make a human re-approve their own just-performed demonstration.
-* ``tw record start/stop`` (macros.md §Capture) is not "the human typed a
-  name into a form" -- it is the human physically at the keyboard, live,
-  performing the exact sequence being recorded. That IS the strongest form
-  of "human-demonstrated, human-approved" macros.md opens with (invariant
-  1); there is no second, more-authoritative demonstration a promote step
-  could add.
-* Practically: if every ``tw record`` output required a not-yet-built
-  promote verb before X3 would ever replay it, the FIRST writer this
-  codebase ships could never single-handedly satisfy the stub WO's own
-  Accept ("operator can record a loop that X2 loads") in its non-draft
+Why the default was already ``blessed=True`` before that ruling:
+
+* The schema table pairs "RECORDING a macro" with "MINING a DRAFT" -- a
+  deliberate word choice that already treats the two origins differently.
+* ``loader.py``'s docstring: "Approval is expressed by file location... a
+  mined/AI-authored draft lives in a separate ``_drafts/`` area" -- the
+  gate keeps machine-authored proposals inert, never makes a human
+  re-approve their own just-performed demonstration.
+* A live human demonstration *is* the strongest form of
+  "human-demonstrated, human-approved"; a second promote step adds nothing.
+* Practically: if every ``tw record`` required a not-yet-built promote verb
+  before replay, the first writer could never satisfy Accept in non-draft
   form.
 
 So :meth:`LoopRecorder.save` defaults to ``blessed=True``, with an explicit
 ``blessed=False`` (``tw record --draft``) opt-out for an operator who wants
-the review ceremony anyway. This is a genuine canon ambiguity -- the "Both
-are inert" sentence is real and not explained away above -- so it is
-recorded here as a decision, not resolved silently: a future ruling that
-disagrees only has to flip the one default and this docstring, because
-every consumer already treats ``draft`` as a first-class fact (``loader.py``,
-``store.py``, ``player.py`` -- none of them special-case ``source``
-directly).
+the review ceremony anyway. **Max ruled 2026-07-26 (WO-BLESSED-MACRO-DEFAULT):
+blessed-by-default is OK** -- ``macros.md`` matches; do not flip it to
+inert. Every consumer already treats ``draft`` as a first-class fact
+(``loader.py``, ``store.py``, ``player.py`` -- none of them special-case
+``source`` directly).
 
 Identity, and why a fourth trap does not reach this module
 ------------------------------------------------------------
