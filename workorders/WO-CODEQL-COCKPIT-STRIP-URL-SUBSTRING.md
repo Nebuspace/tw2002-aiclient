@@ -1,6 +1,6 @@
 # WO-CODEQL-COCKPIT-STRIP-URL-SUBSTRING
 
-**Status:** OPEN · READY · Cursor preferred (test pin) · banked from code-scanning sweep  
+**Status:** IN FLIGHT · Cursor · PR branch `wo/CODEQL-COCKPIT-STRIP-URL`  
 **Posted:** 2026-07-26 · GitHub code scanning alert #2  
 **Alert:** https://github.com/Nebuspace/tw2002-aiclient/security/code-scanning/2  
 **Rule:** `py/incomplete-url-substring-sanitization` (warning)  
