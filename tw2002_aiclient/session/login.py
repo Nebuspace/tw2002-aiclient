@@ -131,6 +131,73 @@ _CLEAR_AVOIDS_RE = re.compile(
 # on-screen well after being answered; a whole-text match would re-fire
 # on that stale scrollback).
 _MODULE_ENTRY_MENU_RE = re.compile(r"T\s*-\s*Play\s+Trade\s*Wars\s*2002", re.I)
+# a-net post-ANSI TWGS access menu (live capture step6) -- H/M/X +
+# "Enter your choice:". Must NOT be treated as module-entry even when a
+# stale ``T - Play Trade Wars`` line still sits higher in the pyte grid
+# (WO-ANET-GAME-SELECT-LETTER-STEP12 live FAIL after letter latch tip).
+_TWGS_HMX_ACCESS_MENU_RE = re.compile(
+    r"H\s*-\s*High\s+scores[\s\S]{0,200}?X\s*-\s*Exit",
+    re.I,
+)
+_ENTER_YOUR_CHOICE_RE = re.compile(r"enter\s+your\s+choice\s*:", re.I)
+
+
+def _option_block_above_prompt(text: str, prompt: str) -> str:
+    """Lines of the CURRENT option list attached to ``prompt`` (or the last
+    ``Enter your choice:`` in ``text``).
+
+    Walks upward from that prompt line and stops at the first blank once any
+    option line has been collected — so stale scrollback above a blank
+    separator is excluded. Same structural discipline as classify's
+    ``_range_has_no_dash_style_menu`` (mirror direction); no magic line count.
+    """
+    lines = (text or "").splitlines()
+    if not lines:
+        return ""
+    prompt_key = (prompt or "").strip().lower()
+    idx = None
+    for i in range(len(lines) - 1, -1, -1):
+        stripped = lines[i].strip().lower()
+        if prompt_key and prompt_key in stripped:
+            idx = i
+            break
+        if _ENTER_YOUR_CHOICE_RE.search(lines[i]):
+            idx = i
+            break
+    if idx is None:
+        return ""
+    collected: list[str] = []
+    for i in range(idx - 1, -1, -1):
+        if not lines[i].strip():
+            if collected:
+                break
+            continue
+        collected.append(lines[i])
+    collected.reverse()
+    return "\n".join(collected)
+
+
+def _is_module_entry_menu(text: str, prompt: str) -> bool:
+    """True only when the CURRENT menu offers ``T - Play Trade Wars 2002``.
+
+    Whole-screen search is unsafe: pyte leaves prior doors' text in the
+    grid, so a later H/M/X access menu can still match the module-entry
+    regex against scrollback and fire a blind ``T`` (live a-net).
+    """
+    window = _option_block_above_prompt(text, prompt)
+    if not window or not _MODULE_ENTRY_MENU_RE.search(window):
+        return False
+    # Live H/M/X access menu under Enter your choice: — refuse even if
+    # ``T - Play`` somehow shares the same option block.
+    if _ENTER_YOUR_CHOICE_RE.search(prompt or "") and _TWGS_HMX_ACCESS_MENU_RE.search(
+        window
+    ):
+        return False
+    if not (prompt or "").strip() and _TWGS_HMX_ACCESS_MENU_RE.search(window):
+        return False
+    return True
+
+
 _TRADER_NAME_CHOICE_RE = re.compile(r"\(N\)ew\s+Name\s+or\s+\(B\)BS\s+Name", re.I)
 _SHIP_NAME_PROMPT_RE = re.compile(r"name\s+your\s+ship", re.I)
 _SHIP_CONFIRM_RE = re.compile(r"is\s+what\s+you\s+want\s*\?", re.I)
@@ -168,11 +235,17 @@ _POST_GAME_SELECT_PROGRESS = frozenset(
 )
 
 
-def _left_game_select_for_real(cls, text):
-    """True when ``cls`` is genuine post-door progress, not a paint flash."""
+def _left_game_select_for_real(cls, text, prompt=""):
+    """True when ``cls`` is genuine post-door progress, not a paint flash.
+
+    ``prompt`` is the CURRENT bottom-row prompt, forwarded to
+    ``_is_module_entry_menu`` so its ``_option_block_above_prompt`` anchor
+    can scope the option list correctly (same discipline as ``_decide``'s
+    menu branch).
+    """
     if cls in _POST_GAME_SELECT_PROGRESS:
         return True
-    if cls == "menu" and _MODULE_ENTRY_MENU_RE.search(text or ""):
+    if cls == "menu" and _is_module_entry_menu(text or "", prompt or ""):
         return True
     return False
 
@@ -320,13 +393,35 @@ def run_login(session, profile, get_password, save_password, target="main_comman
         if trace is not None:
             trace.append({"step": step, "classification": cls, "prompt": prompt})
 
+        # Door re-entry: if game_select is PERSISTENTLY classified while
+        # ``game_select_answered`` is True (stagnant_rounds >= 1 at the top
+        # of this iteration), the host has genuinely returned to the door
+        # after the automaton had already left it -- clear both flags so the
+        # configured letter can re-send.
+        #
+        # Requires stagnant_rounds >= 1 (not 0): a single transient stale
+        # redraw (``restale_game_select`` test shape) reaches this check with
+        # stagnant_rounds == 0 (the preceding send reset it to 0) and then
+        # has its settle wait interrupted by the next real screen arriving,
+        # so it NEVER accumulates a second consecutive None-return for the
+        # same signature.  Stagnant_rounds == 0 is the exclusion gap that
+        # keeps the stale-redraw test green while still recovering a genuine
+        # persistent re-entry on the second stagnant iteration.
+        if (
+            cls == "game_select"
+            and getattr(session, "game_select_answered", False)
+            and stagnant_rounds >= 1
+        ):
+            session.game_select_answered = False
+            session.game_select_letter_sent = False
+
         # Cleared past game-select only once we've LEFT that screen for a
         # known post-door class after sending the configured letter --
         # never on send-confirm alone, and never on a mid-paint flash to
         # ``unknown`` / generic ``menu`` (WO-ANET-GAME-SELECT-LETTER-STEP12).
         if (
             getattr(session, "game_select_letter_sent", False)
-            and _left_game_select_for_real(cls, text)
+            and _left_game_select_for_real(cls, text, prompt)
         ):
             session.game_select_answered = True
 
@@ -511,7 +606,7 @@ def _decide(cls, text, prompt, profile, state, get_password, save_password, sess
             return None
         return profile.game_letter, False, None
 
-    if cls == "menu" and _MODULE_ENTRY_MENU_RE.search(text):
+    if cls == "menu" and _is_module_entry_menu(text, prompt):
         return "T", False, None
 
     if cls == "char_create":

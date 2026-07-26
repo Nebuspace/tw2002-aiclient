@@ -1,42 +1,34 @@
-# a-net `game_select`@step12 — letter latch (WO-ANET-GAME-SELECT-LETTER-STEP12)
+# a-net letter@12 revise — false MODULE_ENTRY `T` (WO-ANET-GAME-SELECT-LETTER-STEP12)
 
-**WO:** `WO-ANET-GAME-SELECT-LETTER-STEP12` · **PR:** #23  
-**Depends:** `main` `25ac393` (chrome-footer `game_select`)  
-**Seat:** `impl-aiclient-cursor`
+**Tip base:** `d4bc185` latch-only (do **not** merge alone)  
+**Evidence:** `/tmp/…/reprove/anet-letter-actions-191957Z/events.json`
 
-No credentials in this file.
+## Live walk (hub)
 
-## Symptom
+C **works** → inner name → ANSI Y → **menu `Enter your choice:` send T** → show-log → pause
+(“closed game”) → `game_select` again with `answered=True` → stuck.
 
-Hub post-#22 ensure (`…/anet-new-postfix-190343Z/ensure.json`):
-`login_failed:automaton_stuck:classification='game_select':step=12`
-(`screen_withheld=login_failure`). Classify progressed (`menu`@5 → `game_select`);
-ensure still dies on the door.
+Step6 `text_snip` is H/M/X + Exit only — **no** `T - Play` in the live menu.
+`T` came from MODULE_ENTRY matching **stale scrollback**.
 
-## Hypothesis (primary)
+## Fix (a) — root
 
-`run_login` latched `game_select_answered` on **any** non-`game_select` class after
-`game_select_letter_sent`. A mid-paint flash (`unknown` / generic `menu`) after the
-letter send can latch; the door reappears; `_decide` returns `None`; stagnation →
-`automaton_stuck` at `game_select`.
+`_is_module_entry_menu(text, prompt)`:
+- Require `T - Play` in the **option block attached to the current prompt**
+  (`_option_block_above_prompt` — walk up; stop at blank after options).
+  No magic line-count window (CC 19:24: only one fixture sample at 7 lines).
+- If that block is the H/M/X access menu → **refuse**
 
-Matches design intent of “not on send-confirm alone” but left a hole for false leaves.
+Pins: `test_anet_hmx_access_menu_does_not_send_module_entry_t` ·
+`test_module_entry_menu_still_sends_t_when_t_play_is_current`
 
-## Fix
+Latch tighten from tip `d4bc185` kept.
 
-Latch `game_select_answered` only on **known post-door progress**
-(`login_name` / `login_password` / `ansi_prompt` / `char_create` / `pause_key` /
-`main_command` / `money_prompt` / module-entry `menu` with `T - Play Trade Wars`).
+## Residual (hub live-prove)
 
-Pins: `test_game_select_answered_latch_ignores_unknown_flash` + existing
-`test_no_double_answer_after_stale_game_select_redraw` (still requires real leave).
-
-## Open / hub live-prove
-
-- Prefer a-net NEW+RETURNING → past door (ideally `main_command`).
-- If still stuck: capture `tw screen` + history at fail (letter actually on wire?).
-- Alternate residual: host needs Enter on chrome-footer door — bank only with capture.
+After false-`T` is gone, H/M/X may stagnate honestly (no taught key) — bank next door.
+Closed-game pause on letter C may be host policy (SysOp gate) — not this tip’s invent.
 
 ## Out
 
-invent class · blank-reject · README · xeno Phase-2
+new `screen_class` · blank-reject · README
