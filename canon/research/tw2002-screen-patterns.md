@@ -93,9 +93,9 @@ prompt-line API). Keep `rx_count` / freshness guards; they are necessary but not
 
 **Do not:** treat whole-screen regex success as proof the *live* prompt matched.
 
-Open Max question (orthogonal): which canon doc governs default `match_scope` for settle —
-settle-detection vs screen-understanding adjacency. Until ruled, do not flip defaults in a
-drive-by tip; pin prompt-line scope where a WO explicitly Accepts it.
+**Ruled (Max carte blanche → hub 2026-07-26):** settle-detection owns readiness / default
+`match_scope` for drive verbs; screen-understanding owns identity only. See `DECISIONS.md`
+§D under "Max carte blanche parked gates."
 
 ## P-SUPPRESS — missing prompts are a legitimate server state
 

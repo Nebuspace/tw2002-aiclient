@@ -28,7 +28,12 @@ so the whole design leans toward refusing to claim more than the screen actually
 - **`screen_class`** — a single label from a fixed vocabulary
   (`main_command`, `computer`, `port_trade`, `sector_display`, `menu`, the login/interstitial
   states `login_name` / `login_password` / `ansi_prompt` / `game_select` / `char_create`, the
-  mid-flow gates `pause_key` / `warp_confirm`, `cim_report`, and the catch-all `unknown`).
+  mid-flow gates `pause_key` / `warp_confirm` / `money_prompt`, content classes
+  `stardock_cargo_hold_quote` / `stardock_shipyard_listing`, `cim_report`, and the catch-all
+  `unknown`). **`money_prompt` is never-auto-action** (App escalates; no macro may fire) —
+  Max carte blanche Accept 2026-07-26 in `DECISIONS.md`. StarDock quote/listing classes are
+  content anchors with exclusivity/provenance discipline (same distrust-of-bare-shape family
+  as `cim_report`).
 - **`state`** — a partial dict of whatever structured fields the screen legibly encodes. Missing
   or unreadable fields are simply **omitted**, never guessed. Partial state is normal and fine.
 

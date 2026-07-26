@@ -1,33 +1,35 @@
 # WO-CLASSIFY-BLOCK-TITLES
 
-**Status:** OPEN · PARKED · Max (vocab + money-screen)  
-**Posted:** ~2026-07-25 (CC tip built; push parked 18:37:06Z)
+**Status:** OPEN · UNPARKED · EXECUTE (Max carte blanche → hub ruled 2026-07-26)  
+**Posted:** ~2026-07-25 (CC tip built; push parked 18:37:06Z) · **Unparked:** 2026-07-26
 
 ## Goal
 
-Generalize block-title classification (StarDock folds into block-title generalisation). Tip introduces labels `stardock_cargo_hold_quote` + `stardock_shipyard_listing` with exclusivity-first / asymmetry-trap awareness; prefer fewer confident classes over shaky coverage.
+Land parked classify tip aligned to Accepted rulings: add `stardock_cargo_hold_quote` +
+`stardock_shipyard_listing` + gate `money_prompt` (**never-auto-action**). Update closed vocab
+in `screen-understanding.md` (hub may have drafted; tip must match).
 
 ## Scope
 
-- `tw2002_aiclient/` classify path + tests (when unparked)
-- Local tip held (historically `628077a` / `bd883fa` / `ae1618b` — do not land without Max GO)
+- `tw2002_aiclient/` classify path + tests
+- `canon/engine/screen-understanding.md` vocab (if not already on tip)
+- `preserve/classify-parked` rebase onto `origin/main`
 
 ## Constraints
 
-- `screen_class` is a **closed fixed vocabulary** in `canon/engine/screen-understanding.md` — new labels are a canon amendment → **human-gated**.
-- Money-screen naming + never-auto-action pin also Max-gated.
-- Do not push; do not rebase-away the tip until Max rules.
+- Rulings in `canon/DECISIONS.md` §A (Max carte blanche) are **Accepted** — do not re-litigate
+- `money_prompt` → escalate only; wire `_UNSAFE_SCREEN_PATTERNS` / compensating controls
+- Cite P-QTY / exclusivity-first; no silent macro path on money
 
-## Accept (after Max GO)
+## Accept
 
-Tip lands with hub Accept; vocab / money-screen rulings reflected in canon + code; independent `_UNSAFE_SCREEN_PATTERNS` / compensating controls preserved.
+Tip on origin; vocab + never-auto-action pins green; suite green for classify tests.
 
 ## Proof
 
-STATUS + SHA after unpark; hub Accept.
+STATUS + SHA · hub Accept.
 
 ## Refs
 
-- Hub ACK classify merge @ 18:12:06Z · park @ 18:37:06Z
-- `canon/engine/screen-understanding.md` closed vocab
-- Max pending: add `stardock_*` labels vs rename; money-screen name ok with never-auto-action?
+- `preserve/classify-parked` · `DECISIONS.md` Max carte blanche §A
+- `canon/engine/screen-understanding.md`

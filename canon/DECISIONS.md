@@ -200,3 +200,34 @@ See `WO-ROOT-MD-INTO-CANON`.
 ## Accepted — archive-port-patterns research doc (Max GO this session · 2026-07-25T21:53:00Z)
 
 **Decision:** Extract pre-rebirth archive patterns into `canon/research/archive-port-patterns.md` as an OKF Reference concept. Archive stays reference-only; no code restored to root. 14 patterns (AP-01…AP-14), 8 negative/do-not-port items. `canon/index.md` gets a Research section. Cross-links added to 4 existing concepts. Implementer brief at `workorders/BRIEF-OKF-ARCHIVE-PORT-PATTERNS.md`.
+
+## Accepted — Max carte blanche parked gates (hub-ruled 2026-07-26 · Max: "carte blanche for you to decide")
+
+Max delegated the standing 🧑‍⚖️ parked gates to hub (Samantha). Treat the following as **Accepted** human rulings (delegation = human resolution). Seats align; do not re-litigate without a new Max ask.
+
+### A — Classify vocab + money-screen + tip land (was WO-CLASSIFY-BLOCK-TITLES)
+
+1. **Add** closed-vocab labels `stardock_cargo_hold_quote` and `stardock_shipyard_listing` (content anchors; exclusivity / provenance discipline — same family as `cim_report` distrust-of-bare-shape).
+2. **Add** gate-class `money_prompt` for quantity/money/bank-transfer style blocking prompts. **Hard pin: never-auto-action** — App must escalate; no rule/macro may fire; crawler `_UNSAFE_SCREEN_PATTERNS` (or successor) must cover; aligns P-QTY.
+3. **GO land** `preserve/classify-parked` aligned to (1)+(2); update `screen-understanding.md` vocab list in the same tip.
+
+### B — ASCII / glyph under `LC_ALL=C` (crash vs silent hole)
+
+**Prefer honest substitute or controlled loud failure over silent content holes.** ASCII mode may use the documented TW-safe substitute table (`+|-/` etc.). Em-dash and other non-encodable glyphs: substitute per table **or** fail the write with a typed/logged error — never drop characters with a successful-looking send. Silent holes are the defect.
+
+### C — Secrets surfaces (`repr(UnicodeDecodeError)` / `get_password` / stuck-login wire)
+
+**GO rehab:** decode/permission failures → typed redacted errors; **never** put secret or undecoded secret-adjacent bytes into `repr()`, exception strings, CLI JSON, or logs. `get_password` failure → `None` or typed error without payload leak. Stuck-login RX-on-wire stays redacted. Orthogonal to ensure-JSON MT-07 (already separate).
+
+### D — Settle default ownership (prompt settle)
+
+**Settle-detection owns readiness** ("is the stream settled / safe to act"). **Screen-understanding owns identity** ("what screen is this"). Drive verbs (`do`) take settle-detection's prompt-line + `rx_count` / freshness discipline as default `match_scope`; classify vocab does **not** set settle readiness. Closes the open note under P-SETTLE-LINE.
+
+### E — Catalog public names + `twgs.exiled.org`
+
+1. **Keep** third-party BBS directory display names (including Firstname-Lastname shapes) as published catalog provenance — not a privacy scrub target in this public-game-directory sense.
+2. **Keep** `twgs.exiled.org:2002` with honest `archive_seed` / known-exception status (do not drop). Operator may still use it; catalog must not lie that it was absent from greenfield when it was not.
+
+### F — Throwaway-worktree lifecycle (Proposed → Accepted with CC amendments)
+
+Accepted: owner removes on Accept/abandon; `preserve/<wo-id>` if tip ∉ origin; hub mass-prune only after `🧹 PRUNE-INTENT` + seat ACK; **never remove a LOCKED worktree** (lock carries PID; `kill -0` detects stale); soft ceiling **12 is a reporting trigger**, not a removal trigger (CC amendment B). Hub may lift 🧹 PRUNE PAUSED after seats ACK this Accept note.
