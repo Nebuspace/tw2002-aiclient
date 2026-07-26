@@ -322,7 +322,7 @@ def test_a_daemon_with_no_runner_still_answers_from_the_lock():
     App does not hold the connection" are different claims and only the
     second is what the chip renders."""
     lock = ControlLock()
-    lock.enter_auto_loop()
+    token = lock.enter_auto_loop()
     session = WireSession([ANCHOR_158[0]])
     server = Server(session, lock, None)
 
@@ -330,7 +330,7 @@ def test_a_daemon_with_no_runner_still_answers_from_the_lock():
     assert resp["autopilot"]["running"] is True
     assert arm_chip.arm_state(resp) == arm_chip.ARM_ON
 
-    lock.leave_auto_loop()
+    lock.leave_auto_loop(token)
     assert protocol.dispatch(session, "status", {}, server)["autopilot"]["running"] is False
 
 
@@ -820,19 +820,37 @@ def test_stopping_is_wired_to_the_players_predicate_not_to_the_lock():
 
 
 # --------------------------------------------------------------------------
-# 5. Human sovereignty -- and the fence-wiring trap
+# 5. Human sovereignty -- the fence-wiring trap, and its later repair
 # --------------------------------------------------------------------------
 
 
-def test_a_human_attach_halts_the_run_and_the_naive_wiring_would_not_have(tmp_path):
-    """The trap, pinned: ``ControlLock.is_driver_fenced()`` is still
-    ``False`` while a human holds the keyboard over a running loop --
-    because that flag is only raised for an in-flight *dispatch*. An
-    adapter forwarding it would answer "not fenced" and keep pressing
-    keys into a game the human is playing.
+def test_a_human_attach_halts_the_run_and_the_lock_now_fences_it_too(tmp_path):
+    """**Reversal, named**: this test used to be
+    ``test_a_human_attach_halts_the_run_and_the_naive_wiring_would_not_have``
+    (landed X4, commit ``344991e``), and pinned the OPPOSITE of the
+    assertion below -- ``lock.is_driver_fenced() is False`` right after
+    ``take_human()`` preempted a running loop, deliberately recording that
+    the naive wiring (forwarding the lock's flag straight to the player)
+    would have sent. That was correct THEN: the lock only fenced an
+    in-flight *dispatch*, never an auto_loop hold.
 
-    So this asserts both halves: the run halted with the fence code, AND
-    the flag the naive wiring would have read was down the whole time."""
+    WO-CONTROL-LOCK-AUTOLOOP-FENCE overturned that half of the claim: the
+    lock now fences an auto_loop preemption too (the preempted generation
+    is added to its own set, whose non-emptiness is OR'd into the same
+    predicate -- see ``control_lock.py``'s
+    ``_auto_loop_fenced_generations``), because a DIFFERENT caller needed
+    it honest --
+    ``Session.send_raw``'s bounded wind-down wait on the human's own
+    attach keystrokes, which had no fence signal for this case at all and
+    so gave a human's first bytes no beat to let an in-flight loop step
+    actually finish before racing it onto the wire. The run's own halt
+    decision was never in question, before or after -- it was always the
+    port's own ``is_auto_loop_held()`` re-read, not this lock flag -- so
+    what remains true from the original test is kept: the run still
+    halts ``HALT_FENCED``, still stops before its second step, and the
+    human still keeps the keyboard. What flips is that
+    ``lock.is_driver_fenced()`` is HONEST now instead of a documented
+    trap."""
     write_macro(tmp_path, "ore-run", TWO_STEPS)
     session = WireSession([ANCHOR_158[0], PORT[0], ANCHOR_158[0]], gate_at=1)
     lock = ControlLock()
@@ -841,8 +859,10 @@ def test_a_human_attach_halts_the_run_and_the_naive_wiring_would_not_have(tmp_pa
     runner.start("ore-run")
     assert session.entered.wait(GATE_TIMEOUT_S)
     lock.take_human()
-    assert lock.is_driver_fenced() is False, (
-        "the naive wiring's flag is down -- an adapter forwarding it would have sent"
+    assert lock.is_driver_fenced() is True, (
+        "the lock must fence an auto_loop preemption the same way it fences a "
+        "dispatch -- Session.send_raw's human-keystroke wind-down wait reads "
+        "exactly this flag"
     )
     session.gate.set()
     snapshot = run_to_completion(runner, session)
@@ -852,11 +872,24 @@ def test_a_human_attach_halts_the_run_and_the_naive_wiring_would_not_have(tmp_pa
     # The run's release must not take the keyboard back off the human.
     assert lock.mode == "human"
     assert snapshot.running is False
+    # The run's own finally is the run's own release path for the fence it
+    # was given, same as for the hold itself.
+    assert lock.is_driver_fenced() is False
 
 
 def test_the_ports_fence_predicate_tracks_the_hold_not_the_dispatch_flag():
     """The same fact at unit scale, without a run: the port answers
-    "fenced" exactly when the exclusive hold is gone."""
+    "fenced" exactly when the exclusive hold is gone.
+
+    The final assertion here is the other reversal from
+    WO-CONTROL-LOCK-AUTOLOOP-FENCE: this used to read
+    ``assert lock.is_driver_fenced() is False  # ...and the other flag
+    never moved`` -- true before that WO, and now the opposite, because
+    the lock's own flag moves for exactly the same preemption the port
+    just detected. The port is kept anyway (see ``autoloop.py``'s module
+    docstring, "The fence wiring, a trap in it, and the trap's later
+    repair") -- it is provably redundant with the lock's flag today, and
+    deliberately not simplified to rely on that, on the reasoning there."""
     lock = ControlLock()
     port = autoloop._ReplayPort(object(), lock, threading.Event())
 
@@ -865,7 +898,7 @@ def test_the_ports_fence_predicate_tracks_the_hold_not_the_dispatch_flag():
     assert port.is_driver_fenced() is False
     lock.take_human()
     assert port.is_driver_fenced() is True
-    assert lock.is_driver_fenced() is False  # ...and the other flag never moved
+    assert lock.is_driver_fenced() is True  # ...and now the other flag agrees
 
 
 # --------------------------------------------------------------------------
@@ -1247,3 +1280,75 @@ def test_status_is_unchanged_for_a_daemon_that_has_never_run_a_loop():
     assert set(with_runner) == set(without)
     assert "intervention" not in with_runner
     assert with_runner["autopilot"] == {"running": False}
+
+
+# --------------------------------------------------------------------------
+# 10. The external invariant, pinned loudly (Mack's LOW, round 5)
+# --------------------------------------------------------------------------
+#
+# `ControlLock` itself permits any number of outstanding auto_loop
+# generations -- that permissiveness is what its own fence fix depends
+# on. The bound this runner actually relies on ("at most one outstanding
+# at a time") is `AutoLoopRunner`'s OWN discipline (`_in_flight` refusing
+# a second `start()`), proven UNREACHABLE through this runner today --
+# not proven impossible at the lock. `start()` now asserts that external
+# invariant explicitly, immediately before granting, so a future breach
+# (a second call site; a loosened one-runner-per-daemon rule) fails loud
+# instead of silently minting a second concurrent generation.
+
+
+def test_start_fails_loudly_when_the_lock_already_carries_an_outstanding_generation(tmp_path):
+    """Constructed directly against the lock, since `AutoLoopRunner`'s own
+    `_in_flight` bookkeeping makes this unreachable through a single
+    runner's own `start()`/`stop()` calls -- exactly Mack's point: the
+    lock will happily carry a stale outstanding generation from ANY
+    prior activity, and nothing stops a fresh runner (or a fresh `start()`
+    on a runner whose `_in_flight` has, for whatever future reason,
+    stopped tracking reality) from being handed that same lock. `_in_
+    flight` being False here is the whole scenario -- it means this
+    runner itself sees no reason to refuse, and the lock is the only
+    thing left that could have caught it."""
+    write_macro(tmp_path, "ore-run", ONE_STEP)
+    session = WireSession([ANCHOR_158[0], ANCHOR_158[0]])
+    lock = ControlLock()
+    # Leaves a genuine, unreleased outstanding generation on the lock --
+    # entirely independent of any AutoLoopRunner.
+    lock.enter_auto_loop()
+    lock.take_human()
+    lock.release_human()
+    assert lock.outstanding_auto_loop_generations() == frozenset({1})
+
+    runner = make_runner(tmp_path, session, lock)
+    assert runner._in_flight is False  # this runner has no reason to refuse
+
+    with pytest.raises(autoloop.AutoLoopInvariantViolation) as exc_info:
+        runner.start("ore-run")
+
+    assert "1" in str(exc_info.value)
+    # Must NOT be raised as the ordinary refusal type -- protocol.py's
+    # `except autoloop.AutoLoopRefused` must not swallow this into a
+    # polite, expected-looking wire response.
+    assert not isinstance(exc_info.value, autoloop.AutoLoopRefused)
+    # Never touched: nothing was armed, nothing was cleared.
+    assert lock.outstanding_auto_loop_generations() == frozenset({1})
+    assert runner._in_flight is False
+
+
+def test_dispatch_autoloop_start_lets_the_invariant_violation_escape_uncaught(tmp_path):
+    """The wiring proof: `protocol.dispatch`'s own `autoloop_start` verb
+    catches ONLY `AutoLoopRefused` (see `_dispatch_autoloop_start`) -- this
+    exception must reach the caller instead of becoming a normal `{"ok":
+    false, "error": ...}` response, so the daemon's own outermost catch
+    (`daemon.py`'s `internal_error:{type}` narrowing) is what actually
+    reports it, loudly, with a traceback in the local log."""
+    write_macro(tmp_path, "ore-run", ONE_STEP)
+    session = WireSession([ANCHOR_158[0], ANCHOR_158[0]])
+    lock = ControlLock()
+    lock.enter_auto_loop()
+    lock.take_human()
+    lock.release_human()
+    runner = make_runner(tmp_path, session, lock)
+    server = Server(session, lock, runner)
+
+    with pytest.raises(autoloop.AutoLoopInvariantViolation):
+        protocol.dispatch(session, "autoloop_start", {"name": "ore-run"}, server)

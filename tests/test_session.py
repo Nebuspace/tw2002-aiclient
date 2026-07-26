@@ -1,8 +1,12 @@
 """Session unit tests — no network.
 
 Constructing a bare Session never touches the network (only .start()/
-.reconnect() do). Fence-wait tests use a duck-typed control_lock stub
-(control_lock.py is not yet ported under tw2002_aiclient.session).
+.reconnect() do). Most fence-wait tests use a duck-typed control_lock stub
+(``send_raw`` only requires ``is_driver_fenced()``, proven generically);
+WO-CONTROL-LOCK-AUTOLOOP-FENCE adds one against the REAL
+``tw2002_aiclient.session.control_lock.ControlLock`` collaborator, to prove
+the two modules' preemption/wind-down handshake end to end rather than
+only each side's half of the duck-typed contract.
 """
 
 import threading
@@ -12,6 +16,7 @@ import pytest
 
 from tw2002_aiclient.session import session as session_module
 from tw2002_aiclient.session.connection import TelnetConnection
+from tw2002_aiclient.session.control_lock import ControlLock
 from tw2002_aiclient.session.session import VALID_SENDERS, Session
 
 from .conftest import FAKE_HOST, FAKE_PORT
@@ -138,6 +143,53 @@ def test_send_raw_fence_wait_is_bounded_and_sends_anyway_once_the_bound_expires(
 
     session.send_raw(b"H", control_lock=lock)
 
+    assert sent == [b"H"]
+
+
+def test_send_raw_waits_for_a_preempted_auto_loop_hold_to_actually_release(tmp_path, monkeypatch):
+    """WO-CONTROL-LOCK-AUTOLOOP-FENCE, proved against the REAL collaborator
+    (not the duck-typed stub the tests above use). `daemon.py`'s human-
+    attach keystroke forwarder (`_handle_attach`) is `send_raw`'s only
+    production caller with `sender="human"`, and its whole reason to gate
+    on `is_driver_fenced()` is to give an in-flight App step a beat to
+    actually finish before a human byte can interleave with it on the
+    wire.
+
+    Before this WO, `ControlLock.take_human()` preempting a running
+    auto_loop hold cleared it silently -- `is_driver_fenced()` never rose,
+    so this exact sequence would have sent the byte immediately, racing
+    whatever step the loop was mid-send-then-settle on. Here it must wait,
+    and must resume the instant the run's OWN release path
+    (`leave_auto_loop()`, never `release_driver()` -- that clears the
+    OTHER fence) actually fires, not merely once the bound expires (that
+    other case is `test_send_raw_fence_wait_is_bounded_and_sends_anyway_
+    once_the_bound_expires` above)."""
+    sent = []
+    monkeypatch.setattr(TelnetConnection, "send_bytes", lambda self, data, secret=False: sent.append(data))
+    session = Session(FAKE_HOST, FAKE_PORT, "test", str(tmp_path))
+    lock = ControlLock()
+    token = lock.enter_auto_loop()
+    lock.take_human()  # preempts the hold -- fences it, does not merely revoke it
+    assert lock.is_driver_fenced() is True
+    assert lock.mode == "human"  # the human already has the keyboard, unconditionally
+
+    result = {}
+
+    def send_call():
+        session.send_raw(b"H", control_lock=lock)
+        result["done"] = True
+
+    t = threading.Thread(target=send_call)
+    t.start()
+    time.sleep(0.2)
+
+    assert "done" not in result
+    assert sent == []
+
+    lock.leave_auto_loop(token)
+    t.join(timeout=2.0)
+
+    assert result.get("done") is True
     assert sent == [b"H"]
 
 

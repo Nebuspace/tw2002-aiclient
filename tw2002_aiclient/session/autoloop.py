@@ -65,23 +65,67 @@ on the one wire -- the precise failure the exclusive hold exists to
 prevent. So ``stop()`` only *requests*, through the player's arm
 predicate, and the run releases as it dies, within one send-step.
 
-The fence wiring, and a trap in it
-----------------------------------
-The player asks its port ``is_driver_fenced()`` at every boundary. The
-obvious wiring -- forward ``ControlLock.is_driver_fenced()`` -- is WRONG
-here, and quietly so. That flag is only raised by ``take_human()`` when
-an App *dispatch* held the driver slot (``_driving``); a background run
-holds ``enter_auto_loop()`` instead, so ``_driving`` is ``False`` and the
-flag stays down. An adapter forwarding it would answer "not fenced" while
-a human typed into the game, and the player would keep pressing keys.
+The fence wiring, a trap in it, and the trap's later repair
+-------------------------------------------------------------
+The player asks its port ``is_driver_fenced()`` at every boundary. When
+this module landed (X4, commit ``344991e``), forwarding
+``ControlLock.is_driver_fenced()`` was WRONG, and quietly so: that flag
+was only raised by ``take_human()`` when an App *dispatch* held the
+driver slot (``_driving``); a background run holds ``enter_auto_loop()``
+instead, so ``_driving`` stayed ``False`` and the flag stayed down. An
+adapter forwarding it would have answered "not fenced" while a human
+typed into the game, and the player would have kept pressing keys.
 
-What ``take_human()`` DOES do to a running loop is clear the exclusive
-hold, so the honest predicate is the run's own authority: *is the hold I
-took still mine?* That is one fact, it is the fact the lock actually
-maintains, and it is checked at the same boundary as every other guard.
-(Pinned by ``tests/test_autoloop.py``'s attach test, which asserts the
-lock's own ``is_driver_fenced()`` is still ``False`` at the moment the
-run halts -- i.e. that the naive wiring would have sent.)
+**WO-CONTROL-LOCK-AUTOLOOP-FENCE fixed that flag itself** -- ``take_human()``
+now fences an auto_loop preemption too (each preempted generation added to
+its own set, ``_auto_loop_fenced_generations``, whose non-emptiness is
+OR'd into ``is_driver_fenced()``), so ``ControlLock.is_driver_fenced()`` is
+honest for this case as of that WO.
+That fix was for a DIFFERENT caller, though: ``Session.send_raw``'s bounded
+wind-down wait on the human-attach keystroke path, which had no fence
+signal for an auto_loop preemption at all before it. It was never a fix to
+THIS predicate, because this predicate was never wrong about what it
+answers -- only about which lock field would have been an honest source
+for it.
+
+The port's own predicate below is kept exactly as it was: the run's own
+authority, *is the hold I took still mine?*, read off ``is_auto_loop_held()``
+directly rather than off ``ControlLock.is_driver_fenced()`` even now that
+the latter is honest for this case too. The two are provably equivalent
+today (both flip on take_human()'s SAME preemption, in the same critical
+section, for the entire window this port is actually asked); reasoned
+through, not merely asserted, because the equivalence rests on invariants
+(the mutual exclusion between ``_driving`` and ``_auto_loop_held``,
+``leave_auto_loop()``'s single call site, this port's one-run lifetime)
+that a future change could quietly break without a dispatch-fence test
+noticing. Simplifying this port to forward ``control_lock.
+is_driver_fenced()`` was considered and declined -- kept independent
+instead.
+
+**That independence was called "defense in depth" in an earlier pass of
+this WO. That framing was incomplete, and the retraction is recorded
+here rather than silently corrected.** Cipher's later finding (round 5):
+``is_auto_loop_held()`` answers *"is some hold currently standing"*, not
+*"is MY generation's hold still standing"* -- it carries no generation
+parameter at all, structurally the SAME shape as the original single-bool
+fence defect this WO exists to fix. It reads correctly today for the
+identical reason the fence's >1 cardinality is unreachable today (see
+``control_lock.py``'s closing module-docstring note): ``AutoLoopRunner``
+never lets a second generation's thread exist while this port's own run
+is still alive, so "some hold is standing" and "MY hold is standing" can
+never come apart while this predicate is actually asked. **A second path
+to the same halt is only genuine defense in depth if it does not share
+the defect the first path had** -- this one does, merely hidden behind
+the same external serialization the rest of this WO had to make explicit
+elsewhere. Recorded for ``WO-WEDGED-SEND-FENCE-STICKS`` (which exists to
+REMOVE that very serialization, and would reopen this exact hazard
+through the player layer if it did so without also fixing this port) --
+not fixed here, because this WO's scope is the lock, not the player.
+
+(Pinned by ``tests/test_autoloop.py``'s attach test, updated by the same
+WO to assert the now-CORRECTED direction: the lock's own
+``is_driver_fenced()`` is ``True`` at the moment of the halt, not the
+stale ``False`` the original pin recorded as the trap.)
 
 One pass, and why there is STILL no ``cycles``
 ----------------------------------------------
@@ -240,6 +284,23 @@ class AutoLoopRefused(Exception):
     reports. Never a free-text explanation: ``protocol.py`` puts
     ``str(exc)`` straight into an ``error`` field, so the message IS the
     vocabulary."""
+
+
+class AutoLoopInvariantViolation(Exception):
+    """Not a refusal -- a bug report. Deliberately NOT an
+    :class:`AutoLoopRefused` (``protocol.py``'s ``except autoloop.
+    AutoLoopRefused`` must NOT catch this): a refusal is an expected,
+    named outcome a client can act on (``already_running``,
+    ``loop_not_found:x``); this is ``AutoLoopRunner.start()`` discovering
+    that an invariant EXTERNAL to this class -- "at most one auto_loop
+    generation is ever outstanding" -- has already been violated before
+    it even asked ``enter_auto_loop()`` for a new one. Left uncaught here,
+    it propagates to ``daemon.py``'s outermost dispatch catch and reaches
+    the wire as ``internal_error:AutoLoopInvariantViolation`` with a full
+    traceback in the local log -- loud on purpose, not a bare ``assert``
+    a ``-O`` run would silently strip, and not folded into the ordinary
+    refusal vocabulary where it would read as just another polite
+    no-thanks."""
 
 
 # ---------------------------------------------------------------------------
@@ -526,11 +587,21 @@ class _ReplayPort:
     def is_driver_fenced(self) -> bool:
         """Is the exclusive App hold this run took still ours?
 
-        NOT ``control_lock.is_driver_fenced()`` -- see the module
-        docstring's "The fence wiring, and a trap in it". ``take_human()``
-        clears the hold unconditionally, so this is what actually catches
-        a human attaching mid-run, and it catches it at the next boundary,
-        before the next send."""
+        Deliberately NOT ``control_lock.is_driver_fenced()`` -- see the
+        module docstring's "The fence wiring, a trap in it, and the
+        trap's later repair". ``take_human()`` clears the hold
+        unconditionally, so this is what actually catches a human
+        attaching mid-run, and it catches it at the next boundary, before
+        the next send.
+
+        Reads ``is_auto_loop_held()`` -- *"is some hold currently
+        standing"*, not *"is MY generation's hold still standing"*; it
+        takes no generation argument and cannot distinguish the two. That
+        is only safe because ``AutoLoopRunner`` never lets a second
+        generation's thread exist while this one is alive (see the module
+        docstring's retraction of this method's earlier "defense in
+        depth" framing) -- recorded for ``WO-WEDGED-SEND-FENCE-STICKS``,
+        not fixed here."""
         return not _lock_held(self._control_lock)
 
     def should_abort(self) -> bool:
@@ -634,6 +705,21 @@ class AutoLoopRunner:
         proposal awaiting human approval, and approval is expressed by
         file location. A background driver playing an unapproved macro
         would be the human-approval gate failing open.
+
+        **Asserts "at most one auto_loop generation outstanding" as a
+        loud, typed failure** (:class:`AutoLoopInvariantViolation`, not
+        :class:`AutoLoopRefused`) rather than leaving it merely true by
+        construction. ``ControlLock`` itself permits any number of
+        outstanding generations -- that permissiveness is what its own
+        fence fix depends on -- so the bound this runner relies on
+        (``_in_flight`` refuses a second ``start()`` before an earlier
+        run's own release) is THIS class's discipline, not the lock's.
+        Nothing pins that discipline anywhere else; a future second call
+        site to ``enter_auto_loop()``, or a loosened one-runner-per-daemon
+        rule, would find the lock fully willing to accommodate it in
+        silence. Checked here, immediately before granting, so that day
+        produces a crash with a traceback instead of two drivers quietly
+        sharing the one wire.
         """
         if floor is not None:
             # `True` is an int and would arm a floor of 1 -- the same trap
@@ -653,26 +739,54 @@ class AutoLoopRunner:
         loop = self._load(name)
         stop = threading.Event()
         report = RunReport(loop=loop.name, started_at=_utc_now(), floor=floor)
-        thread = threading.Thread(
-            target=self._run,
-            args=(loop, stop, report),
-            name="tw-autoloop",
-            daemon=True,
-        )
         with self._mutex:
             if self._in_flight:
                 # The lock would refuse a second enter too, but refusing
                 # here keeps `enter_auto_loop` un-called on this path --
                 # a second acquisition attempt is not a thing to lean on.
                 raise AutoLoopRefused("already_running")
+            # WO-CONTROL-LOCK-AUTOLOOP-FENCE (Mack's LOW, round 5): the
+            # lock's OWN contract permits any number of outstanding
+            # generations (see its module docstring) -- the "at most one"
+            # bound is this class's discipline, not the lock's, and lives
+            # ONLY in the `_in_flight` check just above. Pin that external
+            # invariant explicitly rather than let it stay merely true by
+            # construction: if a future change ever reaches this point
+            # with the lock already carrying an unreleased generation --
+            # a second call site, a loosened one-runner-per-daemon rule --
+            # fail LOUD here instead of quietly minting a second
+            # concurrent generation on top of it. Deliberately NOT a bare
+            # `assert` (`-O` strips those) and deliberately NOT an
+            # `AutoLoopRefused` (that reads on the wire as an ordinary,
+            # expected no-thanks; this is a bug report).
+            outstanding = self._control_lock.outstanding_auto_loop_generations()
+            if outstanding:
+                raise AutoLoopInvariantViolation(
+                    "at most one auto_loop generation may ever be outstanding, "
+                    f"but the lock already carries {sorted(outstanding)!r} while "
+                    "`_in_flight` was False"
+                )
             try:
-                self._control_lock.enter_auto_loop()
+                generation = self._control_lock.enter_auto_loop()
             except ControlModeConflict as exc:
                 # The lock's own closed vocabulary: locked_by_human_attach
                 # / already_running / locked_by_active_driver. Not
                 # re-spelled -- a second dialect for a refusal is how two
                 # surfaces start disagreeing about the same event.
                 raise AutoLoopRefused(str(exc)) from None
+            # WO-CONTROL-LOCK-AUTOLOOP-FENCE (Mack's CRITICAL): the thread
+            # is built HERE, after the grant, so it can close over the
+            # generation token THIS hold actually received -- never a
+            # shared/instance-level value a later run could stomp on, and
+            # never guessed. `_run`'s own `finally` hands this exact value
+            # back to `leave_auto_loop()`, so a stale release can never
+            # touch a hold this run does not own.
+            thread = threading.Thread(
+                target=self._run,
+                args=(loop, stop, report, generation),
+                name="tw-autoloop",
+                daemon=True,
+            )
             self._in_flight = True
             self._stop = stop
             self._thread = thread
@@ -682,8 +796,10 @@ class AutoLoopRunner:
             except Exception as exc:
                 # Armed but with nothing behind it: exactly the state the
                 # chip must never show. Unwind it here rather than leave a
-                # thread-less hold for `stop` to discover.
-                self._control_lock.leave_auto_loop()
+                # thread-less hold for `stop` to discover. Same token this
+                # grant received -- nothing else could be correct here,
+                # since no OTHER generation exists yet.
+                self._control_lock.leave_auto_loop(generation)
                 self._in_flight = False
                 self._thread = None
                 self._stop = None
@@ -745,7 +861,7 @@ class AutoLoopRunner:
         except LoopAmbiguous:
             raise AutoLoopRefused(f"loop_ambiguous:{name}") from None
 
-    def _run(self, loop, stop: threading.Event, report: RunReport) -> None:
+    def _run(self, loop, stop: threading.Event, report: RunReport, generation: int) -> None:
         """The thread body: one pass, then die.
 
         There is no ``for`` and no ``while`` around the ``replay_loop``
@@ -753,6 +869,13 @@ class AutoLoopRunner:
         module docstring. A halt is not retried: the player's answer is
         recorded and the run ends, because a driver that re-invoked after
         a halt would be pressing into a screen the guard just refused.
+
+        ``generation`` is the exact token ``start()`` received from
+        ``enter_auto_loop()`` for THIS run -- threaded through as a plain
+        argument (not read off ``self`` at release time) so a wedged run
+        that outlives a human detach-and-re-arm cycle still releases only
+        the hold it actually took, never whatever a later ``start()`` put
+        in its place (WO-CONTROL-LOCK-AUTOLOOP-FENCE, Mack's CRITICAL).
         """
         port = _ReplayPort(
             self._session,
@@ -800,11 +923,21 @@ class AutoLoopRunner:
                 # Release BEFORE the flags are cleared, inside one mutex
                 # hold, so no observer can see a released lock with
                 # `in_flight` still set, or a held lock with it clear.
-                # `leave_auto_loop` is idempotent and never clobbers a
-                # mode someone else set -- if `take_human()` already took
-                # the hold away, this is a no-op and the human keeps the
-                # keyboard.
-                self._control_lock.leave_auto_loop()
+                # `leave_auto_loop` never clobbers a mode someone else set
+                # -- if `take_human()` already took the hold away, MODE
+                # stays theirs and the human keeps the keyboard. It is NOT
+                # a pure no-op in that case, though (WO-CONTROL-LOCK-
+                # AUTOLOOP-FENCE): `take_human()` fenced the preemption
+                # (`is_driver_fenced()` -> True), and THIS call is what
+                # clears that fence -- the run's own wind-down actually
+                # completing is what lets `Session.send_raw`'s bounded
+                # wait on a human's attach keystroke stop waiting early
+                # instead of sitting out the full bound. `generation` is
+                # THIS run's own token (a plain argument, not read off
+                # `self`) -- Mack's CRITICAL: a stale release must only
+                # ever be able to touch the hold it actually took, never
+                # whatever a later `start()` put in its place.
+                self._control_lock.leave_auto_loop(generation)
                 self._report = finished
                 self._in_flight = False
                 self._thread = None
