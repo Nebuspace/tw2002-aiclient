@@ -9,7 +9,7 @@
 |---|---|---|---|---|
 | `roguetw.net:2002` | A | **PASS** (`main_command`) | **PASS** (`main_command`) | — |
 | `twgs.microblaster.net:2002` | B | **FAIL** (`unknown`@step6) | **SKIP** (no persist) | remote classify · recovery `empty_response` local |
-| `game.a-net-online.lol:2002` | C | **FAIL** (`menu`@step5) | **SKIP** (no persist) | first `empty_response` local · recovery `menu`@step5 remote |
+| `game.a-net-online.lol:2002` | C | **FAIL** (`menu`@step5) | **SKIP** (no persist) | first `empty_response` **withdrawn/contested** · durable `menu`@step5 remote |
 
 Secrets keys: `proof_rogue` only. Tip base ≥ `ca8108a`/`50bbc46`. Micro stall frame: **gone** under `/tmp`. Follow-ups: micro classify corpus · a-net menu/game_select · ensure spawn-readiness (`WO-ENSURE-SPAWN-READINESS`).
 

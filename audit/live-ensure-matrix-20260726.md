@@ -13,7 +13,7 @@ No passwords, handles, or screen dumps in this file.
 |---|---|---|---|---|
 | `roguetw.net:2002` | A | **PASS** (`main_command`) | **PASS** (`main_command`) | remote — both cells clean |
 | `twgs.microblaster.net:2002` | B | **FAIL** (`unknown`@step6) | **SKIP** (no password persist) | **remote** classify gap · recovery **FAIL** `empty_response` = **local** (daemon socket / stop→re-ensure race) |
-| `game.a-net-online.lol:2002` | C | **FAIL** (`menu`@step5) | **SKIP** (no password persist) | first attempt **FAIL** `empty_response` = **local** · recovery NEW **FAIL** `menu`@step5 = **remote** (login stall / possible game-select↔`menu` misclass) |
+| `game.a-net-online.lol:2002` | C | **FAIL** (`menu`@step5) | **SKIP** (no password persist) | first `empty_response` **withdrawn/contested** (sandbox-poisoned artifact discarded — not a host claim) · durable NEW **FAIL** `menu`@step5 = **remote** (login stall / possible game-select↔`menu` misclass) |
 
 **Letter diversity proven:** A / B / C across three hosts (profile-driven `game_letter`, not hardcoded `A`).
 
