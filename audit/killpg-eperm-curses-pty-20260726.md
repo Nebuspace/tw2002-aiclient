@@ -13,9 +13,10 @@ No secrets in this file.
 
 | Observation | Status |
 |---|---|
-| ~88 `PermissionError` warnings per full suite when curses-in-pty teardown calls `os.killpg` | Banked (CC cert machine) |
+| ~88 `PermissionError` warnings per full suite when curses-in-pty teardown calls `os.killpg` | Banked (CC cert machine) — **in this suite’s harness** |
 | Plain `sleep` child, identical `start_new_session=True` / pty shape | **0** EPERM — sleep negative fixture was structurally blind |
-| Reproduces under `-n0` and `-n auto` | Banked |
+| Minimal curses-in-pty + `start_new_session` alone (CC 18:42Z) | **0/3** EPERM — further harness ingredient required (unidentified) |
+| Reproduces under `-n0` and `-n auto` | Banked (in-suite) |
 | Measured orphan leak today | **None** when the curses child holds no live grandchild at teardown |
 | Latent risk | Present **if** a curses-in-pty child still holds a live grandchild (`twd`, etc.) when EPERM fires — group sweep degrades to direct-child kill |
 
@@ -25,16 +26,18 @@ Source: WO body + CC STATUS 18:00:47Z / CORRECTION 18:02:30Z (do not re-derive).
 
 ## Root cause (bounded)
 
-**Named shape:** `terminate_session_group` → `os.killpg(proc.pid, SIGKILL)` against a session/process-group leader that is (or was) a **curses-in-pty** child spawned with `start_new_session=True` (no `TIOCSCTTY`) reliably raises **`PermissionError` (EPERM)** on the cert Darwin environment.
+**Named shape (suite harness):** `terminate_session_group` → `os.killpg(proc.pid, SIGKILL)` against session/process-group leaders from **this suite’s curses-in-pty harness** (`start_new_session=True`, typically via `capture_pty*` / `_spawn_bootstrap`) reliably raises **`PermissionError` (EPERM)** on the cert Darwin environment (~88 warnings/suite).
+
+**Not reproducible from curses-in-pty + `start_new_session` alone:** CC independent check (2026-07-26T18:42Z) — minimal curses-in-pty + setsid spawn, 0/3 EPERM; group sweep reaped the grandchild each time. So **suite harness has a further unidentified ingredient** beyond “curses + setsid” (candidates: `claim_ctty` / `set_winsize` / fd layout in bootstrap helpers — not isolated this tip).
 
 **What it is not:**
-- Not mid-suite flake alone (reproduces serial and parallel).
-- Not “killpg never works for setsid children” — the sleep control proves setsid+pty alone is insufficient to trigger EPERM.
+- Not mid-suite flake alone (reproduces serial and parallel in-suite).
+- Not “killpg never works for setsid children” — sleep controls and CC’s minimal curses repro both get clean group sweeps.
 - Not fixed by removing `start_new_session=True` (forbidden — isolation purpose is load-bearing for WO-P3-PTY-CTTY / orphan incident).
 
-**Kernel/curses mechanism:** **not fully isolated.** Candidates (unproven): Darwin session-leader / signaling interaction with a process that has initialized ncurses against a pty slave; timing around leader exit vs group membership. This tip does **not** claim a single ioctl or flag as the cause.
+**Kernel/curses mechanism:** **not fully isolated.** This tip does **not** claim a single ioctl or flag as the cause.
 
-**Honesty correction vs prior helper comment:** an earlier note framed EPERM as “intermittent in one sandboxed environment, not reproduced elsewhere.” Suite-scale curses-in-pty evidence contradicts that framing — treat EPERM as a **known platform carve-out for this spawn shape**, not a rare sandbox glitch.
+**Honesty correction vs prior helper comment:** an earlier note framed EPERM as “intermittent in one sandboxed environment.” In-suite volume contradicts that — treat EPERM as a **known carve-out for this suite’s pty harness shape**, not a rare sandbox glitch, and **not** as a universal curses+setsid law.
 
 ---
 
