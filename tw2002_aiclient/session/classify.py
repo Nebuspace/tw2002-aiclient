@@ -160,13 +160,23 @@ _BOX_VERTICAL_SEPARATOR_RE = re.compile(r"[│|]")
 # real TWGS server): no box-drawing at all, just a plain bracket list --
 # see _is_twgs_server_banner_game_select_menu below for why the TWGS
 # server startup BANNER (not the bracket list itself) is what's trusted.
-_TWGS_BANNER_TITLE_RE = re.compile(r"trade\s*wars\s+game\s+server", re.I)
+# Optional year/edition token between "Wars" and "Game" (a-net: "Trade Wars
+# 2002 Game Server"). Bare "TradeWars Game Server" / "Trade Wars Game Server"
+# still match. Digits alone must not be required -- only permitted.
+_TWGS_BANNER_TITLE_RE = re.compile(
+    r"trade\s*wars(?:\s+\d{2,4})?\s+game\s+server", re.I
+)
 _TWGS_BANNER_VERSION_RE = re.compile(r"\btwgs\s+v[\d.]+[a-z]?\b", re.I)
 _TWGS_BANNER_REGISTERED_RE = re.compile(r"server\s+registered\s+to", re.I)
 # The 3 banner lines must sit close together (TWGS always prints them as
 # 2-3 consecutive lines) -- bounds a stale/forged banner assembled from
 # fragments scattered far apart in an unrelated document.
 _BANNER_PROXIMITY_MAX_LINES = 6
+# Box / block-drawing chars used when a-net embeds the title inside ANSI art
+# ~13 rows below the plain version/registered pair (WO-ANET-BANNER-LAYOUT).
+_BANNER_ART_LINE_RE = re.compile(
+    r"[\u2500-\u259F═║─┌┐└┘├┤┬┴┼╔╗╚╝╠╣╦╩╬│┃]"
+)
 
 # -- Adversarial-review hardening: both variant checks above originally
 # scanned signals 2/3 (the "Game" header cell / the banner) against the
@@ -176,7 +186,11 @@ _BANNER_PROXIMITY_MAX_LINES = 6
 # "Selection (? for menu):" prompt and still misfire game_select -- see
 # _range_has_no_dash_style_menu / _range_has_qualifying_game_select_menu
 # below, and each function's own updated docstring, for the fix.
-_PLAYERS_ONLINE_OPTION_RE = re.compile(r"<\s*#\s*>\s*players\s+online", re.I)
+# a-net wording is "<#> View Players Online" (optional "View "); prior
+# captures used bare "<#> Players Online".
+_PLAYERS_ONLINE_OPTION_RE = re.compile(
+    r"<\s*#\s*>\s*(?:view\s+)?players\s+online", re.I
+)
 _VIEW_GAME_DESCRIPTIONS_OPTION_RE = re.compile(r"<\s*!\s*>\s*view\s+game\s+descriptions", re.I)
 # ROUND 2 hardening (same-day re-attack): the fix above proves ADJACENCY
 # (the header/banner and the qualifying body sit in the same range) but
@@ -476,10 +490,10 @@ def _is_twgs_server_banner_game_select_menu(full_text: str, prompt_line: str) ->
             registered_idx = i
     if title_idx is None or version_idx is None or registered_idx is None:
         return False
+    if not _twgs_banner_signals_coherent(lines, title_idx, version_idx, registered_idx):
+        return False
     banner_first_idx = min(title_idx, version_idx, registered_idx)
     banner_last_idx = max(title_idx, version_idx, registered_idx)
-    if banner_last_idx - banner_first_idx > _BANNER_PROXIMITY_MAX_LINES:
-        return False
     if banner_last_idx >= prompt_idx:
         return False
     if not _range_has_no_dash_style_menu(lines, banner_last_idx + 1, prompt_idx - 1):
@@ -487,6 +501,42 @@ def _is_twgs_server_banner_game_select_menu(full_text: str, prompt_line: str) ->
     if not _range_has_qualifying_game_select_menu(lines, banner_last_idx + 1, prompt_idx - 1):
         return False
     return _range_has_no_menu_after_game_select_markers(lines, banner_last_idx + 1, prompt_idx - 1)
+
+
+def _twgs_banner_signals_coherent(
+    lines, title_idx: int, version_idx: int, registered_idx: int
+) -> bool:
+    """True when the three TWGS startup-banner signals form one identity.
+
+    Compact layout (classic / roguetw): all three lines within
+    ``_BANNER_PROXIMITY_MAX_LINES`` — the bound that stops a forged banner
+    assembled from fragments scattered through an unrelated document.
+
+    Boxed-title layout (a-net, WO-ANET-BANNER-LAYOUT): the plain
+    version + registered pair stay compact at the top, and the title sits
+    *below* that pair on a line that also carries box/block art (title
+    embedded in the ANSI frame around the game list). Do **not** simply
+    raise the proximity ceiling — a bare quoted title 13 rows down in
+    prose still fails; only an art-embedded title is admitted.
+    """
+    banner_first_idx = min(title_idx, version_idx, registered_idx)
+    banner_last_idx = max(title_idx, version_idx, registered_idx)
+    if banner_last_idx - banner_first_idx <= _BANNER_PROXIMITY_MAX_LINES:
+        return True
+
+    core_first = min(version_idx, registered_idx)
+    core_last = max(version_idx, registered_idx)
+    if core_last - core_first > _BANNER_PROXIMITY_MAX_LINES:
+        return False
+    # Title must sit below the plain top-of-screen pair (not above / between).
+    if title_idx <= core_last:
+        return False
+    title_line = lines[title_idx]
+    if not _TWGS_BANNER_TITLE_RE.search(title_line):
+        return False
+    if not _BANNER_ART_LINE_RE.search(title_line):
+        return False
+    return True
 
 
 def _is_plain_timed_out_game_select(full_text: str, prompt_line: str) -> bool:

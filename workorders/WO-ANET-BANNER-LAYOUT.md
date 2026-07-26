@@ -1,6 +1,6 @@
 # WO-ANET-BANNER-LAYOUT
 
-**Status:** OPEN · READY · product (`session/classify.py`) · Claude Code lane · queued after fence 3A
+**Status:** IN FLIGHT · Cursor seat · WO-ANET-BANNER-LAYOUT
 **Posted:** 2026-07-26 · from the live-ensure diagnosis (`4f7449f`)
 
 ## Goal
