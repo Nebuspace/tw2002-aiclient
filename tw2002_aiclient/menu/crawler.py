@@ -68,7 +68,12 @@ out a second time.
    prompt line, or by matching one of ``classify``'s own login / pause /
    game-select / char-create / cim gate anchors — is never enumerated at
    all. Not even its options' labels are read. That is what "back out to a
-   safe menu without answering" means in practice.
+   safe menu without answering" means in practice. The same leg carries
+   canon's escalate-only classes (``classify.NEVER_AUTO_ACTION_CLASSES``,
+   ``money_prompt`` today — `DECISIONS.md` §A.2, aligning P-QTY): a
+   quantity / money / bank-transfer question the server is blocked on is
+   refused BY CLASS, so it stays refused even if some future edit loosens
+   the keyword scan below it.
 3. **No bare Enter, ever.** A bare vertical confirm (``"(Y)es\\n(N)o"``,
    ``"(A)ccept\\n(D)ecline"``) has an ordinary bracket-option line as its
    last line and slips past both layers above. A synthetic bare-Enter
@@ -105,7 +110,7 @@ the two sets equal so neither can drift from canon again.
 import re
 from collections import deque
 
-from ..session.classify import classify_screen
+from ..session.classify import NEVER_AUTO_ACTION_CLASSES, classify_screen
 from ..session.settle import send_and_confirm, wait_until_settled
 from .knowledge import (
     MENU_EDGE_KINDS,
@@ -333,6 +338,18 @@ _UNSAFE_SCREEN_PATTERNS = (
     re.compile(r"do\s+you\s+(wish|want)\s+to", re.I),
     re.compile(r"\bpurchase\b", re.I),
     re.compile(r"how\s+many\s+(holds|units)", re.I),
+    # The money/quantity family the line above only sampled (canon P-QTY /
+    # DECISIONS §A.2). Added ALONGSIDE it rather than widening it, so the
+    # captured holds/units shape keeps its own pin: a later tightening
+    # here can never silently un-cover the one screen actually captured.
+    # Requires the quantity question to name a commerce verb or credits,
+    # which is what keeps it off the safe informational prompts a crawl
+    # exists to enumerate ("How many sectors have I visited?").
+    re.compile(
+        r"how\s+m(?:any|uch)\b[^\n]*?\b(?:buy|sell|purchase|deploy|drop|transfer|deposit|withdraw|credits?)\b",
+        re.I,
+    ),
+    re.compile(r"\b(?:transfer|deposit|withdraw)\b[^\n]*?\bcredits?\b", re.I),
     # NOT a bare `\bcombat\b` -- that also matches the perfectly safe
     # informational "Display Combat Rating" / "View Combat Log". Anchored
     # to phrases meaning combat is ACTUALLY active, not merely mentioned.
@@ -343,10 +360,18 @@ _UNSAFE_SCREEN_PATTERNS = (
 # `classify` gate anchors meaning "this is not an ordinary navigable menu
 # screen at all" -- a login / pause / door-select / character-creation
 # gate, or a genuine CIM report. Never crawled through.
+#
+# UNIONED, never restated: `classify.NEVER_AUTO_ACTION_CLASSES` is canon's
+# escalate-only set (DECISIONS §A.2 -- `money_prompt` today). Deriving it
+# means a class added there is refused HERE the same day, with no second
+# edit to remember; a literal copy of "money_prompt" would have been a
+# second source of truth and the drift would be silent in the unsafe
+# direction. This module already learned that lesson in `classify`'s own
+# history (one exclusivity check, not divergent copies).
 _NON_MENU_GATE_CLASSES = frozenset({
     "login_password", "login_name", "pause_key", "ansi_prompt",
     "game_select", "char_create", "cim_report",
-})
+}) | NEVER_AUTO_ACTION_CLASSES
 
 # Structural, keyword-independent commit-shape detection on the ACTIVE
 # prompt line (the single line the server is actually blocked on). The
@@ -418,9 +443,11 @@ def screen_state(full_text, prompt_line):
 
     - ``"unsafe"`` -- a commit / confirm / purchase / combat prompt (by
       keyword ANYWHERE on screen, or by structural shape on the active
-      prompt line), or one of `classify`'s login / pause / game-select /
-      char-create / cim gate anchors. Never enumerated, never pressed
-      from -- this is what "back out without answering" means.
+      prompt line), one of `classify`'s login / pause / game-select /
+      char-create / cim gate anchors, or one of canon's escalate-only
+      classes (`classify.NEVER_AUTO_ACTION_CLASSES`). Never enumerated,
+      never pressed from -- this is what "back out without answering"
+      means.
     - ``"menu"`` -- a genuine multi-option navigable menu: at least 2
       DIFFERENT qualifying option lines (the same threshold `classify`'s
       own `_is_menu` uses, and for the same reason: a single inline

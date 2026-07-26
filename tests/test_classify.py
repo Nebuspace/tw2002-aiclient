@@ -3,7 +3,20 @@ TWGS screen fixture (see tests/fixtures/, captured live; see canon session-engin
 
 import os
 
-from tw2002_aiclient.session.classify import classify, classify_screen, is_probable_secret_prompt
+import pytest
+
+from tw2002_aiclient.session import classify as classify_module
+from tw2002_aiclient.session.classify import (
+    _BLOCK_TITLE_SPECS,
+    _CONTENT_ANCHORS,
+    _GATE_ANCHORS,
+    NEVER_AUTO_ACTION_CLASSES,
+    _is_exclusive_closed_block,
+    _is_money_prompt,
+    classify,
+    classify_screen,
+    is_probable_secret_prompt,
+)
 
 FIXTURE_DIR = os.path.join(os.path.dirname(__file__), "fixtures")
 
@@ -12,6 +25,42 @@ def _load_fixture(name):
     path = os.path.join(FIXTURE_DIR, name)
     with open(path, encoding="utf-8") as f:
         return f.read()
+
+
+def _fixture_with_prompt(name):
+    """A fixture plus the prompt line the live path would hand
+    `classify_screen` (`session.classify()` passes `rows[-1].strip()`)."""
+    text = _load_fixture(name)
+    rows = text.splitlines()
+    return text, (rows[-1].strip() if rows else "")
+
+
+def _block_spec(class_name):
+    """The (header_re, footer_re) pair `classify` anchors for `class_name`.
+    Reaching into the private table deliberately: several tests below need
+    to prove the BLOCK was recognized on a screen whose final class is
+    something else (a live gate anchor legitimately outranks it), and
+    there is no public surface that reports that distinction."""
+    for name, header_re, footer_re in _BLOCK_TITLE_SPECS:
+        if name == class_name:
+            return header_re, footer_re
+    raise AssertionError(f"no block-title spec anchored for {class_name!r}")
+
+
+def _cargo_hold_block_recognized(text):
+    """Does the cargo-hold quote's block anchor actually fire on `text`?
+
+    The question every exclusivity vector below is really asking. Those
+    vectors used to ask it indirectly, via `classify_screen(...) ==
+    "unknown"`, which worked only while their terminal purchase prompt
+    anchored to nothing. `money_prompt` now claims that prompt, so the
+    indirect form would answer "money_prompt" whether the exclusivity
+    check worked or not -- a green test pinning nothing. Asking the
+    predicate directly is both immune to that and strictly more
+    specific: it names the property under test instead of a side effect
+    of it."""
+    header_re, footer_re = _block_spec("stardock_cargo_hold_quote")
+    return _is_exclusive_closed_block(text, header_re, footer_re)
 
 
 def test_main_command_prompt():
@@ -605,6 +654,584 @@ def test_classify_whole_text_also_recognizes_a_genuine_cim_report():
     with different arguments."""
     text = _load_fixture("cim_port_report.txt")
     assert classify(text) == "cim_report"
+
+
+# -- WO-CLASSIFY-BLOCK-TITLES: the OTHER `-=-=- <Title> -=-=-` blocks ------
+#
+# `Port Report (CIM)` was the only system block classify.py anchored, even
+# though the captured corpus carries eight distinct block headers. The
+# generalization is deliberately narrow, because on this product a
+# CONFIDENTLY WRONG class is worse than `unknown` (which routes to
+# escalate-to-the-human -- canon engine/screen-understanding.md, "The
+# Unknown Is First-Class"). Three properties carry that narrowness, and
+# each has its own tests below:
+#
+#   1. exclusivity, reused wholesale from `_is_genuine_cim_report` -- a
+#      screen that merely QUOTES a block is never the block;
+#   2. an explicit header+footer PAIR per entry, because TW2002's footers
+#      are not derived from its headers ("StarDock Shipyard - Cargo Hold
+#      Upgrade" closes with "End of Cargo Hold Upgrade Quote");
+#   3. an ALLOWLIST, not a shape -- an unanchored title classifies as
+#      nothing at all and the screen stays `unknown`.
+#
+# Anchored: `Port Report (CIM)` (pre-existing), `StarDock Shipyard - Cargo
+# Hold Upgrade`, `StarDock Shipyard - Ship Registration`. NOT anchored,
+# with reasons, in `_BLOCK_TITLE_SPECS`' own comment in classify.py.
+
+_HOLDS_PROMPT = "How many holds would you like to buy [0-20] ?"
+
+
+def test_real_captured_stardock_cargo_hold_quote_classifies():
+    """The acceptance case, in its final shape. A real captured StarDock
+    PURCHASE screen: the cargo-hold upgrade quote. Two things are true
+    about it at once and the order between them is the whole point.
+
+    The exclusive closed block above the prompt IS recognized -- asserted
+    directly against the shared predicate, so this is a claim about the
+    block anchor and not about whatever `classify_screen` happens to
+    answer. But the live prompt is a BUY QUESTION, and DECISIONS §A.2
+    pins that shape never-auto-action, so the `money_prompt` gate
+    outranks the content anchor and is what the app is told.
+
+    That precedence is deliberate and is the safety of the whole WO. The
+    losing answer, `stardock_cargo_hold_quote`, is a benign screen
+    IDENTITY -- exactly the kind of label a taught rule may be recorded
+    against. Handing it back while the server sits blocked on "how many
+    holds would you like to buy" is the hole DECISIONS §A.2 exists to
+    close. Nothing is lost: the block still identifies the screen for
+    anyone who asks the predicate, and the at-max sibling capture below
+    still classifies by its block on the no-prompt path."""
+    text, prompt = _fixture_with_prompt("stardock_cargo_hold_quote.txt")
+    header_re, footer_re = _block_spec("stardock_cargo_hold_quote")
+    assert prompt == _HOLDS_PROMPT
+    assert _is_exclusive_closed_block(text, header_re, footer_re) is True
+    assert classify_screen(text, prompt) == "money_prompt"
+    # ... and with no live prompt line the block IS the answer: the gate
+    # never fires, because a gate is a claim about what the server is
+    # blocked on right now.
+    assert classify_screen(text, "") == "stardock_cargo_hold_quote"
+
+
+def test_cargo_hold_quote_at_max_keeps_main_command_because_the_live_gate_wins():
+    """The SAME block on the sibling real capture (the ship is already at
+    max holds, so the server printed the quote and went straight back to
+    the ship command prompt). The block IS recognized -- proven directly
+    against the shared predicate -- but the block anchors are CONTENT
+    anchors, so the live `main_command` gate correctly outranks them: the
+    server is blocked at the command prompt, and that is what the app must
+    be told. Getting this precedence backwards would silently break
+    `ensure`/`guardian`/`login`, all of which drive to a verified
+    `main_command`."""
+    text, prompt = _fixture_with_prompt("stardock_cargo_hold_quote_at_max.txt")
+    header_re, footer_re = _block_spec("stardock_cargo_hold_quote")
+    assert _is_exclusive_closed_block(text, header_re, footer_re) is True
+    assert classify_screen(text, prompt) == "main_command"
+
+
+def test_real_captured_shipyard_listing_block_is_recognized_and_the_live_gate_wins():
+    """The second anchored title, on its own real capture. Same shape as
+    the at-max case above: an exclusive closed `StarDock Shipyard - Ship
+    Registration` block whose live prompt is the ship command prompt, so
+    `main_command` wins. This title is anchored anyway -- the block is what
+    identifies the screen, and the class is what a taught rule would have
+    to match on the day a capture arrives with a question below it instead
+    of the command prompt."""
+    text, prompt = _fixture_with_prompt("stardock_shipyard_listing.txt")
+    header_re, footer_re = _block_spec("stardock_shipyard_listing")
+    assert _is_exclusive_closed_block(text, header_re, footer_re) is True
+    assert classify_screen(text, prompt) == "main_command"
+
+
+# -- exclusivity: a screen that QUOTES a block is never that block --------
+#
+# Every vector below ends in the real purchase prompt. When these were
+# written that prompt anchored to NOTHING, which is what made
+# `classify_screen(...) == "unknown"` a meaningful assertion: with no gate
+# to hide behind, the block anchor was the only thing that could have
+# classified them.
+#
+# `money_prompt` took that property away -- the purchase prompt is now a
+# gate, and a gate answers before any content anchor is consulted. Left
+# alone, every one of these would assert "money_prompt" and pass no matter
+# what the exclusivity check did. So each now asserts the exclusivity
+# predicate DIRECTLY (`_cargo_hold_block_recognized`), which no gate can
+# stand in front of, and keeps the class assertion as corroboration that
+# the block never reaches the answer either. The vectors themselves are
+# untouched: the attack each encodes is unchanged, only the question asked
+# of it is sharper.
+
+
+def test_help_screen_quoting_the_cargo_hold_quote_as_a_worked_example_is_not_classified():
+    """The `_is_genuine_cim_report` probe, re-aimed: a help screen can
+    reproduce the block's punctuation byte-for-byte, but it needs a lead-in
+    ("...looks like this:") and a trailing remark that real system output
+    never carries."""
+    text = (
+        "Command [TL=00:00:00]:[1000] (?=Help) ? u\n"
+        "\n"
+        "HELP: buying cargo holds\n"
+        "The upgrade quote StarDock prints looks like this:\n"
+        "\n"
+        "-=-=-        StarDock Shipyard - Cargo Hold Upgrade        -=-=-\n"
+        "Your ship can hold up to 20 additional cargo holds.\n"
+        "-=-=-        End of Cargo Hold Upgrade Quote        -=-=-\n"
+        "\n"
+        "Holds are only ever sold at StarDock.\n"
+        f"{_HOLDS_PROMPT}"
+    )
+    assert _cargo_hold_block_recognized(text) is False
+    assert classify_screen(text, _HOLDS_PROMPT) == "money_prompt"
+    assert classify(text) != "stardock_cargo_hold_quote"
+
+
+def test_forged_transmission_quoting_the_cargo_hold_quote_is_not_classified():
+    """A forged/griefing broadcast reproducing the identical block, with
+    its own "Incoming transmission from..." label directly above the
+    header -- which a genuine block (immediately preceded by only the
+    triggering command's echo) never has."""
+    text = (
+        "Incoming transmission from Rival Trader:\n"
+        "-=-=-        StarDock Shipyard - Cargo Hold Upgrade        -=-=-\n"
+        "Holds cost 1 credit each, for a total of 20 credits to fill them all.\n"
+        "-=-=-        End of Cargo Hold Upgrade Quote        -=-=-\n"
+        "\n"
+        f"{_HOLDS_PROMPT}"
+    )
+    assert _cargo_hold_block_recognized(text) is False
+    assert classify_screen(text, _HOLDS_PROMPT) == "money_prompt"
+
+
+def test_cargo_hold_quote_still_printing_is_not_classified():
+    """Header seen, no footer yet -- the same "never trust a block
+    mid-arrival" discipline the CIM report already obeys."""
+    text = (
+        "Command [TL=00:00:00]:[1000] (?=Help) ? u\n"
+        "\n"
+        "-=-=-        StarDock Shipyard - Cargo Hold Upgrade        -=-=-\n"
+        "Your ship can hold up to 20 additional cargo holds.\n"
+        f"{_HOLDS_PROMPT}"
+    )
+    assert _cargo_hold_block_recognized(text) is False
+    assert classify_screen(text, _HOLDS_PROMPT) == "money_prompt"
+
+
+def test_narrative_after_the_cargo_hold_quote_footer_is_not_classified():
+    """Exclusivity is checked on BOTH sides of the block: a trailing
+    remark between the footer and the prompt is narrative framing, so the
+    block is not the screen's sole content."""
+    text = (
+        "Command [TL=00:00:00]:[1000] (?=Help) ? u\n"
+        "\n"
+        "-=-=-        StarDock Shipyard - Cargo Hold Upgrade        -=-=-\n"
+        "Your ship can hold up to 20 additional cargo holds.\n"
+        "-=-=-        End of Cargo Hold Upgrade Quote        -=-=-\n"
+        "\n"
+        "Prices are re-quoted daily; this one may be out of date.\n"
+        f"{_HOLDS_PROMPT}"
+    )
+    assert _cargo_hold_block_recognized(text) is False
+    assert classify_screen(text, _HOLDS_PROMPT) == "money_prompt"
+
+
+def test_stale_cargo_hold_quote_above_a_later_one_anchors_to_the_LATEST_block():
+    """Stale-scrollback discipline, inherited from the CIM anchor: an
+    older closed quote sitting higher in the never-cleared pyte grid, with
+    intervening game text, must not be what gets classified -- the freshest
+    block printed after it is."""
+    text = (
+        "-=-=-        StarDock Shipyard - Cargo Hold Upgrade        -=-=-\n"
+        "Holds cost 900 credits each, for a total of 18,000 credits.\n"
+        "-=-=-        End of Cargo Hold Upgrade Quote        -=-=-\n"
+        "(intervening scrolled game text)\n"
+        "Command [TL=00:00:00]:[1000] (?=Help) ? u\n"
+        "\n"
+        "-=-=-        StarDock Shipyard - Cargo Hold Upgrade        -=-=-\n"
+        "Holds cost 1,468 credits each, for a total of 29,360 credits.\n"
+        "-=-=-        End of Cargo Hold Upgrade Quote        -=-=-\n"
+        "\n"
+        f"{_HOLDS_PROMPT}"
+    )
+    assert _cargo_hold_block_recognized(text) is True
+    assert classify_screen(text, _HOLDS_PROMPT) == "money_prompt"
+
+
+# -- the asymmetric footer: headers do NOT derive their own closers -------
+
+
+def test_the_naive_symmetric_end_of_header_title_footer_is_not_accepted():
+    """The trap this WO exists around. TW2002's footer title is NOT
+    "End of <header title>": the real captured block closes with "End of
+    Cargo Hold Upgrade Quote". A screen carrying the *derived* footer a
+    naive rule would have looked for is not a block this module knows, so
+    it stays `unknown` -- and the paired assertion proves the anchored,
+    genuinely captured footer is what does close it, so this test can
+    never pass merely because the header regex is broken."""
+    derived_footer = "-=-=-        End of StarDock Shipyard - Cargo Hold Upgrade        -=-=-"
+    real_footer = "-=-=-        End of Cargo Hold Upgrade Quote        -=-=-"
+    body = (
+        "Command [TL=00:00:00]:[1000] (?=Help) ? u\n"
+        "\n"
+        "-=-=-        StarDock Shipyard - Cargo Hold Upgrade        -=-=-\n"
+        "Your ship can hold up to 20 additional cargo holds.\n"
+        "{footer}\n"
+        "\n"
+        f"{_HOLDS_PROMPT}"
+    )
+    assert _cargo_hold_block_recognized(body.format(footer=derived_footer)) is False
+    assert _cargo_hold_block_recognized(body.format(footer=real_footer)) is True
+
+
+def test_a_real_footer_from_a_different_block_never_closes_this_header():
+    """The looser repair for the asymmetry -- "accept any `End of ...`
+    line" -- is worse than the naive one: it pairs one block's header with
+    a DIFFERENT block's closer. Both titles here are real captured
+    strings; the PAIR is not, so nothing classifies."""
+    text = (
+        "Command [TL=00:00:00]:[1000] (?=Help) ? u\n"
+        "\n"
+        "-=-=-        StarDock Shipyard - Cargo Hold Upgrade        -=-=-\n"
+        "Your ship can hold up to 20 additional cargo holds.\n"
+        "-=-=-        End of Shipyard Listing        -=-=-\n"
+        "\n"
+        f"{_HOLDS_PROMPT}"
+    )
+    assert _cargo_hold_block_recognized(text) is False
+    assert classify_screen(text, _HOLDS_PROMPT) == "money_prompt"
+
+
+# -- allowlist, not shape -------------------------------------------------
+
+
+def test_an_unanchored_block_title_stays_unknown_even_when_perfectly_exclusive():
+    """The single most important property of the generalization: the table
+    is an ALLOWLIST of captured title pairs, not a `-=-=- <Title> -=-=-`
+    shape. This screen is synthetic and gives a REAL but unanchored title
+    pair (from tests/fixtures/stardock_equipment_listing.txt, where it
+    only ever appears mid-listing) the most favourable framing possible --
+    perfectly exclusive, triggering echo above, nothing but the prompt
+    below. It must still be `unknown`, because naming a screen nobody has
+    captured in this shape is exactly the confident-wrong-answer this
+    module refuses to give."""
+    text = (
+        "Command [TL=00:00:00]:[1000] (?=Help) ? e\n"
+        "\n"
+        "-=-=-        Density & Holographic Scanners        -=-=-\n"
+        "Scanner Type                  Cost        Notes\n"
+        "Fixture Density Scanner      50,000      Reveals adjacent signatures\n"
+        "-=-=-        End of Scanner Listing        -=-=-\n"
+        "\n"
+        "Enter your selection:"
+    )
+    assert classify_screen(text, "Enter your selection:") == "unknown"
+
+
+def test_a_one_word_mutation_of_an_anchored_title_stays_unknown():
+    """Same allowlist property, attacked from the other side: the real
+    captured purchase screen with ONE word changed in its header title.
+    Everything else -- framing, footer, live prompt -- is the genuine
+    capture, so only the exact-title match stands between this and a
+    confident wrong answer."""
+    text, prompt = _fixture_with_prompt("stardock_cargo_hold_quote.txt")
+    assert _cargo_hold_block_recognized(text) is True
+    mutated = text.replace("Cargo Hold Upgrade        -=-=-", "Cargo Bay Upgrade        -=-=-")
+    assert "Cargo Bay Upgrade" in mutated
+    assert _cargo_hold_block_recognized(mutated) is False
+    # The live money gate answers for both, which is exactly why the
+    # title claim has to be asserted against the predicate above.
+    assert classify_screen(mutated, prompt) == "money_prompt"
+
+
+def test_multi_block_equipment_listing_anchors_nothing_new():
+    """The real StarDock equipment screen carries FOUR block headers and
+    THREE footers, none of them a matching pair by title and none of them
+    exclusive (each inner block has the previous block's output above it).
+    It is not anchored, it does not become anchored by accident, and its
+    live `main_command` gate remains its correct class."""
+    text, prompt = _fixture_with_prompt("stardock_equipment_listing.txt")
+    for _name, header_re, footer_re in _BLOCK_TITLE_SPECS:
+        assert _is_exclusive_closed_block(text, header_re, footer_re) is False
+    assert classify_screen(text, prompt) == "main_command"
+
+
+def test_with_no_prompt_line_the_block_outranks_the_whole_text_gate_fallback():
+    """A real behavior change worth stating outright. `classify_screen`'s
+    last resort, when there is no prompt line at all, is to scan gate
+    anchors against the WHOLE text -- and the whole text of these screens
+    still holds the stale `Command [TL=…]` echo that triggered the block.
+    Content anchors are checked BEFORE that fallback (pre-existing
+    precedent, unchanged by this WO: `port_trade_screen.txt` with an empty
+    prompt already answers `port_trade`, not `main_command`), so these two
+    screens now answer with their block instead of `main_command`.
+
+    That is the honest answer: with no live prompt line, `main_command`
+    would be a claim that the server is blocked at the ship prompt, sourced
+    from nothing but stale unclaimed grid content -- exactly the
+    false-gate-on-scrollback failure this module's prompt-line discipline
+    exists to prevent. The live path reaches this shape whenever the last
+    rendered row is blank (`session.classify()` passes `rows[-1].strip()`).
+    """
+    for fixture, expected in (
+        ("stardock_shipyard_listing.txt", "stardock_shipyard_listing"),
+        ("stardock_cargo_hold_quote_at_max.txt", "stardock_cargo_hold_quote"),
+    ):
+        text = _load_fixture(fixture)
+        assert classify_screen(text, "") == expected
+        # ... and with the real prompt line present, the live gate still wins.
+        assert classify_screen(text, text.splitlines()[-1].strip()) == "main_command"
+
+
+def test_an_anchored_stardock_block_never_becomes_a_cim_report():
+    """The CIM anchor and the new ones now share one structural predicate;
+    this pins that sharing the STRUCTURE never means sharing the TITLE."""
+    for name in ("stardock_cargo_hold_quote.txt", "stardock_shipyard_listing.txt"):
+        text, prompt = _fixture_with_prompt(name)
+        assert classify_screen(text, prompt) != "cim_report"
+        assert classify_screen(text, "") != "cim_report"
+        assert classify(text) != "cim_report"
+
+
+# -- money_prompt: the class that FORBIDS ---------------------------------
+#
+# WO-CLASSIFY-BLOCK-TITLES / canon DECISIONS.md §A.2 (Accepted
+# 2026-07-26), aligning canon's P-QTY. Every other class in this module is
+# a licence: canon (engine/screen-understanding.md, "The Unknown Is First-
+# Class") makes `unknown` the escalate trigger, so naming a screen is what
+# allows a taught rule to match it. `money_prompt` is the one label that
+# runs the other way -- it is named AND forbidden, so it SUBTRACTS its
+# screens from the teachable set. Tests below pin both halves: that it
+# claims the shapes P-QTY names, and that claiming them never hands any
+# consumer a new screen to act on.
+
+
+def test_the_real_captured_purchase_prompt_is_a_money_prompt():
+    """P-QTY's own worked example, from the real capture. This exact line
+    is why the class exists: `[0-20]` is a RANGE HINT, while the sibling
+    `[12]` / `[100]` quantity prompts are DEFAULTS a bare Enter accepts,
+    and nothing in the shape distinguishes them."""
+    assert classify_screen("", _HOLDS_PROMPT) == "money_prompt"
+
+
+@pytest.mark.parametrize(
+    "prompt",
+    [
+        # Range hint -- the real capture (tests/fixtures/…quote.txt).
+        "How many holds would you like to buy [0-20] ?",
+        # Enter-accepts-default siblings, both recorded in canon's P-QTY
+        # anchor probe. Before this class they matched no gate at all.
+        "How many holds of Fuel Ore do you want to buy [12]?",
+        "How many fighters would you like to deploy [100]?",
+        # canon/engine/trace-ledger.md's own worked example of an app
+        # keystroke answering a quantity question.
+        "How many holds?",
+        # "how much", the money-side wording of the same question.
+        "How much are you willing to spend?",
+        # Bank transfer -- named by DECISIONS §A.2, tagged HYPOTHESIS in
+        # classify.py until a real bank capture lands.
+        "How many credits do you wish to transfer?",
+        "Transfer how many credits to the vault:",
+        "Withdraw 5,000 credits:",
+    ],
+)
+def test_money_prompt_claims_the_quantity_and_transfer_shapes(prompt):
+    assert classify_screen("", prompt) == "money_prompt"
+
+
+@pytest.mark.parametrize(
+    "prompt",
+    [
+        # DELIBERATE NON-CLAIM 1. `Your offer [N]?` is unambiguously a
+        # money prompt, and is unambiguously owned by a DIFFERENT
+        # Accepted canon concept: canon/engine/auto-haggle.md
+        # prescribes a built-in guarded rule that answers exactly this
+        # prompt under its own parser and STOP-on-desync contract.
+        # Claiming it here would silently overrule that concept, so it
+        # is escalated instead of decided in code.
+        "We'll buy them for 158 credits. Your offer [158]?",
+        "Your offer [158]?",
+        # DELIBERATE NON-CLAIM 2. The bare free-input solicitation. The
+        # crawler matches this on purpose (a false "unsafe" there only
+        # under-explores a graph); a false CLASS here would be this
+        # module claiming to know a screen it does not.
+        "Enter your selection:",
+        "Enter your choice:",
+        # Ordinary driven prompts -- pinned so a widening of the money
+        # patterns cannot quietly eat one.
+        "Command [TL=00753:0/0/0/850] (?=Help)? :",
+        "Computer command [TL=00753:0/0/0/850] (?=Help)? :",
+        # "how many" as ordinary informational prose, not a solicitation:
+        # no terminal ? or :, so the line-anchored pattern declines.
+        "You have no idea how many sectors are out there",
+    ],
+)
+def test_money_prompt_declines_what_it_deliberately_does_not_claim(prompt):
+    assert classify_screen("", prompt) != "money_prompt"
+
+
+def test_money_prompt_is_the_last_gate_so_no_driven_class_can_lose_a_screen():
+    """Position, not just presence. Everything above `money_prompt` in
+    `_GATE_ANCHORS` answers a screen some part of this app DRIVES --
+    login.py's automaton, guardian.py's keepalive, protocol.py's `ensure`
+    each act on a specific named class. Appended last, `money_prompt` can
+    only ever take screens that were going to fall through to a content
+    anchor or to `unknown`, and nothing drives either of those. Promote it
+    up the list and this pin goes red."""
+    assert _GATE_ANCHORS[-1][0] == "money_prompt"
+    assert [name for name, _m in _GATE_ANCHORS].count("money_prompt") == 1
+
+
+@pytest.mark.parametrize(
+    "prompt, driven_class",
+    [
+        ("How many holds? Command [TL=00751:0/0/0/850]:", "main_command"),
+        ("How many characters in your password?", "login_password"),
+        ("How many? Press any key to continue:", "pause_key"),
+    ],
+)
+def test_a_money_shaped_line_never_outranks_a_gate_the_app_actually_drives(prompt, driven_class):
+    """The behavioural half of the ordering pin, for the case where
+    someone reorders the list and updates the index assertion above along
+    with it. Every prompt here is deliberately AMBIGUOUS -- the money
+    patterns genuinely match it (asserted, so the case cannot degrade into
+    a tautology about a line money never claimed) AND so does a gate some
+    consumer drives. The driven class must win, or the login automaton and
+    the keepalive lose screens they are built to recognize."""
+    assert _is_money_prompt(prompt) is True
+    assert classify_screen("", prompt) == driven_class
+
+
+def test_money_prompt_needs_a_whole_line_not_a_fragment_in_stale_scrollback():
+    """`classify_screen`'s last resort, with no prompt line at all, scans
+    gate anchors against the WHOLE text -- where a never-cleared pyte grid
+    routinely still holds old output. The money patterns are line-anchored
+    (`re.MULTILINE`) precisely so that fallback still requires a whole
+    LINE to be a money question. A screen whose only money wording is
+    embedded mid-sentence is not a money prompt."""
+    embedded = "The clerk asks how many holds you want: consult the manual before deciding\nSome other line"
+    assert classify_screen(embedded, "") != "money_prompt"
+    whole_line = "-- Cargo Bay --\nHow many holds would you like to buy [0-20] ?\n"
+    assert classify_screen(whole_line, "") == "money_prompt"
+
+
+def test_never_auto_action_classes_is_exactly_the_ruled_set():
+    """A closed vocabulary decision, pinned as one. DECISIONS §A.2 named
+    `money_prompt` and nothing else; a class quietly joining or leaving
+    this set changes what the App is permitted to automate, which is a
+    canon change, not a refactor."""
+    assert NEVER_AUTO_ACTION_CLASSES == frozenset({"money_prompt"})
+
+
+def test_never_auto_action_only_names_classes_an_anchor_can_actually_return():
+    """The pin fails OPEN if it is misspelled -- a class nothing ever
+    returns forbids nothing at all, and every consumer keeps looking
+    green. classify.py asserts this at import; asserting it again here is
+    what makes the failure a named test rather than a collection error
+    somebody re-runs and shrugs at."""
+    returnable = {name for name, _m in _GATE_ANCHORS} | {name for name, _m in _CONTENT_ANCHORS}
+    assert NEVER_AUTO_ACTION_CLASSES <= returnable
+
+
+def test_money_prompt_only_ever_takes_screens_that_nothing_drives(monkeypatch):
+    """The WO's load-bearing direction, proven as a differential rather
+    than argued: adding this class must make the app do LESS.
+
+    Classify the whole captured corpus twice -- once as shipped, once with
+    the `money_prompt` anchor lifted back out -- and inspect every screen
+    that moved. Two things must hold. The set must be NON-EMPTY, or the
+    anchor is dead code and every other test here is theatre. And every
+    moved screen's OLD class must be one that no consumer acts on, so the
+    move can only ever have taken a screen out of reach, never put one
+    within it."""
+    # Every class any consumer branches on, with its site. Sourced by
+    # reading the four `classify_screen` decision call sites, not guessed:
+    #   login._decide          -- pause_key, login_name, ansi_prompt,
+    #                             game_select, menu, char_create,
+    #                             login_password, main_command (target)
+    #   guardian._maybe_keepalive -- main_command (and ONLY that)
+    #   protocol.ensure        -- main_command (the `cls == target` check)
+    #   crawler.screen_state   -- _NON_MENU_GATE_CLASSES, a REFUSAL list
+    driven = {
+        "pause_key",
+        "login_name",
+        "login_password",
+        "ansi_prompt",
+        "game_select",
+        "char_create",
+        "menu",
+        "main_command",
+    }
+
+    without_money = [entry for entry in _GATE_ANCHORS if entry[0] != "money_prompt"]
+    assert len(without_money) == len(_GATE_ANCHORS) - 1
+
+    corpus = {name: _fixture_with_prompt(name) for name in _EXPECTED_FIXTURE_CLASSES}
+    after = {name: classify_screen(text, prompt) for name, (text, prompt) in corpus.items()}
+    monkeypatch.setattr(classify_module, "_GATE_ANCHORS", without_money)
+    before = {name: classify_screen(text, prompt) for name, (text, prompt) in corpus.items()}
+    monkeypatch.undo()
+
+    moved = {name: (before[name], after[name]) for name in corpus if before[name] != after[name]}
+    assert moved, "money_prompt classified no captured screen at all -- dead anchor"
+    for fixture, (before, after) in moved.items():
+        assert after == "money_prompt", (fixture, before, after)
+        assert before not in driven, (
+            f"{fixture} moved a DRIVEN class {before!r} into money_prompt -- "
+            "that is a consumer losing a screen it acts on, not a refusal being added"
+        )
+
+
+# -- nothing silently re-classed -----------------------------------------
+
+
+# Frozen expectations for every captured screen in tests/fixtures/, both
+# entry points. A generalized anchor that quietly re-classes an existing
+# screen is a defect, not an improvement, and a per-screen assertion buried
+# in its own test does not catch it across the whole corpus. Deliberately
+# NOT exhaustive over the directory: a sibling lane adding a fixture should
+# not be red-gated by this file. Add a row when you add a fixture.
+#
+# `classify()` (whole text, gate anchors scanned everywhere) legitimately
+# disagrees with `classify_screen()` (gate anchors scoped to the live
+# prompt) on three of these -- that divergence is the documented reason
+# classify_screen is the canonical live path, and it is pinned here rather
+# than left to be rediscovered.
+_EXPECTED_FIXTURE_CLASSES = {
+    # fixture: (classify(text), classify_screen(text, prompt))
+    "been_on_today_reenter_screen.txt": ("unknown", "unknown"),
+    "cim_port_report.txt": ("cim_report", "cim_report"),
+    "game_select_menu.mojibake-before.txt": ("game_select", "game_select"),
+    "game_select_menu.txt": ("game_select", "game_select"),
+    "game_select_menu_banner_variant.txt": ("game_select", "game_select"),
+    "game_select_menu_boxed_variant.txt": ("game_select", "game_select"),
+    "opening_screen.txt": ("login_name", "login_name"),
+    "pause_key_prompt.txt": ("pause_key", "pause_key"),
+    "port_commerce_report_gorram_primus.txt": ("main_command", "main_command"),
+    "port_trade_screen.txt": ("main_command", "main_command"),
+    # stale "[Pause]" above a live menu prompt -- the naive whole-text bug.
+    "rules_and_menu_screen.txt": ("pause_key", "menu"),
+    "stale_bracket_false_positive.txt": ("unknown", "unknown"),
+    # The one screen this WO moves (was ("main_command", "unknown")). Its
+    # live prompt is the purchase question, so the `money_prompt` gate
+    # answers -- DECISIONS §A.2, never-auto-action. The exclusive block
+    # above it is still recognized and still names the screen on the
+    # no-prompt path; see
+    # test_real_captured_stardock_cargo_hold_quote_classifies for both
+    # halves. classify()'s whole-text scan still finds the STALE command
+    # echo on line 1 and answers main_command -- unchanged, and the same
+    # naive-path bug as rules_and_menu_screen above.
+    "stardock_cargo_hold_quote.txt": ("main_command", "money_prompt"),
+    "stardock_cargo_hold_quote_at_max.txt": ("main_command", "main_command"),
+    "stardock_equipment_listing.txt": ("main_command", "main_command"),
+    "stardock_shipyard_listing.txt": ("main_command", "main_command"),
+    "warp_confirm_prompt.txt": ("warp_confirm", "warp_confirm"),
+}
+
+
+def test_every_captured_fixture_keeps_its_expected_classification():
+    actual = {}
+    for name in _EXPECTED_FIXTURE_CLASSES:
+        text, prompt = _fixture_with_prompt(name)
+        actual[name] = (classify(text), classify_screen(text, prompt))
+    assert actual == _EXPECTED_FIXTURE_CLASSES
 
 
 # -- WO-CLEANPREEMPT (secret sub-diff): is_probable_secret_prompt() -- the

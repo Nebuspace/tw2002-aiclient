@@ -24,11 +24,33 @@ Anchors split into two kinds:
   `warp_confirm` is the mid-warp ``Do you really want to warp there?
   (Y/N)`` gate: without it the Sector body still matches `sector_display`
   and Autopilot held forever (live stall).
-- **Content anchors** (sector_display, port_trade, menu): describe what
-  KIND of screen you're looking at, and legitimately live in the body a
-  few lines above the prompt (e.g. "Sector : 1234" sits above a
-  "Command?" prompt) — these ARE allowed to match anywhere in the full
-  screen text.
+- **Content anchors** (the system-block titles, sector_display,
+  port_trade, menu): describe what KIND of screen you're looking at, and
+  legitimately live in the body a few lines above the prompt (e.g.
+  "Sector : 1234" sits above a "Command?" prompt) — these ARE allowed to
+  match anywhere in the full screen text.
+
+The **system-block anchors** are a distinct family within the content
+anchors, listed first because a bracketed `-=-=- <Title> -=-=-` block
+closed by its own footer is a far more specific structural signal than
+the loose keyword scans that follow it (the same specificity-wins-first
+discipline that puts `computer` ahead of `main_command`). They are
+content anchors deliberately: on a real capture the ship's
+`Command [TL=…]` prompt frequently sits *below* a finished block (the
+server printed the block and went back to waiting), and in that case the
+LIVE GATE is the truth about what the server wants — the block is
+already-printed history. `cim_report` is the one exception, checked
+ahead of even the gate anchors, and only because that report is a
+data-bearing batch whose provenance gate has to fire before the world
+model may ingest it; see `_is_genuine_cim_report`.
+
+One gate class is not merely a label but a PROHIBITION: `money_prompt`
+(WO-CLASSIFY-BLOCK-TITLES / `canon/DECISIONS.md` §A.2, Accepted
+2026-07-26) names a quantity / money / bank-transfer question the server
+is blocked on, and it is pinned NEVER-AUTO-ACTION -- see
+`NEVER_AUTO_ACTION_CLASSES` below for what that pin means, why it makes
+this module's output strictly SMALLER rather than larger, and who is
+obliged to honour it.
 """
 
 import re
@@ -49,6 +71,69 @@ _DASH_OPTION_RE = re.compile(r"^\s*[a-z]\s*[-:]\s*\S+", re.I)
 _CIM_REPORT_HEADER_RE = re.compile(r"^-=-=-\s+Port Report \(CIM\)\s+-=-=-$")
 _CIM_REPORT_FOOTER_RE = re.compile(r"^-=-=-\s+End of Report\s+-=-=-$")
 _COMMAND_ECHO_LINE_RE = re.compile(r"command\s*\[\s*tl\s*=", re.I)
+
+# -- Other system-block titles (WO-CLASSIFY-BLOCK-TITLES) ------------------
+#
+# TW2002 brackets every system-generated block as `-=-=- <Title> -=-=-`.
+# The CIM pair above was the only one anchored; the REUSABLE part of it is
+# not its regexes but the exclusivity discipline in
+# `_is_exclusive_closed_block` (extracted from `_is_genuine_cim_report`,
+# which now delegates to it unchanged). Two properties of this table are
+# load-bearing and must not be "simplified":
+#
+# 1. HEADER AND FOOTER TITLES ARE NOT SYMMETRIC -- each entry names both
+#    explicitly. Real capture: the block opened by "StarDock Shipyard -
+#    Cargo Hold Upgrade" closes with "End of Cargo Hold Upgrade Quote",
+#    NOT "End of StarDock Shipyard - Cargo Hold Upgrade". A derived
+#    `End of <header title>` rule fails on the very screen this table
+#    exists to classify; and the looser repair (accept ANY `End of ...`
+#    line) is worse still -- it would happily pair one block's header
+#    with a DIFFERENT block's closer on a multi-block screen like the
+#    StarDock equipment listing (four headers, three footers, none of
+#    them matching pairs by title).
+# 2. IT IS AN ALLOWLIST, NOT A SHAPE. A `-=-=- <Title> -=-=-` block whose
+#    title pair is absent here contributes NOTHING; the screen keeps
+#    whatever it already had, normally `unknown` -> escalate to the
+#    human. That is deliberate. A generic "any bracketed block" anchor
+#    would confidently name screens nobody has ever captured, and on this
+#    product a confidently WRONG class is worse than no class at all
+#    (`unknown` is the designed safe path -- canon
+#    engine/screen-understanding.md, "The Unknown Is First-Class"). Add a
+#    row only alongside a real captured fixture that proves the pair.
+#
+# Case-SENSITIVE, matching the CIM pair above rather than the
+# case-insensitive keyword anchors further down: these titles are exact
+# server-emitted strings, and the stricter match can only ever fall back
+# to the safe path.
+_CARGO_HOLD_QUOTE_HEADER_RE = re.compile(r"^-=-=-\s+StarDock Shipyard - Cargo Hold Upgrade\s+-=-=-$")
+_CARGO_HOLD_QUOTE_FOOTER_RE = re.compile(r"^-=-=-\s+End of Cargo Hold Upgrade Quote\s+-=-=-$")
+_SHIPYARD_LISTING_HEADER_RE = re.compile(r"^-=-=-\s+StarDock Shipyard - Ship Registration\s+-=-=-$")
+_SHIPYARD_LISTING_FOOTER_RE = re.compile(r"^-=-=-\s+End of Shipyard Listing\s+-=-=-$")
+
+# (class name, header pattern, footer pattern) -- see the two properties
+# above.
+#
+# DELIBERATELY NOT ANCHORED, from the same captured corpus (recorded so
+# the omissions read as decisions, not oversights):
+#   - "Docking Log" (tests/fixtures/port_trade_screen.txt) -- printed with
+#     NO footer at all, mid-screen, with the arrival narrative and the
+#     commerce report around it. There is no closed block to anchor and no
+#     exclusivity to check; that screen's live gate (`main_command`) is
+#     already its correct class.
+#   - "StarDock Special Equipment & Devices" -- an umbrella header that is
+#     never closed; the three inner blocks under it ("Density &
+#     Holographic Scanners" / "End of Scanner Listing", "TransWarp Drive
+#     Installation" / "End of TransWarp Listing", "Special Devices &
+#     Ordnance" / "End of Item Listing") ARE closed, but never
+#     exclusive -- each has the previous block's output above it
+#     (tests/fixtures/stardock_equipment_listing.txt). Anchoring any of
+#     them would fire on nothing unless the exclusivity check were
+#     weakened, and weakening it is precisely the move that manufactures
+#     wrong classifications.
+_BLOCK_TITLE_SPECS = (
+    ("stardock_cargo_hold_quote", _CARGO_HOLD_QUOTE_HEADER_RE, _CARGO_HOLD_QUOTE_FOOTER_RE),
+    ("stardock_shipyard_listing", _SHIPYARD_LISTING_HEADER_RE, _SHIPYARD_LISTING_FOOTER_RE),
+)
 
 # -- TWGS "boxed" game-select variant (found live against a real TWGS
 # server, distinct from a test server's own "Select a game :" wording --
@@ -399,6 +484,75 @@ def _is_twgs_server_banner_game_select_menu(full_text: str, prompt_line: str) ->
     return _range_has_no_menu_after_game_select_markers(lines, banner_last_idx + 1, prompt_idx - 1)
 
 
+def _is_exclusive_closed_block(full_text: str, header_re, footer_re) -> bool:
+    """Is the screen's LATEST `header_re` … `footer_re` block CLOSED and
+    the screen's SOLE content? The exclusivity discipline extracted
+    verbatim from `_is_genuine_cim_report` (which now delegates here), so
+    the CIM report and every other anchored block title are judged by one
+    implementation instead of divergent copies of a subtle check.
+
+    Why this, and not the block's own text, is the trust signal: a screen
+    that merely REPRODUCES a block's punctuation -- a help screen quoting
+    it as a worked example, a forged transmission, a fragment of stale
+    scrollback -- can reproduce that shape byte-for-byte. What it cannot
+    reproduce is being ALONE on the screen. A worked example needs a
+    lead-in ("...looks like this:"); a forged transmission needs a label
+    ("Incoming transmission from..."); a trailing remark ("Use it to scan
+    ...") is the kind of narrative framing real system output never
+    carries. So the block is trusted only when nothing but blank lines
+    (or the command-prompt echo that triggered it) precedes its header,
+    and nothing but blank lines follow its footer up to the screen's own
+    final (prompt) line.
+
+    Two more disciplines, both load-bearing:
+    - anchors to the LAST header in the buffer (same stale-scrollback
+      rule as `state_parser._latest_cim_report_lines`), so an older copy
+      higher up never outranks the freshest one;
+    - a block with no footer yet (still printing) is not confidently
+      closed, and is never trusted mid-arrival.
+    """
+    lines = full_text.splitlines()
+    if not lines:
+        return False
+
+    header_idx = None
+    for i, line in enumerate(lines):
+        if header_re.match(line.strip()):
+            header_idx = i  # keep overwriting -- last match wins
+
+    if header_idx is None:
+        return False
+
+    footer_idx = None
+    for j in range(header_idx + 1, len(lines)):
+        if footer_re.match(lines[j].strip()):
+            footer_idx = j
+            break
+    if footer_idx is None:
+        return False
+
+    for line in reversed(lines[:header_idx]):
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if _COMMAND_ECHO_LINE_RE.search(stripped):
+            break
+        return False  # narrative text shares the screen -- not trusted
+
+    for line in lines[footer_idx + 1 : -1]:
+        if line.strip():
+            return False  # narrative text after the report -- not trusted
+
+    return True
+
+
+def _block_matcher(header_re, footer_re):
+    """Bind one `_BLOCK_TITLE_SPECS` row into the `(name, matcher)` anchor
+    shape the anchor lists use -- the block-title sibling of
+    `_regex_matcher`."""
+    return lambda text: _is_exclusive_closed_block(text, header_re, footer_re)
+
+
 def _is_genuine_cim_report(full_text: str) -> bool:
     """Adversarial-review finding: `parse_port_report` ran on EVERY
     response with zero provenance check -- any screen merely
@@ -424,40 +578,77 @@ def _is_genuine_cim_report(full_text: str) -> bool:
     Anchors to the LAST closed report in the buffer -- same
     stale-scrollback discipline as `state_parser._latest_cim_report_lines`
     -- and treats a report with no footer yet (still printing) as not
-    confidently closed, so it's never trusted mid-arrival."""
-    lines = full_text.splitlines()
-    if not lines:
-        return False
+    confidently closed, so it's never trusted mid-arrival.
 
-    header_idx = None
-    for i, line in enumerate(lines):
-        if _CIM_REPORT_HEADER_RE.match(line.strip()):
-            header_idx = i  # keep overwriting -- last match wins
+    WO-CLASSIFY-BLOCK-TITLES moved that structural check, unchanged, into
+    `_is_exclusive_closed_block` so the other anchored block titles are
+    judged by the SAME implementation and cannot drift from it. This
+    function keeps its own name, its own regexes and -- critically -- its
+    own priority: `cim_report` is the one block class checked ahead of the
+    gate anchors, because the report is a data-bearing batch whose
+    provenance gate must fire even though its live prompt is an ordinary
+    `main_command` prompt. Every other block title is an ordinary content
+    anchor, where that same live gate correctly wins."""
+    return _is_exclusive_closed_block(full_text, _CIM_REPORT_HEADER_RE, _CIM_REPORT_FOOTER_RE)
 
-    if header_idx is None:
-        return False
 
-    footer_idx = None
-    for j in range(header_idx + 1, len(lines)):
-        if _CIM_REPORT_FOOTER_RE.match(lines[j].strip()):
-            footer_idx = j
-            break
-    if footer_idx is None:
-        return False
+# -- money_prompt (WO-CLASSIFY-BLOCK-TITLES / DECISIONS.md §A.2) ----------
+#
+# The one class whose whole purpose is to FORBID, not to enable. See
+# `NEVER_AUTO_ACTION_CLASSES` for the pin; these are the shapes that earn
+# it, and every one is grounded rather than guessed:
+#
+#   QUANTITY -- VERIFIED (live capture). The real captured StarDock
+#   purchase screen ends in `How many holds would you like to buy [0-20]
+#   ?` (tests/fixtures/stardock_cargo_hold_quote.txt), and canon records
+#   the same shape at a port (`How many holds of Fuel Ore… [12]?`) and on
+#   a fighter deploy (`How many fighters… [100]?`). Canon's P-QTY is
+#   emphatic about why this shape is dangerous rather than merely
+#   uninteresting: the bracketed `[0-20]` is a RANGE HINT, while the
+#   `[12]` / `[100]` variants are DEFAULTS a bare Enter accepts. The two
+#   are indistinguishable by shape, so a blank Enter here means "buy 12"
+#   on one screen and nothing definable on the other. Refusing the whole
+#   family is the only answer that is right on both.
+#
+#   BANK TRANSFER -- HYPOTHESIS (named by the ruling, no capture in this
+#   repo yet). A prompt line naming credits together with a
+#   transfer/deposit/withdraw verb. Tagged rather than asserted, in the
+#   same spirit as this module's other constructed grammars; tighten or
+#   widen it when a real bank capture lands.
+#
+# TWO DELIBERATE NON-CLAIMS, recorded so they read as decisions:
+#
+#   1. `Your offer [N]?` is NOT claimed, even though it is unambiguously a
+#      money prompt. That exact shape is already owned, prescriptively, by
+#      `canon/engine/auto-haggle.md` -- a built-in guarded money-path rule
+#      that answers it under its own parser and STOP-on-desync contract.
+#      Claiming it here would silently overrule a different Accepted canon
+#      concept. The collision is real and is escalated, not resolved in
+#      code (see this module's WO report / DECISIONS.md).
+#   2. The bare free-input solicitation (`Enter your selection:`) is NOT
+#      claimed. `menu.crawler._FREE_INPUT_PROMPT_RE` matches it on
+#      purpose -- there, a false "unsafe" only under-explores a graph. A
+#      false CLASS here is different in kind: it is this module telling
+#      the rest of the app it KNOWS what a screen is, and canon
+#      (screen-understanding, "The Unknown Is First-Class") is explicit
+#      that a confident wrong answer is worse than `unknown`.
+#
+# `re.MULTILINE` deliberately: both patterns are line-anchored, so on
+# `classify_screen`'s last-resort whole-text scan (no prompt line at all)
+# they still require a WHOLE LINE to be a money question rather than
+# firing on a fragment buried in stale scrollback.
+_MONEY_PROMPT_QUANTITY_RE = re.compile(r"^\s*how\s+m(?:any|uch)\b.*[?:]\s*$", re.I | re.M)
+_MONEY_PROMPT_TRANSFER_RE = re.compile(
+    r"^(?=.*\bcredits?\b)(?=.*\b(?:transfer|deposit|withdraw)\b).*[?:]\s*$",
+    re.I | re.M,
+)
 
-    for line in reversed(lines[:header_idx]):
-        stripped = line.strip()
-        if not stripped:
-            continue
-        if _COMMAND_ECHO_LINE_RE.search(stripped):
-            break
-        return False  # narrative text shares the screen -- not trusted
 
-    for line in lines[footer_idx + 1 : -1]:
-        if line.strip():
-            return False  # narrative text after the report -- not trusted
-
-    return True
+def _is_money_prompt(text: str) -> bool:
+    """Is this a quantity / money / bank-transfer question the server is
+    blocked on? See the table above for each shape's provenance and for
+    the two shapes deliberately NOT claimed."""
+    return bool(_MONEY_PROMPT_QUANTITY_RE.search(text) or _MONEY_PROMPT_TRANSFER_RE.search(text))
 
 
 _GATE_ANCHORS = [
@@ -494,9 +685,41 @@ _GATE_ANCHORS = [
         ),
     ),
     ("main_command", _regex_matcher(re.compile(r"command\s*\[\s*tl\s*=", re.I))),
+    # LAST among the gates, and the position is load-bearing. Everything
+    # above answers a screen some part of this app DRIVES: `login.py`'s
+    # automaton, `guardian.py`'s keepalive and `protocol.py`'s `ensure`
+    # each act on a specific named class. Appending here means
+    # `money_prompt` can never take a screen away from one of them -- the
+    # only classifications it can change are ones that were going to fall
+    # through to a content anchor or to `unknown`, and both of those are
+    # already "nobody drives this". So the anchor's whole effect is to
+    # move screens INTO the never-auto-action set and never out of any
+    # driven one. Do not promote it up this list to "make it more
+    # specific": specificity is not the problem it solves.
+    #
+    # It still sits ahead of every CONTENT anchor, and that IS the point.
+    # On the real captured purchase screen the exclusive
+    # `stardock_cargo_hold_quote` block sits directly above a live buy
+    # question; if the content anchor won, the screen would carry a
+    # benign, teachable identity while the server sat blocked on a money
+    # question -- precisely the hole DECISIONS §A.2 exists to close. The
+    # block is still recognized (`_is_exclusive_closed_block` reports it
+    # unchanged); it is the CLASS the app is told that becomes the
+    # prohibition.
+    ("money_prompt", _is_money_prompt),
 ]
 
 _CONTENT_ANCHORS = [
+    # System-block titles first: an exclusive, closed `-=-=- <Title> -=-=-`
+    # block is a far more specific structural signal than the keyword
+    # scans below it (same specificity-first discipline as `computer`
+    # ahead of `main_command`). Content anchors, NOT gate anchors -- see
+    # the module docstring: when a finished block sits above a live
+    # `Command [TL=…]` prompt the gate is the truth about what the server
+    # wants, and gate anchors are checked first. The one exception,
+    # `cim_report`, is checked ahead of everything for its own stated
+    # reason.
+    *((name, _block_matcher(header_re, footer_re)) for name, header_re, footer_re in _BLOCK_TITLE_SPECS),
     ("sector_display", _regex_matcher(re.compile(r"sector\s*:?\s*\d+", re.I))),
     (
         "port_trade",
@@ -506,6 +729,42 @@ _CONTENT_ANCHORS = [
 ]
 
 _ANCHORS = _GATE_ANCHORS + _CONTENT_ANCHORS
+
+# Every class name either entry point can return: the anchor tables plus
+# `cim_report` (decided ahead of them by `_is_genuine_cim_report`) and the
+# `unknown` fall-through. Private -- its only job is the assert below.
+_RETURNABLE_CLASSES = frozenset(name for name, _matcher in _ANCHORS) | {"cim_report", "unknown"}
+
+# -- the never-auto-action pin --------------------------------------------
+#
+# `canon/DECISIONS.md` §A.2 (Accepted 2026-07-26), aligning canon's P-QTY:
+# a `money_prompt` is escalate-only. No taught rule, no macro, no crawler
+# keystroke, no keepalive nudge may fire on a screen carrying one of these
+# classes; the App hands the keyboard to the human instead.
+#
+# WHY A SET RATHER THAN A COMMENT. Naming a screen is normally a licence
+# to act on it: canon (engine/screen-understanding.md, "The Unknown Is
+# First-Class") makes `unknown` the stop-and-escalate trigger, so every
+# OTHER class is, by construction, a screen a taught rule is allowed to
+# match. That makes the vocabulary monotone in the dangerous direction --
+# every label added is a screen moved from "must escalate" to "may be
+# taught". This frozenset is the one lever that pushes the other way: a
+# class listed here is named AND forbidden, so `money_prompt` SUBTRACTS
+# its screens from the teachable set instead of adding them. That is the
+# whole safety argument for the class existing, and it only holds while
+# consumers derive their refusals from this name rather than restating
+# it. `menu.crawler._NON_MENU_GATE_CLASSES` already does; anything that
+# later decides whether a rule may fire owes the same.
+#
+# The import-time check is not ceremony: a typo here fails OPEN (a class
+# nothing ever returns forbids nothing at all), which is exactly the
+# failure a silent constant would hide until a money screen got driven.
+NEVER_AUTO_ACTION_CLASSES = frozenset({"money_prompt"})
+
+assert NEVER_AUTO_ACTION_CLASSES <= _RETURNABLE_CLASSES, (
+    "NEVER_AUTO_ACTION_CLASSES names a class no anchor can ever return: "
+    f"{sorted(NEVER_AUTO_ACTION_CLASSES - _RETURNABLE_CLASSES)}"
+)
 
 # -- FAIL-SAFE secret-entry detection for the `tw attach` interactive
 # keystroke path specifically -- see is_probable_secret_prompt()'s own

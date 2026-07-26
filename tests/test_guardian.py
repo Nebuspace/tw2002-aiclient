@@ -186,11 +186,26 @@ def test_keepalive_never_fires_on_password_screen_even_if_idle():
     assert session.sent == []
 
 
-def test_keepalive_never_fires_on_port_trade_screen_even_if_idle():
-    session = KeepaliveFakeSession(
-        "Fuel Ore   Buying   50%\nHow many holds of Fuel Ore do you want to buy [50]?",
-        last_rx=-1000.0,
-    )
+def test_keepalive_never_fires_on_a_port_quantity_screen_even_if_idle():
+    """Renamed from ...on_port_trade_screen... and pinned by class, because
+    the class this screen carries CHANGED: its live prompt is a buy
+    quantity, which WO-CLASSIFY-BLOCK-TITLES now names `money_prompt`
+    (canon DECISIONS §A.2, never-auto-action) where it used to fall
+    through to the `port_trade` content anchor. The keepalive behaviour is
+    identical either way -- `_maybe_keepalive` acts on `main_command`
+    alone -- but the old NAME asserted a class the classifier no longer
+    returns here, which would have quietly become a lie.
+
+    The screen matters more than most: canon's P-QTY is exactly about
+    `[50]`-style brackets that a bare Enter ACCEPTS, so the keepalive's
+    bare Enter would buy 50 holds."""
+    from tw2002_aiclient.session.classify import NEVER_AUTO_ACTION_CLASSES, classify_screen
+
+    text = "Fuel Ore   Buying   50%\nHow many holds of Fuel Ore do you want to buy [50]?"
+    prompt = text.splitlines()[-1]
+    assert classify_screen(text, prompt) in NEVER_AUTO_ACTION_CLASSES
+
+    session = KeepaliveFakeSession(text, last_rx=-1000.0)
     g = _guardian(session, idle_keepalive_ms=100)
     g._tick()
     assert session.sent == []

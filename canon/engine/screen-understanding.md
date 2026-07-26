@@ -48,16 +48,16 @@ one:
 
 - **Gate anchors** — a single, currently-active blocking request: `pause_key`, `login_password`,
   `login_name`, `ansi_prompt`, `game_select`, `char_create`, `computer`, `warp_confirm`,
-  `main_command`. In real TWGS/TW2002 play the server is blocked waiting *right there*, so a gate
-  is always the last thing printed. A gate anchor is therefore trusted only against the **current
+  `main_command`, `money_prompt`. In real TWGS/TW2002 play the server is blocked waiting *right
+  there*, so a gate is always the last thing printed. A gate anchor is therefore trusted only against the **current
   prompt line**, never the whole screen. A gate pattern found only deeper in the buffer is stale
   leftover text sitting in an unclaimed region of the pyte grid (pyte never clears cells the
   server did not overwrite), not a live gate. This was caught live: a rules screen's decorative
   `[Pause]` marker lingered above an already-active `Enter your choice:` menu prompt, and naive
   whole-screen scanning misread it as `pause_key`.
 - **Content anchors** — describe what *kind* of screen this is and legitimately live a few lines
-  above the prompt: `sector_display`, `port_trade`, `menu`. These are allowed to match anywhere
-  in the full screen text.
+  above the prompt: `sector_display`, `port_trade`, `menu`, `stardock_cargo_hold_quote`,
+  `stardock_shipyard_listing`. These are allowed to match anywhere in the full screen text.
 
 Order matters and is deliberate. **Gate anchors are checked before content anchors.** Within the
 gate list, more specific anchors precede their supersets: `computer` (`Computer command [TL=…]`)
@@ -66,6 +66,24 @@ the ship prompt and would otherwise be swallowed by it; `warp_confirm` (the mid-
 `Do you really want to warp there? (Y/N)` gate) is checked before the `sector_display` content
 anchor because the Sector body is still on screen above that prompt — without the gate winning,
 the autopilot held forever on a real live stall.
+
+`money_prompt` is checked **last among the gates**, so it can never take a screen from a class some
+consumer drives; it still precedes every content anchor, so a finished quote block cannot give a
+*live* money question a benign, teachable identity. That ordering is the whole safety argument: the
+real captured `stardock_cargo_hold_quote` screen classifies as `money_prompt` while the server is
+blocked on "how many holds would you like to buy", and reverts to its block identity only on the
+no-prompt path where nothing is being asked.
+
+The never-auto-action pin is enforced, not merely stated: `classify.NEVER_AUTO_ACTION_CLASSES` is a
+frozenset that consumers **derive** their refusals from (`menu.crawler._NON_MENU_GATE_CLASSES`
+unions it) rather than restating, and an import-time assertion rejects a name no anchor can ever
+return — because a misspelled pin forbids nothing while every consumer stays green.
+
+**Verification status:** the quantity shape (`how many … ?`) is VERIFIED against a live capture; the
+bank-transfer shape is a HYPOTHESIS named by the ruling and not yet observed. `Your offer [N] ?` is
+deliberately **not** claimed by `money_prompt` — [auto-haggle](/engine/auto-haggle.md) owns that
+shape prescriptively, and claiming it here would silently overrule a different Accepted concept.
+That tension is unresolved and is recorded in `DECISIONS.md`.
 
 The live entry point is `classify_screen(full_text, prompt_line)`: it evaluates gate anchors
 against the **prompt line only**, content anchors against the whole screen, and gate anchors

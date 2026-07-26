@@ -29,6 +29,7 @@ import pytest
 from tw2002_aiclient.menu import crawler as menu_crawler
 from tw2002_aiclient.menu import knowledge as game_knowledge
 from tw2002_aiclient.menu.sig import menu_signature
+from tw2002_aiclient.session import classify
 
 
 class FakeMenuSession:
@@ -826,6 +827,97 @@ def test_screen_state_other_leaf_content():
 def test_screen_state_login_gate_is_unsafe():
     text = "Please enter your password:"
     assert menu_crawler.screen_state(text, text) == "unsafe"
+
+
+# -- never-auto-action classes (canon DECISIONS.md §A.2 / P-QTY) --------------
+#
+# A quantity / money / bank-transfer question the server is blocked on is
+# escalate-only: the App must hand the keyboard to the human, and no rule,
+# macro or crawl keystroke may fire. `screen_state` is where that lands for
+# the crawler, and it has THREE independent legs -- the whole-screen keyword
+# scan, the structural prompt-shape check, and the classify-class check. The
+# real captured purchase screen trips all three, which makes a bare
+# `screen_state(...) == "unsafe"` assertion worthless as a pin on any one of
+# them: it would pass with the class leg deleted. So the tests below isolate
+# the class leg by disabling the other two, and vice versa.
+
+
+_MONEY_SCREEN = (
+    "Command [TL=00751:0/0/0/850] (?=Help)? : u\n"
+    "\n"
+    "-=-=-        StarDock Shipyard - Cargo Hold Upgrade        -=-=-\n"
+    "Your ship can hold up to 20 additional cargo holds.\n"
+    "Holds cost 1,468 credits each, for a total of 29,360 credits to fill them all.\n"
+    "-=-=-        End of Cargo Hold Upgrade Quote        -=-=-\n"
+    "\n"
+    "How many holds would you like to buy [0-20] ?"
+)
+_MONEY_PROMPT_LINE = "How many holds would you like to buy [0-20] ?"
+
+
+def test_the_captured_purchase_screen_is_refused():
+    """The acceptance case, unmodified: the real captured StarDock
+    purchase screen is never enumerated and never pressed from."""
+    assert menu_crawler.screen_state(_MONEY_SCREEN, _MONEY_PROMPT_LINE) == "unsafe"
+
+
+def test_a_money_prompt_is_refused_by_CLASS_alone(monkeypatch):
+    """The leg this WO adds, isolated. With the whole-screen keyword scan
+    emptied and the structural prompt-shape check forced False, the ONLY
+    thing left that can refuse this screen is
+    `classify_screen(...) in _NON_MENU_GATE_CLASSES` -- and that set now
+    unions `classify.NEVER_AUTO_ACTION_CLASSES`.
+
+    Disabling the other two legs is what makes this a pin instead of a
+    coincidence: this screen contains "purchase"-adjacent wording and a
+    "how many holds" line that the keyword scan already caught before this
+    WO existed, so an assertion that left them switched on would stay
+    green with the class check deleted outright."""
+    monkeypatch.setattr(menu_crawler, "_UNSAFE_SCREEN_PATTERNS", ())
+    monkeypatch.setattr(menu_crawler, "_is_commit_shaped_prompt", lambda _prompt: False)
+    assert menu_crawler.screen_state(_MONEY_SCREEN, _MONEY_PROMPT_LINE) == "unsafe"
+
+
+def test_the_refusal_set_derives_canon_rather_than_restating_it():
+    """`_NON_MENU_GATE_CLASSES` unions `NEVER_AUTO_ACTION_CLASSES` rather
+    than listing "money_prompt" a second time. That is the anti-drift
+    property, and it is worth a test: a literal copy would be a second
+    source of truth, and a class added to canon's set would then go
+    unrefused here with nothing red to say so."""
+    assert classify.NEVER_AUTO_ACTION_CLASSES <= menu_crawler._NON_MENU_GATE_CLASSES
+
+
+def test_a_money_prompt_is_refused_even_if_the_keyword_scan_is_narrowed(monkeypatch):
+    """Defense in depth, stated as behaviour: the keyword scan is a
+    denylist over unbounded natural language and this module's own
+    docstring calls it best-effort. Narrowing it -- a plausible future
+    edit, e.g. to stop over-refusing informational screens -- must not be
+    able to make a money screen crawlable."""
+    monkeypatch.setattr(menu_crawler, "_UNSAFE_SCREEN_PATTERNS", ())
+    assert menu_crawler.screen_state(_MONEY_SCREEN, _MONEY_PROMPT_LINE) == "unsafe"
+
+
+def test_the_added_keyword_patterns_are_additive_not_a_replacement():
+    """The other direction: the class leg is not licence to drop the
+    keyword leg either. With classification forced to a benign value, the
+    whole-screen scan alone must still refuse a money screen -- including
+    a bank-transfer wording the classify anchors reach only via their
+    HYPOTHESIS pattern."""
+    for text in (
+        "How many units of Organics would you like to sell?",
+        "Transfer how many credits to your other character?",
+        "Deposit 10,000 credits into the Galactic Bank?",
+    ):
+        assert any(p.search(text) for p in menu_crawler._UNSAFE_SCREEN_PATTERNS), text
+
+
+def test_an_ordinary_informational_menu_is_still_crawlable():
+    """The cost side, pinned so the additions above cannot quietly turn
+    the crawler into a no-op. A safe informational menu must survive every
+    new pattern -- a crawler that refuses everything proves nothing and
+    maps nothing."""
+    text = "(V)iew Ship Status\n(H)elp\n(Q)uit to Sector"
+    assert menu_crawler.screen_state(text, "(Q)uit to Sector") == "menu"
 
 
 # -- residual breach, closed by the 2026-07-19 hardening pass ------------------
