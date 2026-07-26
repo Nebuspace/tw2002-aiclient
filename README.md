@@ -18,7 +18,7 @@ keystroke senders are `{app, human}` only.
 | Surface | Role |
 |---|---|
 | `./tw2002-aiclient` | **Product TUI** — profile launcher, play shell / cockpit chrome. Human-facing client. |
-| `./tw` | **Backend / ops CLI** — shipped verbs today: `status`, `ensure`, `screen`, `stop`, `do`, `send`, `read`, `history`, `watch`, `attach`, `menumap`, `loops` (table grows one WO at a time). |
+| `./tw` | **Backend / ops CLI** — shipped verbs today: `status`, `ensure`, `screen`, `stop`, `do`, `send`, `read`, `history`, `watch`, `attach`, `menumap`, `loops`, `record` (table grows one WO at a time). |
 
 Same daemon either way — one telnet connection. Prefer `./tw2002-aiclient` for day-to-day play; keep `./tw` for automation and ops. Further ops verbs (`spectate`, `autoloop`, …) are inventoried in [`workorders/WO-P2-OPS-VERB-SURFACE.md`](workorders/WO-P2-OPS-VERB-SURFACE.md) — not on `./tw --help` yet.
 
@@ -42,9 +42,10 @@ connection drops, a background guardian reconnects and logs back in by itself.
 
 **📺 Ops visibility today.** `tw status` / `tw screen` / `tw stop` / `tw do` /
 `tw send` / `tw read` / `tw history` / `tw watch` / `tw attach` / `tw menumap` /
-`tw loops` (plus `ensure`) are the shipped ops verbs. Most talk to the daemon
-over a unix socket; `tw loops` and (absent a live localize) `tw menumap` read
-their own on-disk stores instead, so they answer with the daemon stopped.
+`tw loops` / `tw record` (plus `ensure`) are the shipped ops verbs. Most talk to
+the daemon over a unix socket; `tw loops`, `tw record`, and (absent a live
+localize) `tw menumap` read/write their own on-disk stores instead, so they
+work with the daemon stopped.
 Long-lived `tw spectate` and `tw state` (needs `state_parser`) are staged
 in [`WO-P2-OPS-VERB-SURFACE.md`](workorders/WO-P2-OPS-VERB-SURFACE.md) — **not**
 on `./tw --help` yet.
@@ -82,14 +83,14 @@ One long-lived daemon, short-lived windows into it:
   everything over a local unix socket. You never run it directly.
 - **The CLI (`tw`)** is stateless: every verb connects, asks, prints, exits.
   Shipped today: `ensure`, `status`, `screen`, `stop`, `do`, `send`, `read`,
-  `history`, `watch`, `attach`, `menumap`, `loops`. More verbs land one WO at a
-  time — see the Verb reference and the ops WO. (`menumap` and `loops` are
-  daemon-free reads: they read their own on-disk stores, so they work with the
-  daemon stopped.)
+  `history`, `watch`, `attach`, `menumap`, `loops`, `record`. More verbs land
+  one WO at a time — see the Verb reference and the ops WO. (`menumap`,
+  `loops`, and `record` are daemon-free: they read/write their own on-disk
+  stores, so they work with the daemon stopped.)
 - **Product play** is `./tw2002-aiclient`, not `./tw`. Thin `tw attach` /
-  `tw watch` / `tw menumap` / `tw loops` already ship on the same daemon;
-  full-curses `tw spectate` (and `start` / `state` / `autoloop`) stay
-  **Coming**.
+  `tw watch` / `tw menumap` / `tw loops` / `tw record` already ship on the
+  same daemon; full-curses `tw spectate` (and `start` / `state` / `autoloop`)
+  stay **Coming**.
 - **A control lock** arbitrates the one connection: App (taught autopilot) or
   human at the keyboard — exactly one live driver at a time. The AI is never a
   live driver.
@@ -157,6 +158,7 @@ Everything takes `--json` for machine-parseable output where applicable.
 | `tw attach [--keys …]` | Take the control-lock and forward keystrokes (thin — no curses paint yet). TTY cbreak until Ctrl-]; `--keys` for scripted/non-TTY. **Warning:** `--keys` puts those bytes on **argv / process table / shell history** — never put a password or PIN there; use interactive attach (redacted) or env/`secrets.json` for credentials. |
 | `tw menumap --path FILE` | Read-only menu-map inspector (coverage / dead-ends / orphans / you-are-here ★). Optional live localize via `screen` when daemon up; never sends. `--world-id` joins `state/world/<slug>/game_knowledge.json`. |
 | `tw loops [--include-drafts]` | List the learned-loop (taught-macro) store in `state/skills/` — name, provenance, profit metadata, step count. Daemon-free; never sends. Drafts are inert until a human promotes them, so they list only on `--include-drafts` and are tagged `[DRAFT]`. An unreadable store never renders as an empty one: the report says so and the verb exits **1** (a partial read lists what it read, is marked INCOMPLETE, and exits 0). |
+| `tw record MANIFEST [--draft]` | Write a taught macro from an already-captured demonstration manifest (assembled from real `tw do`/`tw screen --json` output) into `state/skills/`. Daemon-free; the recorder itself cannot send a keystroke. `expected_post_class` is always the live classifier's answer and `wait_prompt` is always escaped, never raw; a capture without a readable current sector is refused rather than saved without a `start_anchor`. Lands **blessed** by default (`--draft` writes to `state/skills/_drafts/` instead). See `loops/recorder.py` for the manifest shape and the live-attach follow-up this leaves on the table. |
 
 ### Coming (not on `./tw --help` yet)
 

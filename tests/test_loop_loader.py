@@ -742,11 +742,17 @@ _SEND_SYMBOLS = frozenset({
 })
 
 # `loops/` modules that must not reach the transport AT ALL -- the strict
-# pin, unchanged from G3/X2. `player.py` is the sole module held to the
-# different (and separately proven) pin in tests/test_loop_player.py; it is
-# named there, not merely skipped here, so the exclusion cannot be silent.
+# pin, unchanged from G3/X2. `player.py` and `recorder.py` are each held to
+# their OWN (and separately proven) pin, in tests/test_loop_player.py and
+# tests/test_loop_recorder.py respectively; both are named here, not merely
+# skipped, so neither exclusion can be silent (WO-P2-G4-X6: this is the
+# "someone decides, explicitly, which pin a new module belongs under"
+# moment the test below's own docstring anticipates -- recorder.py writes
+# files, so it fits neither the zero-writes read-only pin nor player's own
+# `test_no_run_loop_snuck_in` no-persistence claim; it earns a third).
 _READ_ONLY_MODULES = frozenset({"__init__.py", "store.py", "loader.py", "list_view.py"})
 _PLAYER_MODULE = "player.py"
+_RECORDER_MODULE = "recorder.py"
 
 
 def _reflected_name(call):
@@ -826,18 +832,19 @@ def test_the_read_modules_still_cannot_send_a_keystroke(tmp_path):
     ``protocol.py`` lane: a READ module in ``loops/`` reaching into
     ``session/`` is exactly the edge that would couple them.
 
-    ``player.py`` (WO-P2-G4-X3) is held to a different pin, proven in
-    ``tests/test_loop_player.py``. The exclusion is by NAME, and the
-    coverage assertion below is an equality rather than a superset: a new
-    module dropped into ``loops/`` fails here until someone decides,
-    explicitly, which of the two pins it belongs under. That is what stops
-    the strict pin from being escaped by simply adding a file.
+    ``player.py`` (WO-P2-G4-X3) and ``recorder.py`` (WO-P2-G4-X6) are each
+    held to their own, DIFFERENT pin, proven in ``tests/test_loop_player.py``
+    and ``tests/test_loop_recorder.py`` respectively. Both exclusions are by
+    NAME, and the coverage assertion below is an equality rather than a
+    superset: a new module dropped into ``loops/`` fails here until someone
+    decides, explicitly, which pin it belongs under. That is what stops the
+    strict pin from being escaped by simply adding a file.
     """
     scanned = sorted(LOOPS_PKG.glob("*.py"))
-    assert {p.name for p in scanned} == _READ_ONLY_MODULES | {_PLAYER_MODULE}
+    assert {p.name for p in scanned} == _READ_ONLY_MODULES | {_PLAYER_MODULE, _RECORDER_MODULE}
 
     for path in scanned:
-        if path.name == _PLAYER_MODULE:
+        if path.name in (_PLAYER_MODULE, _RECORDER_MODULE):
             continue
         assert _send_violations(path.read_text(encoding="utf-8")) == [], path.name
 

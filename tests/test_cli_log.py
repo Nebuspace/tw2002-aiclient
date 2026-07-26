@@ -28,6 +28,9 @@ _SHIPPED_VERBS = frozenset(
         # WO-P2-G3 slice 2/2 -- `tw loops`, the daemon-free learned-loop
         # listing. Behaviour: tests/test_cli_loops.py.
         "loops",
+        # WO-P2-G4-X6 -- `tw record`, the daemon-free manifest-driven macro
+        # writer. Behaviour: tests/test_cli_record.py.
+        "record",
     }
 )
 

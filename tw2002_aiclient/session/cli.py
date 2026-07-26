@@ -597,6 +597,117 @@ def cmd_loops(args):
     return 1 if result.get("status") == "unreadable" else 0
 
 
+def cmd_record(args):
+    """WO-P2-G4-X6: write a taught macro from an already-captured
+    demonstration manifest. Daemon-free by design -- no ``--run-dir``, the
+    same posture as ``cmd_loops``/``cmd_menumap --path``: everything this
+    verb needs is already in the manifest, so there is no socket round trip
+    here at all.
+
+    **What this verb is, and what it deliberately is not.** The recorder
+    module (``tw2002_aiclient.loops.recorder``) is capture-only and cannot
+    send a keystroke -- proven in ``tests/test_loop_recorder.py``. This
+    verb does not change that: it never opens a daemon socket, never
+    presses a key, and never touches ``protocol.py``/``daemon.py``. It reads
+    a MANIFEST -- a JSON document describing a demonstration that has
+    ALREADY happened, assembled from real ``tw do``/``tw screen --json``
+    output -- and turns it into a stored loop.
+
+    Wiring a live ``tw attach`` session directly into this recorder (so an
+    operator presses keys once, live, and the macro falls out the other
+    end) is real, useful follow-up work this WO's Scope explicitly excludes
+    ("NOT... the daemon") -- it would touch the control-lock/driving-dispatch
+    machinery X3/X4 own, and there is nowhere today that already logs a raw
+    human keystroke alongside its resulting classified screen
+    (``daemon.py``'s own ``_handle_attach`` comment: "Ledger/
+    record_attach_keystroke deferred"). Until that lands, the recipe is::
+
+        tw screen --json > anchor.json     # BEFORE the first keystroke
+        tw do 'P' --json > step0.json      # for each step, in order
+        tw do '' --json > step1.json
+        # then assemble the manifest below from each response's own
+        # "screen" field (by hand, or with a small script).
+
+    Manifest shape::
+
+        {
+          "name": "ore-run",
+          "anchor": {"screen": [...]},          # a real response's "screen"
+                                                 # field, taken BEFORE step 0
+          "steps": [
+            {"input": "P", "screen": [...]},
+            {"input": "1", "screen": [...], "confirm_exact": true}
+          ]
+        }
+
+    ``confirm_exact`` (optional, default false) asks the recorder to capture
+    that step's resulting prompt line as an exact (escaped) ``wait_prompt``
+    -- see ``loops/recorder.py``'s docstring, trap 2.
+
+    Exit codes mirror ``cmd_loops``'s posture: a malformed manifest, or a
+    refusal from the recorder itself (no readable start_anchor, an empty
+    recording, an unusable name), is reported and this returns 1; a written
+    loop returns 0.
+    """
+    from tw2002_aiclient.loops.recorder import LoopRecorder, RecorderError
+
+    manifest_path = Path(args.manifest)
+    try:
+        raw = manifest_path.read_text(encoding="utf-8")
+    except OSError as e:
+        print(f"ERROR: could not read manifest {manifest_path}: {e}")
+        return 1
+    try:
+        manifest = json.loads(raw)
+    except json.JSONDecodeError as e:
+        print(f"ERROR: manifest is not valid JSON: {e}")
+        return 1
+    if not isinstance(manifest, dict):
+        print("ERROR: manifest top level must be a JSON object")
+        return 1
+
+    anchor = manifest.get("anchor")
+    anchor_screen = anchor.get("screen") if isinstance(anchor, dict) else None
+    steps = manifest.get("steps")
+    if not isinstance(steps, list) or not steps:
+        print("ERROR: manifest 'steps' must be a non-empty list")
+        return 1
+
+    blessed = not bool(getattr(args, "draft", False))
+    try:
+        recorder = LoopRecorder(manifest.get("name"), anchor_screen)
+        for index, raw_step in enumerate(steps):
+            if not isinstance(raw_step, dict):
+                print(f"ERROR: step {index} is not a JSON object")
+                return 1
+            recorder.step(
+                raw_step.get("input", ""),
+                raw_step.get("screen"),
+                confirm_exact=bool(raw_step.get("confirm_exact", False)),
+            )
+        path = recorder.save(blessed=blessed)
+    except (RecorderError, TypeError) as e:
+        print(f"ERROR: {e}")
+        return 1
+
+    if getattr(args, "json", False):
+        print(
+            json.dumps(
+                {
+                    "ok": True,
+                    "name": recorder.name,
+                    "path": str(path),
+                    "steps": len(recorder.steps),
+                    "draft": not blessed,
+                }
+            )
+        )
+    else:
+        kind = "draft (inert)" if not blessed else "blessed"
+        print_tty(f"recorded {recorder.name!r} -> {path} ({len(recorder.steps)} steps, {kind})")
+    return 0
+
+
 def _arm_lossless_stdin():
     """Make ``sys.stdin`` park an undecodable byte as a PEP 383 surrogate
     instead of raising, and report whether stdin is now lossless.
@@ -1182,6 +1293,22 @@ def build_parser() -> argparse.ArgumentParser:
     )
     sp.add_argument("--json", action="store_true", help="machine-parseable JSON output")
     sp.set_defaults(func=cmd_loops)
+
+    sp = sub.add_parser(
+        "record",
+        help=(
+            "write a taught macro from an already-captured demonstration "
+            "manifest -- state/skills, daemon-free, never sends"
+        ),
+    )
+    sp.add_argument("manifest", help="path to a JSON capture manifest (see cmd_record's docstring)")
+    sp.add_argument(
+        "--draft",
+        action="store_true",
+        help="write to state/skills/_drafts/ (inert) instead of the blessed store",
+    )
+    sp.add_argument("--json", action="store_true", help="machine-parseable JSON output")
+    sp.set_defaults(func=cmd_record)
 
     return parser
 
