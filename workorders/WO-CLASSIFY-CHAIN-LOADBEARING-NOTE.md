@@ -1,6 +1,6 @@
 # WO-CLASSIFY-CHAIN-LOADBEARING-NOTE
 
-**Status:** OPEN · READY · offline · Claude Code preferred  
+**Status:** DONE · PR #43 · origin `4669f4a` (premise correction also on main via #44 `7b229ae`)  
 **Posted:** 2026-07-26 · CC post-#38 STATUS (dependency chain)
 
 ## Goal

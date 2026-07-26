@@ -1,6 +1,6 @@
 # WO-CODEQL-ACTIONS-WORKFLOW-PERMS
 
-**Status:** READY FOR HUB COMMIT · Cursor · tip pending push · `wo/CODEQL-ACTIONS-PERMS` · [PR #10](https://github.com/Nebuspace/tw2002-aiclient/pull/10)  
+**Status:** DONE · PR #10 · origin `11412d4` (was READY FOR HUB COMMIT · Cursor · `wo/CODEQL-ACTIONS-PERMS`)  
 **Posted:** 2026-07-26 · GitHub code scanning alert #1  
 **Alert:** https://github.com/Nebuspace/tw2002-aiclient/security/code-scanning/1  
 **Rule:** `actions/missing-workflow-permissions` (warning)  

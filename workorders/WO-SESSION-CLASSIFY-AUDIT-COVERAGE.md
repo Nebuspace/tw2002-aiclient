@@ -1,6 +1,6 @@
 # WO-SESSION-CLASSIFY-AUDIT-COVERAGE
 
-**Status:** READY FOR REVIEW · tip `2bfd8c5` · Cursor · `wo/SESSION-CLASSIFY-AUDIT`  
+**Status:** DONE · PR #12 · origin `a4347f0` (was READY FOR REVIEW · tip `2bfd8c5` · Cursor · `wo/SESSION-CLASSIFY-AUDIT`)  
 **Posted:** 2026-07-26 · from `canon/findings.md` SESSION-AUDIT-COVERAGE-GAP / MT-11  
 **Report:** `audit/session-classify-audit-coverage-20260726.md`
 
