@@ -125,19 +125,35 @@ class FakeAttachSession:
     `scale * 0.5` real seconds -- `0.1` reproduces the original ~50ms
     per cycle.
 
-    `observe_credits`/`credits_snapshot` (WO-FA-SAFE) are the REAL
-    `Session` methods (assigned directly off the class, not reimplemented
-    -- same convention as tests/test_credits_supervision.py's/
-    test_loop_player.py's/test_autopilot.py's own fakes), so a test using
-    this session through the real dispatch/LoopPlayer/AutopilotEngine
-    paths exercises the same hasattr-guarded calls those call sites make
-    against a real `Session`, rather than silently falling through the
-    hasattr guard to a fail-closed `None`/`None` this fixture predated.
+    `observe_credits`/`credits_snapshot` (WO-FA-SAFE) are DELIBERATELY
+    ABSENT from this shared base, even though `Session` grew both methods
+    since (WO-P2-G4-X5, `tw2002_aiclient/session/session.py`). A test that
+    needs the credits-floor behavior opts in by subclassing and assigning
+    them itself straight off `Session` -- the convention
+    `tests/test_autoloop.py`'s `WireSession` -> `tests/test_credits_floor.py`'s
+    `CreditsWireSession` already uses (`observe_credits =
+    Session.observe_credits`, same for `credits_snapshot`) -- rather than
+    this base class growing them for every caller. The reason is a live
+    negative case, not caution for its own sake:
+    `tests/test_autoloop.py::test_a_floor_is_still_refused_when_this_session_cannot_enforce_it`
+    asserts `not hasattr(session, "credits_snapshot")` on a plain
+    `WireSession` to prove a session that genuinely cannot enforce a floor
+    is refused rather than silently armed. A class attribute assigned here
+    would be inherited by every subclass -- including that one -- turning
+    a deliberate "this runtime cannot honour that" case into a session
+    that silently can (confirmed by attaching the methods here and running
+    that test: it fails on the hasattr assertion). Attach per-subclass,
+    never on this shared base.
     `self.lock` is a plain `threading.Lock`, the same shape `Session.lock`
-    is -- both methods acquire it internally."""
+    is, already set below -- so a subclass that DOES assign the real
+    methods (both of which acquire a lock internally) has one ready-made."""
 
-    # observe_*/snapshots deferred until Session grows those methods —
-    # attach protocol tests do not need them.
+    # observe_credits/credits_snapshot are intentionally NOT assigned here
+    # (see the class docstring above) even though Session has had both
+    # since WO-P2-G4-X5 -- tests/test_autoloop.py depends on this shared
+    # fixture genuinely lacking them. A subclass that wants the real
+    # behavior assigns its own, as tests/test_credits_floor.py's
+    # CreditsWireSession does.
 
     def __init__(self, initial_screen="Command [TL=00:00:00]:[1234] (?=Help)? :", real_time_scale=0.0):
         self._screen = initial_screen
