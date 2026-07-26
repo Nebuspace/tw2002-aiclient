@@ -1,6 +1,6 @@
 # WO-TUI-DEAD-TERMINAL-SPIN
 
-**Status:** OPEN · **HIGH** · product + tests · from a live incident on the operator's laptop
+**Status:** IN FLIGHT · **HIGH** · product + tests · hub-seeded after PR-CI merge `91a0561`
 **Posted:** 2026-07-26 · after 11 orphaned processes were found pegging ~11 of 16 cores
 
 ## Incident

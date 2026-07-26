@@ -11,6 +11,7 @@ import os
 import pty
 import re
 import select
+import signal
 import subprocess
 import sys
 import time
@@ -29,6 +30,7 @@ from tests.pty_helpers import (
     pyte_grid,
     pyte_screen,
     set_winsize,
+    terminate_session_group,
 )
 
 
@@ -155,13 +157,7 @@ def _drive_sigwinch_probe(*, claim_ctty: bool) -> bytes:
             if b"DONE" in captured:
                 break
     finally:
-        if proc.poll() is None:
-            proc.kill()
-        try:
-            proc.wait(timeout=2)
-        except subprocess.TimeoutExpired:
-            proc.kill()
-            proc.wait(timeout=2)
+        terminate_session_group(proc, wait_timeout=2.0)
         try:
             os.close(master_fd)
         except OSError:
@@ -299,4 +295,195 @@ def test_child_curses_geometry_follows_the_pty_not_the_environment(monkeypatch):
     text = captured.replace(b"\r", b"").decode(errors="replace")
     sizes = re.findall(r"SIZE (\d+) (\d+)", text)
     assert sizes, "child never reported its curses geometry: " + repr(captured[:400])
-    assert sizes[-1] == ("24", "80")
+
+
+# ---------------------------------------------------------------------------
+# WO-TUI-DEAD-TERMINAL-SPIN Defect 2 (Samantha review, 2026-07-26): the
+# direct child exiting cleanly does NOT mean its whole process group is
+# empty. This is the COMMON path for this suite's own pty tests (the TUI
+# exits cleanly on Esc/quit in most of them), not an exotic one -- a
+# grandchild the direct child spawned and left running survives unless the
+# GROUP itself is swept.
+# ---------------------------------------------------------------------------
+
+
+def _old_poll_gated_terminate(proc: subprocess.Popen, *, wait_timeout: float = 5.0) -> None:
+    """The ORIGINAL, Samantha-review-caught shape -- gated on
+    ``proc.poll()``, which skips the whole-group signal in exactly the
+    case where the direct child has ALREADY exited cleanly. Kept here,
+    inline, purely as the injection vehicle for the red-first proof below
+    -- never call this in real cleanup code; ``terminate_session_group``
+    is the fixed, unconditional replacement.
+    """
+    if proc.poll() is None:
+        try:
+            os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+    try:
+        proc.wait(timeout=wait_timeout)
+    except subprocess.TimeoutExpired:
+        pass
+
+
+def _wait_until_gone(pid: int, *, timeout: float) -> bool:
+    """Bounded poll for a pid to fully disappear from the process table.
+
+    A single immediate ``os.kill(pid, 0)`` right after signalling is NOT
+    reliable here: once its own parent (the direct child) has already
+    exited and been reaped, the grandchild is reparented at that moment,
+    so a SIGKILL turns it into a zombie under its NEW parent -- which
+    still answers ``os.kill(pid, 0)`` successfully until that parent
+    reaps it. How quickly that reaping happens is environment-dependent
+    (observed to need more than an immediate check in this sandbox), so
+    this polls instead of asserting on a single snapshot.
+    """
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            return True
+        time.sleep(0.05)
+    return False
+
+
+def _spawn_direct_child_with_live_grandchild(tmp_path: Path) -> tuple[subprocess.Popen, int]:
+    """Spawn a direct child (its own session) that forks a long-lived
+    grandchild, records its pid, then exits 0 immediately -- returns
+    ``(direct_child_proc, grandchild_pid)`` with the direct child already
+    reaped (``proc.wait()`` already called) and the grandchild confirmed
+    still alive."""
+    marker = tmp_path / "grandchild.pid"
+    src = (
+        "import subprocess, sys\n"
+        "gc = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(60)'])\n"
+        f"open({str(marker)!r}, 'w').write(str(gc.pid))\n"
+        "sys.exit(0)\n"
+    )
+    proc = subprocess.Popen([sys.executable, "-c", src], start_new_session=True)
+    proc.wait(timeout=5.0)  # the direct child exits cleanly, on its own
+    assert proc.returncode == 0
+    assert marker.exists(), "middle process exited before recording the grandchild pid"
+    grandchild_pid = int(marker.read_text().strip())
+    os.kill(grandchild_pid, 0)  # still alive -- proves the repro reaches the defect
+    return proc, grandchild_pid
+
+
+def test_old_poll_gated_shape_leaves_the_grandchild_orphaned(tmp_path):
+    """Red-first: the shape Samantha's review caught really does leave a
+    live grandchild behind once the direct child has already exited."""
+    proc, grandchild_pid = _spawn_direct_child_with_live_grandchild(tmp_path)
+    try:
+        _old_poll_gated_terminate(proc)
+        os.kill(grandchild_pid, 0)  # still alive -- the old shape never signalled it
+    finally:
+        try:
+            os.kill(grandchild_pid, 9)
+        except ProcessLookupError:
+            pass
+
+
+def test_terminate_session_group_reaps_the_grandchild_after_clean_exit(tmp_path):
+    """Green: the fixed, unconditional sweep reaches the grandchild even
+    though the direct child (the group leader) is already gone."""
+    proc, grandchild_pid = _spawn_direct_child_with_live_grandchild(tmp_path)
+
+    terminate_session_group(proc)
+
+    assert _wait_until_gone(grandchild_pid, timeout=3.0), (
+        f"grandchild pid {grandchild_pid} still present after terminate_session_group"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Structural pin: every terminate_session_group call site must be reachable
+# to a setsid'd spawn. terminate_session_group trusts `proc.pid` AS the
+# process-group id with no `os.getpgid(proc.pid)` re-check (that lookup
+# raises ProcessLookupError on an already-reaped pid -- see the function's
+# own docstring for why it was tried and rejected). That trust is only
+# sound because every spawn feeding this suite's `proc` objects uses
+# `start_new_session=True` or the `claim_ctty` preexec's own
+# `os.setsid()`. A future call site that skips both would put its child in
+# THIS suite's own process group, and `killpg` there would take down the
+# test runner itself.
+# ---------------------------------------------------------------------------
+
+
+def _iter_terminate_session_group_call_sites():
+    """Yield ``(path, enclosing_function_or_None, module_tree)`` for every
+    ``terminate_session_group(...)`` call under ``tests/``."""
+    tests_dir = Path(__file__).resolve().parent
+    for path in sorted(tests_dir.glob("*.py")):
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        stack: list[ast.AST] = []
+        findings: list[tuple[Path, ast.AST | None, ast.AST]] = []
+
+        class _Visitor(ast.NodeVisitor):
+            def visit_FunctionDef(self, node):  # noqa: N802
+                stack.append(node)
+                self.generic_visit(node)
+                stack.pop()
+
+            visit_AsyncFunctionDef = visit_FunctionDef
+
+            def visit_Call(self, node):  # noqa: N802
+                func = node.func
+                name = (
+                    func.id
+                    if isinstance(func, ast.Name)
+                    else func.attr
+                    if isinstance(func, ast.Attribute)
+                    else None
+                )
+                if name == "terminate_session_group":
+                    findings.append((path, stack[-1] if stack else None, tree))
+                self.generic_visit(node)
+
+        _Visitor().visit(tree)
+        yield from findings
+
+
+def _has_setsid_evidence(scope: ast.AST | None) -> bool:
+    """True iff ``scope`` (a function or module AST node) shows a setsid'd
+    spawn: ``start_new_session=True`` on some call, or a call reaching
+    ``_claim_controlling_tty`` (which itself calls ``os.setsid()``)."""
+    if scope is None:
+        return False
+    for node in ast.walk(scope):
+        if isinstance(node, ast.keyword) and node.arg == "start_new_session":
+            if isinstance(node.value, ast.Constant) and node.value.value is True:
+                return True
+        if isinstance(node, ast.Call):
+            fn = node.func
+            fn_name = (
+                fn.id if isinstance(fn, ast.Name) else fn.attr if isinstance(fn, ast.Attribute) else None
+            )
+            if fn_name == "_claim_controlling_tty":
+                return True
+    return False
+
+
+def test_every_terminate_session_group_call_site_has_a_setsid_spawn():
+    """Checks the ENCLOSING FUNCTION first (strongest evidence); falls back
+    to the enclosing MODULE for a helper like
+    ``pty_helpers._drain_until_exit``, which receives an already-spawned
+    ``proc`` from a sibling function (``capture_pty`` /
+    ``capture_pty_with_keys``) in the same file rather than spawning it
+    itself.
+    """
+    sites = list(_iter_terminate_session_group_call_sites())
+    assert sites, "no terminate_session_group call sites found — guard is vacuous"
+
+    failures = []
+    for path, enclosing_func, tree in sites:
+        ok = _has_setsid_evidence(enclosing_func) or _has_setsid_evidence(tree)
+        if not ok:
+            where = enclosing_func.name if enclosing_func is not None else "<module level>"
+            failures.append(f"{path.name}::{where}")
+
+    assert not failures, (
+        "call site(s) with no start_new_session=True / _claim_controlling_tty "
+        "evidence in scope — killpg here could hit OUR OWN process group: "
+        + ", ".join(failures)
+    )

@@ -49,7 +49,13 @@ pytestmark = pytest.mark.pty_ui
 from tw2002_aiclient.cockpit.arm import ARM_OFF_LABEL, ARM_ON_LABEL, ARM_UNKNOWN_LABEL
 from tw2002_aiclient.cockpit.control_seat import APP_LABEL
 
-from .pty_helpers import find_text, pty_curses_supported, pyte_grid, set_winsize
+from .pty_helpers import (
+    find_text,
+    pty_curses_supported,
+    pyte_grid,
+    set_winsize,
+    terminate_session_group,
+)
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 HANDLE = "Alpha"
@@ -207,13 +213,7 @@ def _drive_arm_pty(tmp_path: Path, status: dict | None, *, timeout: float = 20.0
                 if not chunk:
                     break
                 captured += chunk
-        if proc.poll() is None:
-            proc.kill()
-        try:
-            proc.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-            proc.kill()
-            proc.wait(timeout=5)
+        terminate_session_group(proc)
         try:
             os.close(master_fd)
         except OSError:
