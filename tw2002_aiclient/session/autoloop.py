@@ -837,6 +837,17 @@ class AutoLoopRunner:
             stop.set()
         if thread is not None and thread is not threading.current_thread():
             thread.join(join_timeout)
+            # WO-WEDGED-SEND-FENCE-STICKS: a thread still alive after the
+            # join bound is almost certainly stuck in blocking ``sendall``.
+            # Unblock the socket so `_run`'s ``finally`` can
+            # ``leave_auto_loop``; do not call ``leave_auto_loop`` here
+            # (second release path / second driver). Then give the finally
+            # a short beat to finish.
+            if thread.is_alive():
+                conn = getattr(self._session, "conn", None)
+                if conn is not None and hasattr(conn, "force_unblock_sends"):
+                    conn.force_unblock_sends()
+                thread.join(min(join_timeout, 1.0))
         return self.snapshot()
 
     # -- internals ------------------------------------------------------
