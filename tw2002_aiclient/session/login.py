@@ -131,14 +131,6 @@ _CLEAR_AVOIDS_RE = re.compile(
 # on-screen well after being answered; a whole-text match would re-fire
 # on that stale scrollback).
 _MODULE_ENTRY_MENU_RE = re.compile(r"T\s*-\s*Play\s+Trade\s*Wars\s*2002", re.I)
-# a-net post-ANSI TWGS access menu (live capture step6) -- H/M/X +
-# "Enter your choice:". Must NOT be treated as module-entry even when a
-# stale ``T - Play Trade Wars`` line still sits higher in the pyte grid
-# (WO-ANET-GAME-SELECT-LETTER-STEP12 live FAIL after letter latch tip).
-_TWGS_HMX_ACCESS_MENU_RE = re.compile(
-    r"H\s*-\s*High\s+scores[\s\S]{0,200}?X\s*-\s*Exit",
-    re.I,
-)
 _ENTER_YOUR_CHOICE_RE = re.compile(r"enter\s+your\s+choice\s*:", re.I)
 
 
@@ -181,21 +173,13 @@ def _is_module_entry_menu(text: str, prompt: str) -> bool:
     """True only when the CURRENT menu offers ``T - Play Trade Wars 2002``.
 
     Whole-screen search is unsafe: pyte leaves prior doors' text in the
-    grid, so a later H/M/X access menu can still match the module-entry
-    regex against scrollback and fire a blind ``T`` (live a-net).
+    grid. Scope to the option block above the current prompt so a stale
+    ``T - Play`` above a blank separator cannot vouch for a later menu.
+    Live a-net module-entry lists T/I/S *and* H/M/X in the SAME block —
+    that must still return True (hub 194056Z capture).
     """
     window = _option_block_above_prompt(text, prompt)
-    if not window or not _MODULE_ENTRY_MENU_RE.search(window):
-        return False
-    # Live H/M/X access menu under Enter your choice: — refuse even if
-    # ``T - Play`` somehow shares the same option block.
-    if _ENTER_YOUR_CHOICE_RE.search(prompt or "") and _TWGS_HMX_ACCESS_MENU_RE.search(
-        window
-    ):
-        return False
-    if not (prompt or "").strip() and _TWGS_HMX_ACCESS_MENU_RE.search(window):
-        return False
-    return True
+    return bool(window and _MODULE_ENTRY_MENU_RE.search(window))
 
 
 _TRADER_NAME_CHOICE_RE = re.compile(r"\(N\)ew\s+Name\s+or\s+\(B\)BS\s+Name", re.I)

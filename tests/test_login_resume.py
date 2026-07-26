@@ -169,10 +169,10 @@ def test_game_select_answered_latch_ignores_unknown_flash():
 
 
 def test_anet_hmx_access_menu_does_not_send_module_entry_t():
-    """Live a-net step6 (hub events.json): H/M/X + Enter your choice must
-    not fire MODULE_ENTRY ``T`` even if stale ``T - Play`` sits above."""
-    # Stale module-entry text still on the grid (scrollback), then the
-    # live access menu from the capture snip.
+    """H/M/X-only current block must not fire MODULE_ENTRY ``T`` when a
+    stale ``T - Play`` sits above a blank separator (scoped window)."""
+    # Stale module-entry text still on the grid (scrollback), then an
+    # H/M/X-only access menu as the CURRENT option block.
     text = (
         "T - Play Trade Wars 2002\n"
         "I - Introduction & Help\n"
@@ -202,11 +202,16 @@ def test_anet_hmx_access_menu_does_not_send_module_entry_t():
 
 
 def test_module_entry_menu_still_sends_t_when_t_play_is_current():
+    """Live a-net shape (hub 194056Z): T/I/S/H/M/X in ONE block → send T."""
     text = (
         "==-- Trade Wars 2002 --==\n"
         "T - Play Trade Wars 2002\n"
         "I - Introduction & Help\n"
+        "S - View Game Settings\n"
+        "H - High scores\n"
+        "M - View Access Modes\n"
         "X - Exit\n"
+        "\n"
         "Enter your choice:\n"
     )
     prompt = "Enter your choice:"
