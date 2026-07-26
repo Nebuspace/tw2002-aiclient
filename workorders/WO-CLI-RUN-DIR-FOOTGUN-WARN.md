@@ -1,6 +1,6 @@
 # WO-CLI-RUN-DIR-FOOTGUN-WARN
 
-**Status:** OPEN · READY · product honesty (`session/cli.py` + help/docs) · Cursor preferred · banked hub discovery 2026-07-26
+**Status:** **DONE** · origin `368c4c9` (`368c4c90e2a968c7d8b29c2ce8a37e4356981b87`) · product (`session/cli.py` + pin) · Cursor seat 2026-07-26
 **Posted:** 2026-07-26 · matrix collateral: `./tw status|stop` without `--run-dir` hit **default** daemon while `TW_CONFIG_DIR` was isolated
 
 ## Goal
@@ -25,4 +25,4 @@ does **not** isolate the daemon socket axis. Operator must not silently stop/sta
 
 ## Proof
 
-pytest pin + STATUS. No live stop of Max's default daemon without Max GO.
+Tip `368c4c9`. `pytest tests/test_cli_run_dir_footgun_warn.py -n0` — 6 passed. No live default-daemon touch.
