@@ -231,6 +231,34 @@ def test_module_entry_menu_still_sends_t_when_t_play_is_current():
     assert action == ("T", False, None)
 
 
+def test_closed_game_refusal_fails_loud():
+    """a-net Star Wars (hub 194645Z): closed-game text must not loop door↔Play."""
+    text = (
+        "I'm sorry, but this is a closed game.  You must request a player "
+        "account from the game administrator before joining this game.\n"
+        "[Pause]\n"
+    )
+    prompt = "[Pause]"
+    profile = login.LoginProfile(
+        name="proof_anet", handle="Proof", game_letter="C", allow_register=True
+    )
+    state = {"registering": None, "password": None, "password_attempts": 0, "outer_name_handle_tried": False}
+
+    class _S:
+        game_select_answered = True
+        game_select_letter_sent = True
+
+    try:
+        login._decide(
+            "pause_key", text, prompt, profile, state, lambda n: None, lambda n, p: None, _S()
+        )
+    except login.LoginError as e:
+        assert "game_closed" in str(e)
+        assert "proof_anet" in str(e)
+    else:
+        raise AssertionError("expected LoginError game_closed")
+
+
 # -- 4: door re-entry (host returns to game_select after answered=True) ---
 
 def test_door_reentry_sends_letter_again(tmp_path):

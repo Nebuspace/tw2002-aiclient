@@ -108,6 +108,13 @@ _RETURNING_REJECT_SETTLE_S = 2.5
 # they can't desync any branch.
 _SHOW_LOG_RE = re.compile(r"show\s+today.?s\s+log", re.I)
 _INACTIVITY_RE = re.compile(r"inactivity\s+warning|critical\s+inactivity", re.I)
+# Live a-net Star Wars (letter C): after MODULE_ENTRY ``T`` the host prints
+# this closed-game refusal then returns the player to TWGS game_select
+# (hub capture anet-postpause-194645Z). Fail loud — never loop door↔Play.
+_CLOSED_GAME_RE = re.compile(
+    r"this\s+is\s+a\s+closed\s+game|request\s+a\s+player\s+account\s+from\s+the\s+game\s+administrator",
+    re.I,
+)
 # RETURNING re-enter interstitial: TWGS shows "You have been on today ..."
 # after password, sometimes alone after `[Pause]` is dismissed -- not
 # covered by the pause_key anchor, so without this it lands in `unknown`
@@ -519,7 +526,14 @@ def _decide(cls, text, prompt, profile, state, get_password, save_password, sess
 
     # -- nuisances first: these can interleave with any branch. ----------
     if cls == "pause_key":
+        # Closed-game refusal often shares the screen with ``[Pause]``
+        # (a-net live). Detect BEFORE dismissing the pause so we do not
+        # loop forever via door re-entry (hub 194645Z).
+        if _CLOSED_GAME_RE.search(text or ""):
+            raise LoginError(f"game_closed:profile={profile.name}")
         return "", False, None
+    if _CLOSED_GAME_RE.search(text or ""):
+        raise LoginError(f"game_closed:profile={profile.name}")
     if _BEEN_ON_TODAY_RE.search(prompt):
         return "", False, None
     if cls == "unknown" and not prompt.strip():
