@@ -1,6 +1,6 @@
 # WO-TEST-COCKPIT-FRAME-PTY-ISOLATE
 
-**Status:** DONE (this tip) · Cursor preferred (tests lane)  
+**Status:** DONE · tip `1aea4b6` (push pending Accept)  
 **Posted:** 2026-07-26T00:55:00Z
 
 ## Goal
