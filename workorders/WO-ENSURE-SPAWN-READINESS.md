@@ -1,7 +1,9 @@
 # WO-ENSURE-SPAWN-READINESS
 
 **Status:** OPEN · product (`session/cli.py`) · Claude Code lane · banked 2026-07-26
-**Posted:** 2026-07-26 · root-caused from the live ensure matrix (2 of 5 cells)
+**Posted:** 2026-07-26 · root-caused in `session/cli.py`; surfaced by the live ensure matrix
+(**no frequency claim** — see the Scope section: the original "2 of 5 cells" rested on a cell that
+was later withdrawn as sandbox-poisoned)
 
 ## Scope — wide, and resting on the CODE not the matrix (amended 2026-07-26)
 
