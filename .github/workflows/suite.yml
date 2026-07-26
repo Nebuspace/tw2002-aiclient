@@ -3,11 +3,12 @@
 # Excludes live_login tests (those run on the orchestrator's laptop at merge time
 # and are gated by the hub-posted `live-prove` Check Run, NOT this workflow).
 #
-# Job timeout is set conservatively (45 min) because PTY tests that spawn
-# subprocesses with pty.openpty() can busy-spin if a child writes into the
-# master fd with no reader — the child blocks indefinitely on write(), which
-# looks like a hang rather than an error. See workorders/WO-TUI-DEAD-TERMINAL-SPIN
-# for details and the test-suite hygiene work that limits orphan PTYs.
+# Job timeout is an HONEST hang detector, not a padded comfort ceiling.
+# Measured GHA suite (post pty_ui exclusion): ~2–3 min wall; with full history
+# still well under 5 min on ubuntu-latest. timeout-minutes: 10 = ~3× observed
+# healthy runs — long enough for cold pip cache, short enough that a busy-spin
+# / wedged xdist worker fails the job instead of burning a runner for 45 min.
+# PTY UI drives are excluded via -m "not pty_ui" until WO-TUI-DEAD-TERMINAL-SPIN.
 #
 # xvfb-run: NOT used here. PTY tests call pty.openpty() (pseudo-terminal),
 # not X11 or a display server. The shared pty_curses_supported() probe in
@@ -30,8 +31,8 @@ jobs:
   suite:
     name: suite
     runs-on: ubuntu-latest
-    # 45-minute ceiling. See comment above re: PTY busy-spin / WO-TUI-DEAD-TERMINAL-SPIN.
-    timeout-minutes: 45
+    # 10-minute hang ceiling (≈3× measured healthy GHA runs). See header comment.
+    timeout-minutes: 10
 
     steps:
       - name: Checkout
