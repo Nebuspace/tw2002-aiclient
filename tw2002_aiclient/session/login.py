@@ -544,15 +544,35 @@ def _decide(cls, text, prompt, profile, state, get_password, save_password, sess
             if _BEEN_ON_TODAY_RE.search(stripped):
                 return "", False, None
             break
+    # Intentional whole-grid match (stale-scrollback hazard accepted):
+    # "show today's log?" sits in the BODY a line or more above the
+    # current prompt by the time we classify, never on the prompt line
+    # itself -- a prompt-only search would miss the live gate. One-shot
+    # interstitial; unlikely to linger as a false-fire after answer.
     if _SHOW_LOG_RE.search(text):
         return "N", False, None
-    if _CLEAR_AVOIDS_RE.search(prompt) or _CLEAR_AVOIDS_RE.search(text):
+    # Stale-scrollback hazard: pyte keeps prior "clear avoids?" cells.
+    # Scope to current prompt line OR the option-block attached to that
+    # prompt (same helper as MODULE_ENTRY) — never the whole grid.
+    if _CLEAR_AVOIDS_RE.search(prompt) or _CLEAR_AVOIDS_RE.search(
+        _option_block_above_prompt(text, prompt)
+    ):
         # Keep avoids unless the profile explicitly opts in (rare).
         clear = bool(getattr(profile, "clear_avoids_on_login", False))
         return ("Y" if clear else "N"), False, None
-    if _INACTIVITY_RE.search(text):
-        # A keepalive nudge mid-automaton -- harmless blank Enter resets
-        # the server's idle clock without altering any pending field entry.
+    # Stale-scrollback hazard: pyte can leave a prior inactivity banner in
+    # the grid. Whole-grid `.search(text)` would blank-Enter against an
+    # unrelated later prompt (Accept #4 — "harmless" claim falsified).
+    # Scope to current prompt line OR the option-block attached to that
+    # prompt (same helper as MODULE_ENTRY / CLEAR_AVOIDS) so a fresh
+    # warning still matches in the BODY above the prompt, never only on
+    # the last line.
+    if _INACTIVITY_RE.search(prompt) or _INACTIVITY_RE.search(
+        _option_block_above_prompt(text, prompt)
+    ):
+        # Keepalive nudge for a LIVE inactivity banner -- blank Enter
+        # resets the server's idle clock without altering any pending
+        # field entry.
         return "", False, None
 
     # -- outer BBS-level connection name vs. the TW2002 module's own
@@ -689,11 +709,13 @@ def _decide(cls, text, prompt, profile, state, get_password, save_password, sess
     if _SHIP_CONFIRM_RE.search(prompt):
         return "Y", False, None
 
-    # The planet-name prompt is the one sub-step whose current bottom
-    # line is a generic input-box marker ("[---...---]"), not text
-    # containing "planet" -- so it's matched with a compound condition
-    # instead: the box-marker SHAPE as the current prompt, plus the
-    # "name your home planet" wording anywhere in the full screen.
+    # Intentional hybrid (stale-scrollback hazard gated): the current
+    # bottom line is only a generic input-box marker ("[---...---]"), so
+    # `_PLANET_NAME_BOX_RE` on ``prompt`` anchors us to THIS sub-step;
+    # only then may `_PLANET_NAME_PROMPT_RE` search the full screen for
+    # "name your home planet" (wording that sits above the box, never on
+    # the prompt line). The box gate prevents a stale planet-name body
+    # from firing against an unrelated later prompt.
     if _PLANET_NAME_BOX_RE.search(prompt) and _PLANET_NAME_PROMPT_RE.search(text):
         return profile.planet_name, False, None
 
