@@ -1,6 +1,6 @@
 # WO-FIND-MENU-PATH-INVARIANT-ASSERT
 
-**Status:** OPEN · tiny product pin · banked from path-scout outcome  
+**Status:** DONE · origin `f61e10b` (assert + pin)  
 **Posted:** 2026-07-26T06:24Z
 
 ## Goal
