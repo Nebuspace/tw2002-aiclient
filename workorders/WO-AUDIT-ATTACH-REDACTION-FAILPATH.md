@@ -1,6 +1,6 @@
 # WO-AUDIT-ATTACH-REDACTION-FAILPATH
 
-**Status:** OPEN / banked (check coord tip history)  
+**Status:** DONE · origin `79c9bf5` (MT-01 fail-path + falsification; suite teeth on BrokenPipe)  
 **Posted:** 2026-07-25T15:27:10Z
 
 ## Goal
