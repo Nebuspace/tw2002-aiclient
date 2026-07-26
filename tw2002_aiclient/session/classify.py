@@ -785,9 +785,31 @@ def _is_money_prompt(text: str) -> bool:
     return bool(_MONEY_PROMPT_QUANTITY_RE.search(text) or _MONEY_PROMPT_TRANSFER_RE.search(text))
 
 
+# login_password — real login-automaton password gates only.
+#
+# False-positive hazard (C-02 / WO-CLASSIFY-LOGIN-PASSWORD-NARROW): a bare
+# ``password`` substring steals this class from help/utility prompt lines that
+# merely *mention* the word while they are the active prompt (e.g. "How many
+# characters in your password?", "Utility: password tools?"). That matters
+# because this gate also drives the automated login automaton — unlike
+# ``is_probable_secret_prompt``, which stays deliberately broader for attach
+# redaction only. Match the shapes FakeTWGS / live login actually emit:
+# bare ``Password?`` / ``Password:``, ``Please enter a/your password…``,
+# ``Enter [your] password…``, ``Repeat password…``.
+_LOGIN_PASSWORD_RE = re.compile(
+    r"(?:"
+    r"^\s*password\s*[?:]\s*$"
+    r"|please\s+enter\s+(?:a\s+|your\s+)?password\b"
+    r"|^\s*enter\s+(?:your\s+)?password\b"
+    r"|^\s*repeat\s+password\b"
+    r"|^\s*your\s+password\s*[?:]"
+    r")",
+    re.I | re.M,
+)
+
 _GATE_ANCHORS = [
     ("pause_key", _regex_matcher(re.compile(r"\[\s*pause\s*\]|press\s+.*\bkey\b|--\s*more\s*--", re.I))),
-    ("login_password", _regex_matcher(re.compile(r"password", re.I))),
+    ("login_password", _regex_matcher(_LOGIN_PASSWORD_RE)),
     (
         "login_name",
         _regex_matcher(re.compile(r"what\s+is\s+your\s+name|enter\s+your\s+name|your\s+name\s*[?:]", re.I)),
