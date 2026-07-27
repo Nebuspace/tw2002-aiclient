@@ -24,11 +24,11 @@ Canon
   invariants govern every rule below: (1) the substrate is human-
   demonstrated and human-approved, never AI-generated live; (2) never fire
   an unverified or destructive send.
-* ``canon/architecture/cli-verbs.md:36-38`` puts the loop surfaces among the
+* ``canon/architecture/cli-verbs.md §"The One-Round-Trip Contract"`` puts the loop surfaces among the
   **daemon-free reads** -- direct on-disk artifact reads that work with the
   daemon stopped. No protocol verb, no round trip.
-* ``canon/engine/candidate-mining.md:31`` / ``world-identity.md:132-134``
-  name the on-disk home, and ``macros.md:224-228`` makes approval a matter
+* ``canon/engine/candidate-mining.md §"What it reads, what it emits"`` / ``world-identity.md §"Code divergence"``
+  name the on-disk home, and ``macros.md §"Findings — code divergences (docs win)"`` makes approval a matter
   of FILE LOCATION: ``state/skills/<name>.json`` is blessed,
   ``state/skills/_drafts/<name>.json`` is an inert proposal. Drafts are
   therefore opt-in here, exactly as they are in the listing.

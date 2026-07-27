@@ -21,7 +21,7 @@ plays, and each is closed STRUCTURALLY here, not by convention:
    .step` takes the screen the send actually produced and calls
    ``classify.classify_screen`` on it ITSELF -- there is no parameter a
    caller could use to hand this module an invented class name. Canon's own
-   illustrative macro (``canon/engine/macros.md:180-183``) writes
+   illustrative macro (``canon/engine/macros.md §"A recorded macro (illustrative)"``) writes
    ``port_offer`` / ``command_prompt`` -- neither a class ``classify_screen``
    has ever emitted (measured against ``classify.py``'s live anchor tables:
    the real vocabulary has ``main_command``, not ``command_prompt``, and

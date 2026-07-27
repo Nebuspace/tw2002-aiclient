@@ -375,7 +375,7 @@ def _run_create(stdscr: curses.window) -> str:
 
 
 # Ctrl-] (ASCII 29, the classic telnet escape) is canon's own designated
-# graceful detach key -- `spectate-and-attach.md:100-102` ("The detach key
+# graceful detach key -- `spectate-and-attach.md §"Attach — the interactive driving surface"` ("The detach key
 # is Ctrl-] ... deliberately not q or Ctrl-C, because those are live
 # TradeWars menu commands"), mirroring the archive's own `DETACH_KEY`
 # precedent (`interactive_app.py`). Wired in `_run_play` below
@@ -679,7 +679,7 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                     explore_poll_active = _poll_explore_status(play, run_dir=run_dir)
                 continue
             if attach_conn is not None and key != 27:
-                # Attached: canon `mode-line-and-teach-controls.md:42-44`
+                # Attached: canon mode-line-and-teach-controls.md §"`Ctrl-A` — the App↔Human Mode switch"
                 # -- "the human always wins the keyboard" the instant
                 # they're attached -- so every key except Esc, Ctrl-] (the
                 # detach key), and Ctrl-A (the Mode chord, both handled
@@ -701,7 +701,7 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                 # same way a crashed `tw attach` already does
                 # (`daemon.py::_handle_attach`'s own `finally:
                 # lock.release_human()`). Esc is NOT the detach key --
-                # canon `spectate-and-attach.md:100-102` names Ctrl-]
+                # canon `spectate-and-attach.md §"Attach — the interactive driving surface"` names Ctrl-]
                 # (`_DETACH_KEY` above) as the real graceful-detach
                 # affordance (the archive's own `DETACH_KEY`,
                 # `interactive_app.py`), wired next (WO-P4-057).
@@ -731,7 +731,7 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                     # dropped/killed attach already takes
                     # (`daemon.py::_handle_attach`'s own `finally:
                     # lock.release_human()`, canon
-                    # `spectate-and-attach.md:91-96`) -- never a new
+                    # `spectate-and-attach.md §"Attach — the interactive driving surface"`) -- never a new
                     # wire verb of our own; detach is a close, never a
                     # send.
                     attach_conn.close()

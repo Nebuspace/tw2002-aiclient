@@ -29,7 +29,7 @@ Canon
   every extracted field anchors to the LAST match in the buffer, never the
   first, because pyte emulates a fixed 80x25 grid with no scrollback and a
   stale value can sit *above* the live one.
-* ``canon/architecture/cli-verbs.md:104``: ``state`` is "parsed structured
+* ``canon/architecture/cli-verbs.md §"Session primitives"``: ``state`` is "parsed structured
   game-state only", ``read-only``.
 * ``canon/research/tw2002-screen-patterns.md`` P-SETTLE-LINE: "a stale copy
   of the target text elsewhere on the grid still hits. Do not treat

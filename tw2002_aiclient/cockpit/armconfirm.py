@@ -68,9 +68,9 @@ is `ARM_CONFIRM_TONE` = `"danger"`, and the draw layer must render it
 **bold** and reverse-video.
 
 That weight is load-bearing and easy to get wrong: this tree carries
-`danger` in *two* weights. `visual-language.md:58` is the 7-tone table row
+`danger` in *two* weights. `visual-language.md §"Color semantics — the one 7-tone table"` is the 7-tone table row
 (red / **bold**) and lists "the live-play `y/N` confirm" among its own
-examples; `visual-language.md:83` is a deliberate per-surface override to
+examples; `visual-language.md §"Three load-bearing color rules (apply on every surface, no exceptions)"` is a deliberate per-surface override to
 red **non-bold**, for the viewport border's link-down flip only, and
 `screens.py` exposes it as `_viewport_danger_attr`. Reaching for that
 attribute here -- it is on the class, and it has `danger` in its name --

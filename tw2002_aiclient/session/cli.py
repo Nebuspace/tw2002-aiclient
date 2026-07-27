@@ -593,7 +593,7 @@ def cmd_menumap(args):
     # identically to a genuine "you are off the map", which is a claim about
     # the player's position that none of them established. Canon reserves
     # off-map for localize's own None -- "STOP, escalate, never navigate
-    # blind" (canon/engine/menu-map-and-introspection.md:298-302) -- so the
+    # blind" (canon/engine/menu-map-and-introspection.md §"Examples") -- so the
     # other four get `here ? <reason>` instead.
     here_unknown = None
     if not daemon_alive(run_dir):
@@ -642,7 +642,7 @@ def cmd_menumap(args):
 def cmd_loops(args):
     """WO-P2-G3: read-only listing of the taught-macro ("learned loop") store.
 
-    Daemon-free by canon -- ``canon/architecture/cli-verbs.md:36-38`` lists
+    Daemon-free by canon -- ``canon/architecture/cli-verbs.md §"The One-Round-Trip Contract"`` lists
     ``loops`` among the reads that "read on-disk artifacts directly, so they
     work with the daemon stopped". So there is no socket round trip here and
     no ``--run-dir``: nothing this verb reports comes from the session, and a

@@ -12,26 +12,26 @@ Canon
 * ``canon/engine/macros.md`` §Schema defines the document: ``name`` /
   ``start_anchor`` / ``source`` / ``created_ts`` / ``mined_stats``, and
   ``steps[]`` of ``{input, wait_prompt, expected_post_class}``.
-* ``canon/architecture/cli-verbs.md:36-38`` lists ``loops`` among the
+* ``canon/architecture/cli-verbs.md §"The One-Round-Trip Contract"`` lists ``loops`` among the
   **daemon-free reads** -- "they read on-disk artifacts directly, so they
   work with the daemon stopped". So this is a direct store read with no
   protocol verb. The archive routed the same listing through the daemon
   (``protocol.py::_dispatch_list_skills``) purely to attach live
   ``loop_player`` progress; G3 has no player and canon prescribes against
   the round trip, so the daemon path is not carried. **Docs win.**
-* ``canon/engine/candidate-mining.md:31`` and
-  ``canon/engine/world-identity.md:132-134`` both name the on-disk home:
+* ``canon/engine/candidate-mining.md §"What it reads, what it emits"`` and
+  ``canon/engine/world-identity.md §"Code divergence"`` both name the on-disk home:
   ``state/skills/<name>.json`` blessed, ``state/skills/_drafts/<name>.json``
   drafts. A draft is **inert** -- approval is expressed by file location
-  (``canon/engine/macros.md:224-228``), so this reader flags every draft row
+  (``canon/engine/macros.md §"Findings — code divergences (docs win)"``), so this reader flags every draft row
   and lists them only on explicit opt-in.
 
 Canon divergence (surfaced, not closed)
 ---------------------------------------
-``canon/engine/macros.md:142-149`` requires the macro library be world-scoped
+``canon/engine/macros.md §"Send-and-confirm — never auto-fire an unverified prompt"`` requires the macro library be world-scoped
 -- "never a global namespace shared across servers" -- while the path canon
 names above is flat. That gap is already a recorded canon finding
-(``canon/engine/world-identity.md:132-137``: "Macro / loop library is
+(``canon/engine/world-identity.md §"Code divergence"``: "Macro / loop library is
 currently flat, not per-world ... must be migrated to the same per-world
 scoping"). This reader deliberately reads the **flat** path: a reader aimed
 at the not-yet-existent per-world location would report empty for the wrong
@@ -81,7 +81,7 @@ import os
 from pathlib import Path
 from typing import Any, Mapping, Optional
 
-# Canon's two provenance values (`canon/engine/macros.md:49`). Anything else
+# Canon's two provenance values (`canon/engine/macros.md §"What a macro is"`). Anything else
 # -- absent, misspelled, or invented -- is unknown provenance, never coerced
 # into one of these.
 SOURCE_VALUES = frozenset({"recorded", "mined"})
