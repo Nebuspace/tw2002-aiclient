@@ -10,6 +10,7 @@ import curses
 
 from tw2002_aiclient import adapters
 from tw2002_aiclient.cockpit import assign_trigger as _assign_trigger
+from tw2002_aiclient.cockpit import record_macro as _record_macro
 from tw2002_aiclient.screens import (
     BankViewScreen,
     CreateFormScreen,
@@ -812,6 +813,39 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                 play.stub_store.set(stub)
                 screen_label = play.current_classification or "?"
                 play.status_line = f"trigger stub set — screen: {screen_label}"
+                continue
+            if action == "record_toggle":
+                # WO-P5-067: R Record scaffold.  Toggle the in-cockpit
+                # recording session.  On first press: start recording, using
+                # the most-recently confirmed ensure result as the opening
+                # screen.  On second press: finalise and save the macro.
+                # This is a SCAFFOLD -- the live-attach keystroke capture
+                # (feeding raw human keystrokes into record_session.add_step()
+                # as they happen) is the follow-on work recorder.py's docstring
+                # names.  The record path never calls explore_start or any
+                # send -- RecordSession has no send path of its own.
+                if not play.record_session.active:
+                    # Start recording: capture the opening screen from the
+                    # most recent ensure result.  A missing or bad result
+                    # produces empty rows; RecordSession.start() and
+                    # LoopRecorder.__init__ degrade safely (NoStartAnchor on
+                    # stop if the anchor cannot be read from an empty screen).
+                    opening_rows = (result.raw or {}).get("screen", []) if result.ok else []
+                    name = _record_macro.auto_name(play.current_classification)
+                    play.record_session.start(name, opening_rows)
+                    play.status_line = f"recording — {name!r}  (press R to stop)"
+                else:
+                    # Stop recording: finalise and save.
+                    save = play.record_session.save()
+                    if save is not None:
+                        play.status_line = (
+                            f"recorded {save.steps} step(s) → {save.path.name}"
+                        )
+                    else:
+                        play.status_line = (
+                            "recording stopped — nothing saved "
+                            "(no steps captured or missing sector anchor)"
+                        )
                 continue
             if action == "attach":
                 if attach_conn is None:
