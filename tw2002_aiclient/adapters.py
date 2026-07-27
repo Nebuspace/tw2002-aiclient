@@ -246,6 +246,59 @@ def explore_status(*, run_dir: Path | None = None) -> ExploreResult:
     )
 
 
+@dataclass(frozen=True)
+class AutoLoopResult:
+    """Typed outcome of ``autoloop_stop`` (WO-P5-071).
+
+    Deliberately a separate type from :class:`ExploreResult` rather than a
+    reuse: the two verbs answer about different runners, and a shared
+    result type invites a caller to hand an explore outcome to a panic
+    consumer (or the reverse) with nothing catching it. The field shape is
+    intentionally identical so the transport-handling idiom stays one
+    idiom.
+    """
+
+    ok: bool
+    reason: str | None = None   # machine-readable when ok=False
+    detail: str | None = None
+    raw: dict | None = None     # wire dict; carries `stopping` + the run report
+
+
+def autoloop_stop(*, run_dir: Path | None = None) -> AutoLoopResult:
+    """Halt the background taught-run player. The panic path's transport.
+
+    Sends ``autoloop_stop`` to the daemon. Never raises; always returns a
+    typed :class:`AutoLoopResult`.
+
+    The verb it wraps is **idempotent and never refuses**
+    (``session/protocol.py::_dispatch_autoloop_stop``) — the player's own
+    arm predicate stops the run within one send-step, and the run releases
+    its control-lock hold as it dies. So a double-press is harmless and a
+    stop cannot drop the App's exclusivity out from under an in-flight
+    step. The one non-``ok`` answer the daemon itself produces is
+    ``autoloop_unavailable`` (no player attached), which is surfaced as
+    ``reason`` rather than being smoothed into a success — an operator who
+    hit panic is entitled to know the halt did not reach a runner.
+
+    NOTE: this stops the AUTO-LOOP player only, not an ``explore`` run
+    (which has its own ``explore_stop``). Canon's "halts *all* automation"
+    is not yet literally true on tip; see ``cockpit/panic.py``.
+    """
+    resolved_run_dir = run_dir or _env.resolve_run_dir()
+    try:
+        resp = _cli.send_request("autoloop_stop", {}, run_dir=resolved_run_dir)
+    except Exception as e:  # noqa: BLE001
+        return AutoLoopResult(ok=False, reason="unknown", detail=f"{type(e).__name__}: {e}")
+    if resp.get("ok"):
+        return AutoLoopResult(ok=True, raw=resp)
+    return AutoLoopResult(
+        ok=False,
+        reason=resp.get("error") or "unknown",
+        detail=resp.get("detail") or resp.get("error") or None,
+        raw=resp,
+    )
+
+
 def explore_start_for_profile(
     profile: object,
     *,
