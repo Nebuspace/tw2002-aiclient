@@ -542,3 +542,154 @@ def pty_curses_supported() -> bool:
     from tests.conftest import pty_curses_supported as _probe
 
     return bool(_probe())
+
+
+# ---------------------------------------------------------------------------
+# Cockpit Layer-B play-shell drive (WO-PTY-DRIVE-HOIST)
+# ---------------------------------------------------------------------------
+
+_DEFAULT_SMOKE_POPS = (
+    "TW2002_ASCII",
+    "TW2002_HANDOFF_SMOKE",
+    "TW2002_LAUNCHER_SMOKE",
+    "TW2002_BANK_SMOKE",
+)
+
+
+def settle_pty(master_fd: int, captured: bytes, seconds: float) -> bytes:
+    """Drain the pty master for ``seconds``, appending onto ``captured``.
+
+    One-shot post-sleep reads miss mid-flush frames (control strip is drawn
+    last). Shared by the five cockpit chip PTY suites.
+    """
+    deadline = time.monotonic() + seconds
+    while time.monotonic() < deadline:
+        ready, _, _ = select.select([master_fd], [], [], 0.2)
+        if master_fd in ready:
+            try:
+                chunk = os.read(master_fd, 65536)
+            except OSError:
+                break
+            if not chunk:
+                break
+            captured += chunk
+    return captured
+
+
+def drive_play_shell_pty(
+    bootstrap: Path,
+    *,
+    project_root: Path | str,
+    rows: int,
+    cols: int,
+    handle: str,
+    timeout: float = 20.0,
+    env_extra: dict[str, str] | None = None,
+    env_pops: Sequence[str] = _DEFAULT_SMOKE_POPS,
+    settle_s: float = 1.6,
+    grace_s: float = 5.0,
+    after_first_frame: Callable[[int, bytes], tuple[bytes, bool]] | None = None,
+) -> tuple[bytes, bytes | None]:
+    """Spawn a bootstrap that runs ``app._run``: Enter launcher → settle play shell → quit.
+
+    Returns ``(capture1, capture2)``. ``capture2`` is set only when
+    ``after_first_frame`` returns ``(captured, True)`` (want a second settle
+    before quit) — used by the liveness two-capture clock path.
+
+    ``after_first_frame(master_fd, captured) -> (captured, want_second)``.
+    Default: settle already applied; quit after first frame.
+    """
+    import sys
+
+    isolated = Path(bootstrap).parent / "isolated_run"
+    isolated.mkdir(exist_ok=True)
+
+    master_fd, slave_fd = pty.openpty()
+    set_winsize(slave_fd, rows, cols)
+    env = dict(os.environ)
+    env["TERM"] = DEFAULT_TERM
+    env["TW2002_LAUNCHER_DEMO"] = "1"
+    env["TW_RUN_DIR"] = str(isolated)
+    if env_extra:
+        env.update(env_extra)
+    for stray in env_pops:
+        env.pop(stray, None)
+
+    proc = subprocess.Popen(
+        [sys.executable, str(bootstrap)],
+        stdin=slave_fd,
+        stdout=slave_fd,
+        stderr=slave_fd,
+        cwd=str(project_root),
+        env=env,
+        start_new_session=True,
+    )
+    os.close(slave_fd)
+
+    captured = b""
+    capture1: bytes | None = None
+    capture2: bytes | None = None
+    phase = "wait_launcher"
+    deadline = time.monotonic() + timeout
+    try:
+        while time.monotonic() < deadline:
+            ready, _, _ = select.select([master_fd], [], [], 0.2)
+            if master_fd in ready:
+                try:
+                    chunk = os.read(master_fd, 65536)
+                except OSError:
+                    break
+                if not chunk:
+                    break
+                captured += chunk
+
+            grid = pyte_grid(captured, rows, cols)
+            if phase == "wait_launcher":
+                if find_text(grid, "SELECT PROFILE") and find_text(grid, handle):
+                    os.write(master_fd, b"\r")
+                    phase = "wait_frame"
+            elif phase == "wait_frame":
+                if find_text(grid, "PLAY SHELL"):
+                    captured = settle_pty(master_fd, captured, settle_s)
+                    capture1 = captured
+                    want_second = False
+                    if after_first_frame is not None:
+                        captured, want_second = after_first_frame(master_fd, captured)
+                        capture1 = captured
+                    if want_second:
+                        phase = "wait_second"
+                    else:
+                        os.write(master_fd, b"q")
+                        phase = "done"
+                        break
+            elif phase == "wait_second":
+                captured = settle_pty(master_fd, captured, settle_s)
+                capture2 = captured
+                os.write(master_fd, b"q")
+                phase = "done"
+                break
+        if phase != "done":
+            try:
+                os.write(master_fd, b"q")
+            except OSError:
+                pass
+    finally:
+        drain_deadline = time.monotonic() + 5.0
+        while time.monotonic() < drain_deadline and proc.poll() is None:
+            ready, _, _ = select.select([master_fd], [], [], 0.2)
+            if master_fd in ready:
+                try:
+                    chunk = os.read(master_fd, 65536)
+                except OSError:
+                    break
+                if not chunk:
+                    break
+                captured += chunk
+        terminate_session_group(proc, grace_s=grace_s)
+        _close_master(master_fd)
+
+    assert phase == "done" and capture1 is not None, (
+        f"pty play-shell drive stalled in phase={phase!r}; last grid:\n"
+        + "\n".join(pyte_grid(captured, rows, cols))
+    )
+    return capture1, capture2

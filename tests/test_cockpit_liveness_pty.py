@@ -38,12 +38,6 @@ already does (e.g. ``tests/test_cockpit_hud_pty.py``'s own
 
 from __future__ import annotations
 
-import os
-import pty
-import select
-import subprocess
-import sys
-import time
 from pathlib import Path
 
 import pytest
@@ -57,11 +51,10 @@ from tw2002_aiclient.cockpit import liveness as cockpit_liveness
 from tw2002_aiclient.cockpit.layout import frame_layout
 
 from .pty_helpers import (
+    drive_play_shell_pty,
     find_text,
     pty_curses_supported,
     pyte_grid,
-    set_winsize,
-    terminate_session_group,
 )
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -129,34 +122,6 @@ curses.wrapper(_run)
 """
 
 
-def _settle(master_fd: int, captured: bytes, seconds: float) -> bytes:
-    """Keep draining ``master_fd`` for ``seconds`` of wall time, accumulating
-    onto ``captured``. A single post-sleep ``read()`` isn't reliable here --
-    ``PlayShellScreen.draw()``'s one ``refresh()`` call still spans multiple
-    OS-level pty read chunks for a full 40x160 (or even 25x100) frame, so a
-    one-shot read after the sleep can snapshot mid-flush and leave stale
-    prior-screen content in cells the new frame hasn't reached yet in the
-    byte stream (observed directly while developing this driver -- a
-    single-read capture showed the play-shell chrome's top rows correctly
-    drawn but leftover launcher-screen border characters still in the
-    lower rows). Looping reads across the whole settle window is what
-    ``LOGS``/``control_strip`` -- both drawn last, right before
-    ``refresh()`` -- need to reliably land in the capture.
-    """
-    deadline = time.monotonic() + seconds
-    while time.monotonic() < deadline:
-        ready, _, _ = select.select([master_fd], [], [], 0.2)
-        if master_fd in ready:
-            try:
-                chunk = os.read(master_fd, 65536)
-            except OSError:
-                break
-            if not chunk:
-                break
-            captured += chunk
-    return captured
-
-
 def _drive_liveness_pty(
     tmp_path: Path,
     rows: int,
@@ -166,126 +131,41 @@ def _drive_liveness_pty(
     two_capture: bool = False,
     timeout: float = 14.0,
 ) -> tuple[bytes, bytes | None]:
-    """Spawn ``app._run`` in a pty sized ``rows``x``cols``: Enter from the
-    launcher once its chrome is up, capture the play-shell cockpit frame
-    once the outer ``PLAY SHELL`` chrome is visible (letting at least one
-    ~1 Hz refresh tick land, mirroring
-    ``tests/test_cockpit_hud_pty.py::_drive_hud_pty``'s poll-and-decide
-    loop) as ``capture1``. When ``two_capture`` is set, the clock file is
-    then rewritten to a second value, one more tick is let land, and
-    ``capture2`` is taken before quitting -- ``capture2`` is ``None``
-    otherwise.
-
-    ``TW_RUN_DIR`` always points at an isolated tmp dir under ``tmp_path``
-    so the real (unstubbed) status_provider path can never reach the
-    project's own ``run/twd.sock`` regardless of scenario.
-    """
+    """Spawn ``app._run`` in a pty sized ``rows``x``cols`` via shared
+    ``drive_play_shell_pty`` (WO-PTY-DRIVE-HOIST)."""
     bootstrap = tmp_path / f"liveness_pty_bootstrap_{rows}x{cols}.py"
     bootstrap.write_text(_BOOTSTRAP.format(project_root=str(PROJECT_ROOT)), encoding="utf-8")
-    isolated_run_dir = tmp_path / "isolated_run"
-    isolated_run_dir.mkdir(exist_ok=True)
     clock_file = tmp_path / "clock.txt"
     clock_file.write_text("0.0", encoding="utf-8")
 
-    master_fd, slave_fd = pty.openpty()
-    set_winsize(slave_fd, rows, cols)
-    env = dict(os.environ)
-    env["TERM"] = "xterm"
-    env["TW2002_LAUNCHER_DEMO"] = "1"
-    env["TW_RUN_DIR"] = str(isolated_run_dir)
-    env["TW2002_TEST_CLOCK_FILE"] = str(clock_file)
+    def after_first_frame(_master_fd: int, captured: bytes) -> tuple[bytes, bool]:
+        if two_capture:
+            clock_file.write_text("1.2", encoding="utf-8")
+            return captured, True
+        return captured, False
+
+    env_extra = {"TW2002_TEST_CLOCK_FILE": str(clock_file)}
+    pops = [
+        "TW2002_HANDOFF_SMOKE",
+        "TW2002_LAUNCHER_SMOKE",
+        "TW2002_BANK_SMOKE",
+    ]
     if ascii_mode:
-        env["TW2002_ASCII"] = "1"
+        env_extra["TW2002_ASCII"] = "1"
     else:
-        env.pop("TW2002_ASCII", None)
-    env.pop("TW2002_HANDOFF_SMOKE", None)
-    env.pop("TW2002_LAUNCHER_SMOKE", None)
-    env.pop("TW2002_BANK_SMOKE", None)
+        pops = ["TW2002_ASCII", *pops]
 
-    proc = subprocess.Popen(
-        [sys.executable, str(bootstrap)],
-        stdin=slave_fd,
-        stdout=slave_fd,
-        stderr=slave_fd,
-        cwd=str(PROJECT_ROOT),
-        env=env,
-        start_new_session=True,
+    return drive_play_shell_pty(
+        bootstrap,
+        project_root=PROJECT_ROOT,
+        rows=rows,
+        cols=cols,
+        handle=HANDLE,
+        timeout=timeout,
+        env_extra=env_extra,
+        env_pops=pops,
+        after_first_frame=after_first_frame,
     )
-    os.close(slave_fd)
-
-    captured = b""
-    capture1: bytes | None = None
-    capture2: bytes | None = None
-    phase = "wait_launcher"
-    deadline = time.monotonic() + timeout
-    try:
-        while time.monotonic() < deadline:
-            ready, _, _ = select.select([master_fd], [], [], 0.2)
-            if master_fd in ready:
-                try:
-                    chunk = os.read(master_fd, 65536)
-                except OSError:
-                    break
-                if not chunk:
-                    break
-                captured += chunk
-
-            grid = pyte_grid(captured, rows, cols)
-
-            if phase == "wait_launcher":
-                if find_text(grid, "SELECT PROFILE") and find_text(grid, HANDLE):
-                    os.write(master_fd, b"\r")
-                    phase = "wait_frame"
-            elif phase == "wait_frame":
-                if find_text(grid, "PLAY SHELL"):
-                    # Let at least one ~1 Hz refresh tick fully settle at
-                    # clock=0.0 before snapshotting -- see ``_settle``.
-                    captured = _settle(master_fd, captured, 1.6)
-                    capture1 = captured
-                    if two_capture:
-                        clock_file.write_text("1.2", encoding="utf-8")
-                        phase = "wait_second"
-                    else:
-                        os.write(master_fd, b"q")
-                        phase = "done"
-                        break
-            elif phase == "wait_second":
-                # Deterministic phase VALUE (1.2, written above) -- this
-                # settle window only lets the next real ~1 Hz tick pick it
-                # up and fully flush, see module docstring + ``_settle``.
-                captured = _settle(master_fd, captured, 1.6)
-                capture2 = captured
-                os.write(master_fd, b"q")
-                phase = "done"
-                break
-        if phase != "done":
-            try:
-                os.write(master_fd, b"q")
-            except OSError:
-                pass
-    finally:
-        drain_deadline = time.monotonic() + 5.0
-        while time.monotonic() < drain_deadline and proc.poll() is None:
-            ready, _, _ = select.select([master_fd], [], [], 0.2)
-            if master_fd in ready:
-                try:
-                    chunk = os.read(master_fd, 65536)
-                except OSError:
-                    break
-                if not chunk:
-                    break
-                captured += chunk
-        terminate_session_group(proc)
-        try:
-            os.close(master_fd)
-        except OSError:
-            pass
-
-    assert phase == "done", (
-        f"pty liveness drive stalled in phase={phase!r} at {rows}x{cols}; last grid:\n"
-        + "\n".join(pyte_grid(captured, rows, cols))
-    )
-    return capture1, capture2
 
 
 @pytest.fixture(scope="module")

@@ -40,24 +40,13 @@ Proving more than one state matters for a second reason: a wire pinned by a
 single state can be satisfied by a hardcoded chip. Three distinct outputs
 from three distinct payloads show the value is genuinely flowing.
 
-# Harness duplication is the convention here, deliberately
-
-The pty drive loop below is near-identical to the sibling suites'. Each pty
-file in this repo carries its own copy rather than importing a private
-helper across test modules. Hoisting it into ``tests/pty_helpers.py`` would
-be a real improvement and is **out of scope for this WO** — noted in the
-STATUS as a banked follow-on rather than smuggled in beside a wire proof.
+# Harness: shared ``drive_play_shell_pty`` (WO-PTY-DRIVE-HOIST). Assertions
+# stay suite-local; only the Layer-B drive loop is shared.
 """
 
 from __future__ import annotations
 
 import json
-import os
-import pty
-import select
-import subprocess
-import sys
-import time
 from pathlib import Path
 
 import pytest
@@ -66,11 +55,10 @@ pytestmark = pytest.mark.pty_ui
 
 
 from .pty_helpers import (
+    drive_play_shell_pty,
     find_text,
     pty_curses_supported,
     pyte_grid,
-    set_winsize,
-    terminate_session_group,
 )
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -124,25 +112,6 @@ curses.wrapper(_run)
 """
 
 
-def _settle(master_fd: int, captured: bytes, seconds: float) -> bytes:
-    """Keep draining for ``seconds``. One ``refresh()`` of a 40x160 frame
-    spans several OS-level pty chunks and the control strip is drawn LAST,
-    so a one-shot read can snapshot mid-flush and miss exactly the row this
-    file is about."""
-    deadline = time.monotonic() + seconds
-    while time.monotonic() < deadline:
-        ready, _, _ = select.select([master_fd], [], [], 0.2)
-        if master_fd in ready:
-            try:
-                chunk = os.read(master_fd, 65536)
-            except OSError:
-                break
-            if not chunk:
-                break
-            captured += chunk
-    return captured
-
-
 def _drive(tmp_path: Path, status: dict | None, *, timeout: float = 20.0) -> bytes:
     """Spawn ``app._run`` in a 40x160 pty, Enter through the launcher, and
     capture the settled cockpit frame. ``status`` is the payload the stubbed
@@ -154,80 +123,15 @@ def _drive(tmp_path: Path, status: dict | None, *, timeout: float = 20.0) -> byt
         .replace("__STATUS_JSON__", repr(json.dumps(status) if status else "")),
         encoding="utf-8",
     )
-    isolated_run_dir = tmp_path / "isolated_run"
-    isolated_run_dir.mkdir(exist_ok=True)
-
-    master_fd, slave_fd = pty.openpty()
-    set_winsize(slave_fd, FULL_ROWS, FULL_COLS)
-    env = dict(os.environ)
-    env["TERM"] = "xterm"
-    env["TW2002_LAUNCHER_DEMO"] = "1"
-    env["TW_RUN_DIR"] = str(isolated_run_dir)
-    for stray in ("TW2002_ASCII", "TW2002_HANDOFF_SMOKE",
-                  "TW2002_LAUNCHER_SMOKE", "TW2002_BANK_SMOKE"):
-        env.pop(stray, None)
-
-    proc = subprocess.Popen(
-        [sys.executable, str(bootstrap)],
-        stdin=slave_fd, stdout=slave_fd, stderr=slave_fd,
-        cwd=str(PROJECT_ROOT), env=env, start_new_session=True,
+    capture1, _ = drive_play_shell_pty(
+        bootstrap,
+        project_root=PROJECT_ROOT,
+        rows=FULL_ROWS,
+        cols=FULL_COLS,
+        handle=HANDLE,
+        timeout=timeout,
     )
-    os.close(slave_fd)
-
-    captured = b""
-    phase = "wait_launcher"
-    deadline = time.monotonic() + timeout
-    try:
-        while time.monotonic() < deadline:
-            ready, _, _ = select.select([master_fd], [], [], 0.2)
-            if master_fd in ready:
-                try:
-                    chunk = os.read(master_fd, 65536)
-                except OSError:
-                    break
-                if not chunk:
-                    break
-                captured += chunk
-
-            grid = pyte_grid(captured, FULL_ROWS, FULL_COLS)
-            if phase == "wait_launcher":
-                if find_text(grid, "SELECT PROFILE") and find_text(grid, HANDLE):
-                    os.write(master_fd, b"\r")
-                    phase = "wait_frame"
-            elif phase == "wait_frame":
-                if find_text(grid, "PLAY SHELL"):
-                    captured = _settle(master_fd, captured, 1.6)
-                    os.write(master_fd, b"q")
-                    phase = "done"
-                    break
-        if phase != "done":
-            try:
-                os.write(master_fd, b"q")
-            except OSError:
-                pass
-    finally:
-        drain_deadline = time.monotonic() + 5.0
-        while time.monotonic() < drain_deadline and proc.poll() is None:
-            ready, _, _ = select.select([master_fd], [], [], 0.2)
-            if master_fd in ready:
-                try:
-                    chunk = os.read(master_fd, 65536)
-                except OSError:
-                    break
-                if not chunk:
-                    break
-                captured += chunk
-        terminate_session_group(proc, grace_s=5.0)
-        try:
-            os.close(master_fd)
-        except OSError:
-            pass
-
-    assert phase == "done", (
-        f"pty CONN drive stalled in phase={phase!r}; last grid:\n"
-        + "\n".join(pyte_grid(captured, FULL_ROWS, FULL_COLS))
-    )
-    return captured
+    return capture1
 
 
 # --------------------------------------------------------------------------
