@@ -17,6 +17,7 @@ from tw2002_aiclient.cockpit import arm as cockpit_arm
 from tw2002_aiclient.cockpit import armconfirm as cockpit_armconfirm
 from tw2002_aiclient.cockpit import control_seat as cockpit_control_seat
 from tw2002_aiclient.cockpit import covermeter as cockpit_covermeter
+from tw2002_aiclient.cockpit import panic
 from tw2002_aiclient.cockpit import decisions as cockpit_decisions
 from tw2002_aiclient.cockpit import draft_approve as cockpit_draft_approve
 from tw2002_aiclient.cockpit import draw as cockpit_draw
@@ -2013,6 +2014,26 @@ class PlayShellScreen:
         # `R` is NOT bound to attach/launch (WO constraint).
         if key in (ord("r"), ord("R")):
             return "record_toggle"
+        # WO-P5-071: P panic -- the N5 cluster's halt control.
+        #
+        # Returns the intent IMMEDIATELY and unconditionally. Deliberately
+        # NOT routed through `begin_arm_confirm` the way every other N5
+        # affordance is: the confirm gate protects the direction that
+        # *spends* live turns and credits, and panic runs the other way.
+        # Adding a `y/N` to the emergency path to satisfy a rule written
+        # for the commitment path would be a safety regression wearing
+        # safety clothing (see `cockpit/panic.py`, hub-ratified
+        # 2026-07-27, pinned in `tests/test_cockpit_panic.py`).
+        #
+        # Placed AFTER the A/R/T teach keys and before the fallthrough so
+        # it cannot shadow one of them, and it takes no state into account
+        # -- there is no "is a run armed?" precondition here on purpose. A
+        # panic that refuses because the cockpit believes nothing is
+        # running is a panic that fails exactly when the cockpit's belief
+        # is the thing that is wrong. The daemon's `autoloop_stop` is
+        # idempotent and never refuses, so an unnecessary press is free.
+        if panic.resolve_panic_key(key):
+            return panic.PANIC_INTENT
         return None
 
 

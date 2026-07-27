@@ -913,6 +913,30 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                             "(no steps captured or missing sector anchor)"
                         )
                 continue
+            if action == "panic":
+                # WO-P5-071: P panic — halt the taught-run player NOW.
+                #
+                # No confirm gate, by design and by hub ruling (2026-07-27).
+                # Canon's "a bare Enter must never fire a launch" protects
+                # the direction that SPENDS turns and credits; this is the
+                # halt direction. See `cockpit/panic.py` for the full
+                # reasoning and `tests/test_cockpit_panic.py` for the pin
+                # that keeps a future "consistency" refactor from adding one.
+                #
+                # `autoloop_stop` never raises and is idempotent daemon-side,
+                # so this needs no try/except of its own and a double-press
+                # is harmless.
+                result = adapters.autoloop_stop()
+                if result.ok:
+                    play.status_line = "PANIC — taught run halted"
+                else:
+                    # Reported, not smoothed. "I could not reach a runner" and
+                    # "I halted the run" are different facts, and an operator
+                    # who just hit panic is entitled to know which one
+                    # happened — a reassuring message here would be the
+                    # worst possible lie on this particular key.
+                    play.status_line = f"PANIC failed — {result.reason or 'unknown'}"
+                continue
             if action == "attach":
                 if attach_conn is None:
                     conn, error = _attempt_attach(env.socket_path(run_dir))

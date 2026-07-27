@@ -26,7 +26,22 @@ CANON = (
 # --------------------------------------------------------------------------
 
 def test_band_is_canon_standing_spelling() -> None:
-    assert teachband.compose_teach_band() == "A)nalyze  R)ecord  T)rigger"
+    """WO-P5-071 adds `P panic` -- the N5 cluster's halt affordance -- to the
+    triad, exactly as this module's docstring forecast (`TEACH_TOKENS` is a
+    tuple so the extension is a list edit).
+
+    `P panic` is spelled with a SPACE, not a paren. Canon's prose at
+    `mode-line-and-teach-controls.md:234` says "every token uses the uniform
+    `KEY)verb` shape", which would make this `P)anic` -- but the band
+    literal canon actually prints is `P panic`, identically at `:136`,
+    `:219` and `visual-language.md:302`. Three consistent cross-file
+    literals beat one generalisation that overlooks its own last token, so
+    the literal is what ships and the conflict is reported to the hub.
+    Kept as an inline literal, NOT derived from `TEACH_TOKENS`: an
+    expectation built from the product's own constant would follow any
+    change to it and pin nothing.
+    """
+    assert teachband.compose_teach_band() == "A)nalyze  R)ecord  T)rigger  P panic"
 
 
 def test_band_uses_trigger_not_the_banner_s_assign() -> None:
@@ -51,10 +66,21 @@ def test_both_registers_are_grounded_in_canon_verbatim() -> None:
 
 
 def test_band_does_not_carry_other_wos_tokens() -> None:
-    """A/R/T triad only: `^A)ode` is Mode (ADR-002), `L)chains` / `P panic`
-    are the N5 cluster (WO-071). Guarding scope creep in both directions."""
+    """Still guarding scope creep in both directions, with one token moved.
+
+    `P panic` left this list in WO-P5-071 -- that is the WO the original
+    docstring named as its owner, so this is the pin being *satisfied*, not
+    weakened. `^A)ode` (the Mode chord, ADR-002) and `L)chains` remain
+    foreign.
+
+    `L)chains` stays out for a reason worth recording: it is the
+    Trade-Loop-Chains library popup, and no chain store exists on tip
+    (verified -- no `*chain*` module anywhere in `tw2002_aiclient/`). The
+    hub ruled it out of 071's scope rather than have the band advertise a
+    key that opens nothing.
+    """
     band = teachband.compose_teach_band()
-    for foreign in ("^A)ode", "L)chains", "P panic"):
+    for foreign in ("^A)ode", "L)chains"):
         assert foreign not in band
 
 
@@ -68,7 +94,7 @@ def test_tokens_are_pure_ascii_no_unicode_twin() -> None:
 @pytest.mark.parametrize("hostile", [None, 0, object(), b"x", [], 3.5])
 def test_compose_never_raises_on_hostile_unicode_ok(hostile: object) -> None:
     assert teachband.compose_teach_band(unicode_ok=hostile) == \
-        "A)nalyze  R)ecord  T)rigger"
+        "A)nalyze  R)ecord  T)rigger  P panic"
 
 
 # --------------------------------------------------------------------------

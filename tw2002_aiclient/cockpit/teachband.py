@@ -72,6 +72,13 @@ never raises regardless of any argument's type or content.
 
 from __future__ import annotations
 
+# WO-P5-071. Imported rather than re-spelled: the band and the key handler
+# must never disagree about what the panic token says, and a second literal
+# here is exactly how that drift starts (the `T)rigger`/`T)assign` split
+# below is the same hazard, handled the same way -- by keeping each
+# register's spelling in exactly one place).
+from .panic import PANIC_TOKEN
+
 # Canon's standing-band spelling of the teach triad
 # (`mode-line-and-teach-controls.md:136`, `visual-language.md:302`).
 #
@@ -81,7 +88,16 @@ from __future__ import annotations
 #
 # A tuple, not a flat string, so the later WOs that add `^A)ode`,
 # `L)chains` and `P panic` extend a sequence instead of re-parsing prose.
-TEACH_TOKENS: tuple[str, ...] = ("A)nalyze", "R)ecord", "T)rigger")
+#
+# WO-P5-071 extends this exactly as forecast -- a list edit, not a re-parse.
+# `P panic` joins the triad; `^A)ode` and `L)chains` still do not. `^A)ode`
+# is the Mode chord's token (ADR-002) and belongs to that WO; `L)chains` is
+# the Trade-Loop-Chains library popup, which needs a chain store that does
+# not exist on tip (verified: no `*chain*` module in `tw2002_aiclient/`) and
+# was ruled out of 071's scope by the hub rather than stubbed.
+#
+# Order follows canon's literal band, so panic sits last.
+TEACH_TOKENS: tuple[str, ...] = ("A)nalyze", "R)ecord", "T)rigger", PANIC_TOKEN)
 
 # Two spaces between tokens -- canon renders the band that way in every
 # example it gives (`:136`, `:219`, `visual-language.md:302`), and it is
