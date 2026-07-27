@@ -1,8 +1,9 @@
 # WO-AUDIT-SESSION-TERMINAL — Honesty audit of session/terminal.py (encoding/glyph/locale)
 
-**Status:** OPEN · HANDOFF · Cursor
+**Status:** DONE · Cursor
 **Posted:** 2026-07-26
-**Seat:** Cursor or Claude Code
+**Seat:** Cursor (`impl-aiclient-cursor`)
+**Done:** 2026-07-27 · report `audit/session-terminal-audit-20260727.md` (code tip audited `f96d68b`)
 
 ## Goal
 
