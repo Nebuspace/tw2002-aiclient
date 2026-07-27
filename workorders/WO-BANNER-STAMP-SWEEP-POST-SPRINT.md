@@ -1,6 +1,6 @@
 # WO-BANNER-STAMP-SWEEP-POST-SPRINT — Docs-only banner sweep after M1–M4 sprint
 
-**Status:** READY · LOW · Cursor
+**Status:** DONE · PR #56 · tip `1e64e4c` (hub stamped 2026-07-27 — already on main)
 **Posted:** 2026-07-26
 **Seat:** Cursor
 

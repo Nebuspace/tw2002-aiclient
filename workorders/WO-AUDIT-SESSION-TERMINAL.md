@@ -1,6 +1,6 @@
 # WO-AUDIT-SESSION-TERMINAL — Honesty audit of session/terminal.py (encoding/glyph/locale)
 
-**Status:** READY · MED · Cursor or CC
+**Status:** OPEN · HANDOFF · Cursor
 **Posted:** 2026-07-26
 **Seat:** Cursor or Claude Code
 
