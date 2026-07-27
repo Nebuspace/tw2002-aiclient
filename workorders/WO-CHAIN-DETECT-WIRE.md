@@ -18,6 +18,9 @@ Wire detection to live world-model port records: after explore (or on demand), r
 3. Surface a typed API/adapters call the TUI can read (no curses in this WO).  
 4. PR + STATUS + suite (+ optional live after explore on sacrificial world).
 
+
+5. **Canon renderings (hub GO 2026-07-27 · Scope-1 correction):** inject discovered chains via a `chain_as_library_row`-shaped bridge into the loops/composer consumer; land `format_coach_callout` (or equivalent) on the coach surface. Pure bridge helpers may live beside detect; callout formatter in cockpit/coach — do not drop these as "parked archive."
+
 ## Constraints
 
 - Finder only — operator arms later via TUI / #116 path.  
