@@ -61,14 +61,72 @@ Current census on `3854e70`: **47 line-numbered citations across 15 product file
 ## Accept
 
 1. No `*.md:<digits>` citation remains in `tw2002_aiclient/**/*.py` (single-line or range).
-2. Every converted citation names a heading that **exists** in the cited canon file.
+2. Every converted citation **matches** a heading in the cited canon file, under the
+   match rule defined in Proof below. "Matches" is not "is equal to" — see the rule.
 3. Suite green, test count unchanged (comments-only change).
 4. PR + STATUS.
 
 ## Proof
 
 Mechanical sweep asserting (a) zero remaining `\.md:[0-9]+` in product code, (b) each cited
-heading string is present in its file. Suite green.
+heading matches its file under the rule below. Suite green.
+
+### The match rule (normalisation + shape)
+
+Two competent checkers disagreed on this WO's own PR (#113: one reported 0 problems, one
+reported 2) because "the heading exists" was never defined. It is defined here.
+
+A citation `§"CLAIM"` into `file.md` matches iff, after normalising **both** sides, `CLAIM`
+is **equal to** some heading in that file **or is a prefix of one ending at a word boundary**
+— the next character in the heading must be whitespace or `(`.
+
+Normalisation, applied to both sides:
+
+1. **Strip inline markdown** — backticks/code spans, and `*`/`_` emphasis markers.
+2. **Compare dashes literally.** `-`, `--`, `–` and `—` are four distinct things; do not
+   fold them. A citation must use the dash its heading uses.
+3. **Collapse whitespace** — squeeze internal runs to one space, trim both ends.
+4. **Compare case-sensitively.**
+
+Headings mean ATX headings (`^#{1,6} `). Everything else is prose, not a citable section.
+
+### Why these choices — measured on this repo, not asserted
+
+Three checker shapes were run over the tree at `b2e586d` (clean, post-conversion) and at
+`b2e586d^` (which carried exactly one known-bad citation, `loops/player.py:25`):
+
+| checker shape | clean tree (27 cites) | tree with 1 real defect (9 cites) | verdict |
+|---|---|---|---|
+| equality only, dashes literal | **6 false failures** | 7 = 1 real + 6 false | too narrow — red on a correct tree |
+| prefix-ok, dashes **folded** | 0 | **0 — misses the real defect** | too loose — blind to the bug it exists for |
+| **prefix-ok, dashes literal** | **0** | **1 — exactly the real defect** | ✅ the rule above |
+
+- **Prefix matching is required, not a convenience.** Six of the 27 citations on the clean
+  tree deliberately cite the *stable* head of a long heading — `§"Structural rails"` for
+  `# Structural rails (L4) — turn-budget, stop-loss, hazard, novelty-halt`, `§"Deterministic
+  replay"` for `## Deterministic replay — one confirmed step at a time`. That is good
+  practice: it is the part of the heading least likely to churn. An equality-only checker
+  calls all six broken **on a tree where nothing is broken** — the third instance in this
+  WO's history of *a check narrower than its claim*, after the `:91-96` range false positive
+  and the two false positives during #93.
+- **The boundary condition is what keeps prefix matching honest.** `§"Replay"` does *not*
+  match `## Replay-safety invariants` — the next character is `-`, not whitespace or `(`.
+  Without the boundary, prefix matching degrades into "starts with", which would accept
+  almost anything.
+- **Dashes literal, deliberately.** Folding them makes the checker silent on the one real
+  defect in the table above. A checker that papers over the single bug it has already caught
+  is worse than no checker.
+- **Case-sensitive**, because canon headings are prose with meaningful capitalisation, and
+  case-folding would let `§"the coverage meter"` pass for `## The Coverage / auto-% meter` —
+  close enough to look right, wrong enough to mislead.
+
+> **Correction (2026-07-27), recorded rather than quietly fixed.** During #113 review this
+> seat reported that `loops/player.py:25` still carried an ASCII `--` against canon's em-dash
+> `—`. Half right: the mismatch was real and **predated this WO** (it dates to `a7dbf22`,
+> long before the conversion, so it was never conversion-introduced drift) — but it is **not**
+> on `main`, because **#113 fixed it**. The tree is clean. The episode is kept because it is
+> the entire empirical case for rule 2: for the whole life of that citation a dash-folding
+> checker would have called it green.
 
 ## Note for whoever takes it
 
