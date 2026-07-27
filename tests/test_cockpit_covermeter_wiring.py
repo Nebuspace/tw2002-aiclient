@@ -181,6 +181,52 @@ def test_hostile_meter_values_degrade_to_absent_without_raising(hostile):
     assert "LIVE" in line
 
 
+# --------------------------------------------------------------------------
+# The live-session row -- where a previous defect on this exact surface hid
+# --------------------------------------------------------------------------
+
+@pytest.mark.parametrize("width", [200, 160, 120, 100, 90, 80])
+def test_meter_survives_a_fully_populated_live_row(width):
+    """The row as it looks on a CONNECTED session, not an idle cockpit.
+
+    Why this exists: the PTY proof drives the demo launcher with a stubbed
+    `ensure_session`, so no real daemon tail exists, so `has_real_tail` is
+    false and `screens.py` passes `status_offer=None`. On a live session it
+    is NOT none -- `status_line` moves onto this row and competes for it.
+    Every other test in this file (and the PTY proof) therefore exercises a
+    strictly emptier row than the one an operator actually sees.
+
+    That asymmetry is exactly where WO-PLAY-OFFER-VISIBLE-ON-LIVE's defect
+    lived: content that was present and correct on an idle cockpit and
+    invisible the moment a session connected, which no green suite could
+    see. Pinned here so a future reordering of the chip run cannot drop the
+    meter on live sessions only.
+    """
+    line = compose_control_strip_line(
+        spectating=False, attached=True, liveness_text="LIVE 12s", width=width,
+        arm_chip=("ARM OFF", "warn"), conn_chip=("CONN", "ok"),
+        coverage_meter=_chip(), status_offer="Explore: press E to map 5 sectors",
+        teach_band="A)nalyze  R)ecord  T)rigger",
+    )
+    assert "COV ?" in line, f"meter lost on a populated live row at width={width}"
+    assert "LIVE 12s" in line, "liveness lost — the meter must never cost it columns"
+
+
+def test_meter_outranks_the_status_offer_not_the_other_way_round():
+    """Both are mid-row content, so their order is a real decision: the meter
+    is a *state readout* that is either true or absent, while the offer is a
+    prose hint that truncates by design (`status_text[:room]`). At a width
+    that cannot hold both in full, the meter must not be the thing that
+    silently loses."""
+    line = compose_control_strip_line(
+        spectating=False, attached=True, liveness_text="LIVE 12s", width=80,
+        arm_chip=("ARM OFF", "warn"), conn_chip=("CONN", "ok"),
+        coverage_meter=_chip(), status_offer="Explore: press E to map 5 sectors",
+        teach_band="A)nalyze  R)ecord  T)rigger",
+    )
+    assert "COV ?" in line
+
+
 def test_no_ai_term_reaches_the_row():
     """The WO's grep pin, enforced at the row level as well as the composer:
     an `AI` slice must not appear even if some future chip re-introduces it."""
