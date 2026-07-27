@@ -504,7 +504,11 @@ def test_the_status_answer_carries_only_bounded_fields(cfg, tmp_path, run_dir):
                               for anything it cannot name, never a slice of the
                               screen
       `host`/`port`/`name`    the PROFILE's own values, not receive-buffer content
-      `autopilot`             a literal (autopilot.py is not ported)
+      `autopilot`             one `bool` from `autoloop.arm_block()` — a live
+                              runtime fact since `session/autoloop.py` landed,
+                              no longer the hardcoded literal this row used to
+                              describe. Still carries no receive-buffer content,
+                              which is what this table is about.
       `mode`                  `control_lock`'s closed vocabulary
       `log_tail`              TX-only, redact-at-INSERT: `transcript_tail.
                               TranscriptTail.append_redacted()` cannot accept a

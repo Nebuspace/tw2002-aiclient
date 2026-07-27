@@ -18,15 +18,26 @@ a side effect) lives in ``tests/test_cockpit_arm_wiring.py``, mirroring the
 Layer-A/Layer-B split ``test_cockpit_spectate.py`` /
 ``test_cockpit_stopbanner_wiring.py`` already use.
 
-Round-trip honesty (WO-P5-062 scope finding, reported to the hub before
-build): ``session/protocol.py:167-168`` reports ``"autopilot": {"running":
-False}`` as a HARDCODED literal -- "autopilot.py is not ported — ensure
-never arms" -- and ``protocol.dispatch`` has no ``arm``/``disarm`` verb at
-all. So the round-trip this module completes is genuinely read-only today.
-That is deliberate and is the safer of the two available outcomes: a write
-path would have to report ``ARM ON`` for a runtime that cannot arm, which
-is precisely the fabricated-arm claim this WO exists to prevent. The
-indicator is honest about what the daemon reports and claims nothing else.
+Round-trip honesty (WO-P5-062 scope finding): this module completes a
+read-only round trip -- the indicator reports what the daemon reports and
+claims nothing else. A write path here would be the fabricated-arm claim
+the WO exists to prevent, so the absence of a setter is the design.
+
+**Corrected 2026-07-27 (WO-AUDIT-ARM-CLAIM-HONESTY).** This paragraph used
+to add that ``protocol.py`` reported ``{"running": False}`` as a HARDCODED
+literal and that ``dispatch`` had "no ``arm``/``disarm`` verb at all", so
+the runtime "cannot arm". True when written, **false now**:
+``session/autoloop.py`` landed a real ``AutoLoopRunner``,
+``protocol.py:300`` calls ``autoloop.arm_block(arm)`` off a live
+``observe()``, and ``autoloop_start``/``autoloop_stop``/``autoloop_status``
+exist. ``ARM ON`` is reachable, so the ``True`` case pinned below is a live
+state rather than a defensive one.
+
+Recorded rather than deleted because the stale text framed an expired fact
+as a *safety property*; a reader trusting it would treat the ``True``
+branch as unreachable. ``tests/test_autoloop.py`` already carries the
+corrected reading ("The runtime can arm now") -- this file and
+``cockpit/arm.py`` had drifted from it.
 """
 
 from __future__ import annotations

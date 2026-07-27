@@ -45,17 +45,34 @@ having reported it.
 Round-trip status, stated honestly (WO-P5-062 scope finding)
 =============================================================
 
-The round-trip is **read-only today**, and that is a deliberate outcome
-rather than an unfinished one. ``session/protocol.py``'s ``status`` verb
-reports the autopilot block as a HARDCODED disarmed literal -- its own
-comment reads "WO-P2-022: autopilot.py is not ported — ensure never arms"
--- and ``protocol.dispatch`` carries no arm/disarm verb of any kind. There
-is no ported run-loop to arm. A write path built against that would render
-``ARM ON`` for a runtime that cannot arm: a fabricated affirmative safety
-claim, which is the exact failure this WO exists to prevent. So the
-indicator reports what the daemon reports and claims nothing further.
-When the autopilot module and its arm verb land, this module needs no
-change -- it already reads the field they will populate.
+This module is **read-only**: it reports what the daemon reports and
+claims nothing further. That is a deliberate outcome, not an unfinished
+one -- see "no silent arm" above, which is structural rather than a
+discipline someone has to remember.
+
+**Corrected 2026-07-27 (WO-AUDIT-ARM-CLAIM-HONESTY).** This section used
+to say that ``session/protocol.py``'s ``status`` verb reported the
+autopilot block as a HARDCODED disarmed literal, that ``dispatch``
+carried no arm/disarm verb of any kind, and that "there is no ported
+run-loop to arm". **All three were true when written and are false now.**
+``session/autoloop.py`` landed a real ``AutoLoopRunner``;
+``protocol.py:300`` calls ``autoloop.arm_block(arm)`` off a live
+``observe()``; and ``autoloop_start`` / ``autoloop_stop`` /
+``autoloop_status`` all exist. ``arm_block`` returns
+``{"running": bool(snapshot.running)}``, so **``ARM ON`` is reachable
+today** and the ``True`` branch below is live, not dead.
+
+The correction is recorded rather than quietly deleted because the stale
+text did not merely state an expired fact -- it framed that fact as a
+*safety property* ("a runtime that cannot arm"). A reader who trusted it
+would conclude ``ARM ON`` is unreachable, which is one step from removing
+the ``True`` branch as dead code or from dismissing a genuine ``ARM ON``
+as a bug. ``protocol.py`` corrected its own copy of this claim when
+``autoloop`` landed; this module and ``screens.py`` did not, and drifted.
+
+The forecast in the old text did hold: this module needed **no code
+change** when the run-loop arrived -- it already read the field the new
+runtime populates.
 
 Three states, because two would have to lie
 ============================================
