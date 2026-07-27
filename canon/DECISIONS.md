@@ -30,9 +30,19 @@ RULES:
 
 <!-- Items not yet resolved. -->
 
-<!-- (empty — OPEN-003 formally CLOSED 2026-07-25) -->
+### OPEN-PLAY-STATUS-MIDSTRIP — control-strip mid segment for app `status_line` / offers (2026-07-27)
+
+**Gap:** Live sessions always populate LOGS (`log_tail`), so `status_line` never paints (it is only a LOGS empty-tail fallback). The explore offer (`press E`) is therefore invisible in real use. The hint band is canon-reserved for A/R/T affordances, or for a **live-run** progress claim — an offer is not a live run, and parking the offer there evicts teach tokens (measured: 4 pty pins).
+
+**Proposed kernel (hub-ruled 2026-07-27 under Max’s one-client / visible-automation bar; awaiting Max mark RESOLVED):**
+1. While an explore (or taught) run is **live**, the hint band may show cycle/progress (existing canon `:231-232`).
+2. App `status_line` / explore **offer** paints on a **mid control-strip segment** between left chips (+ TX) and the right hint band — does not replace LOGS, does not claim the hint band.
+3. Update `canon/surfaces/mode-line-and-teach-controls.md` spacing diagram to name that mid segment once Accepted.
+
+**Code in flight:** `wo/PLAY-OFFER-VISIBLE-ON-LIVE` @ `0e13244` (WIP: (c) progress band done; (a) mid-strip not started).
 
 ---
+
 
 ## RESOLVED
 
