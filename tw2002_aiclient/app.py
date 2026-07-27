@@ -481,6 +481,60 @@ def _attempt_attach(sock_path):
     return None, error
 
 
+def _explore_status_line_from_wire(
+    raw: dict | None, *, default_min_sectors: int
+) -> tuple[str | None, bool]:
+    """Map an ``explore_status`` wire dict to a Play status_line.
+
+    Returns ``(line, keep_polling)``. ``keep_polling`` is False once the run
+    reaches a terminal outcome or the explorer is no longer running.
+    """
+    if raw is None:
+        return None, False
+    running = bool(raw.get("running"))
+    run = raw.get("run")
+    if not isinstance(run, dict):
+        if running:
+            return f"explore 0/{default_min_sectors}…", True
+        return None, False
+    distinct = run.get("distinct_sectors")
+    if not isinstance(distinct, int):
+        distinct = 0
+    min_sectors = run.get("min_sectors")
+    if not isinstance(min_sectors, int):
+        min_sectors = default_min_sectors
+    outcome = run.get("outcome")
+    reason = run.get("reason") or run.get("error") or "unknown"
+    if outcome == "completed":
+        return f"explore completed ({distinct})", False
+    if outcome in ("halted", "crashed"):
+        return f"explore halted: {reason}", False
+    if running or outcome is None:
+        return f"explore {distinct}/{min_sectors}…", True
+    return f"explore halted: {outcome}", False
+
+
+def _poll_explore_status(play: PlayShellScreen, *, run_dir) -> bool:
+    """Poll ``adapters.explore_status`` and refresh ``play.status_line``.
+
+    Returns whether the Play loop should keep polling on idle ticks.
+    """
+    try:
+        result = adapters.explore_status(run_dir=run_dir)
+    except Exception:  # noqa: BLE001 — honest containment; do not drop the loop
+        return False
+    if not result.ok:
+        reason = result.reason or "unknown"
+        play.status_line = f"explore status unavailable — {reason}"
+        return False
+    line, keep_polling = _explore_status_line_from_wire(
+        result.raw, default_min_sectors=_EXPLORE_MIN_SECTORS
+    )
+    if line is not None:
+        play.status_line = line
+    return keep_polling
+
+
 def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
     """Bind profile to a fresh play-shell placeholder; Esc ends the binding."""
     run_dir = env.resolve_run_dir()
@@ -542,12 +596,18 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
     # `None` here means spectating -- the loop below still routes every
     # key through `play.handle_key`, exactly as before this WO.
     attach_conn = None
+    # WO-PLAY-EXPLORE-VISIBLE (L4): set after a successful arm start; cleared
+    # when ``explore_status`` reports a terminal outcome so idle ticks do not
+    # spam the daemon.
+    explore_poll_active = False
     guard = _DeadTerminalGuard()
     try:
         while True:
             play.draw()
             key = _guarded_getch(stdscr, guard)
             if key == -1:
+                if explore_poll_active:
+                    explore_poll_active = _poll_explore_status(play, run_dir=run_dir)
                 continue
             if attach_conn is not None and key != 27:
                 # Attached: canon `mode-line-and-teach-controls.md:42-44`
@@ -704,6 +764,7 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                 else:
                     if getattr(explore, "ok", False):
                         play.status_line = f"explore started — {_EXPLORE_MIN_SECTORS} sectors"
+                        explore_poll_active = True
                     else:
                         # Report the adapter's machine-readable reason rather
                         # than a cheerful generic: "explore failed" with no
