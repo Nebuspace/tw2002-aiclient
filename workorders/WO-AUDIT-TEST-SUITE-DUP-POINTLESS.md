@@ -1,7 +1,7 @@
 # WO-AUDIT-TEST-SUITE-DUP-POINTLESS — Pytest suite duplicate / pointless test audit (read-only report)
 
 > Reconstructed from coord HANDOFF bodies (2026-07-25 backfill).
-> Status: **IN FLIGHT** 2026-07-25 · dispatched to Cursor @ 14:24:58Z (Max-requested NOW)
+> Status: **DONE** · report on main `5704a47` (`workorders/AUDIT-TEST-SUITE-DUP-POINTLESS.md`) (was IN FLIGHT 2026-07-25 · dispatched to Cursor @ 14:24:58Z (Max-requested NOW))
 > Type: docs/audit · Priority: P0 (Max direct) · Lens: L4 cleanup / L5 doc-gap
 > Refs: `canon/testing/test-case-catalog.md` · `pytest.ini` ignore list · OKF catalog `4882045`
 

@@ -1,6 +1,6 @@
 # WO-AUDIT-CREDENTIALS-LAUNCHER-CRASH — the launcher's first read stops crashing, and stops lying
 
-> Status: **IN FLIGHT** 2026-07-25 · Max-gated lane (secrets), scoped authorization granted for error handling only · isolated worktree
+> Status: **DONE** · origin `3c17479` (was IN FLIGHT 2026-07-25 · Max-gated lane (secrets), scoped authorization granted for error handling only · isolated worktree)
 > Type: harden · Priority: P0 (launcher is dead at startup for four real conditions) · Lens: L2 code-vs-canon / honesty
 > Refs: `tw2002_aiclient/session/credentials.py` (`list_profile_summaries`, `list_servers`, `resolve_profile_host_port`) · `tw2002_aiclient/app.py:41` `_load_profiles` (call site — NOT edited) · `canon/doctrine/secrets-and-credentials.md` · precedent `WO-AUDIT-PLAYER-BANK-STORE-HONESTY` (`a9868ac`) · content boundary `WO-AUDIT-F5-TYPE-NAME` (`6661f13`)
 
