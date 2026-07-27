@@ -16,6 +16,7 @@ from tw2002_aiclient.cockpit import analyze as cockpit_analyze
 from tw2002_aiclient.cockpit import arm as cockpit_arm
 from tw2002_aiclient.cockpit import armconfirm as cockpit_armconfirm
 from tw2002_aiclient.cockpit import control_seat as cockpit_control_seat
+from tw2002_aiclient.cockpit import covermeter as cockpit_covermeter
 from tw2002_aiclient.cockpit import decisions as cockpit_decisions
 from tw2002_aiclient.cockpit import draw as cockpit_draw
 from tw2002_aiclient.cockpit import focus as cockpit_focus
@@ -1758,6 +1759,40 @@ class PlayShellScreen:
             # (the same shared snapshot every other consumer uses -- no
             # second status_provider() call) and reflects the focus state.
             conn_chip = self._compose_conn_chip(status, self._conn_focused)
+            # WO-P5-072: the coverage meter — App-vs-Human live share.
+            #
+            # The counts are passed as `None` because THERE IS NO SOURCE FOR
+            # THEM ON TIP, not as a placeholder someone should fill with a
+            # plausible number. PWO-025 is PARTIAL: the control lock and
+            # `VALID_SENDERS` are live, but `LedgerWriter` / the attach
+            # keystroke ledger are still deferred in `session/daemon.py`, so
+            # nothing in this tree records the per-send `actor` rows the
+            # metric counts. `compose_coverage_meter` therefore renders
+            # `COV ?` here on every draw, which is canon's required reading
+            # ("Honest `?` when shares unknown — never invent",
+            # `canon/engine/coverage-metrics.md`).
+            #
+            # When the ledger lands, ONLY this call changes — two counts
+            # replace the two `None`s and the rest of the chain is already
+            # correct. Deliberately NOT derived from `status`: the daemon's
+            # status payload carries no coverage block, and synthesising one
+            # from `last_sender` would report the most recent keystroke as
+            # if it were a session-wide share.
+            #
+            # Passed as an explicit `(text, tone)` pair, not a bare string:
+            # `control_seat._safe_arm_chip` 2-unpacks its argument, so a
+            # plain string would be silently discarded (or, at exactly two
+            # characters, split into text and tone) — a failure that would
+            # look identical to "the meter didn't fit".
+            try:
+                meter_chip = (
+                    cockpit_covermeter.compose_coverage_meter(
+                        app=None, human=None, unicode_ok=uok
+                    ),
+                    cockpit_covermeter.METER_TONE,
+                )
+            except Exception:  # noqa: BLE001 -- a raising composer must not crash the draw pass
+                meter_chip = None
             # WO-PLAY-OFFER-VISIBLE-ON-LIVE: when LOGS carries a real daemon
             # tail, `status_line` no longer paints there -- surface it on the
             # control strip's mid segment instead (empty-tail LOGS fallback unchanged).
@@ -1772,6 +1807,7 @@ class PlayShellScreen:
                     liveness_text=liveness_text, width=cs_w, unicode_ok=uok,
                     arm_chip=arm_chip,
                     conn_chip=conn_chip,
+                    coverage_meter=meter_chip,
                     status_offer=status_offer,
                     # WO-P5-066: the standing A/R/T teach band. Composed
                     # unconditionally -- it is calm-state chrome that names
