@@ -1,6 +1,6 @@
 # WO-CANON-GLYPH-SOURCE-OF-TRUTH — Canon glyph SoT matches live draw path
 
-**Status:** OPEN · READY · docs  
+**Status:** DONE · closed by `3854e70` (#109 SoT edit) — tip-check claim stale
 **Posted:** 2026-07-27T18:55:00Z · from `audit/session-terminal-audit-20260727.md` T-03  
 **Seat:** Cursor or CC (docs; Max-gate if changing Accepted canon numbers/prose shape)  
 **Depends:** prefer after or with `WO-TERMINAL-CHROME-ORPHAN-RETIRE`  
