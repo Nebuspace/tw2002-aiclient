@@ -515,9 +515,17 @@ def _explore_status_line_from_wire(
 
 
 def _poll_explore_status(play: PlayShellScreen, *, run_dir) -> bool:
-    """Poll ``adapters.explore_status`` and refresh ``play.status_line``.
+    """Poll ``adapters.explore_status``; refresh the visible band and
+    ``status_line``.
 
     Returns whether the Play loop should keep polling on idle ticks.
+
+    WO-PLAY-OFFER-VISIBLE-ON-LIVE: the same text goes to `explore_band` as
+    to `status_line`. `status_line` alone is not enough -- it renders only
+    when the LOGS band has no daemon tail, which on a live session is never
+    (live prove 2026-07-27). The band is the surface an operator actually
+    sees mid-session; `status_line` is kept for the empty-LOGS case and for
+    the existing L4 tests that assert on it.
     """
     try:
         result = adapters.explore_status(run_dir=run_dir)
@@ -526,12 +534,21 @@ def _poll_explore_status(play: PlayShellScreen, *, run_dir) -> bool:
     if not result.ok:
         reason = result.reason or "unknown"
         play.status_line = f"explore status unavailable — {reason}"
+        # Stop claiming the band on a reading we do not have -- a stale
+        # "explore 3/5…" frozen on screen would be a live-looking run that
+        # is not being observed.
+        play.explore_band = None
         return False
     line, keep_polling = _explore_status_line_from_wire(
         result.raw, default_min_sectors=_EXPLORE_MIN_SECTORS
     )
     if line is not None:
         play.status_line = line
+        play.explore_band = line
+    if not keep_polling:
+        # Terminal outcome: leave the final reading on `status_line` and hand
+        # the band back to the calm teach tokens.
+        play.explore_band = None
     return keep_polling
 
 
@@ -571,6 +588,14 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                 f"session ready — {result.classification}  ·  "
                 f"explore ×{_EXPLORE_MIN_SECTORS} available — press E"
             )
+            # NOTE (WO-PLAY-OFFER-VISIBLE-ON-LIVE, partial): the OFFER does
+            # NOT claim the hint band. Canon sanctions that claim only "when
+            # a taught run is live" (`mode-line-and-teach-controls.md:231`);
+            # an offer is not a live run, and claiming it here permanently
+            # displaces the A/R/T teach affordances -- measured, 4 pty pins
+            # in `test_cockpit_teachband_pty.py` go red. The offer therefore
+            # still rides `status_line` and is STILL INVISIBLE on a live
+            # session. That half of the defect is escalated, not fixed here.
     else:
         explore_offered = False
         play.status_line = f"ensure failed — {result.reason}: {result.detail}"
@@ -746,6 +771,7 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                 # composed from, so the run cannot start with a different
                 # number than the one the human just agreed to.
                 play.status_line = f"starting explore ×{_EXPLORE_MIN_SECTORS}…"
+                play.explore_band = f"explore ×{_EXPLORE_MIN_SECTORS} starting…"
                 play.draw()  # the start call blocks; show intent first
                 try:
                     explore = adapters.explore_start_for_profile(
@@ -761,9 +787,11 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                     # exception message is not a safe place to assume
                     # otherwise (`canon/doctrine/secrets-and-credentials.md`).
                     play.status_line = f"explore failed to start — {type(exc).__name__}"
+                    play.explore_band = None      # offer is spent; calm band returns
                 else:
                     if getattr(explore, "ok", False):
                         play.status_line = f"explore started — {_EXPLORE_MIN_SECTORS} sectors"
+                        play.explore_band = f"explore 0/{_EXPLORE_MIN_SECTORS}…"
                         explore_poll_active = True
                     else:
                         # Report the adapter's machine-readable reason rather
@@ -772,6 +800,7 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                         # to the logs for something the screen already knew.
                         reason = getattr(explore, "reason", None) or "unknown"
                         play.status_line = f"explore did not start — {reason}"
+                        play.explore_band = None
                 continue
             if action == "attach":
                 if attach_conn is None:

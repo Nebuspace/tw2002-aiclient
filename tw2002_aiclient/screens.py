@@ -807,6 +807,25 @@ class PlayShellScreen:
     # default somewhere a reader of the class body cannot see it.
     _arm_confirm: tuple[object, object] | None = None
 
+    # WO-PLAY-OFFER-VISIBLE-ON-LIVE: text that CLAIMS the hint band's slot.
+    #
+    # `None` -> the band shows the calm A/R/T teach tokens. A string -> that
+    # string is shown instead. Canon sanctions exactly this: "When a taught
+    # run is live, the band's slot is claimed instead by the AUTO-LOOP
+    # cycle-progress bar ... never both, there is only room for one"
+    # (`mode-line-and-teach-controls.md:229-232`).
+    #
+    # Why here and not the LOGS band, where the offer used to be written:
+    # `status_line` only renders when LOGS has no real tail, so on a live
+    # session the offer was written and never drawn (live prove,
+    # `audit/live-play-ladder-newchar-9795263-20260727T0430Z.md`). Moving it
+    # into the LOGS band was tried and measured: at the standard 40x160 frame
+    # that band is `h=3`, i.e. ONE inner row, so giving the offer a row would
+    # leave the transcript zero. The control strip is the surface canon
+    # already assigns to affordance chrome, and it is visible on every frame
+    # size the cockpit draws.
+    explore_band: str | None = None
+
     def __init__(
         self,
         stdscr: curses.window,
@@ -1721,7 +1740,14 @@ class PlayShellScreen:
                     # the teach repertoire, not a state readout, so there is
                     # no status to gate it on. It self-drops when the row is
                     # too narrow (see `_compose_segments`).
-                    teach_band=cockpit_teachband.compose_teach_band(unicode_ok=uok),
+                    # The claim wins when set; otherwise the calm teach
+                    # tokens. Never both -- canon: "there is only room for
+                    # one".
+                    teach_band=(
+                        self.explore_band
+                        if isinstance(self.explore_band, str) and self.explore_band
+                        else cockpit_teachband.compose_teach_band(unicode_ok=uok)
+                    ),
                 )
                 control_strip_segments = [
                     (str(text), self._control_strip_segment_attr(tone))
