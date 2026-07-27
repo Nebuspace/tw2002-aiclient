@@ -160,10 +160,22 @@ pre-reborn shape:
   live-sender count. Until the enum is migrated, a coverage reader must fold legacy `trainer` into `app`
   and must **not** count legacy `ai` rows toward the live denominator.
 
-- **No coverage-metrics computation exists in code yet.** There is no module that reads the ledger and
-  emits `app/(app+human)`, the escalation frequency, or the teaching-provenance count; this concept
-  specifies the metric the cockpit's auto-% meter and any retro summary should compute, over the
-  attribution the ledger already records. The counterpart session-retro tool (grouping a session's rows
+- **The computation exists; its input does not (PWO-072, 2026-07-27).**
+  `tw2002_aiclient/cockpit/covermeter.py` implements `app / (app + human)`, the escalation
+  complement, the honest-`?` rule and the no-live-`AI`-slice guarantee, and renders them as the
+  cockpit's `COV` chip. **But no ledger exists to read**: PWO-025 is PARTIAL — the control lock and
+  `VALID_SENDERS` are live, while `LedgerWriter` / the attach keystroke ledger remain deferred in
+  `session/daemon.py` — so nothing records the per-send `actor` rows this metric counts. The meter
+  therefore renders `COV ?` on every draw of the live product. That is this concept's own
+  "never invent" rule working as specified, not a stub: when the ledger lands, the counts arrive
+  through the composer's existing keyword arguments and the module needs no change. The
+  teaching-provenance count remains prescribed and unbuilt.
+
+  Note also that the legacy-actor mapping the bullet above prescribes (fold `trainer` → `app`,
+  exclude legacy `ai`) applies to the **archive's** ledger only. Tip's send choke point already
+  rejects both legacy values (`session/session.py` `VALID_SENDERS = ("app", "human")`, pinned by
+  `tests/test_actor_attribution.py`), so `covermeter.py` deliberately implements no mapping layer
+  for an enum the live tree cannot produce. The counterpart session-retro tool (grouping a session's rows
   to surface codification candidates) is likewise prescribed, not built — that mechanism is now homed in
   candidate-mining / the AI teacher, and this concept keeps only the *measurement* half of the old
   autonomy loop.

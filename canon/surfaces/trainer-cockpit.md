@@ -141,8 +141,23 @@ otherwise, so the cockpit carries continuous motion signals (N6/N7/N8):
 
 ## The coverage / auto-% meter
 
-A small footer gauge (`compose_autonomy_footer_box`, at the bottom of the left gutter so it never
-clips the HUD's PORT meters) answers "how much of the live driving is the app doing versus me?" The
+A compact `COV` readout on the control strip, placed in the chip run beside ARM and CONN, answers
+"how much of the live driving is the app doing versus me?" It sits there rather than in the HUD
+gutter for the reason the archive's own footer placement was chosen — so it never clips the HUD's
+PORT commodity meters — and it yields its columns to the liveness cluster under width pressure,
+dropping whole rather than truncating (a clipped `COV 75%` reads as `COV 7`, a readable wrong
+number rather than an unreadable token).
+
+> **Placement correction, 2026-07-27 — PROPOSED, awaiting ratify.** This paragraph previously
+> specified "a small footer gauge (`compose_autonomy_footer_box`, at the bottom of the left
+> gutter)", carried over from the archived `spectate_layout.py`. WO-P5-072 shipped the meter on the
+> control strip instead (hub ruling 2026-07-27: the WO's placement wins for that slice, and the
+> strip satisfies the PORT-non-clip constraint that motivated the gutter placement, since the strip
+> is not the HUD gutter). The archived footer-box function is **not** the reborn implementation —
+> `tw2002_aiclient/cockpit/covermeter.py` shares no code with it. Recorded here rather than silently
+> overwritten so the change is reviewable.
+
+The
 reborn meter is an **App-vs-Human live share**: of the keystrokes actually sent to the game this
 session, what fraction were the app's deterministic play versus the human's own hands on the
 keyboard. **"AI" is not a slice of this live meter** — the AI teacher never sends a live keystroke,
@@ -434,8 +449,9 @@ Concretely, a builder should aim for:
 | Product attach / detach | **LIVE** — Mode attach (Ctrl-A per ADR-002; tip historically bare `M`) · Ctrl-] detach · chip SPECTATE↔`MANUAL — YOU HAVE CONTROL` (PWO-056 · PWO-057 · tip `bba53d4`) |
 | App / Human dual chips (no AI-PILOT) | **LIVE** — `APP` XOR `MANUAL — YOU HAVE CONTROL` · strict gate · vocabulary AST (PWO-060 · tip `2ca3154`) |
 | App-hold → Human (Ctrl-A) | **LIVE** (PWO-061 KERNEL · `d4a8829` · test-only pins; 056 path migrating off printable `M`) — Human→App entry = **Ctrl-A** (ADR-002 / Batch 1b; CC `WO-P5-061-ENTRY`); full 061 **not CLOSED** |
-| Mode line teach A·R·T / STOP / arm / N5 / coverage | **NOT** — remaining Phase 5+ |
-| Coverage meter / chains library / formations | **NOT** on tip play shell (archive / later WOs) |
+| Mode line teach A·R·T / STOP / arm / N5 | **PARTIAL** — A·R·T band, STOP banner and arm-confirm LIVE (PWO-063…068); N5 operate-the-app cluster remaining (PWO-071). Coverage now has its own row below. |
+| Coverage meter | **PARTIAL** — `COV` chip LIVE on the control strip, App-vs-Human math + honest-`?` + no live AI slice (PWO-072 · `cockpit/covermeter.py`). Reads `COV ?` on every draw because **no ledger exists**: PWO-025 is PARTIAL (`LedgerWriter` deferred in `session/daemon.py`), so nothing supplies the counts. The gauge is wired; the number is not. |
+| Chains library / formations | **NOT** on tip play shell (archive / later WOs) |
 
 Citations below that name only `spectate_app.py` / `spectate_layout.py` are **port-source** until the
 reborn module is cited; prefer `tw2002_aiclient/cockpit/*` for chrome that has already landed.
@@ -450,7 +466,14 @@ reborn module is cited; prefer `tw2002_aiclient/cockpit/*` for chrome that has a
   (the teacher never sends live) — AI belongs on a separate teaching-provenance axis, not in the
   live meter. DOCS WIN — the meter math is recast in [coverage-metrics](/engine/coverage-metrics.md);
   this cell's `App/(App+AI)` formula and its `AI` live-denominator term are the recorded divergence.
-  **Not on tip play shell today** — recorded so the port does not revive it.
+  **CLOSED on tip (PWO-072, 2026-07-27).** `tw2002_aiclient/cockpit/covermeter.py` implements the
+  recast `app / (app + human)` with human *inside* the denominator and no `AI` term anywhere in the
+  formula or the rendered string; it shares no code with the archived module. Both halves are pinned
+  by mutation — reintroducing the archive formula or an `AI` slice turns
+  `tests/test_cockpit_covermeter.py` red, and the real-terminal
+  `tests/test_cockpit_covermeter_pty.py` asserts no `AI` token reaches the operator's screen. The
+  archived `compute_autonomy_ratio()` / `format_autonomy_counts()` remain the divergence *record*,
+  not a porting target.
 - **Mode badge may still carry an AI/auto-loop live position.** Archived `format_mode_badge()` /
   `_MODE_BADGES` render the control-strip mode from `control_lock`'s modes, which historically
   include `ai_pilot` / `auto_loop` alongside `human`. The reborn mode line is an **App/Human dual
