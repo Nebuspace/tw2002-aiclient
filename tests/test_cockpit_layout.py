@@ -76,7 +76,7 @@ def test_too_small_below_col_floor():
 
 
 def test_too_small_message_uses_the_times_glyph_not_ascii_x():
-    """Canon-cited literal (visual-language.md:208, trainer-cockpit.md:368):
+    """Canon-cited literal (visual-language.md:154, trainer-cockpit.md:368):
     ``Terminal too small (C×L) — need at least 60×20`` — the × glyph is a
     no-swap literal (same family as ·/—), never an ASCII "x" twin."""
     regions = frame_layout(19, 200)

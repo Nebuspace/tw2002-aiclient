@@ -12,7 +12,7 @@ import os
 import pty
 from pathlib import Path
 
-from tw2002_aiclient.session.terminal import TerminalScreen, init_locale
+from tw2002_aiclient.session.terminal import TerminalScreen
 
 from .fake_client import FakeClient
 from .pty_helpers import (
@@ -70,7 +70,6 @@ def test_pyte_grid_finds_painted_text():
 
 
 def test_tw2002_aiclient_terminal_feeds_cp437():
-    init_locale()
     screen = TerminalScreen(columns=80, lines=25)
     screen.feed(b"hello")
     assert "hello" in "".join(screen.raw_display())

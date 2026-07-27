@@ -126,9 +126,9 @@ def test_arming_is_still_confirm_gated():
 
 def test_panic_token_is_canon_literal_spelling():
     """`P panic` -- a SPACE, not `P)anic`. Canon's prose at
-    `mode-line-and-teach-controls.md:234` claims a uniform `KEY)verb` shape,
+    `mode-line-and-teach-controls.md:235` claims a uniform `KEY)verb` shape,
     but the band literal it prints is `P panic`, identically at `:136`,
-    `:219` and `visual-language.md:302`. Conflict reported to the hub;
+    `:220` and `visual-language.md:306`. Conflict reported to the hub;
     the thrice-repeated cross-file literal is what ships."""
     assert panic.PANIC_TOKEN == "P panic"
 

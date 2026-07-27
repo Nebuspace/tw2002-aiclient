@@ -1,6 +1,11 @@
-"""pyte-backed 80x25 terminal emulator + token-efficient cropped rendering."""
+"""pyte-backed 80x25 terminal emulator + token-efficient cropped rendering.
 
-import locale
+This module owns the **game-byte** path only: CP437 decode into pyte,
+cropped text, and RLE color maps. Live **chrome** glyphs (borders,
+spinner, heartbeat, ASCII fallback) live under ``cockpit.draw``
+(``unicode_ok`` / ``DOUBLE_*`` / ``THIN_*``) and ``cockpit.liveness`` —
+not here. See ``canon/surfaces/visual-language.md``.
+"""
 
 import pyte
 
@@ -96,66 +101,3 @@ class TerminalScreen:
     def cursor(self):
         c = self.screen.cursor
         return {"x": c.x, "y": c.y}
-
-
-def init_locale():
-    """Call once at startup, BEFORE curses.wrapper() -- ncurses needs the
-    process locale set to render wide/non-ASCII glyphs correctly, and
-    that has to happen before initscr(). Returns True when the resulting
-    locale's preferred encoding is UTF-8 (safe to draw the Unicode
-    chrome glyphs in glyph_set() below), False otherwise -- callers fall
-    back to the plain-ASCII glyph set in that case. This is a one-time
-    capability probe for OUR OWN chrome output, distinct from the CP437
-    decode above (TerminalScreen.feed), which is about correctly reading
-    the DOS door's game-art bytes regardless of local terminal locale."""
-    locale.setlocale(locale.LC_ALL, "")
-    encoding = locale.getpreferredencoding().lower()
-    return "utf-8" in encoding or "utf8" in encoding
-
-
-# Two parallel glyph tables so every chrome element (viewport border, HUD
-# chrome, liveness spinner/heartbeat, freshness/delta marks) degrades
-# together under a single unicode_ok flag from init_locale() -- never a
-# per-glyph guess. Weight hierarchy: double-line on the game VIEWPORT
-# (heavier border = focus, BBS/DOS-door echo), thin rounded line on HUD
-# chrome.
-GLYPHS_UNICODE = {
-    "viewport_tl": "╔", "viewport_tr": "╗",
-    "viewport_bl": "╚", "viewport_br": "╝",
-    "viewport_h": "═", "viewport_v": "║",
-    "hud_tl": "╭", "hud_tr": "╮",
-    "hud_bl": "╰", "hud_br": "╯",
-    "hud_h": "─", "hud_v": "│",
-    "spinner": ("⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"),
-    "heartbeat": ("●", "○"),  # filled / hollow -- a slow breathing pulse
-    "freshness_mark": "✦",
-    "delta_up": "▲",
-    "delta_down": "▼",
-    "bar_full": "█",   # %-meters, turns-left fuel gauge
-    "bar_empty": "░",
-    "sparkline": "▁▂▃▄▅▆▇█",  # credits sparkline ramp, low->high
-}
-GLYPHS_ASCII = {
-    "viewport_tl": "+", "viewport_tr": "+",
-    "viewport_bl": "+", "viewport_br": "+",
-    "viewport_h": "=", "viewport_v": "|",
-    "hud_tl": "+", "hud_tr": "+",
-    "hud_bl": "+", "hud_br": "+",
-    "hud_h": "-", "hud_v": "|",
-    "spinner": ("|", "/", "-", "\\"),
-    "heartbeat": ("*", "."),
-    "freshness_mark": "*",
-    "delta_up": "^",
-    "delta_down": "v",
-    "bar_full": "#",   # ASCII meter fallback "[###..]"
-    "bar_empty": ".",
-    "sparkline": ".-=#",
-}
-
-
-def glyph_set(unicode_ok: bool) -> dict:
-    """Select the chrome glyph table -- the single switch every drawing
-    helper keys off, so a non-UTF-8 terminal degrades consistently
-    rather than per-element (mirrors this module's existing CP437-vs-
-    mojibake discipline for game art, one level up at the chrome layer)."""
-    return GLYPHS_UNICODE if unicode_ok else GLYPHS_ASCII

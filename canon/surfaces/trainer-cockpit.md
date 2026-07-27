@@ -271,8 +271,8 @@ palette is monochrome-plus — one table, seven meanings, one selection attribut
 
 ## Box-drawing, borders & titles — a two-weight hierarchy
 
-The frame uses a deliberate **two-weight** border system (`terminal.py`, `GLYPHS_UNICODE` /
-`GLYPHS_ASCII`, switched by a single `unicode_ok` flag so every glyph has an ASCII twin):
+The frame uses a deliberate **two-weight** border system (`cockpit/draw.py` `DOUBLE_*` /
+`THIN_*`, switched by a single `unicode_ok` flag so every glyph has an ASCII twin):
 
 | element | Unicode | ASCII |
 |---|---|---|
@@ -380,8 +380,9 @@ survive. Degradation is designed to lose *chrome and redundancy*, never *informa
 
 ## Glyph / status-marker vocabulary
 
-Two parallel glyph tables switch on one `unicode_ok` flag (`glyph_set()`), so a non-UTF-8 terminal
-loses fidelity but never meaning. The marker set the cockpit uses:
+Two parallel glyph families switch on one `unicode_ok` flag (`cockpit.draw.unicode_ok` /
+`screens._glyph_set`), so a non-UTF-8 / ASCII-forced terminal loses fidelity but never meaning.
+The marker set the cockpit uses:
 
 - **GOALS / FOCUS status:** `✓` met / known · `·` in progress / partial · `?` unknown · `⊘` blocked
   (an unmet prerequisite; also a gated FOCUS/autopilot candidate) — `compose_primary_goals_lines`.
@@ -472,8 +473,9 @@ reborn module is cited; prefer `tw2002_aiclient/cockpit/*` for chrome that has a
   `spectate_layout.py` (`status_semantic` / `gauge_semantic`, `_MODE_BADGES`, `_HUD_FIELD_SPECS`,
   `compose_hud_cells`, `HUD_GUTTER_W` / `PRIORITIES_W`, `FRESHNESS_STALE_S`, `format_freshness`,
   `render_sparkline` / `render_bar_meter`, `compose_intervention_strip`, `frame_layout`'s
-  `needs_attention` height claim), `terminal.py` (`GLYPHS_UNICODE` / `GLYPHS_ASCII` two-weight border
-  set, `color_map()`), `menu_map_view.py` (`here off-map` / `here ★`), and the polish intent in
+  `needs_attention` height claim), `cockpit/draw.py` (two-weight border set + `unicode_ok`),
+  `session/terminal.py` (`color_map()` game-byte RLE only), `menu_map_view.py` (`here off-map` /
+  `here ★`), and the polish intent in
   `TUI-POLISH-PLAN.md` (BBS/DOS-door border echo, the anti-gold-plating cut list, dark-only theme).
   Shared vocabulary forward-referenced to the staged `visual-language.md` concept (operator-gated).
 - **Cold-join HUD seed** — `hud_seed.py` (`seed_hud_after_join`, the single `I` ship-info probe,

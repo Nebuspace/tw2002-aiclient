@@ -199,10 +199,10 @@ the host — rather than let its 3-col field bury it.
 
 `[ASPIRATIONAL]` The consolidated picker renders these same columns inside a **thin-rounded titled
 box** (chrome weight, cyan) — e.g. a `" PLAYERS "` box and a `" SERVERS "` box, titles at col 2 —
-per the two-weight border hierarchy (terminal.py:122-153; see the shared visual language). There is
-**no double-line viewport** on this surface: the double-line weight is reserved for a live CP437 game
-screen, and the launcher has none — it opens no socket. The launcher is all thin-rounded instrument
-chrome, no game frame.
+per the two-weight border hierarchy (`cockpit/draw.py` `DOUBLE_*` / `THIN_*`; see the shared visual
+language). There is **no double-line viewport** on this surface: the double-line weight is reserved
+for a live CP437 game screen, and the launcher has none — it opens no socket. The launcher is all
+thin-rounded instrument chrome, no game frame.
 
 ## Color semantics for the launcher
 

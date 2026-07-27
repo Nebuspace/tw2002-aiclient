@@ -7,7 +7,7 @@ Canon (`canon/surfaces/mode-line-and-teach-controls.md`) surfaces the three
 teach moves in TWO registers, and they are deliberately spelled
 differently:
 
-- **The standing hint band** (`:136`, and `visual-language.md:302`) --
+- **The standing hint band** (`:136`, and `visual-language.md:306`) --
   `^A)ode  A)nalyze  R)ecord  T)rigger  L)chains  P panic`. Calm-state
   chrome, always present, right-aligned on the control strip.
 - **The STOP banner's `teach:` line** (`:146`, `:271`) --
@@ -62,7 +62,7 @@ badge treatment is canon's "selected/active" signal (`:179-181`) and this
 band is neither.
 
 `unicode_ok` is accepted for API uniformity with every sibling composer
-in this package but has no effect: `visual-language.md:152` lists
+in this package but has no effect: `visual-language.md:156` lists
 `KEY)verb` -> `KEY)verb` **(no swap)**, so the tokens are pure ASCII with
 no Unicode twin to trade away on an 80-col non-UTF-8 terminal.
 
@@ -80,7 +80,7 @@ from __future__ import annotations
 from .panic import PANIC_TOKEN
 
 # Canon's standing-band spelling of the teach triad
-# (`mode-line-and-teach-controls.md:136`, `visual-language.md:302`).
+# (`mode-line-and-teach-controls.md:136`, `visual-language.md:306`).
 #
 # `T)rigger` -- NOT the banner's `T)assign`. See this module's docstring;
 # the two registers are canon-distinct and `stopbanner.TEACH_LINE` owns
@@ -100,7 +100,7 @@ from .panic import PANIC_TOKEN
 TEACH_TOKENS: tuple[str, ...] = ("A)nalyze", "R)ecord", "T)rigger", PANIC_TOKEN)
 
 # Two spaces between tokens -- canon renders the band that way in every
-# example it gives (`:136`, `:219`, `visual-language.md:302`), and it is
+# example it gives (`:136`, `:220`, `visual-language.md:306`), and it is
 # the same gap `arm.ARM_GAP` uses between chips.
 TOKEN_GAP = "  "
 

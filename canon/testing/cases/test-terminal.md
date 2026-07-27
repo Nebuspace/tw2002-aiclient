@@ -26,9 +26,3 @@ _pyte render + crop correctness tests — no network involved._
 | `test_color_map_splits_runs_at_attribute_changes` | Color map splits runs at attribute changes. |
 | `test_color_map_captures_bold_and_background` | Color map captures bold and background. |
 | `test_color_map_aligned_with_render_cropped_bounding_box` | Color map aligned with render cropped bounding box. |
-| `test_glyph_set_selects_unicode_or_ascii_table` | Glyph set selects unicode or ascii table. |
-| `test_glyph_tables_expose_the_same_keys` | Glyph tables expose the same keys. |
-| `test_glyph_tables_have_a_distinct_viewport_and_hud_border_weight` | Glyph tables have a distinct viewport and hud border weight. |
-| `test_glyph_tables_spinner_and_heartbeat_are_nonempty_sequences` | Glyph tables spinner and heartbeat are nonempty sequences. |
-| `test_ascii_glyph_table_is_pure_ascii` | Ascii glyph table is pure ascii. |
-| `test_init_locale_returns_a_bool_without_raising` | Init locale returns a bool without raising. |
