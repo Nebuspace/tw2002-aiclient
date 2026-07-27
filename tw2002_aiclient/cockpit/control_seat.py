@@ -458,6 +458,7 @@ def _compose_segments(
     width: object,
     arm_chip: object = None,
     conn_chip: object = None,
+    coverage_meter: object = None,
     status_offer: object = None,
     teach_band: object = None,
 ) -> list[tuple[str, str | None]]:
@@ -547,6 +548,31 @@ def _compose_segments(
                 left.append((separator, None))
             left.append((conn_text, conn_tone))
             used += len(separator) + len(conn_text)
+    # WO-P5-072: the coverage meter — App-vs-Human live share. Placed right
+    # of CONN, in the chip run rather than out by the teach band, because it
+    # is *data* like ARM/CONN and not affordance chrome; it carries tone
+    # `None` (plain) for the same reason liveness does.
+    #
+    # All-or-nothing like every chip beside it, but for a sharper reason:
+    # `covermeter` already refuses to truncate itself (a clipped `COV 75%`
+    # reads as `COV 7` — seven percent — a readable wrong number rather than
+    # an unreadable token). The width test here is therefore belt-and-braces
+    # against the composer's own guard, not the only thing standing between
+    # the operator and a misreported share.
+    #
+    # Deliberately NOT given priority over liveness: `budget` already
+    # reserves the liveness cluster's full space above, so the meter can
+    # only ever occupy columns liveness does not want. Canon's N5 hazard
+    # ("do not steal the liveness slot under pressure") is satisfied
+    # structurally here, not by a rule someone has to remember.
+    meter_text, meter_tone = _safe_arm_chip(coverage_meter)
+    if meter_text:
+        separator = _ARM_SEPARATOR if used else ""
+        if used + len(separator) + len(meter_text) <= budget:
+            if separator:
+                left.append((separator, None))
+            left.append((meter_text, meter_tone))
+            used += len(separator) + len(meter_text)
 
     band = _safe_teach_band(teach_band)
     gap_total = w - len(text) - used
@@ -611,6 +637,7 @@ def compose_control_strip_line(
     attached: object = False,
     arm_chip: object = None,
     conn_chip: object = None,
+    coverage_meter: object = None,
     status_offer: object = None,
     teach_band: object = None,
 ) -> str:
@@ -678,6 +705,7 @@ def compose_control_strip_line(
     segments = _compose_segments(
         spectating=spectating, attached=attached, liveness_text=liveness_text,
         width=width, arm_chip=arm_chip, conn_chip=conn_chip,
+        coverage_meter=coverage_meter,
         status_offer=status_offer, teach_band=teach_band,
     )
     return "".join(text for text, _tone in segments)
@@ -692,6 +720,7 @@ def compose_control_strip_segments(
     unicode_ok: object = True,
     arm_chip: object = None,
     conn_chip: object = None,
+    coverage_meter: object = None,
     status_offer: object = None,
     teach_band: object = None,
 ) -> list[tuple[str, str | None]]:
@@ -728,5 +757,6 @@ def compose_control_strip_segments(
     return _compose_segments(
         spectating=spectating, attached=attached, liveness_text=liveness_text,
         width=width, arm_chip=arm_chip, conn_chip=conn_chip,
+        coverage_meter=coverage_meter,
         status_offer=status_offer, teach_band=teach_band,
     )
