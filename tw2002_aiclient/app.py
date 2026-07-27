@@ -22,7 +22,6 @@ from tw2002_aiclient.screens import (
 )
 from tw2002_aiclient.session import cli as session_cli
 from tw2002_aiclient.session import credentials, env, player_bank
-from tw2002_aiclient.session.classify import is_probable_secret_prompt as _is_probable_secret_prompt
 from tw2002_aiclient.session.attach_client import AttachInputConn
 from tw2002_aiclient.watchfeed import WatchFeed
 
@@ -759,7 +758,7 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                     play.record_session.add_step(
                         _recorded_key,
                         (result.raw or {}).get("screen", []) if result.ok else [],
-                        is_secret=_is_probable_secret_prompt(_prompt),
+                        is_secret=_record_macro.is_secret_prompt_line(_prompt),
                     )
                 if not sent_ok:
                     # The connection broke mid-session (daemon gone,

@@ -392,6 +392,18 @@ def test_no_uninventoried_classify_send_module():
     )
 
 
+def test_app_does_not_import_session_classify():
+    """Pin: app.py routes secret-prompt detection through
+    ``_record_macro.is_secret_prompt_line`` and must not import
+    ``session.classify`` directly — which would place it in the
+    classify→send audit perimeter (WO-P5-069)."""
+    app_src = (_PKG_ROOT / "app.py").read_text(encoding="utf-8")
+    assert "session.classify" not in app_src, (
+        "app.py must not import session.classify directly; "
+        "use _record_macro.is_secret_prompt_line() instead"
+    )
+
+
 def test_cockpit_arm_is_not_a_classify_send_consumer():
     """C-06 named taught-rule / cockpit arm. Arm is presentation-only:
     no classify import, no send. Fire path is consumer #2 (player)."""
