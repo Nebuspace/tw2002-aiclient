@@ -22,14 +22,22 @@ Line numbers are a decaying pointer. One ordinary canon edit broke most of them 
 | Several landed on **blank lines** | `panic.py` → `mode-line…:234`, three sites → `visual-language.md:302` |
 | One landed on the **wrong semantic row** | `armconfirm.py:71` cited the `danger` tone row, would have read `warn` |
 | Survivors survived by **luck** | 7 unaffected only because edits happened *below* them |
-| Already broken before anyone looked | 3 (`app.py` → `spectate-and-attach.md:91/:100`, blank on main) |
-| Needed a human to interpret, not a number | 1 (`layout.py:183`, `×` glyph row) |
+| Needed a human to interpret, not a number | 1 (`layout.py:183`, `×` glyph row — genuinely blank, fixed in #109 as `:154`) |
 
 **Nothing failed in any of those cases.** A comment cannot fail, so the entire class is
 invisible to CI — the same reason #98's stale capability claims survived a green suite.
 
-Current census on `3854e70`: **46 line-numbered citations across 15 product files**, of which
-**3 already resolve to blank lines**.
+Current census on `3854e70`: **47 line-numbered citations across 15 product files**, and
+**all 47 currently resolve to real text** — see the correction note below.
+
+> **Correction (2026-07-27).** An earlier version of this WO claimed 3 citations
+> (`app.py` → `spectate-and-attach.md:91`/`:100`) were already broken. **That was wrong.**
+> Those are *range* citations (`:91-96`, `:100-102`) whose first line is ordinary markdown
+> spacing; the ranges carry exactly the text the comments claim. The error was in the
+> checking script, which asked "is line N blank?" when the claim was "does the cited range
+> contain the claimed text" — a check narrower than its claim, which is the very defect this
+> WO exists to make impossible. Recorded rather than silently edited, because the next
+> person writing a citation checker will reach for the same shortcut.
 
 ## Scope
 
@@ -40,10 +48,10 @@ Current census on `3854e70`: **46 line-numbered citations across 15 product file
 ## Constraints
 
 - **No product behaviour change.** Comments and docstrings only; the suite count must not move.
-- **Do not auto-convert the 3 blanks.** `app.py:378`/`:704` → `spectate-and-attach.md:100` and
-  `app.py:734` → `:91` point at blank lines *on main today*. There is no text to relocate —
-  read each comment and retarget honestly, or bank a follow-on if the intent is unclear.
-  Guessing a plausible heading here would re-create the defect in a form that looks fixed.
+- **Any checker written for this WO must be range-aware.** Citations come in both
+  `file.md:123` and `file.md:123-456` forms. A checker that inspects only the first line of a
+  range reports false breakage (it did — see the correction above). Ask whether the cited
+  *span* contains the claimed text.
 - Where a citation quotes canon text, keep the quote — it is what makes the citation
   checkable at all, and it is how every break in this WO's evidence table was detected.
 - Do not edit `canon/` in this WO. If a cited heading turns out to be wrong or missing,
@@ -51,11 +59,10 @@ Current census on `3854e70`: **46 line-numbered citations across 15 product file
 
 ## Accept
 
-1. No `*.md:<digits>` citation remains in `tw2002_aiclient/**/*.py`.
+1. No `*.md:<digits>` citation remains in `tw2002_aiclient/**/*.py` (single-line or range).
 2. Every converted citation names a heading that **exists** in the cited canon file.
-3. The 3 pre-existing blanks are resolved by intent, or explicitly banked with the reason.
-4. Suite green, test count unchanged (comments-only change).
-5. PR + STATUS.
+3. Suite green, test count unchanged (comments-only change).
+4. PR + STATUS.
 
 ## Proof
 
