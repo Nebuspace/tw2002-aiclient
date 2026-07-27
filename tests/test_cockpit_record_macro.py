@@ -521,3 +521,77 @@ def test_play_screen_has_record_session_attribute() -> None:
     play = _make_play()
     assert hasattr(play, "record_session")
     assert isinstance(play.record_session, RecordSession)
+
+
+# ---------------------------------------------------------------------------
+# Accept #2 — production capture-path integration pins
+#
+# These tests exercise the exact pattern app.py uses in the attach
+# send_key → add_step chain: is_probable_secret_prompt on the current prompt
+# determines is_secret; the result_rows are the current screen snapshot.
+# Proves the capture path produces a correct artifact without requiring a
+# live curses environment.
+# ---------------------------------------------------------------------------
+
+def test_capture_path_plain_key_lands_in_artifact(tmp_path: Path) -> None:
+    """Non-secret key captured via the app.py pattern → artifact contains it."""
+    from tw2002_aiclient.session.classify import is_probable_secret_prompt
+
+    s = RecordSession()
+    s.start("ore-run", _ANCHOR_ROWS)
+    # Simulate the app.py pattern: command prompt → not secret
+    prompt = "Command [TL=00:00:00]:[158] (?=Help)? :"
+    s.add_step("P", _PORT_ROWS, is_secret=is_probable_secret_prompt(prompt))
+    result = s.save(skills_dir=str(tmp_path))
+
+    assert result is not None, "expected a SaveResult, got None"
+    doc = json.loads(result.path.read_text(encoding="utf-8"))
+    assert doc["steps"][0]["input"] == "P", (
+        f"expected plain 'P', got {doc['steps'][0]['input']!r}"
+    )
+
+
+def test_capture_path_secret_key_is_redacted_in_artifact(tmp_path: Path) -> None:
+    """Key sent while a password prompt is active → REDACTED_SENTINEL in artifact."""
+    from tw2002_aiclient.session.classify import is_probable_secret_prompt
+
+    s = RecordSession()
+    s.start("login-run", _ANCHOR_ROWS)
+    # Simulate the app.py pattern: password prompt → is_secret=True
+    password_prompt = "Enter your Password:"
+    s.add_step("hunter2", _ANCHOR_ROWS2, is_secret=is_probable_secret_prompt(password_prompt))
+    result = s.save(skills_dir=str(tmp_path))
+
+    assert result is not None, "expected a SaveResult, got None"
+    doc = json.loads(result.path.read_text(encoding="utf-8"))
+    assert doc["steps"][0]["input"] == REDACTED_SENTINEL, (
+        f"expected REDACTED_SENTINEL, got {doc['steps'][0]['input']!r}"
+    )
+    assert "hunter2" not in json.dumps(doc), "plaintext password leaked into artifact"
+
+
+def test_capture_path_is_probable_secret_prompt_detects_password(tmp_path: Path) -> None:
+    """is_probable_secret_prompt correctly classifies prompts used in the capture path."""
+    from tw2002_aiclient.session.classify import is_probable_secret_prompt
+
+    # Secret prompts (must be True)
+    for secret_prompt in (
+        "Enter your Password:",
+        "Enter Password:",
+        "password: ",
+        "Please enter PIN:",
+        "Passcode: ",
+    ):
+        assert is_probable_secret_prompt(secret_prompt), (
+            f"Expected secret prompt to be detected: {secret_prompt!r}"
+        )
+
+    # Non-secret prompts (must be False — key should NOT be redacted)
+    for plain_prompt in (
+        "Command [TL=00:00:00]:[158] (?=Help)? :",
+        "<Trade with this port> (Y/N)? ",
+        "",
+    ):
+        assert not is_probable_secret_prompt(plain_prompt), (
+            f"Expected non-secret prompt, got True for: {plain_prompt!r}"
+        )

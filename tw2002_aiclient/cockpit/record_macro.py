@@ -12,13 +12,12 @@ Canon (``canon/surfaces/mode-line-and-teach-controls.md`` §R ~63-65):
     demonstration as a replayable taught sequence.  The captured macro is
     the ``do`` a rule will later play.
 
-This module owns the SCAFFOLD half — the in-memory recording session that
-accumulates (keystroke, screen) pairs and flushes them to a
+This module owns the in-memory recording session that accumulates
+(keystroke, screen) pairs and flushes them to a
 :class:`~tw2002_aiclient.loops.recorder.LoopRecorder` document.  The
 live-attach instrumentation (feeding raw human keystrokes into this session
-as they happen) is the follow-on work ``loops/recorder.py``'s own docstring
-names: "Wiring a live ``tw attach`` session directly into this recorder …
-is exactly 'the daemon' this WO's Scope excludes."
+as they happen) is wired in ``app.py``'s attach send path: each successful
+``send_key`` call appends a step here while a session is active.
 
 # What this is NOT
 
