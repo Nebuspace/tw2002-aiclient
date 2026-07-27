@@ -1,6 +1,6 @@
 # WO-CANON-HEADING-NORM — specify heading-citation checker normalisation
 
-**Status:** OPEN · READY  
+**Status:** DONE — amendment landed in `WO-CANON-HEADING-CITATIONS.md` §"The match rule"  
 **Posted:** 2026-07-27T19:47:00Z · hub (from CC PROCESS-NOTE after #113)  
 **Seat:** `impl-claudecode-aiclient` (HOLD-capacity · docs-only · authored the parent WO)  
 **Depends:** `main` ≥ `b2e586d` (#113 heading conversion DONE)  
@@ -39,3 +39,20 @@ re-sweep).
 ## Proof
 
 Docs-only · suite n/a or unchanged · `gh pr view` state MERGED before any Accept ACK.
+
+## Outcome — one rule added beyond the three specified
+
+The three rules above all assume the comparison is **equality**. Measured against the tree,
+equality is the wrong shape: **6 of 27** citations on a clean `main` deliberately cite the
+stable *head* of a long heading (`§"Structural rails"` → `# Structural rails (L4) —
+turn-budget, …`), so an equality checker reports six failures where nothing is wrong.
+
+So the landed amendment specifies **match shape as well as normalisation** — equality *or* a
+prefix ending at a word boundary (next char whitespace or `(`). Flagged rather than folded in
+silently, because it exceeds what this WO asked for.
+
+The three shapes were run over `b2e586d` and `b2e586d^`; only *prefix-ok + dashes-literal* is
+both silent on the clean tree (0/27) and loud on the one known defect (1/9). Table is in the
+parent WO.
+
+No product cites were changed — the tree is left exactly as #113 left it, per Scope.
