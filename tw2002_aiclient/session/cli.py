@@ -810,6 +810,35 @@ def cmd_record(args):
     return 0
 
 
+def cmd_explore_start(args):
+    """WO-EXPLORE-CLI-INVOKE: start sector explorer for a world."""
+    run_dir = _resolve_run_dir(args.run_dir)
+    payload: dict = {"world_id": args.world_id}
+    if args.min_sectors is not None:
+        payload["min_sectors"] = args.min_sectors
+    if args.turn_budget is not None:
+        payload["turn_budget"] = args.turn_budget
+    resp = send_request("explore_start", payload, run_dir=run_dir)
+    print_response(resp, args)
+    return 0 if resp.get("ok") else 1
+
+
+def cmd_explore_stop(args):
+    """WO-EXPLORE-CLI-INVOKE: stop the running sector explorer."""
+    run_dir = _resolve_run_dir(args.run_dir)
+    resp = send_request("explore_stop", {}, run_dir=run_dir)
+    print_response(resp, args)
+    return 0 if resp.get("ok") else 1
+
+
+def cmd_explore_status(args):
+    """WO-EXPLORE-CLI-INVOKE: query sector explorer status."""
+    run_dir = _resolve_run_dir(args.run_dir)
+    resp = send_request("explore_status", {}, run_dir=run_dir)
+    print_response(resp, args)
+    return 0 if resp.get("ok") else 1
+
+
 def _arm_lossless_stdin():
     """Make ``sys.stdin`` park an undecodable byte as a PEP 383 surrogate
     instead of raising, and report whether stdin is now lossless.
@@ -1414,6 +1443,39 @@ def build_parser() -> argparse.ArgumentParser:
     )
     sp.add_argument("--json", action="store_true", help="machine-parseable JSON output")
     sp.set_defaults(func=cmd_record)
+
+    # --- explore sub-group (WO-EXPLORE-CLI-INVOKE) ---
+    sp_ex = sub.add_parser(
+        "explore",
+        help="sector exploration: start|stop|status (routes to daemon explore_* verbs)",
+    )
+    ex_sub = sp_ex.add_subparsers(dest="explore_verb")
+
+    sp_ex.set_defaults(func=lambda _: (sp_ex.print_help() or 0), run_dir=None, json=False)
+
+    sp = ex_sub.add_parser("start", help="start sector explorer for a world")
+    sp.add_argument("--world-id", required=True, dest="world_id", metavar="SLUG",
+                    help="world_id slug (state/world/<slug>/)")
+    sp.add_argument("--min-sectors", type=int, default=None, dest="min_sectors",
+                    help="minimum distinct sectors to visit (default daemon: 5)")
+    sp.add_argument("--turn-budget", type=int, default=None, dest="turn_budget",
+                    help="maximum turns to spend (default daemon: 50)")
+    sp.add_argument("--run-dir", default=None, metavar="PATH", dest="run_dir",
+                    help="daemon run directory override")
+    sp.add_argument("--json", action="store_true", help="machine-parseable JSON output")
+    sp.set_defaults(func=cmd_explore_start)
+
+    sp = ex_sub.add_parser("stop", help="stop the running sector explorer")
+    sp.add_argument("--run-dir", default=None, metavar="PATH", dest="run_dir",
+                    help="daemon run directory override")
+    sp.add_argument("--json", action="store_true", help="machine-parseable JSON output")
+    sp.set_defaults(func=cmd_explore_stop)
+
+    sp = ex_sub.add_parser("status", help="query sector explorer status")
+    sp.add_argument("--run-dir", default=None, metavar="PATH", dest="run_dir",
+                    help="daemon run directory override")
+    sp.add_argument("--json", action="store_true", help="machine-parseable JSON output")
+    sp.set_defaults(func=cmd_explore_status)
 
     return parser
 
