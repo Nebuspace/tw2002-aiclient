@@ -2,7 +2,7 @@
 
 import pytest
 
-from twclient import world_identity
+from tw2002_aiclient import world_identity
 
 
 class _FakeProfile:
