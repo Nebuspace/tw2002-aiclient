@@ -1,0 +1,21 @@
+                                    █ █                █   █
+¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬█        █¬¬¬¬¬¬¬█ ██ █¬¬¬¬¬█         █ █¬█  █¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬
+¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬█ █¬¬¬¬█ █¬¬¬¬¬¬¬¬¬█ █¬¬¬¬¬¬█ █¬¬¬¬█ █ █¬¬█ █¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬
+¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬█    █¬¬¬█ █¬¬¬█ █ ██ █¬¬¬¬¬¬█ █¬¬¬█ ██  █¬¬█  █¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬
+¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬█ █¬¬¬¬¬█ █¬¬¬█ █ ██ █¬¬¬█ ██  █¬█ █¬¬█ █¬¬¬█ █¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬
+¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬█ █¬█ █ █  █ █  █ ██  █¬¬█  ██   █¬¬¬¬█ █¬¬¬█ █¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬
+           twgs.█       █ █     ██ █        █ █ █  █ █ █ █  █ █.org
+                           █   █ █ █          █  █ █ ██  █ █ █
+                         █   ██ █             █      ██ █ █ █
+                         █ █   █ █                   █     █
+                        █  █    █ █        [ SysOp/GameOp: sysop@example.org ]
+───────────────────────────────────────────────────────────────────────────────
+ [A] Alpha Quadrant Invasion -Sectors:10000 Turns:1000 Time:180m MBBS  Rev:35
+ [B] Alpha Quadrant Invasion -Sectors:20000 Turns:3000 Time:360m GOLD  Rev:35
+ [C] Alpha Quadrant Invasion -Sectors:30000 Turns:Unli Time:420m GOLD  Rev:35
+ [D] Default Stock Game      -Sectors:1000  Turns:250  Time:60m
+ [E] Enhanced Stock Game     -Sectors:5000  Turns:750  Time:120m MBBS
+ [X] Alpha Quadrant Invasion -Sectors:30000 Turns:Unli Time:Unli MBBS  Rev:36
+  Z  Borg Assimilation       -Sectors:30000 Turns:Unli Time:Unli MBBS
+──────────────────────────────────────────────[ http://www.exiled.org/twgs ]───
+[ Exiled TW2002 ]:[A][B][C][D][E][X][Z][#]:Timed out...
