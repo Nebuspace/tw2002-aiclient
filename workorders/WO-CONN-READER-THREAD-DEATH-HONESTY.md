@@ -1,6 +1,6 @@
 # WO-CONN-READER-THREAD-DEATH-HONESTY
 
-**Status:** READY  
+**Status:** DONE · PR #65 · tip `a40ffa1` (hub stamped 2026-07-27 — already on main; phantom HANDOFF #103 closed)
 **Posted:** 2026-07-27 · from `audit/session-iac-audit-20260727.md` I-02  
 **Seat:** impl-claudecode-aiclient (Fable OK)  
 **Depends:** `WO-AUDIT-SESSION-IAC` DONE (`0aa8aa0`)
