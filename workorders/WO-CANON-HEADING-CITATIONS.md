@@ -41,8 +41,9 @@ Current census on `3854e70`: **47 line-numbered citations across 15 product file
 
 ## Scope
 
-- Convert `*.md:<line>` citations in `tw2002_aiclient/**/*.py` to heading form.
-- Fix the 3 pre-existing broken citations by reading what they *meant* (see Constraints).
+- Convert `*.md:<line>` and `*.md:<line>-<line>` citations in `tw2002_aiclient/**/*.py`
+  to heading form. All 47 resolve to real text today, so every one is a mechanical
+  conversion — no judgement calls, no residuals to bank.
 - Optional, if cheap: a check that every cited heading exists in the cited file.
 
 ## Constraints
