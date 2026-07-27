@@ -1,6 +1,6 @@
 # WO-EXPLORE-CLI-INVOKE
 
-**Status:** DONE — PR #59 · SHA b072a1e  
+**Status:** DONE — PR #59 · SHA faf682a  
 **Posted:** 2026-07-27 · Max try-path — M4 must be operator-reachable  
 **Seat:** impl-aiclient-cursor (volume · well-spec'd CLI)  
 **Depends:** `WO-EXPLORE-SECTOR-FRONTIER` DONE (`6ea004b`) — `ExploreRunner` + protocol already on `main`
