@@ -1175,19 +1175,43 @@ def test_the_run_report_carries_no_screen_text_and_no_keystrokes(tmp_path):
     assert "Trade with this port" not in wire
 
 
-def test_the_pause_and_resume_verbs_are_absent_rather_than_stubbed():
-    """Canon lists ``autoloop {start,stop,pause,resume}``; pause/resume are
-    controls on a REPEATING loop and this slice plays one pass. An honest
-    ``unknown_verb`` beats a verb that accepts a pause it cannot perform
-    -- and beats one that silently completes the run instead."""
+def test_the_word_resume_is_still_refused_after_the_rename():
+    """Hub ruling (1+3): the verb is `autoloop_relaunch`, and `resume` stays
+    an `unknown_verb` ON PURPOSE.
+
+    This is the load-bearing half of the rename. If `autoloop_resume` were
+    aliased to the relaunch for convenience, a caller reaching for the word
+    that promises continuation would silently get a replay-from-start that
+    re-spends turns — which is the entire defect the rename exists to fix.
+    A refusal sends them to read what the other verb actually does.
+    """
+    session = WireSession([ANCHOR_158[0]])
+    server = Server(session, ControlLock(), None)
+    assert protocol.dispatch(session, "autoloop_resume", {}, server) == {
+        "ok": False,
+        "error": "unknown_verb:autoloop_resume",
+    }
+
+
+def test_relaunch_is_a_real_verb_and_refuses_honestly_with_no_player():
+    session = WireSession([ANCHOR_158[0]])
+    server = Server(session, ControlLock(), None)
+    result = protocol.dispatch(session, "autoloop_relaunch", {}, server)
+    assert result == {"ok": False, "error": "autoloop_unavailable"}
+    assert "unknown_verb" not in str(result)
+
+
+def test_pause_is_a_real_verb_now_not_an_unknown_one():
+    """The half that IS unambiguous: pause stands the run down and hands
+    the keyboard back, which is canon-true under every option still open on
+    the resume question. With no player it refuses honestly rather than
+    claiming a pause it could not perform."""
     session = WireSession([ANCHOR_158[0]])
     server = Server(session, ControlLock(), None)
 
-    for verb in ("autoloop_pause", "autoloop_resume"):
-        assert protocol.dispatch(session, verb, {}, server) == {
-            "ok": False,
-            "error": f"unknown_verb:{verb}",
-        }
+    result = protocol.dispatch(session, "autoloop_pause", {}, server)
+    assert result == {"ok": False, "error": "autoloop_unavailable"}
+    assert "unknown_verb" not in str(result)
 
 
 def test_the_verbs_answer_honestly_on_a_daemon_with_no_player():
@@ -1200,10 +1224,19 @@ def test_the_verbs_answer_honestly_on_a_daemon_with_no_player():
             "error": "autoloop_unavailable",
         }
     # ...but the read verb still answers, from the lock.
+    #
+    # WO-AUTOLOOP-PAUSE-RESUME added `stand_down` to the wire, so this
+    # exact-dict pin is UPDATED, not loosened — it stays an equality check
+    # precisely so an unintended future field cannot slip onto the wire
+    # unnoticed. `None` here is the honest answer and is deliberately
+    # present rather than omitted: a client asking "was this paused?" gets
+    # a definite no from a runner-less daemon instead of having to infer it
+    # from a missing key.
     assert protocol.dispatch(session, "autoloop_status", {}, server) == {
         "ok": True,
         "running": False,
         "run": None,
+        "stand_down": None,
     }
 
 
@@ -1356,3 +1389,105 @@ def test_dispatch_autoloop_start_lets_the_invariant_violation_escape_uncaught(tm
 
     with pytest.raises(autoloop.AutoLoopInvariantViolation):
         protocol.dispatch(session, "autoloop_start", {"name": "ore-run"}, server)
+
+
+# --------------------------------------------------------------------------
+# WO-AUTOLOOP-PAUSE-RESUME — the pause half (the resume half is held; see
+# `test_resume_is_still_absent_rather_than_stubbed`)
+# --------------------------------------------------------------------------
+
+class _FreeLock:
+    """A control lock holding nothing — `pause`/`stop` must be safe here."""
+
+    def is_auto_loop_held(self):
+        return False
+
+
+def _idle_runner():
+    return autoloop.AutoLoopRunner(object(), _FreeLock())
+
+
+def test_a_fresh_runner_has_never_been_stood_down():
+    """`None` rather than `"stop"`: a runner that never ran was not stopped,
+    and claiming otherwise would be an affirmative statement about a run
+    that does not exist."""
+    assert _idle_runner().snapshot().stand_down is None
+
+
+def test_pause_and_stop_record_different_intents():
+    """The ONLY difference between them. If these ever return the same
+    value, `autoloop_resume` cannot tell a parked run from a panicked one
+    and would relaunch something the operator halted on purpose."""
+    paused = _idle_runner()
+    paused.pause()
+    assert paused.snapshot().stand_down == autoloop.STAND_DOWN_PAUSE
+
+    stopped = _idle_runner()
+    stopped.stop()
+    assert stopped.snapshot().stand_down == autoloop.STAND_DOWN_STOP
+
+    assert autoloop.STAND_DOWN_PAUSE != autoloop.STAND_DOWN_STOP
+
+
+def test_pause_then_stop_reports_stop_not_pause():
+    """A panic after a pause must win the label. Otherwise a resume would
+    see `"pause"` and relaunch a run the operator later panicked."""
+    runner = _idle_runner()
+    runner.pause()
+    runner.stop()
+    assert runner.snapshot().stand_down == autoloop.STAND_DOWN_STOP
+
+
+def test_pause_never_hangs_and_neither_does_a_stop_after_it():
+    """Finding 3, satisfied STRUCTURALLY rather than by timeout.
+
+    `pause` is not a wait state — it is the same stand-down as `stop` — so
+    there is nothing for a later stop/panic to block on. Both calls return
+    on an idle runner, and a stop after a pause returns too. If a future
+    edit reintroduced a parked thread, this is where it would hang.
+    """
+    runner = _idle_runner()
+    assert runner.pause() is not None
+    assert runner.stop() is not None
+    assert runner.pause() is not None       # idempotent in both directions
+
+
+def test_pause_does_not_release_the_lock_itself():
+    """The one-release-path invariant. `pause` must NOT grow a second
+    release: the run's own `finally` is the only caller of
+    `leave_auto_loop()`. Pinned by asserting the lock is never asked."""
+
+    class _SpyLock:
+        def __init__(self):
+            self.releases = []
+
+        def is_auto_loop_held(self):
+            return False
+
+        def leave_auto_loop(self, *a, **k):
+            self.releases.append(a)
+
+    lock = _SpyLock()
+    runner = autoloop.AutoLoopRunner(object(), lock)
+    runner.pause()
+    assert lock.releases == [], "pause created a second release path"
+
+
+def test_stand_down_is_on_the_wire_in_both_shapes():
+    """A client must not have to branch on whether a report exists to learn
+    why the run stood down."""
+    runner = _idle_runner()
+    no_report = autoloop.run_wire(runner.snapshot())
+    assert no_report["run"] is None
+    assert no_report["stand_down"] is None
+
+    runner.pause()
+    assert autoloop.run_wire(runner.snapshot())["stand_down"] == autoloop.STAND_DOWN_PAUSE
+
+
+def test_pause_and_stop_share_one_implementation():
+    """Structural: both must route through `_stand_down_run`, so a future
+    fix to the release half cannot land on one path and miss the other."""
+    import inspect
+    for fn in (autoloop.AutoLoopRunner.pause, autoloop.AutoLoopRunner.stop):
+        assert "_stand_down_run" in inspect.getsource(fn)

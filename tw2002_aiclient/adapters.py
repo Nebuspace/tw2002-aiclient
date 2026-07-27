@@ -299,6 +299,51 @@ def autoloop_stop(*, run_dir: Path | None = None) -> AutoLoopResult:
     )
 
 
+def autoloop_pause(*, run_dir: Path | None = None) -> AutoLoopResult:
+    """Park the taught run and hand the keyboard back (WO-AUTOLOOP-PAUSE-RESUME).
+
+    Mechanically the same stand-down as :func:`autoloop_stop` — the daemon
+    records the *intent* so a later relaunch can tell a parked run from a
+    panicked one. Never raises; always returns a typed result.
+    """
+    return _autoloop_verb("autoloop_pause", run_dir)
+
+
+def autoloop_relaunch(*, run_dir: Path | None = None) -> AutoLoopResult:
+    """Re-arm a paused run **from the start of its macro**. Not a resume.
+
+    The caller MUST disclose two fields from ``raw`` before committing:
+    ``replays_from_start`` and ``sends_already_issued``. This replays steps
+    the paused run already executed, so on a trade macro it re-spends live
+    turns and credits — the operator has to see that before confirming.
+
+    ``sends_already_issued`` is ``None`` when the player never produced a
+    count. That is "unknown", NOT zero, and must not be rendered as
+    "0 sends already issued" — the same honest-`?` rule the coverage meter
+    follows.
+    """
+    return _autoloop_verb("autoloop_relaunch", run_dir)
+
+
+def _autoloop_verb(verb: str, run_dir: "Path | None") -> AutoLoopResult:
+    """Shared transport for the autoloop verbs — one place that decides how
+    a daemon refusal becomes a typed result, so `pause` and `relaunch`
+    cannot drift apart in how honestly they report failure."""
+    resolved_run_dir = run_dir or _env.resolve_run_dir()
+    try:
+        resp = _cli.send_request(verb, {}, run_dir=resolved_run_dir)
+    except Exception as e:  # noqa: BLE001
+        return AutoLoopResult(ok=False, reason="unknown", detail=f"{type(e).__name__}: {e}")
+    if resp.get("ok"):
+        return AutoLoopResult(ok=True, raw=resp)
+    return AutoLoopResult(
+        ok=False,
+        reason=resp.get("error") or "unknown",
+        detail=resp.get("detail") or resp.get("error") or None,
+        raw=resp,
+    )
+
+
 def explore_start_for_profile(
     profile: object,
     *,
