@@ -227,9 +227,10 @@ The code is right and the sentence is loose: NAWS is *sent* (in response to `DO 
 A literal `0xFF` in game output survives as exactly one byte. **Correct.**
 
 **Reconnect state.** `session.py:236` constructs a **new** `TelnetHandler` on reconnect, so
-none of the stuck states above survive a reconnect — including I-01's wedged `_STATE_SB`.
-That is a genuine mitigation and is why I-01 is MED rather than HIGH: the operator can
-escape it by reconnecting, if they realise they need to.
+none of the stuck states above survive a reconnect — including the historical I-01 wedged
+`_STATE_SB` (pre-cap). That mitigation is why I-01 was rated MED rather than HIGH: the
+operator could escape by reconnecting, if they realised they needed to. (Tip also caps
+`_sb_buf` now — see §I-01 CLOSED.)
 
 ---
 
