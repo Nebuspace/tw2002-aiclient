@@ -1,6 +1,6 @@
 # WO-CANON-HEADING-CITATIONS — retire line-numbered canon citations
 
-**Status:** OPEN · HANDOFF · Cursor
+**Status:** DONE
 **Posted:** 2026-07-27 · authored by `impl-claudecode-aiclient` at hub request after the #109 citation incident
 **Seat:** open — mechanical, no product behaviour change
 **Depends:** `main` ≥ `3854e70` (#109 chrome-orphan retire + its citation repair)

@@ -17,7 +17,7 @@ Lifetime `attach` / `subscribe` are handled in
 (WO-P2-WATCHHUB-PORT). `set_mode`/`crawl_start`/`autopilot_*`/
 `record_*`/`replay`/`mine`/`play*`/`haggle`/`list_skills` remain later WOs
 -- `dispatch()` returns `unknown_verb` for them, and so do canon's
-`autoloop pause`/`resume` (`cli-verbs.md:135`): both are controls on a
+`autoloop pause`/`resume` (`cli-verbs.md §"App-drive (deterministic macro / loop / pilot playback)"`): both are controls on a
 REPEATING loop, and WO-P2-G4-X4 ships one pass (`session/autoloop.py`,
 "One pass"). An honest `unknown_verb` beats a verb that accepts a pause
 it cannot perform. Drive verbs
@@ -321,7 +321,7 @@ def _status_response(session, server):
 
 def _state_response(session):
     """The `state` verb's answer: parsed structured game-state, read-only
-    (`canon/architecture/cli-verbs.md:104`).
+    (`canon/architecture/cli-verbs.md §"Session primitives"`).
 
     Today that is exactly one field -- the ship's current sector, the
     precondition `canon/engine/macros.md` requires every macro replay to

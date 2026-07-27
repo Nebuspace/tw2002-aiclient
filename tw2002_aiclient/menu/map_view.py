@@ -21,7 +21,7 @@ def menu_map_summary(
     ``here_unknown`` separates the two things a ``current`` of None used to
     mean at once. Canon's contract is that ``localize()`` returning None means
     **off-map** -- "STOP, escalate, never navigate blind"
-    (`canon/engine/menu-map-and-introspection.md:298-302`). But a caller that
+    (`canon/engine/menu-map-and-introspection.md §"Examples"`). But a caller that
     never got to *ask* localize -- no daemon, an unusable ``screen`` response,
     a blank screen, a raised lookup -- also arrives here with None, and
     rendering that as "off-map" asserts a fact nobody established.
@@ -29,7 +29,7 @@ def menu_map_summary(
     So: ``here_unknown=None`` means "we looked and you are genuinely off-map";
     a non-empty string is the *reason we could not look*, rendered with canon's
     unknown glyph ``?`` instead of the off-map claim (`?` = unknown,
-    `canon/surfaces/visual-language.md:145`; "the system never lies or
+    `canon/surfaces/visual-language.md §"Glyph / status-marker vocabulary"`; "the system never lies or
     invents", `:289`). Passing it alongside a resolvable ``current_sig`` is
     meaningless and is ignored -- a located ``★`` outranks any reason.
     """

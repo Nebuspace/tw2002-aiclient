@@ -756,7 +756,7 @@ class PlayShellScreen:
     ``session/control_lock.py:59`` constructs ``self._mode = MODE_APP``,
     and nothing has called ``take_human()`` on a screen the human has not
     yet pressed Ctrl-A on. Canon says the same thing prescriptively --
-    ``canon/surfaces/mode-line-and-teach-controls.md:39``, "Default when
+    ``canon/surfaces/mode-line-and-teach-controls.md §"The mode line is a DUAL, not a triad"``, "Default when
     the client runs = App/autopilot", ratified in ADR-002 -- so
     WO-ENTRY-APP-CHIP is a code-to-canon correction: the prior
     ``spectating = True`` entry default made the cockpit open by asserting
@@ -821,7 +821,7 @@ class PlayShellScreen:
     # string is shown instead. Canon sanctions exactly this: "When a taught
     # run is live, the band's slot is claimed instead by the AUTO-LOOP
     # cycle-progress bar ... never both, there is only room for one"
-    # (`mode-line-and-teach-controls.md:230-233`).
+    # (`mode-line-and-teach-controls.md §"Spacing, alignment & hierarchy — the mode-line reading order"`).
     #
     # Why here and not the LOGS band, where the offer used to be written:
     # `status_line` only renders when LOGS has no real tail, so on a live
@@ -861,9 +861,9 @@ class PlayShellScreen:
         #
         # Defaults `False` (WO-ENTRY-APP-CHIP). This is a code-to-canon
         # correction, not a new product decision: canon already says
-        # `mode-line-and-teach-controls.md:39` -- "Default when the client
+        # `mode-line-and-teach-controls.md §"The mode line is a DUAL, not a triad"` -- "Default when the client
         # runs = App/autopilot" -- ratified in ADR-002 (Accepted
-        # 2026-07-25, `canon/ADR/002-mode-chord-ctrl-a.md:30`: "Spectate is
+        # 2026-07-25, `canon/ADR/002-mode-chord-ctrl-a.md §"Context"`: "Spectate is
         # not a Mode; default run = App/autopilot"). The code had drifted
         # from it. Together with `attached`'s own `False`
         # below this makes the entry state App-hold, whose chip reads
@@ -876,7 +876,7 @@ class PlayShellScreen:
         # Only `app.py::_run_play` ever sets this `True`: the Ctrl-] detach
         # branch and the broken-wire fallback, i.e. post-detach observation
         # chrome, explicitly preserved by the same ruling. Ctrl-A (canon
-        # `mode-line-and-teach-controls.md:40-47`'s App<->Human
+        # `mode-line-and-teach-controls.md §"The mode line is a DUAL, not a triad"`'s App<->Human
         # control-switch key -- moved off `M` by WO-P5-061-ENTRY) is what
         # takes/releases the daemon's Human lock; see ``handle_key``'s own
         # ``"attach"`` return value. This class itself still has no
@@ -1022,7 +1022,7 @@ class PlayShellScreen:
         # own (red, bold=True) "danger" attr.
         self._viewport_danger_attr = _shared_pairs.attr_for(danger_fg_name)
         if self._viewport_danger_attr == curses.A_NORMAL:
-            # WO-P4-054 Gap 2, DOCS-WIN (canon `visual-language.md:76-83`
+            # WO-P4-054 Gap 2, DOCS-WIN (canon `visual-language.md §"Three load-bearing color rules (apply on every surface, no exceptions)"`
             # "the viewport border is a STATE surface" -- "Mono /
             # color-unavailable interim: the same disconnect flip uses
             # A_UNDERLINE non-bold"). Canon scopes that interim to "color
@@ -1116,7 +1116,7 @@ class PlayShellScreen:
         own class docstring for why a second allocator would corrupt other
         screens' already-cached colors), with ``curses.A_BOLD |
         curses.A_REVERSE`` layered on top -- canon's badge law
-        (``mode-line-and-teach-controls.md:179-181``: reverse-video is the
+        (``mode-line-and-teach-controls.md §"Color semantics — the mode indicator, teach overlay, and the one 7-tone table"``: reverse-video is the
         one "selected/active/badge" signal) applied to BOTH dual chips (App
         AND Human), not just the newly-added App side, so the pair's visual
         register stays matched rather than splitting App-reversed/
@@ -1140,7 +1140,7 @@ class PlayShellScreen:
         if tone == cockpit_teachband.TEACH_TONE:
             # WO-P5-066: the standing teach band is canon's cyan chrome
             # accent -- "affordance chrome, not data"
-            # (`mode-line-and-teach-controls.md:230-232`) -- so it takes
+            # (`mode-line-and-teach-controls.md §"Spacing, alignment & hierarchy — the mode-line reading order"`) -- so it takes
             # the SAME `_chrome_attr` the rest of the frame's chrome wears
             # and deliberately skips the `A_BOLD | A_REVERSE` badge below.
             # Reverse-video is canon's one "selected/active" signal
@@ -1178,7 +1178,7 @@ class PlayShellScreen:
     def _arm_confirm_attr(self) -> int:
         """The confirm gate's attr: table-row ``danger`` (red **BOLD**) plus
         ``A_REVERSE`` -- canon's "loudest combination the palette owns"
-        (`visual-language.md:78-79`).
+        (`visual-language.md §"Three load-bearing color rules (apply on every surface, no exceptions)"`).
 
         Routed through ``_control_strip_segment_attr`` rather than composing
         the attr here, so this gate and the chips beside it can never drift
@@ -1187,13 +1187,13 @@ class PlayShellScreen:
         growing a second attr path.
 
         **Deliberately NOT ``self._viewport_danger_attr``.** That attribute
-        is the *other* ``danger``: `visual-language.md:83` specifies red
+        is the *other* ``danger``: `visual-language.md §"Three load-bearing color rules (apply on every surface, no exceptions)"` specifies red
         **non-bold** as a per-surface override for the viewport border's
         link-down flip, and this module's own comment at the point of
         divergence records it. It is on this class, it has ``danger`` in its
         name, and using it here would render the money-path gate *quieter*
         than the frame around it while still satisfying any check that only
-        asked "is it danger-toned?". `visual-language.md:58` lists "the
+        asked "is it danger-toned?". `visual-language.md §"Color semantics — the one 7-tone table"` lists "the
         live-play `y/N` confirm" among the **table row's** own examples.
         Pinned by attr identity, not by tone name.
         """
