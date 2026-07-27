@@ -7,11 +7,13 @@ small hand-rolled state machine over raw bytes. It does two jobs:
    stream, leaving only the data pyte should see.
 2. Answer option negotiation (WILL/WONT/DO/DONT) and the TTYPE/NAWS
    subnegotiations a TWGS door expects, queuing the reply bytes for the
-   caller to send back on the socket.
+    caller to send back on the socket.
 
 The state machine persists across calls to `feed()`, so an IAC sequence
 split across two recv() calls is handled correctly.
 """
+
+import logging
 
 IAC = 255
 DONT = 254
@@ -30,6 +32,15 @@ NAWS = 31
 
 TTYPE_IS = 0
 TTYPE_SEND = 1
+
+# Maximum bytes buffered inside an IAC SB…SE subnegotiation.
+# TWGS subnegotiations (TTYPE, NAWS) are tiny; 1 KiB is generous.
+# If a server sends an unterminated SB that grows past this cap we
+# abandon the subnegotiation and return to DATA state so the screen
+# never freezes.  (Audit I-01)
+_SB_BUF_MAX = 1024
+
+_log = logging.getLogger(__name__)
 
 _STATE_DATA = "data"
 _STATE_IAC = "iac"
@@ -85,6 +96,17 @@ class TelnetHandler:
             elif self._state == _STATE_SB:
                 if b == IAC:
                     self._state = _STATE_SB_IAC
+                elif len(self._sb_buf) >= _SB_BUF_MAX:
+                    # Unterminated SB has overflowed the cap.  Abandon it,
+                    # restore DATA state so subsequent game bytes reach the
+                    # terminal.  (Audit I-01)
+                    _log.warning(
+                        "IAC SB overflow (%d bytes ≥ cap %d): abandoning subnegotiation",
+                        len(self._sb_buf),
+                        _SB_BUF_MAX,
+                    )
+                    self._sb_buf = bytearray()
+                    self._state = _STATE_DATA
                 else:
                     self._sb_buf.append(b)
             elif self._state == _STATE_SB_IAC:
