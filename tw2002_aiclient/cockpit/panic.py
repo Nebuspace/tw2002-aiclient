@@ -87,7 +87,7 @@ from __future__ import annotations
 # `KEY)verb` shape", which would make this `P)anic`. But the band literal
 # canon actually prints is `^A)ode  A)nalyze  R)ecord  T)rigger  L)chains
 # P panic` -- with a SPACE, not a paren -- and it appears three times
-# identically across two files (`:136`, `:219`,
+# identically across two files (`:136`, `:220`,
 # `visual-language.md:306`). Three consistent cross-file literals is
 # stronger evidence of intent than one generalisation that overlooks its
 # own last token, so the literal wins here and the conflict is reported to

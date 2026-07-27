@@ -34,7 +34,7 @@ def test_band_is_canon_standing_spelling() -> None:
     `mode-line-and-teach-controls.md:235` says "every token uses the uniform
     `KEY)verb` shape", which would make this `P)anic` -- but the band
     literal canon actually prints is `P panic`, identically at `:136`,
-    `:219` and `visual-language.md:306`. Three consistent cross-file
+    `:220` and `visual-language.md:306`. Three consistent cross-file
     literals beat one generalisation that overlooks its own last token, so
     the literal is what ships and the conflict is reported to the hub.
     Kept as an inline literal, NOT derived from `TEACH_TOKENS`: an

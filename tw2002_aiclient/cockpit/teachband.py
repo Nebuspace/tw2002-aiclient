@@ -100,7 +100,7 @@ from .panic import PANIC_TOKEN
 TEACH_TOKENS: tuple[str, ...] = ("A)nalyze", "R)ecord", "T)rigger", PANIC_TOKEN)
 
 # Two spaces between tokens -- canon renders the band that way in every
-# example it gives (`:136`, `:219`, `visual-language.md:306`), and it is
+# example it gives (`:136`, `:220`, `visual-language.md:306`), and it is
 # the same gap `arm.ARM_GAP` uses between chips.
 TOKEN_GAP = "  "
 
