@@ -1,6 +1,6 @@
 # WO-PLAY-EXPLORE-ARM
 
-**Status:** OPEN · **depends on** adapter contract in `WO-PLAY-EXPLORE-ADAPTER` (mock until merged)  
+**Status:** DONE · CC · adapter mocked pending L2 · **depends on** adapter contract in `WO-PLAY-EXPLORE-ADAPTER` (mock until merged)  
 **Posted:** 2026-07-27T03:10:33Z · One-client Play ladder **L3**  
 **Seat:** impl-claudecode-aiclient (product wire · first live arm path)  
 **Plan:** `.samantha/plans/one-client-play-ladder-20260727.md`
