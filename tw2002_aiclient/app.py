@@ -21,6 +21,7 @@ from tw2002_aiclient.screens import (
 )
 from tw2002_aiclient.session import cli as session_cli
 from tw2002_aiclient.session import credentials, env, player_bank
+from tw2002_aiclient.session.classify import is_probable_secret_prompt as _is_probable_secret_prompt
 from tw2002_aiclient.session.attach_client import AttachInputConn
 from tw2002_aiclient.watchfeed import WatchFeed
 
@@ -696,8 +697,14 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                     play.attached = False  # WO-P5-060 lane B: honest badge truth, alongside spectating
                     play.status_line = "detached — spectating"
                     continue
+                # WO-P5-067 Accept #2: _recorded_key is set only on branches
+                # that actually send a byte to the game.  Refused/dropped
+                # paths (UTF-8 multi-byte lead, arrow/function keys) leave it
+                # None so those pseudo-keystrokes are never captured.
+                _recorded_key = None
                 if key in (curses.KEY_ENTER, 10, 13):
                     sent_ok = attach_conn.send_key(b"\r\n")
+                    _recorded_key = "\r\n"
                 elif key in (curses.KEY_BACKSPACE, 127, 8):
                     # Backspace forwarding is MANDATORY (hub ruling,
                     # WO-P4-056 REVISE) -- a human who cannot correct a
@@ -715,6 +722,7 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                     # (curses.KEY_BACKSPACE, 127, 8): return b"\x08"`) --
                     # ported verbatim rather than re-derived.
                     sent_ok = attach_conn.send_key(b"\x08")
+                    _recorded_key = "\x08"
                 elif 0 <= key < 256:
                     # WO-AUDIT-COCKPIT-UTF8-GETCH (hub-ruled): curses getch()
                     # yields each UTF-8 byte as its own 0..255 int. Forwarding
@@ -727,8 +735,10 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                     if _utf8_multibyte_len(key) is not None:
                         play.status_line = _refuse_utf8_getch_sequence(stdscr, key)
                         sent_ok = True
+                        # UTF-8 multi-byte lead refused; nothing sent; not recorded.
                     else:
                         sent_ok = attach_conn.send_key(bytes([key]))
+                        _recorded_key = chr(key)
                 else:
                     # Every OTHER curses special key (arrow/function key
                     # etc.) has no single-byte raw form to forward --
@@ -737,6 +747,19 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                     # this WO, disclosed here and in STATUS, unlike
                     # backspace above. key >= 256 path untouched.
                     sent_ok = True
+                if sent_ok and _recorded_key and play.record_session.active:
+                    # WO-P5-067 Accept #2: add the keystroke to the active
+                    # recording session.  result.raw carries the screen that
+                    # prompted this press (the pre-key snapshot; the game's
+                    # response arrives asynchronously on the next ensure tick).
+                    # Secret detection mirrors the existing attach-redaction
+                    # logic: is_probable_secret_prompt on the current prompt.
+                    _prompt = (result.raw or {}).get("prompt", "") if result.ok else ""
+                    play.record_session.add_step(
+                        _recorded_key,
+                        (result.raw or {}).get("screen", []) if result.ok else [],
+                        is_secret=_is_probable_secret_prompt(_prompt),
+                    )
                 if not sent_ok:
                     # The connection broke mid-session (daemon gone,
                     # socket reset, ...) -- honest failure containment,
@@ -815,15 +838,14 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                 play.status_line = f"trigger stub set — screen: {screen_label}"
                 continue
             if action == "record_toggle":
-                # WO-P5-067: R Record scaffold.  Toggle the in-cockpit
-                # recording session.  On first press: start recording, using
-                # the most-recently confirmed ensure result as the opening
-                # screen.  On second press: finalise and save the macro.
-                # This is a SCAFFOLD -- the live-attach keystroke capture
-                # (feeding raw human keystrokes into record_session.add_step()
-                # as they happen) is the follow-on work recorder.py's docstring
-                # names.  The record path never calls explore_start or any
-                # send -- RecordSession has no send path of its own.
+                # WO-P5-067: R Record.  Toggle the in-cockpit recording
+                # session.  On first press: start recording, capturing the
+                # opening screen from the most recent ensure result.  On
+                # second press: finalise and save the macro.  Human
+                # keystrokes are fed into the session via the attach path
+                # above (add_step on each successful send_key).  The record
+                # path never calls explore_start or any send -- RecordSession
+                # has no send path of its own.
                 if not play.record_session.active:
                     # Start recording: capture the opening screen from the
                     # most recent ensure result.  A missing or bad result
