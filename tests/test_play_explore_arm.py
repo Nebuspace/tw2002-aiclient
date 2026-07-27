@@ -122,11 +122,8 @@ def test_offer_is_announced_but_the_gate_is_not_raised_unbidden(monkeypatch) -> 
     keystroke -- measured: 33 pre-existing `_run_play` tests went red because
     the swallowed key was their Ctrl-A attach chord."""
     _calls, screen = _drive(monkeypatch, [])
-    # WO-PLAY-OFFER-VISIBLE-ON-LIVE: this used to assert `status_line`, which
-    # was the defect -- that field renders only when the LOGS band has no
-    # daemon tail, i.e. never on a live session. The offer now claims the
-    # hint band, which paints at every frame size. Asserting the surface that
-    # actually reaches the operator is the point.
+    # WO-PLAY-OFFER-VISIBLE-ON-LIVE: offer lives on status_line and paints on
+    # the control strip mid segment when LOGS has a real tail.
     assert "press E" in (screen.status_line or "")
     assert screen.gate_raises == [], (
         f"gate was raised without the human asking: {screen.gate_raises}"

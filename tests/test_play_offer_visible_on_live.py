@@ -19,7 +19,15 @@ from tw2002_aiclient.cockpit.teachband import compose_teach_band
 
 ROWS, COLS = 40, 160
 OFFER = "explore 3/5…"   # a LIVE run reading — what canon lets claim the band
+OFFER_STATUS = (
+    "session ready — main_command  ·  explore ×5 available — press E"
+)
 TAIL = [f"app> line {i}" for i in range(1, 9)]
+
+
+class _R:
+    def __init__(self, ok=True, raw=None, reason=None):
+        self.ok, self.raw, self.reason, self.detail = ok, raw, reason, None
 
 
 class _Win:
@@ -40,7 +48,7 @@ class _Win:
     def chgat(self, *a, **k): pass
 
 
-def _screen(monkeypatch, win, *, tail, band=OFFER):
+def _screen(monkeypatch, win, *, tail, band=OFFER, status_line="session ready — main_command"):
     monkeypatch.setattr(screens_mod.curses, "has_colors", lambda: False)
     profile = screens_mod.ProfileRow(
         name="a", handle="A", server="s", host="h", game_letter="B")
@@ -48,7 +56,7 @@ def _screen(monkeypatch, win, *, tail, band=OFFER):
     s.spectating, s.attached = False, False
     # THE fixture that matters: a live session with real transcript rows.
     s.status_provider = lambda: {"ok": True, "connected": True, "log_tail": list(tail)}
-    s.status_line = "session ready — main_command"
+    s.status_line = status_line
     s.explore_band = band
     return s
 
@@ -73,6 +81,12 @@ def test_the_transcript_is_untouched(monkeypatch) -> None:
     _screen(monkeypatch, win, tail=TAIL).draw()
     assert "app> line 8" in _logs_text(win), "transcript lost"
 
+
+def test_offer_paints_while_the_transcript_is_populated(monkeypatch) -> None:
+    """The shipped defect, directly."""
+    win = _Win()
+    _screen(monkeypatch, win, tail=TAIL, band=None, status_line=OFFER_STATUS).draw()
+    assert "press E" in _strip_text(win), "explore offer invisible on a live session"
 
 
 def test_calm_band_returns_when_nothing_is_claimed(monkeypatch) -> None:
@@ -100,7 +114,7 @@ def test_band_is_released_when_the_run_reaches_a_terminal_outcome(monkeypatch) -
     win = _Win()
     play = _screen(monkeypatch, win, tail=TAIL, band="explore 3/5…")
     monkeypatch.setattr(
-        app_mod.adapters, "explore_status",
+        "tw2002_aiclient.adapters.explore_status",
         lambda **kw: _R(raw={"run": {"distinct_sectors": 5, "min_sectors": 5,
                                      "outcome": "completed"}}),
     )
@@ -116,7 +130,7 @@ def test_band_is_released_when_the_status_reading_is_unavailable(monkeypatch) ->
     win = _Win()
     play = _screen(monkeypatch, win, tail=TAIL, band="explore 3/5…")
     monkeypatch.setattr(
-        app_mod.adapters, "explore_status",
+        "tw2002_aiclient.adapters.explore_status",
         lambda **kw: _R(ok=False, reason="daemon_not_running"),
     )
     assert app_mod._poll_explore_status(play, run_dir=None) is False
@@ -130,7 +144,7 @@ def test_band_keeps_the_claim_while_the_run_is_still_going(monkeypatch) -> None:
     win = _Win()
     play = _screen(monkeypatch, win, tail=TAIL, band="explore 0/5…")
     monkeypatch.setattr(
-        app_mod.adapters, "explore_status",
+        "tw2002_aiclient.adapters.explore_status",
         lambda **kw: _R(raw={"run": {"distinct_sectors": 3, "min_sectors": 5}}),
     )
     assert app_mod._poll_explore_status(play, run_dir=None) is True

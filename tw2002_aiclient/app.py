@@ -588,14 +588,6 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                 f"session ready — {result.classification}  ·  "
                 f"explore ×{_EXPLORE_MIN_SECTORS} available — press E"
             )
-            # NOTE (WO-PLAY-OFFER-VISIBLE-ON-LIVE, partial): the OFFER does
-            # NOT claim the hint band. Canon sanctions that claim only "when
-            # a taught run is live" (`mode-line-and-teach-controls.md:231`);
-            # an offer is not a live run, and claiming it here permanently
-            # displaces the A/R/T teach affordances -- measured, 4 pty pins
-            # in `test_cockpit_teachband_pty.py` go red. The offer therefore
-            # still rides `status_line` and is STILL INVISIBLE on a live
-            # session. That half of the defect is escalated, not fixed here.
     else:
         explore_offered = False
         play.status_line = f"ensure failed — {result.reason}: {result.detail}"

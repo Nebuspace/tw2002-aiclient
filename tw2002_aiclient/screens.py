@@ -1729,20 +1729,29 @@ class PlayShellScreen:
             # (the same shared snapshot every other consumer uses -- no
             # second status_provider() call) and reflects the focus state.
             conn_chip = self._compose_conn_chip(status, self._conn_focused)
+            # WO-PLAY-OFFER-VISIBLE-ON-LIVE: when LOGS carries a real daemon
+            # tail, `status_line` no longer paints there -- surface it on the
+            # control strip's mid segment instead (empty-tail LOGS fallback unchanged).
+            status_offer = None
+            if has_real_tail:
+                sl = self.status_line
+                if isinstance(sl, str) and sl:
+                    status_offer = sl
             try:
                 raw_segments = cockpit_control_seat.compose_control_strip_segments(
                     spectating=self.spectating, attached=self.attached,
                     liveness_text=liveness_text, width=cs_w, unicode_ok=uok,
                     arm_chip=arm_chip,
                     conn_chip=conn_chip,
+                    status_offer=status_offer,
                     # WO-P5-066: the standing A/R/T teach band. Composed
                     # unconditionally -- it is calm-state chrome that names
                     # the teach repertoire, not a state readout, so there is
                     # no status to gate it on. It self-drops when the row is
                     # too narrow (see `_compose_segments`).
-                    # The claim wins when set; otherwise the calm teach
-                    # tokens. Never both -- canon: "there is only room for
-                    # one".
+                    # WO-PLAY-OFFER-VISIBLE-ON-LIVE (c): a live explore run
+                    # claims the hint slot via `explore_band`; the offer itself
+                    # rides `status_line` on the mid segment, never here.
                     teach_band=(
                         self.explore_band
                         if isinstance(self.explore_band, str) and self.explore_band
