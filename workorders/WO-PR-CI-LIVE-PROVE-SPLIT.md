@@ -66,6 +66,8 @@ In the PR-coordinator rhythm, `live-prove` is **not** “one happy path on the s
 
 **When `n/a` is still honest:** docs / protocol / CI-infra / **product PRs that cannot affect live login/classify/ensure** (e.g. TUI dead-terminal CPU guard with offline exit+CPU proof). Summary must say why. **Do not** `n/a` a login/ensure/classify PR because “suite was green.”
 
+**`n/a` vs `NOT-ATTEMPTED` (Max 2026-07-27 — #116):** `n/a` means live is *inapplicable*. `NOT-ATTEMPTED` means live *could* run and was skipped. **Never Accept or post hub `live-prove` as `n/a` when the truth is NOT-ATTEMPTED.** Unverified seat claims of “no TWGS / unreachable” without a probe (inventory · TCP sample · launchers) are **REVISE** — hub pushes back on the outbox; do **not** wait for Max to challenge. Safe halves (transport refusals / attach without arm) are hub GO; turn-spending arm still needs sacrificial Max GO. Cursor always-on: Nebuspace `.cursor/rules/live-prove-pushback.mdc`.
+
 **Unmeetable ≠ lower the principle:** if ensure blockers leave fewer than 3 exercisable hosts, live-prove stays **failure/pending** with that stated — or Max temporarily narrows the floor. Do not invent RETURNING on hosts that never registered.
 
 ### Mechanism (hub has access; Max does not need to click)
