@@ -913,6 +913,19 @@ class PlayShellScreen:
         # default of the same name above for why it is declared there too;
         # this instance assignment is the ordinary path.
         self._arm_confirm: tuple[object, object] | None = None
+        # WO-P5-068: the most-recently confirmed screen classification, set
+        # by app.py after ensure_session() so the T Assign-Trigger handler
+        # can stamp the stub's ``when.screen`` field.  ``None`` before any
+        # ensure result arrives (the honest "not yet known" state -- a
+        # stub created before this is set will carry ``""`` via
+        # ``cockpit.assign_trigger.create_stub``'s own degradation path).
+        self.current_classification: str | None = None
+        # WO-P5-068: in-memory stub store.  app.py calls
+        # ``cockpit.assign_trigger.create_stub`` and stores the result
+        # here on every "assign_trigger" action.  The store is test-
+        # visible via ``play.stub_store.get()``.
+        from tw2002_aiclient.cockpit import assign_trigger as _at
+        self.stub_store = _at.StubStore()
 
     def _init_colors(self) -> None:
         # Tone-table fg names -- sourced from cockpit.tones via the
@@ -1865,6 +1878,14 @@ class PlayShellScreen:
             if self._conn_focused:
                 return "conn_activate"
             return None
+        # WO-P5-068: T Assign-Trigger scaffold.  Returns a pure INTENT signal
+        # only ("assign_trigger") -- this class has no send path of its own
+        # (``tests/test_spectate_no_send.py``'s guards remain intact).
+        # Both `t` and `T` bind, matching the A/R/T teach band's posture.
+        # `T` is NOT stolen for explore: explore keys are E/e only
+        # (``app._EXPLORE_OFFER_KEYS``), never T.
+        if key in (ord("t"), ord("T")):
+            return "assign_trigger"
         return None
 
 

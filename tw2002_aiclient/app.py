@@ -9,6 +9,7 @@ import time
 import curses
 
 from tw2002_aiclient import adapters
+from tw2002_aiclient.cockpit import assign_trigger as _assign_trigger
 from tw2002_aiclient.screens import (
     BankViewScreen,
     CreateFormScreen,
@@ -563,6 +564,12 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
     # the profile itself enables autopilot -- no surprise auto-arm here.
     result = adapters.ensure_session(profile.name, no_auto_arm=True)
     if result.ok:
+        # WO-P5-068: record the confirmed classification so T Assign-Trigger
+        # can stamp it on the stub's ``when.screen`` field.  Only set on
+        # a successful ensure (an ok=False result has no confirmed screen
+        # class -- leaving current_classification as None lets create_stub's
+        # own degradation path produce "" rather than a wrong class name).
+        play.current_classification = result.classification
         play.status_line = f"session ready — {result.classification}"
         # WO-PLAY-EXPLORE-ARM (L3): the FIRST production caller of the
         # confirm-to-arm gate. Until now `begin_arm_confirm` had zero
@@ -793,6 +800,18 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                         reason = getattr(explore, "reason", None) or "unknown"
                         play.status_line = f"explore did not start — {reason}"
                         play.explore_band = None
+                continue
+            if action == "assign_trigger":
+                # WO-P5-068: T Assign-Trigger scaffold.  Create a when+guards
+                # stub for the most-recently confirmed screen classification
+                # and record it in the play shell's in-memory stub store.
+                # This is a DRAFT only -- the stub is NOT on the live
+                # autopilot fire path and cannot trigger any send.  Full
+                # rule engine + approval gate land in WO-070 family.
+                stub = _assign_trigger.create_stub(play.current_classification)
+                play.stub_store.set(stub)
+                screen_label = play.current_classification or "?"
+                play.status_line = f"trigger stub set — screen: {screen_label}"
                 continue
             if action == "attach":
                 if attach_conn is None:
