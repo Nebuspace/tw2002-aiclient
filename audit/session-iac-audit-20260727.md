@@ -19,7 +19,7 @@ see.
 
 | # | Surface | Severity | Status |
 |---|---|---|---|
-| I-01 | An unterminated subnegotiation swallows the entire stream, unbounded — and the liveness signal still reads healthy | **MED** | defect |
+| I-01 | An unterminated subnegotiation swallows the entire stream, unbounded — and the liveness signal still reads healthy | **MED** | **CLOSED** (`884f73e` / #64 · WO-IAC-SB-BUFFER-BOUND) — historical defect; tip has `_SB_BUF_MAX` |
 | I-02 | An exception in `feed()` kills the reader thread while `connected` keeps claiming `True` | **MED** | defect (cross-module) |
 | I-03 | Outbound `IAC` is never escaped in NAWS/TTYPE payloads | **LOW** (latent; unreachable at tip) | defect |
 | I-04 | Negotiation is stateless — a mirroring peer never reaches a fixed point | **LOW** | defect |
@@ -30,13 +30,25 @@ see.
 
 ---
 
-## I-01 · MED · one stray `IAC SB` freezes the screen forever, and the freeze detector says everything is fine — `iac.py:85-89`
+## I-01 · MED · one stray `IAC SB` freezes the screen forever, and the freeze detector says everything is fine — **CLOSED**
 
-In `_STATE_SB`, every non-`IAC` byte is appended to `self._sb_buf`. There is no length cap
-and no timeout. If the peer ever sends `IAC SB` without a matching `IAC SE` — one corrupt
-byte pair on the wire is enough — the state machine never returns to `_STATE_DATA`.
+> **Tip honesty (2026-07-27 · `WO-IAC-AUDIT-I01-DOC-HONESTY`):** the *unbounded*
+> `_sb_buf` / permanent `_STATE_SB` wedge described below is **historical**. It was
+> closed on main by PR #64 (`884f73e`) / `WO-IAC-SB-BUFFER-BOUND`: tip has
+> `_SB_BUF_MAX = 1024` (`session/iac.py`); on overflow the handler abandons the
+> subnegotiation, clears the buffer, returns to `_STATE_DATA`, and logs a WARNING.
+> Pins: `tests/test_iac.py` (`test_sb_overflow_*`). The companion
+> `rx_count`/`last_rx` vs terminal-feed question remains open as
+> `WO-CONN-RX-COUNTERS-VS-TERMINAL-FEED` — not claimed closed here.
 
-Measured:
+### Historical defect (pre-`884f73e`)
+
+In `_STATE_SB`, every non-`IAC` byte was appended to `self._sb_buf`. There was no
+length cap and no timeout. If the peer ever sent `IAC SB` without a matching
+`IAC SE` — one corrupt byte pair on the wire was enough — the state machine never
+returned to `_STATE_DATA`.
+
+Measured (against the pre-fix tip):
 
 ```
 feed(IAC SB TTYPE)            # open a subnegotiation, never close it
@@ -46,13 +58,13 @@ _sb_buf                      -> 1,000,001 bytes and still growing
 bytes returned to the terminal ->             0
 ```
 
-**Every subsequent byte is swallowed.** `feed()` returns `b""` forever, pyte is never fed,
-and the cockpit viewport freezes on whatever it last drew. Recovery requires the peer to
-send `IAC SE` — which a corrupt or hostile stream never will.
+**Every subsequent byte was swallowed.** `feed()` returned `b""` forever, pyte was
+never fed, and the cockpit viewport froze on whatever it last drew. Recovery
+required the peer to send `IAC SE` — which a corrupt or hostile stream never would.
 
-**Why this is MED and not LOW: the honesty failure is that the app's freeze detector is
-blind to precisely this freeze.** In `connection.py:147-153` the counters advance
-*regardless* of whether `feed()` returned anything:
+**Why this was MED and not LOW: the honesty failure is that the app's freeze
+detector is blind to precisely this freeze.** In `connection.py` the counters
+advance *regardless* of whether `feed()` returned anything:
 
 ```python
 clean = self.negotiator.feed(data)
@@ -63,24 +75,12 @@ with self.lock:
     self.last_rx = time.monotonic()   # ← advances anyway
 ```
 
-So `last_rx` keeps ticking, the liveness cluster's "is it frozen?" reading stays healthy, and
-`guardian.py:181` keeps re-anchoring its idle window on `session.last_rx`. The one signal
-built to answer "has the screen stopped moving?" answers **no** while the screen has, in
-fact, stopped moving permanently. Settle-detection (`rx_count`/`last_rx`, the protocol
-`session.py:3` names as core) sees continuous activity and would never settle.
+So `last_rx` kept ticking while the screen had stopped moving. That counter
+honesty gap is **unchanged by the I-01 buffer cap** and is why
+`WO-CONN-RX-COUNTERS-VS-TERMINAL-FEED` stays banked separately.
 
-This is the same shape the `env.py` audit found and the same shape this tree keeps
-re-learning: **a check that answers a narrower question than the claim it supports.**
-`rx_count` honestly answers "are bytes arriving from the socket". It is *read* as "is the
-session alive". Those diverge exactly here.
-
-**Suggested follow-on:** `WO-IAC-SB-BUFFER-BOUND` — cap `_sb_buf` (a TWGS subnegotiation is
-never more than a few dozen bytes; 1 KiB is generous), and on overflow abandon the
-subnegotiation, return to `_STATE_DATA`, and surface the event rather than swallowing it.
-The stricter companion question — whether `rx_count`/`last_rx` should advance when *no*
-data reached the terminal — belongs to `connection.py` and is banked separately as
-`WO-CONN-RX-COUNTERS-VS-TERMINAL-FEED`, because changing it touches settle-detection and
-must not be done casually inside an IAC fix.
+**Fix shipped:** `WO-IAC-SB-BUFFER-BOUND` — `_SB_BUF_MAX` (1 KiB), abandon +
+`_STATE_DATA` + WARNING on overflow. Stamp: `884f73e` (#64); WO DONE stamp #105.
 
 ---
 
@@ -227,9 +227,10 @@ The code is right and the sentence is loose: NAWS is *sent* (in response to `DO 
 A literal `0xFF` in game output survives as exactly one byte. **Correct.**
 
 **Reconnect state.** `session.py:236` constructs a **new** `TelnetHandler` on reconnect, so
-none of the stuck states above survive a reconnect — including I-01's wedged `_STATE_SB`.
-That is a genuine mitigation and is why I-01 is MED rather than HIGH: the operator can
-escape it by reconnecting, if they realise they need to.
+none of the stuck states above survive a reconnect — including the historical I-01 wedged
+`_STATE_SB` (pre-cap). That mitigation is why I-01 was rated MED rather than HIGH: the
+operator could escape by reconnecting, if they realised they needed to. (Tip also caps
+`_sb_buf` now — see §I-01 CLOSED.)
 
 ---
 
@@ -237,7 +238,7 @@ escape it by reconnecting, if they realise they need to.
 
 | WO | Target | From |
 |---|---|---|
-| `WO-IAC-SB-BUFFER-BOUND` | `iac.py` — cap `_sb_buf`, abandon + surface on overflow | I-01 |
+| `WO-IAC-SB-BUFFER-BOUND` | `iac.py` — cap `_sb_buf`, abandon + surface on overflow | I-01 · **DONE** (`884f73e` / #64; stamp #105) |
 | `WO-CONN-RX-COUNTERS-VS-TERMINAL-FEED` | `connection.py` — should `last_rx` advance when nothing reached the terminal? | I-01 |
 | `WO-CONN-READER-THREAD-DEATH-HONESTY` | `connection.py` — a dead reader thread must not leave `connected=True` | I-02 |
 | `WO-IAC-ESCAPE-OUTBOUND-SUBNEG` | `iac.py` — escape `0xFF`, validate dimensions | I-03 |
