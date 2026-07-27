@@ -31,6 +31,9 @@ _SHIPPED_VERBS = frozenset(
         # WO-P2-G4-X6 -- `tw record`, the daemon-free manifest-driven macro
         # writer. Behaviour: tests/test_cli_record.py.
         "record",
+        # WO-EXPLORE-CLI-INVOKE -- `tw explore`, nested start|stop|status.
+        # Behaviour: tests/test_cli_explore_wiring.py.
+        "explore",
     }
 )
 
