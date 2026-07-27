@@ -679,7 +679,7 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                     explore_poll_active = _poll_explore_status(play, run_dir=run_dir)
                 continue
             if attach_conn is not None and key != 27:
-                # Attached: canon `mode-line-and-teach-controls.md §"Ctrl-A — the App↔Human Mode switch"`
+                # Attached: canon mode-line-and-teach-controls.md §"`Ctrl-A` — the App↔Human Mode switch"
                 # -- "the human always wins the keyboard" the instant
                 # they're attached -- so every key except Esc, Ctrl-] (the
                 # detach key), and Ctrl-A (the Mode chord, both handled

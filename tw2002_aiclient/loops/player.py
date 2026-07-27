@@ -22,7 +22,7 @@ Canon
   untrustworthy; re-classify a confirmed settle and compare it to the
   step's ``expected_post_class``; halt on any divergence carrying the trace
   up to and including the failing step.
-* ``canon/engine/macros.md`` §"Start-anchor -- refuse on context mismatch"
+* ``canon/engine/macros.md`` §"Start-anchor — refuse on context mismatch"
   is the pre-flight: before the first send of *every* replay invocation,
   read the current sector and validate it against ``start_anchor``. A
   present anchor that differs "(or can't be read at all)" halts and is
