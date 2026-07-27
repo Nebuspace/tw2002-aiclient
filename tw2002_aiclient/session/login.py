@@ -736,12 +736,7 @@ def _decide(cls, text, prompt, profile, state, get_password, save_password, sess
 
 
 def _fresh_password(length=8):
-    """WO-P2-020 Wave-3 CUT: mirrors archive credentials.py:281-284's
-    `generate_password` (CSPRNG, alnum-only, 8 chars) -- the ported
-    `credentials.py` only landed read-side `get_password` (Wave-1); this
-    stays a small local helper until a follow-on WO promotes it there."""
-    import secrets
-    import string
-
-    alphabet = string.ascii_letters + string.digits
-    return "".join(secrets.choice(alphabet) for _ in range(length))
+    """Delegate to the canonical mint in ``credentials.generate_password``
+    (WO-PASSWORD-MINT-CANON).  Single source of truth for CSPRNG alnum ≤8."""
+    from .credentials import generate_password
+    return generate_password(length)

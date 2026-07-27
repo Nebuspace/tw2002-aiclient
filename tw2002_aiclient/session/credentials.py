@@ -1,7 +1,8 @@
-"""Profile + secrets helpers (WO-P0-005 / WO-P1-012).
+"""Profile + secrets helpers (WO-P0-005 / WO-P1-012 / WO-PASSWORD-MINT-CANON).
 
 Read-only password resolution (env → secrets.json → None) plus non-secret
-profile list/create for the launcher. Passwords are never written here.
+profile list/create for the launcher. Passwords are never written here
+(except the canonical mint function below).
 """
 
 from __future__ import annotations
@@ -9,6 +10,8 @@ from __future__ import annotations
 import json
 import os
 import re
+import secrets
+import string
 from pathlib import Path
 
 try:
@@ -18,6 +21,31 @@ except ImportError:  # pragma: no cover
 
 # session/credentials.py → session → tw2002_aiclient → repo root
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+
+# ---------------------------------------------------------------------------
+# Canonical password mint (WO-PASSWORD-MINT-CANON)
+# ---------------------------------------------------------------------------
+
+_GENERATED_PASSWORD_LEN = 8
+_ALNUM_ALPHABET = string.ascii_letters + string.digits
+
+
+def generate_password(length: int = _GENERATED_PASSWORD_LEN) -> str:
+    """Return a CSPRNG alnum password of exactly ``length`` characters.
+
+    ``length`` must be between 1 and ``_GENERATED_PASSWORD_LEN`` (8)
+    inclusive.  Callers that need a different length must request a new
+    Max GO rather than passing a larger value here -- the ≤8 ceiling is
+    the TW-safe construction contract.
+
+    Uses ``secrets.choice`` (CSPRNG); never ``secrets.token_urlsafe``
+    (which produces base64-URL characters, not pure alnum).
+    """
+    if length < 1 or length > _GENERATED_PASSWORD_LEN:
+        raise ValueError(
+            f"length must be 1–{_GENERATED_PASSWORD_LEN}; got {length}"
+        )
+    return "".join(secrets.choice(_ALNUM_ALPHABET) for _ in range(length))
 
 
 def _resolve_config_dir() -> Path:
