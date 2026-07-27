@@ -91,8 +91,14 @@ Both edge cases behaved as designed, and they are the ones that matter:
   empty record, not a `None` that would clear a future reading — absent, which is the honest state.
 
 Six real buy/sell classes off **8 turns of ordinary map-fill**, with no docking and no trading, is
-the thing this gate exists to produce: chain detection can be fed by exploration rather than
-needing a second, turn-spending pass.
+the thing this gate exists to produce: the class letter triple (e.g. `BSS`) encodes each port's
+buy/sell posture -- the **compatibility** half of a `TradeHop`, enough to say which port pairs
+could trade. It is not the **margin** half: `trade_adapter` prices from a commodity row's `pct`,
+which only appears on a docked commerce report. Today nothing in the reborn tree writes
+`port["commodities"]` at all -- `state_parser.py` never mentions it, `parse_state` is not defined
+anywhere, and `world_model.write_port_only` (the docked write path) has no production caller -- so
+`build_trade_hops` returns empty on a real world right now. Exploration can already tell you which
+port pairs are compatible; it can never tell you what the trade is worth.
 
 ## 4. Credential handling
 
