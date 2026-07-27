@@ -1,14 +1,21 @@
-"""WO-FA3 trade_adapter tests -- synthetic world-model fixtures only, no
-live daemon, no network (same tmp_path/state_dir convention as
-test_world_model.py)."""
+"""trade_adapter tests -- synthetic world-model fixtures only, no live
+daemon, no network (same tmp_path/state_dir convention as world_model's
+own tests).
 
+Ported onto `tw2002_aiclient.trade_adapter` (ADR-001: one import tree,
+`twclient` is gone).
+"""
+
+import ast
 import datetime
 import json
+from pathlib import Path
+from typing import Optional
 
 import pytest
 
-from twclient import trade_adapter, world_model
-from twclient.chains import find_profit_chains, longest_profit_chain
+from tw2002_aiclient import trade_adapter, world_model
+from tw2002_aiclient.chains import find_profit_chains, longest_profit_chain
 
 WORLD = "hostA__F__ALPHA"
 
@@ -105,6 +112,25 @@ def test_both_ports_buying_same_commodity_yields_zero_hops(tmp_path):
     assert hops == ()
 
 
+def test_perspective_landmine_pinned_frm_sells_to_buys_never_inverted(tmp_path):
+    """DoD accept 3: explicitly pins the direction -- `frm` must be the
+    SELLING sector, `to` the BUYING sector. Deliberately asymmetric (only
+    one warp direction, only one commodity, only one compatible pair) so
+    a status-check swap in the implementation (checking `frm` for
+    "buying" and `to` for "selling") flips this from one hop to zero,
+    rather than merely relabeling an existing hop -- mutate-proven to go
+    RED, see report."""
+    _upsert(tmp_path, 200, warps=(201,), commodities=[_row("Equipment", "selling", 100)])
+    _upsert(tmp_path, 201, warps=(200,), commodities=[_row("Equipment", "buying", 0)])
+
+    hops, note = trade_adapter.build_trade_hops(WORLD, state_dir=tmp_path, now=_CLOCK)
+
+    assert len(hops) == 1
+    hop = hops[0]
+    assert hop.frm == 200  # the SELLING sector -- player buys here
+    assert hop.to == 201  # the BUYING sector -- player sells here
+
+
 # -- (3) missing/unrecognized status or commodity -> fail-closed, zero hops -
 
 
@@ -141,12 +167,33 @@ def test_no_known_route_yields_no_hop(tmp_path):
     assert hops == ()
 
 
+def test_route_through_unvisited_frontier_sector_yields_no_hop(tmp_path):
+    """Distinct from the case above: `path_to_sector`'s BFS only steps
+    into a warp target that is ITSELF a known sector (present as a key
+    in the graph, i.e. previously visited/recorded) -- a warp pointing at
+    an unvisited sector is a frontier edge, not a route. Sectors 150 and
+    151 both warp toward 999, but 999 is never upserted here, so it is
+    not in `known_graph`'s output at all. Even though the live game may
+    well connect 150 to 151 through 999, this trainer has never observed
+    that path, so it must not be invented -- offering a hop the ship
+    can't actually fly would be worse than offering none."""
+    _upsert(tmp_path, 150, warps=(999,), commodities=[_row("Equipment", "selling", 100)])
+    _upsert(tmp_path, 151, warps=(999,), commodities=[_row("Equipment", "buying", 0)])
+    # Sector 999 itself is deliberately never upserted -- unvisited.
+
+    hops, note = trade_adapter.build_trade_hops(WORLD, state_dir=tmp_path, now=_CLOCK)
+
+    assert hops == ()
+
+
 # -- (4) multi-hop fixture: proves the len-1 off-by-one -------------------
 
 
 def test_multi_hop_turns_is_path_length_minus_one(tmp_path):
     # 1 -> 2 -> 3, directed; sector 2 carries no port of its own, just
-    # routes through it -- proves turns counts WARPS, not sectors-visited.
+    # routes through it -- proves turns counts WARPS, not sectors-visited,
+    # and pins `path_to_sector`'s "inclusive of both endpoints" contract:
+    # a 3-sector path is 2 turns, not 3.
     _upsert(tmp_path, 1, warps=(2,), commodities=[_row("Equipment", "selling", 100)])
     _upsert(tmp_path, 2, warps=(3,))
     _upsert(tmp_path, 3, warps=(), commodities=[_row("Equipment", "buying", 0)])
@@ -156,7 +203,7 @@ def test_multi_hop_turns_is_path_length_minus_one(tmp_path):
     assert len(hops) == 1
     hop = hops[0]
     assert (hop.frm, hop.to, hop.commodity) == (1, 3, "Equipment")
-    assert hop.turns == 2  # path (1, 2, 3) has 3 sectors, 2 warps
+    assert hop.turns == 2  # path (1, 2, 3) has 3 sectors, 2 warps -- NOT 3
 
 
 # -- (5) stale-past-cutoff port reading is dropped --------------------------
@@ -188,6 +235,46 @@ def test_fresh_port_reading_within_max_age_is_kept(tmp_path):
     hops, note = trade_adapter.build_trade_hops(WORLD, state_dir=tmp_path, config=cfg, now=_CLOCK)
 
     assert len(hops) == 1
+
+
+def test_absent_last_seen_ts_yields_no_hop(tmp_path):
+    """An absent/unparseable timestamp is never treated as fresh
+    (`_is_fresh`'s explicit fail-closed contract) -- a raw sector whose
+    port has no `last_seen_ts` key at all must drop, not default-pass."""
+    _write_raw_sector(
+        tmp_path,
+        98,
+        {
+            "sector_id": 98,
+            "warps": [99],
+            "port": {"commodities": [_row("Equipment", "selling", 100)]},  # no last_seen_ts
+        },
+    )
+    _upsert(tmp_path, 99, warps=(98,), commodities=[_row("Equipment", "buying", 0)])
+
+    hops, note = trade_adapter.build_trade_hops(WORLD, state_dir=tmp_path, now=_CLOCK)
+
+    assert hops == ()
+
+
+def test_unparseable_last_seen_ts_yields_no_hop(tmp_path):
+    _write_raw_sector(
+        tmp_path,
+        100,
+        {
+            "sector_id": 100,
+            "warps": [101],
+            "port": {
+                "commodities": [_row("Equipment", "selling", 100)],
+                "last_seen_ts": "not-a-timestamp",
+            },
+        },
+    )
+    _upsert(tmp_path, 101, warps=(100,), commodities=[_row("Equipment", "buying", 0)])
+
+    hops, note = trade_adapter.build_trade_hops(WORLD, state_dir=tmp_path, now=_CLOCK)
+
+    assert hops == ()
 
 
 # -- (6) hop-cap truncates + notes ------------------------------------------
@@ -243,8 +330,8 @@ def test_empty_hops_keeps_chain_finder_output_none():
     assert find_profit_chains(()) == []
 
 
-# -- revise round (cipher/mack): malformed container shapes fail-closed ----
-# -- (isinstance guards), never crash a per-tick caller ---------------------
+# -- malformed container shapes fail-closed (isinstance guards), never ------
+# -- crash a per-tick caller -------------------------------------------------
 
 
 def test_non_dict_port_is_skipped_not_crashed(tmp_path):
@@ -355,7 +442,7 @@ def test_non_numeric_sector_id_field_is_skipped_not_crashed(tmp_path):
     assert hops == ()
 
 
-# -- revise round (cipher/mack): non-finite pct fails closed, not open -----
+# -- non-finite pct fails closed, not open -----------------------------------
 
 
 @pytest.mark.parametrize("bad_pct", [float("nan"), float("inf"), float("-inf")])
@@ -368,7 +455,17 @@ def test_non_finite_pct_yields_no_hop(tmp_path, bad_pct):
     assert hops == ()
 
 
-# -- revise round (mack): max_hops validation -------------------------------
+def test_missing_pct_yields_no_hop(tmp_path):
+    malformed_row = {"name": "Equipment", "status": "selling", "amount": 1000}  # no "pct" key
+    _upsert(tmp_path, 102, warps=(103,), commodities=[malformed_row])
+    _upsert(tmp_path, 103, warps=(102,), commodities=[_row("Equipment", "buying", 0)])
+
+    hops, note = trade_adapter.build_trade_hops(WORLD, state_dir=tmp_path, now=_CLOCK)
+
+    assert hops == ()
+
+
+# -- max_hops validation ------------------------------------------------------
 
 
 def test_max_hops_zero_returns_empty_but_notes_the_drop(tmp_path):
@@ -398,7 +495,7 @@ def test_negative_max_hops_raises_at_construction():
         trade_adapter.TradeAdapterConfig(max_hops=-1)
 
 
-# -- revise round (hub-ruled): amount-floor filter drops phantom legs -------
+# -- amount-floor filter drops phantom legs ----------------------------------
 
 
 def test_both_sides_zero_amount_yields_no_hop(tmp_path):
@@ -467,3 +564,143 @@ def test_missing_or_unusable_amount_yields_no_hop(tmp_path, bad_amount):
     hops, note = trade_adapter.build_trade_hops(WORLD, state_dir=tmp_path, now=_CLOCK)
 
     assert hops == ()
+
+
+# --------------------------------------------------------------------------
+# Structural pin -- DoD accept 4: neither module reaches a send path
+# --------------------------------------------------------------------------
+
+PKG_ROOT = Path(trade_adapter.__file__).resolve().parent
+REPO_ROOT = PKG_ROOT.parent
+
+_BANNED_MODULES = frozenset(
+    {
+        "tw2002_aiclient.session.connection",
+        "tw2002_aiclient.session.protocol",
+        "tw2002_aiclient.adapters",
+    }
+)
+
+_ENTRY_FILES = (PKG_ROOT / "chains.py", PKG_ROOT / "trade_adapter.py")
+
+
+def _is_banned(dotted: str) -> bool:
+    return any(dotted == b or dotted.startswith(b + ".") for b in _BANNED_MODULES)
+
+
+def _dotted_for_file(path: Path) -> str:
+    rel = path.relative_to(REPO_ROOT)
+    parts = list(rel.with_suffix("").parts)
+    if parts[-1] == "__init__":
+        parts = parts[:-1]
+    return ".".join(parts)
+
+
+def _package_for_file(path: Path, dotted: str) -> str:
+    """A module's `__package__`: itself if it's an `__init__.py`, else its
+    dotted name with the last component dropped (Python relative-import
+    semantics)."""
+    if path.name == "__init__.py":
+        return dotted
+    return dotted.rsplit(".", 1)[0] if "." in dotted else ""
+
+
+def _file_for_dotted(dotted: str) -> Optional[Path]:
+    if not (dotted == "tw2002_aiclient" or dotted.startswith("tw2002_aiclient.")):
+        return None
+    parts = dotted.split(".")
+    candidate = REPO_ROOT.joinpath(*parts).with_suffix(".py")
+    if candidate.is_file():
+        return candidate
+    pkg_init = REPO_ROOT.joinpath(*parts, "__init__.py")
+    if pkg_init.is_file():
+        return pkg_init
+    return None
+
+
+def _scan_module(path: Path, *, seen: set, banned_hits: list, unresolved_dynamic: list) -> None:
+    """Recursively walk `path`'s tw2002_aiclient-rooted import closure,
+    collecting any edge into `_BANNED_MODULES` (absolute imports, resolved
+    relative imports, and literal `importlib.import_module`/`__import__`
+    calls) and separately flagging any dynamic-import call whose target
+    isn't a string literal -- per this repo's evasion-aware scanning
+    convention, an unreadable dynamic import is refused, not trusted."""
+    dotted = _dotted_for_file(path)
+    if dotted in seen:
+        return
+    seen.add(dotted)
+    source = path.read_text(encoding="utf-8")
+    tree = ast.parse(source, filename=str(path))
+    package = _package_for_file(path, dotted)
+    targets: set = set()
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.name.startswith("tw2002_aiclient"):
+                    targets.add(alias.name)
+        elif isinstance(node, ast.ImportFrom):
+            if node.level == 0:
+                mod = node.module or ""
+                if mod == "tw2002_aiclient" or mod.startswith("tw2002_aiclient."):
+                    targets.add(mod)
+                    for alias in node.names:
+                        targets.add(f"{mod}.{alias.name}")
+            else:
+                base_parts = package.split(".") if package else []
+                strip = node.level - 1
+                base = base_parts[: len(base_parts) - strip] if strip <= len(base_parts) else []
+                prefix = ".".join(base + ([node.module] if node.module else []))
+                if prefix:
+                    targets.add(prefix)
+                    for alias in node.names:
+                        targets.add(f"{prefix}.{alias.name}")
+        elif isinstance(node, ast.Call):
+            fn = node.func
+            is_dynamic_import = (isinstance(fn, ast.Attribute) and fn.attr == "import_module") or (
+                isinstance(fn, ast.Name) and fn.id == "__import__"
+            )
+            if is_dynamic_import:
+                if (
+                    node.args
+                    and isinstance(node.args[0], ast.Constant)
+                    and isinstance(node.args[0].value, str)
+                ):
+                    literal = node.args[0].value
+                    if _is_banned(literal):
+                        banned_hits.append(f"{dotted}: dynamic import of {literal!r}")
+                else:
+                    unresolved_dynamic.append(f"{dotted}: {ast.dump(node)[:120]}")
+
+    for t in targets:
+        if _is_banned(t):
+            banned_hits.append(f"{dotted} -> {t}")
+        child = _file_for_dotted(t)
+        if child is not None:
+            _scan_module(child, seen=seen, banned_hits=banned_hits, unresolved_dynamic=unresolved_dynamic)
+
+
+def test_neither_module_reaches_a_send_path():
+    """DoD accept 4 -- structural, not text-grep: recursively walks the
+    tw2002_aiclient-rooted import closure of `chains.py` and
+    `trade_adapter.py` and asserts it never reaches
+    `session.connection`, `session.protocol`, or `adapters.py` (the
+    send-capable surfaces). Also refuses (rather than silently trusting)
+    any dynamic `importlib.import_module`/`__import__` call whose target
+    isn't a string literal -- mutate-proven, see report."""
+    seen: set = set()
+    banned_hits: list = []
+    unresolved_dynamic: list = []
+    for entry in _ENTRY_FILES:
+        _scan_module(entry, seen=seen, banned_hits=banned_hits, unresolved_dynamic=unresolved_dynamic)
+
+    assert banned_hits == []
+    assert unresolved_dynamic == []
+    # Sanity the walk actually traversed the real closure -- an empty/
+    # trivial `seen` would make the assertions above vacuously true.
+    assert seen >= {
+        "tw2002_aiclient.chains",
+        "tw2002_aiclient.trade_adapter",
+        "tw2002_aiclient.world_model",
+        "tw2002_aiclient.explore",
+    }
