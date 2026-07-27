@@ -31,10 +31,19 @@ curses. Blast radius = any future exception in negotiation, not only I-03's >255
 ## Accept
 
 1. Unexpected exception in reader loop → `connected` is `False` when the thread is gone
-2. Event/log surfaces the failure (operator-visible path or durable log — no silent death)
-3. Pin: raising negotiator → thread not alive · `connected is False`
-4. Happy-path reads unchanged (no false disconnect on clean traffic)
-5. Disjoint from Cursor IAC SB WO — do not edit `iac.py` buffer logic here
+2. Failure is recorded with a **distinct reason** from ordinary peer-close / clean shutdown
+   (guardian must not silently reconnect-around a real bug forever — CC pre-flight 01:41Z)
+3. Do not race or double-handle the existing shutdown `connected=False` path (`connection.py`
+   shutdown site — tip ~`:278`)
+4. Pin: raising negotiator → thread not alive · `connected is False` · reason ≠ peer-close
+5. Happy-path reads unchanged (no false disconnect on clean traffic)
+6. Disjoint from Cursor IAC SB WO — do not edit `iac.py` buffer logic here
+
+## Severity note (CC pre-flight)
+
+I-02 is still MED, but not cosmetic: `protocol.status`, disconnect gates, **guardian
+auto-reconnect**, CONN chip, and `ensure_session` all read `connected`. A dead reader with
+`connected=True` disables the system's own recovery path.
 
 ## Proof
 
