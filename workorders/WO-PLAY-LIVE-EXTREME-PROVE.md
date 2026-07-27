@@ -1,6 +1,6 @@
 # WO-PLAY-LIVE-EXTREME-PROVE
 
-**Status:** OPEN · **supersedes parked Accept of** `WO-PLAY-OFFER-LIVE-REPROVE`  
+**Status:** DONE · A–E PASS · tip `de6ca30` · audit #85 / `9028920`  
 **Posted:** 2026-07-27T05:19:10Z · Max GO ("don't wait — prove it all out to the extreme")  
 **Seat:** `impl-claudecode-aiclient` (live TWGS / Fable)  
 **Depends:** tip ≥ `bd9ea1a` (offer mid-strip). Prefer mint-canon tip if #PASSWORD merges mid-flight; do **not** block starting on `bd9ea1a`.

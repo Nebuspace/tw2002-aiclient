@@ -1,6 +1,6 @@
 # WO-PLAY-EXPLORE-VISIBLE
 
-**Status:** OPEN · **depends on** `WO-PLAY-EXPLORE-ADAPTER` on `main`; best after or with `WO-PLAY-EXPLORE-ARM`  
+**Status:** DONE · tip `3ec1928` · #73  
 **Posted:** 2026-07-27T03:10:33Z · One-client Play ladder **L4**  
 **Seat:** impl-aiclient-cursor (status poll) · CC may take if Cursor is mid-L1/L2  
 **Plan:** `.samantha/plans/one-client-play-ladder-20260727.md`
