@@ -271,9 +271,10 @@ def test_gate_is_drawn_with_the_loud_attr(monkeypatch) -> None:
 # Accept #5 -- no silent arm inject in any code path.
 # --------------------------------------------------------------------------
 
-def test_exactly_two_production_call_sites_raise_the_gate() -> None:
+def test_exactly_three_production_call_sites_raise_the_gate() -> None:
     """WO-PLAY-EXPLORE-ARM flipped this pin once already; WO-AUTOLOOP-
-    RELAUNCH-COCKPIT flips it again, deliberately.
+    RELAUNCH-COCKPIT flipped it again; WO-PLAY-AUTOLOOP-START flips it a
+    third time, deliberately.
 
     WO-P5-063 shipped the gate with ZERO production callers and a pin
     asserting exactly that, so the first one would have to be a decision
@@ -285,12 +286,26 @@ def test_exactly_two_production_call_sites_raise_the_gate() -> None:
     `no_resumable_run` -- so this cockpit adds no redundant client-side
     gate of its own).
 
-    The pin is UPDATED, not deleted -- it now asserts there are exactly TWO
-    production call sites, both in `app.py`. A THIRD caller appearing
+    WO-PLAY-AUTOLOOP-START adds the third: canon's `L)chains` Trade-Loop-
+    Chains popup, where `Enter` on a taught-macro row raises the gate. It is
+    the same deliberate shape as the two before it -- selection ARMS a
+    pending action and nothing else, and only a subsequent `y` reaches
+    `adapters.autoloop_start`. Canon names this one directly:
+    `mode-line-and-teach-controls.md` §"Confirm-gate — never one keystroke
+    to live money" ("selecting a chain ... arms a pending action and raises
+    an explicit confirm prompt").
+
+    The pin is UPDATED, not deleted -- it now asserts there are exactly
+    THREE production call sites, all in `app.py`. A FOURTH caller appearing
     without its own WO still goes red first, which is the property that
     made the original worth having. Deleting it would have converted a
     live guard into silence at the exact moment it started guarding
     something real.
+
+    This test caught the third addition on its first full-suite run, which
+    is the whole argument for a counted tripwire over a "gates are gated"
+    assertion: the count is what makes a new money path impossible to add
+    quietly.
     """
     root = Path(screens_mod.__file__).resolve().parent
     callers = []
@@ -301,9 +316,10 @@ def test_exactly_two_production_call_sites_raise_the_gate() -> None:
             name = getattr(func, "attr", None) or getattr(func, "id", None)
             if isinstance(node, ast.Call) and name == "begin_arm_confirm":
                 callers.append(path.name)
-    assert callers == ["app.py", "app.py"], (
-        f"expected exactly two production callers, both in app.py (the "
-        f"post-ensure explore offer and the relaunch offer); found {callers}"
+    assert callers == ["app.py", "app.py", "app.py"], (
+        f"expected exactly three production callers, all in app.py (the "
+        f"post-ensure explore offer, the relaunch offer, and the L)chains "
+        f"taught-loop arm); found {callers}"
     )
 
 

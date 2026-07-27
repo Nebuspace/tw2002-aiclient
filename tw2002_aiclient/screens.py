@@ -16,6 +16,7 @@ from tw2002_aiclient.cockpit import analyze as cockpit_analyze
 from tw2002_aiclient.cockpit import arm as cockpit_arm
 from tw2002_aiclient.cockpit import armconfirm as cockpit_armconfirm
 from tw2002_aiclient.cockpit import autoloop_controls as cockpit_autoloop_controls
+from tw2002_aiclient.cockpit import chains as cockpit_chains
 from tw2002_aiclient.cockpit import control_seat as cockpit_control_seat
 from tw2002_aiclient.cockpit import covermeter as cockpit_covermeter
 from tw2002_aiclient.cockpit import panic
@@ -949,6 +950,14 @@ class PlayShellScreen:
         self.analyze_session: cockpit_analyze.AnalyzeSession = (
             cockpit_analyze.AnalyzeSession()
         )
+        # WO-PLAY-AUTOLOOP-START: canon's ``L)chains`` Trade-Loop-Chains
+        # library popup.  Same overlay idiom as ``analyze_session`` above --
+        # never auto-opens; only an explicit ``L`` (or a close action) moves
+        # it.  app.py fills the rows from the loop store; this class holds
+        # no store reader of its own.  Test-visible via ``play.chains_session``.
+        self.chains_session: cockpit_chains.ChainsSession = (
+            cockpit_chains.ChainsSession()
+        )
         # WO-P5-070: in-flight analyze draft (pre-approval).  Cleared on
         # reject; promoted to ``stub_store`` only after ``draft_approve``.
         self.pending_analyze_draft: dict | None = None
@@ -1878,6 +1887,31 @@ class PlayShellScreen:
                 self.stdscr, control_strip, control_strip_fallback_lines, curses.A_NORMAL, boxed=False
             )
 
+        # WO-PLAY-AUTOLOOP-START: canon's ``L)chains`` library popup, drawn
+        # over the centre region and BEFORE the confirm gate below -- the
+        # confirm line must stay the last thing painted, since it is the one
+        # prompt that spends.
+        _cs_draw = getattr(self, "chains_session", None)
+        if _cs_draw is not None and _cs_draw.is_open:
+            try:
+                _center = regions.get("center") or {}
+                _w = _center.get("w")
+                lines = cockpit_chains.compose_chain_lines(
+                    _cs_draw,
+                    unicode_ok=uok,
+                    width=(_w - 4) if isinstance(_w, int) else 40,
+                )
+                cockpit_draw.draw_lines(
+                    self.stdscr, regions.get("center"), lines, curses.A_NORMAL, boxed=True
+                )
+            except Exception:  # noqa: BLE001 -- a raising composer must not crash the draw pass
+                # Same asymmetry the confirm gate states below: degrading
+                # silently would leave an OPEN popup that `handle_key` still
+                # routes Enter to as `chains_arm`, i.e. an invisible list
+                # whose selection the operator cannot see. Closing it is the
+                # only honest recovery.
+                _cs_draw.close()
+
         # WO-P5-063: the confirm-to-arm gate. Drawn LAST and over the control
         # strip's own row, so nothing can paint on top of the one prompt that
         # spends live turns. Canon puts it on the strip's row rather than in a
@@ -1970,6 +2004,14 @@ class PlayShellScreen:
                 return "draft_approve"
             return "draft_reject"
         if key == 27:  # Esc
+            # WO-PLAY-AUTOLOOP-START: the chains popup dismisses first, for
+            # the same reason the Analyze overlay does -- Esc means "close
+            # the thing that is up", and dropping the operator all the way
+            # back to the launcher from an open money-path list would lose
+            # their place for a keystroke they meant as "never mind".
+            _cs = getattr(self, "chains_session", None)
+            if _cs is not None and _cs.is_open:
+                return "chains_close"
             # WO-P5-069: if the Analyze overlay is open, Esc closes it
             # rather than returning to the launcher -- "A or Esc closes"
             # (WO-P5-069 Accept).  Only the overlay is dismissed; the
@@ -1988,6 +2030,24 @@ class PlayShellScreen:
         # chip in the control strip.  Any arrow direction cycles the single
         # focusable control (currently only CONN); future WOs that add more
         # focusable controls can extend this into a focus-ring.
+        # WO-PLAY-AUTOLOOP-START: while the chains popup is up it owns the
+        # cursor keys and Enter.  Placed ABOVE the CONN focus-ring so an
+        # operator moving down a list of live-money actions cannot silently
+        # be toggling a connection chip instead.
+        _cs = getattr(self, "chains_session", None)
+        if _cs is not None and _cs.is_open:
+            if key in (curses.KEY_UP, ord("k")):
+                return "chains_up"
+            if key in (curses.KEY_DOWN, ord("j")):
+                return "chains_down"
+            if key in (curses.KEY_ENTER, 10, 13):
+                # An INTENT to arm, never a start.  Canon: "selecting a chain
+                # or launching a run *arms* a pending action and raises an
+                # explicit confirm prompt ... A bare Enter must never fire a
+                # launch" (`mode-line-and-teach-controls.md` §"Confirm-gate —
+                # never one keystroke to live money").  app.py turns this into
+                # `begin_arm_confirm`, and only a subsequent `y` spends.
+                return "chains_arm"
         if key in (curses.KEY_LEFT, curses.KEY_RIGHT, curses.KEY_UP, curses.KEY_DOWN):
             self._conn_focused = not self._conn_focused
             return None
@@ -1996,6 +2056,14 @@ class PlayShellScreen:
             if self._conn_focused:
                 return "conn_activate"
             return None
+        # WO-PLAY-AUTOLOOP-START: canon's ``L)chains``.  Toggle, matching the
+        # Analyze overlay's posture: a second press closes.  Both cases bind.
+        # Returns a pure INTENT only -- this class has no send path
+        # (``tests/test_spectate_no_send.py``'s guards remain intact).
+        if key in (ord("l"), ord("L")):
+            if _cs is not None and _cs.is_open:
+                return "chains_close"
+            return "chains_open"
         # WO-P5-069: A Analyze on-demand overlay.  Returns a pure INTENT
         # signal only -- this class has no send path of its own
         # (``tests/test_spectate_no_send.py``'s guards remain intact).

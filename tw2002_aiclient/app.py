@@ -12,8 +12,10 @@ from tw2002_aiclient import adapters
 from tw2002_aiclient.cockpit import analyze as _analyze
 from tw2002_aiclient.cockpit import assign_trigger as _assign_trigger
 from tw2002_aiclient.cockpit import autoloop_controls as _autoloop_controls
+from tw2002_aiclient.cockpit import chains as _chains
 from tw2002_aiclient.cockpit import draft_approve as _draft_approve
 from tw2002_aiclient.cockpit import record_macro as _record_macro
+from tw2002_aiclient.loops import store as _loop_store
 from tw2002_aiclient.screens import (
     BankViewScreen,
     CreateFormScreen,
@@ -665,6 +667,20 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
     # `begin_arm_confirm` call below; cleared the instant "arm_confirm"
     # fires.
     pending_confirm_action: str | None = None
+    # WO-PLAY-AUTOLOOP-START: the exact row the taught-loop confirm line was
+    # composed from. Held alongside `pending_confirm_action` rather than
+    # re-read at `y`, so the macro that runs is provably the macro named in
+    # the prompt the operator agreed to.
+    #
+    # Cancelling a gate leaves `pending_confirm_action` stale (the screen
+    # clears its own gate and returns None, so this loop never sees the
+    # cancel). That is currently harmless only because EVERY
+    # `begin_arm_confirm` call site also assigns `pending_confirm_action` --
+    # an invariant nothing enforces. So the arm branch additionally requires
+    # this to be non-None and clears it on every other gate raise: if that
+    # invariant ever breaks, the failure is a refusal to arm rather than
+    # arming yesterday's macro under someone else's prompt.
+    pending_confirm_loop: dict | None = None
     # WO-PLAY-EXPLORE-VISIBLE (L4): set after a successful arm start; cleared
     # when ``explore_status`` reports a terminal outcome so idle ticks do not
     # spam the daemon.
@@ -824,6 +840,7 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                 # None, so no gate is currently up and no other binding
                 # claimed the key.
                 pending_confirm_action = "explore"
+                pending_confirm_loop = None  # a different gate owns the row now
                 play.begin_arm_confirm(_EXPLORE_OFFER_ACTION, cycles=_EXPLORE_MIN_SECTORS)
                 continue
             if action == "pause":
@@ -849,7 +866,98 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                 sends_preview = _preview_relaunch_sends(run_dir)
                 action_text = _autoloop_controls.compose_relaunch_confirm_action(sends_preview)
                 pending_confirm_action = "relaunch"
+                pending_confirm_loop = None  # a different gate owns the row now
                 play.begin_arm_confirm(action_text)
+                continue
+            if action == "chains_open":
+                # WO-PLAY-AUTOLOOP-START: canon's `L)chains`. The store read
+                # happens HERE, on the human's keypress -- not on a timer and
+                # not at ensure -- so the list can never appear unbidden.
+                # `status` is carried alongside the rows because an empty list
+                # means "none taught" ONLY under `ok`; `read_loop_store`'s own
+                # contract names `status` as the field a caller must branch on
+                # before saying anything about how many loops exist.
+                try:
+                    store = _loop_store.read_loop_store()
+                except Exception as exc:  # noqa: BLE001
+                    # A raising store read must not take the play loop down.
+                    # Type name only, never `str(exc)` -- a store path is not
+                    # a safe thing to assume is free of operator identity
+                    # (`canon/doctrine/secrets-and-credentials.md`).
+                    play.chains_session.open([], "unreadable")
+                    play.status_line = f"loop store unreadable — {type(exc).__name__}"
+                else:
+                    play.chains_session.open(
+                        _chains.playable_loops(store), _chains.store_status(store)
+                    )
+                continue
+            if action == "chains_close":
+                play.chains_session.close()
+                continue
+            if action == "chains_up":
+                play.chains_session.move(-1)
+                continue
+            if action == "chains_down":
+                play.chains_session.move(1)
+                continue
+            if action == "chains_arm":
+                # Enter on a row ARMS a pending action; it never starts one.
+                # The adapter call lives in the `arm_confirm` branch below,
+                # behind `y`. Canon: "A bare Enter must never fire a launch."
+                selected = play.chains_session.selected()
+                if selected is None:
+                    # Nothing to arm. Say so and leave the popup up rather
+                    # than raising a confirm gate for a run with no macro --
+                    # a `y/N` prompt naming nothing is worse than no prompt.
+                    play.status_line = "nothing to arm — no taught loop selected"
+                    continue
+                pending_confirm_loop = selected
+                pending_confirm_action = "loop"
+                play.chains_session.close()
+                play.begin_arm_confirm(_chains.compose_arm_action(selected))
+                continue
+            if action == "arm_confirm" and pending_confirm_action == "loop":
+                # WO-PLAY-AUTOLOOP-START: the human pressed `y` at the taught-
+                # loop confirm. Only NOW does the money-spending adapter call
+                # happen.
+                #
+                # This branch MUST stay above the bare `arm_confirm` below,
+                # which starts EXPLORE as the unguarded default. Without it a
+                # `y` meant for a taught loop would start an explore run --
+                # two different runners, one keystroke, and nothing in a
+                # "something started" assertion would notice. Pinned both ways
+                # in `tests/test_play_chains_arm.py`.
+                #
+                # The name comes from the row the confirm line was composed
+                # from, never from a re-read of the store: re-reading between
+                # the prompt and the `y` is how an operator ends up arming a
+                # different macro than the one they agreed to.
+                pending_confirm_action = None
+                armed = pending_confirm_loop
+                pending_confirm_loop = None
+                name = armed.get("name") if isinstance(armed, dict) else None
+                if not name:
+                    # Fail closed: the gate said "loop" but no row is held.
+                    # Reachable only if the stale-pending invariant above
+                    # breaks. Refusing costs an operator one keystroke;
+                    # guessing costs them live turns on a macro nobody named.
+                    play.status_line = "did not arm — no loop held for this confirm"
+                    continue
+                play.status_line = f"arming {name or '?'}…"
+                play.draw()  # the start call blocks; show intent first
+                try:
+                    started = adapters.autoloop_start(name, run_dir=run_dir)
+                except Exception as exc:  # noqa: BLE001
+                    # A raising adapter must not take the play loop down --
+                    # same containment posture as the explore branch below.
+                    # Type name only, never `str(exc)`.
+                    play.status_line = f"arm failed — {type(exc).__name__}"
+                else:
+                    if getattr(started, "ok", False):
+                        play.status_line = f"armed {name} — one pass running"
+                    else:
+                        reason = getattr(started, "reason", None) or "unknown"
+                        play.status_line = f"did not arm — {reason}"
                 continue
             if action == "arm_confirm" and pending_confirm_action == "relaunch":
                 # WO-AUTOLOOP-RELAUNCH-COCKPIT: the human pressed `y` at the
