@@ -1,6 +1,6 @@
 # WO-ANET-GAME-SELECT-LETTER-STEP12
 
-**Status:** FIX READY · Cursor latch tighten · hub pytest/push/live-prove · PR #23  
+**Status:** DONE · PR #23 · origin `a5cfdda` (was FIX READY · Cursor latch tighten · hub pytest/push/live-prove · PR #23)
 **Posted:** 2026-07-26 · hub live after classify fix: a-net reaches `game_select` then stuck @ ensure step 12  
 **Depends:** `25ac393`+ (`WO-ANET-STEP5-LIVE-BYTES` on main)  
 **Artifact:** `audit/anet-game-select-letter-step12-20260726.md`
