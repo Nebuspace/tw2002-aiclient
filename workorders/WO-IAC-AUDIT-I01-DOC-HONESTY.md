@@ -1,9 +1,10 @@
 # WO-IAC-AUDIT-I01-DOC-HONESTY — Close stale I-01 prose in session-iac audit
 
-**Status:** OPEN · HANDOFF · Cursor  
+**Status:** DONE  
 **Posted:** 2026-07-27T18:47:00Z · from Cursor #105 flag + CC PROCESS-NOTE  
-**Seat:** Cursor or CC (docs-only)  
-**Depends:** I-01 code on main `884f73e` (#64)
+**Seat:** Cursor (`impl-aiclient-cursor`)  
+**Depends:** I-01 code on main `884f73e` (#64)  
+**Done:** `audit/session-iac-audit-20260727.md` §I-01 marked CLOSED against `884f73e`; historical probe retained; no product code.
 
 ## Goal
 
