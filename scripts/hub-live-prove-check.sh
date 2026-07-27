@@ -92,10 +92,15 @@ if [[ $CHECK_RC -eq 0 ]]; then
 else
   echo "Check Runs API failed (rc=$CHECK_RC): $CHECK_OUT"
   echo "Falling back to Commit Status context=${CHECK_NAME} …"
+  # Statuses API description max length is 140 — longer values → HTTP 422.
+  DESC="${TITLE}: ${SUMMARY}"
+  if ((${#DESC} > 140)); then
+    DESC="${DESC:0:137}..."
+  fi
   gh api "repos/${REPO}/statuses/${HEAD_SHA}" \
     -f "state=${STATE}" \
     -f "context=${CHECK_NAME}" \
-    -f "description=${TITLE}: ${SUMMARY}" \
+    -f "description=${DESC}" \
     --jq '"status id=" + (.id|tostring) + " state=" + .state'
   echo "Done — Commit Status posted (wire a GitHub App for Check Runs when ready)."
 fi
