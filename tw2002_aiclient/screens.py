@@ -1760,14 +1760,25 @@ class PlayShellScreen:
             # and the seat chip beside it is composed from wholly separate
             # inputs (`self.spectating`/`self.attached`).
             #
-            # Read-only round trip, honestly: `session/protocol.py`'s
-            # `status` verb reports the autopilot block as a hardcoded
-            # disarmed literal ("autopilot.py is not ported — ensure never
-            # arms") and carries no arm/disarm verb, so today this chip
-            # always renders `ARM OFF` against a live daemon and `ARM ?`
-            # with none. That is the truthful reading of what the daemon
-            # reports; when the run-loop and its verb land, this wiring
-            # needs no change.
+            # Read-only round trip: this chip renders whatever the daemon
+            # reports and claims nothing further.
+            #
+            # Corrected 2026-07-27 (WO-AUDIT-ARM-CLAIM-HONESTY). This
+            # comment used to say `protocol.py` reported a hardcoded
+            # disarmed literal and carried no arm/disarm verb, "so today
+            # this chip always renders `ARM OFF` against a live daemon".
+            # True when written, FALSE now: `session/autoloop.py` landed a
+            # real `AutoLoopRunner`, `protocol.py:300` calls
+            # `autoloop.arm_block(arm)` off a live `observe()`, and
+            # `autoloop_start`/`autoloop_stop`/`autoloop_status` exist. So
+            # `ARM ON` is reachable and this chip can render all three
+            # states against a live daemon (`ARM ?` still means no daemon
+            # or an unusable payload).
+            #
+            # Kept as a note rather than deleted: the old text asserted
+            # `ARM ON` was unreachable, which is one step from someone
+            # "simplifying away" a live branch. See `cockpit/arm.py` for
+            # the same correction and why it is recorded.
             try:
                 arm_chip = cockpit_arm.compose_arm_chip(status)
             except Exception:  # noqa: BLE001 -- a raising composer must not crash the draw pass

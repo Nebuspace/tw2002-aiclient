@@ -23,7 +23,17 @@ def test_parser_accepts_no_auto_arm_flag():
 
 
 def test_parser_bare_ensure_defaults_no_auto_arm_false():
-    """Flag default is False, but runtime still never arms (WO-P2-022)."""
+    """Flag default is False, and `ensure` still never auto-arms (WO-P2-022).
+
+    Precision fix 2026-07-27 (WO-AUDIT-ARM-CLAIM-HONESTY): this used to read
+    "runtime still never arms", which is now misleading. The runtime CAN arm
+    — `session/autoloop.py`'s `AutoLoopRunner`, reached by the
+    `autoloop_start` verb. What remains true is the narrower and actually
+    load-bearing claim: `ensure` does not auto-arm as a side effect
+    (`protocol.py` keeps `no_auto_arm` accepted-and-unused and leaves
+    `_maybe_auto_start_after_ensure` out), so arming stays an explicit,
+    separately-requested act.
+    """
     parser = cli.build_parser()
     args = parser.parse_args(["ensure", "--profile", "x"])
     assert args.no_auto_arm is False
