@@ -34,11 +34,11 @@ as they happen) is wired in ``app.py``'s attach send path: each successful
 
 Secret keystrokes — those sent while the current screen is a probable
 password prompt — must be stored as :data:`REDACTED_SENTINEL`, never as
-their plaintext bytes.  The **caller** decides which steps are secret by
-passing ``is_secret=True`` to :meth:`RecordSession.add_step`; this module
-never calls ``is_probable_secret_prompt`` itself, keeping the ``cockpit/``
-layer clean of ``session/`` imports (the same disjointness
-``loops/__init__.py`` documents for the read modules).
+their plaintext bytes.  :func:`is_secret_prompt_line` encapsulates the
+``session.classify`` query; callers pass ``is_secret=is_secret_prompt_line(prompt)``
+to :meth:`RecordSession.add_step`.  Centralising the check here keeps
+``app.py`` free of direct ``session.classify`` imports and away from the
+``NEVER_AUTO_ACTION`` classify→send audit perimeter.
 
 # Hardening
 
@@ -52,6 +52,9 @@ from __future__ import annotations
 import time
 from typing import NamedTuple, Optional
 
+from tw2002_aiclient.session.classify import (
+    is_probable_secret_prompt as _is_probable_secret_prompt,
+)
 from tw2002_aiclient.loops.recorder import (
     EmptyRecording,
     InvalidName,
@@ -65,6 +68,7 @@ __all__ = [
     "RecordSession",
     "SaveResult",
     "auto_name",
+    "is_secret_prompt_line",
 ]
 
 # The placeholder stored for a secret keystroke — never the plaintext bytes.
@@ -93,6 +97,22 @@ def auto_name(classification: object = None) -> str:
     safe_class = classification if isinstance(classification, str) and classification else "macro"
     ts = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
     return f"{safe_class}-{ts}"
+
+
+def is_secret_prompt_line(prompt: str) -> bool:
+    """Return ``True`` if *prompt* looks like a password / secret prompt.
+
+    Delegates to :func:`~tw2002_aiclient.session.classify.is_probable_secret_prompt`.
+    Centralised here so ``app.py``'s attach-record path can query without
+    importing ``session.classify`` directly — keeping ``app.py`` outside
+    the ``NEVER_AUTO_ACTION`` classify→send audit perimeter.
+
+    Never raises.
+    """
+    try:
+        return bool(_is_probable_secret_prompt(prompt))
+    except Exception:
+        return False
 
 
 class RecordSession:

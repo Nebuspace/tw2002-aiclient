@@ -9,6 +9,7 @@ import time
 import curses
 
 from tw2002_aiclient import adapters
+from tw2002_aiclient.cockpit import analyze as _analyze
 from tw2002_aiclient.cockpit import assign_trigger as _assign_trigger
 from tw2002_aiclient.cockpit import record_macro as _record_macro
 from tw2002_aiclient.screens import (
@@ -21,7 +22,6 @@ from tw2002_aiclient.screens import (
 )
 from tw2002_aiclient.session import cli as session_cli
 from tw2002_aiclient.session import credentials, env, player_bank
-from tw2002_aiclient.session.classify import is_probable_secret_prompt as _is_probable_secret_prompt
 from tw2002_aiclient.session.attach_client import AttachInputConn
 from tw2002_aiclient.watchfeed import WatchFeed
 
@@ -758,7 +758,7 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                     play.record_session.add_step(
                         _recorded_key,
                         (result.raw or {}).get("screen", []) if result.ok else [],
-                        is_secret=_is_probable_secret_prompt(_prompt),
+                        is_secret=_record_macro.is_secret_prompt_line(_prompt),
                     )
                 if not sent_ok:
                     # The connection broke mid-session (daemon gone,
@@ -836,6 +836,26 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                 play.stub_store.set(stub)
                 screen_label = play.current_classification or "?"
                 play.status_line = f"trigger stub set — screen: {screen_label}"
+                continue
+            if action == "analyze_open":
+                # WO-P5-069: A Analyze on-demand overlay — open.
+                # The AI teacher is spectator-only: it reads the settled
+                # screen and ledger after the fact.  It NEVER sends a
+                # keystroke to the game -- no session.send /
+                # attach_conn.send_key call appears here or in any module
+                # this branch reaches (structural grep pin:
+                # tests/test_cockpit_analyze.py).
+                # The draft-rule content path is WO-P5-070; this WO only
+                # opens the overlay gate and shows the indicator badge.
+                play.analyze_session.open()
+                play.status_line = "analyzing — press A or Esc to close"
+                continue
+            if action == "analyze_close":
+                # WO-P5-069: A Analyze on-demand overlay — close.
+                # Triggered by a second A press or an Esc while open
+                # (screens.py intercepts Esc when analyze_session.is_open).
+                play.analyze_session.close()
+                play.status_line = ""
                 continue
             if action == "record_toggle":
                 # WO-P5-067: R Record.  Toggle the in-cockpit recording

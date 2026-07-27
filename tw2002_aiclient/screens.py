@@ -12,6 +12,7 @@ from typing import Callable, Sequence
 
 import curses
 
+from tw2002_aiclient.cockpit import analyze as cockpit_analyze
 from tw2002_aiclient.cockpit import arm as cockpit_arm
 from tw2002_aiclient.cockpit import armconfirm as cockpit_armconfirm
 from tw2002_aiclient.cockpit import control_seat as cockpit_control_seat
@@ -932,6 +933,15 @@ class PlayShellScreen:
         # The store is test-visible via ``play.record_session``.
         from tw2002_aiclient.cockpit import record_macro as _rm
         self.record_session = _rm.RecordSession()
+        # WO-P5-069: in-cockpit Analyze overlay state.  Tracks whether
+        # the Analyze overlay is open (``True``) or closed (``False``).
+        # app.py opens/closes it on "analyze_open"/"analyze_close"
+        # actions.  Never auto-opens; only an explicit A press (or the
+        # corresponding close action) changes this state.
+        # Test-visible via ``play.analyze_session``.
+        self.analyze_session: cockpit_analyze.AnalyzeSession = (
+            cockpit_analyze.AnalyzeSession()
+        )
 
     def _init_colors(self) -> None:
         # Tone-table fg names -- sourced from cockpit.tones via the
@@ -1771,10 +1781,18 @@ class PlayShellScreen:
                     # WO-PLAY-OFFER-VISIBLE-ON-LIVE (c): a live explore run
                     # claims the hint slot via `explore_band`; the offer itself
                     # rides `status_line` on the mid segment, never here.
+                    # WO-P5-069: while an Analyze overlay pass is open, the
+                    # band slot shows the overlay badge instead of the calm
+                    # A/R/T affordance tokens.  Explore still takes priority
+                    # (it is a live run; analyze is an overlay annotation).
                     teach_band=(
                         self.explore_band
                         if isinstance(self.explore_band, str) and self.explore_band
-                        else cockpit_teachband.compose_teach_band(unicode_ok=uok)
+                        else (
+                            cockpit_analyze.OVERLAY_LABEL
+                            if self.analyze_session.is_open
+                            else cockpit_teachband.compose_teach_band(unicode_ok=uok)
+                        )
                     ),
                 )
                 control_strip_segments = [
@@ -1866,7 +1884,16 @@ class PlayShellScreen:
                 # adds the confirm gate, not the daemon call."
                 return "arm_confirm"
             return None
-        if key == 27:  # Esc — end binding, return to launcher
+        if key == 27:  # Esc
+            # WO-P5-069: if the Analyze overlay is open, Esc closes it
+            # rather than returning to the launcher -- "A or Esc closes"
+            # (WO-P5-069 Accept).  Only the overlay is dismissed; the
+            # play shell stays up.
+            # getattr guard: tests that use object.__new__ to skip __init__
+            # may not have analyze_session set; treat its absence as closed.
+            _as = getattr(self, "analyze_session", None)
+            if _as is not None and _as.is_open:
+                return "analyze_close"
             return "back"
         if key in (ord("q"), ord("Q")):
             return "quit"
@@ -1884,6 +1911,21 @@ class PlayShellScreen:
             if self._conn_focused:
                 return "conn_activate"
             return None
+        # WO-P5-069: A Analyze on-demand overlay.  Returns a pure INTENT
+        # signal only -- this class has no send path of its own
+        # (``tests/test_spectate_no_send.py``'s guards remain intact).
+        # Both `a` and `A` bind, matching the A/R/T teach band's posture.
+        # Second press while open returns "analyze_close" (toggle); first
+        # press while closed returns "analyze_open".  Esc-while-open is
+        # intercepted above.  This handler NEVER fires without an explicit
+        # key press -- no auto-open on STOP alone.
+        # getattr guard: same defence as the Esc branch above for
+        # object.__new__-constructed instances that skip __init__.
+        if key in (ord("a"), ord("A")):
+            _as = getattr(self, "analyze_session", None)
+            if _as is not None and _as.is_open:
+                return "analyze_close"
+            return "analyze_open"
         # WO-P5-068: T Assign-Trigger scaffold.  Returns a pure INTENT signal
         # only ("assign_trigger") -- this class has no send path of its own
         # (``tests/test_spectate_no_send.py``'s guards remain intact).

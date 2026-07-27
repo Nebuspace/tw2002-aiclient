@@ -852,7 +852,11 @@ def test_run_play_drives_only_subscribe_and_status_writes(monkeypatch, tmp_path)
     # KEYPRESS triggers a send either, not just that the idle loop stays
     # quiet -- then multiple draw cycles genuinely happen, landing more
     # than one status_call in the log.
-    keys = [ord("a"), curses.KEY_UP, ord("7"), 27]
+    # Note: `a`/`A` is NOT used here -- WO-P5-069 wires it to analyze_open
+    # (which itself is clean, but would make Esc return analyze_close instead
+    # of "back", exhausting the scripted key queue before the test's exit
+    # condition fires).  Use a different neutral key instead.
+    keys = [ord("z"), curses.KEY_UP, ord("7"), 27]
     stdscr = _ScriptedStdscr(keys)
 
     result = app._run_play(stdscr, _profile())
