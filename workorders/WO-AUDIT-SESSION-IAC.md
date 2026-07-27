@@ -1,6 +1,6 @@
 # WO-AUDIT-SESSION-IAC — Honesty audit of session/iac.py
 
-**Status:** READY · MED · Cursor
+**Status:** DONE · report `audit/session-iac-audit-20260727.md` · CC (re-routed from Cursor 2026-07-27 during usage/Shell outage) (was READY · MED · Cursor)
 **Posted:** 2026-07-26
 **Seat:** Cursor (read-only; no product changes)
 
