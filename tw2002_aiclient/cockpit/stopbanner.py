@@ -216,6 +216,36 @@ HANDOFF_MARKER = "[ HUMAN — YOU HAVE CONTROL ]"
 # "Panel states / Empty" degrade rule for a mode the surface cannot read.
 UNKNOWN_HOLDER_MARKER = "[ ? ]"
 
+# WO-P5-065: the attach affordance, shown on band 2 whenever the human does
+# NOT already hold the keyboard.
+#
+# Canon's band-2 sentence ("Keyboard -> Human ... control has passed to the
+# human") describes an outcome this surface cannot produce on its own, and
+# saying it anyway would be the one thing the WO forbids -- a "handed to
+# Human" claim the lock cannot back. The product reality:
+#
+#   control_lock.py:159   _SETTABLE_MODES = frozenset({MODE_APP, MODE_SPECTATE})
+#   control_lock.py:26    "...cannot enter MODE_HUMAN (attach-scoped only)"
+#
+# `MODE_HUMAN` is not settable. It is ACQUIRED by a live interactive attach
+# holding the socket, and `daemon.py` guards against releasing someone's
+# hold out from under them. So a STOP cannot hand the keyboard over; it can
+# only say who has it and how to take it.
+#
+# Hence ruling (b) (hub, 2026-07-27): PROMPT-to-attach. The human initiates.
+# Auto-acquiring MODE_HUMAN on a halt -- ruling (c) -- was rejected: it would
+# take the daemon's exclusive human lock without the operator pressing
+# anything, possibly while nobody is at the keyboard, against both the
+# single-connection invariant and the north-star's human-sovereign posture.
+#
+# The keystroke named here is the EXISTING attach chord (`screens.MODE_KEY`,
+# Ctrl-A / ADR-002), not a new binding -- there is one way to attach and this
+# band points at it rather than inventing a second. What makes this distinct
+# from the voluntary Mode toggle is the CONTEXT, not the mechanism: the calm
+# hint band offers `^A)ode` as one option among several, while this line
+# appears only at a halt and only when the human does not hold the keyboard.
+ATTACH_AFFORDANCE = "press ^A to take the keyboard"
+
 # Band 3. Canon-cited verbatim: the teach triad "move off the band and
 # onto the banner's dedicated `teach:` line" as `A)nalyze  R)ecord
 # T)assign` (note `T)assign` on the banner, vs the hint band's own
@@ -339,6 +369,25 @@ def _reason_line(status: dict) -> str:
     return STOP_PREFIX + REASON_SEPARATOR.join(labels)
 
 
+def _with_attach_affordance(marker: str) -> str:
+    """Append the attach prompt to a band-2 marker (WO-P5-065, ruling (b)).
+
+    Applied to every holder reading EXCEPT a confirmed human hold --
+    including the unknown fallback. Offering the prompt when the surface
+    cannot read the mode is the honest direction: the human may or may not
+    hold the keyboard, and telling them how to take it costs nothing (the
+    daemon refuses a duplicate attach on its own), whereas withholding it
+    would leave an operator staring at `[ ? ]` at a halt with no way
+    forward named.
+
+    The affordance is a LABEL. Pressing the key is what attaches, through
+    the cockpit's existing `MODE_KEY` path -- nothing here binds, arms, or
+    acquires anything, exactly as band 3's teach triad names moves it does
+    not perform.
+    """
+    return f"{marker}  {ATTACH_AFFORDANCE}"
+
+
 def _holder_line(status: dict) -> str:
     """Band 2 -- the keyboard-handoff marker, claimed only on evidence.
 
@@ -350,13 +399,15 @@ def _holder_line(status: dict) -> str:
     does not."""
     mode = status.get("mode")
     if not isinstance(mode, str):
-        return UNKNOWN_HOLDER_MARKER
+        return _with_attach_affordance(UNKNOWN_HOLDER_MARKER)
     holder = mode.strip()
     if not holder:
-        return UNKNOWN_HOLDER_MARKER
+        return _with_attach_affordance(UNKNOWN_HOLDER_MARKER)
     if holder == MODE_HUMAN:
+        # The ONLY branch that claims the human has the keyboard, and the
+        # only one that omits the affordance -- there is nothing to take.
         return HANDOFF_MARKER
-    return f"[ {holder.upper()} ]"
+    return _with_attach_affordance(f"[ {holder.upper()} ]")
 
 
 def compose_stop_banner_lines(

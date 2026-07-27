@@ -244,7 +244,13 @@ def test_handoff_band_never_claims_human_while_another_holder_is_reported(mode, 
     lines = stopbanner.compose_stop_banner_lines(
         _halt("autopilot_halted", mode=mode), width=WIDE
     )
-    assert lines[1] == expected
+    # WO-P5-065 appended the attach affordance to every NON-human holder
+    # reading. Kept as an EXACT comparison rather than relaxed to `in`:
+    # this pin's job is to catch band-2 drift, and a substring check would
+    # stop doing that. Only the expected value moved.
+    assert lines[1] == f"{expected}  {stopbanner.ATTACH_AFFORDANCE}"
+    # The load-bearing assertion, untouched: never claim the human holds
+    # the keyboard while another holder is reported.
     assert "YOU HAVE CONTROL" not in lines[1]
 
 
@@ -254,7 +260,12 @@ def test_handoff_band_degrades_to_question_mark_when_the_holder_is_unknown(statu
     if status_mode is not None:
         status["mode"] = status_mode
     lines = stopbanner.compose_stop_banner_lines(status, width=WIDE)
-    assert lines[1] == "[ ? ]"
+    # WO-P5-065: the honest `[ ? ]` degrade is unchanged; the attach
+    # affordance now follows it (an operator who cannot be told who holds
+    # the keyboard should still be told how to take it). Exact comparison
+    # preserved -- see the sibling pin above.
+    assert lines[1] == f"[ ? ]  {stopbanner.ATTACH_AFFORDANCE}"
+    assert lines[1].startswith(stopbanner.UNKNOWN_HOLDER_MARKER)
     assert "YOU HAVE CONTROL" not in "\n".join(lines)
 
 
@@ -405,3 +416,90 @@ def test_a_hostile_reason_entry_is_contained_and_its_siblings_still_render():
                                "reasons": [_Hostile(), {"code": "credits_stale"}]}}
     lines = stopbanner.compose_stop_banner_lines(status, width=WIDE)
     assert "credits stale" in lines[0]
+
+
+# ---------------------------------------------------------------------------
+# WO-P5-065 -- prompt-to-attach (hub ruling (b)).
+#
+# A STOP cannot hand the keyboard over: `MODE_HUMAN` is not settable
+# (`control_lock.py:159` `_SETTABLE_MODES`), only acquired by a live attach.
+# So band 2 says who holds it and how to take it. The human initiates.
+# ---------------------------------------------------------------------------
+
+
+def test_attach_affordance_offered_when_the_app_holds_the_keyboard():
+    lines = stopbanner.compose_stop_banner_lines(
+        _halt("autopilot_halted", mode="app"), width=WIDE
+    )
+    assert stopbanner.ATTACH_AFFORDANCE in lines[1]
+
+
+def test_attach_affordance_absent_when_the_human_already_holds_it():
+    """The only reading with nothing to take -- and the only one that may
+    claim the human has control."""
+    lines = stopbanner.compose_stop_banner_lines(
+        _halt("autopilot_halted", mode="human"), width=WIDE
+    )
+    assert lines[1] == stopbanner.HANDOFF_MARKER
+    assert stopbanner.ATTACH_AFFORDANCE not in lines[1]
+
+
+@pytest.mark.parametrize("status_mode", [None, "", 17, [], {"a": 1}, "spectate", "app"])
+def test_every_non_human_reading_names_a_way_forward(status_mode):
+    """Including the unknown fallback: an operator staring at `[ ? ]` at a
+    halt must still be told how to take the keyboard."""
+    status = _halt("autopilot_halted")
+    if status_mode is not None:
+        status["mode"] = status_mode
+    lines = stopbanner.compose_stop_banner_lines(status, width=WIDE)
+    assert stopbanner.ATTACH_AFFORDANCE in lines[1]
+
+
+def test_the_banner_never_claims_the_keyboard_was_handed_over_unprompted():
+    """The claim the WO forbids: a STOP asserting the human has control when
+    the lock says otherwise. `HANDOFF_MARKER` may appear ONLY for a reported
+    human hold -- never as a side effect of the halt itself."""
+    for mode in (None, "app", "spectate", "", 17):
+        status = _halt("autopilot_halted")
+        if mode is not None:
+            status["mode"] = mode
+        text = "\n".join(stopbanner.compose_stop_banner_lines(status, width=WIDE))
+        assert stopbanner.HANDOFF_MARKER not in text
+        assert "YOU HAVE CONTROL" not in text
+
+
+def test_affordance_names_the_existing_chord_not_a_new_binding():
+    """No invented key: the affordance points at the cockpit's one attach
+    path (`screens.MODE_KEY`, Ctrl-A / ADR-002)."""
+    from tw2002_aiclient import screens
+
+    assert "^A" in stopbanner.ATTACH_AFFORDANCE
+    assert screens.MODE_KEY == 1  # Ctrl-A
+
+
+def test_affordance_is_a_label_and_arms_nothing():
+    """Same posture as band 3's teach triad: naming a move is not performing
+    it. Nothing in this module may acquire a lock or send."""
+    import ast
+    import inspect
+
+    tree = ast.parse(inspect.getsource(stopbanner))
+    referenced = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Name):
+            referenced.add(node.id)
+        elif isinstance(node, ast.Attribute):
+            referenced.add(node.attr)
+    for forbidden in ("attach", "acquire", "send", "send_request", "connect"):
+        assert forbidden not in referenced, f"stopbanner references {forbidden!r} in CODE"
+
+
+def test_banner_height_unchanged_by_the_affordance():
+    """The affordance rides band 2 rather than adding a fourth row --
+    `cockpit.layout` imports `BANNER_H` and a height change would silently
+    move the whole frame."""
+    assert stopbanner.BANNER_H == 3
+    lines = stopbanner.compose_stop_banner_lines(
+        _halt("autopilot_halted", mode="app"), width=WIDE
+    )
+    assert len(lines) == 3
