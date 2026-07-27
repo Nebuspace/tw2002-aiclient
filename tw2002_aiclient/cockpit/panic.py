@@ -51,16 +51,29 @@ is not yet literally true on tip; recorded here rather than quietly
 overclaimed in a docstring. A future WO widening panic to every runner
 should update this paragraph and the pin that goes with it.
 
-# Pause/resume is deliberately absent
+# Pause and relaunch are no longer absent
 
-Canon says the loop is "**pause**/stop-able from the cockpit"
-(`app-autopilot-model.md` ~133, ~188), but `session/autoloop.py` has
-`start()` and `stop()` and no pause -- the capability does not exist to
-bind a key to. Rather than ship a `pause` key that silently does nothing on
-a loop that is spending turns, pause/resume is descoped to a follow-on WO
-that adds runner-side pause first (hub ruling 2026-07-27). A key that lies
-in the one moment the operator reaches for it is worse than a key that is
-not there.
+The paragraph that used to stand here said pause/resume was "descoped to a
+follow-on WO that adds runner-side pause first" (hub ruling 2026-07-27,
+when `session/autoloop.py` had only `start()`/`stop()` and no capability
+to bind a key to). That follow-on landed: `session/autoloop.py` now has a
+real `pause()` (WO-AUTOLOOP-PAUSE-RESUME, #101), wired to the daemon's
+`autoloop_pause` verb.
+
+The other half is **not** a `resume` -- `resume` would have been a lie:
+`replay_loop` takes no start index, so re-arming a paused run always
+replays its macro from step 1 and re-issues sends already made. The hub
+ruled the verb be named for what it actually does instead --
+`autoloop_relaunch` -- disclosing `replays_from_start` and
+`sends_already_issued` so a confirm gate can state the truth
+(`session/protocol.py::_dispatch_autoloop_relaunch`).
+
+Neither key is bound in THIS module: this module still owns panic alone.
+The pause hotkey (ungated, this module's own "halts nothing to spend"
+reasoning applies unchanged) and the relaunch confirm gate + label
+(money-path, confirm-gated) are `cockpit/autoloop_controls.py`'s job
+(WO-AUTOLOOP-RELAUNCH-COCKPIT), wired in `app.py`/`screens.py` alongside
+this module's own panic wiring.
 
 Hardening family (matches `arm.py`/`armconfirm.py`/`teachband.py`): never
 raises regardless of any argument's type or content.
