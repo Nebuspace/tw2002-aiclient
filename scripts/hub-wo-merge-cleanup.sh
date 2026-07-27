@@ -43,9 +43,18 @@ if ! git show-ref --verify --quiet "refs/remotes/origin/${BRANCH}"; then
 fi
 
 TIP="$(git rev-parse "origin/${BRANCH}")"
-if ! git merge-base --is-ancestor "$TIP" origin/main; then
-  echo "REFUSE: origin/${BRANCH} tip ${TIP:0:7} is NOT an ancestor of origin/main."
-  echo "        Merge (or abandon + preserve/) before cleanup. No delete performed."
+if git merge-base --is-ancestor "$TIP" origin/main; then
+  : # merge-commit workflow — tip reachable from main
+elif command -v gh >/dev/null 2>&1 \
+  && [[ -n "$(gh pr list --head "$BRANCH" --state merged --json number -q '.[0].number' 2>/dev/null || true)" ]]; then
+  # Squash-merge carve-out (WO-LIFECYCLE-SQUASH-ON-ORIGIN): pre-squash tips are
+  # never ancestors of main after squash. A MERGED PR with this head is enough.
+  echo "OK: origin/${BRANCH} tip ${TIP:0:7} not an ancestor of main, but gh reports a MERGED PR for this head (squash-safe)."
+else
+  echo "REFUSE: origin/${BRANCH} tip ${TIP:0:7} is NOT an ancestor of origin/main,"
+  echo "        and no MERGED PR was found for head=${BRANCH}."
+  echo "        For squash repos, prefer: gh pr view <n> state=MERGED + per-path blob identity"
+  echo "        (see workorders/WO-LIFECYCLE-SQUASH-ON-ORIGIN.md). No delete performed."
   exit 2
 fi
 
