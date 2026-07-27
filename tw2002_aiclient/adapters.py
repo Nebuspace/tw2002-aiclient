@@ -16,6 +16,7 @@ from pathlib import Path
 
 from .session import cli as _cli
 from .session import env as _env
+from . import world_identity as _wi
 
 # Machine-readable failure reasons `ensure_session()` may return on
 # `EnsureResult.reason`. Callers should switch on these constants, not on
@@ -141,3 +142,130 @@ def _classify_failure(resp: dict) -> str:
 
 def _failure_detail(resp: dict) -> str | None:
     return resp.get("detail") or (resp.get("error") or None)
+
+
+# ---------------------------------------------------------------------------
+# Explore adapter — WO-PLAY-EXPLORE-ADAPTER (Play ladder L2)
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class ExploreResult:
+    """Typed outcome of ``explore_start`` / ``explore_stop`` / ``explore_status``.
+
+    ``ok=True``: the daemon accepted the request. ``ok=False``: transport or
+    protocol failure — ``reason`` carries a machine-readable tag, ``detail``
+    carries the raw daemon error string (never silently swallowed). ``raw``
+    is the full wire dict, kept for debugging / L4 readers that need
+    ``distinct_sectors`` / ``outcome`` / other daemon-side fields.
+    """
+
+    ok: bool
+    reason: str | None = None   # machine-readable when ok=False
+    detail: str | None = None
+    raw: dict | None = None     # wire dict; L4 reads distinct_sectors/outcome from here
+
+
+def explore_start(
+    world_id: str,
+    *,
+    min_sectors: int | None = None,
+    turn_budget: int | None = None,
+    run_dir: Path | None = None,
+) -> ExploreResult:
+    """Start the sector explorer for *world_id*.
+
+    Sends ``explore_start`` to the daemon via :func:`session.cli.send_request`.
+    Payload mirrors ``cmd_explore_start``'s discipline: ``world_id`` is always
+    sent; ``min_sectors`` and ``turn_budget`` are included only when explicitly
+    supplied (``None`` → omit, letting the daemon apply its own defaults of 5
+    and 50 respectively).
+
+    Never raises for expected transport / protocol failures — every path
+    returns a typed :class:`ExploreResult`.
+    """
+    resolved_run_dir = run_dir or _env.resolve_run_dir()
+    payload: dict = {"world_id": world_id}
+    if min_sectors is not None:
+        payload["min_sectors"] = min_sectors
+    if turn_budget is not None:
+        payload["turn_budget"] = turn_budget
+    try:
+        resp = _cli.send_request("explore_start", payload, run_dir=resolved_run_dir)
+    except Exception as e:  # noqa: BLE001 — belt-and-suspenders; send_request never raises
+        return ExploreResult(ok=False, reason="unknown", detail=f"{type(e).__name__}: {e}")
+    if resp.get("ok"):
+        return ExploreResult(ok=True, raw=resp)
+    return ExploreResult(
+        ok=False,
+        reason=resp.get("error") or "unknown",
+        detail=resp.get("detail") or resp.get("error") or None,
+        raw=resp,
+    )
+
+
+def explore_stop(*, run_dir: Path | None = None) -> ExploreResult:
+    """Stop the running sector explorer.
+
+    Sends ``explore_stop`` to the daemon. Never raises; always returns a typed
+    :class:`ExploreResult`.
+    """
+    resolved_run_dir = run_dir or _env.resolve_run_dir()
+    try:
+        resp = _cli.send_request("explore_stop", {}, run_dir=resolved_run_dir)
+    except Exception as e:  # noqa: BLE001
+        return ExploreResult(ok=False, reason="unknown", detail=f"{type(e).__name__}: {e}")
+    if resp.get("ok"):
+        return ExploreResult(ok=True, raw=resp)
+    return ExploreResult(
+        ok=False,
+        reason=resp.get("error") or "unknown",
+        detail=resp.get("detail") or resp.get("error") or None,
+        raw=resp,
+    )
+
+
+def explore_status(*, run_dir: Path | None = None) -> ExploreResult:
+    """Query sector explorer status.
+
+    Sends ``explore_status`` to the daemon. Never raises; always returns a
+    typed :class:`ExploreResult`.
+    """
+    resolved_run_dir = run_dir or _env.resolve_run_dir()
+    try:
+        resp = _cli.send_request("explore_status", {}, run_dir=resolved_run_dir)
+    except Exception as e:  # noqa: BLE001
+        return ExploreResult(ok=False, reason="unknown", detail=f"{type(e).__name__}: {e}")
+    if resp.get("ok"):
+        return ExploreResult(ok=True, raw=resp)
+    return ExploreResult(
+        ok=False,
+        reason=resp.get("error") or "unknown",
+        detail=resp.get("detail") or resp.get("error") or None,
+        raw=resp,
+    )
+
+
+def explore_start_for_profile(
+    profile: object,
+    *,
+    min_sectors: int | None = None,
+    turn_budget: int | None = None,
+    run_dir: Path | None = None,
+) -> ExploreResult:
+    """Convenience wrapper: derive *world_id* from *profile*, then call
+    :func:`explore_start`.
+
+    *profile* must expose ``.host``, ``.game_letter``, and ``.handle``
+    (a ``credentials.Profile`` or any duck-typed equivalent). Raises
+    :class:`world_identity.WorldIdentityError` if the profile lacks a
+    required field — this is a programmer error (bad profile object), not
+    an expected transport failure, so it is not swallowed.
+    """
+    world_id = _wi.world_id_from_profile(profile)
+    return explore_start(
+        world_id,
+        min_sectors=min_sectors,
+        turn_budget=turn_budget,
+        run_dir=run_dir,
+    )
