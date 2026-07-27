@@ -1,8 +1,8 @@
 # WO-EXPLORE-AUTOMATION-GATE — Finish automated exploration (pre–trade-chain gate)
 
-**Status:** OPEN · READY · **NEXT after #116**  
+**Status:** OPEN · READY · EXEC seeded · HANDOFF CC  
 **Posted:** 2026-07-27T21:35:00Z · Max priority: trade-chain TUI+detect after explore done  
-**Seat:** open (CC preferred if free; else Cursor)  
+**Seat:** `impl-claudecode-aiclient`  
 **Depends:** Play explore L1–L4 already on main; tip-check remaining gaps below  
 **Refs:** `.samantha/plans/trade-loop-chains-after-explore-20260727.md` · `canon/strategy/exploration-policy.md`
 
