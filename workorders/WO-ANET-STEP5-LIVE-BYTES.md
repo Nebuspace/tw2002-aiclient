@@ -1,6 +1,6 @@
 # WO-ANET-STEP5-LIVE-BYTES
 
-**Status:** FIX READY · Cursor chrome-footer carve-out + live fixture · hub pytest/push/live-prove · PR #22  
+**Status:** DONE · PR #22 · origin `25ac393` (was FIX READY · Cursor chrome-footer carve-out + live fixture · hub pytest/push/live-prove · PR #22)
 **Posted:** 2026-07-26 · hub live wave on `7e43af6` falsified “a-net root already fixed”  
 **Depends:** tip ≥ `7e43af6` (banner + letter on main); ephemeral bank  
 **Seat:** Cursor preferred (capture + classify offline); hub may assist live capture if Shell dead  

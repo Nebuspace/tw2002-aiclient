@@ -1,7 +1,7 @@
 # WO-AUDIT-PLAYER-BANK-STORE-HONESTY — player_bank.py five-into-one collapse fix
 
 > Reconstructed from coord HANDOFF bodies (2026-07-25 backfill).
-> Status: **IN FLIGHT** 2026-07-25 · discovered by CC during G3 build; dispatched under standing discovered-work rule @ 14:41:45Z · isolated worktree `lane-playerbank-honesty`
+> Status: **DONE** · origin `a9868ac` (was IN FLIGHT 2026-07-25 · discovered by CC during G3 build; dispatched under standing discovered-work rule @ 14:41:45Z · isolated worktree `lane-playerbank-honesty`)
 > Type: harden · Priority: P1 · Lens: L2 code-vs-canon / honesty
 > Refs: `tw2002_aiclient/session/player_bank.py:25-38` `_load_bank_raw` · `canon/architecture/secrets-and-credentials.md`
 

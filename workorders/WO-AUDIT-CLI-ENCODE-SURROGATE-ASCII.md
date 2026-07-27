@@ -1,7 +1,7 @@
 # WO-AUDIT-CLI-ENCODE-SURROGATE-ASCII — CLI --keys surrogate / unencodable byte encoding honesty
 
 > Reconstructed from coord HANDOFF bodies (2026-07-25 backfill).
-> Status: **IN FLIGHT** 2026-07-25 · dispatched @ 14:21:28Z (isolated worktree) · F3 / WO-AUDIT-KEYS-ENCODE-HONESTY folded in
+> Status: **DONE** · origin `fec3ffe` (was IN FLIGHT 2026-07-25 · dispatched @ 14:21:28Z (isolated worktree) · F3 / WO-AUDIT-KEYS-ENCODE-HONESTY folded in)
 > Type: harden · Priority: P0 · Lens: L2 code-vs-canon / encoding honesty
 > Refs: `tw2002_aiclient/session/cli.py` `--keys` path · F3 session-audit finding · `canon/architecture/secrets-and-credentials.md`
 
