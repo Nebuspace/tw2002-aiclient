@@ -18,6 +18,7 @@ from tw2002_aiclient.cockpit import armconfirm as cockpit_armconfirm
 from tw2002_aiclient.cockpit import control_seat as cockpit_control_seat
 from tw2002_aiclient.cockpit import covermeter as cockpit_covermeter
 from tw2002_aiclient.cockpit import decisions as cockpit_decisions
+from tw2002_aiclient.cockpit import draft_approve as cockpit_draft_approve
 from tw2002_aiclient.cockpit import draw as cockpit_draw
 from tw2002_aiclient.cockpit import focus as cockpit_focus
 from tw2002_aiclient.cockpit import fold as cockpit_fold
@@ -809,6 +810,9 @@ class PlayShellScreen:
     # default somewhere a reader of the class body cannot see it.
     _arm_confirm: tuple[object, object] | None = None
 
+    # WO-P5-070: pending analyze draft awaiting human y/N approval.
+    _draft_approve: dict | None = None
+
     # WO-PLAY-OFFER-VISIBLE-ON-LIVE: text that CLAIMS the hint band's slot.
     #
     # `None` -> the band shows the calm A/R/T teach tokens. A string -> that
@@ -943,6 +947,18 @@ class PlayShellScreen:
         self.analyze_session: cockpit_analyze.AnalyzeSession = (
             cockpit_analyze.AnalyzeSession()
         )
+        # WO-P5-070: in-flight analyze draft (pre-approval).  Cleared on
+        # reject; promoted to ``stub_store`` only after ``draft_approve``.
+        self.pending_analyze_draft: dict | None = None
+        # Test-visible approval attribution (full LedgerWriter is deferred).
+        self.approval_ledger_events: list[dict] = []
+
+    def begin_draft_approve(self, draft: object = None) -> None:
+        """Raise the analyze-draft approval gate (WO-P5-070). Never raises."""
+        if isinstance(draft, dict):
+            self._draft_approve = draft
+        else:
+            self._draft_approve = None
 
     def _init_colors(self) -> None:
         # Tone-table fg names -- sourced from cockpit.tones via the
@@ -1871,6 +1887,18 @@ class PlayShellScreen:
                 # gate. Cancelling is the only honest recovery.
                 self._arm_confirm = None
 
+        # WO-P5-070: draft approval gate — same row priority as arm confirm.
+        if self._draft_approve is not None:
+            try:
+                screen = (self._draft_approve.get("when") or {}).get("screen", "?")
+                line = cockpit_draft_approve.compose_draft_approve_line(screen, unicode_ok=uok)
+                attr = self._control_strip_segment_attr(cockpit_draft_approve.DRAFT_APPROVE_TONE)
+                cockpit_draw.draw_lines(
+                    self.stdscr, control_strip, [line], attr, boxed=False,
+                )
+            except Exception:  # noqa: BLE001
+                self._draft_approve = None
+
         self.stdscr.refresh()
 
     def handle_key(self, key: int) -> str | None:
@@ -1920,6 +1948,14 @@ class PlayShellScreen:
                 # adds the confirm gate, not the daemon call."
                 return "arm_confirm"
             return None
+        # WO-P5-070: draft approval gate — total capture while up (same ordering
+        # contract as arm confirm above).
+        if self._draft_approve is not None:
+            outcome = cockpit_draft_approve.resolve_draft_approve_key(key)
+            self._draft_approve = None
+            if outcome == cockpit_draft_approve.CONFIRM:
+                return "draft_approve"
+            return "draft_reject"
         if key == 27:  # Esc
             # WO-P5-069: if the Analyze overlay is open, Esc closes it
             # rather than returning to the launcher -- "A or Esc closes"

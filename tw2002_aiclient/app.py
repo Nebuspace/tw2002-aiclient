@@ -11,6 +11,7 @@ import curses
 from tw2002_aiclient import adapters
 from tw2002_aiclient.cockpit import analyze as _analyze
 from tw2002_aiclient.cockpit import assign_trigger as _assign_trigger
+from tw2002_aiclient.cockpit import draft_approve as _draft_approve
 from tw2002_aiclient.cockpit import record_macro as _record_macro
 from tw2002_aiclient.screens import (
     BankViewScreen,
@@ -852,10 +853,33 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                 continue
             if action == "analyze_close":
                 # WO-P5-069: A Analyze on-demand overlay — close.
-                # Triggered by a second A press or an Esc while open
-                # (screens.py intercepts Esc when analyze_session.is_open).
+                # WO-P5-070: closing produces an inert draft and raises the
+                # human approval gate — unapproved drafts never reach stub_store.
                 play.analyze_session.close()
-                play.status_line = ""
+                draft = _draft_approve.create_analyze_draft(play.current_classification)
+                play.pending_analyze_draft = draft
+                play.begin_draft_approve(draft)
+                screen_label = (draft.get("when") or {}).get("screen") or "?"
+                play.status_line = f"analyze draft ({screen_label}) — y/N to approve"
+                continue
+            if action == "draft_approve":
+                draft = play.pending_analyze_draft
+                approved = _draft_approve.promote_to_approved(draft)
+                play.pending_analyze_draft = None
+                if approved is not None:
+                    play.stub_store.set(approved)
+                    play.approval_ledger_events.append(
+                        {"actor": "app", "event": "analyze_rule_approved", "screen": (
+                            (approved.get("when") or {}).get("screen") or ""
+                        )}
+                    )
+                    play.status_line = "analyze draft approved (playback-eligible stub)"
+                else:
+                    play.status_line = "analyze draft approve failed — no draft"
+                continue
+            if action == "draft_reject":
+                play.pending_analyze_draft = None
+                play.status_line = "analyze draft discarded"
                 continue
             if action == "record_toggle":
                 # WO-P5-067: R Record.  Toggle the in-cockpit recording
