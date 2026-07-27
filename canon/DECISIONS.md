@@ -275,5 +275,14 @@ Do not leave `"prompt": rows[-1]` feeding both sides unchanged. Thin follow-on W
 
 **Ruled:** For `state` / replay anchor checks, **only the command-prompt bracket** is admitted as current sector. The `Sector : N` status line is **not** admitted (warp-confirm / computer remote display ambiguity — wrong read satisfies the guard; missing read only halts). Widening requires a new DECISION + live warp-confirm capture — not fixture assumption. Aligns macros.md "missed write, never a wrong one."
 
+## Pending — chain floors + class-derived posture (2026-07-27)
 
+**Context:** Explore gate (#122) persists port **class** letter triples from flyby; `build_trade_hops` historically required non-empty `commodities` rows (docked commerce report). Reborn tree has no `commodities` producer and `write_port_only` has zero callers. Canon cites `MIN_CHAIN_LINKS` in `priority_engine.py`, which is not reborn; EV picker is out of scope.
+
+**Decision (Pending Max Accept of prose if folded into FEATURES):**
+1. Until a priority/EV layer is reborn, `MIN_CHAIN_LINKS` (and related floors) live as cited constants in `tw2002_aiclient/chains.py` with sole pure consumer `is_executable_chain`.
+2. Trade-adapter / WIRE: support a **class-derived posture path** — emit compatible `TradeHop` shapes from letter triples with **margin unknown** (never guessed). Commodity/pct path remains for docked reports when that parser is reborn.
+3. Follow-on WO: rebirth commerce-report parser + wire `write_port_only` (turn-spend prove).
+
+**Refs:** #122 artifact correction · WO-CHAIN-DETECT-PORT · WO-CHAIN-DETECT-WIRE · CC 2026-07-27T23:31:10Z
 
