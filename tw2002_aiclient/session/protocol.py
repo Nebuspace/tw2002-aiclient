@@ -37,6 +37,7 @@ from contextlib import contextmanager
 
 from . import autoloop
 from . import sector_explore
+from .. import explore as _explore
 from .classify import classify_screen
 from .control_lock import (
     MODE_HUMAN,
@@ -414,11 +415,18 @@ def _dispatch_explore_start(args, server):
     world_id = args.get("world_id")
     min_sectors = args.get("min_sectors", sector_explore.DEFAULT_MIN_DISTINCT_SECTORS)
     turn_budget = args.get("turn_budget", sector_explore.DEFAULT_TURN_BUDGET)
+    # WO-EXPLORE-AUTOMATION-GATE E3. Omitting `intent` keeps the pre-WO
+    # behaviour exactly (map-fill), so every existing caller is unchanged;
+    # an unknown value is refused by `runner.start` as `invalid_intent`
+    # rather than defaulted, because a run that silently pursues a different
+    # goal than the one confirmed is the failure this gate exists to prevent.
+    intent = args.get("intent", _explore.INTENT_MAP_FILL)
     try:
         snapshot = runner.start(
             world_id,
             min_sectors=min_sectors,
             turn_budget=turn_budget,
+            intent=intent,
         )
     except sector_explore.ExploreRefused as exc:
         return {"ok": False, "error": str(exc)}
@@ -873,7 +881,28 @@ def _load_profile(name):
     missing = []
     if not game_letter:
         missing.append("game_letter")
-    if not handle and not allow_register:
+    # A handle is required UNCONDITIONALLY -- `allow_register` does not
+    # excuse it.
+    #
+    # `allow_register` means "you may CREATE the character with this
+    # handle", not "you need no handle": `login.py`'s own Wave-3 cuts note
+    # says so outright -- "A profile must set its own `handle` (or opt into
+    # `allow_register` with a handle it's fine reusing every run); no
+    # drawn-identity retry loop exists yet", because `register_with_name_bank`
+    # / `name_bank.py` were never ported. There is nothing in this tree that
+    # can invent a name.
+    #
+    # The old `and not allow_register` let a handle-less profile load, and it
+    # then died four layers down on the wire: the blank-reject retry
+    # (WO-MICRO-LOGIN-BLANK-REJECT) answers a rejecting outer gate with
+    # `profile.handle`, which was `None`, reaching `connection.send_text`
+    # and surfacing as `internal_error:AttributeError`. Found live against
+    # twgs.microblaster.net while registering a sacrificial profile.
+    #
+    # Refusing HERE turns that into `profile_incomplete:<name>:missing=
+    # ['handle']` before a socket is opened -- the operator learns their
+    # config is wrong instead of watching a login crash.
+    if not handle:
         missing.append("handle")
     if missing:
         return None, f"profile_incomplete:{name}:missing={missing}"

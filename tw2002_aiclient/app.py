@@ -12,6 +12,7 @@ from tw2002_aiclient import adapters
 from tw2002_aiclient.cockpit import analyze as _analyze
 from tw2002_aiclient.cockpit import assign_trigger as _assign_trigger
 from tw2002_aiclient.cockpit import autoloop_controls as _autoloop_controls
+from tw2002_aiclient import explore as _explore
 from tw2002_aiclient.cockpit import chains as _chains
 from tw2002_aiclient.cockpit import draft_approve as _draft_approve
 from tw2002_aiclient.cockpit import record_macro as _record_macro
@@ -39,6 +40,10 @@ _EXPLORE_OFFER_CLASSIFICATION = "main_command"
 # `Explore x5 LIVE?  y/N` -- canon's "the prompt spells out *what* runs and
 # *how many cycles*".
 _EXPLORE_OFFER_ACTION = "Explore"
+# WO-EXPLORE-AUTOMATION-GATE E3: the second armable intent's confirm text.
+# States the stopping rule ("until found") because it is NOT the ×N rule the
+# map-fill prompt states, and the gate must describe the run it arms.
+_EXPLORE_STARDOCK_ACTION = "Explore \u2014 find StarDock (until found)"
 # Cycles shown in the prompt AND the `min_sectors` handed to the adapter. ONE
 # constant feeds both, so the number the human confirms cannot drift from the
 # number the run is started with -- the confirm gate's whole value is that the
@@ -667,6 +672,16 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
     # `begin_arm_confirm` call below; cleared the instant "arm_confirm"
     # fires.
     pending_confirm_action: str | None = None
+    # WO-EXPLORE-AUTOMATION-GATE E3: the intent the most recently raised `E`
+    # offer was composed from, or `None` before the first press. ONE variable,
+    # not two: the cycle position and "what the live prompt says" are the same
+    # fact here, because `E` advances the cycle and raises the gate in the
+    # same step. An earlier draft kept a separate "next" variable and a
+    # comment explaining how they could differ; they could not, and mutating
+    # the confirm branch to read the other one left every test green -- which
+    # is how the redundancy was found. The confirm branch reads THIS, so the
+    # run is always the one the visible prompt named.
+    explore_intent_offered: str | None = None
     # WO-PLAY-AUTOLOOP-START: the exact row the taught-loop confirm line was
     # composed from. Held alongside `pending_confirm_action` rather than
     # re-read at `y`, so the macro that runs is provably the macro named in
@@ -841,7 +856,33 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                 # claimed the key.
                 pending_confirm_action = "explore"
                 pending_confirm_loop = None  # a different gate owns the row now
-                play.begin_arm_confirm(_EXPLORE_OFFER_ACTION, cycles=_EXPLORE_MIN_SECTORS)
+                # WO-EXPLORE-AUTOMATION-GATE E3: one affordance, two intents.
+                # `E` CYCLES which goal is on offer and raises the gate for
+                # it; it never starts anything. The first press of a session
+                # is map-fill, byte-identical to the pre-WO prompt, so the
+                # existing muscle memory arms the existing run.
+                if explore_intent_offered is None:
+                    explore_intent_offered = _explore.ARMABLE_INTENTS[0]
+                else:
+                    explore_intent_offered = _explore.next_armable_intent(
+                        explore_intent_offered
+                    )
+                # ONE `begin_arm_confirm` call, deliberately: the label is
+                # chosen first and the gate raised once. An if/else with a
+                # call in each arm reads the same but adds a fourth
+                # production call site, and `test_exactly_three_production_
+                # call_sites_raise_the_gate` counts them precisely so a new
+                # money-path gate cannot appear quietly. One affordance, one
+                # call site -- the count stays honest.
+                #
+                # find-StarDock carries NO cycle count: that run ends on
+                # ARRIVAL or exhaustion, not after N sectors, and a prompt
+                # promising "×5" would describe the other intent's rule.
+                if explore_intent_offered == _explore.INTENT_FIND_STARDOCK:
+                    offer_action, offer_cycles = _EXPLORE_STARDOCK_ACTION, None
+                else:
+                    offer_action, offer_cycles = _EXPLORE_OFFER_ACTION, _EXPLORE_MIN_SECTORS
+                play.begin_arm_confirm(offer_action, cycles=offer_cycles)
                 continue
             if action == "pause":
                 # WO-AUTOLOOP-RELAUNCH-COCKPIT: Space -- ungated, like panic
@@ -983,13 +1024,26 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                 # `_EXPLORE_MIN_SECTORS` is the SAME constant the prompt was
                 # composed from, so the run cannot start with a different
                 # number than the one the human just agreed to.
+                #
+                # E3: the run uses the intent the RAISED PROMPT was composed
+                # from. The `or` is the fail-safe for a gate raised by some
+                # future path that never set an intent -- map-fill is the
+                # conservative one (bounded by `_EXPLORE_MIN_SECTORS`), where
+                # find-StarDock runs until arrival or exhaustion.
                 pending_confirm_action = None
-                play.status_line = f"starting explore ×{_EXPLORE_MIN_SECTORS}…"
-                play.explore_band = f"explore ×{_EXPLORE_MIN_SECTORS} starting…"
+                armed_intent = explore_intent_offered or _explore.INTENT_MAP_FILL
+                if armed_intent == _explore.INTENT_FIND_STARDOCK:
+                    play.status_line = "starting explore — find StarDock…"
+                    play.explore_band = "find StarDock starting…"
+                else:
+                    play.status_line = f"starting explore ×{_EXPLORE_MIN_SECTORS}…"
+                    play.explore_band = f"explore ×{_EXPLORE_MIN_SECTORS} starting…"
                 play.draw()  # the start call blocks; show intent first
                 try:
                     explore = adapters.explore_start_for_profile(
-                        profile, min_sectors=_EXPLORE_MIN_SECTORS
+                        profile,
+                        min_sectors=_EXPLORE_MIN_SECTORS,
+                        intent=armed_intent,
                     )
                 except Exception as exc:  # noqa: BLE001
                     # A raising adapter must not take the play loop down with

@@ -713,6 +713,114 @@ def _adjacent_hop_toward(
     return path[1]
 
 
+INTENT_MAP_FILL = "map_fill"
+INTENT_FIND_STARDOCK = "find_stardock"
+#: The intents a caller may arm. Deliberately a closed set: an unknown intent
+#: is REFUSED by the daemon rather than silently falling back to map-fill,
+#: because a run that quietly does something other than what the confirm line
+#: promised is exactly what the arm gate exists to prevent.
+INTENTS = frozenset({INTENT_MAP_FILL, INTENT_FIND_STARDOCK})
+
+#: Cycle order for the Play `E` offer. ORDERED (a frozenset is not) and
+#: map-fill FIRST so the first `E` press raises exactly the prompt it raised
+#: before this WO -- an operator's muscle memory must not arm a different run
+#: than it armed yesterday.
+#:
+#: `cycle_explore_mode`'s "off → mapfill → stardock → formations" is the
+#: fuller trainer-panel cycle and stays UNWIRED: `formations` has no armable
+#: path (`plan_find_formations` has no callers either) and this WO's scope
+#: excludes it. Two vocabularies therefore exist -- these daemon intents and
+#: that panel's mode names -- and unifying them is deliberately left to the
+#: WO that wires the panel, rather than half-done here.
+ARMABLE_INTENTS: tuple[str, ...] = (INTENT_MAP_FILL, INTENT_FIND_STARDOCK)
+
+
+def next_armable_intent(current: object) -> str:
+    """The next intent in the Play offer cycle. Never raises; anything
+    unrecognised restarts at map-fill."""
+    try:
+        i = ARMABLE_INTENTS.index(current)  # type: ignore[arg-type]
+    except (ValueError, TypeError):
+        return ARMABLE_INTENTS[0]
+    return ARMABLE_INTENTS[(i + 1) % len(ARMABLE_INTENTS)]
+
+
+@dataclass(frozen=True)
+class IntentTick:
+    """One intent-driven decision: hop here, stop here, or we are done.
+
+    Three states, and the third is why this is not a ``(target, reason)``
+    tuple like :func:`map_fill_warp_target` returns. Find-StarDock can
+    ``arrive`` — a *success* — and a tuple whose only non-``None`` answer is
+    "next hop" would have to encode that as a halt reason, making a completed
+    goal indistinguishable from an exhausted frontier in the run report.
+    """
+
+    next_sector: Optional[int]
+    goal_reached: bool = False
+    reason: str = ""
+
+
+def warp_target_for_intent(
+    intent: str,
+    world_id: str,
+    *,
+    current_sector: int,
+    turn_budget: int,
+    epsilon: float = 0.1,
+    state_dir=None,
+    rng: Optional[random.Random] = None,
+) -> IntentTick:
+    """One tick for *intent* — the single seam the explore runner drives.
+
+    ``map_fill`` delegates to :func:`map_fill_warp_target` unchanged, so the
+    existing behaviour (and its tests) keep one owner. ``find_stardock``
+    routes to :func:`plan_find_stardock`, which was fully built and had **no
+    callers anywhere** before this WO.
+
+    An unrecognised intent returns a halt rather than defaulting to map-fill:
+    the daemon refuses unknown intents up front, so reaching here with one
+    means an internal disagreement, and quietly exploring in some other
+    direction is worse than stopping.
+    """
+    if intent == INTENT_MAP_FILL:
+        target, reason = map_fill_warp_target(
+            world_id,
+            current_sector=current_sector,
+            turn_budget=turn_budget,
+            epsilon=epsilon,
+            state_dir=state_dir,
+            rng=rng,
+        )
+        return IntentTick(next_sector=target, reason=reason)
+    if intent != INTENT_FIND_STARDOCK:
+        return IntentTick(next_sector=None, reason=f"explore_exhausted:unknown_intent:{intent}")
+
+    plan = plan_find_stardock(
+        world_id,
+        current_sector=current_sector,
+        turn_budget=turn_budget,
+        epsilon=epsilon,
+        state_dir=state_dir,
+        rng=rng,
+    )
+    if plan.mode == "arrived":
+        return IntentTick(next_sector=None, goal_reached=True)
+    if plan.next_sector is None:
+        reason = plan.mode or "no_hop"
+        if not reason.startswith("explore_exhausted"):
+            reason = f"explore_exhausted:{reason}"
+        return IntentTick(next_sector=None, reason=reason)
+    # `StarDockPlan.next_sector` is already the IMMEDIATE next hop ("next hop
+    # toward dock or frontier"), not a distant waypoint, so it is returned as
+    # given -- resolving it again through `_adjacent_hop_toward` would be
+    # wrong twice over (that helper takes a `FrontierEdge`, not a sector id).
+    # The runner re-checks adjacency against the known graph before sending,
+    # which is where a planner that ever returned a non-adjacent hop is
+    # caught -- one owner for that refusal, and it is the layer that sends.
+    return IntentTick(next_sector=int(plan.next_sector))
+
+
 def map_fill_warp_target(
     world_id: str,
     *,

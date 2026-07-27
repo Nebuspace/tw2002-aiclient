@@ -171,6 +171,7 @@ def explore_start(
     *,
     min_sectors: int | None = None,
     turn_budget: int | None = None,
+    intent: str | None = None,
     run_dir: Path | None = None,
 ) -> ExploreResult:
     """Start the sector explorer for *world_id*.
@@ -190,6 +191,11 @@ def explore_start(
         payload["min_sectors"] = min_sectors
     if turn_budget is not None:
         payload["turn_budget"] = turn_budget
+    if intent is not None:
+        # Omitted when None so the daemon keeps its pre-WO default (map-fill)
+        # -- same "None -> omit" discipline as the two args above, and it is
+        # what keeps every existing caller byte-identical on the wire.
+        payload["intent"] = intent
     try:
         resp = _cli.send_request("explore_start", payload, run_dir=resolved_run_dir)
     except Exception as e:  # noqa: BLE001 — belt-and-suspenders; send_request never raises
@@ -430,6 +436,7 @@ def explore_start_for_profile(
     *,
     min_sectors: int | None = None,
     turn_budget: int | None = None,
+    intent: str | None = None,
     run_dir: Path | None = None,
 ) -> ExploreResult:
     """Convenience wrapper: derive *world_id* from *profile*, then call
@@ -446,5 +453,6 @@ def explore_start_for_profile(
         world_id,
         min_sectors=min_sectors,
         turn_budget=turn_budget,
+        intent=intent,
         run_dir=run_dir,
     )
