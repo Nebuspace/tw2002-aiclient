@@ -1,6 +1,6 @@
 # WO-AUTOLOOP-RELAUNCH-COCKPIT — Pause/relaunch cockpit intents + honest confirm label
 
-**Status:** OPEN · READY  
+**Status:** DONE · origin `034bec0` (#102 — bank+EXEC squash)
 **Posted:** 2026-07-27T18:01:00Z · follow-on to #101 (wire already carries disclosure)  
 **Seat:** `impl-aiclient-cursor` (rendering / intents; no protocol change)  
 **Depends:** `main` ≥ `d891d35` (`autoloop_pause` / `autoloop_relaunch` + disclosure fields)  
