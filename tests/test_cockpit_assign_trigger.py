@@ -246,14 +246,48 @@ def test_t_binding_present_in_handle_key_source() -> None:
 
 
 def test_a_still_not_bound() -> None:
-    """A (WO-069) is NOT yet wired — its pin stays live.
+    """A (WO-069) is now wired — its intent must be analyze_open/analyze_close.
 
-    R is now wired by WO-P5-067; its own pin lives in
-    ``test_cockpit_record_macro.py``.
+    R is wired by WO-P5-067; T by WO-P5-068; A by WO-P5-069 (this WO).
     """
     from tw2002_aiclient import screens
     src = inspect.getsource(screens.PlayShellScreen.handle_key)
     for key in ("A", "a"):
-        assert not re.search(rf"""ord\(["']{key}["']\)""", src), (
-            f"handle_key now binds {key!r} — WO-069 wire must own its own pin"
+        assert re.search(rf"""ord\(["']{key}["']\)""", src), (
+            f"handle_key no longer binds {key!r} — WO-P5-069 wire broken"
         )
+    # Verify the intent it returns, not just binding presence.
+    # handle_key returns the INTENT only; app.py does the open()/close() call.
+    from tw2002_aiclient.screens import PlayShellScreen, ProfileRow
+    import unittest.mock as mock
+    import curses
+
+    class _Stdscr:
+        def getmaxyx(self): return (40, 160)
+        def erase(self): pass
+        def refresh(self): pass
+        def addstr(self, *a, **k): pass
+        def addnstr(self, *a, **k): pass
+        def attron(self, a): pass
+        def attroff(self, a): pass
+        def hline(self, *a, **k): pass
+        def vline(self, *a, **k): pass
+        def border(self, *a, **k): pass
+        def chgat(self, *a, **k): pass
+        def keypad(self, flag): pass
+        def nodelay(self, flag): pass
+        def has_colors(self): return False
+
+    profile = ProfileRow(name="alpha", handle="Alpha", server="demo",
+                         host="demo.example", game_letter="B")
+    with mock.patch.object(curses, "has_colors", return_value=False):
+        with mock.patch.object(curses, "start_color", return_value=None):
+            with mock.patch.object(curses, "init_pair", return_value=None):
+                with mock.patch.object(curses, "color_pair", return_value=0):
+                    play = PlayShellScreen(_Stdscr(), profile)
+    # Session starts closed → first A returns analyze_open
+    assert play.handle_key(ord("a")) == "analyze_open"
+    # Simulate app.py's action handler opening the session
+    play.analyze_session.open()
+    # Session now open → second A returns analyze_close
+    assert play.handle_key(ord("a")) == "analyze_close"

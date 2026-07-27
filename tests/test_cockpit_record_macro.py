@@ -331,12 +331,12 @@ def test_r_key_binding_present_in_handle_key_source() -> None:
 
 
 def test_a_still_not_bound_after_r_wire() -> None:
-    """A (WO-069) is still not wired — its pin must remain live."""
+    """A (WO-069) is now wired — landed alongside R (WO-067) and T (WO-068)."""
     from tw2002_aiclient import screens
     src = inspect.getsource(screens.PlayShellScreen.handle_key)
     for key in ("A", "a"):
-        assert not re.search(rf"""ord\(["']{key}["']\)""", src), (
-            f"handle_key now binds {key!r} — WO-069 wire must own its own pin"
+        assert re.search(rf"""ord\(["']{key}["']\)""", src), (
+            f"handle_key no longer binds {key!r} — WO-P5-069 wire broken"
         )
 
 
