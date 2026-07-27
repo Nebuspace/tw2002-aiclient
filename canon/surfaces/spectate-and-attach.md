@@ -180,11 +180,12 @@ status bar, is drawn in reverse-video rather than a semantic tone (see Panel sta
 
 ## Box-drawing, borders & titles
 
-Both surfaces inherit the **two-weight border hierarchy** (`terminal.py:122-153`): the live game
-viewport wears a **double-line** box (`╔ ╗ ╚ ╝ ═ ║`, ASCII `+ = |`) while all instrument chrome
-wears **thin-rounded** boxes (`╭ ╮ ╰ ╯ ─ │`, ASCII `+ - |`). The heavier double-line deliberately
-gives the CP437 world visual primacy — a BBS/DOS-door echo — so the eye lands on the game first and
-reads the HUD as its frame. See [Visual Language](/surfaces/visual-language.md) for the full table.
+Both surfaces inherit the **two-weight border hierarchy** (`cockpit/draw.py` `DOUBLE_*` /
+`THIN_*`): the live game viewport wears a **double-line** box (`╔ ╗ ╚ ╝ ═ ║`, ASCII `+ = |`) while
+all instrument chrome wears **thin-rounded** boxes (`╭ ╮ ╰ ╯ ─ │`, ASCII `+ - |`). The heavier
+double-line deliberately gives the CP437 world visual primacy — a BBS/DOS-door echo — so the eye
+lands on the game first and reads the HUD as its frame. See
+[Visual Language](/surfaces/visual-language.md) for the full table.
 
 - **Spectate** composes titled thin-rounded boxes for its instruments (`HUD`, `LOG`, `MENU MAP`, and
   the priorities/port column), each title drawn at `addnstr(0, 2, " TITLE ")` in cyan, all wrapped in
@@ -354,6 +355,6 @@ This is the same divergence already recorded canonically in
 [5] twclient/control_lock.py (control-mode state machine; take_human/release_human; MODE_SPECTATE pause state)
 [6] twclient/daemon.py (_handle_attach — take_human on connect, try/finally release_human on every exit path)
 [7] canon/architecture/control-and-escalation.md (the control dual, {app,human} attribution, MODE_AI_PILOT divergence)
-[8] twclient/terminal.py (color_map RLE per-cell SGR encode; two-weight box-drawing glyph tables)
+[8] twclient/terminal.py (color_map RLE per-cell SGR encode — game bytes only; chrome borders live in cockpit/draw.py on tip)
 [9] twclient/spectate_app.py (_SEMANTIC_COLORS 7-tone table; _ColorPairs lazy allocation; viewport red-on-disconnect border)
 [10] .samantha/plans/ui-polish-assessment.md (shared visual vocabulary — grounded color/glyph/border/fold tables; forward-ref for /surfaces/visual-language.md)

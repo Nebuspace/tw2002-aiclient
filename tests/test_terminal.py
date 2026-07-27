@@ -1,12 +1,6 @@
 """pyte render + crop correctness tests — no network involved."""
 
-from tw2002_aiclient.session.terminal import (
-    GLYPHS_ASCII,
-    GLYPHS_UNICODE,
-    TerminalScreen,
-    glyph_set,
-    init_locale,
-)
+from tw2002_aiclient.session.terminal import TerminalScreen
 
 
 def test_raw_display_is_80x25():
@@ -108,34 +102,3 @@ def test_color_map_aligned_with_render_cropped_bounding_box():
     assert len(color) == len(cropped)
     for row_text, runs in zip(cropped, color):
         assert runs[-1]["end"] == len(row_text)
-
-
-def test_glyph_set_selects_unicode_or_ascii_table():
-    assert glyph_set(True) is GLYPHS_UNICODE
-    assert glyph_set(False) is GLYPHS_ASCII
-
-
-def test_glyph_tables_expose_the_same_keys():
-    assert set(GLYPHS_UNICODE.keys()) == set(GLYPHS_ASCII.keys())
-
-
-def test_glyph_tables_have_a_distinct_viewport_and_hud_border_weight():
-    assert GLYPHS_UNICODE["viewport_tl"] != GLYPHS_UNICODE["hud_tl"]
-    assert GLYPHS_UNICODE["viewport_h"] != GLYPHS_UNICODE["hud_h"]
-
-
-def test_glyph_tables_spinner_and_heartbeat_are_nonempty_sequences():
-    for glyphs in (GLYPHS_UNICODE, GLYPHS_ASCII):
-        assert len(glyphs["spinner"]) >= 2
-        assert len(glyphs["heartbeat"]) >= 2
-
-
-def test_ascii_glyph_table_is_pure_ascii():
-    for value in GLYPHS_ASCII.values():
-        chars = value if isinstance(value, tuple) else (value,)
-        for ch in chars:
-            ch.encode("ascii")
-
-
-def test_init_locale_returns_a_bool_without_raising():
-    assert isinstance(init_locale(), bool)

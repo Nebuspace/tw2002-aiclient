@@ -201,15 +201,16 @@ not text; the tone colors the chip:
 
 ## Box-drawing, borders & titles
 
-The mode line and its neighbors ride **thin rounded HUD chrome** (`╭ ╮ ╰ ╯ ─ │`, cyan; `terminal.py`
-`glyph_set`), the lighter of the two-weight hierarchy — the heavier double-line `╔═╗` box is reserved
-for the live GAME viewport so the eye lands on the CP437 world first. The control strip itself is a
-single unbordered row (no box) sitting inside the outer double-line cyan frame; the **STOP /
-intervention strip** is likewise an unboxed single row led by a bare `!`. The **Trade-Loop-Chains
-library** is a titled modal that *replaces* the dashboard (`_draw_loops_library`, `spectate_app.py`),
-title drawn at col 2 in the shared cyan-title convention; its confirm line is an inset row inside that
-modal. Every glyph has an ASCII twin via the `unicode_ok` flag — an 80-col non-UTF-8 terminal loses
-fidelity, never information.
+The mode line and its neighbors ride **thin rounded HUD chrome** (`╭ ╮ ╰ ╯ ─ │`, cyan;
+`cockpit/draw.py` `THIN_*` / `unicode_ok`), the lighter of the two-weight hierarchy — the heavier
+double-line `╔═╗` box is reserved for the live GAME viewport so the eye lands on the CP437 world
+first. The control strip itself is a single unbordered row (no box) sitting inside the outer
+double-line cyan frame; the **STOP / intervention strip** is likewise an unboxed single row led by
+a bare `!`. The **Trade-Loop-Chains library** is a titled modal that *replaces* the dashboard
+(`_draw_loops_library`, `spectate_app.py`), title drawn at col 2 in the shared cyan-title
+convention; its confirm line is an inset row inside that modal. Every glyph has an ASCII twin via
+the `unicode_ok` flag — an 80-col non-UTF-8 / `TW2002_ASCII=1` terminal loses fidelity, never
+information.
 
 ## Spacing, alignment & hierarchy — the mode-line reading order
 

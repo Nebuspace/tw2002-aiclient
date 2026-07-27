@@ -1,8 +1,8 @@
 # WO-TERMINAL-CHROME-ORPHAN-RETIRE — Retire orphaned terminal.py chrome glyph path
 
-**Status:** OPEN · READY  
+**Status:** DONE  
 **Posted:** 2026-07-27T18:55:00Z · from `audit/session-terminal-audit-20260727.md` T-01/T-02  
-**Seat:** Cursor or CC  
+**Seat:** Cursor (`impl-aiclient-cursor`)  
 **Depends:** audit on main `8fae287` (#106)  
 **Tip-check:** product callers of `init_locale`/`glyph_set` = **none** (audit measured) — WO still needed.
 
@@ -19,3 +19,7 @@ Resolve the orphaned chrome story in `session/terminal.py`: either retire `init_
 ## Proof
 
 Unit + suite; live-prove n/a unless chrome visible change needs PTY.
+
+## Done
+
+**Path chosen:** retire (T-02 N/A). Removed `init_locale` / `glyph_set` / `GLYPHS_*` from `session/terminal.py`; live SoT remains `cockpit.draw.unicode_ok` + `DOUBLE_*`/`THIN_*` + `cockpit.liveness`. Canon SoT pointers corrected surgically; deeper archive-citation rewrite deferred to `WO-CANON-GLYPH-SOURCE-OF-TRUTH` if still needed.

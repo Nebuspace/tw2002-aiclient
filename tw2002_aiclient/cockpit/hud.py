@@ -99,8 +99,7 @@ Glyph law. ``✦``→``*`` under ``unicode_ok=False`` is a **legitimate ASCII
 twin** — the freshness mark is explicitly *not* one of the NO-SWAP rows
 (`canon/surfaces/trainer-cockpit.md` glyph table: only ``✓``/``·``/``?``/
 ``⊘``/``★`` are called out NO-SWAP; ``✦`` pairs with ASCII ``*`` the same
-way `session/terminal.py`'s ``GLYPHS_ASCII["freshness_mark"]`` already
-does for the drawn chrome).
+way the chrome ASCII twin tables do under ``cockpit.draw.unicode_ok``).
 
 Scope boundary vs. the archive (WO-P3-037 dispatch: "Cold-join seed
 (``hud_seed``) may be a sibling WO or fold-in — call out if deferred").

@@ -189,6 +189,6 @@ Complete inventory of **2271 pytest test cases** across **129 modules** (`tests/
 | [`test_ship_upgrade_decision.py`](/testing/cases/test-ship-upgrade-decision.md) | 10 | BANKED | TW-30 ship-upgrade decision engine — unit coverage for all five §24 learnings. |
 | [`test_skills.py`](/testing/cases/test-skills.md) | 50 | BANKED | Skill record/replay + playback tests (DESIGN-v2 §3 v2.1 item 11b/11d, C3) -- no network. |
 | [`test_state_parser.py`](/testing/cases/test-state-parser.md) | 62 | BANKED | Best-effort state-extraction tests — no network involved. |
-| [`test_terminal.py`](/testing/cases/test-terminal.md) | 19 | active | pyte render + crop correctness tests — no network involved. |
+| [`test_terminal.py`](/testing/cases/test-terminal.md) | 13 | active | pyte render + crop correctness tests — no network involved. |
 | [`test_tw04_toctou.py`](/testing/cases/test-tw04-toctou.md) | 7 | active | TW-04 TOCTOU / refuse-not-queue probes (WO-P2-025). |
 

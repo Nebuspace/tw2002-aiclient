@@ -11,12 +11,13 @@ Four surfaces — [The Trainer Cockpit](/surfaces/trainer-cockpit.md),
 [Spectate & Attach](/surfaces/spectate-and-attach.md), and
 [Entry & Profile Selection](/surfaces/entry-and-profile-selection.md) — render through the *same*
 rendering code paths (`spectate_layout.py` for pure layout, `spectate_app.py` for the curses host,
-`terminal.py` for glyphs and CP437/pyte color translation), so a color, a glyph, or a border weight
-means the same thing everywhere it appears. This concept is that shared dictionary, extracted once
-so the four surface docs never restate it — they instead forward-reference here and specify only
-their own *application* of it (which HUD cell gets which tone, which panel gets which border). If a
-value below and a surface doc's inline restatement of it ever drift, this concept is the
-single-source authority and the surface doc's copy is a stale echo to be corrected.
+`cockpit/draw.py` + `cockpit/liveness.py` for chrome glyphs, `session/terminal.py` for CP437/pyte
+game-byte color translation), so a color, a glyph, or a border weight means the same thing
+everywhere it appears. This concept is that shared dictionary, extracted once so the four surface
+docs never restate it — they instead forward-reference here and specify only their own
+*application* of it (which HUD cell gets which tone, which panel gets which border). If a value
+below and a surface doc's inline restatement of it ever drift, this concept is the single-source
+authority and the surface doc's copy is a stale echo to be corrected.
 
 Every concrete value below is grounded to the module and, where meaningfully stable, the symbol name
 that defines it. **Rebirth tip (Phases 0–3 CLOSED · Phase 4 CLOSED through `bba53d4` · PWO-060
@@ -129,10 +130,13 @@ selection attribute — the whole palette is monochrome-plus by design, not by o
 
 ## Glyph / status-marker vocabulary
 
-Two parallel glyph tables — `GLYPHS_UNICODE` / `GLYPHS_ASCII` (`terminal.py`) — switch on a single
-`unicode_ok` flag via `glyph_set()`, so every chrome element (border, spinner, heartbeat,
-freshness/delta marks) degrades **together**, never per-glyph, and a non-UTF-8 terminal loses
-fidelity but never meaning.
+Live chrome switches on one `unicode_ok` flag — tip SoT is
+`tw2002_aiclient.cockpit.draw.unicode_ok()` (ASCII forced only when `TW2002_ASCII=1`; no locale
+probe). Border tables are `DOUBLE_*` / `THIN_*` in `cockpit/draw.py`; spinner/heartbeat live in
+`cockpit/liveness.py`. Launcher chrome extends the thin tables via `screens._glyph_set()`. Every
+chrome element degrades **together**, never per-glyph, so a non-UTF-8 / ASCII-forced terminal loses
+fidelity but never meaning. (`session/terminal.py` is game-byte CP437/pyte only — it does **not**
+gate chrome.)
 
 | glyph | ASCII twin | meaning | source |
 |---|---|---|---|
@@ -157,8 +161,8 @@ fuel/bar-meter fill `█`/`░` (ASCII `#`/`.`) · delta chip `▲`/`▼` (ASCII
 
 ## Box-drawing / border hierarchy — the two-weight system
 
-`terminal.py` defines a deliberate **two-weight** border system, switched by the same `unicode_ok`
-flag so every glyph has an ASCII twin:
+`cockpit/draw.py` defines a deliberate **two-weight** border system (`DOUBLE_*` / `THIN_*`),
+switched by the same `unicode_ok` flag so every glyph has an ASCII twin:
 
 | element | Unicode | ASCII | weight |
 |---|---|---|---|
@@ -328,11 +332,14 @@ could commit live turns. `y/N` capitalization signals the safe default; a bare E
   `_PYTE_TO_CURSES_COLOR`, `_ColorPairs`, `_tone_attr`, `ANIM_FPS`, `ANIM_INTERVAL_S`,
   `IDLE_ANIM_INTERVAL_S`, `HEARTBEAT_PERIOD_S`), `spectate_layout.py` (`status_semantic`,
   `gauge_semantic`, `_MODE_BADGES`, `format_mode_badge`), `terminal.py` (`color_map`).
-- **Glyphs, box-drawing, two-weight border hierarchy** — `terminal.py` (`GLYPHS_UNICODE`,
-  `GLYPHS_ASCII`, `glyph_set`), `spectate_app.py` (`_draw_outer_frame`, `_content_inset`),
+- **Glyphs, box-drawing, two-weight border hierarchy** — tip:
+  `tw2002_aiclient/cockpit/draw.py` (`unicode_ok`, `DOUBLE_*`, `THIN_*`),
+  `tw2002_aiclient/cockpit/liveness.py` (spinner/heartbeat), `screens.py` (`_glyph_set`);
+  archive port-source still: `spectate_app.py` (`_draw_outer_frame`, `_content_inset`),
   `spectate_layout.py` (`_CHAIN_CONNECTOR`, `compose_primary_goals_lines`,
   `format_autopilot_trace_lines`, `format_freshness`, `format_tx_readout`,
-  `compose_intervention_strip`).
+  `compose_intervention_strip`). Full archive-citation rewrite deferred to
+  `WO-CANON-GLYPH-SOURCE-OF-TRUTH` if still needed.
 - **Liveness-cue constants** — `spectate_layout.py` (`FRESHNESS_STALE_S`, `CREDIT_FLASH_DURATION_S`,
   `TICKER_FLASH_DURATION_S`, `CREDIT_SPARK_WIDTH`, `TURNS_GAUGE_WIDTH`, `render_sparkline`,
   `render_bar_meter`).
