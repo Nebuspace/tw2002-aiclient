@@ -271,10 +271,20 @@ def test_gate_is_drawn_with_the_loud_attr(monkeypatch) -> None:
 # Accept #5 -- no silent arm inject in any code path.
 # --------------------------------------------------------------------------
 
-def test_no_production_call_site_raises_the_gate() -> None:
-    """`begin_arm_confirm` is the only seam, and nothing in the product calls
-    it yet. The day an arm path lands without its own WO, this goes red
-    before anything can be armed."""
+def test_exactly_one_production_call_site_raises_the_gate() -> None:
+    """WO-PLAY-EXPLORE-ARM flipped this pin, deliberately.
+
+    WO-P5-063 shipped the gate with ZERO production callers and a pin
+    asserting exactly that, so the first one would have to be a decision
+    rather than an accident. L3 is that decision: the post-ensure explore
+    offer in `app._run_play`.
+
+    The pin is UPDATED, not deleted -- it now asserts there is exactly ONE
+    production path. A second caller appearing without its own WO still
+    goes red first, which is the property that made the original worth
+    having. Deleting it would have converted a live guard into silence at
+    the exact moment it started guarding something real.
+    """
     root = Path(screens_mod.__file__).resolve().parent
     callers = []
     for path in root.rglob("*.py"):
@@ -283,75 +293,66 @@ def test_no_production_call_site_raises_the_gate() -> None:
             func = getattr(node, "func", None)
             name = getattr(func, "attr", None) or getattr(func, "id", None)
             if isinstance(node, ast.Call) and name == "begin_arm_confirm":
-                callers.append(f"{path.name}:{node.lineno}")
-    assert callers == [], f"production call site(s) raise the arm gate: {callers}"
+                callers.append(path.name)
+    assert callers == ["app.py"], (
+        f"expected exactly one production caller (app.py, the post-ensure "
+        f"explore offer); found {callers}"
+    )
 
 
-def test_arm_confirm_state_cannot_move_the_arm_chip(monkeypatch) -> None:
-    """Earns WO-P5-063's exemption from WO-P5-062's no-arm-state pin.
+def test_the_one_caller_is_gated_not_raised_unconditionally() -> None:
+    """The gate must be raised only behind a guard -- never on entry.
 
-    That pin scans `vars(screen)` for names containing "arm" and forbids
-    them, because "an attribute that cached [the daemon's arm state] would
-    be a place a side effect could write". `_arm_confirm` trips it on the
-    letters while being a different kind of thing entirely -- the pending
-    confirm PROMPT, this client's own fact, never the daemon's.
+    Structural (AST), not a source-text match. An earlier draft of this pin
+    asserted a literal source line and broke the moment the guard was
+    refactored from an inline comparison to a named flag, while the
+    behaviour was correct throughout -- a check answering "does this exact
+    string appear" while claiming "is the call guarded".
 
-    The exemption in `tests/test_cockpit_arm_wiring.py` is by exact name,
-    so it is only honest if the claim behind it is checked. This drives
-    `_arm_confirm` through every value it can hold -- including a
-    confirmed-then-closed cycle -- and shows the rendered ARM chip never
-    moves. The chip's only input remains `status["autopilot"]`.
+    Hub ruling 2026-07-27T03:35:06Z: do NOT auto-raise the modal confirm
+    gate. A modal raised unbidden consumes the operator's next keystroke,
+    and that key is usually their Ctrl-A attach chord.
     """
-    from tw2002_aiclient.cockpit.arm import ARM_OFF_LABEL, ARM_ON_LABEL, ARM_UNKNOWN_LABEL
+    from tw2002_aiclient import app as app_mod
 
-    def _chip_text(gate_value, status):
-        win = _Win()
-        s = _screen(monkeypatch, win)
-        s.status_provider = lambda: status
-        s._arm_confirm = gate_value
-        s.draw()
-        return "".join(t for (_y, _x, t, _a) in win.writes)
+    tree = ast.parse(inspect.getsource(app_mod))
 
-    for status, expected in (
-        ({"autopilot": {"running": True}}, ARM_ON_LABEL),
-        ({"autopilot": {"running": False}}, ARM_OFF_LABEL),
-        (None, ARM_UNKNOWN_LABEL),
-    ):
-        baseline = _chip_text(None, status)
-        assert expected in baseline
-        for gate in (("Arm autopilot", None), ("Play x", 3), ("", 0), (object(), object())):
-            text = _chip_text(gate, status)
-            assert expected in text, (
-                f"gate={gate!r} changed the ARM chip for status={status!r}"
-            )
-            # And the gate never flips the chip to a DIFFERENT reading.
-            for other in (ARM_ON_LABEL, ARM_OFF_LABEL, ARM_UNKNOWN_LABEL):
-                if other != expected:
-                    assert other not in text
+    def _calls_begin(node):
+        return any(
+            isinstance(n, ast.Call)
+            and (getattr(n.func, "attr", None) == "begin_arm_confirm")
+            for n in ast.walk(node)
+        )
+
+    guarded = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.If) and _calls_begin(node):
+            guarded.append(ast.dump(node.test))
+    assert guarded, "begin_arm_confirm is not inside any `if` -- raised unconditionally"
+    # And the guard is the standing-offer flag, not merely `result.ok`.
+    assert any("explore_offered" in g or "_EXPLORE_OFFER_KEYS" in g for g in guarded), guarded
 
 
-def test_confirming_the_gate_does_not_change_the_arm_chip(monkeypatch) -> None:
-    """The end-to-end version: pressing `y` yields an intent and nothing else.
+def test_the_offer_is_gated_on_the_ready_classification() -> None:
+    """`ok` alone is not enough: the offer stands only at the literal ready
+    classification, so explore is never offered against an unknown screen."""
+    from tw2002_aiclient import app as app_mod
 
-    WO constraint -- "arm write-back is still read-only (062 stub)". So a
-    confirmed gate must leave the chip exactly where a cancelled one does.
-    """
-    from tw2002_aiclient.cockpit.arm import ARM_OFF_LABEL
+    assert app_mod._EXPLORE_OFFER_CLASSIFICATION == "main_command"
+    src = inspect.getsource(app_mod)
+    assert "_EXPLORE_OFFER_CLASSIFICATION" in src
 
-    def _after(key):
-        win = _Win()
-        s = _screen(monkeypatch, win)
-        s.status_provider = lambda: {"autopilot": {"running": False}}
-        s.begin_arm_confirm("Arm autopilot", cycles=3)
-        result = s.handle_key(key)
-        s.draw()
-        return result, "".join(t for (_y, _x, t, _a) in win.writes)
 
-    confirmed, confirmed_text = _after(ord("y"))
-    cancelled, cancelled_text = _after(ord("N"))
-    assert confirmed == "arm_confirm" and cancelled is None
-    assert ARM_OFF_LABEL in confirmed_text
-    assert ARM_OFF_LABEL in cancelled_text
+def test_prompt_and_run_share_one_cycle_constant() -> None:
+    """The confirm gate's whole value is that the prompt is the truth about
+    what happens next. If the number shown and the number sent came from
+    two literals, they could drift and the human would be agreeing to
+    something other than what runs."""
+    from tw2002_aiclient import app as app_mod
+
+    src = inspect.getsource(app_mod)
+    assert "cycles=_EXPLORE_MIN_SECTORS" in src
+    assert "min_sectors=_EXPLORE_MIN_SECTORS" in src
 
 
 def test_gate_module_holds_no_send_or_daemon_path() -> None:

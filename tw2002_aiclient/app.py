@@ -22,6 +22,30 @@ from tw2002_aiclient.session import credentials, env, player_bank
 from tw2002_aiclient.session.attach_client import AttachInputConn
 from tw2002_aiclient.watchfeed import WatchFeed
 
+# WO-PLAY-EXPLORE-ARM (L3): the post-ensure explore offer.
+#
+# The classification the offer is gated on. Named rather than inlined so the
+# gate and the pin that guards it read the SAME literal -- a drifting spelling
+# would silently stop offering explore, and the failure mode is silence.
+_EXPLORE_OFFER_CLASSIFICATION = "main_command"
+# What the confirm line describes. `compose_arm_confirm_line` renders this as
+# `Explore x5 LIVE?  y/N` -- canon's "the prompt spells out *what* runs and
+# *how many cycles*".
+_EXPLORE_OFFER_ACTION = "Explore"
+# Cycles shown in the prompt AND the `min_sectors` handed to the adapter. ONE
+# constant feeds both, so the number the human confirms cannot drift from the
+# number the run is started with -- the confirm gate's whole value is that the
+# prompt is the truth about what happens next.
+_EXPLORE_MIN_SECTORS = 5
+# The key that RAISES the confirm gate. Deliberately not auto-raised on
+# ensure: a modal gate raised unbidden consumes the operator's next
+# keystroke, and measurement showed that keystroke is usually their Ctrl-A
+# attach chord (33 pre-existing `_run_play` tests went red on exactly that
+# swallow). Same posture the hub ruled for WO-P5-065's prompt-to-attach --
+# offer, do not take. `E` is unbound everywhere else in this app; teach
+# `A`/`R`/`T` stay reserved for WO-067/068/069.
+_EXPLORE_OFFER_KEYS = (ord("e"), ord("E"))
+
 
 class DeadTerminalError(Exception):
     """The controlling terminal is gone -- see ``_DeadTerminalGuard`` below.
@@ -469,7 +493,32 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
     result = adapters.ensure_session(profile.name, no_auto_arm=True)
     if result.ok:
         play.status_line = f"session ready — {result.classification}"
+        # WO-PLAY-EXPLORE-ARM (L3): the FIRST production caller of the
+        # confirm-to-arm gate. Until now `begin_arm_confirm` had zero
+        # production call sites by design (WO-P5-063 shipped the gate with a
+        # pin asserting exactly that, so this moment would have to be
+        # deliberate rather than accidental). This is that moment; the pin is
+        # updated in the same change to assert THIS path, not deleted.
+        #
+        # Gated on the literal ready classification, not on `result.ok`
+        # alone. `ok` can be true for a session that settled somewhere other
+        # than the command prompt, and offering to explore from a screen the
+        # daemon has not confirmed is the command prompt would arm a
+        # strategic behaviour against an unknown position.
+        #
+        # Raising the gate arms NOTHING -- it draws the y/N line and routes
+        # the next keystroke through `armconfirm.resolve_arm_confirm_key`,
+        # which is default-deny. `no_auto_arm=True` above is untouched:
+        # explore is a separate, human-confirmed action, not a silent
+        # re-arm of Autopilot.
+        explore_offered = result.classification == _EXPLORE_OFFER_CLASSIFICATION
+        if explore_offered:
+            play.status_line = (
+                f"session ready — {result.classification}  ·  "
+                f"explore ×{_EXPLORE_MIN_SECTORS} available — press E"
+            )
     else:
+        explore_offered = False
         play.status_line = f"ensure failed — {result.reason}: {result.detail}"
     # ~1 Hz GOALS refresh (PWO-034): a bounded getch() timeout wakes the loop
     # even with no keypress, so the next draw() picks up a fresh
@@ -618,6 +667,51 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                     play.status_line = "attach connection lost — spectating"
                 continue
             action = play.handle_key(key)
+            if action is None and explore_offered and key in _EXPLORE_OFFER_KEYS:
+                # The human asked for the gate. THIS is what raises it --
+                # never the ensure result on its own. `handle_key` returned
+                # None, so no gate is currently up and no other binding
+                # claimed the key.
+                play.begin_arm_confirm(_EXPLORE_OFFER_ACTION, cycles=_EXPLORE_MIN_SECTORS)
+                continue
+            if action == "arm_confirm":
+                # WO-PLAY-EXPLORE-ARM (L3): the human pressed `y` at the
+                # explore offer. `handle_key` has already cleared the gate
+                # (single-shot) and only `y`/`Y` can produce this intent --
+                # `resolve_arm_confirm_key` is default-deny, so `Enter`,
+                # `Esc`, `N` and every unmapped keycode land on the cancel
+                # branch and never reach here.
+                #
+                # `_EXPLORE_MIN_SECTORS` is the SAME constant the prompt was
+                # composed from, so the run cannot start with a different
+                # number than the one the human just agreed to.
+                play.status_line = f"starting explore ×{_EXPLORE_MIN_SECTORS}…"
+                play.draw()  # the start call blocks; show intent first
+                try:
+                    explore = adapters.explore_start_for_profile(
+                        profile, min_sectors=_EXPLORE_MIN_SECTORS
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    # A raising adapter must not take the play loop down with
+                    # it. The operator keeps the cockpit and is told the
+                    # start failed -- the same "honest failure containment,
+                    # not a control decision" posture the attach path takes
+                    # below. Type name only, never `str(exc)`: this call
+                    # carries a profile and reaches the daemon, and an
+                    # exception message is not a safe place to assume
+                    # otherwise (`canon/doctrine/secrets-and-credentials.md`).
+                    play.status_line = f"explore failed to start — {type(exc).__name__}"
+                else:
+                    if getattr(explore, "ok", False):
+                        play.status_line = f"explore started — {_EXPLORE_MIN_SECTORS} sectors"
+                    else:
+                        # Report the adapter's machine-readable reason rather
+                        # than a cheerful generic: "explore failed" with no
+                        # code is the kind of message that sends an operator
+                        # to the logs for something the screen already knew.
+                        reason = getattr(explore, "reason", None) or "unknown"
+                        play.status_line = f"explore did not start — {reason}"
+                continue
             if action == "attach":
                 if attach_conn is None:
                     conn, error = _attempt_attach(env.socket_path(run_dir))
