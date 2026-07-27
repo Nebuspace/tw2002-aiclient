@@ -1,6 +1,6 @@
 # WO-PLAY-EXPLORE-ADAPTER
 
-**Status:** OPEN · **depends on** `WO-PLAY-WORLD-IDENTITY` on `main` (or same PR if sequential commits)  
+**Status:** DONE · tip `09c3cd6` · #71  
 **Posted:** 2026-07-27T03:10:33Z · One-client Play ladder **L2**  
 **Seat:** impl-aiclient-cursor  
 **Plan:** `.samantha/plans/one-client-play-ladder-20260727.md`

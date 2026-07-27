@@ -1,6 +1,6 @@
 # WO-PLAY-LADDER-LIVE-PROVE
 
-**Status:** OPEN · **AMENDED 2026-07-27T04:18:15Z** — Max: create a **new** character on a **random** catalog server  
+**Status:** SUPERSEDED by extreme prove (DONE) · prior FAIL audits retained  
 **Posted:** 2026-07-27T04:12:19Z · Max ask — CC must test Play ladder against a **live TWGS**  
 **Seat:** `impl-claudecode-aiclient` (only)  
 **Depends:** L1–L4 on `main` tip ≥ `3ec1928`  

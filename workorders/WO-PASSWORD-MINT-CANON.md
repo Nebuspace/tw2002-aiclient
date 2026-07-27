@@ -1,6 +1,6 @@
 # WO-PASSWORD-MINT-CANON
 
-**Status:** OPEN  
+**Status:** DONE · tip `094d37d` · #83  
 **Posted:** 2026-07-27T05:19:10Z · Max GO ("don't wait — prove it all")  
 **Seat:** `impl-aiclient-cursor`  
 **Depends:** main tip ≥ `bd9ea1a`  
