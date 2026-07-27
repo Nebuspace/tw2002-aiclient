@@ -370,12 +370,31 @@ def test_prompt_and_run_share_one_cycle_constant() -> None:
     """The confirm gate's whole value is that the prompt is the truth about
     what happens next. If the number shown and the number sent came from
     two literals, they could drift and the human would be agreeing to
-    something other than what runs."""
+    something other than what runs.
+
+    WO-EXPLORE-AUTOMATION-GATE E3 made the offer carry one of TWO intents, so
+    the gate is now raised once with a chosen ``(action, cycles)`` pair rather
+    than from a literal keyword at the call. The property is unchanged — both
+    the prompt's number and the run's still come from ``_EXPLORE_MIN_SECTORS``
+    — but the old assertion looked for the literal text ``cycles=_EXPLORE_MIN_
+    SECTORS`` and so measured the spelling, not the property. Same lesson
+    ``test_the_one_caller_is_gated_not_raised_unconditionally`` already
+    records two tests below: a source-literal pin breaks on refactor while
+    the behaviour is still correct.
+
+    Kept textual here (it is cheap and catches a stray literal), but the
+    load-bearing version is now behavioural: ``tests/test_play_explore_
+    intents.py::test_the_prompt_number_is_the_number_that_runs`` drives the
+    real play loop and asserts the number SHOWN equals the number SENT.
+    """
     from tw2002_aiclient import app as app_mod
 
     src = inspect.getsource(app_mod)
-    assert "cycles=_EXPLORE_MIN_SECTORS" in src
+    # The offer's cycle count and the run's min_sectors both trace to the one
+    # constant; neither may be a bare integer literal.
+    assert "_EXPLORE_MIN_SECTORS" in src
     assert "min_sectors=_EXPLORE_MIN_SECTORS" in src
+    assert "cycles=5" not in src and "min_sectors=5" not in src
 
 
 def test_gate_module_holds_no_send_or_daemon_path() -> None:

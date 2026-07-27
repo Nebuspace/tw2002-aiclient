@@ -37,6 +37,7 @@ from contextlib import contextmanager
 
 from . import autoloop
 from . import sector_explore
+from .. import explore as _explore
 from .classify import classify_screen
 from .control_lock import (
     MODE_HUMAN,
@@ -414,11 +415,18 @@ def _dispatch_explore_start(args, server):
     world_id = args.get("world_id")
     min_sectors = args.get("min_sectors", sector_explore.DEFAULT_MIN_DISTINCT_SECTORS)
     turn_budget = args.get("turn_budget", sector_explore.DEFAULT_TURN_BUDGET)
+    # WO-EXPLORE-AUTOMATION-GATE E3. Omitting `intent` keeps the pre-WO
+    # behaviour exactly (map-fill), so every existing caller is unchanged;
+    # an unknown value is refused by `runner.start` as `invalid_intent`
+    # rather than defaulted, because a run that silently pursues a different
+    # goal than the one confirmed is the failure this gate exists to prevent.
+    intent = args.get("intent", _explore.INTENT_MAP_FILL)
     try:
         snapshot = runner.start(
             world_id,
             min_sectors=min_sectors,
             turn_budget=turn_budget,
+            intent=intent,
         )
     except sector_explore.ExploreRefused as exc:
         return {"ok": False, "error": str(exc)}

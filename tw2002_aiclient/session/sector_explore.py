@@ -13,7 +13,8 @@ from dataclasses import dataclass, replace
 from typing import Optional, Set
 
 from .. import world_model
-from ..explore import known_graph, map_fill_warp_target
+from .. import explore as _explore
+from ..explore import known_graph, map_fill_warp_target, warp_target_for_intent
 from ..loops.player import (
     HALT_ABORTED,
     HALT_CONFIRM_FAILED,
@@ -28,6 +29,7 @@ from .control_lock import ControlLock, ControlModeConflict
 from .state_parser import (
     OUTCOME_READ,
     read_current_sector,
+    read_port_from_sector_status,
     read_warps_from_sector_status,
 )
 from . import settle as _settle
@@ -53,7 +55,7 @@ SETTLE_TIMEOUT_S = 8.0
 SETTLE_DEBOUNCE_MS = 350
 STOP_JOIN_TIMEOUT_S = 5.0
 
-ARGS_EXPLORE_START = frozenset({"world_id", "min_sectors", "turn_budget"})
+ARGS_EXPLORE_START = frozenset({"world_id", "min_sectors", "turn_budget", "intent"})
 
 OUTCOME_COMPLETED = "completed"
 OUTCOME_CRASHED = "crashed"
@@ -74,6 +76,11 @@ class ExploreReport:
     world_id: str
     started_at: str
     min_sectors: int
+    # WO-EXPLORE-AUTOMATION-GATE E3: which goal this run is pursuing. On the
+    # report (not just the call) because the run's outcome is only
+    # interpretable against its intent -- "exhausted" means a filled frontier
+    # for map-fill and an unreachable landmark for find-StarDock.
+    intent: str = _explore.INTENT_MAP_FILL
     outcome: Optional[str] = None
     reason: Optional[str] = None
     distinct_sectors: int = 0
@@ -108,6 +115,7 @@ def explore_run_wire(snapshot: ExploreSnapshot) -> dict:
             "sends_issued": report.sends_issued,
             "turns_remaining": report.turns_remaining,
             "min_sectors": report.min_sectors,
+            "intent": report.intent,
             "stop_requested": report.stop_requested,
             "started_at": report.started_at,
             "finished_at": report.finished_at,
@@ -147,11 +155,29 @@ def _ingest_settled_sector(
     full_text: str,
     state_dir,
 ) -> None:
-    """Persist sector + warps from a settled main_command screen."""
+    """Persist sector + warps + port posture from a settled main_command screen.
+
+    WO-EXPLORE-AUTOMATION-GATE E2: the ``Ports :`` flyby is read on every hop
+    because it is **turn-free** — the sector display already prints it, so
+    port buy/sell posture is learned without docking or sending. That is what
+    makes the world model good enough to feed chain detection off an ordinary
+    map-fill run rather than a second, turn-spending pass.
+
+    The tri-state from ``read_port_from_sector_status`` is forwarded, not
+    flattened: the ``port`` key is **omitted** when nothing was observed (so
+    `write_from_state` preserves a previously-learned port) and set to an
+    explicit ``None`` only when the screen positively said ``Ports : None``
+    (which clears a stale record). Collapsing those two would either wipe
+    real port data on a warps-only render or keep asserting a port that is
+    gone.
+    """
     parsed: dict = {"sector": int(sector_id)}
     warps = read_warps_from_sector_status(full_text)
     if warps is not None:
         parsed["warps"] = warps
+    port = read_port_from_sector_status(full_text)
+    if port.observed:
+        parsed["port"] = port.port
     world_model.write_from_state(world_id, parsed, state_dir=state_dir)
 
 
@@ -198,19 +224,29 @@ class ExploreRunner:
         *,
         min_sectors: int = DEFAULT_MIN_DISTINCT_SECTORS,
         turn_budget: int = DEFAULT_TURN_BUDGET,
+        intent: str = _explore.INTENT_MAP_FILL,
     ) -> ExploreSnapshot:
         if not isinstance(world_id, str) or not world_id.strip():
             raise ExploreRefused("missing_world_id")
-        if isinstance(min_sectors, bool) or not isinstance(min_sectors, int) or min_sectors < 1:
+        # `0` is legal and means "no sector cap" (E1 exhaustive: run until
+        # turn budget or frontier exhaustion). Negatives and bools stay
+        # refused -- a cap you cannot reach is not a cap.
+        if isinstance(min_sectors, bool) or not isinstance(min_sectors, int) or min_sectors < 0:
             raise ExploreRefused("invalid_min_sectors")
         if isinstance(turn_budget, bool) or not isinstance(turn_budget, int) or turn_budget < 0:
             raise ExploreRefused("invalid_turn_budget")
+        # Closed set, refused not defaulted: a run that quietly map-fills when
+        # the operator confirmed "find StarDock" would have done something
+        # other than what the arm gate promised.
+        if intent not in _explore.INTENTS:
+            raise ExploreRefused("invalid_intent")
 
         stop = threading.Event()
         report = ExploreReport(
             world_id=world_id.strip(),
             started_at=_utc_now(),
             min_sectors=int(min_sectors),
+            intent=intent,
             turns_remaining=int(turn_budget),
         )
         with self._mutex:
@@ -303,7 +339,23 @@ class ExploreRunner:
                     full_text=full_text,
                     state_dir=self._state_dir,
                 )
-                if len(distinct) >= report.min_sectors:
+                # WO-EXPLORE-AUTOMATION-GATE E1/E3: the distinct-sector cap
+                # is MAP-FILL's stopping rule and only map-fill's. A
+                # find-StarDock run that stopped here would report
+                # `completed` having never found a dock -- a run reporting
+                # success for a goal it did not reach. That intent completes
+                # on ARRIVAL (`IntentTick.goal_reached`) or halts honestly.
+                #
+                # E1 exhaustive mode: `min_sectors == 0` means "no sector
+                # cap" -- run until the turn budget or the frontier is spent,
+                # which is what E1 asks for and what chain detection needs to
+                # be fed. A cap of 0 is expressible only deliberately;
+                # negatives stay refused.
+                if (
+                    report.intent == _explore.INTENT_MAP_FILL
+                    and report.min_sectors > 0
+                    and len(distinct) >= report.min_sectors
+                ):
                     outcome = OUTCOME_COMPLETED
                     reason = None
                     break
@@ -311,13 +363,23 @@ class ExploreRunner:
                     outcome = OUTCOME_HALTED
                     reason = f"{REASON_EXPLORE_EXHAUSTED}:turn_budget"
                     break
-                target, exhaust = map_fill_warp_target(
+                tick = warp_target_for_intent(
+                    report.intent,
                     report.world_id,
                     current_sector=current,
                     turn_budget=turns,
                     state_dir=self._state_dir,
                 )
+                if tick.goal_reached:
+                    # find_stardock ARRIVED. A completed goal is not an
+                    # exhausted frontier, and the report must not conflate
+                    # them -- see `explore.IntentTick`.
+                    outcome = OUTCOME_COMPLETED
+                    reason = None
+                    break
+                target = tick.next_sector
                 if target is None:
+                    exhaust = tick.reason
                     outcome = OUTCOME_HALTED
                     reason = exhaust if exhaust.startswith("explore_exhausted") else (
                         f"{REASON_EXPLORE_EXHAUSTED}:{exhaust or 'no_hop'}"
