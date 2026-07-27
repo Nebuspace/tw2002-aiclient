@@ -1,6 +1,6 @@
 # WO-PLAY-WORLD-IDENTITY
 
-**Status:** OPEN  
+**Status:** DONE · tip `5e20ce2` · #70  
 **Posted:** 2026-07-27T03:10:33Z · One-client Play ladder **L1**  
 **Seat:** impl-aiclient-cursor (volume · restore + tests)  
 **Plan:** `.samantha/plans/one-client-play-ladder-20260727.md`
