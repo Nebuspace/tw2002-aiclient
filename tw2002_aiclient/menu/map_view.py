@@ -29,7 +29,7 @@ def menu_map_summary(
     So: ``here_unknown=None`` means "we looked and you are genuinely off-map";
     a non-empty string is the *reason we could not look*, rendered with canon's
     unknown glyph ``?`` instead of the off-map claim (`?` = unknown,
-    `canon/surfaces/visual-language.md:141`; "the system never lies or
+    `canon/surfaces/visual-language.md:145`; "the system never lies or
     invents", `:289`). Passing it alongside a resolvable ``current_sig`` is
     meaningless and is ignored -- a located ``★`` outranks any reason.
     """

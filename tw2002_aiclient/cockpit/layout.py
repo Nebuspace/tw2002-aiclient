@@ -180,7 +180,7 @@ def frame_layout(lines: int, cols: int, *, needs_attention: bool = False) -> dic
     if lines < MIN_LINES or cols < MIN_COLS:
         return {
             "mode": "too_small",
-            # "×" is a canon-cited literal (visual-language.md:208,
+            # "×" is a canon-cited literal (visual-language.md:154,
             # trainer-cockpit.md:368) — same no-swap family as "·"/"—"
             # (never degrades to an ASCII "x" twin, even under TW2002_ASCII=1).
             "message": (

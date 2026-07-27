@@ -70,7 +70,7 @@ def test_a_reason_replaces_the_off_map_claim_with_canon_s_unknown_glyph():
 
 
 def test_the_unknown_glyph_is_the_one_canon_names():
-    """`?` is canon's unknown marker (visual-language.md:141) and has no ASCII
+    """`?` is canon's unknown marker (visual-language.md:145) and has no ASCII
     twin, so this line degrades identically on a non-UTF-8 terminal -- unlike
     `★`, which the located line uses. Pinned so a later 'nicer glyph' edit has
     to argue with canon rather than with taste."""

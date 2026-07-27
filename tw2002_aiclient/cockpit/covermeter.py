@@ -103,7 +103,7 @@ from __future__ import annotations
 # flip it in a single edit.
 METER_LABEL = "COV"
 
-# The honest-unknown glyph. `trainer-cockpit.md:417` ("Never lie, never
+# The honest-unknown glyph. `trainer-cockpit.md:418` ("Never lie, never
 # invent") allows `?`, `—` or `off-map`; WO-P5-072's Accept names `?`
 # explicitly, so `?` it is. Unlike `strip.py`'s two different fallbacks
 # (identity vs game-letter) there is one kind of unknown here.

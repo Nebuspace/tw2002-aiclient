@@ -821,7 +821,7 @@ class PlayShellScreen:
     # string is shown instead. Canon sanctions exactly this: "When a taught
     # run is live, the band's slot is claimed instead by the AUTO-LOOP
     # cycle-progress bar ... never both, there is only room for one"
-    # (`mode-line-and-teach-controls.md:229-232`).
+    # (`mode-line-and-teach-controls.md:230-233`).
     #
     # Why here and not the LOGS band, where the offer used to be written:
     # `status_line` only renders when LOGS has no real tail, so on a live
@@ -1022,7 +1022,7 @@ class PlayShellScreen:
         # own (red, bold=True) "danger" attr.
         self._viewport_danger_attr = _shared_pairs.attr_for(danger_fg_name)
         if self._viewport_danger_attr == curses.A_NORMAL:
-            # WO-P4-054 Gap 2, DOCS-WIN (canon `visual-language.md:75-82`
+            # WO-P4-054 Gap 2, DOCS-WIN (canon `visual-language.md:76-83`
             # "the viewport border is a STATE surface" -- "Mono /
             # color-unavailable interim: the same disconnect flip uses
             # A_UNDERLINE non-bold"). Canon scopes that interim to "color
@@ -1140,7 +1140,7 @@ class PlayShellScreen:
         if tone == cockpit_teachband.TEACH_TONE:
             # WO-P5-066: the standing teach band is canon's cyan chrome
             # accent -- "affordance chrome, not data"
-            # (`mode-line-and-teach-controls.md:229-231`) -- so it takes
+            # (`mode-line-and-teach-controls.md:230-232`) -- so it takes
             # the SAME `_chrome_attr` the rest of the frame's chrome wears
             # and deliberately skips the `A_BOLD | A_REVERSE` badge below.
             # Reverse-video is canon's one "selected/active" signal
@@ -1178,7 +1178,7 @@ class PlayShellScreen:
     def _arm_confirm_attr(self) -> int:
         """The confirm gate's attr: table-row ``danger`` (red **BOLD**) plus
         ``A_REVERSE`` -- canon's "loudest combination the palette owns"
-        (`visual-language.md:77-78`).
+        (`visual-language.md:78-79`).
 
         Routed through ``_control_strip_segment_attr`` rather than composing
         the attr here, so this gate and the chips beside it can never drift
@@ -1187,13 +1187,13 @@ class PlayShellScreen:
         growing a second attr path.
 
         **Deliberately NOT ``self._viewport_danger_attr``.** That attribute
-        is the *other* ``danger``: `visual-language.md:82` specifies red
+        is the *other* ``danger``: `visual-language.md:83` specifies red
         **non-bold** as a per-surface override for the viewport border's
         link-down flip, and this module's own comment at the point of
         divergence records it. It is on this class, it has ``danger`` in its
         name, and using it here would render the money-path gate *quieter*
         than the frame around it while still satisfying any check that only
-        asked "is it danger-toned?". `visual-language.md:57` lists "the
+        asked "is it danger-toned?". `visual-language.md:58` lists "the
         live-play `y/N` confirm" among the **table row's** own examples.
         Pinned by attr identity, not by tone name.
         """

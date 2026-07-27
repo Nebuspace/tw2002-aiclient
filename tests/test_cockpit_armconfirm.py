@@ -181,9 +181,9 @@ def test_gate_attr_carries_bold_and_reverse(monkeypatch) -> None:
 def test_gate_attr_is_not_the_non_bold_viewport_danger(monkeypatch) -> None:
     """The trap this WO was warned about.
 
-    `visual-language.md:57` = danger red/**bold** (the 7-tone table row, and
+    `visual-language.md:58` = danger red/**bold** (the 7-tone table row, and
     it lists the live-play y/N confirm among its own examples).
-    `visual-language.md:82` = danger red **non-bold**, a deliberate override
+    `visual-language.md:83` = danger red **non-bold**, a deliberate override
     for the viewport border only, exposed as `_viewport_danger_attr`.
     Using the latter here renders the money-path gate QUIETER than the frame
     around it while still passing any "is it danger-toned?" check.

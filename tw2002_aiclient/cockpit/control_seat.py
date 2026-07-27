@@ -594,7 +594,7 @@ def _compose_segments(
     # WO-P5-066: the standing teach band. Canon places the hint band
     # "right-aligned ... it is affordance chrome, not data, so it wears the
     # chrome color and yields the strip's center to the TX channel"
-    # (`mode-line-and-teach-controls.md:229-231`).
+    # (`mode-line-and-teach-controls.md:230-232`).
     #
     # Canon's own diagram (`:219`) shows the band hugging the row's right
     # edge, because that diagram has no liveness cluster in it. On tip the

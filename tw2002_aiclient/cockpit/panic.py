@@ -83,12 +83,12 @@ from __future__ import annotations
 
 # Canon's band spelling, taken from the literal rather than the prose rule.
 #
-# `mode-line-and-teach-controls.md:234` states "every token uses the uniform
+# `mode-line-and-teach-controls.md:235` states "every token uses the uniform
 # `KEY)verb` shape", which would make this `P)anic`. But the band literal
 # canon actually prints is `^A)ode  A)nalyze  R)ecord  T)rigger  L)chains
 # P panic` -- with a SPACE, not a paren -- and it appears three times
 # identically across two files (`:136`, `:219`,
-# `visual-language.md:302`). Three consistent cross-file literals is
+# `visual-language.md:306`). Three consistent cross-file literals is
 # stronger evidence of intent than one generalisation that overlooks its
 # own last token, so the literal wins here and the conflict is reported to
 # the hub rather than silently resolved. Flip this one constant if canon

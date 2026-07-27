@@ -31,10 +31,10 @@ def test_band_is_canon_standing_spelling() -> None:
     tuple so the extension is a list edit).
 
     `P panic` is spelled with a SPACE, not a paren. Canon's prose at
-    `mode-line-and-teach-controls.md:234` says "every token uses the uniform
+    `mode-line-and-teach-controls.md:235` says "every token uses the uniform
     `KEY)verb` shape", which would make this `P)anic` -- but the band
     literal canon actually prints is `P panic`, identically at `:136`,
-    `:219` and `visual-language.md:302`. Three consistent cross-file
+    `:219` and `visual-language.md:306`. Three consistent cross-file
     literals beat one generalisation that overlooks its own last token, so
     the literal is what ships and the conflict is reported to the hub.
     Kept as an inline literal, NOT derived from `TEACH_TOKENS`: an
@@ -85,7 +85,7 @@ def test_band_does_not_carry_other_wos_tokens() -> None:
 
 
 def test_tokens_are_pure_ascii_no_unicode_twin() -> None:
-    """`visual-language.md:152`: `KEY)verb` -> `KEY)verb` (no swap)."""
+    """`visual-language.md:156`: `KEY)verb` -> `KEY)verb` (no swap)."""
     assert teachband.compose_teach_band(unicode_ok=True) == \
         teachband.compose_teach_band(unicode_ok=False)
     assert teachband.compose_teach_band().isascii()

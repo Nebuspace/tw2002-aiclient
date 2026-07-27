@@ -51,7 +51,7 @@ keystroke once attached: canon `mode-line-and-teach-controls.md:42-44` --
 "the human always wins the keyboard" -- so reserving ordinary letters
 would be a real loss of control fidelity, not a theoretical one (Samantha
 REVISE, WO-P4-056). A real in-cockpit graceful detach affordance (canon
-`spectate-and-attach.md:350` cites the archive's `Ctrl-]` precedent) is
+`spectate-and-attach.md:351` cites the archive's `Ctrl-]` precedent) is
 WO-P4-057's job, never invented here. Ctrl-A itself IS now reserved while
 attached (WO-P5-061-ENTRY) -- the Mode chord, not a game keystroke.
 """
