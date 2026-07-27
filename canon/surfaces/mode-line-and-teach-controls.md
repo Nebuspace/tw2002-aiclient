@@ -231,10 +231,22 @@ The control strip lays out strictly **left-to-right** (`compose_control_strip` �
    channel. When a taught run is live, the band's slot is claimed instead by the AUTO-LOOP
    cycle-progress bar (`Playing <name> ▸ cycle/total [███░░]`) — never both, there is only room for one.
 
-The reborn hint band is `^A)ode  A)nalyze  R)ecord  T)rigger  L)chains  P panic`; every token uses the
-uniform `KEY)verb` shape so the hotkey letter is scannable at the head of each token (`^A` = Ctrl-A
-Mode per ADR-002). (As-built the band is still `CONTROL_HINTS = "M)ode  L)chains  E)xplore  Spc pause
-X stop  P panic  A)ttach"` until 061-entry lands — tip honesty; see Code divergence.)
+The reborn hint band is `^A)ode  A)nalyze  R)ecord  T)rigger  L)chains  P panic`. Every token leads
+with its hotkey so the letter is scannable at the head of the token (`^A` = Ctrl-A Mode per
+ADR-002); most use the `KEY)verb` shape, and **`P panic` uses a space rather than a paren** —
+the one exception, spelled that way in every band literal this bundle prints. (As-built the band is
+still `CONTROL_HINTS = "M)ode  L)chains  E)xplore  Spc pause X stop  P panic  A)ttach"` until
+061-entry lands — tip honesty; see Code divergence.)
+
+> **Prose correction, 2026-07-27 — PROPOSED, awaiting ratify.** This paragraph previously read
+> "**every** token uses the uniform `KEY)verb` shape", which contradicts the band literal in its own
+> first sentence: `P panic` has a space, not a paren. The literal is spelled `P panic` identically in
+> three places across two files — here, at `:136` and `:219`, and in
+> [visual-language](/surfaces/visual-language.md) at `:302` — so the generalisation is what was
+> wrong, not the token. WO-P5-071 shipped `P panic` on that basis (hub ruling 2026-07-27) and the
+> sentence is corrected here to describe the band canon actually specifies. Recorded rather than
+> silently reworded, because the alternative resolution — respelling the token `P)anic` — was a live
+> option and a future reader is entitled to see it was considered and declined.
 
 ## The A / R / T / Mode hotkey affordances
 
