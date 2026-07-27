@@ -81,18 +81,22 @@ raises regardless of any argument's type or content.
 
 from __future__ import annotations
 
-# Canon's band spelling, taken from the literal rather than the prose rule.
+# Canon's band spelling. `P panic` -- a SPACE, not a paren, and the one
+# token on the band that does not use the `KEY)verb` shape.
 #
-# `mode-line-and-teach-controls.md:234` states "every token uses the uniform
-# `KEY)verb` shape", which would make this `P)anic`. But the band literal
-# canon actually prints is `^A)ode  A)nalyze  R)ecord  T)rigger  L)chains
-# P panic` -- with a SPACE, not a paren -- and it appears three times
-# identically across two files (`:136`, `:219`,
-# `visual-language.md:302`). Three consistent cross-file literals is
-# stronger evidence of intent than one generalisation that overlooks its
-# own last token, so the literal wins here and the conflict is reported to
-# the hub rather than silently resolved. Flip this one constant if canon
-# rules the other way.
+# RESOLVED, and canon now says so directly
+# (`mode-line-and-teach-controls.md` "The reborn hint band is ...", and the
+# dated correction note beneath it). When this module was written, canon's
+# prose claimed "**every** token uses the uniform `KEY)verb` shape" -- which
+# would have made this `P)anic` -- while the band literal it printed in the
+# same sentence said `P panic`, identically in three places across two files
+# (`:136`, `:219`, `visual-language.md:302`).
+#
+# The conflict was reported rather than silently resolved; the hub ruled for
+# the literal (2026-07-27) on the grounds that three consistent cross-file
+# literals beat one generalisation that overlooks its own last token, and the
+# prose was corrected to name this token as the exception. So this constant is
+# no longer a judgement call awaiting a ruling -- it is what canon specifies.
 PANIC_TOKEN = "P panic"
 
 # Both cases bind, matching the A/R/T teach keys' posture

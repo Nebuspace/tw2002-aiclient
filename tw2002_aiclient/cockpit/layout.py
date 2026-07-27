@@ -181,7 +181,7 @@ def frame_layout(lines: int, cols: int, *, needs_attention: bool = False) -> dic
         return {
             "mode": "too_small",
             # "×" is a canon-cited literal (visual-language.md:208,
-            # trainer-cockpit.md:368) — same no-swap family as "·"/"—"
+            # trainer-cockpit.md:383) — same no-swap family as "·"/"—"
             # (never degrades to an ASCII "x" twin, even under TW2002_ASCII=1).
             "message": (
                 f"Terminal too small ({cols}×{lines}) — need at least "
