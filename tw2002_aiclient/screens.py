@@ -15,6 +15,7 @@ import curses
 from tw2002_aiclient.cockpit import analyze as cockpit_analyze
 from tw2002_aiclient.cockpit import arm as cockpit_arm
 from tw2002_aiclient.cockpit import armconfirm as cockpit_armconfirm
+from tw2002_aiclient.cockpit import autoloop_controls as cockpit_autoloop_controls
 from tw2002_aiclient.cockpit import control_seat as cockpit_control_seat
 from tw2002_aiclient.cockpit import covermeter as cockpit_covermeter
 from tw2002_aiclient.cockpit import panic
@@ -2045,6 +2046,17 @@ class PlayShellScreen:
         # idempotent and never refuses, so an unnecessary press is free.
         if panic.resolve_panic_key(key):
             return panic.PANIC_INTENT
+        # WO-AUTOLOOP-RELAUNCH-COCKPIT: Space -- pause the taught run.
+        #
+        # Ungated, same reasoning as panic just above: pausing STOPS
+        # further sends, it never spends any, so the money-path confirm
+        # gate does not apply here either (`cockpit/autoloop_controls.py`
+        # docstring). Placed after panic so it cannot shadow it or the A/R/T
+        # teach keys above; no precondition on run state, same posture as
+        # panic's own "a halt that refuses because the cockpit believes
+        # nothing is running fails exactly when that belief is wrong."
+        if cockpit_autoloop_controls.resolve_pause_key(key):
+            return cockpit_autoloop_controls.PAUSE_INTENT
         return None
 
 

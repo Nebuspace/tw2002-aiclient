@@ -11,6 +11,7 @@ import curses
 from tw2002_aiclient import adapters
 from tw2002_aiclient.cockpit import analyze as _analyze
 from tw2002_aiclient.cockpit import assign_trigger as _assign_trigger
+from tw2002_aiclient.cockpit import autoloop_controls as _autoloop_controls
 from tw2002_aiclient.cockpit import draft_approve as _draft_approve
 from tw2002_aiclient.cockpit import record_macro as _record_macro
 from tw2002_aiclient.screens import (
@@ -436,6 +437,38 @@ def _daemon_status_provider(run_dir):
     return _poll
 
 
+def _preview_relaunch_sends(run_dir) -> object:
+    """Read-only preview of ``sends_issued``, taken BEFORE the relaunch
+    confirm gate is raised (WO-AUTOLOOP-RELAUNCH-COCKPIT).
+
+    The gate's label must disclose the money-path truth ahead of the
+    keystroke that fires it, but that truth (``sends_already_issued``) is
+    only handed back on the WIRE by `adapters.autoloop_relaunch` itself --
+    and that call is the mutating one the gate exists to guard. Calling it
+    just to preview its own answer would defeat the gate.
+
+    Reads the identical underlying field instead via
+    ``adapters.autoloop_status`` (not a raw ``session_cli.send_request`` --
+    ``app.py`` may only request the adjudicated ``status`` verb directly;
+    every other daemon verb goes through adapters). The daemon's
+    ``_dispatch_autoloop_relaunch`` captures ``sends_already_issued`` from
+    ``snapshot.report.sends_issued`` before re-arming, and
+    ``_dispatch_autoloop_status`` echoes that same ``report.sends_issued``
+    back as ``run.sends_issued``, so this is a genuine preview of the same
+    daemon state, not an invented value. No new protocol surface.
+
+    Returns the raw ``sends_issued`` value (an ``int`` or ``None``) on any
+    ``ok`` response with a real run, or ``None`` -- honest unknown, never a
+    guessed zero -- for a non-``ok`` response or no runner."""
+    result = adapters.autoloop_status(run_dir=run_dir)
+    if not result.ok or not isinstance(result.raw, dict):
+        return None
+    run = result.raw.get("run")
+    if not isinstance(run, dict):
+        return None
+    return run.get("sends_issued")
+
+
 def _attempt_attach(sock_path):
     """Take the Human control lock for THIS cockpit instance -- PWO-056
     (WO-P4-056). Canon `mode-line-and-teach-controls.md`'s App<->Human
@@ -623,6 +656,15 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
     # `None` here means spectating -- the loop below still routes every
     # key through `play.handle_key`, exactly as before this WO.
     attach_conn = None
+    # WO-AUTOLOOP-RELAUNCH-COCKPIT: which pending gate a subsequent
+    # "arm_confirm" belongs to. `PlayShellScreen._arm_confirm` is a single
+    # slot shared by every affordance that raises it (explore, and now
+    # relaunch) -- `handle_key` clears it and returns the SAME generic
+    # "arm_confirm" string on `y` regardless of who raised it, so this loop
+    # must remember which one it is on its own. Set right before each
+    # `begin_arm_confirm` call below; cleared the instant "arm_confirm"
+    # fires.
+    pending_confirm_action: str | None = None
     # WO-PLAY-EXPLORE-VISIBLE (L4): set after a successful arm start; cleared
     # when ``explore_status`` reports a terminal outcome so idle ticks do not
     # spam the daemon.
@@ -781,7 +823,46 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                 # never the ensure result on its own. `handle_key` returned
                 # None, so no gate is currently up and no other binding
                 # claimed the key.
+                pending_confirm_action = "explore"
                 play.begin_arm_confirm(_EXPLORE_OFFER_ACTION, cycles=_EXPLORE_MIN_SECTORS)
+                continue
+            if action == "pause":
+                # WO-AUTOLOOP-RELAUNCH-COCKPIT: Space -- ungated, like panic
+                # (see `cockpit/autoloop_controls.py` and `cockpit/panic.py`
+                # for why the confirm gate does not apply to a halt
+                # direction). `autoloop_pause` never raises and is idempotent
+                # daemon-side, so no precondition and no try/except here
+                # either, mirroring the panic branch below.
+                result = adapters.autoloop_pause(run_dir=run_dir)
+                if result.ok:
+                    play.status_line = "paused — taught run parked (Ctrl-A to drive, G to relaunch)"
+                else:
+                    play.status_line = f"pause failed — {result.reason or 'unknown'}"
+                continue
+            if action is None and _autoloop_controls.resolve_relaunch_offer_key(key):
+                # The human asked for the gate -- never raised unbidden, the
+                # same sovereignty posture the explore offer above uses.
+                # The disclosure preview happens BEFORE the gate is raised:
+                # the label must state the money-path truth on the FIRST
+                # keystroke the human sees, not after they have already
+                # committed.
+                sends_preview = _preview_relaunch_sends(run_dir)
+                action_text = _autoloop_controls.compose_relaunch_confirm_action(sends_preview)
+                pending_confirm_action = "relaunch"
+                play.begin_arm_confirm(action_text)
+                continue
+            if action == "arm_confirm" and pending_confirm_action == "relaunch":
+                # WO-AUTOLOOP-RELAUNCH-COCKPIT: the human pressed `y` at the
+                # relaunch offer. Only NOW does the money-spending adapter
+                # call happen -- the preview above never called it.
+                pending_confirm_action = None
+                play.status_line = "relaunching…"
+                play.draw()
+                result = adapters.autoloop_relaunch(run_dir=run_dir)
+                if result.ok:
+                    play.status_line = "relaunched — replaying from the start"
+                else:
+                    play.status_line = f"relaunch failed — {result.reason or 'unknown'}"
                 continue
             if action == "arm_confirm":
                 # WO-PLAY-EXPLORE-ARM (L3): the human pressed `y` at the
@@ -794,6 +875,7 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                 # `_EXPLORE_MIN_SECTORS` is the SAME constant the prompt was
                 # composed from, so the run cannot start with a different
                 # number than the one the human just agreed to.
+                pending_confirm_action = None
                 play.status_line = f"starting explore ×{_EXPLORE_MIN_SECTORS}…"
                 play.explore_band = f"explore ×{_EXPLORE_MIN_SECTORS} starting…"
                 play.draw()  # the start call blocks; show intent first

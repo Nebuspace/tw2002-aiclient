@@ -271,19 +271,26 @@ def test_gate_is_drawn_with_the_loud_attr(monkeypatch) -> None:
 # Accept #5 -- no silent arm inject in any code path.
 # --------------------------------------------------------------------------
 
-def test_exactly_one_production_call_site_raises_the_gate() -> None:
-    """WO-PLAY-EXPLORE-ARM flipped this pin, deliberately.
+def test_exactly_two_production_call_sites_raise_the_gate() -> None:
+    """WO-PLAY-EXPLORE-ARM flipped this pin once already; WO-AUTOLOOP-
+    RELAUNCH-COCKPIT flips it again, deliberately.
 
     WO-P5-063 shipped the gate with ZERO production callers and a pin
     asserting exactly that, so the first one would have to be a decision
-    rather than an accident. L3 is that decision: the post-ensure explore
-    offer in `app._run_play`.
+    rather than an accident. L3 was that decision: the post-ensure explore
+    offer in `app._run_play`. WO-AUTOLOOP-RELAUNCH-COCKPIT adds a second,
+    equally deliberate one in the same function: the relaunch offer, gated
+    on `resolve_relaunch_offer_key` rather than on any "is a run active"
+    precondition (the daemon itself refuses honestly -- `not_paused` /
+    `no_resumable_run` -- so this cockpit adds no redundant client-side
+    gate of its own).
 
-    The pin is UPDATED, not deleted -- it now asserts there is exactly ONE
-    production path. A second caller appearing without its own WO still
-    goes red first, which is the property that made the original worth
-    having. Deleting it would have converted a live guard into silence at
-    the exact moment it started guarding something real.
+    The pin is UPDATED, not deleted -- it now asserts there are exactly TWO
+    production call sites, both in `app.py`. A THIRD caller appearing
+    without its own WO still goes red first, which is the property that
+    made the original worth having. Deleting it would have converted a
+    live guard into silence at the exact moment it started guarding
+    something real.
     """
     root = Path(screens_mod.__file__).resolve().parent
     callers = []
@@ -294,9 +301,9 @@ def test_exactly_one_production_call_site_raises_the_gate() -> None:
             name = getattr(func, "attr", None) or getattr(func, "id", None)
             if isinstance(node, ast.Call) and name == "begin_arm_confirm":
                 callers.append(path.name)
-    assert callers == ["app.py"], (
-        f"expected exactly one production caller (app.py, the post-ensure "
-        f"explore offer); found {callers}"
+    assert callers == ["app.py", "app.py"], (
+        f"expected exactly two production callers, both in app.py (the "
+        f"post-ensure explore offer and the relaunch offer); found {callers}"
     )
 
 

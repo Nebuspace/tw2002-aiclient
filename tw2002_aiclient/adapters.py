@@ -309,6 +309,19 @@ def autoloop_pause(*, run_dir: Path | None = None) -> AutoLoopResult:
     return _autoloop_verb("autoloop_pause", run_dir)
 
 
+def autoloop_status(*, run_dir: Path | None = None) -> AutoLoopResult:
+    """Read-only taught-run status (WO-AUTOLOOP-RELAUNCH-COCKPIT preview).
+
+    Sends ``autoloop_status`` to the daemon. Same transport idiom as
+    :func:`explore_status` / the other ``autoloop_*`` adapters: never raises;
+    always returns a typed :class:`AutoLoopResult`. Cockpit preview of
+    ``run.sends_issued`` before a relaunch confirm MUST go through this
+    adapter — ``app.py`` must not call ``send_request`` with any verb other
+    than the adjudicated ``status`` allowlist entry.
+    """
+    return _autoloop_verb("autoloop_status", run_dir)
+
+
 def autoloop_relaunch(*, run_dir: Path | None = None) -> AutoLoopResult:
     """Re-arm a paused run **from the start of its macro**. Not a resume.
 

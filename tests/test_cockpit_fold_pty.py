@@ -646,5 +646,8 @@ def test_play_shell_screen_handle_key_unchanged_esc_and_q_only(monkeypatch):
     assert screen.handle_key(27) == "back"
     assert screen.handle_key(ord("q")) == "quit"
     assert screen.handle_key(ord("Q")) == "quit"
-    for key in (curses.KEY_UP, curses.KEY_DOWN, ord("1"), ord("d"), ord(" ")):
+    # `ord(" ")` (Space) dropped from this list -- WO-AUTOLOOP-RELAUNCH-COCKPIT
+    # legitimately binds it to the pause intent; this pin is only about
+    # THIS module's own wiring not adding new key handling.
+    for key in (curses.KEY_UP, curses.KEY_DOWN, ord("1"), ord("d")):
         assert screen.handle_key(key) is None
