@@ -447,27 +447,23 @@ def _preview_relaunch_sends(run_dir) -> object:
     and that call is the mutating one the gate exists to guard. Calling it
     just to preview its own answer would defeat the gate.
 
-    Reads the identical underlying field instead, via the daemon's
-    existing, already-dispatched ``autoloop_status`` verb --
-    ``session/protocol.py::_dispatch_autoloop_relaunch`` captures its own
-    ``sends_already_issued`` from ``snapshot.report.sends_issued`` before
-    re-arming, and ``_dispatch_autoloop_status`` echoes that same
-    ``report.sends_issued`` back as ``run.sends_issued``, so this is a
-    genuine preview of the same daemon state, not an invented value. No new
-    protocol surface: mirrors ``_daemon_status_provider`` just above, which
-    already calls ``session_cli.send_request`` directly for the same
-    reason (a read that must not touch ``adapters.py``'s mutating verbs).
+    Reads the identical underlying field instead via
+    ``adapters.autoloop_status`` (not a raw ``session_cli.send_request`` --
+    ``app.py`` may only request the adjudicated ``status`` verb directly;
+    every other daemon verb goes through adapters). The daemon's
+    ``_dispatch_autoloop_relaunch`` captures ``sends_already_issued`` from
+    ``snapshot.report.sends_issued`` before re-arming, and
+    ``_dispatch_autoloop_status`` echoes that same ``report.sends_issued``
+    back as ``run.sends_issued``, so this is a genuine preview of the same
+    daemon state, not an invented value. No new protocol surface.
 
     Returns the raw ``sends_issued`` value (an ``int`` or ``None``) on any
     ``ok`` response with a real run, or ``None`` -- honest unknown, never a
-    guessed zero -- for a non-``ok`` response or no runner.
-    ``session_cli.send_request`` never raises (its own docstring: "always
-    returns a dict"), so no ``try``/``except`` is needed here either,
-    mirroring ``_daemon_status_provider``'s own ``_poll`` just above."""
-    resp = session_cli.send_request("autoloop_status", {}, run_dir=run_dir)
-    if not isinstance(resp, dict) or not resp.get("ok"):
+    guessed zero -- for a non-``ok`` response or no runner."""
+    result = adapters.autoloop_status(run_dir=run_dir)
+    if not result.ok or not isinstance(result.raw, dict):
         return None
-    run = resp.get("run")
+    run = result.raw.get("run")
     if not isinstance(run, dict):
         return None
     return run.get("sends_issued")

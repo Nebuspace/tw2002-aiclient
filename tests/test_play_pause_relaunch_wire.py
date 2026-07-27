@@ -21,7 +21,6 @@ from __future__ import annotations
 import pytest
 
 from tw2002_aiclient import adapters, app as app_mod
-from tw2002_aiclient.session import cli as session_cli
 
 
 class _Ensure:
@@ -30,8 +29,8 @@ class _Ensure:
 
 
 class _AutoloopResult:
-    def __init__(self, ok=True, reason=None):
-        self.ok, self.reason, self.detail, self.raw = ok, reason, None, None
+    def __init__(self, ok=True, reason=None, raw=None):
+        self.ok, self.reason, self.detail, self.raw = ok, reason, None, raw
 
 
 class _Stdscr:
@@ -79,22 +78,21 @@ def _drive(
     monkeypatch.setattr(adapters, "autoloop_pause", _pause, raising=False)
     monkeypatch.setattr(adapters, "autoloop_relaunch", _relaunch, raising=False)
 
-    real_send_request = session_cli.send_request
-
-    def _send_request(verb, args_payload, **kw):
-        if verb == "autoloop_status":
-            status_calls.append(kw)
-            if not status_ok:
-                return {"ok": False, "error": "autoloop_unavailable"}
-            return {
+    def _status(**kw):
+        status_calls.append(kw)
+        if not status_ok:
+            return _AutoloopResult(ok=False, reason="autoloop_unavailable")
+        return _AutoloopResult(
+            ok=True,
+            raw={
                 "ok": True,
                 "running": False,
                 "run": {"sends_issued": status_sends_issued},
                 "stand_down": "pause",
-            }
-        return real_send_request(verb, args_payload, **kw)
+            },
+        )
 
-    monkeypatch.setattr(session_cli, "send_request", _send_request)
+    monkeypatch.setattr(adapters, "autoloop_status", _status, raising=False)
 
     seen = {}
     real_screen = app_mod.PlayShellScreen
