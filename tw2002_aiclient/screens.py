@@ -13,6 +13,7 @@ from typing import Callable, Sequence
 import curses
 
 from tw2002_aiclient.cockpit import arm as cockpit_arm
+from tw2002_aiclient.cockpit import armconfirm as cockpit_armconfirm
 from tw2002_aiclient.cockpit import control_seat as cockpit_control_seat
 from tw2002_aiclient.cockpit import decisions as cockpit_decisions
 from tw2002_aiclient.cockpit import draw as cockpit_draw
@@ -780,6 +781,32 @@ class PlayShellScreen:
     Esc ends the binding and returns to the launcher — clean close, not a suspend.
     """
 
+    # WO-P5-063: the pending confirm-to-arm gate, as ``(action, cycles)`` --
+    # ``None`` when no gate is up. Set ONLY through ``begin_arm_confirm``.
+    #
+    # Declared at CLASS level, not only in ``__init__``, for two reasons that
+    # point the same way:
+    #
+    # 1. **Safety direction.** ``None`` means "no gate is up", which is the
+    #    state in which `y` does nothing. Making it the class default means
+    #    EVERY instance -- however constructed -- starts unable to arm. There
+    #    is no construction path, present or future, that can produce a
+    #    cockpit one keystroke away from a live arm.
+    # 2. **The suite's own construction idiom.** Several sibling suites build
+    #    this screen with ``object.__new__(PlayShellScreen)`` to skip
+    #    ``__init__`` and shim just the attributes under test (documented in
+    #    ``tests/test_conn_toggle.py``). ``handle_key`` reads this attribute,
+    #    so an ``__init__``-only assignment raises ``AttributeError`` on every
+    #    such instance -- 20 pre-existing tests, none of them wrong. A class
+    #    default keeps that idiom working instead of requiring every current
+    #    and future shim-built test to know about this field.
+    #
+    # Deliberately NOT ``getattr(self, "_arm_confirm", None)`` at the read
+    # site: that would paper over a genuinely missing attribute at the one
+    # place where knowing the gate's real state matters, and it would put the
+    # default somewhere a reader of the class body cannot see it.
+    _arm_confirm: tuple[object, object] | None = None
+
     def __init__(
         self,
         stdscr: curses.window,
@@ -863,6 +890,10 @@ class PlayShellScreen:
         # default, unintrusive state).  Reset to False after activation in
         # app.py so the strip returns to its resting appearance.
         self._conn_focused: bool = False
+        # WO-P5-063: the pending confirm-to-arm gate. See the CLASS-level
+        # default of the same name above for why it is declared there too;
+        # this instance assignment is the ordinary path.
+        self._arm_confirm: tuple[object, object] | None = None
 
     def _init_colors(self) -> None:
         # Tone-table fg names -- sourced from cockpit.tones via the
@@ -1057,6 +1088,49 @@ class PlayShellScreen:
         fg_name, _unused_bold = _SEMANTIC_COLORS.get(tone, ("default", False))
         base = _shared_pairs.attr_for(fg_name)
         return base | curses.A_BOLD | curses.A_REVERSE
+
+    def begin_arm_confirm(self, action: object = None, *, cycles: object = None) -> None:
+        """Raise the confirm-to-arm gate (WO-P5-063).
+
+        The **single seam** through which a gate can appear. Nothing in the
+        product calls it today: what canon says should raise it -- a
+        Trade-Loop chain launch, a taught-run launch -- is the N5
+        operate-the-app cluster (WO-071), unbuilt. A pinned test asserts
+        there is still no production call site, so the day an arm path
+        appears without its own WO it goes red first (Accept #5, "no silent
+        arm inject in any code path").
+
+        Raising the gate arms **nothing**. It only causes the prompt to be
+        drawn and the next keystroke to be routed to
+        ``armconfirm.resolve_arm_confirm_key``; only a subsequent `y`
+        produces the ``"arm_confirm"`` intent, and even that intent has no
+        daemon call behind it in this WO.
+        """
+        self._arm_confirm = (action, cycles)
+
+    def _arm_confirm_attr(self) -> int:
+        """The confirm gate's attr: table-row ``danger`` (red **BOLD**) plus
+        ``A_REVERSE`` -- canon's "loudest combination the palette owns"
+        (`visual-language.md:77-78`).
+
+        Routed through ``_control_strip_segment_attr`` rather than composing
+        the attr here, so this gate and the chips beside it can never drift
+        onto different treatments of the same tone name -- the same reason
+        WO-P5-062's ARM chip was made to share that helper instead of
+        growing a second attr path.
+
+        **Deliberately NOT ``self._viewport_danger_attr``.** That attribute
+        is the *other* ``danger``: `visual-language.md:82` specifies red
+        **non-bold** as a per-surface override for the viewport border's
+        link-down flip, and this module's own comment at the point of
+        divergence records it. It is on this class, it has ``danger`` in its
+        name, and using it here would render the money-path gate *quieter*
+        than the frame around it while still satisfying any check that only
+        asked "is it danger-toned?". `visual-language.md:57` lists "the
+        live-play `y/N` confirm" among the **table row's** own examples.
+        Pinned by attr identity, not by tone name.
+        """
+        return self._control_strip_segment_attr(cockpit_armconfirm.ARM_CONFIRM_TONE)
 
     def _compose_conn_chip(
         self, status: "dict | None", focused: bool
@@ -1667,6 +1741,28 @@ class PlayShellScreen:
                 self.stdscr, control_strip, control_strip_fallback_lines, curses.A_NORMAL, boxed=False
             )
 
+        # WO-P5-063: the confirm-to-arm gate. Drawn LAST and over the control
+        # strip's own row, so nothing can paint on top of the one prompt that
+        # spends live turns. Canon puts it on the strip's row rather than in a
+        # bordered modal ("a single confirm line",
+        # `mode-line-and-teach-controls.md` "The confirm-gate dialog look").
+        if self._arm_confirm is not None:
+            try:
+                line = cockpit_armconfirm.compose_arm_confirm_line(
+                    self._arm_confirm[0], cycles=self._arm_confirm[1], unicode_ok=uok
+                )
+                cockpit_draw.draw_lines(
+                    self.stdscr, control_strip, [line],
+                    self._arm_confirm_attr(), boxed=False,
+                )
+            except Exception:  # noqa: BLE001 -- a raising composer must not crash the draw pass
+                # Deliberate asymmetry with the strip's fallback above: that one
+                # degrades to a quieter row, which is fine for telemetry. Here a
+                # silent degrade would leave a PENDING ARM with no visible prompt
+                # while `handle_key` still routes `y` to it -- an invisible live
+                # gate. Cancelling is the only honest recovery.
+                self._arm_confirm = None
+
         self.stdscr.refresh()
 
     def handle_key(self, key: int) -> str | None:
@@ -1693,6 +1789,29 @@ class PlayShellScreen:
         takes the daemon's Human control lock and flips
         ``self.spectating``/``self.attached``.
         """
+        # WO-P5-063: the confirm-to-arm gate intercepts EVERYTHING while it is
+        # up, and returns before any binding below can see the key. That
+        # ordering is the contract, not a style choice: `Esc` below returns
+        # `"back"` and `q` returns `"quit"`, so a gate placed lower down would
+        # let a cancelling keystroke also tear down the screen -- "cancels with
+        # no state change" (Accept #1) would be false for two of the four keys
+        # the Accept names. Placing it first makes the capture total.
+        #
+        # Note there is no `y`-shaped hole below either: no binding in this
+        # handler claims `y`, so the gate is the only thing that can ever act
+        # on it. `resolve_arm_confirm_key` is default-deny (see its module),
+        # so every key that is not `y`/`Y` -- named or not, including keycodes
+        # this cockpit does not know yet -- lands on the cancel branch.
+        if self._arm_confirm is not None:
+            outcome = cockpit_armconfirm.resolve_arm_confirm_key(key)
+            self._arm_confirm = None  # the gate is single-shot either way
+            if outcome == cockpit_armconfirm.CONFIRM:
+                # A pure INTENT signal, exactly like `"attach"` above it --
+                # this class holds no arm-capable call. WO-P5-063 constraint:
+                # "arm write-back is still read-only (062 stub); this WO only
+                # adds the confirm gate, not the daemon call."
+                return "arm_confirm"
+            return None
         if key == 27:  # Esc — end binding, return to launcher
             return "back"
         if key in (ord("q"), ord("Q")):

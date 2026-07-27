@@ -308,9 +308,29 @@ def test_the_cockpit_holds_no_arm_state_of_its_own(monkeypatch):
     win = _RecordingWin(FULL_ROWS, FULL_COLS)
     screen = _screen(monkeypatch, win, {"autopilot": {"running": False}})
     screen.draw()
+    # WO-P5-063 exemption, by EXACT name and justified below rather than by
+    # widening the substring rule.
+    #
+    # `_arm_confirm` holds the pending confirm-to-arm PROMPT -- `(action,
+    # cycles)` or `None` -- i.e. "is a question currently on screen". It is
+    # this client's own fact, like `spectating`/`attached` in the docstring
+    # above, and it never holds or mirrors the daemon's arm reading: the chip
+    # still derives from `status["autopilot"]` alone.
+    #
+    # The detector here is a name-substring match, so it fires on the letters
+    # "arm" rather than on the property the docstring describes. Exempting by
+    # name alone would leave that gap papered over, so the exemption is PROVEN
+    # rather than asserted: `test_arm_confirm_state_cannot_move_the_arm_chip`
+    # in `tests/test_cockpit_armconfirm.py` drives `_arm_confirm` through
+    # every value and shows the rendered chip does not move. If a future
+    # attribute really does cache the daemon's fact, this list does not cover
+    # it and the pin still bites.
+    _ARM_CONFIRM_EXEMPT = {"_arm_confirm"}
     offenders = [
         name for name in vars(screen)
-        if "arm" in name.lower() and "warn" not in name.lower()
+        if "arm" in name.lower()
+        and "warn" not in name.lower()
+        and name not in _ARM_CONFIRM_EXEMPT
     ]
     assert not offenders, f"cockpit is caching arm state in {offenders}"
 
