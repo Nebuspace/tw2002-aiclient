@@ -23,6 +23,7 @@ from tw2002_aiclient.cockpit import hud as cockpit_hud
 from tw2002_aiclient.cockpit import liveness as cockpit_liveness
 from tw2002_aiclient.cockpit import logsband as cockpit_logsband
 from tw2002_aiclient.cockpit import stopbanner as cockpit_stopbanner
+from tw2002_aiclient.cockpit import teachband as cockpit_teachband
 from tw2002_aiclient.cockpit import tones as cockpit_tones
 from tw2002_aiclient.cockpit import viewport as cockpit_viewport
 from tw2002_aiclient.cockpit import viewport_color as cockpit_viewport_color
@@ -1038,6 +1039,17 @@ class PlayShellScreen:
         losing its "this is a chip" signal entirely. Never raises: an
         unrecognized/hostile ``tone`` degrades to the same plain
         ``A_NORMAL`` as ``None``."""
+        if tone == cockpit_teachband.TEACH_TONE:
+            # WO-P5-066: the standing teach band is canon's cyan chrome
+            # accent -- "affordance chrome, not data"
+            # (`mode-line-and-teach-controls.md:229-231`) -- so it takes
+            # the SAME `_chrome_attr` the rest of the frame's chrome wears
+            # and deliberately skips the `A_BOLD | A_REVERSE` badge below.
+            # Reverse-video is canon's one "selected/active" signal
+            # (`:179-181`); a hint band is neither selected nor active, and
+            # badging it would make three unwired labels shout louder than
+            # the ARM chip's real state.
+            return self._chrome_attr
         if tone not in ("ok", "warn", "danger"):
             # Any other tone (None, SPECTATE's muted, separators, liveness)
             # stays plain A_NORMAL — unreversed, no badge treatment.
@@ -1630,6 +1642,12 @@ class PlayShellScreen:
                     liveness_text=liveness_text, width=cs_w, unicode_ok=uok,
                     arm_chip=arm_chip,
                     conn_chip=conn_chip,
+                    # WO-P5-066: the standing A/R/T teach band. Composed
+                    # unconditionally -- it is calm-state chrome that names
+                    # the teach repertoire, not a state readout, so there is
+                    # no status to gate it on. It self-drops when the row is
+                    # too narrow (see `_compose_segments`).
+                    teach_band=cockpit_teachband.compose_teach_band(unicode_ok=uok),
                 )
                 control_strip_segments = [
                     (str(text), self._control_strip_segment_attr(tone))

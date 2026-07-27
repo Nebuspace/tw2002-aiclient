@@ -173,6 +173,7 @@ from __future__ import annotations
 # the finished `(text, tone)` pair, keeping the seat composer blind to
 # daemon-global status exactly as the module docstring above commits to.
 from .arm import ARM_GAP as _ARM_SEPARATOR
+from .teachband import TEACH_TONE
 
 # Canon-cited verbatim (see module docstring) -- deliberately a single
 # constant, not a Unicode/ASCII twin pair: plain ASCII text has no glyph
@@ -431,6 +432,19 @@ def _safe_arm_chip(value: object) -> tuple[str, str | None]:
     return text, tone
 
 
+def _safe_teach_band(value: object) -> str:
+    """Coerce the optional teach band to a plain string.
+
+    Anything that is not a non-empty ``str`` renders as ABSENT rather than
+    as a guess -- the same "honest absence of information beats wrong
+    information" rule ``_safe_arm_chip`` applies to the chips, and the
+    reason this function never falls back to ``teachband.compose_teach_
+    band()`` on bad input: a caller that failed to supply the band should
+    show no band, not a band this layer invented on its behalf.
+    """
+    return value if isinstance(value, str) and value else ""
+
+
 def _compose_segments(
     *,
     spectating: object,
@@ -439,6 +453,7 @@ def _compose_segments(
     width: object,
     arm_chip: object = None,
     conn_chip: object = None,
+    teach_band: object = None,
 ) -> list[tuple[str, str | None]]:
     """Shared core: builds the ordered ``(text, tone)`` segments both public
     composers below return (``compose_control_strip_line`` joins them back
@@ -524,6 +539,40 @@ def _compose_segments(
                 left.append((separator, None))
             left.append((conn_text, conn_tone))
             used += len(separator) + len(conn_text)
+
+    # WO-P5-066: the standing teach band. Canon places the hint band
+    # "right-aligned ... it is affordance chrome, not data, so it wears the
+    # chrome color and yields the strip's center to the TX channel"
+    # (`mode-line-and-teach-controls.md:229-231`).
+    #
+    # Canon's own diagram (`:219`) shows the band hugging the row's right
+    # edge, because that diagram has no liveness cluster in it. On tip the
+    # right edge is already held by liveness -- the operationally
+    # load-bearing "is it frozen?" signal this function's docstring pins as
+    # keeping its full space ahead of every chip. So the band right-aligns
+    # against LIVENESS'S left edge rather than the row's: canon's reading
+    # order (chips left, band right, band yields the center) is preserved
+    # exactly, and the one element canon's diagram does not model keeps the
+    # priority the product already proved it needs. Recorded here rather
+    # than silently resolved -- see the WO's Design-decision section.
+    band = _safe_teach_band(teach_band)
+    if band:
+        # Blank columns standing between the chips' end and the liveness
+        # cluster's first column.
+        gap_total = w - len(text) - used
+        # `+ 2` buys one blank column on EACH side: the band may never abut
+        # the chips on its left nor the liveness cluster on its right.
+        if gap_total >= len(band) + 2:
+            lead = gap_total - len(band) - 1
+            left.append((" " * lead, None))
+            left.append((band, TEACH_TONE))
+            used += lead + len(band)
+        # else: dropped whole. All-or-nothing, matching the ARM/CONN chips'
+        # rule above -- a clipped `T)rig` is not a shorter true statement,
+        # it is a token the reader cannot resolve, and this band is the
+        # lowest-priority thing on the row (pure affordance chrome, zero
+        # live state), so it is the correct first thing to lose.
+
     if not left:
         return [(right, None)]
     return left + [(right[used:], None)]
@@ -538,6 +587,7 @@ def compose_control_strip_line(
     attached: object = False,
     arm_chip: object = None,
     conn_chip: object = None,
+    teach_band: object = None,
 ) -> str:
     """Compose the control-strip row's one content line: the seat label
     left-anchored, the already-composed ``liveness_text`` (``cockpit.
@@ -603,6 +653,7 @@ def compose_control_strip_line(
     segments = _compose_segments(
         spectating=spectating, attached=attached, liveness_text=liveness_text,
         width=width, arm_chip=arm_chip, conn_chip=conn_chip,
+        teach_band=teach_band,
     )
     return "".join(text for text, _tone in segments)
 
@@ -616,6 +667,7 @@ def compose_control_strip_segments(
     unicode_ok: object = True,
     arm_chip: object = None,
     conn_chip: object = None,
+    teach_band: object = None,
 ) -> list[tuple[str, str | None]]:
     """PWO-060: the draw layer's per-run-color view of the same control-strip
     row ``compose_control_strip_line`` renders as one flat string -- ordered
@@ -650,4 +702,5 @@ def compose_control_strip_segments(
     return _compose_segments(
         spectating=spectating, attached=attached, liveness_text=liveness_text,
         width=width, arm_chip=arm_chip, conn_chip=conn_chip,
+        teach_band=teach_band,
     )
