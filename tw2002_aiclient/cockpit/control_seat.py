@@ -445,6 +445,11 @@ def _safe_teach_band(value: object) -> str:
     return value if isinstance(value, str) and value else ""
 
 
+def _safe_status_offer(value: object) -> str:
+    """Coerce the optional mid-strip status/offer line to a plain string."""
+    return value if isinstance(value, str) and value else ""
+
+
 def _compose_segments(
     *,
     spectating: object,
@@ -453,6 +458,7 @@ def _compose_segments(
     width: object,
     arm_chip: object = None,
     conn_chip: object = None,
+    status_offer: object = None,
     teach_band: object = None,
 ) -> list[tuple[str, str | None]]:
     """Shared core: builds the ordered ``(text, tone)`` segments both public
@@ -460,8 +466,10 @@ def _compose_segments(
     into one string; ``compose_control_strip_segments`` returns them as-is).
 
     Layout, left to right: the seat chip, then (WO-P5-062) the ARM chip
-    separated by ``cockpit.arm.ARM_GAP``, then the right-justified liveness
-    cluster. Either chip may be absent; when both are, the row is the bare
+    separated by ``cockpit.arm.ARM_GAP``, then (WO-PLAY-OFFER-VISIBLE-ON-LIVE)
+    an optional mid-strip ``status_offer`` (``PlayShellScreen.status_line`` on
+    live sessions), then the standing teach/hint band, then the right-justified
+    liveness cluster. Either chip may be absent; when both are, the row is the bare
     ``(liveness_only, None)`` segment it has always been. That last case is
     a real, reachable outcome rather than a defensive-only branch: a
     degraded/unknown/non-``bool`` reading of ``spectating``/``attached``
@@ -540,6 +548,23 @@ def _compose_segments(
             left.append((conn_text, conn_tone))
             used += len(separator) + len(conn_text)
 
+    band = _safe_teach_band(teach_band)
+    gap_total = w - len(text) - used
+    band_reserved = 0
+    if band and gap_total >= len(band) + 2:
+        band_reserved = len(band) + 1
+
+    status_text = _safe_status_offer(status_offer)
+    if status_text and gap_total > band_reserved:
+        sep = _ARM_SEPARATOR if used else ""
+        room = gap_total - band_reserved - len(sep) - 1
+        if room > 0:
+            if sep:
+                left.append((sep, None))
+                used += len(sep)
+            left.append((status_text[:room], None))
+            used += min(len(status_text), room)
+
     # WO-P5-066: the standing teach band. Canon places the hint band
     # "right-aligned ... it is affordance chrome, not data, so it wears the
     # chrome color and yields the strip's center to the TX channel"
@@ -555,7 +580,6 @@ def _compose_segments(
     # exactly, and the one element canon's diagram does not model keeps the
     # priority the product already proved it needs. Recorded here rather
     # than silently resolved -- see the WO's Design-decision section.
-    band = _safe_teach_band(teach_band)
     if band:
         # Blank columns standing between the chips' end and the liveness
         # cluster's first column.
@@ -587,6 +611,7 @@ def compose_control_strip_line(
     attached: object = False,
     arm_chip: object = None,
     conn_chip: object = None,
+    status_offer: object = None,
     teach_band: object = None,
 ) -> str:
     """Compose the control-strip row's one content line: the seat label
@@ -653,7 +678,7 @@ def compose_control_strip_line(
     segments = _compose_segments(
         spectating=spectating, attached=attached, liveness_text=liveness_text,
         width=width, arm_chip=arm_chip, conn_chip=conn_chip,
-        teach_band=teach_band,
+        status_offer=status_offer, teach_band=teach_band,
     )
     return "".join(text for text, _tone in segments)
 
@@ -667,6 +692,7 @@ def compose_control_strip_segments(
     unicode_ok: object = True,
     arm_chip: object = None,
     conn_chip: object = None,
+    status_offer: object = None,
     teach_band: object = None,
 ) -> list[tuple[str, str | None]]:
     """PWO-060: the draw layer's per-run-color view of the same control-strip
@@ -702,5 +728,5 @@ def compose_control_strip_segments(
     return _compose_segments(
         spectating=spectating, attached=attached, liveness_text=liveness_text,
         width=width, arm_chip=arm_chip, conn_chip=conn_chip,
-        teach_band=teach_band,
+        status_offer=status_offer, teach_band=teach_band,
     )
