@@ -245,11 +245,15 @@ def test_t_binding_present_in_handle_key_source() -> None:
     )
 
 
-def test_a_and_r_still_not_bound() -> None:
-    """A (WO-069) and R (WO-067) are NOT yet wired — their pins stay live."""
+def test_a_still_not_bound() -> None:
+    """A (WO-069) is NOT yet wired — its pin stays live.
+
+    R is now wired by WO-P5-067; its own pin lives in
+    ``test_cockpit_record_macro.py``.
+    """
     from tw2002_aiclient import screens
     src = inspect.getsource(screens.PlayShellScreen.handle_key)
-    for key in ("A", "R", "a", "r"):
+    for key in ("A", "a"):
         assert not re.search(rf"""ord\(["']{key}["']\)""", src), (
-            f"handle_key now binds {key!r} — WO-067/069 wire must own its own pin"
+            f"handle_key now binds {key!r} — WO-069 wire must own its own pin"
         )

@@ -926,6 +926,12 @@ class PlayShellScreen:
         # visible via ``play.stub_store.get()``.
         from tw2002_aiclient.cockpit import assign_trigger as _at
         self.stub_store = _at.StubStore()
+        # WO-P5-067: in-cockpit record session.  Tracks the recording
+        # lifecycle (start → add_step* → stop/cancel) for the R Record
+        # teach key.  app.py toggles it on every "record_toggle" action.
+        # The store is test-visible via ``play.record_session``.
+        from tw2002_aiclient.cockpit import record_macro as _rm
+        self.record_session = _rm.RecordSession()
 
     def _init_colors(self) -> None:
         # Tone-table fg names -- sourced from cockpit.tones via the
@@ -1886,6 +1892,13 @@ class PlayShellScreen:
         # (``app._EXPLORE_OFFER_KEYS``), never T.
         if key in (ord("t"), ord("T")):
             return "assign_trigger"
+        # WO-P5-067: R Record scaffold.  Returns a pure INTENT signal only
+        # ("record_toggle") -- this class has no send path of its own.
+        # Both `r` and `R` bind, matching the A/R/T teach band's posture.
+        # First press starts a recording; second press stops and saves.
+        # `R` is NOT bound to attach/launch (WO constraint).
+        if key in (ord("r"), ord("R")):
+            return "record_toggle"
         return None
 
 
