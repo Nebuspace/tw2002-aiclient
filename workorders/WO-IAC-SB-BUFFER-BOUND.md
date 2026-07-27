@@ -1,9 +1,11 @@
 # WO-IAC-SB-BUFFER-BOUND
 
-**Status:** OPEN · HANDOFF · Cursor  
+**Status:** DONE  
 **Posted:** 2026-07-27 · from `audit/session-iac-audit-20260727.md` I-01  
 **Seat:** impl-aiclient-cursor (volume · mechanical)  
-**Depends:** `WO-AUDIT-SESSION-IAC` DONE (`0aa8aa0`)
+**Depends:** `WO-AUDIT-SESSION-IAC` DONE (`0aa8aa0`)  
+**Shipped:** already on `main` via PR #64 (`884f73e`, 2026-07-27) — re-verified this seat 2026-07-27T18:41:07Z  
+**Proof tip:** `tests/test_iac.py` overflow suite green (`pytest -n0 tests/test_iac.py -q` → 16 passed)
 
 ## Goal
 
