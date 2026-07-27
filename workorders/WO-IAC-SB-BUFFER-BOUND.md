@@ -1,6 +1,6 @@
 # WO-IAC-SB-BUFFER-BOUND
 
-**Status:** READY  
+**Status:** OPEN · HANDOFF · Cursor  
 **Posted:** 2026-07-27 · from `audit/session-iac-audit-20260727.md` I-01  
 **Seat:** impl-aiclient-cursor (volume · mechanical)  
 **Depends:** `WO-AUDIT-SESSION-IAC` DONE (`0aa8aa0`)
