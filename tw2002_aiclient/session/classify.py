@@ -71,6 +71,13 @@ _DASH_OPTION_RE = re.compile(r"^\s*[a-z]\s*[-:]\s*\S+", re.I)
 _CIM_REPORT_HEADER_RE = re.compile(r"^-=-=-\s+Port Report \(CIM\)\s+-=-=-$")
 _CIM_REPORT_FOOTER_RE = re.compile(r"^-=-=-\s+End of Report\s+-=-=-$")
 _COMMAND_ECHO_LINE_RE = re.compile(r"command\s*\[\s*tl\s*=", re.I)
+# TWGS outer-door tell: the server prints `[Main Menu]` in the sector
+# slot of the command prompt when the player has NOT yet selected a game.
+# The in-game prompt always carries an integer sector number (`[54]`),
+# or encodes all turn-state inside the TL bracket itself -- never a
+# bare word like "Main Menu". Refusing this form keeps `main_command`
+# meaning only the real in-game ship-command prompt.
+_TWGS_MAIN_MENU_SECTOR_RE = re.compile(r"\[\s*main\s+menu\s*\]", re.I)
 
 # -- Other system-block titles (WO-CLASSIFY-BLOCK-TITLES) ------------------
 #
@@ -922,6 +929,24 @@ _LOGIN_PASSWORD_RE = re.compile(
     re.I | re.M,
 )
 
+def _is_main_command(text: str) -> bool:
+    """True only for the real in-game ship-command prompt.
+
+    Refuses the TWGS outer-door ``[Main Menu]`` variant: the server
+    uses the same ``Command [TL=…]`` prefix but puts ``[Main Menu]`` in
+    the sector slot instead of an integer sector number (``[54]``).
+    ``ensure`` reported ``ok:true · classification=main_command`` for
+    this form (live false-positive 2026-07-27) because the previous
+    pattern matched on the shared prefix alone. ``_TWGS_MAIN_MENU_SECTOR_RE``
+    is the refuse guard; deleting it re-introduces the false positive
+    (WO-CLASSIFY-MAIN-COMMAND-VS-TWGS-MENU mutation pin).
+    """
+    return (
+        _COMMAND_ECHO_LINE_RE.search(text) is not None
+        and not _TWGS_MAIN_MENU_SECTOR_RE.search(text)
+    )
+
+
 _GATE_ANCHORS = [
     ("pause_key", _regex_matcher(re.compile(r"\[\s*pause\s*\]|press\s+.*\bkey\b|--\s*more\s*--", re.I))),
     ("login_password", _regex_matcher(_LOGIN_PASSWORD_RE)),
@@ -955,7 +980,7 @@ _GATE_ANCHORS = [
             )
         ),
     ),
-    ("main_command", _regex_matcher(re.compile(r"command\s*\[\s*tl\s*=", re.I))),
+    ("main_command", _is_main_command),
     # LAST among the gates, and the position is load-bearing. Everything
     # above answers a screen some part of this app DRIVES: `login.py`'s
     # automaton, `guardian.py`'s keepalive and `protocol.py`'s `ensure`

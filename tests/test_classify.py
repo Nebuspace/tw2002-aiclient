@@ -12,7 +12,9 @@ from tw2002_aiclient.session.classify import (
     _CONTENT_ANCHORS,
     _GATE_ANCHORS,
     NEVER_AUTO_ACTION_CLASSES,
+    _TWGS_MAIN_MENU_SECTOR_RE,
     _is_exclusive_closed_block,
+    _is_main_command,
     _is_money_prompt,
     classify,
     classify_screen,
@@ -66,6 +68,98 @@ def _cargo_hold_block_recognized(text):
 
 def test_main_command_prompt():
     assert classify("Command [TL=00753:0/0/0/850] (?=Help)? :") == "main_command"
+
+
+# -- WO-CLASSIFY-MAIN-COMMAND-VS-TWGS-MENU --------------------------------
+
+
+def test_twgs_door_main_menu_prompt_is_not_main_command():
+    """Accept #1 (WO-CLASSIFY-MAIN-COMMAND-VS-TWGS-MENU).
+
+    The TWGS outer-door ``[Main Menu]`` prompt must NOT classify as
+    ``main_command``. Before the fix, ``ensure`` reported
+    ``ok:true · classification=main_command`` for this exact string and
+    the Play ladder drove a door menu as if it were an in-game sector
+    prompt (live false-positive 2026-07-27)."""
+    prompt = "Command [TL=00:00:00]:[Main Menu] :"
+    assert classify_screen("", prompt) != "main_command"
+    assert classify(prompt) != "main_command"
+    # Hub ruling: prefer ``unknown`` (no new screen_class).
+    assert classify_screen("", prompt) == "unknown"
+    assert classify(prompt) == "unknown"
+
+
+def test_twgs_door_main_menu_mutation_pin():
+    """Mutation pin: ``_TWGS_MAIN_MENU_SECTOR_RE`` is the load-bearing guard.
+
+    If the refuse regex is removed (or changed to never match), the prompt
+    reverts to ``main_command`` because ``_COMMAND_ECHO_LINE_RE`` still
+    matches the shared prefix. This proves the pin is not vacuous -- both
+    halves of ``_is_main_command`` are necessary."""
+    prompt = "Command [TL=00:00:00]:[Main Menu] :"
+    # The refuse guard fires on the exact live false-positive string.
+    assert _TWGS_MAIN_MENU_SECTOR_RE.search(prompt) is not None, (
+        "refuse guard did not match — pin is vacuous"
+    )
+    # Without the guard, the TL prefix alone would match main_command.
+    from tw2002_aiclient.session.classify import _COMMAND_ECHO_LINE_RE
+    assert _COMMAND_ECHO_LINE_RE.search(prompt) is not None, (
+        "TL prefix did not match — test is against wrong string"
+    )
+    # _is_main_command combines both: TL prefix YES, Main Menu guard FIRES → False.
+    assert _is_main_command(prompt) is False
+
+
+def test_in_game_sector_prompt_is_still_main_command():
+    """Accept #2 (WO-CLASSIFY-MAIN-COMMAND-VS-TWGS-MENU).
+
+    The real in-game sector prompt (integer sector number) must remain
+    ``main_command`` after the fix — ``ensure`` depends on this."""
+    in_game = "Command [TL=00:00:00]:[54] (?=Help)? :"
+    assert classify_screen("", in_game) == "main_command"
+    assert classify(in_game) == "main_command"
+    assert _is_main_command(in_game) is True
+
+
+def test_twgs_door_main_menu_stale_above_real_sector_prompt_does_not_poison():
+    """Stale-scrollback guard (WO-CLASSIFY-MAIN-COMMAND-VS-TWGS-MENU).
+
+    TWGS door chrome with ``[Main Menu]`` sitting above a real in-game
+    sector prompt (e.g. after game selection and login) must not prevent
+    ``main_command`` from being the correct classification for the live
+    sector prompt. The gate anchor is checked against the prompt line
+    only in ``classify_screen``."""
+    stale_menu = "Command [TL=00:00:00]:[Main Menu] :"
+    live_sector = "Command [TL=00:00:00]:[54] (?=Help)? :"
+    text = stale_menu + "\n" + live_sector
+    assert classify_screen(text, live_sector) == "main_command"
+
+
+def test_real_sector_prompt_above_stale_main_menu_chrome_still_wins():
+    """Mirror stale-scrollback guard: a later ``[Main Menu]`` left unclaimed
+    in the pyte grid (e.g. on a TUI screen transition) above a real sector
+    prompt must not steal the live gate. The current prompt is the live
+    signal; stale content above it is scrollback noise."""
+    live_sector = "Command [TL=00:00:00]:[54] (?=Help)? :"
+    stale_menu = "Command [TL=00:00:00]:[Main Menu] :"
+    # live prompt above, stale menu in scrollback below
+    text = live_sector + "\n" + stale_menu
+    # classify_screen uses the live prompt line — stale menu in body is irrelevant.
+    assert classify_screen(text, live_sector) == "main_command"
+    # NOTE: classify() (whole-text, no prompt discipline) sees BOTH lines;
+    # _is_main_command checks the FULL text for [Main Menu] and would refuse.
+    # This is a known, intentional difference — the stale-scrollback discipline
+    # (gate anchors against prompt line only) is classify_screen's job, not
+    # the content of classify().
+    # For classify(), the live prompt's ``[54]`` is also present in the text;
+    # since ``_TWGS_MAIN_MENU_SECTOR_RE`` fires on the stale line, classify()
+    # returns ``unknown`` — the safe direction, never falsely ``main_command``
+    # on a door menu screen.
+    # Pinned both outcomes:
+    assert classify(text) == "unknown"  # safe: stale menu in text → refuse wins
+
+
+# -- end WO-CLASSIFY-MAIN-COMMAND-VS-TWGS-MENU ----------------------------
 
 
 def test_computer_command_prompt_wins_over_main_command():
