@@ -1,6 +1,6 @@
 # WO-IAC-AUDIT-I01-DOC-HONESTY — Close stale I-01 prose in session-iac audit
 
-**Status:** OPEN · READY (docs)  
+**Status:** OPEN · HANDOFF · Cursor  
 **Posted:** 2026-07-27T18:47:00Z · from Cursor #105 flag + CC PROCESS-NOTE  
 **Seat:** Cursor or CC (docs-only)  
 **Depends:** I-01 code on main `884f73e` (#64)
