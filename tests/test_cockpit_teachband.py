@@ -194,20 +194,24 @@ def test_chrome_tone_is_distinct_from_every_badge_tone() -> None:
 # --------------------------------------------------------------------------
 
 def test_teach_keys_are_not_bound_in_the_cockpit_handler() -> None:
-    """A/R/T must remain inert until WO-067/068/069 wire them.
+    """A and R must remain inert until WO-069 (A) and WO-067 (R) wire them.
 
-    Read structurally from the cockpit handler's source: the band claims
-    three affordances, and this is the pin that fails the day one of them
-    starts doing something without its own WO.
+    T is now wired by WO-P5-068 (Assign-Trigger scaffold) — that WO owns
+    the binding and its own pins in ``test_cockpit_assign_trigger.py``.
+    A/R wires belong to WO-069 and WO-067 respectively and still owe
+    their own pins; this check stays live for them.
+
+    Read structurally from the cockpit handler's source so a future wire
+    cannot land silently without the pin that owns its WO going red first.
     """
     from tw2002_aiclient import screens
 
     src = inspect.getsource(screens.PlayShellScreen.handle_key)
-    for key in ("A", "R", "T", "a", "r", "t"):
+    for key in ("A", "R", "a", "r"):
         assert not re.search(rf"""ord\(["']{key}["']\)""", src), (
             f"cockpit handle_key now binds {key!r} -- WO-P5-066 ships the "
-            f"LABEL only; the wire belongs to WO-067/068/069 and owes its "
-            f"own pin"
+            f"LABEL only; the wire belongs to WO-067 (R) / WO-069 (A) and "
+            f"each owes its own pin"
         )
 
 
