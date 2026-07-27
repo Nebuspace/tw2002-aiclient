@@ -110,6 +110,14 @@ def _tx_direction(channel: str, exc) -> str:
     return f"{channel}{_FAILED_SUFFIX} {tx_failure_phrase(exc)}"
 
 
+# WO-CONN-READER-THREAD-DEATH-HONESTY: the marker prefixing every recorded
+# reader-thread failure. A typed prefix + the exception's TYPE NAME only --
+# never `str(exc)`, which on this code path could carry server bytes from a
+# password prompt (`canon/doctrine/secrets-and-credentials.md`). Mirrors
+# `guardian.py`'s own `guardian_tick_error:{type(e).__name__}` idiom.
+READER_FAILURE_PREFIX = "reader_loop_error:"
+
+
 class TelnetConnection:
     def __init__(self, host, port, terminal, negotiator, logger=None):
         self.host = host
@@ -122,6 +130,15 @@ class TelnetConnection:
         self.last_rx = time.monotonic()
         self.rx_count = 0
         self.connected = False
+        # `None` until the reader loop dies from an unexpected exception;
+        # a clean exit (peer closed, `_stop` set) leaves it `None`. That is
+        # what makes "the thread hit a bug" distinguishable from "the link
+        # dropped" -- see `_reader_loop`.
+        self.reader_failure = None
+        # Bumped by every `connect()`. A reader thread captures it at entry
+        # and only clears `connected` in its `finally` if the value is still
+        # its own -- see `_reader_loop`.
+        self._reader_generation = 0
 
         self._sock = None
         self._reader_thread = None
@@ -130,30 +147,115 @@ class TelnetConnection:
     def connect(self, timeout=10):
         self._sock = socket.create_connection((self.host, self.port), timeout=timeout)
         self._sock.settimeout(None)
+        # Clear any failure recorded by a PREVIOUS reader thread before
+        # declaring this one live. Without this a reconnect on the same
+        # object would come up `connected=True` while still reporting the
+        # last death -- the mirror image of the bug this WO fixes, and the
+        # kind that reads as "the fault is still happening" long after it
+        # stopped. Ordered before `connected = True` so there is no window
+        # in which a reader is live and the stale reason is still visible.
+        self.reader_failure = None
+        # Bump BEFORE starting the thread, so the new reader captures the new
+        # generation and any still-draining OLD reader now holds a stale one.
+        self._reader_generation += 1
         self.connected = True
         self._reader_thread = threading.Thread(target=self._reader_loop, daemon=True)
         self._reader_thread.start()
 
     def _reader_loop(self):
-        while not self._stop.is_set():
-            try:
-                data = self._sock.recv(4096)
-            except OSError:
-                break
-            if not data:
-                break
-            if self.logger:
-                self.logger.log_raw("RX", data)
-            clean = self.negotiator.feed(data)
-            pending = self.negotiator.pop_pending_output()
-            with self.lock:
-                if clean:
-                    self.terminal.feed(clean)
-                self.rx_count += len(data)
-                self.last_rx = time.monotonic()
-            if pending:
-                self._send_raw(pending)
-        self.connected = False
+        """Drain the socket until it closes, this connection is stopped, or
+        something in the loop body raises (WO-CONN-READER-THREAD-DEATH-HONESTY).
+
+        **`connected` is cleared in a `finally`, not after the `while`.**
+        That placement is the whole fix. Previously `self.connected = False`
+        sat below the loop, so it was reached on the two *clean* exits
+        (peer closed, `_stop` set) and skipped entirely when the body raised
+        -- the thread died and the connection went on advertising itself as
+        live (audit `session-iac-audit-20260727.md` I-02, proven by
+        execution). `finally` makes the flag track the thread's actual
+        liveness on **every** exit path, including ones no one has written
+        yet, rather than on the paths someone remembered to enumerate.
+
+        Why that mattered more than a stale boolean: `connected` is what the
+        `status` verb reports to every client (`protocol.py`), what the
+        disconnect gates test, and -- most consequentially -- what
+        `guardian.py::_tick` reads to decide whether to reconnect
+        (`if not session.conn.connected: self._maybe_reconnect()`). A
+        wrongly-`True` flag disables the component whose entire job is
+        noticing the link is gone, so the system cannot recover from the
+        failure by the same mechanism the failure breaks.
+
+        **The failure is recorded, not merely survived.** `reader_failure`
+        distinguishes "the loop body raised" from an ordinary peer close;
+        without it, flipping the flag would make a genuine defect render as
+        a routine network drop and the guardian would quietly reconnect
+        around it forever -- trading a loud-wrong signal for a quiet-wrong
+        one. Following `guardian.py`'s own idiom, it records the exception's
+        **type name only, never `str(exc)`**: this loop handles bytes from a
+        server that may be mid-password-prompt, and an exception message can
+        embed the payload that caused it
+        (`canon/doctrine/secrets-and-credentials.md`).
+
+        The exception is re-raised after being recorded so the interpreter's
+        own "Exception in thread" traceback still reaches stderr for
+        debugging -- recording replaces the *silence*, not the diagnostics.
+        `Exception` rather than `BaseException` is caught, so `SystemExit` /
+        `KeyboardInterrupt` are not swallowed or relabelled as connection
+        faults; the `finally` still clears `connected` for those too.
+        """
+        generation = self._reader_generation
+        try:
+            while not self._stop.is_set():
+                try:
+                    data = self._sock.recv(4096)
+                except OSError:
+                    break
+                if not data:
+                    break
+                if self.logger:
+                    self.logger.log_raw("RX", data)
+                clean = self.negotiator.feed(data)
+                pending = self.negotiator.pop_pending_output()
+                with self.lock:
+                    if clean:
+                        self.terminal.feed(clean)
+                    self.rx_count += len(data)
+                    self.last_rx = time.monotonic()
+                if pending:
+                    self._send_raw(pending)
+        except Exception as exc:  # noqa: BLE001 -- recorded and re-raised below
+            self.reader_failure = f"{READER_FAILURE_PREFIX}{type(exc).__name__}"
+            if self.logger is not None:
+                try:
+                    # `log_redacted`, not `log_raw`: this note is authored
+                    # here and carries no server bytes, and the redaction
+                    # sink is the one path guaranteed never to persist
+                    # content. A logger that itself raises must not replace
+                    # the original failure.
+                    self.logger.log_redacted("ERR", f"reader thread died: {self.reader_failure}")
+                except Exception:  # noqa: BLE001
+                    pass
+            raise
+        finally:
+            # Only clear the flag if this thread is still the CURRENT reader.
+            #
+            # `close()` does not join the reader thread, so a dying reader can
+            # outlive its own connection: close -> reconnect -> the OLD thread
+            # finally fires and marks the NEW, live connection down. That race
+            # predates this WO -- the original `self.connected = False` sat
+            # after the loop with the same exposure -- but Accept #3 asks that
+            # the fix not race with the shutdown path, and widening the flag to
+            # fire on exception paths too would widen that window rather than
+            # leave it as found.
+            #
+            # A generation check rather than `self._reader_thread is
+            # threading.current_thread()`: `connect()` assigns `_reader_thread`
+            # AFTER `start()`, so a thread that dies immediately could find the
+            # attribute still unset and skip clearing -- reinstating exactly the
+            # bug this WO closes. The counter is incremented before `start()`,
+            # so it is always already correct when the loop reads it.
+            if self._reader_generation == generation:
+                self.connected = False
 
     def _log_tx(self, channel: str, data: bytes, secret: bool, exc):
         """Write the ONE transcript record for a TX that has already
