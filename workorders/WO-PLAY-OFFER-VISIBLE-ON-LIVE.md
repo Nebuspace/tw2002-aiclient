@@ -1,6 +1,6 @@
 # WO-PLAY-OFFER-VISIBLE-ON-LIVE
 
-**Status:** OPEN  
+**Status:** DONE · tip `0911d4b` · #79  
 **Posted:** 2026-07-27T04:40Z · Found by live prove PR #76 / `WO-PLAY-LADDER-LIVE-PROVE`  
 **Seat:** `impl-claudecode-aiclient` (Model: Fable — Play chrome)  
 **Depends:** tip ≥ `9795263` · audit evidence in `audit/live-play-ladder-newchar-9795263-20260727T0430Z.md`

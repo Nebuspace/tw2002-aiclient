@@ -1,6 +1,6 @@
 # WO-CLASSIFY-MAIN-COMMAND-VS-TWGS-MENU
 
-**Status:** OPEN · **P0** — blocks extreme Play prove / ensure truth  
+**Status:** DONE · tip `de6ca30` · #84  
 **Posted:** 2026-07-27T05:32:00Z · hub ruling on CC `❓` (Max GO already: prove extreme)  
 **Seat:** `impl-aiclient-cursor` (disjoint from mint: `classify.py` + tests/fixtures only)  
 **Depends:** tip ≥ `5bb96b7`

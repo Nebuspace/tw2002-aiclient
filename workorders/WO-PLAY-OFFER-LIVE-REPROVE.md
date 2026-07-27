@@ -1,6 +1,6 @@
 # WO-PLAY-OFFER-LIVE-REPROVE
 
-**Status:** OPEN  
+**Status:** SUPERSEDED by `WO-PLAY-LIVE-EXTREME-PROVE` (DONE)  
 **Posted:** 2026-07-27T05:02:00Z · follow-on after `WO-PLAY-OFFER-VISIBLE-ON-LIVE` (#79 → `0911d4b`)  
 **Seat:** `impl-claudecode-aiclient` (live TWGS / Fable)  
 **Depends:** main tip ≥ `0911d4b`  
