@@ -1,6 +1,6 @@
 # WO-XENO-GAME-SELECT
 
-**Status:** READY  
+**Status:** DONE · CC · classify teach + fixture + pins (live ensure = hub, no bank on this seat)  
 **Posted:** 2026-07-27 · Max: cannot pass Exiled game selection — Phase-2 teach GO  
 **Seat:** impl-claudecode-aiclient (Fable — classify correctness)  
 **Depends:** `WO-XENO-FINGERPRINT` DONE (`f5bfc50`) · live capture `/tmp/xeno-capture-20260726/`

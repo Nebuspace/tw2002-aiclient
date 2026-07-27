@@ -148,6 +148,31 @@ _TWGS_TIMED_OUT_PROMPT_RE = re.compile(r"^Timed\s+out", re.I)
 # ``_is_plain_timed_out_game_select`` can reuse it rather than duplicate the
 # literal — avoids the two drifting apart if the gate anchor is ever tightened.
 _PLAIN_GAME_SELECT_RE = re.compile(r"select\s+a\s+game", re.I)
+# WO-XENO-GAME-SELECT: a fourth SHAPE of the existing `game_select` class --
+# the square-bracket door some hosts (Exiled / `twgs.exiled.org`) render
+# instead of TWGS's own menus. NOT a new screen_class; the letter path in
+# `login.py` is already correct once the class resolves.
+#
+#   [ Exiled TW2002 ]:[A][B][C][D][E][X][Z][#]:Timed out...
+#    [A] Alpha Quadrant Invasion -Sectors:10000 Turns:1000 ...
+#
+# Two signals, BOTH required, because either alone is far too generic:
+#
+# 1. The timed-out marker as a COLON-PREFIXED SUFFIX of custom chrome. The
+#    sibling `_TWGS_TIMED_OUT_PROMPT_RE` is anchored `^Timed\s+out` and
+#    structurally cannot match here -- this host's marker is the tail of a
+#    decorated prompt, not the whole line. Re-using that constant was the
+#    first thing I tried and it returns False on the live capture.
+_SQUARE_BRACKET_TIMED_OUT_PROMPT_RE = re.compile(r":\s*Timed\s+out\b", re.I)
+# 2. Indented single-character bracket rows in the body ABOVE that prompt.
+#    The leading `\s+` is load-bearing twice over: the PROMPT line itself
+#    carries `[A][B][C][D][E][X][Z][#]` at column 0, and without the
+#    indent requirement the prompt would satisfy its own body check.
+_SQUARE_BRACKET_GAME_ROW_RE = re.compile(r"^\s+\[[A-Za-z0-9]\]\s+\S+")
+# Two rows, not "every row": the live capture's own `Z` entry renders
+# UNBRACKETED (` Z  Borg Assimilation`), so a rule demanding uniformity
+# would refuse the very screen this WO exists to teach.
+_SQUARE_BRACKET_MIN_GAME_ROWS = 2
 _GAME_HEADER_LINE_RE = re.compile(r"^[^a-z0-9]*game[^a-z0-9]*$", re.I)
 # TWGS commonly renders two side-by-side boxes sharing ONE physical
 # terminal row (see the captured fixture: the "Game" box's header shares
@@ -576,6 +601,67 @@ def _twgs_banner_signals_coherent(
     if not _BANNER_ART_LINE_RE.search(title_line):
         return False
     return True
+
+
+def _is_square_bracket_game_select_menu(full_text: str, prompt_line: str) -> bool:
+    """The square-bracket game-select door (Exiled / `twgs.exiled.org`).
+
+    A fourth shape of the EXISTING ``game_select`` class -- no new
+    ``screen_class``. `login.py` already sends `profile.game_letter` once the
+    class resolves; this detector is the only thing that was missing, and its
+    absence is why `tw ensure --profile xeno` stalls at
+    `LoginStalled(automaton_stuck, unknown)`.
+
+    Both signals are required (see the constants above for why each alone is
+    too generic):
+
+    1. the prompt line carries a COLON-PREFIXED ``Timed out`` suffix, and
+    2. at least two INDENTED ``[X] <name>`` rows appear **above** that prompt.
+
+    **The above-prompt scoping is the stale-scrollback guard**, and it is the
+    same discipline every sibling here applies. Signal 1 already refuses a
+    screen whose live prompt is something else (a stale Exiled menu still in
+    scrollback under a live ``Command [TL=...]`` prompt fails immediately,
+    because the prompt is what is tested -- not the whole buffer). Signal 2
+    then refuses the mirror case: chrome that happens to end in ``:Timed
+    out`` with no game rows standing above it.
+
+    Rows are counted strictly above the resolved prompt index rather than
+    anywhere in ``full_text``. That matters for the ``classify()`` API, whose
+    caller has no separate prompt line and passes the last non-blank line --
+    counting over the whole buffer there would let scrollback rows from a
+    PREVIOUS visit to this door satisfy signal 2 on an unrelated screen.
+
+    Never raises; a non-``str`` ``full_text`` or ``prompt_line`` is treated as
+    absent evidence and refuses.
+    """
+    if not isinstance(prompt_line, str) or not isinstance(full_text, str):
+        return False
+    if not _SQUARE_BRACKET_TIMED_OUT_PROMPT_RE.search(prompt_line.strip()):
+        return False
+
+    lines = full_text.splitlines()
+    # Resolve where the prompt sits so rows are counted strictly above it.
+    # Walk from the end for the last line whose content matches the prompt;
+    # fall back to the last non-blank line (the `classify()` shape, where the
+    # prompt IS the final rendered line).
+    needle = prompt_line.strip()
+    prompt_index = len(lines)
+    for i in range(len(lines) - 1, -1, -1):
+        if lines[i].strip() == needle:
+            prompt_index = i
+            break
+    else:
+        for i in range(len(lines) - 1, -1, -1):
+            if lines[i].strip():
+                prompt_index = i
+                break
+
+    rows = sum(
+        1 for line in lines[:prompt_index]
+        if _SQUARE_BRACKET_GAME_ROW_RE.match(line)
+    )
+    return rows >= _SQUARE_BRACKET_MIN_GAME_ROWS
 
 
 def _is_plain_timed_out_game_select(full_text: str, prompt_line: str) -> bool:
@@ -1053,8 +1139,16 @@ def classify(rendered_text: str) -> str:
         return "cim_report"
     lines = rendered_text.splitlines()
     last_line = lines[-1].strip() if lines else ""
-    if _is_twgs_boxed_game_select_menu(rendered_text, last_line) or _is_twgs_server_banner_game_select_menu(
-        rendered_text, last_line
+    if (
+        _is_twgs_boxed_game_select_menu(rendered_text, last_line)
+        or _is_twgs_server_banner_game_select_menu(rendered_text, last_line)
+        # WO-XENO-GAME-SELECT: wired into BOTH public APIs, per the WO. Note
+        # the pre-existing asymmetry sitting right here -- `classify_screen`
+        # also consults `_is_plain_timed_out_game_select` and this function
+        # does not. That gap predates this WO and is NOT widened by it;
+        # reported rather than silently "fixed", since changing an existing
+        # detector's reach is a behaviour change this WO does not scope.
+        or _is_square_bracket_game_select_menu(rendered_text, last_line)
     ):
         return "game_select"
     for name, matcher in _ANCHORS:
@@ -1094,6 +1188,11 @@ def classify_screen(full_text: str, prompt_line: str) -> str:
         _is_twgs_boxed_game_select_menu(full_text, prompt_line)
         or _is_twgs_server_banner_game_select_menu(full_text, prompt_line)
         or _is_plain_timed_out_game_select(full_text, prompt_line)
+        # WO-XENO-GAME-SELECT: the square-bracket door (Exiled). Placed in
+        # this same pre-pass rather than as a gate anchor because its live
+        # prompt is the host's own decorated chrome, which no anchor phrase
+        # can match -- the shape has to be read from the body above it.
+        or _is_square_bracket_game_select_menu(full_text, prompt_line)
     ):
         return "game_select"
     if prompt_line:

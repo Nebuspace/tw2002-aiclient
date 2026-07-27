@@ -2,6 +2,7 @@
 TWGS screen fixture (see tests/fixtures/, captured live; see canon session-engine / screen-understanding)."""
 
 import os
+import re
 
 import pytest
 
@@ -1515,3 +1516,98 @@ def test_is_probable_secret_prompt_documented_residual_no_keyword_at_all():
     understanding. This test exists so a future reader can see the gap
     is real and intentional, not an oversight."""
     assert is_probable_secret_prompt("Speak, friend, and enter:") is False
+
+
+# ---------------------------------------------------------------------------
+# WO-XENO-GAME-SELECT -- the square-bracket door (Exiled / twgs.exiled.org).
+#
+# Max's actual block: this screen classified `unknown`, so `_decide` returned
+# None and `tw ensure --profile xeno` stalled at
+# LoginStalled(automaton_stuck, unknown). The letter path was already correct;
+# only the classification was missing.
+# ---------------------------------------------------------------------------
+
+EXILED_FIXTURE = "game_select_menu_exiled_square_bracket.txt"
+
+
+def test_exiled_square_bracket_menu_is_game_select():
+    """Accept #1 -- the live capture must resolve to the EXISTING class."""
+    text, prompt = _fixture_with_prompt(EXILED_FIXTURE)
+    assert classify_screen(text, prompt) == "game_select"
+
+
+def test_exiled_square_bracket_menu_is_game_select_via_classify_too():
+    """Both public APIs. `classify()` has no separate prompt line, so a
+    detector wired into only one of them is the standing parity trap here."""
+    text = _load_fixture(EXILED_FIXTURE)
+    assert classify("\n".join(text.splitlines())) == "game_select"
+
+
+def test_exiled_fixture_still_carries_the_two_signals_it_is_teaching():
+    """Guards the fixture itself: a later redaction/reflow that removed the
+    bracket rows or the timed-out suffix would leave the positive tests
+    passing for the wrong reason (or silently testing nothing)."""
+    text = _load_fixture(EXILED_FIXTURE)
+    rows = [l for l in text.splitlines() if re.match(r"^\s+\[[A-Za-z0-9]\]\s+\S+", l)]
+    assert len(rows) >= 2, "fixture lost its bracketed game rows"
+    assert re.search(r":\s*Timed\s+out\b", text.splitlines()[-1], re.I)
+
+
+def test_exiled_fixture_carries_no_operator_contact():
+    """Public repo: the live capture's sysop e-mail is redacted."""
+    text = _load_fixture(EXILED_FIXTURE)
+    found = re.findall(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}", text)
+    assert found == ["sysop@example.org"], found
+
+
+def test_stale_exiled_rows_under_a_live_command_prompt_are_not_game_select():
+    """Accept #2 -- the stale-scrollback negative.
+
+    The whole menu is still in scrollback, but the human has since reached a
+    live game prompt. Classifying this `game_select` would make ensure send a
+    game letter into a live Command prompt.
+    """
+    stale = _load_fixture(EXILED_FIXTURE).rstrip("\n")
+    live_prompt = "Command [TL=00:00:00]:[10] (?=Help)? :"
+    text = stale + "\n" + live_prompt
+    assert classify_screen(text, live_prompt) != "game_select"
+    assert classify(text) != "game_select"
+
+
+def test_timed_out_chrome_without_game_rows_is_not_game_select():
+    """Signal 1 alone is far too generic -- any host chrome ending in
+    `:Timed out` would otherwise be read as a game door."""
+    text = "Connecting to the server...\nPlease wait.\n[ Some Host ]:Timed out..."
+    assert classify_screen(text, text.splitlines()[-1]) != "game_select"
+
+
+def test_game_rows_without_the_timed_out_prompt_are_not_game_select():
+    """Signal 2 alone: bracket rows under an unrelated live prompt."""
+    text = " [A] Alpha Quadrant Invasion\n [B] Default Stock Game\nEnter your choice:"
+    assert classify_screen(text, "Enter your choice:") != "game_select"
+
+
+def test_the_prompt_line_cannot_satisfy_its_own_body_requirement():
+    """The Exiled prompt itself carries `[A][B][C][D]...` at column 0. The
+    detector's leading-indent requirement plus above-prompt scoping is what
+    stops it counting itself -- without both, a bare prompt line with no menu
+    would classify as a game door."""
+    lone = "[ Exiled TW2002 ]:[A][B][C][D][E][X][Z][#]:Timed out..."
+    assert classify_screen(lone, lone) != "game_select"
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "game_select_menu.txt",
+        "game_select_menu_boxed_variant.txt",
+        "game_select_menu_banner_variant.txt",
+        "game_select_menu_banner_anet_boxed_title.txt",
+        "game_select_menu_banner_anet_live_chrome.txt",
+    ],
+)
+def test_existing_game_select_shapes_are_unaffected(name):
+    """Accept #3 -- no collision. The three previously-taught shapes must
+    still classify exactly as they did before this detector existed."""
+    text, prompt = _fixture_with_prompt(name)
+    assert classify_screen(text, prompt) == "game_select"
