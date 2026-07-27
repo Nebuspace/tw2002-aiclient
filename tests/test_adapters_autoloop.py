@@ -94,3 +94,69 @@ def test_stop_is_idempotent_from_the_callers_view(monkeypatch, tmp_path):
     first = adapters.autoloop_stop(run_dir=tmp_path)
     second = adapters.autoloop_stop(run_dir=tmp_path)
     assert first.ok is second.ok is True
+
+
+# --------------------------------------------------------------------------
+# WO-AUTOLOOP-PAUSE-RESUME — pause / relaunch adapters
+# --------------------------------------------------------------------------
+
+def test_pause_sends_the_pause_verb(monkeypatch, tmp_path):
+    sink: list = []
+    monkeypatch.setattr(_cli, "send_request", _spy({"ok": True, "paused": True}, sink))
+    assert adapters.autoloop_pause(run_dir=tmp_path).ok is True
+    assert sink[0][0] == "autoloop_pause"
+
+
+def test_relaunch_sends_the_relaunch_verb_not_resume(monkeypatch, tmp_path):
+    """The rename has to reach the wire. If this adapter still said
+    `autoloop_resume` the daemon would answer `unknown_verb` and the
+    operator would see a broken button instead of a working one."""
+    sink: list = []
+    monkeypatch.setattr(_cli, "send_request", _spy({"ok": True, "relaunched": True}, sink))
+    assert adapters.autoloop_relaunch(run_dir=tmp_path).ok is True
+    assert sink[0][0] == "autoloop_relaunch"
+    assert sink[0][0] != "autoloop_resume"
+
+
+def test_relaunch_carries_the_disclosure_fields_through_raw(monkeypatch, tmp_path):
+    """The money-path contract. A caller cannot render the confirm gate
+    honestly unless BOTH fields survive the adapter."""
+    wire = {"ok": True, "relaunched": True,
+            "replays_from_start": True, "sends_already_issued": 3}
+    monkeypatch.setattr(_cli, "send_request", _spy(wire))
+    raw = adapters.autoloop_relaunch(run_dir=tmp_path).raw
+    assert raw["replays_from_start"] is True
+    assert raw["sends_already_issued"] == 3
+
+
+def test_unknown_send_count_stays_none_not_zero(monkeypatch, tmp_path):
+    """`None` means the player never gave a count. Rendering it as "0 sends
+    already issued" would be an affirmative claim that nothing reached the
+    wire -- the same honest-`?` rule the coverage meter follows."""
+    wire = {"ok": True, "relaunched": True,
+            "replays_from_start": True, "sends_already_issued": None}
+    monkeypatch.setattr(_cli, "send_request", _spy(wire))
+    assert adapters.autoloop_relaunch(run_dir=tmp_path).raw["sends_already_issued"] is None
+
+
+@pytest.mark.parametrize("verb_fn,reason", [
+    (lambda **k: adapters.autoloop_pause(**k), "autoloop_unavailable"),
+    (lambda **k: adapters.autoloop_relaunch(**k), "not_paused"),
+])
+def test_daemon_refusals_surface_as_reasons(monkeypatch, tmp_path, verb_fn, reason):
+    monkeypatch.setattr(_cli, "send_request", _spy({"ok": False, "error": reason}))
+    result = verb_fn(run_dir=tmp_path)
+    assert result.ok is False and result.reason == reason
+
+
+@pytest.mark.parametrize("fn", ["autoloop_pause", "autoloop_relaunch"])
+def test_transport_failure_never_raises(monkeypatch, tmp_path, fn):
+    monkeypatch.setattr(_cli, "send_request", _spy(OSError("socket gone")))
+    result = getattr(adapters, fn)(run_dir=tmp_path)
+    assert result.ok is False and result.reason == "unknown"
+
+
+def test_there_is_no_autoloop_resume_adapter():
+    """Structural companion to the daemon-side refusal: the word must not
+    be reachable from the client either."""
+    assert not hasattr(adapters, "autoloop_resume")

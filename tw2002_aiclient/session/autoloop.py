@@ -237,6 +237,24 @@ SETTLE_DEBOUNCE_MS = 350
 # `running: true` -- honest, and the operator can ask again.
 STOP_JOIN_TIMEOUT_S = 5.0
 
+# WO-AUTOLOOP-PAUSE-RESUME: why a stand-down happened, not how.
+#
+# A pause and a stop are the SAME mechanical event here -- both set the
+# player's arm predicate and let the run release through its own `finally`.
+# That is forced by the hub's ruling (B, 2026-07-27): a pause must give the
+# keyboard back, and the only release path is the run's own wind-down, so a
+# pause cannot be a parked thread. A parked thread would hold
+# `enter_auto_loop()` for the whole pause and lock the human out -- which is
+# the option the ruling rejected.
+#
+# So the difference is INTENT, recorded for the operator and for resume, and
+# it changes nothing about the release. Keeping them mechanically identical
+# is the point: there is no second release path, no wait state, and
+# therefore nothing for a later stop/panic to deadlock against. `panic`
+# keeps working during a pause because a paused run is not a running run.
+STAND_DOWN_STOP = "stop"
+STAND_DOWN_PAUSE = "pause"
+
 # The complete arg vocabulary of `autoloop_start`. Anything else is
 # refused; see "One pass" in the module docstring for why silence would
 # be the dishonest option. `floor` is here because X5 built the rail
@@ -356,6 +374,13 @@ class AutoLoopSnapshot:
 
     running: bool
     report: Optional[RunReport] = None
+    # WO-AUTOLOOP-PAUSE-RESUME. Deliberately on the SNAPSHOT, not on
+    # `RunReport`: the report is built outside the mutex in `_run`'s
+    # `finally` (`replace(report, ...)`) and assigned under it, so an
+    # intent written there would race a concurrent `pause()`/`stop()`.
+    # The runner holds the intent under `_mutex` and it is read here in
+    # the same hold as `running`, so the pair can never disagree.
+    stand_down: Optional[str] = None
 
 
 # ---------------------------------------------------------------------------
@@ -410,7 +435,15 @@ def run_wire(snapshot: AutoLoopSnapshot) -> dict:
     fabricated idle record."""
     report = snapshot.report
     if report is None:
-        return {"running": bool(snapshot.running), "run": None}
+        return {
+            "running": bool(snapshot.running),
+            "run": None,
+            # WO-AUTOLOOP-PAUSE-RESUME. Present even with no report, and
+            # `None` rather than absent: a client asking "is this paused?"
+            # gets a definite no on a runner that has never run, instead of
+            # having to infer it from a missing key.
+            "stand_down": snapshot.stand_down,
+        }
     return {
         "running": bool(snapshot.running),
         "run": {
@@ -427,7 +460,13 @@ def run_wire(snapshot: AutoLoopSnapshot) -> dict:
             # statement "this run had no stop-loss", which an operator needs
             # to be able to read as clearly as they read a number.
             "floor": report.floor,
+            # WO-AUTOLOOP-PAUSE-RESUME: `loop` + `floor` above are exactly
+            # what `start()` takes, which is why a resume needs no new
+            # storage — the report already carries everything to re-arm.
         },
+        # Same key on both shapes so a client never has to branch on
+        # whether a report exists to find out why the run stood down.
+        "stand_down": snapshot.stand_down,
     }
 
 
@@ -652,6 +691,12 @@ class AutoLoopRunner:
         self._thread: Optional[threading.Thread] = None
         self._stop: Optional[threading.Event] = None
         self._report: Optional[RunReport] = None
+        # WO-AUTOLOOP-PAUSE-RESUME: why the last stand-down happened
+        # (`STAND_DOWN_PAUSE`/`STAND_DOWN_STOP`), or `None` if this runner
+        # has never been stood down. Guarded by `_mutex` like every other
+        # field here; see `AutoLoopSnapshot.stand_down` for why it does not
+        # live on the report.
+        self._stand_down: Optional[str] = None
 
     # -- reads ----------------------------------------------------------
 
@@ -665,7 +710,11 @@ class AutoLoopRunner:
         cannot land between the two reads."""
         with self._mutex:
             running = bool(self._in_flight or _lock_held(self._control_lock))
-            return AutoLoopSnapshot(running=running, report=self._report)
+            return AutoLoopSnapshot(
+                running=running,
+                report=self._report,
+                stand_down=self._stand_down,
+            )
 
     # -- writes ---------------------------------------------------------
 
@@ -791,6 +840,13 @@ class AutoLoopRunner:
             self._stop = stop
             self._thread = thread
             self._report = report
+            # WO-AUTOLOOP-PAUSE-RESUME: a fresh arm is not a paused run.
+            # Cleared in the SAME mutex hold that publishes the new run, so
+            # no observer can see this run in flight while still carrying
+            # the previous run's stand-down reason. This is also what makes
+            # `resume` honest: after it succeeds, `stand_down` reads `None`
+            # rather than leaving a stale `"pause"` on a live run.
+            self._stand_down = None
             try:
                 thread.start()
             except Exception as exc:
@@ -818,6 +874,36 @@ class AutoLoopRunner:
         # returning to -- including, honestly, a run that is already over.
         return self.snapshot()
 
+    def pause(self, join_timeout: float = STOP_JOIN_TIMEOUT_S) -> AutoLoopSnapshot:
+        """Park the run and give the keyboard back (WO-AUTOLOOP-PAUSE-RESUME).
+
+        **Mechanically identical to :meth:`stop`** — same predicate, same
+        release, same join. Only the recorded intent differs, and that is
+        the whole design rather than an unfinished one.
+
+        A pause cannot be a parked thread. `_run`'s ``finally`` is the only
+        release path (see "One release path" above), so a thread waiting
+        mid-run would hold ``enter_auto_loop()`` for the entire pause and
+        lock the human out — the opposite of what a pause is for, and the
+        option the hub explicitly ruled against (B, 2026-07-27). Standing
+        the run down is what hands the keyboard back.
+
+        Two consequences worth stating, because they are guarantees rather
+        than luck:
+
+        * **Nothing can deadlock against a pause.** There is no wait state,
+          so a later :meth:`stop` (the panic path) is not waiting on
+          anything to wake up. Panic works during a pause because a paused
+          run is not a running run.
+        * **Resume is a fresh arm, not a thaw.** The macro name and floor
+          survive on the report (``run_wire``'s ``loop``/``floor``), so an
+          operator resumes without retyping — but the new pass starts at the
+          macro's beginning, and re-acquiring the seat can fail if someone
+          else took it. Mid-macro resumption would require the parked thread
+          this method deliberately does not create.
+        """
+        return self._stand_down_run(STAND_DOWN_PAUSE, join_timeout)
+
     def stop(self, join_timeout: float = STOP_JOIN_TIMEOUT_S) -> AutoLoopSnapshot:
         """Stand the run down. Idempotent, and safe with nothing running.
 
@@ -830,7 +916,23 @@ class AutoLoopRunner:
         The answer is taken AFTER the join, so a stop that worked reports
         ``running: false`` and a stop that ran out of patience reports
         ``running: true``. Neither is a promise about the other."""
+        return self._stand_down_run(STAND_DOWN_STOP, join_timeout)
+
+    def _stand_down_run(self, intent: str, join_timeout: float) -> AutoLoopSnapshot:
+        """Shared body of :meth:`stop` and :meth:`pause`.
+
+        ONE implementation on purpose: a pause and a stop must never drift
+        apart in how they release, because the release is the safety-
+        relevant half and the intent is only a label. Two copies would let
+        a later edit fix one path's release and not the other's.
+
+        The intent is written under ``_mutex`` BEFORE the predicate is set,
+        so any observer that can see the run standing down can already see
+        why. Writing it after would leave a window where a pause looked
+        like a stop.
+        """
         with self._mutex:
+            self._stand_down = intent
             stop = self._stop
             thread = self._thread
         if stop is not None:

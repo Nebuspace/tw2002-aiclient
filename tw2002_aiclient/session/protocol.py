@@ -525,6 +525,101 @@ def _dispatch_autoloop_stop(server):
     return {"ok": True, "stopping": True, **autoloop.run_wire(snapshot)}
 
 
+def _dispatch_autoloop_pause(server):
+    """Park the run and hand the keyboard back. Idempotent; never refuses.
+
+    Mechanically the same stand-down as `autoloop_stop` — the difference is
+    the recorded intent, which is what lets `autoloop_resume` know there is
+    something to resume and what the operator sees. See
+    `autoloop.AutoLoopRunner.pause` for why a pause cannot be a parked
+    thread under the one-release-path invariant.
+    """
+    runner = _autoloop_runner(server)
+    if runner is None:
+        return {"ok": False, "error": "autoloop_unavailable"}
+    snapshot = runner.pause()
+    return {"ok": True, "paused": True, **autoloop.run_wire(snapshot)}
+
+
+def _dispatch_autoloop_relaunch(server):
+    """Re-arm a paused run from the START of its macro. **Not a resume.**
+
+    Named `relaunch` on a hub ruling (2026-07-27, options 1+3) because
+    `resume` was a lie: `replay_loop` takes no start index, so this replays
+    the macro from step 1 and **re-issues sends already made**. On a trade
+    macro that is live turns and credits spent twice — the class the
+    confirm gate exists for (the -75/-78-turn scars). A confirm gate cannot
+    fix a prompt whose verb says the wrong thing, so the verb changed.
+
+    `tests/test_autoloop.py` anticipated this before it was built: "an
+    honest `unknown_verb` beats a verb that accepts a pause it cannot
+    perform — **and beats one that silently completes the run instead**."
+
+    **Disclosure is part of the contract, not a courtesy.** The response
+    carries `replays_from_start: True` and `sends_already_issued: <n>` from
+    the paused report, so the cockpit's confirm gate can state what the
+    operator is about to repeat. A caller that renders neither is
+    misreporting a money path; `sends_already_issued` is `None` when the
+    player never gave a count, which is NOT the same claim as zero and must
+    not be rendered as "0 sends".
+
+    Refuses honestly instead of guessing:
+
+    * no runner            -> ``autoloop_unavailable``
+    * nothing was paused   -> ``not_paused`` (a stop is not relaunchable;
+      only a deliberate pause is, so this cannot silently restart a run the
+      operator panicked)
+    * no macro name        -> ``no_resumable_run``
+
+    Re-acquiring the seat can fail — someone else may hold it now — and
+    that surfaces as `start`'s own refusal rather than a new failure mode
+    invented here.
+
+    A resume is a fresh `start`, not a thaw: the macro replays from its
+    beginning. The name and floor come off the last report (`loop`/`floor`
+    — exactly `start`'s two arguments), so the operator does not retype
+    them, but nothing about mid-macro position is restored and this
+    docstring says so rather than letting the verb name imply otherwise.
+
+    Refuses honestly instead of guessing:
+
+    * no runner            -> ``autoloop_unavailable``
+    * nothing was paused   -> ``not_paused`` (a stop is not resumable; only
+      a deliberate pause is, so a resume after a panic does not silently
+      relaunch a run the operator halted on purpose)
+    * no macro name        -> ``no_resumable_run``
+
+    Re-acquiring the seat can fail — someone else may hold it now — and
+    that surfaces as `start`'s own refusal rather than a new failure mode
+    invented here.
+    """
+    runner = _autoloop_runner(server)
+    if runner is None:
+        return {"ok": False, "error": "autoloop_unavailable"}
+    snapshot = runner.snapshot()
+    if snapshot.stand_down != autoloop.STAND_DOWN_PAUSE:
+        # Deliberately strict: resuming a run the operator PANICKED is not
+        # a convenience, it is relaunching something they halted. Only a
+        # pause is resumable.
+        return {"ok": False, "error": "not_paused"}
+    report = snapshot.report
+    name = getattr(report, "loop", None)
+    if not name:
+        return {"ok": False, "error": "no_resumable_run"}
+    # Captured BEFORE the re-arm: `start()` publishes a fresh report, so
+    # reading the count afterwards would report the new run's zero sends
+    # instead of what the operator is about to repeat.
+    sends_already_issued = getattr(report, "sends_issued", None)
+    relaunched = runner.start(name, getattr(report, "floor", None))
+    return {
+        "ok": True,
+        "relaunched": True,
+        "replays_from_start": True,
+        "sends_already_issued": sends_already_issued,
+        **autoloop.run_wire(relaunched),
+    }
+
+
 def _dispatch_autoloop_status(server):
     """The run report: read-only, no driver slot, no send.
 
@@ -705,6 +800,20 @@ def dispatch(session, verb, args, server):
 
     if verb == "autoloop_stop":
         return _dispatch_autoloop_stop(server)
+
+    if verb == "autoloop_pause":
+        return _dispatch_autoloop_pause(server)
+
+    if verb == "autoloop_relaunch":
+        # NOT `autoloop_resume` — hub ruling 2026-07-27 (1+3). This replays
+        # the macro from step 1 and re-issues sends already made, so the
+        # verb is named for what it does. `autoloop_resume` stays an
+        # `unknown_verb` deliberately: a caller reaching for the word that
+        # promises continuation should get a refusal, not a relaunch.
+        # Same non-`_driving_dispatch` reasoning as `autoloop_start`: a
+        # relaunch IS a start and must reach `enter_auto_loop` without
+        # holding the per-dispatch driver slot that would refuse it.
+        return _dispatch_autoloop_relaunch(server)
 
     if verb == "autoloop_status":
         return _dispatch_autoloop_status(server)
