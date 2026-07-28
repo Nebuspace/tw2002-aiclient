@@ -1,18 +1,19 @@
-# WO-TEST-FORMATIONS-REHAB — Rewrite formations tests off twclient
+# WO-TEST-FORMATIONS-REHAB — Delete orphan formations test (no producer)
 
-**Status:** BANKED · HIGH · Cursor-class OK  
-**Posted:** 2026-07-28T04:32Z · from #149 ignore-list audit  
-**Refs:** `tests/test_formations.py` ignored · #142 product disarm · `explore.plan_find_formations`
+**Status:** SEAT-DONE · awaiting hub Accept · Cursor (`impl-aiclient-cursor`)  
+**Posted:** banked #149 · EXEC · **REVISE (a) DELETE** hub 2026-07-28T04:41:32Z · seat STATUS 2026-07-28T04:42Z  
+**Refs:** ignore-list audit HIGH · #142 · CC evidence (no formations producer on tip) · port bank #152
 
 ## Goal
-Rehabilitate formations coverage onto reborn `tw2002_aiclient.explore` (catalog
-seam / `unavailable` honesty). Un-ignore only after collect+suite green.
+**(a) DELETE** `tests/test_formations.py` — consumer with no in-tree producer.
+Stub/`catalog_provider` doubles in that file = #142-class lie. Planner seam pins
+remain in `tests/test_explore.py`. Do **not** invent `catalog_world`.
 
 ## Accept
-1. No `twclient` import in the formations test module.
-2. Pins cover `catalog_provider is None` → `unavailable` and provider-present paths as product defines.
-3. Remove `--ignore=tests/test_formations.py` when green.
-4. Suite + STATUS. live-prove n/a.
+1. `tests/test_formations.py` deleted.
+2. No `--ignore=tests/test_formations.py` in `pytest.ini`.
+3. Do not touch `tests/test_import_hygiene.py` vacuity strings (`:109`, `:115`).
+4. Suite green; live-prove n/a.
 
 ## Constraints
-Do not resurrect `twclient.formations`. No CHAINS-TUI collision.
+No twclient resurrect. No stub producer. Avoid #147. Port path = banked PR #152.
