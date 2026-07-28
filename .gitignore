@@ -23,6 +23,7 @@ CLAUDE.local.md
 # tracked file in config/.
 config/profiles.toml
 config/secrets.json
+config/servers.liveness.json
 config/*.local.*
 
 # tests/test_ensure_from_play.py's `_temporary_profile()` flock-serializes

@@ -1,7 +1,7 @@
 {
   "scraped_at_utc": "2026-07-25T00:00:00Z",
   "telnet_default_port": 23,
-  "notes": "Union of MicroBlaster Servers.aspx live-listing and telnetbbsguide.com TWGS software category. Dead entries sourced from MicroBlaster server graveyard (type=dead query + individual ServerDetail pages). Dedup key: (host.lower(), port). MicroBlaster display-name preferred when both sources list the same endpoint.",
+  "notes": "Union of MicroBlaster Servers.aspx live-listing and telnetbbsguide.com TWGS software category. Dead entries sourced from MicroBlaster server graveyard (type=dead query + individual ServerDetail pages). Dedup key: (host.lower(), port). MicroBlaster display-name preferred when both sources list the same endpoint. SCHEMA (WO-CATALOG-SOURCE-LIVENESS-SPLIT): per-row `status` is LISTING PROVENANCE only (listed / listed_bbsguide / archive_seed / dead) — never TCP reachability. Measured liveness belongs in optional per-row `liveness`+`last_probed_utc` and/or config/servers.liveness.json from scripts/catalog-tcp-probe.py. Do not invent a connectable count from provenance.",
   "sources": [
     {
       "id": "microblaster",
