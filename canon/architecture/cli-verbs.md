@@ -145,9 +145,9 @@ config is isolated, and print the run-dir path they would have targeted (WO-CLI-
 
 | verb | one-line effect | key args | actor-class | owning concept |
 |---|---|---|---|---|
-| `spectate` | Ops read-only curses HUD over the running daemon, decoupled from whoever drives (`--snapshot` for scripting). | `--snapshot` `--frames` | `read-only` | [Trainer UI](/surfaces/trainer-ui.md) |
-| `attach` | Interactive live console — take the keyboard and play by hand; Ctrl-] hands control back. | — | `drives {human}` | [Trainer UI](/surfaces/trainer-ui.md) |
-| `aiclient` | Product TUI — profile launcher, create form, Autopilot ON/OFF (same as `./tw2002-aiclient`). | — | `drives {app,human}` | [Trainer UI](/surfaces/trainer-ui.md) |
+| `spectate` | Ops read-only curses HUD over the running daemon, decoupled from whoever drives (`--snapshot` for scripting). | `--snapshot` `--frames` | `read-only` | [Spectate & Attach](/surfaces/spectate-and-attach.md) |
+| `attach` | Interactive live console — take the keyboard and play by hand; Ctrl-] hands control back. | — | `drives {human}` | [Spectate & Attach](/surfaces/spectate-and-attach.md) |
+| `aiclient` | Product TUI — profile launcher, create form, Autopilot ON/OFF (same as `./tw2002-aiclient`). | — | `drives {app,human}` | [Entry & Profile Selection](/surfaces/entry-and-profile-selection.md) → [The Trainer Cockpit](/surfaces/trainer-cockpit.md) |
 
 # Examples
 

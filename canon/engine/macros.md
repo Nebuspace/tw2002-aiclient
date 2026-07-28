@@ -169,7 +169,7 @@ that runs cycle after cycle until a stop condition). The macro *definition* and 
 (start-anchor re-checked every cycle, send-and-confirm every step, halt-on-divergence) live here. The
 **run-loop that arms, drives, and bounds that repetition** — the human-arm gate, the stop-on-unknown
 mid-run contract, the depletion-guard that **STOPs and escalates rather than autonomously rotating** to
-a new target — is owned by [App Autopilot Model](/app-autopilot-model.md). This concept guarantees each
+a new target — is owned by [App Autopilot Model](/architecture/app-autopilot-model.md). This concept guarantees each
 *step* is safe; the autopilot model guarantees the *loop around them* stops on the unknown. That
 boundary is deliberate and not restated here.
 
@@ -224,13 +224,13 @@ noted, not conformed away.
   priority-engine-driven "keep driving / never idle" posture) rather than replaying only *taught*
   screens and STOPping on the unrecognized. Macro replay itself already halts on surprise (correct); the
   divergence lives in the run-loop that wraps it and is owned/recorded by
-  [App Autopilot Model](/app-autopilot-model.md) — flagged here because a `scope: repeating` macro is
+  [App Autopilot Model](/architecture/app-autopilot-model.md) — flagged here because a `scope: repeating` macro is
   what that loop drives.
 - **The 78-turn haggle misfire.** A verified live incident where the port-negotiation resolver
   auto-fired across ~78 turns of an unattended autopilot run — a real money-path defect and the
   archetype of the "auto-fire an unverified action" class this concept's send-and-confirm invariant
   exists to prevent. The guarded-resolver contract that hardens it is owned by
-  [Auto-Haggle](/engine/auto-haggle.md) / [Action-Safety Guards](/engine/action-safety-guards.md); it is
+  [Auto-Haggle](/engine/auto-haggle.md) / [Action-Safety Guards](/doctrine/action-safety-guards.md); it is
   cited here as the money-path precedent for why replay never presses an unconfirmed send.
 - **Approval gate is enforced by file location, not an explicit flag — and recorded macros are blessed
   by default (Max ruling 2026-07-26).** A mined/AI-authored draft lives in a separate `_drafts/` area
