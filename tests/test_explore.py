@@ -222,8 +222,35 @@ def test_find_stardock_hunt_resolves_a_multi_hop_frontier_to_the_first_adjacent_
     assert plan.hunt.next_hop.to == 99
 
 
+class _FakeFormation:
+    """Minimal stand-in for a TW-16 catalogue entry: only the three
+    attributes `plan_find_formations` actually reads."""
+
+    def __init__(self, kind, sectors, entrance=None):
+        self.kind = kind
+        self.sectors = sectors
+        self.entrance = entrance
+
+
+def _fake_catalog(*formations):
+    """A `catalog_provider` seam double. Deliberately NOT a port of the
+    deleted `twclient.formations` — it exposes only `.genesis_candidates`,
+    which is the whole contract `plan_find_formations` depends on."""
+
+    class _Cat:
+        genesis_candidates = list(formations)
+
+    return lambda world_id, *, state_dir=None: _Cat()
+
+
 def test_find_formations_routes_to_dead_end(tmp_path: Path):
-    pytest.skip("formations catalog not ported to tw2002_aiclient yet (TW-16)")
+    """WO-EXPLORE-TWCLIENT-FORMATIONS-LANDMINE: previously an unconditional
+    `pytest.skip("formations catalog not ported yet")`. The reason for the
+    skip was that the only catalogue source was the DELETED
+    `twclient.formations` — the same import that made this function raise
+    `ModuleNotFoundError` on first call. The `catalog_provider` seam removes
+    both problems at once, so this test now RUNS against the real routing
+    algorithm instead of documenting an intention."""
     from tw2002_aiclient.explore import plan_find_formations
 
     wid = "test+form"
@@ -237,12 +264,46 @@ def test_find_formations_routes_to_dead_end(tmp_path: Path):
         ],
     )
     plan = plan_find_formations(
-        wid, current_sector=1, turn_budget=5, epsilon=0.0, state_dir=tmp_path,
+        wid,
+        current_sector=1,
+        turn_budget=5,
+        epsilon=0.0,
+        state_dir=tmp_path,
+        catalog_provider=_fake_catalog(_FakeFormation("dead-end", (3,), entrance=3)),
     )
     assert plan.found is True
     assert plan.mode == "route"
     assert plan.next_sector == 2
     assert plan.kind == "dead-end"
+
+
+def test_find_formations_without_a_provider_refuses_honestly(tmp_path: Path):
+    """The landmine pin. With no catalogue seam wired, this must return a
+    TYPED refusal — never raise, and never borrow a mode that makes a claim
+    about the world.
+
+    `"hunt"`/`"exhausted"` would both assert something the code cannot know:
+    that a catalogue was consulted and held nothing. Only `"unavailable"`
+    says the true thing — no catalogue was reachable. Before this WO the
+    same call raised `ModuleNotFoundError: No module named 'twclient'`."""
+    from tw2002_aiclient.explore import plan_find_formations
+
+    wid = "test+form-noprovider"
+    _seed(wid, tmp_path, [{"sector_id": 1, "warps": [2], "landmarks": []}])
+
+    plan = plan_find_formations(
+        wid, current_sector=1, turn_budget=5, epsilon=0.0, state_dir=tmp_path
+    )
+
+    assert plan.mode == "unavailable"
+    # The load-bearing half: not merely "some falsy plan", but specifically
+    # NOT a mode that would read downstream as a surveyed-and-empty world.
+    assert plan.mode not in ("hunt", "exhausted", "catalog", "route", "arrived")
+    assert plan.found is False
+    assert plan.hunt is None
+    assert plan.route is None
+    assert plan.next_sector is None
+    assert plan.targets == ()
 
 
 def test_cycle_explore_mode_and_decision_lines():
