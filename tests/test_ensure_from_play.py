@@ -271,6 +271,15 @@ def test_ensure_from_play_full_flow(tmp_path, monkeypatch):
                 status = json.loads(proc.stdout)
                 assert status["ok"] is True
                 assert status["classification"] == "main_command"
+                # WO-STATUS-EXPOSE-REPLAY-ARM: arm always present; after ensure
+                # it reports the stamped profile + reconnect (host, port).
+                assert "replay_arm" in status
+                arm = status["replay_arm"]
+                assert arm["armed"] is True
+                assert arm["profile"] == profile_name
+                assert arm["host"] == "127.0.0.1"
+                assert arm["port"] == fake.port
+                assert password not in proc.stdout
 
                 # -- Accept 4: idempotent 2nd ensure, no 2nd daemon --------
                 result2 = adapters.ensure_session(profile_name, run_dir=run_dir, timeout=30.0)
