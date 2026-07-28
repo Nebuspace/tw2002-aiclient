@@ -1,8 +1,10 @@
 # WO-CERT-JUNIT-HARDFAIL — Seat cert: missing/empty junitxml = hard fail
 
-**Status:** READY · MED · CC preferred
-**Posted:** 2026-07-26
-**Seat:** Claude Code (preferred — cert harness reliability is safety-adjacent)
+**Status:** IN PROGRESS · EXECUTE · MED · Cursor-class · impl-aiclient-cursor  
+
+**Posted:** 2026-07-26  
+**Seeded for execute:** 2026-07-28T01:25Z · hub  
+**Seat:** impl-aiclient-cursor  
 
 ## Goal
 
@@ -17,12 +19,16 @@ having run.
 - A documented runbook section in the existing seat runbook at the path currently used for cert
   instructions (verify and cite the path in STATUS)
 
+Tip-check first: prefer extending an existing cert / wire-sweep helper (e.g. junitxml parse in
+`scripts/wire-sweep.py`) rather than inventing a parallel path.
+
 ## Constraints
 
 - Do not change test collection logic or pytest configuration
 - Guard fires on: file missing · file empty · `<testsuites tests="0"/>` · any parse error
 - Guard must not fire if `pytest` itself exits non-zero (already a hard fail by other means)
 - No new Python dependencies
+- Do not touch `wo/CHAIN-DETECT-WIRE` / #128
 
 ## Accept
 
@@ -36,3 +42,4 @@ having run.
 Demonstrate: `pytest --collect-only -q --junitxml=/tmp/junit_test.xml tests/test_nonexistent.py`
 exits 0 but the guard detects empty/missing xml and returns non-zero.
 Report the guard path in STATUS.
+live-prove **n/a** (CI/cert tooling).

@@ -61,8 +61,11 @@ import argparse
 import ast
 import subprocess
 import sys
-import xml.etree.ElementTree as ET
 from pathlib import Path
+
+# Shared junitxml honesty (WO-CERT-JUNIT-HARDFAIL) — same directory as this script.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from junitxml_guard import counts as _counts  # noqa: E402
 
 PINNED = "PINNED"
 UNPINNED = "UNPINNED"
@@ -70,36 +73,13 @@ CONTAMINATED = "CONTAMINATED"
 ANCHOR_MISS = "ANCHOR-MISS"
 
 
-def _counts(xml: Path) -> tuple[int, int, int]:
-    """(tests, failures, errors) from junitxml — never from the terminal.
+def run_suite(repo: Path, tests: str) -> tuple[int, int, int]:
+    """Run pytest; counts come from junitxml — never from the terminal.
 
     The terminal's exit status is unusable here: ``pytest | tail`` reports
     *tail*'s status, and pytest itself exits 0 having run zero tests when
     collection dies. The report is the only honest source.
     """
-    if not xml.exists() or xml.stat().st_size == 0:
-        return (0, -1, -1)
-    # XXE / billion-laughs hardening without a new dependency (this repo adds
-    # none): pytest's junitxml writer never emits a DOCTYPE or ENTITY, so their
-    # presence means this file did not come from the run it claims to describe
-    # — disqualifying for a measurement artifact whatever they would expand to.
-    # Refusing beats parsing carefully: no expansion happens at all.
-    head = xml.read_bytes()[:8192].lower()
-    if b"<!doctype" in head or b"<!entity" in head:
-        return (0, -1, -1)
-    try:
-        root = ET.parse(xml).getroot()
-    except ET.ParseError:
-        return (0, -1, -1)
-    suites = [root] if root.tag == "testsuite" else root.findall("testsuite")
-    return (
-        sum(int(s.get("tests", 0)) for s in suites),
-        sum(int(s.get("failures", 0)) for s in suites),
-        sum(int(s.get("errors", 0)) for s in suites),
-    )
-
-
-def run_suite(repo: Path, tests: str) -> tuple[int, int, int]:
     xml = repo / ".wire-sweep.xml"
     if xml.exists():
         xml.unlink()
