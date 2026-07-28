@@ -2,3 +2,4 @@
 # Install:  .venv/bin/pip install -r requirements-dev.txt
 pytest>=8.0
 pytest-xdist>=3.5
+pytest-timeout>=2.3
