@@ -747,6 +747,65 @@ def cmd_pairs(args):
     return 0
 
 
+def cmd_chains(args):
+    """WO-CHAIN-NPORT-WIRE: read-only listing of DISCOVERED N-port profit
+    cycles for a world -- the product caller for the chain finder that had
+    shipped complete, tested, and callerless since before the rebirth.
+
+    Sibling of ``pairs`` above, not a replacement: ``pairs`` lists 2-port
+    class-derived loops (``chain_detect``); this lists general N-port cycles
+    found by real DFS over priced hops (``chain_search`` ->
+    ``trade_adapter.build_trade_hops`` -> ``chains.find_profit_chains``).
+    A pair is the cheapest shape; a chain is the general one.
+
+    Daemon-free, world-model-scoped read, same family as ``loops``/``pairs``:
+    reads ``state/world/<world_id>/`` directly and never opens the daemon
+    socket. Deliberately thin, same split discipline: ``chain_search.recompute``
+    decides what cycles exist (and, when none do, WHY not -- one of three
+    typed reasons, plus whether the search was even exhaustive);
+    ``chain_search_view.format_profit_chain_lines`` decides how that reads;
+    this function chooses only the JSON/text branch.
+
+    Exit code is always **0** -- every typed empty reason is a successfully
+    established fact about the world, never a failure to read anything.
+
+    The JSON branch carries ``adapter_note`` and ``search_note`` as SEPARATE
+    fields, and a ``truncated`` boolean. They are different claims -- "I did
+    not consider every hop" vs "I did not finish searching the hops I had" --
+    and a machine consumer that cannot tell an exhaustive empty from a
+    truncated one will report "no profitable cycle exists" when all that
+    happened is the budget ran out.
+
+    NEVER the taught ``L)chains`` arm list, and never curses: these are
+    discovered, unpriced cycles the operator has not taught and cannot arm
+    from here -- see ``chain_search_view``'s module docstring.
+    """
+    from dataclasses import asdict
+
+    from tw2002_aiclient import chain_search, chain_search_view
+
+    result = chain_search.recompute(args.world_id)
+
+    if getattr(args, "json", False):
+        print(
+            json.dumps(
+                {
+                    "world_id": result.world_id,
+                    "chains": [asdict(c) for c in result.chains],
+                    "reason": result.reason,
+                    "detail": result.detail,
+                    "adapter_note": result.adapter_note,
+                    "search_note": result.search_note,
+                    "truncated": result.truncated,
+                }
+            )
+        )
+    else:
+        for line in chain_search_view.format_profit_chain_lines(result):
+            print_tty(line)
+    return 0
+
+
 def cmd_record(args):
     """WO-P2-G4-X6: write a taught macro from an already-captured
     demonstration manifest. Daemon-free by design -- no ``--run-dir``, the
@@ -1492,6 +1551,23 @@ def build_parser() -> argparse.ArgumentParser:
     )
     sp.add_argument("--json", action="store_true", help="machine-parseable JSON output")
     sp.set_defaults(func=cmd_pairs)
+
+    sp = sub.add_parser(
+        "chains",
+        help=(
+            "list DISCOVERED N-port profit cycles for a world -- reads "
+            "state/world/<world-id> directly, never sends, never the taught L)chains list"
+        ),
+    )
+    sp.add_argument(
+        "--world-id",
+        required=True,
+        dest="world_id",
+        metavar="SLUG",
+        help="world_id slug (state/world/<slug>/)",
+    )
+    sp.add_argument("--json", action="store_true", help="machine-parseable JSON output")
+    sp.set_defaults(func=cmd_chains)
 
     sp = sub.add_parser(
         "record",
