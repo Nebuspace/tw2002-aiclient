@@ -1,7 +1,7 @@
 # WO-CONTROL-STRIP-LINE-RETIRE-OR-WIRE — compose_control_strip_line disposition
 
-**Status:** OPEN · EXECUTE · LOW→MED · Cursor (`impl-aiclient-cursor`)  
-**Posted:** 2026-07-28T03:45Z bank · EXEC seeded 2026-07-28T03:58Z  
+**Status:** SEAT-DONE · awaiting hub Accept · Cursor (`impl-aiclient-cursor`)  
+**Posted:** 2026-07-28T03:45Z bank · EXEC seeded 2026-07-28T03:58Z · seat STATUS 2026-07-28T04:02Z  
 **Refs:** CC sweep · screens.py already on `compose_control_strip_segments` · wire-class W7
 
 ## Goal
