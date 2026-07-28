@@ -281,7 +281,7 @@ Do not leave `"prompt": rows[-1]` feeding both sides unchanged. Thin follow-on W
 
 **Decision (Pending Max Accept of prose if folded into FEATURES):**
 1. Until a priority/EV layer is reborn, `MIN_CHAIN_LINKS` (and related floors) live as cited constants in `tw2002_aiclient/chains.py` with sole pure consumer `is_executable_chain`.
-2. Trade-adapter / WIRE: support a **class-derived posture path** — emit compatible `TradeHop` shapes from letter triples with **margin unknown** (never guessed). Commodity/pct path remains for docked reports when that parser is reborn.
+2. Trade-adapter / WIRE: support a **class-derived posture path** — emit a distinct, no-margin `trade_adapter.CandidatePair` from letter triples (WO-CHAIN-DETECT-WIRE correction: NOT a `chains.TradeHop` shape — `trade-loops.md` defines `TradeHop` as a *positive-margin* edge, and `CandidatePair` carries no margin field at all, structurally rather than merely `None`). `chain_detect.py` wires it to a **pair loop only** (two ports, set-intersection posture match + known route both ways) — no cycle search, `chains.py` untouched. Commodity/pct path (`build_trade_hops` → `chains.TradeHop`) remains for docked reports when that parser is reborn.
 3. Follow-on WO: rebirth commerce-report parser + wire `write_port_only` (turn-spend prove).
 
 **Refs:** #122 artifact correction · WO-CHAIN-DETECT-PORT · WO-CHAIN-DETECT-WIRE · CC 2026-07-27T23:31:10Z
