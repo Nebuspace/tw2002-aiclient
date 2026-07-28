@@ -1,18 +1,17 @@
-# WO-TEST-STATE-PARSER-REHAB — Port or supersede ignored state_parser suite
+# WO-TEST-STATE-PARSER-REHAB — Rehabilitate ignored state-parser tests
 
-**Status:** BANKED · HIGH · Cursor-class OK  
-**Posted:** 2026-07-28T04:32Z · from #149 ignore-list audit  
-**Refs:** `tests/test_state_parser.py` (twclient collect-fail) · live `session/state_parser.py` · existing `test_state_sector_read.py`
+**Status:** OPEN · EXECUTE · HIGH · Cursor (`impl-aiclient-cursor`)  
+**Posted:** banked #149 · EXEC after #151 DELETE  
+**Refs:** AUDIT-TEST-IGNORE-LIST-LANDMINE.md
 
 ## Goal
-Either rewrite archive `test_state_parser.py` onto
-`tw2002_aiclient.session.state_parser`, or prove live pins supersede it and
-**delete** the ignored file + `--ignore` line with an honesty note.
+Rehab ignored state-parser test file(s) from the audit table onto in-tree APIs (no twclient).
+Un-ignore when collect+pass, or DELETE if producer is gone (same #151 lesson — no stubs).
 
 ## Accept
-1. No silent ignore of the only broad parser suite if gaps remain vs canon.
-2. Disposition recorded (rehab SHA or delete+gap table).
-3. Suite + STATUS. live-prove n/a.
+1. Honest disposition: rehab+un-ignore or DELETE+drop ignore.
+2. Leave import-hygiene vacuity pins untouched.
+3. Suite green; live-prove n/a.
 
 ## Constraints
-Explicit paths. Do not invent parser behavior. Avoid #147 chains.
+Cite audit row(s). Avoid #147 cockpit/chains. Explicit paths. No new deps.
