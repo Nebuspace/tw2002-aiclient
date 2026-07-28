@@ -139,6 +139,24 @@ Consequently a landmark-writing pass calls `upsert_sector` **directly** with
 `{sector_id, landmarks: [...]}`, and only when something was actually observed — it does not route
 through `write_from_state`, whose refusal to carry the field is deliberate and stays.
 
+**The named writer (2026-07-28, `WO-LANDMARK-ATTRIBUTE-LAST-KNOWN`).** That "calls `upsert_sector`
+directly" is now spelled `add_landmark(world_id, sector_id, name)`, and it is the **only**
+product-facing way into the field. Until it existed the guarantee above protected a field **nothing
+in the product ever wrote** — `write_from_state` was the single product write path and it declines
+landmarks, so the union semantics were correct and unreached.
+
+Two properties of that writer are load-bearing rather than stylistic:
+
+- **The caller supplies the sector; the writer never guesses it.** Because the field unions and has
+  no removal path, a wrong attribution is permanent — so the question "do we know where we are?"
+  belongs to the layer that can actually answer it, and arrives already decided.
+- **Junk raises rather than returning a quiet negative.** A bad type is a programming error, and a
+  silent `None` would be indistinguishable from the caller's legitimate *"we do not know the sector,
+  do not write"* — the one signal that has to stay readable.
+
+Which sector a sector-less screen belongs to is decided by the landing-screen rule in
+[session-engine](/architecture/session-engine.md), not here.
+
 # Consumers
 
 Everything here **reads** the store; none of it lets the store drive.
