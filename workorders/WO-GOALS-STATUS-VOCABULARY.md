@@ -16,10 +16,12 @@ Close the honest-but-uninformative GOALS/status gap: document starved `status` k
 
 ## T1 — client overlay (commit 2, after T0 green on 18-starved tree)
 
-Wire from world model (no daemon): `known_sectors`, `galaxy_size`, `formations_count`, `stardock_found`, `stardock_sectors`.
+Wire via **`WorldStats` cache** (same `wrap` seam as `ChainScalars`): **zero world-model reads on `status_provider()` draw path** — refresh only at events that already touch the WM (chains popup minimum; explore-tick when already on a WM read path).
 
-- **`stardock_found` / `stardock_sectors`:** `stardock_found` is written only when the world model has positively established the answer. `False` = searched-and-confirmed-absent; “have not looked” = **absent**, never `False` (default `False` would gate `ship_prices`/`hold_price` to ⊘ and hide good data). Tri-state pinned with ⊘ gate asserted for all three states (CC 13:44:31Z table).
-- Delete **exactly 5** allowlist entries when wired; guard must go red on wrong deletion count.
+Fields: `known_sectors`, `formations_count`, `stardock_sectors`, `stardock_found` (**True or absent only** — `False` unreachable without `galaxy_size`; stronger than tri-state).
+
+- **`galaxy_size`:** **not T1** — no producer; `state_parser` forbids inventing; `goals.py` degrades with `known_sectors` alone → **re-tranche T3** (screen parsing).
+- Delete **exactly 4** allowlist entries on T1 commit; `galaxy_size` stays listed (T3).
 
 ## Out of scope (banked)
 
@@ -28,7 +30,7 @@ Wire from world model (no daemon): `known_sectors`, `galaxy_size`, `formations_c
 ## Accept
 
 1. T0 green on pre-T1 tree with full 18-entry allowlist; falsification pins for both scan traps.
-2. T1 green; 5 fields supplied; allowlist shrinks by 5 with exact-set still green.
+2. T1 green; 4 fields wired via cache; allowlist shrinks by 4; `galaxy_size` remains (T3).
 3. Suite + STATUS; two commits reported separately; live-prove `n/a`.
 
 ## Refs
