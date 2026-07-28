@@ -1,0 +1,277 @@
+{
+  "name": "triple_push",
+  "created_ts": "2026-07-19T07:50:45Z",
+  "source": "recorded",
+  "steps": [
+    {
+      "input": "I",
+      "wait_prompt": null,
+      "expected_post_class": "main_command"
+    },
+    {
+      "input": "1",
+      "wait_prompt": null,
+      "expected_post_class": "sector_display"
+    },
+    {
+      "input": "Y",
+      "wait_prompt": null,
+      "expected_post_class": "sector_display"
+    },
+    {
+      "input": "N",
+      "wait_prompt": null,
+      "expected_post_class": "main_command"
+    },
+    {
+      "input": "P",
+      "wait_prompt": null,
+      "expected_post_class": "unknown"
+    },
+    {
+      "input": "?",
+      "wait_prompt": null,
+      "expected_post_class": "unknown"
+    },
+    {
+      "input": "Q",
+      "wait_prompt": null,
+      "expected_post_class": "main_command"
+    },
+    {
+      "input": "!",
+      "wait_prompt": null,
+      "expected_post_class": "pause_key"
+    },
+    {
+      "input": "",
+      "wait_prompt": null,
+      "expected_post_class": "pause_key"
+    },
+    {
+      "input": "",
+      "wait_prompt": null,
+      "expected_post_class": "pause_key"
+    },
+    {
+      "input": "",
+      "wait_prompt": null,
+      "expected_post_class": "pause_key"
+    },
+    {
+      "input": "",
+      "wait_prompt": null,
+      "expected_post_class": "pause_key"
+    },
+    {
+      "input": "",
+      "wait_prompt": null,
+      "expected_post_class": "pause_key"
+    },
+    {
+      "input": "",
+      "wait_prompt": null,
+      "expected_post_class": "pause_key"
+    },
+    {
+      "input": "",
+      "wait_prompt": null,
+      "expected_post_class": "pause_key"
+    },
+    {
+      "input": "",
+      "wait_prompt": null,
+      "expected_post_class": "pause_key"
+    },
+    {
+      "input": "",
+      "wait_prompt": null,
+      "expected_post_class": "pause_key"
+    },
+    {
+      "input": "",
+      "wait_prompt": null,
+      "expected_post_class": "pause_key"
+    },
+    {
+      "input": "",
+      "wait_prompt": null,
+      "expected_post_class": "pause_key"
+    },
+    {
+      "input": "Q",
+      "wait_prompt": null,
+      "expected_post_class": "pause_key"
+    },
+    {
+      "input": "",
+      "wait_prompt": null,
+      "expected_post_class": "pause_key"
+    },
+    {
+      "input": "",
+      "wait_prompt": null,
+      "expected_post_class": "pause_key"
+    },
+    {
+      "input": "",
+      "wait_prompt": null,
+      "expected_post_class": "pause_key"
+    },
+    {
+      "input": "",
+      "wait_prompt": null,
+      "expected_post_class": "pause_key"
+    },
+    {
+      "input": "",
+      "wait_prompt": null,
+      "expected_post_class": "pause_key"
+    },
+    {
+      "input": "",
+      "wait_prompt": null,
+      "expected_post_class": "main_command"
+    },
+    {
+      "input": "L",
+      "wait_prompt": null,
+      "expected_post_class": "unknown"
+    },
+    {
+      "input": "Q",
+      "wait_prompt": null,
+      "expected_post_class": "main_command"
+    },
+    {
+      "input": "4",
+      "wait_prompt": null,
+      "expected_post_class": "main_command"
+    },
+    {
+      "input": "1151",
+      "wait_prompt": null,
+      "expected_post_class": "main_command"
+    },
+    {
+      "input": "6929",
+      "wait_prompt": null,
+      "expected_post_class": "main_command"
+    },
+    {
+      "input": "1151",
+      "wait_prompt": null,
+      "expected_post_class": "main_command"
+    },
+    {
+      "input": "8816",
+      "wait_prompt": null,
+      "expected_post_class": "main_command"
+    },
+    {
+      "input": "P",
+      "wait_prompt": null,
+      "expected_post_class": "main_command"
+    },
+    {
+      "input": "I",
+      "wait_prompt": null,
+      "expected_post_class": "main_command"
+    },
+    {
+      "input": "J",
+      "wait_prompt": null,
+      "expected_post_class": "main_command"
+    },
+    {
+      "input": "J",
+      "wait_prompt": "sure you want to jettison",
+      "expected_post_class": "main_command"
+    },
+    {
+      "input": "J",
+      "wait_prompt": null,
+      "expected_post_class": "main_command"
+    },
+    {
+      "input": "Y",
+      "wait_prompt": null,
+      "expected_post_class": "main_command"
+    },
+    {
+      "input": "P",
+      "wait_prompt": null,
+      "expected_post_class": "port_trade"
+    },
+    {
+      "input": "",
+      "wait_prompt": null,
+      "expected_post_class": "port_trade"
+    },
+    {
+      "input": "",
+      "wait_prompt": null,
+      "expected_post_class": "main_command"
+    },
+    {
+      "input": "1151",
+      "wait_prompt": null,
+      "expected_post_class": "main_command"
+    },
+    {
+      "input": "4",
+      "wait_prompt": null,
+      "expected_post_class": "main_command"
+    },
+    {
+      "input": "1",
+      "wait_prompt": null,
+      "expected_post_class": "main_command"
+    },
+    {
+      "input": "6",
+      "wait_prompt": null,
+      "expected_post_class": "main_command"
+    },
+    {
+      "input": "P",
+      "wait_prompt": null,
+      "expected_post_class": "port_trade"
+    },
+    {
+      "input": "",
+      "wait_prompt": null,
+      "expected_post_class": "port_trade"
+    },
+    {
+      "input": "",
+      "wait_prompt": null,
+      "expected_post_class": "port_trade"
+    },
+    {
+      "input": "0",
+      "wait_prompt": null,
+      "expected_post_class": "main_command"
+    },
+    {
+      "input": "1",
+      "wait_prompt": null,
+      "expected_post_class": "main_command"
+    },
+    {
+      "input": "4",
+      "wait_prompt": null,
+      "expected_post_class": "main_command"
+    },
+    {
+      "input": "1151",
+      "wait_prompt": null,
+      "expected_post_class": "main_command"
+    },
+    {
+      "input": "8816",
+      "wait_prompt": null,
+      "expected_post_class": "main_command"
+    }
+  ]
+}

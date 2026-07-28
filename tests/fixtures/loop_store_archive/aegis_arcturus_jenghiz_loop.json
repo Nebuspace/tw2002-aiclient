@@ -1,0 +1,82 @@
+{
+  "name": "aegis_arcturus_jenghiz_loop",
+  "created_ts": "2026-07-19T07:51:23Z",
+  "source": "recorded",
+  "steps": [
+    {
+      "input": "P",
+      "wait_prompt": null,
+      "expected_post_class": "port_trade"
+    },
+    {
+      "input": "",
+      "wait_prompt": null,
+      "expected_post_class": "port_trade"
+    },
+    {
+      "input": "",
+      "wait_prompt": null,
+      "expected_post_class": "main_command"
+    },
+    {
+      "input": "1151",
+      "wait_prompt": "Command \\[TL=",
+      "expected_post_class": "main_command"
+    },
+    {
+      "input": "4",
+      "wait_prompt": "Command \\[TL=",
+      "expected_post_class": "main_command"
+    },
+    {
+      "input": "1",
+      "wait_prompt": "Command \\[TL=",
+      "expected_post_class": "main_command"
+    },
+    {
+      "input": "6",
+      "wait_prompt": "Command \\[TL=",
+      "expected_post_class": "main_command"
+    },
+    {
+      "input": "P",
+      "wait_prompt": null,
+      "expected_post_class": "port_trade"
+    },
+    {
+      "input": "",
+      "wait_prompt": null,
+      "expected_post_class": "port_trade"
+    },
+    {
+      "input": "",
+      "wait_prompt": null,
+      "expected_post_class": "port_trade"
+    },
+    {
+      "input": "0",
+      "wait_prompt": null,
+      "expected_post_class": "main_command"
+    },
+    {
+      "input": "1",
+      "wait_prompt": "Command \\[TL=",
+      "expected_post_class": "main_command"
+    },
+    {
+      "input": "4",
+      "wait_prompt": "Command \\[TL=",
+      "expected_post_class": "main_command"
+    },
+    {
+      "input": "1151",
+      "wait_prompt": "Command \\[TL=",
+      "expected_post_class": "main_command"
+    },
+    {
+      "input": "8816",
+      "wait_prompt": "Command \\[TL=",
+      "expected_post_class": "main_command"
+    }
+  ]
+}

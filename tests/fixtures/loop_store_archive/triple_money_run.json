@@ -1,0 +1,232 @@
+{
+  "name": "triple_money_run",
+  "created_ts": "2026-07-19T06:45:50Z",
+  "source": "recorded",
+  "steps": [
+    {
+      "input": "P",
+      "wait_prompt": null,
+      "expected_post_class": "port_trade"
+    },
+    {
+      "input": "0",
+      "wait_prompt": null,
+      "expected_post_class": "main_command"
+    },
+    {
+      "input": "1027",
+      "wait_prompt": null,
+      "expected_post_class": "main_command"
+    },
+    {
+      "input": "?",
+      "wait_prompt": null,
+      "expected_post_class": "main_command"
+    },
+    {
+      "input": "I",
+      "wait_prompt": null,
+      "expected_post_class": "main_command"
+    },
+    {
+      "input": "T",
+      "wait_prompt": null,
+      "expected_post_class": "main_command"
+    },
+    {
+      "input": "5476",
+      "wait_prompt": null,
+      "expected_post_class": "main_command"
+    },
+    {
+      "input": "P",
+      "wait_prompt": null,
+      "expected_post_class": "port_trade"
+    },
+    {
+      "input": "50",
+      "wait_prompt": null,
+      "expected_post_class": "port_trade"
+    },
+    {
+      "input": "754",
+      "wait_prompt": null,
+      "expected_post_class": "main_command"
+    },
+    {
+      "input": "1027",
+      "wait_prompt": null,
+      "expected_post_class": "main_command"
+    },
+    {
+      "input": "7646",
+      "wait_prompt": null,
+      "expected_post_class": "main_command"
+    },
+    {
+      "input": "P",
+      "wait_prompt": null,
+      "expected_post_class": "port_trade"
+    },
+    {
+      "input": "50",
+      "wait_prompt": null,
+      "expected_post_class": "port_trade"
+    },
+    {
+      "input": "1881",
+      "wait_prompt": null,
+      "expected_post_class": "main_command"
+    },
+    {
+      "input": "1027",
+      "wait_prompt": null,
+      "expected_post_class": "main_command"
+    },
+    {
+      "input": "5476",
+      "wait_prompt": null,
+      "expected_post_class": "main_command"
+    },
+    {
+      "input": "172",
+      "wait_prompt": null,
+      "expected_post_class": "main_command"
+    },
+    {
+      "input": "5476",
+      "wait_prompt": null,
+      "expected_post_class": "main_command"
+    },
+    {
+      "input": "2260",
+      "wait_prompt": null,
+      "expected_post_class": "main_command"
+    },
+    {
+      "input": "5476",
+      "wait_prompt": null,
+      "expected_post_class": "main_command"
+    },
+    {
+      "input": "5476",
+      "wait_prompt": null,
+      "expected_post_class": "main_command"
+    },
+    {
+      "input": "2260",
+      "wait_prompt": null,
+      "expected_post_class": "main_command"
+    },
+    {
+      "input": "P",
+      "wait_prompt": null,
+      "expected_post_class": "port_trade"
+    },
+    {
+      "input": "50",
+      "wait_prompt": null,
+      "expected_post_class": "port_trade"
+    },
+    {
+      "input": "2390",
+      "wait_prompt": null,
+      "expected_post_class": "main_command"
+    },
+    {
+      "input": "5476",
+      "wait_prompt": null,
+      "expected_post_class": "main_command"
+    },
+    {
+      "input": "1027",
+      "wait_prompt": null,
+      "expected_post_class": "main_command"
+    },
+    {
+      "input": "7646",
+      "wait_prompt": null,
+      "expected_post_class": "main_command"
+    },
+    {
+      "input": "P",
+      "wait_prompt": null,
+      "expected_post_class": "port_trade"
+    },
+    {
+      "input": "50",
+      "wait_prompt": null,
+      "expected_post_class": "port_trade"
+    },
+    {
+      "input": "3828",
+      "wait_prompt": null,
+      "expected_post_class": "main_command"
+    },
+    {
+      "input": "5476",
+      "wait_prompt": null,
+      "expected_post_class": "sector_display"
+    },
+    {
+      "input": "1027",
+      "wait_prompt": null,
+      "expected_post_class": "sector_display"
+    },
+    {
+      "input": "5476",
+      "wait_prompt": null,
+      "expected_post_class": "main_command"
+    },
+    {
+      "input": "P",
+      "wait_prompt": null,
+      "expected_post_class": "port_trade"
+    },
+    {
+      "input": "50",
+      "wait_prompt": null,
+      "expected_post_class": "port_trade"
+    },
+    {
+      "input": "",
+      "wait_prompt": null,
+      "expected_post_class": "main_command"
+    },
+    {
+      "input": "1027",
+      "wait_prompt": null,
+      "expected_post_class": "main_command"
+    },
+    {
+      "input": "7646",
+      "wait_prompt": null,
+      "expected_post_class": "main_command"
+    },
+    {
+      "input": "P",
+      "wait_prompt": null,
+      "expected_post_class": "port_trade"
+    },
+    {
+      "input": "50",
+      "wait_prompt": null,
+      "expected_post_class": "port_trade"
+    },
+    {
+      "input": "",
+      "wait_prompt": null,
+      "expected_post_class": "main_command"
+    },
+    {
+      "input": "1027",
+      "wait_prompt": null,
+      "expected_post_class": "main_command"
+    },
+    {
+      "input": "5476",
+      "wait_prompt": null,
+      "expected_post_class": "main_command"
+    }
+  ]
+}
