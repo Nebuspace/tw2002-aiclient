@@ -1,7 +1,7 @@
 # WO-TEST-FORMATIONS-REHAB — Rehabilitate tests/test_formations.py onto tw2002_aiclient
 
-**Status:** OPEN · EXECUTE · HIGH · Cursor (`impl-aiclient-cursor`)  
-**Posted:** banked #149 · EXEC overnight after Accept  
+**Status:** SEAT-DONE · awaiting hub Accept · Cursor (`impl-aiclient-cursor`)  
+**Posted:** banked #149 · EXEC overnight after Accept · seat STATUS 2026-07-28T04:41Z  
 **Refs:** ignore-list audit HIGH · #142 catalog_provider / unavailable seam
 
 ## Goal

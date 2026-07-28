@@ -1,89 +1,149 @@
-"""TW-16 formation detector tests."""
+"""Formations planner tests — reborn seam (WO-TEST-FORMATIONS-REHAB).
 
+Replaces the archive ``twclient.formations`` detector suite. The TW-16
+catalogue package is gone (ADR-001); product coverage is
+``explore.plan_find_formations`` + its ``catalog_provider`` seam (#142).
+"""
+
+from __future__ import annotations
+
+import ast
 from pathlib import Path
 
-from twclient import world_model
-from twclient.formations import (
-    BUBBLE,
-    DEAD_END,
-    ONE_WAY,
-    WARP_SINK,
-    catalog_world,
-    detect_formations,
-    membership_map,
-    write_membership,
-)
+from tw2002_aiclient import explore, world_model
+
+WORLD = "test+formations-rehab"
 
 
-def test_dead_end():
-    graph = {1: (2,), 2: (1, 3), 3: (2,)}
-    cat = detect_formations(graph)
-    dead = cat.by_kind(DEAD_END)
-    assert {f.sectors[0] for f in dead} == {1, 3}
-    assert all(f in cat.genesis_candidates for f in dead)
+class _FakeFormation:
+    def __init__(self, kind, sectors, entrance=None):
+        self.kind = kind
+        self.sectors = sectors
+        self.entrance = entrance
 
 
-def test_bubble_single_entrance():
-    # Pocket {10,11,12} entered only via 10↔2; outside 1—2
-    graph = {
-        1: (2,),
-        2: (1, 10),
-        10: (2, 11, 12),
-        11: (10, 12),
-        12: (10, 11),
-    }
-    cat = detect_formations(graph)
-    bubbles = cat.by_kind(BUBBLE)
-    assert len(bubbles) == 1
-    assert set(bubbles[0].sectors) == {10, 11, 12}
-    assert bubbles[0].entrance == 10
-    assert bubbles[0] in cat.genesis_candidates
+def _fake_catalog(*formations):
+    class _Cat:
+        genesis_candidates = list(formations)
+
+    return lambda world_id, *, state_dir=None: _Cat()
 
 
-def test_one_way_warp():
-    graph = {1: (2,), 2: (3,), 3: (2,)}  # 1→2 no reverse
-    cat = detect_formations(graph)
-    ones = cat.by_kind(ONE_WAY)
-    assert any(f.sectors == (1, 2) for f in ones)
-    assert all(f not in cat.genesis_candidates for f in ones)
+def _seed(tmp_path: Path, rows: list[dict]) -> None:
+    world_model.bulk_upsert(WORLD, rows, state_dir=tmp_path)
 
 
-def test_warp_sink_no_exit():
-    # 1→2→3, 3 has no out; 2←3 mutual so 3 not dead-end of outdeg1...
-    # Sink: 4 reachable from 1 via one-way, 4 has no outs
-    graph = {
-        1: (2, 4),
-        2: (1,),
-        4: (),  # trap
-    }
-    cat = detect_formations(graph)
-    sinks = cat.by_kind(WARP_SINK)
-    assert any(4 in f.sectors for f in sinks)
-    assert all(f not in cat.genesis_candidates for f in sinks)
-
-
-def test_catalog_world_and_write_membership(tmp_path: Path):
-    wid = "test+form"
-    world_model.bulk_upsert(
-        wid,
-        [
-            {"sector_id": 5, "warps": [6]},
-            {"sector_id": 6, "warps": [5, 7]},
-            {"sector_id": 7, "warps": [6]},
-        ],
-        state_dir=tmp_path,
+def test_no_provider_is_typed_unavailable_not_hunt(tmp_path: Path):
+    _seed(tmp_path, [{"sector_id": 1, "warps": [2], "landmarks": []}])
+    plan = explore.plan_find_formations(
+        WORLD, current_sector=1, turn_budget=5, epsilon=0.0, state_dir=tmp_path
     )
-    cat = catalog_world(wid, state_dir=tmp_path)
-    assert cat.known_sectors == 3
-    assert any(f.kind == DEAD_END and f.sectors == (5,) for f in cat.formations)
-    n = write_membership(wid, cat, state_dir=tmp_path)
-    assert n >= 1
-    rec = world_model.get_sector(wid, 5, state_dir=tmp_path)
-    assert DEAD_END in (rec.get("formation_membership") or [])
+    assert plan.mode == "unavailable"
+    assert plan.found is False
+    assert plan.hunt is None
+    assert plan.next_sector is None
+    assert plan.targets == ()
 
 
-def test_membership_map_dedupes_kinds():
-    cat = detect_formations({1: (2,), 2: (1,)})
-    m = membership_map(cat)
-    for tags in m.values():
-        assert len(tags) == len(set(tags))
+def test_empty_catalog_hunts_via_map_fill(tmp_path: Path):
+    _seed(
+        tmp_path,
+        [
+            {"sector_id": 1, "warps": [2], "landmarks": []},
+            {"sector_id": 2, "warps": [1, 99], "landmarks": []},
+        ],
+    )
+    plan = explore.plan_find_formations(
+        WORLD,
+        current_sector=1,
+        turn_budget=5,
+        epsilon=0.0,
+        state_dir=tmp_path,
+        catalog_provider=_fake_catalog(),
+    )
+    assert plan.found is False
+    assert plan.mode in ("hunt", "exhausted")
+    assert plan.mode != "unavailable"
+
+
+def test_routes_toward_genesis_candidate(tmp_path: Path):
+    _seed(
+        tmp_path,
+        [
+            {"sector_id": 1, "warps": [2], "landmarks": []},
+            {"sector_id": 2, "warps": [1, 3], "landmarks": []},
+            {"sector_id": 3, "warps": [2], "landmarks": []},
+        ],
+    )
+    plan = explore.plan_find_formations(
+        WORLD,
+        current_sector=1,
+        turn_budget=5,
+        epsilon=0.0,
+        state_dir=tmp_path,
+        catalog_provider=_fake_catalog(
+            _FakeFormation("dead-end", (3,), entrance=3)
+        ),
+    )
+    assert plan.found is True
+    assert plan.mode == "route"
+    assert plan.next_sector == 2
+    assert plan.kind == "dead-end"
+
+
+def test_arrived_when_already_at_entrance(tmp_path: Path):
+    _seed(
+        tmp_path,
+        [
+            {"sector_id": 3, "warps": [2], "landmarks": []},
+            {"sector_id": 2, "warps": [3], "landmarks": []},
+        ],
+    )
+    plan = explore.plan_find_formations(
+        WORLD,
+        current_sector=3,
+        turn_budget=5,
+        epsilon=0.0,
+        state_dir=tmp_path,
+        catalog_provider=_fake_catalog(
+            _FakeFormation("dead-end", (3,), entrance=3)
+        ),
+    )
+    assert plan.found is True
+    assert plan.mode == "arrived"
+    assert plan.next_sector is None
+
+
+def test_catalog_mode_when_candidate_unreachable(tmp_path: Path):
+    # Disjoint components: sitting in 1, candidate entrance 50 unknown/unlinked.
+    _seed(tmp_path, [{"sector_id": 1, "warps": [2], "landmarks": []}])
+    plan = explore.plan_find_formations(
+        WORLD,
+        current_sector=1,
+        turn_budget=5,
+        epsilon=0.0,
+        state_dir=tmp_path,
+        catalog_provider=_fake_catalog(
+            _FakeFormation("bubble", (50, 51), entrance=50)
+        ),
+    )
+    assert plan.found is True
+    assert plan.mode == "catalog"
+    assert plan.route is None
+    assert plan.next_sector is None
+
+
+def test_formations_modules_never_import_twclient():
+    """Regression pin for the #142 landmine class."""
+    roots = [
+        Path(explore.__file__),
+        Path(__file__),
+    ]
+    for path in roots:
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    assert not alias.name.startswith("twclient"), path
+            elif isinstance(node, ast.ImportFrom) and node.module:
+                assert not node.module.startswith("twclient"), path
