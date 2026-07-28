@@ -105,9 +105,33 @@ gh_pr_state() {
   echo "NONE"
 }
 
+# Hub may ONLY reap hub-owned worktrees (allowlist). Everything else REFUSE/SKIP.
+# Incidents 2026-07-28: auto-discover reaped seat cc-* lanes twice after merge.
+# Blocklist of seat names is the weak half — allowlist inverts the failure mode.
+is_hub_owned_wt() {
+  local wt="$1"
+  local base
+  base="$(basename "$wt")"
+  [[ "$base" == hub-* ]] && return 0
+  [[ "$wt" == */.worktrees/hub-* ]] && return 0
+  [[ "$wt" == /private/tmp/hub-* ]] && return 0
+  [[ "$wt" == /tmp/hub-* ]] && return 0
+  return 1
+}
+
 remove_wt() {
   local wt="$1"
+  local mode="${2:-auto}" # auto | explicit
   [[ -z "$wt" ]] && return 0
+  if ! is_hub_owned_wt "$wt"; then
+    if [[ "$mode" == "explicit" ]]; then
+      # Caller must pre-validate; this path is a last-resort guard.
+      echo "REFUSE: $wt is not hub-owned (hub-owned = basename hub-*, or a path under .worktrees/hub-* | /private/tmp/hub-* | /tmp/hub-*). Owning seat reaps." >&2
+      exit 2
+    fi
+    echo "SKIP non-hub worktree (auto-discover): $wt"
+    return 0
+  fi
   if [[ -d "$wt" ]]; then
     echo "Removing worktree: $wt"
     git worktree remove --force "$wt"
@@ -116,8 +140,18 @@ remove_wt() {
 
 reap_worktrees() {
   local wt
+  # All-or-nothing: validate every explicit argv BEFORE any remove, so a mixed
+  # list cannot leave half the hubs reaped under a REFUSE exit code (CC 21:08:44Z).
   for wt in "${WT_ARGS[@]+"${WT_ARGS[@]}"}"; do
-    remove_wt "$wt"
+    [[ -z "$wt" ]] && continue
+    if ! is_hub_owned_wt "$wt"; then
+      echo "REFUSE: $wt is not hub-owned (hub-owned = basename hub-*, or a path under .worktrees/hub-* | /private/tmp/hub-* | /tmp/hub-*). Owning seat reaps." >&2
+      echo "REFUSE: aborting before any worktree remove (all-or-nothing argv gate)." >&2
+      exit 2
+    fi
+  done
+  for wt in "${WT_ARGS[@]+"${WT_ARGS[@]}"}"; do
+    remove_wt "$wt" explicit
   done
 
   local current_path="" current_branch=""
@@ -130,7 +164,7 @@ reap_worktrees() {
       branch\ *)
         current_branch="${line#branch refs/heads/}"
         if [[ "$current_branch" == "$BRANCH" ]]; then
-          remove_wt "$current_path"
+          remove_wt "$current_path" auto
         fi
         ;;
       "")
