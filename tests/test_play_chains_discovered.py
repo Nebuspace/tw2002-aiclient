@@ -40,6 +40,7 @@ from tw2002_aiclient import adapters, app as app_mod
 from tw2002_aiclient import chain_search as chain_search_mod
 from tw2002_aiclient import chain_search_view as V
 from tw2002_aiclient import screens as screens_mod
+from tw2002_aiclient import world_model as world_model_mod
 from tw2002_aiclient.cockpit import chains
 from tw2002_aiclient.loops import store as _loop_store
 
@@ -73,6 +74,10 @@ TAUGHT = [
 ]
 
 DISCOVERED = _payload([_chain(), _chain((20, 21, 20), hops_n=2, turns=6, cr=90.0)])
+
+# Distinct from every other number in this file so an assertion cannot pass on
+# a coincidence, and not a count any real fixture here would produce.
+SECTOR_COUNT = 812
 
 
 def _open(rows, status="ok", discovered=DISCOVERED):
@@ -178,13 +183,21 @@ L = ord("L")
 ENTER = 10
 
 
-def _drive(monkeypatch, keys, *, store, recompute):
+def _drive(monkeypatch, keys, *, store, recompute, sector_count=SECTOR_COUNT):
     """Run the real `_run_play`; return (arm_calls, explore_calls, screen).
 
     Both money-path spies are installed on every drive (the cross-
     contamination discipline `test_play_chains_arm.py` established), and
     `chain_search.recompute` is controlled so the discovered section is
     hermetic — no read of the real `state/world/` tree.
+
+    `sector_count` controls the OTHER world-model read this branch now makes
+    (`world_stats.refresh`), for the same hermetic reason and then some: left
+    unpatched it would count sector files under the operator's real
+    `state/world/`, so the assertions below would pass or fail according to
+    how much the human had explored — a test that reddens exactly when the
+    product is in use. Pass a `BaseException` to drive the raising-store case;
+    `None` models a store that cannot be counted.
     """
     arm_calls: list = []
     explore_calls: list = []
@@ -206,6 +219,17 @@ def _drive(monkeypatch, keys, *, store, recompute):
     # branch (launcher-startup CPU budget), so the patch target is the
     # real module — the branch import resolves to the same object.
     monkeypatch.setattr(chain_search_mod, "recompute", recompute)
+
+    def _count(world_id, **kw):
+        if isinstance(sector_count, BaseException):
+            raise sector_count
+        if callable(sector_count):
+            return sector_count(world_id, **kw)
+        return sector_count
+
+    # `world_stats.refresh` imports `world_model` lazily, so the patch target
+    # is the real module -- the lazy import resolves to the same object.
+    monkeypatch.setattr(world_model_mod, "known_sector_count", _count)
 
     def _arm(name=None, **kw):
         arm_calls.append((name, kw))
@@ -470,7 +494,9 @@ def test_the_cached_scalars_reach_the_real_status_provider(monkeypatch):
         monkeypatch, [L], store=TWO_LOOPS, recompute=lambda wid, **kw: DISCOVERED,
     )
     assert screen.status_provider() == {
-        "ok": True, "credits": 7, "chain_hops": 3, "chain_unit": "hops",
+        "ok": True, "credits": 7,
+        "chain_hops": 3, "chain_unit": "hops",
+        "known_sectors": SECTOR_COUNT,
     }
 
 
@@ -557,3 +583,126 @@ def test_the_empty_pane_still_paints_its_honest_state_without_a_chain(monkeypatc
     painted = "\n".join(text for (_y, _x, text, _a) in win.writes)
     assert "profit chain" not in painted.lower()
     assert "Exploring" in painted
+
+
+# ------------------------------- WO-GOALS-STATUS-VOCABULARY T1: `known_sectors`
+#
+# The GOALS Map row's producer rides the same keypress and the same seam as the
+# chain scalars above, for the same reason: `status_provider()` runs once per
+# DRAW, and counting sector files is ~26ms at 5000 sectors against a budget
+# already within ~50ms of its ceiling (`tests/test_dead_terminal_spin.py`).
+#
+# `WorldStats` unit behaviour is pinned in `tests/test_world_stats.py`. What is
+# pinned HERE is only what those cannot see: that `_run_play` actually calls
+# `refresh`, that it passes the profile's own world_id, and that the number
+# reaches the closure GOALS polls.
+
+
+def test_pressing_L_refreshes_the_known_sector_count(monkeypatch):
+    from tw2002_aiclient.session import cli as session_cli
+
+    monkeypatch.setattr(
+        session_cli, "send_request", lambda verb, args=None, **kw: {"ok": True},
+    )
+    _arm, _explore, screen = _drive(
+        monkeypatch, [L], store=TWO_LOOPS, recompute=lambda wid, **kw: DISCOVERED,
+    )
+    assert screen.status_provider().get("known_sectors") == SECTOR_COUNT
+
+
+def test_the_count_is_absent_until_the_popup_runs(monkeypatch):
+    """The negative control for the pin above.
+
+    Without it, a `WorldStats` that fabricated a count at CONSTRUCTION time
+    would pass every positive assertion in this file. The Map row must say
+    "unknown" until we have actually looked, never a zero we did not measure.
+    """
+    monkeypatch.setattr(screens_mod.curses, "has_colors", lambda: False)
+    profile = screens_mod.ProfileRow(
+        name="alpha", handle="Alpha", server="demo-a",
+        host="demo-a.example", game_letter="B",
+    )
+    s = screens_mod.PlayShellScreen(_Win(), profile)
+    assert s.world_stats.merge({"ok": True}) == {"ok": True}
+
+
+def test_the_refresh_is_keyed_by_this_profiles_world_id(monkeypatch):
+    """A count read against the wrong world is worse than no count: it would
+    report another server's exploration as this one's progress."""
+    from tw2002_aiclient import world_identity
+
+    seen: list = []
+
+    def _count(world_id, **kw):
+        seen.append(world_id)
+        return SECTOR_COUNT
+
+    profile = app_mod.ProfileRow(
+        name="alpha", handle="Alpha", server="demo-a",
+        host="demo-a.example", game_letter="B",
+    )
+    expected = world_identity.world_id_from_profile(profile)
+
+    # The spy is routed through the `sector_count` PARAMETER, not patched from
+    # this body: `_drive` installs its own `known_sector_count` after the body
+    # runs and would silently overwrite a patch made here, leaving this test
+    # green while asserting nothing. The pin two sections up
+    # (`..._store_unreadable_branch...`) exists because that already happened.
+    _arm, _explore, _screen = _drive(
+        monkeypatch, [L], store=TWO_LOOPS, recompute=lambda wid, **kw: DISCOVERED,
+        sector_count=_count,
+    )
+    assert seen == [expected], f"refreshed against the wrong world: {seen!r}"
+    assert _screen.world_stats.merge({}) == {"known_sectors": SECTOR_COUNT}
+
+
+def test_a_raising_world_model_costs_the_count_not_the_cockpit(monkeypatch):
+    """The count and the chain search are independent reads on one keypress.
+    A world model that will not open must not take the play loop down, and
+    must not cost the discovered section that already succeeded."""
+    _arm, _explore, screen = _drive(
+        monkeypatch, [L], store=TWO_LOOPS,
+        recompute=lambda wid, **kw: DISCOVERED,
+        sector_count=OSError("world model gone"),
+    )
+    assert screen is not None
+    assert screen.chains_session.status == "ok", "the popup never opened"
+    assert screen.world_stats.merge({"ok": True}) == {"ok": True}, "fabricated a count"
+    assert _scalars_after(screen) == {"chain_hops": 3, "chain_unit": "hops"}
+
+
+def test_the_map_row_paints_the_count(monkeypatch):
+    """The delivery proof. `status` carrying the field and the operator SEEING
+    a number are different claims, and this repo has shipped a composer with no
+    wire to the screen before. Painted, not merely present in a dict."""
+    monkeypatch.setattr(screens_mod.curses, "has_colors", lambda: False)
+    profile = screens_mod.ProfileRow(
+        name="alpha", handle="Alpha", server="demo-a",
+        host="demo-a.example", game_letter="B",
+    )
+    win = _Win()
+    s = screens_mod.PlayShellScreen(win, profile)
+    s.spectating = False
+    s.attached = False
+    s.status_provider = lambda: {"ok": True, "known_sectors": SECTOR_COUNT}
+    s.draw()
+    painted = "\n".join(text for (_y, _x, text, _a) in win.writes)
+    assert f"{SECTOR_COUNT} sectors" in painted, f"Map row never painted the count:\n{painted}"
+
+
+def test_the_map_row_paints_unknown_without_a_count(monkeypatch):
+    """Negative control: a Map row that printed a number regardless would pass
+    the pin above on its own."""
+    monkeypatch.setattr(screens_mod.curses, "has_colors", lambda: False)
+    profile = screens_mod.ProfileRow(
+        name="alpha", handle="Alpha", server="demo-a",
+        host="demo-a.example", game_letter="B",
+    )
+    win = _Win()
+    s = screens_mod.PlayShellScreen(win, profile)
+    s.spectating = False
+    s.attached = False
+    s.status_provider = lambda: {"ok": True}
+    s.draw()
+    painted = "\n".join(text for (_y, _x, text, _a) in win.writes)
+    assert "sectors" not in painted, f"a sector count appeared from nowhere:\n{painted}"

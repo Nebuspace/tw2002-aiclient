@@ -49,11 +49,17 @@ objective is *unmet* — higher numbers dominate the list until satisfied. Weigh
 **prioritization ladder for which taught behavior / suggestion is offered first**, not a per-cycle
 action score that competes against a live screen.
 
-| # | Priority | Type | Weight | Depends on | Status in code (2026-07-22) |
+The **Status in code** column below was re-audited against the tree on 2026-07-28 by
+`WO-GOALS-STATUS-VOCABULARY`, and rows 1 and 3 moved from "Implemented" to **Starved**. Both had a
+working *reader* and no *writer* — the shape that renders an honest `?` forever while every suite
+stays green, because tests supply what the product does not. When updating this column, state which
+side is missing: "implemented" describing a consumer alone is how these two rows stayed wrong.
+
+| # | Priority | Type | Weight | Depends on | Status in code (2026-07-28) |
 |---:|---|---|---:|---|---|
-| 1 | Turns & credit count known | Boolean | 100 | — | Implemented — `state_parser.parse_state()` reads `turns_left`; credits via strict `session.credits_snapshot()`; `hud_seed` sends `I` once when either is unknown after login |
+| 1 | Turns & credit count known | Boolean | 100 | — | **Starved** — no code produces `turns_left` at all (every occurrence in the package is prose; `state_parser` line 421 states it *declines* the archive's forging regex rather than reimplementing it). Credits: `read_credits_balance` exists but is not wired onto `status`. `hud_seed` sends `I` as documented. GOALS reads both keys and can only render `?` |
 | 2 | Current-ship type identified | Boolean | 90 | #1 | Planned — no live current-ship introspection adapter; `ShipSpec`/`PlayerState` exist for scoring but aren't fed live |
-| 3 | StarDock located | Boolean | 85 | explore when unknown | Implemented — `world_model` landmarks + `explore.find_landmark_sectors()`; GOALS shows `StarDock @…` |
+| 3 | StarDock located | Boolean | 85 | explore when unknown | **Starved** — the READER is implemented (`explore.find_landmark_sectors()`), the WRITER never was: no code writes `landmarks[]`, so the lookup returns `[]` however much is explored and GOALS can never show `StarDock @…`. Blocked on `WO-WM-LANDMARKS-WRITE` |
 | 4 | Cost of other ships known | Boolean | 80 | #3 | Partial — GOALS gated until dock found; catalog not yet on live `WorldSnapshot.ship_catalog` |
 | 5 | Cost of cargo-hold upgrades known | Boolean | 75 | #3 | Partial — GOALS gated until dock found; quote via `get_cargo_hold_price()` when captured |
 | 6 | Obtain fighters (aboard > 0) | Boolean | 73 | #1 (Class-0 at Sol always reachable) | Partial — GOALS shows aboard count + credit-gated status via `afford_fighters()`; buy EXECUTE Planned |
