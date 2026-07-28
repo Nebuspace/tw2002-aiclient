@@ -1,8 +1,10 @@
 # WO-WORLD-STATS-REFRESH-EVENTS — widen the `known_sectors` refresh, retire its expensive twin
 
-**Status:** OPEN EXECUTE · Cursor preferred · LOW · either seat
+**Status:** DONE · Cursor · PR #166 · awaiting hub Accept
 **Posted:** 2026-07-28 · impl-claudecode-aiclient (discovered building `WO-GOALS-STATUS-VOCABULARY` T1)
 **Depends:** T1 (`world_stats.WorldStats`, `world_model.known_sector_count`) — landed first
+
+**Hub build order (HANDOFF #166):** B first, then A — explore-completion hook exists (`_poll_explore_status` terminal outcome).
 
 ## Why this is banked and not folded into T1
 
