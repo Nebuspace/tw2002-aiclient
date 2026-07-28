@@ -548,21 +548,32 @@ def write_port_only(world_id, sector_id, parsed_port, state_dir=None, now=None):
     EXPLICITLY-SUPPLIED `sector_id` -- the docked commerce-report case
     `write_from_state()` can't handle, because the screen that observed
     the port commodities carries no "Sector : N" line of its own to
-    derive a sector from (see state_parser.is_genuine_port_report's
-    module-level comment). The caller (protocol._write_world_model)
-    resolves `sector_id` from `state_parser.sector_from_command_prompt()`
-    -- THIS SAME SCREEN's own trailing ship Command prompt (WO-FA2b
-    REVISE: an earlier design anchored to a cross-screen
-    `session.last_genuine_sector` instead, but pyte's lack of scrollback
-    could let a long warp-then-dock burst scroll the sector-status line
-    off the settled grid before that anchor was ever set -- see that
-    function's own docstring for the fix).
+    derive a sector from. The caller
+    (`session.sector_explore._ingest_docked_report`) resolves `sector_id`
+    from `state_parser.read_current_sector()` -- THIS SAME SCREEN's own
+    trailing ship Command prompt (WO-FA2b REVISE: an earlier design
+    anchored to a cross-screen `session.last_genuine_sector` instead, but
+    pyte's lack of scrollback could let a long warp-then-dock burst scroll
+    the sector-status line off the settled grid before that anchor was
+    ever set).
 
-    `parsed_port` is `parse_state()`'s own `state["port"]` dict
-    (`{"commodities": [...]}`, the exact canon vocab shape -- see
-    world-model.md's Schema table) -- never re-derived or re-parsed
-    here (WO-FA2b's contract: reuse `parse_state()`'s existing commodity
-    extraction, never write a second row parser).
+    **Docstring corrected 2026-07-28 (WO-EXPLORE-DOCK-NEW-PORT).** Until
+    that WO this function had NO product caller, and the three symbols
+    this paragraph originally named -- `protocol._write_world_model`,
+    `state_parser.is_genuine_port_report`,
+    `state_parser.sector_from_command_prompt` -- had no definition
+    anywhere in the tree. Neither did `parse_state`, whose "existing
+    commodity extraction" both this docstring and canon's Ingestion
+    section described as merely being reused. So this writer shipped
+    fully tested as a consumer of a shape nothing produced, while its
+    documentation read as though the path were wired. The producer is
+    now `state_parser.read_port_commodities_from_report`, and it is THE
+    one -- canon's "never write a second row parser" is a live constraint
+    on the next caller, not a description of a parser that never existed.
+
+    `parsed_port` is that reader's output in canon's vocab shape
+    (`{"commodities": [{name, status, amount, pct}]}` -- see
+    world-model.md's Schema table) -- never re-derived or re-parsed here.
 
     Only `commodities`/`last_seen_ts` are ever written to the `port`
     sub-dict -- same as `write_from_state`'s own port mapping, and for

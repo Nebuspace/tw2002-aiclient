@@ -29,6 +29,7 @@ from .control_lock import ControlLock, ControlModeConflict
 from .state_parser import (
     OUTCOME_READ,
     read_current_sector,
+    read_port_commodities_from_report,
     read_port_from_sector_status,
     read_warps_from_sector_status,
 )
@@ -42,9 +43,13 @@ __all__ = [
     "ExploreSnapshot",
     "DEFAULT_MIN_DISTINCT_SECTORS",
     "DEFAULT_TURN_BUDGET",
+    "DOCK_LETTER_ALLOWLIST",
+    "HALT_DOCK_FORBIDDEN_KEY",
+    "HALT_DOCK_UNRECOGNIZED",
     "MOVEMENT_SCREEN_CLASS",
     "explore_run_wire",
     "observe_explore",
+    "port_needs_dock",
 ]
 
 MOVEMENT_SCREEN_CLASS = "main_command"
@@ -55,7 +60,9 @@ SETTLE_TIMEOUT_S = 8.0
 SETTLE_DEBOUNCE_MS = 350
 STOP_JOIN_TIMEOUT_S = 5.0
 
-ARGS_EXPLORE_START = frozenset({"world_id", "min_sectors", "turn_budget", "intent"})
+ARGS_EXPLORE_START = frozenset(
+    {"world_id", "min_sectors", "turn_budget", "intent", "dock_new_ports"}
+)
 
 OUTCOME_COMPLETED = "completed"
 OUTCOME_CRASHED = "crashed"
@@ -81,6 +88,16 @@ class ExploreReport:
     # interpretable against its intent -- "exhausted" means a filled frontier
     # for map-fill and an unreachable landmark for find-StarDock.
     intent: str = _explore.INTENT_MAP_FILL
+    # WO-EXPLORE-DOCK-NEW-PORT: may this run SPEND turns docking first-sight
+    # ports? Default off, and on the report for the same reason `intent` is:
+    # a run that spent turns docking and one that only read free flybys are
+    # not the same run, and "turns_remaining" alone cannot tell them apart.
+    #
+    # Off by default because this is the only thing the explore loop does that
+    # costs a resource. Reading the `Ports :` flyby and ingesting a report
+    # already on screen stay unconditional -- both are free. Only the P/T
+    # cascade is gated, so an unarmed run still learns everything it can see.
+    dock_new_ports: bool = False
     outcome: Optional[str] = None
     reason: Optional[str] = None
     distinct_sectors: int = 0
@@ -206,6 +223,121 @@ def _ingest_settled_sector(
     if port.observed:
         parsed["port"] = port.port
     world_model.write_from_state(world_id, parsed, state_dir=state_dir)
+
+
+#: The ONLY letters this module may ever send. `"P"` enters the port menu and
+#: `"T"` chooses Trade; the captured cascade is
+#: `P` -> menu -> `T` -> `<Port>` -> `Docking...` -> commerce report.
+#:
+#: The set is a frozenset of exactly two letters rather than a comment because
+#: of what the OTHER options on that menu are: the port menu's first entry is
+#: `<A> Attack this Port`. A one-character construction bug in this module is
+#: therefore not a wrong-menu-item bug, it is an unattended attack on a port —
+#: the precise thing `/doctrine/alignment-and-conduct.md` forbids and that
+#: `fighter_toll_policy` exists to keep behind a Max-ratified gate. The archived
+#: `trade_driver` enforced the same two literals at two layers for this reason;
+#: this is that discipline ported, not re-invented.
+DOCK_LETTER_ALLOWLIST = frozenset({"P", "T"})
+
+HALT_DOCK_UNRECOGNIZED = "dock_screen_unrecognized"
+HALT_DOCK_FORBIDDEN_KEY = "dock_forbidden_key"
+
+#: The port menu that `P` lands on. Matched on its prompt, not on `<A> Attack
+#: this Port`, so that recognizing the menu never depends on the attack option
+#: being present in the render.
+_PORT_MENU_MARKER = "enter your choice"
+
+
+def port_needs_dock(flyby, stored_port) -> bool:
+    """Is this a first-sight port whose commodities we do not yet hold?
+
+    Turn-spending is the whole cost model here, so the predicate is
+    deliberately narrow — it says yes ONLY when all of:
+
+    * the sector-status flyby positively observed a port (``observed=True``
+      with a dict). ``observed=False`` means the screen said nothing about a
+      port and docking on a guess would spend a turn on nothing;
+    * that observation was not ``Ports : None``. A positive "no port here"
+      must never produce a dock — there is nothing to dock with, and this is
+      the pin the WO calls for by name;
+    * the world model holds no non-empty ``commodities`` for the sector.
+
+    That last clause is what stops a re-dock every hop: once a report has been
+    ingested the stored list is non-empty, so the same port is never paid for
+    twice within a run or across runs. An EMPTY stored list counts as absent
+    rather than as "known to have nothing", because `write_port_only` writes
+    ``[]`` for a report it could not read rows from and canon's schema has no
+    way to say "this port genuinely trades nothing".
+    """
+    if flyby is None or not getattr(flyby, "observed", False):
+        return False
+    port = getattr(flyby, "port", None)
+    if not isinstance(port, dict):
+        # `observed=True, port=None` -- "Ports : None", positively no port.
+        return False
+    if isinstance(stored_port, dict) and stored_port.get("commodities"):
+        return False
+    return True
+
+
+def _stored_port(world_id: str, sector_id: int, *, state_dir) -> Optional[dict]:
+    """The world model's current ``port`` sub-dict for a sector, if any."""
+    try:
+        record = world_model.get_sector(world_id, int(sector_id), state_dir=state_dir)
+    except Exception:
+        # A read failure must not be reported as "no commodities stored",
+        # which would licence a turn-spending dock. Claim knowledge instead:
+        # the caller treats a truthy commodities list as "already have it".
+        return {"commodities": [_UNREADABLE_SENTINEL]}
+    if not isinstance(record, dict):
+        return None
+    port = record.get("port")
+    return port if isinstance(port, dict) else None
+
+
+#: Never persisted, never compared against -- it exists only so a failed
+#: world-model read is indistinguishable from "already known" at the ONE call
+#: site that decides whether to spend a turn. Fail closed toward not spending.
+_UNREADABLE_SENTINEL = {"name": "__unreadable__"}
+
+
+def _ingest_docked_report(
+    world_id: str,
+    *,
+    full_text: str,
+    prompt_line: str,
+    state_dir,
+) -> Optional[int]:
+    """Persist a docked commerce report's commodities. Returns the sector, or
+    ``None`` when nothing was written.
+
+    This is `world_model.write_port_only`'s FIRST product caller. That writer
+    shipped fully tested with a docstring naming `protocol._write_world_model`
+    as its caller and `state_parser.is_genuine_port_report` as its gate;
+    neither symbol has ever existed, so the write path it documents was never
+    wired and every commodity table the client rendered was dropped.
+
+    The sector comes from THIS screen's own trailing ship Command prompt, per
+    canon's Ingestion note — a commerce report carries no ``Sector : N`` line,
+    and reaching back to a remembered sector would attribute a port to
+    wherever we were last if anything scrolled. Unreadable prompt ⇒ write
+    nothing: a port written into the wrong sector cannot be removed by any
+    product path.
+    """
+    report = read_port_commodities_from_report(full_text)
+    if not report.observed:
+        return None
+    sector_read = read_current_sector(prompt_line)
+    if sector_read.outcome != OUTCOME_READ or sector_read.sector is None:
+        return None
+    sector_id = int(sector_read.sector)
+    world_model.write_port_only(
+        world_id,
+        sector_id,
+        {"commodities": [dict(c) for c in report.commodities]},
+        state_dir=state_dir,
+    )
+    return sector_id
 
 
 def _attribute_landmark(session, world_id: str, klass: str, *, state_dir) -> Optional[int]:
@@ -339,6 +471,66 @@ class ExploreRunner:
                 return
             self._report = live
 
+    def _send_dock_letter(self, letter: str) -> tuple[bool, str, str]:
+        """Send ONE allowlisted dock letter. ``(confirmed, full_text, prompt)``.
+
+        Layer 1 of the two-layer guard the archived `trade_driver` used, ported
+        because the hazard is unchanged: the menu `P` opens leads with
+        ``<A> Attack this Port``. Layer 2 is the shape assert below — it catches
+        a bad construction from any FUTURE call site, not just a bad letter
+        here, which is the failure a single check at the top would miss.
+        """
+        if letter not in DOCK_LETTER_ALLOWLIST:
+            raise ValueError(f"{HALT_DOCK_FORBIDDEN_KEY}:{letter!r}")
+        if not (isinstance(letter, str) and len(letter) == 1 and letter.isalpha()):
+            raise ValueError(f"{HALT_DOCK_FORBIDDEN_KEY}:malformed")
+        _reason, _elapsed, confirmed = _settle.send_and_confirm(
+            self._session,
+            letter,
+            confirm_prompt=None,
+            enter=True,
+            timeout_s=self._timeout_s,
+            debounce_ms=self._debounce_ms,
+        )
+        rows = self._session.render()
+        return confirmed, self._session.render_text(rows), (rows[-1].strip() if rows else "")
+
+    def _dock_and_ingest(self, report: ExploreReport) -> tuple[Optional[str], int, int]:
+        """`P` -> port menu -> `T` -> commerce report -> write.
+
+        Returns ``(halt_reason_or_None, sends_issued, turns_spent)``.
+
+        **Every unexpected screen halts the whole run** rather than backing out.
+        The WO calls for "no silent wander", and mid-cascade is the worst place
+        to improvise: we are inside a menu whose first option attacks the port,
+        so a module that guesses its way out is a module that can pick a letter
+        on a screen it does not recognize. A halt leaves the human on a real
+        screen with the keyboard, which is the escalation canon asks for.
+
+        There is no undock step, by design: the archived cascade records that
+        navigating to the next hop's sector IS the undock, so this never sends
+        one and the loop's ordinary hop resumes control.
+        """
+        confirmed, full_text, prompt = self._send_dock_letter("P")
+        if not confirmed:
+            return HALT_CONFIRM_FAILED, 1, 0
+        if _PORT_MENU_MARKER not in full_text.lower():
+            return HALT_DOCK_UNRECOGNIZED, 1, 0
+        confirmed, full_text, prompt = self._send_dock_letter("T")
+        # The turn is deducted by the server at `Docking...`, so it is spent
+        # from here on regardless of whether the report parses.
+        if not confirmed:
+            return HALT_CONFIRM_FAILED, 2, 1
+        wrote = _ingest_docked_report(
+            report.world_id,
+            full_text=full_text,
+            prompt_line=prompt,
+            state_dir=self._state_dir,
+        )
+        if wrote is None:
+            return HALT_DOCK_UNRECOGNIZED, 2, 1
+        return None, 2, 1
+
     def start(
         self,
         world_id: str,
@@ -346,6 +538,7 @@ class ExploreRunner:
         min_sectors: int = DEFAULT_MIN_DISTINCT_SECTORS,
         turn_budget: int = DEFAULT_TURN_BUDGET,
         intent: str = _explore.INTENT_MAP_FILL,
+        dock_new_ports: bool = False,
     ) -> ExploreSnapshot:
         if not isinstance(world_id, str) or not world_id.strip():
             raise ExploreRefused("missing_world_id")
@@ -361,6 +554,11 @@ class ExploreRunner:
         # other than what the arm gate promised.
         if intent not in _explore.INTENTS:
             raise ExploreRefused("invalid_intent")
+        # Refused, not coerced. `dock_new_ports="no"` is truthy in Python, and
+        # coercing it would arm a turn-spending cascade from a string the
+        # caller meant as a refusal.
+        if not isinstance(dock_new_ports, bool):
+            raise ExploreRefused("invalid_dock_new_ports")
 
         stop = threading.Event()
         report = ExploreReport(
@@ -368,6 +566,7 @@ class ExploreRunner:
             started_at=_utc_now(),
             min_sectors=int(min_sectors),
             intent=intent,
+            dock_new_ports=bool(dock_new_ports),
             turns_remaining=int(turn_budget),
         )
         with self._mutex:
@@ -475,6 +674,42 @@ class ExploreRunner:
                     full_text=full_text,
                     state_dir=self._state_dir,
                 )
+                # WO-EXPLORE-DOCK-NEW-PORT. Free, and unconditional on the
+                # dock trigger: a commerce report classifies as
+                # `main_command` (it ends at the ship Command prompt), so it
+                # already reaches this point in the loop with its commodity
+                # table on screen. Before this call every one of those tables
+                # was discarded -- including the report from a dock the HUMAN
+                # performed, which costs the app nothing to read. Ingesting
+                # here also means the turn-spending cascade below never has to
+                # re-derive what is already rendered.
+                _ingest_docked_report(
+                    report.world_id,
+                    full_text=full_text,
+                    prompt_line=prompt_line,
+                    state_dir=self._state_dir,
+                )
+                # The only turn-spending branch in this loop. Armed explicitly,
+                # and re-checked against the world model AFTER the free ingest
+                # above so a report already on screen is never paid for again.
+                if report.dock_new_ports and turns > 0 and port_needs_dock(
+                    read_port_from_sector_status(full_text),
+                    _stored_port(report.world_id, current, state_dir=self._state_dir),
+                ):
+                    dock_halt, dock_sends, dock_turns = self._dock_and_ingest(report)
+                    sends += dock_sends
+                    turns -= dock_turns
+                    self._publish_progress(
+                        report,
+                        distinct_sectors=len(distinct),
+                        sends_issued=sends,
+                        turns_remaining=turns,
+                        stop_requested=stop.is_set(),
+                    )
+                    if dock_halt is not None:
+                        outcome = OUTCOME_HALTED
+                        reason = dock_halt
+                        break
                 self._publish_progress(
                     report,
                     distinct_sectors=len(distinct),
