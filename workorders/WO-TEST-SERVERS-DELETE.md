@@ -76,3 +76,14 @@ Also confirm: `grep test_servers pytest.ini` → no output.
 - PR #154 (`WO-TEST-AICLIENT-ADAPTERS-REHAB`) — pattern to follow (delete stale archive test + remove ignore)
 - `tw2002_aiclient/session/credentials.py` — `list_servers()` is the reborn API
 - `tests/test_profile_resolver.py` — server catalog covered here (reborn)
+
+---
+
+## Status: DONE (hub-finish 2026-07-28)
+
+**Hub finish:** Cursor seat CLAIMed but shell-blocked (bash ENOENT). Hub completed from `wo/TEST-SERVERS-DELETE` worktree.
+
+- `tests/test_servers.py` deleted (97-line archive file, `twclient.servers` hard-fail).
+- `pytest.ini` `--ignore=tests/test_servers.py` line removed.
+- Suite passed: no collection errors, no new failures.
+- Merged via PR #155.
