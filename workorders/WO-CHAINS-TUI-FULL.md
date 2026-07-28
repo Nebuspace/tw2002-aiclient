@@ -1,6 +1,6 @@
 # WO-CHAINS-TUI-FULL — Full Trade-Loop-Chains library modal (`L)chains`)
 
-**Status:** OPEN · EXECUTE · HIGH · Claude Code + **Fable** (`impl-claudecode-aiclient`)  
+**Status:** DONE · origin `95fc4af` (#147) · Accept verified 2026-07-28 (ship tests green on tip)
 **Posted:** 2026-07-27T21:35Z staged · EXEC overnight after #144 N-port wire  
 **Depends:** #144 `tw chains` / chain_search on main · taught path already present  
 **Refs:** wire-class W4 · mode-line-and-teach-controls · visual-language · trainer-cockpit  

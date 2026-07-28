@@ -1,6 +1,6 @@
 # WO-EXPLORE-TWCLIENT-FORMATIONS-LANDMINE — Disarm unresolvable imports (class)
 
-**Status:** OPEN · EXECUTE · HIGH · Claude Code · impl-claudecode-aiclient  
+**Status:** DONE · origin `65d6241` (#142) · Accept verified 2026-07-28 (ship tests green on tip)
 **Posted:** 2026-07-28T03:45Z · EXEC seeded 03:48Z · **scope widened 03:49Z** (CC sequencing)  
 **Refs:** CC STATUS 2026-07-28T03:44:20Z · ACK 03:46:27Z · ADR-001 deleted `twclient` · seed site `explore.py:493`
 
