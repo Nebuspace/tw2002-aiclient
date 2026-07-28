@@ -149,3 +149,55 @@ def test_band_keeps_the_claim_while_the_run_is_still_going(monkeypatch) -> None:
     )
     assert app_mod._poll_explore_status(play, run_dir=None) is True
     assert "3/5" in (play.explore_band or "")
+
+
+def test_explore_terminal_poll_refreshes_known_sectors(monkeypatch) -> None:
+    """WO-WORLD-STATS-REFRESH-EVENTS A: explore completion is a second refresh event."""
+    from tw2002_aiclient import app as app_mod
+    from tw2002_aiclient import world_identity
+
+    win = _Win()
+    play = _screen(monkeypatch, win, tail=TAIL, band="explore 3/5…")
+    expected = world_identity.world_id_from_profile(play.profile)
+    seen: list = []
+
+    def _count(world_id, **kw):
+        seen.append(world_id)
+        return 42
+
+    monkeypatch.setattr(
+        "tw2002_aiclient.adapters.explore_status",
+        lambda **kw: _R(raw={"run": {"distinct_sectors": 5, "min_sectors": 5,
+                                     "outcome": "completed"}}),
+    )
+    monkeypatch.setattr(
+        "tw2002_aiclient.world_model.known_sector_count", _count, raising=False,
+    )
+    # refresh imports world_model lazily — patch the module attribute after import path
+    import tw2002_aiclient.world_model as wm
+
+    monkeypatch.setattr(wm, "known_sector_count", _count)
+
+    keep = app_mod._poll_explore_status(play, run_dir=None)
+    assert keep is False
+    assert seen == [expected]
+    assert play.world_stats.merge({}) == {"known_sectors": 42}
+
+
+def test_draw_path_does_not_call_known_sector_count(monkeypatch) -> None:
+    """Accept A: status_provider / draw must not pay for a world-model count."""
+    calls: list = []
+
+    def _boom(world_id, **kw):
+        calls.append(world_id)
+        raise AssertionError("draw path must not call known_sector_count")
+
+    import tw2002_aiclient.world_model as wm
+
+    monkeypatch.setattr(wm, "known_sector_count", _boom)
+    win = _Win()
+    play = _screen(monkeypatch, win, tail=TAIL, band=None)
+    play.status_provider = play.world_stats.wrap(lambda: {"ok": True})
+    play.draw()
+    assert play.status_provider() == {"ok": True}
+    assert calls == []

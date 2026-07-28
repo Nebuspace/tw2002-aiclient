@@ -856,7 +856,8 @@ class PlayShellScreen:
         # AttributeError there.
         self.chain_scalars = _chain_status.ChainScalars()
         # Producer for the GOALS Map row's `known_sectors`, refreshed from the
-        # same chains-popup branch and constructed here for the same reason.
+        # chains-popup branch and explore terminal poll (see app.py); constructed
+        # here for the same reason as `chain_scalars`.
         self.world_stats = _world_stats.WorldStats()
         # WO-P4-052: a no-arg callable returning a `WatchFeedSnapshot`-shaped
         # object (duck-typed via `.latest_event` only -- this module never

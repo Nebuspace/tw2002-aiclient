@@ -594,6 +594,17 @@ def _poll_explore_status(play: PlayShellScreen, *, run_dir) -> bool:
         # Terminal outcome: leave the final reading on `status_line` and hand
         # the band back to the calm teach tokens.
         play.explore_band = None
+        # WO-WORLD-STATS-REFRESH-EVENTS A: explore terminal poll is a real
+        # client-visible completion signal (already paid for explore_status).
+        # Refresh known_sectors here — never on the draw path.
+        try:
+            from tw2002_aiclient import world_identity as _world_identity
+
+            play.world_stats.refresh(
+                _world_identity.world_id_from_profile(play.profile)
+            )
+        except Exception:  # noqa: BLE001 — count is best-effort; keep the loop
+            pass
     return keep_polling
 
 
@@ -952,8 +963,9 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                 # 0.5s including imports) is already within ~50ms of the
                 # line before it.
                 #
-                # The GOALS Map row's `known_sectors` is refreshed on this same
-                # keypress, and ONLY here: `status_provider()` runs once per
+                # The GOALS Map row's `known_sectors` is refreshed on this
+                # keypress (and on explore terminal poll — see
+                # `_poll_explore_status`): `status_provider()` runs once per
                 # DRAW, and counting sector files (~26ms at 5000 sectors)
                 # cannot go on that path against the budget described above.
                 # This keypress already pays for a full world-model pass, so
