@@ -12,6 +12,58 @@ this class — those are forced data dependencies, not masking.
 
 This meta-test walks every ``test_*.py`` under ``tests/`` and fails when
 wall-clock order is inverted. Allowlist entries must carry a reason.
+
+----------------------------------------------------------------------
+SCOPE -- the companion rule this meta-test does NOT enforce
+----------------------------------------------------------------------
+
+**A timing or budget assertion measures only the window its message names.**
+
+Order and scope are different failures, and passing the check above earns
+nothing here. The rule:
+
+* If setup, teardown, or unrelated work sits inside the bracket, **split the
+  measurement** -- self-stamp a baseline, or time the call alone -- rather
+  than widening the threshold. Widening keeps the wrong window and only makes
+  the pin blinder.
+* **Size the bound against the worst condition the suite actually runs in**,
+  not a quiet box. A bound chosen on an idle machine is a bound chosen against
+  the wrong distribution.
+
+The carve-out in the docstring above is exactly where this rule starts. That
+carve-out is correct on its own terms -- a CPU canary after a behavioural
+assert is a forced data dependency, not masking -- but it means the ordering
+gate deliberately waves through the class that later produced the defect
+below. **A green order check is not evidence of a sound budget.**
+
+That is checked, not assumed. Feeding #184's original defective pin to this
+module's own ``_violations_in_function`` returns ``[]`` -- clean -- while a
+genuine order inversion is caught, so the blind spot is real and the detector
+is live. Re-run it if you doubt this: parse the pin below into an
+``ast.FunctionDef`` and call ``_violations_in_function`` on it.
+
+Worked exemplar, ``WO-DEAD-TERMINAL-SPIN-INTERMITTENT`` (#184). The pin read::
+
+    cpu_s = rusage.ru_utime + rusage.ru_stime          # whole-life rusage
+    assert cpu_s < 0.5, f"consumed {cpu_s:.3f}s CPU exiting -- looks like it spun first"
+
+It was order-correct: `assert exited` ran first. It was still wrong, because
+`cpu_s` covered the child's entire life -- interpreter start, imports, curses
+init, first render -- while the message charged the exit path. Measured, setup
+was **82-84%** of that number. It sat at 51-70% of budget on a quiet box and
+70-83% under two concurrent suites, then went red at 0.539s **with `exited`
+passing** -- accusing the code of a spin that had not happened.
+
+The repair is the pattern to copy: the child stamps its own
+``getrusage(RUSAGE_SELF)`` at the moment it first blocks in the loop under
+test, and the assertion reads only the residual after that point. Detection
+got *stronger*, not weaker -- an injected 0.4s spin reddens now, where the
+whole-life pin buried a spin that size inside its own startup noise.
+
+Note the fail-closed half: a missing stamp is a **failure**, never a silent
+fallback to the whole-life number. A fallback there would quietly restore the
+defect while still reporting green -- the same trap as reading a missing
+instrument value as the favourable one.
 """
 
 from __future__ import annotations
