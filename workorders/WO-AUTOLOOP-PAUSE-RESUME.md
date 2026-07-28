@@ -1,8 +1,8 @@
 # WO-AUTOLOOP-PAUSE-RESUME — Runner-side pause/resume for taught runs
 
-**Status:** OPEN · READY  
+**Status:** DONE · shipped #101 · pause + `autoloop_relaunch` (not `autoloop_resume` — refused by ruling) · stamped 2026-07-28T21:15:26Z (was stale OPEN)  
 **Posted:** 2026-07-27T15:12:00Z · hub queue refill after P5 teach wave  
-**Seat:** open — prefer Claude Code (origin: WO-P5-071 scope carve-out)  
+**Seat:** Claude Code (`impl-claudecode-aiclient`)  
 **Depends:** `main` ≥ `11595d8` (panic/stop + `adapters.autoloop_stop`)  
 **Refs:** CC 071 DECISION (A) · `session/autoloop.py` · `app-autopilot-model.md` pause/stop-able
 
