@@ -15,3 +15,6 @@
 **Proof:** fresh worktree + CI show the tests collected and passed; suite. live-prove `n/a`.
 
 **Refs:** #193 archive square · #194 sibling family · CC 20:23:58Z.
+
+
+**HANDOFF:** slice 2 — implement on this branch (2026-07-28 hub).
