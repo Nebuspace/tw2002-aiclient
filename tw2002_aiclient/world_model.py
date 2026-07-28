@@ -56,8 +56,8 @@ section below has always documented.
 field" rule the canon's Write Hooks section describes):** `record`
 passed to `upsert_sector`/`bulk_upsert` may be PARTIAL -- only
 `sector_id` is required. Any other top-level field present in `record`
-(`warps`, `port`, `threats`, `landmarks`, `formation_membership`)
-*fully replaces* the corresponding stored field for that sector --
+(`warps`, `port`, `threats`, `formation_membership` -- but see
+`landmarks` below) *fully replaces* the corresponding stored field --
 never sub-merged with the old value (e.g. an old and new `port`
 commodities list are never unioned; the new one wins outright, per the
 canon's "supersedes... rather than merging stale and fresh data").
@@ -66,6 +66,14 @@ entry -- this is the "additive" half: a warps-only write from movement
 (no port info observed this pass) must not erase previously-learned
 port data for that sector. `last_seen_ts` is always re-stamped on
 every upsert, whether the caller supplies one or not.
+
+**`landmarks` is the one UNIONING field** (`_merge_landmarks`, which
+carries the full argument). Replace semantics cannot hold for it: canon
+requires that a plain visit never clear a landmark, and no readable
+screen ever says "there is positively no landmark here" -- so an
+observation that merely failed to notice would erase one that did.
+Union makes that structural: no argument to an upsert can shrink the
+stored set. Removal, if it is ever needed, owes its own deliberate path.
 
 **Nested port field-level merge (mack Finding 1, 2026-07-19
 hardening pass):** the `port` field is the ONE exception to "fully
@@ -252,6 +260,54 @@ def _merge_port(existing_port, incoming_port):
     return merged_port
 
 
+def _merge_landmarks(existing, incoming):
+    """Union, never replace — landmarks ACCUMULATE.
+
+    The one field whose upsert is additive rather than last-write-wins, and
+    the exception is deliberate. Canon (`world-model.md`) requires that a
+    plain visit never clears a landmark, and the reason is that no screen
+    the trainer can read says *"there is positively no landmark here"* — a
+    sector display that does not mention StarDock is silence, not a denial.
+    Under the module's ordinary replace semantics, one observation that
+    happened not to notice would erase one that did, and the erasure is
+    indistinguishable from never having found it.
+
+    Union makes that structural rather than remembered: there is no argument
+    to this function that shrinks the stored set, so no future caller can
+    reintroduce the clearing bug by passing `[]`. (A landmark that becomes
+    genuinely wrong is a *correction*, which needs a deliberate removal path
+    and an observation that can justify it — neither exists yet, and
+    inventing one here would be the same guess in the other direction.)
+
+    Dedup is **casefold**-based to match `explore.find_landmark_sectors`,
+    which casefolds both sides: without it `stardock` and `StarDock` are one
+    landmark to the reader and two to the store. Existing order is kept and
+    new tokens append, so the record stays stable and diffable across runs.
+    Non-string entries are dropped rather than stored — a landmarks list is a
+    list of names, and anything else would only ever fail to match a lookup.
+    """
+    out: list = []
+    seen: set = set()
+    for source in (existing or (), incoming or ()):
+        if isinstance(source, (str, bytes)):
+            # A bare string is iterable, and iterating it would store one
+            # landmark per CHARACTER. Refuse rather than silently shred it.
+            continue
+        try:
+            items = list(source)
+        except TypeError:
+            continue
+        for item in items:
+            if not isinstance(item, str) or not item:
+                continue
+            key = item.casefold()
+            if key in seen:
+                continue
+            seen.add(key)
+            out.append(item)
+    return out
+
+
 def _compute_merged_sector(existing, record, now):
     """Pure computation, no I/O and no lock -- given the record already
     stored for this sector (or `None`) and an incoming partial
@@ -266,6 +322,8 @@ def _compute_merged_sector(existing, record, now):
             continue
         if field == "port" and record["port"] is not None:
             merged["port"] = _merge_port(merged.get("port"), record["port"])
+        elif field == "landmarks":
+            merged["landmarks"] = _merge_landmarks(merged.get("landmarks"), record["landmarks"])
         else:
             merged[field] = record[field]
     merged["sector_id"] = sector_id
