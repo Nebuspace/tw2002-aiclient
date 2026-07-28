@@ -218,6 +218,37 @@ class ExploreRunner:
             running = self._in_flight or _lock_held(self._control_lock)
             return ExploreSnapshot(running=running, report=self._report)
 
+    def _publish_progress(
+        self,
+        report: ExploreReport,
+        *,
+        distinct_sectors: int,
+        sends_issued: int,
+        turns_remaining: int,
+        stop_requested: bool,
+    ) -> None:
+        """WO-EXPLORE-STATUS-LIVE-COUNTERS: surface mid-run counters.
+
+        ``explore_status`` reads ``self._report``. Updating it only at
+        finish left operators with silent zeros while the viewport flew.
+        Publish after each observed sector / hop; never overwrite a
+        terminal report if the run has already finished.
+        """
+        live = replace(
+            report,
+            distinct_sectors=int(distinct_sectors),
+            sends_issued=int(sends_issued),
+            turns_remaining=int(turns_remaining),
+            stop_requested=bool(stop_requested),
+        )
+        with self._mutex:
+            if not self._in_flight:
+                return
+            current = self._report
+            if current is not None and current.outcome is not None:
+                return
+            self._report = live
+
     def start(
         self,
         world_id: str,
@@ -339,6 +370,13 @@ class ExploreRunner:
                     full_text=full_text,
                     state_dir=self._state_dir,
                 )
+                self._publish_progress(
+                    report,
+                    distinct_sectors=len(distinct),
+                    sends_issued=sends,
+                    turns_remaining=turns,
+                    stop_requested=stop.is_set(),
+                )
                 # WO-EXPLORE-AUTOMATION-GATE E1/E3: the distinct-sector cap
                 # is MAP-FILL's stopping rule and only map-fill's. A
                 # find-StarDock run that stopped here would report
@@ -400,6 +438,13 @@ class ExploreRunner:
                 )
                 sends += 1
                 turns -= 1
+                self._publish_progress(
+                    report,
+                    distinct_sectors=len(distinct),
+                    sends_issued=sends,
+                    turns_remaining=turns,
+                    stop_requested=stop.is_set(),
+                )
                 if not confirmed:
                     outcome = OUTCOME_HALTED
                     reason = HALT_CONFIRM_FAILED

@@ -1,7 +1,7 @@
 # WO-EXPLORE-STATUS-LIVE-COUNTERS — explore status must report mid-run progress
 
-**Status:** OPEN · EXECUTE · MED · Cursor (`impl-aiclient-cursor`)  
-**Posted:** 2026-07-28T02:52Z bank · EXEC seeded overnight after #142+#143  
+**Status:** SEAT-DONE · awaiting hub Accept · Cursor (`impl-aiclient-cursor`)  
+**Posted:** 2026-07-28T02:52Z bank · EXEC seeded overnight after #142+#143 · seat STATUS 2026-07-28T04:11Z  
 **Refs:** wire-class W8 · overnight carte blanche
 
 ## Goal
