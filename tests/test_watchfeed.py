@@ -12,6 +12,8 @@ import socket
 import threading
 import time
 
+import pytest
+
 from tw2002_aiclient.watchfeed import WatchFeed
 
 _EXPECTED_SUBSCRIBE_LINE = (json.dumps({"verb": "subscribe", "args": {}}) + "\n").encode("utf-8")
@@ -288,6 +290,17 @@ def test_default_connect_fn_failure_is_contained(tmp_path):
     feed.stop()
 
 
+def _assert_watchfeed_observed_growth(last_count: int, *, min_events: int = 2) -> None:
+    """Shared growth pin — production smoke and single-event falsify both call this.
+
+    ``last_count > 0`` only proved *a* event arrived (#188 F2 / #191); a feed that
+    delivers exactly one event then stalls still passes that floor.
+    """
+    assert last_count >= min_events, (
+        f"feed stalled after {last_count} event(s); need growth ≥{min_events}"
+    )
+
+
 def test_snapshot_thread_safety_smoke():
     feed, _spy, server_sock = _make_feed_pair()
     feed.start()
@@ -320,4 +333,25 @@ def test_snapshot_thread_safety_smoke():
     finally:
         feed.stop()
         server_sock.close()
-    assert last_count > 0  # actually observed real growth, not a no-op loop
+    _assert_watchfeed_observed_growth(last_count)
+
+
+def test_watchfeed_growth_pin_goes_red_on_single_event_stall():
+    """Falsify Accept: one event then stall must redden the *same* growth helper."""
+    feed, _spy, server_sock = _make_feed_pair()
+    feed.start()
+    try:
+        _send_event(server_sock, {"ok": True, "screen": ["only"]})
+        assert _wait_until(lambda: feed.snapshot().events_received == 1)
+        last_count = -1
+        deadline = time.monotonic() + 0.25
+        while time.monotonic() < deadline:
+            snap = feed.snapshot()
+            assert snap.events_received >= last_count
+            last_count = snap.events_received
+        assert last_count == 1, f"precondition: stalled at one event, got {last_count}"
+        with pytest.raises(AssertionError, match="growth"):
+            _assert_watchfeed_observed_growth(last_count)
+    finally:
+        feed.stop()
+        server_sock.close()
