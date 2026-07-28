@@ -27,8 +27,8 @@ figure a hypothesis until proven.
 | Part | What it is | Where it lives |
 |---|---|---|
 | **I1 — Strategy knowledge base** | The taught strategy *content*: encoded cards, one per play pattern, each with WHAT it is, the WHEN game-state trigger, tradeoffs/risks, and concrete steps + numbers. | Content authored in the `strategy/*` concepts; encoded as data and loaded by `coach_kb.py` (`StrategyCard`) from `data/coach/strategies.json`. |
-| **I2 — Contextual trigger map** | The pure function from live game-state to the set of applicable strategy cards: docked→trade-eval, dead-end→colonize, toll→attack/pay/flee, depleting-source→rotate. | `infer_coach_triggers()` in `spectate_layout.py`. |
-| **I3 — Contextual-advice engine** | The renderer that takes the triggered cards and composes the option + its tradeoffs as human-facing callouts — never a keystroke, never an armed behavior. | `compose_decisions_coach()` in `spectate_layout.py`, driven by `spectate_app.py`'s Decisions pane. |
+| **I2 — Contextual trigger map** | The pure function from live game-state to the set of applicable strategy cards: docked→trade-eval, dead-end→colonize, toll→attack/pay/flee, depleting-source→rotate. | `infer_coach_triggers()` in `coach_engine.py`. **Partial:** it emits six trigger ids; `depleting-source→rotate` (`loop_depleting`) is authored as a card but not yet produced — see Code divergence. |
+| **I3 — Contextual-advice engine** | The renderer that takes the triggered cards and composes the option + its tradeoffs as human-facing callouts — never a keystroke, never an armed behavior. | `compose_decisions_coach()` in `coach_engine.py`. **Not yet wired to a pane** — the pre-rebirth Decisions consumer was `spectate_app.py`, which the rebirth deleted. |
 | **I4 — Configurable coaching parameters** | The numeric substrate the cards cite — every one a hypothesis carrying a verify-vs-live flag, never a hardcoded fact. | `CoachParam` loaded by `coach_kb.py` from `data/coach/params.json`; the convention itself is [game-data-store](/engine/game-data-store.md)'s. |
 
 The load-bearing property that unifies all four: **the coaching engine is read-only with respect to the
@@ -156,8 +156,21 @@ a screen the trainer does not understand.
 
 # Code divergence
 
-The coaching engine as implemented (`coach_kb.py` + `infer_coach_triggers` / `compose_decisions_coach`
-in `spectate_layout.py`, wired into `spectate_app.py`'s Decisions pane) already matches the reborn frame:
+**Status at tip (corrected 2026-07-28, `WO-COACH-ENGINE-PORT`).** This section previously described the
+engine as shipped "in `spectate_layout.py`, wired into `spectate_app.py`'s Decisions pane." Both files were
+deleted by the `452d896` rebirth scaffold, so for a period this concept described an implementation that did
+not exist. What is true at tip:
+
+- **Restored:** `coach_kb.py` (I1/I4) and `coach_engine.py` (`infer_coach_triggers` I2 +
+  `compose_decisions_coach` I3), ported as a severable ~285-line kernel — not the surrounding spectate surface.
+- **Not restored:** any *consumer*. Nothing calls `compose_decisions_coach`, so no pane renders a card today.
+  The DECISIONS wire is a follow-on work order.
+- **Authored but unreachable:** `strategies.json` carries eight cards; the trigger map produces six ids, so
+  `route_longevity` (`loop_depleting`) and `planet_production` (`planet_management`) can never fire. The first
+  of those is named in I2's own contract line above, which makes it a genuine canon↔code gap rather than
+  merely unbuilt scope.
+
+The coaching kernel as restored already matches the reborn frame:
 it is a pure, fail-closed, read-only teacher that surfaces cards and never sends. The divergences are not
 in the coach itself but in *sibling engines* that share its cr/turn strategy vocabulary while crossing the
 line the coach never crosses — recorded here so this concept is not misread as blessing them (docs win: the
@@ -229,10 +242,12 @@ diverging autopilot it can only ever teach.
   coach's fail-closed silence mirrors).
 - Disposition: NEW — the survey found no owning module for the coach dispatch/advice engine; it is distinct
   from rule *proposals* (the KB teaches human-facing options; rules are fireable behaviors).
-- Code modules (plain text): `coach_kb.py` (`StrategyCard` / `CoachParam` loader + schema validation, I1/I4),
-  `spectate_layout.py` (`infer_coach_triggers` = I2 trigger map, `compose_decisions_coach` = I3 advice
-  renderer, plus the honest empty-state placeholder), `spectate_app.py` (Decisions-pane wiring, fail-closed
-  KB load, yield-to-live-trace ordering), `data/coach/strategies.json` and `data/coach/params.json` (the KB
+- Code modules (plain text) — **at tip:** `coach_kb.py` (`StrategyCard` / `CoachParam` loader + schema
+  validation, I1/I4), `coach_engine.py` (`infer_coach_triggers` = I2 trigger map, `compose_decisions_coach`
+  = I3 advice renderer, plus the honest empty-state placeholder), `chain_units.py` (the hop/step arithmetic
+  the trigger map consumes). **Port-source only, deleted at the rebirth:** `spectate_layout.py` (original
+  home of the two I2/I3 functions), `spectate_app.py` (Decisions-pane wiring, fail-closed KB load,
+  yield-to-live-trace ordering — this consumer has NOT been restored). Data: `data/coach/strategies.json` and `data/coach/params.json` (the KB
   content and hypothesis-flagged numeric substrate); and, for the recorded divergences, `autopilot.py`
   (per-cycle EV `select()` + `EXPLORE_BASELINE_EV`, §22/§23 orchestrator framing), `priority_engine.py`
   (`explore_baseline_ev`, `recommend_actions`), and `trade_driver.py` (`run_chain` autonomous chain runner).
