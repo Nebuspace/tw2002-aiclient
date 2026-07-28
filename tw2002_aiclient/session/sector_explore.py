@@ -363,6 +363,15 @@ class ExploreRunner:
                     reason = HALT_UNRECOGNIZED_SCREEN
                     break
                 current = int(sector_read.sector)
+                # WO-LAST-KNOWN-SECTOR: the explore loop is the other place a
+                # sector is positively stated, and it reads far more of them
+                # than the `status` verb does. Noting here too means the
+                # memory is fresh the moment a run stops -- including when it
+                # stops BECAUSE the next screen was unrecognized, which is
+                # exactly the StarDock case this exists for.
+                _note = getattr(self._session, "note_sector", None)
+                if callable(_note):
+                    _note(current)
                 distinct.add(current)
                 _ingest_settled_sector(
                     report.world_id,

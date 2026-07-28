@@ -46,6 +46,7 @@ from .control_lock import (
 )
 from .settle import MATCH_SCOPE_PROMPT_LINE
 from .state_parser import (
+    OUTCOME_READ,
     REASON_SESSION_DISCONNECTED,
     read_current_sector,
     sector_unreadable,
@@ -393,9 +394,34 @@ def _state_response(session):
     rows = session.render()
     text = session.render_text(rows)
     prompt_line = rows[-1].strip() if rows else ""
+    sector_read = read_current_sector(prompt_line)
+    if sector_read.outcome == OUTCOME_READ and sector_read.sector is not None:
+        # WO-LAST-KNOWN-SECTOR: remember a sector the screen POSITIVELY
+        # stated, so a later screen that identifies itself WITHOUT carrying
+        # one (every captured StarDock screen) has something to attribute a
+        # per-sector fact to. Recorded only on a genuine read -- an `absent`
+        # or `unreadable` outcome leaves the previous memory alone rather
+        # than overwriting it with a guess, and the send-epoch stamped here
+        # is what stops that memory outliving the next keystroke.
+        # Duck-typed via `getattr`, matching this codebase's existing idiom
+        # for optional session capabilities (`sector_explore` does the same
+        # for `should_abort`/`is_driver_fenced`) -- `build_response` is handed
+        # scripted stand-ins by dozens of tests, and a daemon that crashed on
+        # one lacking a recording hook would be trading a real outage for a
+        # bookkeeping nicety.
+        #
+        # The obvious objection to `getattr` is that a real `Session` which
+        # LOST the method would then degrade silently, which is exactly the
+        # failure this memory must not have. That is closed on the other side
+        # instead: `tests/test_last_known_sector.py` asserts the contract
+        # against the real `Session` class directly, so the duck-typing here
+        # can only ever excuse a test double, never a regression.
+        note = getattr(session, "note_sector", None)
+        if callable(note):
+            note(int(sector_read.sector))
     return {
         "ok": True,
-        "state": {"sector": sector_wire(read_current_sector(prompt_line))},
+        "state": {"sector": sector_wire(sector_read)},
         "classification": classify_screen(text, prompt_line),
         "connected": True,
     }
