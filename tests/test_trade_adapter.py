@@ -727,10 +727,11 @@ def test_class_pair_compatible_hand_computed(tmp_path):
     Sector 11: BSS -- buys Fuel Ore, sells Organics+Equipment.
     Perspective rule pinned: 10 sells Fuel Ore which 11 buys (one
     compatible commodity); 11 sells {Organics, Equipment}, both of
-    which 10 buys (two compatible commodities -- exercises the
-    alphabetical tiebreak, "Equipment" < "Organics"). One adjacent
-    warp each way -> turns == 1 + 1 == 2, canon's cheapest pair-loop
-    shape."""
+    which 10 buys (two compatible commodities). REVISE (Samantha,
+    2026-07-28): the full set is carried on both sides now, never
+    collapsed to a single tiebroken pick -- see `CandidatePair`'s own
+    docstring for why a `min()` tiebreak was wrong. One adjacent warp
+    each way -> turns == 1 + 1 == 2, canon's cheapest pair-loop shape."""
     _upsert_class(tmp_path, 10, warps=(11,), klass="SBB")
     _upsert_class(tmp_path, 11, warps=(10,), klass="BSS")
 
@@ -739,8 +740,8 @@ def test_class_pair_compatible_hand_computed(tmp_path):
     assert len(pairs) == 1
     pair = pairs[0]
     assert pair.sector_a == 10 and pair.sector_b == 11
-    assert pair.commodity_a_sells == "Fuel Ore"
-    assert pair.commodity_b_sells == "Equipment"  # alphabetical tiebreak, never a guessed "best"
+    assert pair.commodities_a_sells == ("Fuel Ore",)
+    assert pair.commodities_b_sells == ("Organics", "Equipment")  # CLASS_POSITIONS order, full set
     assert pair.turns == 2
     assert pair.observed_age_s == 0.0
     assert not hasattr(pair, "margin")  # structurally impossible to guess a number here
@@ -983,12 +984,16 @@ _BANNED_MODULES = frozenset(
 _ENTRY_FILES = (
     PKG_ROOT / "chains.py",
     PKG_ROOT / "trade_adapter.py",
-    # WO-CHAIN-DETECT-WIRE: the class-derived pair-loop wire is a THIRD
-    # pure-read entry point (`build_candidate_pairs` lives in
-    # trade_adapter.py above, already covered; `chain_detect.py` is its
-    # own module) that must never reach a send path either -- same walker,
-    # same banned set, no second copy of the AST scan.
+    # WO-CHAIN-DETECT-WIRE: the class-derived pair-loop wire adds TWO more
+    # pure-read entry points (`build_candidate_pairs` lives in
+    # trade_adapter.py above, already covered) that must never reach a
+    # send path either -- same walker, same banned set, no second copy of
+    # the AST scan. `chain_detect_view.py` (the re-scoped dedicated
+    # formatter, 2026-07-28) replaces the deleted `loops.list_view` bridge
+    # -- it imports nothing at all, so its own closure sanity-checks to a
+    # singleton set below.
     PKG_ROOT / "chain_detect.py",
+    PKG_ROOT / "chain_detect_view.py",
 )
 
 
@@ -1091,12 +1096,12 @@ def _scan_module(path: Path, *, seen: set, banned_hits: list, unresolved_dynamic
 def test_neither_module_reaches_a_send_path():
     """DoD accept 4 -- structural, not text-grep: recursively walks the
     tw2002_aiclient-rooted import closure of `chains.py`,
-    `trade_adapter.py`, and (WO-CHAIN-DETECT-WIRE) `chain_detect.py`, and
-    asserts none of them ever reaches `session.connection`,
-    `session.protocol`, or `adapters.py` (the send-capable surfaces).
-    Also refuses (rather than silently trusting) any dynamic
-    `importlib.import_module`/`__import__` call whose target isn't a
-    string literal -- mutate-proven, see report."""
+    `trade_adapter.py`, and (WO-CHAIN-DETECT-WIRE) `chain_detect.py` +
+    `chain_detect_view.py`, and asserts none of them ever reaches
+    `session.connection`, `session.protocol`, or `adapters.py` (the
+    send-capable surfaces). Also refuses (rather than silently trusting)
+    any dynamic `importlib.import_module`/`__import__` call whose target
+    isn't a string literal -- mutate-proven, see report."""
     seen: set = set()
     banned_hits: list = []
     unresolved_dynamic: list = []
@@ -1107,11 +1112,19 @@ def test_neither_module_reaches_a_send_path():
     assert unresolved_dynamic == []
     # Sanity the walk actually traversed the real closure -- an empty/
     # trivial `seen` would make the assertions above vacuously true.
+    # `loops.list_view` is DELIBERATELY absent here (WO-CHAIN-DETECT-WIRE
+    # re-scope, 2026-07-28): `chain_detect.py` no longer imports it (the
+    # bridge into `format_loop_row` was deleted), and `chain_detect_view.py`
+    # -- its replacement -- imports nothing at all, so it never reaches
+    # this module's own closure either. A stray re-introduction of that
+    # import edge is exactly what this assertion (an exact `seen` set, not
+    # merely `>=` on the old members) would catch.
     assert seen >= {
         "tw2002_aiclient.chains",
         "tw2002_aiclient.trade_adapter",
         "tw2002_aiclient.world_model",
         "tw2002_aiclient.explore",
         "tw2002_aiclient.chain_detect",
-        "tw2002_aiclient.loops.list_view",
+        "tw2002_aiclient.chain_detect_view",
     }
+    assert "tw2002_aiclient.loops.list_view" not in seen

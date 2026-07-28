@@ -195,11 +195,34 @@ class PairLoopConfig:
 class CandidatePair:
     """A class-derived pair-loop candidate: two ports whose BUY/SELL
     letter-triple postures are mutually complementary (`sector_a`
-    SELLS `commodity_a_sells`, which `sector_b` BUYS; `sector_b` SELLS
-    `commodity_b_sells`, which `sector_a` BUYS), with a known route
-    both ways on the current warp graph. `sector_a < sector_b` always
-    (construction order -- see `build_candidate_pairs`), giving every
-    pair a canonical identity with no separate normalization step.
+    SELLS every commodity in `commodities_a_sells`, which `sector_b`
+    BUYS; `sector_b` SELLS every commodity in `commodities_b_sells`,
+    which `sector_a` BUYS), with a known route both ways on the current
+    warp graph. `sector_a < sector_b` always (construction order -- see
+    `build_candidate_pairs`), giving every pair a canonical identity
+    with no separate normalization step.
+
+    Both commodity fields carry the FULL compatible set, never a
+    single collapsed pick (Samantha REVISE, 2026-07-28: an earlier
+    draft picked one commodity per direction via `min()` -- alphabetical
+    order, which the draft's own comment called "a deterministic pick,
+    never a value judgement," but alphabetical order (`Equipment, Fuel
+    Ore, Organics`) disagrees with canon's stated floor-price ordering
+    (`port-economics.md`: `Equipment(40) > Organics(30) > Fuel
+    Ore(20)`) in the middle of the range -- a value judgement the
+    comment denied making. Worse, collapsing to one commodity silently
+    discarded whether a pair is compatible on one commodity or three --
+    real, decision-relevant information: `port-economics.md`'s
+    depletion STOP-guard means a pair that can trade three commodities
+    each way survives the depletion of one, the single-commodity pair
+    does not. Carrying the full set dissolves the tiebreak question
+    entirely -- there is nothing to rank and nothing arbitrary to
+    defend -- and keeps this margin-less path free of any dependency on
+    canon's `[hypothesis]`-tagged economics ordering.) Ordered by
+    `CLASS_POSITIONS` (structural class-triple position order -- Fuel
+    Ore, Organics, Equipment; carries no economic ranking claim) purely
+    for a deterministic, testable rendering order, never as a "best
+    first" claim.
 
     Deliberately carries NO margin field -- not `None`, not `0.0`, the
     attribute does not exist -- because a bare class letter states a
@@ -210,8 +233,8 @@ class CandidatePair:
 
     sector_a: int
     sector_b: int
-    commodity_a_sells: str  # sector_a SELLS this; sector_b BUYS it
-    commodity_b_sells: str  # sector_b SELLS this; sector_a BUYS it
+    commodities_a_sells: tuple[str, ...]  # sector_a SELLS all of these; sector_b BUYS them
+    commodities_b_sells: tuple[str, ...]  # sector_b SELLS all of these; sector_a BUYS them
     turns: int  # round trip: sector_a -> sector_b -> sector_a, both legs summed
     observed_age_s: float  # age (seconds) of the STALER of the two ports' class reads
 
@@ -645,11 +668,14 @@ def build_candidate_pairs(
                 continue
 
             # More than one commodity can qualify each direction (a port
-            # selling several things the other buys) -- there is no margin
-            # signal to rank them by, so the tiebreak is alphabetical, a
-            # deterministic pick, never a value judgement.
-            commodity_a_sells = min(a_to_b)
-            commodity_b_sells = min(b_to_a)
+            # selling several things the other buys) -- REVISE: carry the
+            # FULL set, never collapse to one (see CandidatePair's own
+            # docstring for why a single-pick tiebreak was wrong on two
+            # counts). `CLASS_POSITIONS` order is structural, not economic,
+            # and used only so the tuple has a deterministic, testable
+            # order.
+            commodities_a_sells = tuple(name for name in CLASS_POSITIONS if name in a_to_b)
+            commodities_b_sells = tuple(name for name in CLASS_POSITIONS if name in b_to_a)
             # Both ages are guaranteed non-None here: sector_a/sector_b are
             # drawn from `sectors` = sorted(fresh.keys()), and `fresh` only
             # ever gains a key when `age is not None` above. The `or 0.0`
@@ -660,8 +686,8 @@ def build_candidate_pairs(
                 CandidatePair(
                     sector_a=sector_a,
                     sector_b=sector_b,
-                    commodity_a_sells=commodity_a_sells,
-                    commodity_b_sells=commodity_b_sells,
+                    commodities_a_sells=commodities_a_sells,
+                    commodities_b_sells=commodities_b_sells,
                     turns=turns,
                     observed_age_s=observed_age_s,
                 )
