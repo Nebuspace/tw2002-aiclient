@@ -56,6 +56,17 @@ _PRODUCT_ROOT = Path(__file__).resolve().parent.parent / "tw2002_aiclient"
 
 _BANNED_TERMS = ("AI-PILOT", "ai_pilot", "AUTO-LOOP")
 
+# Positive-control identity for the tree walk (WO-BADGE-SCAN-IDENTITY-FLOOR).
+# Cardinality (`len > 10`) stays green if an entire subpackage drops out of
+# the walk — one named file per package the gate claims to cover does not.
+_SCAN_IDENTITY: tuple[Path, ...] = (
+    Path("app.py"),  # package root
+    Path("cockpit") / "arm.py",
+    Path("session") / "session.py",
+    Path("menu") / "crawl_driver.py",
+    Path("loops") / "player.py",
+)
+
 _DOCSTRING_SCOPE_TYPES = (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)
 
 
@@ -243,12 +254,35 @@ def test_scanner_is_case_sensitive_and_does_not_false_positive_on_unrelated_text
     assert _banned_vocab_hits(ast.parse(clean_src)) == []
 
 
-def test_scan_product_tree_finds_python_files():
-    """Belt-and-suspenders on the gate's own setup: the tree walk must
-    genuinely find files, or the gate test above would pass vacuously on
-    an empty scan rather than on a real clean result."""
+def test_scan_product_tree_reaches_each_claimed_subpackage():
+    """Identity floor, not cardinality (WO-BADGE-SCAN-IDENTITY-FLOOR).
+
+    Dropping an entire subpackage still leaves dozens of `.py` files, so
+    ``len(py_files) > 10`` never noticed a narrowed walk. Each package the
+    gate claims to cover must contribute a named representative — mirror
+    ``test_status_vocabulary_guard.test_the_scanner_reaches_the_files_it_
+    claims_to_scan``.
+    """
     py_files, _hits = _scan_product_tree()
-    assert len(py_files) > 10, (
-        f"expected substantially more than 10 .py files under tw2002_aiclient/; "
-        f"found {len(py_files)} -- product-tree discovery is broken"
+    rel = {p.relative_to(_PRODUCT_ROOT) for p in py_files}
+    missing = [str(p) for p in _SCAN_IDENTITY if p not in rel]
+    assert not missing, (
+        "product-tree discovery missed representative(s) — walk is incomplete "
+        f"or a claimed package vanished: {missing}"
+    )
+
+
+def test_scan_identity_floor_goes_red_when_a_representative_is_dropped():
+    """Falsify Accept: remove one representative from a real scan set →
+    the identity check must notice. Restored set (the real walk) stays green
+    via ``test_scan_product_tree_reaches_each_claimed_subpackage``."""
+    py_files, _hits = _scan_product_tree()
+    rel = {p.relative_to(_PRODUCT_ROOT) for p in py_files}
+    victim = _SCAN_IDENTITY[1]  # cockpit/
+    assert victim in rel, f"fixture assumed present: {victim}"
+    forged = rel - {victim}
+    missing = [p for p in _SCAN_IDENTITY if p not in forged]
+    assert victim in missing, (
+        "identity floor stayed silent after dropping a representative — "
+        "the control is vacuous"
     )
