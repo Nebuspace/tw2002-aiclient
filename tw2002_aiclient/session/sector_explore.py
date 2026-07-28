@@ -139,13 +139,40 @@ def _lock_held(control_lock) -> bool:
     return bool(probe())
 
 
-def _gate_screen(full_text: str, prompt_line: str) -> Optional[str]:
+#: Screen classes that identify StarDock and carry NO sector of their own.
+#: Enumerated rather than pattern-matched on a ``stardock_`` prefix: a prefix
+#: rule silently adopts any future class someone adds to the classifier, and
+#: adopting one wrongly writes a permanent landmark (`landmarks` unions and
+#: the product has no removal path). `tests/test_landmark_attribute.py` carries
+#: the tripwire that fails if the classifier grows a StarDock class this set
+#: has not been taught about -- so the closed side is checked mechanically
+#: rather than remembered.
+#:
+#: `stardock_equipment_listing` is deliberately absent: it is not a classifier
+#: class at all (see `classify._BLOCK_TITLE_SPECS`' preceding comment -- its
+#: inner blocks are closed but never exclusive).
+STARDOCK_SCREEN_CLASSES = frozenset(
+    {
+        "stardock_cargo_hold_quote",
+        "stardock_shipyard_listing",
+    }
+)
+
+
+def _gate_screen(full_text: str, prompt_line: str) -> tuple[Optional[str], str]:
+    """``(halt_reason_or_None, klass)``.
+
+    Returns the class alongside the verdict because the halt path needs it:
+    a screen that stops the run is also the screen most likely to be worth
+    recording something about, and re-classifying at the call site would let
+    the two answers drift.
+    """
     klass = classify_screen(full_text, prompt_line)
     if klass in NEVER_AUTO_ACTION_CLASSES:
-        return HALT_NEVER_AUTO_ACTION
+        return HALT_NEVER_AUTO_ACTION, klass
     if klass != MOVEMENT_SCREEN_CLASS:
-        return HALT_UNRECOGNIZED_SCREEN
-    return None
+        return HALT_UNRECOGNIZED_SCREEN, klass
+    return None, klass
 
 
 def _ingest_settled_sector(
@@ -179,6 +206,69 @@ def _ingest_settled_sector(
     if port.observed:
         parsed["port"] = port.port
     world_model.write_from_state(world_id, parsed, state_dir=state_dir)
+
+
+def _attribute_landmark(session, world_id: str, klass: str, *, state_dir) -> Optional[int]:
+    """Record StarDock in the sector we are in -- iff we still know which one.
+
+    This is the halt path: the run stopped because the screen was not a
+    movement screen, and for the StarDock classes that screen is genuinely
+    informative. It states *what* is here but never *where* -- all four
+    captured StarDock fixtures carry zero sector-bearing lines, while an
+    ordinary docked-port screen carries one. So the sector has to come from
+    `Session.last_known_sector()`, the memory built for exactly this.
+
+    **`None` means refuse, never "attribute anyway".** The memory returns
+    `None` whenever anything has happened since the last positive sector
+    read, and that is not a technicality to route around: attributing to a
+    stale sector writes StarDock into the WRONG one, `landmarks` unions, and
+    no product path can remove it. A skipped write costs one re-read; a wrong
+    write is permanent. Returns the sector written, or `None` if nothing was.
+
+    **Landing on StarDock is itself the proof that we did not move.** Reaching
+    either class requires sending -- they are menus entered by a command -- and
+    every send expires the memory, so a memory-only rule would refuse in every
+    real sequence. The way out is not to relax the memory but to notice that a
+    warp lands on a **sector display**, while docking lands on a **StarDock
+    screen**. The landing screen is an OBSERVATION that discriminates the two,
+    where the outgoing command was only an inference. So when the memory is
+    silent we fall back to `sector_before_last_send()` -- the raw pre-send
+    carry, which is exactly the stale value the memory refuses to hand out, and
+    which is safe to read HERE and only here because `klass` has already proved
+    no movement occurred.
+
+    Having proved position, we re-`note_sector()` it. That is not a trick to
+    keep a stale value alive: landing on StarDock is positive evidence of where
+    we are, the same category of evidence a sector display gives. It also makes
+    multi-step menu navigation work without a special case -- each further send
+    carries the re-established sector forward, and the moment a screen we
+    cannot vouch for appears, the chain stops on its own.
+
+    The human keystroke path never carries (`send_raw` files no memo), so
+    attribution follows app-driven navigation only.
+    """
+    if klass not in STARDOCK_SCREEN_CLASSES:
+        return None
+    probe = getattr(session, "last_known_sector", None)
+    if not callable(probe):
+        return None
+    sector = probe()
+    if sector is None:
+        carry = getattr(session, "sector_before_last_send", None)
+        if callable(carry):
+            sector = carry()
+    if sector is None:
+        return None
+    world_model.add_landmark(
+        world_id,
+        sector,
+        world_model.STARDOCK_LANDMARK,
+        state_dir=state_dir,
+    )
+    note = getattr(session, "note_sector", None)
+    if callable(note):
+        note(sector)
+    return sector
 
 
 def _adjacent_warp_allowed(graph, current: int, target: int) -> bool:
@@ -352,8 +442,14 @@ class ExploreRunner:
                 rows = self._session.render()
                 full_text = self._session.render_text(rows)
                 prompt_line = rows[-1].strip() if rows else ""
-                halt = _gate_screen(full_text, prompt_line)
+                halt, klass = _gate_screen(full_text, prompt_line)
                 if halt is not None:
+                    _attribute_landmark(
+                        self._session,
+                        report.world_id,
+                        klass,
+                        state_dir=self._state_dir,
+                    )
                     outcome = OUTCOME_HALTED
                     reason = halt
                     break

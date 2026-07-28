@@ -107,6 +107,42 @@ were unsure about costs one re-read; making a wrong one cannot be undone. Both s
 — covering only the scripted one would leave the memory correct under automation and wrong under a
 human at the keys.
 
+## The landing screen, and the one carry it licenses (WO-LANDMARK-ATTRIBUTE-LAST-KNOWN, 2026-07-28)
+
+The rule above is correct and is also, on its own, **unusable for the case it was built for**. Every
+StarDock screen is a menu, and a menu is *reached by sending* — so by the time one is on screen the
+epoch has advanced and the memory is silent. A memory-only rule refuses every time.
+
+Two repairs were tried and rejected on evidence, recorded here so neither is re-proposed:
+
+- **Preserve the memory across "sends that cannot move us."** No such set can be named from captured
+  evidence. `stardock_shipyard_listing` ends at a *main command prompt*, from which a warp is legal;
+  `stardock_cargo_hold_quote` ends at a quantity question, making it a `money_prompt` and therefore
+  **never-auto-action** — the app may not send there at all; and the docking command itself appears in
+  no captured fixture. Naming it anyway would be a guess, and a guess here writes a landmark nothing
+  can remove.
+- **Read the sector off the StarDock screen.** It is not there. All four captured fixtures carry zero
+  sector-bearing lines.
+
+What works is to stop asking *what we sent* and ask **what we landed on**. A warp lands on a sector
+display; docking lands on a StarDock screen. The landing screen is an **observation** that
+discriminates the two, where the outgoing command was only an inference.
+
+So each app send files the pre-send sector into a **one-slot carry**. The carry is inert: it never
+widens `last_known_sector()`, which still goes silent on every send exactly as above. It may be read
+only by a caller that has already classified the landing screen as StarDock — at which point no
+movement occurred, and the carry is not stale but correct. Having proved position, the session
+re-records it, so multi-step menu navigation continues without a special case and stops on its own
+the moment a screen we cannot vouch for appears.
+
+The carry is filed by the **app** send path only. `send_raw` files none — a human's keystrokes are
+opaque, so the app declines to reason about what they did — and `reconnect` files none either, a
+fresh connection being the one event that proves nothing at all about position.
+
+**What would falsify this.** If a warp is ever observed landing directly on a StarDock-classified
+screen, the premise is wrong and attribution must be withdrawn rather than patched. That case could
+not be constructed from the captured corpus, and a live host is where it would appear.
+
 # The Unix-Socket JSON Verb Protocol
 
 The one contract between `tw` and `twd` is a newline-delimited JSON protocol over the local
