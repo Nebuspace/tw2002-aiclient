@@ -251,7 +251,7 @@ class PairBuildStats:
     known_sectors: int  # every sector this world has ever recorded, any content
     class_valid_ports: int  # ports with a syntactically valid B/S triple, any age
     fresh_class_ports: int  # subset of the above within `class_max_age_s`
-    oldest_class_age_s: Optional[float]  # max NON-NEGATIVE age among class_valid_ports with a parseable ts
+    oldest_class_age_s: Optional[float]  # max age among class_valid ports that passed fail-closed `_age_s` (never future/negative)
     compatible_pairs_considered: int  # posture-compatible among the FRESH set, before routing
     routed_pairs: int  # == len(the returned pairs tuple)
 
@@ -267,15 +267,28 @@ def _parse_ts(ts_str) -> Optional[datetime.datetime]:
         return None
 
 
-def _is_fresh(ts_str, *, max_age_s: float, now: datetime.datetime) -> bool:
+def _age_s(ts_str, *, now: datetime.datetime) -> Optional[float]:
+    """Fail-closed age in seconds from a `last_seen_ts` string.
+
+    Returns ``None`` (never a negative float) when the stamp is absent,
+    unparseable, or in the future. This is the **only** place in this
+    module that computes ``(now - ts).total_seconds()`` for freshness /
+    age decisions — ``_is_fresh`` and every aggregator read through it
+    (WO-ADAPTER-FRESHNESS-SWEEP).
+    """
     ts = _parse_ts(ts_str)
     if ts is None:
-        return False  # fail-closed: an absent/unparseable timestamp is never treated as fresh
+        return None
     age_s = (now - ts).total_seconds()
-    # Fail-closed on future stamps (clock skew / corrupt write): a negative
-    # age would otherwise satisfy `<= max_age_s` and bypass the staleness gate.
     if age_s < 0:
-        return False
+        return None
+    return age_s
+
+
+def _is_fresh(ts_str, *, max_age_s: float, now: datetime.datetime) -> bool:
+    age_s = _age_s(ts_str, now=now)
+    if age_s is None:
+        return False  # fail-closed: absent / unparseable / future is never fresh
     return age_s <= max_age_s
 
 
@@ -584,19 +597,25 @@ def _observed_age_s(age_a: Optional[float], age_b: Optional[float]) -> Optional[
     two ports' individually-computed ages. `None` -- never a fabricated
     or masked float -- when either input is missing or negative.
 
-    Defense-in-depth (Samantha REVISE, 2026-07-28, following the #131
-    future-timestamp fix): `build_candidate_pairs`'s `fresh` gate (via
+    Inputs must already be fail-closed ages from ``_age_s`` (or an
+    equivalent that never yields a future/negative delta). Aggregation
+    here deliberately does **not** invent ages from raw timestamps —
+    that would reopen the laundering path where ``max(healthy, future)``
+    looked like a normal one-hour reading (WO-ADAPTER-FRESHNESS-SWEEP /
+    Samantha second-order finding on the #131 twin).
+
+    Defense-in-depth: `build_candidate_pairs`'s `fresh` gate (via
     `_is_fresh`) should already exclude any future-stamped/corrupt-
     timestamp port, so in practice both inputs here are always real,
     non-negative floats. If that upstream gate is ever reopened by a
     future refactor, this guard is what stops a nonsense age from
     reaching a real `CandidatePair` -- and specifically stops the MASKING
-    failure mode Samantha's second-order finding named: `max(3600.0,
-    -3600.0) == 3600.0` looks like a perfectly normal one-hour reading
-    while silently hiding that the OTHER port's timestamp was garbage. A
-    plausible wrong number is worse than an obviously wrong one -- treat
-    EITHER input being negative as the whole result being unknown; never
-    let the healthy side win `max()` and paper over the broken one."""
+    failure mode: `max(3600.0, -3600.0) == 3600.0` looks like a perfectly
+    normal one-hour reading while silently hiding that the OTHER port's
+    timestamp was garbage. A plausible wrong number is worse than an
+    obviously wrong one -- treat EITHER input being negative as the whole
+    result being unknown; never let the healthy side win `max()` and paper
+    over the broken one."""
     if age_a is None or age_a < 0 or age_b is None or age_b < 0:
         return None
     return max(age_a, age_b)
@@ -628,29 +647,22 @@ def build_candidate_pairs(
     known_sectors = len(world_model.all_sectors(world_id, state_dir=state_dir))
     raw_ports = _class_ports(world_id, state_dir=state_dir)
 
+    # Ages are ONLY fail-closed `_age_s` results (None = absent / bad /
+    # future). Never store a raw negative ``(now - ts)`` here — that value
+    # must not participate in ``max``/pair aggregation (WO-ADAPTER-
+    # FRESHNESS-SWEEP Accept: no age-aggregation laundering).
     ages: dict[int, Optional[float]] = {}
     fresh: dict[int, str] = {}
     for sid, (cls, ts_raw) in raw_ports.items():
-        ts = _parse_ts(ts_raw)
-        age = (current - ts).total_seconds() if ts is not None else None
+        age = _age_s(ts_raw, now=current)
         ages[sid] = age
-        # REVISE (Samantha, 2026-07-28, following #131 WO-ADAPTER-FRESHNESS-
-        # FUTURE-TS on main): the freshness DECISION is delegated to
-        # `_is_fresh` -- the single place that predicate lives -- rather
-        # than re-derived here. The earlier inline `age <= max_age_s` check
-        # missed #131's fix: a future/clock-skewed `last_seen_ts` yields a
-        # NEGATIVE age, which satisfied that bare comparison unconditionally
-        # and got treated as fresh. Calling `_is_fresh` here means this path
-        # can never silently drift from that fix again.
         if _is_fresh(ts_raw, max_age_s=cfg.class_max_age_s, now=current):
             fresh[sid] = cls
 
-    # Only a genuinely non-negative age is a real STALENESS figure -- a
-    # negative age (future/corrupt timestamp) is a data-integrity problem,
-    # not "very fresh", and must never be aggregated into "how stale is the
-    # stalest reading" (nor silently allowed to report a nonsensical
-    # negative "age" when it is the only reading present).
-    oldest_age = max((a for a in ages.values() if a is not None and a >= 0), default=None)
+    # Aggregate only ages that already passed fail-closed parse (`_age_s`
+    # returned a real non-negative float). Future stamps are ``None`` in
+    # `ages` and cannot launder into ``oldest_class_age_s``.
+    oldest_age = max((a for a in ages.values() if a is not None), default=None)
 
     if len(fresh) < 2:
         return (), PairBuildStats(

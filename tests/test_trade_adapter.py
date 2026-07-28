@@ -931,6 +931,58 @@ def test_observed_age_s_is_none_not_zero_on_a_missing_input():
     assert trade_adapter._observed_age_s(None, None) is None
 
 
+# --------------------------------------------------------------------------
+# WO-ADAPTER-FRESHNESS-SWEEP -- `_age_s` owns the only `(now - ts)` site;
+# aggregators never see raw negative ages.
+# --------------------------------------------------------------------------
+
+
+def test_age_s_fail_closed_on_future_and_unparseable():
+    now = _CLOCK()
+    future = world_model._now_iso(lambda: now + datetime.timedelta(hours=1))
+    past = world_model._now_iso(lambda: now - datetime.timedelta(seconds=42))
+    assert trade_adapter._age_s(future, now=now) is None
+    assert trade_adapter._age_s(None, now=now) is None
+    assert trade_adapter._age_s("not-a-ts", now=now) is None
+    assert trade_adapter._age_s(past, now=now) == 42.0
+
+
+def test_age_s_is_the_sole_total_seconds_freshness_site():
+    """Accept #1: no remaining inline `(now - ts).total_seconds()` freshness
+    decisions outside the shared helper. Every Call to `total_seconds` in
+    this module must live inside `_age_s` (tests may still compute ages)."""
+    src = Path(trade_adapter.__file__).read_text(encoding="utf-8")
+    tree = ast.parse(src)
+    offenders = []
+    for node in tree.body:
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        for call in ast.walk(node):
+            if not isinstance(call, ast.Call):
+                continue
+            func = call.func
+            if isinstance(func, ast.Attribute) and func.attr == "total_seconds":
+                if node.name != "_age_s":
+                    offenders.append(node.name)
+    assert offenders == [], f"total_seconds outside _age_s: {offenders}"
+
+
+def test_one_future_stamp_never_launders_into_pair_observed_age(tmp_path):
+    """CC probe shape: one future + one healthy neighbour must not yield a
+    pair whose `observed_age_s` is the healthy neighbour's age (Accept #3).
+    Gate drops the future port → fewer than 2 fresh → no pair at all."""
+    future_clock = lambda: _CLOCK() + datetime.timedelta(hours=1)
+    _upsert_class(tmp_path, 10, warps=(11,), klass="SBB", port_ts_clock=future_clock)
+    _upsert_class(tmp_path, 11, warps=(10,), klass="BSS", port_ts_clock=_CLOCK)
+
+    pairs, stats = trade_adapter.build_candidate_pairs(WORLD, state_dir=tmp_path, now=_CLOCK)
+
+    assert stats.fresh_class_ports == 1
+    assert pairs == ()
+    # ages dict stores None for the future stamp — oldest is only the healthy side
+    assert stats.oldest_class_age_s == 0.0
+
+
 @pytest.mark.parametrize(
     "klass",
     [None, "", "BS", "BSSS", "BSX", "bss", 5, ["B", "S", "S"], {"letters": "BSS"}],
