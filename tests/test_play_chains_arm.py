@@ -5,14 +5,13 @@ the shape `tests/test_play_explore_arm.py` established: these assert the
 PRODUCT path, not a re-implementation of it.
 
 The load-bearing test in this file is
-`test_confirming_a_loop_does_not_start_explore`. `app.py`'s bare
-`if action == "arm_confirm":` starts EXPLORE as the unguarded default, and
-the relaunch branch only escapes it by claiming an earlier branch. A third
-arm type wired without its own branch would take an operator's `y` on a
-taught-loop prompt and start an explore run instead -- two different runners,
-one keystroke, and an assertion that merely checked "something started"
-would stay green through it. So both directions are pinned: a loop confirm
-must not reach explore, and an explore confirm must not reach autoloop.
+`test_confirming_a_loop_does_not_start_explore`. Explore confirm is gated on
+`pending_confirm_action == "explore"` (WO-ARM-CONFIRM-EXPLICIT-EXPLORE); the
+loop branch must still claim its confirm first so a taught-loop `y` never
+reaches explore_start. Both directions are pinned: a loop confirm must not
+reach explore, and an explore confirm must not reach autoloop. A third pin
+(`test_orphan_arm_confirm_starts_neither_runner`) covers unset/unknown
+pending — fail closed, no runner.
 
 The states that matter:
   * `L` -> popup opens, NOTHING armed and no gate raised
@@ -23,6 +22,8 @@ The states that matter:
 """
 
 from __future__ import annotations
+
+from pathlib import Path
 
 import pytest
 
@@ -172,10 +173,10 @@ def test_l_enter_y_arms_the_selected_loop(monkeypatch) -> None:
 
 
 def test_confirming_a_loop_does_not_start_explore(monkeypatch) -> None:
-    """THE pin. `app.py`'s bare `arm_confirm` branch starts explore as the
-    unguarded default; the taught-loop branch must claim the confirm first.
-    Delete the `pending_confirm_action == "loop"` branch and this goes red
-    while a "something started" assertion would not."""
+    """THE pin. Explore start requires `pending_confirm_action == "explore"`;
+    the taught-loop branch must claim the confirm first. Delete the
+    `pending_confirm_action == "loop"` branch and this goes red while a
+    "something started" assertion would not."""
     arm, explore, _screen = _drive(monkeypatch, [L, ENTER, ord("y")])
     assert len(arm) == 1, "the taught loop did not arm"
     assert explore == [], f"a taught-loop confirm started EXPLORE instead: {explore}"
@@ -187,6 +188,75 @@ def test_confirming_explore_does_not_arm_a_loop(monkeypatch) -> None:
     arm, explore, _screen = _drive(monkeypatch, [ord("E"), ord("y")])
     assert len(explore) == 1, "explore did not start"
     assert arm == [], f"an explore confirm armed a taught loop: {arm}"
+
+
+def test_orphan_arm_confirm_starts_neither_runner(monkeypatch) -> None:
+    """WO-ARM-CONFIRM-EXPLICIT-EXPLORE Accept #3: `arm_confirm` with no
+    (or unknown) pending discriminator must start nothing — the old bare
+    fallthrough started explore here."""
+    arm_calls: list = []
+    explore_calls: list = []
+    monkeypatch.setattr(adapters, "ensure_session", lambda name, **kw: _Result())
+    monkeypatch.setattr(
+        _loop_store, "read_loop_store",
+        lambda **kw: TWO_LOOPS,
+    )
+
+    def _arm(name=None, **kw):
+        arm_calls.append((name, kw))
+        return _AutoLoopResult()
+
+    def _explore(profile, **kw):
+        explore_calls.append(kw)
+        return _ExploreResult()
+
+    monkeypatch.setattr(adapters, "autoloop_start", _arm, raising=False)
+    monkeypatch.setattr(adapters, "explore_start_for_profile", _explore, raising=False)
+
+    seen: dict = {}
+    real_screen = app_mod.PlayShellScreen
+
+    class _Spy(real_screen):
+        def __init__(self, *a, **k):
+            super().__init__(*a, **k)
+            self._orphan_fired = False
+            seen["screen"] = self
+
+        def handle_key(self, key):
+            # Inject a confirm without any offer path having set
+            # `pending_confirm_action` in `_run_play`.
+            if key == ord("y") and not self._orphan_fired:
+                self._orphan_fired = True
+                return "arm_confirm"
+            return super().handle_key(key)
+
+        def draw(self):
+            pass
+
+    monkeypatch.setattr(app_mod, "PlayShellScreen", _Spy)
+    monkeypatch.setattr(app_mod.curses, "has_colors", lambda: False, raising=False)
+    profile = app_mod.ProfileRow(
+        name="alpha", handle="Alpha", server="demo-a",
+        host="demo-a.example", game_letter="B",
+    )
+    try:
+        app_mod._run_play(_Stdscr([ord("y")]), profile)
+    except Exception:
+        pass
+    assert arm_calls == [], f"orphan confirm started autoloop: {arm_calls}"
+    assert explore_calls == [], f"orphan confirm started explore: {explore_calls}"
+    assert "nothing pending" in (seen["screen"].status_line or "")
+
+
+def test_explore_confirm_still_requires_explicit_pending(monkeypatch) -> None:
+    """Proof Accept #1: explore start is gated on explicit pending=explore."""
+    arm, explore, _screen = _drive(monkeypatch, [ord("E"), ord("y")])
+    assert explore and not arm
+    src = Path(app_mod.__file__).read_text(encoding="utf-8")
+    assert 'if action == "arm_confirm" and pending_confirm_action == "explore"' in src
+    # Fail-closed bare confirm must not invoke explore_start.
+    bare = src.split('if action == "arm_confirm":', 1)[1].split("if action ==", 1)[0]
+    assert "explore_start" not in bare
 
 
 def test_cancelling_the_confirm_does_not_arm(monkeypatch) -> None:
