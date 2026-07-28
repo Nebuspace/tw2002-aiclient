@@ -1,9 +1,9 @@
 # WO-CHAIN-DETECT-PORT — Port chains + trade_adapter onto tw2002_aiclient
 
-**Status:** OPEN · STAGED · **blocked on WO-EXPLORE-AUTOMATION-GATE**  
+**Status:** OPEN · READY · EXEC seeded · HANDOFF CC  
 **Posted:** 2026-07-27T21:35:00Z · Max priority tranche ②  
-**Seat:** open  
-**Depends:** explore gate green · archive `chains.py` / `trade_adapter.py` as reference  
+**Seat:** `impl-claudecode-aiclient`  
+**Depends:** explore gate CLOSED (`b2d6c89` / #122) · archive `chains.py` / `trade_adapter.py` as reference  
 **Refs:** `canon/strategy/trade-loops.md` · `canon/research/archive-port-patterns.md` · plan `trade-loop-chains-after-explore-20260727.md`
 
 ## Goal
