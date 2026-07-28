@@ -120,6 +120,25 @@ Every write is additive and last-seen-stamped; `landmarks` and `formation_member
 by dedicated passes (exploration, the formation detector), not by a raw state read, so a plain visit
 never clears them.
 
+**How that guarantee is enforced (2026-07-28, `WO-WM-LANDMARKS-WRITE`).** "A plain visit never
+clears them" was, until now, a rule a writer had to *remember*: `write_from_state` maps only
+`warps`/`port`/`threats` and silently drops a `landmarks` key, so the raw state read could not
+clear a landmark — but any pass writing through `upsert_sector` could, because that field replaced
+like every other. It is now structural instead: **`landmarks` is the one field whose upsert
+UNIONS.** No record passed to `upsert_sector` can shrink a sector's landmark set, so an
+observation that merely failed to notice can never erase one that did.
+
+The asymmetry is not arbitrary. Every other field has a screen that can *deny* it — `Ports : None`
+positively states there is no port — whereas nothing the trainer can read says "there is positively
+no landmark here". A sector display that does not mention StarDock is **silence, not a denial**, and
+silence must not be allowed to write. Removal, if a landmark is ever found to be genuinely wrong,
+owes its own deliberate path and an observation that can justify it; neither exists today, and
+inventing one would be the same guess in the opposite direction.
+
+Consequently a landmark-writing pass calls `upsert_sector` **directly** with
+`{sector_id, landmarks: [...]}`, and only when something was actually observed — it does not route
+through `write_from_state`, whose refusal to carry the field is deliberate and stays.
+
 # Consumers
 
 Everything here **reads** the store; none of it lets the store drive.
