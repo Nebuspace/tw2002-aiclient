@@ -234,6 +234,59 @@ def test_guarded_getch_raises_when_reads_return_instantly(monkeypatch):
 # Part 2 -- real end-to-end pty proof: close the master, measure exit + CPU.
 # ---------------------------------------------------------------------------
 
+# The child stamps its OWN cpu-so-far at the moment it first blocks in the loop
+# under test, so the assertion below can charge the exit path for the exit path
+# alone (WO-DEAD-TERMINAL-SPIN-INTERMITTENT).
+#
+# Why this exists: the assertion used to read the child's WHOLE-LIFE rusage --
+# interpreter start, imports, curses init, first render -- and report it as
+# "consumed Xs CPU exiting -- looks like it spun first". Measured, setup was
+# 82-84% of that number. On a quiet box it already ate 54-64% of the 0.5s
+# budget with no spin present at all, so the pin was one busy machine away from
+# red. It was reproduced deterministically (2 of 2 concurrent full-suite runs,
+# 0.539s and 0.546s) with `exited` passing first -- i.e. the child had exited
+# promptly and the message accusing it of spinning was simply false.
+#
+# NOTE the bootstraps below are `.format(project_root=...)`-ed, so any literal
+# brace in this injected code would be eaten as a format field. That is why it
+# uses module globals and `global` rather than the dict/closure shape you would
+# write normally.
+_BOOTSTRAP_STAMP_PRELUDE = r"""
+import resource
+
+_STAMP_PATH = os.environ["TW_CPU_STAMP"]
+_stamp_armed = False
+_stamp_done = False
+
+
+def _stamp_now():
+    global _stamp_done
+    if _stamp_done:
+        return
+    _stamp_done = True
+    _r = resource.getrusage(resource.RUSAGE_SELF)
+    _fh = open(_STAMP_PATH, "w")
+    _fh.write(repr(_r.ru_utime + _r.ru_stime))
+    _fh.close()
+
+
+import tw2002_aiclient.app as _app
+
+_orig_guarded_getch = _app._guarded_getch
+
+
+def _stamping_getch(stdscr, guard):
+    # Delegates to the real guard -- this observes, it does not replace. The
+    # injection proof (a deliberately weakened guard) must still go RED, which
+    # is what shows the wrap did not neuter the thing being pinned.
+    if _stamp_armed:
+        _stamp_now()
+    return _orig_guarded_getch(stdscr, guard)
+
+
+_app._guarded_getch = _stamping_getch
+"""
+
 _BOOTSTRAP_LAUNCHER = r"""
 import os
 import sys
@@ -247,6 +300,10 @@ sys.path.insert(0, {project_root!r})
 
 import curses
 from tw2002_aiclient.app import _run
+""" + _BOOTSTRAP_STAMP_PRELUDE + r"""
+# The launcher's own dispatch loop is the loop under test, so the stamp is
+# armed from the start: its first `_guarded_getch` IS the first idle block.
+_stamp_armed = True
 
 curses.wrapper(_run)
 """
@@ -273,6 +330,22 @@ adapters.ensure_session = lambda *a, **k: EnsureResult(ok=True, classification="
 
 import curses
 from tw2002_aiclient.app import _run
+""" + _BOOTSTRAP_STAMP_PRELUDE + r"""
+# Here the loop under test is the THROTTLED one inside `_run_play`, which is
+# reached only after the launcher screen and a selection. Arming from the start
+# would stamp at the launcher's first block and then charge the play shell's
+# own setup + first render to the exit path -- the exact confusion being fixed.
+# So arm on entry to `_run_play`; the first block *inside* it takes the stamp.
+_orig_run_play = _app._run_play
+
+
+def _arming_run_play(stdscr, profile):
+    global _stamp_armed
+    _stamp_armed = True
+    return _orig_run_play(stdscr, profile)
+
+
+_app._run_play = _arming_run_play
 
 curses.wrapper(_run)
 """
@@ -286,6 +359,7 @@ def _spawn_bootstrap(tmp_path: Path, name: str, src: str, *, run_dir: Path | Non
     set_winsize(slave_fd, ROWS, COLS)
     env = dict(os.environ)
     env["TERM"] = "xterm"
+    env["TW_CPU_STAMP"] = str(tmp_path / "cpu.stamp")
     env["TW2002_LAUNCHER_DEMO"] = "1"
     if run_dir is not None:
         env["TW_RUN_DIR"] = str(run_dir)
@@ -322,6 +396,49 @@ def _read_until(master_fd: int, needle: str, *, timeout: float) -> bytes:
         if find_text(pyte_grid(captured, ROWS, COLS), needle) is not None:
             break
     return captured
+
+
+#: Budget for CPU burned *after* the child first blocks in the loop under test
+#: -- idle waiting, the guard firing, unwind and curses teardown.
+#:
+#: Sized against the condition that actually broke the old assertion (two
+#: concurrent full suites), not a gentler one:
+#:
+#:            residual        whole-life (what the old pin charged)
+#:   quiet    0.032-0.056s    0.255-0.348s   (51-70% of the old 0.5 budget)
+#:   2 suites 0.055-0.090s    0.348-0.416s   (70-83%, and observed at 0.539 -> RED)
+#:
+#: So 0.30 keeps ~3.3x margin over the worst residual seen under the
+#: reproducing condition. This is NOT a loosened 0.5: that number covered the
+#: child's whole life, of which 82-84% was startup the exit path never touched.
+#: Detection is unchanged or better -- an injected spin reddens here at 0.403s
+#: (streak 1200), which the old pin would have hidden inside its startup noise.
+_EXIT_CPU_BUDGET_S = 0.30
+
+
+def _exit_path_cpu(tmp_path: Path, rusage) -> tuple[float, float, float]:
+    """(total, setup, residual) CPU seconds for the child.
+
+    `setup` is what the child stamped for itself the moment it first blocked in
+    the loop under test; `residual` is everything after that, which is the only
+    part a busy-spin can grow.
+
+    A missing stamp is a FAILURE, never a fallback to the whole-life number.
+    If the bootstrap's wrap of `_guarded_getch` ever stops taking effect (say
+    the product starts resolving it through a captured reference instead of a
+    module global), the stamp silently stops appearing -- and treating that as
+    "no baseline, use the total" would quietly restore the very defect this
+    change removes, while still reporting green.
+    """
+    stamp = tmp_path / "cpu.stamp"
+    total = rusage.ru_utime + rusage.ru_stime
+    assert stamp.is_file(), (
+        f"child never wrote {stamp} -- the bootstrap's _guarded_getch wrap did "
+        "not take effect, so there is no setup baseline. Refusing to fall back "
+        "to whole-life CPU: that is the measurement this test exists to avoid."
+    )
+    setup = float(stamp.read_text())
+    return total, setup, total - setup
 
 
 def _wait_dead_with_rusage(pid: int, *, deadline_s: float):
@@ -362,8 +479,12 @@ def test_launcher_blocking_loop_exits_promptly_and_cheaply_when_pty_dies(tmp_pat
 
         exited, elapsed_s, rusage = _wait_dead_with_rusage(proc.pid, deadline_s=5.0)
         assert exited, f"still running after {elapsed_s:.2f}s — busy-spin regression"
-        cpu_s = rusage.ru_utime + rusage.ru_stime
-        assert cpu_s < 0.5, f"consumed {cpu_s:.3f}s CPU exiting — looks like it spun first"
+        total, setup, residual = _exit_path_cpu(tmp_path, rusage)
+        assert residual < _EXIT_CPU_BUDGET_S, (
+            f"burned {residual:.3f}s CPU between first blocking on the dead "
+            f"terminal and exiting — looks like it spun first "
+            f"(total {total:.3f}s, of which {setup:.3f}s was startup)"
+        )
     finally:
         if proc.poll() is None:
             terminate_session_group(proc)
@@ -387,8 +508,12 @@ def test_play_shell_throttled_loop_exits_promptly_and_cheaply_when_pty_dies(tmp_
 
         exited, elapsed_s, rusage = _wait_dead_with_rusage(proc.pid, deadline_s=5.0)
         assert exited, f"still running after {elapsed_s:.2f}s — busy-spin regression"
-        cpu_s = rusage.ru_utime + rusage.ru_stime
-        assert cpu_s < 0.5, f"consumed {cpu_s:.3f}s CPU exiting — looks like it spun first"
+        total, setup, residual = _exit_path_cpu(tmp_path, rusage)
+        assert residual < _EXIT_CPU_BUDGET_S, (
+            f"burned {residual:.3f}s CPU between first blocking on the dead "
+            f"terminal and exiting — looks like it spun first "
+            f"(total {total:.3f}s, of which {setup:.3f}s was startup)"
+        )
     finally:
         if proc.poll() is None:
             terminate_session_group(proc)
