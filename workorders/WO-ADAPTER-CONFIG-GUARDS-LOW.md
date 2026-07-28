@@ -1,6 +1,6 @@
 # WO-ADAPTER-CONFIG-GUARDS-LOW — Close bool + ceiling_multiplier guard holes
 
-**Status:** OPEN · EXECUTE · LOW (folded) · Cursor-class  
+**Status:** DONE · origin `4a86d28` (#133) · Accept verified 2026-07-28 (ship tests green on tip)
 **Posted:** 2026-07-28T00:15:00Z · banked from WO-CHAIN-DETECT-PORT STATUS  
 **Seeded for execute:** 2026-07-28T01:55Z · hub  
 **Seat:** impl-aiclient-cursor  

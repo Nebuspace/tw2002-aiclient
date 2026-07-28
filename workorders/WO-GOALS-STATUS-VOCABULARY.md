@@ -1,6 +1,6 @@
 # WO-GOALS-STATUS-VOCABULARY — T0 guard + T1 client overlay
 
-**Status:** OPEN EXECUTE · HIGH · Claude Code preferred  
+**Status:** DONE · origin `a8e18ed` (#164) · Accept verified 2026-07-28 (ship tests green on tip)
 **Posted:** 2026-07-28T13:45Z · hub (CC scope 13:42Z · ruling 13:43Z)  
 **Depends:** #162 chain scalars precedent (`ChainScalars` client overlay)
 

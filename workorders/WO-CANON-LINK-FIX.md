@@ -1,6 +1,6 @@
 # WO-CANON-LINK-FIX — Repair 8 broken canon markdown links + pin
 
-**Status:** OPEN · EXECUTE · Claude Code (`impl-claudecode-aiclient`)  
+**Status:** DONE · origin `3a48c04` (#181) · Accept verified 2026-07-28 (ship tests green on tip)
 **Posted:** 2026-07-28 · hub  
 **Refs:** PROCESS-NOTE 2026-07-28T17:28:18Z (8 broken `](/…md)` links)
 

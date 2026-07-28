@@ -1,6 +1,6 @@
 # WO-CONN-CHIP-PTY-PROOF — CONN control-strip chip Layer-B content proof
 
-**Status:** OPEN · READY  
+**Status:** DONE · origin `49337ff` (#99) · Accept verified 2026-07-28 (ship tests green on tip)
 **Posted:** 2026-07-27T14:55:00Z · hub refill after draw-wire sweeps  
 **Seat:** open — CC origin; Cursor if CC lane full  
 **Depends:** `main` ≥ `2920ef7` (wire-sweep + arm honesty)  

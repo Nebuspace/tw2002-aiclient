@@ -1,6 +1,6 @@
 # WO-WM-LANDMARKS-WRITE — populate landmarks from Ports line
 
-**Status:** OPEN EXECUTE · HIGH · Claude Code preferred  
+**Status:** DONE · origin `b4b92f8` (#165) · Accept verified 2026-07-28 (ship tests green on tip)
 **Posted:** 2026-07-28T14:06Z · hub (CC 14:04:20Z evidence)  
 **Amended:** 2026-07-28T15:19Z · CC PROCESS-NOTE constraints
 **Re-scoped:** 2026-07-28T15:29Z · hub ruling — **P1 only** (see Scope split)

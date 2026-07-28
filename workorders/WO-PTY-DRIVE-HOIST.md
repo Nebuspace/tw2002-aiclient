@@ -1,6 +1,6 @@
 # WO-PTY-DRIVE-HOIST — Shared PTY drive loop for cockpit Layer-B tests
 
-**Status:** OPEN · READY  
+**Status:** DONE · origin `53ae0eb` (#100) · Accept verified 2026-07-28 (ship tests green on tip)
 **Posted:** 2026-07-27T15:12:00Z · hub queue refill after CONN PTY  
 **Seat:** open — prefer Cursor volume  
 **Depends:** `main` ≥ `49337ff` (CONN PTY + covermeter/arm/teachband/liveness PTY suites)  

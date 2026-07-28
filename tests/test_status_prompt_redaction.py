@@ -515,6 +515,12 @@ def test_the_status_answer_carries_only_bounded_fields(cfg, tmp_path, run_dir):
                               payload at all, so no receive-side byte can enter
                               that ring
       `prompt_withheld`       a closed literal saying WHY the line is absent
+      `replay_arm`            WO-STATUS-EXPOSE-REPLAY-ARM: always-present
+                              `{armed, profile, host, port}` — profile name is
+                              `session.auto_login_profile` (or null when
+                              disarmed); host/port are the session reconnect
+                              endpoint when armed. Never RX-buffer content,
+                              never a password.
 
     Run against the POLITE script on purpose: with no echo the screen still
     classifies `login_password`, so this doubles as the positive diagnosability
@@ -542,6 +548,7 @@ def test_the_status_answer_carries_only_bounded_fields(cfg, tmp_path, run_dir):
         "subscribers",
         "mode",
         "log_tail",
+        "replay_arm",
     }
     assert "prompt" not in status
     assert "screen" not in status
@@ -552,6 +559,11 @@ def test_the_status_answer_carries_only_bounded_fields(cfg, tmp_path, run_dir):
     # future "helpful" edit cannot quietly repoint one at the buffer.
     assert status["name"] == PROFILE
     assert status["host"] == "127.0.0.1"
+    arm = status["replay_arm"]
+    assert set(arm) == {"armed", "profile", "host", "port"}
+    assert arm["armed"] is False
+    assert arm["profile"] is None
+    assert SENTINEL not in json.dumps(arm)
 
 
 def test_tw_status_serialises_the_whole_dict_on_both_branches(cfg, tmp_path, run_dir):

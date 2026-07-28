@@ -1,6 +1,6 @@
 # WO-COACH-ENGINE-PORT — Rebirth port of coaching-engine kernel
 
-**Status:** OPEN EXECUTE · HIGH · Claude Code preferred  
+**Status:** DONE · origin `12b72d6` (#161) · Accept verified 2026-07-28 (ship tests green on tip)
 **Posted:** 2026-07-28T12:28Z · hub (CC DECISION 12:25Z · supersedes premature W5 unbank)  
 **Blocks:** `WO-COACH-CHAIN-TRIGGER` (W5) until this lands  
 **Refs:** `canon/engine/coaching-engine.md` · pre-rebirth `2a7d03f:twclient/spectate_layout.py` (`infer_coach_triggers`, `compose_decisions_coach`) · rebirth `452d896` deletion

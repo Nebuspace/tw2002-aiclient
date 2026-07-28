@@ -1,6 +1,6 @@
 # WO-LAST-KNOWN-SECTOR — daemon remembers last successfully-read sector
 
-**Status:** OPEN EXECUTE · HIGH · Claude Code preferred · after #165 P1  
+**Status:** DONE · origin `e54b975` (#169) · Accept verified 2026-07-28 (ship tests green on tip)
 **Posted:** 2026-07-28T15:30Z · hub (CC #165 DECISION 15:27Z)
 
 ## Goal
