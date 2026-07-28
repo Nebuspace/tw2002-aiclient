@@ -699,6 +699,54 @@ def cmd_loops(args):
     return 1 if result.get("status") == "unreadable" else 0
 
 
+def cmd_pairs(args):
+    """WO-CHAIN-DETECT-WIRE Accept 5 (re-scoped 2026-07-28): read-only
+    listing of class-derived DISCOVERED pair loops for a world -- the
+    thin product caller the WO's typed API requires.
+
+    Daemon-free, world-model-scoped read, same family as ``loops`` above:
+    ``chain_detect.recompute`` reads ``state/world/<world_id>/`` directly
+    and never opens the daemon socket. Deliberately thin, same split
+    discipline as ``cmd_loops``: ``chain_detect.recompute`` decides what
+    pairs exist (and, when none do, WHY not -- one of five typed
+    reasons); ``chain_detect_view.format_candidate_pair_lines`` decides
+    how that reads; this function chooses only the JSON/text branch. No
+    store/formatting logic lives here.
+
+    Exit code is always **0** -- every one of the five typed empty
+    reasons is a successfully-established fact about the world (``ok,
+    nothing found, and here is why``), never a failure to read anything,
+    so none of them earns ``cmd_loops``'s ``unreadable -> 1`` treatment.
+
+    NEVER the taught ``L)chains`` arm list, and never curses: this lists
+    discovered, unpriced pair candidates the operator has not taught and
+    cannot arm from here -- see ``chain_detect_view``'s own module
+    docstring for why conflating the two surfaces is exactly the mistake
+    this WO exists to prevent.
+    """
+    from dataclasses import asdict
+
+    from tw2002_aiclient import chain_detect, chain_detect_view
+
+    result = chain_detect.recompute(args.world_id)
+
+    if getattr(args, "json", False):
+        print(
+            json.dumps(
+                {
+                    "world_id": result.world_id,
+                    "pairs": [asdict(p) for p in result.pairs],
+                    "reason": result.reason,
+                    "detail": result.detail,
+                }
+            )
+        )
+    else:
+        for line in chain_detect_view.format_candidate_pair_lines(result):
+            print_tty(line)
+    return 0
+
+
 def cmd_record(args):
     """WO-P2-G4-X6: write a taught macro from an already-captured
     demonstration manifest. Daemon-free by design -- no ``--run-dir``, the
@@ -1427,6 +1475,23 @@ def build_parser() -> argparse.ArgumentParser:
     )
     sp.add_argument("--json", action="store_true", help="machine-parseable JSON output")
     sp.set_defaults(func=cmd_loops)
+
+    sp = sub.add_parser(
+        "pairs",
+        help=(
+            "list class-derived DISCOVERED pair loops for a world -- "
+            "reads state/world/<world-id> directly, never sends, never the taught L)chains list"
+        ),
+    )
+    sp.add_argument(
+        "--world-id",
+        required=True,
+        dest="world_id",
+        metavar="SLUG",
+        help="world_id slug (state/world/<slug>/)",
+    )
+    sp.add_argument("--json", action="store_true", help="machine-parseable JSON output")
+    sp.set_defaults(func=cmd_pairs)
 
     sp = sub.add_parser(
         "record",

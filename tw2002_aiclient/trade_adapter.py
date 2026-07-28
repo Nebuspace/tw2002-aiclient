@@ -251,7 +251,7 @@ class PairBuildStats:
     known_sectors: int  # every sector this world has ever recorded, any content
     class_valid_ports: int  # ports with a syntactically valid B/S triple, any age
     fresh_class_ports: int  # subset of the above within `class_max_age_s`
-    oldest_class_age_s: Optional[float]  # max age among class_valid_ports with a parseable ts
+    oldest_class_age_s: Optional[float]  # max NON-NEGATIVE age among class_valid_ports with a parseable ts
     compatible_pairs_considered: int  # posture-compatible among the FRESH set, before routing
     routed_pairs: int  # == len(the returned pairs tuple)
 
@@ -579,6 +579,29 @@ def _bfs_paths_from(
     return paths
 
 
+def _observed_age_s(age_a: Optional[float], age_b: Optional[float]) -> Optional[float]:
+    """The pair's reported class-observation age: the STALER (max) of the
+    two ports' individually-computed ages. `None` -- never a fabricated
+    or masked float -- when either input is missing or negative.
+
+    Defense-in-depth (Samantha REVISE, 2026-07-28, following the #131
+    future-timestamp fix): `build_candidate_pairs`'s `fresh` gate (via
+    `_is_fresh`) should already exclude any future-stamped/corrupt-
+    timestamp port, so in practice both inputs here are always real,
+    non-negative floats. If that upstream gate is ever reopened by a
+    future refactor, this guard is what stops a nonsense age from
+    reaching a real `CandidatePair` -- and specifically stops the MASKING
+    failure mode Samantha's second-order finding named: `max(3600.0,
+    -3600.0) == 3600.0` looks like a perfectly normal one-hour reading
+    while silently hiding that the OTHER port's timestamp was garbage. A
+    plausible wrong number is worse than an obviously wrong one -- treat
+    EITHER input being negative as the whole result being unknown; never
+    let the healthy side win `max()` and paper over the broken one."""
+    if age_a is None or age_a < 0 or age_b is None or age_b < 0:
+        return None
+    return max(age_a, age_b)
+
+
 def build_candidate_pairs(
     world_id: str,
     *,
@@ -611,12 +634,23 @@ def build_candidate_pairs(
         ts = _parse_ts(ts_raw)
         age = (current - ts).total_seconds() if ts is not None else None
         ages[sid] = age
-        # fail-closed, same discipline as `_is_fresh`: an absent/unparseable
-        # timestamp is never treated as fresh.
-        if age is not None and age <= cfg.class_max_age_s:
+        # REVISE (Samantha, 2026-07-28, following #131 WO-ADAPTER-FRESHNESS-
+        # FUTURE-TS on main): the freshness DECISION is delegated to
+        # `_is_fresh` -- the single place that predicate lives -- rather
+        # than re-derived here. The earlier inline `age <= max_age_s` check
+        # missed #131's fix: a future/clock-skewed `last_seen_ts` yields a
+        # NEGATIVE age, which satisfied that bare comparison unconditionally
+        # and got treated as fresh. Calling `_is_fresh` here means this path
+        # can never silently drift from that fix again.
+        if _is_fresh(ts_raw, max_age_s=cfg.class_max_age_s, now=current):
             fresh[sid] = cls
 
-    oldest_age = max((a for a in ages.values() if a is not None), default=None)
+    # Only a genuinely non-negative age is a real STALENESS figure -- a
+    # negative age (future/corrupt timestamp) is a data-integrity problem,
+    # not "very fresh", and must never be aggregated into "how stale is the
+    # stalest reading" (nor silently allowed to report a nonsensical
+    # negative "age" when it is the only reading present).
+    oldest_age = max((a for a in ages.values() if a is not None and a >= 0), default=None)
 
     if len(fresh) < 2:
         return (), PairBuildStats(
@@ -676,11 +710,19 @@ def build_candidate_pairs(
             # order.
             commodities_a_sells = tuple(name for name in CLASS_POSITIONS if name in a_to_b)
             commodities_b_sells = tuple(name for name in CLASS_POSITIONS if name in b_to_a)
-            # Both ages are guaranteed non-None here: sector_a/sector_b are
-            # drawn from `sectors` = sorted(fresh.keys()), and `fresh` only
-            # ever gains a key when `age is not None` above. The `or 0.0`
-            # is defensive only -- no fixture reaches it.
-            observed_age_s = max(ages[sector_a] or 0.0, ages[sector_b] or 0.0)
+            # Both ages SHOULD always be real, non-negative floats here:
+            # sector_a/sector_b are drawn from `sectors` = sorted(fresh.keys()),
+            # and `fresh` only ever gains a key when `_is_fresh` returned
+            # True (age in [0, max_age_s]) above. `_observed_age_s` is
+            # nonetheless a defended, never-fabricate/never-mask helper --
+            # see its own docstring -- so if that upstream invariant is ever
+            # broken by a future refactor, this is what stops a nonsense
+            # age from reaching a real `CandidatePair`, rather than
+            # re-opening the exact masking failure Samantha found (REVISE,
+            # 2026-07-28).
+            observed_age_s = _observed_age_s(ages[sector_a], ages[sector_b])
+            if observed_age_s is None:
+                continue  # defense-in-depth -- see _observed_age_s's own docstring
 
             pairs.append(
                 CandidatePair(

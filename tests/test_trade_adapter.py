@@ -278,6 +278,38 @@ def test_future_last_seen_ts_is_rejected(tmp_path):
     ) is False
 
 
+@pytest.mark.parametrize("age_s,expected", [(-1.0, False), (0.0, True), (100.0, True), (100.1, False)])
+def test_is_fresh_boundary_including_future_timestamps(age_s, expected):
+    """#131 WO-ADAPTER-FRESHNESS-FUTURE-TS. Direct unit coverage of the
+    predicate's exact boundary, independent of either caller -- neither
+    `test_future_last_seen_ts_is_rejected` above nor
+    `test_commodity_path_future_stamped_port_is_never_treated_as_fresh`
+    below exercises the `<=` edge itself (`100.0` true vs `100.1` false),
+    only the far future/negative case. `age_s=-1.0` (a future/clock-skewed
+    timestamp) must fail closed, not satisfy `<= max_age_s` unconditionally."""
+    now = _CLOCK()
+    ts_str = trade_adapter.world_model._now_iso(lambda: now - datetime.timedelta(seconds=age_s))
+    assert trade_adapter._is_fresh(ts_str, max_age_s=100.0, now=now) is expected
+
+
+def test_commodity_path_future_stamped_port_is_never_treated_as_fresh(tmp_path):
+    """Asymmetric case neither sibling test above covers: only ONE side
+    of the pair (sector 60) carries a future stamp, the other (61) is
+    stamped normally. Proves a single corrupt/future timestamp is enough
+    to fail the WHOLE pair, not just the "both sides future" case
+    `test_future_last_seen_ts_is_rejected` exercises."""
+    future_clock = lambda: _CLOCK() + datetime.timedelta(hours=1)
+    _upsert(
+        tmp_path, 60, warps=(61,), commodities=[_row("Equipment", "selling", 100)], port_ts_clock=future_clock
+    )
+    _upsert(tmp_path, 61, warps=(60,), commodities=[_row("Equipment", "buying", 0)])
+
+    cfg = trade_adapter.TradeAdapterConfig(max_age_s=3600.0 * 24)  # generous -- only the FUTURE stamp should fail
+    hops, note = trade_adapter.build_trade_hops(WORLD, state_dir=tmp_path, config=cfg, now=_CLOCK)
+
+    assert hops == ()
+
+
 def test_absent_last_seen_ts_yields_no_hop(tmp_path):
     """An absent/unparseable timestamp is never treated as fresh
     (`_is_fresh`'s explicit fail-closed contract) -- a raw sector whose
@@ -806,6 +838,97 @@ def test_class_pair_asymmetric_one_way_warps_sums_both_directions(tmp_path):
     assert pairs[0].turns == 3
     assert stats.known_sectors == 3  # the waypoint counts as a known sector too
     assert stats.class_valid_ports == 2  # but never as a class-valid PORT
+
+
+def test_future_stamped_port_is_never_treated_as_fresh(tmp_path):
+    """#131 WO-ADAPTER-FRESHNESS-FUTURE-TS (main, `ff48656`) fixed
+    `_is_fresh` to fail closed on a negative age (a future/clock-skewed
+    `last_seen_ts`). `build_candidate_pairs` used to re-derive the same
+    predicate inline instead of calling `_is_fresh`, and missed the fix:
+    a future-stamped port's negative age satisfied the old bare
+    `age <= max_age_s` check unconditionally and was treated as fresh.
+
+    Execution proof: sector 10 is stamped ONE HOUR IN THE FUTURE relative
+    to `now`; sector 11 is stamped normally and is otherwise posture-
+    compatible with sector 10 and routed. Only sector 11 may count as
+    fresh, so no pair can form (fewer than 2 fresh ports)."""
+    future_clock = lambda: _CLOCK() + datetime.timedelta(hours=1)
+    _upsert_class(tmp_path, 10, warps=(11,), klass="SBB", port_ts_clock=future_clock)
+    _upsert_class(tmp_path, 11, warps=(10,), klass="BSS", port_ts_clock=_CLOCK)
+
+    pairs, stats = trade_adapter.build_candidate_pairs(WORLD, state_dir=tmp_path, now=_CLOCK)
+
+    assert stats.class_valid_ports == 2  # both are syntactically valid class triples
+    assert stats.fresh_class_ports == 1  # only sector 11 -- sector 10's future stamp is NOT fresh
+    assert pairs == ()
+
+
+def test_oldest_class_age_excludes_a_negative_future_stamp(tmp_path):
+    """Sanity, not a discriminating regression pin (a genuinely-old
+    positive age is always numerically larger than any negative one, so
+    plain `max()` already picks it correctly regardless of the `a >= 0`
+    filter -- verified by hand, not claimed as mutation-proven). The
+    actually-discriminating case, where the filter is load-bearing, is
+    `test_oldest_class_age_is_none_when_every_reading_is_future_stamped`
+    below (every candidate negative -> `max()` alone would pick the
+    least-negative one and report it as a real "oldest reading")."""
+    future_clock = lambda: _CLOCK() + datetime.timedelta(hours=1)
+    old_clock = lambda: datetime.datetime(2026, 6, 1, 12, 0, 0, tzinfo=datetime.timezone.utc)
+    _upsert_class(tmp_path, 10, warps=(11,), klass="SBB", port_ts_clock=future_clock)
+    _upsert_class(tmp_path, 11, warps=(10,), klass="BSS", port_ts_clock=old_clock)
+
+    cfg = trade_adapter.PairLoopConfig(class_max_age_s=10.0)
+    pairs, stats = trade_adapter.build_candidate_pairs(WORLD, state_dir=tmp_path, config=cfg, now=_CLOCK)
+
+    expected_age = (_CLOCK() - old_clock()).total_seconds()
+    assert stats.oldest_class_age_s == expected_age  # sector 11's genuinely-old age, never sector 10's negative one
+    assert stats.oldest_class_age_s > 0
+
+
+def test_oldest_class_age_is_none_when_every_reading_is_future_stamped(tmp_path):
+    """No genuinely non-negative age exists at all -- `None` (honest
+    unknown), never a negative number masquerading as an age."""
+    future_clock = lambda: _CLOCK() + datetime.timedelta(hours=1)
+    _upsert_class(tmp_path, 10, warps=(11,), klass="SBB", port_ts_clock=future_clock)
+    _upsert_class(tmp_path, 11, warps=(10,), klass="BSS", port_ts_clock=future_clock)
+
+    pairs, stats = trade_adapter.build_candidate_pairs(WORLD, state_dir=tmp_path, now=_CLOCK)
+
+    assert stats.oldest_class_age_s is None
+
+
+# --------------------------------------------------------------------------
+# _observed_age_s -- direct unit coverage of the defense-in-depth guard
+# (Samantha's second-order finding: a plausible-but-wrong number is worse
+# than an obviously-wrong one; `max()` alone MASKS one negative input
+# behind a healthy-looking one).
+# --------------------------------------------------------------------------
+
+
+def test_observed_age_s_normal_case_returns_the_staler():
+    assert trade_adapter._observed_age_s(100.0, 3600.0) == 3600.0
+    assert trade_adapter._observed_age_s(0.0, 0.0) == 0.0
+
+
+def test_observed_age_s_is_none_when_both_are_future_stamped():
+    assert trade_adapter._observed_age_s(-100.0, -50.0) is None
+
+
+def test_observed_age_s_never_masks_one_future_stamp_behind_a_healthy_one():
+    """The masking case, named explicitly: `max(3600.0, -3600.0)` is
+    `3600.0` on its own, which reads as a perfectly normal one-hour
+    figure while hiding that the OTHER input was garbage. Must be
+    `None`, whichever side carries the negative value."""
+    assert trade_adapter._observed_age_s(3600.0, -3600.0) is None
+    assert trade_adapter._observed_age_s(-3600.0, 3600.0) is None
+
+
+def test_observed_age_s_is_none_not_zero_on_a_missing_input():
+    """Honest unknown, never a fabricated `0.0` -- same em-dash discipline
+    as every other "never guess" guard in this module."""
+    assert trade_adapter._observed_age_s(None, 100.0) is None
+    assert trade_adapter._observed_age_s(100.0, None) is None
+    assert trade_adapter._observed_age_s(None, None) is None
 
 
 @pytest.mark.parametrize(
