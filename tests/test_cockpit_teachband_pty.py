@@ -140,5 +140,44 @@ def test_band_shares_the_control_strip_row_with_liveness(_capture) -> None:
     band = compose_teach_band()
     rows = [i for i, line in enumerate(grid) if band in line]
     assert rows, "band not found on any row"
-    row = grid[rows[0]]
-    assert row.index(band) > 0, "band is hard-left; canon right-aligns it"
+    _assert_band_right_aligned_on_row(grid[rows[0]], band)
+
+
+def _assert_band_right_aligned_on_row(row: str, band: str) -> None:
+    """Shared right-align pin — production pty capture and left-shift falsify.
+
+    ``index(band) > 0`` only ruled out column 0 (#188 F3 / #192); column 1 and
+    any mid-row drift still passed. Canon + ``control_seat`` place the band
+    against liveness's left edge (one blank each side), yielding the center.
+    """
+    assert band in row, "band not on row"
+    idx = row.index(band)
+    end = idx + len(band)
+    left = row[:idx]
+    assert left and any(not c.isspace() for c in left), (
+        f"band hard-left at column {idx}; canon right-aligns it against "
+        "yielded right-side content"
+    )
+    assert left[-1] == " ", "band abuts left-side content"
+    stripped = row.rstrip()
+    if end == len(stripped):
+        return  # flush to visible right edge (no liveness yield in this frame)
+    trailing = stripped[end:]
+    assert trailing.startswith(" ") and not trailing.startswith("  "), (
+        "band not flush to yielded right-side content (expected one blank)"
+    )
+    assert trailing[1:] and not trailing[1].isspace(), (
+        "expected yielded content after band gap; got trailing blank only"
+    )
+
+
+def test_band_right_align_pin_goes_red_when_left_shifted() -> None:
+    """Falsify Accept: band at column 1 (old ``> 0`` still green) must redden
+    the *same* helper the pty pin uses."""
+    band = compose_teach_band()
+    # Column 1 + one-blank yield to liveness — the vacuous ``> 0`` floor passes.
+    forged = " " + band + " ♥ RX 2s"
+    forged = forged + (" " * (FULL_COLS - len(forged)))
+    assert forged.index(band) == 1
+    with pytest.raises(AssertionError, match="hard-left|right-align"):
+        _assert_band_right_aligned_on_row(forged, band)
