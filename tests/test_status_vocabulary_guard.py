@@ -157,6 +157,15 @@ def test_every_allowlist_entry_names_a_tranche_and_a_reason():
 # ---------------------------------------------------------------------------
 
 
+# Producer-side identity anchors — mirror #186 badge pattern / #188 F1.
+# Cardinality alone is vacuous once the real map is large; dropping a known
+# producer from the scan must redden this pin (WO-TEST-EMITTED-SCAN-IDENTITY).
+_EMITTED_SCAN_IDENTITY = (
+    "tw2002_aiclient/session/protocol.py",
+    "tw2002_aiclient/world_model.py",
+)
+
+
 def test_the_scanner_reaches_the_files_it_claims_to_scan():
     """The empty-scan trap: a glob that matches nothing yields no consumed keys,
     hence no starved keys, hence a green guard over a repo full of gaps. Assert
@@ -166,7 +175,31 @@ def test_the_scanner_reaches_the_files_it_claims_to_scan():
     assert len(consumed) >= 20, f"consumer scan found only {len(consumed)} keys"
     for expected in ("tw2002_aiclient/cockpit/goals.py", "tw2002_aiclient/screens.py"):
         assert expected in readers, f"{expected} was not scanned"
-    assert len(emitted_keys()) >= 10, "producer scan found suspiciously few keys"
+    # Producer side: identity, not cardinality (#190).
+    writers = {
+        site.split(":")[0]
+        for sites in emitted_keys().values()
+        for site in sites
+    }
+    for expected in _EMITTED_SCAN_IDENTITY:
+        assert expected in writers, f"{expected} was not scanned as a producer"
+
+
+def test_emitted_identity_floor_goes_red_when_protocol_is_dropped():
+    """Falsify Accept: excluding session/protocol.py from the writer set must
+    fail the identity pin — not a raised count floor."""
+    writers = {
+        site.split(":")[0]
+        for sites in emitted_keys().values()
+        for site in sites
+    }
+    victim = "tw2002_aiclient/session/protocol.py"
+    assert victim in writers, "precondition: protocol.py must be a live producer"
+    forged = writers - {victim}
+    missing = [p for p in _EMITTED_SCAN_IDENTITY if p not in forged]
+    assert missing == [victim], (
+        f"expected only {victim!r} missing from identity floor; got {missing!r}"
+    )
 
 
 def test_the_scanner_resolves_named_constant_writes():
