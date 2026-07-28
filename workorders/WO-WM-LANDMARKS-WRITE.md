@@ -1,6 +1,6 @@
 # WO-WM-LANDMARKS-WRITE — populate landmarks from Ports line
 
-**Status:** BANKED · HIGH  
+**Status:** OPEN EXECUTE · HIGH · Claude Code preferred  
 **Posted:** 2026-07-28T14:06Z · hub (CC 14:04:20Z evidence)
 
 ## Goal
