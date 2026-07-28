@@ -1,7 +1,8 @@
 # WO-COACH-CHAIN-TRIGGER — Discovered-chain coach callout via coaching-engine
 
-**Status:** BANKED · MED · blocked on coaching-engine follow-on  
+**Status:** DONE · superseded by #162 `5f35188` (`WO-STATUS-CHAIN-SCALARS-COACH` on main)  
 **Posted:** 2026-07-28T01:25Z · hub (split from #128 Accept 5)  
+**Closed:** 2026-07-28T13:40Z · PR #159 closed without merge; goal shipped via #162  
 **Seat:** open (CC+Fable preferred when coaching surface opens)  
 **Depends:** `WO-CHAIN-DETECT-WIRE` row half (#128) · `canon/engine/coaching-engine.md`
 
