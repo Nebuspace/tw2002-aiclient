@@ -11,7 +11,7 @@ from __future__ import annotations
 import random
 from collections import deque
 from dataclasses import dataclass
-from typing import Mapping, Optional, Sequence
+from typing import Any, Callable, Mapping, Optional, Sequence
 
 from tw2002_aiclient import world_model
 
@@ -472,7 +472,10 @@ class FormationsPlan:
     route: Optional[tuple[int, ...]]
     next_sector: Optional[int]
     hunt: Optional[MapFillPlan]
-    mode: str  # "route" | "hunt" | "arrived" | "exhausted" | "catalog"
+    # "unavailable" is NOT interchangeable with "hunt"/"exhausted" -- see
+    # `plan_find_formations`. It means "no catalogue was reachable", never
+    # "a catalogue was read and held nothing".
+    mode: str  # "route" | "hunt" | "arrived" | "exhausted" | "catalog" | "unavailable"
 
 
 def plan_find_formations(
@@ -483,19 +486,51 @@ def plan_find_formations(
     epsilon: float = 0.1,
     state_dir=None,
     rng: Optional[random.Random] = None,
+    catalog_provider: Optional[Callable[..., Any]] = None,
 ) -> FormationsPlan:
     """Find-Formations tick: route toward nearest genesis candidate.
 
-    Runs TW-16 `catalog_world` (read-only). If candidates exist, pathfind
-    to the nearest (entrance if set, else first sector). Otherwise Map-fill
-    to grow the graph. Never deploys Genesis — locate/recommend only.
-    """
-    from twclient.formations import catalog_world
+    If candidates exist, pathfind to the nearest (entrance if set, else
+    first sector). Otherwise Map-fill to grow the graph. Never deploys
+    Genesis — locate/recommend only.
 
+    ``catalog_provider`` is the TW-16 formation catalogue seam: a callable
+    ``(world_id, *, state_dir) -> object`` exposing ``.genesis_candidates``.
+    It mirrors ``screens.py``'s ``status_provider`` contract — **defaults to
+    ``None``, and with no provider set this returns an honest
+    ``mode="unavailable"`` rather than inventing content.**
+
+    WO-EXPLORE-TWCLIENT-FORMATIONS-LANDMINE: this function previously did
+    ``from twclient.formations import catalog_world`` in its body. ADR-001
+    deleted the whole ``twclient`` package, so that line raised
+    ``ModuleNotFoundError`` on the first call — armed, and invisible because
+    it is a *function-level* import (module import stayed clean) whose only
+    tests are ``--ignore``d (``pytest.ini`` → ``tests/test_formations.py``).
+
+    Why a distinct ``"unavailable"`` and not the existing ``"hunt"``: with no
+    catalogue, "no candidates" and "could not look for candidates" are the
+    same empty value. Degrading to the Map-fill hunt branch would report
+    *exploring, none found* — a confident statement about the world derived
+    from a missing dependency. The refusal is typed so a caller can tell the
+    two apart. No resurrect: the catalogue is not reimplemented here, and
+    wiring a real one later is one argument at the call site.
+    """
     budget = max(0, int(turn_budget))
     cur = int(current_sector)
     graph = known_graph(world_id, state_dir=state_dir)
-    cat = catalog_world(world_id, state_dir=state_dir)
+
+    if catalog_provider is None:
+        return FormationsPlan(
+            found=False,
+            targets=(),
+            kind=None,
+            route=None,
+            next_sector=None,
+            hunt=None,
+            mode="unavailable",
+        )
+
+    cat = catalog_provider(world_id, state_dir=state_dir)
     candidates = cat.genesis_candidates
     if not candidates:
         hunt = plan_map_fill(
