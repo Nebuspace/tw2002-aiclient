@@ -27,3 +27,12 @@ Cite audit. Avoid #147 cockpit/chains. Explicit paths. No twclient resurrect.
 
 Live coverage remains: `tests/test_adapters_*.py`, `tests/test_cli_run_dir*.py`.
 Import-hygiene vacuity pins untouched.
+
+## REVISE follow-up (2026-07-28)
+
+CI suite red was **not** the DELETE — `test_cli_chains` fixture stamped ports at
+fixed `2026-07-28T04:00:00Z` while `cmd_chains` uses wall-clock freshness
+(`max_age_s=3600`). Suite green before ~05:00Z, red after. Pinned adapter
+`now` via the `world` fixture in `tests/test_cli_chains.py` (CLI test only;
+no cockpit/chains / #147 touch).
+

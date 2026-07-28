@@ -29,8 +29,25 @@ def _row(name, status, pct, amount=1000):
 @pytest.fixture()
 def world(tmp_path, monkeypatch):
     """A three-port cycle, with `world_model.WORLD_DIR` pointed at tmp so
-    `cmd_chains` (which takes no `--state-dir`) reads it."""
+    `cmd_chains` (which takes no `--state-dir`) reads it.
+
+    `cmd_chains` → `chain_search.recompute` omits `now=`, so
+    `trade_adapter.build_trade_hops` falls back to wall-clock UTC. Ports
+    stamped at a fixed NOW go stale after ``max_age_s`` (1h) and the suite
+    flips to ``no_tradeable_hops`` — a CI time-bomb (green before the hour,
+    red after). Pin the adapter clock to CLOCK for this fixture.
+    """
+    from tw2002_aiclient import trade_adapter
+
     monkeypatch.setattr(world_model, "WORLD_DIR", tmp_path)
+    _orig_build = trade_adapter.build_trade_hops
+
+    def _build_pinned(world_id, *, state_dir=None, config=None, now=None):
+        return _orig_build(
+            world_id, state_dir=state_dir, config=config, now=now or CLOCK
+        )
+
+    monkeypatch.setattr(trade_adapter, "build_trade_hops", _build_pinned)
     for sid, warps, comm in (
         (10, (11, 12), [_row("Equipment", "selling", 100), _row("Fuel Ore", "buying", 0)]),
         (11, (10, 12), [_row("Fuel Ore", "selling", 100), _row("Organics", "buying", 0)]),
