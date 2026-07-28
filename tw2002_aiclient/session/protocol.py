@@ -951,6 +951,120 @@ def _save_password(profile_name, password):
     os.chmod(path, 0o600)
 
 
+def _normalise_host(value):
+    """DNS-comparable form of a host string, or `None` if it is not one.
+
+    Two normalisations only, both of them things DNS itself treats as the
+    SAME name: ASCII-case folding (`.lower()`, not `.casefold()` -- casefold
+    maps `ß` to `ss`, which would make two genuinely DIFFERENT hosts compare
+    EQUAL, i.e. fail open), and dropping the single trailing root dot of an
+    absolute FQDN (`host.example.` == `host.example`). Exactly one trailing
+    dot is dropped, not `rstrip(".")`: `host..` is malformed, not the same
+    name, and must stay unequal.
+
+    Deliberately NOT done: DNS resolution, alias/CNAME chasing, IP-literal
+    canonicalisation, whitespace stripping. The first two are network I/O in
+    a dispatch path (a new failure mode, and a new way for a wrong answer to
+    look authoritative); the last would silently repair a malformed config
+    value instead of refusing on it.
+
+    A non-string is `None` -- the caller treats that as "cannot compare",
+    which is a REFUSAL, never a pass.
+    """
+    if not isinstance(value, str):
+        return None
+    host = value.lower()
+    if host.endswith("."):
+        host = host[:-1]
+    return host
+
+
+def _profile_identity(profile_name):
+    """Resolve `profile_name`'s connect target for the `ensure` identity gate.
+
+    Returns `((host, port), None)` or `(None, error_str)` -- never raises, so
+    a store that has become unreadable/malformed between `_load_profile`'s own
+    resolve and this one turns into an ordinary refusal rather than a
+    traceback. Fail CLOSED: any exception at all means we do not know which
+    server this profile names, and an unknown identity may never be treated
+    as a matching one.
+
+    The error carries `type(e).__name__` only, never `str(e)` -- the
+    type-name-only convention `watch.py`/`guardian.py` already use, so no
+    exception message can carry session payload into a response. The
+    ACTIONABLE version of the common failures is already delivered upstream:
+    `_load_profile` runs first and turns every `ProfileConnectionError` into
+    `profile_connection_error:<name>:<e>`, so this branch is reached only by
+    a store that changed under us or by a failure outside that family.
+    """
+    from . import credentials
+
+    try:
+        host, port = credentials.resolve_profile_host_port(profile_name)
+    except Exception as e:  # noqa: BLE001 -- fail closed on ANY resolve failure
+        return None, f"profile_identity_unverified:{profile_name}:{type(e).__name__}"
+    return (host, port), None
+
+
+def _session_identity_mismatch(session, profile_name, want):
+    """`None` when the live session's connect target IS `want`; the typed
+    refusal string when it provably is not.
+
+    **What this closes (WO-ENSURE-PROFILE-IDENTITY-VERIFY).** `ensure
+    --profile X` used to accept a matching screen CLASS as proof of
+    IDENTITY: any session already sitting at `main_command` was stamped
+    `session.mark_profile(X)` regardless of which server it was actually on,
+    and `mark_profile` is what arms `guardian._maybe_reconnect` to replay
+    X's credential -- through `session.reconnect()`, which reconnects to the
+    session's OWN host, not the profile's. So a wrong-profile `ensure`
+    mislabelled the session and a later drop sent X's password to a server X
+    never named. The immediate path was the same shape: when the class did
+    NOT match, `run_login` ran against the EXISTING socket.
+
+    **Purely restrictive.** The only outcome this function can add is a
+    refusal. It never reconnects, never re-targets, never edits credentials
+    -- correcting the connection is deliberately out of scope; refusing is
+    the deliverable.
+
+    **The "no wire target to contradict" rule.** The comparison is made iff
+    `session.port` is a usable port by `credentials._valid_port` -- the
+    codebase's OWN definition (positive `int`, `bool` excluded), called
+    rather than re-derived so this cannot drift from the resolver's idea of
+    a valid port. A session whose port is not one (0, `None`, a string) has
+    no reachable TCP target: it has never spoken to a game server on that
+    port and cannot, so there is no established identity for a profile to
+    contradict and a first `ensure` must still work. Everything else -- an
+    empty or non-string HOST with a real port -- is COMPARED, and therefore
+    refuses: an empty host is still a connectable target (it resolves to the
+    loopback/any address), so it is exactly the case that must not be waved
+    through.
+
+    **Deliberate non-reuse of `server_inventory.endpoint_key`.** That helper
+    builds the same `(host, port)` pair into a lookup key, but it LAUNDERS
+    bad values -- an unparseable port becomes `0` and a `None` host becomes
+    `""` -- so two differently-broken endpoints collapse to the same key and
+    compare EQUAL. That is the correct behaviour for a display/lookup key
+    and precisely the wrong one for an identity gate, which must refuse on
+    anything it cannot compare.
+
+    Host and port differences get their OWN error names. A port-only
+    difference reported as `profile_host_mismatch` would tell the operator
+    something false about their config while it is being refused.
+    """
+    from . import credentials
+
+    port = getattr(session, "port", None)
+    if not credentials._valid_port(port):
+        return None
+    live_host = _normalise_host(getattr(session, "host", None))
+    want_host = _normalise_host(want[0])
+    if live_host is None or want_host is None or live_host != want_host:
+        return f"profile_host_mismatch:{profile_name}"
+    if port != want[1]:
+        return f"profile_port_mismatch:{profile_name}"
+    return None
+
+
 def _login_failure_response(session, error_text):
     """The `ensure` FAILURE answer — bounded by construction, never a mirror
     of the receive buffer (canon `DECISIONS.md` §C.2, ruled 2026-07-26).
@@ -1039,6 +1153,15 @@ def _dispatch_ensure(session, args, server):
     queued — folds the earlier ensure-only `drive_lock`. Bare harness
     without `server.control_lock` stays unrestricted for unit tests.
     Login sends use Session.send default `sender="app"` (no login edits).
+
+    **WO-ENSURE-PROFILE-IDENTITY-VERIFY:** a matching screen CLASS is no
+    longer accepted as proof of IDENTITY. Before either hazard -- the
+    `cls == target` `mark_profile` stamp, and `run_login` against the
+    existing socket -- the session's own `(host, port)` must match the one
+    the profile resolves to, or the verb refuses (`profile_host_mismatch:` /
+    `profile_port_mismatch:` / `profile_identity_unverified:`). The check is
+    purely restrictive: it never reconnects and never re-targets, so a
+    wrong-profile `ensure` is REFUSED rather than repaired.
     """
     with _driving_dispatch(server) as lock_error:
         if lock_error is not None:
@@ -1061,6 +1184,24 @@ def _dispatch_ensure(session, args, server):
         if err is not None:
             return {"ok": False, "error": err}
 
+        # WO-ENSURE-PROFILE-IDENTITY-VERIFY: does this session actually sit on
+        # the server this profile names? Placed HERE, immediately after the
+        # profile loads and before anything else happens, because it is the
+        # one point that precedes ALL THREE hazards at once: the
+        # `cls == target` reuse stamp (`mark_profile` arms the guardian's
+        # later credential replay), `run_login` on the EXISTING socket, and
+        # the `reconnect()` just below -- a wrong-profile request should not
+        # even buy a reconnection on that profile's behalf. Re-derived again
+        # at each use point below rather than trusted forward; see
+        # `_session_identity_mismatch` for what it compares and why refusing
+        # is the whole remedy.
+        want, err = _profile_identity(profile.name)
+        if err is not None:
+            return {"ok": False, "error": err}
+        err = _session_identity_mismatch(session, profile.name, want)
+        if err is not None:
+            return {"ok": False, "error": err}
+
         # A dead telnet connection must be repaired before we can even
         # classify the current screen (a stale pyte buffer would
         # misclassify a frozen last-seen frame as "current").
@@ -1074,6 +1215,21 @@ def _dispatch_ensure(session, args, server):
         text = session.render_text(rows)
         prompt = rows[-1].strip() if rows else ""
         cls = classify_screen(text, prompt)
+
+        # Re-derived at the USE point, not trusted forward from the gate
+        # above (Accept 2). Between the gate and here the session may have
+        # been reconnected, and a stop/restart burst can land in that window;
+        # nothing may stand between this line and the two hazards it guards,
+        # so it sits AFTER the render/classify (the only calls that can block
+        # or hand control to another thread) and immediately BEFORE both the
+        # `mark_profile` stamp and the `run_login` send. The invariant this
+        # enforces -- rather than assumes -- is that `Session.host`/`.port`
+        # are assigned once in `__init__` and never reassigned (`reconnect()`
+        # rebuilds the socket from those same two fields), so the pair that
+        # was verified IS the pair the login will be sent to.
+        err = _session_identity_mismatch(session, profile.name, want)
+        if err is not None:
+            return {"ok": False, "error": err}
 
         if cls == target:
             session.mark_profile(profile.name)
@@ -1091,6 +1247,18 @@ def _dispatch_ensure(session, args, server):
             # NOT build_response() -- see `_login_failure_response`'s docstring
             # and canon `DECISIONS.md` C.2. The success paths below keep it.
             return _login_failure_response(session, f"login_failed:{e}")
+
+        # Third and last re-derivation (Accept 2): the login itself is the
+        # longest window in this dispatch, so the stamp that ARMS the
+        # guardian's future credential replay is gated on the identity still
+        # holding NOW, not on the check that let the login start. A refusal
+        # here cannot un-send what `run_login` already sent -- it does the
+        # one thing still available, which is to leave `auto_login_profile`
+        # unset so no FUTURE reconnect replays this credential against a
+        # session whose target we can no longer vouch for.
+        err = _session_identity_mismatch(session, profile.name, want)
+        if err is not None:
+            return {"ok": False, "error": err}
 
         session.mark_profile(profile.name)
         return build_response(session, extra={"steps": steps, "already_there": False})

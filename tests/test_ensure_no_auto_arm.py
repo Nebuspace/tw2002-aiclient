@@ -12,7 +12,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from tw2002_aiclient import adapters
-from tw2002_aiclient.session import cli, protocol
+from tw2002_aiclient.session import cli, credentials, protocol
 
 
 def test_parser_accepts_no_auto_arm_flag():
@@ -84,7 +84,7 @@ def test_adapters_ensure_session_forwards_no_auto_arm(monkeypatch):
     assert seen["no_auto_arm"] is True
 
 
-def test_dispatch_ensure_never_arms_even_when_profile_would(monkeypatch):
+def test_dispatch_ensure_never_arms_even_when_profile_would(monkeypatch, tmp_path):
     """Bare ensure with autopilot-ish profile metadata still only logs in
     / returns already_there — no autopilot loop start side effect."""
     from tw2002_aiclient.session.control_lock import ControlLock
@@ -110,6 +110,29 @@ def test_dispatch_ensure_never_arms_even_when_profile_would(monkeypatch):
 
     server = FakeServer()
     server.control_lock = ControlLock()
+
+    # WO-ENSURE-PROFILE-IDENTITY-VERIFY: `ensure` now verifies that the live
+    # session is on the server the profile NAMES, resolving the profile
+    # through `credentials.resolve_profile_host_port` — an INDEPENDENT store
+    # read that the `_load_profile` stub below does not satisfy. This test's
+    # subject is auto-arming, not identity, so it supplies a store resolving
+    # `armed_profile` to the SAME endpoint its session claims; without it the
+    # verb fails closed (`profile_identity_unverified:armed_profile:
+    # ProfileNotFound`) and never reaches the arming question at all. Written
+    # from `session.host`/`session.port` rather than as a second pair of
+    # literals so the two cannot drift apart. This also removes an ambient
+    # dependency the stub used to leave open — the resolve otherwise falls
+    # through to whatever `config/profiles.toml` the machine happens to have.
+    profiles = tmp_path / "profiles.toml"
+    profiles.write_text(
+        f"[armed_profile]\n"
+        f'host = "{session.host}"\n'
+        f"port = {session.port}\n"
+        'game_letter = "A"\n'
+        'handle = "Trader1"\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(credentials, "PROFILES_PATH", profiles)
 
     # Profile loader returns a profile; already-at-target path taken.
     fake_profile = MagicMock()
