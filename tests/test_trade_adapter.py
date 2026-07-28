@@ -470,6 +470,68 @@ def test_non_numeric_sector_id_field_is_skipped_not_crashed(tmp_path):
     assert hops == ()
 
 
+def test_non_integral_sector_id_raises_rather_than_truncating(tmp_path):
+    """WO-ADAPTER-SECTOR-ID-INTEGRAL: 10.9 must not silently become key 10."""
+    _write_raw_sector(
+        tmp_path,
+        110,
+        {
+            "sector_id": 10.9,
+            "warps": [111],
+            "port": {
+                "commodities": [_row("Equipment", "selling", 100)],
+                "last_seen_ts": world_model._now_iso(_CLOCK),
+            },
+        },
+    )
+    _upsert(tmp_path, 111, warps=(110,), commodities=[_row("Equipment", "buying", 0)])
+
+    with pytest.raises(ValueError, match="non-integral sector_id"):
+        trade_adapter.build_trade_hops(WORLD, state_dir=tmp_path, now=_CLOCK)
+
+
+def test_require_integral_sector_id_accepts_integral_float_and_int():
+    assert trade_adapter._require_integral_sector_id(10) == 10
+    assert trade_adapter._require_integral_sector_id(10.0) == 10
+    assert trade_adapter._require_integral_sector_id("10") == 10
+    assert trade_adapter._require_integral_sector_id("not-a-number") is None
+    with pytest.raises(ValueError, match="non-integral"):
+        trade_adapter._require_integral_sector_id(10.9)
+
+
+def test_integral_float_sector_id_builds_hops(tmp_path):
+    """``10.0`` is integral — accepted as sector 10 and can form a hop."""
+    _write_raw_sector(
+        tmp_path,
+        10,
+        {
+            "sector_id": 10.0,
+            "warps": [11],
+            "port": {
+                "commodities": [_row("Equipment", "selling", 100)],
+                "last_seen_ts": world_model._now_iso(_CLOCK),
+            },
+        },
+    )
+    _write_raw_sector(
+        tmp_path,
+        11,
+        {
+            "sector_id": 11,
+            "warps": [10],
+            "port": {
+                "commodities": [_row("Equipment", "buying", 0)],
+                "last_seen_ts": world_model._now_iso(_CLOCK),
+            },
+        },
+    )
+
+    hops, note = trade_adapter.build_trade_hops(WORLD, state_dir=tmp_path, now=_CLOCK)
+
+    assert len(hops) == 1
+    assert (hops[0].frm, hops[0].to, hops[0].commodity) == (10, 11, "Equipment")
+
+
 # -- non-finite pct fails closed, not open -----------------------------------
 
 
