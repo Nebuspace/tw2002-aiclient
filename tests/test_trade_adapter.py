@@ -1303,3 +1303,44 @@ def test_neither_module_reaches_a_send_path():
         "tw2002_aiclient.chain_detect_view",
     }
     assert "tw2002_aiclient.loops.list_view" not in seen
+
+
+# --------------------------------------------------------------------------
+# WO-WORLD-STATS-REFRESH-EVENTS B — cheap known_sector_count at pair-build
+# --------------------------------------------------------------------------
+
+
+def test_candidate_pairs_known_sectors_uses_cheap_count_when_all_sectors_would_raise(
+    tmp_path, monkeypatch
+):
+    """Corrupt sibling: `all_sectors` raises; the stats count must still land.
+
+    Hub ruling: cheap counter wins — skip unreadable content for the *count*,
+    do not raise at the `known_sectors` call site. Pairing still needs a
+    loadable graph, so after proving the raise we replace `all_sectors` with
+    the two good records only (isolates the count call site).
+    """
+    _upsert_class(tmp_path, 10, warps=(11,), klass="SBB")
+    _upsert_class(tmp_path, 11, warps=(10,), klass="BSS")
+    bad = world_model._sector_path(WORLD, 99, state_dir=tmp_path)
+    bad.write_text("{not-json", encoding="utf-8")
+
+    assert world_model.known_sector_count(WORLD, state_dir=tmp_path) == 3
+    with pytest.raises(world_model.WorldModelError):
+        world_model.all_sectors(WORLD, state_dir=tmp_path)
+
+    good = [
+        world_model.get_sector(WORLD, 10, state_dir=tmp_path),
+        world_model.get_sector(WORLD, 11, state_dir=tmp_path),
+    ]
+    monkeypatch.setattr(
+        world_model,
+        "all_sectors",
+        lambda wid, state_dir=None: list(good),
+    )
+
+    pairs, stats = trade_adapter.build_candidate_pairs(
+        WORLD, state_dir=tmp_path, now=_CLOCK
+    )
+    assert stats.known_sectors == 3
+    assert len(pairs) == 1

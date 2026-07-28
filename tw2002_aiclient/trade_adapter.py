@@ -644,7 +644,16 @@ def build_candidate_pairs(
     cfg = config or PairLoopConfig()
     current = now() if now is not None else datetime.datetime.now(datetime.timezone.utc)
 
-    known_sectors = len(world_model.all_sectors(world_id, state_dir=state_dir))
+    # WO-WORLD-STATS-REFRESH-EVENTS B: count directory entries, do not
+    # deep-copy every sector file. Deliberate behaviour change vs
+    # `len(all_sectors(...))`: a corrupt JSON sibling that makes
+    # `all_sectors` raise still contributes to this count (filename
+    # stem is enough), and an unreadable sectors dir reports 0 here
+    # rather than raising — `PairBuildStats.known_sectors` is an int.
+    # `_class_ports` may still raise via `query`/`all_sectors`; that is
+    # a separate path.
+    count = world_model.known_sector_count(world_id, state_dir=state_dir)
+    known_sectors = 0 if count is None else count
     raw_ports = _class_ports(world_id, state_dir=state_dir)
 
     # Ages are ONLY fail-closed `_age_s` results (None = absent / bad /

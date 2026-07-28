@@ -25,15 +25,18 @@ the other four are listed in that guard's allowlist with the evidence:
 DRAW (`screens.py`), not on a timer. Counting sector files costs ~5ms at 1000
 sectors and ~26ms at 5000 — per draw, against a whole-process budget
 (`tests/test_dead_terminal_spin.py`, 0.5s) already within ~50ms of its ceiling.
-So the count is taken when the operator opens the chains popup, which already
-pays for a far more expensive world-model pass on that keypress, and the draw
-path only ever reads one cached integer. **Nothing here runs on a draw.**
+So the count is taken when the operator opens the chains popup (which already
+pays for a far more expensive world-model pass on that keypress) or when an
+explore run reaches a terminal outcome on the idle poll (already paid for
+`explore_status`), and the draw path only ever reads one cached integer.
+**Nothing here runs on a draw.**
 
 **Staleness is bounded and honest.** The number is "sectors known as of the last
-chains popup", so it can lag exploration done since. That is a real cost of the
-budget above, and it is the right trade for a progress counter: a number that
-lags is still true of a moment we were actually in, while no number at all is
-what shipped before this. It never counts anything that was not on disk.
+chains popup or the last explore terminal poll", so it can lag exploration done
+since without those events. That is a real cost of the budget above, and it is
+the right trade for a progress counter: a number that lags is still true of a
+moment we were actually in, while no number at all is what shipped before this.
+It never counts anything that was not on disk.
 """
 
 from __future__ import annotations
