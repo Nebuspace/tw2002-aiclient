@@ -125,6 +125,7 @@ remove_wt() {
   [[ -z "$wt" ]] && return 0
   if ! is_hub_owned_wt "$wt"; then
     if [[ "$mode" == "explicit" ]]; then
+      # Caller must pre-validate; this path is a last-resort guard.
       echo "REFUSE: $wt is not hub-owned (need basename hub-* under .worktrees/ or /private/tmp/hub-*). Owning seat reaps." >&2
       exit 2
     fi
@@ -139,6 +140,16 @@ remove_wt() {
 
 reap_worktrees() {
   local wt
+  # All-or-nothing: validate every explicit argv BEFORE any remove, so a mixed
+  # list cannot leave half the hubs reaped under a REFUSE exit code (CC 21:08:44Z).
+  for wt in "${WT_ARGS[@]+"${WT_ARGS[@]}"}"; do
+    [[ -z "$wt" ]] && continue
+    if ! is_hub_owned_wt "$wt"; then
+      echo "REFUSE: $wt is not hub-owned (need basename hub-* under .worktrees/ or /private/tmp/hub-*). Owning seat reaps." >&2
+      echo "REFUSE: aborting before any worktree remove (all-or-nothing argv gate)." >&2
+      exit 2
+    fi
+  done
   for wt in "${WT_ARGS[@]+"${WT_ARGS[@]}"}"; do
     remove_wt "$wt" explicit
   done

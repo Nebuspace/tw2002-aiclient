@@ -10,3 +10,5 @@
 5. live-prove `n/a`.
 
 **Refs:** CC 21:05:04Z allowlist design · incidents after #195/#197.
+
+6. Mixed argv (`hub-a` + `cc-x` + `hub-b`) refuses **before** any remove (all-or-nothing).
