@@ -1,0 +1,13 @@
+{
+  "name": "p4_trainer",
+  "created_ts": "2026-07-21T01:42:44Z",
+  "source": "recorded",
+  "start_anchor": 2335,
+  "steps": [
+    {
+      "input": "D",
+      "wait_prompt": "Command \\[TL=",
+      "expected_post_class": "main_command"
+    }
+  ]
+}

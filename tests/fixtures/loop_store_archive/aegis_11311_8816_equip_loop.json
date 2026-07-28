@@ -1,0 +1,12 @@
+{
+  "name": "aegis_11311_8816_equip_loop",
+  "created_ts": "2026-07-19T08:04:08Z",
+  "source": "recorded",
+  "steps": [
+    {
+      "input": "383",
+      "wait_prompt": null,
+      "expected_post_class": "main_command"
+    }
+  ]
+}

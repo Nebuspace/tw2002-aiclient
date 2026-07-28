@@ -1,0 +1,42 @@
+{
+  "name": "aegis_11311_equip_loop",
+  "created_ts": "2026-07-19T07:32:14Z",
+  "source": "recorded",
+  "steps": [
+    {
+      "input": "P",
+      "wait_prompt": null,
+      "expected_post_class": "main_command"
+    },
+    {
+      "input": "0",
+      "wait_prompt": null,
+      "expected_post_class": "main_command"
+    },
+    {
+      "input": "0",
+      "wait_prompt": null,
+      "expected_post_class": "main_command"
+    },
+    {
+      "input": "",
+      "wait_prompt": null,
+      "expected_post_class": "main_command"
+    },
+    {
+      "input": "",
+      "wait_prompt": null,
+      "expected_post_class": "main_command"
+    },
+    {
+      "input": "P",
+      "wait_prompt": null,
+      "expected_post_class": "main_command"
+    },
+    {
+      "input": "I",
+      "wait_prompt": null,
+      "expected_post_class": "main_command"
+    }
+  ]
+}
