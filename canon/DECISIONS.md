@@ -52,6 +52,22 @@ RULES:
 
 ---
 
+Append to `tw2002-aiclient/canon/DECISIONS.md` (RESOLVED — Max oral GO 2026-07-28 evening).
+
+---
+
+## RESOLVED-COMBAT-AUTOFIGHT-90 — NPC toll auto-Attack when force_share ≥ 0.90 (2026-07-28)
+
+**Question:** May the fighter-toll guard autonomously Attack on NPC encounters, and at what threshold?
+
+**Ruling (Max):** Yes for **NPC/environmental** tolls only. Use **`force_share = own / (own + enemy)`**. Autonomous Attack iff `force_share ≥ 0.90` (≈9:1) **and** enemy count within `winnable_enemy_band` (default ≤3) **and** both counts are present. Else Retreat. Never Pay. PvP ⇒ STOP. Unparseable ⇒ Retreat. Quantity prompt after Attack is in scope.
+
+**Canon:** Amend `/strategy/toll-and-defense.md` (schema + I5 guard + divergence). Prior reborn prose that framed *all* engaging combat as human-only STOP is superseded for this gated band only.
+
+**Code:** EXEC `WO-COMBAT-ENCOUNTER-POLICY-EXEC` aligns `fighter_toll_policy` to force_share (replace weaker parity auto-Attack).
+
+**Public-safe.** No credentials.
+
 ## CLOSED
 
 <!-- Items fully absorbed into canon (ADR accepted + canon updated). Safe to archive. -->
