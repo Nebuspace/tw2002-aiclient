@@ -1,7 +1,7 @@
 # WO-TEST-IGNORE-LIST-LANDMINE-AUDIT — What the 39 ignored tests hide
 
-**Status:** OPEN · EXECUTE · HIGH · Cursor (`impl-aiclient-cursor`) OK; CC OK  
-**Posted:** 2026-07-28T04:26Z overnight · after formations landmine + CC correction  
+**Status:** SEAT-DONE · awaiting hub Accept · Cursor (`impl-aiclient-cursor`)  
+**Posted:** 2026-07-28T04:26Z overnight · after formations landmine + CC correction · seat STATUS 2026-07-28T04:33Z  
 **Refs:** pytest.ini --ignore list · CC 04:16:48Z (37/39 hard-fail on twclient) · wire plan
 
 ## Goal
