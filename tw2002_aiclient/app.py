@@ -1033,12 +1033,11 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                 # loop confirm. Only NOW does the money-spending adapter call
                 # happen.
                 #
-                # This branch MUST stay above the bare `arm_confirm` below,
-                # which starts EXPLORE as the unguarded default. Without it a
-                # `y` meant for a taught loop would start an explore run --
-                # two different runners, one keystroke, and nothing in a
-                # "something started" assertion would notice. Pinned both ways
-                # in `tests/test_play_chains_arm.py`.
+                # This branch MUST stay above the explore `arm_confirm` below.
+                # Explore no longer is an unguarded default (WO-ARM-CONFIRM-
+                # EXPLICIT-EXPLORE), but a `y` meant for a taught loop must
+                # still never reach explore_start — pinned both ways in
+                # `tests/test_play_chains_arm.py`.
                 #
                 # The name comes from the row the confirm line was composed
                 # from, never from a re-read of the store: re-reading between
@@ -1084,13 +1083,16 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                 else:
                     play.status_line = f"relaunch failed — {result.reason or 'unknown'}"
                 continue
-            if action == "arm_confirm":
-                # WO-PLAY-EXPLORE-ARM (L3): the human pressed `y` at the
-                # explore offer. `handle_key` has already cleared the gate
-                # (single-shot) and only `y`/`Y` can produce this intent --
-                # `resolve_arm_confirm_key` is default-deny, so `Enter`,
-                # `Esc`, `N` and every unmapped keycode land on the cancel
-                # branch and never reach here.
+            if action == "arm_confirm" and pending_confirm_action == "explore":
+                # WO-PLAY-EXPLORE-ARM (L3) + WO-ARM-CONFIRM-EXPLICIT-EXPLORE:
+                # the human pressed `y` at the explore offer. Explore is NOT
+                # the bare `arm_confirm` default — only an explicit
+                # `pending_confirm_action == "explore"` (set when `E` raises
+                # the gate) may start a runner. `handle_key` has already
+                # cleared the gate (single-shot) and only `y`/`Y` can produce
+                # this intent -- `resolve_arm_confirm_key` is default-deny, so
+                # `Enter`, `Esc`, `N` and every unmapped keycode land on the
+                # cancel branch and never reach here.
                 #
                 # `_EXPLORE_MIN_SECTORS` is the SAME constant the prompt was
                 # composed from, so the run cannot start with a different
@@ -1140,6 +1142,15 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                         reason = getattr(explore, "reason", None) or "unknown"
                         play.status_line = f"explore did not start — {reason}"
                         play.explore_band = None
+                continue
+            if action == "arm_confirm":
+                # WO-ARM-CONFIRM-EXPLICIT-EXPLORE: fail closed. Unknown /
+                # unset / stale `pending_confirm_action` must not start ANY
+                # runner — a third arm type that raises the gate but forgets
+                # its own branch used to fall into explore here.
+                pending_confirm_action = None
+                pending_confirm_loop = None
+                play.status_line = "did not arm — nothing pending for this confirm"
                 continue
             if action == "assign_trigger":
                 # WO-P5-068: T Assign-Trigger scaffold.  Create a when+guards
