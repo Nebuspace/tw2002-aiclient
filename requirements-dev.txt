@@ -1,4 +1,5 @@
-# Dev/test only — not a runtime dependency of twclient.
+# Dev/test only — not a runtime dependency of tw2002-aiclient.
+# (The sole runtime dependency is `pyte`; see pyproject.toml [project].)
 # Install:  .venv/bin/pip install -r requirements-dev.txt
 pytest>=8.0
 pytest-xdist>=3.5
