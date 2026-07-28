@@ -1,6 +1,7 @@
 # WO-CERT-JUNIT-HARDFAIL — Seat cert: missing/empty junitxml = hard fail
 
-**Status:** OPEN · EXECUTE · MED · Cursor-class  
+**Status:** IN PROGRESS · EXECUTE · MED · Cursor-class · impl-aiclient-cursor  
+
 **Posted:** 2026-07-26  
 **Seeded for execute:** 2026-07-28T01:25Z · hub  
 **Seat:** impl-aiclient-cursor  
