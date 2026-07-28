@@ -133,7 +133,15 @@ class Session:
         self._sector_epoch = 0
         self._last_sector = None
         self._last_sector_epoch = None
-        # Guards the three fields above ONLY. Never held while acquiring any
+        # WO-LANDMARK-ATTRIBUTE-LAST-KNOWN: one-slot carry of the sector that
+        # was valid immediately before the last APP send. Inert on its own --
+        # see `sector_before_last_send` for the one caller allowed to read it
+        # and the proof it must hold first.
+        self._sector_before_send = None
+        # Guards the four sector-memory fields above ONLY (`_sector_epoch`,
+        # `_last_sector`, `_last_sector_epoch`, `_sector_before_send`) --
+        # they are read and written together and a partial view of them is
+        # exactly a stale attribution. Never held while acquiring any
         # other lock, so it cannot participate in a cycle -- `send()` takes
         # `send_lock` and then this one, and nothing anywhere takes
         # `send_lock` while holding this.
@@ -217,7 +225,7 @@ class Session:
         -- a later auto-reconnect replays login against this profile."""
         self.auto_login_profile = profile_name
 
-    def _bump_sector_epoch(self):
+    def _bump_sector_epoch(self, carry=False):
         """Invalidate the remembered sector. The ONE invalidation primitive.
 
         Called on every send and every reconnect. Deliberately not a
@@ -225,9 +233,46 @@ class Session:
         one way the memory becomes valid (recorded at the current epoch) and
         any change at all invalidates it, so a future caller cannot add a
         third state by forgetting to clear one of two fields.
+
+        `carry=True` additionally files the sector that was valid at this
+        instant into the one-slot `_sector_before_send` memo. That memo is
+        NOT a second memory and never widens `last_known_sector()` -- it is
+        inert unless a later screen proves we did not move (see
+        `sector_before_last_send`). Carrying a stale-or-absent value would
+        defeat the point, so a memo is only filed when the memory was
+        genuinely valid; otherwise the slot is cleared.
+
+        `reconnect` deliberately does NOT carry. A fresh connection is the
+        one event that proves nothing at all about where we are, and a carry
+        filed there would let a later StarDock landing attribute to a sector
+        from before the connection dropped.
         """
         with self._sector_memory_lock:
+            if carry and self._last_sector_epoch is not None and self._last_sector_epoch == self._sector_epoch:
+                self._sector_before_send = self._last_sector
+            else:
+                self._sector_before_send = None
             self._sector_epoch += 1
+
+    def sector_before_last_send(self):
+        """The sector we were in immediately before the most recent app send,
+        or ``None``.
+
+        **Read this only with independent proof that we did not move.** It is
+        a raw carry, not a claim about where we are: on its own it is exactly
+        the stale value `last_known_sector()` exists to refuse. Its one
+        legitimate consumer is a caller looking at a screen that *proves* no
+        movement occurred -- a warp lands on a sector display, while docking
+        lands on a StarDock screen, so the landing screen is an OBSERVATION
+        that discriminates the two where the outgoing command was only an
+        inference.
+
+        Cleared by `reconnect` and never filled by `send_raw`: a human's raw
+        keystrokes are opaque to us, so the app declines to reason about what
+        they did.
+        """
+        with self._sector_memory_lock:
+            return self._sector_before_send
 
     def note_sector(self, sector_id):
         """Record a sector a settled screen POSITIVELY stated.
@@ -572,7 +617,15 @@ class Session:
             # one that would attribute a landmark to the sector we just left.
             # Bumping early can only cost a write we were unsure about;
             # bumping late can write a permanent wrong one.
-            self._bump_sector_epoch()
+            #
+            # `carry=True` files the pre-send sector into the inert one-slot
+            # memo. It does NOT keep the memory alive -- `last_known_sector()`
+            # still goes silent here exactly as before. The memo is only
+            # readable by a caller holding independent proof that this send
+            # did not move us (the landing screen), and only the APP send
+            # carries: a human's raw keystrokes are opaque, so `send_raw`
+            # deliberately passes no carry.
+            self._bump_sector_epoch(carry=True)
             now = time.monotonic()
             delta = now - self._last_send_time
             if delta < MIN_SEND_GAP_S:

@@ -364,6 +364,45 @@ def bulk_upsert(world_id, records, state_dir=None, now=None):
     return [upsert_sector(world_id, r, state_dir=state_dir, now=now) for r in records]
 
 
+#: The landmark name recorded for StarDock. A single constant because the
+#: store dedups landmarks by `casefold()` but NOT by spelling -- "StarDock"
+#: and "Star Dock" would both survive as separate entries, and since
+#: `landmarks` unions there is no product path that could ever remove the
+#: loser. One name, written from one place.
+STARDOCK_LANDMARK = "StarDock"
+
+
+def add_landmark(world_id, sector_id, name, state_dir=None, now=None):
+    """Attribute a named landmark to an EXPLICITLY-SUPPLIED sector.
+
+    The product-facing write path into `landmarks`, and deliberately the
+    only one: `write_from_state` refuses to carry landmarks (it maps a raw
+    state read, which has no landmark to report), so anything that learns a
+    landmark has to say *which sector* it belongs to out loud rather than
+    letting a general-purpose write infer it.
+
+    **Caller supplies the sector; this function never guesses it.** That
+    division matters more here than elsewhere in this module because
+    `landmarks` is the one UNIONING field -- a wrong attribution is not
+    overwritten by the next correct write, and there is no removal path
+    anywhere in the product. A landmark written into the wrong sector is
+    permanent. So the decision "do we know where we are?" belongs to the
+    caller that can actually answer it, and arrives here already made.
+
+    Junk RAISES rather than returning a quiet negative. A bad `name` or a
+    non-int `sector_id` is a programming error, and if it returned `None`
+    it would be indistinguishable from the caller's legitimate "we do not
+    know the sector, do not write" -- which is the one signal that must
+    stay readable.
+    """
+    if isinstance(sector_id, bool) or not isinstance(sector_id, int):
+        raise WorldModelError(f"add_landmark: sector_id must be an int, got {sector_id!r}")
+    if not isinstance(name, str) or not name.strip():
+        raise WorldModelError(f"add_landmark: name must be a non-empty str, got {name!r}")
+    record = {"sector_id": sector_id, "landmarks": [name]}
+    return upsert_sector(world_id, record, state_dir=state_dir, now=now)
+
+
 def get_sector(world_id, sector_id, state_dir=None):
     """A single sector's record (deep copy -- mutating the return
     value never touches the live store), or `None` if this world has
