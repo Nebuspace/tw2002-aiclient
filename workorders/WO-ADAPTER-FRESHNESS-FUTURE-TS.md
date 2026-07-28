@@ -1,8 +1,9 @@
 # WO-ADAPTER-FRESHNESS-FUTURE-TS — Clamp future-timestamp delta in _is_fresh
 
-**Status:** OPEN · BANKED · MED  
+**Status:** OPEN · EXECUTE · MED · Cursor-class  
 **Posted:** 2026-07-28T00:15:00Z · banked from WO-CHAIN-DETECT-PORT STATUS  
-**Seat:** open  
+**Seeded for execute:** 2026-07-28T01:36Z · hub  
+**Seat:** impl-aiclient-cursor  
 **Refs:** `tw2002_aiclient/trade_adapter.py` · `_is_fresh`
 
 ## Goal
