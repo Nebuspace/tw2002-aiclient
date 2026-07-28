@@ -30,6 +30,8 @@ from __future__ import annotations
 
 import ast
 
+import pytest
+
 from tests.status_vocabulary import (
     consumed_keys,
     emitted_keys,
@@ -157,6 +159,32 @@ def test_every_allowlist_entry_names_a_tranche_and_a_reason():
 # ---------------------------------------------------------------------------
 
 
+# Producer-side identity anchors — mirror #186 badge pattern / #188 F1.
+# Cardinality alone is vacuous once the real map is large; dropping a known
+# producer from the scan must redden this pin (WO-TEST-EMITTED-SCAN-IDENTITY).
+_EMITTED_SCAN_IDENTITY = (
+    "tw2002_aiclient/session/protocol.py",
+    "tw2002_aiclient/world_model.py",
+)
+
+
+def _emitted_writer_files(emitted: dict | None = None) -> set[str]:
+    """File paths that appear as producer sites in an emitted-keys map."""
+    if emitted is None:
+        emitted = emitted_keys()
+    return {
+        site.split(":")[0]
+        for sites in emitted.values()
+        for site in sites
+    }
+
+
+def _assert_emitted_scan_identity(writers: set[str]) -> None:
+    """Shared identity pin — production control and falsify both call this."""
+    for expected in _EMITTED_SCAN_IDENTITY:
+        assert expected in writers, f"{expected} was not scanned as a producer"
+
+
 def test_the_scanner_reaches_the_files_it_claims_to_scan():
     """The empty-scan trap: a glob that matches nothing yields no consumed keys,
     hence no starved keys, hence a green guard over a repo full of gaps. Assert
@@ -166,7 +194,27 @@ def test_the_scanner_reaches_the_files_it_claims_to_scan():
     assert len(consumed) >= 20, f"consumer scan found only {len(consumed)} keys"
     for expected in ("tw2002_aiclient/cockpit/goals.py", "tw2002_aiclient/screens.py"):
         assert expected in readers, f"{expected} was not scanned"
-    assert len(emitted_keys()) >= 10, "producer scan found suspiciously few keys"
+    # Producer side: identity, not cardinality (#190).
+    _assert_emitted_scan_identity(_emitted_writer_files())
+
+
+def test_emitted_identity_floor_goes_red_when_protocol_is_dropped():
+    """Falsify Accept: filter protocol.py out of the scan result → the *same*
+    identity helper the production pin uses must raise (not set-arithmetic)."""
+    victim = "tw2002_aiclient/session/protocol.py"
+    real = emitted_keys()
+    assert any(
+        s.startswith(victim + ":") for sites in real.values() for s in sites
+    ), "precondition: protocol.py must be a live producer"
+    filtered = {
+        key: [s for s in sites if not s.startswith(victim + ":")]
+        for key, sites in real.items()
+    }
+    filtered = {k: v for k, v in filtered.items() if v}
+    writers = _emitted_writer_files(filtered)
+    assert victim not in writers
+    with pytest.raises(AssertionError, match="protocol.py"):
+        _assert_emitted_scan_identity(writers)
 
 
 def test_the_scanner_resolves_named_constant_writes():
