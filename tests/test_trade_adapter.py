@@ -36,6 +36,19 @@ def _row(name, status, pct, amount=1000):
     return {"name": name, "status": status, "amount": amount, "pct": pct}
 
 
+def _upsert_class(tmp_path, sector_id, *, warps=(), klass=None, port_ts_clock=_CLOCK):
+    """Like `_upsert`, but writes the class-derived posture shape
+    (`{"class": ..., "last_seen_ts": ...}`, NO `commodities`) --
+    `explore.py`'s E2 flyby gate writes exactly this shape (see
+    `state_parser.read_port_from_sector_status`), never a commerce
+    report. `klass=None` writes a warps-only sector with no port field
+    at all (mirrors a plain movement observation)."""
+    record = {"sector_id": sector_id, "warps": list(warps)}
+    if klass is not None:
+        record["port"] = {"class": klass, "last_seen_ts": world_model._now_iso(port_ts_clock)}
+    world_model.upsert_sector(WORLD, record, state_dir=tmp_path, now=port_ts_clock)
+
+
 def _write_raw_sector(tmp_path, sector_id, record):
     """Writes a raw sector JSON file directly, bypassing `upsert_sector`'s
     own field-level merge entirely -- the only way to construct a
@@ -263,6 +276,38 @@ def test_future_last_seen_ts_is_rejected(tmp_path):
     assert trade_adapter._is_fresh(
         world_model._now_iso(future_clock), max_age_s=60.0, now=_CLOCK()
     ) is False
+
+
+@pytest.mark.parametrize("age_s,expected", [(-1.0, False), (0.0, True), (100.0, True), (100.1, False)])
+def test_is_fresh_boundary_including_future_timestamps(age_s, expected):
+    """#131 WO-ADAPTER-FRESHNESS-FUTURE-TS. Direct unit coverage of the
+    predicate's exact boundary, independent of either caller -- neither
+    `test_future_last_seen_ts_is_rejected` above nor
+    `test_commodity_path_future_stamped_port_is_never_treated_as_fresh`
+    below exercises the `<=` edge itself (`100.0` true vs `100.1` false),
+    only the far future/negative case. `age_s=-1.0` (a future/clock-skewed
+    timestamp) must fail closed, not satisfy `<= max_age_s` unconditionally."""
+    now = _CLOCK()
+    ts_str = trade_adapter.world_model._now_iso(lambda: now - datetime.timedelta(seconds=age_s))
+    assert trade_adapter._is_fresh(ts_str, max_age_s=100.0, now=now) is expected
+
+
+def test_commodity_path_future_stamped_port_is_never_treated_as_fresh(tmp_path):
+    """Asymmetric case neither sibling test above covers: only ONE side
+    of the pair (sector 60) carries a future stamp, the other (61) is
+    stamped normally. Proves a single corrupt/future timestamp is enough
+    to fail the WHOLE pair, not just the "both sides future" case
+    `test_future_last_seen_ts_is_rejected` exercises."""
+    future_clock = lambda: _CLOCK() + datetime.timedelta(hours=1)
+    _upsert(
+        tmp_path, 60, warps=(61,), commodities=[_row("Equipment", "selling", 100)], port_ts_clock=future_clock
+    )
+    _upsert(tmp_path, 61, warps=(60,), commodities=[_row("Equipment", "buying", 0)])
+
+    cfg = trade_adapter.TradeAdapterConfig(max_age_s=3600.0 * 24)  # generous -- only the FUTURE stamp should fail
+    hops, note = trade_adapter.build_trade_hops(WORLD, state_dir=tmp_path, config=cfg, now=_CLOCK)
+
+    assert hops == ()
 
 
 def test_absent_last_seen_ts_yields_no_hop(tmp_path):
@@ -705,6 +750,398 @@ def test_missing_or_unusable_amount_yields_no_hop(tmp_path, bad_amount):
 
 
 # --------------------------------------------------------------------------
+# WO-CHAIN-DETECT-WIRE -- class-derived posture path (build_candidate_pairs)
+# --------------------------------------------------------------------------
+
+
+def test_class_pair_compatible_hand_computed(tmp_path):
+    """Sector 10: SBB -- sells Fuel Ore, buys Organics+Equipment.
+    Sector 11: BSS -- buys Fuel Ore, sells Organics+Equipment.
+    Perspective rule pinned: 10 sells Fuel Ore which 11 buys (one
+    compatible commodity); 11 sells {Organics, Equipment}, both of
+    which 10 buys (two compatible commodities). REVISE (Samantha,
+    2026-07-28): the full set is carried on both sides now, never
+    collapsed to a single tiebroken pick -- see `CandidatePair`'s own
+    docstring for why a `min()` tiebreak was wrong. One adjacent warp
+    each way -> turns == 1 + 1 == 2, canon's cheapest pair-loop shape."""
+    _upsert_class(tmp_path, 10, warps=(11,), klass="SBB")
+    _upsert_class(tmp_path, 11, warps=(10,), klass="BSS")
+
+    pairs, stats = trade_adapter.build_candidate_pairs(WORLD, state_dir=tmp_path, now=_CLOCK)
+
+    assert len(pairs) == 1
+    pair = pairs[0]
+    assert pair.sector_a == 10 and pair.sector_b == 11
+    assert pair.commodities_a_sells == ("Fuel Ore",)
+    assert pair.commodities_b_sells == ("Organics", "Equipment")  # CLASS_POSITIONS order, full set
+    assert pair.turns == 2
+    assert pair.observed_age_s == 0.0
+    assert not hasattr(pair, "margin")  # structurally impossible to guess a number here
+    assert stats == trade_adapter.PairBuildStats(
+        known_sectors=2,
+        class_valid_ports=2,
+        fresh_class_ports=2,
+        oldest_class_age_s=0.0,
+        compatible_pairs_considered=1,
+        routed_pairs=1,
+    )
+
+
+def test_class_pair_sector_a_always_lower_regardless_of_write_order(tmp_path):
+    """Same pair as above, written in descending sector-id order --
+    `CandidatePair.sector_a < sector_b` must hold by construction, not
+    by luck of iteration order."""
+    _upsert_class(tmp_path, 11, warps=(10,), klass="BSS")
+    _upsert_class(tmp_path, 10, warps=(11,), klass="SBB")
+
+    pairs, _stats = trade_adapter.build_candidate_pairs(WORLD, state_dir=tmp_path, now=_CLOCK)
+
+    assert len(pairs) == 1
+    assert pairs[0].sector_a == 10
+    assert pairs[0].sector_b == 11
+
+
+def test_class_pair_both_selling_same_single_commodity_not_compatible(tmp_path):
+    """Canon invariant, pinned for the class path too: two ports both
+    SELLING (never buying) the same single commodity are NOT a
+    compatible pair on either leg -- fail-closed, no candidate.
+    Perspective-rule pin: swapping the S/B interpretation anywhere in
+    `build_candidate_pairs` (e.g. computing `sells & sells` instead of
+    `sells & buys`) would turn a variant of this fixture green when it
+    must stay red -- see report Verification for the manual mutation
+    proof."""
+    _upsert_class(tmp_path, 20, warps=(21,), klass="SSS")
+    _upsert_class(tmp_path, 21, warps=(20,), klass="SSS")
+
+    pairs, stats = trade_adapter.build_candidate_pairs(WORLD, state_dir=tmp_path, now=_CLOCK)
+
+    assert pairs == ()
+    assert stats.fresh_class_ports == 2
+    assert stats.compatible_pairs_considered == 0
+    assert stats.routed_pairs == 0
+
+
+def test_class_pair_asymmetric_one_way_warps_sums_both_directions(tmp_path):
+    """40 -> 41 -> 42 -> 40 is a one-way RING (sector 41 is a plain
+    waypoint, no port). Path 40->42 is 2 hops (via 41); path 42->40 is
+    1 hop (direct). `turns` must be the sum of the TWO direction-
+    specific route lengths (2 + 1 == 3), never a naive doubling of one
+    direction's hop count -- pins that `_bfs_paths_from` is queried
+    once per source and both directions are genuinely routed."""
+    _upsert_class(tmp_path, 40, warps=(41,), klass="SBB")
+    _upsert_class(tmp_path, 41, warps=(42,))  # waypoint only, no port
+    _upsert_class(tmp_path, 42, warps=(40,), klass="BSS")
+
+    pairs, stats = trade_adapter.build_candidate_pairs(WORLD, state_dir=tmp_path, now=_CLOCK)
+
+    assert len(pairs) == 1
+    assert pairs[0].turns == 3
+    assert stats.known_sectors == 3  # the waypoint counts as a known sector too
+    assert stats.class_valid_ports == 2  # but never as a class-valid PORT
+
+
+def test_future_stamped_port_is_never_treated_as_fresh(tmp_path):
+    """#131 WO-ADAPTER-FRESHNESS-FUTURE-TS (main, `ff48656`) fixed
+    `_is_fresh` to fail closed on a negative age (a future/clock-skewed
+    `last_seen_ts`). `build_candidate_pairs` used to re-derive the same
+    predicate inline instead of calling `_is_fresh`, and missed the fix:
+    a future-stamped port's negative age satisfied the old bare
+    `age <= max_age_s` check unconditionally and was treated as fresh.
+
+    Execution proof: sector 10 is stamped ONE HOUR IN THE FUTURE relative
+    to `now`; sector 11 is stamped normally and is otherwise posture-
+    compatible with sector 10 and routed. Only sector 11 may count as
+    fresh, so no pair can form (fewer than 2 fresh ports)."""
+    future_clock = lambda: _CLOCK() + datetime.timedelta(hours=1)
+    _upsert_class(tmp_path, 10, warps=(11,), klass="SBB", port_ts_clock=future_clock)
+    _upsert_class(tmp_path, 11, warps=(10,), klass="BSS", port_ts_clock=_CLOCK)
+
+    pairs, stats = trade_adapter.build_candidate_pairs(WORLD, state_dir=tmp_path, now=_CLOCK)
+
+    assert stats.class_valid_ports == 2  # both are syntactically valid class triples
+    assert stats.fresh_class_ports == 1  # only sector 11 -- sector 10's future stamp is NOT fresh
+    assert pairs == ()
+
+
+def test_oldest_class_age_excludes_a_negative_future_stamp(tmp_path):
+    """Sanity, not a discriminating regression pin (a genuinely-old
+    positive age is always numerically larger than any negative one, so
+    plain `max()` already picks it correctly regardless of the `a >= 0`
+    filter -- verified by hand, not claimed as mutation-proven). The
+    actually-discriminating case, where the filter is load-bearing, is
+    `test_oldest_class_age_is_none_when_every_reading_is_future_stamped`
+    below (every candidate negative -> `max()` alone would pick the
+    least-negative one and report it as a real "oldest reading")."""
+    future_clock = lambda: _CLOCK() + datetime.timedelta(hours=1)
+    old_clock = lambda: datetime.datetime(2026, 6, 1, 12, 0, 0, tzinfo=datetime.timezone.utc)
+    _upsert_class(tmp_path, 10, warps=(11,), klass="SBB", port_ts_clock=future_clock)
+    _upsert_class(tmp_path, 11, warps=(10,), klass="BSS", port_ts_clock=old_clock)
+
+    cfg = trade_adapter.PairLoopConfig(class_max_age_s=10.0)
+    pairs, stats = trade_adapter.build_candidate_pairs(WORLD, state_dir=tmp_path, config=cfg, now=_CLOCK)
+
+    expected_age = (_CLOCK() - old_clock()).total_seconds()
+    assert stats.oldest_class_age_s == expected_age  # sector 11's genuinely-old age, never sector 10's negative one
+    assert stats.oldest_class_age_s > 0
+
+
+def test_oldest_class_age_is_none_when_every_reading_is_future_stamped(tmp_path):
+    """No genuinely non-negative age exists at all -- `None` (honest
+    unknown), never a negative number masquerading as an age."""
+    future_clock = lambda: _CLOCK() + datetime.timedelta(hours=1)
+    _upsert_class(tmp_path, 10, warps=(11,), klass="SBB", port_ts_clock=future_clock)
+    _upsert_class(tmp_path, 11, warps=(10,), klass="BSS", port_ts_clock=future_clock)
+
+    pairs, stats = trade_adapter.build_candidate_pairs(WORLD, state_dir=tmp_path, now=_CLOCK)
+
+    assert stats.oldest_class_age_s is None
+
+
+# --------------------------------------------------------------------------
+# _observed_age_s -- direct unit coverage of the defense-in-depth guard
+# (Samantha's second-order finding: a plausible-but-wrong number is worse
+# than an obviously-wrong one; `max()` alone MASKS one negative input
+# behind a healthy-looking one).
+# --------------------------------------------------------------------------
+
+
+def test_observed_age_s_normal_case_returns_the_staler():
+    assert trade_adapter._observed_age_s(100.0, 3600.0) == 3600.0
+    assert trade_adapter._observed_age_s(0.0, 0.0) == 0.0
+
+
+def test_observed_age_s_is_none_when_both_are_future_stamped():
+    assert trade_adapter._observed_age_s(-100.0, -50.0) is None
+
+
+def test_observed_age_s_never_masks_one_future_stamp_behind_a_healthy_one():
+    """The masking case, named explicitly: `max(3600.0, -3600.0)` is
+    `3600.0` on its own, which reads as a perfectly normal one-hour
+    figure while hiding that the OTHER input was garbage. Must be
+    `None`, whichever side carries the negative value."""
+    assert trade_adapter._observed_age_s(3600.0, -3600.0) is None
+    assert trade_adapter._observed_age_s(-3600.0, 3600.0) is None
+
+
+def test_observed_age_s_is_none_not_zero_on_a_missing_input():
+    """Honest unknown, never a fabricated `0.0` -- same em-dash discipline
+    as every other "never guess" guard in this module."""
+    assert trade_adapter._observed_age_s(None, 100.0) is None
+    assert trade_adapter._observed_age_s(100.0, None) is None
+    assert trade_adapter._observed_age_s(None, None) is None
+
+
+# --------------------------------------------------------------------------
+# WO-ADAPTER-FRESHNESS-SWEEP -- `_age_s` owns the only `(now - ts)` site;
+# aggregators never see raw negative ages.
+# --------------------------------------------------------------------------
+
+
+def test_age_s_fail_closed_on_future_and_unparseable():
+    now = _CLOCK()
+    future = world_model._now_iso(lambda: now + datetime.timedelta(hours=1))
+    past = world_model._now_iso(lambda: now - datetime.timedelta(seconds=42))
+    assert trade_adapter._age_s(future, now=now) is None
+    assert trade_adapter._age_s(None, now=now) is None
+    assert trade_adapter._age_s("not-a-ts", now=now) is None
+    assert trade_adapter._age_s(past, now=now) == 42.0
+
+
+def test_age_s_is_the_sole_total_seconds_freshness_site():
+    """Accept #1: no remaining inline `(now - ts).total_seconds()` freshness
+    decisions outside the shared helper. Every Call to `total_seconds` in
+    this module must live inside `_age_s` (tests may still compute ages)."""
+    src = Path(trade_adapter.__file__).read_text(encoding="utf-8")
+    tree = ast.parse(src)
+    offenders = []
+    for node in tree.body:
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        for call in ast.walk(node):
+            if not isinstance(call, ast.Call):
+                continue
+            func = call.func
+            if isinstance(func, ast.Attribute) and func.attr == "total_seconds":
+                if node.name != "_age_s":
+                    offenders.append(node.name)
+    assert offenders == [], f"total_seconds outside _age_s: {offenders}"
+
+
+def test_one_future_stamp_never_launders_into_pair_observed_age(tmp_path):
+    """CC probe shape: one future + one healthy neighbour must not yield a
+    pair whose `observed_age_s` is the healthy neighbour's age (Accept #3).
+    Gate drops the future port → fewer than 2 fresh → no pair at all."""
+    future_clock = lambda: _CLOCK() + datetime.timedelta(hours=1)
+    _upsert_class(tmp_path, 10, warps=(11,), klass="SBB", port_ts_clock=future_clock)
+    _upsert_class(tmp_path, 11, warps=(10,), klass="BSS", port_ts_clock=_CLOCK)
+
+    pairs, stats = trade_adapter.build_candidate_pairs(WORLD, state_dir=tmp_path, now=_CLOCK)
+
+    assert stats.fresh_class_ports == 1
+    assert pairs == ()
+    # ages dict stores None for the future stamp — oldest is only the healthy side
+    assert stats.oldest_class_age_s == 0.0
+
+
+@pytest.mark.parametrize(
+    "klass",
+    [None, "", "BS", "BSSS", "BSX", "bss", 5, ["B", "S", "S"], {"letters": "BSS"}],
+)
+def test_invalid_class_shapes_never_crash_and_are_excluded(tmp_path, klass):
+    """`_valid_class_triple` fail-closed sweep: `None` (never observed /
+    Class-0-StarDock presence-without-class), wrong length, an invalid
+    letter, lowercase (canon stores upper-case only -- `state_parser`
+    upper-cases at the regex site, so a lowercase triple here is a
+    malformed on-disk shape, never a live-parser output), and non-str
+    types a corrupted JSON file could genuinely carry. None of these
+    may raise, and none may count as a usable class port."""
+    _write_raw_sector(
+        tmp_path,
+        50,
+        {
+            "sector_id": 50,
+            "warps": [51],
+            "port": {"class": klass, "last_seen_ts": world_model._now_iso(_CLOCK)},
+        },
+    )
+    _upsert_class(tmp_path, 51, warps=(50,), klass="SBB")
+
+    pairs, stats = trade_adapter.build_candidate_pairs(WORLD, state_dir=tmp_path, now=_CLOCK)
+
+    assert pairs == ()
+    assert stats.class_valid_ports == 1  # only sector 51
+
+
+@pytest.mark.parametrize(
+    "raw_record",
+    [
+        {"sector_id": 60, "warps": [61], "port": "not-a-dict"},
+        {"sector_id": "not-an-int", "warps": [61], "port": {"class": "SBB"}},
+        {"sector_id": 60, "warps": [61], "port": {"class": "SBB", "last_seen_ts": None}},
+    ],
+)
+def test_malformed_on_disk_shapes_never_crash(tmp_path, raw_record):
+    """`world_model.query`'s predicate only checks truthiness -- a
+    malformed on-disk record (non-dict `port`, non-numeric `sector_id`,
+    an unparseable `last_seen_ts`) must reach `build_candidate_pairs`
+    without raising, same fail-closed discipline `_fresh_ports` already
+    documents for the commodity path."""
+    _write_raw_sector(tmp_path, 60, raw_record)
+    _upsert_class(tmp_path, 61, warps=(60,), klass="BSS")
+
+    pairs, _stats = trade_adapter.build_candidate_pairs(WORLD, state_dir=tmp_path, now=_CLOCK)
+
+    assert pairs == ()  # sector 60 never contributes a usable class port either way
+
+
+def test_reason_no_world_model(tmp_path):
+    pairs, stats = trade_adapter.build_candidate_pairs(WORLD, state_dir=tmp_path, now=_CLOCK)
+    assert pairs == ()
+    assert stats.known_sectors == 0
+
+
+def test_reason_fewer_than_two_ports(tmp_path):
+    _upsert_class(tmp_path, 1, warps=(2,))  # known sector, no port at all
+    _upsert_class(tmp_path, 2, warps=(1,), klass="SBB")  # the only valid class port
+
+    pairs, stats = trade_adapter.build_candidate_pairs(WORLD, state_dir=tmp_path, now=_CLOCK)
+
+    assert pairs == ()
+    assert stats.known_sectors == 2
+    assert stats.class_valid_ports == 1
+
+
+def test_reason_all_stale_carries_oldest_age(tmp_path):
+    """Both ports carry a genuine, syntactically valid, MUTUALLY
+    COMPATIBLE class pair -- the ONLY thing wrong is staleness against
+    a deliberately short `class_max_age_s`. `oldest_class_age_s` must
+    report a real, computed figure (not a placeholder), matching the
+    "explore tonight, open the view tomorrow" scenario the config's
+    long default guards against."""
+    old_clock = lambda: datetime.datetime(2026, 6, 1, 12, 0, 0, tzinfo=datetime.timezone.utc)
+    _upsert_class(tmp_path, 10, warps=(11,), klass="SBB", port_ts_clock=old_clock)
+    _upsert_class(tmp_path, 11, warps=(10,), klass="BSS", port_ts_clock=old_clock)
+
+    cfg = trade_adapter.PairLoopConfig(class_max_age_s=10.0)
+    pairs, stats = trade_adapter.build_candidate_pairs(WORLD, state_dir=tmp_path, config=cfg, now=_CLOCK)
+
+    expected_age = (_CLOCK() - old_clock()).total_seconds()
+    assert pairs == ()
+    assert stats.class_valid_ports == 2
+    assert stats.fresh_class_ports == 0
+    assert stats.oldest_class_age_s == expected_age
+
+
+def test_reason_no_compatible_pairs(tmp_path):
+    _upsert_class(tmp_path, 20, warps=(21,), klass="SSS")
+    _upsert_class(tmp_path, 21, warps=(20,), klass="SSS")
+
+    pairs, stats = trade_adapter.build_candidate_pairs(WORLD, state_dir=tmp_path, now=_CLOCK)
+
+    assert pairs == ()
+    assert stats.fresh_class_ports == 2
+    assert stats.compatible_pairs_considered == 0
+
+
+def test_reason_compatible_but_unrouted(tmp_path):
+    """Posture-compatible, but the two sectors' warp graphs never
+    connect (no warps recorded either side) -- structurally compatible,
+    never routable, the single most actionable empty this feature can
+    surface."""
+    _upsert_class(tmp_path, 30, warps=(), klass="SBB")
+    _upsert_class(tmp_path, 31, warps=(), klass="BSS")
+
+    pairs, stats = trade_adapter.build_candidate_pairs(WORLD, state_dir=tmp_path, now=_CLOCK)
+
+    assert pairs == ()
+    assert stats.compatible_pairs_considered == 1
+    assert stats.routed_pairs == 0
+
+
+def test_pair_loop_config_rejects_negative_class_max_age():
+    with pytest.raises(ValueError):
+        trade_adapter.PairLoopConfig(class_max_age_s=-1.0)
+
+
+def test_bfs_paths_from_matches_path_to_sector_for_every_reachable_pair():
+    """Differential proof for the O(ports) routing optimization
+    (module docstring): `_bfs_paths_from`'s single multi-target BFS
+    must return EXACTLY what `explore.path_to_sector`'s one-BFS-per-
+    call would have, for every (start, goal) pair on a graph with a
+    cycle, a branch, a disconnected component, AND a dangling warp
+    (sector 1 warps to 99, which is never itself a known sector --
+    `known_graph` genuinely produces this shape from a flyby that has
+    seen a neighbor's warp but not yet visited it) -- swept
+    exhaustively, not sampled. The dangling case is load-bearing, not
+    decorative: a mutant that drops `_bfs_paths_from`'s "only step onto
+    a KNOWN sector" guard passes every other case here unchanged but
+    fabricates a path through sector 99 -- see report Verification."""
+    from tw2002_aiclient.explore import path_to_sector
+
+    graph = {
+        1: (2, 3, 99),  # 99 is a dangling warp target -- never a key below
+        2: (4,),
+        3: (4, 5),
+        4: (1,),
+        5: (),
+        6: (7,),  # disconnected component -- unreachable from 1..5
+        7: (),
+    }
+    nodes = list(graph.keys())
+    for start in nodes:
+        paths = trade_adapter._bfs_paths_from(graph, start)
+        assert paths[start] == (start,)
+        for goal in list(nodes) + [99]:
+            if goal == start:
+                continue
+            assert paths.get(goal) == path_to_sector(graph, start, goal), (start, goal)
+
+
+def test_bfs_paths_from_unknown_start_is_empty():
+    assert trade_adapter._bfs_paths_from({1: (2,), 2: (1,)}, 99) == {}
+
+
+# --------------------------------------------------------------------------
 # Structural pin -- DoD accept 4: neither module reaches a send path
 # --------------------------------------------------------------------------
 
@@ -719,7 +1156,20 @@ _BANNED_MODULES = frozenset(
     }
 )
 
-_ENTRY_FILES = (PKG_ROOT / "chains.py", PKG_ROOT / "trade_adapter.py")
+_ENTRY_FILES = (
+    PKG_ROOT / "chains.py",
+    PKG_ROOT / "trade_adapter.py",
+    # WO-CHAIN-DETECT-WIRE: the class-derived pair-loop wire adds TWO more
+    # pure-read entry points (`build_candidate_pairs` lives in
+    # trade_adapter.py above, already covered) that must never reach a
+    # send path either -- same walker, same banned set, no second copy of
+    # the AST scan. `chain_detect_view.py` (the re-scoped dedicated
+    # formatter, 2026-07-28) replaces the deleted `loops.list_view` bridge
+    # -- it imports nothing at all, so its own closure sanity-checks to a
+    # singleton set below.
+    PKG_ROOT / "chain_detect.py",
+    PKG_ROOT / "chain_detect_view.py",
+)
 
 
 def _is_banned(dotted: str) -> bool:
@@ -820,8 +1270,9 @@ def _scan_module(path: Path, *, seen: set, banned_hits: list, unresolved_dynamic
 
 def test_neither_module_reaches_a_send_path():
     """DoD accept 4 -- structural, not text-grep: recursively walks the
-    tw2002_aiclient-rooted import closure of `chains.py` and
-    `trade_adapter.py` and asserts it never reaches
+    tw2002_aiclient-rooted import closure of `chains.py`,
+    `trade_adapter.py`, and (WO-CHAIN-DETECT-WIRE) `chain_detect.py` +
+    `chain_detect_view.py`, and asserts none of them ever reaches
     `session.connection`, `session.protocol`, or `adapters.py` (the
     send-capable surfaces). Also refuses (rather than silently trusting)
     any dynamic `importlib.import_module`/`__import__` call whose target
@@ -836,9 +1287,19 @@ def test_neither_module_reaches_a_send_path():
     assert unresolved_dynamic == []
     # Sanity the walk actually traversed the real closure -- an empty/
     # trivial `seen` would make the assertions above vacuously true.
+    # `loops.list_view` is DELIBERATELY absent here (WO-CHAIN-DETECT-WIRE
+    # re-scope, 2026-07-28): `chain_detect.py` no longer imports it (the
+    # bridge into `format_loop_row` was deleted), and `chain_detect_view.py`
+    # -- its replacement -- imports nothing at all, so it never reaches
+    # this module's own closure either. A stray re-introduction of that
+    # import edge is exactly what this assertion (an exact `seen` set, not
+    # merely `>=` on the old members) would catch.
     assert seen >= {
         "tw2002_aiclient.chains",
         "tw2002_aiclient.trade_adapter",
         "tw2002_aiclient.world_model",
         "tw2002_aiclient.explore",
+        "tw2002_aiclient.chain_detect",
+        "tw2002_aiclient.chain_detect_view",
     }
+    assert "tw2002_aiclient.loops.list_view" not in seen

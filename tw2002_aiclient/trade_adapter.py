@@ -46,14 +46,40 @@ nothing to sell, a buying port with (near-)zero amount wants nothing
 bought, and either makes the loop a phantom. This is a discovery-quality
 volume gate only (drops the obviously-impossible), NOT a substitute for
 a future live, authoritative per-buy volume read at execution time.
+
+Class-derived posture path (WO-CHAIN-DETECT-WIRE, DECISIONS.md "Pending
+-- chain floors + class-derived posture"): the commodity/pct path above
+requires a docked commerce-report `commodities` list this tree has no
+producer for yet (see the module docstring's own note). `explore.py`'s
+E2 flyby gate DOES persist a port's `class` letter-triple from a plain
+sector-status line, turn-free, well before any commerce report exists.
+`build_candidate_pairs` reads THAT signal instead and emits `CandidatePair`
+-- a pair loop candidate carrying NO margin field at all (not `None`, not
+`0.0` -- the field does not exist, so a caller cannot accidentally read a
+guessed number out of it). This is a deliberately narrower shape than
+`chains.TradeHop`, which canon (`trade-loops.md`) defines as a
+*positive-margin* edge; a `CandidatePair` is never fed into `chains.py`'s
+cycle search (which requires `margin`), and this module makes no attempt
+to bridge the two.
+
+Class-observation age caveat: the world-model schema (`world_model.py`)
+stores exactly ONE `last_seen_ts` per port record, not one per sub-field.
+A port visited again for an unrelated reason (e.g. `write_port_only`'s
+docked-commerce write) re-stamps that single timestamp even though `class`
+itself was NOT re-observed on that visit (`_merge_port`'s nested merge
+preserves the old `class` value untouched). `CandidatePair.observed_age_s`
+therefore reads as a proxy that can UNDERSTATE how old a class reading
+truly is; it can never overstate it. Growing a dedicated per-sub-field
+timestamp is a world_model schema change this WO does not make.
 """
 
 from __future__ import annotations
 
 import datetime
 import math
+from collections import deque
 from dataclasses import dataclass, field
-from typing import Callable, Mapping, Optional
+from typing import Callable, Mapping, Optional, Sequence
 
 from tw2002_aiclient import world_model
 from tw2002_aiclient.chains import TradeHop
@@ -70,6 +96,18 @@ DEFAULT_CEILING_MULTIPLIER = 2.0  # this module's own interpolation choice -- UN
 DEFAULT_MAX_AGE_S = 3600.0  # drop a port reading older than this as stale (1h)
 DEFAULT_MAX_HOPS = 500  # bounded compute/output on a large known map
 DEFAULT_AMOUNT_FLOOR = 1  # discovery-quality volume gate -- see TradeAdapterConfig.amount_floor
+
+# Class-derived posture path (see module docstring). A class triple is
+# STRUCTURAL -- it doesn't drift the way a commodity's `amount`/`pct` does
+# absent port destruction -- so it gets its own, much longer, staleness
+# ceiling rather than reusing DEFAULT_MAX_AGE_S (1h): "explore tonight, open
+# the view tomorrow, get empty" would be wrong for data that doesn't decay
+# on that timescale. 30 days is a deliberately generous default, not a
+# claim about how often class actually changes.
+DEFAULT_CLASS_MAX_AGE_S = 30 * 24 * 3600.0
+# canon/strategy/port-economics.md: "first letter = Fuel Ore, second =
+# Organics, third = Equipment" -- the ONE place that ordering is encoded.
+CLASS_POSITIONS: tuple[str, ...] = ("Fuel Ore", "Organics", "Equipment")
 
 
 @dataclass(frozen=True)
@@ -135,6 +173,89 @@ class TradeAdapterConfig:
                 )
 
 
+@dataclass(frozen=True)
+class PairLoopConfig:
+    """Knobs `build_candidate_pairs` uses -- deliberately its OWN config,
+    not a reuse of `TradeAdapterConfig`: the class-derived path has no
+    pricing model, no amount-floor (a class triple carries no volume
+    figure to gate on), and a different staleness ceiling, so bolting
+    those unrelated fields onto `TradeAdapterConfig` would let a caller
+    set an `amount_floor` this path silently ignores."""
+
+    class_max_age_s: float = DEFAULT_CLASS_MAX_AGE_S
+
+    def __post_init__(self):
+        if self.class_max_age_s < 0:
+            raise ValueError(
+                f"PairLoopConfig.class_max_age_s must be >= 0, got {self.class_max_age_s}"
+            )
+
+
+@dataclass(frozen=True)
+class CandidatePair:
+    """A class-derived pair-loop candidate: two ports whose BUY/SELL
+    letter-triple postures are mutually complementary (`sector_a`
+    SELLS every commodity in `commodities_a_sells`, which `sector_b`
+    BUYS; `sector_b` SELLS every commodity in `commodities_b_sells`,
+    which `sector_a` BUYS), with a known route both ways on the current
+    warp graph. `sector_a < sector_b` always (construction order -- see
+    `build_candidate_pairs`), giving every pair a canonical identity
+    with no separate normalization step.
+
+    Both commodity fields carry the FULL compatible set, never a
+    single collapsed pick (Samantha REVISE, 2026-07-28: an earlier
+    draft picked one commodity per direction via `min()` -- alphabetical
+    order, which the draft's own comment called "a deterministic pick,
+    never a value judgement," but alphabetical order (`Equipment, Fuel
+    Ore, Organics`) disagrees with canon's stated floor-price ordering
+    (`port-economics.md`: `Equipment(40) > Organics(30) > Fuel
+    Ore(20)`) in the middle of the range -- a value judgement the
+    comment denied making. Worse, collapsing to one commodity silently
+    discarded whether a pair is compatible on one commodity or three --
+    real, decision-relevant information: `port-economics.md`'s
+    depletion STOP-guard means a pair that can trade three commodities
+    each way survives the depletion of one, the single-commodity pair
+    does not. Carrying the full set dissolves the tiebreak question
+    entirely -- there is nothing to rank and nothing arbitrary to
+    defend -- and keeps this margin-less path free of any dependency on
+    canon's `[hypothesis]`-tagged economics ordering.) Ordered by
+    `CLASS_POSITIONS` (structural class-triple position order -- Fuel
+    Ore, Organics, Equipment; carries no economic ranking claim) purely
+    for a deterministic, testable rendering order, never as a "best
+    first" claim.
+
+    Deliberately carries NO margin field -- not `None`, not `0.0`, the
+    attribute does not exist -- because a bare class letter states a
+    posture, never a price; see the module docstring's pricing-model
+    note. Guessing a number here must be a structural impossibility,
+    not merely a documented one.
+    """
+
+    sector_a: int
+    sector_b: int
+    commodities_a_sells: tuple[str, ...]  # sector_a SELLS all of these; sector_b BUYS them
+    commodities_b_sells: tuple[str, ...]  # sector_b SELLS all of these; sector_a BUYS them
+    turns: int  # round trip: sector_a -> sector_b -> sector_a, both legs summed
+    observed_age_s: float  # age (seconds) of the STALER of the two ports' class reads
+
+
+@dataclass(frozen=True)
+class PairBuildStats:
+    """Diagnostic counts from one `build_candidate_pairs` pass. Exists so
+    a caller (`chain_detect.recompute`) can classify WHY the result is
+    empty without a second world-model read -- `build_candidate_pairs`
+    already walks every known sector once; re-deriving the same counts
+    from a fresh read would be able to drift from what the pairing loop
+    actually saw."""
+
+    known_sectors: int  # every sector this world has ever recorded, any content
+    class_valid_ports: int  # ports with a syntactically valid B/S triple, any age
+    fresh_class_ports: int  # subset of the above within `class_max_age_s`
+    oldest_class_age_s: Optional[float]  # max age among class_valid ports that passed fail-closed `_age_s` (never future/negative)
+    compatible_pairs_considered: int  # posture-compatible among the FRESH set, before routing
+    routed_pairs: int  # == len(the returned pairs tuple)
+
+
 def _parse_ts(ts_str) -> Optional[datetime.datetime]:
     if not ts_str:
         return None
@@ -146,15 +267,28 @@ def _parse_ts(ts_str) -> Optional[datetime.datetime]:
         return None
 
 
-def _is_fresh(ts_str, *, max_age_s: float, now: datetime.datetime) -> bool:
+def _age_s(ts_str, *, now: datetime.datetime) -> Optional[float]:
+    """Fail-closed age in seconds from a `last_seen_ts` string.
+
+    Returns ``None`` (never a negative float) when the stamp is absent,
+    unparseable, or in the future. This is the **only** place in this
+    module that computes ``(now - ts).total_seconds()`` for freshness /
+    age decisions — ``_is_fresh`` and every aggregator read through it
+    (WO-ADAPTER-FRESHNESS-SWEEP).
+    """
     ts = _parse_ts(ts_str)
     if ts is None:
-        return False  # fail-closed: an absent/unparseable timestamp is never treated as fresh
+        return None
     age_s = (now - ts).total_seconds()
-    # Fail-closed on future stamps (clock skew / corrupt write): a negative
-    # age would otherwise satisfy `<= max_age_s` and bypass the staleness gate.
     if age_s < 0:
-        return False
+        return None
+    return age_s
+
+
+def _is_fresh(ts_str, *, max_age_s: float, now: datetime.datetime) -> bool:
+    age_s = _age_s(ts_str, now=now)
+    if age_s is None:
+        return False  # fail-closed: absent / unparseable / future is never fresh
     return age_s <= max_age_s
 
 
@@ -380,3 +514,245 @@ def build_trade_hops(
             f"({len(candidates)} candidates from {considered} compatible pairs considered)"
         )
     return hops, note
+
+
+# --------------------------------------------------------------------------
+# Class-derived posture path (WO-CHAIN-DETECT-WIRE) -- see module docstring.
+# --------------------------------------------------------------------------
+
+
+def _valid_class_triple(cls) -> bool:
+    """`True` only for a genuine 3-letter buy/sell code (`state_parser`'s
+    `_PORT_CLASS_RE` shape, upper-cased). A `Class 0`/StarDock flyby reads
+    as present-but-classless (`class` absent or `None` on the stored
+    record -- see `state_parser.read_port_from_sector_status`'s
+    docstring), and a hand-corrupted or partially-written record could in
+    principle carry any JSON scalar here -- never crash on either, just
+    treat it as "no usable class"."""
+    return isinstance(cls, str) and len(cls) == 3 and set(cls) <= {"B", "S"}
+
+
+def _class_ports(
+    world_id: str, *, state_dir
+) -> dict[int, tuple[str, object]]:
+    """sector_id -> (class_triple, raw `last_seen_ts`) for every sector
+    whose port carries a syntactically valid class triple, at ANY age --
+    staleness is `build_candidate_pairs`'s job, once it has every
+    candidate's parsed age to classify with. Same skip-and-continue,
+    isinstance/try-guarded discipline as `_fresh_ports` above: a
+    malformed on-disk shape (non-dict `port`, non-numeric `sector_id`)
+    is dropped, never raised."""
+    recs = world_model.query(world_id, lambda s: bool(s.get("port")), state_dir=state_dir)
+    ports: dict[int, tuple[str, object]] = {}
+    for rec in recs:
+        port = rec.get("port")
+        if not isinstance(port, dict):
+            continue
+        cls = port.get("class")
+        if not _valid_class_triple(cls):
+            continue
+        try:
+            sector_id = int(rec["sector_id"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        ports[sector_id] = (cls, port.get("last_seen_ts"))
+    return ports
+
+
+def _bfs_paths_from(
+    graph: Mapping[int, Sequence[int]], start: int
+) -> dict[int, tuple[int, ...]]:
+    """Every sector reachable from `start` on the KNOWN (directed) warp
+    graph, mapped to its shortest path -- `start` itself included, path
+    tuples inclusive of both endpoints, same convention as
+    `explore.path_to_sector`. Deliberately a single multi-target BFS
+    rather than N calls to `explore.path_to_sector` (one per destination):
+    the class-posture graph is ~58%-dense (`P(compatible) = 1-(3/4)**3`,
+    unlike the sparse commodity graph three filters already cull before
+    `build_trade_hops` ever routes), so routing every compatible pair via
+    one BFS call apiece is an O(ports^2) BFS blowup this module must
+    avoid. One BFS per source sector, memoized by the caller across every
+    pair that shares that source, is O(ports) BFS total instead.
+
+    Matches `path_to_sector`'s own reachability rule exactly (`nxt not in
+    graph` is skipped, never stepped onto) so the two give identical
+    answers for any `goal != start` where both are `in graph` -- pinned
+    by a differential test, not merely asserted here."""
+    if start not in graph:
+        return {}
+    paths: dict[int, tuple[int, ...]] = {start: (start,)}
+    q: deque[int] = deque([start])
+    while q:
+        node = q.popleft()
+        for nxt in graph.get(node, ()):
+            if nxt in paths or nxt not in graph:
+                continue
+            paths[nxt] = paths[node] + (nxt,)
+            q.append(nxt)
+    return paths
+
+
+def _observed_age_s(age_a: Optional[float], age_b: Optional[float]) -> Optional[float]:
+    """The pair's reported class-observation age: the STALER (max) of the
+    two ports' individually-computed ages. `None` -- never a fabricated
+    or masked float -- when either input is missing or negative.
+
+    Inputs must already be fail-closed ages from ``_age_s`` (or an
+    equivalent that never yields a future/negative delta). Aggregation
+    here deliberately does **not** invent ages from raw timestamps —
+    that would reopen the laundering path where ``max(healthy, future)``
+    looked like a normal one-hour reading (WO-ADAPTER-FRESHNESS-SWEEP /
+    Samantha second-order finding on the #131 twin).
+
+    Defense-in-depth: `build_candidate_pairs`'s `fresh` gate (via
+    `_is_fresh`) should already exclude any future-stamped/corrupt-
+    timestamp port, so in practice both inputs here are always real,
+    non-negative floats. If that upstream gate is ever reopened by a
+    future refactor, this guard is what stops a nonsense age from
+    reaching a real `CandidatePair` -- and specifically stops the MASKING
+    failure mode: `max(3600.0, -3600.0) == 3600.0` looks like a perfectly
+    normal one-hour reading while silently hiding that the OTHER port's
+    timestamp was garbage. A plausible wrong number is worse than an
+    obviously wrong one -- treat EITHER input being negative as the whole
+    result being unknown; never let the healthy side win `max()` and paper
+    over the broken one."""
+    if age_a is None or age_a < 0 or age_b is None or age_b < 0:
+        return None
+    return max(age_a, age_b)
+
+
+def build_candidate_pairs(
+    world_id: str,
+    *,
+    state_dir=None,
+    config: Optional[PairLoopConfig] = None,
+    now: Optional[Callable[[], datetime.datetime]] = None,
+) -> tuple[tuple[CandidatePair, ...], PairBuildStats]:
+    """Every class-derived pair-loop candidate currently discoverable
+    from `world_id`'s world-model: two ports whose letter-triple
+    postures are mutually complementary (set-intersection, never a
+    cycle search -- see module docstring) with a known route both ways,
+    built in ascending-`sector_a` order.
+
+    Returns `(pairs, stats)` -- `stats` is unconditional (not only on
+    empty) so `chain_detect.recompute` can classify a typed empty reason
+    without a second world-model read. `pairs` is empty exactly when
+    `stats.routed_pairs == 0`; every other `stats` field still describes
+    what WAS found, so a caller can tell "never explored this world"
+    from "explored plenty, nothing pairs up" from "pairs up, but no known
+    route yet"."""
+    cfg = config or PairLoopConfig()
+    current = now() if now is not None else datetime.datetime.now(datetime.timezone.utc)
+
+    known_sectors = len(world_model.all_sectors(world_id, state_dir=state_dir))
+    raw_ports = _class_ports(world_id, state_dir=state_dir)
+
+    # Ages are ONLY fail-closed `_age_s` results (None = absent / bad /
+    # future). Never store a raw negative ``(now - ts)`` here — that value
+    # must not participate in ``max``/pair aggregation (WO-ADAPTER-
+    # FRESHNESS-SWEEP Accept: no age-aggregation laundering).
+    ages: dict[int, Optional[float]] = {}
+    fresh: dict[int, str] = {}
+    for sid, (cls, ts_raw) in raw_ports.items():
+        age = _age_s(ts_raw, now=current)
+        ages[sid] = age
+        if _is_fresh(ts_raw, max_age_s=cfg.class_max_age_s, now=current):
+            fresh[sid] = cls
+
+    # Aggregate only ages that already passed fail-closed parse (`_age_s`
+    # returned a real non-negative float). Future stamps are ``None`` in
+    # `ages` and cannot launder into ``oldest_class_age_s``.
+    oldest_age = max((a for a in ages.values() if a is not None), default=None)
+
+    if len(fresh) < 2:
+        return (), PairBuildStats(
+            known_sectors=known_sectors,
+            class_valid_ports=len(raw_ports),
+            fresh_class_ports=len(fresh),
+            oldest_class_age_s=oldest_age,
+            compatible_pairs_considered=0,
+            routed_pairs=0,
+        )
+
+    graph = known_graph(world_id, state_dir=state_dir)
+    path_cache: dict[int, dict[int, tuple[int, ...]]] = {}
+
+    def _paths_from(sector: int) -> dict[int, tuple[int, ...]]:
+        if sector not in path_cache:
+            path_cache[sector] = _bfs_paths_from(graph, sector)
+        return path_cache[sector]
+
+    sectors = sorted(fresh.keys())
+    pairs: list[CandidatePair] = []
+    considered = 0
+    for i, sector_a in enumerate(sectors):
+        cls_a = fresh[sector_a]
+        sells_a = {name for name, letter in zip(CLASS_POSITIONS, cls_a) if letter == "S"}
+        buys_a = {name for name, letter in zip(CLASS_POSITIONS, cls_a) if letter == "B"}
+        for sector_b in sectors[i + 1 :]:
+            cls_b = fresh[sector_b]
+            sells_b = {name for name, letter in zip(CLASS_POSITIONS, cls_b) if letter == "S"}
+            buys_b = {name for name, letter in zip(CLASS_POSITIONS, cls_b) if letter == "B"}
+
+            # Perspective rule (canon, never inverted): sector_a SELLS what
+            # sector_b BUYS, and independently sector_b SELLS what sector_a
+            # BUYS. Two ports both selling (or both buying) the same
+            # commodity are NOT a compatible pair on that leg -- fail-closed,
+            # same invariant `build_trade_hops` already documents above.
+            a_to_b = sells_a & buys_b
+            b_to_a = sells_b & buys_a
+            if not a_to_b or not b_to_a:
+                continue
+            considered += 1
+
+            path_ab = _paths_from(sector_a).get(sector_b)
+            path_ba = _paths_from(sector_b).get(sector_a)
+            if path_ab is None or path_ba is None:
+                continue  # compatible posture, no known route -- fail-closed, no pair
+            turns = (len(path_ab) - 1) + (len(path_ba) - 1)
+            if turns <= 0:
+                continue
+
+            # More than one commodity can qualify each direction (a port
+            # selling several things the other buys) -- REVISE: carry the
+            # FULL set, never collapse to one (see CandidatePair's own
+            # docstring for why a single-pick tiebreak was wrong on two
+            # counts). `CLASS_POSITIONS` order is structural, not economic,
+            # and used only so the tuple has a deterministic, testable
+            # order.
+            commodities_a_sells = tuple(name for name in CLASS_POSITIONS if name in a_to_b)
+            commodities_b_sells = tuple(name for name in CLASS_POSITIONS if name in b_to_a)
+            # Both ages SHOULD always be real, non-negative floats here:
+            # sector_a/sector_b are drawn from `sectors` = sorted(fresh.keys()),
+            # and `fresh` only ever gains a key when `_is_fresh` returned
+            # True (age in [0, max_age_s]) above. `_observed_age_s` is
+            # nonetheless a defended, never-fabricate/never-mask helper --
+            # see its own docstring -- so if that upstream invariant is ever
+            # broken by a future refactor, this is what stops a nonsense
+            # age from reaching a real `CandidatePair`, rather than
+            # re-opening the exact masking failure Samantha found (REVISE,
+            # 2026-07-28).
+            observed_age_s = _observed_age_s(ages[sector_a], ages[sector_b])
+            if observed_age_s is None:
+                continue  # defense-in-depth -- see _observed_age_s's own docstring
+
+            pairs.append(
+                CandidatePair(
+                    sector_a=sector_a,
+                    sector_b=sector_b,
+                    commodities_a_sells=commodities_a_sells,
+                    commodities_b_sells=commodities_b_sells,
+                    turns=turns,
+                    observed_age_s=observed_age_s,
+                )
+            )
+
+    stats = PairBuildStats(
+        known_sectors=known_sectors,
+        class_valid_ports=len(raw_ports),
+        fresh_class_ports=len(fresh),
+        oldest_class_age_s=oldest_age,
+        compatible_pairs_considered=considered,
+        routed_pairs=len(pairs),
+    )
+    return tuple(pairs), stats
