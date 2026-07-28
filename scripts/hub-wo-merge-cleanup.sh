@@ -105,9 +105,33 @@ gh_pr_state() {
   echo "NONE"
 }
 
+# Seat-owned worktrees must NEVER be reaped by hub (owning-seat-reaps rule).
+# Incidents 2026-07-28: hub passed/auto-discovered cc-* lanes after merge.
+is_seat_owned_wt() {
+  local wt="$1"
+  local base
+  base="$(basename "$wt")"
+  # CC seat lanes: .worktrees/cc-* or basename cc-*
+  [[ "$base" == cc-* ]] && return 0
+  [[ "$wt" == */.worktrees/cc-* ]] && return 0
+  [[ "$wt" == */cc-* ]] && return 0
+  # Cursor / implementer throwaways under .claude/worktrees/
+  [[ "$wt" == */.claude/worktrees/* ]] && return 0
+  return 1
+}
+
 remove_wt() {
   local wt="$1"
+  local mode="${2:-auto}" # auto | explicit
   [[ -z "$wt" ]] && return 0
+  if is_seat_owned_wt "$wt"; then
+    if [[ "$mode" == "explicit" ]]; then
+      echo "REFUSE: $wt looks seat-owned (cc-* / .claude/worktrees/). Owning seat reaps — hub must not list it." >&2
+      exit 2
+    fi
+    echo "SKIP seat-owned worktree (auto-discover): $wt"
+    return 0
+  fi
   if [[ -d "$wt" ]]; then
     echo "Removing worktree: $wt"
     git worktree remove --force "$wt"
@@ -117,7 +141,7 @@ remove_wt() {
 reap_worktrees() {
   local wt
   for wt in "${WT_ARGS[@]+"${WT_ARGS[@]}"}"; do
-    remove_wt "$wt"
+    remove_wt "$wt" explicit
   done
 
   local current_path="" current_branch=""
@@ -130,7 +154,7 @@ reap_worktrees() {
       branch\ *)
         current_branch="${line#branch refs/heads/}"
         if [[ "$current_branch" == "$BRANCH" ]]; then
-          remove_wt "$current_path"
+          remove_wt "$current_path" auto
         fi
         ;;
       "")
