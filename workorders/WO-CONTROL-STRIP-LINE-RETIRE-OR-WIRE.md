@@ -1,17 +1,30 @@
 # WO-CONTROL-STRIP-LINE-RETIRE-OR-WIRE — compose_control_strip_line disposition
 
-**Status:** BANKED · LOW · Cursor-class OK  
-**Posted:** 2026-07-28T03:45Z · hub from CC sweep (downgraded from DELETE)  
-**Refs:** CC STATUS 2026-07-28T03:44:20Z · `cockpit/control_seat.py:631` · precedent #109
+**Status:** OPEN · EXECUTE · LOW→MED · Cursor (`impl-aiclient-cursor`)  
+**Posted:** 2026-07-28T03:45Z bank · EXEC seeded 2026-07-28T03:58Z  
+**Refs:** CC sweep · screens.py already on `compose_control_strip_segments` · wire-class W7
 
 ## Goal
-`compose_control_strip_line` has **zero product callers** but **5 test files** + maintained
-sibling docs with `compose_control_strip_segments`. Not mechanical delete.
+Dispose `compose_control_strip_line` (zero product callers; 5 test files). Product draw path
+already uses **segments** (`screens.py`).
+
+## Hub ruling (do not re-ask)
+**(b) RETIRE** — remove the unused flat-string helper (and any *only*-line test surface that
+cannot migrate). Prefer migrating useful pins onto `compose_control_strip_segments` parity
+tests before delete. Update docstrings in `control_seat.py` / `screens.py` that still present
+`compose_control_strip_line` as the live composer.
+
+Not (a) wire — would reintroduce a dead API next to the live one.  
+Not (c) keep-as-stub — no product needs the flat join.
 
 ## Accept
-Hub-ruled disposition in STATUS: (a) wire to product, or (b) retire helper+tests together with
-honesty, or (c) keep as shared-helper surface with a product caller stub documented.
-Suite + STATUS.
+1. Zero remaining product **or** test imports of `compose_control_strip_line` (or tests that
+   still import it must be deleted/rewritten to segments).
+2. `compose_control_strip_segments` remains the sole product strip composer; suite green on
+   affected cockpit/spectate/control tests.
+3. STATUS cites files removed/rewritten; live-prove **n/a** (chrome helper, no login path).
 
 ## Constraints
-Do not delete tests without a ruling. Public-repo safe.
+Owned paths: `tw2002_aiclient/cockpit/control_seat.py` · `screens.py` docstring-only if needed ·
+`tests/test_cockpit_*.py` that reference the line helper.  
+Do **not** touch `explore.py` / formations / chains (CC #142). Public-repo safe. Explicit paths only.
