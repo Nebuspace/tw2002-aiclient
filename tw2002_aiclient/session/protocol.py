@@ -230,7 +230,11 @@ def _status_response(session, server):
     `session/autoloop.py` states why nothing derived from the receive buffer,
     from a macro's recorded keystrokes, or from server-side paths can reach
     either; `mode` is the control lock's own closed
-    vocabulary. `log_tail` is the one remaining screen-adjacent field and it is
+    vocabulary. `replay_arm` (WO-STATUS-EXPOSE-REPLAY-ARM) is always present:
+    `armed` plus profile name + reconnect `(host, port)` when stamped, or an
+    explicit disarmed shape when `auto_login_profile` is unset -- never a
+    missing key that could read as safe; profile name is that field itself,
+    never a password. `log_tail` is the one remaining screen-adjacent field and it is
     safe for a structural reason rather than a filtering one: `transcript_tail.
     TranscriptTail` is TX-only and redact-at-INSERT -- `append_redacted()`
     cannot accept a payload at all -- so no receive-side byte can enter that
@@ -290,6 +294,26 @@ def _status_response(session, server):
     # banner would otherwise be able to describe two different instants --
     # see `autoloop.observe`.
     arm = autoloop.observe(getattr(server, "autoloop", None), lock)
+    # WO-STATUS-EXPOSE-REPLAY-ARM: always-present arm report so a missing key
+    # cannot read as "safe / disarmed". Profile name is `session.auto_login_profile`
+    # itself (same field `guardian._maybe_reconnect` reads) — never re-derived.
+    # When armed, host/port are the reconnect TCP target (`session.reconnect()`
+    # uses the session endpoint, not a second profile lookup).
+    profile_name = getattr(session, "auto_login_profile", None)
+    if profile_name:
+        replay_arm = {
+            "armed": True,
+            "profile": profile_name,
+            "host": session.host,
+            "port": session.port,
+        }
+    else:
+        replay_arm = {
+            "armed": False,
+            "profile": None,
+            "host": None,
+            "port": None,
+        }
     resp = {
         "ok": True,
         "connected": session.conn.connected,
@@ -301,6 +325,7 @@ def _status_response(session, server):
         "name": session.name,
         "autopilot": autoloop.arm_block(arm),
         "subscribers": watch_hub.subscriber_count() if watch_hub else 0,
+        "replay_arm": replay_arm,
     }
     # Omitted entirely when there is no halt to report (see
     # `autoloop.intervention_block`), so a daemon that has never run a
