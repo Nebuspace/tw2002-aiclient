@@ -1,6 +1,6 @@
 # WO-EXPLORE-TWCLIENT-FORMATIONS-LANDMINE — Remove armed twclient import in explore
 
-**Status:** BANKED · **HIGH** · Claude Code preferred · outranks wire/retire orphans  
+**Status:** OPEN · EXECUTE · HIGH · Claude Code · impl-claudecode-aiclient  
 **Posted:** 2026-07-28T03:45Z · hub from CC unreachable-sweep review  
 **Refs:** CC STATUS 2026-07-28T03:44:20Z · ADR-001 deleted `twclient` · `explore.py:493`
 
