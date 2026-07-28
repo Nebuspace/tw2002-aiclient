@@ -1,18 +1,17 @@
-# WO-TEST-FORMATIONS-REHAB — Rewrite formations tests off twclient
+# WO-TEST-FORMATIONS-REHAB — Rehabilitate tests/test_formations.py onto tw2002_aiclient
 
-**Status:** BANKED · HIGH · Cursor-class OK  
-**Posted:** 2026-07-28T04:32Z · from #149 ignore-list audit  
-**Refs:** `tests/test_formations.py` ignored · #142 product disarm · `explore.plan_find_formations`
+**Status:** OPEN · EXECUTE · HIGH · Cursor (`impl-aiclient-cursor`)  
+**Posted:** banked #149 · EXEC overnight after Accept  
+**Refs:** ignore-list audit HIGH · #142 catalog_provider / unavailable seam
 
 ## Goal
-Rehabilitate formations coverage onto reborn `tw2002_aiclient.explore` (catalog
-seam / `unavailable` honesty). Un-ignore only after collect+suite green.
+Rewrite/un-ignore `tests/test_formations.py` onto in-tree APIs (`catalog_provider` seam /
+`plan_find_formations` unavailable honesty). No `twclient`.
 
 ## Accept
-1. No `twclient` import in the formations test module.
-2. Pins cover `catalog_provider is None` → `unavailable` and provider-present paths as product defines.
-3. Remove `--ignore=tests/test_formations.py` when green.
-4. Suite + STATUS. live-prove n/a.
+1. Remove `--ignore=tests/test_formations.py` once tests collect+pass.
+2. Pins cover refuse/unavailable path and post-#142 routing coverage where applicable.
+3. Suite green; live-prove n/a.
 
 ## Constraints
-Do not resurrect `twclient.formations`. No CHAINS-TUI collision.
+Do not resurrect twclient. Avoid #147 cockpit/chains product edits. Explicit paths.
