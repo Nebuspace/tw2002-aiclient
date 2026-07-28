@@ -28,15 +28,18 @@ This module is not itself IN `cockpit/` (that package is reserved for the
 taught-macro/arm surfaces this feature must stay clearly apart from -- see
 below), but it inherits that same discipline rather than drifting from it.
 
-# Never the taught `L)chains` arm list
+# Never the taught arm list (display is allowed; ARMING is not)
 
-`cockpit/chains.py`'s rows are the ARM list (`app.py` -> `begin_arm_confirm`
--> `y` -> `adapters.autoloop_start`, the money-spending call). A discovered,
-unpriced `CandidatePair` rendered through that surface would be
-indistinguishable from a taught, human-armed macro at the arm gate. This
-module never imports `cockpit.chains` and produces rows for a read-only
-listing only -- a typed API a thin product caller paints, never the arm
-surface itself (WO-CHAIN-DETECT-WIRE Accept 5, re-scoped 2026-07-28).
+`cockpit/chains.py`'s `rows` are the ARM list (`app.py` -> `begin_arm_confirm`
+-> `y` -> `adapters.autoloop_start`, the money-spending call). The bar is
+ARMABILITY, not display: since WO-CHAINS-TUI-FULL the `L)chains` modal
+displays discovered N-port cycles (`chain_search` results, via
+`chain_search_view`) as a separate, `detected`-tagged, structurally
+non-armable section. Pair loops have NO such display wire today -- this
+module's rows reach the CLI listing only -- and if one lands it must take
+the same shape: a section outside `rows`, never a row the cursor can select
+or the arm path can receive. This module never imports `cockpit.chains`
+(WO-CHAIN-DETECT-WIRE Accept 5, re-scoped 2026-07-28).
 
 # The empty state -- deliberately NOT canon's `○ ○  no trade loop yet`
 

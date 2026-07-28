@@ -15,14 +15,20 @@ Inherits the sibling composers' hardening family: never raises regardless of
 input shape, a malformed payload degrades to the honest-empty rendering
 rather than blowing up a draw pass, ASCII twins gated on `unicode_ok`.
 
-# Never the taught `L)chains` arm list
+# Never the taught arm list (display is allowed; ARMING is not)
 
-`cockpit/chains.py`'s rows are the ARM list (`app.py` -> `begin_arm_confirm`
--> `y` -> `adapters.autoloop_start`, the money-spending call). A discovered,
-unpriced cycle rendered through that surface would be indistinguishable from
-a taught, human-armed macro at the arm gate. This module never imports
-`cockpit.chains`; it produces rows for a read-only listing only. Same ruling
-as WO-CHAIN-DETECT-WIRE, same reason.
+`cockpit/chains.py`'s `rows` are the ARM list (`app.py` -> `begin_arm_confirm`
+-> `y` -> `adapters.autoloop_start`, the money-spending call). Since
+WO-CHAINS-TUI-FULL the `L)chains` modal DISPLAYS discovered cycles —
+`cockpit.chains.compose_chain_lines` calls THIS formatter for a separate,
+`detected`-tagged, structurally non-armable section — but a discovered chain
+never enters `rows`, the cursor never traverses it, and `selected()` / the
+arm path cannot express one (a `ProfitChain` has no name, no `steps[]`, no
+`start_anchor`; arming it would synthesise a macro the human never
+demonstrated). The load-bearing invariant is **never armable**, not never
+displayed. This module still never imports `cockpit.chains`; the dependency
+points the other way. Ruling lineage: WO-CHAIN-DETECT-WIRE, re-scoped by
+WO-CHAINS-TUI-FULL (hub, 2026-07-28).
 
 # TRUNCATION IS PART OF THE RENDERING, not a footnote
 
