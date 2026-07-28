@@ -1,6 +1,6 @@
 # WO-TEST-TIMING-ASSERT-ORDER — AST meta-test: no wall-clock assert before correctness
 
-**Status:** BANKED · LOW · optional insurance · Cursor-class OK  
+**Status:** OPEN · EXECUTE · LOW · Cursor-class · impl-aiclient-cursor · IDLE-KICK feed  
 **Posted:** 2026-07-28T03:32Z · hub (CC offer after #134)  
 **Refs:** CC STATUS #134 2026-07-28T03:31:18Z
 
