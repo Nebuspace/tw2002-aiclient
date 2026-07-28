@@ -1,12 +1,17 @@
 """WO-TEST-TIMING-ASSERT-ORDER — no wall-clock assert before correctness.
 
-A wall-clock / ``perf_counter`` / ``monotonic`` (or CPU ``rusage``) assert that
-runs *before* a non-timing assert in the same test function masks defects:
-under load the timing bound fails first, the correctness asserts never run,
-and the failure reads as "the machine was busy" (K9 twin class, #134).
+A wall-clock / ``perf_counter`` / ``monotonic`` assert that runs *before* a
+non-timing assert in the same test function masks defects: under load the
+timing bound fails first, the correctness asserts never run, and the
+failure reads as "the machine was busy" (K9 twin class, #134).
 
-This meta-test walks every ``test_*.py`` under ``tests/`` and fails when that
-order is inverted. Allowlist entries must carry a reason.
+**Scope (hub/CC constraint):** key on ``time.perf_counter()`` / wall-clock
+deltas only. Do **not** treat rusage / CPU-time canaries (e.g.
+``test_dead_terminal_spin`` assert-exited-then-``cpu_s``) as members of
+this class — those are forced data dependencies, not masking.
+
+This meta-test walks every ``test_*.py`` under ``tests/`` and fails when
+wall-clock order is inverted. Allowlist entries must carry a reason.
 """
 
 from __future__ import annotations
@@ -31,7 +36,7 @@ def _is_wall_clock_call(node: ast.AST) -> bool:
     func = node.func
     if isinstance(func, ast.Attribute) and func.attr in _WALL_ATTRS:
         return True
-    if isinstance(func, ast.Name) and func.id in _WALL_ATTRS | {"getrusage"}:
+    if isinstance(func, ast.Name) and func.id in _WALL_ATTRS:
         return True
     return False
 
@@ -41,17 +46,15 @@ def _names_in(node: ast.AST) -> set[str]:
 
 
 def _collect_timing_names(fn: ast.AST) -> set[str]:
-    """Names bound to wall-clock / rusage measurements inside ``fn``."""
+    """Names bound to wall-clock measurements inside ``fn``.
+
+    Intentionally ignores rusage / ``cpu_s`` (hub: not this defect class).
+    """
     timing: set[str] = set()
 
     def _note_assign(target: ast.AST, value: ast.AST) -> None:
         if isinstance(target, ast.Name):
             if any(_is_wall_clock_call(n) for n in ast.walk(value)):
-                timing.add(target.id)
-            if any(
-                isinstance(n, ast.Attribute) and n.attr in ("ru_utime", "ru_stime")
-                for n in ast.walk(value)
-            ):
                 timing.add(target.id)
         elif isinstance(target, (ast.Tuple, ast.List)):
             for elt in target.elts:
@@ -92,8 +95,8 @@ def _assert_is_timing(assert_node: ast.Assert, timing_names: set[str]) -> bool:
     used = _names_in(assert_node.test)
     if used & timing_names:
         return True
-    # Common canary names even if assignment shape was exotic.
-    if used & {"cpu_s", "elapsed_wall", "wall_s"}:
+    # Common wall-clock canary names (not cpu_s / rusage).
+    if used & {"elapsed_wall", "wall_s"}:
         return True
     return False
 
@@ -129,7 +132,7 @@ def _iter_test_functions(tree: ast.AST):
 
 
 def test_no_wall_clock_assert_precedes_a_non_timing_assert():
-    """Accept #1: structural — timing canaries may only run LAST."""
+    """Accept #1: structural — wall-clock canaries may only run LAST."""
     offenders: list[str] = []
     for path in sorted(TESTS_ROOT.rglob("test_*.py")):
         if path.name == Path(__file__).name:
@@ -148,7 +151,7 @@ def test_no_wall_clock_assert_precedes_a_non_timing_assert():
             for line in bad:
                 offenders.append(
                     f"{rel}:{line} {fn.name}: non-timing assert after a "
-                    f"wall-clock/rusage assert (reorder: correctness first, "
+                    f"wall-clock assert (reorder: correctness first, "
                     f"timing canary last)"
                 )
 
@@ -157,7 +160,7 @@ def test_no_wall_clock_assert_precedes_a_non_timing_assert():
         assert reason.strip(), f"ALLOWLIST {key} needs a non-empty reason"
 
     assert offenders == [], (
-        "wall-clock/rusage assert precedes a non-timing assert:\n  "
+        "wall-clock assert precedes a non-timing assert:\n  "
         + "\n  ".join(offenders)
     )
 
@@ -202,3 +205,25 @@ def test_fake_clock():
     tree = ast.parse(src)
     fn = tree.body[0]
     assert _violations_in_function(fn) == []
+
+
+def test_meta_detector_ignores_rusage_cpu_canaries():
+    """Hub/CC: rusage/cpu_s is out of scope (forced dependency, not mask)."""
+    src = """
+def test_rusage_after_exit():
+    exited = True
+    cpu_s = 0.01  # as if from rusage.ru_utime + ru_stime
+    assert exited
+    assert cpu_s < 0.5
+"""
+    tree = ast.parse(src)
+    fn = tree.body[0]
+    assert _violations_in_function(fn) == []
+    # Even cpu-first would not be this meta-test's job:
+    src2 = """
+def test_rusage_first_not_our_class():
+    cpu_s = 0.01
+    assert cpu_s < 0.5
+    assert True
+"""
+    assert _violations_in_function(ast.parse(src2).body[0]) == []
