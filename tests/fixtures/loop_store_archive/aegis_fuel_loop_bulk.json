@@ -1,0 +1,57 @@
+{
+  "name": "aegis_fuel_loop_bulk",
+  "created_ts": "2026-07-19T06:46:14Z",
+  "source": "recorded",
+  "steps": [
+    {
+      "input": "P",
+      "wait_prompt": null,
+      "expected_post_class": "port_trade"
+    },
+    {
+      "input": "",
+      "wait_prompt": null,
+      "expected_post_class": "port_trade"
+    },
+    {
+      "input": "",
+      "wait_prompt": null,
+      "expected_post_class": "main_command"
+    },
+    {
+      "input": "1027",
+      "wait_prompt": "Command \\[TL=",
+      "expected_post_class": "main_command"
+    },
+    {
+      "input": "7646",
+      "wait_prompt": "Command \\[TL=",
+      "expected_post_class": "main_command"
+    },
+    {
+      "input": "P",
+      "wait_prompt": null,
+      "expected_post_class": "port_trade"
+    },
+    {
+      "input": "",
+      "wait_prompt": null,
+      "expected_post_class": "port_trade"
+    },
+    {
+      "input": "",
+      "wait_prompt": null,
+      "expected_post_class": "main_command"
+    },
+    {
+      "input": "1027",
+      "wait_prompt": "Command \\[TL=",
+      "expected_post_class": "main_command"
+    },
+    {
+      "input": "5476",
+      "wait_prompt": "Command \\[TL=",
+      "expected_post_class": "main_command"
+    }
+  ]
+}

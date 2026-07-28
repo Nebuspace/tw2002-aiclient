@@ -1,0 +1,48 @@
+{
+  "name": "mined-2-_NUM___NUM__P__NUM___NUM___NUM___NUM_",
+  "created_ts": "2026-07-19T06:18:49Z",
+  "source": "mined",
+  "steps": [
+    {
+      "input": "1027",
+      "wait_prompt": null,
+      "expected_post_class": "main_command"
+    },
+    {
+      "input": "7646",
+      "wait_prompt": null,
+      "expected_post_class": "main_command"
+    },
+    {
+      "input": "P",
+      "wait_prompt": null,
+      "expected_post_class": "port_trade"
+    },
+    {
+      "input": "10",
+      "wait_prompt": null,
+      "expected_post_class": "port_trade"
+    },
+    {
+      "input": "370",
+      "wait_prompt": null,
+      "expected_post_class": "main_command"
+    },
+    {
+      "input": "1027",
+      "wait_prompt": null,
+      "expected_post_class": "main_command"
+    },
+    {
+      "input": "5476",
+      "wait_prompt": null,
+      "expected_post_class": "main_command"
+    }
+  ],
+  "mined_stats": {
+    "pre_class": "main_command",
+    "support": 2,
+    "cr_per_turn": null,
+    "cr_per_action": 52.785714285714285
+  }
+}

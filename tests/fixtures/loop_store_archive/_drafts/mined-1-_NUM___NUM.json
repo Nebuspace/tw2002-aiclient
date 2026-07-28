@@ -1,0 +1,23 @@
+{
+  "name": "mined-1-_NUM___NUM_",
+  "created_ts": "2026-07-19T06:18:49Z",
+  "source": "mined",
+  "steps": [
+    {
+      "input": "10",
+      "wait_prompt": null,
+      "expected_post_class": "port_trade"
+    },
+    {
+      "input": "146",
+      "wait_prompt": null,
+      "expected_post_class": "main_command"
+    }
+  ],
+  "mined_stats": {
+    "pre_class": "port_trade",
+    "support": 8,
+    "cr_per_turn": null,
+    "cr_per_action": 54.375
+  }
+}

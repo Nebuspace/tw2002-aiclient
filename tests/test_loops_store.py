@@ -18,14 +18,20 @@ from tw2002_aiclient.loops.list_view import format_loop_row, format_loops_report
 from tw2002_aiclient.loops.store import read_loop_store
 from tw2002_aiclient.session import cli
 
-ARCHIVE_SKILLS = (
-    Path(__file__).resolve().parents[1]
-    / "archive"
-    / "pre-rebirth-2026-07-23"
-    / "runtime"
-    / "state"
-    / "skills"
-)
+# The recorded-macro corpus these schema-conformance tests read.
+#
+# It used to point into `archive/pre-rebirth-2026-07-23/…`, which is **gitignored**
+# (`.gitignore:56`). The consequence, measured in #193: the two tests below ran on
+# exactly one developer's checkout — never in a worktree, never in CI, because CI
+# cannot clone an ignored path. They reported `2 skipped`, and a skip count is not
+# a number anyone reads as a coverage hole. A proof that executes in one place is
+# not a gate.
+#
+# The corpus is now a committed fixture: 19 files, byte-identical copies of the
+# archived originals (md5-verified per file when copied), so "read as-is with
+# nothing hand-fixed" stays literally true. Trimming it would have saved 84 K by
+# quietly weakening the exact claim these tests exist to make.
+ARCHIVED_MACRO_CORPUS = Path(__file__).resolve().parent / "fixtures" / "loop_store_archive"
 
 # The document canon/engine/macros.md §Schema defines, in the shape the
 # archive writer actually emits (verified against the 16 real artifacts).
@@ -428,28 +434,86 @@ def test_unreadable_drafts_do_not_silently_pass_as_a_complete_listing(tmp_path, 
 # --------------------------------------------------------------------------
 
 
-@pytest.mark.skipif(not ARCHIVE_SKILLS.is_dir(), reason="archived store not present in this tree")
+def _corpus_json(subdir: str = "") -> list[str]:
+    """The corpus's own `.json` inventory, read the way the reader reads it.
+
+    ``os.listdir``, not ``Path.glob``, for the reason spelled out in
+    ``store.py`` -- ``glob`` swallows a ``PermissionError`` on the directory
+    and hands back an empty iterator, so an unreadable fixture would look
+    exactly like a fixture that legitimately holds nothing. A cross-check
+    that can silently return ``[]`` is not a cross-check.
+    """
+    directory = ARCHIVED_MACRO_CORPUS / subdir if subdir else ARCHIVED_MACRO_CORPUS
+    return sorted(name for name in os.listdir(directory) if name.endswith(".json"))
+
+
+def _archived_macro_corpus() -> Path:
+    """The committed corpus, or a named failure -- deliberately never a skip.
+
+    What stood here was ``@pytest.mark.skipif(not ARCHIVE_SKILLS.is_dir())``
+    pointed at a **gitignored** path, so the two tests below reported
+    ``2 skipped`` in every worktree and in CI, and ran only on the one
+    checkout that happened to hold the archive. Nobody reads a skip count as
+    a coverage hole, which is exactly why it survived. The corpus is tracked
+    now, so its absence means a broken checkout -- and a broken checkout is a
+    red, not a shrug.
+    """
+    assert ARCHIVED_MACRO_CORPUS.is_dir(), (
+        f"committed macro corpus missing at {ARCHIVED_MACRO_CORPUS} -- it is a "
+        "tracked fixture, so this is a broken checkout, not a reason to skip"
+    )
+    return ARCHIVED_MACRO_CORPUS
+
+
+def test_the_committed_corpus_is_the_whole_archived_store():
+    """The `== 16` two tests below assert is only a claim about the *reader*
+    if the corpus itself is known-intact -- otherwise a fixture file quietly
+    going missing would move both sides of the comparison together and the
+    tests would keep passing on less evidence.
+
+    16 blessed macros at the root + 3 mined drafts under `_drafts/` = the 19
+    files the real writer left behind, copied byte-for-byte.
+    """
+    _archived_macro_corpus()
+
+    assert len(_corpus_json()) == 16, _corpus_json()
+    assert len(_corpus_json("_drafts")) == 3, _corpus_json("_drafts")
+
+    # `_drafts` is the only subdirectory -- no second store hiding deeper
+    # where the reader would never look for it.
+    subdirs = sorted(p.name for p in ARCHIVED_MACRO_CORPUS.iterdir() if p.is_dir())
+    assert subdirs == ["_drafts"], subdirs
+
+
 def test_reads_the_real_archived_artifacts_without_a_single_unreadable():
     """Proof the schema this reader accepts is the one the writer emits --
-    16 genuine recorded macros, read as-is with nothing hand-fixed."""
-    result = read_loop_store(skills_dir=ARCHIVE_SKILLS, include_drafts=True)
+    16 genuine recorded macros, read as-is with nothing hand-fixed.
+
+    Why both a literal 16 *and* a count derived from the directory: they fail
+    on different things. The literal notices a corpus file disappearing; the
+    derived equality notices the reader dropping a file it should have read.
+    A derived count on its own is blind to deletion, because the corpus and
+    the expectation shrink together and still agree.
+    """
+    corpus = _archived_macro_corpus()
+    result = read_loop_store(skills_dir=corpus, include_drafts=True)
 
     assert result["unreadable"] == []
     assert result["status"] == "ok"
     blessed = [row for row in result["loops"] if not row["draft"]]
     drafts = [row for row in result["loops"] if row["draft"]]
     assert len(blessed) == 16
+    assert len(blessed) == len(_corpus_json())
     assert drafts, "the archived store carries mined drafts"
     assert all(row["source"] == "recorded" for row in blessed)
     assert all(row["steps"] > 0 for row in blessed)
 
 
-@pytest.mark.skipif(not ARCHIVE_SKILLS.is_dir(), reason="archived store not present in this tree")
 def test_real_mined_draft_reports_the_stat_it_actually_has():
     """`mined-1` really carries `cr_per_turn: None` alongside a genuine
     `cr_per_action: 54.375`. The archive's CLI checked only per-turn and
     fell through to a dash, discarding a real measured number."""
-    result = read_loop_store(skills_dir=ARCHIVE_SKILLS, include_drafts=True)
+    result = read_loop_store(skills_dir=_archived_macro_corpus(), include_drafts=True)
     row = next(r for r in result["loops"] if r["name"].startswith("mined-1"))
 
     assert "profit_per_turn" not in row
