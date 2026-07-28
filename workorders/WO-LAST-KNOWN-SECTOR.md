@@ -21,7 +21,7 @@ StarDock screens classify correctly but carry **no `[sector]`** in the Command p
 1. Daemon exposes last-known sector + move-counter (updated only on successful sector reads; absent until first success; attribute only when counter unchanged since that read).
 2. Client/write path can attribute landmark upsert when current screen is sector-less but StarDock-classified.
 3. Pins: never invent a sector; clear/reset rules on disconnect; suite + Cipher glance on threaded daemon state.
-4. live-prove: n/a or safe half per surface.
+4. live-prove: **DEFERRED → Cursor** (Max 2026-07-28) — CC does not run live; hub LIVE-PROVE-HANDOFFs Cursor after suite green. Docs/offline cells may still n/a with reason.
 
 ## Out of scope
 
