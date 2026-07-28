@@ -778,7 +778,7 @@ class PlayShellScreen:
     ``cockpit.control_seat``'s ``APP_LABEL``/``MANUAL_LABEL``/
     ``SPECTATE_LABEL``, whichever is true -- right up against wherever
     the liveness cluster's own space begins, dropping out first if the
-    row is too narrow for both (see ``compose_control_strip_line``). The
+    row is too narrow for both (see ``compose_control_strip_segments``). The
     Mode chord (``handle_key``'s own ``"attach"`` return value, acted on
     by ``app.py::_run_play``) is **Ctrl-A**, not `M` -- WO-P5-061-ENTRY
     (project owner ruling, 2026-07-25) moved it off `M` so bare `M` stays
@@ -1723,7 +1723,7 @@ class PlayShellScreen:
         # release, and the broken-wire fallback all set `self.attached`
         # alongside `self.spectating`, never coupled through negation) --
         # honest state, not a derived proxy. `compose_control_strip_segments`
-        # (WO-P5-060) replaces the flat-string `compose_control_strip_line`
+        # (WO-P5-060) replaced the retired flat-string strip join helper
         # call here so the mode-badge chip can carry its OWN reverse-video+
         # tone attr (`_control_strip_segment_attr`) distinct from the row's
         # plain liveness cluster -- drawn through `draw_segment_line`, the

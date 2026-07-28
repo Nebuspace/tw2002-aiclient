@@ -12,9 +12,14 @@ import pytest
 
 from tw2002_aiclient.cockpit import covermeter
 from tw2002_aiclient.cockpit.control_seat import (
-    compose_control_strip_line,
     compose_control_strip_segments,
 )
+
+def _joined_strip(**kwargs) -> str:
+    """Flat join of ``compose_control_strip_segments`` — test-only stand-in
+    for the retired product flat-string strip helper."""
+    return "".join(text for text, _tone in compose_control_strip_segments(**kwargs))
+
 
 WIDE = 160
 
@@ -29,7 +34,7 @@ def _chip(app=None, human=None):
 # --------------------------------------------------------------------------
 
 def test_meter_appears_on_a_wide_row():
-    line = compose_control_strip_line(
+    line = _joined_strip(
         spectating=False, attached=True, liveness_text="LIVE",
         width=WIDE, coverage_meter=_chip(app=3, human=1),
     )
@@ -41,7 +46,7 @@ def test_unknown_meter_still_appears():
     """`COV ?` is the tip reading and must be visible, not suppressed as if
     it were an empty chip -- an absent gauge and a gauge honestly reporting
     `?` are different statements to the operator."""
-    line = compose_control_strip_line(
+    line = _joined_strip(
         spectating=False, attached=True, liveness_text="LIVE",
         width=WIDE, coverage_meter=_chip(),
     )
@@ -74,7 +79,7 @@ def test_bare_string_meter_is_not_rendered():
     caller that passes a string sees a test naming the reason, instead of a
     meter that silently never appears.
     """
-    line = compose_control_strip_line(
+    line = _joined_strip(
         spectating=False, attached=True, liveness_text="LIVE",
         width=WIDE, coverage_meter="COV 75%",
     )
@@ -84,7 +89,7 @@ def test_bare_string_meter_is_not_rendered():
 def test_correct_tuple_shape_does_render():
     """The companion half of the pin above -- proves the previous test fails
     for the *shape*, not because the meter is unwired entirely."""
-    line = compose_control_strip_line(
+    line = _joined_strip(
         spectating=False, attached=True, liveness_text="LIVE",
         width=WIDE, coverage_meter=("COV 75%", None),
     )
@@ -101,7 +106,7 @@ def test_liveness_survives_when_the_meter_cannot_fit():
     comfortably wide -- at every single one, liveness is intact."""
     liveness = "LIVE 12s"
     for width in range(1, 60):
-        line = compose_control_strip_line(
+        line = _joined_strip(
             spectating=False, attached=True, liveness_text=liveness,
             width=width, coverage_meter=_chip(app=3, human=1),
         )
@@ -115,7 +120,7 @@ def test_meter_drops_before_liveness_under_pressure():
     liveness = "LIVE 12s"
     meter_text = covermeter.compose_coverage_meter(app=3, human=1)
     width = len(liveness) + 2
-    line = compose_control_strip_line(
+    line = _joined_strip(
         spectating=False, attached=True, liveness_text=liveness,
         width=width, coverage_meter=_chip(app=3, human=1),
     )
@@ -127,7 +132,7 @@ def test_meter_never_truncated_onto_the_row():
     """A partial `COV 7` must never reach the row at ANY width -- the failure
     mode this whole design exists to prevent."""
     for width in range(1, 120):
-        line = compose_control_strip_line(
+        line = _joined_strip(
             spectating=False, attached=True, liveness_text="LIVE",
             width=width, coverage_meter=_chip(app=3, human=1),
         )
@@ -148,7 +153,7 @@ def test_row_is_byte_identical_when_no_meter_is_passed(width, spectating, attach
         spectating=spectating, attached=attached,
         liveness_text="LIVE 12s", width=width,
     )
-    assert compose_control_strip_line(**kwargs) == compose_control_strip_line(
+    assert _joined_strip(**kwargs) == _joined_strip(
         **kwargs, coverage_meter=None
     )
 
@@ -162,7 +167,7 @@ def test_line_and_segments_stay_consistent_with_a_meter(width):
         width=width, coverage_meter=_chip(app=3, human=1),
     )
     joined = "".join(text for text, _ in compose_control_strip_segments(**kwargs))
-    assert joined == compose_control_strip_line(**kwargs)
+    assert joined == _joined_strip(**kwargs)
 
 
 # --------------------------------------------------------------------------
@@ -174,7 +179,7 @@ def test_line_and_segments_stay_consistent_with_a_meter(width):
     [object(), 42, [], {}, ("only-one",), ("a", "b", "c"), (None, None), (b"x", None)],
 )
 def test_hostile_meter_values_degrade_to_absent_without_raising(hostile):
-    line = compose_control_strip_line(
+    line = _joined_strip(
         spectating=False, attached=True, liveness_text="LIVE",
         width=WIDE, coverage_meter=hostile,
     )
@@ -202,7 +207,7 @@ def test_meter_survives_a_fully_populated_live_row(width):
     see. Pinned here so a future reordering of the chip run cannot drop the
     meter on live sessions only.
     """
-    line = compose_control_strip_line(
+    line = _joined_strip(
         spectating=False, attached=True, liveness_text="LIVE 12s", width=width,
         arm_chip=("ARM OFF", "warn"), conn_chip=("CONN", "ok"),
         coverage_meter=_chip(), status_offer="Explore: press E to map 5 sectors",
@@ -218,7 +223,7 @@ def test_meter_outranks_the_status_offer_not_the_other_way_round():
     prose hint that truncates by design (`status_text[:room]`). At a width
     that cannot hold both in full, the meter must not be the thing that
     silently loses."""
-    line = compose_control_strip_line(
+    line = _joined_strip(
         spectating=False, attached=True, liveness_text="LIVE 12s", width=80,
         arm_chip=("ARM OFF", "warn"), conn_chip=("CONN", "ok"),
         coverage_meter=_chip(), status_offer="Explore: press E to map 5 sectors",
@@ -231,7 +236,7 @@ def test_no_ai_term_reaches_the_row():
     """The WO's grep pin, enforced at the row level as well as the composer:
     an `AI` slice must not appear even if some future chip re-introduces it."""
     for app, human in [(None, None), (0, 0), (3, 1), (1, 7)]:
-        line = compose_control_strip_line(
+        line = _joined_strip(
             spectating=False, attached=True, liveness_text="LIVE",
             width=WIDE, coverage_meter=_chip(app=app, human=human),
         )
