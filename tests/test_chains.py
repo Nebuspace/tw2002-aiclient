@@ -307,8 +307,9 @@ def test_k7_completes_without_truncation():
     chains, note = find_profit_chains_with_note(_complete(7))
     elapsed = time.perf_counter() - t0
     assert note is None
-    assert elapsed < 1.0
     assert len(chains) > 0
+    # Generous machine canary LAST — never mask the deterministic asserts above.
+    assert elapsed < 1.0
 
 
 def test_differential_iterative_matches_legacy_recursive_on_small_graphs():
