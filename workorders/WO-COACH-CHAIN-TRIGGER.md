@@ -1,9 +1,10 @@
 # WO-COACH-CHAIN-TRIGGER — Discovered-chain coach callout via coaching-engine
 
-**Status:** BANKED · MED · blocked on coaching-engine follow-on  
+**Status:** OPEN EXECUTE · MED · Claude Code preferred  
 **Posted:** 2026-07-28T01:25Z · hub (split from #128 Accept 5)  
-**Seat:** open (CC+Fable preferred when coaching surface opens)  
-**Depends:** `WO-CHAIN-DETECT-WIRE` row half (#128) · `canon/engine/coaching-engine.md`
+**Unbanked:** 2026-07-28T12:15Z · hub under Max carte blanche (W4/#147 landed; `infer_coach_triggers` + strategy cards already in tree)  
+**Seat:** impl-claudecode-aiclient  
+**Depends:** `WO-CHAIN-DETECT-WIRE` / #128 · #147 CHAINS-TUI · `canon/engine/coaching-engine.md` (substrate present — not blocked)
 
 ## Goal
 
