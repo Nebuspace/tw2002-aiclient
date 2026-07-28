@@ -1,6 +1,6 @@
 # WO-STATUS-CHAIN-SCALARS-COACH — chain scalars on status + coach wire
 
-**Status:** OPEN EXECUTE · HIGH · Claude Code preferred  
+**Status:** DONE · origin `5f35188` (#162) · Accept verified 2026-07-28 (ship tests green on tip)
 **Posted:** 2026-07-28T13:21Z · hub (CC scoping 12:55Z · ruling 12:56Z)  
 **Supersedes:** narrow `WO-COACH-CHAIN-TRIGGER` / #159 until this lands  
 **Depends:** #161 `WO-COACH-ENGINE-PORT` on `main` · #147 chains surface

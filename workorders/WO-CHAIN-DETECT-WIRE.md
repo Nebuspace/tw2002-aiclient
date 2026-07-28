@@ -1,6 +1,6 @@
 # WO-CHAIN-DETECT-WIRE — World model → hops → recompute chains
 
-**Status:** OPEN · EXECUTE · unblocked (PORT #125 + SEARCH-BUDGET #127 on main)  
+**Status:** OPEN · Accept 0–4 DONE origin `c56f852` (#128) · **residual:** Accept 5's `chain_as_library_row` resolves to no product definition (canon + one test cite it only) — rendering shipped via #147; the named bridge shape never existed · reviewed 2026-07-28
 **Posted:** 2026-07-27T21:35:00Z · Max priority tranche ②  
 **Seeded for execute:** 2026-07-28T00:51Z · hub  
 **Seat:** impl-claudecode-aiclient  

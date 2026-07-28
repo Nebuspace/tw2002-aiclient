@@ -1,6 +1,6 @@
 # WO-CHAIN-DETECT-PORT — Port chains + trade_adapter onto tw2002_aiclient
 
-**Status:** OPEN · READY · EXEC seeded · HANDOFF CC  
+**Status:** DONE · origin `dc1df22` (#125) · Accept verified 2026-07-28 (ship tests green on tip)
 **Posted:** 2026-07-27T21:35:00Z · Max priority tranche ②  
 **Seat:** `impl-claudecode-aiclient`  
 **Depends:** explore gate CLOSED (`b2d6c89` / #122) · archive `chains.py` / `trade_adapter.py` as reference  

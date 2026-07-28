@@ -1,6 +1,6 @@
 # WO-PLAY-CHAINS-ARM-LIVE-PROVE — Live diversity prove of L)chains → confirm → taught autoloop
 
-**Status:** OPEN · EXECUTE · HIGH · Cursor (`impl-aiclient-cursor`)  
+**Status:** DONE · origin `70dfdbe` (#201) · live diversity prove hub-Accepted; no code by design (live-prove WO) · stamped 2026-07-28
 **Posted:** 2026-07-28T21:15:26Z · Max redirect — stop hygiene; prove the automation already on `main`  
 **Seat:** `impl-aiclient-cursor`  
 **Depends:** `main` ≥ `e9b8655` · Play arm already shipped (#116) · inventory non-empty  
