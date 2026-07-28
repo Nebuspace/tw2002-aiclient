@@ -1,6 +1,6 @@
 # WO-TEST-ARCHIVE-DELETE-BATCH-3 — more twclient-hard-fail archive deletes
 
-**Status:** OPEN EXECUTE · MED · Cursor preferred  
+**Status:** DONE · Cursor · PR #172 · awaiting hub Accept  
 **Posted:** 2026-07-28T15:56Z · hub (#149 AUDIT BANK-DELETE)
 
 ## Scope (only these)
