@@ -43,13 +43,34 @@ from tests.status_vocabulary import (
 # rather than by panel — panels cut across producers, and #162 established that
 # the fix for a GOALS field can live client-side rather than in the daemon.
 STARVED_ALLOWLIST: dict[str, tuple[str, str]] = {
-    # -- T1: this WO's commit 2. Derivable from the world model the client
-    #    already holds; no daemon change, no protocol change, no window.
-    "known_sectors": ("T1", "world model holds the sector count; overlay not wired yet"),
-    "galaxy_size": ("T1", "world model / profile knows the galaxy bound; not wired yet"),
-    "formations_count": ("T1", "world model holds formations; overlay not wired yet"),
-    "stardock_found": ("T1", "world model knows; TRI-STATE — absent != False, see the WO"),
-    "stardock_sectors": ("T1", "world model holds the sector pair; not wired yet"),
+    # -- BLOCKED: no producer exists to wire, and building one is a different
+    #    WO's job. T1 was scheduled as FIVE world-model fields "the client
+    #    already holds"; resolving each one's actual producer left exactly one
+    #    (`known_sectors`, now wired by `world_stats.py` and deleted from this
+    #    list). The other four were starved one layer deeper than the panel —
+    #    the reader existed, the writer never did. Each reason below is the
+    #    evidence, not the original assumption:
+    "formations_count": (
+        "BLOCKED",
+        "needs `catalog_provider.genesis_candidates`; that seam is unimplemented "
+        "and the planner returns mode='unavailable' — WO-FORMATIONS-CATALOG-PORT",
+    ),
+    "stardock_found": (
+        "BLOCKED",
+        "`find_landmark_sectors` reads rec['landmarks']; the only live world-model "
+        "writer never writes landmarks, so this is never True — WO-WM-LANDMARKS-WRITE",
+    ),
+    "stardock_sectors": (
+        "BLOCKED",
+        "same starved reader as `stardock_found`: landmarks are never written, so "
+        "the lookup is always [] however much you explore — WO-WM-LANDMARKS-WRITE",
+    ),
+    # -- T3: no extractor exists; needs new screen parsing and captured fixtures.
+    "galaxy_size": (
+        "T3",
+        "nothing in the package produces one and `state_parser` refuses to invent "
+        "one; the Map row degrades honestly to '· N sectors' without it",
+    ),
     # -- T2: the daemon already has an extractor, it is simply unwired.
     #    Touches `_status_response`, so scheduling it needs a DEPLOY-WINDOW.
     "credits": ("T2", "`state_parser.read_credits_balance` exists, unwired; needs a window"),
@@ -67,7 +88,11 @@ STARVED_ALLOWLIST: dict[str, tuple[str, str]] = {
     "spinner_frame": ("T4", "app per-draw tick; `liveness.py` documents its own pending wire"),
 }
 
-_VALID_TRANCHES = {"T1", "T2", "T3", "T4"}
+# T1 is absent by design: it had one wireable field, it was wired, its entry is
+# gone. "BLOCKED" is not a tranche of this WO at all — it marks a key whose
+# producer belongs to a named other WO, which is the honest owner for a field no
+# amount of wiring here can supply.
+_VALID_TRANCHES = {"BLOCKED", "T2", "T3", "T4"}
 
 
 def _diff(actual: set[str], expected: set[str]) -> tuple[list[str], list[str]]:

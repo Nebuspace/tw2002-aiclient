@@ -608,7 +608,12 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
     # `_daemon_status_provider`: the scalars are a client-side overlay on
     # whatever the status source is, not part of polling the daemon, so every
     # provider (including the scripted ones tests substitute) carries them.
-    play.status_provider = play.chain_scalars.wrap(_daemon_status_provider(run_dir))
+    # Both overlays compose by wrapping: each adds only its own keys, each
+    # declines to clobber a value the layer beneath already supplied, and each
+    # maps a `None` provider to `None`, so the order is not load-bearing.
+    play.status_provider = play.world_stats.wrap(
+        play.chain_scalars.wrap(_daemon_status_provider(run_dir))
+    )
     play.status_line = "Ensuring session…"
     play.draw()  # show the ensuring state during the (blocking) wait below
     # no_auto_arm=True: ensure only reaches main_command and stops, even if
@@ -946,6 +951,20 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                 # whole-process CPU budget (`tests/test_dead_terminal_spin.py`,
                 # 0.5s including imports) is already within ~50ms of the
                 # line before it.
+                #
+                # The GOALS Map row's `known_sectors` is refreshed on this same
+                # keypress, and ONLY here: `status_provider()` runs once per
+                # DRAW, and counting sector files (~26ms at 5000 sectors)
+                # cannot go on that path against the budget described above.
+                # This keypress already pays for a full world-model pass, so
+                # the marginal cost of a directory count is noise. Kept in its
+                # own guarded block rather than folded into the discovery below
+                # so that a broken finder does not also cost us the count, and
+                # so the existing expression's behaviour is untouched.
+                try:
+                    play.world_stats.refresh(_world_identity.world_id_from_profile(profile))
+                except Exception:  # noqa: BLE001
+                    pass
                 try:
                     from tw2002_aiclient import chain_search as _chain_search
 

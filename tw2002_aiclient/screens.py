@@ -13,6 +13,7 @@ from typing import Callable, Sequence
 import curses
 
 from tw2002_aiclient import chain_status as _chain_status
+from tw2002_aiclient import world_stats as _world_stats
 from tw2002_aiclient.cockpit import analyze as cockpit_analyze
 from tw2002_aiclient.cockpit import arm as cockpit_arm
 from tw2002_aiclient.cockpit import armconfirm as cockpit_armconfirm
@@ -854,6 +855,9 @@ class PlayShellScreen:
         # constructed screen (as every pty test builds one) must not
         # AttributeError there.
         self.chain_scalars = _chain_status.ChainScalars()
+        # Producer for the GOALS Map row's `known_sectors`, refreshed from the
+        # same chains-popup branch and constructed here for the same reason.
+        self.world_stats = _world_stats.WorldStats()
         # WO-P4-052: a no-arg callable returning a `WatchFeedSnapshot`-shaped
         # object (duck-typed via `.latest_event` only -- this module never
         # imports `WatchFeed` itself, see draw()'s own GAME viewport block).
