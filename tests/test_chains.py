@@ -344,32 +344,75 @@ def test_differential_iterative_matches_legacy_recursive_on_small_graphs():
         assert find_profit_chains(hops, min_hops=min_hops, max_hops=max_hops) == expected
 
 
-def test_ring_500_terminates_under_a_second_with_a_truncation_note():
+# WO-CHAIN-K9-BUDGET-ASSERT: a wall-clock comparison is a property of the
+# MACHINE, never of the algorithm, so it may only ever be a LAST, generous
+# backstop -- never the assert that decides whether a test passes.
+#
+# Ordered FIRST (as `ring_500` and `K9` both were), it *masks*: a slow or
+# loaded box reddens the test on a timing property, the correctness asserts
+# below it never execute, and the failure reads as "the machine was busy".
+# A genuine truncation regression is then invisible -- you retune the
+# threshold and ship the bug.
+#
+# What IS deterministic here is the budget: whether `DEFAULT_MAX_SEARCH_STEPS`
+# is exhausted depends only on the graph and the constant, and is identical on
+# every machine. That is the primary claim these tests should make.
+#
+# pytest.ini already sets a global `timeout = 120`, so a genuine hang is a
+# named failure regardless. This canary therefore carries only the "budget
+# stopped bounding the search at all" signal, and can afford to be generous.
+_BUDGET_CANARY_S = 10.0
+
+
+def test_ring_500_truncates_with_a_budget_note():
     hops = _ring(500)
     t0 = time.perf_counter()
     chains, note = find_profit_chains_with_note(hops)
     elapsed = time.perf_counter() - t0
-    assert elapsed < 1.0, f"ring(500) took {elapsed:.3f}s"
-    assert note is not None
+
+    # Deterministic primary asserts -- machine-independent.
+    assert note is not None, "ring(500) must exhaust the search budget"
+    assert str(DEFAULT_MAX_SEARCH_STEPS) in note, (
+        f"the note must name the budget that fired, got: {note!r}"
+    )
+    assert "partial" in note, f"a truncated result must say it is partial, got: {note!r}"
+
+    # Generous machine canary, LAST so it can never mask the above.
+    assert elapsed < _BUDGET_CANARY_S, (
+        f"ring(500) took {elapsed:.3f}s -- the search budget may have stopped bounding"
+    )
 
 
-def test_complete_k9_terminates_under_a_second_with_a_truncation_note():
+def test_complete_k9_truncates_with_a_budget_note():
     hops = _complete(9)
     t0 = time.perf_counter()
     chains, note = find_profit_chains_with_note(hops)
     elapsed = time.perf_counter() - t0
-    assert elapsed < 1.0, f"K9 took {elapsed:.3f}s"
-    assert note is not None
+
+    # Deterministic primary asserts -- machine-independent.
+    assert note is not None, "complete K9 must exhaust the search budget"
+    assert str(DEFAULT_MAX_SEARCH_STEPS) in note, (
+        f"the note must name the budget that fired, got: {note!r}"
+    )
+    assert "partial" in note, f"a truncated result must say it is partial, got: {note!r}"
+
+    # Generous machine canary, LAST so it can never mask the above.
+    assert elapsed < _BUDGET_CANARY_S, (
+        f"K9 took {elapsed:.3f}s -- the search budget may have stopped bounding"
+    )
 
 
 def test_ring_5000_and_50000_return_normally_without_recursion_error():
+    # Already correctly ordered before this WO -- the two deterministic
+    # asserts precede the timing one. Only the canary is widened, onto the
+    # shared constant, so the whole class has one threshold to reason about.
     for n in (5000, 50000):
         t0 = time.perf_counter()
         chain = longest_profit_chain(_ring(n))
         elapsed = time.perf_counter() - t0
         assert chain is not None, f"ring({n}) found no chain"
         assert len(chain.hops) == n
-        assert elapsed < 5.0, f"ring({n}) took {elapsed:.3f}s"
+        assert elapsed < _BUDGET_CANARY_S, f"ring({n}) took {elapsed:.3f}s"
 
 
 def test_ring_999_crashes_the_legacy_recursive_algorithm_but_not_the_new_one():
