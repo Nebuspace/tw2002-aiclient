@@ -30,6 +30,7 @@ import threading
 import pytest
 
 from tw2002_aiclient.session import protocol
+from tw2002_aiclient.session import session as session_mod
 from tw2002_aiclient.session.session import Session
 
 SECTOR = 158
@@ -185,7 +186,13 @@ def test_a_send_racing_a_read_never_yields_a_stale_positive(session, monkeypatch
     Checked by hammering both sides and asserting the epoch discipline holds
     rather than asserting a particular interleaving, which would only pin the
     scheduler this machine happened to use.
+
+    Wall-clock: production `MIN_SEND_GAP_S` is the live anti-hammer (untouched).
+    This pin only needs the send path to take the lock and bump the epoch, so
+    the gap is collapsed to 0 under test — 300 sends stay a concurrency hammer,
+    not a ~45s sleep tax (WO-TEST-RACE-PIN-COST).
     """
+    monkeypatch.setattr(session_mod, "MIN_SEND_GAP_S", 0.0)
     monkeypatch.setattr(session.conn, "send_text", lambda *a, **k: None)
     bad: list = []
     stop = threading.Event()
@@ -194,12 +201,18 @@ def test_a_send_racing_a_read_never_yields_a_stale_positive(session, monkeypatch
         while not stop.is_set():
             got = session.last_known_sector()
             if got is not None and got != SECTOR:
-                bad.append(got)
+                bad.append(("corrupt", got))
 
     def writer():
         for _ in range(300):
             session.note_sector(SECTOR)
             session.send("D")
+            # Sequential half of the pin: after a completed send the memory
+            # must be silent. Catches an epoch-skip injection the concurrent
+            # reader cannot safely name (same-sector stale vs. a fresh note).
+            stale = session.last_known_sector()
+            if stale is not None:
+                bad.append(("stale_after_send", stale))
 
     r = threading.Thread(target=reader, daemon=True)
     r.start()
@@ -208,7 +221,32 @@ def test_a_send_racing_a_read_never_yields_a_stale_positive(session, monkeypatch
     finally:
         stop.set()
         r.join(timeout=5)
-    assert bad == [], f"a sector appeared that was never noted: {bad[:3]}"
+    assert bad == [], f"race pin tripped: {bad[:3]}"
+
+
+def test_race_pin_goes_red_when_epoch_check_is_skipped(session, monkeypatch):
+    """Falsification for WO-TEST-RACE-PIN-COST Accept: an intentional
+    epoch-skip stale-positive makes the race pin's post-send check fire.
+
+    Production `last_known_sector` refuses a sector whose epoch no longer
+    matches. Strip that check and the same note→send sequence leaves a
+    readable stale sector — exactly what the pin above must reject.
+    """
+    monkeypatch.setattr(session_mod, "MIN_SEND_GAP_S", 0.0)
+    monkeypatch.setattr(session.conn, "send_text", lambda *a, **k: None)
+
+    def broken_last_known():
+        with session._sector_memory_lock:
+            if session._last_sector_epoch is None:
+                return None
+            return session._last_sector  # ignores epoch mismatch
+
+    monkeypatch.setattr(session, "last_known_sector", broken_last_known)
+    session.note_sector(SECTOR)
+    session.send("D")
+    assert session.last_known_sector() == SECTOR, (
+        "injection did not produce a stale positive — pin measures nothing"
+    )
 
 
 # --------------------------------------------------- the production wiring
