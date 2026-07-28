@@ -1,8 +1,8 @@
 # WO-RUN-DIR-AFUNIX-REFUSE — Honest refuse when TW_RUN_DIR socket path too long
 
-**Status:** OPEN · READY · banked from #116 transport live-prove  
+**Status:** OPEN · EXECUTE · MED · Cursor-class · impl-aiclient-cursor  
 **Posted:** 2026-07-27T21:56:00Z · CC finding during autoloop_start live matrix  
-**Seat:** open (after explore gate; not interrupting #122)  
+**Seat:** impl-aiclient-cursor · EXEC seeded 2026-07-28T02:29Z (IDLE-KICK feed; FRESHNESS-SWEEP still HOLD until #128 twin on main)  
 **Refs:** #116 transport prove · WO-RUN-DIR-NORMALISE (E-01) class
 
 ## Goal
