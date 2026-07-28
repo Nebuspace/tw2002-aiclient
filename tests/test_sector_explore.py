@@ -131,6 +131,74 @@ def test_explore_runner_visits_five_distinct_sectors(tmp_path: Path):
     assert snap.report.sends_issued >= 4
 
 
+class _GatedExploreSession(ExploreMapSession):
+    """Hold the explore thread on the *second* hop so first-hop tallies are live."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.hop_gate = threading.Event()
+        self._hops = 0
+
+    def send(self, text, enter=True, secret=False):
+        result = super().send(text, enter=enter, secret=secret)
+        dest = text.strip()
+        if dest.isdigit():
+            self._hops += 1
+            if self._hops >= 2:
+                # First hop fully tallied; park on the second send.
+                self.hop_gate.wait(timeout=30)
+        return result
+
+
+def test_mid_run_status_exposes_live_counters_not_silent_zeros(tmp_path: Path):
+    """WO-EXPLORE-STATUS-LIVE-COUNTERS: mid-run polls must not look idle."""
+    import time
+
+    _seed_line(tmp_path, [1, 2, 3, 4, 5, 6], extra_frontier=(6, 99))
+    graph = {i: [i - 1, i + 1] if 1 < i < 6 else ([2] if i == 1 else [5, 99]) for i in range(1, 7)}
+    session = _GatedExploreSession(sector=1, graph=graph, state_dir=tmp_path)
+    lock = ControlLock()
+    runner = sector_explore.ExploreRunner(session, lock, state_dir=tmp_path)
+
+    # Idle shape before start.
+    idle = sector_explore.explore_run_wire(runner.snapshot())
+    assert idle["running"] is False
+    assert idle["run"] is None
+
+    runner.start(WORLD, min_sectors=5, turn_budget=20)
+
+    mid = None
+    deadline = time.monotonic() + 5.0
+    while time.monotonic() < deadline:
+        mid = sector_explore.explore_run_wire(runner.snapshot())
+        run = mid.get("run") or {}
+        if (
+            mid.get("running")
+            and run.get("outcome") is None
+            and int(run.get("distinct_sectors") or 0) >= 1
+            and int(run.get("sends_issued") or 0) >= 1
+        ):
+            break
+        time.sleep(0.01)
+    else:
+        pytest.fail(f"no live mid-run counters within timeout: {mid!r}")
+
+    assert mid["running"] is True
+    assert mid["run"]["outcome"] is None
+    assert mid["run"]["distinct_sectors"] >= 1
+    assert mid["run"]["sends_issued"] >= 1
+    # Mid-run vs completed: no finished_at while still flying.
+    assert mid["run"]["finished_at"] is None
+
+    session.hop_gate.set()
+    runner._thread.join(timeout=30)
+    done = sector_explore.explore_run_wire(runner.snapshot())
+    assert done["running"] is False
+    assert done["run"]["outcome"] == OUTCOME_COMPLETED
+    assert done["run"]["distinct_sectors"] >= 5
+    assert done["run"]["finished_at"] is not None
+
+
 def test_explore_halts_on_unknown_screen(tmp_path: Path):
     _seed_line(tmp_path, [1, 2], extra_frontier=(2, 99))
     session = ExploreMapSession(sector=1, graph={1: [2], 2: [1, 99]}, state_dir=tmp_path)
