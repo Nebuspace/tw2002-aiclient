@@ -1,10 +1,11 @@
 # WO-PLAY-AUTOLOOP-START — Play can arm a taught loop (adapter + confirm)
 
-**Status:** OPEN · READY  
+**Status:** DONE · shipped #116 (`0273f4b`) · stamped 2026-07-28T21:15:26Z (was stale OPEN; tip-check found wire on `main`)  
 **Posted:** 2026-07-27T20:10:00Z · hub — money-path after teach wire tip-check (067–071 already on main)  
-**Seat:** `impl-aiclient-cursor`  
+**Seat:** `impl-aiclient-cursor` (EXEC landed in #116 bank+implement squash)  
 **Depends:** `main` ≥ `b2e586d` · daemon `autoloop_start` LIVE · teach Record/Trigger scaffolds DONE  
-**Refs:** `canon/architecture/app-autopilot-model.md` · `session/protocol.py::_dispatch_autoloop_start` · explore-arm pattern in `app.py` / `adapters.explore_start*`
+**Refs:** `canon/architecture/app-autopilot-model.md` · `session/protocol.py::_dispatch_autoloop_start` · explore-arm pattern in `app.py` / `adapters.explore_start*`  
+**Follow-on:** `WO-PLAY-CHAINS-ARM-LIVE-PROVE` (live diversity prove — do not re-EXEC this wire)
 
 ## Goal
 
