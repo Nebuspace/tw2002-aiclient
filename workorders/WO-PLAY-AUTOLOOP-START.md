@@ -1,6 +1,6 @@
 # WO-PLAY-AUTOLOOP-START — Play can arm a taught loop (adapter + confirm)
 
-**Status:** OPEN · READY  
+**Status:** DONE · tip-check 2026-07-28 (Cursor · #200) — Accept already satisfied on `main`  
 **Posted:** 2026-07-27T20:10:00Z · hub — money-path after teach wire tip-check (067–071 already on main)  
 **Seat:** `impl-aiclient-cursor`  
 **Depends:** `main` ≥ `b2e586d` · daemon `autoloop_start` LIVE · teach Record/Trigger scaffolds DONE  
@@ -9,8 +9,6 @@
 ## Goal
 
 From **Play**, after ensure @ a classified screen the operator can **confirm-to-arm** and start a **taught** autoloop (named macro / loop id), without inventing a new CLI verb as the demo path.
-
-Today: daemon has `autoloop_start`; adapters expose stop/pause/status/relaunch only — **no** `autoloop_start` adapter; Play cannot arm a grind the way it arms explore.
 
 ## Scope
 
@@ -38,11 +36,30 @@ Today: daemon has `autoloop_start`; adapters expose stop/pause/status/relaunch o
 
 Unit + FakeClient; optional live on sacrificial profile. live-prove: product path → ≥3 hosts diversity bar if live; else honest n/a with reason only if pure offline fixture Accept (prefer live once).
 
-## Tip-check (hub)
+## Tip-check (hub · bank #116)
 
-- `adapters.py`: `autoloop_stop|pause|status|relaunch` present; **`autoloop_start` absent** — real.
+- Then: `adapters.py` had stop/pause/status/relaunch; **`autoloop_start` absent**.
 - `session/protocol.py`: `autoloop_start` dispatch LIVE.
-- P5-067…071 code on main — do **not** rebuild teach scaffolds.
+- P5-067…071 scaffolds — do **not** rebuild.
+
+## Tip-check (Cursor · #200 EXEC · 2026-07-28)
+
+**Finding:** Accept 1–4 already green on `main` (implementation landed via prior squash of
+`wo/PLAY-AUTOLOOP-START` tip `41b7522` — that tip SHA is not an ancestor of `main`, but
+the blobs are). No product code change in this PR.
+
+| Accept | Evidence on tip |
+|---|---|
+| 1 adapter | `adapters.autoloop_start` @ `adapters.py:273` · `tests/test_adapters_autoloop_start.py` |
+| 2 L→Enter→y | `app.py` `pending_confirm_action == "loop"` → `adapters.autoloop_start` · `tests/test_play_chains_arm.py` |
+| 3 N / cancel | same module — gate clears, start not called |
+| 4 explore E | `pending_confirm_action == "explore"` pin + cross-fire pins in `test_play_chains_arm.py` / #120 |
+| Offline proof | `pytest` on adapter + play/cockpit chains/armconfirm modules `-n0` → **115 passed** |
+
+**live-prove:** `n/a` — offline fixture Accept met; this seat has no `config/secrets.json` for a
+≥3-host live arm this turn. Prefer live on a later sacrificial profile when credentials are present.
+
+**Out of scope held:** no protocol invent · no silent arm · no `autoloop_resume`.
 
 
-**HANDOFF:** EXEC slice · Cursor · 2026-07-28 hub (bank was #116; implement on this branch).
+**HANDOFF:** EXEC slice · Cursor · 2026-07-28 hub (bank was #116; tip-check closed on this branch).
