@@ -1,7 +1,12 @@
 # WO-HUB-CLEANUP-SEAT-REFUSE
 
-**Goal:** Make `scripts/hub-wo-merge-cleanup.sh` refuse seat-owned worktrees (`cc-*`, `.claude/worktrees/*`) so auto-discover cannot violate owning-seat-reaps.
+**Goal:** `scripts/hub-wo-merge-cleanup.sh` reaps **only** hub-owned worktrees (allowlist). Everything else is REFUSE (explicit argv) or SKIP (auto-discover).
 
-**Accept:** explicit argv of a seat path exits non-zero with REFUSE; auto-discover skips with SKIP line; hub `.worktrees/hub-*` still reaped.
+**Accept:**
+1. Allowlist only: basename `hub-*` under `.worktrees/` or legacy `/private/tmp/hub-*` (and `/tmp/hub-*`).
+2. Explicit non-hub path → exit non-zero REFUSE.
+3. Auto-discover non-hub → SKIP (do not remove).
+4. Falsify both halves: fabricated `cc-scratch` refuses; fabricated `hub-scratch` reaps (then restore).
+5. live-prove `n/a`.
 
-**Refs:** CC PROCESS-NOTE · incidents `cc-*` auto-reap after #195 / #197.
+**Refs:** CC 21:05:04Z allowlist design · incidents after #195/#197.

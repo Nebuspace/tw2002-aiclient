@@ -105,18 +105,17 @@ gh_pr_state() {
   echo "NONE"
 }
 
-# Seat-owned worktrees must NEVER be reaped by hub (owning-seat-reaps rule).
-# Incidents 2026-07-28: hub passed/auto-discovered cc-* lanes after merge.
-is_seat_owned_wt() {
+# Hub may ONLY reap hub-owned worktrees (allowlist). Everything else REFUSE/SKIP.
+# Incidents 2026-07-28: auto-discover reaped seat cc-* lanes twice after merge.
+# Blocklist of seat names is the weak half — allowlist inverts the failure mode.
+is_hub_owned_wt() {
   local wt="$1"
   local base
   base="$(basename "$wt")"
-  # CC seat lanes: .worktrees/cc-* or basename cc-*
-  [[ "$base" == cc-* ]] && return 0
-  [[ "$wt" == */.worktrees/cc-* ]] && return 0
-  [[ "$wt" == */cc-* ]] && return 0
-  # Cursor / implementer throwaways under .claude/worktrees/
-  [[ "$wt" == */.claude/worktrees/* ]] && return 0
+  [[ "$base" == hub-* ]] && return 0
+  [[ "$wt" == */.worktrees/hub-* ]] && return 0
+  [[ "$wt" == /private/tmp/hub-* ]] && return 0
+  [[ "$wt" == /tmp/hub-* ]] && return 0
   return 1
 }
 
@@ -124,12 +123,12 @@ remove_wt() {
   local wt="$1"
   local mode="${2:-auto}" # auto | explicit
   [[ -z "$wt" ]] && return 0
-  if is_seat_owned_wt "$wt"; then
+  if ! is_hub_owned_wt "$wt"; then
     if [[ "$mode" == "explicit" ]]; then
-      echo "REFUSE: $wt looks seat-owned (cc-* / .claude/worktrees/). Owning seat reaps — hub must not list it." >&2
+      echo "REFUSE: $wt is not hub-owned (need basename hub-* under .worktrees/ or /private/tmp/hub-*). Owning seat reaps." >&2
       exit 2
     fi
-    echo "SKIP seat-owned worktree (auto-discover): $wt"
+    echo "SKIP non-hub worktree (auto-discover): $wt"
     return 0
   fi
   if [[ -d "$wt" ]]; then
