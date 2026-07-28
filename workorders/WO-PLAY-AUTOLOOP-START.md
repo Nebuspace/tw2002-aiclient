@@ -43,3 +43,6 @@ Unit + FakeClient; optional live on sacrificial profile. live-prove: product pat
 - `adapters.py`: `autoloop_stop|pause|status|relaunch` present; **`autoloop_start` absent** — real.
 - `session/protocol.py`: `autoloop_start` dispatch LIVE.
 - P5-067…071 code on main — do **not** rebuild teach scaffolds.
+
+
+**HANDOFF:** EXEC slice · Cursor · 2026-07-28 hub (bank was #116; implement on this branch).
