@@ -1,6 +1,6 @@
 # WO-EXPLORE-AUTOMATION-GATE — Finish automated exploration (pre–trade-chain gate)
 
-**Status:** OPEN · READY · EXEC seeded · HANDOFF CC  
+**Status:** OPEN · E1–E4 DONE (CC tip-check) · live Accept-5 via `WO-EXPLORE-GATE-LIVE-PROVE` (port.class; commodities OOS)
 **Posted:** 2026-07-27T21:35:00Z · Max priority: trade-chain TUI+detect after explore done  
 **Seat:** `impl-claudecode-aiclient`  
 **Depends:** Play explore L1–L4 already on main; tip-check remaining gaps below  
