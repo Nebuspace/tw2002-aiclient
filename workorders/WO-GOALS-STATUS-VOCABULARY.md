@@ -18,7 +18,7 @@ Close the honest-but-uninformative GOALS/status gap: document starved `status` k
 
 Wire from world model (no daemon): `known_sectors`, `galaxy_size`, `formations_count`, `stardock_found`, `stardock_sectors`.
 
-- **`stardock_found` / `stardock_sectors`:** pin tri-state gate — wrong pairing must not blank `ship_prices` / `hold_price` rows via `goals.py` gate.
+- **`stardock_found` / `stardock_sectors`:** `stardock_found` is written only when the world model has positively established the answer. `False` = searched-and-confirmed-absent; “have not looked” = **absent**, never `False` (default `False` would gate `ship_prices`/`hold_price` to ⊘ and hide good data). Tri-state pinned with ⊘ gate asserted for all three states (CC 13:44:31Z table).
 - Delete **exactly 5** allowlist entries when wired; guard must go red on wrong deletion count.
 
 ## Out of scope (banked)
