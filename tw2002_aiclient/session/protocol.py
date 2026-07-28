@@ -858,10 +858,7 @@ def _load_profile(name):
     `(LoginProfile, None)` on success, `(None, error_str)` on failure --
     never raises, so `_dispatch_ensure` can turn a bad profile into an
     ordinary `{"ok": False, ...}` response."""
-    try:
-        import tomllib
-    except ImportError:  # pragma: no cover
-        import tomli as tomllib  # type: ignore
+    import tomllib  # stdlib since 3.11 — requires-python >=3.11 (WO-REQUIRES-PYTHON-311)
 
     from . import credentials
     from .login import LoginProfile

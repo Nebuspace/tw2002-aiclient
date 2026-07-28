@@ -14,10 +14,7 @@ import secrets
 import string
 from pathlib import Path
 
-try:
-    import tomllib
-except ImportError:  # pragma: no cover
-    import tomli as tomllib  # type: ignore
+import tomllib  # stdlib since 3.11 — requires-python >=3.11 (WO-REQUIRES-PYTHON-311)
 
 # session/credentials.py → session → tw2002_aiclient → repo root
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent

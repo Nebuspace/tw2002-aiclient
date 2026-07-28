@@ -41,12 +41,11 @@ def _handler_catches_import_error(handler: ast.ExceptHandler) -> bool:
 def _guarded_imports(tree: ast.AST) -> set[int]:
     """`id()`s of import nodes inside a try/except that catches ImportError.
 
-    These are the canonical optional-dependency fallback --
-    `try: import tomllib / except ImportError: import tomli as tomllib` --
-    and are deliberately NOT landmines: the failure is handled by design.
-    A checker that cannot tell them apart reports two false positives on
-    this very package (`session/credentials.py`, `session/protocol.py`) and
-    is therefore useless as a gate.
+    These are the canonical optional-dependency fallback shape
+    (`try: import x / except ImportError: import y`) and are deliberately
+    NOT landmines: the failure is handled by design. Product code no longer
+    uses a tomllib/tomli pair (WO-REQUIRES-PYTHON-311); the vacuity pins
+    below still use that shape as a synthetic example of a guarded import.
     """
     guarded: set[int] = set()
     for node in ast.walk(tree):

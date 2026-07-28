@@ -50,7 +50,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
-          # Minimum version from pyproject.toml requires-python = ">=3.10"
+          # Minimum version from pyproject.toml requires-python = ">=3.11"
           python-version: "3.11"
 
       - name: Cache pip

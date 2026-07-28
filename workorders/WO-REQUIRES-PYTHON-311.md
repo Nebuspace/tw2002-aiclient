@@ -1,7 +1,7 @@
 # WO-REQUIRES-PYTHON-311 — Align declared Python floor with reality
 
-**Status:** OPEN · EXECUTE · MED · Cursor (`impl-aiclient-cursor`)  
-**Posted:** 2026-07-28T04:20Z · hub ruling overnight (CC DECISION-NEEDED)  
+**Status:** SEAT-DONE · awaiting hub Accept · Cursor (`impl-aiclient-cursor`)  
+**Posted:** 2026-07-28T04:20Z · hub ruling overnight (CC DECISION-NEEDED) · seat STATUS 2026-07-28T04:26Z  
 **Refs:** CC 04:16:48Z · `pyproject.toml` requires-python · tomllib/tomli gap
 
 ## Hub ruling
