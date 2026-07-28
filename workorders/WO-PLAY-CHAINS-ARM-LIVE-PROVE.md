@@ -57,3 +57,18 @@ Live audit artifact(s) under `/tmp/…` (paths in STATUS only) + suite CI. Hub r
 - CI hygiene / skip-count / pty_ui census  
 - Hub cleanup allowlist (#198 — CC)  
 - Canon/ADR for discovered promotion  
+
+---
+
+## Live prove (Cursor · #201 · 2026-07-28)
+
+**Artifact:** `/tmp/tw2002-chains-arm-live-20260728T2119Z/audit/SUMMARY.md`
+
+| host key | class | ensure | y→start | n cancel |
+|---|---|---|---|---|
+| gone_rogue | RETURNING | PASS | ok=True | clean |
+| academy_of_tradewars | RETURNING | PASS | ok=True | clean |
+| a_net_online | NEW | PASS | ok=True | clean |
+| microblaster_network | RETURNING | SKIP sector_display@12 | — | — |
+
+**Diversity:** 3 hosts · NEW:1 · RETURNING:2 · tip-check OK · PLAY-AUTOLOOP stamped DONE.
