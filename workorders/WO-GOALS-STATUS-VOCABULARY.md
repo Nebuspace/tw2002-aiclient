@@ -16,12 +16,14 @@ Close the honest-but-uninformative GOALS/status gap: document starved `status` k
 
 ## T1 — client overlay (commit 2, after T0 green on 18-starved tree)
 
-Wire via **`WorldStats` cache** (same `wrap` seam as `ChainScalars`): **zero world-model reads on `status_provider()` draw path** — refresh only at events that already touch the WM (chains popup minimum; explore-tick when already on a WM read path).
+Wire **`known_sectors` only** via **`WorldStats` cache** (same `wrap` seam as `ChainScalars`): **zero world-model reads on `status_provider()` draw path** — refresh at chains-popup (and explore-tick only on existing WM read paths).
 
-Fields: `known_sectors`, `formations_count`, `stardock_sectors`, `stardock_found` (**True or absent only** — `False` unreachable without `galaxy_size`; stronger than tri-state).
+**Re-tranche (stay on allowlist with evidenced WHY — CC 14:04:20Z):**
+- `galaxy_size` → **T3** (no producer; `state_parser` forbids inventing)
+- `formations_count` → **TW-16** — see `WO-FORMATIONS-CATALOG-PORT` (catalogue seam unimplemented)
+- `stardock_found` / `stardock_sectors` → blocked until **`WO-WM-LANDMARKS-WRITE`** (WM never writes `landmarks[]`)
 
-- **`galaxy_size`:** **not T1** — no producer; `state_parser` forbids inventing; `goals.py` degrades with `known_sectors` alone → **re-tranche T3** (screen parsing).
-- Delete **exactly 4** allowlist entries on T1 commit; `galaxy_size` stays listed (T3).
+Delete **exactly 1** allowlist entry on T1 commit (`known_sectors`).
 
 ## Out of scope (banked)
 
@@ -30,7 +32,7 @@ Fields: `known_sectors`, `formations_count`, `stardock_sectors`, `stardock_found
 ## Accept
 
 1. T0 green on pre-T1 tree with full 18-entry allowlist; falsification pins for both scan traps.
-2. T1 green; 4 fields wired via cache; allowlist shrinks by 4; `galaxy_size` remains (T3).
+2. T1 green; `known_sectors` wired; allowlist shrinks by **1**; four fields re-tranched with reasons.
 3. Suite + STATUS; two commits reported separately; live-prove `n/a`.
 
 ## Refs
