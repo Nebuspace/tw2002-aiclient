@@ -271,9 +271,10 @@ def test_gate_is_drawn_with_the_loud_attr(monkeypatch) -> None:
 # Accept #5 -- no silent arm inject in any code path.
 # --------------------------------------------------------------------------
 
-def test_exactly_two_production_call_sites_raise_the_gate() -> None:
+def test_exactly_three_production_call_sites_raise_the_gate() -> None:
     """WO-PLAY-EXPLORE-ARM flipped this pin once already; WO-AUTOLOOP-
-    RELAUNCH-COCKPIT flips it again, deliberately.
+    RELAUNCH-COCKPIT flipped it again; WO-PLAY-AUTOLOOP-START flips it a
+    third time, deliberately.
 
     WO-P5-063 shipped the gate with ZERO production callers and a pin
     asserting exactly that, so the first one would have to be a decision
@@ -285,12 +286,26 @@ def test_exactly_two_production_call_sites_raise_the_gate() -> None:
     `no_resumable_run` -- so this cockpit adds no redundant client-side
     gate of its own).
 
-    The pin is UPDATED, not deleted -- it now asserts there are exactly TWO
-    production call sites, both in `app.py`. A THIRD caller appearing
+    WO-PLAY-AUTOLOOP-START adds the third: canon's `L)chains` Trade-Loop-
+    Chains popup, where `Enter` on a taught-macro row raises the gate. It is
+    the same deliberate shape as the two before it -- selection ARMS a
+    pending action and nothing else, and only a subsequent `y` reaches
+    `adapters.autoloop_start`. Canon names this one directly:
+    `mode-line-and-teach-controls.md` §"Confirm-gate — never one keystroke
+    to live money" ("selecting a chain ... arms a pending action and raises
+    an explicit confirm prompt").
+
+    The pin is UPDATED, not deleted -- it now asserts there are exactly
+    THREE production call sites, all in `app.py`. A FOURTH caller appearing
     without its own WO still goes red first, which is the property that
     made the original worth having. Deleting it would have converted a
     live guard into silence at the exact moment it started guarding
     something real.
+
+    This test caught the third addition on its first full-suite run, which
+    is the whole argument for a counted tripwire over a "gates are gated"
+    assertion: the count is what makes a new money path impossible to add
+    quietly.
     """
     root = Path(screens_mod.__file__).resolve().parent
     callers = []
@@ -301,9 +316,10 @@ def test_exactly_two_production_call_sites_raise_the_gate() -> None:
             name = getattr(func, "attr", None) or getattr(func, "id", None)
             if isinstance(node, ast.Call) and name == "begin_arm_confirm":
                 callers.append(path.name)
-    assert callers == ["app.py", "app.py"], (
-        f"expected exactly two production callers, both in app.py (the "
-        f"post-ensure explore offer and the relaunch offer); found {callers}"
+    assert callers == ["app.py", "app.py", "app.py"], (
+        f"expected exactly three production callers, all in app.py (the "
+        f"post-ensure explore offer, the relaunch offer, and the L)chains "
+        f"taught-loop arm); found {callers}"
     )
 
 
@@ -354,12 +370,31 @@ def test_prompt_and_run_share_one_cycle_constant() -> None:
     """The confirm gate's whole value is that the prompt is the truth about
     what happens next. If the number shown and the number sent came from
     two literals, they could drift and the human would be agreeing to
-    something other than what runs."""
+    something other than what runs.
+
+    WO-EXPLORE-AUTOMATION-GATE E3 made the offer carry one of TWO intents, so
+    the gate is now raised once with a chosen ``(action, cycles)`` pair rather
+    than from a literal keyword at the call. The property is unchanged — both
+    the prompt's number and the run's still come from ``_EXPLORE_MIN_SECTORS``
+    — but the old assertion looked for the literal text ``cycles=_EXPLORE_MIN_
+    SECTORS`` and so measured the spelling, not the property. Same lesson
+    ``test_the_one_caller_is_gated_not_raised_unconditionally`` already
+    records two tests below: a source-literal pin breaks on refactor while
+    the behaviour is still correct.
+
+    Kept textual here (it is cheap and catches a stray literal), but the
+    load-bearing version is now behavioural: ``tests/test_play_explore_
+    intents.py::test_the_prompt_number_is_the_number_that_runs`` drives the
+    real play loop and asserts the number SHOWN equals the number SENT.
+    """
     from tw2002_aiclient import app as app_mod
 
     src = inspect.getsource(app_mod)
-    assert "cycles=_EXPLORE_MIN_SECTORS" in src
+    # The offer's cycle count and the run's min_sectors both trace to the one
+    # constant; neither may be a bare integer literal.
+    assert "_EXPLORE_MIN_SECTORS" in src
     assert "min_sectors=_EXPLORE_MIN_SECTORS" in src
+    assert "cycles=5" not in src and "min_sectors=5" not in src
 
 
 def test_gate_module_holds_no_send_or_daemon_path() -> None:

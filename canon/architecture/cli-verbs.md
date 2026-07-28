@@ -35,8 +35,8 @@ Three carve-outs to the one-shot shape, all deliberate:
 - **Daemon-free reads** never touch the socket at all — they read on-disk artifacts directly, so
   they work with the daemon stopped: `log`/`trail` (reads `state/ledger.jsonl`), `frames` (reads
   `state/frames/`), `analyze` and `mine` (read the ledger), `loops`/`menumap`/`players`/`servers`
-  (read their own stores/catalogs). `probe` opens its own throwaway connections to *catalog*
-  endpoints, never the live game session.
+  (read their own stores/catalogs), `pairs` (reads `state/world/<world-id>` directly). `probe` opens
+  its own throwaway connections to *catalog* endpoints, never the live game session.
 - **Session-establishing verbs** (`start`, `ensure`) may spawn the daemon before the round trip.
 
 # Actor Classes
@@ -62,7 +62,7 @@ human must approve before the App can ever play them.
 ## Read-only-safe at any time vs. control-lock
 
 A caller may run the pure observers — **`status`, `screen`, `state`, `history`, `spectate`,
-`watch`, `log`/`trail`, `frames`, `loops`, `menumap`, `servers`, `players`** — at **any** moment,
+`watch`, `log`/`trail`, `frames`, `loops`, `menumap`, `pairs`, `servers`, `players`** — at **any** moment,
 including while the App or a human is mid-drive, because none of them touch the control lock. The
 `drives {*}` verbs contend for that lock; the control-lock arbitration (who may hold it, and the
 handoff on escalation) is specified in
@@ -117,6 +117,7 @@ config is isolated, and print the run-dir path they would have targeted (WO-CLI-
 | `frames {tail,show,grep,diff}` | Post-mortem over full 80×25 settle frames in `state/frames/` (no daemon). | `--session ID` `-n N` `seq` `pattern` | `read-only` | [Session Engine](/architecture/session-engine.md) |
 | `menumap` | Read-only menu-map inspector — coverage, orphans, you-are-here ★ / off-map (never sends). | `--profile` \| `--world-id` \| `--path` | `read-only` | [Session Engine](/architecture/session-engine.md) |
 | `loops` | List every learned loop with profit metadata — CLI twin of the in-TUI Learned-Loops Library. | `--include-drafts` | `read-only` | [Rule–Macro Engine](/architecture/rule-macro-engine.md) |
+| `pairs` | List class-derived DISCOVERED pair loops for a world — margin-unknown candidates, never the taught `L)chains` library (reads `state/world/<world-id>` directly, never sends). | `--world-id` (required) `--json` | `read-only` | [Trade Loops](/strategy/trade-loops.md) |
 | `players {list,add,next}` | Multi-character rotation bank (reads/writes `state/player_bank.json`; no daemon, no game keystrokes). | `add <profile>` `--note k=v` `next --current` | `read-only` | [Session Engine](/architecture/session-engine.md) |
 | `servers list` | Print the `config/servers.toml` catalog (no live connection). | — | `read-only` | [Session Engine](/architecture/session-engine.md) |
 | `probe [server]` | Read-only catalog probe: IAC-only (L0), optional `--menu` peeks the TWGS game list; connects to catalog endpoints, not the live session. | `--all` `--menu` `--write-catalog` | `read-only` | [Session Engine](/architecture/session-engine.md) |
@@ -144,9 +145,9 @@ config is isolated, and print the run-dir path they would have targeted (WO-CLI-
 
 | verb | one-line effect | key args | actor-class | owning concept |
 |---|---|---|---|---|
-| `spectate` | Ops read-only curses HUD over the running daemon, decoupled from whoever drives (`--snapshot` for scripting). | `--snapshot` `--frames` | `read-only` | [Trainer UI](/surfaces/trainer-ui.md) |
-| `attach` | Interactive live console — take the keyboard and play by hand; Ctrl-] hands control back. | — | `drives {human}` | [Trainer UI](/surfaces/trainer-ui.md) |
-| `aiclient` | Product TUI — profile launcher, create form, Autopilot ON/OFF (same as `./tw2002-aiclient`). | — | `drives {app,human}` | [Trainer UI](/surfaces/trainer-ui.md) |
+| `spectate` | Ops read-only curses HUD over the running daemon, decoupled from whoever drives (`--snapshot` for scripting). | `--snapshot` `--frames` | `read-only` | [Spectate & Attach](/surfaces/spectate-and-attach.md) |
+| `attach` | Interactive live console — take the keyboard and play by hand; Ctrl-] hands control back. | — | `drives {human}` | [Spectate & Attach](/surfaces/spectate-and-attach.md) |
+| `aiclient` | Product TUI — profile launcher, create form, Autopilot ON/OFF (same as `./tw2002-aiclient`). | — | `drives {app,human}` | [Entry & Profile Selection](/surfaces/entry-and-profile-selection.md) → [The Trainer Cockpit](/surfaces/trainer-cockpit.md) |
 
 # Examples
 
@@ -178,7 +179,17 @@ tw mine --min-support 3            # propose draft skills from the ledger
 # Implementation status (tip `13f34a8` + M3 WO-P2-G4 X1–X6 · live `./tw --help`)
 
 **LIVE ops verbs today:** `status`, `ensure`, `screen`, `stop`, `do`, `send`, `read`, `history`,
-`watch`, `attach`, `menumap`, `loops`, `record`.
+`watch`, `attach`, `menumap`, `loops`, `pairs`, `record`.
+
+`pairs` (**WO-CHAIN-DETECT-WIRE**, re-scoped 2026-07-28) is the thin product caller over the
+class-derived pair-loop path: `chain_detect.recompute` reads a world's `state/world/<world-id>`
+port records and returns a typed `PairLoopResult` (a ranked tuple of margin-unknown `CandidatePair`
+rows, or one of five typed empty reasons); `chain_detect_view.format_candidate_pair_lines` renders
+it. Daemon-free like `loops` above — no `--run-dir`, `--world-id` required. Exit code is always
+**0**: every typed empty reason is a successfully-established fact about the world, never a failed
+read. Deliberately NOT the taught `L)chains` arm list (`cockpit/chains.py`) — a discovered,
+unpriced pair rendered through that surface would be indistinguishable from a taught,
+human-armed macro at the money-spending confirm gate.
 
 `loops` (**G3**) landed as two slices — a read-only store reader/composer
 (`tw2002_aiclient/loops/`), then the CLI wire. It is a **daemon-free read**: no protocol verb, no

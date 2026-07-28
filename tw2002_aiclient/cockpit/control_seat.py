@@ -64,7 +64,7 @@ signature, only an additional label of its own.
 **PWO-056 status (this module's half only, as of this WO's lane B dispatch):**
 ``MANUAL_LABEL``/``attached_label()`` below land the promised "additional
 label of its own" -- ``seat_label``'s own signature is untouched, exactly as
-forecast. ``compose_control_strip_line`` gains one new keyword-only
+forecast. ``compose_control_strip_segments`` gained one new keyword-only
 ``attached`` parameter (default ``False``, so every existing caller's
 behavior is unchanged) rather than a signature rework -- see that function's
 own docstring for the priority rule when both are truthy. The DRAW-layer
@@ -97,30 +97,26 @@ shipped: ``screens.py`` now passes ``attached=self.attached`` directly
 WO-ENTRY-APP-CHIP made App-hold the cockpit's ENTRY state
 (``spectating=False, attached=False``) -- so the both-falsy input is
 no longer hypothetical but the DEFAULT rendering path, hit every time
-the cockpit opens. ``compose_control_
-strip_line``'s label-selection priority is extended (no signature change)
-from ``attached_label(attached) or seat_label(spectating)`` to additionally
+the cockpit opens. ``compose_control_strip_segments``' label-selection
+priority is extended (no signature change) from
+``attached_label(attached) or seat_label(spectating)`` to additionally
 fall back ``... or app_label()`` -- this is a deliberate, flagged behavior
 change for that previously-off-contract both-falsy input (three pre-PWO-060
 tests pinned the old "liveness only" reading for it; they're updated in
 this dispatch with a comment explaining why, since the old reading was
 merely the accidental absence of a third state, not a guaranteed contract).
-The new ``compose_control_strip_segments`` (ordered ``(text, tone)``
-segments for the draw layer to per-run-color, ``tone`` one of ``"ok"``/
-``"warn"``/``None``) and ``compose_control_strip_line`` now BOTH delegate to
-one private ``_compose_segments`` helper -- the "byte-identical
-concatenation" invariant between the two public functions is therefore
-structurally guaranteed (one shared code path, not two hand-kept-in-sync
-ones), not merely asserted by a test. See ``SendMessage`` to team-lead
-(pre-build) for the two contract points this resolution deviates from the
-literal PWO-060 dispatch text on: (1) selection priority is attached >
-spectating > App, matching the ALREADY-SHIPPED ``compose_control_strip_
-line`` priority and its own passing test, not the dispatch's literal
-"spectating first" wording, which would have disagreed with the shipped
-line-composer on the both-truthy case and broken the concatenation
-invariant; (2) the App branch's reachability required this small additive
-change to ``compose_control_strip_line`` itself (see above), which the
-dispatch's literal text did not call out.
+``compose_control_strip_segments`` (ordered ``(text, tone)`` segments for
+the draw layer to per-run-color, ``tone`` one of ``"ok"``/``"warn"``/``None``)
+delegates to one private ``_compose_segments`` helper -- the sole public
+strip composer (the retired flat-string join helper is gone; join in tests
+or the draw path if a string is needed). See ``SendMessage`` to team-lead
+(pre-build) for the two contract points this resolution originally
+deviated from the literal PWO-060 dispatch text on: (1) selection priority
+is attached > spectating > App, matching the shipped strip priority and its
+own passing test, not the dispatch's literal "spectating first" wording;
+(2) the App branch's reachability required a small additive change to the
+composer itself (see above), which the dispatch's literal text did not
+call out.
 
 **WO-P5-062 status (autopilot ARM chip -- this dispatch's own
 contribution):** the row gains a SECOND chip, placed immediately right of
@@ -353,20 +349,20 @@ def _is_definitively_false(value: object) -> bool:
 
 def _resolve_label_and_tone(spectating: object, attached: object) -> tuple[str, str | None]:
     """Single source of truth for which chip is showing and its tone --
-    both ``compose_control_strip_line`` and ``compose_control_strip_segments``
-    call this (via ``_compose_segments`` below) so the two can never drift
-    apart. Priority: ``attached_label(attached) or seat_label(spectating)``,
+    ``compose_control_strip_segments`` (via ``_compose_segments`` below)
+    is the sole public consumer. Priority:
+    ``attached_label(attached) or seat_label(spectating)``,
     falling back to ``app_label()`` only when BOTH are empty AND
     ``_is_definitively_false`` holds for both raw inputs -- Human wins over
     Spectate wins over App, and App additionally requires unambiguous proof
     neither of the other two applies.
 
-    The Human-over-Spectate tie-break is the ALREADY-SHIPPED ``compose_
-    control_strip_line`` priority (PWO-056's own shipped behavior, not a
-    PWO-060 invention), not the PWO-060 dispatch's literal "spectating
-    first" wording -- kept as-is because reordering it would disagree with
-    this module's own passing test (``test_attached_true_wins_over_
-    spectating_true``) on the off-contract both-truthy case, and because a
+    The Human-over-Spectate tie-break is the ALREADY-SHIPPED strip
+    priority (PWO-056's own shipped behavior, not a PWO-060 invention),
+    not the PWO-060 dispatch's literal "spectating first" wording -- kept
+    as-is because reordering it would disagree with this module's own
+    passing test (``test_attached_true_wins_over_spectating_true``) on
+    the off-contract both-truthy case, and because a
     wrongly-suppressed "YOU HAVE CONTROL" claim is a worse failure than a
     wrongly-suppressed passive SPECTATE one (same reasoning ``attached_
     label``'s own docstring already gives).
@@ -462,9 +458,9 @@ def _compose_segments(
     status_offer: object = None,
     teach_band: object = None,
 ) -> list[tuple[str, str | None]]:
-    """Shared core: builds the ordered ``(text, tone)`` segments both public
-    composers below return (``compose_control_strip_line`` joins them back
-    into one string; ``compose_control_strip_segments`` returns them as-is).
+    """Shared core: builds the ordered ``(text, tone)`` segments
+    ``compose_control_strip_segments`` returns as-is (callers that need a
+    flat string join the segment texts).
 
     Layout, left to right: the seat chip, then (WO-P5-062) the ARM chip
     separated by ``cockpit.arm.ARM_GAP``, then (WO-PLAY-OFFER-VISIBLE-ON-LIVE)
@@ -504,8 +500,8 @@ def _compose_segments(
     failure.
 
     Never raises; returns ``[]`` when ``width`` is not a usable positive
-    ``int`` (mirrors ``compose_control_strip_line``'s pre-existing ``""``
-    return for the same case, since ``"".join([]) == ""``)."""
+    ``int`` (``"".join([]) == ""``, so a flat join stays empty for the
+    same case)."""
     w = _safe_width(width)
     if w <= 0:
         return []
@@ -628,89 +624,6 @@ def _compose_segments(
     return left + [(right[used:], None)]
 
 
-def compose_control_strip_line(
-    *,
-    spectating: object,
-    liveness_text: object,
-    width: object,
-    unicode_ok: bool = True,
-    attached: object = False,
-    arm_chip: object = None,
-    conn_chip: object = None,
-    coverage_meter: object = None,
-    status_offer: object = None,
-    teach_band: object = None,
-) -> str:
-    """Compose the control-strip row's one content line: the seat label
-    left-anchored, the already-composed ``liveness_text`` (``cockpit.
-    liveness.compose_liveness_cluster``'s own output) right-anchored --
-    mirroring ``screens.py``'s pre-existing ``liveness_text.rjust(cs_w)``
-    placement, now shared with the seat label rather than the row's left
-    half staying blank. Implemented as ``"".join(text for text, _tone in
-    _compose_segments(...))`` -- see that function and ``_resolve_label_
-    and_tone`` for the full selection-priority rule (PWO-055/056/060).
-
-    The two clusters never collide: ``liveness_text`` (the pre-existing,
-    operationally-load-bearing "is it frozen?" signal -- see
-    ``liveness.py``) always keeps its full space. The seat label only fills
-    whatever blank columns remain to its left, truncated to fit, and drops
-    entirely (the row degrades to ``liveness_text.rjust(width)`` alone) the
-    instant there is not at least one free column of separation. This
-    mirrors the same "secondary content yields, primary content survives"
-    precedent ``layout.py``'s own ``control_strip`` region drops before
-    ``logs`` under height pressure.
-
-    PWO-060 note: when both ``spectating`` and ``attached`` are falsy, the
-    label is ``APP_LABEL`` rather than dropped -- a deliberate, additive
-    extension of the priority chain (``... or app_label()``), not a
-    regression. Three pre-PWO-060 tests pinned the old accidental
-    "liveness only" reading for that input and were updated in that WO
-    with a comment explaining why.
-
-    (CORRECTED WO-P5-062 -- the two sentences that used to sit here said
-    the both-falsy combo was "off-contract/unreachable through the only
-    real caller", because ``screens.py`` "always passes ``attached=not
-    self.spectating``, so the two are never both false there today". Both
-    halves stopped being true within a day of being written and were
-    never revised: WO-P5-060 replaced that derivation with the real
-    per-instance ``attached=self.attached``, and WO-ENTRY-APP-CHIP made
-    both-falsy the cockpit's ENTRY state -- so it is now the DEFAULT
-    rendering path, hit every time the cockpit opens. This module's own
-    docstring above already records that correctly; this docstring
-    contradicted it.)
-
-    ``unicode_ok`` is accepted for API uniformity with every sibling
-    composer in this package (``liveness.py``, ``strip.py``) but has no
-    effect here -- ``SPECTATE_LABEL``/``APP_LABEL`` are plain ASCII with no
-    Unicode twin to swap, and ``MANUAL_LABEL``'s embedded em-dash is canon's
-    own established NO-SWAP glyph (see each constant's own module-level
-    comment).
-
-    Returns a string of exactly ``width`` characters when ``width > 0``
-    (padding/truncation absorbed the same way ``str.rjust``/slicing
-    already behaves), or ``""`` when ``width`` is not a usable positive
-    ``int`` (including ``OverflowError``-raising inputs like
-    ``float("inf")``). Never raises regardless of any argument's type or
-    content -- a non-``str`` ``liveness_text`` degrades to ``""`` rather
-    than crashing.
-
-    WO-P5-062 note: ``arm_chip`` is the optional ``(text, tone)`` pair
-    ``cockpit.arm.compose_arm_chip`` produces, placed immediately right of
-    the seat chip. Its default of ``None`` renders a row BYTE-IDENTICAL to
-    the pre-WO-P5-062 output for every other input, so no existing caller
-    changes behavior by not passing it. See ``_compose_segments`` for the
-    placement and width-pressure rules, and ``_safe_arm_chip`` for how an
-    unusable pair degrades.
-    """
-    segments = _compose_segments(
-        spectating=spectating, attached=attached, liveness_text=liveness_text,
-        width=width, arm_chip=arm_chip, conn_chip=conn_chip,
-        coverage_meter=coverage_meter,
-        status_offer=status_offer, teach_band=teach_band,
-    )
-    return "".join(text for text, _tone in segments)
-
-
 def compose_control_strip_segments(
     *,
     spectating: object = True,
@@ -724,18 +637,14 @@ def compose_control_strip_segments(
     status_offer: object = None,
     teach_band: object = None,
 ) -> list[tuple[str, str | None]]:
-    """PWO-060: the draw layer's per-run-color view of the same control-strip
-    row ``compose_control_strip_line`` renders as one flat string -- ordered
-    ``(text, tone)`` segments whose concatenation is BYTE-IDENTICAL to
-    ``compose_control_strip_line``'s output for the same inputs, for every
-    input, by construction: both functions delegate to the same
-    ``_compose_segments`` helper above, so there are never two independently
-    hand-kept-in-sync code paths that could drift apart. ``tone`` is one of
-    ``"ok"`` (App chip), ``"warn"`` (MANUAL/Human chip, and the ARM chip
-    whenever the autopilot is not PROVEN disarmed -- WO-P5-062), or
-    ``None`` (SPECTATE chip, a proven-disarmed ARM chip, or any non-label
-    segment such as the liveness cluster and the inter-chip separator) --
-    see ``_resolve_label_and_tone``'s own docstring for the seat tone
+    """PWO-060: the draw layer's per-run-color view of the control-strip
+    row -- ordered ``(text, tone)`` segments from the sole public strip
+    composer. ``tone`` is one of ``"ok"`` (App chip), ``"warn"``
+    (MANUAL/Human chip, and the ARM chip whenever the autopilot is not
+    PROVEN disarmed -- WO-P5-062), or ``None`` (SPECTATE chip, a
+    proven-disarmed ARM chip, or any non-label segment such as the
+    liveness cluster and the inter-chip separator) -- see
+    ``_resolve_label_and_tone``'s own docstring for the seat tone
     vocabulary and the App-never-co-renders-with-MANUAL structural
     guarantee, and ``cockpit.arm.arm_tone`` for the ARM chip's own.
 
@@ -746,14 +655,13 @@ def compose_control_strip_segments(
     tones is correct here and is NOT a widening of the seat chips' own XOR
     (see ``_compose_segments``, which still emits at most one seat label).
 
-    ``unicode_ok`` is accepted for API uniformity with ``compose_control_
-    strip_line`` and every sibling composer in this package but has no
-    effect here, for the same reason given on that function.
+    ``unicode_ok`` is accepted for API uniformity with every sibling
+    composer in this package but has no effect here -- seat labels are
+    plain ASCII / canon NO-SWAP glyphs with no Unicode twin to swap.
 
     Returns ``[]`` when ``width`` is not a usable positive ``int``
-    (``"".join`` over ``[]`` is ``""``, matching ``compose_control_strip_
-    line``'s own empty-string return for the same case). Never raises
-    regardless of any argument's type or content."""
+    (``"".join`` over ``[]`` is ``""``). Never raises regardless of any
+    argument's type or content."""
     return _compose_segments(
         spectating=spectating, attached=attached, liveness_text=liveness_text,
         width=width, arm_chip=arm_chip, conn_chip=conn_chip,

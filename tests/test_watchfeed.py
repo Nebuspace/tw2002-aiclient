@@ -156,13 +156,15 @@ def test_stop_idempotent_before_and_mid_stream():
         started = time.monotonic()
         feed.stop()  # mid-stream: thread is parked in a blocking readline()
         elapsed = time.monotonic() - started
-        assert elapsed < 2.5  # bounded well within the ~2s join budget
 
         assert not reader_thread.is_alive()  # join proves the thread is dead
         assert feed.snapshot().running is False
 
         feed.stop()  # idempotent -- no raise, no hang, no re-write
         assert feed.snapshot().running is False
+
+        # Join-budget canary LAST — never mask the behavioural asserts above.
+        assert elapsed < 2.5  # bounded well within the ~2s join budget
     finally:
         server_sock.close()
 

@@ -154,8 +154,9 @@ def test_wedged_autoloop_send_fence_clears_after_send_raw_courtesy_bound(
     t0 = time.monotonic()
     sess.send_raw(b"y", control_lock=lock, sender="human")
     elapsed = time.monotonic() - t0
-    assert elapsed < 0.15, f"still paying fence tax: {elapsed:.3f}s"
     assert ok.last == b"y"
+    # Fence-clear latency canary LAST — never mask the send content assert.
+    assert elapsed < 0.15, f"still paying fence tax: {elapsed:.3f}s"
 
 
 def test_generation_token_does_not_clear_wedged_predecessor_fence():

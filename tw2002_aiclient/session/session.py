@@ -113,6 +113,39 @@ class Session:
         # use, never the real password text.
         self.last_sent = None
         self.last_sent_ts = None
+        # WO-LAST-KNOWN-SECTOR: the last sector a screen POSITIVELY stated,
+        # plus the send-epoch it was stated at. Exists because several screens
+        # identify themselves without carrying a sector -- every captured
+        # StarDock screen shows `Command [TL=00751:0/0/0/850] (?=Help)? :`
+        # with no `[sector]` bracket, while an ordinary docked-port screen has
+        # one -- so a per-sector fact learned there has nothing to attach to.
+        #
+        # The epoch is what makes remembering safe. It bumps on EVERY send
+        # (both paths) and on every reconnect, and a reading is only offered
+        # back while the epoch still matches the one it was taken at. So the
+        # memory answers exactly "the sector we are in, given that nothing has
+        # happened since we looked" and goes silent the instant anything has.
+        # That matters more than it sounds: attributing a landmark to a stale
+        # sector writes StarDock into the WRONG sector, and `landmarks` unions
+        # (WO-WM-LANDMARKS-WRITE P1), so nothing in the product can ever
+        # remove it. One wrong write is permanent, which is why this fails
+        # closed in every direction rather than guessing.
+        self._sector_epoch = 0
+        self._last_sector = None
+        self._last_sector_epoch = None
+        # WO-LANDMARK-ATTRIBUTE-LAST-KNOWN: one-slot carry of the sector that
+        # was valid immediately before the last APP send. Inert on its own --
+        # see `sector_before_last_send` for the one caller allowed to read it
+        # and the proof it must hold first.
+        self._sector_before_send = None
+        # Guards the four sector-memory fields above ONLY (`_sector_epoch`,
+        # `_last_sector`, `_last_sector_epoch`, `_sector_before_send`) --
+        # they are read and written together and a partial view of them is
+        # exactly a stale attribution. Never held while acquiring any
+        # other lock, so it cannot participate in a cycle -- `send()` takes
+        # `send_lock` and then this one, and nothing anywhere takes
+        # `send_lock` while holding this.
+        self._sector_memory_lock = threading.Lock()
         # RX-side counterpart to last_sent/last_sent_ts (WO-P2-G4-X5): the
         # most recent STRICT credits balance any settled screen stated, plus
         # the monotonic instant it was seen. Written ONLY by
@@ -192,6 +225,86 @@ class Session:
         -- a later auto-reconnect replays login against this profile."""
         self.auto_login_profile = profile_name
 
+    def _bump_sector_epoch(self, carry=False):
+        """Invalidate the remembered sector. The ONE invalidation primitive.
+
+        Called on every send and every reconnect. Deliberately not a
+        `_last_sector = None` clear: with a single mechanism there is exactly
+        one way the memory becomes valid (recorded at the current epoch) and
+        any change at all invalidates it, so a future caller cannot add a
+        third state by forgetting to clear one of two fields.
+
+        `carry=True` additionally files the sector that was valid at this
+        instant into the one-slot `_sector_before_send` memo. That memo is
+        NOT a second memory and never widens `last_known_sector()` -- it is
+        inert unless a later screen proves we did not move (see
+        `sector_before_last_send`). Carrying a stale-or-absent value would
+        defeat the point, so a memo is only filed when the memory was
+        genuinely valid; otherwise the slot is cleared.
+
+        `reconnect` deliberately does NOT carry. A fresh connection is the
+        one event that proves nothing at all about where we are, and a carry
+        filed there would let a later StarDock landing attribute to a sector
+        from before the connection dropped.
+        """
+        with self._sector_memory_lock:
+            if carry and self._last_sector_epoch is not None and self._last_sector_epoch == self._sector_epoch:
+                self._sector_before_send = self._last_sector
+            else:
+                self._sector_before_send = None
+            self._sector_epoch += 1
+
+    def sector_before_last_send(self):
+        """The sector we were in immediately before the most recent app send,
+        or ``None``.
+
+        **Read this only with independent proof that we did not move.** It is
+        a raw carry, not a claim about where we are: on its own it is exactly
+        the stale value `last_known_sector()` exists to refuse. Its one
+        legitimate consumer is a caller looking at a screen that *proves* no
+        movement occurred -- a warp lands on a sector display, while docking
+        lands on a StarDock screen, so the landing screen is an OBSERVATION
+        that discriminates the two where the outgoing command was only an
+        inference.
+
+        Cleared by `reconnect` and never filled by `send_raw`: a human's raw
+        keystrokes are opaque to us, so the app declines to reason about what
+        they did.
+        """
+        with self._sector_memory_lock:
+            return self._sector_before_send
+
+    def note_sector(self, sector_id):
+        """Record a sector a settled screen POSITIVELY stated.
+
+        Only ever called with a real parsed reading -- there is no path here
+        that derives, defaults, or infers a sector. A non-int (or a bool,
+        which is an int in Python and would remember sector ``1`` for
+        ``True``) is refused rather than stored.
+        """
+        if isinstance(sector_id, bool) or not isinstance(sector_id, int):
+            return
+        with self._sector_memory_lock:
+            self._last_sector = sector_id
+            self._last_sector_epoch = self._sector_epoch
+
+    def last_known_sector(self):
+        """The sector we are in **if nothing has happened since we looked**,
+        else ``None``.
+
+        ``None`` covers three genuinely different situations -- never looked,
+        looked and then sent something, connection replaced -- and collapses
+        them on purpose: every one of them means *do not attribute a per-sector
+        fact right now*, and a caller that wanted to tell them apart would be a
+        caller looking for an excuse to write anyway.
+        """
+        with self._sector_memory_lock:
+            if self._last_sector_epoch is None:
+                return None
+            if self._last_sector_epoch != self._sector_epoch:
+                return None
+            return self._last_sector
+
     def reconnect(self, timeout=10):
         """D9: tear down a dead telnet connection and establish a fresh
         one to the same host/port. A fresh TerminalScreen + TelnetHandler
@@ -201,6 +314,11 @@ class Session:
         newly-arriving bytes). The logger, `session_id`, and history are
         preserved so the transcript/recent-events stay continuous across
         the drop."""
+        # A fresh TCP connection means the server starts drawing from its own
+        # login entry point, so whatever sector we last read is gone with the
+        # old screen. Bumped FIRST, before the teardown that can raise, so a
+        # reconnect that fails part-way still leaves the memory silent.
+        self._bump_sector_epoch()
         try:
             self.conn.close()
         except Exception:
@@ -493,6 +611,21 @@ class Session:
         if sender not in VALID_SENDERS:
             raise ValueError(f"sender must be one of {VALID_SENDERS}, got {sender!r}")
         with self.send_lock:
+            # Invalidate the remembered sector BEFORE the byte can reach the
+            # wire, never after: a send that raises may still have moved the
+            # ship, and a memory that outlived a failed send is exactly the
+            # one that would attribute a landmark to the sector we just left.
+            # Bumping early can only cost a write we were unsure about;
+            # bumping late can write a permanent wrong one.
+            #
+            # `carry=True` files the pre-send sector into the inert one-slot
+            # memo. It does NOT keep the memory alive -- `last_known_sector()`
+            # still goes silent here exactly as before. The memo is only
+            # readable by a caller holding independent proof that this send
+            # did not move us (the landing screen), and only the APP send
+            # carries: a human's raw keystrokes are opaque, so `send_raw`
+            # deliberately passes no carry.
+            self._bump_sector_epoch(carry=True)
             now = time.monotonic()
             delta = now - self._last_send_time
             if delta < MIN_SEND_GAP_S:
@@ -583,6 +716,13 @@ class Session:
         prompt_line = self.current_prompt_line()
         secret = is_probable_secret_prompt(prompt_line)
         with self.send_lock:
+            # Same invalidation as send(), and NOT optional here: this is the
+            # human keystroke path, and a human typing a warp moves the ship
+            # exactly like a scripted dispatch does. Bumping in one send path
+            # and not the other is the asymmetry that would make the memory
+            # correct under automation and wrong under a human at the keys --
+            # the direction nobody tests.
+            self._bump_sector_epoch()
             now = time.monotonic()
             delta = now - self._last_send_time
             if delta < MIN_SEND_GAP_S:

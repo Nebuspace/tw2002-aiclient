@@ -43,9 +43,14 @@ from tw2002_aiclient.cockpit.control_seat import (
     APP_LABEL,
     MANUAL_LABEL,
     SPECTATE_LABEL,
-    compose_control_strip_line,
     compose_control_strip_segments,
 )
+
+def _joined_strip(**kwargs) -> str:
+    """Flat join of ``compose_control_strip_segments`` — test-only stand-in
+    for the retired product flat-string strip helper."""
+    return "".join(text for text, _tone in compose_control_strip_segments(**kwargs))
+
 from tw2002_aiclient.cockpit.layout import frame_layout
 
 FULL_ROWS, FULL_COLS = 40, 160
@@ -189,7 +194,7 @@ def test_arm_reads_a_different_input_than_the_seat_badge_entirely(monkeypatch):
     dict's worth of nonsense and the arm composer a seat's worth -- neither
     can act on the other's vocabulary."""
     # Seat composer, given only arm vocabulary: no arm chip appears.
-    seat_only = compose_control_strip_line(
+    seat_only = _joined_strip(
         spectating=False, attached=False, liveness_text="", width=60
     )
     assert APP_LABEL in seat_only
@@ -474,7 +479,7 @@ def test_line_and_segments_stay_byte_identical_with_an_arm_chip():
                     spectating=spectating, attached=attached,
                     liveness_text="● ⠋ → 158", width=width, arm_chip=arm,
                 )
-                line = compose_control_strip_line(**kwargs)
+                line = _joined_strip(**kwargs)
                 segments = compose_control_strip_segments(**kwargs)
                 assert line == "".join(text for text, _tone in segments)
 
@@ -523,7 +528,7 @@ def test_the_seat_chip_outranks_the_arm_chip_under_width_pressure():
     Stated here rather than left implicit, because the opposite ordering
     is a defensible-sounding choice someone could make later by accident."""
     width = len(MANUAL_LABEL) + len("● ⠋ → 158") + 1
-    line = compose_control_strip_line(
+    line = _joined_strip(
         spectating=False, attached=True, liveness_text="● ⠋ → 158",
         width=width, arm_chip=_chip(ARM_ON_LABEL, "warn"),
     )
@@ -537,7 +542,7 @@ def test_the_arm_chip_renders_even_when_the_seat_makes_no_claim():
     label is deliberately empty (``control_seat`` refuses to invent a
     claim). The arm chip must still render -- it is answering a different
     question and its own evidence is unaffected."""
-    line = compose_control_strip_line(
+    line = _joined_strip(
         spectating=None, attached=None, liveness_text="→ -", width=60,
         arm_chip=_chip(ARM_ON_LABEL, "warn"),
     )
@@ -554,7 +559,7 @@ def test_a_malformed_arm_chip_degrades_to_no_chip_and_never_raises(arm_chip):
     """House hardening discipline: every public composer here is
     never-raises regardless of input shape. An unusable chip drops rather
     than rendering a mangled claim."""
-    line = compose_control_strip_line(
+    line = _joined_strip(
         spectating=False, attached=False, liveness_text="→ -", width=60,
         arm_chip=arm_chip,
     )

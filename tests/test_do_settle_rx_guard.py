@@ -251,7 +251,22 @@ def test_do_returns_on_real_wall_clock_time_when_the_game_says_nothing(tmp_path,
     # needed to show what was being fixed.
     before = time.monotonic()
     reason, elapsed = session.wait_settle(wait_prompt=COMMAND_PROMPT_RE, timeout=0.3)
+    first_wall = time.monotonic() - before
+
+    started = time.monotonic()
+    resp = protocol.dispatch(
+        session,
+        "do",
+        {"input": "P", "wait_prompt": COMMAND_PROMPT_RE, "timeout": 0.3},
+        _NoLockServer(),
+    )
+    took = time.monotonic() - started
+
+    # Behavioural claims FIRST — wall-clock canaries must not mask them
+    # (WO-TEST-TIMING-ASSERT-ORDER).
     assert reason == "prompt"
+    assert resp["settled_reason"] == "timeout"
+
     # Both bounds below are loosened, not removed (WO-SUITE-PARALLEL-FLAKE).
     # Reproduced ORGANICALLY (not synthetically) under this suite's own
     # `-n auto` plus ordinary background CPU load: a live `pytest` run of
@@ -272,18 +287,7 @@ def test_do_returns_on_real_wall_clock_time_when_the_game_says_nothing(tmp_path,
     # budget" regression (elapsed >=0.3s) -- an order of magnitude beyond
     # either new ceiling.
     assert elapsed < 0.2  # the first poll, before any sleep -- was 0.001
-    assert time.monotonic() - before < 0.35  # was 0.05
-
-    started = time.monotonic()
-    resp = protocol.dispatch(
-        session,
-        "do",
-        {"input": "P", "wait_prompt": COMMAND_PROMPT_RE, "timeout": 0.3},
-        _NoLockServer(),
-    )
-    took = time.monotonic() - started
-
-    assert resp["settled_reason"] == "timeout"
+    assert first_wall < 0.35  # was 0.05
     # Bounded by its own budget in real seconds -- not spinning, and not
     # waiting past the deadline it was given (one poll interval of slack).
     assert 0.3 <= took < 0.6

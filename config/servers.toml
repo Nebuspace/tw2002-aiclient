@@ -15,12 +15,16 @@
 # Telnet default port is 23; all other ports are explicit in the source data.
 # This file is a curated snapshot — entries go stale; it is NOT a liveness
 # probe.  Use it as a starting-point address book, not a guarantee of uptime.
+# description `status=` tags are LISTING PROVENANCE only (same axis as
+# servers.inventory.json `status`) — never TCP truth. For measured
+# reachability see config/servers.liveness.json + scripts/catalog-tcp-probe.py
+# (WO-CATALOG-SOURCE-LIVENESS-SPLIT).
 #
 # Fields
 #   name        — display name
 #   host        — hostname or IP
 #   port        — telnet port
-#   description — short note; includes source tag(s) and status=listed
+#   description — short note; includes source tag(s) and provenance status=listed
 
 # ---------------------------------------------------------------------------
 # MicroBlaster live-listing  (19 entries — status=listed as of scrape date)

@@ -56,8 +56,8 @@ section below has always documented.
 field" rule the canon's Write Hooks section describes):** `record`
 passed to `upsert_sector`/`bulk_upsert` may be PARTIAL -- only
 `sector_id` is required. Any other top-level field present in `record`
-(`warps`, `port`, `threats`, `landmarks`, `formation_membership`)
-*fully replaces* the corresponding stored field for that sector --
+(`warps`, `port`, `threats`, `formation_membership` -- but see
+`landmarks` below) *fully replaces* the corresponding stored field --
 never sub-merged with the old value (e.g. an old and new `port`
 commodities list are never unioned; the new one wins outright, per the
 canon's "supersedes... rather than merging stale and fresh data").
@@ -66,6 +66,14 @@ entry -- this is the "additive" half: a warps-only write from movement
 (no port info observed this pass) must not erase previously-learned
 port data for that sector. `last_seen_ts` is always re-stamped on
 every upsert, whether the caller supplies one or not.
+
+**`landmarks` is the one UNIONING field** (`_merge_landmarks`, which
+carries the full argument). Replace semantics cannot hold for it: canon
+requires that a plain visit never clear a landmark, and no readable
+screen ever says "there is positively no landmark here" -- so an
+observation that merely failed to notice would erase one that did.
+Union makes that structural: no argument to an upsert can shrink the
+stored set. Removal, if it is ever needed, owes its own deliberate path.
 
 **Nested port field-level merge (mack Finding 1, 2026-07-19
 hardening pass):** the `port` field is the ONE exception to "fully
@@ -252,6 +260,54 @@ def _merge_port(existing_port, incoming_port):
     return merged_port
 
 
+def _merge_landmarks(existing, incoming):
+    """Union, never replace — landmarks ACCUMULATE.
+
+    The one field whose upsert is additive rather than last-write-wins, and
+    the exception is deliberate. Canon (`world-model.md`) requires that a
+    plain visit never clears a landmark, and the reason is that no screen
+    the trainer can read says *"there is positively no landmark here"* — a
+    sector display that does not mention StarDock is silence, not a denial.
+    Under the module's ordinary replace semantics, one observation that
+    happened not to notice would erase one that did, and the erasure is
+    indistinguishable from never having found it.
+
+    Union makes that structural rather than remembered: there is no argument
+    to this function that shrinks the stored set, so no future caller can
+    reintroduce the clearing bug by passing `[]`. (A landmark that becomes
+    genuinely wrong is a *correction*, which needs a deliberate removal path
+    and an observation that can justify it — neither exists yet, and
+    inventing one here would be the same guess in the other direction.)
+
+    Dedup is **casefold**-based to match `explore.find_landmark_sectors`,
+    which casefolds both sides: without it `stardock` and `StarDock` are one
+    landmark to the reader and two to the store. Existing order is kept and
+    new tokens append, so the record stays stable and diffable across runs.
+    Non-string entries are dropped rather than stored — a landmarks list is a
+    list of names, and anything else would only ever fail to match a lookup.
+    """
+    out: list = []
+    seen: set = set()
+    for source in (existing or (), incoming or ()):
+        if isinstance(source, (str, bytes)):
+            # A bare string is iterable, and iterating it would store one
+            # landmark per CHARACTER. Refuse rather than silently shred it.
+            continue
+        try:
+            items = list(source)
+        except TypeError:
+            continue
+        for item in items:
+            if not isinstance(item, str) or not item:
+                continue
+            key = item.casefold()
+            if key in seen:
+                continue
+            seen.add(key)
+            out.append(item)
+    return out
+
+
 def _compute_merged_sector(existing, record, now):
     """Pure computation, no I/O and no lock -- given the record already
     stored for this sector (or `None`) and an incoming partial
@@ -266,6 +322,8 @@ def _compute_merged_sector(existing, record, now):
             continue
         if field == "port" and record["port"] is not None:
             merged["port"] = _merge_port(merged.get("port"), record["port"])
+        elif field == "landmarks":
+            merged["landmarks"] = _merge_landmarks(merged.get("landmarks"), record["landmarks"])
         else:
             merged[field] = record[field]
     merged["sector_id"] = sector_id
@@ -306,6 +364,45 @@ def bulk_upsert(world_id, records, state_dir=None, now=None):
     return [upsert_sector(world_id, r, state_dir=state_dir, now=now) for r in records]
 
 
+#: The landmark name recorded for StarDock. A single constant because the
+#: store dedups landmarks by `casefold()` but NOT by spelling -- "StarDock"
+#: and "Star Dock" would both survive as separate entries, and since
+#: `landmarks` unions there is no product path that could ever remove the
+#: loser. One name, written from one place.
+STARDOCK_LANDMARK = "StarDock"
+
+
+def add_landmark(world_id, sector_id, name, state_dir=None, now=None):
+    """Attribute a named landmark to an EXPLICITLY-SUPPLIED sector.
+
+    The product-facing write path into `landmarks`, and deliberately the
+    only one: `write_from_state` refuses to carry landmarks (it maps a raw
+    state read, which has no landmark to report), so anything that learns a
+    landmark has to say *which sector* it belongs to out loud rather than
+    letting a general-purpose write infer it.
+
+    **Caller supplies the sector; this function never guesses it.** That
+    division matters more here than elsewhere in this module because
+    `landmarks` is the one UNIONING field -- a wrong attribution is not
+    overwritten by the next correct write, and there is no removal path
+    anywhere in the product. A landmark written into the wrong sector is
+    permanent. So the decision "do we know where we are?" belongs to the
+    caller that can actually answer it, and arrives here already made.
+
+    Junk RAISES rather than returning a quiet negative. A bad `name` or a
+    non-int `sector_id` is a programming error, and if it returned `None`
+    it would be indistinguishable from the caller's legitimate "we do not
+    know the sector, do not write" -- which is the one signal that must
+    stay readable.
+    """
+    if isinstance(sector_id, bool) or not isinstance(sector_id, int):
+        raise WorldModelError(f"add_landmark: sector_id must be an int, got {sector_id!r}")
+    if not isinstance(name, str) or not name.strip():
+        raise WorldModelError(f"add_landmark: name must be a non-empty str, got {name!r}")
+    record = {"sector_id": sector_id, "landmarks": [name]}
+    return upsert_sector(world_id, record, state_dir=state_dir, now=now)
+
+
 def get_sector(world_id, sector_id, state_dir=None):
     """A single sector's record (deep copy -- mutating the return
     value never touches the live store), or `None` if this world has
@@ -327,6 +424,56 @@ def all_sectors(world_id, state_dir=None):
     return [
         copy.deepcopy(_load_sector_file(world_id, sid, state_dir=state_dir)) for sid in sector_ids
     ]
+
+
+def known_sector_count(world_id, state_dir=None):
+    """How many sectors this world has on file — or `None` when that
+    cannot be determined.
+
+    The cheap sibling of `all_sectors`, for callers that want the COUNT
+    and nothing else. `all_sectors` reads and deep-copies every sector
+    file to produce a list whose length is then thrown away; measured on
+    this layout that is ~157ms at 1000 sectors and ~780ms at 5000, while
+    counting directory entries is ~5ms and ~26ms. The cockpit's GOALS
+    Map row wants only the number, and the launcher's whole-process CPU
+    budget (`tests/test_dead_terminal_spin.py`, 0.5s) has no room for
+    the list version.
+
+    **`None` is not zero, and the distinction is the point.** A missing
+    world directory means no sector has ever been written for this world
+    -- genuinely zero known sectors, and reporting that is honest. An
+    UNREADABLE directory means we cannot tell, and reporting zero there
+    would fabricate "you have explored nothing" out of a permissions
+    error. `Path.glob` cannot make that distinction: it swallows
+    `PermissionError` and yields nothing, so an unreadable directory and
+    an empty one are identical through it. `os.scandir` raises instead,
+    which is the only reason it is used here in place of the `glob` its
+    neighbours use.
+
+    Counted the way `all_sectors` counts -- entries whose stem is an
+    integer -- so the two agree on every store `all_sectors` survives,
+    while a stray non-numeric `*.json` is skipped here rather than
+    raising `ValueError` as it would there.
+    """
+    sectors_dir = _sectors_dir(world_id, state_dir=state_dir)
+    total = 0
+    try:
+        with os.scandir(sectors_dir) as entries:
+            for entry in entries:
+                name = entry.name
+                if not name.endswith(".json"):
+                    continue
+                stem = name[: -len(".json")]
+                try:
+                    int(stem)
+                except ValueError:
+                    continue
+                total += 1
+    except FileNotFoundError:
+        return 0
+    except OSError:
+        return None
+    return total
 
 
 def query(world_id, predicate, state_dir=None):

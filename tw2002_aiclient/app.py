@@ -12,8 +12,12 @@ from tw2002_aiclient import adapters
 from tw2002_aiclient.cockpit import analyze as _analyze
 from tw2002_aiclient.cockpit import assign_trigger as _assign_trigger
 from tw2002_aiclient.cockpit import autoloop_controls as _autoloop_controls
+from tw2002_aiclient import explore as _explore
+from tw2002_aiclient import world_identity as _world_identity
+from tw2002_aiclient.cockpit import chains as _chains
 from tw2002_aiclient.cockpit import draft_approve as _draft_approve
 from tw2002_aiclient.cockpit import record_macro as _record_macro
+from tw2002_aiclient.loops import store as _loop_store
 from tw2002_aiclient.screens import (
     BankViewScreen,
     CreateFormScreen,
@@ -37,6 +41,10 @@ _EXPLORE_OFFER_CLASSIFICATION = "main_command"
 # `Explore x5 LIVE?  y/N` -- canon's "the prompt spells out *what* runs and
 # *how many cycles*".
 _EXPLORE_OFFER_ACTION = "Explore"
+# WO-EXPLORE-AUTOMATION-GATE E3: the second armable intent's confirm text.
+# States the stopping rule ("until found") because it is NOT the ×N rule the
+# map-fill prompt states, and the gate must describe the run it arms.
+_EXPLORE_STARDOCK_ACTION = "Explore \u2014 find StarDock (until found)"
 # Cycles shown in the prompt AND the `min_sectors` handed to the adapter. ONE
 # constant feeds both, so the number the human confirms cannot drift from the
 # number the run is started with -- the confirm gate's whole value is that the
@@ -586,6 +594,17 @@ def _poll_explore_status(play: PlayShellScreen, *, run_dir) -> bool:
         # Terminal outcome: leave the final reading on `status_line` and hand
         # the band back to the calm teach tokens.
         play.explore_band = None
+        # WO-WORLD-STATS-REFRESH-EVENTS A: explore terminal poll is a real
+        # client-visible completion signal (already paid for explore_status).
+        # Refresh known_sectors here — never on the draw path.
+        try:
+            from tw2002_aiclient import world_identity as _world_identity
+
+            play.world_stats.refresh(
+                _world_identity.world_id_from_profile(play.profile)
+            )
+        except Exception:  # noqa: BLE001 — count is best-effort; keep the loop
+            pass
     return keep_polling
 
 
@@ -593,7 +612,19 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
     """Bind profile to a fresh play-shell placeholder; Esc ends the binding."""
     run_dir = env.resolve_run_dir()
     play = PlayShellScreen(stdscr, profile)
-    play.status_provider = _daemon_status_provider(run_dir)
+    # Producer for `status["chain_hops"]`/`["chain_unit"]` -- the fields
+    # cockpit/goals.py reads and, until now, nothing wrote. Updated from the
+    # chains-popup branch below, where a discovery already happens for its own
+    # reasons. Applied as a WRAPPER rather than an argument to
+    # `_daemon_status_provider`: the scalars are a client-side overlay on
+    # whatever the status source is, not part of polling the daemon, so every
+    # provider (including the scripted ones tests substitute) carries them.
+    # Both overlays compose by wrapping: each adds only its own keys, each
+    # declines to clobber a value the layer beneath already supplied, and each
+    # maps a `None` provider to `None`, so the order is not load-bearing.
+    play.status_provider = play.world_stats.wrap(
+        play.chain_scalars.wrap(_daemon_status_provider(run_dir))
+    )
     play.status_line = "Ensuring session…"
     play.draw()  # show the ensuring state during the (blocking) wait below
     # no_auto_arm=True: ensure only reaches main_command and stops, even if
@@ -665,6 +696,30 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
     # `begin_arm_confirm` call below; cleared the instant "arm_confirm"
     # fires.
     pending_confirm_action: str | None = None
+    # WO-EXPLORE-AUTOMATION-GATE E3: the intent the most recently raised `E`
+    # offer was composed from, or `None` before the first press. ONE variable,
+    # not two: the cycle position and "what the live prompt says" are the same
+    # fact here, because `E` advances the cycle and raises the gate in the
+    # same step. An earlier draft kept a separate "next" variable and a
+    # comment explaining how they could differ; they could not, and mutating
+    # the confirm branch to read the other one left every test green -- which
+    # is how the redundancy was found. The confirm branch reads THIS, so the
+    # run is always the one the visible prompt named.
+    explore_intent_offered: str | None = None
+    # WO-PLAY-AUTOLOOP-START: the exact row the taught-loop confirm line was
+    # composed from. Held alongside `pending_confirm_action` rather than
+    # re-read at `y`, so the macro that runs is provably the macro named in
+    # the prompt the operator agreed to.
+    #
+    # Cancelling a gate leaves `pending_confirm_action` stale (the screen
+    # clears its own gate and returns None, so this loop never sees the
+    # cancel). That is currently harmless only because EVERY
+    # `begin_arm_confirm` call site also assigns `pending_confirm_action` --
+    # an invariant nothing enforces. So the arm branch additionally requires
+    # this to be non-None and clears it on every other gate raise: if that
+    # invariant ever breaks, the failure is a refusal to arm rather than
+    # arming yesterday's macro under someone else's prompt.
+    pending_confirm_loop: dict | None = None
     # WO-PLAY-EXPLORE-VISIBLE (L4): set after a successful arm start; cleared
     # when ``explore_status`` reports a terminal outcome so idle ticks do not
     # spam the daemon.
@@ -824,7 +879,34 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                 # None, so no gate is currently up and no other binding
                 # claimed the key.
                 pending_confirm_action = "explore"
-                play.begin_arm_confirm(_EXPLORE_OFFER_ACTION, cycles=_EXPLORE_MIN_SECTORS)
+                pending_confirm_loop = None  # a different gate owns the row now
+                # WO-EXPLORE-AUTOMATION-GATE E3: one affordance, two intents.
+                # `E` CYCLES which goal is on offer and raises the gate for
+                # it; it never starts anything. The first press of a session
+                # is map-fill, byte-identical to the pre-WO prompt, so the
+                # existing muscle memory arms the existing run.
+                if explore_intent_offered is None:
+                    explore_intent_offered = _explore.ARMABLE_INTENTS[0]
+                else:
+                    explore_intent_offered = _explore.next_armable_intent(
+                        explore_intent_offered
+                    )
+                # ONE `begin_arm_confirm` call, deliberately: the label is
+                # chosen first and the gate raised once. An if/else with a
+                # call in each arm reads the same but adds a fourth
+                # production call site, and `test_exactly_three_production_
+                # call_sites_raise_the_gate` counts them precisely so a new
+                # money-path gate cannot appear quietly. One affordance, one
+                # call site -- the count stays honest.
+                #
+                # find-StarDock carries NO cycle count: that run ends on
+                # ARRIVAL or exhaustion, not after N sectors, and a prompt
+                # promising "×5" would describe the other intent's rule.
+                if explore_intent_offered == _explore.INTENT_FIND_STARDOCK:
+                    offer_action, offer_cycles = _EXPLORE_STARDOCK_ACTION, None
+                else:
+                    offer_action, offer_cycles = _EXPLORE_OFFER_ACTION, _EXPLORE_MIN_SECTORS
+                play.begin_arm_confirm(offer_action, cycles=offer_cycles)
                 continue
             if action == "pause":
                 # WO-AUTOLOOP-RELAUNCH-COCKPIT: Space -- ungated, like panic
@@ -849,7 +931,145 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                 sends_preview = _preview_relaunch_sends(run_dir)
                 action_text = _autoloop_controls.compose_relaunch_confirm_action(sends_preview)
                 pending_confirm_action = "relaunch"
+                pending_confirm_loop = None  # a different gate owns the row now
                 play.begin_arm_confirm(action_text)
+                continue
+            if action == "chains_open":
+                # WO-PLAY-AUTOLOOP-START: canon's `L)chains`. The store read
+                # happens HERE, on the human's keypress -- not on a timer and
+                # not at ensure -- so the list can never appear unbidden.
+                # `status` is carried alongside the rows because an empty list
+                # means "none taught" ONLY under `ok`; `read_loop_store`'s own
+                # contract names `status` as the field a caller must branch on
+                # before saying anything about how many loops exist.
+                #
+                # WO-CHAINS-TUI-FULL: the DISCOVERED section's payload is
+                # computed here too, on the same keypress, and passed IN so
+                # `cockpit.chains` stays finder-free. Display-only by
+                # construction: the payload never enters the session's
+                # `rows`, so `selected()` / the arm path structurally cannot
+                # receive a discovered chain. A raising finder (or a profile
+                # that cannot form a `world_id`) must not take the play loop
+                # down; `None` renders as the modal's own honest "discovery
+                # unavailable" line, so no status_line is spent on it and no
+                # absence is fabricated. No exception text is rendered at
+                # all, which keeps the secrets rule above moot on this path.
+                #
+                # Imported HERE, not at module top, for the same reason
+                # `session/cli.py::cmd_chains` does it: `chain_search` pulls
+                # the finder + trade_adapter + world_model, ~40ms of import
+                # CPU nothing else in the cockpit needs — and the launcher's
+                # whole-process CPU budget (`tests/test_dead_terminal_spin.py`,
+                # 0.5s including imports) is already within ~50ms of the
+                # line before it.
+                #
+                # The GOALS Map row's `known_sectors` is refreshed on this
+                # keypress (and on explore terminal poll — see
+                # `_poll_explore_status`): `status_provider()` runs once per
+                # DRAW, and counting sector files (~26ms at 5000 sectors)
+                # cannot go on that path against the budget described above.
+                # This keypress already pays for a full world-model pass, so
+                # the marginal cost of a directory count is noise. Kept in its
+                # own guarded block rather than folded into the discovery below
+                # so that a broken finder does not also cost us the count, and
+                # so the existing expression's behaviour is untouched.
+                try:
+                    play.world_stats.refresh(_world_identity.world_id_from_profile(profile))
+                except Exception:  # noqa: BLE001
+                    pass
+                try:
+                    from tw2002_aiclient import chain_search as _chain_search
+
+                    discovered = _chain_search.recompute(
+                        _world_identity.world_id_from_profile(profile)
+                    )
+                except Exception:  # noqa: BLE001
+                    discovered = None
+                try:
+                    store = _loop_store.read_loop_store()
+                except Exception as exc:  # noqa: BLE001
+                    # A raising store read must not take the play loop down.
+                    # Type name only, never `str(exc)` -- a store path is not
+                    # a safe thing to assume is free of operator identity
+                    # (`canon/doctrine/secrets-and-credentials.md`).
+                    play.chain_scalars.update(discovered)
+                    play.chains_session.open([], "unreadable", discovered=discovered)
+                    play.status_line = f"loop store unreadable — {type(exc).__name__}"
+                else:
+                    play.chain_scalars.update(discovered)
+                    play.chains_session.open(
+                        _chains.playable_loops(store),
+                        _chains.store_status(store),
+                        discovered=discovered,
+                    )
+                continue
+            if action == "chains_close":
+                play.chains_session.close()
+                continue
+            if action == "chains_up":
+                play.chains_session.move(-1)
+                continue
+            if action == "chains_down":
+                play.chains_session.move(1)
+                continue
+            if action == "chains_arm":
+                # Enter on a row ARMS a pending action; it never starts one.
+                # The adapter call lives in the `arm_confirm` branch below,
+                # behind `y`. Canon: "A bare Enter must never fire a launch."
+                selected = play.chains_session.selected()
+                if selected is None:
+                    # Nothing to arm. Say so and leave the popup up rather
+                    # than raising a confirm gate for a run with no macro --
+                    # a `y/N` prompt naming nothing is worse than no prompt.
+                    play.status_line = "nothing to arm — no taught loop selected"
+                    continue
+                pending_confirm_loop = selected
+                pending_confirm_action = "loop"
+                play.chains_session.close()
+                play.begin_arm_confirm(_chains.compose_arm_action(selected))
+                continue
+            if action == "arm_confirm" and pending_confirm_action == "loop":
+                # WO-PLAY-AUTOLOOP-START: the human pressed `y` at the taught-
+                # loop confirm. Only NOW does the money-spending adapter call
+                # happen.
+                #
+                # This branch MUST stay above the bare `arm_confirm` below,
+                # which starts EXPLORE as the unguarded default. Without it a
+                # `y` meant for a taught loop would start an explore run --
+                # two different runners, one keystroke, and nothing in a
+                # "something started" assertion would notice. Pinned both ways
+                # in `tests/test_play_chains_arm.py`.
+                #
+                # The name comes from the row the confirm line was composed
+                # from, never from a re-read of the store: re-reading between
+                # the prompt and the `y` is how an operator ends up arming a
+                # different macro than the one they agreed to.
+                pending_confirm_action = None
+                armed = pending_confirm_loop
+                pending_confirm_loop = None
+                name = armed.get("name") if isinstance(armed, dict) else None
+                if not name:
+                    # Fail closed: the gate said "loop" but no row is held.
+                    # Reachable only if the stale-pending invariant above
+                    # breaks. Refusing costs an operator one keystroke;
+                    # guessing costs them live turns on a macro nobody named.
+                    play.status_line = "did not arm — no loop held for this confirm"
+                    continue
+                play.status_line = f"arming {name or '?'}…"
+                play.draw()  # the start call blocks; show intent first
+                try:
+                    started = adapters.autoloop_start(name, run_dir=run_dir)
+                except Exception as exc:  # noqa: BLE001
+                    # A raising adapter must not take the play loop down --
+                    # same containment posture as the explore branch below.
+                    # Type name only, never `str(exc)`.
+                    play.status_line = f"arm failed — {type(exc).__name__}"
+                else:
+                    if getattr(started, "ok", False):
+                        play.status_line = f"armed {name} — one pass running"
+                    else:
+                        reason = getattr(started, "reason", None) or "unknown"
+                        play.status_line = f"did not arm — {reason}"
                 continue
             if action == "arm_confirm" and pending_confirm_action == "relaunch":
                 # WO-AUTOLOOP-RELAUNCH-COCKPIT: the human pressed `y` at the
@@ -875,13 +1095,26 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                 # `_EXPLORE_MIN_SECTORS` is the SAME constant the prompt was
                 # composed from, so the run cannot start with a different
                 # number than the one the human just agreed to.
+                #
+                # E3: the run uses the intent the RAISED PROMPT was composed
+                # from. The `or` is the fail-safe for a gate raised by some
+                # future path that never set an intent -- map-fill is the
+                # conservative one (bounded by `_EXPLORE_MIN_SECTORS`), where
+                # find-StarDock runs until arrival or exhaustion.
                 pending_confirm_action = None
-                play.status_line = f"starting explore ×{_EXPLORE_MIN_SECTORS}…"
-                play.explore_band = f"explore ×{_EXPLORE_MIN_SECTORS} starting…"
+                armed_intent = explore_intent_offered or _explore.INTENT_MAP_FILL
+                if armed_intent == _explore.INTENT_FIND_STARDOCK:
+                    play.status_line = "starting explore — find StarDock…"
+                    play.explore_band = "find StarDock starting…"
+                else:
+                    play.status_line = f"starting explore ×{_EXPLORE_MIN_SECTORS}…"
+                    play.explore_band = f"explore ×{_EXPLORE_MIN_SECTORS} starting…"
                 play.draw()  # the start call blocks; show intent first
                 try:
                     explore = adapters.explore_start_for_profile(
-                        profile, min_sectors=_EXPLORE_MIN_SECTORS
+                        profile,
+                        min_sectors=_EXPLORE_MIN_SECTORS,
+                        intent=armed_intent,
                     )
                 except Exception as exc:  # noqa: BLE001
                     # A raising adapter must not take the play loop down with

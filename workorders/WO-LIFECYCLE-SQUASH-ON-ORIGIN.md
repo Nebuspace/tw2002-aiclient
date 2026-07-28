@@ -1,6 +1,6 @@
 # WO-LIFECYCLE-SQUASH-ON-ORIGIN — "tip on origin" ≠ ancestry under squash merges
 
-**Status:** OPEN · READY · process  
+**Status:** PARTIAL · cleanup script carve-out in this PR · Nebuspace CLAUDE.md prose still owed  
 **Posted:** 2026-07-27T20:27:00Z · hub from CC STATUS after #114 reap  
 **Seat:** hub / orchestrator (protocol authoring) — CC may review; HOLD seats do not invent  
 **Depends:** none  

@@ -102,10 +102,11 @@ def test_compose_never_raises_on_hostile_unicode_ok(hostile: object) -> None:
 # --------------------------------------------------------------------------
 
 def _line(width: int, **kw: object) -> str:
-    return control_seat.compose_control_strip_line(
+    segs = control_seat.compose_control_strip_segments(
         spectating=False, attached=True, liveness_text="RX 2s",
         width=width, **kw,
     )
+    return "".join(text for text, _tone in segs)
 
 
 def test_band_renders_on_a_wide_row() -> None:

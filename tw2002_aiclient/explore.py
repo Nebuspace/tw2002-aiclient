@@ -11,7 +11,7 @@ from __future__ import annotations
 import random
 from collections import deque
 from dataclasses import dataclass
-from typing import Mapping, Optional, Sequence
+from typing import Any, Callable, Mapping, Optional, Sequence
 
 from tw2002_aiclient import world_model
 
@@ -472,7 +472,10 @@ class FormationsPlan:
     route: Optional[tuple[int, ...]]
     next_sector: Optional[int]
     hunt: Optional[MapFillPlan]
-    mode: str  # "route" | "hunt" | "arrived" | "exhausted" | "catalog"
+    # "unavailable" is NOT interchangeable with "hunt"/"exhausted" -- see
+    # `plan_find_formations`. It means "no catalogue was reachable", never
+    # "a catalogue was read and held nothing".
+    mode: str  # "route" | "hunt" | "arrived" | "exhausted" | "catalog" | "unavailable"
 
 
 def plan_find_formations(
@@ -483,19 +486,51 @@ def plan_find_formations(
     epsilon: float = 0.1,
     state_dir=None,
     rng: Optional[random.Random] = None,
+    catalog_provider: Optional[Callable[..., Any]] = None,
 ) -> FormationsPlan:
     """Find-Formations tick: route toward nearest genesis candidate.
 
-    Runs TW-16 `catalog_world` (read-only). If candidates exist, pathfind
-    to the nearest (entrance if set, else first sector). Otherwise Map-fill
-    to grow the graph. Never deploys Genesis — locate/recommend only.
-    """
-    from twclient.formations import catalog_world
+    If candidates exist, pathfind to the nearest (entrance if set, else
+    first sector). Otherwise Map-fill to grow the graph. Never deploys
+    Genesis — locate/recommend only.
 
+    ``catalog_provider`` is the TW-16 formation catalogue seam: a callable
+    ``(world_id, *, state_dir) -> object`` exposing ``.genesis_candidates``.
+    It mirrors ``screens.py``'s ``status_provider`` contract — **defaults to
+    ``None``, and with no provider set this returns an honest
+    ``mode="unavailable"`` rather than inventing content.**
+
+    WO-EXPLORE-TWCLIENT-FORMATIONS-LANDMINE: this function previously did
+    ``from twclient.formations import catalog_world`` in its body. ADR-001
+    deleted the whole ``twclient`` package, so that line raised
+    ``ModuleNotFoundError`` on the first call — armed, and invisible because
+    it is a *function-level* import (module import stayed clean) whose only
+    tests are ``--ignore``d (``pytest.ini`` → ``tests/test_formations.py``).
+
+    Why a distinct ``"unavailable"`` and not the existing ``"hunt"``: with no
+    catalogue, "no candidates" and "could not look for candidates" are the
+    same empty value. Degrading to the Map-fill hunt branch would report
+    *exploring, none found* — a confident statement about the world derived
+    from a missing dependency. The refusal is typed so a caller can tell the
+    two apart. No resurrect: the catalogue is not reimplemented here, and
+    wiring a real one later is one argument at the call site.
+    """
     budget = max(0, int(turn_budget))
     cur = int(current_sector)
     graph = known_graph(world_id, state_dir=state_dir)
-    cat = catalog_world(world_id, state_dir=state_dir)
+
+    if catalog_provider is None:
+        return FormationsPlan(
+            found=False,
+            targets=(),
+            kind=None,
+            route=None,
+            next_sector=None,
+            hunt=None,
+            mode="unavailable",
+        )
+
+    cat = catalog_provider(world_id, state_dir=state_dir)
     candidates = cat.genesis_candidates
     if not candidates:
         hunt = plan_map_fill(
@@ -711,6 +746,114 @@ def _adjacent_hop_toward(
     if path is None or len(path) < 2:
         return None
     return path[1]
+
+
+INTENT_MAP_FILL = "map_fill"
+INTENT_FIND_STARDOCK = "find_stardock"
+#: The intents a caller may arm. Deliberately a closed set: an unknown intent
+#: is REFUSED by the daemon rather than silently falling back to map-fill,
+#: because a run that quietly does something other than what the confirm line
+#: promised is exactly what the arm gate exists to prevent.
+INTENTS = frozenset({INTENT_MAP_FILL, INTENT_FIND_STARDOCK})
+
+#: Cycle order for the Play `E` offer. ORDERED (a frozenset is not) and
+#: map-fill FIRST so the first `E` press raises exactly the prompt it raised
+#: before this WO -- an operator's muscle memory must not arm a different run
+#: than it armed yesterday.
+#:
+#: `cycle_explore_mode`'s "off → mapfill → stardock → formations" is the
+#: fuller trainer-panel cycle and stays UNWIRED: `formations` has no armable
+#: path (`plan_find_formations` has no callers either) and this WO's scope
+#: excludes it. Two vocabularies therefore exist -- these daemon intents and
+#: that panel's mode names -- and unifying them is deliberately left to the
+#: WO that wires the panel, rather than half-done here.
+ARMABLE_INTENTS: tuple[str, ...] = (INTENT_MAP_FILL, INTENT_FIND_STARDOCK)
+
+
+def next_armable_intent(current: object) -> str:
+    """The next intent in the Play offer cycle. Never raises; anything
+    unrecognised restarts at map-fill."""
+    try:
+        i = ARMABLE_INTENTS.index(current)  # type: ignore[arg-type]
+    except (ValueError, TypeError):
+        return ARMABLE_INTENTS[0]
+    return ARMABLE_INTENTS[(i + 1) % len(ARMABLE_INTENTS)]
+
+
+@dataclass(frozen=True)
+class IntentTick:
+    """One intent-driven decision: hop here, stop here, or we are done.
+
+    Three states, and the third is why this is not a ``(target, reason)``
+    tuple like :func:`map_fill_warp_target` returns. Find-StarDock can
+    ``arrive`` — a *success* — and a tuple whose only non-``None`` answer is
+    "next hop" would have to encode that as a halt reason, making a completed
+    goal indistinguishable from an exhausted frontier in the run report.
+    """
+
+    next_sector: Optional[int]
+    goal_reached: bool = False
+    reason: str = ""
+
+
+def warp_target_for_intent(
+    intent: str,
+    world_id: str,
+    *,
+    current_sector: int,
+    turn_budget: int,
+    epsilon: float = 0.1,
+    state_dir=None,
+    rng: Optional[random.Random] = None,
+) -> IntentTick:
+    """One tick for *intent* — the single seam the explore runner drives.
+
+    ``map_fill`` delegates to :func:`map_fill_warp_target` unchanged, so the
+    existing behaviour (and its tests) keep one owner. ``find_stardock``
+    routes to :func:`plan_find_stardock`, which was fully built and had **no
+    callers anywhere** before this WO.
+
+    An unrecognised intent returns a halt rather than defaulting to map-fill:
+    the daemon refuses unknown intents up front, so reaching here with one
+    means an internal disagreement, and quietly exploring in some other
+    direction is worse than stopping.
+    """
+    if intent == INTENT_MAP_FILL:
+        target, reason = map_fill_warp_target(
+            world_id,
+            current_sector=current_sector,
+            turn_budget=turn_budget,
+            epsilon=epsilon,
+            state_dir=state_dir,
+            rng=rng,
+        )
+        return IntentTick(next_sector=target, reason=reason)
+    if intent != INTENT_FIND_STARDOCK:
+        return IntentTick(next_sector=None, reason=f"explore_exhausted:unknown_intent:{intent}")
+
+    plan = plan_find_stardock(
+        world_id,
+        current_sector=current_sector,
+        turn_budget=turn_budget,
+        epsilon=epsilon,
+        state_dir=state_dir,
+        rng=rng,
+    )
+    if plan.mode == "arrived":
+        return IntentTick(next_sector=None, goal_reached=True)
+    if plan.next_sector is None:
+        reason = plan.mode or "no_hop"
+        if not reason.startswith("explore_exhausted"):
+            reason = f"explore_exhausted:{reason}"
+        return IntentTick(next_sector=None, reason=reason)
+    # `StarDockPlan.next_sector` is already the IMMEDIATE next hop ("next hop
+    # toward dock or frontier"), not a distant waypoint, so it is returned as
+    # given -- resolving it again through `_adjacent_hop_toward` would be
+    # wrong twice over (that helper takes a `FrontierEdge`, not a sector id).
+    # The runner re-checks adjacency against the known graph before sending,
+    # which is where a planner that ever returned a non-adjacent hop is
+    # caught -- one owner for that refusal, and it is the layer that sends.
+    return IntentTick(next_sector=int(plan.next_sector))
 
 
 def map_fill_warp_target(

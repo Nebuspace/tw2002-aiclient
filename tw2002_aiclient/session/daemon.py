@@ -24,14 +24,17 @@ server-side collaborators via `getattr(server, ..., None)`.
 """
 
 import argparse
+import errno
 import json
 import os
 import queue
+import socket
 import socketserver
 import sys
 import threading
 import time
 import traceback
+from pathlib import Path
 
 from . import env
 from .autoloop import AutoLoopRunner
@@ -51,6 +54,71 @@ ERRLOG_NAME = "twd.errors.log"
 # -- straight onto the operator's live game connection. There is no
 # authentication on the wire; reaching the socket IS the authorization.
 SOCK_MODE = 0o600
+
+
+class AfunixSocketPathTooLong(OSError):
+    """Named refuse when ``<run-dir>/twd.sock`` exceeds the OS AF_UNIX limit.
+
+    Subclasses ``OSError`` so existing ``except OSError`` harnesses still see
+    a bind failure, but ``type(exc).__name__`` and the operator-facing
+    ``twd:`` line identify the cause as run-dir / path length — not a raw
+    ``server_bind`` traceback (WO-RUN-DIR-AFUNIX-REFUSE).
+    """
+
+
+def _is_afunix_path_too_long(exc: BaseException) -> bool:
+    """True when the platform reports an AF_UNIX address overflow.
+
+    macOS Python raises ``OSError('AF_UNIX path too long')`` with no errno;
+    some kernels surface ``ENAMETOOLONG``. Match both — never a bare
+    ``OSError`` traceback for the operator.
+    """
+    if not isinstance(exc, OSError):
+        return False
+    msg = str(exc).lower()
+    if "af_unix path too long" in msg:
+        return True
+    return getattr(exc, "errno", None) == errno.ENAMETOOLONG
+
+
+def _afunix_path_too_long_message(sock_path) -> str:
+    path_s = str(sock_path)
+    nbytes = len(os.fsencode(path_s))
+    return (
+        f"run-dir AF_UNIX socket path too long ({nbytes} bytes): {path_s}. "
+        f"OS limit is ~104 bytes on macOS (incl. twd.sock). "
+        f"Shorten {env.RUN_DIR_VAR} / the run directory."
+    )
+
+
+def _raise_afunix_path_too_long(sock_path, *, cause: BaseException | None = None):
+    msg = _afunix_path_too_long_message(sock_path)
+    if cause is not None:
+        raise AfunixSocketPathTooLong(msg) from cause
+    raise AfunixSocketPathTooLong(msg)
+
+
+def _preflight_afunix_socket(sock_path):
+    """Probe-bind ``sock_path`` before pidfile / telnet, then unlink the node.
+
+    Leaves no listener and no stale socket file. Raises
+    ``AfunixSocketPathTooLong`` on the known over-long case so ``main`` can
+    print a one-line refuse without connecting first.
+    """
+    path_s = str(sock_path)
+    s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    try:
+        s.bind(path_s)
+    except OSError as exc:
+        if _is_afunix_path_too_long(exc):
+            _raise_afunix_path_too_long(path_s, cause=exc)
+        raise
+    finally:
+        s.close()
+        try:
+            Path(path_s).unlink(missing_ok=True)
+        except OSError:
+            pass
 
 
 def _open_error_log(run_dir):
@@ -182,8 +250,18 @@ class ThreadingUnixServer(socketserver.ThreadingMixIn, socketserver.UnixStreamSe
         secure its control socket must not serve on it -- an access-control
         assertion that silently no-ops is worse than none, because it reads
         like protection.
+
+        Over-long AF_UNIX paths (WO-RUN-DIR-AFUNIX-REFUSE): re-raise as
+        ``AfunixSocketPathTooLong`` so ``main`` (and any harness that
+        constructs this server) gets a named refuse naming the run-dir path
+        length, not an unhandled ``OSError`` traceback at ``server_bind``.
         """
-        super().server_bind()
+        try:
+            super().server_bind()
+        except OSError as exc:
+            if _is_afunix_path_too_long(exc):
+                _raise_afunix_path_too_long(self.server_address, cause=exc)
+            raise
         os.chmod(self.server_address, SOCK_MODE)
 
 
@@ -495,6 +573,15 @@ def main(argv=None):
     sock_path = env.socket_path(run_dir)
     pidfile = env.pid_path(run_dir)
 
+    # WO-RUN-DIR-AFUNIX-REFUSE: refuse before pidfile / telnet when the
+    # socket path cannot bind (macOS ~104-byte AF_UNIX ceiling). Named
+    # one-liner — never an unhandled traceback at server_bind.
+    try:
+        _preflight_afunix_socket(sock_path)
+    except AfunixSocketPathTooLong as e:
+        print(f"twd: {e}", file=sys.stderr)
+        sys.exit(1)
+
     # Claim the pidfile FIRST, atomically -- see _claim_pidfile()'s own
     # docstring. This is the actual single-connection guard; everything
     # after this line assumes we -- and only we -- hold it.
@@ -558,7 +645,18 @@ def main(argv=None):
     # above already do. Owner-only; see `_open_error_log`.
     error_log = _open_error_log(run_dir)
 
-    server = ThreadingUnixServer(str(sock_path), CommandHandler)
+    try:
+        server = ThreadingUnixServer(str(sock_path), CommandHandler)
+    except AfunixSocketPathTooLong as e:
+        # Backstop if preflight was skipped or the path grew somehow —
+        # still a named refuse, and release the pidfile we claimed.
+        print(f"twd: {e}", file=sys.stderr)
+        try:
+            pidfile.unlink()
+        except OSError:
+            pass
+        error_log.close()
+        sys.exit(1)
     server.session = session
     server.guardian = guardian
     server.watch_hub = watch_hub

@@ -145,7 +145,7 @@ are deterministic (no LLM) and each embodies the fail-closed / STOP-not-guess di
   where the offer prompt should be, an unconfirmed acceptance — it accepts the shown default / backs
   out conservatively and reports `resolved=False`, never a guessed price). Full behavior lives in
   [Auto-Haggle](/engine/auto-haggle.md) and the guard contract in
-  [Action-Safety Guards](/engine/action-safety-guards.md).
+  [Action-Safety Guards](/doctrine/action-safety-guards.md).
 - **Fighter-toll** — matches a fighter-toll / `Option?` prompt and resolves it against a reserve
   policy. It **never** presses `P` (pay the toll) blind and never sends an unparsed option; an
   ambiguous or unaffordable toll resolves to a **safe retreat**, and when the reserve math cannot be
@@ -161,7 +161,7 @@ are deterministic (no LLM) and each embodies the fail-closed / STOP-not-guess di
 | guard evaluation (typed predicates, fail-closed on unknown, STOP-vs-fire) | the STOP → keyboard handoff mechanics & reason-code catalog → [control-and-escalation](/architecture/control-and-escalation.md) |
 | that `priority` is an integer total order picking one winner | the concrete priority numbers & strategic behavior ordering → [priority-engine](/engine/priority-engine.md) |
 | that `screen_match` is the recognition anchor | how a screen becomes a class / signature → [screen-understanding](/engine/screen-understanding.md) |
-| that guards read parsed-state / world-model facts + staleness | the guard-authoring safety rails (arm-confirm, novelty-halt) → [action-safety-guards](/engine/action-safety-guards.md) |
+| that guards read parsed-state / world-model facts + staleness | the guard-authoring safety rails (arm-confirm, novelty-halt) → [action-safety-guards](/doctrine/action-safety-guards.md) |
 
 # Schema
 

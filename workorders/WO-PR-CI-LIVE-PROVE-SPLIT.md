@@ -66,6 +66,8 @@ In the PR-coordinator rhythm, `live-prove` is **not** “one happy path on the s
 
 **When `n/a` is still honest:** docs / protocol / CI-infra / **product PRs that cannot affect live login/classify/ensure** (e.g. TUI dead-terminal CPU guard with offline exit+CPU proof). Summary must say why. **Do not** `n/a` a login/ensure/classify PR because “suite was green.”
 
+**`n/a` vs `NOT-ATTEMPTED` (Max 2026-07-27 — #116):** `n/a` means live is *inapplicable*. `NOT-ATTEMPTED` means live *could* run and was skipped. **Never Accept or post hub `live-prove` as `n/a` when the truth is NOT-ATTEMPTED.** Unverified seat claims of “no TWGS / unreachable” without a probe (inventory · TCP sample · launchers) are **REVISE** — hub pushes back on the outbox; do **not** wait for Max to challenge. Safe halves (transport refusals / attach without arm) are hub GO; turn-spending arm still needs sacrificial Max GO. Cursor always-on: Nebuspace `.cursor/rules/live-prove-pushback.mdc`.
+
 **Unmeetable ≠ lower the principle:** if ensure blockers leave fewer than 3 exercisable hosts, live-prove stays **failure/pending** with that stated — or Max temporarily narrows the floor. Do not invent RETURNING on hosts that never registered.
 
 ### Mechanism (hub has access; Max does not need to click)
@@ -189,7 +191,7 @@ main (clean tip)
 1. For every implementer HANDOFF: **create branch → commit WO md → push → open/ensure PR → then HANDOFF** (order is load-bearing).
 2. **Serial dispatch (ruling K):** do **not** HANDOFF a new WO to a seat while that seat still has an open return PR whose required checks (`suite`, and `live-prove` when applicable) have not passed. Prefer **one in-flight PR per seat**; if both seats share conflicting paths, one global in-flight PR until merge. Idle standing-by under HOLD/pace-down rules is correct — better than full-suite laptop grind.
 3. Watch PR CI (offline) — red ⇒ REVISE, not merge.
-4. For WOs with live Accept: run Lane 3 on laptop; then **post `live-prove` Check Run** via `gh`/API (success only if live passed; docs-only `n/a` with reason). **Never** Approve/`n/a` dishonestly on ensure-bar WOs. **Never** merge without a green `live-prove` on the head SHA.
+4. For WOs with live Accept: **prefer Cursor as live executor** (Max 2026-07-28 — HARNESS-MODEL-WEIGHTING live-prove amendment). Hub HANDOFF `LIVE-PROVE` → `impl-aiclient-cursor` on the PR head SHA after offline `suite` green; Claude Code seats **defer** (`Live: DEFERRED → Cursor`). Hub still **posts** `live-prove` via `hub-live-prove-check.sh` from Cursor STATUS evidence (hub may run live only if Cursor HOLD). Docs-only `n/a` with reason OK without Cursor. **Never** Approve/`n/a` dishonestly on ensure-bar WOs. **Never** merge without a green `live-prove` on the head SHA.
 5. **Hub merges** the PR to `main` only when required checks are green — seats never merge their own return PRs.
 6. Branch protection: require `suite` + `live-prove`; no force-push to `main`. No auto-green `live-prove` workflow.
 7. After merge (or PR closed failed): next HANDOFF may fire for that seat (ruling K).

@@ -232,12 +232,15 @@ def test_conn_chip_does_not_displace_seat_label():
 def test_conn_chip_absent_does_not_change_line_output():
     """``conn_chip=None`` (default) produces byte-identical output to
     omitting the parameter — strict additive-only guarantee."""
-    from tw2002_aiclient.cockpit.control_seat import compose_control_strip_line
+    from tw2002_aiclient.cockpit.control_seat import compose_control_strip_segments
 
-    without = compose_control_strip_line(
+    def _join(**kwargs):
+        return "".join(t for t, _ in compose_control_strip_segments(**kwargs))
+
+    without = _join(
         spectating=False, attached=False, liveness_text="→ TX", width=80
     )
-    with_none = compose_control_strip_line(
+    with_none = _join(
         spectating=False, attached=False, liveness_text="→ TX", width=80,
         conn_chip=None,
     )

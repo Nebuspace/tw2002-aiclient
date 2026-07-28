@@ -13,7 +13,8 @@ from dataclasses import dataclass, replace
 from typing import Optional, Set
 
 from .. import world_model
-from ..explore import known_graph, map_fill_warp_target
+from .. import explore as _explore
+from ..explore import known_graph, map_fill_warp_target, warp_target_for_intent
 from ..loops.player import (
     HALT_ABORTED,
     HALT_CONFIRM_FAILED,
@@ -28,6 +29,7 @@ from .control_lock import ControlLock, ControlModeConflict
 from .state_parser import (
     OUTCOME_READ,
     read_current_sector,
+    read_port_from_sector_status,
     read_warps_from_sector_status,
 )
 from . import settle as _settle
@@ -53,7 +55,7 @@ SETTLE_TIMEOUT_S = 8.0
 SETTLE_DEBOUNCE_MS = 350
 STOP_JOIN_TIMEOUT_S = 5.0
 
-ARGS_EXPLORE_START = frozenset({"world_id", "min_sectors", "turn_budget"})
+ARGS_EXPLORE_START = frozenset({"world_id", "min_sectors", "turn_budget", "intent"})
 
 OUTCOME_COMPLETED = "completed"
 OUTCOME_CRASHED = "crashed"
@@ -74,6 +76,11 @@ class ExploreReport:
     world_id: str
     started_at: str
     min_sectors: int
+    # WO-EXPLORE-AUTOMATION-GATE E3: which goal this run is pursuing. On the
+    # report (not just the call) because the run's outcome is only
+    # interpretable against its intent -- "exhausted" means a filled frontier
+    # for map-fill and an unreachable landmark for find-StarDock.
+    intent: str = _explore.INTENT_MAP_FILL
     outcome: Optional[str] = None
     reason: Optional[str] = None
     distinct_sectors: int = 0
@@ -108,6 +115,7 @@ def explore_run_wire(snapshot: ExploreSnapshot) -> dict:
             "sends_issued": report.sends_issued,
             "turns_remaining": report.turns_remaining,
             "min_sectors": report.min_sectors,
+            "intent": report.intent,
             "stop_requested": report.stop_requested,
             "started_at": report.started_at,
             "finished_at": report.finished_at,
@@ -131,13 +139,40 @@ def _lock_held(control_lock) -> bool:
     return bool(probe())
 
 
-def _gate_screen(full_text: str, prompt_line: str) -> Optional[str]:
+#: Screen classes that identify StarDock and carry NO sector of their own.
+#: Enumerated rather than pattern-matched on a ``stardock_`` prefix: a prefix
+#: rule silently adopts any future class someone adds to the classifier, and
+#: adopting one wrongly writes a permanent landmark (`landmarks` unions and
+#: the product has no removal path). `tests/test_landmark_attribute.py` carries
+#: the tripwire that fails if the classifier grows a StarDock class this set
+#: has not been taught about -- so the closed side is checked mechanically
+#: rather than remembered.
+#:
+#: `stardock_equipment_listing` is deliberately absent: it is not a classifier
+#: class at all (see `classify._BLOCK_TITLE_SPECS`' preceding comment -- its
+#: inner blocks are closed but never exclusive).
+STARDOCK_SCREEN_CLASSES = frozenset(
+    {
+        "stardock_cargo_hold_quote",
+        "stardock_shipyard_listing",
+    }
+)
+
+
+def _gate_screen(full_text: str, prompt_line: str) -> tuple[Optional[str], str]:
+    """``(halt_reason_or_None, klass)``.
+
+    Returns the class alongside the verdict because the halt path needs it:
+    a screen that stops the run is also the screen most likely to be worth
+    recording something about, and re-classifying at the call site would let
+    the two answers drift.
+    """
     klass = classify_screen(full_text, prompt_line)
     if klass in NEVER_AUTO_ACTION_CLASSES:
-        return HALT_NEVER_AUTO_ACTION
+        return HALT_NEVER_AUTO_ACTION, klass
     if klass != MOVEMENT_SCREEN_CLASS:
-        return HALT_UNRECOGNIZED_SCREEN
-    return None
+        return HALT_UNRECOGNIZED_SCREEN, klass
+    return None, klass
 
 
 def _ingest_settled_sector(
@@ -147,12 +182,93 @@ def _ingest_settled_sector(
     full_text: str,
     state_dir,
 ) -> None:
-    """Persist sector + warps from a settled main_command screen."""
+    """Persist sector + warps + port posture from a settled main_command screen.
+
+    WO-EXPLORE-AUTOMATION-GATE E2: the ``Ports :`` flyby is read on every hop
+    because it is **turn-free** — the sector display already prints it, so
+    port buy/sell posture is learned without docking or sending. That is what
+    makes the world model good enough to feed chain detection off an ordinary
+    map-fill run rather than a second, turn-spending pass.
+
+    The tri-state from ``read_port_from_sector_status`` is forwarded, not
+    flattened: the ``port`` key is **omitted** when nothing was observed (so
+    `write_from_state` preserves a previously-learned port) and set to an
+    explicit ``None`` only when the screen positively said ``Ports : None``
+    (which clears a stale record). Collapsing those two would either wipe
+    real port data on a warps-only render or keep asserting a port that is
+    gone.
+    """
     parsed: dict = {"sector": int(sector_id)}
     warps = read_warps_from_sector_status(full_text)
     if warps is not None:
         parsed["warps"] = warps
+    port = read_port_from_sector_status(full_text)
+    if port.observed:
+        parsed["port"] = port.port
     world_model.write_from_state(world_id, parsed, state_dir=state_dir)
+
+
+def _attribute_landmark(session, world_id: str, klass: str, *, state_dir) -> Optional[int]:
+    """Record StarDock in the sector we are in -- iff we still know which one.
+
+    This is the halt path: the run stopped because the screen was not a
+    movement screen, and for the StarDock classes that screen is genuinely
+    informative. It states *what* is here but never *where* -- all four
+    captured StarDock fixtures carry zero sector-bearing lines, while an
+    ordinary docked-port screen carries one. So the sector has to come from
+    `Session.last_known_sector()`, the memory built for exactly this.
+
+    **`None` means refuse, never "attribute anyway".** The memory returns
+    `None` whenever anything has happened since the last positive sector
+    read, and that is not a technicality to route around: attributing to a
+    stale sector writes StarDock into the WRONG one, `landmarks` unions, and
+    no product path can remove it. A skipped write costs one re-read; a wrong
+    write is permanent. Returns the sector written, or `None` if nothing was.
+
+    **Landing on StarDock is itself the proof that we did not move.** Reaching
+    either class requires sending -- they are menus entered by a command -- and
+    every send expires the memory, so a memory-only rule would refuse in every
+    real sequence. The way out is not to relax the memory but to notice that a
+    warp lands on a **sector display**, while docking lands on a **StarDock
+    screen**. The landing screen is an OBSERVATION that discriminates the two,
+    where the outgoing command was only an inference. So when the memory is
+    silent we fall back to `sector_before_last_send()` -- the raw pre-send
+    carry, which is exactly the stale value the memory refuses to hand out, and
+    which is safe to read HERE and only here because `klass` has already proved
+    no movement occurred.
+
+    Having proved position, we re-`note_sector()` it. That is not a trick to
+    keep a stale value alive: landing on StarDock is positive evidence of where
+    we are, the same category of evidence a sector display gives. It also makes
+    multi-step menu navigation work without a special case -- each further send
+    carries the re-established sector forward, and the moment a screen we
+    cannot vouch for appears, the chain stops on its own.
+
+    The human keystroke path never carries (`send_raw` files no memo), so
+    attribution follows app-driven navigation only.
+    """
+    if klass not in STARDOCK_SCREEN_CLASSES:
+        return None
+    probe = getattr(session, "last_known_sector", None)
+    if not callable(probe):
+        return None
+    sector = probe()
+    if sector is None:
+        carry = getattr(session, "sector_before_last_send", None)
+        if callable(carry):
+            sector = carry()
+    if sector is None:
+        return None
+    world_model.add_landmark(
+        world_id,
+        sector,
+        world_model.STARDOCK_LANDMARK,
+        state_dir=state_dir,
+    )
+    note = getattr(session, "note_sector", None)
+    if callable(note):
+        note(sector)
+    return sector
 
 
 def _adjacent_warp_allowed(graph, current: int, target: int) -> bool:
@@ -192,25 +308,66 @@ class ExploreRunner:
             running = self._in_flight or _lock_held(self._control_lock)
             return ExploreSnapshot(running=running, report=self._report)
 
+    def _publish_progress(
+        self,
+        report: ExploreReport,
+        *,
+        distinct_sectors: int,
+        sends_issued: int,
+        turns_remaining: int,
+        stop_requested: bool,
+    ) -> None:
+        """WO-EXPLORE-STATUS-LIVE-COUNTERS: surface mid-run counters.
+
+        ``explore_status`` reads ``self._report``. Updating it only at
+        finish left operators with silent zeros while the viewport flew.
+        Publish after each observed sector / hop; never overwrite a
+        terminal report if the run has already finished.
+        """
+        live = replace(
+            report,
+            distinct_sectors=int(distinct_sectors),
+            sends_issued=int(sends_issued),
+            turns_remaining=int(turns_remaining),
+            stop_requested=bool(stop_requested),
+        )
+        with self._mutex:
+            if not self._in_flight:
+                return
+            current = self._report
+            if current is not None and current.outcome is not None:
+                return
+            self._report = live
+
     def start(
         self,
         world_id: str,
         *,
         min_sectors: int = DEFAULT_MIN_DISTINCT_SECTORS,
         turn_budget: int = DEFAULT_TURN_BUDGET,
+        intent: str = _explore.INTENT_MAP_FILL,
     ) -> ExploreSnapshot:
         if not isinstance(world_id, str) or not world_id.strip():
             raise ExploreRefused("missing_world_id")
-        if isinstance(min_sectors, bool) or not isinstance(min_sectors, int) or min_sectors < 1:
+        # `0` is legal and means "no sector cap" (E1 exhaustive: run until
+        # turn budget or frontier exhaustion). Negatives and bools stay
+        # refused -- a cap you cannot reach is not a cap.
+        if isinstance(min_sectors, bool) or not isinstance(min_sectors, int) or min_sectors < 0:
             raise ExploreRefused("invalid_min_sectors")
         if isinstance(turn_budget, bool) or not isinstance(turn_budget, int) or turn_budget < 0:
             raise ExploreRefused("invalid_turn_budget")
+        # Closed set, refused not defaulted: a run that quietly map-fills when
+        # the operator confirmed "find StarDock" would have done something
+        # other than what the arm gate promised.
+        if intent not in _explore.INTENTS:
+            raise ExploreRefused("invalid_intent")
 
         stop = threading.Event()
         report = ExploreReport(
             world_id=world_id.strip(),
             started_at=_utc_now(),
             min_sectors=int(min_sectors),
+            intent=intent,
             turns_remaining=int(turn_budget),
         )
         with self._mutex:
@@ -285,8 +442,14 @@ class ExploreRunner:
                 rows = self._session.render()
                 full_text = self._session.render_text(rows)
                 prompt_line = rows[-1].strip() if rows else ""
-                halt = _gate_screen(full_text, prompt_line)
+                halt, klass = _gate_screen(full_text, prompt_line)
                 if halt is not None:
+                    _attribute_landmark(
+                        self._session,
+                        report.world_id,
+                        klass,
+                        state_dir=self._state_dir,
+                    )
                     outcome = OUTCOME_HALTED
                     reason = halt
                     break
@@ -296,6 +459,15 @@ class ExploreRunner:
                     reason = HALT_UNRECOGNIZED_SCREEN
                     break
                 current = int(sector_read.sector)
+                # WO-LAST-KNOWN-SECTOR: the explore loop is the other place a
+                # sector is positively stated, and it reads far more of them
+                # than the `status` verb does. Noting here too means the
+                # memory is fresh the moment a run stops -- including when it
+                # stops BECAUSE the next screen was unrecognized, which is
+                # exactly the StarDock case this exists for.
+                _note = getattr(self._session, "note_sector", None)
+                if callable(_note):
+                    _note(current)
                 distinct.add(current)
                 _ingest_settled_sector(
                     report.world_id,
@@ -303,7 +475,30 @@ class ExploreRunner:
                     full_text=full_text,
                     state_dir=self._state_dir,
                 )
-                if len(distinct) >= report.min_sectors:
+                self._publish_progress(
+                    report,
+                    distinct_sectors=len(distinct),
+                    sends_issued=sends,
+                    turns_remaining=turns,
+                    stop_requested=stop.is_set(),
+                )
+                # WO-EXPLORE-AUTOMATION-GATE E1/E3: the distinct-sector cap
+                # is MAP-FILL's stopping rule and only map-fill's. A
+                # find-StarDock run that stopped here would report
+                # `completed` having never found a dock -- a run reporting
+                # success for a goal it did not reach. That intent completes
+                # on ARRIVAL (`IntentTick.goal_reached`) or halts honestly.
+                #
+                # E1 exhaustive mode: `min_sectors == 0` means "no sector
+                # cap" -- run until the turn budget or the frontier is spent,
+                # which is what E1 asks for and what chain detection needs to
+                # be fed. A cap of 0 is expressible only deliberately;
+                # negatives stay refused.
+                if (
+                    report.intent == _explore.INTENT_MAP_FILL
+                    and report.min_sectors > 0
+                    and len(distinct) >= report.min_sectors
+                ):
                     outcome = OUTCOME_COMPLETED
                     reason = None
                     break
@@ -311,13 +506,23 @@ class ExploreRunner:
                     outcome = OUTCOME_HALTED
                     reason = f"{REASON_EXPLORE_EXHAUSTED}:turn_budget"
                     break
-                target, exhaust = map_fill_warp_target(
+                tick = warp_target_for_intent(
+                    report.intent,
                     report.world_id,
                     current_sector=current,
                     turn_budget=turns,
                     state_dir=self._state_dir,
                 )
+                if tick.goal_reached:
+                    # find_stardock ARRIVED. A completed goal is not an
+                    # exhausted frontier, and the report must not conflate
+                    # them -- see `explore.IntentTick`.
+                    outcome = OUTCOME_COMPLETED
+                    reason = None
+                    break
+                target = tick.next_sector
                 if target is None:
+                    exhaust = tick.reason
                     outcome = OUTCOME_HALTED
                     reason = exhaust if exhaust.startswith("explore_exhausted") else (
                         f"{REASON_EXPLORE_EXHAUSTED}:{exhaust or 'no_hop'}"
@@ -338,6 +543,13 @@ class ExploreRunner:
                 )
                 sends += 1
                 turns -= 1
+                self._publish_progress(
+                    report,
+                    distinct_sectors=len(distinct),
+                    sends_issued=sends,
+                    turns_remaining=turns,
+                    stop_requested=stop.is_set(),
+                )
                 if not confirmed:
                     outcome = OUTCOME_HALTED
                     reason = HALT_CONFIRM_FAILED

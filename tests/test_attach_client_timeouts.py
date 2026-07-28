@@ -246,8 +246,9 @@ def test_timeout_armed_happy_path_still_attaches_and_sends_normally(fake_daemon)
     assert conn.send_key(b"d") is True
     elapsed = time.monotonic() - start
 
-    # A local unix-socket round trip is sub-millisecond; this is a loose
-    # sanity bound, not a precision timing assertion.
-    assert elapsed < 2.0
     assert fake_daemon.session.raw_sent == [b"d"]
+    # A local unix-socket round trip is sub-millisecond; this is a loose
+    # sanity bound, not a precision timing assertion — LAST so it cannot
+    # mask the behavioural assert above (WO-TEST-TIMING-ASSERT-ORDER).
+    assert elapsed < 2.0
     conn.close()

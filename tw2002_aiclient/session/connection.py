@@ -75,6 +75,22 @@ _FAILED_SUFFIX = "-FAILED"
 _UNCONFIRMED_DELIVERY = "attempted, delivery unconfirmed"
 
 
+class SendTextNotAString(TypeError):
+    """``send_text`` was handed something that is not a ``str``.
+
+    A ``TypeError`` subclass so anything already catching ``TypeError``
+    keeps catching it, but with a name of its own because the daemon's
+    wire rendering is ``internal_error:{type(e).__name__}`` and nothing
+    else -- the class name is therefore the entire diagnostic budget, and
+    ``AttributeError`` spends it saying "something was None somewhere".
+
+    Never carries the offending VALUE. This is the send path that also
+    carries passwords (`secret=True`), and a repr of the argument is
+    precisely what `canon/doctrine/secrets-and-credentials.md` forbids
+    reaching a log or a transcript.
+    """
+
+
 def tx_failure_phrase(exc) -> str:
     """The one wording for "this send did not complete", shared by every
     surface that has to say it.
@@ -308,6 +324,33 @@ class TelnetConnection:
         self._log_tx(TX_IAC_CHANNEL, data, False, None)
 
     def send_text(self, text: str, enter: bool = True, secret: bool = False):
+        # A non-`str` is refused HERE, at the boundary, with a named type.
+        #
+        # Before this guard, `None` reached `.encode()` and died as a bare
+        # `AttributeError: 'NoneType' object has no attribute 'encode'` from
+        # inside the encoder -- four frames below the caller that actually
+        # had nothing to send, and rendered to the wire as the useless
+        # `internal_error:AttributeError`. Found live: a profile with
+        # `allow_register = true` and no handle yet drove the blank-reject
+        # retry (`login.py`) into sending `profile.handle`, which was `None`.
+        #
+        # The daemon renders `internal_error:{type(e).__name__}` and NOTHING
+        # else (`daemon.py`), so a precise class name is the one diagnostic
+        # channel that is safe by construction -- it carries no payload, no
+        # path, and no operator bytes. `SendTextNotAString` says what
+        # happened; `AttributeError` says only that something was None
+        # somewhere.
+        #
+        # The message names the offending TYPE, never the value: this is the
+        # secret-bearing send path, and a repr of the argument is exactly
+        # what `canon/doctrine/secrets-and-credentials.md` forbids.
+        #
+        # This is the same "fail loud at the send choke" rule the encode
+        # comment below states, applied one step earlier.
+        if not isinstance(text, str):
+            raise SendTextNotAString(
+                f"send_text requires str, got {type(text).__name__}"
+            )
         # TX: utf-8 strict -- never silent-replace (DECISIONS §B). Surrogates /
         # bad code points must fail loud at the send choke rather than land
         # as U+FFFD on the wire looking like a successful operator action.

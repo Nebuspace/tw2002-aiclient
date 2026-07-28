@@ -714,6 +714,113 @@ def read_warps_from_sector_status(rendered_text) -> Optional[list[int]]:
 
 
 # ---------------------------------------------------------------------------
+# Port flyby -- the `Ports :` line of a sector-status block (WO-EXPLORE-
+# AUTOMATION-GATE E2)
+# ---------------------------------------------------------------------------
+
+_SECTOR_STATUS_LINE_RE = re.compile(r"^[ \t]*Sector[ \t]*:[ \t]*(\d+)", re.I | re.M)
+_PORTS_STATUS_LINE_RE = re.compile(r"^[ \t]*Ports?[ \t]*:[ \t]*(.*)$", re.I | re.M)
+# `Class 2 (BSB)` -- the parenthesised buy/sell TRIPLE is the posture. Canon
+# stores the letters (`"class": "BSB"`), never the digit
+# (`canon/engine/world-model.md` §"Examples", `canon/engine/screen-
+# understanding.md` §"Examples").
+_PORT_CLASS_RE = re.compile(r"\bClass[ \t]+\d+[ \t]*\(([BS]{3})\)", re.I)
+# What TW prints for a sector with no port.
+_PORTS_NONE_RE = re.compile(r"^(none|<none>|-|—)$", re.I)
+
+
+@dataclass(frozen=True)
+class PortRead:
+    """Tri-state outcome of reading a sector-status ``Ports :`` flyby.
+
+    Three states, because two of them are NOT the same and collapsing them
+    corrupts the world model in opposite directions:
+
+    * ``observed=False`` — no genuine sector-status block on screen. The
+      caller must **omit** the ``port`` key so a previously-learned port is
+      preserved (`world_model.write_from_state`: absent fields are preserved).
+    * ``observed=True, port=None`` — the block said ``Ports : None``. That is
+      a positive statement that this sector has no port, and canon's write
+      hook spends an explicit ``None`` to CLEAR a stale record.
+    * ``observed=True, port={...}`` — a real port. ``class`` is present only
+      when a buy/sell triple was actually read.
+
+    A two-state return (``dict | None``) cannot express this: it would make
+    "nothing on screen" indistinguishable from "definitely no port", and the
+    write hook would either clear records it never observed or never clear
+    ones it did.
+    """
+
+    observed: bool
+    port: Optional[dict] = None
+
+
+def _sector_status_block(rendered_text: str) -> Optional[str]:
+    """The LAST genuine sector-status block, or ``None``.
+
+    Canon's provenance gate (`canon/engine/screen-understanding.md`
+    §"Block-scoped, gated reads for anything persisted"): a ``Sector : N``
+    line followed, **before the next blank line**, by a sibling ``Ports :`` /
+    ``Warps to Sector(s) :`` marker. It exists "so that narrative text merely
+    *reproducing* a status line's shape does not get ingested as real sector
+    data" — a game whose flavour text quotes a sector readout would otherwise
+    write the world model.
+
+    Last-match over the grid, the same discipline
+    ``read_warps_from_sector_status`` and ``parse_state`` already use: on a
+    scrolled screen the newest block is the true one.
+    """
+    best: Optional[str] = None
+    for block in re.split(r"\n[ \t]*\n", rendered_text):
+        if not _SECTOR_STATUS_LINE_RE.search(block):
+            continue
+        # The sibling-marker requirement IS the gate.
+        if not (
+            _PORTS_STATUS_LINE_RE.search(block)
+            or _WARPS_STATUS_LINE_RE.search(block)
+        ):
+            continue
+        best = block
+    return best
+
+
+def read_port_from_sector_status(rendered_text) -> PortRead:
+    """Read the ``Ports :`` flyby from a settled sector-status screen.
+
+    Turn-free: this is the line a sector display already prints, so a caller
+    learns a port's buy/sell posture **without docking, sending, or spending
+    a turn** — which is what makes it safe for the explore loop to ingest on
+    every hop.
+
+    ``class`` is emitted ONLY for a genuine ``([BS]{3})`` triple. A special
+    port (``Class 0 (Special)``) reads as *present but classless* rather than
+    inventing ``"Special"`` as a commodity posture: canon's class vocabulary
+    is buy/sell letters, and `world_model.write_from_state` omits an absent
+    ``class`` so whatever was previously learned (e.g. from a CIM report)
+    survives. Never invent a posture the screen did not state.
+
+    Never raises; a non-``str`` reads as unobserved.
+    """
+    if not isinstance(rendered_text, str):
+        return PortRead(observed=False)
+    block = _sector_status_block(rendered_text)
+    if block is None:
+        return PortRead(observed=False)
+    matches = list(_PORTS_STATUS_LINE_RE.finditer(block))
+    if not matches:
+        # A genuine block that simply carries no `Ports :` line (warps-only
+        # render) states nothing about a port -- unobserved, not "no port".
+        return PortRead(observed=False)
+    tail = matches[-1].group(1).strip()
+    if not tail or _PORTS_NONE_RE.match(tail):
+        return PortRead(observed=True, port=None)
+    klass = _PORT_CLASS_RE.search(tail)
+    if klass is None:
+        return PortRead(observed=True, port={})
+    return PortRead(observed=True, port={"class": klass.group(1).upper()})
+
+
+# ---------------------------------------------------------------------------
 # Serialization -- the one place this verdict becomes wire bytes
 # ---------------------------------------------------------------------------
 

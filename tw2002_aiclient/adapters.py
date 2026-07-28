@@ -171,6 +171,7 @@ def explore_start(
     *,
     min_sectors: int | None = None,
     turn_budget: int | None = None,
+    intent: str | None = None,
     run_dir: Path | None = None,
 ) -> ExploreResult:
     """Start the sector explorer for *world_id*.
@@ -190,6 +191,11 @@ def explore_start(
         payload["min_sectors"] = min_sectors
     if turn_budget is not None:
         payload["turn_budget"] = turn_budget
+    if intent is not None:
+        # Omitted when None so the daemon keeps its pre-WO default (map-fill)
+        # -- same "None -> omit" discipline as the two args above, and it is
+        # what keeps every existing caller byte-identical on the wire.
+        payload["intent"] = intent
     try:
         resp = _cli.send_request("explore_start", payload, run_dir=resolved_run_dir)
     except Exception as e:  # noqa: BLE001 — belt-and-suspenders; send_request never raises
@@ -262,6 +268,63 @@ class AutoLoopResult:
     reason: str | None = None   # machine-readable when ok=False
     detail: str | None = None
     raw: dict | None = None     # wire dict; carries `stopping` + the run report
+
+
+def autoloop_start(
+    name: str,
+    *,
+    floor: int | None = None,
+    run_dir: Path | None = None,
+) -> AutoLoopResult:
+    """Arm the background player for **one pass** of the taught macro *name*.
+
+    The transport for the money path. Sends ``autoloop_start``; never raises;
+    always returns a typed :class:`AutoLoopResult`.
+
+    **One pass, not a repetition count.** The daemon plays a single pass and
+    *refuses* ``cycles`` outright (``unsupported_arg:cycles``) because two of
+    the four rails that make repetition safe are not built yet — see
+    ``session/protocol.py::_dispatch_autoloop_start``. So this adapter has no
+    ``cycles`` parameter to pass one through: a keyword the daemon will refuse
+    is a keyword that invites a caller to compose a confirm prompt promising
+    repetition that cannot happen. ``force`` is absent for the same reason and
+    a stronger one — it waives a missing start-anchor, and canon allows only an
+    explicit *human* waiver.
+
+    **A blank name fails closed here, without reaching the wire.** The daemon
+    answers ``missing_name`` for the same input, so this is not a second
+    opinion — it is a guarantee that the refusal is reachable when there is no
+    daemon at all, which is exactly the state a caller is in when it has no
+    loop to name. WO-PLAY-AUTOLOOP-START's constraint is "fail closed with a
+    typed error when missing — do not guess", and a guess here would arm
+    *some* macro rather than none.
+
+    **``floor`` is deliberately NOT re-validated here.** The daemon rejects a
+    bool or a float with a named ``invalid_floor`` and documents why the check
+    belongs there — "JSON is where the wrong type actually arrives". Copying
+    that rule into the adapter would create a second place for it to drift,
+    and the failure mode of drift is a floor the operator believes is armed.
+    One owner, and it is the layer that can actually enforce it.
+
+    Caller contract: this is a **live-money call**. Canon
+    (``canon/surfaces/mode-line-and-teach-controls.md`` §"Confirm-gate — never
+    one keystroke to live money") requires an explicit confirm gate showing
+    what will run *before* this function is reached. Calling it straight off a
+    keystroke is the −75/−78-turn scar.
+    """
+    if not isinstance(name, str) or not name.strip():
+        return AutoLoopResult(
+            ok=False,
+            reason="missing_name",
+            detail="no taught loop named; refusing to guess which macro to arm",
+        )
+    payload: dict = {"name": name}
+    if floor is not None:
+        # Omitted when None so the daemon applies its own policy, mirroring
+        # `explore_start`'s "None -> omit" discipline. Sent unvalidated: see
+        # the docstring on who owns `invalid_floor`.
+        payload["floor"] = floor
+    return _autoloop_verb("autoloop_start", run_dir, payload=payload)
 
 
 def autoloop_stop(*, run_dir: Path | None = None) -> AutoLoopResult:
@@ -338,13 +401,24 @@ def autoloop_relaunch(*, run_dir: Path | None = None) -> AutoLoopResult:
     return _autoloop_verb("autoloop_relaunch", run_dir)
 
 
-def _autoloop_verb(verb: str, run_dir: "Path | None") -> AutoLoopResult:
+def _autoloop_verb(
+    verb: str,
+    run_dir: "Path | None",
+    *,
+    payload: dict | None = None,
+) -> AutoLoopResult:
     """Shared transport for the autoloop verbs — one place that decides how
     a daemon refusal becomes a typed result, so `pause` and `relaunch`
-    cannot drift apart in how honestly they report failure."""
+    cannot drift apart in how honestly they report failure.
+
+    ``payload`` exists so ``autoloop_start`` — the one verb of the family that
+    carries args — routes through this same decision instead of forking a
+    second transport. That fork is precisely how a start could end up
+    reporting failure less honestly than the stop that has to clean up after
+    it. Verbs with no args pass ``None`` and send ``{}`` exactly as before."""
     resolved_run_dir = run_dir or _env.resolve_run_dir()
     try:
-        resp = _cli.send_request(verb, {}, run_dir=resolved_run_dir)
+        resp = _cli.send_request(verb, payload or {}, run_dir=resolved_run_dir)
     except Exception as e:  # noqa: BLE001
         return AutoLoopResult(ok=False, reason="unknown", detail=f"{type(e).__name__}: {e}")
     if resp.get("ok"):
@@ -362,6 +436,7 @@ def explore_start_for_profile(
     *,
     min_sectors: int | None = None,
     turn_budget: int | None = None,
+    intent: str | None = None,
     run_dir: Path | None = None,
 ) -> ExploreResult:
     """Convenience wrapper: derive *world_id* from *profile*, then call
@@ -378,5 +453,6 @@ def explore_start_for_profile(
         world_id,
         min_sectors=min_sectors,
         turn_budget=turn_budget,
+        intent=intent,
         run_dir=run_dir,
     )

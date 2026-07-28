@@ -34,6 +34,14 @@ _SHIPPED_VERBS = frozenset(
         # WO-EXPLORE-CLI-INVOKE -- `tw explore`, nested start|stop|status.
         # Behaviour: tests/test_cli_explore_wiring.py.
         "explore",
+        # WO-CHAIN-DETECT-WIRE (re-scoped 2026-07-28) -- `tw pairs`, the
+        # daemon-free class-derived DISCOVERED-pair-loop listing. Behaviour:
+        # tests/test_cli_pairs.py.
+        "pairs",
+        # WO-CHAIN-NPORT-WIRE -- `tw chains`, the daemon-free DISCOVERED
+        # N-port profit-cycle listing (the general case `pairs` is the
+        # 2-port special case of). Behaviour: tests/test_cli_chains.py.
+        "chains",
     }
 )
 
