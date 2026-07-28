@@ -1,6 +1,6 @@
 # WO-ADAPTER-SECTOR-ID-INTEGRAL — Validate sector_id instead of truncating
 
-**Status:** OPEN · EXECUTE · MED · Cursor-class  
+**Status:** IN PROGRESS · EXECUTE · MED · Cursor-class · impl-aiclient-cursor  
 **Posted:** 2026-07-28T00:15:00Z · banked from WO-CHAIN-DETECT-PORT STATUS  
 **Seeded for execute:** 2026-07-28T01:44Z · hub  
 **Seat:** impl-aiclient-cursor  

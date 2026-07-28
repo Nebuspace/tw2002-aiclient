@@ -181,10 +181,11 @@ def _fresh_ports(
     malformed on-disk record (a `port` that isn't a dict, a
     `commodities` that isn't a list, a non-numeric `sector_id`) can
     still reach here -- every boundary below is isinstance/try-guarded
-    and skip-and-continue. This module's own docstring promises
-    "malformed shapes fail-closed, never crash"; a per-tick caller
-    must never see an uncaught exception kill its tick over one bad
-    record."""
+    and skip-and-continue for those shapes. **Non-integral** numeric
+    `sector_id` values (e.g. ``10.9``) are different: ``int()`` would
+    truncate and clobber sibling keys, so those raise ``ValueError``
+    (WO-ADAPTER-SECTOR-ID-INTEGRAL) rather than silently map to ``10``.
+    Other malformed shapes still fail-closed without crashing the tick."""
     recs = world_model.query(world_id, lambda s: bool(s.get("port")), state_dir=state_dir)
     ports: dict[int, Mapping] = {}
     for rec in recs:
@@ -196,12 +197,37 @@ def _fresh_ports(
             continue
         if not _is_fresh(port.get("last_seen_ts"), max_age_s=config.max_age_s, now=now):
             continue
-        try:
-            sector_id = int(rec["sector_id"])
-        except (KeyError, TypeError, ValueError):
+        sector_id = _require_integral_sector_id(rec.get("sector_id"))
+        if sector_id is None:
             continue
         ports[sector_id] = port
     return ports
+
+
+def _require_integral_sector_id(raw) -> Optional[int]:
+    """Parse ``sector_id`` without truncating non-integral values.
+
+    Returns ``None`` for absent/non-numeric values (caller skips).
+    Raises ``ValueError`` when the value is numeric but not integral
+    (e.g. ``10.9``), because ``int(10.9) == 10`` would silently clobber.
+    Integral floats like ``10.0`` are accepted as ``10``.
+    """
+    if raw is None:
+        return None
+    if isinstance(raw, bool):
+        # ``bool`` is an ``int`` subclass; never treat True/False as sectors.
+        return None
+    if isinstance(raw, int):
+        return raw
+    try:
+        as_float = float(raw)
+    except (TypeError, ValueError):
+        return None
+    if not as_float.is_integer():
+        raise ValueError(
+            f"non-integral sector_id {raw!r} (refusing truncate-to-{int(as_float)})"
+        )
+    return int(as_float)
 
 
 def _commodity_maps(ports: Mapping[int, Mapping]) -> dict[int, dict]:
