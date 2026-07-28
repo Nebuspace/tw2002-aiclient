@@ -114,7 +114,12 @@ def _is_fresh(ts_str, *, max_age_s: float, now: datetime.datetime) -> bool:
     ts = _parse_ts(ts_str)
     if ts is None:
         return False  # fail-closed: an absent/unparseable timestamp is never treated as fresh
-    return (now - ts).total_seconds() <= max_age_s
+    age_s = (now - ts).total_seconds()
+    # Fail-closed on future stamps (clock skew / corrupt write): a negative
+    # age would otherwise satisfy `<= max_age_s` and bypass the staleness gate.
+    if age_s < 0:
+        return False
+    return age_s <= max_age_s
 
 
 def _commodity_price(

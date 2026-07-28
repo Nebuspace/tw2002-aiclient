@@ -237,6 +237,34 @@ def test_fresh_port_reading_within_max_age_is_kept(tmp_path):
     assert len(hops) == 1
 
 
+def test_future_last_seen_ts_is_rejected(tmp_path):
+    """WO-ADAPTER-FRESHNESS-FUTURE-TS: a future stamp must fail-closed.
+    Negative `(now - ts)` would otherwise pass `<= max_age_s`."""
+    future_clock = lambda: datetime.datetime(2099, 1, 1, 0, 0, 0, tzinfo=datetime.timezone.utc)
+    _upsert(
+        tmp_path,
+        54,
+        warps=(55,),
+        commodities=[_row("Equipment", "selling", 100)],
+        port_ts_clock=future_clock,
+    )
+    _upsert(
+        tmp_path,
+        55,
+        warps=(54,),
+        commodities=[_row("Equipment", "buying", 0)],
+        port_ts_clock=future_clock,
+    )
+
+    cfg = trade_adapter.TradeAdapterConfig(max_age_s=60.0)
+    hops, note = trade_adapter.build_trade_hops(WORLD, state_dir=tmp_path, config=cfg, now=_CLOCK)
+
+    assert hops == ()
+    assert trade_adapter._is_fresh(
+        world_model._now_iso(future_clock), max_age_s=60.0, now=_CLOCK()
+    ) is False
+
+
 def test_absent_last_seen_ts_yields_no_hop(tmp_path):
     """An absent/unparseable timestamp is never treated as fresh
     (`_is_fresh`'s explicit fail-closed contract) -- a raw sector whose
