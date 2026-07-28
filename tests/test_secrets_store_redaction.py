@@ -438,6 +438,37 @@ def test_residual_the_cause_still_owns_the_document_but_nothing_renders_it(
 # ---------------------------------------------------------------------------
 
 
+# The window backstop's bound is DERIVED, not chosen, because a backstop sized
+# above the event it guards against cannot fire. Measured across all 16
+# parametrizations below, the longest real `str(UnicodeDecodeError)` is 78 chars.
+# The sentinel is 22, so any rendered window big enough to CARRY the secret puts
+# the rendering at >= 78 + 22. Budgeting exactly that means the length check
+# fires on precisely the case it exists for, and the slack it does keep is
+# earmarked for CPython message drift rather than being arbitrary.
+#
+# The previous bound was 200 and could not fire at all: the largest buffer under
+# test is 42 bytes, so even a FULL-buffer window renders near 120 -- comfortably
+# under 200. Sized wrong, it was a backstop only in name (#193).
+_WORST_REAL_RENDERING = 78
+
+
+def _window_budget() -> int:
+    return _WORST_REAL_RENDERING + len(SENTINEL)
+
+
+def _assert_no_window(rendered: str) -> None:
+    """The backstop, as ONE callable so its falsification exercises the real pin.
+
+    A test that re-implements this check proves only that the copy works — the
+    production assert could be deleted and the falsification would stay green.
+    """
+    budget = _window_budget()
+    assert len(rendered) < budget, (
+        f"str() grew a window: {len(rendered)} chars >= budget {budget} "
+        f"(worst real rendering {_WORST_REAL_RENDERING} + sentinel {len(SENTINEL)}): {rendered!r}"
+    )
+
+
 _DAMAGE = {
     "lone-0xff": b"\xff",
     "truncated-2byte": b"\xc3",
@@ -480,11 +511,83 @@ def test_str_of_a_decode_error_never_quotes_a_window_of_the_buffer(damage, arran
 
     rendered = str(exc)
     assert SENTINEL not in rendered
-    assert len(rendered) < 200, f"str() grew a window: {rendered!r}"
+    _assert_no_window(rendered)
     byte_values = re.findall(r"0x[0-9a-fA-F]{2}", rendered)
     assert len(byte_values) <= 1, f"str() rendered more than one byte: {rendered!r}"
     # Non-vacuity: the buffer really is on the object.
     assert SENTINEL in repr(exc)
+
+
+def test_the_window_backstop_can_actually_fire():
+    """Falsify the backstop, because a bound that cannot fire is decoration.
+
+    Before #193 this check read `< 200`. The largest buffer under test is 42
+    bytes, so a CPython that quoted the WHOLE buffer would render ~120 chars and
+    sail under 200 — the guard could not catch the very event it is named for.
+    That was invisible from the source: the assert looks like a guard, passes
+    every run, and its message claims growth detection.
+
+    Both directions run against the SAME helper the production test calls. If
+    `_assert_no_window` were gutted, this test goes green only by also going
+    silent on the real rendering below — which the control catches.
+    """
+    buf = SENTINEL.encode() + b'","x":"' + _DAMAGE["lone-0xff"]
+    with pytest.raises(UnicodeDecodeError) as excinfo:
+        buf.decode("utf-8")
+    real = str(excinfo.value)
+
+    # CONTROL first: the real rendering must pass, or "everything fails" would
+    # masquerade as a working guard.
+    _assert_no_window(real)
+
+    # A hypothetical CPython that appended the offending buffer as a window.
+    # Nothing here is forged set-arithmetic: this is a string of the shape the
+    # backstop exists to reject, handed to the production check.
+    windowed = real + ": " + buf.decode("utf-8", "replace")
+    assert len(windowed) >= _window_budget(), (
+        "the simulated window is not actually over budget — this test would "
+        f"pass vacuously ({len(windowed)} < {_window_budget()})"
+    )
+    with pytest.raises(AssertionError, match="grew a window"):
+        _assert_no_window(windowed)
+
+    # And the budget is anchored to a measured quantity, not a taste. If CPython's
+    # message grows past the recorded worst case, re-measure deliberately rather
+    # than discovering it as a mystery failure.
+    assert len(real) <= _WORST_REAL_RENDERING, (
+        f"real rendering is {len(real)} chars, above the recorded worst case "
+        f"{_WORST_REAL_RENDERING} — re-measure all 16 parametrizations and "
+        "update the constant with the new number"
+    )
+
+
+def test_the_production_pin_actually_routes_through_the_backstop(monkeypatch):
+    """Wiring pin. A correct helper is worth nothing if the test stops calling it.
+
+    Without this, deleting `_assert_no_window(rendered)` from the parametrized
+    test above leaves the whole file green: the falsification exercises the
+    helper directly, so it would go on proving that an uncalled function works.
+    That is the failure mode where a composer is tested and never wired.
+    """
+    import sys as _sys
+
+    module = _sys.modules[__name__]
+    seen: list[str] = []
+    original = _assert_no_window
+
+    def _spy(rendered: str) -> None:
+        seen.append(rendered)
+        return original(rendered)
+
+    monkeypatch.setattr(module, "_assert_no_window", _spy)
+    test_str_of_a_decode_error_never_quotes_a_window_of_the_buffer(
+        "lone-0xff", "sentinel-before-damage"
+    )
+    assert seen, (
+        "the parametrized str() test no longer routes through _assert_no_window "
+        "— the window backstop is unwired, and only its own unit falsification "
+        "would still be green"
+    )
 
 
 def test_str_of_a_json_decode_error_never_quotes_the_document(disposable, monkeypatch):
