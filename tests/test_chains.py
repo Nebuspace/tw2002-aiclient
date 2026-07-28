@@ -11,15 +11,23 @@ functions are dropped, not carried forward.
 
 import ast
 import inspect
+import random
+import sys
+import time
+from collections import defaultdict
+
+import pytest
 
 import tw2002_aiclient.chains as chains_module
 from tw2002_aiclient.chains import (
     CHAIN_LINKS_PREFER_SEARCH_BELOW,
+    DEFAULT_MAX_SEARCH_STEPS,
     MIN_CHAIN_LINKS_FOR_SHIP_UPGRADE,
     MIN_CHAIN_LINKS_TO_EXECUTE,
     ProfitChain,
     TradeHop,
     find_profit_chains,
+    find_profit_chains_with_note,
     is_executable_chain,
     longest_profit_chain,
 )
@@ -175,3 +183,265 @@ def test_min_chain_links_to_execute_has_exactly_one_pure_consumer():
     tree = ast.parse(inspect.getsource(chains_module))
     refs = [n for n in ast.walk(tree) if isinstance(n, ast.Name) and n.id == "MIN_CHAIN_LINKS_TO_EXECUTE"]
     assert len(refs) == 3
+
+
+# -- search budget (WO-CHAIN-SEARCH-BUDGET) --------------------------------
+#
+# `find_profit_chains`'s original recursive DFS had no depth/iteration
+# bound: an unbranched ring of ~999 sectors overflows Python's default
+# recursion limit, and a complete K9 graph takes 6.43s for one chain
+# (`trade_adapter.build_trade_hops`'s 500-edge cap does not protect the
+# finder -- 500 mutually-compatible edges over ~23 sectors is already a
+# complete K23). `_search_cycles` replaced the recursion with an
+# explicit-stack iterative DFS bounded by `max_search_steps`, structurally
+# closing off `RecursionError` rather than merely raising the ceiling.
+
+
+def _ring(n):
+    """Unbranched directed cycle: 0->1->2->...->(n-1)->0. No branching,
+    so DFS depth (not breadth) is the only way to blow this up -- exactly
+    the shape that overflowed the pre-budget recursive algorithm."""
+    return [TradeHop(i, (i + 1) % n, "X", 10.0, 1) for i in range(n)]
+
+
+def _complete(n):
+    """Complete directed graph K_n -- every ordered pair is an edge. This
+    is a breadth blowup (branching factor n-1 at every node), the shape
+    `trade_adapter`'s edge-count cap does not protect against."""
+    hops = []
+    for i in range(n):
+        for j in range(n):
+            if i != j:
+                hops.append(TradeHop(i, j, "X", 10.0, 1))
+    return hops
+
+
+def _legacy_find_profit_chains(hops, *, min_hops=2, max_hops=None):
+    """Vendored, unmodified copy of the PRE-WO-CHAIN-SEARCH-BUDGET
+    recursive `find_profit_chains` (git blob 2f8a505:tw2002_aiclient/
+    chains.py, the seed commit this WO built on) -- the reference oracle
+    for the differential-equality proof below. Do NOT "fix" or refactor
+    this copy: its entire job is to disagree with the new iterative
+    implementation if (and only if) the conversion introduced a
+    behavioral drift, and it is expected to genuinely crash on inputs
+    the new budget was built to survive (see the RecursionError tests
+    below, which exercise exactly that)."""
+    usable = [h for h in hops if h.margin > 0 and h.turns > 0]
+    adj = defaultdict(list)
+    for h in usable:
+        adj[h.frm].append(h)
+
+    found = {}
+
+    def record(path_nodes, path_hops):
+        sectors = chains_module._normalize_cycle(tuple(path_nodes + [path_nodes[0]]))
+        start = sectors[0]
+        rot = path_nodes.index(start)
+        hops_rot = tuple(path_hops[rot:] + path_hops[:rot])
+        overall = sum(h.margin for h in hops_rot)
+        turns = sum(h.turns for h in hops_rot)
+        chain = ProfitChain(
+            sectors=sectors,
+            hops=hops_rot,
+            overall_profit=overall,
+            turns=turns,
+            cr_per_turn=(overall / turns) if turns else 0.0,
+            cr_per_execution=overall,
+        )
+        key = sectors
+        prev = found.get(key)
+        if prev is None or chain.cr_per_turn > prev.cr_per_turn:
+            found[key] = chain
+
+    def dfs(start, node, path_nodes, path_hops):
+        if max_hops is not None and len(path_hops) >= max_hops:
+            return
+        for hop in adj.get(node, ()):
+            nxt = hop.to
+            if nxt == start and len(path_hops) + 1 >= min_hops:
+                record(path_nodes, path_hops + [hop])
+                continue
+            if nxt in path_nodes:
+                continue
+            if max_hops is not None and len(path_hops) + 1 > max_hops:
+                continue
+            dfs(start, nxt, path_nodes + [nxt], path_hops + [hop])
+
+    for start in list(adj.keys()):
+        dfs(start, start, [start], [])
+
+    return chains_module.rank_chains(list(found.values()))
+
+
+def _random_graph(rng, n_nodes):
+    """A small, seeded, pseudo-random directed graph -- deliberately
+    capped at <=7 nodes: the DENSEST possible graph in that range (K7,
+    see `test_k7_completes_without_truncation` below) still finishes
+    comfortably inside `DEFAULT_MAX_SEARCH_STEPS`, so every graph this
+    generates is guaranteed to fall under the budget regardless of the
+    edge pattern drawn."""
+    commodities = ["Equipment", "Organics", "Fuel Ore"]
+    hops = []
+    for i in range(n_nodes):
+        for j in range(n_nodes):
+            if i == j:
+                continue
+            if rng.random() < 0.35:
+                margin = rng.choice([0.0, rng.uniform(-15.0, 80.0)])
+                turns = rng.choice([0, 1, 1, 2, 3])
+                hops.append(TradeHop(i, j, rng.choice(commodities), margin, turns))
+            if rng.random() < 0.08:
+                # Occasional parallel edge on the same (i, j) pair --
+                # the finder does not dedupe multi-edges.
+                hops.append(
+                    TradeHop(i, j, rng.choice(commodities), rng.uniform(-15.0, 80.0), rng.choice([1, 2]))
+                )
+    return hops
+
+
+def test_k7_completes_without_truncation():
+    """Establishes the differential fuzz's safety margin: K7, the
+    densest possible 7-node graph, finishes well under the default
+    budget with no truncation note."""
+    t0 = time.perf_counter()
+    chains, note = find_profit_chains_with_note(_complete(7))
+    elapsed = time.perf_counter() - t0
+    assert note is None
+    assert elapsed < 1.0
+    assert len(chains) > 0
+
+
+def test_differential_iterative_matches_legacy_recursive_on_small_graphs():
+    """Accept #3's differential proof: 300 seeded pseudo-random small
+    graphs (<=7 nodes, so none can hit the budget -- see
+    `test_k7_completes_without_truncation`), each checked for EXACT
+    equality (same chains, same order, same metrics) between the new
+    iterative implementation and the vendored pre-change recursive
+    oracle. This is strictly stronger than re-running the 13 existing
+    hand-written cases: those sample 13 fixed shapes, while the
+    recursion-to-iteration conversion could in principle reorder
+    traversal and silently flip which of two equal-ranked chains wins a
+    tie -- something only a broad, varied differential sweep can catch."""
+    rng = random.Random(20260728)
+    for i in range(300):
+        n = rng.randint(3, 7)
+        hops = _random_graph(rng, n)
+        min_hops = rng.choice([2, 2, 2, 3])
+        max_hops = rng.choice([None, None, None, rng.randint(2, n)])
+
+        expected = _legacy_find_profit_chains(hops, min_hops=min_hops, max_hops=max_hops)
+        actual, note = find_profit_chains_with_note(hops, min_hops=min_hops, max_hops=max_hops)
+
+        assert note is None, (
+            f"case {i} unexpectedly truncated (n={n} min_hops={min_hops} "
+            f"max_hops={max_hops} note={note!r})"
+        )
+        assert actual == expected, (
+            f"case {i} diverged from the legacy oracle (n={n} min_hops={min_hops} "
+            f"max_hops={max_hops})\nhops={hops}\nexpected={expected}\nactual={actual}"
+        )
+        # The plain (no-note) entry point must agree with the honest one.
+        assert find_profit_chains(hops, min_hops=min_hops, max_hops=max_hops) == expected
+
+
+def test_ring_500_terminates_under_a_second_with_a_truncation_note():
+    hops = _ring(500)
+    t0 = time.perf_counter()
+    chains, note = find_profit_chains_with_note(hops)
+    elapsed = time.perf_counter() - t0
+    assert elapsed < 1.0, f"ring(500) took {elapsed:.3f}s"
+    assert note is not None
+
+
+def test_complete_k9_terminates_under_a_second_with_a_truncation_note():
+    hops = _complete(9)
+    t0 = time.perf_counter()
+    chains, note = find_profit_chains_with_note(hops)
+    elapsed = time.perf_counter() - t0
+    assert elapsed < 1.0, f"K9 took {elapsed:.3f}s"
+    assert note is not None
+
+
+def test_ring_5000_and_50000_return_normally_without_recursion_error():
+    for n in (5000, 50000):
+        t0 = time.perf_counter()
+        chain = longest_profit_chain(_ring(n))
+        elapsed = time.perf_counter() - t0
+        assert chain is not None, f"ring({n}) found no chain"
+        assert len(chain.hops) == n
+        assert elapsed < 5.0, f"ring({n}) took {elapsed:.3f}s"
+
+
+def test_ring_999_crashes_the_legacy_recursive_algorithm_but_not_the_new_one():
+    """The exact repro measured for WO-CHAIN-SEARCH-BUDGET: an unbranched
+    ring of 999 sectors overflows Python's DEFAULT recursion limit
+    (deliberately not modified here, to match the original repro
+    conditions) under the pre-change algorithm. The new iterative
+    `find_profit_chains` handles the identical input normally."""
+    hops = _ring(999)
+    with pytest.raises(RecursionError):
+        _legacy_find_profit_chains(hops)
+
+    chain = longest_profit_chain(hops)
+    assert chain is not None
+    assert len(chain.hops) == 999
+
+
+def test_iterative_search_never_touches_the_python_call_stack():
+    """Mutation-proof for 'RecursionError cannot escape under any
+    input': shrink Python's recursion limit to just above however deep
+    pytest's own ambient call stack already is, then hand both
+    implementations a ring deep enough to blow well past that. The
+    legacy oracle (real Python recursion) crashes immediately; the new
+    `find_profit_chains` -- an explicit stack, never a Python call --
+    is structurally unaffected regardless of how deep the graph is, not
+    merely because today's default limit (1000) exceeds today's input
+    sizes."""
+    ambient_depth = len(inspect.stack())
+    tight_limit = ambient_depth + 40
+    hops = _ring(tight_limit + 200)
+    old_limit = sys.getrecursionlimit()
+    try:
+        sys.setrecursionlimit(tight_limit)
+        with pytest.raises(RecursionError):
+            _legacy_find_profit_chains(hops)
+
+        chain = longest_profit_chain(hops)
+        assert chain is not None
+        assert len(chain.hops) == tight_limit + 200
+    finally:
+        sys.setrecursionlimit(old_limit)
+
+
+def test_max_search_steps_actually_bounds_the_search():
+    """Mutation-proof that the budget genuinely stops the search, not
+    just that pathological inputs happen to finish fast: ring(50) needs
+    on the order of 50 DFS frame-visits to close its one cycle, so a
+    budget of 5 must truncate before ever reaching the closing hop --
+    if the `steps > max_search_steps` guard in `_search_cycles` were
+    removed or miswired, this would instead run to completion and
+    return the full 50-hop chain."""
+    hops = _ring(50)
+    chains, note = find_profit_chains_with_note(hops, max_search_steps=5)
+    assert chains == []
+    assert note is not None
+    assert "exhausted at 5 DFS steps" in note
+
+
+def test_find_profit_chains_and_with_note_agree_on_a_truncated_search():
+    """Pins 'one internal search routine feeds both, they cannot drift':
+    on a search that DOES truncate, the note-less entry point's result
+    must be identical to the honest entry point's chain list."""
+    hops = _complete(9)
+    plain = find_profit_chains(hops)
+    with_note, note = find_profit_chains_with_note(hops)
+    assert note is not None
+    assert plain == with_note
+
+
+def test_default_max_search_steps_is_configurable_not_magic():
+    assert DEFAULT_MAX_SEARCH_STEPS == 100_000
+    # A caller-supplied budget overrides the default and is honored.
+    chains, note = find_profit_chains_with_note(_ring(50), max_search_steps=1_000_000)
+    assert note is None
+    assert len(chains) == 1

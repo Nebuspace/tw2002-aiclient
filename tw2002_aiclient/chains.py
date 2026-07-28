@@ -71,12 +71,84 @@ def _normalize_cycle(sectors: tuple[int, ...]) -> tuple[int, ...]:
     return tuple(rotated + [rotated[0]])
 
 
+DEFAULT_MAX_SEARCH_STEPS = 100_000
+"""Global cap on DFS frame-visits across the *whole* `find_profit_chains`
+search (summed over every start sector, not per-start). Protects both
+wall-clock time and the Python call stack on pathological graphs --
+`trade_adapter.DEFAULT_MAX_HOPS` bounds the ADAPTER's edge output, not
+the finder's search cost, and 500 mutually-compatible edges over ~23
+sectors is already a complete K23 (see WO-CHAIN-SEARCH-BUDGET: an
+unbranched ring of ~999 sectors overflowed Python's recursion limit
+before this budget existed; a complete K9 took 6.43s for one chain).
+This is a safety rail, not an EV-optimizer -- canon's hop-count-desc/
+cr-per-turn-desc ranking (`rank_chains`) is unaffected by truncation;
+whatever chains were found before the budget fired are ranked exactly
+as they always were."""
+
+
 def find_profit_chains(
     hops: Sequence[TradeHop],
     *,
     min_hops: int = 2,
     max_hops: Optional[int] = None,
+    max_search_steps: int = DEFAULT_MAX_SEARCH_STEPS,
 ) -> list[ProfitChain]:
+    """Every closed profit cycle discoverable in `hops`, ranked by
+    `rank_chains`. Iterative DFS (explicit stack -- see `_search_cycles`)
+    so `RecursionError` cannot escape regardless of graph size; search is
+    bounded by `max_search_steps` (see `DEFAULT_MAX_SEARCH_STEPS`).
+    Truncation is silent here by design -- this function's return type
+    stays `list[ProfitChain]` for existing callers. Callers that must
+    know whether the budget fired use `find_profit_chains_with_note`,
+    which shares this same search and cannot drift from this one."""
+    chains, _note = _search_cycles(
+        hops, min_hops=min_hops, max_hops=max_hops, max_search_steps=max_search_steps
+    )
+    return chains
+
+
+def find_profit_chains_with_note(
+    hops: Sequence[TradeHop],
+    *,
+    min_hops: int = 2,
+    max_hops: Optional[int] = None,
+    max_search_steps: int = DEFAULT_MAX_SEARCH_STEPS,
+) -> tuple[list[ProfitChain], Optional[str]]:
+    """The honest entry point for callers (WIRE) that must know when the
+    search budget truncated the result -- same `(result, note)` shape
+    `trade_adapter.build_trade_hops` already uses. `note` is `None`
+    unless `max_search_steps` was exhausted, in which case it names the
+    budget, how many chains were found before truncation, and how many
+    start sectors were fully searched -- a truncated result must never
+    look identical to a complete one."""
+    return _search_cycles(
+        hops, min_hops=min_hops, max_hops=max_hops, max_search_steps=max_search_steps
+    )
+
+
+def _search_cycles(
+    hops: Sequence[TradeHop],
+    *,
+    min_hops: int,
+    max_hops: Optional[int],
+    max_search_steps: int,
+) -> tuple[list[ProfitChain], Optional[str]]:
+    """The ONE search routine `find_profit_chains` and
+    `find_profit_chains_with_note` both route through, so their outputs
+    cannot drift apart. Iterative DFS with an explicit stack of resumable
+    hop-iterators -- never Python recursion, so `RecursionError` is
+    structurally unreachable at any graph size (a depth constant alone
+    would only postpone the crash) -- that reproduces the exact
+    traversal order of the pre-budget recursive algorithm: each stack
+    frame processes its node's outgoing hops in listed order, a hop that
+    closes the cycle back to `start` records immediately (matching the
+    original's `continue`, staying in the same frame), and a hop that
+    descends fully explores that subtree via later stack frames before
+    this frame resumes its own remaining hops (matching a `dfs()` call
+    returning before the loop continues). `max_search_steps` bounds
+    total frame-visits across every start sector combined -- it is a
+    node/frame counter, not a depth cap, because the K-graph blowup this
+    guards against is breadth (branching), not depth."""
     usable = [h for h in hops if h.margin > 0 and h.turns > 0]
     adj: dict[int, list[TradeHop]] = defaultdict(list)
     for h in usable:
@@ -87,8 +159,8 @@ def find_profit_chains(
     def record(path_nodes: list[int], path_hops: list[TradeHop]) -> None:
         sectors = _normalize_cycle(tuple(path_nodes + [path_nodes[0]]))
         # Rotate hops to match normalized sector start.
-        start = sectors[0]
-        rot = path_nodes.index(start)
+        start_sector = sectors[0]
+        rot = path_nodes.index(start_sector)
         hops_rot = tuple(path_hops[rot:] + path_hops[:rot])
         overall = sum(h.margin for h in hops_rot)
         turns = sum(h.turns for h in hops_rot)
@@ -105,24 +177,64 @@ def find_profit_chains(
         if prev is None or chain.cr_per_turn > prev.cr_per_turn:
             found[key] = chain
 
-    def dfs(start: int, node: int, path_nodes: list[int], path_hops: list[TradeHop]) -> None:
-        if max_hops is not None and len(path_hops) >= max_hops:
-            return
-        for hop in adj.get(node, ()):
-            nxt = hop.to
-            if nxt == start and len(path_hops) + 1 >= min_hops:
-                record(path_nodes, path_hops + [hop])
-                continue
-            if nxt in path_nodes:
-                continue
-            if max_hops is not None and len(path_hops) + 1 > max_hops:
-                continue
-            dfs(start, nxt, path_nodes + [nxt], path_hops + [hop])
+    def frame_hops(node: int, depth: int) -> Sequence[TradeHop]:
+        # Mirrors the original recursive `dfs`'s top-of-function guard
+        # (`if len(path_hops) >= max_hops: return`): a frame entered
+        # already AT the cap examines zero hops -- not even a closing
+        # one -- exactly like the original returning before its loop.
+        if max_hops is not None and depth >= max_hops:
+            return ()
+        return adj.get(node, ())
 
-    for start in list(adj.keys()):
-        dfs(start, start, [start], [])
+    starts = list(adj.keys())
+    steps = 0
+    truncated = False
+    completed_starts = 0
+    for start in starts:
+        if truncated:
+            break
+        path_nodes = [start]
+        path_hops: list[TradeHop] = []
+        in_path = {start}
+        stack = [iter(frame_hops(start, 0))]
+        while stack:
+            steps += 1
+            if steps > max_search_steps:
+                truncated = True
+                break
+            advanced = False
+            for hop in stack[-1]:
+                nxt = hop.to
+                if nxt == start and len(path_hops) + 1 >= min_hops:
+                    record(path_nodes, path_hops + [hop])
+                    continue
+                if nxt in in_path:
+                    continue
+                if max_hops is not None and len(path_hops) + 1 > max_hops:
+                    continue
+                path_nodes.append(nxt)
+                path_hops.append(hop)
+                in_path.add(nxt)
+                stack.append(iter(frame_hops(nxt, len(path_hops))))
+                advanced = True
+                break
+            if not advanced:
+                stack.pop()
+                if len(path_nodes) > 1:
+                    popped = path_nodes.pop()
+                    in_path.discard(popped)
+                    path_hops.pop()
+        if not truncated:
+            completed_starts += 1
 
-    return rank_chains(list(found.values()))
+    note = None
+    if truncated:
+        note = (
+            f"chains: search budget exhausted at {max_search_steps} DFS steps "
+            f"({len(found)} chain(s) found, {completed_starts}/{len(starts)} start "
+            f"sector(s) fully searched before truncation) -- result is partial"
+        )
+    return rank_chains(list(found.values())), note
 
 
 def rank_chains(chains: Sequence[ProfitChain]) -> list[ProfitChain]:

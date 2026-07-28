@@ -1,6 +1,6 @@
 # WO-CHAIN-SEARCH-BUDGET — Search budget for find_profit_chains
 
-**Status:** OPEN · READY · EXEC seeded · HANDOFF CC  
+**Status:** DONE · branch `wo/CHAIN-SEARCH-BUDGET` (not yet merged -- review pending)  
 **Posted:** 2026-07-28T00:15:00Z · HIGH · blocks WO-CHAIN-DETECT-WIRE  
 **Seat:** impl-claudecode-aiclient  
 **Depends:** WO-CHAIN-DETECT-PORT merged on main (#125 `dc1df22`)  
@@ -69,3 +69,36 @@ the budget merely stops unbounded search when the graph is pathological.
 - Inline timing assertion or comment for the K9 case.
 - `RecursionError` mutation: temporarily set budget below depth → assert the error
   does not escape (caught internally or the graph is truncated).
+
+### DONE — what shipped
+
+`chains.py`: `_search_cycles` replaced the recursive `dfs()` with an iterative explicit-stack
+DFS (resumable per-node hop-iterators — no Python call recursion at any point, so
+`RecursionError` is structurally unreachable, not just pushed past a bigger constant) bounded by
+a new `max_search_steps` param (`DEFAULT_MAX_SEARCH_STEPS = 100_000`, a global frame-visit
+counter, not a depth cap — the K-graph blowup this guards is breadth, not depth). One search
+routine feeds both entry points: `find_profit_chains` keeps its exact pre-change signature/return
+type (`list[ProfitChain]`); the new sibling `find_profit_chains_with_note` returns
+`(chains, note)` — same shape as `trade_adapter.build_trade_hops` — as the honest entry point for
+WIRE, `note` naming the budget, chains found, and start-sectors fully searched before truncation.
+`longest_profit_chain` unchanged (forwards via `**kwargs`, inherits the default budget for free).
+No `trade_adapter.py` / TUI / WIRE changes.
+
+`tests/test_chains.py`: 10 new cases (23 total, 13 pre-existing untouched) — differential proof
+(300 seeded pseudo-random small graphs, exact-equality against a vendored pre-change recursive
+oracle, catches any traversal-order drift the recursion→iteration conversion could have
+introduced); ring(500)/K9 truncate <1s with a note (measured ~0.05–0.4s); ring(5000)/ring(50000)
+return normally (no `RecursionError`); ring(999) reproduces the exact original crash against the
+vendored legacy oracle while the new code handles it fine; a call-stack-depth mutation proof
+(shrinks `sys.recursionlimit` to just above pytest's own ambient depth) proves the new search
+never touches the Python call stack at all, not merely that today's inputs fit under today's
+default limit. Every new pin mutation-proven by literally breaking it and watching the test go
+red, then reverting: disabling the `steps > max_search_steps` guard turned K9 from 0.4s→5.6s and
+ring(5000) from fast→17.8s (both blew past their `<1s`/`<5s` assertions, confirming the guard is
+load-bearing, not decorative); reintroducing real recursion into `find_profit_chains` made the
+ring(999)/call-stack tests fail with an actual `RecursionError` (proving those tests really do
+detect a recursive regression, not just today's absence of one).
+
+Full suite: `pytest tests/ --junitxml=...` — read from the XML after process exit (not the
+captured summary line) — **5270 tests, 0 failures, 0 errors, 3 skipped** (main's baseline was
+5260/0/3; the +10 delta is exactly the new chains cases, nothing else moved).
