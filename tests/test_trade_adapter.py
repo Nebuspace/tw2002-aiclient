@@ -36,6 +36,19 @@ def _row(name, status, pct, amount=1000):
     return {"name": name, "status": status, "amount": amount, "pct": pct}
 
 
+def _upsert_class(tmp_path, sector_id, *, warps=(), klass=None, port_ts_clock=_CLOCK):
+    """Like `_upsert`, but writes the class-derived posture shape
+    (`{"class": ..., "last_seen_ts": ...}`, NO `commodities`) --
+    `explore.py`'s E2 flyby gate writes exactly this shape (see
+    `state_parser.read_port_from_sector_status`), never a commerce
+    report. `klass=None` writes a warps-only sector with no port field
+    at all (mirrors a plain movement observation)."""
+    record = {"sector_id": sector_id, "warps": list(warps)}
+    if klass is not None:
+        record["port"] = {"class": klass, "last_seen_ts": world_model._now_iso(port_ts_clock)}
+    world_model.upsert_sector(WORLD, record, state_dir=tmp_path, now=port_ts_clock)
+
+
 def _write_raw_sector(tmp_path, sector_id, record):
     """Writes a raw sector JSON file directly, bypassing `upsert_sector`'s
     own field-level merge entirely -- the only way to construct a
@@ -705,6 +718,254 @@ def test_missing_or_unusable_amount_yields_no_hop(tmp_path, bad_amount):
 
 
 # --------------------------------------------------------------------------
+# WO-CHAIN-DETECT-WIRE -- class-derived posture path (build_candidate_pairs)
+# --------------------------------------------------------------------------
+
+
+def test_class_pair_compatible_hand_computed(tmp_path):
+    """Sector 10: SBB -- sells Fuel Ore, buys Organics+Equipment.
+    Sector 11: BSS -- buys Fuel Ore, sells Organics+Equipment.
+    Perspective rule pinned: 10 sells Fuel Ore which 11 buys (one
+    compatible commodity); 11 sells {Organics, Equipment}, both of
+    which 10 buys (two compatible commodities -- exercises the
+    alphabetical tiebreak, "Equipment" < "Organics"). One adjacent
+    warp each way -> turns == 1 + 1 == 2, canon's cheapest pair-loop
+    shape."""
+    _upsert_class(tmp_path, 10, warps=(11,), klass="SBB")
+    _upsert_class(tmp_path, 11, warps=(10,), klass="BSS")
+
+    pairs, stats = trade_adapter.build_candidate_pairs(WORLD, state_dir=tmp_path, now=_CLOCK)
+
+    assert len(pairs) == 1
+    pair = pairs[0]
+    assert pair.sector_a == 10 and pair.sector_b == 11
+    assert pair.commodity_a_sells == "Fuel Ore"
+    assert pair.commodity_b_sells == "Equipment"  # alphabetical tiebreak, never a guessed "best"
+    assert pair.turns == 2
+    assert pair.observed_age_s == 0.0
+    assert not hasattr(pair, "margin")  # structurally impossible to guess a number here
+    assert stats == trade_adapter.PairBuildStats(
+        known_sectors=2,
+        class_valid_ports=2,
+        fresh_class_ports=2,
+        oldest_class_age_s=0.0,
+        compatible_pairs_considered=1,
+        routed_pairs=1,
+    )
+
+
+def test_class_pair_sector_a_always_lower_regardless_of_write_order(tmp_path):
+    """Same pair as above, written in descending sector-id order --
+    `CandidatePair.sector_a < sector_b` must hold by construction, not
+    by luck of iteration order."""
+    _upsert_class(tmp_path, 11, warps=(10,), klass="BSS")
+    _upsert_class(tmp_path, 10, warps=(11,), klass="SBB")
+
+    pairs, _stats = trade_adapter.build_candidate_pairs(WORLD, state_dir=tmp_path, now=_CLOCK)
+
+    assert len(pairs) == 1
+    assert pairs[0].sector_a == 10
+    assert pairs[0].sector_b == 11
+
+
+def test_class_pair_both_selling_same_single_commodity_not_compatible(tmp_path):
+    """Canon invariant, pinned for the class path too: two ports both
+    SELLING (never buying) the same single commodity are NOT a
+    compatible pair on either leg -- fail-closed, no candidate.
+    Perspective-rule pin: swapping the S/B interpretation anywhere in
+    `build_candidate_pairs` (e.g. computing `sells & sells` instead of
+    `sells & buys`) would turn a variant of this fixture green when it
+    must stay red -- see report Verification for the manual mutation
+    proof."""
+    _upsert_class(tmp_path, 20, warps=(21,), klass="SSS")
+    _upsert_class(tmp_path, 21, warps=(20,), klass="SSS")
+
+    pairs, stats = trade_adapter.build_candidate_pairs(WORLD, state_dir=tmp_path, now=_CLOCK)
+
+    assert pairs == ()
+    assert stats.fresh_class_ports == 2
+    assert stats.compatible_pairs_considered == 0
+    assert stats.routed_pairs == 0
+
+
+def test_class_pair_asymmetric_one_way_warps_sums_both_directions(tmp_path):
+    """40 -> 41 -> 42 -> 40 is a one-way RING (sector 41 is a plain
+    waypoint, no port). Path 40->42 is 2 hops (via 41); path 42->40 is
+    1 hop (direct). `turns` must be the sum of the TWO direction-
+    specific route lengths (2 + 1 == 3), never a naive doubling of one
+    direction's hop count -- pins that `_bfs_paths_from` is queried
+    once per source and both directions are genuinely routed."""
+    _upsert_class(tmp_path, 40, warps=(41,), klass="SBB")
+    _upsert_class(tmp_path, 41, warps=(42,))  # waypoint only, no port
+    _upsert_class(tmp_path, 42, warps=(40,), klass="BSS")
+
+    pairs, stats = trade_adapter.build_candidate_pairs(WORLD, state_dir=tmp_path, now=_CLOCK)
+
+    assert len(pairs) == 1
+    assert pairs[0].turns == 3
+    assert stats.known_sectors == 3  # the waypoint counts as a known sector too
+    assert stats.class_valid_ports == 2  # but never as a class-valid PORT
+
+
+@pytest.mark.parametrize(
+    "klass",
+    [None, "", "BS", "BSSS", "BSX", "bss", 5, ["B", "S", "S"], {"letters": "BSS"}],
+)
+def test_invalid_class_shapes_never_crash_and_are_excluded(tmp_path, klass):
+    """`_valid_class_triple` fail-closed sweep: `None` (never observed /
+    Class-0-StarDock presence-without-class), wrong length, an invalid
+    letter, lowercase (canon stores upper-case only -- `state_parser`
+    upper-cases at the regex site, so a lowercase triple here is a
+    malformed on-disk shape, never a live-parser output), and non-str
+    types a corrupted JSON file could genuinely carry. None of these
+    may raise, and none may count as a usable class port."""
+    _write_raw_sector(
+        tmp_path,
+        50,
+        {
+            "sector_id": 50,
+            "warps": [51],
+            "port": {"class": klass, "last_seen_ts": world_model._now_iso(_CLOCK)},
+        },
+    )
+    _upsert_class(tmp_path, 51, warps=(50,), klass="SBB")
+
+    pairs, stats = trade_adapter.build_candidate_pairs(WORLD, state_dir=tmp_path, now=_CLOCK)
+
+    assert pairs == ()
+    assert stats.class_valid_ports == 1  # only sector 51
+
+
+@pytest.mark.parametrize(
+    "raw_record",
+    [
+        {"sector_id": 60, "warps": [61], "port": "not-a-dict"},
+        {"sector_id": "not-an-int", "warps": [61], "port": {"class": "SBB"}},
+        {"sector_id": 60, "warps": [61], "port": {"class": "SBB", "last_seen_ts": None}},
+    ],
+)
+def test_malformed_on_disk_shapes_never_crash(tmp_path, raw_record):
+    """`world_model.query`'s predicate only checks truthiness -- a
+    malformed on-disk record (non-dict `port`, non-numeric `sector_id`,
+    an unparseable `last_seen_ts`) must reach `build_candidate_pairs`
+    without raising, same fail-closed discipline `_fresh_ports` already
+    documents for the commodity path."""
+    _write_raw_sector(tmp_path, 60, raw_record)
+    _upsert_class(tmp_path, 61, warps=(60,), klass="BSS")
+
+    pairs, _stats = trade_adapter.build_candidate_pairs(WORLD, state_dir=tmp_path, now=_CLOCK)
+
+    assert pairs == ()  # sector 60 never contributes a usable class port either way
+
+
+def test_reason_no_world_model(tmp_path):
+    pairs, stats = trade_adapter.build_candidate_pairs(WORLD, state_dir=tmp_path, now=_CLOCK)
+    assert pairs == ()
+    assert stats.known_sectors == 0
+
+
+def test_reason_fewer_than_two_ports(tmp_path):
+    _upsert_class(tmp_path, 1, warps=(2,))  # known sector, no port at all
+    _upsert_class(tmp_path, 2, warps=(1,), klass="SBB")  # the only valid class port
+
+    pairs, stats = trade_adapter.build_candidate_pairs(WORLD, state_dir=tmp_path, now=_CLOCK)
+
+    assert pairs == ()
+    assert stats.known_sectors == 2
+    assert stats.class_valid_ports == 1
+
+
+def test_reason_all_stale_carries_oldest_age(tmp_path):
+    """Both ports carry a genuine, syntactically valid, MUTUALLY
+    COMPATIBLE class pair -- the ONLY thing wrong is staleness against
+    a deliberately short `class_max_age_s`. `oldest_class_age_s` must
+    report a real, computed figure (not a placeholder), matching the
+    "explore tonight, open the view tomorrow" scenario the config's
+    long default guards against."""
+    old_clock = lambda: datetime.datetime(2026, 6, 1, 12, 0, 0, tzinfo=datetime.timezone.utc)
+    _upsert_class(tmp_path, 10, warps=(11,), klass="SBB", port_ts_clock=old_clock)
+    _upsert_class(tmp_path, 11, warps=(10,), klass="BSS", port_ts_clock=old_clock)
+
+    cfg = trade_adapter.PairLoopConfig(class_max_age_s=10.0)
+    pairs, stats = trade_adapter.build_candidate_pairs(WORLD, state_dir=tmp_path, config=cfg, now=_CLOCK)
+
+    expected_age = (_CLOCK() - old_clock()).total_seconds()
+    assert pairs == ()
+    assert stats.class_valid_ports == 2
+    assert stats.fresh_class_ports == 0
+    assert stats.oldest_class_age_s == expected_age
+
+
+def test_reason_no_compatible_pairs(tmp_path):
+    _upsert_class(tmp_path, 20, warps=(21,), klass="SSS")
+    _upsert_class(tmp_path, 21, warps=(20,), klass="SSS")
+
+    pairs, stats = trade_adapter.build_candidate_pairs(WORLD, state_dir=tmp_path, now=_CLOCK)
+
+    assert pairs == ()
+    assert stats.fresh_class_ports == 2
+    assert stats.compatible_pairs_considered == 0
+
+
+def test_reason_compatible_but_unrouted(tmp_path):
+    """Posture-compatible, but the two sectors' warp graphs never
+    connect (no warps recorded either side) -- structurally compatible,
+    never routable, the single most actionable empty this feature can
+    surface."""
+    _upsert_class(tmp_path, 30, warps=(), klass="SBB")
+    _upsert_class(tmp_path, 31, warps=(), klass="BSS")
+
+    pairs, stats = trade_adapter.build_candidate_pairs(WORLD, state_dir=tmp_path, now=_CLOCK)
+
+    assert pairs == ()
+    assert stats.compatible_pairs_considered == 1
+    assert stats.routed_pairs == 0
+
+
+def test_pair_loop_config_rejects_negative_class_max_age():
+    with pytest.raises(ValueError):
+        trade_adapter.PairLoopConfig(class_max_age_s=-1.0)
+
+
+def test_bfs_paths_from_matches_path_to_sector_for_every_reachable_pair():
+    """Differential proof for the O(ports) routing optimization
+    (module docstring): `_bfs_paths_from`'s single multi-target BFS
+    must return EXACTLY what `explore.path_to_sector`'s one-BFS-per-
+    call would have, for every (start, goal) pair on a graph with a
+    cycle, a branch, a disconnected component, AND a dangling warp
+    (sector 1 warps to 99, which is never itself a known sector --
+    `known_graph` genuinely produces this shape from a flyby that has
+    seen a neighbor's warp but not yet visited it) -- swept
+    exhaustively, not sampled. The dangling case is load-bearing, not
+    decorative: a mutant that drops `_bfs_paths_from`'s "only step onto
+    a KNOWN sector" guard passes every other case here unchanged but
+    fabricates a path through sector 99 -- see report Verification."""
+    from tw2002_aiclient.explore import path_to_sector
+
+    graph = {
+        1: (2, 3, 99),  # 99 is a dangling warp target -- never a key below
+        2: (4,),
+        3: (4, 5),
+        4: (1,),
+        5: (),
+        6: (7,),  # disconnected component -- unreachable from 1..5
+        7: (),
+    }
+    nodes = list(graph.keys())
+    for start in nodes:
+        paths = trade_adapter._bfs_paths_from(graph, start)
+        assert paths[start] == (start,)
+        for goal in list(nodes) + [99]:
+            if goal == start:
+                continue
+            assert paths.get(goal) == path_to_sector(graph, start, goal), (start, goal)
+
+
+def test_bfs_paths_from_unknown_start_is_empty():
+    assert trade_adapter._bfs_paths_from({1: (2,), 2: (1,)}, 99) == {}
+
+
+# --------------------------------------------------------------------------
 # Structural pin -- DoD accept 4: neither module reaches a send path
 # --------------------------------------------------------------------------
 
@@ -719,7 +980,16 @@ _BANNED_MODULES = frozenset(
     }
 )
 
-_ENTRY_FILES = (PKG_ROOT / "chains.py", PKG_ROOT / "trade_adapter.py")
+_ENTRY_FILES = (
+    PKG_ROOT / "chains.py",
+    PKG_ROOT / "trade_adapter.py",
+    # WO-CHAIN-DETECT-WIRE: the class-derived pair-loop wire is a THIRD
+    # pure-read entry point (`build_candidate_pairs` lives in
+    # trade_adapter.py above, already covered; `chain_detect.py` is its
+    # own module) that must never reach a send path either -- same walker,
+    # same banned set, no second copy of the AST scan.
+    PKG_ROOT / "chain_detect.py",
+)
 
 
 def _is_banned(dotted: str) -> bool:
@@ -820,12 +1090,13 @@ def _scan_module(path: Path, *, seen: set, banned_hits: list, unresolved_dynamic
 
 def test_neither_module_reaches_a_send_path():
     """DoD accept 4 -- structural, not text-grep: recursively walks the
-    tw2002_aiclient-rooted import closure of `chains.py` and
-    `trade_adapter.py` and asserts it never reaches
-    `session.connection`, `session.protocol`, or `adapters.py` (the
-    send-capable surfaces). Also refuses (rather than silently trusting)
-    any dynamic `importlib.import_module`/`__import__` call whose target
-    isn't a string literal -- mutate-proven, see report."""
+    tw2002_aiclient-rooted import closure of `chains.py`,
+    `trade_adapter.py`, and (WO-CHAIN-DETECT-WIRE) `chain_detect.py`, and
+    asserts none of them ever reaches `session.connection`,
+    `session.protocol`, or `adapters.py` (the send-capable surfaces).
+    Also refuses (rather than silently trusting) any dynamic
+    `importlib.import_module`/`__import__` call whose target isn't a
+    string literal -- mutate-proven, see report."""
     seen: set = set()
     banned_hits: list = []
     unresolved_dynamic: list = []
@@ -841,4 +1112,6 @@ def test_neither_module_reaches_a_send_path():
         "tw2002_aiclient.trade_adapter",
         "tw2002_aiclient.world_model",
         "tw2002_aiclient.explore",
+        "tw2002_aiclient.chain_detect",
+        "tw2002_aiclient.loops.list_view",
     }
