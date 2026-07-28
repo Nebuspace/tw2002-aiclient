@@ -207,9 +207,22 @@ def test_trace_only_others_honest_empty_still_render():
 
 
 def test_goals_only_others_honest_empty_still_render():
+    # DECISIONS is no longer honest-empty for THIS fixture, and that is the
+    # point of WO-STATUS-CHAIN-SCALARS-COACH rather than a regression: the
+    # very `chain_hops`/`chain_unit` that render the GOALS "Chain 5 hops" row
+    # are also the coach's `chain_opportunity` trigger, so a status rich
+    # enough to show that row is by construction rich enough to teach from.
+    # FOCUS (which this fixture says nothing about) is still honest-empty,
+    # which is what keeps the "one section live, others still render" subject
+    # of this test intact.
     result = compose_folded_decisions_lines(_GOALS_STATUS, width=60)
     assert result == (
-        ["—", "Exploring…", GOALS_LABEL]
+        [
+            "Celebrate longest profit chains",
+            " Multi-hop adjacent station cycles where every hop margins p",
+            " → Run find_profit_chains / longest_profit_chain on the grap",
+            GOALS_LABEL,
+        ]
         + [
             f"{GLYPH_MET} Turns 12,345",
             f"{GLYPH_MET} Credits 987,654",

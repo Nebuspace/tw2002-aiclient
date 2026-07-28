@@ -190,7 +190,18 @@ def _drive(monkeypatch, keys, *, store, recompute):
     explore_calls: list = []
 
     monkeypatch.setattr(adapters, "ensure_session", lambda name, **kw: _Result())
-    monkeypatch.setattr(_loop_store, "read_loop_store", lambda **kw: store)
+
+    def _read_store(**kw):
+        # A `store` that IS an exception raises instead of returning, so a
+        # caller can drive the unreadable-store branch. Patching
+        # `read_loop_store` from the test body cannot do it: this line runs
+        # after that patch and would overwrite it -- silently, leaving a test
+        # named for one branch exercising the other.
+        if isinstance(store, BaseException):
+            raise store
+        return store
+
+    monkeypatch.setattr(_loop_store, "read_loop_store", _read_store)
     # `app.py` imports `chain_search` lazily inside the `chains_open`
     # branch (launcher-startup CPU budget), so the patch target is the
     # real module — the branch import resolves to the same object.
@@ -413,3 +424,136 @@ def test_discovered_rows_reach_the_screen(monkeypatch):
     assert V.TITLE in painted
     assert RING in painted
     assert V.SOURCE_TAG in painted
+
+
+# --------------------------------- pin 4: the chain-scalars producer wire
+#
+# WO-STATUS-CHAIN-SCALARS-COACH. `cockpit/goals.py` reads
+# `status["chain_hops"]`/`["chain_unit"]`; the discovery that feeds them
+# happens HERE, in this popup branch, because it is the one place a chain
+# search already runs for its own reasons (importing `chain_search` on the
+# draw path would blow the launcher's CPU budget outright).
+#
+# Unit tests for `ChainScalars` live in `tests/test_chain_status_coach_wire.py`.
+# What is pinned below is only the thing those cannot see: that the real
+# `_run_play` actually calls it, and that the scalars it caches reach the same
+# `status_provider` closure the GOALS panel polls. A producer nobody wired is
+# indistinguishable from no producer at all.
+
+
+def _scalars_after(screen):
+    return screen.chain_scalars.merge({})
+
+
+def test_pressing_L_caches_the_discovered_hop_count(monkeypatch):
+    # DISCOVERED is ranked hop-count desc: chains[0] carries 3 hops.
+    _arm, _explore, screen = _drive(
+        monkeypatch, [L], store=TWO_LOOPS, recompute=lambda wid, **kw: DISCOVERED,
+    )
+    assert _scalars_after(screen) == {"chain_hops": 3, "chain_unit": "hops"}
+
+
+def test_the_cached_scalars_reach_the_real_status_provider(monkeypatch):
+    """The wire, end to end: what the popup caches is what GOALS polls.
+
+    Asserting on `screen.chain_scalars` alone would still pass if `_run_play`
+    built its provider without them — that closure is the actual delivery
+    path, so it is the thing worth reading.
+    """
+    from tw2002_aiclient.session import cli as session_cli
+
+    monkeypatch.setattr(
+        session_cli, "send_request",
+        lambda verb, args=None, **kw: {"ok": True, "credits": 7},
+    )
+    _arm, _explore, screen = _drive(
+        monkeypatch, [L], store=TWO_LOOPS, recompute=lambda wid, **kw: DISCOVERED,
+    )
+    assert screen.status_provider() == {
+        "ok": True, "credits": 7, "chain_hops": 3, "chain_unit": "hops",
+    }
+
+
+def test_the_store_unreadable_branch_still_caches_the_scalars(monkeypatch):
+    """Discovery and the taught-loop store are independent reads. A store
+    that will not open says nothing about the chain search that already
+    succeeded, so the GOALS row must not go dark with it."""
+    _arm, _explore, screen = _drive(
+        monkeypatch,
+        [L],
+        store=OSError("store gone"),
+        recompute=lambda wid, **kw: DISCOVERED,
+    )
+    # Proof the intended branch was actually taken -- the first version of
+    # this test patched `read_loop_store` from the body, `_drive` overwrote
+    # the patch, and it passed for two runs while exercising the OK branch.
+    assert "unreadable" in screen.status_line
+    assert _scalars_after(screen) == {"chain_hops": 3, "chain_unit": "hops"}
+
+
+def test_a_raising_finder_writes_no_scalars_at_all(monkeypatch):
+    """The finder-unavailable payload is `None`, and the modal renders it as
+    "discovery unavailable" rather than an absence. The GOALS row must make
+    the same distinction: unknown, never "none yet"."""
+    def _boom(wid, **kw):
+        raise RuntimeError("finder exploded")
+
+    _arm, _explore, screen = _drive(
+        monkeypatch, [L], store=TWO_LOOPS, recompute=_boom,
+    )
+    assert _scalars_after(screen) == {}
+
+
+def test_a_freshly_built_play_screen_always_has_chain_scalars(monkeypatch):
+    """The popup branch calls `.update()` unconditionally, so the attribute
+    must exist on every `PlayShellScreen` — including the many built directly
+    by tests and never through `_run_play`."""
+    monkeypatch.setattr(screens_mod.curses, "has_colors", lambda: False)
+    profile = screens_mod.ProfileRow(
+        name="alpha", handle="Alpha", server="demo-a",
+        host="demo-a.example", game_letter="B",
+    )
+    s = screens_mod.PlayShellScreen(_Win(), profile)
+    assert s.chain_scalars.merge({"ok": True}) == {"ok": True}
+
+
+def test_the_coach_callout_is_actually_PAINTED_not_merely_composed(monkeypatch):
+    """Composer output is not a screen — the same discipline the discovered-rows
+    pin above follows. `compose_decisions_lines` returning a card proves nothing
+    about what the operator sees; this drives the real `PlayShellScreen.draw()`
+    through a recording window and reads the pixels back."""
+    monkeypatch.setattr(screens_mod.curses, "has_colors", lambda: False)
+    profile = screens_mod.ProfileRow(
+        name="alpha", handle="Alpha", server="demo-a",
+        host="demo-a.example", game_letter="B",
+    )
+    win = _Win()
+    s = screens_mod.PlayShellScreen(win, profile)
+    s.spectating = False
+    s.attached = False
+    # No autopilot_trace: DECISIONS would otherwise show its honest-empty state.
+    s.status_provider = lambda: {"ok": True, "chain_hops": 4, "chain_unit": "hops"}
+    s.draw()
+    painted = "\n".join(text for (_y, _x, text, _a) in win.writes)
+    assert "Exploring…" not in painted
+    assert "profit chain" in painted.lower()
+
+
+def test_the_empty_pane_still_paints_its_honest_state_without_a_chain(monkeypatch):
+    """The negative control for the pin above: same screen, same draw, no chain
+    — a coach callout that paints regardless would pass the positive test on its
+    own."""
+    monkeypatch.setattr(screens_mod.curses, "has_colors", lambda: False)
+    profile = screens_mod.ProfileRow(
+        name="alpha", handle="Alpha", server="demo-a",
+        host="demo-a.example", game_letter="B",
+    )
+    win = _Win()
+    s = screens_mod.PlayShellScreen(win, profile)
+    s.spectating = False
+    s.attached = False
+    s.status_provider = lambda: {"ok": True}
+    s.draw()
+    painted = "\n".join(text for (_y, _x, text, _a) in win.writes)
+    assert "profit chain" not in painted.lower()
+    assert "Exploring" in painted

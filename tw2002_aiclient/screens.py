@@ -12,6 +12,7 @@ from typing import Callable, Sequence
 
 import curses
 
+from tw2002_aiclient import chain_status as _chain_status
 from tw2002_aiclient.cockpit import analyze as cockpit_analyze
 from tw2002_aiclient.cockpit import arm as cockpit_arm
 from tw2002_aiclient.cockpit import armconfirm as cockpit_armconfirm
@@ -846,6 +847,13 @@ class PlayShellScreen:
         self.profile = profile
         self.status_line = ""  # set by app.py after the ensure_session() call
         self.status_provider: Callable[[], dict | None] | None = None  # set by app.py (PWO-034)
+        # Producer for the GOALS Chain row's `chain_hops`/`chain_unit`, which
+        # the daemon does not carry. Constructed HERE rather than by app.py so
+        # the attribute always exists and is always usable: the chains-popup
+        # branch calls `.update()` on it unconditionally, and a directly
+        # constructed screen (as every pty test builds one) must not
+        # AttributeError there.
+        self.chain_scalars = _chain_status.ChainScalars()
         # WO-P4-052: a no-arg callable returning a `WatchFeedSnapshot`-shaped
         # object (duck-typed via `.latest_event` only -- this module never
         # imports `WatchFeed` itself, see draw()'s own GAME viewport block).

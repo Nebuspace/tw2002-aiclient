@@ -601,7 +601,14 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
     """Bind profile to a fresh play-shell placeholder; Esc ends the binding."""
     run_dir = env.resolve_run_dir()
     play = PlayShellScreen(stdscr, profile)
-    play.status_provider = _daemon_status_provider(run_dir)
+    # Producer for `status["chain_hops"]`/`["chain_unit"]` -- the fields
+    # cockpit/goals.py reads and, until now, nothing wrote. Updated from the
+    # chains-popup branch below, where a discovery already happens for its own
+    # reasons. Applied as a WRAPPER rather than an argument to
+    # `_daemon_status_provider`: the scalars are a client-side overlay on
+    # whatever the status source is, not part of polling the daemon, so every
+    # provider (including the scripted ones tests substitute) carries them.
+    play.status_provider = play.chain_scalars.wrap(_daemon_status_provider(run_dir))
     play.status_line = "Ensuring session…"
     play.draw()  # show the ensuring state during the (blocking) wait below
     # no_auto_arm=True: ensure only reaches main_command and stops, even if
@@ -954,9 +961,11 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                     # Type name only, never `str(exc)` -- a store path is not
                     # a safe thing to assume is free of operator identity
                     # (`canon/doctrine/secrets-and-credentials.md`).
+                    play.chain_scalars.update(discovered)
                     play.chains_session.open([], "unreadable", discovered=discovered)
                     play.status_line = f"loop store unreadable — {type(exc).__name__}"
                 else:
+                    play.chain_scalars.update(discovered)
                     play.chains_session.open(
                         _chains.playable_loops(store),
                         _chains.store_status(store),

@@ -74,11 +74,29 @@ coach-callout behavior canon actually specifies
 ``compose_decisions_coach``) is a **separate, sibling engine** with its own
 strategy-card knowledge base, trigger map, and configurable-parameter
 substrate — materially larger scope than this pure trace-to-lines
-composer. This module deliberately does **not** implement that fallback;
-the two-line honest-empty state below is what DECISIONS shows whenever
-there is no live trace, exactly as the PREP scoped it. Wiring the
-coach-callout fallback in front of that empty state is left to a follow-on
-WO against ``coaching-engine.md``.
+composer.
+
+**That follow-on has now landed** (``WO-STATUS-CHAIN-SCALARS-COACH``); the
+paragraph above described the state before it. The engine itself was
+restored by ``WO-COACH-ENGINE-PORT`` (``coach_engine.py`` /
+``coach_kb.py``), and this module now consults it **in front of** the
+two-line honest-empty state: a live trace still wins outright, and only
+when there is no renderable trace does the coach get a turn. Three
+properties make that safe to do from a module whose contract is *never
+raises*:
+
+* **The KB load is one-shot and defensive.** ``coach_kb.load_coach_kb``
+  does file I/O and ``json.loads`` — both raise. It is attempted at most
+  once per process, and a failure is cached as "no KB", which degrades to
+  the same honest-empty state. A missing or malformed ``strategies.json``
+  costs the operator their coaching, never their DECISIONS panel.
+* **Card text is never composed here.** Every rendered string comes from
+  ``compose_decisions_coach`` over authored ``data/coach/strategies.json``
+  content. This module contributes no prose — canon's single-source rule.
+* **Fail-closed inputs.** Triggers are inferred only from fields
+  ``status`` actually carries. Absent inputs omit their trigger rather
+  than guessing one, and no trigger at all falls straight through to the
+  empty state.
 
 Helper reuse (WO-P3-036 dispatch note: "reuse goals/focus ``_safe_*``
 helpers via package import"). This module imports ``GLYPH_BLOCKED`` /
@@ -105,8 +123,82 @@ contained at the render layer instead of here (same boundary
 
 from __future__ import annotations
 
+from tw2002_aiclient import chain_status as _chain_status
+from tw2002_aiclient import coach_engine as _coach
+from tw2002_aiclient import coach_kb as _coach_kb
+
 from .focus import _format_ev, _kind_label, _safe_bool, _safe_float
 from .goals import GLYPH_BLOCKED, UNKNOWN_DETAIL, _safe_list, _safe_str
+
+# One-shot KB load. ``_KB_UNSET`` distinguishes "not attempted yet" from the
+# cached result of a *failed* attempt (``None``) -- without it a failure would
+# be retried on every draw, turning a missing data file into per-frame file
+# I/O on the cockpit's hot path.
+_KB_UNSET = object()
+_kb_cache: object = _KB_UNSET
+
+
+def _kb():
+    """The strategy KB, or ``None``. Loads at most once; never raises."""
+    global _kb_cache
+    if _kb_cache is _KB_UNSET:
+        try:
+            _kb_cache = _coach_kb.load_coach_kb(*_coach_kb.default_kb_paths())
+        except Exception:  # noqa: BLE001 -- no coaching is survivable; a dead panel is not
+            _kb_cache = None
+    return _kb_cache
+
+
+def _reset_kb_cache_for_tests() -> None:
+    """Drop the memoised KB. Tests only -- there is no product caller."""
+    global _kb_cache
+    _kb_cache = _KB_UNSET
+
+
+def _coach_lines(status: dict, *, width: int) -> list[str]:
+    """Authored coach callouts for ``status``, or ``[]`` when none apply.
+
+    Total: any failure anywhere in the coach path yields ``[]``, which the
+    caller renders as the same honest-empty state it would have shown anyway.
+    """
+    try:
+        kb = _kb()
+        if kb is None:
+            return []
+        chain = _chain_status.as_chain_like(
+            status.get(_chain_status.HOPS_KEY), status.get(_chain_status.UNIT_KEY)
+        )
+        # Only fields the `status` verb actually emits are passed. `prompt` is
+        # NOT one of them and must not be added: `session/protocol.py::
+        # _status_response` omits it deliberately, because on a server that
+        # echoes at the password gate that line IS the operator's credential.
+        # Three of the trigger map's inputs key off `prompt`, so they simply
+        # cannot fire from this consumer -- fail-closed, and the right trade.
+        triggers = _coach.infer_coach_triggers(
+            classification=_safe_str(status.get("classification")),
+            chain=chain,
+            fighters_aboard=_safe_int_or_none(status.get("fighters_aboard")),
+        )
+        if not triggers:
+            return []
+        lines = _coach.compose_decisions_coach(kb, triggers, width=max(0, width))
+        if lines == _coach.compose_decisions_placeholder():
+            return []
+        return [_clip(line, width=width) for line in lines]
+    except Exception:  # noqa: BLE001 -- see the never-raises contract above
+        return []
+
+
+def _safe_int_or_none(value: object) -> int | None:
+    """``int`` when ``value`` is a real integer, else ``None``.
+
+    ``bool`` is rejected on purpose: ``True == 1``, and a stray boolean in the
+    fighters field must not read as "zero fighters aboard" and fire the
+    shipyard card.
+    """
+    if isinstance(value, bool) or not isinstance(value, int):
+        return None
+    return value
 
 GLYPH_CHOSEN = "★"
 GLYPH_OTHER = "·"
@@ -180,10 +272,16 @@ def compose_decisions_lines(status: dict | None, *, width: int) -> list[str]:
 
     Absent/None/non-dict ``status``, an absent/malformed ``autopilot_trace``
     payload, or an empty/malformed ``candidates`` list (including one whose
-    every entry was dropped as malformed) all render the two-line
+    every entry was dropped as malformed) all yield **no trace lines** —
+    never an invented candidate or a one-line placeholder. What renders in
+    their place is the coach callout for whatever ``status`` supports
+    (``WO-STATUS-CHAIN-SCALARS-COACH``; up to three authored lines), and
+    failing that — no KB, no trigger, or ``width <= 0`` — the two-line
     honest-empty state (`canon/surfaces/trainer-cockpit.md` "Panel states":
-    ``DECISIONS shows ["—", "Exploring…"]``), never an invented candidate or
-    a one-line placeholder.
+    ``DECISIONS shows ["—", "Exploring…"]``).
+
+    A live trace always wins: whenever *any* candidate rendered, the coach is
+    not consulted at all.
 
     Every line is ``len(line) <= width`` (``width <= 0`` empties every line
     to ``""``, mirroring ``goals.py``/``focus.py``'s width-clip convention,
@@ -228,6 +326,17 @@ def compose_decisions_lines(status: dict | None, *, width: int) -> list[str]:
         lines.append(_clip(text, width=width))
 
     if not lines:
+        # Yield-to-live-trace: the coach only speaks when the app has nothing
+        # of its own to report this tick. Any failure inside returns [] and
+        # falls through to the same empty state.
+        #
+        # `width > 0` is not defensiveness, it preserves a documented
+        # invariant: at width <= 0 every panel here renders as empty strings,
+        # and the coach's card count (up to 3) would otherwise change the
+        # *number* of empty lines DECISIONS returns.
+        coach = _coach_lines(status, width=width) if width > 0 else []
+        if coach:
+            return coach
         return [
             _clip(UNKNOWN_DETAIL, width=width),
             _clip("Exploring…", width=width),
