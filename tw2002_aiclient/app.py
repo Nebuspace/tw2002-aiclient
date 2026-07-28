@@ -13,6 +13,7 @@ from tw2002_aiclient.cockpit import analyze as _analyze
 from tw2002_aiclient.cockpit import assign_trigger as _assign_trigger
 from tw2002_aiclient.cockpit import autoloop_controls as _autoloop_controls
 from tw2002_aiclient import explore as _explore
+from tw2002_aiclient import world_identity as _world_identity
 from tw2002_aiclient.cockpit import chains as _chains
 from tw2002_aiclient.cockpit import draft_approve as _draft_approve
 from tw2002_aiclient.cockpit import record_macro as _record_macro
@@ -918,6 +919,34 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                 # means "none taught" ONLY under `ok`; `read_loop_store`'s own
                 # contract names `status` as the field a caller must branch on
                 # before saying anything about how many loops exist.
+                #
+                # WO-CHAINS-TUI-FULL: the DISCOVERED section's payload is
+                # computed here too, on the same keypress, and passed IN so
+                # `cockpit.chains` stays finder-free. Display-only by
+                # construction: the payload never enters the session's
+                # `rows`, so `selected()` / the arm path structurally cannot
+                # receive a discovered chain. A raising finder (or a profile
+                # that cannot form a `world_id`) must not take the play loop
+                # down; `None` renders as the modal's own honest "discovery
+                # unavailable" line, so no status_line is spent on it and no
+                # absence is fabricated. No exception text is rendered at
+                # all, which keeps the secrets rule above moot on this path.
+                #
+                # Imported HERE, not at module top, for the same reason
+                # `session/cli.py::cmd_chains` does it: `chain_search` pulls
+                # the finder + trade_adapter + world_model, ~40ms of import
+                # CPU nothing else in the cockpit needs — and the launcher's
+                # whole-process CPU budget (`tests/test_dead_terminal_spin.py`,
+                # 0.5s including imports) is already within ~50ms of the
+                # line before it.
+                try:
+                    from tw2002_aiclient import chain_search as _chain_search
+
+                    discovered = _chain_search.recompute(
+                        _world_identity.world_id_from_profile(profile)
+                    )
+                except Exception:  # noqa: BLE001
+                    discovered = None
                 try:
                     store = _loop_store.read_loop_store()
                 except Exception as exc:  # noqa: BLE001
@@ -925,11 +954,13 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                     # Type name only, never `str(exc)` -- a store path is not
                     # a safe thing to assume is free of operator identity
                     # (`canon/doctrine/secrets-and-credentials.md`).
-                    play.chains_session.open([], "unreadable")
+                    play.chains_session.open([], "unreadable", discovered=discovered)
                     play.status_line = f"loop store unreadable — {type(exc).__name__}"
                 else:
                     play.chains_session.open(
-                        _chains.playable_loops(store), _chains.store_status(store)
+                        _chains.playable_loops(store),
+                        _chains.store_status(store),
+                        discovered=discovered,
                     )
                 continue
             if action == "chains_close":

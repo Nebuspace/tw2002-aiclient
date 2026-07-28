@@ -40,8 +40,9 @@ CONSUMER, not a thing to repair -- a `CandidatePair` is not a macro (no
 `steps[]`, no `start_anchor`, claims neither `recorded` nor `mined`). The
 dedicated pure formatter now lives in `chain_detect_view.py`
 (`format_candidate_pair_lines`) -- see that module's own docstring for the
-render-side rules (never `cockpit/chains.py`, never the taught `L)chains`
-arm list).
+render-side rules (never the taught `L)chains` ARM list; the modal's
+discovered-section display added by WO-CHAINS-TUI-FULL carries N-port
+`chain_search` rows only -- pairs stay CLI-only today).
 """
 
 from __future__ import annotations

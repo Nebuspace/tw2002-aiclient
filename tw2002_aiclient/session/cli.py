@@ -718,11 +718,13 @@ def cmd_pairs(args):
     nothing found, and here is why``), never a failure to read anything,
     so none of them earns ``cmd_loops``'s ``unreadable -> 1`` treatment.
 
-    NEVER the taught ``L)chains`` arm list, and never curses: this lists
-    discovered, unpriced pair candidates the operator has not taught and
-    cannot arm from here -- see ``chain_detect_view``'s own module
-    docstring for why conflating the two surfaces is exactly the mistake
-    this WO exists to prevent.
+    NEVER the taught arm list, and never curses: this lists discovered,
+    unpriced pair candidates the operator has not taught and cannot arm
+    from here (pairs are not displayed in the ``L)chains`` modal either --
+    its WO-CHAINS-TUI-FULL discovered section carries N-port
+    ``chain_search`` rows only) -- see ``chain_detect_view``'s own module
+    docstring for why conflating armable and discovered is exactly the
+    mistake this WO exists to prevent.
     """
     from dataclasses import asdict
 
@@ -776,9 +778,12 @@ def cmd_chains(args):
     truncated one will report "no profitable cycle exists" when all that
     happened is the budget ran out.
 
-    NEVER the taught ``L)chains`` arm list, and never curses: these are
-    discovered, unpriced cycles the operator has not taught and cannot arm
-    from here -- see ``chain_search_view``'s module docstring.
+    NEVER the taught arm list, and never curses: these are discovered,
+    unpriced cycles the operator has not taught and cannot arm -- not from
+    this verb, and not from the ``L)chains`` modal either, which (since
+    WO-CHAINS-TUI-FULL) displays them only as a ``detected``-tagged,
+    structurally non-armable section -- see ``chain_search_view``'s module
+    docstring.
     """
     from dataclasses import asdict
 
@@ -1539,7 +1544,7 @@ def build_parser() -> argparse.ArgumentParser:
         "pairs",
         help=(
             "list class-derived DISCOVERED pair loops for a world -- "
-            "reads state/world/<world-id> directly, never sends, never the taught L)chains list"
+            "reads state/world/<world-id> directly, never sends, never the taught arm list"
         ),
     )
     sp.add_argument(
@@ -1556,7 +1561,7 @@ def build_parser() -> argparse.ArgumentParser:
         "chains",
         help=(
             "list DISCOVERED N-port profit cycles for a world -- reads "
-            "state/world/<world-id> directly, never sends, never the taught L)chains list"
+            "state/world/<world-id> directly, never sends, never the taught arm list"
         ),
     )
     sp.add_argument(

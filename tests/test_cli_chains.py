@@ -145,9 +145,13 @@ def test_unexplored_world_json_reports_the_typed_reason(monkeypatch, tmp_path):
 
 
 def test_cmd_chains_never_touches_the_taught_arm_list():
-    """`cockpit/chains.py` is the ARM surface (-> `begin_arm_confirm` ->
-    `autoloop_start`, the money-spending call). A discovered, unpriced
-    cycle must never be renderable through it.
+    """`cockpit/chains.py`'s `rows` are the ARM surface (-> `begin_arm_confirm`
+    -> `autoloop_start`, the money-spending call). Since WO-CHAINS-TUI-FULL
+    the `L)chains` modal DISPLAYS discovered cycles -- but only as a
+    structurally non-armable section wired in `app.py`, never through the
+    arm list -- and this CLI verb must still not touch the arm path at all:
+    no cockpit import, no autoloop reference, nothing that could put a
+    discovered cycle where `selected()` could return it.
 
     Checked by **AST**, not by text search. A `"cockpit" not in source`
     grep fails on this very function, whose docstring names the arm list

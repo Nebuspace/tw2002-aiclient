@@ -388,6 +388,15 @@ The reborn contract above is the target; the current code still carries pre-rebo
   `screen` (default) / often-rebinding `tmux` eat Ctrl-A before the trainer sees it — Mode looks
   dead with no on-screen error. Escape the mux (`Ctrl-A a` in screen) or rebind; do not invent a
   second Mode key. See findings Ruled stamp.
+- **`L)chains` modal also displays a DISCOVERED (non-armable) section — canon prose lags tip.**
+  The cluster entry above (§"The operate-the-APP control cluster (N5)") still reads "a modal
+  listing the **taught** trade-loop chains the human can launch". Tip (WO-CHAINS-TUI-FULL,
+  2026-07-28) keeps arming exactly there — only taught rows are selectable/armable, through the
+  confirm gate — but the same modal now ALSO displays a read-only "Discovered profit chains"
+  section (`chain_search` results, `detected`-tagged, structurally outside the arm list, with
+  `chain_search_view`'s truncation honesty: a truncated-empty search renders a hedge, never an
+  established absence). Direction of this divergence is canon-lags-code, not a port hazard;
+  amending the normative cluster prose is Max-gated — recorded here until ruled.
 
 # Citations
 

@@ -18,10 +18,14 @@ Pure world-model read. ZERO sends, ZERO execution, no curses, no protocol
 import, no session. Like `chain_detect`, it stops at the typed payload and
 does not render -- `chain_search_view.format_profit_chain_lines` owns that.
 
-**NEVER the taught `L)chains` arm list.** A discovered, unpriced cycle
-rendered there would be indistinguishable from a taught, human-armed macro
-at the money-spending confirm gate -- the exact conflation
-`chain_detect_view` was created to prevent. Same ruling applies here.
+**NEVER the taught arm list.** Since WO-CHAINS-TUI-FULL the `L)chains`
+modal DISPLAYS these discovered cycles -- as a separate, `detected`-tagged,
+structurally non-armable section -- but a discovered chain never enters the
+modal's taught `rows`, so `selected()` / the arm path cannot express one.
+The invariant is **never armable**, not never displayed: a `ProfitChain`
+has no name, no `steps[]`, no `start_anchor`, so arming one would
+synthesise a macro the human never demonstrated (north-star forbids it).
+Same lineage as the `chain_detect_view` ruling, re-scoped 2026-07-28.
 
 ## Two truncations, carried separately -- the load-bearing design
 
