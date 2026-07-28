@@ -1,6 +1,6 @@
 # WO-HUB-CLEANUP-SCRIPT-HARDEN — Fix hub-wo-merge-cleanup.sh gaps
 
-**Status:** OPEN · EXECUTE · Cursor (`impl-aiclient-cursor`)  
+**Status:** DONE · Cursor (`impl-aiclient-cursor`)  
 **Posted:** 2026-07-28 · hub  
 **Refs:** hub prune 2026-07-28 · CC PROCESS-NOTE squash reap · banked gaps after #168–#180
 
@@ -20,3 +20,14 @@ Harden `scripts/hub-wo-merge-cleanup.sh` so squash-merge + GitHub auto-delete re
 
 ## Out of bounds
 Mass-prune of live worktrees. Force-push. Changing merge ritual ownership.
+
+## Disposition (2026-07-28T17:35Z · Cursor)
+
+Hardened `scripts/hub-wo-merge-cleanup.sh`:
+
+1. Remote-absent no longer `exit 0` before worktree/local reap.
+2. `git push --delete` soft-fails when remote already gone.
+3. CLOSED (non-merged) refused unless `--force-closed`, which cuts `preserve/<wo-id>` first.
+4. Squash carve-out (`gh` MERGED) kept and documented in header.
+
+Self-check: `bash -n` · absent branch → exit 0 reap-only · unmerged local probe → exit 2 REFUSE.
