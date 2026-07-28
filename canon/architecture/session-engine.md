@@ -86,6 +86,27 @@ if a live process still holds it, the second daemon **refuses to start** rather 
 competing connection to the game. A stale pidfile (no such process) is stepped over. This is a hard
 invariant — there is never more than one telnet connection to a given game from this engine.
 
+## Last-known sector, and why it expires (WO-LAST-KNOWN-SECTOR, 2026-07-28)
+
+Several screens identify themselves without stating a sector. Every captured StarDock screen shows
+`Command [TL=00751:0/0/0/850] (?=Help)? :` with **no `[sector]` bracket**, while an ordinary
+docked-port screen carries one — so a per-sector fact learned at StarDock has nothing to attach to.
+The session therefore remembers the last sector a screen **positively stated**.
+
+The memory is guarded by a **send-epoch**, not by a timer. The epoch bumps on **every** send — both
+the scripted path and the interactive keystroke path — and on **every** reconnect, and a reading is
+offered back only while the epoch still matches the one it was taken at. So `last_known_sector()`
+answers precisely *"the sector we are in, given that nothing has happened since we looked"*, and
+returns nothing the instant anything has. It never derives, defaults, or infers a sector; an
+unreadable screen leaves the previous reading alone rather than overwriting it with a guess.
+
+The expiry is deliberately aggressive because the failure is **permanent**: attributing a landmark
+to a stale sector writes it into the wrong one, and `landmarks` unions
+([world-model](/engine/world-model.md)), so nothing in the product can remove it. Losing a write we
+were unsure about costs one re-read; making a wrong one cannot be undone. Both send paths must bump
+— covering only the scripted one would leave the memory correct under automation and wrong under a
+human at the keys.
+
 # The Unix-Socket JSON Verb Protocol
 
 The one contract between `tw` and `twd` is a newline-delimited JSON protocol over the local
