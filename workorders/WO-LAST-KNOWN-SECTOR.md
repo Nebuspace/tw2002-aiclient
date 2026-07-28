@@ -1,6 +1,6 @@
 # WO-LAST-KNOWN-SECTOR — daemon remembers last successfully-read sector
 
-**Status:** BANKED · HIGH · after WO-WM-LANDMARKS-WRITE P1  
+**Status:** OPEN EXECUTE · HIGH · Claude Code preferred · after #165 P1  
 **Posted:** 2026-07-28T15:30Z · hub (CC #165 DECISION 15:27Z)
 
 ## Goal
