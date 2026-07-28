@@ -1,19 +1,16 @@
 # WO-EXPLORE-STATUS-LIVE-COUNTERS — explore status must report mid-run progress
 
-**Status:** BANKED · MED · Cursor-class OK  
-**Posted:** 2026-07-28T02:52Z · hub bank from #128 live-prove (CC)  
-**Refs:** CC DECISION-NEEDED 2026-07-28T02:51:51Z
+**Status:** OPEN · EXECUTE · MED · Cursor (`impl-aiclient-cursor`)  
+**Posted:** 2026-07-28T02:52Z bank · EXEC seeded overnight after #142+#143  
+**Refs:** wire-class W8 · overnight carte blanche
 
 ## Goal
-`explore status` (and any Play mirror) must expose live counters while a run is in flight — not only at completion.
-
-## Observed defect
-Mid-run polls showed `distinct_sectors=0 · sends_issued=0 · turns_remaining=40` while the viewport was flying (1→5→18258). Post-completion polls showed the true totals. Operators conclude "stuck" incorrectly.
+`explore status` must expose live counters mid-run — never silent zeros that look idle.
 
 ## Accept
-1. During an active explore run, status returns non-zero progress fields that match observed motion (or an honest "unavailable" with reason — not silent zeros that look like idle).
-2. Pin: mid-run vs completed shapes distinguishable; zeros only when truly idle/not started.
-3. Suite + STATUS; live-prove n/a unless easy.
+1. Active run → non-zero progress or honest unavailable/pending.
+2. Pin: mid-run vs completed vs idle distinguishable.
+3. Suite + STATUS. live-prove safe half OK; turn-spend NOT-ATTEMPTED.
 
 ## Constraints
-Do not invent new CLI verbs. Do not widen #128.
+No new CLI verbs. No formations/chains (#144 CC). Explicit paths only.
