@@ -585,6 +585,54 @@ def test_negative_max_hops_raises_at_construction():
         trade_adapter.TradeAdapterConfig(max_hops=-1)
 
 
+# -- config guards: ceiling_multiplier + bool-as-number (WO-ADAPTER-CONFIG-GUARDS-LOW)
+
+
+def test_ceiling_multiplier_below_one_raises_at_construction():
+    with pytest.raises(ValueError, match="ceiling_multiplier"):
+        trade_adapter.TradeAdapterConfig(ceiling_multiplier=0.5)
+
+
+def test_ceiling_multiplier_unity_is_accepted():
+    cfg = trade_adapter.TradeAdapterConfig(ceiling_multiplier=1.0)
+    assert cfg.ceiling_multiplier == 1.0
+
+
+def test_bool_ceiling_multiplier_raises_at_construction():
+    with pytest.raises(TypeError, match="ceiling_multiplier"):
+        trade_adapter.TradeAdapterConfig(ceiling_multiplier=True)
+
+
+def test_bool_pct_is_rejected_by_commodity_price():
+    # float(True) == 1.0 would otherwise invent a price from a flag.
+    row = {"name": "Equipment", "pct": True, "amount": 1000, "status": "selling"}
+    assert trade_adapter._commodity_price(row, trade_adapter.DEFAULT_FLOOR_PRICES, 2.0) is None
+
+
+def test_bool_amount_is_rejected_by_tradeable_amount():
+    row = {"name": "Equipment", "pct": 50, "amount": True, "status": "selling"}
+    assert trade_adapter._has_tradeable_amount(row, amount_floor=0) is False
+
+
+def test_bool_amount_yields_no_hop(tmp_path):
+    _upsert(
+        tmp_path,
+        140,
+        warps=(141,),
+        commodities=[_row("Equipment", "selling", 100, amount=True)],
+    )
+    _upsert(
+        tmp_path,
+        141,
+        warps=(140,),
+        commodities=[_row("Equipment", "buying", 0, amount=1000)],
+    )
+
+    hops, _note = trade_adapter.build_trade_hops(WORLD, state_dir=tmp_path, now=_CLOCK)
+
+    assert hops == ()
+
+
 # -- amount-floor filter drops phantom legs ----------------------------------
 
 

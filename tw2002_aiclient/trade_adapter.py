@@ -95,8 +95,44 @@ class TradeAdapterConfig:
         # mack LOW: a negative max_hops hits the `candidates[:max_hops]`
         # negative-slice footgun (drops the wrong end) -- fail loud at
         # construction, a config bug, not a per-tick data problem.
+        if isinstance(self.max_hops, bool) or not isinstance(self.max_hops, int):
+            raise TypeError(
+                f"TradeAdapterConfig.max_hops must be int, got {type(self.max_hops).__name__}"
+            )
         if self.max_hops < 0:
             raise ValueError(f"TradeAdapterConfig.max_hops must be >= 0, got {self.max_hops}")
+        # Module curve: floor at pct==100 → floor*ceiling_multiplier at pct==0.
+        # Sub-unity inverts that (near-empty cheaper than near-full) — reject.
+        if isinstance(self.ceiling_multiplier, bool) or not isinstance(
+            self.ceiling_multiplier, (int, float)
+        ):
+            raise TypeError(
+                "TradeAdapterConfig.ceiling_multiplier must be a real number, "
+                f"got {type(self.ceiling_multiplier).__name__}"
+            )
+        if self.ceiling_multiplier < 1.0:
+            raise ValueError(
+                "TradeAdapterConfig.ceiling_multiplier must be >= 1.0, "
+                f"got {self.ceiling_multiplier}"
+            )
+        if isinstance(self.amount_floor, bool) or not isinstance(
+            self.amount_floor, (int, float)
+        ):
+            raise TypeError(
+                "TradeAdapterConfig.amount_floor must be a real number, "
+                f"got {type(self.amount_floor).__name__}"
+            )
+        if isinstance(self.max_age_s, bool) or not isinstance(self.max_age_s, (int, float)):
+            raise TypeError(
+                "TradeAdapterConfig.max_age_s must be a real number, "
+                f"got {type(self.max_age_s).__name__}"
+            )
+        for name, floor in self.floor_prices.items():
+            if isinstance(floor, bool) or not isinstance(floor, (int, float)):
+                raise TypeError(
+                    f"TradeAdapterConfig.floor_prices[{name!r}] must be a real number, "
+                    f"got {type(floor).__name__}"
+                )
 
 
 def _parse_ts(ts_str) -> Optional[datetime.datetime]:
@@ -134,19 +170,24 @@ def _commodity_price(
     floor = floor_prices.get(name)
     if floor is None or pct is None:
         return None
+    # ``bool`` is an ``int`` subclass; ``float(True) == 1.0`` would pass
+    # positivity/finite checks and invent a price from a flag.
+    if isinstance(pct, bool) or isinstance(floor, bool):
+        return None
     try:
         pct_f = float(pct)
+        floor_f = float(floor)
     except (TypeError, ValueError):
         return None
     # cipher LOW/mack MEDIUM: NaN compares False against both bounds
     # below (max(0.0, min(100.0, nan)) silently becomes 100.0), and a
     # bare inf/-inf token is valid input to json.load -- a corrupted
     # sector JSON must not turn into a plausible-looking guessed price.
-    if not math.isfinite(pct_f):
+    if not math.isfinite(pct_f) or not math.isfinite(floor_f):
         return None
     pct_clamped = max(0.0, min(100.0, pct_f))
-    spread = floor * (ceiling_multiplier - 1.0)
-    return floor + spread * (1.0 - pct_clamped / 100.0)
+    spread = floor_f * (ceiling_multiplier - 1.0)
+    return floor_f + spread * (1.0 - pct_clamped / 100.0)
 
 
 def _has_tradeable_amount(row: Mapping, amount_floor: float) -> bool:
@@ -159,6 +200,10 @@ def _has_tradeable_amount(row: Mapping, amount_floor: float) -> bool:
     (fail-closed, same discipline as `_commodity_price`'s pct
     handling) -- never a guessed volume."""
     amount = row.get("amount")
+    # ``bool`` is an ``int`` subclass; ``float(True) == 1.0`` would look
+    # like a tradeable unit count.
+    if isinstance(amount, bool):
+        return False
     try:
         amount_f = float(amount)
     except (TypeError, ValueError):
