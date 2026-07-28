@@ -11,13 +11,14 @@ by the ``452d896`` scaffold) per ``WO-COACH-ENGINE-PORT``. It lives here rather
 than inside ``coach_engine`` because it is chain arithmetic that the coaching
 engine merely *consumes* -- see the module note below.
 
-**Known gap, deliberately not closed by this WO.** ``cockpit/goals.py`` reads
-``status["chain_hops"]`` and ``status["chain_unit"]`` to render the GOALS Chain
-row, and at tip **no product code writes either field** -- only tests do, which
-is why the suite is green while the live row can only ever say "unknown". The
-pre-rebirth producer was ``spectate_app.py`` (also deleted). ``chain_hop_count_
-and_unit`` below is the computation that producer used, so restoring the wire is
-a matter of calling it; that wire is its own work order, not this one.
+**That gap is now closed** (``WO-STATUS-CHAIN-SCALARS-COACH``).
+``cockpit/goals.py`` reads ``status["chain_hops"]`` / ``status["chain_unit"]``
+to render the GOALS Chain row, and for one release **no product code wrote
+either field** -- only tests did, which is why the suite was green while the
+live row could only ever say "unknown". The pre-rebirth producer was
+``spectate_app.py`` (deleted at the rebirth); the reborn one is
+``chain_status.ChainScalars``, which calls ``chain_hop_count_and_unit`` below on
+the ranked-first chain of a discovery and merges the result into ``status``.
 """
 
 from __future__ import annotations
