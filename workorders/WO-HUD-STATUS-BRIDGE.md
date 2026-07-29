@@ -42,17 +42,21 @@ cells stay `-` and never fill during Play.
    - **credits** — already: `observe_credits` + `read_credits_balance` (T2).
    - **sector** — already: `read_current_sector` / `sector_wire` on the settled
      prompt line (do **not** reintroduce raw `status["prompt"]`).
-   - **turns** — **new careful extractor** for classic `TL=<count>…` shapes on
-     the command prompt; **must refuse** `TL=HH:MM:SS` countdown (archive
-     defect: countdown forged `turns_left=0`). Absent/unreadable → leave cell
-     unknown, never invent 0.
+   - **turns** — **new careful extractor** `read_turns_left(prompt_line)` on the
+     settled prompt line only (same last-match discipline as sector; never
+     whole-screen search). Disambiguation (archive scar — pin in tests):
+     - `TL=` body matching `\d{1,2}:\d{2}:\d{2}` (HH:MM:SS countdown) →
+       **absent** (no key / unknown cell — never forge `0`)
+     - otherwise leading digit sequence (e.g. `00753:0/0/0/850`, bare `00753`)
+       → **read** with turn count
+   - On `OUTCOME_READ`, emit **both**:
+     - top-level `resp["turns_left"] = N` (fixes GOALS Turns row)
+     - `resp["hud"]["turns"] = {"value": N, "age_s": <daemon age>}` (fixes HUD)
 
 4. Update `tests/test_status_vocabulary_guard.py` STARVED_ALLOWLIST: remove
-   `hud` when emitted; remove `credits` / `turns_left` **only if** those
-   top-level keys are also produced (GOALS consumers). If this WO nests under
-   `hud` only, leave top-level starved entries with an updated reason pointing
-   here or a sibling — do not silently leave a false "no producer" claim for
-   a key you now write.
+   `hud` and `turns_left` when those keys are produced; remove `credits` only
+   if top-level `credits` is also written this WO. Exact-set guard fails both
+   directions — stale allowlist entries after wiring are red.
 
 5. Offline tests with captured / synthetic screens: classic TL count fills
    turns; countdown TL leaves turns unknown; sticky persistence across a
@@ -76,28 +80,34 @@ cells stay `-` and never fill during Play.
 
 ## Accept
 
-1. With a settled classic `Command [TL=<count>…]:[<sector>]` screen on a test
-   session, `status["hud"]` carries positive `turns` + `sector` (and credits
-   when a credits line is present) with finite `age_s`.
-2. Countdown-only `TL=HH:MM:SS` does **not** set turns to 0 / a forged count.
-3. Play HUD composer receives the payload without composer changes (contract
-   match) — pin via status→compose test or daemon status fixture.
-4. Vocabulary guard updated honestly for keys this WO actually supplies.
-5. Full offline `suite` green.
+1. Classic `Command [TL=00753:0/0/0/850]:[<sector>]` → `status["turns_left"]=753`
+   and `status["hud"]["turns"]` value 753 with finite `age_s`; sector/credits
+   fill when their producers read.
+2. Countdown `Command [TL=00:00:00]:…` → **no** `turns_left` key and HUD turns
+   stay unknown — never a forged `0`.
+3. Play HUD composer unchanged (contract match) — status→compose pin.
+4. GOALS Turns row consumes top-level `turns_left` (not viewport paint).
+5. Vocabulary guard updated honestly for keys this WO actually supplies.
+6. Full offline `suite` green.
 
 ## Proof
 
-- Focused unit/integration tests for extract + status hud payload + sticky age.
+- `tests/test_state_parser_turns.py` (or equivalent): classic → 753; countdown
+  → absent; bare `TL=00753` → 753; non-string → unreadable.
+- Status/hud integration + sticky age pins.
 - Full offline `suite`.
-- **Live-prove → Cursor** after suite green: attach Play on ≥1 reachable host,
-  confirm HUD TURNS (and SECTOR/CREDITS when on screen) leave `-` after login
-  / main_command. Safe half OK; no new arm path.
+- **Live-prove → Cursor** after suite green: Play HUD TURNS leave `-` after
+  login / main_command; GOALS Turns not `? —` when classic TL is on screen.
+  Safe half OK; no new arm path.
 
 ## Refs
 
 - Max live-test complaint 2026-07-29 (HUD blank while login shows turns)
+- Hub diagnosis corroboration 2026-07-29: viewport shows raw TL=; missing
+  `read_turns_left` (T3) + missing `status["hud"]` (T4) + Wave-3 cut at
+  `protocol.py` `_status_response` — payload omission, not a composer bug
 - `tw2002_aiclient/cockpit/hud.py` wire contract + "no wire bridge yet"
 - `tw2002_aiclient/session/protocol.py` `_status_response` (credits/turns deferred note)
-- `tw2002_aiclient/session/state_parser.py` TL= countdown refusal rationale
+- `tw2002_aiclient/session/state_parser.py` TL= countdown refusal rationale (~412–421)
 - `tests/test_status_vocabulary_guard.py` (`hud` T4 · `turns_left` T3 · `credits` T2)
 - `.samantha/plans/visible-client-gaps-2026-07-29.md`
