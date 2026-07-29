@@ -755,7 +755,7 @@ def test_a_money_screen_is_still_refused_under_a_healthy_floor():
     boundary."""
     session = FlooredNoSendSession([MONEY, MONEY], [HEALTHY])
     result = replay_loop(ONE_STEP_LOOP, session, floor=500)
-    assert result.reason == HALT_NEVER_AUTO_ACTION
+    assert result.reason == "never_auto_action:money_prompt"
     assert session.sends == []
 
 

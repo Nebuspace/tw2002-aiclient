@@ -269,6 +269,18 @@ def _coerce_width_height(value: object) -> int:
         return 0
 
 
+#: Separator in the qualified reason shape `<code>:<detail>`
+#: (WO-PLAYER-HALT-NEVER-AUTO-CLASS / #213's explore twin).
+#:
+#: Declared locally rather than imported from `loops.player`: this module's
+#: contract is "plain strings and a tone NAME only", and a cockpit renderer
+#: reaching into the loop engine for a constant is the coupling that
+#: contract exists to prevent. The cost of the copy is that the two could
+#: drift, so `tests/test_cockpit_stopbanner.py` pins them equal -- a copy
+#: with a pin, not a copy with a hope.
+_QUALIFIER_SEP = ":"
+
+
 def intervention_reason_label(code: object) -> str:
     """Resolve one typed reason ``code`` to its short human label.
 
@@ -299,7 +311,26 @@ def intervention_reason_label(code: object) -> str:
             return UNKNOWN_REASON
     if not text:
         return UNKNOWN_REASON
-    return INTERVENTION_REASON_LABELS.get(text, text)
+    if text in INTERVENTION_REASON_LABELS:
+        return INTERVENTION_REASON_LABELS[text]
+    # WO-PLAYER-HALT-NEVER-AUTO-CLASS: the qualified shape `<code>:<detail>`
+    # (`never_auto_action:money_prompt`). Resolved by its CODE, with the
+    # detail carried through verbatim -- no catalog row per class, which
+    # would make this table grow every time `classify` gains one.
+    #
+    # This is NOT the "silently normalizing" the docstring above forbids,
+    # and the distinction is worth stating because they look alike. That
+    # rule is about mangling a code until it matches something it is not --
+    # stripping whitespace, case-folding. This parses a shape the product
+    # deliberately emits, and only claims a match when the part before the
+    # separator is a code already in the catalog. A qualified code whose
+    # base is unknown still falls through to raw passthrough below, so
+    # open-by-construction is unchanged and no label is ever guessed from a
+    # neighbouring entry.
+    base, sep, detail = text.partition(_QUALIFIER_SEP)
+    if sep and detail and base in INTERVENTION_REASON_LABELS:
+        return f"{INTERVENTION_REASON_LABELS[base]}{_QUALIFIER_SEP} {detail}"
+    return text
 
 
 def needs_attention(status: dict | None) -> bool:

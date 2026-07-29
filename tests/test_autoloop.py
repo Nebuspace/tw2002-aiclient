@@ -610,7 +610,7 @@ def test_a_drive_verb_is_refused_while_the_loop_holds_the_wire(tmp_path):
     "label,screens,anchor,expected_reason,expected_sends",
     [
         # DECISIONS §A.2 -- the money screen the App may never answer.
-        ("money prompt", [MONEY[0]], 158, HALT_NEVER_AUTO_ACTION, 0),
+        ("money prompt", [MONEY[0]], 158, "never_auto_action:money_prompt", 0),
         # Canon's central invariant as a rail: the first unrecognized frame.
         ("unknown screen", [ODD[0]], 158, HALT_UNRECOGNIZED_SCREEN, 0),
         # The near-miss the start-anchor guard exists for.
