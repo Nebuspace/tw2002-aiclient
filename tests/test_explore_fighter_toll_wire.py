@@ -390,7 +390,11 @@ def test_an_encounter_that_never_clears_terminates_instead_of_hanging(tmp_path):
     report = _run_until_finished(_StuckTollSession(), tmp_path, fight_tolls=True)
     assert report is not None, "armed explore never terminated -- this is the live hang"
     assert report.outcome == OUTCOME_HALTED
-    assert report.reason in (sx.HALT_FIGHT_NO_PROGRESS, sx.HALT_FIGHT_CHAIN_LIMIT)
+    # Asserted EXACTLY, not `in (no_progress, chain_limit)`. The loose version
+    # was mutation-proven worthless: deleting the no-progress guard left this
+    # green because the blind budget caught the same case six steps later. An
+    # assertion that accepts either guard cannot tell you which one works.
+    assert report.reason == sx.HALT_FIGHT_NO_PROGRESS
 
 
 def test_a_stuck_encounter_cannot_resend_without_bound(tmp_path):
@@ -399,19 +403,35 @@ def test_a_stuck_encounter_cannot_resend_without_bound(tmp_path):
     must be small and bounded."""
     session = _StuckTollSession()
     _run_until_finished(session, tmp_path, fight_tolls=True)
-    assert len(_letters_sent(session)) <= sx.FIGHT_MAX_CHAIN_STEPS
+    # Exactly ONE key: act once, see the identical screen, stop. `<= 6` would
+    # also pass on a run that re-sent Attack five more times into live combat.
+    assert _letters_sent(session) == ["A"]
 
 
-def test_the_fight_path_publishes_its_counters_mid_run(tmp_path):
+def test_the_fight_path_publishes_its_counters_mid_run(tmp_path, monkeypatch):
     """Why the live failure read as `sends_issued=0`: the fight path
     `continue`d past every `_publish_progress` call, so status could never show
     a send. The count was not evidence of no sends -- it was evidence of no
     reporting, and it sent the diagnosis the wrong way."""
+    published = []
+    original = sx.ExploreRunner._publish_progress
+
+    def spy(self, report, **kw):
+        published.append(kw.get("sends_issued"))
+        return original(self, report, **kw)
+
+    monkeypatch.setattr(sx.ExploreRunner, "_publish_progress", spy)
     session = _StuckTollSession()
     report = _run_until_finished(session, tmp_path, fight_tolls=True)
     assert report is not None
+    # The claim is about MID-RUN publishing, so it must be observed mid-run.
+    # Reading `sends_issued` off the FINISHED report proved nothing -- the
+    # terminal report carries the count either way, which is why deleting the
+    # publish call left the earlier version of this test green.
+    assert any(n and n > 0 for n in published), (
+        "the fight path completed a send without ever publishing progress"
+    )
     assert report.sends_issued == len(_letters_sent(session))
-    assert report.sends_issued > 0
 
 
 def test_status_json_surfaces_the_combat_arm(tmp_path):
