@@ -50,8 +50,10 @@ def test_ensure_raw_settle_nudge_failure_does_not_flip_ensure_result(
     run_dir = tmp_path / "run"
     run_dir.mkdir()
     sock = run_dir / "twd.sock"
-    # Present before spawn wait so the loop exits without sleeping on a
-    # real daemon -- we only care about the settle-retry + ensure path.
+    # Pre-plant so wait-for-exists can exit without a real daemon. Product
+    # WO-ENSURE-STALE-SOCK-RECOVER unlinks orphan sock before Popen when
+    # daemon_alive is False — FakePopen must recreate the node (same as a
+    # real daemon bind) or the wait loop never sees a socket.
     sock.write_text("")
     (tmp_path / "logs").mkdir()
 
@@ -80,7 +82,7 @@ def test_ensure_raw_settle_nudge_failure_does_not_flip_ensure_result(
 
     class _FakePopen:
         def __init__(self, *a, **k):
-            pass
+            sock.write_text("")  # recreate after product orphan unlink
 
     monkeypatch.setattr(cli.subprocess, "Popen", _FakePopen)
 

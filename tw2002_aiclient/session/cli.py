@@ -286,6 +286,21 @@ def ensure_raw(profile, *, target="main_command", timeout=180.0, no_auto_arm=Fal
         if remaining <= 0:
             return {"ok": False, "error": "timeout", "detail": "budget exhausted before daemon spawn"}
 
+        # WO-ENSURE-STALE-SOCK-RECOVER: orphan `twd.sock` (crashed daemon /
+        # leftover live-prove) makes the wait-for-exists loop exit immediately
+        # and the settle `read` probe a corpse → `spawn_failed: … never
+        # answered`. Unlink before spawn when no live daemon holds the
+        # pidfile; do not treat orphan presence as readiness. Pidfile
+        # guards unchanged — this branch only runs when `daemon_alive` is
+        # already False.
+        if sock_path.exists():
+            try:
+                unlink = getattr(sock_path, "unlink", None)
+                if callable(unlink):
+                    unlink()
+            except OSError:
+                pass
+
         daemon_log_path = run_dir / "twd.stderr.log"
         try:
             daemon_log = open(daemon_log_path, "ab")
