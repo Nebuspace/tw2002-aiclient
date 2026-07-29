@@ -266,13 +266,26 @@ def _status_response(session, server):
     # subscribers (WatchHub) are live enough for cockpit status.
     rows = session.render()
     text = session.render_text(rows)
-    # WO-P2-G4-X5: the HUMAN-driven half of credits supervision. Every
-    # `do`/`read`/`screen`/`status` answer passes through here, so this is
-    # where a balance the operator saw while flying by hand becomes the
-    # arm-confirm precondition a later floored run needs ("the arm sequence
-    # must have shown a confirmed balance before a floored run will start").
-    # The App-driven half is `autoloop._ReplayPort.screen()`; both feed the
-    # same sticky pair, and neither decides anything -- capture only.
+    # WO-P2-G4-X5: the HUMAN-driven half of credits supervision -- where a
+    # balance the operator saw while flying by hand becomes the arm-confirm
+    # precondition a later floored run needs ("the arm sequence must have
+    # shown a confirmed balance before a floored run will start"). The
+    # App-driven half is `autoloop._ReplayPort.screen()`; both feed the same
+    # sticky pair, and neither decides anything -- capture only.
+    #
+    # This comment used to read "every `do`/`read`/`screen`/`status` answer
+    # passes through here" (WO-HUD-STATUS-BRIDGE corrected it). It does not:
+    # this is `_status_response`, and `dispatch` routes ONLY the `status`
+    # verb here -- `do`/`read`/`screen` answer through `build_response`,
+    # which has no observation site at all. So `status` is not one of four
+    # observers, it is the ONLY one, and a session driven purely by
+    # `do`/`send` would never fill the sticky pair from this side.
+    #
+    # That is why the two stores added below sit HERE rather than in
+    # `build_response`: this verb is the one the Play HUD polls, and putting
+    # the HUD's producers anywhere else would leave the bridge wired to a
+    # source nothing fills.
+    #
     # `callable`-guarded like `session.tail` below, for the same bare test
     # harnesses; a session that cannot observe leaves the balance `absent`,
     # which is a HALT on any floored run rather than a shrug.
@@ -283,6 +296,17 @@ def _status_response(session, server):
     # the current prompt line (classify.py's stale-scrollback discipline).
     # It is deliberately not a key below -- see this function's docstring.
     prompt_line = rows[-1].strip() if rows else ""
+    # WO-HUD-STATUS-BRIDGE: the turns counterpart, sited AFTER `prompt_line`
+    # because it is the one observer that reads both halves of the screen --
+    # the prompt-line `TL=` count and, when that says nothing, the body
+    # statement. Which of the two wins is `Session.observe_turns`'s call,
+    # not this call site's.
+    observe_turns = getattr(session, "observe_turns", None)
+    if callable(observe_turns):
+        observe_turns(text, prompt_line)
+    observe_sector = getattr(session, "observe_sector", None)
+    if callable(observe_sector):
+        observe_sector(prompt_line)
     watch_hub = getattr(server, "watch_hub", None)
     lock = getattr(server, "control_lock", None)
     # WO-P2-G4-X4: ONE observation of the arm state, feeding BOTH fields
@@ -343,6 +367,23 @@ def _status_response(session, server):
     # so this stays additive-only, never a new hard dependency.
     tail = getattr(session, "tail", None)
     resp["log_tail"] = tail.snapshot() if tail is not None else []
+    # WO-HUD-STATUS-BRIDGE: the always-on Play HUD's five tracked vitals.
+    # Always present, exactly like `replay_arm` above and for the same
+    # reason -- a missing key must not be the way "nothing is known" is
+    # expressed, because the composer already has an honest unknown cell and
+    # a silent key is indistinguishable from a bridge that broke.
+    resp["hud"] = _hud_payload(session)
+    # The GOALS Turns row reads a TOP-LEVEL `turns_left`, not the HUD cell
+    # (`cockpit/goals.py`: `_safe_int(status.get("turns_left"))`). Emitted
+    # only on a genuine reading and OMITTED otherwise, never set to `None`:
+    # "no key" and `None` already mean the same thing to `_safe_int`, and an
+    # explicit null would be this response's one field asserting a value it
+    # does not have. Same omit-don't-null rule `sector_wire` states for its
+    # own fields, and the reason a forged `0` is unreachable from here --
+    # there is no branch that can write this key without a `read` outcome.
+    turns = _turns_snapshot(session)
+    if turns is not None and turns.outcome == OUTCOME_READ:
+        resp["turns_left"] = turns.turns
     return resp
 
 
@@ -449,6 +490,67 @@ def _state_response(session):
         "state": {"sector": sector_wire(sector_read)},
         "classification": classify_screen(text, prompt_line),
         "connected": True,
+    }
+
+
+def _turns_snapshot(session):
+    """The session's turn-count snapshot, or `None` for a stand-in that has
+    no such store. `callable`-guarded for the same reason every other
+    optional session capability on this path is: `build_response` and its
+    neighbours are handed scripted doubles by dozens of tests, and a daemon
+    that crashed on one lacking a HUD store would trade a real outage for a
+    display nicety. The real `Session` is pinned on the other side, against
+    the class itself, so this can only ever excuse a double."""
+    snapshot = getattr(session, "turns_snapshot", None)
+    return snapshot() if callable(snapshot) else None
+
+
+def _hud_cell(value, age_s):
+    """One HUD cell in the shape `cockpit/hud.py` documents.
+
+    Always both keys, always present. The composer treats a missing key, a
+    `None` value and a non-dict identically (it paints `UNKNOWN_VALUE`), so
+    emitting the pair unconditionally costs nothing and keeps every cell the
+    same shape for anything that reads this payload without the composer.
+    """
+    return {"value": value, "age_s": age_s}
+
+
+def _hud_payload(session):
+    """`status["hud"]` -- the five tracked vitals, ages computed daemon-side.
+
+    Canon-authored field order (`cockpit/hud.py`). Ages arrive already
+    subtracted, as SECONDS: the composer is a pure function of an
+    already-computed `(value, age_s)` pair and "never a clock or event
+    source", so shipping a timestamp here would put the subtraction on the
+    far side of a process boundary where a second clock could creep in.
+
+    `cargo` and `profit` have no producer yet and are emitted as honest
+    unknowns rather than omitted, so the payload's shape does not change the
+    day they get one.
+
+    Nothing here can raise on a session that predates these stores: each
+    snapshot is fetched through a `callable` guard, and an absent store is
+    reported as an unknown cell -- the same answer the operator would get
+    from a store that simply had not seen anything yet.
+    """
+    credits_snapshot = getattr(session, "credits_snapshot", None)
+    credits = credits_snapshot() if callable(credits_snapshot) else None
+    sector_snapshot = getattr(session, "sector_snapshot", None)
+    sector = sector_snapshot() if callable(sector_snapshot) else None
+    turns = _turns_snapshot(session)
+
+    def cell(snapshot, attr):
+        if snapshot is None or snapshot.outcome != OUTCOME_READ:
+            return _hud_cell(None, None)
+        return _hud_cell(getattr(snapshot, attr), snapshot.age_s)
+
+    return {
+        "credits": cell(credits, "balance"),
+        "sector": cell(sector, "sector"),
+        "turns": cell(turns, "turns"),
+        "cargo": _hud_cell(None, None),
+        "profit": _hud_cell(None, None),
     }
 
 

@@ -283,10 +283,21 @@ SOURCE_COMMAND_PROMPT = "command_prompt"
 # (a post-transaction message vs. the ship-info screen).
 SOURCE_YOU_HAVE_CREDITS = "you_have_credits"
 SOURCE_CREDITS_LABEL = "credits_label"
+# The three accepted turn-count shapes, named individually for the same
+# reason the two credits shapes are: an operator looking at a turns cell
+# wants to know WHICH line produced it, and on this field the answer decides
+# how much to trust it. `turn_count_prompt` is the CLASSIC-server `TL=`
+# body; the other two are body statements this server actually prints.
+SOURCE_TURN_COUNT_PROMPT = "turn_count_prompt"
+SOURCE_TURNS_LEFT_NARRATIVE = "turns_left_narrative"
+SOURCE_TURNS_LEFT_LABEL = "turns_left_label"
 SOURCES = frozenset({
     SOURCE_COMMAND_PROMPT,
     SOURCE_YOU_HAVE_CREDITS,
     SOURCE_CREDITS_LABEL,
+    SOURCE_TURN_COUNT_PROMPT,
+    SOURCE_TURNS_LEFT_NARRATIVE,
+    SOURCE_TURNS_LEFT_LABEL,
 })
 
 # A damaged anchor: the prompt line opened a sector bracket and the number
@@ -304,9 +315,16 @@ REASON_SESSION_DISCONNECTED = "session_disconnected"
 # the number did not resolve out of it. Reachable in ordinary operation for
 # the same reason as its sector sibling -- a render taken mid-paint.
 REASON_DAMAGED_CREDITS_LABEL = "damaged_credits_label"
+# A damaged turn count: a label-first claim (`Turns left  :`) opened and the
+# number did not resolve out of it. Same mid-paint reachability as its two
+# siblings, and the same consequence -- `unreadable` is a NON-write, so a
+# half-painted ship-info screen ages the sticky value instead of replacing
+# it with a guess.
+REASON_DAMAGED_TURNS_LABEL = "damaged_turns_label"
 REASONS = frozenset({
     REASON_DAMAGED_COMMAND_PROMPT,
     REASON_DAMAGED_CREDITS_LABEL,
+    REASON_DAMAGED_TURNS_LABEL,
     REASON_NOT_TEXT,
     REASON_SESSION_DISCONNECTED,
 })
@@ -681,6 +699,404 @@ def credits_never_observed() -> CreditsSnapshot:
     rather than hand-rolled at each of its call sites -- the same reason
     :func:`sector_unreadable` exists."""
     return CreditsSnapshot(outcome=OUTCOME_ABSENT)
+
+
+# ---------------------------------------------------------------------------
+# Turns left -- what ONE screen said (WO-HUD-STATUS-BRIDGE)
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class TurnsRead:
+    """What a screen was able to say about how many turns remain.
+
+    Same shape and same enforcement as :class:`SectorRead` and
+    :class:`CreditsRead` -- a number accompanies exactly ``read``, a source
+    accompanies exactly ``read``, a reason accompanies exactly
+    ``unreadable``. No ``__bool__``, no ``ok``.
+
+    There is deliberately no fourth outcome distinguishing "this screen
+    printed a COUNTDOWN clock where a turn count would go" from "this screen
+    said nothing about turns". Both are ``absent``, because both mean the
+    same thing to every consumer: no number was established here. Inventing
+    a reason for the first would require loosening the type's
+    ``reason``-implies-``unreadable`` rule, and it would buy nothing -- the
+    HUD paints an unknown cell either way.
+    """
+
+    outcome: str
+    turns: Optional[int] = None
+    source: Optional[str] = None
+    reason: Optional[str] = None
+
+    def __post_init__(self) -> None:
+        if self.outcome not in OUTCOMES:
+            raise ValueError(f"outcome {self.outcome!r} is not one of {sorted(OUTCOMES)}")
+        read = self.outcome == OUTCOME_READ
+        if read != (self.turns is not None):
+            raise ValueError(
+                "a turn count accompanies exactly the 'read' outcome -- "
+                f"got outcome={self.outcome!r} with turns={self.turns!r}"
+            )
+        if read != (self.source is not None):
+            raise ValueError(
+                "a source accompanies exactly the 'read' outcome -- "
+                f"got outcome={self.outcome!r} with source={self.source!r}"
+            )
+        if (self.outcome == OUTCOME_UNREADABLE) != (self.reason is not None):
+            raise ValueError(
+                "a reason accompanies exactly the 'unreadable' outcome -- "
+                f"got outcome={self.outcome!r} with reason={self.reason!r}"
+            )
+        # `isinstance(True, int)` holds, so an unguarded check would let
+        # `turns=True` through as one turn -- the trap every sibling on this
+        # module documents on its own half of the comparison.
+        if self.turns is not None and (
+            isinstance(self.turns, bool) or not isinstance(self.turns, int)
+        ):
+            raise ValueError(f"turns must be an int, got {type(self.turns).__name__}")
+        if self.source is not None and self.source not in SOURCES:
+            raise ValueError(f"source {self.source!r} is not one of {sorted(SOURCES)}")
+        if self.reason is not None and self.reason not in REASONS:
+            raise ValueError(f"reason {self.reason!r} is not one of {sorted(REASONS)}")
+
+
+def turns_unreadable(reason: str) -> TurnsRead:
+    """The ``unreadable`` verdict, minted through the validated type -- the
+    same reason :func:`sector_unreadable` exists."""
+    return TurnsRead(outcome=OUTCOME_UNREADABLE, reason=reason)
+
+
+# The `TL=` bracket, read for its BODY rather than walked past. This is the
+# first interpreter of that field in the reborn tree, and the module's
+# sector half (see `_BRACKET_PREFIX` above) declines to be one on purpose:
+# "Interpreting TL= is where the archive put a real defect (matching the
+# HH:MM:SS countdown as a turn count and silently reporting `turns_left=0`)".
+# That defect is closed HERE, by checking the countdown shape FIRST and
+# answering `absent` to it, so the only way to reach a number is to have
+# already failed to look like a clock.
+#
+# `[^\]\r\n]*` rather than the sector half's `[^\]]*`: that one is scoped to
+# a single line by its caller's contract, and this one is called with the
+# same line but is also the function a future caller is most likely to hand
+# a block to by mistake. Excluding the newline makes "cannot cross a line"
+# a property of the pattern instead of a property of the call site.
+_TL_PREFIX = r"\[[ \t]*tl[ \t]*="
+_TL_OPEN_RE = re.compile(_TL_PREFIX, re.I)
+_TL_BODY_RE = re.compile(_TL_PREFIX + r"([^\]\r\n]*)\]", re.I)
+# The CLASSIC-server turn count, enumerated as an ACCEPT-list and anchored at
+# both ends: a leading digit run, optionally followed by one `:` and a
+# slash-separated stat group ("00753:0/0/0/850", "1000", "0").
+#
+# **Written as "what a count looks like", never as "what a clock looks
+# like".** The obvious implementation is the other way round -- refuse
+# `\d{1,2}:\d{2}:\d{2}`, then take whatever digits lead the rest -- and it
+# has a hole this one does not: a body that is clock-SHAPED but not exactly
+# HH:MM:SS (`1:2:3`, a truncated or differently-padded countdown) escapes
+# the refusal and is then read as its leading digits, which for a clock is a
+# small number and for `00:...` is the forged `0` this whole field exists to
+# make unreachable. Refusing a named hazard only closes the spellings of it
+# you thought of; accepting a named shape closes everything else by default.
+#
+# The countdown is therefore not mentioned in a pattern at all -- it is
+# refused because `:00:00` is not a slash-separated stat group, the same way
+# every other unrecognised body is refused. There is deliberately no second
+# clock-detecting check sitting in front of this one: it could not change an
+# outcome, and a guard that cannot change an outcome reads as protection
+# while providing none.
+#
+# The stat group must contain at least one `/`. Allowing a bare `:\d+` tail
+# re-opens the hole one notch further down: `TL=00:00` (a truncated or
+# half-painted clock) then parses as "count 00, stat group 00" and forges
+# the zero again. A slash is what makes a stat group a stat group, and
+# requiring it is what keeps `HH:MM` on the refused side. A hypothetical
+# classic server printing a single slash-less stat would read as `absent`
+# here -- the fail-closed direction, and the one this field must err in.
+_TL_TURN_COUNT_RE = re.compile(r"^[ \t]*(\d+)(?::\d+(?:/\d+)+)?[ \t]*$")
+
+
+def read_turns_left(prompt_line) -> TurnsRead:
+    """The turn count this screen's own prompt line states, if it states one.
+
+    ``prompt_line`` is the settled screen's last non-blank row, stripped --
+    the same input :func:`read_current_sector` takes, scoped the same way and
+    for the same reason: taking the line rather than the session makes the
+    function structurally incapable of being fooled by stale body content.
+
+    **The countdown is refused, never coerced.** Two servers spell this field
+    differently and only one of them means turns by it:
+
+    - ``TL=00753:0/0/0/850`` -- the CLASSIC-shape TWGS prompt, a turn count.
+    - ``TL=00:00:00`` -- this live server's MBBS Gold build, a session
+      countdown clock, which is **not** a turn count.
+
+    Reading the second as an integer yields ``0``, and a ``0`` here is not a
+    harmless wrong number: it is the reading that says "you are out of
+    turns". The archive shipped exactly that and "silently reported
+    ``turns_left=0``". This function answers ``absent`` to the clock shape,
+    so a forged zero is unreachable rather than merely unlikely.
+
+    **What this means on the live server.** That server uses the bracketed
+    countdown form, so this function answers ``absent`` on every one of its
+    prompts. That is correct, and it is also why it is not the only producer:
+    :func:`read_turns_left_from_screen` reads the body statements this server
+    *does* print. Neither function is a fallback for the other's bugs -- they
+    read different lines, and the caller's precedence is a policy decision
+    that lives with the sticky store, not here.
+
+    Returns a :class:`TurnsRead`, always -- ``absent`` is the ordinary answer
+    for most screens and an exception per poll would train a caller to
+    swallow it.
+    """
+    if not isinstance(prompt_line, str):
+        return turns_unreadable(REASON_NOT_TEXT)
+
+    # LAST match, per canon's hard rule and exactly as the sector sibling
+    # applies it: two brackets on one row means an echo or an in-band
+    # fragment shares it, and the bottom-most is the most recently printed.
+    bodies = list(_TL_BODY_RE.finditer(prompt_line))
+    opens = list(_TL_OPEN_RE.finditer(prompt_line))
+
+    if not opens:
+        return TurnsRead(outcome=OUTCOME_ABSENT)
+
+    # Last-match applied to the DAMAGE check too, not only to the value -- a
+    # resolved bracket earlier on the line does not rehabilitate a damaged
+    # one after it. Reading the earlier body would be first-match-wins by
+    # the back door, and on this field it would hand the HUD a count from
+    # before the spend.
+    if not bodies or opens[-1].start() > bodies[-1].start():
+        return turns_unreadable(REASON_DAMAGED_COMMAND_PROMPT)
+
+    counted = _TL_TURN_COUNT_RE.match(bodies[-1].group(1))
+    if not counted:
+        # Not a count: the HH:MM:SS countdown, any other clock-shaped body,
+        # and any spelling nobody here has seen all land together. This is
+        # the closed side of the enumeration, and it answers `absent` rather
+        # than reaching for whatever digits it can find -- which is the
+        # single behaviour that makes a forged `turns_left=0` unreachable.
+        return TurnsRead(outcome=OUTCOME_ABSENT)
+    return TurnsRead(
+        outcome=OUTCOME_READ,
+        turns=int(counted.group(1)),
+        source=SOURCE_TURN_COUNT_PROMPT,
+    )
+
+
+# ONE label prefix, two patterns built from it -- the `_BRACKET_PREFIX` /
+# `_CREDITS_LABEL_PREFIX` discipline, for the third time and the same
+# reason: "opened" and "resolved" cannot drift into describing different
+# shapes if neither is written twice.
+#
+# `[ \t]` throughout, never `\s`. This is not a general precaution on this
+# field -- it is THE scar. The archive's own `_TURNS_LEFT_PLAIN_RE` used
+# `\s+`, which "crossed newlines and forged turns_left from the prior line's
+# sector id" (quoted in this module's sector half, where it is cited as the
+# reason that half uses `[ \t]` too). A pattern that cannot match a newline
+# cannot cross one, so line-anchoring here is structural rather than a
+# discipline a later editor has to remember.
+#
+# The narrative shape gets no OPEN pattern, for the same reason
+# `You have N credits` gets none: no prefix of "29990 turns left"
+# unambiguously promises a turn count, so inventing one would report
+# `unreadable` on ordinary screens. The cost of that narrowing is only ever
+# a non-write, never a wrong number.
+_TURNS_LABEL_PREFIX = r"turns?[ \t]+left[ \t]*[:=]"
+_TURNS_LABEL_OPEN_RE = re.compile(_TURNS_LABEL_PREFIX, re.I)
+_TURNS_LABEL_VALUE_RE = re.compile(_TURNS_LABEL_PREFIX + r"[ \t]*(\d[\d,]*)", re.I)
+_TURNS_NARRATIVE_RE = re.compile(r"(\d[\d,]*)[ \t]+turns?[ \t]+left\b", re.I)
+
+
+def read_turns_left_from_screen(rendered_text) -> TurnsRead:
+    """The turn count this screen states in its BODY, if it states one.
+
+    ``rendered_text`` is a whole settled screen (``Session.render_text()``),
+    not a single line -- like the credits balance and unlike the sector
+    bracket, a turn count is a body statement with no prompt-line scoping
+    available to narrow it. That is the honest reason this function is more
+    exposed to a forged read than :func:`read_turns_left`, and this docstring
+    says so rather than implying parity.
+
+    Two accepted shapes, both of which this live server actually prints:
+
+    - ``One turn deducted, 29990 turns left.`` -- the post-move narrative.
+    - ``Turns left  : 850`` -- the ship-info (``I``) screen, label-first.
+
+    **Both are line-anchored by construction**, via ``[ \\t]`` in place of
+    ``\\s`` throughout. The archive's version of this exact field used
+    ``\\s+``, crossed a newline, and forged a turn count out of the previous
+    line's sector id. A regex that cannot match a newline cannot repeat that,
+    whatever a future caller passes in.
+
+    **What it will not read.** A line must contain the literal token
+    ``turns left`` adjacent to the number, so a bare count elsewhere on the
+    grid cannot be mistaken for one: the game-select menu's ``Turns:1000``
+    column, a fighter count, and a sector id all fail to match rather than
+    being filtered out afterwards. Refusal by construction, not by blocklist.
+
+    Returns a :class:`TurnsRead`, always. Settling is the caller's job,
+    exactly as it is for the other two readers.
+    """
+    if not isinstance(rendered_text, str):
+        return turns_unreadable(REASON_NOT_TEXT)
+
+    # Position-sorted across BOTH patterns -- a per-pattern priority order
+    # would not be last-match, which is the point the credits sibling makes
+    # at the same spot.
+    found = [
+        (m.end(), m.group(1), SOURCE_TURNS_LEFT_NARRATIVE)
+        for m in _TURNS_NARRATIVE_RE.finditer(rendered_text)
+    ]
+    found += [
+        (m.end(), m.group(1), SOURCE_TURNS_LEFT_LABEL)
+        for m in _TURNS_LABEL_VALUE_RE.finditer(rendered_text)
+    ]
+    opens = [m.end() for m in _TURNS_LABEL_OPEN_RE.finditer(rendered_text)]
+
+    if not found:
+        # A label opened with nothing resolved anywhere is a damaged claim;
+        # no label at all is a screen that simply says nothing about turns.
+        if opens:
+            return turns_unreadable(REASON_DAMAGED_TURNS_LABEL)
+        return TurnsRead(outcome=OUTCOME_ABSENT)
+
+    found.sort(key=lambda item: item[0])
+    last_end, raw, source = found[-1]
+    if opens and max(opens) > last_end:
+        # Last-match applied to the damage check as well: a resolved count
+        # earlier on the grid does not rehabilitate a damaged claim printed
+        # after it.
+        return turns_unreadable(REASON_DAMAGED_TURNS_LABEL)
+
+    return TurnsRead(
+        outcome=OUTCOME_READ,
+        turns=int(raw.replace(",", "")),
+        source=source,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Turns left -- what the RUNTIME knows right now
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class TurnsSnapshot:
+    """The last turn count this session observed, and how old it is.
+
+    Produced by :meth:`Session.turns_snapshot`, consumed by the HUD bridge.
+    Same two-fields-travel-together contract as :class:`CreditsSnapshot`, for
+    the same documented reason: reading the pair apart is how a concurrent
+    poll ends up pairing an old value with a new timestamp.
+
+    ``absent`` means nothing has ever been observed. It is a genuine negative
+    about the observation history, never a claim that zero turns remain --
+    which on this field is the single most important distinction the type
+    carries, and the one the archive lost.
+    """
+
+    outcome: str
+    turns: Optional[int] = None
+    age_s: Optional[float] = None
+
+    def __post_init__(self) -> None:
+        if self.outcome not in SNAPSHOT_OUTCOMES:
+            raise ValueError(
+                f"outcome {self.outcome!r} is not one of {sorted(SNAPSHOT_OUTCOMES)}"
+            )
+        read = self.outcome == OUTCOME_READ
+        if read != (self.turns is not None):
+            raise ValueError(
+                "a turn count accompanies exactly the 'read' outcome -- "
+                f"got outcome={self.outcome!r} with turns={self.turns!r}"
+            )
+        if read != (self.age_s is not None):
+            raise ValueError(
+                "an age accompanies exactly the 'read' outcome -- "
+                f"got outcome={self.outcome!r} with age_s={self.age_s!r}"
+            )
+        if self.turns is not None and (
+            isinstance(self.turns, bool) or not isinstance(self.turns, int)
+        ):
+            raise ValueError(f"turns must be an int, got {type(self.turns).__name__}")
+        if self.age_s is not None:
+            # NaN is the danger, not a type error -- `nan >= stale` is False,
+            # so an unguarded freshness ladder reads a NaN age as perfectly
+            # fresh. Rejected here AND handled positively by the HUD
+            # composer, because one of the two is a defence and both together
+            # are a property.
+            if isinstance(self.age_s, bool) or not isinstance(self.age_s, (int, float)):
+                raise ValueError(f"age_s must be a number, got {type(self.age_s).__name__}")
+            if not math.isfinite(self.age_s) or self.age_s < 0:
+                raise ValueError(f"age_s must be finite and non-negative, got {self.age_s!r}")
+
+
+def turns_never_observed() -> TurnsSnapshot:
+    """The ``absent`` snapshot, minted through the validated type rather than
+    hand-rolled at each call site -- the same reason
+    :func:`credits_never_observed` exists."""
+    return TurnsSnapshot(outcome=OUTCOME_ABSENT)
+
+
+# ---------------------------------------------------------------------------
+# Sector -- what the RUNTIME last SAW (presentational stickiness)
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class SectorSnapshot:
+    """The last sector this session saw stated, and how old that sighting is.
+
+    **This is not** :meth:`Session.last_known_sector`, and the difference is
+    the reason it exists. That method answers "may I attribute a per-sector
+    FACT right now?" and is epoch-invalidated -- it goes ``None`` the moment
+    anything is sent, because a world-model write against a stale sector is
+    the live incident it was built to prevent. This type answers a different
+    and much weaker question: "what is the last sector the operator was
+    shown?" A HUD cell that blanked itself after every keystroke would be
+    reporting the *guard's* state, not the ship's.
+
+    Keeping them apart is deliberate. Borrowing the safety-scoped memory for
+    a display would either weaken that memory or make the display useless,
+    and which of the two happened would depend on whoever edited it next.
+
+    Same two-fields-together contract as its siblings.
+    """
+
+    outcome: str
+    sector: Optional[int] = None
+    age_s: Optional[float] = None
+
+    def __post_init__(self) -> None:
+        if self.outcome not in SNAPSHOT_OUTCOMES:
+            raise ValueError(
+                f"outcome {self.outcome!r} is not one of {sorted(SNAPSHOT_OUTCOMES)}"
+            )
+        read = self.outcome == OUTCOME_READ
+        if read != (self.sector is not None):
+            raise ValueError(
+                "a sector accompanies exactly the 'read' outcome -- "
+                f"got outcome={self.outcome!r} with sector={self.sector!r}"
+            )
+        if read != (self.age_s is not None):
+            raise ValueError(
+                "an age accompanies exactly the 'read' outcome -- "
+                f"got outcome={self.outcome!r} with age_s={self.age_s!r}"
+            )
+        if self.sector is not None and (
+            isinstance(self.sector, bool) or not isinstance(self.sector, int)
+        ):
+            raise ValueError(f"sector must be an int, got {type(self.sector).__name__}")
+        if self.age_s is not None:
+            if isinstance(self.age_s, bool) or not isinstance(self.age_s, (int, float)):
+                raise ValueError(f"age_s must be a number, got {type(self.age_s).__name__}")
+            if not math.isfinite(self.age_s) or self.age_s < 0:
+                raise ValueError(f"age_s must be finite and non-negative, got {self.age_s!r}")
+
+
+def sector_never_observed() -> SectorSnapshot:
+    """The ``absent`` snapshot, minted through the validated type."""
+    return SectorSnapshot(outcome=OUTCOME_ABSENT)
 
 
 # ---------------------------------------------------------------------------

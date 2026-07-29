@@ -521,6 +521,16 @@ def test_the_status_answer_carries_only_bounded_fields(cfg, tmp_path, run_dir):
                               disarmed); host/port are the session reconnect
                               endpoint when armed. Never RX-buffer content,
                               never a password.
+      `hud`                   WO-HUD-STATUS-BRIDGE: always-present five-cell
+                              `{value, age_s}` payload. Bounded by
+                              CONSTRUCTION, not by filtering — every value is
+                              an `int` a `state_parser` reader resolved out of
+                              a digit-only capture group, and every age is a
+                              `float` this process subtracted. No branch can
+                              put a slice of the screen in either slot, which
+                              is the same property `sector_wire` has and the
+                              reason both are safe on this surface. Asserted
+                              positively below, per-cell, rather than assumed.
 
     Run against the POLITE script on purpose: with no echo the screen still
     classifies `login_password`, so this doubles as the positive diagnosability
@@ -549,10 +559,26 @@ def test_the_status_answer_carries_only_bounded_fields(cfg, tmp_path, run_dir):
         "mode",
         "log_tail",
         "replay_arm",
+        "hud",
     }
     assert "prompt" not in status
     assert "screen" not in status
     assert "color" not in status
+    # WO-HUD-STATUS-BRIDGE. The HUD payload is on this surface now, so it is
+    # measured here rather than trusted: every cell may hold only an int (or
+    # null) and a float age (or null). A string in either slot would be the
+    # only way screen content could ride this field, and it cannot get there
+    # -- both readers resolve their number out of a `\d`-only capture group.
+    assert set(status["hud"]) == {"credits", "sector", "turns", "cargo", "profit"}
+    for name, cell in status["hud"].items():
+        assert set(cell) == {"value", "age_s"}, name
+        assert cell["value"] is None or isinstance(cell["value"], int), name
+        assert cell["age_s"] is None or isinstance(cell["age_s"], float), name
+    # A login screen states no turn count, so the key is absent entirely --
+    # the omit-don't-null rule, observed here through a real daemon round
+    # trip rather than a unit fixture. If a future change makes this appear
+    # on a password prompt, that is worth failing over.
+    assert "turns_left" not in status
     assert status["prompt_withheld"] == "structured_mirror"
     assert status["classification"] == "login_password"
     # The profile fields are the profile's, not the screen's -- pinned so a
