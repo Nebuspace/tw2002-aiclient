@@ -1,0 +1,5 @@
+<A> Attack this Port
+<T> Trade at this Port
+<Q> Quit, nevermind
+
+Enter your choice [T] ? 

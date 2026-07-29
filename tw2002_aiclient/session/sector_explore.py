@@ -52,7 +52,9 @@ __all__ = [
     "HALT_FIGHT_NO_KEY",
     "HALT_FIGHT_POLICY_STOP",
     "HALT_DOCK_FORBIDDEN_KEY",
-    "HALT_DOCK_UNRECOGNIZED",
+    "HALT_DOCK_MENU_UNRECOGNIZED",
+    "HALT_DOCK_POSITION_UNKNOWN",
+    "HALT_DOCK_REPORT_UNREADABLE",
     "MOVEMENT_SCREEN_CLASS",
     "explore_run_wire",
     "observe_explore",
@@ -360,12 +362,27 @@ def _ingest_settled_sector(
 #: this is that discipline ported, not re-invented.
 DOCK_LETTER_ALLOWLIST = frozenset({"P", "T"})
 
-HALT_DOCK_UNRECOGNIZED = "dock_screen_unrecognized"
+#: Three reasons, one per failure site, replacing the single
+#: `dock_screen_unrecognized` this module used to return from both the menu
+#: check and the post-`T` ingest. That one string cost a whole diagnosis
+#: cycle: #205's live halt was read as "the dock menu dialect is unknown"
+#: when the menu had matched all along and the *sector attribution* was what
+#: failed. A reason shared by two failures is not a diagnosis, it is a hint.
+HALT_DOCK_MENU_UNRECOGNIZED = "dock_menu_unrecognized"
+HALT_DOCK_REPORT_UNREADABLE = "dock_report_unreadable"
+HALT_DOCK_POSITION_UNKNOWN = "dock_position_unknown"
 HALT_DOCK_FORBIDDEN_KEY = "dock_forbidden_key"
 
 #: The port menu that `P` lands on. Matched on its prompt, not on `<A> Attack
 #: this Port`, so that recognizing the menu never depends on the attack option
 #: being present in the render.
+#:
+#: Confirmed against captured wire (`logs/session-20260725T202110Z.log`): the
+#: real menu is `<A> Attack this Port / <T> Trade at this Port / <Q> Quit,
+#: nevermind` over the prompt `Enter your choice [T] ? `. This marker matches
+#: it. It also matches other menus that end `Enter your choice: `, which is
+#: tolerable only because the letters we may send are allowlisted to `{P, T}`
+#: and every screen after them is re-gated.
 _PORT_MENU_MARKER = "enter your choice"
 
 
@@ -428,6 +445,7 @@ def _ingest_docked_report(
     full_text: str,
     prompt_line: str,
     state_dir,
+    sector_id: Optional[int] = None,
 ) -> Optional[int]:
     """Persist a docked commerce report's commodities. Returns the sector, or
     ``None`` when nothing was written.
@@ -438,20 +456,42 @@ def _ingest_docked_report(
     neither symbol has ever existed, so the write path it documents was never
     wired and every commodity table the client rendered was dropped.
 
-    The sector comes from THIS screen's own trailing ship Command prompt, per
-    canon's Ingestion note — a commerce report carries no ``Sector : N`` line,
-    and reaching back to a remembered sector would attribute a port to
-    wherever we were last if anything scrolled. Unreadable prompt ⇒ write
-    nothing: a port written into the wrong sector cannot be removed by any
-    product path.
+    A commerce report carries no ``Sector : N`` line, so the sector has to come
+    from the prompt — and attributing a port to the wrong sector is
+    unrecoverable, because no product path can remove it. Hence: unreadable
+    position ⇒ write nothing.
+
+    **Which prompt, though, is the thing this function got wrong.** It used to
+    read the sector from ``prompt_line`` unconditionally, documented as "THIS
+    screen's own trailing ship Command prompt". Captured wire
+    (``logs/session-20260725T202110Z.log``) shows that prompt is only there
+    when the port has nothing to trade with you::
+
+        Commerce report for Raven: ...
+         Items     Status  Trading % of max OnBoard
+        Fuel Ore   Buying    2030    100%       0
+        ...
+        How many holds of Equipment do you want to buy [40]?   <-- no sector
+
+    When a trade IS possible the screen ends in the trade dialogue instead, so
+    ``read_current_sector`` returned ``absent`` and this wrote nothing — the
+    live ``dock_screen_unrecognized`` on every armed run. Both captured
+    fixtures happened to be the no-trade case, which is why a green suite sat
+    on top of a path that could not work.
+
+    So callers who already know where they are pass ``sector_id`` explicitly.
+    The free-flyby caller does not pass it and keeps reading the prompt,
+    because on that path ``prompt_line`` genuinely IS the ship Command prompt.
     """
     report = read_port_commodities_from_report(full_text)
     if not report.observed:
         return None
-    sector_read = read_current_sector(prompt_line)
-    if sector_read.outcome != OUTCOME_READ or sector_read.sector is None:
-        return None
-    sector_id = int(sector_read.sector)
+    if sector_id is None:
+        sector_read = read_current_sector(prompt_line)
+        if sector_read.outcome != OUTCOME_READ or sector_read.sector is None:
+            return None
+        sector_id = int(sector_read.sector)
+    sector_id = int(sector_id)
     world_model.write_port_only(
         world_id,
         sector_id,
@@ -605,18 +645,36 @@ class ExploreRunner:
             raise ValueError(f"{HALT_DOCK_FORBIDDEN_KEY}:{letter!r}")
         if not (isinstance(letter, str) and len(letter) == 1 and letter.isalpha()):
             raise ValueError(f"{HALT_DOCK_FORBIDDEN_KEY}:malformed")
+        # `enter=False`: BOTH dock prompts are hot-key menus that act on the
+        # bare keypress. Captured live wire -- `TX (1 bytes) p` returns the
+        # 193-byte port menu, `TX (1 bytes) t` returns the 1024-byte `<Port>`
+        # dock. So a trailing Enter is not harmless punctuation here, it is an
+        # extra keystroke the NEXT prompt consumes:
+        #
+        #   "P\r"  ->  `P` opens the menu, `\r` accepts its `[T]` default and
+        #              DOCKS us, landing on `How many holds ... [50]?`
+        #   "T\r"  ->  `T` buffers at that numeric prompt, `\r` commits it,
+        #              taking the default: `Agreed, 50 units.` -> `Your offer`
+        #
+        # That is exactly what the #211 live prove caught: the run bought a
+        # quantity of Fuel Ore it was never asked to buy, one Enter short of
+        # spending 924 credits. `send_and_confirm` makes `enter` explicit
+        # precisely so the caller decides per prompt-shape; taking its default
+        # was the bug.
         _reason, _elapsed, confirmed = _settle.send_and_confirm(
             self._session,
             letter,
             confirm_prompt=None,
-            enter=True,
+            enter=False,
             timeout_s=self._timeout_s,
             debounce_ms=self._debounce_ms,
         )
         rows = self._session.render()
         return confirmed, self._session.render_text(rows), (rows[-1].strip() if rows else "")
 
-    def _dock_and_ingest(self, report: ExploreReport) -> tuple[Optional[str], int, int]:
+    def _dock_and_ingest(
+        self, report: ExploreReport, sector_id: Optional[int]
+    ) -> tuple[Optional[str], int, int]:
         """`P` -> port menu -> `T` -> commerce report -> write.
 
         Returns ``(halt_reason_or_None, sends_issued, turns_spent)``.
@@ -631,12 +689,36 @@ class ExploreRunner:
         There is no undock step, by design: the archived cascade records that
         navigating to the next hop's sector IS the undock, so this never sends
         one and the loop's ordinary hop resumes control.
+
+        ``sector_id`` is where the CALLER knows we are, read from the sector
+        screen's own Command prompt before any letter is sent. It is a
+        parameter rather than something re-derived here because the screens
+        this method produces do not carry a sector — see
+        :func:`_ingest_docked_report`. ``None`` means the caller could not read
+        its own position, and then this sends **nothing**: docking blind would
+        spend a turn to learn a commodity table it could not safely attribute,
+        and a port written into the wrong sector is unremovable.
         """
+        if sector_id is None:
+            return HALT_DOCK_POSITION_UNKNOWN, 0, 0
         confirmed, full_text, prompt = self._send_dock_letter("P")
         if not confirmed:
             return HALT_CONFIRM_FAILED, 1, 0
-        if _PORT_MENU_MARKER not in full_text.lower():
-            return HALT_DOCK_UNRECOGNIZED, 1, 0
+        # Matched against the live PROMPT LINE, never the whole screen.
+        #
+        # This is the fail-closed half of the #211 overshoot, and on its own it
+        # would have stopped the trade. When `P\r` had already docked us, the
+        # menu had scrolled up but its text was still ON the screen -- so a
+        # `full_text` check happily confirmed "we are at the port menu" while
+        # the live prompt underneath read `How many holds ... [50]?`, and the
+        # cascade sent its next letter into a money prompt.
+        #
+        # A whole-screen check cannot tell "this menu is the live prompt" from
+        # "this menu is scrollback", and those differ by exactly one turn and
+        # one trade. Same idiom the rest of the module already uses: `classify`
+        # matches its gate anchors against `prompt_line` only, for this reason.
+        if _PORT_MENU_MARKER not in prompt.lower():
+            return HALT_DOCK_MENU_UNRECOGNIZED, 1, 0
         confirmed, full_text, prompt = self._send_dock_letter("T")
         # The turn is deducted by the server at `Docking...`, so it is spent
         # from here on regardless of whether the report parses.
@@ -647,9 +729,30 @@ class ExploreRunner:
             full_text=full_text,
             prompt_line=prompt,
             state_dir=self._state_dir,
+            sector_id=sector_id,
         )
         if wrote is None:
-            return HALT_DOCK_UNRECOGNIZED, 2, 1
+            return HALT_DOCK_REPORT_UNREADABLE, 2, 1
+        # Gate the screen `T` left us on, HERE, before returning success.
+        #
+        # It is tempting to write "the loop's own gate will see this" -- I did
+        # write exactly that, and it is false. `_gate_screen` runs at the TOP
+        # of an iteration, and a successful dock returns into the MIDDLE of
+        # one, past the gate and immediately before the next warp is sent. A
+        # test caught the consequence: letters went out as `P`, `T`, `158` --
+        # the loop typing a sector number into the port's trade prompt.
+        #
+        # That matters because when the port has goods we can trade, `T` lands
+        # on `How many holds ... [40]?`, a money prompt that takes its DEFAULT
+        # on any input it cannot parse (captured wire: a human typing `quit`
+        # there bought 2,423 credits of equipment). So an ungated return is
+        # not a missing halt, it is the app sending keys at a money prompt.
+        #
+        # When the port had nothing to trade the game returns to the Command
+        # prompt instead, this gate passes, and the run continues as before.
+        halt, _klass = _gate_screen(full_text, prompt)
+        if halt is not None:
+            return halt, 2, 1
         return None, 2, 1
 
     def start(
@@ -905,7 +1008,7 @@ class ExploreRunner:
                     read_port_from_sector_status(full_text),
                     _stored_port(report.world_id, current, state_dir=self._state_dir),
                 ):
-                    dock_halt, dock_sends, dock_turns = self._dock_and_ingest(report)
+                    dock_halt, dock_sends, dock_turns = self._dock_and_ingest(report, current)
                     sends += dock_sends
                     turns -= dock_turns
                     self._publish_progress(

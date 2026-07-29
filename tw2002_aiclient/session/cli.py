@@ -1626,14 +1626,23 @@ def build_parser() -> argparse.ArgumentParser:
                     help="minimum distinct sectors to visit (default daemon: 5)")
     sp.add_argument("--turn-budget", type=int, default=None, dest="turn_budget",
                     help="maximum turns to spend (default daemon: 50)")
-    # WO-EXPLORE-DOCK-DEFAULT-OFF: default OFF until a recognizable dock
-    # dialect is captured. Library default is already False; CLI matches it.
-    # Opt-in with `--dock-new-ports` (turn-spend). Default-ON halted map-fill
-    # on live hosts via `dock_screen_unrecognized` (#205 live STATUS).
+    # WO-EXPLORE-DOCK-DEFAULT-OFF / WO-EXPLORE-DOCK-DIALECT: default OFF.
+    # Library default is already False; CLI matches it. Opt-in (turn-spend).
+    #
+    # The original reason recorded here -- "until a recognizable dock dialect
+    # is captured" -- was wrong, and is corrected rather than deleted because
+    # it is why this flag spent a release defaulted off for the wrong cause.
+    # The menu dialect always matched; #205's live `dock_screen_unrecognized`
+    # was sector attribution failing on the post-`T` screen. That is fixed.
+    # It stays OFF for a DIFFERENT and larger reason: when the port has goods
+    # you can trade, `T` lands in a money dialogue that takes its default on
+    # unparsable input, and no observed input leaves it without trading. The
+    # run ingests the table and then halts there for the human. Arming it
+    # unattended risks both credits and an inactivity disconnect.
     sp.add_argument("--dock-new-ports", action=argparse.BooleanOptionalAction,
                     default=False, dest="dock_new_ports",
-                    help="dock first-sight ports to ingest commodities "
-                         "(spends one turn each; OFF by default until dialect known)")
+                    help="dock first-sight ports to ingest commodities (spends "
+                         "one turn each; halts on the port's trade prompt for you)")
     # WO-FIGHTER-TOLL-POLICY-WIRE: the combat arm. OFF by default and opt-in
     # per run -- there is no persisted "always fight" setting on purpose, so
     # arming is an explicit decision the operator makes each time.

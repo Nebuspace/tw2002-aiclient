@@ -173,6 +173,7 @@ def explore_start(
     turn_budget: int | None = None,
     intent: str | None = None,
     dock_new_ports: bool | None = None,
+    fight_tolls: bool | None = None,
     run_dir: Path | None = None,
 ) -> ExploreResult:
     """Start the sector explorer for *world_id*.
@@ -203,6 +204,25 @@ def explore_start(
         # caller that has not been taught about turn-spending docking cannot
         # start one by accident.
         payload["dock_new_ports"] = bool(dock_new_ports)
+    if fight_tolls is not None:
+        # WO-ADAPTERS-FIGHT-TOLLS. Same "None -> omit" discipline as the flags
+        # above, and it carries the most weight of any of them: omitted leaves
+        # the daemon at False, so a caller that has never been taught about the
+        # toll policy cannot arm an ATTACK by accident. Play and every other
+        # adapter caller could not arm this at all before -- automation was
+        # CLI-only -- but "reachable" must not become "on".
+        #
+        # DELIBERATELY NOT `bool(fight_tolls)`, which is where `dock_new_ports`
+        # above differs. `runner.start` refuses a non-bool with
+        # `invalid_fight_tolls` precisely because `"no"` is truthy in Python --
+        # coercing here would hand the daemon a valid `True` and the refusal
+        # would never fire. Local coercion does not defend the caller; it
+        # destroys the evidence the daemon needs to defend them.
+        #
+        # So the value is forwarded UNCHANGED and the daemon adjudicates. That
+        # is also consistent with this module's contract: expected protocol
+        # failures come back as a typed `ExploreResult`, not an exception.
+        payload["fight_tolls"] = fight_tolls
     try:
         resp = _cli.send_request("explore_start", payload, run_dir=resolved_run_dir)
     except Exception as e:  # noqa: BLE001 — belt-and-suspenders; send_request never raises
@@ -445,6 +465,7 @@ def explore_start_for_profile(
     turn_budget: int | None = None,
     intent: str | None = None,
     dock_new_ports: bool | None = None,
+    fight_tolls: bool | None = None,
     run_dir: Path | None = None,
 ) -> ExploreResult:
     """Convenience wrapper: derive *world_id* from *profile*, then call
@@ -463,5 +484,6 @@ def explore_start_for_profile(
         turn_budget=turn_budget,
         intent=intent,
         dock_new_ports=dock_new_ports,
+        fight_tolls=fight_tolls,
         run_dir=run_dir,
     )

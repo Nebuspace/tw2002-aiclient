@@ -1,0 +1,17 @@
+Commerce report for Raven: 02:40:44 PM Sat Jul 25, 2054
+
+-=-=-        Docking Log        -=-=-
+No current ship docking log on file.
+For finding this unused port you receive 1 experience point(s).
+
+ Items     Status  Trading % of max OnBoard
+ -----     ------  ------- -------- -------
+Fuel Ore   Buying    2030    100%       0
+Organics   Buying    2970    100%       0
+Equipment  Selling   2800    100%       0
+
+
+You have 99,000 credits and 40 empty cargo holds.
+
+We are selling up to 2800.  You have 0 in your holds.
+How many holds of Equipment do you want to buy [40]? 
