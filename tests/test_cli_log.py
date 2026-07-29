@@ -42,6 +42,11 @@ _SHIPPED_VERBS = frozenset(
         # N-port profit-cycle listing (the general case `pairs` is the
         # 2-port special case of). Behaviour: tests/test_cli_chains.py.
         "chains",
+        # WO-REFLEX-CLIENT-REACH -- `tw reflex`, the READ-ONLY view of what
+        # the taught rule library proposes for the live screen. Proposes
+        # only: it names a macro, never arms or runs one. Behaviour:
+        # tests/test_reflex_client_reach.py.
+        "reflex",
     }
 )
 
