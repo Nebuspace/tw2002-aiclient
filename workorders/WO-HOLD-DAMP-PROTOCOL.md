@@ -16,7 +16,17 @@ canonical coordination-protocol docs. No product or test changes.
 
 ## Scope
 
-Owned implementation paths:
+**Amended 2026-07-29 (Option A, hub-ratified).** The original scope listed five paths that
+PR #217 cannot carry: `.claude/` and `.samantha/` are gitignored in this repo
+(`.gitignore:17` and `.gitignore:16`), and the live files sit in the parent workspace
+`Nebuspace/`, which is not a git repository at all. Delivery is therefore split.
+
+**Carried by PR #217 (`impl-claudecode-aiclient`):**
+
+- `tests/test_hold_damp.sh` — the proof battery, parameterised on `HEARTBEAT=<path>`
+- `workorders/WO-HOLD-DAMP-PROTOCOL.md` — this file
+
+**Applied to the parent workspace by the hub, from the staged artifact:**
 
 - `.claude/heartbeat.sh` (live deployed script — hub owns edits)
 - `.samantha/references/coordination-protocol/heartbeat.sh` (canonical reference copy)
@@ -36,6 +46,15 @@ Branch owner: `impl-claudecode-aiclient` after HANDOFF.
   must remain byte-identical after the change (one is a copy of the other).
 - Preserve all existing `heartbeat.sh` behavior when no HOLD marker is present.
 - No new shell dependency. Bash 3.2 compatible (macOS system bash).
+- **Apply the live script by atomic replace (`mv`), never by editing in place.** Bash reads
+  a running script incrementally from a byte offset, so rewriting the file underneath live
+  heartbeats changes what they execute mid-flight. Measured on bash 3.2.57: an in-place
+  rewrite of similar length made the running process execute the NEW file's tail; a shorter
+  rewrite made it stop dead at the truncation point and **exit 0**. Since `exit 42` is the
+  documented dead-man signal *"distinct from the normal cap-reached exit 0"*, a
+  truncation-killed heartbeat is indistinguishable from a healthy finish — every seat would
+  go deaf while `coord-status.sh` still read BOTH ALIVE. A `mv` leaves the running process
+  on the old inode and it finishes intact. This is a Rule 2 transport-clause change.
 
 ## HOLD-DAMP-V2 specification (implement exactly this)
 
@@ -45,7 +64,7 @@ A seat engages HOLD damping by including `[HOLD:<name>]` in the **header line** 
 a substantive outbox entry (STATUS, HEADS-UP, HANDOFF, ACK, DECISION, PROCESS-NOTE
 — not HEARTBEAT, not WATCHER-DOWN, not HOLD-CHECK ACK). Name is any non-`]` string.
 
-Detection regex (POSIX ERE, `grep -qE`):
+Marker regex (POSIX ERE, `grep -qE`) — unchanged and correct:
 ```
 \[HOLD:[^]]+\]
 ```
@@ -85,14 +104,56 @@ count as clearing.
 
 ### Detection implementation
 
-Read the own outbox; scan backwards from EOF for the most recent non-heartbeat,
-non-WATCHER-DOWN, non-HOLD-CHECK header line that matches:
+**Amended 2026-07-29 — the drafted header regex was inert.** The draft said to find the
+most recent substantive header matching:
 ```
 ### .*— (STATUS|HEADS-UP|HANDOFF|ACK|DECISION|PROCESS-NOTE|DEPLOY)
 ```
-Check that header line for `\[HOLD:[^]]+\]`. Extract `<name>` for logging.
+Measured against the live coord dir, that expression matched **0 of 5034 real headers**, for
+two independent reasons: it anchors the tag word immediately after `— `, but every real
+header carries an emoji there; and the live tag vocabulary is far wider than those seven
+words — `QUEUE-STATUS`, `ACCEPT`, `MERGED`, `CLAIM`, `GO`, `MERGE-ARMED`, `REVISE`,
+`CORRECTION` are all in daily use. Implemented literally, HOLD damping would have been a
+silent no-op: `HOLD_ACTIVE` always 0, IDLE-KICK never suppressed, HOLD-CHECK never posted,
+`exit 43` unreachable — and a battery that only asked "does an unheld seat still work?"
+would have passed.
+
+**Ships instead:** enumerate the CLOSED side. Take every `^### … — … — …` header; a header is
+**substantive unless** its tag word (text after the final `— `, with any trailing `[…]`
+qualifier stripped) contains `HEARTBEAT`, `WATCHER-DOWN`, or `HOLD-WAKE-UNACKED`, or unless
+the unstripped tag matches `ACK…[HOLD-CHECK:` (the Rule 6 exclusion, which needs the
+qualifier to identify it). The last surviving header is the one tested for `[HOLD:<name>]`.
+
+An unrecognised NEW tag therefore defaults to substantive → clears the hold → IDLE-KICK
+resumes. That is the fail-LOUD direction; the closed-list version fails silent, which is the
+wrong way round for a mechanism whose only job is to notice that somebody stopped answering.
+The qualifier strip matters for the same reason: `📋 STATUS [WO-FIX-HEARTBEAT-DEADMAN]`
+contains the word `HEARTBEAT` and must still count as a real message.
 
 One shell function: `detect_hold_marker` — sets `HOLD_ACTIVE=1/0` and `HOLD_NAME`.
+
+### ACK-scan placement (amended 2026-07-29)
+
+Step 4c reads "each cadence tick after a pending HOLD-CHECK", but nesting that scan under
+`idle >= IDLE_THRESHOLD` cannot work: posting the HOLD-CHECK appends to the outbox, which
+resets the idle clock to ~0, so with shipped defaults the branch is not re-entered for four
+more ticks — a "two cadence tick" window is unreachable there, and the agent's own ACK resets
+the clock again. The ACK deadline is cadence-based, so `hold_ack_scan` runs at top level in
+the main loop, outside the idle gate.
+
+### The ACK scan must be anchored to header lines
+
+`hold_ack_scan` matches `^### .*ACK.*\[HOLD-CHECK:<nonce>\]`. Unanchored, the check **ACKs
+itself**: the HOLD-CHECK body prints the exact line the agent should post as a worked
+example, so a whole-file substring search finds its own instruction text and clears the
+pending check on the tick it was posted. Measured during build — `exit 43` became
+unreachable. The worked example is indented inside a code block, so `^###` excludes it.
+
+### Clearing a hold must never trip the alarm
+
+If the hold clears while a HOLD-CHECK is pending, the clearing message is itself the proof of
+life the check was asking for: `hold_ack_scan` drops the pending state instead of counting a
+missed tick.
 
 ## Accept
 
@@ -106,8 +167,15 @@ One shell function: `detect_hold_marker` — sets `HOLD_ACTIVE=1/0` and `HOLD_NA
 6. A fresh heartbeat.sh invocation with no existing outbox entries behaves identically
    to today.
 7. `.claude/heartbeat.sh` and `.samantha/references/coordination-protocol/heartbeat.sh`
-   are byte-identical.
-8. All canonical protocol docs list the new HOLD marker grammar and HOLD-CHECK tag.
+   are byte-identical **in the direction reference ← live**. They are NOT identical at the
+   seed: the live copy (650L, md5 `f0c25ebc46bb…`) carries the self-nudge addressing fix from
+   WO-PROCESS-HUB-IDLE-KICK-ADDRESS; the reference copy (644L, md5 `cdb2f15265b9…`) still
+   prints the old bare `💓 HEARTBEAT` header. Syncing in the wrong direction would silently
+   revert a shipped WO. Patch the LIVE copy, then copy it over the reference; md5-verify both.
+8. A third copy exists — `Claude_Samantha/.samantha/references/coordination-protocol/heartbeat.sh`
+   (428L, the only git-tracked one, 216 lines behind live). Its reconcile is a separate
+   Max-gated framework backport, explicitly **out of this WO's DoD**.
+9. All canonical protocol docs list the new HOLD marker grammar and HOLD-CHECK tag.
 
 ## Proof
 
