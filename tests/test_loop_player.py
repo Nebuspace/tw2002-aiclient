@@ -76,6 +76,10 @@ PLAYER_SRC = (PKG_ROOT / "loops" / "player.py").read_text(encoding="utf-8")
 # The two `session/` modules `player.py` is allowed to import, and the only
 # two: closed vocabularies canon requires it to DERIVE rather than restate.
 ALLOWED_SESSION_MODULES = frozenset({"classify", "state_parser"})
+#: WO-HALT-QUALIFY-CONSOLIDATE: package-root leaves the player may import
+#: across the `loops/` boundary. Same discipline as the session waiver --
+#: granted here, and PAID FOR by scanning the waived module itself below.
+ALLOWED_PACKAGE_MODULES = frozenset({"halt_reasons"})
 
 
 # --------------------------------------------------------------------------
@@ -970,7 +974,11 @@ def test_the_player_reaches_the_wire_through_exactly_one_call():
     shape the scanner knows, including a reflected ``getattr`` -- turns
     this list into two entries and fails.
     """
-    violations = _send_violations(PLAYER_SRC, allow_session_modules=ALLOWED_SESSION_MODULES)
+    violations = _send_violations(
+        PLAYER_SRC,
+        allow_session_modules=ALLOWED_SESSION_MODULES,
+        allow_package_modules=ALLOWED_PACKAGE_MODULES,
+    )
     assert violations == [".send_and_confirm"]
     assert "send_and_confirm" in _SEND_SYMBOLS
 
@@ -1109,3 +1117,28 @@ def test_the_reason_vocabulary_is_closed_and_fully_reachable():
     assert HALT_FENCED in INTERVENTION_REASON_LABELS
     assert player_mod.HALT_CREDITS_UNKNOWN in INTERVENTION_REASON_LABELS
     assert player_mod.HALT_CREDITS_STALE in INTERVENTION_REASON_LABELS
+
+
+def test_the_waived_package_module_is_itself_provably_pure() -> None:
+    """`halt_reasons` is waived past the "no relative import above the package"
+    rule, and that waiver is not taken on trust -- it earns it by passing the
+    same no-send scan, with no waivers of its own.
+
+    Written because the waiver has a cheaper alternative that would have been
+    invisible: `import tw2002_aiclient.halt_reasons` (absolute) is not caught
+    by the level>1 rule at all, so the import could have been spelled past the
+    guard instead of through it. Widening the pin in the open is the point.
+    """
+    src = (PKG_ROOT / "halt_reasons.py").read_text(encoding="utf-8")
+    assert _send_violations(src) == []
+
+
+def test_the_package_waiver_is_load_bearing_and_narrow() -> None:
+    """Without the waiver the player's import IS a violation (so the waiver is
+    doing real work), and the waiver admits only the module it names."""
+    assert "relative import above the package: level 2" in _send_violations(
+        PLAYER_SRC, allow_session_modules=ALLOWED_SESSION_MODULES
+    )
+    assert _send_violations(
+        "from ..protocol import send_request", allow_package_modules=ALLOWED_PACKAGE_MODULES
+    ) != []

@@ -776,7 +776,9 @@ def _reflected_name(call):
     return None
 
 
-def _send_violations(source: str, allow_session_modules=frozenset()) -> list[str]:
+def _send_violations(
+    source: str, allow_session_modules=frozenset(), allow_package_modules=frozenset()
+) -> list[str]:
     """Every way this scanner knows of to reach the wire from a module.
 
     Two layers, and the FIRST is the load-bearing one: a module that cannot
@@ -807,6 +809,15 @@ def _send_violations(source: str, allow_session_modules=frozenset()) -> list[str
             mod = node.module or ""
             parts = mod.split(".")
             if len(parts) == 2 and parts[0] == "session" and parts[1] in allow_session_modules:
+                continue
+            # WO-HALT-QUALIFY-CONSOLIDATE: same waiver discipline, one level up.
+            # A package-root leaf (`from ..halt_reasons import ...`) is allowed
+            # ONLY when named here, ONLY in this single relative spelling, and
+            # ONLY because the caller granting it also runs this scanner over
+            # the waived module itself -- see `tests/test_loop_player.py`. A
+            # module that cannot import the transport cannot send through it,
+            # and that is proven for the waived module rather than assumed.
+            if len(parts) == 1 and parts[0] in allow_package_modules:
                 continue
             if parts[0] in {"socket", "telnetlib"} or "session" in parts:
                 bad.append(f"from {mod} import ...")

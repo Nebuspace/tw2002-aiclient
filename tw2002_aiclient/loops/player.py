@@ -258,6 +258,7 @@ import math
 from dataclasses import dataclass
 from typing import Optional, Protocol
 
+from ..halt_reasons import QUALIFIER_SEP, halt_reason_code, qualify as _qualify
 from ..session.classify import NEVER_AUTO_ACTION_CLASSES, classify_screen
 from ..session.state_parser import (
     OUTCOME_ABSENT,
@@ -424,32 +425,20 @@ assert FORCEABLE_HALTS <= HALT_REASONS, (
 # (`reported == HALT_REASONS`) would stop being readable by a human.
 #
 # Instead the code is what is validated and the detail travels alongside it.
-# `sector_explore._qualify` is the same three lines: duplicated rather than
-# shared, because the alternative is either a new shared package for six
-# lines or an import that drags the explore module into the loop player.
-QUALIFIER_SEP = ":"
-
-
-def _qualify(code: str, detail: str) -> str:
-    """``code:detail`` -- a halt reason that carries what produced it."""
-    return f"{code}{QUALIFIER_SEP}{detail}"
-
-
-def halt_reason_code(reason: object) -> Optional[str]:
-    """The bare CODE from a possibly-qualified ``reason``.
-
-    ``never_auto_action:money_prompt`` -> ``never_auto_action``; an
-    unqualified reason is returned unchanged; a non-string (or ``None``)
-    yields ``None`` rather than a guess.
-
-    This is the one place the qualified shape is parsed, so every consumer
-    that needs "which halt code is this" asks the same question the same
-    way. Splits on the FIRST separator only: a detail that itself contained
-    a colon would otherwise silently truncate.
-    """
-    if not isinstance(reason, str) or not reason:
-        return None
-    return reason.split(QUALIFIER_SEP, 1)[0]
+#
+# WO-HALT-QUALIFY-CONSOLIDATE: the encoder, decoder, and separator now live in
+# `tw2002_aiclient.halt_reasons`. The note that stood here previously said the
+# three lines were "duplicated rather than shared, because the alternative is
+# either a new shared package for six lines or an import that drags the explore
+# module into the loop player" -- a correct objection to the wrong two options.
+# The shared module imports nothing from session/loops/cockpit/adapters, so it
+# creates no such edge, and `sector_explore` no longer re-derives the shape.
+#
+# The three names below are RE-EXPORTED here on purpose: existing callers and
+# tests import them from this module, and the local `_qualify` spelling is also
+# what the AST comparison guard scans for when it derives which halt codes can
+# carry a detail. Removing the aliases would break both.
+# (imported at the top of this module -- see the import block.)
 
 OUTCOME_COMPLETED = "completed"
 OUTCOME_HALTED = "halted"
