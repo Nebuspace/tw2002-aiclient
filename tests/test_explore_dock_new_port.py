@@ -267,16 +267,16 @@ def test_the_adapter_omits_the_key_when_unspecified(monkeypatch):
     assert seen["dock_new_ports"] is True
 
 
-def test_the_cli_explore_arm_sends_true_by_default(monkeypatch):
-    """`tw explore start` IS the operator arming a run, so the spend is on."""
+def test_the_cli_explore_arm_defaults_off(monkeypatch):
+    """`tw explore start` defaults dock OFF until dialect known (WO-…-DEFAULT-OFF)."""
     from tw2002_aiclient.session import cli as _cli
 
     parser = _cli.build_parser()
     args = parser.parse_args(["explore", "start", "--world-id", "w"])
-    assert args.dock_new_ports is True
+    assert args.dock_new_ports is False
     assert parser.parse_args(
-        ["explore", "start", "--world-id", "w", "--no-dock-new-ports"]
-    ).dock_new_ports is False
+        ["explore", "start", "--world-id", "w", "--dock-new-ports"]
+    ).dock_new_ports is True
 
     seen = {}
     monkeypatch.setattr(
@@ -284,12 +284,11 @@ def test_the_cli_explore_arm_sends_true_by_default(monkeypatch):
     )
     monkeypatch.setattr(_cli, "print_response", lambda *a, **k: None)
     _cli.cmd_explore_start(args)
-    assert seen["dock_new_ports"] is True
+    assert seen["dock_new_ports"] is False
 
 
-def test_the_play_explore_arm_passes_the_flag():
-    """Structural, not textual: a grep would match this keyword inside a
-    docstring or a neighbouring call. This resolves the actual call node."""
+def test_the_play_explore_arm_does_not_force_dock_on():
+    """Play explore must not pass dock_new_ports=True (omit or False)."""
     import ast
     import inspect
 
@@ -305,9 +304,9 @@ def test_the_play_explore_arm_passes_the_flag():
     assert calls, "the Play explore arm no longer calls explore_start_for_profile"
     for call in calls:
         kw = {k.arg: k.value for k in call.keywords}
-        assert "dock_new_ports" in kw, "Play explore arm stopped passing the flag"
-        assert isinstance(kw["dock_new_ports"], ast.Constant)
-        assert kw["dock_new_ports"].value is True
+        if "dock_new_ports" in kw:
+            assert isinstance(kw["dock_new_ports"], ast.Constant)
+            assert kw["dock_new_ports"].value is False
 
 
 # --- wired, not merely defined -------------------------------------------
