@@ -478,6 +478,11 @@ def _dispatch_explore_start(args, server):
     # literally and refused by `runner.start` if it is not a bool, never
     # coerced (`"no"` is truthy).
     dock_new_ports = args.get("dock_new_ports", False)
+    # WO-FIGHTER-TOLL-POLICY-WIRE: read exactly like `dock_new_ports` and for
+    # a sharper version of the same reason -- omission must mean DISARMED, and
+    # a non-bool must reach `runner.start` intact so it is refused there rather
+    # than coerced into an armed run.
+    fight_tolls = args.get("fight_tolls", False)
     try:
         snapshot = runner.start(
             world_id,
@@ -485,6 +490,7 @@ def _dispatch_explore_start(args, server):
             turn_budget=turn_budget,
             intent=intent,
             dock_new_ports=dock_new_ports,
+            fight_tolls=fight_tolls,
         )
     except sector_explore.ExploreRefused as exc:
         return {"ok": False, "error": str(exc)}
