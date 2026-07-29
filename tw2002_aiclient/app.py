@@ -17,6 +17,7 @@ from tw2002_aiclient import world_identity as _world_identity
 from tw2002_aiclient.cockpit import chains as _chains
 from tw2002_aiclient.cockpit import draft_approve as _draft_approve
 from tw2002_aiclient.cockpit import explore_flags as _explore_flags
+from tw2002_aiclient.cockpit import live_refresh as _live_refresh
 from tw2002_aiclient.cockpit import record_macro as _record_macro
 from tw2002_aiclient.loops import store as _loop_store
 from tw2002_aiclient.screens import (
@@ -742,6 +743,11 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
     # when ``explore_status`` reports a terminal outcome so idle ticks do not
     # spam the daemon.
     explore_poll_active = False
+    # WO-CHAINS-LIVE-REFRESH: the always-on GOALS/HUD readouts used to update
+    # only when the `L` modal was opened, so a whole explore run showed empty
+    # chain and sector rows. Per session, so a world that outgrew the chain
+    # budget last time is not held against a different profile this time.
+    live = _live_refresh.LiveRefresh()
     guard = _DeadTerminalGuard()
     try:
         while True:
@@ -750,6 +756,15 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
             if key == -1:
                 if explore_poll_active:
                     explore_poll_active = _poll_explore_status(play, run_dir=run_dir)
+                # The idle tick, NOT the draw path: `play.draw()` runs every
+                # loop iteration, while this branch is only reached when
+                # `getch` times out (~1 Hz). `LiveRefresh` throttles on top of
+                # that and never raises, so a slow or broken world model
+                # cannot cost the operator the loop. The PROFILE is handed
+                # over unresolved on purpose -- `world_id_from_profile` raises
+                # on an unusable host, and that raise belongs inside the
+                # module that promises not to raise.
+                live.tick(play, profile)
                 continue
             if attach_conn is not None and key != 27:
                 # Attached: canon mode-line-and-teach-controls.md §"`Ctrl-A` — the App↔Human Mode switch"
