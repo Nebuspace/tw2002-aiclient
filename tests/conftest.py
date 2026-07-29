@@ -278,7 +278,31 @@ class FakeAttachSession:
         self._pending_advance = True
 
     def record_history(self, verb, args, prompt, classification, settled_reason):
-        self.history.append((verb, args, prompt, classification, settled_reason))
+        """The same ENTRY SHAPE `Session.record_history` produces (WO-ARM-HISTORY-RING).
+
+        This appended a 5-tuple until 2026-07-29, while the real session appends
+        a dict with a `ts`. Nothing read it, so nothing was failing -- and that
+        is exactly what made it dangerous: the first test to assert on history
+        through this double would have been handed a shape the product never
+        emits, and would have passed while pinning a fiction. Every existing
+        reader (`test_cli_ops_verb_b/c`, `test_session`) subscripts by name
+        because they all use the real `Session`; this double was the only
+        producer of the tuple and had no consumer at all.
+
+        The ring CAP is deliberately not modelled -- the real one trims at
+        `_history_cap` and this does not. Anything asserting eviction belongs
+        against the real session, not here.
+        """
+        self.history.append(
+            {
+                "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                "verb": verb,
+                "args": args,
+                "prompt": prompt,
+                "classification": classification,
+                "settled_reason": settled_reason,
+            }
+        )
 
 
 class _FakeDaemon:

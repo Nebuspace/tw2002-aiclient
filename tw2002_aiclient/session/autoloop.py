@@ -201,6 +201,7 @@ from .settle import MATCH_SCOPE_PROMPT_LINE
 
 __all__ = [
     "ARGS_AUTOLOOP_START",
+    "HISTORY_VERB_AUTOLOOP",
     "AutoLoopRefused",
     "AutoLoopRunner",
     "AutoLoopSnapshot",
@@ -261,6 +262,19 @@ STAND_DOWN_PAUSE = "pause"
 # behind it -- an arg earns a place in this set by being enforced, never
 # by being plausible.
 ARGS_AUTOLOOP_START = frozenset({"name", "floor"})
+
+#: The history-ring ``verb`` for a send the armed player made (WO-ARM-HISTORY-RING).
+#:
+#: Its own value rather than reusing ``"do"``: the ring is what an operator
+#: reads to answer "what happened on this session", and the single most
+#: important distinction there is **who sent it**. A `do` row is a send the
+#: operator asked for one at a time; an `autoloop` row is a send the app made
+#: on their behalf during an armed run. Filing the second under the first would
+#: make the ledger technically complete and practically useless -- the rows a
+#: post-mortem is looking for would be indistinguishable from the ones it is
+#: not. `sender` on the session is `{app, human}` and cannot draw this line
+#: either: a `do` is already `sender="app"`.
+HISTORY_VERB_AUTOLOOP = "autoloop"
 
 
 def _utc_now() -> str:
@@ -612,7 +626,7 @@ class _ReplayPort:
         that only ever matched a BODY line can no longer be confirmed, so
         that step times out and the run halts ``confirm_failed``. A missed
         confirm, never a wrong one."""
-        _reason, _elapsed, confirmed = _settle.send_and_confirm(
+        reason, _elapsed, confirmed = _settle.send_and_confirm(
             self._session,
             keystrokes,
             confirm_prompt=wait_prompt,
@@ -621,7 +635,63 @@ class _ReplayPort:
             debounce_ms=self._debounce_ms,
             match_scope=MATCH_SCOPE_PROMPT_LINE,
         )
+        self._record(keystrokes, wait_prompt, reason)
         return confirmed is True
+
+    def _record(self, keystrokes: str, wait_prompt: Optional[str], reason: object) -> None:
+        """File this send in the session history ring (WO-ARM-HISTORY-RING).
+
+        **Why the port and not the player.** An armed run is the only path
+        where the app sends without a human keystroke behind each send, so it
+        is the only path where the operator has no memory of what happened and
+        needs a record instead. Before this, `record_history` had exactly two
+        call sites -- the `do` and `read` verbs in `protocol.py` -- and neither
+        is reachable from a replay, so the ring was not merely missing rows: it
+        had never been reachable from the autopilot at all. Filing it here
+        keeps the module's own split intact (`the port does I/O and [the
+        player] does all of the deciding`) -- recording an observation is I/O.
+        Doing it in `Session.send` would double-file every `do`, and doing it
+        in the player would put a session write in the pure decision layer.
+
+        **Called after the settle, unconditionally, including on a failure.**
+        A step that timed out is exactly the row a post-mortem needs; recording
+        only confirmed sends would build a ledger that is most incomplete
+        precisely when it matters. `reason` carries which it was.
+
+        **`classification` is left `None`, deliberately, and that is not
+        laziness.** This layer does not classify -- the player does, from its
+        own `screen()` call. Classifying here would mean classifying a
+        *different* render than the one the player decided on, which is the
+        race `screen()`'s docstring was written to close: two reads with a byte
+        able to land between them, producing a plausible answer about the wrong
+        moment. An empty field is honest; a second opinion taken at a different
+        instant and filed as if it described this one is worse than none.
+
+        **Only the render is best-effort, and the split is deliberate.** The
+        first draft wrapped both calls in one `except: pass` on the reasoning
+        that observability must never break the run. That reasoning is right
+        about `render()` -- it reads live wire state mid-run, and a run that
+        halted because its *audit trail* stumbled would be a strictly worse
+        outcome than a row with an empty prompt, with turns already spent. It
+        is wrong about `record_history`, which appends a dict to a list and has
+        no realistic failure mode; catching it would mean a ring that silently
+        stopped recording on the one path that needs it, which is precisely the
+        loss this WO exists to close. So a failed render costs the prompt
+        field, and the row is filed regardless -- **a send is never dropped
+        from the ledger because the screen behind it could not be read.**
+        """
+        try:
+            rows = self._session.render()
+            prompt = rows[-1].strip() if rows else ""
+        except Exception:  # noqa: BLE001 - a screen we cannot read is not a send we can drop
+            prompt = ""
+        self._session.record_history(
+            HISTORY_VERB_AUTOLOOP,
+            {"input": keystrokes, "wait_prompt": wait_prompt},
+            prompt,
+            None,
+            reason,
+        )
 
     def is_driver_fenced(self) -> bool:
         """Is the exclusive App hold this run took still ours?
