@@ -971,6 +971,57 @@ def cmd_explore_status(args):
     return 0 if resp.get("ok") else 1
 
 
+def cmd_reflex(args):
+    """WO-REFLEX-CLIENT-REACH: what the taught rule library PROPOSES, read-only.
+
+    Goes through ``send_request`` directly rather than
+    ``adapters.reflex_propose``, which is the house pattern -- every other
+    ``cmd_*`` here does the same, and ``adapters`` imports *this* module, so
+    calling upward would invert the dependency. (Measured, not assumed: the
+    resulting cycle does import cleanly today, because neither module touches
+    the other's attributes at import time. It is tolerated rather than broken,
+    which is exactly the kind that breaks later, and there is no reason to
+    introduce one to satisfy a layering nobody needs. ``adapters`` remains the
+    path for *importers*; this is the path for the CLI.)
+
+    **A proposal is not an act.** The wording below is deliberate: this prints
+    what the library *would suggest*, and nothing about arming or running it.
+    The taught run path still requires the human's ``y`` at arm-confirm, and
+    an approved rule proposing a macro that reaches a money prompt still
+    halts on ``never_auto_action``.
+
+    A STOP is a **successful answer**, exit 0. Only a transport failure is
+    exit 1. Rendering "the library says do nothing" as an error would train
+    an operator to ignore the one channel that reports a real refusal --
+    and today, with no rule writer shipped, `autopilot_no_candidates` is the
+    *normal* answer on every install.
+    """
+    run_dir = _resolve_run_dir(args.run_dir)
+    resp = send_request("reflex", {}, run_dir=run_dir)
+    if getattr(args, "json", False):
+        print(json.dumps(resp))
+        return 0 if resp.get("ok") else 1
+    if not resp.get("ok"):
+        print(f"ERROR: {resp.get('error')}")
+        if resp.get("detail"):
+            print(f"  detail: {resp['detail']}")
+        return 1
+    block = resp.get("reflex")
+    block = block if isinstance(block, dict) else {}
+    klass = resp.get("classification") or "unknown"
+    print(f"screen: {klass}")
+    macro = block.get("macro")
+    if macro:
+        rule_id = block.get("rule_id") or "?"
+        # "would run" / "proposes", never "running" or "armed".
+        print(f"proposes: {macro}  (rule {rule_id})")
+        print("not armed — this is a suggestion; arming is still your 'y' at arm-confirm")
+    else:
+        reason = block.get("stop_reason") or "no proposal"
+        print(f"proposes: nothing  ({reason})")
+    return 0
+
+
 def _arm_lossless_stdin():
     """Make ``sys.stdin`` park an undecodable byte as a PEP 383 surrogate
     instead of raising, and report whether stdin is now lossless.
@@ -1666,6 +1717,18 @@ def build_parser() -> argparse.ArgumentParser:
                     help="daemon run directory override")
     sp.add_argument("--json", action="store_true", help="machine-parseable JSON output")
     sp.set_defaults(func=cmd_explore_status)
+
+    # WO-REFLEX-CLIENT-REACH. `help` says "propose", never "run": this verb is
+    # read-only and the wording is the only thing an operator reads before
+    # deciding whether it is safe to try.
+    sp = sub.add_parser(
+        "reflex",
+        help="show what the taught rule library PROPOSES for the live screen (read-only)",
+    )
+    sp.add_argument("--run-dir", default=None, metavar="PATH", dest="run_dir",
+                    help="daemon run directory override")
+    sp.add_argument("--json", action="store_true", help="machine-parseable JSON output")
+    sp.set_defaults(func=cmd_reflex)
 
     return parser
 

@@ -458,6 +458,88 @@ def _autoloop_verb(
     )
 
 
+@dataclass(frozen=True)
+class ReflexResult:
+    """Typed outcome of :func:`reflex_propose` (WO-REFLEX-CLIENT-REACH).
+
+    Its own type rather than a reuse of :class:`AutoLoopResult`, for the reason
+    that class gives about :class:`ExploreResult`: the verbs answer about
+    different things, and a shared type invites a caller to hand one verb's
+    outcome to another verb's consumer with nothing catching it. Here the
+    hazard is sharper than usual -- an ``AutoLoopResult`` describes a run that
+    is *doing* something, and this describes a proposal that is not.
+
+    ``macro`` is a suggestion and **nothing more**. It is not armed, not
+    queued, and not executed; the taught run path still requires the human's
+    ``y`` at arm-confirm, and `rules/reflex.py` documents the two landings
+    that stay inert regardless of what this names.
+
+    ``ok`` is about the *transport*, not the decision. A proposal that
+    resolves to a STOP is a perfectly successful call: ``ok=True`` with
+    ``macro=None`` and a populated ``stop_reason``. Collapsing those would
+    make "the daemon refused to answer" and "the library answered, and the
+    answer is do nothing" the same value, which is the distinction
+    `rules/reflex.py` split ``autopilot_rules_unreadable`` out of
+    ``autopilot_no_candidates`` to preserve. A caller must branch on ``ok``
+    first and only then read ``macro``.
+    """
+
+    ok: bool
+    macro: str | None = None
+    rule_id: str | None = None
+    stop_reason: str | None = None
+    classification: str | None = None
+    reason: str | None = None   # machine-readable transport failure when ok=False
+    detail: str | None = None
+    raw: dict | None = None
+
+
+def reflex_propose(*, run_dir: Path | None = None) -> ReflexResult:
+    """Ask the daemon what the taught rule library proposes for the live screen.
+
+    **Read-only.** Sends the ``reflex`` control verb and nothing else; adds no
+    keystroke path and takes no control lock. Never raises -- a dead socket, a
+    missing daemon, or a malformed reply all come back as ``ok=False`` with a
+    type-named reason, the same transport-honesty contract ``_autoloop_verb``
+    exists to keep from drifting between verbs.
+
+    The rule **writer** does not exist yet, so on a normal install
+    ``state/rules/`` is absent and the honest answer is a STOP reading
+    ``autopilot_no_candidates:<screen_class>``. That is a successful call
+    reporting an empty library, not a failure -- see :class:`ReflexResult`.
+    """
+    resolved_run_dir = run_dir or _env.resolve_run_dir()
+    try:
+        resp = _cli.send_request("reflex", {}, run_dir=resolved_run_dir)
+    except Exception as e:  # noqa: BLE001
+        return ReflexResult(ok=False, reason="unknown", detail=f"{type(e).__name__}: {e}")
+    if not isinstance(resp, dict):
+        # A non-dict reply is a broken transport, not an empty proposal.
+        return ReflexResult(ok=False, reason="malformed_response",
+                            detail=type(resp).__name__)
+    if not resp.get("ok"):
+        return ReflexResult(
+            ok=False,
+            reason=resp.get("error") or "unknown",
+            detail=resp.get("detail") or resp.get("error") or None,
+            raw=resp,
+        )
+    # `.get` on a missing/!dict `reflex` block yields None everywhere rather
+    # than raising: an older daemon that does not know this verb answers `ok`
+    # without the block, and a client that crashed on it would turn a version
+    # skew into a traceback instead of an empty proposal.
+    block = resp.get("reflex")
+    block = block if isinstance(block, dict) else {}
+    return ReflexResult(
+        ok=True,
+        macro=block.get("macro"),
+        rule_id=block.get("rule_id"),
+        stop_reason=block.get("stop_reason"),
+        classification=resp.get("classification"),
+        raw=resp,
+    )
+
+
 def explore_start_for_profile(
     profile: object,
     *,
