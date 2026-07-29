@@ -30,6 +30,7 @@ from tw2002_aiclient import world_model
 from tw2002_aiclient.loops.player import OUTCOME_HALTED
 from tw2002_aiclient.session import sector_explore as sx
 from tw2002_aiclient.session import state_parser as sp
+from tw2002_aiclient.session.classify import NEVER_AUTO_ACTION_CLASSES, classify_screen
 from tw2002_aiclient.session.control_lock import ControlLock
 from tw2002_aiclient.session.state_parser import PortRead
 
@@ -401,7 +402,7 @@ def test_an_unrecognized_dock_screen_halts_rather_than_wandering(tmp_path):
     session = _DockSession(menu_screen="Some screen we have never seen.\n:")
     report = _run_to_completion(session, tmp_path, dock_new_ports=True)
     assert report.outcome == OUTCOME_HALTED
-    assert report.reason == sx.HALT_DOCK_UNRECOGNIZED
+    assert report.reason == sx.HALT_DOCK_MENU_UNRECOGNIZED
     assert _letters_sent(session) == ["P"]  # never sent T blind
 
 
@@ -409,9 +410,24 @@ def test_an_unparseable_report_halts_and_writes_no_commodities(tmp_path):
     session = _DockSession(report_screen="Docking...\nCommand [TL=0]:[4309] (?=Help)? : ")
     report = _run_to_completion(session, tmp_path, dock_new_ports=True)
     assert report.outcome == OUTCOME_HALTED
-    assert report.reason == sx.HALT_DOCK_UNRECOGNIZED
+    assert report.reason == sx.HALT_DOCK_REPORT_UNREADABLE
     rec = world_model.get_sector(WORLD, 4309, state_dir=tmp_path)
     assert not rec["port"].get("commodities")
+
+
+def test_the_two_dock_failures_do_not_share_a_reason():
+    """WO-EXPLORE-DOCK-DIALECT. These were both `dock_screen_unrecognized`,
+    and that is precisely why #205's live halt was diagnosed as "the menu
+    dialect is unknown" when the menu had matched and the sector attribution
+    was what failed. A reason string shared by two failure sites is a hint,
+    not a diagnosis -- so the pin is that they stay DISTINCT."""
+    reasons = [
+        sx.HALT_DOCK_MENU_UNRECOGNIZED,
+        sx.HALT_DOCK_REPORT_UNREADABLE,
+        sx.HALT_DOCK_POSITION_UNKNOWN,
+    ]
+    assert len(set(reasons)) == 3
+    assert not hasattr(sx, "HALT_DOCK_UNRECOGNIZED"), "the ambiguous reason came back"
 
 
 def test_a_human_dock_already_on_screen_is_ingested_for_free(tmp_path):
@@ -423,3 +439,174 @@ def test_a_human_dock_already_on_screen_is_ingested_for_free(tmp_path):
     assert _letters_sent(session) == []
     rec = world_model.get_sector(WORLD, 4309, state_dir=tmp_path)
     assert len(rec["port"]["commodities"]) == 3
+
+
+# --- WO-EXPLORE-DOCK-DIALECT: the real wire ------------------------------
+#
+# The WO was written believing `--dock-new-ports` failed because the dock UI
+# spoke an uncaptured dialect. It did not. Fixtures below are extracted from
+# `logs/session-20260725T202110Z.log`, not retyped, because the defect lived
+# exactly in the gap between what I assumed the screen looked like and what
+# the game actually sends.
+
+REAL_MENU = (FIXTURES / "port_menu_post_p.txt").read_text().rstrip("\n")
+REAL_TRADEABLE = (FIXTURES / "port_commerce_report_tradeable.txt").read_text().rstrip("\n")
+
+
+def test_the_real_captured_port_menu_was_always_recognized():
+    """The premise the WO rested on, falsified against captured wire."""
+    assert sx._PORT_MENU_MARKER in REAL_MENU.lower()
+    assert "<A> Attack this Port" in REAL_MENU  # still the first option
+
+
+def test_the_real_post_T_screen_parses_perfectly_and_carries_no_sector():
+    """THE defect. Both halves matter: the table reads fine, so nothing looked
+    broken about the parse, while the trailing prompt is a trade dialogue with
+    no sector in it -- so a design taking the sector from THIS screen could
+    never work at any port that has goods to trade."""
+    parsed = sp.read_port_commodities_from_report(REAL_TRADEABLE)
+    assert parsed.observed is True
+    assert [c["name"] for c in parsed.commodities] == list(sp.COMMERCE_COMMODITIES)
+
+    last = REAL_TRADEABLE.splitlines()[-1].strip()
+    assert last == "How many holds of Equipment do you want to buy [40]?"
+    assert sp.read_current_sector(last).sector is None
+
+
+def test_the_pre_P_command_prompt_is_where_the_sector_actually_lives():
+    """The control for the test above -- the sector is readable, just from the
+    screen BEFORE `P`, which is why it is now passed in rather than re-derived."""
+    assert sp.read_current_sector("Command [TL=06:45:36]:[23372] (?=Help)? : ").sector == 23372
+
+
+def test_the_old_fixtures_were_all_the_no_trade_case():
+    """Why a green suite sat on top of a path that could not work. Both
+    captured reports are real -- and both are the case where the port has
+    nothing to trade with you, so TW2002 skips the dialogue and returns to the
+    Command prompt. The sample selected exactly the case that hides the bug."""
+    for name in ("port_commerce_report_gorram_primus.txt", "port_trade_screen.txt"):
+        text = (FIXTURES / name).read_text()
+        assert "don't have anything they want" in text
+        assert sp.read_current_sector(text.splitlines()[-1].strip()).sector is not None
+
+
+def test_a_tradeable_port_now_stores_its_commodities(tmp_path):
+    """The WO's Accept, against the screen that used to fail."""
+    session = _DockSession(menu_screen=REAL_MENU, report_screen=REAL_TRADEABLE)
+    _run_to_completion(session, tmp_path, dock_new_ports=True)
+    rec = world_model.get_sector(WORLD, 4309, state_dir=tmp_path)
+    assert [(c["name"], c["status"], c["amount"], c["pct"]) for c in rec["port"]["commodities"]] == [
+        ("Fuel Ore", "buying", 2030, 100),
+        ("Organics", "buying", 2970, 100),
+        ("Equipment", "selling", 2800, 100),
+    ]
+
+
+def test_the_port_is_attributed_to_where_we_stood_not_to_the_report(tmp_path):
+    """The report names port `Raven` and the sector screen says 4309; the
+    fixtures deliberately disagree so that a sector sourced from the report
+    would land somewhere else and be caught. A port written into the wrong
+    sector cannot be removed by any product path."""
+    assert "Raven" in REAL_TRADEABLE and "4309" not in REAL_TRADEABLE
+    session = _DockSession(menu_screen=REAL_MENU, report_screen=REAL_TRADEABLE)
+    _run_to_completion(session, tmp_path, dock_new_ports=True)
+    assert world_model.get_sector(WORLD, 4309, state_dir=tmp_path)["port"].get("commodities")
+
+
+def test_the_dock_path_sends_nothing_at_the_trade_prompt(tmp_path):
+    """The money-path pin, and the reason this WO stops where it does.
+
+    `How many holds ... [40]?` takes its DEFAULT on input it cannot parse --
+    captured wire shows a human typing `quit` there and buying 2,423 credits
+    of equipment. So the cascade sends `P`, `T`, and then NOTHING: the loop's
+    own gate sees a `money_prompt` and halts, which hands the human the
+    keyboard. Any key that backs out of a trade is Max's decision, not this
+    module's.
+    """
+    session = _DockSession(menu_screen=REAL_MENU, report_screen=REAL_TRADEABLE)
+    report = _run_to_completion(session, tmp_path, dock_new_ports=True)
+    assert _letters_sent(session) == ["P", "T"]
+    assert report.outcome == OUTCOME_HALTED
+    assert report.reason == sx.HALT_NEVER_AUTO_ACTION
+
+
+def test_the_warp_number_is_never_typed_into_the_trade_prompt(tmp_path):
+    """REGRESSION, and the reason the gate lives inside the dock cascade.
+
+    A successful dock returns into the MIDDLE of a loop iteration, past the
+    gate at its top and immediately before the next warp is sent. Without a
+    gate at the end of the cascade this run sent `P`, `T`, `158` -- the third
+    being a sector number typed into `How many holds ... [40]?`, a prompt that
+    takes its default on input it cannot parse.
+
+    `min_sectors=2` so the run genuinely wants to keep going; a run that had
+    already met its goal would stop for an unrelated reason and this pin would
+    pass without exercising anything.
+    """
+    world_model.upsert_sector(
+        WORLD, {"sector_id": 4309, "warps": [158], "landmarks": []}, state_dir=tmp_path
+    )
+    session = _DockSession(menu_screen=REAL_MENU, report_screen=REAL_TRADEABLE)
+    runner = sx.ExploreRunner(
+        session, ControlLock(), state_dir=tmp_path, timeout_s=2.0, debounce_ms=1
+    )
+    runner.start(WORLD, min_sectors=2, turn_budget=5, dock_new_ports=True)
+    report = runner.stop(join_timeout=10.0).report
+    assert report.outcome == OUTCOME_HALTED
+    assert report.reason == sx.HALT_NEVER_AUTO_ACTION
+    assert _letters_sent(session) == ["P", "T"]  # still nothing at the money prompt
+
+
+def test_the_trade_prompt_really_is_classified_never_auto():
+    """Non-vacuity for the pin above: it asserts a halt reason that only
+    arrives because the classifier names this screen `money_prompt`. If that
+    ever stops being true the test above would still pass for some other
+    halt, so the classification is pinned on its own."""
+    last = REAL_TRADEABLE.splitlines()[-1].strip()
+    klass = classify_screen(REAL_TRADEABLE, last)
+    assert klass == "money_prompt"
+    assert klass in NEVER_AUTO_ACTION_CLASSES
+
+
+def test_docking_blind_is_refused_before_any_letter_goes_out(tmp_path):
+    """Defence in depth, and deliberately UNREACHABLE from the loop today --
+    the run halts on `unrecognized_screen` at an unreadable sector long before
+    the dock branch. So this calls the method directly rather than pretending
+    the loop can produce the input; a test that drove the loop here would pass
+    for the loop guard's reason while claiming to pin this one.
+
+    It exists for the future where another caller reaches this method: docking
+    blind spends a turn to learn a table it cannot safely attribute.
+    """
+    session = _DockSession()
+    runner = sx.ExploreRunner(
+        session, ControlLock(), state_dir=tmp_path, timeout_s=2.0, debounce_ms=1
+    )
+    rep = sx.ExploreReport(world_id=WORLD, started_at="t", min_sectors=1)
+    assert runner._dock_and_ingest(rep, None) == (sx.HALT_DOCK_POSITION_UNKNOWN, 0, 0)
+    assert _letters_sent(session) == []
+
+
+def test_the_loop_cannot_reach_the_dock_branch_without_a_sector(tmp_path):
+    """The other half of the statement above -- pinned, not assumed."""
+    session = _DockSession()
+    session._screen = "Ports   : Gorram Primus, Class 1 (BBS)\nSome prompt with no sector : "
+    report = _run_to_completion(session, tmp_path, dock_new_ports=True)
+    assert report.outcome == OUTCOME_HALTED
+    assert report.reason == sx.HALT_UNRECOGNIZED_SCREEN
+    assert _letters_sent(session) == []
+
+
+def test_the_free_flyby_ingest_still_reads_its_own_prompt(tmp_path):
+    """`sector_id` is optional, and the free-flyby caller deliberately does not
+    pass it: on that path the prompt IS the ship Command prompt. Pinning that
+    the fallback survived the change, since losing it would silently stop
+    ingesting reports the human docked for."""
+    assert _ingest_docked_report_sector(tmp_path) == 4309
+
+
+def _ingest_docked_report_sector(tmp_path):
+    return sx._ingest_docked_report(
+        WORLD, full_text=REPORT, prompt_line="Command [TL=0]:[4309] (?=Help)? :",
+        state_dir=tmp_path,
+    )
