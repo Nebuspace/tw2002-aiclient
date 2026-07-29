@@ -15,6 +15,7 @@ from typing import Optional, Set
 from .. import world_model
 from .. import explore as _explore
 from ..explore import known_graph, map_fill_warp_target, warp_target_for_intent
+from ..halt_reasons import qualify as _qualify
 from ..loops.player import (
     HALT_ABORTED,
     HALT_CONFIRM_FAILED,
@@ -219,13 +220,22 @@ HALT_NOT_DRIVABLE = "halt_not_drivable"
 CLASS_UNKNOWN = "unknown"
 
 
-def _qualify(base: str, klass: str) -> str:
-    """``base:klass`` -- the reason carries the class that produced it.
-
-    One helper for both branches so the separator cannot drift between them,
-    and so a reader parsing live evidence has a single shape to split on.
-    """
-    return f"{base}:{klass}"
+#: ``base:klass`` -- the reason carries the class that produced it.
+#:
+#: One helper for both branches so the separator cannot drift between them,
+#: and so a reader parsing live evidence has a single shape to split on.
+#:
+#: WO-HALT-QUALIFY-CONSOLIDATE: this was an independent three-line twin of
+#: `loops.player._qualify` that hardcoded `":"` while the player built its
+#: separator from a constant -- they agreed by luck, not by construction, and a
+#: change to one would have left the other behind. Both now call the same
+#: function. Imported from `halt_reasons` and NOT from `loops.player`: this
+#: module has no business depending on the loop player for string formatting,
+#: which is precisely the entanglement the old duplication was avoiding.
+#:
+#: Bound to the local name `_qualify` deliberately -- call sites stay unchanged
+#: and the AST comparison guard still sees `_qualify(<CODE>, ...)` when it
+#: derives which halt codes can carry a detail.
 
 
 def _gate_screen(full_text: str, prompt_line: str) -> tuple[Optional[str], str]:
