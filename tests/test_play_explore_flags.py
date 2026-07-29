@@ -33,6 +33,7 @@ from __future__ import annotations
 import ast
 import inspect
 import types
+import unicodedata
 
 import pytest
 
@@ -122,6 +123,18 @@ def _drive(monkeypatch, keys, *, ensure=None, explore=None):
 _E, _Y = ord("E"), ord("y")
 _D, _F = ord("D"), ord("F")
 
+# The default (opted-OUT) confirm action, derived from the module's own
+# constant so the gate-tuple pins below stay readable.
+#
+# **Derived, therefore blind on its own.** If `DOCK_OFF_MARKER` were emptied,
+# this expectation would empty with it and every pin using it would go on
+# agreeing — both sides degrading together is not a check. The content of the
+# marker is pinned by LITERAL in
+# `test_the_off_marker_names_both_the_state_and_the_key`, which is the guard
+# that actually survives a deletion; this constant only spares six tests from
+# retyping the same string.
+_OFF_ACTION = f"Explore {explore_flags.DOCK_OFF_MARKER}"
+
 
 # --------------------------------------------------------------------------
 # The default is OFF, in both directions
@@ -140,15 +153,32 @@ def test_default_arm_forwards_both_flags_off(monkeypatch) -> None:
     assert calls[0]["fight_tolls"] is False, calls[0]
 
 
-def test_default_confirm_line_is_byte_identical_to_the_pre_wo_prompt(monkeypatch) -> None:
-    """An operator who never presses `D`/`F` sees exactly the old prompt.
+def test_the_default_confirm_line_states_the_dock_state_it_used_to_hide(monkeypatch) -> None:
+    """WO-EXPLORE-GATHER-VISIBLE **inverts** this pin, deliberately.
 
-    This is the pin that stops a marker leaking into the default path --
-    the confirm line is what the human's muscle memory reads before
-    spending turns.
+    It read `test_default_confirm_line_is_byte_identical_to_the_pre_wo_prompt`
+    and asserted `[("Explore", 5)]` — "an operator who never presses `D`/`F`
+    sees exactly the old prompt", justified as protecting muscle memory on
+    the line read before spending turns.
+
+    The property was real and it was the defect. Preserving the old prompt
+    meant the default path never mentioned ports at all, so an operator who
+    had not guessed `D` existed confirmed `Explore x5` and warped past every
+    port wondering why nothing was investigated (Max, live 2026-07-29). The
+    pin protected familiarity at the cost of the one fact the prompt most
+    needed to carry.
+
+    Inverted rather than deleted: the default line is still pinned exactly,
+    it is simply pinned to a line that tells the truth. A marker "leaking
+    into the default path" is now the REQUIREMENT, so this still fails the
+    day the OFF state goes quiet again.
     """
     _calls, screen = _drive(monkeypatch, [_E])
-    assert screen.gate_raises == [("Explore", 5)], screen.gate_raises
+    assert screen.gate_raises == [(_OFF_ACTION, 5)], screen.gate_raises
+    # The affordance, not just the state: naming one without the other
+    # leaves the operator knowing they are missing something and still
+    # unable to act on it.
+    assert "D" in _OFF_ACTION and "gather" in _OFF_ACTION
 
 
 # --------------------------------------------------------------------------
@@ -199,7 +229,7 @@ def test_both_opt_ins_are_spelled_out_together(monkeypatch) -> None:
 def test_toggling_twice_returns_to_off(monkeypatch) -> None:
     calls, screen = _drive(monkeypatch, [_D, _D, _E, _Y])
     assert calls[0]["dock_new_ports"] is False, calls[0]
-    assert screen.gate_raises == [("Explore", 5)], screen.gate_raises
+    assert screen.gate_raises == [(_OFF_ACTION, 5)], screen.gate_raises
 
 
 # --------------------------------------------------------------------------
@@ -222,7 +252,7 @@ def test_toggling_while_the_gate_is_up_clears_it_and_arms_nothing(monkeypatch) -
     """
     calls, screen = _drive(monkeypatch, [_E, _D, _Y])
     assert calls == [], calls
-    assert screen.gate_raises == [("Explore", 5)], screen.gate_raises
+    assert screen.gate_raises == [(_OFF_ACTION, 5)], screen.gate_raises
 
 
 def test_toggles_do_nothing_when_no_explore_offer_is_standing(monkeypatch) -> None:
@@ -329,19 +359,104 @@ def test_the_two_toggles_do_not_share_a_key() -> None:
     assert not (explore_flags.DOCK_TOGGLE_KEYS & explore_flags.TOLLS_TOGGLE_KEYS)
 
 
-def test_compose_returns_the_action_unchanged_when_both_are_off() -> None:
-    assert explore_flags.compose_explore_action("Explore") == "Explore"
+def test_compose_states_no_dock_when_the_operator_has_not_opted_in() -> None:
+    """Was `test_compose_returns_the_action_unchanged_when_both_are_off`,
+    which asserted `compose_explore_action("Explore") == "Explore"`.
+
+    Silence is not a description. The gate's job is to describe the run it
+    arms, and "explore, passing every port" is a different run from
+    "explore" — the operator was reading the second and getting the first.
+    """
+    assert explore_flags.compose_explore_action("Explore") == _OFF_ACTION
     assert explore_flags.compose_explore_action(
         "Explore", dock=False, tolls=False
-    ) == "Explore"
+    ) == _OFF_ACTION
+
+
+def test_the_offer_line_is_what_play_actually_paints(monkeypatch) -> None:
+    """The WIRING, driven through the real `_run_play`.
+
+    A composer with green unit tests and no caller is indistinguishable from
+    no composer at all, and this one decides whether a capability is
+    discoverable — the exact thing that was broken. So this asserts the
+    product path, not the function.
+    """
+    _calls, screen = _drive(monkeypatch, [])
+    assert explore_flags.GATHER_HINT in (screen.status_line or ""), screen.status_line
+    assert "press E" in (screen.status_line or ""), screen.status_line
+
+
+def test_the_offer_line_fits_an_eighty_column_terminal() -> None:
+    """Load-bearing, not cosmetic: it is the TAIL that clips, and the hint is
+    the tail. A gather hint an 80-column operator never sees would leave the
+    defect exactly where it was while every content assertion above passed.
+
+    The length is deterministic — `app._EXPLORE_OFFER_CLASSIFICATION` is the
+    constant `"main_command"`, so this is a real bound and not a sample.
+
+    What this measures is CHARACTERS, which equals display cells here only
+    because the line carries no East-Asian-wide character — asserted below
+    so the equivalence is checked rather than assumed. It does carry five
+    AMBIGUOUS-width ones (`×`, `—`, `·`), which a CJK-locale terminal
+    renders double: 79 → 84, over the bound. That exposure is pre-existing
+    (the em-dash/middle-dot idiom is used across the offer line and teach
+    band) but this WO does widen it by one `·`. Not handled here — a chrome
+    fix is the wrong place to introduce a width policy — and reported to the
+    hub rather than left for the next reader to rediscover.
+    """
+    line = explore_flags.compose_explore_offer(app_mod._EXPLORE_OFFER_CLASSIFICATION, cycles=5)
+    wide = [c for c in line if unicodedata.east_asian_width(c) in ("W", "F")]
+    assert not wide, f"chars != cells; wide chars present: {wide}"
+    assert len(line) <= 80, f"{len(line)} cols: {line}"
+
+
+def test_the_offer_line_degrades_rather_than_raises() -> None:
+    """It is built during the post-ensure path; a raise there costs the
+    operator the whole offer, which is worse than a vague line."""
+    for bad in (None, 3, object(), b"x"):
+        out = explore_flags.compose_explore_offer(bad, cycles=bad)
+        assert isinstance(out, str) and "press E" in out
+
+
+def test_the_off_marker_names_both_the_state_and_the_key() -> None:
+    """Pinned by LITERAL, on purpose — this is the one assertion in the file
+    that a deletion cannot slip past.
+
+    Every other expectation is derived from `DOCK_OFF_MARKER`, so emptying
+    the constant would empty them too and they would all still pass. This
+    one fails.
+
+    Both halves are required and they fail differently: without the state
+    the line says nothing new, and without the key the operator learns they
+    are missing something while remaining unable to act on it.
+    """
+    assert explore_flags.DOCK_OFF_MARKER == "no-dock (D to gather)"
 
 
 def test_compose_appends_markers_in_a_stable_order() -> None:
+    """`+dock` is unchanged byte-for-byte — the opted-IN line an operator
+    may already recognise must not shift under them (WO regression pin)."""
     assert explore_flags.compose_explore_action("Explore", dock=True) == "Explore +dock"
-    assert explore_flags.compose_explore_action("Explore", tolls=True) == "Explore +fight-tolls"
+    assert explore_flags.compose_explore_action(
+        "Explore", tolls=True
+    ) == f"{_OFF_ACTION} +fight-tolls"
     assert explore_flags.compose_explore_action(
         "Explore", dock=True, tolls=True
     ) == "Explore +dock +fight-tolls"
+
+
+def test_fight_tolls_stays_silent_when_off_while_dock_speaks() -> None:
+    """The asymmetry, pinned so it cannot be "tidied" into symmetry.
+
+    Naming an affordance is a nudge, and nudges are directional. Pointing an
+    operator at commodity gathering costs them nothing; an equally helpful
+    "F to fight tolls" on every prompt would advertise a path that SPENDS
+    fighters. Loud toward the safe action, quiet toward the spend.
+    """
+    off = explore_flags.compose_explore_action("Explore", dock=False, tolls=False)
+    assert "gather" in off, "the safe affordance is not advertised"
+    assert "F" not in off.replace("Explore", ""), off
+    assert "toll" not in off.lower(), off
 
 
 @pytest.mark.parametrize("bad", [None, 3, object(), b"x"])

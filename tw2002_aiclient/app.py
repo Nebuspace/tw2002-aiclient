@@ -659,9 +659,14 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
         # re-arm of Autopilot.
         explore_offered = result.classification == _EXPLORE_OFFER_CLASSIFICATION
         if explore_offered:
-            play.status_line = (
-                f"session ready — {result.classification}  ·  "
-                f"explore ×{_EXPLORE_MIN_SECTORS} available — press E"
+            # WO-EXPLORE-GATHER-VISIBLE: composed in `cockpit/explore_flags.py`
+            # rather than inline here, so the operator's FIRST contact with the
+            # feature is assertable without a curses harness. The line is
+            # additive against the pre-WO one -- `press E` is unchanged; `D`
+            # is named because it was reachable on every surface and
+            # advertised on none.
+            play.status_line = _explore_flags.compose_explore_offer(
+                result.classification, cycles=_EXPLORE_MIN_SECTORS
             )
     else:
         explore_offered = False
@@ -929,8 +934,12 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                 # WO-EXPLORE-AUTOMATION-GATE E3: one affordance, two intents.
                 # `E` CYCLES which goal is on offer and raises the gate for
                 # it; it never starts anything. The first press of a session
-                # is map-fill, byte-identical to the pre-WO prompt, so the
-                # existing muscle memory arms the existing run.
+                # is map-fill, so existing muscle memory arms the existing
+                # RUN. (It no longer produces the identical LINE --
+                # WO-EXPLORE-GATHER-VISIBLE added the dock state to it. The
+                # run is what muscle memory is entitled to; the wording was
+                # never the promise, and treating it as one is what kept the
+                # prompt silent about ports.)
                 if explore_intent_offered is None:
                     explore_intent_offered = _explore.ARMABLE_INTENTS[0]
                 else:
@@ -954,9 +963,17 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                     offer_action, offer_cycles = _EXPLORE_OFFER_ACTION, _EXPLORE_MIN_SECTORS
                 # WO-PLAY-EXPLORE-FLAGS: the gate must describe the run it
                 # arms, so any opt-in the operator switched on is spelled
-                # out IN the line they confirm. With both flags OFF this
-                # returns the action text unchanged -- the default prompt
-                # stays byte-identical to the pre-WO one.
+                # out IN the line they confirm.
+                #
+                # WO-EXPLORE-GATHER-VISIBLE applied that rule to the OFF
+                # direction too, which is where it had never been applied.
+                # This used to return the action text unchanged with both
+                # flags off "so the default prompt stays byte-identical to
+                # the pre-WO one" -- and a run that PASSES PORTS BY is just
+                # as much a property of the run as one that docks. Dock is
+                # now always stated; `+fight-tolls` stays ON-only on purpose
+                # (see `cockpit/explore_flags.py`: loud toward the safe
+                # action, quiet toward the spend).
                 offer_action = _explore_flags.compose_explore_action(
                     offer_action,
                     dock=explore_dock_opt_in,
