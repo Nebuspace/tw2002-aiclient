@@ -289,13 +289,29 @@ def test_the_cli_explore_arm_defaults_off(monkeypatch):
 
 
 def test_the_play_explore_arm_does_not_force_dock_on():
-    """Play explore must not pass dock_new_ports=True (omit or False)."""
+    """Play explore must never arm dock ON by itself.
+
+    AMENDED by WO-PLAY-EXPLORE-FLAGS (#212, Max-GO'd 2026-07-29). The
+    original pin required a literal `False` (or omission), which was the
+    right shape while WO-EXPLORE-DOCK-DEFAULT-OFF held dock off
+    *unconditionally* -- "until dialect known". #211 shipped the dialect and
+    #212 adds the operator opt-in, so the call site now forwards a variable.
+
+    What was retired is only the *literal-constant* requirement, which was a
+    proxy for "no opt-in exists yet". The safety property is kept and
+    tightened: dock may be a constant `False`, or a NAME whose initial value
+    in `_run_play` is `False` -- so a hardcoded `True`, a different variable,
+    or an opt-in that defaults ON all still fail. The `fight_tolls` twin of
+    this pin lives in `tests/test_play_explore_flags.py` (it had none here),
+    and is deliberately not duplicated into this dock-scoped file.
+    """
     import ast
     import inspect
 
     from tw2002_aiclient import app
 
-    tree = ast.parse(inspect.getsource(app))
+    source = inspect.getsource(app)
+    tree = ast.parse(source)
     calls = [
         n for n in ast.walk(tree)
         if isinstance(n, ast.Call)
@@ -303,11 +319,39 @@ def test_the_play_explore_arm_does_not_force_dock_on():
         and n.func.attr == "explore_start_for_profile"
     ]
     assert calls, "the Play explore arm no longer calls explore_start_for_profile"
+
+    def _initialised_false(name: str) -> bool:
+        """True iff `name = False` is the only initialisation in the module."""
+        seen = [
+            n for n in ast.walk(tree)
+            if isinstance(n, ast.Assign)
+            and any(isinstance(t, ast.Name) and t.id == name for t in n.targets)
+        ]
+        assert seen, f"{name} is forwarded to the adapter but never assigned"
+        return all(
+            isinstance(a.value, ast.Constant) and a.value.value is False
+            for a in seen
+            # the toggle itself (`x = not x`) is a UnaryOp, not an Assign of
+            # a constant -- only plain constant initialisations are checked
+            if isinstance(a.value, ast.Constant)
+        )
+
     for call in calls:
         kw = {k.arg: k.value for k in call.keywords}
-        if "dock_new_ports" in kw:
-            assert isinstance(kw["dock_new_ports"], ast.Constant)
-            assert kw["dock_new_ports"].value is False
+        if "dock_new_ports" not in kw:
+            continue
+        node = kw["dock_new_ports"]
+        if isinstance(node, ast.Constant):
+            assert node.value is False, "Play must not hardcode dock ON"
+        else:
+            assert isinstance(node, ast.Name), (
+                f"dock_new_ports must be a constant False or a bare opt-in "
+                f"name, got {ast.dump(node)}"
+            )
+            assert _initialised_false(node.id), (
+                f"{node.id} is forwarded as the dock arm but does not "
+                f"initialise to False -- the default must stay OFF"
+            )
 
 
 # --- wired, not merely defined -------------------------------------------

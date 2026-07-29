@@ -16,6 +16,7 @@ from tw2002_aiclient import explore as _explore
 from tw2002_aiclient import world_identity as _world_identity
 from tw2002_aiclient.cockpit import chains as _chains
 from tw2002_aiclient.cockpit import draft_approve as _draft_approve
+from tw2002_aiclient.cockpit import explore_flags as _explore_flags
 from tw2002_aiclient.cockpit import record_macro as _record_macro
 from tw2002_aiclient.loops import store as _loop_store
 from tw2002_aiclient.screens import (
@@ -706,6 +707,18 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
     # is how the redundancy was found. The confirm branch reads THIS, so the
     # run is always the one the visible prompt named.
     explore_intent_offered: str | None = None
+    # WO-PLAY-EXPLORE-FLAGS: the two explore automation opt-ins, default OFF.
+    #
+    # Held as real `bool` and handed to the adapter untouched -- see
+    # `cockpit/explore_flags.py` on why `fight_tolls` must never be wrapped
+    # in `bool(...)` anywhere on this path.
+    #
+    # Loop-local rather than screen state, deliberately: these feed the
+    # confirm line and the adapter call, both of which live in this loop,
+    # and a flag that outlived the loop would be an opt-in the operator
+    # cannot see when they next arm.
+    explore_dock_opt_in = False
+    explore_tolls_opt_in = False
     # WO-PLAY-AUTOLOOP-START: the exact row the taught-loop confirm line was
     # composed from. Held alongside `pending_confirm_action` rather than
     # re-read at `y`, so the macro that runs is provably the macro named in
@@ -873,6 +886,39 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                     play.status_line = "attach connection lost — spectating"
                 continue
             action = play.handle_key(key)
+            if (
+                action is None
+                and explore_offered
+                and _explore_flags.resolve_dock_toggle_key(key)
+            ):
+                # WO-PLAY-EXPLORE-FLAGS: `D` opts in to docking new ports.
+                # It NEVER starts anything -- same posture as `E`, which
+                # only raises the gate.
+                explore_dock_opt_in = not explore_dock_opt_in
+                play.status_line = _explore_flags.describe_dock(explore_dock_opt_in)
+                continue
+            if (
+                action is None
+                and explore_offered
+                and _explore_flags.resolve_tolls_toggle_key(key)
+            ):
+                # `F` opts in to fighting toll demands. Same shape as `D`.
+                #
+                # Both toggles sit AFTER `handle_key`, which means pressing
+                # one while a confirm gate is standing clears that gate (the
+                # gate is single-shot and default-deny, so every non-`y` key
+                # cancels it) and returns None to here.
+                #
+                # That is deliberate, not incidental: changing a flag
+                # INVALIDATES any standing confirm, so the line the operator
+                # finally says `y` to always describes the flags the run
+                # will actually use. The alternative -- letting a toggle
+                # ride while the old prompt stayed up -- would leave the
+                # gate describing a different run than it arms, which is the
+                # single failure mode the confirm gate exists to prevent.
+                explore_tolls_opt_in = not explore_tolls_opt_in
+                play.status_line = _explore_flags.describe_tolls(explore_tolls_opt_in)
+                continue
             if action is None and explore_offered and key in _EXPLORE_OFFER_KEYS:
                 # The human asked for the gate. THIS is what raises it --
                 # never the ensure result on its own. `handle_key` returned
@@ -906,6 +952,16 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                     offer_action, offer_cycles = _EXPLORE_STARDOCK_ACTION, None
                 else:
                     offer_action, offer_cycles = _EXPLORE_OFFER_ACTION, _EXPLORE_MIN_SECTORS
+                # WO-PLAY-EXPLORE-FLAGS: the gate must describe the run it
+                # arms, so any opt-in the operator switched on is spelled
+                # out IN the line they confirm. With both flags OFF this
+                # returns the action text unchanged -- the default prompt
+                # stays byte-identical to the pre-WO one.
+                offer_action = _explore_flags.compose_explore_action(
+                    offer_action,
+                    dock=explore_dock_opt_in,
+                    tolls=explore_tolls_opt_in,
+                )
                 play.begin_arm_confirm(offer_action, cycles=offer_cycles)
                 continue
             if action == "pause":
@@ -1117,9 +1173,26 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                         profile,
                         min_sectors=_EXPLORE_MIN_SECTORS,
                         intent=armed_intent,
-                        # WO-EXPLORE-DOCK-DEFAULT-OFF: do not pass True — dock
-                        # stays library-default False until dialect known.
-                        # Opt-in later via an explicit Play control if added.
+                        # WO-PLAY-EXPLORE-FLAGS: the opt-ins the operator
+                        # switched on, and that the confirm line they just
+                        # answered spelled out. This supersedes
+                        # WO-EXPLORE-DOCK-DEFAULT-OFF's placeholder comment
+                        # ("Opt-in later via an explicit Play control if
+                        # added") -- this IS that control. The DEFAULT is
+                        # still OFF: these are `False` unless `D`/`F` were
+                        # pressed, so an operator who only ever presses
+                        # `E`,`y` arms exactly the run they always did.
+                        #
+                        # Passed unconditionally rather than only-when-True
+                        # so a dropped forward is a MISSING KWARG (loud, and
+                        # pinned) instead of a silent omission that looks
+                        # identical to the safe default.
+                        #
+                        # Neither value is wrapped in `bool(...)` -- see
+                        # `cockpit/explore_flags.py` on why symmetrising
+                        # these two flags is the money-path hazard here.
+                        dock_new_ports=explore_dock_opt_in,
+                        fight_tolls=explore_tolls_opt_in,
                     )
                 except Exception as exc:  # noqa: BLE001
                     # A raising adapter must not take the play loop down with
