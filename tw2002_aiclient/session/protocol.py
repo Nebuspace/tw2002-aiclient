@@ -750,6 +750,71 @@ def _dispatch_reflex(session, server):
     }
 
 
+def _dispatch_reflex_arm(args, session, server):
+    """WO-REFLEX-ARMED-RUN: launch the proposal a human just confirmed --
+    **after proving it is still the proposal**.
+
+    The human's `y` happens on the client, against a preview this daemon
+    answered some moments ago. Between those two instants the game screen can
+    change, a rule can be approved or withdrawn, and the library can be
+    edited. So the confirmation is carried here as an *identity* (`rule_id`,
+    `macro`, `classification`) rather than as an instruction, and this verb
+    re-derives the proposal from scratch and refuses unless all three still
+    match exactly. **Nothing the client says selects the macro.** The client
+    says which macro it was allowed to promise the human; if the answer has
+    moved, the run does not happen and no substitute is offered.
+
+    That is why the delegated name is `decision.macro` and not the caller's
+    string even though the two are proven equal one line above. The value
+    that launches should have come from this snapshot, so that weakening the
+    comparison could never widen into "the client names the macro".
+
+    **A library that now proposes nothing answers with its own reason, not
+    with drift.** `autopilot_no_candidates` and `autopilot_rules_unreadable`
+    say *why* there is no proposal; collapsing them into
+    `autopilot_proposal_drift` would be true but less useful, and the
+    operator's next move differs (teach a rule / fix the library / look
+    again). Drift is reserved for "there is a proposal and it is not yours".
+
+    Sends nothing itself and takes no control lock: on the one path that
+    launches, it delegates to `_dispatch_autoloop_start`, which owns the
+    start-anchor, control-lock, credit-floor and one-pass rails. Those refusals
+    reach the caller in the runner's own vocabulary, unre-spelled. The
+    `NEVER_AUTO_ACTION_CLASSES` refusal at every `replay_loop` boundary is
+    untouched and unconditional -- an armed run of an approved rule still
+    halts at a money prompt.
+    """
+    from ..rules.reflex import (
+        ARGS_REFLEX_ARM,
+        facts_from_status,
+        propose_macro,
+        proposal_drift,
+    )
+
+    unsupported = sorted(set(args) - ARGS_REFLEX_ARM)
+    if unsupported:
+        # Same posture as `autoloop_start`: an arg this verb does not honour
+        # is refused, never ignored. A silently-dropped `cycles` would be a
+        # surface agreeing to a repetition it does not perform.
+        return {"ok": False, "error": f"unsupported_arg:{unsupported[0]}"}
+
+    # ONE snapshot for both halves, for `_dispatch_reflex`'s reason: two reads
+    # would let bytes land between them, and the identity would then be checked
+    # against a screen that is no longer the one classified.
+    status = _status_response(session, server)
+    classification = status.get("classification")
+    decision = propose_macro(classification, facts_from_status(status))
+
+    if not decision.fired:
+        return {"ok": False, "error": decision.stop_reason or "autopilot_no_candidates"}
+
+    drift = proposal_drift(args, decision=decision, classification=classification)
+    if drift:
+        return {"ok": False, "error": drift}
+
+    return _dispatch_autoloop_start({"name": decision.macro}, server)
+
+
 def dispatch(session, verb, args, server):
     """The daemon's one dispatch chokepoint. A malformed/unrecognized
     `verb` is answered with a structured error, never an exception --
@@ -941,6 +1006,13 @@ def dispatch(session, verb, args, server):
         # WO-RULE-ENGINE-WIRE: read-only proposal from the taught rule
         # library. Sends nothing; see `_dispatch_reflex`.
         return _dispatch_reflex(session, server)
+
+    if verb == "reflex_arm":
+        # WO-REFLEX-ARMED-RUN. NOT `_driving_dispatch`, for exactly the
+        # reason `autoloop_start` is not: this delegates into
+        # `enter_auto_loop`, and holding the per-dispatch driver slot here
+        # would make the run refuse itself with `locked_by_active_driver`.
+        return _dispatch_reflex_arm(args, session, server)
 
     if verb == "history":
         # WO-P2-OPS-VERB-C (partial): in-memory session history ring.

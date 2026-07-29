@@ -68,15 +68,46 @@ from .store import STATUS_ABSENT, STATUS_OK, read_rule_store
 _AUTHORISING_STATUSES = (STATUS_OK, STATUS_ABSENT)
 
 __all__ = [
+    "ARGS_REFLEX_ARM",
+    "PROPOSAL_IDENTITY",
     "STATUS_FACT_KEYS",
+    "STOP_PROPOSAL_DRIFT",
     "STOP_RULES_UNREADABLE",
     "facts_from_status",
     "propose_macro",
+    "proposal_drift",
 ]
 
 #: The library could not be read. Distinct from ``autopilot_no_candidates``
 #: (which claims a completed search) and never rendered as "no rule matched".
 STOP_RULES_UNREADABLE = "autopilot_rules_unreadable"
+
+#: The library no longer proposes what the human was shown and confirmed.
+#:
+#: Its own code, never folded into ``autopilot_no_candidates``: that one says
+#: "we searched and nothing applies", which is a statement about the library.
+#: This one says "something moved between the preview and your ``y``", which is
+#: a statement about *time*, and the operator response differs -- look again,
+#: rather than go teach a rule.
+STOP_PROPOSAL_DRIFT = "autopilot_proposal_drift"
+
+#: The three fields that identify a proposal to the human who confirms it,
+#: checked in this order and reported by name when one drifts.
+#:
+#: All three, not just the macro. The macro is what *runs*, but a macro
+#: reached via a different rule was selected by guards the human never saw,
+#: and a macro selected for a different screen class is being launched at a
+#: screen it was not chosen for. Either of those is a different act wearing
+#: the confirmed act's name.
+PROPOSAL_IDENTITY = ("rule_id", "macro", "classification")
+
+#: Args the ``reflex_arm`` verb accepts -- exactly the identity, nothing else.
+#:
+#: Notably absent: any ``cycles``, ``force``, ``yes`` or ``floor``. This verb
+#: launches through ``autoloop_start``, which owns those decisions and refuses
+#: what it cannot honour; accepting them here would let this layer agree to
+#: something the layer below has to walk back.
+ARGS_REFLEX_ARM = frozenset(PROPOSAL_IDENTITY)
 
 #: Status fields promoted to guard facts, by their status key.
 #:
@@ -148,3 +179,48 @@ def propose_macro(
         report["rules"],
         facts or {},
     )
+
+
+def proposal_drift(
+    claimed: Optional[Mapping[str, Any]],
+    *,
+    decision: Decision,
+    classification: Optional[str],
+) -> Optional[str]:
+    """The first identity field that no longer matches, or ``None`` if all do.
+
+    ``claimed`` is the identity a human was shown and confirmed; ``decision``
+    and ``classification`` are what the library proposes for the screen *now*.
+    ``None`` means the run about to launch is the run that was confirmed.
+
+    **Every field must be a non-empty string on the claimed side, and that is
+    the whole point rather than input hygiene.** ``rule_id`` is ``None`` on
+    the kernel's document-level outcomes, and ``classification`` is ``None``
+    for a screen the classifier could not name -- so a caller that omits a
+    field would be compared ``None == None`` and *pass*, arming a run whose
+    identity was never established. A confirmation has to be of something.
+    An absent field is therefore reported as drift on that field: it does not
+    match the proposal, because it does not name one.
+
+    Checked in :data:`PROPOSAL_IDENTITY` order and reported one at a time. The
+    caller gets the first mismatch rather than a set, because the operator
+    response to any single one is identical -- look again -- and a combined
+    reason would need parsing to act on.
+
+    This is the only layer that compares identity; the daemon verb does not
+    repeat it. Never raises: a ``claimed`` that is not a mapping at all drifts
+    on the first field.
+    """
+    fresh = {
+        "rule_id": decision.rule_id,
+        "macro": decision.macro,
+        "classification": classification,
+    }
+    given = claimed if isinstance(claimed, Mapping) else {}
+    for field in PROPOSAL_IDENTITY:
+        want = given.get(field)
+        if not isinstance(want, str) or not want:
+            return qualify(STOP_PROPOSAL_DRIFT, field)
+        if fresh.get(field) != want:
+            return qualify(STOP_PROPOSAL_DRIFT, field)
+    return None
