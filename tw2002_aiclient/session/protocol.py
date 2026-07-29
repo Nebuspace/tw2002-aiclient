@@ -712,6 +712,44 @@ def _dispatch_autoloop_status(server):
     return {"ok": True, **autoloop.run_wire(autoloop.observe(runner, lock))}
 
 
+def _dispatch_reflex(session, server):
+    """The `reflex` verb -- what the taught rule library proposes for the
+    screen on the glass right now. **A proposal, never an act.**
+
+    Read-only in the strongest sense: it sends nothing, arms nothing, and
+    takes no control lock. `NEVER_AUTO_ACTION_CLASSES` is still refused
+    unconditionally at every `replay_loop` boundary, and a `Loop` carries no
+    approval field, so a macro named here is subject to exactly the same
+    refusals it was before this verb existed (see `rules/reflex.py`'s two
+    inert landings). Arming remains the human's `y` at arm-confirm.
+
+    **Its own verb, not a `status` field**, for the reason §C.2.1 gives about
+    that split -- `status` is polled about once a second by the cockpit, and
+    the rule library lives on disk. Folding this in would put a directory
+    listing and N file reads on a hot path to answer a question nobody asked.
+
+    **One snapshot, both halves.** The screen class and the guard facts are
+    derived from a SINGLE `_status_response` call rather than two reads of the
+    session. Two calls would let bytes land in between, and the facts would
+    then describe a screen that is no longer the one classified -- the same
+    race `render_with_color` was built to close, where the failure is not a
+    crash but a plausible answer about the wrong moment.
+    """
+    from ..rules.reflex import facts_from_status, propose_macro
+
+    status = _status_response(session, server)
+    decision = propose_macro(status.get("classification"), facts_from_status(status))
+    return {
+        "ok": True,
+        "classification": status.get("classification"),
+        "reflex": {
+            "macro": decision.macro,
+            "rule_id": decision.rule_id,
+            "stop_reason": decision.stop_reason,
+        },
+    }
+
+
 def dispatch(session, verb, args, server):
     """The daemon's one dispatch chokepoint. A malformed/unrecognized
     `verb` is answered with a structured error, never an exception --
@@ -898,6 +936,11 @@ def dispatch(session, verb, args, server):
 
     if verb == "explore_status":
         return _dispatch_explore_status(server)
+
+    if verb == "reflex":
+        # WO-RULE-ENGINE-WIRE: read-only proposal from the taught rule
+        # library. Sends nothing; see `_dispatch_reflex`.
+        return _dispatch_reflex(session, server)
 
     if verb == "history":
         # WO-P2-OPS-VERB-C (partial): in-memory session history ring.
