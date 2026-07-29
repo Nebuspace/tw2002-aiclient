@@ -454,17 +454,31 @@ def test_a_rule_id_with_no_safe_form_is_refused_rather_than_defaulted(tmp_path):
         write_draft({**DRAFT, "rule_id": "..."}, state_dir=tmp_path)
 
 
-def test_two_rule_ids_sharing_a_stem_refuse_rather_than_overwrite(tmp_path):
+def test_two_drafts_sharing_a_stem_refuse_rather_than_overwrite(tmp_path):
     """`safe_stem` is lossy, so distinct ids can collide on one filename.
 
-    Overwriting would delete a rule a human approved, and it would surface
-    later only as a reflex that stopped existing -- no error, no log line.
+    Pinned separately from the promote path below. An earlier version of this
+    test wrote both calls inside one `pytest.raises` block, which made it
+    impossible to say which of the two guards had fired -- and in fact only
+    the promote-side one ever did, so deleting the draft-side call survived a
+    mutation pass with the suite green.
     """
+    write_draft(DRAFT, state_dir=tmp_path)
+    with pytest.raises(RuleWriteError, match="already holds"):
+        write_draft({**DRAFT, "rule_id": "dock/when/idle"}, state_dir=tmp_path)
+
+    surviving = read_rule_store(state_dir=tmp_path, include_drafts=True)["drafts"]
+    assert [r.rule_id for r in surviving] == ["dock-when-idle"]
+
+
+def test_promoting_onto_another_rules_filename_refuses(tmp_path):
+    """The blessed-side half. This is the one that would delete a rule a human
+    approved, surfacing later only as a reflex that stopped existing."""
     write_draft(DRAFT, state_dir=tmp_path)
     promote_draft("dock-when-idle", state_dir=tmp_path)
 
+    write_draft({**DRAFT, "rule_id": "dock/when/idle"}, state_dir=tmp_path)
     with pytest.raises(RuleWriteError, match="already holds"):
-        write_draft({**DRAFT, "rule_id": "dock/when/idle"}, state_dir=tmp_path)
         promote_draft("dock/when/idle", state_dir=tmp_path)
 
     survivors = read_rule_store(state_dir=tmp_path)["rules"]
