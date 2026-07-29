@@ -147,6 +147,10 @@ def explore_run_wire(snapshot: ExploreSnapshot) -> dict:
             "turns_remaining": report.turns_remaining,
             "min_sectors": report.min_sectors,
             "intent": report.intent,
+            # The single most important fact about a run that can send Attack.
+            # Omitted originally, so status could not prove whether a run was
+            # armed for combat (hub-banked observability gap, live #209).
+            "fight_tolls": report.fight_tolls,
             "stop_requested": report.stop_requested,
             "started_at": report.started_at,
             "finished_at": report.finished_at,
@@ -223,6 +227,18 @@ HALT_FIGHT_POLICY_STOP = "fight_policy_stop"
 HALT_FIGHT_NO_KEY = "fight_no_key"
 HALT_FIGHT_FORBIDDEN_KEY = "fight_forbidden_key"
 HALT_FIGHT_CONFIRM_FAILED = "fight_confirm_failed"
+HALT_FIGHT_NO_PROGRESS = "fight_no_progress"
+HALT_FIGHT_CHAIN_LIMIT = "fight_chain_limit"
+
+#: Hard ceiling on encounter interactions per encounter. The legitimate chain
+#: is short -- Attack, quantity, done -- so this is generous. It exists because
+#: the LIVE failure (hub run 2026-07-29T02:02Z, `gone_rogue` +
+#: `microblaster_network`) was an armed run that never terminated: the server
+#: stayed on the encounter screen and the loop kept going round. A budget the
+#: screen cannot talk us out of is the only reliable stop, because every
+#: content-based check depends on reading a screen we have just proven we do
+#: not fully understand.
+FIGHT_MAX_CHAIN_STEPS = 6
 
 
 def _fight_key_permitted(key, reason: str) -> bool:
@@ -728,6 +744,9 @@ class ExploreRunner:
         reason: Optional[str] = REASON_DRIVER_ERROR
         distinct: Set[int] = set()
         sends = 0
+        # Per-encounter, reset once the loop reaches an ordinary driven screen.
+        fight_steps = 0
+        last_fight_text: Optional[str] = None
         turns = report.turns_remaining
         try:
             while not stop.is_set():
@@ -769,6 +788,27 @@ class ExploreRunner:
                 # reclassifying the screen (canon DECISIONS.md A.2, and the
                 # explicit Accept of this WO).
                 if halt is not None and report.fight_tolls:
+                    # REVISE (live #209): both guards below are new, and both
+                    # are about TERMINATION rather than about combat.
+                    #
+                    # `fight_no_progress` -- we already acted on a screen with
+                    # exactly this text and it did not change. Re-sending is
+                    # both useless and unsafe: the key goes onto a live combat
+                    # screen again. One repeat is enough to know.
+                    #
+                    # `fight_chain_limit` -- the backstop that does not read
+                    # the screen at all. The live hang happened on a screen we
+                    # demonstrably did not model correctly, so a stop condition
+                    # that depends on understanding that screen is exactly the
+                    # thing not to rely on.
+                    if last_fight_text is not None and full_text == last_fight_text:
+                        outcome = OUTCOME_HALTED
+                        reason = HALT_FIGHT_NO_PROGRESS
+                        break
+                    if fight_steps >= FIGHT_MAX_CHAIN_STEPS:
+                        outcome = OUTCOME_HALTED
+                        reason = HALT_FIGHT_CHAIN_LIMIT
+                        break
                     fight = _handle_encounter(
                         self._session,
                         full_text,
@@ -779,6 +819,22 @@ class ExploreRunner:
                     if fight is not None:
                         fight_halt, fight_sends = fight
                         sends += fight_sends
+                        fight_steps += 1
+                        last_fight_text = full_text
+                        # Publish BEFORE the `continue`. Without this the fight
+                        # path skipped every `_publish_progress` call below, so
+                        # `explore_status` reported `sends_issued=0` however
+                        # many keys had gone out -- which is what made the live
+                        # failure read as "sent nothing" instead of "sending
+                        # and not clearing", and sent the diagnosis the wrong
+                        # way for the first pass.
+                        self._publish_progress(
+                            report,
+                            distinct_sectors=len(distinct),
+                            sends_issued=sends,
+                            turns_remaining=turns,
+                            stop_requested=stop.is_set(),
+                        )
                         if fight_halt is not None:
                             _attribute_landmark(
                                 self._session,
@@ -800,6 +856,11 @@ class ExploreRunner:
                     outcome = OUTCOME_HALTED
                     reason = halt
                     break
+                # Reached a screen the loop drives normally: the encounter (if
+                # any) is behind us, so a later one in the same run gets its
+                # own full budget rather than inheriting a spent one.
+                fight_steps = 0
+                last_fight_text = None
                 sector_read = read_current_sector(prompt_line)
                 if sector_read.outcome != OUTCOME_READ or sector_read.sector is None:
                     outcome = OUTCOME_HALTED

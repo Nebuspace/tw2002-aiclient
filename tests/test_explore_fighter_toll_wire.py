@@ -140,9 +140,15 @@ def test_an_armed_run_fights_the_winnable_encounter_through_the_quantity_step(tm
 
     `9 vs 1` is force_share 0.90 -- exactly Max's ratified gate -- and the
     quantity step commits `min(max(theirs,1), max_avail)` = 1, never `max`.
+
+    Uses the run-to-completion helper deliberately. The original version of
+    this test called `stop()` immediately and only saw the second key because
+    the loop out-ran the stop event -- it was passing on a race, and adding one
+    mutex acquire to the fight path was enough to flip it. A test that asserts
+    a two-step chain has to let both steps happen.
     """
     session = _TollSession()
-    _run(session, tmp_path, fight_tolls=True)
+    _run_until_finished(session, tmp_path, fight_tolls=True)
     assert _letters_sent(session)[:2] == ["A", "1"]
 
 
@@ -329,3 +335,132 @@ def test_the_daemon_forwards_the_arm_and_defaults_it_off():
     assert any(
         any(k.arg == "fight_tolls" for k in call.keywords) for call in starts
     ), "protocol must forward fight_tolls to runner.start"
+
+
+# --- WO REVISE (live #209 hang, 2026-07-29): the encounter that never clears ---
+
+
+class _StuckTollSession(_TollSession):
+    """The live failure: the server does not leave the encounter screen.
+
+    Hub's 02:02Z live run found `gone_rogue` and `microblaster_network` sitting
+    on `fighter_encounter` after `ensure` returned ok=false, and an armed
+    explore then ran >100s without finishing. This double reproduces the shape
+    that matters -- a screen that stays an encounter no matter what is sent --
+    without asserting anything about WHY the live server did so.
+    """
+
+    def send(self, text, enter=True, secret=False, sender="app"):
+        # Deliberately does NOT advance `self._screen`.
+        return FakeAttachSession.send(self, text, enter=enter, secret=secret, sender=sender)
+
+
+def _run_until_finished(session, tmp_path, *, fight_tolls, timeout_s=10.0):
+    """Start and let the run END BY ITSELF -- never via `stop()`.
+
+    The existing helper calls `runner.stop()` immediately, which masks a
+    non-terminating loop: the stop event ends it and the test passes. A hang is
+    only observable if nothing external stops the run.
+    """
+    import time as _time
+
+    world_model.upsert_sector(
+        WORLD, {"sector_id": 4309, "warps": [158], "landmarks": []}, state_dir=tmp_path
+    )
+    runner = sx.ExploreRunner(
+        session, ControlLock(), state_dir=tmp_path, timeout_s=2.0, debounce_ms=1
+    )
+    runner.start(WORLD, min_sectors=1, turn_budget=5, fight_tolls=fight_tolls)
+    deadline = _time.monotonic() + timeout_s
+    try:
+        while _time.monotonic() < deadline:
+            snap = runner.snapshot()
+            if snap.report is not None and snap.report.outcome is not None:
+                return snap.report
+            _time.sleep(0.02)
+        return None  # still running -> the hang
+    finally:
+        runner.stop(join_timeout=5.0)
+
+
+def test_an_encounter_that_never_clears_terminates_instead_of_hanging(tmp_path):
+    """THE live defect. An armed run against a screen that stays an encounter
+    must reach a terminal outcome on its own, with a typed reason -- never spin
+    until an operator notices."""
+    report = _run_until_finished(_StuckTollSession(), tmp_path, fight_tolls=True)
+    assert report is not None, "armed explore never terminated -- this is the live hang"
+    assert report.outcome == OUTCOME_HALTED
+    assert report.reason in (sx.HALT_FIGHT_NO_PROGRESS, sx.HALT_FIGHT_CHAIN_LIMIT)
+
+
+def test_a_stuck_encounter_cannot_resend_without_bound(tmp_path):
+    """The unbounded `continue` re-sent Attack into a live combat screen every
+    iteration. Whatever the terminal reason, the number of keys put on the wire
+    must be small and bounded."""
+    session = _StuckTollSession()
+    _run_until_finished(session, tmp_path, fight_tolls=True)
+    assert len(_letters_sent(session)) <= sx.FIGHT_MAX_CHAIN_STEPS
+
+
+def test_the_fight_path_publishes_its_counters_mid_run(tmp_path):
+    """Why the live failure read as `sends_issued=0`: the fight path
+    `continue`d past every `_publish_progress` call, so status could never show
+    a send. The count was not evidence of no sends -- it was evidence of no
+    reporting, and it sent the diagnosis the wrong way."""
+    session = _StuckTollSession()
+    report = _run_until_finished(session, tmp_path, fight_tolls=True)
+    assert report is not None
+    assert report.sends_issued == len(_letters_sent(session))
+    assert report.sends_issued > 0
+
+
+def test_status_json_surfaces_the_combat_arm(tmp_path):
+    """Hub-banked observability gap: `explore_run_wire` omitted `fight_tolls`,
+    so status could not prove whether a run was armed for combat -- the single
+    most important thing to know about a run that is sending Attack."""
+    snap = sx.ExploreSnapshot(
+        running=True,
+        report=sx.ExploreReport(
+            world_id="w", started_at="t", min_sectors=1, fight_tolls=True
+        ),
+    )
+    assert sx.explore_run_wire(snap)["run"]["fight_tolls"] is True
+
+
+class _CyclingTollSession(_TollSession):
+    """An encounter that keeps CHANGING but never resolves.
+
+    `_StuckTollSession` is caught by `fight_no_progress`, which means the
+    `fight_chain_limit` backstop is unreachable in that scenario and therefore
+    untested there. This is the scenario that reaches it: every screen differs
+    from the last, so the progress check never fires and only the budget can
+    stop the run.
+
+    Not hypothetical -- a server that renumbers or re-renders its combat frame
+    each pass produces exactly this, and it is the case where a content-based
+    stop condition fails while a blind budget still holds.
+    """
+
+    def __init__(self):
+        super().__init__()
+        self._n = 0
+
+    def send(self, text, enter=True, secret=False, sender="app"):
+        self._n += 1
+        self._screen = (
+            f"Corp fighters block your path. (wave {self._n})\n"
+            f"{COUNTS}\n"
+            "Option? (A,D,I,R,S,?):?"
+        )
+        return FakeAttachSession.send(self, text, enter=enter, secret=secret, sender=sender)
+
+
+def test_a_never_resolving_encounter_is_stopped_by_the_blind_budget(tmp_path):
+    """Reaches `fight_chain_limit` specifically: the screen differs every pass,
+    so `fight_no_progress` cannot fire and only the step ceiling terminates the
+    run. This is the guard that does not depend on understanding the screen."""
+    session = _CyclingTollSession()
+    report = _run_until_finished(session, tmp_path, fight_tolls=True)
+    assert report is not None, "cycling encounter never terminated"
+    assert report.reason == sx.HALT_FIGHT_CHAIN_LIMIT
+    assert len(_letters_sent(session)) == sx.FIGHT_MAX_CHAIN_STEPS
