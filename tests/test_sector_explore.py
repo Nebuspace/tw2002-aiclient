@@ -199,7 +199,16 @@ def test_mid_run_status_exposes_live_counters_not_silent_zeros(tmp_path: Path):
     assert done["run"]["finished_at"] is not None
 
 
-def test_explore_halts_on_unknown_screen(tmp_path: Path):
+def test_explore_halts_on_a_recognised_screen_it_cannot_drive(tmp_path: Path):
+    """RENAMED by WO-EXPLORE-HALT-REASON-CLASS, because the old name was an
+    instance of the defect this WO fixes.
+
+    `Enter your password: ` is not an unknown screen -- `classify` names it
+    `login_password`. This test asserted `unrecognized_screen` for it, so the
+    lie was encoded in the test as well as the product, and the two agreed.
+    The run still halts on exactly the same screen; only the reason now says
+    what actually happened.
+    """
     _seed_line(tmp_path, [1, 2], extra_frontier=(2, 99))
     session = ExploreMapSession(sector=1, graph={1: [2], 2: [1, 99]}, state_dir=tmp_path)
     session._screen = "Enter your password: "
@@ -212,7 +221,8 @@ def test_explore_halts_on_unknown_screen(tmp_path: Path):
     report = runner.snapshot().report
     assert report is not None
     assert report.outcome == OUTCOME_HALTED
-    assert report.reason == HALT_UNRECOGNIZED_SCREEN
+    assert report.reason == "halt_not_drivable:login_password", report.reason
+    assert report.reason != HALT_UNRECOGNIZED_SCREEN
 
 
 def test_explore_ingests_warps_from_screen_empty_world_discovers_hop(tmp_path: Path):

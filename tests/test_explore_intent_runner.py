@@ -184,7 +184,7 @@ def test_explore_halts_on_a_never_auto_action_screen(tmp_path: Path):
     runner._thread.join(timeout=15)
     report = runner.snapshot().report
     assert report.outcome == OUTCOME_HALTED
-    assert report.reason in (HALT_NEVER_AUTO_ACTION,), (
+    assert report.reason == "never_auto_action:money_prompt", (
         f"explore did not refuse an action prompt; halted as {report.reason!r}"
     )
     assert report.sends_issued == 0, "explore sent into an action prompt"

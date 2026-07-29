@@ -571,7 +571,7 @@ def test_the_dock_path_sends_nothing_at_the_trade_prompt(tmp_path):
     report = _run_to_completion(session, tmp_path, dock_new_ports=True)
     assert _letters_sent(session) == ["P", "T"]
     assert report.outcome == OUTCOME_HALTED
-    assert report.reason == sx.HALT_NEVER_AUTO_ACTION
+    assert report.reason == "never_auto_action:money_prompt"
 
 
 def test_the_warp_number_is_never_typed_into_the_trade_prompt(tmp_path):
@@ -597,7 +597,7 @@ def test_the_warp_number_is_never_typed_into_the_trade_prompt(tmp_path):
     runner.start(WORLD, min_sectors=2, turn_budget=5, dock_new_ports=True)
     report = runner.stop(join_timeout=10.0).report
     assert report.outcome == OUTCOME_HALTED
-    assert report.reason == sx.HALT_NEVER_AUTO_ACTION
+    assert report.reason == "never_auto_action:money_prompt"
     assert _letters_sent(session) == ["P", "T"]  # still nothing at the money prompt
 
 
@@ -769,7 +769,7 @@ def test_the_dock_letters_go_out_as_hot_keys_with_no_trailing_enter(tmp_path):
     assert "Agreed," not in screen, "the run accepted a trade quantity"
     assert "Your offer" not in screen
     assert report.outcome == OUTCOME_HALTED
-    assert report.reason == sx.HALT_NEVER_AUTO_ACTION
+    assert report.reason == "never_auto_action:money_prompt"
 
 
 def test_the_commodities_still_land_through_the_hot_key_path(tmp_path):

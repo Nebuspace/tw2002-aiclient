@@ -18,6 +18,7 @@ from ..explore import known_graph, map_fill_warp_target, warp_target_for_intent
 from ..loops.player import (
     HALT_ABORTED,
     HALT_CONFIRM_FAILED,
+    HALT_CURRENT_SECTOR_UNREADABLE,
     HALT_FENCED,
     HALT_NEVER_AUTO_ACTION,
     HALT_SETTLE_FAILED,
@@ -196,6 +197,37 @@ STARDOCK_SCREEN_CLASSES = frozenset(
 )
 
 
+#: WO-EXPLORE-HALT-REASON-CLASS: the halt vocabulary for a screen this loop
+#: RECOGNISES but is not taught to drive -- `fighter_encounter`,
+#: `sector_display`, and every future class that is neither movement nor a
+#: never-auto action.
+#:
+#: It exists because `unrecognized_screen` was being reported for screens
+#: `classify` had named perfectly well. That reading is not merely imprecise,
+#: it points the reader at the wrong repair: "unrecognized" invites someone
+#: to go write the classifier that already exists. The live fighter cells in
+#: `dock-kernel-live-20260729T0407Z` halted `unrecognized_screen` while
+#: `classify` was returning `fighter_encounter` for the very same bytes --
+#: the same ambiguity that cost the dock WO a full diagnosis cycle when one
+#: `dock_screen_unrecognized` string stood for two different failures.
+HALT_NOT_DRIVABLE = "halt_not_drivable"
+
+#: `classify`'s own "I could not name this" sentinel. Named here rather than
+#: inlined so the gate and its pins read the SAME literal -- a drifting
+#: spelling would silently route genuine unknowns down the named-class branch
+#: and re-introduce the lie in the opposite direction.
+CLASS_UNKNOWN = "unknown"
+
+
+def _qualify(base: str, klass: str) -> str:
+    """``base:klass`` -- the reason carries the class that produced it.
+
+    One helper for both branches so the separator cannot drift between them,
+    and so a reader parsing live evidence has a single shape to split on.
+    """
+    return f"{base}:{klass}"
+
+
 def _gate_screen(full_text: str, prompt_line: str) -> tuple[Optional[str], str]:
     """``(halt_reason_or_None, klass)``.
 
@@ -203,11 +235,29 @@ def _gate_screen(full_text: str, prompt_line: str) -> tuple[Optional[str], str]:
     a screen that stops the run is also the screen most likely to be worth
     recording something about, and re-classifying at the call site would let
     the two answers drift.
+
+    The reason **carries the class whenever there is one** (WO-EXPLORE-HALT-
+    REASON-CLASS). Three outcomes, and the distinction between the last two
+    is the whole point:
+
+      * a never-auto class  -> ``never_auto_action:<klass>``
+      * any other named class -> ``halt_not_drivable:<klass>``
+      * a genuine unknown  -> bare ``unrecognized_screen``
+
+    Only the third is a claim that nothing recognised the screen, and now it
+    is the only case that makes it. Halt *behaviour* is unchanged: every
+    screen that stopped the run before still stops it, and `main_command`
+    still passes.
     """
     klass = classify_screen(full_text, prompt_line)
     if klass in NEVER_AUTO_ACTION_CLASSES:
-        return HALT_NEVER_AUTO_ACTION, klass
+        return _qualify(HALT_NEVER_AUTO_ACTION, klass), klass
     if klass != MOVEMENT_SCREEN_CLASS:
+        # `unknown` is checked by exact identity, not truthiness: a falsy or
+        # oddly-typed class must land on the honest-unknown branch rather
+        # than be pasted into a reason as `halt_not_drivable:None`.
+        if isinstance(klass, str) and klass and klass != CLASS_UNKNOWN:
+            return _qualify(HALT_NOT_DRIVABLE, klass), klass
         return HALT_UNRECOGNIZED_SCREEN, klass
     return None, klass
 
@@ -967,7 +1017,19 @@ class ExploreRunner:
                 sector_read = read_current_sector(prompt_line)
                 if sector_read.outcome != OUTCOME_READ or sector_read.sector is None:
                     outcome = OUTCOME_HALTED
-                    reason = HALT_UNRECOGNIZED_SCREEN
+                    # WO-EXPLORE-HALT-REASON-CLASS twin site. This is NOT an
+                    # unrecognized screen and never was: `_gate_screen` has
+                    # just passed it as `main_command`, so the screen was
+                    # recognised -- what failed is reading a sector NUMBER out
+                    # of it. Reporting `unrecognized_screen` here sent a
+                    # reader hunting for a missing classifier when the actual
+                    # fault is in `read_current_sector`.
+                    #
+                    # `HALT_CURRENT_SECTOR_UNREADABLE` is not invented for
+                    # this: `loops/player.py` already defines it for exactly
+                    # this failure and the STOP banner already renders it as
+                    # "current sector unreadable".
+                    reason = HALT_CURRENT_SECTOR_UNREADABLE
                     break
                 current = int(sector_read.sector)
                 # WO-LAST-KNOWN-SECTOR: the explore loop is the other place a
