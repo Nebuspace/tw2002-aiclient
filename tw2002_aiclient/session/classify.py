@@ -980,6 +980,47 @@ _GATE_ANCHORS = [
             )
         ),
     ),
+    # The NPC fighter-toll encounter (WO-CLASSIFY-FIGHTER-ENCOUNTER-ANCHOR).
+    # Same reason `warp_confirm` sits here: a live blocking question that the
+    # server is stalled on, which must beat `sector_display` when the Sector
+    # body is still painted above it.
+    #
+    # WHY THIS EXISTS AT ALL. Measured on 2026-07-28: the bare encounter frame
+    # classified `unknown` (safe -- canon's stop-and-escalate trigger), but the
+    # SAME dialogue with a sector body above it classified `sector_display` --
+    # an ordinary, teachable content class handed to the app while the server
+    # sat blocked on `Option?`. That is the hazard `money_prompt`'s comment
+    # describes for the StarDock purchase screen, reproduced for combat, and it
+    # is the normal live case: you warp, the previous sector is still on the
+    # grid, and the toll dialogue lands underneath. Gate anchors are checked
+    # against the PROMPT LINE, which is why an anchor here fixes it exactly and
+    # why stale scrollback cannot abuse it -- a screen whose live prompt is an
+    # ordinary `Command [TL=…]` still classifies `main_command` even with a
+    # spent `Option?` sitting in the history above it.
+    #
+    # NOT in `NEVER_AUTO_ACTION_CLASSES`, deliberately (hub ruling (a),
+    # 2026-07-28, following Max's NPC auto-fight GO). This is the shape
+    # `DECISIONS.md` §A.2's clarification blesses: a dedicated class that is
+    # auto-action-eligible WHEN ARMED, owned by one guarded module
+    # (`session.fighter_toll_policy`) rather than open to any taught rule. The
+    # alternative -- naming it and forbidding it -- would close this hole by
+    # making the Max-ratified Retreat/Attack gate unreachable, which trades a
+    # misclassification for a guard that can never fire.
+    #
+    # The letter tuple IS the specificity, and it is not negotiable: a bare
+    # `Option?` is a shape other TW screens share, so widening to it would
+    # claim screens this module cannot vouch for. `P` (Pay) is optional in the
+    # tuple because the server only offers it on some tolls -- matching it does
+    # NOT mean Pay is selectable; `fighter_toll_policy` never chooses it.
+    (
+        "fighter_encounter",
+        _regex_matcher(
+            re.compile(
+                r"Option\s*\?\s*\(\s*A\s*,\s*D\s*,\s*I\s*,\s*R\s*(?:,\s*P\s*)?,\s*S\s*,\s*\?\s*\)",
+                re.I,
+            )
+        ),
+    ),
     ("main_command", _is_main_command),
     # LAST among the gates, and the position is load-bearing. Everything
     # above answers a screen some part of this app DRIVES: `login.py`'s
