@@ -1,6 +1,6 @@
 # WO-EXPLORE-DOCK-DEFAULT-OFF — CLI/Play dock arm defaults OFF until dialect known
 
-**Status:** OPEN · EXECUTE · CRITICAL · hub GO 2026-07-29 (live regression on main)
+**Status:** DONE · tip pending merge · CRITICAL · hub GO 2026-07-29 (live regression on main)
 **Seat:** Cursor (`impl-aiclient-cursor`) · Live: n/a (default flip) or brief smoke
 **Refs:** #205 MERGED `fdcbd1c` · Cursor live STATUS 00:14:23Z · CC FINDING 00:16:56Z
 
