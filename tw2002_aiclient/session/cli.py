@@ -1730,6 +1730,15 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--json", action="store_true", help="machine-parseable JSON output")
     sp.set_defaults(func=cmd_reflex)
 
+    # WO-RULE-WRITER-DRAFTS. The `rule` verb's handlers live in
+    # `tw2002_aiclient/rules/cli.py`: they touch only the filesystem, so the
+    # daemon's request/response plumbing would buy nothing, and this module is
+    # already over the line cap (#218). Imported here rather than at module
+    # scope so the CLI's import cost stays where the other verbs put it.
+    from ..rules.cli import add_rule_parser
+
+    add_rule_parser(sub)
+
     return parser
 
 
