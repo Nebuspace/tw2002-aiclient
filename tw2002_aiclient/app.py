@@ -1270,12 +1270,26 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                 play.pending_analyze_draft = None
                 if approved is not None:
                     play.stub_store.set(approved)
+                    # WO-DRAFT-APPROVE-KERNEL-BRIDGE: the event is named for
+                    # what actually happened. The human accepted the teacher's
+                    # PROPOSAL; no rule exists yet, because `rule_id`/`do`/
+                    # `priority` are human-supplied (Max, 2026-07-29) and this
+                    # surface has no way to accept typed text.
                     play.approval_ledger_events.append(
-                        {"actor": "app", "event": "analyze_rule_approved", "screen": (
+                        {"actor": "app", "event": "analyze_draft_accepted", "screen": (
                             (approved.get("when") or {}).get("screen") or ""
                         )}
                     )
-                    play.status_line = "analyze draft approved (playback-eligible stub)"
+                    # The old line here read "approved (playback-eligible stub)"
+                    # while persisting nowhere and gating nothing -- a claim the
+                    # runtime could not honour. It now says what is true and
+                    # what the operator must do to make the rule real.
+                    play.status_line = (
+                        "draft accepted — not yet a rule; run: "
+                        + _draft_approve.compose_bridge_command(
+                            (approved.get("when") or {}).get("screen")
+                        )
+                    )
                 else:
                     play.status_line = "analyze draft approve failed — no draft"
                 continue
