@@ -87,9 +87,16 @@ def test_explore_start_missing_world_id_errors():
 def test_explore_start_sends_world_id_only(monkeypatch):
     """Minimal start: world_id plus the dock arm (default OFF).
 
-    ``dock_new_ports`` is always sent so CLI and daemon cannot silently
-    disagree (daemon library default is also False). WO-EXPLORE-DOCK-DEFAULT-OFF
-    flipped the CLI default OFF after live map-fill halt regression.
+    ``dock_new_ports`` and ``fight_tolls`` are always sent so CLI and daemon
+    cannot silently disagree (both daemon library defaults are also False).
+    WO-EXPLORE-DOCK-DEFAULT-OFF flipped the CLI dock default OFF after a live
+    map-fill halt regression; WO-FIGHTER-TOLL-POLICY-WIRE added the combat arm
+    already OFF, having learned it there.
+
+    Asserted as exact EQUALITY, not a subset: a new arm appearing in this
+    payload must break this test. A subset check would let a future default-ON
+    combat flag ride along silently, which is the one thing this shape of test
+    is here to prevent.
     """
     seen = {}
 
@@ -103,7 +110,9 @@ def test_explore_start_sends_world_id_only(monkeypatch):
     rc = args.func(args)
     assert rc == 0
     assert seen["verb"] == "explore_start"
-    assert seen["args"] == {"world_id": "ona", "dock_new_ports": False}
+    assert seen["args"] == {
+        "world_id": "ona", "dock_new_ports": False, "fight_tolls": False,
+    }
 
 
 def test_explore_start_sends_optional_flags(monkeypatch):
@@ -122,7 +131,7 @@ def test_explore_start_sends_optional_flags(monkeypatch):
     args.func(args)
     assert seen["args"] == {
         "world_id": "test", "min_sectors": 3, "turn_budget": 20,
-        "dock_new_ports": False,
+        "dock_new_ports": False, "fight_tolls": False,
     }
 
 

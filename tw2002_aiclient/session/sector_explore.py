@@ -26,6 +26,7 @@ from ..loops.player import (
 )
 from .classify import NEVER_AUTO_ACTION_CLASSES, classify_screen
 from .control_lock import ControlLock, ControlModeConflict
+from . import fighter_toll_policy
 from .state_parser import (
     OUTCOME_READ,
     read_current_sector,
@@ -44,6 +45,12 @@ __all__ = [
     "DEFAULT_MIN_DISTINCT_SECTORS",
     "DEFAULT_TURN_BUDGET",
     "DOCK_LETTER_ALLOWLIST",
+    "FIGHT_FORBIDDEN_KEYS",
+    "FIGHT_LETTER_ALLOWLIST",
+    "HALT_FIGHT_CONFIRM_FAILED",
+    "HALT_FIGHT_FORBIDDEN_KEY",
+    "HALT_FIGHT_NO_KEY",
+    "HALT_FIGHT_POLICY_STOP",
     "HALT_DOCK_FORBIDDEN_KEY",
     "HALT_DOCK_UNRECOGNIZED",
     "MOVEMENT_SCREEN_CLASS",
@@ -61,7 +68,7 @@ SETTLE_DEBOUNCE_MS = 350
 STOP_JOIN_TIMEOUT_S = 5.0
 
 ARGS_EXPLORE_START = frozenset(
-    {"world_id", "min_sectors", "turn_budget", "intent", "dock_new_ports"}
+    {"world_id", "min_sectors", "turn_budget", "intent", "dock_new_ports", "fight_tolls"}
 )
 
 OUTCOME_COMPLETED = "completed"
@@ -98,6 +105,13 @@ class ExploreReport:
     # already on screen stay unconditional -- both are free. Only the P/T
     # cascade is gated, so an unarmed run still learns everything it can see.
     dock_new_ports: bool = False
+    # WO-FIGHTER-TOLL-POLICY-WIRE. Off by default, and for a stronger reason
+    # than `dock_new_ports`: this one puts an ATTACK on the wire. `#208` landed
+    # hours earlier because a turn-spending arm defaulted on and broke the
+    # ordinary run; the same mistake here would auto-fight. Nothing about the
+    # Max combat GO (`force_share >= 0.90`) implies it should be ON for a run
+    # the operator did not arm for combat.
+    fight_tolls: bool = False
     outcome: Optional[str] = None
     reason: Optional[str] = None
     distinct_sectors: int = 0
@@ -190,6 +204,97 @@ def _gate_screen(full_text: str, prompt_line: str) -> tuple[Optional[str], str]:
     if klass != MOVEMENT_SCREEN_CLASS:
         return HALT_UNRECOGNIZED_SCREEN, klass
     return None, klass
+
+
+#: The only LETTERS the toll wire may send: the two Max-ratified outcomes.
+#: Deliberately not `{"A", "D", "I", "R", "S"}` -- the screen offers more than
+#: the policy is allowed to choose, and this set encodes the allowed subset.
+FIGHT_LETTER_ALLOWLIST = frozenset({"A", "R"})
+
+#: `P` (Pay) is enumerated as FORBIDDEN rather than merely left out of the set
+#: above. Leaving it out is a fact about today's allowlist; naming it is a fact
+#: about canon ("never Pay"), and it survives someone widening the allowlist
+#: later without reading this comment. Same two-layer discipline as
+#: `DOCK_LETTER_ALLOWLIST` -- and, as there, the danger is a one-character bug,
+#: because `A` on this screen is an attack and `P` spends the player's money.
+FIGHT_FORBIDDEN_KEYS = frozenset({"P"})
+
+HALT_FIGHT_POLICY_STOP = "fight_policy_stop"
+HALT_FIGHT_NO_KEY = "fight_no_key"
+HALT_FIGHT_FORBIDDEN_KEY = "fight_forbidden_key"
+HALT_FIGHT_CONFIRM_FAILED = "fight_confirm_failed"
+
+
+def _fight_key_permitted(key, reason: str) -> bool:
+    """Is `key` one this module is allowed to put on the wire?
+
+    An INDEPENDENT second layer, not a restatement of the policy's own logic.
+    `fighter_toll_policy` already refuses to return `P`; this exists so that a
+    future edit there cannot reach the socket without also editing here.
+
+    Digits are admitted only when the policy's own `reason` says it decided a
+    bounded quantity commit. Without that clause the allowlist would have to
+    accept "any digit string", which is precisely the shape an unrelated
+    quantity screen would present.
+    """
+    if not isinstance(key, str) or not key:
+        return False
+    if key.upper() in FIGHT_FORBIDDEN_KEYS:
+        return False
+    if key.upper() in FIGHT_LETTER_ALLOWLIST:
+        return True
+    return key.isdigit() and reason.startswith("qty_commit:")
+
+
+def _handle_encounter(
+    session,
+    full_text: str,
+    prompt_line: str,
+    *,
+    timeout_s: float,
+    debounce_ms: int,
+) -> Optional[tuple[Optional[str], int]]:
+    """Armed toll handling. ``None`` means "not an encounter frame at all".
+
+    Otherwise ``(halt_reason_or_None, sends_issued)``.
+
+    The refusal ladder is ordered so that every way of NOT having a decided key
+    lands on a halt before any send can be constructed:
+
+    * ``detected=False`` -- the policy says this is not its screen. Returns
+      ``None`` so the ordinary gate keeps its verdict. This is the
+      ``not_encounter`` case, and it must never be read as "proceed".
+    * ``halt=True`` -- PvP, unreadable counts, band exceeded. Hard stop.
+    * ``key is None`` with ``halt=False`` -- checked SEPARATELY and on purpose.
+      `halt=False` is the dataclass default, so a future policy branch that
+      forgets to set it would otherwise fall through to a send with no key.
+      No key is no send, whatever the halt flag says.
+    * a key the allowlist does not admit -- stop, do not "fix" it.
+
+    A send that cannot be positively confirmed halts too: `send_and_confirm`
+    returning `confirmed=False` means the screen did not become what we
+    expected, and guessing the next keystroke into a live combat screen is the
+    exact failure this module exists to prevent.
+    """
+    decision = fighter_toll_policy.next_encounter_input(full_text, prompt_line)
+    if not decision.detected:
+        return None
+    if decision.halt:
+        return HALT_FIGHT_POLICY_STOP, 0
+    if decision.key is None:
+        return HALT_FIGHT_NO_KEY, 0
+    if not _fight_key_permitted(decision.key, decision.reason or ""):
+        return HALT_FIGHT_FORBIDDEN_KEY, 0
+    _reason, _elapsed, confirmed = _settle.send_and_confirm(
+        session,
+        decision.key,
+        enter=True,
+        timeout_s=timeout_s,
+        debounce_ms=debounce_ms,
+    )
+    if not confirmed:
+        return HALT_FIGHT_CONFIRM_FAILED, 1
+    return None, 1
 
 
 def _ingest_settled_sector(
@@ -539,6 +644,7 @@ class ExploreRunner:
         turn_budget: int = DEFAULT_TURN_BUDGET,
         intent: str = _explore.INTENT_MAP_FILL,
         dock_new_ports: bool = False,
+        fight_tolls: bool = False,
     ) -> ExploreSnapshot:
         if not isinstance(world_id, str) or not world_id.strip():
             raise ExploreRefused("missing_world_id")
@@ -559,6 +665,9 @@ class ExploreRunner:
         # caller meant as a refusal.
         if not isinstance(dock_new_ports, bool):
             raise ExploreRefused("invalid_dock_new_ports")
+        # Same refusal, higher stakes: a truthy string here would arm combat.
+        if not isinstance(fight_tolls, bool):
+            raise ExploreRefused("invalid_fight_tolls")
 
         stop = threading.Event()
         report = ExploreReport(
@@ -567,6 +676,7 @@ class ExploreRunner:
             min_sectors=int(min_sectors),
             intent=intent,
             dock_new_ports=bool(dock_new_ports),
+            fight_tolls=bool(fight_tolls),
             turns_remaining=int(turn_budget),
         )
         with self._mutex:
@@ -642,6 +752,44 @@ class ExploreRunner:
                 full_text = self._session.render_text(rows)
                 prompt_line = rows[-1].strip() if rows else ""
                 halt, klass = _gate_screen(full_text, prompt_line)
+                # WO-FIGHTER-TOLL-POLICY-WIRE. Deliberately nested INSIDE the
+                # halt branch. The toll wire can therefore only ever convert a
+                # screen the loop was already going to stop on into a decided
+                # action -- it can never take a screen away from the ordinary
+                # movement path, and it cannot widen what the loop drives.
+                #
+                # It is also why `fight_tolls=False` is not merely a disabled
+                # feature but a structural no-op: with the flag off this block
+                # does not execute, so the disarmed loop is byte-for-byte the
+                # loop that shipped before this WO.
+                #
+                # The qty step arrives classified `money_prompt`, which the gate
+                # halts on via NEVER_AUTO_ACTION_CLASSES -- so reaching it here
+                # is the only way the bounded chain step can be answered without
+                # reclassifying the screen (canon DECISIONS.md A.2, and the
+                # explicit Accept of this WO).
+                if halt is not None and report.fight_tolls:
+                    fight = _handle_encounter(
+                        self._session,
+                        full_text,
+                        prompt_line,
+                        timeout_s=self._timeout_s,
+                        debounce_ms=self._debounce_ms,
+                    )
+                    if fight is not None:
+                        fight_halt, fight_sends = fight
+                        sends += fight_sends
+                        if fight_halt is not None:
+                            _attribute_landmark(
+                                self._session,
+                                report.world_id,
+                                klass,
+                                state_dir=self._state_dir,
+                            )
+                            outcome = OUTCOME_HALTED
+                            reason = fight_halt
+                            break
+                        continue
                 if halt is not None:
                     _attribute_landmark(
                         self._session,

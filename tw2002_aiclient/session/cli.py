@@ -934,6 +934,7 @@ def cmd_explore_start(args):
     # (WO-EXPLORE-DOCK-DEFAULT-OFF); omitting would still be False today but
     # sending keeps an explicit arm decision on the wire.
     payload["dock_new_ports"] = bool(getattr(args, "dock_new_ports", False))
+    payload["fight_tolls"] = bool(getattr(args, "fight_tolls", False))
     resp = send_request("explore_start", payload, run_dir=run_dir)
     print_response(resp, args)
     return 0 if resp.get("ok") else 1
@@ -1618,6 +1619,13 @@ def build_parser() -> argparse.ArgumentParser:
                     default=False, dest="dock_new_ports",
                     help="dock first-sight ports to ingest commodities "
                          "(spends one turn each; OFF by default until dialect known)")
+    # WO-FIGHTER-TOLL-POLICY-WIRE: the combat arm. OFF by default and opt-in
+    # per run -- there is no persisted "always fight" setting on purpose, so
+    # arming is an explicit decision the operator makes each time.
+    sp.add_argument("--fight-tolls", action=argparse.BooleanOptionalAction,
+                    default=False, dest="fight_tolls",
+                    help="let the toll policy answer fighter encounters "
+                         "(Attack/Retreat only, never Pay; OFF by default)")
     sp.add_argument("--run-dir", default=None, metavar="PATH", dest="run_dir",
                     help="daemon run directory override")
     sp.add_argument("--json", action="store_true", help="machine-parseable JSON output")
