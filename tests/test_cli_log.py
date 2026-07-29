@@ -47,6 +47,12 @@ _SHIPPED_VERBS = frozenset(
         # only: it names a macro, never arms or runs one. Behaviour:
         # tests/test_reflex_client_reach.py.
         "reflex",
+        # WO-RULE-WRITER-DRAFTS -- `tw rule`, nested draft|approve|list. The
+        # daemon-free rule authoring tree: `draft` writes an INERT rule and
+        # cannot bless one, `approve` is the sole human act that makes a rule
+        # eligible to fire. Handlers live in `tw2002_aiclient/rules/cli.py`.
+        # Behaviour: tests/test_cli_rule_wiring.py.
+        "rule",
     }
 )
 
