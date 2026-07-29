@@ -33,6 +33,7 @@ from __future__ import annotations
 import ast
 import inspect
 import types
+import unicodedata
 
 import pytest
 
@@ -392,8 +393,20 @@ def test_the_offer_line_fits_an_eighty_column_terminal() -> None:
 
     The length is deterministic — `app._EXPLORE_OFFER_CLASSIFICATION` is the
     constant `"main_command"`, so this is a real bound and not a sample.
+
+    What this measures is CHARACTERS, which equals display cells here only
+    because the line carries no East-Asian-wide character — asserted below
+    so the equivalence is checked rather than assumed. It does carry five
+    AMBIGUOUS-width ones (`×`, `—`, `·`), which a CJK-locale terminal
+    renders double: 79 → 84, over the bound. That exposure is pre-existing
+    (the em-dash/middle-dot idiom is used across the offer line and teach
+    band) but this WO does widen it by one `·`. Not handled here — a chrome
+    fix is the wrong place to introduce a width policy — and reported to the
+    hub rather than left for the next reader to rediscover.
     """
     line = explore_flags.compose_explore_offer(app_mod._EXPLORE_OFFER_CLASSIFICATION, cycles=5)
+    wide = [c for c in line if unicodedata.east_asian_width(c) in ("W", "F")]
+    assert not wide, f"chars != cells; wide chars present: {wide}"
     assert len(line) <= 80, f"{len(line)} cols: {line}"
 
 
