@@ -821,6 +821,125 @@ def read_port_from_sector_status(rendered_text) -> PortRead:
 
 
 # ---------------------------------------------------------------------------
+# Docked commerce report -- the commodity extraction canon's Ingestion section
+# calls "the existing commodity extraction, never a second row parser"
+# ---------------------------------------------------------------------------
+#
+# WO-EXPLORE-DOCK-NEW-PORT. Canon (`/engine/world-model.md` § Ingestion) and
+# `world_model.write_port_only`'s own docstring both describe this reader as
+# already existing and merely reused. It did not exist: `write_port_only` had
+# no product caller at all, and the three symbols its docstring names
+# (`protocol._write_world_model`, `state_parser.is_genuine_port_report`,
+# `parse_state`) have no definition anywhere in the tree. So the writer was a
+# fully-tested consumer of a shape nothing produced. This is that producer --
+# THE one, so that canon's "never a second row parser" stays true going
+# forward rather than being a rule about a parser that was never written.
+#
+# The commodity vocabulary is the CLOSED three-name set canon fixes in
+# `/strategy/port-economics.md` (first letter = Fuel Ore, second = Organics,
+# third = Equipment), not an open `\w+`. That is the provenance gate for this
+# screen, and it is the same discipline `_sector_status_block` applies to
+# sector reads: narrative text that merely reproduces a table's shape must not
+# become persisted world data. A port whose report names something outside the
+# closed set is a screen we do not understand, and this reader says so rather
+# than ingesting the rows it happened to recognize.
+_COMMERCE_REPORT_HEADER_RE = re.compile(r"^Commerce report for .+?:", re.I | re.M)
+#: The column header, which every captured report carries directly above the
+#: rows. Requiring it (not just the "Commerce report" line) is what keeps a
+#: report whose table scrolled off from yielding a confident empty list.
+_COMMERCE_COLUMNS_RE = re.compile(
+    r"^[ \t]*Items[ \t]+Status[ \t]+Trading[ \t]+%[ \t]+of[ \t]+max", re.I | re.M
+)
+#: Closed set, ordered as canon orders the class triple.
+COMMERCE_COMMODITIES: tuple[str, ...] = ("Fuel Ore", "Organics", "Equipment")
+_COMMERCE_ROW_RE = re.compile(
+    r"^(?P<name>Fuel Ore|Organics|Equipment)[ \t]+"
+    r"(?P<status>Buying|Selling)[ \t]+"
+    r"(?P<amount>[\d,]+)[ \t]+"
+    r"(?P<pct>\d+)%",
+    re.I | re.M,
+)
+
+
+@dataclass(frozen=True)
+class PortReportRead:
+    """Outcome of reading a docked commerce report.
+
+    Two states only, and deliberately NOT the tri-state `PortRead` uses. A
+    commerce report is a screen you reached by spending a turn to dock; it
+    never says "this sector has no port" (the sector-status flyby is what
+    says that). So there is no third "positively absent" state to express,
+    and inventing one would give a caller an explicit `None` to write --
+    which under canon's upsert semantics CLEARS the port record wholesale.
+
+    ``observed=False`` means "this is not a commerce report I can vouch for",
+    and the only safe response is to write nothing.
+    """
+
+    observed: bool
+    commodities: tuple[dict, ...] = ()
+
+
+def read_port_commodities_from_report(rendered_text) -> PortReportRead:
+    """Read the commodity table from a settled docked commerce report.
+
+    **Turn-costly, unlike `read_port_from_sector_status`.** That reader parses
+    the `Ports :` flyby a sector display prints for free; this one parses the
+    screen you only see after `P` -> `T` -> `Docking...`, which the captured
+    fixture records as "One turn deducted". Callers must treat reaching this
+    screen as a spend, never as a free upgrade of a flyby read.
+
+    Emits canon's exact schema shape (`/engine/world-model.md` § Schema):
+    ``{name, status, amount, pct}`` with ``status`` lowercased to canon's
+    ``buying``/``selling`` vocabulary.
+
+    **Fails closed as a whole screen, never row-by-row.** A genuine header
+    whose rows do not all parse is a report in a layout this reader does not
+    know, and a partial commodity list is worse than none: canon's upsert
+    replaces the stored list outright ("an old and new `port` commodities list
+    are never unioned; the new one wins outright"), so writing two of three
+    rows would silently DELETE the third from a previously complete record.
+
+    Never raises; a non-``str`` reads as unobserved.
+    """
+    if not isinstance(rendered_text, str):
+        return PortReportRead(observed=False)
+    header = list(_COMMERCE_REPORT_HEADER_RE.finditer(rendered_text))
+    if not header:
+        return PortReportRead(observed=False)
+    # Last-match discipline, as everywhere else in this module: on a scrolled
+    # grid the newest report is the true one. Anything above the final header
+    # is scrollback from a port we have already left.
+    tail = rendered_text[header[-1].start():]
+    if not _COMMERCE_COLUMNS_RE.search(tail):
+        return PortReportRead(observed=False)
+    rows = list(_COMMERCE_ROW_RE.finditer(tail))
+    if not rows:
+        return PortReportRead(observed=False)
+    seen: dict[str, dict] = {}
+    for m in rows:
+        name = m.group("name")
+        # Normalize to canon's spelling rather than the screen's casing.
+        for canonical in COMMERCE_COMMODITIES:
+            if canonical.lower() == name.lower():
+                name = canonical
+                break
+        seen[name] = {
+            "name": name,
+            "status": m.group("status").lower(),
+            "amount": int(m.group("amount").replace(",", "")),
+            "pct": int(m.group("pct")),
+        }
+    if len(seen) != len(COMMERCE_COMMODITIES):
+        # A real report always prints all three rows; the captured fixtures
+        # both do. Fewer means the table was clipped by the viewport or the
+        # layout is one we have not seen -- either way, not vouchable.
+        return PortReportRead(observed=False)
+    ordered = tuple(seen[n] for n in COMMERCE_COMMODITIES)
+    return PortReportRead(observed=True, commodities=ordered)
+
+
+# ---------------------------------------------------------------------------
 # Serialization -- the one place this verdict becomes wire bytes
 # ---------------------------------------------------------------------------
 

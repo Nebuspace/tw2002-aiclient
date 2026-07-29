@@ -172,6 +172,7 @@ def explore_start(
     min_sectors: int | None = None,
     turn_budget: int | None = None,
     intent: str | None = None,
+    dock_new_ports: bool | None = None,
     run_dir: Path | None = None,
 ) -> ExploreResult:
     """Start the sector explorer for *world_id*.
@@ -196,6 +197,12 @@ def explore_start(
         # -- same "None -> omit" discipline as the two args above, and it is
         # what keeps every existing caller byte-identical on the wire.
         payload["intent"] = intent
+    if dock_new_ports is not None:
+        # WO-EXPLORE-DOCK-NEW-PORT. Same "None -> omit" discipline, and here it
+        # carries real weight: an omitted flag leaves the daemon at False, so a
+        # caller that has not been taught about turn-spending docking cannot
+        # start one by accident.
+        payload["dock_new_ports"] = bool(dock_new_ports)
     try:
         resp = _cli.send_request("explore_start", payload, run_dir=resolved_run_dir)
     except Exception as e:  # noqa: BLE001 — belt-and-suspenders; send_request never raises
@@ -437,6 +444,7 @@ def explore_start_for_profile(
     min_sectors: int | None = None,
     turn_budget: int | None = None,
     intent: str | None = None,
+    dock_new_ports: bool | None = None,
     run_dir: Path | None = None,
 ) -> ExploreResult:
     """Convenience wrapper: derive *world_id* from *profile*, then call
@@ -454,5 +462,6 @@ def explore_start_for_profile(
         min_sectors=min_sectors,
         turn_budget=turn_budget,
         intent=intent,
+        dock_new_ports=dock_new_ports,
         run_dir=run_dir,
     )
