@@ -75,9 +75,13 @@ STARVED_ALLOWLIST: dict[str, tuple[str, str]] = {
     ),
     # -- T2: the daemon already has an extractor, it is simply unwired.
     #    Touches `_status_response`, so scheduling it needs a DEPLOY-WINDOW.
+    # Still starved after WO-HUD-STATUS-BRIDGE, and deliberately so: that WO
+    # supplied `hud.credits` (from the existing `credits_snapshot` sticky
+    # pair), not a TOP-LEVEL `credits`. The guard is exact-set and correctly
+    # kept telling them apart -- deleting this entry because "the HUD shows
+    # credits now" would declare a field supplied that no producer writes.
     "credits": ("T2", "`state_parser.read_credits_balance` exists, unwired; needs a window"),
     # -- T3: no extractor exists; needs new screen parsing and captured fixtures.
-    "turns_left": ("T3", "needs screen parsing; no extractor exists"),
     "fighters_aboard": ("T3", "needs screen parsing; also a coach trigger input"),
     "ship_prices_count": ("T3", "needs shipyard-screen parsing; gated by stardock_found"),
     "hold_price_label": ("T3", "needs shipyard-screen parsing; gated by stardock_found"),
@@ -85,7 +89,6 @@ STARVED_ALLOWLIST: dict[str, tuple[str, str]] = {
     # -- T4: whole nested panel payloads, each its own surface-sized WO.
     "autopilot_trace": ("T4", "whole DECISIONS trace payload; no autopilot emits one yet"),
     "focus": ("T4", "whole FOCUS payload; own WO"),
-    "hud": ("T4", "whole HUD payload; own WO"),
     "tx": ("T4", "liveness TX readout; `liveness.py` documents its own pending wire"),
     "spinner_frame": ("T4", "app per-draw tick; `liveness.py` documents its own pending wire"),
 }

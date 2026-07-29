@@ -28,8 +28,15 @@ from .settle import MATCH_SCOPE_SCREEN, wait_for_settle
 from .state_parser import (
     OUTCOME_READ,
     CreditsSnapshot,
+    SectorSnapshot,
+    TurnsSnapshot,
     credits_never_observed,
     read_credits_balance,
+    read_current_sector,
+    read_turns_left,
+    read_turns_left_from_screen,
+    sector_never_observed,
+    turns_never_observed,
 )
 from .terminal import TerminalScreen
 from .transcript_tail import TranscriptTail
@@ -159,6 +166,23 @@ class Session:
         # nowhere near the redaction sinks above.
         self.last_credits = None
         self.last_credits_ts = None
+        # WO-HUD-STATUS-BRIDGE: the turns counterpart of the pair above, with
+        # the same ownership rule -- written ONLY by observe_turns(), read
+        # ONLY through turns_snapshot(), both under self.lock, so the pair
+        # can never tear. `None`/`None` until the first screen that states a
+        # count, and never cleared by a later screen that states none: on
+        # this field especially, a reading that VANISHED and a count that
+        # reached ZERO must not look alike to the HUD.
+        self.last_turns = None
+        self.last_turns_ts = None
+        # WO-HUD-STATUS-BRIDGE: the sector the operator was last SHOWN, for
+        # display only. Deliberately NOT `_last_sector` above -- that one is
+        # epoch-invalidated so a world-model write can never land against a
+        # stale sector, which is exactly the property that makes it useless
+        # to a HUD (it blanks on every send). Two memories, two questions;
+        # see `state_parser.SectorSnapshot` for the full argument.
+        self.last_sector_seen = None
+        self.last_sector_seen_ts = None
         # The {app,human} tag actually applied to `last_sent`, alongside it
         # -- so a later ledger-row writer can read (text, sender, ts) back
         # as one atomic-enough triple without re-deriving the sender.
@@ -481,6 +505,104 @@ class Session:
             return CreditsSnapshot(
                 outcome=OUTCOME_READ,
                 balance=balance,
+                age_s=max(0.0, time.monotonic() - ts),
+            )
+
+    def observe_turns(self, rendered_text, prompt_line=""):
+        """Capture a turn count off a settled screen, if this one states one.
+
+        **This is where the two readers' precedence lives**, deliberately
+        rather than inside either of them. `state_parser` answers "what does
+        THIS line say"; deciding which line to believe when both speak is a
+        policy about the sticky store, and it belongs with the store.
+
+        The order is prompt-line first, body second, and the reason is
+        specificity rather than trust: the prompt-line `TL=` count is scoped
+        to one line the server just printed, whereas the body reader searches
+        a whole grid that may still be showing an older screen's narrative.
+        On a CLASSIC-shape server the first wins every poll; on this live
+        server it answers `absent` on every poll (its `TL=` is a countdown
+        clock) and the body reader is what actually fills the HUD. Both are
+        wired because the client is not told which server it is talking to.
+
+        **Non-clobber, exactly like `observe_credits`.** A screen that states
+        no count leaves the pair untouched and lets the reading age -- which
+        is what `turns_snapshot()` reports. A DAMAGED claim
+        (`OUTCOME_UNREADABLE`, a render taken mid-paint) is likewise not
+        written: "I could not finish reading it" is not a turn count.
+
+        Nothing here decides anything -- capture only, same as its sibling.
+        """
+        read = read_turns_left(prompt_line)
+        if read.outcome != OUTCOME_READ:
+            read = read_turns_left_from_screen(rendered_text)
+        if read.outcome != OUTCOME_READ:
+            return
+        with self.lock:
+            self.last_turns = read.turns
+            self.last_turns_ts = time.monotonic()
+
+    def turns_snapshot(self):
+        """What this session knows about the turn count right now, as a
+        validated `state_parser.TurnsSnapshot`.
+
+        Returns an AGE rather than a timestamp, computed inside the same lock
+        hold that reads the pair -- the one-clock-one-hold-one-value rule
+        `credits_snapshot` documents at length.
+
+        `absent` when nothing has ever been observed, and that is the answer
+        the HUD paints as an unknown cell. It is never softened into `0`:
+        a zero turn count is a real and consequential game state, and a store
+        that has simply never seen a number must not be able to assert it.
+        """
+        with self.lock:
+            turns = self.last_turns
+            ts = self.last_turns_ts
+            if turns is None or ts is None:
+                return turns_never_observed()
+            # Clamped for the same reason as the credits age: TurnsSnapshot
+            # rejects a negative (it would read as fresher-than-now, the
+            # fail-OPEN direction), and clamping here keeps a monotonic
+            # hiccup from raising out of a status poll. It can only ever make
+            # the age look OLDER.
+            return TurnsSnapshot(
+                outcome=OUTCOME_READ,
+                turns=turns,
+                age_s=max(0.0, time.monotonic() - ts),
+            )
+
+    def observe_sector(self, prompt_line=""):
+        """Capture the sector this screen's prompt states, for the HUD.
+
+        Non-clobber and capture-only, like its two siblings: a screen with no
+        bracket (every StarDock screen, every port report) leaves the pair
+        alone and lets the sighting age, rather than blanking a cell the
+        operator is using to stay oriented.
+
+        This does NOT feed `last_known_sector()` and must never be made to --
+        `note_sector` remains the only writer of that memory, under its own
+        lock and its own epoch rule. A display that quietly became a safety
+        input is the failure mode worth spending two stores to avoid.
+        """
+        read = read_current_sector(prompt_line)
+        if read.outcome != OUTCOME_READ or read.sector is None:
+            return
+        with self.lock:
+            self.last_sector_seen = read.sector
+            self.last_sector_seen_ts = time.monotonic()
+
+    def sector_snapshot(self):
+        """The last sector seen and how stale that sighting is, as a
+        validated `state_parser.SectorSnapshot`. `absent` until one is seen.
+        """
+        with self.lock:
+            sector = self.last_sector_seen
+            ts = self.last_sector_seen_ts
+            if sector is None or ts is None:
+                return sector_never_observed()
+            return SectorSnapshot(
+                outcome=OUTCOME_READ,
+                sector=sector,
                 age_s=max(0.0, time.monotonic() - ts),
             )
 
