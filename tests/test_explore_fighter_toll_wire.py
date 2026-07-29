@@ -162,7 +162,13 @@ def test_not_encounter_leaves_the_ordinary_halt_verdict_untouched(tmp_path):
     report = _run(session, tmp_path, fight_tolls=True)
     assert _letters_sent(session) == []
     assert report.outcome == OUTCOME_HALTED
-    assert report.reason != sx.HALT_FIGHT_POLICY_STOP
+    # Was `!= HALT_FIGHT_POLICY_STOP`, and it was the only assertion carrying
+    # this test's whole claim -- with no positive beside it to keep it honest.
+    # A lone negative says what did NOT happen; the contract here is what the
+    # loop's *own* verdict is, so state it. This also excludes the fight-policy
+    # verdict strictly more tightly than the `!=` did (WO-HALT-REASON-NE-SWEEP).
+    assert report.reason == sx.HALT_UNRECOGNIZED_SCREEN
+    assert sx.HALT_UNRECOGNIZED_SCREEN != sx.HALT_FIGHT_POLICY_STOP
 
 
 @pytest.mark.parametrize(
