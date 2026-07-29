@@ -216,6 +216,28 @@ def test_pay_is_forbidden_by_name_not_merely_absent_from_the_allowlist():
     assert not (sx.FIGHT_LETTER_ALLOWLIST & sx.FIGHT_FORBIDDEN_KEYS)
 
 
+def test_the_forbidden_set_is_what_refuses_pay_once_the_allowlist_widens(monkeypatch):
+    """The pin that gives `FIGHT_FORBIDDEN_KEYS` any value at all.
+
+    Measured while mutation-testing this WO: deleting the forbidden-key check
+    reddened NOTHING, because `P` is also refused by simply not being in
+    `FIGHT_LETTER_ALLOWLIST`. The two layers agree today, so the second one is
+    unreachable -- and an unreachable guard is untested by definition.
+
+    It exists for exactly one future: someone widens the allowlist (the letters
+    ARE on the real screen, so this is a plausible edit) and expects the
+    enumerated refusal to hold. That is the scenario simulated here, and it is
+    the only one in which the guard can fail.
+    """
+    monkeypatch.setattr(sx, "FIGHT_LETTER_ALLOWLIST", frozenset({"A", "R", "P"}))
+    assert not sx._fight_key_permitted("P", "attack_npc:share=0.99")
+    assert not sx._fight_key_permitted("p", "qty_commit:1:max=9")
+    # Control: the widening itself is real, so the test above is not passing
+    # because the monkeypatch silently failed to apply.
+    assert sx._fight_key_permitted("A", "attack_npc:share=0.99")
+    assert "P" in sx.FIGHT_LETTER_ALLOWLIST
+
+
 def test_the_policy_itself_never_returns_pay_on_a_pay_offering_screen():
     """Belt and braces across the seam: the wire refuses `P`, and the policy
     does not produce it even when the screen offers it."""
