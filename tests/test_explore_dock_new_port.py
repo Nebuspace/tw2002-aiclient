@@ -610,3 +610,168 @@ def _ingest_docked_report_sector(tmp_path):
         WORLD, full_text=REPORT, prompt_line="Command [TL=0]:[4309] (?=Help)? :",
         state_dir=tmp_path,
     )
+
+
+# --- #211 live REVISE: the trailing Enter, and the scrollback marker -----
+#
+# Live prove on `32e7825` filled commodities and then produced this on two
+# hosts (`.samantha/audit/dock-kernel-live-20260729T0354Z/`):
+#
+#     How many holds of Fuel Ore do you want to buy [50]?
+#     Agreed, 50 units.
+#     We'll sell them for 924 credits.
+#     Your offer [924] ?
+#
+# with `sends_issued=2`. The app accepted a trade quantity it was never asked
+# to accept, one Enter short of spending 924 credits.
+#
+# `_DockSession` could never have caught it: it ignores `enter=` and swaps
+# screens per letter. The double below models the game as a KEYSTROKE consumer
+# instead, which is the only way a trailing Enter can be seen at all.
+
+_HOLDS = (
+    "Commerce report for Harrison Minor: 10:56:29 PM Tue Jul 28, 2054\n"
+    "\n"
+    " Items     Status  Trading % of max OnBoard\n"
+    " -----     ------  ------- -------- -------\n"
+    "Fuel Ore   Selling    780    100%       0\n"
+    "Organics   Buying    2520    100%       0\n"
+    "Equipment  Buying    1910    100%       0\n"
+    "\n"
+    "We are selling up to 780.  You have 0 in your holds.\n"
+    "How many holds of Fuel Ore do you want to buy [50]? "
+)
+_OFFER = _HOLDS + "\nAgreed, 50 units.\n\nWe'll sell them for 924 credits.\nYour offer [924] ? "
+
+
+class _KeystrokeSession(FakeAttachSession):
+    """The port cascade as a keystroke consumer -- hot-key menus, where a
+    trailing Enter is an extra keystroke the NEXT prompt consumes.
+
+    `keys` is every character the game actually received, which is the thing
+    under test; asserting on screens alone cannot distinguish "sent T" from
+    "sent T and an Enter that bought something".
+    """
+
+    SCREENS = {
+        "command": SECTOR_WITH_PORT,
+        "menu": REAL_MENU,
+        "holds": _HOLDS,
+        "offer": _OFFER,
+        "bought": _OFFER + "\nYou are a shrewd trader, they're all yours.\n",
+        "attacked": "You attack the port!\n",
+    }
+
+    def __init__(self):
+        super().__init__(initial_screen=SECTOR_WITH_PORT)
+        self.rx_count = 1
+        self.last_rx = -10.0
+        self.keys: list[str] = []
+        self._state = "command"
+
+    def _feed(self, ch: str) -> None:
+        self.keys.append(ch)
+        s = self._state
+        if s == "command":
+            if ch.upper() == "P":
+                self._state = "menu"
+        elif s == "menu":
+            # `T` selects trade; a bare Enter accepts the `[T]` default. Both
+            # dock -- which is why the trailing Enter is not harmless.
+            if ch.upper() == "T" or ch == "\r":
+                self._state = "holds"
+            elif ch.upper() == "Q":
+                self._state = "command"
+            elif ch.upper() == "A":
+                self._state = "attacked"
+        elif s == "holds":
+            # Captured wire: unparsable input is ignored and Enter commits the
+            # DEFAULT. A human typing `quit` here bought 40 units.
+            if ch == "\r":
+                self._state = "offer"
+        elif s == "offer":
+            if ch == "\r":
+                self._state = "bought"
+        self._screen = self.SCREENS[self._state]
+
+    def send(self, text, enter=True, secret=False, sender="app"):
+        for ch in text.strip():
+            self._feed(ch)
+        if enter:
+            self._feed("\r")
+        return super().send(text, enter=enter, secret=secret, sender=sender)
+
+
+def test_the_double_reproduces_the_live_overshoot_when_enter_is_sent():
+    """Control: this double must be able to FAIL the way the live host did,
+    or the pin below passes for the double's blindness rather than the fix."""
+    s = _KeystrokeSession()
+    s.send("P", enter=True)
+    s.send("T", enter=True)
+    assert "Agreed, 50 units." in s.render_text(s.render())
+    assert s._state == "offer"
+
+
+def test_the_dock_letters_go_out_as_hot_keys_with_no_trailing_enter(tmp_path):
+    """REGRESSION (#211 live). The exact keystrokes, not the outcome: an
+    assertion on screens or halt reason would pass even if an Enter had gone
+    out and bought something first."""
+    session = _KeystrokeSession()
+    report = _run_to_completion(session, tmp_path, dock_new_ports=True)
+    assert session.keys == ["P", "T"], f"stray keystrokes reached the game: {session.keys}"
+    assert "\r" not in session.keys
+
+    screen = session.render_text(session.render())
+    assert "Agreed," not in screen, "the run accepted a trade quantity"
+    assert "Your offer" not in screen
+    assert report.outcome == OUTCOME_HALTED
+    assert report.reason == sx.HALT_NEVER_AUTO_ACTION
+
+
+def test_the_commodities_still_land_through_the_hot_key_path(tmp_path):
+    """The fix must not buy safety by breaking the Accept."""
+    session = _KeystrokeSession()
+    _run_to_completion(session, tmp_path, dock_new_ports=True)
+    rec = world_model.get_sector(WORLD, 4309, state_dir=tmp_path)
+    assert [(c["name"], c["status"], c["amount"]) for c in rec["port"]["commodities"]] == [
+        ("Fuel Ore", "selling", 780),
+        ("Organics", "buying", 2520),
+        ("Equipment", "buying", 1910),
+    ]
+
+
+class _ScrollbackMenuSession(FakeAttachSession):
+    """`P` lands on a screen that still SHOWS the port menu while its live
+    prompt is already the money prompt -- what the host actually rendered when
+    `P\\r` docked us inside a single send."""
+
+    def __init__(self):
+        super().__init__(initial_screen=SECTOR_WITH_PORT)
+        self.rx_count = 1
+        self.last_rx = -10.0
+
+    def send(self, text, enter=True, secret=False, sender="app"):
+        self._screen = REAL_MENU + "\n<Port>\nDocking...\n" + _HOLDS
+        return super().send(text, enter=enter, secret=secret, sender=sender)
+
+
+def test_a_menu_left_in_scrollback_cannot_satisfy_the_menu_check(tmp_path):
+    """The fail-closed half, and on its own it would have stopped the trade.
+
+    The menu text is still on screen after docking, so a whole-screen check
+    confirms "we are at the port menu" while the live prompt underneath is
+    `How many holds ... [50]?`. Those two differ by one turn and one trade.
+    Matching the PROMPT LINE is what tells them apart.
+    """
+    session = _ScrollbackMenuSession()
+    report = _run_to_completion(session, tmp_path, dock_new_ports=True)
+    assert report.reason == sx.HALT_DOCK_MENU_UNRECOGNIZED
+    assert _letters_sent(session) == ["P"]  # never sent T into the money prompt
+
+
+def test_that_screen_really_does_contain_the_marker():
+    """Non-vacuity: the pin above is only meaningful because a whole-screen
+    check WOULD have passed on this exact text."""
+    screen = REAL_MENU + "\n<Port>\nDocking...\n" + _HOLDS
+    assert sx._PORT_MENU_MARKER in screen.lower()          # the old check: passes
+    assert sx._PORT_MENU_MARKER not in screen.splitlines()[-1].lower()  # the new one: refuses

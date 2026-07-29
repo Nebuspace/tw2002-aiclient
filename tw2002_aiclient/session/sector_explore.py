@@ -645,11 +645,27 @@ class ExploreRunner:
             raise ValueError(f"{HALT_DOCK_FORBIDDEN_KEY}:{letter!r}")
         if not (isinstance(letter, str) and len(letter) == 1 and letter.isalpha()):
             raise ValueError(f"{HALT_DOCK_FORBIDDEN_KEY}:malformed")
+        # `enter=False`: BOTH dock prompts are hot-key menus that act on the
+        # bare keypress. Captured live wire -- `TX (1 bytes) p` returns the
+        # 193-byte port menu, `TX (1 bytes) t` returns the 1024-byte `<Port>`
+        # dock. So a trailing Enter is not harmless punctuation here, it is an
+        # extra keystroke the NEXT prompt consumes:
+        #
+        #   "P\r"  ->  `P` opens the menu, `\r` accepts its `[T]` default and
+        #              DOCKS us, landing on `How many holds ... [50]?`
+        #   "T\r"  ->  `T` buffers at that numeric prompt, `\r` commits it,
+        #              taking the default: `Agreed, 50 units.` -> `Your offer`
+        #
+        # That is exactly what the #211 live prove caught: the run bought a
+        # quantity of Fuel Ore it was never asked to buy, one Enter short of
+        # spending 924 credits. `send_and_confirm` makes `enter` explicit
+        # precisely so the caller decides per prompt-shape; taking its default
+        # was the bug.
         _reason, _elapsed, confirmed = _settle.send_and_confirm(
             self._session,
             letter,
             confirm_prompt=None,
-            enter=True,
+            enter=False,
             timeout_s=self._timeout_s,
             debounce_ms=self._debounce_ms,
         )
@@ -688,7 +704,20 @@ class ExploreRunner:
         confirmed, full_text, prompt = self._send_dock_letter("P")
         if not confirmed:
             return HALT_CONFIRM_FAILED, 1, 0
-        if _PORT_MENU_MARKER not in full_text.lower():
+        # Matched against the live PROMPT LINE, never the whole screen.
+        #
+        # This is the fail-closed half of the #211 overshoot, and on its own it
+        # would have stopped the trade. When `P\r` had already docked us, the
+        # menu had scrolled up but its text was still ON the screen -- so a
+        # `full_text` check happily confirmed "we are at the port menu" while
+        # the live prompt underneath read `How many holds ... [50]?`, and the
+        # cascade sent its next letter into a money prompt.
+        #
+        # A whole-screen check cannot tell "this menu is the live prompt" from
+        # "this menu is scrollback", and those differ by exactly one turn and
+        # one trade. Same idiom the rest of the module already uses: `classify`
+        # matches its gate anchors against `prompt_line` only, for this reason.
+        if _PORT_MENU_MARKER not in prompt.lower():
             return HALT_DOCK_MENU_UNRECOGNIZED, 1, 0
         confirmed, full_text, prompt = self._send_dock_letter("T")
         # The turn is deducted by the server at `Docking...`, so it is spent
