@@ -278,7 +278,7 @@ TWO_STEPS = [("P", None, "port_trade"), ("1", None, "main_command")]
         ("unknown screen", {"screens": [ODD]}, {}, False, HALT_UNRECOGNIZED_SCREEN),
         # A money question. DECISIONS §A.2 -- and note the screen ALSO has
         # no readable sector, so this cell doubles as the ordering pin.
-        ("money prompt", {"screens": [MONEY]}, {}, False, HALT_NEVER_AUTO_ACTION),
+        ("money prompt", {"screens": [MONEY]}, {}, False, "never_auto_action:money_prompt"),
         # The human has the keyboard.
         ("fenced", {"screens": [ANCHOR_158], "fences": [True]}, {}, False, HALT_FENCED),
         # The run was stood down before it ever pressed anything. A
@@ -300,7 +300,7 @@ TWO_STEPS = [("P", None, "port_trade"), ("1", None, "main_command")]
         ("forced mismatch", {"screens": [ANCHOR_231]}, {}, True, HALT_START_ANCHOR_MISMATCH),
         ("forced absent", {"screens": [CLASSIC]}, {}, True, HALT_CURRENT_SECTOR_ABSENT),
         ("forced unreadable", {"screens": [DAMAGED]}, {}, True, HALT_CURRENT_SECTOR_UNREADABLE),
-        ("forced money prompt", {"screens": [MONEY]}, {}, True, HALT_NEVER_AUTO_ACTION),
+        ("forced money prompt", {"screens": [MONEY]}, {}, True, "never_auto_action:money_prompt"),
         ("forced unknown screen", {"screens": [ODD]}, {}, True, HALT_UNRECOGNIZED_SCREEN),
         # GATE-ONLY cells. Every case above is ALSO covered by the anchor
         # check, because a money question and an unrecognized screen both
@@ -311,7 +311,7 @@ TWO_STEPS = [("P", None, "port_trade"), ("1", None, "main_command")]
         # screens and a keystroke. Measured, not assumed: with the gate
         # removed these two are the cells that fail on the RAISE.
         ("gate-only money prompt", {"screens": [MONEY]}, {"start_anchor": None}, True,
-         HALT_NEVER_AUTO_ACTION),
+         "never_auto_action:money_prompt"),
         ("gate-only unknown screen", {"screens": [ODD]}, {"start_anchor": None}, True,
          HALT_UNRECOGNIZED_SCREEN),
         ("gate-only fence", {"screens": [ANCHOR_158], "fences": [True]}, {"start_anchor": None},
@@ -519,7 +519,7 @@ def test_a_money_prompt_mid_loop_is_refused_before_that_step_sends():
     result = replay_loop(make_loop(TWO_STEPS), session)
 
     assert result.outcome == OUTCOME_HALTED
-    assert result.reason == HALT_NEVER_AUTO_ACTION
+    assert result.reason == "never_auto_action:money_prompt"
     assert result.halted_at == 0
     assert result.sends_issued == 1
     assert session.sends == [("P", None)]
@@ -543,7 +543,7 @@ def test_a_macro_recorded_to_answer_a_money_prompt_still_halts_there():
     scripted = ScriptedSession(screens=[ANCHOR_158, MONEY, ANCHOR_158])
     result = replay_loop(make_loop(taught_to_answer_money), scripted)
 
-    assert result.reason == HALT_NEVER_AUTO_ACTION
+    assert result.reason == "never_auto_action:money_prompt"
     assert result.reason != HALT_POST_CLASS  # not "the class disagreed" -- forbidden
     assert scripted.sends == [("P", None)]
 
@@ -578,7 +578,11 @@ def test_widening_canons_set_widens_the_players_refusal(monkeypatch):
     session = NoSendSession(screens=[PORT])
     result = replay_loop(make_loop(TWO_STEPS, start_anchor=None), session, force=True)
 
-    assert result.reason == HALT_NEVER_AUTO_ACTION
+    # The SECOND never-auto class, and the reason must name THIS one --
+    # `port_trade`, not `money_prompt`. That is what makes the class
+    # provably taken from the observation rather than a constant that
+    # happens to equal the only member the set usually has.
+    assert result.reason == "never_auto_action:port_trade"
     assert session.sends == []
 
 
@@ -633,7 +637,7 @@ def test_the_gate_outranks_the_anchor_check_in_what_it_reports():
     money = replay_loop(make_loop(ONE_STEP), NoSendSession(screens=[MONEY]))
     odd = replay_loop(make_loop(ONE_STEP), NoSendSession(screens=[ODD]))
 
-    assert money.reason == HALT_NEVER_AUTO_ACTION
+    assert money.reason == "never_auto_action:money_prompt"
     assert odd.reason == HALT_UNRECOGNIZED_SCREEN
     assert HALT_CURRENT_SECTOR_ABSENT not in {money.reason, odd.reason}
 

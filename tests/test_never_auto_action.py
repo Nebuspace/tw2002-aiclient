@@ -187,7 +187,7 @@ def test_the_taught_loop_player_refuses_a_money_prompt():
     `expected_post_class` named the money prompt (see
     tests/test_loop_player.py for the mid-loop / recorded-answer proofs)."""
     observation = player_mod._Observation(klass="money_prompt")
-    assert player_mod._gate(observation) == player_mod.HALT_NEVER_AUTO_ACTION
+    assert player_mod._gate(observation) == "never_auto_action:money_prompt"
     # Anti-drift: the player refuses via the shared frozenset, not a
     # restated "money_prompt" literal that could diverge from classify.
     assert player_mod.NEVER_AUTO_ACTION_CLASSES is NEVER_AUTO_ACTION_CLASSES
@@ -290,7 +290,14 @@ def test_no_consumer_acts_on_unknown():
     # escalate-on-unknown, not HALT_NEVER_AUTO_ACTION.
     observation = player_mod._Observation(klass="unknown")
     assert player_mod._gate(observation) == player_mod.HALT_UNRECOGNIZED_SCREEN
-    assert player_mod._gate(observation) != player_mod.HALT_NEVER_AUTO_ACTION
+    # Compare the CODE, not the whole string: once reasons can be
+    # qualified, `never_auto_action:x != never_auto_action` is trivially
+    # true and this line would pass even for a wrongly-qualified
+    # never-auto halt -- the assertion would weaken silently.
+    assert (
+        player_mod.halt_reason_code(player_mod._gate(observation))
+        != player_mod.HALT_NEVER_AUTO_ACTION
+    )
 
     # Consumer 3: keepalive is main_command-only.
     session = _KeepaliveSession(PASSWORD_LENGTH_PROMPT)

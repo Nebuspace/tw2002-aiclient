@@ -415,6 +415,42 @@ assert FORCEABLE_HALTS <= HALT_REASONS, (
     f"{sorted(FORCEABLE_HALTS - HALT_REASONS)}"
 )
 
+# WO-PLAYER-HALT-NEVER-AUTO-CLASS: the qualified-reason shape, `<code>:<detail>`.
+#
+# `HALT_REASONS` stays the closed vocabulary of CODES and is deliberately NOT
+# exploded into every code x class pair -- that would turn a readable
+# 16-member set into a combinatorial one that grows silently whenever
+# `classify` gains a class, and the closed-vocabulary pin
+# (`reported == HALT_REASONS`) would stop being readable by a human.
+#
+# Instead the code is what is validated and the detail travels alongside it.
+# `sector_explore._qualify` is the same three lines: duplicated rather than
+# shared, because the alternative is either a new shared package for six
+# lines or an import that drags the explore module into the loop player.
+QUALIFIER_SEP = ":"
+
+
+def _qualify(code: str, detail: str) -> str:
+    """``code:detail`` -- a halt reason that carries what produced it."""
+    return f"{code}{QUALIFIER_SEP}{detail}"
+
+
+def halt_reason_code(reason: object) -> Optional[str]:
+    """The bare CODE from a possibly-qualified ``reason``.
+
+    ``never_auto_action:money_prompt`` -> ``never_auto_action``; an
+    unqualified reason is returned unchanged; a non-string (or ``None``)
+    yields ``None`` rather than a guess.
+
+    This is the one place the qualified shape is parsed, so every consumer
+    that needs "which halt code is this" asks the same question the same
+    way. Splits on the FIRST separator only: a detail that itself contained
+    a colon would otherwise silently truncate.
+    """
+    if not isinstance(reason, str) or not reason:
+        return None
+    return reason.split(QUALIFIER_SEP, 1)[0]
+
 OUTCOME_COMPLETED = "completed"
 OUTCOME_HALTED = "halted"
 OUTCOMES = frozenset({OUTCOME_COMPLETED, OUTCOME_HALTED})
@@ -663,7 +699,12 @@ class ReplayResult:
                 "a halted_at index accompanies exactly the 'halted' outcome -- "
                 f"got outcome={self.outcome!r} with halted_at={self.halted_at!r}"
             )
-        if self.reason is not None and self.reason not in HALT_REASONS:
+        # WO-PLAYER-HALT-NEVER-AUTO-CLASS: validate the CODE, not the whole
+        # string -- `never_auto_action:money_prompt` is the same halt as
+        # `never_auto_action`, carrying which class refused. The closed
+        # vocabulary is still closed: an unknown code raises exactly as
+        # before, whether or not it arrives qualified.
+        if self.reason is not None and halt_reason_code(self.reason) not in HALT_REASONS:
             raise ValueError(f"reason {self.reason!r} is not one of {sorted(HALT_REASONS)}")
 
 
@@ -779,8 +820,20 @@ def _gate(observation: _Observation) -> Optional[str]:
         return HALT_ABORTED
     # DECISIONS §A.2. Derived from `classify.NEVER_AUTO_ACTION_CLASSES`,
     # never restated -- a class added there is refused here the same day.
+    #
+    # WO-PLAYER-HALT-NEVER-AUTO-CLASS: the reason carries WHICH never-auto
+    # class refused. Bare `never_auto_action` is honest only while that set
+    # has exactly one member; the set is explicitly designed to grow ("a
+    # class added there is refused here the same day"), and on the day it
+    # does, the bare reason stops saying which screen stopped the run. That
+    # is the latent twin of the explore defect #213 fixed, so it is carried
+    # now rather than after the ambiguity ships.
+    #
+    # The class comes from `observation`, never a literal: a hardcoded
+    # `money_prompt` would be indistinguishable from this while the set has
+    # one member, which is exactly the mutation the pins have to catch.
     if observation.klass in NEVER_AUTO_ACTION_CLASSES:
-        return HALT_NEVER_AUTO_ACTION
+        return _qualify(HALT_NEVER_AUTO_ACTION, observation.klass)
     if observation.klass == "unknown":
         return HALT_UNRECOGNIZED_SCREEN
     return None
