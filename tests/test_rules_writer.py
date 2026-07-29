@@ -556,40 +556,75 @@ def test_resolve_roots_is_pure_path_math(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# Tripwire -- the second, unreconciled draft schema
+# The reconciled boundary -- was a gap marker, now a pair of pins
 # ---------------------------------------------------------------------------
+#
+# WO-DRAFT-APPROVE-KERNEL-BRIDGE (2026-07-29) closed the gap that
+# `test_the_cockpit_analyze_draft_cannot_enter_the_rule_store` used to mark.
+# That test was written to go RED the day the schemas were reconciled, and it
+# did. It is replaced below rather than deleted, because both halves of what
+# it asserted still matter: the bridged shape must round-trip, AND the raw
+# stub must still be refused. Losing the second half is how a bridge quietly
+# becomes a bypass.
 
 
-def test_the_cockpit_analyze_draft_cannot_enter_the_rule_store(tmp_path):
-    """DELIBERATE GAP MARKER -- not a bug being pinned as correct.
+def test_the_bridged_analyze_draft_round_trips_into_the_rule_store(tmp_path):
+    """The reconcile, proven end to end on real files.
 
-    `cockpit/draft_approve.py` (WO-P5-070) already implements an Analyze
-    approval gate with its own draft shape (`when`/`do`/`source`/
-    `playback_eligible`) and no disk I/O. This package's kernel schema
-    (`rule_id`/`screen_match`/`do`/`priority`/`guards`) refuses it outright.
+    `cockpit/draft_approve.bridge_to_kernel_document` is the one crossing
+    between the cockpit's stub vocabulary and the kernel's rule schema. What
+    the teacher observed (the screen class) crosses; what only a human can
+    decide (`rule_id`, `do`, `priority`) is supplied here as an argument,
+    because Max ruled no value of those three may ever be minted.
+    """
+    from tw2002_aiclient.cockpit.draft_approve import (
+        bridge_to_kernel_document,
+        create_analyze_draft,
+    )
 
-    So there are currently **two approval paths that cannot exchange a
-    document**: the cockpit can approve a draft that can never fire, and the
-    reflex layer can only fire a rule the cockpit cannot produce. That is a
-    real gap, banked by the hub as a follow-on reconciliation WO.
+    stub = create_analyze_draft("command_prompt")
+    document = bridge_to_kernel_document(
+        stub, rule_id="dock-when-idle", do="dock", priority=10
+    )
 
-    This test asserts the gap **as it stands**, so that whoever closes it has
-    to come here and say so. It is expected to go red when the schemas are
-    reconciled -- that redness is the notification, not a regression.
+    # Crossed, and inert on arrival.
+    assert document["screen_match"] == "command_prompt"
+    assert document["approved"] is False
+    rule = rule_from_dict(document)          # THE parser admits it
+    assert rule.rule_id == "dock-when-idle"
+
+    path = write_draft(document, state_dir=tmp_path)
+    assert path.parent == drafts_dir(tmp_path)
+    assert json.loads(path.read_text(encoding="utf-8"))["approved"] is False
+
+    # Still not blessed by writing it -- the human act is separate.
+    assert read_rule_store(state_dir=tmp_path)["rules"] == []
+
+
+def test_the_raw_stub_still_cannot_bless_itself(tmp_path):
+    """Retained half of the old tripwire, and the reason it is retained.
+
+    The bridge exists so a *translated* stub can enter the store. It must not
+    make the *untranslated* one admissible: the raw shape has no `rule_id` and
+    no `priority`, so admitting it would mean inventing both -- the precise
+    thing the ruling forbids. `promote_to_approved` setting its own
+    `approved: True` flag makes this sharper, not softer: that flag is the
+    cockpit's in-memory bookkeeping and must never be mistaken by the store
+    for the kernel's approval.
     """
     from tw2002_aiclient.cockpit.draft_approve import create_analyze_draft, promote_to_approved
 
-    draft = create_analyze_draft("command_prompt")
+    stub = create_analyze_draft("command_prompt")
     with pytest.raises(RuleDocumentError):
-        rule_from_dict(draft)
+        rule_from_dict(stub)
     with pytest.raises(RuleWriteError):
-        write_draft(draft, state_dir=tmp_path)
+        write_draft(stub, state_dir=tmp_path)
 
-    # And the cockpit's own promotion produces something equally unstorable --
-    # so the gap is on both sides of its gate, not just the draft side.
-    approved = promote_to_approved(draft)
-    assert approved["approved"] is True
+    approved = promote_to_approved(stub)
+    assert approved["approved"] is True, "precondition: the cockpit did set its own flag"
     with pytest.raises(RuleDocumentError):
         rule_from_dict(approved)
+    with pytest.raises(RuleWriteError):
+        write_draft(approved, state_dir=tmp_path)
 
     assert not drafts_dir(tmp_path).exists() or list(drafts_dir(tmp_path).iterdir()) == []
