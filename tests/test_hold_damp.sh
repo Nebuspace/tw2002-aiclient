@@ -46,8 +46,15 @@ cleanup() {
   # Process hygiene (AMEND-PROCESS-HYGIENE-20260726): anything this battery starts,
   # this battery reaps. Kill by RECORDED pid only — never pkill -f, whose pattern
   # would also match this script's own command line.
-  if [[ -n "$FAKE_WATCHER_PID" ]] && kill -0 "$FAKE_WATCHER_PID" 2>/dev/null; then
-    kill "$FAKE_WATCHER_PID" 2>/dev/null
+  if [[ -n "$FAKE_WATCHER_PID" ]]; then
+    # Kill the wrapper AND its children. The wrapper is a bash script whose real
+    # worker is a `sleep`; SIGTERM to the wrapper alone orphans that sleep, which
+    # then survives for its full duration with PPID 1. Four of them accumulated
+    # during this battery's own development, one per run.
+    for _c in $(ps -eo pid,ppid | awk -v p="$FAKE_WATCHER_PID" '$2==p {print $1}'); do
+      kill -9 "$_c" 2>/dev/null
+    done
+    kill -9 "$FAKE_WATCHER_PID" 2>/dev/null
   fi
   rm -rf "$TMPROOT"
 }
@@ -175,6 +182,13 @@ mk '### 2026-07-29T10:00:00Z — impl-test → orchestrator — 📋 STATUS [HOL
 detect_hold_marker
 check "a hold name containing spaces is extracted whole" "max pace-down" "$HOLD_NAME"
 
+# Archiving a mailbox (the ~400-line hygiene rule) can carry away the very header that
+# holds the marker. Pin which way that fails: to LOUD (kick resumes), never to a seat
+# left silently damped by a marker nobody can see any more.
+mk "$H_HEARTBEAT"
+detect_hold_marker
+check "a mailbox archived down to heartbeats only is not a hold (fails loud)" "0" "$HOLD_ACTIVE"
+
 rm -f "$MY_FILE"
 detect_hold_marker
 check "a missing outbox is not a hold" "0" "$HOLD_ACTIVE"
@@ -198,7 +212,11 @@ cat > "$TMPROOT/watch-coordination.sh" <<'W'
 sleep 600
 W
 chmod +x "$TMPROOT/watch-coordination.sh"
-"$TMPROOT/watch-coordination.sh" &
+# stdout/stderr to /dev/null, not inherited. A backgrounded child that keeps the
+# inherited pipe open blocks any parent reading this battery with a captured pipe
+# until EOF -- which never arrives while the child lives. That hung the mutation
+# harness for ten minutes with an exited battery and a zombie in between.
+"$TMPROOT/watch-coordination.sh" >/dev/null 2>&1 &
 FAKE_WATCHER_PID=$!
 
 # Assertions must target the real markers, not prose that MENTIONS them. The
@@ -225,8 +243,10 @@ run_hb() { # $1 = seconds to let it run, rest = extra args
   local secs="$1"; shift
   local log="$TMPROOT/hb.log"
   : > "$log"
+  local thr="--idle-threshold 1"
+  case " $* " in *" --idle-threshold "*) thr="" ;; esac
   bash "$HEARTBEAT" --identity "$ID" --role implementer --dir "$TMPROOT/c" \
-       --idle-threshold 1 --cadence 1 "$@" > "$log" 2>&1 &
+       $thr --cadence 1 "$@" > "$log" 2>&1 &
   local pid=$!
   local waited=0
   while kill -0 "$pid" 2>/dev/null && [[ $waited -lt $((secs * 10)) ]]; do
@@ -352,7 +372,11 @@ setup_seat '### 2026-07-29T10:00:00Z — impl-holdtest → orchestrator — 📋
   done
 ) &
 CLEARER=$!
-run_hb 12 --hold-check-interval 1
+# --idle-threshold 3 (not 1): after the clearing post the seat stays BELOW the idle
+# threshold for several ticks, so the idle gate cannot run and hold_ack_scan's own
+# cleared-hold branch is the only thing preventing the alarm. That is the production
+# geometry, and the only configuration in which this test tests what it is named for.
+run_hb 14 --hold-check-interval 1 --idle-threshold 3
 wait $CLEARER 2>/dev/null
 check "clearing a hold with a check pending does not exit 43" "RUNNING" "$RC"
 if printf '%s' "$OUT" | grep -q 'hold cleared with HOLD-CHECK'; then
