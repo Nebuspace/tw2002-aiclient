@@ -1,6 +1,6 @@
 # WO-COMBAT-ENCOUNTER-POLICY — programmatic fight/retreat on encounter prompt
 
-**Status:** BANKED · HIGH · Max-issued policy 2026-07-28 · Claude Code + Fable · **canon owed (Max-gated prose)**  
+**Status:** OPEN · EXECUTE · HIGH · Max GO 2026-07-28 (90% auto-fight NPC) · see WO-COMBAT-ENCOUNTER-POLICY-EXEC  
 **Posted:** 2026-07-28T02:52Z · hub bank from #128 live mine/fighter halt  
 **Refs:** Max wording quoted in CC STATUS 2026-07-28T02:51:51Z · AP-12 emit_key_if_safe
 

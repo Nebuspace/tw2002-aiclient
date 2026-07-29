@@ -1,6 +1,6 @@
 # WO-CHAIN-NPORT-WIRE — Wire N-port `chains.py` finder to a product surface
 
-**Status:** OPEN · EXECUTE · HIGH · Claude Code (`impl-claudecode-aiclient`)  
+**Status:** DONE · origin `23d9874` (#144) · Accept verified 2026-07-28 (ship tests green on tip)
 **Posted:** 2026-07-28T03:23Z bank · EXEC seeded after #142 · overnight carte blanche  
 **Refs:** wire-class W2/W3 · #128 pairs already wired · #142 import hygiene on main
 

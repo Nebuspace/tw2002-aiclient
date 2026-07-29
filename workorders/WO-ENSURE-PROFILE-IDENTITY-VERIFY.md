@@ -1,6 +1,6 @@
 # WO-ENSURE-PROFILE-IDENTITY-VERIFY — ensure must refuse wrong-profile session reuse
 
-**Status:** OPEN EXECUTE · HIGH · money-path adjacent · Claude Code preferred  
+**Status:** DONE · origin `fafba9b` (#156) · Accept verified 2026-07-28 (ship tests green on tip)
 **Posted:** 2026-07-28T02:52Z · hub bank from #128 live-prove (CC)  
 **Refs:** CC DECISION-NEEDED 2026-07-28T02:51:51Z · ensure ok:True on wrong profile while stop in flight
 

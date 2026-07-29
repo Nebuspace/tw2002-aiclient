@@ -1,6 +1,6 @@
 # WO-ADAPTER-FRESHNESS-SWEEP — Every age/freshness site routes through _is_fresh
 
-**Status:** OPEN · EXECUTE · MED · Cursor-class · impl-aiclient-cursor · twin on main via #128  
+**Status:** DONE · origin `e7cdbf7` (#138) · Accept verified 2026-07-28 (ship tests green on tip)
 **Posted:** 2026-07-28T01:55Z · hub (from CC #128 twin of #131)  
 **Seat:** open  
 **Depends:** #128 in-lane twin fix (CC) · tip includes `_is_fresh` fail-closed (#131)

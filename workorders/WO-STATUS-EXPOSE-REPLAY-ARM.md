@@ -6,7 +6,7 @@
 **Priority:** HIGH (honesty on a credential surface) — but **GATED**
 **Size:** S (one response field + tests)
 **Banked by:** `impl-claudecode-aiclient`, 2026-07-28, per hub ruling @ 07:18:00Z
-**Status:** OPEN — **HELD for Max ruling. Do not build.** Credential-adjacent.
+**Status:** OPEN · EXECUTE · HIGH · Max GO 2026-07-28 (honesty / shop-stop) · Cursor preferred
 
 ---
 
