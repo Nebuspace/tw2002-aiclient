@@ -997,6 +997,15 @@ def cmd_reflex(args):
     *normal* answer on every install.
     """
     run_dir = _resolve_run_dir(args.run_dir)
+    arming = bool(getattr(args, "arm", False))
+    if arming and getattr(args, "json", False):
+        # Refused rather than resolved either way. `--json` returns before the
+        # prompt, so honouring both would print a preview and silently not arm
+        # -- a surface agreeing to something it does not do. And a
+        # machine-readable arm flow is the scriptable confirmation this WO
+        # exists to prevent, so the pair is refused rather than ordered.
+        print("ERROR: --arm cannot be combined with --json")
+        return 1
     resp = send_request("reflex", {}, run_dir=run_dir)
     if getattr(args, "json", False):
         print(json.dumps(resp))
@@ -1015,10 +1024,28 @@ def cmd_reflex(args):
         rule_id = block.get("rule_id") or "?"
         # "would run" / "proposes", never "running" or "armed".
         print(f"proposes: {macro}  (rule {rule_id})")
-        print("not armed — this is a suggestion; arming is still your 'y' at arm-confirm")
+        if not arming:
+            # Suppressed only under `--arm`, where the very next line asks the
+            # question this sentence says has not been asked.
+            print("not armed — this is a suggestion; arming is still your 'y' at arm-confirm")
     else:
         reason = block.get("stop_reason") or "no proposal"
         print(f"proposes: nothing  ({reason})")
+    if arming:
+        # Local import for `rules/cli.py`'s reason: this module is already
+        # over the line cap with #218 frozen, and the arm flow is worth
+        # calling from a test without argparse or a socket.
+        from ..rules.arm import run_arm_flow
+
+        return run_arm_flow(
+            block,
+            # The RAW classification, never the `klass` display fallback
+            # above: sending "unknown" would claim the human confirmed a
+            # screen class the daemon never reported. An absent class must
+            # reach the flow as absent so it can refuse to ask at all.
+            resp.get("classification"),
+            launch=lambda payload: send_request("reflex_arm", payload, run_dir=run_dir),
+        )
     return 0
 
 
@@ -1728,6 +1755,12 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--run-dir", default=None, metavar="PATH", dest="run_dir",
                     help="daemon run directory override")
     sp.add_argument("--json", action="store_true", help="machine-parseable JSON output")
+    # WO-REFLEX-ARMED-RUN. `store_true` with no value form, and no sibling
+    # `--yes`: the flag asks the question, it cannot answer it. The help says
+    # "ask", never "run", because this word is what an operator reads before
+    # deciding whether the command is safe to try.
+    sp.add_argument("--arm", action="store_true",
+                    help="after the proposal, ask y/N to launch it (never launches unprompted)")
     sp.set_defaults(func=cmd_reflex)
 
     # WO-RULE-WRITER-DRAFTS. The `rule` verb's handlers live in
