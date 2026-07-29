@@ -179,6 +179,24 @@ missed tick.
 
 ## Proof
 
+### Where this battery is actually enforced (disclosed gap)
+
+`tests/test_hold_damp.sh` ships in this repo but **CI can never run it**: pytest collects
+`.py` only, and no `heartbeat.sh` is tracked anywhere in the tree (`git ls-files | grep
+heartbeat.sh` → 0), so nothing in CI can supply `HEARTBEAT=<path>`. A test file that no
+gate executes is not a gate — say so rather than let "tests added" imply coverage.
+
+**The enforcement point is therefore the hub apply step, and it is mandatory:** before any
+`mv` of a patched `heartbeat.sh` onto a live path, run
+
+```
+HEARTBEAT=<the patched copy> bash tests/test_hold_damp.sh
+```
+
+and record `N passed, 0 failed` in the apply STATUS. Same for the reference copy after the
+`reference ← live` sync. If the coordination scripts are ever vendored into a repo, wire
+this battery into that repo's CI and delete this paragraph.
+
 - Shell unit tests via a test script `tests/test_hold_damp.sh`:
   - `detect_hold_marker` returns correct for held/not-held headers
   - IDLE-KICK suppressed when held
