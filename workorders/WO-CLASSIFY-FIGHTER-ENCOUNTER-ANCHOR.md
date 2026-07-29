@@ -1,6 +1,8 @@
 # WO-CLASSIFY-FIGHTER-ENCOUNTER-ANCHOR — the toll `Option?` prompt has no gate anchor
 
-**Status:** BANKED · needs hub post + Max ruling on the vocabulary question
+**Status:** OPEN · EXECUTE · HIGH · hub ruling **(a)** 2026-07-28 (armed-eligible `fighter_encounter`; Max combat GO entailed)
+**Seat:** Claude Code (`impl-claudecode-aiclient`) · Live DEFERRED → Cursor
+**PR branch:** `wo/CLASSIFY-FIGHTER-ENCOUNTER-ANCHOR`
 **Found:** 2026-07-28 by `impl-claudecode-aiclient` while executing `WO-COMBAT-ENCOUNTER-POLICY-EXEC`
 **Refs:** `canon/DECISIONS.md` §A.2 + §A.2 clarification · `canon/strategy/toll-and-defense.md` § Toll-dialogue guard behavior (I5) · `tw2002_aiclient/session/classify.py` (`_GATE_ANCHORS`, `NEVER_AUTO_ACTION_CLASSES`)
 
@@ -43,7 +45,7 @@ governed by `DECISIONS.md` §A.2. That is a ruling, not an implementation detail
 (`grep` across the package: zero non-test importers), so nothing currently acts on
 either classification.
 
-## The question for Max (the reason this is banked, not built)
+## Vocabulary ruling (RESOLVED — hub 2026-07-28)
 
 A new `fighter_encounter` class must be one of:
 
@@ -55,8 +57,7 @@ A new `fighter_encounter` class must be one of:
   `sector_display` hole but makes auto-Retreat impossible, defeating the Max-ratified
   gate.
 
-(a) is consistent with §A.2's clarification and with the auto-haggle precedent; it is
-still a vocabulary ruling and is not mine to make.
+**Ruled (a).** Armed-eligible `fighter_encounter` so `fighter_toll_policy` can own the screen. Qty stays `money_prompt`.
 
 ## Accept
 
@@ -64,11 +65,14 @@ still a vocabulary ruling and is not mine to make.
    rationale (before the content anchors) so a stale sector body cannot claim the frame.
 2. Class membership per Max's ruling above, with the reasoning written into the anchor
    comment in the style of the surrounding entries.
-3. Blast-radius proof: classify every existing fixture before and after; **zero** class
-   changes outside the encounter frames. The anchor must steal from no driven class.
-4. Pins for all four rows in the table above, including the `sector_display` case as the
-   regression that motivated it.
-5. Suite green · live DEFERRED → Cursor.
+3. Blast-radius proof: classify fixtures + synthetic frames before and after; **exactly 3 rows move** (CC oracle baseline):
+   - toll banner + vs-line + `Option? (A,D,I,R,S,?)` → `unknown` → `fighter_encounter`
+   - `Fighters: N (Corp) [Toll]` + `Option? (…,P,…)` → `unknown` → `fighter_encounter`
+   - `Sector : 42` above encounter prompt → `sector_display` → `fighter_encounter`
+   Any other class change = fail. Qty frame (`How many fighters…`) **stays `money_prompt`**.
+4. Pins for all four rows in the finding table, including the `sector_display` hole as the regression that motivated it.
+5. Class is **(a) auto-action-eligible when armed** — NOT in `NEVER_AUTO_ACTION_CLASSES`. Comment cites §A.2 clarification + `fighter_toll_policy` as guarded owner.
+6. Suite green · live DEFERRED → Cursor. Do **not** wire policy consumers in this WO (wire follows).
 
 ## Constraints
 
