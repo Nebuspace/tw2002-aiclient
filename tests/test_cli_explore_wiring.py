@@ -85,14 +85,11 @@ def test_explore_start_missing_world_id_errors():
 # ---------------------------------------------------------------------------
 
 def test_explore_start_sends_world_id_only(monkeypatch):
-    """Minimal start: only world_id plus the dock arm.
+    """Minimal start: world_id plus the dock arm (default OFF).
 
-    WO-EXPLORE-DOCK-NEW-PORT changed this payload deliberately.
-    ``dock_new_ports`` is NOT an optional in the ``None -> omit`` sense the
-    other two follow: the daemon's default is False and this CLI's default is
-    True, so omitting it would hand the decision to the opposite default and
-    make ``--dock-new-ports`` a no-op. Sent always, and asserted by exact
-    equality so a future arg cannot slip into the payload unnoticed.
+    ``dock_new_ports`` is always sent so CLI and daemon cannot silently
+    disagree (daemon library default is also False). WO-EXPLORE-DOCK-DEFAULT-OFF
+    flipped the CLI default OFF after live map-fill halt regression.
     """
     seen = {}
 
@@ -106,7 +103,7 @@ def test_explore_start_sends_world_id_only(monkeypatch):
     rc = args.func(args)
     assert rc == 0
     assert seen["verb"] == "explore_start"
-    assert seen["args"] == {"world_id": "ona", "dock_new_ports": True}
+    assert seen["args"] == {"world_id": "ona", "dock_new_ports": False}
 
 
 def test_explore_start_sends_optional_flags(monkeypatch):
@@ -125,7 +122,7 @@ def test_explore_start_sends_optional_flags(monkeypatch):
     args.func(args)
     assert seen["args"] == {
         "world_id": "test", "min_sectors": 3, "turn_budget": 20,
-        "dock_new_ports": True,
+        "dock_new_ports": False,
     }
 
 

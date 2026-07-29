@@ -930,9 +930,9 @@ def cmd_explore_start(args):
         payload["min_sectors"] = args.min_sectors
     if args.turn_budget is not None:
         payload["turn_budget"] = args.turn_budget
-    # Always sent, unlike the two above: this arg has a real CLI default (on),
-    # so omitting it from the payload would silently hand the decision back to
-    # the daemon's opposite default and make `--dock-new-ports` a no-op.
+    # Always sent, unlike the two above: CLI and daemon both default OFF
+    # (WO-EXPLORE-DOCK-DEFAULT-OFF); omitting would still be False today but
+    # sending keeps an explicit arm decision on the wire.
     payload["dock_new_ports"] = bool(getattr(args, "dock_new_ports", False))
     resp = send_request("explore_start", payload, run_dir=run_dir)
     print_response(resp, args)
@@ -1610,15 +1610,14 @@ def build_parser() -> argparse.ArgumentParser:
                     help="minimum distinct sectors to visit (default daemon: 5)")
     sp.add_argument("--turn-budget", type=int, default=None, dest="turn_budget",
                     help="maximum turns to spend (default daemon: 50)")
-    # WO-EXPLORE-DOCK-NEW-PORT. ON by default HERE and only here: the library
-    # default stays False so nothing can start a turn-spending run by omission,
-    # but `tw explore start` IS the operator arming an explore run, and Max's
-    # ruling is that the turn-spend belongs to that arm rather than to a silent
-    # library default. `--no-dock-new-ports` is the way to map-fill for free.
+    # WO-EXPLORE-DOCK-DEFAULT-OFF: default OFF until a recognizable dock
+    # dialect is captured. Library default is already False; CLI matches it.
+    # Opt-in with `--dock-new-ports` (turn-spend). Default-ON halted map-fill
+    # on live hosts via `dock_screen_unrecognized` (#205 live STATUS).
     sp.add_argument("--dock-new-ports", action=argparse.BooleanOptionalAction,
-                    default=True, dest="dock_new_ports",
+                    default=False, dest="dock_new_ports",
                     help="dock first-sight ports to ingest commodities "
-                         "(spends one turn each; --no-dock-new-ports to skip)")
+                         "(spends one turn each; OFF by default until dialect known)")
     sp.add_argument("--run-dir", default=None, metavar="PATH", dest="run_dir",
                     help="daemon run directory override")
     sp.add_argument("--json", action="store_true", help="machine-parseable JSON output")
