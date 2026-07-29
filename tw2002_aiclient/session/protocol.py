@@ -447,12 +447,19 @@ def _dispatch_explore_start(args, server):
     # rather than defaulted, because a run that silently pursues a different
     # goal than the one confirmed is the failure this gate exists to prevent.
     intent = args.get("intent", _explore.INTENT_MAP_FILL)
+    # WO-EXPLORE-DOCK-NEW-PORT: absent means False, matching the library
+    # default. This is the only explore arg whose omission decides whether the
+    # run may SPEND turns, so it is read the same way `intent` is -- taken
+    # literally and refused by `runner.start` if it is not a bool, never
+    # coerced (`"no"` is truthy).
+    dock_new_ports = args.get("dock_new_ports", False)
     try:
         snapshot = runner.start(
             world_id,
             min_sectors=min_sectors,
             turn_budget=turn_budget,
             intent=intent,
+            dock_new_ports=dock_new_ports,
         )
     except sector_explore.ExploreRefused as exc:
         return {"ok": False, "error": str(exc)}

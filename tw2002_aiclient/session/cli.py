@@ -930,6 +930,10 @@ def cmd_explore_start(args):
         payload["min_sectors"] = args.min_sectors
     if args.turn_budget is not None:
         payload["turn_budget"] = args.turn_budget
+    # Always sent, unlike the two above: this arg has a real CLI default (on),
+    # so omitting it from the payload would silently hand the decision back to
+    # the daemon's opposite default and make `--dock-new-ports` a no-op.
+    payload["dock_new_ports"] = bool(getattr(args, "dock_new_ports", False))
     resp = send_request("explore_start", payload, run_dir=run_dir)
     print_response(resp, args)
     return 0 if resp.get("ok") else 1
@@ -1606,6 +1610,15 @@ def build_parser() -> argparse.ArgumentParser:
                     help="minimum distinct sectors to visit (default daemon: 5)")
     sp.add_argument("--turn-budget", type=int, default=None, dest="turn_budget",
                     help="maximum turns to spend (default daemon: 50)")
+    # WO-EXPLORE-DOCK-NEW-PORT. ON by default HERE and only here: the library
+    # default stays False so nothing can start a turn-spending run by omission,
+    # but `tw explore start` IS the operator arming an explore run, and Max's
+    # ruling is that the turn-spend belongs to that arm rather than to a silent
+    # library default. `--no-dock-new-ports` is the way to map-fill for free.
+    sp.add_argument("--dock-new-ports", action=argparse.BooleanOptionalAction,
+                    default=True, dest="dock_new_ports",
+                    help="dock first-sight ports to ingest commodities "
+                         "(spends one turn each; --no-dock-new-ports to skip)")
     sp.add_argument("--run-dir", default=None, metavar="PATH", dest="run_dir",
                     help="daemon run directory override")
     sp.add_argument("--json", action="store_true", help="machine-parseable JSON output")

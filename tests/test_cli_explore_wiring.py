@@ -85,7 +85,15 @@ def test_explore_start_missing_world_id_errors():
 # ---------------------------------------------------------------------------
 
 def test_explore_start_sends_world_id_only(monkeypatch):
-    """Minimal start: only world_id forwarded when optionals are absent."""
+    """Minimal start: only world_id plus the dock arm.
+
+    WO-EXPLORE-DOCK-NEW-PORT changed this payload deliberately.
+    ``dock_new_ports`` is NOT an optional in the ``None -> omit`` sense the
+    other two follow: the daemon's default is False and this CLI's default is
+    True, so omitting it would hand the decision to the opposite default and
+    make ``--dock-new-ports`` a no-op. Sent always, and asserted by exact
+    equality so a future arg cannot slip into the payload unnoticed.
+    """
     seen = {}
 
     def fake_send(verb, args_payload, *, timeout=15.0, run_dir=None):
@@ -98,7 +106,7 @@ def test_explore_start_sends_world_id_only(monkeypatch):
     rc = args.func(args)
     assert rc == 0
     assert seen["verb"] == "explore_start"
-    assert seen["args"] == {"world_id": "ona"}
+    assert seen["args"] == {"world_id": "ona", "dock_new_ports": True}
 
 
 def test_explore_start_sends_optional_flags(monkeypatch):
@@ -115,7 +123,10 @@ def test_explore_start_sends_optional_flags(monkeypatch):
         "--min-sectors", "3", "--turn-budget", "20", "--json",
     ])
     args.func(args)
-    assert seen["args"] == {"world_id": "test", "min_sectors": 3, "turn_budget": 20}
+    assert seen["args"] == {
+        "world_id": "test", "min_sectors": 3, "turn_budget": 20,
+        "dock_new_ports": True,
+    }
 
 
 def test_explore_stop_sends_empty_payload(monkeypatch):

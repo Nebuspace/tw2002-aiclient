@@ -1117,6 +1117,12 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                         profile,
                         min_sectors=_EXPLORE_MIN_SECTORS,
                         intent=armed_intent,
+                        # WO-EXPLORE-DOCK-NEW-PORT: reaching here means the
+                        # operator armed and confirmed an explore run, which is
+                        # the act Max's ruling attaches the turn-spend to. The
+                        # library default stays False so nothing spends by
+                        # omission; this surface is where it is chosen.
+                        dock_new_ports=True,
                     )
                 except Exception as exc:  # noqa: BLE001
                     # A raising adapter must not take the play loop down with

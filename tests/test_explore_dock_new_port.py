@@ -203,6 +203,113 @@ def test_the_attack_letter_can_never_be_sent():
         assert sx.HALT_DOCK_FORBIDDEN_KEY in str(exc.value)
 
 
+# --- the arm reaches the runner through every layer ----------------------
+#
+# Hub ruling 2026-07-28: library default False, and the explore ARM surfaces
+# set True -- the turn-spend belongs to the operator's arm, not to a silent
+# library default. A flag no surface ever sets is a gate whose verdict nothing
+# reads, which is the same shape as the unwired writer this WO exists to fix.
+
+
+class _CapturingRunner:
+    def __init__(self):
+        self.kwargs = None
+
+    def start(self, world_id, **kwargs):
+        self.kwargs = kwargs
+        return sx.ExploreSnapshot(running=True, report=None)
+
+
+def _dispatch(monkeypatch, args):
+    from tw2002_aiclient.session import protocol
+
+    runner = _CapturingRunner()
+    monkeypatch.setattr(protocol, "_explore_runner", lambda server: runner)
+    protocol._dispatch_explore_start(args, object())
+    return runner.kwargs
+
+
+def test_dispatch_without_the_flag_stays_false_for_compat(monkeypatch):
+    assert _dispatch(monkeypatch, {"world_id": "w"})["dock_new_ports"] is False
+
+
+@pytest.mark.parametrize("sent", [True, False])
+def test_dispatch_forwards_the_flag_it_was_given(monkeypatch, sent):
+    kwargs = _dispatch(monkeypatch, {"world_id": "w", "dock_new_ports": sent})
+    assert kwargs["dock_new_ports"] is sent
+
+
+def test_a_non_bool_flag_is_refused_not_coerced():
+    """`"no"` is truthy in Python. Coercing it would arm a turn-spending
+    cascade from a string the caller meant as a refusal."""
+    runner = sx.ExploreRunner(object(), object())
+    with pytest.raises(sx.ExploreRefused) as exc:
+        runner.start("w", dock_new_ports="no")
+    assert "invalid_dock_new_ports" in str(exc.value)
+
+
+def test_the_arg_is_accepted_by_the_protocol_allowlist():
+    assert "dock_new_ports" in sx.ARGS_EXPLORE_START
+
+
+def test_the_adapter_omits_the_key_when_unspecified(monkeypatch):
+    from tw2002_aiclient import adapters
+    from tw2002_aiclient.session import cli as _cli
+
+    seen = {}
+    monkeypatch.setattr(
+        _cli, "send_request", lambda verb, payload, run_dir=None: seen.update(payload) or {"ok": True}
+    )
+    adapters.explore_start("w", run_dir=Path("/nonexistent"))
+    assert "dock_new_ports" not in seen
+    seen.clear()
+    adapters.explore_start("w", dock_new_ports=True, run_dir=Path("/nonexistent"))
+    assert seen["dock_new_ports"] is True
+
+
+def test_the_cli_explore_arm_sends_true_by_default(monkeypatch):
+    """`tw explore start` IS the operator arming a run, so the spend is on."""
+    from tw2002_aiclient.session import cli as _cli
+
+    parser = _cli.build_parser()
+    args = parser.parse_args(["explore", "start", "--world-id", "w"])
+    assert args.dock_new_ports is True
+    assert parser.parse_args(
+        ["explore", "start", "--world-id", "w", "--no-dock-new-ports"]
+    ).dock_new_ports is False
+
+    seen = {}
+    monkeypatch.setattr(
+        _cli, "send_request", lambda verb, payload, run_dir=None: seen.update(payload) or {"ok": True}
+    )
+    monkeypatch.setattr(_cli, "print_response", lambda *a, **k: None)
+    _cli.cmd_explore_start(args)
+    assert seen["dock_new_ports"] is True
+
+
+def test_the_play_explore_arm_passes_the_flag():
+    """Structural, not textual: a grep would match this keyword inside a
+    docstring or a neighbouring call. This resolves the actual call node."""
+    import ast
+    import inspect
+
+    from tw2002_aiclient import app
+
+    tree = ast.parse(inspect.getsource(app))
+    calls = [
+        n for n in ast.walk(tree)
+        if isinstance(n, ast.Call)
+        and isinstance(n.func, ast.Attribute)
+        and n.func.attr == "explore_start_for_profile"
+    ]
+    assert calls, "the Play explore arm no longer calls explore_start_for_profile"
+    for call in calls:
+        kw = {k.arg: k.value for k in call.keywords}
+        assert "dock_new_ports" in kw, "Play explore arm stopped passing the flag"
+        assert isinstance(kw["dock_new_ports"], ast.Constant)
+        assert kw["dock_new_ports"].value is True
+
+
 # --- wired, not merely defined -------------------------------------------
 #
 # The whole reason this WO exists is a writer that was correct, fully tested,
