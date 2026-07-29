@@ -57,11 +57,48 @@ from __future__ import annotations
 DOCK_TOGGLE_KEYS = frozenset({ord("d"), ord("D")})
 TOLLS_TOGGLE_KEYS = frozenset({ord("f"), ord("F")})
 
-# What the confirm line gains when a flag is ON. Absent when OFF -- the
-# default line must stay byte-identical to the pre-WO prompt, so existing
-# muscle memory and the pins that assert `("Explore", 5)` both still hold.
+# What the confirm line gains for each flag.
+#
+# **The dock marker is emitted in BOTH directions; the tolls marker only when
+# ON. That asymmetry is the point of WO-EXPLORE-GATHER-VISIBLE.**
+#
+# This block used to say "absent when OFF -- the default line must stay
+# byte-identical to the pre-WO prompt, so existing muscle memory and the pins
+# that assert `("Explore", 5)` both still hold." That was a real argument and
+# it was wrong in the way that only live use reveals: it made the OFF state
+# *invisible by construction*. An operator who never guessed `D` existed saw
+# `Explore x5 LIVE?  y/N`, said yes, and warped past every port wondering why
+# nothing was investigated (Max, live 2026-07-29). Muscle memory was
+# preserved by hiding the one fact the prompt most needed to state.
+#
+# The invariant this module already claimed two comments down -- "the gate
+# must describe the run it arms" -- was only ever applied to the ON
+# direction. A run that PASSES PORTS BY is just as much a property of the run
+# as one that docks, so the gate now volunteers both.
+#
+# `TOLLS_MARKER` deliberately keeps the old asymmetric behaviour and is
+# absent when OFF. Naming the affordance is a NUDGE, and nudges are
+# directional: pointing an operator at commodity gathering costs them
+# nothing, while an equally helpful "F to fight tolls" on every prompt would
+# be this module quietly advertising a path that SPENDS fighters. Loud toward
+# the safe action, quiet toward the spend.
 DOCK_MARKER = "+dock"
+# Names the state AND the key, because a prompt that only said "no-dock"
+# would fix the invisibility of the state while leaving the affordance just
+# as unguessable -- the operator would learn they are missing something and
+# still not know what to press.
+DOCK_OFF_MARKER = "no-dock (D to gather)"
 TOLLS_MARKER = "+fight-tolls"
+
+# Appended to the post-ensure offer status line, which is where an operator
+# FIRST learns explore exists. It advertised only `E`; `D` was reachable but
+# unadvertised on every surface, which is the "secret D" half of the same
+# defect. Kept short on purpose: the offer line is a fixed-length string
+# (`_EXPLORE_OFFER_CLASSIFICATION` is the constant `"main_command"`), and
+# with this suffix it measures 79 columns -- inside an 80-column terminal by
+# one character. A hint that clips is not a hint, and it is the TAIL that
+# clips, which is exactly where a new suffix lands.
+GATHER_HINT = "D to gather"
 
 # Status-line wording for the toggle itself. States the consequence, not the
 # variable name: "dock ON" tells an operator nothing about what it spends.
@@ -96,11 +133,16 @@ def compose_explore_action(
     dock: object = False,
     tolls: object = False,
 ) -> str:
-    """Add the ON markers to the confirm line's action text.
+    """Spell the run's flags into the confirm line's action text.
 
-    With both flags OFF this returns *action* unchanged, so the default
-    prompt is byte-identical to the pre-WO one. With a flag ON the marker
-    is appended, because the gate must describe the run it actually arms.
+    The gate must describe the run it actually arms, so **dock is always
+    stated** -- `+dock` when the operator opted in, `no-dock (D to gather)`
+    when they did not. Silence is not a description: an unmarked line was
+    read for a whole live session as "explore", when what it armed was
+    "explore, passing every port".
+
+    `tolls` keeps the ON-only behaviour. See `TOLLS_MARKER` for why the two
+    are deliberately not symmetric.
 
     Truthiness is used for the *display* decision only -- a caller that
     somehow held a non-bool still gets a marker rather than a silently
@@ -109,11 +151,30 @@ def compose_explore_action(
     """
     text = action if isinstance(action, str) else ""
     parts = [text] if text else []
-    if dock:
-        parts.append(DOCK_MARKER)
+    parts.append(DOCK_MARKER if dock else DOCK_OFF_MARKER)
     if tolls:
         parts.append(TOLLS_MARKER)
     return " ".join(parts)
+
+
+def compose_explore_offer(classification: object, *, cycles: object = None) -> str:
+    """The post-ensure status line announcing that explore is available.
+
+    Lives here rather than as an f-string in `app._run_play` for one
+    practical reason: this is the operator's FIRST contact with the feature,
+    and inside that loop it is unreachable by a unit test. A surface that
+    decides whether a capability is discoverable should be assertable
+    without a curses harness.
+
+    Purely additive against the pre-WO line -- the `press E` token is kept
+    byte-for-byte, because several pins assert on it and, more importantly,
+    because the existing affordance was never the broken one. `D` is what
+    was missing. Never raises.
+    """
+    label = classification if isinstance(classification, str) else "?"
+    count = cycles if isinstance(cycles, int) and not isinstance(cycles, bool) else None
+    run = f"explore ×{count} available" if count is not None else "explore available"
+    return f"session ready — {label}  ·  {run} — press E  ·  {GATHER_HINT}"
 
 
 def describe_dock(enabled: object) -> str:

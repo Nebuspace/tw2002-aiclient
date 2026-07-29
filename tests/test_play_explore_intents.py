@@ -4,8 +4,12 @@ Drives the real `app._run_play`, in the shape `tests/test_play_explore_arm.py`
 established. The properties that matter are about AGREEMENT — the run that
 starts must be the run the prompt described:
 
-* the first `E` of a session offers map-fill, byte-identical to the pre-WO
-  prompt, so existing muscle memory arms the existing run;
+* the first `E` of a session offers map-fill — the same RUN existing muscle
+  memory has always armed. (It is no longer the same WORDS: since
+  WO-EXPLORE-GATHER-VISIBLE the line also states the dock state, because a
+  prompt silent about ports let an operator arm "explore, passing every
+  port" believing it was "explore". The run is the promise here; the
+  wording never was.);
 * `E` CYCLES the offer and never starts anything;
 * `y` runs the intent the RAISED PROMPT named, not whatever the cycle
   advanced to afterwards;
@@ -20,6 +24,7 @@ from __future__ import annotations
 import pytest
 
 from tw2002_aiclient import adapters, app as app_mod
+from tw2002_aiclient.cockpit import explore_flags
 from tw2002_aiclient import explore as explore_mod
 
 
@@ -105,11 +110,27 @@ Y = ord("y")
 # --------------------------------------------------------------- the cycle
 
 def test_the_first_E_offers_map_fill_exactly_as_before(monkeypatch) -> None:
-    """Muscle memory must not arm a different run than it armed yesterday."""
+    """Muscle memory must not arm a different RUN than it armed yesterday.
+
+    WO-EXPLORE-GATHER-VISIBLE changed the WORDS on that line without
+    changing the run, and this test had been asserting both through one
+    equality. The two are now separated, because they are different
+    promises: the intent is still map-fill and the count is still
+    `_EXPLORE_MIN_SECTORS` — asserted below, unchanged — while the action
+    text additionally states the dock state.
+
+    Keeping the old equality would have made "the prompt may never gain a
+    word" a property of the intent cycle, which it never was. It is the
+    silence that was the bug: a line saying nothing about ports let an
+    operator arm "explore, passing every port" believing it was "explore".
+    """
     _calls, screen = _drive(monkeypatch, [E])
     assert len(screen.gate_raises) == 1
     action, cycles = screen.gate_raises[0]
-    assert action == app_mod._EXPLORE_OFFER_ACTION
+    # The INTENT label is still pinned exactly, as the leading clause — a
+    # change to which run `E` first offers still fails here.
+    assert action.startswith(app_mod._EXPLORE_OFFER_ACTION), action
+    assert explore_flags.DOCK_OFF_MARKER in action, action
     assert cycles == app_mod._EXPLORE_MIN_SECTORS
 
 

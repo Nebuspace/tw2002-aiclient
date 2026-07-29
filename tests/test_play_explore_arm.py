@@ -27,6 +27,14 @@ import types
 import pytest
 
 from tw2002_aiclient import adapters, app as app_mod
+from tw2002_aiclient.cockpit import explore_flags as _explore_flags
+
+# WO-EXPLORE-GATHER-VISIBLE: the default confirm action now states the
+# opted-OUT dock state instead of staying silent. Derived here for
+# readability; the marker's CONTENT is pinned by literal in
+# `tests/test_play_explore_flags.py`, which is the assertion a deletion
+# cannot slip past.
+_OFF_ACTION = f"Explore {_explore_flags.DOCK_OFF_MARKER}"
 
 
 class _Result:
@@ -139,7 +147,7 @@ def test_e_raises_the_gate_and_then_y_starts_explore(monkeypatch) -> None:
 def test_e_alone_raises_the_gate_but_arms_nothing(monkeypatch) -> None:
     """`E` raises the gate; it does not start anything. Only `y` does."""
     calls, screen = _drive(monkeypatch, [ord("E")])
-    assert screen.gate_raises == [("Explore", 5)], screen.gate_raises
+    assert screen.gate_raises == [(_OFF_ACTION, 5)], screen.gate_raises
     assert calls == []
 
 

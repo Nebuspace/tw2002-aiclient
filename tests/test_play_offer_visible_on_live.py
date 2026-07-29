@@ -14,14 +14,20 @@ pass against the broken code -- which is exactly how it shipped.
 from __future__ import annotations
 
 from tw2002_aiclient import screens as screens_mod
+from tw2002_aiclient.cockpit import explore_flags
 from tw2002_aiclient.cockpit.layout import frame_layout
 from tw2002_aiclient.cockpit.teachband import compose_teach_band
 
 ROWS, COLS = 40, 160
 OFFER = "explore 3/5…"   # a LIVE run reading — what canon lets claim the band
-OFFER_STATUS = (
-    "session ready — main_command  ·  explore ×5 available — press E"
-)
+# Built by the real composer rather than retyped. This string is an INPUT
+# here (a status line fed to the screen), so a hand-copied version would
+# silently drift from what `app._run_play` actually produces the moment the
+# offer wording changes — a double diverging from its own producer, which is
+# how a fixture ends up pinning a screen the product never paints.
+# WO-EXPLORE-GATHER-VISIBLE changed this line; asking the producer keeps the
+# next change free.
+OFFER_STATUS = explore_flags.compose_explore_offer("main_command", cycles=5)
 TAIL = [f"app> line {i}" for i in range(1, 9)]
 
 
