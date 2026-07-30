@@ -427,7 +427,7 @@ def test_a_refused_start_never_leaves_the_chip_armed(tmp_path):
 
     refusals = [
         ({"name": "no-such-macro"}, "loop_not_found:no-such-macro"),
-        ({"name": "ore-run", "cycles": 10}, "unsupported_arg:cycles"),
+        ({"name": "ore-run", "force": True}, "unsupported_arg:force"),
         ({}, "missing_name"),
     ]
     for args, expected in refusals:
@@ -495,35 +495,13 @@ def test_stop_is_not_a_second_release_path():
     assert functions == {"_run": 1, "start": 1}, functions
 
 
-def test_the_runner_plays_one_pass_and_never_loops(tmp_path):
-    """No ``cycles``, and no ``for``/``while`` smuggling one in.
+def test_the_runner_default_is_one_pass(tmp_path):
+    """Omitted ``cycles`` still plays exactly one pass.
 
-    X3 refused a cycle count deliberately -- repetition without the
-    stop-loss floor (X5, unbuilt) is the dangerous half alone. A driver
-    that wrapped the player in a loop would reintroduce exactly that, so
-    the absence is pinned structurally AND behaviourally."""
-    source = (PKG_ROOT / "session" / "autoloop.py").read_text(encoding="utf-8")
-    tree = ast.parse(source)
-    calls = [
-        node
-        for node in ast.walk(tree)
-        if isinstance(node, ast.Call)
-        and isinstance(node.func, ast.Name)
-        and node.func.id == "replay_loop"
-    ]
-    assert len(calls) == 1, "one call site, or the 'one pass' claim needs re-proving"
-    looped = [
-        node
-        for node in ast.walk(tree)
-        if isinstance(node, (ast.For, ast.While, ast.AsyncFor))
-        for inner in ast.walk(node)
-        if isinstance(inner, ast.Call)
-        and isinstance(inner.func, ast.Name)
-        and inner.func.id == "replay_loop"
-    ]
-    assert looped == [], "the player is invoked inside a loop"
-
-    # And behaviourally: a completed run sends its steps ONCE.
+    Multi-pass is opt-in via ``cycles=N`` (WO-AUTOLOOP-CYCLES); the default
+    path must stay single-pass so one-shot Play / chains arms do not
+    silently repeat.
+    """
     write_macro(tmp_path, "ore-run", TWO_STEPS)
     session = WireSession([ANCHOR_158[0], PORT[0], ANCHOR_158[0]])
     runner = make_runner(tmp_path, session)
@@ -531,6 +509,7 @@ def test_the_runner_plays_one_pass_and_never_loops(tmp_path):
     snapshot = run_to_completion(runner, session)
 
     assert snapshot.report.outcome == OUTCOME_COMPLETED
+    assert snapshot.report.cycles == 1
     assert snapshot.report.sends_issued == 2
     assert [text for text, _enter, _secret in session.sent] == ["P", "1"]
 
@@ -1046,18 +1025,13 @@ def test_a_broken_error_sink_never_takes_the_release_down(tmp_path):
 # --------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("arg", ["cycles", "force", "param", "include_drafts"])
+@pytest.mark.parametrize("arg", ["force", "param", "include_drafts"])
 def test_a_knob_this_runtime_cannot_honour_is_refused_not_ignored(tmp_path, arg):
-    """Accepting ``cycles=10`` and running once is a surface agreeing to
-    something it does not do. Contrast ``ensure``'s ``no_auto_arm``, which
-    is accepted and unused precisely because the behaviour it asks for is
-    what happens.
+    """``force`` / ``param`` stay refused. ``cycles`` left this list in
+    WO-AUTOLOOP-CYCLES (accepted + clamped). ``floor`` left in X5.
 
-    ``floor`` left this list in WO-P2-G4-X5 and only because the rail
-    behind it was built -- see :func:`test_a_floor_is_still_refused_when_
-    this_session_cannot_enforce_it` immediately below, which is the same
-    property re-pinned at the layer where it now lives, and
-    ``tests/test_credits_floor.py`` for the enforcement itself.
+    Contrast ``ensure``'s ``no_auto_arm``, which is accepted and unused
+    precisely because the behaviour it asks for is what happens.
     """
     write_macro(tmp_path, "ore-run", ONE_STEP)
     session = WireSession([ANCHOR_158[0]])

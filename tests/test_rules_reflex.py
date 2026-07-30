@@ -303,7 +303,7 @@ def test_the_reflex_verb_returns_the_kernels_answer(tmp_path, monkeypatch):
 
     assert resp["ok"] is True
     assert resp["classification"] == "main_command"
-    assert set(resp["reflex"]) == {"macro", "rule_id", "stop_reason"}
+    assert set(resp["reflex"]) == {"macro", "rule_id", "stop_reason", "scope"}
 
 
 def test_the_reflex_verb_sends_nothing(tmp_path, monkeypatch):

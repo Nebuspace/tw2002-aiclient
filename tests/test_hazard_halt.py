@@ -78,16 +78,20 @@ def test_check_hazard_unknown_fighters_do_not_halt():
     assert _check_hazard(Obs()) is None
 
 
-def test_cycles_still_refused(tmp_path):
+def test_cycles_accepted_under_four_rails(tmp_path):
     write_macro(tmp_path, "ore-run", ONE_STEP)
     session = HazardWireSession([ANCHOR_158[0]])
     lock = ControlLock()
-    server = Server(session, lock, make_runner(tmp_path, session, lock))
+    runner = make_runner(tmp_path, session, lock)
+    server = Server(session, lock, runner)
     resp = protocol.dispatch(
-        session, "autoloop_start", {"name": "ore-run", "cycles": 10}, server
+        session, "autoloop_start", {"name": "ore-run", "cycles": 2}, server
     )
-    assert resp == {"ok": False, "error": "unsupported_arg:cycles"}
+    assert resp["ok"] is True
+    assert resp["run"]["cycles"] == 2
     assert "Four of four" in autoloop.__doc__ or "All four rails" in autoloop.__doc__
+    assert "accepted" in (autoloop.__doc__ or "").lower()
+    runner.stop()
 
 
 def test_game_select_halts_before_send(tmp_path):

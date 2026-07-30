@@ -104,9 +104,9 @@ PROPOSAL_IDENTITY = ("rule_id", "macro", "classification")
 #: Args the ``reflex_arm`` verb accepts -- exactly the identity, nothing else.
 #:
 #: Notably absent: any ``cycles``, ``force``, ``yes`` or ``floor``. This verb
-#: launches through ``autoloop_start``, which owns those decisions and refuses
-#: what it cannot honour; accepting them here would let this layer agree to
-#: something the layer below has to walk back.
+#: launches through ``autoloop_start``, which owns those decisions; cycle
+#: count for a repeating rule is derived from rule ``scope`` on the daemon
+#: (WO-AUTOLOOP-CYCLES), never accepted as a client arg here.
 ARGS_REFLEX_ARM = frozenset(PROPOSAL_IDENTITY)
 
 #: Status fields promoted to guard facts, by their status key.

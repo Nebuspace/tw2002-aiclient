@@ -218,11 +218,16 @@ class Decision:
     `rule_id` names the rule responsible -- the winner when a macro fires, the
     STOPping rule when a guard refused, and `None` for document-level outcomes
     (no candidates, ambiguity) which no single rule owns.
+
+    `scope` is the winning rule's ``one-shot`` / ``repeating`` when a macro
+    fires (WO-AUTOLOOP-CYCLES); ``None`` on every STOP / document-level
+    outcome, because those have no run to bound.
     """
 
     macro: Optional[str] = None
     rule_id: Optional[str] = None
     stop_reason: Optional[str] = None
+    scope: Optional[str] = None
 
     @property
     def fired(self) -> bool:
@@ -349,7 +354,7 @@ def select_rule(
         return Decision(stop_reason=qualify(STOP_AMBIGUOUS, str(top)))
 
     winner = winners[0]
-    return Decision(macro=winner.do, rule_id=winner.rule_id)
+    return Decision(macro=winner.do, rule_id=winner.rule_id, scope=winner.scope)
 
 
 # ── strict serialization ────────────────────────────────────────────────────

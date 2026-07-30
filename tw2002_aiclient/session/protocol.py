@@ -624,20 +624,20 @@ def _autoloop_runner(server):
 
 
 def _dispatch_autoloop_start(args, server):
-    """WO-P2-G4-X4: arm the background player for ONE pass of one taught
-    macro. Returns as soon as the run is live (canon `cli-verbs.md`:
-    "`start` returns immediately").
+    """WO-P2-G4-X4 + WO-AUTOLOOP-CYCLES: arm the background player for N
+    passes of one taught macro (default 1). Returns as soon as the run is
+    live (canon `cli-verbs.md`: "`start` returns immediately").
 
     **Unsupported args are REFUSED, not ignored** (`autoloop.
-    ARGS_AUTOLOOP_START`). `cycles` is the one that matters: this slice
-    plays one pass. All four rails are built (hazard-halt in WO-AUTOLOOP-
-    HAZARD-HALT); `cycles` remains refused until a dedicated unlock WO
-    (see `autoloop.py`'s "One pass").
-    Accepting `cycles=10` and running once would be a surface agreeing to
-    something it does not do. `force` is refused for a different reason: it
-    waives a MISSING start-anchor, canon allows only an explicit human
-    waiver, and a socket verb cannot confirm a human is behind it -- a
-    daemon granting itself that waiver is the self-arming canon forbids.
+    ARGS_AUTOLOOP_START`). `force` stays refused: it waives a MISSING
+    start-anchor, canon allows only an explicit human waiver, and a socket
+    verb cannot confirm a human is behind it -- a daemon granting itself
+    that waiver is the self-arming canon forbids. `param` stays refused
+    for the same honesty reason.
+
+    **`cycles` is ACCEPTED and clamped** (WO-AUTOLOOP-CYCLES) to
+    `CYCLES_HARD_CEILING` because all four rails are built. Bool / float /
+    ≤0 → `invalid_cycles`. Over-ceiling → clamp, never unbounded.
 
     **`floor` is ACCEPTED, and only because it is ENFORCED**
     (WO-P2-G4-X5). **`turn_budget` is ACCEPTED for the same reason**
@@ -675,8 +675,13 @@ def _dispatch_autoloop_start(args, server):
         isinstance(turn_budget, bool) or not isinstance(turn_budget, int)
     ):
         return {"ok": False, "error": "invalid_turn_budget"}
+    cycles = args.get("cycles")
+    if cycles is not None and (isinstance(cycles, bool) or not isinstance(cycles, int)):
+        return {"ok": False, "error": "invalid_cycles"}
     try:
-        snapshot = runner.start(name, floor=floor, turn_budget=turn_budget)
+        snapshot = runner.start(
+            name, floor=floor, turn_budget=turn_budget, cycles=cycles
+        )
     except autoloop.AutoLoopRefused as e:
         # Typed code, already in the runner's / control lock's / loader's
         # own vocabulary -- never re-spelled here.
@@ -752,8 +757,9 @@ def _dispatch_autoloop_relaunch(server):
     invented here.
 
     A resume is a fresh `start`, not a thaw: the macro replays from its
-    beginning. The name, floor, and turn_budget come off the last report
-    (`loop`/`floor`/`turn_budget` — exactly `start`'s arguments), so the
+    beginning. The name, floor, turn_budget, and cycles come off the last
+    report (`loop`/`floor`/`turn_budget`/`cycles` — exactly `start`'s
+    arguments), so the
     operator does not retype them, but nothing about mid-macro position is
     restored and this docstring says so rather than letting the verb name
     imply otherwise.
@@ -791,6 +797,7 @@ def _dispatch_autoloop_relaunch(server):
         name,
         floor=getattr(report, "floor", None),
         turn_budget=getattr(report, "turn_budget", None),
+        cycles=getattr(report, "cycles", None),
     )
     return {
         "ok": True,
@@ -855,6 +862,7 @@ def _dispatch_reflex(session, server):
             "macro": decision.macro,
             "rule_id": decision.rule_id,
             "stop_reason": decision.stop_reason,
+            "scope": decision.scope,
         },
     }
 
@@ -887,12 +895,21 @@ def _dispatch_reflex_arm(args, session, server):
 
     Sends nothing itself and takes no control lock: on the one path that
     launches, it delegates to `_dispatch_autoloop_start`, which owns the
-    start-anchor, control-lock, credit-floor and one-pass rails. Those refusals
-    reach the caller in the runner's own vocabulary, unre-spelled. The
-    `NEVER_AUTO_ACTION_CLASSES` refusal at every `replay_loop` boundary is
-    untouched and unconditional -- an armed run of an approved rule still
+    start-anchor, control-lock, credit-floor, turn-budget, hazard, and
+    cycles rails. Those refusals reach the caller in the runner's own
+    vocabulary, unre-spelled. The `NEVER_AUTO_ACTION_CLASSES` refusal at
+    every `replay_loop` boundary is untouched and unconditional -- an armed
+    run of an approved rule still
     halts at a money prompt.
+
+    **Repeating scope → multi-pass** (WO-AUTOLOOP-CYCLES): when the
+    re-derived winning rule carries ``scope: repeating``, this verb asks
+    ``autoloop_start`` for ``cycles=CYCLES_HARD_CEILING``. ``one-shot`` /
+    missing scope stays a single pass. The client never names a cycle
+    count on this verb — ``ARGS_REFLEX_ARM`` stays identity-only — so a
+    client cannot smuggle an unbounded request past the hard ceiling.
     """
+    from ..rule_engine import SCOPE_REPEATING
     from ..rules.reflex import (
         ARGS_REFLEX_ARM,
         facts_from_status,
@@ -904,7 +921,8 @@ def _dispatch_reflex_arm(args, session, server):
     if unsupported:
         # Same posture as `autoloop_start`: an arg this verb does not honour
         # is refused, never ignored. A silently-dropped `cycles` would be a
-        # surface agreeing to a repetition it does not perform.
+        # surface agreeing to a repetition it does not perform — and for
+        # this verb, cycles are derived from rule scope, not client args.
         return {"ok": False, "error": f"unsupported_arg:{unsupported[0]}"}
 
     # ONE snapshot for both halves, for `_dispatch_reflex`'s reason: two reads
@@ -921,7 +939,10 @@ def _dispatch_reflex_arm(args, session, server):
     if drift:
         return {"ok": False, "error": drift}
 
-    return _dispatch_autoloop_start({"name": decision.macro}, server)
+    payload = {"name": decision.macro}
+    if decision.scope == SCOPE_REPEATING:
+        payload["cycles"] = autoloop.CYCLES_HARD_CEILING
+    return _dispatch_autoloop_start(payload, server)
 
 
 def dispatch(session, verb, args, server):

@@ -10,9 +10,10 @@ Two properties carry the weight here, and neither is about the happy path:
   daemon" are the same moment for a cold cockpit. A version that round-trips
   to learn `missing_name` would arm nothing but would also look, to a caller,
   like a transport failure it might retry.
-* **`cycles` and `force` are not parameters.** The daemon refuses both; a
-  keyword that exists only to be refused invites a confirm prompt promising
-  repetition that cannot happen.
+* **`force` is not a parameter.** The daemon refuses it; a keyword that
+  exists only to be refused invites a confirm prompt promising a waiver
+  the socket cannot grant. ``cycles`` *is* a parameter (WO-AUTOLOOP-CYCLES)
+  and is clamped on the daemon.
 """
 
 from __future__ import annotations
@@ -103,13 +104,12 @@ def test_non_string_name_fails_closed_without_touching_the_wire(monkeypatch, tmp
 
 def test_daemon_refusal_survives_as_a_typed_reason(monkeypatch, tmp_path):
     """Every refusal the daemon can produce stays machine-readable rather
-    than being smoothed into a generic failure. `unsupported_arg:cycles` is
-    included because it is what a caller reaching for repetition gets."""
+    than being smoothed into a generic failure."""
     for code in (
         "autoloop_unavailable",
         "missing_name",
         "invalid_floor",
-        "unsupported_arg:cycles",
+        "invalid_cycles",
         "unsupported_arg:force",
         "floor_unsupported",
         "invalid_turn_budget",
@@ -137,14 +137,20 @@ def test_the_run_report_survives_in_raw(monkeypatch, tmp_path):
     assert result.raw["steps"] == 12
 
 
-def test_no_cycles_or_force_parameter_exists():
-    """The daemon refuses both. A parameter that exists only to be refused
-    lets a caller compose a confirm prompt for behaviour that cannot happen
-    -- which on this path means promising an operator repetition that will
-    not occur. Structural, so it cannot regress by comment rot."""
+def test_cycles_is_a_parameter_force_is_not():
+    """``cycles`` unlocked in WO-AUTOLOOP-CYCLES; ``force`` stays absent."""
     params = set(inspect.signature(adapters.autoloop_start).parameters)
-    assert "cycles" not in params
+    assert "cycles" in params
     assert "force" not in params
+
+
+def test_cycles_reaches_the_wire(monkeypatch, tmp_path):
+    sink = []
+    monkeypatch.setattr(_cli, "send_request", _spy({"ok": True, "started": True}, sink))
+    result = adapters.autoloop_start("grind-alpha", cycles=7, run_dir=tmp_path)
+    assert result.ok is True
+    assert sink[0][0] == "autoloop_start"
+    assert sink[0][1]["cycles"] == 7
 
 
 def test_a_missing_ok_key_is_not_read_as_success(monkeypatch, tmp_path):

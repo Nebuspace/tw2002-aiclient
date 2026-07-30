@@ -264,12 +264,12 @@ best-effort); game_select and settle halves still fire.
 
 What this slice is NOT
 ----------------------
-There is still no cycle count and no repetition here, and that is a
-boundary, not an omission. With all four rails built, unlocking
-``cycles`` / ``scope: repeating`` is a *follow-on* WO -- this module still
-refuses a ``cycles`` parameter. A caller that wants N cycles calls this N
-times and gets canon's per-cycle start-anchor re-check for free, exactly as
-the archived ``play_skill`` got it from ``replay_skill``.
+There is still no cycle count *inside* this player — each call is one pass —
+and that is a boundary, not an omission. With all four rails built,
+``AutoLoopRunner`` (WO-AUTOLOOP-CYCLES) invokes this N times for a
+``cycles=N`` / ``scope: repeating`` arm, getting canon's per-cycle
+start-anchor re-check for free, exactly as the archived ``play_skill``
+got it from ``replay_skill``.
 
 Also absent, deliberately: no ledger rows (``macros.md`` §"Ledgering a
 replay" -- ``actor=trainer``), no parameter substitution (``_apply_params``

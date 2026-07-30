@@ -113,11 +113,13 @@ def test_proceed_on_unknown_is_impossible():
 # --- arm / wire ------------------------------------------------------------
 
 
-def test_args_vocabulary_includes_turn_budget():
-    assert autoloop.ARGS_AUTOLOOP_START == frozenset({"name", "floor", "turn_budget"})
+def test_args_vocabulary_includes_turn_budget_and_cycles():
+    assert autoloop.ARGS_AUTOLOOP_START == frozenset(
+        {"name", "floor", "turn_budget", "cycles"}
+    )
 
 
-def test_cycles_still_refused(tmp_path):
+def test_cycles_accepted_with_turn_budget(tmp_path):
     write_macro(tmp_path, "ore-run", ONE_STEP)
     session = TurnsWireSession([ANCHOR_158[0]])
     lock = ControlLock()
@@ -125,12 +127,13 @@ def test_cycles_still_refused(tmp_path):
     resp = protocol.dispatch(
         session,
         "autoloop_start",
-        {"name": "ore-run", "cycles": 10, "turn_budget": 50},
+        {"name": "ore-run", "cycles": 2, "turn_budget": 50},
         server,
     )
-    assert resp == {"ok": False, "error": "unsupported_arg:cycles"}
-    assert lock.is_auto_loop_held() is False
-    assert session.sent == []
+    assert resp["ok"] is True
+    assert resp["run"]["cycles"] == 2
+    assert resp["run"]["turn_budget"] == 50
+    server.autoloop.stop()
 
 
 def test_invalid_turn_budget_types_refused(tmp_path):

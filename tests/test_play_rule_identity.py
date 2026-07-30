@@ -166,7 +166,12 @@ def test_blessed_status_line_names_rule_and_v():
     assert "dock" in line
     assert "repeating" in line
     assert "V can propose" in line
-    assert "one-pass" in line
+    assert "multi-pass" in line
+
+    one = draft_approve.compose_rule_blessed_line(
+        "dock-when-idle", "dock", "one-shot",
+    )
+    assert "one-pass" in one
 
 
 def _run_play_calls() -> set:

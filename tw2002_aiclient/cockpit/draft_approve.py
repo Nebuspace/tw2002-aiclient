@@ -292,15 +292,20 @@ def compose_rule_blessed_line(
 ) -> str:
     """Status after a successful write+promote — names the rule and points at V.
 
-    Discloses that arm remains one-pass even when ``scope`` is ``repeating``
-    (the cycles run-loop is a separate WO).
+    Discloses that ``repeating`` arms under the hard cycle ceiling
+    (WO-AUTOLOOP-CYCLES); ``one-shot`` stays one pass.
     """
     rid = rule_id if isinstance(rule_id, str) and rule_id.strip() else "?"
     macro = do if isinstance(do, str) and do.strip() else "?"
     sc = scope if isinstance(scope, str) and scope.strip() else "?"
+    if sc == "repeating":
+        return (
+            f"rule blessed — {rid} does {macro} [{sc}]; "
+            f"V can propose multi-pass (capped)"
+        )
     return (
         f"rule blessed — {rid} does {macro} [{sc}]; "
-        f"V can propose it (arm still one-pass)"
+        f"V can propose it (arm is one-pass)"
     )
 
 
