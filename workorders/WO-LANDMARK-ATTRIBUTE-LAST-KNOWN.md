@@ -1,6 +1,7 @@
 # WO-LANDMARK-ATTRIBUTE-LAST-KNOWN — attribute landmarks via last_known_sector
 
-**Status:** BANKED · HIGH · after #169 Accept  
+**Status:** DONE · product `_attribute_landmark` on main (post #169) · Accept verified 2026-07-30 · stamp with WO-GOALS-STARDOCK-STATUS  
+
 **Posted:** 2026-07-28T16:28Z · hub (CC honesty HEADS-UP 16:22:50Z)
 
 ## Goal
