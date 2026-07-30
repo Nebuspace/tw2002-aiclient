@@ -18,6 +18,7 @@ from tw2002_aiclient.cockpit import analyze as cockpit_analyze
 from tw2002_aiclient.cockpit import arm as cockpit_arm
 from tw2002_aiclient.cockpit import armconfirm as cockpit_armconfirm
 from tw2002_aiclient.cockpit import autoloop_controls as cockpit_autoloop_controls
+from tw2002_aiclient.cockpit import chain_bubbles as cockpit_chain_bubbles
 from tw2002_aiclient.cockpit import chains as cockpit_chains
 from tw2002_aiclient.cockpit import control_seat as cockpit_control_seat
 from tw2002_aiclient.cockpit import covermeter as cockpit_covermeter
@@ -1589,6 +1590,38 @@ class PlayShellScreen:
             # own uncolored base layer -- content is never lost to a color
             # failure.
             cockpit_draw.draw_runs(self.stdscr, center, runs_lines)
+
+        # WO-PLAY-CHAIN-BUBBLE-VIZ: always-on best-chain bubbles under the
+        # viewport. Reads the cached chain from `chain_scalars` only — never
+        # calls chain_search / world_model / filesystem on the draw path.
+        # Fold while L)chains is open so the modal's empty/unreadable wording
+        # is not shadowed by the strip's quiet "no trade loop yet" placeholder
+        # (same canon words; different facts).
+        chain_region = regions.get("chain")
+        _cs_open = getattr(getattr(self, "chains_session", None), "is_open", False)
+        if chain_region is not None and not _cs_open:
+            cur_sector = None
+            try:
+                hud = status.get("hud") if isinstance(status, dict) else None
+                sector_cell = hud.get("sector") if isinstance(hud, dict) else None
+                if isinstance(sector_cell, dict):
+                    cur_sector = sector_cell.get("value")
+                else:
+                    cur_sector = sector_cell
+            except Exception:  # noqa: BLE001
+                cur_sector = None
+            try:
+                bubble_lines = cockpit_chain_bubbles.compose_chain_bubbles(
+                    self.chain_scalars.best_chain,
+                    current_sector=cur_sector,
+                    port_classes=self.chain_scalars.port_classes,
+                    width=chain_region["w"],
+                )
+            except Exception:  # noqa: BLE001 -- never crash the draw pass
+                bubble_lines = [""] * cockpit_chain_bubbles.CHAIN_VIZ_H
+            cockpit_draw.draw_lines(
+                self.stdscr, chain_region, bubble_lines, curses.A_NORMAL, boxed=False,
+            )
 
         right = regions["right_gutter"]
         cockpit_draw.draw_box(

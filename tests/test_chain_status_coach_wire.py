@@ -222,6 +222,36 @@ def test_update_never_raises_on_a_hostile_shape(hostile):
     assert cs.merge({}) == {}
 
 
+
+def test_best_chain_is_retained_alongside_scalars():
+    """WO-PLAY-CHAIN-BUBBLE-VIZ: ranked-first cycle survives for bubble viz."""
+    cs = ChainScalars()
+    chain = _chain([10, 11, 12, 10])
+    cs.update(_result(chains_=[chain, _chain([1, 2, 1])]))
+    assert cs.best_chain is chain
+    assert cs.merge({}) == {"chain_hops": 3, "chain_unit": "hops"}
+    # Chain object must never land on status JSON.
+    assert "chain_best" not in cs.merge({})
+    assert "sectors" not in cs.merge({})
+
+
+def test_failed_discovery_does_not_erase_best_chain():
+    cs = ChainScalars()
+    chain = _chain([10, 11, 12, 10])
+    cs.update(_result(chains_=[chain]))
+    cs.update(None)
+    cs.update(_result(chains_=(), search_note="budget"))
+    assert cs.best_chain is chain
+
+
+def test_completed_empty_search_clears_best_chain_to_quiet_empty():
+    cs = ChainScalars()
+    cs.update(_result(chains_=[_chain([10, 11, 12, 10])]))
+    cs.update(_result(chains_=(), reason="none"))
+    assert cs.best_chain is None
+    assert cs.merge({}) == {"chain_hops": 0, "chain_unit": "hops"}
+
+
 def test_a_later_failed_discovery_does_not_erase_a_good_one():
     # A discovery that establishes nothing must not silently blank a value the
     # operator was already shown -- "unknown" replacing a real count reads as

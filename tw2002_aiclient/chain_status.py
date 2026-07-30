@@ -48,7 +48,7 @@ _REASON_NO_WORLD_MODEL = "no_world_model"
 
 
 class ChainScalars:
-    """Memoises ``(hops, unit)`` from the most recent discovered-chain result.
+    """Memoises ``(hops, unit)`` and the ranked-first chain for bubble viz.
 
     Both methods are total: they never raise, whatever shape they are handed.
     That is a hard requirement rather than defensiveness for its own sake --
@@ -56,12 +56,20 @@ class ChainScalars:
     ``compose_decisions_lines`` documents that it never raises regardless of
     ``status``. A producer that could throw would convert both guarantees into
     "usually".
+
+    WO-PLAY-CHAIN-BUBBLE-VIZ: ``best_chain`` retains ``chains[0]`` for the
+    always-on bubble strip. Failed / truncated / no-world-model updates never
+    wipe the last good sequence; a completed empty search clears it to quiet
+    empty. The chain object is **never** merged onto daemon ``status`` JSON —
+    draw reads ``best_chain`` directly.
     """
 
     def __init__(self) -> None:
         self._hops: int | None = None
         self._unit: str | None = None
         self._seen: bool = False
+        self._best_chain: object | None = None
+        self._port_classes: dict[int, str] = {}
 
     def update(self, discovered: object) -> None:
         """Record the scalars for a `chain_search.recompute` result.
@@ -87,8 +95,8 @@ class ChainScalars:
         * empty because the world was never explored
           (``REASON_NO_WORLD_MODEL``) -> not seen. There was no map to search.
         * empty for any other reason -> **seen, zero.** Sectors were known and
-          searched; "none yet" is the true statement.
-        * non-empty -> seen, ``len(chains[0].hops)``.
+          searched; "none yet" is the true statement. Clears ``best_chain``.
+        * non-empty -> seen, ``len(chains[0].hops)``, retain ``chains[0]``.
         """
         try:
             chains = getattr(discovered, "chains", None)
@@ -102,6 +110,8 @@ class ChainScalars:
                 self._hops = 0
                 self._unit = "hops"
                 self._seen = True
+                self._best_chain = None
+                self._port_classes = {}
                 return
             hops, unit = chain_hop_count_and_unit(chains[0])
         except Exception:  # noqa: BLE001 -- a hostile shape is an unknown, not a crash
@@ -111,10 +121,21 @@ class ChainScalars:
         self._hops = hops
         self._unit = unit if isinstance(unit, str) and unit else "hops"
         self._seen = True
+        self._best_chain = chains[0]
 
     @property
     def seen(self) -> bool:
         return self._seen
+
+    @property
+    def best_chain(self) -> object | None:
+        """Ranked-first discovered chain for bubble viz; never on status JSON."""
+        return self._best_chain
+
+    @property
+    def port_classes(self) -> dict[int, str]:
+        """Sector → class cache for bubble labels (may be empty)."""
+        return dict(self._port_classes)
 
     def merge(self, status: object) -> dict | None:
         """``status`` with the cached scalars added; never mutates the input.

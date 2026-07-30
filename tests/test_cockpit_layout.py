@@ -13,6 +13,7 @@ import itertools
 import pytest
 
 from tw2002_aiclient.cockpit.layout import (
+    CHAIN_VIZ_H,
     FULL_GUTTER_MIN_COLS,
     GAME_H,
     GAME_W,
@@ -38,6 +39,7 @@ _REGION_KEYS = (
     "goals",
     "left_gutter",
     "center",
+    "chain",
     "right_gutter",
     "decisions",
     "logs",
@@ -765,3 +767,35 @@ def test_pwo039_five_boundary_fold_ladder_sweep():
     assert below["mode"] == "too_small"
     for key in ("goals", "left_gutter", "right_gutter", "decisions", "control_strip"):
         assert below[key] is None
+
+
+# -- WO-PLAY-CHAIN-BUBBLE-VIZ --------------------------------------------
+
+
+def test_chain_region_folds_until_five_spare_rows_under_full_viewport():
+    """Never shrink the 80×25 viewport; fold chain until column_h allows it."""
+    short = frame_layout(34, 160)
+    assert short["center"]["h"] == VIEWPORT_H
+    assert short["center"]["border"] is True
+    assert short["chain"] is None
+
+    tall = frame_layout(40, 160)
+    assert tall["center"]["h"] == VIEWPORT_H
+    assert tall["center"]["border"] is True
+    chain = tall["chain"]
+    assert chain is not None
+    assert chain["h"] == CHAIN_VIZ_H
+    assert chain["y"] == tall["center"]["y"] + tall["center"]["h"]
+    assert chain["x"] == tall["center"]["x"]
+    assert chain["w"] == tall["center"]["w"]
+    # No overlap with logs / control strip.
+    assert chain["y"] + chain["h"] <= tall["logs"]["y"]
+
+
+def test_chain_region_never_steals_viewport_height():
+    for lines in (34, 35, 36, 37, 38, 39, 40):
+        regions = frame_layout(lines, 160)
+        if regions["center"] is not None and regions["center"]["border"]:
+            # When chain appears, center stays at VIEWPORT_H.
+            if regions["chain"] is not None:
+                assert regions["center"]["h"] == VIEWPORT_H
