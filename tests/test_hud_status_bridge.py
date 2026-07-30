@@ -412,8 +412,8 @@ def test_ship_info_live_capture_fills_status_and_hud_through_real_session(
     session, monkeypatch
 ):
     """Same Session + `_status_response` path as the rest of this file —
-    top-level turns_left and hud.turns both 25000; sector/credits from the
-    capture's positive statements."""
+    all five HUD cells come from the capture's positive statements plus the
+    session-profit baseline."""
     rows = _ship_info_rows()
     resp = _status(session, monkeypatch, *rows)
     assert resp["turns_left"] == 25000
@@ -421,6 +421,8 @@ def test_ship_info_live_capture_fills_status_and_hud_through_real_session(
     assert math.isfinite(resp["hud"]["turns"]["age_s"])
     assert resp["hud"]["sector"]["value"] == 15450
     assert resp["hud"]["credits"]["value"] == 100000
+    assert resp["hud"]["cargo"]["value"] == 60
+    assert resp["hud"]["profit"]["value"] == 0
 
 
 # ===========================================================================
