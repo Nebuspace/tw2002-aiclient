@@ -62,6 +62,7 @@ CANON_CATALOG = {
     "turns_unknown": "turns unknown",
     "turns_stale": "turns stale",
     "turns_unreadable": "turns unreadable",
+    "fighters_zero": "fighters zero",
 }
 
 WIDE = 120

@@ -249,14 +249,25 @@ answered with something that is not a :class:`~tw2002_aiclient.session.state_par
 (``turn_budget_exhausted``). A run with no ``turn_budget`` never calls
 :meth:`ReplaySession.turns`.
 
+The hazard-halt rail (WO-AUTOLOOP-HAZARD-HALT) -- always on
+-----------------------------------------------------------
+Always checked at every boundary (not an optional arm flag). Three shapes:
+
+* ``game_select`` classification → ``autopilot_game_select``
+* known fighters aboard == 0 → ``fighters_zero``
+* settle never-safe → already ``settle_failed`` / ``confirm_failed``
+  (those codes *are* the settle-desync half of this rail)
+
+Unknown fighters do **not** halt -- only a confirmed zero does. A port
+without :meth:`ReplaySession.fighters` skips the zero check (capture is
+best-effort); game_select and settle halves still fire.
+
 What this slice is NOT
 ----------------------
 There is still no cycle count and no repetition here, and that is a
-boundary, not an omission. ``scope: repeating`` is driven by the run-loop,
-which owns the remaining rail -- hazard-halt
-(``action-safety-guards.md`` §"Structural rails", ``app-autopilot-model.md`` §"Background AUTO-LOOP Posture"). A
-``cycles=N`` parameter here would ship the repetition without them, which
-is the dangerous half on its own. A caller that wants N cycles calls this N
+boundary, not an omission. With all four rails built, unlocking
+``cycles`` / ``scope: repeating`` is a *follow-on* WO -- this module still
+refuses a ``cycles`` parameter. A caller that wants N cycles calls this N
 times and gets canon's per-cycle start-anchor re-check for free, exactly as
 the archived ``play_skill`` got it from ``replay_skill``.
 
@@ -279,6 +290,7 @@ from ..session.state_parser import (
     OUTCOME_READ,
     OUTCOME_UNREADABLE,
     CreditsSnapshot,
+    FightersSnapshot,
     SectorRead,
     TurnsSnapshot,
     read_current_sector,
@@ -297,6 +309,8 @@ __all__ = [
     "HALT_CURRENT_SECTOR_UNREADABLE",
     "HALT_FENCED",
     "HALT_FLOOR_REACHED",
+    "HALT_HAZARD_GAME_SELECT",
+    "HALT_HAZARD_ZERO_FIGHTERS",
     "HALT_NEVER_AUTO_ACTION",
     "HALT_POST_CLASS",
     "HALT_REASONS",
@@ -404,6 +418,11 @@ HALT_TURNS_STALE = "turns_stale"
 # desync -- the port answered turns() with something that is not a
 # TurnsSnapshot (adapter fault; never truthiness-tested).
 HALT_TURNS_UNREADABLE = "turns_unreadable"
+# hazard -- classified game_select; human owns the door letter. Catalog
+# spelling from control-and-escalation.md, carried verbatim.
+HALT_HAZARD_GAME_SELECT = "autopilot_game_select"
+# hazard -- fighters aboard known and exactly zero (WO-AUTOLOOP-HAZARD-HALT).
+HALT_HAZARD_ZERO_FIGHTERS = "fighters_zero"
 
 HALT_REASONS = frozenset({
     HALT_SETTLE_FAILED,
@@ -426,6 +445,8 @@ HALT_REASONS = frozenset({
     HALT_TURNS_UNKNOWN,
     HALT_TURNS_STALE,
     HALT_TURNS_UNREADABLE,
+    HALT_HAZARD_GAME_SELECT,
+    HALT_HAZARD_ZERO_FIGHTERS,
 })
 
 # How old a balance may be and still gate a send. AP-13's number
@@ -661,6 +682,14 @@ class ReplaySession(Protocol):
         (:data:`HALT_TURNS_UNREADABLE`). An adapter over the daemon core
         implements this with ``Session.turns_snapshot()``."""
 
+    def fighters(self) -> FightersSnapshot:
+        """Fighters aboard RIGHT NOW, as a
+        :class:`~tw2002_aiclient.session.state_parser.FightersSnapshot`.
+
+        Optional on ports that predate the hazard rail; when present, a
+        confirmed zero halts ``fighters_zero``. Return the snapshot object,
+        never a bare int."""
+
 
 # ---------------------------------------------------------------------------
 # What a caller gets back
@@ -774,6 +803,10 @@ class _Observation:
     when a floor was requested.
 
     ``turns`` follows the same contract for the turn-budget rail.
+
+    ``fighters`` is captured whenever the port answers ``fighters()`` --
+    the hazard-halt zero-fighter check reads it. ``None`` means the port
+    has no fighters method (skip that half), not "zero aboard".
     """
 
     klass: Optional[str] = None
@@ -783,6 +816,7 @@ class _Observation:
     failure: Optional[str] = None
     credits: object = None
     turns: object = None
+    fighters: object = None
 
 
 def _is_screen(value) -> bool:
@@ -834,6 +868,9 @@ def _observe(session, *, want_credits: bool = False, want_turns: bool = False) -
     # working on an unfloored run. Same rule for turns / turn_budget.
     credits = session.credits() if want_credits else None
     turns = session.turns() if want_turns else None
+    # Hazard rail: fighters are best-effort. A port without fighters()
+    # skips the zero-fighter half; game_select + settle still fire.
+    fighters = session.fighters() if callable(getattr(session, "fighters", None)) else None
     return _Observation(
         klass=classify_screen(full_text, prompt_line),
         sector=read_current_sector(prompt_line),
@@ -841,6 +878,7 @@ def _observe(session, *, want_credits: bool = False, want_turns: bool = False) -
         aborted=bool(session.should_abort()),
         credits=credits,
         turns=turns,
+        fighters=fighters,
     )
 
 
@@ -988,6 +1026,23 @@ def _check_turn_budget(turns, turn_budget: Optional[int], stale_ms: int) -> Opti
     # Strictly above, matching the credit floor: a budget of 50 means
     # "stop at 50 remaining", not "stop below 50".
     return None if remaining > turn_budget else HALT_TURN_BUDGET_EXHAUSTED
+
+
+def _check_hazard(observation) -> Optional[str]:
+    """Hazard-halt rail (WO-AUTOLOOP-HAZARD-HALT). ``None`` means proceed.
+
+    Always-on at every boundary after :func:`_gate`. Settle never-safe is
+    already expressed as ``settle_failed`` / ``confirm_failed`` on other
+    paths; this function covers game-select and confirmed zero fighters.
+    """
+    if observation.klass == "game_select":
+        return HALT_HAZARD_GAME_SELECT
+    fighters = observation.fighters
+    if isinstance(fighters, FightersSnapshot) and fighters.outcome == OUTCOME_READ:
+        count = fighters.fighters
+        if isinstance(count, int) and not isinstance(count, bool) and count == 0:
+            return HALT_HAZARD_ZERO_FIGHTERS
+    return None
 
 
 def _check_start_anchor(loop: Loop, read: Optional[SectorRead], force: bool) -> Optional[str]:
@@ -1191,6 +1246,8 @@ def replay_loop(
     anchor_read = observation.sector
     reason = _gate(observation)
     if reason is None:
+        reason = _check_hazard(observation)
+    if reason is None:
         # The floor sits between the gate and the anchor, and the placement
         # is a REPORTING choice like every other order in this ladder: the
         # gate's facts (a human at the keyboard, a screen that could not be
@@ -1233,6 +1290,8 @@ def replay_loop(
 
         observation = _observe(session, want_credits=want_credits, want_turns=want_turns)
         reason = _gate(observation)
+        if reason is None:
+            reason = _check_hazard(observation)
         if reason is None:
             # Re-checked here, not only at boundary 0, and this call is the
             # difference between a stop-loss and a decoration: a taught macro

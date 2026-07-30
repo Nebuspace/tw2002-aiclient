@@ -630,9 +630,9 @@ def _dispatch_autoloop_start(args, server):
 
     **Unsupported args are REFUSED, not ignored** (`autoloop.
     ARGS_AUTOLOOP_START`). `cycles` is the one that matters: this slice
-    plays one pass, and hazard-halt -- the remaining rail that makes
-    repetition safe -- is still not built (see `autoloop.py`'s "One pass"
-    for the standing tally; turn-budget landed in WO-AUTOLOOP-TURN-BUDGET).
+    plays one pass. All four rails are built (hazard-halt in WO-AUTOLOOP-
+    HAZARD-HALT); `cycles` remains refused until a dedicated unlock WO
+    (see `autoloop.py`'s "One pass").
     Accepting `cycles=10` and running once would be a surface agreeing to
     something it does not do. `force` is refused for a different reason: it
     waives a MISSING start-anchor, canon allows only an explicit human

@@ -28,11 +28,14 @@ from .settle import MATCH_SCOPE_SCREEN, wait_for_settle
 from .state_parser import (
     OUTCOME_READ,
     CreditsSnapshot,
+    FightersSnapshot,
     SectorSnapshot,
     TurnsSnapshot,
     credits_never_observed,
+    fighters_never_observed,
     read_credits_balance,
     read_current_sector,
+    read_fighters_aboard,
     read_turns_left,
     read_turns_left_from_screen,
     sector_never_observed,
@@ -175,6 +178,12 @@ class Session:
         # reached ZERO must not look alike to the HUD.
         self.last_turns = None
         self.last_turns_ts = None
+        # WO-AUTOLOOP-HAZARD-HALT: fighters aboard for the zero-fighter rail.
+        # Same ownership as credits/turns -- observe_fighters / fighters_snapshot
+        # only; never cleared by a screen that states no count (zero and
+        # unknown must not look alike).
+        self.last_fighters = None
+        self.last_fighters_ts = None
         # WO-HUD-STATUS-BRIDGE: the sector the operator was last SHOWN, for
         # display only. Deliberately NOT `_last_sector` above -- that one is
         # epoch-invalidated so a world-model write can never land against a
@@ -568,6 +577,33 @@ class Session:
             return TurnsSnapshot(
                 outcome=OUTCOME_READ,
                 turns=turns,
+                age_s=max(0.0, time.monotonic() - ts),
+            )
+
+    def observe_fighters(self, rendered_text):
+        """Capture fighters aboard off a settled screen, if this one states them.
+
+        Non-clobber, capture-only — same contract as ``observe_credits``.
+        Uses ``read_fighters_aboard`` (ship-info shape only; encounter toll
+        lines are refused by construction).
+        """
+        read = read_fighters_aboard(rendered_text)
+        if read.outcome != OUTCOME_READ:
+            return
+        with self.lock:
+            self.last_fighters = read.fighters
+            self.last_fighters_ts = time.monotonic()
+
+    def fighters_snapshot(self):
+        """What this session knows about fighters aboard right now."""
+        with self.lock:
+            fighters = self.last_fighters
+            ts = self.last_fighters_ts
+            if fighters is None or ts is None:
+                return fighters_never_observed()
+            return FightersSnapshot(
+                outcome=OUTCOME_READ,
+                fighters=fighters,
                 age_s=max(0.0, time.monotonic() - ts),
             )
 

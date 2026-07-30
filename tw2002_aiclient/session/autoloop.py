@@ -142,16 +142,16 @@ is one rail and not the set. Standing today:
   floor, observed via ``Session.turns_snapshot`` / ``observe_turns``,
   re-checked at every player boundary, fail-closed on unknown/stale/
   unreadable, refuse at arm when the session cannot observe turns.
-* **hazard-halt** -- NOT built. Zero-fighter state, an unrecoverable
-  game-select, and a never-safe-to-proceed settle-desync are all
-  unimplemented.
+* **hazard-halt** -- built (WO-AUTOLOOP-HAZARD-HALT): ``game_select`` →
+  ``autopilot_game_select``; known fighters aboard == 0 → ``fighters_zero``;
+  settle never-safe remains ``settle_failed`` / ``confirm_failed``.
 
-Three of four is still not the full set; shipping N cycles on it would
-ship the dangerous half of repetition just as surely as shipping it on
-none. When hazard-halt lands, N cycles is N invocations of
+All four rails are built. Shipping N cycles is still a *follow-on* -- this
+module continues to refuse a ``cycles`` parameter until a dedicated unlock
+WO lands with pins. When that lands, N cycles is N invocations of
 ``replay_loop`` and gets canon's per-cycle start-anchor re-check for free
--- which is precisely why X3 refused a ``cycles`` parameter and why this
-module does not smuggle one in as a ``for`` loop.
+-- which is precisely why this module does not smuggle one in as a
+``for`` loop.
 
 The consequence for the wire is stated rather than hidden: ``cycles``,
 ``force`` and ``param`` are **refused**, not ignored. A caller that asks
@@ -605,6 +605,9 @@ class _ReplayPort:
         observe_turns = getattr(self._session, "observe_turns", None)
         if callable(observe_turns):
             observe_turns(text, prompt)
+        observe_fighters = getattr(self._session, "observe_fighters", None)
+        if callable(observe_fighters):
+            observe_fighters(text)
         return text, prompt
 
     def credits(self) -> object:
@@ -631,6 +634,18 @@ class _ReplayPort:
         same reason: a budgeted run was already refused at arm if this
         session cannot answer."""
         return self._session.turns_snapshot()
+
+    def fighters(self) -> object:
+        """The session's sticky fighters-aboard count, forwarded WHOLE.
+
+        Sessions that predate observe_fighters answer ``absent`` rather than
+        raising -- unknown fighters must not crash a run (only a confirmed
+        zero is a hazard halt)."""
+        snap = getattr(self._session, "fighters_snapshot", None)
+        if not callable(snap):
+            from ..session.state_parser import fighters_never_observed
+            return fighters_never_observed()
+        return snap()
 
     def send_and_confirm(self, keystrokes: str, wait_prompt: Optional[str]) -> bool:
         """THE wire call. Returns the third element of the settle layer's
