@@ -43,7 +43,7 @@ from tw2002_aiclient.rules.reflex import propose_macro
 from tw2002_aiclient.rules.store import drafts_dir, read_rule_store
 from tw2002_aiclient.rules.writer import RuleWriteError, promote_draft, write_draft
 
-HUMAN = {"rule_id": "dock-when-idle", "do": "dock", "priority": 10}
+HUMAN = {"rule_id": "dock-when-idle", "do": "dock", "priority": 10, "scope": "one-shot"}
 
 
 # ---------------------------------------------------------------------------

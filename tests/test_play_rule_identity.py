@@ -1,8 +1,10 @@
-"""WO-PLAY-RULE-IDENTITY — Play typed entry for rule_id / do / priority.
+"""WO-PLAY-RULE-IDENTITY / WO-PLAY-RULE-SCOPE — Play typed entry for
+rule_id / do / priority / scope.
 
-After Analyze `y`, the operator types three fields on the control strip
-(Enter advances; Esc cancels). Only a complete triple reaches
-``write_draft`` → ``promote_draft``. No minted defaults.
+After Analyze `y`, the operator types four fields on the control strip
+(Enter advances; Esc cancels). Only a complete quadruple reaches
+``write_draft`` → ``promote_draft``. No minted defaults — including
+``scope`` (never a silent one-shot).
 """
 
 from __future__ import annotations
@@ -52,6 +54,29 @@ def test_non_int_priority_refuses():
     assert "priority" not in session.get("values", {})
 
 
+def test_blank_scope_refuses():
+    session = draft_approve.create_identity_session(
+        draft_approve.create_analyze_draft("main_command")
+    )
+    assert _type_field(session, "r") == draft_approve.CONTINUE
+    assert _type_field(session, "d") == draft_approve.CONTINUE
+    assert _type_field(session, "1") == draft_approve.CONTINUE
+    assert _type_field(session, "") == draft_approve.REFUSE
+    assert "scope" in (session.get("refuse_reason") or "")
+
+
+def test_unknown_scope_refuses():
+    session = draft_approve.create_identity_session(
+        draft_approve.create_analyze_draft("main_command")
+    )
+    assert _type_field(session, "r") == draft_approve.CONTINUE
+    assert _type_field(session, "d") == draft_approve.CONTINUE
+    assert _type_field(session, "1") == draft_approve.CONTINUE
+    assert _type_field(session, "always") == draft_approve.REFUSE
+    assert "one-shot" in (session.get("refuse_reason") or "")
+    assert "scope" not in session.get("values", {})
+
+
 def test_esc_cancels_with_nothing_written(tmp_path):
     session = draft_approve.create_identity_session(
         draft_approve.create_analyze_draft("main_command")
@@ -67,14 +92,17 @@ def test_complete_fields_bridge_write_promote_and_reflex_sees_it(tmp_path):
     session = draft_approve.create_identity_session(stub)
     assert _type_field(session, "dock-when-idle") == draft_approve.CONTINUE
     assert _type_field(session, "dock") == draft_approve.CONTINUE
-    assert _type_field(session, "10") == draft_approve.COMPLETE
+    assert _type_field(session, "10") == draft_approve.CONTINUE
+    assert _type_field(session, "repeating") == draft_approve.COMPLETE
 
     values = session["values"]
+    assert values["scope"] == "repeating"
     document = draft_approve.bridge_to_kernel_document(
         stub,
         rule_id=values["rule_id"],
         do=values["do"],
         priority=values["priority"],
+        scope=values["scope"],
     )
     from tw2002_aiclient.rules.writer import promote_draft, write_draft
 
@@ -83,6 +111,7 @@ def test_complete_fields_bridge_write_promote_and_reflex_sees_it(tmp_path):
 
     payload = json.loads(path.read_text(encoding="utf-8"))
     assert payload["approved"] is True
+    assert payload["scope"] == "repeating"
     assert path.parent == rules_dir(tmp_path)
     after = propose_macro("main_command", {}, state_dir=tmp_path)
     assert after.macro == "dock"
@@ -108,11 +137,15 @@ def test_play_screen_routes_y_then_typed_entry():
     assert play.handle_key(10) is None  # advance to priority
     for ch in "3":
         assert play.handle_key(ord(ch)) is None
+    assert play.handle_key(10) is None  # advance to scope
+    for ch in "one-shot":
+        assert play.handle_key(ord(ch)) is None
     assert play.handle_key(10) == "rule_identity"
     assert play._rule_identity["values"] == {
         "rule_id": "r1",
         "do": "m1",
         "priority": 3,
+        "scope": "one-shot",
     }
 
 
@@ -126,10 +159,14 @@ def test_play_screen_esc_cancels_identity():
 
 
 def test_blessed_status_line_names_rule_and_v():
-    line = draft_approve.compose_rule_blessed_line("dock-when-idle", "dock")
+    line = draft_approve.compose_rule_blessed_line(
+        "dock-when-idle", "dock", "repeating",
+    )
     assert "dock-when-idle" in line
     assert "dock" in line
+    assert "repeating" in line
     assert "V can propose" in line
+    assert "one-pass" in line
 
 
 def _run_play_calls() -> set:

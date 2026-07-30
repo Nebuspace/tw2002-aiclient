@@ -584,7 +584,7 @@ def test_the_bridged_analyze_draft_round_trips_into_the_rule_store(tmp_path):
 
     stub = create_analyze_draft("command_prompt")
     document = bridge_to_kernel_document(
-        stub, rule_id="dock-when-idle", do="dock", priority=10
+        stub, rule_id="dock-when-idle", do="dock", priority=10, scope="one-shot"
     )
 
     # Crossed, and inert on arrival.

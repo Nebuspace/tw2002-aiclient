@@ -48,13 +48,19 @@ COMPLETE = "complete"
 REFUSE = "refuse"
 
 #: Fields a human must supply; the teacher cannot know any of them.
-HUMAN_SUPPLIED_FIELDS = ("rule_id", "do", "priority")
+HUMAN_SUPPLIED_FIELDS = ("rule_id", "do", "priority", "scope")
+
+#: Literal scope spellings — same set the kernel admits (no aliases).
+SCOPE_ONE_SHOT = "one-shot"
+SCOPE_REPEATING = "repeating"
+_SCOPES = frozenset({SCOPE_ONE_SHOT, SCOPE_REPEATING})
 
 #: Control-strip labels — never look like filled-in suggestions.
 _IDENTITY_LABELS = {
     "rule_id": "rule id",
     "do": "macro (do)",
     "priority": "priority (int)",
+    "scope": "scope (one-shot|repeating)",
 }
 
 # Enter / backspace without importing curses (screens may also pass KEY_*).
@@ -106,7 +112,7 @@ def bridge_to_kernel_document(
     rule_id: object,
     do: object,
     priority: object,
-    scope: object = None,
+    scope: object,
 ) -> dict:
     """Translate an analyze *stub* into a kernel rule document. **Pure.**
 
@@ -118,11 +124,13 @@ def bridge_to_kernel_document(
     "what can create a rule" and "what can bless one" keep their single
     answers.
 
-    **Refuses rather than invents.** ``rule_id``, ``do`` and ``priority`` are
-    keyword-only and have **no defaults** -- omitting one is a ``TypeError``
-    from Python itself, before any of this code runs, which is a stronger
-    guarantee than a check I could later be argued out of. Supplying one as
-    ``None`` or empty raises :class:`DraftBridgeError`.
+    **Refuses rather than invents.** ``rule_id``, ``do``, ``priority`` and
+    ``scope`` are keyword-only and have **no defaults** -- omitting one is a
+    ``TypeError`` from Python itself, before any of this code runs, which is a
+    stronger guarantee than a check I could later be argued out of. Supplying
+    one as ``None`` or empty raises :class:`DraftBridgeError`. ``scope`` must
+    be the literal ``one-shot`` or ``repeating`` — the kernel's silent
+    one-shot default is exactly what Play identity exists to close.
 
     How much of this check is load-bearing -- measured, not assumed
     ---------------------------------------------------------------------
@@ -151,7 +159,12 @@ def bridge_to_kernel_document(
         )
 
     missing = []
-    for name, value in (("rule_id", rule_id), ("do", do), ("priority", priority)):
+    for name, value in (
+        ("rule_id", rule_id),
+        ("do", do),
+        ("priority", priority),
+        ("scope", scope),
+    ):
         if value is None or (isinstance(value, str) and not value.strip()):
             missing.append(name)
     if missing:
@@ -159,7 +172,12 @@ def bridge_to_kernel_document(
             "a human must supply "
             + ", ".join(missing)
             + " -- these are never defaulted (a minted priority would collide "
-            "every rule into autopilot_ambiguous_rules)"
+            "every rule into autopilot_ambiguous_rules; a minted scope would "
+            "silently one-shot every rule)"
+        )
+    if scope not in _SCOPES:
+        raise DraftBridgeError(
+            "scope must be one-shot or repeating — never defaulted"
         )
 
     when = stub.get("when") if isinstance(stub, Mapping) else None
@@ -170,6 +188,7 @@ def bridge_to_kernel_document(
         "screen_match": screen,
         "do": do,
         "priority": priority,
+        "scope": scope,
         # Always False, and there is no parameter to ask otherwise -- same
         # shape as `write_draft`. Blessing lives in `promote_draft` alone.
         "approved": False,
@@ -180,8 +199,6 @@ def bridge_to_kernel_document(
         # that ever appears must be judged by the kernel's parser, not
         # translated by a second opinion here.
         document["guards"] = guards
-    if scope is not None:
-        document["scope"] = scope
     return document
 
 
@@ -268,11 +285,23 @@ def compose_identity_prompt(session: object = None, *, unicode_ok: object = True
     return f"Rule identity — {base}  (Enter next · Esc cancel)"
 
 
-def compose_rule_blessed_line(rule_id: object = None, do: object = None) -> str:
-    """Status after a successful write+promote — names the rule and points at V."""
+def compose_rule_blessed_line(
+    rule_id: object = None,
+    do: object = None,
+    scope: object = None,
+) -> str:
+    """Status after a successful write+promote — names the rule and points at V.
+
+    Discloses that arm remains one-pass even when ``scope`` is ``repeating``
+    (the cycles run-loop is a separate WO).
+    """
     rid = rule_id if isinstance(rule_id, str) and rule_id.strip() else "?"
     macro = do if isinstance(do, str) and do.strip() else "?"
-    return f"rule blessed — {rid} does {macro}; V can propose it"
+    sc = scope if isinstance(scope, str) and scope.strip() else "?"
+    return (
+        f"rule blessed — {rid} does {macro} [{sc}]; "
+        f"V can propose it (arm still one-pass)"
+    )
 
 
 def _commit_identity_field(session: dict) -> str:
@@ -295,6 +324,13 @@ def _commit_identity_field(session: dict) -> str:
         except ValueError:
             session["refuse_reason"] = "priority must be an int"
             return REFUSE
+    elif field == "scope":
+        if raw not in _SCOPES:
+            session["refuse_reason"] = (
+                "scope must be one-shot or repeating — never defaulted"
+            )
+            return REFUSE
+        value = raw
     else:
         value = raw
 
@@ -316,9 +352,9 @@ def _commit_identity_field(session: dict) -> str:
 def resolve_identity_key(session: object, key: object) -> str:
     """Drive the identity session. Mutates ``session``. Never raises.
 
-    ``COMPLETE`` — all three fields committed (read ``session['values']``).
+    ``COMPLETE`` — all four fields committed (read ``session['values']``).
     ``CANCEL`` — Esc / non-int keycodes that are not editing keys.
-    ``REFUSE`` — Enter with a blank / non-int field (stay on the field).
+    ``REFUSE`` — Enter with a blank / invalid field (stay on the field).
     ``CONTINUE`` — buffer changed or advanced to the next field.
     """
     if not isinstance(session, dict):
