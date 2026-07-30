@@ -43,8 +43,10 @@ doubles are local to this module, per the convention
 `test_ensure_login_error_redaction.py` states.
 """
 
+import hashlib
 import math
 import re
+from pathlib import Path
 
 import pytest
 
@@ -66,6 +68,12 @@ WO_ACCEPT_EXAMPLE = "Command [TL=00753:0/0/0/850]:[21068] (?=Help)? :"
 
 LIVE_NARRATIVE = "One turn deducted, 29990 turns left."
 SHIP_INFO_LABEL = "Turns left     : 850"
+
+# WO-HUD-I-LIVE-FIXTURE: byte-identical #226 live `I` capture.
+_SHIP_INFO_FIXTURE = Path("tests/fixtures/ship_info_screen.txt")
+_SHIP_INFO_SHA256 = (
+    "5fa6cfb3aaf7989e0c94c7fcb27d028366b9643f109ab7765c566c9f5ef9c867"
+)
 
 
 class _Server:
@@ -353,6 +361,66 @@ def test_the_classic_fixture_is_the_mirror_image():
     prompt = [line.strip() for line in text.splitlines() if line.strip()][-1]
     assert sp.read_turns_left(prompt).outcome == sp.OUTCOME_READ
     assert sp.read_turns_left_from_screen(text).outcome == sp.OUTCOME_ABSENT
+
+
+# ===========================================================================
+# WO-HUD-I-LIVE-FIXTURE — exact live `I` capture, not a hand-typed label
+# ===========================================================================
+
+
+def _ship_info_raw() -> bytes:
+    return _SHIP_INFO_FIXTURE.read_bytes()
+
+
+def _ship_info_rows() -> list[str]:
+    """Exact capture lines (trailing spaces preserved)."""
+    return _ship_info_raw().decode("utf-8").splitlines()
+
+
+def test_ship_info_fixture_is_byte_identical_to_the_live_capture():
+    """Provenance pin: the fixture is the #226 capture, not a redraw."""
+    raw = _ship_info_raw()
+    assert len(raw) == 1525
+    assert hashlib.sha256(raw).hexdigest() == _SHIP_INFO_SHA256
+    text = raw.decode("utf-8")
+    assert "Turns left     : 25000" in text
+    assert "Command [TL=07:57:48]:[15450]" in text
+    assert "Current Sector : 15450" in text
+    assert "Credits        : 100,000" in text
+
+
+def test_ship_info_live_capture_fills_turns_from_the_label_not_the_countdown():
+    """The load-bearing live dialect on the `I` screen: countdown prompt is
+    absent (never a forged zero); the body label is SOURCE_TURNS_LEFT_LABEL."""
+    rows = _ship_info_rows()
+    text = "\n".join(rows)
+    prompt = rows[-1].strip()
+    assert prompt.startswith("Command [TL="), prompt
+
+    prompt_read = sp.read_turns_left(prompt)
+    assert prompt_read.outcome == sp.OUTCOME_ABSENT
+    assert prompt_read.turns is None
+    assert prompt_read.turns != 0
+
+    body = sp.read_turns_left_from_screen(text)
+    assert body.outcome == sp.OUTCOME_READ
+    assert body.turns == 25000
+    assert body.source == sp.SOURCE_TURNS_LEFT_LABEL
+
+
+def test_ship_info_live_capture_fills_status_and_hud_through_real_session(
+    session, monkeypatch
+):
+    """Same Session + `_status_response` path as the rest of this file —
+    top-level turns_left and hud.turns both 25000; sector/credits from the
+    capture's positive statements."""
+    rows = _ship_info_rows()
+    resp = _status(session, monkeypatch, *rows)
+    assert resp["turns_left"] == 25000
+    assert resp["hud"]["turns"]["value"] == 25000
+    assert math.isfinite(resp["hud"]["turns"]["age_s"])
+    assert resp["hud"]["sector"]["value"] == 15450
+    assert resp["hud"]["credits"]["value"] == 100000
 
 
 # ===========================================================================
