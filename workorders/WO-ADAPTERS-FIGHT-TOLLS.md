@@ -1,6 +1,6 @@
 # WO-ADAPTERS-FIGHT-TOLLS — Forward fight_tolls through adapters (Play path)
 
-**Status:** OPEN · EXECUTE · HIGH · automation morning bar
+**Status:** DONE · origin `f8400e8` (#211) · Accept verified 2026-07-30
 **Posted:** 2026-07-29T03:02Z · Max: meaningful client automation by morning
 **Seat:** Claude Code (impl-claudecode-aiclient) after #209 MERGED
 **Depends:** #209 / wo/FIGHTER-TOLL-POLICY-WIRE on main (CLI+daemon already have the flag)

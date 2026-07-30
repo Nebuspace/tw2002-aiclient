@@ -1,6 +1,6 @@
 # WO-PLAY-REFLEX-AFFORDANCE — advertise Play `V` reflex in the calm teach band
 
-**Status:** OPEN · EXECUTE · HIGH · visible client automation · Cursor-only  
+**Status:** DONE · origin `fd24246` (#236) · Accept verified 2026-07-30
 **Posted / seeded:** 2026-07-30T04:03Z · hub (follow-on #235)  
 **Seat:** `impl-aiclient-cursor`  
 **Depends:** `main` ≥ `73c5b1c` (`WO-PLAY-REFLEX-ARM` — `V` wired)  

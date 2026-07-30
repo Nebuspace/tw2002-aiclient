@@ -1,6 +1,6 @@
 # WO-EXPLORE-DOCK-DIALECT — Recognize dock UI so commodities ingest completes
 
-**Status:** OPEN · EXECUTE · HIGH · automation morning bar
+**Status:** DONE · origin `f8400e8` (#211) · Accept verified 2026-07-30
 **Posted:** 2026-07-29T03:02Z · Max: meaningful client automation by morning
 **Seat:** open (CC preferred offline; Cursor live)
 **Depends:** #205 dock path on main (fail-closed dock_screen_unrecognized) · salvage under .samantha/audit/dock-post-P-capture-20260729T0017Z/
