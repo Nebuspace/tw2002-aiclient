@@ -69,6 +69,81 @@ def test_composer_from_run_rejects_unknown_intent():
     assert explore.explore_decision_lines_from_run(None) is None
 
 
+def test_composer_appends_dock_and_tolls_markers():
+    from tw2002_aiclient.cockpit import explore_flags
+
+    both = explore.explore_decision_lines_from_run(
+        {
+            "intent": explore.INTENT_MAP_FILL,
+            "next_sector": 3,
+            "dock_new_ports": True,
+            "fight_tolls": True,
+        }
+    )
+    assert both is not None
+    assert both[-1] == f"{explore_flags.DOCK_MARKER} {explore_flags.TOLLS_MARKER}"
+
+    dock_only = explore.explore_decision_lines_from_run(
+        {
+            "intent": explore.INTENT_MAP_FILL,
+            "next_sector": 3,
+            "dock_new_ports": True,
+            "fight_tolls": False,
+        }
+    )
+    assert dock_only is not None
+    assert dock_only[-1] == explore_flags.DOCK_MARKER
+    assert explore_flags.TOLLS_MARKER not in dock_only[-1]
+
+
+def test_composer_dock_off_is_stated_not_silent():
+    from tw2002_aiclient.cockpit import explore_flags
+
+    lines = explore.explore_decision_lines_from_run(
+        {
+            "intent": explore.INTENT_FIND_STARDOCK,
+            "next_sector": None,
+            "dock_new_ports": False,
+            "fight_tolls": False,
+        }
+    )
+    assert lines is not None
+    assert lines[-1] == explore_flags.DOCK_OFF_MARKER
+    assert explore_flags.DOCK_MARKER not in lines[-1]
+    assert explore_flags.TOLLS_MARKER not in lines[-1]
+
+
+def test_composer_omits_flags_line_when_keys_absent():
+    """No invented +dock when the wire never named the arm state."""
+    from tw2002_aiclient.cockpit import explore_flags
+
+    lines = explore.explore_decision_lines_from_run(
+        {"intent": explore.INTENT_MAP_FILL, "next_sector": 1}
+    )
+    assert lines is not None
+    joined = " ".join(lines)
+    assert explore_flags.DOCK_MARKER not in joined
+    assert explore_flags.DOCK_OFF_MARKER not in joined
+    assert explore_flags.TOLLS_MARKER not in joined
+
+
+def test_composer_non_bool_flags_do_not_invent_markers():
+    from tw2002_aiclient.cockpit import explore_flags
+
+    lines = explore.explore_decision_lines_from_run(
+        {
+            "intent": explore.INTENT_MAP_FILL,
+            "next_sector": 1,
+            "dock_new_ports": "yes",
+            "fight_tolls": "no",
+        }
+    )
+    assert lines is not None
+    joined = " ".join(lines)
+    assert explore_flags.DOCK_MARKER not in joined
+    assert explore_flags.TOLLS_MARKER not in joined
+
+
 def test_compose_decisions_prefers_explore_overlay():
     status = {
         explore.EXPLORE_DECISION_LINES_KEY: ["MAP-FILL", "next →3", "(live)"],
