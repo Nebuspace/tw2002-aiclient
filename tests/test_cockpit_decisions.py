@@ -485,3 +485,32 @@ def test_live_trace_still_wins_over_depletion_coach(_fresh_coach_kb):
     lines = compose_decisions_lines(status, width=60)
     assert any("loop @1<->3" in ln for ln in lines)
     assert not any("Rotate before decay" in ln for ln in lines)
+
+
+# ---------------------------------------------------------------------------
+# WO-COACH-HAS-PORT — idle DECISIONS + status has_port merge
+# ---------------------------------------------------------------------------
+
+
+def test_has_port_true_renders_pair_trade_card(_fresh_coach_kb):
+    lines = compose_decisions_lines({"has_port": True}, width=60)
+    assert lines != _EMPTY_LINES
+    joined = "\n".join(lines)
+    assert "Pair trade loops" in joined
+
+
+@pytest.mark.parametrize(
+    "has_port",
+    [False, 1, "yes", "True", None],
+    ids=["false", "int-1", "yes", "str-True", "none"],
+)
+def test_has_port_non_identity_true_stays_honest_empty(has_port, _fresh_coach_kb):
+    status = {"has_port": has_port} if has_port is not None else {"has_port": None}
+    assert compose_decisions_lines(status, width=60) == _EMPTY_LINES
+
+
+def test_live_trace_still_wins_over_has_port_coach(_fresh_coach_kb):
+    status = {**_FULL_TRACE_STATUS, "has_port": True}
+    lines = compose_decisions_lines(status, width=60)
+    assert any("loop @1<->3" in ln for ln in lines)
+    assert not any("Pair trade loops" in ln for ln in lines)

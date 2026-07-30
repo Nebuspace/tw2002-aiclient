@@ -180,7 +180,14 @@ class LiveRefresh:
         # was wrong -- the guarantee is the unconditional stamp.
         self._last_world = t
         try:
-            play.world_stats.refresh(world_id)
+            status = None
+            provider = getattr(play, "status_provider", None)
+            if callable(provider):
+                try:
+                    status = provider()
+                except Exception:  # noqa: BLE001 — sector lookup is best-effort
+                    status = None
+            play.world_stats.refresh(world_id, status=status)
         except Exception:  # noqa: BLE001
             pass
 

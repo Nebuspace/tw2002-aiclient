@@ -623,8 +623,16 @@ def _poll_explore_status(play: PlayShellScreen, *, run_dir) -> bool:
         try:
             from tw2002_aiclient import world_identity as _world_identity
 
+            status = None
+            provider = getattr(play, "status_provider", None)
+            if callable(provider):
+                try:
+                    status = provider()
+                except Exception:  # noqa: BLE001
+                    status = None
             play.world_stats.refresh(
-                _world_identity.world_id_from_profile(play.profile)
+                _world_identity.world_id_from_profile(play.profile),
+                status=status,
             )
         except Exception:  # noqa: BLE001 — count is best-effort; keep the loop
             pass
@@ -1197,7 +1205,17 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                 # so that a broken finder does not also cost us the count, and
                 # so the existing expression's behaviour is untouched.
                 try:
-                    play.world_stats.refresh(_world_identity.world_id_from_profile(profile))
+                    status = None
+                    provider = getattr(play, "status_provider", None)
+                    if callable(provider):
+                        try:
+                            status = provider()
+                        except Exception:  # noqa: BLE001
+                            status = None
+                    play.world_stats.refresh(
+                        _world_identity.world_id_from_profile(profile),
+                        status=status,
+                    )
                 except Exception:  # noqa: BLE001
                     pass
                 try:
