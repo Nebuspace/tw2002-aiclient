@@ -273,12 +273,19 @@ def _drive_launcher_play_esc_in_pty(tmp_path: Path, timeout: float = 12.0) -> by
                     and "placeholder" not in text
                 ):
                     os.write(master_fd, b"q")
+                    # Whole-app quit may raise the daemon-stop confirm when a
+                    # daemon is held; default-No (Enter) always completes quit.
+                    time.sleep(0.15)
+                    try:
+                        os.write(master_fd, b"\n")
+                    except OSError:
+                        pass
                     phase = "done"
                     break
         if phase != "done":
             # Still ask the child to quit so teardown isn't a hard kill only.
             try:
-                os.write(master_fd, b"q")
+                os.write(master_fd, b"q\n")
             except OSError:
                 pass
     finally:

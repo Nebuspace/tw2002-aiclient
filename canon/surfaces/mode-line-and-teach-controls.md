@@ -87,6 +87,14 @@ is owned here. The cluster is:
 - **The Trade-Loop-Chains library popup** — a modal listing the taught trade-loop chains the human
   can launch (see [trade-loops](/strategy/trade-loops.md)); selecting a chain arms a launch.
 - **The play-launch confirm** — see the confirm-gate below.
+- **Whole-app exit confirm** — `q` that would exit the **client process** (from Play, or after a
+  bank/launcher quit routes here) raises **"Stop daemon and disconnect \<profile\>? y/N"** before
+  the process ends. Same **key posture** as the arm confirm (`y`/`Y` only; Enter/Esc/non-`y` =
+  default No = quit client, leave daemon). This is **not** a money-path arm: semantic confirm
+  styling is fine; do **not** reuse LIVE / turn-spend wording or any direct-send path. Esc that
+  only returns to the launcher is outside this cluster — it must issue **zero** `stop` traffic.
+  Exact popup ownership for Play chrome lives with this surface's N5 contract; the launcher hosts
+  the same dialog when `q` is pressed there (one app-lifecycle bookend, two entry points).
 
 ### Confirm-gate — never one keystroke to live money
 

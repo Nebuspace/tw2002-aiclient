@@ -54,6 +54,8 @@ class ProfileRow:
     host: str = ""  # resolved host for world-identity display
     autopilot: bool = False  # capability flag shown (ok tint) — not an armed run
     error: str | None = None  # parse failure — row stays visible (never dropped)
+    # Read-only daemon presence overlay (never from config; exact profile match).
+    online: bool = False
 
 
 TITLE = " TW2002 AICLIENT "
@@ -340,15 +342,20 @@ class LauncherScreen:
         self.stdscr = stdscr
         self.profiles: list[ProfileRow] = list(profiles or ())
         self.selected = 0  # index into selectable items (profiles + trailing CTA)
+        self.presence_note: str | None = None  # honest unavailable / status copy
         self._palette = _TonePalette()
         self._chrome = self._palette.attr("info")
         self._warn = self._palette.attr("warn")
         self._ok = self._palette.attr("ok")
         self._muted = self._palette.attr("muted")
+        self._danger = self._palette.attr("danger")
 
     def set_profiles(self, profiles: Sequence[ProfileRow]) -> None:
         self.profiles = list(profiles or ())
         self.selected = min(self.selected, max(0, self._n_items - 1))
+
+    def set_presence_note(self, note: str | None) -> None:
+        self.presence_note = note if isinstance(note, str) and note.strip() else None
 
     @property
     def _n_items(self) -> int:
@@ -383,7 +390,7 @@ class LauncherScreen:
                 self.stdscr,
                 y,
                 5,
-                f"{'name':<14} {'handle':<14} {'host':<22} game",
+                f"{'name':<14} {'handle':<14} {'host':<22} game   status",
                 self._chrome,
             )
             y += 1
@@ -409,6 +416,11 @@ class LauncherScreen:
                 _safe_addstr(self.stdscr, y, x, prefix + left, attr)
                 x += len(prefix + left)
                 _safe_addstr(self.stdscr, y, x, f"[{letter}]", letter_attr)
+                x += len(f"[{letter}]")
+                if row.online:
+                    # Presence is exact-match only; ok tone, never inferred.
+                    online_attr = (self._ok | curses.A_REVERSE) if selected else self._ok
+                    _safe_addstr(self.stdscr, y, x, "  ONLINE", online_attr | curses.A_BOLD)
             y += 1
 
         # Create New Player CTA — sole content when the picker is empty.
@@ -419,14 +431,27 @@ class LauncherScreen:
             prefix = f"{glyphs['sel']} " if selected else "  "
             _safe_addstr(self.stdscr, y, 3, prefix + CREATE_CTA, attr)
 
+        hint_y = max_y - 2
+        if self.presence_note and hint_y > 0:
+            _safe_addstr(self.stdscr, hint_y - 1, 3, self.presence_note, self._warn)
         _safe_addstr(
             self.stdscr,
-            max_y - 2,
+            hint_y,
             3,
             "↑/↓ select   Enter play/create   b bank   q quit",
             self._chrome,
         )
         self.stdscr.refresh()
+
+    def draw_quit_confirm(self, line: str) -> None:
+        """Draw the whole-app exit confirm (danger + reverse; not money-path copy)."""
+        self.draw()
+        max_y, _max_x = self.stdscr.getmaxyx()
+        text = " ".join(str(line).split()) if line else ""
+        if text and max_y >= 2:
+            attr = self._danger | curses.A_BOLD | curses.A_REVERSE
+            _safe_addstr(self.stdscr, max_y - 2, 3, text, attr)
+            self.stdscr.refresh()
 
     def handle_key(self, key: int) -> str | None:
         """Return ``quit`` / ``create`` / ``play`` / ``bank`` / ``None``."""

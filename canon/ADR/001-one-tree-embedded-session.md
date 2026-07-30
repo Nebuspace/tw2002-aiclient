@@ -62,9 +62,17 @@ becomes `tw2002_aiclient/session/*`); the product TUI app and its screens live u
 separate OS processes per session-engine's "Two-Process Split," and that section of canon is
 unchanged by this decision; embedding into one import tree is not the same as collapsing to one
 process. Additionally, the aiclient app (the process the player runs) **owns the daemon's lifecycle
-at the UX level**: it may start/ensure the daemon on entry, and on the player's exit from the
-aiclient app it presents a confirm popup — "Stop the daemon too? (Yes / No)" — before the app itself
-exits, rather than silently leaving the daemon's fate unstated.
+at the UX level**: it may start/ensure the daemon on entry, and on any action that exits the
+**whole app** (`q` from launcher, Play, or bank) it presents one confirm popup —
+**"Stop daemon and disconnect \<profile\>? y/N"** — before the app itself exits, rather than
+silently leaving the daemon's fate unstated. The popup **defaults to No** (Enter / Esc /
+non-`y` leave the daemon running and still quit the client — matching the Rolling-Pilot model);
+**Yes** (`y`/`Y` only) issues exactly one existing `stop` request. If stop fails, the app stays
+open and shows the failure — it never claims the player disconnected. If no daemon is running,
+quit proceeds with no popup. Esc from Play back to the launcher is **not** an app exit and must
+not stop the daemon. The launcher also overlays **read-only** active-profile presence from a
+bounded `status` poll (exact `replay_arm.profile` match when `connected` is true) — presence is
+not a second connection.
 
 ---
 
@@ -74,8 +82,9 @@ exits, rather than silently leaving the daemon's fate unstated.
 `from twclient import X` / `from tw2002_aiclient import Y` convention to keep straight, and a
 packaging shape that matches the "single product" mental model a human piloting one app expects.
 The exit-confirm popup makes the daemon's continuity an explicit, visible choice at the one moment
-it matters (quitting the app) instead of an implicit side effect the player has to already know
-about.
+it matters (quitting the whole app) instead of an implicit side effect the player has to already
+know about. Launcher ONLINE presence makes the one active daemon session visible without turning
+the picker into a live multi-connection manager.
 
 **Trade-offs accepted:** every module formerly under the Phase-0 `twclient/` sibling had to be
 relocated and every import path updated — nontrivial mechanical churn that was **executed** after

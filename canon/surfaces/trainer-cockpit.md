@@ -185,17 +185,18 @@ authoritative for everything on the control strip.
 
 The aiclient app the operator is watching in this frame is not the daemon: `twd` is continuity, the
 app is disposable (see [Session Engine](/architecture/session-engine.md)'s Rolling-Pilot Operating
-Model). That means quitting the cockpit is not automatically the same thing as ending the game
-session — the daemon can keep the one telnet connection alive for a later reattach, or it can be
-stopped along with the client. The cockpit does not decide this silently either way: on the
-operator's exit from the app, a **confirm popup** asks — **"Stop the daemon too? (Yes / No)"** —
-before the app itself closes. The popup **defaults to No** (leave the daemon running; the session
-stays reattachable) — the lower-risk, non-destructive outcome if the operator just hits Enter;
-stopping the daemon requires actively moving to and confirming **Yes**. `tw stop` is the deliberate,
-explicit verb for a full stop outside this flow. The popup is a plain confirm-gate, the same weight
-as the launch confirm-gate mode-line-and-teach-controls specifies for arming a run: one explicit
-choice always asked, never a silently *auto-applied* action — a stated default on the gate is not
-the same as skipping the gate.
+Model). That means leaving Play is not automatically the same thing as ending the game session —
+**Esc → launcher** returns without stopping anything (daemon survival). Ending the **whole app**
+(`q` from Play, bank, or launcher) is the bookend that asks: a **confirm popup** —
+**"Stop daemon and disconnect \<profile\>? y/N"** — before the client process exits. The popup
+**defaults to No** (quit the client; leave the daemon running; the session stays reattachable) —
+Enter / Esc / any non-`y` take that path; stopping the daemon requires an explicit **`y`/`Y`**,
+which issues exactly one existing `stop` request. If that stop fails, the app stays open and shows
+the failure — it never claims a disconnect it did not perform. If no daemon is running, quit
+proceeds with no popup. `tw stop` remains the deliberate CLI verb for a full stop outside this
+flow. The popup reuses the confirm-gate **key posture** (explicit `y`; everything else is the safe
+default) from mode-line-and-teach-controls; it is **not** a money-path arm and must not reuse
+live-send wording. A stated default on the gate is not the same as skipping the gate.
 
 This mirrors [Entry & Profile Selection](/surfaces/entry-and-profile-selection.md)'s hand-off at the
 other end of the session: that surface hands a chosen profile *into* the cockpit at launch; this is
