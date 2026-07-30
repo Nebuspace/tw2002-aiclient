@@ -1034,6 +1034,9 @@ def dispatch(session, verb, args, server):
 
     if verb == "send":
         # WO-P2-OPS-VERB-B: raw send, no settle wait.
+        # WO-SEND-HISTORY-RING: still file the history ring — same ledger as
+        # `do`/`read`, same secret redaction; settled_reason is None because
+        # this verb never waits.
         with _driving_dispatch(server) as lock_error:
             if lock_error is not None:
                 return lock_error
@@ -1041,7 +1044,12 @@ def dispatch(session, verb, args, server):
             enter = args.get("enter", True)
             secret = args.get("secret", False)
             session.send(text, enter=enter, secret=secret, sender="app")
-            return build_response(session)
+            resp = build_response(session)
+            history_args = {**args, "input": "<redacted>"} if secret else args
+            session.record_history(
+                "send", history_args, resp["prompt"], resp["classification"], None
+            )
+            return resp
 
     if verb == "read":
         # WO-P2-OPS-VERB-B: wait-and-return, never sends (read-only).
