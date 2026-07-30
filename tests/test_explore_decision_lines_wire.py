@@ -144,6 +144,57 @@ def test_composer_non_bool_flags_do_not_invent_markers():
     assert explore_flags.TOLLS_MARKER not in joined
 
 
+def test_composer_appends_turns_remaining():
+    lines = explore.explore_decision_lines_from_run(
+        {
+            "intent": explore.INTENT_MAP_FILL,
+            "next_sector": 2,
+            "turns_remaining": 42,
+        }
+    )
+    assert lines is not None
+    assert lines[-1] == "turns 42"
+
+
+def test_composer_turns_zero_is_honest():
+    lines = explore.explore_decision_lines_from_run(
+        {
+            "intent": explore.INTENT_FIND_STARDOCK,
+            "next_sector": None,
+            "turns_remaining": 0,
+        }
+    )
+    assert lines is not None
+    assert lines[-1] == "turns 0"
+
+
+def test_composer_omits_turns_when_absent_or_invalid():
+    for bad in (None, True, -1, "42", 3.5):
+        run = {"intent": explore.INTENT_MAP_FILL, "next_sector": 1}
+        if bad is not None:
+            run["turns_remaining"] = bad
+        lines = explore.explore_decision_lines_from_run(run)
+        assert lines is not None
+        assert not any(isinstance(x, str) and x.startswith("turns ") for x in lines)
+
+
+def test_composer_flags_then_turns_order():
+    from tw2002_aiclient.cockpit import explore_flags
+
+    lines = explore.explore_decision_lines_from_run(
+        {
+            "intent": explore.INTENT_MAP_FILL,
+            "next_sector": 1,
+            "dock_new_ports": True,
+            "fight_tolls": False,
+            "turns_remaining": 7,
+        }
+    )
+    assert lines is not None
+    assert lines[-2] == explore_flags.DOCK_MARKER
+    assert lines[-1] == "turns 7"
+
+
 def test_compose_decisions_prefers_explore_overlay():
     status = {
         explore.EXPLORE_DECISION_LINES_KEY: ["MAP-FILL", "next →3", "(live)"],
