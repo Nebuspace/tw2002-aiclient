@@ -735,3 +735,63 @@ def test_goals_fighters_row_reads_status_fighters_aboard(session, monkeypatch):
     joined = "\n".join(lines)
     assert "7" in joined
     assert "Fighters" in joined or "fighters" in joined.lower()
+
+
+# ===========================================================================
+# WO-STATUS-CREDITS — top-level status["credits"]
+# ===========================================================================
+
+
+def test_accept_credits_from_ship_info_fixture(session, monkeypatch):
+    """Accept 1. Live I-capture credits line → top-level int."""
+    text = _SHIP_INFO_FIXTURE.read_text(encoding="utf-8")
+    resp = _status(session, monkeypatch, text)
+    assert resp["credits"] == 100000
+    # Distinct from the HUD cell the bridge already supplied.
+    assert resp["hud"]["credits"]["value"] == 100000
+
+
+def test_credits_omitted_when_never_observed(session, monkeypatch):
+    """Accept 2. Never invent 0 from absence — GOALS Credits must stay `?`."""
+    resp = _status(session, monkeypatch, "A screen with no credits line", LIVE_PROMPT)
+    assert "credits" not in resp
+    with pytest.raises(KeyError):
+        resp["credits"]
+
+
+def test_price_quote_credits_mention_does_not_emit_top_level_credits(
+    session, monkeypatch
+):
+    """AP-13: a hold-price quote must not become the cash balance."""
+    resp = _status(
+        session,
+        monkeypatch,
+        "Holds cost 1,468 credits each, for a total of 29,360 credits "
+        "to fill them all.\n",
+        LIVE_PROMPT,
+    )
+    assert "credits" not in resp
+
+
+def test_credits_zero_is_emitted_not_omitted(session, monkeypatch):
+    """A real reading of 0 is a fact; omit is only for unknown."""
+    resp = _status(session, monkeypatch, "Credits        : 0\n", LIVE_PROMPT)
+    assert resp["credits"] == 0
+
+
+def test_the_status_verb_already_observes_credits(session, monkeypatch):
+    """Observation already lives on the status path — do not re-plumb."""
+    _wire(session, monkeypatch, "Credits        : 42\n")
+    assert session.credits_snapshot().outcome == sp.OUTCOME_ABSENT
+    resp = protocol.dispatch(session, "status", {}, _Server())
+    assert session.credits_snapshot().balance == 42
+    assert resp["credits"] == 42
+
+
+def test_goals_credits_row_reads_status_credits(session, monkeypatch):
+    """Consumer proof: GOALS paints the balance once the wire supplies it."""
+    resp = _status(session, monkeypatch, "Credits        : 987654\n", LIVE_PROMPT)
+    lines = goals.compose_goals_lines(resp, width=40)
+    joined = "\n".join(lines)
+    assert "987,654" in joined or "987654" in joined
+    assert "Credits" in joined or "Cr" in joined

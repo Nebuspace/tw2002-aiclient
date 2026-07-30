@@ -65,16 +65,9 @@ STARVED_ALLOWLIST: dict[str, tuple[str, str]] = {
         "nothing in the package produces one and `state_parser` refuses to invent "
         "one; the Map row degrades honestly to '· N sectors' without it",
     ),
-    # -- T2: the daemon already has an extractor, it is simply unwired.
-    #    Touches `_status_response`, so scheduling it needs a DEPLOY-WINDOW.
-    # Still starved after WO-HUD-STATUS-BRIDGE, and deliberately so: that WO
-    # supplied `hud.credits` (from the existing `credits_snapshot` sticky
-    # pair), not a TOP-LEVEL `credits`. The guard is exact-set and correctly
-    # kept telling them apart -- deleting this entry because "the HUD shows
-    # credits now" would declare a field supplied that no producer writes.
-    "credits": ("T2", "`state_parser.read_credits_balance` exists, unwired; needs a window"),
-    # fighters_aboard — supplied by protocol._status_response from
-    # fighters_snapshot (WO-STATUS-FIGHTERS-ABOARD); extractor was already T2.
+    # credits — supplied by protocol._status_response from credits_snapshot
+    # (WO-STATUS-CREDITS); distinct from hud.credits which WO-HUD-STATUS-BRIDGE
+    # already emitted. fighters_aboard — same pattern (WO-STATUS-FIGHTERS-ABOARD).
     "ship_prices_count": ("T3", "needs shipyard-screen parsing; gated by stardock_found"),
     "hold_price_label": ("T3", "needs shipyard-screen parsing; gated by stardock_found"),
     "fighter_buy_status": ("T3", "needs shipyard-screen parsing"),
@@ -244,13 +237,17 @@ def test_the_scanner_does_not_count_label_tables_as_producers():
 
     `goals.py::_LABELS` and `hud.py::_FIELD_LABELS` are dict literals keyed by
     field name — display strings, not producers. A scan counting dict-literal
-    keys anywhere reported `credits` as supplied when nothing supplies it."""
-    # The tables really do contain the key, so this control is not vacuous.
+    keys anywhere used to report `credits` as supplied when nothing wrote it.
+    WO-STATUS-CREDITS now supplies top-level `credits`, so the live-tree
+    starved exemplar is gone; the synthetic tree below still pins the rule.
+    This pin only proves the real label table still names the field (hazard
+    surface intact) and that the real producer landed.
+    """
     goals_src = (repo_root() / "tw2002_aiclient" / "cockpit" / "goals.py").read_text()
     assert '"credits":' in goals_src, "the label table no longer mentions credits"
 
-    assert "credits" not in emitted_keys(), "a label table was counted as a producer"
-    assert "credits" in starved_keys()
+    assert "credits" in emitted_keys(), "WO-STATUS-CREDITS must leave a real producer"
+    assert "credits" not in starved_keys()
 
 
 def _synthetic_repo(tmp_path):
