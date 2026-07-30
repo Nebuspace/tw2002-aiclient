@@ -5,10 +5,12 @@ from __future__ import annotations
 import os
 import sys
 import time
+from dataclasses import replace
 
 import curses
 
 from tw2002_aiclient import adapters
+from tw2002_aiclient import daemon_lifecycle
 from tw2002_aiclient.cockpit import analyze as _analyze
 from tw2002_aiclient.cockpit import assign_trigger as _assign_trigger
 from tw2002_aiclient.cockpit import autoloop_controls as _autoloop_controls
@@ -39,6 +41,9 @@ from tw2002_aiclient.session import credentials, env, player_bank
 from tw2002_aiclient.session.attach_client import AttachInputConn
 from tw2002_aiclient.session.autoloop import CYCLES_HARD_CEILING
 from tw2002_aiclient.watchfeed import WatchFeed
+
+# Presence poll while the launcher sits idle (ms). Timeout getch wakes redraw.
+_LAUNCHER_PRESENCE_POLL_MS = 2000
 
 # WO-PLAY-EXPLORE-ARM (L3): the post-ensure explore offer.
 #
@@ -1759,6 +1764,73 @@ def _run_bank(stdscr: curses.window) -> str:
             return action
 
 
+def _apply_presence(screen: LauncherScreen, *, run_dir=None) -> None:
+    """Overlay read-only ONLINE flags from a bounded status poll. Never raises."""
+    sticky_fail = (
+        screen.presence_note
+        if isinstance(screen.presence_note, str)
+        and screen.presence_note.startswith("stop failed")
+        else None
+    )
+    try:
+        presence = daemon_lifecycle.read_presence(run_dir=run_dir)
+        active = daemon_lifecycle.online_profile_name(presence)
+        updated = [
+            replace(row, online=(active is not None and row.name == active))
+            for row in screen.profiles
+        ]
+        screen.set_profiles(updated)
+        if sticky_fail is not None:
+            screen.set_presence_note(sticky_fail)
+        else:
+            screen.set_presence_note(daemon_lifecycle.presence_note(presence))
+    except Exception:  # noqa: BLE001 — launcher must stay usable
+        if sticky_fail is not None:
+            screen.set_presence_note(sticky_fail)
+        else:
+            screen.set_presence_note("daemon status unavailable — no profile marked online")
+        try:
+            screen.set_profiles([replace(row, online=False) for row in screen.profiles])
+        except Exception:  # noqa: BLE001
+            pass
+
+
+def _confirm_app_quit(stdscr: curses.window, screen: LauncherScreen, *, run_dir=None) -> bool:
+    """Whole-app quit gate. True = exit the app; False = stay open.
+
+    No daemon → quit immediately. Otherwise raise default-No confirm; ``y``
+    issues one ``stop``. Stop failure keeps the app open with an honest error.
+    """
+    try:
+        if not daemon_lifecycle.should_confirm_quit_stop(run_dir=run_dir):
+            return True
+    except Exception:  # noqa: BLE001
+        pass
+
+    presence = daemon_lifecycle.read_presence(run_dir=run_dir)
+    line = daemon_lifecycle.compose_quit_confirm_line(
+        daemon_lifecycle.quit_profile_label(presence)
+    )
+    stdscr.timeout(-1)
+    screen.draw_quit_confirm(line)
+    while True:
+        key = _guarded_getch(stdscr, _DeadTerminalGuard())
+        if key == -1:
+            continue
+        outcome = daemon_lifecycle.resolve_quit_confirm_key(key)
+        if outcome != daemon_lifecycle.CONFIRM:
+            # Default No: quit the client, leave the daemon running.
+            return True
+        result = daemon_lifecycle.stop_daemon(run_dir=run_dir)
+        if result.ok:
+            return True
+        # Stop failed — stay in the app; never claim a disconnect.
+        detail = result.detail or result.reason or "stop failed"
+        screen.set_presence_note(f"stop failed — {detail} (still connected?)")
+        screen.draw()
+        return False
+
+
 def _run(stdscr: curses.window) -> None:
     try:
         curses.curs_set(0)
@@ -1767,6 +1839,7 @@ def _run(stdscr: curses.window) -> None:
     stdscr.keypad(True)
     stdscr.timeout(-1)
     screen = LauncherScreen(stdscr, profiles=_load_profiles())
+    _apply_presence(screen)
     # Automated smoke: draw once and exit clean (hub/script verify without interactive input).
     if os.environ.get("TW2002_LAUNCHER_SMOKE") == "1":
         screen.draw()
@@ -1821,17 +1894,23 @@ def _run(stdscr: curses.window) -> None:
         return
     guard = _DeadTerminalGuard()
     while True:
+        _apply_presence(screen)
         screen.draw()
+        stdscr.timeout(_LAUNCHER_PRESENCE_POLL_MS)
         key = _guarded_getch(stdscr, guard)
         if key == -1:
-            continue
+            continue  # presence poll tick — redraw with fresh ONLINE next loop
+        stdscr.timeout(-1)
         action = screen.handle_key(key)
         if action == "quit":
-            break
+            if _confirm_app_quit(stdscr, screen):
+                break
+            continue
         if action == "bank":
             result = _run_bank(stdscr)
             if result == "quit":
-                break
+                if _confirm_app_quit(stdscr, screen):
+                    break
             continue
         if action == "create":
             result = _run_create(stdscr)
@@ -1851,7 +1930,8 @@ def _run(stdscr: curses.window) -> None:
             result = _run_play(stdscr, profile)
             # Fresh launcher draw — no play-shell transient state carried back.
             if result == "quit":
-                break
+                if _confirm_app_quit(stdscr, screen):
+                    break
             try:
                 curses.curs_set(0)
             except curses.error:

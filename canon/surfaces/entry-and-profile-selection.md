@@ -54,7 +54,26 @@ Two things a row **never** contains:
 - **A password.** Profiles live in `config/profiles.toml`, which holds only the non-secret shape.
   The password lives elsewhere entirely (see below). The picker has no password field to render, so
   redaction here is structural, not a display filter.
-- **A live connection.** Listing players touches only local config; it opens no socket.
+- **Inferred login state.** The picker never guesses who is online from host/handle alone, and it
+  never displays secrets.
+
+### Active-profile presence (read-only overlay)
+
+Profile **shape** still comes only from local config (`credentials.list_profile_summaries()` —
+that half opens no socket). Separately, the launcher overlays a **read-only** presence column from
+a bounded daemon `status` poll against the app's run directory:
+
+- Mark a row **ONLINE** only when `status.connected is True` **and**
+  `status.replay_arm.profile` **exact-matches** that row's profile `name`.
+- At most one row is ONLINE (single active daemon / profile model).
+- Connected false, daemon absent, unreachable status, missing/`None` profile, or a profile name
+  that matches no configured row → **no** row is marked online. Unreachable status shows an honest
+  unavailable note rather than inventing presence.
+
+Presence is display-only: it does not attach, arm, send, or stop. Whole-app quit (`q`) is owned
+by the app-exit confirm in [ADR-001](/ADR/001-one-tree-embedded-session.md) /
+[trainer-cockpit](/surfaces/trainer-cockpit.md); Esc from Play back to this launcher still leaves
+the daemon running.
 
 Selecting an existing row means "enter this world as this character" and proceeds toward the
 cockpit. The list is joined by a **Create New Player** action for the case where the character does
