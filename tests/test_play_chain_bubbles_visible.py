@@ -110,6 +110,32 @@ def test_bubbles_paint_from_cached_best_chain_without_pressing_l(monkeypatch):
     assert "★" in text
 
 
+def test_bubbles_paint_enriched_port_classes_and_drop_non_ports(monkeypatch):
+    """WO-CHAIN-BUBBLE-PORT-CLASSES — cache → strip, no draw-path world_model."""
+    win = _Win(40, 160)
+    play = _screen(
+        monkeypatch,
+        win,
+        status={
+            "ok": True,
+            "connected": True,
+            "classification": "main_command",
+            "hud": {"sector": {"value": 10, "age_s": 0.0}},
+            "log_tail": ["app> line"],
+        },
+    )
+    # Bypass update()'s world scan — pin the draw wire + composer filter.
+    play.chain_scalars._best_chain = _Chain([10, 99, 11, 10])
+    play.chain_scalars._port_classes = {10: "BSB", 11: "SSS"}
+    play.chain_scalars._known_ports = {10, 11}
+    play.draw()
+    text = _region_text(win, frame_layout(40, 160)["chain"])
+    assert "BSB" in text
+    assert "SSS" in text
+    assert "99" not in text
+    assert "?" not in text
+
+
 def test_draw_path_does_not_import_chain_search():
     """Accept #4 — structural pin against draw-path recompute."""
     src = Path(screens_mod.__file__).read_text(encoding="utf-8")

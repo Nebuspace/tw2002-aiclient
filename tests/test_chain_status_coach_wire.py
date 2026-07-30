@@ -58,9 +58,9 @@ def _chain(sectors: list[int]) -> chains.ProfitChain:
     )
 
 
-def _result(*, chains_=(), reason=None, search_note=None, adapter_note=None):
+def _result(*, chains_=(), reason=None, search_note=None, adapter_note=None, world_id="w"):
     return chain_search.ProfitChainResult(
-        world_id="w",
+        world_id=world_id,
         chains=tuple(chains_),
         reason=reason,
         search_note=search_note,
@@ -250,6 +250,80 @@ def test_completed_empty_search_clears_best_chain_to_quiet_empty():
     cs.update(_result(chains_=(), reason="none"))
     assert cs.best_chain is None
     assert cs.merge({}) == {"chain_hops": 0, "chain_unit": "hops"}
+
+
+def test_port_classes_enrich_from_world_model_on_successful_update(tmp_path):
+    """WO-CHAIN-BUBBLE-PORT-CLASSES: real class labels, not perpetual '?'."""
+    from tw2002_aiclient import world_model
+
+    world_id = "bubble-ports"
+    world_model.upsert_sector(
+        world_id,
+        {"sector_id": 10, "warps": [11], "port": {"class": "BSB"}},
+        state_dir=tmp_path,
+    )
+    world_model.upsert_sector(
+        world_id,
+        {"sector_id": 11, "warps": [10], "port": {"class": "SSS"}},
+        state_dir=tmp_path,
+    )
+    # Classless port still counts as known for the filter.
+    world_model.upsert_sector(
+        world_id,
+        {"sector_id": 99, "warps": [10], "port": {}},
+        state_dir=tmp_path,
+    )
+    cs = ChainScalars()
+    cs.update(
+        _result(chains_=[_chain([10, 11, 10])], world_id=world_id),
+        state_dir=tmp_path,
+    )
+    assert cs.port_classes == {10: "BSB", 11: "SSS"}
+    assert cs.known_ports == {10, 11, 99}
+    # Never on status JSON.
+    merged = cs.merge({})
+    assert "port_classes" not in merged
+    assert "known_ports" not in merged
+
+
+def test_failed_update_retains_last_good_port_classes(tmp_path):
+    from tw2002_aiclient import world_model
+
+    world_id = "bubble-retain"
+    world_model.upsert_sector(
+        world_id,
+        {"sector_id": 1, "port": {"class": "BBS"}},
+        state_dir=tmp_path,
+    )
+    cs = ChainScalars()
+    cs.update(
+        _result(chains_=[_chain([1, 2, 1])], world_id=world_id),
+        state_dir=tmp_path,
+    )
+    assert cs.port_classes == {1: "BBS"}
+    cs.update(None)
+    cs.update(_result(chains_=(), search_note="budget"))
+    assert cs.port_classes == {1: "BBS"}
+    assert 1 in cs.known_ports
+
+
+def test_completed_empty_clears_port_class_cache(tmp_path):
+    from tw2002_aiclient import world_model
+
+    world_id = "bubble-clear"
+    world_model.upsert_sector(
+        world_id,
+        {"sector_id": 5, "port": {"class": "SBB"}},
+        state_dir=tmp_path,
+    )
+    cs = ChainScalars()
+    cs.update(
+        _result(chains_=[_chain([5, 6, 5])], world_id=world_id),
+        state_dir=tmp_path,
+    )
+    cs.update(_result(chains_=(), reason="none", world_id=world_id))
+    assert cs.port_classes == {}
+    assert cs.known_ports == set()
 
 
 def test_a_later_failed_discovery_does_not_erase_a_good_one():

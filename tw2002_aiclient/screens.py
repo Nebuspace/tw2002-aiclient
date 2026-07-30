@@ -1615,6 +1615,7 @@ class PlayShellScreen:
                     self.chain_scalars.best_chain,
                     current_sector=cur_sector,
                     port_classes=self.chain_scalars.port_classes,
+                    known_ports=self.chain_scalars.known_ports or None,
                     width=chain_region["w"],
                 )
             except Exception:  # noqa: BLE001 -- never crash the draw pass
