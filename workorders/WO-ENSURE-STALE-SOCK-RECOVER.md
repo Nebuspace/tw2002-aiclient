@@ -1,6 +1,6 @@
 # WO-ENSURE-STALE-SOCK-RECOVER — orphan `twd.sock` makes ensure `spawn_failed`
 
-**Status:** OPEN · EXECUTE · CRITICAL · Max live break 2026-07-29T00:46Z
+**Status:** DONE · origin `26b13e4` (#210) · Accept verified 2026-07-30
 **Seat:** Cursor (`impl-aiclient-cursor`) · Live: brief smoke ensure OK
 **Refs:** Max Play ensure · hub repro · `session/cli.py` `ensure_raw` · `daemon.py` stale-sock comment
 

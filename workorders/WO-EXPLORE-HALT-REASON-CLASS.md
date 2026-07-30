@@ -1,6 +1,6 @@
 # WO-EXPLORE-HALT-REASON-CLASS — Carry classify class in explore halt reasons
 
-**Status:** OPEN · EXECUTE · HIGH · diagnosis honesty (post #211/#212)
+**Status:** DONE · origin `a8f2bc8` (#213) · Accept verified 2026-07-30
 **Posted:** 2026-07-29T05:23Z · Max carte blanche / automation continuity
 **Seat:** impl-claudecode-aiclient (offline) · live → Cursor (optional / n/a OK if offline-only)
 **Depends:** #207 fighter_encounter classify on main · #211 dock reason-split precedent
