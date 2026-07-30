@@ -678,3 +678,60 @@ def test_turns_snapshot_refuses_an_incoherent_pair(kwargs):
     unguarded freshness ladder reads a NaN age as perfectly fresh."""
     with pytest.raises(ValueError):
         sp.TurnsSnapshot(**kwargs)
+
+
+# ===========================================================================
+# WO-STATUS-FIGHTERS-ABOARD — top-level status["fighters_aboard"]
+# ===========================================================================
+
+
+def test_accept_fighters_aboard_from_ship_info_fixture(session, monkeypatch):
+    """Accept 1. Live I-capture ship-info line → top-level int."""
+    text = _SHIP_INFO_FIXTURE.read_text(encoding="utf-8")
+    resp = _status(session, monkeypatch, text)
+    assert resp["fighters_aboard"] == 150
+
+
+def test_fighters_aboard_omitted_when_never_observed(session, monkeypatch):
+    """Accept 2. Never invent 0 from absence — coach at_shipyard must stay silent."""
+    resp = _status(session, monkeypatch, "A screen with no fighters line", LIVE_PROMPT)
+    assert "fighters_aboard" not in resp
+    with pytest.raises(KeyError):
+        resp["fighters_aboard"]
+
+
+def test_encounter_toll_fighters_line_does_not_emit_fighters_aboard(
+    session, monkeypatch
+):
+    """Other people's grid fighters must not become aboard count."""
+    resp = _status(
+        session,
+        monkeypatch,
+        "Fighters: 4 (Somecorp) [Toll]\nOption? (A,D,I,R,P,S,?):?",
+        LIVE_PROMPT,
+    )
+    assert "fighters_aboard" not in resp
+
+
+def test_fighters_aboard_zero_is_emitted_not_omitted(session, monkeypatch):
+    """A real reading of 0 is a fact (shipyard arm); omit is only for unknown."""
+    resp = _status(session, monkeypatch, "Fighters       : 0\n", LIVE_PROMPT)
+    assert resp["fighters_aboard"] == 0
+
+
+def test_the_status_verb_observes_fighters(session, monkeypatch):
+    """Observation lives on the status path (same pin as turns)."""
+    _wire(session, monkeypatch, "Fighters       : 12\n")
+    assert session.fighters_snapshot().outcome == sp.OUTCOME_ABSENT
+    resp = protocol.dispatch(session, "status", {}, _Server())
+    assert session.fighters_snapshot().fighters == 12
+    assert resp["fighters_aboard"] == 12
+
+
+def test_goals_fighters_row_reads_status_fighters_aboard(session, monkeypatch):
+    """Consumer proof: GOALS paints the count once the wire supplies it."""
+    resp = _status(session, monkeypatch, "Fighters       : 7\n", LIVE_PROMPT)
+    lines = goals.compose_goals_lines(resp, width=40)
+    joined = "\n".join(lines)
+    assert "7" in joined
+    assert "Fighters" in joined or "fighters" in joined.lower()

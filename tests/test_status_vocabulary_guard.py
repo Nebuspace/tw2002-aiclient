@@ -73,8 +73,8 @@ STARVED_ALLOWLIST: dict[str, tuple[str, str]] = {
     # kept telling them apart -- deleting this entry because "the HUD shows
     # credits now" would declare a field supplied that no producer writes.
     "credits": ("T2", "`state_parser.read_credits_balance` exists, unwired; needs a window"),
-    # -- T3: no extractor exists; needs new screen parsing and captured fixtures.
-    "fighters_aboard": ("T3", "needs screen parsing; also a coach trigger input"),
+    # fighters_aboard — supplied by protocol._status_response from
+    # fighters_snapshot (WO-STATUS-FIGHTERS-ABOARD); extractor was already T2.
     "ship_prices_count": ("T3", "needs shipyard-screen parsing; gated by stardock_found"),
     "hold_price_label": ("T3", "needs shipyard-screen parsing; gated by stardock_found"),
     "fighter_buy_status": ("T3", "needs shipyard-screen parsing"),
