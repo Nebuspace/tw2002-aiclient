@@ -1,6 +1,6 @@
 # WO-AUTOLOOP-CYCLE-PROGRESS — Play hint-band cycle progress chrome
 
-**Status:** OPEN · EXECUTE · HIGH · visible automation · Cursor-only  
+**Status:** DONE · origin `763380b` (#244) · Accept verified 2026-07-30
 **Posted / seeded:** 2026-07-30T06:38Z · hub (after #243 cycles unlock)  
 **Seat:** `impl-aiclient-cursor`  
 **Depends:** `main` ≥ `30c8e57` (`CYCLES_HARD_CEILING` + multi-pass `_run`)  

@@ -1,6 +1,6 @@
 # WO-AUTOLOOP-HAZARD-HALT — last structural rail before `cycles`
 
-**Status:** OPEN · EXECUTE · HIGH · automation frontier · Cursor-only  
+**Status:** DONE · origin `1d81492` (#242) · Accept verified 2026-07-30
 **Posted / seeded:** 2026-07-30T05:48Z · hub (after #241 turn-budget → 3/4 rails)  
 **Seat:** `impl-aiclient-cursor`  
 **Depends:** `main` ≥ `2a969e6` (turn-budget LIVE; docstring says hazard NOT)  

@@ -1,6 +1,6 @@
 # WO-EXPLORE-DECISION-TURNS — DECISIONS overlay shows turns remaining
 
-**Status:** OPEN · EXECUTE · MED · visible automation · Cursor-only  
+**Status:** DONE · origin `70cffa6` (#248) · Accept verified 2026-07-30
 **Posted / seeded:** 2026-07-30T08:17Z · hub (post-#247)  
 **Seat:** `impl-aiclient-cursor`  
 **Depends:** `main` ≥ `9763fb0` (`explore_decision_lines_from_run` + dock/tolls flags)  

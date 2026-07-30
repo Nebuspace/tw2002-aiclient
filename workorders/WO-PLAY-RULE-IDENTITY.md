@@ -1,6 +1,6 @@
 # WO-PLAY-RULE-IDENTITY — Play collects rule_id / do / priority for Analyze drafts
 
-**Status:** OPEN · EXECUTE · HIGH · visible client automation · Cursor-only  
+**Status:** DONE · origin `f545747` (#237) · Accept verified 2026-07-30
 **Posted / seeded:** 2026-07-30T04:10Z · hub (closes Analyze→`V` loop after #235/#236)  
 **Seat:** `impl-aiclient-cursor`  
 **Depends:** `main` ≥ `fd24246` (`V)reflex` on teach band; reflex arm LIVE)  

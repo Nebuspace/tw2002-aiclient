@@ -1,6 +1,6 @@
 # WO-AUTOLOOP-TURN-BUDGET — fail-closed turn-budget rail on AutoLoopRunner
 
-**Status:** OPEN · EXECUTE · HIGH · automation frontier (rail toward `scope: repeating`) · Cursor-only  
+**Status:** DONE · origin `2a969e6` (#241) · Accept verified 2026-07-30
 **Posted / seeded:** 2026-07-30T05:17Z · hub (IDLE-KICK after offline teach loop closed)  
 **Seat:** `impl-aiclient-cursor`  
 **Depends:** `main` ≥ `5b1afb5` · `Session.turns_snapshot` / `observe_turns` LIVE (HUD bridge)  

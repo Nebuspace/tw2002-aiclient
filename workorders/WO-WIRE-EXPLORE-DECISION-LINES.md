@@ -1,6 +1,6 @@
 # WO-WIRE-EXPLORE-DECISION-LINES — DECISIONS pane shows live explore next-hop
 
-**Status:** OPEN · EXECUTE · HIGH · visible automation · unused-code WIRE · Cursor-only  
+**Status:** DONE · origin `912361e` (#245) · Accept verified 2026-07-30
 **Posted / seeded:** 2026-07-30T07:18Z · hub (IDLE-KICK feed; post-#244)  
 **Seat:** `impl-aiclient-cursor`  
 **Depends:** `main` ≥ `763380b`  
