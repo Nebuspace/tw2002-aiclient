@@ -155,3 +155,56 @@ def test_seed_failure_never_raises_or_invents_values(tmp_path, monkeypatch):
     assert result["hud_seed_reason"] == "probe_error"
     assert result["hud_seed_error"] == "OSError"
     assert session.cargo_snapshot().outcome == OUTCOME_ABSENT
+
+
+_UNLIMITED_SHIP_INFO = [
+    "Trader Name    : Gunnery Sergeant Sextant",
+    "Current Sector : 9193",
+    "Total Holds    : 50 - Empty=50",
+    "Credits        : 99,000",
+    "Command [TL=00:00:00]:[9193] (?=Help)? :",
+]
+
+
+def test_seed_confirms_ship_info_that_omits_turns_left(tmp_path, monkeypatch):
+    """Unlimited-turn variants omit Turns left; Credits+cargo still seed."""
+    session = _session(tmp_path)
+    current = _screen(
+        session,
+        monkeypatch,
+        ["Sector : 9193", "Command [TL=00:00:00]:[9193] (?=Help)? :"],
+    )
+    sent = []
+
+    def fake_send_and_confirm(target, text, **kwargs):
+        sent.append(kwargs.get("confirm_prompt"))
+        current["rows"] = list(_UNLIMITED_SHIP_INFO)
+        return "prompt", 0.1, True
+
+    monkeypatch.setattr(hud_seed, "send_and_confirm", fake_send_and_confirm)
+
+    result = hud_seed.seed_hud_after_join(session)
+
+    assert len(sent) == 1
+    assert "Credits" in sent[0]
+    assert "Turns" not in sent[0]
+    assert result == {
+        "hud_seed_probed": True,
+        "hud_seed_reason": "seeded",
+        "credits": 99000,
+        "turns_left": None,
+        "cargo": 50,
+    }
+    assert session.turns_snapshot().outcome == OUTCOME_ABSENT
+
+
+def test_credits_and_cargo_known_without_turns_is_already_seeded(tmp_path, monkeypatch):
+    session = _session(tmp_path)
+    _screen(session, monkeypatch, _UNLIMITED_SHIP_INFO)
+    monkeypatch.setattr(
+        hud_seed,
+        "send_and_confirm",
+        lambda *a, **k: (_ for _ in ()).throw(AssertionError("unexpected send")),
+    )
+
+    assert hud_seed.seed_hud_after_join(session)["hud_seed_reason"] == "already_seeded"

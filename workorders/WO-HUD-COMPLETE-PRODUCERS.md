@@ -1,6 +1,6 @@
 # WO-HUD-COMPLETE-PRODUCERS
 
-**Status:** BUILT · offline green · live partial (2 distinct hosts)  
+**Status:** BUILT · offline green · live blocked once on unlimited-turn confirm · REVISE in flight  
 **Depends:** `main` ≥ `102681e` · HUD bridge #226 · daemon lifecycle #252
 
 ## Goal
@@ -27,6 +27,9 @@ credits, sector, turns, empty cargo holds, and session profit.
 - The first strict credit observation establishes a known baseline and
   therefore a truthful profit of `0`.
 - Unknown / damaged screens never overwrite sticky values.
+- Seed completeness is **credits + empty cargo holds**. Turns are sticky when
+  ship-info states them; unlimited-turn variants that omit `Turns left` leave
+  the turns cell honestly absent and still count as `seeded`.
 - `I` is sent only when the current screen positively classifies
   `main_command`; fighter `Option?`, human-held, spectate, and other screens
   defer without sending.
@@ -59,11 +62,12 @@ hub-mediated deploy window; no turn-spending arm is required.
 
 - Focused: `79 passed`.
 - Full offline: `6401 passed`.
-- Live isolated-daemon success on two distinct catalog hosts, including one
-  NEW registration and one subsequent RETURNING login. Both emitted all five
-  non-null HUD cells after `hud_seed_reason=seeded`.
-- Additional catalog hosts stopped in pre-existing login/spawn paths before
-  HUD seeding (`unknown`, `fighter_encounter`, missing saved password, or
-  spawn timeout). Therefore the repository's three-host merge diversity gate
-  remains open; those failures do not contradict the two successful HUD
-  observations and are not recorded as `n/a`.
+- Live isolated-daemon matrix on tip `c78e553`: 3 distinct hosts fully seeded
+  (`academy_of_tradewars` RETURNING, `gone_rogue` RETURNING, `joes_tavern` NEW).
+- Two additional NEW hosts reached `main_command` but unlimited-turn ship-info
+  omitted `Turns left`, so the old Turns-based confirm returned
+  `probe_unconfirmed` while credits/cargo were on screen. REVISE: confirm on
+  `Credits :`, treat credits+cargo as seed-complete, turns may stay absent.
+- Other catalog hosts stopped in pre-existing login paths (`unknown`,
+  `fighter_encounter`, missing saved password). Those are `NOT-ATTEMPTED` /
+  login-blocked cells, not `n/a`.

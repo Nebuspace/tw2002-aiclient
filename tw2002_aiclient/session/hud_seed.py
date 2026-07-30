@@ -3,7 +3,11 @@
 The probe is deliberately narrow: only a positively classified
 ``main_command`` screen may send ``I``. Every other screen defers, including
 fighter ``Option?`` dialogues where ``I`` has dialogue-local meaning.
-Failures are diagnostic return values and never break a successful ensure.
+Confirmation looks for the ship-info ``Credits :`` line (always present),
+not ``Turns left``, so unlimited-turn variants that omit turns still seed.
+Seed completeness is credits + empty cargo holds; turns stay sticky when
+stated and honestly absent otherwise. Failures are diagnostic return values
+and never break a successful ensure.
 """
 
 from __future__ import annotations
@@ -13,7 +17,9 @@ from .state_parser import OUTCOME_READ
 
 _PROBE_TIMEOUT_S = 8.0
 _STALE_S = 20.0
-_SHIP_INFO_CONFIRM = r"(?im)^[ \t]*Turns[ \t]+left[ \t]*:[ \t]*\d"
+# Confirm the ship-info screen itself, not a turns line. Unlimited-turn
+# variants omit ``Turns left`` while still printing Credits / holds.
+_SHIP_INFO_CONFIRM = r"(?im)^[ \t]*Credits[ \t]*:[ \t]*\d"
 
 
 def _render(session) -> tuple[str, str]:
@@ -38,6 +44,11 @@ def _values(session) -> tuple[object, object, object]:
     )
 
 
+def _seed_complete(credits, cargo) -> bool:
+    """Credits + empty holds are enough; turns may be honestly absent."""
+    return credits.outcome == OUTCOME_READ and cargo.outcome == OUTCOME_READ
+
+
 def seed_hud_after_join(session, *, force: bool = False) -> dict:
     """Observe once, then issue at most one ``I`` if a tracked seed is absent."""
     required = (
@@ -59,13 +70,13 @@ def seed_hud_after_join(session, *, force: bool = False) -> dict:
     try:
         text, prompt = _render(session)
         _observe(session, text, prompt)
-        snapshots = _values(session)
-        complete = all(snapshot.outcome == OUTCOME_READ for snapshot in snapshots)
+        credits, turns, cargo = _values(session)
+        complete = _seed_complete(credits, cargo)
         stale = any(
             snapshot.outcome == OUTCOME_READ
             and snapshot.age_s is not None
             and snapshot.age_s >= _STALE_S
-            for snapshot in snapshots
+            for snapshot in (credits, turns, cargo)
         )
         if complete and not (force and stale):
             return {"hud_seed_probed": False, "hud_seed_reason": "already_seeded"}
@@ -87,12 +98,20 @@ def seed_hud_after_join(session, *, force: bool = False) -> dict:
         text, prompt = _render(session)
         _observe(session, text, prompt)
         credits, turns, cargo = _values(session)
+        if not _seed_complete(credits, cargo):
+            return {
+                "hud_seed_probed": True,
+                "hud_seed_reason": "probe_incomplete",
+                "credits": credits.balance if credits.outcome == OUTCOME_READ else None,
+                "turns_left": turns.turns if turns.outcome == OUTCOME_READ else None,
+                "cargo": cargo.cargo if cargo.outcome == OUTCOME_READ else None,
+            }
         return {
             "hud_seed_probed": True,
             "hud_seed_reason": "seeded",
-            "credits": credits.balance if credits.outcome == OUTCOME_READ else None,
+            "credits": credits.balance,
             "turns_left": turns.turns if turns.outcome == OUTCOME_READ else None,
-            "cargo": cargo.cargo if cargo.outcome == OUTCOME_READ else None,
+            "cargo": cargo.cargo,
         }
     except Exception as exc:  # noqa: BLE001 — ensure success must survive seed failure
         return {
