@@ -1,12 +1,14 @@
 """App-driven sector frontier exploration from ``main_command`` (WO M4).
 
-Pure map-fill / AP-08 adjacent hops only — no invented screen classes, no
-money/combat auto-action. Halts on the first unrecognized or never-auto
-screen; surfaces ``explore_exhausted`` when the planner has no legal hop.
+Pure map-fill / AP-08 adjacent hops only — no invented screen classes and no
+combat or trade action. An armed Gather run may answer the exact captured port
+commodity quantity prompt with ``0`` (decline); every other money prompt still
+halts. Surfaces ``explore_exhausted`` when the planner has no legal hop.
 """
 
 from __future__ import annotations
 
+import re
 import threading
 import time
 from dataclasses import dataclass, replace
@@ -434,6 +436,23 @@ def _ingest_settled_sector(
 #: this is that discipline ported, not re-invented.
 DOCK_LETTER_ALLOWLIST = frozenset({"P", "T"})
 
+# Gather is allowed to decline a captured port quantity prompt, never to answer
+# an arbitrary money question.  Keep the exact commodity shape narrower than
+# the classifier's intentionally broad `money_prompt` family.
+_PORT_QUANTITY_PROMPT_RE = re.compile(
+    r"^How\s+many\s+holds\s+of\s+(?:Fuel\s+Ore|Organics|Equipment)"
+    r"(?:\s+do\s+you\s+want\s+to\s+(?:buy|sell))?"
+    r"\s+\[\s*\d[\d,]*\s*\]\?\s*$",
+    re.IGNORECASE,
+)
+_PORT_QUANTITY_OR_COMMAND_PATTERN = (
+    r"(?i:(?:How\s+many\s+holds\s+of\s+(?:Fuel\s+Ore|Organics|Equipment)"
+    r"(?:\s+do\s+you\s+want\s+to\s+(?:buy|sell))?"
+    r"\s+\[\s*\d[\d,]*\s*\]\?"
+    r"|Command\s*\[\s*TL\s*=.*\]\s*.*:\s*))$"
+)
+_MAX_GATHER_DECLINES = 3
+
 #: Three reasons, one per failure site, replacing the single
 #: `dock_screen_unrecognized` this module used to return from both the menu
 #: check and the post-`T` ingest. That one string cost a whole diagnosis
@@ -820,27 +839,48 @@ class ExploreRunner:
         )
         if wrote is None:
             return HALT_DOCK_REPORT_UNREADABLE, 2, 1
-        # Gate the screen `T` left us on, HERE, before returning success.
-        #
-        # It is tempting to write "the loop's own gate will see this" -- I did
-        # write exactly that, and it is false. `_gate_screen` runs at the TOP
-        # of an iteration, and a successful dock returns into the MIDDLE of
-        # one, past the gate and immediately before the next warp is sent. A
-        # test caught the consequence: letters went out as `P`, `T`, `158` --
-        # the loop typing a sector number into the port's trade prompt.
-        #
-        # That matters because when the port has goods we can trade, `T` lands
-        # on `How many holds ... [40]?`, a money prompt that takes its DEFAULT
-        # on any input it cannot parse (captured wire: a human typing `quit`
-        # there bought 2,423 credits of equipment). So an ungated return is
-        # not a missing halt, it is the app sending keys at a money prompt.
-        #
-        # When the port had nothing to trade the game returns to the Command
-        # prompt instead, this gate passes, and the run continues as before.
-        halt, _klass = _gate_screen(full_text, prompt)
-        if halt is not None:
-            return halt, 2, 1
-        return None, 2, 1
+        decline_halt, decline_sends = self._decline_gather_quantities(full_text, prompt)
+        if decline_halt is not None:
+            return decline_halt, 2 + decline_sends, 1
+        return None, 2 + decline_sends, 1
+
+    def _decline_gather_quantities(
+        self, full_text: str, prompt: str
+    ) -> tuple[Optional[str], int]:
+        """Decline the bounded port quantity cascade after Gather ingestion.
+
+        The Explore arm authorized commodity discovery, not a transaction.
+        Therefore the only money-screen exception is the exact captured
+        commodity quantity shape, answered with numeric ``0``.  A bank
+        transfer, generic quantity, offer/haggle prompt, or fourth commodity
+        remains a halt.
+        """
+        sends = 0
+        while True:
+            halt, klass = _gate_screen(full_text, prompt)
+            if halt is None:
+                return None, sends
+            if (
+                klass != "money_prompt"
+                or _PORT_QUANTITY_PROMPT_RE.fullmatch(prompt) is None
+                or sends >= _MAX_GATHER_DECLINES
+            ):
+                return halt, sends
+
+            _reason, _elapsed, confirmed = _settle.send_and_confirm(
+                self._session,
+                "0",
+                confirm_prompt=_PORT_QUANTITY_OR_COMMAND_PATTERN,
+                enter=True,
+                timeout_s=self._timeout_s,
+                debounce_ms=self._debounce_ms,
+            )
+            sends += 1
+            if not confirmed:
+                return HALT_CONFIRM_FAILED, sends
+            rows = self._session.render()
+            full_text = self._session.render_text(rows)
+            prompt = rows[-1].strip() if rows else ""
 
     def start(
         self,
