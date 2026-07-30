@@ -112,6 +112,8 @@ def test_daemon_refusal_survives_as_a_typed_reason(monkeypatch, tmp_path):
         "unsupported_arg:cycles",
         "unsupported_arg:force",
         "floor_unsupported",
+        "invalid_turn_budget",
+        "turn_budget_unsupported",
         "locked_by_active_driver",
     ):
         monkeypatch.setattr(_cli, "send_request", _spy({"ok": False, "error": code}))

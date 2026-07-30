@@ -181,6 +181,11 @@ INTERVENTION_REASON_LABELS = {
     "confirm_failed": "confirm failed",
     "post_class": "post class",
     "floor_reached": "floor reached",
+    # WO-AUTOLOOP-TURN-BUDGET remaining-turns floor (parallel to credits_*).
+    "turn_budget_exhausted": "turn budget exhausted",
+    "turns_unknown": "turns unknown",
+    "turns_stale": "turns stale",
+    "turns_unreadable": "turns unreadable",
 }
 
 # Canon's own empty/unknown marker -- "an empty code renders ``"?"``"

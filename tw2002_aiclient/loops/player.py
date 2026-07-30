@@ -234,13 +234,27 @@ the archive's own rule, kept because it is what lets every port written
 before this parameter existed keep working unchanged, and what makes
 "a floor was requested" and "credits were consulted" the same event.
 
+The turn-budget rail (WO-AUTOLOOP-TURN-BUDGET) -- same choke-point
+--------------------------------------------------------------------
+``turn_budget`` is an optional *remaining-turns floor*, checked here for
+the same reason ``floor`` is: this is the only place a send can be refused
+before it happens. It is **not** a cycle count and does not unlock
+``cycles`` -- see "What this slice is NOT". The run-loop decides whether a
+run is budgeted and at what number; this module refuses the send.
+
+Fail-closed ladder mirrors :func:`_check_floor`: never observed
+(``turns_unknown``), observed too long ago (``turns_stale``), adapter
+answered with something that is not a :class:`~tw2002_aiclient.session.state_parser.TurnsSnapshot`
+(``turns_unreadable``), or a genuine reading at or below the armed number
+(``turn_budget_exhausted``). A run with no ``turn_budget`` never calls
+:meth:`ReplaySession.turns`.
+
 What this slice is NOT
 ----------------------
 There is still no cycle count and no repetition here, and that is a
 boundary, not an omission. ``scope: repeating`` is driven by the run-loop,
-which owns the remaining rails -- turn-budget clamp, hazard-halt,
-arm-confirm as a launch gate (``action-safety-guards.md`` §"Structural
-rails", ``app-autopilot-model.md`` §"Background AUTO-LOOP Posture"). A
+which owns the remaining rail -- hazard-halt
+(``action-safety-guards.md`` §"Structural rails", ``app-autopilot-model.md`` §"Background AUTO-LOOP Posture"). A
 ``cycles=N`` parameter here would ship the repetition without them, which
 is the dangerous half on its own. A caller that wants N cycles calls this N
 times and gets canon's per-cycle start-anchor re-check for free, exactly as
@@ -266,6 +280,7 @@ from ..session.state_parser import (
     OUTCOME_UNREADABLE,
     CreditsSnapshot,
     SectorRead,
+    TurnsSnapshot,
     read_current_sector,
 )
 from .loader import Loop, LoopStep
@@ -289,6 +304,10 @@ __all__ = [
     "HALT_SETTLE_FAILED",
     "HALT_START_ANCHOR_MISMATCH",
     "HALT_START_ANCHOR_MISSING",
+    "HALT_TURN_BUDGET_EXHAUSTED",
+    "HALT_TURNS_STALE",
+    "HALT_TURNS_UNKNOWN",
+    "HALT_TURNS_UNREADABLE",
     "HALT_UNRECOGNIZED_SCREEN",
     "OUTCOME_COMPLETED",
     "OUTCOME_HALTED",
@@ -296,6 +315,7 @@ __all__ = [
     "ReplayResult",
     "ReplaySession",
     "StepTrace",
+    "TURNS_STALE_MS",
     "replay_loop",
 ]
 
@@ -371,6 +391,19 @@ HALT_CREDITS_STALE = "credits_stale"
 # every such tuple is truthy, and a truthiness test would have read one as
 # a healthy balance.
 HALT_CREDITS_UNREADABLE = "credits_unreadable"
+# depletion -- remaining turns are AT OR BELOW the turn_budget the run was
+# armed with. Mirror of floor_reached for the turn-budget rail
+# (WO-AUTOLOOP-TURN-BUDGET): a remaining-turns floor, re-checked at every
+# boundary, halt before the next send.
+HALT_TURN_BUDGET_EXHAUSTED = "turn_budget_exhausted"
+# desync -- no turn count has EVER been observed. Parallel to
+# credits_unknown: arm-confirm fails closed rather than playing blind.
+HALT_TURNS_UNKNOWN = "turns_unknown"
+# desync -- last-known turn count is too old to trust for a send decision.
+HALT_TURNS_STALE = "turns_stale"
+# desync -- the port answered turns() with something that is not a
+# TurnsSnapshot (adapter fault; never truthiness-tested).
+HALT_TURNS_UNREADABLE = "turns_unreadable"
 
 HALT_REASONS = frozenset({
     HALT_SETTLE_FAILED,
@@ -389,6 +422,10 @@ HALT_REASONS = frozenset({
     HALT_CREDITS_UNKNOWN,
     HALT_CREDITS_STALE,
     HALT_CREDITS_UNREADABLE,
+    HALT_TURN_BUDGET_EXHAUSTED,
+    HALT_TURNS_UNKNOWN,
+    HALT_TURNS_STALE,
+    HALT_TURNS_UNREADABLE,
 })
 
 # How old a balance may be and still gate a send. AP-13's number
@@ -401,6 +438,11 @@ HALT_REASONS = frozenset({
 # the archive's own honesty note records that its CLI never threaded one
 # either.
 CREDITS_STALE_MS = 15_000
+
+# Same window as credits, on purpose: both rails are "is this sticky reading
+# still young enough to gate a send", and inventing a second number would
+# let one rail go soft while the other stayed tight. Not on the wire.
+TURNS_STALE_MS = CREDITS_STALE_MS
 
 # The whole content of `force`, as data rather than as scattered branches.
 #
@@ -605,6 +647,20 @@ class ReplaySession(Protocol):
         that is not a ``CreditsSnapshot`` halts the run
         (:data:`HALT_CREDITS_UNREADABLE`); it is never interpreted."""
 
+    def turns(self) -> TurnsSnapshot:
+        """What the runtime knows about remaining turns RIGHT NOW: a
+        :class:`~tw2002_aiclient.session.state_parser.TurnsSnapshot`.
+
+        Required **iff** the run was given a ``turn_budget``; unreached on
+        an unbudgeted run. :func:`replay_loop` refuses a budget handed to a
+        port that cannot answer this, at entry, so "a budget was accepted"
+        and "a budget can be enforced" stay the same condition.
+
+        Return the snapshot object, never a bare int or ``(turns, ts)``
+        pair — anything that is not a ``TurnsSnapshot`` halts
+        (:data:`HALT_TURNS_UNREADABLE`). An adapter over the daemon core
+        implements this with ``Session.turns_snapshot()``."""
+
 
 # ---------------------------------------------------------------------------
 # What a caller gets back
@@ -716,6 +772,8 @@ class _Observation:
     ``None`` on an unfloored run, which is a different fact from an adapter
     answering ``None``, and the two never meet: this field is only ever read
     when a floor was requested.
+
+    ``turns`` follows the same contract for the turn-budget rail.
     """
 
     klass: Optional[str] = None
@@ -724,6 +782,7 @@ class _Observation:
     aborted: bool = False
     failure: Optional[str] = None
     credits: object = None
+    turns: object = None
 
 
 def _is_screen(value) -> bool:
@@ -741,7 +800,7 @@ def _is_screen(value) -> bool:
     )
 
 
-def _observe(session, *, want_credits: bool = False) -> _Observation:
+def _observe(session, *, want_credits: bool = False, want_turns: bool = False) -> _Observation:
     """Settle, read, classify -- in that order, always.
 
     The order is the safety property, not a convenience: ``state`` is the
@@ -772,14 +831,16 @@ def _observe(session, *, want_credits: bool = False) -> _Observation:
     # boundary -- a reading from before the send this boundary is about to
     # gate. Asked at all only when a floor is in play (see the module
     # docstring), so every port written before this method existed keeps
-    # working on an unfloored run.
+    # working on an unfloored run. Same rule for turns / turn_budget.
     credits = session.credits() if want_credits else None
+    turns = session.turns() if want_turns else None
     return _Observation(
         klass=classify_screen(full_text, prompt_line),
         sector=read_current_sector(prompt_line),
         fenced=bool(session.is_driver_fenced()),
         aborted=bool(session.should_abort()),
         credits=credits,
+        turns=turns,
     )
 
 
@@ -891,6 +952,44 @@ def _check_floor(credits, floor: Optional[int], stale_ms: int) -> Optional[str]:
     return None if balance > floor else HALT_FLOOR_REACHED
 
 
+def _check_turn_budget(turns, turn_budget: Optional[int], stale_ms: int) -> Optional[str]:
+    """May the App spend another turn at this boundary? ``None`` means yes.
+
+    Pure, and a structural twin of :func:`_check_floor`: every path except
+    one halts. The single non-halting path requires a budget was set, the
+    port answered with a real :class:`TurnsSnapshot`, that snapshot carries
+    an affirmative reading, that reading is young enough, and the remaining
+    turn count is strictly above the armed floor. Anything else stops the
+    run. There is deliberately no "assume we're fine" branch
+    (``action-safety-guards.md``: a run whose turn budget is unknown fails
+    closed).
+
+    ``turn_budget is None`` returns ``None`` immediately: an unbudgeted run
+    must not depend on a turn count it never asked about.
+    """
+    if turn_budget is None:
+        return None
+    if not isinstance(turns, TurnsSnapshot):
+        return HALT_TURNS_UNREADABLE
+    if turns.outcome != OUTCOME_READ:
+        return HALT_TURNS_UNKNOWN
+    age_s = turns.age_s
+    fresh = (
+        isinstance(age_s, (int, float))
+        and not isinstance(age_s, bool)
+        and math.isfinite(age_s)
+        and 0 <= age_s <= stale_ms / 1000.0
+    )
+    if not fresh:
+        return HALT_TURNS_STALE
+    remaining = turns.turns
+    if not isinstance(remaining, int) or isinstance(remaining, bool):
+        return HALT_TURNS_UNREADABLE
+    # Strictly above, matching the credit floor: a budget of 50 means
+    # "stop at 50 remaining", not "stop below 50".
+    return None if remaining > turn_budget else HALT_TURN_BUDGET_EXHAUSTED
+
+
 def _check_start_anchor(loop: Loop, read: Optional[SectorRead], force: bool) -> Optional[str]:
     """Canon's start-anchor guard as a 4-way decision. ``None`` means the
     world matches the recording and the first send may proceed.
@@ -963,6 +1062,8 @@ def replay_loop(
     force: bool = False,
     floor: Optional[int] = None,
     credits_stale_ms: int = CREDITS_STALE_MS,
+    turn_budget: Optional[int] = None,
+    turns_stale_ms: int = TURNS_STALE_MS,
 ) -> ReplayResult:
     """Replay one taught macro against a live session, one confirmed step
     at a time, halting the instant reality disagrees.
@@ -983,9 +1084,8 @@ def replay_loop(
     ``force`` waives exactly one halt -- a macro with no recorded anchor
     (:data:`FORCEABLE_HALTS`). It cannot waive a mismatch, an absent read,
     or an unreadable one, and no argument here can enable a
-    never-auto-action screen. It does not touch the floor: a credit floor
-    is not a recording artifact, it is live money, and there is nothing
-    about it that "there was nothing to check against" could ever describe.
+    never-auto-action screen. It does not touch the floor or turn budget:
+    those are live readings, not recording artifacts.
 
     ``floor`` is an optional credit floor, re-checked at EVERY boundary --
     see the module docstring. ``None`` (the default) means no floor was
@@ -996,16 +1096,19 @@ def replay_loop(
     cannot be missed rather than discovered as an ``AttributeError`` at the
     first boundary.
 
-    ``credits_stale_ms`` is how old a balance may be and still gate a send
-    (:data:`CREDITS_STALE_MS`). A caller cannot widen it to infinity by
-    accident: a non-positive value is refused at entry, because a window
-    that never expires is a stop-loss with the staleness gate removed.
+    ``turn_budget`` is an optional remaining-turns floor (WO-AUTOLOOP-
+    TURN-BUDGET), re-checked at every boundary the same way. ``None`` means
+    :meth:`ReplaySession.turns` is never called. A budget against a port
+    that cannot answer turns raises at entry.
+
+    ``credits_stale_ms`` / ``turns_stale_ms`` are how old a sticky reading
+    may be and still gate a send. A non-positive window is refused at entry.
 
     Returns a :class:`ReplayResult` and does not raise for any game
     outcome; halting is the normal, correct answer whenever the world has
     moved. It raises only for a caller bug (a wrong ``loop`` type, an
-    unenforceable floor), and every such raise costs zero bytes because it
-    happens before the first observation.
+    unenforceable floor or budget), and every such raise costs zero bytes
+    because it happens before the first observation.
     """
     if not isinstance(loop, Loop):
         raise TypeError(
@@ -1043,6 +1146,28 @@ def replay_loop(
                 "fires is a rail nobody can use, and it should be refused where the "
                 "caller can see it rather than at the first boundary."
             )
+    if turn_budget is not None:
+        if isinstance(turn_budget, bool) or not isinstance(turn_budget, int):
+            raise TypeError(
+                "replay_loop's turn_budget is a remaining-turns floor and must be an "
+                f"int -- got {type(turn_budget).__name__}."
+            )
+        if not callable(getattr(session, "turns", None)):
+            raise TypeError(
+                "replay_loop was given turn_budget=%r but this port cannot observe "
+                "turns (no callable turns()). A budget accepted here would be a "
+                "flag that reads as a safety feature and stops nothing -- refused "
+                "instead." % (turn_budget,)
+            )
+        if not isinstance(turns_stale_ms, int) or isinstance(turns_stale_ms, bool):
+            raise TypeError(
+                "turns_stale_ms must be an int (milliseconds) -- got "
+                f"{type(turns_stale_ms).__name__}."
+            )
+        if turns_stale_ms <= 0:
+            raise ValueError(
+                f"turns_stale_ms must be positive -- got {turns_stale_ms}."
+            )
 
     traces: list[StepTrace] = []
     sends_issued = 0
@@ -1059,9 +1184,10 @@ def replay_loop(
         )
 
     want_credits = floor is not None
+    want_turns = turn_budget is not None
 
     # ---- boundary 0: the only boundary that also checks the anchor ----
-    observation = _observe(session, want_credits=want_credits)
+    observation = _observe(session, want_credits=want_credits, want_turns=want_turns)
     anchor_read = observation.sector
     reason = _gate(observation)
     if reason is None:
@@ -1073,6 +1199,8 @@ def replay_loop(
         # is a one-time pre-flight. Every branch halts, so nothing is less
         # safe whichever fires first.
         reason = _check_floor(observation.credits, floor, credits_stale_ms)
+    if reason is None:
+        reason = _check_turn_budget(observation.turns, turn_budget, turns_stale_ms)
     if reason is None:
         reason = _check_start_anchor(loop, anchor_read, force)
     if reason is not None:
@@ -1103,7 +1231,7 @@ def replay_loop(
             traces.append(_trace(index, step, confirmed=False, observed_class=None))
             return halted(HALT_CONFIRM_FAILED, index, anchor_read)
 
-        observation = _observe(session, want_credits=want_credits)
+        observation = _observe(session, want_credits=want_credits, want_turns=want_turns)
         reason = _gate(observation)
         if reason is None:
             # Re-checked here, not only at boundary 0, and this call is the
@@ -1113,6 +1241,8 @@ def replay_loop(
             # i+1 is step i+1's pre-send check (see "Boundaries, not phases"),
             # so refusing here refuses the next send before it happens.
             reason = _check_floor(observation.credits, floor, credits_stale_ms)
+        if reason is None:
+            reason = _check_turn_budget(observation.turns, turn_budget, turns_stale_ms)
         if reason is None and observation.klass != step.expected_post_class:
             # An ordinary divergence: the screen is one the app can name,
             # it is simply not the one this step recorded. Checked AFTER
