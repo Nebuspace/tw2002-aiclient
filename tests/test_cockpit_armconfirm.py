@@ -296,16 +296,16 @@ def test_exactly_three_production_call_sites_raise_the_gate() -> None:
     an explicit confirm prompt").
 
     The pin is UPDATED, not deleted -- it now asserts there are exactly
-    THREE production call sites, all in `app.py`. A FOURTH caller appearing
+    FOUR production call sites, all in `app.py`. A FIFTH caller appearing
     without its own WO still goes red first, which is the property that
     made the original worth having. Deleting it would have converted a
     live guard into silence at the exact moment it started guarding
     something real.
 
-    This test caught the third addition on its first full-suite run, which
-    is the whole argument for a counted tripwire over a "gates are gated"
-    assertion: the count is what makes a new money path impossible to add
-    quietly.
+    WO-PLAY-REFLEX-ARM adds the fourth: Play `V` preview → confirm-arm of a
+    taught-rule proposal via `adapters.reflex_arm`. Same deliberate shape —
+    preview/raise arms nothing; only a subsequent `y` with
+    `pending_confirm_action == "reflex"` launches.
     """
     root = Path(screens_mod.__file__).resolve().parent
     callers = []
@@ -316,10 +316,9 @@ def test_exactly_three_production_call_sites_raise_the_gate() -> None:
             name = getattr(func, "attr", None) or getattr(func, "id", None)
             if isinstance(node, ast.Call) and name == "begin_arm_confirm":
                 callers.append(path.name)
-    assert callers == ["app.py", "app.py", "app.py"], (
-        f"expected exactly three production callers, all in app.py (the "
-        f"post-ensure explore offer, the relaunch offer, and the L)chains "
-        f"taught-loop arm); found {callers}"
+    assert callers == ["app.py", "app.py", "app.py", "app.py"], (
+        f"expected exactly four production callers, all in app.py (explore, "
+        f"relaunch, L)chains, and V)reflex); found {callers}"
     )
 
 

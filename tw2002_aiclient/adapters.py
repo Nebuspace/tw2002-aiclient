@@ -494,6 +494,54 @@ class ReflexResult:
     raw: dict | None = None
 
 
+def reflex_arm(
+    *,
+    rule_id: str,
+    macro: str,
+    classification: str,
+    run_dir: Path | None = None,
+) -> AutoLoopResult:
+    """Launch a human-confirmed reflex proposal (WO-PLAY-REFLEX-ARM).
+
+    Sends the ``reflex_arm`` control verb with the **exact** identity the
+    operator saw at preview (``rule_id``, ``macro``, ``classification``).
+    The daemon re-derives the proposal and refuses on drift — this adapter
+    never selects a substitute macro and never takes a control lock itself.
+
+    Never raises. Same transport-honesty contract as :func:`autoloop_start`:
+    a dead socket or malformed reply is ``ok=False`` with a typed reason.
+    Incomplete identity is refused client-side so we do not ask the daemon
+    to check a claim we could not show the human.
+    """
+    if not isinstance(rule_id, str) or not rule_id.strip():
+        return AutoLoopResult(
+            ok=False,
+            reason="incomplete_identity",
+            detail="rule_id missing; refusing to arm an unnamed proposal",
+        )
+    if not isinstance(macro, str) or not macro.strip():
+        return AutoLoopResult(
+            ok=False,
+            reason="incomplete_identity",
+            detail="macro missing; refusing to arm an unnamed proposal",
+        )
+    if not isinstance(classification, str) or not classification.strip():
+        return AutoLoopResult(
+            ok=False,
+            reason="incomplete_identity",
+            detail="classification missing; refusing to arm without a screen class",
+        )
+    return _autoloop_verb(
+        "reflex_arm",
+        run_dir,
+        payload={
+            "rule_id": rule_id,
+            "macro": macro,
+            "classification": classification,
+        },
+    )
+
+
 def reflex_propose(*, run_dir: Path | None = None) -> ReflexResult:
     """Ask the daemon what the taught rule library proposes for the live screen.
 
