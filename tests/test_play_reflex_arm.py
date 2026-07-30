@@ -197,6 +197,7 @@ def test_screens_handle_key_returns_reflex_offer_intent():
     play.chains_session = type("C", (), {"is_open": False})()
     play._arm_confirm = None
     play._draft_approve = None
+    play._rule_identity = None
     play._conn_focused = False
     assert play.handle_key(ord("v")) == _reflex_controls.REFLEX_OFFER_INTENT
     assert play.handle_key(ord("V")) == _reflex_controls.REFLEX_OFFER_INTENT
