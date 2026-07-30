@@ -117,6 +117,10 @@ express:
 | `current_sector_unreadable` | current sector unreadable | **guard-STOP** — anchor check needed, sector claim could not be resolved |
 | `post_class` | post class | **guard-STOP** — post-step classification diverged from the recorded expected class |
 | `floor_reached` | floor reached | **depletion** — credits balance at or below the armed floor |
+| `turn_budget_exhausted` | turn budget exhausted | **depletion** — remaining turns at or below the armed turn_budget |
+| `turns_unknown` | turns unknown | **desync** — no turn count has ever been observed; autopilot will not act on an unknown budget |
+| `turns_stale` | turns stale | **desync** — the last-known turn count is too old to trust for a decision |
+| `turns_unreadable` | turns unreadable | **desync** — the turns port answered something that is not a readable snapshot |
 
 The catalog is **open by construction**: `intervention_reason_label()` passes an unrecognized code
 through as its own text (and maps an empty/`None` code to `"?"`), so a new STOP cause can ship a new

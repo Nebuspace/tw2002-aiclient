@@ -301,6 +301,7 @@ def autoloop_start(
     name: str,
     *,
     floor: int | None = None,
+    turn_budget: int | None = None,
     run_dir: Path | None = None,
 ) -> AutoLoopResult:
     """Arm the background player for **one pass** of the taught macro *name*.
@@ -309,14 +310,15 @@ def autoloop_start(
     always returns a typed :class:`AutoLoopResult`.
 
     **One pass, not a repetition count.** The daemon plays a single pass and
-    *refuses* ``cycles`` outright (``unsupported_arg:cycles``) because two of
-    the four rails that make repetition safe are not built yet — see
-    ``session/protocol.py::_dispatch_autoloop_start``. So this adapter has no
-    ``cycles`` parameter to pass one through: a keyword the daemon will refuse
-    is a keyword that invites a caller to compose a confirm prompt promising
-    repetition that cannot happen. ``force`` is absent for the same reason and
-    a stronger one — it waives a missing start-anchor, and canon allows only an
-    explicit *human* waiver.
+    *refuses* ``cycles`` outright (``unsupported_arg:cycles``) because
+    hazard-halt — the remaining rail that makes repetition safe — is not
+    built yet (turn-budget landed in WO-AUTOLOOP-TURN-BUDGET; see
+    ``session/protocol.py::_dispatch_autoloop_start``). So this adapter has
+    no ``cycles`` parameter to pass one through: a keyword the daemon will
+    refuse is a keyword that invites a caller to compose a confirm prompt
+    promising repetition that cannot happen. ``force`` is absent for the
+    same reason and a stronger one — it waives a missing start-anchor, and
+    canon allows only an explicit *human* waiver.
 
     **A blank name fails closed here, without reaching the wire.** The daemon
     answers ``missing_name`` for the same input, so this is not a second
@@ -326,12 +328,13 @@ def autoloop_start(
     typed error when missing — do not guess", and a guess here would arm
     *some* macro rather than none.
 
-    **``floor`` is deliberately NOT re-validated here.** The daemon rejects a
-    bool or a float with a named ``invalid_floor`` and documents why the check
-    belongs there — "JSON is where the wrong type actually arrives". Copying
-    that rule into the adapter would create a second place for it to drift,
-    and the failure mode of drift is a floor the operator believes is armed.
-    One owner, and it is the layer that can actually enforce it.
+    **``floor`` / ``turn_budget`` are deliberately NOT re-validated here.**
+    The daemon rejects a bool or a float with a named ``invalid_floor`` /
+    ``invalid_turn_budget`` and documents why the check belongs there —
+    "JSON is where the wrong type actually arrives". Copying that rule into
+    the adapter would create a second place for it to drift, and the failure
+    mode of drift is a rail the operator believes is armed. One owner, and
+    it is the layer that can actually enforce it.
 
     Caller contract: this is a **live-money call**. Canon
     (``canon/surfaces/mode-line-and-teach-controls.md`` §"Confirm-gate — never
@@ -351,6 +354,8 @@ def autoloop_start(
         # `explore_start`'s "None -> omit" discipline. Sent unvalidated: see
         # the docstring on who owns `invalid_floor`.
         payload["floor"] = floor
+    if turn_budget is not None:
+        payload["turn_budget"] = turn_budget
     return _autoloop_verb("autoloop_start", run_dir, payload=payload)
 
 

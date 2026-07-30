@@ -1013,8 +1013,16 @@ def test_the_player_cannot_acquire_a_session():
     ``loops/`` unable to reach the game on its own."""
     parameters = inspect.signature(replay_loop).parameters
     assert parameters["session"].default is inspect.Parameter.empty
-    assert list(parameters) == ["loop", "session", "force", "floor", "credits_stale_ms"]
-    for keyword in ("force", "floor", "credits_stale_ms"):
+    assert list(parameters) == [
+        "loop",
+        "session",
+        "force",
+        "floor",
+        "credits_stale_ms",
+        "turn_budget",
+        "turns_stale_ms",
+    ]
+    for keyword in ("force", "floor", "credits_stale_ms", "turn_budget", "turns_stale_ms"):
         assert parameters[keyword].kind is inspect.Parameter.KEYWORD_ONLY, keyword
     # WO-P2-G4-X5: the floor is OFF by default and the freshness window is
     # not. A `floor` that defaulted to anything but None would arm a rail
@@ -1022,6 +1030,9 @@ def test_the_player_cannot_acquire_a_session():
     # defaulted to None would be a freshness gate with no window.
     assert parameters["floor"].default is None
     assert parameters["credits_stale_ms"].default == player_mod.CREDITS_STALE_MS
+    # WO-AUTOLOOP-TURN-BUDGET: same posture for the remaining-turns floor.
+    assert parameters["turn_budget"].default is None
+    assert parameters["turns_stale_ms"].default == player_mod.TURNS_STALE_MS
     assert isinstance(player_mod.CREDITS_STALE_MS, int)
     assert player_mod.CREDITS_STALE_MS > 0
 
@@ -1102,6 +1113,12 @@ def test_the_reason_vocabulary_is_closed_and_fully_reachable():
         player_mod.HALT_CREDITS_UNKNOWN,
         player_mod.HALT_CREDITS_STALE,
         player_mod.HALT_CREDITS_UNREADABLE,
+        # WO-AUTOLOOP-TURN-BUDGET's remaining-turns floor. Reachability is
+        # proven in tests/test_turn_budget.py.
+        player_mod.HALT_TURN_BUDGET_EXHAUSTED,
+        player_mod.HALT_TURNS_UNKNOWN,
+        player_mod.HALT_TURNS_STALE,
+        player_mod.HALT_TURNS_UNREADABLE,
     }
     assert reported == HALT_REASONS
     # Canon's and the archive's own spellings, carried rather than re-coined.
@@ -1111,6 +1128,10 @@ def test_the_reason_vocabulary_is_closed_and_fully_reachable():
     assert player_mod.HALT_FLOOR_REACHED == "floor_reached"
     assert player_mod.HALT_CREDITS_UNKNOWN == "credits_unknown"
     assert player_mod.HALT_CREDITS_STALE == "credits_stale"
+    assert player_mod.HALT_TURN_BUDGET_EXHAUSTED == "turn_budget_exhausted"
+    assert player_mod.HALT_TURNS_UNKNOWN == "turns_unknown"
+    assert player_mod.HALT_TURNS_STALE == "turns_stale"
+    assert player_mod.HALT_TURNS_UNREADABLE == "turns_unreadable"
     # The codes canon's catalog already renders a label for.
     from tw2002_aiclient.cockpit.stopbanner import INTERVENTION_REASON_LABELS
 

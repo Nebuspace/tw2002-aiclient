@@ -1135,8 +1135,7 @@ def test_a_negative_floor_is_refused(tmp_path):
 
 
 def test_repetition_is_still_refused(tmp_path):
-    """X5 is one of the rails repetition needs, not the thing that unlocks
-    itself. Turn-budget and hazard-halt are still unbuilt, so `cycles` is
+    """Turn-budget landed; hazard-halt is still unbuilt, so `cycles` is
     still a surface agreeing to something it does not do."""
     write_macro(tmp_path, "ore-run", ONE_STEP)
     session = CreditsWireSession([ANCHOR_158[0]])
@@ -1151,10 +1150,10 @@ def test_repetition_is_still_refused(tmp_path):
     assert session.sent == []
 
 
-def test_the_arg_vocabulary_grew_by_exactly_one(tmp_path):
+def test_the_arg_vocabulary_grew_by_exactly_the_enforced_rails(tmp_path):
     """Pinned as a set rather than as a count, so a future arg has to be
     argued for here as well as wired."""
-    assert autoloop.ARGS_AUTOLOOP_START == frozenset({"name", "floor"})
+    assert autoloop.ARGS_AUTOLOOP_START == frozenset({"name", "floor", "turn_budget"})
 
 
 def test_the_port_forwards_the_snapshot_whole(tmp_path):

@@ -630,28 +630,25 @@ def _dispatch_autoloop_start(args, server):
 
     **Unsupported args are REFUSED, not ignored** (`autoloop.
     ARGS_AUTOLOOP_START`). `cycles` is the one that matters: this slice
-    plays one pass, and two of the four rails that make repetition safe --
-    turn-budget and hazard-halt -- are still not built (see
-    `autoloop.py`'s "One pass" for the standing tally). Accepting
-    `cycles=10` and running once would be a surface agreeing to something
-    it does not do. `force` is refused for a different reason: it waives a
-    MISSING start-anchor, canon allows only an explicit human waiver, and
-    a socket verb cannot confirm a human is behind it -- a daemon granting
-    itself that waiver is the self-arming canon forbids.
+    plays one pass, and hazard-halt -- the remaining rail that makes
+    repetition safe -- is still not built (see `autoloop.py`'s "One pass"
+    for the standing tally; turn-budget landed in WO-AUTOLOOP-TURN-BUDGET).
+    Accepting `cycles=10` and running once would be a surface agreeing to
+    something it does not do. `force` is refused for a different reason: it
+    waives a MISSING start-anchor, canon allows only an explicit human
+    waiver, and a socket verb cannot confirm a human is behind it -- a
+    daemon granting itself that waiver is the self-arming canon forbids.
 
-    **`floor` is now ACCEPTED, and only because it is now ENFORCED**
-    (WO-P2-G4-X5). X4 refused it on the rule that "accepting a floor you
-    cannot enforce is forbidden" -- the rule has not moved; the runtime
-    has. A floored run observes credits off every settled render it takes,
-    re-checks the number before every send, and halts fail-closed
-    (`credits_unknown` / `credits_stale`) when it cannot establish one. The
-    validation here is deliberately narrow and refuses rather than coerces:
-    a bool would arm a floor of 1 (`isinstance(True, int)`), a float would
-    compare fine and never be the number anyone typed, and a negative floor
-    is a stop-loss that cannot stop. `runner.start` then makes the final
-    refusal -- `floor_unsupported` -- if the daemon's own session cannot
-    observe credits at all, so acceptance at this layer never outruns
-    enforcement at that one.
+    **`floor` is ACCEPTED, and only because it is ENFORCED**
+    (WO-P2-G4-X5). **`turn_budget` is ACCEPTED for the same reason**
+    (WO-AUTOLOOP-TURN-BUDGET): a budgeted run observes turns off every
+    settled render, re-checks before every send, and halts fail-closed
+    (`turns_unknown` / `turns_stale` / `turns_unreadable` /
+    `turn_budget_exhausted`) when it cannot. Validation here is narrow and
+    refuses rather than coerces (bool/float/negative). `runner.start` then
+    makes the final refusal -- `floor_unsupported` /
+    `turn_budget_unsupported` -- if the daemon's own session cannot observe
+    the required quantity.
 
     Contrast `ensure`'s `no_auto_arm`, which is accepted and unused: the
     behaviour it asks for is exactly what happens, so accepting it lies
@@ -673,8 +670,13 @@ def _dispatch_autoloop_start(args, server):
         # or `"floor": 500.0` gets a named refusal instead of a run armed
         # with something that is not the number it meant.
         return {"ok": False, "error": "invalid_floor"}
+    turn_budget = args.get("turn_budget")
+    if turn_budget is not None and (
+        isinstance(turn_budget, bool) or not isinstance(turn_budget, int)
+    ):
+        return {"ok": False, "error": "invalid_turn_budget"}
     try:
-        snapshot = runner.start(name, floor=floor)
+        snapshot = runner.start(name, floor=floor, turn_budget=turn_budget)
     except autoloop.AutoLoopRefused as e:
         # Typed code, already in the runner's / control lock's / loader's
         # own vocabulary -- never re-spelled here.
@@ -750,10 +752,11 @@ def _dispatch_autoloop_relaunch(server):
     invented here.
 
     A resume is a fresh `start`, not a thaw: the macro replays from its
-    beginning. The name and floor come off the last report (`loop`/`floor`
-    — exactly `start`'s two arguments), so the operator does not retype
-    them, but nothing about mid-macro position is restored and this
-    docstring says so rather than letting the verb name imply otherwise.
+    beginning. The name, floor, and turn_budget come off the last report
+    (`loop`/`floor`/`turn_budget` — exactly `start`'s arguments), so the
+    operator does not retype them, but nothing about mid-macro position is
+    restored and this docstring says so rather than letting the verb name
+    imply otherwise.
 
     Refuses honestly instead of guessing:
 
@@ -784,7 +787,11 @@ def _dispatch_autoloop_relaunch(server):
     # reading the count afterwards would report the new run's zero sends
     # instead of what the operator is about to repeat.
     sends_already_issued = getattr(report, "sends_issued", None)
-    relaunched = runner.start(name, getattr(report, "floor", None))
+    relaunched = runner.start(
+        name,
+        floor=getattr(report, "floor", None),
+        turn_budget=getattr(report, "turn_budget", None),
+    )
     return {
         "ok": True,
         "relaunched": True,

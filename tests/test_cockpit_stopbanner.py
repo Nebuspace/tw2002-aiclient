@@ -58,6 +58,10 @@ CANON_CATALOG = {
     "confirm_failed": "confirm failed",
     "post_class": "post class",
     "floor_reached": "floor reached",
+    "turn_budget_exhausted": "turn budget exhausted",
+    "turns_unknown": "turns unknown",
+    "turns_stale": "turns stale",
+    "turns_unreadable": "turns unreadable",
 }
 
 WIDE = 120
@@ -121,9 +125,8 @@ def test_unknown_code_never_borrows_any_catalog_label():
 
 
 def test_every_loop_player_halt_reason_has_a_human_label():
-    """WO-HALT-BANNER-LABEL-VOCAB / Max 1A: all 16 LoopPlayer HALT_REASONS
-    resolve to a short human label (the 13 that used to render RAW plus the
-    3 that already had one)."""
+    """WO-HALT-BANNER-LABEL-VOCAB / Max 1A: every LoopPlayer HALT_REASON
+    resolves to a short human label (never RAW)."""
     from tw2002_aiclient.loops.player import HALT_REASONS
 
     for code in sorted(HALT_REASONS):
