@@ -26,9 +26,7 @@ CANON = (
 # --------------------------------------------------------------------------
 
 def test_band_is_canon_standing_spelling() -> None:
-    """WO-P5-071 adds `P panic` -- the N5 cluster's halt affordance -- to the
-    triad, exactly as this module's docstring forecast (`TEACH_TOKENS` is a
-    tuple so the extension is a list edit).
+    """WO-P5-071 adds `P panic`; WO-PLAY-REFLEX-AFFORDANCE adds `V)reflex`.
 
     `P panic` is spelled with a SPACE, not a paren. Canon's prose at
     `mode-line-and-teach-controls.md:235` says "every token uses the uniform
@@ -41,7 +39,19 @@ def test_band_is_canon_standing_spelling() -> None:
     expectation built from the product's own constant would follow any
     change to it and pin nothing.
     """
-    assert teachband.compose_teach_band() == "A)nalyze  R)ecord  T)rigger  P panic"
+    assert teachband.compose_teach_band() == (
+        "A)nalyze  R)ecord  T)rigger  V)reflex  P panic"
+    )
+
+
+def test_band_imports_reflex_token_spelling() -> None:
+    """Single source of truth with the key-handler module (Accept #2)."""
+    from tw2002_aiclient.cockpit import reflex_controls
+
+    assert reflex_controls.REFLEX_TOKEN == "V)reflex"
+    assert reflex_controls.REFLEX_TOKEN in teachband.TEACH_TOKENS
+    assert "V)reflex" in teachband.compose_teach_band()
+    assert teachband.compose_teach_band().endswith("P panic")
 
 
 def test_band_uses_trigger_not_the_banner_s_assign() -> None:
@@ -94,7 +104,7 @@ def test_tokens_are_pure_ascii_no_unicode_twin() -> None:
 @pytest.mark.parametrize("hostile", [None, 0, object(), b"x", [], 3.5])
 def test_compose_never_raises_on_hostile_unicode_ok(hostile: object) -> None:
     assert teachband.compose_teach_band(unicode_ok=hostile) == \
-        "A)nalyze  R)ecord  T)rigger  P panic"
+        "A)nalyze  R)ecord  T)rigger  V)reflex  P panic"
 
 
 # --------------------------------------------------------------------------

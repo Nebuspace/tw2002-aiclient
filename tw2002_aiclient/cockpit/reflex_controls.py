@@ -15,6 +15,11 @@ from __future__ import annotations
 REFLEX_OFFER_KEYS: tuple[int, ...] = (ord("v"), ord("V"))
 REFLEX_OFFER_INTENT = "reflex_offer"
 
+# Calm teach-band spelling (WO-PLAY-REFLEX-AFFORDANCE). Imported by
+# ``teachband.TEACH_TOKENS`` so the standing chrome and the key handler
+# cannot drift onto different labels — same pattern as ``panic.PANIC_TOKEN``.
+REFLEX_TOKEN = "V)reflex"
+
 
 def resolve_reflex_offer_key(key: object) -> bool:
     """True only for the int keycodes that offer a reflex preview."""

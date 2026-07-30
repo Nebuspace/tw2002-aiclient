@@ -110,7 +110,7 @@ def test_teach_band_is_visible_on_a_real_terminal(_capture) -> None:
 def test_each_teach_token_is_individually_visible(_capture) -> None:
     """Guards the failure where the row renders but a token is clipped."""
     grid = pyte_grid(_capture, FULL_ROWS, FULL_COLS)
-    for token in ("A)nalyze", "R)ecord", "T)rigger"):
+    for token in ("A)nalyze", "R)ecord", "T)rigger", "V)reflex", "P panic"):
         assert find_text(grid, token), f"token {token!r} not visible"
 
 
