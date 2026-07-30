@@ -572,11 +572,21 @@ def _compose_segments(
 
     band = _safe_teach_band(teach_band)
     gap_total = w - len(text) - used
+    status_text = _safe_status_offer(status_offer)
+    # Mid-strip status/offer owns the center; the teach band yields to it
+    # (canon: affordance chrome, not data). Reserve the band beside a
+    # status line ONLY when the FULL status still fits — otherwise leave
+    # band_reserved=0 so a long calm strip (e.g. after L)chains joins)
+    # cannot clip "press E" off a live explore offer.
     band_reserved = 0
     if band and gap_total >= len(band) + 2:
-        band_reserved = len(band) + 1
+        if not status_text:
+            band_reserved = len(band) + 1
+        else:
+            sep_len = len(_ARM_SEPARATOR if used else "")
+            if gap_total >= sep_len + len(status_text) + 1 + len(band) + 1:
+                band_reserved = len(band) + 1
 
-    status_text = _safe_status_offer(status_offer)
     if status_text and gap_total > band_reserved:
         sep = _ARM_SEPARATOR if used else ""
         room = gap_total - band_reserved - len(sep) - 1

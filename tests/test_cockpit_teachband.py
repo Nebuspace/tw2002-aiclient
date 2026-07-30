@@ -40,12 +40,13 @@ def test_band_is_canon_standing_spelling() -> None:
     change to it and pin nothing.
     """
     assert teachband.compose_teach_band() == (
-        "A)nalyze  R)ecord  T)rigger  V)reflex  U)rules  P panic"
+        "A)nalyze  R)ecord  T)rigger  V)reflex  U)rules  L)chains  P panic"
     )
 
 
 def test_band_imports_reflex_token_spelling() -> None:
     """Single source of truth with the key-handler module (Accept #2)."""
+    from tw2002_aiclient.cockpit import chains
     from tw2002_aiclient.cockpit import reflex_controls
     from tw2002_aiclient.cockpit import rules_library
 
@@ -55,6 +56,10 @@ def test_band_imports_reflex_token_spelling() -> None:
     assert rules_library.RULES_TOKEN == "U)rules"
     assert rules_library.RULES_TOKEN in teachband.TEACH_TOKENS
     assert "U)rules" in teachband.compose_teach_band()
+    assert chains.CHAINS_TOKEN == "L)chains"
+    assert chains.CHAINS_TOKEN in teachband.TEACH_TOKENS
+    assert "L)chains" in teachband.compose_teach_band()
+    assert teachband.TEACH_TOKENS[-2] is chains.CHAINS_TOKEN
     assert teachband.compose_teach_band().endswith("P panic")
 
 
@@ -80,22 +85,14 @@ def test_both_registers_are_grounded_in_canon_verbatim() -> None:
 
 
 def test_band_does_not_carry_other_wos_tokens() -> None:
-    """Still guarding scope creep in both directions, with one token moved.
+    """Still guarding scope creep — `^A)ode` stays foreign (ADR-002).
 
-    `P panic` left this list in WO-P5-071 -- that is the WO the original
-    docstring named as its owner, so this is the pin being *satisfied*, not
-    weakened. `^A)ode` (the Mode chord, ADR-002) and `L)chains` remain
-    foreign.
-
-    `L)chains` stays out for a reason worth recording: it is the
-    Trade-Loop-Chains library popup, and no chain store exists on tip
-    (verified -- no `*chain*` module anywhere in `tw2002_aiclient/`). The
-    hub ruled it out of 071's scope rather than have the band advertise a
-    key that opens nothing.
+    `P panic` joined in WO-P5-071; `L)chains` joins in WO-TEACHBAND-L-CHAINS
+    now that the modal ships. Mode chord remains out of this band.
     """
     band = teachband.compose_teach_band()
-    for foreign in ("^A)ode", "L)chains"):
-        assert foreign not in band
+    assert "^A)ode" not in band
+    assert "L)chains" in band
 
 
 def test_tokens_are_pure_ascii_no_unicode_twin() -> None:
@@ -108,7 +105,7 @@ def test_tokens_are_pure_ascii_no_unicode_twin() -> None:
 @pytest.mark.parametrize("hostile", [None, 0, object(), b"x", [], 3.5])
 def test_compose_never_raises_on_hostile_unicode_ok(hostile: object) -> None:
     assert teachband.compose_teach_band(unicode_ok=hostile) == \
-        "A)nalyze  R)ecord  T)rigger  V)reflex  U)rules  P panic"
+        "A)nalyze  R)ecord  T)rigger  V)reflex  U)rules  L)chains  P panic"
 
 
 # --------------------------------------------------------------------------

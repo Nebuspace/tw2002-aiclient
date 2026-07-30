@@ -71,6 +71,11 @@ from typing import Any, Mapping, Sequence
 # truncated-empty-is-not-absence wording live in exactly one module.
 from tw2002_aiclient import chain_search_view as _search_view
 
+# Calm-strip spelling — single source for teachband (WO-TEACHBAND-L-CHAINS).
+# Mirror REFLEX_TOKEN / PANIC_TOKEN: the band imports this; do not re-spell
+# ``L)chains`` in ``teachband.TEACH_TOKENS``.
+CHAINS_TOKEN = "L)chains"
+
 # `L` — canon's own letter for this popup; see the module docstring. Both
 # cases bind, matching the A/R/T teach band's posture.
 _CHAINS_OFFER_KEYS = frozenset({ord("l"), ord("L")})
