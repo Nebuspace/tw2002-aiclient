@@ -1039,6 +1039,104 @@ def turns_never_observed() -> TurnsSnapshot:
 
 
 # ---------------------------------------------------------------------------
+# Fighters aboard -- sticky count for the hazard-halt zero-fighter rail
+# ---------------------------------------------------------------------------
+#
+# Ship-info shape only: ``Fighters       : 150``. Deliberately refuses the
+# sector-encounter line ``Fighters: 4 (Somecorp) [Toll]`` -- that is OTHER
+# people's fighters on the grid, not the ship's aboard count, and treating
+# it as aboard would arm a false zero/nonzero for the hazard rail.
+
+
+_FIGHTERS_ABOARD_RE = re.compile(
+    r"^[ \t]*Fighters[ \t]*:[ \t]*(\d+)[ \t]*$",
+    re.IGNORECASE | re.MULTILINE,
+)
+
+
+@dataclass(frozen=True)
+class FightersRead:
+    """One parse of a screen for fighters aboard."""
+
+    outcome: str
+    fighters: Optional[int] = None
+
+    def __post_init__(self) -> None:
+        if self.outcome not in OUTCOMES:
+            raise ValueError(
+                f"outcome {self.outcome!r} is not one of {sorted(OUTCOMES)}"
+            )
+        read = self.outcome == OUTCOME_READ
+        if read != (self.fighters is not None):
+            raise ValueError(
+                "a fighter count accompanies exactly the 'read' outcome -- "
+                f"got outcome={self.outcome!r} with fighters={self.fighters!r}"
+            )
+        if self.fighters is not None and (
+            isinstance(self.fighters, bool) or not isinstance(self.fighters, int)
+        ):
+            raise ValueError(
+                f"fighters must be an int, got {type(self.fighters).__name__}"
+            )
+
+
+def read_fighters_aboard(rendered_text) -> FightersRead:
+    """Fighters aboard from a settled screen, if this screen states them.
+
+    Last match wins (same discipline as credits/turns body readers). A line
+    that continues past the digits (encounter toll / defensive lines) does
+    not match -- by construction, not by blocklist.
+    """
+    if not isinstance(rendered_text, str):
+        return FightersRead(outcome=OUTCOME_UNREADABLE)
+    matches = list(_FIGHTERS_ABOARD_RE.finditer(rendered_text))
+    if not matches:
+        return FightersRead(outcome=OUTCOME_ABSENT)
+    return FightersRead(outcome=OUTCOME_READ, fighters=int(matches[-1].group(1)))
+
+
+@dataclass(frozen=True)
+class FightersSnapshot:
+    """Last fighters-aboard count this session observed, and how old it is."""
+
+    outcome: str
+    fighters: Optional[int] = None
+    age_s: Optional[float] = None
+
+    def __post_init__(self) -> None:
+        if self.outcome not in SNAPSHOT_OUTCOMES:
+            raise ValueError(
+                f"outcome {self.outcome!r} is not one of {sorted(SNAPSHOT_OUTCOMES)}"
+            )
+        read = self.outcome == OUTCOME_READ
+        if read != (self.fighters is not None):
+            raise ValueError(
+                "a fighter count accompanies exactly the 'read' outcome -- "
+                f"got outcome={self.outcome!r} with fighters={self.fighters!r}"
+            )
+        if read != (self.age_s is not None):
+            raise ValueError(
+                "an age accompanies exactly the 'read' outcome -- "
+                f"got outcome={self.outcome!r} with age_s={self.age_s!r}"
+            )
+        if self.fighters is not None and (
+            isinstance(self.fighters, bool) or not isinstance(self.fighters, int)
+        ):
+            raise ValueError(
+                f"fighters must be an int, got {type(self.fighters).__name__}"
+            )
+        if self.age_s is not None:
+            if isinstance(self.age_s, bool) or not isinstance(self.age_s, (int, float)):
+                raise ValueError(f"age_s must be a number, got {type(self.age_s).__name__}")
+            if not math.isfinite(self.age_s) or self.age_s < 0:
+                raise ValueError(f"age_s must be finite and non-negative, got {self.age_s!r}")
+
+
+def fighters_never_observed() -> FightersSnapshot:
+    return FightersSnapshot(outcome=OUTCOME_ABSENT)
+
+
+# ---------------------------------------------------------------------------
 # Sector -- what the RUNTIME last SAW (presentational stickiness)
 # ---------------------------------------------------------------------------
 

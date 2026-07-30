@@ -1119,6 +1119,8 @@ def test_the_reason_vocabulary_is_closed_and_fully_reachable():
         player_mod.HALT_TURNS_UNKNOWN,
         player_mod.HALT_TURNS_STALE,
         player_mod.HALT_TURNS_UNREADABLE,
+        player_mod.HALT_HAZARD_GAME_SELECT,
+        player_mod.HALT_HAZARD_ZERO_FIGHTERS,
     }
     assert reported == HALT_REASONS
     # Canon's and the archive's own spellings, carried rather than re-coined.
@@ -1132,6 +1134,8 @@ def test_the_reason_vocabulary_is_closed_and_fully_reachable():
     assert player_mod.HALT_TURNS_UNKNOWN == "turns_unknown"
     assert player_mod.HALT_TURNS_STALE == "turns_stale"
     assert player_mod.HALT_TURNS_UNREADABLE == "turns_unreadable"
+    assert player_mod.HALT_HAZARD_GAME_SELECT == "autopilot_game_select"
+    assert player_mod.HALT_HAZARD_ZERO_FIGHTERS == "fighters_zero"
     # The codes canon's catalog already renders a label for.
     from tw2002_aiclient.cockpit.stopbanner import INTERVENTION_REASON_LABELS
 

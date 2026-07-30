@@ -121,6 +121,7 @@ express:
 | `turns_unknown` | turns unknown | **desync** — no turn count has ever been observed; autopilot will not act on an unknown budget |
 | `turns_stale` | turns stale | **desync** — the last-known turn count is too old to trust for a decision |
 | `turns_unreadable` | turns unreadable | **desync** — the turns port answered something that is not a readable snapshot |
+| `fighters_zero` | fighters zero | **hazard** — fighters aboard are known and exactly zero; autopilot will not press on |
 
 The catalog is **open by construction**: `intervention_reason_label()` passes an unrecognized code
 through as its own text (and maps an empty/`None` code to `"?"`), so a new STOP cause can ship a new
