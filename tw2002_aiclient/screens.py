@@ -818,6 +818,8 @@ class PlayShellScreen:
 
     # WO-P5-070: pending analyze draft awaiting human y/N approval.
     _draft_approve: dict | None = None
+    # WO-PLAY-RULE-IDENTITY: sequential typed entry for rule_id / do / priority.
+    _rule_identity: dict | None = None
 
     # WO-PLAY-OFFER-VISIBLE-ON-LIVE: text that CLAIMS the hint band's slot.
     #
@@ -975,6 +977,8 @@ class PlayShellScreen:
         # WO-P5-070: in-flight analyze draft (pre-approval).  Cleared on
         # reject; promoted to ``stub_store`` only after ``draft_approve``.
         self.pending_analyze_draft: dict | None = None
+        # WO-PLAY-RULE-IDENTITY: typed-entry session (None when idle).
+        self._rule_identity: dict | None = None
         # Test-visible approval attribution (full LedgerWriter is deferred).
         self.approval_ledger_events: list[dict] = []
 
@@ -984,6 +988,10 @@ class PlayShellScreen:
             self._draft_approve = draft
         else:
             self._draft_approve = None
+
+    def begin_rule_identity(self, stub: object = None) -> None:
+        """Start Play typed-entry for rule_id / do / priority. Never raises."""
+        self._rule_identity = cockpit_draft_approve.create_identity_session(stub)
 
     def _init_colors(self) -> None:
         # Tone-table fg names -- sourced from cockpit.tones via the
@@ -1960,6 +1968,19 @@ class PlayShellScreen:
             except Exception:  # noqa: BLE001
                 self._draft_approve = None
 
+        # WO-PLAY-RULE-IDENTITY: typed entry outranks a stale approve prompt.
+        if self._rule_identity is not None:
+            try:
+                line = cockpit_draft_approve.compose_identity_prompt(
+                    self._rule_identity, unicode_ok=uok,
+                )
+                attr = self._control_strip_segment_attr(cockpit_draft_approve.IDENTITY_TONE)
+                cockpit_draw.draw_lines(
+                    self.stdscr, control_strip, [line], attr, boxed=False,
+                )
+            except Exception:  # noqa: BLE001
+                self._rule_identity = None
+
         self.stdscr.refresh()
 
     def handle_key(self, key: int) -> str | None:
@@ -2008,6 +2029,20 @@ class PlayShellScreen:
                 # "arm write-back is still read-only (062 stub); this WO only
                 # adds the confirm gate, not the daemon call."
                 return "arm_confirm"
+            return None
+        # WO-PLAY-RULE-IDENTITY: typed entry captures the strip while up
+        # (same total-capture contract as arm confirm / draft approve).
+        if self._rule_identity is not None:
+            outcome = cockpit_draft_approve.resolve_identity_key(
+                self._rule_identity, key,
+            )
+            if outcome == cockpit_draft_approve.COMPLETE:
+                return "rule_identity"
+            if outcome == cockpit_draft_approve.CANCEL:
+                self._rule_identity = None
+                return "rule_identity_cancel"
+            # CONTINUE / REFUSE — stay in the session; REFUSE reason is on
+            # the prompt via compose_identity_prompt.
             return None
         # WO-P5-070: draft approval gate — total capture while up (same ordering
         # contract as arm confirm above).

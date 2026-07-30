@@ -321,18 +321,19 @@ def _run_play_calls() -> set:
 
 
 def test_the_cockpit_gate_is_actually_wired_to_the_bridge_hint():
-    """Wiring pin. The composer being correct proves nothing about it being used.
+    """Wiring pin. Play now collects identity then blesses via the writer.
 
-    `_run_play` is a ~700-line curses loop and the handler cannot be called
-    directly; extracting it is #218, which is frozen. So this asserts the call
-    exists where the operator's `y` lands — the same standard `wire-sweep.py`
-    applies to the cockpit surfaces, after three of them shipped composed-but-
-    unwired with a green suite.
+    Historically this asserted ``compose_bridge_command`` (CLI-only path).
+    WO-PLAY-RULE-IDENTITY replaced that with typed entry + write/promote;
+    the CLI composer remains as a fallback helper but must not be the Play
+    gate's only next step.
     """
     called = _run_play_calls()
-    assert "compose_bridge_command" in called, (
-        "the y-confirm branch no longer builds the operator's next-step command"
+    assert "bridge_to_kernel_document" in called, (
+        "the identity-complete branch no longer bridges the analyze stub"
     )
+    assert "write_draft" in called and "promote_draft" in called
+    assert "begin_rule_identity" in called
     # Control: the scan is discriminating, not a set that contains everything.
     assert "compose_bridge_command_that_does_not_exist" not in called
 
@@ -357,25 +358,22 @@ def _emittable_strings(module) -> list:
 
 
 def test_the_false_playback_eligible_claim_can_no_longer_be_emitted():
-    """The claim this WO exists to kill.
+    """The claim the kernel-bridge WO existed to kill — still dead.
 
     `y` used to report "analyze draft approved (playback-eligible stub)" while
-    persisting nowhere and gating nothing — a statement about the runtime that
-    the runtime could not honour, which is this repo's dominant defect shape.
-    The ledger event `analyze_rule_approved` said the same thing in a field
-    name: under ruling A the human accepted a *proposal*, and no rule exists
-    until they run the CLI.
+    persisting nowhere. Play now blesses via typed identity; the honest success
+    line names the rule and points at `V`. The old CLI-only "not yet a rule"
+    claim is gone from Play's emit path.
     """
     import tw2002_aiclient.app as app_mod
 
     said = _emittable_strings(app_mod)
     assert not [s for s in said if "playback-eligible" in s]
     assert not [s for s in said if "analyze_rule_approved" in s]
+    assert not [s for s in said if "not yet a rule" in s]
 
-    # And the honest replacements ARE emittable — otherwise this passes just as
-    # well on a file where the whole branch was deleted.
-    assert any("not yet a rule" in s for s in said)
-    assert any(s == "analyze_draft_accepted" for s in said)
+    assert any(s == "analyze_rule_written" for s in said)
+    assert any("rule identity cancelled" in s for s in said)
 
 
 def test_that_claim_guard_reads_literals_rather_than_comments(tmp_path):

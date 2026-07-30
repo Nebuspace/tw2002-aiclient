@@ -21,6 +21,7 @@ from tw2002_aiclient.cockpit import live_refresh as _live_refresh
 from tw2002_aiclient.cockpit import record_macro as _record_macro
 from tw2002_aiclient.cockpit import reflex_controls as _reflex_controls
 from tw2002_aiclient.loops import store as _loop_store
+from tw2002_aiclient.rules import writer as _rules_writer
 from tw2002_aiclient.screens import (
     BankViewScreen,
     CreateFormScreen,
@@ -1384,33 +1385,73 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                 play.status_line = f"analyze draft ({screen_label}) — y/N to approve"
                 continue
             if action == "draft_approve":
+                # WO-PLAY-RULE-IDENTITY: y accepts the *proposal* and opens
+                # typed entry for rule_id / do / priority. Nothing is written
+                # to state/rules/ until those three fields complete.
                 draft = play.pending_analyze_draft
-                approved = _draft_approve.promote_to_approved(draft)
+                if draft is None:
+                    play.status_line = "analyze draft approve failed — no draft"
+                    continue
+                play.begin_rule_identity(draft)
+                play.status_line = (
+                    "rule identity — type rule id, then macro, then priority"
+                )
+                continue
+            if action == "rule_identity":
+                session = play._rule_identity
+                play._rule_identity = None
+                values = (
+                    session.get("values") if isinstance(session, dict) else None
+                )
+                stub = (
+                    (session.get("stub") if isinstance(session, dict) else None)
+                    or play.pending_analyze_draft
+                )
                 play.pending_analyze_draft = None
+                if not isinstance(values, dict) or not isinstance(stub, dict):
+                    play.status_line = "rule identity failed — session lost"
+                    continue
+                try:
+                    document = _draft_approve.bridge_to_kernel_document(
+                        stub,
+                        rule_id=values.get("rule_id"),
+                        do=values.get("do"),
+                        priority=values.get("priority"),
+                    )
+                    _rules_writer.write_draft(document)
+                    blessed = _rules_writer.promote_draft(str(values["rule_id"]))
+                except (
+                    _draft_approve.DraftBridgeError,
+                    _rules_writer.RuleWriteError,
+                    TypeError,
+                    KeyError,
+                    ValueError,
+                ) as exc:
+                    play.status_line = f"rule write refused — {exc}"
+                    continue
+                approved = _draft_approve.promote_to_approved(stub)
                 if approved is not None:
                     play.stub_store.set(approved)
-                    # WO-DRAFT-APPROVE-KERNEL-BRIDGE: the event is named for
-                    # what actually happened. The human accepted the teacher's
-                    # PROPOSAL; no rule exists yet, because `rule_id`/`do`/
-                    # `priority` are human-supplied (Max, 2026-07-29) and this
-                    # surface has no way to accept typed text.
-                    play.approval_ledger_events.append(
-                        {"actor": "app", "event": "analyze_draft_accepted", "screen": (
-                            (approved.get("when") or {}).get("screen") or ""
-                        )}
-                    )
-                    # The old line here read "approved (playback-eligible stub)"
-                    # while persisting nowhere and gating nothing -- a claim the
-                    # runtime could not honour. It now says what is true and
-                    # what the operator must do to make the rule real.
-                    play.status_line = (
-                        "draft accepted — not yet a rule; run: "
-                        + _draft_approve.compose_bridge_command(
-                            (approved.get("when") or {}).get("screen")
-                        )
-                    )
-                else:
-                    play.status_line = "analyze draft approve failed — no draft"
+                play.approval_ledger_events.append(
+                    {
+                        "actor": "app",
+                        "event": "analyze_rule_written",
+                        "screen": (
+                            (stub.get("when") or {}).get("screen") or ""
+                        ),
+                        "rule_id": values.get("rule_id"),
+                        "do": values.get("do"),
+                        "path": str(blessed),
+                    }
+                )
+                play.status_line = _draft_approve.compose_rule_blessed_line(
+                    values.get("rule_id"), values.get("do"),
+                )
+                continue
+            if action == "rule_identity_cancel":
+                play._rule_identity = None
+                play.pending_analyze_draft = None
+                play.status_line = "rule identity cancelled — nothing written"
                 continue
             if action == "draft_reject":
                 play.pending_analyze_draft = None

@@ -7,7 +7,9 @@ owns the draft schema, the ``y/N`` approval gate (same default-deny key
 policy as :mod:`armconfirm`), and promotion to a playback-eligible stub.
 
 No live I/O, no send path, no ledger writer — ``app.py`` records
-approval attribution on confirm only.
+approval attribution on confirm only, and persists via
+``rules.writer.write_draft`` / ``promote_draft`` after the Play identity
+session collects the three human fields (WO-PLAY-RULE-IDENTITY).
 
 Two vocabularies, one bridge
 ----------------------------
@@ -40,16 +42,34 @@ from tw2002_aiclient.cockpit import assign_trigger
 CONFIRM = "confirm"
 CANCEL = "cancel"
 
+#: Identity-entry outcomes (sequential rule_id → do → priority).
+CONTINUE = "continue"
+COMPLETE = "complete"
+REFUSE = "refuse"
+
 #: Fields a human must supply; the teacher cannot know any of them.
 HUMAN_SUPPLIED_FIELDS = ("rule_id", "do", "priority")
+
+#: Control-strip labels — never look like filled-in suggestions.
+_IDENTITY_LABELS = {
+    "rule_id": "rule id",
+    "do": "macro (do)",
+    "priority": "priority (int)",
+}
+
+# Enter / backspace without importing curses (screens may also pass KEY_*).
+_ENTER_KEYS = frozenset({10, 13, 343})  # \n, \r, curses.KEY_ENTER
+_BACKSPACE_KEYS = frozenset({8, 127, 263})  # BS, DEL, curses.KEY_BACKSPACE
 
 
 class DraftBridgeError(ValueError):
     """A stub could not be translated into a kernel rule document."""
 
+
 _CONFIRM_KEYS = frozenset({ord("y"), ord("Y")})
 
 DRAFT_APPROVE_TONE = "info"
+IDENTITY_TONE = "info"
 CONFIRM_HINT = "y/N"
 _HINT_GAP = "  "
 
@@ -182,18 +202,11 @@ def promote_to_approved(draft: object) -> dict | None:
 
 
 def compose_bridge_command(screen: object = None) -> str:
-    """The exact command an operator types to finish a recorded proposal.
+    """CLI fallback when an operator prefers the shell over Play typed-entry.
 
-    The cockpit cannot collect ``rule_id``/``do``/``priority`` -- it has no
-    typed-entry surface at all, and Max ruled (2026-07-29) that they must be
-    human-supplied rather than minted. So the settled screen class, which is
-    the one thing the teacher genuinely observed, is handed over pre-filled
-    and the three human decisions are left as visible placeholders.
-
-    Placeholders are UPPERCASE so it is obvious the line is not runnable as
-    printed. A copy-pasteable command with plausible-looking values would be
-    worse than none: it would invite exactly the minted defaults the ruling
-    forbids, typed by a human who thought they were accepting a suggestion.
+    Play's primary path is :func:`create_identity_session` (WO-PLAY-RULE-IDENTITY).
+    This line remains for operators who leave the client; placeholders stay
+    UPPERCASE so it is obvious the printed command is not runnable as-is.
     """
     label = screen if isinstance(screen, str) and screen else "?"
     return f"tw rule draft --screen {label} --rule-id ID --do MACRO --priority N"
@@ -210,3 +223,122 @@ def resolve_draft_approve_key(key: object) -> str:
     if isinstance(key, bool) or not isinstance(key, int):
         return CANCEL
     return CONFIRM if key in _CONFIRM_KEYS else CANCEL
+
+
+def create_identity_session(stub: object = None) -> dict:
+    """Start sequential collection of ``rule_id`` / ``do`` / ``priority``.
+
+    Pure session dict — no filesystem. Esc cancels with nothing written;
+    Enter advances only after the current field validates.
+    """
+    return {
+        "stub": stub if isinstance(stub, dict) else None,
+        "field_index": 0,
+        "buf": "",
+        "values": {},
+        "refuse_reason": None,
+    }
+
+
+def identity_field_name(session: object) -> str:
+    """Current field name, or ``""`` if the session is malformed."""
+    if not isinstance(session, dict):
+        return ""
+    idx = session.get("field_index")
+    if not isinstance(idx, int) or idx < 0 or idx >= len(HUMAN_SUPPLIED_FIELDS):
+        return ""
+    return HUMAN_SUPPLIED_FIELDS[idx]
+
+
+def compose_identity_prompt(session: object = None, *, unicode_ok: object = True) -> str:
+    """Control-strip prompt for the current identity field. Never raises."""
+    del unicode_ok  # reserved for future glyph policy; keep signature stable
+    if not isinstance(session, dict):
+        return "Rule identity — (session lost)  Esc cancel"
+    field = identity_field_name(session)
+    if not field:
+        return "Rule identity — (session lost)  Esc cancel"
+    label = _IDENTITY_LABELS.get(field, field)
+    buf = session.get("buf") if isinstance(session.get("buf"), str) else ""
+    refuse = session.get("refuse_reason")
+    refuse = refuse if isinstance(refuse, str) and refuse else None
+    base = f"{label}: {buf}_"
+    if refuse:
+        return f"{refuse} — {base}"
+    return f"Rule identity — {base}  (Enter next · Esc cancel)"
+
+
+def compose_rule_blessed_line(rule_id: object = None, do: object = None) -> str:
+    """Status after a successful write+promote — names the rule and points at V."""
+    rid = rule_id if isinstance(rule_id, str) and rule_id.strip() else "?"
+    macro = do if isinstance(do, str) and do.strip() else "?"
+    return f"rule blessed — {rid} does {macro}; V can propose it"
+
+
+def _commit_identity_field(session: dict) -> str:
+    """Validate ``session['buf']`` into ``values``; advance or complete.
+
+    Returns ``COMPLETE``, ``CONTINUE``, or ``REFUSE`` (sets ``refuse_reason``).
+    """
+    field = identity_field_name(session)
+    raw = session.get("buf") if isinstance(session.get("buf"), str) else ""
+    raw = raw.strip()
+    if not raw:
+        session["refuse_reason"] = (
+            f"{field} required — never defaulted (Max 2026-07-29)"
+        )
+        return REFUSE
+
+    if field == "priority":
+        try:
+            value = int(raw, 10)
+        except ValueError:
+            session["refuse_reason"] = "priority must be an int"
+            return REFUSE
+    else:
+        value = raw
+
+    values = session.get("values")
+    if not isinstance(values, dict):
+        values = {}
+        session["values"] = values
+    values[field] = value
+    session["buf"] = ""
+    session["refuse_reason"] = None
+
+    next_idx = int(session.get("field_index") or 0) + 1
+    if next_idx >= len(HUMAN_SUPPLIED_FIELDS):
+        return COMPLETE
+    session["field_index"] = next_idx
+    return CONTINUE
+
+
+def resolve_identity_key(session: object, key: object) -> str:
+    """Drive the identity session. Mutates ``session``. Never raises.
+
+    ``COMPLETE`` — all three fields committed (read ``session['values']``).
+    ``CANCEL`` — Esc / non-int keycodes that are not editing keys.
+    ``REFUSE`` — Enter with a blank / non-int field (stay on the field).
+    ``CONTINUE`` — buffer changed or advanced to the next field.
+    """
+    if not isinstance(session, dict):
+        return CANCEL
+    if isinstance(key, bool) or not isinstance(key, int):
+        return CANCEL
+    if key == 27:  # Esc — abort with nothing written
+        return CANCEL
+    if key in _BACKSPACE_KEYS:
+        buf = session.get("buf") if isinstance(session.get("buf"), str) else ""
+        session["buf"] = buf[:-1]
+        session["refuse_reason"] = None
+        return CONTINUE
+    if key in _ENTER_KEYS:
+        return _commit_identity_field(session)
+    if 32 <= key < 127:
+        buf = session.get("buf") if isinstance(session.get("buf"), str) else ""
+        session["buf"] = buf + chr(key)
+        session["refuse_reason"] = None
+        return CONTINUE
+    # Unknown keys: ignore (stay in session) rather than cancel — a stray
+    # KEY_RESIZE must not discard half-typed identity.
+    return CONTINUE
