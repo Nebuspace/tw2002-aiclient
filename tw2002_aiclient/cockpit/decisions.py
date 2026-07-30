@@ -293,6 +293,21 @@ def compose_decisions_lines(status: dict | None, *, width: int) -> list[str]:
         width = 0
 
     status = status if isinstance(status, dict) else {}
+    # WO-WIRE-EXPLORE-DECISION-LINES: live explore overlay wins over autopilot
+    # trace / coach. Injected by Play onto the same status snapshot the draw
+    # path already passes here — never a second string table.
+    # Key literal matches explore.EXPLORE_DECISION_LINES_KEY (avoid importing
+    # explore into this hot composer path).
+    overlay = status.get("explore_decision_lines")
+    if isinstance(overlay, list) and overlay:
+        overlay_lines = [
+            _clip(str(item), width=width)
+            for item in overlay
+            if isinstance(item, str)
+        ]
+        if overlay_lines:
+            return overlay_lines
+
     payload = status.get("autopilot_trace")
     payload = payload if isinstance(payload, dict) else {}
     raw_candidates = _safe_list(payload.get("candidates"))

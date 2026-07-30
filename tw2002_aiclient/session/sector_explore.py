@@ -116,6 +116,9 @@ class ExploreReport:
     # Max combat GO (`force_share >= 0.90`) implies it should be ON for a run
     # the operator did not arm for combat.
     fight_tolls: bool = False
+    # WO-WIRE-EXPLORE-DECISION-LINES: last planned warp hop for DECISIONS.
+    # Updated when a tick chooses a target; null when unknown — never invent.
+    next_sector: Optional[int] = None
     outcome: Optional[str] = None
     reason: Optional[str] = None
     distinct_sectors: int = 0
@@ -136,6 +139,10 @@ class ExploreSnapshot:
     report: Optional[ExploreReport] = None
 
 
+#: Sentinel for ``_publish_progress(next_sector=…)`` — keep last published hop.
+_KEEP_NEXT_SECTOR = object()
+
+
 def explore_run_wire(snapshot: ExploreSnapshot) -> dict:
     report = snapshot.report
     if report is None:
@@ -151,10 +158,15 @@ def explore_run_wire(snapshot: ExploreSnapshot) -> dict:
             "turns_remaining": report.turns_remaining,
             "min_sectors": report.min_sectors,
             "intent": report.intent,
+            # Same honesty as fight_tolls / intent: status must prove whether
+            # the run was armed to spend turns docking (WO-WIRE-EXPLORE-DECISION-LINES).
+            "dock_new_ports": report.dock_new_ports,
             # The single most important fact about a run that can send Attack.
             # Omitted originally, so status could not prove whether a run was
             # armed for combat (hub-banked observability gap, live #209).
             "fight_tolls": report.fight_tolls,
+            # Last planned hop (int) or null — DECISIONS next-hop chrome.
+            "next_sector": report.next_sector,
             "stop_requested": report.stop_requested,
             "started_at": report.started_at,
             "finished_at": report.finished_at,
@@ -669,6 +681,7 @@ class ExploreRunner:
         sends_issued: int,
         turns_remaining: int,
         stop_requested: bool,
+        next_sector=_KEEP_NEXT_SECTOR,
     ) -> None:
         """WO-EXPLORE-STATUS-LIVE-COUNTERS: surface mid-run counters.
 
@@ -676,13 +689,27 @@ class ExploreRunner:
         finish left operators with silent zeros while the viewport flew.
         Publish after each observed sector / hop; never overwrite a
         terminal report if the run has already finished.
+
+        ``next_sector`` defaults to keeping the last published hop
+        (WO-WIRE-EXPLORE-DECISION-LINES); pass an int or ``None`` to set.
         """
+        if next_sector is _KEEP_NEXT_SECTOR:
+            with self._mutex:
+                cur = self._report
+            next_val = cur.next_sector if cur is not None else None
+        elif next_sector is None or (
+            isinstance(next_sector, int) and not isinstance(next_sector, bool)
+        ):
+            next_val = next_sector
+        else:
+            next_val = None
         live = replace(
             report,
             distinct_sectors=int(distinct_sectors),
             sends_issued=int(sends_issued),
             turns_remaining=int(turns_remaining),
             stop_requested=bool(stop_requested),
+            next_sector=next_val,
         )
         with self._mutex:
             if not self._in_flight:
@@ -1146,12 +1173,31 @@ class ExploreRunner:
                     reason = exhaust if exhaust.startswith("explore_exhausted") else (
                         f"{REASON_EXPLORE_EXHAUSTED}:{exhaust or 'no_hop'}"
                     )
+                    # Honest clear: no hop chosen this tick.
+                    self._publish_progress(
+                        report,
+                        distinct_sectors=len(distinct),
+                        sends_issued=sends,
+                        turns_remaining=turns,
+                        stop_requested=stop.is_set(),
+                        next_sector=None,
+                    )
                     break
                 graph = known_graph(report.world_id, state_dir=self._state_dir)
                 if not _adjacent_warp_allowed(graph, current, target):
                     outcome = OUTCOME_HALTED
                     reason = f"{REASON_EXPLORE_EXHAUSTED}:non_adjacent"
                     break
+                # Publish the chosen hop BEFORE the send so explore_status /
+                # DECISIONS can show next →N while the warp is in flight.
+                self._publish_progress(
+                    report,
+                    distinct_sectors=len(distinct),
+                    sends_issued=sends,
+                    turns_remaining=turns,
+                    stop_requested=stop.is_set(),
+                    next_sector=int(target),
+                )
                 _reason, _elapsed, confirmed = _settle.send_and_confirm(
                     self._session,
                     str(target),

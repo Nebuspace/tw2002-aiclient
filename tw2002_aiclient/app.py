@@ -580,10 +580,14 @@ def _poll_explore_status(play: PlayShellScreen, *, run_dir) -> bool:
     (live prove 2026-07-27). The band is the surface an operator actually
     sees mid-session; `status_line` is kept for the empty-LOGS case and for
     the existing L4 tests that assert on it.
+
+    WO-WIRE-EXPLORE-DECISION-LINES: also refresh ``explore_decision_lines``
+    for the DECISIONS pane (status overlay). Cleared on stand-down / error.
     """
     try:
         result = adapters.explore_status(run_dir=run_dir)
     except Exception:  # noqa: BLE001 — honest containment; do not drop the loop
+        play.explore_decision_lines = None
         return False
     if not result.ok:
         reason = result.reason or "unknown"
@@ -592,6 +596,7 @@ def _poll_explore_status(play: PlayShellScreen, *, run_dir) -> bool:
         # "explore 3/5…" frozen on screen would be a live-looking run that
         # is not being observed.
         play.explore_band = None
+        play.explore_decision_lines = None
         return False
     line, keep_polling = _explore_status_line_from_wire(
         result.raw, default_min_sectors=_EXPLORE_MIN_SECTORS
@@ -599,10 +604,14 @@ def _poll_explore_status(play: PlayShellScreen, *, run_dir) -> bool:
     if line is not None:
         play.status_line = line
         play.explore_band = line
-    if not keep_polling:
+    if keep_polling:
+        run = result.raw.get("run") if isinstance(result.raw, dict) else None
+        play.explore_decision_lines = _explore.explore_decision_lines_from_run(run)
+    else:
         # Terminal outcome: leave the final reading on `status_line` and hand
-        # the band back to the calm teach tokens.
+        # the band back to the calm teach tokens. Clear DECISIONS overlay.
         play.explore_band = None
+        play.explore_decision_lines = None
         # WO-WORLD-STATS-REFRESH-EVENTS A: explore terminal poll is a real
         # client-visible completion signal (already paid for explore_status).
         # Refresh known_sectors here — never on the draw path.
@@ -1447,6 +1456,7 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                     # otherwise (`canon/doctrine/secrets-and-credentials.md`).
                     play.status_line = f"explore failed to start — {type(exc).__name__}"
                     play.explore_band = None      # offer is spent; calm band returns
+                    play.explore_decision_lines = None
                 else:
                     if getattr(explore, "ok", False):
                         play.status_line = f"explore started — {_EXPLORE_MIN_SECTORS} sectors"
@@ -1460,6 +1470,7 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                         reason = getattr(explore, "reason", None) or "unknown"
                         play.status_line = f"explore did not start — {reason}"
                         play.explore_band = None
+                        play.explore_decision_lines = None
                 continue
             if action == "arm_confirm":
                 # WO-ARM-CONFIRM-EXPLICIT-EXPLORE: fail closed. Unknown /
