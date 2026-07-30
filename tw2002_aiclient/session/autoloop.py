@@ -389,6 +389,12 @@ class RunReport:
     # (WO-AUTOLOOP-CYCLES), including when the caller asked for more than
     # :data:`CYCLES_HARD_CEILING`.
     cycles: int = 1
+    # 1-based current pass (WO-AUTOLOOP-CYCLE-PROGRESS). Set to 1 at arm,
+    # advanced under the mutex as each ``replay_loop`` pass begins, so
+    # ``autoloop_status`` can drive the Play hint-band chrome mid-run.
+    # ``None`` only on a report that never entered the pass loop (should
+    # not appear on a live wire after ``start`` returns).
+    cycle: Optional[int] = None
 
     @property
     def halted(self) -> bool:
@@ -497,6 +503,9 @@ def run_wire(snapshot: AutoLoopSnapshot) -> dict:
             "floor": report.floor,
             "turn_budget": report.turn_budget,
             "cycles": report.cycles,
+            # 1-based current pass (WO-AUTOLOOP-CYCLE-PROGRESS). An int or
+            # null — null means "pass not yet published" (omit chrome).
+            "cycle": report.cycle,
             # WO-AUTOLOOP-PAUSE-RESUME: `loop` + `floor` + `turn_budget`
             # + `cycles` above are exactly what `start()` takes, which is
             # why a resume needs no new storage — the report already
@@ -941,6 +950,7 @@ class AutoLoopRunner:
             floor=floor,
             turn_budget=turn_budget,
             cycles=effective_cycles,
+            cycle=1,  # pass 1 about to begin (WO-AUTOLOOP-CYCLE-PROGRESS)
         )
         with self._mutex:
             if self._in_flight:
@@ -1157,12 +1167,19 @@ class AutoLoopRunner:
         halted_at: Optional[int] = None
         sends: Optional[int] = None
         error: Optional[str] = None
+        live_report = report
         try:
             # `report.floor` / `turn_budget` rather than second stored fields:
             # the report IS this run's record of what it was armed with.
             total_sends = 0
             passes = report.cycles if report.cycles >= 1 else 1
-            for _pass_i in range(passes):
+            for pass_i in range(passes):
+                # Publish 1-based current pass BEFORE the player runs so a
+                # concurrent autoloop_status sees the chrome advance
+                # (WO-AUTOLOOP-CYCLE-PROGRESS).
+                live_report = replace(live_report, cycle=pass_i + 1)
+                with self._mutex:
+                    self._report = live_report
                 if stop.is_set():
                     outcome = OUTCOME_HALTED
                     reason = HALT_ABORTED
@@ -1171,8 +1188,8 @@ class AutoLoopRunner:
                 result = replay_loop(
                     loop,
                     port,
-                    floor=report.floor,
-                    turn_budget=report.turn_budget,
+                    floor=live_report.floor,
+                    turn_budget=live_report.turn_budget,
                 )
                 if result.sends_issued is not None:
                     total_sends += result.sends_issued
@@ -1190,7 +1207,7 @@ class AutoLoopRunner:
             self._record_error(exc)
         finally:
             finished = replace(
-                report,
+                live_report,
                 outcome=outcome,
                 reason=reason,
                 halted_at=halted_at,
