@@ -17,13 +17,22 @@ from tw2002_aiclient.rules.store import read_rule_store
 from tw2002_aiclient.rules.writer import promote_draft, write_draft
 
 
-def _bless(tmp_path, *, rule_id="dock-when-idle", do="dock", screen="main_command", priority=10):
+def _bless(
+    tmp_path,
+    *,
+    rule_id="dock-when-idle",
+    do="dock",
+    screen="main_command",
+    priority=10,
+    scope="one-shot",
+):
     write_draft(
         {
             "rule_id": rule_id,
             "screen_match": screen,
             "do": do,
             "priority": priority,
+            "scope": scope,
             "approved": False,
         },
         state_dir=tmp_path,
@@ -64,17 +73,56 @@ def test_ok_store_lists_blessed_fields(tmp_path):
             "do": "dock",
             "screen_match": "main_command",
             "priority": 10,
+            "scope": "one-shot",
         }
     ]
     session = rules_library.RulesLibrarySession()
     session.open(rows, "ok")
     text = "\n".join(
-        rules_library.compose_rule_lines(session, unicode_ok=False, width=80)
+        rules_library.compose_rule_lines(session, unicode_ok=False, width=100)
     )
     assert "dock-when-idle" in text
     assert "do=dock" in text
     assert "screen=main_command" in text
     assert "prio=10" in text
+    assert "scope=one-shot" in text
+
+
+def test_peek_shows_repeating_scope(tmp_path):
+    """WO-PLAY-RULES-SHOW-SCOPE: typed scope is visible in U)rules."""
+    _bless(tmp_path, scope="repeating")
+    report = read_rule_store(state_dir=tmp_path)
+    rows = rules_library.blessed_rows(report)
+    assert rows[0]["scope"] == "repeating"
+    session = rules_library.RulesLibrarySession()
+    session.open(rows, "ok")
+    text = "\n".join(
+        rules_library.compose_rule_lines(session, unicode_ok=False, width=100)
+    )
+    assert "scope=repeating" in text
+    assert "scope=one-shot" not in text
+
+
+def test_missing_scope_in_row_displays_question_mark_not_one_shot():
+    """Peek must not mint one-shot when scope is absent from the row."""
+    session = rules_library.RulesLibrarySession()
+    session.open(
+        [
+            {
+                "rule_id": "r",
+                "do": "d",
+                "screen_match": "s",
+                "priority": 1,
+                # scope deliberately omitted
+            }
+        ],
+        "ok",
+    )
+    text = "\n".join(
+        rules_library.compose_rule_lines(session, unicode_ok=False, width=100)
+    )
+    assert "scope=?" in text
+    assert "scope=one-shot" not in text
 
 
 def test_partial_store_banner(tmp_path):

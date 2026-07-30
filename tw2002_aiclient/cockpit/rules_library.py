@@ -80,6 +80,7 @@ def blessed_rows(store_result: object) -> list[dict]:
                 "do": _field(rule, "do"),
                 "screen_match": _field(rule, "screen_match"),
                 "priority": _field(rule, "priority"),
+                "scope": _field(rule, "scope"),
             }
         )
     return out
@@ -191,7 +192,13 @@ def _format_row(row: Mapping, budget: int) -> str:
         prio_s = UNKNOWN
     else:
         prio_s = str(prio)
-    text = f"{rid}  do={do}  screen={screen}  prio={prio_s}"
+    scope = row.get("scope")
+    # Never mint one-shot in the peek — missing/unknown → honest "?".
+    if scope in ("one-shot", "repeating"):
+        scope_s = scope
+    else:
+        scope_s = UNKNOWN
+    text = f"{rid}  do={do}  screen={screen}  prio={prio_s}  scope={scope_s}"
     if isinstance(budget, int) and budget > 0 and len(text) > budget:
         return text[: max(0, budget - 1)] + "…"
     return text
