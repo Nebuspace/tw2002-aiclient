@@ -78,6 +78,7 @@ from __future__ import annotations
 # below is the same hazard, handled the same way -- by keeping each
 # register's spelling in exactly one place).
 from .panic import PANIC_TOKEN
+from .reflex_controls import REFLEX_TOKEN
 
 # Canon's standing-band spelling of the teach triad
 # (`mode-line-and-teach-controls.md §"Mode line, healthy autopilot"`, `visual-language.md §"A calm cockpit reading (App healthy, nothing to see)"`).
@@ -96,8 +97,15 @@ from .panic import PANIC_TOKEN
 # not exist on tip (verified: no `*chain*` module in `tw2002_aiclient/`) and
 # was ruled out of 071's scope by the hub rather than stubbed.
 #
-# Order follows canon's literal band, so panic sits last.
-TEACH_TOKENS: tuple[str, ...] = ("A)nalyze", "R)ecord", "T)rigger", PANIC_TOKEN)
+# WO-PLAY-REFLEX-AFFORDANCE: `V)reflex` joins before panic so the #235 wire
+# is discoverable on the calm strip. Panic stays last (canon order).
+TEACH_TOKENS: tuple[str, ...] = (
+    "A)nalyze",
+    "R)ecord",
+    "T)rigger",
+    REFLEX_TOKEN,
+    PANIC_TOKEN,
+)
 
 # Two spaces between tokens -- canon renders the band that way in every
 # example it gives (`:136`, `:220`, `visual-language.md §"A calm cockpit reading (App healthy, nothing to see)"`), and it is
@@ -116,7 +124,7 @@ TEACH_TONE = "chrome"
 def compose_teach_band(*, unicode_ok: object = True) -> str:
     """The standing A/R/T hint band as one plain string.
 
-    Returns `"A)nalyze  R)ecord  T)rigger"`. `unicode_ok` is accepted and
+    Returns the joined ``TEACH_TOKENS`` band. `unicode_ok` is accepted and
     ignored (see the module docstring: `KEY)verb` has no Unicode twin).
     Never raises.
     """
