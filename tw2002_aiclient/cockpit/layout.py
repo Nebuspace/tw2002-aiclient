@@ -12,10 +12,11 @@ three-column body (left gutter, itself stacked GOALS above PRIORITIES |
 center game viewport | right gutter, itself stacked HUD above DECISIONS
 per PWO-036), the bottom LOGS band, and — only while a halt is actually
 reported — the intervention/STOP banner (WO-P5-064, see
-``INTERVENTION_H``). The archived function's MENU MAP/FORMATIONS/
-chain-bubble sub-regions belong to later WOs and are deliberately not
-ported here — see the module docstring on ``frame_layout`` for the
-DOCS-WIN fold-floor correction this module encodes.
+``INTERVENTION_H``), and — when five wholly spare rows exist under a
+full bordered 80×25 viewport — the always-on chain-bubble strip
+(WO-PLAY-CHAIN-BUBBLE-VIZ). MENU MAP/FORMATIONS remain later WOs.
+See the module docstring on ``frame_layout`` for the DOCS-WIN fold-floor
+correction this module encodes.
 """
 
 from __future__ import annotations
@@ -44,6 +45,9 @@ VIEWPORT_W, VIEWPORT_H = 82, 27
 # Native content the bordered viewport wraps, zero inner padding on every
 # side (visual-language.md: "Viewport zero-inset is an invariant").
 GAME_W, GAME_H = VIEWPORT_W - 2, VIEWPORT_H - 2  # 80 x 25
+# Always-on best-chain bubbles under the viewport (WO-PLAY-CHAIN-BUBBLE-VIZ).
+# Never carve these out of VIEWPORT_H — fold the region instead.
+CHAIN_VIZ_H = 5
 
 HUD_GUTTER_W = 36
 PRIORITIES_W = HUD_GUTTER_W  # the left PRIORITIES gutter mirrors HUD width at the full tier
@@ -192,6 +196,7 @@ def frame_layout(lines: int, cols: int, *, needs_attention: bool = False) -> dic
             "goals": None,
             "left_gutter": None,
             "center": None,
+            "chain": None,
             "right_gutter": None,
             "decisions": None,
             "logs": None,
@@ -418,6 +423,23 @@ def frame_layout(lines: int, cols: int, *, needs_attention: bool = False) -> dic
 
     center = {"y": rest_y, "x": center_x, "w": center_w, "h": center_h, "border": border}
 
+    # WO-PLAY-CHAIN-BUBBLE-VIZ: optional five-row strip directly under the
+    # bordered 80×25 viewport. Appears only when column_h already has five
+    # wholly spare rows after preserving VIEWPORT_H — never shrink center.
+    chain = None
+    spare_under_center = column_h - center_h
+    if (
+        border
+        and center_h == VIEWPORT_H
+        and spare_under_center >= CHAIN_VIZ_H
+    ):
+        chain = {
+            "y": rest_y + center_h,
+            "x": center_x,
+            "w": center_w,
+            "h": CHAIN_VIZ_H,
+        }
+
     return {
         "mode": mode,
         "message": None,
@@ -426,6 +448,7 @@ def frame_layout(lines: int, cols: int, *, needs_attention: bool = False) -> dic
         "goals": goals,
         "left_gutter": left_gutter,
         "center": center,
+        "chain": chain,
         "right_gutter": right_gutter,
         "decisions": decisions,
         "logs": logs,
