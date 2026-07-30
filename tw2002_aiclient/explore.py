@@ -663,6 +663,11 @@ def explore_decision_lines_from_run(run: object) -> list[str] | None:
     builds the minimal plan-shaped object that composer reads. Returns ``None``
     when the run is unusable so the caller clears the overlay rather than
     inventing chrome. Does not fork a second string table.
+
+    WO-EXPLORE-DECISION-FLAGS: when ``dock_new_ports`` / ``fight_tolls`` are
+    present on the run dict, append one flags line using
+    ``cockpit.explore_flags`` markers (``+dock`` / ``no-dock…`` /
+    ``+fight-tolls``). Absent keys → no invented flags line.
     """
     from types import SimpleNamespace
 
@@ -675,11 +680,42 @@ def explore_decision_lines_from_run(run: object) -> list[str] | None:
     if intent == INTENT_MAP_FILL:
         hop = SimpleNamespace(to=nxt) if nxt is not None else None
         plan = SimpleNamespace(next_hop=hop, mode="live")
-        return format_explore_decision_lines("mapfill", plan)
-    if intent == INTENT_FIND_STARDOCK:
+        lines = format_explore_decision_lines("mapfill", plan)
+    elif intent == INTENT_FIND_STARDOCK:
         plan = SimpleNamespace(next_sector=nxt, mode="live")
-        return format_explore_decision_lines("stardock", plan)
-    return None
+        lines = format_explore_decision_lines("stardock", plan)
+    else:
+        return None
+    flags = _explore_decision_flags_line(run)
+    if flags is not None:
+        lines = list(lines) + [flags]
+    return lines
+
+
+def _explore_decision_flags_line(run: dict) -> str | None:
+    """Short dock/tolls disclosure for DECISIONS, or ``None`` if unknown.
+
+    Reuses ``explore_flags`` markers only — never invents ``+dock`` when the
+    wire omits the key. Tolls stay ON-only (same asymmetry as the confirm
+    line). Non-bool values are skipped rather than coerced.
+    """
+    # Lazy: keep explore.py free of cockpit import at module load.
+    from tw2002_aiclient.cockpit import explore_flags as _flags
+
+    if "dock_new_ports" not in run and "fight_tolls" not in run:
+        return None
+    parts: list[str] = []
+    if "dock_new_ports" in run:
+        dock = run["dock_new_ports"]
+        if isinstance(dock, bool):
+            parts.append(_flags.DOCK_MARKER if dock else _flags.DOCK_OFF_MARKER)
+    if "fight_tolls" in run:
+        tolls = run["fight_tolls"]
+        if tolls is True:
+            parts.append(_flags.TOLLS_MARKER)
+    if not parts:
+        return None
+    return " ".join(parts)
 
 
 #: Status-dict key for the Play → DECISIONS explore overlay
