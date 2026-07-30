@@ -78,6 +78,16 @@ _COMMAND_ECHO_LINE_RE = re.compile(r"command\s*\[\s*tl\s*=", re.I)
 # bare word like "Main Menu". Refusing this form keeps `main_command`
 # meaning only the real in-game ship-command prompt.
 _TWGS_MAIN_MENU_SECTOR_RE = re.compile(r"\[\s*main\s+menu\s*\]", re.I)
+# Positive in-game require (WO-CLASSIFY-MAIN-COMMAND-SECTOR-POSITIVE): the
+# shared ``Command [TL=…]`` prefix alone is insufficient — real prompts
+# carry an integer sector slot (``:[54]``), the literal TWGS Help cue
+# ``(?=Help)?``, or classic turn-state digits inside the TL bracket
+# (``TL=00753:0/0/0/850``). Door/menu chrome that only mimics the prefix
+# (including Unicode-confusable ``[Main Menu]`` spellings the refuse regex
+# misses) must not qualify.
+_MAIN_COMMAND_SECTOR_SLOT_RE = re.compile(r"\]\s*:\s*\[\s*(?:\d+\s*\]|$)", re.I)
+_MAIN_COMMAND_HELP_CUE_RE = re.compile(r"\(\?=Help\)\?", re.I)
+_MAIN_COMMAND_TL_TURN_STATE_RE = re.compile(r"tl\s*=\s*[^\]]*:\d+/\d", re.I)
 
 # -- Other system-block titles (WO-CLASSIFY-BLOCK-TITLES) ------------------
 #
@@ -939,11 +949,18 @@ def _is_main_command(text: str) -> bool:
     this form (live false-positive 2026-07-27) because the previous
     pattern matched on the shared prefix alone. ``_TWGS_MAIN_MENU_SECTOR_RE``
     is the refuse guard; deleting it re-introduces the false positive
-    (WO-CLASSIFY-MAIN-COMMAND-VS-TWGS-MENU mutation pin).
+    (WO-CLASSIFY-MAIN-COMMAND-VS-TWGS-MENU mutation pin). The positive
+    sector/help/turn-state require is the second load-bearing half
+    (WO-CLASSIFY-MAIN-COMMAND-SECTOR-POSITIVE mutation pin).
     """
     return (
         _COMMAND_ECHO_LINE_RE.search(text) is not None
         and not _TWGS_MAIN_MENU_SECTOR_RE.search(text)
+        and (
+            _MAIN_COMMAND_SECTOR_SLOT_RE.search(text) is not None
+            or _MAIN_COMMAND_HELP_CUE_RE.search(text) is not None
+            or _MAIN_COMMAND_TL_TURN_STATE_RE.search(text) is not None
+        )
     )
 
 

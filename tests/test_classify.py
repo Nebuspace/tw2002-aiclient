@@ -13,6 +13,9 @@ from tw2002_aiclient.session.classify import (
     _GATE_ANCHORS,
     NEVER_AUTO_ACTION_CLASSES,
     _TWGS_MAIN_MENU_SECTOR_RE,
+    _MAIN_COMMAND_SECTOR_SLOT_RE,
+    _MAIN_COMMAND_HELP_CUE_RE,
+    _MAIN_COMMAND_TL_TURN_STATE_RE,
     _is_exclusive_closed_block,
     _is_main_command,
     _is_money_prompt,
@@ -160,6 +163,56 @@ def test_real_sector_prompt_above_stale_main_menu_chrome_still_wins():
 
 
 # -- end WO-CLASSIFY-MAIN-COMMAND-VS-TWGS-MENU ----------------------------
+
+
+# -- WO-CLASSIFY-MAIN-COMMAND-SECTOR-POSITIVE -----------------------------
+
+
+def test_unicode_confusable_main_menu_is_not_main_command():
+    """Accept #1 (WO-CLASSIFY-MAIN-COMMAND-SECTOR-POSITIVE).
+
+    A door prompt whose sector slot *looks* like ``[Main Menu]`` but uses a
+    confusable spelling the refuse regex does not catch must not qualify as
+    ``main_command`` once the positive sector require is enforced."""
+    # Cyrillic small letter a (U+0430) in place of Latin ``a`` in ``Main``.
+    prompt = "Command [TL=00:00:00]:[Mаin Menu] :"
+    assert classify_screen("", prompt) != "main_command"
+    assert classify(prompt) != "main_command"
+    assert _is_main_command(prompt) is False
+
+
+def test_bare_tl_prefix_without_sector_or_help_is_not_main_command():
+    """Door/menu chrome may end at ``:[`` with no integer sector — not in-game."""
+    prompt = "Command [TL=00:00:00]:"
+    assert _is_main_command(prompt) is False
+    assert classify(prompt) != "main_command"
+
+
+def test_main_command_sector_positive_mutation_pin():
+    """Mutation pin: positive sector require is load-bearing.
+
+    Removing it would let bare ``Command [TL=…]:`` prefixes classify as
+    ``main_command`` again while the refuse guard stays vacuously green."""
+    prompt = "Command [TL=00:00:00]:"
+    from tw2002_aiclient.session.classify import _COMMAND_ECHO_LINE_RE
+
+    assert _COMMAND_ECHO_LINE_RE.search(prompt) is not None
+    assert _TWGS_MAIN_MENU_SECTOR_RE.search(prompt) is None
+    assert _MAIN_COMMAND_SECTOR_SLOT_RE.search(prompt) is None
+    assert _MAIN_COMMAND_HELP_CUE_RE.search(prompt) is None
+    assert _MAIN_COMMAND_TL_TURN_STATE_RE.search(prompt) is None
+    assert _is_main_command(prompt) is False
+
+
+def test_in_game_sector_slot_positive_still_main_command():
+    """Accept #2: integer sector slot ``:[N]`` with Help cue → ``main_command``."""
+    prompt = "Command [TL=00:00:00]:[54] (?=Help)? :"
+    assert _MAIN_COMMAND_SECTOR_SLOT_RE.search(prompt) is not None
+    assert _is_main_command(prompt) is True
+    assert classify(prompt) == "main_command"
+
+
+# -- end WO-CLASSIFY-MAIN-COMMAND-SECTOR-POSITIVE -------------------------
 
 
 def test_computer_command_prompt_wins_over_main_command():
