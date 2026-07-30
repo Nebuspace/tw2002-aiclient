@@ -60,3 +60,7 @@ STATUS names the wire field + Play overlay seam.
 
 Closes unused-code tip-check **WIRE** for
 `tw2002_aiclient.explore:format_explore_decision_lines`.
+
+## Hub CI note
+
+Suite re-fired after tip synchronize miss (2026-07-30T07:45Z).
