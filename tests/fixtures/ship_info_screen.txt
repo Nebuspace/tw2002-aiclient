@@ -1,0 +1,25 @@
+Sector  : 15450 in uncharted space.                         
+Warps to Sector(s) :  (1160) - (5434) - (7280) - 14410      
+                                                            
+Command [TL=07:58:26]:[15450] (?=Help)? : I                 
+<Info>                                                      
+                                                            
+Trader Name    : Private Surveyor                           
+Rank and Exp   : 2 points, Alignment=2 Tolerant             
+Ship Name      : SurveyorShip                               
+Ship Info      : 4 Dragons Ltd Dragon Quest Ported=1 Kills=0
+Date Built     : 10:49:08 PM Mon Jul 27, 2054               
+Turns to Warp  : 3                                          
+Current Sector : 15450                                      
+Turns left     : 25000                                      
+Total Holds    : 60 - Empty=60                              
+Fighters       : 150                                        
+Credits        : 100,000                                    
+                                                            
+Command [TL=07:57:48]:[15450] (?=Help)? :                   
+<Re-Display>                                                
+                                                            
+Sector  : 15450 in uncharted space.                         
+Warps to Sector(s) :  (1160) - (5434) - (7280) - 14410      
+                                                            
+Command [TL=07:57:48]:[15450] (?=Help)? :                   
