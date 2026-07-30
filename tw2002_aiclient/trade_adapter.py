@@ -83,7 +83,7 @@ from typing import Callable, Mapping, Optional, Sequence
 
 from tw2002_aiclient import world_model
 from tw2002_aiclient.chains import TradeHop
-from tw2002_aiclient.explore import known_graph, path_to_sector
+from tw2002_aiclient.explore import known_graph
 
 # port-economics.md's "Ore" is the same commodity state_parser._COMMODITIES
 # spells out as "Fuel Ore" -- this maps the doc's name to the parser's.
@@ -95,6 +95,10 @@ DEFAULT_FLOOR_PRICES: Mapping[str, float] = {
 DEFAULT_CEILING_MULTIPLIER = 2.0  # this module's own interpolation choice -- UNVERIFIED, not from the doc
 DEFAULT_MAX_AGE_S = 3600.0  # drop a port reading older than this as stale (1h)
 DEFAULT_MAX_HOPS = 500  # bounded compute/output on a large known map
+# Bounds expensive *route-search* work in build_trade_hops (one BFS per
+# source sector). Caps OUTPUT separately via max_hops; this caps WORK
+# before the full candidate list is routed (WO-CHAIN-WORK-BOUND).
+DEFAULT_MAX_ROUTE_SEARCHES = 10_000
 DEFAULT_AMOUNT_FLOOR = 1  # discovery-quality volume gate -- see TradeAdapterConfig.amount_floor
 
 # Class-derived posture path (see module docstring). A class triple is
@@ -121,6 +125,10 @@ class TradeAdapterConfig:
     ceiling_multiplier: float = DEFAULT_CEILING_MULTIPLIER
     max_age_s: float = DEFAULT_MAX_AGE_S
     max_hops: int = DEFAULT_MAX_HOPS
+    # Non-wall-clock budget: max number of one-source BFS route searches
+    # build_trade_hops may run. Cheap status/amount/price filtering runs
+    # first; routing is spent in margin order. 0 = zero route searches.
+    max_route_searches: int = DEFAULT_MAX_ROUTE_SEARCHES
     # hub-ruled: discovery-quality volume gate, not a substitute for a
     # future live, authoritative per-buy volume read at execution time --
     # this only filters legs that are OBVIOUSLY impossible at discovery
@@ -139,6 +147,18 @@ class TradeAdapterConfig:
             )
         if self.max_hops < 0:
             raise ValueError(f"TradeAdapterConfig.max_hops must be >= 0, got {self.max_hops}")
+        if isinstance(self.max_route_searches, bool) or not isinstance(
+            self.max_route_searches, int
+        ):
+            raise TypeError(
+                "TradeAdapterConfig.max_route_searches must be int, "
+                f"got {type(self.max_route_searches).__name__}"
+            )
+        if self.max_route_searches < 0:
+            raise ValueError(
+                "TradeAdapterConfig.max_route_searches must be >= 0, "
+                f"got {self.max_route_searches}"
+            )
         # Module curve: floor at pct==100 → floor*ceiling_multiplier at pct==0.
         # Sub-unity inverts that (near-empty cheaper than near-full) — reject.
         if isinstance(self.ceiling_multiplier, bool) or not isinstance(
@@ -446,10 +466,16 @@ def build_trade_hops(
     routable, priced hop currently discoverable from `world_id`'s
     world-model, ranked by margin and capped at `config.max_hops`.
 
-    Returns `(hops, note)`. `note` is `None` unless the cap truncated
-    the candidate list, in which case it names how many hops were
-    dropped -- this module has no logger of its own, so the caller/
-    report is the channel."""
+    Expensive route search is separately bounded by
+    `config.max_route_searches` (one multi-target BFS per source
+    sector). Cheap status / amount / price filtering runs first;
+    routing is spent in descending-margin order. When that work
+    budget truncates discovery, the note says the search is
+    incomplete -- absence of further hops is not established.
+
+    Returns `(hops, note)`. `note` is `None` unless a cap truncated
+    discovery or output -- this module has no logger of its own, so
+    the caller/report is the channel."""
     cfg = config or TradeAdapterConfig()
     current = now() if now is not None else datetime.datetime.now(datetime.timezone.utc)
 
@@ -458,17 +484,11 @@ def build_trade_hops(
         return (), None
 
     graph = known_graph(world_id, state_dir=state_dir)
-    route_cache: dict[tuple[int, int], Optional[tuple[int, ...]]] = {}
-
-    def _route(frm: int, to: int) -> Optional[tuple[int, ...]]:
-        key = (frm, to)
-        if key not in route_cache:
-            route_cache[key] = path_to_sector(graph, frm, to)
-        return route_cache[key]
-
     commodity_maps = _commodity_maps(ports)
 
-    candidates: list[TradeHop] = []
+    # Phase 1 -- cheap filters only (no routing). Collect priced
+    # compatible legs; margin is known without a path.
+    priced: list[tuple[float, int, int, str]] = []
     considered = 0
     for frm, frm_by_name in commodity_maps.items():
         for to, to_by_name in commodity_maps.items():
@@ -489,26 +509,55 @@ def build_trade_hops(
                 ):
                     continue  # phantom leg -- (near-)zero stock on one side, fail-closed
 
-                path = _route(frm, to)
-                if path is None:
-                    continue  # no known route -- fail-closed, no hop
-                turns = len(path) - 1  # path is INCLUSIVE of both endpoints -- see explore.path_to_sector
-                if turns <= 0:
-                    continue
-
                 frm_price = _commodity_price(frm_row, cfg.floor_prices, cfg.ceiling_multiplier)
                 to_price = _commodity_price(to_row, cfg.floor_prices, cfg.ceiling_multiplier)
                 if frm_price is None or to_price is None:
                     continue  # unpriced commodity/pct -- never a guessed margin
 
-                candidates.append(
-                    TradeHop(frm=frm, to=to, commodity=name, margin=to_price - frm_price, turns=turns)
-                )
+                priced.append((to_price - frm_price, frm, to, name))
 
-    candidates.sort(key=lambda h: h.margin, reverse=True)
+    # Stable descending-margin order: ties keep discovery order so
+    # repeated calls stay byte-identical.
+    priced.sort(key=lambda row: row[0], reverse=True)
+
+    # Phase 2 -- spend route-search budget (one BFS per source).
+    paths_from: dict[int, dict[int, tuple[int, ...]]] = {}
+    route_searches = 0
+    route_truncated = False
+    candidates: list[TradeHop] = []
+    for margin, frm, to, name in priced:
+        if frm not in paths_from:
+            if route_searches >= cfg.max_route_searches:
+                # Budget spent: skip legs that need a new source BFS, but
+                # keep draining priced legs whose source was already paid.
+                route_truncated = True
+                continue
+            paths_from[frm] = _bfs_paths_from(graph, frm)
+            route_searches += 1
+        path = paths_from[frm].get(to)
+        if path is None:
+            continue  # no known route -- fail-closed, no hop
+        turns = len(path) - 1  # path inclusive of both endpoints
+        if turns <= 0:
+            continue
+        candidates.append(
+            TradeHop(frm=frm, to=to, commodity=name, margin=margin, turns=turns)
+        )
+
     hops = tuple(candidates[: cfg.max_hops])
     note = None
-    if len(candidates) > cfg.max_hops:
+    if route_truncated:
+        # Priced legs whose source was never BFS'd -- not yet searched.
+        remaining = sum(1 for _m, f, _t, _n in priced if f not in paths_from)
+        note = (
+            f"trade_adapter: incomplete route search — "
+            f"max_route_searches={cfg.max_route_searches} exhausted "
+            f"({route_searches} source BFS; {len(candidates)} routed hops; "
+            f"{remaining} priced candidates not searched; "
+            f"absence of further hops is not established; "
+            f"{considered} compatible pairs considered)"
+        )
+    elif len(candidates) > cfg.max_hops:
         note = (
             f"trade_adapter: capped at {cfg.max_hops} hops "
             f"({len(candidates)} candidates from {considered} compatible pairs considered)"
