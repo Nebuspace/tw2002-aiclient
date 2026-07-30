@@ -22,6 +22,7 @@ from tw2002_aiclient.cockpit import chains as cockpit_chains
 from tw2002_aiclient.cockpit import control_seat as cockpit_control_seat
 from tw2002_aiclient.cockpit import covermeter as cockpit_covermeter
 from tw2002_aiclient.cockpit import panic
+from tw2002_aiclient.cockpit import reflex_controls as cockpit_reflex_controls
 from tw2002_aiclient.cockpit import decisions as cockpit_decisions
 from tw2002_aiclient.cockpit import draft_approve as cockpit_draft_approve
 from tw2002_aiclient.cockpit import draw as cockpit_draw
@@ -2107,6 +2108,12 @@ class PlayShellScreen:
         # `R` is NOT bound to attach/launch (WO constraint).
         if key in (ord("r"), ord("R")):
             return "record_toggle"
+        # WO-PLAY-REFLEX-ARM: V — preview what the taught rule library proposes
+        # for the live screen. Returns a pure INTENT only; app.py calls
+        # `reflex_propose` and (only on a fireable proposal) raises the
+        # existing default-deny armconfirm gate. Never a send path.
+        if cockpit_reflex_controls.resolve_reflex_offer_key(key):
+            return cockpit_reflex_controls.REFLEX_OFFER_INTENT
         # WO-P5-071: P panic -- the N5 cluster's halt control.
         #
         # Returns the intent IMMEDIATELY and unconditionally. Deliberately

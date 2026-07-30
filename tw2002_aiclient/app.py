@@ -19,6 +19,7 @@ from tw2002_aiclient.cockpit import draft_approve as _draft_approve
 from tw2002_aiclient.cockpit import explore_flags as _explore_flags
 from tw2002_aiclient.cockpit import live_refresh as _live_refresh
 from tw2002_aiclient.cockpit import record_macro as _record_macro
+from tw2002_aiclient.cockpit import reflex_controls as _reflex_controls
 from tw2002_aiclient.loops import store as _loop_store
 from tw2002_aiclient.screens import (
     BankViewScreen,
@@ -739,6 +740,12 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
     # invariant ever breaks, the failure is a refusal to arm rather than
     # arming yesterday's macro under someone else's prompt.
     pending_confirm_loop: dict | None = None
+    # WO-PLAY-REFLEX-ARM: the exact identity (`rule_id`, `macro`, `classification`)
+    # shown at preview. Held alongside `pending_confirm_action` so `y` launches
+    # the claim the human saw — never a re-read of the library between prompt
+    # and confirm. Cleared on every other gate raise and on the reflex arm
+    # branch itself.
+    pending_confirm_reflex: dict | None = None
     # WO-PLAY-EXPLORE-VISIBLE (L4): set after a successful arm start; cleared
     # when ``explore_status`` reports a terminal outcome so idle ticks do not
     # spam the daemon.
@@ -946,6 +953,7 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                 # claimed the key.
                 pending_confirm_action = "explore"
                 pending_confirm_loop = None  # a different gate owns the row now
+                pending_confirm_reflex = None
                 # WO-EXPLORE-AUTOMATION-GATE E3: one affordance, two intents.
                 # `E` CYCLES which goal is on offer and raises the gate for
                 # it; it never starts anything. The first press of a session
@@ -1020,7 +1028,52 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                 action_text = _autoloop_controls.compose_relaunch_confirm_action(sends_preview)
                 pending_confirm_action = "relaunch"
                 pending_confirm_loop = None  # a different gate owns the row now
+                pending_confirm_reflex = None
                 play.begin_arm_confirm(action_text)
+                continue
+            if action == _reflex_controls.REFLEX_OFFER_INTENT:
+                # WO-PLAY-REFLEX-ARM: V — ask what the taught library proposes.
+                # Preview is free; arming is not. No candidate / STOP /
+                # transport fail / incomplete identity → status only, zero
+                # gate, zero launch.
+                pending_confirm_loop = None
+                pending_confirm_reflex = None
+                proposal = adapters.reflex_propose(run_dir=run_dir)
+                if not getattr(proposal, "ok", False):
+                    play.status_line = _reflex_controls.describe_transport_fail(
+                        getattr(proposal, "reason", None)
+                    )
+                    continue
+                macro = getattr(proposal, "macro", None)
+                if not macro:
+                    play.status_line = _reflex_controls.describe_stop(
+                        getattr(proposal, "stop_reason", None)
+                    )
+                    continue
+                rule_id = getattr(proposal, "rule_id", None)
+                klass = getattr(proposal, "classification", None)
+                if not (
+                    isinstance(rule_id, str)
+                    and rule_id
+                    and isinstance(klass, str)
+                    and klass
+                ):
+                    play.status_line = (
+                        "reflex: incomplete identity — not offering arm"
+                    )
+                    continue
+                pending_confirm_action = "reflex"
+                pending_confirm_reflex = {
+                    "rule_id": rule_id,
+                    "macro": macro,
+                    "classification": klass,
+                }
+                play.status_line = _reflex_controls.describe_proposal(
+                    macro=macro, rule_id=rule_id, classification=klass
+                )
+                play.begin_arm_confirm(
+                    _reflex_controls.compose_reflex_confirm_action(macro)
+                )
                 continue
             if action == "chains_open":
                 # WO-PLAY-AUTOLOOP-START: canon's `L)chains`. The store read
@@ -1113,6 +1166,7 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                     continue
                 pending_confirm_loop = selected
                 pending_confirm_action = "loop"
+                pending_confirm_reflex = None
                 play.chains_session.close()
                 play.begin_arm_confirm(_chains.compose_arm_action(selected))
                 continue
@@ -1134,6 +1188,7 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                 pending_confirm_action = None
                 armed = pending_confirm_loop
                 pending_confirm_loop = None
+                pending_confirm_reflex = None
                 name = armed.get("name") if isinstance(armed, dict) else None
                 if not name:
                     # Fail closed: the gate said "loop" but no row is held.
@@ -1171,6 +1226,36 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                 else:
                     play.status_line = f"relaunch failed — {result.reason or 'unknown'}"
                 continue
+            if action == "arm_confirm" and pending_confirm_action == "reflex":
+                # WO-PLAY-REFLEX-ARM: human pressed `y` at the reflex confirm.
+                # Launch ONLY through `adapters.reflex_arm` with the exact
+                # identity held from preview — never a re-propose, never a
+                # direct send.
+                pending_confirm_action = None
+                identity = pending_confirm_reflex
+                pending_confirm_reflex = None
+                if not isinstance(identity, dict):
+                    play.status_line = "did not arm — no reflex held for this confirm"
+                    continue
+                macro = identity.get("macro") or "?"
+                play.status_line = f"arming {macro}…"
+                play.draw()
+                try:
+                    started = adapters.reflex_arm(
+                        rule_id=identity.get("rule_id"),
+                        macro=identity.get("macro"),
+                        classification=identity.get("classification"),
+                        run_dir=run_dir,
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    play.status_line = f"arm failed — {type(exc).__name__}"
+                else:
+                    if getattr(started, "ok", False):
+                        play.status_line = f"armed {macro} — one pass running"
+                    else:
+                        reason = getattr(started, "reason", None) or "unknown"
+                        play.status_line = f"did not arm — {reason}"
+                continue
             if action == "arm_confirm" and pending_confirm_action == "explore":
                 # WO-PLAY-EXPLORE-ARM (L3) + WO-ARM-CONFIRM-EXPLICIT-EXPLORE:
                 # the human pressed `y` at the explore offer. Explore is NOT
@@ -1193,6 +1278,7 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                 # find-StarDock runs until arrival or exhaustion.
                 pending_confirm_action = None
                 armed_intent = explore_intent_offered or _explore.INTENT_MAP_FILL
+                pending_confirm_reflex = None
                 if armed_intent == _explore.INTENT_FIND_STARDOCK:
                     play.status_line = "starting explore — find StarDock…"
                     play.explore_band = "find StarDock starting…"
@@ -1258,6 +1344,7 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                 # its own branch used to fall into explore here.
                 pending_confirm_action = None
                 pending_confirm_loop = None
+                pending_confirm_reflex = None
                 play.status_line = "did not arm — nothing pending for this confirm"
                 continue
             if action == "assign_trigger":
