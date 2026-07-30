@@ -119,6 +119,9 @@ class _FakeWM:
         self.calls: list = []
         self.landmark_results: list = [[]]
         self.landmark_calls: list = []
+        # None → every all_sectors call returns [] (completed empty scan).
+        self.sector_lists: list | None = None
+        self.sector_list_calls: list = []
 
     def known_sector_count(self, world_id, **kw):
         self.calls.append(world_id)
@@ -134,11 +137,23 @@ class _FakeWM:
             raise r
         return r
 
+    def all_sectors(self, world_id, **kw):
+        self.sector_list_calls.append(world_id)
+        if self.sector_lists is None:
+            return []
+        if not self.sector_lists:
+            return []
+        r = self.sector_lists.pop(0)
+        if isinstance(r, BaseException):
+            raise r
+        return r
+
 
 @pytest.fixture
 def wm(monkeypatch):
     fake = _FakeWM()
     monkeypatch.setattr(world_model, "known_sector_count", fake.known_sector_count)
+    monkeypatch.setattr(world_model, "all_sectors", fake.all_sectors)
     monkeypatch.setattr(explore, "find_landmark_sectors", fake.find_landmark_sectors)
     return fake
 
@@ -148,13 +163,18 @@ def test_it_contributes_nothing_before_a_refresh(wm):
     assert s.merge({"ok": True}) == {"ok": True}
     assert wm.calls == [], "reading the world model without being asked to"
     assert wm.landmark_calls == [], "scanning landmarks without being asked to"
+    assert wm.sector_list_calls == [], "scanning sectors without being asked to"
 
 
 def test_a_refresh_supplies_the_count(wm):
     wm.results = [812]
     s = world_stats.WorldStats()
     s.refresh("w-1")
-    assert s.merge({"ok": True}) == {"ok": True, "known_sectors": 812}
+    assert s.merge({"ok": True}) == {
+        "ok": True,
+        "known_sectors": 812,
+        "dead_end_count": 0,
+    }
     assert wm.calls == ["w-1"]
 
 
@@ -164,7 +184,7 @@ def test_zero_is_supplied_not_swallowed(wm):
     wm.results = [0]
     s = world_stats.WorldStats()
     s.refresh("w-1")
-    assert s.merge({}) == {"known_sectors": 0}
+    assert s.merge({}) == {"known_sectors": 0, "dead_end_count": 0}
 
 
 def test_it_never_mutates_the_status_it_is_given(wm):
@@ -182,14 +202,20 @@ def test_a_supplied_value_wins(wm):
     wm.results = [5]
     s = world_stats.WorldStats()
     s.refresh("w-1")
-    assert s.merge({"known_sectors": 99}) == {"known_sectors": 99}
+    assert s.merge({"known_sectors": 99}) == {
+        "known_sectors": 99,
+        "dead_end_count": 0,
+    }
 
 
 def test_a_supplied_none_is_filled_in(wm):
     wm.results = [5]
     s = world_stats.WorldStats()
     s.refresh("w-1")
-    assert s.merge({"known_sectors": None}) == {"known_sectors": 5}
+    assert s.merge({"known_sectors": None}) == {
+        "known_sectors": 5,
+        "dead_end_count": 0,
+    }
 
 
 @pytest.mark.parametrize(
@@ -202,14 +228,15 @@ def test_junk_counts_are_refused(wm, bad):
     wm.results = [bad]
     s = world_stats.WorldStats()
     s.refresh("w-1")
-    assert s.merge({"ok": True}) == {"ok": True}
+    # known_sectors refused; dead-end scan still completed over [].
+    assert s.merge({"ok": True}) == {"ok": True, "dead_end_count": 0}
 
 
 def test_a_raising_world_model_is_swallowed(wm):
     wm.results = [RuntimeError("store on fire")]
     s = world_stats.WorldStats()
     s.refresh("w-1")
-    assert s.merge({"ok": True}) == {"ok": True}
+    assert s.merge({"ok": True}) == {"ok": True, "dead_end_count": 0}
 
 
 def test_a_failed_refresh_keeps_the_last_observed_count(wm):
@@ -220,9 +247,9 @@ def test_a_failed_refresh_keeps_the_last_observed_count(wm):
     s = world_stats.WorldStats()
     s.refresh("w-1")
     s.refresh("w-1")
-    assert s.merge({}) == {"known_sectors": 812}
+    assert s.merge({}) == {"known_sectors": 812, "dead_end_count": 0}
     s.refresh("w-1")
-    assert s.merge({}) == {"known_sectors": 812}
+    assert s.merge({}) == {"known_sectors": 812, "dead_end_count": 0}
 
 
 def test_a_non_dict_status_passes_through_untouched(wm):
@@ -243,7 +270,11 @@ def test_wrap_overlays_any_provider(wm):
     wm.results = [812]
     s = world_stats.WorldStats()
     s.refresh("w-1")
-    assert s.wrap(lambda: {"ok": True})() == {"ok": True, "known_sectors": 812}
+    assert s.wrap(lambda: {"ok": True})() == {
+        "ok": True,
+        "known_sectors": 812,
+        "dead_end_count": 0,
+    }
 
 
 def test_the_two_overlays_compose_in_either_order(wm):
@@ -258,7 +289,13 @@ def test_the_two_overlays_compose_in_either_order(wm):
     cs.update(_discovery(hops=3))
 
     base = lambda: {"ok": True}  # noqa: E731
-    expected = {"ok": True, "known_sectors": 812, "chain_hops": 3, "chain_unit": "hops"}
+    expected = {
+        "ok": True,
+        "known_sectors": 812,
+        "dead_end_count": 0,
+        "chain_hops": 3,
+        "chain_unit": "hops",
+    }
     assert ws.wrap(cs.wrap(base))() == expected
 
     ws2 = world_stats.WorldStats()
@@ -284,6 +321,7 @@ def test_nonempty_landmarks_supply_sectors_and_found(wm):
     assert s.merge({"ok": True}) == {
         "ok": True,
         "known_sectors": 3,
+        "dead_end_count": 0,
         "stardock_sectors": [11, 42],
         "stardock_found": True,
     }
@@ -296,7 +334,11 @@ def test_empty_landmark_scan_omits_stardock_keys(wm):
     wm.landmark_results = [[]]
     s = world_stats.WorldStats()
     s.refresh("w-1")
-    assert s.merge({"ok": True}) == {"ok": True, "known_sectors": 0}
+    assert s.merge({"ok": True}) == {
+        "ok": True,
+        "known_sectors": 0,
+        "dead_end_count": 0,
+    }
     assert "stardock_found" not in s.merge({})
     assert "stardock_sectors" not in s.merge({})
 
@@ -318,7 +360,12 @@ def test_stardock_does_not_clobber_caller_values(wm):
     s.refresh("w-1")
     assert s.merge(
         {"stardock_sectors": [99], "stardock_found": False}
-    ) == {"stardock_sectors": [99], "stardock_found": False, "known_sectors": 1}
+    ) == {
+        "stardock_sectors": [99],
+        "stardock_found": False,
+        "known_sectors": 1,
+        "dead_end_count": 0,
+    }
 
 
 def test_failed_stardock_refresh_keeps_last_observation(wm):
@@ -343,15 +390,18 @@ def test_wrap_reads_only_the_cache(wm):
     s.refresh("w-1")
     calls_after_refresh = list(wm.calls)
     landmark_after_refresh = list(wm.landmark_calls)
+    sectors_after_refresh = list(wm.sector_list_calls)
     wrapped = s.wrap(lambda: {"ok": True})
     assert wrapped() == {
         "ok": True,
         "known_sectors": 5,
+        "dead_end_count": 0,
         "stardock_sectors": [3],
         "stardock_found": True,
     }
     assert wm.calls == calls_after_refresh
     assert wm.landmark_calls == landmark_after_refresh
+    assert wm.sector_list_calls == sectors_after_refresh
 
 
 def test_junk_landmark_lists_are_refused(wm):
@@ -463,7 +513,11 @@ def test_has_port_does_not_clobber_caller(tmp_path, wm):
     )
     s = world_stats.WorldStats()
     s.refresh(WORLD, status=_hud_status(7), state_dir=tmp_path)
-    assert s.merge({"has_port": False}) == {"has_port": False, "known_sectors": 1}
+    assert s.merge({"has_port": False}) == {
+        "has_port": False,
+        "known_sectors": 1,
+        "dead_end_count": 0,
+    }
 
 
 def test_wrap_does_not_touch_world_model_for_has_port(tmp_path, wm, monkeypatch):
@@ -488,4 +542,72 @@ def test_wrap_does_not_touch_world_model_for_has_port(tmp_path, wm, monkeypatch)
     wrapped = s.wrap(lambda: {"ok": True})
     assert wrapped()["has_port"] is True
     assert calls["n"] == 1
+
+
+# ------------------------------------------------- dead_end_count (WO-COACH-DEAD-END-COUNT)
+
+
+def test_dead_end_count_omitted_before_refresh(wm):
+    s = world_stats.WorldStats()
+    assert "dead_end_count" not in s.merge({"ok": True})
+
+
+def test_dead_end_count_zero_after_empty_completed_scan(wm):
+    """Pre-scan omits; completed empty scan reports 0 (not omit)."""
+    wm.results = [0]
+    s = world_stats.WorldStats()
+    s.refresh("w-1")
+    assert s.merge({})["dead_end_count"] == 0
+
+
+def test_dead_end_count_counts_one_warp_sectors(wm):
+    wm.results = [3]
+    wm.sector_lists = [
+        [
+            {"sector_id": 1, "warps": [2]},
+            {"sector_id": 2, "warps": [1, 3]},
+            {"sector_id": 3, "warps": []},
+            {"sector_id": 4, "warps": [9]},
+            {"sector_id": 5},  # missing warps — skip, not invent
+        ]
+    ]
+    s = world_stats.WorldStats()
+    s.refresh("w-1")
+    assert s.merge({})["dead_end_count"] == 2
+
+
+def test_dead_end_count_does_not_clobber_caller(wm):
+    wm.results = [1]
+    wm.sector_lists = [[{"sector_id": 1, "warps": [2]}]]
+    s = world_stats.WorldStats()
+    s.refresh("w-1")
+    assert s.merge({"dead_end_count": 99})["dead_end_count"] == 99
+
+
+def test_raising_all_sectors_keeps_prior_dead_end_count(wm):
+    wm.results = [1, 1]
+    wm.sector_lists = [[{"sector_id": 1, "warps": [2]}], RuntimeError("gone")]
+    s = world_stats.WorldStats()
+    s.refresh("w-1")
+    assert s.merge({})["dead_end_count"] == 1
+    s.refresh("w-1")
+    assert s.merge({})["dead_end_count"] == 1
+
+
+def test_hostile_sector_list_never_invents_positive_dead_end_count(wm):
+    wm.results = [0]
+    wm.sector_lists = [["not-a-dict"]]
+    s = world_stats.WorldStats()
+    s.refresh("w-1")
+    assert "dead_end_count" not in s.merge({"ok": True})
+
+
+def test_wrap_does_not_rescan_dead_ends(wm):
+    wm.results = [1]
+    wm.sector_lists = [[{"sector_id": 1, "warps": [2]}]]
+    s = world_stats.WorldStats()
+    s.refresh("w-1")
+    n = len(wm.sector_list_calls)
+    assert s.wrap(lambda: {})()["dead_end_count"] == 1
+    assert len(wm.sector_list_calls) == n
 

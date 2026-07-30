@@ -187,7 +187,10 @@ def test_explore_terminal_poll_refreshes_known_sectors(monkeypatch) -> None:
     keep = app_mod._poll_explore_status(play, run_dir=None)
     assert keep is False
     assert seen == [expected]
-    assert play.world_stats.merge({}) == {"known_sectors": 42}
+    assert play.world_stats.merge({}) == {
+        "known_sectors": 42,
+        "dead_end_count": 0,
+    }
 
 
 def test_draw_path_does_not_call_known_sector_count(monkeypatch) -> None:

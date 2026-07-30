@@ -11,15 +11,22 @@ sector is a real int and the world-model record for that sector carries a
 port, merge ``has_port=True``. Unknown / missing sector / no port observation
 **omits** the key (never invents confirmed-negative ``False``).
 
+``dead_end_count`` (WO-COACH-DEAD-END-COUNT) counts world-model sectors whose
+``warps`` list has length exactly 1 (colonization dead-ends — **not**
+menu-map signature dead-ends). Pre-scan **omits**; a completed scan may
+report ``0``. ``genesis_count`` stays unproduced here (needs
+``catalog_provider.genesis_candidates``).
+
 **What stays allowlisted.** Other GOALS world-model keys still have no honest
 producer here:
 
 * ``galaxy_size`` — nothing in the package produces one, and `state_parser`
   explicitly refuses to invent one. The Map row already degrades to
   "· N sectors" without a denominator.
-* ``formations_count`` — needs the `catalog_provider.genesis_candidates` seam,
-  which is unimplemented; with the only available provider the planner reports
-  ``mode="unavailable"`` by its own first branch.
+* ``formations_count`` / ``genesis_count`` — need the
+  `catalog_provider.genesis_candidates` seam, which is unimplemented; with
+  the only available provider the planner reports ``mode="unavailable"`` by
+  its own first branch.
 
 StarDock is **not** starved at the landmarks layer anymore: explore / ingest
 writers record ``landmarks[]``, and ``explore.find_landmark_sectors`` +
@@ -57,6 +64,7 @@ KNOWN_SECTORS_KEY = "known_sectors"
 STARDOCK_SECTORS_KEY = "stardock_sectors"
 STARDOCK_FOUND_KEY = "stardock_found"
 HAS_PORT_KEY = "has_port"
+DEAD_END_COUNT_KEY = "dead_end_count"
 
 
 def _sector_from_status(status: object) -> int | None:
@@ -88,6 +96,8 @@ class WorldStats:
         "_stardock_sectors",
         "_stardock_seen",
         "_has_port_seen",
+        "_dead_end_count",
+        "_dead_end_seen",
     )
 
     def __init__(self) -> None:
@@ -96,6 +106,8 @@ class WorldStats:
         self._stardock_sectors: list[int] = []
         self._stardock_seen = False
         self._has_port_seen = False
+        self._dead_end_count: int | None = None
+        self._dead_end_seen = False
 
     def refresh(
         self,
@@ -115,21 +127,31 @@ class WorldStats:
         sector). A completed lookup that does not observe a port clears any
         prior True so a move to an unknown sector cannot leave a stale card.
 
+        ``dead_end_count`` scans on every refresh (same cadence as known
+        sectors). A completed scan may report ``0``; failure leaves the prior
+        observation in place.
+
         `world_model` / `explore` are imported here rather than at module scope
         because this module is imported by the cockpit wiring while `refresh`
         only runs on a popup keypress — the same lazy-import discipline
         `app.py` applies to `chain_search` for the same CPU-budget reason.
         """
-        self._refresh_known_sectors(world_id)
-        self._refresh_stardock(world_id)
+        self._refresh_known_sectors(world_id, state_dir=state_dir)
+        self._refresh_stardock(world_id, state_dir=state_dir)
+        self._refresh_dead_ends(world_id, state_dir=state_dir)
         if status is not None:
             self._refresh_has_port(world_id, status, state_dir=state_dir)
 
-    def _refresh_known_sectors(self, world_id: object) -> None:
+    def _refresh_known_sectors(
+        self, world_id: object, *, state_dir: object = None
+    ) -> None:
         try:
             from tw2002_aiclient import world_model as _world_model
 
-            count = _world_model.known_sector_count(world_id)
+            kwargs = {}
+            if state_dir is not None:
+                kwargs["state_dir"] = state_dir
+            count = _world_model.known_sector_count(world_id, **kwargs)
         except Exception:  # noqa: BLE001
             return
         if not isinstance(count, int) or isinstance(count, bool):
@@ -139,13 +161,18 @@ class WorldStats:
         self._known_sectors = count
         self._seen = True
 
-    def _refresh_stardock(self, world_id: object) -> None:
+    def _refresh_stardock(
+        self, world_id: object, *, state_dir: object = None
+    ) -> None:
         try:
             from tw2002_aiclient import explore as _explore
             from tw2002_aiclient import world_model as _world_model
 
+            kwargs = {}
+            if state_dir is not None:
+                kwargs["state_dir"] = state_dir
             raw = _explore.find_landmark_sectors(
-                world_id, _world_model.STARDOCK_LANDMARK
+                world_id, _world_model.STARDOCK_LANDMARK, **kwargs
             )
         except Exception:  # noqa: BLE001
             return
@@ -158,6 +185,38 @@ class WorldStats:
             sectors.append(item)
         self._stardock_sectors = sectors
         self._stardock_seen = True
+
+    def _refresh_dead_ends(
+        self, world_id: object, *, state_dir: object = None
+    ) -> None:
+        """Count one-warp sectors. Never raises.
+
+        Completed scan (including zero) sets ``_dead_end_seen``. A raising or
+        hostile ``all_sectors`` leaves the prior observation untouched —
+        never invents a positive count from junk.
+        """
+        try:
+            from tw2002_aiclient import world_model as _world_model
+
+            kwargs = {}
+            if state_dir is not None:
+                kwargs["state_dir"] = state_dir
+            sectors = _world_model.all_sectors(world_id, **kwargs)
+        except Exception:  # noqa: BLE001
+            return
+        if not isinstance(sectors, list):
+            return
+        count = 0
+        for record in sectors:
+            if not isinstance(record, dict):
+                return
+            warps = record.get("warps")
+            if not isinstance(warps, list):
+                continue
+            if len(warps) == 1:
+                count += 1
+        self._dead_end_count = count
+        self._dead_end_seen = True
 
     def _refresh_has_port(
         self,
@@ -210,10 +269,18 @@ class WorldStats:
         landmarks does not emit ``stardock_found=False``.
 
         **``has_port`` is True-or-omit.** Never merges ``False``.
+
+        **``dead_end_count``:** omitted until a completed scan; then a
+        non-negative int (including ``0``).
         """
         if not isinstance(status, dict):
             return status
-        if not self._seen and not self._stardock_seen and not self._has_port_seen:
+        if (
+            not self._seen
+            and not self._stardock_seen
+            and not self._has_port_seen
+            and not self._dead_end_seen
+        ):
             return status
         merged = dict(status)
         if self._seen and merged.get(KNOWN_SECTORS_KEY) is None:
@@ -225,6 +292,8 @@ class WorldStats:
                 merged[STARDOCK_FOUND_KEY] = True
         if self._has_port_seen and merged.get(HAS_PORT_KEY) is None:
             merged[HAS_PORT_KEY] = True
+        if self._dead_end_seen and merged.get(DEAD_END_COUNT_KEY) is None:
+            merged[DEAD_END_COUNT_KEY] = self._dead_end_count
         return merged
 
     def wrap(self, provider):

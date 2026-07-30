@@ -514,3 +514,37 @@ def test_live_trace_still_wins_over_has_port_coach(_fresh_coach_kb):
     lines = compose_decisions_lines(status, width=60)
     assert any("loop @1<->3" in ln for ln in lines)
     assert not any("Pair trade loops" in ln for ln in lines)
+
+
+# ---------------------------------------------------------------------------
+# WO-COACH-DEAD-END-COUNT — idle DECISIONS + status dead_end_count
+# ---------------------------------------------------------------------------
+
+
+def test_dead_end_count_positive_renders_hide_planet_card(_fresh_coach_kb):
+    lines = compose_decisions_lines({"dead_end_count": 1}, width=60)
+    assert lines != _EMPTY_LINES
+    assert "Hide a planet in a dead-end" in "\n".join(lines)
+
+
+@pytest.mark.parametrize(
+    "dead_end_count",
+    [0, -1, True, "1", 1.5, None],
+    ids=["zero", "neg", "bool", "str", "float", "none"],
+)
+def test_dead_end_count_non_positive_int_stays_honest_empty(
+    dead_end_count, _fresh_coach_kb
+):
+    status = (
+        {"dead_end_count": dead_end_count}
+        if dead_end_count is not None
+        else {"dead_end_count": None}
+    )
+    assert compose_decisions_lines(status, width=60) == _EMPTY_LINES
+
+
+def test_live_trace_still_wins_over_dead_end_coach(_fresh_coach_kb):
+    status = {**_FULL_TRACE_STATUS, "dead_end_count": 3}
+    lines = compose_decisions_lines(status, width=60)
+    assert any("loop @1<->3" in ln for ln in lines)
+    assert not any("Hide a planet in a dead-end" in ln for ln in lines)

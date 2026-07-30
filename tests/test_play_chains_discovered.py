@@ -497,6 +497,7 @@ def test_the_cached_scalars_reach_the_real_status_provider(monkeypatch):
         "ok": True, "credits": 7,
         "chain_hops": 3, "chain_unit": "hops",
         "known_sectors": SECTOR_COUNT,
+        "dead_end_count": 0,
     }
 
 
@@ -653,7 +654,10 @@ def test_the_refresh_is_keyed_by_this_profiles_world_id(monkeypatch):
         sector_count=_count,
     )
     assert seen == [expected], f"refreshed against the wrong world: {seen!r}"
-    assert _screen.world_stats.merge({}) == {"known_sectors": SECTOR_COUNT}
+    assert _screen.world_stats.merge({}) == {
+        "known_sectors": SECTOR_COUNT,
+        "dead_end_count": 0,
+    }
 
 
 def test_a_raising_world_model_costs_the_count_not_the_cockpit(monkeypatch):
@@ -667,7 +671,11 @@ def test_a_raising_world_model_costs_the_count_not_the_cockpit(monkeypatch):
     )
     assert screen is not None
     assert screen.chains_session.status == "ok", "the popup never opened"
-    assert screen.world_stats.merge({"ok": True}) == {"ok": True}, "fabricated a count"
+    # known_sectors refused; dead-end scan may still complete over [].
+    assert screen.world_stats.merge({"ok": True}) == {
+        "ok": True,
+        "dead_end_count": 0,
+    }, "fabricated a known_sectors count"
     assert _scalars_after(screen) == {"chain_hops": 3, "chain_unit": "hops"}
 
 
