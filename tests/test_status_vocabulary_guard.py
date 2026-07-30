@@ -57,16 +57,8 @@ STARVED_ALLOWLIST: dict[str, tuple[str, str]] = {
         "needs `catalog_provider.genesis_candidates`; that seam is unimplemented "
         "and the planner returns mode='unavailable' — WO-FORMATIONS-CATALOG-PORT",
     ),
-    "stardock_found": (
-        "BLOCKED",
-        "`find_landmark_sectors` reads rec['landmarks']; the only live world-model "
-        "writer never writes landmarks, so this is never True — WO-WM-LANDMARKS-WRITE",
-    ),
-    "stardock_sectors": (
-        "BLOCKED",
-        "same starved reader as `stardock_found`: landmarks are never written, so "
-        "the lookup is always [] however much you explore — WO-WM-LANDMARKS-WRITE",
-    ),
+    # stardock_found / stardock_sectors — supplied by world_stats.WorldStats
+    # (WO-GOALS-STARDOCK-STATUS); landmarks writers already on main.
     # -- T3: no extractor exists; needs new screen parsing and captured fixtures.
     "galaxy_size": (
         "T3",

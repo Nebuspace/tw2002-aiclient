@@ -1,42 +1,47 @@
-"""World-model scalars on ``status`` — the one field of T1 that has a producer.
+"""World-model scalars on ``status`` — Map count + StarDock landmarks (T1).
 
 **What this closes.** `cockpit/goals.py` renders its GOALS Map row from
-``status["known_sectors"]``. No product code wrote it, so the row said "unknown"
-on every live run while the suite stayed green on supplied values — the starved-
-consumer shape `tests/test_status_vocabulary_guard.py` exists to catch.
+``status["known_sectors"]`` and its StarDock row from ``stardock_sectors`` /
+``stardock_found``. Both were starved consumers: suites stayed green on
+supplied fixtures while live runs painted ``?``. This cache is the client-side
+producer for the fields whose world-model readers already exist.
 
-**Why only one field.** `WO-GOALS-STATUS-VOCABULARY` scheduled five world-model
-fields here. Resolving each one's producer left exactly this one standing, and
-the other four are listed in that guard's allowlist with the evidence:
+**What stays allowlisted.** Other GOALS world-model keys still have no honest
+producer here:
 
 * ``galaxy_size`` — nothing in the package produces one, and `state_parser`
   explicitly refuses to invent one. The Map row already degrades to
-  "· N sectors" without a denominator, which is why this module is useful alone.
+  "· N sectors" without a denominator.
 * ``formations_count`` — needs the `catalog_provider.genesis_candidates` seam,
   which is unimplemented; with the only available provider the planner reports
   ``mode="unavailable"`` by its own first branch.
-* ``stardock_found`` / ``stardock_sectors`` — read `rec["landmarks"]`, and the
-  only live world-model writer (`sector_explore._ingest_settled_sector`) builds
-  ``{sector, warps, port}``. Fed a screen that literally says
-  ``Ports : StarDock, Class 9 (Special)``, the stored record still has
-  ``landmarks == []`` and the lookup still returns ``[]``.
+
+StarDock is **not** starved at the landmarks layer anymore: explore / ingest
+writers record ``landmarks[]``, and ``explore.find_landmark_sectors`` +
+``world_model.STARDOCK_LANDMARK`` are the single spelling table this module
+reuses (no second landmark vocabulary).
+
+**Empty scan ≠ confirmed-negative.** A successful refresh that finds no
+StarDock sectors **omits** both keys so GOALS stays ``?``. Emitting
+``stardock_found=False`` would mean *confirmed not found* and wrongly gate
+Ship/Hold rows — never do that from an empty landmark scan.
 
 **Why a cache, not a read on the draw path.** `status_provider()` runs ONCE PER
 DRAW (`screens.py`), not on a timer. Counting sector files costs ~5ms at 1000
 sectors and ~26ms at 5000 — per draw, against a whole-process budget
 (`tests/test_dead_terminal_spin.py`, 0.5s) already within ~50ms of its ceiling.
-So the count is taken when the operator opens the chains popup (which already
-pays for a far more expensive world-model pass on that keypress) or when an
-explore run reaches a terminal outcome on the idle poll (already paid for
-`explore_status`), and the draw path only ever reads one cached integer.
-**Nothing here runs on a draw.**
+Landmark scans walk sector records. So both scalars are taken when the operator
+opens the chains popup (which already pays for a far more expensive world-model
+pass on that keypress) or when an explore run reaches a terminal outcome on the
+idle poll (already paid for `explore_status`), and the draw path only ever reads
+the cached values. **Nothing here runs on a draw.**
 
-**Staleness is bounded and honest.** The number is "sectors known as of the last
-chains popup or the last explore terminal poll", so it can lag exploration done
+**Staleness is bounded and honest.** The numbers are "as of the last chains
+popup or the last explore terminal poll", so they can lag exploration done
 since without those events. That is a real cost of the budget above, and it is
-the right trade for a progress counter: a number that lags is still true of a
-moment we were actually in, while no number at all is what shipped before this.
-It never counts anything that was not on disk.
+the right trade for a progress counter / landmark disclosure: a value that lags
+is still true of a moment we were actually in, while no value at all is what
+shipped before this. It never reports anything that was not on disk.
 """
 
 from __future__ import annotations
@@ -44,6 +49,8 @@ from __future__ import annotations
 __all__ = ["WorldStats"]
 
 KNOWN_SECTORS_KEY = "known_sectors"
+STARDOCK_SECTORS_KEY = "stardock_sectors"
+STARDOCK_FOUND_KEY = "stardock_found"
 
 
 class WorldStats:
@@ -53,27 +60,31 @@ class WorldStats:
     by wrapping one provider in the other.
     """
 
-    __slots__ = ("_known_sectors", "_seen")
+    __slots__ = ("_known_sectors", "_seen", "_stardock_sectors", "_stardock_seen")
 
     def __init__(self) -> None:
         self._known_sectors: int | None = None
         self._seen = False
+        self._stardock_sectors: list[int] = []
+        self._stardock_seen = False
 
     def refresh(self, world_id: object) -> None:
-        """Re-read the world model's sector count. Never raises.
+        """Re-read world-model scalars. Never raises.
 
-        A refresh that cannot determine the count (unreadable store, unusable
-        ``world_id``, a raising world_model) leaves the previous value in place
-        rather than clearing it: the cached number was genuinely observed, and
-        replacing an observation with "unknown" because a *later* read failed
-        would lose information without gaining honesty. Before any successful
-        refresh there is no value, and this contributes nothing at all.
+        Known-sector count and StarDock landmarks refresh independently: a
+        failure on one leaves that cache's previous observation in place and
+        does not block the other. Before any successful refresh of a scalar
+        there is no value, and that scalar contributes nothing at merge.
 
-        `world_model` is imported here rather than at module scope because this
-        module is imported by the cockpit wiring while `refresh` only runs on a
-        popup keypress — the same lazy-import discipline `app.py` applies to
-        `chain_search` for the same CPU-budget reason.
+        `world_model` / `explore` are imported here rather than at module scope
+        because this module is imported by the cockpit wiring while `refresh`
+        only runs on a popup keypress — the same lazy-import discipline
+        `app.py` applies to `chain_search` for the same CPU-budget reason.
         """
+        self._refresh_known_sectors(world_id)
+        self._refresh_stardock(world_id)
+
+    def _refresh_known_sectors(self, world_id: object) -> None:
         try:
             from tw2002_aiclient import world_model as _world_model
 
@@ -87,24 +98,52 @@ class WorldStats:
         self._known_sectors = count
         self._seen = True
 
+    def _refresh_stardock(self, world_id: object) -> None:
+        try:
+            from tw2002_aiclient import explore as _explore
+            from tw2002_aiclient import world_model as _world_model
+
+            raw = _explore.find_landmark_sectors(
+                world_id, _world_model.STARDOCK_LANDMARK
+            )
+        except Exception:  # noqa: BLE001
+            return
+        if not isinstance(raw, list):
+            return
+        sectors: list[int] = []
+        for item in raw:
+            if isinstance(item, bool) or not isinstance(item, int):
+                return
+            sectors.append(item)
+        self._stardock_sectors = sectors
+        self._stardock_seen = True
+
     def merge(self, status: object) -> dict | None:
         """``status`` with the cached scalars added; never mutates the input.
 
         Returns a non-dict argument unchanged (a provider's own "no status"
-        signal must survive untouched), and adds nothing before a successful
-        refresh.
+        signal must survive untouched), and adds nothing for a scalar before
+        that scalar has successfully refreshed.
 
         **Does not clobber.** A key the caller already supplied with a
         non-``None`` value wins, so a future daemon-side producer cannot be
-        silently overwritten by this cache's older number.
+        silently overwritten by this cache's older value.
+
+        **Empty StarDock scan omits keys.** A successful refresh that found no
+        landmarks does not emit ``stardock_found=False``.
         """
         if not isinstance(status, dict):
             return status
-        if not self._seen:
+        if not self._seen and not self._stardock_seen:
             return status
         merged = dict(status)
-        if merged.get(KNOWN_SECTORS_KEY) is None:
+        if self._seen and merged.get(KNOWN_SECTORS_KEY) is None:
             merged[KNOWN_SECTORS_KEY] = self._known_sectors
+        if self._stardock_seen and self._stardock_sectors:
+            if merged.get(STARDOCK_SECTORS_KEY) is None:
+                merged[STARDOCK_SECTORS_KEY] = list(self._stardock_sectors)
+            if merged.get(STARDOCK_FOUND_KEY) is None:
+                merged[STARDOCK_FOUND_KEY] = True
         return merged
 
     def wrap(self, provider):
