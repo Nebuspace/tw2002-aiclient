@@ -611,14 +611,7 @@ def plan_find_formations(
     )
 
 
-EXPLORE_MODES = ("off", "mapfill", "stardock", "formations")
 
-
-def cycle_explore_mode(current: str) -> str:
-    """Trainer-panel tick cycle: off → mapfill → stardock → formations → off."""
-    cur = current if current in EXPLORE_MODES else "off"
-    i = EXPLORE_MODES.index(cur)
-    return EXPLORE_MODES[(i + 1) % len(EXPLORE_MODES)]
 
 
 def format_explore_decision_lines(mode: str, plan) -> list[str]:
@@ -847,12 +840,11 @@ INTENTS = frozenset({INTENT_MAP_FILL, INTENT_FIND_STARDOCK})
 #: before this WO -- an operator's muscle memory must not arm a different run
 #: than it armed yesterday.
 #:
-#: `cycle_explore_mode`'s "off → mapfill → stardock → formations" is the
-#: fuller trainer-panel cycle and stays UNWIRED: `formations` has no armable
-#: path (`plan_find_formations` has no callers either) and this WO's scope
-#: excludes it. Two vocabularies therefore exist -- these daemon intents and
-#: that panel's mode names -- and unifying them is deliberately left to the
-#: WO that wires the panel, rather than half-done here.
+#: A fuller trainer-panel cycle (off → mapfill → stardock → formations) was
+#: never product-wired and was retired (WO-RETIRE-CYCLE-EXPLORE-MODE / #247).
+#: `formations` still has no armable path (`plan_find_formations` has no
+#: product callers); Play stays on these two daemon intents only. Unifying
+#: panel mode names with daemon intents waits on the WO that wires formations.
 ARMABLE_INTENTS: tuple[str, ...] = (INTENT_MAP_FILL, INTENT_FIND_STARDOCK)
 
 

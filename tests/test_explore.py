@@ -306,16 +306,16 @@ def test_find_formations_without_a_provider_refuses_honestly(tmp_path: Path):
     assert plan.targets == ()
 
 
-def test_cycle_explore_mode_and_decision_lines():
+def test_format_explore_decision_lines_mapfill():
+    """Cycler retired (#247); keep a thin mapfill DECISIONS pin here.
+    Broader coverage lives in ``test_explore_decision_lines_wire.py``.
+    """
     from tw2002_aiclient.explore import (
-        cycle_explore_mode,
         format_explore_decision_lines,
         MapFillPlan,
         FrontierEdge,
     )
 
-    assert cycle_explore_mode("off") == "mapfill"
-    assert cycle_explore_mode("formations") == "off"
     plan = MapFillPlan(
         next_hop=FrontierEdge(frm=1, to=9, depth=1),
         frontier=(FrontierEdge(frm=1, to=9, depth=1),),
