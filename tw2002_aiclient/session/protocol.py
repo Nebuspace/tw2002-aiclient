@@ -405,6 +405,18 @@ def _status_response(session, server):
     credits = _credits_snapshot(session)
     if credits is not None and credits.outcome == OUTCOME_READ:
         resp["credits"] = credits.balance
+    # WO-COACH-EXPLORE-MODE: coach exploring_frontier reads TOP-LEVEL
+    # `explore_mode` (= run intent). Reuse explore_run_wire truth; emit only
+    # while running with a report; omit when idle / unavailable (never invent
+    # a fake mode).
+    explore_wire = sector_explore.explore_run_wire(
+        sector_explore.observe_explore(_explore_runner(server), lock)
+    )
+    run = explore_wire.get("run")
+    if explore_wire.get("running") and isinstance(run, dict):
+        intent = run.get("intent")
+        if isinstance(intent, str) and intent:
+            resp["explore_mode"] = intent
     return resp
 
 
