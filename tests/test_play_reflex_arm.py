@@ -195,6 +195,7 @@ def test_screens_handle_key_returns_reflex_offer_intent():
     play = object.__new__(app_mod.PlayShellScreen)
     play.analyze_session = type("A", (), {"is_open": False})()
     play.chains_session = type("C", (), {"is_open": False})()
+    play.rules_library_session = type("R", (), {"is_open": False})()
     play._arm_confirm = None
     play._draft_approve = None
     play._rule_identity = None
