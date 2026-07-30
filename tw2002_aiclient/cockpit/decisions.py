@@ -202,6 +202,9 @@ def _coach_lines(status: dict, *, width: int) -> list[str]:
             classification=_safe_str(status.get("classification")),
             chain=chain,
             fighters_aboard=_safe_int_or_none(status.get("fighters_aboard")),
+            # Identity-true only (WO-COACH-HAS-PORT): truthy strings / 1 must
+            # not fire the trade card. Absent / False / junk → default False.
+            has_port=status.get("has_port") is True,
             loop_depleting=_loop_depleting_from_intervention(status),
         )
         if not triggers:

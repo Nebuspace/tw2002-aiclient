@@ -1,10 +1,15 @@
-"""World-model scalars on ``status`` — Map count + StarDock landmarks (T1).
+"""World-model scalars on ``status`` — Map count + StarDock + ``has_port`` (T1).
 
 **What this closes.** `cockpit/goals.py` renders its GOALS Map row from
 ``status["known_sectors"]`` and its StarDock row from ``stardock_sectors`` /
 ``stardock_found``. Both were starved consumers: suites stayed green on
 supplied fixtures while live runs painted ``?``. This cache is the client-side
 producer for the fields whose world-model readers already exist.
+
+``has_port`` (WO-COACH-HAS-PORT) feeds idle DECISIONS coaching: when the HUD
+sector is a real int and the world-model record for that sector carries a
+port, merge ``has_port=True``. Unknown / missing sector / no port observation
+**omits** the key (never invents confirmed-negative ``False``).
 
 **What stays allowlisted.** Other GOALS world-model keys still have no honest
 producer here:
@@ -51,6 +56,23 @@ __all__ = ["WorldStats"]
 KNOWN_SECTORS_KEY = "known_sectors"
 STARDOCK_SECTORS_KEY = "stardock_sectors"
 STARDOCK_FOUND_KEY = "stardock_found"
+HAS_PORT_KEY = "has_port"
+
+
+def _sector_from_status(status: object) -> int | None:
+    """HUD sector id when it is a real ``int``; else ``None``. Never raises."""
+    if not isinstance(status, dict):
+        return None
+    hud = status.get("hud")
+    if not isinstance(hud, dict):
+        return None
+    cell = hud.get("sector")
+    if not isinstance(cell, dict):
+        return None
+    value = cell.get("value")
+    if isinstance(value, bool) or not isinstance(value, int):
+        return None
+    return value
 
 
 class WorldStats:
@@ -60,21 +82,38 @@ class WorldStats:
     by wrapping one provider in the other.
     """
 
-    __slots__ = ("_known_sectors", "_seen", "_stardock_sectors", "_stardock_seen")
+    __slots__ = (
+        "_known_sectors",
+        "_seen",
+        "_stardock_sectors",
+        "_stardock_seen",
+        "_has_port_seen",
+    )
 
     def __init__(self) -> None:
         self._known_sectors: int | None = None
         self._seen = False
         self._stardock_sectors: list[int] = []
         self._stardock_seen = False
+        self._has_port_seen = False
 
-    def refresh(self, world_id: object) -> None:
+    def refresh(
+        self,
+        world_id: object,
+        *,
+        status: object = None,
+        state_dir: object = None,
+    ) -> None:
         """Re-read world-model scalars. Never raises.
 
         Known-sector count and StarDock landmarks refresh independently: a
         failure on one leaves that cache's previous observation in place and
         does not block the other. Before any successful refresh of a scalar
         there is no value, and that scalar contributes nothing at merge.
+
+        ``has_port`` refreshes only when ``status`` is supplied (needs the HUD
+        sector). A completed lookup that does not observe a port clears any
+        prior True so a move to an unknown sector cannot leave a stale card.
 
         `world_model` / `explore` are imported here rather than at module scope
         because this module is imported by the cockpit wiring while `refresh`
@@ -83,6 +122,8 @@ class WorldStats:
         """
         self._refresh_known_sectors(world_id)
         self._refresh_stardock(world_id)
+        if status is not None:
+            self._refresh_has_port(world_id, status, state_dir=state_dir)
 
     def _refresh_known_sectors(self, world_id: object) -> None:
         try:
@@ -118,6 +159,42 @@ class WorldStats:
         self._stardock_sectors = sectors
         self._stardock_seen = True
 
+    def _refresh_has_port(
+        self,
+        world_id: object,
+        status: object,
+        *,
+        state_dir: object = None,
+    ) -> None:
+        """Observe port presence for the HUD sector. Never raises.
+
+        Emit path is omit-until-known: only a completed lookup that finds a
+        non-``None`` ``port`` on the sector record sets ``_has_port_seen``.
+        Missing sector, unknown sector, empty port, or hostile HUD clears the
+        flag so merge omits the key.
+        """
+        sector = _sector_from_status(status)
+        if sector is None:
+            self._has_port_seen = False
+            return
+        try:
+            from tw2002_aiclient import world_model as _world_model
+
+            kwargs = {}
+            if state_dir is not None:
+                kwargs["state_dir"] = state_dir
+            record = _world_model.get_sector(world_id, sector, **kwargs)
+        except Exception:  # noqa: BLE001
+            # Failed lookup for a known sector id: omit rather than keep a
+            # possibly-stale True from a previous sector (coaching fail-closed).
+            self._has_port_seen = False
+            return
+        if not isinstance(record, dict):
+            self._has_port_seen = False
+            return
+        port = record.get("port")
+        self._has_port_seen = port is not None
+
     def merge(self, status: object) -> dict | None:
         """``status`` with the cached scalars added; never mutates the input.
 
@@ -131,10 +208,12 @@ class WorldStats:
 
         **Empty StarDock scan omits keys.** A successful refresh that found no
         landmarks does not emit ``stardock_found=False``.
+
+        **``has_port`` is True-or-omit.** Never merges ``False``.
         """
         if not isinstance(status, dict):
             return status
-        if not self._seen and not self._stardock_seen:
+        if not self._seen and not self._stardock_seen and not self._has_port_seen:
             return status
         merged = dict(status)
         if self._seen and merged.get(KNOWN_SECTORS_KEY) is None:
@@ -144,6 +223,8 @@ class WorldStats:
                 merged[STARDOCK_SECTORS_KEY] = list(self._stardock_sectors)
             if merged.get(STARDOCK_FOUND_KEY) is None:
                 merged[STARDOCK_FOUND_KEY] = True
+        if self._has_port_seen and merged.get(HAS_PORT_KEY) is None:
+            merged[HAS_PORT_KEY] = True
         return merged
 
     def wrap(self, provider):

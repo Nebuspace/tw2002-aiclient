@@ -44,7 +44,9 @@ class _Stats:
     def __init__(self) -> None:
         self.calls: list[object] = []
 
-    def refresh(self, world_id: object) -> None:
+    def refresh(self, world_id: object, **_kw) -> None:
+        # Optional ``status=`` / ``state_dir=`` (WO-COACH-HAS-PORT) must not
+        # break this spy — production refresh gained kwargs, not new positionals.
         self.calls.append(world_id)
 
 
@@ -260,7 +262,7 @@ def test_a_raising_world_model_does_not_raise_or_spin(play, clock, monkeypatch) 
     into a retry storm."""
     calls: list[int] = []
 
-    def _boom(world_id: object) -> None:
+    def _boom(world_id: object, **_kw) -> None:
         calls.append(1)
         raise OSError("world model unreadable")
 

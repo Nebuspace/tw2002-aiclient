@@ -362,3 +362,130 @@ def test_junk_landmark_lists_are_refused(wm):
         s.refresh("w-1")
         assert "stardock_sectors" not in s.merge({"ok": True})
 
+
+# ------------------------------------------------- has_port (WO-COACH-HAS-PORT)
+
+
+def _hud_status(sector):
+    return {"hud": {"sector": {"value": sector, "age_s": 0.0}}}
+
+
+def test_has_port_omitted_when_refresh_has_no_status(wm):
+    wm.results = [0]
+    s = world_stats.WorldStats()
+    s.refresh("w-1")
+    assert "has_port" not in s.merge({"ok": True})
+
+
+def test_has_port_true_when_current_sector_has_port(tmp_path, wm):
+    wm.results = [1]
+    world_model.upsert_sector(
+        WORLD,
+        {"sector_id": 7, "port": {"last_seen_ts": "t", "class": "BBB"}},
+        state_dir=tmp_path,
+    )
+    s = world_stats.WorldStats()
+    s.refresh(WORLD, status=_hud_status(7), state_dir=tmp_path)
+    assert s.merge({"ok": True})["has_port"] is True
+
+
+def test_has_port_omitted_for_unknown_sector(tmp_path, wm):
+    wm.results = [0]
+    s = world_stats.WorldStats()
+    s.refresh(WORLD, status=_hud_status(99), state_dir=tmp_path)
+    assert "has_port" not in s.merge({"ok": True})
+
+
+def test_has_port_omitted_when_sector_port_is_none(tmp_path, wm):
+    wm.results = [1]
+    world_model.upsert_sector(
+        WORLD, {"sector_id": 7, "warps": [1]}, state_dir=tmp_path
+    )
+    s = world_stats.WorldStats()
+    s.refresh(WORLD, status=_hud_status(7), state_dir=tmp_path)
+    assert "has_port" not in s.merge({"ok": True})
+
+
+def test_has_port_clears_when_sector_moves_to_unknown(tmp_path, wm):
+    wm.results = [1, 1]
+    world_model.upsert_sector(
+        WORLD,
+        {"sector_id": 7, "port": {"last_seen_ts": "t"}},
+        state_dir=tmp_path,
+    )
+    s = world_stats.WorldStats()
+    s.refresh(WORLD, status=_hud_status(7), state_dir=tmp_path)
+    assert s.merge({})["has_port"] is True
+    s.refresh(WORLD, status=_hud_status(8), state_dir=tmp_path)
+    assert "has_port" not in s.merge({"ok": True})
+
+
+@pytest.mark.parametrize(
+    "status",
+    [
+        {},
+        {"hud": None},
+        {"hud": "nope"},
+        {"hud": {}},
+        {"hud": {"sector": None}},
+        {"hud": {"sector": "7"}},
+        {"hud": {"sector": {"value": None}}},
+        {"hud": {"sector": {"value": True}}},
+        {"hud": {"sector": {"value": "7"}}},
+        {"hud": {"sector": {"value": 7.5}}},
+    ],
+    ids=[
+        "no-hud",
+        "hud-none",
+        "hud-str",
+        "hud-empty",
+        "sector-none",
+        "sector-str",
+        "value-none",
+        "value-bool",
+        "value-str",
+        "value-float",
+    ],
+)
+def test_hostile_hud_sector_never_raises_or_invents_has_port(wm, status):
+    wm.results = [0]
+    s = world_stats.WorldStats()
+    s.refresh("w-1", status=status)
+    assert "has_port" not in s.merge({"ok": True})
+
+
+def test_has_port_does_not_clobber_caller(tmp_path, wm):
+    wm.results = [1]
+    world_model.upsert_sector(
+        WORLD,
+        {"sector_id": 7, "port": {"last_seen_ts": "t"}},
+        state_dir=tmp_path,
+    )
+    s = world_stats.WorldStats()
+    s.refresh(WORLD, status=_hud_status(7), state_dir=tmp_path)
+    assert s.merge({"has_port": False}) == {"has_port": False, "known_sectors": 1}
+
+
+def test_wrap_does_not_touch_world_model_for_has_port(tmp_path, wm, monkeypatch):
+    """Draw-path wrap reads only the cache — no get_sector on merge/wrap."""
+    wm.results = [1]
+    world_model.upsert_sector(
+        WORLD,
+        {"sector_id": 7, "port": {"last_seen_ts": "t"}},
+        state_dir=tmp_path,
+    )
+    calls = {"n": 0}
+    real_get = world_model.get_sector
+
+    def counting_get(*a, **kw):
+        calls["n"] += 1
+        return real_get(*a, **kw)
+
+    monkeypatch.setattr(world_model, "get_sector", counting_get)
+    s = world_stats.WorldStats()
+    s.refresh(WORLD, status=_hud_status(7), state_dir=tmp_path)
+    assert calls["n"] == 1
+    wrapped = s.wrap(lambda: {"ok": True})
+    assert wrapped()["has_port"] is True
+    assert calls["n"] == 1
+
