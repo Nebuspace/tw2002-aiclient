@@ -44,12 +44,16 @@ def infer_coach_triggers(
     dead_end_count: int = 0,
     explore_mode: str | None = None,
     has_port: bool = False,
+    loop_depleting: object = False,
 ) -> list[str]:
     """Map live context to ``StrategyCard.when_trigger`` ids.
 
     Pure and fail-closed: unknown inputs omit that trigger rather than guessing
     one. Returns unique ids in a stable priority order for
     ``compose_decisions_coach``.
+
+    ``loop_depleting`` is identity-true only (``is True``): a truthy string /
+    ``1`` / ``"yes"`` must not fire the card (WO-COACH-LOOP-DEPLETING-TRIGGER).
     """
     found: list[str] = []
 
@@ -71,6 +75,10 @@ def infer_coach_triggers(
     hop_n, _unit = chain_hop_count_and_unit(chain)
     if hop_n is not None and hop_n >= _MIN_CHAIN_HOPS:
         _add("chain_opportunity")
+    # After chain_opportunity: same loop family, depletion advice when the
+    # armed loop has already halted for floor / turn budget.
+    if loop_depleting is True:
+        _add("loop_depleting")
     if int(genesis_count or 0) > 0 or int(dead_end_count or 0) > 0:
         _add("at_dead_end")
     if explore_mode and explore_mode != "off":

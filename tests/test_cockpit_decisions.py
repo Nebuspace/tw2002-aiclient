@@ -425,3 +425,63 @@ def test_fixed_vocabulary_never_uses_an_imperative_leading_word():
         first_token = phrase.split()[0] if phrase.split() else phrase
         first_word = first_token.rstrip("…").lower()
         assert first_word not in IMPERATIVE_DENYLIST
+
+
+# ---------------------------------------------------------------------------
+# WO-COACH-LOOP-DEPLETING-TRIGGER — idle DECISIONS + intervention codes
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def _fresh_coach_kb():
+    from tw2002_aiclient.cockpit import decisions as decisions_mod
+
+    decisions_mod._reset_kb_cache_for_tests()
+    yield
+    decisions_mod._reset_kb_cache_for_tests()
+
+
+@pytest.mark.parametrize("code", ["floor_reached", "turn_budget_exhausted"])
+def test_depletion_intervention_renders_route_longevity_card(code, _fresh_coach_kb):
+    status = {
+        "intervention": {
+            "needs_attention": True,
+            "reasons": [{"code": code}],
+        }
+    }
+    lines = compose_decisions_lines(status, width=60)
+    assert lines != _EMPTY_LINES
+    joined = "\n".join(lines)
+    assert "Rotate before decay" in joined or "remaining profitable" in joined
+
+
+@pytest.mark.parametrize(
+    "intervention",
+    [
+        None,
+        {},
+        {"needs_attention": True},
+        {"needs_attention": True, "reasons": []},
+        {"needs_attention": True, "reasons": [{"code": "near_miss"}]},
+        {"needs_attention": True, "reasons": [{"code": "unknown_halt"}]},
+        {"needs_attention": True, "reasons": ["floor_reached"]},  # not a dict
+        {"needs_attention": True, "reasons": {"code": "floor_reached"}},
+        {"needs_attention": True, "reasons": [{"code": 1}]},
+    ],
+)
+def test_non_depletion_intervention_stays_honest_empty(intervention, _fresh_coach_kb):
+    status = {} if intervention is None else {"intervention": intervention}
+    assert compose_decisions_lines(status, width=60) == _EMPTY_LINES
+
+
+def test_live_trace_still_wins_over_depletion_coach(_fresh_coach_kb):
+    status = {
+        **_FULL_TRACE_STATUS,
+        "intervention": {
+            "needs_attention": True,
+            "reasons": [{"code": "floor_reached"}],
+        },
+    }
+    lines = compose_decisions_lines(status, width=60)
+    assert any("loop @1<->3" in ln for ln in lines)
+    assert not any("Rotate before decay" in ln for ln in lines)

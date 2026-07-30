@@ -134,6 +134,7 @@ def test_no_input_yields_no_triggers():
         ({"prompt": "Option? "}, "toll_or_gate"),
         ({"prompt": "How many fighters to use?"}, "toll_or_gate"),
         ({"chain": {"source": "discovered", "steps": 3}}, "chain_opportunity"),
+        ({"loop_depleting": True}, "loop_depleting"),
     ],
 )
 def test_each_trigger_fires_on_its_own_signal(kwargs, expected):
@@ -150,6 +151,12 @@ def test_each_trigger_fires_on_its_own_signal(kwargs, expected):
         {"chain": None},
         {"classification": "unknown"},
         {"prompt": ""},
+        # WO-COACH-LOOP-DEPLETING-TRIGGER: identity-true only — truthy junk
+        # and False/absent must not fire.
+        {"loop_depleting": False},
+        {"loop_depleting": 1},
+        {"loop_depleting": "yes"},
+        {"loop_depleting": "True"},
     ],
 )
 def test_negative_signals_produce_no_trigger(kwargs):
@@ -164,6 +171,7 @@ def test_triggers_are_unique_and_order_is_stable():
         fighters_aboard=0,
         prompt="stardock option?",     # at_shipyard AND toll_or_gate
         chain={"source": "discovered", "steps": 4},
+        loop_depleting=True,
         genesis_count=2,
         explore_mode="auto",
     )
@@ -174,6 +182,7 @@ def test_triggers_are_unique_and_order_is_stable():
         "docked_at_port",
         "at_shipyard",
         "chain_opportunity",
+        "loop_depleting",
         "at_dead_end",
         "exploring_frontier",
         "toll_or_gate",
@@ -183,8 +192,8 @@ def test_triggers_are_unique_and_order_is_stable():
 def test_the_reachable_trigger_set_is_pinned_against_the_shipped_cards():
     """Enumerate the CLOSED side: which authored cards can never fire.
 
-    ``infer_coach_triggers`` emits six ids. ``strategies.json`` authors eight
-    cards. The two whose triggers are never produced are unreachable through
+    ``infer_coach_triggers`` emits seven ids. ``strategies.json`` authors eight
+    cards. The one whose trigger is never produced is unreachable through
     this engine -- pinned here so the gap is a stated fact rather than a
     surprise, and so closing it has to update this list deliberately.
     """
@@ -192,13 +201,14 @@ def test_the_reachable_trigger_set_is_pinned_against_the_shipped_cards():
         "docked_at_port",
         "at_shipyard",
         "chain_opportunity",
+        "loop_depleting",
         "at_dead_end",
         "exploring_frontier",
         "toll_or_gate",
     }
     kb = coach_kb.load_coach_kb(*coach_kb.default_kb_paths())
     authored = {c.when_trigger for c in kb.strategies}
-    assert authored - emitted == {"loop_depleting", "planet_management"}
+    assert authored - emitted == {"planet_management"}
     assert emitted - authored == set()
 
 
