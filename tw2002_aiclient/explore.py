@@ -661,6 +661,9 @@ def explore_decision_lines_from_run(run: object) -> list[str] | None:
     present on the run dict, append one flags line using
     ``cockpit.explore_flags`` markers (``+dock`` / ``no-dock…`` /
     ``+fight-tolls``). Absent keys → no invented flags line.
+
+    WO-EXPLORE-DECISION-TURNS: when ``turns_remaining`` is a non-bool int
+    ≥ 0, append ``turns N``. Omit when absent or wrong type — never invent.
     """
     from types import SimpleNamespace
 
@@ -679,10 +682,24 @@ def explore_decision_lines_from_run(run: object) -> list[str] | None:
         lines = format_explore_decision_lines("stardock", plan)
     else:
         return None
+    extra: list[str] = []
     flags = _explore_decision_flags_line(run)
     if flags is not None:
-        lines = list(lines) + [flags]
+        extra.append(flags)
+    turns = _explore_decision_turns_line(run)
+    if turns is not None:
+        extra.append(turns)
+    if extra:
+        lines = list(lines) + extra
     return lines
+
+
+def _explore_decision_turns_line(run: dict) -> str | None:
+    """``turns N`` when wire carries a usable remaining budget; else omit."""
+    raw = run.get("turns_remaining")
+    if isinstance(raw, bool) or not isinstance(raw, int) or raw < 0:
+        return None
+    return f"turns {raw}"
 
 
 def _explore_decision_flags_line(run: dict) -> str | None:
