@@ -630,6 +630,110 @@ def test_negative_max_hops_raises_at_construction():
         trade_adapter.TradeAdapterConfig(max_hops=-1)
 
 
+# -- max_route_searches (WO-CHAIN-WORK-BOUND) ---------------------------------
+
+
+def _pair_world(tmp_path, a, b):
+    """Two-port Equipment/Fuel Ore mirror used by several hop pins."""
+    _upsert(
+        tmp_path,
+        a,
+        warps=(b,),
+        commodities=[_row("Equipment", "selling", 100), _row("Fuel Ore", "buying", 0)],
+    )
+    _upsert(
+        tmp_path,
+        b,
+        warps=(a,),
+        commodities=[_row("Fuel Ore", "selling", 100), _row("Equipment", "buying", 0)],
+    )
+
+
+def test_route_search_budget_bounds_bfs_calls(tmp_path, monkeypatch):
+    """Spy/counter (not wall-clock): many compatible pairs, few sources —
+    budget of 1 must not run more than one source BFS."""
+    # Three sell-sources (10, 20, 30) each with a buyer that only that
+    # source can profitably hit on Equipment — forces distinct BFS starts
+    # if the budget allows, and proves pair-count growth cannot exceed
+    # the configured search limit.
+    for frm, to in ((10, 11), (20, 21), (30, 31)):
+        _upsert(
+            tmp_path,
+            frm,
+            warps=(to,),
+            commodities=[_row("Equipment", "selling", 100, amount=1000)],
+        )
+        _upsert(
+            tmp_path,
+            to,
+            warps=(frm,),
+            commodities=[_row("Equipment", "buying", 0, amount=1000)],
+        )
+
+    calls = {"n": 0}
+    real_bfs = trade_adapter._bfs_paths_from
+
+    def counting_bfs(graph, start):
+        calls["n"] += 1
+        return real_bfs(graph, start)
+
+    monkeypatch.setattr(trade_adapter, "_bfs_paths_from", counting_bfs)
+    cfg = trade_adapter.TradeAdapterConfig(max_route_searches=1)
+    hops, note = trade_adapter.build_trade_hops(WORLD, state_dir=tmp_path, config=cfg, now=_CLOCK)
+
+    assert calls["n"] == 1
+    assert note is not None
+    assert "incomplete" in note
+    assert "not established" in note
+    assert len(hops) >= 1  # the one paid source still yields its hop
+
+
+def test_route_search_within_budget_matches_legacy_and_is_deterministic(tmp_path):
+    _pair_world(tmp_path, 10, 11)
+    cfg = trade_adapter.TradeAdapterConfig(max_route_searches=100)
+    a = trade_adapter.build_trade_hops(WORLD, state_dir=tmp_path, config=cfg, now=_CLOCK)
+    b = trade_adapter.build_trade_hops(WORLD, state_dir=tmp_path, config=cfg, now=_CLOCK)
+    default = trade_adapter.build_trade_hops(WORLD, state_dir=tmp_path, now=_CLOCK)
+
+    assert a == b
+    assert a == default
+    assert a[1] is None  # within budget: no incomplete-search note
+    assert len(a[0]) == 2
+
+
+def test_max_route_searches_zero_performs_zero_bfs(tmp_path, monkeypatch):
+    _pair_world(tmp_path, 10, 11)
+    calls = {"n": 0}
+
+    def counting_bfs(graph, start):
+        calls["n"] += 1
+        return {}
+
+    monkeypatch.setattr(trade_adapter, "_bfs_paths_from", counting_bfs)
+    cfg = trade_adapter.TradeAdapterConfig(max_route_searches=0)
+    hops, note = trade_adapter.build_trade_hops(WORLD, state_dir=tmp_path, config=cfg, now=_CLOCK)
+
+    assert calls["n"] == 0
+    assert hops == ()
+    assert note is not None
+    assert "incomplete" in note
+
+
+def test_negative_max_route_searches_raises_at_construction():
+    with pytest.raises(ValueError, match="max_route_searches"):
+        trade_adapter.TradeAdapterConfig(max_route_searches=-1)
+
+
+def test_bool_max_route_searches_raises_at_construction():
+    with pytest.raises(TypeError, match="max_route_searches"):
+        trade_adapter.TradeAdapterConfig(max_route_searches=True)
+
+
+def test_non_int_max_route_searches_raises_at_construction():
+    with pytest.raises(TypeError, match="max_route_searches"):
+        trade_adapter.TradeAdapterConfig(max_route_searches=1.5)
+
+
 # -- config guards: ceiling_multiplier + bool-as-number (WO-ADAPTER-CONFIG-GUARDS-LOW)
 
 
