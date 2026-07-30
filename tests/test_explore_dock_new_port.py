@@ -320,8 +320,8 @@ def test_the_play_explore_arm_does_not_force_dock_on():
     ]
     assert calls, "the Play explore arm no longer calls explore_start_for_profile"
 
-    def _initialised_false(name: str) -> bool:
-        """True iff `name = False` is the only initialisation in the module."""
+    def _initialised_constant(name: str, value: bool) -> bool:
+        """True iff every plain constant init of `name` equals *value*."""
         seen = [
             n for n in ast.walk(tree)
             if isinstance(n, ast.Assign)
@@ -329,7 +329,7 @@ def test_the_play_explore_arm_does_not_force_dock_on():
         ]
         assert seen, f"{name} is forwarded to the adapter but never assigned"
         return all(
-            isinstance(a.value, ast.Constant) and a.value.value is False
+            isinstance(a.value, ast.Constant) and a.value.value is value
             for a in seen
             # the toggle itself (`x = not x`) is a UnaryOp, not an Assign of
             # a constant -- only plain constant initialisations are checked
@@ -341,17 +341,17 @@ def test_the_play_explore_arm_does_not_force_dock_on():
         if "dock_new_ports" not in kw:
             continue
         node = kw["dock_new_ports"]
-        if isinstance(node, ast.Constant):
-            assert node.value is False, "Play must not hardcode dock ON"
-        else:
-            assert isinstance(node, ast.Name), (
-                f"dock_new_ports must be a constant False or a bare opt-in "
-                f"name, got {ast.dump(node)}"
-            )
-            assert _initialised_false(node.id), (
-                f"{node.id} is forwarded as the dock arm but does not "
-                f"initialise to False -- the default must stay OFF"
-            )
+        # WO-PLAY-EXPLORE-GATHER-DEFAULT-ON: Play forwards a bare name that
+        # initialises True. Must not hardcode a Constant True/False here —
+        # that would bypass the operator toggle.
+        assert isinstance(node, ast.Name), (
+            f"dock_new_ports must be a bare Play toggle name, got "
+            f"{ast.dump(node)}"
+        )
+        assert _initialised_constant(node.id, True), (
+            f"{node.id} is forwarded as the dock arm but does not "
+            f"initialise to True -- Play gather default must stay ON"
+        )
 
 
 # --- wired, not merely defined -------------------------------------------
