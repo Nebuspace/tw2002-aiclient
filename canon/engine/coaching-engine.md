@@ -27,7 +27,7 @@ figure a hypothesis until proven.
 | Part | What it is | Where it lives |
 |---|---|---|
 | **I1 — Strategy knowledge base** | The taught strategy *content*: encoded cards, one per play pattern, each with WHAT it is, the WHEN game-state trigger, tradeoffs/risks, and concrete steps + numbers. | Content authored in the `strategy/*` concepts; encoded as data and loaded by `coach_kb.py` (`StrategyCard`) from `data/coach/strategies.json`. |
-| **I2 — Contextual trigger map** | The pure function from live game-state to the set of applicable strategy cards: docked→trade-eval, dead-end→colonize, toll→attack/pay/flee, depleting-source→rotate. | `infer_coach_triggers()` in `coach_engine.py`. **Partial:** it emits six trigger ids; `depleting-source→rotate` (`loop_depleting`) is authored as a card but not yet produced — see Code divergence. |
+| **I2 — Contextual trigger map** | The pure function from live game-state to the set of applicable strategy cards: docked→trade-eval, dead-end→colonize, toll→attack/pay/flee, depleting-source→rotate, explore→density-scan. | `infer_coach_triggers()` in `coach_engine.py`. Emits seven trigger ids the authored KB can fire; only `planet_management` stays authored-unreachable — see Code divergence. |
 | **I3 — Contextual-advice engine** | The renderer that takes the triggered cards and composes the option + its tradeoffs as human-facing callouts — never a keystroke, never an armed behavior. | `compose_decisions_coach()` in `coach_engine.py`, consumed by `cockpit/decisions.py` in front of its honest-empty state. The pre-rebirth consumer was `spectate_app.py`, which the rebirth deleted; the reborn one is the cockpit's own DECISIONS composer. |
 | **I4 — Configurable coaching parameters** | The numeric substrate the cards cite — every one a hypothesis carrying a verify-vs-live flag, never a hardcoded fact. | `CoachParam` loaded by `coach_kb.py` from `data/coach/params.json`; the convention itself is [game-data-store](/engine/game-data-store.md)'s. |
 
@@ -74,12 +74,13 @@ prompt text, fighters aboard, whether a profitable chain is known, genesis/dead-
 world-model, the explore mode, and whether the current sector has a port — and emits the set of matching
 `when_trigger` ids in a stable order. The mappings are the intuitive ones the map prescribes:
 
-- a port in the sector, or a `port_trade` / `cim_report` classification → **`docked_at_port`** (trade
+- `has_port` true, or a `port_trade` / `cim_report` classification → **`docked_at_port`** (trade
   evaluation);
 - zero fighters aboard, or a `stardock`/`shipyard` prompt → **`at_shipyard`** (holds-first progression);
 - a known chain of ≥2 hops → **`chain_opportunity`** (longest-profit-chain);
+- intervention-derived `loop_depleting is True` → **`loop_depleting`** (route-longevity rotation);
 - any genesis/dead-end formation nearby → **`at_dead_end`** (colonization siting);
-- an active explore mode → **`exploring_frontier`** (density-scan);
+- an active explore mode (non-`"off"` string) → **`exploring_frontier`** (density-scan);
 - a toll/fighters prompt → **`toll_or_gate`** (fight/pay/reroute math).
 
 "Fail-closed" is the safety property: an input the map does not understand simply omits that trigger — it
@@ -156,38 +157,43 @@ a screen the trainer does not understand.
 
 # Code divergence
 
-**Status at tip (corrected 2026-07-28, `WO-COACH-ENGINE-PORT`).** This section previously described the
-engine as shipped "in `spectate_layout.py`, wired into `spectate_app.py`'s Decisions pane." Both files were
-deleted by the `452d896` rebirth scaffold, so for a period this concept described an implementation that did
-not exist. What is true at tip:
+**Status at tip (corrected 2026-07-30, `WO-COACH-ENGINE-DOC-SYNC` after #258–#263).** This section
+previously described the engine as shipped "in `spectate_layout.py`, wired into `spectate_app.py`'s
+Decisions pane." Both files were deleted by the `452d896` rebirth scaffold, so for a period this concept
+described an implementation that did not exist. What is true at tip:
 
 - **Restored:** `coach_kb.py` (I1/I4) and `coach_engine.py` (`infer_coach_triggers` I2 +
-  `compose_decisions_coach` I3), ported as a severable ~285-line kernel — not the surrounding spectate surface.
-- **Consumer restored** (`WO-STATUS-CHAIN-SCALARS-COACH`, 2026-07-28 — the follow-on this bullet used to
-  name). `cockpit/decisions.py` calls `infer_coach_triggers` + `compose_decisions_coach` in front of its
-  two-line honest-empty state, so the DECISIONS pane renders authored cards whenever it would otherwise be
-  idle. Three properties keep that inside the pane's never-raises contract: the KB load is attempted at most
-  once per process and a failure is cached as "no KB" (degrading to the same empty state, never to per-frame
-  file I/O); no prose is composed at the call site; and a live autopilot trace wins outright — the coach is
-  consulted only when zero trace lines rendered, which is the yield rule I3 states above.
-- **Trigger inputs are partial, and one of the gaps is permanent by design.** Of `infer_coach_triggers`'
-  eight parameters the consumer passes three: `classification` and `fighters_aboard` (both on the `status`
-  verb's answer) and `chain` (via the `chain_hops`/`chain_unit` scalars `chain_status.ChainScalars` now
-  writes). `genesis_count`, `dead_end_count`, `explore_mode` and `has_port` have no producer on `status`
-  yet — ordinary wiring gaps, each its own follow-on.
-  **`prompt` is different: it is deliberately absent and must stay so.** `session/protocol.py::
-  _status_response` removed it because on a server that echoes at the password gate that line *is* the
-  operator's credential (`canon/doctrine/secrets-and-credentials.md`, Code Divergence #1). Three trigger
-  arms key off `prompt` — the `stardock`/`shipyard` half of `at_shipyard`, and `toll_or_gate` entirely — so
-  those cannot fire from the cockpit and should not be "fixed" by re-adding the field. A structural pin
-  keeps the consumer from ever asking for it.
-  Of the ids that remain reachable, `docked_at_port` fires on `classification == "cim_report"` only:
-  `port_trade` is in the trigger map's anchor list but `classify_screen` does not produce it today
-  (swept across every screen fixture in `tests/fixtures/`), which is a classifier gap, not an engine one.
-- **Authored but unreachable:** `strategies.json` carries eight cards; the trigger map produces six ids, so
-  `route_longevity` (`loop_depleting`) and `planet_production` (`planet_management`) can never fire. The first
-  of those is named in I2's own contract line above, which makes it a genuine canon↔code gap rather than
-  merely unbuilt scope.
+  `compose_decisions_coach` I3), ported as a severable kernel — not the surrounding spectate surface.
+- **Consumer restored** (`WO-STATUS-CHAIN-SCALARS-COACH`, 2026-07-28). `cockpit/decisions.py` calls
+  `infer_coach_triggers` + `compose_decisions_coach` in front of its two-line honest-empty state, so the
+  DECISIONS pane renders authored cards whenever it would otherwise be idle. Three properties keep that
+  inside the pane's never-raises contract: the KB load is attempted at most once per process and a failure
+  is cached as "no KB" (degrading to the same empty state, never to per-frame file I/O); no prose is
+  composed at the call site; and a live autopilot trace wins outright — the coach is consulted only when
+  zero trace lines rendered, which is the yield rule I3 states above.
+- **Trigger inputs at tip (after the coach/status wire tranche #258–#263).** Of `infer_coach_triggers`'
+  nine parameters the DECISIONS consumer passes seven: `classification`, `fighters_aboard`, `chain` (via
+  `chain_hops`/`chain_unit`), `has_port` (world-model merge, True-or-omit), `dead_end_count` (world-stats
+  warp-degree-1 count), `explore_mode` (run intent from `explore_run_wire` while running+report), and
+  `loop_depleting` (derived fail-closed from `status["intervention"]`, identity-true only). Top-level
+  `status` also emits `credits` for GOALS; that key is not a coach-trigger input.
+  **Still no status producer:** `genesis_count` — needs an honest `catalog_provider.genesis_candidates`
+  reader (formations catalog); `at_dead_end` still fires from `dead_end_count` alone when that is > 0.
+  **`prompt` is deliberately absent and must stay so.** `session/protocol.py:: _status_response` omits it
+  because on a server that echoes at the password gate that line *is* the operator's credential
+  (`canon/doctrine/secrets-and-credentials.md`, Code Divergence #1). Prompt-keyed arms — the
+  `stardock`/`shipyard` half of `at_shipyard`, and `toll_or_gate` entirely — therefore cannot fire from the
+  cockpit consumer and must not be "fixed" by re-adding the field. A structural pin keeps the consumer from
+  ever asking for it. `at_shipyard` *does* fire from the cockpit when top-level `fighters_aboard == 0`
+  (wired by `WO-STATUS-FIGHTERS-ABOARD`).
+  **`docked_at_port` paths at tip:** `has_port is True` (primary idle path) or
+  `classification in ("port_trade", "cim_report")`. `cim_report` is produced by `classify_screen` today;
+  `port_trade` remains in the trigger map's anchor list but is not emitted by the classifier on the current
+  fixture corpus — a classifier gap, not an engine one. Do not invent classifier capability in this concept.
+- **Authored but unreachable:** `strategies.json` carries eight cards; the trigger map can produce seven
+  ids. The sole authored-unreachable card is `planet_production` (`when_trigger=planet_management`) — it
+  still needs an honest planet/genesis producer and must not be marked wired without one.
+  `route_longevity` (`loop_depleting`) is reachable via the intervention-derived flag.
 
 The coaching kernel as restored already matches the reborn frame:
 it is a pure, fail-closed, read-only teacher that surfaces cards and never sends. The divergences are not
@@ -264,9 +270,11 @@ diverging autopilot it can only ever teach.
 - Code modules (plain text) — **at tip:** `coach_kb.py` (`StrategyCard` / `CoachParam` loader + schema
   validation, I1/I4), `coach_engine.py` (`infer_coach_triggers` = I2 trigger map, `compose_decisions_coach`
   = I3 advice renderer, plus the honest empty-state placeholder), `chain_units.py` (the hop/step arithmetic
-  the trigger map consumes). **Port-source only, deleted at the rebirth:** `spectate_layout.py` (original
-  home of the two I2/I3 functions), `spectate_app.py` (Decisions-pane wiring, fail-closed KB load,
-  yield-to-live-trace ordering — this consumer has NOT been restored). Data: `data/coach/strategies.json` and `data/coach/params.json` (the KB
-  content and hypothesis-flagged numeric substrate); and, for the recorded divergences, `autopilot.py`
-  (per-cycle EV `select()` + `EXPLORE_BASELINE_EV`, §22/§23 orchestrator framing), `priority_engine.py`
-  (`explore_baseline_ev`, `recommend_actions`), and `trade_driver.py` (`run_chain` autonomous chain runner).
+  the trigger map consumes), `cockpit/decisions.py` (reborn DECISIONS consumer — fail-closed KB load,
+  yield-to-live-trace, coach call when the pane would otherwise be idle). **Port-source only, deleted at
+  the rebirth:** `spectate_layout.py` (original home of the two I2/I3 functions), `spectate_app.py`
+  (pre-rebirth Decisions-pane wiring). Data: `data/coach/strategies.json` and `data/coach/params.json`
+  (the KB content and hypothesis-flagged numeric substrate); and, for the recorded divergences,
+  `autopilot.py` (per-cycle EV `select()` + `EXPLORE_BASELINE_EV`, §22/§23 orchestrator framing),
+  `priority_engine.py` (`explore_baseline_ev`, `recommend_actions`), and `trade_driver.py` (`run_chain`
+  autonomous chain runner).
