@@ -72,9 +72,14 @@ jobs:
         # drives). GHA run 30209603462: pty_curses_supported() passed but cockpit
         # *_pty tests stalled in wait_frame (30 failed / 37 errors) — same hazard
         # class as WO-TUI-DEAD-TERMINAL-SPIN. Honest exclusion until that WO lands;
-        # not a silent deselect of unrelated failures.
+        # not a silent deselect of unrelated failures (deselect ≠ skip — #194).
         # Inherits pytest.ini addopts (-q -n auto).
-        run: python -m pytest -m "not live_login and not pty_ui"
+        # junitxml feeds the skip-count guard (WO-TEST-CI-SKIP-COUNT-GUARD).
+        run: python -m pytest -m "not live_login and not pty_ui" --junitxml=junit.xml
+
+      - name: Fail on skipped tests
+        # Pin skipped == 0. Fail closed on missing/toy XML (tests must be thousands).
+        run: python scripts/ci_skip_count_guard.py junit.xml
 
       - name: Upload test results on failure
         if: failure()
@@ -82,5 +87,6 @@ jobs:
         with:
           name: pytest-results
           path: |
+            junit.xml
             .pytest_cache/
           retention-days: 7
