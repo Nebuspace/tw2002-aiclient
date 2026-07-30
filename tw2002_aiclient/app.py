@@ -15,7 +15,9 @@ from tw2002_aiclient.cockpit import autoloop_controls as _autoloop_controls
 from tw2002_aiclient import explore as _explore
 from tw2002_aiclient import world_identity as _world_identity
 from tw2002_aiclient.cockpit import chains as _chains
+from tw2002_aiclient.cockpit import cycle_progress as _cycle_progress
 from tw2002_aiclient.cockpit import draft_approve as _draft_approve
+from tw2002_aiclient.cockpit import draw as _cockpit_draw
 from tw2002_aiclient.cockpit import explore_flags as _explore_flags
 from tw2002_aiclient.cockpit import live_refresh as _live_refresh
 from tw2002_aiclient.cockpit import record_macro as _record_macro
@@ -615,6 +617,52 @@ def _poll_explore_status(play: PlayShellScreen, *, run_dir) -> bool:
     return keep_polling
 
 
+def _apply_autoloop_cycle_band(play: PlayShellScreen, raw: object) -> bool:
+    """Set or clear ``explore_band`` from an ``autoloop_status`` wire body.
+
+    Returns whether the run is still live (keep polling). Display-only
+    (WO-AUTOLOOP-CYCLE-PROGRESS): unknown progress omits the band rather
+    than inventing counts. Stand-down / finished clears the band so calm
+    teach tokens return.
+    """
+    if not isinstance(raw, dict):
+        play.explore_band = None
+        return False
+    if raw.get("stand_down") or not raw.get("running"):
+        play.explore_band = None
+        return False
+    run = raw.get("run")
+    if not isinstance(run, dict):
+        play.explore_band = None
+        return True  # running but no report yet — keep polling, omit chrome
+    line = _cycle_progress.compose_cycle_progress(
+        run.get("loop"),
+        run.get("cycle"),
+        run.get("cycles"),
+        unicode_ok=_cockpit_draw.unicode_ok(),
+    )
+    play.explore_band = line  # None when unknown — calm hints, not a guess
+    return True
+
+
+def _poll_autoloop_status(play: PlayShellScreen, *, run_dir) -> bool:
+    """Poll ``adapters.autoloop_status`` for cycle-progress chrome.
+
+    Returns whether idle ticks should keep polling. Never raises into the
+    play loop. Explore owns the same band when its poll is active — this
+    path is only reached when explore is idle.
+    """
+    try:
+        result = adapters.autoloop_status(run_dir=run_dir)
+    except Exception:  # noqa: BLE001 — honest containment
+        play.explore_band = None
+        return False
+    if not result.ok:
+        play.explore_band = None
+        return False
+    return _apply_autoloop_cycle_band(play, result.raw)
+
+
 def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
     """Bind profile to a fresh play-shell placeholder; Esc ends the binding."""
     run_dir = env.resolve_run_dir()
@@ -754,6 +802,10 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
     # when ``explore_status`` reports a terminal outcome so idle ticks do not
     # spam the daemon.
     explore_poll_active = False
+    # WO-AUTOLOOP-CYCLE-PROGRESS: poll autoloop_status on idle ticks while a
+    # taught run is live so the hint band can show cycle chrome. Cleared when
+    # the run stands down. Explore owns the same band when its poll is active.
+    autoloop_poll_active = False
     # WO-CHAINS-LIVE-REFRESH: the always-on GOALS/HUD readouts used to update
     # only when the `L` modal was opened, so a whole explore run showed empty
     # chain and sector rows. Per session, so a world that outgrew the chain
@@ -767,6 +819,8 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
             if key == -1:
                 if explore_poll_active:
                     explore_poll_active = _poll_explore_status(play, run_dir=run_dir)
+                elif autoloop_poll_active:
+                    autoloop_poll_active = _poll_autoloop_status(play, run_dir=run_dir)
                 # The idle tick, NOT the draw path: `play.draw()` runs every
                 # loop iteration, while this branch is only reached when
                 # `getch` times out (~1 Hz). `LiveRefresh` throttles on top of
@@ -1018,6 +1072,8 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                 result = adapters.autoloop_pause(run_dir=run_dir)
                 if result.ok:
                     play.status_line = "paused — taught run parked (Ctrl-A to drive, G to relaunch)"
+                    autoloop_poll_active = False
+                    play.explore_band = None
                 else:
                     play.status_line = f"pause failed — {result.reason or 'unknown'}"
                 continue
@@ -1263,6 +1319,8 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                 else:
                     if getattr(started, "ok", False):
                         play.status_line = f"armed {name} — one pass running"
+                        autoloop_poll_active = True
+                        _apply_autoloop_cycle_band(play, getattr(started, "raw", None))
                     else:
                         reason = getattr(started, "reason", None) or "unknown"
                         play.status_line = f"did not arm — {reason}"
@@ -1277,6 +1335,8 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                 result = adapters.autoloop_relaunch(run_dir=run_dir)
                 if result.ok:
                     play.status_line = "relaunched — replaying from the start"
+                    autoloop_poll_active = True
+                    _apply_autoloop_cycle_band(play, result.raw)
                 else:
                     play.status_line = f"relaunch failed — {result.reason or 'unknown'}"
                 continue
@@ -1312,6 +1372,10 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                             )
                         else:
                             play.status_line = f"armed {macro} — one pass running"
+                        autoloop_poll_active = True
+                        _apply_autoloop_cycle_band(
+                            play, getattr(started, "raw", None)
+                        )
                     else:
                         reason = getattr(started, "reason", None) or "unknown"
                         play.status_line = f"did not arm — {reason}"
@@ -1569,6 +1633,8 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                 result = adapters.autoloop_stop()
                 if result.ok:
                     play.status_line = "PANIC — taught run halted"
+                    autoloop_poll_active = False
+                    play.explore_band = None
                 else:
                     # Reported, not smoothed. "I could not reach a runner" and
                     # "I halted the run" are different facts, and an operator
