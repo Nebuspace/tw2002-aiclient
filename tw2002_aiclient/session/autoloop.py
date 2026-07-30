@@ -127,17 +127,18 @@ WO to assert the now-CORRECTED direction: the lock's own
 ``is_driver_fenced()`` is ``True`` at the moment of the halt, not the
 stale ``False`` the original pin recorded as the trap.)
 
-One pass, and why there is STILL no ``cycles``
-----------------------------------------------
-A ``start`` runs ONE pass of one taught macro and stops. X5 landed the
-stop-loss floor, which was one of the four rails canon names for a
-*repeating* surface (``action-safety-guards.md`` §"Structural rails") --
-and it is deliberately NOT the thing that unlocks repetition, because it
-is one rail and not the set. Standing today:
+Cycles, and why they are safe to accept now
+-------------------------------------------
+A ``start`` may run **N passes** of one taught macro
+(:data:`CYCLES_HARD_CEILING` is the hard clamp). Each pass is one
+:func:`~tw2002_aiclient.loops.player.replay_loop` invocation, so canon's
+per-cycle start-anchor re-check is free. Early halt / refuse stops further
+passes. Standing rails:
 
 * **stop-loss** -- built (below, and enforced at the player's send
   choke-point).
-* **novelty-halt** -- built (X3 halts on the first unrecognized frame).
+* **novelty-halt** -- built (X3 / player halts on the first unrecognized
+  frame).
 * **turn-budget** -- built (WO-AUTOLOOP-TURN-BUDGET): remaining-turns
   floor, observed via ``Session.turns_snapshot`` / ``observe_turns``,
   re-checked at every player boundary, fail-closed on unknown/stale/
@@ -146,22 +147,12 @@ is one rail and not the set. Standing today:
   ``autopilot_game_select``; known fighters aboard == 0 → ``fighters_zero``;
   settle never-safe remains ``settle_failed`` / ``confirm_failed``.
 
-All four rails are built. Shipping N cycles is still a *follow-on* -- this
-module continues to refuse a ``cycles`` parameter until a dedicated unlock
-WO lands with pins. When that lands, N cycles is N invocations of
-``replay_loop`` and gets canon's per-cycle start-anchor re-check for free
--- which is precisely why this module does not smuggle one in as a
-``for`` loop.
-
-The consequence for the wire is stated rather than hidden: ``cycles``,
-``force`` and ``param`` are **refused**, not ignored. A caller that asks
-for ten cycles and gets one has been lied to by a surface that looked like
-it agreed. ``floor`` and ``turn_budget`` earned acceptance the same way:
-only once a floored / budgeted run genuinely observes, re-checks before
-every send, and halts fail-closed when it cannot. A ``floor`` or
-``turn_budget`` this daemon could not enforce is still refused -- see
-:meth:`AutoLoopRunner.start`. (``ensure``'s ``no_auto_arm``
-is accepted-and-unused for a third reason: the behaviour it asks for --
+All four rails are built, so ``cycles`` is **accepted** (WO-AUTOLOOP-CYCLES)
+and clamped to :data:`CYCLES_HARD_CEILING` regardless of caller intent.
+``force`` and ``param`` stay **refused**, not ignored. ``floor`` and
+``turn_budget`` remain accepted only when enforceable -- see
+:meth:`AutoLoopRunner.start`. (``ensure``'s ``no_auto_arm`` is
+accepted-and-unused for a third reason: the behaviour it asks for --
 never auto-arm -- is exactly what happens.)
 
 What leaves this module
@@ -192,13 +183,19 @@ from ..loops.loader import (
     LoopUnreadable,
     load_loop,
 )
-from ..loops.player import OUTCOME_HALTED, replay_loop
+from ..loops.player import (
+    HALT_ABORTED,
+    OUTCOME_COMPLETED,
+    OUTCOME_HALTED,
+    replay_loop,
+)
 from . import settle as _settle
 from .control_lock import ControlModeConflict
 from .settle import MATCH_SCOPE_PROMPT_LINE
 
 __all__ = [
     "ARGS_AUTOLOOP_START",
+    "CYCLES_HARD_CEILING",
     "HISTORY_VERB_AUTOLOOP",
     "AutoLoopRefused",
     "AutoLoopRunner",
@@ -255,11 +252,19 @@ STAND_DOWN_STOP = "stop"
 STAND_DOWN_PAUSE = "pause"
 
 # The complete arg vocabulary of `autoloop_start`. Anything else is
-# refused; see "One pass" in the module docstring for why silence would
-# be the dishonest option. `floor` and `turn_budget` are here because
-# their rails are enforced -- an arg earns a place in this set by being
-# enforced, never by being plausible.
-ARGS_AUTOLOOP_START = frozenset({"name", "floor", "turn_budget"})
+# refused; see "Cycles" in the module docstring for why silence would
+# be the dishonest option. `floor`, `turn_budget`, and `cycles` are here
+# because their rails / clamp are enforced -- an arg earns a place in
+# this set by being enforced, never by being plausible.
+ARGS_AUTOLOOP_START = frozenset({"name", "floor", "turn_budget", "cycles"})
+
+#: Hard ceiling on AutoLoop cycle count (WO-AUTOLOOP-CYCLES).
+#:
+#: Ported from archive ``twclient/loop_player.py`` ``_MAX_CYCLES = 50``.
+#: Canon (``action-safety-guards.md`` §Structural rails) requires a clamp
+#: regardless of caller intent — over-ceiling requests are reduced to this
+#: value, never refused as "too many" and never run unbounded.
+CYCLES_HARD_CEILING = 50
 
 #: The history-ring ``verb`` for a send the armed player made (WO-ARM-HISTORY-RING).
 #:
@@ -379,6 +384,11 @@ class RunReport:
     # Remaining-turns floor for this run, or `None` when unbudgeted.
     # Same reporting reason as `floor` (WO-AUTOLOOP-TURN-BUDGET).
     turn_budget: Optional[int] = None
+    # Effective cycle budget after clamp (always ≥1). Omitted request → 1.
+    # Reported so resume / surfaces can see the bound that actually ran
+    # (WO-AUTOLOOP-CYCLES), including when the caller asked for more than
+    # :data:`CYCLES_HARD_CEILING`.
+    cycles: int = 1
 
     @property
     def halted(self) -> bool:
@@ -486,10 +496,11 @@ def run_wire(snapshot: AutoLoopSnapshot) -> dict:
             # to be able to read as clearly as they read a number.
             "floor": report.floor,
             "turn_budget": report.turn_budget,
+            "cycles": report.cycles,
             # WO-AUTOLOOP-PAUSE-RESUME: `loop` + `floor` + `turn_budget`
-            # above are exactly what `start()` takes, which is why a resume
-            # needs no new storage — the report already carries everything
-            # to re-arm.
+            # + `cycles` above are exactly what `start()` takes, which is
+            # why a resume needs no new storage — the report already
+            # carries everything to re-arm.
         },
         # Same key on both shapes so a client never has to branch on
         # whether a report exists to find out why the run stood down.
@@ -833,9 +844,10 @@ class AutoLoopRunner:
         name: str,
         floor: Optional[int] = None,
         turn_budget: Optional[int] = None,
+        cycles: Optional[int] = None,
     ) -> AutoLoopSnapshot:
-        """Arm and run ONE pass of the macro called ``name``, optionally
-        under a credit floor and/or remaining-turns floor.
+        """Arm and run ``cycles`` passes (default 1) of the macro called ``name``,
+        optionally under a credit floor and/or remaining-turns floor.
 
         Returns as soon as the thread is running (canon: "``start``
         returns immediately"). Raises :class:`AutoLoopRefused` -- having
@@ -855,6 +867,12 @@ class AutoLoopRunner:
         nothing behind it can make. Checked against the SESSION's ability
         to observe rather than against a config flag, so it cannot be
         satisfied by asserting it.
+
+        **``cycles`` is accepted and clamped** (WO-AUTOLOOP-CYCLES) to
+        :data:`CYCLES_HARD_CEILING`. Bool / float / ≤0 are refused
+        (``invalid_cycles``); over-ceiling requests are reduced, never
+        refused as "too many" — the hard cap is a clamp regardless of
+        caller intent (canon Structural rails).
 
         Note what is NOT checked here: whether a balance or turn count has
         actually been observed yet. That is boundary 0's job inside the
@@ -908,6 +926,13 @@ class AutoLoopRunner:
                 raise AutoLoopRefused("invalid_turn_budget")
             if not _can_observe_turns(self._session):
                 raise AutoLoopRefused("turn_budget_unsupported")
+        effective_cycles = 1
+        if cycles is not None:
+            if isinstance(cycles, bool) or not isinstance(cycles, int):
+                raise AutoLoopRefused("invalid_cycles")
+            if cycles <= 0:
+                raise AutoLoopRefused("invalid_cycles")
+            effective_cycles = min(cycles, CYCLES_HARD_CEILING)
         loop = self._load(name)
         stop = threading.Event()
         report = RunReport(
@@ -915,6 +940,7 @@ class AutoLoopRunner:
             started_at=_utc_now(),
             floor=floor,
             turn_budget=turn_budget,
+            cycles=effective_cycles,
         )
         with self._mutex:
             if self._in_flight:
@@ -1104,13 +1130,13 @@ class AutoLoopRunner:
             raise AutoLoopRefused(f"loop_ambiguous:{name}") from None
 
     def _run(self, loop, stop: threading.Event, report: RunReport, generation: int) -> None:
-        """The thread body: one pass, then die.
+        """The thread body: N passes of ``replay_loop``, then die.
 
-        There is no ``for`` and no ``while`` around the ``replay_loop``
-        call, and that absence is the whole of "no repetition" -- see the
-        module docstring. A halt is not retried: the player's answer is
-        recorded and the run ends, because a driver that re-invoked after
-        a halt would be pressing into a screen the guard just refused.
+        N is ``report.cycles`` (already clamped at :meth:`start`). Each
+        pass is a fresh :func:`replay_loop` so start-anchor / rails re-check
+        for free. A halt or refuse stops further passes — a driver that
+        re-invoked after a halt would be pressing into a screen the guard
+        just refused. ``force`` / ``param`` are not knobs here.
 
         ``generation`` is the exact token ``start()`` received from
         ``enter_auto_loop()`` for THIS run -- threaded through as a plain
@@ -1132,26 +1158,36 @@ class AutoLoopRunner:
         sends: Optional[int] = None
         error: Optional[str] = None
         try:
-            # `report.floor` rather than a second stored field: the report
-            # IS this run's record of what it was armed with, so the number
-            # the player enforces and the number the operator reads cannot
-            # be two different values.
-            result = replay_loop(
-                loop, port, floor=report.floor, turn_budget=report.turn_budget
-            )
+            # `report.floor` / `turn_budget` rather than second stored fields:
+            # the report IS this run's record of what it was armed with.
+            total_sends = 0
+            passes = report.cycles if report.cycles >= 1 else 1
+            for _pass_i in range(passes):
+                if stop.is_set():
+                    outcome = OUTCOME_HALTED
+                    reason = HALT_ABORTED
+                    sends = total_sends
+                    break
+                result = replay_loop(
+                    loop,
+                    port,
+                    floor=report.floor,
+                    turn_budget=report.turn_budget,
+                )
+                if result.sends_issued is not None:
+                    total_sends += result.sends_issued
+                outcome = result.outcome
+                reason = result.reason
+                halted_at = result.halted_at
+                sends = total_sends
+                if outcome != OUTCOME_COMPLETED:
+                    break
         except Exception as exc:  # noqa: BLE001 -- an adapter fault must still release
             # TYPE NAME only on anything a client can read; the text and
             # frame chain go to the daemon's owner-only local log
             # (`daemon._log_dispatch_error`'s split, same reasoning).
             error = type(exc).__name__
             self._record_error(exc)
-        else:
-            outcome = result.outcome
-            reason = result.reason
-            halted_at = result.halted_at
-            # The player's own count -- never defaulted. `0` would be an
-            # affirmative zero-bytes claim, which only the player may make.
-            sends = result.sends_issued
         finally:
             finished = replace(
                 report,

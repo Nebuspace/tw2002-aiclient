@@ -27,6 +27,7 @@ class _ReflexResult:
         rule_id=None,
         stop_reason=None,
         classification=None,
+        scope=None,
         reason=None,
     ):
         self.ok = ok
@@ -34,6 +35,7 @@ class _ReflexResult:
         self.rule_id = rule_id
         self.stop_reason = stop_reason
         self.classification = classification
+        self.scope = scope
         self.reason = reason
         self.detail = None
         self.raw = None
@@ -255,6 +257,25 @@ def test_confirm_y_launches_once_with_exact_identity(monkeypatch):
     assert arm_calls[0]["classification"] == "main_command"
     assert screen.gate_raises == [("Arm ore-run", None)]
     assert "armed ore-run" in (screen.status_line or "")
+    assert "one pass" in (screen.status_line or "")
+
+
+def test_repeating_scope_offers_hard_ceiling_cycles(monkeypatch):
+    from tw2002_aiclient.session.autoloop import CYCLES_HARD_CEILING
+
+    prop = _ReflexResult(
+        ok=True,
+        macro="ore-run",
+        rule_id="r1",
+        classification="main_command",
+        scope="repeating",
+    )
+    _, arm_calls, screen = _drive(
+        monkeypatch, [ord("v"), ord("y")], propose=prop, arm=_ArmResult(ok=True)
+    )
+    assert screen.gate_raises == [("Arm ore-run", CYCLES_HARD_CEILING)]
+    assert len(arm_calls) == 1
+    assert "multi-pass" in (screen.status_line or "")
 
 
 @pytest.mark.parametrize("key", [ord("N"), ord("n"), 10, 13, ord("q")])

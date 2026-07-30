@@ -35,6 +35,7 @@ from tw2002_aiclient.screens import (
 from tw2002_aiclient.session import cli as session_cli
 from tw2002_aiclient.session import credentials, env, player_bank
 from tw2002_aiclient.session.attach_client import AttachInputConn
+from tw2002_aiclient.session.autoloop import CYCLES_HARD_CEILING
 from tw2002_aiclient.watchfeed import WatchFeed
 
 # WO-PLAY-EXPLORE-ARM (L3): the post-ensure explore offer.
@@ -1065,17 +1066,25 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                         "reflex: incomplete identity — not offering arm"
                     )
                     continue
+                scope = getattr(proposal, "scope", None)
                 pending_confirm_action = "reflex"
                 pending_confirm_reflex = {
                     "rule_id": rule_id,
                     "macro": macro,
                     "classification": klass,
+                    "scope": scope,
                 }
                 play.status_line = _reflex_controls.describe_proposal(
                     macro=macro, rule_id=rule_id, classification=klass
                 )
+                # WO-AUTOLOOP-CYCLES: repeating → confirm shows hard-ceiling
+                # cycles; one-shot / missing stays one-pass (cycles=None).
+                offer_cycles = (
+                    CYCLES_HARD_CEILING if scope == "repeating" else None
+                )
                 play.begin_arm_confirm(
-                    _reflex_controls.compose_reflex_confirm_action(macro)
+                    _reflex_controls.compose_reflex_confirm_action(macro),
+                    cycles=offer_cycles,
                 )
                 continue
             if action == "chains_open":
@@ -1296,7 +1305,13 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                     play.status_line = f"arm failed — {type(exc).__name__}"
                 else:
                     if getattr(started, "ok", False):
-                        play.status_line = f"armed {macro} — one pass running"
+                        scope = identity.get("scope")
+                        if scope == "repeating":
+                            play.status_line = (
+                                f"armed {macro} — multi-pass running"
+                            )
+                        else:
+                            play.status_line = f"armed {macro} — one pass running"
                     else:
                         reason = getattr(started, "reason", None) or "unknown"
                         play.status_line = f"did not arm — {reason}"

@@ -1134,26 +1134,28 @@ def test_a_negative_floor_is_refused(tmp_path):
     assert lock.is_auto_loop_held() is False
 
 
-def test_repetition_is_still_refused(tmp_path):
-    """Turn-budget landed; hazard-halt is still unbuilt, so `cycles` is
-    still a surface agreeing to something it does not do."""
+def test_repetition_is_accepted_with_floor(tmp_path):
+    """WO-AUTOLOOP-CYCLES: cycles + floor together are a legal arm."""
     write_macro(tmp_path, "ore-run", ONE_STEP)
     session = CreditsWireSession([ANCHOR_158[0]])
     lock = ControlLock()
     server = Server(session, lock, make_runner(tmp_path, session, lock))
 
     resp = protocol.dispatch(
-        session, "autoloop_start", {"name": "ore-run", "cycles": 10, "floor": 500}, server
+        session, "autoloop_start", {"name": "ore-run", "cycles": 2, "floor": 500}, server
     )
-    assert resp == {"ok": False, "error": "unsupported_arg:cycles"}
-    assert lock.is_auto_loop_held() is False
-    assert session.sent == []
+    assert resp["ok"] is True
+    assert resp["run"]["cycles"] == 2
+    assert resp["run"]["floor"] == 500
+    server.autoloop.stop()
 
 
 def test_the_arg_vocabulary_grew_by_exactly_the_enforced_rails(tmp_path):
     """Pinned as a set rather than as a count, so a future arg has to be
     argued for here as well as wired."""
-    assert autoloop.ARGS_AUTOLOOP_START == frozenset({"name", "floor", "turn_budget"})
+    assert autoloop.ARGS_AUTOLOOP_START == frozenset(
+        {"name", "floor", "turn_budget", "cycles"}
+    )
 
 
 def test_the_port_forwards_the_snapshot_whole(tmp_path):

@@ -80,8 +80,8 @@ class _SpyRunner:
 
         return AutoLoopSnapshot(running=False)
 
-    def start(self, name, floor=None, turn_budget=None):
-        self.started.append((name, floor, turn_budget))
+    def start(self, name, floor=None, turn_budget=None, cycles=None):
+        self.started.append((name, floor, turn_budget, cycles))
         if self._refuse is not None:
             from tw2002_aiclient.session import autoloop
 
@@ -440,7 +440,9 @@ def test_a_typed_y_reaches_the_real_autoloop_start(tmp_path, monkeypatch, capsys
         _Server(runner),
     )
     assert resp["ok"] is True
-    assert runner.started == [("dock", None, None)], "the existing player was not the launcher"
+    assert runner.started == [
+        ("dock", None, None, None)
+    ], "the existing player was not the launcher"
 
 
 def test_the_launched_name_is_read_from_the_fresh_decision_not_the_caller():
@@ -472,18 +474,20 @@ def test_the_launched_name_is_read_from_the_fresh_decision_not_the_caller():
     ]
     assert len(delegations) == 1, "the WO allows exactly one delegation"
 
-    payload = delegations[0].args[0]
-    assert isinstance(payload, ast.Dict)
-    names = {
-        k.value: v for k, v in zip(payload.keys, payload.values)
-        if isinstance(k, ast.Constant)
-    }
-    source = names["name"]
-    assert isinstance(source, ast.Attribute) and source.attr == "macro", (
+    # Payload is built then passed (may carry cycles for repeating scope);
+    # the name that launches must still come from decision.macro.
+    arg0 = delegations[0].args[0]
+    assert isinstance(arg0, ast.Name) and arg0.id == "payload"
+    decision_macros = [
+        n
+        for n in ast.walk(func)
+        if isinstance(n, ast.Attribute)
+        and n.attr == "macro"
+        and isinstance(n.value, ast.Name)
+        and n.value.id == "decision"
+    ]
+    assert decision_macros, (
         "the launched name is not read from an attribute of the fresh decision"
-    )
-    assert isinstance(source.value, ast.Name) and source.value.id == "decision", (
-        "the launched name comes from something other than the fresh decision"
     )
 
 

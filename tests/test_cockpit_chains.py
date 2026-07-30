@@ -161,9 +161,7 @@ def test_close_dismisses_without_losing_the_status():
 # ------------------------------------------------------------------ composers
 
 def test_arm_action_names_the_macro_and_says_one_pass():
-    """"one pass" rather than a cycle count, because `autoloop_start` refuses
-    `cycles` -- a prompt offering a number the runtime would refuse is an
-    agreement the surface cannot keep."""
+    """Chains arm has no rule scope — honest answer remains one pass."""
     text = chains.compose_arm_action({"name": "ore-run-K7", "steps": 12})
     assert "ore-run-K7" in text
     assert "one pass" in text

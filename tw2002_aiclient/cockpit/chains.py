@@ -49,11 +49,11 @@ only, default-deny), reused verbatim. Nothing in this module can start a run
 — it has no adapter import and no send path, by construction.
 
 ``compose_arm_action`` says **"one pass"** rather than a cycle count because
-one pass is what the daemon does: ``autoloop_start`` refuses ``cycles``
-outright (``session/protocol.py::_dispatch_autoloop_start``). Canon asks the
-gate to show "how many cycles"; the honest answer on tip is "one", and a
-prompt offering a number the runtime would refuse is the kind of agreement
-this surface exists to prevent.
+the L)chains path arms a taught *macro* with no rule ``scope`` attached —
+``autoloop_start`` defaults to one pass. Multi-pass for ``scope: repeating``
+rules is the Play ``V``→reflex path (WO-AUTOLOOP-CYCLES), which clamps to
+``CYCLES_HARD_CEILING``. Canon asks the gate to show "how many cycles"; for
+this surface the honest answer remains "one".
 
 Hardening family (matches ``panic.py`` / ``armconfirm.py`` /
 ``autoloop_controls.py``): every public function is never-raises regardless
