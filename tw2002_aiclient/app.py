@@ -788,7 +788,9 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
     # is how the redundancy was found. The confirm branch reads THIS, so the
     # run is always the one the visible prompt named.
     explore_intent_offered: str | None = None
-    # WO-PLAY-EXPLORE-FLAGS: the two explore automation opt-ins, default OFF.
+    # WO-PLAY-EXPLORE-FLAGS / WO-PLAY-EXPLORE-GATHER-DEFAULT-ON: dock gather
+    # defaults ON in Play (Max GO 2026-07-30); fight-tolls stays default OFF.
+    # CLI/daemon library defaults remain OFF — this is the Play surface only.
     #
     # Held as real `bool` and handed to the adapter untouched -- see
     # `cockpit/explore_flags.py` on why `fight_tolls` must never be wrapped
@@ -798,7 +800,7 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
     # confirm line and the adapter call, both of which live in this loop,
     # and a flag that outlived the loop would be an opt-in the operator
     # cannot see when they next arm.
-    explore_dock_opt_in = False
+    explore_dock_opt_in = True
     explore_tolls_opt_in = False
     # WO-PLAY-AUTOLOOP-START: the exact row the taught-loop confirm line was
     # composed from. Held alongside `pending_confirm_action` rather than

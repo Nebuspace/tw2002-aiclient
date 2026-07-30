@@ -130,7 +130,7 @@ def test_the_first_E_offers_map_fill_exactly_as_before(monkeypatch) -> None:
     # The INTENT label is still pinned exactly, as the leading clause — a
     # change to which run `E` first offers still fails here.
     assert action.startswith(app_mod._EXPLORE_OFFER_ACTION), action
-    assert explore_flags.DOCK_OFF_MARKER in action, action
+    assert explore_flags.DOCK_MARKER in action, action
     assert cycles == app_mod._EXPLORE_MIN_SECTORS
 
 

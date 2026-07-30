@@ -1,5 +1,5 @@
-"""WO-PLAY-EXPLORE-FLAGS -- Play's default-OFF opt-in for the two explore
-automation flags.
+"""WO-PLAY-EXPLORE-FLAGS / WO-PLAY-EXPLORE-GATHER-DEFAULT-ON -- Play explore
+automation toggles (dock gather default ON; fight-tolls default OFF).
 
 These drive the real `app._run_play` with a fake stdscr and a mocked
 adapter, so the assertions are about the PRODUCT path rather than a
@@ -123,114 +123,87 @@ def _drive(monkeypatch, keys, *, ensure=None, explore=None):
 _E, _Y = ord("E"), ord("y")
 _D, _F = ord("D"), ord("F")
 
-# The default (opted-OUT) confirm action, derived from the module's own
-# constant so the gate-tuple pins below stay readable.
-#
-# **Derived, therefore blind on its own.** If `DOCK_OFF_MARKER` were emptied,
-# this expectation would empty with it and every pin using it would go on
-# agreeing — both sides degrading together is not a check. The content of the
-# marker is pinned by LITERAL in
-# `test_the_off_marker_names_both_the_state_and_the_key`, which is the guard
-# that actually survives a deletion; this constant only spares six tests from
-# retyping the same string.
+# Confirm actions, derived from the module's own constants so the gate-tuple
+# pins below stay readable. OFF-marker *content* is pinned by LITERAL in
+# `test_the_off_marker_names_both_the_state_and_the_key`.
 _OFF_ACTION = f"Explore {explore_flags.DOCK_OFF_MARKER}"
+_ON_ACTION = f"Explore {explore_flags.DOCK_MARKER}"
 
 
 # --------------------------------------------------------------------------
-# The default is OFF, in both directions
+# Play gather defaults ON; fight-tolls stays OFF
 # --------------------------------------------------------------------------
 
-def test_default_arm_forwards_both_flags_off(monkeypatch) -> None:
-    """`E`,`y` with no toggle pressed forwards both flags explicitly False.
+def test_default_arm_forwards_dock_on_and_tolls_off(monkeypatch) -> None:
+    """`E`,`y` with no toggle pressed → dock True, fight-tolls False.
 
-    Asserted as `is False` rather than falsy: `None`, `0` and `""` are all
-    falsy and all mean something different to the adapter, which omits the
-    payload key on `None`.
+    WO-PLAY-EXPLORE-GATHER-DEFAULT-ON (Max GO). Asserted as `is True` /
+    `is False` rather than truthy/falsy: the adapter omits on `None`.
     """
     calls, _screen = _drive(monkeypatch, [_E, _Y])
-    assert len(calls) == 1, calls
-    assert calls[0]["dock_new_ports"] is False, calls[0]
-    assert calls[0]["fight_tolls"] is False, calls[0]
-
-
-def test_the_default_confirm_line_states_the_dock_state_it_used_to_hide(monkeypatch) -> None:
-    """WO-EXPLORE-GATHER-VISIBLE **inverts** this pin, deliberately.
-
-    It read `test_default_confirm_line_is_byte_identical_to_the_pre_wo_prompt`
-    and asserted `[("Explore", 5)]` — "an operator who never presses `D`/`F`
-    sees exactly the old prompt", justified as protecting muscle memory on
-    the line read before spending turns.
-
-    The property was real and it was the defect. Preserving the old prompt
-    meant the default path never mentioned ports at all, so an operator who
-    had not guessed `D` existed confirmed `Explore x5` and warped past every
-    port wondering why nothing was investigated (Max, live 2026-07-29). The
-    pin protected familiarity at the cost of the one fact the prompt most
-    needed to carry.
-
-    Inverted rather than deleted: the default line is still pinned exactly,
-    it is simply pinned to a line that tells the truth. A marker "leaking
-    into the default path" is now the REQUIREMENT, so this still fails the
-    day the OFF state goes quiet again.
-    """
-    _calls, screen = _drive(monkeypatch, [_E])
-    assert screen.gate_raises == [(_OFF_ACTION, 5)], screen.gate_raises
-    # The affordance, not just the state: naming one without the other
-    # leaves the operator knowing they are missing something and still
-    # unable to act on it.
-    assert "D" in _OFF_ACTION and "gather" in _OFF_ACTION
-
-
-# --------------------------------------------------------------------------
-# Opting in forwards the exact value, and says so on the line being confirmed
-# --------------------------------------------------------------------------
-
-def test_dock_toggle_forwards_true_and_leaves_tolls_off(monkeypatch) -> None:
-    calls, _screen = _drive(monkeypatch, [_D, _E, _Y])
     assert len(calls) == 1, calls
     assert calls[0]["dock_new_ports"] is True, calls[0]
     assert calls[0]["fight_tolls"] is False, calls[0]
 
 
-def test_tolls_toggle_forwards_true_and_leaves_dock_off(monkeypatch) -> None:
+def test_the_default_confirm_line_shows_plus_dock(monkeypatch) -> None:
+    """Fresh Play Explore confirm (no `D`) spells gather ON as `+dock`."""
+    _calls, screen = _drive(monkeypatch, [_E])
+    assert screen.gate_raises == [(_ON_ACTION, 5)], screen.gate_raises
+    assert explore_flags.DOCK_MARKER in _ON_ACTION
+
+
+# --------------------------------------------------------------------------
+# Toggles forward the exact value, and say so on the line being confirmed
+# --------------------------------------------------------------------------
+
+def test_dock_toggle_disables_gather_and_leaves_tolls_off(monkeypatch) -> None:
+    """`D` before confirm passes ports (dock OFF)."""
+    calls, _screen = _drive(monkeypatch, [_D, _E, _Y])
+    assert len(calls) == 1, calls
+    assert calls[0]["dock_new_ports"] is False, calls[0]
+    assert calls[0]["fight_tolls"] is False, calls[0]
+
+
+def test_tolls_toggle_forwards_true_and_keeps_dock_on(monkeypatch) -> None:
     """The two flags are independent -- pinned separately in both directions
     so a wire that forwards one value to both slots cannot pass."""
     calls, _screen = _drive(monkeypatch, [_F, _E, _Y])
     assert len(calls) == 1, calls
     assert calls[0]["fight_tolls"] is True, calls[0]
-    assert calls[0]["dock_new_ports"] is False, calls[0]
+    assert calls[0]["dock_new_ports"] is True, calls[0]
 
 
-def test_both_toggles_forward_both_true(monkeypatch) -> None:
+def test_dock_off_plus_tolls_on_forwards_both(monkeypatch) -> None:
     calls, _screen = _drive(monkeypatch, [_D, _F, _E, _Y])
     assert len(calls) == 1, calls
-    assert calls[0]["dock_new_ports"] is True, calls[0]
+    assert calls[0]["dock_new_ports"] is False, calls[0]
     assert calls[0]["fight_tolls"] is True, calls[0]
 
 
-def test_opt_in_is_spelled_out_in_the_line_the_operator_confirms(monkeypatch) -> None:
-    """Accept 2: opt-in is visible BEFORE/AS PART OF the confirm, never a
-    silent side effect of `y`.
+def test_default_on_is_spelled_out_in_the_line_the_operator_confirms(monkeypatch) -> None:
+    """Gather ON is visible BEFORE/AS PART OF the confirm, never silent on `y`.
 
     ONE `_drive` per test, deliberately: a second call in the same test
     re-reads `app_mod.PlayShellScreen`, which is already the first call's
     spy, so the new spy SUBCLASSES it and `begin_arm_confirm` records the
     same raise twice. Caught here by that exact double-count.
     """
-    _calls, screen = _drive(monkeypatch, [_D, _E])
-    assert screen.gate_raises == [("Explore +dock", 5)], screen.gate_raises
+    _calls, screen = _drive(monkeypatch, [_E])
+    assert screen.gate_raises == [(_ON_ACTION, 5)], screen.gate_raises
 
 
-def test_both_opt_ins_are_spelled_out_together(monkeypatch) -> None:
+def test_dock_off_and_tolls_on_are_spelled_out_together(monkeypatch) -> None:
     _calls, screen = _drive(monkeypatch, [_D, _F, _E])
-    assert screen.gate_raises == [("Explore +dock +fight-tolls", 5)], screen.gate_raises
+    assert screen.gate_raises == [
+        (f"{_OFF_ACTION} +fight-tolls", 5)
+    ], screen.gate_raises
 
 
-def test_toggling_twice_returns_to_off(monkeypatch) -> None:
+def test_toggling_twice_returns_to_default_on(monkeypatch) -> None:
     calls, screen = _drive(monkeypatch, [_D, _D, _E, _Y])
-    assert calls[0]["dock_new_ports"] is False, calls[0]
-    assert screen.gate_raises == [(_OFF_ACTION, 5)], screen.gate_raises
-
+    assert calls[0]["dock_new_ports"] is True, calls[0]
+    assert screen.gate_raises == [(_ON_ACTION, 5)], screen.gate_raises
 
 # --------------------------------------------------------------------------
 # A toggle never starts anything, and never survives an unanswered gate
@@ -252,7 +225,7 @@ def test_toggling_while_the_gate_is_up_clears_it_and_arms_nothing(monkeypatch) -
     """
     calls, screen = _drive(monkeypatch, [_E, _D, _Y])
     assert calls == [], calls
-    assert screen.gate_raises == [(_OFF_ACTION, 5)], screen.gate_raises
+    assert screen.gate_raises == [(_ON_ACTION, 5)], screen.gate_raises
 
 
 def test_toggles_do_nothing_when_no_explore_offer_is_standing(monkeypatch) -> None:
@@ -449,14 +422,16 @@ def test_fight_tolls_stays_silent_when_off_while_dock_speaks() -> None:
     """The asymmetry, pinned so it cannot be "tidied" into symmetry.
 
     Naming an affordance is a nudge, and nudges are directional. Pointing an
-    operator at commodity gathering costs them nothing; an equally helpful
-    "F to fight tolls" on every prompt would advertise a path that SPENDS
-    fighters. Loud toward the safe action, quiet toward the spend.
+    operator at commodity gathering (or how to re-enable it when OFF) costs
+    them nothing; an equally helpful "F to fight tolls" on every prompt would
+    advertise a path that SPENDS fighters. Loud toward the safe action, quiet
+    toward the spend.
     """
     off = explore_flags.compose_explore_action("Explore", dock=False, tolls=False)
-    assert "gather" in off, "the safe affordance is not advertised"
+    assert "gather" in off, "the re-enable affordance is not advertised"
     assert "F" not in off.replace("Explore", ""), off
     assert "toll" not in off.lower(), off
+    assert explore_flags.GATHER_HINT == "D to pass"
 
 
 @pytest.mark.parametrize("bad", [None, 3, object(), b"x"])

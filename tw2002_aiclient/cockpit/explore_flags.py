@@ -1,24 +1,22 @@
-"""Play's explicit, default-OFF opt-in for the two explore automation flags
-(WO-PLAY-EXPLORE-FLAGS).
+"""Play's explicit toggles for the two explore automation flags
+(WO-PLAY-EXPLORE-FLAGS · WO-PLAY-EXPLORE-GATHER-DEFAULT-ON).
 
 # What this is for
 
 `adapters.explore_start_for_profile` has accepted `dock_new_ports` and
 `fight_tolls` since WO-EXPLORE-DOCK-NEW-PORT / WO-FIGHTER-TOLL-POLICY-WIRE,
-and the daemon reads both (`session/protocol.py`). Play passed **neither** --
-the call site carried a placeholder comment saying "Opt-in later via an
-explicit Play control if added". This module is that control.
+and the daemon reads both (`session/protocol.py`). Play's chrome lives here.
 
-# Why the opt-in is a separate keystroke, not part of `y`
+# Play dock default ON; fight-tolls stays OFF
 
-WO-EXPLORE-DOCK-DEFAULT-OFF made dock default OFF *until the dialect was
-known*; the dialect is now known (WO-EXPLORE-DOCK-DIALECT, #211) but the
-default stays OFF because these two flags change what a run **spends**.
-`y` at the confirm gate must keep meaning exactly what the line above it
-says, so the opt-in happens BEFORE the gate is raised and is then spelled
-out IN the line the operator confirms. An opt-in that rode along silently on
-`y` would make the confirm gate describe a run other than the one it starts,
-which is the one thing that gate exists to prevent.
+WO-PLAY-EXPLORE-GATHER-DEFAULT-ON (Max GO 2026-07-30): Play Explore starts with
+gather/dock ON so first-sight ports are entered for commodity ingest unless the
+operator presses `D` to pass ports. Fight-tolls remains default OFF (`F` opts
+in). CLI/daemon library defaults stay OFF — only the Play surface flipped.
+
+`y` at the confirm gate must keep meaning exactly what the line above it says,
+so the toggle happens BEFORE the gate is raised and is spelled out IN the line
+the operator confirms.
 
 # The two flags are NOT symmetrical, and must not be tidied into symmetry
 
@@ -83,22 +81,17 @@ TOLLS_TOGGLE_KEYS = frozenset({ord("f"), ord("F")})
 # be this module quietly advertising a path that SPENDS fighters. Loud toward
 # the safe action, quiet toward the spend.
 DOCK_MARKER = "+dock"
-# Names the state AND the key, because a prompt that only said "no-dock"
-# would fix the invisibility of the state while leaving the affordance just
-# as unguessable -- the operator would learn they are missing something and
-# still not know what to press.
+# Names the state AND the key. When gather is OFF, `D` re-enables it — so the
+# OFF marker still teaches the gather key. The *offer* line (GATHER_HINT) is
+# what teaches the default-ON path: `D` passes ports / disables gather.
 DOCK_OFF_MARKER = "no-dock (D to gather)"
 TOLLS_MARKER = "+fight-tolls"
 
-# Appended to the post-ensure offer status line, which is where an operator
-# FIRST learns explore exists. It advertised only `E`; `D` was reachable but
-# unadvertised on every surface, which is the "secret D" half of the same
-# defect. Kept short on purpose: the offer line is a fixed-length string
-# (`_EXPLORE_OFFER_CLASSIFICATION` is the constant `"main_command"`), and
-# with this suffix it measures 79 columns -- inside an 80-column terminal by
-# one character. A hint that clips is not a hint, and it is the TAIL that
-# clips, which is exactly where a new suffix lands.
-GATHER_HINT = "D to gather"
+# Appended to the post-ensure offer status line. Play gather defaults ON
+# (WO-PLAY-EXPLORE-GATHER-DEFAULT-ON), so this advertises how to *disable*
+# dock — not how to discover it. Kept ≤9 chars so the offer line stays ≤80
+# columns with classification=`main_command` and cycles=5 (see the width pin).
+GATHER_HINT = "D to pass"
 
 # Status-line wording for the toggle itself. States the consequence, not the
 # variable name: "dock ON" tells an operator nothing about what it spends.
@@ -136,10 +129,10 @@ def compose_explore_action(
     """Spell the run's flags into the confirm line's action text.
 
     The gate must describe the run it actually arms, so **dock is always
-    stated** -- `+dock` when the operator opted in, `no-dock (D to gather)`
-    when they did not. Silence is not a description: an unmarked line was
-    read for a whole live session as "explore", when what it armed was
-    "explore, passing every port".
+    stated** -- `+dock` when gather is ON (Play default), `no-dock (D to
+    gather)` when the operator pressed `D` to pass ports. Silence is not a
+    description: an unmarked line was read for a whole live session as
+    "explore", when what it armed was "explore, passing every port".
 
     `tolls` keeps the ON-only behaviour. See `TOLLS_MARKER` for why the two
     are deliberately not symmetric.
@@ -167,9 +160,8 @@ def compose_explore_offer(classification: object, *, cycles: object = None) -> s
     without a curses harness.
 
     Purely additive against the pre-WO line -- the `press E` token is kept
-    byte-for-byte, because several pins assert on it and, more importantly,
-    because the existing affordance was never the broken one. `D` is what
-    was missing. Never raises.
+    byte-for-byte, because several pins assert on it. `GATHER_HINT` names how
+    to pass ports under the Play gather-default-ON contract. Never raises.
     """
     label = classification if isinstance(classification, str) else "?"
     count = cycles if isinstance(cycles, int) and not isinstance(cycles, bool) else None
