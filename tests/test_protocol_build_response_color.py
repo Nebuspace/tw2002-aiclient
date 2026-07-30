@@ -161,6 +161,11 @@ class _DispatchFakeSession:
         self.last_sent = "<redacted>" if secret else text
         self.last_sender = sender
 
+    def record_history(self, verb, args, prompt, classification, settled_reason):
+        # WO-SEND-HISTORY-RING: protocol `send` now files the ring; bare
+        # dispatch doubles must accept the call (real Session always has it).
+        return
+
 
 class _FakeServer:
     control_lock = None
