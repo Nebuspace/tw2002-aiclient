@@ -1438,7 +1438,8 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                     continue
                 play.begin_rule_identity(draft)
                 play.status_line = (
-                    "rule identity — type rule id, then macro, then priority"
+                    "rule identity — rule id, macro, priority, scope "
+                    "(one-shot|repeating)"
                 )
                 continue
             if action == "rule_identity":
@@ -1461,6 +1462,7 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                         rule_id=values.get("rule_id"),
                         do=values.get("do"),
                         priority=values.get("priority"),
+                        scope=values.get("scope"),
                     )
                     _rules_writer.write_draft(document)
                     blessed = _rules_writer.promote_draft(str(values["rule_id"]))
@@ -1485,11 +1487,14 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                         ),
                         "rule_id": values.get("rule_id"),
                         "do": values.get("do"),
+                        "scope": values.get("scope"),
                         "path": str(blessed),
                     }
                 )
                 play.status_line = _draft_approve.compose_rule_blessed_line(
-                    values.get("rule_id"), values.get("do"),
+                    values.get("rule_id"),
+                    values.get("do"),
+                    values.get("scope"),
                 )
                 continue
             if action == "rule_identity_cancel":
