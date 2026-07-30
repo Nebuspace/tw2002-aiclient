@@ -25,7 +25,7 @@ import stat
 
 import pytest
 
-from tw2002_aiclient import chain_status, world_model, world_stats
+from tw2002_aiclient import chain_status, explore, world_model, world_stats
 
 WORLD = "w-test"
 
@@ -117,10 +117,19 @@ class _FakeWM:
     def __init__(self, *results):
         self.results = list(results)
         self.calls: list = []
+        self.landmark_results: list = [[]]
+        self.landmark_calls: list = []
 
     def known_sector_count(self, world_id, **kw):
         self.calls.append(world_id)
         r = self.results.pop(0) if self.results else None
+        if isinstance(r, BaseException):
+            raise r
+        return r
+
+    def find_landmark_sectors(self, world_id, landmark_name, **kw):
+        self.landmark_calls.append((world_id, landmark_name))
+        r = self.landmark_results.pop(0) if self.landmark_results else []
         if isinstance(r, BaseException):
             raise r
         return r
@@ -130,6 +139,7 @@ class _FakeWM:
 def wm(monkeypatch):
     fake = _FakeWM()
     monkeypatch.setattr(world_model, "known_sector_count", fake.known_sector_count)
+    monkeypatch.setattr(explore, "find_landmark_sectors", fake.find_landmark_sectors)
     return fake
 
 
@@ -137,6 +147,7 @@ def test_it_contributes_nothing_before_a_refresh(wm):
     s = world_stats.WorldStats()
     assert s.merge({"ok": True}) == {"ok": True}
     assert wm.calls == [], "reading the world model without being asked to"
+    assert wm.landmark_calls == [], "scanning landmarks without being asked to"
 
 
 def test_a_refresh_supplies_the_count(wm):
@@ -260,3 +271,94 @@ def _discovery(hops):
 
     chain = SimpleNamespace(hops=tuple(object() for _ in range(hops)))
     return SimpleNamespace(chains=(chain,), truncated=False, reason=None)
+
+
+# ------------------------------------------------- StarDock landmarks
+
+
+def test_nonempty_landmarks_supply_sectors_and_found(wm):
+    wm.results = [3]
+    wm.landmark_results = [[11, 42]]
+    s = world_stats.WorldStats()
+    s.refresh("w-1")
+    assert s.merge({"ok": True}) == {
+        "ok": True,
+        "known_sectors": 3,
+        "stardock_sectors": [11, 42],
+        "stardock_found": True,
+    }
+    assert wm.landmark_calls == [("w-1", world_model.STARDOCK_LANDMARK)]
+
+
+def test_empty_landmark_scan_omits_stardock_keys(wm):
+    """Empty after a successful refresh keeps GOALS at `?` — never confirmed-negative."""
+    wm.results = [0]
+    wm.landmark_results = [[]]
+    s = world_stats.WorldStats()
+    s.refresh("w-1")
+    assert s.merge({"ok": True}) == {"ok": True, "known_sectors": 0}
+    assert "stardock_found" not in s.merge({})
+    assert "stardock_sectors" not in s.merge({})
+
+
+def test_empty_scan_never_emits_stardock_found_false(wm):
+    wm.results = [1]
+    wm.landmark_results = [[]]
+    s = world_stats.WorldStats()
+    s.refresh("w-1")
+    merged = s.merge({})
+    assert merged.get("stardock_found") is not False
+    assert "stardock_found" not in merged
+
+
+def test_stardock_does_not_clobber_caller_values(wm):
+    wm.results = [1]
+    wm.landmark_results = [[7]]
+    s = world_stats.WorldStats()
+    s.refresh("w-1")
+    assert s.merge(
+        {"stardock_sectors": [99], "stardock_found": False}
+    ) == {"stardock_sectors": [99], "stardock_found": False, "known_sectors": 1}
+
+
+def test_failed_stardock_refresh_keeps_last_observation(wm):
+    wm.results = [1, 1, 1]
+    wm.landmark_results = [[7], RuntimeError("store on fire"), []]
+    s = world_stats.WorldStats()
+    s.refresh("w-1")
+    assert s.merge({})["stardock_sectors"] == [7]
+    s.refresh("w-1")  # landmark failure — keep [7]
+    assert s.merge({})["stardock_sectors"] == [7]
+    assert s.merge({})["stardock_found"] is True
+    s.refresh("w-1")  # successful empty — omit keys again
+    assert "stardock_sectors" not in s.merge({})
+    assert "stardock_found" not in s.merge({})
+
+
+def test_wrap_reads_only_the_cache(wm):
+    """Draw-path wrap must not touch the world model — only the last refresh cache."""
+    wm.results = [5]
+    wm.landmark_results = [[3]]
+    s = world_stats.WorldStats()
+    s.refresh("w-1")
+    calls_after_refresh = list(wm.calls)
+    landmark_after_refresh = list(wm.landmark_calls)
+    wrapped = s.wrap(lambda: {"ok": True})
+    assert wrapped() == {
+        "ok": True,
+        "known_sectors": 5,
+        "stardock_sectors": [3],
+        "stardock_found": True,
+    }
+    assert wm.calls == calls_after_refresh
+    assert wm.landmark_calls == landmark_after_refresh
+
+
+def test_junk_landmark_lists_are_refused(wm):
+    wm.results = [1]
+    wm.landmark_results = [["7"], [True], [1, "x"], "nope"]
+    s = world_stats.WorldStats()
+    for _ in range(4):
+        s.refresh("w-1")
+        assert "stardock_sectors" not in s.merge({"ok": True})
+
