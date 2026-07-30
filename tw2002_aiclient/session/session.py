@@ -449,6 +449,22 @@ class Session:
         rows = self.render()
         return rows[-1].strip() if rows else ""
 
+    def current_cursor_line(self):
+        """The row containing the terminal's live input cursor.
+
+        Unlike :meth:`current_prompt_line`, this cannot be displaced by stale
+        painted content below the active prompt. Callers opt into this narrower
+        provenance only for dialogue cascades whose next send depends on the
+        exact prompt currently holding the cursor.
+        """
+        with self.lock:
+            rows = self.terminal.raw_display()
+            cursor = self.terminal.cursor()
+            y = cursor.get("y")
+            if isinstance(y, bool) or not isinstance(y, int) or not 0 <= y < len(rows):
+                return ""
+            return rows[y].strip()
+
     def classify(self):
         """Classify the CURRENT rendered screen via `classify.
         classify_screen()` -- the canonical live path (gate anchors

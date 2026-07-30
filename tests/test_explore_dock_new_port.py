@@ -653,6 +653,64 @@ def test_gather_declines_each_known_commodity_then_returns_to_command(tmp_path, 
     assert report.outcome == sx.OUTCOME_COMPLETED
 
 
+class _CursorOwnedCascadeSession(_DockSession):
+    """Real-grid shape: active prompt above a stale painted Command row."""
+
+    def __init__(self, active_frames: list[str]):
+        self._active_frames = iter(active_frames[1:])
+        self._active_prompt = active_frames[0].splitlines()[-1].strip()
+        super().__init__(
+            menu_screen=REAL_MENU,
+            report_screen=active_frames[0] + "\n" + COMMAND_4309,
+        )
+
+    def current_cursor_line(self):
+        return self._active_prompt
+
+    def send(self, text, enter=True, secret=False, sender="app"):
+        key = text.strip().upper()
+        if key == "P":
+            result = super().send(text, enter=enter, secret=secret, sender=sender)
+            self._active_prompt = "Enter your choice [T] ?"
+            return result
+        if key == "T":
+            result = super().send(text, enter=enter, secret=secret, sender=sender)
+            self._active_prompt = self._report.splitlines()[-2].strip()
+            return result
+        if key == "0":
+            frame = next(self._active_frames)
+            self._active_prompt = frame.splitlines()[-1].strip()
+            self._screen = (
+                frame
+                if self._active_prompt.startswith("Command [")
+                else frame + "\n" + COMMAND_4309
+            )
+            return FakeAttachSession.send(
+                self, text, enter=enter, secret=secret, sender=sender
+            )
+        return super().send(text, enter=enter, secret=secret, sender=sender)
+
+
+def test_gather_declines_all_three_cursor_owned_prompts_above_stale_command(
+    tmp_path,
+):
+    """Regression: stale tail Command must not hide prompt two or three."""
+    prompts = [
+        "How many holds of Fuel Ore do you want to buy [50]?",
+        "How many holds of Organics do you want to buy [50]?",
+        "How many holds of Equipment do you want to sell [0]?",
+    ]
+    frames = [_trade_frame(prompt) for prompt in prompts]
+    frames.append(_trade_frame(COMMAND_4309))
+    session = _CursorOwnedCascadeSession(frames)
+
+    report = _run_to_completion(session, tmp_path, dock_new_ports=True)
+
+    assert _letters_sent(session) == ["P", "T", "0", "0", "0"]
+    assert report.outcome == sx.OUTCOME_COMPLETED
+    assert report.reason is None
+
+
 def test_gather_refuses_a_fourth_quantity_without_sending_it(tmp_path):
     prompts = [
         "How many holds of Fuel Ore do you want to buy [40]?",

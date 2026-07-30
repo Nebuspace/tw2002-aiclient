@@ -214,12 +214,22 @@ _CONFIRM_STABILITY_PAUSE_S = 0.15
 #                    the ONLY scope under which a cross-row pattern can
 #                    match. Can also match a line a previous screen left
 #                    behind.
-#   "prompt_line" -- the current prompt line only
-#                    (`session.current_prompt_line()`). Cannot match a
-#                    stale row -- and cannot match across rows either.
+#   "prompt_line" -- the last non-empty cropped row
+#                    (`session.current_prompt_line()`). Cannot match across
+#                    rows, but stale painted content below the cursor can
+#                    still displace the actual input line.
+#   "cursor_line" -- the row holding the live terminal cursor
+#                    (`session.current_cursor_line()`). Narrower than
+#                    prompt_line when stale painted content remains below the
+#                    active input prompt.
 MATCH_SCOPE_SCREEN = "screen"
 MATCH_SCOPE_PROMPT_LINE = "prompt_line"
-MATCH_SCOPES = (MATCH_SCOPE_SCREEN, MATCH_SCOPE_PROMPT_LINE)
+MATCH_SCOPE_CURSOR_LINE = "cursor_line"
+MATCH_SCOPES = (
+    MATCH_SCOPE_SCREEN,
+    MATCH_SCOPE_PROMPT_LINE,
+    MATCH_SCOPE_CURSOR_LINE,
+)
 
 
 def _match_source(session, match_scope):
@@ -250,6 +260,14 @@ def _match_source(session, match_scope):
             raise TypeError(
                 f"match_scope={MATCH_SCOPE_PROMPT_LINE!r} requires session."
                 f"current_prompt_line(); {type(session).__name__} does not provide it"
+            )
+        return source
+    if match_scope == MATCH_SCOPE_CURSOR_LINE:
+        source = getattr(session, "current_cursor_line", None)
+        if source is None:
+            raise TypeError(
+                f"match_scope={MATCH_SCOPE_CURSOR_LINE!r} requires session."
+                f"current_cursor_line(); {type(session).__name__} does not provide it"
             )
         return source
     raise ValueError(f"match_scope must be one of {MATCH_SCOPES}, got {match_scope!r}")

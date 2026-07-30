@@ -93,6 +93,16 @@ distinct confirmation modes exist:
   guarantee — it proves a screen arrived and stayed, not *which* screen — so any caller that can
   name a target shape should always prefer positive-shape confirmation.
 
+Positive-shape callers also choose the narrowest honest match provenance. A
+whole-screen match is appropriate only when the target may span rows.
+`prompt_line` scopes to the last non-empty cropped row. A dialogue cascade may
+instead require `cursor_line`: the row holding the live terminal cursor. TWGS
+can leave an older `Command` row painted *below* the second or third commodity
+question, so “last painted row” and “current input prompt” are not equivalent.
+Money-path cascades use cursor-line scope and halt if that provenance is
+unavailable; stale text elsewhere on the grid never proves the next answer is
+safe.
+
 A related send-side rule belongs to the same anti-race discipline: the caller decides **per send**
 whether a trailing Enter is appended, rather than a blanket default. A menu-style single-key
 selection sent with an unwanted trailing CRLF can have that Enter consumed by the server as a
