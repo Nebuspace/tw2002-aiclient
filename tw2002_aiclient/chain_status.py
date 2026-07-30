@@ -47,6 +47,54 @@ UNIT_KEY = "chain_unit"
 _REASON_NO_WORLD_MODEL = "no_world_model"
 
 
+def _valid_class_triple(cls: object) -> bool:
+    """Same B/S triple gate as ``trade_adapter._valid_class_triple`` — copied
+    so this module never imports the adapter (and its world_model pull) at
+    load time."""
+    return isinstance(cls, str) and len(cls) == 3 and set(cls) <= {"B", "S"}
+
+
+def _port_snapshot_from_world(
+    world_id: object, *, state_dir: object = None
+) -> tuple[dict[int, str], set[int]]:
+    """One lazy world-model scan → ``(port_classes, known_ports)``.
+
+    Called only from ``ChainScalars.update`` after a successful discovery —
+    never from the draw path. Hostile / missing worlds yield empty maps
+    (never raise).
+    """
+    if not isinstance(world_id, str) or not world_id:
+        return {}, set()
+    try:
+        from tw2002_aiclient import world_model  # lazy — keep draw-path cold
+    except Exception:  # noqa: BLE001
+        return {}, set()
+    classes: dict[int, str] = {}
+    known: set[int] = set()
+    try:
+        recs = world_model.query(
+            world_id, lambda s: bool(s.get("port")), state_dir=state_dir
+        )
+    except Exception:  # noqa: BLE001
+        return {}, set()
+    for rec in recs:
+        if not isinstance(rec, dict):
+            continue
+        port = rec.get("port")
+        if port is None:
+            continue
+        try:
+            sid = int(rec["sector_id"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        known.add(sid)
+        if isinstance(port, dict):
+            cls = port.get("class")
+            if _valid_class_triple(cls):
+                classes[sid] = cls  # type: ignore[assignment]
+    return classes, known
+
+
 class ChainScalars:
     """Memoises ``(hops, unit)`` and the ranked-first chain for bubble viz.
 
@@ -62,6 +110,11 @@ class ChainScalars:
     wipe the last good sequence; a completed empty search clears it to quiet
     empty. The chain object is **never** merged onto daemon ``status`` JSON —
     draw reads ``best_chain`` directly.
+
+    WO-CHAIN-BUBBLE-PORT-CLASSES: successful non-empty updates also refresh
+    ``port_classes`` / ``known_ports`` from the world-model port records for
+    ``discovered.world_id``. Failed updates retain the last good maps (same
+    retention as ``best_chain``); completed empty clears them. Never on status.
     """
 
     def __init__(self) -> None:
@@ -70,8 +123,9 @@ class ChainScalars:
         self._seen: bool = False
         self._best_chain: object | None = None
         self._port_classes: dict[int, str] = {}
+        self._known_ports: set[int] = set()
 
-    def update(self, discovered: object) -> None:
+    def update(self, discovered: object, *, state_dir: object = None) -> None:
         """Record the scalars for a `chain_search.recompute` result.
 
         ``discovered`` is a ``ProfitChainResult`` -- **not** a chain. Its
@@ -96,7 +150,11 @@ class ChainScalars:
           (``REASON_NO_WORLD_MODEL``) -> not seen. There was no map to search.
         * empty for any other reason -> **seen, zero.** Sectors were known and
           searched; "none yet" is the true statement. Clears ``best_chain``.
-        * non-empty -> seen, ``len(chains[0].hops)``, retain ``chains[0]``.
+        * non-empty -> seen, ``len(chains[0].hops)``, retain ``chains[0]``,
+          refresh port class / known-port caches from the world model.
+
+        ``state_dir`` is an injectable world-model root for tests; production
+        callers omit it (default store).
         """
         try:
             chains = getattr(discovered, "chains", None)
@@ -112,6 +170,7 @@ class ChainScalars:
                 self._seen = True
                 self._best_chain = None
                 self._port_classes = {}
+                self._known_ports = set()
                 return
             hops, unit = chain_hop_count_and_unit(chains[0])
         except Exception:  # noqa: BLE001 -- a hostile shape is an unknown, not a crash
@@ -122,6 +181,14 @@ class ChainScalars:
         self._unit = unit if isinstance(unit, str) and unit else "hops"
         self._seen = True
         self._best_chain = chains[0]
+        try:
+            classes, known = _port_snapshot_from_world(
+                getattr(discovered, "world_id", None), state_dir=state_dir
+            )
+            self._port_classes = classes
+            self._known_ports = known
+        except Exception:  # noqa: BLE001 -- enrichment must not undo scalars
+            pass
 
     @property
     def seen(self) -> bool:
@@ -136,6 +203,11 @@ class ChainScalars:
     def port_classes(self) -> dict[int, str]:
         """Sector → class cache for bubble labels (may be empty)."""
         return dict(self._port_classes)
+
+    @property
+    def known_ports(self) -> set[int]:
+        """Sectors with a non-``None`` port record; never on status JSON."""
+        return set(self._known_ports)
 
     def merge(self, status: object) -> dict | None:
         """``status`` with the cached scalars added; never mutates the input.
