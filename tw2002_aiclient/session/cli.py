@@ -1720,7 +1720,8 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--dock-new-ports", action=argparse.BooleanOptionalAction,
                     default=False, dest="dock_new_ports",
                     help="dock first-sight ports to ingest commodities (spends "
-                         "one turn each; halts on the port's trade prompt for you)")
+                         "one turn each; declines commodity quantities with 0; "
+                         "does not trade)")
     # WO-FIGHTER-TOLL-POLICY-WIRE: the combat arm. OFF by default and opt-in
     # per run -- there is no persisted "always fight" setting on purpose, so
     # arming is an explicit decision the operator makes each time.

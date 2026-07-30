@@ -379,6 +379,13 @@ PORT_MENU = (
 #: A rendered screen's last row IS the live prompt, so these carry no trailing
 #: newline -- one would make `rows[-1]` empty and every screen unrecognized.
 REPORT_SCREEN = REPORT.rstrip("\n")
+NEXT_SECTOR = (
+    "Sector  : 158\n"
+    "Ports   : None\n"
+    "Warps to Sector(s) : 4309\n"
+    "Command [TL=00:00:00]:[158] (?=Help)? :"
+)
+COMMAND_4309 = "Command [TL=00:00:00]:[4309] (?=Help)? :"
 
 
 class _DockSession(FakeAttachSession):
@@ -402,6 +409,10 @@ class _DockSession(FakeAttachSession):
             self._screen = self._menu
         elif key == "T":
             self._screen = self._report
+        elif key == "0" and "How many holds of " in self._screen:
+            self._screen = "\n".join(self._screen.splitlines()[:-1] + [COMMAND_4309])
+        elif key == "158":
+            self._screen = NEXT_SECTOR
         return super().send(text, enter=enter, secret=secret, sender=sender)
 
 
@@ -557,24 +568,22 @@ def test_the_port_is_attributed_to_where_we_stood_not_to_the_report(tmp_path):
     assert world_model.get_sector(WORLD, 4309, state_dir=tmp_path)["port"].get("commodities")
 
 
-def test_the_dock_path_sends_nothing_at_the_trade_prompt(tmp_path):
-    """The money-path pin, and the reason this WO stops where it does.
+def test_gather_declines_the_trade_prompt_and_continues(tmp_path):
+    """Gather is not Trade: exact quantity prompts receive numeric zero.
 
     `How many holds ... [40]?` takes its DEFAULT on input it cannot parse --
-    captured wire shows a human typing `quit` there and buying 2,423 credits
-    of equipment. So the cascade sends `P`, `T`, and then NOTHING: the loop's
-    own gate sees a `money_prompt` and halts, which hands the human the
-    keyboard. Any key that backs out of a trade is Max's decision, not this
-    module's.
+    captured wire shows a human typing `quit` there and buying equipment.
+    The archived guarded driver identifies `0` as the explicit decline; no
+    blank Enter is sent at the quantity or offer.
     """
     session = _DockSession(menu_screen=REAL_MENU, report_screen=REAL_TRADEABLE)
     report = _run_to_completion(session, tmp_path, dock_new_ports=True)
-    assert _letters_sent(session) == ["P", "T"]
-    assert report.outcome == OUTCOME_HALTED
-    assert report.reason == "never_auto_action:money_prompt"
+    assert _letters_sent(session) == ["P", "T", "0"]
+    assert report.outcome == sx.OUTCOME_COMPLETED
+    assert report.reason is None
 
 
-def test_the_warp_number_is_never_typed_into_the_trade_prompt(tmp_path):
+def test_the_next_warp_is_sent_only_after_zero_returns_to_command(tmp_path):
     """REGRESSION, and the reason the gate lives inside the dock cascade.
 
     A successful dock returns into the MIDDLE of a loop iteration, past the
@@ -595,10 +604,10 @@ def test_the_warp_number_is_never_typed_into_the_trade_prompt(tmp_path):
         session, ControlLock(), state_dir=tmp_path, timeout_s=2.0, debounce_ms=1
     )
     runner.start(WORLD, min_sectors=2, turn_budget=5, dock_new_ports=True)
-    report = runner.stop(join_timeout=10.0).report
-    assert report.outcome == OUTCOME_HALTED
-    assert report.reason == "never_auto_action:money_prompt"
-    assert _letters_sent(session) == ["P", "T"]  # still nothing at the money prompt
+    runner._thread.join(10.0)
+    report = runner.snapshot().report
+    assert report.outcome == sx.OUTCOME_COMPLETED
+    assert _letters_sent(session) == ["P", "T", "0", "158"]
 
 
 def test_the_trade_prompt_really_is_classified_never_auto():
@@ -610,6 +619,76 @@ def test_the_trade_prompt_really_is_classified_never_auto():
     klass = classify_screen(REAL_TRADEABLE, last)
     assert klass == "money_prompt"
     assert klass in NEVER_AUTO_ACTION_CLASSES
+
+
+def _trade_frame(prompt: str) -> str:
+    return "\n".join(REAL_TRADEABLE.splitlines()[:-1] + [prompt])
+
+
+class _CascadeDockSession(_DockSession):
+    def __init__(self, screens: list[str]):
+        super().__init__(menu_screen=REAL_MENU, report_screen=screens[0])
+        self._after_zero = iter(screens[1:])
+
+    def send(self, text, enter=True, secret=False, sender="app"):
+        if text.strip() == "0":
+            self._screen = next(self._after_zero, _trade_frame(COMMAND_4309))
+            return FakeAttachSession.send(
+                self, text, enter=enter, secret=secret, sender=sender
+            )
+        return super().send(text, enter=enter, secret=secret, sender=sender)
+
+
+@pytest.mark.parametrize("count", [2, 3])
+def test_gather_declines_each_known_commodity_then_returns_to_command(tmp_path, count):
+    prompts = [
+        "How many holds of Fuel Ore do you want to buy [40]?",
+        "How many holds of Organics do you want to sell [12]?",
+        "How many holds of Equipment do you want to buy [7]?",
+    ][:count]
+    screens = [_trade_frame(p) for p in prompts] + [_trade_frame(COMMAND_4309)]
+    session = _CascadeDockSession(screens)
+    report = _run_to_completion(session, tmp_path, dock_new_ports=True)
+    assert _letters_sent(session) == ["P", "T"] + ["0"] * count
+    assert report.outcome == sx.OUTCOME_COMPLETED
+
+
+def test_gather_refuses_a_fourth_quantity_without_sending_it(tmp_path):
+    prompts = [
+        "How many holds of Fuel Ore do you want to buy [40]?",
+        "How many holds of Organics do you want to sell [12]?",
+        "How many holds of Equipment do you want to buy [7]?",
+        "How many holds of Fuel Ore do you want to sell [1]?",
+    ]
+    session = _CascadeDockSession([_trade_frame(p) for p in prompts])
+    report = _run_to_completion(session, tmp_path, dock_new_ports=True)
+    assert _letters_sent(session) == ["P", "T", "0", "0", "0"]
+    assert report.outcome == OUTCOME_HALTED
+    assert report.reason == "never_auto_action:money_prompt"
+
+
+def test_gather_never_answers_a_non_commodity_money_prompt(tmp_path):
+    session = _DockSession(
+        menu_screen=REAL_MENU,
+        report_screen=_trade_frame("Transfer how many credits to the vault:"),
+    )
+    report = _run_to_completion(session, tmp_path, dock_new_ports=True)
+    assert _letters_sent(session) == ["P", "T"]
+    assert report.outcome == OUTCOME_HALTED
+    assert report.reason == "never_auto_action:money_prompt"
+
+
+def test_gather_halts_if_zero_lands_on_an_offer(tmp_path):
+    session = _CascadeDockSession(
+        [
+            REAL_TRADEABLE,
+            _trade_frame("Your offer [924] ?"),
+        ]
+    )
+    report = _run_to_completion(session, tmp_path, dock_new_ports=True)
+    assert _letters_sent(session) == ["P", "T", "0"]
+    assert report.outcome == OUTCOME_HALTED
+    assert report.reason == sx.HALT_CONFIRM_FAILED
 
 
 def test_docking_blind_is_refused_before_any_letter_goes_out(tmp_path):
@@ -702,6 +781,7 @@ class _KeystrokeSession(FakeAttachSession):
         "menu": REAL_MENU,
         "holds": _HOLDS,
         "offer": _OFFER,
+        "declined": _HOLDS + "\n" + COMMAND_4309,
         "bought": _OFFER + "\nYou are a shrewd trader, they're all yours.\n",
         "attacked": "You attack the port!\n",
     }
@@ -712,6 +792,7 @@ class _KeystrokeSession(FakeAttachSession):
         self.last_rx = -10.0
         self.keys: list[str] = []
         self._state = "command"
+        self._quantity = ""
 
     def _feed(self, ch: str) -> None:
         self.keys.append(ch)
@@ -731,8 +812,10 @@ class _KeystrokeSession(FakeAttachSession):
         elif s == "holds":
             # Captured wire: unparsable input is ignored and Enter commits the
             # DEFAULT. A human typing `quit` here bought 40 units.
-            if ch == "\r":
-                self._state = "offer"
+            if ch.isdigit():
+                self._quantity += ch
+            elif ch == "\r":
+                self._state = "declined" if self._quantity == "0" else "offer"
         elif s == "offer":
             if ch == "\r":
                 self._state = "bought"
@@ -762,14 +845,15 @@ def test_the_dock_letters_go_out_as_hot_keys_with_no_trailing_enter(tmp_path):
     out and bought something first."""
     session = _KeystrokeSession()
     report = _run_to_completion(session, tmp_path, dock_new_ports=True)
-    assert session.keys == ["P", "T"], f"stray keystrokes reached the game: {session.keys}"
-    assert "\r" not in session.keys
+    assert session.keys == ["P", "T", "0", "\r"], (
+        f"unexpected keystrokes reached the game: {session.keys}"
+    )
 
     screen = session.render_text(session.render())
     assert "Agreed," not in screen, "the run accepted a trade quantity"
     assert "Your offer" not in screen
-    assert report.outcome == OUTCOME_HALTED
-    assert report.reason == "never_auto_action:money_prompt"
+    assert report.outcome == sx.OUTCOME_COMPLETED
+    assert report.reason is None
 
 
 def test_the_commodities_still_land_through_the_hot_key_path(tmp_path):
