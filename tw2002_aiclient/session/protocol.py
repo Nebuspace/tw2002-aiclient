@@ -44,6 +44,7 @@ from .control_lock import (
     MODE_SPECTATE,
     ControlModeConflict,
 )
+from .hud_seed import seed_hud_after_join
 from .settle import MATCH_SCOPE_PROMPT_LINE
 from .state_parser import (
     OUTCOME_READ,
@@ -304,6 +305,9 @@ def _status_response(session, server):
     observe_turns = getattr(session, "observe_turns", None)
     if callable(observe_turns):
         observe_turns(text, prompt_line)
+    observe_cargo = getattr(session, "observe_cargo", None)
+    if callable(observe_cargo):
+        observe_cargo(text)
     observe_sector = getattr(session, "observe_sector", None)
     if callable(observe_sector):
         observe_sector(prompt_line)
@@ -525,10 +529,6 @@ def _hud_payload(session):
     source", so shipping a timestamp here would put the subtraction on the
     far side of a process boundary where a second clock could creep in.
 
-    `cargo` and `profit` have no producer yet and are emitted as honest
-    unknowns rather than omitted, so the payload's shape does not change the
-    day they get one.
-
     Nothing here can raise on a session that predates these stores: each
     snapshot is fetched through a `callable` guard, and an absent store is
     reported as an unknown cell -- the same answer the operator would get
@@ -539,6 +539,10 @@ def _hud_payload(session):
     sector_snapshot = getattr(session, "sector_snapshot", None)
     sector = sector_snapshot() if callable(sector_snapshot) else None
     turns = _turns_snapshot(session)
+    cargo_snapshot = getattr(session, "cargo_snapshot", None)
+    cargo = cargo_snapshot() if callable(cargo_snapshot) else None
+    profit_snapshot = getattr(session, "profit_snapshot", None)
+    profit = profit_snapshot() if callable(profit_snapshot) else None
 
     def cell(snapshot, attr):
         if snapshot is None or snapshot.outcome != OUTCOME_READ:
@@ -549,8 +553,8 @@ def _hud_payload(session):
         "credits": cell(credits, "balance"),
         "sector": cell(sector, "sector"),
         "turns": cell(turns, "turns"),
-        "cargo": _hud_cell(None, None),
-        "profit": _hud_cell(None, None),
+        "cargo": cell(cargo, "cargo"),
+        "profit": cell(profit, "profit"),
     }
 
 
@@ -1550,7 +1554,11 @@ def _dispatch_ensure(session, args, server):
 
         if cls == target:
             session.mark_profile(profile.name)
-            return build_response(session, extra={"already_there": True, "steps": 0})
+            seed = seed_hud_after_join(session)
+            return build_response(
+                session,
+                extra={"already_there": True, "steps": 0, **seed},
+            )
 
         try:
             final_cls, steps = run_login(
@@ -1578,4 +1586,8 @@ def _dispatch_ensure(session, args, server):
             return {"ok": False, "error": err}
 
         session.mark_profile(profile.name)
-        return build_response(session, extra={"steps": steps, "already_there": False})
+        seed = seed_hud_after_join(session)
+        return build_response(
+            session,
+            extra={"steps": steps, "already_there": False, **seed},
+        )

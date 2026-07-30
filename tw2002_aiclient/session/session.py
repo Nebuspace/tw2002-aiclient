@@ -23,6 +23,13 @@ import time
 from .classify import classify_screen, is_probable_secret_prompt
 from .connection import TelnetConnection, tx_failure_phrase
 from .iac import TelnetHandler
+from .hud_tracking import (
+    CargoSnapshot,
+    ProfitSnapshot,
+    cargo_never_observed,
+    profit_never_observed,
+    read_empty_cargo_holds,
+)
 from .logging_util import TranscriptLogger
 from .settle import MATCH_SCOPE_SCREEN, wait_for_settle
 from .state_parser import (
@@ -169,6 +176,12 @@ class Session:
         # nowhere near the redaction sinks above.
         self.last_credits = None
         self.last_credits_ts = None
+        # HUD session profit is current strict credits minus this daemon
+        # session's first strict balance. The baseline is write-once; both
+        # profit fields are updated atomically with credits below.
+        self.credits_baseline = None
+        self.last_profit = None
+        self.last_profit_ts = None
         # WO-HUD-STATUS-BRIDGE: the turns counterpart of the pair above, with
         # the same ownership rule -- written ONLY by observe_turns(), read
         # ONLY through turns_snapshot(), both under self.lock, so the pair
@@ -178,6 +191,10 @@ class Session:
         # reached ZERO must not look alike to the HUD.
         self.last_turns = None
         self.last_turns_ts = None
+        # Historical HUD semantics: CARGO is empty holds, not total holds or
+        # commodity quantity. Populated from strict ship-info / port lines.
+        self.last_cargo = None
+        self.last_cargo_ts = None
         # WO-AUTOLOOP-HAZARD-HALT: fighters aboard for the zero-fighter rail.
         # Same ownership as credits/turns -- observe_fighters / fighters_snapshot
         # only; never cleared by a screen that states no count (zero and
@@ -483,8 +500,15 @@ class Session:
         if read.outcome != OUTCOME_READ:
             return
         with self.lock:
+            # ``getattr`` preserves compatibility with the repository's
+            # focused Session subclasses that deliberately bypass __init__.
+            if getattr(self, "credits_baseline", None) is None:
+                self.credits_baseline = read.balance
             self.last_credits = read.balance
-            self.last_credits_ts = time.monotonic()
+            now = time.monotonic()
+            self.last_credits_ts = now
+            self.last_profit = read.balance - self.credits_baseline
+            self.last_profit_ts = now
 
     def credits_snapshot(self):
         """What this session knows about the balance right now, as a
@@ -514,6 +538,19 @@ class Session:
             return CreditsSnapshot(
                 outcome=OUTCOME_READ,
                 balance=balance,
+                age_s=max(0.0, time.monotonic() - ts),
+            )
+
+    def profit_snapshot(self):
+        """Credits delta from this daemon session's first strict balance."""
+        with self.lock:
+            profit = self.last_profit
+            ts = self.last_profit_ts
+            if profit is None or ts is None:
+                return profit_never_observed()
+            return ProfitSnapshot(
+                outcome=OUTCOME_READ,
+                profit=profit,
                 age_s=max(0.0, time.monotonic() - ts),
             )
 
@@ -577,6 +614,28 @@ class Session:
             return TurnsSnapshot(
                 outcome=OUTCOME_READ,
                 turns=turns,
+                age_s=max(0.0, time.monotonic() - ts),
+            )
+
+    def observe_cargo(self, rendered_text):
+        """Capture empty cargo holds from strict settled-screen shapes."""
+        read = read_empty_cargo_holds(rendered_text)
+        if read.outcome != OUTCOME_READ:
+            return
+        with self.lock:
+            self.last_cargo = read.empty_holds
+            self.last_cargo_ts = time.monotonic()
+
+    def cargo_snapshot(self):
+        """Last known empty cargo holds and daemon-computed age."""
+        with self.lock:
+            cargo = self.last_cargo
+            ts = self.last_cargo_ts
+            if cargo is None or ts is None:
+                return cargo_never_observed()
+            return CargoSnapshot(
+                outcome=OUTCOME_READ,
+                cargo=cargo,
                 age_s=max(0.0, time.monotonic() - ts),
             )
 

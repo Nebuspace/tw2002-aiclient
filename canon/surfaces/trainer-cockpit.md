@@ -108,15 +108,21 @@ screen → tracked model → HUD; the ledger is a one-way sink (see [trace-ledge
 
 **Cold-join HUD seed (`hud_seed.py`).** This is the mechanism *behind* "persists across
 credits-less screens." When a spectator attaches (or `ensure` finishes login) onto a screen that
-states neither credits nor turns, every HUD cell would sit at its sticky `-` forever because nothing
+states neither credits, turns nor empty cargo holds, those HUD cells would sit at sticky `-` forever because nothing
 on screen ever restates the value. `seed_hud_after_join()` breaks that: at a safe command prompt it
-sends the single **`I` ship-info probe** exactly once when either credits or turns is still unknown,
+sends the single **`I` ship-info probe** exactly once when credits, turns or empty cargo holds are still unknown,
 observes the resulting ship-info screen, and fills the sticky cells. A `force=True` re-probe is
 age-gated for long explore runs where the values have gone stale. The probe is **deliberately
 deferred on a fighter `Option?` dialogue** — there `I` means *Info*, not ship-info, and probing
 would scroll the `Your fighters: N vs. theirs: M` line off pyte's 25-line viewport before the app
 could Attack/Retreat. The seed never raises: a failed probe must not break the join. This is the one
 place the dashboard causes a send, and it is a safe read-only introspection, not a play move.
+
+**Cargo and profit semantics.** CARGO is the ship's **empty cargo holds**, read from strict
+ship-info / port-report claims; it is not total capacity and is never inferred from commodity rows.
+PROFIT is the strict current credit balance minus the first strict balance observed in this daemon
+session. The first observation therefore establishes a truthful `0` baseline; later credits-less
+screens preserve and age that value rather than resetting it.
 
 ## Liveness and TX transparency — killing "is it frozen?"
 
