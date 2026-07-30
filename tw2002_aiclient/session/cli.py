@@ -793,12 +793,10 @@ def cmd_chains(args):
     truncated one will report "no profitable cycle exists" when all that
     happened is the budget ran out.
 
-    NEVER the taught arm list, and never curses: these are discovered,
-    unpriced cycles the operator has not taught and cannot arm -- not from
-    this verb, and not from the ``L)chains`` modal either, which (since
-    WO-CHAINS-TUI-FULL) displays them only as a ``detected``-tagged,
-    structurally non-armable section -- see ``chain_search_view``'s module
-    docstring.
+    NEVER the recorded-macro arm list, and never curses: this verb is a
+    read-only discovery view and cannot arm or send. ADR-003 gives the
+    ``L)chains`` modal a separate exact-fingerprint approve/confirm path;
+    it does not turn this CLI output into execution authority.
     """
     from dataclasses import asdict
 

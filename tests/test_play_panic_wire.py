@@ -73,6 +73,7 @@ def _drive(monkeypatch, keys, *, stop_result=None, raises=None):
     the mistake repeated.
     """
     stop_calls = []
+    other_stop_calls = []
 
     monkeypatch.setattr(adapters, "ensure_session", lambda name, **kw: _Ensure())
 
@@ -83,6 +84,18 @@ def _drive(monkeypatch, keys, *, stop_result=None, raises=None):
         return stop_result if stop_result is not None else _StopResult()
 
     monkeypatch.setattr(adapters, "autoloop_stop", _stop, raising=False)
+    monkeypatch.setattr(
+        adapters,
+        "explore_stop",
+        lambda **kw: (other_stop_calls.append(("explore", kw)) or _StopResult()),
+        raising=False,
+    )
+    monkeypatch.setattr(
+        adapters,
+        "trade_chain_stop",
+        lambda **kw: (other_stop_calls.append(("trade", kw)) or _StopResult()),
+        raising=False,
+    )
 
     seen = {}
     real_screen = app_mod.PlayShellScreen
@@ -92,6 +105,7 @@ def _drive(monkeypatch, keys, *, stop_result=None, raises=None):
             super().__init__(*a, **k)
             self.gate_raises = []
             self.actions = []
+            self.other_stop_calls = other_stop_calls
             seen["screen"] = self
 
         def begin_arm_confirm(self, action=None, *, cycles=None):
@@ -173,7 +187,8 @@ def test_double_press_is_harmless(monkeypatch):
 def test_successful_halt_is_reported(monkeypatch):
     _stop_calls, screen = _drive(monkeypatch, [ord("P")])
     assert "PANIC" in (screen.status_line or "")
-    assert "halted" in (screen.status_line or "")
+    assert "halt requested" in (screen.status_line or "")
+    assert [name for name, _kw in screen.other_stop_calls] == ["explore", "trade"]
 
 
 def test_failed_halt_is_reported_as_a_failure(monkeypatch):
@@ -184,9 +199,9 @@ def test_failed_halt_is_reported_as_a_failure(monkeypatch):
         stop_result=_StopResult(ok=False, reason="autoloop_unavailable"),
     )
     line = screen.status_line or ""
-    assert "failed" in line
+    assert "partial" in line
     assert "autoloop_unavailable" in line
-    assert "halted" not in line, "reported a halt that did not happen"
+    assert "halt requested" not in line, "reported a complete halt that did not happen"
 
 
 @pytest.mark.parametrize("key,expected", [

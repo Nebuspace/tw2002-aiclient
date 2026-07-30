@@ -176,14 +176,12 @@ canon above is the prescriptive target; the code conforms to it in future work o
   offered or run, but must **not** let a computed focus win over an unrecognized screen. Recorded
   here (the strategic-layer half of the same divergence is recorded in
   [Priority Engine](/engine/priority-engine.md)).
-- **`trade_driver.py` is an autonomous end-to-end chain runner.** `run_chain()` drives the whole
-  `navigate → dock → buy → navigate → dock → sell → repeat` loop "end to end, synchronously, one
-  call." It is already built with the reborn model's own disciplines — a fresh-render gate before
-  every send, a required fail-closed `is_armed` predicate, a required `should_abort` predicate,
-  depletion/cargo-stranded/turn-floor STOPs (`ChainHold`), and a hardcoded Paladin allowlist that
-  can never send attack/Genesis — so its divergence is narrow: it must be framed and driven as a
-  *human-armed taught behavior whose every step is re-validated and which STOPs on the unknown*,
-  never as a driver the app may launch on its own initiative. Recorded as a divergence in framing.
+- **`trade_driver.py` guarded-chain divergence resolved by ADR-003.**
+  `TradeChainRunner` is now the only product owner of `run_chain()`: it
+  requires an exact human-confirmed fingerprint, re-runs discovery before the
+  lock, executes one pass, and surfaces each `ChainHold` as a terminal STOP.
+  Fresh-render, arm/abort, floor, reconciliation, and Paladin checks remain at
+  every send. No finder-initiated launch or replacement-chain rotation exists.
 - **`loop_player.py` is the background AUTO-LOOP driver.** It runs a saved skill as a bounded
   (hard cycle cap), human-armed, pause/stop-able background thread that halts on replay divergence
   (`surprise`) and on a fail-closed below-floor / unconfirmable-balance check (`floor_reached` /

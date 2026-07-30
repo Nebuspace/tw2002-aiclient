@@ -15,18 +15,17 @@ Inherits the sibling composers' hardening family: never raises regardless of
 input shape, a malformed payload degrades to the honest-empty rendering
 rather than blowing up a draw pass, ASCII twins gated on `unicode_ok`.
 
-# Never the taught arm list (display is allowed; ARMING is not)
+# Never the recorded-macro arm list
 
 `cockpit/chains.py`'s `rows` are the ARM list (`app.py` -> `begin_arm_confirm`
 -> `y` -> `adapters.autoloop_start`, the money-spending call). Since
 WO-CHAINS-TUI-FULL the `L)chains` modal DISPLAYS discovered cycles —
 `cockpit.chains.compose_chain_lines` calls THIS formatter for a separate,
-`detected`-tagged, structurally non-armable section — but a discovered chain
-never enters `rows`, the cursor never traverses it, and `selected()` / the
-arm path cannot express one (a `ProfitChain` has no name, no `steps[]`, no
-`start_anchor`; arming it would synthesise a macro the human never
-demonstrated). The load-bearing invariant is **never armable**, not never
-displayed. This module still never imports `cockpit.chains`; the dependency
+`detected`-tagged section outside recorded ``rows``. ADR-003 permits a
+different path: an exact discovered fingerprint may be selected, previewed,
+and confirm-armed as a semantic one-pass trade plan. It never becomes a
+recorded keystroke macro, and this formatter still has no arm or send path.
+This module still never imports `cockpit.chains`; the dependency
 points the other way. Ruling lineage: WO-CHAIN-DETECT-WIRE, re-scoped by
 WO-CHAINS-TUI-FULL (hub, 2026-07-28).
 
@@ -57,6 +56,8 @@ UNKNOWN = "?"  # no-swap (visual-language.md)
 
 BEST_UNICODE = "★"
 BEST_ASCII = "*"  # real ASCII twin -- see `chain_detect_view`'s ★/* note
+SELECTED_UNICODE = "▸"
+SELECTED_ASCII = ">"
 
 # Per-row provenance tag -- never "recorded"/"mined" (`loops/store.py`'s
 # `SOURCE_VALUES`): a discovered cycle was neither demonstrated at the
@@ -127,14 +128,14 @@ def _cr_per_turn_text(value: object) -> str:
     return f"{value:.0f}/t"
 
 
-def _format_one_chain(chain: object, *, index: int, best_marker: str, width: int) -> str:
+def _format_one_chain(chain: object, *, marker: str, width: int) -> str:
     """One row. `hops_text`, `cr_text` and `SOURCE_TAG` are computed and
     reserved FIRST and never truncated -- hop-count and cr/turn are the
     genuinely-known, never-fabricated numbers on this row, and the
     provenance tag is what keeps it from being read as a taught macro.
     Only the sector ring is clipped, the same "protect the count, clip the
     description" discipline `compose_chain_lines` uses."""
-    marker = f"{best_marker} " if index == 0 else "  "
+    marker_text = f"{marker} " if marker else "  "
     hops_text = _hops_text(getattr(chain, "hops", None))
     turns_text = _turns_text(getattr(chain, "turns", None))
     cr_text = _cr_per_turn_text(getattr(chain, "cr_per_turn", None))
@@ -142,9 +143,9 @@ def _format_one_chain(chain: object, *, index: int, best_marker: str, width: int
 
     tail = f"{hops_text} {turns_text} {cr_text}"
     reserved = len(tail) + 2 + len(SOURCE_TAG)
-    avail = max(4, width - len(marker) - reserved)
+    avail = max(4, width - len(marker_text) - reserved)
     body = body[:avail]
-    return f"{marker}{body:<{avail}}  {tail}  {SOURCE_TAG}"
+    return f"{marker_text}{body:<{avail}}  {tail}  {SOURCE_TAG}"
 
 
 def format_profit_chain_lines(
@@ -152,6 +153,7 @@ def format_profit_chain_lines(
     *,
     unicode_ok: bool = True,
     width: int = 48,
+    selected_index: int | None = None,
 ) -> list[str]:
     """The listing's body lines. Never raises regardless of `payload`'s shape.
 
@@ -171,6 +173,7 @@ def format_profit_chain_lines(
         w = 48
     w = max(16, w)
     best = BEST_UNICODE if unicode_ok else BEST_ASCII
+    selected = SELECTED_UNICODE if unicode_ok else SELECTED_ASCII
     partial_banner = PARTIAL_UNICODE if unicode_ok else PARTIAL_ASCII
 
     # Computed by getattr, not via `payload.truncated`, so a duck-typed
@@ -200,5 +203,12 @@ def format_profit_chain_lines(
     if truncated:
         lines.append(partial_banner)
     for i, chain in enumerate(chains):
-        lines.append(_format_one_chain(chain, index=i, best_marker=best, width=w))
+        marker = selected if i == selected_index else (best if i == 0 else "")
+        lines.append(
+            _format_one_chain(
+                chain,
+                marker=marker,
+                width=w,
+            )
+        )
     return lines

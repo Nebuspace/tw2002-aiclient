@@ -3,8 +3,11 @@
 Canon: `DECISIONS.md` §A.2 (Accepted 2026-07-26, aligning
 `canon/research/tw2002-screen-patterns.md` P-QTY) rules that a
 `money_prompt` -- a quantity / money / bank-transfer question the server is
-blocked on -- is **escalate-only**. The App must hand the keyboard to the
-human; no taught rule, macro, crawl keystroke or keepalive nudge may fire.
+blocked on -- is **escalate-only** for generic consumers. ADR-003 adds one
+narrow exception: the explicitly confirmed guarded trade driver may answer
+only its freshly matched commodity-quantity/standing-offer cascade under
+cash, turn, cargo, arm, and abort rails. No taught rule, generic macro, crawl
+keystroke, keepalive nudge, or unrelated money prompt may fire.
 
 WHY THIS FILE EXISTS SEPARATELY. The pin is a property of the SYSTEM, not
 of `classify.py`. Classification alone cannot enforce it: canon
@@ -37,6 +40,9 @@ reading the tree rather than assumed. Durable twin:
        -- (a) `klass in NEVER_AUTO_ACTION_CLASSES` → halt
   8. `session/hud_seed.py` · `seed_hud_after_join`
        -- (b) `main_command`-only whitelist
+  9. `trade_driver.py` · `_trade_target` (ADR-003 guarded trade only)
+       -- (c) exact `_QTY_PROMPT_RE` commodity + offer-total cascade; every
+              send remains behind arm/abort/fresh-render/floor/PALADIN rails
 
 Cockpit `arm.py` is presentation-only (no classify, no send). Taught-run
 fire is consumer #2 only. Operator `do`/`send` report class; they do not
@@ -84,6 +90,7 @@ _INVENTORIED_CONSUMERS: dict[str, str] = {
     "session/protocol.py": 'target = args.get("target", "main_command")',
     "session/sector_explore.py": "NEVER_AUTO_ACTION_CLASSES",
     "session/hud_seed.py": '!= "main_command"',
+    "trade_driver.py": "_QTY_PROMPT_RE",
 }
 
 # Modules that may mention classify + send symbols without being a
@@ -377,6 +384,7 @@ def test_inventory_frozenset_matches_audit_table():
             "session/protocol.py",
             "session/sector_explore.py",
             "session/hud_seed.py",
+            "trade_driver.py",
         }
     )
 

@@ -1,18 +1,15 @@
-"""WO-CHAINS-TUI-FULL — discovered chains in `L)chains`: displayed, NEVER armable.
+"""ADR-003 — discovered chains require exact preview + confirm before execution.
 
 The hub ruling this file pins (2026-07-28): discovered profit chains
-(`chain_search.recompute` results) are DISPLAY-ONLY in the `L)chains`
-modal — visually distinct, structurally non-armable. Taught rows arm
-unchanged through the confirm gate. The design is structural, not a
-guard: `ChainsSession.discovered` is a separate field, never merged into
-`rows`, so `move()` cannot put a discovered chain under the cursor and
-`selected()` cannot return one — an absent path, not a deletable `if`.
+`ChainsSession.discovered` stays separate from recorded macro `rows`.
+`selected()` therefore remains recorded-only; `selected_discovered()` feeds
+the exact semantic approval path. Enter raises a visible default-deny gate,
+and only a later `y` may call the guarded trade adapter.
 
-Both directions are pinned:
+Both identities are pinned:
 
-* the arm side can never see a discovered chain (cursor sweep, and the
-  real `_run_play` arm wire with zero taught loops but discovered rows
-  present);
+* `selected()` can never return a discovered chain, while
+  `selected_discovered()` can feed only the separate exact-plan gate;
 * the display side is honest — the discovered section renders even with
   zero taught loops (the old taught-empty early-return would have
   swallowed it), a truncated-and-empty search renders the hedge and never
@@ -39,6 +36,7 @@ import pytest
 from tw2002_aiclient import adapters, app as app_mod
 from tw2002_aiclient import chain_search as chain_search_mod
 from tw2002_aiclient import chain_search_view as V
+from tw2002_aiclient.chains import ProfitChain, TradeHop
 from tw2002_aiclient import screens as screens_mod
 from tw2002_aiclient import world_model as world_model_mod
 from tw2002_aiclient.cockpit import chains
@@ -50,11 +48,25 @@ RING = "10>11>12>"
 
 
 def _chain(sectors=(10, 11, 12, 10), hops_n=3, turns=8, cr=120.0):
-    return SimpleNamespace(
-        sectors=tuple(sectors),
-        hops=tuple(object() for _ in range(hops_n)),
+    sectors = tuple(sectors)
+    commodities = ("Fuel Ore", "Organics", "Equipment")
+    hops = tuple(
+        TradeHop(
+            frm=sectors[i],
+            to=sectors[i + 1],
+            commodity=commodities[i % len(commodities)],
+            margin=10.0 + i,
+            turns=1,
+        )
+        for i in range(hops_n)
+    )
+    return ProfitChain(
+        sectors=sectors,
+        hops=hops,
+        overall_profit=sum(h.margin for h in hops),
         turns=turns,
         cr_per_turn=cr,
+        cr_per_execution=sum(h.margin for h in hops),
     )
 
 
@@ -110,9 +122,10 @@ def test_selected_can_never_return_a_discovered_chain_with_taught_present():
     rows"). Only the list the operator's store actually produced counts."""
     s = _open(list(TAUGHT))
     for sel in _sweep_selected(s):
-        assert sel is not None
-        assert any(sel is r for r in TAUGHT), f"selected() escaped the taught rows: {sel!r}"
-        assert not hasattr(sel, "cr_per_turn"), "a chain-shaped object reached selected()"
+        if sel is not None:
+            assert any(sel is r for r in TAUGHT), f"selected() escaped the taught rows: {sel!r}"
+            assert not hasattr(sel, "cr_per_turn"), "a chain-shaped object reached selected()"
+    assert s.selected_discovered() is not None
 
 
 @pytest.mark.parametrize("rows", [None, []], ids=["taught-absent", "taught-empty"])
@@ -200,6 +213,7 @@ def _drive(monkeypatch, keys, *, store, recompute, sector_count=SECTOR_COUNT):
     `None` models a store that cannot be counted.
     """
     arm_calls: list = []
+    trade_calls: list = []
     explore_calls: list = []
 
     monkeypatch.setattr(adapters, "ensure_session", lambda name, **kw: _Result())
@@ -240,6 +254,11 @@ def _drive(monkeypatch, keys, *, store, recompute, sector_count=SECTOR_COUNT):
         return SimpleNamespace(ok=True, reason=None, detail=None, raw=None)
 
     monkeypatch.setattr(adapters, "autoloop_start", _arm, raising=False)
+    def _trade(world_id, fingerprint, **kw):
+        trade_calls.append((world_id, fingerprint, kw))
+        return _AutoLoopResult()
+
+    monkeypatch.setattr(adapters, "trade_chain_start", _trade, raising=False)
     monkeypatch.setattr(adapters, "explore_start_for_profile", _explore, raising=False)
 
     seen: dict = {}
@@ -269,22 +288,55 @@ def _drive(monkeypatch, keys, *, store, recompute, sector_count=SECTOR_COUNT):
         app_mod._run_play(_Stdscr(keys), profile)
     except Exception:
         pass
-    return arm_calls, explore_calls, seen.get("screen")
+    screen = seen.get("screen")
+    if screen is not None:
+        screen.trade_calls = trade_calls
+    return arm_calls, explore_calls, screen
 
 
-def test_the_arm_wire_cannot_receive_a_discovered_chain(monkeypatch):
-    """Zero taught loops, discovered chains on screen, Enter pressed: no
-    gate may rise and no adapter call may happen — there is no row for the
-    arm path to hold, because discovered chains never became rows."""
+def test_discovered_enter_raises_exact_gate_but_does_not_start(monkeypatch):
+    """Enter approves an exact pending plan; only a later y may start it."""
     arm, _explore, screen = _drive(
         monkeypatch, [L, ENTER], store=EMPTY_OK, recompute=lambda wid, **kw: DISCOVERED,
     )
-    assert arm == [], f"a discovered chain reached the money path: {arm}"
-    assert screen.gate_raises == [], (
-        f"a confirm gate rose with nothing taught to arm: {screen.gate_raises}"
-    )
-    assert "nothing to arm" in (screen.status_line or "")
+    assert arm == []
+    assert screen.trade_calls == []
+    assert len(screen.gate_raises) == 1
+    assert "10>11>12>10" in screen.gate_raises[0][0]
+    assert "Fuel Ore>Organics>Equipment" in screen.gate_raises[0][0]
+    assert "one pass" in screen.gate_raises[0][0]
     assert screen.chains_session.discovered is DISCOVERED
+
+
+def test_discovered_y_starts_only_the_confirmed_fingerprint(monkeypatch):
+    arm, explore, screen = _drive(
+        monkeypatch,
+        [L, ENTER, ord("y")],
+        store=EMPTY_OK,
+        recompute=lambda wid, **kw: DISCOVERED,
+    )
+
+    assert arm == []
+    assert explore == []
+    assert len(screen.trade_calls) == 1
+    world_id, fingerprint, kwargs = screen.trade_calls[0]
+    assert world_id
+    assert len(fingerprint) == 64
+    assert kwargs["cash_floor"] == 1000
+    assert kwargs["turn_reserve"] == 10
+
+
+def test_discovered_n_cancels_without_starting_any_money_path(monkeypatch):
+    arm, explore, screen = _drive(
+        monkeypatch,
+        [L, ENTER, ord("n")],
+        store=EMPTY_OK,
+        recompute=lambda wid, **kw: DISCOVERED,
+    )
+
+    assert arm == []
+    assert explore == []
+    assert screen.trade_calls == []
 
 
 def test_taught_arm_flow_unregressed_with_discovered_present(monkeypatch):
@@ -323,16 +375,19 @@ def _discovered_slice(lines):
 
 
 @pytest.mark.parametrize("unicode_ok", [True, False], ids=["unicode", "ascii"])
-def test_discovered_rows_are_tagged_and_never_carry_the_selected_marker(unicode_ok):
+def test_discovered_rows_are_tagged_and_only_active_row_has_selection_marker(unicode_ok):
     s = _open(list(TAUGHT))
     for _pos in range(len(TAUGHT) + 1):  # every cursor position, incl. clamped end
         lines = chains.compose_chain_lines(s, unicode_ok=unicode_ok)
         disc = _discovered_slice(lines)
         tagged = [ln for ln in disc if V.SOURCE_TAG in ln]
         assert len(tagged) == len(DISCOVERED.chains), disc
-        for ln in tagged:
-            assert not ln.startswith(chains.SELECTED_UNICODE), ln
-            assert not ln.startswith(chains.SELECTED_ASCII), ln
+        selected = [
+            ln for ln in tagged
+            if ln.startswith(chains.SELECTED_UNICODE)
+            or ln.startswith(chains.SELECTED_ASCII)
+        ]
+        assert len(selected) == (1 if s.section == "discovered" else 0)
         # ...and the taught side never borrows the provenance tag.
         taught_side = lines[: lines.index(V.TITLE)]
         assert all(V.SOURCE_TAG not in ln for ln in taught_side), taught_side

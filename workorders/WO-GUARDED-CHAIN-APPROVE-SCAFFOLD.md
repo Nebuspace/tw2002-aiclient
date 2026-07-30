@@ -1,6 +1,6 @@
 # WO-GUARDED-CHAIN-APPROVE-SCAFFOLD — Approve and run an exact discovered trade chain
 
-**Status:** IN PROGRESS · HIGH · money-path · Max-approved 2026-07-30  
+**Status:** OFFLINE COMPLETE · HIGH · money-path · Max-approved 2026-07-30
 **Branch:** `wo/GUARDED-CHAIN-APPROVE-SCAFFOLD`  
 **Depends on:** #266 (`WO-PLAY-GATHER-CONTINUE`)
 
@@ -60,35 +60,41 @@ serially from this exclusive worktree under the standing lead-seat exception.
 
 ## Accept
 
-- [ ] `L)chains` distinguishes recorded macros from discovered chains and can
+- [x] `L)chains` distinguishes recorded macros from discovered chains and can
       cursor-select discovered rows without merging them into the macro store.
-- [ ] Enter on a discovered row performs zero sends and raises a gate naming
+- [x] Enter on a discovered row performs zero sends and raises a gate naming
       the exact route, commodities, hop count, one-pass bound, cash floor, and
       turn reserve; any unknown field refuses to arm.
-- [ ] `N`, Esc, malformed input, stale fingerprint, truncated discovery, or
+- [x] `N`, Esc, malformed input, stale fingerprint, truncated discovery, or
       discovery failure creates no runner and issues zero sends.
-- [ ] `y` starts exactly the confirmed chain; daemon re-resolution cannot
+- [x] `y` starts exactly the confirmed chain; daemon re-resolution cannot
       substitute the current best or another same-sector cycle.
-- [ ] Start anchor mismatch refuses before the first send.
-- [ ] Quantity/offer cascades preserve archived guards and only permit `P`,
+- [x] Start anchor mismatch refuses before the first send.
+- [x] Quantity/offer cascades preserve archived guards and only permit `P`,
       `T`, sector digits, bounded quantities, `0` declines, and blank standing
       offer acceptance. `A` is structurally unreachable.
-- [ ] Panic stops Explore, recorded autoloop, and guarded trade; the trade
+- [x] Panic stops Explore, recorded autoloop, and guarded trade; the trade
       runner observes stop/disarm within one send-step.
-- [ ] Status/progress names `trade`, route, hop progress, and terminal STOP
+- [x] Status/progress names `trade`, route, hop progress, and terminal STOP
       reason without claiming success when credits/cargo reconciliation fails.
-- [ ] Full offline suite passes.
-- [ ] Static safety/mutation pins pass for arm, abort, stale identity, floors,
+- [x] Full offline suite passes.
+- [x] Static safety/mutation pins pass for arm, abort, stale identity, floors,
       depletion, unexpected screens, and PALADIN.
 
 ## Proof
 
 ```bash
-pytest -q tests/test_trade_chain_plan.py tests/test_trade_driver.py \
-  tests/test_trade_chain_protocol.py tests/test_play_chains_discovered.py \
-  tests/test_panic_control.py
+pytest -q -n 0 tests/test_trade_chain_plan.py tests/test_trade_driver.py \
+  tests/test_trade_chain_protocol.py tests/test_trade_chain_runner.py \
+  tests/test_play_chains_discovered.py tests/test_play_panic_wire.py \
+  tests/test_cockpit_panic.py
 pytest -q -m "not live_login and not pty_ui"
 ```
+
+Observed 2026-07-30: corrected serial acceptance set **105 passed**; full
+offline suite **passed**. The first full pass also exercised the structural
+arm-callsite, control-lock-callsite, never-auto-action inventory,
+import-hygiene, and bounded-global-status guards; all are green after review.
 
 Live proof is **NOT-ATTEMPTED** until the offline money-path review is accepted.
 After that, Cursor may run safe transport/attach probes. A one-pass

@@ -13,7 +13,9 @@ Every send path that **keys off screen classification to choose a keystroke**
 must either:
 
 - **(a)** intersect `classify.NEVER_AUTO_ACTION_CLASSES` / refuse `money_prompt`, or
-- **(b)** fail-closed via a `main_command`-only whitelist (money cannot match).
+- **(b)** fail-closed via a `main_command`-only whitelist (money cannot match), or
+- **(c)** be the Accepted, explicitly human-armed guarded-money exception and
+  match only its exact fresh prompt shape under its own send/floor rails.
 
 Classification that is **reported** but does not decide what to press is out of
 scope (status / read / history / HUD chips).
@@ -32,6 +34,7 @@ scope (status / read / history / HUD chips).
 | 6 | `session/protocol.py` · `_dispatch_ensure` | "Already there?" before login replay | **(b)** `cls == target` with default `target="main_command"` | `test_ensure_never_treats_a_money_prompt_as_a_reached_target` |
 | 7 | `session/sector_explore.py` · `_gate_screen` | ExploreRunner warp hops from `main_command` only | **(a)** `klass in NEVER_AUTO_ACTION_CLASSES` → `HALT_NEVER_AUTO_ACTION` | `test_inventoried_consumers_still_carry_their_refuse_marker` · structural inventory pin (#7 additive — see below) |
 | 8 | `session/hud_seed.py` · `seed_hud_after_join` | One read-only `I` ship-info probe | **(b)** `session.classify() != "main_command"` → return (no send) | `tests/test_hud_complete_producers.py` unsafe-screen pin · structural inventory pin |
+| 9 | `trade_driver.py` · `_trade_target` | Answer only the confirmed chain's fresh commodity quantity and standing-offer cascade | **(c)** exact `_QTY_PROMPT_RE` commodity match plus arm/abort/fresh-render/floor/PALADIN rails; unrelated `money_prompt` cannot match | `tests/test_trade_driver.py` quantity, unexpected-screen, floor, reconciliation, and PALADIN pins · structural inventory pin |
 
 ### Taught-rule / cockpit arm (C-06 residual)
 

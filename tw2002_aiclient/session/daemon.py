@@ -39,6 +39,7 @@ from pathlib import Path
 from . import env
 from .autoloop import AutoLoopRunner
 from .sector_explore import ExploreRunner
+from .trade_chain import TradeChainRunner
 from .control_lock import ControlLock, ControlModeConflict
 from .credentials import get_password
 from .guardian import SessionGuardian
@@ -473,6 +474,9 @@ def _shutdown(server, session):
     explore = getattr(server, "sector_explore", None)
     if explore is not None:
         explore.stop()
+    trade_chain = getattr(server, "trade_chain", None)
+    if trade_chain is not None:
+        trade_chain.stop()
     guardian = getattr(server, "guardian", None)
     if guardian is not None:
         guardian.stop()
@@ -681,6 +685,11 @@ def main(argv=None):
         session,
         server.control_lock,
         log_error=lambda exc: _log_dispatch_error(server, "sector_explore", exc),
+    )
+    server.trade_chain = TradeChainRunner(
+        session,
+        server.control_lock,
+        log_error=lambda exc: _log_dispatch_error(server, "trade_chain", exc),
     )
     server.request_stop = lambda: threading.Thread(target=_shutdown, args=(server, session), daemon=True).start()
     try:

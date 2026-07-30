@@ -123,6 +123,25 @@ reads persisted port records via `trade_adapter.build_trade_hops` over the
 [Priority Engine](/engine/priority-engine.md) ranks the finder's output to decide which chain is
 worth offering; the operator decides whether to arm it.
 
+## Discovered → approved semantic plan (ADR-003)
+
+A discovered chain is never silently promoted into a recorded keystroke macro:
+the two populations remain visibly distinct. The operator may select one exact
+discovered fingerprint and review its semantic scaffold — start anchor,
+ordered sector ring, and ordered commodity buy/sell blocks; quantities remain
+explicitly unresolved. Accepting that scaffold still sends nothing. A separate
+default-deny `y/N` arm names the exact route, one-pass bound, cash floor, and
+turn reserve.
+
+The daemon then recomputes discovery from the current world model and requires
+one exact fingerprint match. Missing, changed, partial, truncated, or ambiguous
+identity refuses before the control lock or first send; the current best chain
+is never substituted. One confirmed arm runs one pass. Live quantities come
+only from freshly rendered quantity prompts and are bounded under the confirmed
+floors; every send re-checks arm, abort, screen shape, and PALADIN. Depletion,
+loss, floor breach, stranded cargo, or an unrecognized screen STOPs and hands
+control back — never rotates.
+
 # Examples
 
 ```
@@ -152,8 +171,8 @@ Depletion STOP (never autonomous rotation):
 
 # Code divergence
 
-The reborn contract above is the target. The current code still carries a pre-reborn
-autonomous-driver shape in three places; these are recorded, not conformed to:
+The remaining pre-reborn autonomous-picker divergence and the resolved guarded
+trade path are recorded here explicitly:
 
 - **`autopilot.py` per-cycle EV picker + `EXPLORE_BASELINE_EV` "never idle."** The autopilot's
   `SELECT` step is a continuous per-tick cost-benefit scorer that picks the highest expected-value
@@ -166,21 +185,16 @@ autonomous-driver shape in three places; these are recorded, not conformed to:
   behavior, not a keep-driving baseline. A continuous EV re-pick across chains is also *de-facto
   autonomous rotation* — the reborn depletion contract forbids it (rotation is an operator
   decision).
-- **`trade_driver.run_chain()` autonomous chain runner.** `run_chain()` drives a whole discovered
-  `ProfitChain` end-to-end in one synchronous call — navigate → dock → buy → navigate → dock → sell
-  → repeat across every hop — under `MODE_AUTO_LOOP`. It is well-gated (a REQUIRED, fail-closed
-  `should_abort` and `is_armed` checked at every send choke point, a fresh-render gate before each
-  send, PALADIN letter-allowlist, no counter/haggle), and it HOLDs cleanly on any unexpected screen.
-  But it is still an autonomous multi-hop drive, not the reborn per-cycle "re-validate the
-  screen-match every tick, stop on the first unrecognized frame, hand the keyboard back" run-loop
-  owned by the [APP Autopilot Model](/architecture/app-autopilot-model.md). The reborn shape moves
-  the drive under that per-cycle-revalidating owner.
-- **Depletion as an internal `ChainHold`, not an operator escalation.** `trade_driver` detects
-  depletion (`ChainHold("depleted:...")`) and margin-floor breaches
-  (`realized_margin_below_floor:...`) and *aborts the chain internally*, after which the autopilot's
-  next tick simply re-picks the next-best candidate — the current code path is closer to silent
-  rotation than to STOP-and-hand-to-the-operator. Reborn target: depletion fires a typed escalation
-  that STOPS and surfaces to the operator, who decides whether to rotate.
+- **`trade_driver.run_chain()` divergence resolved by ADR-003.** The guarded
+  driver now runs only behind `TradeChainRunner`: exact human-confirmed
+  fingerprint, daemon re-resolution, one-pass bound, exclusive App hold, and
+  stop/disarm checked at every send. It retains fresh-render gates, PALADIN,
+  floors, reconciliation, and typed STOPs; there is no finder-initiated launch
+  or next-chain rotation.
+- **Depletion escalation resolved by ADR-003.** `ChainHold("depleted:...")`
+  and `realized_margin_below_floor:...` become the terminal guarded-run report
+  and STOP banner. The one-pass runner releases the keyboard and has no branch
+  that selects or starts another chain.
 - **§22 / TW-23 autonomous-trainer capstone re-scope.** The original §22/TW-23 "autonomous trainer"
   epic assumed the app keeps driving and selecting actions on its own. Under the reborn vision that
   capstone is re-scoped: the never-idle keep-driving appetite is retired; the app plays only taught,
