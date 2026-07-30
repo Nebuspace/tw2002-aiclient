@@ -399,6 +399,12 @@ def _status_response(session, server):
     fighters = _fighters_snapshot(session)
     if fighters is not None and fighters.outcome == OUTCOME_READ:
         resp["fighters_aboard"] = fighters.fighters
+    # WO-STATUS-CREDITS: GOALS Credits reads TOP-LEVEL `credits`, distinct
+    # from `hud.credits` (same sticky). Emit only on OUTCOME_READ; omit
+    # otherwise (never invent 0 from absence — GOALS must stay `?`).
+    credits = _credits_snapshot(session)
+    if credits is not None and credits.outcome == OUTCOME_READ:
+        resp["credits"] = credits.balance
     return resp
 
 
@@ -523,6 +529,12 @@ def _turns_snapshot(session):
 def _fighters_snapshot(session):
     """The session's fighters-aboard sticky, or `None` for a stand-in."""
     snapshot = getattr(session, "fighters_snapshot", None)
+    return snapshot() if callable(snapshot) else None
+
+
+def _credits_snapshot(session):
+    """The session's credits sticky, or `None` for a stand-in."""
+    snapshot = getattr(session, "credits_snapshot", None)
     return snapshot() if callable(snapshot) else None
 
 
