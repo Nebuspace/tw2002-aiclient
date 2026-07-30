@@ -77,6 +77,7 @@ from __future__ import annotations
 # here is exactly how that drift starts (the `T)rigger`/`T)assign` split
 # below is the same hazard, handled the same way -- by keeping each
 # register's spelling in exactly one place).
+from .chains import CHAINS_TOKEN
 from .panic import PANIC_TOKEN
 from .reflex_controls import REFLEX_TOKEN
 from .rules_library import RULES_TOKEN
@@ -88,25 +89,21 @@ from .rules_library import RULES_TOKEN
 # the two registers are canon-distinct and `stopbanner.TEACH_LINE` owns
 # the other one.
 #
-# A tuple, not a flat string, so the later WOs that add `^A)ode`,
-# `L)chains` and `P panic` extend a sequence instead of re-parsing prose.
+# A tuple, not a flat string, so later WOs extend a sequence instead of
+# re-parsing prose.
 #
-# WO-P5-071 extends this exactly as forecast -- a list edit, not a re-parse.
-# `P panic` joins the triad; `^A)ode` and `L)chains` still do not. `^A)ode`
-# is the Mode chord's token (ADR-002) and belongs to that WO; `L)chains` is
-# the Trade-Loop-Chains library popup, which needs a chain store that does
-# not exist on tip (verified: no `*chain*` module in `tw2002_aiclient/`) and
-# was ruled out of 071's scope by the hub rather than stubbed.
-#
-# WO-PLAY-REFLEX-AFFORDANCE: `V)reflex` joins before panic so the #235 wire
-# is discoverable on the calm strip. Panic stays last (canon order).
-# WO-PLAY-RULES-LIBRARY: `U)rules` peeks the blessed library after #237.
+# WO-P5-071: `P panic` joins the triad. WO-PLAY-REFLEX-AFFORDANCE /
+# WO-PLAY-RULES-LIBRARY: `V)reflex` / `U)rules` before panic. WO-TEACHBAND-
+# L-CHAINS: `L)chains` (imported CHAINS_TOKEN) immediately before panic so
+# the shipped modal is discoverable. `^A)ode` stays out (Mode chord /
+# ADR-002). Panic stays last (canon order).
 TEACH_TOKENS: tuple[str, ...] = (
     "A)nalyze",
     "R)ecord",
     "T)rigger",
     REFLEX_TOKEN,
     RULES_TOKEN,
+    CHAINS_TOKEN,
     PANIC_TOKEN,
 )
 

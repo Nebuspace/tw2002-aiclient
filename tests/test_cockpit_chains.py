@@ -28,6 +28,14 @@ def _names(rows):
     return [r["name"] for r in rows]
 
 
+# --------------------------------------------------------------- calm token
+
+def test_chains_token_spelling_is_single_source():
+    """Teach band imports this; spelling must not drift from the key offer."""
+    assert chains.CHAINS_TOKEN == "L)chains"
+    assert chains.resolve_chains_offer_key(ord(chains.CHAINS_TOKEN[0])) is True
+
+
 # ---------------------------------------------------------------- key resolve
 
 def test_l_in_both_cases_opens_the_popup():
