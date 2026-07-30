@@ -207,6 +207,13 @@ def _coach_lines(status: dict, *, width: int) -> list[str]:
             has_port=status.get("has_port") is True,
             # WO-COACH-DEAD-END-COUNT: real non-negative int only; hostile → 0.
             dead_end_count=_safe_nonneg_int(status.get("dead_end_count")) or 0,
+            # WO-COACH-EXPLORE-MODE: fail-closed string only (int/bool must not
+            # coerce into a mode); "off"/blank/absent → no card.
+            explore_mode=(
+                _safe_str(status.get("explore_mode"))
+                if isinstance(status.get("explore_mode"), str)
+                else None
+            ),
             loop_depleting=_loop_depleting_from_intervention(status),
         )
         if not triggers:

@@ -795,3 +795,73 @@ def test_goals_credits_row_reads_status_credits(session, monkeypatch):
     joined = "\n".join(lines)
     assert "987,654" in joined or "987654" in joined
     assert "Credits" in joined or "Cr" in joined
+
+
+# ===========================================================================
+# WO-COACH-EXPLORE-MODE — top-level status["explore_mode"]
+# ===========================================================================
+
+
+class _ExploreStub:
+    """Minimal runner: snapshot() is what observe_explore calls."""
+
+    def __init__(self, snapshot):
+        self._snapshot = snapshot
+
+    def snapshot(self):
+        return self._snapshot
+
+
+class _ExploreServer(_Server):
+    def __init__(self, runner):
+        self.sector_explore = runner
+
+
+def test_explore_mode_emitted_when_running_with_report(session, monkeypatch):
+    """Accept 1. Mid-run explore → top-level intent string."""
+    from tw2002_aiclient.session import sector_explore as sx
+
+    report = sx.ExploreReport(
+        world_id="w", started_at="t", min_sectors=1, intent="map_fill"
+    )
+    snap = sx.ExploreSnapshot(running=True, report=report)
+    _wire(session, monkeypatch, "Command prompt\n", LIVE_PROMPT)
+    resp = protocol._status_response(session, _ExploreServer(_ExploreStub(snap)))
+    assert resp["explore_mode"] == "map_fill"
+
+
+def test_explore_mode_omitted_when_idle(session, monkeypatch):
+    """Accept 2. Idle / no runner → key omitted; coach card stays silent."""
+    from tw2002_aiclient.session import sector_explore as sx
+
+    snap = sx.ExploreSnapshot(running=False, report=None)
+    _wire(session, monkeypatch, "Command prompt\n", LIVE_PROMPT)
+    resp = protocol._status_response(session, _ExploreServer(_ExploreStub(snap)))
+    assert "explore_mode" not in resp
+    # Default _Server has no runner — same omit.
+    assert "explore_mode" not in _status(session, monkeypatch, "idle\n", LIVE_PROMPT)
+
+
+def test_explore_mode_omitted_when_running_without_report(session, monkeypatch):
+    """Running-but-no-report must not invent a mode."""
+    from tw2002_aiclient.session import sector_explore as sx
+
+    snap = sx.ExploreSnapshot(running=True, report=None)
+    _wire(session, monkeypatch, "Command prompt\n", LIVE_PROMPT)
+    resp = protocol._status_response(session, _ExploreServer(_ExploreStub(snap)))
+    assert "explore_mode" not in resp
+
+
+def test_decisions_reads_status_explore_mode(session, monkeypatch):
+    """Consumer proof: decisions surfaces exploring_frontier from the wire."""
+    from tw2002_aiclient.cockpit.decisions import compose_decisions_lines
+    from tw2002_aiclient.session import sector_explore as sx
+
+    report = sx.ExploreReport(
+        world_id="w", started_at="t", min_sectors=1, intent="find_stardock"
+    )
+    snap = sx.ExploreSnapshot(running=True, report=report)
+    _wire(session, monkeypatch, "Command prompt\n", LIVE_PROMPT)
+    resp = protocol._status_response(session, _ExploreServer(_ExploreStub(snap)))
+    joined = "\n".join(compose_decisions_lines(resp, width=60))
+    assert "Density-scan before stepping" in joined

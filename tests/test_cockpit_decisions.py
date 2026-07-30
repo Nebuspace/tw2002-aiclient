@@ -564,3 +564,35 @@ def test_fighters_aboard_zero_renders_shipyard_card(_fresh_coach_kb):
 def test_fighters_aboard_absent_stays_honest_empty(_fresh_coach_kb):
     assert compose_decisions_lines({}, width=60) == _EMPTY_LINES
 
+
+# ---------------------------------------------------------------------------
+# WO-COACH-EXPLORE-MODE — idle DECISIONS + status explore_mode
+# ---------------------------------------------------------------------------
+
+
+def test_explore_mode_present_renders_exploring_frontier_card(_fresh_coach_kb):
+    lines = compose_decisions_lines({"explore_mode": "map_fill"}, width=60)
+    assert lines != _EMPTY_LINES
+    assert "Density-scan before stepping" in "\n".join(lines)
+
+
+@pytest.mark.parametrize(
+    "explore_mode",
+    ["off", "", "   ", None, 1, True],
+    ids=["off", "empty", "blank", "none", "int", "bool"],
+)
+def test_explore_mode_off_or_hostile_stays_honest_empty(explore_mode, _fresh_coach_kb):
+    status = (
+        {"explore_mode": explore_mode}
+        if explore_mode is not None
+        else {"explore_mode": None}
+    )
+    assert compose_decisions_lines(status, width=60) == _EMPTY_LINES
+
+
+def test_live_trace_still_wins_over_explore_mode_coach(_fresh_coach_kb):
+    status = {**_FULL_TRACE_STATUS, "explore_mode": "map_fill"}
+    lines = compose_decisions_lines(status, width=60)
+    assert any("loop @1<->3" in ln for ln in lines)
+    assert not any("Density-scan before stepping" in ln for ln in lines)
+
