@@ -205,6 +205,8 @@ def _coach_lines(status: dict, *, width: int) -> list[str]:
             # Identity-true only (WO-COACH-HAS-PORT): truthy strings / 1 must
             # not fire the trade card. Absent / False / junk → default False.
             has_port=status.get("has_port") is True,
+            # WO-COACH-DEAD-END-COUNT: real non-negative int only; hostile → 0.
+            dead_end_count=_safe_nonneg_int(status.get("dead_end_count")) or 0,
             loop_depleting=_loop_depleting_from_intervention(status),
         )
         if not triggers:
@@ -227,6 +229,14 @@ def _safe_int_or_none(value: object) -> int | None:
     if isinstance(value, bool) or not isinstance(value, int):
         return None
     return value
+
+
+def _safe_nonneg_int(value: object) -> int | None:
+    """Non-negative ``int`` when ``value`` is a real integer, else ``None``."""
+    n = _safe_int_or_none(value)
+    if n is None or n < 0:
+        return None
+    return n
 
 GLYPH_CHOSEN = "★"
 GLYPH_OTHER = "·"
