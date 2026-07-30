@@ -10,7 +10,12 @@
 #   scripts/path-leak-scan.sh --file PATH  # scan one file
 #   scripts/path-leak-scan.sh --diff -     # scan a unified diff on stdin
 #
-# Exit: 0 clean · 1 leak found · 2 usage/error
+# Default (cached) honesty — WO-PATH-LEAK-UNSTAGED-HONESTY:
+#   Empty index + clean worktree → exit 0 ("no staged changes").
+#   Empty index + dirty worktree (unstaged / untracked) → exit 1 (not a green pass).
+#   Non-empty index → scan staged diff only (pre-commit path unchanged).
+#
+# Exit: 0 clean · 1 leak found / dirty-unstaged refuse · 2 usage/error
 
 set -euo pipefail
 
@@ -57,6 +62,15 @@ case "$mode" in
   cached)
     DIFF=$(git diff --cached 2>/dev/null || true)
     if [[ -z "$DIFF" ]]; then
+      # Dirty-tree refuse: vacuous "nothing staged" must not look like a green pass
+      # when the working tree still has unstaged / untracked modifications.
+      PORCELAIN=$(git status --porcelain 2>/dev/null || true)
+      if [[ -n "$PORCELAIN" ]]; then
+        echo "FAIL [path-leak]: no staged changes, but working tree is dirty." >&2
+        echo "Stage intended paths (or discard) before treating this scan as clean." >&2
+        echo "Hint: porcelain shows unstaged/untracked work; pre-commit still scans --cached only." >&2
+        exit 1
+      fi
       echo "INFO [path-leak]: no staged changes."
       exit 0
     fi
