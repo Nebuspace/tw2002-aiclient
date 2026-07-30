@@ -548,3 +548,19 @@ def test_live_trace_still_wins_over_dead_end_coach(_fresh_coach_kb):
     lines = compose_decisions_lines(status, width=60)
     assert any("loop @1<->3" in ln for ln in lines)
     assert not any("Hide a planet in a dead-end" in ln for ln in lines)
+
+
+# ---------------------------------------------------------------------------
+# WO-STATUS-FIGHTERS-ABOARD — idle DECISIONS + status fighters_aboard
+# ---------------------------------------------------------------------------
+
+
+def test_fighters_aboard_zero_renders_shipyard_card(_fresh_coach_kb):
+    lines = compose_decisions_lines({"fighters_aboard": 0}, width=60)
+    assert lines != _EMPTY_LINES
+    assert "Holds-first ship progression" in "\n".join(lines)
+
+
+def test_fighters_aboard_absent_stays_honest_empty(_fresh_coach_kb):
+    assert compose_decisions_lines({}, width=60) == _EMPTY_LINES
+

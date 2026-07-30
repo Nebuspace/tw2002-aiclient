@@ -308,6 +308,11 @@ def _status_response(session, server):
     observe_cargo = getattr(session, "observe_cargo", None)
     if callable(observe_cargo):
         observe_cargo(text)
+    # WO-STATUS-FIGHTERS-ABOARD: same cadence as credits/cargo — status is
+    # the wire that observes, not only the wire that reports.
+    observe_fighters = getattr(session, "observe_fighters", None)
+    if callable(observe_fighters):
+        observe_fighters(text)
     observe_sector = getattr(session, "observe_sector", None)
     if callable(observe_sector):
         observe_sector(prompt_line)
@@ -388,6 +393,12 @@ def _status_response(session, server):
     turns = _turns_snapshot(session)
     if turns is not None and turns.outcome == OUTCOME_READ:
         resp["turns_left"] = turns.turns
+    # WO-STATUS-FIGHTERS-ABOARD: GOALS Fighters + coach at_shipyard read the
+    # TOP-LEVEL key. Emit only on a genuine sticky reading; omit otherwise
+    # (never invent 0 from absence — that would falsely fire at_shipyard).
+    fighters = _fighters_snapshot(session)
+    if fighters is not None and fighters.outcome == OUTCOME_READ:
+        resp["fighters_aboard"] = fighters.fighters
     return resp
 
 
@@ -506,6 +517,12 @@ def _turns_snapshot(session):
     display nicety. The real `Session` is pinned on the other side, against
     the class itself, so this can only ever excuse a double."""
     snapshot = getattr(session, "turns_snapshot", None)
+    return snapshot() if callable(snapshot) else None
+
+
+def _fighters_snapshot(session):
+    """The session's fighters-aboard sticky, or `None` for a stand-in."""
+    snapshot = getattr(session, "fighters_snapshot", None)
     return snapshot() if callable(snapshot) else None
 
 
