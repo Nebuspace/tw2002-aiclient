@@ -1,6 +1,6 @@
 # WO-PLAY-EXPLORE-FLAGS — Opt-in dock + fight_tolls from Play explore arm
 
-**Status:** OPEN · EXECUTE · HIGH · post morning-bar visible automation
+**Status:** DONE · origin `8cfda01` (#212) · Accept verified 2026-07-30
 **Posted:** 2026-07-29T04:46Z · Max carte blanche / automation continuity
 **Seat:** impl-claudecode-aiclient (offline) · live → Cursor
 **Depends:** #211 on main `f8400e8` (adapters forward both flags; dock path option-3 safe)

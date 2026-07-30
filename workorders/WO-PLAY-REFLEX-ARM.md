@@ -1,6 +1,6 @@
 # WO-PLAY-REFLEX-ARM — Play can preview + confirm-arm a reflex proposal
 
-**Status:** OPEN · EXECUTE · HIGH · visible client automation · Cursor-only  
+**Status:** DONE · origin `73c5b1c` (#235) · Accept verified 2026-07-30
 **Posted / seeded:** 2026-07-30T03:50Z · hub (Max priority: automation in the client)  
 **Seat:** `impl-aiclient-cursor`  
 **Depends:** `main` ≥ `6ea3dcd` / tip with `reflex` + `reflex_arm` + Analyze→rule-store bridge  

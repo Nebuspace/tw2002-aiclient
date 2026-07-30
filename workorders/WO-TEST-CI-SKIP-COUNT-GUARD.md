@@ -1,6 +1,6 @@
 # WO-TEST-CI-SKIP-COUNT-GUARD — rising pytest skips must fail CI
 
-**Status:** OPEN · EXECUTE · tooling · Cursor-only  
+**Status:** DONE · origin `b52e269` (#234) · Accept verified 2026-07-30
 **Posted:** banked on hub-skip-guard worktree · **Seeded for execute:** 2026-07-30T03:38Z · hub  
 **Seat:** impl-aiclient-cursor  
 **Depends:** none (CI/tooling)  
