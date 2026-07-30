@@ -155,6 +155,30 @@ def _reset_kb_cache_for_tests() -> None:
     _kb_cache = _KB_UNSET
 
 
+# Halt reason codes that mean the armed loop depleted (canon control /
+# escalation + coaching-engine). Anything else on the intervention wire —
+# near-miss, unknown, malformed — stays silent for this trigger.
+_LOOP_DEPLETION_CODES = frozenset({"floor_reached", "turn_budget_exhausted"})
+
+
+def _loop_depleting_from_intervention(status: dict) -> bool:
+    """``True`` only when ``status["intervention"]["reasons"]`` carries a
+    depletion code. Never reads ``prompt``; never invents a halt."""
+    intervention = status.get("intervention")
+    if not isinstance(intervention, dict):
+        return False
+    reasons = intervention.get("reasons")
+    if not isinstance(reasons, list):
+        return False
+    for item in reasons:
+        if not isinstance(item, dict):
+            continue
+        code = item.get("code")
+        if isinstance(code, str) and code in _LOOP_DEPLETION_CODES:
+            return True
+    return False
+
+
 def _coach_lines(status: dict, *, width: int) -> list[str]:
     """Authored coach callouts for ``status``, or ``[]`` when none apply.
 
@@ -178,6 +202,7 @@ def _coach_lines(status: dict, *, width: int) -> list[str]:
             classification=_safe_str(status.get("classification")),
             chain=chain,
             fighters_aboard=_safe_int_or_none(status.get("fighters_aboard")),
+            loop_depleting=_loop_depleting_from_intervention(status),
         )
         if not triggers:
             return []
