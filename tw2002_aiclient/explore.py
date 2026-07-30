@@ -655,6 +655,56 @@ def format_explore_decision_lines(mode: str, plan) -> list[str]:
     return [f"E) {mode}"]
 
 
+def explore_decision_lines_from_run(run: object) -> list[str] | None:
+    """Product seam for ``explore_status.run`` → DECISIONS lines.
+
+    Maps daemon intents onto the panel mode names ``format_explore_decision_lines``
+    already knows (``map_fill``→``mapfill``, ``find_stardock``→``stardock``) and
+    builds the minimal plan-shaped object that composer reads. Returns ``None``
+    when the run is unusable so the caller clears the overlay rather than
+    inventing chrome. Does not fork a second string table.
+    """
+    from types import SimpleNamespace
+
+    if not isinstance(run, dict):
+        return None
+    intent = run.get("intent")
+    nxt = run.get("next_sector")
+    if isinstance(nxt, bool) or (nxt is not None and not isinstance(nxt, int)):
+        nxt = None
+    if intent == INTENT_MAP_FILL:
+        hop = SimpleNamespace(to=nxt) if nxt is not None else None
+        plan = SimpleNamespace(next_hop=hop, mode="live")
+        return format_explore_decision_lines("mapfill", plan)
+    if intent == INTENT_FIND_STARDOCK:
+        plan = SimpleNamespace(next_sector=nxt, mode="live")
+        return format_explore_decision_lines("stardock", plan)
+    return None
+
+
+#: Status-dict key for the Play → DECISIONS explore overlay
+#: (WO-WIRE-EXPLORE-DECISION-LINES). Named constant so the vocabulary guard
+#: sees the producer write (``merged[KEY] = …; return merged``).
+EXPLORE_DECISION_LINES_KEY = "explore_decision_lines"
+
+
+def merge_explore_decision_lines(status: object, lines: object) -> object:
+    """Overlay explore DECISIONS lines onto a status snapshot.
+
+    Returns ``status`` unchanged when there is nothing to overlay. Never
+    mutates the input dict. Shape matches ``chain_status.ChainScalars.merge``
+    so the status-vocabulary scanner credits the write.
+    """
+    if not isinstance(lines, list) or not lines:
+        return status
+    if isinstance(status, dict):
+        merged = dict(status)
+    else:
+        merged = {}
+    merged[EXPLORE_DECISION_LINES_KEY] = list(lines)
+    return merged
+
+
 def find_landmark_sectors(
     world_id: str,
     landmark_name: str,

@@ -840,6 +840,10 @@ class PlayShellScreen:
     # already assigns to affordance chrome, and it is visible on every frame
     # size the cockpit draws.
     explore_band: str | None = None
+    # WO-WIRE-EXPLORE-DECISION-LINES: DECISIONS overlay lines while explore is
+    # live. Set/cleared by app.py poll; draw injects onto the status snapshot.
+    # Independent of explore_band (hint strip) — never steals cycle-progress.
+    explore_decision_lines: list[str] | None = None
 
     def __init__(
         self,
@@ -1394,6 +1398,17 @@ class PlayShellScreen:
                 status = self.status_provider() if self.status_provider is not None else None
             except Exception:  # noqa: BLE001 -- a raising provider must not crash the draw pass
                 status = None
+            # WO-WIRE-EXPLORE-DECISION-LINES: overlay explore DECISIONS lines onto
+            # the same status dict DECISIONS/fold already consume. Display-only;
+            # does not steal explore_band / cycle-progress chrome.
+            try:
+                from tw2002_aiclient import explore as _explore_overlay
+
+                status = _explore_overlay.merge_explore_decision_lines(
+                    status, getattr(self, "explore_decision_lines", None)
+                )
+            except Exception:  # noqa: BLE001 -- overlay must not crash the draw pass
+                pass
         else:
             status = None
 
