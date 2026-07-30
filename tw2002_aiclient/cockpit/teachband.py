@@ -79,6 +79,7 @@ from __future__ import annotations
 # register's spelling in exactly one place).
 from .panic import PANIC_TOKEN
 from .reflex_controls import REFLEX_TOKEN
+from .rules_library import RULES_TOKEN
 
 # Canon's standing-band spelling of the teach triad
 # (`mode-line-and-teach-controls.md §"Mode line, healthy autopilot"`, `visual-language.md §"A calm cockpit reading (App healthy, nothing to see)"`).
@@ -99,11 +100,13 @@ from .reflex_controls import REFLEX_TOKEN
 #
 # WO-PLAY-REFLEX-AFFORDANCE: `V)reflex` joins before panic so the #235 wire
 # is discoverable on the calm strip. Panic stays last (canon order).
+# WO-PLAY-RULES-LIBRARY: `U)rules` peeks the blessed library after #237.
 TEACH_TOKENS: tuple[str, ...] = (
     "A)nalyze",
     "R)ecord",
     "T)rigger",
     REFLEX_TOKEN,
+    RULES_TOKEN,
     PANIC_TOKEN,
 )
 

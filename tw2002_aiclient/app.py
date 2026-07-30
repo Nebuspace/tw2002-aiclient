@@ -20,7 +20,9 @@ from tw2002_aiclient.cockpit import explore_flags as _explore_flags
 from tw2002_aiclient.cockpit import live_refresh as _live_refresh
 from tw2002_aiclient.cockpit import record_macro as _record_macro
 from tw2002_aiclient.cockpit import reflex_controls as _reflex_controls
+from tw2002_aiclient.cockpit import rules_library as _rules_library
 from tw2002_aiclient.loops import store as _loop_store
+from tw2002_aiclient.rules import store as _rule_store
 from tw2002_aiclient.rules import writer as _rules_writer
 from tw2002_aiclient.screens import (
     BankViewScreen,
@@ -1153,6 +1155,48 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                 continue
             if action == "chains_down":
                 play.chains_session.move(1)
+                continue
+            if action == "rules_library_open":
+                # WO-PLAY-RULES-LIBRARY: U)rules — read-only blessed peek.
+                # Branch on status before claiming a count (absent ≠ empty ≠
+                # blind). Drafts stay invisible (include_drafts=False).
+                try:
+                    store = _rule_store.read_rule_store()
+                except Exception as exc:  # noqa: BLE001
+                    play.rules_library_session.open([], "unreadable")
+                    play.status_line = (
+                        f"rule store unreadable — {type(exc).__name__}"
+                    )
+                else:
+                    status = _rules_library.store_status(store)
+                    play.rules_library_session.open(
+                        _rules_library.blessed_rows(store), status,
+                    )
+                    if status == "absent":
+                        play.status_line = _rules_library.ABSENT_TEXT
+                    elif status == "unreadable":
+                        play.status_line = _rules_library.UNREADABLE_TEXT
+                    elif status == "partial":
+                        n = len(play.rules_library_session.rows)
+                        play.status_line = (
+                            f"blessed rules ({n}) — partial store"
+                        )
+                    else:
+                        n = len(play.rules_library_session.rows)
+                        play.status_line = (
+                            f"blessed rules ({n})"
+                            if n
+                            else _rules_library.EMPTY_TEXT
+                        )
+                continue
+            if action == "rules_library_close":
+                play.rules_library_session.close()
+                continue
+            if action == "rules_library_up":
+                play.rules_library_session.move(-1)
+                continue
+            if action == "rules_library_down":
+                play.rules_library_session.move(1)
                 continue
             if action == "chains_arm":
                 # Enter on a row ARMS a pending action; it never starts one.

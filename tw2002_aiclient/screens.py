@@ -23,6 +23,7 @@ from tw2002_aiclient.cockpit import control_seat as cockpit_control_seat
 from tw2002_aiclient.cockpit import covermeter as cockpit_covermeter
 from tw2002_aiclient.cockpit import panic
 from tw2002_aiclient.cockpit import reflex_controls as cockpit_reflex_controls
+from tw2002_aiclient.cockpit import rules_library as cockpit_rules_library
 from tw2002_aiclient.cockpit import decisions as cockpit_decisions
 from tw2002_aiclient.cockpit import draft_approve as cockpit_draft_approve
 from tw2002_aiclient.cockpit import draw as cockpit_draw
@@ -973,6 +974,10 @@ class PlayShellScreen:
         # no store reader of its own.  Test-visible via ``play.chains_session``.
         self.chains_session: cockpit_chains.ChainsSession = (
             cockpit_chains.ChainsSession()
+        )
+        # WO-PLAY-RULES-LIBRARY: read-only blessed rules peek (U).
+        self.rules_library_session: cockpit_rules_library.RulesLibrarySession = (
+            cockpit_rules_library.RulesLibrarySession()
         )
         # WO-P5-070: in-flight analyze draft (pre-approval).  Cleared on
         # reject; promoted to ``stub_store`` only after ``draft_approve``.
@@ -1934,6 +1939,24 @@ class PlayShellScreen:
                 # only honest recovery.
                 _cs_draw.close()
 
+        # WO-PLAY-RULES-LIBRARY: blessed rules peek (read-only). Drawn like
+        # chains over center; confirm/identity gates still paint last.
+        _rl_draw = getattr(self, "rules_library_session", None)
+        if _rl_draw is not None and _rl_draw.is_open:
+            try:
+                _center = regions.get("center") or {}
+                _w = _center.get("w")
+                lines = cockpit_rules_library.compose_rule_lines(
+                    _rl_draw,
+                    unicode_ok=uok,
+                    width=(_w - 4) if isinstance(_w, int) else 40,
+                )
+                cockpit_draw.draw_lines(
+                    self.stdscr, regions.get("center"), lines, curses.A_NORMAL, boxed=True
+                )
+            except Exception:  # noqa: BLE001
+                _rl_draw.close()
+
         # WO-P5-063: the confirm-to-arm gate. Drawn LAST and over the control
         # strip's own row, so nothing can paint on top of the one prompt that
         # spends live turns. Canon puts it on the strip's row rather than in a
@@ -2061,6 +2084,11 @@ class PlayShellScreen:
             _cs = getattr(self, "chains_session", None)
             if _cs is not None and _cs.is_open:
                 return "chains_close"
+            # WO-PLAY-RULES-LIBRARY: same dismiss-first posture for the
+            # read-only rules peek.
+            _rl = getattr(self, "rules_library_session", None)
+            if _rl is not None and _rl.is_open:
+                return "rules_library_close"
             # WO-P5-069: if the Analyze overlay is open, Esc closes it
             # rather than returning to the launcher -- "A or Esc closes"
             # (WO-P5-069 Accept).  Only the overlay is dismissed; the
@@ -2097,6 +2125,16 @@ class PlayShellScreen:
                 # never one keystroke to live money").  app.py turns this into
                 # `begin_arm_confirm`, and only a subsequent `y` spends.
                 return "chains_arm"
+        # WO-PLAY-RULES-LIBRARY: read-only peek owns cursor while open.
+        # Enter is a no-op (peek, never arm).
+        _rl = getattr(self, "rules_library_session", None)
+        if _rl is not None and _rl.is_open:
+            if key in (curses.KEY_UP, ord("k")):
+                return "rules_library_up"
+            if key in (curses.KEY_DOWN, ord("j")):
+                return "rules_library_down"
+            if key in (curses.KEY_ENTER, 10, 13):
+                return None
         if key in (curses.KEY_LEFT, curses.KEY_RIGHT, curses.KEY_UP, curses.KEY_DOWN):
             self._conn_focused = not self._conn_focused
             return None
@@ -2113,6 +2151,11 @@ class PlayShellScreen:
             if _cs is not None and _cs.is_open:
                 return "chains_close"
             return "chains_open"
+        # WO-PLAY-RULES-LIBRARY: ``U)rules`` blessed-library peek (toggle).
+        if cockpit_rules_library.resolve_rules_offer_key(key):
+            if _rl is not None and _rl.is_open:
+                return "rules_library_close"
+            return cockpit_rules_library.RULES_OFFER_INTENT
         # WO-P5-069: A Analyze on-demand overlay.  Returns a pure INTENT
         # signal only -- this class has no send path of its own
         # (``tests/test_spectate_no_send.py``'s guards remain intact).

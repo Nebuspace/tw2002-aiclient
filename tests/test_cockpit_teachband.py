@@ -40,17 +40,21 @@ def test_band_is_canon_standing_spelling() -> None:
     change to it and pin nothing.
     """
     assert teachband.compose_teach_band() == (
-        "A)nalyze  R)ecord  T)rigger  V)reflex  P panic"
+        "A)nalyze  R)ecord  T)rigger  V)reflex  U)rules  P panic"
     )
 
 
 def test_band_imports_reflex_token_spelling() -> None:
     """Single source of truth with the key-handler module (Accept #2)."""
     from tw2002_aiclient.cockpit import reflex_controls
+    from tw2002_aiclient.cockpit import rules_library
 
     assert reflex_controls.REFLEX_TOKEN == "V)reflex"
     assert reflex_controls.REFLEX_TOKEN in teachband.TEACH_TOKENS
     assert "V)reflex" in teachband.compose_teach_band()
+    assert rules_library.RULES_TOKEN == "U)rules"
+    assert rules_library.RULES_TOKEN in teachband.TEACH_TOKENS
+    assert "U)rules" in teachband.compose_teach_band()
     assert teachband.compose_teach_band().endswith("P panic")
 
 
@@ -104,7 +108,7 @@ def test_tokens_are_pure_ascii_no_unicode_twin() -> None:
 @pytest.mark.parametrize("hostile", [None, 0, object(), b"x", [], 3.5])
 def test_compose_never_raises_on_hostile_unicode_ok(hostile: object) -> None:
     assert teachband.compose_teach_band(unicode_ok=hostile) == \
-        "A)nalyze  R)ecord  T)rigger  V)reflex  P panic"
+        "A)nalyze  R)ecord  T)rigger  V)reflex  U)rules  P panic"
 
 
 # --------------------------------------------------------------------------

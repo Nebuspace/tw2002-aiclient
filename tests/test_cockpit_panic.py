@@ -137,7 +137,7 @@ def test_band_carries_panic_last():
     """Canon's band order puts panic at the tail."""
     band = teachband.compose_teach_band()
     assert band.endswith(panic.PANIC_TOKEN)
-    assert band == "A)nalyze  R)ecord  T)rigger  V)reflex  P panic"
+    assert band == "A)nalyze  R)ecord  T)rigger  V)reflex  U)rules  P panic"
 
 
 def test_band_and_module_cannot_disagree_about_the_spelling():
