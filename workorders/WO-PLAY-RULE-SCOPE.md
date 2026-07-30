@@ -1,6 +1,6 @@
 # WO-PLAY-RULE-SCOPE — Play collects rule `scope` (one-shot | repeating)
 
-**Status:** OPEN · EXECUTE · HIGH · visible client automation · Cursor-only  
+**Status:** DONE · origin `d3d82fe` (#239) · Accept verified 2026-07-30
 **Posted / seeded:** 2026-07-30T04:37Z · hub (after #237/#238 teach→bless→peek)  
 **Seat:** `impl-aiclient-cursor`  
 **Depends:** `main` ≥ `c6c0d46` (`U)rules` peek on teach band)  

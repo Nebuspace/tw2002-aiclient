@@ -1,6 +1,6 @@
 # WO-RETIRE-CYCLE-EXPLORE-MODE — delete unwired trainer mode cycler
 
-**Status:** OPEN · EXECUTE · MED · unused-code RETIRE · Cursor-only  
+**Status:** DONE · origin `9763fb0` (#247) · Accept verified 2026-07-30
 **Posted / seeded:** 2026-07-30T08:09Z · hub (post-#246; unused-code tick)  
 **Seat:** `impl-aiclient-cursor`  
 **Depends:** `main` ≥ `707efa6`  

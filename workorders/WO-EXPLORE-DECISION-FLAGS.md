@@ -1,6 +1,6 @@
 # WO-EXPLORE-DECISION-FLAGS — DECISIONS lines disclose dock/tolls arm state
 
-**Status:** OPEN · EXECUTE · MED · visible automation · Cursor-only  
+**Status:** DONE · origin `707efa6` (#246) · Accept verified 2026-07-30
 **Posted / seeded:** 2026-07-30T07:57Z · hub (post-#245)  
 **Seat:** `impl-aiclient-cursor`  
 **Depends:** `main` ≥ `912361e` (`run.next_sector` + `run.dock_new_ports` on wire)  

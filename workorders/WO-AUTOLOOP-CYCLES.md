@@ -1,6 +1,6 @@
 # WO-AUTOLOOP-CYCLES — unlock N passes now that 4/4 rails exist
 
-**Status:** OPEN · EXECUTE · HIGH · automation frontier · Cursor-only  
+**Status:** DONE · origin `30c8e57` (#243) · Accept verified 2026-07-30
 **Posted / seeded:** 2026-07-30T06:10Z · hub (after #242 hazard-halt → All four rails)  
 **Seat:** `impl-aiclient-cursor`  
 **Depends:** `main` ≥ `1d81492` (4/4 rails; `cycles` still refused only by policy)  

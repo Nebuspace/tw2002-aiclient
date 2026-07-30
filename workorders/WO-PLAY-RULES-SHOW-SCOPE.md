@@ -1,6 +1,6 @@
 # WO-PLAY-RULES-SHOW-SCOPE — U)rules lists typed `scope`
 
-**Status:** OPEN · EXECUTE · HIGH · visible client automation · Cursor-only  
+**Status:** DONE · origin `5b1afb5` (#240) · Accept verified 2026-07-30
 **Posted / seeded:** 2026-07-30T04:45Z · hub (after #239 scope identity)  
 **Seat:** `impl-aiclient-cursor`  
 **Depends:** `main` ≥ `d3d82fe` (Play collects `scope`)  

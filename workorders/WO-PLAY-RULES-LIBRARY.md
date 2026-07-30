@@ -1,6 +1,6 @@
 # WO-PLAY-RULES-LIBRARY — Play can peek the blessed rule library
 
-**Status:** OPEN · EXECUTE · HIGH · visible client automation · Cursor-only  
+**Status:** DONE · origin `c6c0d46` (#238) · Accept verified 2026-07-30
 **Posted / seeded:** 2026-07-30T04:28Z · hub (after #237 Analyze→bless closes the write path)  
 **Seat:** `impl-aiclient-cursor`  
 **Depends:** `main` ≥ `f545747` (Play collects `rule_id`/`do`/`priority` + bless)  
