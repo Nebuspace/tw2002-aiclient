@@ -6,6 +6,7 @@ No curses/terminal involved — asserts the composed lines directly, per the
 
 import pytest
 
+from tw2002_aiclient.cockpit import autonomy_keys
 from tw2002_aiclient.cockpit.decisions import (
     GLYPH_CHOSEN,
     GLYPH_OTHER,
@@ -15,7 +16,16 @@ from tw2002_aiclient.cockpit.decisions import (
 from tw2002_aiclient.cockpit.focus import _KIND_LABELS
 from tw2002_aiclient.cockpit.goals import GLYPH_BLOCKED, UNKNOWN_DETAIL
 
-_EMPTY_LINES = [UNKNOWN_DETAIL, "Exploring…"]
+# Calm-empty = autonomy HELP one-liners (WO-WIRE-AUTONOMY-HELP-LINES).
+# Width 80 fits every HELP line unclipped so Accept can assert full strings.
+_EMPTY_WIDTH = 80
+_EMPTY_LINES = list(autonomy_keys.compose_autonomy_help_lines())
+
+
+def _empty_at(width: int) -> list[str]:
+    if width <= 0:
+        return [""] * len(_EMPTY_LINES)
+    return [line[:width] for line in _EMPTY_LINES]
 
 _FULL_TRACE_STATUS = {
     "autopilot_trace": {
@@ -50,49 +60,49 @@ _FULL_TRACE_STATUS = {
 
 
 def test_status_none_is_honest_empty():
-    assert compose_decisions_lines(None, width=40) == _EMPTY_LINES
+    assert compose_decisions_lines(None, width=40) == _empty_at(40)
 
 
 def test_status_empty_dict_is_honest_empty():
-    assert compose_decisions_lines({}, width=40) == _EMPTY_LINES
+    assert compose_decisions_lines({}, width=40) == _empty_at(40)
 
 
 def test_autopilot_trace_key_absent_is_honest_empty():
-    assert compose_decisions_lines({"other": 1}, width=40) == _EMPTY_LINES
+    assert compose_decisions_lines({"other": 1}, width=40) == _empty_at(40)
 
 
 def test_autopilot_trace_non_dict_is_honest_empty():
     for bad in ("bogus", 5, [1, 2], object(), True):
-        assert compose_decisions_lines({"autopilot_trace": bad}, width=40) == _EMPTY_LINES
+        assert compose_decisions_lines({"autopilot_trace": bad}, width=40) == _empty_at(40)
 
 
 def test_candidates_absent_is_honest_empty():
-    assert compose_decisions_lines({"autopilot_trace": {}}, width=40) == _EMPTY_LINES
+    assert compose_decisions_lines({"autopilot_trace": {}}, width=40) == _empty_at(40)
 
 
 def test_candidates_empty_list_is_honest_empty():
     assert (
         compose_decisions_lines({"autopilot_trace": {"candidates": []}}, width=40)
-        == _EMPTY_LINES
+        == _empty_at(40)
     )
 
 
 def test_candidates_non_list_is_honest_empty():
     for bad in ("bogus", 5, {"a": 1}, object()):
         lines = compose_decisions_lines({"autopilot_trace": {"candidates": bad}}, width=40)
-        assert lines == _EMPTY_LINES
+        assert lines == _empty_at(40)
 
 
 def test_candidates_all_non_dict_entries_dropped_is_honest_empty():
     lines = compose_decisions_lines(
         {"autopilot_trace": {"candidates": ["bogus", 5, None, [1, 2]]}}, width=40
     )
-    assert lines == _EMPTY_LINES
+    assert lines == _empty_at(40)
 
 
 def test_status_non_dict_types_never_raise():
     for bad in ("a string", 12345, 3.14, [1, 2, 3], object(), True):
-        assert compose_decisions_lines(bad, width=40) == _EMPTY_LINES
+        assert compose_decisions_lines(bad, width=40) == _empty_at(40)
 
 
 # ---------------------------------------------------------------------------
@@ -397,8 +407,22 @@ def test_width_zero_or_negative_empties_every_line():
     assert compose_decisions_lines(_FULL_TRACE_STATUS, width=-5) == [""] * 3
 
 
-def test_width_zero_on_empty_state_is_two_empty_lines():
-    assert compose_decisions_lines(None, width=0) == ["", ""]
+def test_width_zero_on_empty_state_is_four_empty_lines():
+    assert compose_decisions_lines(None, width=0) == _empty_at(0)
+
+
+def test_empty_calm_shows_all_autonomy_help_lines() -> None:
+    """WO-WIRE-AUTONOMY-HELP-LINES Accept: four HELP strings, H/O confirm-not-auto."""
+    lines = compose_decisions_lines(None, width=_EMPTY_WIDTH)
+    assert lines == _EMPTY_LINES
+    assert autonomy_keys.EXPLORE_HELP in lines
+    assert autonomy_keys.HOLD_HELP in lines
+    assert autonomy_keys.OFFER_HELP in lines
+    assert autonomy_keys.CHAINS_HELP in lines
+    assert "confirm" in autonomy_keys.HOLD_HELP
+    assert "not auto" in autonomy_keys.HOLD_HELP
+    assert "confirm" in autonomy_keys.OFFER_HELP
+    assert "not auto" in autonomy_keys.OFFER_HELP
 
 
 # ---------------------------------------------------------------------------
@@ -471,7 +495,7 @@ def test_depletion_intervention_renders_route_longevity_card(code, _fresh_coach_
 )
 def test_non_depletion_intervention_stays_honest_empty(intervention, _fresh_coach_kb):
     status = {} if intervention is None else {"intervention": intervention}
-    assert compose_decisions_lines(status, width=60) == _EMPTY_LINES
+    assert compose_decisions_lines(status, width=60) == _empty_at(60)
 
 
 def test_live_trace_still_wins_over_depletion_coach(_fresh_coach_kb):
@@ -506,7 +530,7 @@ def test_has_port_true_renders_pair_trade_card(_fresh_coach_kb):
 )
 def test_has_port_non_identity_true_stays_honest_empty(has_port, _fresh_coach_kb):
     status = {"has_port": has_port} if has_port is not None else {"has_port": None}
-    assert compose_decisions_lines(status, width=60) == _EMPTY_LINES
+    assert compose_decisions_lines(status, width=60) == _empty_at(60)
 
 
 def test_live_trace_still_wins_over_has_port_coach(_fresh_coach_kb):
@@ -540,7 +564,7 @@ def test_dead_end_count_non_positive_int_stays_honest_empty(
         if dead_end_count is not None
         else {"dead_end_count": None}
     )
-    assert compose_decisions_lines(status, width=60) == _EMPTY_LINES
+    assert compose_decisions_lines(status, width=60) == _empty_at(60)
 
 
 def test_live_trace_still_wins_over_dead_end_coach(_fresh_coach_kb):
@@ -562,7 +586,7 @@ def test_fighters_aboard_zero_renders_shipyard_card(_fresh_coach_kb):
 
 
 def test_fighters_aboard_absent_stays_honest_empty(_fresh_coach_kb):
-    assert compose_decisions_lines({}, width=60) == _EMPTY_LINES
+    assert compose_decisions_lines({}, width=60) == _empty_at(60)
 
 
 # ---------------------------------------------------------------------------
@@ -587,7 +611,7 @@ def test_explore_mode_off_or_hostile_stays_honest_empty(explore_mode, _fresh_coa
         if explore_mode is not None
         else {"explore_mode": None}
     )
-    assert compose_decisions_lines(status, width=60) == _EMPTY_LINES
+    assert compose_decisions_lines(status, width=60) == _empty_at(60)
 
 
 def test_live_trace_still_wins_over_explore_mode_coach(_fresh_coach_kb):

@@ -355,7 +355,7 @@ def _no_daemon_capture(tmp_path_factory):
     # No fixture -> status_provider resolves to None (daemon_not_running,
     # never touching run/twd.sock) -> DECISIONS' own honest-empty collapse,
     # ["—", "Exploring…"] -- wait for its own second line, genuine content.
-    return _drive_tone_pty(tmp_path, ready_text="Exploring…")
+    return _drive_tone_pty(tmp_path, ready_text="E)xplore")
 
 
 @pytest.fixture(scope="module")

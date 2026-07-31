@@ -318,7 +318,7 @@ def _narrow_no_fixture_capture(tmp_path_factory):
     # No fixture -> status_provider resolves to None -> the fold composer's
     # all-empty collapse, ["—", "Exploring…"] -- wait for its own second
     # line, the genuine content this drive needs on screen.
-    return _drive_fold_pty(tmp_path, NARROW_ROWS, NARROW_COLS, ready_text="Exploring…")
+    return _drive_fold_pty(tmp_path, NARROW_ROWS, NARROW_COLS, ready_text="E)xplore")
 
 
 @pytest.fixture(scope="module")
@@ -526,6 +526,8 @@ def test_wide_tier_decisions_box_never_contains_folded_labels(_wide_data_fixture
 
 @_PTY_SKIP
 def test_narrow_tier_all_empty_fold_shows_honest_empty_no_labels(_narrow_no_fixture_capture):
+    from tw2002_aiclient.cockpit import autonomy_keys
+
     regions = frame_layout(NARROW_ROWS, NARROW_COLS)
     assert regions["goals"] is None
     decisions = regions["decisions"]
@@ -534,12 +536,14 @@ def test_narrow_tier_all_empty_fold_shows_honest_empty_no_labels(_narrow_no_fixt
 
     content_left = decisions["x"] + 1
     content_right = decisions["x"] + decisions["w"] - 1  # exclusive -- box's own right border
-    row0 = grid[decisions["y"] + 1][content_left:content_right].strip()
-    row1 = grid[decisions["y"] + 2][content_left:content_right].strip()
-    assert row0 == "—", f"expected the folded all-empty first line, got {row0!r}"
-    assert row1 == "Exploring…", f"expected the folded all-empty second line, got {row1!r}"
-
     decisions_text = "\n".join(grid[decisions["y"] + 1 : decisions["y"] + decisions["h"] - 1])
+    row0 = grid[decisions["y"] + 1][content_left:content_right].strip()
+    assert row0.startswith("E)xplore"), f"expected calm-empty HELP first line, got {row0!r}"
+    for help_line in autonomy_keys.compose_autonomy_help_lines():
+        assert help_line[:12] in decisions_text, (
+            f"expected HELP prefix {help_line[:12]!r} in folded DECISIONS, got {decisions_text!r}"
+        )
+
     assert "GOALS" not in decisions_text, "no label spam when nothing was actually folded in"
     assert "FOCUS" not in decisions_text, "no label spam when nothing was actually folded in"
 

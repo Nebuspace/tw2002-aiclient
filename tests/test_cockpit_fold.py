@@ -6,6 +6,7 @@ No curses/terminal involved — asserts the composed lines directly, per the
 
 import pytest
 
+from tw2002_aiclient.cockpit import autonomy_keys
 from tw2002_aiclient.cockpit.decisions import (
     GLYPH_CHOSEN,
     GLYPH_OTHER,
@@ -21,8 +22,8 @@ from tw2002_aiclient.cockpit.focus import compose_focus_lines
 # section's own field namespace, so trace-only/goals-only/focus-only tests
 # can combine them freely. The trace fixture mirrors
 # ``tests/test_cockpit_decisions.py``'s own 3-candidate fixture verbatim
-# (three candidates, not two) so its composed length (3) never coincides
-# with the honest-empty trace marker's fixed length (2) -- a deliberate
+# (three candidates, not four) so its composed length (3) never coincides
+# with the calm-empty HELP marker's fixed length (4) -- a deliberate
 # choice that keeps the width=0 "all-empty" comparison meaningful in tests
 # below rather than accidentally colliding on line count alone.
 
@@ -143,8 +144,9 @@ def test_status_none_collapses_to_pane_empty():
 
 
 def test_status_empty_dict_collapses_to_pane_empty():
-    assert compose_folded_decisions_lines({}, width=60) == ["—", "Exploring…"]
-
+    assert compose_folded_decisions_lines({}, width=60) == compose_decisions_lines(
+        None, width=60
+    )
 
 def test_status_non_dict_types_never_raise_and_collapse():
     for bad in ("a string", 12345, 3.14, [1, 2, 3], object(), True):
@@ -158,8 +160,9 @@ def test_all_three_sections_present_but_malformed_still_collapses():
     # at all -- every section still independently resolves to its own
     # honest-empty marker, so the whole pane still collapses.
     status = {"autopilot_trace": {}, "focus": {"candidates": []}}
-    assert compose_folded_decisions_lines(status, width=60) == ["—", "Exploring…"]
-
+    assert compose_folded_decisions_lines(status, width=60) == compose_decisions_lines(
+        None, width=60
+    )
 
 # ---------------------------------------------------------------------------
 # Full fixture — section order, labels, glyph pass-through, all in one pin
@@ -241,7 +244,8 @@ def test_goals_only_others_honest_empty_still_render():
 def test_focus_only_others_honest_empty_still_render():
     result = compose_folded_decisions_lines(_FOCUS_STATUS, width=60)
     assert result == (
-        ["—", "Exploring…", GOALS_LABEL]
+        list(autonomy_keys.compose_autonomy_help_lines())
+        + [GOALS_LABEL]
         + _UNKNOWN_GOALS_LINES
         + [
             FOCUS_LABEL,
@@ -348,10 +352,12 @@ def test_width_zero_goals_only_status_collapses_due_to_fixed_line_count_quirk():
     lines regardless of content, so at width<=0 its real (all-"") output is
     indistinguishable from its own empty marker (also all-"", same fixed
     length) purely by coincidence of shape -- a genuinely non-empty GOALS
-    status collapses to the pane's two-line empty at width 0 even though it
-    would render in full at any real width (proven below at width=5, where
-    "GOALS" -- exactly 5 characters -- survives unclipped)."""
-    assert compose_folded_decisions_lines(_GOALS_STATUS, width=0) == ["", ""]
+    status collapses to the pane's calm-empty HELP marker at width 0 even
+    though it would render in full at any real width (proven below at
+    width=5, where "GOALS" -- exactly 5 characters -- survives unclipped)."""
+    assert compose_folded_decisions_lines(_GOALS_STATUS, width=0) == (
+        compose_decisions_lines(None, width=0)
+    )
 
     result_wide = compose_folded_decisions_lines(_GOALS_STATUS, width=5)
     assert GOALS_LABEL in result_wide
