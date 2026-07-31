@@ -69,6 +69,27 @@ def test_source_tag_stays_within_its_reserved_width():
     assert len(V.SOURCE_TAG) <= V._SOURCE_TAG_MAX_W
 
 
+def test_below_floor_chain_row_marked_discovery():
+    """WO-WIRE-EXECUTABLE-CHAIN-VIEW Accept #1 — 1-hop is discovery-only."""
+    lines = V.format_profit_chain_lines(
+        _payload([_chain((10, 12, 10), 1, 1, 50.0)])
+    )
+    row = lines[1]
+    assert V.DISCOVERY_TAG in row
+    assert "1h" in row
+    assert V.SOURCE_TAG in row
+
+
+def test_executable_chain_row_has_no_discovery_tag():
+    """WO-WIRE-EXECUTABLE-CHAIN-VIEW Accept #1 — ≥ floor is not discovery."""
+    lines = V.format_profit_chain_lines(
+        _payload([_chain((10, 12, 11, 10), 3, 3, 30.0)])
+    )
+    row = lines[1]
+    assert V.DISCOVERY_TAG not in row
+    assert V.SOURCE_TAG in row
+
+
 # -- honest empties ---------------------------------------------------------
 
 
