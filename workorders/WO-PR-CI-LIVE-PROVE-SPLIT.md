@@ -158,6 +158,7 @@ main (clean tip)
   ├─ hub: write workorders/WO-<ID>.md
   ├─ hub: git commit -- workorders/WO-<ID>.md # WO lands on the branch first
   ├─ hub: git push -u origin wo/<WO-ID>
+  ├─ hub: scripts/wo-on-branch-check.sh wo/<WO-ID>   # WO-DEC-07 — must exit 0 before HANDOFF
   ├─ hub: gh pr create (or draft) → main      # PR exists early; encapsulates WO from commit 1
   ├─ hub: 🤝 HANDOFF with branch name + PR URL + Accept
   │
