@@ -238,33 +238,43 @@ def test_liveness_survives_every_width_the_band_renders_at() -> None:
 
 
 def test_band_drops_whole_never_truncated() -> None:
-    """All-or-nothing: no proper prefix of the band may ever appear."""
-    band = teachband.compose_teach_band()
-    # From 2 chars up, skipping whitespace-only prefixes: the calm band
-    # now carries a two-space left/right pad, so ``band[:2] == "  "``
-    # collides with ordinary chip gaps (e.g. ``MANUAL  RX``) and is not a
-    # truncated-band signal. Once a non-space character is in the prefix,
-    # it cannot occur except as this band.
-    prefixes = [
-        band[:n] for n in range(2, len(band)) if band[:n].strip()
-    ]
+    """Placed teach text is always a complete fit ladder step (never clipped).
+
+    WO-STRIP-HOTFIX-FIT-TRADE-LOGS replaced all-or-nothing drop of the *full*
+    band with progressive shorter spellings; each spelling must still appear
+    whole.
+    """
+    full = teachband.compose_teach_band()
+    legal = {full}
+    for budget in range(1, len(full) + 1):
+        fitted = teachband.fit_teach_band(budget)
+        if fitted:
+            legal.add(fitted)
     for width in range(1, 200):
-        line = _line(width, teach_band=band)
-        if band in line:
+        segs = control_seat.compose_control_strip_segments(
+            spectating=False, attached=True, liveness_text="RX 2s",
+            width=width, teach_band=full,
+        )
+        placed = [text for text, tone in segs if tone == teachband.TEACH_TONE]
+        if not placed:
             continue
-        for prefix in prefixes:
-            assert prefix not in line, (
-                f"width {width} rendered truncated band {prefix!r}"
-            )
+        assert placed[0] in legal, (
+            f"width {width} placed non-ladder band {placed[0]!r}"
+        )
 
 
 def test_narrow_row_is_byte_identical_to_no_band() -> None:
-    """Where the band cannot fit, the row is exactly what it was pre-066."""
-    band = teachband.compose_teach_band()
+    """Where even a fitted calm band cannot fit, the row matches no-band."""
+    full = teachband.compose_teach_band()
     for width in range(1, 200):
-        line = _line(width, teach_band=band)
-        if band not in line:
-            assert line == _line(width), f"width {width} changed without a band"
+        segs = control_seat.compose_control_strip_segments(
+            spectating=False, attached=True, liveness_text="RX 2s",
+            width=width, teach_band=full,
+        )
+        if any(tone == teachband.TEACH_TONE for _, tone in segs):
+            continue
+        line = "".join(text for text, _ in segs)
+        assert line == _line(width), f"width {width} changed without a band"
 
 
 @pytest.mark.parametrize("hostile", [0, object(), b"bytes", [], 3.5, ""])
@@ -331,3 +341,73 @@ def test_teachband_module_sends_nothing() -> None:
     src = inspect.getsource(teachband)
     for forbidden in ("send", "write", "socket", "subprocess", "os.system"):
         assert forbidden not in src, f"teachband references {forbidden!r}"
+
+
+
+# --------------------------------------------------------------------------
+# WO-STRIP-HOTFIX-FIT-TRADE-LOGS — progressive fit at common strip widths
+# --------------------------------------------------------------------------
+
+def test_fit_teach_band_wide_is_full_labels() -> None:
+    full = teachband.compose_teach_band()
+    assert teachband.fit_teach_band(200) == full
+    assert teachband.compose_teach_band(width=200) == full
+    assert "P)ort Trade" in full
+    assert "C)argo Hold Upgrade" in full
+
+
+def test_fit_teach_band_ladder_keeps_e_and_l() -> None:
+    for budget in (105, 90, 78, 60, 50, 40, 25, 20):
+        fitted = teachband.fit_teach_band(budget)
+        if not fitted:
+            assert budget < len("E)xplore L)ist Loops")
+            continue
+        assert "E)xplore" in fitted
+        assert "L)ist" in fitted
+
+
+@pytest.mark.parametrize("width", [100, 120, 140])
+def test_strip_widths_keep_explore_and_list_with_seat_liveness(width: int) -> None:
+    """Accept: keybinds visible at common widths with seat + liveness."""
+    band = teachband.compose_teach_band()
+    segs = control_seat.compose_control_strip_segments(
+        spectating=False,
+        attached=True,
+        liveness_text="RX 2s",
+        width=width,
+        teach_band=band,
+        trainer_labels=True,
+    )
+    line = "".join(t for t, _ in segs)
+    assert "E)xplore" in line, f"width {width} lost E)xplore: {line!r}"
+    assert "L)ist" in line, f"width {width} lost L)ist: {line!r}"
+    if width >= 140:
+        assert "P)ort Trade" in line
+
+
+@pytest.mark.parametrize("width", [100, 120, 140])
+def test_strip_widths_with_optional_cov_still_show_keybinds(width: int) -> None:
+    band = teachband.compose_teach_band()
+    segs = control_seat.compose_control_strip_segments(
+        spectating=False,
+        attached=True,
+        liveness_text="RX 12s",
+        width=width,
+        teach_band=band,
+        trainer_labels=True,
+        coverage_meter=("COV 75%", None),
+    )
+    line = "".join(t for t, _ in segs)
+    assert "E)xplore" in line, f"width {width}+COV lost E: {line!r}"
+    assert "L)ist" in line, f"width {width}+COV lost L: {line!r}"
+
+
+def test_fit_preserves_toggle_off_state() -> None:
+    fitted = teachband.fit_teach_band(
+        80,
+        port_trade_on=False,
+        cargo_upgrade_on=True,
+        ship_upgrade_on=False,
+    )
+    assert "P)ort" in fitted and "OFF" in fitted
+    assert "·OFF" in fitted

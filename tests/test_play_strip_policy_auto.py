@@ -209,9 +209,8 @@ def test_upgrade_offer_with_cargo_on_fires_with_no_confirm(monkeypatch):
     assert "App-armed" in play.status_line
 
 
-def test_upgrade_offer_already_running_refusal_is_quiet(monkeypatch):
-    """`already_running` is the daemon safely refusing a same-tick re-fire —
-    must not spam `status_line` every idle tick."""
+def test_upgrade_offer_already_running_refusal_is_honest(monkeypatch):
+    """WO-STRIP-HOTFIX-FIT-TRADE-LOGS: ok=False must not leave stuck starting…"""
     monkeypatch.setattr(_autonomy_policy, "choose_offer", lambda *_a, **_k: _offer("upgrade"))
     monkeypatch.setattr(_stardock_hold_plan, "plan_from_status", lambda *_a, **_k: _HOLD_PLAN)
     monkeypatch.setattr(
@@ -222,7 +221,39 @@ def test_upgrade_offer_already_running_refusal_is_quiet(monkeypatch):
     play.status_line = "unchanged"
     trade_poll, hold_poll = app_mod._autonomy_auto_fire(play, profile=_PROFILE, run_dir=None)
     assert (trade_poll, hold_poll) == (False, False)
-    assert play.status_line == "App-armed — starting hold buy @ StarDock 7… (Cargo Hold Upgrade\u00b7ON)"
+    assert "starting hold" not in play.status_line
+    assert "already_running" in play.status_line
+    assert "did not start" in play.status_line
+
+
+def test_run_chain_offer_refuse_rewrites_starting_line(monkeypatch):
+    """ok=False after trade_chain_start must not leave 'starting trade…'."""
+    monkeypatch.setattr(_autonomy_policy, "choose_offer", lambda *_a, **_k: _offer("run_chain"))
+    monkeypatch.setattr(_trade_chain_plan, "plan_from_chain", lambda *_a, **_k: _TRADE_PLAN)
+    monkeypatch.setattr(
+        adapters, "trade_chain_start",
+        lambda *a, **k: _TradeResult(ok=False, reason="cash_floor"),
+    )
+    play = _FakePlay(port_trade_on=True)
+    trade_poll, hold_poll = app_mod._autonomy_auto_fire(play, profile=_PROFILE, run_dir=None)
+    assert (trade_poll, hold_poll) == (False, False)
+    assert "starting trade" not in play.status_line
+    assert "cash_floor" in play.status_line
+    assert "did not start" in play.status_line
+
+
+def test_upgrade_offer_policy_refuse_rewrites_starting_line(monkeypatch):
+    monkeypatch.setattr(_autonomy_policy, "choose_offer", lambda *_a, **_k: _offer("upgrade"))
+    monkeypatch.setattr(_stardock_hold_plan, "plan_from_status", lambda *_a, **_k: _HOLD_PLAN)
+    monkeypatch.setattr(
+        adapters, "stardock_hold_start",
+        lambda *a, **k: _HoldResult(ok=False, reason="insufficient_credits"),
+    )
+    play = _FakePlay(cargo_upgrade_on=True)
+    trade_poll, hold_poll = app_mod._autonomy_auto_fire(play, profile=_PROFILE, run_dir=None)
+    assert (trade_poll, hold_poll) == (False, False)
+    assert "starting hold" not in play.status_line
+    assert "insufficient_credits" in play.status_line
 
 
 def test_ship_upgrade_toggle_never_reaches_any_adapter(monkeypatch):
