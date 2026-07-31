@@ -548,7 +548,13 @@ def test_the_cached_scalars_reach_the_real_status_provider(monkeypatch):
     _arm, _explore, screen = _drive(
         monkeypatch, [L], store=TWO_LOOPS, recompute=lambda wid, **kw: DISCOVERED,
     )
-    assert screen.status_provider() == {
+    got = screen.status_provider()
+    # WO-PRIORITY-ENGINE-FOCUS-WIRE: outermost wrap adds focus.candidates;
+    # assert the chain/world scalars delivery path separately from ranking.
+    focus = got.pop("focus", None)
+    assert isinstance(focus, dict)
+    assert isinstance(focus.get("candidates"), list) and focus["candidates"]
+    assert got == {
         "ok": True, "credits": 7,
         "chain_hops": 3, "chain_unit": "hops",
         "known_sectors": SECTOR_COUNT,
