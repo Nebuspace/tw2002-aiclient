@@ -5,8 +5,10 @@ discipline, one deliberate addition: **this listing can be partial, and it
 has to say so.**
 
 Pure: no filesystem, no session, no curses, no import of `chain_search`,
-`chains`, `trade_adapter`, or anything under `tw2002_aiclient.session` /
-`adapters`. `payload` is read entirely by `getattr(..., default)` -- exactly
+`trade_adapter`, or anything under `tw2002_aiclient.session` /
+`adapters`. Imports `chains.is_executable_chain` only — the execute-floor
+helper that marks discovery-only short cycles (WO-WIRE-EXECUTABLE-CHAIN-VIEW).
+`payload` is read entirely by `getattr(..., default)` -- exactly
 `cockpit/chains.py::compose_chain_lines`'s discipline -- so a real
 `chain_search.ProfitChainResult` or any duck-typed stand-in both work
 without this module importing that one to check.
@@ -50,6 +52,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from tw2002_aiclient.chains import is_executable_chain
+
 TITLE = "Discovered profit chains"
 
 UNKNOWN = "?"  # no-swap (visual-language.md)
@@ -65,6 +69,10 @@ SELECTED_ASCII = ">"
 # ceiling is caught by a test rather than silently eating another column.
 SOURCE_TAG = "detected"
 _SOURCE_TAG_MAX_W = 12
+
+# Below `MIN_CHAIN_LINKS_TO_EXECUTE` — still shown, never dressed as an
+# earn-macro candidate (WO-WIRE-EXECUTABLE-CHAIN-VIEW).
+DISCOVERY_TAG = "discovery"
 
 PARTIAL_UNICODE = "⚠ partial — search truncated"
 PARTIAL_ASCII = "! partial - search truncated"
@@ -90,14 +98,23 @@ def _int_or_none(value: object) -> int | None:
 
 
 def _hops_text(hops: object) -> str:
-    """Hop count = number of trade legs, the closed-set size that decides
-    `chains.is_executable_chain`. Reserved and never truncated."""
+    """Hop count = number of trade legs (same count `is_executable_chain`
+    uses). Reserved and never truncated."""
     n = None
     if isinstance(hops, (tuple, list)):
         n = len(hops)
     if n is None or n < 0:
         return f"{UNKNOWN}h"
     return f"{n}h"
+
+
+def _chain_is_executable(chain: object) -> bool:
+    """True when the row clears the earn-macro floor; hostile shapes → True
+    (do not falsely stamp discovery)."""
+    try:
+        return bool(is_executable_chain(chain))  # type: ignore[arg-type]
+    except Exception:  # noqa: BLE001
+        return True
 
 
 def _turns_text(turns: object) -> str:
@@ -133,19 +150,21 @@ def _format_one_chain(chain: object, *, marker: str, width: int) -> str:
     reserved FIRST and never truncated -- hop-count and cr/turn are the
     genuinely-known, never-fabricated numbers on this row, and the
     provenance tag is what keeps it from being read as a taught macro.
-    Only the sector ring is clipped, the same "protect the count, clip the
+    Discovery-only (below-floor) rows append ``DISCOVERY_TAG``. Only the
+    sector ring is clipped, the same "protect the count, clip the
     description" discipline `compose_chain_lines` uses."""
     marker_text = f"{marker} " if marker else "  "
     hops_text = _hops_text(getattr(chain, "hops", None))
     turns_text = _turns_text(getattr(chain, "turns", None))
     cr_text = _cr_per_turn_text(getattr(chain, "cr_per_turn", None))
     body = _sectors_text(getattr(chain, "sectors", None))
+    discovery = f" {DISCOVERY_TAG}" if not _chain_is_executable(chain) else ""
 
     tail = f"{hops_text} {turns_text} {cr_text}"
-    reserved = len(tail) + 2 + len(SOURCE_TAG)
+    reserved = len(tail) + 2 + len(SOURCE_TAG) + len(discovery)
     avail = max(4, width - len(marker_text) - reserved)
     body = body[:avail]
-    return f"{marker_text}{body:<{avail}}  {tail}  {SOURCE_TAG}"
+    return f"{marker_text}{body:<{avail}}  {tail}  {SOURCE_TAG}{discovery}"
 
 
 def format_profit_chain_lines(
