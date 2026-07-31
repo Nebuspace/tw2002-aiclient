@@ -30,16 +30,9 @@ RULES:
 
 <!-- Items not yet resolved. -->
 
-### OPEN-PLAY-STATUS-MIDSTRIP — control-strip mid segment for app `status_line` / offers (2026-07-27)
+### OPEN-PLAY-STATUS-MIDSTRIP — SUPERSEDED 2026-07-31
 
-**Gap:** Live sessions always populate LOGS (`log_tail`), so `status_line` never paints (it is only a LOGS empty-tail fallback). The explore offer (`press E`) is therefore invisible in real use. The hint band is canon-reserved for A/R/T affordances, or for a **live-run** progress claim — an offer is not a live run, and parking the offer there evicts teach tokens (measured: 4 pty pins).
-
-**Proposed kernel (hub-ruled 2026-07-27 under Max’s one-client / visible-automation bar; awaiting Max mark RESOLVED):**
-1. While an explore (or taught) run is **live**, the hint band may show cycle/progress (existing canon `:231-232`).
-2. App `status_line` / explore **offer** paints on a **mid control-strip segment** between left chips (+ TX) and the right hint band — does not replace LOGS, does not claim the hint band.
-3. Update `canon/surfaces/mode-line-and-teach-controls.md` spacing diagram to name that mid segment once Accepted.
-
-**Code in flight:** `wo/PLAY-OFFER-VISIBLE-ON-LIVE` @ `0e13244` (WIP: (c) progress band done; (a) mid-strip not started).
+**Superseded by** `RESOLVED-TRAINER-STRIP-AND-GUTTER-20260731`: App `status_line` / offers paint in **LOGS**, not a mid control-strip segment. Calm teachband is the trainer key row (E/P/L/T/C/S), not A/R/T.
 
 ---
 
@@ -48,7 +41,24 @@ RULES:
 
 <!-- Items with a human decision on record. Waiting for ADR drafting or already captured. -->
 
-<!-- (empty — nothing resolved yet) -->
+### RESOLVED-TRAINER-STRIP-AND-GUTTER-20260731 — trainer Play chrome + App-armed default (Max 2026-07-31)
+
+**Edge:** Conflict + Change — calm strip / seat+arm / CONN / panic / money-path confirm-not-auto vs Max trainer model.
+
+**Ruling (Max, session 2026-07-31 — “Proceed”):**
+
+1. **Seat:** One chip with Mode key — `^A)APP-ARMED` / `^A)MANUAL-HUMAN`. Merge APP+ARM. Halt = leave App → Manual (STOP/PANIC redundant as operator controls).
+2. **Calm keys:** `E)xplore` · `P)ort Trade·ON/OFF` (default ON) · `L)oops` · `T)rade Loop Chain` · `C)argo Hold Upgrade·ON/OFF` (default ON) · `S)hip Upgrade·ON/OFF` (default ON). Retire A/R/T/V/U/H/O/Panic from calm band.
+3. **CONN:** Top line beside server/host; **green slowly flashing** when connected — not bottom strip.
+4. **Outcomes:** `status_line` → **LOGS** (not mid-strip).
+5. **Left gutter:** GOALS outer box with **FOCUS nested inside**; tall **FORMATIONS** panel down toward LOGS.
+6. **Automation:** **App-armed auto = default** (trainer). Soft confirm-only banked. Per-action `y` is not the calm default under APP-ARMED + ·ON policies.
+
+**Code waves:** `WO-PLAY-STRIP-TRAINER-CHROME` → `WO-LEFT-GUTTER-NEST-FOCUS-FORMATIONS` → `WO-PLAY-STRIP-POLICY-AUTO`.
+
+**Canon:** Amend `mode-line-and-teach-controls.md`, `trainer-cockpit.md`, arm/seat prose as WOs land. Soft confirm (A) remains optional later — not ship path.
+
+**Public-safe.** No credentials.
 
 ---
 

@@ -1,53 +1,63 @@
-"""The standing teach hint band -- the A/R/T affordance tokens that sit on
-the control strip whenever the cockpit is up (WO-P5-066).
+"""The standing calm teach hint band on the control strip (WO-P5-066;
+redefined for the trainer surface by WO-PLAY-STRIP-TRAINER-CHROME per
+DECISION `RESOLVED-TRAINER-STRIP-AND-GUTTER-20260731` point 2).
 
-# What this is
+# What this is now
 
-Canon (`canon/surfaces/mode-line-and-teach-controls.md`) surfaces the three
-teach moves in TWO registers, and they are deliberately spelled
-differently:
+The developer-repertoire band this module used to emit (`A)nalyze
+R)ecord T)rigger V)reflex U)rules H)old? O)ffer? L)chains P panic`) is
+**retired from this calm band** by Max's ratified DECISION -- the
+underlying features (Record, Assign-Trigger, Analyze, reflex, rules
+library, the hold/offer confirm gates, the chains popup, panic) are all
+UNCHANGED and still reachable by their existing keys; only the standing
+CHROME that advertises them on the calm strip changes, in favor of a
+trainer-plain vocabulary:
 
-- **The standing hint band** (`:136`, and `visual-language.md §"A calm cockpit reading (App healthy, nothing to see)"`) --
-  `^A)ode  A)nalyze  R)ecord  T)rigger  L)chains  P panic`. Calm-state
-  chrome, always present, right-aligned on the control strip.
-- **The STOP banner's `teach:` line** (`:146`, `:271`) --
-  `A)nalyze  R)ecord  T)assign`, promoted onto the banner at a halt so the
-  three moves sit where the escalation happened. That register belongs to
-  `cockpit.stopbanner.TEACH_LINE` and is NOT this module's business.
+    E)xplore  P)ort Trade·ON  L)oops  T)rade Loop Chain
+    C)argo Hold Upgrade·ON  S)hip Upgrade·ON
 
-Note the `T` token: **`T)rigger` on the standing band, `T)assign` on the
-banner.** Canon spells both, and `stopbanner.py`'s own constant comment
-calls the distinction out. This module therefore does not import or reuse
-`TEACH_LINE` -- reusing it would ship the banner's `T)assign` into the
-calm band and quietly violate the "labels per canon" contract while still
-passing any check that merely looks for the letters A, R and T.
+- `E)xplore` reuses `autonomy_keys.EXPLORE_TOKEN` verbatim -- same key,
+  same word, already trainer-plain.
+- `L)oops` is a RELABEL of the same `L` key `chains.CHAINS_TOKEN`
+  ("L)chains") already opens -- this module does not import or change
+  `CHAINS_TOKEN` (other surfaces still cite the popup by that name); it
+  is a local, calm-band-only spelling of the identical affordance.
+- `T)rade Loop Chain` is a RELABEL of the same `T` key the old
+  `T)rigger` token named (`screens.py`'s `assign_trigger` intent,
+  WO-P5-068) -- trainer wording for the same wire, not a new one.
+- `P)ort Trade`, `C)argo Hold Upgrade`, `S)hip Upgrade` are NEW
+  chrome-only toggles (WO-PLAY-STRIP-TRAINER-CHROME): each renders
+  `·ON`/`·OFF` from a caller-supplied boolean (default **ON**, per
+  DECISION), driven by `PlayShellScreen`'s own local Play state. `P`/`C`/
+  `S` (`screens.py::PlayShellScreen.handle_key`, REVISE 2026-07-31) flip
+  their own boolean directly and return no intent -- there is no
+  daemon-side spend gate behind them yet, only this instance's own
+  display state. `P` is DELIBERATELY no longer `cockpit.panic`'s key on
+  this calm path (the STATUS-DONE cut of this WO left that old wire live
+  underneath the new label, a plausible-but-wrong claim caught in hub
+  REVISE): `cockpit/panic.py` itself is untouched, only the calm-path
+  binding moved. A daemon-side spend gate for these three toggles lands
+  in a follow-on WO (WO-PLAY-STRIP-POLICY-AUTO); until then this is
+  intentionally an honest "the label exists, the toggle is local paint"
+  state, the same kind of WO-scoped intermediate `A`/`R`/`T` were during
+  their own pre-wire days (see history below).
 
-# Scope -- the triad only
+The STOP banner's own `teach:` line (`cockpit.stopbanner.TEACH_LINE`,
+`A)nalyze R)ecord T)assign`) is a DIFFERENT register/surface entirely and
+is untouched by this WO -- it names the same underlying Record/Trigger
+affordances at the moment of a halt, in the developer spelling canon's
+escalation banner still uses. This module never imported `TEACH_LINE`
+before and still does not.
 
-Canon's full band carries six tokens. This module emits **only the A/R/T
-triad**: `^A)ode` is the Mode chord (ADR-002 / WO-P5-061-ENTRY) and
-`L)chains` / `P panic` are the N5 operate-the-app cluster (WO-071). Those
-are other WOs' tokens; a later WO extends the band additively rather than
-this one guessing at their placement. `TEACH_TOKENS` is the seam that
-makes that extension a list edit rather than a re-parse of a flat string.
+# History (why the old band's shape looked the way it did)
 
-# Labels only -- nothing here is wired
-
-`A`/`R`/`T` are **not bound to any key handler on tip**, by design: the
-wires are WO-067 (Record), WO-068 (Assign-Trigger) and WO-069 (Analyze).
-This band names three moves the human *will* be able to make and stops
-there, exactly as `stopbanner.py`'s band-3 does for the halt register.
-`tests/test_cockpit_teachband.py` pins that separation mechanically --
-the cockpit's `handle_key` must keep returning `None` for `A`, `R` and
-`T` -- so a future wire cannot land silently without the pin that owns
-its WO going red first.
-
-That "advertises a key that does nothing yet" state is a deliberate,
-WO-scoped intermediate, not an oversight: canon's calm band is part of
-the surface's teaching function (the human learns the repertoire exists
-before needing it), and the alternative -- hiding the affordances until
-all three wires land -- would ship three separate surface changes instead
-of one.
+Kept for context, not because any of it still ships: the pre-trainer band
+was built up WO-by-WO (`P5-066` A/R/T triad -> `P5-071` panic ->
+`PLAY-REFLEX-AFFORDANCE`/`PLAY-RULES-LIBRARY` V/U ->
+`PLAY-HELP-AUTONOMY-KEYS` H/O -> `TEACHBAND-L-CHAINS` L)chains), each
+tracking the label a real key handler had just gained, exactly the
+"advertise a key, wire it later" posture the trainer's own P/C/S toggles
+now reuse for a different repertoire.
 
 # Rendering contract
 
@@ -72,45 +82,63 @@ never raises regardless of any argument's type or content.
 
 from __future__ import annotations
 
-# WO-P5-071. Imported rather than re-spelled: the band and the key handler
-# must never disagree about what the panic token says, and a second literal
-# here is exactly how that drift starts (the `T)rigger`/`T)assign` split
-# below is the same hazard, handled the same way -- by keeping each
-# register's spelling in exactly one place).
-from .autonomy_keys import HOLD_TOKEN, OFFER_TOKEN
-from .chains import CHAINS_TOKEN
-from .panic import PANIC_TOKEN
-from .reflex_controls import REFLEX_TOKEN
-from .rules_library import RULES_TOKEN
+# `EXPLORE_TOKEN` is imported rather than re-spelled -- the band and the
+# real `E` key handler must never disagree about the word, same
+# single-source-of-truth discipline the retired imports below used to
+# keep for their own tokens.
+from .autonomy_keys import EXPLORE_TOKEN
 
-# Canon's standing-band spelling of the teach triad
-# (`mode-line-and-teach-controls.md §"Mode line, healthy autopilot"`, `visual-language.md §"A calm cockpit reading (App healthy, nothing to see)"`).
-#
-# `T)rigger` -- NOT the banner's `T)assign`. See this module's docstring;
-# the two registers are canon-distinct and `stopbanner.TEACH_LINE` owns
-# the other one.
-#
-# A tuple, not a flat string, so later WOs extend a sequence instead of
-# re-parsing prose.
-#
-# WO-P5-071: `P panic` joins the triad. WO-PLAY-REFLEX-AFFORDANCE /
-# WO-PLAY-RULES-LIBRARY: `V)reflex` / `U)rules` before panic. WO-TEACHBAND-
-# L-CHAINS: `L)chains` (imported CHAINS_TOKEN) immediately before panic so
-# the shipped modal is discoverable. WO-PLAY-HELP-AUTONOMY-KEYS: `H)old?` /
-# `O)ffer?` (`?` = confirm-not-auto) sit just before `L)chains`. `E)xplore`
-# stays on the autonomy HELP one-liners (and the post-ensure "press E"
-# offer) so the calm strip still fits a typical 120-col row. `^A)ode` stays
-# out (Mode chord / ADR-002). Panic stays last (canon order).
+# Canon's middle-dot separator for a toggle's ON/OFF suffix
+# (`cockpit/strip.py`'s own `SEP` -- both are the same NO-SWAP glyph,
+# `visual-language.md` glyph table: `·` never gets an ASCII substitute).
+_TOGGLE_SEP = "\u00b7"
+
+# The trainer calm band's own labels (WO-PLAY-STRIP-TRAINER-CHROME).
+# Deliberately LOCAL literals, not re-imports of `chains.CHAINS_TOKEN`
+# ("L)chains") or the retired `"T)rigger"` -- see the module docstring's
+# "What this is now" section for why: this is a calm-band-only RELABEL of
+# the same two keys, and every other surface that still cites the popup
+# by its own name keeps doing so unchanged.
+LOOPS_TOKEN = "L)oops"
+TRADE_LOOP_CHAIN_TOKEN = "T)rade Loop Chain"
+
+# The three toggle labels' PREFIX only -- ``compose_teach_band`` appends
+# the ``·ON``/``·OFF`` suffix from the caller's own boolean at call time,
+# so there is no single fixed "the" token for these three the way there
+# is for `LOOPS_TOKEN`/`TRADE_LOOP_CHAIN_TOKEN` above.
+PORT_TRADE_LABEL = "P)ort Trade"
+CARGO_UPGRADE_LABEL = "C)argo Hold Upgrade"
+SHIP_UPGRADE_LABEL = "S)hip Upgrade"
+
+
+def _toggle_token(label: str, on: object) -> str:
+    """``"{label}·ON"`` / ``"{label}·OFF"`` from any caller-supplied
+    truthiness. Never raises: an unevaluable ``on`` (a raising
+    ``__bool__``) degrades to ``ON`` -- DECISION's own stated default for
+    all three trainer toggles, so a hostile/unset value reads as the
+    canon-default state rather than an arbitrary OFF.
+    """
+    try:
+        lit = bool(on)
+    except Exception:
+        lit = True
+    return f"{label}{_TOGGLE_SEP}{'ON' if lit else 'OFF'}"
+
+
+# Canon's standing calm-band spelling (DECISION
+# `RESOLVED-TRAINER-STRIP-AND-GUTTER-20260731` point 2). A tuple, not a
+# flat string, so a later WO can extend it additively. Rendered at the
+# DEFAULT (all-ON) toggle state -- `compose_teach_band`'s own toggle
+# kwargs recompute the three toggle tokens for any other state; this
+# tuple is the reference/default reading other modules may check
+# membership against (mirroring the old band's `TEACH_TOKENS` seam).
 TEACH_TOKENS: tuple[str, ...] = (
-    "A)nalyze",
-    "R)ecord",
-    "T)rigger",
-    REFLEX_TOKEN,
-    RULES_TOKEN,
-    HOLD_TOKEN,
-    OFFER_TOKEN,
-    CHAINS_TOKEN,
-    PANIC_TOKEN,
+    EXPLORE_TOKEN,
+    _toggle_token(PORT_TRADE_LABEL, True),
+    LOOPS_TOKEN,
+    TRADE_LOOP_CHAIN_TOKEN,
+    _toggle_token(CARGO_UPGRADE_LABEL, True),
+    _toggle_token(SHIP_UPGRADE_LABEL, True),
 )
 
 # Two spaces between tokens -- canon renders the band that way in every
@@ -127,11 +155,32 @@ TOKEN_GAP = "  "
 TEACH_TONE = "chrome"
 
 
-def compose_teach_band(*, unicode_ok: object = True) -> str:
-    """The standing A/R/T hint band as one plain string.
+def compose_teach_band(
+    *,
+    unicode_ok: object = True,
+    port_trade_on: object = True,
+    cargo_upgrade_on: object = True,
+    ship_upgrade_on: object = True,
+) -> str:
+    """The standing calm-band hint line as one plain string.
 
-    Returns the joined ``TEACH_TOKENS`` band. `unicode_ok` is accepted and
-    ignored (see the module docstring: `KEY)verb` has no Unicode twin).
-    Never raises.
+    ``E)xplore  P)ort Trade·{ON|OFF}  L)oops  T)rade Loop Chain
+    C)argo Hold Upgrade·{ON|OFF}  S)hip Upgrade·{ON|OFF}`` -- see the
+    module docstring for what each token means and why P/C/S carry a
+    caller-supplied boolean instead of a fixed word. All three toggle
+    kwargs default to ``True`` (DECISION's own stated default), so
+    calling this with no arguments reproduces `TEACH_TOKENS` joined
+    verbatim.
+
+    ``unicode_ok`` is accepted and ignored (see the module docstring:
+    `KEY)verb` has no Unicode twin). Never raises.
     """
-    return TOKEN_GAP.join(TEACH_TOKENS)
+    tokens = (
+        EXPLORE_TOKEN,
+        _toggle_token(PORT_TRADE_LABEL, port_trade_on),
+        LOOPS_TOKEN,
+        TRADE_LOOP_CHAIN_TOKEN,
+        _toggle_token(CARGO_UPGRADE_LABEL, cargo_upgrade_on),
+        _toggle_token(SHIP_UPGRADE_LABEL, ship_upgrade_on),
+    )
+    return TOKEN_GAP.join(tokens)

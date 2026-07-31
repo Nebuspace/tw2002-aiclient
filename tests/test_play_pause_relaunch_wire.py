@@ -245,11 +245,14 @@ def test_pause_then_relaunch_do_not_confuse_each_others_gate_state(monkeypatch):
 
 
 # --------------------------------------------------------------------------
-# Neither key shadows panic or the teach keys in the real loop
+# Neither key shadows the trainer toggle keys or the teach keys in the real
+# loop. `p` is a local Port Trade toggle, not panic, on this calm path
+# (hub REVISE 2026-07-31, WO-PLAY-STRIP-TRAINER-CHROME) -- it returns no
+# intent, so its expected `screen.actions` entry is `None`, not `"panic"`.
 # --------------------------------------------------------------------------
 
 @pytest.mark.parametrize("key,expected", [
-    (ord("p"), "panic"),
+    (ord("p"), None),
     (ord("a"), "analyze_open"),
     (ord("r"), "record_toggle"),
     (ord("t"), "assign_trigger"),

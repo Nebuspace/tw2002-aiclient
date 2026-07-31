@@ -26,55 +26,58 @@ CANON = (
 # --------------------------------------------------------------------------
 
 def test_band_is_canon_standing_spelling() -> None:
-    """WO-P5-071 adds `P panic`; WO-PLAY-REFLEX-AFFORDANCE adds `V)reflex`.
-
-    `P panic` is spelled with a SPACE, not a paren. Canon's prose at
-    `mode-line-and-teach-controls.md:235` says "every token uses the uniform
-    `KEY)verb` shape", which would make this `P)anic` -- but the band
-    literal canon actually prints is `P panic`, identically at `:136`,
-    `:220` and `visual-language.md:306`. Three consistent cross-file
-    literals beat one generalisation that overlooks its own last token, so
-    the literal is what ships and the conflict is reported to the hub.
-    Kept as an inline literal, NOT derived from `TEACH_TOKENS`: an
-    expectation built from the product's own constant would follow any
-    change to it and pin nothing.
-
-    WO-PLAY-HELP-AUTONOMY-KEYS adds `H)old?` / `O)ffer?`
-    (`?` = confirm-not-auto) immediately before `L)chains`.
+    """WO-PLAY-STRIP-TRAINER-CHROME / DECISION
+    `RESOLVED-TRAINER-STRIP-AND-GUTTER-20260731` point 2 replaces the
+    developer-repertoire calm band (`A)nalyze R)ecord T)rigger V)reflex
+    U)rules H)old? O)ffer? L)chains P panic`) with the trainer's own
+    E/P/L/T/C/S vocabulary. Kept as an inline literal, NOT derived from
+    `TEACH_TOKENS`: an expectation built from the product's own constant
+    would follow any change to it and pin nothing.
     """
     assert teachband.compose_teach_band() == (
-        "A)nalyze  R)ecord  T)rigger  V)reflex  U)rules  "
-        "H)old?  O)ffer?  L)chains  P panic"
+        "E)xplore  P)ort Trade\u00b7ON  L)oops  T)rade Loop Chain  "
+        "C)argo Hold Upgrade\u00b7ON  S)hip Upgrade\u00b7ON"
     )
 
 
 def test_band_imports_reflex_token_spelling() -> None:
-    """Single source of truth with the key-handler module (Accept #2)."""
+    """WO-PLAY-STRIP-TRAINER-CHROME retired V)reflex/U)rules/H)old?/O)ffer?/
+    L)chains/P panic from the CALM BAND (their underlying modules and key
+    handlers are unchanged and untouched by this WO -- only this band's own
+    membership changed). `E)xplore` is now imported into the band verbatim
+    from `autonomy_keys.EXPLORE_TOKEN` -- single source of truth with the
+    real `E` key handler, same discipline the retired imports used to keep
+    for their own tokens."""
     from tw2002_aiclient.cockpit import autonomy_keys
     from tw2002_aiclient.cockpit import chains
     from tw2002_aiclient.cockpit import reflex_controls
     from tw2002_aiclient.cockpit import rules_library
 
+    # The retired tokens' own modules/constants are UNCHANGED (features
+    # still reachable by their existing keys) -- only band MEMBERSHIP
+    # changed.
     assert reflex_controls.REFLEX_TOKEN == "V)reflex"
-    assert reflex_controls.REFLEX_TOKEN in teachband.TEACH_TOKENS
-    assert "V)reflex" in teachband.compose_teach_band()
+    assert reflex_controls.REFLEX_TOKEN not in teachband.TEACH_TOKENS
+    assert "V)reflex" not in teachband.compose_teach_band()
     assert rules_library.RULES_TOKEN == "U)rules"
-    assert rules_library.RULES_TOKEN in teachband.TEACH_TOKENS
-    assert "U)rules" in teachband.compose_teach_band()
+    assert rules_library.RULES_TOKEN not in teachband.TEACH_TOKENS
+    assert "U)rules" not in teachband.compose_teach_band()
     assert autonomy_keys.HOLD_TOKEN == "H)old?"
     assert autonomy_keys.OFFER_TOKEN == "O)ffer?"
-    assert autonomy_keys.HOLD_TOKEN in teachband.TEACH_TOKENS
-    assert autonomy_keys.OFFER_TOKEN in teachband.TEACH_TOKENS
-    assert "H)old?" in teachband.compose_teach_band()
-    assert "O)ffer?" in teachband.compose_teach_band()
-    # E stays on HELP one-liners (width) — still discoverable beside O/H/L.
-    assert autonomy_keys.EXPLORE_TOKEN == "E)xplore"
-    assert autonomy_keys.EXPLORE_TOKEN not in teachband.TEACH_TOKENS
+    assert autonomy_keys.HOLD_TOKEN not in teachband.TEACH_TOKENS
+    assert autonomy_keys.OFFER_TOKEN not in teachband.TEACH_TOKENS
+    assert "H)old?" not in teachband.compose_teach_band()
+    assert "O)ffer?" not in teachband.compose_teach_band()
     assert chains.CHAINS_TOKEN == "L)chains"
-    assert chains.CHAINS_TOKEN in teachband.TEACH_TOKENS
-    assert "L)chains" in teachband.compose_teach_band()
-    assert teachband.TEACH_TOKENS[-2] is chains.CHAINS_TOKEN
-    assert teachband.compose_teach_band().endswith("P panic")
+    assert chains.CHAINS_TOKEN not in teachband.TEACH_TOKENS
+    assert "L)chains" not in teachband.compose_teach_band()
+    assert not teachband.compose_teach_band().endswith("P panic")
+
+    # `E)xplore` DOES join the trainer band, imported verbatim.
+    assert autonomy_keys.EXPLORE_TOKEN == "E)xplore"
+    assert autonomy_keys.EXPLORE_TOKEN in teachband.TEACH_TOKENS
+    assert "E)xplore" in teachband.compose_teach_band()
+    assert teachband.TEACH_TOKENS[0] is autonomy_keys.EXPLORE_TOKEN
 
 
 def test_autonomy_help_one_liners_confirm_not_auto() -> None:
@@ -99,49 +102,65 @@ def test_autonomy_help_one_liners_confirm_not_auto() -> None:
 
 
 def test_band_uses_trigger_not_the_banner_s_assign() -> None:
-    """The whole point of the WO's wording criterion.
-
-    Canon spells the T token TWO ways on purpose: `T)rigger` on the calm
-    standing band, `T)assign` on the STOP banner's promoted teach line.
-    Reusing `stopbanner.TEACH_LINE` here would still contain an A, an R and
-    a T -- and would still be wrong.
-    """
+    """The calm band and the STOP banner's own promoted teach line are two
+    DIFFERENT surfaces -- WO-PLAY-STRIP-TRAINER-CHROME only retired A/R/T
+    from the CALM band (in favor of `T)rade Loop Chain`, a relabel of the
+    same underlying `assign_trigger` wire); `stopbanner.TEACH_LINE`'s own
+    developer-register `T)assign` is untouched (a different surface, per
+    `teachband.py`'s own module docstring)."""
     band = teachband.compose_teach_band()
-    assert "T)rigger" in band
+    assert "T)rade Loop Chain" in band
+    assert "T)rigger" not in band
     assert "T)assign" not in band
     assert "T)assign" in stopbanner.TEACH_LINE  # the other register, unchanged
 
 
 def test_both_registers_are_grounded_in_canon_verbatim() -> None:
-    """Neither spelling is this repo's invention -- both appear in canon."""
+    """Neither spelling is this repo's invention -- both appear in canon.
+
+    WO-PLAY-STRIP-TRAINER-CHROME's canon amendment cites the NEW trainer
+    calm band verbatim alongside the (unchanged, still-cited) developer
+    band and the STOP banner's own untouched teach line."""
     text = CANON.read_text(encoding="utf-8")
-    assert "A)nalyze  R)ecord  T)rigger" in text     # standing band, :136
-    assert "A)nalyze  R)ecord  T)assign" in text     # STOP banner, :271
+    assert "A)nalyze  R)ecord  T)rigger" in text     # developer band (superseded for this surface, still cited)
+    assert "A)nalyze  R)ecord  T)assign" in text     # STOP banner, untouched
+    assert (
+        "E)xplore  P)ort Trade\u00b7ON  L)oops  T)rade Loop Chain  "
+        "C)argo Hold Upgrade\u00b7ON  S)hip Upgrade\u00b7ON"
+    ) in text  # trainer calm band, the amendment's own citation
 
 
 def test_band_does_not_carry_other_wos_tokens() -> None:
-    """Still guarding scope creep — `^A)ode` stays foreign (ADR-002).
-
-    `P panic` joined in WO-P5-071; `L)chains` joins in WO-TEACHBAND-L-CHAINS
-    now that the modal ships. Mode chord remains out of this band.
-    """
+    """Still guarding scope creep — `^A)ode` stays foreign (ADR-002), and
+    the developer-repertoire tokens WO-PLAY-STRIP-TRAINER-CHROME retired
+    (`L)chains`, `P panic`) do not leak back in."""
     band = teachband.compose_teach_band()
     assert "^A)ode" not in band
-    assert "L)chains" in band
+    assert "L)chains" not in band
+    assert "P panic" not in band
 
 
-def test_tokens_are_pure_ascii_no_unicode_twin() -> None:
-    """`visual-language.md:156`: `KEY)verb` -> `KEY)verb` (no swap)."""
+def test_tokens_have_no_unicode_twin_to_swap() -> None:
+    """`visual-language.md:156`: `KEY)verb` -> `KEY)verb` (no swap).
+
+    `unicode_ok` has zero effect either way -- the SAME identity
+    `cockpit.strip.SEP = "\u00b7"` already establishes for the profile
+    strip's own middle-dot separator (`visual-language.md`'s glyph table:
+    `·` is a NO-SWAP glyph, not an ASCII/Unicode twin pair), so
+    `compose_teach_band()` is no longer pure-ASCII the way the retired
+    developer band was -- the P/C/S toggle suffix's `·` is this same
+    canon-established NO-SWAP glyph, not a Unicode feature this module
+    ever offers an ASCII fallback for."""
     assert teachband.compose_teach_band(unicode_ok=True) == \
         teachband.compose_teach_band(unicode_ok=False)
-    assert teachband.compose_teach_band().isascii()
+    assert "\u00b7" in teachband.compose_teach_band()
 
 
 @pytest.mark.parametrize("hostile", [None, 0, object(), b"x", [], 3.5])
 def test_compose_never_raises_on_hostile_unicode_ok(hostile: object) -> None:
     assert teachband.compose_teach_band(unicode_ok=hostile) == (
-        "A)nalyze  R)ecord  T)rigger  V)reflex  U)rules  "
-        "H)old?  O)ffer?  L)chains  P panic"
+        "E)xplore  P)ort Trade\u00b7ON  L)oops  T)rade Loop Chain  "
+        "C)argo Hold Upgrade\u00b7ON  S)hip Upgrade\u00b7ON"
     )
 
 
@@ -158,13 +177,17 @@ def _line(width: int, **kw: object) -> str:
 
 
 def test_band_renders_on_a_wide_row() -> None:
-    line = _line(120, teach_band=teachband.compose_teach_band())
-    assert "A)nalyze  R)ecord  T)rigger" in line
+    # The trainer band is longer than the retired developer one, so the
+    # "wide enough" width is wider too -- 140 (not 120) is comfortably past
+    # the worst-case MANUAL seat label's own budget need (see
+    # `_compose_segments`'s own priority-under-pressure docstring).
+    line = _line(140, teach_band=teachband.compose_teach_band())
+    assert "E)xplore  P)ort Trade" in line
 
 
 def test_band_is_absent_when_not_passed() -> None:
     """Opt-in: every pre-066 caller keeps its exact previous row."""
-    assert "A)nalyze" not in _line(120)
+    assert "E)xplore" not in _line(120)
 
 
 def test_band_does_not_disturb_the_row_width() -> None:
@@ -250,9 +273,11 @@ def test_segments_join_byte_identical_to_line() -> None:
 
 def test_band_segment_carries_the_chrome_tone() -> None:
     band = teachband.compose_teach_band()
+    # width=140, not 120 -- see `test_band_renders_on_a_wide_row`'s own
+    # comment on why the trainer band needs a wider "renders" width.
     segs = control_seat.compose_control_strip_segments(
         spectating=False, attached=True, liveness_text="RX 2s",
-        width=120, teach_band=band,
+        width=140, teach_band=band,
     )
     tones = [tone for text, tone in segs if text == band]
     assert tones == [teachband.TEACH_TONE]

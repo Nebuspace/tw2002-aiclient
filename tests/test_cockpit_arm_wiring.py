@@ -1,27 +1,37 @@
-"""WO-P5-062 Layer-B -- the ARM indicator's placement in the control strip
-(``cockpit.control_seat``) and its wiring through ``screens.
-PlayShellScreen.draw()``.
+"""WO-P5-062 Layer-B, revised by WO-PLAY-STRIP-TRAINER-CHROME -- the ARM
+indicator's placement in the control strip (``cockpit.control_seat``) and
+its wiring through ``screens.PlayShellScreen.draw()``.
 
-Layer-A (the pure state extraction and label/tone mapping) lives in
-``tests/test_cockpit_arm.py``. This file proves the three things a pure
-composer test cannot:
+DECISION `RESOLVED-TRAINER-STRIP-AND-GUTTER-20260731` point 1 retires the
+separate, daemon-sourced ARM chip from THIS product's draw wiring: the
+merged seat chip (`^A)APP-ARMED`/`^A)MANUAL-HUMAN`, via
+`compose_control_strip_segments(..., trainer_labels=True)`) replaces it.
+`cockpit/arm.py` and `cockpit_arm.compose_arm_chip` are UNCHANGED and still
+exist as a pure composer (Layer-A: ``tests/test_cockpit_arm.py``) -- only
+``screens.py`` no longer calls them. This file now proves:
 
-  1. **Arm and seat are independent** (Accept #1) -- not merely that both
-     render, but that neither input can move the other's output. An armed
-     autopilot that does NOT hold the seat is a legitimate state and is
-     representable here.
-  2. **Arming cannot happen implicitly** (Accept #3) -- the cockpit holds
-     no arm state of its own, so there is nothing for any action to flip.
-     Proved by driving the paths that could plausibly arm and by pinning
-     the chip's only input to the daemon's own reported payload.
-  3. The chip reaches a real drawn row without crowding out the liveness
-     cluster the strip already carries.
+  1. **The merged seat chip renders correctly for all three seat states**,
+     and never depends on the daemon's ``status["autopilot"]`` payload --
+     the trainer's "App holding the seat" == "armed" reading is a purely
+     LOCAL, client-side fact (DECISION point 6), not a second daemon-
+     verified claim the way the retired ARM chip was.
+  2. **SPECTATE never lies APP-ARMED** (DECISION point 1's explicit
+     honesty carve-out) -- no key, seat transition, or daemon payload can
+     make a spectating instance claim an armed/manual seat.
+  3. **No separate ARM chip ever reaches the drawn row** -- none of
+     ``ARM_ON_LABEL``/``ARM_OFF_LABEL``/``ARM_UNKNOWN_LABEL`` appear on the
+     control strip regardless of the daemon's reported autopilot state.
+  4. The merged chip reaches a real drawn row, styled, without crowding
+     out the liveness cluster the strip already carries.
+  5. The PURE composer layer (``compose_control_strip_segments``'s own
+     ``arm_chip`` parameter) is untouched and still supports a non-trainer
+     caller supplying an arm chip explicitly -- proven in section 4 below,
+     unchanged by this WO.
 
 Harness: the headless fake-stdscr idiom every sibling cockpit-panel suite
 uses (``tests/test_cockpit_spectate.py``'s ``_RecordingWin``, reused
 verbatim by ``tests/test_cockpit_stopbanner_wiring.py``) -- real
-``draw()``, real ``frame_layout``, no pty, no daemon, no network. The
-real-terminal proof lives in ``tests/test_cockpit_arm_pty.py``.
+``draw()``, real ``frame_layout``, no pty, no daemon, no network.
 """
 
 from __future__ import annotations
@@ -34,7 +44,6 @@ from tw2002_aiclient import screens as screens_mod
 from tw2002_aiclient.cockpit import arm as cockpit_arm
 from tw2002_aiclient.cockpit import control_seat
 from tw2002_aiclient.cockpit.arm import (
-    ARM_GAP,
     ARM_OFF_LABEL,
     ARM_ON_LABEL,
     ARM_UNKNOWN_LABEL,
@@ -43,6 +52,10 @@ from tw2002_aiclient.cockpit.control_seat import (
     APP_LABEL,
     MANUAL_LABEL,
     SPECTATE_LABEL,
+    TRAINER_APP_ARMED_LABEL,
+    TRAINER_APP_ARMED_LABEL_NARROW,
+    TRAINER_MANUAL_HUMAN_LABEL,
+    TRAINER_MANUAL_HUMAN_LABEL_NARROW,
     compose_control_strip_segments,
 )
 
@@ -65,7 +78,12 @@ _SEATS = {
     SPECTATE_LABEL: (True, False),
 }
 
-# The three arm readings, as the status payloads that produce them.
+# Three distinct daemon status payloads that the retired ARM chip used to
+# read (`ARM ON`/`ARM OFF`/`ARM ?`). Kept under these names purely as three
+# VARIED status fixtures for the "the merged seat label never depends on
+# this payload" tests below -- `screens.py`'s draw() no longer reads
+# ``status["autopilot"]`` for anything, so no chip keyed to these labels
+# ever reaches the row any more (see section 2/3 below).
 _ARMS = {
     ARM_ON_LABEL: {"autopilot": {"running": True}},
     ARM_OFF_LABEL: {"autopilot": {"running": False}},
@@ -135,55 +153,60 @@ def _drawn_row(monkeypatch, status, *, spectating=False, attached=False) -> str:
 
 
 # ---------------------------------------------------------------------------
-# 1. ACCEPT #1 -- arm state and seat state are orthogonal.
+# 1. Merged trainer seat chip -- correct per seat state, and never moved by
+#    the retired ARM chip's would-be input (the daemon autopilot payload).
 # ---------------------------------------------------------------------------
+
+_TRAINER_MERGED = {
+    APP_LABEL: TRAINER_APP_ARMED_LABEL,
+    MANUAL_LABEL: TRAINER_MANUAL_HUMAN_LABEL,
+    SPECTATE_LABEL: SPECTATE_LABEL,
+}
 
 
 @pytest.mark.parametrize("seat_label", list(_SEATS))
 @pytest.mark.parametrize("arm_label_text", list(_ARMS))
-def test_every_seat_and_arm_combination_renders_both_chips(
+def test_every_seat_state_renders_its_merged_trainer_label_regardless_of_daemon_arm(
     monkeypatch, seat_label, arm_label_text
 ):
-    """All nine combinations, including the three the WO calls out as the
-    point of the whole change: an armed autopilot that does not hold the
-    seat. ``ARM ON`` beside ``MANUAL — YOU HAVE CONTROL`` is not a
-    contradiction to be suppressed -- it is the honest report that the
-    human has the keyboard while a taught behaviour remains armed."""
+    """The merged-chip replacement for the retired ARM-chip Accept #1: the
+    trainer's seat+armed chip is a purely LOCAL reading (DECISION point 6)
+    and must render identically no matter what the daemon reports for
+    ``autopilot`` -- there is no longer a second, daemon-sourced claim on
+    this row for a seat transition to leak into or out of."""
     spectating, attached = _SEATS[seat_label]
     row = _drawn_row(
         monkeypatch, _ARMS[arm_label_text], spectating=spectating, attached=attached
     )
-    assert seat_label in row
-    assert arm_label_text in row
+    assert _TRAINER_MERGED[seat_label] in row
 
 
-def test_the_arm_reading_is_unmoved_by_every_seat_state(monkeypatch):
-    """Independence, direction one: hold the daemon's report fixed, walk
-    every seat state, and assert the arm text never changes. This is
-    stronger than "both render" -- it fails if the seat state is ever
-    allowed to leak into the arm decision (e.g. a future "we're attached,
-    so surely nothing is armed" shortcut)."""
-    for status_label, status in _ARMS.items():
-        seen = set()
-        for spectating, attached in _SEATS.values():
-            row = _drawn_row(monkeypatch, status, spectating=spectating, attached=attached)
-            seen.add(next(a for a in _ARMS if a in row))
-        assert seen == {status_label}, (
-            f"arm reading moved with the seat state: {seen}"
-        )
-
-
-def test_the_seat_reading_is_unmoved_by_every_arm_state(monkeypatch):
-    """Independence, direction two -- the mirror, which matters just as
-    much: arming must never appear to change who holds the keyboard.
-    That is this WO's stated hazard (ARM != take the human lock) observed
-    at the surface the operator actually reads."""
+def test_the_merged_label_is_unmoved_by_every_daemon_arm_state(monkeypatch):
+    """Independence, direction one, restated for the merged chip: hold the
+    seat fixed, walk every daemon ``autopilot`` payload the retired ARM
+    chip used to read, and assert the merged label text never changes."""
     for seat_label, (spectating, attached) in _SEATS.items():
         seen = set()
         for status in _ARMS.values():
             row = _drawn_row(monkeypatch, status, spectating=spectating, attached=attached)
-            seen.add(next(s for s in _SEATS if s in row))
-        assert seen == {seat_label}, f"seat reading moved with the arm state: {seen}"
+            seen.add(_TRAINER_MERGED[seat_label] in row)
+        assert seen == {True}, (
+            f"merged label for {seat_label!r} moved with the daemon arm payload"
+        )
+
+
+def test_spectate_never_lies_an_armed_or_manual_seat(monkeypatch):
+    """DECISION point 1's explicit honesty carve-out: SPECTATE must never
+    render either merged claim (``-ARMED`` or ``-HUMAN``), no matter what
+    the daemon reports. A spectating instance holds no seat and must not
+    be caught implying otherwise."""
+    for status in _ARMS.values():
+        row = _drawn_row(monkeypatch, status, spectating=True, attached=False)
+        assert SPECTATE_LABEL in row
+        assert TRAINER_APP_ARMED_LABEL not in row
+        assert TRAINER_APP_ARMED_LABEL_NARROW not in row
+        assert TRAINER_MANUAL_HUMAN_LABEL not in row
+        assert TRAINER_MANUAL_HUMAN_LABEL_NARROW not in row
 
 
 def test_arm_reads_a_different_input_than_the_seat_badge_entirely(monkeypatch):
@@ -237,53 +260,44 @@ _PLAUSIBLE_KEYS = [
 ]
 
 
-def test_no_key_and_no_seat_transition_can_make_the_indicator_read_armed(monkeypatch):
-    """Accept #3, behaviourally. The daemon reports a disarmed autopilot
-    throughout. Every plausible key is routed, every seat transition
-    ``app.py::_run_play`` performs is applied by hand, and the strip is
-    redrawn after each -- ``ARM ON`` must never appear on any frame."""
-    win = _RecordingWin(FULL_ROWS, FULL_COLS)
-    screen = _screen(monkeypatch, win, {"autopilot": {"running": False}})
-
-    for spectating, attached in ((False, False), (False, True), (True, False)):
-        screen.spectating, screen.attached = spectating, attached
-        for key in _PLAUSIBLE_KEYS:
-            screen.handle_key(key)
-            win.calls.clear()
-            screen.draw()
-            row = _control_strip_text(win)
-            assert ARM_ON_LABEL not in row, (
-                f"key {key!r} at seat ({spectating}, {attached}) produced an ARM ON claim"
-            )
-            assert ARM_OFF_LABEL in row
-
-
-def test_that_assertion_is_not_vacuous_only_the_daemons_report_can_arm(monkeypatch):
-    """The companion without which the test above proves nothing.
-
-    Identical drive, identical keys, identical seat transitions -- the ONE
-    thing changed is the daemon's own reported payload, and now ``ARM ON``
-    appears on every frame. So the absence above is a real property of the
-    cockpit, not an artefact of a chip that simply never says ``ARM ON``."""
+def test_no_key_and_no_seat_transition_can_make_a_spectating_seat_read_armed(monkeypatch):
+    """Accept #3/DECISION point 1, behaviourally, for the merged chip. The
+    daemon reports an ``autopilot.running: True`` payload throughout --
+    the single input that would have driven the retired ARM chip to
+    ``ARM ON`` on every frame. Every plausible key is routed and the strip
+    is redrawn after each: a spectating seat must never once claim
+    ``-ARMED``/``-HUMAN``, and an App/Manual seat's merged label must never
+    move off its own honest reading because of this key or payload."""
     win = _RecordingWin(FULL_ROWS, FULL_COLS)
     screen = _screen(monkeypatch, win, {"autopilot": {"running": True}})
 
     for spectating, attached in ((False, False), (False, True), (True, False)):
         screen.spectating, screen.attached = spectating, attached
+        seat_label = next(s for s, pair in _SEATS.items() if pair == (spectating, attached))
         for key in _PLAUSIBLE_KEYS:
             screen.handle_key(key)
             win.calls.clear()
             screen.draw()
-            assert ARM_ON_LABEL in _control_strip_text(win)
+            row = _control_strip_text(win)
+            if seat_label == SPECTATE_LABEL:
+                assert TRAINER_APP_ARMED_LABEL not in row
+                assert TRAINER_APP_ARMED_LABEL_NARROW not in row
+                assert TRAINER_MANUAL_HUMAN_LABEL not in row
+                assert TRAINER_MANUAL_HUMAN_LABEL_NARROW not in row
+            else:
+                assert _TRAINER_MERGED[seat_label] in row, (
+                    f"key {key!r} at seat {seat_label!r} moved the merged label"
+                )
 
 
-def test_the_chip_only_ever_sees_the_object_the_status_provider_returned(monkeypatch):
-    """The structural half of Accept #3: the cockpit cannot fabricate an
-    arm input, because the only value that ever reaches ``compose_arm_
-    chip`` is -- by identity, not by equality -- the exact object the
-    daemon poll handed back. A locally-synthesised or locally-amended
-    payload would be a different object and would fail here."""
-    payload = {"autopilot": {"running": False}}
+def test_no_arm_chip_related_call_reaches_the_retired_composer(monkeypatch):
+    """The structural half of Accept #3, restated: ``screens.py`` no
+    longer imports or calls ``cockpit_arm.compose_arm_chip`` at all, so
+    there is nothing left for a key or seat transition to route into it.
+    Proved by spying on the composer itself (still reachable via
+    ``cockpit_arm`` directly, since the module is unchanged) and driving
+    every plausible key through a full draw pass -- the spy must never
+    fire."""
     seen: list[object] = []
     real = cockpit_arm.compose_arm_chip
 
@@ -291,16 +305,17 @@ def test_the_chip_only_ever_sees_the_object_the_status_provider_returned(monkeyp
         seen.append(status)
         return real(status)
 
-    monkeypatch.setattr(screens_mod.cockpit_arm, "compose_arm_chip", _spy)
+    monkeypatch.setattr(cockpit_arm, "compose_arm_chip", _spy)
     win = _RecordingWin(FULL_ROWS, FULL_COLS)
-    screen = _screen(monkeypatch, win, payload)
+    screen = _screen(monkeypatch, win, {"autopilot": {"running": False}})
     for key in _PLAUSIBLE_KEYS:
         screen.handle_key(key)
         screen.draw()
 
-    assert seen, "compose_arm_chip was never reached -- this test proves nothing"
-    for status in seen:
-        assert status is payload
+    assert not seen, (
+        "screens.py's draw() reached the retired cockpit_arm.compose_arm_chip "
+        f"composer: {seen!r}"
+    )
 
 
 def test_the_cockpit_holds_no_arm_state_of_its_own(monkeypatch):
@@ -340,19 +355,19 @@ def test_the_cockpit_holds_no_arm_state_of_its_own(monkeypatch):
     assert not offenders, f"cockpit is caching arm state in {offenders}"
 
 
-def test_a_dropped_status_poll_degrades_to_unknown_never_to_a_calm_disarmed(monkeypatch):
-    """The failure mode with real consequences: the daemon goes away
-    mid-session. The chip must stop claiming ``ARM OFF`` the moment it
-    stops having evidence for it -- an operator must not read a stale calm
-    as a live one."""
+def test_a_dropped_status_poll_does_not_disturb_the_local_merged_label(monkeypatch):
+    """The failure mode the retired ARM chip existed to guard against (the
+    daemon going away mid-session) no longer has a daemon-sourced claim on
+    this row to degrade at all: the merged label is documented, local
+    chrome (DECISION point 6 -- ``screens.py``'s ``__init__`` comment), so
+    a dropped/malformed poll must not crash the draw and must leave the
+    default App seat's ``-ARMED`` reading exactly where it was."""
     for status in (None, {}, {"ok": False}, {"autopilot": {}}):
-        row = _drawn_row(monkeypatch, status)
-        assert ARM_UNKNOWN_LABEL in row
-        assert ARM_OFF_LABEL not in row
-        assert ARM_ON_LABEL not in row
+        row = _drawn_row(monkeypatch, status)  # default seat = App (False, False)
+        assert TRAINER_APP_ARMED_LABEL in row
 
 
-def test_a_raising_status_provider_shows_unknown_rather_than_a_calm_claim(monkeypatch):
+def test_a_raising_status_provider_does_not_crash_the_draw_pass(monkeypatch):
     win = _RecordingWin(FULL_ROWS, FULL_COLS)
     monkeypatch.setattr(screens_mod.curses, "has_colors", lambda: False)
     profile = screens_mod.ProfileRow(
@@ -364,8 +379,8 @@ def test_a_raising_status_provider_shows_unknown_rather_than_a_calm_claim(monkey
         raise RuntimeError("provider exploded")
 
     screen.status_provider = _boom
-    screen.draw()
-    assert ARM_UNKNOWN_LABEL in _control_strip_text(win)
+    screen.draw()  # must not raise
+    assert TRAINER_APP_ARMED_LABEL in _control_strip_text(win)
 
 
 # ---------------------------------------------------------------------------
@@ -374,59 +389,62 @@ def test_a_raising_status_provider_shows_unknown_rather_than_a_calm_claim(monkey
 # ---------------------------------------------------------------------------
 
 
-def test_the_arm_chip_lands_immediately_right_of_the_seat_chip(monkeypatch):
+def test_the_merged_seat_chip_lands_hard_left_with_no_arm_chip_anywhere_on_the_row(
+    monkeypatch,
+):
+    """Canon's cell-#1 priority (``mode-line-and-teach-controls.md``
+    ~223) still holds, and DECISION point 1 additionally forbids a
+    second, separate ARM chip beside it -- the merged label is now the
+    entire hard-left claim, and none of the retired chip's own text
+    (``ARM ON``/``ARM OFF``/``ARM ?``) appears anywhere on the row."""
     row = _drawn_row(monkeypatch, _ARMS[ARM_ON_LABEL])
-    assert row.startswith(APP_LABEL + ARM_GAP + ARM_ON_LABEL)
+    assert row.startswith(TRAINER_APP_ARMED_LABEL)
+    for arm_text in _ARMS:
+        assert arm_text not in row
 
 
-def test_the_liveness_cluster_still_survives_beside_both_chips(monkeypatch):
+def test_the_liveness_cluster_still_survives_beside_the_merged_chip(monkeypatch):
     """The strip's pre-existing, operationally load-bearing "is it
-    frozen?" signal keeps its full space -- the new chip is secondary
-    content and must never be the reason it is lost."""
+    frozen?" signal keeps its full space -- the merged seat chip is not
+    the reason it would ever be lost."""
     for status in _ARMS.values():
         row = _drawn_row(monkeypatch, status)
         assert "→" in row
 
 
-def test_the_armed_chip_carries_the_badge_attributes(monkeypatch):
+def test_the_merged_armed_seat_chip_carries_the_badge_attributes(monkeypatch):
     """Canon's badge law (``mode-line-and-teach-controls.md`` ~179-181):
-    reverse-video is the single "selected/active/badge" signal. Colours
-    are off in this harness, so the honest remainder of the warn tone is
-    A_BOLD -- the chip is still a chip without colour."""
+    reverse-video is the single "selected/active/badge" signal, applied
+    to the App seat's ``ok`` tone whether or not this WO's trainer label
+    remap is in effect -- the remap only ever changes the label text
+    (``_trainer_seat_label``), never the tone it carries."""
     win = _RecordingWin(FULL_ROWS, FULL_COLS)
     screen = _screen(monkeypatch, win, _ARMS[ARM_ON_LABEL])
     screen.draw()
-    attrs = [attr for _x, text, attr in _control_strip_calls(win) if ARM_ON_LABEL in text]
-    assert attrs, "the ARM ON chip was not drawn as its own segment"
+    attrs = [
+        attr for _x, text, attr in _control_strip_calls(win)
+        if TRAINER_APP_ARMED_LABEL in text
+    ]
+    assert attrs, "the merged App-armed chip was not drawn as its own segment"
     for attr in attrs:
         assert attr & curses.A_REVERSE
         assert attr & curses.A_BOLD
 
 
-def test_the_disarmed_chip_stays_calm_and_unbadged(monkeypatch):
-    """The muted register ``SPECTATE`` already establishes on this row:
-    a proven-disarmed autopilot is the "nothing to see here" state and
-    must not compete for attention with the seat chip beside it."""
+def test_the_spectate_chip_stays_calm_and_unbadged(monkeypatch):
+    """The muted register ``SPECTATE`` already establishes on this row
+    stays muted under the trainer remap too -- ``_trainer_seat_label``
+    only remaps ``APP_LABEL``/``MANUAL_LABEL``, never ``SPECTATE_LABEL``,
+    so a spectating instance is never dressed up as a badge."""
     win = _RecordingWin(FULL_ROWS, FULL_COLS)
-    screen = _screen(monkeypatch, win, _ARMS[ARM_OFF_LABEL])
+    screen = _screen(monkeypatch, win, _ARMS[ARM_OFF_LABEL], spectating=True, attached=False)
     screen.draw()
-    attrs = [attr for _x, text, attr in _control_strip_calls(win) if ARM_OFF_LABEL in text]
+    attrs = [
+        attr for _x, text, attr in _control_strip_calls(win) if SPECTATE_LABEL in text
+    ]
     assert attrs
     for attr in attrs:
         assert not attr & curses.A_REVERSE
-
-
-def test_a_raising_arm_composer_never_crashes_the_draw_pass(monkeypatch):
-    def _boom(*_a, **_k):
-        raise RuntimeError("arm composer exploded")
-
-    monkeypatch.setattr(screens_mod.cockpit_arm, "compose_arm_chip", _boom)
-    win = _RecordingWin(FULL_ROWS, FULL_COLS)
-    screen = _screen(monkeypatch, win, _ARMS[ARM_ON_LABEL])
-    screen.draw()  # must not raise
-    row = _control_strip_text(win)
-    assert APP_LABEL in row  # the seat chip and the rest of the row survive
-    assert "→" in row
 
 
 # ---------------------------------------------------------------------------

@@ -108,9 +108,16 @@ def test_teach_band_is_visible_on_a_real_terminal(_capture) -> None:
 
 @_PTY_SKIP
 def test_each_teach_token_is_individually_visible(_capture) -> None:
-    """Guards the failure where the row renders but a token is clipped."""
+    """Guards the failure where the row renders but a token is clipped.
+
+    WO-PLAY-STRIP-TRAINER-CHROME retired the developer A/R/T/V/U/P-panic
+    tokens from this calm band -- the trainer's own six tokens replace
+    them."""
     grid = pyte_grid(_capture, FULL_ROWS, FULL_COLS)
-    for token in ("A)nalyze", "R)ecord", "T)rigger", "V)reflex", "U)rules", "P panic"):
+    for token in (
+        "E)xplore", "P)ort Trade", "L)oops", "T)rade Loop Chain",
+        "C)argo Hold Upgrade", "S)hip Upgrade",
+    ):
         assert find_text(grid, token), f"token {token!r} not visible"
 
 
@@ -118,13 +125,14 @@ def test_each_teach_token_is_individually_visible(_capture) -> None:
 def test_calm_cockpit_shows_the_standing_spelling_not_the_banner_s(_capture) -> None:
     """The register check, at the terminal.
 
-    A calm cockpit (no STOP) must show the standing band's ``T)rigger``
-    and must NOT be showing the banner's ``T)assign`` line -- if the two
-    registers were ever collapsed into one constant, this is where it
-    surfaces as something a human would actually see.
+    A calm cockpit (no STOP) must show the standing band's own
+    ``T)rade Loop Chain`` token and must NOT be showing the banner's
+    ``T)assign`` line -- if the two registers were ever collapsed into one
+    constant, this is where it surfaces as something a human would
+    actually see.
     """
     grid = pyte_grid(_capture, FULL_ROWS, FULL_COLS)
-    assert find_text(grid, "T)rigger")
+    assert find_text(grid, "T)rade Loop Chain")
     assert not find_text(grid, "T)assign"), (
         "the STOP banner's teach spelling is on screen with no halt in "
         "progress -- the two registers have been collapsed"

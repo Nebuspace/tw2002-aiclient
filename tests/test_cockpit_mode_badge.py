@@ -169,7 +169,12 @@ def test_zero_width_budget_renders_nothing():
 
 import pytest
 
-from tw2002_aiclient.cockpit.control_seat import APP_LABEL, MANUAL_LABEL, SPECTATE_LABEL
+from tw2002_aiclient.cockpit.control_seat import (
+    MANUAL_LABEL,
+    SPECTATE_LABEL,
+    TRAINER_APP_ARMED_LABEL,
+    TRAINER_MANUAL_HUMAN_LABEL,
+)
 from tw2002_aiclient.cockpit.layout import frame_layout
 from tw2002_aiclient.screens import PlayShellScreen, ProfileRow
 
@@ -185,6 +190,15 @@ assert "APP" not in SPECTATE_LABEL
 assert "APP" not in MANUAL_LABEL
 assert SPECTATE_LABEL not in MANUAL_LABEL
 assert MANUAL_LABEL not in SPECTATE_LABEL
+
+# `PlayShellScreen.draw()` always renders through `trainer_labels=True`
+# (WO-PLAY-STRIP-TRAINER-CHROME), so every real-draw assertion below reads
+# the merged trainer chip, never the bare `APP_LABEL`/`MANUAL_LABEL` --
+# the same non-overlap property holds for the trainer pair too.
+assert SPECTATE_LABEL not in TRAINER_APP_ARMED_LABEL
+assert SPECTATE_LABEL not in TRAINER_MANUAL_HUMAN_LABEL
+assert TRAINER_APP_ARMED_LABEL not in TRAINER_MANUAL_HUMAN_LABEL
+assert TRAINER_MANUAL_HUMAN_LABEL not in TRAINER_APP_ARMED_LABEL
 
 
 class _RecordingWin:
@@ -235,8 +249,8 @@ def _profile() -> ProfileRow:
     "spectating, attached, expected_label, expected_attr",
     [
         (True, False, SPECTATE_LABEL, curses.A_NORMAL),
-        (False, True, MANUAL_LABEL, curses.A_BOLD | curses.A_REVERSE),
-        (False, False, APP_LABEL, curses.A_BOLD | curses.A_REVERSE),
+        (False, True, TRAINER_MANUAL_HUMAN_LABEL, curses.A_BOLD | curses.A_REVERSE),
+        (False, False, TRAINER_APP_ARMED_LABEL, curses.A_BOLD | curses.A_REVERSE),
     ],
     ids=["spectate-plain", "manual-warn-bold-reverse", "app-ok-bold-reverse"],
 )
@@ -275,7 +289,7 @@ def test_wiring_matrix_chip_text_and_attr_per_state(
 
 @pytest.mark.parametrize(
     "tone, expected_label",
-    [("warn", MANUAL_LABEL), ("ok", APP_LABEL)],
+    [("warn", TRAINER_MANUAL_HUMAN_LABEL), ("ok", TRAINER_APP_ARMED_LABEL)],
     ids=["manual-warn", "app-ok"],
 )
 def test_color_path_combines_allocated_pair_with_bold_reverse(monkeypatch, tone, expected_label):
@@ -318,9 +332,10 @@ def test_xor_at_the_wire_exactly_one_chip_ever_renders(monkeypatch):
 
     combos = [
         (True, False, SPECTATE_LABEL),
-        (False, True, MANUAL_LABEL),
-        (False, False, APP_LABEL),
-        (True, True, MANUAL_LABEL),  # off-contract: attached wins (control_seat's own priority)
+        (False, True, TRAINER_MANUAL_HUMAN_LABEL),
+        (False, False, TRAINER_APP_ARMED_LABEL),
+        # off-contract: attached wins (control_seat's own priority)
+        (True, True, TRAINER_MANUAL_HUMAN_LABEL),
     ]
     for spectating, attached, expected_label in combos:
         win = _RecordingWin(FULL_ROWS, FULL_COLS)
@@ -332,7 +347,9 @@ def test_xor_at_the_wire_exactly_one_chip_ever_renders(monkeypatch):
         frame = _control_strip_frame(win, FULL_ROWS, FULL_COLS)
         joined = "".join(text for text, _attr in frame)
         present = {
-            label for label in (SPECTATE_LABEL, MANUAL_LABEL, APP_LABEL) if label in joined
+            label
+            for label in (SPECTATE_LABEL, TRAINER_MANUAL_HUMAN_LABEL, TRAINER_APP_ARMED_LABEL)
+            if label in joined
         }
         assert present == {expected_label}, (spectating, attached, present)
 
@@ -363,9 +380,11 @@ def test_app_hold_to_manual_walk_app_chip_before_manual_after_never_both(monkeyp
     frame_before = _control_strip_frame(win, FULL_ROWS, FULL_COLS)
     joined_before = "".join(text for text, _attr in frame_before)
     present_before = {
-        label for label in (SPECTATE_LABEL, MANUAL_LABEL, APP_LABEL) if label in joined_before
+        label
+        for label in (SPECTATE_LABEL, TRAINER_MANUAL_HUMAN_LABEL, TRAINER_APP_ARMED_LABEL)
+        if label in joined_before
     }
-    assert present_before == {APP_LABEL}
+    assert present_before == {TRAINER_APP_ARMED_LABEL}
 
     win.calls.clear()
     screen.spectating = False
@@ -374,6 +393,8 @@ def test_app_hold_to_manual_walk_app_chip_before_manual_after_never_both(monkeyp
     frame_after = _control_strip_frame(win, FULL_ROWS, FULL_COLS)
     joined_after = "".join(text for text, _attr in frame_after)
     present_after = {
-        label for label in (SPECTATE_LABEL, MANUAL_LABEL, APP_LABEL) if label in joined_after
+        label
+        for label in (SPECTATE_LABEL, TRAINER_MANUAL_HUMAN_LABEL, TRAINER_APP_ARMED_LABEL)
+        if label in joined_after
     }
-    assert present_after == {MANUAL_LABEL}
+    assert present_after == {TRAINER_MANUAL_HUMAN_LABEL}

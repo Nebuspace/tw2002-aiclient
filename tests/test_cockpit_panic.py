@@ -133,27 +133,37 @@ def test_panic_token_is_canon_literal_spelling():
     assert panic.PANIC_TOKEN == "P panic"
 
 
-def test_band_carries_panic_last():
-    """Canon's band order puts panic at the tail."""
+def test_band_no_longer_carries_panic():
+    """WO-PLAY-STRIP-TRAINER-CHROME, DECISION
+    `RESOLVED-TRAINER-STRIP-AND-GUTTER-20260731` point 2, retires
+    ``P panic`` (and the whole developer A/R/T/V/U/H/O/L repertoire) from
+    the calm teachband. The STATUS-DONE cut of this WO retired only the
+    band's own ADVERTISEMENT and left the ``P`` KEY BINDING still live
+    underneath it (hub REVISE 2026-07-31) -- this file's own "cockpit
+    wire" section below now pins that the binding is retired too, so
+    band and key agree. See
+    ``tests/test_cockpit_teachband.py::test_band_does_not_carry_other_wos_tokens``
+    for the band-level pin this mirrors."""
     band = teachband.compose_teach_band()
-    assert band.endswith(panic.PANIC_TOKEN)
-    assert band == (
-        "A)nalyze  R)ecord  T)rigger  V)reflex  U)rules  "
-        "H)old?  O)ffer?  L)chains  P panic"
-    )
+    assert panic.PANIC_TOKEN not in band
+    assert not band.endswith(panic.PANIC_TOKEN)
 
 
 def test_band_and_module_cannot_disagree_about_the_spelling():
-    """`teachband` imports the token rather than re-spelling it. Pinned so a
-    future 'tidy-up' that inlines the string reintroduces the drift hazard
-    the `T)rigger`/`T)assign` split already demonstrated on this surface."""
-    assert panic.PANIC_TOKEN in teachband.TEACH_TOKENS
+    """`panic.PANIC_TOKEN` is retired from the calm band (see above), and
+    `teachband` never re-spells it under a different name -- pinned as an
+    explicit absence so a future 'tidy-up' cannot reintroduce a re-spelled
+    copy of the retired token."""
+    assert panic.PANIC_TOKEN not in teachband.TEACH_TOKENS
 
 
-def test_band_imports_reflex_token_like_panic():
+def test_band_no_longer_imports_the_reflex_token():
+    """`V)reflex` is retired alongside panic (DECISION point 2) -- the
+    module and its token still exist for any other consumer, they simply
+    no longer appear in the calm band."""
     from tw2002_aiclient.cockpit import reflex_controls
 
-    assert reflex_controls.REFLEX_TOKEN in teachband.TEACH_TOKENS
+    assert reflex_controls.REFLEX_TOKEN not in teachband.TEACH_TOKENS
     assert reflex_controls.REFLEX_TOKEN == "V)reflex"
 
 
@@ -163,27 +173,29 @@ def test_panic_token_is_ascii():
 
 
 # --------------------------------------------------------------------------
-# The cockpit wire -- key reaches the intent, and reaches it UNGATED
+# The cockpit wire -- `P` is RETIRED from this calm path (hub REVISE
+# 2026-07-31). `panic.resolve_panic_key`/`PANIC_INTENT` above are pinned as
+# bare module functions; `PlayShellScreen.handle_key` no longer calls
+# either -- `P` now flips the trainer's own local `port_trade_on` toggle
+# instead (`tests/test_play_strip_trainer_toggles.py`). These pins prove
+# the retirement structurally rather than merely by omission, so a future
+# "restore panic for consistency" edit goes red here immediately.
 # --------------------------------------------------------------------------
 
 @pytest.mark.parametrize("key", [ord("p"), ord("P")])
-def test_play_shell_returns_the_panic_intent(key):
-    assert _make_play().handle_key(key) == panic.PANIC_INTENT
+def test_play_shell_no_longer_returns_the_panic_intent(key):
+    assert _make_play().handle_key(key) != panic.PANIC_INTENT
 
 
-def test_panic_key_raises_no_confirm_gate():
-    """The wire-level half of the no-confirm pin.
-
-    Read `_arm_confirm` immediately after the single keypress, with nothing
-    else driving the screen -- an earlier WO on this surface shipped a pin
-    that inspected the gate *after* a loop had already cleared it, which
-    made 'gate raised then dismissed' and 'gate never raised' look
-    identical. One key, one read.
-    """
-    play = _make_play()
-    assert play._arm_confirm is None
-    play.handle_key(ord("P"))
-    assert play._arm_confirm is None, "panic raised a confirm gate — see cockpit/panic.py"
+def test_play_shell_handle_key_does_not_reference_panic_module():
+    """Structural, not textual coincidence: the handler must not call
+    either of `panic`'s public entry points -- see this file's own
+    ``test_panic_module_has_no_confirm_step`` for the sibling pattern
+    (checking behavior, not grepping prose comments that discuss the
+    retirement at length and would keep a textual pin green forever)."""
+    src = inspect.getsource(PlayShellScreen.handle_key)
+    assert "panic.resolve_panic_key" not in src
+    assert "panic.PANIC_INTENT" not in src
 
 
 def test_panic_does_not_shadow_the_teach_keys():
@@ -192,16 +204,6 @@ def test_panic_does_not_shadow_the_teach_keys():
     assert play.handle_key(ord("a")) == "analyze_open"
     assert play.handle_key(ord("t")) == "assign_trigger"
     assert play.handle_key(ord("r")) == "record_toggle"
-
-
-def test_panic_fires_with_no_run_armed():
-    """No 'is a run armed?' precondition, deliberately: a panic that refuses
-    because the cockpit believes nothing is running fails exactly when the
-    cockpit's belief is the thing that is wrong. The daemon verb is
-    idempotent, so an unnecessary press is free."""
-    play = _make_play()
-    assert getattr(play, "_arm_confirm", None) is None
-    assert play.handle_key(ord("p")) == panic.PANIC_INTENT
 
 
 def test_panic_wears_chrome_not_danger():

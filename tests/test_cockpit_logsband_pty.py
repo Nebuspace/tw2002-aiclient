@@ -4,18 +4,44 @@ Layer-B.
 Real-curses pty + pyte replay (``tests.pty_helpers``) proves the *drawn*
 LOGS band ``screens.py``/``app.py`` produce once wired to
 ``cockpit.logsband``: the box shows the daemon's ``status["log_tail"]``
-content (not just the bare box title), the tail genuinely ADVANCES across
-draws as new lines arrive, a redacted-secret marker renders while a
-sentinel planted in an UNRELATED status field never reaches the LOGS band's
-own drawn row, the honest-empty/``status_line`` fallback still works with
-no ``log_tail`` field at all, Esc/q regression is unchanged, and a hostile
-control-char payload inside a tail entry is neutralized by the shared draw
-choke point the same way ``tests/test_cockpit_frame_pty.py`` already proves
-for ``status_line``. Layer-A coverage for the composer itself
+content (not just the bare box title), the honest-empty/``status_line``
+fallback still works with no ``log_tail`` field at all, and Esc/q
+regression is unchanged. Layer-A coverage for the composer itself
 (``compose_logs_lines``/``newest_tail_entry``/``flash_active``) lives in
 ``tests/test_cockpit_logsband.py``; this file only proves the
 ``PlayShellScreen``/``app.py`` wiring around it -- mirrors
 ``tests/test_cockpit_hud_pty.py``'s split for HUD.
+
+WO-PLAY-STRIP-TRAINER-CHROME / DECISION
+``RESOLVED-TRAINER-STRIP-AND-GUTTER-20260731`` point 4 routed
+``status_line`` (offers/outcomes, previously a mid-control-strip
+``status_offer`` segment) INTO this same LOGS box. At the real MIN_LINES
+floor LOGS has exactly ONE content row, so a non-empty ``status_line``
+reserves that row over a real tail rather than the two ever sharing it --
+see ``screens.py``'s own ``reserve_status_row`` comment. Because the real
+``app._run_play`` flow sets a non-empty, never-cleared ``status_line``
+immediately after every successful ``ensure_session`` (the fixtures below
+all stub a successful ensure), a full end-to-end drive through this file's
+own subprocess bootstrap can no longer observe raw ``log_tail`` content at
+all once a real tail exists -- only the reserved status row is visible.
+Consequently:
+  - the pty-level fixtures/tests that used to assert on raw tail text
+    (the STATIC tail's own line, the growing ``advancing-line-N`` text, the
+    redacted SECRET marker, the hostile-control-char tail payload) now
+    assert on the reserved status row instead, or were converted to
+    unit-level ``draw()`` calls (via ``_make_screen``/``_RecordingWin``)
+    where ``status_line`` is directly controllable -- the only way left to
+    exercise "an empty status_line + a real tail" now that a full
+    subprocess drive can no longer reach that combination;
+  - genuine tail-advancement + flash-timing over real draws is proven at
+    the unit level in
+    ``test_flash_state_persists_across_unchanged_newest_then_resets_on_change``
+    (a manually-driven fake clock, not wall-clock ticks);
+  - what the "advancing" pty fixture still uniquely proves is that the
+    reserved status row stays stable and non-flashing across real ~1Hz
+    ticks even while a REAL, continuously-growing tail sits underneath it
+    (``test_status_row_never_flashes_while_the_underlying_tail_keeps_advancing``),
+    exercising the ``flash_index`` guard end-to-end.
 
 Isolation: ``adapters.ensure_session`` is stubbed inside the spawned
 process (same convention as every sibling cockpit-panel pty suite), and
@@ -26,39 +52,12 @@ unstubbed against that empty dir (its own ``send_request`` early-returns
 scenario, and every other fixture additionally monkeypatches
 ``tw2002_aiclient.session.cli.send_request`` inside the bootstrap -- never
 ``run/twd.sock`` either way.
-
-Advancing-tail proof, and why it does NOT wait for an exact line number:
-the stubbed ``send_request``'s ``"status"`` verb keeps a module-level call
-counter inside the spawned subprocess and grows ``log_tail`` by one entry
-each time it is polled. ``app.py``'s own ``_run_play`` calls ``draw()``
-TWICE back-to-back before the loop's first real ~1Hz tick (once showing
-"Ensuring session…", once right after the stubbed ``ensure_session``
-returns) -- so waiting for an EXACT early number (e.g. "line-1") is racy
-against however much of that back-to-back pair the outer poll loop
-actually observes as a distinct frame. Instead this file waits for the
-generic marker substring, extracts whatever number is CURRENTLY showing,
-waits several more real ticks, and asserts the SECOND number is strictly
-greater than the first -- proving genuine advancement over wall-clock time
-without depending on exact draw-count alignment (the general shape of the
-"WO-P3-038/039 lesson": never assert on a specific-but-fragile transition
-when a monotonic/structural one is available).
-
-Newest-row flash proof, and why it is NOT racy against
-``TICKER_FLASH_DURATION_S``: because THIS fixture's tail grows by exactly
-one entry on every single poll, EVERY draw against it introduces a
-genuinely NEW newest entry -- so at the exact draw() call that writes it,
-``arrival_s`` and ``now`` are the SAME reading (age 0), deterministically
-bold, regardless of real wall-clock scheduling. Any capture taken while
-this fixture is still advancing therefore shows the newest row bold. The
-CONTRASTING negative case (a STATIC tail, captured well after its one-time
-arrival has aged past 1.0s) proves the flash does NOT stick.
 """
 
 from __future__ import annotations
 
 import os
 import pty
-import re
 import select
 import subprocess
 import sys
@@ -96,7 +95,6 @@ FULL_ROWS, FULL_COLS = 40, 160
 
 _SECRET_MARKER = "<<secret input redacted>>"  # tw2002_aiclient.session.transcript_tail.TranscriptTail.append_redacted()'s own default wire format
 _SECRET_SENTINEL = "SENTINEL-hunter2-SENTINEL"
-_ADVANCING_RE = re.compile(r"advancing-line-(\d+)")
 
 # Bootstrap: demo launcher rows + stubbed ensure (no daemon / no twd.sock),
 # same shape as every sibling cockpit-panel pty suite's own bootstrap. The
@@ -325,13 +323,27 @@ def _drive_logs_pty(
 
 def _drive_advancing_logs_pty(tmp_path: Path, timeout: float = 16.0) -> tuple[bytes, bytes]:
     """Spawn ``app._run`` with the "advancing" fixture. Captures an EARLY
-    frame (shortly after the first ``advancing-line-N`` marker appears,
-    with only a short 0.5s settle -- comfortably under
-    ``TICKER_FLASH_DURATION_S`` so this capture's own newest row is still a
-    genuinely fresh arrival) and a LATER frame (after several more real
-    ~1Hz ticks), both independently replayable -- see the module
-    docstring's rationale for extracting NUMBERS rather than waiting on an
-    exact early line's text.
+    frame (shortly after the LOGS row first shows content, with only a
+    short 0.5s settle -- comfortably under ``TICKER_FLASH_DURATION_S`` so
+    an unguarded flash decision at this point would still read as a fresh
+    arrival) and a LATER frame (after several more real ~1Hz ticks), both
+    independently replayable.
+
+    WO-PLAY-STRIP-TRAINER-CHROME: this fixture's tail keeps growing
+    underneath (``advancing-line-N``), but the real ``app._run_play`` flow
+    sets a non-empty, never-cleared ``status_line`` right after
+    ``ensure_session`` -- see ``_static_capture``'s own comment -- which
+    wins LOGS' one content row at the real MIN_LINES floor. So this drive
+    no longer waits for (and the two tests below no longer assert on) the
+    raw ``advancing-line-N`` text itself; genuine tail advancement + flash
+    timing is proven at the unit level instead
+    (``test_flash_state_persists_across_unchanged_newest_then_resets_on_change``).
+    What THIS pty drive still uniquely proves: across a real subprocess
+    with a REAL, continuously-growing tail underneath, the reserved status
+    row stays stable and never flashes (see
+    ``test_status_row_never_flashes_while_the_underlying_tail_keeps_advancing``
+    below) -- exercising the ``flash_index`` guard end-to-end, not just in
+    an isolated unit test.
     """
     proc, master_fd = _spawn(tmp_path, "logs_pty_bootstrap_advancing.py", "advancing")
 
@@ -359,13 +371,15 @@ def _drive_advancing_logs_pty(tmp_path: Path, timeout: float = 16.0) -> tuple[by
                     os.write(master_fd, b"\r")
                     phase = "wait_first"
             elif phase == "wait_first":
-                if find_text(grid, "advancing-line-"):
+                if find_text(grid, "session ready"):
                     captured = _settle(master_fd, captured, 0.5)
                     capture_early = captured
                     phase = "wait_growth"
             elif phase == "wait_growth":
-                # Several more real ~1Hz ticks -- proves genuine
-                # advancement over wall-clock time.
+                # Several more real ~1Hz ticks -- the underlying tail
+                # keeps growing across this window even though the
+                # reserved status row (proven stable/non-flashing by the
+                # consuming test) is all that is visible.
                 captured = _settle(master_fd, captured, 2.5)
                 capture_later = captured
                 os.write(master_fd, b"q")
@@ -386,11 +400,6 @@ def _drive_advancing_logs_pty(tmp_path: Path, timeout: float = 16.0) -> tuple[by
     return capture_early, capture_later
 
 
-def _extract_advancing_number(row_text: str) -> int | None:
-    m = _ADVANCING_RE.search(row_text)
-    return int(m.group(1)) if m else None
-
-
 @pytest.fixture(scope="module")
 def _no_daemon_capture(tmp_path_factory):
     tmp_path = tmp_path_factory.mktemp("logs_no_daemon")
@@ -404,25 +413,26 @@ def _no_daemon_capture(tmp_path_factory):
 @pytest.fixture(scope="module")
 def _static_capture(tmp_path_factory):
     tmp_path = tmp_path_factory.mktemp("logs_static")
-    return _drive_logs_pty(tmp_path, ready_text="static-tail-line", fixture="static")
+    # WO-PLAY-STRIP-TRAINER-CHROME: the real `app._run_play` flow always
+    # sets a non-empty `status_line` right after `ensure_session` succeeds
+    # (the "session ready — <classification>" line, or -- since this
+    # fixture's classification is `main_command`, matching
+    # `app._EXPLORE_OFFER_CLASSIFICATION` -- the explore-offer prose that
+    # supersedes it), and never clears it back to "" on its own. At the
+    # real MIN_LINES floor LOGS has exactly one content row, so that
+    # status line -- not the fixture's own "static-tail-line" tail entry
+    # -- is what a full end-to-end drive actually shows. See
+    # ``test_logs_title_visible_and_status_line_wins_the_reserved_row``
+    # below; raw tail-rendering itself is proven at the unit level
+    # (``test_real_tail_renders_when_status_line_is_empty``) where
+    # `status_line` is directly controllable.
+    return _drive_logs_pty(tmp_path, ready_text="session ready", fixture="static")
 
 
 @pytest.fixture(scope="module")
 def _advancing_captures(tmp_path_factory):
     tmp_path = tmp_path_factory.mktemp("logs_advancing")
     return _drive_advancing_logs_pty(tmp_path)
-
-
-@pytest.fixture(scope="module")
-def _secret_capture(tmp_path_factory):
-    tmp_path = tmp_path_factory.mktemp("logs_secret")
-    return _drive_logs_pty(tmp_path, ready_text=_SECRET_MARKER, fixture="secret")
-
-
-@pytest.fixture(scope="module")
-def _hostile_control_chars_capture(tmp_path_factory):
-    tmp_path = tmp_path_factory.mktemp("logs_hostile_control_chars")
-    return _drive_logs_pty(tmp_path, ready_text="before", fixture="hostile_control_chars")
 
 
 def _logs_content_row(regions: dict) -> int:
@@ -439,54 +449,49 @@ def _logs_content_row(regions: dict) -> int:
 
 
 @_PTY_SKIP
-def test_logs_title_and_real_tail_line_visible_and_not_flashing(_static_capture):
+def test_logs_title_visible_and_status_line_wins_the_reserved_row(_static_capture):
+    """DECISION point 4: `status_line` routes into LOGS. At the real
+    MIN_LINES floor it wins the box's only row over a real tail rather
+    than the two ever sharing it -- see the fixture's own comment. The
+    static fixture's own tail text is therefore NOT expected to be
+    visible here (that would be the pre-WO behavior this WO retired)."""
     regions = frame_layout(FULL_ROWS, FULL_COLS)
     logs = regions["logs"]
     row = _logs_content_row(regions)
     grid = pyte_grid(_static_capture, FULL_ROWS, FULL_COLS)
 
     assert "LOGS" in grid[logs["y"]]
-    assert "static-tail-line" in grid[row]
+    assert "session ready" in grid[row]
+    assert "static-tail-line" not in grid[row]
 
     screen = pyte_screen(_static_capture, FULL_ROWS, FULL_COLS)
     cell = screen.buffer[row][logs["x"] + 1]
     assert not cell.bold, (
-        "a static (unchanging) tail line, captured well past its one-time "
-        "arrival, must not still be flashing bold"
+        "the reserved status row is chrome, not a transcript arrival, "
+        "and must never flash bold"
     )
 
 
 # ---------------------------------------------------------------------------
-# (b) Advancing lines -- a later capture shows a STRICTLY LARGER line
-# number than an earlier one, proving the tail genuinely advances across
-# real draws (not just at compose-time in isolation, already covered at
-# Layer-A). Also pins the flash POSITIVE case: every draw against this
-# always-growing fixture is a fresh arrival, so the newest row is bold at
-# both captures.
+# (b) Advancing tail underneath a reserved status row -- WO-PLAY-STRIP-
+# TRAINER-CHROME retired the pre-WO "raw advancing-line-N text is directly
+# visible in LOGS" proof (see ``_drive_advancing_logs_pty``'s own comment
+# for why that is no longer observable through a full app.py drive; the
+# genuine-advancement + flash-timing proof it duplicated now lives at the
+# unit level in
+# ``test_flash_state_persists_across_unchanged_newest_then_resets_on_change``).
+# What a real subprocess uniquely adds is proven here instead: with a REAL,
+# continuously-growing tail underneath (this fixture's own defining trait),
+# the reserved status row that wins LOGS' one row stays textually stable
+# and never flashes bold -- exercising the ``flash_index`` guard end-to-end
+# rather than in isolation.
 # ---------------------------------------------------------------------------
 
 
 @_PTY_SKIP
-def test_advancing_tail_shows_a_strictly_later_number_after_more_ticks(_advancing_captures):
-    capture_early, capture_later = _advancing_captures
-    regions = frame_layout(FULL_ROWS, FULL_COLS)
-    row = _logs_content_row(regions)
-
-    grid_early = pyte_grid(capture_early, FULL_ROWS, FULL_COLS)
-    grid_later = pyte_grid(capture_later, FULL_ROWS, FULL_COLS)
-
-    n_early = _extract_advancing_number(grid_early[row])
-    n_later = _extract_advancing_number(grid_later[row])
-    assert n_early is not None, f"expected an advancing-line-N marker, got {grid_early[row]!r}"
-    assert n_later is not None, f"expected an advancing-line-N marker, got {grid_later[row]!r}"
-    assert n_later > n_early, (
-        f"expected the tail to have advanced further after more real ticks, "
-        f"got early={n_early} later={n_later}"
-    )
-
-
-@_PTY_SKIP
-def test_newest_row_stays_bold_while_the_tail_keeps_advancing(_advancing_captures):
+def test_status_row_never_flashes_while_the_underlying_tail_keeps_advancing(
+    _advancing_captures,
+):
     capture_early, capture_later = _advancing_captures
     regions = frame_layout(FULL_ROWS, FULL_COLS)
     row = _logs_content_row(regions)
@@ -494,35 +499,64 @@ def test_newest_row_stays_bold_while_the_tail_keeps_advancing(_advancing_capture
     content_col = logs["x"] + 1
 
     for label, capture in (("early", capture_early), ("later", capture_later)):
+        grid = pyte_grid(capture, FULL_ROWS, FULL_COLS)
+        assert "session ready" in grid[row], (
+            f"expected the reserved status row at the {label} capture, "
+            f"got {grid[row]!r}"
+        )
+        assert "advancing-line-" not in grid[row], (
+            f"the underlying tail keeps growing but must not surface over "
+            f"the reserved status row at the {label} capture, got {grid[row]!r}"
+        )
         screen = pyte_screen(capture, FULL_ROWS, FULL_COLS)
         cell = screen.buffer[row][content_col]
-        assert cell.bold, (
-            f"expected the always-advancing newest row to render bold at the "
-            f"{label} capture, got bold={cell.bold!r}"
+        assert not cell.bold, (
+            f"the reserved status row is chrome, not a transcript arrival, "
+            f"and must never flash bold even while the tail keeps advancing "
+            f"underneath it -- {label} capture got bold={cell.bold!r}"
         )
 
 
 # ---------------------------------------------------------------------------
-# (c) SECRET fixture: the pre-redacted marker renders in the band; a
-# sentinel planted in an UNRELATED status field never reaches ANY drawn
-# row of the frame -- the absence sweep is grid-wide, not just the LOGS
-# band's own row (no panel renders status["prompt"]).
+# (c) SECRET: the pre-redacted marker renders in the band; a sentinel
+# planted in an UNRELATED status field never reaches the LOGS band's own
+# row. WO-PLAY-STRIP-TRAINER-CHROME: this moved from a full pty drive to a
+# unit-level draw() -- see ``_static_capture``'s own comment for why the
+# real ``app._run_play`` flow can no longer reach a state with a real tail
+# AND an empty ``status_line`` simultaneously (status_line always wins the
+# one reserved row once ensure succeeds), so a full end-to-end pty drive
+# can no longer observe raw tail content at all. Direct control of
+# ``status_line`` here keeps this security-relevant proof (redaction
+# reaching the actually-drawn row) alive at the layer that can still see
+# it.
 # ---------------------------------------------------------------------------
 
 
-@_PTY_SKIP
-def test_secret_marker_present_and_sentinel_absent_from_logs_band(_secret_capture):
+def test_secret_marker_present_and_sentinel_absent_from_logs_row(monkeypatch):
+    screen, win = _make_screen(monkeypatch)
+    screen.status_line = ""
+    screen.status_provider = lambda: {
+        "connected": True,
+        "idle_ms": 1,
+        "log_tail": ["before-secret", _SECRET_MARKER],
+        # Sentinel planted in an UNRELATED status field -- never part of
+        # log_tail -- proving it cannot leak into the LOGS band's own row
+        # even though it rides the same status payload.
+        "prompt": _SECRET_SENTINEL,
+    }
+    screen.draw()
+
     regions = frame_layout(FULL_ROWS, FULL_COLS)
     row = _logs_content_row(regions)
-    grid = pyte_grid(_secret_capture, FULL_ROWS, FULL_COLS)
-
-    assert _SECRET_MARKER in grid[row], (
-        f"expected the pre-redacted marker in the LOGS band row, got {grid[row]!r}"
+    row_calls = [text for (y, _x, text, _attr) in win.calls if y == row]
+    assert row_calls
+    assert _SECRET_MARKER in row_calls[-1], (
+        f"expected the pre-redacted marker in the LOGS band row, got {row_calls[-1]!r}"
     )
-    offenders = [r for r in grid if _SECRET_SENTINEL in r]
+    offenders = [text for (_y, _x, text, _attr) in win.calls if _SECRET_SENTINEL in text]
     assert not offenders, (
         "a sentinel planted in an UNRELATED status field ('prompt') must never "
-        f"leak into ANY drawn row of the frame, found in: {offenders!r}"
+        f"leak into any drawn row, found in: {offenders!r}"
     )
 
 
@@ -588,35 +622,48 @@ def test_play_shell_screen_handle_key_unchanged_esc_and_q_only(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# (f) Hostile control-char payload inside a tail line is neutralized by the
-# shared draw choke point (cockpit.draw._safe_write), same guarantee
-# already proven for status_line
-# (tests/test_cockpit_frame_pty.py::test_embedded_newline_in_status_line_does_not_escape_box)
-# -- chrome (the outer frame's own border) stays intact.
+# (f) Hostile control-char payload inside a tail line is neutralized before
+# it ever reaches ``addstr`` -- the shared draw choke point
+# (``cockpit.draw._safe_write``, exercised via ``draw_lines_attrs`` here,
+# the same call LOGS itself makes). WO-PLAY-STRIP-TRAINER-CHROME: moved
+# from a full pty drive to a unit-level draw() for the same reason as the
+# SECRET test above (a full ``app._run_play`` drive can no longer reach a
+# real tail with an empty ``status_line``). The REAL curses/terminal
+# round-trip proof for this exact neutralization already exists at both
+# ``tests/test_cockpit_frame_pty.py::test_embedded_newline_in_status_line_does_not_escape_box``
+# (status_line, full pty) and this file's own
+# ``tests/test_cockpit_logsband_pty.py`` unit-level ``draw_lines_attrs``
+# proof pattern -- this test only additionally pins that LOGS' own wiring
+# passes tail content through that same choke point.
 # ---------------------------------------------------------------------------
 
 
-@_PTY_SKIP
-def test_embedded_newline_in_tail_line_does_not_escape_box(_hostile_control_chars_capture):
+def test_embedded_newline_in_tail_line_is_neutralized_before_addstr(monkeypatch):
+    screen, win = _make_screen(monkeypatch)
+    screen.status_line = ""
+    screen.status_provider = lambda: {
+        "connected": True,
+        "idle_ms": 1,
+        "log_tail": ["before\nBREAKOUT-AFTER-NEWLINE"],
+    }
+    screen.draw()
+
     regions = frame_layout(FULL_ROWS, FULL_COLS)
     row = _logs_content_row(regions)
-    outer = regions["outer"]
-
-    grid = pyte_grid(_hostile_control_chars_capture, FULL_ROWS, FULL_COLS)
-    screen = pyte_screen(_hostile_control_chars_capture, FULL_ROWS, FULL_COLS)
-
-    next_row = row + 1
-    # The sanitized \n becomes a plain space -- content stays on ONE row and
-    # never moves the terminal cursor, so nothing bleeds onto the next row,
-    # let alone past the outer frame's own left border at column 0.
-    assert "BREAKOUT" not in grid[next_row]
-    assert screen.buffer[next_row][outer["x"]].data == "║"  # outer frame's own border, untouched
-
-    logs = regions["logs"]
-    left_x = logs["x"]
-    right_x = logs["x"] + logs["w"] - 1
-    assert screen.buffer[row][left_x].data == "│"
-    assert screen.buffer[row][right_x].data == "│"
+    row_calls = [text for (y, _x, text, _attr) in win.calls if y == row]
+    assert row_calls
+    # The sanitized `\n` becomes a plain space -- content stays on ONE
+    # `addstr` call, never a second call implying a moved cursor/row.
+    assert "\n" not in row_calls[-1]
+    assert "before BREAKOUT-AFTER-NEWLINE" in row_calls[-1]
+    # The next row belongs to other chrome (e.g. the box's own bottom
+    # border) and legitimately receives its own unrelated addstr calls --
+    # what must never happen is the tail's own payload bleeding onto it.
+    next_row_calls = [text for (y, _x, text, _attr) in win.calls if y == row + 1]
+    assert not any("BREAKOUT" in text for text in next_row_calls), (
+        f"a neutralized embedded newline must never bleed onto the next row, "
+        f"got {next_row_calls!r}"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -697,7 +744,15 @@ def test_status_line_fallback_used_when_no_real_tail(monkeypatch):
     assert "(none yet)" not in row_calls[-1]
 
 
-def test_real_tail_supersedes_status_line_fallback(monkeypatch):
+def test_status_line_reserves_the_one_row_over_a_real_tail(monkeypatch):
+    """WO-PLAY-STRIP-TRAINER-CHROME / DECISION
+    ``RESOLVED-TRAINER-STRIP-AND-GUTTER-20260731`` point 4: at the real
+    MIN_LINES floor (``logs_inner_h == 1``) there is no room to show both a
+    real tail line and ``status_line`` -- the status line wins the box's
+    one row (this is the opposite of the pre-WO
+    WO-PLAY-OFFER-VISIBLE-ON-LIVE-era pin this test replaces, which is now
+    intentionally inverted: `status_offer` used to be a mid-strip segment
+    ADDITIONAL to LOGS' own tail; now it rides INSIDE LOGS' only row)."""
     screen, win = _make_screen(monkeypatch)
     screen.status_line = "session ready — main_command"
     screen.status_provider = lambda: {
@@ -709,8 +764,28 @@ def test_real_tail_supersedes_status_line_fallback(monkeypatch):
     row = _logs_content_row(regions)
     row_calls = [text for (y, _x, text, _attr) in win.calls if y == row]
     assert row_calls
+    assert "session ready" in row_calls[-1]
+    assert "real tail line" not in row_calls[-1]
+
+
+def test_real_tail_renders_when_status_line_is_empty(monkeypatch):
+    """The tail-rendering path itself is unchanged -- it is only ever
+    displaced by a NON-empty ``status_line`` (see the reservation test
+    above). Empty ``status_line`` is the ordinary steady state once the
+    ensure-session/offer prose has been superseded by a later empty
+    assignment, so real tail content must still surface then."""
+    screen, win = _make_screen(monkeypatch)
+    screen.status_line = ""
+    screen.status_provider = lambda: {
+        "connected": True, "idle_ms": 1, "log_tail": ["real tail line"],
+    }
+    screen.draw()
+
+    regions = frame_layout(FULL_ROWS, FULL_COLS)
+    row = _logs_content_row(regions)
+    row_calls = [text for (y, _x, text, _attr) in win.calls if y == row]
+    assert row_calls
     assert "real tail line" in row_calls[-1]
-    assert "session ready" not in row_calls[-1]
 
 
 def test_flash_state_persists_across_unchanged_newest_then_resets_on_change(monkeypatch):

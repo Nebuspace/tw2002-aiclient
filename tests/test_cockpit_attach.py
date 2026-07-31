@@ -68,7 +68,11 @@ from pathlib import Path
 
 from tw2002_aiclient import adapters, app
 from tw2002_aiclient.adapters import EnsureResult
-from tw2002_aiclient.cockpit.control_seat import APP_LABEL, MANUAL_LABEL
+from tw2002_aiclient.cockpit.control_seat import (
+    APP_LABEL,
+    MANUAL_LABEL,
+    TRAINER_MANUAL_HUMAN_LABEL,
+)
 from tw2002_aiclient.cockpit.layout import frame_layout
 from tw2002_aiclient.screens import PlayShellScreen, ProfileRow
 from tw2002_aiclient.session.attach_client import DETACH_KEY, AttachInputConn
@@ -273,7 +277,9 @@ def test_run_play_ctrl_a_attaches_forwards_a_keystroke_and_esc_releases(monkeypa
         # attach repainted the row or not, since SPECTATE was never on it.
         assert APP_LABEL not in row_text  # entry chip dropped once attached
         assert "SPECTATE" not in row_text  # and no observation state was invented
-        assert MANUAL_LABEL in row_text  # the Human badge takes its place
+        # WO-PLAY-STRIP-TRAINER-CHROME: the real cockpit draws the merged
+        # trainer chip (`trainer_labels=True`), not the bare `MANUAL_LABEL`.
+        assert TRAINER_MANUAL_HUMAN_LABEL in row_text  # the Human badge takes its place
 
         assert daemon.session.raw_sent == [b"d"]  # the one forwarded keystroke
 
@@ -473,7 +479,7 @@ def test_control_strip_transitions_app_spectate_manual_and_back(monkeypatch):
     screen.attached = True
     screen.draw()
     row3 = _control_strip_row_text(win)
-    assert MANUAL_LABEL in row3
+    assert TRAINER_MANUAL_HUMAN_LABEL in row3
     assert "SPECTATE" not in row3
 
     # Leg 4 -- and Spectate genuinely COMES BACK, the point of the test.
@@ -1006,14 +1012,14 @@ def test_app_hold_ctrl_a_attaches_to_human_lock_and_manual_chip_renders(monkeypa
         def _manual_chip_painted() -> bool:
             frame = _control_strip_frame(stdscr, FULL_ROWS, FULL_COLS)
             joined = "".join(text for text, _attr in frame)
-            return MANUAL_LABEL in joined and APP_LABEL not in joined
+            return TRAINER_MANUAL_HUMAN_LABEL in joined and APP_LABEL not in joined
 
         assert _wait_until(_manual_chip_painted), (
             "MANUAL chip never replaced APP after App-hold Ctrl-A attach"
         )
         frame = _control_strip_frame(stdscr, FULL_ROWS, FULL_COLS)
         label_text, label_attr = frame[0]
-        assert label_text.startswith(MANUAL_LABEL)
+        assert label_text.startswith(TRAINER_MANUAL_HUMAN_LABEL)
         assert label_attr == curses.A_BOLD | curses.A_REVERSE  # mono path -- _patch_common forces has_colors False
 
         stdscr.push(27)
