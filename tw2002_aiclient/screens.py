@@ -1611,7 +1611,9 @@ class PlayShellScreen:
             except Exception:  # noqa: BLE001
                 cur_sector = None
             try:
-                subject, caption = self.chain_scalars.bubble_subject()
+                subject, caption = self.chain_scalars.bubble_subject(
+                    current_sector=cur_sector,
+                )
                 bubble_lines = cockpit_chain_bubbles.compose_chain_bubbles(
                     subject,
                     current_sector=cur_sector,
