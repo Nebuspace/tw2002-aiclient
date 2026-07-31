@@ -1,6 +1,6 @@
 # WO-STATUS-STAMP-SWEEP-250 — stamp remaining shipped-but-OPEN WOs
 
-**Status:** OPEN · EXECUTE · docs-only · Cursor-only  
+**Status:** DONE · origin `9e6601e` (#251) · tip-honesty stamp 2026-07-31 (product on main; banner was stale OPEN)
 **Posted / seeded:** 2026-07-30T12:53Z · hub  
 **Seat:** `impl-aiclient-cursor`  
 **Depends:** `main` ≥ `abaf47c`  
