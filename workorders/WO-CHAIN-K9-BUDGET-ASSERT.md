@@ -1,6 +1,6 @@
 # WO-CHAIN-K9-BUDGET-ASSERT — Assert step budget + note, not wall-clock
 
-**Status:** OPEN · EXECUTE · MED · Claude Code · impl-claudecode-aiclient  
+**Status:** DONE · origin `9833550` (#134) · tip-honesty stamp 2026-07-31 (note-before-canary / `_BUDGET_CANARY_S` on main; banner was stale OPEN)
 **Posted:** 2026-07-28T02:02Z · hub (from CC #128 mid-STATUS) · EXEC 2026-07-28T03:07Z  
 **Seat:** impl-claudecode-aiclient  
 **Depends:** #128 MERGED (`c56f852`)
