@@ -18,7 +18,7 @@ from tw2002_aiclient.cockpit import explore_flags
 from tw2002_aiclient.cockpit.layout import frame_layout
 from tw2002_aiclient.cockpit.teachband import compose_teach_band
 
-ROWS, COLS = 40, 160
+ROWS, COLS = 40, 180
 OFFER = "explore 3/5…"   # a LIVE run reading — what canon lets claim the band
 # Built by the real composer rather than retyped. This string is an INPUT
 # here (a status line fed to the screen), so a hand-copied version would

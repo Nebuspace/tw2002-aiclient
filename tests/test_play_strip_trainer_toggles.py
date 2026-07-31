@@ -34,7 +34,7 @@ def _make_play() -> PlayShellScreen:
     defaults, not left unset."""
 
     class _Stdscr:
-        def getmaxyx(self): return (40, 160)
+        def getmaxyx(self): return (40, 180)
         def erase(self): pass
         def refresh(self): pass
         def addstr(self, *a, **k): pass

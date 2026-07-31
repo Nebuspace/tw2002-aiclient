@@ -278,7 +278,7 @@ class _StdscrKeys:
 
     def __init__(self, keys):
         self._keys = list(keys) + [27]
-        self.rows, self.cols = 40, 160
+        self.rows, self.cols = 40, 180
 
     def getmaxyx(self): return (self.rows, self.cols)
     def getch(self): return self._keys.pop(0) if self._keys else 27
@@ -484,7 +484,7 @@ def test_ensure_status_has_no_explore_offer_tease(monkeypatch):
     class _Stdscr:
         def __init__(self):
             self._keys = [27]
-            self.rows, self.cols = 40, 160
+            self.rows, self.cols = 40, 180
 
         def getmaxyx(self):
             return (self.rows, self.cols)
@@ -587,7 +587,7 @@ def test_e_starts_infinite_explore(monkeypatch):
     class _Stdscr:
         def __init__(self):
             self._keys = [ord("E"), 27]
-            self.rows, self.cols = 40, 160
+            self.rows, self.cols = 40, 180
 
         def getmaxyx(self):
             return (self.rows, self.cols)

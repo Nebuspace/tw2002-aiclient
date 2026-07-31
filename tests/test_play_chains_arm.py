@@ -51,7 +51,7 @@ class _Stdscr:
 
     def __init__(self, keys):
         self._keys = list(keys) + [27, 27]
-        self.rows, self.cols = 40, 160
+        self.rows, self.cols = 40, 180
 
     def getmaxyx(self): return (self.rows, self.cols)
     def getch(self): return self._keys.pop(0) if self._keys else 27
