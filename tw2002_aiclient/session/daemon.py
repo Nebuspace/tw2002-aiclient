@@ -40,6 +40,7 @@ from . import env
 from .autoloop import AutoLoopRunner
 from .sector_explore import ExploreRunner
 from .trade_chain import TradeChainRunner
+from .stardock_hold import StardockHoldRunner
 from .control_lock import ControlLock, ControlModeConflict
 from .credentials import get_password
 from .guardian import SessionGuardian
@@ -477,6 +478,9 @@ def _shutdown(server, session):
     trade_chain = getattr(server, "trade_chain", None)
     if trade_chain is not None:
         trade_chain.stop()
+    stardock_hold = getattr(server, "stardock_hold", None)
+    if stardock_hold is not None:
+        stardock_hold.stop()
     guardian = getattr(server, "guardian", None)
     if guardian is not None:
         guardian.stop()
@@ -690,6 +694,11 @@ def main(argv=None):
         session,
         server.control_lock,
         log_error=lambda exc: _log_dispatch_error(server, "trade_chain", exc),
+    )
+    server.stardock_hold = StardockHoldRunner(
+        session,
+        server.control_lock,
+        log_error=lambda exc: _log_dispatch_error(server, "stardock_hold", exc),
     )
     server.request_stop = lambda: threading.Thread(target=_shutdown, args=(server, session), daemon=True).start()
     try:

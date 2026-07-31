@@ -37,6 +37,7 @@ from contextlib import contextmanager
 
 from . import autoloop
 from . import sector_explore
+from . import stardock_hold
 from . import trade_chain
 from .. import explore as _explore
 from .classify import classify_screen
@@ -715,6 +716,57 @@ def _dispatch_trade_chain_status(server):
     return {"ok": True, **trade_chain.run_wire(runner.snapshot())}
 
 
+def _stardock_hold_runner(server):
+    return getattr(server, "stardock_hold", None)
+
+
+def _dispatch_stardock_hold_start(args, server):
+    runner = _stardock_hold_runner(server)
+    if runner is None:
+        return {"ok": False, "error": "stardock_hold_unavailable"}
+    unsupported = sorted(set(args) - stardock_hold.ARGS_STARDOCK_HOLD_START)
+    if unsupported:
+        return {"ok": False, "error": f"unsupported_arg:{unsupported[0]}"}
+    kwargs = {}
+    for key in (
+        "stardock_sector",
+        "empty_holds",
+        "hold_price",
+        "credits",
+        "qty",
+        "cash_floor",
+    ):
+        if key in args:
+            kwargs[key] = args[key]
+    try:
+        snapshot = runner.start(
+            args.get("world_id"),
+            args.get("fingerprint"),
+            **kwargs,
+        )
+    except stardock_hold.StardockHoldRefused as exc:
+        return {"ok": False, "error": str(exc)}
+    return {"ok": True, "started": True, **stardock_hold.run_wire(snapshot)}
+
+
+def _dispatch_stardock_hold_stop(server):
+    runner = _stardock_hold_runner(server)
+    if runner is None:
+        return {"ok": False, "error": "stardock_hold_unavailable"}
+    return {
+        "ok": True,
+        "stopping": True,
+        **stardock_hold.run_wire(runner.stop()),
+    }
+
+
+def _dispatch_stardock_hold_status(server):
+    runner = _stardock_hold_runner(server)
+    if runner is None:
+        return {"ok": False, "error": "stardock_hold_unavailable"}
+    return {"ok": True, **stardock_hold.run_wire(runner.snapshot())}
+
+
 def _autoloop_runner(server):
     """The daemon's background player, or ``None``.
 
@@ -1241,6 +1293,15 @@ def dispatch(session, verb, args, server):
 
     if verb == "trade_chain_status":
         return _dispatch_trade_chain_status(server)
+
+    if verb == "stardock_hold_start":
+        return _dispatch_stardock_hold_start(args, server)
+
+    if verb == "stardock_hold_stop":
+        return _dispatch_stardock_hold_stop(server)
+
+    if verb == "stardock_hold_status":
+        return _dispatch_stardock_hold_status(server)
 
     if verb == "explore_start":
         return _dispatch_explore_start(args, server)

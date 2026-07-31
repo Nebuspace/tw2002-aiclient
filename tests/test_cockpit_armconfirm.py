@@ -310,6 +310,10 @@ def test_exactly_three_production_call_sites_raise_the_gate() -> None:
     ADR-003 adds the fifth: a discovered chain's exact semantic scaffold.
     Enter raises the gate without sending; only a subsequent `y` submits the
     held fingerprint to the daemon for recomputation and one-pass execution.
+
+    WO-STARDOCK-HOLD-UPGRADE-ARM adds the sixth: Play `H` raises a hold-buy
+    confirm when the exact scaffold is complete; only a subsequent `y` with
+    `pending_confirm_action == "stardock_hold"` arms the daemon buy.
     """
     root = Path(screens_mod.__file__).resolve().parent
     callers = []
@@ -320,10 +324,12 @@ def test_exactly_three_production_call_sites_raise_the_gate() -> None:
             name = getattr(func, "attr", None) or getattr(func, "id", None)
             if isinstance(node, ast.Call) and name == "begin_arm_confirm":
                 callers.append(path.name)
-    assert callers == ["app.py", "app.py", "app.py", "app.py", "app.py"], (
-        f"expected exactly five production callers, all in app.py (explore, "
-        f"relaunch, taught L)chains, discovered L)chains, and V)reflex); "
-        f"found {callers}"
+    assert callers == [
+        "app.py", "app.py", "app.py", "app.py", "app.py", "app.py"
+    ], (
+        f"expected exactly six production callers, all in app.py (explore, "
+        f"relaunch, taught L)chains, discovered L)chains, V)reflex, and "
+        f"H)hold); found {callers}"
     )
 
 
