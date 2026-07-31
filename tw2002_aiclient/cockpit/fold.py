@@ -38,9 +38,11 @@ still gets its label row and its (empty-but-honest) content, because that
 content **is** status the operator is meant to keep reading (canon: "the
 operator keeps the status ... just relocated"). Only the one case where
 **all three** sections are simultaneously at their own honest-empty marker
-collapses the whole pane down to DECISIONS' own two-line honest-empty state
-(`canon/surfaces/trainer-cockpit.md` "Panel states": ``["—", "Exploring…"]``)
-— never a fourteen-line stack of nothing but honest unknowns. "Empty" is
+collapses the whole pane down to DECISIONS' own calm-empty state
+(``decisions.compose_decisions_lines(None, …)`` — today the four autonomy
+HELP one-liners from WO-WIRE-AUTONOMY-HELP-LINES / #285; previously the
+canon pair ``["—", "Exploring…"]``) — never a fourteen-line stack of
+nothing but honest unknowns. "Empty" is
 detected by **comparing a section's real output to that same composer
 called on an empty/``None`` status at the same width** — never a
 hardcoded string guess — so the check stays correct if a sibling composer's
@@ -136,14 +138,14 @@ def compose_folded_decisions_lines(status: dict | None, *, width: int) -> list[s
     the same ``width``) still renders in full — see the module docstring's
     "still renders" rule — *unless every section* is simultaneously at its
     own empty marker, in which case the whole pane collapses to
-    ``decisions.compose_decisions_lines(None, width=width)`` (the two-line
-    honest-empty state) rather than a long stack of nothing but honest
-    unknowns. A section whose own composer call raises (an out-of-contract
-    hostile nested payload — see Hardening) is dropped from the stack
-    entirely (no label, no lines) rather than propagating; if every section
-    drops this way the pane still falls back to that same two-line
-    honest-empty state rather than ever returning ``[]``.
-
+    ``decisions.compose_decisions_lines(None, width=width)`` (DECISIONS'
+    calm-empty marker — currently the autonomy HELP one-liners) rather
+    than a long stack of nothing but honest unknowns. A section whose own
+    composer call raises (an out-of-contract hostile nested payload — see
+    Hardening) is dropped from the stack entirely (no label, no lines)
+    rather than propagating; if every section drops this way the pane
+    still falls back to that same calm-empty marker rather than ever
+    returning ``[]``.
     Every line is ``len(line) <= width`` (``width <= 0`` empties every
     line, including the ``GOALS``/``FOCUS`` label rows, to ``""`` —
     mirroring every child composer's own width-clip convention).
