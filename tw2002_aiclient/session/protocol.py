@@ -37,6 +37,7 @@ from contextlib import contextmanager
 
 from . import autoloop
 from . import sector_explore
+from . import trade_chain
 from .. import explore as _explore
 from .classify import classify_screen
 from .control_lock import (
@@ -327,6 +328,12 @@ def _status_response(session, server):
     # banner would otherwise be able to describe two different instants --
     # see `autoloop.observe`.
     arm = autoloop.observe(getattr(server, "autoloop", None), lock)
+    trade_runner = _trade_chain_runner(server)
+    trade = (
+        trade_runner.snapshot()
+        if trade_runner is not None
+        else trade_chain.TradeSnapshot(running=False)
+    )
     # WO-STATUS-EXPOSE-REPLAY-ARM: always-present arm report so a missing key
     # cannot read as "safe / disarmed". Profile name is `session.auto_login_profile`
     # itself (same field `guardian._maybe_reconnect` reads) — never re-derived.
@@ -356,7 +363,10 @@ def _status_response(session, server):
         "host": session.host,
         "port": session.port,
         "name": session.name,
-        "autopilot": autoloop.arm_block(arm),
+        # The global status surface stays deliberately bounded; detailed
+        # route/fingerprint progress is available only from the dedicated
+        # trade_chain_status verb.
+        "autopilot": {"running": bool(arm.running or trade.running)},
         "subscribers": watch_hub.subscriber_count() if watch_hub else 0,
         "replay_arm": replay_arm,
     }
@@ -364,6 +374,8 @@ def _status_response(session, server):
     # `autoloop.intervention_block`), so a daemon that has never run a
     # loop answers exactly as it did before this field existed.
     intervention = autoloop.intervention_block(arm)
+    if intervention is None:
+        intervention = trade_chain.intervention_block(trade)
     if intervention is not None:
         resp["intervention"] = intervention
     if lock is not None:
@@ -656,6 +668,51 @@ def _dispatch_explore_status(server):
     runner = _explore_runner(server)
     lock = getattr(server, "control_lock", None)
     return {"ok": True, **sector_explore.explore_run_wire(sector_explore.observe_explore(runner, lock))}
+
+
+def _trade_chain_runner(server):
+    return getattr(server, "trade_chain", None)
+
+
+def _dispatch_trade_chain_start(args, server):
+    runner = _trade_chain_runner(server)
+    if runner is None:
+        return {"ok": False, "error": "trade_chain_unavailable"}
+    unsupported = sorted(set(args) - trade_chain.ARGS_TRADE_CHAIN_START)
+    if unsupported:
+        return {"ok": False, "error": f"unsupported_arg:{unsupported[0]}"}
+    kwargs = {}
+    if "cash_floor" in args:
+        kwargs["cash_floor"] = args["cash_floor"]
+    if "turn_reserve" in args:
+        kwargs["turn_reserve"] = args["turn_reserve"]
+    try:
+        snapshot = runner.start(
+            args.get("world_id"),
+            args.get("fingerprint"),
+            **kwargs,
+        )
+    except trade_chain.TradeChainRefused as exc:
+        return {"ok": False, "error": str(exc)}
+    return {"ok": True, "started": True, **trade_chain.run_wire(snapshot)}
+
+
+def _dispatch_trade_chain_stop(server):
+    runner = _trade_chain_runner(server)
+    if runner is None:
+        return {"ok": False, "error": "trade_chain_unavailable"}
+    return {
+        "ok": True,
+        "stopping": True,
+        **trade_chain.run_wire(runner.stop()),
+    }
+
+
+def _dispatch_trade_chain_status(server):
+    runner = _trade_chain_runner(server)
+    if runner is None:
+        return {"ok": False, "error": "trade_chain_unavailable"}
+    return {"ok": True, **trade_chain.run_wire(runner.snapshot())}
 
 
 def _autoloop_runner(server):
@@ -1175,6 +1232,15 @@ def dispatch(session, verb, args, server):
 
     if verb == "autoloop_status":
         return _dispatch_autoloop_status(server)
+
+    if verb == "trade_chain_start":
+        return _dispatch_trade_chain_start(args, server)
+
+    if verb == "trade_chain_stop":
+        return _dispatch_trade_chain_stop(server)
+
+    if verb == "trade_chain_status":
+        return _dispatch_trade_chain_status(server)
 
     if verb == "explore_start":
         return _dispatch_explore_start(args, server)

@@ -147,9 +147,9 @@ def test_unexplored_world_json_reports_the_typed_reason(monkeypatch, tmp_path):
 def test_cmd_chains_never_touches_the_taught_arm_list():
     """`cockpit/chains.py`'s `rows` are the ARM surface (-> `begin_arm_confirm`
     -> `autoloop_start`, the money-spending call). Since WO-CHAINS-TUI-FULL
-    the `L)chains` modal DISPLAYS discovered cycles -- but only as a
-    structurally non-armable section wired in `app.py`, never through the
-    arm list -- and this CLI verb must still not touch the arm path at all:
+    the `L)chains` modal displays discovered cycles and ADR-003 gives that
+    surface a separate exact-fingerprint approval path, never through the
+    recorded arm list. This CLI verb must still not touch either arm path:
     no cockpit import, no autoloop reference, nothing that could put a
     discovered cycle where `selected()` could return it.
 

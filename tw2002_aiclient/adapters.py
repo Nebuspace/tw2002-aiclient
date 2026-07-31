@@ -297,6 +297,65 @@ class AutoLoopResult:
     raw: dict | None = None     # wire dict; carries `stopping` + the run report
 
 
+@dataclass(frozen=True)
+class TradeChainResult:
+    """Typed guarded-chain start/stop/status transport result."""
+
+    ok: bool
+    reason: str | None = None
+    detail: str | None = None
+    raw: dict | None = None
+
+
+def _trade_chain_verb(
+    verb: str, *, run_dir: Path | None = None, payload: dict | None = None
+) -> TradeChainResult:
+    resolved_run_dir = run_dir or _env.resolve_run_dir()
+    try:
+        resp = _cli.send_request(
+            verb, payload or {}, run_dir=resolved_run_dir
+        )
+    except Exception as exc:  # noqa: BLE001
+        return TradeChainResult(
+            ok=False, reason="unknown", detail=f"{type(exc).__name__}: {exc}"
+        )
+    if resp.get("ok"):
+        return TradeChainResult(ok=True, raw=resp)
+    return TradeChainResult(
+        ok=False,
+        reason=str(resp.get("error") or "unknown"),
+        raw=resp,
+    )
+
+
+def trade_chain_start(
+    world_id: str,
+    fingerprint: str,
+    *,
+    cash_floor: int,
+    turn_reserve: int,
+    run_dir: Path | None = None,
+) -> TradeChainResult:
+    return _trade_chain_verb(
+        "trade_chain_start",
+        run_dir=run_dir,
+        payload={
+            "world_id": world_id,
+            "fingerprint": fingerprint,
+            "cash_floor": cash_floor,
+            "turn_reserve": turn_reserve,
+        },
+    )
+
+
+def trade_chain_stop(*, run_dir: Path | None = None) -> TradeChainResult:
+    return _trade_chain_verb("trade_chain_stop", run_dir=run_dir)
+
+
+def trade_chain_status(*, run_dir: Path | None = None) -> TradeChainResult:
+    return _trade_chain_verb("trade_chain_status", run_dir=run_dir)
+
+
 def autoloop_start(
     name: str,
     *,

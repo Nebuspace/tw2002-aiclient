@@ -296,7 +296,7 @@ def test_exactly_three_production_call_sites_raise_the_gate() -> None:
     an explicit confirm prompt").
 
     The pin is UPDATED, not deleted -- it now asserts there are exactly
-    FOUR production call sites, all in `app.py`. A FIFTH caller appearing
+    FIVE production call sites, all in `app.py`. A SIXTH caller appearing
     without its own WO still goes red first, which is the property that
     made the original worth having. Deleting it would have converted a
     live guard into silence at the exact moment it started guarding
@@ -306,6 +306,10 @@ def test_exactly_three_production_call_sites_raise_the_gate() -> None:
     taught-rule proposal via `adapters.reflex_arm`. Same deliberate shape —
     preview/raise arms nothing; only a subsequent `y` with
     `pending_confirm_action == "reflex"` launches.
+
+    ADR-003 adds the fifth: a discovered chain's exact semantic scaffold.
+    Enter raises the gate without sending; only a subsequent `y` submits the
+    held fingerprint to the daemon for recomputation and one-pass execution.
     """
     root = Path(screens_mod.__file__).resolve().parent
     callers = []
@@ -316,9 +320,10 @@ def test_exactly_three_production_call_sites_raise_the_gate() -> None:
             name = getattr(func, "attr", None) or getattr(func, "id", None)
             if isinstance(node, ast.Call) and name == "begin_arm_confirm":
                 callers.append(path.name)
-    assert callers == ["app.py", "app.py", "app.py", "app.py"], (
-        f"expected exactly four production callers, all in app.py (explore, "
-        f"relaunch, L)chains, and V)reflex); found {callers}"
+    assert callers == ["app.py", "app.py", "app.py", "app.py", "app.py"], (
+        f"expected exactly five production callers, all in app.py (explore, "
+        f"relaunch, taught L)chains, discovered L)chains, and V)reflex); "
+        f"found {callers}"
     )
 
 

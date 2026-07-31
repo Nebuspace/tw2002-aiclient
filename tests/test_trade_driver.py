@@ -16,14 +16,14 @@ for tests that aren't themselves exercising those two gates.
 """
 
 import time
+from dataclasses import dataclass
 
 import pytest
 
-from twclient import world_model
-from twclient.autopilot import EconCaps
-from twclient.chains import ProfitChain, TradeHop
-from twclient.state_parser import credits_balance
-from twclient.trade_driver import (
+from tw2002_aiclient import world_model
+from tw2002_aiclient.chains import ProfitChain, TradeHop
+from tw2002_aiclient.session.state_parser import OUTCOME_READ, read_credits_balance
+from tw2002_aiclient.trade_driver import (
     DEFAULT_MAX_STEPS,
     PaladinViolation,
     TradeDriverConfig,
@@ -32,6 +32,13 @@ from twclient.trade_driver import (
     _send_letter,
     run_chain,
 )
+
+
+@dataclass(frozen=True)
+class EconCaps:
+    cash_floor: int
+    turn_reserve: int
+    credits_stale_ms: int
 
 
 class FakeChainSession:
@@ -90,9 +97,9 @@ class FakeChainSession:
         return self.last_credits, self.last_credits_ts
 
     def _maybe_observe_credits(self):
-        bal = credits_balance(self._screens[self._i])
-        if bal is not None:
-            self.last_credits = bal
+        read = read_credits_balance(self._screens[self._i])
+        if read.outcome == OUTCOME_READ:
+            self.last_credits = read.balance
             self.last_credits_ts = time.monotonic()
 
 
@@ -325,6 +332,21 @@ def test_is_armed_false_produces_zero_sends_fail_closed(tmp_path):
     assert session.sent == []
 
 
+def test_start_anchor_mismatch_produces_zero_sends(tmp_path):
+    world_id = "test-start-anchor"
+    _seed_two_sector_graph(world_id, tmp_path)
+    session = FakeChainSession(
+        ["Sector  : 2\nCommand [TL=00:00:08]:[2] (?=Help)? : "],
+        initial_credits=10_000,
+    )
+
+    result = _run(session, _two_port_loop_chain(), world_id, tmp_path, 100)
+
+    assert result.stop_reason == "start_anchor_mismatch:2:1"
+    assert result.steps == 0
+    assert session.sent == []
+
+
 # -- A-M2: sell-side genuine [0] must never strand cargo -------------------
 
 
@@ -344,7 +366,9 @@ def test_sell_side_genuine_zero_bracket_holds_cargo_stranded_never_completes(tmp
             "Commerce report for PortA: 12:00:00 AM Mon Jan 01, 2054\n\n"
             " Items     Status  Trading % of max OnBoard\n"
             " -----     ------  ------- -------- -------\n"
-            "Fuel Ore   Selling    500     100%       0\n\n"
+                "Fuel Ore   Selling    500     100%       0\n"
+                "Organics   Buying     300      50%       0\n"
+                "Equipment  Buying     200      50%       0\n\n"
             "How many holds of Fuel Ore [500] ? "
         ),
         "We'll sell them for 900 credits.\nYour offer [900] ? ",
@@ -356,7 +380,9 @@ def test_sell_side_genuine_zero_bracket_holds_cargo_stranded_never_completes(tmp
             "Commerce report for PortB: 12:00:00 AM Mon Jan 01, 2054\n\n"
             " Items     Status  Trading % of max OnBoard\n"
             " -----     ------  ------- -------- -------\n"
-            "Fuel Ore   Selling      0     100%       0\n\n"
+                "Fuel Ore   Selling      0     100%       0\n"
+                "Organics   Selling    300      50%       0\n"
+                "Equipment  Buying     200      50%       0\n\n"
             "How many holds of Fuel Ore [0] ? "
         ),
         "Command [TL=00:00:08]:[2] (?=Help)? : ",  # after decline("0")
@@ -399,7 +425,9 @@ def test_dock_turn_floor_gates_the_actual_sell_dock_not_just_the_upfront_estimat
             "Commerce report for PortA: 12:00:00 AM Mon Jan 01, 2054\n\n"
             " Items     Status  Trading % of max OnBoard\n"
             " -----     ------  ------- -------- -------\n"
-            "Fuel Ore   Selling    500     100%       0\n\n"
+                "Fuel Ore   Selling    500     100%       0\n"
+                "Organics   Buying     300      50%       0\n"
+                "Equipment  Buying     200      50%       0\n\n"
             "How many holds of Fuel Ore [500] ? "
         ),  # 2 (after T @1)
         "We'll sell them for 900 credits.\nYour offer [900] ? ",  # 3 (after qty 45)
@@ -472,7 +500,9 @@ def test_credit_delta_anomaly_fires_on_a_magnitude_mismatch_even_with_correct_di
             "Commerce report for PortA: 12:00:00 AM Mon Jan 01, 2054\n\n"
             " Items     Status  Trading % of max OnBoard\n"
             " -----     ------  ------- -------- -------\n"
-            "Fuel Ore   Selling    500     100%       0\n\n"
+                "Fuel Ore   Selling    500     100%       0\n"
+                "Organics   Buying     300      50%       0\n"
+                "Equipment  Buying     200      50%       0\n\n"
             "How many holds of Fuel Ore [500] ? "
         ),
         "We'll sell them for 900 credits.\nYour offer [900] ? ",
@@ -513,7 +543,9 @@ def test_buy_quantity_is_computed_from_budget_never_the_ports_own_max_default(tm
             "Commerce report for PortA: 12:00:00 AM Mon Jan 01, 2054\n\n"
             " Items     Status  Trading % of max OnBoard\n"
             " -----     ------  ------- -------- -------\n"
-            "Fuel Ore   Selling    500     100%       0\n\n"
+                "Fuel Ore   Selling    500     100%       0\n"
+                "Organics   Buying     300      50%       0\n"
+                "Equipment  Buying     200      50%       0\n\n"
             "How many holds of Fuel Ore [500] ? "
         ),
         "We'll sell them for 900 credits.\nYour offer [900] ? ",
@@ -553,7 +585,9 @@ def test_over_budget_offer_holds_without_ever_accepting(tmp_path):
             "Commerce report for PortA: 12:00:00 AM Mon Jan 01, 2054\n\n"
             " Items     Status  Trading % of max OnBoard\n"
             " -----     ------  ------- -------- -------\n"
-            "Fuel Ore   Selling    500     100%       0\n\n"
+                "Fuel Ore   Selling    500     100%       0\n"
+                "Organics   Buying     300      50%       0\n"
+                "Equipment  Buying     200      50%       0\n\n"
             "How many holds of Fuel Ore [500] ? "
         ),
         # A live total far above what our own price estimate/budget

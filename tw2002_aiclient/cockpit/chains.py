@@ -2,9 +2,9 @@
 (WO-PLAY-AUTOLOOP-START).
 
 Pure: no filesystem, no session, no curses. Formats whatever
-``loops.store.read_loop_store`` found (plus, display-only, whatever
-discovered-chains payload the caller passed in — see "What this is NOT")
-and answers which TAUGHT row is selected; ``app.py::_run_play`` owns the
+``loops.store.read_loop_store`` found plus the discovered-chains payload
+the caller passed in, and answers which recorded or discovered row is selected;
+``app.py::_run_play`` owns the
 state transitions and the one call that spends, and ``screens.py`` owns
 drawing. Same split ``teachband`` / ``autoloop_controls`` / ``panic``
 already use.
@@ -26,13 +26,13 @@ chains the human can launch". **Taught** is the load-bearing word for
 ARMING: ``rows`` lists only macros a human already demonstrated, read from
 the shipped loop store, and those rows are the only thing ``selected()`` can
 return — the only shape the arm path can ever receive. Since
-WO-CHAINS-TUI-FULL the popup ALSO DISPLAYS a separate read-only "Discovered
-profit chains" section (``ChainsSession.discovered``, a
+WO-CHAINS-TUI-FULL the popup ALSO DISPLAYS a separate "Discovered profit
+chains" section (``ChainsSession.discovered``, a
 ``chain_search.recompute``-shaped payload the CALLER passes in): display
-only, visually distinct (``detected`` provenance tag, no selection marker),
-and structurally non-armable — a discovered chain never enters ``rows``,
-the cursor never traverses it, and ``selected()`` cannot express it. The
-invariant is **never armable**, not never displayed. This module still runs
+visually distinct (``detected`` provenance tag), and never merged into
+recorded ``rows``. ADR-003 adds a separate ``selected_discovered()`` approval
+path; ``selected()`` remains recorded-only, so a discovered suggestion can
+never masquerade as a demonstrated keystroke macro. This module still runs
 no discovery of its own — no EV, no priority engine, no chain-finder import
 (``chain_search_view`` is a pure formatter, not a finder); ``app.py``
 computes the payload and passes it in (WO-PLAY-AUTOLOOP-START Scope 4
@@ -211,6 +211,8 @@ class ChainsSession:
         self.is_open: bool = False
         self.rows: list[dict] = []
         self.index: int = 0
+        self.section: str = "taught"
+        self.discovered_index: int = 0
         # Carried so the EMPTY rendering can tell "none taught" from "could
         # not read the store" -- see `store_status`.
         self.status: str = "unreadable"
@@ -237,7 +239,7 @@ class ChainsSession:
         forgets to pass it gets the honest-unknown rendering rather than a
         fabricated "no trade loop yet".
 
-        ``discovered`` (display-only, never armable) defaults to ``None``
+        ``discovered`` defaults to ``None``
         for the same fail-closed reason: no payload renders as "discovery
         unavailable", never as a fabricated "no discovered profit chains".
         A junk shape is folded to ``None`` rather than handed to the
@@ -245,34 +247,83 @@ class ChainsSession:
         self.rows = [r for r in rows if isinstance(r, Mapping)] if isinstance(rows, list) else []
         self.is_open = True
         self.index = 0
+        self.discovered_index = 0
         self.status = status if status in ("ok", "partial", "unreadable") else "unreadable"
         self.discovered = _usable_discovered(discovered)
+        self.section = "taught" if self.rows else (
+            "discovered" if self._selectable_discovered() else "taught"
+        )
 
     def close(self) -> None:
         self.is_open = False
         self.index = 0
+        self.discovered_index = 0
+        self.section = "taught"
+
+    def _selectable_discovered(self) -> list:
+        payload = self.discovered
+        if payload is None:
+            return []
+        if (
+            getattr(payload, "adapter_note", None) is not None
+            or getattr(payload, "search_note", None) is not None
+        ):
+            return []
+        found = getattr(payload, "chains", None)
+        return list(found) if isinstance(found, (tuple, list)) else []
 
     def move(self, delta: object) -> None:
         """Move the cursor, clamped to the list. Clamped rather than
         wrapping: wrapping past the end of a list of live-money actions puts
         a different row under a confirm the operator may already be
         reaching for. Never raises."""
-        if not self.rows:
-            self.index = 0
-            return
         if isinstance(delta, bool) or not isinstance(delta, int):
             return
-        self.index = max(0, min(len(self.rows) - 1, self.index + delta))
+        discovered = self._selectable_discovered()
+        if self.section == "taught":
+            if not self.rows:
+                self.index = 0
+                if discovered:
+                    self.section = "discovered"
+                return
+            target = self.index + delta
+            if target >= len(self.rows) and discovered:
+                self.section = "discovered"
+                self.discovered_index = min(
+                    len(discovered) - 1, target - len(self.rows)
+                )
+                return
+            self.index = max(0, min(len(self.rows) - 1, target))
+            return
+        if not discovered:
+            self.section = "taught"
+            self.discovered_index = 0
+            return
+        target = self.discovered_index + delta
+        if target < 0 and self.rows:
+            self.section = "taught"
+            self.index = max(0, len(self.rows) + target)
+            return
+        self.discovered_index = max(0, min(len(discovered) - 1, target))
 
     def selected(self) -> dict | None:
         """The row under the cursor, or ``None`` when there is nothing to
         arm. ``None`` is what stops the arm intent from ever reaching the
         adapter with a guessed name."""
-        if not self.rows:
+        if self.section != "taught" or not self.rows:
             return None
         if not 0 <= self.index < len(self.rows):
             return None
         return self.rows[self.index]
+
+    def selected_discovered(self) -> object | None:
+        """The exact complete discovered chain under the approval cursor."""
+        if self.section != "discovered":
+            return None
+        discovered = self._selectable_discovered()
+        if not 0 <= self.discovered_index < len(discovered):
+            return None
+        return discovered[self.discovered_index]
 
 
 def compose_arm_action(loop: object) -> str:
@@ -319,7 +370,8 @@ def compose_chain_lines(
       ``○ ○  no trade loop yet`` placeholder — a stated negative, never a
       blank box — and only under ``status == "ok"``; anything else renders
       the could-not-establish line instead.
-    * **Discovered** — display-only, never armable: ``session.discovered``
+    * **Discovered** — separately selectable for ADR-003 approval:
+      ``session.discovered``
       is formatted by ``chain_search_view.format_profit_chain_lines``
       (PARTIAL banner, truncated-empty hedge and all — the wording lives
       there, not here), so every row carries its ``detected`` tag and none
@@ -335,6 +387,7 @@ def compose_chain_lines(
     w = max(12, w)
     rows = getattr(session, "rows", None)
     index = getattr(session, "index", 0)
+    section = getattr(session, "section", "taught")
     lines = [TITLE]
     if not isinstance(rows, list) or not rows:
         # The honest empty, reached ONLY when the store established the
@@ -359,7 +412,7 @@ def compose_chain_lines(
                 steps_text = f"{UNKNOWN} steps"
             else:
                 steps_text = f"{steps} steps"
-            marker = f"{sel} " if i == index else "  "
+            marker = f"{sel} " if section == "taught" and i == index else "  "
             name_w = max(4, w - len(marker) - len(steps_text) - 2)
             lines.append(f"{marker}{name.strip()[:name_w]:<{name_w}}  {steps_text}")
     # The discovered section — appended AFTER the taught rows (tests pin the
@@ -373,7 +426,14 @@ def compose_chain_lines(
     else:
         lines.extend(
             _search_view.format_profit_chain_lines(
-                discovered, unicode_ok=unicode_ok, width=w
+                discovered,
+                unicode_ok=unicode_ok,
+                width=w,
+                selected_index=(
+                    getattr(session, "discovered_index", 0)
+                    if section == "discovered"
+                    else None
+                ),
             )
         )
     return lines

@@ -449,12 +449,13 @@ def _package_sources():
     return sorted(PKG_ROOT.rglob("*.py"))
 
 
-def test_enter_auto_loop_has_exactly_one_production_call_site():
+def test_enter_auto_loop_has_exactly_three_production_call_sites():
     """Structural, via AST rather than grep, and it looks for the two
     shapes a grep for ``enter_auto_loop(`` would miss: an attribute call
     written any other way, and a reflective ``getattr(lock,
-    "enter_auto_loop")``. A second acquisition path is how two drivers end
-    up on one wire while the chip reads OFF."""
+    "enter_auto_loop")``. The three reviewed daemon runners share this lock;
+    a fourth acquisition path is how two drivers could end up on one wire
+    while the chip reads OFF."""
     attribute_sites = []
     reflective_sites = []
     for path in _package_sources():
@@ -468,8 +469,9 @@ def test_enter_auto_loop_has_exactly_one_production_call_site():
     assert sorted(name for name, _ in attribute_sites) == [
         "autoloop.py",
         "sector_explore.py",
+        "trade_chain.py",
     ], attribute_sites
-    assert len(attribute_sites) == 2, attribute_sites
+    assert len(attribute_sites) == 3, attribute_sites
     # `control_lock.py` names it in prose only; a string LITERAL of the
     # method name anywhere is a reflection door and must be deliberate.
     assert reflective_sites == [], reflective_sites
