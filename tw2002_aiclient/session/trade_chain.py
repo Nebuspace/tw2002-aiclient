@@ -29,6 +29,17 @@ class TradeChainRefused(Exception):
     pass
 
 
+def discovery_blocks_start(discovered) -> bool:
+    """True when chain discovery must not arm a trade start.
+
+    Same condition ``TradeRunner.start`` uses for ``chain_discovery_partial``
+    (WO-TRADE-PARTIAL-BACKOFF): a truncated search is incomplete even when
+    it returned some cycles — absence of better cycles is not established.
+    Shared so the App-armed auto-fire preflight cannot drift from the runner.
+    """
+    return bool(getattr(discovered, "truncated", False))
+
+
 @dataclass(frozen=True)
 class TradeCaps:
     cash_floor: int
@@ -167,7 +178,7 @@ class TradeChainRunner:
             raise TradeChainRefused(
                 f"chain_discovery_failed:{type(exc).__name__}"
             ) from None
-        if discovered.truncated:
+        if discovery_blocks_start(discovered):
             raise TradeChainRefused("chain_discovery_partial")
         chain = resolve_exact_chain(
             world_id.strip(), fingerprint, discovered.chains

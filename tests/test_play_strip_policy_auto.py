@@ -294,6 +294,161 @@ def test_incomplete_plan_is_an_honest_no_op(monkeypatch):
     assert calls == []
 
 
+class _PartialDiscovery:
+    truncated = True
+    chains = ()
+
+
+class _CompleteDiscovery:
+    truncated = False
+    chains = (object(),)
+
+
+def test_partial_discovery_preflight_skips_start_and_starting_paint(monkeypatch):
+    """WO-TRADE-PARTIAL-BACKOFF: truncated discovery → no start, no 'starting…'."""
+    monkeypatch.setattr(_autonomy_policy, "choose_offer", lambda *_a, **_k: _offer("run_chain"))
+    monkeypatch.setattr(_trade_chain_plan, "plan_from_chain", lambda *_a, **_k: _TRADE_PLAN)
+    monkeypatch.setattr(
+        app_mod, "_trade_chain_discovery_preflight", lambda *_a, **_k: _PartialDiscovery()
+    )
+    calls = []
+    monkeypatch.setattr(
+        adapters, "trade_chain_start", lambda *a, **k: calls.append(1) or _TradeResult()
+    )
+    monkeypatch.setattr(app_mod.time, "monotonic", lambda: 1000.0)
+    # Prefer-explore path must not require a live explore adapter for this pin.
+    monkeypatch.setattr(
+        app_mod, "_prefer_explore_while_trade_blocked", lambda *a, **k: None
+    )
+    play = _FakePlay(port_trade_on=True)
+    assert app_mod._autonomy_auto_fire(play, profile=_PROFILE, run_dir=None) == (False, False)
+    assert calls == []
+    assert play.draw_calls == 0
+    assert "starting trade" not in play.status_line
+    assert "chain_discovery_partial" in play.status_line
+    assert play._trade_af_cooldown_until == 1000.0 + app_mod._TRADE_AUTO_FIRE_COOLDOWN_S
+
+
+def test_partial_refuse_then_quiet_during_cooldown(monkeypatch):
+    """One honest refuse LOGS line, then silence — no multi-fire in cooldown."""
+    monkeypatch.setattr(_autonomy_policy, "choose_offer", lambda *_a, **_k: _offer("run_chain"))
+    monkeypatch.setattr(_trade_chain_plan, "plan_from_chain", lambda *_a, **_k: _TRADE_PLAN)
+    monkeypatch.setattr(
+        app_mod, "_trade_chain_discovery_preflight", lambda *_a, **_k: _PartialDiscovery()
+    )
+    monkeypatch.setattr(
+        app_mod, "_prefer_explore_while_trade_blocked", lambda *a, **k: None
+    )
+    calls = []
+    monkeypatch.setattr(
+        adapters, "trade_chain_start", lambda *a, **k: calls.append(1) or _TradeResult()
+    )
+    clock = {"t": 1000.0}
+    monkeypatch.setattr(app_mod.time, "monotonic", lambda: clock["t"])
+    play = _FakePlay(port_trade_on=True)
+    app_mod._autonomy_auto_fire(play, profile=_PROFILE, run_dir=None)
+    first_line = play.status_line
+    assert "chain_discovery_partial" in first_line
+    # Mid-cooldown tick: quiet — status_line unchanged, still no start.
+    clock["t"] = 1000.0 + 10.0
+    play.status_line = first_line  # simulate LOGS still showing refuse
+    assert app_mod._autonomy_auto_fire(play, profile=_PROFILE, run_dir=None) == (False, False)
+    assert play.status_line == first_line
+    assert calls == []
+    assert play.draw_calls == 0
+
+
+def test_after_cooldown_allows_one_attempt_again(monkeypatch):
+    monkeypatch.setattr(_autonomy_policy, "choose_offer", lambda *_a, **_k: _offer("run_chain"))
+    monkeypatch.setattr(_trade_chain_plan, "plan_from_chain", lambda *_a, **_k: _TRADE_PLAN)
+    monkeypatch.setattr(
+        app_mod, "_prefer_explore_while_trade_blocked", lambda *a, **k: None
+    )
+    discovery = {"partial": True}
+
+    def _preflight(*_a, **_k):
+        return _PartialDiscovery() if discovery["partial"] else _CompleteDiscovery()
+
+    monkeypatch.setattr(app_mod, "_trade_chain_discovery_preflight", _preflight)
+    calls = []
+
+    def _start(*a, **k):
+        calls.append(1)
+        return _TradeResult(ok=True, raw={"running": True, "run": {"route": "1>2>1"}})
+
+    monkeypatch.setattr(adapters, "trade_chain_start", _start)
+    clock = {"t": 1000.0}
+    monkeypatch.setattr(app_mod.time, "monotonic", lambda: clock["t"])
+    play = _FakePlay(port_trade_on=True)
+    app_mod._autonomy_auto_fire(play, profile=_PROFILE, run_dir=None)
+    assert calls == []
+    # Cooldown expired + discovery complete → one start allowed.
+    clock["t"] = 1000.0 + app_mod._TRADE_AUTO_FIRE_COOLDOWN_S + 0.1
+    discovery["partial"] = False
+    trade_poll, hold_poll = app_mod._autonomy_auto_fire(play, profile=_PROFILE, run_dir="/rd")
+    assert calls == [1]
+    assert trade_poll is True
+    assert hold_poll is False
+
+
+def test_backoff_refuse_from_start_arms_cooldown(monkeypatch):
+    """Daemon-side chain_identity_stale also backs off (no per-tick re-fire)."""
+    monkeypatch.setattr(_autonomy_policy, "choose_offer", lambda *_a, **_k: _offer("run_chain"))
+    monkeypatch.setattr(_trade_chain_plan, "plan_from_chain", lambda *_a, **_k: _TRADE_PLAN)
+    monkeypatch.setattr(
+        app_mod, "_trade_chain_discovery_preflight", lambda *_a, **_k: _CompleteDiscovery()
+    )
+    calls = []
+    monkeypatch.setattr(
+        adapters,
+        "trade_chain_start",
+        lambda *a, **k: calls.append(1)
+        or _TradeResult(ok=False, reason="chain_identity_stale"),
+    )
+    clock = {"t": 500.0}
+    monkeypatch.setattr(app_mod.time, "monotonic", lambda: clock["t"])
+    play = _FakePlay(port_trade_on=True)
+    app_mod._autonomy_auto_fire(play, profile=_PROFILE, run_dir=None)
+    assert calls == [1]
+    assert "chain_identity_stale" in play.status_line
+    first = play.status_line
+    clock["t"] = 510.0
+    app_mod._autonomy_auto_fire(play, profile=_PROFILE, run_dir=None)
+    assert calls == [1]  # no second fire
+    assert play.status_line == first
+
+
+def test_map_growth_clears_trade_auto_fire_cooldown(monkeypatch):
+    monkeypatch.setattr(_autonomy_policy, "choose_offer", lambda *_a, **_k: _offer("run_chain"))
+    monkeypatch.setattr(_trade_chain_plan, "plan_from_chain", lambda *_a, **_k: _TRADE_PLAN)
+    monkeypatch.setattr(
+        app_mod, "_trade_chain_discovery_preflight", lambda *_a, **_k: _CompleteDiscovery()
+    )
+    calls = []
+    monkeypatch.setattr(
+        adapters,
+        "trade_chain_start",
+        lambda *a, **k: calls.append(1)
+        or _TradeResult(ok=False, reason="chain_plan_invalid"),
+    )
+    monkeypatch.setattr(app_mod.time, "monotonic", lambda: 2000.0)
+    play = _FakePlay(port_trade_on=True)
+    play.chain_scalars.known_ports = {1, 2}
+    app_mod._autonomy_auto_fire(play, profile=_PROFILE, run_dir=None)
+    assert calls == [1]
+    # Growth clears marker → another attempt allowed immediately.
+    play.chain_scalars.known_ports = {1, 2, 3}
+    app_mod._autonomy_auto_fire(play, profile=_PROFILE, run_dir=None)
+    assert calls == [1, 1]
+
+
+def test_discovery_blocks_start_matches_truncated_gate():
+    from tw2002_aiclient.session import trade_chain as tc
+
+    assert tc.discovery_blocks_start(_PartialDiscovery()) is True
+    assert tc.discovery_blocks_start(_CompleteDiscovery()) is False
+
+
 # ---------------------------------------------------------------------------
 # Full-loop wire pins — Mode-leave halt
 # ---------------------------------------------------------------------------
