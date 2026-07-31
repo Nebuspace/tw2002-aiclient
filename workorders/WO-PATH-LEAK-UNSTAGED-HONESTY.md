@@ -1,6 +1,6 @@
 # WO-PATH-LEAK-UNSTAGED-HONESTY — path-leak-scan must not exit 0 on "nothing staged"
 
-**Status:** OPEN · EXECUTE · tooling · Cursor-only  
+**Status:** DONE · origin `d67cd5f` (#233) · tip-honesty stamp 2026-07-31 (product on main; banner was stale OPEN)
 **Posted:** 2026-07-27T20:50:00Z · hub from CC #114 STATUS finding  
 **Seeded for execute:** 2026-07-30T03:25Z · hub · autonomous safe queue after #232  
 **Seat:** impl-aiclient-cursor  

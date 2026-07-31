@@ -1,6 +1,6 @@
 # WO-PLAYER-HALT-NEVER-AUTO-CLASS — Qualify LoopPlayer never-auto halt with class
 
-**Status:** OPEN · EXECUTE · MED · diagnosis honesty (follow-on #213)
+**Status:** DONE · origin `da94f0e` (#214) · tip-honesty stamp 2026-07-31 (product on main; banner was stale OPEN)
 **Posted:** 2026-07-29T05:40Z · morning bar complete; hygiene/honesty continuity
 **Seat:** impl-claudecode-aiclient (offline) · live → n/a (vocabulary; no new live path)
 **Depends:** #213 explore halt vocabulary on main (`a8f2bc8`)
