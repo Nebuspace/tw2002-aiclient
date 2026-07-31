@@ -746,8 +746,11 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
     # Both overlays compose by wrapping: each adds only its own keys, each
     # declines to clobber a value the layer beneath already supplied, and each
     # maps a `None` provider to `None`, so the order is not load-bearing.
-    play.status_provider = play.world_stats.wrap(
-        play.chain_scalars.wrap(_daemon_status_provider(run_dir))
+    # FOCUS wraps outermost so it sees chain + world scalars already merged.
+    play.status_provider = play.focus_scalars.wrap(
+        play.world_stats.wrap(
+            play.chain_scalars.wrap(_daemon_status_provider(run_dir))
+        )
     )
     play.status_line = "Ensuring session…"
     play.draw()  # show the ensuring state during the (blocking) wait below

@@ -13,6 +13,7 @@ from typing import Callable, Sequence
 import curses
 
 from tw2002_aiclient import chain_status as _chain_status
+from tw2002_aiclient import focus_status as _focus_status
 from tw2002_aiclient import world_stats as _world_stats
 from tw2002_aiclient.cockpit import analyze as cockpit_analyze
 from tw2002_aiclient.cockpit import arm as cockpit_arm
@@ -893,6 +894,9 @@ class PlayShellScreen:
         # chains-popup branch and explore terminal poll (see app.py); constructed
         # here for the same reason as `chain_scalars`.
         self.world_stats = _world_stats.WorldStats()
+        # WO-PRIORITY-ENGINE-FOCUS-WIRE: FOCUS candidates overlay (display
+        # only). Bound to chain_scalars so merge can see priced cycles.
+        self.focus_scalars = _focus_status.FocusScalars(self.chain_scalars)
         # WO-P4-052: a no-arg callable returning a `WatchFeedSnapshot`-shaped
         # object (duck-typed via `.latest_event` only -- this module never
         # imports `WatchFeed` itself, see draw()'s own GAME viewport block).
