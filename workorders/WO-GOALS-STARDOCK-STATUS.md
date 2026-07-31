@@ -1,6 +1,6 @@
 # WO-GOALS-STARDOCK-STATUS — GOALS StarDock row from world-model landmarks
 
-**Status:** OPEN · EXECUTE · HIGH · visible client automation · Cursor-only  
+**Status:** DONE · origin `abaf47c` (#250) · paper-close 2026-07-31 (product on main; banner was stale OPEN)  
 **Posted / seeded:** 2026-07-30T08:44Z · hub (Play-visible after #249; Max "just go")  
 **Seat:** `impl-aiclient-cursor`  
 **Depends:** `main` ≥ `40ba197` · landmarks writers already on main (`WO-WM-LANDMARKS-WRITE` #165 · `_attribute_landmark` / #169 memory)  
