@@ -661,8 +661,11 @@ _CONN_FLASH_PERIOD_S = 1.6
 
 # Connected-state glyph beside the host (hub REVISE chrome for
 # WO-PLAY-STRIP-POLICY-AUTO): filled heartbeat-class dot, not the word
-# CONN. Private in liveness (`_HEARTBEAT_UNICODE[0]` / ASCII twin) so we
-# keep local mirrors rather than importing private names.
+# CONN. Same codepoint as the bottom liveness heartbeat's lit phase
+# (WO-CONN-HEARTBEAT-GLYPH) — intentional; distinguish by geometry
+# (top strip vs control-strip), not whole-grid uniqueness. Private in
+# liveness (`_HEARTBEAT_UNICODE[0]` / ASCII twin) so we keep local
+# mirrors rather than importing private names.
 _CONN_GLYPH_U = "●"  # ●
 _CONN_GLYPH_A = "*"
 

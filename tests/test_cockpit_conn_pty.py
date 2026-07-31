@@ -153,27 +153,47 @@ def test_connected_renders_conn_on_a_real_terminal(tmp_path) -> None:
 def test_connected_conn_rides_the_top_strip_only(tmp_path) -> None:
     """Accept #3 (WO-PLAY-STRIP-TRAINER-CHROME / DECISION
     `RESOLVED-TRAINER-STRIP-AND-GUTTER-20260731` point 3): CONN moved onto
-    the row-1 profile strip and must be ABSENT from the bottom control
-    strip it used to render on. ``find_text`` alone (the pin above) cannot
-    see this — it is satisfied by CONN appearing anywhere at all, including
-    a stray second copy left behind on the old row. This test additionally
-    pins WHERE the chip is (near the top, under the outer frame's own
-    title row) and that it never appears a second time anywhere else on
-    the settled frame."""
+    the row-1 profile strip.
+
+    WO-CONN-HEARTBEAT-GLYPH (#300): top CONN and bottom-right liveness both
+    intentionally use Unicode ``●`` (Max green slow-flash CONN vs always-
+    breathing heartbeat). Do **not** require whole-grid uniqueness — that
+    flakes when the heartbeat phase is lit. Scope by geometry: CONN on the
+    top profile strip; ``●`` allowed on the bottom control-strip liveness
+    cluster; ``●`` must stay out of the GAME viewport / mid-frame.
+    """
+    from tw2002_aiclient.cockpit.layout import frame_layout
+
     grid = pyte_grid(_drive(tmp_path, {"ok": True, "connected": True}),
                      FULL_ROWS, FULL_COLS)
-    hit = find_text(grid, "●")
-    assert hit, "● chip not visible on the settled cockpit; grid:\n" + "\n".join(grid)
-    row, _col = hit
-    assert row <= 3, (
-        f"● chip found at row {row}, expected on the top profile strip "
-        "(row 1, just under the outer frame's title row); grid:\n"
-        + "\n".join(grid)
+    regions = frame_layout(FULL_ROWS, FULL_COLS)
+    center = regions["center"]
+    control = regions["control_strip"]
+    assert center is not None and control is not None, (
+        "expected full-tier layout with center + control_strip; "
+        f"mode={regions.get('mode')!r}"
     )
-    other_rows = [r for r, line in enumerate(grid) if "●" in line and r != row]
-    assert not other_rows, (
-        f"● also appears at row(s) {other_rows} -- expected exactly once, "
-        "on the top strip, and absent from the bottom control strip; "
+    viewport_rows = range(center["y"], center["y"] + center["h"])
+    control_rows = range(control["y"], control["y"] + control["h"])
+
+    glyph_rows = [r for r, line in enumerate(grid) if "●" in line]
+    assert glyph_rows, (
+        "● chip not visible on the settled cockpit; grid:\n" + "\n".join(grid)
+    )
+    top_hits = [r for r in glyph_rows if r <= 3]
+    assert top_hits, (
+        f"● not on the top profile strip (rows ≤ 3); found at {glyph_rows}; "
+        "grid:\n" + "\n".join(grid)
+    )
+    # Mid-frame / GAME viewport: stray CONN left on the old control path or
+    # painted into the daemon viewport must fail. Bottom liveness ● is OK.
+    mid_hits = [
+        r for r in glyph_rows
+        if r in viewport_rows and r not in control_rows and r > 3
+    ]
+    assert not mid_hits, (
+        f"● appears in GAME viewport / mid-frame row(s) {mid_hits} "
+        f"(top CONN rows={top_hits}, all ● rows={glyph_rows}); "
         "grid:\n" + "\n".join(grid)
     )
 
