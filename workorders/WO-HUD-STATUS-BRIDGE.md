@@ -1,6 +1,6 @@
 # WO-HUD-STATUS-BRIDGE — daemon emits `status["hud"]` tracked vitals
 
-**Status:** READY · visible client gap (Max live-test 2026-07-29)
+**Status:** DONE · origin `833c83c` (#226) · tip-honesty stamp 2026-07-31 (product on main; banner was stale READY)
 **Seat:** `impl-claudecode-aiclient`
 **Branch:** `wo/HUD-STATUS-BRIDGE`
 **Depends:** `main` ≥ `a88116c` (#225)

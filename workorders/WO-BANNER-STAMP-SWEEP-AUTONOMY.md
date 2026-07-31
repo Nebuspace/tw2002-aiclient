@@ -1,5 +1,7 @@
 # WO-BANNER-STAMP-SWEEP-AUTONOMY
 
+**Status:** DONE · tip-honesty stamp sweep 2026-07-31 · PR #284
+
 **Goal:** Docs-only — stamp READY WO banners whose product already landed on
 `main` (tip-honesty from Cursor 2026-07-31).
 

@@ -1,6 +1,6 @@
 # WO-CHAINS-LIVE-REFRESH — refresh chain/HUD scalars during/after explore
 
-**Status:** READY · visible client gap (Max live-test 2026-07-29)
+**Status:** DONE · origin `5767411` (#228) · tip-honesty stamp 2026-07-31 (product on main; banner was stale READY)
 **Seat:** `impl-claudecode-aiclient`
 **Branch:** `wo/CHAINS-LIVE-REFRESH`
 **Depends:** `main` ≥ `8f4e6fc` (#227 Gather chrome)
