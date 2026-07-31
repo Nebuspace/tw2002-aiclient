@@ -544,8 +544,20 @@ def test_narrow_tier_all_empty_fold_shows_honest_empty_no_labels(_narrow_no_fixt
             f"expected HELP prefix {help_line[:12]!r} in folded DECISIONS, got {decisions_text!r}"
         )
 
-    assert "GOALS" not in decisions_text, "no label spam when nothing was actually folded in"
-    assert "FOCUS" not in decisions_text, "no label spam when nothing was actually folded in"
+    # Pin = no bare panel-label rows when the fold collapsed to calm HELP.
+    # HELP prose may mention FOCUS (OFFER_HELP); that is not a FOCUS label row.
+    from tw2002_aiclient.cockpit.fold import FOCUS_LABEL, GOALS_LABEL
+
+    content_rows = [
+        grid[y][content_left:content_right].strip()
+        for y in range(decisions["y"] + 1, decisions["y"] + decisions["h"] - 1)
+    ]
+    assert GOALS_LABEL not in content_rows, (
+        f"no GOALS label row when nothing was actually folded in, got rows={content_rows!r}"
+    )
+    assert FOCUS_LABEL not in content_rows, (
+        f"no FOCUS label row when nothing was actually folded in, got rows={content_rows!r}"
+    )
 
 
 # ---------------------------------------------------------------------------
