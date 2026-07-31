@@ -294,7 +294,8 @@ def _clip(text: str, *, width: int) -> str:
 
 
 def _autonomy_help_empty_lines(*, width: int) -> list[str]:
-    """Calm-empty DECISIONS: E/H/O/L one-liners (WO-WIRE-AUTONOMY-HELP-LINES).
+    """Calm-empty DECISIONS: E · P/C/S · Mode · L/T one-liners
+    (WO-WIRE-AUTONOMY-HELP-LINES; vocab WO-AUTONOMY-HELP-VOCAB).
 
     Never raises. Width-clips like every other DECISIONS line; ``width <= 0``
     yields one empty string per HELP line (same count as the calm empty).

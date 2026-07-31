@@ -82,35 +82,33 @@ def test_band_imports_reflex_token_spelling() -> None:
     assert teachband.TEACH_TOKENS[0] is autonomy_keys.EXPLORE_TOKEN
 
 
-def test_autonomy_help_one_liners_confirm_not_auto() -> None:
-    """WO-PLAY-HELP-AUTONOMY-KEYS Accept: O/H carry confirm wording.
-
-    Text updated by WO-PLAY-STRIP-POLICY-AUTO: the blanket "(not auto)"
-    claim is gone -- App-armed + the matching toggle now reaches the same
-    outcome with no key press at all (DECISION
-    `RESOLVED-TRAINER-STRIP-AND-GUTTER-20260731` point 6). Pressing H/O
-    themselves is still a manual confirm, unchanged, so both lines still
-    say "confirm".
-    """
+def test_autonomy_help_one_liners_calm_vocab() -> None:
+    """WO-AUTONOMY-HELP-VOCAB: help matches calm teachband (no Hold?/Offer?/confirm)."""
     from tw2002_aiclient.cockpit import autonomy_keys
 
     lines = autonomy_keys.compose_autonomy_help_lines()
     assert lines == (
         autonomy_keys.EXPLORE_HELP,
-        autonomy_keys.HOLD_HELP,
-        autonomy_keys.OFFER_HELP,
+        autonomy_keys.POLICY_HELP,
+        autonomy_keys.MODE_HELP,
         autonomy_keys.CHAINS_HELP,
     )
-    assert "confirm" in autonomy_keys.HOLD_HELP
-    assert "APP-ARMED" in autonomy_keys.HOLD_HELP
-    assert "confirm" in autonomy_keys.OFFER_HELP
-    assert "APP-ARMED" in autonomy_keys.OFFER_HELP
-    assert "O)ffer?" in autonomy_keys.OFFER_HELP
-    assert "H)old?" in autonomy_keys.HOLD_HELP
+    joined = " ".join(lines)
+    assert "confirm" not in joined.lower()
+    assert "H)old?" not in joined
+    assert "O)ffer?" not in joined
+    assert "L)chains" not in joined
     assert "E)xplore" in autonomy_keys.EXPLORE_HELP
+    assert "App-armed" in autonomy_keys.EXPLORE_HELP
+    assert "StarDock" in autonomy_keys.EXPLORE_HELP
+    assert "P)ort Trade" in autonomy_keys.POLICY_HELP
+    assert "App-armed policy" in autonomy_keys.POLICY_HELP
+    assert "Mode/^A" in autonomy_keys.MODE_HELP
+    assert "halt" in autonomy_keys.MODE_HELP.lower()
     assert "L)ist Loops" in autonomy_keys.CHAINS_HELP
-    assert "L)chains" not in autonomy_keys.CHAINS_HELP
+    assert "pick" in autonomy_keys.CHAINS_HELP
     assert "T)rade Loop Chain" in autonomy_keys.CHAINS_HELP
+    assert "runs" in autonomy_keys.CHAINS_HELP
 
 
 def test_band_uses_trigger_not_the_banner_s_assign() -> None:
