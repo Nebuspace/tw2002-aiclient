@@ -659,6 +659,13 @@ MODE_KEY = 1
 # than the same blink repeated twice a few columns apart.
 _CONN_FLASH_PERIOD_S = 1.6
 
+# Connected-state glyph beside the host (hub REVISE chrome for
+# WO-PLAY-STRIP-POLICY-AUTO): filled heartbeat-class dot, not the word
+# CONN. Private in liveness (`_HEARTBEAT_UNICODE[0]` / ASCII twin) so we
+# keep local mirrors rather than importing private names.
+_CONN_GLYPH_U = "●"  # ●
+_CONN_GLYPH_A = "*"
+
 
 def _conn_connected_tone(now: object) -> "str | None":
     """The CONN chip's tone while connected: alternates ``"ok"`` (lit
@@ -1355,24 +1362,28 @@ class PlayShellScreen:
         return self._control_strip_segment_attr(cockpit_armconfirm.ARM_CONFIRM_TONE)
 
     def _compose_conn_chip(
-        self, status: "dict | None", focused: bool, *, now: object = None
+        self,
+        status: "dict | None",
+        focused: bool,
+        *,
+        now: object = None,
+        unicode_ok: object = True,
     ) -> "tuple[str, str | None]":
         """WO-PLAY-CONN-TOGGLE: compose the ``(text, tone)`` pair for the
         CONN chip (WO-PLAY-STRIP-TRAINER-CHROME moved this chip onto the
-        top profile strip; the composition below is unchanged).
+        top profile strip).
 
         Reads ``status["connected"]`` (the real bool the daemon reports on
         the ``status`` verb -- ``session.conn.connected``).  Three outcomes:
 
-        * ``True``  → ``("CONN", tone)``, or ``("[CONN]", tone)`` when
-          focused (brackets = focus cursor, plain ASCII, no swap). ``tone``
-          is ``"ok"`` when ``now`` is omitted (every pre-trainer caller),
-          or the SLOWLY FLASHING ``"ok"``/``None`` alternation
-          `_conn_connected_tone` computes from ``now`` when supplied --
-          DECISION `RESOLVED-TRAINER-STRIP-AND-GUTTER-20260731` point 3:
-          "green slowly flashing" when connected. This is strictly
-          additive: omitting ``now`` reproduces this function's exact
-          pre-trainer steady-``"ok"`` behavior.
+        * ``True``  → filled glyph ``●`` (ASCII ``*`` when ``unicode_ok``
+          is falsey), or ``[●]`` / ``[*]`` when focused (brackets = focus
+          cursor). ``tone`` is ``"ok"`` when ``now`` is omitted (every
+          pre-trainer caller), or the SLOWLY FLASHING ``"ok"``/``None``
+          alternation `_conn_connected_tone` computes from ``now`` when
+          supplied -- DECISION `RESOLVED-TRAINER-STRIP-AND-GUTTER-20260731`
+          point 3: "green slowly flashing" when connected. This is
+          strictly additive: omitting ``now`` reproduces steady-``"ok"``.
         * ``False`` → ``("DISC", "danger")`` red, or ``("[DISC]", "danger")``
           when focused. Never flashes -- DECISION: "offline/unknown =
           honest non-green (no lying pulse)".
@@ -1394,7 +1405,12 @@ class PlayShellScreen:
             connected = None
         if connected is True:
             tone = "ok" if now is None else _conn_connected_tone(now)
-            return ("[CONN]" if focused else "CONN", tone)
+            try:
+                use_u = bool(unicode_ok)
+            except Exception:
+                use_u = True
+            glyph = _CONN_GLYPH_U if use_u else _CONN_GLYPH_A
+            return (f"[{glyph}]" if focused else glyph, tone)
         if connected is False:
             return ("[DISC]" if focused else "DISC", "danger")
         # Unknown / no provider / provider raised
@@ -1596,7 +1612,7 @@ class PlayShellScreen:
         # this method.
         strip_region = regions["strip"]
         try:
-            conn_chip = self._compose_conn_chip(status, self._conn_focused, now=now_val)
+            conn_chip = self._compose_conn_chip(status, self._conn_focused, now=now_val, unicode_ok=uok)
         except Exception:  # noqa: BLE001 -- a raising composer must not crash the draw pass
             conn_chip = None
         try:
@@ -2136,7 +2152,7 @@ class PlayShellScreen:
                     # DECISION point 2 (WO-PLAY-STRIP-TRAINER-CHROME) retired
                     # the old A/R/T/V/U/H)old?/O)ffer?/Panic calm-band tokens
                     # in favor of `teachband.compose_teach_band`'s new
-                    # E)xplore/P)ort Trade/L)oops/T)rade Loop Chain/
+                    # E)xplore/P)ort Trade/C)argo/S)hip/│/T)rade Loop Chain/L)ist Loops/
                     # C)argo Hold Upgrade/S)hip Upgrade set -- the
                     # `port_trade_on`/`cargo_upgrade_on`/`ship_upgrade_on`
                     # toggles below read THIS instance's own local Play

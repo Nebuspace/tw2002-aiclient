@@ -3,7 +3,7 @@
 Layer-A pure-function tests (no PTY/curses session) covering:
   - Arrow keys reach the CONN chip (focus order).
   - Enter when focused returns ``"conn_activate"`` (activate behavior).
-  - ``_compose_conn_chip`` maps status correctly (CONN/DISC/DISC?).
+  - ``_compose_conn_chip`` maps status correctly (●/DISC/DISC?).
   - ``conn_chip`` integrates with ``compose_control_strip_segments``
     without disturbing the seat-label output (no regression).
   - ``_run_play``'s ``"conn_activate"`` branch calls
@@ -157,7 +157,7 @@ def test_mode_key_still_returns_attach():
 def test_conn_chip_connected_true_returns_conn_ok():
     play = _make_play()
     text, tone = play._compose_conn_chip({"connected": True}, focused=False)
-    assert text == "CONN"
+    assert text == "●"
     assert tone == "ok"
 
 
@@ -186,7 +186,7 @@ def test_conn_chip_dict_without_connected_key_is_unknown():
 def test_conn_chip_focused_connected_adds_brackets():
     play = _make_play()
     text, tone = play._compose_conn_chip({"connected": True}, focused=True)
-    assert text == "[CONN]"
+    assert text == "[●]"
     assert tone == "ok"
 
 
@@ -258,7 +258,7 @@ def test_no_regression_manual_label_with_conn_chip():
         attached=True,
         liveness_text="→ TX",
         width=80,
-        conn_chip=("CONN", "ok"),
+        conn_chip=("●", "ok"),
     )
     joined = "".join(t for t, _ in segs)
     assert MANUAL_LABEL in joined

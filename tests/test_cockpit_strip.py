@@ -298,29 +298,29 @@ def test_conn_chip_absent_is_byte_identical_to_the_flat_composer():
 def test_conn_chip_renders_full_text_with_room():
     segs = compose_profile_strip_segments(
         host="host", game_letter="A", handle="Captain", width=80,
-        conn_chip=("CONN", "ok"),
+        conn_chip=("●", "ok"),
     )
     joined = "".join(t for t, _ in segs)
-    assert " CONN " in joined
+    assert " ● " in joined
     chip_segments = [text for text, tone in segs if tone == "ok"]
-    assert chip_segments == [" CONN"]
+    assert chip_segments == [" ●"]
 
 
 @pytest.mark.parametrize("width", list(range(0, 45)))
 def test_conn_chip_is_all_or_nothing_never_a_partial_prefix(width):
     """THE pin this REVISE exists for: at every width, the chip segment is
-    either the exact full ``" CONN"`` text or entirely absent — never a
+    either the exact full ``" ●"`` text or entirely absent — never a
     truncated ``" CO"``/``" CON"`` fragment that reads as a plausible but
     wrong claim."""
     segs = compose_profile_strip_segments(
         host="a-fairly-long-hostname.example.net", game_letter="A",
-        handle="SomeLongHandleName", width=width, conn_chip=("CONN", "ok"),
+        handle="SomeLongHandleName", width=width, conn_chip=("●", "ok"),
     )
     joined = "".join(t for t, _ in segs)
     assert len(joined) <= width
     chip_segments = [text for text, tone in segs if tone == "ok"]
-    assert chip_segments in ([], [" CONN"]), (
-        f"width {width} produced a partial/mangled CONN chip: {chip_segments!r}"
+    assert chip_segments in ([], [" ●"]), (
+        f"width {width} produced a partial/mangled ● chip: {chip_segments!r}"
     )
 
 
@@ -330,10 +330,10 @@ def test_conn_chip_dropping_never_costs_the_identity_fields_a_character():
     for width in range(0, 45):
         with_chip = compose_profile_strip_segments(
             host="a-fairly-long-hostname.example.net", game_letter="A",
-            handle="SomeLongHandleName", width=width, conn_chip=("CONN", "ok"),
+            handle="SomeLongHandleName", width=width, conn_chip=("●", "ok"),
         )
         joined = "".join(t for t, _ in with_chip)
-        if " CONN" in joined:
+        if " ●" in joined:
             continue
         without_chip = compose_profile_strip(
             host="a-fairly-long-hostname.example.net", game_letter="A",
@@ -343,14 +343,14 @@ def test_conn_chip_dropping_never_costs_the_identity_fields_a_character():
 
 
 def test_conn_chip_focused_brackets_are_also_all_or_nothing():
-    """The focused ``"[CONN]"`` variant (one char longer) must obey the
+    """The focused ``"[●]"`` variant (one char longer) must obey the
     same rule — never clip to ``"[CON"`` or similar."""
     for width in range(0, 45):
         segs = compose_profile_strip_segments(
             host="host", game_letter="A", handle="Captain", width=width,
-            conn_chip=("[CONN]", "ok"),
+            conn_chip=("[●]", "ok"),
         )
         chip_segments = [text for text, tone in segs if tone == "ok"]
-        assert chip_segments in ([], [" [CONN]"]), (
+        assert chip_segments in ([], [" [●]"]), (
             f"width {width} produced a partial focused chip: {chip_segments!r}"
         )

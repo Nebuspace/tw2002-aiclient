@@ -13,15 +13,21 @@ UNCHANGED and still reachable by their existing keys; only the standing
 CHROME that advertises them on the calm strip changes, in favor of a
 trainer-plain vocabulary:
 
-    E)xplore  P)ort Trade·ON  L)oops  T)rade Loop Chain
-    C)argo Hold Upgrade·ON  S)hip Upgrade·ON
+    E)xplore  P)ort Trade·ON  C)argo Hold Upgrade·ON  S)hip Upgrade·ON
+    │  T)rade Loop Chain  L)ist Loops
+
+  Two clusters (Explore toggles, then loop tools), separated by a
+  NO-SWAP ``│`` token (same spirit as middle-dot ``·``: no ASCII twin).
+  Left/right pad of two spaces is baked into ``compose_teach_band`` so
+  the band is not flush to the seat chip / liveness cluster.
 
 - `E)xplore` reuses `autonomy_keys.EXPLORE_TOKEN` verbatim -- same key,
   same word, already trainer-plain.
-- `L)oops` is a RELABEL of the same `L` key `chains.CHAINS_TOKEN`
-  ("L)chains") already opens -- this module does not import or change
-  `CHAINS_TOKEN` (other surfaces still cite the popup by that name); it
-  is a local, calm-band-only spelling of the identical affordance.
+- `L)ist Loops` (``LOOPS_TOKEN``) is a RELABEL of the same `L` key
+  `chains.CHAINS_TOKEN` ("L)chains") already opens -- this module does
+  not import or change `CHAINS_TOKEN` (other surfaces still cite the
+  popup by that name); it is a local, calm-band-only spelling of the
+  identical affordance.
 - `T)rade Loop Chain` is a RELABEL of the same `T` key the old
   `T)rigger` token named (`screens.py`'s `assign_trigger` intent,
   WO-P5-068) -- trainer wording for the same wire, not a new one.
@@ -102,7 +108,7 @@ _TOGGLE_SEP = "\u00b7"
 # "What this is now" section for why: this is a calm-band-only RELABEL of
 # the same two keys, and every other surface that still cites the popup
 # by its own name keeps doing so unchanged.
-LOOPS_TOKEN = "L)oops"
+LOOPS_TOKEN = "L)ist Loops"
 TRADE_LOOP_CHAIN_TOKEN = "T)rade Loop Chain"
 
 # The three toggle labels' PREFIX only -- ``compose_teach_band`` appends
@@ -135,19 +141,29 @@ def _toggle_token(label: str, on: object) -> str:
 # kwargs recompute the three toggle tokens for any other state; this
 # tuple is the reference/default reading other modules may check
 # membership against (mirroring the old band's `TEACH_TOKENS` seam).
+# Cluster separator between the Explore toggle cluster (E+P+C+S) and the
+# loop-tools cluster (T+L). Own TEACH_TOKENS element so membership checks
+# work; NO-SWAP like middle-dot ``·`` (no ASCII twin on ``unicode_ok=False``).
+CLUSTER_SEP = "│"  # │
+
 TEACH_TOKENS: tuple[str, ...] = (
     EXPLORE_TOKEN,
     _toggle_token(PORT_TRADE_LABEL, True),
-    LOOPS_TOKEN,
-    TRADE_LOOP_CHAIN_TOKEN,
     _toggle_token(CARGO_UPGRADE_LABEL, True),
     _toggle_token(SHIP_UPGRADE_LABEL, True),
+    CLUSTER_SEP,
+    TRADE_LOOP_CHAIN_TOKEN,
+    LOOPS_TOKEN,
 )
 
 # Two spaces between tokens -- canon renders the band that way in every
 # example it gives (`:136`, `:220`, `visual-language.md §"A calm cockpit reading (App healthy, nothing to see)"`), and it is
 # the same gap `arm.ARM_GAP` uses between chips.
 TOKEN_GAP = "  "
+
+# Left/right pad baked into ``compose_teach_band`` only (not into
+# ``TEACH_TOKENS``) so the calm band is not flush to seat chip / liveness.
+BAND_PAD = "  "
 
 # The tone NAME (not an attr) the draw layer resolves to canon's cyan
 # chrome accent. A distinct name rather than `None`, because `None`
@@ -167,23 +183,26 @@ def compose_teach_band(
 ) -> str:
     """The standing calm-band hint line as one plain string.
 
-    ``E)xplore  P)ort Trade·{ON|OFF}  L)oops  T)rade Loop Chain
-    C)argo Hold Upgrade·{ON|OFF}  S)hip Upgrade·{ON|OFF}`` -- see the
-    module docstring for what each token means and why P/C/S carry a
-    caller-supplied boolean instead of a fixed word. All three toggle
-    kwargs default to ``True`` (DECISION's own stated default), so
-    calling this with no arguments reproduces `TEACH_TOKENS` joined
-    verbatim.
+    ``  E)xplore  P)ort Trade·{ON|OFF}  C)argo Hold Upgrade·{ON|OFF}
+    S)hip Upgrade·{ON|OFF}  │  T)rade Loop Chain  L)ist Loops  `` --
+    Explore cluster, ``│`` separator, loop-tools cluster; left/right
+    ``BAND_PAD``. See the module docstring for what each token means and
+    why P/C/S carry a caller-supplied boolean. All three toggle kwargs
+    default to ``True`` (DECISION's own stated default), so calling this
+    with no arguments reproduces ``BAND_PAD + TOKEN_GAP.join(TEACH_TOKENS)
+    + BAND_PAD``.
 
     ``unicode_ok`` is accepted and ignored (see the module docstring:
-    `KEY)verb` has no Unicode twin). Never raises.
+    `KEY)verb` and cluster ``│`` have no Unicode twin / are NO-SWAP).
+    Never raises.
     """
     tokens = (
         EXPLORE_TOKEN,
         _toggle_token(PORT_TRADE_LABEL, port_trade_on),
-        LOOPS_TOKEN,
-        TRADE_LOOP_CHAIN_TOKEN,
         _toggle_token(CARGO_UPGRADE_LABEL, cargo_upgrade_on),
         _toggle_token(SHIP_UPGRADE_LABEL, ship_upgrade_on),
+        CLUSTER_SEP,
+        TRADE_LOOP_CHAIN_TOKEN,
+        LOOPS_TOKEN,
     )
-    return TOKEN_GAP.join(tokens)
+    return f"{BAND_PAD}{TOKEN_GAP.join(tokens)}{BAND_PAD}"
