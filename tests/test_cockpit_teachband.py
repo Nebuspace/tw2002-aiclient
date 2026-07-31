@@ -68,8 +68,10 @@ def test_band_imports_reflex_token_spelling() -> None:
     assert autonomy_keys.OFFER_TOKEN not in teachband.TEACH_TOKENS
     assert "H)old?" not in teachband.compose_teach_band()
     assert "O)ffer?" not in teachband.compose_teach_band()
-    assert chains.CHAINS_TOKEN == "L)chains"
-    assert chains.CHAINS_TOKEN not in teachband.TEACH_TOKENS
+    assert chains.CHAINS_TOKEN == "L)ist Loops"
+    assert teachband.LOOPS_TOKEN is chains.CHAINS_TOKEN
+    assert chains.CHAINS_TOKEN in teachband.TEACH_TOKENS
+    assert "L)ist Loops" in teachband.compose_teach_band()
     assert "L)chains" not in teachband.compose_teach_band()
     assert not teachband.compose_teach_band().endswith("P panic")
 
@@ -106,7 +108,9 @@ def test_autonomy_help_one_liners_confirm_not_auto() -> None:
     assert "O)ffer?" in autonomy_keys.OFFER_HELP
     assert "H)old?" in autonomy_keys.HOLD_HELP
     assert "E)xplore" in autonomy_keys.EXPLORE_HELP
-    assert "L)chains" in autonomy_keys.CHAINS_HELP
+    assert "L)ist Loops" in autonomy_keys.CHAINS_HELP
+    assert "L)chains" not in autonomy_keys.CHAINS_HELP
+    assert "T)rade Loop Chain" in autonomy_keys.CHAINS_HELP
 
 
 def test_band_uses_trigger_not_the_banner_s_assign() -> None:

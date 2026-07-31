@@ -1,5 +1,5 @@
-"""The Trade-Loop-Chains library popup — canon's ``L)chains``
-(WO-PLAY-AUTOLOOP-START).
+"""The List Loops viewport overlay — calm chrome ``L)ist Loops``
+(WO-LOOPS-POPUP-OVERLAY / WO-PLAY-AUTOLOOP-START).
 
 Pure: no filesystem, no session, no curses. Formats whatever
 ``loops.store.read_loop_store`` found plus the discovered-chains payload
@@ -11,13 +11,11 @@ already use.
 
 # Why ``L`` and not another free letter
 
-``canon/surfaces/mode-line-and-teach-controls.md`` §"The operate-the-APP
-control cluster (N5)" names the cluster's hint band, and three canon files
-render it identically: ``^A)ode  A)nalyze  R)ecord  T)rigger  L)chains  P
-panic``. ``L`` is *already* canon's letter for this affordance —
-``autoloop_controls.py`` declined it for the relaunch offer on exactly that
-reservation and took ``G``. Any other letter here would have squatted a
-non-canon key that this popup would later have to take back.
+``L`` is *already* the letter for this affordance (developer-band history
+spelled it ``L)chains``; calm chrome now teaches **List Loops** /
+``L)ist Loops``). ``autoloop_controls.py`` declined ``L`` for the relaunch
+offer on exactly that reservation and took ``G``. Any other letter here
+would have squatted a key this popup would later have to take back.
 
 # What this is NOT
 
@@ -49,7 +47,7 @@ only, default-deny), reused verbatim. Nothing in this module can start a run
 — it has no adapter import and no send path, by construction.
 
 ``compose_arm_action`` says **"one pass"** rather than a cycle count because
-the L)chains path arms a taught *macro* with no rule ``scope`` attached —
+the List Loops path arms a taught *macro* with no rule ``scope`` attached —
 ``autoloop_start`` defaults to one pass. Multi-pass for ``scope: repeating``
 rules is the Play ``V``→reflex path (WO-AUTOLOOP-CYCLES), which clamps to
 ``CYCLES_HARD_CEILING``. Canon asks the gate to show "how many cycles"; for
@@ -71,10 +69,9 @@ from typing import Any, Mapping, Sequence
 # truncated-empty-is-not-absence wording live in exactly one module.
 from tw2002_aiclient import chain_search_view as _search_view
 
-# Calm-strip spelling — single source for teachband (WO-TEACHBAND-L-CHAINS).
-# Mirror REFLEX_TOKEN / PANIC_TOKEN: the band imports this; do not re-spell
-# ``L)chains`` in ``teachband.TEACH_TOKENS``.
-CHAINS_TOKEN = "L)chains"
+# Calm-strip spelling — single source for teachband (WO-LOOPS-POPUP-OVERLAY).
+# Mirror REFLEX_TOKEN / PANIC_TOKEN: teachband imports this as LOOPS_TOKEN.
+CHAINS_TOKEN = "L)ist Loops"
 
 # `L` — canon's own letter for this popup; see the module docstring. Both
 # cases bind, matching the A/R/T teach band's posture.
@@ -99,7 +96,7 @@ UNREADABLE_TEXT = "loop store unreadable — cannot list"
 # The honest-unknown mark, same rule `list_view` and `covermeter` follow.
 UNKNOWN = "?"
 
-TITLE = "Taught loops"
+TITLE = "List Loops"
 
 # WO-CHAINS-TUI-FULL: what the discovered section says when NO usable
 # payload was passed in (finder raised, profile could not form a world_id,
