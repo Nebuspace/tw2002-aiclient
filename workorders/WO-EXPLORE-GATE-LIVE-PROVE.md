@@ -1,6 +1,6 @@
 # WO-EXPLORE-GATE-LIVE-PROVE — Live half of WO-EXPLORE-AUTOMATION-GATE Accept 5
 
-**Status:** OPEN · EXECUTE · HIGH · Cursor (`impl-aiclient-cursor`)  
+**Status:** READY · EXECUTE · HIGH · Cursor (`impl-aiclient-cursor`) — hub re-seed 2026-07-31  
 **Posted:** hub emergency seed (shell wedge recovery)  
 **Seat:** `impl-aiclient-cursor`  
 **Depends:** `main` ≥ `70dfdbe` · E1–E4 on tip · CC observability 21:53Z + world_id doctrine 21:55Z  
