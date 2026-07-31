@@ -77,6 +77,7 @@ from __future__ import annotations
 # here is exactly how that drift starts (the `T)rigger`/`T)assign` split
 # below is the same hazard, handled the same way -- by keeping each
 # register's spelling in exactly one place).
+from .autonomy_keys import HOLD_TOKEN, OFFER_TOKEN
 from .chains import CHAINS_TOKEN
 from .panic import PANIC_TOKEN
 from .reflex_controls import REFLEX_TOKEN
@@ -95,14 +96,19 @@ from .rules_library import RULES_TOKEN
 # WO-P5-071: `P panic` joins the triad. WO-PLAY-REFLEX-AFFORDANCE /
 # WO-PLAY-RULES-LIBRARY: `V)reflex` / `U)rules` before panic. WO-TEACHBAND-
 # L-CHAINS: `L)chains` (imported CHAINS_TOKEN) immediately before panic so
-# the shipped modal is discoverable. `^A)ode` stays out (Mode chord /
-# ADR-002). Panic stays last (canon order).
+# the shipped modal is discoverable. WO-PLAY-HELP-AUTONOMY-KEYS: `H)old?` /
+# `O)ffer?` (`?` = confirm-not-auto) sit just before `L)chains`. `E)xplore`
+# stays on the autonomy HELP one-liners (and the post-ensure "press E"
+# offer) so the calm strip still fits a typical 120-col row. `^A)ode` stays
+# out (Mode chord / ADR-002). Panic stays last (canon order).
 TEACH_TOKENS: tuple[str, ...] = (
     "A)nalyze",
     "R)ecord",
     "T)rigger",
     REFLEX_TOKEN,
     RULES_TOKEN,
+    HOLD_TOKEN,
+    OFFER_TOKEN,
     CHAINS_TOKEN,
     PANIC_TOKEN,
 )
