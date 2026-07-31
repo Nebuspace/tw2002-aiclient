@@ -71,7 +71,7 @@ _PTY_SKIP = pytest.mark.skipif(
 # constants) -- interior is exactly GAME_W x GAME_H (80x25) here, per
 # layout.py's own "bordered viewport wraps the daemon's true native pyte
 # grid, zero inset" invariant.
-FULL_ROWS, FULL_COLS = 40, 160
+FULL_ROWS, FULL_COLS = 40, 180
 
 _READY_TEXT = "session ready"  # LOGS band's honest-empty status_line fallback
 

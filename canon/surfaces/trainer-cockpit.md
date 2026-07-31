@@ -174,12 +174,12 @@ pushed off-edge (`frame_layout`). The load-bearing breakpoints (from `VIEWPORT_W
 
 | Width (cols) | What renders |
 |---|---|
-| ≥ `FULL_GUTTER_MIN_COLS` (154) | Full left gutter (GOALS⊃FOCUS nested, plus tall FORMATIONS below) + viewport + right HUD gutter |
-| ≥ `LEFT_GUTTER_MIN_COLS` (138) | Narrow left gutter (`PRIORITIES_MIN_W` 20) still present + viewport + HUD |
-| ≥ `RIGHT_GUTTER_MIN_COLS` (118) | Viewport + right HUD only; **GOALS + FOCUS + FORMATIONS fold into the idle DECISIONS pane** |
+| ≥ `FULL_GUTTER_MIN_COLS` (170) | Full left gutter (GOALS⊃FOCUS nested, plus tall FORMATIONS below) + viewport + right HUD gutter |
+| ≥ `LEFT_GUTTER_MIN_COLS` (146) | Narrow left gutter (`PRIORITIES_MIN_W` 20) still present + viewport + HUD |
+| ≥ `RIGHT_GUTTER_MIN_COLS` (126) | Viewport + right HUD only; **GOALS + FOCUS + FORMATIONS fold into the idle DECISIONS pane** |
 | ≥ `MINIMAL_HEADER_MIN_COLS` (82) | Bordered viewport alone (`== VIEWPORT_W`, the floor at which a framed 80×25 fits) |
 
-Below `LEFT_GUTTER_MIN_COLS` (138) the left-gutter GOALS, FOCUS, and FORMATIONS panels **collapse
+Below `LEFT_GUTTER_MIN_COLS` (146) the left-gutter GOALS, FOCUS, and FORMATIONS panels **collapse
 into the idle DECISIONS pane** rather than disappearing — the operator keeps the status, the ranked
 suggestions, and the discovered topologies, just relocated. The viewport is the last thing to
 survive; the body never sacrifices horizontal legibility for panel count.
@@ -315,16 +315,17 @@ The frame uses a deliberate **two-weight** border system (`cockpit/draw.py` `DOU
 
 The composition has a fixed reading order, enforced by geometry:
 
-- **Gutter widths are fixed and symmetric:** `HUD_GUTTER_W = 36` on the right, `PRIORITIES_W = 36`
+- **Gutter widths are fixed and symmetric:** `HUD_GUTTER_W = 44` on the right, `PRIORITIES_W = 44`
   on the left (`spectate_layout.py`), sized so the CREDITS value plus its freshness stamp (plus the
   sparkline) fit without wrapping. The center viewport is whatever remains
   (`middle = i_cols − PRIORITIES_W − HUD_GUTTER_W`), keeping the game grid centered between two
   equal instrument rails.
 - **CREDITS is the primary metric and it is cell #1.** The HUD renders in a fixed operator order —
   **`CREDITS · SECTOR · TURNS · CARGO · PROFIT`** (`compose_hud_cells`, `_HUD_FIELD_SPECS`) — top of
-  the right gutter, first thing read. Labels are `A_BOLD`; the value carries the full emphasis stack:
-  semantic tone + a floating delta chip + the recent-credits sparkline. SECTOR/TURNS/CARGO/PROFIT
-  follow in a uniform 2-row cell stride so the column stays scannable.
+  the right gutter, first thing read. Labels are `A_BOLD`; value rows are indented two spaces under
+  their label (`HUD_VALUE_INDENT`) so the column scans cleanly. The value carries the full emphasis
+  stack: semantic tone + a floating delta chip + the recent-credits sparkline. SECTOR/TURNS/CARGO/
+  PROFIT follow in a uniform 2-row cell stride so the column stays scannable.
 - **The eye goes: game → HUD → left-gutter status.** Border weight pulls to the viewport, the bold
   bright CREDITS cell anchors the right rail, and the left gutter (GOALS⊃FOCUS nested, then
   FORMATIONS below) reads as supporting context. Nothing in the calm state competes for attention

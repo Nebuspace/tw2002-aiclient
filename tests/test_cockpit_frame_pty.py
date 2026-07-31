@@ -224,7 +224,7 @@ def _drive_cockpit_frame_pty(
 
 
 # ---------------------------------------------------------------------------
-# Full tier (40x160, "full" mode): double-line outer frame, cyan+bold
+# Full tier (40x180, "full" mode): double-line outer frame, cyan+bold
 # corners, all four titled panels, row-1 strip text.
 # ---------------------------------------------------------------------------
 
@@ -232,15 +232,15 @@ def _drive_cockpit_frame_pty(
 @pytest.fixture(scope="module")
 def _full_tier_capture(tmp_path_factory):
     tmp_path = tmp_path_factory.mktemp("cockpit_full")
-    return _drive_cockpit_frame_pty(tmp_path, 40, 160)
+    return _drive_cockpit_frame_pty(tmp_path, 40, 180)
 
 
 @_PTY_SKIP
 def test_full_tier_outer_frame_double_line_corners_cyan_bold(_full_tier_capture):
-    regions = frame_layout(40, 160)
+    regions = frame_layout(40, 180)
     assert regions["mode"] == "full"
     outer = regions["outer"]
-    screen = pyte_screen(_full_tier_capture, 40, 160)
+    screen = pyte_screen(_full_tier_capture, 40, 180)
 
     top_y, bottom_y = outer["y"], outer["y"] + outer["h"] - 1
     left_x, right_x = outer["x"], outer["x"] + outer["w"] - 1
@@ -255,8 +255,8 @@ def test_full_tier_outer_frame_double_line_corners_cyan_bold(_full_tier_capture)
 
 @_PTY_SKIP
 def test_full_tier_panel_titles_at_expected_rows(_full_tier_capture):
-    regions = frame_layout(40, 160)
-    grid = pyte_grid(_full_tier_capture, 40, 160)
+    regions = frame_layout(40, 180)
+    grid = pyte_grid(_full_tier_capture, 40, 180)
 
     goals, left, center, right, logs = (
         regions["goals"],
@@ -284,9 +284,9 @@ def test_full_tier_panel_titles_at_expected_rows(_full_tier_capture):
 
 @_PTY_SKIP
 def test_full_tier_strip_shows_host_and_handle_on_row_1(_full_tier_capture):
-    regions = frame_layout(40, 160)
+    regions = frame_layout(40, 180)
     strip_row = regions["strip"]["y"]
-    grid = pyte_grid(_full_tier_capture, 40, 160)
+    grid = pyte_grid(_full_tier_capture, 40, 180)
 
     assert HOST in grid[strip_row]
     assert HANDLE in grid[strip_row]
@@ -296,8 +296,8 @@ def test_full_tier_strip_shows_host_and_handle_on_row_1(_full_tier_capture):
 def test_full_tier_strip_row_is_data_not_chrome_colored(_full_tier_capture):
     """Pixel canon ruling: strip content is profile identity DATA, never
     chrome -- must not carry the cyan chrome tint every border/title uses."""
-    regions = frame_layout(40, 160)
-    screen = pyte_screen(_full_tier_capture, 40, 160)
+    regions = frame_layout(40, 180)
+    screen = pyte_screen(_full_tier_capture, 40, 180)
 
     strip = regions["strip"]
     strip_cell = screen.buffer[strip["y"]][strip["x"]]  # first char of the composed strip text
@@ -316,8 +316,8 @@ def test_full_tier_center_viewport_is_double_line_and_empty_panels_honest(_full_
     states its own emptiness a different way -- an explicit em-dash row --
     since it's a data panel with a real honest-empty composer, unlike GAME
     which has no content composer at all yet."""
-    regions = frame_layout(40, 160)
-    screen = pyte_screen(_full_tier_capture, 40, 160)
+    regions = frame_layout(40, 180)
+    screen = pyte_screen(_full_tier_capture, 40, 180)
     grid = list(screen.display)
 
     center = regions["center"]
@@ -353,9 +353,9 @@ def test_full_tier_center_viewport_is_double_line_and_empty_panels_honest(_full_
 
 @_PTY_SKIP
 def test_ascii_twin_closure_glyphs_no_unicode_leak(tmp_path):
-    captured = _drive_cockpit_frame_pty(tmp_path, 40, 160, ascii_mode=True)
-    regions = frame_layout(40, 160)
-    screen = pyte_screen(captured, 40, 160)
+    captured = _drive_cockpit_frame_pty(tmp_path, 40, 180, ascii_mode=True)
+    regions = frame_layout(40, 180)
+    screen = pyte_screen(captured, 40, 180)
     grid = list(screen.display)
     text = "\n".join(grid)
 
@@ -422,7 +422,7 @@ def test_narrow_run_left_gutter_absent_frame_flush_to_right_edge(tmp_path):
 
 @_PTY_SKIP
 def test_cjk_heavy_status_line_preserves_logs_right_border(tmp_path):
-    rows, cols = 40, 160
+    rows, cols = 40, 180
     # Wide (2-cell) glyphs, repeated well past the LOGS interior width --
     # a raw Python-character-count clip would still let this through and
     # overflow the box's own right border on a real terminal.
@@ -441,7 +441,7 @@ def test_cjk_heavy_status_line_preserves_logs_right_border(tmp_path):
 
 @_PTY_SKIP
 def test_embedded_newline_in_status_line_does_not_escape_box(tmp_path):
-    rows, cols = 40, 160
+    rows, cols = 40, 180
     classification = "before\nBREAKOUT-AFTER-NEWLINE"
     captured = _drive_cockpit_frame_pty(tmp_path, rows, cols, classification=classification)
     regions = frame_layout(rows, cols)
@@ -478,7 +478,7 @@ def test_embedded_newline_in_status_line_does_not_escape_box(tmp_path):
 
 @_PTY_SKIP
 def test_tall_terminal_leaves_reserved_band_unpainted(tmp_path):
-    rows, cols = 200, 160
+    rows, cols = 200, 180
     captured = _drive_cockpit_frame_pty(tmp_path, rows, cols)
     regions = frame_layout(rows, cols)
     assert regions["mode"] == "full"

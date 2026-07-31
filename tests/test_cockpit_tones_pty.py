@@ -90,7 +90,7 @@ _PTY_SKIP = pytest.mark.skipif(
 
 # Full tier — every gutter present, matches tests/test_cockpit_frame_pty.py's
 # own FULL constants so GOALS/DECISIONS/GAME are all simultaneously visible.
-FULL_ROWS, FULL_COLS = 40, 160
+FULL_ROWS, FULL_COLS = 40, 180
 _DOUBLE_GLYPHS_UNICODE = ("╔", "╗", "╚", "╝")
 _THIN_GLYPHS_UNICODE = ("╭", "╮", "╰", "╯")
 

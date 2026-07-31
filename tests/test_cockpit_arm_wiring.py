@@ -66,7 +66,7 @@ def _joined_strip(**kwargs) -> str:
 
 from tw2002_aiclient.cockpit.layout import frame_layout
 
-FULL_ROWS, FULL_COLS = 40, 160
+FULL_ROWS, FULL_COLS = 40, 180
 HANDLE = "Alpha"
 
 # The three seat states, as the literal ``(spectating, attached)`` pairs

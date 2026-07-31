@@ -8,7 +8,7 @@ while the DECISIONS host still survives, and GOALS+FOCUS content relocates
 INTO that pane (canon `trainer-cockpit.md` "Responsive fold") via
 ``cockpit.fold.compose_folded_decisions_lines`` in place of
 ``cockpit.decisions.compose_decisions_lines`` for that one draw call. At
->=138 cols nothing changes -- the left gutter survives and DECISIONS keeps
+>=146 cols nothing changes -- the left gutter survives and DECISIONS keeps
 showing only its own trace content. Layer-A coverage for the composer
 itself lives in the sibling composer WO's own test file; this file only
 proves the ``PlayShellScreen``/``app.py`` wiring around it -- mirrors
@@ -60,16 +60,16 @@ _PTY_SKIP = pytest.mark.skipif(
     reason="no controlling-terminal/pty support — can't init curses in a pty subprocess",
 )
 
-# The two sizes the dispatch calls out: 40x122 is a genuine narrow-right
-# fold tier (122-2=120 inner cols -- inside [RIGHT_GUTTER_MIN_COLS=118,
-# LEFT_GUTTER_MIN_COLS=138), so `goals` is None and `decisions` survives);
-# 40x142 is the same "right_gutter" fold *mode* but wide enough
-# (142-2=140 inner cols >= 138) that the left gutter (and `goals`) still
-# fits -- no fold. Both share HUD_GUTTER_W=36 for the right gutter/
+# The two sizes the dispatch calls out: 40x130 is a genuine narrow-right
+# fold tier (130-2=128 inner cols -- inside [RIGHT_GUTTER_MIN_COLS=126,
+# LEFT_GUTTER_MIN_COLS=146), so `goals` is None and `decisions` survives);
+# 40x150 is the same "right_gutter" fold *mode* but wide enough
+# (150-2=148 inner cols >= 146) that the left gutter (and `goals`) still
+# fits -- no fold. Both share HUD_GUTTER_W=44 for the right gutter/
 # DECISIONS box itself, so DECISIONS' own width and height are identical
 # at both sizes; only whether `goals` is None differs.
-NARROW_ROWS, NARROW_COLS = 40, 122
-WIDE_ROWS, WIDE_COLS = 40, 142
+NARROW_ROWS, NARROW_COLS = 40, 130
+WIDE_ROWS, WIDE_COLS = 40, 150
 
 # Bootstrap: demo launcher rows + stubbed ensure (no daemon / no twd.sock),
 # same shape as every sibling cockpit-panel pty suite's own bootstrap. One
@@ -346,7 +346,7 @@ def _narrow_escape_fixture_capture(tmp_path_factory):
 
 
 # ---------------------------------------------------------------------------
-# Narrow-right tier (40x122, fold ACTIVE): GOALS+FOCUS content relocates
+# Narrow-right tier (40x130, fold ACTIVE): GOALS+FOCUS content relocates
 # into the DECISIONS box.
 # ---------------------------------------------------------------------------
 
@@ -355,7 +355,7 @@ def _narrow_escape_fixture_capture(tmp_path_factory):
 def test_narrow_tier_fold_active_goals_absent(_narrow_data_fixture_capture):
     regions = frame_layout(NARROW_ROWS, NARROW_COLS)
     assert regions["mode"] == "right_gutter"
-    assert regions["goals"] is None, "40x122 must be a genuine goals-absent fold tier"
+    assert regions["goals"] is None, "40x130 must be a genuine goals-absent fold tier"
     assert regions["decisions"] is not None, "DECISIONS host must survive at this tier"
 
 
@@ -383,8 +383,8 @@ def test_narrow_tier_shows_decisions_title_and_folded_goals_focus_content(
     ``lines=34``. This is ``layout.py``'s pre-existing PWO-036 stacked-gutter
     height split (HUD claims its floor first, DECISIONS gets whatever
     remains) -- unrelated to this WO's own fold logic, column-independent,
-    and present at unfolded ``>=138``-col tiers too. It is NOT a WO-P3-039
-    regression (before this WO, GOALS/FOCUS simply didn't exist below 138
+    and present at unfolded ``>=146``-col tiers too. It is NOT a WO-P3-039
+    regression (before this WO, GOALS/FOCUS simply didn't exist below 146
     cols at any height, so there was nothing to compare against; the fold
     strictly improves every reachable height ``>=22``) -- but it is
     disclosed to the hub as a DECISIONS-height-policy follow-on (the
@@ -483,7 +483,7 @@ def test_narrow_tier_shows_decisions_title_and_folded_goals_focus_content(
 
 
 # ---------------------------------------------------------------------------
-# Wide-right tier (40x142, NO fold): GOALS content stays in the left
+# Wide-right tier (40x150, NO fold): GOALS content stays in the left
 # gutter; DECISIONS never carries the GOALS/FOCUS label rows.
 # ---------------------------------------------------------------------------
 
@@ -493,7 +493,7 @@ def test_wide_tier_no_fold_goals_present_in_left_gutter(_wide_data_fixture_captu
     regions = frame_layout(WIDE_ROWS, WIDE_COLS)
     assert regions["mode"] == "right_gutter"
     goals = regions["goals"]
-    assert goals is not None, "40x142 must keep the left GOALS gutter (>=138 inner cols)"
+    assert goals is not None, "40x150 must keep the left GOALS gutter (>=146 inner cols)"
     grid = pyte_grid(_wide_data_fixture_capture, WIDE_ROWS, WIDE_COLS)
 
     assert "GOALS" in grid[goals["y"]], "GOALS box title must render in its own left-gutter box"
@@ -519,7 +519,7 @@ def test_wide_tier_decisions_box_never_contains_folded_labels(_wide_data_fixture
 
 
 # ---------------------------------------------------------------------------
-# All-empty fold (40x122, no fixture -- no daemon at all): the same
+# All-empty fold (40x130, no fixture -- no daemon at all): the same
 # two-line honest-empty state as unfolded DECISIONS, no label spam.
 # ---------------------------------------------------------------------------
 

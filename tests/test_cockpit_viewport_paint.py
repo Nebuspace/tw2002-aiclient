@@ -112,7 +112,7 @@ def test_hostile_width_height_types_degrade_to_empty_not_raise():
 # Wire-level: PlayShellScreen.draw() polls viewport_provider once and paints
 # ---------------------------------------------------------------------------
 
-FULL_ROWS, FULL_COLS = 40, 160
+FULL_ROWS, FULL_COLS = 40, 180
 
 
 class _RecordingWindow:

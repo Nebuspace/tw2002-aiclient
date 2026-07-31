@@ -189,7 +189,7 @@ def test_never_raises_on_wildly_hostile_arguments():
 # tests/test_cockpit_liveness_pty.py's own `_RecordingWin`).
 # ---------------------------------------------------------------------------
 
-FULL_ROWS, FULL_COLS = 40, 160
+FULL_ROWS, FULL_COLS = 40, 180
 HANDLE = "Alpha"
 
 

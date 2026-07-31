@@ -225,9 +225,9 @@ terminal.
 
 | tier | inner-cols floor | constant | layout |
 |---|---|---|---|
-| `full` | ≥154 | `FULL_GUTTER_MIN_COLS` (`VIEWPORT_W+HUD_GUTTER_W+PRIORITIES_W`, 82+36+36) | PRIORITIES gutter (left) \| centered game \| HUD gutter (right) — both side gutters |
-| `right_gutter` (wide) | ≥138 | `LEFT_GUTTER_MIN_COLS` (`VIEWPORT_W+HUD_GUTTER_W+PRIORITIES_MIN_W`) | bordered viewport (left-anchored) + right HUD; a narrowed left PRIORITIES (`PRIORITIES_MIN_W = 20`) still fits |
-| `right_gutter` (narrow) | ≥118 | `RIGHT_GUTTER_MIN_COLS` (`VIEWPORT_W+HUD_GUTTER_W`) | bordered viewport + right HUD only, no left gutter |
+| `full` | ≥170 | `FULL_GUTTER_MIN_COLS` (`VIEWPORT_W+HUD_GUTTER_W+PRIORITIES_W`, 82+44+44) | PRIORITIES gutter (left) \| centered game \| HUD gutter (right) — both side gutters |
+| `right_gutter` (wide) | ≥146 | `LEFT_GUTTER_MIN_COLS` (`VIEWPORT_W+HUD_GUTTER_W+PRIORITIES_MIN_W`) | bordered viewport (left-anchored) + right HUD; a narrowed left PRIORITIES (`PRIORITIES_MIN_W = 20`) still fits |
+| `right_gutter` (narrow) | ≥126 | `RIGHT_GUTTER_MIN_COLS` (`VIEWPORT_W+HUD_GUTTER_W`) | bordered viewport + right HUD only, no left gutter |
 | `minimal` | ≥82 | `MINIMAL_HEADER_MIN_COLS` (`== VIEWPORT_W`) | bordered viewport, centered, no side gutter — HUD rides the packed header strip |
 | `no_border` | ≥60 | `MIN_COLS` | viewport border dropped, game full-bleed/clipped |
 | `too_small` | <60 | — | refuses to render: `Terminal too small (C×L) — need at least 60×20` |
@@ -250,13 +250,13 @@ terminal.
 
 `[CODE NOTE]` The **archived** `twclient/spectate_layout.py::frame_layout`'s own docstring ladder
 comment states the `full` floor as `>=142`; the governing comparison actually gated in that code is
-`i_cols >= FULL_GUTTER_MIN_COLS`, which computes to **154** from the module's own
+`i_cols >= FULL_GUTTER_MIN_COLS`, which computes to **170** from the module's own
 `VIEWPORT_W/HUD_GUTTER_W/PRIORITIES_W` constants — the archived docstring number was stale relative
 to the constant it describes. The table above states the constant-derived (behavior-governing)
 value; the reborn port, `tw2002_aiclient/cockpit/layout.py::frame_layout` (PWO-031/033), now
-encodes that `>=154` floor directly — the rebuild this note asked for has happened.
+encodes that `>=170` floor directly — the rebuild this note asked for has happened.
 
-**Fold stack order below 138 (PWO-039 · tip `f594b9e`):** when the left gutter sheds, the
+**Fold stack order below 146 (PWO-039 · tip `f594b9e`):** when the left gutter sheds, the
 right-gutter **DECISIONS** pane hosts the folded stack — title stays **`DECISIONS`** — in fixed
 order **trace → GOALS → FOCUS** (autopilot-trace lines unlabeled as the pane's own identity; then
 a bare `GOALS` label + digest; then a bare `FOCUS` label + ranked lines). Height-clip is
@@ -271,7 +271,7 @@ a bare `GOALS` label + digest; then a bare `FOCUS` label + ranked lines). Height
   `[ASPIRATIONAL]` collapse to a single stacked row rather than overflow.
 - **Panels shed by column budget in a fixed priority** (full gutters → narrow left gutter → right
   HUD only → bordered viewport alone → unbordered viewport), with secondary content (GOALS +
-  FOCUS) folding *into* idle DECISIONS below 138 (stack order above) before either is dropped
+  FOCUS) folding *into* idle DECISIONS below 146 (stack order above) before either is dropped
   outright.
 - **Degradation loses chrome and redundancy, never information.** The viewport — the live game
   itself — is always the last thing to survive a fold; unicode/ASCII glyph twins carry zero

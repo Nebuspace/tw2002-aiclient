@@ -178,7 +178,7 @@ from tw2002_aiclient.cockpit.control_seat import (
 from tw2002_aiclient.cockpit.layout import frame_layout
 from tw2002_aiclient.screens import PlayShellScreen, ProfileRow
 
-FULL_ROWS, FULL_COLS = 40, 160
+FULL_ROWS, FULL_COLS = 40, 180
 HANDLE = "Alpha"
 
 # The three canon-vocabulary labels never overlap as substrings of one

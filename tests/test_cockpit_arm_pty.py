@@ -50,7 +50,7 @@ from .pty_helpers import (
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 HANDLE = "Alpha"
-FULL_ROWS, FULL_COLS = 40, 160
+FULL_ROWS, FULL_COLS = 40, 180
 
 _PTY_SKIP = pytest.mark.skipif(
     not pty_curses_supported(),
@@ -106,7 +106,7 @@ curses.wrapper(_run)
 
 
 def _drive_arm_pty(tmp_path: Path, status: dict | None, *, timeout: float = 20.0) -> bytes:
-    """Spawn ``app._run`` in a 40x160 pty, Enter through the launcher, and
+    """Spawn ``app._run`` in a 40x180 pty, Enter through the launcher, and
     capture the settled cockpit frame. ``status`` is the payload the
     stubbed status poll returns, or ``None`` to leave the real no-daemon
     path in place."""

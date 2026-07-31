@@ -91,7 +91,7 @@ _PTY_SKIP = pytest.mark.skipif(
 
 # Full tier -- matches every sibling cockpit-panel pty suite's own FULL
 # constants so the LOGS band's one content row is unambiguously visible.
-FULL_ROWS, FULL_COLS = 40, 160
+FULL_ROWS, FULL_COLS = 40, 180
 
 _SECRET_MARKER = "<<secret input redacted>>"  # tw2002_aiclient.session.transcript_tail.TranscriptTail.append_redacted()'s own default wire format
 _SECRET_SENTINEL = "SENTINEL-hunter2-SENTINEL"

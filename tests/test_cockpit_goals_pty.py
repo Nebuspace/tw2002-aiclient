@@ -109,7 +109,7 @@ from tw2002_aiclient.app import _run
 curses.wrapper(_run)
 """
 
-ROWS, COLS = 40, 160  # "full" tier -- both gutters present
+ROWS, COLS = 40, 180  # "full" tier -- both gutters present
 
 
 def _drive_goals_pty(
