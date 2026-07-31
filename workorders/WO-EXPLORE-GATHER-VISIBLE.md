@@ -1,6 +1,6 @@
 # WO-EXPLORE-GATHER-VISIBLE — make port commodity investigation unmistakable
 
-**Status:** READY · visible client gap (Max live-test 2026-07-29)
+**Status:** DONE · origin `8f4e6fc` (#227) · tip-honesty stamp 2026-07-31 (product on main; banner was stale READY)
 **Seat:** `impl-claudecode-aiclient`
 **Branch:** `wo/EXPLORE-GATHER-VISIBLE`
 **Depends:** `main` ≥ `833c83c` (#226 HUD bridge)

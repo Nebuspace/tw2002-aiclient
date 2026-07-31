@@ -1,6 +1,6 @@
 # WO-ARM-HISTORY-RING — armed-run sends appear in session history
 
-**Status:** READY · visible automation honesty (follow-on #224)
+**Status:** DONE · origin `a88116c` (#225) · tip-honesty stamp 2026-07-31 (product on main; banner was stale READY)
 **Seat:** `impl-claudecode-aiclient`
 **Branch:** `wo/ARM-HISTORY-RING`
 **Depends:** `main` ≥ `6ea3dcd` (#224 armed run on main)
