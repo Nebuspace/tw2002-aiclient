@@ -23,6 +23,8 @@ The defects these are built to catch are listed at each section head.
 
 from __future__ import annotations
 
+from tw2002_aiclient.cockpit import autonomy_keys
+
 import pytest
 
 from tw2002_aiclient import chain_search, chain_status, chains
@@ -395,12 +397,12 @@ def test_a_live_trace_wins_outright_over_the_coach():
 def test_the_coach_speaks_only_into_an_otherwise_empty_pane():
     no_trace = {"chain_hops": 5, "chain_unit": "hops"}
     lines = compose_decisions_lines(no_trace, width=48)
-    assert lines != ["—", "Exploring…"]
+    assert lines != [line[:48] for line in autonomy_keys.compose_autonomy_help_lines()]
     assert lines[0].strip()  # authored card text, not a placeholder
 
 
 def test_a_status_with_nothing_to_teach_still_shows_the_honest_empty_state():
-    assert compose_decisions_lines({}, width=48) == ["—", "Exploring…"]
+    assert compose_decisions_lines({}, width=48) == [line[:48] for line in autonomy_keys.compose_autonomy_help_lines()]
 
 
 def test_the_none_status_empty_marker_is_unchanged():
@@ -408,15 +410,15 @@ def test_the_none_status_empty_marker_is_unchanged():
     # None at the same width, and collapses the whole pane when every section
     # matches its own marker. If the coach could ever fire on None, that probe
     # would silently stop matching and the pane would never collapse again.
-    assert compose_decisions_lines(None, width=48) == ["—", "Exploring…"]
+    assert compose_decisions_lines(None, width=48) == [line[:48] for line in autonomy_keys.compose_autonomy_help_lines()]
 
 
-def test_width_zero_still_yields_exactly_two_empty_lines():
+def test_width_zero_still_yields_exactly_four_empty_lines():
     # Not cosmetic: at width<=0 every panel renders as empty strings, and a
     # coach callout would change the NUMBER of lines DECISIONS returns.
     rich = {"chain_hops": 5, "chain_unit": "hops"}
-    assert compose_decisions_lines(rich, width=0) == ["", ""]
-    assert compose_decisions_lines(rich, width=-7) == ["", ""]
+    assert compose_decisions_lines(rich, width=0) == [""] * len(autonomy_keys.compose_autonomy_help_lines())
+    assert compose_decisions_lines(rich, width=-7) == [""] * len(autonomy_keys.compose_autonomy_help_lines())
 
 
 def test_every_coach_line_respects_the_width_clip():
@@ -453,7 +455,7 @@ def test_a_failing_kb_load_is_cached_as_a_failure_not_retried(monkeypatch):
     monkeypatch.setattr(decisions_mod._coach_kb, "load_coach_kb", boom)
     rich = {"chain_hops": 5, "chain_unit": "hops"}
     for _ in range(5):
-        assert compose_decisions_lines(rich, width=48) == ["—", "Exploring…"]
+        assert compose_decisions_lines(rich, width=48) == [line[:48] for line in autonomy_keys.compose_autonomy_help_lines()]
     assert len(calls) == 1
 
 
@@ -465,7 +467,7 @@ def test_a_raising_coach_engine_degrades_to_the_empty_state(monkeypatch):
 
     monkeypatch.setattr(decisions_mod._coach, "compose_decisions_coach", boom)
     rich = {"chain_hops": 5, "chain_unit": "hops"}
-    assert compose_decisions_lines(rich, width=48) == ["—", "Exploring…"]
+    assert compose_decisions_lines(rich, width=48) == [line[:48] for line in autonomy_keys.compose_autonomy_help_lines()]
 
 
 @pytest.mark.parametrize(
@@ -545,7 +547,7 @@ def test_a_cim_report_classification_reaches_the_coach():
     docked-at-port card can fire. Pinned with the classification the REAL
     classifier produces (see the fixture pin below), not an invented one."""
     lines = compose_decisions_lines({"classification": "cim_report"}, width=60)
-    assert lines != ["—", "Exploring…"]
+    assert lines != [line[:60] for line in autonomy_keys.compose_autonomy_help_lines()]
 
 
 def test_the_cim_report_anchor_is_producible_by_the_real_classifier():

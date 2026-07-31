@@ -309,22 +309,30 @@ def test_narrow_right_gutter_tier_hud_and_decisions_titles_visible(_narrow_tier_
 # ---------------------------------------------------------------------------
 # No autopilot_trace payload (real transport, empty isolated run dir; also
 # the shape of today's real daemon, which carries no "autopilot_trace" key
-# yet) -> the composer's two-line honest-empty state, never blank.
+# yet) -> the composer's calm-empty autonomy HELP lines, never blank.
 # ---------------------------------------------------------------------------
 
 
 @_PTY_SKIP
 def test_no_provider_decisions_shows_honest_empty(_full_tier_no_provider_capture):
+    from tw2002_aiclient.cockpit import autonomy_keys
+
     regions = frame_layout(FULL_ROWS, FULL_COLS)
     decisions = regions["decisions"]
     grid = pyte_grid(_full_tier_no_provider_capture, FULL_ROWS, FULL_COLS)
 
     content_left = decisions["x"] + 1
     content_right = decisions["x"] + decisions["w"] - 1  # exclusive -- box's own right border
+    decisions_text = "\n".join(
+        grid[decisions["y"] + 1 : decisions["y"] + decisions["h"] - 1]
+    )
+    for help_line in autonomy_keys.compose_autonomy_help_lines():
+        # Panel width may clip; assert the unclipped prefix that always fits.
+        assert help_line[:20] in decisions_text, (
+            f"expected HELP prefix {help_line[:20]!r} in DECISIONS, got {decisions_text!r}"
+        )
     row0 = grid[decisions["y"] + 1][content_left:content_right].strip()
-    row1 = grid[decisions["y"] + 2][content_left:content_right].strip()
-    assert row0 == "—", f"expected DECISIONS honest-empty first line, got {row0!r}"
-    assert row1 == "Exploring…", f"expected DECISIONS honest-empty second line, got {row1!r}"
+    assert row0.startswith("E)xplore"), f"expected E)xplore HELP first, got {row0!r}"
 
 
 # ---------------------------------------------------------------------------

@@ -27,9 +27,11 @@ glyph table): **``★`` chosen action · ``·`` other candidate · ``⊘`` gated
 Every composed candidate line is **glyph-prefixed** — a structural
 guarantee, not a per-line check: no rendered candidate line can begin with
 a bare word, imperative or otherwise, because its first character is always
-one of ``★``/``·``/``⊘``. The two-line empty state is the one exception and
-is composer-authored, present-participle text ("Exploring…"), never an
-imperative — see ``IMPERATIVE_DENYLIST`` below.
+one of ``★``/``·``/``⊘``. The calm empty state is the one exception: when
+there is no live trace, no explore overlay, and no coach card, the pane
+shows the four autonomy HELP one-liners (`E`/`H`/`O`/`L`, confirm-not-auto
+on H/O — WO-WIRE-AUTONOMY-HELP-LINES) rather than a bare "Exploring…"
+pair. Still never an imperative command — see ``IMPERATIVE_DENYLIST``.
 
 Status-dict field mapping (WO-P3-036). ``status`` is the daemon's ``status``
 verb response shape (``tw2002_aiclient/session/protocol.py::dispatch()``).
@@ -127,6 +129,7 @@ from tw2002_aiclient import chain_status as _chain_status
 from tw2002_aiclient import coach_engine as _coach
 from tw2002_aiclient import coach_kb as _coach_kb
 
+from . import autonomy_keys
 from .focus import _format_ev, _kind_label, _safe_bool, _safe_float
 from .goals import GLYPH_BLOCKED, UNKNOWN_DETAIL, _safe_list, _safe_str
 
@@ -252,19 +255,19 @@ GLYPH_OTHER = "·"
 # line read as a live command rather than read-only reasoning (canon
 # hazard, `trainer-cockpit.md` PWO-036 hazards: "coaching copy must not
 # look like a live driver"). This module's own authored vocabulary (the
-# fixed kind labels imported from focus.py, and the two empty-state
-# strings below) is checked against it in
-# tests/test_cockpit_decisions.py. It is NOT a general sanitizer for
-# arbitrary wire-supplied text — an operator-hostile `kind` or `rationale`
-# string could still spell an imperative word — same type-safety-only
-# boundary goals.py/focus.py already draw for their own free-text fields.
-# Every real candidate line is glyph-prefixed regardless of this list (see
-# module docstring), which is the load-bearing structural guarantee; this
-# denylist is a secondary, narrower check on text this module itself
-# chooses to author. "explore"/"trade"/"upgrade" are deliberately absent —
-# they collide with the canon-authored FOCUS/DECISIONS kind-label
-# vocabulary (`focus.py::_KIND_LABELS`) and are not command-style verbs in
-# that noun-phrase context.
+# fixed kind labels imported from focus.py, and the calm-empty HELP
+# one-liners) is checked against it in tests/test_cockpit_decisions.py.
+# It is NOT a general sanitizer for arbitrary wire-supplied text — an
+# operator-hostile `kind` or `rationale` string could still spell an
+# imperative word — same type-safety-only boundary goals.py/focus.py
+# already draw for their own free-text fields. Every real candidate line
+# is glyph-prefixed regardless of this list (see module docstring), which
+# is the load-bearing structural guarantee; this denylist is a secondary,
+# narrower check on text this module itself chooses to author.
+# "explore"/"trade"/"upgrade" are deliberately absent — they collide with
+# the canon-authored FOCUS/DECISIONS kind-label vocabulary
+# (`focus.py::_KIND_LABELS`) and are not command-style verbs in that
+# noun-phrase context.
 IMPERATIVE_DENYLIST = frozenset(
     {
         "attack",
@@ -288,6 +291,22 @@ def _clip(text: str, *, width: int) -> str:
     if width <= 0:
         return ""
     return text[:width]
+
+
+def _autonomy_help_empty_lines(*, width: int) -> list[str]:
+    """Calm-empty DECISIONS: E/H/O/L one-liners (WO-WIRE-AUTONOMY-HELP-LINES).
+
+    Never raises. Width-clips like every other DECISIONS line; ``width <= 0``
+    yields one empty string per HELP line (same count as the calm empty).
+    """
+    try:
+        help_lines = autonomy_keys.compose_autonomy_help_lines()
+    except Exception:  # noqa: BLE001 -- never-raises; fall back to legacy empty
+        return [
+            _clip(UNKNOWN_DETAIL, width=width),
+            _clip("Exploring…", width=width),
+        ]
+    return [_clip(line, width=width) for line in help_lines]
 
 
 def compose_decisions_lines(status: dict | None, *, width: int) -> list[str]:
@@ -321,9 +340,9 @@ def compose_decisions_lines(status: dict | None, *, width: int) -> list[str]:
     never an invented candidate or a one-line placeholder. What renders in
     their place is the coach callout for whatever ``status`` supports
     (``WO-STATUS-CHAIN-SCALARS-COACH``; up to three authored lines), and
-    failing that — no KB, no trigger, or ``width <= 0`` — the two-line
-    honest-empty state (`canon/surfaces/trainer-cockpit.md` "Panel states":
-    ``DECISIONS shows ["—", "Exploring…"]``).
+    failing that — no KB, no trigger, or ``width <= 0`` — the calm-empty
+    autonomy HELP one-liners (WO-WIRE-AUTONOMY-HELP-LINES), clipped to
+    ``width`` (four empty strings when ``width <= 0``).
 
     A live trace always wins: whenever *any* candidate rendered, the coach is
     not consulted at all.
@@ -397,9 +416,6 @@ def compose_decisions_lines(status: dict | None, *, width: int) -> list[str]:
         coach = _coach_lines(status, width=width) if width > 0 else []
         if coach:
             return coach
-        return [
-            _clip(UNKNOWN_DETAIL, width=width),
-            _clip("Exploring…", width=width),
-        ]
+        return _autonomy_help_empty_lines(width=width)
 
     return lines

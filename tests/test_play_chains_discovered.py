@@ -631,6 +631,8 @@ def test_the_empty_pane_still_paints_its_honest_state_without_a_chain(monkeypatc
     """The negative control for the pin above: same screen, same draw, no chain
     — a coach callout that paints regardless would pass the positive test on its
     own."""
+    from tw2002_aiclient.cockpit import autonomy_keys
+
     monkeypatch.setattr(screens_mod.curses, "has_colors", lambda: False)
     profile = screens_mod.ProfileRow(
         name="alpha", handle="Alpha", server="demo-a",
@@ -644,7 +646,10 @@ def test_the_empty_pane_still_paints_its_honest_state_without_a_chain(monkeypatc
     s.draw()
     painted = "\n".join(text for (_y, _x, text, _a) in win.writes)
     assert "profit chain" not in painted.lower()
-    assert "Exploring" in painted
+    for help_line in autonomy_keys.compose_autonomy_help_lines():
+        assert help_line[:12] in painted, (
+            f"expected calm-empty HELP {help_line[:12]!r} in painted DECISIONS"
+        )
 
 
 # ------------------------------- WO-GOALS-STATUS-VOCABULARY T1: `known_sectors`
