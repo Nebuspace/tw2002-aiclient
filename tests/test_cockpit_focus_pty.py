@@ -5,7 +5,8 @@ FOCUS box the ``screens.py``/``app.py`` wiring produces: its drawn title is
 ``FOCUS`` (not the pre-035 ``PRIORITIES`` placeholder), it is nested INSIDE
 the ``GOALS`` box (``cockpit.layout.nested_focus_region``,
 WO-LEFT-GUTTER-NEST-FOCUS-FORMATIONS) at both the full tier and the
-narrowed ``right_gutter`` fold tier (>=138 cols), it renders the composer's
+narrowed ``right_gutter`` fold tier (raw 150 → inner ≥146, matching
+``fold_pty`` WIDE_COLS / ``LEFT_GUTTER_MIN_COLS``), it renders the composer's
 honest empty state with no focus payload, and a stubbed daemon status with
 ranked + gated candidates renders a ranked label and a ``⊘`` gated line on
 screen.
@@ -58,10 +59,11 @@ _PTY_SKIP = pytest.mark.skipif(
 )
 
 # Full tier (both gutters at full width) and the narrowed right_gutter fold
-# tier (left gutter still present, PRIORITIES_MIN_W=20) -- the two sizes
-# PWO-035's Accept calls out ("fold tier >=138").
+# tier with left gutter still present. NARROW raw cols=150 mirrors
+# tests/test_cockpit_fold_pty.py WIDE_COLS: 150-2=148 inner >= LEFT_GUTTER_MIN_COLS=146
+# (142 raw fell below that floor post–gutter-widen and stalled wait_frame).
 FULL_ROWS, FULL_COLS = 40, 180
-NARROW_ROWS, NARROW_COLS = 40, 142
+NARROW_ROWS, NARROW_COLS = 40, 150
 
 # Bootstrap: demo launcher rows + stubbed ensure (no daemon / no twd.sock),
 # same shape as tests/test_cockpit_goals_pty.py's _BOOTSTRAP. One opt-in
@@ -276,8 +278,8 @@ def test_full_tier_goals_and_focus_titles_visible(_full_tier_no_provider_capture
 @_PTY_SKIP
 def test_narrow_right_gutter_tier_goals_and_focus_titles_visible(_narrow_tier_no_provider_capture):
     regions = frame_layout(NARROW_ROWS, NARROW_COLS)
-    # >=138 inner cols still carries a narrowed left gutter under the
-    # "right_gutter" mode name (frame_layout's own convention).
+    # Raw 150 → inner 148 >= LEFT_GUTTER_MIN_COLS=146: narrowed left gutter
+    # still present under the "right_gutter" mode name (frame_layout convention).
     assert regions["mode"] == "right_gutter"
     goals = regions["goals"]
     focus = nested_focus_region(goals)
