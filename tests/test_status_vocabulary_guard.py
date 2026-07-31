@@ -73,7 +73,6 @@ STARVED_ALLOWLIST: dict[str, tuple[str, str]] = {
     "fighter_buy_status": ("T3", "needs shipyard-screen parsing"),
     # -- T4: whole nested panel payloads, each its own surface-sized WO.
     "autopilot_trace": ("T4", "whole DECISIONS trace payload; no autopilot emits one yet"),
-    "focus": ("T4", "whole FOCUS payload; own WO"),
     "tx": ("T4", "liveness TX readout; `liveness.py` documents its own pending wire"),
     "spinner_frame": ("T4", "app per-draw tick; `liveness.py` documents its own pending wire"),
 }
