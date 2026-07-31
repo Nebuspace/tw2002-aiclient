@@ -46,6 +46,7 @@ from tw2002_aiclient.session.autoloop import CYCLES_HARD_CEILING
 from tw2002_aiclient.session.trade_chain import (
     DEFAULT_CASH_FLOOR as _TRADE_CASH_FLOOR,
     DEFAULT_TURN_RESERVE as _TRADE_TURN_RESERVE,
+    discovery_blocks_start as _trade_discovery_blocks_start,
 )
 from tw2002_aiclient.session.stardock_hold import (
     DEFAULT_CASH_FLOOR as _HOLD_CASH_FLOOR,
@@ -791,6 +792,119 @@ def _poll_stardock_hold_status(play: PlayShellScreen, *, run_dir) -> bool:
 # touch).
 _AUTO_FIRE_KINDS = frozenset({"run_chain", "upgrade"})
 
+# WO-TRADE-PARTIAL-BACKOFF: non-transient trade-start refuses that must not
+# re-fire every idle tick. First refuse stays honest in LOGS; further ticks
+# stay quiet until cooldown expires or the map/sector marker moves.
+_TRADE_AUTO_FIRE_COOLDOWN_S = 45.0
+_TRADE_AUTO_FIRE_BACKOFF_REASONS = frozenset(
+    {
+        "chain_discovery_partial",
+        "chain_identity_stale",
+        "chain_plan_invalid",
+    }
+)
+
+
+def _trade_auto_fire_map_marker(play: PlayShellScreen, status) -> tuple:
+    """Sector + known-port count — growth or move clears a trade backoff."""
+    sector = None
+    try:
+        if isinstance(status, dict):
+            hud = status.get("hud")
+            cell = hud.get("sector") if isinstance(hud, dict) else None
+            if isinstance(cell, dict):
+                sector = cell.get("value")
+            else:
+                sector = cell
+    except Exception:  # noqa: BLE001
+        sector = None
+    known_n = 0
+    try:
+        ports = getattr(play.chain_scalars, "known_ports", None)
+        if callable(ports):
+            ports = ports()
+        if ports is not None:
+            known_n = len(ports)
+    except Exception:  # noqa: BLE001
+        known_n = 0
+    return (sector, known_n)
+
+
+def _trade_chain_discovery_preflight(world_id: str):
+    """Client-side recompute for the same truncated gate as the runner.
+
+    Returns a discovery result or ``None`` when recompute itself fails
+    (transport/IO) — caller then falls through to ``trade_chain_start``,
+    which still refuses honestly daemon-side.
+    """
+    try:
+        from tw2002_aiclient import chain_search
+
+        return chain_search.recompute(world_id)
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _trade_auto_fire_reason_is_backoff(reason: object) -> bool:
+    if not isinstance(reason, str) or not reason:
+        return False
+    if reason in _TRADE_AUTO_FIRE_BACKOFF_REASONS:
+        return True
+    return reason.startswith("chain_discovery_failed:")
+
+
+def _trade_auto_fire_cooldown_active(
+    play: PlayShellScreen, *, now: float, status
+) -> bool:
+    until = float(getattr(play, "_trade_af_cooldown_until", 0.0) or 0.0)
+    if until <= 0.0:
+        return False
+    if now >= until:
+        play._trade_af_cooldown_until = 0.0
+        return False
+    marker = _trade_auto_fire_map_marker(play, status)
+    if marker != getattr(play, "_trade_af_cooldown_marker", None):
+        play._trade_af_cooldown_until = 0.0
+        return False
+    return True
+
+
+def _arm_trade_auto_fire_cooldown(
+    play: PlayShellScreen, reason: str, *, now: float, status
+) -> None:
+    play._trade_af_cooldown_until = now + _TRADE_AUTO_FIRE_COOLDOWN_S
+    play._trade_af_cooldown_reason = reason
+    play._trade_af_cooldown_marker = _trade_auto_fire_map_marker(play, status)
+
+
+def _prefer_explore_while_trade_blocked(
+    play: PlayShellScreen, profile: ProfileRow
+) -> None:
+    """Lean explore/gather under Port Trade·ON when discovery is incomplete.
+
+    Preserves the refuse ``status_line`` (one honest LOGS line). Sets
+    ``play.auto_fire_kicked_explore`` so the idle loop can keep polling.
+    """
+    play.auto_fire_kicked_explore = False
+    if not getattr(play, "port_trade_on", False):
+        return
+    band = getattr(play, "explore_band", None)
+    if isinstance(band, str) and band.strip():
+        # Explore already owns the band — do not stack a second start.
+        return
+    refuse_line = play.status_line
+    kicked = _start_policy_explore(
+        play,
+        profile,
+        dock=getattr(play, "port_trade_on", True),
+        tolls=False,
+        status_starting=(
+            "App-armed — explore while chain discovery incomplete…"
+        ),
+    )
+    play.status_line = refuse_line
+    play.auto_fire_kicked_explore = bool(kicked)
+
 
 def _stop_live_runners(*, run_dir) -> tuple[bool, list[str]]:
     """Idempotent halt-all for every runner this play surface can start --
@@ -935,11 +1049,27 @@ def _autonomy_auto_fire(
     if offer.kind == "run_chain":
         if not play.port_trade_on:
             return False, False
+        now = time.monotonic()
+        if _trade_auto_fire_cooldown_active(play, now=now, status=status):
+            # Quiet during backoff — keep the first refuse LOGS line.
+            return False, False
         chain, _caption = play.chain_scalars.bubble_subject()
         plan = _trade_chain_plan.plan_from_chain(
             _world_identity.world_id_from_profile(profile), chain
         )
         if plan is None:
+            return False, False
+        # Preflight (WO-TRADE-PARTIAL-BACKOFF): same truncated gate as
+        # session.trade_chain — skip painting "starting trade…" and the
+        # start verb when discovery is incomplete.
+        discovered = _trade_chain_discovery_preflight(plan.world_id)
+        if discovered is not None and _trade_discovery_blocks_start(discovered):
+            reason = "chain_discovery_partial"
+            play.status_line = f"App-armed trade did not start — {reason}"
+            _arm_trade_auto_fire_cooldown(
+                play, reason, now=now, status=status
+            )
+            _prefer_explore_while_trade_blocked(play, profile)
             return False, False
         play.status_line = (
             f"App-armed — starting trade {plan.route}… (Port Trade\u00b7ON)"
@@ -957,6 +1087,7 @@ def _autonomy_auto_fire(
             play.status_line = f"App-armed trade start failed — {type(exc).__name__}"
             return False, False
         if getattr(started, "ok", False):
+            play._trade_af_cooldown_until = 0.0
             play.status_line = (
                 f"App-armed trade — {plan.route}, one pass running"
             )
@@ -965,6 +1096,12 @@ def _autonomy_auto_fire(
         # "starting trade…" line as the final LOGS status on ok=False.
         reason = getattr(started, "reason", None) or getattr(started, "error", None) or "unknown"
         play.status_line = f"App-armed trade did not start — {reason}"
+        if _trade_auto_fire_reason_is_backoff(reason):
+            _arm_trade_auto_fire_cooldown(
+                play, str(reason), now=now, status=status
+            )
+            if reason == "chain_discovery_partial":
+                _prefer_explore_while_trade_blocked(play, profile)
         return False, False
 
     # offer.kind == "upgrade"
@@ -1206,6 +1343,9 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                     trade_poll_active, hold_poll_active = _autonomy_auto_fire(
                         play, profile=profile, run_dir=run_dir,
                     )
+                    if getattr(play, "auto_fire_kicked_explore", False):
+                        explore_poll_active = True
+                        play.auto_fire_kicked_explore = False
                 # The idle tick, NOT the draw path: `play.draw()` runs every
                 # loop iteration, while this branch is only reached when
                 # `getch` times out (~1 Hz). `LiveRefresh` throttles on top of
