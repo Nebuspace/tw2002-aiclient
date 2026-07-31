@@ -1,6 +1,6 @@
 # WO-FIGHTER-TOLL-POLICY-WIRE — product consumer for `fighter_toll_policy`
 
-**Status:** OPEN · EXECUTE · HIGH · hub seed after #207 MERGED `df857f9`
+**Status:** DONE · origin `ad232da` (#209) · tip-honesty stamp 2026-07-31 (product on main; banner was stale OPEN)
 **Seat:** Claude Code (`impl-claudecode-aiclient`) · Live DEFERRED → Cursor
 **Refs:** #206 EXEC · #207 classify ruling (a) · CC STATUS 00:33Z findings · Max combat GO (force_share≥0.90)
 

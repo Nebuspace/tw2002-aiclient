@@ -1,6 +1,6 @@
 # WO-PROCESS-HUB-IDLE-KICK-ADDRESS — Hub self-nudges must not read as spoke directives
 
-**Status:** OPEN · READY · process  
+**Status:** DONE · Nebuspace `.claude/heartbeat.sh` SELF-NUDGE (`hub only — spokes ignore`) verified 2026-07-31 · tip-honesty stamp (process Accept met; banner was stale OPEN)
 **Posted:** 2026-07-27T20:50:00Z · hub from CC PROCESS-NOTE 20:48:07Z  
 **Seat:** hub (Nebuspace `.claude/heartbeat.sh` / coord-monitor)  
 **Depends:** none  

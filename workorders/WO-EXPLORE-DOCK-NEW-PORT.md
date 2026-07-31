@@ -1,6 +1,6 @@
 # WO-EXPLORE-DOCK-NEW-PORT — Dock newly found ports for commodity ingest during explore
 
-**Status:** OPEN · EXECUTE · HIGH · Claude Code (`impl-claudecode-aiclient`)  
+**Status:** DONE · origin `fdcbd1c` (#205) · tip-honesty stamp 2026-07-31 (product on main; banner was stale OPEN)
 **Posted:** 2026-07-28T22:36Z · Max GO — immediate data gathering on first sight  
 **Refs:** flyby `port.class` (E2) · `write_port_only` / commodities · explore map-fill
 
