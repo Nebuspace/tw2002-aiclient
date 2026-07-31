@@ -23,15 +23,19 @@ Pricing model (see canon/strategy/port-economics.md): that doc is
 explicitly UNVERIFIED against the live game, and only asserts (a) a
 floor price exists per commodity and (b) a port's price sits somewhere
 between that floor (near-full stock) and a higher price (near-empty
-stock) -- it does NOT specify the interpolation shape or a ceiling
-multiplier. This module supplies both as its OWN additional, equally
-unverified modeling choice: linear interpolation from `floor` at
-`pct == 100` (fully stocked -- cheapest) up to `floor * ceiling_multiplier`
-at `pct == 0` (nearly empty -- priciest), applied identically regardless
-of buying/selling posture -- a port's price moves toward its floor the
-closer it sits to full stock, whichever direction the trade runs. Every
-number here is a `TradeAdapterConfig` field, never a hardcoded constant,
-so it can be corrected the moment live data contradicts it.
+stock) -- it does NOT specify the interpolation shape, a ceiling
+multiplier, or buy≠sell at the same pct. This module supplies those as
+its OWN additional, equally unverified modeling choices: linear
+interpolation from `floor` at `pct == 100` (fully stocked -- cheapest)
+up to `floor * ceiling_multiplier` at `pct == 0` (nearly empty --
+priciest), then a posture spread (`buy_sell_spread_of_floor`): the mid-
+curve estimate is shifted down for a port `selling` row (player cost)
+and up for a port `buying` row (player revenue) by ``floor * spread``.
+Without that spread, Gather docks that stamp every row at `pct=100`
+produce `margin == 0` forever and `chains.find_profit_chains` stays
+empty. Every number here is a `TradeAdapterConfig` field, never a
+hardcoded constant, so it can be corrected the moment live data
+contradicts it.
 
 A future write-hook MAY someday attach a real observed unit price to a
 port's commodity record (e.g. from a mid-haggle capture) -- no such
@@ -93,6 +97,13 @@ DEFAULT_FLOOR_PRICES: Mapping[str, float] = {
     "Equipment": 40.0,
 }
 DEFAULT_CEILING_MULTIPLIER = 2.0  # this module's own interpolation choice -- UNVERIFIED, not from the doc
+# Posture spread as a fraction of floor (UNVERIFIED modeling, WO-TRADE-
+# ADAPTER-BUY-SELL-SPREAD). At equal pct, selling-posture estimate is mid
+# minus ``floor * spread`` and buying-posture is mid plus that delta, so a
+# complementary hop clears ``margin = 2 * floor * spread > 0``. Not a claim
+# about live TWGS bid/ask tables — a named knob so Gather pct=100 worlds
+# are not permanently margin-zero under the estimator.
+DEFAULT_BUY_SELL_SPREAD_OF_FLOOR = 0.05
 DEFAULT_MAX_AGE_S = 3600.0  # drop a port reading older than this as stale (1h)
 DEFAULT_MAX_HOPS = 500  # bounded compute/output on a large known map
 # Bounds expensive *route-search* work in build_trade_hops (one BFS per
@@ -123,6 +134,9 @@ class TradeAdapterConfig:
 
     floor_prices: Mapping[str, float] = field(default_factory=lambda: dict(DEFAULT_FLOOR_PRICES))
     ceiling_multiplier: float = DEFAULT_CEILING_MULTIPLIER
+    # UNVERIFIED: fraction of floor separating selling vs buying posture
+    # estimates at the same pct. See module docstring / DEFAULT_*.
+    buy_sell_spread_of_floor: float = DEFAULT_BUY_SELL_SPREAD_OF_FLOOR
     max_age_s: float = DEFAULT_MAX_AGE_S
     max_hops: int = DEFAULT_MAX_HOPS
     # Non-wall-clock budget: max number of one-source BFS route searches
@@ -172,6 +186,20 @@ class TradeAdapterConfig:
             raise ValueError(
                 "TradeAdapterConfig.ceiling_multiplier must be >= 1.0, "
                 f"got {self.ceiling_multiplier}"
+            )
+        if isinstance(self.buy_sell_spread_of_floor, bool) or not isinstance(
+            self.buy_sell_spread_of_floor, (int, float)
+        ):
+            raise TypeError(
+                "TradeAdapterConfig.buy_sell_spread_of_floor must be a real number, "
+                f"got {type(self.buy_sell_spread_of_floor).__name__}"
+            )
+        if self.buy_sell_spread_of_floor < 0.0 or not math.isfinite(
+            float(self.buy_sell_spread_of_floor)
+        ):
+            raise ValueError(
+                "TradeAdapterConfig.buy_sell_spread_of_floor must be >= 0 and finite, "
+                f"got {self.buy_sell_spread_of_floor}"
             )
         if isinstance(self.amount_floor, bool) or not isinstance(
             self.amount_floor, (int, float)
@@ -313,12 +341,16 @@ def _is_fresh(ts_str, *, max_age_s: float, now: datetime.datetime) -> bool:
 
 
 def _commodity_price(
-    row: Mapping, floor_prices: Mapping[str, float], ceiling_multiplier: float
+    row: Mapping,
+    floor_prices: Mapping[str, float],
+    ceiling_multiplier: float,
+    buy_sell_spread_of_floor: float = 0.0,
 ) -> Optional[float]:
     """Estimated per-unit price from a commodity row's `pct`, via the
-    linear floor->ceiling curve documented in the module docstring.
-    `None` (never a guessed number) when the commodity has no configured
-    floor price, or the row carries no usable `pct`."""
+    linear floor->ceiling curve documented in the module docstring, then
+    the UNVERIFIED posture spread when ``status`` is ``selling`` /
+    ``buying``. `None` (never a guessed number) when the commodity has
+    no configured floor price, or the row carries no usable `pct`."""
     name = row.get("name")
     pct = row.get("pct")
     floor = floor_prices.get(name)
@@ -328,20 +360,34 @@ def _commodity_price(
     # positivity/finite checks and invent a price from a flag.
     if isinstance(pct, bool) or isinstance(floor, bool):
         return None
+    if isinstance(buy_sell_spread_of_floor, bool) or not isinstance(
+        buy_sell_spread_of_floor, (int, float)
+    ):
+        return None
     try:
         pct_f = float(pct)
         floor_f = float(floor)
+        spread_f = float(buy_sell_spread_of_floor)
     except (TypeError, ValueError):
         return None
     # cipher LOW/mack MEDIUM: NaN compares False against both bounds
     # below (max(0.0, min(100.0, nan)) silently becomes 100.0), and a
     # bare inf/-inf token is valid input to json.load -- a corrupted
     # sector JSON must not turn into a plausible-looking guessed price.
-    if not math.isfinite(pct_f) or not math.isfinite(floor_f):
+    if not math.isfinite(pct_f) or not math.isfinite(floor_f) or not math.isfinite(spread_f):
+        return None
+    if spread_f < 0.0:
         return None
     pct_clamped = max(0.0, min(100.0, pct_f))
-    spread = floor_f * (ceiling_multiplier - 1.0)
-    return floor_f + spread * (1.0 - pct_clamped / 100.0)
+    curve_spread = floor_f * (ceiling_multiplier - 1.0)
+    mid = floor_f + curve_spread * (1.0 - pct_clamped / 100.0)
+    delta = floor_f * spread_f
+    status = row.get("status")
+    if status == "selling":
+        return mid - delta
+    if status == "buying":
+        return mid + delta
+    return mid
 
 
 def _has_tradeable_amount(row: Mapping, amount_floor: float) -> bool:
@@ -509,8 +555,18 @@ def build_trade_hops(
                 ):
                     continue  # phantom leg -- (near-)zero stock on one side, fail-closed
 
-                frm_price = _commodity_price(frm_row, cfg.floor_prices, cfg.ceiling_multiplier)
-                to_price = _commodity_price(to_row, cfg.floor_prices, cfg.ceiling_multiplier)
+                frm_price = _commodity_price(
+                    frm_row,
+                    cfg.floor_prices,
+                    cfg.ceiling_multiplier,
+                    cfg.buy_sell_spread_of_floor,
+                )
+                to_price = _commodity_price(
+                    to_row,
+                    cfg.floor_prices,
+                    cfg.ceiling_multiplier,
+                    cfg.buy_sell_spread_of_floor,
+                )
                 if frm_price is None or to_price is None:
                     continue  # unpriced commodity/pct -- never a guessed margin
 
