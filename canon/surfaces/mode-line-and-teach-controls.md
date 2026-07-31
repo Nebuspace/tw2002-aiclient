@@ -16,6 +16,38 @@ and defers to. This concept is prescriptive: it specifies the reborn dual-actor 
 loop the A/R/T keys drive, and the confirm-gated control cluster the trainer targets, and it records
 where the current code still carries the pre-reborn "AI drives" framing.
 
+## Trainer strip amendment — DECISION `RESOLVED-TRAINER-STRIP-AND-GUTTER-20260731` (2026-07-31, `WO-PLAY-STRIP-TRAINER-CHROME`)
+
+Max ruled a **trainer-specific calm band and seat chip** for this product's Play cockpit,
+superseding the developer-repertoire calm-band diagrams below for THIS surface. The underlying
+A/R/T teach-loop mechanics, the STOP banner's own `teach:` line, and the confirm-gate are all
+**unchanged** — only the trainer's own calm-band CHROME and seat-chip wording change:
+
+- **Seat chip merges Mode + ARM.** The trainer's mode chip reads `^A)APP-ARMED` /
+  `^A)MANUAL-HUMAN` (narrowing to `^A)APP` / `^A)MANUAL` under width pressure) instead of a bare
+  `APP`/`MANUAL — YOU HAVE CONTROL` chip beside a separate `ARM ON`/`ARM OFF` chip — "App holding
+  the seat" reads as armed-by-default for this trainer model (DECISION point 6: "App-armed auto =
+  default"). **Spectate is never remapped** — it stays the honest, unarmed `SPECTATE` reading; no
+  ARM claim is ever attached to a non-seat-holding viewer.
+- **Calm band retires A/R/T/V/U, `H)old?`, `O)ffer?`, and `P panic`** in favor of a trainer-plain
+  vocabulary: `E)xplore  P)ort Trade·ON  L)oops  T)rade Loop Chain  C)argo Hold Upgrade·ON
+  S)hip Upgrade·ON` (P/C/S default **ON**; `·` is this doc's own NO-SWAP glyph, same convention as
+  the `KEY)verb` rule below). The retired tokens' underlying features (Analyze, Record, reflex, the
+  rules library, the hold/offer confirm gates, the Trade-Loop-Chains popup, panic) are **all still
+  reachable by their existing keys** — only the standing chrome that advertises them on THIS calm
+  band changes. The STOP banner's own escalation `teach:` line (`A)nalyze  R)ecord  T)assign`,
+  below) is untouched — a different surface, not this calm band.
+- **CONN moves to the profile/title strip**, beside the host identity, with a slow green flash
+  while connected (offline/unknown stays honest non-green, never a lying pulse) — it no longer
+  renders on this bottom control strip.
+- **`status_line` / outcome prose routes into LOGS**, not a mid-control-strip segment — the
+  control strip carries only the seat chip, the coverage meter, the calm band, and the liveness
+  cluster.
+
+Code waves: `WO-PLAY-STRIP-TRAINER-CHROME` (this amendment, chrome only) →
+`WO-LEFT-GUTTER-NEST-FOCUS-FORMATIONS` (left-gutter layout) → `WO-PLAY-STRIP-POLICY-AUTO` (wires
+the P/C/S toggles + the App-armed-auto policy this amendment's chrome only advertises today).
+
 # Schema
 
 ## The mode line is a DUAL, not a triad
@@ -146,6 +178,17 @@ teach-provenance number, if shown, is labeled and kept separate from the live sh
 The App holds the keyboard (dual: App or Human). The auto meter is App-vs-Human live share. No AI
 slice appears in the live share; the teach keys sit on the hint band.
 
+**Trainer surface (this product's Play cockpit, per the amendment above):**
+
+```
+^A)APP-ARMED   COV ?                E)xplore  P)ort Trade·ON  L)oops  T)rade Loop Chain  C)argo Hold Upgrade·ON  S)hip Upgrade·ON  → K
+```
+The merged Mode+seat chip reads `^A)APP-ARMED` (App holding the seat under this trainer's
+armed-by-default model); the calm band shows the six trainer tokens instead of the developer
+A/R/T/V/U/H/O/L/P repertoire above. `CONN` is not on this row — it moved to the profile/title
+strip beside the host identity (see the amendment above; the profile strip itself is
+[trainer-cockpit](/surfaces/trainer-cockpit.md)'s own territory, not this surface's).
+
 ## The STOP-and-handoff banner
 
 ```
@@ -206,6 +249,11 @@ not text; the tone colors the chip:
 - **Spectate (not a dual member)** — **muted / plain** (`spectate` → tone `muted`). A read-only viewer
   takes no lock, so its chip is deliberately uncolored — "nothing to see here," idle/parked, drawn
   reverse-video like every badge but with no bold accent next to the App/Human chips.
+- **Trainer merged seat+ARM chip (amendment above)** — same `ok`/`warn` tones as the base App/Human
+  chips (`^A)APP-ARMED` green, `^A)MANUAL-HUMAN` yellow), just with the Mode chord and the ARM
+  reading folded into the one label instead of a second co-rendered `ARM ON`/`ARM OFF` chip.
+  `^A)APP-ARMED`'s "ARMED" half is this trainer's own client-side default reading (DECISION point
+  6), not a second daemon-verified fact the way the retired ARM chip was.
 
 ## Box-drawing, borders & titles
 
@@ -244,6 +292,12 @@ The reborn hint band is `^A)ode  A)nalyze  R)ecord  T)rigger  L)chains  P panic`
 uniform `KEY)verb` shape so the hotkey letter is scannable at the head of each token (`^A` = Ctrl-A
 Mode per ADR-002). (As-built the band is still `CONTROL_HINTS = "M)ode  L)chains  E)xplore  Spc pause
 X stop  P panic  A)ttach"` until 061-entry lands — tip honesty; see Code divergence.)
+
+**Trainer surface (per the amendment above):** the mode chip already carries the `^A)` chord
+(merged into `^A)APP-ARMED`/`^A)MANUAL-HUMAN`), and the hint band is
+`E)xplore  P)ort Trade·ON  L)oops  T)rade Loop Chain  C)argo Hold Upgrade·ON  S)hip Upgrade·ON`
+— every token still uses the same uniform `KEY)verb` shape (P/C/S additionally carry a `·ON`/`·OFF`
+toggle suffix).
 
 ## The A / R / T / Mode hotkey affordances
 

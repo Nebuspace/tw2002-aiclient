@@ -16,7 +16,6 @@ from tw2002_aiclient import chain_status as _chain_status
 from tw2002_aiclient import focus_status as _focus_status
 from tw2002_aiclient import world_stats as _world_stats
 from tw2002_aiclient.cockpit import analyze as cockpit_analyze
-from tw2002_aiclient.cockpit import arm as cockpit_arm
 from tw2002_aiclient.cockpit import armconfirm as cockpit_armconfirm
 from tw2002_aiclient.cockpit import autoloop_controls as cockpit_autoloop_controls
 from tw2002_aiclient.cockpit import chain_bubbles as cockpit_chain_bubbles
@@ -41,7 +40,7 @@ from tw2002_aiclient.cockpit import tones as cockpit_tones
 from tw2002_aiclient.cockpit import viewport as cockpit_viewport
 from tw2002_aiclient.cockpit import viewport_color as cockpit_viewport_color
 from tw2002_aiclient.cockpit.layout import frame_layout
-from tw2002_aiclient.cockpit.strip import compose_profile_strip_from_row
+from tw2002_aiclient.cockpit.strip import compose_profile_strip_segments_from_row
 from tw2002_aiclient.session import credentials
 
 
@@ -650,6 +649,38 @@ BOUNDARY_LINE_2 = (
 # cross-module (unlike this file's other `_`-private constants).
 MODE_KEY = 1
 
+# WO-PLAY-STRIP-TRAINER-CHROME: the CONN chip's own "slowly flashing"
+# period (DECISION `RESOLVED-TRAINER-STRIP-AND-GUTTER-20260731` point 3
+# says "green slowly flashing", not a fixed literal duration). Chosen
+# distinctly SLOWER than the heartbeat glyph's own
+# `cockpit.liveness.HEARTBEAT_PERIOD_S = 0.8`, so the cockpit's two
+# independent "is it alive" cues read as visually distinct pulses rather
+# than the same blink repeated twice a few columns apart.
+_CONN_FLASH_PERIOD_S = 1.6
+
+
+def _conn_connected_tone(now: object) -> "str | None":
+    """The CONN chip's tone while connected: alternates ``"ok"`` (lit
+    green) / ``None`` (unlit) on ``_CONN_FLASH_PERIOD_S`` -- the identical
+    ``int(now / period) % 2`` phase arithmetic
+    ``cockpit.liveness.heartbeat_glyph`` uses for its own always-breathing
+    cue, so this flash degrades exactly like every other time-driven
+    signal in this cockpit: a hostile/non-finite/negative ``now`` collapses
+    to phase 0 (lit) rather than raising or freezing dark. Never raises.
+    """
+    try:
+        t = float(now)
+    except Exception:
+        t = 0.0
+    if not math.isfinite(t):
+        t = 0.0
+    t = max(0.0, t)
+    try:
+        phase = int(t / _CONN_FLASH_PERIOD_S) % 2
+    except Exception:
+        phase = 0
+    return "ok" if phase == 0 else None
+
 
 class PlayShellScreen:
     """Trainer-cockpit frame bound to one launcher profile (WO-P1-016,
@@ -658,13 +689,18 @@ class PlayShellScreen:
     Renders the two-weight bordered chrome from
     ``cockpit.layout.frame_layout``: a cyan-bold double-line outer frame
     titled ``PLAY SHELL``, the row-1 character/profile strip
-    (``cockpit.strip.compose_profile_strip_from_row``), a three-column body
-    (left gutter stacked GOALS above thin-rounded FOCUS | double-line
-    GAME viewport | right gutter stacked thin-rounded HUD above thin-rounded
-    DECISIONS, PWO-036), and the bottom thin-rounded LOGS band carrying the
-    daemon's advancing session transcript tail (WO-P3-041, ``cockpit.
-    logsband.compose_logs_lines``, falling back to the ensure-session
-    ``status_line`` only while no real tail exists yet -- see the LOGS
+    (``cockpit.strip.compose_profile_strip_segments_from_row`` --
+    WO-PLAY-STRIP-TRAINER-CHROME moved the CONN chip onto this row beside
+    the host, DECISION `RESOLVED-TRAINER-STRIP-AND-GUTTER-20260731` point
+    3), a three-column body (left gutter stacked GOALS above thin-rounded
+    FOCUS | double-line GAME viewport | right gutter stacked thin-rounded
+    HUD above thin-rounded DECISIONS, PWO-036), and the bottom thin-rounded
+    LOGS band carrying the daemon's advancing session transcript tail
+    (WO-P3-041, ``cockpit.logsband.compose_logs_lines``, falling back to
+    the ensure-session ``status_line`` only while no real tail exists yet;
+    once a real tail exists, ``status_line`` still surfaces -- routed onto
+    LOGS' own reserved bottom row rather than a mid-control-strip segment,
+    WO-PLAY-STRIP-TRAINER-CHROME / DECISION point 4 -- see the LOGS
     paragraph below). The GAME viewport paints the live daemon screen
     (WO-P4-052, ``cockpit.viewport.compose_viewport_lines``, fed by
     ``viewport_provider``'s ``WatchFeed`` settle-edge snapshot) inside its
@@ -750,23 +786,32 @@ class PlayShellScreen:
     deterministic; the real refresh cadence (``app.py``'s 1 Hz
     ``stdscr.timeout(1000)``) is unchanged by this seam.
 
-    LOGS (WO-P3-041, ``cockpit.logsband``): the SAME shared ``status``
-    snapshot's ``log_tail`` field composes the box's advancing transcript
-    (``compose_logs_lines``, newest-last, clipped to the box's one content
-    row today). While ``cockpit_logsband.newest_tail_entry(status)`` is
+    LOGS (WO-P3-041, ``cockpit.logsband``; routing revised by
+    WO-PLAY-STRIP-TRAINER-CHROME / DECISION
+    `RESOLVED-TRAINER-STRIP-AND-GUTTER-20260731` point 4): the SAME shared
+    ``status`` snapshot's ``log_tail`` field composes the box's advancing
+    transcript (``compose_logs_lines``, newest-last, clipped to the box's
+    content rows). While ``cockpit_logsband.newest_tail_entry(status)`` is
     ``None`` -- no real daemon tail yet -- the box falls back to
     ``self.status_line`` (the local ensure-session progress/error string
     app.py sets) rather than the composer's own generic honest-empty
     marker, so the pre-tail ensure-session feedback (notably a failure
-    reason) is never silently lost; once a real tail exists it supersedes
-    the fallback entirely. The newest row renders ``curses.A_BOLD`` for
+    reason) is never silently lost. Once a real tail exists AND
+    ``status_line`` is non-empty, the two no longer compete for the same
+    space: the transcript composer is asked for one row less and
+    ``status_line`` takes the row it gave up, appended as the box's own
+    last line -- "route status_line into LOGS ... without wiping the
+    transcript" (DECISION point 4; this superseded WO-PLAY-OFFER-
+    VISIBLE-ON-LIVE's mid-control-strip ``status_offer`` segment, which no
+    longer exists). The newest row renders ``curses.A_BOLD`` for
     ``cockpit_logsband.TICKER_FLASH_DURATION_S`` (1.0s, canon's LOGS/ticker
     flash duration -- distinct from the CREDITS delta-chip's own 1.5s) after
     a genuinely NEW newest entry is observed -- tracked as this instance's
     own content-identity state (``_logs_last_newest`` /
     ``_logs_newest_arrival_s``), since ``cockpit_logsband`` is a pure,
-    stateless composer with no draw-to-draw memory of its own. The
-    ``status_line`` fallback line never flashes (it is not real tail
+    stateless composer with no draw-to-draw memory of its own. The flash
+    always targets the newest TRANSCRIPT row, never the appended
+    ``status_line`` row (which never flashes -- it is not real tail
     content).
 
     Every box border/title here renders in the ``"info"`` chrome tone
@@ -807,13 +852,22 @@ class PlayShellScreen:
     The control-strip row's left side, which this docstring's own prior
     revision left blank pending N5, carries the honest mode chip --
     ``cockpit.control_seat``'s ``APP_LABEL``/``MANUAL_LABEL``/
-    ``SPECTATE_LABEL``, whichever is true -- right up against wherever
-    the liveness cluster's own space begins, dropping out first if the
-    row is too narrow for both (see ``compose_control_strip_segments``). The
-    Mode chord (``handle_key``'s own ``"attach"`` return value, acted on
-    by ``app.py::_run_play``) is **Ctrl-A**, not `M` -- WO-P5-061-ENTRY
-    (project owner ruling, 2026-07-25) moved it off `M` so bare `M` stays
-    TradeWars' own Move command, unintercepted, while attached.
+    ``SPECTATE_LABEL`` reading, remapped via ``trainer_labels=True``
+    (WO-PLAY-STRIP-TRAINER-CHROME) to the merged Mode-key+seat wording
+    ``^A)APP-ARMED``/``^A)MANUAL-HUMAN`` (narrowing to ``^A)APP``/
+    ``^A)MANUAL`` under width pressure; SPECTATE is deliberately NOT
+    remapped -- DECISION `RESOLVED-TRAINER-STRIP-AND-GUTTER-20260731`
+    point 1: "keep honest SPECTATE ... do not lie APP-ARMED") -- right up
+    against wherever the liveness cluster's own space begins, dropping out
+    first if the row is too narrow for both (see
+    ``compose_control_strip_segments``). This row no longer carries a
+    separate ARM chip or the CONN chip (both retired from here by the same
+    WO -- ARM is folded into the merged label above, CONN moved to the
+    row-1 profile strip). The Mode chord (``handle_key``'s own
+    ``"attach"`` return value, acted on by ``app.py::_run_play``) is
+    **Ctrl-A**, not `M` -- WO-P5-061-ENTRY (project owner ruling,
+    2026-07-25) moved it off `M` so bare `M` stays TradeWars' own Move
+    command, unintercepted, while attached.
 
     Esc ends the binding and returns to the launcher — clean close, not a suspend.
     """
@@ -969,6 +1023,20 @@ class PlayShellScreen:
         # default, unintrusive state).  Reset to False after activation in
         # app.py so the strip returns to its resting appearance.
         self._conn_focused: bool = False
+        # WO-PLAY-STRIP-TRAINER-CHROME: the calm teachband's three
+        # trainer-only toggles (DECISION
+        # `RESOLVED-TRAINER-STRIP-AND-GUTTER-20260731` point 2 -- "default
+        # ON" for all three). This is LOCAL PLAY STATE driving CHROME
+        # ONLY: nothing in this class or `app.py` reads these to gate a
+        # send, and no key flips them yet (see `teachband.py`'s module
+        # docstring for why `P` in particular stays a display-only label
+        # this WO). A follow-on WO wires a real key + daemon-side spend
+        # gate to each; until then these three booleans exist purely so
+        # the calm band can render its required `·ON`/`·OFF` suffix
+        # honestly from SOME state rather than a hardcoded literal.
+        self.port_trade_on: bool = True
+        self.cargo_upgrade_on: bool = True
+        self.ship_upgrade_on: bool = True
         # WO-P5-063: the pending confirm-to-arm gate. See the CLASS-level
         # default of the same name above for why it is declared there too;
         # this instance assignment is the ordinary path.
@@ -1270,22 +1338,32 @@ class PlayShellScreen:
         return self._control_strip_segment_attr(cockpit_armconfirm.ARM_CONFIRM_TONE)
 
     def _compose_conn_chip(
-        self, status: "dict | None", focused: bool
+        self, status: "dict | None", focused: bool, *, now: object = None
     ) -> "tuple[str, str | None]":
         """WO-PLAY-CONN-TOGGLE: compose the ``(text, tone)`` pair for the
-        CONN chip in the control strip.
+        CONN chip (WO-PLAY-STRIP-TRAINER-CHROME moved this chip onto the
+        top profile strip; the composition below is unchanged).
 
         Reads ``status["connected"]`` (the real bool the daemon reports on
         the ``status`` verb -- ``session.conn.connected``).  Three outcomes:
 
-        * ``True``  → ``("CONN", "ok")`` green, or ``("[CONN]", "ok")``
-          when focused (brackets = focus cursor, plain ASCII, no swap).
+        * ``True``  → ``("CONN", tone)``, or ``("[CONN]", tone)`` when
+          focused (brackets = focus cursor, plain ASCII, no swap). ``tone``
+          is ``"ok"`` when ``now`` is omitted (every pre-trainer caller),
+          or the SLOWLY FLASHING ``"ok"``/``None`` alternation
+          `_conn_connected_tone` computes from ``now`` when supplied --
+          DECISION `RESOLVED-TRAINER-STRIP-AND-GUTTER-20260731` point 3:
+          "green slowly flashing" when connected. This is strictly
+          additive: omitting ``now`` reproduces this function's exact
+          pre-trainer steady-``"ok"`` behavior.
         * ``False`` → ``("DISC", "danger")`` red, or ``("[DISC]", "danger")``
-          when focused.
+          when focused. Never flashes -- DECISION: "offline/unknown =
+          honest non-green (no lying pulse)".
         * Unknown (non-dict status, missing/non-bool field) →
           ``("DISC?", "warn")`` / ``("[DISC?]", "warn")`` — unknown state
           treated as "attention needed" per the established honest-unknown
-          convention, NOT as "connected".
+          convention, NOT as "connected". Never flashes, same reason as
+          ``False`` above.
 
         Tone matches the viewport border flip (``_viewport_border_attr``):
         ``"ok"`` / ``"danger"`` / ``"warn"`` -- draw layer resolves to
@@ -1298,7 +1376,8 @@ class PlayShellScreen:
         else:
             connected = None
         if connected is True:
-            return ("[CONN]" if focused else "CONN", "ok")
+            tone = "ok" if now is None else _conn_connected_tone(now)
+            return ("[CONN]" if focused else "CONN", tone)
         if connected is False:
             return ("[DISC]" if focused else "DISC", "danger")
         # Unknown / no provider / provider raised
@@ -1457,6 +1536,25 @@ class PlayShellScreen:
 
         uok = cockpit_draw.unicode_ok()
 
+        # `now_val` (WO-P3-038, extended WO-P3-041, hoisted earlier still by
+        # WO-PLAY-STRIP-TRAINER-CHROME): resolved ONCE per draw, here rather
+        # than down at the LOGS block, because the row-1 profile strip's own
+        # CONN chip (DECISION `RESOLVED-TRAINER-STRIP-AND-GUTTER-20260731`
+        # point 3, moved from the control strip) now needs it too -- every
+        # time-driven cue in this draw pass (this CONN flash, LOGS' own
+        # newest-row flash, CONTROL_STRIP's heartbeat) shares the identical
+        # reading rather than each querying the clock separately.
+        try:
+            now_val = (self._now_fn or time.monotonic)()
+        except Exception:  # noqa: BLE001 -- a raising now_fn must not crash the draw pass
+            # Fall back to the REAL clock, not a frozen 0.0: the
+            # heartbeat's whole job is proving the draw loop is still
+            # running (canon "always breathing... so 'alive' reads even
+            # on a settled screen") -- the loop IS running (we got this
+            # far), so the true signal should survive a broken injected
+            # clock rather than lying still.
+            now_val = time.monotonic()
+
         # Outer frame -- double-line, cyan+bold, titled on its own top-border
         # row (row 1 below it is fully claimed by the character/profile strip).
         cockpit_draw.draw_box(
@@ -1464,17 +1562,50 @@ class PlayShellScreen:
             title=PLAY_TITLE.strip(), title_attr=self._outer_attr, uok=uok,
         )
 
+        # Row-1 profile strip (WO-PLAY-STRIP-TRAINER-CHROME / DECISION point
+        # 3): CONN now rides beside the host on THIS row instead of the
+        # bottom control strip -- `status` is the same shared snapshot every
+        # other panel in this draw already reads (no second poll), and
+        # `now_val` (hoisted above) drives the chip's own slow green flash
+        # while connected (`_compose_conn_chip`/`_conn_connected_tone`).
+        # Segmented (`compose_profile_strip_segments_from_row` +
+        # `draw_segment_line`) rather than the flat-string composer/
+        # `draw_lines` pairing this row used pre-trainer, so the CONN chip
+        # can carry its own tone distinct from the plain identity text
+        # around it -- the identical segments-vs-flat-string split the
+        # control strip already uses for its own mode-badge chip. A raising
+        # composer degrades to an empty row rather than crashing the draw
+        # pass, same containment discipline as every other composer call in
+        # this method.
         strip_region = regions["strip"]
-        strip_text = compose_profile_strip_from_row(
-            self.profile, width=strip_region["w"] if strip_region else 0, unicode_ok=uok
-        )
+        try:
+            conn_chip = self._compose_conn_chip(status, self._conn_focused, now=now_val)
+        except Exception:  # noqa: BLE001 -- a raising composer must not crash the draw pass
+            conn_chip = None
+        try:
+            strip_segments_raw = compose_profile_strip_segments_from_row(
+                self.profile,
+                width=strip_region["w"] if strip_region else 0,
+                unicode_ok=uok,
+                conn_chip=conn_chip,
+            )
+        except Exception:  # noqa: BLE001 -- a raising composer must not crash the draw pass
+            strip_segments_raw = []
         # Strip content is profile identity -- DATA, not chrome. Canon
         # doctrine ("cyan is chrome, never data", visual-language.md) reads
         # as an interim ruling here pending hub ratification of this
-        # concept's own promotion out of staged status; A_NORMAL (default
-        # fg, non-bold) keeps the row itself un-tinted while the outer
-        # frame's own border stays cyan around it.
-        cockpit_draw.draw_lines(self.stdscr, strip_region, [strip_text], curses.A_NORMAL, boxed=False)
+        # concept's own promotion out of staged status; plain A_NORMAL
+        # (default fg, non-bold) keeps the identity text un-tinted while the
+        # outer frame's own border stays cyan around it -- only the CONN
+        # chip segment itself carries a real tone attr, through the SAME
+        # `_control_strip_segment_attr` helper the control strip below
+        # already uses (a generic tone->attr resolver, not a control-strip-
+        # only one, despite its name).
+        strip_segments = [
+            (str(text), self._control_strip_segment_attr(tone) if tone else curses.A_NORMAL)
+            for text, tone in strip_segments_raw
+        ]
+        cockpit_draw.draw_segment_line(self.stdscr, strip_region, strip_segments, boxed=False)
 
         goals = regions["goals"]
         cockpit_draw.draw_box(
@@ -1692,23 +1823,11 @@ class PlayShellScreen:
             decisions_lines = []
         cockpit_draw.draw_lines(self.stdscr, decisions, decisions_lines, curses.A_NORMAL)
 
-        # `now_fn` (WO-P3-038, extended WO-P3-041): resolved ONCE per draw,
-        # here -- `logs` is unconditionally present at every reachable
-        # non-`too_small` tier (see the poll-guard comment above), so
-        # hoisting this ahead of the LOGS block lets its own newest-row
-        # flash and CONTROL_STRIP's heartbeat below share the identical
-        # reading rather than each querying the clock separately.
-        try:
-            now_val = (self._now_fn or time.monotonic)()
-        except Exception:  # noqa: BLE001 -- a raising now_fn must not crash the draw pass
-            # Fall back to the REAL clock, not a frozen 0.0: the
-            # heartbeat's whole job is proving the draw loop is still
-            # running (canon "always breathing... so 'alive' reads even
-            # on a settled screen") -- the loop IS running (we got this
-            # far), so the true signal should survive a broken injected
-            # clock rather than lying still.
-            now_val = time.monotonic()
-
+        # `now_val` (WO-P3-038, extended WO-P3-041) was hoisted up ahead of
+        # the row-1 profile strip by WO-PLAY-STRIP-TRAINER-CHROME (see that
+        # comment) -- LOGS' own newest-row flash and CONTROL_STRIP's
+        # heartbeat below share that SAME reading, never a second clock
+        # query.
         logs = regions["logs"]
         cockpit_draw.draw_box(
             self.stdscr, logs, weight="thin", attr=self._chrome_attr,
@@ -1721,13 +1840,29 @@ class PlayShellScreen:
         except Exception:  # noqa: BLE001 -- a raising panel must not crash the draw pass
             current_newest = None
         has_real_tail = current_newest is not None
+        # WO-PLAY-STRIP-TRAINER-CHROME / DECISION
+        # `RESOLVED-TRAINER-STRIP-AND-GUTTER-20260731` point 4: `status_line`
+        # now always routes into LOGS -- the control strip's own mid-strip
+        # `status_offer` segment (WO-PLAY-OFFER-VISIBLE-ON-LIVE) is retired
+        # below. While a REAL transcript exists, reserve its bottom-most row
+        # for `status_line` rather than replacing the tail outright --
+        # "don't wipe the transcript" (DECISION point 4): the composer is
+        # asked for one row less so the appended status row never displaces
+        # transcript content it already decided to show. While there is no
+        # real tail yet, the pre-existing WO-P3-041 fallback below is
+        # unchanged (the WHOLE box is the status line -- nothing to
+        # preserve).
+        status_text = self.status_line if isinstance(self.status_line, str) else ""
+        reserve_status_row = bool(has_real_tail and status_text and logs_inner_h > 0)
+        tail_h = max(0, logs_inner_h - 1) if reserve_status_row else logs_inner_h
         try:
             logs_lines = cockpit_logsband.compose_logs_lines(
-                status, width=logs_inner_w, height=logs_inner_h
+                status, width=logs_inner_w, height=tail_h
             )
         except Exception:  # noqa: BLE001 -- a raising panel must not crash the draw pass
-            logs_lines = _LOGS_COMPOSE_FAILED[:logs_inner_h]
+            logs_lines = _LOGS_COMPOSE_FAILED[:tail_h]
             has_real_tail = False  # a raising composer can't be trusted to carry real content
+            reserve_status_row = False
         # `status_line` fallback (WO-P3-041): while there is no real daemon
         # tail (`has_real_tail` False -- honest-empty OR a raising
         # composer), surface app.py's own ensure-session progress/error
@@ -1737,8 +1872,14 @@ class PlayShellScreen:
         # any width-driven truncation `compose_logs_lines` may have already
         # applied to its OWN honest-empty text) rather than a fragile
         # string comparison against the (possibly-clipped) composed line.
-        if not has_real_tail and self.status_line and logs_inner_h > 0:
-            logs_lines = [self.status_line[:logs_inner_w]] if logs_inner_w > 0 else [""]
+        if not has_real_tail and status_text and logs_inner_h > 0:
+            logs_lines = [status_text[:logs_inner_w]] if logs_inner_w > 0 else [""]
+        elif reserve_status_row:
+            # A real tail AND a status line both want the box: the tail
+            # keeps every row above the last (composed against `tail_h`
+            # above, one row narrower than the box), and `status_line`
+            # takes the row the tail gave up -- both visible, neither wiped.
+            logs_lines = logs_lines + [status_text[:logs_inner_w]]
 
         # Newest-row flash (WO-P3-041, canon "the newest LOGS/ticker row
         # flashes on arrival"): content-identity tracking is THIS
@@ -1764,11 +1905,26 @@ class PlayShellScreen:
 
         logs_attrs = [(line, curses.A_NORMAL) for line in logs_lines]
         if has_real_tail and logs_newest_flashing and logs_attrs:
-            # Only the bottom (newest) line ever flashes, and only when it
-            # is genuine tail content -- the `status_line` fallback line
-            # above never flashes (it is not a transcript arrival).
-            last_text, _ = logs_attrs[-1]
-            logs_attrs[-1] = (last_text, curses.A_BOLD)
+            # Only the bottom (newest) TRANSCRIPT line ever flashes, and
+            # only when it is genuine tail content -- the `status_line`
+            # fallback line never flashes (it is not a transcript arrival).
+            # When `reserve_status_row` appended `status_line` as this
+            # list's own last entry (WO-PLAY-STRIP-TRAINER-CHROME), the
+            # newest TRANSCRIPT row is the entry just above it instead. At
+            # the real MIN_LINES floor (`logs_inner_h == 1`) the reserved
+            # status row consumes the box's ONLY row, leaving no separate
+            # transcript row to flash at all -- `flash_index=-1` would
+            # otherwise wrongly bold `status_line` itself, so this case
+            # flashes nothing rather than mislabel chrome as a fresh
+            # transcript arrival.
+            flash_index: int | None
+            if reserve_status_row:
+                flash_index = -2 if len(logs_attrs) >= 2 else None
+            else:
+                flash_index = -1
+            if flash_index is not None:
+                last_text, _ = logs_attrs[flash_index]
+                logs_attrs[flash_index] = (last_text, curses.A_BOLD)
         cockpit_draw.draw_lines_attrs(self.stdscr, logs, logs_attrs)
 
         # INTERVENTION / STOP banner (WO-P5-064, canon
@@ -1854,58 +2010,33 @@ class PlayShellScreen:
                 )
             except Exception:  # noqa: BLE001 -- a raising composer must not crash the draw pass
                 liveness_text = _CONTROL_STRIP_COMPOSE_FAILED
-            # The autopilot ARM chip (WO-P5-062) -- the row's SECOND chip,
-            # answering a different question from the seat chip beside it:
-            # `may the taught autopilot act`, not `who holds the keyboard`.
-            # Canon needs both at once (`canon/architecture/
-            # app-autopilot-model.md` "Arm-Confirm": an armed run STOPs and
-            # hands the keyboard back on the first unrecognized screen, so
-            # armed-but-not-driving is routine, not a contradiction).
+            # DECISION `RESOLVED-TRAINER-STRIP-AND-GUTTER-20260731` point 1
+            # ("one chip with Mode key -- merge APP+ARM, no separate APP +
+            # ARM ON/OFF chips") retires the autopilot ARM chip's own
+            # rendering on THIS row: `compose_control_strip_segments` below
+            # is called with `trainer_labels=True`, which folds an armed
+            # reading straight into the seat chip itself
+            # (`^A)APP-ARMED`/`^A)MANUAL-HUMAN`) rather than a second
+            # co-rendered chip beside it. `cockpit/arm.py` and
+            # `compose_arm_chip` are UNCHANGED and still exist (this WO does
+            # not touch that module) -- only this call site no longer reads
+            # or renders their output. `arm_chip` is deliberately omitted
+            # from the call below (defaults to `None`), the same additive
+            # shape every other opt-out caller of this composer already
+            # uses. This is a DELIBERATE relaxation of the daemon-verified
+            # "no silent arm" guarantee those chips used to carry: the
+            # merged label is aspirational client-side chrome for the
+            # trainer ("App holding the seat" == "armed by default" under
+            # this model), not a read of a real daemon arm state -- see
+            # DECISION point 6 ("App-armed auto = default"). SPECTATE never
+            # gets this treatment (`_trainer_seat_label` passes it through
+            # unchanged), so a spectating instance can never claim ARMED.
             #
-            # `status` here is the SAME snapshot every other panel in this
-            # draw already shares -- never a second poll. The poll guard
-            # above needed no new term for it, verified rather than
-            # assumed: this consumer only ever runs inside `control_strip
-            # is not None`, and `regions["control_strip"] is not None` is
-            # already one of that guard's four terms.
+            # CONN also no longer renders on this row -- DECISION point 3
+            # moved it to the row-1 profile strip (see that block above,
+            # which already reads this SAME shared `status` snapshot and
+            # `now_val`, not a second poll).
             #
-            # NOTHING in this cockpit can originate an arm state. There is
-            # no local arm flag to flip and `compose_arm_chip` takes only
-            # the daemon's payload, so `ARM ON` cannot appear as a side
-            # effect of any keystroke, mode switch, attach, or detach --
-            # the "no silent arm" guarantee is structural here, not a
-            # discipline someone has to remember. Arming also never
-            # touches the control lock: this is a read of reported state,
-            # and the seat chip beside it is composed from wholly separate
-            # inputs (`self.spectating`/`self.attached`).
-            #
-            # Read-only round trip: this chip renders whatever the daemon
-            # reports and claims nothing further.
-            #
-            # Corrected 2026-07-27 (WO-AUDIT-ARM-CLAIM-HONESTY). This
-            # comment used to say `protocol.py` reported a hardcoded
-            # disarmed literal and carried no arm/disarm verb, "so today
-            # this chip always renders `ARM OFF` against a live daemon".
-            # True when written, FALSE now: `session/autoloop.py` landed a
-            # real `AutoLoopRunner`, `protocol.py:300` calls
-            # `autoloop.arm_block(arm)` off a live `observe()`, and
-            # `autoloop_start`/`autoloop_stop`/`autoloop_status` exist. So
-            # `ARM ON` is reachable and this chip can render all three
-            # states against a live daemon (`ARM ?` still means no daemon
-            # or an unusable payload).
-            #
-            # Kept as a note rather than deleted: the old text asserted
-            # `ARM ON` was unreachable, which is one step from someone
-            # "simplifying away" a live branch. See `cockpit/arm.py` for
-            # the same correction and why it is recorded.
-            try:
-                arm_chip = cockpit_arm.compose_arm_chip(status)
-            except Exception:  # noqa: BLE001 -- a raising composer must not crash the draw pass
-                arm_chip = None
-            # WO-PLAY-CONN-TOGGLE: the CONN chip reads status["connected"]
-            # (the same shared snapshot every other consumer uses -- no
-            # second status_provider() call) and reflects the focus state.
-            conn_chip = self._compose_conn_chip(status, self._conn_focused)
             # WO-P5-072: the coverage meter — App-vs-Human live share.
             #
             # The counts are passed as `None` because THERE IS NO SOURCE FOR
@@ -1940,41 +2071,51 @@ class PlayShellScreen:
                 )
             except Exception:  # noqa: BLE001 -- a raising composer must not crash the draw pass
                 meter_chip = None
-            # WO-PLAY-OFFER-VISIBLE-ON-LIVE: when LOGS carries a real daemon
-            # tail, `status_line` no longer paints there -- surface it on the
-            # control strip's mid segment instead (empty-tail LOGS fallback unchanged).
-            status_offer = None
-            if has_real_tail:
-                sl = self.status_line
-                if isinstance(sl, str) and sl:
-                    status_offer = sl
+            # WO-PLAY-STRIP-TRAINER-CHROME / DECISION point 4: `status_offer`
+            # (WO-PLAY-OFFER-VISIBLE-ON-LIVE's mid-strip segment) is retired
+            # here -- `status_line` now always routes into LOGS instead (see
+            # that block above), never this row, so this composer call omits
+            # `status_offer` entirely (defaults to `None`).
             try:
                 raw_segments = cockpit_control_seat.compose_control_strip_segments(
                     spectating=self.spectating, attached=self.attached,
                     liveness_text=liveness_text, width=cs_w, unicode_ok=uok,
-                    arm_chip=arm_chip,
-                    conn_chip=conn_chip,
                     coverage_meter=meter_chip,
-                    status_offer=status_offer,
-                    # WO-P5-066: the standing A/R/T teach band. Composed
+                    trainer_labels=True,
+                    # WO-P5-066: the standing calm teach band. Composed
                     # unconditionally -- it is calm-state chrome that names
                     # the teach repertoire, not a state readout, so there is
                     # no status to gate it on. It self-drops when the row is
                     # too narrow (see `_compose_segments`).
-                    # WO-PLAY-OFFER-VISIBLE-ON-LIVE (c): a live explore run
-                    # claims the hint slot via `explore_band`; the offer itself
-                    # rides `status_line` on the mid segment, never here.
+                    # DECISION point 2 (WO-PLAY-STRIP-TRAINER-CHROME) retired
+                    # the old A/R/T/V/U/H)old?/O)ffer?/Panic calm-band tokens
+                    # in favor of `teachband.compose_teach_band`'s new
+                    # E)xplore/P)ort Trade/L)oops/T)rade Loop Chain/
+                    # C)argo Hold Upgrade/S)hip Upgrade set -- the
+                    # `port_trade_on`/`cargo_upgrade_on`/`ship_upgrade_on`
+                    # toggles below read THIS instance's own local Play
+                    # state (default-ON per DECISION point 2), not a
+                    # daemon-reported fact; nothing in the App wires these
+                    # keys yet (stubs, honest chrome only -- see
+                    # `PlayShellScreen.__init__`'s own comment on these
+                    # three attributes).
                     # WO-P5-069: while an Analyze overlay pass is open, the
                     # band slot shows the overlay badge instead of the calm
-                    # A/R/T affordance tokens.  Explore still takes priority
-                    # (it is a live run; analyze is an overlay annotation).
+                    # affordance tokens. A live explore run still claims the
+                    # hint slot via `explore_band` ahead of both (it is a
+                    # live run; analyze is an overlay annotation).
                     teach_band=(
                         self.explore_band
                         if isinstance(self.explore_band, str) and self.explore_band
                         else (
                             cockpit_analyze.OVERLAY_LABEL
                             if self.analyze_session.is_open
-                            else cockpit_teachband.compose_teach_band(unicode_ok=uok)
+                            else cockpit_teachband.compose_teach_band(
+                                unicode_ok=uok,
+                                port_trade_on=self.port_trade_on,
+                                cargo_upgrade_on=self.cargo_upgrade_on,
+                                ship_upgrade_on=self.ship_upgrade_on,
+                            )
                         )
                     ),
                 )

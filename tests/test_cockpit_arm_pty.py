@@ -1,4 +1,5 @@
-"""WO-P5-062 Accept #4 -- the ARM indicator on a real terminal.
+"""WO-P5-062 Accept #4, revised by WO-PLAY-STRIP-TRAINER-CHROME -- the
+merged seat+armed chip on a real terminal.
 
 Real-curses pty + pyte replay (``tests.pty_helpers``), the same Layer-B
 harness ``tests/test_cockpit_liveness_pty.py`` uses for the neighbouring
@@ -8,18 +9,15 @@ logic; this file proves the one thing they structurally cannot -- that the
 chip survives real curses, a real terminal-sized frame, and the pyte
 replay of what a terminal would actually display.
 
-Three states are driven through a real TTY:
-
-  - **no daemon** -> ``ARM ?``. This is the honest default and the one a
-    developer will see most often. The status poll early-returns
-    ``daemon_not_running`` without opening a socket, so there is no
-    evidence about the autopilot either way, and the chip says so rather
-    than rendering a calm ``ARM OFF`` nobody could stand behind.
-  - **daemon reporting disarmed** -> ``ARM OFF``, the reading a live
-    daemon produces today.
-  - **daemon reporting armed** -> ``ARM ON``, which nothing but the
-    daemon's own report can produce (the non-vacuity companion, at the
-    TTY layer this time).
+DECISION `RESOLVED-TRAINER-STRIP-AND-GUTTER-20260731` point 1 retires the
+separate, daemon-sourced ARM chip (``ARM ON``/``ARM OFF``/``ARM ?``) this
+file used to drive through three daemon states -- the merged trainer chip
+(``^A)APP-ARMED``) is a purely LOCAL reading (DECISION point 6) and no
+longer varies with what the daemon reports for ``autopilot``. So the
+three fixtures below still drive three distinct daemon reports (to prove
+the ABSENCE of that old coupling, not its presence), and the assertions
+now check that the merged chip renders identically across all three and
+that none of the retired chip's own text ever reaches a real screen.
 
 Isolation: ``adapters.ensure_session`` is stubbed inside the spawned
 process and ``TW_RUN_DIR`` points at an isolated per-test tmp dir, the
@@ -41,7 +39,7 @@ pytestmark = pytest.mark.pty_ui
 
 
 from tw2002_aiclient.cockpit.arm import ARM_OFF_LABEL, ARM_ON_LABEL, ARM_UNKNOWN_LABEL
-from tw2002_aiclient.cockpit.control_seat import APP_LABEL
+from tw2002_aiclient.cockpit.control_seat import APP_LABEL, TRAINER_APP_ARMED_LABEL
 
 from .pty_helpers import (
     drive_play_shell_pty,
@@ -156,57 +154,49 @@ def _armed_capture(tmp_path_factory):
 
 
 @_PTY_SKIP
-def test_the_arm_indicator_is_visible_on_a_real_terminal(_no_daemon_capture):
-    """Accept #4. With no daemon there is no evidence about the autopilot,
-    and the chip says exactly that on a real TTY rather than going blank
-    or claiming a calm ``ARM OFF``."""
+def test_the_merged_seat_chip_is_visible_on_a_real_terminal(_no_daemon_capture):
+    """DECISION point 1/6: with no daemon at all there is no evidence
+    about the autopilot, yet the merged chip still claims ``-ARMED`` --
+    it is this client's own local reading of "App holds the seat," not a
+    daemon-verified fact, so having zero evidence about the daemon does
+    not blank it or degrade it to an unknown state the way the retired
+    ARM chip once did."""
     grid = _grid(_no_daemon_capture)
-    assert find_text(grid, ARM_UNKNOWN_LABEL)
-    assert not find_text(grid, ARM_ON_LABEL)
+    assert find_text(grid, TRAINER_APP_ARMED_LABEL)
+    for retired in (ARM_ON_LABEL, ARM_OFF_LABEL, ARM_UNKNOWN_LABEL):
+        assert not find_text(grid, retired)
 
 
 @_PTY_SKIP
-def test_the_seat_chip_and_the_arm_chip_are_both_visible_on_the_same_row(
+def test_the_merged_chip_shares_its_row_with_the_liveness_cluster(
     _no_daemon_capture,
 ):
-    """Accept #1 at the terminal: the two facts sit side by side on one
-    row, separately legible. The cockpit's entry seat is App-hold, so the
-    row reads ``APP`` then the arm chip -- who holds the keyboard, then
-    whether the taught autopilot may act."""
+    """The strip's pre-existing, operationally load-bearing "is it
+    frozen?" liveness cluster keeps its full space beside the merged
+    chip -- unchanged from the pre-merge row's own guarantee."""
     grid = _grid(_no_daemon_capture)
-    rows = [line for line in grid if APP_LABEL in line and ARM_UNKNOWN_LABEL in line]
+    rows = [line for line in grid if TRAINER_APP_ARMED_LABEL in line and "→" in line]
     assert rows, (
-        "expected one row carrying BOTH the seat chip and the arm chip; grid:\n"
-        + "\n".join(grid)
+        "expected one row carrying BOTH the merged seat chip and the "
+        "liveness cluster; grid:\n" + "\n".join(grid)
     )
-    row = rows[0]
-    assert row.index(APP_LABEL) < row.index(ARM_UNKNOWN_LABEL)
-    # The liveness cluster the strip already carried still shares the row.
-    assert "→" in row
 
 
 @_PTY_SKIP
-def test_a_daemon_reporting_disarmed_renders_the_disarmed_chip(_disarmed_capture):
-    """The reading a live daemon produces today -- ``session/protocol.py``
-    reports its hardcoded ``{"running": False}``, and the round trip ends
-    with that fact on the operator's screen."""
-    grid = _grid(_disarmed_capture)
-    assert find_text(grid, ARM_OFF_LABEL)
-    assert not find_text(grid, ARM_ON_LABEL)
-    assert not find_text(grid, ARM_UNKNOWN_LABEL)
-
-
-@_PTY_SKIP
-def test_only_the_daemons_own_report_can_put_armed_on_a_real_screen(_armed_capture):
-    """Accept #2 and the TTY-layer non-vacuity companion for Accept #3.
-    Three identical runs of the same cockpit differ in one thing only --
-    what the daemon reported -- and the chip tracks it. So the indicator
-    genuinely reflects the daemon's state rather than a local guess, and
-    the ``ARM ON`` absent from the other two captures was absent because
-    nothing reported it, not because the chip cannot say it."""
-    grid = _grid(_armed_capture)
-    assert find_text(grid, ARM_ON_LABEL)
-    assert not find_text(grid, ARM_UNKNOWN_LABEL)
+def test_no_daemon_report_moves_the_merged_chip_on_a_real_screen(
+    _no_daemon_capture, _disarmed_capture, _armed_capture
+):
+    """DECISION point 1/6, the TTY-layer non-vacuity proof: three
+    identical runs of the same cockpit differ in one thing only -- what
+    the daemon reported for ``autopilot`` -- and the merged chip is
+    unmoved by all three, because it no longer reads that payload at all.
+    None of the retired chip's own text (``ARM ON``/``ARM OFF``/``ARM
+    ?``) reaches a real screen in any of the three."""
+    for capture in (_no_daemon_capture, _disarmed_capture, _armed_capture):
+        grid = _grid(capture)
+        assert find_text(grid, TRAINER_APP_ARMED_LABEL)
+        for retired in (ARM_ON_LABEL, ARM_OFF_LABEL, ARM_UNKNOWN_LABEL):
+            assert not find_text(grid, retired)
 
 
 @_PTY_SKIP

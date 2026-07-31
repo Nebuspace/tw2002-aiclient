@@ -230,6 +230,69 @@ MANUAL_LABEL = "MANUAL — YOU HAVE CONTROL"
 # `unicode_ok` has no effect on this constant either.
 APP_LABEL = "APP"
 
+# WO-PLAY-STRIP-TRAINER-CHROME / DECISION
+# RESOLVED-TRAINER-STRIP-AND-GUTTER-20260731 point 1: "One chip with Mode
+# key -- merge APP+ARM. No separate APP + ARM ON/OFF chips." `^A)` is the
+# SAME Mode-chord notation the (now-retired-from-this-band) standing hint
+# line used to show as its own leading token, `^A)ode`
+# (`teachband.py`'s pre-trainer module docstring) -- moved onto the seat
+# chip itself here rather than invented fresh, so the operator's one
+# already-learned Ctrl-A affordance still reads the same chord.
+#
+# These are ADDITIVE, opt-in labels for the trainer strip only --
+# `APP_LABEL`/`MANUAL_LABEL`/`SPECTATE_LABEL` above are UNCHANGED and are
+# still exactly what every pre-existing (non-trainer) caller of this
+# module sees. The one real production caller (`screens.py`) opts in via
+# `compose_control_strip_segments(..., trainer_labels=True)`; every other
+# caller's row is untouched (see `_trainer_seat_label` below).
+#
+# `SPECTATE_LABEL` is DELIBERATELY not given a trainer variant: DECISION's
+# own text is explicit ("keep honest SPECTATE ... do not lie APP-ARMED")
+# -- a spectating instance holds no seat at all, so claiming an armed
+# Mode-key reading for it would be exactly the dishonest claim the
+# decision forbids.
+TRAINER_MODE_CHORD = "^A)"
+TRAINER_APP_ARMED_LABEL = TRAINER_MODE_CHORD + "APP-ARMED"
+TRAINER_APP_ARMED_LABEL_NARROW = TRAINER_MODE_CHORD + "APP"
+TRAINER_MANUAL_HUMAN_LABEL = TRAINER_MODE_CHORD + "MANUAL-HUMAN"
+TRAINER_MANUAL_HUMAN_LABEL_NARROW = TRAINER_MODE_CHORD + "MANUAL"
+
+
+def _trainer_seat_label(label: str, budget: int) -> str:
+    """Remap ``label`` (the pre-existing ``APP_LABEL``/``MANUAL_LABEL``/
+    ``SPECTATE_LABEL``/``""`` reading `_resolve_label_and_tone` already
+    produced) to the trainer's merged Mode-key+seat wording, choosing the
+    narrow form when the full one would not fit in ``budget`` columns.
+
+    All-or-nothing on the ``-ARMED``/``-HUMAN`` suffix, matching every
+    other chip's own truncation rule on this row (see
+    ``_compose_segments``'s docstring): a mid-word clip like
+    ``^A)APP-ARM`` reads as a plausible-but-wrong claim, so the suffix is
+    either whole (``TRAINER_..._LABEL``) or dropped to the bare
+    Mode+seat form (``TRAINER_..._LABEL_NARROW``), which then falls
+    through to this function's caller's own ordinary character
+    truncation exactly like every pre-trainer label already does.
+
+    ``label`` values this function does not recognize (``SPECTATE_LABEL``,
+    ``""``) pass through unchanged -- see this constant block's own
+    honesty note on why SPECTATE never gets an ARMED-flavoured spelling.
+    Never raises: any budget value that fails a length comparison (should
+    be unreachable -- ``budget`` is always this module's own coerced
+    ``int`` by the time it reaches here) degrades to the narrow form,
+    the shorter and therefore safer of the two under an unknown budget.
+    """
+    if label == APP_LABEL:
+        full, narrow = TRAINER_APP_ARMED_LABEL, TRAINER_APP_ARMED_LABEL_NARROW
+    elif label == MANUAL_LABEL:
+        full, narrow = TRAINER_MANUAL_HUMAN_LABEL, TRAINER_MANUAL_HUMAN_LABEL_NARROW
+    else:
+        return label
+    try:
+        fits_full = len(full) <= budget
+    except Exception:
+        fits_full = False
+    return full if fits_full else narrow
+
 
 def _safe_spectating(value: object) -> bool:
     """Best-effort truthiness for ``spectating``. A cleanly-evaluated value
@@ -457,6 +520,7 @@ def _compose_segments(
     coverage_meter: object = None,
     status_offer: object = None,
     teach_band: object = None,
+    trainer_labels: object = False,
 ) -> list[tuple[str, str | None]]:
     """Shared core: builds the ordered ``(text, tone)`` segments
     ``compose_control_strip_segments`` returns as-is (callers that need a
@@ -517,6 +581,15 @@ def _compose_segments(
         return [(right, None)]
 
     label, tone = _resolve_label_and_tone(spectating, attached)
+    # WO-PLAY-STRIP-TRAINER-CHROME: opt-in only (default False leaves
+    # every pre-existing caller's row byte-identical) -- see
+    # `_trainer_seat_label`'s own docstring for the remap this performs.
+    try:
+        use_trainer_labels = bool(trainer_labels)
+    except Exception:
+        use_trainer_labels = False
+    if use_trainer_labels:
+        label = _trainer_seat_label(label, budget)
     arm_text, arm_tone = _safe_arm_chip(arm_chip)
 
     left: list[tuple[str, str | None]] = []
@@ -646,6 +719,7 @@ def compose_control_strip_segments(
     coverage_meter: object = None,
     status_offer: object = None,
     teach_band: object = None,
+    trainer_labels: object = False,
 ) -> list[tuple[str, str | None]]:
     """PWO-060: the draw layer's per-run-color view of the control-strip
     row -- ordered ``(text, tone)`` segments from the sole public strip
@@ -669,6 +743,13 @@ def compose_control_strip_segments(
     composer in this package but has no effect here -- seat labels are
     plain ASCII / canon NO-SWAP glyphs with no Unicode twin to swap.
 
+    ``trainer_labels`` (WO-PLAY-STRIP-TRAINER-CHROME, default ``False``):
+    when truthy, remaps the seat chip to the trainer's merged Mode-key
+    reading (``TRAINER_APP_ARMED_LABEL``/``TRAINER_MANUAL_HUMAN_LABEL``,
+    narrowing under width pressure) instead of the bare
+    ``APP_LABEL``/``MANUAL_LABEL`` -- see `_trainer_seat_label`. Every
+    pre-existing caller leaves this at its default and sees no change.
+
     Returns ``[]`` when ``width`` is not a usable positive ``int``
     (``"".join`` over ``[]`` is ``""``). Never raises regardless of any
     argument's type or content."""
@@ -677,4 +758,5 @@ def compose_control_strip_segments(
         width=width, arm_chip=arm_chip, conn_chip=conn_chip,
         coverage_meter=coverage_meter,
         status_offer=status_offer, teach_band=teach_band,
+        trainer_labels=trainer_labels,
     )

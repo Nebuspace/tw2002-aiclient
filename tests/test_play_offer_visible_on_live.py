@@ -80,19 +80,36 @@ def _logs_text(win, rows=ROWS, cols=COLS):
 
 
 
-def test_the_transcript_is_untouched(monkeypatch) -> None:
-    """Constraint: not 'status_line replaces LOGS'. The band never had to
-    give anything up, because the offer went to the control strip instead."""
+def test_the_transcript_survives_underneath_a_reserved_status_row(monkeypatch) -> None:
+    """WO-PLAY-STRIP-TRAINER-CHROME, DECISION
+    `RESOLVED-TRAINER-STRIP-AND-GUTTER-20260731` point 4, routes
+    `status_line` into LOGS instead of a mid-strip `status_offer`. LOGS is
+    a fixed ``LOGS_MIN_H``-tall band -- one content row -- at every
+    terminal size (`cockpit.layout.LOGS_MIN_H`), so a present status line
+    necessarily occupies that one row in place of the latest transcript
+    line while it is showing. "Don't wipe the transcript" holds at the
+    level that matters: the underlying `log_tail` the daemon reports is
+    never mutated or truncated by drawing a status line -- the very next
+    status-free draw shows the transcript exactly as it was."""
     win = _Win()
     _screen(monkeypatch, win, tail=TAIL).draw()
-    assert "app> line 8" in _logs_text(win), "transcript lost"
+    assert "app> line 8" not in _logs_text(win), (
+        "the reserved status row and the transcript's own last line cannot "
+        "both fit in LOGS' single content row"
+    )
+    win2 = _Win()
+    _screen(monkeypatch, win2, tail=TAIL, status_line=None).draw()
+    assert "app> line 8" in _logs_text(win2), "transcript lost once the status line clears"
 
 
-def test_offer_paints_while_the_transcript_is_populated(monkeypatch) -> None:
-    """The shipped defect, directly."""
+def test_offer_paints_in_logs_while_the_transcript_is_populated(monkeypatch) -> None:
+    """The shipped defect's replacement location: DECISION point 4 routes
+    status_line/offers into LOGS, not the retired control-strip
+    ``status_offer`` mid-strip claim."""
     win = _Win()
     _screen(monkeypatch, win, tail=TAIL, band=None, status_line=OFFER_STATUS).draw()
-    assert "press E" in _strip_text(win), "explore offer invisible on a live session"
+    assert "press E" in _logs_text(win), "explore offer invisible on a live session"
+    assert "press E" not in _strip_text(win), "explore offer still on the retired mid-strip"
 
 
 def test_calm_band_returns_when_nothing_is_claimed(monkeypatch) -> None:

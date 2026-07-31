@@ -102,6 +102,89 @@ def compose_profile_strip(
     return line[:width]
 
 
+def _safe_chip(value: object) -> tuple[str, str | None]:
+    """Best-effort coercion of a caller-supplied ``(text, tone)`` chip pair
+    to a usable ``(str, str|None)``, degrading any unusable shape to
+    ``("", None)`` -- mirrors ``cockpit.control_seat._safe_arm_chip``'s
+    own contract verbatim (this module intentionally does not import that
+    one, to keep the pure-composer/pure-composer boundary a plain
+    duplication rather than a new cross-module dependency for two lines
+    of logic). Never raises regardless of ``value``'s type."""
+    try:
+        text, tone = value  # a 2-element unpack; anything else raises
+    except Exception:  # noqa: BLE001 -- an unusable chip must not crash the row
+        return "", None
+    if not isinstance(text, str) or not text:
+        return "", None
+    if tone is not None and not isinstance(tone, str):
+        return text, None
+    return text, tone
+
+
+def compose_profile_strip_segments(
+    *,
+    host: str | None,
+    game_letter: str | None,
+    handle: str | None,
+    width: int,
+    unicode_ok: bool = True,
+    conn_chip: "tuple[str, str | None] | None" = None,
+) -> "list[tuple[str, str | None]]":
+    """``compose_profile_strip``'s row, as ``(text, tone)`` segments so the
+    CONN chip (WO-PLAY-STRIP-TRAINER-CHROME / DECISION
+    `RESOLVED-TRAINER-STRIP-AND-GUTTER-20260731` point 3: "CONN -- top
+    line beside server/host") can carry its own color distinct from the
+    plain identity text around it -- the same segments-vs-flat-string
+    split ``cockpit.control_seat.compose_control_strip_segments`` already
+    uses for the row below.
+
+    ``conn_chip=None`` (the default) degrades to the exact
+    ``compose_profile_strip`` string wrapped as one plain ``(text, None)``
+    segment -- byte-identical output, so this is a strict additive
+    extension and every pre-existing caller of the flat-string composer
+    is unaffected by this function's existence.
+
+    When a usable ``conn_chip`` is supplied, it is placed immediately
+    beside the host (``"{host} {chip} · {letter} · {handle}"``), each
+    piece truncated left-to-right against ``width`` exactly like
+    ``control_seat._compose_segments``'s own sequential-budget rule: the
+    identity fields never lose a character to the chip and the chip is
+    never split mid-token (an empty remaining budget simply drops it
+    whole, honest-absence rather than a mangled ``CO``).
+
+    Never raises regardless of any argument's type or content.
+    """
+    if width <= 0:
+        return []
+    if conn_chip is None:
+        text = compose_profile_strip(
+            host=host, game_letter=game_letter, handle=handle,
+            width=width, unicode_ok=unicode_ok,
+        )
+        return [(text, None)] if text else []
+
+    host_s = _clean(host) or MISSING_IDENTITY
+    letter_s = (_clean(game_letter) or MISSING_GAME_LETTER)[:1]
+    handle_s = _clean(handle) or MISSING_IDENTITY
+    chip_text, chip_tone = _safe_chip(conn_chip)
+
+    pieces: list[tuple[str, str | None]] = [(host_s, None)]
+    if chip_text:
+        pieces.append((f" {chip_text}", chip_tone))
+    pieces.append((f" {SEP} {letter_s} {SEP} {handle_s}", None))
+
+    out: list[tuple[str, str | None]] = []
+    used = 0
+    for text, tone in pieces:
+        if used >= width:
+            break
+        clipped = text[: width - used]
+        if clipped:
+            out.append((clipped, tone))
+            used += len(clipped)
+    return out
+
+
 def compose_profile_strip_from_row(row: object, *, width: int, unicode_ok: bool = True) -> str:
     """Convenience wrapper over a duck-typed profile row.
 
@@ -118,4 +201,25 @@ def compose_profile_strip_from_row(row: object, *, width: int, unicode_ok: bool 
         handle=getattr(row, "handle", None),
         width=width,
         unicode_ok=unicode_ok,
+    )
+
+
+def compose_profile_strip_segments_from_row(
+    row: object,
+    *,
+    width: int,
+    unicode_ok: bool = True,
+    conn_chip: "tuple[str, str | None] | None" = None,
+) -> "list[tuple[str, str | None]]":
+    """``compose_profile_strip_segments``'s duck-typed row wrapper --
+    mirrors ``compose_profile_strip_from_row``'s own host-fallback
+    convention verbatim, plus the optional ``conn_chip`` segment."""
+    host = getattr(row, "host", None) or getattr(row, "server", None)
+    return compose_profile_strip_segments(
+        host=host,
+        game_letter=getattr(row, "game_letter", None),
+        handle=getattr(row, "handle", None),
+        width=width,
+        unicode_ok=unicode_ok,
+        conn_chip=conn_chip,
     )

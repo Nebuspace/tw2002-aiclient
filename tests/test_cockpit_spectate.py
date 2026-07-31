@@ -20,6 +20,7 @@ from tw2002_aiclient.cockpit.control_seat import (
     APP_LABEL,
     MANUAL_LABEL,
     SPECTATE_LABEL,
+    TRAINER_MANUAL_HUMAN_LABEL,
     app_label,
     attached_label,
     compose_control_strip_segments,
@@ -390,7 +391,9 @@ def test_toggling_spectating_false_and_attached_true_renders_manual(monkeypatch)
     row_text = _control_strip_row_text(win, FULL_ROWS, FULL_COLS)
     assert "SPECTATE" not in row_text
     assert APP_LABEL not in row_text
-    assert MANUAL_LABEL in row_text
+    # WO-PLAY-STRIP-TRAINER-CHROME: the real cockpit draws the merged
+    # trainer chip (`trainer_labels=True`), not the bare `MANUAL_LABEL`.
+    assert TRAINER_MANUAL_HUMAN_LABEL in row_text
     assert "→" in row_text
 
 

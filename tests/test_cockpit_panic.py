@@ -133,27 +133,35 @@ def test_panic_token_is_canon_literal_spelling():
     assert panic.PANIC_TOKEN == "P panic"
 
 
-def test_band_carries_panic_last():
-    """Canon's band order puts panic at the tail."""
+def test_band_no_longer_carries_panic():
+    """WO-PLAY-STRIP-TRAINER-CHROME, DECISION
+    `RESOLVED-TRAINER-STRIP-AND-GUTTER-20260731` point 2, retires
+    ``P panic`` (and the whole developer A/R/T/V/U/H/O/L repertoire) from
+    the calm teachband -- the panic KEY BINDING stays fully live
+    (``test_play_shell_returns_the_panic_intent`` below), only its calm-
+    band advertisement is gone. See
+    ``tests/test_cockpit_teachband.py::test_band_does_not_carry_other_wos_tokens``
+    for the band-level pin this mirrors."""
     band = teachband.compose_teach_band()
-    assert band.endswith(panic.PANIC_TOKEN)
-    assert band == (
-        "A)nalyze  R)ecord  T)rigger  V)reflex  U)rules  "
-        "H)old?  O)ffer?  L)chains  P panic"
-    )
+    assert panic.PANIC_TOKEN not in band
+    assert not band.endswith(panic.PANIC_TOKEN)
 
 
 def test_band_and_module_cannot_disagree_about_the_spelling():
-    """`teachband` imports the token rather than re-spelling it. Pinned so a
-    future 'tidy-up' that inlines the string reintroduces the drift hazard
-    the `T)rigger`/`T)assign` split already demonstrated on this surface."""
-    assert panic.PANIC_TOKEN in teachband.TEACH_TOKENS
+    """`panic.PANIC_TOKEN` is retired from the calm band (see above), and
+    `teachband` never re-spells it under a different name -- pinned as an
+    explicit absence so a future 'tidy-up' cannot reintroduce a re-spelled
+    copy of the retired token."""
+    assert panic.PANIC_TOKEN not in teachband.TEACH_TOKENS
 
 
-def test_band_imports_reflex_token_like_panic():
+def test_band_no_longer_imports_the_reflex_token():
+    """`V)reflex` is retired alongside panic (DECISION point 2) -- the
+    module and its token still exist for any other consumer, they simply
+    no longer appear in the calm band."""
     from tw2002_aiclient.cockpit import reflex_controls
 
-    assert reflex_controls.REFLEX_TOKEN in teachband.TEACH_TOKENS
+    assert reflex_controls.REFLEX_TOKEN not in teachband.TEACH_TOKENS
     assert reflex_controls.REFLEX_TOKEN == "V)reflex"
 
 
