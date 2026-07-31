@@ -1,6 +1,6 @@
 # WO-CHAIN-BUBBLE-PORT-CLASSES
 
-**Status:** READY  
+**Status:** DONE · origin `4d26eac` (#257) · tip-honesty stamp 2026-07-31 (product on main; banner was stale READY/OPEN)
 **Depends:** `main` ≥ `fb33f5b` · `WO-PLAY-CHAIN-BUBBLE-VIZ` (#256)
 
 ## Goal

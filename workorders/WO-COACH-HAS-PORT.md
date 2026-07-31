@@ -1,6 +1,6 @@
 # WO-COACH-HAS-PORT
 
-**Status:** READY  
+**Status:** DONE · origin `fc39277` (#259) · tip-honesty stamp 2026-07-31 (product on main; banner was stale READY/OPEN)
 **Depends:** `main` ≥ `c49819b` (#258)
 
 ## Goal

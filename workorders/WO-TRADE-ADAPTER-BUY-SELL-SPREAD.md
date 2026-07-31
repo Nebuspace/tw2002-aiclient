@@ -1,6 +1,6 @@
 # WO-TRADE-ADAPTER-BUY-SELL-SPREAD — posture-aware price so Gather pct=100 can yield margin
 
-**Status:** OPEN · EXECUTE · HIGH · visible automation follow-on (#269)
+**Status:** DONE · origin `dd8222f` (#270) · tip-honesty stamp 2026-07-31 (product on main; banner was stale READY/OPEN)
 **Seat:** `impl-aiclient-cursor`
 **Branch:** `wo/TRADE-ADAPTER-BUY-SELL-SPREAD`
 **Depends:** `main` ≥ `91fa979` (#269 pair-fallback bubbles)

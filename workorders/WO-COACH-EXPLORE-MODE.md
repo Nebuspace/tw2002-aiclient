@@ -1,6 +1,6 @@
 # WO-COACH-EXPLORE-MODE
 
-**Status:** READY  
+**Status:** DONE · origin `ecc42f7` (#263) · tip-honesty stamp 2026-07-31 (product on main; banner was stale READY/OPEN)
 **Depends:** `main` ≥ `fb4cdf8` (#262)
 
 ## Goal

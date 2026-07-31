@@ -1,6 +1,6 @@
 # WO-TEST-TIMING-ASSERT-ORDER — AST meta-test: no wall-clock assert before correctness
 
-**Status:** OPEN · EXECUTE · LOW · Cursor-class · impl-aiclient-cursor · IDLE-KICK feed  
+**Status:** DONE · origin `c017672` (#140) · tip-honesty stamp 2026-07-31 (product on main; banner was stale READY/OPEN)
 **Posted:** 2026-07-28T03:32Z · hub (CC offer after #134)  
 **Refs:** CC STATUS #134 2026-07-28T03:31:18Z
 

@@ -1,6 +1,6 @@
 # WO-COACH-ENGINE-DOC-SYNC
 
-**Status:** READY  
+**Status:** DONE · origin `cdf3797` (#264) · tip-honesty stamp 2026-07-31 (product on main; banner was stale READY/OPEN)
 **Depends:** `main` ≥ `ecc42f7` (#263)
 
 ## Goal

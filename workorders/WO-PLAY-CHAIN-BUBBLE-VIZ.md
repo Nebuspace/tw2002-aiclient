@@ -1,6 +1,6 @@
 # WO-PLAY-CHAIN-BUBBLE-VIZ
 
-**Status:** READY  
+**Status:** DONE · origin `fb33f5b` (#256) · tip-honesty stamp 2026-07-31 (product on main; banner was stale READY/OPEN)
 **Depends:** `main` ≥ `8352f3e` · `WO-CHAINS-LIVE-REFRESH` · `WO-CHAINS-TUI-FULL` · `WO-TEACHBAND-L-CHAINS`
 
 ## Goal

@@ -1,6 +1,6 @@
 # WO-STATUS-CREDITS
 
-**Status:** READY  
+**Status:** DONE · origin `fb4cdf8` (#262) · tip-honesty stamp 2026-07-31 (product on main; banner was stale READY/OPEN)
 **Depends:** `main` ≥ `7397396` (#261)
 
 ## Goal
