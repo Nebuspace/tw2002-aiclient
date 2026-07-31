@@ -1036,16 +1036,21 @@ class PlayShellScreen:
         # WO-PLAY-STRIP-TRAINER-CHROME: the calm teachband's three
         # trainer-only toggles (DECISION
         # `RESOLVED-TRAINER-STRIP-AND-GUTTER-20260731` point 2 -- "default
-        # ON" for all three). This is LOCAL PLAY STATE driving CHROME
-        # ONLY: nothing in this class or `app.py` reads these to gate a
-        # send. `P`/`C`/`S` (see `handle_key` below) flip these three
-        # booleans directly and return no intent -- there is nothing for
-        # `app.py` to act on yet, only this instance's own display state.
-        # A follow-on WO (WO-PLAY-STRIP-POLICY-AUTO) wires a real
-        # daemon-side spend gate to each; until then these three booleans
-        # exist purely so the calm band can render its required
-        # `·ON`/`·OFF` suffix honestly from SOME state rather than a
-        # hardcoded literal.
+        # ON" for all three). `P`/`C`/`S` (see `handle_key` below) flip
+        # these three booleans directly and return no intent -- this class
+        # and `screens.py` never read them for anything but the calm
+        # band's own `·ON`/`·OFF` rendering.
+        #
+        # WO-PLAY-STRIP-POLICY-AUTO landed the real daemon-side spend gate
+        # this comment used to describe as a follow-on: `app.py`'s
+        # `_autonomy_auto_fire` (an idle-tick function OUTSIDE this class,
+        # reading these booleans through its `play` parameter) now honors
+        # `port_trade_on`/`cargo_upgrade_on` for real -- App-armed +
+        # ·ON reaches a live trade/hold-buy start with no human `y`. Still
+        # true for `ship_upgrade_on` alone: no ship-upgrade engine or
+        # `AutonomyOffer` kind exists yet, so it remains local-only chrome
+        # by honest necessity, not by the same "not wired yet" reason the
+        # other two used to share.
         self.port_trade_on: bool = True
         self.cargo_upgrade_on: bool = True
         self.ship_upgrade_on: bool = True
@@ -2461,9 +2466,12 @@ class PlayShellScreen:
         # Cargo Hold Upgrade, Ship Upgrade (`teachband.py`'s
         # `PORT_TRADE_LABEL`/`CARGO_UPGRADE_LABEL`/`SHIP_UPGRADE_LABEL`).
         # Each key flips ONLY this instance's own boolean and returns no
-        # intent -- there is no daemon-side spend gate to wire yet
-        # (WO-PLAY-STRIP-POLICY-AUTO owns that follow-on), the same
-        # local-only shape the CONN focus-ring toggle above already uses.
+        # intent -- the same local-only shape the CONN focus-ring toggle
+        # above already uses. WO-PLAY-STRIP-POLICY-AUTO wired the real
+        # daemon-side spend gate these booleans drive (`app.py`'s
+        # `_autonomy_auto_fire`, read on every App-armed idle tick from
+        # OUTSIDE this class) -- this handler itself is unchanged by that
+        # WO, it still only ever flips the boolean the gate later reads.
         #
         # `P` is DELIBERATELY no longer bound to `cockpit.panic` on this
         # calm path: the STATUS-DONE cut of this WO left the OLD `P panic`

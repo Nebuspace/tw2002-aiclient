@@ -46,7 +46,29 @@ A/R/T teach-loop mechanics, the STOP banner's own `teach:` line, and the confirm
 
 Code waves: `WO-PLAY-STRIP-TRAINER-CHROME` (this amendment, chrome only) →
 `WO-LEFT-GUTTER-NEST-FOCUS-FORMATIONS` (left-gutter layout) → `WO-PLAY-STRIP-POLICY-AUTO` (wires
-the P/C/S toggles + the App-armed-auto policy this amendment's chrome only advertises today).
+the P/C/S toggles + the App-armed-auto policy this amendment's chrome only advertised at the time).
+
+### Policy-auto amendment — `WO-PLAY-STRIP-POLICY-AUTO` (2026-07-31, DECISION point 6)
+
+The chrome above is now backed by real behavior, not just a rendered `·ON`/`·OFF` suffix:
+
+- **Mode-leave IS the halt.** `^A` from `APP-ARMED` to `MANUAL-HUMAN` stops every live App
+  runner (explore, the taught autoloop, the trade-chain, and the StarDock hold-buy) before the
+  human takes the seat — "leave App → Manual" (DECISION point 1), making STOP/PANIC redundant as
+  a separate operator control on this calm path. The retired `P panic` binding (above) stays
+  retired; `cockpit/panic.py`'s own halt verbs are unchanged and reused, plus a fourth
+  (`stardock_hold_stop`) this Mode-leave halt adds that panic itself never covered.
+- **`P)ort Trade·ON` / `C)argo Hold Upgrade·ON` gate a real App-armed auto-fire.** While the seat
+  chip reads `APP-ARMED` (neither Spectate nor a live Human attach) and the matching toggle is
+  ON, the App reaches the identical trade-loop / hold-buy start the confirm-gated `O)ffer?`/`H)old?`
+  keys already offer — with **no key press and no `y` confirm** — on the same ~1 Hz idle tick that
+  already redraws GOALS. `O`/`H` remain manual fallbacks (Manual mode, or the toggle OFF); Manual
+  stays sovereign, and neither key's own confirm-gate is removed.
+- **`S)hip Upgrade·ON` gates nothing yet, honestly.** No ship-upgrade engine or offer kind exists
+  in this codebase, so the toggle is local-only chrome by necessity, not an unwired follow-on —
+  the honest state until a future WO lands a real ship-upgrade path to gate.
+- **Explore is not part of this policy.** `E)xplore` has no ON/OFF toggle and is never auto-fired
+  by this mechanism; it stays the operator's own confirm-gated key.
 
 # Schema
 

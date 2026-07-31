@@ -25,22 +25,25 @@ trainer-plain vocabulary:
 - `T)rade Loop Chain` is a RELABEL of the same `T` key the old
   `T)rigger` token named (`screens.py`'s `assign_trigger` intent,
   WO-P5-068) -- trainer wording for the same wire, not a new one.
-- `P)ort Trade`, `C)argo Hold Upgrade`, `S)hip Upgrade` are NEW
-  chrome-only toggles (WO-PLAY-STRIP-TRAINER-CHROME): each renders
-  `·ON`/`·OFF` from a caller-supplied boolean (default **ON**, per
-  DECISION), driven by `PlayShellScreen`'s own local Play state. `P`/`C`/
-  `S` (`screens.py::PlayShellScreen.handle_key`, REVISE 2026-07-31) flip
-  their own boolean directly and return no intent -- there is no
-  daemon-side spend gate behind them yet, only this instance's own
-  display state. `P` is DELIBERATELY no longer `cockpit.panic`'s key on
-  this calm path (the STATUS-DONE cut of this WO left that old wire live
-  underneath the new label, a plausible-but-wrong claim caught in hub
-  REVISE): `cockpit/panic.py` itself is untouched, only the calm-path
-  binding moved. A daemon-side spend gate for these three toggles lands
-  in a follow-on WO (WO-PLAY-STRIP-POLICY-AUTO); until then this is
-  intentionally an honest "the label exists, the toggle is local paint"
-  state, the same kind of WO-scoped intermediate `A`/`R`/`T` were during
-  their own pre-wire days (see history below).
+- `P)ort Trade`, `C)argo Hold Upgrade`, `S)hip Upgrade` are toggles
+  (WO-PLAY-STRIP-TRAINER-CHROME): each renders `·ON`/`·OFF` from a
+  caller-supplied boolean (default **ON**, per DECISION), driven by
+  `PlayShellScreen`'s own local Play state. `P`/`C`/`S`
+  (`screens.py::PlayShellScreen.handle_key`, REVISE 2026-07-31) flip
+  their own boolean directly and return no intent -- the daemon-side
+  spend gate lives OUTSIDE this key handler entirely, in `app.py`'s own
+  idle-tick loop (`_autonomy_auto_fire`, WO-PLAY-STRIP-POLICY-AUTO),
+  which reads `port_trade_on`/`cargo_upgrade_on` on every App-armed tick
+  and starts a live trade/hold-buy run with no human `y` when the
+  matching toggle is ON. `ship_upgrade_on` alone still gates nothing --
+  no ship-upgrade engine or offer kind exists yet, an honest absence
+  rather than an unwired follow-on. `P` is DELIBERATELY no longer
+  `cockpit.panic`'s key on this calm path (the STATUS-DONE cut of this
+  WO left that old wire live underneath the new label, a
+  plausible-but-wrong claim caught in hub REVISE): `cockpit/panic.py`
+  itself is untouched, only the calm-path binding moved; Mode-leave
+  (Ctrl-A to Manual) is the operator's own halt now (DECISION point 1),
+  not this retired `P`.
 
 The STOP banner's own `teach:` line (`cockpit.stopbanner.TEACH_LINE`,
 `A)nalyze R)ecord T)assign`) is a DIFFERENT register/surface entirely and

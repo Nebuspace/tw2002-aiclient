@@ -81,7 +81,15 @@ def test_band_imports_reflex_token_spelling() -> None:
 
 
 def test_autonomy_help_one_liners_confirm_not_auto() -> None:
-    """WO-PLAY-HELP-AUTONOMY-KEYS Accept: O/H carry confirm-not-auto wording."""
+    """WO-PLAY-HELP-AUTONOMY-KEYS Accept: O/H carry confirm wording.
+
+    Text updated by WO-PLAY-STRIP-POLICY-AUTO: the blanket "(not auto)"
+    claim is gone -- App-armed + the matching toggle now reaches the same
+    outcome with no key press at all (DECISION
+    `RESOLVED-TRAINER-STRIP-AND-GUTTER-20260731` point 6). Pressing H/O
+    themselves is still a manual confirm, unchanged, so both lines still
+    say "confirm".
+    """
     from tw2002_aiclient.cockpit import autonomy_keys
 
     lines = autonomy_keys.compose_autonomy_help_lines()
@@ -92,9 +100,9 @@ def test_autonomy_help_one_liners_confirm_not_auto() -> None:
         autonomy_keys.CHAINS_HELP,
     )
     assert "confirm" in autonomy_keys.HOLD_HELP
-    assert "not auto" in autonomy_keys.HOLD_HELP
+    assert "APP-ARMED" in autonomy_keys.HOLD_HELP
     assert "confirm" in autonomy_keys.OFFER_HELP
-    assert "not auto" in autonomy_keys.OFFER_HELP
+    assert "APP-ARMED" in autonomy_keys.OFFER_HELP
     assert "O)ffer?" in autonomy_keys.OFFER_HELP
     assert "H)old?" in autonomy_keys.HOLD_HELP
     assert "E)xplore" in autonomy_keys.EXPLORE_HELP
