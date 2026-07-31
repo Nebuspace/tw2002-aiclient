@@ -50,6 +50,22 @@ def test_session_id_matches_logger(tmp_path):
     assert session.session_id == session.logger.session_id
 
 
+def test_current_cursor_line_ignores_stale_content_painted_below_it(tmp_path):
+    session = Session(FAKE_HOST, FAKE_PORT, "test", str(tmp_path))
+    active = "How many holds of Organics do you want to buy [50]?"
+    stale = "Command [TL=00:00:00]:[7132] (?=Help)? :"
+    session.terminal.feed(
+        (
+            f"\x1b[5;1H{active}"
+            f"\x1b[10;1H{stale}"
+            f"\x1b[5;{len(active) + 1}H"
+        ).encode("ascii")
+    )
+
+    assert session.current_prompt_line() == stale
+    assert session.current_cursor_line() == active
+
+
 def test_reconnect_resets_game_select_answered_even_if_it_was_set(tmp_path, monkeypatch):
     monkeypatch.setattr(TelnetConnection, "connect", _noop_connect)
     session = Session(FAKE_HOST, FAKE_PORT, "test", str(tmp_path))

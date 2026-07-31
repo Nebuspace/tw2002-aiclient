@@ -453,6 +453,33 @@ _PORT_QUANTITY_OR_COMMAND_PATTERN = (
 )
 _MAX_GATHER_DECLINES = 3
 
+
+def _active_input_line(session, rows) -> str:
+    """Prefer the cursor-owned row; fail closed to the legacy cropped tail.
+
+    A TWGS redraw may leave a stale ``Command`` row painted below the active
+    second or third commodity prompt. The cropped tail then names the wrong
+    input gate even though the cursor still sits on ``How many holds...``.
+    """
+    cursor_line = getattr(session, "current_cursor_line", None)
+    if callable(cursor_line):
+        try:
+            line = cursor_line()
+        except Exception:  # noqa: BLE001 - unreadable provenance halts below
+            return ""
+        return line.strip() if isinstance(line, str) else ""
+    return rows[-1].strip() if rows else ""
+
+
+def _gather_match_scope(session) -> str:
+    """Use cursor provenance in production; retain old duck-test support."""
+    return (
+        _settle.MATCH_SCOPE_CURSOR_LINE
+        if callable(getattr(session, "current_cursor_line", None))
+        else _settle.MATCH_SCOPE_SCREEN
+    )
+
+
 #: Three reasons, one per failure site, replacing the single
 #: `dock_screen_unrecognized` this module used to return from both the menu
 #: check and the post-`T` ingest. That one string cost a whole diagnosis
@@ -776,7 +803,11 @@ class ExploreRunner:
             debounce_ms=self._debounce_ms,
         )
         rows = self._session.render()
-        return confirmed, self._session.render_text(rows), (rows[-1].strip() if rows else "")
+        return (
+            confirmed,
+            self._session.render_text(rows),
+            _active_input_line(self._session, rows),
+        )
 
     def _dock_and_ingest(
         self, report: ExploreReport, sector_id: Optional[int]
@@ -874,13 +905,14 @@ class ExploreRunner:
                 enter=True,
                 timeout_s=self._timeout_s,
                 debounce_ms=self._debounce_ms,
+                match_scope=_gather_match_scope(self._session),
             )
             sends += 1
             if not confirmed:
                 return HALT_CONFIRM_FAILED, sends
             rows = self._session.render()
             full_text = self._session.render_text(rows)
-            prompt = rows[-1].strip() if rows else ""
+            prompt = _active_input_line(self._session, rows)
 
     def start(
         self,
