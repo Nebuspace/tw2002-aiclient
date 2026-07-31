@@ -19,17 +19,24 @@ stacked labeled sections in a fixed order:
    drawn by the wire/box layer, already names this section; see the N5-
    style boundary note below),
 2. a bare uppercase ``GOALS`` label row, then the GOALS digest,
-3. a bare uppercase ``FOCUS`` label row, then the FOCUS ranked lines.
+3. a bare uppercase ``FOCUS`` label row, then the FOCUS ranked lines,
+4. a bare uppercase ``FORMATIONS`` label row, then the FORMATIONS lines
+   (WO-LEFT-GUTTER-NEST-FOCUS-FORMATIONS scope item 4: the fold must stay
+   honest for all three left-gutter panels, not just the original two, now
+   that FORMATIONS also disappears from the grid below the same 138 floor).
 
 Height-clipping happens naturally at draw time (the curses draw layer clips
 from the *bottom* of an overflowing box) — bottom-first order is therefore
-load-bearing: FOCUS (last) sheds before GOALS (middle) before the trace
-(first), matching the canon-cited priority "the operator keeps the status
-[GOALS] and the ranked suggestions [FOCUS]" over the trace itself when
-height is scarce. This module does not do any clipping of its own; it only
-composes the stack in this fixed order and leaves height-driven truncation
-to the draw layer, same division of labor ``goals.py``/``focus.py``/
-``decisions.py`` already keep from their own curses host.
+load-bearing: FORMATIONS (last) sheds before FOCUS before GOALS (middle)
+before the trace (first), matching the canon-cited priority "the operator
+keeps the status [GOALS] and the ranked suggestions [FOCUS]" over the trace
+itself when height is scarce — FORMATIONS, the newest and least-built of
+the three (still honest-empty pending its own catalog wire), is the first
+thing this fold sheds under height pressure. This module does not do any
+clipping of its own; it only composes the stack in this fixed order and
+leaves height-driven truncation to the draw layer, same division of labor
+``goals.py``/``focus.py``/``decisions.py``/``formations.py`` already keep
+from their own curses host.
 
 **"Still renders" rule.** A section whose composer output happens to equal
 that composer's own honest-empty marker (e.g. GOALS with no known fields —
@@ -37,12 +44,12 @@ still 9 lines of honest ``?``/``—`` rows) is **not** treated as absent — it
 still gets its label row and its (empty-but-honest) content, because that
 content **is** status the operator is meant to keep reading (canon: "the
 operator keeps the status ... just relocated"). Only the one case where
-**all three** sections are simultaneously at their own honest-empty marker
+**all four** sections are simultaneously at their own honest-empty marker
 collapses the whole pane down to DECISIONS' own calm-empty state
 (``decisions.compose_decisions_lines(None, …)`` — today the four autonomy
 HELP one-liners from WO-WIRE-AUTONOMY-HELP-LINES / #285; previously the
-canon pair ``["—", "Exploring…"]``) — never a fourteen-line stack of
-nothing but honest unknowns. "Empty" is
+canon pair ``["—", "Exploring…"]``) — never a long stack of nothing but
+honest unknowns. "Empty" is
 detected by **comparing a section's real output to that same composer
 called on an empty/``None`` status at the same width** — never a
 hardcoded string guess — so the check stays correct if a sibling composer's
@@ -91,7 +98,7 @@ composer's own empty output" and is pinned by a test rather than left as a
 silent surprise.
 
 D5: no ``ai_pilot``/imperative-mood text anywhere — the only text this
-module itself authors is the two bare uppercase section labels below; every
+module itself authors is the three bare uppercase section labels below; every
 other rendered character is a pass-through of a child composer's own
 (already-audited) output, glyphs included (``✓``/``·``/``?``/``⊘``/``★`` are
 NO-SWAP rows per ``canon/surfaces/visual-language.md`` and are never
@@ -102,6 +109,7 @@ from __future__ import annotations
 
 from .decisions import compose_decisions_lines
 from .focus import compose_focus_lines
+from .formations import compose_formations_panel
 from .goals import compose_goals_lines
 
 # Bare uppercase label rows (mirrors the HUD label-row convention,
@@ -111,6 +119,7 @@ from .goals import compose_goals_lines
 # layer per the WO dispatch) already names it.
 GOALS_LABEL = "GOALS"
 FOCUS_LABEL = "FOCUS"
+FORMATIONS_LABEL = "FORMATIONS"
 
 
 def _clip(text: str, *, width: int) -> str:
@@ -128,27 +137,28 @@ def compose_folded_decisions_lines(status: dict | None, *, width: int) -> list[s
     guarantees on its own.
 
     Reuses ``decisions.compose_decisions_lines`` / ``goals.compose_goals_
-    lines`` / ``focus.compose_focus_lines`` verbatim — this module never
-    re-implements their field mapping, coercion, or glyph choices; it only
-    decides *whether* and *where* each section's already-composed lines
-    appear in the combined stack, in the fixed order (1) trace (unlabeled),
-    (2) ``GOALS`` label + goals digest, (3) ``FOCUS`` label + focus ranked
-    lines. A section whose own output equals that composer's own
-    empty-marker output (probed by calling the same composer on ``None`` at
-    the same ``width``) still renders in full — see the module docstring's
-    "still renders" rule — *unless every section* is simultaneously at its
-    own empty marker, in which case the whole pane collapses to
-    ``decisions.compose_decisions_lines(None, width=width)`` (DECISIONS'
-    calm-empty marker — currently the autonomy HELP one-liners) rather
-    than a long stack of nothing but honest unknowns. A section whose own
-    composer call raises (an out-of-contract hostile nested payload — see
-    Hardening) is dropped from the stack entirely (no label, no lines)
-    rather than propagating; if every section drops this way the pane
-    still falls back to that same calm-empty marker rather than ever
-    returning ``[]``.
+    lines`` / ``focus.compose_focus_lines`` / ``formations.
+    compose_formations_panel`` verbatim — this module never re-implements
+    their field mapping, coercion, or glyph choices; it only decides
+    *whether* and *where* each section's already-composed lines appear in
+    the combined stack, in the fixed order (1) trace (unlabeled), (2)
+    ``GOALS`` label + goals digest, (3) ``FOCUS`` label + focus ranked
+    lines, (4) ``FORMATIONS`` label + formations lines. A section whose own
+    output equals that composer's own empty-marker output (probed by
+    calling the same composer on ``None`` at the same ``width``) still
+    renders in full — see the module docstring's "still renders" rule —
+    *unless every section* is simultaneously at its own empty marker, in
+    which case the whole pane collapses to ``decisions.
+    compose_decisions_lines(None, width=width)`` (DECISIONS' calm-empty
+    marker — currently the autonomy HELP one-liners) rather than a long
+    stack of nothing but honest unknowns. A section whose own composer call
+    raises (an out-of-contract hostile nested payload — see Hardening) is
+    dropped from the stack entirely (no label, no lines) rather than
+    propagating; if every section drops this way the pane still falls back
+    to that same calm-empty marker rather than ever returning ``[]``.
     Every line is ``len(line) <= width`` (``width <= 0`` empties every
-    line, including the ``GOALS``/``FOCUS`` label rows, to ``""`` —
-    mirroring every child composer's own width-clip convention).
+    line, including the ``GOALS``/``FOCUS``/``FORMATIONS`` label rows, to
+    ``""`` — mirroring every child composer's own width-clip convention).
     """
     try:
         width = int(width)
@@ -163,6 +173,7 @@ def compose_folded_decisions_lines(status: dict | None, *, width: int) -> list[s
     empty_decisions = compose_decisions_lines(None, width=width)
     empty_goals = compose_goals_lines(None, width=width)
     empty_focus = compose_focus_lines(None, width=width)
+    empty_formations = compose_formations_panel(None, width=width)
 
     trace_lines: list[str] | None
     try:
@@ -182,6 +193,12 @@ def compose_folded_decisions_lines(status: dict | None, *, width: int) -> list[s
     except Exception:
         focus_lines = None
 
+    formations_lines: list[str] | None
+    try:
+        formations_lines = compose_formations_panel(status, width=width)
+    except Exception:
+        formations_lines = None
+
     all_empty = (
         trace_lines is not None
         and trace_lines == empty_decisions
@@ -189,6 +206,8 @@ def compose_folded_decisions_lines(status: dict | None, *, width: int) -> list[s
         and goals_lines == empty_goals
         and focus_lines is not None
         and focus_lines == empty_focus
+        and formations_lines is not None
+        and formations_lines == empty_formations
     )
     if all_empty:
         return empty_decisions
@@ -202,10 +221,13 @@ def compose_folded_decisions_lines(status: dict | None, *, width: int) -> list[s
     if focus_lines is not None:
         lines.append(_clip(FOCUS_LABEL, width=width))
         lines.extend(focus_lines)
+    if formations_lines is not None:
+        lines.append(_clip(FORMATIONS_LABEL, width=width))
+        lines.extend(formations_lines)
 
     if not lines:
         # Every section dropped (e.g. a hostile top-level `status` shared
-        # by all three children) -- fall back to the honest-empty pane
+        # by all four children) -- fall back to the honest-empty pane
         # rather than ever rendering nothing at all.
         return empty_decisions
 

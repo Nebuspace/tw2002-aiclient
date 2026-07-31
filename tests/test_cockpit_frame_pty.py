@@ -42,7 +42,7 @@ pytestmark = pytest.mark.pty_ui
 import curses
 
 from tw2002_aiclient.cockpit import draw as cockpit_draw
-from tw2002_aiclient.cockpit.layout import frame_layout
+from tw2002_aiclient.cockpit.layout import frame_layout, nested_focus_region
 
 from .pty_helpers import (
     find_text,
@@ -250,15 +250,23 @@ def test_full_tier_panel_titles_at_expected_rows(_full_tier_capture):
     regions = frame_layout(40, 160)
     grid = pyte_grid(_full_tier_capture, 40, 160)
 
-    left, center, right, logs = (
+    goals, left, center, right, logs = (
+        regions["goals"],
         regions["left_gutter"],
         regions["center"],
         regions["right_gutter"],
         regions["logs"],
     )
+    focus = nested_focus_region(goals)
+    assert goals is not None and focus is not None
     assert left is not None and right is not None and center is not None and logs is not None
 
-    assert "FOCUS" in grid[left["y"]]
+    assert "GOALS" in grid[goals["y"]]
+    # FOCUS is nested INSIDE the GOALS box (WO-LEFT-GUTTER-NEST-FOCUS-
+    # FORMATIONS); ``left_gutter`` (the old FOCUS slot) now hosts the tall
+    # FORMATIONS panel below GOALS.
+    assert "FOCUS" in grid[focus["y"]]
+    assert "FORMATIONS" in grid[left["y"]]
     assert "GAME" in grid[center["y"]]
     assert "HUD" in grid[right["y"]]
     assert "LOGS" in grid[logs["y"]]
@@ -325,8 +333,8 @@ def test_full_tier_center_viewport_is_double_line_and_empty_panels_honest(_full_
             f"GAME interior row {row} carries non-blank content"
         )
 
-    left = regions["left_gutter"]
-    assert "—" in grid[left["y"] + 1]  # FOCUS empty-state row (no focus payload wired yet)
+    focus = nested_focus_region(regions["goals"])
+    assert "—" in grid[focus["y"] + 1]  # FOCUS empty-state row (no focus payload wired yet)
 
 
 # ---------------------------------------------------------------------------
@@ -444,9 +452,19 @@ def test_embedded_newline_in_status_line_does_not_escape_box(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# Tall terminal: the reserved gap between the gutters/center bottom and the
-# LOGS top (out of PWO-031/033 scope -- later-WO sub-panels) must stay
+# Tall terminal: the reserved gap between the RIGHT gutter/center bottom and
+# the LOGS top (out of PWO-031/033 scope -- later-WO sub-panels) must stay
 # unpainted -- no border, no box, no filler text (Mack geometry-attack note).
+#
+# The LEFT column no longer leaves a gap here as of
+# WO-LEFT-GUTTER-NEST-FOCUS-FORMATIONS -- FORMATIONS (``left_gutter``) is
+# now a genuinely tall panel that deliberately claims the WHOLE ``column_h``
+# slot below GOALS, all the way down to LOGS (that is the point of "tall
+# FORMATIONS panel ... down toward LOGS", DECISION point 5). The right
+# gutter/DECISIONS stack still stops at ``center_h`` (unchanged by this WO,
+# see ``layout.py``'s own comment), so the reserved band this test targets
+# moved from the left gutter's own bottom edge to the right gutter/
+# DECISIONS stack's own bottom edge instead.
 # ---------------------------------------------------------------------------
 
 
@@ -457,14 +475,29 @@ def test_tall_terminal_leaves_reserved_band_unpainted(tmp_path):
     regions = frame_layout(rows, cols)
     assert regions["mode"] == "full"
 
-    left, logs = regions["left_gutter"], regions["logs"]
-    gap_top = left["y"] + left["h"]  # first row after gutters/center bottom
+    left_gutter, right_gutter, decisions, logs = (
+        regions["left_gutter"],
+        regions["right_gutter"],
+        regions["decisions"],
+        regions["logs"],
+    )
+    bottom_region = decisions if decisions is not None else right_gutter
+    gap_top = bottom_region["y"] + bottom_region["h"]  # first row after the right stack's bottom
     gap_bottom = logs["y"]  # first row of LOGS -- gap is [gap_top, gap_bottom)
     assert gap_bottom > gap_top, "fixture no longer produces a reserved band -- update the size"
 
     screen = pyte_screen(captured, rows, cols)
     outer = regions["outer"]
-    interior_cols = range(outer["x"] + 1, outer["x"] + outer["w"] - 1)  # excludes the outer's own side border
+    # Columns under the LEFT gutter are excluded from this scan --
+    # FORMATIONS (``left_gutter``) legitimately runs its own box border
+    # THROUGH this same row band as of WO-LEFT-GUTTER-NEST-FOCUS-FORMATIONS
+    # (it claims the whole ``column_h`` slot down to LOGS, unlike the right
+    # gutter/DECISIONS stack, which still stops at ``center_h``). Only the
+    # center-viewport-and-rightward columns are still a genuinely reserved,
+    # unpainted band.
+    interior_cols = range(
+        left_gutter["x"] + left_gutter["w"], outer["x"] + outer["w"] - 1
+    )  # excludes the outer's own side border
     box_glyphs = set(_DOUBLE_GLYPHS_UNICODE + _THIN_GLYPHS_UNICODE) | {"+", "=", "-", "|"}
 
     leaked = [

@@ -297,15 +297,26 @@ def test_corner_and_edge_coords_at_40x160():
     strip = regions["strip"]
     assert strip == {"y": 1, "x": 1, "w": 158, "h": 1}
 
-    # Left gutter is stacked GOALS (top, claims its own floor first) above
-    # PRIORITIES (below, gets whatever height remains) as of PWO-034 —
-    # together they still span the same y=2..(2+VIEWPORT_H) / h=VIEWPORT_H
-    # (2..29 / h=27) slot the single PRIORITIES box occupied pre-PWO-034.
+    # Left gutter is the outer GOALS box (with FOCUS nested inside it, see
+    # ``nested_focus_region``) claiming its own floor first, then a tall
+    # FORMATIONS box below getting whatever height remains, down toward
+    # LOGS (WO-LEFT-GUTTER-NEST-FOCUS-FORMATIONS, DECISION point 5).
+    # Unlike the pre-this-WO sibling-FOCUS shape, the two no longer span
+    # only ``VIEWPORT_H`` together -- FORMATIONS claims the WHOLE
+    # ``column_h`` slot below GOALS (the same spare-height-below-the-
+    # viewport band LOGS sits under), so at a generously tall terminal like
+    # this one FORMATIONS runs past the viewport's own bottom edge.
     goals = regions["goals"]
     assert goals == {"y": 2, "x": 1, "w": 36, "h": GOALS_BOX_MIN_H}
 
     left = regions["left_gutter"]
-    assert left == {"y": 2 + GOALS_BOX_MIN_H, "x": 1, "w": 36, "h": VIEWPORT_H - GOALS_BOX_MIN_H}
+    expected_column_h = _expected_column_h(40)
+    assert left == {
+        "y": 2 + GOALS_BOX_MIN_H,
+        "x": 1,
+        "w": 36,
+        "h": expected_column_h - GOALS_BOX_MIN_H,
+    }
 
     center = regions["center"]
     assert center == {"y": 2, "x": 39, "w": VIEWPORT_W, "h": VIEWPORT_H, "border": True}
@@ -404,11 +415,18 @@ def test_goals_at_least_1x1_when_column_is_extremely_short(monkeypatch):
 
 
 def test_goals_and_priorities_together_span_the_full_left_gutter_height():
+    """GOALS + FORMATIONS together span the WHOLE ``column_h`` slot -- not
+    just ``center["h"]`` (the viewport's own capped height) -- because
+    FORMATIONS is a genuinely tall panel that runs down toward LOGS past the
+    viewport's own bottom edge on a tall terminal
+    (WO-LEFT-GUTTER-NEST-FOCUS-FORMATIONS). At ``lines=40`` ``column_h`` (33)
+    exceeds ``VIEWPORT_H`` (27), so this deliberately asserts against
+    ``column_h``, not ``center["h"]``."""
     for cols in (FULL_GUTTER_MIN_COLS + 2, LEFT_GUTTER_MIN_COLS + 2):
         regions = frame_layout(40, cols)
-        goals, left, center = regions["goals"], regions["left_gutter"], regions["center"]
+        goals, left = regions["goals"], regions["left_gutter"]
         total_h = goals["h"] + (left["h"] if left is not None else 0)
-        assert total_h == center["h"]
+        assert total_h == _expected_column_h(40)
 
 
 # -- HUD/DECISIONS right-gutter stack (PWO-036) ---------------------------

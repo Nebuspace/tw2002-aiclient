@@ -32,14 +32,16 @@ owned elsewhere (see the N5 boundary).
 
 ```
 ┌ Character / Profile — host · game · character ──────────────────────────────┐
-│ [GOALS]        │                                    │ [HUD]                 │
-│  ✓ · ?  status │        [ GAME UI ]                  │  credits/sector/turns │
-│ ─────────────  │   native 80×25 zero-inset viewport  │  cargo · ✦ Ns ago     │
-│ [FOCUS]        │                                    │ ───────────────────── │
-│  ranked        │                                    │ [DECISIONS]           │
-│  suggestions   │  [CHAIN]  ○→○→○→○  bubble row       │  trace: kind · gates  │
-│ ─────────────  │                                    │  live metrics array   │
+│┌[GOALS]──────┐│                                    │ [HUD]                 │
+││✓ · ? status ││        [ GAME UI ]                  │  credits/sector/turns │
+││┌[FOCUS]────┐││   native 80×25 zero-inset viewport  │  cargo · ✦ Ns ago     │
+│││ranked     │││                                    │ ───────────────────── │
+│││suggestions│││                                    │ [DECISIONS]           │
+││└───────────┘││  [CHAIN]  ○→○→○→○  bubble row       │  trace: kind · gates  │
+│└─────────────┘│                                    │  live metrics array   │
 │ [FORMATIONS]   │                                    │                       │
+│  discovered    │      (FORMATIONS keeps running     │                       │
+│  topologies ▼  │       down toward LOGS)             │                       │
 ├────────────────┴────────────────────────────────────┴───────────────────────┤
 │ [LOGS]  session transcript tail                                              │
 ├──────────────────────────────────────────────────────────────────────────────┤
@@ -48,22 +50,30 @@ owned elsewhere (see the N5 boundary).
 └──────────────────────────────────────────────────────────────────────────────┘
 ```
 
-**Left gutter** — three stacked panels, top to bottom:
+**Left gutter** — an outer **`[GOALS]`** box with **`[FOCUS]`** nested entirely inside its own
+bounds (box-in-box, not a sibling stacked below it), then a tall **`[FORMATIONS]`** panel below
+claiming the rest of the column all the way down toward `[LOGS]`:
 
-- **`[GOALS]`** — Layer-1 status. Each strategic prerequisite on its own line with a readable label
-  and a status glyph: **`✓`** known / met, **`·`** in progress / partial, **`?`** unknown. The
-  authored line set is Turns, Credits, StarDock, Map, Formations, Chain, Ship prices, Hold price,
-  Fighters (`compose_primary_goals_lines`, fed by a `GoalsSnapshot`). This layer is **read-only
-  context — it does not pick the next action**; it says only how much of the world is known yet.
-- **`[FOCUS]` / `[PRIORITIES]`** — Layer-2, the ranked list. **FOCUS is a list of *suggestions*,
-  never the app's chosen action.** It shows the engine-ranked effort candidates for the current tick
-  (Trade chain / Upgrade / Explore), highest expected-value first, with a gate glyph `⊘` and reason
-  on any candidate that is skipped. It is the reborn reframe of the old EV weigh-list: a recommended
-  ordering the operator reads, not a commitment the app has made. The ranking source is the priority
-  engine — see [priority-engine](/engine/priority-engine.md) — and FOCUS only *displays* its output.
+- **`[GOALS]`** — Layer-1 status, the outer box. Each strategic prerequisite on its own line with a
+  readable label and a status glyph: **`✓`** known / met, **`·`** in progress / partial, **`?`**
+  unknown. The authored line set is Turns, Credits, StarDock, Map, Formations, Chain, Ship prices,
+  Hold price, Fighters (`compose_primary_goals_lines`, fed by a `GoalsSnapshot`). This layer is
+  **read-only context — it does not pick the next action**; it says only how much of the world is
+  known yet.
+- **`[FOCUS]` / `[PRIORITIES]`** — Layer-2, the ranked list, nested **inside** the GOALS box (its own
+  bordered sub-box, entirely within GOALS's bounds — `nested_focus_region`). **FOCUS is a list of
+  *suggestions*, never the app's chosen action.** It shows the engine-ranked effort candidates for
+  the current tick (Trade chain / Upgrade / Explore), highest expected-value first, with a gate glyph
+  `⊘` and reason on any candidate that is skipped. It is the reborn reframe of the old EV weigh-list:
+  a recommended ordering the operator reads, not a commitment the app has made. The ranking source is
+  the priority engine — see [priority-engine](/engine/priority-engine.md) — and FOCUS only *displays*
+  its output.
 - **`[FORMATIONS]`** — discovered galaxy topologies by name with a short blurb
   (`compose_formations_panel`); the route-hazard-relevant subset (one-way, warp-sink) is what feeds
-  the guards elsewhere.
+  the guards elsewhere. Unlike GOALS/FOCUS, FORMATIONS is a genuinely **tall** panel: it claims
+  whatever vertical room remains in the left column below GOALS, running well past the game
+  viewport's own bottom edge on a generously tall terminal, down toward `[LOGS]` — the mirror image of
+  the still-reserved (unpainted) band that sits below the right gutter's HUD/DECISIONS stack.
 
 **Center column** — the app's window onto the game:
 
@@ -164,15 +174,15 @@ pushed off-edge (`frame_layout`). The load-bearing breakpoints (from `VIEWPORT_W
 
 | Width (cols) | What renders |
 |---|---|
-| ≥ `FULL_GUTTER_MIN_COLS` (154) | Full left gutter (GOALS/FOCUS/FORMATIONS) + viewport + right HUD gutter |
+| ≥ `FULL_GUTTER_MIN_COLS` (154) | Full left gutter (GOALS⊃FOCUS nested, plus tall FORMATIONS below) + viewport + right HUD gutter |
 | ≥ `LEFT_GUTTER_MIN_COLS` (138) | Narrow left gutter (`PRIORITIES_MIN_W` 20) still present + viewport + HUD |
-| ≥ `RIGHT_GUTTER_MIN_COLS` (118) | Viewport + right HUD only; **GOALS + FOCUS fold into the idle DECISIONS pane** |
+| ≥ `RIGHT_GUTTER_MIN_COLS` (118) | Viewport + right HUD only; **GOALS + FOCUS + FORMATIONS fold into the idle DECISIONS pane** |
 | ≥ `MINIMAL_HEADER_MIN_COLS` (82) | Bordered viewport alone (`== VIEWPORT_W`, the floor at which a framed 80×25 fits) |
 
-Below `LEFT_GUTTER_MIN_COLS` (138) the left-gutter GOALS and FOCUS panels **collapse into the idle
-DECISIONS pane** rather than disappearing — the operator keeps the status and the ranked suggestions,
-just relocated. The viewport is the last thing to survive; the body never sacrifices horizontal
-legibility for panel count.
+Below `LEFT_GUTTER_MIN_COLS` (138) the left-gutter GOALS, FOCUS, and FORMATIONS panels **collapse
+into the idle DECISIONS pane** rather than disappearing — the operator keeps the status, the ranked
+suggestions, and the discovered topologies, just relocated. The viewport is the last thing to
+survive; the body never sacrifices horizontal legibility for panel count.
 
 ## N5 boundary — rendered here, owned elsewhere
 
@@ -316,8 +326,9 @@ The composition has a fixed reading order, enforced by geometry:
   semantic tone + a floating delta chip + the recent-credits sparkline. SECTOR/TURNS/CARGO/PROFIT
   follow in a uniform 2-row cell stride so the column stays scannable.
 - **The eye goes: game → HUD → left-gutter status.** Border weight pulls to the viewport, the bold
-  bright CREDITS cell anchors the right rail, and the left gutter (GOALS/FOCUS/FORMATIONS) reads as
-  supporting context. Nothing in the calm state competes for attention with color noise.
+  bright CREDITS cell anchors the right rail, and the left gutter (GOALS⊃FOCUS nested, then
+  FORMATIONS below) reads as supporting context. Nothing in the calm state competes for attention
+  with color noise.
 
 ## Panel states — active, stale, empty, alert
 
@@ -380,8 +391,8 @@ The fold ladder (specified in full in the Responsive-fold section above, `frame_
 *visual-dignity* contract as much as a layout one: **the body never scrolls horizontally.** Content
 that cannot fit is folded, not pushed off-edge — the viewport stays ≤80 wide, LOG truncates to its
 line-tail, and chain bubbles truncate left→right with a `… Nh` marker. Panels shed by column budget
-in a fixed priority (full gutters → narrow left gutter → right HUD only, with GOALS+FOCUS folding
-*into* the idle DECISIONS pane → bordered viewport alone), and height degrades
+in a fixed priority (full gutters → narrow left gutter → right HUD only, with GOALS+FOCUS+FORMATIONS
+folding *into* the idle DECISIONS pane → bordered viewport alone), and height degrades
 header→control→ticker→viewport-border in that order. The viewport is always the last thing to
 survive. Degradation is designed to lose *chrome and redundancy*, never *information*.
 
