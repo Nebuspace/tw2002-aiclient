@@ -170,12 +170,176 @@ BAND_PAD = "  "
 TEACH_TONE = "chrome"
 
 
+# Short toggle prefixes under width pressure (WO-STRIP-HOTFIX-FIT-TRADE-LOGS).
+# Wide-terminal default still uses the long PORT/CARGO/SHIP labels above.
+PORT_TRADE_LABEL_SHORT = "P)ort"
+CARGO_UPGRADE_LABEL_SHORT = "C)argo"
+SHIP_UPGRADE_LABEL_SHORT = "S)hip"
+
+
+def _join_band(tokens: tuple[str, ...], *, gap: str, pad: str) -> str:
+    return f"{pad}{gap.join(tokens)}{pad}"
+
+
+def fit_teach_band(
+    budget: object,
+    *,
+    unicode_ok: object = True,
+    port_trade_on: object = True,
+    cargo_upgrade_on: object = True,
+    ship_upgrade_on: object = True,
+) -> str:
+    """Return the widest calm teach band that fits ``budget`` columns.
+
+    Ladder (wide → narrow), stop at first that fits
+    (WO-STRIP-HOTFIX-FIT-TRADE-LOGS):
+
+    1. Full labels + ``BAND_PAD`` (same as unlimited ``compose_teach_band``)
+    2. Short toggles ``P)ort·ON`` / ``C)argo·ON`` / ``S)hip·ON``; E / │ / T / L
+    3. Reduce ``BAND_PAD`` / token-gap padding
+    4. Drop S, then C (keep E P T L)
+    5. Drop ``│`` if needed
+    6. Last resort empty only if even ``E)xplore  L)ist Loops`` will not fit
+
+    ``unicode_ok`` accepted and ignored. Never raises. Returns ``""`` when
+    ``budget`` is not a usable positive int or nothing fits.
+    """
+    del unicode_ok  # API uniformity with compose_teach_band
+    try:
+        room = int(budget)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return ""
+    if room <= 0:
+        return ""
+
+    port_long = _toggle_token(PORT_TRADE_LABEL, port_trade_on)
+    cargo_long = _toggle_token(CARGO_UPGRADE_LABEL, cargo_upgrade_on)
+    ship_long = _toggle_token(SHIP_UPGRADE_LABEL, ship_upgrade_on)
+    port_s = _toggle_token(PORT_TRADE_LABEL_SHORT, port_trade_on)
+    cargo_s = _toggle_token(CARGO_UPGRADE_LABEL_SHORT, cargo_upgrade_on)
+    ship_s = _toggle_token(SHIP_UPGRADE_LABEL_SHORT, ship_upgrade_on)
+
+    candidates: list[str] = [
+        # 1 — full calm default
+        _join_band(
+            (
+                EXPLORE_TOKEN,
+                port_long,
+                cargo_long,
+                ship_long,
+                CLUSTER_SEP,
+                TRADE_LOOP_CHAIN_TOKEN,
+                LOOPS_TOKEN,
+            ),
+            gap=TOKEN_GAP,
+            pad=BAND_PAD,
+        ),
+        # 2 — short toggle labels
+        _join_band(
+            (
+                EXPLORE_TOKEN,
+                port_s,
+                cargo_s,
+                ship_s,
+                CLUSTER_SEP,
+                TRADE_LOOP_CHAIN_TOKEN,
+                LOOPS_TOKEN,
+            ),
+            gap=TOKEN_GAP,
+            pad=BAND_PAD,
+        ),
+        # 3 — tighter pad / gap
+        _join_band(
+            (
+                EXPLORE_TOKEN,
+                port_s,
+                cargo_s,
+                ship_s,
+                CLUSTER_SEP,
+                TRADE_LOOP_CHAIN_TOKEN,
+                LOOPS_TOKEN,
+            ),
+            gap=TOKEN_GAP,
+            pad=" ",
+        ),
+        _join_band(
+            (
+                EXPLORE_TOKEN,
+                port_s,
+                cargo_s,
+                ship_s,
+                CLUSTER_SEP,
+                TRADE_LOOP_CHAIN_TOKEN,
+                LOOPS_TOKEN,
+            ),
+            gap=" ",
+            pad=" ",
+        ),
+        _join_band(
+            (
+                EXPLORE_TOKEN,
+                port_s,
+                cargo_s,
+                ship_s,
+                CLUSTER_SEP,
+                TRADE_LOOP_CHAIN_TOKEN,
+                LOOPS_TOKEN,
+            ),
+            gap=" ",
+            pad="",
+        ),
+        # 4 — drop S, then C
+        _join_band(
+            (
+                EXPLORE_TOKEN,
+                port_s,
+                cargo_s,
+                CLUSTER_SEP,
+                TRADE_LOOP_CHAIN_TOKEN,
+                LOOPS_TOKEN,
+            ),
+            gap=" ",
+            pad=" ",
+        ),
+        _join_band(
+            (
+                EXPLORE_TOKEN,
+                port_s,
+                CLUSTER_SEP,
+                TRADE_LOOP_CHAIN_TOKEN,
+                LOOPS_TOKEN,
+            ),
+            gap=" ",
+            pad=" ",
+        ),
+        # 5 — drop cluster sep
+        _join_band(
+            (EXPLORE_TOKEN, port_s, TRADE_LOOP_CHAIN_TOKEN, LOOPS_TOKEN),
+            gap=" ",
+            pad=" ",
+        ),
+        _join_band(
+            (EXPLORE_TOKEN, port_s, TRADE_LOOP_CHAIN_TOKEN, LOOPS_TOKEN),
+            gap=" ",
+            pad="",
+        ),
+        # last honest minimum before empty
+        _join_band((EXPLORE_TOKEN, LOOPS_TOKEN), gap=TOKEN_GAP, pad=" "),
+        _join_band((EXPLORE_TOKEN, LOOPS_TOKEN), gap=" ", pad=""),
+    ]
+    for cand in candidates:
+        if len(cand) <= room:
+            return cand
+    return ""
+
+
 def compose_teach_band(
     *,
     unicode_ok: object = True,
     port_trade_on: object = True,
     cargo_upgrade_on: object = True,
     ship_upgrade_on: object = True,
+    width: object = None,
 ) -> str:
     """The standing calm-band hint line as one plain string.
 
@@ -188,10 +352,28 @@ def compose_teach_band(
     with no arguments reproduces ``BAND_PAD + TOKEN_GAP.join(TEACH_TOKENS)
     + BAND_PAD``.
 
+    ``width`` (WO-STRIP-HOTFIX-FIT-TRADE-LOGS): when a positive int, return
+    ``fit_teach_band(width, ...)`` so callers can request a budgeted band.
+    ``None`` / non-int / non-positive keeps the unlimited full-label default.
+
     ``unicode_ok`` is accepted and ignored (see the module docstring:
     `KEY)verb` and cluster ``│`` have no Unicode twin / are NO-SWAP).
     Never raises.
     """
+    if width is not None:
+        try:
+            w = int(width)  # type: ignore[arg-type]
+        except (TypeError, ValueError):
+            w = 0
+        if w > 0:
+            return fit_teach_band(
+                w,
+                unicode_ok=unicode_ok,
+                port_trade_on=port_trade_on,
+                cargo_upgrade_on=cargo_upgrade_on,
+                ship_upgrade_on=ship_upgrade_on,
+            )
+
     tokens = (
         EXPLORE_TOKEN,
         _toggle_token(PORT_TRADE_LABEL, port_trade_on),

@@ -961,6 +961,10 @@ def _autonomy_auto_fire(
                 f"App-armed trade — {plan.route}, one pass running"
             )
             return _apply_trade_chain_band(play, getattr(started, "raw", None)), False
+        # WO-STRIP-HOTFIX-FIT-TRADE-LOGS: never leave the pre-start
+        # "starting trade…" line as the final LOGS status on ok=False.
+        reason = getattr(started, "reason", None) or getattr(started, "error", None) or "unknown"
+        play.status_line = f"App-armed trade did not start — {reason}"
         return False, False
 
     # offer.kind == "upgrade"
@@ -997,14 +1001,11 @@ def _autonomy_auto_fire(
             f"{plan.stardock_sector}, one pass running"
         )
         return False, True
-    reason = getattr(started, "reason", None) or "unknown"
-    if reason != "already_running":
-        # "already_running" is the daemon safely refusing a re-fire this
-        # same tick already started (see `StardockHoldRunner.start`'s own
-        # `already_running` refusal) -- reporting it every ~1s would be
-        # noise, not news. Every OTHER refusal reason is real information
-        # the operator is entitled to see.
-        play.status_line = f"App-armed hold buy did not start — {reason}"
+    # WO-STRIP-HOTFIX-FIT-TRADE-LOGS: prefer one honest refuse line over a
+    # stuck "starting hold…" status — including already_running (one line
+    # once beats a false "starting" claim every idle tick).
+    reason = getattr(started, "reason", None) or getattr(started, "error", None) or "unknown"
+    play.status_line = f"App-armed hold buy did not start — {reason}"
     return False, False
 
 

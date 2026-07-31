@@ -169,7 +169,7 @@ from __future__ import annotations
 # the finished `(text, tone)` pair, keeping the seat composer blind to
 # daemon-global status exactly as the module docstring above commits to.
 from .arm import ARM_GAP as _ARM_SEPARATOR
-from .teachband import TEACH_TONE
+from .teachband import EXPLORE_TOKEN, LOOPS_TOKEN, TEACH_TONE, fit_teach_band
 
 # Canon-cited verbatim (see module docstring) -- deliberately a single
 # constant, not a Unicode/ASCII twin pair: plain ASCII text has no glyph
@@ -504,6 +504,50 @@ def _safe_teach_band(value: object) -> str:
     return value if isinstance(value, str) and value else ""
 
 
+def _infer_teach_toggles(band: str) -> tuple[object, object, object]:
+    """Recover P/C/S ON|OFF from a caller-composed calm band string."""
+    sep = "·"
+
+    def _on(long_label: str, short_label: str) -> bool:
+        for label in (long_label, short_label):
+            if f"{label}{sep}OFF" in band:
+                return False
+            if f"{label}{sep}ON" in band:
+                return True
+        return True
+
+    return (
+        _on("P)ort Trade", "P)ort"),
+        _on("C)argo Hold Upgrade", "C)argo"),
+        _on("S)hip Upgrade", "S)hip"),
+    )
+
+
+def _fit_teach_into_budget(band: str, budget: int) -> str:
+    """Place ``band`` under ``budget``, with progressive calm-band shrink.
+
+    Non-calm hint slots (explore run line, ``[ ANALYZING ]``) stay
+    all-or-nothing. Calm repertoire (``E)xplore`` + ``L)ist Loops``) uses
+    ``fit_teach_band`` (WO-STRIP-HOTFIX-FIT-TRADE-LOGS).
+    """
+    if budget <= 0 or not band:
+        return ""
+    if len(band) <= budget:
+        return band
+    if EXPLORE_TOKEN not in band or LOOPS_TOKEN not in band:
+        return ""
+    port_on, cargo_on, ship_on = _infer_teach_toggles(band)
+    try:
+        return fit_teach_band(
+            budget,
+            port_trade_on=port_on,
+            cargo_upgrade_on=cargo_on,
+            ship_upgrade_on=ship_on,
+        )
+    except Exception:
+        return ""
+
+
 def _safe_status_offer(value: object) -> str:
     """Coerce the optional mid-strip status/offer line to a plain string."""
     return value if isinstance(value, str) and value else ""
@@ -648,17 +692,21 @@ def _compose_segments(
     status_text = _safe_status_offer(status_offer)
     # Mid-strip status/offer owns the center; the teach band yields to it
     # (canon: affordance chrome, not data). Reserve the band beside a
-    # status line ONLY when the FULL status still fits — otherwise leave
-    # band_reserved=0 so a long calm strip (e.g. after L)chains joins)
-    # cannot clip "press E" off a live explore offer.
+    # status line ONLY when a fitted band + FULL status still fit —
+    # otherwise leave band_reserved=0 so a long calm strip cannot clip
+    # "press E" off a live explore offer. Progressive fit
+    # (WO-STRIP-HOTFIX-FIT-TRADE-LOGS) may reserve a SHORTER band than the
+    # caller-composed full string.
     band_reserved = 0
-    if band and gap_total >= len(band) + 2:
-        if not status_text:
-            band_reserved = len(band) + 1
-        else:
-            sep_len = len(_ARM_SEPARATOR if used else "")
-            if gap_total >= sep_len + len(status_text) + 1 + len(band) + 1:
-                band_reserved = len(band) + 1
+    if band and gap_total >= 2:
+        provisional = _fit_teach_into_budget(band, gap_total - 2)
+        if provisional:
+            if not status_text:
+                band_reserved = len(provisional) + 1
+            else:
+                sep_len = len(_ARM_SEPARATOR if used else "")
+                if gap_total >= sep_len + len(status_text) + 1 + len(provisional) + 1:
+                    band_reserved = len(provisional) + 1
 
     if status_text and gap_total > band_reserved:
         sep = _ARM_SEPARATOR if used else ""
@@ -691,16 +739,16 @@ def _compose_segments(
         gap_total = w - len(text) - used
         # `+ 2` buys one blank column on EACH side: the band may never abut
         # the chips on its left nor the liveness cluster on its right.
-        if gap_total >= len(band) + 2:
-            lead = gap_total - len(band) - 1
+        # Under pressure, progressive-fit the calm repertoire into the
+        # remaining budget instead of all-or-nothing-dropping the whole
+        # band (WO-STRIP-HOTFIX-FIT-TRADE-LOGS). Non-calm hint strings
+        # (explore / analyze) still drop whole when they cannot fit.
+        place = _fit_teach_into_budget(band, gap_total - 2)
+        if place and gap_total >= len(place) + 2:
+            lead = gap_total - len(place) - 1
             left.append((" " * lead, None))
-            left.append((band, TEACH_TONE))
-            used += lead + len(band)
-        # else: dropped whole. All-or-nothing, matching the ARM/CONN chips'
-        # rule above -- a clipped `T)rig` is not a shorter true statement,
-        # it is a token the reader cannot resolve, and this band is the
-        # lowest-priority thing on the row (pure affordance chrome, zero
-        # live state), so it is the correct first thing to lose.
+            left.append((place, TEACH_TONE))
+            used += lead + len(place)
 
     if not left:
         return [(right, None)]
