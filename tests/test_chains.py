@@ -489,3 +489,32 @@ def test_default_max_search_steps_is_configurable_not_magic():
     chains, note = find_profit_chains_with_note(_ring(50), max_search_steps=1_000_000)
     assert note is None
     assert len(chains) == 1
+
+
+def test_in_degree_zero_start_does_not_starve_budget_for_real_pairs():
+    """Live academy regression: SSS (all-selling) ports have out-degree but
+    in-degree 0. Insertion order put them first as DFS starts; the open tree
+    exhausted DEFAULT_MAX_SEARCH_STEPS with 0 chains while mutual pairs
+    existed elsewhere — UI fell back to a 2-port class pair.
+
+    A cycle that starts at S must return to S, so in-degree-0 starts are
+    skipped. This graph reproduces the starvation shape under a modest
+    budget: without the skip, `dead` burns the budget before the pair is
+    ever used as a start.
+    """
+    dead = 9000
+    hops: list[TradeHop] = []
+    leaves = list(range(100, 112))
+    for leaf in leaves:
+        hops.append(TradeHop(dead, leaf, "Equipment", 10, 1))
+    for a in leaves:
+        for b in leaves:
+            if a != b:
+                hops.append(TradeHop(a, b, "Organics", 1, 1))
+    hops.append(TradeHop(1, 2, "Fuel Ore", 40, 1))
+    hops.append(TradeHop(2, 1, "Organics", 40, 1))
+
+    found, note = find_profit_chains_with_note(hops, max_search_steps=20_000)
+    assert any(
+        len(c.hops) == 2 and set(c.sectors[:2]) == {1, 2} for c in found
+    ), ([(len(c.hops), c.sectors) for c in found[:5]], note)

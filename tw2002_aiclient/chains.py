@@ -151,8 +151,10 @@ def _search_cycles(
     guards against is breadth (branching), not depth."""
     usable = [h for h in hops if h.margin > 0 and h.turns > 0]
     adj: dict[int, list[TradeHop]] = defaultdict(list)
+    in_degree: dict[int, int] = defaultdict(int)
     for h in usable:
         adj[h.frm].append(h)
+        in_degree[h.to] += 1
 
     found: dict[tuple[int, ...], ProfitChain] = {}
 
@@ -186,7 +188,16 @@ def _search_cycles(
             return ()
         return adj.get(node, ())
 
-    starts = list(adj.keys())
+    # Skip in-degree-0 starts: a cycle that begins at S must hop back to S,
+    # so a node nothing trades into can never close (live academy: SSS
+    # all-selling ports with out>0/in=0 burned the entire DFS budget as the
+    # first starts while mutual pairs existed elsewhere — bubbles fell back
+    # to a 2-port class pair). Prefer low out-degree next so tight pairs
+    # surface before wide open trees.
+    starts = sorted(
+        (s for s in adj if in_degree[s] > 0),
+        key=lambda s: (len(adj[s]), -in_degree[s], s),
+    )
     steps = 0
     truncated = False
     completed_starts = 0
