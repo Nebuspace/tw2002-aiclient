@@ -760,3 +760,32 @@ def test_bubble_subject_pair_fallback_unchanged_with_current_sector():
     subject, caption = cs.bubble_subject(current_sector=10)
     assert subject == pair_as_chain_like(pair)
     assert caption == "class pair"
+
+
+def test_goals_hops_match_bubble_local_prefer():
+    """WO-CHAIN-GOALS-MATCH-BUBBLE Accept #1."""
+    remote = _chain([1, 2, 3, 4, 5, 6, 7, 8, 9, 1])  # 9 hops
+    local = _chain([50, 51, 52, 50])  # 3 hops
+    cs = ChainScalars()
+    cs.update(_result(chains_=[remote, local]))
+    assert cs.best_chain is remote
+    subject, _caption = cs.bubble_subject(current_sector=51)
+    assert subject is local
+    merged = cs.merge(
+        {"hud": {"sector": {"value": 51, "age_s": 0.0}}},
+    )
+    assert merged["chain_hops"] == 3
+    assert merged["chain_unit"] == "hops"
+    # Explicit kwarg matches HUD extraction.
+    assert cs.merge({}, current_sector=51)["chain_hops"] == 3
+
+
+def test_goals_hops_global_when_sector_absent_from_chains():
+    """WO-CHAIN-GOALS-MATCH-BUBBLE Accept #2."""
+    remote = _chain([1, 2, 3, 4, 5, 6, 7, 8, 9, 1])
+    local = _chain([50, 51, 52, 50])
+    cs = ChainScalars()
+    cs.update(_result(chains_=[remote, local]))
+    assert cs.merge({})["chain_hops"] == 9
+    assert cs.merge({"hud": {"sector": {"value": 999}}})["chain_hops"] == 9
+    assert cs.bubble_subject(current_sector=999)[0] is remote
