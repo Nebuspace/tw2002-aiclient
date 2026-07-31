@@ -682,3 +682,46 @@ def test_bubble_subject_empty_when_both_absent():
     cs.update(_result(chains_=(), reason="no_closed_cycle"))
     cs.update_pairs(_PairResult(pairs=(), reason="no_compatible_pairs"))
     assert cs.bubble_subject() == (None, None)
+
+
+def test_bubble_subject_truncated_empty_pair_caption_is_search_incomplete():
+    """WO-CHAIN-BUBBLE-TRUNCATION-CAPTION Accept #1."""
+    from tw2002_aiclient.chain_status import pair_as_chain_like
+
+    cs = ChainScalars()
+    cs.update(
+        _result(
+            chains_=(),
+            reason=chain_search.REASON_NO_CLOSED_CYCLE,
+            search_note="budget",
+        )
+    )
+    pair = _Pair(10, 20)
+    cs.update_pairs(_PairResult(pairs=[pair]))
+    subject, caption = cs.bubble_subject()
+    assert subject == pair_as_chain_like(pair)
+    assert caption == "class pair · search incomplete"
+
+
+def test_bubble_subject_completed_empty_keeps_bare_class_pair_caption():
+    """WO-CHAIN-BUBBLE-TRUNCATION-CAPTION Accept #2."""
+    cs = ChainScalars()
+    cs.update(_result(chains_=(), reason="no_closed_cycle"))
+    cs.update_pairs(_PairResult(pairs=[_Pair(10, 20)]))
+    _subject, caption = cs.bubble_subject()
+    assert caption == "class pair"
+
+
+def test_bubble_subject_priced_chain_clears_incomplete_caption():
+    """WO-CHAIN-BUBBLE-TRUNCATION-CAPTION Accept #3."""
+    cs = ChainScalars()
+    cs.update(
+        _result(chains_=(), reason="no_closed_cycle", search_note="budget")
+    )
+    cs.update_pairs(_PairResult(pairs=[_Pair(10, 20)]))
+    assert cs.bubble_subject()[1] == "class pair · search incomplete"
+    chain = _chain([10, 11, 12, 10])
+    cs.update(_result(chains_=[chain]))
+    subject, caption = cs.bubble_subject()
+    assert subject is chain
+    assert caption is None

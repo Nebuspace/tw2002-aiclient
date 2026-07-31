@@ -138,6 +138,12 @@ class ChainScalars:
     Retention mirrors ``best_chain``: failed / missing / no-world-model
     pair updates never wipe the last good pair; a completed empty pair
     result clears it. Never on status JSON; never carries a margin field.
+
+    WO-CHAIN-BUBBLE-TRUNCATION-CAPTION: remember when the latest priced
+    ``update`` was truncated-empty (absence not established). Pair-fallback
+    caption then becomes ``"class pair · search incomplete"`` instead of
+    bare ``"class pair"``. Cleared on any completed priced update. Never on
+    status JSON.
     """
 
     def __init__(self) -> None:
@@ -146,6 +152,7 @@ class ChainScalars:
         self._seen: bool = False
         self._best_chain: object | None = None
         self._best_pair: object | None = None
+        self._priced_search_incomplete: bool = False
         self._port_classes: dict[int, str] = {}
         self._known_ports: set[int] = set()
 
@@ -169,13 +176,16 @@ class ChainScalars:
           branches on, expressed as the attribute read it actually needs.
         * empty and ``truncated`` -> not seen. `chain_search`'s own words: "a
           truncated search that found nothing has not established that
-          nothing is there."
+          nothing is there." Sets ``_priced_search_incomplete`` so pair-
+          fallback captions stay honest.
         * empty because the world was never explored
           (``REASON_NO_WORLD_MODEL``) -> not seen. There was no map to search.
         * empty for any other reason -> **seen, zero.** Sectors were known and
-          searched; "none yet" is the true statement. Clears ``best_chain``.
+          searched; "none yet" is the true statement. Clears ``best_chain``
+          and clears ``_priced_search_incomplete``.
         * non-empty -> seen, ``len(chains[0].hops)``, retain ``chains[0]``,
-          refresh port class / known-port caches from the world model.
+          refresh port class / known-port caches from the world model,
+          clears ``_priced_search_incomplete``.
 
         ``state_dir`` is an injectable world-model root for tests; production
         callers omit it (default store).
@@ -186,6 +196,7 @@ class ChainScalars:
                 return
             if not chains:
                 if getattr(discovered, "truncated", False):
+                    self._priced_search_incomplete = True
                     return
                 if getattr(discovered, "reason", None) == _REASON_NO_WORLD_MODEL:
                     return
@@ -193,6 +204,7 @@ class ChainScalars:
                 self._unit = "hops"
                 self._seen = True
                 self._best_chain = None
+                self._priced_search_incomplete = False
                 self._port_classes = {}
                 self._known_ports = set()
                 return
@@ -205,6 +217,7 @@ class ChainScalars:
         self._unit = unit if isinstance(unit, str) and unit else "hops"
         self._seen = True
         self._best_chain = chains[0]
+        self._priced_search_incomplete = False
         try:
             classes, known = _port_snapshot_from_world(
                 getattr(discovered, "world_id", None), state_dir=state_dir
@@ -279,14 +292,18 @@ class ChainScalars:
     def bubble_subject(self) -> tuple[object | None, str | None]:
         """Prefer priced ``best_chain``; else adapt ``best_pair`` as a 2-hop cycle.
 
-        Returns ``(chain_like, caption)``. Caption is ``"class pair"`` only for
-        the unpriced fallback — never claim credits/turn for class pairs.
+        Returns ``(chain_like, caption)``. Caption is ``"class pair"`` for a
+        completed priced miss, or ``"class pair · search incomplete"`` when
+        the priced half truncated empty (WO-CHAIN-BUBBLE-TRUNCATION-CAPTION).
+        Never claim credits/turn for class pairs.
         """
         if self._best_chain is not None:
             return self._best_chain, None
         if self._best_pair is not None:
             adapted = pair_as_chain_like(self._best_pair)
             if adapted is not None:
+                if self._priced_search_incomplete:
+                    return adapted, "class pair · search incomplete"
                 return adapted, "class pair"
         return None, None
 
