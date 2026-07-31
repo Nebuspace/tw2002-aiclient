@@ -121,11 +121,18 @@ class ChainScalars:
     ``status``. A producer that could throw would convert both guarantees into
     "usually".
 
-    WO-PLAY-CHAIN-BUBBLE-VIZ: ``best_chain`` retains ``chains[0]`` for the
-    always-on bubble strip. Failed / truncated / no-world-model updates never
-    wipe the last good sequence; a completed empty search clears it to quiet
-    empty. The chain object is **never** merged onto daemon ``status`` JSON —
-    draw reads ``best_chain`` directly.
+    WO-PLAY-CHAIN-BUBBLE-VIZ: ``best_chain`` retains ``chains[0]`` (global
+    longest) for GOALS hop scalars. Failed / truncated / no-world-model
+    updates never wipe the last good sequence; a completed empty search
+    clears it to quiet empty. The chain object is **never** merged onto
+    daemon ``status`` JSON.
+
+    WO-CHAIN-BUBBLE-PREFER-CURRENT: the always-on bubble strip reads via
+    ``bubble_subject(current_sector=…)``, which prefers the first ranked
+    priced cycle that includes the player's sector when one exists, else
+    ``chains[0]``. Full ranked tuple is retained so sector moves re-pick
+    without waiting for the next discovery tick. GOALS may still show
+    global hop count from ``best_chain`` / ``chains[0]``.
 
     WO-CHAIN-BUBBLE-PORT-CLASSES: successful non-empty updates also refresh
     ``port_classes`` / ``known_ports`` from the world-model port records for
@@ -151,6 +158,7 @@ class ChainScalars:
         self._unit: str | None = None
         self._seen: bool = False
         self._best_chain: object | None = None
+        self._ranked_chains: tuple = ()
         self._best_pair: object | None = None
         self._priced_search_incomplete: bool = False
         self._port_classes: dict[int, str] = {}
@@ -204,6 +212,7 @@ class ChainScalars:
                 self._unit = "hops"
                 self._seen = True
                 self._best_chain = None
+                self._ranked_chains = ()
                 self._priced_search_incomplete = False
                 self._port_classes = {}
                 self._known_ports = set()
@@ -217,6 +226,10 @@ class ChainScalars:
         self._unit = unit if isinstance(unit, str) and unit else "hops"
         self._seen = True
         self._best_chain = chains[0]
+        try:
+            self._ranked_chains = tuple(chains)
+        except TypeError:
+            self._ranked_chains = (chains[0],)
         self._priced_search_incomplete = False
         try:
             classes, known = _port_snapshot_from_world(
@@ -281,7 +294,7 @@ class ChainScalars:
 
     @property
     def best_chain(self) -> object | None:
-        """Ranked-first discovered chain for bubble viz; never on status JSON."""
+        """Global longest ranked chain (GOALS hops); never on status JSON."""
         return self._best_chain
 
     @property
@@ -289,16 +302,52 @@ class ChainScalars:
         """Ranked-first class pair for bubble fallback; never on status JSON."""
         return self._best_pair
 
-    def bubble_subject(self) -> tuple[object | None, str | None]:
-        """Prefer priced ``best_chain``; else adapt ``best_pair`` as a 2-hop cycle.
+    def _chain_includes_sector(self, chain: object, sector: int) -> bool:
+        try:
+            sectors = getattr(chain, "sectors", None)
+            if sectors is None and isinstance(chain, dict):
+                sectors = chain.get("sectors")
+            if sectors is None:
+                return False
+            return sector in sectors
+        except Exception:  # noqa: BLE001
+            return False
+
+    def _bubble_priced_chain(self, current_sector: object = None) -> object | None:
+        """Priced subject for the strip: local cycle if any, else global first."""
+        ranked = self._ranked_chains
+        if not ranked:
+            return self._best_chain
+        cur: int | None
+        try:
+            cur = int(current_sector) if current_sector is not None else None  # type: ignore[arg-type]
+        except (TypeError, ValueError):
+            cur = None
+        if cur is not None:
+            for chain in ranked:
+                if self._chain_includes_sector(chain, cur):
+                    return chain
+        return ranked[0]
+
+    def bubble_subject(
+        self, current_sector: object = None
+    ) -> tuple[object | None, str | None]:
+        """Prefer a priced cycle through ``current_sector`` when one exists.
+
+        Else the global ranked-first ``chains[0]``. Else adapt ``best_pair``
+        as a 2-hop cycle.
 
         Returns ``(chain_like, caption)``. Caption is ``"class pair"`` for a
         completed priced miss, or ``"class pair · search incomplete"`` when
         the priced half truncated empty (WO-CHAIN-BUBBLE-TRUNCATION-CAPTION).
         Never claim credits/turn for class pairs.
+
+        GOALS hop scalars still come from ``best_chain`` / ``chains[0]``
+        (global longest) — only this strip selection is local-preferring.
         """
-        if self._best_chain is not None:
-            return self._best_chain, None
+        priced = self._bubble_priced_chain(current_sector)
+        if priced is not None:
+            return priced, None
         if self._best_pair is not None:
             adapted = pair_as_chain_like(self._best_pair)
             if adapted is not None:

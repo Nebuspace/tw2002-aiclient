@@ -725,3 +725,38 @@ def test_bubble_subject_priced_chain_clears_incomplete_caption():
     subject, caption = cs.bubble_subject()
     assert subject is chain
     assert caption is None
+
+
+def test_bubble_subject_prefers_chain_including_current_sector():
+    """WO-CHAIN-BUBBLE-PREFER-CURRENT Accept #1."""
+    remote = _chain([1, 2, 3, 4, 5, 6, 7, 8, 9, 1])  # longer → ranked first
+    local = _chain([50, 51, 52, 50])
+    cs = ChainScalars()
+    cs.update(_result(chains_=[remote, local]))
+    assert cs.best_chain is remote  # GOALS still global longest
+    subject, caption = cs.bubble_subject(current_sector=51)
+    assert subject is local
+    assert caption is None
+
+
+def test_bubble_subject_falls_back_to_global_when_sector_absent():
+    """WO-CHAIN-BUBBLE-PREFER-CURRENT Accept #2."""
+    remote = _chain([1, 2, 3, 4, 5, 6, 7, 8, 9, 1])
+    local = _chain([50, 51, 52, 50])
+    cs = ChainScalars()
+    cs.update(_result(chains_=[remote, local]))
+    assert cs.bubble_subject()[0] is remote
+    assert cs.bubble_subject(current_sector=999)[0] is remote
+
+
+def test_bubble_subject_pair_fallback_unchanged_with_current_sector():
+    """WO-CHAIN-BUBBLE-PREFER-CURRENT Accept #3 — class-pair path intact."""
+    from tw2002_aiclient.chain_status import pair_as_chain_like
+
+    cs = ChainScalars()
+    cs.update(_result(chains_=(), reason="no_closed_cycle"))
+    pair = _Pair(10, 20)
+    cs.update_pairs(_PairResult(pairs=[pair]))
+    subject, caption = cs.bubble_subject(current_sector=10)
+    assert subject == pair_as_chain_like(pair)
+    assert caption == "class pair"
