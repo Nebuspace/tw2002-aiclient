@@ -15,6 +15,7 @@ from tw2002_aiclient.cockpit import analyze as _analyze
 from tw2002_aiclient.cockpit import assign_trigger as _assign_trigger
 from tw2002_aiclient.cockpit import autoloop_controls as _autoloop_controls
 from tw2002_aiclient import explore as _explore
+from tw2002_aiclient import trade_chain_plan as _trade_chain_plan
 from tw2002_aiclient import world_identity as _world_identity
 from tw2002_aiclient.cockpit import chains as _chains
 from tw2002_aiclient.cockpit import cycle_progress as _cycle_progress
@@ -40,6 +41,10 @@ from tw2002_aiclient.session import cli as session_cli
 from tw2002_aiclient.session import credentials, env, player_bank
 from tw2002_aiclient.session.attach_client import AttachInputConn
 from tw2002_aiclient.session.autoloop import CYCLES_HARD_CEILING
+from tw2002_aiclient.session.trade_chain import (
+    DEFAULT_CASH_FLOOR as _TRADE_CASH_FLOOR,
+    DEFAULT_TURN_RESERVE as _TRADE_TURN_RESERVE,
+)
 from tw2002_aiclient.watchfeed import WatchFeed
 
 # Presence poll while the launcher sits idle (ms). Timeout getch wakes redraw.
@@ -685,6 +690,48 @@ def _poll_autoloop_status(play: PlayShellScreen, *, run_dir) -> bool:
     return _apply_autoloop_cycle_band(play, result.raw)
 
 
+def _apply_trade_chain_band(play: PlayShellScreen, raw: object) -> bool:
+    if not isinstance(raw, dict):
+        play.explore_band = None
+        return False
+    run = raw.get("run")
+    if not isinstance(run, dict):
+        play.explore_band = None
+        return bool(raw.get("running"))
+    route = run.get("route") if isinstance(run.get("route"), str) else "?"
+    if raw.get("running"):
+        done = run.get("hops_completed")
+        total = run.get("hops_total")
+        progress = (
+            f"{done}/{total}" if isinstance(done, int) and isinstance(total, int)
+            else f"?/{total}" if isinstance(total, int)
+            else "?"
+        )
+        play.explore_band = f"trade {route} · hop {progress}"
+        return True
+    play.explore_band = None
+    outcome = run.get("outcome")
+    reason = run.get("reason") or "unknown"
+    if outcome == "completed":
+        play.status_line = f"trade completed — {route}"
+    elif outcome is not None:
+        play.status_line = f"trade stopped — {reason}"
+    return False
+
+
+def _poll_trade_chain_status(play: PlayShellScreen, *, run_dir) -> bool:
+    try:
+        result = adapters.trade_chain_status(run_dir=run_dir)
+    except Exception:  # noqa: BLE001
+        play.explore_band = None
+        return False
+    if not result.ok:
+        play.status_line = f"trade status unavailable — {result.reason or 'unknown'}"
+        play.explore_band = None
+        return False
+    return _apply_trade_chain_band(play, result.raw)
+
+
 def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
     """Bind profile to a fresh play-shell placeholder; Esc ends the binding."""
     run_dir = env.resolve_run_dir()
@@ -816,6 +863,7 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
     # invariant ever breaks, the failure is a refusal to arm rather than
     # arming yesterday's macro under someone else's prompt.
     pending_confirm_loop: dict | None = None
+    pending_confirm_trade: _trade_chain_plan.TradeChainPlan | None = None
     # WO-PLAY-REFLEX-ARM: the exact identity (`rule_id`, `macro`, `classification`)
     # shown at preview. Held alongside `pending_confirm_action` so `y` launches
     # the claim the human saw — never a re-read of the library between prompt
@@ -830,6 +878,7 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
     # taught run is live so the hint band can show cycle chrome. Cleared when
     # the run stands down. Explore owns the same band when its poll is active.
     autoloop_poll_active = False
+    trade_poll_active = False
     # WO-CHAINS-LIVE-REFRESH: the always-on GOALS/HUD readouts used to update
     # only when the `L` modal was opened, so a whole explore run showed empty
     # chain and sector rows. Per session, so a world that outgrew the chain
@@ -843,6 +892,8 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
             if key == -1:
                 if explore_poll_active:
                     explore_poll_active = _poll_explore_status(play, run_dir=run_dir)
+                elif trade_poll_active:
+                    trade_poll_active = _poll_trade_chain_status(play, run_dir=run_dir)
                 elif autoloop_poll_active:
                     autoloop_poll_active = _poll_autoloop_status(play, run_dir=run_dir)
                 # The idle tick, NOT the draw path: `play.draw()` runs every
@@ -1302,6 +1353,29 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                 # The adapter call lives in the `arm_confirm` branch below,
                 # behind `y`. Canon: "A bare Enter must never fire a launch."
                 selected = play.chains_session.selected()
+                discovered = play.chains_session.selected_discovered()
+                if discovered is not None:
+                    world_id = _world_identity.world_id_from_profile(profile)
+                    plan = _trade_chain_plan.plan_from_chain(
+                        world_id, discovered
+                    )
+                    prompt = _trade_chain_plan.compose_confirm_action(
+                        plan,
+                        cash_floor=_TRADE_CASH_FLOOR,
+                        turn_reserve=_TRADE_TURN_RESERVE,
+                    )
+                    if plan is None or prompt is None:
+                        play.status_line = (
+                            "did not approve trade — incomplete chain scaffold"
+                        )
+                        continue
+                    pending_confirm_trade = plan
+                    pending_confirm_loop = None
+                    pending_confirm_action = "trade"
+                    pending_confirm_reflex = None
+                    play.chains_session.close()
+                    play.begin_arm_confirm(prompt)
+                    continue
                 if selected is None:
                     # Nothing to arm. Say so and leave the popup up rather
                     # than raising a confirm gate for a run with no macro --
@@ -1313,6 +1387,41 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                 pending_confirm_reflex = None
                 play.chains_session.close()
                 play.begin_arm_confirm(_chains.compose_arm_action(selected))
+                continue
+            if action == "arm_confirm" and pending_confirm_action == "trade":
+                pending_confirm_action = None
+                plan = pending_confirm_trade
+                pending_confirm_trade = None
+                pending_confirm_loop = None
+                pending_confirm_reflex = None
+                if not isinstance(plan, _trade_chain_plan.TradeChainPlan):
+                    play.status_line = (
+                        "did not arm trade — no exact chain held for this confirm"
+                    )
+                    continue
+                play.status_line = f"starting trade {plan.route}…"
+                play.draw()
+                try:
+                    started = adapters.trade_chain_start(
+                        plan.world_id,
+                        plan.fingerprint,
+                        cash_floor=_TRADE_CASH_FLOOR,
+                        turn_reserve=_TRADE_TURN_RESERVE,
+                        run_dir=run_dir,
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    play.status_line = f"trade arm failed — {type(exc).__name__}"
+                else:
+                    if getattr(started, "ok", False):
+                        play.status_line = (
+                            f"trade armed — {plan.route}, one pass running"
+                        )
+                        trade_poll_active = _apply_trade_chain_band(
+                            play, getattr(started, "raw", None)
+                        )
+                    else:
+                        reason = getattr(started, "reason", None) or "unknown"
+                        play.status_line = f"did not arm trade — {reason}"
                 continue
             if action == "arm_confirm" and pending_confirm_action == "loop":
                 # WO-PLAY-AUTOLOOP-START: the human pressed `y` at the taught-
@@ -1666,10 +1775,16 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                 # `autoloop_stop` never raises and is idempotent daemon-side,
                 # so this needs no try/except of its own and a double-press
                 # is harmless.
-                result = adapters.autoloop_stop()
-                if result.ok:
-                    play.status_line = "PANIC — taught run halted"
+                results = (
+                    adapters.autoloop_stop(run_dir=run_dir),
+                    adapters.explore_stop(run_dir=run_dir),
+                    adapters.trade_chain_stop(run_dir=run_dir),
+                )
+                if all(result.ok for result in results):
+                    play.status_line = "PANIC — all automation halt requested"
                     autoloop_poll_active = False
+                    explore_poll_active = False
+                    trade_poll_active = False
                     play.explore_band = None
                 else:
                     # Reported, not smoothed. "I could not reach a runner" and
@@ -1677,7 +1792,12 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                     # who just hit panic is entitled to know which one
                     # happened — a reassuring message here would be the
                     # worst possible lie on this particular key.
-                    play.status_line = f"PANIC failed — {result.reason or 'unknown'}"
+                    failures = [
+                        result.reason or "unknown"
+                        for result in results
+                        if not result.ok
+                    ]
+                    play.status_line = f"PANIC partial — {', '.join(failures)}"
                 continue
             if action == "attach":
                 if attach_conn is None:

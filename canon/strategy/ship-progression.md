@@ -205,12 +205,10 @@ this concept prescribes. The prescription stands; these are recorded, not silent
   keep-driving appetite is an AI-first artifact the reborn vision retires: the target is
   stop-on-unrecognized, not fill-every-tick.
 
-- **`trade_driver.run_chain()` is an autonomous end-to-end loop runner.** It drives a whole discovered
-  chain — navigate → dock → buy → navigate → dock → sell → repeat — synchronously in one call, which is
-  the autonomous-execution shape (a taught loop should be human-armed and re-validate its screen match
-  each tick, stopping on the first unrecognized frame). It is cited here because a ship-upgrade
-  recommendation feeds the same loop economics this driver consumes; the divergence is the *autonomy*
-  of the runner, not the chain math.
+- **Guarded discovered-chain framing resolved by ADR-003.** `TradeChainRunner`
+  now requires an exact human-confirmed fingerprint, daemon re-resolution, and
+  one-pass bound while retaining the driver's per-send guards. Ship progression
+  may inform the economics but cannot approve, arm, launch, or rotate the run.
 
 - **The §22.4 "full-autopilot capstone" is re-scoped by the reborn vision.** The v2 design history
   frames the end-state as *start the client → it goes autopilot → autonomously double starting credits*

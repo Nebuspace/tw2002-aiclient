@@ -219,14 +219,13 @@ reborn target is that strategy *ranks and teaches*, it does not live-drive):
   order which taught behaviors/suggestions are offered, which is compatible with coaching; its
   action-picker wiring is the divergence.
 
-- **`trade_driver.run_chain()` is an autonomous chain runner.** `trade_driver.py` drives a whole discovered
-  `ProfitChain` end-to-end (navigate→dock→buy→navigate→dock→sell→repeat) in one synchronous call, routed
-  from `autopilot._execute_chain()`. Under the reborn model a taught trade loop is a human-armed repeating
-  macro that re-validates the screen every cycle and STOPs on the first unrecognized frame, and its
-  depletion is a STOP-guard, never an autonomous rotation. A synchronous whole-loop runner is the shape that
-  must be re-scoped to that per-cycle-guarded, human-armed, stop-on-depletion contract. The coach only
-  *teaches* the loop (the `pair_trade_loop` / `longest_profit_chain` cards); the execution contract lives in
-  [trade-loops](/strategy/trade-loops.md) and [app-autopilot-model](/architecture/app-autopilot-model.md).
+- **Guarded chain execution is separate from coaching (ADR-003).**
+  `TradeChainRunner` may execute one exact human-approved discovered
+  fingerprint with per-send guards and depletion STOP; the coach still only
+  teaches and ranks the option. It cannot approve, arm, select, or rotate a
+  chain. The execution contract lives in
+  [trade-loops](/strategy/trade-loops.md) and
+  [app-autopilot-model](/architecture/app-autopilot-model.md).
 
 - **The §22 / TW-23 capstone is re-scoped, not an AI-driver.** `autopilot.py` still frames itself as the
   "§22/§23 autonomous goal-orchestrator" whose EXECUTE stage sends navigation keystrokes. The reborn
