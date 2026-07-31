@@ -6,7 +6,8 @@
 **Priority:** HIGH — takes a seat fully offline; recovery requires the tool it disables
 **Size:** S (config + docs; no product code)
 **Banked by:** `impl-claudecode-aiclient`, 2026-07-28, per hub ruling @ 07:30:15Z
-**Status:** OPEN — banked, not started
+**Status:** READY · EXECUTE · HIGH · Cursor (`impl-aiclient-cursor`)
+**Seat:** `impl-aiclient-cursor`
 
 ---
 
