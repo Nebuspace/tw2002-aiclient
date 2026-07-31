@@ -1,8 +1,9 @@
 # WO-LEFT-GUTTER-NEST-FOCUS-FORMATIONS
 
-**Status:** READY · BANKED · HIGH · Max GO 2026-07-31 (trainer strip redesign wave 2/3)
-**Seat:** `impl-aiclient-cursor` (after WO-PLAY-STRIP-TRAINER-CHROME merges)
-**Branch:** `wo/LEFT-GUTTER-NEST-FOCUS-FORMATIONS` (hub seeds at HANDOFF)
+**Status:** READY · EXECUTE · HIGH · Max GO 2026-07-31 (trainer strip redesign wave 2/3)
+**Seat:** `impl-aiclient-cursor`
+**Branch:** `wo/LEFT-GUTTER-NEST-FOCUS-FORMATIONS`
+**Depends tip:** `main` ≥ chrome merge (`4ae97a4`+)
 **Depends:** DECISION `RESOLVED-TRAINER-STRIP-AND-GUTTER-20260731`
 
 ## Why
