@@ -164,7 +164,7 @@ class _Stdscr:
 
     def __init__(self, keys):
         self._keys = list(keys) + [27, 27]
-        self.rows, self.cols = 40, 160
+        self.rows, self.cols = 40, 180
 
     def getmaxyx(self): return (self.rows, self.cols)
     def getch(self): return self._keys.pop(0) if self._keys else 27
@@ -268,6 +268,7 @@ def _drive(monkeypatch, keys, *, store, recompute, sector_count=SECTOR_COUNT):
         def __init__(self, *a, **k):
             super().__init__(*a, **k)
             self.gate_raises = []
+            self.spectating = True  # no App-armed ensure explore kick
             seen["screen"] = self
 
         def begin_arm_confirm(self, action=None, *, cycles=None):
@@ -462,7 +463,7 @@ def test_unavailable_discovery_never_renders_as_established_absence(bogus):
 # ---------------------------------------- pin 9: the section reaches the screen
 
 
-FULL_ROWS, FULL_COLS = 40, 160
+FULL_ROWS, FULL_COLS = 40, 180
 
 
 class _Win:

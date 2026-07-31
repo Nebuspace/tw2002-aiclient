@@ -121,7 +121,7 @@ def _make_play():
     from tw2002_aiclient.screens import PlayShellScreen, ProfileRow
 
     class _Stdscr:
-        def getmaxyx(self): return (40, 160)
+        def getmaxyx(self): return (40, 180)
         def erase(self): pass
         def refresh(self): pass
         def addstr(self, *a, **k): pass
@@ -263,7 +263,7 @@ def test_a_still_not_bound() -> None:
     import curses
 
     class _Stdscr:
-        def getmaxyx(self): return (40, 160)
+        def getmaxyx(self): return (40, 180)
         def erase(self): pass
         def refresh(self): pass
         def addstr(self, *a, **k): pass

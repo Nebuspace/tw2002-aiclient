@@ -30,13 +30,13 @@ def test_band_is_canon_standing_spelling() -> None:
     `RESOLVED-TRAINER-STRIP-AND-GUTTER-20260731` point 2 replaces the
     developer-repertoire calm band (`A)nalyze R)ecord T)rigger V)reflex
     U)rules H)old? O)ffer? L)chains P panic`) with the trainer's own
-    E/P/L/T/C/S vocabulary. Kept as an inline literal, NOT derived from
+    E/P/C/S + cluster-sep + T/L vocabulary. Kept as an inline literal, NOT derived from
     `TEACH_TOKENS`: an expectation built from the product's own constant
     would follow any change to it and pin nothing.
     """
     assert teachband.compose_teach_band() == (
-        "E)xplore  P)ort Trade\u00b7ON  L)oops  T)rade Loop Chain  "
-        "C)argo Hold Upgrade\u00b7ON  S)hip Upgrade\u00b7ON"
+        "  E)xplore  P)ort Trade\u00b7ON  C)argo Hold Upgrade\u00b7ON  "
+        "S)hip Upgrade\u00b7ON  \u2502  T)rade Loop Chain  L)ist Loops  "
     )
 
 
@@ -81,7 +81,15 @@ def test_band_imports_reflex_token_spelling() -> None:
 
 
 def test_autonomy_help_one_liners_confirm_not_auto() -> None:
-    """WO-PLAY-HELP-AUTONOMY-KEYS Accept: O/H carry confirm-not-auto wording."""
+    """WO-PLAY-HELP-AUTONOMY-KEYS Accept: O/H carry confirm wording.
+
+    Text updated by WO-PLAY-STRIP-POLICY-AUTO: the blanket "(not auto)"
+    claim is gone -- App-armed + the matching toggle now reaches the same
+    outcome with no key press at all (DECISION
+    `RESOLVED-TRAINER-STRIP-AND-GUTTER-20260731` point 6). Pressing H/O
+    themselves is still a manual confirm, unchanged, so both lines still
+    say "confirm".
+    """
     from tw2002_aiclient.cockpit import autonomy_keys
 
     lines = autonomy_keys.compose_autonomy_help_lines()
@@ -92,9 +100,9 @@ def test_autonomy_help_one_liners_confirm_not_auto() -> None:
         autonomy_keys.CHAINS_HELP,
     )
     assert "confirm" in autonomy_keys.HOLD_HELP
-    assert "not auto" in autonomy_keys.HOLD_HELP
+    assert "APP-ARMED" in autonomy_keys.HOLD_HELP
     assert "confirm" in autonomy_keys.OFFER_HELP
-    assert "not auto" in autonomy_keys.OFFER_HELP
+    assert "APP-ARMED" in autonomy_keys.OFFER_HELP
     assert "O)ffer?" in autonomy_keys.OFFER_HELP
     assert "H)old?" in autonomy_keys.HOLD_HELP
     assert "E)xplore" in autonomy_keys.EXPLORE_HELP
@@ -125,8 +133,8 @@ def test_both_registers_are_grounded_in_canon_verbatim() -> None:
     assert "A)nalyze  R)ecord  T)rigger" in text     # developer band (superseded for this surface, still cited)
     assert "A)nalyze  R)ecord  T)assign" in text     # STOP banner, untouched
     assert (
-        "E)xplore  P)ort Trade\u00b7ON  L)oops  T)rade Loop Chain  "
-        "C)argo Hold Upgrade\u00b7ON  S)hip Upgrade\u00b7ON"
+        "E)xplore  P)ort Trade\u00b7ON  C)argo Hold Upgrade\u00b7ON  "
+        "S)hip Upgrade\u00b7ON  \u2502  T)rade Loop Chain  L)ist Loops"
     ) in text  # trainer calm band, the amendment's own citation
 
 
@@ -159,8 +167,8 @@ def test_tokens_have_no_unicode_twin_to_swap() -> None:
 @pytest.mark.parametrize("hostile", [None, 0, object(), b"x", [], 3.5])
 def test_compose_never_raises_on_hostile_unicode_ok(hostile: object) -> None:
     assert teachband.compose_teach_band(unicode_ok=hostile) == (
-        "E)xplore  P)ort Trade\u00b7ON  L)oops  T)rade Loop Chain  "
-        "C)argo Hold Upgrade\u00b7ON  S)hip Upgrade\u00b7ON"
+        "  E)xplore  P)ort Trade\u00b7ON  C)argo Hold Upgrade\u00b7ON  "
+        "S)hip Upgrade\u00b7ON  \u2502  T)rade Loop Chain  L)ist Loops  "
     )
 
 
@@ -228,11 +236,14 @@ def test_liveness_survives_every_width_the_band_renders_at() -> None:
 def test_band_drops_whole_never_truncated() -> None:
     """All-or-nothing: no proper prefix of the band may ever appear."""
     band = teachband.compose_teach_band()
-    # From 2 chars up. A 1-char prefix is "A", which collides with any
-    # unrelated chip that happens to contain the letter (the truncated
-    # MANUAL chip renders "MA" at width 8) -- that is a coincidence, not a
-    # truncated band. "A)" onward cannot occur except as this band.
-    prefixes = [band[:n] for n in range(2, len(band))]
+    # From 2 chars up, skipping whitespace-only prefixes: the calm band
+    # now carries a two-space left/right pad, so ``band[:2] == "  "``
+    # collides with ordinary chip gaps (e.g. ``MANUAL  RX``) and is not a
+    # truncated-band signal. Once a non-space character is in the prefix,
+    # it cannot occur except as this band.
+    prefixes = [
+        band[:n] for n in range(2, len(band)) if band[:n].strip()
+    ]
     for width in range(1, 200):
         line = _line(width, teach_band=band)
         if band in line:

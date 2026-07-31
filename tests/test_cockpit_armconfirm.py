@@ -27,7 +27,7 @@ from tw2002_aiclient.cockpit.armconfirm import (
 )
 from tw2002_aiclient.cockpit.layout import frame_layout
 
-FULL_ROWS, FULL_COLS = 40, 160
+FULL_ROWS, FULL_COLS = 40, 180
 HANDLE = "Alpha"
 
 CANON = Path(__file__).resolve().parents[1] / "canon" / "surfaces"
@@ -328,10 +328,11 @@ def test_exactly_three_production_call_sites_raise_the_gate() -> None:
             name = getattr(func, "attr", None) or getattr(func, "id", None)
             if isinstance(node, ast.Call) and name == "begin_arm_confirm":
                 callers.append(path.name)
-    assert callers == ["app.py"] * 9, (
-        f"expected exactly nine production callers, all in app.py (explore, "
-        f"relaunch, taught L)chains, discovered L)chains, V)reflex, and "
-        f"H)hold plus O)policy's explore/trade/hold); found {callers}"
+    assert callers == ["app.py"] * 8, (
+        f"expected exactly eight production callers, all in app.py (relaunch, "
+        f"taught L)chains, discovered L)chains, V)reflex, H)hold, and "
+        f"O)policy's explore/trade/hold — E no longer raises confirm); "
+        f"found {callers}"
     )
 
 
@@ -364,8 +365,6 @@ def test_the_one_caller_is_gated_not_raised_unconditionally() -> None:
         if isinstance(node, ast.If) and _calls_begin(node):
             guarded.append(ast.dump(node.test))
     assert guarded, "begin_arm_confirm is not inside any `if` -- raised unconditionally"
-    # And the guard is the standing-offer flag, not merely `result.ok`.
-    assert any("explore_offered" in g or "_EXPLORE_OFFER_KEYS" in g for g in guarded), guarded
 
 
 def test_the_offer_is_gated_on_the_ready_classification() -> None:
@@ -405,7 +404,8 @@ def test_prompt_and_run_share_one_cycle_constant() -> None:
     # The offer's cycle count and the run's min_sectors both trace to the one
     # constant; neither may be a bare integer literal.
     assert "_EXPLORE_MIN_SECTORS" in src
-    assert "min_sectors=_EXPLORE_MIN_SECTORS" in src
+    assert "_EXPLORE_POLICY_MIN_SECTORS" in src
+    assert "min_sectors=_EXPLORE_POLICY_MIN_SECTORS" in src
     assert "cycles=5" not in src and "min_sectors=5" not in src
 
 

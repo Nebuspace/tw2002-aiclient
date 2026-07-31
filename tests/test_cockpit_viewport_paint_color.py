@@ -34,7 +34,7 @@ from tw2002_aiclient.screens import PlayShellScreen, ProfileRow
 
 from .test_screens_shared_pairs import _FakeCurses, _patch_curses
 
-FULL_ROWS, FULL_COLS = 40, 160
+FULL_ROWS, FULL_COLS = 40, 180
 
 
 class _RecordingWindow:

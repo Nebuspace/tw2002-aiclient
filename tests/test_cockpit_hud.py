@@ -10,10 +10,16 @@ import pytest
 from tw2002_aiclient.cockpit.hud import (
     FRESHNESS_STALE_S,
     HUD_FIELDS,
+    HUD_VALUE_INDENT,
     UNKNOWN_VALUE,
     compose_hud_cells,
     format_freshness,
 )
+
+def _iv(text: str) -> str:
+    """Expected indented HUD value-row text."""
+    return f"{HUD_VALUE_INDENT}{text}"
+
 
 CANON_LABELS = ["CREDITS", "SECTOR", "TURNS", "CARGO", "PROFIT"]
 
@@ -94,7 +100,7 @@ def test_status_none_all_ten_lines_unknown():
     lines = compose_hud_cells(None, width=40)
     assert len(lines) == 10
     assert _labels(lines) == CANON_LABELS
-    assert _values(lines) == [UNKNOWN_VALUE] * 5
+    assert _values(lines) == [_iv(UNKNOWN_VALUE)] * 5
     assert _stales(lines) == [False] * 5
     # Label rows are never stale.
     assert all(stale is False for _text, stale in lines[0::2])
@@ -157,36 +163,36 @@ def test_full_fixture_exact_lines():
     lines = compose_hud_cells(_FULL_STATUS, width=40)
     assert lines == [
         ("CREDITS", False),
-        ("987,654 ✦ 3s ago", False),
+        (_iv("987,654 ✦ 3s ago"), False),
         ("SECTOR", False),
-        ("4521 ✦ 19s ago", False),
+        (_iv("4521 ✦ 19s ago"), False),
         ("TURNS", False),
-        ("12,345 ✦ 20s ago", True),
+        (_iv("12,345 ✦ 20s ago"), True),
         ("CARGO", False),
-        ("3 ✦ now", False),
+        (_iv("3 ✦ now"), False),
         ("PROFIT", False),
-        ("-500 ✦ now", False),
+        (_iv("-500 ✦ now"), False),
     ]
 
 
 def test_positive_profit_gets_explicit_plus_sign():
     status = {"hud": {"profit": {"value": 500, "age_s": 1.0}}}
     lines = compose_hud_cells(status, width=40)
-    assert lines[9] == ("+500 ✦ 1s ago", False)
+    assert lines[9] == (_iv("+500 ✦ 1s ago"), False)
 
 
 def test_sector_and_cargo_render_without_thousands_separator():
     status = {"hud": {"sector": {"value": 12345, "age_s": 1.0}, "cargo": {"value": 6789, "age_s": 1.0}}}
     lines = compose_hud_cells(status, width=40)
-    assert lines[3] == ("12345 ✦ 1s ago", False)
-    assert lines[7] == ("6789 ✦ 1s ago", False)
+    assert lines[3] == (_iv("12345 ✦ 1s ago"), False)
+    assert lines[7] == (_iv("6789 ✦ 1s ago"), False)
 
 
 def test_credits_and_turns_render_with_thousands_separator():
     status = {"hud": {"credits": {"value": 1234567, "age_s": 1.0}, "turns": {"value": 20000, "age_s": 1.0}}}
     lines = compose_hud_cells(status, width=40)
-    assert lines[1] == ("1,234,567 ✦ 1s ago", False)
-    assert lines[5] == ("20,000 ✦ 1s ago", False)
+    assert lines[1] == (_iv("1,234,567 ✦ 1s ago"), False)
+    assert lines[5] == (_iv("20,000 ✦ 1s ago"), False)
 
 
 # ---------------------------------------------------------------------------
@@ -228,41 +234,41 @@ def test_missing_field_is_unknown():
     status = {"hud": {"credits": {"value": 1, "age_s": 1.0}}}
     lines = compose_hud_cells(status, width=40)
     # sector/turns/cargo/profit all absent
-    assert lines[3] == (UNKNOWN_VALUE, False)
-    assert lines[5] == (UNKNOWN_VALUE, False)
-    assert lines[7] == (UNKNOWN_VALUE, False)
-    assert lines[9] == (UNKNOWN_VALUE, False)
+    assert lines[3] == (_iv(UNKNOWN_VALUE), False)
+    assert lines[5] == (_iv(UNKNOWN_VALUE), False)
+    assert lines[7] == (_iv(UNKNOWN_VALUE), False)
+    assert lines[9] == (_iv(UNKNOWN_VALUE), False)
 
 
 def test_value_none_is_unknown_regardless_of_age():
     status = {"hud": {"credits": {"value": None, "age_s": 1.0}}}
     lines = compose_hud_cells(status, width=40)
-    assert lines[1] == (UNKNOWN_VALUE, False)
+    assert lines[1] == (_iv(UNKNOWN_VALUE), False)
 
 
 def test_field_slot_not_a_dict_is_unknown():
     for bad_slot in ["garbage", 5, [1, 2], None, True]:
         status = {"hud": {"credits": bad_slot}}
         lines = compose_hud_cells(status, width=40)
-        assert lines[1] == (UNKNOWN_VALUE, False), bad_slot
+        assert lines[1] == (_iv(UNKNOWN_VALUE), False), bad_slot
 
 
 def test_age_none_renders_value_with_no_stamp_not_stale():
     status = {"hud": {"credits": {"value": 42, "age_s": None}}}
     lines = compose_hud_cells(status, width=40)
-    assert lines[1] == ("42", False)
+    assert lines[1] == (_iv("42"), False)
 
 
 def test_age_missing_key_renders_value_with_no_stamp():
     status = {"hud": {"credits": {"value": 42}}}
     lines = compose_hud_cells(status, width=40)
-    assert lines[1] == ("42", False)
+    assert lines[1] == (_iv("42"), False)
 
 
 def test_negative_age_clamps_to_zero_and_reads_now():
     status = {"hud": {"credits": {"value": 42, "age_s": -50.0}}}
     lines = compose_hud_cells(status, width=40)
-    assert lines[1] == ("42 ✦ now", False)
+    assert lines[1] == (_iv("42 ✦ now"), False)
 
 
 # ---------------------------------------------------------------------------
@@ -273,7 +279,7 @@ def test_negative_age_clamps_to_zero_and_reads_now():
 def test_bool_value_renders_as_true_false_text_not_numeric():
     status = {"hud": {"credits": {"value": True, "age_s": 1.0}}}
     lines = compose_hud_cells(status, width=40)
-    assert lines[1] == ("True ✦ 1s ago", False)
+    assert lines[1] == (_iv("True ✦ 1s ago"), False)
 
 
 def test_str_value_renders_verbatim_never_reformatted_as_number():
@@ -281,39 +287,39 @@ def test_str_value_renders_verbatim_never_reformatted_as_number():
     lines = compose_hud_cells(status, width=40)
     # No thousands separator inserted -- a string payload is never
     # re-parsed as a number.
-    assert lines[1] == ("1234 ✦ 1s ago", False)
+    assert lines[1] == (_iv("1234 ✦ 1s ago"), False)
 
 
 def test_str_value_is_trimmed():
     status = {"hud": {"sector": {"value": "  4521  ", "age_s": 1.0}}}
     lines = compose_hud_cells(status, width=40)
-    assert lines[3] == ("4521 ✦ 1s ago", False)
+    assert lines[3] == (_iv("4521 ✦ 1s ago"), False)
 
 
 def test_whole_valued_float_formats_without_trailing_point_zero():
     status = {"hud": {"credits": {"value": 987654.0, "age_s": 1.0}}}
     lines = compose_hud_cells(status, width=40)
-    assert lines[1] == ("987,654 ✦ 1s ago", False)
+    assert lines[1] == (_iv("987,654 ✦ 1s ago"), False)
 
 
 def test_non_integer_float_value_still_renders():
     status = {"hud": {"credits": {"value": 12.5, "age_s": 1.0}}}
     lines = compose_hud_cells(status, width=40)
-    assert lines[1] == ("12.5 ✦ 1s ago", False)
+    assert lines[1] == (_iv("12.5 ✦ 1s ago"), False)
 
 
 @pytest.mark.parametrize("bad", [float("inf"), float("-inf"), float("nan")])
 def test_non_finite_value_never_raises_and_degrades_to_unknown(bad):
     status = {"hud": {"credits": {"value": bad, "age_s": 1.0}}}
     lines = compose_hud_cells(status, width=40)
-    assert lines[1] == (UNKNOWN_VALUE, False)
+    assert lines[1] == (_iv(UNKNOWN_VALUE), False)
 
 
 @pytest.mark.parametrize("bad", [float("inf"), float("-inf"), float("nan"), "not-a-number", object()])
 def test_non_finite_or_unparsable_age_never_raises_and_omits_stamp(bad):
     status = {"hud": {"credits": {"value": 42, "age_s": bad}}}
     lines = compose_hud_cells(status, width=40)
-    assert lines[1] == ("42", False)
+    assert lines[1] == (_iv("42"), False)
 
 
 def test_raising_str_dunder_on_value_degrades_to_unknown():
@@ -325,7 +331,7 @@ def test_raising_str_dunder_on_value_degrades_to_unknown():
 
     status = {"hud": {"credits": {"value": Boom(), "age_s": 1.0}}}
     lines = compose_hud_cells(status, width=40)
-    assert lines[1] == (UNKNOWN_VALUE, False)
+    assert lines[1] == (_iv(UNKNOWN_VALUE), False)
 
 
 def test_raising_float_dunder_on_age_never_raises():
@@ -335,7 +341,7 @@ def test_raising_float_dunder_on_age_never_raises():
 
     status = {"hud": {"credits": {"value": 42, "age_s": HostileFloat()}}}
     lines = compose_hud_cells(status, width=40)
-    assert lines[1] == ("42", False)
+    assert lines[1] == (_iv("42"), False)
 
 
 def test_hostile_int_like_value_object_falls_back_to_str():
@@ -350,7 +356,7 @@ def test_hostile_int_like_value_object_falls_back_to_str():
     lines = compose_hud_cells(status, width=40)
     # Not an int/float instance -- falls straight to the str() fallback,
     # never attempts numeric coercion (and so never triggers __int__).
-    assert lines[1] == ("weird-42 ✦ 1s ago", False)
+    assert lines[1] == (_iv("weird-42 ✦ 1s ago"), False)
 
 
 def test_dict_subclass_field_slot_with_hostile_get_is_contained():
@@ -360,13 +366,13 @@ def test_dict_subclass_field_slot_with_hostile_get_is_contained():
 
     status = {"hud": {"credits": HostileDict(value=1, age_s=1.0)}}
     lines = compose_hud_cells(status, width=40)
-    assert lines[1] == (UNKNOWN_VALUE, False)
+    assert lines[1] == (_iv(UNKNOWN_VALUE), False)
 
 
 def test_huge_int_credits_never_raises_and_formats():
     status = {"hud": {"credits": {"value": 10**30, "age_s": 1.0}}}
     lines = compose_hud_cells(status, width=40)
-    assert lines[1][0].startswith("1,000,000")
+    assert lines[1][0].startswith(_iv("1,000,000"))
     assert lines[1][1] is False
 
 
@@ -379,7 +385,7 @@ def test_ascii_mark_swap_applies_to_every_stamped_value():
     lines = compose_hud_cells(_FULL_STATUS, width=40, unicode_ok=False)
     for text, _stale in lines[1::2]:
         assert "✦" not in text
-    assert lines[1][0] == "987,654 * 3s ago"
+    assert lines[1][0] == _iv("987,654 * 3s ago")
 
 
 def test_unicode_mark_is_default():
@@ -438,5 +444,5 @@ def test_width_non_finite_float_never_raises_and_empties(bad_width):
 def test_narrow_width_clips_mid_value():
     status = {"hud": {"credits": {"value": 987654, "age_s": 3.0}}}
     lines = compose_hud_cells(status, width=5)
-    assert lines[1][0] == "987,6"
+    assert lines[1][0] == "  987"
     assert len(lines[1][0]) == 5

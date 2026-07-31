@@ -24,7 +24,7 @@ class _Stdscr:
 
     def __init__(self, keys):
         self._keys = list(keys) + [27]
-        self.rows, self.cols = 40, 160
+        self.rows, self.cols = 40, 180
 
     def getmaxyx(self):
         return (self.rows, self.cols)
@@ -82,7 +82,7 @@ def _wire(*, running=True, distinct=0, min_sectors=5, outcome=None, reason=None)
     return {"running": running, "run": run}
 
 
-def _drive(monkeypatch, keys, *, status_snapshots=None, explore_start=None):
+def _drive(monkeypatch, keys, *, status_snapshots=None, explore_start=None, ensure=None):
     """Run ``_run_play``; return (status_calls, screen)."""
     status_calls: list[object] = []
     snapshots = list(status_snapshots or [])
@@ -90,7 +90,7 @@ def _drive(monkeypatch, keys, *, status_snapshots=None, explore_start=None):
     monkeypatch.setattr(
         adapters,
         "ensure_session",
-        lambda name, **kw: _Result(),
+        lambda name, **kw: ensure if ensure is not None else _Result(),
     )
     if explore_start is None:
         explore_start = _ExploreResult(ok=True)
@@ -142,7 +142,7 @@ def test_idle_tick_updates_status_line_while_explore_runs(monkeypatch) -> None:
     """Accept 1: in-progress explore shows sector count on status_line."""
     calls, screen = _drive(
         monkeypatch,
-        [ord("E"), ord("y"), -1, -1],
+        [-1, -1],
         status_snapshots=[
             _wire(running=True, distinct=2, min_sectors=5, outcome=None),
             _wire(running=True, distinct=3, min_sectors=5, outcome=None),
@@ -157,7 +157,7 @@ def test_terminal_completed_status_line(monkeypatch) -> None:
     """Accept 2: completed outcome — stable final line, not stuck on start text."""
     _calls, screen = _drive(
         monkeypatch,
-        [ord("E"), ord("y"), -1],
+        [-1],
         status_snapshots=[
             _wire(running=False, distinct=5, min_sectors=5, outcome="completed"),
         ],
@@ -168,7 +168,7 @@ def test_terminal_completed_status_line(monkeypatch) -> None:
 def test_terminal_halted_status_line(monkeypatch) -> None:
     _calls, screen = _drive(
         monkeypatch,
-        [ord("E"), ord("y"), -1],
+        [-1],
         status_snapshots=[
             _wire(
                 running=False,
@@ -185,7 +185,7 @@ def test_terminal_halted_status_line(monkeypatch) -> None:
 def test_terminal_crashed_status_line(monkeypatch) -> None:
     _calls, screen = _drive(
         monkeypatch,
-        [ord("E"), ord("y"), -1],
+        [-1],
         status_snapshots=[
             _wire(
                 running=False,
@@ -201,14 +201,18 @@ def test_terminal_crashed_status_line(monkeypatch) -> None:
 
 def test_no_explore_status_poll_when_explore_not_active(monkeypatch) -> None:
     """Accept 3: without a successful arm start, idle ticks do not poll."""
-    calls, _screen = _drive(monkeypatch, [-1, -1, -1])
+    calls, _screen = _drive(
+        monkeypatch,
+        [-1, -1, -1],
+        ensure=_Result(ok=True, classification="unknown"),
+    )
     assert calls == []
 
 
 def test_no_explore_status_poll_after_failed_start(monkeypatch) -> None:
     calls, _screen = _drive(
         monkeypatch,
-        [ord("E"), ord("y"), -1],
+        [-1],
         explore_start=_ExploreResult(ok=False, reason="daemon_not_running"),
     )
     assert calls == []

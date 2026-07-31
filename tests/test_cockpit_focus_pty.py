@@ -60,7 +60,7 @@ _PTY_SKIP = pytest.mark.skipif(
 # Full tier (both gutters at full width) and the narrowed right_gutter fold
 # tier (left gutter still present, PRIORITIES_MIN_W=20) -- the two sizes
 # PWO-035's Accept calls out ("fold tier >=138").
-FULL_ROWS, FULL_COLS = 40, 160
+FULL_ROWS, FULL_COLS = 40, 180
 NARROW_ROWS, NARROW_COLS = 40, 142
 
 # Bootstrap: demo launcher rows + stubbed ensure (no daemon / no twd.sock),
@@ -384,7 +384,7 @@ def test_play_shell_screen_handle_key_unchanged_esc_and_q_only(monkeypatch):
 
     class _NullWin:
         def getmaxyx(self):
-            return (40, 160)
+            return (40, 180)
 
         def erase(self):
             return None

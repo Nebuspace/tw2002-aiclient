@@ -541,7 +541,7 @@ and curses rendering — all geometry is computed in pure functions that return 
 ```
 
 **Terminal width ladder (cols-driven):**
-- `≥ FULL_GUTTER_MIN_COLS (154)`: PRIORITIES left gutter | centered viewport | HUD right gutter
+- `≥ FULL_GUTTER_MIN_COLS (170)`: PRIORITIES left gutter | centered viewport | HUD right gutter
 - `≥ RIGHT_GUTTER_MIN_COLS (118)`: viewport + right HUD; left PRIORITIES when `≥ 138`
 - `≥ MINIMAL_HEADER_MIN_COLS (82)`: bordered 82×26 viewport, no side gutter
 - `≥ 60`: viewport border dropped, game full-bleed/clipped
@@ -550,8 +550,8 @@ and curses rendering — all geometry is computed in pure functions that return 
 **Key constants:**
 - `GAME_W, GAME_H = 80, 24` — native TW2002 terminal grid
 - `VIEWPORT_W, VIEWPORT_H = 82, 26` — bordered viewport (1-cell border all sides)
-- `HUD_GUTTER_W = 36` — right HUD column width (CREDITS + freshness + spark fit on one line)
-- `PRIORITIES_W = 36` — left PRIORITIES column
+- `HUD_GUTTER_W = 44` — right HUD column width (CREDITS + freshness + spark fit on one line)
+- `PRIORITIES_W = 44` — left PRIORITIES column
 - `CHAIN_VIZ_H = 5` — ASCII chain bubble viz under viewport
 - `DECISIONS_MIN_H = 5` — minimum rows before DECISIONS splits from LOG
 - `BAND_H_MAX = 10` — max height for the bottom band

@@ -61,9 +61,9 @@ _PTY_SKIP = pytest.mark.skipif(
 
 # Full tier (both gutters at full width) and the narrowed right_gutter fold
 # tier (left gutter narrowed, right gutter/DECISIONS width unaffected --
-# HUD_GUTTER_W is a fixed 36 across every has_right_gutter tier) -- the two
+# HUD_GUTTER_W is a fixed 44 across every has_right_gutter tier) -- the two
 # sizes the dispatch calls out ("pty 40×160 and 40×142").
-FULL_ROWS, FULL_COLS = 40, 160
+FULL_ROWS, FULL_COLS = 40, 180
 NARROW_ROWS, NARROW_COLS = 40, 142
 
 # Bootstrap: demo launcher rows + stubbed ensure (no daemon / no twd.sock),
@@ -294,7 +294,7 @@ def test_full_tier_hud_and_decisions_titles_visible(_full_tier_no_provider_captu
 @_PTY_SKIP
 def test_narrow_right_gutter_tier_hud_and_decisions_titles_visible(_narrow_tier_no_provider_capture):
     regions = frame_layout(NARROW_ROWS, NARROW_COLS)
-    # >=138 inner cols still carries the right gutter (HUD/DECISIONS) at
+    # >=146 inner cols still carries the right gutter (HUD/DECISIONS) at
     # its full HUD_GUTTER_W -- only the LEFT gutter narrows at this tier.
     assert regions["mode"] == "right_gutter"
     hud, decisions = regions["right_gutter"], regions["decisions"]
@@ -413,7 +413,7 @@ def test_play_shell_screen_handle_key_unchanged_esc_and_q_only(monkeypatch):
 
     class _NullWin:
         def getmaxyx(self):
-            return (40, 160)
+            return (40, 180)
 
         def erase(self):
             return None

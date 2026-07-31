@@ -659,6 +659,13 @@ MODE_KEY = 1
 # than the same blink repeated twice a few columns apart.
 _CONN_FLASH_PERIOD_S = 1.6
 
+# Connected-state glyph beside the host (hub REVISE chrome for
+# WO-PLAY-STRIP-POLICY-AUTO): filled heartbeat-class dot, not the word
+# CONN. Private in liveness (`_HEARTBEAT_UNICODE[0]` / ASCII twin) so we
+# keep local mirrors rather than importing private names.
+_CONN_GLYPH_U = "●"  # ●
+_CONN_GLYPH_A = "*"
+
 
 def _conn_connected_tone(now: object) -> "str | None":
     """The CONN chip's tone while connected: alternates ``"ok"`` (lit
@@ -1036,16 +1043,21 @@ class PlayShellScreen:
         # WO-PLAY-STRIP-TRAINER-CHROME: the calm teachband's three
         # trainer-only toggles (DECISION
         # `RESOLVED-TRAINER-STRIP-AND-GUTTER-20260731` point 2 -- "default
-        # ON" for all three). This is LOCAL PLAY STATE driving CHROME
-        # ONLY: nothing in this class or `app.py` reads these to gate a
-        # send. `P`/`C`/`S` (see `handle_key` below) flip these three
-        # booleans directly and return no intent -- there is nothing for
-        # `app.py` to act on yet, only this instance's own display state.
-        # A follow-on WO (WO-PLAY-STRIP-POLICY-AUTO) wires a real
-        # daemon-side spend gate to each; until then these three booleans
-        # exist purely so the calm band can render its required
-        # `·ON`/`·OFF` suffix honestly from SOME state rather than a
-        # hardcoded literal.
+        # ON" for all three). `P`/`C`/`S` (see `handle_key` below) flip
+        # these three booleans directly and return no intent -- this class
+        # and `screens.py` never read them for anything but the calm
+        # band's own `·ON`/`·OFF` rendering.
+        #
+        # WO-PLAY-STRIP-POLICY-AUTO landed the real daemon-side spend gate
+        # this comment used to describe as a follow-on: `app.py`'s
+        # `_autonomy_auto_fire` (an idle-tick function OUTSIDE this class,
+        # reading these booleans through its `play` parameter) now honors
+        # `port_trade_on`/`cargo_upgrade_on` for real -- App-armed +
+        # ·ON reaches a live trade/hold-buy start with no human `y`. Still
+        # true for `ship_upgrade_on` alone: no ship-upgrade engine or
+        # `AutonomyOffer` kind exists yet, so it remains local-only chrome
+        # by honest necessity, not by the same "not wired yet" reason the
+        # other two used to share.
         self.port_trade_on: bool = True
         self.cargo_upgrade_on: bool = True
         self.ship_upgrade_on: bool = True
@@ -1350,24 +1362,28 @@ class PlayShellScreen:
         return self._control_strip_segment_attr(cockpit_armconfirm.ARM_CONFIRM_TONE)
 
     def _compose_conn_chip(
-        self, status: "dict | None", focused: bool, *, now: object = None
+        self,
+        status: "dict | None",
+        focused: bool,
+        *,
+        now: object = None,
+        unicode_ok: object = True,
     ) -> "tuple[str, str | None]":
         """WO-PLAY-CONN-TOGGLE: compose the ``(text, tone)`` pair for the
         CONN chip (WO-PLAY-STRIP-TRAINER-CHROME moved this chip onto the
-        top profile strip; the composition below is unchanged).
+        top profile strip).
 
         Reads ``status["connected"]`` (the real bool the daemon reports on
         the ``status`` verb -- ``session.conn.connected``).  Three outcomes:
 
-        * ``True``  → ``("CONN", tone)``, or ``("[CONN]", tone)`` when
-          focused (brackets = focus cursor, plain ASCII, no swap). ``tone``
-          is ``"ok"`` when ``now`` is omitted (every pre-trainer caller),
-          or the SLOWLY FLASHING ``"ok"``/``None`` alternation
-          `_conn_connected_tone` computes from ``now`` when supplied --
-          DECISION `RESOLVED-TRAINER-STRIP-AND-GUTTER-20260731` point 3:
-          "green slowly flashing" when connected. This is strictly
-          additive: omitting ``now`` reproduces this function's exact
-          pre-trainer steady-``"ok"`` behavior.
+        * ``True``  → filled glyph ``●`` (ASCII ``*`` when ``unicode_ok``
+          is falsey), or ``[●]`` / ``[*]`` when focused (brackets = focus
+          cursor). ``tone`` is ``"ok"`` when ``now`` is omitted (every
+          pre-trainer caller), or the SLOWLY FLASHING ``"ok"``/``None``
+          alternation `_conn_connected_tone` computes from ``now`` when
+          supplied -- DECISION `RESOLVED-TRAINER-STRIP-AND-GUTTER-20260731`
+          point 3: "green slowly flashing" when connected. This is
+          strictly additive: omitting ``now`` reproduces steady-``"ok"``.
         * ``False`` → ``("DISC", "danger")`` red, or ``("[DISC]", "danger")``
           when focused. Never flashes -- DECISION: "offline/unknown =
           honest non-green (no lying pulse)".
@@ -1389,7 +1405,12 @@ class PlayShellScreen:
             connected = None
         if connected is True:
             tone = "ok" if now is None else _conn_connected_tone(now)
-            return ("[CONN]" if focused else "CONN", tone)
+            try:
+                use_u = bool(unicode_ok)
+            except Exception:
+                use_u = True
+            glyph = _CONN_GLYPH_U if use_u else _CONN_GLYPH_A
+            return (f"[{glyph}]" if focused else glyph, tone)
         if connected is False:
             return ("[DISC]" if focused else "DISC", "danger")
         # Unknown / no provider / provider raised
@@ -1591,7 +1612,7 @@ class PlayShellScreen:
         # this method.
         strip_region = regions["strip"]
         try:
-            conn_chip = self._compose_conn_chip(status, self._conn_focused, now=now_val)
+            conn_chip = self._compose_conn_chip(status, self._conn_focused, now=now_val, unicode_ok=uok)
         except Exception:  # noqa: BLE001 -- a raising composer must not crash the draw pass
             conn_chip = None
         try:
@@ -2131,7 +2152,7 @@ class PlayShellScreen:
                     # DECISION point 2 (WO-PLAY-STRIP-TRAINER-CHROME) retired
                     # the old A/R/T/V/U/H)old?/O)ffer?/Panic calm-band tokens
                     # in favor of `teachband.compose_teach_band`'s new
-                    # E)xplore/P)ort Trade/L)oops/T)rade Loop Chain/
+                    # E)xplore/P)ort Trade/C)argo/S)hip/│/T)rade Loop Chain/L)ist Loops/
                     # C)argo Hold Upgrade/S)hip Upgrade set -- the
                     # `port_trade_on`/`cargo_upgrade_on`/`ship_upgrade_on`
                     # toggles below read THIS instance's own local Play
@@ -2461,9 +2482,12 @@ class PlayShellScreen:
         # Cargo Hold Upgrade, Ship Upgrade (`teachband.py`'s
         # `PORT_TRADE_LABEL`/`CARGO_UPGRADE_LABEL`/`SHIP_UPGRADE_LABEL`).
         # Each key flips ONLY this instance's own boolean and returns no
-        # intent -- there is no daemon-side spend gate to wire yet
-        # (WO-PLAY-STRIP-POLICY-AUTO owns that follow-on), the same
-        # local-only shape the CONN focus-ring toggle above already uses.
+        # intent -- the same local-only shape the CONN focus-ring toggle
+        # above already uses. WO-PLAY-STRIP-POLICY-AUTO wired the real
+        # daemon-side spend gate these booleans drive (`app.py`'s
+        # `_autonomy_auto_fire`, read on every App-armed idle tick from
+        # OUTSIDE this class) -- this handler itself is unchanged by that
+        # WO, it still only ever flips the boolean the gate later reads.
         #
         # `P` is DELIBERATELY no longer bound to `cockpit.panic` on this
         # calm path: the STATUS-DONE cut of this WO left the OLD `P panic`

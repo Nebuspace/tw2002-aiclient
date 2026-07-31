@@ -25,7 +25,7 @@ from tw2002_aiclient.screens import PlayShellScreen, ProfileRow
 # Matches tests/test_cockpit_frame_pty.py's own full-tier fixture size --
 # same "full" mode, same center geometry, so results are directly
 # comparable to that suite's pty-grid proof.
-ROWS, COLS = 40, 160
+ROWS, COLS = 40, 180
 
 
 class _RecordingWindow:

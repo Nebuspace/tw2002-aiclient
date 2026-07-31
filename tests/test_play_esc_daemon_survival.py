@@ -88,7 +88,7 @@ def test_run_play_esc_issues_no_daemon_stop_verb(monkeypatch):
     monkeypatch.setattr(
         adapters,
         "ensure_session",
-        lambda *a, **k: EnsureResult(ok=True, classification="main_command"),
+        lambda *a, **k: EnsureResult(ok=True, classification="unknown"),  # no policy explore kick
     )
 
     def _spy_send(verb, args_payload=None, **kwargs):

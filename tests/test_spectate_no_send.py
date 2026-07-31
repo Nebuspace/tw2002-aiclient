@@ -672,7 +672,7 @@ def test_play_shell_screen_entry_state_is_app_hold_and_owns_no_send_path(monkeyp
 
     class _NullWin:
         def getmaxyx(self):
-            return (40, 160)
+            return (40, 180)
 
     screen = PlayShellScreen(_NullWin(), profile)
 
@@ -777,7 +777,7 @@ class _ScriptedStdscr:
     by grep before writing this: erase/getmaxyx/attron/attroff/box/
     addstr/refresh/getch/timeout -- no ``addnstr``, no sub-windows;
     ``cockpit/draw.py`` only ever calls ``win.addstr``/``win.getmaxyx`` on
-    the window it's handed). Full-tier size (40x160, the same constant
+    the window it's handed). Full-tier size (40x180, the same constant
     ``tests/test_cockpit_liveness_pty.py`` uses for its own full-tier
     proof) so GOALS/right_gutter/control_strip are all present --
     ``status_provider()`` genuinely polls once per draw, giving the log
@@ -796,7 +796,7 @@ class _ScriptedStdscr:
         return None
 
     def getmaxyx(self):
-        return (40, 160)
+        return (40, 180)
 
     def attron(self, *_a, **_k):
         return None
@@ -831,7 +831,8 @@ def test_run_play_drives_only_subscribe_and_status_writes(monkeypatch, tmp_path)
     monkeypatch.setattr(screens_mod.curses, "has_colors", lambda: False)
     monkeypatch.setattr(
         adapters, "ensure_session",
-        lambda *a, **k: EnsureResult(ok=True, classification="main_command"),
+        # Not main_command: App-armed policy explore would call explore_start.
+        lambda *a, **k: EnsureResult(ok=True, classification="unknown"),
     )
 
     log: list[tuple] = []

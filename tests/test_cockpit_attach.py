@@ -83,7 +83,7 @@ from .conftest import _FakeDaemon
 from .test_cockpit_mode_badge import _control_strip_frame
 
 HANDLE = "Alpha"
-FULL_ROWS, FULL_COLS = 40, 160
+FULL_ROWS, FULL_COLS = 40, 180
 
 
 def _profile() -> ProfileRow:

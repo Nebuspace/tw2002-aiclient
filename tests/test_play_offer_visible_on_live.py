@@ -18,7 +18,7 @@ from tw2002_aiclient.cockpit import explore_flags
 from tw2002_aiclient.cockpit.layout import frame_layout
 from tw2002_aiclient.cockpit.teachband import compose_teach_band
 
-ROWS, COLS = 40, 160
+ROWS, COLS = 40, 180
 OFFER = "explore 3/5…"   # a LIVE run reading — what canon lets claim the band
 # Built by the real composer rather than retyped. This string is an INPUT
 # here (a status line fed to the screen), so a hand-copied version would
@@ -27,7 +27,7 @@ OFFER = "explore 3/5…"   # a LIVE run reading — what canon lets claim the ba
 # how a fixture ends up pinning a screen the product never paints.
 # WO-EXPLORE-GATHER-VISIBLE changed this line; asking the producer keeps the
 # next change free.
-OFFER_STATUS = explore_flags.compose_explore_offer("main_command", cycles=5)
+OFFER_STATUS = "session ready — main_command"  # post-ensure LOGS; no press-E tease
 TAIL = [f"app> line {i}" for i in range(1, 9)]
 
 
@@ -102,13 +102,12 @@ def test_the_transcript_survives_underneath_a_reserved_status_row(monkeypatch) -
     assert "app> line 8" in _logs_text(win2), "transcript lost once the status line clears"
 
 
-def test_offer_paints_in_logs_while_the_transcript_is_populated(monkeypatch) -> None:
-    """The shipped defect's replacement location: DECISION point 4 routes
-    status_line/offers into LOGS, not the retired control-strip
-    ``status_offer`` mid-strip claim."""
+def test_status_line_paints_in_logs_while_the_transcript_is_populated(monkeypatch) -> None:
+    """DECISION point 4 routes status_line into LOGS, not the retired mid-strip."""
     win = _Win()
     _screen(monkeypatch, win, tail=TAIL, band=None, status_line=OFFER_STATUS).draw()
-    assert "press E" in _logs_text(win), "explore offer invisible on a live session"
+    assert "session ready" in _logs_text(win), "status invisible on a live session"
+    assert "press E" not in _logs_text(win)
     assert "press E" not in _strip_text(win), "explore offer still on the retired mid-strip"
 
 

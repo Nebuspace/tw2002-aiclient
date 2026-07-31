@@ -39,7 +39,7 @@ from .pty_helpers import (
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 HANDLE = "Alpha"
-FULL_ROWS, FULL_COLS = 40, 160
+FULL_ROWS, FULL_COLS = 40, 180
 
 _PTY_SKIP = pytest.mark.skipif(
     not pty_curses_supported(),
@@ -111,12 +111,12 @@ def test_each_teach_token_is_individually_visible(_capture) -> None:
     """Guards the failure where the row renders but a token is clipped.
 
     WO-PLAY-STRIP-TRAINER-CHROME retired the developer A/R/T/V/U/P-panic
-    tokens from this calm band -- the trainer's own six tokens replace
+    tokens from this calm band -- the trainer's Explore + loop-tool tokens replace
     them."""
     grid = pyte_grid(_capture, FULL_ROWS, FULL_COLS)
     for token in (
-        "E)xplore", "P)ort Trade", "L)oops", "T)rade Loop Chain",
-        "C)argo Hold Upgrade", "S)hip Upgrade",
+        "E)xplore", "P)ort Trade", "C)argo Hold Upgrade", "S)hip Upgrade",
+        "T)rade Loop Chain", "L)ist Loops",
     ):
         assert find_text(grid, token), f"token {token!r} not visible"
 

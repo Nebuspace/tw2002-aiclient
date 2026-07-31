@@ -83,8 +83,8 @@ _PTY_SKIP = pytest.mark.skipif(
 # minimal/no-border sizes are chosen from layout.py's own documented floors
 # (MINIMAL_HEADER_MIN_COLS=82, MIN_COLS=60), comfortably inside each band
 # without straddling a neighboring tier's floor.
-FULL_ROWS, FULL_COLS = 40, 160
-MINIMAL_ROWS, MINIMAL_COLS = 26, 100  # inner cols 98: >=82, <118 -> "minimal"
+FULL_ROWS, FULL_COLS = 40, 180
+MINIMAL_ROWS, MINIMAL_COLS = 26, 100  # inner cols 98: >=82, <126 -> "minimal"
 NO_BORDER_ROWS, NO_BORDER_COLS = 26, 70  # inner cols 68: >=60, <82 -> "no_border"
 
 _DOUBLE_GLYPHS_UNICODE = ("╔", "╗", "╚", "╝")
@@ -113,7 +113,7 @@ from tw2002_aiclient.adapters import EnsureResult
 
 
 def _fake_ensure(profile, **kwargs):
-    return EnsureResult(ok=True, classification="main_command")
+    return EnsureResult(ok=True, classification="unknown")  # no App-armed explore kick in chrome PTY
 
 
 adapters.ensure_session = _fake_ensure
@@ -303,7 +303,7 @@ def _assert_region_fully_blank(grid: list[str], region: dict) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Full tier (40x160, "full" mode): bordered viewport, GAME title, blank
+# Full tier (40x180, "full" mode): bordered viewport, GAME title, blank
 # 80-col interior, double-line corners.
 # ---------------------------------------------------------------------------
 

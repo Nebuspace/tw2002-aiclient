@@ -40,7 +40,7 @@ class _RecordingStdscr:
         return None
 
     def getmaxyx(self):
-        return (40, 160)
+        return (40, 180)
 
     def erase(self):
         return None

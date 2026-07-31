@@ -18,7 +18,7 @@ import pytest
 from tw2002_aiclient import screens as screens_mod
 from tw2002_aiclient.cockpit import chains
 
-FULL_ROWS, FULL_COLS = 40, 160
+FULL_ROWS, FULL_COLS = 40, 180
 
 
 class _Win:

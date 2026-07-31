@@ -70,7 +70,7 @@ _PTY_SKIP = pytest.mark.skipif(
 # `minimal_rows, minimal_cols = 25, 100` pair mirrors
 # ``tests/test_cockpit_hud_pty.py::test_poll_guard_zero_calls_at_minimal_tier_with_no_status_consumer``'s
 # own real-tier constants for consistency across the suite.
-FULL_ROWS, FULL_COLS = 40, 160
+FULL_ROWS, FULL_COLS = 40, 180
 MINIMAL_ROWS, MINIMAL_COLS = 25, 100
 
 _TX_IDLE = "→ -"

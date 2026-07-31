@@ -86,7 +86,7 @@ def _region_text(win, region):
 
 
 def test_bubbles_paint_from_cached_best_chain_without_pressing_l(monkeypatch):
-    win = _Win(40, 160)
+    win = _Win(40, 180)
     play = _screen(
         monkeypatch,
         win,
@@ -102,7 +102,7 @@ def test_bubbles_paint_from_cached_best_chain_without_pressing_l(monkeypatch):
         _Result([_Chain([10, 11, 12, 10])])
     )
     play.draw()
-    regions = frame_layout(40, 160)
+    regions = frame_layout(40, 180)
     text = _region_text(win, regions["chain"])
     assert regions["chain"] is not None
     assert regions["chain"]["h"] == CHAIN_VIZ_H
@@ -112,7 +112,7 @@ def test_bubbles_paint_from_cached_best_chain_without_pressing_l(monkeypatch):
 
 def test_bubbles_paint_enriched_port_classes_and_drop_non_ports(monkeypatch):
     """WO-CHAIN-BUBBLE-PORT-CLASSES — cache → strip, no draw-path world_model."""
-    win = _Win(40, 160)
+    win = _Win(40, 180)
     play = _screen(
         monkeypatch,
         win,
@@ -129,7 +129,7 @@ def test_bubbles_paint_enriched_port_classes_and_drop_non_ports(monkeypatch):
     play.chain_scalars._port_classes = {10: "BSB", 11: "SSS"}
     play.chain_scalars._known_ports = {10, 11}
     play.draw()
-    text = _region_text(win, frame_layout(40, 160)["chain"])
+    text = _region_text(win, frame_layout(40, 180)["chain"])
     assert "BSB" in text
     assert "SSS" in text
     assert "99" not in text
@@ -170,7 +170,7 @@ class _Pair:
 
 def test_bubbles_paint_pair_fallback_when_no_priced_chain(monkeypatch):
     """WO-CHAIN-BUBBLE-PAIR-FALLBACK Accept #1 — class pair, not empty placeholder."""
-    win = _Win(40, 160)
+    win = _Win(40, 180)
     play = _screen(
         monkeypatch,
         win,
@@ -189,7 +189,7 @@ def test_bubbles_paint_pair_fallback_when_no_priced_chain(monkeypatch):
     play.chain_scalars._port_classes = {10: "BSB", 20: "SBS"}
     play.chain_scalars._known_ports = {10, 20}
     play.draw()
-    text = _region_text(win, frame_layout(40, 160)["chain"])
+    text = _region_text(win, frame_layout(40, 180)["chain"])
     assert "10" in text
     assert "20" in text
     assert "no trade loop yet" not in text
@@ -199,7 +199,7 @@ def test_bubbles_paint_pair_fallback_when_no_priced_chain(monkeypatch):
 
 def test_bubbles_prefer_priced_chain_over_pair(monkeypatch):
     """WO-CHAIN-BUBBLE-PAIR-FALLBACK Accept #2."""
-    win = _Win(40, 160)
+    win = _Win(40, 180)
     play = _screen(
         monkeypatch,
         win,
@@ -216,7 +216,7 @@ def test_bubbles_prefer_priced_chain_over_pair(monkeypatch):
     play.chain_scalars._port_classes = {10: "BSB", 11: "SSS", 12: "SBS"}
     play.chain_scalars._known_ports = {10, 11, 12}
     play.draw()
-    text = _region_text(win, frame_layout(40, 160)["chain"])
+    text = _region_text(win, frame_layout(40, 180)["chain"])
     assert "11" in text
     assert "12" in text
     assert "50" not in text
@@ -225,7 +225,7 @@ def test_bubbles_prefer_priced_chain_over_pair(monkeypatch):
 
 def test_bubbles_empty_placeholder_when_neither_chain_nor_pair(monkeypatch):
     """WO-CHAIN-BUBBLE-PAIR-FALLBACK Accept #3."""
-    win = _Win(40, 160)
+    win = _Win(40, 180)
     play = _screen(
         monkeypatch,
         win,
@@ -238,5 +238,5 @@ def test_bubbles_empty_placeholder_when_neither_chain_nor_pair(monkeypatch):
         },
     )
     play.draw()
-    text = _region_text(win, frame_layout(40, 160)["chain"])
+    text = _region_text(win, frame_layout(40, 180)["chain"])
     assert "no trade loop yet" in text

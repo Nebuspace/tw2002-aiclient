@@ -7,10 +7,18 @@ affordances so the standing chrome cannot drift off the wires — same
 ``TOKEN`` import pattern as ``reflex_controls.REFLEX_TOKEN`` /
 ``chains.CHAINS_TOKEN``.
 
-Confirm-not-auto is load-bearing for ``H`` and ``O``: both only raise the
-existing confirm gate; neither auto-arms. The ``?`` on those tokens and
-the HELP one-liners spell that out for the operator (Ada would otherwise
-miss ``O`` entirely).
+Confirm-not-auto is still load-bearing for what PRESSING ``H``/``O``
+themselves do: both only ever raise the existing confirm gate; neither
+key press auto-arms anything, and the ``?`` on those tokens still says so
+truthfully. What is NO LONGER true (WO-PLAY-STRIP-POLICY-AUTO, DECISION
+`RESOLVED-TRAINER-STRIP-AND-GUTTER-20260731` point 6) is that this was the
+calm path's own standing doctrine: under APP-ARMED with the matching
+toggle ON, the App now reaches the identical hold-buy/trade-loop outcome
+through `app.py`'s own idle-tick auto-fire, with no key press and no
+confirm at all. ``H``/``O`` remain honest manual fallbacks -- useful in
+Manual mode, or when the toggle is OFF -- not a claim that nothing on this
+surface ever auto-acts. See ``HOLD_HELP``/``OFFER_HELP`` below for the
+operator-facing wording.
 """
 
 from __future__ import annotations
@@ -24,8 +32,18 @@ OFFER_TOKEN = "O)ffer?"
 # Honest one-liners — pins + any future help overlay. Not joined into the
 # standing band (width budget); teachband ships the short TOKEN forms.
 EXPLORE_HELP = "E)xplore — start explore via confirm gate"
-HOLD_HELP = "H)old? — hold buy confirm when scaffold complete (not auto)"
-OFFER_HELP = "O)ffer? — top FOCUS candidate → confirm (not auto)"
+# WO-PLAY-STRIP-POLICY-AUTO: no longer "(not auto)" unconditionally -- see
+# this module's own docstring for why. Both lines state what the KEY press
+# itself still does (manual confirm) alongside the real App-armed auto path
+# that now exists beside it, rather than the old blanket "not auto" claim.
+# Kept under the same ~60-char budget the old "(not auto)" lines held
+# (`tests/test_cockpit_fold.py`'s width=60 fold-composer pins truncate any
+# HELP line longer than that, same clip contract every composer here
+# documents) -- "under APP-ARMED + ON" is the compact form; the P/C/S
+# toggle names themselves are spelled out on the calm band the operator is
+# already looking at (`teachband.py`), not repeated here.
+HOLD_HELP = "H)old? — manual confirm; APP-ARMED + ON auto-buys"
+OFFER_HELP = "O)ffer? — manual confirm; APP-ARMED + ON auto-acts"
 CHAINS_HELP = "L)chains — taught trade-loop chains library"
 
 

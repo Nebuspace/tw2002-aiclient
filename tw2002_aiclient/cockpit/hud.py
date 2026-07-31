@@ -141,6 +141,10 @@ from .goals import _safe_str
 # cold-start all-``-``") names this exact glyph.
 UNKNOWN_VALUE = "-"
 
+# Leading indent on value rows under each field label (CREDITS / 987,654 …)
+# so the readout reads as label-then-indented-value rather than a flat column.
+HUD_VALUE_INDENT = "  "
+
 # A persisted HUD cell dims past this many seconds untouched (canon
 # `trainer-cockpit.md` "Panel states — active, stale, empty, alert":
 # "dims to A_DIM once its value ages past FRESHNESS_STALE_S (20s)");
@@ -368,6 +372,6 @@ def compose_hud_cells(
             value_line, stale = _field_cell(field, hud, unicode_ok=unicode_ok)
         except Exception:
             value_line, stale = UNKNOWN_VALUE, False
-        lines.append((_clip(value_line, width=width), stale))
+        lines.append((_clip(f"{HUD_VALUE_INDENT}{value_line}", width=width), stale))
 
     return lines

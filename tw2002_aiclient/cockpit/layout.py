@@ -50,7 +50,9 @@ GAME_W, GAME_H = VIEWPORT_W - 2, VIEWPORT_H - 2  # 80 x 25
 # Never carve these out of VIEWPORT_H — fold the region instead.
 CHAIN_VIZ_H = 5
 
-HUD_GUTTER_W = 36
+# Wider side gutters (Max 2026-07-31): Goals⊃Focus + Formations (left) and
+# HUD + Decisions (right) claim more horizontal room than the archive's 36.
+HUD_GUTTER_W = 44
 PRIORITIES_W = HUD_GUTTER_W  # the left PRIORITIES gutter mirrors HUD width at the full tier
 PRIORITIES_MIN_W = 20
 
@@ -58,12 +60,12 @@ PRIORITIES_MIN_W = 20
 # traceable back to the same VIEWPORT_W/HUD_GUTTER_W/PRIORITIES_W arithmetic
 # canon cites. `[DOCS-WIN]` the archived frame_layout's own docstring stated
 # the "full" floor as the stale ">=142"; visual-language.md self-flags this
-# and states the constant-derived value is 154 — that fix is applied both
-# here and in canon (visual-language.md, this port's D4).
+# and states the constant-derived value (now 170 = 82+44+44) — that fix is
+# applied both here and in canon (visual-language.md, this port's D4).
 MINIMAL_HEADER_MIN_COLS = VIEWPORT_W  # 82 -- bordered viewport alone floor
-RIGHT_GUTTER_MIN_COLS = VIEWPORT_W + HUD_GUTTER_W  # 118 -- viewport + right HUD, zero-margin fit
-LEFT_GUTTER_MIN_COLS = VIEWPORT_W + HUD_GUTTER_W + PRIORITIES_MIN_W  # 138 -- narrowed left gutter also fits
-FULL_GUTTER_MIN_COLS = VIEWPORT_W + HUD_GUTTER_W + PRIORITIES_W  # 154 -- both gutters at full width
+RIGHT_GUTTER_MIN_COLS = VIEWPORT_W + HUD_GUTTER_W  # 126 -- viewport + right HUD, zero-margin fit
+LEFT_GUTTER_MIN_COLS = VIEWPORT_W + HUD_GUTTER_W + PRIORITIES_MIN_W  # 146 -- narrowed left gutter also fits
+FULL_GUTTER_MIN_COLS = VIEWPORT_W + HUD_GUTTER_W + PRIORITIES_W  # 170 -- both gutters at full width
 
 MIN_COLS = 60
 MIN_LINES = 20
@@ -162,15 +164,15 @@ def frame_layout(lines: int, cols: int, *, needs_attention: bool = False) -> dic
     Ladder (inner-cols-driven, PRIORITIES_MIN_W/HUD_GUTTER_W of headroom
     shed first, the center viewport surviving last — visual-language.md
     "Responsive-fold ladder"):
-      >=154  "full"          -- left PRIORITIES (36) | centered game | right HUD (36)
-      >=138  "right_gutter"  -- bordered viewport (left-anchored) + right HUD;
+      >=170  "full"          -- left PRIORITIES (44) | centered game | right HUD (44)
+      >=146  "right_gutter"  -- bordered viewport (left-anchored) + right HUD;
                                 a narrowed left PRIORITIES (20) still fits
-      >=118  "right_gutter"  -- bordered viewport + right HUD only, no left gutter
+      >=126  "right_gutter"  -- bordered viewport + right HUD only, no left gutter
       >=82   "minimal"       -- bordered viewport, centered, no side gutter
       >=60   "no_border"     -- viewport border dropped, game full-bleed/clipped
       else   "too_small"     -- refuse to render (message states the floor)
 
-    The two ">=138"/">=118" rows share the "right_gutter" mode string (the
+    The two ">=146"/">=126" rows share the "right_gutter" mode string (the
     archived module's own convention — the fold within that mode is whether
     ``left_gutter`` is present, not a distinct mode name).
 

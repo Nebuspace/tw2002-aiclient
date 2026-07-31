@@ -70,10 +70,10 @@ _PTY_SKIP = pytest.mark.skipif(
 
 # Full tier (both gutters at full width) and the narrowed right_gutter fold
 # tier (left gutter narrowed, right gutter/HUD width unaffected --
-# HUD_GUTTER_W is a fixed 36 across every has_right_gutter tier) -- the two
+# HUD_GUTTER_W is a fixed 44 across every has_right_gutter tier) -- the two
 # sizes the dispatch calls out ("pty 40×160 and 40×142"), same as
 # tests/test_cockpit_decisions_pty.py's FULL/NARROW constants.
-FULL_ROWS, FULL_COLS = 40, 160
+FULL_ROWS, FULL_COLS = 40, 180
 NARROW_ROWS, NARROW_COLS = 40, 142
 
 # Bootstrap: demo launcher rows + stubbed ensure (no daemon / no twd.sock),
@@ -308,7 +308,7 @@ def test_full_tier_hud_labels_visible_in_order(_full_tier_no_provider_capture):
 @_PTY_SKIP
 def test_narrow_tier_hud_labels_visible_in_order(_narrow_tier_no_provider_capture):
     regions = frame_layout(NARROW_ROWS, NARROW_COLS)
-    # >=138 inner cols still carries the right gutter (HUD/DECISIONS) at its
+    # >=146 inner cols still carries the right gutter (HUD/DECISIONS) at its
     # full HUD_GUTTER_W -- only the LEFT gutter narrows at this tier.
     assert regions["mode"] == "right_gutter"
     hud = regions["right_gutter"]
@@ -619,7 +619,7 @@ def test_poll_guard_fires_when_hud_is_sole_surviving_status_consumer(monkeypatch
     hypothetical starvation shape (``goals``/``decisions`` both ``None``,
     ``right_gutter`` alone present) by monkeypatching ``frame_layout``'s
     return value on top of a REAL ``right_gutter``-mode regions dict (the
-    118..138-col band, where ``goals`` is already ``None``) -- only
+    126..146-col band, where ``goals`` is already ``None``) -- only
     ``decisions`` is forced to the hypothetical ``None``. Proves the guard
     still polls in that shape, independent of whether today's real geometry
     ever reaches it (a future MIN_LINES change could)."""
@@ -627,7 +627,7 @@ def test_poll_guard_fires_when_hud_is_sole_surviving_status_consumer(monkeypatch
 
     monkeypatch.setattr(screens_mod.curses, "has_colors", lambda: False)
 
-    real_rows, real_cols = 20, 120
+    real_rows, real_cols = 20, 130  # inner 128 ≥ RIGHT_GUTTER_MIN_COLS (126)
     real_regions = frame_layout(real_rows, real_cols)
     assert real_regions["mode"] == "right_gutter"
     assert real_regions["goals"] is None
@@ -720,7 +720,7 @@ def test_play_shell_screen_handle_key_unchanged_esc_and_q_only(monkeypatch):
 
     class _NullWin:
         def getmaxyx(self):
-            return (40, 160)
+            return (40, 180)
 
         def erase(self):
             return None

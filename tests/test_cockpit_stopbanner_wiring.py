@@ -25,7 +25,7 @@ from tw2002_aiclient.cockpit import layout as layout_mod
 from tw2002_aiclient.cockpit import stopbanner
 from tw2002_aiclient.cockpit.layout import frame_layout
 
-FULL_ROWS, FULL_COLS = 40, 160
+FULL_ROWS, FULL_COLS = 40, 180
 HANDLE = "Alpha"
 
 # Every region key that existed before this WO -- the parity set below
@@ -108,7 +108,7 @@ def _row_attrs(win, y: int, region: dict) -> set[int]:
 
 
 @pytest.mark.parametrize("lines,cols", [
-    (24, 80), (30, 100), (34, 120), (40, 160), (50, 200), (20, 60), (19, 60),
+    (24, 80), (30, 100), (34, 130), (40, 180), (50, 200), (20, 60), (19, 60),
 ])
 def test_no_halt_leaves_every_pre_wo_region_untouched(lines, cols):
     """The banner is opt-in: with ``needs_attention`` unset (the default,
@@ -135,7 +135,7 @@ def test_too_small_still_refuses_and_allocates_no_banner():
 
 
 @pytest.mark.parametrize("lines,cols", [
-    (20, 60), (24, 80), (30, 100), (34, 120), (40, 160), (60, 200),
+    (20, 60), (24, 80), (30, 100), (34, 130), (40, 180), (60, 200),
 ])
 def test_banner_claims_rows_without_ever_shrinking_logs(lines, cols):
     """The hazard this WO was warned about, pinned: LOGS must never lose a
@@ -149,7 +149,7 @@ def test_banner_claims_rows_without_ever_shrinking_logs(lines, cols):
     assert halt["logs"]["w"] == calm["logs"]["w"]
 
 
-@pytest.mark.parametrize("lines,cols", [(20, 60), (30, 100), (40, 160), (60, 200)])
+@pytest.mark.parametrize("lines,cols", [(20, 60), (30, 100), (40, 180), (60, 200)])
 def test_banner_is_full_inner_width_directly_above_the_control_strip(lines, cols):
     regions = frame_layout(lines, cols, needs_attention=True)
     banner = regions["intervention"]
@@ -164,7 +164,7 @@ def test_banner_is_full_inner_width_directly_above_the_control_strip(lines, cols
     assert control["y"] == banner["y"] + banner["h"]
 
 
-@pytest.mark.parametrize("lines,cols", [(20, 60), (24, 100), (40, 160), (60, 200)])
+@pytest.mark.parametrize("lines,cols", [(20, 60), (24, 100), (40, 180), (60, 200)])
 def test_no_region_overlaps_or_escapes_the_frame_at_a_halt(lines, cols):
     regions = frame_layout(lines, cols, needs_attention=True)
     outer = regions["outer"]

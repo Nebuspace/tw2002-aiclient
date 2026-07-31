@@ -48,7 +48,7 @@ from .pty_helpers import (
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 HANDLE = "Alpha"
-FULL_ROWS, FULL_COLS = 40, 160
+FULL_ROWS, FULL_COLS = 40, 180
 
 _PTY_SKIP = pytest.mark.skipif(
     not pty_curses_supported(),

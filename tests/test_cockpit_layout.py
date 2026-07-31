@@ -19,6 +19,7 @@ from tw2002_aiclient.cockpit.layout import (
     GAME_W,
     GOALS_BOX_MIN_H,
     HUD_BOX_MIN_H,
+    HUD_GUTTER_W,
     LEFT_GUTTER_MIN_COLS,
     LOGS_MIN_H,
     MIN_COLS,
@@ -100,7 +101,7 @@ def test_at_line_floor_is_not_too_small():
 
 # -- fold-ladder boundaries (each floor, at the boundary and boundary-1) --
 #
-# The 154/138/118/82 floors are INNER-cols floors (cols minus the 2-cell
+# The 170/146/126/82 floors are INNER-cols floors (cols minus the 2-cell
 # outer-frame inset) — hence feeding `frame_layout` a raw `cols` of
 # `FLOOR + 2` to land exactly on the boundary, and `FLOOR + 1` to land one
 # inner-col short of it. Only the too_small gate (MIN_COLS=60) is checked
@@ -190,7 +191,7 @@ def test_center_never_exceeds_viewport_width_across_bordered_tiers():
 
 def test_game_content_budget_is_80x25_at_full_tier_with_ample_height():
     """At lines=40 the column band comfortably clears VIEWPORT_H (27) --
-    see ``test_corner_and_edge_coords_at_40x160`` above, which already pins
+    see ``test_corner_and_edge_coords_at_40x180`` above, which already pins
     ``center['h'] == VIEWPORT_H`` at this exact size -- so the GAME interior
     lands on its full GAME_W x GAME_H (80x25) budget, not a height-clipped
     one."""
@@ -284,18 +285,18 @@ def test_minimal_tier_center_height_clips_to_layout_formula():
     assert center["w"] == VIEWPORT_W
 
 
-# -- corner/edge coords at a specific size (40 x 160, full tier) ---------
+# -- corner/edge coords at a specific size (40 x 180, full tier) ---------
 
 
-def test_corner_and_edge_coords_at_40x160():
-    regions = frame_layout(40, 160)
+def test_corner_and_edge_coords_at_40x180():
+    regions = frame_layout(40, 180)
     assert regions["mode"] == "full"
 
     outer = regions["outer"]
-    assert outer == {"y": 0, "x": 0, "w": 160, "h": 40}
+    assert outer == {"y": 0, "x": 0, "w": 180, "h": 40}
 
     strip = regions["strip"]
-    assert strip == {"y": 1, "x": 1, "w": 158, "h": 1}
+    assert strip == {"y": 1, "x": 1, "w": 178, "h": 1}
 
     # Left gutter is the outer GOALS box (with FOCUS nested inside it, see
     # ``nested_focus_region``) claiming its own floor first, then a tall
@@ -307,19 +308,21 @@ def test_corner_and_edge_coords_at_40x160():
     # viewport band LOGS sits under), so at a generously tall terminal like
     # this one FORMATIONS runs past the viewport's own bottom edge.
     goals = regions["goals"]
-    assert goals == {"y": 2, "x": 1, "w": 36, "h": GOALS_BOX_MIN_H}
+    assert goals == {"y": 2, "x": 1, "w": PRIORITIES_W, "h": GOALS_BOX_MIN_H}
 
     left = regions["left_gutter"]
     expected_column_h = _expected_column_h(40)
     assert left == {
         "y": 2 + GOALS_BOX_MIN_H,
         "x": 1,
-        "w": 36,
+        "w": PRIORITIES_W,
         "h": expected_column_h - GOALS_BOX_MIN_H,
     }
 
     center = regions["center"]
-    assert center == {"y": 2, "x": 39, "w": VIEWPORT_W, "h": VIEWPORT_H, "border": True}
+    # Full tier centers the viewport in the middle band between gutters
+    # (i_cols=178 → left_edge=45, right_edge=135, center_x=49).
+    assert center == {"y": 2, "x": 49, "w": VIEWPORT_W, "h": VIEWPORT_H, "border": True}
 
     # Right gutter is stacked HUD (top, claims its own floor first) above
     # DECISIONS (below, gets whatever height remains) as of PWO-036 --
@@ -328,13 +331,13 @@ def test_corner_and_edge_coords_at_40x160():
     # ``right_gutter`` keeps its key as the HUD sub-region (unchanged from
     # pre-036 draw code); ``decisions`` is the new sub-region below it.
     right = regions["right_gutter"]
-    assert right == {"y": 2, "x": 123, "w": 36, "h": HUD_BOX_MIN_H}
+    assert right == {"y": 2, "x": 135, "w": HUD_GUTTER_W, "h": HUD_BOX_MIN_H}
 
     decisions = regions["decisions"]
     assert decisions == {
         "y": 2 + HUD_BOX_MIN_H,
-        "x": 123,
-        "w": 36,
+        "x": 135,
+        "w": HUD_GUTTER_W,
         "h": VIEWPORT_H - HUD_BOX_MIN_H,
     }
 
@@ -343,16 +346,16 @@ def test_corner_and_edge_coords_at_40x160():
     # row below it, carved out of the column band's slack, never out of
     # LOGS' own height (still exactly 3, its unchanged floor).
     logs = regions["logs"]
-    assert logs == {"y": 35, "x": 1, "w": 158, "h": 3}
+    assert logs == {"y": 35, "x": 1, "w": 178, "h": 3}
 
     control_strip = regions["control_strip"]
-    assert control_strip == {"y": 38, "x": 1, "w": 158, "h": 1}
+    assert control_strip == {"y": 38, "x": 1, "w": 178, "h": 1}
 
     # every region stays inside the outer frame's inner inset
     for region in (strip, goals, left, center, right, decisions, logs, control_strip):
         assert region["x"] >= 1
         assert region["y"] >= 1
-        assert region["x"] + region["w"] <= 159
+        assert region["x"] + region["w"] <= 179
         assert region["y"] + region["h"] <= 39
     # CONTROL_STRIP is the true bottom-most interior row -- directly below
     # LOGS, no gap, and its own bottom edge sits exactly at the outer
@@ -621,14 +624,14 @@ def test_frame_layout_never_raises_across_extreme_sizes(lines, cols):
 #
 # The boundary tests above each pin one or two facts per floor (mode + one
 # region's width, mostly). This sweep re-proves the SAME five floors --
-# 154/138/118/82/60 -- each at the floor and one column short of it, as one
+# 170/146/126/82/60 -- each at the floor and one column short of it, as one
 # full-fact matrix per boundary: mode, the presence/absence of every region
 # the PWO-039 fold composer cares about (goals/left_gutter/right_gutter/
 # decisions/control_strip), and the center viewport's x/w wherever that is
 # cleanly derivable from this module's own named constants (never a bare
 # re-typed magic number) -- new coverage the per-floor tests above don't
 # already assert in one place (e.g. no existing test pins `decisions`
-# presence/absence or center x specifically at the 118 or 60 floors).
+# presence/absence or center x specifically at the 126 or 60 floors).
 #
 # MIN_COLS=60 is the one floor of the five that is a RAW-cols gate, not an
 # inner-cols one -- `frame_layout` compares `cols < MIN_COLS` directly (see
@@ -654,7 +657,7 @@ def test_pwo039_five_boundary_fold_ladder_sweep():
             "control_strip": regions["control_strip"] is not None,
         }
 
-    # -- 154: FULL_GUTTER_MIN_COLS -- both gutters at full width -----------
+    # -- 170: FULL_GUTTER_MIN_COLS -- both gutters at full width -----------
     at = frame_layout(lines, FULL_GUTTER_MIN_COLS + 2)
     assert _facts(at) == {
         "mode": "full",
@@ -685,7 +688,7 @@ def test_pwo039_five_boundary_fold_ladder_sweep():
     assert below["center"]["w"] == VIEWPORT_W
     assert below["center"]["border"] is True
 
-    # -- 138: LEFT_GUTTER_MIN_COLS -- narrowed left gutter still fits ------
+    # -- 146: LEFT_GUTTER_MIN_COLS -- narrowed left gutter still fits ------
     at = frame_layout(lines, LEFT_GUTTER_MIN_COLS + 2)
     assert _facts(at) == {
         "mode": "right_gutter",
@@ -710,7 +713,7 @@ def test_pwo039_five_boundary_fold_ladder_sweep():
     assert below["center"]["x"] == ox
     assert below["center"]["w"] == VIEWPORT_W
 
-    # -- 118: RIGHT_GUTTER_MIN_COLS -- viewport + right HUD only -----------
+    # -- 126: RIGHT_GUTTER_MIN_COLS -- viewport + right HUD only -----------
     at = frame_layout(lines, RIGHT_GUTTER_MIN_COLS + 2)
     assert _facts(at) == {
         "mode": "right_gutter",
@@ -797,7 +800,7 @@ def test_chain_region_folds_until_five_spare_rows_under_full_viewport():
     assert short["center"]["border"] is True
     assert short["chain"] is None
 
-    tall = frame_layout(40, 160)
+    tall = frame_layout(40, 180)
     assert tall["center"]["h"] == VIEWPORT_H
     assert tall["center"]["border"] is True
     chain = tall["chain"]

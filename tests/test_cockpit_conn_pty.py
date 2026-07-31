@@ -27,7 +27,7 @@ this very row.
 Three states rendered by the real draw path, through real curses, read back
 off a pyte grid:
 
-* ``connected: True``   -> ``CONN``
+* ``connected: True``   -> ``●``
 * ``connected: False``  -> ``DISC``
 * the field absent      -> ``DISC?``
 
@@ -63,7 +63,7 @@ from .pty_helpers import (
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 HANDLE = "Alpha"
-FULL_ROWS, FULL_COLS = 40, 160
+FULL_ROWS, FULL_COLS = 40, 180
 
 _PTY_SKIP = pytest.mark.skipif(
     not pty_curses_supported(),
@@ -113,7 +113,7 @@ curses.wrapper(_run)
 
 
 def _drive(tmp_path: Path, status: dict | None, *, timeout: float = 20.0) -> bytes:
-    """Spawn ``app._run`` in a 40x160 pty, Enter through the launcher, and
+    """Spawn ``app._run`` in a 40x180 pty, Enter through the launcher, and
     capture the settled cockpit frame. ``status`` is the payload the stubbed
     poll returns, or ``None`` to leave the real no-daemon path in place."""
     bootstrap = tmp_path / "conn_pty_bootstrap.py"
@@ -144,8 +144,8 @@ def test_connected_renders_conn_on_a_real_terminal(tmp_path) -> None:
     ``conn_chip`` — the deletion that previously left the whole suite green."""
     grid = pyte_grid(_drive(tmp_path, {"ok": True, "connected": True}),
                      FULL_ROWS, FULL_COLS)
-    assert find_text(grid, "CONN"), (
-        "CONN chip not visible on the settled cockpit; grid:\n" + "\n".join(grid)
+    assert find_text(grid, "●"), (
+        "● chip not visible on the settled cockpit; grid:\n" + "\n".join(grid)
     )
 
 
@@ -162,17 +162,17 @@ def test_connected_conn_rides_the_top_strip_only(tmp_path) -> None:
     the settled frame."""
     grid = pyte_grid(_drive(tmp_path, {"ok": True, "connected": True}),
                      FULL_ROWS, FULL_COLS)
-    hit = find_text(grid, "CONN")
-    assert hit, "CONN chip not visible on the settled cockpit; grid:\n" + "\n".join(grid)
+    hit = find_text(grid, "●")
+    assert hit, "● chip not visible on the settled cockpit; grid:\n" + "\n".join(grid)
     row, _col = hit
     assert row <= 3, (
-        f"CONN chip found at row {row}, expected on the top profile strip "
+        f"● chip found at row {row}, expected on the top profile strip "
         "(row 1, just under the outer frame's title row); grid:\n"
         + "\n".join(grid)
     )
-    other_rows = [r for r, line in enumerate(grid) if "CONN" in line and r != row]
+    other_rows = [r for r, line in enumerate(grid) if "●" in line and r != row]
     assert not other_rows, (
-        f"CONN also appears at row(s) {other_rows} -- expected exactly once, "
+        f"● also appears at row(s) {other_rows} -- expected exactly once, "
         "on the top strip, and absent from the bottom control strip; "
         "grid:\n" + "\n".join(grid)
     )
