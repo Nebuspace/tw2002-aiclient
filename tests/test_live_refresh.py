@@ -53,9 +53,13 @@ class _Stats:
 class _Scalars:
     def __init__(self) -> None:
         self.updates: list[object] = []
+        self.pair_updates: list[object] = []
 
     def update(self, discovered: object) -> None:
         self.updates.append(discovered)
+
+    def update_pairs(self, pair_result: object, **_kw) -> None:
+        self.pair_updates.append(pair_result)
 
 
 class _Play:
@@ -76,6 +80,23 @@ def play() -> _Play:
 @pytest.fixture
 def clock() -> _Clock:
     return _Clock()
+
+
+@pytest.fixture(autouse=True)
+def _stub_pair_recompute(monkeypatch) -> None:
+    """Pair fallback is orthogonal to these budget/interval pins; stub it so
+    a missing world store cannot turn every live-refresh test into an IO test.
+    """
+
+    class _EmptyPairs:
+        world_id = "stub"
+        pairs = ()
+        reason = "no_world_model"
+
+    monkeypatch.setattr(
+        "tw2002_aiclient.chain_detect.recompute",
+        lambda world_id, **_kw: _EmptyPairs(),
+    )
 
 
 def _recompute_costing(clock: _Clock, seconds: float, result: object = "CHAINS"):
@@ -173,6 +194,8 @@ def test_an_over_budget_recompute_retires_automatic_chain_refresh(play, clock, m
     clock.advance(live_refresh.CHAIN_INTERVAL_S * 10)
     live.tick(play, _Profile(), now=clock)
     assert len(play.chain_scalars.updates) == 1, "retired refresh ran again"
+    # Pair fallback keeps refreshing after priced-cycle retire.
+    assert len(play.chain_scalars.pair_updates) == 2
 
 
 def test_the_over_budget_result_is_still_applied(play, clock, monkeypatch) -> None:

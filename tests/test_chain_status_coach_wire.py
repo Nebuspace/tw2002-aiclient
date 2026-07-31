@@ -147,7 +147,10 @@ def test_the_no_world_model_reason_literal_matches_chain_search():
     # chain_status copies the literal rather than importing chain_search (a
     # ~40ms import the cockpit draw path must not carry). This is the pin that
     # keeps the copy from drifting -- without it the copy is a silent time bomb.
+    from tw2002_aiclient import chain_detect
+
     assert chain_status._REASON_NO_WORLD_MODEL == chain_search.REASON_NO_WORLD_MODEL
+    assert chain_status._REASON_NO_WORLD_MODEL == chain_detect.REASON_NO_WORLD_MODEL
 
 
 def test_merge_does_not_mutate_the_caller_dict():
@@ -601,3 +604,81 @@ def test_wrap_leaves_a_none_returning_provider_returning_none():
 
 def test_wrap_of_no_provider_is_no_provider():
     assert ChainScalars().wrap(None) is None
+
+
+# ---------------------------------------------------------------------------
+# WO-CHAIN-BUBBLE-PAIR-FALLBACK — best_pair retention + bubble preference
+# ---------------------------------------------------------------------------
+
+
+class _Pair:
+    def __init__(self, a, b, turns=2):
+        self.sector_a = a
+        self.sector_b = b
+        self.turns = turns
+        # Deliberately no margin attribute — class pairs must not invent one.
+
+
+class _PairResult:
+    def __init__(self, pairs=(), reason=None, world_id="w"):
+        self.pairs = tuple(pairs)
+        self.reason = reason
+        self.world_id = world_id
+
+
+def test_best_pair_is_retained_and_never_on_status():
+    cs = ChainScalars()
+    pair = _Pair(10, 20)
+    cs.update_pairs(_PairResult(pairs=[pair, _Pair(1, 2, turns=9)]))
+    assert cs.best_pair is pair
+    assert "best_pair" not in (cs.merge({"ok": True}) or {})
+    assert not hasattr(cs.best_pair, "margin")
+
+
+def test_failed_pair_update_does_not_erase_best_pair():
+    cs = ChainScalars()
+    pair = _Pair(10, 20)
+    cs.update_pairs(_PairResult(pairs=[pair]))
+    cs.update_pairs(None)
+    cs.update_pairs(object())
+    cs.update_pairs(_PairResult(pairs=(), reason=chain_search.REASON_NO_WORLD_MODEL))
+    assert cs.best_pair is pair
+
+
+def test_completed_empty_pair_result_clears_best_pair():
+    cs = ChainScalars()
+    cs.update_pairs(_PairResult(pairs=[_Pair(10, 20)]))
+    cs.update_pairs(_PairResult(pairs=(), reason="no_compatible_pairs"))
+    assert cs.best_pair is None
+
+
+def test_bubble_subject_prefers_chain_over_pair():
+    cs = ChainScalars()
+    chain = _chain([10, 11, 12, 10])
+    cs.update(_result(chains_=[chain]))
+    cs.update_pairs(_PairResult(pairs=[_Pair(50, 60)]))
+    subject, caption = cs.bubble_subject()
+    assert subject is chain
+    assert caption is None
+
+
+def test_bubble_subject_falls_back_to_pair_when_chain_empty():
+    from tw2002_aiclient.chain_status import pair_as_chain_like
+
+    cs = ChainScalars()
+    # Completed empty priced search (the live academy shape).
+    cs.update(_result(chains_=(), reason="no_closed_cycle"))
+    pair = _Pair(10, 20)
+    cs.update_pairs(_PairResult(pairs=[pair]))
+    subject, caption = cs.bubble_subject()
+    assert subject == pair_as_chain_like(pair)
+    assert caption == "class pair"
+    assert cs.best_chain is None
+
+
+def test_bubble_subject_empty_when_both_absent():
+    cs = ChainScalars()
+    assert cs.bubble_subject() == (None, None)
+    cs.update(_result(chains_=(), reason="no_closed_cycle"))
+    cs.update_pairs(_PairResult(pairs=(), reason="no_compatible_pairs"))
+    assert cs.bubble_subject() == (None, None)

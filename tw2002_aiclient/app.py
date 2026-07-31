@@ -1296,6 +1296,18 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                         _chains.store_status(store),
                         discovered=discovered,
                     )
+                # WO-CHAIN-BUBBLE-PAIR-FALLBACK: refresh class-pair cache on L
+                # so the always-on strip can fall back when priced cycles miss.
+                try:
+                    from tw2002_aiclient import chain_detect as _chain_detect
+
+                    play.chain_scalars.update_pairs(
+                        _chain_detect.recompute(
+                            _world_identity.world_id_from_profile(profile)
+                        )
+                    )
+                except Exception:  # noqa: BLE001
+                    pass
                 continue
             if action == "chains_close":
                 play.chains_session.close()

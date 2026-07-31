@@ -192,8 +192,6 @@ class LiveRefresh:
             pass
 
     def _refresh_chains(self, play: object, world_id: object, t: float, clock) -> None:
-        if self.chain_auto_retired:
-            return
         if not self._due(self._last_chain, t, self._chain_interval_s):
             return
         # Unlike `_refresh_world`'s, this stamp's POSITION is load-bearing:
@@ -201,25 +199,40 @@ class LiveRefresh:
         # would be skipped on every failure and a raising finder would be
         # re-entered on each due tick.
         self._last_chain = t
-        try:
-            # Lazy import for the same CPU-budget reason `app.py` and
-            # `world_stats.py` give: this module is imported by the cockpit
-            # wiring, while the discovery only runs on a due tick.
-            from tw2002_aiclient import chain_search as _chain_search
+        if not self.chain_auto_retired:
+            try:
+                # Lazy import for the same CPU-budget reason `app.py` and
+                # `world_stats.py` give: this module is imported by the cockpit
+                # wiring, while the discovery only runs on a due tick.
+                from tw2002_aiclient import chain_search as _chain_search
 
-            t0 = clock()
-            discovered = _chain_search.recompute(world_id)
-            cost = clock() - t0
-        except Exception:  # noqa: BLE001
-            # A raise is not a cost signal, so it does not retire the
-            # refresh -- it is already stamped, so it will not spin.
-            return
-        self.last_chain_cost_s = cost
+                t0 = clock()
+                discovered = _chain_search.recompute(world_id)
+                cost = clock() - t0
+            except Exception:  # noqa: BLE001
+                # A raise is not a cost signal, so it does not retire the
+                # refresh -- it is already stamped, so it will not spin.
+                # Do not call update(None): a raise is not a discovery result,
+                # and fabricating a not-seen retain via update would blur the
+                # "finder never answered" pin (test_a_raising_recompute…).
+                discovered = None
+                cost = None
+            if cost is not None:
+                self.last_chain_cost_s = cost
+                try:
+                    play.chain_scalars.update(discovered)
+                except Exception:  # noqa: BLE001
+                    pass
+                # Retire AFTER applying: the result was paid for and is valid,
+                # and discarding it would make the breach cost the operator twice.
+                if cost > self._chain_budget_s:
+                    self.chain_auto_retired = True
+        # WO-CHAIN-BUBBLE-PAIR-FALLBACK: class pairs stay on the idle tick even
+        # after priced-cycle self-retire — they are the strip's fallback when
+        # `no_closed_cycle` is the honest priced-chain answer.
         try:
-            play.chain_scalars.update(discovered)
+            from tw2002_aiclient import chain_detect as _chain_detect
+
+            play.chain_scalars.update_pairs(_chain_detect.recompute(world_id))
         except Exception:  # noqa: BLE001
             pass
-        # Retire AFTER applying: the result was paid for and is valid, and
-        # discarding it would make the breach cost the operator twice.
-        if cost > self._chain_budget_s:
-            self.chain_auto_retired = True

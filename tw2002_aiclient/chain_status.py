@@ -31,20 +31,36 @@ enumerates the split.
 
 from __future__ import annotations
 
-__all__ = ["ChainScalars", "as_chain_like"]
+__all__ = ["ChainScalars", "as_chain_like", "pair_as_chain_like"]
 
 from tw2002_aiclient.chain_units import chain_hop_count_and_unit
 
 HOPS_KEY = "chain_hops"
 UNIT_KEY = "chain_unit"
 
-# Literal copy of ``chain_search.REASON_NO_WORLD_MODEL``. Copied, not
-# imported: importing `chain_search` pulls the finder + trade_adapter +
+# Literal copy of ``chain_search.REASON_NO_WORLD_MODEL`` /
+# ``chain_detect.REASON_NO_WORLD_MODEL``. Copied, not imported: importing
+# `chain_search` / `chain_detect` pulls the finder + trade_adapter +
 # world_model (~40ms) into every module that touches `cockpit/decisions.py`,
 # which is the whole reason this module deals in cached scalars. A test pins
 # the two against each other so the copy cannot drift silently -- the same
 # trick `chain_search.recompute` uses for its `min_hops` default.
 _REASON_NO_WORLD_MODEL = "no_world_model"
+
+
+def pair_as_chain_like(pair: object) -> dict | None:
+    """Adapt a ``CandidatePair`` into the ``{sectors: (a, b, a)}`` shape
+    ``compose_chain_bubbles`` already reads. Never invents margin.
+
+    ``None`` when the pair lacks usable sector ids — draw then falls through
+    to the quiet empty placeholder.
+    """
+    try:
+        a = int(getattr(pair, "sector_a"))  # type: ignore[arg-type]
+        b = int(getattr(pair, "sector_b"))  # type: ignore[arg-type]
+    except (AttributeError, TypeError, ValueError):
+        return None
+    return {"sectors": (a, b, a)}
 
 
 def _valid_class_triple(cls: object) -> bool:
@@ -115,6 +131,13 @@ class ChainScalars:
     ``port_classes`` / ``known_ports`` from the world-model port records for
     ``discovered.world_id``. Failed updates retain the last good maps (same
     retention as ``best_chain``); completed empty clears them. Never on status.
+
+    WO-CHAIN-BUBBLE-PAIR-FALLBACK: ``best_pair`` retains the ranked-first
+    class-derived ``CandidatePair`` from ``chain_detect.recompute`` for the
+    always-on bubble strip when no positive-margin ``best_chain`` exists.
+    Retention mirrors ``best_chain``: failed / missing / no-world-model
+    pair updates never wipe the last good pair; a completed empty pair
+    result clears it. Never on status JSON; never carries a margin field.
     """
 
     def __init__(self) -> None:
@@ -122,6 +145,7 @@ class ChainScalars:
         self._unit: str | None = None
         self._seen: bool = False
         self._best_chain: object | None = None
+        self._best_pair: object | None = None
         self._port_classes: dict[int, str] = {}
         self._known_ports: set[int] = set()
 
@@ -190,6 +214,54 @@ class ChainScalars:
         except Exception:  # noqa: BLE001 -- enrichment must not undo scalars
             pass
 
+    def update_pairs(self, pair_result: object, *, state_dir: object = None) -> None:
+        """Record the ranked-first class pair for bubble viz fallback.
+
+        ``pair_result`` is a ``PairLoopResult`` -- **not** a pair. Its
+        ``pairs`` field is already ranked turns-ascending, so ``pairs[0]``
+        is the cheapest known class loop.
+
+        Retention mirrors ``update`` / ``best_chain``:
+
+        * no ``pairs`` attribute / ``None`` result -> not seen; retain last.
+        * empty and ``reason == no_world_model`` -> not seen; retain last
+          (there was no map to search — same honesty gate as chains).
+        * empty for any other reason -> clear ``best_pair``.
+        * non-empty -> retain ``pairs[0]``; refresh port class / known-port
+          caches from the world model so pair bubbles keep real class
+          labels even when the priced-chain half cleared them on
+          ``no_closed_cycle``.
+
+        Never invents a margin onto the pair. Never merges the pair onto
+        daemon ``status`` JSON.
+        """
+        try:
+            if pair_result is None:
+                return
+            pairs = getattr(pair_result, "pairs", None)
+            if pairs is None:
+                return
+            if not pairs:
+                if getattr(pair_result, "reason", None) == _REASON_NO_WORLD_MODEL:
+                    return
+                self._best_pair = None
+                return
+            self._best_pair = pairs[0]
+        except Exception:  # noqa: BLE001 -- hostile shape is unknown, not a crash
+            return
+        try:
+            classes, known = _port_snapshot_from_world(
+                getattr(pair_result, "world_id", None), state_dir=state_dir
+            )
+            # Only overwrite when the snapshot actually found something —
+            # a hostile/empty world_id must not wipe maps the chain half
+            # already enriched on the same tick.
+            if classes or known:
+                self._port_classes = classes
+                self._known_ports = known
+        except Exception:  # noqa: BLE001 -- enrichment must not undo the pair
+            pass
+
     @property
     def seen(self) -> bool:
         return self._seen
@@ -198,6 +270,25 @@ class ChainScalars:
     def best_chain(self) -> object | None:
         """Ranked-first discovered chain for bubble viz; never on status JSON."""
         return self._best_chain
+
+    @property
+    def best_pair(self) -> object | None:
+        """Ranked-first class pair for bubble fallback; never on status JSON."""
+        return self._best_pair
+
+    def bubble_subject(self) -> tuple[object | None, str | None]:
+        """Prefer priced ``best_chain``; else adapt ``best_pair`` as a 2-hop cycle.
+
+        Returns ``(chain_like, caption)``. Caption is ``"class pair"`` only for
+        the unpriced fallback — never claim credits/turn for class pairs.
+        """
+        if self._best_chain is not None:
+            return self._best_chain, None
+        if self._best_pair is not None:
+            adapted = pair_as_chain_like(self._best_pair)
+            if adapted is not None:
+                return adapted, "class pair"
+        return None, None
 
     @property
     def port_classes(self) -> dict[int, str]:

@@ -118,8 +118,14 @@ def compose_chain_bubbles(
     width: object = 82,
     active_sector: object = None,
     known_ports: object = None,
+    caption: object = None,
 ) -> list[str]:
-    """Return exactly ``CHAIN_VIZ_H`` centered lines. Never raises."""
+    """Return exactly ``CHAIN_VIZ_H`` centered lines. Never raises.
+
+    ``caption`` (WO-CHAIN-BUBBLE-PAIR-FALLBACK): optional short label under
+    the bubbles when the operator is not on a painted sector — used to mark
+    an unpriced class-pair fallback without inventing margin chrome.
+    """
     try:
         try:
             width_i = max(8, int(width))  # type: ignore[arg-type]
@@ -208,6 +214,16 @@ def compose_chain_bubbles(
             mid_c_ln = mid_c_ln + (" " * pad)
             bot_ln = bot_ln + (" " * pad)
             star_ln = star_ln + (" " * pad)
+
+        # Honest "class pair" chrome: only when no current-sector star is
+        # painted (★ wins); never invents credits/turn.
+        if caption and "★" not in star_ln:
+            try:
+                cap = str(caption).strip()
+            except Exception:  # noqa: BLE001
+                cap = ""
+            if cap:
+                star_ln = _pad_center(cap[: max(1, len(star_ln) or width_i)], max(len(star_ln), 1))
 
         return _center_block(
             [top_ln, mid_s_ln, mid_c_ln, bot_ln, star_ln], width_i, CHAIN_VIZ_H
