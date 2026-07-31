@@ -75,8 +75,12 @@ class _Stdscr:
     def nodelay(self, flag): pass
 
 
-def _drive(monkeypatch, keys, *, ensure=None, explore=None):
-    """Run `_run_play`; return (explore_call_kwargs, screen)."""
+def _drive(monkeypatch, keys, *, ensure=None, explore=None, spectating=False):
+    """Run `_run_play`; return (explore_call_kwargs, screen).
+
+    spectating=True skips App-armed ensure kick so toggles/`E` can be the
+    first start (policy explore still arms on `E`).
+    """
     calls = []
 
     monkeypatch.setattr(
@@ -97,6 +101,8 @@ def _drive(monkeypatch, keys, *, ensure=None, explore=None):
         def __init__(self, *a, **k):
             super().__init__(*a, **k)
             self.gate_raises = []
+            if spectating:
+                self.spectating = True
             seen["screen"] = self
 
         def begin_arm_confirm(self, action=None, *, cycles=None):
@@ -135,113 +141,67 @@ _ON_ACTION = f"Explore {explore_flags.DOCK_MARKER}"
 # --------------------------------------------------------------------------
 
 def test_default_arm_forwards_dock_on_and_tolls_off(monkeypatch) -> None:
-    """`E`,`y` with no toggle pressed → dock True, fight-tolls False.
-
-    WO-PLAY-EXPLORE-GATHER-DEFAULT-ON (Max GO). Asserted as `is True` /
-    `is False` rather than truthy/falsy: the adapter omits on `None`.
-    """
-    calls, _screen = _drive(monkeypatch, [_E, _Y])
+    """App-armed ensure kick → dock True, fight-tolls False, infinite."""
+    calls, _screen = _drive(monkeypatch, [])
     assert len(calls) == 1, calls
     assert calls[0]["dock_new_ports"] is True, calls[0]
     assert calls[0]["fight_tolls"] is False, calls[0]
+    assert calls[0]["min_sectors"] == app_mod._EXPLORE_POLICY_MIN_SECTORS == 0
 
 
-def test_the_default_confirm_line_shows_plus_dock(monkeypatch) -> None:
-    """Fresh Play Explore confirm (no `D`) spells gather ON as `+dock`."""
-    _calls, screen = _drive(monkeypatch, [_E])
-    assert screen.gate_raises == [(_ON_ACTION, 5)], screen.gate_raises
-    assert explore_flags.DOCK_MARKER in _ON_ACTION
+def test_e_restarts_without_confirm_gate(monkeypatch) -> None:
+    calls, screen = _drive(monkeypatch, [_E], spectating=True)
+    assert len(calls) == 1, calls
+    assert screen.gate_raises == [], screen.gate_raises
+    assert calls[0]["dock_new_ports"] is True
+    assert calls[0]["min_sectors"] == 0
 
 
-# --------------------------------------------------------------------------
-# Toggles forward the exact value, and say so on the line being confirmed
-# --------------------------------------------------------------------------
-
-def test_dock_toggle_disables_gather_and_leaves_tolls_off(monkeypatch) -> None:
-    """`D` before confirm passes ports (dock OFF)."""
-    calls, _screen = _drive(monkeypatch, [_D, _E, _Y])
+def test_dock_toggle_disables_gather_on_e_restart(monkeypatch) -> None:
+    """`D` before `E` (no App-armed kick) passes ports (dock OFF)."""
+    calls, _screen = _drive(monkeypatch, [_D, _E], spectating=True)
     assert len(calls) == 1, calls
     assert calls[0]["dock_new_ports"] is False, calls[0]
     assert calls[0]["fight_tolls"] is False, calls[0]
 
 
 def test_tolls_toggle_forwards_true_and_keeps_dock_on(monkeypatch) -> None:
-    """The two flags are independent -- pinned separately in both directions
-    so a wire that forwards one value to both slots cannot pass."""
-    calls, _screen = _drive(monkeypatch, [_F, _E, _Y])
+    calls, _screen = _drive(monkeypatch, [_F, _E], spectating=True)
     assert len(calls) == 1, calls
     assert calls[0]["fight_tolls"] is True, calls[0]
     assert calls[0]["dock_new_ports"] is True, calls[0]
 
 
 def test_dock_off_plus_tolls_on_forwards_both(monkeypatch) -> None:
-    calls, _screen = _drive(monkeypatch, [_D, _F, _E, _Y])
+    calls, _screen = _drive(monkeypatch, [_D, _F, _E], spectating=True)
     assert len(calls) == 1, calls
     assert calls[0]["dock_new_ports"] is False, calls[0]
     assert calls[0]["fight_tolls"] is True, calls[0]
 
 
-def test_default_on_is_spelled_out_in_the_line_the_operator_confirms(monkeypatch) -> None:
-    """Gather ON is visible BEFORE/AS PART OF the confirm, never silent on `y`.
-
-    ONE `_drive` per test, deliberately: a second call in the same test
-    re-reads `app_mod.PlayShellScreen`, which is already the first call's
-    spy, so the new spy SUBCLASSES it and `begin_arm_confirm` records the
-    same raise twice. Caught here by that exact double-count.
-    """
-    _calls, screen = _drive(monkeypatch, [_E])
-    assert screen.gate_raises == [(_ON_ACTION, 5)], screen.gate_raises
-
-
-def test_dock_off_and_tolls_on_are_spelled_out_together(monkeypatch) -> None:
-    _calls, screen = _drive(monkeypatch, [_D, _F, _E])
-    assert screen.gate_raises == [
-        (f"{_OFF_ACTION} +fight-tolls", 5)
-    ], screen.gate_raises
-
-
 def test_toggling_twice_returns_to_default_on(monkeypatch) -> None:
-    calls, screen = _drive(monkeypatch, [_D, _D, _E, _Y])
+    calls, _screen = _drive(monkeypatch, [_D, _D, _E], spectating=True)
     assert calls[0]["dock_new_ports"] is True, calls[0]
-    assert screen.gate_raises == [(_ON_ACTION, 5)], screen.gate_raises
 
-# --------------------------------------------------------------------------
-# A toggle never starts anything, and never survives an unanswered gate
-# --------------------------------------------------------------------------
 
-def test_toggles_alone_arm_nothing_and_raise_no_gate(monkeypatch) -> None:
+def test_toggles_alone_do_not_add_starts_beyond_ensure_kick(monkeypatch) -> None:
+    """App-armed ensure may kick once; `D`/`F` alone never start another run."""
     calls, screen = _drive(monkeypatch, [_D, _F])
+    assert len(calls) == 1, calls  # ensure kick only
+    assert screen.gate_raises == [], screen.gate_raises
+
+
+def test_toggles_alone_arm_nothing_when_not_app_armed(monkeypatch) -> None:
+    calls, screen = _drive(monkeypatch, [_D, _F], spectating=True)
     assert calls == [], calls
     assert screen.gate_raises == [], screen.gate_raises
 
 
-def test_toggling_while_the_gate_is_up_clears_it_and_arms_nothing(monkeypatch) -> None:
-    """Deliberate: changing a flag INVALIDATES a standing confirm.
-
-    The gate is single-shot and default-deny, so `D` cancels it like any
-    non-`y` key. That is the property worth having -- it makes it
-    impossible to answer `y` to a line composed under different flags than
-    the run will use.
-    """
-    calls, screen = _drive(monkeypatch, [_E, _D, _Y])
-    assert calls == [], calls
-    assert screen.gate_raises == [(_ON_ACTION, 5)], screen.gate_raises
-
-
 def test_toggles_do_nothing_when_no_explore_offer_is_standing(monkeypatch) -> None:
-    """Same guard `E` carries: no offer, no opt-in. Otherwise the flags
-    could be set on a screen where explore was never on the table.
-
-    The `calls == []` half of this is NOT enough on its own and was
-    measured to be vacuous: with no offer standing, `E` refuses to raise
-    the gate anyway, so nothing arms whether or not the toggle fired. A
-    mutation removing `and explore_offered` from the toggle branch left
-    this test GREEN. The status line is the observable that can actually
-    tell the two worlds apart -- the toggle's only visible effect.
-    """
     calls, screen = _drive(
-        monkeypatch, [_D, _F, _E, _Y],
+        monkeypatch, [_D, _F, _E],
         ensure=_Result(ok=True, classification="unknown"),
+        spectating=True,
     )
     assert calls == [], calls
     assert screen.gate_raises == [], screen.gate_raises
@@ -257,13 +217,22 @@ def test_toggles_do_nothing_when_no_explore_offer_is_standing(monkeypatch) -> No
 # --------------------------------------------------------------------------
 
 def _explore_start_call_node() -> ast.Call:
-    """The `explore_start_for_profile(...)` call node inside `_run_play`."""
+    """A policy `explore_start_for_profile(...)` call with dock/tolls kwargs.
+
+    Prefers ``_start_policy_explore`` (trainer path); falls back to the first
+    call that forwards both flags as bare names.
+    """
     tree = ast.parse(inspect.getsource(app_mod))
+    candidates = []
     for node in ast.walk(tree):
         if not isinstance(node, ast.Call):
             continue
         func = node.func
         if isinstance(func, ast.Attribute) and func.attr == "explore_start_for_profile":
+            candidates.append(node)
+    for node in candidates:
+        passed = {kw.arg for kw in node.keywords}
+        if {"dock_new_ports", "fight_tolls"} <= passed:
             return node
     raise AssertionError("no explore_start_for_profile call site found in app.py")
 
@@ -346,64 +315,39 @@ def test_compose_states_no_dock_when_the_operator_has_not_opted_in() -> None:
     ) == _OFF_ACTION
 
 
-def test_the_offer_line_is_what_play_actually_paints(monkeypatch) -> None:
-    """The WIRING, driven through the real `_run_play`.
-
-    A composer with green unit tests and no caller is indistinguishable from
-    no composer at all, and this one decides whether a capability is
-    discoverable — the exact thing that was broken. So this asserts the
-    product path, not the function.
-    """
+def test_ensure_does_not_paint_gather_hint_or_press_e(monkeypatch) -> None:
+    """WO-PLAY-STRIP-POLICY-AUTO REVISE: LOGS has no explore-available tease."""
     _calls, screen = _drive(monkeypatch, [])
-    assert explore_flags.GATHER_HINT in (screen.status_line or ""), screen.status_line
-    assert "press E" in (screen.status_line or ""), screen.status_line
+    line = screen.status_line or ""
+    assert "press E" not in line, line
+    assert "D to pass" not in line, line
+    assert explore_flags.GATHER_HINT == ""
+    assert "GATHER_HINT" not in line
 
 
-def test_the_offer_line_fits_an_eighty_column_terminal() -> None:
-    """Load-bearing, not cosmetic: it is the TAIL that clips, and the hint is
-    the tail. A gather hint an 80-column operator never sees would leave the
-    defect exactly where it was while every content assertion above passed.
-
-    The length is deterministic — `app._EXPLORE_OFFER_CLASSIFICATION` is the
-    constant `"main_command"`, so this is a real bound and not a sample.
-
-    What this measures is CHARACTERS, which equals display cells here only
-    because the line carries no East-Asian-wide character — asserted below
-    so the equivalence is checked rather than assumed. It does carry five
-    AMBIGUOUS-width ones (`×`, `—`, `·`), which a CJK-locale terminal
-    renders double: 79 → 84, over the bound. That exposure is pre-existing
-    (the em-dash/middle-dot idiom is used across the offer line and teach
-    band) but this WO does widen it by one `·`. Not handled here — a chrome
-    fix is the wrong place to introduce a width policy — and reported to the
-    hub rather than left for the next reader to rediscover.
-    """
-    line = explore_flags.compose_explore_offer(app_mod._EXPLORE_OFFER_CLASSIFICATION, cycles=5)
+def test_the_offer_composer_fits_an_eighty_column_terminal() -> None:
+    """Residual composer (not painted post-ensure) still stays ≤80."""
+    line = explore_flags.compose_explore_offer(
+        app_mod._EXPLORE_OFFER_CLASSIFICATION, cycles=0
+    )
     wide = [c for c in line if unicodedata.east_asian_width(c) in ("W", "F")]
     assert not wide, f"chars != cells; wide chars present: {wide}"
     assert len(line) <= 80, f"{len(line)} cols: {line}"
+    assert "press E" not in line
+    assert "D to pass" not in line
 
 
 def test_the_offer_line_degrades_rather_than_raises() -> None:
-    """It is built during the post-ensure path; a raise there costs the
-    operator the whole offer, which is worse than a vague line."""
     for bad in (None, 3, object(), b"x"):
         out = explore_flags.compose_explore_offer(bad, cycles=bad)
-        assert isinstance(out, str) and "press E" in out
+        assert isinstance(out, str)
+        assert "press E" not in out
+        assert "session ready" in out
 
 
-def test_the_off_marker_names_both_the_state_and_the_key() -> None:
-    """Pinned by LITERAL, on purpose — this is the one assertion in the file
-    that a deletion cannot slip past.
-
-    Every other expectation is derived from `DOCK_OFF_MARKER`, so emptying
-    the constant would empty them too and they would all still pass. This
-    one fails.
-
-    Both halves are required and they fail differently: without the state
-    the line says nothing new, and without the key the operator learns they
-    are missing something while remaining unable to act on it.
-    """
-    assert explore_flags.DOCK_OFF_MARKER == "no-dock (D to gather)"
+def test_the_off_marker_names_port_trade_not_d_key() -> None:
+    """Pinned by LITERAL — gather OFF tracks Port Trade·OFF, not `D to gather`."""
+    assert explore_flags.DOCK_OFF_MARKER == "no-dock (Port Trade·OFF)"
 
 
 def test_compose_appends_markers_in_a_stable_order() -> None:
@@ -428,10 +372,10 @@ def test_fight_tolls_stays_silent_when_off_while_dock_speaks() -> None:
     toward the spend.
     """
     off = explore_flags.compose_explore_action("Explore", dock=False, tolls=False)
-    assert "gather" in off, "the re-enable affordance is not advertised"
-    assert "F" not in off.replace("Explore", ""), off
+    assert "Port Trade" in off, off
+    assert explore_flags.TOLLS_MARKER not in off, off
     assert "toll" not in off.lower(), off
-    assert explore_flags.GATHER_HINT == "D to pass"
+    assert explore_flags.GATHER_HINT == ""
 
 
 @pytest.mark.parametrize("bad", [None, 3, object(), b"x"])

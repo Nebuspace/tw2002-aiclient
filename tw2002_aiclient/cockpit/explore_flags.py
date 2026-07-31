@@ -10,9 +10,10 @@ and the daemon reads both (`session/protocol.py`). Play's chrome lives here.
 # Play dock default ON; fight-tolls stays OFF
 
 WO-PLAY-EXPLORE-GATHER-DEFAULT-ON (Max GO 2026-07-30): Play Explore starts with
-gather/dock ON so first-sight ports are entered for commodity ingest unless the
-operator presses `D` to pass ports. Fight-tolls remains default OFF (`F` opts
-in). CLI/daemon library defaults stay OFF — only the Play surface flipped.
+gather/dock ON so first-sight ports are entered for commodity ingest, driven
+from Port Trade·ON by default (WO-PLAY-STRIP-POLICY-AUTO). Fight-tolls remains
+default OFF (`F` opts in). CLI/daemon library defaults stay OFF — only the
+Play surface flipped.
 
 `y` at the confirm gate must keep meaning exactly what the line above it says,
 so the toggle happens BEFORE the gate is raised and is spelled out IN the line
@@ -81,17 +82,16 @@ TOLLS_TOGGLE_KEYS = frozenset({ord("f"), ord("F")})
 # be this module quietly advertising a path that SPENDS fighters. Loud toward
 # the safe action, quiet toward the spend.
 DOCK_MARKER = "+dock"
-# Names the state AND the key. When gather is OFF, `D` re-enables it — so the
-# OFF marker still teaches the gather key. The *offer* line (GATHER_HINT) is
-# what teaches the default-ON path: `D` passes ports / disables gather.
-DOCK_OFF_MARKER = "no-dock (D to gather)"
+# OFF marker names the Port Trade strip linkage (WO-PLAY-STRIP-POLICY-AUTO) —
+# gather rides Port Trade·ON, not a LOGS-taught `D` key. `D` may still toggle
+# a loop-local opt-in for residual tests; it is not advertised in LOGS.
+DOCK_OFF_MARKER = "no-dock (Port Trade·OFF)"
 TOLLS_MARKER = "+fight-tolls"
 
-# Appended to the post-ensure offer status line. Play gather defaults ON
-# (WO-PLAY-EXPLORE-GATHER-DEFAULT-ON), so this advertises how to *disable*
-# dock — not how to discover it. Kept ≤9 chars so the offer line stays ≤80
-# columns with classification=`main_command` and cycles=5 (see the width pin).
-GATHER_HINT = "D to pass"
+# Retired from LOGS / status paint (WO-PLAY-STRIP-POLICY-AUTO REVISE). Kept as
+# an empty constant so older imports do not AttributeError; composers must not
+# append it to operator-facing lines.
+GATHER_HINT = ""
 
 # Status-line wording for the toggle itself. States the consequence, not the
 # variable name: "dock ON" tells an operator nothing about what it spends.
@@ -129,8 +129,7 @@ def compose_explore_action(
     """Spell the run's flags into the confirm line's action text.
 
     The gate must describe the run it actually arms, so **dock is always
-    stated** -- `+dock` when gather is ON (Play default), `no-dock (D to
-    gather)` when the operator pressed `D` to pass ports. Silence is not a
+    stated** -- `+dock` when gather is ON (Play default), `no-dock (Port Trade·OFF)` when gather is OFF. Silence is not a
     description: an unmarked line was read for a whole live session as
     "explore", when what it armed was "explore, passing every port".
 
@@ -151,22 +150,22 @@ def compose_explore_action(
 
 
 def compose_explore_offer(classification: object, *, cycles: object = None) -> str:
-    """The post-ensure status line announcing that explore is available.
+    """Legacy composer for explore-available wording (tests / residual callers).
 
-    Lives here rather than as an f-string in `app._run_play` for one
-    practical reason: this is the operator's FIRST contact with the feature,
-    and inside that loop it is unreachable by a unit test. A surface that
-    decides whether a capability is discoverable should be assertable
-    without a curses harness.
-
-    Purely additive against the pre-WO line -- the `press E` token is kept
-    byte-for-byte, because several pins assert on it. `GATHER_HINT` names how
-    to pass ports under the Play gather-default-ON contract. Never raises.
+    WO-PLAY-STRIP-POLICY-AUTO REVISE: Play no longer paints this into LOGS after
+    ensure — App-armed kicks infinite explore, and `E` restarts the same run.
+    Kept for unit pins and any non-LOGS caller. Does **not** advertise press-E
+    or `D` / GATHER_HINT. Never raises.
     """
     label = classification if isinstance(classification, str) else "?"
     count = cycles if isinstance(cycles, int) and not isinstance(cycles, bool) else None
-    run = f"explore ×{count} available" if count is not None else "explore available"
-    return f"session ready — {label}  ·  {run} — press E  ·  {GATHER_HINT}"
+    if count == 0:
+        run = "explore available (infinite · find StarDock)"
+    elif count is not None:
+        run = f"explore ×{count} available"
+    else:
+        run = "explore available (find StarDock)"
+    return f"session ready — {label}  ·  {run}"
 
 
 def describe_dock(enabled: object) -> str:

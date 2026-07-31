@@ -93,6 +93,14 @@ def _fake_ensure(profile, **kwargs):
 
 adapters.ensure_session = _fake_ensure
 
+class _ExploreOk:
+    ok = True
+    reason = None
+    detail = None
+    raw = None
+
+adapters.explore_start_for_profile = lambda *a, **k: _ExploreOk()
+
 import curses
 from tw2002_aiclient.app import _run
 

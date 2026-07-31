@@ -74,13 +74,14 @@ _EXPLORE_STARDOCK_ACTION = "Explore \u2014 find StarDock (until found)"
 # number the run is started with -- the confirm gate's whole value is that the
 # prompt is the truth about what happens next.
 _EXPLORE_MIN_SECTORS = 5
-# The key that RAISES the confirm gate. Deliberately not auto-raised on
-# ensure: a modal gate raised unbidden consumes the operator's next
-# keystroke, and measurement showed that keystroke is usually their Ctrl-A
-# attach chord (33 pre-existing `_run_play` tests went red on exactly that
-# swallow). Same posture the hub ruled for WO-P5-065's prompt-to-attach --
-# offer, do not take. `E` is unbound everywhere else in this app; teach
-# `A`/`R`/`T` stay reserved for WO-067/068/069.
+# Infinite / exhaustive explore for the trainer policy path (App-armed ensure
+# kick + `E` restart): min_sectors=0 means "keep going" toward StarDock rather
+# than stopping after a ×N map-fill band (WO-PLAY-STRIP-POLICY-AUTO REVISE).
+_EXPLORE_POLICY_MIN_SECTORS = 0
+# `E` starts/restarts infinite find-StarDock explore (no confirm). App-armed
+# ensure also kicks the same run when classification is main_command. `O` may
+# still raise a confirm for an autonomy explore offer. Teach `A`/`R`/`T` stay
+# reserved for WO-067/068/069.
 _EXPLORE_OFFER_KEYS = (ord("e"), ord("E"))
 # WO-STARDOCK-HOLD-UPGRADE-ARM: H offers the hold-buy confirm scaffold when
 # evidence is complete. Pressing H itself still never auto-executes -- it
@@ -828,6 +829,53 @@ def _stop_live_runners(*, run_dir) -> tuple[bool, list[str]]:
     return not failures, failures
 
 
+def _start_policy_explore(
+    play: PlayShellScreen,
+    profile: ProfileRow,
+    *,
+    dock,
+    tolls,
+    status_starting: str | None = None,
+) -> bool:
+    """Start/restart infinite find-StarDock explore (trainer policy path).
+
+    ``min_sectors=_EXPLORE_POLICY_MIN_SECTORS`` (0) is exhaustive; intent is
+    always ``INTENT_FIND_STARDOCK``. Used after App-armed ensure and on `E`.
+    Never raises. Returns True when the adapter reported ok (caller should
+    keep explore_poll_active).
+    """
+    play.status_line = status_starting or (
+        "starting explore — find StarDock (infinite)…"
+    )
+    play.explore_band = "find StarDock starting…"
+    try:
+        play.draw()
+    except Exception:  # noqa: BLE001 — paint must not block start
+        pass
+    try:
+        explore = adapters.explore_start_for_profile(
+            profile,
+            min_sectors=_EXPLORE_POLICY_MIN_SECTORS,
+            intent=_explore.INTENT_FIND_STARDOCK,
+            dock_new_ports=dock,
+            fight_tolls=tolls,
+        )
+    except Exception as exc:  # noqa: BLE001
+        play.status_line = f"explore failed to start — {type(exc).__name__}"
+        play.explore_band = None
+        play.explore_decision_lines = None
+        return False
+    if getattr(explore, "ok", False):
+        play.status_line = "explore started — find StarDock (infinite)"
+        play.explore_band = "find StarDock…"
+        return True
+    reason = getattr(explore, "reason", None) or "unknown"
+    play.status_line = f"explore did not start — {reason}"
+    play.explore_band = None
+    play.explore_decision_lines = None
+    return False
+
+
 def _autonomy_auto_fire(
     play: PlayShellScreen, *, profile: ProfileRow, run_dir
 ) -> tuple[bool, bool]:
@@ -846,8 +894,9 @@ def _autonomy_auto_fire(
     plan_from_status``) -- this is the same offer, not a second invented
     one; only the confirm step (``begin_arm_confirm`` / the operator's own
     `y`) is skipped, exactly as the DECISION states. `explore` offers are
-    never acted on here (see ``_AUTO_FIRE_KINDS``) -- Explore has no ON/OFF
-    toggle and stays the operator's own `E` press.
+    never acted on here (see ``_AUTO_FIRE_KINDS``) -- Explore is kicked by
+    the App-armed ensure path (``_start_policy_explore``) and restarted by
+    `E`; this idle-tick auto-fire stays Port Trade / Cargo Hold only.
 
     Each of the two toggles gates its own kind independently:
     ``play.port_trade_on`` for ``run_chain``, ``play.cargo_upgrade_on`` for
@@ -1010,17 +1059,11 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
         # which is default-deny. `no_auto_arm=True` above is untouched:
         # explore is a separate, human-confirmed action, not a silent
         # re-arm of Autopilot.
+        # Explore stays armable when we settled on the command prompt; LOGS
+        # keeps the plain ready line (no press-E / GATHER_HINT tease —
+        # WO-PLAY-STRIP-POLICY-AUTO REVISE). App-armed kick happens after
+        # loop-local dock defaults are initialized below.
         explore_offered = result.classification == _EXPLORE_OFFER_CLASSIFICATION
-        if explore_offered:
-            # WO-EXPLORE-GATHER-VISIBLE: composed in `cockpit/explore_flags.py`
-            # rather than inline here, so the operator's FIRST contact with the
-            # feature is assertable without a curses harness. The line is
-            # additive against the pre-WO one -- `press E` is unchanged; `D`
-            # is named because it was reachable on every surface and
-            # advertised on none.
-            play.status_line = _explore_flags.compose_explore_offer(
-                result.classification, cycles=_EXPLORE_MIN_SECTORS
-            )
     else:
         explore_offered = False
         play.status_line = f"ensure failed — {result.reason}: {result.detail}"
@@ -1077,7 +1120,9 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
     # confirm line and the adapter call, both of which live in this loop,
     # and a flag that outlived the loop would be an opt-in the operator
     # cannot see when they next arm.
-    explore_dock_opt_in = True
+    # Gather follows Port Trade·ON (strip default True). Residual `D` may
+    # still flip this loop-local flag; starts prefer the synced value.
+    explore_dock_opt_in = getattr(play, "port_trade_on", True)
     explore_tolls_opt_in = False
     # WO-PLAY-AUTOLOOP-START: the exact row the taught-loop confirm line was
     # composed from. Held alongside `pending_confirm_action` rather than
@@ -1106,6 +1151,20 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
     # when ``explore_status`` reports a terminal outcome so idle ticks do not
     # spam the daemon.
     explore_poll_active = False
+    # WO-PLAY-STRIP-POLICY-AUTO REVISE: App-armed + main_command → infinite
+    # find-StarDock explore without confirm (same helper `E` restarts).
+    if (
+        explore_offered
+        and not play.attached
+        and not play.spectating
+    ):
+        explore_poll_active = _start_policy_explore(
+            play,
+            profile,
+            dock=explore_dock_opt_in,
+            tolls=explore_tolls_opt_in,
+            status_starting="App-armed — infinite explore (find StarDock)…",
+        )
     # WO-AUTOLOOP-CYCLE-PROGRESS: poll autoloop_status on idle ticks while a
     # taught run is live so the hint band can show cycle chrome. Cleared when
     # the run stands down. Explore owns the same band when its poll is active.
@@ -1396,64 +1455,16 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                 play.status_line = _explore_flags.describe_tolls(explore_tolls_opt_in)
                 continue
             if action is None and explore_offered and key in _EXPLORE_OFFER_KEYS:
-                # The human asked for the gate. THIS is what raises it --
-                # never the ensure result on its own. `handle_key` returned
-                # None, so no gate is currently up and no other binding
-                # claimed the key.
-                pending_confirm_action = "explore"
-                pending_confirm_loop = None  # a different gate owns the row now
-                pending_confirm_reflex = None
-                pending_confirm_hold = None
-                pending_confirm_trade = None
-                # WO-EXPLORE-AUTOMATION-GATE E3: one affordance, two intents.
-                # `E` CYCLES which goal is on offer and raises the gate for
-                # it; it never starts anything. The first press of a session
-                # is map-fill, so existing muscle memory arms the existing
-                # RUN. (It no longer produces the identical LINE --
-                # WO-EXPLORE-GATHER-VISIBLE added the dock state to it. The
-                # run is what muscle memory is entitled to; the wording was
-                # never the promise, and treating it as one is what kept the
-                # prompt silent about ports.)
-                if explore_intent_offered is None:
-                    explore_intent_offered = _explore.ARMABLE_INTENTS[0]
-                else:
-                    explore_intent_offered = _explore.next_armable_intent(
-                        explore_intent_offered
-                    )
-                # ONE `begin_arm_confirm` call, deliberately: the label is
-                # chosen first and the gate raised once. An if/else with a
-                # call in each arm reads the same but adds a fourth
-                # production call site, and `test_exactly_three_production_
-                # call_sites_raise_the_gate` counts them precisely so a new
-                # money-path gate cannot appear quietly. One affordance, one
-                # call site -- the count stays honest.
-                #
-                # find-StarDock carries NO cycle count: that run ends on
-                # ARRIVAL or exhaustion, not after N sectors, and a prompt
-                # promising "×5" would describe the other intent's rule.
-                if explore_intent_offered == _explore.INTENT_FIND_STARDOCK:
-                    offer_action, offer_cycles = _EXPLORE_STARDOCK_ACTION, None
-                else:
-                    offer_action, offer_cycles = _EXPLORE_OFFER_ACTION, _EXPLORE_MIN_SECTORS
-                # WO-PLAY-EXPLORE-FLAGS: the gate must describe the run it
-                # arms, so any opt-in the operator switched on is spelled
-                # out IN the line they confirm.
-                #
-                # WO-EXPLORE-GATHER-VISIBLE applied that rule to the OFF
-                # direction too, which is where it had never been applied.
-                # This used to return the action text unchanged with both
-                # flags off "so the default prompt stays byte-identical to
-                # the pre-WO one" -- and a run that PASSES PORTS BY is just
-                # as much a property of the run as one that docks. Dock is
-                # now always stated; `+fight-tolls` stays ON-only on purpose
-                # (see `cockpit/explore_flags.py`: loud toward the safe
-                # action, quiet toward the spend).
-                offer_action = _explore_flags.compose_explore_action(
-                    offer_action,
+                # WO-PLAY-STRIP-POLICY-AUTO REVISE: `E` starts/restarts the
+                # same infinite find-StarDock explore App-armed ensure kicks —
+                # no confirm, no intent cycle, min_sectors=0. Dock starts from
+                # Port Trade·ON and residual `D` may have flipped the local flag.
+                explore_poll_active = _start_policy_explore(
+                    play,
+                    profile,
                     dock=explore_dock_opt_in,
                     tolls=explore_tolls_opt_in,
                 )
-                play.begin_arm_confirm(offer_action, cycles=offer_cycles)
                 continue
             if action is None and key in _HOLD_OFFER_KEYS:
                 # WO-STARDOCK-HOLD-UPGRADE-ARM: H raises the hold-buy gate only
@@ -1960,16 +1971,18 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                 pending_confirm_hold = None
                 pending_confirm_reflex = None
                 if armed_intent == _explore.INTENT_FIND_STARDOCK:
-                    play.status_line = "starting explore — find StarDock…"
+                    run_min = _EXPLORE_POLICY_MIN_SECTORS
+                    play.status_line = "starting explore — find StarDock (infinite)…"
                     play.explore_band = "find StarDock starting…"
                 else:
+                    run_min = _EXPLORE_MIN_SECTORS
                     play.status_line = f"starting explore ×{_EXPLORE_MIN_SECTORS}…"
                     play.explore_band = f"explore ×{_EXPLORE_MIN_SECTORS} starting…"
                 play.draw()  # the start call blocks; show intent first
                 try:
                     explore = adapters.explore_start_for_profile(
                         profile,
-                        min_sectors=_EXPLORE_MIN_SECTORS,
+                        min_sectors=run_min,
                         intent=armed_intent,
                         # WO-PLAY-EXPLORE-FLAGS: the opt-ins the operator
                         # switched on, and that the confirm line they just
@@ -2006,8 +2019,16 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                     play.explore_decision_lines = None
                 else:
                     if getattr(explore, "ok", False):
-                        play.status_line = f"explore started — {_EXPLORE_MIN_SECTORS} sectors"
-                        play.explore_band = f"explore 0/{_EXPLORE_MIN_SECTORS}…"
+                        if armed_intent == _explore.INTENT_FIND_STARDOCK:
+                            play.status_line = (
+                                "explore started — find StarDock (infinite)"
+                            )
+                            play.explore_band = "find StarDock…"
+                        else:
+                            play.status_line = (
+                                f"explore started — {_EXPLORE_MIN_SECTORS} sectors"
+                            )
+                            play.explore_band = f"explore 0/{_EXPLORE_MIN_SECTORS}…"
                         explore_poll_active = True
                     else:
                         # Report the adapter's machine-readable reason rather

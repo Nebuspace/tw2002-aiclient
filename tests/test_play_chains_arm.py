@@ -117,6 +117,8 @@ def _drive(monkeypatch, keys, *, store=None, started=None, raises=None):
         def __init__(self, *a, **k):
             super().__init__(*a, **k)
             self.gate_raises = []
+            # Skip App-armed ensure explore kick — this file pins chains, not policy explore.
+            self.spectating = True
             seen["screen"] = self
 
         def begin_arm_confirm(self, action=None, *, cycles=None):
@@ -185,9 +187,9 @@ def test_confirming_a_loop_does_not_start_explore(monkeypatch) -> None:
 def test_confirming_explore_does_not_arm_a_loop(monkeypatch) -> None:
     """The same pin from the other side: adding the loop branch must not
     steal the explore path's own confirm."""
-    arm, explore, _screen = _drive(monkeypatch, [ord("E"), ord("y")])
+    arm, explore, _screen = _drive(monkeypatch, [ord("E")])
     assert len(explore) == 1, "explore did not start"
-    assert arm == [], f"an explore confirm armed a taught loop: {arm}"
+    assert arm == [], f"an explore start armed a taught loop: {arm}"
 
 
 def test_orphan_arm_confirm_starts_neither_runner(monkeypatch) -> None:
@@ -220,6 +222,7 @@ def test_orphan_arm_confirm_starts_neither_runner(monkeypatch) -> None:
         def __init__(self, *a, **k):
             super().__init__(*a, **k)
             self._orphan_fired = False
+            self.spectating = True  # no App-armed ensure explore kick
             seen["screen"] = self
 
         def handle_key(self, key):
@@ -250,7 +253,7 @@ def test_orphan_arm_confirm_starts_neither_runner(monkeypatch) -> None:
 
 def test_explore_confirm_still_requires_explicit_pending(monkeypatch) -> None:
     """Proof Accept #1: explore start is gated on explicit pending=explore."""
-    arm, explore, _screen = _drive(monkeypatch, [ord("E"), ord("y")])
+    arm, explore, _screen = _drive(monkeypatch, [ord("E")])
     assert explore and not arm
     src = Path(app_mod.__file__).read_text(encoding="utf-8")
     assert 'if action == "arm_confirm" and pending_confirm_action == "explore"' in src

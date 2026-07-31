@@ -341,17 +341,25 @@ def test_the_play_explore_arm_does_not_force_dock_on():
         if "dock_new_ports" not in kw:
             continue
         node = kw["dock_new_ports"]
-        # WO-PLAY-EXPLORE-GATHER-DEFAULT-ON: Play forwards a bare name that
-        # initialises True. Must not hardcode a Constant True/False here —
-        # that would bypass the operator toggle.
+        # Must be a bare name (not Constant True/False). Policy helper uses
+        # parameter `dock`; Play loop uses `explore_dock_opt_in` synced from
+        # Port Trade·ON (getattr default True) — Constant False still fails.
         assert isinstance(node, ast.Name), (
             f"dock_new_ports must be a bare Play toggle name, got "
             f"{ast.dump(node)}"
         )
-        assert _initialised_constant(node.id, True), (
-            f"{node.id} is forwarded as the dock arm but does not "
-            f"initialise to True -- Play gather default must stay ON"
+        if node.id == "dock":
+            continue  # _start_policy_explore parameter
+        const_inits = [
+            n for n in ast.walk(tree)
+            if isinstance(n, ast.Assign)
+            and any(isinstance(t, ast.Name) and t.id == node.id for t in n.targets)
+            and isinstance(n.value, ast.Constant)
+        ]
+        assert not any(a.value.value is False for a in const_inits), (
+            f"{node.id} must not Constant-init False (gather default ON)"
         )
+        assert not isinstance(node, ast.Constant)
 
 
 # --- wired, not merely defined -------------------------------------------

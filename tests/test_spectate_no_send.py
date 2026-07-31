@@ -831,7 +831,8 @@ def test_run_play_drives_only_subscribe_and_status_writes(monkeypatch, tmp_path)
     monkeypatch.setattr(screens_mod.curses, "has_colors", lambda: False)
     monkeypatch.setattr(
         adapters, "ensure_session",
-        lambda *a, **k: EnsureResult(ok=True, classification="main_command"),
+        # Not main_command: App-armed policy explore would call explore_start.
+        lambda *a, **k: EnsureResult(ok=True, classification="unknown"),
     )
 
     log: list[tuple] = []

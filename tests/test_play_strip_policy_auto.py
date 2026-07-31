@@ -437,3 +437,213 @@ def test_p_c_s_still_toggle_and_do_not_shadow_mode_leave(monkeypatch):
     assert screen.ship_upgrade_on is False
     for name in ("autoloop", "explore", "trade", "hold"):
         assert stop_calls[name] == []
+
+
+# ---------------------------------------------------------------------------
+# WO-PLAY-STRIP-POLICY-AUTO REVISE — explore LOGS / infinite pins
+# ---------------------------------------------------------------------------
+
+
+def test_ensure_status_has_no_explore_offer_tease(monkeypatch):
+    """Post-ensure LOGS must not advertise press-E / GATHER_HINT."""
+    from tw2002_aiclient.cockpit import explore_flags
+
+    calls = []
+
+    class _Ensure:
+        ok = True
+        classification = "main_command"
+        reason = None
+        detail = None
+
+    class _Explore:
+        ok = True
+        reason = None
+        detail = None
+        raw = None
+
+    monkeypatch.setattr(adapters, "ensure_session", lambda name, **kw: _Ensure())
+    monkeypatch.setattr(
+        adapters,
+        "explore_start_for_profile",
+        lambda profile, **kw: calls.append(kw) or _Explore(),
+        raising=False,
+    )
+
+    seen = {}
+    real = app_mod.PlayShellScreen
+
+    class _Spy(real):
+        def __init__(self, *a, **k):
+            super().__init__(*a, **k)
+            seen["screen"] = self
+
+        def draw(self):
+            pass
+
+    class _Stdscr:
+        def __init__(self):
+            self._keys = [27]
+            self.rows, self.cols = 40, 160
+
+        def getmaxyx(self):
+            return (self.rows, self.cols)
+
+        def getch(self):
+            return self._keys.pop(0) if self._keys else 27
+
+        def timeout(self, ms):
+            pass
+
+        def erase(self):
+            pass
+
+        def refresh(self):
+            pass
+
+        def addstr(self, *a, **k):
+            pass
+
+        def addnstr(self, *a, **k):
+            pass
+
+        def attron(self, a):
+            pass
+
+        def attroff(self, a):
+            pass
+
+        def hline(self, *a, **k):
+            pass
+
+        def vline(self, *a, **k):
+            pass
+
+        def border(self, *a, **k):
+            pass
+
+        def chgat(self, *a, **k):
+            pass
+
+        def keypad(self, flag):
+            pass
+
+        def nodelay(self, flag):
+            pass
+
+    monkeypatch.setattr(app_mod, "PlayShellScreen", _Spy)
+    monkeypatch.setattr(app_mod.curses, "has_colors", lambda: False, raising=False)
+    profile = app_mod.ProfileRow(
+        name="alpha", handle="Alpha", server="demo-a",
+        host="demo-a.example", game_letter="B",
+    )
+    try:
+        app_mod._run_play(_Stdscr(), profile)
+    except Exception:
+        pass
+    line = (seen["screen"].status_line or "")
+    assert "press E" not in line, line
+    assert "D to pass" not in line, line
+    assert explore_flags.GATHER_HINT not in line or explore_flags.GATHER_HINT == ""
+    assert calls and calls[0].get("min_sectors") == 0
+
+
+def test_e_starts_infinite_explore(monkeypatch):
+    from tw2002_aiclient import explore as explore_mod
+
+    calls = []
+
+    class _Ensure:
+        ok = True
+        classification = "main_command"
+        reason = None
+        detail = None
+
+    class _Explore:
+        ok = True
+        reason = None
+        detail = None
+        raw = None
+
+    monkeypatch.setattr(adapters, "ensure_session", lambda name, **kw: _Ensure())
+    monkeypatch.setattr(
+        adapters,
+        "explore_start_for_profile",
+        lambda profile, **kw: calls.append(kw) or _Explore(),
+        raising=False,
+    )
+    seen = {}
+    real = app_mod.PlayShellScreen
+
+    class _Spy(real):
+        def __init__(self, *a, **k):
+            super().__init__(*a, **k)
+            self.spectating = True  # skip ensure kick
+            seen["screen"] = self
+
+        def draw(self):
+            pass
+
+    class _Stdscr:
+        def __init__(self):
+            self._keys = [ord("E"), 27]
+            self.rows, self.cols = 40, 160
+
+        def getmaxyx(self):
+            return (self.rows, self.cols)
+
+        def getch(self):
+            return self._keys.pop(0) if self._keys else 27
+
+        def timeout(self, ms):
+            pass
+
+        def erase(self):
+            pass
+
+        def refresh(self):
+            pass
+
+        def addstr(self, *a, **k):
+            pass
+
+        def addnstr(self, *a, **k):
+            pass
+
+        def attron(self, a):
+            pass
+
+        def attroff(self, a):
+            pass
+
+        def hline(self, *a, **k):
+            pass
+
+        def vline(self, *a, **k):
+            pass
+
+        def border(self, *a, **k):
+            pass
+
+        def chgat(self, *a, **k):
+            pass
+
+        def keypad(self, flag):
+            pass
+
+        def nodelay(self, flag):
+            pass
+
+    monkeypatch.setattr(app_mod, "PlayShellScreen", _Spy)
+    monkeypatch.setattr(app_mod.curses, "has_colors", lambda: False, raising=False)
+    profile = app_mod.ProfileRow(
+        name="alpha", handle="Alpha", server="demo-a",
+        host="demo-a.example", game_letter="B",
+    )
+    try:
+        app_mod._run_play(_Stdscr(), profile)
+    except Exception:
+        pass
+    assert len(calls) == 1
+    assert calls[0]["min_sectors"] == 0
+    assert calls[0].get("intent") == explore_mod.INTENT_FIND_STARDOCK

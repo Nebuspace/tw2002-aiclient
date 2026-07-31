@@ -117,7 +117,7 @@ from tw2002_aiclient.adapters import EnsureResult
 
 
 def _fake_ensure(profile, **kwargs):
-    return EnsureResult(ok=True, classification="main_command")
+    return EnsureResult(ok=True, classification="unknown")  # no App-armed explore kick in chrome PTY
 
 
 adapters.ensure_session = _fake_ensure

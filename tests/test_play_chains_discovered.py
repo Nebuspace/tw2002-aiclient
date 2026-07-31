@@ -268,6 +268,7 @@ def _drive(monkeypatch, keys, *, store, recompute, sector_count=SECTOR_COUNT):
         def __init__(self, *a, **k):
             super().__init__(*a, **k)
             self.gate_raises = []
+            self.spectating = True  # no App-armed ensure explore kick
             seen["screen"] = self
 
         def begin_arm_confirm(self, action=None, *, cycles=None):
