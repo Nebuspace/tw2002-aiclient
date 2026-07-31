@@ -1,6 +1,6 @@
 # WO-TEACHBAND-L-CHAINS
 
-**Status:** READY  
+**Status:** DONE · origin `8352f3e` (#255) · tip-honesty stamp 2026-07-31 (product on main; banner was stale READY/OPEN)
 **Depends:** `main` ≥ `f5db859` · `WO-CHAINS-TUI-FULL` (`L` modal live) · HUD #254 shipped
 
 ## Goal

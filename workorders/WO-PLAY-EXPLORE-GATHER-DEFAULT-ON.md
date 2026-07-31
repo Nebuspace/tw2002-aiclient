@@ -1,6 +1,6 @@
 # WO-PLAY-EXPLORE-GATHER-DEFAULT-ON
 
-**Status:** READY  
+**Status:** DONE · origin `243a175` (#265) · tip-honesty stamp 2026-07-31 (product on main; banner was stale READY/OPEN)
 **Depends:** `main` ≥ `cdf3797` (#264)  
 **Max GO:** 2026-07-30 — Explore should enter first-sight ports and ingest
 commodity tables by default in Play.

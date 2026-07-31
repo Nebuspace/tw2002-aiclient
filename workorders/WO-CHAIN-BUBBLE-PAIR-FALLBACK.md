@@ -1,6 +1,6 @@
 # WO-CHAIN-BUBBLE-PAIR-FALLBACK — show class pair loops when profit bubbles are empty
 
-**Status:** OPEN · EXECUTE · HIGH · visible client gap (Max live-report 2026-07-31)
+**Status:** DONE · origin `91fa979` (#269) · tip-honesty stamp 2026-07-31 (product on main; banner was stale READY/OPEN)
 **Seat:** `impl-aiclient-cursor`
 **Branch:** `wo/CHAIN-BUBBLE-PAIR-FALLBACK`
 **Depends:** `main` ≥ `dfc560f` (#256/#257 bubbles + #265 gather)

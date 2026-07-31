@@ -1,6 +1,6 @@
 # WO-STATUS-FIGHTERS-ABOARD
 
-**Status:** READY  
+**Status:** DONE · origin `7397396` (#261) · tip-honesty stamp 2026-07-31 (product on main; banner was stale READY/OPEN)
 **Depends:** `main` ≥ `df862ad` (#260)
 
 ## Goal

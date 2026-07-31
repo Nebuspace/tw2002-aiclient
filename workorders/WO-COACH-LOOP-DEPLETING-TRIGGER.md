@@ -1,6 +1,6 @@
 # WO-COACH-LOOP-DEPLETING-TRIGGER
 
-**Status:** READY  
+**Status:** DONE · origin `c49819b` (#258) · tip-honesty stamp 2026-07-31 (product on main; banner was stale READY/OPEN)
 **Depends:** `main` ≥ `4d26eac`
 
 ## Goal

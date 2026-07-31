@@ -1,6 +1,6 @@
 # WO-COACH-DEAD-END-COUNT
 
-**Status:** READY  
+**Status:** DONE · origin `df862ad` (#260) · tip-honesty stamp 2026-07-31 (product on main; banner was stale READY/OPEN)
 **Depends:** `main` ≥ `fc39277` (#259)
 
 ## Goal
