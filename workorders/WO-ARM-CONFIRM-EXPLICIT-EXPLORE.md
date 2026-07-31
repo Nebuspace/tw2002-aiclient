@@ -1,6 +1,6 @@
 # WO-ARM-CONFIRM-EXPLICIT-EXPLORE — explore arm must not be the bare default
 
-**Status:** OPEN · READY  
+**Status:** DONE · origin `b25b158` (#120) · tip-honesty stamp 2026-07-31 (product on main; banner was stale OPEN)
 **Posted:** 2026-07-27T21:21:00Z · hub from CC #116 mid-build hazard  
 **Seat:** open (after #116 lands — same `app.py` seam)  
 **Depends:** prefer `main` ≥ #116 Accept (Play autoloop start)  
