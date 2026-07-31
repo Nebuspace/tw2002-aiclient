@@ -1,9 +1,10 @@
 # WO-PLAY-STRIP-TRAINER-CHROME
 
-**Status:** READY · EXECUTE · HIGH · Max GO 2026-07-31 (trainer strip redesign wave 1/3)
+**Status:** DONE · tip `fd90573` (`wo/PLAY-STRIP-TRAINER-CHROME`) · HIGH · Max GO 2026-07-31 (trainer strip redesign wave 1/3)
 **Seat:** `impl-aiclient-cursor`
 **Branch:** `wo/PLAY-STRIP-TRAINER-CHROME`
 **Depends:** `main` ≥ `f378779` · DECISION `RESOLVED-TRAINER-STRIP-AND-GUTTER-20260731`
+**Proof:** WO Proof list + full `pytest tests/ -q` green (6727 passed, 0 failed). live-prove **n/a** (chrome/layout paint only).
 
 ## Why
 
