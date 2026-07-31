@@ -122,17 +122,18 @@ class ChainScalars:
     "usually".
 
     WO-PLAY-CHAIN-BUBBLE-VIZ: ``best_chain`` retains ``chains[0]`` (global
-    longest) for GOALS hop scalars. Failed / truncated / no-world-model
+    longest) as the ranked-first cache. Failed / truncated / no-world-model
     updates never wipe the last good sequence; a completed empty search
     clears it to quiet empty. The chain object is **never** merged onto
     daemon ``status`` JSON.
 
-    WO-CHAIN-BUBBLE-PREFER-CURRENT: the always-on bubble strip reads via
-    ``bubble_subject(current_sector=…)``, which prefers the first ranked
-    priced cycle that includes the player's sector when one exists, else
-    ``chains[0]``. Full ranked tuple is retained so sector moves re-pick
-    without waiting for the next discovery tick. GOALS may still show
-    global hop count from ``best_chain`` / ``chains[0]``.
+    WO-CHAIN-BUBBLE-PREFER-CURRENT / WO-CHAIN-GOALS-MATCH-BUBBLE: the
+    always-on bubble strip and the GOALS hop scalars both prefer the first
+    ranked priced cycle that includes the player's sector when one exists,
+    else ``chains[0]``. Full ranked tuple is retained so sector moves
+    re-pick without waiting for the next discovery tick. ``best_chain``
+    stays the global longest for any consumer that still wants it; display
+    selection is ``_bubble_priced_chain`` / ``bubble_subject`` / ``merge``.
 
     WO-CHAIN-BUBBLE-PORT-CLASSES: successful non-empty updates also refresh
     ``port_classes`` / ``known_ports`` from the world-model port records for
@@ -329,6 +330,34 @@ class ChainScalars:
                     return chain
         return ranked[0]
 
+    @staticmethod
+    def _sector_from_status(status: object) -> object | None:
+        """HUD sector cell from a daemon status dict — same shape as Play draw."""
+        try:
+            if not isinstance(status, dict):
+                return None
+            hud = status.get("hud")
+            sector_cell = hud.get("sector") if isinstance(hud, dict) else None
+            if isinstance(sector_cell, dict):
+                return sector_cell.get("value")
+            return sector_cell
+        except Exception:  # noqa: BLE001
+            return None
+
+    def _display_hops_unit(
+        self, current_sector: object = None
+    ) -> tuple[int | None, str | None]:
+        """Hop scalars for GOALS / coach — same chain pick as the bubble strip."""
+        priced = self._bubble_priced_chain(current_sector)
+        if priced is not None:
+            try:
+                hops, unit = chain_hop_count_and_unit(priced)
+            except Exception:  # noqa: BLE001
+                hops, unit = None, None
+            if isinstance(hops, int) and not isinstance(hops, bool):
+                return hops, unit if isinstance(unit, str) and unit else "hops"
+        return self._hops, self._unit
+
     def bubble_subject(
         self, current_sector: object = None
     ) -> tuple[object | None, str | None]:
@@ -342,8 +371,8 @@ class ChainScalars:
         the priced half truncated empty (WO-CHAIN-BUBBLE-TRUNCATION-CAPTION).
         Never claim credits/turn for class pairs.
 
-        GOALS hop scalars still come from ``best_chain`` / ``chains[0]``
-        (global longest) — only this strip selection is local-preferring.
+        GOALS hop scalars use the same selection via ``merge`` /
+        ``_display_hops_unit``.
         """
         priced = self._bubble_priced_chain(current_sector)
         if priced is not None:
@@ -366,12 +395,20 @@ class ChainScalars:
         """Sectors with a non-``None`` port record; never on status JSON."""
         return set(self._known_ports)
 
-    def merge(self, status: object) -> dict | None:
+    def merge(
+        self, status: object, *, current_sector: object = None
+    ) -> dict | None:
         """``status`` with the cached scalars added; never mutates the input.
 
         Returns the argument unchanged when it is not a dict (the provider's
         own "no status" signal must survive untouched), and adds nothing before
         a discovery has been seen.
+
+        Hop / unit scalars follow the same local-prefer policy as
+        ``bubble_subject`` (WO-CHAIN-GOALS-MATCH-BUBBLE). When
+        ``current_sector`` is omitted, the HUD sector cell on ``status`` is
+        used if present — so the wrapped status provider aligns GOALS with
+        the bubble strip without a second call site.
 
         **Does not clobber.** A key the caller already supplied with a
         non-``None`` value wins. Today the daemon emits neither field -- checked,
@@ -383,11 +420,14 @@ class ChainScalars:
             return status
         if not self._seen:
             return status
+        if current_sector is None:
+            current_sector = self._sector_from_status(status)
+        hops, unit = self._display_hops_unit(current_sector)
         merged = dict(status)
         if merged.get(HOPS_KEY) is None:
-            merged[HOPS_KEY] = self._hops
+            merged[HOPS_KEY] = hops
         if merged.get(UNIT_KEY) is None:
-            merged[UNIT_KEY] = self._unit
+            merged[UNIT_KEY] = unit
         return merged
 
 
