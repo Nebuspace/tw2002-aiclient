@@ -22,7 +22,6 @@ from tw2002_aiclient.cockpit import chain_bubbles as cockpit_chain_bubbles
 from tw2002_aiclient.cockpit import chains as cockpit_chains
 from tw2002_aiclient.cockpit import control_seat as cockpit_control_seat
 from tw2002_aiclient.cockpit import covermeter as cockpit_covermeter
-from tw2002_aiclient.cockpit import panic
 from tw2002_aiclient.cockpit import reflex_controls as cockpit_reflex_controls
 from tw2002_aiclient.cockpit import rules_library as cockpit_rules_library
 from tw2002_aiclient.cockpit import decisions as cockpit_decisions
@@ -1028,12 +1027,14 @@ class PlayShellScreen:
         # `RESOLVED-TRAINER-STRIP-AND-GUTTER-20260731` point 2 -- "default
         # ON" for all three). This is LOCAL PLAY STATE driving CHROME
         # ONLY: nothing in this class or `app.py` reads these to gate a
-        # send, and no key flips them yet (see `teachband.py`'s module
-        # docstring for why `P` in particular stays a display-only label
-        # this WO). A follow-on WO wires a real key + daemon-side spend
-        # gate to each; until then these three booleans exist purely so
-        # the calm band can render its required `·ON`/`·OFF` suffix
-        # honestly from SOME state rather than a hardcoded literal.
+        # send. `P`/`C`/`S` (see `handle_key` below) flip these three
+        # booleans directly and return no intent -- there is nothing for
+        # `app.py` to act on yet, only this instance's own display state.
+        # A follow-on WO (WO-PLAY-STRIP-POLICY-AUTO) wires a real
+        # daemon-side spend gate to each; until then these three booleans
+        # exist purely so the calm band can render its required
+        # `·ON`/`·OFF` suffix honestly from SOME state rather than a
+        # hardcoded literal.
         self.port_trade_on: bool = True
         self.cargo_upgrade_on: bool = True
         self.ship_upgrade_on: bool = True
@@ -2415,35 +2416,50 @@ class PlayShellScreen:
         # existing default-deny armconfirm gate. Never a send path.
         if cockpit_reflex_controls.resolve_reflex_offer_key(key):
             return cockpit_reflex_controls.REFLEX_OFFER_INTENT
-        # WO-P5-071: P panic -- the N5 cluster's halt control.
+        # WO-PLAY-STRIP-TRAINER-CHROME REVISE (hub 2026-07-31): P/C/S are
+        # the trainer calm band's own local chrome toggles -- Port Trade,
+        # Cargo Hold Upgrade, Ship Upgrade (`teachband.py`'s
+        # `PORT_TRADE_LABEL`/`CARGO_UPGRADE_LABEL`/`SHIP_UPGRADE_LABEL`).
+        # Each key flips ONLY this instance's own boolean and returns no
+        # intent -- there is no daemon-side spend gate to wire yet
+        # (WO-PLAY-STRIP-POLICY-AUTO owns that follow-on), the same
+        # local-only shape the CONN focus-ring toggle above already uses.
         #
-        # Returns the intent IMMEDIATELY and unconditionally. Deliberately
-        # NOT routed through `begin_arm_confirm` the way every other N5
-        # affordance is: the confirm gate protects the direction that
-        # *spends* live turns and credits, and panic runs the other way.
-        # Adding a `y/N` to the emergency path to satisfy a rule written
-        # for the commitment path would be a safety regression wearing
-        # safety clothing (see `cockpit/panic.py`, hub-ratified
-        # 2026-07-27, pinned in `tests/test_cockpit_panic.py`).
+        # `P` is DELIBERATELY no longer bound to `cockpit.panic` on this
+        # calm path: the STATUS-DONE cut of this WO left the OLD `P panic`
+        # wire live underneath the NEW `P)ort Trade` band label, a
+        # plausible-but-wrong claim (the band advertised one meaning for
+        # `P`, the handler still fired another) caught in hub REVISE.
+        # `cockpit/panic.py` itself is UNCHANGED -- `resolve_panic_key`/
+        # `PANIC_INTENT` still exist and its own module-level tests still
+        # pin the bare function -- only THIS calm-path wire is retired.
+        # Until a follow-on policy WO reintroduces a real halt control on
+        # this surface, Esc (leave the play shell) and the Mode chord
+        # (hand the seat back to the human) remain the operator's own
+        # paths out of a run that needs stopping.
         #
-        # Placed AFTER the A/R/T teach keys and before the fallthrough so
-        # it cannot shadow one of them, and it takes no state into account
-        # -- there is no "is a run armed?" precondition here on purpose. A
-        # panic that refuses because the cockpit believes nothing is
-        # running is a panic that fails exactly when the cockpit's belief
-        # is the thing that is wrong. The daemon's `autoloop_stop` is
-        # idempotent and never refuses, so an unnecessary press is free.
-        if panic.resolve_panic_key(key):
-            return panic.PANIC_INTENT
+        # Placed AFTER the A/R/T teach keys so it cannot shadow them.
+        if key in (ord("p"), ord("P")):
+            self.port_trade_on = not self.port_trade_on
+            return None
+        if key in (ord("c"), ord("C")):
+            self.cargo_upgrade_on = not self.cargo_upgrade_on
+            return None
+        if key in (ord("s"), ord("S")):
+            self.ship_upgrade_on = not self.ship_upgrade_on
+            return None
         # WO-AUTOLOOP-RELAUNCH-COCKPIT: Space -- pause the taught run.
         #
-        # Ungated, same reasoning as panic just above: pausing STOPS
-        # further sends, it never spends any, so the money-path confirm
-        # gate does not apply here either (`cockpit/autoloop_controls.py`
-        # docstring). Placed after panic so it cannot shadow it or the A/R/T
-        # teach keys above; no precondition on run state, same posture as
-        # panic's own "a halt that refuses because the cockpit believes
-        # nothing is running fails exactly when that belief is wrong."
+        # Ungated, same reasoning `cockpit/panic.py` states for its own
+        # (now calm-path-retired, see the P/C/S block above) halt key:
+        # pausing STOPS further sends, it never spends any, so the
+        # money-path confirm gate does not apply here either
+        # (`cockpit/autoloop_controls.py` docstring). Placed after the
+        # P/C/S toggles and the A/R/T teach keys above so it cannot shadow
+        # any of them; no precondition on run state, same posture panic's
+        # own module docstring gives: "a halt that refuses because the
+        # cockpit believes nothing is running fails exactly when that
+        # belief is wrong."
         if cockpit_autoloop_controls.resolve_pause_key(key):
             return cockpit_autoloop_controls.PAUSE_INTENT
         return None

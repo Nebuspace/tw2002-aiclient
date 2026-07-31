@@ -1,18 +1,30 @@
-"""`P` panic reaches the halt -- the app-loop wire (WO-P5-071).
+"""`P` panic -- retired from the calm play-shell wire (hub REVISE
+2026-07-31, WO-PLAY-STRIP-TRAINER-CHROME).
 
-# Why this file is separate from `test_cockpit_panic.py`
+# Why this file still exists (now proving the opposite claim)
 
-That file proves the key resolves to an intent and that the cockpit raises
-no confirm gate. **Neither of those proves the app loop acts on the
-intent.** Measured, not assumed: deleting the whole ``if action ==
-"panic":`` block from ``app.py`` left the entire suite green at 4976
-tests. `P` would return its intent, fall through the if-chain, and do
-nothing -- while the taught run kept spending turns and credits.
+This file used to prove ``P`` reached ``adapters.autoloop_stop`` through the
+real app loop (WO-P5-071). The STATUS-DONE cut of WO-PLAY-STRIP-TRAINER-
+CHROME retired the ``P panic`` calm-band token but left the OLD ``P``
+key BINDING live underneath the NEW ``P)ort Trade`` label -- a
+plausible-but-wrong claim (the band said one thing, the handler did
+another) caught in hub REVISE. ``screens.py::PlayShellScreen.handle_key``
+no longer calls ``panic.resolve_panic_key``/``panic.PANIC_INTENT`` at all
+(see ``tests/test_cockpit_panic.py``'s own structural pin on that); ``P``
+now flips the trainer's local ``port_trade_on`` toggle instead.
 
-That is the worst available failure mode for this particular key, and it
-is invisible to every composer-level test. Same class of gap the coverage
-meter had at WO-P5-072 (composer green, wire absent); found the same way,
-by deleting the wire and watching nothing complain.
+Measured, not assumed, the same way the original file was: driving ``P``
+through the real loop with ``adapters.autoloop_stop`` mocked now records
+**zero** calls -- proving the retirement reaches all the way through the
+app loop, not just the cockpit's own ``handle_key`` return value (a
+composer/handler-level pin alone cannot see whether some OTHER app-loop
+branch still calls the stop path for an unrelated reason).
+
+``cockpit/panic.py`` itself, and its own halt call sites for a FUTURE
+policy WO, are unchanged -- only this one calm-path wire is gone. See
+``tests/test_play_strip_trainer_toggles.py`` for the dedicated pins on the
+new ``P``/``C``/``S`` local-toggle behavior (composer + cockpit-handler
+level); this file stays scoped to the full-loop non-regression proof.
 
 The harness is ``tests/test_play_explore_arm.py``'s -- a scripted stdscr
 driving the real ``app._run_play`` with the adapter mocked, so these
@@ -142,84 +154,56 @@ def _drive(monkeypatch, keys, *, stop_result=None, raises=None):
 
 
 # --------------------------------------------------------------------------
-# The wire
+# The retirement -- `P` no longer reaches the halt, at the FULL loop level
 # --------------------------------------------------------------------------
 
 @pytest.mark.parametrize("key", [ord("p"), ord("P")])
-def test_panic_key_reaches_the_halt(monkeypatch, key):
-    """THE pin this file exists for. Goes red if the app.py routing is
-    removed -- the deletion that left the rest of the suite green."""
-    stop_calls, _screen = _drive(monkeypatch, [key])
-    assert len(stop_calls) == 1, "P did not reach adapters.autoloop_stop"
+def test_p_no_longer_reaches_the_halt(monkeypatch, key):
+    """THE pin this file exists for, now proving the opposite of its
+    original claim. Goes red if a future edit silently re-wires `P` back
+    onto the halt path without updating the calm band's own label."""
+    stop_calls, screen = _drive(monkeypatch, [key])
+    assert stop_calls == [], "P must not reach adapters.autoloop_stop on this calm path"
+    assert screen.other_stop_calls == [], "P must not reach explore/trade stop either"
 
 
-def test_panic_does_not_pass_through_a_confirm_gate(monkeypatch):
-    """The no-confirm asymmetry at LOOP level, not just key level.
-
-    A confirm gate could be raised by the app loop rather than the cockpit,
-    which the key-level pin in `test_cockpit_panic.py` would not see.
-    """
-    stop_calls, screen = _drive(monkeypatch, [ord("P")])
-    assert len(stop_calls) == 1
-    assert screen.gate_raises == [], (
-        f"panic routed through a confirm gate: {screen.gate_raises}"
-    )
-
-
-def test_halt_happens_on_the_first_press_not_the_second(monkeypatch):
-    """No 'press again to confirm' behaviour smuggled in as a non-modal
-    substitute for the gate."""
-    stop_calls, _ = _drive(monkeypatch, [ord("P")])
-    assert len(stop_calls) == 1
-
-
-def test_double_press_is_harmless(monkeypatch):
-    """The daemon verb is idempotent, so two presses are two honest halts
-    rather than an error the operator has to interpret."""
-    stop_calls, _ = _drive(monkeypatch, [ord("P"), ord("P")])
-    assert len(stop_calls) == 2
-
-
-# --------------------------------------------------------------------------
-# Honest reporting -- the operator must know whether the halt landed
-# --------------------------------------------------------------------------
-
-def test_successful_halt_is_reported(monkeypatch):
+def test_p_does_not_pass_through_a_confirm_gate(monkeypatch):
+    """`P` is a bare local toggle -- it must never raise the confirm gate,
+    the same no-gate posture the retired panic wire also held (for a
+    different reason: panic was halt-direction; the toggle spends nothing
+    at all)."""
     _stop_calls, screen = _drive(monkeypatch, [ord("P")])
-    assert "PANIC" in (screen.status_line or "")
-    assert "halt requested" in (screen.status_line or "")
-    assert [name for name, _kw in screen.other_stop_calls] == ["explore", "trade"]
-
-
-def test_failed_halt_is_reported_as_a_failure(monkeypatch):
-    """`autoloop_unavailable` means the halt reached no runner. Saying
-    anything reassuring here would be the worst possible lie on this key."""
-    _stop_calls, screen = _drive(
-        monkeypatch, [ord("P")],
-        stop_result=_StopResult(ok=False, reason="autoloop_unavailable"),
+    assert screen.gate_raises == [], (
+        f"P routed through a confirm gate: {screen.gate_raises}"
     )
-    line = screen.status_line or ""
-    assert "partial" in line
-    assert "autoloop_unavailable" in line
-    assert "halt requested" not in line, "reported a complete halt that did not happen"
 
 
-@pytest.mark.parametrize("key,expected", [
-    (ord("a"), "analyze_open"),
-    (ord("r"), "record_toggle"),
-    (ord("t"), "assign_trigger"),
-])
-def test_panic_does_not_shadow_the_teach_keys_in_the_real_loop(monkeypatch, key, expected):
-    """`P` sits after A/R/T in the handler; adding it must not shadow them.
+def test_p_toggles_port_trade_at_the_full_loop_level(monkeypatch):
+    """The new wire's own full-loop proof, mirroring this file's original
+    reasoning: a composer/handler-level pin alone cannot see whether
+    `app.py`'s loop construction somehow shadows or discards the toggle
+    before it reaches the live `PlayShellScreen` instance the loop holds."""
+    _stop_calls, screen = _drive(monkeypatch, [ord("P")])
+    assert screen.port_trade_on is False  # started True (DECISION default)
+    assert (ord("P"), None) in screen.actions
+
+
+def test_double_press_toggles_back(monkeypatch):
+    """Two presses return to the starting state -- a plain flip, not a
+    one-way latch or (the old panic behavior) two independent halts."""
+    _stop_calls, screen = _drive(monkeypatch, [ord("P"), ord("P")])
+    assert screen.port_trade_on is True
+    assert _stop_calls == []
+
+
+def test_p_does_not_shadow_the_teach_keys_in_the_real_loop(monkeypatch):
+    """`P`/`C`/`S` sit after A/R/T in the handler; adding them must not
+    shadow those teach keys.
 
     Asserts on what each key RESOLVED TO rather than on end state -- the
     drive's trailing Esc closes the analyze overlay (WO-P5-069), so an
     end-state read cannot tell "worked then undone" from "never worked".
     """
-    _stop_calls, screen = _drive(monkeypatch, [key])
-    assert (key, expected) in screen.actions
-
-
-def test_panic_resolves_to_its_own_intent_in_the_real_loop(monkeypatch):
-    _stop_calls, screen = _drive(monkeypatch, [ord("P")])
-    assert (ord("P"), "panic") in screen.actions
+    for key, expected in ((ord("a"), "analyze_open"), (ord("r"), "record_toggle"), (ord("t"), "assign_trigger")):
+        _stop_calls, screen = _drive(monkeypatch, [key])
+        assert (key, expected) in screen.actions

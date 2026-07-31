@@ -150,6 +150,35 @@ def test_connected_renders_conn_on_a_real_terminal(tmp_path) -> None:
 
 
 @_PTY_SKIP
+def test_connected_conn_rides_the_top_strip_only(tmp_path) -> None:
+    """Accept #3 (WO-PLAY-STRIP-TRAINER-CHROME / DECISION
+    `RESOLVED-TRAINER-STRIP-AND-GUTTER-20260731` point 3): CONN moved onto
+    the row-1 profile strip and must be ABSENT from the bottom control
+    strip it used to render on. ``find_text`` alone (the pin above) cannot
+    see this — it is satisfied by CONN appearing anywhere at all, including
+    a stray second copy left behind on the old row. This test additionally
+    pins WHERE the chip is (near the top, under the outer frame's own
+    title row) and that it never appears a second time anywhere else on
+    the settled frame."""
+    grid = pyte_grid(_drive(tmp_path, {"ok": True, "connected": True}),
+                     FULL_ROWS, FULL_COLS)
+    hit = find_text(grid, "CONN")
+    assert hit, "CONN chip not visible on the settled cockpit; grid:\n" + "\n".join(grid)
+    row, _col = hit
+    assert row <= 3, (
+        f"CONN chip found at row {row}, expected on the top profile strip "
+        "(row 1, just under the outer frame's title row); grid:\n"
+        + "\n".join(grid)
+    )
+    other_rows = [r for r, line in enumerate(grid) if "CONN" in line and r != row]
+    assert not other_rows, (
+        f"CONN also appears at row(s) {other_rows} -- expected exactly once, "
+        "on the top strip, and absent from the bottom control strip; "
+        "grid:\n" + "\n".join(grid)
+    )
+
+
+@_PTY_SKIP
 def test_disconnected_renders_disc_on_a_real_terminal(tmp_path) -> None:
     """Second distinct output from a second distinct payload.
 

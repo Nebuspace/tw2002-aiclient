@@ -14,6 +14,7 @@ from tw2002_aiclient.cockpit.strip import (
     SEP,
     compose_profile_strip,
     compose_profile_strip_from_row,
+    compose_profile_strip_segments,
 )
 
 
@@ -273,3 +274,83 @@ def test_from_row_ascii_mode_propagates():
     assert result == compose_profile_strip(
         host="host", game_letter="A", handle="Captain", width=80, unicode_ok=True
     )
+
+
+# ---------------------------------------------------------------------------
+# compose_profile_strip_segments — the CONN chip is all-or-nothing
+# (WO-PLAY-STRIP-TRAINER-CHROME REVISE, hub 2026-07-31: the STATUS-DONE cut
+# mid-truncated the chip at tight widths — `clipped = text[: width - used]`
+# on the chip piece itself — producing readable-but-wrong prefixes like
+# "CO"/"CON". Fixed to drop the whole chip rather than clip it, mirroring
+# ``control_seat._compose_segments``'s own all-or-nothing chip rule.)
+# ---------------------------------------------------------------------------
+
+
+def test_conn_chip_absent_is_byte_identical_to_the_flat_composer():
+    segs = compose_profile_strip_segments(
+        host="host", game_letter="A", handle="Captain", width=80, conn_chip=None,
+    )
+    assert "".join(t for t, _ in segs) == compose_profile_strip(
+        host="host", game_letter="A", handle="Captain", width=80,
+    )
+
+
+def test_conn_chip_renders_full_text_with_room():
+    segs = compose_profile_strip_segments(
+        host="host", game_letter="A", handle="Captain", width=80,
+        conn_chip=("CONN", "ok"),
+    )
+    joined = "".join(t for t, _ in segs)
+    assert " CONN " in joined
+    chip_segments = [text for text, tone in segs if tone == "ok"]
+    assert chip_segments == [" CONN"]
+
+
+@pytest.mark.parametrize("width", list(range(0, 45)))
+def test_conn_chip_is_all_or_nothing_never_a_partial_prefix(width):
+    """THE pin this REVISE exists for: at every width, the chip segment is
+    either the exact full ``" CONN"`` text or entirely absent — never a
+    truncated ``" CO"``/``" CON"`` fragment that reads as a plausible but
+    wrong claim."""
+    segs = compose_profile_strip_segments(
+        host="a-fairly-long-hostname.example.net", game_letter="A",
+        handle="SomeLongHandleName", width=width, conn_chip=("CONN", "ok"),
+    )
+    joined = "".join(t for t, _ in segs)
+    assert len(joined) <= width
+    chip_segments = [text for text, tone in segs if tone == "ok"]
+    assert chip_segments in ([], [" CONN"]), (
+        f"width {width} produced a partial/mangled CONN chip: {chip_segments!r}"
+    )
+
+
+def test_conn_chip_dropping_never_costs_the_identity_fields_a_character():
+    """Where the chip does not fit, the row must be byte-identical to the
+    no-chip composition (only the chip's own room is given up)."""
+    for width in range(0, 45):
+        with_chip = compose_profile_strip_segments(
+            host="a-fairly-long-hostname.example.net", game_letter="A",
+            handle="SomeLongHandleName", width=width, conn_chip=("CONN", "ok"),
+        )
+        joined = "".join(t for t, _ in with_chip)
+        if " CONN" in joined:
+            continue
+        without_chip = compose_profile_strip(
+            host="a-fairly-long-hostname.example.net", game_letter="A",
+            handle="SomeLongHandleName", width=width,
+        )
+        assert joined == without_chip, f"width {width} lost identity chars when dropping the chip"
+
+
+def test_conn_chip_focused_brackets_are_also_all_or_nothing():
+    """The focused ``"[CONN]"`` variant (one char longer) must obey the
+    same rule — never clip to ``"[CON"`` or similar."""
+    for width in range(0, 45):
+        segs = compose_profile_strip_segments(
+            host="host", game_letter="A", handle="Captain", width=width,
+            conn_chip=("[CONN]", "ok"),
+        )
+        chip_segments = [text for text, tone in segs if tone == "ok"]
+        assert chip_segments in ([], [" [CONN]"]), (
+            f"width {width} produced a partial focused chip: {chip_segments!r}"
+        )

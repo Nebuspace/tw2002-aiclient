@@ -28,14 +28,19 @@ trainer-plain vocabulary:
 - `P)ort Trade`, `C)argo Hold Upgrade`, `S)hip Upgrade` are NEW
   chrome-only toggles (WO-PLAY-STRIP-TRAINER-CHROME): each renders
   `·ON`/`·OFF` from a caller-supplied boolean (default **ON**, per
-  DECISION), driven by `PlayShellScreen`'s own local Play state. They are
-  **display-only in this WO** -- no key is bound to flip them yet (`P` in
-  particular stays bound to `cockpit.panic`'s existing handler; giving it
-  a second, conflicting meaning here would be worse than an inert label).
-  A key wire lands in a follow-on WO once the daemon side exists to back
-  it; until then this is intentionally an honest "the label exists, the
-  toggle is local paint" state, the same kind of WO-scoped intermediate
-  `A`/`R`/`T` were during their own pre-wire days (see history below).
+  DECISION), driven by `PlayShellScreen`'s own local Play state. `P`/`C`/
+  `S` (`screens.py::PlayShellScreen.handle_key`, REVISE 2026-07-31) flip
+  their own boolean directly and return no intent -- there is no
+  daemon-side spend gate behind them yet, only this instance's own
+  display state. `P` is DELIBERATELY no longer `cockpit.panic`'s key on
+  this calm path (the STATUS-DONE cut of this WO left that old wire live
+  underneath the new label, a plausible-but-wrong claim caught in hub
+  REVISE): `cockpit/panic.py` itself is untouched, only the calm-path
+  binding moved. A daemon-side spend gate for these three toggles lands
+  in a follow-on WO (WO-PLAY-STRIP-POLICY-AUTO); until then this is
+  intentionally an honest "the label exists, the toggle is local paint"
+  state, the same kind of WO-scoped intermediate `A`/`R`/`T` were during
+  their own pre-wire days (see history below).
 
 The STOP banner's own `teach:` line (`cockpit.stopbanner.TEACH_LINE`,
 `A)nalyze R)ecord T)assign`) is a DIFFERENT register/surface entirely and

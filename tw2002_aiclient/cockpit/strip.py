@@ -145,12 +145,19 @@ def compose_profile_strip_segments(
     is unaffected by this function's existence.
 
     When a usable ``conn_chip`` is supplied, it is placed immediately
-    beside the host (``"{host} {chip} · {letter} · {handle}"``), each
-    piece truncated left-to-right against ``width`` exactly like
-    ``control_seat._compose_segments``'s own sequential-budget rule: the
-    identity fields never lose a character to the chip and the chip is
-    never split mid-token (an empty remaining budget simply drops it
-    whole, honest-absence rather than a mangled ``CO``).
+    beside the host (``"{host} {chip} · {letter} · {handle}"``). The
+    identity pieces (host, and the trailing ``· letter · handle`` run)
+    truncate left-to-right against ``width`` same as ever -- an
+    identity string clipped mid-word is still an honest partial
+    reading. The CONN chip itself is **all-or-nothing**, mirroring
+    ``control_seat._compose_segments``'s own rule for its chips (ARM/
+    CONN/coverage meter): a mid-clip like ``CO`` or ``CON`` is not a
+    shorter true statement, it is a token the reader cannot resolve (and
+    for CONN specifically, a truncated ``[CON]`` on a focused chip could
+    even be misread as a different, unrelated word), so a chip that does
+    not fit its full text in the remaining budget is dropped whole
+    rather than clipped. Dropping the chip never costs the identity
+    fields a character -- it only ever gives up its own room.
 
     Never raises regardless of any argument's type or content.
     """
@@ -168,17 +175,26 @@ def compose_profile_strip_segments(
     handle_s = _clean(handle) or MISSING_IDENTITY
     chip_text, chip_tone = _safe_chip(conn_chip)
 
-    pieces: list[tuple[str, str | None]] = [(host_s, None)]
+    # `all_or_nothing` marks the CONN-chip piece only -- the two identity
+    # pieces around it keep the pre-existing tail-truncation contract.
+    pieces: list[tuple[str, str | None, bool]] = [(host_s, None, False)]
     if chip_text:
-        pieces.append((f" {chip_text}", chip_tone))
-    pieces.append((f" {SEP} {letter_s} {SEP} {handle_s}", None))
+        pieces.append((f" {chip_text}", chip_tone, True))
+    pieces.append((f" {SEP} {letter_s} {SEP} {handle_s}", None, False))
 
     out: list[tuple[str, str | None]] = []
     used = 0
-    for text, tone in pieces:
+    for text, tone, all_or_nothing in pieces:
         if used >= width:
             break
-        clipped = text[: width - used]
+        remaining = width - used
+        if all_or_nothing:
+            if len(text) > remaining:
+                continue  # drop the whole chip; never a mid-token clip
+            out.append((text, tone))
+            used += len(text)
+            continue
+        clipped = text[:remaining]
         if clipped:
             out.append((clipped, tone))
             used += len(clipped)

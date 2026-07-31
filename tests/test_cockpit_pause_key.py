@@ -14,7 +14,7 @@ from unittest import mock
 
 import pytest
 
-from tw2002_aiclient.cockpit import autoloop_controls, panic
+from tw2002_aiclient.cockpit import autoloop_controls
 from tw2002_aiclient.screens import PlayShellScreen, ProfileRow
 
 
@@ -62,9 +62,14 @@ def test_pause_key_raises_no_confirm_gate():
     assert play._arm_confirm is None, "pause raised a confirm gate"
 
 
-def test_pause_does_not_shadow_panic_or_the_teach_keys():
+def test_pause_does_not_shadow_port_trade_or_the_teach_keys():
+    """`p` is no longer bound to `panic` on this calm path (hub REVISE
+    2026-07-31) -- it flips the local `port_trade_on` toggle instead. See
+    `tests/test_play_strip_trainer_toggles.py` for the dedicated pins."""
     play = _make_play()
-    assert play.handle_key(ord("p")) == panic.PANIC_INTENT
+    before = play.port_trade_on
+    assert play.handle_key(ord("p")) is None
+    assert play.port_trade_on is (not before)
     assert play.handle_key(ord("a")) == "analyze_open"
     assert play.handle_key(ord("t")) == "assign_trigger"
     assert play.handle_key(ord("r")) == "record_toggle"
