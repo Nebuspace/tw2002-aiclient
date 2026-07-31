@@ -38,14 +38,19 @@ def test_band_is_canon_standing_spelling() -> None:
     Kept as an inline literal, NOT derived from `TEACH_TOKENS`: an
     expectation built from the product's own constant would follow any
     change to it and pin nothing.
+
+    WO-PLAY-HELP-AUTONOMY-KEYS adds `H)old?` / `O)ffer?`
+    (`?` = confirm-not-auto) immediately before `L)chains`.
     """
     assert teachband.compose_teach_band() == (
-        "A)nalyze  R)ecord  T)rigger  V)reflex  U)rules  L)chains  P panic"
+        "A)nalyze  R)ecord  T)rigger  V)reflex  U)rules  "
+        "H)old?  O)ffer?  L)chains  P panic"
     )
 
 
 def test_band_imports_reflex_token_spelling() -> None:
     """Single source of truth with the key-handler module (Accept #2)."""
+    from tw2002_aiclient.cockpit import autonomy_keys
     from tw2002_aiclient.cockpit import chains
     from tw2002_aiclient.cockpit import reflex_controls
     from tw2002_aiclient.cockpit import rules_library
@@ -56,11 +61,41 @@ def test_band_imports_reflex_token_spelling() -> None:
     assert rules_library.RULES_TOKEN == "U)rules"
     assert rules_library.RULES_TOKEN in teachband.TEACH_TOKENS
     assert "U)rules" in teachband.compose_teach_band()
+    assert autonomy_keys.HOLD_TOKEN == "H)old?"
+    assert autonomy_keys.OFFER_TOKEN == "O)ffer?"
+    assert autonomy_keys.HOLD_TOKEN in teachband.TEACH_TOKENS
+    assert autonomy_keys.OFFER_TOKEN in teachband.TEACH_TOKENS
+    assert "H)old?" in teachband.compose_teach_band()
+    assert "O)ffer?" in teachband.compose_teach_band()
+    # E stays on HELP one-liners (width) — still discoverable beside O/H/L.
+    assert autonomy_keys.EXPLORE_TOKEN == "E)xplore"
+    assert autonomy_keys.EXPLORE_TOKEN not in teachband.TEACH_TOKENS
     assert chains.CHAINS_TOKEN == "L)chains"
     assert chains.CHAINS_TOKEN in teachband.TEACH_TOKENS
     assert "L)chains" in teachband.compose_teach_band()
     assert teachband.TEACH_TOKENS[-2] is chains.CHAINS_TOKEN
     assert teachband.compose_teach_band().endswith("P panic")
+
+
+def test_autonomy_help_one_liners_confirm_not_auto() -> None:
+    """WO-PLAY-HELP-AUTONOMY-KEYS Accept: O/H carry confirm-not-auto wording."""
+    from tw2002_aiclient.cockpit import autonomy_keys
+
+    lines = autonomy_keys.compose_autonomy_help_lines()
+    assert lines == (
+        autonomy_keys.EXPLORE_HELP,
+        autonomy_keys.HOLD_HELP,
+        autonomy_keys.OFFER_HELP,
+        autonomy_keys.CHAINS_HELP,
+    )
+    assert "confirm" in autonomy_keys.HOLD_HELP
+    assert "not auto" in autonomy_keys.HOLD_HELP
+    assert "confirm" in autonomy_keys.OFFER_HELP
+    assert "not auto" in autonomy_keys.OFFER_HELP
+    assert "O)ffer?" in autonomy_keys.OFFER_HELP
+    assert "H)old?" in autonomy_keys.HOLD_HELP
+    assert "E)xplore" in autonomy_keys.EXPLORE_HELP
+    assert "L)chains" in autonomy_keys.CHAINS_HELP
 
 
 def test_band_uses_trigger_not_the_banner_s_assign() -> None:
@@ -104,8 +139,10 @@ def test_tokens_are_pure_ascii_no_unicode_twin() -> None:
 
 @pytest.mark.parametrize("hostile", [None, 0, object(), b"x", [], 3.5])
 def test_compose_never_raises_on_hostile_unicode_ok(hostile: object) -> None:
-    assert teachband.compose_teach_band(unicode_ok=hostile) == \
-        "A)nalyze  R)ecord  T)rigger  V)reflex  U)rules  L)chains  P panic"
+    assert teachband.compose_teach_band(unicode_ok=hostile) == (
+        "A)nalyze  R)ecord  T)rigger  V)reflex  U)rules  "
+        "H)old?  O)ffer?  L)chains  P panic"
+    )
 
 
 # --------------------------------------------------------------------------
