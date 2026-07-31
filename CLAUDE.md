@@ -65,13 +65,14 @@ python3 -m venv .venv && .venv/bin/pip install -e .
 - **`.claude/` and `.samantha/` are gitignored** (hub ruling) — framework install is local orchestration, not shippable client. Same for private journals (`DESIGN-v2.md`, `QUEUE.md`, etc. if reintroduced).
 - **Path-leak gate (both seats).** Do not commit operator-home absolute paths (`/Users/<username>/` or `/home/<username>/`).
 
-  **Dual-layer design (Cursor seat):**
-  1. **Tip / shared config** — `.cursor/hooks.json` wires `beforeShellExecution` → `.cursor/hooks/path-leak-gate.sh` with **`failClosed: true`** (deny if the hook crashes or is missing). Scanner: `scripts/path-leak-scan.sh`.
-  2. **Real commit backstop** — tracked `scripts/githooks/pre-commit` runs the same scanner. **Enable once per clone:**
+  **Dual-layer design (Cursor seat · WO-CURSOR-HOOK-RECOVERY-HARDENING):**
+  1. **Tip / shared config** — `.cursor/hooks.json` wires `beforeShellExecution` → `.cursor/hooks/path-leak-gate.sh` with **`failClosed: false`**. The hook still denies leaky `git commit` when Cursor can run it; when the worker **cannot** execute command hooks (`Shell execution is not available in the worker extension host`), fail-open keeps Shell usable. Tip no longer requires a dirty local overlay after `checkout` / `reset --hard` / `worktree add`. Scanner: `scripts/path-leak-scan.sh`.
+  2. **Real commit backstop (fail-closed)** — tracked `scripts/githooks/pre-commit` runs the same scanner. **Enable once per clone:**
      ```bash
      git config core.hooksPath scripts/githooks
      ```
-  3. **Local agent overlay** — Cursor's worker extension host often cannot execute command hooks (`Shell execution is not available in the worker extension host`). Loading tip `failClosed: true` into the *live* Cursor config then denies **all** Shell tool calls, not only commits. Agents may keep a **local empty** `.cursor/hooks.json` (`"hooks": {}`) uncommitted overlay so Shell stays usable; tip still carries `failClosed: true`. The fail-closed guarantee for `git commit` is the githooks path above.
+     This is the load-bearing gate: a staged operator-home path must still make `git commit` exit 1 with HEAD unmoved.
+  3. **Recovery if a seat is already shell-dead** — usually from an *old* tip/`failClosed: true` overlay still loaded in the live Cursor config. The seat **cannot** self-repair via Shell. Fix out-of-band: another seat, the IDE file editor, or a host terminal — set `.cursor/hooks.json` to tip (`failClosed: false`) or temporarily `"hooks": {}`, then reload the agent. Do not reintroduce a dirty tracked overlay as the standing disarm.
 
   Claude Code enforces the same intent via its PreToolUse hook. Dry-run: stage a file containing `/Users/…` and confirm `scripts/path-leak-scan.sh` exits 1.
 

@@ -4,7 +4,7 @@
     "beforeShellExecution": [
       {
         "command": ".cursor/hooks/path-leak-gate.sh",
-        "failClosed": true
+        "failClosed": false
       }
     ]
   }
