@@ -1,6 +1,6 @@
 # WO-HALT-REASON-NE-SWEEP — Harden `!=` assertions against bare halt codes
 
-**Status:** OPEN · EXECUTE · MED · instrument honesty (follow-on #214)
+**Status:** DONE · origin `91da221` (#215) · tip-honesty stamp 2026-07-31 (product on main; banner was stale OPEN)
 **Seat:** impl-claudecode-aiclient · live n/a
 **Depends:** #214 on main (`da94f0e`)
 **Refs:** CC STATUS 2026-07-29T05:55:49Z · `halt_reason_code()` in `loops/player.py`
