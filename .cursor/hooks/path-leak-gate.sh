@@ -2,9 +2,11 @@
 # Cursor beforeShellExecution hook — block `git commit` when staged content
 # contains operator-home absolute paths (`/Users/<user>/` or `/home/<user>/`).
 #
-# Wired from `.cursor/hooks.json` with failClosed: true — this script MUST
-# always emit exactly one JSON permission object on stdout (even on errors),
-# or Cursor will deny the tool call.
+# Wired from `.cursor/hooks.json` with failClosed: false — when the Cursor
+# worker cannot execute command hooks, shell stays usable (WO-CURSOR-HOOK-
+# RECOVERY-HARDENING). Commit-time fail-closed remains `scripts/githooks/
+# pre-commit`. When this hook *does* run, it must still emit exactly one
+# JSON permission object on stdout (even on errors).
 #
 # Self-filters to real `git commit` invocations (no hooks.json matcher) so
 # agent scripts that merely mention the words are not gated.
