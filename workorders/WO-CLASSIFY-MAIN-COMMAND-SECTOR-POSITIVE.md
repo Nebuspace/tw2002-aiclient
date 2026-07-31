@@ -1,6 +1,6 @@
 # WO-CLASSIFY-MAIN-COMMAND-SECTOR-POSITIVE (optional LOW follow-on)
 
-**Status:** READY · EXECUTE · LOW · Cursor (`impl-aiclient-cursor`)
+**Status:** DONE · origin `102681e` (#253) · tip-honesty 2026-07-31 (product already on main; hub re-seeded READY — Accept satisfied by tip)
 **Seat:** `impl-aiclient-cursor`  
 **Posted:** 2026-07-27T06:03:26Z  
 **Seat:** Cursor volume after teach wave or anytime  
