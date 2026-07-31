@@ -1,6 +1,7 @@
 # WO-CLASSIFY-MAIN-COMMAND-SECTOR-POSITIVE (optional LOW follow-on)
 
-**Status:** OPEN · OPTIONAL (Cipher LOW banked 2026-07-27)  
+**Status:** READY · EXECUTE · LOW · Cursor (`impl-aiclient-cursor`)
+**Seat:** `impl-aiclient-cursor`  
 **Posted:** 2026-07-27T06:03:26Z  
 **Seat:** Cursor volume after teach wave or anytime  
 **Depends:** `de6ca30` Main Menu refuse already on main  
