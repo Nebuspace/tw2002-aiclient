@@ -545,7 +545,7 @@ def test_narrow_tier_all_empty_fold_shows_honest_empty_no_labels(_narrow_no_fixt
         )
 
     # Pin = no bare panel-label rows when the fold collapsed to calm HELP.
-    # HELP prose may mention FOCUS (OFFER_HELP); that is not a FOCUS label row.
+    # HELP prose is calm-band vocab only; still not a FOCUS label row.
     from tw2002_aiclient.cockpit.fold import FOCUS_LABEL, GOALS_LABEL
 
     content_rows = [

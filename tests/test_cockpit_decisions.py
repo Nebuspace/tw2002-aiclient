@@ -412,24 +412,21 @@ def test_width_zero_on_empty_state_is_four_empty_lines():
 
 
 def test_empty_calm_shows_all_autonomy_help_lines() -> None:
-    """WO-WIRE-AUTONOMY-HELP-LINES Accept: four HELP strings.
-
-    H/O text updated by WO-PLAY-STRIP-POLICY-AUTO: pressing H/O is still a
-    manual confirm (unchanged), but the blanket "(not auto)" claim is gone
-    -- App now auto-acts under APP-ARMED + the matching toggle without
-    either key being pressed at all (DECISION
-    `RESOLVED-TRAINER-STRIP-AND-GUTTER-20260731` point 6).
-    """
+    """WO-WIRE-AUTONOMY-HELP-LINES / WO-AUTONOMY-HELP-VOCAB: calm HELP strings."""
     lines = compose_decisions_lines(None, width=_EMPTY_WIDTH)
     assert lines == _EMPTY_LINES
     assert autonomy_keys.EXPLORE_HELP in lines
-    assert autonomy_keys.HOLD_HELP in lines
-    assert autonomy_keys.OFFER_HELP in lines
+    assert autonomy_keys.POLICY_HELP in lines
+    assert autonomy_keys.MODE_HELP in lines
     assert autonomy_keys.CHAINS_HELP in lines
-    assert "confirm" in autonomy_keys.HOLD_HELP
-    assert "APP-ARMED" in autonomy_keys.HOLD_HELP
-    assert "confirm" in autonomy_keys.OFFER_HELP
-    assert "APP-ARMED" in autonomy_keys.OFFER_HELP
+    joined = " ".join(lines)
+    assert "confirm" not in joined.lower()
+    assert "H)old?" not in joined
+    assert "O)ffer?" not in joined
+    assert "App-armed" in autonomy_keys.EXPLORE_HELP
+    assert "P)ort Trade" in autonomy_keys.POLICY_HELP
+    assert "Mode/^A" in autonomy_keys.MODE_HELP
+    assert "L)ist Loops" in autonomy_keys.CHAINS_HELP
 
 
 # ---------------------------------------------------------------------------
