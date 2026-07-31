@@ -87,19 +87,20 @@ def test_direction_compatible_pair_hand_computed_margins_and_best_chain(tmp_path
 
     assert note is None
     by_key = {(h.frm, h.to, h.commodity): h for h in hops}
-    # Equipment floor 40: selling@pct100 -> 40.0; buying@pct0 -> 40*2=80.0 -> margin 40.0
-    assert by_key[(10, 11, "Equipment")].margin == 40.0
+    # Equipment floor 40, default spread 0.05 → delta 2:
+    # selling@pct100 mid 40 → 38; buying@pct0 mid 80 → 82 → margin 44.
+    assert by_key[(10, 11, "Equipment")].margin == 44.0
     assert by_key[(10, 11, "Equipment")].turns == 1
-    # Fuel Ore floor 20: selling@pct100 -> 20.0; buying@pct0 -> 20*2=40.0 -> margin 20.0
-    assert by_key[(11, 10, "Fuel Ore")].margin == 20.0
+    # Fuel Ore floor 20, delta 1: selling@100 → 19; buying@0 → 41 → margin 22.
+    assert by_key[(11, 10, "Fuel Ore")].margin == 22.0
     assert by_key[(11, 10, "Fuel Ore")].turns == 1
     assert len(hops) == 2
 
     chain = longest_profit_chain(hops)
     assert chain is not None
-    assert chain.overall_profit == 60.0
+    assert chain.overall_profit == 66.0
     assert chain.turns == 2
-    assert chain.cr_per_turn == 30.0
+    assert chain.cr_per_turn == 33.0
     assert set(chain.sectors) == {10, 11}
 
 
@@ -373,7 +374,7 @@ def test_hop_cap_truncates_and_reports_a_note(tmp_path):
     assert len(hops) == 1
     assert note is not None
     assert "capped" in note
-    # Highest-margin hop (Equipment, 40.0) is kept over the lower one (Fuel Ore, 20.0).
+    # Highest-margin hop (Equipment) is kept over the lower one (Fuel Ore).
     assert hops[0].commodity == "Equipment"
 
 
@@ -458,7 +459,7 @@ def test_non_dict_commodity_row_is_skipped_but_sibling_valid_row_still_works(tmp
     # tolerance, not just "doesn't crash."
     assert len(hops) == 1
     assert (hops[0].frm, hops[0].to, hops[0].commodity) == (94, 95, "Equipment")
-    assert hops[0].margin == 40.0
+    assert hops[0].margin == 44.0
 
 
 @pytest.mark.parametrize("bad_name", [["x"], {"nested": "dict"}])
@@ -1448,3 +1449,99 @@ def test_candidate_pairs_known_sectors_uses_cheap_count_when_all_sectors_would_r
     )
     assert stats.known_sectors == 3
     assert len(pairs) == 1
+
+
+# -- WO-TRADE-ADAPTER-BUY-SELL-SPREAD -----------------------------------------
+
+
+def test_default_config_exposes_buy_sell_spread_of_floor():
+    cfg = trade_adapter.TradeAdapterConfig()
+    assert cfg.buy_sell_spread_of_floor == trade_adapter.DEFAULT_BUY_SELL_SPREAD_OF_FLOOR
+    assert cfg.buy_sell_spread_of_floor == 0.05
+
+
+def test_same_pct_complementary_ports_yield_positive_margin_under_default_spread(tmp_path):
+    """Accept #2 — Gather pct=100 both sides still clears margin > 0."""
+    _upsert(
+        tmp_path,
+        300,
+        warps=(301,),
+        commodities=[_row("Equipment", "selling", 100)],
+    )
+    _upsert(
+        tmp_path,
+        301,
+        warps=(300,),
+        commodities=[_row("Equipment", "buying", 100)],
+    )
+    hops, note = trade_adapter.build_trade_hops(WORLD, state_dir=tmp_path, now=_CLOCK)
+    assert note is None
+    assert len(hops) == 1
+    # floor 40 * 2 * 0.05 = 4.0
+    assert hops[0].margin == 4.0
+    assert hops[0].margin > 0
+
+
+def test_zero_spread_restores_same_pct_zero_margin(tmp_path):
+    """Spread=0 reproduces the pre-WO posture-blind same-pct collapse."""
+    _upsert(
+        tmp_path,
+        302,
+        warps=(303,),
+        commodities=[_row("Equipment", "selling", 100)],
+    )
+    _upsert(
+        tmp_path,
+        303,
+        warps=(302,),
+        commodities=[_row("Equipment", "buying", 100)],
+    )
+    cfg = trade_adapter.TradeAdapterConfig(buy_sell_spread_of_floor=0.0)
+    hops, _ = trade_adapter.build_trade_hops(
+        WORLD, state_dir=tmp_path, config=cfg, now=_CLOCK
+    )
+    # margin == 0 is dropped by chains, but build_trade_hops still emits the leg
+    assert len(hops) == 1
+    assert hops[0].margin == 0.0
+    assert find_profit_chains(hops) == []
+
+
+def test_same_posture_still_yields_no_hop_with_spread(tmp_path):
+    """Accept #3 — spread must not invent hops across mismatched postures."""
+    _upsert(tmp_path, 304, warps=(305,), commodities=[_row("Equipment", "selling", 100)])
+    _upsert(tmp_path, 305, warps=(304,), commodities=[_row("Equipment", "selling", 100)])
+    hops, _ = trade_adapter.build_trade_hops(WORLD, state_dir=tmp_path, now=_CLOCK)
+    assert hops == ()
+
+
+@pytest.mark.parametrize("bad", [-0.01, float("nan"), float("inf"), True])
+def test_buy_sell_spread_rejects_hostile_config(bad):
+    with pytest.raises((TypeError, ValueError)):
+        trade_adapter.TradeAdapterConfig(buy_sell_spread_of_floor=bad)
+
+
+def test_chain_search_finds_cycle_on_same_pct_world(tmp_path):
+    """Optional Accept pin — priced bubbles can light after Gather-shaped docks."""
+    from tw2002_aiclient import chain_search
+
+    _upsert(
+        tmp_path,
+        310,
+        warps=(311,),
+        commodities=[
+            _row("Equipment", "selling", 100),
+            _row("Fuel Ore", "buying", 100),
+        ],
+    )
+    _upsert(
+        tmp_path,
+        311,
+        warps=(310,),
+        commodities=[
+            _row("Fuel Ore", "selling", 100),
+            _row("Equipment", "buying", 100),
+        ],
+    )
+    result = chain_search.recompute(WORLD, state_dir=tmp_path, now=_CLOCK)
+    assert result.chains, f"expected priced cycle, got reason={result.reason!r}"
+    assert result.reason is None
