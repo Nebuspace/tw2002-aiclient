@@ -15,6 +15,7 @@ from tw2002_aiclient.cockpit import analyze as _analyze
 from tw2002_aiclient.cockpit import assign_trigger as _assign_trigger
 from tw2002_aiclient.cockpit import autoloop_controls as _autoloop_controls
 from tw2002_aiclient import explore as _explore
+from tw2002_aiclient import autonomy_policy as _autonomy_policy
 from tw2002_aiclient import trade_chain_plan as _trade_chain_plan
 from tw2002_aiclient import stardock_hold_plan as _stardock_hold_plan
 from tw2002_aiclient import world_identity as _world_identity
@@ -84,6 +85,8 @@ _EXPLORE_OFFER_KEYS = (ord("e"), ord("E"))
 # WO-STARDOCK-HOLD-UPGRADE-ARM: H offers the hold-buy confirm scaffold when
 # evidence is complete; never auto-executes.
 _HOLD_OFFER_KEYS = (ord("h"), ord("H"))
+# `O` asks the pure policy which existing, confirm-gated path is next.
+_AUTONOMY_OFFER_KEYS = (ord("o"), ord("O"))
 
 
 class DeadTerminalError(Exception):
@@ -1058,6 +1061,72 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                     play.status_line = "attach connection lost — spectating"
                 continue
             action = play.handle_key(key)
+            if action is None and key in _AUTONOMY_OFFER_KEYS:
+                status = (
+                    play.status_provider() if play.status_provider is not None else {}
+                )
+                offer = _autonomy_policy.choose_offer(status)
+                if offer.kind == "idle":
+                    play.status_line = f"no autonomy offer — {offer.reason}"
+                    continue
+                if offer.gated:
+                    play.status_line = f"autonomy offer gated — {offer.reason}"
+                    continue
+                if offer.kind == "explore":
+                    pending_confirm_action = "explore"
+                    pending_confirm_loop = None
+                    pending_confirm_reflex = None
+                    pending_confirm_hold = None
+                    pending_confirm_trade = None
+                    explore_intent_offered = _explore.INTENT_FIND_STARDOCK
+                    offer_action = _explore_flags.compose_explore_action(
+                        _EXPLORE_STARDOCK_ACTION,
+                        dock=explore_dock_opt_in,
+                        tolls=explore_tolls_opt_in,
+                    )
+                    play.begin_arm_confirm(offer_action)
+                    continue
+                if offer.kind == "run_chain":
+                    chain, _caption = play.chain_scalars.bubble_subject()
+                    plan = _trade_chain_plan.plan_from_chain(
+                        _world_identity.world_id_from_profile(profile), chain
+                    )
+                    prompt = _trade_chain_plan.compose_confirm_action(
+                        plan,
+                        cash_floor=_TRADE_CASH_FLOOR,
+                        turn_reserve=_TRADE_TURN_RESERVE,
+                    )
+                    if plan is None or prompt is None:
+                        play.status_line = (
+                            "did not approve trade — incomplete chain scaffold"
+                        )
+                        continue
+                    pending_confirm_action = "trade"
+                    pending_confirm_trade = plan
+                    pending_confirm_hold = None
+                    pending_confirm_loop = None
+                    pending_confirm_reflex = None
+                    play.begin_arm_confirm(prompt)
+                    continue
+                if offer.kind == "upgrade":
+                    plan = _stardock_hold_plan.plan_from_status(
+                        _world_identity.world_id_from_profile(profile), status
+                    )
+                    prompt = _stardock_hold_plan.compose_confirm_action(
+                        plan, cash_floor=_HOLD_CASH_FLOOR
+                    )
+                    if plan is None or prompt is None:
+                        play.status_line = (
+                            "did not approve hold buy — incomplete hold scaffold"
+                        )
+                        continue
+                    pending_confirm_action = "stardock_hold"
+                    pending_confirm_hold = plan
+                    pending_confirm_trade = None
+                    pending_confirm_loop = None
+                    pending_confirm_reflex = None
+                    play.begin_arm_confirm(prompt)
+                    continue
             if (
                 action is None
                 and explore_offered

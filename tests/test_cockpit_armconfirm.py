@@ -314,6 +314,10 @@ def test_exactly_three_production_call_sites_raise_the_gate() -> None:
     WO-STARDOCK-HOLD-UPGRADE-ARM adds the sixth: Play `H` raises a hold-buy
     confirm when the exact scaffold is complete; only a subsequent `y` with
     `pending_confirm_action == "stardock_hold"` arms the daemon buy.
+
+    WO-AUTONOMY-EARLY-GAME-POLICY adds three offer-selected callers: Play `O`
+    routes its pure policy's explore, trade, or hold offer to the same
+    confirm-only paths.
     """
     root = Path(screens_mod.__file__).resolve().parent
     callers = []
@@ -324,12 +328,10 @@ def test_exactly_three_production_call_sites_raise_the_gate() -> None:
             name = getattr(func, "attr", None) or getattr(func, "id", None)
             if isinstance(node, ast.Call) and name == "begin_arm_confirm":
                 callers.append(path.name)
-    assert callers == [
-        "app.py", "app.py", "app.py", "app.py", "app.py", "app.py"
-    ], (
-        f"expected exactly six production callers, all in app.py (explore, "
+    assert callers == ["app.py"] * 9, (
+        f"expected exactly nine production callers, all in app.py (explore, "
         f"relaunch, taught L)chains, discovered L)chains, V)reflex, and "
-        f"H)hold); found {callers}"
+        f"H)hold plus O)policy's explore/trade/hold); found {callers}"
     )
 
 
