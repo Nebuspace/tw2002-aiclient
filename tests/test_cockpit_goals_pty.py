@@ -1,10 +1,11 @@
 """WO-P3-034 wire — GOALS panel + 1 Hz status_provider refresh, Layer-B.
 
 Real-curses pty + pyte replay (``tests.pty_helpers``) proves the *drawn*
-GOALS box the app.py wiring produces: a titled panel above FOCUS in
-the left gutter, rendering nine honest-unknown lines with no provider
-attached, and a known label/value once a stubbed daemon ``status`` response
-is wired in. Layer-A coverage for the composer itself
+GOALS box the app.py wiring produces: a titled panel in the left gutter
+with FOCUS nested inside it (``cockpit.layout.nested_focus_region``,
+WO-LEFT-GUTTER-NEST-FOCUS-FORMATIONS), rendering nine honest-unknown lines
+with no provider attached, and a known label/value once a stubbed daemon
+``status`` response is wired in. Layer-A coverage for the composer itself
 (``compose_goals_lines``) lives in ``tests/test_cockpit_goals.py``; this
 file only proves the ``PlayShellScreen``/``app.py`` wiring around it.
 
@@ -43,7 +44,7 @@ import pytest
 pytestmark = pytest.mark.pty_ui
 
 
-from tw2002_aiclient.cockpit.layout import frame_layout
+from tw2002_aiclient.cockpit.layout import GOALS_CONTENT_H, frame_layout, nested_focus_region
 
 from .pty_helpers import (
     find_text,
@@ -265,27 +266,30 @@ def _fixture_capture(tmp_path_factory):
 @_PTY_SKIP
 def test_goals_title_visible_above_focus(_no_provider_capture):
     regions = frame_layout(ROWS, COLS)
-    goals, focus = regions["goals"], regions["left_gutter"]
+    goals = regions["goals"]
+    focus = nested_focus_region(goals)
     assert goals is not None and focus is not None
     grid = pyte_grid(_no_provider_capture, ROWS, COLS)
 
     assert "GOALS" in grid[goals["y"]]
     assert "FOCUS" in grid[focus["y"]]
-    # GOALS sits strictly above FOCUS, matching the layout split.
+    # FOCUS is nested strictly inside GOALS's own bounds
+    # (WO-LEFT-GUTTER-NEST-FOCUS-FORMATIONS), matching the layout split.
     assert goals["y"] < focus["y"]
 
 
 @_PTY_SKIP
 def test_no_provider_run_shows_all_unknown_honest_lines(_no_provider_capture):
     """No status_provider data (real transport, empty isolated run dir):
-    every one of the 9 GOALS rows renders the unknown glyph -- honest, never
-    blank, never invented."""
+    every one of the 9 GOALS digest rows (``GOALS_CONTENT_H`` -- the rows
+    ABOVE the nested FOCUS sub-box, WO-LEFT-GUTTER-NEST-FOCUS-FORMATIONS)
+    renders the unknown glyph -- honest, never blank, never invented."""
     regions = frame_layout(ROWS, COLS)
     goals = regions["goals"]
     grid = pyte_grid(_no_provider_capture, ROWS, COLS)
 
     content_top = goals["y"] + 1
-    content_h = goals["h"] - 2
+    content_h = GOALS_CONTENT_H
     content_left = goals["x"] + 1
     content_right = goals["x"] + goals["w"] - 1  # exclusive -- box's own right border
     assert content_h >= 1
@@ -298,15 +302,16 @@ def test_no_provider_run_shows_all_unknown_honest_lines(_no_provider_capture):
 @_PTY_SKIP
 def test_stubbed_provider_shows_known_credits_label_and_value(_fixture_capture):
     regions = frame_layout(ROWS, COLS)
-    goals, focus = regions["goals"], regions["left_gutter"]
+    goals = regions["goals"]
+    focus = nested_focus_region(goals)
     grid = pyte_grid(_fixture_capture, ROWS, COLS)
     text = "\n".join(grid)
 
     assert "GOALS" in grid[goals["y"]]
     assert "Credits" in text
     assert "54,321" in text
-    # FOCUS still present below GOALS -- the stub only touched GOALS's
-    # data source, not the panel split itself.
+    # FOCUS still present nested inside GOALS -- the stub only touched
+    # GOALS's data source, not the panel split itself.
     assert focus is not None
     assert "FOCUS" in grid[focus["y"]]
 

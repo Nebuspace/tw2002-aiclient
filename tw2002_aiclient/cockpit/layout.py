@@ -8,13 +8,14 @@ regions with real ``curses`` windows is a later WO. This mirrors
 archived ``twclient/spectate_layout.py::frame_layout`` reflow ladder, scoped
 down to what PWO-031/033 (+ PWO-034's GOALS/PRIORITIES stack) need: the
 outer frame, the row-1 character/profile strip band (PWO-032), the
-three-column body (left gutter, itself stacked GOALS above PRIORITIES |
-center game viewport | right gutter, itself stacked HUD above DECISIONS
-per PWO-036), the bottom LOGS band, and — only while a halt is actually
-reported — the intervention/STOP banner (WO-P5-064, see
+three-column body (left gutter, itself stacked GOALS -- with FOCUS nested
+inside it, WO-LEFT-GUTTER-NEST-FOCUS-FORMATIONS -- above a tall FORMATIONS
+panel | center game viewport | right gutter, itself stacked HUD above
+DECISIONS per PWO-036), the bottom LOGS band, and — only while a halt is
+actually reported — the intervention/STOP banner (WO-P5-064, see
 ``INTERVENTION_H``), and — when five wholly spare rows exist under a
 full bordered 80×25 viewport — the always-on chain-bubble strip
-(WO-PLAY-CHAIN-BUBBLE-VIZ). MENU MAP/FORMATIONS remain later WOs.
+(WO-PLAY-CHAIN-BUBBLE-VIZ). MENU MAP remains a later WO.
 See the module docstring on ``frame_layout`` for the DOCS-WIN fold-floor
 correction this module encodes.
 """
@@ -99,14 +100,31 @@ CONTROL_STRIP_H = 1
 # GOALS box height (PWO-034): the authored line set is nine strategic
 # prerequisites -- Turns, Credits, StarDock, Map, Formations, Chain, Ship
 # prices, Hold price, Fighters (canon `trainer-cockpit.md` "Left gutter"
-# GOALS bullet) -- plus its own top/bottom border. GOALS stacks *above*
-# PRIORITIES in the left gutter (was the sole occupant pre-PWO-034); GOALS
-# claims this height first and PRIORITIES gets whatever vertical room is
-# left, shrinking or dropping entirely rather than the two panels
-# overlapping or GOALS itself ever rendering short of its own floor when
-# any room exists at all.
+# GOALS bullet) -- plus its own top/bottom border.
 GOALS_CONTENT_H = 9
-GOALS_BOX_MIN_H = GOALS_CONTENT_H + 2
+
+# FOCUS is nested INSIDE the GOALS box (WO-LEFT-GUTTER-NEST-FOCUS-FORMATIONS,
+# DECISION `RESOLVED-TRAINER-STRIP-AND-GUTTER-20260731` point 5: "Left
+# gutter: GOALS outer box with FOCUS nested inside") rather than a sibling
+# stacked below it, as it was pre-this-WO. FOCUS_CONTENT_H reserves room for
+# its own ranked list the same way GOALS_CONTENT_H reserves its own digest --
+# canon's three named FOCUS candidate kinds (Trade chain / Upgrade / Explore,
+# `canon/engine/priority-engine.md` "Layer 2 -- FOCUS") ground the count.
+# FOCUS_NESTED_BOX_H adds the nested sub-box's OWN top/bottom border (see
+# ``nested_focus_region`` below, which computes its actual on-screen rect).
+FOCUS_CONTENT_H = 3
+FOCUS_NESTED_BOX_H = FOCUS_CONTENT_H + 2
+
+# GOALS_BOX_MIN_H is the OUTER Goals box's own height floor: its own
+# top/bottom border, the GOALS_CONTENT_H digest, AND the nested FOCUS
+# sub-box (FOCUS_NESTED_BOX_H) entirely inside it -- box-in-box, not two
+# stacked siblings each paying for their own outer border. GOALS claims this
+# height first (clamped to whatever the column actually has -- see
+# ``frame_layout``'s own pri_w block); FORMATIONS gets whatever vertical
+# room is left below it, shrinking or dropping entirely rather than the two
+# panels overlapping or GOALS itself ever rendering short of its own floor
+# when any room exists at all.
+GOALS_BOX_MIN_H = 2 + GOALS_CONTENT_H + FOCUS_NESTED_BOX_H
 
 # HUD box height (PWO-036): the right gutter mirrors the left gutter's
 # stacked-panel shape — HUD stacks *above* DECISIONS (was the sole occupant
@@ -170,16 +188,22 @@ def frame_layout(lines: int, cols: int, *, needs_attention: bool = False) -> dic
     ``outer`` (the whole client), ``strip`` (row 1, the character/profile
     band), ``goals``/``left_gutter``/``center``/``right_gutter``/``decisions``
     (the three-column body — each present only where its tier draws it; the
-    left gutter itself is stacked GOALS above PRIORITIES per PWO-034, see
-    ``GOALS_BOX_MIN_H``; the right gutter itself is stacked HUD above
-    DECISIONS per PWO-036, see ``HUD_BOX_MIN_H`` — ``right_gutter`` is the
-    HUD sub-region, unchanged key, ``decisions`` is the new sub-region below
-    it), ``logs`` (the bottom full-width band), ``intervention`` (WO-P5-064
-    — the STOP banner, present only while ``needs_attention``; see
+    left gutter itself is stacked GOALS (with FOCUS nested INSIDE the
+    ``goals`` rect, box-in-box — see ``GOALS_BOX_MIN_H`` and the module-level
+    ``nested_focus_region`` helper, WO-LEFT-GUTTER-NEST-FOCUS-FORMATIONS)
+    above a tall FORMATIONS panel; the right gutter itself is stacked HUD
+    above DECISIONS per PWO-036, see ``HUD_BOX_MIN_H`` — ``right_gutter`` is
+    the HUD sub-region, unchanged key, ``decisions`` is the new sub-region
+    below it), ``logs`` (the bottom full-width band), ``intervention``
+    (WO-P5-064 — the STOP banner, present only while ``needs_attention``; see
     ``INTERVENTION_H``), ``control_strip`` (WO-P3-038 — the single bare row
     below them both, the frame's own last interior row; see
     ``CONTROL_STRIP_H``). Every region is clamped to at least 1x1 and
-    stays inside ``outer``; siblings never overlap.
+    stays inside ``outer``; siblings never overlap. ``left_gutter`` was
+    FOCUS's key pre-WO-LEFT-GUTTER-NEST-FOCUS-FORMATIONS; it is now
+    FORMATIONS' — FOCUS's own nested rect is NOT one of these top-level
+    siblings (it deliberately overlaps ``goals``, its own outer box) and is
+    computed separately by ``nested_focus_region(goals)``.
     """
     if lines < MIN_LINES or cols < MIN_COLS:
         return {
@@ -343,31 +367,37 @@ def frame_layout(lines: int, cols: int, *, needs_attention: bool = False) -> dic
     center_w = VIEWPORT_W if border else min(GAME_W, i_cols)
     center_h = min(VIEWPORT_H, column_h) if border else min(GAME_H, column_h)
 
-    # Gutters mirror the center viewport's height, not the whole column
-    # slot (``column_h``, which can run taller than VIEWPORT_H on a
-    # generously tall terminal) — matching the archived module's "PRIORITIES
-    # keeps full viewport height" precedent. Any leftover slot height below
-    # the gutters is deliberately left unclaimed here (out of this WO's
-    # scope; the archived module hands it to MENU MAP/FORMATIONS/DECISIONS
-    # sub-panels a later WO will port), rather than silently reassigning it
-    # to LOGS.
+    # The right gutter still mirrors the center viewport's height only
+    # (``center_h``, unchanged by this WO). The LEFT gutter is different as
+    # of WO-LEFT-GUTTER-NEST-FOCUS-FORMATIONS: FORMATIONS is a genuinely
+    # TALL panel that claims the whole ``column_h`` slot below GOALS -- the
+    # spare height below the viewport that used to sit "deliberately
+    # unclaimed" (pre-this-WO comment, now claimed on purpose) -- rather
+    # than stopping at ``center_h`` like the sibling FOCUS box it replaces
+    # did. This is what "tall FORMATIONS panel down toward LOGS" (DECISION
+    # `RESOLVED-TRAINER-STRIP-AND-GUTTER-20260731` point 5) means concretely:
+    # on a generously tall terminal FORMATIONS now runs well past the
+    # viewport's own bottom edge, down to LOGS.
     #
-    # The left gutter's ``center_h``-tall slot is itself stacked (PWO-034):
-    # GOALS claims up to ``GOALS_BOX_MIN_H`` off the top first, PRIORITIES
-    # gets whatever remains below it. GOALS is present at 1x1-or-taller
-    # whenever the slot exists at all (``pri_w > 0``) — never dropped in
-    # favor of PRIORITIES; PRIORITIES is what shrinks, then drops (``None``)
-    # once GOALS alone has consumed the whole slot. Same width for both
-    # (stacked, not side-by-side), so every existing PRIORITIES_W /
-    # PRIORITIES_MIN_W tier width stays unchanged.
+    # GOALS claims up to ``GOALS_BOX_MIN_H`` off the top first (its own
+    # nested-FOCUS box included, see ``GOALS_BOX_MIN_H``'s own comment);
+    # FORMATIONS gets whatever remains below it. GOALS is present at
+    # 1x1-or-taller whenever the slot exists at all (``pri_w > 0``) — never
+    # dropped in favor of FORMATIONS; FORMATIONS is what shrinks, then drops
+    # (``None``) once GOALS alone has consumed the whole slot. Same width
+    # for both (stacked, not side-by-side), so every existing PRIORITIES_W /
+    # PRIORITIES_MIN_W tier width stays unchanged. ``left_gutter`` keeps its
+    # pre-this-WO key -- it was FOCUS's key, now it's FORMATIONS' -- the same
+    # "reuse the existing key for whichever occupant sits below GOALS" shape
+    # ``right_gutter`` already uses for HUD.
     goals = None
     left_gutter = None
     if pri_w > 0:
-        goals_h = min(GOALS_BOX_MIN_H, center_h)
+        goals_h = min(GOALS_BOX_MIN_H, column_h)
         goals = {"y": rest_y, "x": ox, "w": pri_w, "h": goals_h}
-        pri_h = center_h - goals_h
-        if pri_h > 0:
-            left_gutter = {"y": rest_y + goals_h, "x": ox, "w": pri_w, "h": pri_h}
+        formations_h = column_h - goals_h
+        if formations_h > 0:
+            left_gutter = {"y": rest_y + goals_h, "x": ox, "w": pri_w, "h": formations_h}
 
     # The right gutter's ``center_h``-tall slot is itself stacked (PWO-036),
     # mirroring the left gutter's GOALS-over-PRIORITIES split above: HUD
@@ -455,3 +485,42 @@ def frame_layout(lines: int, cols: int, *, needs_attention: bool = False) -> dic
         "intervention": intervention,
         "control_strip": control_strip,
     }
+
+
+def nested_focus_region(goals: dict | None) -> dict | None:
+    """FOCUS's own nested sub-box within a GOALS outer region
+    (WO-LEFT-GUTTER-NEST-FOCUS-FORMATIONS, DECISION
+    ``RESOLVED-TRAINER-STRIP-AND-GUTTER-20260731`` point 5: "GOALS outer box
+    with FOCUS nested inside" -- box-in-box, not two stacked siblings each
+    paying for their own outer border).
+
+    Deliberately NOT one of ``frame_layout``'s returned top-level regions:
+    it overlaps ``goals`` by construction (it lives INSIDE it), which would
+    break every sibling-region "never overlap" invariant the rest of this
+    module's regions hold. Callers that need it (``screens.py``'s draw pass,
+    this module's own pty test suites) compute it from the already-resolved
+    ``goals`` rect via this pure helper instead.
+
+    Reserves GOALS' own top border row plus ``GOALS_CONTENT_H`` digest rows
+    before FOCUS's own box begins; the remaining rows down to GOALS' own
+    bottom border become FOCUS's slot, at the same width as GOALS (nested,
+    not side-by-side). Returns ``None`` when ``goals`` itself is
+    ``None``/absent, or when the remaining slot has no room left for even a
+    minimal 2-row box (a top+bottom border with zero content rows) --
+    degrading to "no nested FOCUS" rather than a negative-height rect, the
+    same "drops to None under height pressure" convention every other region
+    in this module already follows. Unreachable at every size this module's
+    own ``GOALS_BOX_MIN_H``/``FOCUS_NESTED_BOX_H`` constants are sized for
+    (they are the very numbers that guarantee this fits whenever ``goals``
+    itself reached its own full floor); it only fires when ``goals`` was
+    ITSELF clamped short of that floor (an extremely height-starved
+    terminal), i.e. the same "goals claims height first" degrade path
+    ``frame_layout``'s own pri_w block documents.
+    """
+    if goals is None:
+        return None
+    focus_y = goals["y"] + 1 + GOALS_CONTENT_H
+    focus_h = goals["y"] + goals["h"] - 1 - focus_y
+    if focus_h < 2:
+        return None
+    return {"y": focus_y, "x": goals["x"], "w": goals["w"], "h": focus_h}

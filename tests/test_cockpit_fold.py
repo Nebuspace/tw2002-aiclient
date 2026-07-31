@@ -12,7 +12,13 @@ from tw2002_aiclient.cockpit.decisions import (
     GLYPH_OTHER,
     compose_decisions_lines,
 )
-from tw2002_aiclient.cockpit.fold import FOCUS_LABEL, GOALS_LABEL, compose_folded_decisions_lines
+from tw2002_aiclient.cockpit.fold import (
+    FOCUS_LABEL,
+    FORMATIONS_LABEL,
+    GOALS_LABEL,
+    compose_folded_decisions_lines,
+)
+from tw2002_aiclient.cockpit.formations import EMPTY_FORMATIONS, compose_formations_panel
 from tw2002_aiclient.cockpit.goals import GLYPH_BLOCKED, GLYPH_MET, compose_goals_lines
 from tw2002_aiclient.cockpit.focus import compose_focus_lines
 
@@ -84,11 +90,15 @@ _FOCUS_STATUS = {
 _FULL_STATUS = {**_TRACE_STATUS, **_GOALS_STATUS, **_FOCUS_STATUS}
 
 # Exact combined shape for _FULL_STATUS at width=60 (3 trace + 1 GOALS label
-# + 9 goals + 1 FOCUS label + 2 focus = 16 lines) -- hand-computed from each
-# sibling composer's own documented field mapping, pinned here as a single
-# literal regression check covering order, labels, and glyph pass-through
-# all at once (mirrors ``test_cockpit_decisions.py``'s own
+# + 9 goals + 1 FOCUS label + 2 focus + 1 FORMATIONS label + 1 formations
+# honest-empty = 18 lines) -- hand-computed from each sibling composer's own
+# documented field mapping, pinned here as a single literal regression check
+# covering order, labels, and glyph pass-through all at once (mirrors
+# ``test_cockpit_decisions.py``'s own
 # ``test_full_fixture_exact_lines_with_glyph_placement`` convention).
+# _FULL_STATUS carries no ``formations_panel`` key (WO-LEFT-GUTTER-NEST-
+# FOCUS-FORMATIONS: no producer exists yet, see STARVED_ALLOWLIST), so
+# FORMATIONS always renders its own honest-empty line here.
 _FULL_EXPECTED = [
     f"{GLYPH_CHOSEN} Trade chain +550.0cr/t loop @1<->3 margin 55/hold",
     f"{GLYPH_OTHER} Upgrade +200.0cr/t hold capacity +40",
@@ -106,6 +116,8 @@ _FULL_EXPECTED = [
     FOCUS_LABEL,
     "1 Trade chain +12.5cr/t",
     f"2 {GLYPH_BLOCKED} Upgrade path to StarDock unknown",
+    FORMATIONS_LABEL,
+    EMPTY_FORMATIONS,
 ]
 
 _UNKNOWN_GOALS_LINES = [
@@ -157,8 +169,10 @@ def test_status_non_dict_types_never_raise_and_collapse():
 
 def test_all_three_sections_present_but_malformed_still_collapses():
     # autopilot_trace/focus keys present but empty-shaped, no GOALS fields
-    # at all -- every section still independently resolves to its own
-    # honest-empty marker, so the whole pane still collapses.
+    # at all, and no formations_panel key either (FORMATIONS has no
+    # producer yet -- always its own honest-empty) -- every section still
+    # independently resolves to its own honest-empty marker, so the whole
+    # pane still collapses.
     status = {"autopilot_trace": {}, "focus": {"candidates": []}}
     assert compose_folded_decisions_lines(status, width=60) == compose_decisions_lines(
         None, width=60
@@ -176,9 +190,11 @@ def test_full_fixture_section_order_labels_and_glyphs():
 def test_section_labels_are_bare_uppercase_no_glyph_no_colon():
     assert GOALS_LABEL == "GOALS"
     assert FOCUS_LABEL == "FOCUS"
+    assert FORMATIONS_LABEL == "FORMATIONS"
     result = compose_folded_decisions_lines(_FULL_STATUS, width=60)
     assert result[3] == GOALS_LABEL  # right after the 3 trace lines
     assert result[13] == FOCUS_LABEL  # right after the 9 goals lines
+    assert result[16] == FORMATIONS_LABEL  # right after the 2 focus lines
 
 
 def test_no_ai_pilot_text_anywhere():
@@ -206,6 +222,7 @@ def test_trace_only_others_honest_empty_still_render():
         ]
         + _UNKNOWN_GOALS_LINES
         + [FOCUS_LABEL, "—"]
+        + [FORMATIONS_LABEL, EMPTY_FORMATIONS]
     )
 
 
@@ -238,6 +255,7 @@ def test_goals_only_others_honest_empty_still_render():
             f"{GLYPH_MET} Fighters 10",
         ]
         + [FOCUS_LABEL, "—"]
+        + [FORMATIONS_LABEL, EMPTY_FORMATIONS]
     )
 
 
@@ -252,6 +270,7 @@ def test_focus_only_others_honest_empty_still_render():
             "1 Trade chain +12.5cr/t",
             f"2 {GLYPH_BLOCKED} Upgrade path to StarDock unknown",
         ]
+        + [FORMATIONS_LABEL, EMPTY_FORMATIONS]
     )
 
 
@@ -284,6 +303,7 @@ def test_hostile_autopilot_trace_payload_drops_trace_section_others_survive():
             "1 Trade chain +12.5cr/t",
             f"2 {GLYPH_BLOCKED} Upgrade path to StarDock unknown",
         ]
+        + [FORMATIONS_LABEL, EMPTY_FORMATIONS]
     )
 
 
@@ -309,6 +329,7 @@ def test_hostile_focus_payload_drops_focus_section_others_survive():
             f"{GLYPH_MET} Hold price 1,200cr",
             f"{GLYPH_MET} Fighters 10",
         ]
+        + [FORMATIONS_LABEL, EMPTY_FORMATIONS]
     )
 
 
@@ -334,17 +355,18 @@ def test_width_clip_sweep_every_line_within_budget():
 
 def test_width_zero_or_negative_empties_every_line_keeping_shape():
     # _FULL_STATUS's 3-candidate trace never collides in length with the
-    # fixed 2-line trace marker, so this stays the full 16-line stack, just
-    # every line clipped to "" -- not a false all-empty collapse.
+    # fixed 2-line trace marker, so this stays the full 18-line stack (see
+    # _FULL_EXPECTED), just every line clipped to "" -- not a false
+    # all-empty collapse.
     for width in (0, -5):
         lines = compose_folded_decisions_lines(_FULL_STATUS, width=width)
-        assert lines == [""] * 16
+        assert lines == [""] * len(_FULL_EXPECTED)
 
 
 @pytest.mark.parametrize("bad_width", ["not-a-number", float("inf"), float("-inf"), float("nan")])
 def test_hostile_width_never_raises(bad_width):
     lines = compose_folded_decisions_lines(_FULL_STATUS, width=bad_width)
-    assert lines == [""] * 16
+    assert lines == [""] * len(_FULL_EXPECTED)
 
 
 def test_width_zero_goals_only_status_collapses_due_to_fixed_line_count_quirk():
@@ -374,11 +396,23 @@ def test_reuses_child_composers_verbatim_not_a_reimplementation():
         trace = compose_decisions_lines(status, width=60)
         goals = compose_goals_lines(status, width=60)
         focus = compose_focus_lines(status, width=60)
+        formations = compose_formations_panel(status, width=60)
         result = compose_folded_decisions_lines(status, width=60)
-        if trace == compose_decisions_lines(None, width=60) and goals == compose_goals_lines(
-            None, width=60
-        ) and focus == compose_focus_lines(None, width=60):
+        if (
+            trace == compose_decisions_lines(None, width=60)
+            and goals == compose_goals_lines(None, width=60)
+            and focus == compose_focus_lines(None, width=60)
+            and formations == compose_formations_panel(None, width=60)
+        ):
             assert result == compose_decisions_lines(None, width=60)
         else:
-            expected = trace + [GOALS_LABEL] + goals + [FOCUS_LABEL] + focus
+            expected = (
+                trace
+                + [GOALS_LABEL]
+                + goals
+                + [FOCUS_LABEL]
+                + focus
+                + [FORMATIONS_LABEL]
+                + formations
+            )
             assert result == expected

@@ -29,6 +29,7 @@ from tw2002_aiclient.cockpit import draft_approve as cockpit_draft_approve
 from tw2002_aiclient.cockpit import draw as cockpit_draw
 from tw2002_aiclient.cockpit import focus as cockpit_focus
 from tw2002_aiclient.cockpit import fold as cockpit_fold
+from tw2002_aiclient.cockpit import formations as cockpit_formations
 from tw2002_aiclient.cockpit import goals as cockpit_goals
 from tw2002_aiclient.cockpit import hud as cockpit_hud
 from tw2002_aiclient.cockpit import liveness as cockpit_liveness
@@ -38,7 +39,7 @@ from tw2002_aiclient.cockpit import teachband as cockpit_teachband
 from tw2002_aiclient.cockpit import tones as cockpit_tones
 from tw2002_aiclient.cockpit import viewport as cockpit_viewport
 from tw2002_aiclient.cockpit import viewport_color as cockpit_viewport_color
-from tw2002_aiclient.cockpit.layout import frame_layout
+from tw2002_aiclient.cockpit.layout import frame_layout, nested_focus_region
 from tw2002_aiclient.cockpit.strip import compose_profile_strip_segments_from_row
 from tw2002_aiclient.session import credentials
 
@@ -506,6 +507,7 @@ BANK_UNREADABLE_HINT = "no character list and no count can be shown: nothing her
 # em-dash glyph rather than inventing a second "something broke" vocabulary.
 _GOALS_COMPOSE_FAILED = ["—"]
 _FOCUS_COMPOSE_FAILED = ["—"]
+_FORMATIONS_COMPOSE_FAILED = ["—"]
 # DECISIONS' own composer already defines its honest-empty state as
 # ``["—", "Exploring…"]`` (canon `trainer-cockpit.md` "Panel states":
 # `DECISIONS shows ["—", "Exploring…"]`) -- the raising-composer fallback
@@ -691,10 +693,13 @@ class PlayShellScreen:
     (``cockpit.strip.compose_profile_strip_segments_from_row`` --
     WO-PLAY-STRIP-TRAINER-CHROME moved the CONN chip onto this row beside
     the host, DECISION `RESOLVED-TRAINER-STRIP-AND-GUTTER-20260731` point
-    3), a three-column body (left gutter stacked GOALS above thin-rounded
-    FOCUS | double-line GAME viewport | right gutter stacked thin-rounded
-    HUD above thin-rounded DECISIONS, PWO-036), and the bottom thin-rounded
-    LOGS band carrying the daemon's advancing session transcript tail
+    3), a three-column body (left gutter: outer thin-rounded GOALS box with
+    a nested thin-rounded FOCUS sub-box inside it, then a tall thin-rounded
+    FORMATIONS box below spanning down toward LOGS (WO-LEFT-GUTTER-NEST-
+    FOCUS-FORMATIONS, DECISION point 5) | double-line GAME viewport | right
+    gutter stacked thin-rounded HUD above thin-rounded DECISIONS, PWO-036),
+    and the bottom thin-rounded LOGS band carrying the daemon's advancing
+    session transcript tail
     (WO-P3-041, ``cockpit.logsband.compose_logs_lines``, falling back to
     the ensure-session ``status_line`` only while no real tail exists yet;
     once a real tail exists, ``status_line`` still surfaces -- routed onto
@@ -707,13 +712,16 @@ class PlayShellScreen:
     raising composer, the interior stays the honest blank 80x25 grid PWO-051
     shipped -- never placeholder text or fake content.
     Below the fold floor (``mode == "too_small"``) only the layout's
-    refusal message is drawn. The left-gutter FOCUS box is the
-    ``left_gutter`` region internally (unchanged region key -- only its
-    drawn title and content are PWO-035; ``cockpit.layout``'s
-    PRIORITIES_W/PRIORITIES_MIN_W geometry constants are untouched). The
-    right-gutter HUD box is likewise still the ``right_gutter`` region
-    internally (unchanged key, pre-dating the split); DECISIONS is the new
-    ``decisions`` region below it.
+    refusal message is drawn. The left-gutter FORMATIONS box is the
+    ``left_gutter`` region internally (WO-LEFT-GUTTER-NEST-FOCUS-FORMATIONS
+    retargeted this region key from FOCUS -- its pre-this-WO occupant -- to
+    FORMATIONS; ``cockpit.layout``'s PRIORITIES_W/PRIORITIES_MIN_W geometry
+    constants are untouched). FOCUS's own box is computed on the fly from
+    ``goals`` via ``cockpit.layout.nested_focus_region`` -- it has no
+    top-level region key of its own, since it lives entirely inside
+    ``goals``'s bounds. The right-gutter HUD box is likewise still the
+    ``right_gutter`` region internally (unchanged key, pre-dating the
+    split); DECISIONS is the new ``decisions`` region below it.
 
     The STOP banner (WO-P5-064, ``cockpit.stopbanner.
     compose_stop_banner_lines``) is the frame's one CONDITIONAL region: an
@@ -734,7 +742,8 @@ class PlayShellScreen:
     Responsive fold (WO-P3-039, canon `trainer-cockpit.md` "Responsive
     fold"): below ``layout.LEFT_GUTTER_MIN_COLS`` (138) the left gutter is
     absent entirely (``regions["goals"] is None``) while the DECISIONS host
-    still survives -- GOALS and FOCUS relocate INTO the idle DECISIONS pane
+    still survives -- GOALS, FOCUS, and FORMATIONS (WO-LEFT-GUTTER-NEST-
+    FOCUS-FORMATIONS added the third) relocate INTO the idle DECISIONS pane
     rather than disappearing, via ``cockpit.fold.
     compose_folded_decisions_lines`` in place of ``cockpit.decisions.
     compose_decisions_lines`` for that one draw call. The DECISIONS box
@@ -745,16 +754,18 @@ class PlayShellScreen:
     first, so there is no host left to fold into.
 
     ``status_provider`` (PWO-034/035/036/037, WO-P3-038) is the shared data
-    seam for every panel that reads live daemon state -- GOALS and FOCUS in
-    the left gutter, HUD and DECISIONS in the right, and now the
+    seam for every panel that reads live daemon state -- GOALS, nested
+    FOCUS, and FORMATIONS in the left gutter, HUD and DECISIONS in the
+    right, and now the
     ``control_strip`` liveness cluster (``cockpit.liveness.
     compose_liveness_cluster``) at the bottom: a no-arg callable returning a
     ``status`` dict (the daemon ``status`` verb shape) or ``None``.
     Defaults to ``None`` -- with no provider set, ``cockpit.goals.
     compose_goals_lines`` renders every row honestly unknown,
     ``cockpit.focus.compose_focus_lines`` renders its own honest-empty,
-    ``cockpit.decisions.compose_decisions_lines`` renders its own
-    ``["—", "Exploring…"]`` honest-empty, ``cockpit.hud.
+    ``cockpit.formations.compose_formations_panel`` renders its own
+    honest-empty, ``cockpit.decisions.compose_decisions_lines`` renders its
+    own ``["—", "Exploring…"]`` honest-empty, ``cockpit.hud.
     compose_hud_cells`` renders every cell sticky ``"-"`` with no freshness
     stamp, and ``compose_liveness_cluster`` renders its own idle ``→ -`` TX
     read, rather than any panel going blank or inventing content. Every
@@ -1624,20 +1635,49 @@ class PlayShellScreen:
             goals_lines = []
         cockpit_draw.draw_lines(self.stdscr, goals, goals_lines, curses.A_NORMAL)
 
-        left = regions["left_gutter"]
+        # FOCUS nests INSIDE the GOALS box as of
+        # WO-LEFT-GUTTER-NEST-FOCUS-FORMATIONS (box-in-box, not a sibling
+        # stacked below it) -- `nested_focus_region` computes its own
+        # top/bottom-bordered sub-rect entirely within `goals`'s bounds, so
+        # drawing FOCUS's own box here paints strictly inside GOALS's
+        # already-drawn border, never past it.
+        focus = nested_focus_region(goals)
         cockpit_draw.draw_box(
-            self.stdscr, left, weight="thin", attr=self._chrome_attr,
+            self.stdscr, focus, weight="thin", attr=self._chrome_attr,
             title="FOCUS", title_attr=self._chrome_attr, uok=uok,
         )
-        if left is not None:
-            left_inner_w = max(0, left["w"] - 2)
+        if focus is not None:
+            focus_inner_w = max(0, focus["w"] - 2)
             try:
-                focus_lines = cockpit_focus.compose_focus_lines(status, width=left_inner_w)
+                focus_lines = cockpit_focus.compose_focus_lines(status, width=focus_inner_w)
             except Exception:  # noqa: BLE001 -- a raising panel must not crash the draw pass
                 focus_lines = _FOCUS_COMPOSE_FAILED
         else:
             focus_lines = []
-        cockpit_draw.draw_lines(self.stdscr, left, focus_lines, curses.A_NORMAL)
+        cockpit_draw.draw_lines(self.stdscr, focus, focus_lines, curses.A_NORMAL)
+
+        # FORMATIONS retargets the `left_gutter` region key -- FOCUS's own
+        # slot pre-this-WO, now claimed by a genuinely tall panel that
+        # extends the left column below GOALS down toward LOGS (WO scope
+        # item 2/3). Honest-empty via `formations.compose_formations_panel`
+        # until a later WO wires a real catalog (see that module's
+        # docstring).
+        left = regions["left_gutter"]
+        cockpit_draw.draw_box(
+            self.stdscr, left, weight="thin", attr=self._chrome_attr,
+            title="FORMATIONS", title_attr=self._chrome_attr, uok=uok,
+        )
+        if left is not None:
+            left_inner_w = max(0, left["w"] - 2)
+            try:
+                formations_lines = cockpit_formations.compose_formations_panel(
+                    status, width=left_inner_w
+                )
+            except Exception:  # noqa: BLE001 -- a raising panel must not crash the draw pass
+                formations_lines = _FORMATIONS_COMPOSE_FAILED
+        else:
+            formations_lines = []
+        cockpit_draw.draw_lines(self.stdscr, left, formations_lines, curses.A_NORMAL)
 
         # GAME viewport (PWO-051 shell, WO-P4-052 live paint). At the
         # `no_border` tier (`center["border"]` False) nothing is drawn at
@@ -1797,8 +1837,8 @@ class PlayShellScreen:
             # Responsive fold (WO-P3-039, canon `trainer-cockpit.md`
             # "Responsive fold"): below `LEFT_GUTTER_MIN_COLS` (138) the
             # left gutter is absent entirely (`goals is None`) while the
-            # right gutter/DECISIONS host still survives -- GOALS+FOCUS
-            # relocate INTO the idle DECISIONS pane rather than
+            # right gutter/DECISIONS host still survives -- GOALS+FOCUS+
+            # FORMATIONS relocate INTO the idle DECISIONS pane rather than
             # disappearing. `goals is None` (checked here, inside the
             # already-established `decisions is not None` guard) is
             # therefore the exact fold-active condition: at >=138 `goals`

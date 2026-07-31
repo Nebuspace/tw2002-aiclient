@@ -1,12 +1,14 @@
 """WO-P3-035 wire — FOCUS panel retitle + live compose, Layer-B.
 
 Real-curses pty + pyte replay (``tests.pty_helpers``) proves the *drawn*
-FOCUS box the ``screens.py``/``app.py`` wiring produces: the left-gutter
-box's drawn title is ``FOCUS`` (not the pre-035 ``PRIORITIES`` placeholder),
-it sits below ``GOALS`` at both the full tier and the narrowed
-``right_gutter`` fold tier (>=138 cols), it renders the composer's honest
-empty state with no focus payload, and a stubbed daemon status with ranked +
-gated candidates renders a ranked label and a ``⊘`` gated line on screen.
+FOCUS box the ``screens.py``/``app.py`` wiring produces: its drawn title is
+``FOCUS`` (not the pre-035 ``PRIORITIES`` placeholder), it is nested INSIDE
+the ``GOALS`` box (``cockpit.layout.nested_focus_region``,
+WO-LEFT-GUTTER-NEST-FOCUS-FORMATIONS) at both the full tier and the
+narrowed ``right_gutter`` fold tier (>=138 cols), it renders the composer's
+honest empty state with no focus payload, and a stubbed daemon status with
+ranked + gated candidates renders a ranked label and a ``⊘`` gated line on
+screen.
 Layer-A coverage for the composer itself (``compose_focus_lines``) lives in
 ``tests/test_cockpit_focus.py`` (monk-focus, PWO-035a); this file only
 proves the ``PlayShellScreen``/``app.py`` wiring around it -- mirrors
@@ -38,7 +40,7 @@ import pytest
 pytestmark = pytest.mark.pty_ui
 
 
-from tw2002_aiclient.cockpit.layout import frame_layout
+from tw2002_aiclient.cockpit.layout import frame_layout, nested_focus_region
 
 from .pty_helpers import (
     find_text,
@@ -261,7 +263,8 @@ def _narrow_tier_fixture_capture(tmp_path_factory):
 def test_full_tier_goals_and_focus_titles_visible(_full_tier_no_provider_capture):
     regions = frame_layout(FULL_ROWS, FULL_COLS)
     assert regions["mode"] == "full"
-    goals, focus = regions["goals"], regions["left_gutter"]
+    goals = regions["goals"]
+    focus = nested_focus_region(goals)
     assert goals is not None and focus is not None
     grid = pyte_grid(_full_tier_no_provider_capture, FULL_ROWS, FULL_COLS)
 
@@ -276,7 +279,8 @@ def test_narrow_right_gutter_tier_goals_and_focus_titles_visible(_narrow_tier_no
     # >=138 inner cols still carries a narrowed left gutter under the
     # "right_gutter" mode name (frame_layout's own convention).
     assert regions["mode"] == "right_gutter"
-    goals, focus = regions["goals"], regions["left_gutter"]
+    goals = regions["goals"]
+    focus = nested_focus_region(goals)
     assert goals is not None and focus is not None
     grid = pyte_grid(_narrow_tier_no_provider_capture, NARROW_ROWS, NARROW_COLS)
 
@@ -295,7 +299,7 @@ def test_narrow_right_gutter_tier_goals_and_focus_titles_visible(_narrow_tier_no
 @_PTY_SKIP
 def test_no_provider_focus_shows_honest_empty(_full_tier_no_provider_capture):
     regions = frame_layout(FULL_ROWS, FULL_COLS)
-    focus = regions["left_gutter"]
+    focus = nested_focus_region(regions["goals"])
     grid = pyte_grid(_full_tier_no_provider_capture, FULL_ROWS, FULL_COLS)
 
     content_row = grid[focus["y"] + 1]
@@ -314,7 +318,7 @@ def test_no_provider_focus_shows_honest_empty(_full_tier_no_provider_capture):
 @_PTY_SKIP
 def test_full_tier_stubbed_provider_shows_ranked_and_gated_lines(_full_tier_fixture_capture):
     regions = frame_layout(FULL_ROWS, FULL_COLS)
-    focus = regions["left_gutter"]
+    focus = nested_focus_region(regions["goals"])
     grid = pyte_grid(_full_tier_fixture_capture, FULL_ROWS, FULL_COLS)
     focus_text = "\n".join(
         grid[focus["y"] + 1 : focus["y"] + focus["h"] - 1]
@@ -329,7 +333,7 @@ def test_full_tier_stubbed_provider_shows_ranked_and_gated_lines(_full_tier_fixt
 @_PTY_SKIP
 def test_narrow_tier_stubbed_provider_shows_ranked_and_gated_lines(_narrow_tier_fixture_capture):
     regions = frame_layout(NARROW_ROWS, NARROW_COLS)
-    focus = regions["left_gutter"]
+    focus = nested_focus_region(regions["goals"])
     grid = pyte_grid(_narrow_tier_fixture_capture, NARROW_ROWS, NARROW_COLS)
     focus_text = "\n".join(
         grid[focus["y"] + 1 : focus["y"] + focus["h"] - 1]

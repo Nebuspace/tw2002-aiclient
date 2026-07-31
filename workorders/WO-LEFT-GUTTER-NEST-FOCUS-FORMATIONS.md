@@ -1,6 +1,6 @@
 # WO-LEFT-GUTTER-NEST-FOCUS-FORMATIONS
 
-**Status:** READY · EXECUTE · HIGH · Max GO 2026-07-31 (trainer strip redesign wave 2/3)
+**Status:** DONE · implemented by `impl-aiclient-cursor` 2026-07-31 · suite green · live-prove n/a (layout-only)
 **Seat:** `impl-aiclient-cursor`
 **Branch:** `wo/LEFT-GUTTER-NEST-FOCUS-FORMATIONS`
 **Depends tip:** `main` ≥ chrome merge (`4ae97a4`+)
