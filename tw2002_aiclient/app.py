@@ -16,6 +16,7 @@ from tw2002_aiclient.cockpit import assign_trigger as _assign_trigger
 from tw2002_aiclient.cockpit import autoloop_controls as _autoloop_controls
 from tw2002_aiclient import explore as _explore
 from tw2002_aiclient import trade_chain_plan as _trade_chain_plan
+from tw2002_aiclient import stardock_hold_plan as _stardock_hold_plan
 from tw2002_aiclient import world_identity as _world_identity
 from tw2002_aiclient.cockpit import chains as _chains
 from tw2002_aiclient.cockpit import cycle_progress as _cycle_progress
@@ -44,6 +45,9 @@ from tw2002_aiclient.session.autoloop import CYCLES_HARD_CEILING
 from tw2002_aiclient.session.trade_chain import (
     DEFAULT_CASH_FLOOR as _TRADE_CASH_FLOOR,
     DEFAULT_TURN_RESERVE as _TRADE_TURN_RESERVE,
+)
+from tw2002_aiclient.session.stardock_hold import (
+    DEFAULT_CASH_FLOOR as _HOLD_CASH_FLOOR,
 )
 from tw2002_aiclient.watchfeed import WatchFeed
 
@@ -77,6 +81,9 @@ _EXPLORE_MIN_SECTORS = 5
 # offer, do not take. `E` is unbound everywhere else in this app; teach
 # `A`/`R`/`T` stay reserved for WO-067/068/069.
 _EXPLORE_OFFER_KEYS = (ord("e"), ord("E"))
+# WO-STARDOCK-HOLD-UPGRADE-ARM: H offers the hold-buy confirm scaffold when
+# evidence is complete; never auto-executes.
+_HOLD_OFFER_KEYS = (ord("h"), ord("H"))
 
 
 class DeadTerminalError(Exception):
@@ -867,6 +874,8 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
     # arming yesterday's macro under someone else's prompt.
     pending_confirm_loop: dict | None = None
     pending_confirm_trade: _trade_chain_plan.TradeChainPlan | None = None
+    # WO-STARDOCK-HOLD-UPGRADE-ARM: exact hold-buy scaffold held for confirm.
+    pending_confirm_hold: _stardock_hold_plan.StardockHoldPlan | None = None
     # WO-PLAY-REFLEX-ARM: the exact identity (`rule_id`, `macro`, `classification`)
     # shown at preview. Held alongside `pending_confirm_action` so `y` launches
     # the claim the human saw — never a re-read of the library between prompt
@@ -1090,6 +1099,8 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                 pending_confirm_action = "explore"
                 pending_confirm_loop = None  # a different gate owns the row now
                 pending_confirm_reflex = None
+                pending_confirm_hold = None
+                pending_confirm_trade = None
                 # WO-EXPLORE-AUTOMATION-GATE E3: one affordance, two intents.
                 # `E` CYCLES which goal is on offer and raises the gate for
                 # it; it never starts anything. The first press of a session
@@ -1140,6 +1151,34 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                 )
                 play.begin_arm_confirm(offer_action, cycles=offer_cycles)
                 continue
+            if action is None and key in _HOLD_OFFER_KEYS:
+                # WO-STARDOCK-HOLD-UPGRADE-ARM: H raises the hold-buy gate only
+                # when the exact scaffold is complete — never invents price /
+                # dock / holds.
+                status = (
+                    play.status_provider() if play.status_provider is not None else {}
+                )
+                world_id = _world_identity.world_id_from_profile(profile)
+                plan = _stardock_hold_plan.plan_from_status(world_id, status)
+                prompt = (
+                    _stardock_hold_plan.compose_confirm_action(
+                        plan, cash_floor=_HOLD_CASH_FLOOR
+                    )
+                    if plan is not None
+                    else None
+                )
+                if plan is None or prompt is None:
+                    play.status_line = (
+                        "did not approve hold buy — incomplete hold scaffold"
+                    )
+                    continue
+                pending_confirm_hold = plan
+                pending_confirm_action = "stardock_hold"
+                pending_confirm_trade = None
+                pending_confirm_loop = None
+                pending_confirm_reflex = None
+                play.begin_arm_confirm(prompt)
+                continue
             if action == "pause":
                 # WO-AUTOLOOP-RELAUNCH-COCKPIT: Space -- ungated, like panic
                 # (see `cockpit/autoloop_controls.py` and `cockpit/panic.py`
@@ -1166,6 +1205,7 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                 action_text = _autoloop_controls.compose_relaunch_confirm_action(sends_preview)
                 pending_confirm_action = "relaunch"
                 pending_confirm_loop = None  # a different gate owns the row now
+                pending_confirm_hold = None
                 pending_confirm_reflex = None
                 play.begin_arm_confirm(action_text)
                 continue
@@ -1175,6 +1215,7 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                 # transport fail / incomplete identity → status only, zero
                 # gate, zero launch.
                 pending_confirm_loop = None
+                pending_confirm_hold = None
                 pending_confirm_reflex = None
                 proposal = adapters.reflex_propose(run_dir=run_dir)
                 if not getattr(proposal, "ok", False):
@@ -1385,6 +1426,7 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                         )
                         continue
                     pending_confirm_trade = plan
+                    pending_confirm_hold = None
                     pending_confirm_loop = None
                     pending_confirm_action = "trade"
                     pending_confirm_reflex = None
@@ -1399,6 +1441,7 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                     continue
                 pending_confirm_loop = selected
                 pending_confirm_action = "loop"
+                pending_confirm_hold = None
                 pending_confirm_reflex = None
                 play.chains_session.close()
                 play.begin_arm_confirm(_chains.compose_arm_action(selected))
@@ -1407,6 +1450,7 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                 pending_confirm_action = None
                 plan = pending_confirm_trade
                 pending_confirm_trade = None
+                pending_confirm_hold = None
                 pending_confirm_loop = None
                 pending_confirm_reflex = None
                 if not isinstance(plan, _trade_chain_plan.TradeChainPlan):
@@ -1438,6 +1482,46 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                         reason = getattr(started, "reason", None) or "unknown"
                         play.status_line = f"did not arm trade — {reason}"
                 continue
+            if action == "arm_confirm" and pending_confirm_action == "stardock_hold":
+                pending_confirm_action = None
+                plan = pending_confirm_hold
+                pending_confirm_hold = None
+                pending_confirm_trade = None
+                pending_confirm_loop = None
+                pending_confirm_reflex = None
+                if not isinstance(plan, _stardock_hold_plan.StardockHoldPlan):
+                    play.status_line = (
+                        "did not arm hold buy — no exact hold held for this confirm"
+                    )
+                    continue
+                play.status_line = (
+                    f"starting hold buy @ StarDock {plan.stardock_sector}…"
+                )
+                play.draw()
+                try:
+                    started = adapters.stardock_hold_start(
+                        plan.world_id,
+                        plan.fingerprint,
+                        stardock_sector=plan.stardock_sector,
+                        empty_holds=plan.empty_holds,
+                        hold_price=plan.hold_price,
+                        credits=plan.credits,
+                        qty=plan.qty,
+                        cash_floor=_HOLD_CASH_FLOOR,
+                        run_dir=run_dir,
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    play.status_line = f"hold arm failed — {type(exc).__name__}"
+                else:
+                    if getattr(started, "ok", False):
+                        play.status_line = (
+                            f"hold buy armed — {plan.qty} hold(s) @ "
+                            f"StarDock {plan.stardock_sector}, one pass running"
+                        )
+                    else:
+                        reason = getattr(started, "reason", None) or "unknown"
+                        play.status_line = f"did not arm hold buy — {reason}"
+                continue
             if action == "arm_confirm" and pending_confirm_action == "loop":
                 # WO-PLAY-AUTOLOOP-START: the human pressed `y` at the taught-
                 # loop confirm. Only NOW does the money-spending adapter call
@@ -1456,6 +1540,7 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                 pending_confirm_action = None
                 armed = pending_confirm_loop
                 pending_confirm_loop = None
+                pending_confirm_hold = None
                 pending_confirm_reflex = None
                 name = armed.get("name") if isinstance(armed, dict) else None
                 if not name:
@@ -1488,6 +1573,7 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                 # relaunch offer. Only NOW does the money-spending adapter
                 # call happen -- the preview above never called it.
                 pending_confirm_action = None
+                pending_confirm_hold = None
                 play.status_line = "relaunching…"
                 play.draw()
                 result = adapters.autoloop_relaunch(run_dir=run_dir)
@@ -1505,6 +1591,7 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                 # direct send.
                 pending_confirm_action = None
                 identity = pending_confirm_reflex
+                pending_confirm_hold = None
                 pending_confirm_reflex = None
                 if not isinstance(identity, dict):
                     play.status_line = "did not arm — no reflex held for this confirm"
@@ -1560,6 +1647,7 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                 # find-StarDock runs until arrival or exhaustion.
                 pending_confirm_action = None
                 armed_intent = explore_intent_offered or _explore.INTENT_MAP_FILL
+                pending_confirm_hold = None
                 pending_confirm_reflex = None
                 if armed_intent == _explore.INTENT_FIND_STARDOCK:
                     play.status_line = "starting explore — find StarDock…"
@@ -1628,6 +1716,7 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                 # its own branch used to fall into explore here.
                 pending_confirm_action = None
                 pending_confirm_loop = None
+                pending_confirm_hold = None
                 pending_confirm_reflex = None
                 play.status_line = "did not arm — nothing pending for this confirm"
                 continue

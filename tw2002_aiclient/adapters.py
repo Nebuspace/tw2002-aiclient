@@ -356,6 +356,73 @@ def trade_chain_status(*, run_dir: Path | None = None) -> TradeChainResult:
     return _trade_chain_verb("trade_chain_status", run_dir=run_dir)
 
 
+@dataclass(frozen=True)
+class StardockHoldResult:
+    """Typed StarDock hold-buy start/stop/status transport result."""
+
+    ok: bool
+    reason: str | None = None
+    detail: str | None = None
+    raw: dict | None = None
+
+
+def _stardock_hold_verb(
+    verb: str, *, run_dir: Path | None = None, payload: dict | None = None
+) -> StardockHoldResult:
+    resolved_run_dir = run_dir or _env.resolve_run_dir()
+    try:
+        resp = _cli.send_request(
+            verb, payload or {}, run_dir=resolved_run_dir
+        )
+    except Exception as exc:  # noqa: BLE001
+        return StardockHoldResult(
+            ok=False, reason="unknown", detail=f"{type(exc).__name__}: {exc}"
+        )
+    if resp.get("ok"):
+        return StardockHoldResult(ok=True, raw=resp)
+    return StardockHoldResult(
+        ok=False,
+        reason=str(resp.get("error") or "unknown"),
+        raw=resp,
+    )
+
+
+def stardock_hold_start(
+    world_id: str,
+    fingerprint: str,
+    *,
+    stardock_sector: int,
+    empty_holds: int,
+    hold_price: int,
+    credits: int,
+    qty: int,
+    cash_floor: int,
+    run_dir: Path | None = None,
+) -> StardockHoldResult:
+    return _stardock_hold_verb(
+        "stardock_hold_start",
+        run_dir=run_dir,
+        payload={
+            "world_id": world_id,
+            "fingerprint": fingerprint,
+            "stardock_sector": stardock_sector,
+            "empty_holds": empty_holds,
+            "hold_price": hold_price,
+            "credits": credits,
+            "qty": qty,
+            "cash_floor": cash_floor,
+        },
+    )
+
+
+def stardock_hold_stop(*, run_dir: Path | None = None) -> StardockHoldResult:
+    return _stardock_hold_verb("stardock_hold_stop", run_dir=run_dir)
+
+
+def stardock_hold_status(*, run_dir: Path | None = None) -> StardockHoldResult:
+    return _stardock_hold_verb("stardock_hold_status", run_dir=run_dir)
+
+
 def autoloop_start(
     name: str,
     *,
