@@ -708,7 +708,10 @@ def test_the_refresh_is_keyed_by_this_profiles_world_id(monkeypatch):
         monkeypatch, [L], store=TWO_LOOPS, recompute=lambda wid, **kw: DISCOVERED,
         sector_count=_count,
     )
-    assert seen == [expected], f"refreshed against the wrong world: {seen!r}"
+    # world_stats.refresh + chain_detect/build_candidate_pairs both count
+    # sectors for this profile's world_id (WO-CHAIN-BUBBLE-PAIR-FALLBACK).
+    assert seen, f"never refreshed against any world"
+    assert all(w == expected for w in seen), f"refreshed against the wrong world: {seen!r}"
     assert _screen.world_stats.merge({}) == {
         "known_sectors": SECTOR_COUNT,
         "dead_end_count": 0,

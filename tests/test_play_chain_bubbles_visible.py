@@ -150,6 +150,7 @@ def test_draw_path_does_not_import_chain_search():
                 imports.add(node.module.split(".")[0])
     assert "chain_search" not in imports
     assert "world_model" not in imports
+    assert "chain_detect" not in imports
     # Composer is pure; screens may import it.
     assert chain_bubbles.CHAIN_VIZ_H == 5
 
@@ -159,3 +160,83 @@ def test_short_terminal_folds_chain_and_keeps_viewport():
     assert regions["chain"] is None
     assert regions["center"]["h"] == 27
     assert regions["center"]["border"] is True
+
+
+class _Pair:
+    def __init__(self, a, b):
+        self.sector_a = a
+        self.sector_b = b
+
+
+def test_bubbles_paint_pair_fallback_when_no_priced_chain(monkeypatch):
+    """WO-CHAIN-BUBBLE-PAIR-FALLBACK Accept #1 — class pair, not empty placeholder."""
+    win = _Win(40, 160)
+    play = _screen(
+        monkeypatch,
+        win,
+        status={
+            "ok": True,
+            "connected": True,
+            "classification": "main_command",
+            # Sector outside the pair so the honest "class pair" caption paints
+            # (★ wins when the operator is on a bubble sector).
+            "hud": {"sector": {"value": 99, "age_s": 0.0}},
+            "log_tail": ["app> line"],
+        },
+    )
+    play.chain_scalars._best_chain = None
+    play.chain_scalars._best_pair = _Pair(10, 20)
+    play.chain_scalars._port_classes = {10: "BSB", 20: "SBS"}
+    play.chain_scalars._known_ports = {10, 20}
+    play.draw()
+    text = _region_text(win, frame_layout(40, 160)["chain"])
+    assert "10" in text
+    assert "20" in text
+    assert "no trade loop yet" not in text
+    assert "class pair" in text
+    assert "★" not in text
+
+
+def test_bubbles_prefer_priced_chain_over_pair(monkeypatch):
+    """WO-CHAIN-BUBBLE-PAIR-FALLBACK Accept #2."""
+    win = _Win(40, 160)
+    play = _screen(
+        monkeypatch,
+        win,
+        status={
+            "ok": True,
+            "connected": True,
+            "classification": "main_command",
+            "hud": {"sector": {"value": 10, "age_s": 0.0}},
+            "log_tail": ["app> line"],
+        },
+    )
+    play.chain_scalars._best_chain = _Chain([10, 11, 12, 10])
+    play.chain_scalars._best_pair = _Pair(50, 60)
+    play.chain_scalars._port_classes = {10: "BSB", 11: "SSS", 12: "SBS"}
+    play.chain_scalars._known_ports = {10, 11, 12}
+    play.draw()
+    text = _region_text(win, frame_layout(40, 160)["chain"])
+    assert "11" in text
+    assert "12" in text
+    assert "50" not in text
+    assert "class pair" not in text
+
+
+def test_bubbles_empty_placeholder_when_neither_chain_nor_pair(monkeypatch):
+    """WO-CHAIN-BUBBLE-PAIR-FALLBACK Accept #3."""
+    win = _Win(40, 160)
+    play = _screen(
+        monkeypatch,
+        win,
+        status={
+            "ok": True,
+            "connected": True,
+            "classification": "main_command",
+            "hud": {"sector": {"value": 10, "age_s": 0.0}},
+            "log_tail": ["app> line"],
+        },
+    )
+    play.draw()
+    text = _region_text(win, frame_layout(40, 160)["chain"])
+    assert "no trade loop yet" in text

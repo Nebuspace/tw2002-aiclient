@@ -1611,12 +1611,14 @@ class PlayShellScreen:
             except Exception:  # noqa: BLE001
                 cur_sector = None
             try:
+                subject, caption = self.chain_scalars.bubble_subject()
                 bubble_lines = cockpit_chain_bubbles.compose_chain_bubbles(
-                    self.chain_scalars.best_chain,
+                    subject,
                     current_sector=cur_sector,
                     port_classes=self.chain_scalars.port_classes,
                     known_ports=self.chain_scalars.known_ports or None,
                     width=chain_region["w"],
+                    caption=caption,
                 )
             except Exception:  # noqa: BLE001 -- never crash the draw pass
                 bubble_lines = [""] * cockpit_chain_bubbles.CHAIN_VIZ_H

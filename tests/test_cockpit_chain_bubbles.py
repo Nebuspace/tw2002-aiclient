@@ -69,3 +69,29 @@ def test_truncation_suffix_is_deterministic():
 def test_composer_never_raises(hostile):
     lines = chain_bubbles.compose_chain_bubbles(hostile, width="bad")
     assert len(lines) == chain_bubbles.CHAIN_VIZ_H
+
+
+def test_caption_marks_class_pair_when_no_star():
+    """WO-CHAIN-BUBBLE-PAIR-FALLBACK — honest unpriced chrome."""
+    lines = chain_bubbles.compose_chain_bubbles(
+        _Chain([10, 20, 10]),
+        port_classes={10: "BSB", 20: "SBS"},
+        width=80,
+        caption="class pair",
+    )
+    joined = "\n".join(lines)
+    assert "class pair" in joined
+    assert "no trade loop yet" not in joined
+
+
+def test_star_wins_over_caption():
+    lines = chain_bubbles.compose_chain_bubbles(
+        _Chain([10, 20, 10]),
+        current_sector=10,
+        port_classes={10: "BSB", 20: "SBS"},
+        width=80,
+        caption="class pair",
+    )
+    joined = "\n".join(lines)
+    assert "★" in joined
+    assert "class pair" not in joined
