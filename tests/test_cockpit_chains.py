@@ -1,4 +1,4 @@
-"""`cockpit.chains` -- the `L)chains` popup's pure half (WO-PLAY-AUTOLOOP-START).
+"""`cockpit.chains` -- the List Loops overlay's pure half (WO-LOOPS-POPUP-OVERLAY).
 
 No curses, no filesystem: these pin the composer, the selection math, and the
 one honesty rule the surface owes -- that an unreadable store is never
@@ -32,7 +32,8 @@ def _names(rows):
 
 def test_chains_token_spelling_is_single_source():
     """Teach band imports this; spelling must not drift from the key offer."""
-    assert chains.CHAINS_TOKEN == "L)chains"
+    assert chains.CHAINS_TOKEN == "L)ist Loops"
+    assert chains.TITLE == "List Loops"
     assert chains.resolve_chains_offer_key(ord(chains.CHAINS_TOKEN[0])) is True
 
 

@@ -1,4 +1,4 @@
-"""The `L)chains` popup actually REACHES THE SCREEN (WO-PLAY-AUTOLOOP-START).
+"""The List Loops overlay actually REACHES THE SCREEN (WO-LOOPS-POPUP-OVERLAY).
 
 Separate from `tests/test_play_chains_arm.py` on purpose: that file drives
 the real `_run_play` but stubs `draw()` to keep a fake stdscr out of curses
@@ -78,7 +78,8 @@ def test_an_open_popup_reaches_the_screen(monkeypatch) -> None:
     s.chains_session.open(ROWS, "ok")
     s.draw()
     body = _painted(win)
-    assert chains.TITLE in body, "the popup title never reached the screen"
+    assert chains.TITLE == "List Loops"
+    assert chains.TITLE in body, "the List Loops overlay title never reached the screen"
     assert "ore-run-K7" in body
     assert "fuel-shuttle" in body
 

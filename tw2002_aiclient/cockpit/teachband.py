@@ -23,11 +23,9 @@ trainer-plain vocabulary:
 
 - `E)xplore` reuses `autonomy_keys.EXPLORE_TOKEN` verbatim -- same key,
   same word, already trainer-plain.
-- `L)ist Loops` (``LOOPS_TOKEN``) is a RELABEL of the same `L` key
-  `chains.CHAINS_TOKEN` ("L)chains") already opens -- this module does
-  not import or change `CHAINS_TOKEN` (other surfaces still cite the
-  popup by that name); it is a local, calm-band-only spelling of the
-  identical affordance.
+- `L)ist Loops` (``LOOPS_TOKEN``) is ``chains.CHAINS_TOKEN`` imported
+  under the calm-band name (WO-LOOPS-POPUP-OVERLAY) -- same `L` key,
+  same overlay, one spelling for chrome and HELP.
 - `T)rade Loop Chain` is a RELABEL of the same `T` key the old
   `T)rigger` token named (`screens.py`'s `assign_trigger` intent,
   WO-P5-068) -- trainer wording for the same wire, not a new one.
@@ -96,19 +94,17 @@ from __future__ import annotations
 # single-source-of-truth discipline the retired imports below used to
 # keep for their own tokens.
 from .autonomy_keys import EXPLORE_TOKEN
+from .chains import CHAINS_TOKEN as LOOPS_TOKEN
 
 # Canon's middle-dot separator for a toggle's ON/OFF suffix
 # (`cockpit/strip.py`'s own `SEP` -- both are the same NO-SWAP glyph,
 # `visual-language.md` glyph table: `·` never gets an ASCII substitute).
 _TOGGLE_SEP = "\u00b7"
 
-# The trainer calm band's own labels (WO-PLAY-STRIP-TRAINER-CHROME).
-# Deliberately LOCAL literals, not re-imports of `chains.CHAINS_TOKEN`
-# ("L)chains") or the retired `"T)rigger"` -- see the module docstring's
-# "What this is now" section for why: this is a calm-band-only RELABEL of
-# the same two keys, and every other surface that still cites the popup
-# by its own name keeps doing so unchanged.
-LOOPS_TOKEN = "L)ist Loops"
+# The trainer calm band's own labels (WO-PLAY-STRIP-TRAINER-CHROME /
+# WO-LOOPS-POPUP-OVERLAY). ``LOOPS_TOKEN`` is ``chains.CHAINS_TOKEN``
+# (single source). ``T)rade Loop Chain`` stays a local relabel of the
+# retired `"T)rigger"` wire -- see the module docstring.
 TRADE_LOOP_CHAIN_TOKEN = "T)rade Loop Chain"
 
 # The three toggle labels' PREFIX only -- ``compose_teach_band`` appends

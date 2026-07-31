@@ -44,7 +44,7 @@ EXPLORE_HELP = "E)xplore — start explore via confirm gate"
 # already looking at (`teachband.py`), not repeated here.
 HOLD_HELP = "H)old? — manual confirm; APP-ARMED + ON auto-buys"
 OFFER_HELP = "O)ffer? — manual confirm; APP-ARMED + ON auto-acts"
-CHAINS_HELP = "L)chains — taught trade-loop chains library"
+CHAINS_HELP = "L)ist Loops — pick; T)rade Loop Chain runs"
 
 
 def compose_autonomy_help_lines() -> tuple[str, ...]:
