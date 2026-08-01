@@ -665,12 +665,108 @@ def test_unexpected_screen_holds_instead_of_retry_spinning(tmp_path):
     assert result.steps < DEFAULT_MAX_STEPS
 
 
+def test_dock_skips_t_when_post_p_is_already_commerce_qty():
+    """WO-TRADE-DOCK-MENU: classic menu missing; qty prompt after P → no T."""
+    from tw2002_aiclient.trade_driver import _dock
+
+    screens = [
+        "Sector  : 1\nCommand [TL=00:00:08]:[1] (?=Help)? : ",
+        (
+            "<Port>\nDocking...\nOne turn deducted, 99 turns left.\n\n"
+            "Commerce report for PortX: 12:00:00 AM Mon Jan 01, 2054\n\n"
+            "How many holds of Fuel Ore [100] ? "
+        ),
+    ]
+    session = FakeChainSession(screens, initial_credits=5_000)
+    ctx = _StepCtx(session, TradeDriverConfig(), lambda: False, lambda: True)
+    _dock(ctx, 0)
+    assert session.sent == [("P", True, False)]
+
+
+def test_fo_then_equipment_skip_with_zero_after_direct_commerce(tmp_path):
+    """Live-shaped: after P, FO qty then Equipment — decline FO with 0, buy Equ."""
+    world_id = "test-dock-menu-cascade"
+    _seed_two_sector_graph(world_id, tmp_path)
+    # Single hop buy Equipment @1 then sell @2. First dock has no menu —
+    # FO offered before Equipment (Cartogra live shape).
+    screens = [
+        "Sector  : 1\nCommand [TL=00:00:08]:[1] (?=Help)? : ",
+        (
+            "<Port>\n\nDocking...\nOne turn deducted, 99 turns left.\n\n"
+            "Commerce report for PortA: 12:00:00 AM Mon Jan 01, 2054\n\n"
+            " Items     Status  Trading % of max OnBoard\n"
+            " -----     ------  ------- -------- -------\n"
+            "Fuel Ore   Selling    100     100%       0\n"
+            "Organics   Selling    100     100%       0\n"
+            "Equipment  Selling     50     100%       0\n\n"
+            "You have 10,000 credits and 50 empty cargo holds.\n\n"
+            "How many holds of Fuel Ore [100] ? "
+        ),
+        "How many holds of Organics [100] ? ",
+        "How many holds of Equipment [50] ? ",
+        "We'll sell them for 2000 credits.\nYour offer [2000] ? ",
+        "You have 8,000 credits and 50 empty cargo holds.\n\nCommand [TL=00:00:08]:[1] (?=Help)? : ",
+        "Sector  : 2\nCommand [TL=00:00:08]:[2] (?=Help)? : ",
+        _MENU,
+        (
+            "<Port>\n\nDocking...\nOne turn deducted, 97 turns left.\n\n"
+            "Commerce report for PortB: 12:00:00 AM Mon Jan 01, 2054\n\n"
+            " Items     Status  Trading % of max OnBoard\n"
+            " -----     ------  ------- -------- -------\n"
+            "Fuel Ore   Buying     100     100%       0\n"
+            "Organics   Buying     100     100%       0\n"
+            "Equipment  Buying      50     100%       0\n\n"
+            "You have 8,000 credits and 50 empty cargo holds.\n\n"
+            "How many holds of Fuel Ore [100] ? "
+        ),
+        "How many holds of Organics [100] ? ",
+        "How many holds of Equipment [50] ? ",
+        "We'll buy them for 2500 credits.\nYour offer [2500] ? ",
+        "You have 10,500 credits and 50 empty cargo holds.\n\nCommand [TL=00:00:08]:[2] (?=Help)? : ",
+    ]
+    session = FakeChainSession(screens, initial_credits=10_000)
+    chain = ProfitChain(
+        sectors=(1, 2, 1),
+        hops=(TradeHop(frm=1, to=2, commodity="Equipment", margin=10.0, turns=1),),
+        overall_profit=10.0,
+        turns=1,
+        cr_per_turn=10.0,
+        cr_per_execution=10.0,
+    )
+
+    result = _run(session, chain, world_id, tmp_path, 100)
+
+    assert result.completed is True
+    assert result.hops_completed == 1
+    # First dock: P only (no T). Declines FO + Org with 0 before Equipment.
+    assert session.sent[0] == ("P", True, False)
+    assert session.sent[1] == ("0", True, False)
+    assert session.sent[2] == ("0", True, False)
+    # No dock_menu halt — T was never required on the first dock.
+    assert not any(s[0] == "T" for s in session.sent[:4])
+
+
+def test_classic_port_menu_still_sends_t_after_p():
+    """Accept 2: recognizable menu → existing T path unchanged."""
+    from tw2002_aiclient.trade_driver import _dock
+
+    screens = [
+        "Sector  : 1\nCommand [TL=00:00:08]:[1] (?=Help)? : ",
+        _MENU,
+        "How many holds of Fuel Ore [100] ? ",
+    ]
+    session = FakeChainSession(screens, initial_credits=5_000)
+    ctx = _StepCtx(session, TradeDriverConfig(), lambda: False, lambda: True)
+    _dock(ctx, 0)
+    assert session.sent == [("P", True, False), ("T", True, False)]
+
+
 def test_paladin_send_letter_refuses_any_letter_outside_the_allowlist():
     """PALADIN: no combat/attack/genesis verb reachable -- `_send_letter`
     is the one place a single-letter command could ever be sent, and it
     refuses anything outside the allowlist (never `"A"`ttack, never
     `"Q"`uit-as-a-driver-choice). `"Y"` is WO-WARP-CONFIRM-Y only."""
-    assert _ALLOWED_LETTER_SENDS == {"P", "T", "Y"}
+    assert _ALLOWED_LETTER_SENDS == {"P", "T", "Y", "N"}
 
     class _NeverSendsSession:
         def render(self):

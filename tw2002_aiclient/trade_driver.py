@@ -208,6 +208,14 @@ _CASCADE_ENTRY_PATTERN = f"{_QTY_PROMPT_PATTERN}|{_COMMAND_PROMPT_PATTERN}"
 # commodity, or (a port that skips the offer step entirely) straight to
 # the next cascade entry.
 _OFFER_OR_CASCADE_PATTERN = f"{_OFFER_PROMPT_PATTERN}|{_CASCADE_ENTRY_PATTERN}"
+# WO-TRADE-DOCK-MENU: some TWGS builds scroll past the classic
+# Attack/Trade/Quit menu after ``P`` and open FO→Org→Equ qty prompts
+# directly. ``send_and_confirm`` may still match a stale menu line in the
+# buffer while ``fresh()``'s prompt is already commerce — accept either.
+_POST_P_CONFIRM_PATTERN = (
+    f"{_PORT_MENU_CONFIRM_PATTERN}|{_QTY_PROMPT_PATTERN}|"
+    f"{_OFFER_PROMPT_PATTERN}|{_COMMAND_PROMPT_PATTERN}"
+)
 
 # The ONLY single-letter commands this module may ever send -- see module
 # docstring's PALADIN section. "A" (Attack) and "Q" (Quit, nevermind) are
@@ -449,26 +457,39 @@ def _offer_total(text: str) -> Optional[int]:
 
 def _dock(ctx: _StepCtx, hop_index: int) -> None:
     """`"P"` (enter the port) then `"T"` (trade -- PALADIN: never
-    `"A"`ttack) -- the live-captured menu cascade, see module docstring.
+    `"A"`ttack) when the classic port menu is present.
+
+    WO-TRADE-DOCK-MENU: if post-``P`` is already a commodity qty/offer (or
+    back at Command after an empty port), skip ``T`` and let
+    ``_visit_port`` drive the FO→Org→Equ cascade with ``0`` declines —
+    never ``ChainHold(dock_menu)`` solely because the menu regex missed.
     Gated on the CURRENT screen genuinely being the ordinary sector
     command prompt before ever sending "P" (HIGH-2 discipline, same
     classification autopilot.py's own nav gate uses)."""
     full_text, prompt_line = ctx.fresh()
     if not prompt_line or classify_screen(full_text, prompt_line) != _MOVEMENT_PROMPT_CLASS:
         raise ChainHold(f"unexpected_screen:predock:{hop_index}")
-    _send_letter(ctx, "P", _PORT_MENU_CONFIRM_PATTERN)
+    _send_letter(ctx, "P", _POST_P_CONFIRM_PATTERN)
 
     # Re-derive the CURRENT line independently rather than trusting the
     # settle-layer match alone (haggle.py's `_resolution_evidence()`
     # convention -- see module docstring's fresh-render-gate section).
     _full_text, prompt_line = ctx.fresh()
-    if not _PORT_MENU_PROMPT_RE.search(prompt_line):
-        raise ChainHold(f"unexpected_screen:dock_menu:{hop_index}")
-    _send_letter(ctx, "T", _CASCADE_ENTRY_PATTERN)
+    if _PORT_MENU_PROMPT_RE.search(prompt_line):
+        _send_letter(ctx, "T", _CASCADE_ENTRY_PATTERN)
+        return
+    if (
+        _QTY_PROMPT_RE.search(prompt_line)
+        or _OFFER_PROMPT_RE.search(prompt_line)
+        or _COMMAND_PROMPT_RE.search(prompt_line)
+    ):
+        # Commerce already open (or empty-port bounce to Command).
+        return
+    raise ChainHold(f"unexpected_screen:dock_menu:{hop_index}")
 
 
 def _decline(ctx: _StepCtx) -> None:
-    _confirmed_send(ctx, "0", _CASCADE_ENTRY_PATTERN, enter=True)
+    _confirmed_send(ctx, "0", _OFFER_OR_CASCADE_PATTERN, enter=True)
 
 
 def _send_qty(ctx: _StepCtx, qty: int) -> None:
