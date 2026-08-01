@@ -34,6 +34,17 @@ RULES:
 
 **Superseded by** `RESOLVED-TRAINER-STRIP-AND-GUTTER-20260731`: App `status_line` / offers paint in **LOGS**, not a mid control-strip segment. Calm teachband is the trainer key row (E/P/L/T/C/S), not A/R/T.
 
+### PENDING-HUD-CARGO-BREAKDOWN — CARGO shows empty/total (+ holdings next) (2026-08-01)
+
+**Edge:** Change — `trainer-cockpit.md` said CARGO is **empty holds only**; Max (2026-08-01) asked the right HUD to explain **what is in cargo holds**. Bare `CARGO 50` reads as contents.
+
+**Kernel (build now · Max product ask = GO for display honesty):**
+1. CARGO paints **empty and total** when ship-info `Total Holds : N - Empty=M` is known (filled = N−M is implied, not a third invented claim).
+2. Port-commerce empty-only lines still update empty; do not invent total from port **market** commodity rows.
+3. Per-commodity Ore/Org/Equ sticky holdings = follow-on WO (`WO-HUD-CARGO-HOLDINGS`), fed by trade buy/sell and/or future ship-info lines — still never from market rows.
+
+**Status:** Pending formal RESOLVED stamp; product kernel executing under Max ask.
+
 ---
 
 

@@ -41,12 +41,14 @@ def test_strict_cargo_reader_accepts_live_ship_info_and_port_report():
     ship_info = hud_tracking.read_empty_cargo_holds(FIXTURE.read_text())
     assert ship_info.outcome == OUTCOME_READ
     assert ship_info.empty_holds == 60
+    assert ship_info.total_holds == 60
 
     port = hud_tracking.read_empty_cargo_holds(
         "You have 99,000 credits and 40 empty cargo holds."
     )
     assert port.outcome == OUTCOME_READ
     assert port.empty_holds == 40
+    assert port.total_holds is None
 
 
 def test_cargo_reader_refuses_commodity_rows_and_impossible_ship_arithmetic():
@@ -66,7 +68,9 @@ def test_session_tracks_empty_holds_and_profit_from_first_strict_balance(tmp_pat
     session.observe_cargo(text)
     session.observe_credits(text)
 
-    assert session.cargo_snapshot().cargo == 60
+    snap = session.cargo_snapshot()
+    assert snap.cargo == 60
+    assert snap.total_holds == 60
     assert session.profit_snapshot().profit == 0
 
     session.observe_credits("You have 101,250 credits.")
@@ -84,7 +88,7 @@ def test_live_ship_info_populates_all_five_status_cells(tmp_path, monkeypatch):
     assert response["hud"]["credits"]["value"] == 100000
     assert response["hud"]["sector"]["value"] == 15450
     assert response["hud"]["turns"]["value"] == 25000
-    assert response["hud"]["cargo"]["value"] == 60
+    assert response["hud"]["cargo"]["value"] == "60 empty / 60"
     assert response["hud"]["profit"]["value"] == 0
     for cell in response["hud"].values():
         assert cell["age_s"] is not None
@@ -208,3 +212,41 @@ def test_credits_and_cargo_known_without_turns_is_already_seeded(tmp_path, monke
     )
 
     assert hud_seed.seed_hud_after_join(session)["hud_seed_reason"] == "already_seeded"
+
+
+def test_port_empty_keeps_sticky_total_and_hud_breakdown(tmp_path, monkeypatch):
+    """Port updates empty only; ship-info total sticks; HUD paints breakdown."""
+    session = _session(tmp_path)
+    session.observe_cargo(FIXTURE.read_text())
+    assert session.cargo_snapshot().total_holds == 60
+
+    session.observe_cargo("You have 99,000 credits and 40 empty cargo holds.")
+    snap = session.cargo_snapshot()
+    assert snap.cargo == 40
+    assert snap.total_holds == 60
+
+    rows = [
+        "You have 99,000 credits and 40 empty cargo holds.",
+        "Command [TL=00:00:08]:[1] (?=Help)? :",
+    ]
+    _screen(session, monkeypatch, rows)
+    # Re-observe via status path uses last sticky (already observed).
+    response = protocol._status_response(session, _Server())
+    assert response["hud"]["cargo"]["value"] == "40 empty / 60"
+
+
+def test_cargo_hud_value_without_total_cues_empty_holds():
+    assert hud_tracking.format_cargo_hud_value(50, None) == "50 empty"
+    assert hud_tracking.format_cargo_hud_value(50, 60) == "50 empty / 60"
+
+
+def test_port_only_hud_shows_empty_cue_not_bare_int(tmp_path, monkeypatch):
+    session = _session(tmp_path)
+    rows = [
+        "You have 99,000 credits and 40 empty cargo holds.",
+        "Command [TL=00:00:08]:[1] (?=Help)? :",
+    ]
+    _screen(session, monkeypatch, rows)
+    session.observe_cargo("\n".join(rows))
+    response = protocol._status_response(session, _Server())
+    assert response["hud"]["cargo"]["value"] == "40 empty"
