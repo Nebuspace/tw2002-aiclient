@@ -100,7 +100,6 @@ _DOCK_OFF = "dock off — ports are passed by"
 _TOLLS_ON = "fight-tolls ON — toll demands will be FOUGHT"
 _TOLLS_OFF = "fight-tolls off — toll screens halt for you"
 
-
 def resolve_dock_toggle_key(key: object) -> bool:
     """True iff *key* is the dock opt-in toggle. Never raises.
 
@@ -112,13 +111,11 @@ def resolve_dock_toggle_key(key: object) -> bool:
         return False
     return key in DOCK_TOGGLE_KEYS
 
-
 def resolve_tolls_toggle_key(key: object) -> bool:
     """True iff *key* is the fight-tolls opt-in toggle. Never raises."""
     if isinstance(key, bool) or not isinstance(key, int):
         return False
     return key in TOLLS_TOGGLE_KEYS
-
 
 def compose_explore_action(
     action: object,
@@ -147,25 +144,6 @@ def compose_explore_action(
     if tolls:
         parts.append(TOLLS_MARKER)
     return " ".join(parts)
-
-
-def compose_explore_offer(classification: object, *, cycles: object = None) -> str:
-    """Legacy composer for explore-available wording (tests / residual callers).
-
-    WO-PLAY-STRIP-POLICY-AUTO REVISE: Play no longer paints this into LOGS after
-    ensure — App-armed kicks infinite explore, and `E` restarts the same run.
-    Kept for unit pins and any non-LOGS caller. Does **not** advertise press-E
-    or `D` / GATHER_HINT. Never raises.
-    """
-    label = classification if isinstance(classification, str) else "?"
-    count = cycles if isinstance(cycles, int) and not isinstance(cycles, bool) else None
-    if count == 0:
-        run = "explore available (infinite · find StarDock)"
-    elif count is not None:
-        run = f"explore ×{count} available"
-    else:
-        run = "explore available (find StarDock)"
-    return f"session ready — {label}  ·  {run}"
 
 
 def describe_dock(enabled: object) -> str:
