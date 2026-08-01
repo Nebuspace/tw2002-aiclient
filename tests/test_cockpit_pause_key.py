@@ -71,7 +71,7 @@ def test_pause_does_not_shadow_port_trade_or_the_teach_keys():
     assert play.handle_key(ord("p")) is None
     assert play.port_trade_on is (not before)
     assert play.handle_key(ord("a")) == "analyze_open"
-    assert play.handle_key(ord("t")) == "assign_trigger"
+    assert play.handle_key(ord("t")) == "trade_loop_toggle"
     assert play.handle_key(ord("r")) == "record_toggle"
 
 

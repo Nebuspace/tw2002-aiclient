@@ -345,7 +345,9 @@ def test_the_cockpit_holds_no_arm_state_of_its_own(monkeypatch):
     # every value and shows the rendered chip does not move. If a future
     # attribute really does cache the daemon's fact, this list does not cover
     # it and the pin still bites.
-    _ARM_CONFIRM_EXEMPT = {"_arm_confirm"}
+    # ``trade_loop_arm`` (WO-EXPLORE-TRADE-MODE-SPLIT) is L-selected loop
+    # identity for T — operator selection, not a daemon autopilot mirror.
+    _ARM_CONFIRM_EXEMPT = {"_arm_confirm", "trade_loop_arm"}
     offenders = [
         name for name in vars(screen)
         if "arm" in name.lower()

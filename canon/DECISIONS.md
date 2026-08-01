@@ -52,6 +52,24 @@ RULES:
 
 <!-- Items with a human decision on record. Waiting for ADR drafting or already captured. -->
 
+### RESOLVED-EXPLORE-VS-TRADE-LOOP-MODES — two operator modes (Max ratify 2026-08-01)
+
+**Edge:** Change + Conflict — Max clarified the trainer mental model; live Play had conflated Explore gather with Trade Loop execution.
+
+**Ruling (Max, 2026-08-01 — “ratify”):**
+
+1. **Explore mode (`E`)** — FOCUS is **discovery**: StarDock, sector special formations, planets, and **mapping / learning** Trade Loop Chains. Not money-path execution of those chains. Docking under Explore is world-model sampling only.
+2. **Trade Loop Chain execution (`T`)** — separate mode: warp to the **L-selected** chain’s start sector, then warp the loop sector-by-sector **actually trading** at each port.
+3. **`L)ist Loops`** — selects which discovered/taught loop is **armed** for execution.
+4. **`P)ort Trade·ON`** — gates whether Trade Loop **execution** may spend money. It is **not** the switch for Explore gather docks (decouple `dock_new_ports` from Port Trade).
+5. App-armed must **not** silently auto-execute Trade Loop Chains from FOCUS while Explore is the discovery path. Execution is **T** (and L selection), with `P` as the money gate. Under APP-ARMED, T may run without per-action `y` when `P` is ON (trainer auto default stands for the T path).
+
+**Supersedes / narrows:** `RESOLVED-TRAINER-STRIP-AND-GUTTER-20260731` point 6 auto-fire for `run_chain` must not mean “FOCUS bubble fires trade during Explore.” Cargo/Ship upgrade auto-fire unchanged by this ruling.
+
+**Canon:** Amend `mode-line-and-teach-controls.md` (+ trainer-cockpit as needed). Code waves: `WO-EXPLORE-TRADE-MODE-SPLIT` (decouple P/dock · stop FOCUS trade auto-fire · wire T to L-selection · allow L-select under partial discovery · soft truncated start when fingerprint present).
+
+**Public-safe.**
+
 ### RESOLVED-TRAINER-STRIP-AND-GUTTER-20260731 — trainer Play chrome + App-armed default (Max 2026-07-31)
 
 **Edge:** Conflict + Change — calm strip / seat+arm / CONN / panic / money-path confirm-not-auto vs Max trainer model.

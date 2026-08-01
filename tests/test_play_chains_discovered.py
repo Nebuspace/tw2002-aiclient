@@ -260,6 +260,18 @@ def _drive(monkeypatch, keys, *, store, recompute, sector_count=SECTOR_COUNT):
 
     monkeypatch.setattr(adapters, "trade_chain_start", _trade, raising=False)
     monkeypatch.setattr(adapters, "explore_start_for_profile", _explore, raising=False)
+    monkeypatch.setattr(
+        adapters, "explore_stop",
+        lambda **kw: SimpleNamespace(ok=True, reason=None), raising=False,
+    )
+    monkeypatch.setattr(
+        adapters, "autoloop_stop",
+        lambda **kw: _AutoLoopResult(), raising=False,
+    )
+    monkeypatch.setattr(
+        adapters, "trade_chain_stop",
+        lambda **kw: _AutoLoopResult(), raising=False,
+    )
 
     seen: dict = {}
     real_screen = app_mod.PlayShellScreen
@@ -269,6 +281,7 @@ def _drive(monkeypatch, keys, *, store, recompute, sector_count=SECTOR_COUNT):
             super().__init__(*a, **k)
             self.gate_raises = []
             self.spectating = True  # no App-armed ensure explore kick
+            self.port_trade_on = True
             seen["screen"] = self
 
         def begin_arm_confirm(self, action=None, *, cycles=None):
@@ -295,24 +308,25 @@ def _drive(monkeypatch, keys, *, store, recompute, sector_count=SECTOR_COUNT):
     return arm_calls, explore_calls, screen
 
 
-def test_discovered_enter_raises_exact_gate_but_does_not_start(monkeypatch):
-    """Enter approves an exact pending plan; only a later y may start it."""
+def test_discovered_enter_arms_without_starting(monkeypatch):
+    """Enter arms the L-selection; only T may start it."""
     arm, _explore, screen = _drive(
         monkeypatch, [L, ENTER], store=EMPTY_OK, recompute=lambda wid, **kw: DISCOVERED,
     )
     assert arm == []
     assert screen.trade_calls == []
-    assert len(screen.gate_raises) == 1
-    assert "10>11>12>10" in screen.gate_raises[0][0]
-    assert "Fuel Ore>Organics>Equipment" in screen.gate_raises[0][0]
-    assert "one pass" in screen.gate_raises[0][0]
+    assert screen.gate_raises == []
+    assert screen.trade_loop_arm is not None
+    assert screen.trade_loop_arm["kind"] == "discovered"
+    assert "10>11>12>10" in screen.trade_loop_arm["route"]
+    assert "press T to run" in (screen.status_line or "")
     assert screen.chains_session.discovered is DISCOVERED
 
 
-def test_discovered_y_starts_only_the_confirmed_fingerprint(monkeypatch):
+def test_discovered_t_starts_only_the_armed_fingerprint(monkeypatch):
     arm, explore, screen = _drive(
         monkeypatch,
-        [L, ENTER, ord("y")],
+        [L, ENTER, ord("T")],
         store=EMPTY_OK,
         recompute=lambda wid, **kw: DISCOVERED,
     )
@@ -327,7 +341,7 @@ def test_discovered_y_starts_only_the_confirmed_fingerprint(monkeypatch):
     assert kwargs["turn_reserve"] == 10
 
 
-def test_discovered_n_cancels_without_starting_any_money_path(monkeypatch):
+def test_discovered_enter_alone_starts_no_money_path(monkeypatch):
     arm, explore, screen = _drive(
         monkeypatch,
         [L, ENTER, ord("n")],
@@ -338,17 +352,18 @@ def test_discovered_n_cancels_without_starting_any_money_path(monkeypatch):
     assert arm == []
     assert explore == []
     assert screen.trade_calls == []
+    assert screen.trade_loop_arm is not None
 
 
 def test_taught_arm_flow_unregressed_with_discovered_present(monkeypatch):
-    """The other direction: the taught path must not lose its arm to the
-    new section. `L` Enter `y` still starts exactly the taught macro."""
+    """Taught path still wins when both sections exist: L Enter T starts taught."""
     arm, explore, screen = _drive(
-        monkeypatch, [L, ENTER, ord("y")], store=TWO_LOOPS, recompute=lambda wid, **kw: DISCOVERED,
+        monkeypatch, [L, ENTER, ord("T")], store=TWO_LOOPS, recompute=lambda wid, **kw: DISCOVERED,
     )
     assert [name for (name, _kw) in arm] == ["ore-run-K7"]
     assert explore == []
-    assert "ore-run-K7" in screen.gate_raises[0][0]
+    assert screen.trade_calls == []
+    assert screen.trade_loop_arm == {"kind": "taught", "name": "ore-run-K7"}
 
 
 def test_a_raising_finder_does_not_take_down_the_play_loop(monkeypatch):
@@ -396,6 +411,18 @@ def test_discovered_rows_are_tagged_and_only_active_row_has_selection_marker(uni
 
 
 # ------------------------------------------------ pin 4: truncation honesty
+
+
+def test_partial_discovery_with_chains_remains_selectable():
+    """RESOLVED-EXPLORE-VS-TRADE-LOOP-MODES: PARTIAL banner stays; rows stay armable."""
+    partial = _payload(
+        chains_=[_chain()],
+        search_note="stopped at 100000 of 100000 steps",
+        adapter_note="budget",
+    )
+    s = _open([], discovered=partial)
+    assert s._selectable_discovered()
+    assert s.selected_discovered() is not None
 
 
 def test_truncated_and_empty_renders_the_hedge_never_established_absence():

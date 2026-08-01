@@ -252,12 +252,12 @@ def test_analyze_module_does_not_call_explore_start() -> None:
 # ---------------------------------------------------------------------------
 
 @pytest.mark.parametrize("key_char", ["t", "T"])
-def test_t_key_still_returns_assign_trigger(key_char: str) -> None:
+def test_t_key_returns_trade_loop_toggle(key_char: str) -> None:
     """T path must not be disrupted by the A wire."""
     play = _make_play()
     result = play.handle_key(ord(key_char))
-    assert result == "assign_trigger", (
-        f"T key ({key_char!r}) returned {result!r} — assign_trigger lane broken"
+    assert result == "trade_loop_toggle", (
+        f"T key ({key_char!r}) returned {result!r} — trade_loop_toggle lane broken"
     )
 
 

@@ -258,13 +258,15 @@ class ChainsSession:
         self.section = "taught"
 
     def _selectable_discovered(self) -> list:
+        """Executable discovered cycles under the cursor.
+
+        RESOLVED-EXPLORE-VS-TRADE-LOOP-MODES: PARTIAL discovery still lists
+        found cycles (banner stays in the formatter). Hiding every row when
+        ``search_note``/``adapter_note`` is set made ``L)ist`` unusable as
+        the map grew — the operator could not arm a known loop for ``T``.
+        """
         payload = self.discovered
         if payload is None:
-            return []
-        if (
-            getattr(payload, "adapter_note", None) is not None
-            or getattr(payload, "search_note", None) is not None
-        ):
             return []
         found = getattr(payload, "chains", None)
         return list(found) if isinstance(found, (tuple, list)) else []

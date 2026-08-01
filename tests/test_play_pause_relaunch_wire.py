@@ -255,7 +255,7 @@ def test_pause_then_relaunch_do_not_confuse_each_others_gate_state(monkeypatch):
     (ord("p"), None),
     (ord("a"), "analyze_open"),
     (ord("r"), "record_toggle"),
-    (ord("t"), "assign_trigger"),
+    (ord("t"), "trade_loop_toggle"),
 ])
 def test_pause_and_relaunch_do_not_shadow_existing_keys(monkeypatch, key, expected):
     _p, _r, _s, screen = _drive(monkeypatch, [key])

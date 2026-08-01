@@ -26,20 +26,19 @@ trainer-plain vocabulary:
 - `L)ist Loops` (``LOOPS_TOKEN``) is ``chains.CHAINS_TOKEN`` imported
   under the calm-band name (WO-LOOPS-POPUP-OVERLAY) -- same `L` key,
   same overlay, one spelling for chrome and HELP.
-- `T)rade Loop Chain` is a RELABEL of the same `T` key the old
-  `T)rigger` token named (`screens.py`'s `assign_trigger` intent,
-  WO-P5-068) -- trainer wording for the same wire, not a new one.
+- `T)rade Loop Chain` starts/stops the L-armed Trade Loop
+  (`screens.py`'s `trade_loop_toggle` intent; Assign-Trigger is not calm `T`).
+  WO-EXPLORE-TRADE-MODE-SPLIT / RESOLVED-EXPLORE-VS-TRADE-LOOP-MODES.
 - `P)ort Trade`, `C)argo Hold Upgrade`, `S)hip Upgrade` are toggles
   (WO-PLAY-STRIP-TRAINER-CHROME): each renders `·ON`/`·OFF` from a
   caller-supplied boolean (default **ON**, per DECISION), driven by
   `PlayShellScreen`'s own local Play state. `P`/`C`/`S`
   (`screens.py::PlayShellScreen.handle_key`, REVISE 2026-07-31) flip
   their own boolean directly and return no intent -- the daemon-side
-  spend gate lives OUTSIDE this key handler entirely, in `app.py`'s own
-  idle-tick loop (`_autonomy_auto_fire`, WO-PLAY-STRIP-POLICY-AUTO),
-  which reads `port_trade_on`/`cargo_upgrade_on` on every App-armed tick
-  and starts a live trade/hold-buy run with no human `y` when the
-  matching toggle is ON. `ship_upgrade_on` alone still gates nothing --
+  spend gate for Trade Loop **execution** is `T` when Port Trade is ON
+  (FOCUS no longer silent-fires `run_chain`). Cargo upgrade may still
+  App-armed auto-fire via `_autonomy_auto_fire`. `ship_upgrade_on` alone
+  still gates nothing --
   no ship-upgrade engine or offer kind exists yet, an honest absence
   rather than an unwired follow-on. `P` is DELIBERATELY no longer
   `cockpit.panic`'s key on this calm path (the STATUS-DONE cut of this
