@@ -311,6 +311,9 @@ def _status_response(session, server):
     observe_cargo = getattr(session, "observe_cargo", None)
     if callable(observe_cargo):
         observe_cargo(text)
+    observe_holdings = getattr(session, "observe_holdings", None)
+    if callable(observe_holdings):
+        observe_holdings(text)
     # WO-STATUS-FIGHTERS-ABOARD: same cadence as credits/cargo — status is
     # the wire that observes, not only the wire that reports.
     observe_fighters = getattr(session, "observe_fighters", None)
@@ -610,7 +613,11 @@ def _hud_payload(session):
         # Display honesty: empty/total (or "N empty" when total unknown).
         # Empty int remains on CargoSnapshot.cargo for seed / non-HUD readers.
         return _hud_cell(
-            format_cargo_hud_value(snapshot.cargo, snapshot.total_holds),
+            format_cargo_hud_value(
+                snapshot.cargo,
+                snapshot.total_holds,
+                getattr(snapshot, "holdings", None),
+            ),
             snapshot.age_s,
         )
 

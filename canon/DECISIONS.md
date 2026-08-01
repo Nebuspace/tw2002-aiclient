@@ -41,9 +41,9 @@ RULES:
 **Kernel (build now · Max product ask = GO for display honesty):**
 1. CARGO paints **empty and total** when ship-info `Total Holds : N - Empty=M` is known (filled = N−M is implied, not a third invented claim).
 2. Port-commerce empty-only lines still update empty; do not invent total from port **market** commodity rows.
-3. Per-commodity Ore/Org/Equ sticky holdings = follow-on WO (`WO-HUD-CARGO-HOLDINGS`), fed by trade buy/sell and/or future ship-info lines — still never from market rows.
+3. Per-commodity Ore/Org/Equ sticky holdings = `WO-HUD-CARGO-HOLDINGS` (wave 2), fed by trade buy/sell and/or future ship-info lines — still never from market rows.
 
-**Status:** Pending formal RESOLVED stamp; product kernel executing under Max ask.
+**Status:** Pending formal RESOLVED stamp; empty/total + holdings kernels executing under Max ask.
 
 ---
 
