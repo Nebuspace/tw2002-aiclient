@@ -501,6 +501,19 @@ def _sanity_check_delta(
     return abs(actual_delta - total) <= epsilon
 
 
+def _apply_holdings_delta(session, commodity: str, delta: int) -> None:
+    """Session sticky Ore/Org/Equ after a verified buy/sell (availability-only).
+
+    Missing ``adjust_holdings`` (tests / thin fakes) is a no-op. Exceptions
+    from the session must never abort a cleared money-path trade.
+    """
+    adjust = getattr(session, "adjust_holdings", None)
+    if not callable(adjust):
+        return
+    with contextlib.suppress(Exception):
+        adjust(commodity, delta)
+
+
 def _trade_target(
     ctx: _StepCtx,
     hop: TradeHop,
@@ -590,6 +603,10 @@ def _trade_target(
         raise ChainHold(f"credit_delta_anomaly:{hop_index}:{direction}:{hop.commodity}")
 
     ctx.trace.append(f"hop{hop_index} {direction} {qty}x {hop.commodity} @ ~{total}cr total")
+    # Sticky HUD holdings: buy adds, sell subtracts (clamped on session).
+    _apply_holdings_delta(
+        ctx.session, hop.commodity, qty if direction == "buy" else -qty
+    )
     return qty, total
 
 

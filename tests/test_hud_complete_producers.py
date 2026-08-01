@@ -250,3 +250,87 @@ def test_port_only_hud_shows_empty_cue_not_bare_int(tmp_path, monkeypatch):
     session.observe_cargo("\n".join(rows))
     response = protocol._status_response(session, _Server())
     assert response["hud"]["cargo"]["value"] == "40 empty"
+
+def test_holdings_buy_equ_sticky_on_hud(tmp_path, monkeypatch):
+    """After verified Equ buy, HUD CARGO shows Equ N with empty/total."""
+    session = _session(tmp_path)
+    session.observe_cargo(FIXTURE.read_text())
+    session.adjust_holdings("Equipment", 50)
+    # Port empty update after buy: 10 empty of 60 with Equ 50 aboard.
+    session.observe_cargo("You have 99,000 credits and 10 empty cargo holds.")
+    snap = session.cargo_snapshot()
+    assert snap.cargo == 10
+    assert snap.total_holds == 60
+    assert snap.holdings is not None
+    assert snap.holdings.equipment == 50
+    assert hud_tracking.format_cargo_hud_value(
+        snap.cargo, snap.total_holds, snap.holdings
+    ) == "10 empty / 60 · Equ 50"
+
+    rows = [
+        "You have 99,000 credits and 10 empty cargo holds.",
+        "Command [TL=00:00:08]:[1] (?=Help)? :",
+    ]
+    _screen(session, monkeypatch, rows)
+    response = protocol._status_response(session, _Server())
+    assert response["hud"]["cargo"]["value"] == "10 empty / 60 · Equ 50"
+
+
+def test_holdings_sell_reduces_and_clears(tmp_path):
+    session = _session(tmp_path)
+    session.observe_cargo(FIXTURE.read_text())
+    session.adjust_holdings("Equipment", 50)
+    session.adjust_holdings("Equipment", -30)
+    assert session.cargo_snapshot().holdings.equipment == 20
+    session.adjust_holdings("Equipment", -20)
+    assert session.cargo_snapshot().holdings.equipment == 0
+    assert hud_tracking.format_cargo_hud_value(
+        60, 60, session.cargo_snapshot().holdings
+    ) == "60 empty / 60"
+    # Oversell clamps at zero — never negative.
+    session.adjust_holdings("Equipment", -5)
+    assert session.cargo_snapshot().holdings.equipment == 0
+
+
+def test_holdings_never_from_market_rows_or_observe_holdings(tmp_path):
+    session = _session(tmp_path)
+    session.observe_cargo(FIXTURE.read_text())
+    assert session.last_cargo_holdings is None
+    # Market / port commodity rows do not invent holdings via cargo reader.
+    market = (
+        "Fuel Ore Buying 2030 100% 17\n"
+        "Organics Selling 500 80% 42\n"
+        "Equipment Buying 100 50% 99"
+    )
+    session.observe_cargo(market)
+    session.observe_holdings(market)
+    assert session.last_cargo_holdings is None
+    assert session.cargo_snapshot().holdings is None
+
+
+def test_trade_driver_buy_sell_updates_session_holdings(tmp_path):
+    """Thin session: adjust_holdings called with +qty on buy, -qty on sell."""
+    from tw2002_aiclient.trade_driver import _apply_holdings_delta
+
+    class _Sess:
+        def __init__(self):
+            self.calls = []
+
+        def adjust_holdings(self, commodity, delta):
+            self.calls.append((commodity, delta))
+
+    s = _Sess()
+    _apply_holdings_delta(s, "Equipment", 50)
+    _apply_holdings_delta(s, "Equipment", -50)
+    assert s.calls == [("Equipment", 50), ("Equipment", -50)]
+    # Missing API is quiet.
+    _apply_holdings_delta(object(), "Equipment", 1)
+
+
+def test_format_cargo_hud_holdings_multi_and_unknown_until_write():
+    assert hud_tracking.format_cargo_hud_value(10, 60, None) == "10 empty / 60"
+    h = hud_tracking.CargoHoldings(fuel_ore=5, organics=0, equipment=50)
+    assert hud_tracking.format_cargo_hud_value(5, 60, h) == "5 empty / 60 · Ore 5 · Equ 50"
+    assert hud_tracking.holdings_field_for_commodity("Fuel Ore") == "fuel_ore"
+    assert hud_tracking.holdings_field_for_commodity("nope") is None
+
