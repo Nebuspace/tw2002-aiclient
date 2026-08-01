@@ -1168,6 +1168,28 @@ def is_probable_secret_prompt(prompt_line: str) -> bool:
     return bool(_SECRET_PROMPT_RE.search(prompt_line or ""))
 
 
+# WO-WARP-CONFIRM-Y (REVISE): TWGS's own avoid-list DANGER body -- distinct
+# from a bare `warp_confirm` (e.g. mid-warp on an ordinary sector). Both
+# shapes classify `warp_confirm` on the prompt line alone; this predicate
+# reads the BODY above it to tell "you marked this sector to be avoided" from
+# an unrelated confirm, because the two demand opposite answers (N vs Y).
+# Shared by both callers (`session.sector_explore`, `trade_driver`) so the
+# avoid-detection policy has exactly one owner. Anchored on the live-captured
+# shape in `tests/fixtures/warp_confirm_prompt.txt`:
+#   "DANGER! You have marked sector 3034 to be avoided!"
+_AVOID_DANGER_RE = re.compile(
+    r"danger!.{0,80}marked\s+sector\s+\d+\s+to\s+be\s+avoided",
+    re.I | re.S,
+)
+
+
+def is_avoid_danger_warp(full_text: str) -> bool:
+    """True when `full_text` carries TWGS's avoid-list DANGER body ahead
+    of a `warp_confirm` prompt. False for a bare/ordinary warp confirm
+    (no DANGER body) -- callers answer N only on a True here, Y otherwise."""
+    return bool(_AVOID_DANGER_RE.search(full_text or ""))
+
+
 def classify(rendered_text: str) -> str:
     """Whole-text anchor scan, gate anchors checked first. Simple and
     order-dependent — fine for a single isolated string (tests, one-off
