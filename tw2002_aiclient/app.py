@@ -734,6 +734,17 @@ def _apply_trade_chain_band(play: PlayShellScreen, raw: object) -> bool:
         play.status_line = f"trade completed — {route}"
     elif outcome is not None:
         play.status_line = f"trade stopped — {reason}"
+        # WO-TRADE-AUTOFIRE-ANCHOR: start_anchor_* (and kin) halt → quiet
+        # Port Trade auto-fire; do not re-pick the global chain every tick.
+        if _trade_auto_fire_reason_is_backoff(reason):
+            try:
+                provider = getattr(play, "status_provider", None)
+                status = provider() if callable(provider) else None
+            except Exception:  # noqa: BLE001
+                status = None
+            _arm_trade_auto_fire_cooldown(
+                play, str(reason), now=time.monotonic(), status=status
+            )
     return False
 
 
@@ -801,6 +812,7 @@ _TRADE_AUTO_FIRE_BACKOFF_REASONS = frozenset(
         "chain_discovery_partial",
         "chain_identity_stale",
         "chain_plan_invalid",
+        "start_anchor_unknown",
     }
 )
 
@@ -850,7 +862,16 @@ def _trade_auto_fire_reason_is_backoff(reason: object) -> bool:
         return False
     if reason in _TRADE_AUTO_FIRE_BACKOFF_REASONS:
         return True
-    return reason.startswith("chain_discovery_failed:")
+    if reason.startswith("chain_discovery_failed:"):
+        return True
+    # WO-TRADE-AUTOFIRE-ANCHOR: runner halt / pre-start gate
+    # ``start_anchor_mismatch:<here>:<anchor>`` (and any ``start_anchor_unknown``
+    # suffix variant) must quiet auto-fire like partial-discovery backoff.
+    if reason.startswith("start_anchor_mismatch:") or reason.startswith(
+        "start_anchor_unknown"
+    ):
+        return True
+    return False
 
 
 def _trade_auto_fire_cooldown_active(
@@ -1053,11 +1074,27 @@ def _autonomy_auto_fire(
         if _trade_auto_fire_cooldown_active(play, now=now, status=status):
             # Quiet during backoff — keep the first refuse LOGS line.
             return False, False
-        chain, _caption = play.chain_scalars.bubble_subject()
+        # WO-TRADE-AUTOFIRE-ANCHOR: prefer a priced cycle through the ship
+        # sector (same helper FOCUS already uses). Hard-gate start_anchor
+        # == here so we never fire the global longest chain from afar.
+        here = _trade_auto_fire_map_marker(play, status)[0]
+        chain, _caption = play.chain_scalars.bubble_subject(current_sector=here)
         plan = _trade_chain_plan.plan_from_chain(
             _world_identity.world_id_from_profile(profile), chain
         )
         if plan is None:
+            return False, False
+        try:
+            here_i = int(here) if here is not None else None  # type: ignore[arg-type]
+        except (TypeError, ValueError):
+            here_i = None
+        if here_i is not None and plan.start_anchor != here_i:
+            reason = f"start_anchor_mismatch:{here_i}:{plan.start_anchor}"
+            play.status_line = f"App-armed trade did not start — {reason}"
+            _arm_trade_auto_fire_cooldown(
+                play, reason, now=now, status=status
+            )
+            _prefer_explore_while_trade_blocked(play, profile)
             return False, False
         # Preflight (WO-TRADE-PARTIAL-BACKOFF): same truncated gate as
         # session.trade_chain — skip painting "starting trade…" and the
@@ -1522,7 +1559,9 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                     play.begin_arm_confirm(offer_action)
                     continue
                 if offer.kind == "run_chain":
-                    chain, _caption = play.chain_scalars.bubble_subject()
+                    chain, _caption = play.chain_scalars.bubble_subject(
+                        current_sector=_trade_auto_fire_map_marker(play, status)[0]
+                    )
                     plan = _trade_chain_plan.plan_from_chain(
                         _world_identity.world_id_from_profile(profile), chain
                     )
