@@ -57,17 +57,22 @@ The chrome above is now backed by real behavior, not just a rendered `·ON`/`·O
   a separate operator control on this calm path. The retired `P panic` binding (above) stays
   retired; `cockpit/panic.py`'s own halt verbs are unchanged and reused, plus a fourth
   (`stardock_hold_stop`) this Mode-leave halt adds that panic itself never covered.
-- **`P)ort Trade·ON` / `C)argo Hold Upgrade·ON` gate a real App-armed auto-fire.** While the seat
-  chip reads `APP-ARMED` (neither Spectate nor a live Human attach) and the matching toggle is
-  ON, the App reaches the identical trade-loop / hold-buy start the confirm-gated `O)ffer?`/`H)old?`
-  keys already offer — with **no key press and no `y` confirm** — on the same ~1 Hz idle tick that
-  already redraws GOALS. `O`/`H` remain manual fallbacks (Manual mode, or the toggle OFF); Manual
-  stays sovereign, and neither key's own confirm-gate is removed.
+- **Two modes (RESOLVED-EXPLORE-VS-TRADE-LOOP-MODES, Max 2026-08-01).**
+  - **`E)xplore`** — discovery mode: StarDock, formations, planets, **map / learn** Trade Loop
+    Chains. Docking under Explore is world-model sampling only — not Trade Loop execution.
+  - **`L)ist Loops`** — selects which discovered/taught loop is **armed** for execution.
+  - **`T)rade Loop Chain`** — start/stop **execution** of the L-armed loop (warp to start → trade
+    each port). Label must match behavior (not legacy Assign-Trigger).
+  - **`P)ort Trade·ON`** — money gate for Trade Loop **execution** only. It does **not** control
+    Explore gather docks (`dock_new_ports` is Explore’s discovery concern, decoupled from P).
+- **`C)argo Hold Upgrade·ON` gate a real App-armed auto-fire** for hold-buy when APP-ARMED and the
+  toggle is ON (unchanged by the Explore/Trade split). Manual fallbacks remain sovereign.
+- **Trade Loop execution is not silent FOCUS auto-fire during Explore.** Under APP-ARMED +
+  `P)ort Trade·ON`, **`T`** runs the L-armed loop without per-action `y` (trainer default). The App
+  must not pick a FOCUS bubble chain and spend money while Explore owns discovery.
 - **`S)hip Upgrade·ON` gates nothing yet, honestly.** No ship-upgrade engine or offer kind exists
   in this codebase, so the toggle is local-only chrome by necessity, not an unwired follow-on —
   the honest state until a future WO lands a real ship-upgrade path to gate.
-- **Explore is not part of this policy.** `E)xplore` has no ON/OFF toggle and is never auto-fired
-  by this mechanism; it stays the operator's own confirm-gated key.
 
 # Schema
 

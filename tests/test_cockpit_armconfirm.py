@@ -328,10 +328,10 @@ def test_exactly_three_production_call_sites_raise_the_gate() -> None:
             name = getattr(func, "attr", None) or getattr(func, "id", None)
             if isinstance(node, ast.Call) and name == "begin_arm_confirm":
                 callers.append(path.name)
-    assert callers == ["app.py"] * 8, (
-        f"expected exactly eight production callers, all in app.py (relaunch, "
-        f"taught L)chains, discovered L)chains, V)reflex, H)hold, and "
-        f"O)policy's explore/trade/hold — E no longer raises confirm); "
+    assert callers == ["app.py"] * 6, (
+        f"expected exactly six production callers, all in app.py (relaunch, "
+        f"V)reflex, H)hold, and O)policy's explore/trade/hold — L Enter now "
+        f"arms without confirm; E no longer raises confirm); "
         f"found {callers}"
     )
 

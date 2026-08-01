@@ -151,22 +151,22 @@ def _make_play():
 
 
 @pytest.mark.parametrize("key_char", ["t", "T"])
-def test_t_key_returns_assign_trigger_intent(key_char: str) -> None:
+def test_t_key_returns_trade_loop_toggle_intent(key_char: str) -> None:
     play = _make_play()
     result = play.handle_key(ord(key_char))
-    assert result == "assign_trigger", (
-        f"T key ({key_char!r}) returned {result!r}, expected 'assign_trigger'"
+    assert result == "trade_loop_toggle", (
+        f"T key ({key_char!r}) returned {result!r}, expected 'trade_loop_toggle'"
     )
 
 
 def test_t_key_is_only_intent_not_a_send() -> None:
-    """handle_key for T returns 'assign_trigger'; it never fires a send."""
+    """handle_key for T returns trade_loop_toggle; it never fires a send."""
     play = _make_play()
     # The store is empty before T is pressed
     assert play.stub_store.get() is None
     result = play.handle_key(ord("T"))
     # Intent returned; no stub written yet (app.py does the write)
-    assert result == "assign_trigger"
+    assert result == "trade_loop_toggle"
     assert play.stub_store.get() is None  # still empty: app.py hasn't acted
 
 

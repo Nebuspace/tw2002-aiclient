@@ -401,13 +401,13 @@ def test_e_key_is_not_record_toggle() -> None:
         )
 
 
-def test_t_key_is_still_assign_trigger() -> None:
+def test_t_key_is_trade_loop_toggle() -> None:
     """T is still Assign-Trigger (WO-068); R must not displace it."""
     play = _make_play()
     for key_char in ("t", "T"):
         result = play.handle_key(ord(key_char))
-        assert result == "assign_trigger", (
-            f"T ({key_char!r}) returned {result!r} — assign_trigger lane broken"
+        assert result == "trade_loop_toggle", (
+            f"T ({key_char!r}) returned {result!r} — trade_loop_toggle lane broken"
         )
 
 

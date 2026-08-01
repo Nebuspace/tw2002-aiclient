@@ -204,6 +204,6 @@ def test_p_does_not_shadow_the_teach_keys_in_the_real_loop(monkeypatch):
     drive's trailing Esc closes the analyze overlay (WO-P5-069), so an
     end-state read cannot tell "worked then undone" from "never worked".
     """
-    for key, expected in ((ord("a"), "analyze_open"), (ord("r"), "record_toggle"), (ord("t"), "assign_trigger")):
+    for key, expected in ((ord("a"), "analyze_open"), (ord("r"), "record_toggle"), (ord("t"), "trade_loop_toggle")):
         _stop_calls, screen = _drive(monkeypatch, [key])
         assert (key, expected) in screen.actions

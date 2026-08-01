@@ -917,7 +917,7 @@ def _prefer_explore_while_trade_blocked(
     kicked = _start_policy_explore(
         play,
         profile,
-        dock=getattr(play, "port_trade_on", True),
+        dock=True,  # Explore discovery sampling — not Port Trade (RESOLVED-EXPLORE-VS-TRADE-LOOP-MODES)
         tolls=False,
         status_starting=(
             "App-armed — explore while chain discovery incomplete…"
@@ -1078,77 +1078,8 @@ def _autonomy_auto_fire(
         return False, False
 
     if offer.kind == "run_chain":
-        if not play.port_trade_on:
-            return False, False
-        now = time.monotonic()
-        if _trade_auto_fire_cooldown_active(play, now=now, status=status):
-            # Quiet during backoff — keep the first refuse LOGS line.
-            return False, False
-        # WO-TRADE-AUTOFIRE-ANCHOR: prefer a priced cycle through the ship
-        # sector (same helper FOCUS already uses). Hard-gate start_anchor
-        # == here so we never fire the global longest chain from afar.
-        here = _trade_auto_fire_map_marker(play, status)[0]
-        chain, _caption = play.chain_scalars.bubble_subject(current_sector=here)
-        plan = _trade_chain_plan.plan_from_chain(
-            _world_identity.world_id_from_profile(profile), chain
-        )
-        if plan is None:
-            return False, False
-        try:
-            here_i = int(here) if here is not None else None  # type: ignore[arg-type]
-        except (TypeError, ValueError):
-            here_i = None
-        if here_i is not None and plan.start_anchor != here_i:
-            reason = f"start_anchor_mismatch:{here_i}:{plan.start_anchor}"
-            play.status_line = f"App-armed trade did not start — {reason}"
-            _arm_trade_auto_fire_cooldown(
-                play, reason, now=now, status=status
-            )
-            _prefer_explore_while_trade_blocked(play, profile)
-            return False, False
-        # Preflight (WO-TRADE-PARTIAL-BACKOFF): same truncated gate as
-        # session.trade_chain — skip painting "starting trade…" and the
-        # start verb when discovery is incomplete.
-        discovered = _trade_chain_discovery_preflight(plan.world_id)
-        if discovered is not None and _trade_discovery_blocks_start(discovered):
-            reason = "chain_discovery_partial"
-            play.status_line = f"App-armed trade did not start — {reason}"
-            _arm_trade_auto_fire_cooldown(
-                play, reason, now=now, status=status
-            )
-            _prefer_explore_while_trade_blocked(play, profile)
-            return False, False
-        play.status_line = (
-            f"App-armed — starting trade {plan.route}… (Port Trade\u00b7ON)"
-        )
-        play.draw()
-        try:
-            started = adapters.trade_chain_start(
-                plan.world_id,
-                plan.fingerprint,
-                cash_floor=_TRADE_CASH_FLOOR,
-                turn_reserve=_TRADE_TURN_RESERVE,
-                run_dir=run_dir,
-            )
-        except Exception as exc:  # noqa: BLE001
-            play.status_line = f"App-armed trade start failed — {type(exc).__name__}"
-            return False, False
-        if getattr(started, "ok", False):
-            play._trade_af_cooldown_until = 0.0
-            play.status_line = (
-                f"App-armed trade — {plan.route}, one pass running"
-            )
-            return _apply_trade_chain_band(play, getattr(started, "raw", None)), False
-        # WO-STRIP-HOTFIX-FIT-TRADE-LOGS: never leave the pre-start
-        # "starting trade…" line as the final LOGS status on ok=False.
-        reason = getattr(started, "reason", None) or getattr(started, "error", None) or "unknown"
-        play.status_line = f"App-armed trade did not start — {reason}"
-        if _trade_auto_fire_reason_is_backoff(reason):
-            _arm_trade_auto_fire_cooldown(
-                play, str(reason), now=now, status=status
-            )
-            if reason == "chain_discovery_partial":
-                _prefer_explore_while_trade_blocked(play, profile)
+        # RESOLVED-EXPLORE-VS-TRADE-LOOP-MODES: L arms, T executes.
+        # Never silent FOCUS bubble trade auto-fire.
         return False, False
 
     # offer.kind == "upgrade"
@@ -1307,7 +1238,10 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
     # cannot see when they next arm.
     # Gather follows Port Trade·ON (strip default True). Residual `D` may
     # still flip this loop-local flag; starts prefer the synced value.
-    explore_dock_opt_in = getattr(play, "port_trade_on", True)
+    # WO-EXPLORE-TRADE-MODE-SPLIT / RESOLVED-EXPLORE-VS-TRADE-LOOP-MODES:
+    # Explore gather docks are discovery sampling, not Port Trade. Default ON
+    # for map learning; operator may still flip via explore dock flag keys.
+    explore_dock_opt_in = True
     explore_tolls_opt_in = False
     # WO-PLAY-AUTOLOOP-START: the exact row the taught-loop confirm line was
     # composed from. Held alongside `pending_confirm_action` rather than
@@ -1910,9 +1844,9 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                 play.rules_library_session.move(1)
                 continue
             if action == "chains_arm":
-                # Enter on a row ARMS a pending action; it never starts one.
-                # The adapter call lives in the `arm_confirm` branch below,
-                # behind `y`. Canon: "A bare Enter must never fire a launch."
+                # RESOLVED-EXPLORE-VS-TRADE-LOOP-MODES: Enter ARMS the L-row
+                # for T)rade Loop Chain. It never starts a runner — T does.
+                # (Canon: bare Enter must never fire a launch.)
                 selected = play.chains_session.selected()
                 discovered = play.chains_session.selected_discovered()
                 if discovered is not None:
@@ -1920,38 +1854,165 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                     plan = _trade_chain_plan.plan_from_chain(
                         world_id, discovered
                     )
-                    prompt = _trade_chain_plan.compose_confirm_action(
-                        plan,
-                        cash_floor=_TRADE_CASH_FLOOR,
-                        turn_reserve=_TRADE_TURN_RESERVE,
-                    )
-                    if plan is None or prompt is None:
+                    if plan is None:
                         play.status_line = (
-                            "did not approve trade — incomplete chain scaffold"
+                            "did not arm trade — incomplete chain scaffold"
                         )
                         continue
-                    pending_confirm_trade = plan
-                    pending_confirm_hold = None
-                    pending_confirm_loop = None
-                    pending_confirm_action = "trade"
-                    pending_confirm_reflex = None
+                    play.trade_loop_arm = {
+                        "kind": "discovered",
+                        "world_id": plan.world_id,
+                        "fingerprint": plan.fingerprint,
+                        "route": plan.route,
+                    }
                     play.chains_session.close()
-                    play.begin_arm_confirm(prompt)
+                    play.status_line = (
+                        f"Trade loop armed — {plan.route} · press T to run"
+                    )
                     continue
                 if selected is None:
-                    # Nothing to arm. Say so and leave the popup up rather
-                    # than raising a confirm gate for a run with no macro --
-                    # a `y/N` prompt naming nothing is worse than no prompt.
-                    play.status_line = "nothing to arm — no taught loop selected"
+                    play.status_line = "nothing to arm — no loop selected"
                     continue
-                pending_confirm_loop = selected
-                pending_confirm_action = "loop"
-                pending_confirm_hold = None
-                pending_confirm_reflex = None
+                name = selected.get("name") if isinstance(selected, dict) else None
+                if not isinstance(name, str) or not name.strip():
+                    play.status_line = "nothing to arm — taught loop has no name"
+                    continue
+                play.trade_loop_arm = {
+                    "kind": "taught",
+                    "name": name.strip(),
+                }
                 play.chains_session.close()
-                play.begin_arm_confirm(_chains.compose_arm_action(selected))
+                play.status_line = (
+                    f"Trade loop armed — taught {name.strip()} · press T to run"
+                )
+                continue
+            if action == "trade_loop_toggle":
+                # RESOLVED-EXPLORE-VS-TRADE-LOOP-MODES: T starts/stops the
+                # L-armed Trade Loop. Port Trade (P) gates money execution.
+                band = getattr(play, "explore_band", None)
+                trade_band = isinstance(band, str) and band.startswith("trade ")
+                if trade_poll_active or trade_band:
+                    try:
+                        adapters.trade_chain_stop(run_dir=run_dir)
+                    except Exception as exc:  # noqa: BLE001
+                        play.status_line = (
+                            f"trade stop failed — {type(exc).__name__}"
+                        )
+                        continue
+                    trade_poll_active = False
+                    play.explore_band = None
+                    play.status_line = "Trade Loop Chain stopped"
+                    continue
+                if autoloop_poll_active:
+                    try:
+                        adapters.autoloop_stop(run_dir=run_dir)
+                    except Exception as exc:  # noqa: BLE001
+                        play.status_line = (
+                            f"loop stop failed — {type(exc).__name__}"
+                        )
+                        continue
+                    autoloop_poll_active = False
+                    play.explore_band = None
+                    play.status_line = "taught loop stopped"
+                    continue
+                arm = getattr(play, "trade_loop_arm", None)
+                if not isinstance(arm, dict):
+                    play.status_line = (
+                        "no Trade Loop armed — open L)ist Loops and Enter a row"
+                    )
+                    continue
+                if not getattr(play, "port_trade_on", False):
+                    play.status_line = (
+                        "Port Trade·OFF — turn P on to run a Trade Loop"
+                    )
+                    continue
+                kind = arm.get("kind")
+                if kind == "discovered":
+                    world_id = arm.get("world_id")
+                    fingerprint = arm.get("fingerprint")
+                    route = arm.get("route") or "?"
+                    if not isinstance(world_id, str) or not isinstance(
+                        fingerprint, str
+                    ):
+                        play.status_line = "armed Trade Loop is incomplete"
+                        continue
+                    try:
+                        adapters.explore_stop(run_dir=run_dir)
+                    except Exception:  # noqa: BLE001
+                        pass
+                    explore_poll_active = False
+                    play.status_line = (
+                        f"starting Trade Loop {route}… (Port Trade\u00b7ON)"
+                    )
+                    play.draw()
+                    try:
+                        started = adapters.trade_chain_start(
+                            world_id,
+                            fingerprint,
+                            cash_floor=_TRADE_CASH_FLOOR,
+                            turn_reserve=_TRADE_TURN_RESERVE,
+                            run_dir=run_dir,
+                        )
+                    except Exception as exc:  # noqa: BLE001
+                        play.status_line = (
+                            f"Trade Loop start failed — {type(exc).__name__}"
+                        )
+                        continue
+                    if getattr(started, "ok", False):
+                        trade_poll_active = _apply_trade_chain_band(
+                            play, getattr(started, "raw", None)
+                        )
+                        play.status_line = (
+                            f"Trade Loop — {route}, one pass running"
+                        )
+                    else:
+                        reason = (
+                            getattr(started, "reason", None)
+                            or getattr(started, "error", None)
+                            or "unknown"
+                        )
+                        play.status_line = (
+                            f"Trade Loop did not start — {reason}"
+                        )
+                    continue
+                if kind == "taught":
+                    name = arm.get("name")
+                    if not isinstance(name, str) or not name.strip():
+                        play.status_line = "armed taught loop has no name"
+                        continue
+                    try:
+                        adapters.explore_stop(run_dir=run_dir)
+                    except Exception:  # noqa: BLE001
+                        pass
+                    explore_poll_active = False
+                    play.status_line = f"starting taught loop {name}…"
+                    play.draw()
+                    try:
+                        started = adapters.autoloop_start(
+                            name.strip(), run_dir=run_dir
+                        )
+                    except Exception as exc:  # noqa: BLE001
+                        play.status_line = (
+                            f"taught loop start failed — {type(exc).__name__}"
+                        )
+                        continue
+                    if getattr(started, "ok", False):
+                        autoloop_poll_active = True
+                        _apply_autoloop_cycle_band(
+                            play, getattr(started, "raw", None)
+                        )
+                        play.status_line = f"taught loop — {name} running"
+                    else:
+                        reason = getattr(started, "reason", None) or "unknown"
+                        play.status_line = (
+                            f"taught loop did not start — {reason}"
+                        )
+                    continue
+                play.status_line = "armed Trade Loop kind unknown"
                 continue
             if action == "arm_confirm" and pending_confirm_action == "trade":
+                # Legacy y-confirm trade start (L now arms; T runs). Kept so
+                # any stale pending_confirm_trade still resolves safely.
                 pending_confirm_action = None
                 plan = pending_confirm_trade
                 pending_confirm_trade = None

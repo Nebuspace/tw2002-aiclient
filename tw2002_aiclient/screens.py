@@ -1064,12 +1064,17 @@ class PlayShellScreen:
         self.port_trade_on: bool = True
         self.cargo_upgrade_on: bool = True
         self.ship_upgrade_on: bool = True
+        # WO-EXPLORE-TRADE-MODE-SPLIT: L)ist-armed Trade Loop selection for T.
+        # ``None`` = nothing armed. Dict shapes:
+        #   {"kind": "discovered", "world_id": str, "fingerprint": str, "route": str}
+        #   {"kind": "taught", "name": str}
+        self.trade_loop_arm: dict | None = None
         # WO-P5-063: the pending confirm-to-arm gate. See the CLASS-level
         # default of the same name above for why it is declared there too;
         # this instance assignment is the ordinary path.
         self._arm_confirm: tuple[object, object] | None = None
         # WO-P5-068: the most-recently confirmed screen classification, set
-        # by app.py after ensure_session() so the T Assign-Trigger handler
+        # by app.py after ensure_session() so Assign-Trigger (non-calm path)
         # can stamp the stub's ``when.screen`` field.  ``None`` before any
         # ensure result arrives (the honest "not yet known" state -- a
         # stub created before this is set will carry ``""`` via
@@ -2459,22 +2464,19 @@ class PlayShellScreen:
             if _as is not None and _as.is_open:
                 return "analyze_close"
             return "analyze_open"
-        # WO-P5-068: T Assign-Trigger scaffold.  Returns a pure INTENT signal
-        # only ("assign_trigger") -- this class has no send path of its own
-        # (``tests/test_spectate_no_send.py``'s guards remain intact).
-        # Both `t` and `T` bind, matching the A/R/T teach band's posture.
-        # `T` is NOT stolen for explore: explore keys are E/e only
-        # (``app._EXPLORE_OFFER_KEYS``), never T.
+        # WO-P5-068 RETIRED on calm path by WO-EXPLORE-TRADE-MODE-SPLIT:
+        # teachband ``T)rade Loop Chain`` must mean Trade Loop execution of
+        # the L-armed selection, not Assign-Trigger. Assign-Trigger remains
+        # available via its own module / tests; calm ``T``/`t` is Trade Loop.
         if key in (ord("t"), ord("T")):
-            return "assign_trigger"
+            return "trade_loop_toggle"
         # WO-P5-067: R Record scaffold.  Returns a pure INTENT signal only
         # ("record_toggle") -- this class has no send path of its own.
         # Both `r` and `R` bind, matching the A/R/T teach band's posture.
         # First press starts a recording; second press stops and saves.
         # `R` is NOT bound to attach/launch (WO constraint).
         if key in (ord("r"), ord("R")):
-            return "record_toggle"
-        # WO-PLAY-REFLEX-ARM: V — preview what the taught rule library proposes
+            return "record_toggle"        # WO-PLAY-REFLEX-ARM: V — preview what the taught rule library proposes
         # for the live screen. Returns a pure INTENT only; app.py calls
         # `reflex_propose` and (only on a fireable proposal) raises the
         # existing default-deny armconfirm gate. Never a send path.
