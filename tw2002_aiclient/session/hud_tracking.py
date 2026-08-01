@@ -5,6 +5,12 @@ Cargo sticky stores *empty cargo holds* (and, when ship-info states it,
 ship-info line (``Total Holds : N - Empty=M``) and the captured port-commerce
 sentence (empty only). Everything else is a non-write; this module never
 guesses from commodity / market rows.
+
+Per-commodity holdings (Fuel Ore / Organics / Equipment) are a separate
+sticky model written only by verified trade buy/sell (or a future
+ship-info parse). There is no fixture shape for per-commodity hold lines
+yet — ``observe_holdings`` is intentionally a non-write. Market rows
+never invent holdings.
 """
 
 from __future__ import annotations
@@ -88,11 +94,61 @@ def read_empty_cargo_holds(rendered_text: object) -> CargoRead:
     return CargoRead(outcome=OUTCOME_READ, empty_holds=empty, total_holds=total)
 
 
-def format_cargo_hud_value(empty: int, total: Optional[int]) -> str:
-    """Operator-honest CARGO cell text: empty/total when known, else empty cue."""
+@dataclass(frozen=True)
+class CargoHoldings:
+    """Sticky Ore/Org/Equ quantities — unknown until first verified write."""
+
+    fuel_ore: int = 0
+    organics: int = 0
+    equipment: int = 0
+
+    def __post_init__(self) -> None:
+        for name in ("fuel_ore", "organics", "equipment"):
+            value = getattr(self, name)
+            if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+                raise ValueError(f"{name} must be an int >= 0")
+
+
+_HOLDINGS_SHORT = (
+    ("fuel_ore", "Ore"),
+    ("organics", "Org"),
+    ("equipment", "Equ"),
+)
+
+_COMMODITY_TO_HOLDINGS_FIELD = {
+    "fuel ore": "fuel_ore",
+    "organics": "organics",
+    "equipment": "equipment",
+}
+
+
+def holdings_field_for_commodity(commodity: object) -> Optional[str]:
+    """Map a hop commodity name to a CargoHoldings field, or None if unknown."""
+    if not isinstance(commodity, str):
+        return None
+    return _COMMODITY_TO_HOLDINGS_FIELD.get(commodity.strip().casefold())
+
+
+def format_cargo_hud_value(
+    empty: int,
+    total: Optional[int],
+    holdings: Optional[CargoHoldings] = None,
+) -> str:
+    """Operator-honest CARGO cell: empty/total plus non-zero Ore/Org/Equ."""
     if total is None:
-        return f"{empty} empty"
-    return f"{empty} empty / {total}"
+        base = f"{empty} empty"
+    else:
+        base = f"{empty} empty / {total}"
+    if holdings is None:
+        return base
+    parts: list[str] = []
+    for field, label in _HOLDINGS_SHORT:
+        qty = getattr(holdings, field)
+        if qty:
+            parts.append(f"{label} {qty}")
+    if not parts:
+        return base
+    return base + " · " + " · ".join(parts)
 
 
 def _validate_snapshot(outcome: str, value: Optional[int], age_s: Optional[float]) -> None:
@@ -116,6 +172,7 @@ class CargoSnapshot:
     cargo: Optional[int] = None
     age_s: Optional[float] = None
     total_holds: Optional[int] = None
+    holdings: Optional[CargoHoldings] = None
 
     def __post_init__(self) -> None:
         _validate_snapshot(self.outcome, self.cargo, self.age_s)
@@ -128,6 +185,11 @@ class CargoSnapshot:
                 raise ValueError("total_holds must be an int")
             if self.cargo is not None and self.cargo > self.total_holds:
                 raise ValueError("cargo empty cannot exceed total_holds")
+        if self.holdings is not None:
+            if self.outcome != OUTCOME_READ:
+                raise ValueError("holdings only accompany the read outcome")
+            if not isinstance(self.holdings, CargoHoldings):
+                raise ValueError("holdings must be a CargoHoldings")
 
 
 @dataclass(frozen=True)

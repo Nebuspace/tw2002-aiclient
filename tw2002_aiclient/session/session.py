@@ -24,9 +24,11 @@ from .classify import classify_screen, is_probable_secret_prompt
 from .connection import TelnetConnection, tx_failure_phrase
 from .iac import TelnetHandler
 from .hud_tracking import (
+    CargoHoldings,
     CargoSnapshot,
     ProfitSnapshot,
     cargo_never_observed,
+    holdings_field_for_commodity,
     profit_never_observed,
     read_empty_cargo_holds,
 )
@@ -197,6 +199,9 @@ class Session:
         self.last_cargo = None
         self.last_cargo_ts = None
         self.last_cargo_total = None
+        # Sticky Ore/Org/Equ — None until first verified trade write (or future
+        # ship-info parse). Never invented from port market rows.
+        self.last_cargo_holdings = None
         # WO-AUTOLOOP-HAZARD-HALT: fighters aboard for the zero-fighter rail.
         # Same ownership as credits/turns -- observe_fighters / fighters_snapshot
         # only; never cleared by a screen that states no count (zero and
@@ -647,12 +652,50 @@ class Session:
             if read.total_holds is not None:
                 self.last_cargo_total = read.total_holds
 
+    def set_holdings(self, fuel_ore=0, organics=0, equipment=0):
+        """Replace sticky Ore/Org/Equ holdings after a verified write."""
+        holdings = CargoHoldings(
+            fuel_ore=fuel_ore, organics=organics, equipment=equipment
+        )
+        with self.lock:
+            self.last_cargo_holdings = holdings
+
+    def adjust_holdings(self, commodity, delta):
+        """Buy (+delta) / sell (−delta) one hop commodity; clamp each field ≥0.
+
+        First verified write materializes zeroed sticky holdings, then applies
+        the delta. Unknown commodity names are ignored (non-write).
+        """
+        if isinstance(delta, bool) or not isinstance(delta, int):
+            raise ValueError("delta must be an int")
+        field = holdings_field_for_commodity(commodity)
+        if field is None:
+            return
+        with self.lock:
+            current = self.last_cargo_holdings or CargoHoldings()
+            values = {
+                "fuel_ore": current.fuel_ore,
+                "organics": current.organics,
+                "equipment": current.equipment,
+            }
+            values[field] = max(0, values[field] + delta)
+            self.last_cargo_holdings = CargoHoldings(**values)
+
+    def observe_holdings(self, rendered_text):
+        """Optional ship-info per-commodity parse — no fixture shape yet.
+
+        Non-write until a captured screen states Ore/Org/Equ hold lines.
+        Market / port commodity rows must never invent holdings.
+        """
+        return
+
     def cargo_snapshot(self):
-        """Last known empty cargo holds, optional sticky total, and age."""
+        """Last known empty cargo holds, optional sticky total/holdings, and age."""
         with self.lock:
             cargo = self.last_cargo
             ts = self.last_cargo_ts
             total = self.last_cargo_total
+            holdings = self.last_cargo_holdings
             if cargo is None or ts is None:
                 return cargo_never_observed()
             return CargoSnapshot(
@@ -660,6 +703,7 @@ class Session:
                 cargo=cargo,
                 age_s=max(0.0, time.monotonic() - ts),
                 total_holds=total,
+                holdings=holdings,
             )
 
     def observe_fighters(self, rendered_text):
