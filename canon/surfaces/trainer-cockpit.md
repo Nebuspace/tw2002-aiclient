@@ -128,8 +128,11 @@ would scroll the `Your fighters: N vs. theirs: M` line off pyte's 25-line viewpo
 could Attack/Retreat. The seed never raises: a failed probe must not break the join. This is the one
 place the dashboard causes a send, and it is a safe read-only introspection, not a play move.
 
-**Cargo and profit semantics.** CARGO is the ship's **empty cargo holds**, read from strict
-ship-info / port-report claims; it is not total capacity and is never inferred from commodity rows.
+**Cargo and profit semantics.** CARGO explains **hold occupancy**: **empty** and **total** when
+ship-info states `Total Holds : N - Empty=M` (filled = N−M is implied). Port-commerce lines that
+only name empty holds still update empty. It is never inferred from port **market** commodity rows.
+Per-commodity holdings (Fuel Ore / Organics / Equipment) are a follow-on sticky model
+(`PENDING-HUD-CARGO-BREAKDOWN` / `WO-HUD-CARGO-HOLDINGS`), not invented from market quotes.
 PROFIT is the strict current credit balance minus the first strict balance observed in this daemon
 session. The first observation therefore establishes a truthful `0` baseline; later credits-less
 screens preserve and age that value rather than resetting it.
