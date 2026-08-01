@@ -1009,6 +1009,8 @@ class ExploreRunner:
         # Per-encounter, reset once the loop reaches an ordinary driven screen.
         fight_steps = 0
         last_fight_text: Optional[str] = None
+        # WO-WARP-CONFIRM-Y: set True only after an intentional sector hop send.
+        pending_intentional_hop = False
         turns = report.turns_remaining
         try:
             while not stop.is_set():
@@ -1033,6 +1035,37 @@ class ExploreRunner:
                 full_text = self._session.render_text(rows)
                 prompt_line = rows[-1].strip() if rows else ""
                 halt, klass = _gate_screen(full_text, prompt_line)
+                # WO-WARP-CONFIRM-Y: nested like fight-toll — only converts a
+                # screen the loop was already halting on. Intentional hop
+                # (we just sent a sector target) → answer Y. No pending hop →
+                # fall through to ordinary halt (no blind Y).
+                if halt is not None and klass == "warp_confirm" and pending_intentional_hop:
+                    pending_intentional_hop = False
+                    _reason, _elapsed, confirmed = _settle.send_and_confirm(
+                        self._session,
+                        "Y",
+                        confirm_prompt=None,
+                        enter=False,
+                        timeout_s=self._timeout_s,
+                        debounce_ms=self._debounce_ms,
+                    )
+                    sends += 1
+                    self._publish_progress(
+                        report,
+                        distinct_sectors=len(distinct),
+                        sends_issued=sends,
+                        turns_remaining=turns,
+                        stop_requested=stop.is_set(),
+                    )
+                    if not confirmed:
+                        outcome = OUTCOME_HALTED
+                        reason = HALT_CONFIRM_FAILED
+                        break
+                    continue
+                if halt is not None and klass == "warp_confirm":
+                    # Avoid-list confirm without an App-initiated hop: do not
+                    # auto-Y (Manual / unexpected). Ordinary halt stands.
+                    pending_intentional_hop = False
                 # WO-FIGHTER-TOLL-POLICY-WIRE. Deliberately nested INSIDE the
                 # halt branch. The toll wire can therefore only ever convert a
                 # screen the loop was already going to stop on into a decided
@@ -1123,6 +1156,7 @@ class ExploreRunner:
                 # own full budget rather than inheriting a spent one.
                 fight_steps = 0
                 last_fight_text = None
+                pending_intentional_hop = False
                 sector_read = read_current_sector(prompt_line)
                 if sector_read.outcome != OUTCOME_READ or sector_read.sector is None:
                     outcome = OUTCOME_HALTED
@@ -1280,6 +1314,8 @@ class ExploreRunner:
                 )
                 sends += 1
                 turns -= 1
+                # Mark intentional hop so a following warp_confirm may answer Y.
+                pending_intentional_hop = bool(confirmed)
                 self._publish_progress(
                     report,
                     distinct_sectors=len(distinct),
@@ -1288,6 +1324,7 @@ class ExploreRunner:
                     stop_requested=stop.is_set(),
                 )
                 if not confirmed:
+                    pending_intentional_hop = False
                     outcome = OUTCOME_HALTED
                     reason = HALT_CONFIRM_FAILED
                     break

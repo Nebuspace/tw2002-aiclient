@@ -213,7 +213,9 @@ _OFFER_OR_CASCADE_PATTERN = f"{_OFFER_PROMPT_PATTERN}|{_CASCADE_ENTRY_PATTERN}"
 # docstring's PALADIN section. "A" (Attack) and "Q" (Quit, nevermind) are
 # both real options on the port-encounter menu and MUST never be reachable
 # from any code path here.
-_ALLOWED_LETTER_SENDS = frozenset({"P", "T"})
+_ALLOWED_LETTER_SENDS = frozenset({"P", "T", "Y"})
+# "Y" is WO-WARP-CONFIRM-Y only (avoid-list warp confirm after intentional hop).
+# Still never Attack/Quit/Pay — those stay out.
 
 DEFAULT_MAX_STEPS = 200
 DEFAULT_QTY_SAFETY_MARGIN = 0.9
@@ -686,6 +688,12 @@ def _navigate(
             raise ChainHold(f"non_adjacent_nav:{hop_index}:{next_sector}")
         _confirmed_send(ctx, str(next_sector), None, enter=True)
         turns_budget -= 1
+        # WO-WARP-CONFIRM-Y: TWGS avoid-list mid-warp Y/N after *this* hop.
+        # Intentional by construction (we just sent the sector). Other
+        # unexpected screens still HOLD at the next hop's entry gate.
+        full_text, prompt_line = ctx.fresh()
+        if classify_screen(full_text, prompt_line) == "warp_confirm":
+            _confirmed_send(ctx, "Y", None, enter=False)
     return turns_budget
 
 

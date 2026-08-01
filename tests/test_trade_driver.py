@@ -668,9 +668,9 @@ def test_unexpected_screen_holds_instead_of_retry_spinning(tmp_path):
 def test_paladin_send_letter_refuses_any_letter_outside_the_allowlist():
     """PALADIN: no combat/attack/genesis verb reachable -- `_send_letter`
     is the one place a single-letter command could ever be sent, and it
-    refuses anything outside `{"P", "T"}` (never `"A"`ttack, never
-    `"Q"`uit-as-a-driver-choice)."""
-    assert _ALLOWED_LETTER_SENDS == {"P", "T"}
+    refuses anything outside the allowlist (never `"A"`ttack, never
+    `"Q"`uit-as-a-driver-choice). `"Y"` is WO-WARP-CONFIRM-Y only."""
+    assert _ALLOWED_LETTER_SENDS == {"P", "T", "Y"}
 
     class _NeverSendsSession:
         def render(self):
