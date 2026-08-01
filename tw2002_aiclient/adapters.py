@@ -11,12 +11,20 @@ for anything importing it directly, rather than shelling out to `tw ensure`.
 
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
 from .session import cli as _cli
 from .session import env as _env
 from . import world_identity as _wi
+
+# Wire errors from protocol._session_identity_mismatch — Play-layer
+# ensure_session recovers once (stop + respawn); CLI ensure stays refuse-only.
+_IDENTITY_MISMATCH_PREFIXES = (
+    "profile_host_mismatch:",
+    "profile_port_mismatch:",
+)
 
 # Machine-readable failure reasons `ensure_session()` may return on
 # `EnsureResult.reason`. Callers should switch on these constants, not on
@@ -75,13 +83,21 @@ def ensure_session(
     when the daemon already sits at `target`; spawns the daemon first if
     none is running. Never raises for an expected failure mode -- every
     path returns a typed `EnsureResult`.
+
+    WO-PLAY-HOST-SWITCH-DAEMON: if the live daemon refuses with
+    ``profile_host_mismatch:`` / ``profile_port_mismatch:``, stop that
+    daemon once, wait for it to exit, and retry ``ensure_raw`` with the
+    remaining shared budget so Play can switch servers without a manual
+    ``tw stop``. Same-host success never takes this path.
     """
     resolved_run_dir = run_dir or _env.resolve_run_dir()
+    deadline = time.monotonic() + max(0.0, float(timeout))
+    first_budget = max(0.0, deadline - time.monotonic())
     try:
         resp = _cli.ensure_raw(
             profile,
             target=target,
-            timeout=timeout,
+            timeout=first_budget,
             no_auto_arm=no_auto_arm,
             run_dir=resolved_run_dir,
         )
@@ -98,7 +114,66 @@ def ensure_session(
             raw=resp,
         )
 
+    if _is_identity_mismatch(resp) and time.monotonic() < deadline:
+        resp = _retarget_after_identity_mismatch(
+            profile,
+            target=target,
+            no_auto_arm=no_auto_arm,
+            run_dir=resolved_run_dir,
+            deadline=deadline,
+        )
+        if resp.get("ok"):
+            return EnsureResult(
+                ok=True,
+                classification=resp.get("class") or resp.get("classification") or target,
+                raw=resp,
+            )
+
     return EnsureResult(ok=False, reason=_classify_failure(resp), detail=_failure_detail(resp), raw=resp)
+
+
+def _is_identity_mismatch(resp: dict) -> bool:
+    error = str(resp.get("error") or "")
+    return any(error.startswith(prefix) for prefix in _IDENTITY_MISMATCH_PREFIXES)
+
+
+def _retarget_after_identity_mismatch(
+    profile: str,
+    *,
+    target: str,
+    no_auto_arm: bool,
+    run_dir: Path,
+    deadline: float,
+) -> dict:
+    """Stop the stale-host daemon once, then ensure again under ``deadline``."""
+    try:
+        _cli.send_request("stop", {}, run_dir=run_dir, timeout=min(5.0, max(0.5, deadline - time.monotonic())))
+    except Exception:  # noqa: BLE001 -- best-effort; poll liveness next
+        pass
+
+    while time.monotonic() < deadline and _cli.daemon_alive(run_dir):
+        time.sleep(0.1)
+
+    remaining = deadline - time.monotonic()
+    if remaining <= 0.0:
+        return {"ok": False, "error": "timeout", "detail": "host_switch_budget_exhausted"}
+    if _cli.daemon_alive(run_dir):
+        return {
+            "ok": False,
+            "error": "timeout",
+            "detail": "host_switch_daemon_still_alive",
+        }
+
+    try:
+        return _cli.ensure_raw(
+            profile,
+            target=target,
+            timeout=remaining,
+            no_auto_arm=no_auto_arm,
+            run_dir=run_dir,
+        )
+    except Exception as e:  # noqa: BLE001 -- same belt as ensure_session
+        return {"ok": False, "error": f"{type(e).__name__}: {e}"}
 
 
 def disconnect_session(*, run_dir: "Path | None" = None) -> bool:
