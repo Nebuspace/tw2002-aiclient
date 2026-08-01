@@ -162,7 +162,7 @@ from typing import Callable, Mapping, Optional
 
 from .chains import ProfitChain, TradeHop
 from .explore import known_graph, path_to_sector
-from .session.classify import classify_screen
+from .session.classify import classify_screen, is_avoid_danger_warp
 from .session.settle import send_and_confirm
 from .session.state_parser import (
     OUTCOME_READ,
@@ -213,7 +213,11 @@ _OFFER_OR_CASCADE_PATTERN = f"{_OFFER_PROMPT_PATTERN}|{_CASCADE_ENTRY_PATTERN}"
 # docstring's PALADIN section. "A" (Attack) and "Q" (Quit, nevermind) are
 # both real options on the port-encounter menu and MUST never be reachable
 # from any code path here.
-_ALLOWED_LETTER_SENDS = frozenset({"P", "T"})
+_ALLOWED_LETTER_SENDS = frozenset({"P", "T", "Y", "N"})
+# "Y"/"N" are WO-WARP-CONFIRM-Y only (avoid-list warp confirm after an
+# intentional hop this module just sent -- N on the avoid-DANGER body,
+# Y on an ordinary confirm; see `_navigate`). Still never Attack/Quit/Pay
+# — those stay out.
 
 DEFAULT_MAX_STEPS = 200
 DEFAULT_QTY_SAFETY_MARGIN = 0.9
@@ -703,6 +707,21 @@ def _navigate(
             raise ChainHold(f"non_adjacent_nav:{hop_index}:{next_sector}")
         _confirmed_send(ctx, str(next_sector), None, enter=True)
         turns_budget -= 1
+        # WO-WARP-CONFIRM-Y (REVISE, hub reject of always-Y): TWGS avoid-list
+        # mid-warp Y/N after *this* hop. Intentional by construction (we just
+        # sent the sector). Other unexpected screens still HOLD at the next
+        # hop's entry gate. Avoid-DANGER body -> decline (N) and HOLD this
+        # hop rather than loop back into the same avoided sector -- the
+        # chain's route was computed against the known graph, not against
+        # TWGS's separate avoid-list, so this is the one place that can
+        # discover a route step is avoided, and refusing beats guessing a
+        # detour. Ordinary confirm (no DANGER body) -> Y, as before.
+        full_text, prompt_line = ctx.fresh()
+        if classify_screen(full_text, prompt_line) == "warp_confirm":
+            if is_avoid_danger_warp(full_text):
+                _confirmed_send(ctx, "N", None, enter=False)
+                raise ChainHold(f"avoid_declined:{hop_index}:{next_sector}")
+            _confirmed_send(ctx, "Y", None, enter=False)
     return turns_budget
 
 

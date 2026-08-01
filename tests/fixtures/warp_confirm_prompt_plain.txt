@@ -1,5 +1,4 @@
 Sector  : 3034 in uncharted space.
 Warps to Sector(s) :  (250) - (119) - (4571)
 Warping to Sector 3034
-DANGER! You have marked sector 3034 to be avoided!
 Do you really want to warp there? (Y/N)
