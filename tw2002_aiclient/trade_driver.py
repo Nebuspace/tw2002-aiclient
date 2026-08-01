@@ -190,8 +190,20 @@ _MOVEMENT_PROMPT_CLASS = "main_command"
 # `re.I` for robustness, same split state_parser.py/haggle.py already use.
 _PORT_MENU_CONFIRM_PATTERN = r"Enter\s+your\s+choice\s*\[\s*T\s*\]\s*\?"
 _PORT_MENU_PROMPT_RE = re.compile(_PORT_MENU_CONFIRM_PATTERN)
-_QTY_PROMPT_PATTERN = r"How\s+many\s+holds\s+of\s+[A-Za-z ]+\s*\[\s*\d[\d,]*\s*\]\s*\?"
-_QTY_PROMPT_RE = re.compile(r"how\s+many\s+holds\s+of\s+([A-Za-z ]+?)\s*\[\s*(\d[\d,]*)\s*\]\s*\?", re.I)
+# Live TWGS (3rdage) and fixtures/port_commerce_report_tradeable.txt use
+# ``How many holds of Equipment do you want to buy [40]?`` — the short
+# ``… of Equipment [40]?`` form is also real. Commodity names are the
+# three canon goods only (never greedy ``[A-Za-z ]+``, which ate
+# ``do you want to buy`` and made every hop ``depleted``).
+_QTY_COMMODITY = r"(?:Fuel\s+Ore|Organics|Equipment)"
+_QTY_WANT = r"(?:\s+do\s+you\s+want\s+to\s+(?:buy|sell))?"
+_QTY_PROMPT_PATTERN = (
+    rf"How\s+many\s+holds\s+of\s+{_QTY_COMMODITY}{_QTY_WANT}\s*\[\s*\d[\d,]*\s*\]\s*\?"
+)
+_QTY_PROMPT_RE = re.compile(
+    rf"how\s+many\s+holds\s+of\s+({_QTY_COMMODITY}){_QTY_WANT}\s*\[\s*(\d[\d,]*)\s*\]\s*\?",
+    re.I,
+)
 _COMMAND_PROMPT_PATTERN = r"Command\s*\[\s*TL\s*="
 _COMMAND_PROMPT_RE = re.compile(_COMMAND_PROMPT_PATTERN)
 _OFFER_PROMPT_PATTERN = r"Your\s+offer\s*\[\s*\d[\d,]*\s*\]\s*\?"
