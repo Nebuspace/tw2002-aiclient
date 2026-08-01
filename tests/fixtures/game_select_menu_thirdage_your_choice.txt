@@ -1,0 +1,25 @@
+   ─═══▐█▀▀▀▐█═▐█▐█═▐█▐█▀▀▀════─ .·                .░ ▀▀▀▀  .   ·      ·.
+ ·   ─═▐█═══▐█═▐█▐█═▐█▐█═════─          ·     ·     ░▒▓█▓▒░                ·
+       ▐▀▀▀▀▐▀▀▀▀▐▀▀▀▀▐▀▀▀▀                         ░▒██▓█░
+    ·       ·         ·       ·                    .┘║██▓█│└.
+         ·                 ·                 ·       │ │  │       ·          ·
+
+  ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
+  █   Game Name            █ Sectors █ Turns   █ Notes      ▄        ·       █
+  ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+  [A] Alien Retribution Edit 20,000    25,000    Player vs Alien game
+  [B] Borgan Edit            20,000    10,000    Custom Borgan Edit -rebang-
+  [C] Dungeons & Dragons     30,000    20,000
+  [D] open
+  [E] open                                       To request a game in an
+  [F] open                                        open slot send an email to
+  [G] open                                        sysop@example.org
+  [H] open
+  [I] open
+  [T] Testing use DONT USE                       Test only don't use for play
+
+  [Q] Quit
+  [#] Players Online
+  [!] View Game Descriptions
+                                  Your choice:
+Timed out...

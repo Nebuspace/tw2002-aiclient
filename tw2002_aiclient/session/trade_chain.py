@@ -32,12 +32,16 @@ class TradeChainRefused(Exception):
 def discovery_blocks_start(discovered) -> bool:
     """True when chain discovery must not arm a trade start.
 
-    Same condition ``TradeRunner.start`` uses for ``chain_discovery_partial``
-    (WO-TRADE-PARTIAL-BACKOFF): a truncated search is incomplete even when
-    it returned some cycles — absence of better cycles is not established.
-    Shared so the App-armed auto-fire preflight cannot drift from the runner.
+    RESOLVED-EXPLORE-VS-TRADE-LOOP-MODES / WO-EXPLORE-TRADE-MODE-SPLIT:
+    a truncated search that still returned cycles may arm an **exact**
+    fingerprint present in that partial list (absence of a *better* cycle
+    is not established — the selected cycle still is). Block only when
+    truncated **and** empty, or when truncated with no usable chain list.
     """
-    return bool(getattr(discovered, "truncated", False))
+    if not bool(getattr(discovered, "truncated", False)):
+        return False
+    found = getattr(discovered, "chains", None)
+    return not isinstance(found, (tuple, list)) or len(found) == 0
 
 
 @dataclass(frozen=True)
@@ -171,8 +175,14 @@ class TradeChainRunner:
             raise TradeChainRefused("invalid_turn_reserve")
 
         try:
+            # Map growth made the default 100k DFS budget return 0 cycles while
+            # still truncated (live Cartogra 2026-08-01) — soft partial gate
+            # then still blocked every start. Prefer a deeper search here so an
+            # exact L-armed fingerprint can resolve.
             discovered = chain_search.recompute(
-                world_id.strip(), state_dir=self._state_dir
+                world_id.strip(),
+                state_dir=self._state_dir,
+                max_search_steps=500_000,
             )
         except Exception as exc:  # noqa: BLE001
             raise TradeChainRefused(

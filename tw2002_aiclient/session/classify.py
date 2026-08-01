@@ -181,6 +181,12 @@ _PLAIN_GAME_SELECT_RE = re.compile(r"select\s+a\s+game", re.I)
 #    decorated prompt, not the whole line. Re-using that constant was the
 #    first thing I tried and it returns False on the live capture.
 _SQUARE_BRACKET_TIMED_OUT_PROMPT_RE = re.compile(r":\s*Timed\s+out\b", re.I)
+# Third Age / similar: live prompt is bare ``Your choice:`` (or ``Timed
+# out...`` one line below it after the host idle timer). Not Exiled's
+# colon-suffixed chrome and not TWGS ``Select a game :`` — without this
+# shape, ``ensure`` never sends ``profile.game_letter`` and App-armed Play
+# idles on ``unknown`` while FOCUS still tries to trade.
+_YOUR_CHOICE_GAME_SELECT_PROMPT_RE = re.compile(r"^Your\s+choice\s*:\s*$", re.I)
 # 2. Indented single-character bracket rows in the body ABOVE that prompt.
 #    The leading `\s+` is load-bearing twice over: the PROMPT line itself
 #    carries `[A][B][C][D][E][X][Z][#]` at column 0, and without the
@@ -621,27 +627,32 @@ def _twgs_banner_signals_coherent(
 
 
 def _is_square_bracket_game_select_menu(full_text: str, prompt_line: str) -> bool:
-    """The square-bracket game-select door (Exiled / `twgs.exiled.org`).
+    """The square-bracket game-select door (Exiled / Third Age / kin).
 
     A fourth shape of the EXISTING ``game_select`` class -- no new
     ``screen_class``. `login.py` already sends `profile.game_letter` once the
     class resolves; this detector is the only thing that was missing, and its
     absence is why `tw ensure --profile xeno` stalls at
-    `LoginStalled(automaton_stuck, unknown)`.
+    `LoginStalled(automaton_stuck, unknown)` — and why Third Age
+    (`Your choice:` + ``[A] Name`` rows) left Play on ``unknown`` so the
+    profile letter never auto-selected.
 
-    Both signals are required (see the constants above for why each alone is
-    too generic):
+    Prompt signal (exactly one of):
 
-    1. the prompt line carries a COLON-PREFIXED ``Timed out`` suffix, and
-    2. at least two INDENTED ``[X] <name>`` rows appear **above** that prompt.
+    1. Exiled: colon-prefixed ``:Timed out`` chrome on the prompt line, or
+    2. Third Age live: bare ``Your choice:``, or
+    3. Third Age after idle: bare ``Timed out...`` with ``Your choice:``
+       still visible above it.
+
+    Plus body signal: at least two INDENTED ``[X] <name>`` rows **above**
+    that prompt.
 
     **The above-prompt scoping is the stale-scrollback guard**, and it is the
-    same discipline every sibling here applies. Signal 1 already refuses a
-    screen whose live prompt is something else (a stale Exiled menu still in
-    scrollback under a live ``Command [TL=...]`` prompt fails immediately,
-    because the prompt is what is tested -- not the whole buffer). Signal 2
-    then refuses the mirror case: chrome that happens to end in ``:Timed
-    out`` with no game rows standing above it.
+    same discipline every sibling here applies. The prompt signal already
+    refuses a screen whose live prompt is something else (a stale Exiled
+    menu still in scrollback under a live ``Command [TL=...]`` prompt fails
+    immediately). The body signal then refuses chrome that matches a prompt
+    shape with no game rows standing above it.
 
     Rows are counted strictly above the resolved prompt index rather than
     anywhere in ``full_text``. That matters for the ``classify()`` API, whose
@@ -654,7 +665,11 @@ def _is_square_bracket_game_select_menu(full_text: str, prompt_line: str) -> boo
     """
     if not isinstance(prompt_line, str) or not isinstance(full_text, str):
         return False
-    if not _SQUARE_BRACKET_TIMED_OUT_PROMPT_RE.search(prompt_line.strip()):
+    needle = prompt_line.strip()
+    exiled_timed_out = bool(_SQUARE_BRACKET_TIMED_OUT_PROMPT_RE.search(needle))
+    your_choice = bool(_YOUR_CHOICE_GAME_SELECT_PROMPT_RE.search(needle))
+    bare_timed_out = bool(_TWGS_TIMED_OUT_PROMPT_RE.search(needle))
+    if not (exiled_timed_out or your_choice or bare_timed_out):
         return False
 
     lines = full_text.splitlines()
@@ -662,7 +677,6 @@ def _is_square_bracket_game_select_menu(full_text: str, prompt_line: str) -> boo
     # Walk from the end for the last line whose content matches the prompt;
     # fall back to the last non-blank line (the `classify()` shape, where the
     # prompt IS the final rendered line).
-    needle = prompt_line.strip()
     prompt_index = len(lines)
     for i in range(len(lines) - 1, -1, -1):
         if lines[i].strip() == needle:
@@ -674,11 +688,20 @@ def _is_square_bracket_game_select_menu(full_text: str, prompt_line: str) -> boo
                 prompt_index = i
                 break
 
-    rows = sum(
-        1 for line in lines[:prompt_index]
-        if _SQUARE_BRACKET_GAME_ROW_RE.match(line)
-    )
-    return rows >= _SQUARE_BRACKET_MIN_GAME_ROWS
+    above = lines[:prompt_index]
+    rows = sum(1 for line in above if _SQUARE_BRACKET_GAME_ROW_RE.match(line))
+    if rows < _SQUARE_BRACKET_MIN_GAME_ROWS:
+        return False
+    # Bare ``Timed out...`` (not Exiled's ``:Timed out``) is only trusted
+    # when the Third Age ``Your choice:`` line is still above it — otherwise
+    # any host that parks on ``Timed out...`` with unrelated bracket noise
+    # would mis-fire.
+    if bare_timed_out and not exiled_timed_out and not your_choice:
+        return any(
+            _YOUR_CHOICE_GAME_SELECT_PROMPT_RE.search((line or "").strip())
+            for line in above
+        )
+    return True
 
 
 def _is_plain_timed_out_game_select(full_text: str, prompt_line: str) -> bool:

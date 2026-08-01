@@ -91,9 +91,16 @@ class _FakeChainScalars:
         return self._chain, "caption"
 
 
+def _in_game_status(**extra):
+    """Status shape App-armed auto-fire requires (connected + main_command)."""
+    base = {"connected": True, "classification": "main_command"}
+    base.update(extra)
+    return base
+
+
 class _FakePlay:
     def __init__(self, *, status=None, port_trade_on=True, cargo_upgrade_on=True, ship_upgrade_on=True):
-        self._status = status if status is not None else {}
+        self._status = status if status is not None else _in_game_status()
         self.status_provider = lambda: self._status
         self.chain_scalars = _FakeChainScalars()
         self.port_trade_on = port_trade_on
@@ -433,7 +440,7 @@ def test_auto_fire_skips_wrong_anchor_chain(monkeypatch):
     )
     monkeypatch.setattr(app_mod.time, "monotonic", lambda: 3000.0)
     # _TRADE_PLAN.start_anchor == 1; ship elsewhere
-    status = {"hud": {"sector": {"value": 3886}}}
+    status = _in_game_status(hud={"sector": {"value": 3886}})
     play = _FakePlay(status=status, port_trade_on=True)
     assert app_mod._autonomy_auto_fire(play, profile=_PROFILE, run_dir=None) == (False, False)
     assert calls == []
@@ -457,7 +464,8 @@ def test_auto_fire_starts_when_ship_on_anchor(monkeypatch):
         or _TradeResult(ok=True, raw={"running": True, "run": {"route": "1>2>1"}}),
     )
     monkeypatch.setattr(app_mod.time, "monotonic", lambda: 4000.0)
-    status = {"hud": {"sector": {"value": 1}}}  # matches _TRADE_PLAN.start_anchor
+    # matches _TRADE_PLAN.start_anchor
+    status = _in_game_status(hud={"sector": {"value": 1}})
     play = _FakePlay(status=status, port_trade_on=True)
     trade_poll, hold_poll = app_mod._autonomy_auto_fire(play, profile=_PROFILE, run_dir="/rd")
     assert calls == [1]
@@ -485,7 +493,7 @@ def test_start_anchor_mismatch_refuse_from_start_backs_off(monkeypatch):
     clock = {"t": 6000.0}
     monkeypatch.setattr(app_mod.time, "monotonic", lambda: clock["t"])
     # Ship on plan start so client gate does not fire first — exercise daemon refuse path.
-    play = _FakePlay(status={"hud": {"sector": {"value": 1}}}, port_trade_on=True)
+    play = _FakePlay(status=_in_game_status(hud={"sector": {"value": 1}}), port_trade_on=True)
     app_mod._autonomy_auto_fire(play, profile=_PROFILE, run_dir=None)
     assert calls == [1]
     assert "start_anchor_mismatch:2260:8" in play.status_line
@@ -496,8 +504,30 @@ def test_start_anchor_mismatch_refuse_from_start_backs_off(monkeypatch):
     assert play.status_line == first
 
 
+def test_auto_fire_refuses_when_not_connected_or_not_main(monkeypatch):
+    """Login door / dead socket must not paint starting-trade."""
+    monkeypatch.setattr(_autonomy_policy, "choose_offer", lambda *_a, **_k: _offer("run_chain"))
+    monkeypatch.setattr(_trade_chain_plan, "plan_from_chain", lambda *_a, **_k: _TRADE_PLAN)
+    calls = []
+    monkeypatch.setattr(
+        adapters, "trade_chain_start", lambda *a, **k: calls.append(1) or _TradeResult()
+    )
+    for status in (
+        {"connected": False, "classification": "main_command"},
+        {"connected": True, "classification": "game_select"},
+        {"connected": True, "classification": "unknown"},
+        {},
+    ):
+        play = _FakePlay(status=status, port_trade_on=True)
+        assert app_mod._autonomy_auto_fire(play, profile=_PROFILE, run_dir=None) == (
+            False,
+            False,
+        )
+    assert calls == []
+
+
 def test_trade_stop_start_anchor_unknown_arms_cooldown():
-    play = _FakePlay(status={"hud": {"sector": {"value": 5}}})
+    play = _FakePlay(status=_in_game_status(hud={"sector": {"value": 5}}))
     raw = {
         "running": False,
         "run": {"route": "8>9>8", "outcome": "halted", "reason": "start_anchor_unknown"},
@@ -531,11 +561,17 @@ def test_map_growth_clears_trade_auto_fire_cooldown(monkeypatch):
     assert calls == [1, 1]
 
 
-def test_discovery_blocks_start_matches_truncated_gate():
+def test_discovery_blocks_start_matches_soft_partial_gate():
     from tw2002_aiclient.session import trade_chain as tc
 
-    assert tc.discovery_blocks_start(_PartialDiscovery()) is True
+    assert tc.discovery_blocks_start(_PartialDiscovery()) is True  # truncated + empty
     assert tc.discovery_blocks_start(_CompleteDiscovery()) is False
+
+    class _TruncatedWithChains:
+        truncated = True
+        chains = (object(),)
+
+    assert tc.discovery_blocks_start(_TruncatedWithChains()) is False
 
 
 # ---------------------------------------------------------------------------
