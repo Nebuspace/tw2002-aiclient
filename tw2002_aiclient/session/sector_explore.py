@@ -1087,6 +1087,20 @@ class ExploreRunner:
                     # auto-Y (Manual / unexpected). Ordinary halt stands.
                     pending_intentional_hop = False
                     pending_hop_target = None
+                # WO-EXPLORE-MIDWARP-WAIT: after an intentional hop, mid-warp
+                # progress bars and the arriving Sector body (before the
+                # Command prompt) classify as `sector_display`. Settle's
+                # debounce can fire between progress-bar frames, so gating
+                # that class as halt_not_drivable killed the run on the
+                # first hop (live Cartogra 2026-08-01:
+                # halt_not_drivable:sector_display after one send). Wait for
+                # main_command instead — only while THIS run just hopped.
+                if (
+                    halt is not None
+                    and klass == "sector_display"
+                    and pending_intentional_hop
+                ):
+                    continue
                 # WO-FIGHTER-TOLL-POLICY-WIRE. Deliberately nested INSIDE the
                 # halt branch. The toll wire can therefore only ever convert a
                 # screen the loop was already going to stop on into a decided
@@ -1326,20 +1340,29 @@ class ExploreRunner:
                     stop_requested=stop.is_set(),
                     next_sector=int(target),
                 )
-                _reason, _elapsed, confirmed = _settle.send_and_confirm(
+                _reason, _elapsed, _confirmed = _settle.send_and_confirm(
                     self._session,
                     str(target),
                     confirm_prompt=None,
                     enter=True,
                     timeout_s=self._timeout_s,
                     debounce_ms=self._debounce_ms,
+                    # Mid-warp progress bars keep emitting bytes between
+                    # "quiet" gaps — without retry, an unstable idle during
+                    # the animation is confirm_failed even though the hop
+                    # completes (live Cartogra 2026-08-01, after
+                    # WO-EXPLORE-MIDWARP-WAIT unblocked sector_display).
+                    retry_unstable_idle=True,
                 )
                 sends += 1
                 turns -= 1
-                # Mark intentional hop + its target so a following
-                # warp_confirm knows what to (maybe) deny-list.
-                pending_intentional_hop = bool(confirmed)
-                pending_hop_target = int(target) if confirmed else None
+                # Mark intentional hop after every warp send. Arrival is
+                # proven by the next main_command (or warp_confirm) tick —
+                # not by a perfect mid-animation idle. A settle timeout /
+                # unstable-idle here used to halt confirm_failed while the
+                # ship was still warping (live 2026-08-01).
+                pending_intentional_hop = True
+                pending_hop_target = int(target)
                 self._publish_progress(
                     report,
                     distinct_sectors=len(distinct),
@@ -1347,11 +1370,10 @@ class ExploreRunner:
                     turns_remaining=turns,
                     stop_requested=stop.is_set(),
                 )
-                if not confirmed:
-                    pending_intentional_hop = False
-                    outcome = OUTCOME_HALTED
-                    reason = HALT_CONFIRM_FAILED
-                    break
+                # Deliberately do not halt on ``not confirmed``: the midwarp
+                # ``sector_display`` continue (above) + warp_confirm branch
+                # finish the hop. Hard aborts still trip ``should_abort`` /
+                # settle-failed at the top of the next tick.
         except Exception as exc:
             outcome = OUTCOME_CRASHED
             reason = REASON_DRIVER_ERROR
