@@ -191,10 +191,12 @@ class Session:
         # reached ZERO must not look alike to the HUD.
         self.last_turns = None
         self.last_turns_ts = None
-        # Historical HUD semantics: CARGO is empty holds, not total holds or
-        # commodity quantity. Populated from strict ship-info / port lines.
+        # Historical HUD semantics: CARGO empty holds (+ sticky total from
+        # ship-info when known). Port lines update empty only; never invent
+        # total from commodity / market rows.
         self.last_cargo = None
         self.last_cargo_ts = None
+        self.last_cargo_total = None
         # WO-AUTOLOOP-HAZARD-HALT: fighters aboard for the zero-fighter rail.
         # Same ownership as credits/turns -- observe_fighters / fighters_snapshot
         # only; never cleared by a screen that states no count (zero and
@@ -634,25 +636,30 @@ class Session:
             )
 
     def observe_cargo(self, rendered_text):
-        """Capture empty cargo holds from strict settled-screen shapes."""
+        """Capture empty cargo holds (and ship-info total when stated)."""
         read = read_empty_cargo_holds(rendered_text)
         if read.outcome != OUTCOME_READ:
             return
         with self.lock:
             self.last_cargo = read.empty_holds
             self.last_cargo_ts = time.monotonic()
+            # Sticky total: only refresh from ship-info; port empty-only keeps prior.
+            if read.total_holds is not None:
+                self.last_cargo_total = read.total_holds
 
     def cargo_snapshot(self):
-        """Last known empty cargo holds and daemon-computed age."""
+        """Last known empty cargo holds, optional sticky total, and age."""
         with self.lock:
             cargo = self.last_cargo
             ts = self.last_cargo_ts
+            total = self.last_cargo_total
             if cargo is None or ts is None:
                 return cargo_never_observed()
             return CargoSnapshot(
                 outcome=OUTCOME_READ,
                 cargo=cargo,
                 age_s=max(0.0, time.monotonic() - ts),
+                total_holds=total,
             )
 
     def observe_fighters(self, rendered_text):

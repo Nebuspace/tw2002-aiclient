@@ -38,18 +38,24 @@ def _sector_from_status(status: object) -> object | None:
 
 
 def _cargo_empty_holds(status: object) -> int | None:
-    """HUD cargo is empty-holds when a real int (see hud_tracking)."""
+    """HUD cargo empty-holds: int wire or ``N empty`` / ``N empty / T`` display."""
     if not isinstance(status, dict):
         return None
     try:
         hud = status.get("hud")
         cell = hud.get("cargo") if isinstance(hud, dict) else None
         value = cell.get("value") if isinstance(cell, dict) else cell
-        if isinstance(value, bool) or not isinstance(value, int):
+        if isinstance(value, bool):
             return None
-        if value < 0:
+        if isinstance(value, int):
+            return value if value >= 0 else None
+        if isinstance(value, str):
+            # Protocol paints ``format_cargo_hud_value`` text for the gutter.
+            head = value.strip().split(" ", 1)[0].replace(",", "")
+            if head.isdigit():
+                return int(head)
             return None
-        return value
+        return None
     except Exception:  # noqa: BLE001
         return None
 

@@ -421,7 +421,7 @@ def test_ship_info_live_capture_fills_status_and_hud_through_real_session(
     assert math.isfinite(resp["hud"]["turns"]["age_s"])
     assert resp["hud"]["sector"]["value"] == 15450
     assert resp["hud"]["credits"]["value"] == 100000
-    assert resp["hud"]["cargo"]["value"] == 60
+    assert resp["hud"]["cargo"]["value"] == "60 empty / 60"
     assert resp["hud"]["profit"]["value"] == 0
 
 

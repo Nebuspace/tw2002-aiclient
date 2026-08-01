@@ -188,6 +188,15 @@ def test_sector_and_cargo_render_without_thousands_separator():
     assert lines[7] == (_iv("6789 ✦ 1s ago"), False)
 
 
+def test_cargo_empty_total_string_renders_verbatim():
+    """Protocol paints empty/total text; composer must not reformat it."""
+    status = {
+        "hud": {"cargo": {"value": "50 empty / 60", "age_s": 1.0}},
+    }
+    lines = compose_hud_cells(status, width=40)
+    assert lines[7] == (_iv("50 empty / 60 ✦ 1s ago"), False)
+
+
 def test_credits_and_turns_render_with_thousands_separator():
     status = {"hud": {"credits": {"value": 1234567, "age_s": 1.0}, "turns": {"value": 20000, "age_s": 1.0}}}
     lines = compose_hud_cells(status, width=40)

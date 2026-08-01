@@ -47,6 +47,7 @@ from .control_lock import (
     ControlModeConflict,
 )
 from .hud_seed import seed_hud_after_join
+from .hud_tracking import format_cargo_hud_value
 from .settle import MATCH_SCOPE_PROMPT_LINE
 from .state_parser import (
     OUTCOME_READ,
@@ -603,11 +604,21 @@ def _hud_payload(session):
             return _hud_cell(None, None)
         return _hud_cell(getattr(snapshot, attr), snapshot.age_s)
 
+    def cargo_cell(snapshot):
+        if snapshot is None or snapshot.outcome != OUTCOME_READ:
+            return _hud_cell(None, None)
+        # Display honesty: empty/total (or "N empty" when total unknown).
+        # Empty int remains on CargoSnapshot.cargo for seed / non-HUD readers.
+        return _hud_cell(
+            format_cargo_hud_value(snapshot.cargo, snapshot.total_holds),
+            snapshot.age_s,
+        )
+
     return {
         "credits": cell(credits, "balance"),
         "sector": cell(sector, "sector"),
         "turns": cell(turns, "turns"),
-        "cargo": cell(cargo, "cargo"),
+        "cargo": cargo_cell(cargo),
         "profit": cell(profit, "profit"),
     }
 

@@ -1,10 +1,10 @@
 """Pure tracked-value types and strict cargo extraction for the HUD.
 
-Cargo means *empty cargo holds*, matching the historical
-``cargo_holds_empty`` HUD field. Two positive screen shapes are accepted:
-the captured ``I`` ship-info line and the captured port-commerce sentence.
-Everything else is a non-write; this module never guesses from total holds
-or commodity rows.
+Cargo sticky stores *empty cargo holds* (and, when ship-info states it,
+*total holds*). Two positive screen shapes are accepted: the captured ``I``
+ship-info line (``Total Holds : N - Empty=M``) and the captured port-commerce
+sentence (empty only). Everything else is a non-write; this module never
+guesses from commodity / market rows.
 """
 
 from __future__ import annotations
@@ -38,6 +38,7 @@ _PORT_EMPTY_RE = re.compile(
 class CargoRead:
     outcome: str
     empty_holds: Optional[int] = None
+    total_holds: Optional[int] = None
 
     def __post_init__(self) -> None:
         if self.outcome not in OUTCOMES:
@@ -49,29 +50,49 @@ class CargoRead:
             isinstance(self.empty_holds, bool) or not isinstance(self.empty_holds, int)
         ):
             raise ValueError("empty_holds must be an int")
+        if self.total_holds is not None:
+            if not read:
+                raise ValueError("total_holds only accompanies the read outcome")
+            if isinstance(self.total_holds, bool) or not isinstance(
+                self.total_holds, int
+            ):
+                raise ValueError("total_holds must be an int")
+            if self.empty_holds is not None and self.empty_holds > self.total_holds:
+                raise ValueError("empty_holds cannot exceed total_holds")
 
 
 def read_empty_cargo_holds(rendered_text: object) -> CargoRead:
-    """Read empty holds from a settled screen; last positive match wins."""
+    """Read empty holds (and total when ship-info) from a settled screen.
+
+    Last positive match wins for empty. Total is present only when that
+    winning match was a ship-info line; port-commerce leaves total unset
+    (session sticky may retain a prior ship-info total).
+    """
     if not isinstance(rendered_text, str):
         return CargoRead(outcome=OUTCOME_UNREADABLE)
 
-    found: list[tuple[int, int]] = []
+    found: list[tuple[int, int, Optional[int]]] = []
     for match in _SHIP_INFO_EMPTY_RE.finditer(rendered_text):
         total = int(match.group(1).replace(",", ""))
         empty = int(match.group(2).replace(",", ""))
         # Impossible ship-info arithmetic is a damaged/partial claim, not a
         # value. Keep scanning in case a later complete line exists.
         if empty <= total:
-            found.append((match.end(), empty))
-    found.extend(
-        (match.end(), int(match.group(1).replace(",", "")))
-        for match in _PORT_EMPTY_RE.finditer(rendered_text)
-    )
+            found.append((match.end(), empty, total))
+    for match in _PORT_EMPTY_RE.finditer(rendered_text):
+        found.append((match.end(), int(match.group(1).replace(",", "")), None))
     if not found:
         return CargoRead(outcome=OUTCOME_ABSENT)
     found.sort(key=lambda item: item[0])
-    return CargoRead(outcome=OUTCOME_READ, empty_holds=found[-1][1])
+    _end, empty, total = found[-1]
+    return CargoRead(outcome=OUTCOME_READ, empty_holds=empty, total_holds=total)
+
+
+def format_cargo_hud_value(empty: int, total: Optional[int]) -> str:
+    """Operator-honest CARGO cell text: empty/total when known, else empty cue."""
+    if total is None:
+        return f"{empty} empty"
+    return f"{empty} empty / {total}"
 
 
 def _validate_snapshot(outcome: str, value: Optional[int], age_s: Optional[float]) -> None:
@@ -94,9 +115,19 @@ class CargoSnapshot:
     outcome: str
     cargo: Optional[int] = None
     age_s: Optional[float] = None
+    total_holds: Optional[int] = None
 
     def __post_init__(self) -> None:
         _validate_snapshot(self.outcome, self.cargo, self.age_s)
+        if self.total_holds is not None:
+            if self.outcome != OUTCOME_READ:
+                raise ValueError("total_holds only accompanies the read outcome")
+            if isinstance(self.total_holds, bool) or not isinstance(
+                self.total_holds, int
+            ):
+                raise ValueError("total_holds must be an int")
+            if self.cargo is not None and self.cargo > self.total_holds:
+                raise ValueError("cargo empty cannot exceed total_holds")
 
 
 @dataclass(frozen=True)
