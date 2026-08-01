@@ -28,7 +28,7 @@ from ..loops.player import (
     HALT_UNRECOGNIZED_SCREEN,
     OUTCOME_HALTED,
 )
-from .classify import NEVER_AUTO_ACTION_CLASSES, classify_screen
+from .classify import NEVER_AUTO_ACTION_CLASSES, classify_screen, is_avoid_danger_warp
 from .control_lock import ControlLock, ControlModeConflict
 from . import fighter_toll_policy
 from .state_parser import (
@@ -1011,6 +1011,17 @@ class ExploreRunner:
         last_fight_text: Optional[str] = None
         # WO-WARP-CONFIRM-Y: set True only after an intentional sector hop send.
         pending_intentional_hop = False
+        # The sector that hop targeted -- only meaningful while the flag
+        # above is True; consumed (and cleared) the moment the confirm
+        # resolves either way.
+        pending_hop_target: Optional[int] = None
+        # REVISE (hub reject of always-Y, live #308 pre-empt): sector ids
+        # declined off an avoid-list DANGER prompt THIS run. Never persisted
+        # to world-model -- purely a runtime "don't immediately re-pick"
+        # note for `warp_target_for_intent`'s `deny` kwarg. Grows for the
+        # run's lifetime; no expiry, since a sector avoided once stays
+        # avoided for the rest of this explore.
+        denied_sectors: Set[int] = set()
         turns = report.turns_remaining
         try:
             while not stop.is_set():
@@ -1035,15 +1046,22 @@ class ExploreRunner:
                 full_text = self._session.render_text(rows)
                 prompt_line = rows[-1].strip() if rows else ""
                 halt, klass = _gate_screen(full_text, prompt_line)
-                # WO-WARP-CONFIRM-Y: nested like fight-toll — only converts a
-                # screen the loop was already halting on. Intentional hop
-                # (we just sent a sector target) → answer Y. No pending hop →
-                # fall through to ordinary halt (no blind Y).
+                # WO-WARP-CONFIRM-Y (REVISE, hub reject of always-Y): nested
+                # like fight-toll — only converts a screen the loop was
+                # already halting on, and only for a hop THIS run just sent
+                # (no pending hop → fall through to ordinary halt, no blind
+                # answer either way). Avoid-list DANGER body → N (decline;
+                # deny-list the target so the next tick doesn't re-pick it).
+                # Ordinary confirm on an intentional hop → Y, as before.
                 if halt is not None and klass == "warp_confirm" and pending_intentional_hop:
                     pending_intentional_hop = False
+                    declined_target = pending_hop_target
+                    pending_hop_target = None
+                    is_avoid = is_avoid_danger_warp(full_text)
+                    answer = "N" if is_avoid else "Y"
                     _reason, _elapsed, confirmed = _settle.send_and_confirm(
                         self._session,
-                        "Y",
+                        answer,
                         confirm_prompt=None,
                         enter=False,
                         timeout_s=self._timeout_s,
@@ -1061,11 +1079,14 @@ class ExploreRunner:
                         outcome = OUTCOME_HALTED
                         reason = HALT_CONFIRM_FAILED
                         break
+                    if is_avoid and declined_target is not None:
+                        denied_sectors.add(declined_target)
                     continue
                 if halt is not None and klass == "warp_confirm":
                     # Avoid-list confirm without an App-initiated hop: do not
                     # auto-Y (Manual / unexpected). Ordinary halt stands.
                     pending_intentional_hop = False
+                    pending_hop_target = None
                 # WO-FIGHTER-TOLL-POLICY-WIRE. Deliberately nested INSIDE the
                 # halt branch. The toll wire can therefore only ever convert a
                 # screen the loop was already going to stop on into a decided
@@ -1264,6 +1285,7 @@ class ExploreRunner:
                     current_sector=current,
                     turn_budget=turns,
                     state_dir=self._state_dir,
+                    deny=frozenset(denied_sectors),
                 )
                 if tick.goal_reached:
                     # find_stardock ARRIVED. A completed goal is not an
@@ -1314,8 +1336,10 @@ class ExploreRunner:
                 )
                 sends += 1
                 turns -= 1
-                # Mark intentional hop so a following warp_confirm may answer Y.
+                # Mark intentional hop + its target so a following
+                # warp_confirm knows what to (maybe) deny-list.
                 pending_intentional_hop = bool(confirmed)
+                pending_hop_target = int(target) if confirmed else None
                 self._publish_progress(
                     report,
                     distinct_sectors=len(distinct),

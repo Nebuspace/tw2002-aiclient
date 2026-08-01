@@ -1,0 +1,4 @@
+Sector  : 3034 in uncharted space.
+Warps to Sector(s) :  (250) - (119) - (4571)
+Warping to Sector 3034
+Do you really want to warp there? (Y/N)

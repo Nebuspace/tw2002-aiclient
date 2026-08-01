@@ -63,12 +63,19 @@ def frontier_edges(
     graph: Mapping[int, Sequence[int]],
     *,
     start: int,
+    deny: frozenset[int] = frozenset(),
 ) -> list[FrontierEdge]:
     """BFS from `start` over KNOWN warps; collect edges to UNKNOWN ids.
 
     An unknown target is any warp destination not present as a key in
     `graph` (never recorded). Depth is hop-count from start along the
     known subgraph.
+
+    `deny` (WO-WARP-CONFIRM-Y REVISE): frontier `to` ids to exclude from
+    this tick's candidates -- the runner's own record of sectors just
+    declined off an avoid-list DANGER prompt, so the very next tick does
+    not immediately re-pick the same hop. Never persisted (world-model
+    stays untouched); the caller owns the set's lifetime.
     """
     if start not in graph:
         return []
@@ -81,6 +88,8 @@ def frontier_edges(
         node, depth = q.popleft()
         for nxt in graph.get(node, ()):
             if nxt not in known:
+                if nxt in deny:
+                    continue
                 key = (node, nxt)
                 if key not in seen_edge:
                     seen_edge.add(key)
@@ -146,11 +155,15 @@ def plan_map_fill(
     epsilon: float = 0.1,
     state_dir=None,
     rng: Optional[random.Random] = None,
+    deny: frozenset[int] = frozenset(),
 ) -> MapFillPlan:
-    """One Map-fill tick: propose the next unmapped hop under budget."""
+    """One Map-fill tick: propose the next unmapped hop under budget.
+
+    `deny` -- see `frontier_edges`'s own docstring (WO-WARP-CONFIRM-Y).
+    """
     budget = max(0, int(turn_budget))
     graph = known_graph(world_id, state_dir=state_dir)
-    frontier = frontier_edges(graph, start=current_sector)
+    frontier = frontier_edges(graph, start=current_sector, deny=deny)
     unmapped = len({e.to for e in frontier})
     if budget <= 0:
         return MapFillPlan(
@@ -362,6 +375,7 @@ def plan_find_stardock(
     landmark: str = "StarDock",
     state_dir=None,
     rng: Optional[random.Random] = None,
+    deny: frozenset[int] = frozenset(),
 ) -> StarDockPlan:
     """Find-StarDock tick: pathfind if landmark known, else Map-fill hunt.
 
@@ -371,6 +385,11 @@ def plan_find_stardock(
     WO-EXPLORE-NO-CANDIDATES: when the frontier is exhausted (and we are
     not already mid-route to a dock), attach densest / StarDock recovery
     or leave ``mode="exhausted"`` for an explicit autopilot halt.
+
+    `deny` (WO-WARP-CONFIRM-Y) only applies to the Map-fill HUNT branch
+    below (fresh frontier picks) -- the known-route path to an already
+    landmarked StarDock is untouched, same reasoning as
+    `map_fill_warp_target`'s own docstring.
     """
     budget = max(0, int(turn_budget))
     docks = tuple(find_landmark_sectors(world_id, landmark, state_dir=state_dir))
@@ -437,6 +456,7 @@ def plan_find_stardock(
         epsilon=epsilon,
         state_dir=state_dir,
         rng=rng,
+        deny=deny,
     )
     # HIGH fix (see `_adjacent_hop_toward`'s own docstring): never hand
     # back the frontier's own (possibly non-adjacent) `to` sector as
@@ -900,6 +920,7 @@ def warp_target_for_intent(
     epsilon: float = 0.1,
     state_dir=None,
     rng: Optional[random.Random] = None,
+    deny: frozenset[int] = frozenset(),
 ) -> IntentTick:
     """One tick for *intent* — the single seam the explore runner drives.
 
@@ -912,6 +933,10 @@ def warp_target_for_intent(
     the daemon refuses unknown intents up front, so reaching here with one
     means an internal disagreement, and quietly exploring in some other
     direction is worse than stopping.
+
+    `deny` (WO-WARP-CONFIRM-Y): sector ids the runner just declined off an
+    avoid-list DANGER prompt this run -- excluded from this tick's fresh-
+    frontier candidates so the very next tick does not re-pick the same hop.
     """
     if intent == INTENT_MAP_FILL:
         target, reason = map_fill_warp_target(
@@ -921,6 +946,7 @@ def warp_target_for_intent(
             epsilon=epsilon,
             state_dir=state_dir,
             rng=rng,
+            deny=deny,
         )
         return IntentTick(next_sector=target, reason=reason)
     if intent != INTENT_FIND_STARDOCK:
@@ -933,6 +959,7 @@ def warp_target_for_intent(
         epsilon=epsilon,
         state_dir=state_dir,
         rng=rng,
+        deny=deny,
     )
     if plan.mode == "arrived":
         return IntentTick(next_sector=None, goal_reached=True)
@@ -959,11 +986,17 @@ def map_fill_warp_target(
     epsilon: float = 0.1,
     state_dir=None,
     rng: Optional[random.Random] = None,
+    deny: frozenset[int] = frozenset(),
 ) -> tuple[Optional[int], str]:
     """Map-fill tick → one adjacent warp target, or ``(None, halt_reason)``.
 
     Uses ``plan_map_fill`` then ``plan_exhausted_recovery`` when the frontier
     is empty — same AP-08 discipline as archive ``autopilot`` explore ticks.
+
+    `deny` -- see `frontier_edges`'s own docstring (WO-WARP-CONFIRM-Y).
+    Recovery is NOT deny-filtered: recovery only ever targets already-KNOWN
+    graph sectors (StarDock landmark / densest reachable), never the fresh
+    frontier `to` a decline was just issued against.
     """
     plan = plan_map_fill(
         world_id,
@@ -972,6 +1005,7 @@ def map_fill_warp_target(
         epsilon=epsilon,
         state_dir=state_dir,
         rng=rng,
+        deny=deny,
     )
     graph = known_graph(world_id, state_dir=state_dir)
     if plan.next_hop is not None and plan.mode != "exhausted":

@@ -126,6 +126,30 @@ def test_frontier_edges_unit():
     assert edges[0].frm == 2 and edges[0].to == 9
 
 
+def test_frontier_edges_deny_excludes_target():
+    """WO-WARP-CONFIRM-Y (REVISE): a `deny`-listed frontier target is
+    dropped from the candidate set entirely, not merely deprioritized."""
+    graph = {1: (2, 3)}
+    edges = frontier_edges(graph, start=1, deny=frozenset({2}))
+    assert [e.to for e in edges] == [3]
+
+
+def test_map_fill_warp_target_deny_picks_alternate(tmp_path: Path):
+    """WO-WARP-CONFIRM-Y (REVISE): with the nearer frontier target denied
+    (just declined off an avoid-list DANGER prompt), map-fill picks the
+    remaining candidate instead of re-offering the denied one."""
+    from tw2002_aiclient.explore import map_fill_warp_target
+
+    wid = "test+deny"
+    _seed(wid, tmp_path, [{"sector_id": 1, "warps": [2, 3], "landmarks": []}])
+    target, reason = map_fill_warp_target(
+        wid, current_sector=1, turn_budget=10, epsilon=0.0, state_dir=tmp_path,
+        rng=random.Random(0), deny=frozenset({2}),
+    )
+    assert target == 3
+    assert reason == ""
+
+
 def test_find_stardock_routes_when_landmark_known(tmp_path: Path):
     wid = "test+sdroute"
     _seed(
