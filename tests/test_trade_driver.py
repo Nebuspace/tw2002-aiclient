@@ -28,6 +28,7 @@ from tw2002_aiclient.trade_driver import (
     PaladinViolation,
     TradeDriverConfig,
     _ALLOWED_LETTER_SENDS,
+    _QTY_PROMPT_RE,
     _StepCtx,
     _send_letter,
     run_chain,
@@ -759,6 +760,24 @@ def test_classic_port_menu_still_sends_t_after_p():
     ctx = _StepCtx(session, TradeDriverConfig(), lambda: False, lambda: True)
     _dock(ctx, 0)
     assert session.sent == [("P", False, False), ("T", False, False)]
+
+
+@pytest.mark.parametrize(
+    "prompt,commodity,qty",
+    [
+        ("How many holds of Equipment do you want to buy [75]?", "Equipment", "75"),
+        ("How many holds of Fuel Ore do you want to sell [64]?", "Fuel Ore", "64"),
+        ("How many holds of Organics do you want to buy [11]?", "Organics", "11"),
+        ("How many holds of Equipment [200] ? ", "Equipment", "200"),
+        ("How many holds of Fuel Ore [500] ? ", "Fuel Ore", "500"),
+    ],
+)
+def test_qty_prompt_parses_live_buy_sell_phrasing(prompt, commodity, qty):
+    """WO-TRADE-QTY-PHRASE: live TWGS inserts 'do you want to buy/sell'."""
+    m = _QTY_PROMPT_RE.search(prompt)
+    assert m is not None, prompt
+    assert m.group(1) == commodity
+    assert m.group(2) == qty
 
 
 def test_dock_letters_use_enter_false_hotkey(tmp_path):
