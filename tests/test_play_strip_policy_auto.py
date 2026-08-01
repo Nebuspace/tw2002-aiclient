@@ -84,8 +84,10 @@ def test_stop_live_runners_never_raises_on_adapter_exception(monkeypatch):
 class _FakeChainScalars:
     def __init__(self, chain=object()):
         self._chain = chain
+        self.last_bubble_sector = None
 
-    def bubble_subject(self):
+    def bubble_subject(self, current_sector=None):
+        self.last_bubble_sector = current_sector
         return self._chain, "caption"
 
 
@@ -416,6 +418,93 @@ def test_backoff_refuse_from_start_arms_cooldown(monkeypatch):
     app_mod._autonomy_auto_fire(play, profile=_PROFILE, run_dir=None)
     assert calls == [1]  # no second fire
     assert play.status_line == first
+
+
+def test_auto_fire_skips_wrong_anchor_chain(monkeypatch):
+    """WO-TRADE-AUTOFIRE-ANCHOR: ship at B, plan starts at A → no start."""
+    monkeypatch.setattr(_autonomy_policy, "choose_offer", lambda *_a, **_k: _offer("run_chain"))
+    monkeypatch.setattr(_trade_chain_plan, "plan_from_chain", lambda *_a, **_k: _TRADE_PLAN)
+    monkeypatch.setattr(
+        app_mod, "_prefer_explore_while_trade_blocked", lambda *a, **k: None
+    )
+    calls = []
+    monkeypatch.setattr(
+        adapters, "trade_chain_start", lambda *a, **k: calls.append(1) or _TradeResult()
+    )
+    monkeypatch.setattr(app_mod.time, "monotonic", lambda: 3000.0)
+    # _TRADE_PLAN.start_anchor == 1; ship elsewhere
+    status = {"hud": {"sector": {"value": 3886}}}
+    play = _FakePlay(status=status, port_trade_on=True)
+    assert app_mod._autonomy_auto_fire(play, profile=_PROFILE, run_dir=None) == (False, False)
+    assert calls == []
+    assert play.chain_scalars.last_bubble_sector == 3886
+    assert "start_anchor_mismatch:3886:1" in play.status_line
+    assert play._trade_af_cooldown_until == 3000.0 + app_mod._TRADE_AUTO_FIRE_COOLDOWN_S
+
+
+def test_auto_fire_starts_when_ship_on_anchor(monkeypatch):
+    """Prefer-current still fires when ship sector == plan.start_anchor."""
+    monkeypatch.setattr(_autonomy_policy, "choose_offer", lambda *_a, **_k: _offer("run_chain"))
+    monkeypatch.setattr(_trade_chain_plan, "plan_from_chain", lambda *_a, **_k: _TRADE_PLAN)
+    monkeypatch.setattr(
+        app_mod, "_trade_chain_discovery_preflight", lambda *_a, **_k: _CompleteDiscovery()
+    )
+    calls = []
+    monkeypatch.setattr(
+        adapters,
+        "trade_chain_start",
+        lambda *a, **k: calls.append(1)
+        or _TradeResult(ok=True, raw={"running": True, "run": {"route": "1>2>1"}}),
+    )
+    monkeypatch.setattr(app_mod.time, "monotonic", lambda: 4000.0)
+    status = {"hud": {"sector": {"value": 1}}}  # matches _TRADE_PLAN.start_anchor
+    play = _FakePlay(status=status, port_trade_on=True)
+    trade_poll, hold_poll = app_mod._autonomy_auto_fire(play, profile=_PROFILE, run_dir="/rd")
+    assert calls == [1]
+    assert trade_poll is True
+    assert hold_poll is False
+    assert play.chain_scalars.last_bubble_sector == 1
+
+
+def test_start_anchor_mismatch_refuse_from_start_backs_off(monkeypatch):
+    monkeypatch.setattr(_autonomy_policy, "choose_offer", lambda *_a, **_k: _offer("run_chain"))
+    monkeypatch.setattr(_trade_chain_plan, "plan_from_chain", lambda *_a, **_k: _TRADE_PLAN)
+    monkeypatch.setattr(
+        app_mod, "_trade_chain_discovery_preflight", lambda *_a, **_k: _CompleteDiscovery()
+    )
+    monkeypatch.setattr(
+        app_mod, "_prefer_explore_while_trade_blocked", lambda *a, **k: None
+    )
+    calls = []
+    monkeypatch.setattr(
+        adapters,
+        "trade_chain_start",
+        lambda *a, **k: calls.append(1)
+        or _TradeResult(ok=False, reason="start_anchor_mismatch:2260:8"),
+    )
+    clock = {"t": 6000.0}
+    monkeypatch.setattr(app_mod.time, "monotonic", lambda: clock["t"])
+    # Ship on plan start so client gate does not fire first — exercise daemon refuse path.
+    play = _FakePlay(status={"hud": {"sector": {"value": 1}}}, port_trade_on=True)
+    app_mod._autonomy_auto_fire(play, profile=_PROFILE, run_dir=None)
+    assert calls == [1]
+    assert "start_anchor_mismatch:2260:8" in play.status_line
+    first = play.status_line
+    clock["t"] = 6010.0
+    app_mod._autonomy_auto_fire(play, profile=_PROFILE, run_dir=None)
+    assert calls == [1]
+    assert play.status_line == first
+
+
+def test_trade_stop_start_anchor_unknown_arms_cooldown():
+    play = _FakePlay(status={"hud": {"sector": {"value": 5}}})
+    raw = {
+        "running": False,
+        "run": {"route": "8>9>8", "outcome": "halted", "reason": "start_anchor_unknown"},
+    }
+    assert app_mod._apply_trade_chain_band(play, raw) is False
+    assert "start_anchor_unknown" in play.status_line
+    assert float(play._trade_af_cooldown_until) > 0.0
 
 
 def test_map_growth_clears_trade_auto_fire_cooldown(monkeypatch):
