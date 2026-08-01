@@ -45,17 +45,50 @@ def test_start_refuses_stale_identity_before_lock_or_thread(monkeypatch):
     assert lock.is_auto_loop_held() is False
 
 
-def test_start_refuses_partial_discovery_even_when_identity_is_present(monkeypatch):
+def test_start_refuses_truncated_empty_discovery(monkeypatch):
+    """Soft partial gate: truncated with zero cycles still blocks start."""
     chain = _chain()
     monkeypatch.setattr(
         trade_chain.chain_search,
         "recompute",
-        lambda *a, **k: _discovered(chain, truncated=True),
+        lambda *a, **k: _discovered(truncated=True),
     )
     runner = trade_chain.TradeChainRunner(_Session(), ControlLock())
 
     with pytest.raises(trade_chain.TradeChainRefused, match="chain_discovery_partial"):
         runner.start("world-a", plan_from_chain("world-a", chain).fingerprint)
+
+
+def test_start_allows_truncated_discovery_when_exact_identity_is_present(monkeypatch):
+    """RESOLVED-EXPLORE-VS-TRADE-LOOP-MODES: exact fingerprint in a partial
+    list may arm — absence of a *better* cycle is not established, but the
+    selected cycle is."""
+    chain = _chain()
+    plan = plan_from_chain("world-a", chain)
+    monkeypatch.setattr(
+        trade_chain.chain_search,
+        "recompute",
+        lambda *a, **k: _discovered(chain, truncated=True),
+    )
+    ran = {"n": 0}
+
+    def _run(_session, resolved, **kwargs):
+        ran["n"] += 1
+        assert resolved is chain
+        return ChainRunResult(
+            outcome=trade_chain.OUTCOME_COMPLETED,
+            reason=None,
+            hops_completed=2,
+            sends_issued=4,
+            credits_delta=10,
+        )
+
+    monkeypatch.setattr(trade_chain, "run_chain", _run)
+    runner = trade_chain.TradeChainRunner(_Session(), ControlLock())
+    snap = runner.start("world-a", plan.fingerprint)
+    assert snap.running is True
+    runner.stop()
+    assert ran["n"] == 1
 
 
 def test_exact_start_runs_once_and_stop_reaches_abort_predicate(monkeypatch):

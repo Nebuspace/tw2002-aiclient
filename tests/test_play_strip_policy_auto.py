@@ -561,11 +561,17 @@ def test_map_growth_clears_trade_auto_fire_cooldown(monkeypatch):
     assert calls == [1, 1]
 
 
-def test_discovery_blocks_start_matches_truncated_gate():
+def test_discovery_blocks_start_matches_soft_partial_gate():
     from tw2002_aiclient.session import trade_chain as tc
 
-    assert tc.discovery_blocks_start(_PartialDiscovery()) is True
+    assert tc.discovery_blocks_start(_PartialDiscovery()) is True  # truncated + empty
     assert tc.discovery_blocks_start(_CompleteDiscovery()) is False
+
+    class _TruncatedWithChains:
+        truncated = True
+        chains = (object(),)
+
+    assert tc.discovery_blocks_start(_TruncatedWithChains()) is False
 
 
 # ---------------------------------------------------------------------------
