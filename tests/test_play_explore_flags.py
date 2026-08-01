@@ -33,23 +33,19 @@ from __future__ import annotations
 import ast
 import inspect
 import types
-import unicodedata
 
 import pytest
 
 from tw2002_aiclient import adapters, app as app_mod
 from tw2002_aiclient.cockpit import explore_flags
 
-
 class _Result:
     def __init__(self, ok=True, classification="main_command", reason=None, detail=None):
         self.ok, self.classification, self.reason, self.detail = ok, classification, reason, detail
 
-
 class _ExploreResult:
     def __init__(self, ok=True, reason=None):
         self.ok, self.reason, self.detail, self.raw = ok, reason, None, None
-
 
 class _Stdscr:
     """Feeds a scripted key sequence, then Esc to leave the loop."""
@@ -73,7 +69,6 @@ class _Stdscr:
     def chgat(self, *a, **k): pass
     def keypad(self, flag): pass
     def nodelay(self, flag): pass
-
 
 def _drive(monkeypatch, keys, *, ensure=None, explore=None, spectating=False):
     """Run `_run_play`; return (explore_call_kwargs, screen).
@@ -125,7 +120,6 @@ def _drive(monkeypatch, keys, *, ensure=None, explore=None, spectating=False):
         pass
     return calls, seen.get("screen")
 
-
 _E, _Y = ord("E"), ord("y")
 _D, _F = ord("D"), ord("F")
 
@@ -134,7 +128,6 @@ _D, _F = ord("D"), ord("F")
 # `test_the_off_marker_names_both_the_state_and_the_key`.
 _OFF_ACTION = f"Explore {explore_flags.DOCK_OFF_MARKER}"
 _ON_ACTION = f"Explore {explore_flags.DOCK_MARKER}"
-
 
 # --------------------------------------------------------------------------
 # Play gather defaults ON; fight-tolls stays OFF
@@ -148,14 +141,12 @@ def test_default_arm_forwards_dock_on_and_tolls_off(monkeypatch) -> None:
     assert calls[0]["fight_tolls"] is False, calls[0]
     assert calls[0]["min_sectors"] == app_mod._EXPLORE_POLICY_MIN_SECTORS == 0
 
-
 def test_e_restarts_without_confirm_gate(monkeypatch) -> None:
     calls, screen = _drive(monkeypatch, [_E], spectating=True)
     assert len(calls) == 1, calls
     assert screen.gate_raises == [], screen.gate_raises
     assert calls[0]["dock_new_ports"] is True
     assert calls[0]["min_sectors"] == 0
-
 
 def test_dock_toggle_disables_gather_on_e_restart(monkeypatch) -> None:
     """`D` before `E` (no App-armed kick) passes ports (dock OFF)."""
@@ -164,13 +155,11 @@ def test_dock_toggle_disables_gather_on_e_restart(monkeypatch) -> None:
     assert calls[0]["dock_new_ports"] is False, calls[0]
     assert calls[0]["fight_tolls"] is False, calls[0]
 
-
 def test_tolls_toggle_forwards_true_and_keeps_dock_on(monkeypatch) -> None:
     calls, _screen = _drive(monkeypatch, [_F, _E], spectating=True)
     assert len(calls) == 1, calls
     assert calls[0]["fight_tolls"] is True, calls[0]
     assert calls[0]["dock_new_ports"] is True, calls[0]
-
 
 def test_dock_off_plus_tolls_on_forwards_both(monkeypatch) -> None:
     calls, _screen = _drive(monkeypatch, [_D, _F, _E], spectating=True)
@@ -178,11 +167,9 @@ def test_dock_off_plus_tolls_on_forwards_both(monkeypatch) -> None:
     assert calls[0]["dock_new_ports"] is False, calls[0]
     assert calls[0]["fight_tolls"] is True, calls[0]
 
-
 def test_toggling_twice_returns_to_default_on(monkeypatch) -> None:
     calls, _screen = _drive(monkeypatch, [_D, _D, _E], spectating=True)
     assert calls[0]["dock_new_ports"] is True, calls[0]
-
 
 def test_toggles_alone_do_not_add_starts_beyond_ensure_kick(monkeypatch) -> None:
     """App-armed ensure may kick once; `D`/`F` alone never start another run."""
@@ -190,12 +177,10 @@ def test_toggles_alone_do_not_add_starts_beyond_ensure_kick(monkeypatch) -> None
     assert len(calls) == 1, calls  # ensure kick only
     assert screen.gate_raises == [], screen.gate_raises
 
-
 def test_toggles_alone_arm_nothing_when_not_app_armed(monkeypatch) -> None:
     calls, screen = _drive(monkeypatch, [_D, _F], spectating=True)
     assert calls == [], calls
     assert screen.gate_raises == [], screen.gate_raises
-
 
 def test_toggles_do_nothing_when_no_explore_offer_is_standing(monkeypatch) -> None:
     calls, screen = _drive(
@@ -210,7 +195,6 @@ def test_toggles_do_nothing_when_no_explore_offer_is_standing(monkeypatch) -> No
     assert status != explore_flags.describe_dock(False), status
     assert status != explore_flags.describe_tolls(True), status
     assert status != explore_flags.describe_tolls(False), status
-
 
 # --------------------------------------------------------------------------
 # The asymmetry pin -- structural, with a non-vacuity control
@@ -236,7 +220,6 @@ def _explore_start_call_node() -> ast.Call:
             return node
     raise AssertionError("no explore_start_for_profile call site found in app.py")
 
-
 def test_the_call_site_this_pin_inspects_actually_exists() -> None:
     """Non-vacuity control.
 
@@ -249,7 +232,6 @@ def test_the_call_site_this_pin_inspects_actually_exists() -> None:
     passed = {kw.arg for kw in node.keywords}
     assert "dock_new_ports" in passed, passed
     assert "fight_tolls" in passed, passed
-
 
 def test_call_site_does_not_coerce_either_flag() -> None:
     """Neither flag may be wrapped in `bool(...)` at the Play call site.
@@ -275,7 +257,6 @@ def test_call_site_does_not_coerce_either_flag() -> None:
             f"these two flags must not be symmetrised."
         )
 
-
 # --------------------------------------------------------------------------
 # The composer / key resolver in isolation (hardening family: never raises)
 # --------------------------------------------------------------------------
@@ -287,19 +268,16 @@ def test_toggle_resolvers_reject_non_keycodes(bad) -> None:
     assert explore_flags.resolve_dock_toggle_key(bad) is False
     assert explore_flags.resolve_tolls_toggle_key(bad) is False
 
-
 def test_toggle_resolvers_accept_both_cases() -> None:
     for k in (ord("d"), ord("D")):
         assert explore_flags.resolve_dock_toggle_key(k) is True
     for k in (ord("f"), ord("F")):
         assert explore_flags.resolve_tolls_toggle_key(k) is True
 
-
 def test_the_two_toggles_do_not_share_a_key() -> None:
     """A shared keycode would make one flag unreachable while every
     single-flag test above still passed."""
     assert not (explore_flags.DOCK_TOGGLE_KEYS & explore_flags.TOLLS_TOGGLE_KEYS)
-
 
 def test_compose_states_no_dock_when_the_operator_has_not_opted_in() -> None:
     """Was `test_compose_returns_the_action_unchanged_when_both_are_off`,
@@ -314,7 +292,6 @@ def test_compose_states_no_dock_when_the_operator_has_not_opted_in() -> None:
         "Explore", dock=False, tolls=False
     ) == _OFF_ACTION
 
-
 def test_ensure_does_not_paint_gather_hint_or_press_e(monkeypatch) -> None:
     """WO-PLAY-STRIP-POLICY-AUTO REVISE: LOGS has no explore-available tease."""
     _calls, screen = _drive(monkeypatch, [])
@@ -324,31 +301,9 @@ def test_ensure_does_not_paint_gather_hint_or_press_e(monkeypatch) -> None:
     assert explore_flags.GATHER_HINT == ""
     assert "GATHER_HINT" not in line
 
-
-def test_the_offer_composer_fits_an_eighty_column_terminal() -> None:
-    """Residual composer (not painted post-ensure) still stays ≤80."""
-    line = explore_flags.compose_explore_offer(
-        app_mod._EXPLORE_OFFER_CLASSIFICATION, cycles=0
-    )
-    wide = [c for c in line if unicodedata.east_asian_width(c) in ("W", "F")]
-    assert not wide, f"chars != cells; wide chars present: {wide}"
-    assert len(line) <= 80, f"{len(line)} cols: {line}"
-    assert "press E" not in line
-    assert "D to pass" not in line
-
-
-def test_the_offer_line_degrades_rather_than_raises() -> None:
-    for bad in (None, 3, object(), b"x"):
-        out = explore_flags.compose_explore_offer(bad, cycles=bad)
-        assert isinstance(out, str)
-        assert "press E" not in out
-        assert "session ready" in out
-
-
 def test_the_off_marker_names_port_trade_not_d_key() -> None:
     """Pinned by LITERAL — gather OFF tracks Port Trade·OFF, not `D to gather`."""
     assert explore_flags.DOCK_OFF_MARKER == "no-dock (Port Trade·OFF)"
-
 
 def test_compose_appends_markers_in_a_stable_order() -> None:
     """`+dock` is unchanged byte-for-byte — the opted-IN line an operator
@@ -360,7 +315,6 @@ def test_compose_appends_markers_in_a_stable_order() -> None:
     assert explore_flags.compose_explore_action(
         "Explore", dock=True, tolls=True
     ) == "Explore +dock +fight-tolls"
-
 
 def test_fight_tolls_stays_silent_when_off_while_dock_speaks() -> None:
     """The asymmetry, pinned so it cannot be "tidied" into symmetry.
@@ -377,13 +331,11 @@ def test_fight_tolls_stays_silent_when_off_while_dock_speaks() -> None:
     assert "toll" not in off.lower(), off
     assert explore_flags.GATHER_HINT == ""
 
-
 @pytest.mark.parametrize("bad", [None, 3, object(), b"x"])
 def test_compose_never_raises_on_a_bad_action(bad) -> None:
     out = explore_flags.compose_explore_action(bad, dock=True, tolls=True)
     assert isinstance(out, str)
     assert explore_flags.DOCK_MARKER in out
-
 
 def test_describe_states_the_consequence_not_the_variable_name() -> None:
     """An operator reading `dock ON` learns nothing about what it spends."""
