@@ -1060,6 +1060,16 @@ def _autonomy_auto_fire(
         status = provider() if callable(provider) else None
     except Exception:  # noqa: BLE001
         status = None
+    # Never App-arm money runners off the login door / a dead socket.
+    # FOCUS candidates can still look "ready" from the world model while
+    # ensure is stuck on game_select / disconnected — that painted
+    # "starting trade…" before Cartogra was even in-game (live 2026-08-01).
+    if not isinstance(status, dict):
+        return False, False
+    if status.get("connected") is not True:
+        return False, False
+    if status.get("classification") != "main_command":
+        return False, False
     try:
         offer = _autonomy_policy.choose_offer(status or {})
     except Exception:  # noqa: BLE001

@@ -1683,6 +1683,32 @@ def test_exiled_square_bracket_menu_is_game_select():
     assert classify_screen(text, prompt) == "game_select"
 
 
+THIRDAGE_FIXTURE = "game_select_menu_thirdage_your_choice.txt"
+
+
+def test_thirdage_your_choice_timed_out_is_game_select():
+    """Third Age door: ``[A] Name`` rows + ``Your choice:`` + ``Timed out...``."""
+    text, prompt = _fixture_with_prompt(THIRDAGE_FIXTURE)
+    assert prompt.strip().startswith("Timed out")
+    assert classify_screen(text, prompt) == "game_select"
+    assert classify(text) == "game_select"
+
+
+def test_thirdage_your_choice_before_timeout_is_game_select():
+    """Same door while the host is still waiting on ``Your choice:``."""
+    text = _load_fixture(THIRDAGE_FIXTURE)
+    lines = [l for l in text.splitlines() if l.strip() != "Timed out..."]
+    body = "\n".join(lines)
+    assert classify_screen(body, "Your choice:") == "game_select"
+    assert classify(body) == "game_select"
+
+
+def test_thirdage_fixture_redacts_operator_contact():
+    text = _load_fixture(THIRDAGE_FIXTURE)
+    found = re.findall(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}", text)
+    assert found == ["sysop@example.org"], found
+
+
 def test_exiled_square_bracket_menu_is_game_select_via_classify_too():
     """Both public APIs. `classify()` has no separate prompt line, so a
     detector wired into only one of them is the standing parity trap here."""
