@@ -368,10 +368,16 @@ def _confirmed_send(ctx: _StepCtx, text: str, confirm_prompt: Optional[str], *, 
 def _send_letter(ctx: _StepCtx, letter: str, confirm_prompt: str) -> None:
     """PALADIN allowlist gate -- see module docstring. `letter` is always
     a hardcoded caller literal (`"P"`/`"T"`); this assertion is defensive,
-    never a caller-trust assumption."""
+    never a caller-trust assumption.
+
+    WO-TRADE-DOCK-MENU / explore #211: port-menu letters are **hotkeys**.
+    ``enter=True`` sends ``P\\r`` / ``T\\r``, and ``\\r`` on the Attack/Trade
+    menu accepts the default ``[T]`` — auto-docking before we ever choose.
+    Qty / ``0`` / offer accepts stay on ``_confirmed_send(..., enter=True)``.
+    """
     if letter not in _ALLOWED_LETTER_SENDS:
         raise PaladinViolation(f"refused_disallowed_letter_send:{letter!r}")
-    _confirmed_send(ctx, letter, confirm_prompt, enter=True)
+    _confirmed_send(ctx, letter, confirm_prompt, enter=False)
 
 
 def _current_strict_credits(session, caps, current_text: str) -> Optional[int]:

@@ -680,7 +680,7 @@ def test_dock_skips_t_when_post_p_is_already_commerce_qty():
     session = FakeChainSession(screens, initial_credits=5_000)
     ctx = _StepCtx(session, TradeDriverConfig(), lambda: False, lambda: True)
     _dock(ctx, 0)
-    assert session.sent == [("P", True, False)]
+    assert session.sent == [("P", False, False)]
 
 
 def test_fo_then_equipment_skip_with_zero_after_direct_commerce(tmp_path):
@@ -739,7 +739,7 @@ def test_fo_then_equipment_skip_with_zero_after_direct_commerce(tmp_path):
     assert result.completed is True
     assert result.hops_completed == 1
     # First dock: P only (no T). Declines FO + Org with 0 before Equipment.
-    assert session.sent[0] == ("P", True, False)
+    assert session.sent[0] == ("P", False, False)
     assert session.sent[1] == ("0", True, False)
     assert session.sent[2] == ("0", True, False)
     # No dock_menu halt — T was never required on the first dock.
@@ -758,7 +758,21 @@ def test_classic_port_menu_still_sends_t_after_p():
     session = FakeChainSession(screens, initial_credits=5_000)
     ctx = _StepCtx(session, TradeDriverConfig(), lambda: False, lambda: True)
     _dock(ctx, 0)
-    assert session.sent == [("P", True, False), ("T", True, False)]
+    assert session.sent == [("P", False, False), ("T", False, False)]
+
+
+def test_dock_letters_use_enter_false_hotkey(tmp_path):
+    """WO-TRADE-DOCK-MENU REVISE: P/T must never be sent with enter=True."""
+    world_id = "test-dock-hotkey"
+    _seed_two_sector_graph(world_id, tmp_path)
+    session = FakeChainSession(_two_port_loop_screens(), initial_credits=10_000)
+    result = _run(session, _two_port_loop_chain(), world_id, tmp_path, 100)
+    assert result.completed is True
+    for text, enter, _secret in session.sent:
+        if text in ("P", "T"):
+            assert enter is False, f"dock letter {text!r} must be hotkey (enter=False)"
+        if text == "0" or text.isdigit() or text == "":
+            assert enter is True
 
 
 def test_paladin_send_letter_refuses_any_letter_outside_the_allowlist():
