@@ -1,6 +1,6 @@
 # WO-STATUS-STAMP-SWEEP — Align workorder Status lines with git reality
 
-**Status:** DONE · tip-honesty stamp 2026-08-02 · seat `impl-aiclient-cursor` · PR #319 (SHA in STATUS) · must-include FORMATIONS #317 stamped
+**Status:** DONE · origin `471a3a2` (#319) · tip-honesty stamp 2026-08-02 · seat `impl-aiclient-cursor` · must-include FORMATIONS #317 stamped
 **Posted:** 2026-07-28T22:36Z · Max GO (stamp sweep)  
 **Re-armed:** 2026-08-02T04:08Z · hub refill after #317  
 **Branch:** `wo/STATUS-STAMP-SWEEP`  
