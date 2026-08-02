@@ -12,8 +12,8 @@ and the daemon reads both (`session/protocol.py`). Play's chrome lives here.
 WO-PLAY-EXPLORE-GATHER-DEFAULT-ON (Max GO 2026-07-30): Play Explore starts with
 gather/dock ON so first-sight ports are entered for commodity ingest, driven
 from Port Trade·ON by default (WO-PLAY-STRIP-POLICY-AUTO). Fight-tolls remains
-default OFF (`F` opts in). CLI/daemon library defaults stay OFF — only the
-Play surface flipped.
+default OFF (`X` opts in — calm `F` is Find StarDock per WO-FIND-STARDOCK-
+TOGGLE). CLI/daemon library defaults stay OFF — only the Play surface flipped.
 
 `y` at the confirm gate must keep meaning exactly what the line above it says,
 so the toggle happens BEFORE the gate is raised and is spelled out IN the line
@@ -49,12 +49,12 @@ what every unrecognised input gets.
 
 from __future__ import annotations
 
-# The toggle keys. Verified unbound elsewhere in this app at time of
-# writing: `E` raises the explore gate, `G` relaunch, `L` chains, `P` panic,
-# Space pause, `y`/`Y` confirm, and teach `A`/`R`/`T` stay reserved for
-# WO-067/068/069. `D` for dock and `F` for fight are the mnemonic pair.
+# The toggle keys. `D` docks new ports (Play residual / tests). Fight-tolls
+# used to share `F` with a mnemonic pair; WO-FIND-STARDOCK-TOGGLE reclaims
+# calm `F` for `F)ind StarDock·ON/OFF`, so fight-tolls moves to `X`
+# (unadvertised on the calm strip — same quiet posture as before).
 DOCK_TOGGLE_KEYS = frozenset({ord("d"), ord("D")})
-TOLLS_TOGGLE_KEYS = frozenset({ord("f"), ord("F")})
+TOLLS_TOGGLE_KEYS = frozenset({ord("x"), ord("X")})
 
 # What the confirm line gains for each flag.
 #

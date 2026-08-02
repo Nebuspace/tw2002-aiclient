@@ -1064,6 +1064,9 @@ class PlayShellScreen:
         self.port_trade_on: bool = True
         self.cargo_upgrade_on: bool = True
         self.ship_upgrade_on: bool = True
+        # WO-FIND-STARDOCK-TOGGLE: Explore-cluster intent gate (default ON
+        # so `E` / App-armed explore keep today's find-StarDock hunt).
+        self.find_stardock_on: bool = True
         # WO-EXPLORE-TRADE-MODE-SPLIT: L)ist-armed Trade Loop selection for T.
         # ``None`` = nothing armed. Dict shapes:
         #   {"kind": "discovered", "world_id": str, "fingerprint": str, "route": str}
@@ -2182,6 +2185,7 @@ class PlayShellScreen:
                             if self.analyze_session.is_open
                             else cockpit_teachband.compose_teach_band(
                                 unicode_ok=uok,
+                                find_stardock_on=self.find_stardock_on,
                                 port_trade_on=self.port_trade_on,
                                 cargo_upgrade_on=self.cargo_upgrade_on,
                                 ship_upgrade_on=self.ship_upgrade_on,
@@ -2482,17 +2486,16 @@ class PlayShellScreen:
         # existing default-deny armconfirm gate. Never a send path.
         if cockpit_reflex_controls.resolve_reflex_offer_key(key):
             return cockpit_reflex_controls.REFLEX_OFFER_INTENT
-        # WO-PLAY-STRIP-TRAINER-CHROME REVISE (hub 2026-07-31): P/C/S are
-        # the trainer calm band's own local chrome toggles -- Port Trade,
-        # Cargo Hold Upgrade, Ship Upgrade (`teachband.py`'s
-        # `PORT_TRADE_LABEL`/`CARGO_UPGRADE_LABEL`/`SHIP_UPGRADE_LABEL`).
-        # Each key flips ONLY this instance's own boolean and returns no
-        # intent -- the same local-only shape the CONN focus-ring toggle
-        # above already uses. WO-PLAY-STRIP-POLICY-AUTO wired the real
-        # daemon-side spend gate these booleans drive (`app.py`'s
-        # `_autonomy_auto_fire`, read on every App-armed idle tick from
-        # OUTSIDE this class) -- this handler itself is unchanged by that
-        # WO, it still only ever flips the boolean the gate later reads.
+        # WO-PLAY-STRIP-TRAINER-CHROME REVISE (hub 2026-07-31) +
+        # WO-FIND-STARDOCK-TOGGLE: F/P/C/S are the trainer calm band's own
+        # local chrome toggles -- Find StarDock, Port Trade, Cargo Hold
+        # Upgrade, Ship Upgrade. Each key flips ONLY this instance's own
+        # boolean and returns no intent. `find_stardock_on` gates Explore
+        # intent on `E` / App-armed ensure (`_start_policy_explore`).
+        #
+        # `F` is Find StarDock on this calm path (not fight-tolls). Fight-
+        # tolls moved to `X` in `explore_flags` / `app.py` so the mnemonic
+        # can teach the Explore intent toggle.
         #
         # `P` is DELIBERATELY no longer bound to `cockpit.panic` on this
         # calm path: the STATUS-DONE cut of this WO left the OLD `P panic`
@@ -2508,6 +2511,9 @@ class PlayShellScreen:
         # paths out of a run that needs stopping.
         #
         # Placed AFTER the A/R/T teach keys so it cannot shadow them.
+        if key in (ord("f"), ord("F")):
+            self.find_stardock_on = not self.find_stardock_on
+            return None
         if key in (ord("p"), ord("P")):
             self.port_trade_on = not self.port_trade_on
             return None

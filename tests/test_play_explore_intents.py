@@ -1,7 +1,7 @@
-"""Explore intents under WO-PLAY-STRIP-POLICY-AUTO REVISE.
+"""Explore intents under WO-PLAY-STRIP-POLICY-AUTO + WO-FIND-STARDOCK-TOGGLE.
 
-`E` no longer cycles map-fill ↔ find-StarDock. Trainer strip policy explore
-is always infinite find-StarDock (min_sectors=0). `O` may still raise a
+`E` starts infinite Explore. Intent is find-StarDock when
+``find_stardock_on`` (default ON), else map-fill. `O` may still raise a
 confirm for an autonomy explore offer.
 """
 
@@ -45,7 +45,7 @@ class _Stdscr:
     def nodelay(self, flag): pass
 
 
-def _drive(monkeypatch, keys, *, spectating=False):
+def _drive(monkeypatch, keys, *, spectating=False, before_keys=None):
     calls: list = []
     monkeypatch.setattr(adapters, "ensure_session", lambda name, **kw: _Result())
 
@@ -64,6 +64,8 @@ def _drive(monkeypatch, keys, *, spectating=False):
             self.gate_raises = []
             if spectating:
                 self.spectating = True
+            if before_keys is not None:
+                before_keys(self)
             seen["screen"] = self
 
         def begin_arm_confirm(self, action=None, *, cycles=None):
@@ -87,6 +89,7 @@ def _drive(monkeypatch, keys, *, spectating=False):
 
 
 E = ord("E")
+F = ord("F")
 
 
 def test_app_armed_ensure_runs_find_stardock_infinite(monkeypatch) -> None:
@@ -95,12 +98,31 @@ def test_app_armed_ensure_runs_find_stardock_infinite(monkeypatch) -> None:
     assert calls[0].get("intent") == explore_mod.INTENT_FIND_STARDOCK
     assert calls[0].get("min_sectors") == app_mod._EXPLORE_POLICY_MIN_SECTORS == 0
     assert screen.gate_raises == []
+    assert screen.find_stardock_on is True
 
 
 def test_e_restarts_find_stardock_infinite(monkeypatch) -> None:
     calls, _screen = _drive(monkeypatch, [E])
     assert calls[-1].get("intent") == explore_mod.INTENT_FIND_STARDOCK
     assert calls[-1].get("min_sectors") == 0
+
+
+def test_e_with_find_stardock_off_runs_map_fill(monkeypatch) -> None:
+    calls, screen = _drive(
+        monkeypatch,
+        [E],
+        before_keys=lambda play: setattr(play, "find_stardock_on", False),
+    )
+    assert calls[-1].get("intent") == explore_mod.INTENT_MAP_FILL
+    assert calls[-1].get("min_sectors") == 0
+    assert screen.find_stardock_on is False
+
+
+def test_f_then_e_flips_to_map_fill(monkeypatch) -> None:
+    """Calm `F` toggles Find StarDock OFF before `E` starts Explore."""
+    calls, screen = _drive(monkeypatch, [F, E])
+    assert screen.find_stardock_on is False
+    assert calls[-1].get("intent") == explore_mod.INTENT_MAP_FILL
 
 
 def test_e_alone_never_raises_the_gate(monkeypatch) -> None:

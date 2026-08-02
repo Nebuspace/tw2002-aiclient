@@ -30,7 +30,7 @@ A/R/T teach-loop mechanics, the STOP banner's own `teach:` line, and the confirm
   default"). **Spectate is never remapped** — it stays the honest, unarmed `SPECTATE` reading; no
   ARM claim is ever attached to a non-seat-holding viewer.
 - **Calm band retires A/R/T/V/U, `H)old?`, `O)ffer?`, and `P panic`** in favor of a trainer-plain
-  vocabulary: `E)xplore  P)ort Trade·ON  C)argo Hold Upgrade·ON  S)hip Upgrade·ON  │  T)rade Loop Chain  L)ist Loops` (P/C/S default **ON**; `·` is this doc's own NO-SWAP glyph, same convention as
+  vocabulary: `E)xplore  F)ind StarDock·ON  P)ort Trade·ON  C)argo Hold Upgrade·ON  S)hip Upgrade·ON  │  T)rade Loop Chain  L)ist Loops` (P/C/S default **ON**; `·` is this doc's own NO-SWAP glyph, same convention as
   the `KEY)verb` rule below). The retired tokens' underlying features (Analyze, Record, reflex, the
   rules library, the hold/offer confirm gates, the Trade-Loop-Chains popup, panic) are **all still
   reachable by their existing keys** — only the standing chrome that advertises them on THIS calm
@@ -207,7 +207,7 @@ slice appears in the live share; the teach keys sit on the hint band.
 **Trainer surface (this product's Play cockpit, per the amendment above):**
 
 ```
-^A)APP-ARMED   COV ?                E)xplore  P)ort Trade·ON  C)argo Hold Upgrade·ON  S)hip Upgrade·ON  │  T)rade Loop Chain  L)ist Loops  → K
+^A)APP-ARMED   COV ?                E)xplore  F)ind StarDock·ON  P)ort Trade·ON  C)argo Hold Upgrade·ON  S)hip Upgrade·ON  │  T)rade Loop Chain  L)ist Loops  → K
 ```
 The merged Mode+seat chip reads `^A)APP-ARMED` (App holding the seat under this trainer's
 armed-by-default model); the calm band shows the six trainer tokens instead of the developer
@@ -321,7 +321,7 @@ X stop  P panic  A)ttach"` until 061-entry lands — tip honesty; see Code diver
 
 **Trainer surface (per the amendment above):** the mode chip already carries the `^A)` chord
 (merged into `^A)APP-ARMED`/`^A)MANUAL-HUMAN`), and the hint band is
-`E)xplore  P)ort Trade·ON  C)argo Hold Upgrade·ON  S)hip Upgrade·ON  │  T)rade Loop Chain  L)ist Loops`
+`E)xplore  F)ind StarDock·ON  P)ort Trade·ON  C)argo Hold Upgrade·ON  S)hip Upgrade·ON  │  T)rade Loop Chain  L)ist Loops`
 — every token still uses the same uniform `KEY)verb` shape (P/C/S additionally carry a `·ON`/`·OFF`
 toggle suffix).
 

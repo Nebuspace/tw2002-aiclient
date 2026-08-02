@@ -13,8 +13,8 @@ UNCHANGED and still reachable by their existing keys; only the standing
 CHROME that advertises them on the calm strip changes, in favor of a
 trainer-plain vocabulary:
 
-    E)xplore  P)ort Trade·ON  C)argo Hold Upgrade·ON  S)hip Upgrade·ON
-    │  T)rade Loop Chain  L)ist Loops
+    E)xplore  F)ind StarDock·ON  P)ort Trade·ON  C)argo Hold Upgrade·ON
+    S)hip Upgrade·ON  │  T)rade Loop Chain  L)ist Loops
 
   Two clusters (Explore toggles, then loop tools), separated by a
   NO-SWAP ``│`` token (same spirit as middle-dot ``·``: no ASCII twin).
@@ -22,7 +22,12 @@ trainer-plain vocabulary:
   the band is not flush to the seat chip / liveness cluster.
 
 - `E)xplore` reuses `autonomy_keys.EXPLORE_TOKEN` verbatim -- same key,
-  same word, already trainer-plain.
+  same word, already trainer-plain. Starts/restarts Explore; intent is
+  gated by `F)ind StarDock` (below).
+- `F)ind StarDock` is an Explore-cluster toggle (default **ON**): when
+  ON, `E` / App-armed explore hunt StarDock; when OFF, map-fill instead.
+  `F` was previously the unadvertised fight-tolls opt-in; that binding
+  moved to `X` so calm chrome can teach Find StarDock on its mnemonic.
 - `L)ist Loops` (``LOOPS_TOKEN``) is ``chains.CHAINS_TOKEN`` imported
   under the calm-band name (WO-LOOPS-POPUP-OVERLAY) -- same `L` key,
   same overlay, one spelling for chrome and HELP.
@@ -101,15 +106,14 @@ from .chains import CHAINS_TOKEN as LOOPS_TOKEN
 _TOGGLE_SEP = "\u00b7"
 
 # The trainer calm band's own labels (WO-PLAY-STRIP-TRAINER-CHROME /
-# WO-LOOPS-POPUP-OVERLAY). ``LOOPS_TOKEN`` is ``chains.CHAINS_TOKEN``
-# (single source). ``T)rade Loop Chain`` stays a local relabel of the
-# retired `"T)rigger"` wire -- see the module docstring.
+# WO-LOOPS-POPUP-OVERLAY / WO-FIND-STARDOCK-TOGGLE). ``LOOPS_TOKEN`` is
+# ``chains.CHAINS_TOKEN`` (single source). ``T)rade Loop Chain`` stays a
+# local relabel of the retired `"T)rigger"` wire -- see the module docstring.
 TRADE_LOOP_CHAIN_TOKEN = "T)rade Loop Chain"
 
-# The three toggle labels' PREFIX only -- ``compose_teach_band`` appends
-# the ``·ON``/``·OFF`` suffix from the caller's own boolean at call time,
-# so there is no single fixed "the" token for these three the way there
-# is for `LOOPS_TOKEN`/`TRADE_LOOP_CHAIN_TOKEN` above.
+# Toggle labels' PREFIX only -- ``compose_teach_band`` appends the
+# ``·ON``/``·OFF`` suffix from the caller's own boolean at call time.
+FIND_STARDOCK_LABEL = "F)ind StarDock"
 PORT_TRADE_LABEL = "P)ort Trade"
 CARGO_UPGRADE_LABEL = "C)argo Hold Upgrade"
 SHIP_UPGRADE_LABEL = "S)hip Upgrade"
@@ -119,7 +123,7 @@ def _toggle_token(label: str, on: object) -> str:
     """``"{label}·ON"`` / ``"{label}·OFF"`` from any caller-supplied
     truthiness. Never raises: an unevaluable ``on`` (a raising
     ``__bool__``) degrades to ``ON`` -- DECISION's own stated default for
-    all three trainer toggles, so a hostile/unset value reads as the
+    trainer toggles, so a hostile/unset value reads as the
     canon-default state rather than an arbitrary OFF.
     """
     try:
@@ -130,19 +134,19 @@ def _toggle_token(label: str, on: object) -> str:
 
 
 # Canon's standing calm-band spelling (DECISION
-# `RESOLVED-TRAINER-STRIP-AND-GUTTER-20260731` point 2). A tuple, not a
-# flat string, so a later WO can extend it additively. Rendered at the
-# DEFAULT (all-ON) toggle state -- `compose_teach_band`'s own toggle
-# kwargs recompute the three toggle tokens for any other state; this
-# tuple is the reference/default reading other modules may check
-# membership against (mirroring the old band's `TEACH_TOKENS` seam).
-# Cluster separator between the Explore toggle cluster (E+P+C+S) and the
+# `RESOLVED-TRAINER-STRIP-AND-GUTTER-20260731` point 2 + Find StarDock).
+# A tuple, not a flat string, so a later WO can extend it additively.
+# Rendered at the DEFAULT (all-ON) toggle state -- `compose_teach_band`'s
+# own toggle kwargs recompute tokens for any other state; this tuple is
+# the reference/default reading other modules may check membership against.
+# Cluster separator between the Explore toggle cluster (E+F+P+C+S) and the
 # loop-tools cluster (T+L). Own TEACH_TOKENS element so membership checks
 # work; NO-SWAP like middle-dot ``·`` (no ASCII twin on ``unicode_ok=False``).
 CLUSTER_SEP = "│"  # │
 
 TEACH_TOKENS: tuple[str, ...] = (
     EXPLORE_TOKEN,
+    _toggle_token(FIND_STARDOCK_LABEL, True),
     _toggle_token(PORT_TRADE_LABEL, True),
     _toggle_token(CARGO_UPGRADE_LABEL, True),
     _toggle_token(SHIP_UPGRADE_LABEL, True),
@@ -170,7 +174,8 @@ TEACH_TONE = "chrome"
 
 
 # Short toggle prefixes under width pressure (WO-STRIP-HOTFIX-FIT-TRADE-LOGS).
-# Wide-terminal default still uses the long PORT/CARGO/SHIP labels above.
+# Wide-terminal default still uses the long labels above.
+FIND_STARDOCK_LABEL_SHORT = "F)ind"
 PORT_TRADE_LABEL_SHORT = "P)ort"
 CARGO_UPGRADE_LABEL_SHORT = "C)argo"
 SHIP_UPGRADE_LABEL_SHORT = "S)hip"
@@ -184,6 +189,7 @@ def fit_teach_band(
     budget: object,
     *,
     unicode_ok: object = True,
+    find_stardock_on: object = True,
     port_trade_on: object = True,
     cargo_upgrade_on: object = True,
     ship_upgrade_on: object = True,
@@ -191,12 +197,12 @@ def fit_teach_band(
     """Return the widest calm teach band that fits ``budget`` columns.
 
     Ladder (wide → narrow), stop at first that fits
-    (WO-STRIP-HOTFIX-FIT-TRADE-LOGS):
+    (WO-STRIP-HOTFIX-FIT-TRADE-LOGS / WO-FIND-STARDOCK-TOGGLE):
 
     1. Full labels + ``BAND_PAD`` (same as unlimited ``compose_teach_band``)
-    2. Short toggles ``P)ort·ON`` / ``C)argo·ON`` / ``S)hip·ON``; E / │ / T / L
+    2. Short toggles ``F)ind·ON`` / ``P)ort·ON`` / ``C)argo·ON`` / ``S)hip·ON``
     3. Reduce ``BAND_PAD`` / token-gap padding
-    4. Drop S, then C (keep E P T L)
+    4. Drop S, then C, then F (keep E P T L)
     5. Drop ``│`` if needed
     6. Last resort empty only if even ``E)xplore  L)ist Loops`` will not fit
 
@@ -211,9 +217,11 @@ def fit_teach_band(
     if room <= 0:
         return ""
 
+    find_long = _toggle_token(FIND_STARDOCK_LABEL, find_stardock_on)
     port_long = _toggle_token(PORT_TRADE_LABEL, port_trade_on)
     cargo_long = _toggle_token(CARGO_UPGRADE_LABEL, cargo_upgrade_on)
     ship_long = _toggle_token(SHIP_UPGRADE_LABEL, ship_upgrade_on)
+    find_s = _toggle_token(FIND_STARDOCK_LABEL_SHORT, find_stardock_on)
     port_s = _toggle_token(PORT_TRADE_LABEL_SHORT, port_trade_on)
     cargo_s = _toggle_token(CARGO_UPGRADE_LABEL_SHORT, cargo_upgrade_on)
     ship_s = _toggle_token(SHIP_UPGRADE_LABEL_SHORT, ship_upgrade_on)
@@ -223,6 +231,7 @@ def fit_teach_band(
         _join_band(
             (
                 EXPLORE_TOKEN,
+                find_long,
                 port_long,
                 cargo_long,
                 ship_long,
@@ -237,6 +246,7 @@ def fit_teach_band(
         _join_band(
             (
                 EXPLORE_TOKEN,
+                find_s,
                 port_s,
                 cargo_s,
                 ship_s,
@@ -251,6 +261,7 @@ def fit_teach_band(
         _join_band(
             (
                 EXPLORE_TOKEN,
+                find_s,
                 port_s,
                 cargo_s,
                 ship_s,
@@ -264,6 +275,7 @@ def fit_teach_band(
         _join_band(
             (
                 EXPLORE_TOKEN,
+                find_s,
                 port_s,
                 cargo_s,
                 ship_s,
@@ -277,6 +289,7 @@ def fit_teach_band(
         _join_band(
             (
                 EXPLORE_TOKEN,
+                find_s,
                 port_s,
                 cargo_s,
                 ship_s,
@@ -287,12 +300,25 @@ def fit_teach_band(
             gap=" ",
             pad="",
         ),
-        # 4 — drop S, then C
+        # 4 — drop S, then C, then F
         _join_band(
             (
                 EXPLORE_TOKEN,
+                find_s,
                 port_s,
                 cargo_s,
+                CLUSTER_SEP,
+                TRADE_LOOP_CHAIN_TOKEN,
+                LOOPS_TOKEN,
+            ),
+            gap=" ",
+            pad=" ",
+        ),
+        _join_band(
+            (
+                EXPLORE_TOKEN,
+                find_s,
+                port_s,
                 CLUSTER_SEP,
                 TRADE_LOOP_CHAIN_TOKEN,
                 LOOPS_TOKEN,
@@ -335,6 +361,7 @@ def fit_teach_band(
 def compose_teach_band(
     *,
     unicode_ok: object = True,
+    find_stardock_on: object = True,
     port_trade_on: object = True,
     cargo_upgrade_on: object = True,
     ship_upgrade_on: object = True,
@@ -342,14 +369,13 @@ def compose_teach_band(
 ) -> str:
     """The standing calm-band hint line as one plain string.
 
-    ``  E)xplore  P)ort Trade·{ON|OFF}  C)argo Hold Upgrade·{ON|OFF}
-    S)hip Upgrade·{ON|OFF}  │  T)rade Loop Chain  L)ist Loops  `` --
-    Explore cluster, ``│`` separator, loop-tools cluster; left/right
-    ``BAND_PAD``. See the module docstring for what each token means and
-    why P/C/S carry a caller-supplied boolean. All three toggle kwargs
-    default to ``True`` (DECISION's own stated default), so calling this
-    with no arguments reproduces ``BAND_PAD + TOKEN_GAP.join(TEACH_TOKENS)
-    + BAND_PAD``.
+    ``  E)xplore  F)ind StarDock·{ON|OFF}  P)ort Trade·{ON|OFF}
+    C)argo Hold Upgrade·{ON|OFF}  S)hip Upgrade·{ON|OFF}  │
+    T)rade Loop Chain  L)ist Loops  `` -- Explore cluster, ``│``
+    separator, loop-tools cluster; left/right ``BAND_PAD``.
+
+    All toggle kwargs default to ``True`` (DECISION defaults + Find
+    StarDock ON so `E` keeps today's hunt behavior).
 
     ``width`` (WO-STRIP-HOTFIX-FIT-TRADE-LOGS): when a positive int, return
     ``fit_teach_band(width, ...)`` so callers can request a budgeted band.
@@ -368,6 +394,7 @@ def compose_teach_band(
             return fit_teach_band(
                 w,
                 unicode_ok=unicode_ok,
+                find_stardock_on=find_stardock_on,
                 port_trade_on=port_trade_on,
                 cargo_upgrade_on=cargo_upgrade_on,
                 ship_upgrade_on=ship_upgrade_on,
@@ -375,6 +402,7 @@ def compose_teach_band(
 
     tokens = (
         EXPLORE_TOKEN,
+        _toggle_token(FIND_STARDOCK_LABEL, find_stardock_on),
         _toggle_token(PORT_TRADE_LABEL, port_trade_on),
         _toggle_token(CARGO_UPGRADE_LABEL, cargo_upgrade_on),
         _toggle_token(SHIP_UPGRADE_LABEL, ship_upgrade_on),

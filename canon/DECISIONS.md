@@ -77,7 +77,7 @@ RULES:
 **Ruling (Max, session 2026-07-31 — “Proceed”):**
 
 1. **Seat:** One chip with Mode key — `^A)APP-ARMED` / `^A)MANUAL-HUMAN`. Merge APP+ARM. Halt = leave App → Manual (STOP/PANIC redundant as operator controls).
-2. **Calm keys:** `E)xplore` · `P)ort Trade·ON/OFF` (default ON) · `L)oops` · `T)rade Loop Chain` · `C)argo Hold Upgrade·ON/OFF` (default ON) · `S)hip Upgrade·ON/OFF` (default ON). Retire A/R/T/V/U/H/O/Panic from calm band.
+2. **Calm keys:** `E)xplore` · `F)ind StarDock·ON/OFF` (default ON) · `P)ort Trade·ON/OFF` (default ON) · `L)oops` · `T)rade Loop Chain` · `C)argo Hold Upgrade·ON/OFF` (default ON) · `S)hip Upgrade·ON/OFF` (default ON). Retire A/R/T/V/U/H/O/Panic from calm band.
 3. **CONN:** Top line beside server/host; **green slowly flashing** when connected — not bottom strip.
 4. **Outcomes:** `status_line` → **LOGS** (not mid-strip).
 5. **Left gutter:** GOALS outer box with **FOCUS nested inside**; tall **FORMATIONS** panel down toward LOGS.
