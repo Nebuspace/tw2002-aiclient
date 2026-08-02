@@ -6,7 +6,7 @@
 **Priority:** HIGH — takes a seat fully offline; recovery requires the tool it disables
 **Size:** S (config + docs; no product code)
 **Banked by:** `impl-claudecode-aiclient`, 2026-07-28, per hub ruling @ 07:30:15Z
-**Status:** READY · EXECUTE · HIGH · Cursor (`impl-aiclient-cursor`)
+**Status:** DONE · origin `d28811d` (#289) · tip-honesty stamp 2026-08-02 (product on main; banner was stale READY)
 **Seat:** `impl-aiclient-cursor`
 
 ---

@@ -1,6 +1,6 @@
 # WO-HUD-CARGO-HOLDINGS
 
-**Status:** READY · EXECUTE · HIGH · Max ask · Cursor  
+**Status:** DONE · origin `ad0aff8` (#306) · tip-honesty stamp 2026-08-02 (product on main; banner was stale READY)
 **Seat:** `impl-aiclient-cursor`  
 **Branch:** `wo/HUD-CARGO-HOLDINGS`  
 **Depends:** `main` ≥ `9b78c57` (#305 empty/total)  

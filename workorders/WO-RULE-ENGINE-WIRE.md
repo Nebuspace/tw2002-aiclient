@@ -1,6 +1,6 @@
 # WO-RULE-ENGINE-WIRE — wire guarded-rule kernel to store + run-loop choke-point
 
-**Status:** READY · automation frontier (follow-on #219)
+**Status:** DONE · origin `0a11241` (#220) · tip-honesty stamp 2026-08-02 (product on main; banner was stale READY)
 **Seat:** `impl-claudecode-aiclient`
 **Branch:** `wo/RULE-ENGINE-WIRE`
 **Depends:** `main` ≥ `a9e0dd0` (`rule_engine.py` kernel on main)

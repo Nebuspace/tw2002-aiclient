@@ -1,6 +1,6 @@
 # WO-BANNER-STAMP-SWEEP-COACH-CHAIN
 
-**Status:** READY · EXECUTE · LOW · docs-only tip-honesty (IDLE-KICK refill)
+**Status:** DONE · origin `3896346` (#286) · tip-honesty stamp 2026-08-02 (sweep landed on main; banner was stale READY)
 **Seat:** `impl-aiclient-cursor`
 **Branch:** `wo/BANNER-STAMP-SWEEP-COACH-CHAIN`
 **Depends:** `main` ≥ `1bcd3c8`

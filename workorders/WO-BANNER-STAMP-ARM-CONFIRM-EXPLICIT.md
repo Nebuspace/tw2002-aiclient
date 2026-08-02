@@ -1,6 +1,6 @@
 # WO-BANNER-STAMP-ARM-CONFIRM-EXPLICIT
 
-**Status:** READY · EXECUTE · LOW · docs-only
+**Status:** DONE · origin `f22dd10` (#292) · tip-honesty stamp 2026-08-02 (sweep landed on main; banner was stale READY)
 **Seat:** `impl-aiclient-cursor`
 **Branch:** `wo/BANNER-STAMP-ARM-CONFIRM-EXPLICIT`
 

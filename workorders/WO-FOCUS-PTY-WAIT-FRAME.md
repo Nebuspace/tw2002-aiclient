@@ -1,6 +1,6 @@
 # WO-FOCUS-PTY-WAIT-FRAME
 
-**Status:** READY · EXECUTE · MED · follow-on from #300 Concerns
+**Status:** DONE · origin `8df72bd` (#301) · tip-honesty stamp 2026-08-02 (product on main; banner was stale READY)
 **Seat:** `impl-aiclient-cursor`
 **Branch:** `wo/FOCUS-PTY-WAIT-FRAME`
 **Depends:** `main` ≥ `13a6ecf` · gutter width 44 (`FULL=170` / `LEFT=146` / `RIGHT=126`)

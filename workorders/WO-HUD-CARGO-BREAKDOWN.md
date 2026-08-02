@@ -1,6 +1,6 @@
 # WO-HUD-CARGO-BREAKDOWN
 
-**Status:** READY · EXECUTE · HIGH · Max ask 2026-08-01 · Cursor  
+**Status:** DONE · origin `9b78c57` (#305) · tip-honesty stamp 2026-08-02 (product on main; banner was stale READY)
 **Seat:** `impl-aiclient-cursor`  
 **Branch:** `wo/HUD-CARGO-BREAKDOWN`  
 **Depends:** `main` ≥ `245dfe3`  

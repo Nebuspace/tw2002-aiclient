@@ -1,6 +1,6 @@
 # WO-PLAY-HOST-SWITCH-DAEMON
 
-**Status:** READY · EXECUTE · CRITICAL · Max live 2026-08-01 · Cursor  
+**Status:** DONE · origin `2847708` (#309) · tip-honesty stamp 2026-08-02 (product on main; banner was stale READY)
 **Seat:** `impl-aiclient-cursor`  
 **Branch:** `wo/PLAY-HOST-SWITCH-DAEMON`  
 **Depends:** `main` ≥ `ad0aff8`
