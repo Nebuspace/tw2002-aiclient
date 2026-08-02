@@ -64,6 +64,18 @@ def test_composer_from_run_stardock():
     assert "→7" in lines[1]
 
 
+def test_composer_from_run_formations():
+    lines = explore.explore_decision_lines_from_run(
+        {
+            "intent": explore.INTENT_FIND_FORMATIONS,
+            "next_sector": 7,
+        }
+    )
+    assert lines is not None
+    assert lines[0] == "FORMATIONS"
+    assert "→7" in lines[1]
+
+
 def test_composer_from_run_rejects_unknown_intent():
     assert explore.explore_decision_lines_from_run({"intent": "nope"}) is None
     assert explore.explore_decision_lines_from_run(None) is None
@@ -273,3 +285,36 @@ def test_poll_sets_and_clears_decision_overlay(monkeypatch):
     assert app_mod._poll_explore_status(play, run_dir=None) is False
     assert play.explore_decision_lines is None
     assert play.explore_band is None
+
+
+def test_poll_sets_decision_overlay_for_formations(monkeypatch):
+    from tw2002_aiclient import app as app_mod
+    from tw2002_aiclient import adapters
+
+    play = object.__new__(app_mod.PlayShellScreen)
+    play.status_line = ""
+    play.explore_band = None
+    play.explore_decision_lines = ["stale"]
+    play.world_stats = SimpleNamespace(refresh=lambda *_a, **_k: None)
+    play.profile = SimpleNamespace()
+
+    live = adapters.ExploreResult(
+        ok=True,
+        reason=None,
+        raw={
+            "ok": True,
+            "running": True,
+            "run": {
+                "intent": explore.INTENT_FIND_FORMATIONS,
+                "next_sector": 13,
+                "distinct_sectors": 1,
+                "min_sectors": 5,
+                "outcome": None,
+            },
+        },
+    )
+    monkeypatch.setattr(adapters, "explore_status", lambda **_k: live)
+    assert app_mod._poll_explore_status(play, run_dir=None) is True
+    assert play.explore_decision_lines is not None
+    assert play.explore_decision_lines[0] == "FORMATIONS"
+    assert "→13" in play.explore_decision_lines[1]
