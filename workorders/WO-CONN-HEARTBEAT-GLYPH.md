@@ -1,6 +1,6 @@
 # WO-CONN-HEARTBEAT-GLYPH
 
-**Status:** READY · EXECUTE · MED · hub-fed after #299 (IDLE-KICK · suite flake hygiene)
+**Status:** DONE · origin `13a6ecf` (#300) · tip-honesty stamp 2026-08-02 (product on main; banner was stale READY)
 **Seat:** `impl-aiclient-cursor`
 **Branch:** `wo/CONN-HEARTBEAT-GLYPH`
 **Depends:** `main` ≥ `efeb7e7`

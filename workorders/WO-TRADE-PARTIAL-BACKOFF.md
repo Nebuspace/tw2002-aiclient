@@ -1,6 +1,6 @@
 # WO-TRADE-PARTIAL-BACKOFF
 
-**Status:** READY · EXECUTE · HIGH · Max live report 2026-07-31
+**Status:** DONE · origin `183ac8e` (#302) · tip-honesty stamp 2026-08-02 (product on main; banner was stale READY)
 **Seat:** `impl-aiclient-cursor`
 **Branch:** `wo/TRADE-PARTIAL-BACKOFF`
 **Depends:** `main` ≥ `13a6ecf` · #299 refuse LOGS

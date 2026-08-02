@@ -1,6 +1,6 @@
 # WO-FIND-STARDOCK-TOGGLE
 
-**Status:** READY · EXECUTE · MED
+**Status:** DONE · origin `2497c16` (#316) · tip-honesty stamp 2026-08-02 (product on main; banner was stale READY)
 **Seat:** `impl-aiclient-cursor`
 **Branch:** `wo/FIND-STARDOCK-TOGGLE`
 **Depends:** trainer calm strip (`WO-PLAY-STRIP-TRAINER-CHROME`) · explore intents (`find_stardock` / `map_fill`)

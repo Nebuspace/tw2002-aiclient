@@ -1,6 +1,6 @@
 # WO-LOOPS-POPUP-OVERLAY
 
-**Status:** READY · EXECUTE · MED · after #297 on `main`
+**Status:** DONE · origin `e6ef566` (#298) · tip-honesty stamp 2026-08-02 (product on main; banner was stale READY)
 **Seat:** `impl-aiclient-cursor`
 **Branch:** `wo/LOOPS-POPUP-OVERLAY`
 **Depends:** DECISION `RESOLVED-TRAINER-STRIP-AND-GUTTER-20260731` point 6 · teachband `L)ist Loops` (#297) · existing `cockpit.chains` + center draw

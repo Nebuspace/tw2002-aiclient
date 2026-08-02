@@ -1,6 +1,6 @@
 # WO-GUARDED-RULE-KERNEL — taught-rule eligibility and deterministic selection
 
-**Status:** READY · automation frontier
+**Status:** DONE · origin `a9e0dd0` (#219) · tip-honesty stamp 2026-08-02 (product on main; banner was stale READY)
 **Seat:** `impl-claudecode-aiclient`
 **Branch:** `wo/GUARDED-RULE-KERNEL`
 **Depends:** state parser LIVE · macro recorder/loader/player LIVE · arm-confirm LIVE

@@ -1,6 +1,6 @@
 # WO-REFLEX-CLIENT-REACH — client path for daemon `reflex` verb
 
-**Status:** READY · automation (follow-on #220)
+**Status:** DONE · origin `46ae461` (#221) · tip-honesty stamp 2026-08-02 (product on main; banner was stale READY)
 **Seat:** `impl-claudecode-aiclient`
 **Branch:** `wo/REFLEX-CLIENT-REACH`
 **Depends:** `main` ≥ `0a11241` (`rules/reflex.py` + protocol dispatch LIVE)

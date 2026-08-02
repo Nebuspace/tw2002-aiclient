@@ -1,6 +1,6 @@
 # WO-BANNER-STAMP-HALT-REASON-NE
 
-**Status:** READY · EXECUTE · LOW · docs-only
+**Status:** DONE · origin `4ef4192` (#290) · tip-honesty stamp 2026-08-02 (sweep landed on main; banner was stale READY)
 **Seat:** `impl-aiclient-cursor`
 **Branch:** `wo/BANNER-STAMP-HALT-REASON-NE`
 **Depends:** after #289 or serial after hook Accept

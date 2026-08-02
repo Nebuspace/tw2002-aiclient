@@ -1,6 +1,6 @@
 # WO-REFLEX-ARMED-RUN — approved reflex proposal → confirmed macro run
 
-**Status:** READY · visible automation (follow-on #223)
+**Status:** DONE · origin `6ea3dcd` (#224) · tip-honesty stamp 2026-08-02 (product on main; banner was stale READY)
 **Seat:** `impl-claudecode-aiclient`
 **Branch:** `wo/REFLEX-ARMED-RUN`
 **Depends:** `main` ≥ `84ad771` (reflex stack #219–#223)
