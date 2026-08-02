@@ -1,6 +1,6 @@
 # WO-CATALOG-SOURCE-LIVENESS-SPLIT — Separate provenance from TCP liveness
 
-**Status:** SEAT-DONE · awaiting hub Accept · Cursor (`impl-aiclient-cursor`)  
+**Status:** DONE · origin `acb2832` (#146) · tip-honesty stamp 2026-08-02 (product on main; banner was stale SEAT-DONE awaiting Accept)
 **Posted:** 2026-07-28T02:31Z bank · EXEC overnight after #145 · seat STATUS 2026-07-28T04:18Z  
 **Refs:** #128 live-prove probe · live-prove-pushback · overnight carte blanche
 

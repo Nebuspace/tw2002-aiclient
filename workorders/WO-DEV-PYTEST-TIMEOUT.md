@@ -1,6 +1,6 @@
 # WO-DEV-PYTEST-TIMEOUT — Global pytest hang → named failure
 
-**Status:** IN PROGRESS · EXECUTE · MED · Cursor-class · impl-aiclient-cursor  
+**Status:** DONE · origin `78785af` (#129) · tip-honesty stamp 2026-08-02 (product on main; banner was stale IN PROGRESS)
 **Posted:** 2026-07-28T01:14Z · hub  
 **Seat:** impl-aiclient-cursor  
 **Max gate:** dependency OK in principle (Max 2026-07-27 evening — recorded on CC #127 STATUS); scheduling only  

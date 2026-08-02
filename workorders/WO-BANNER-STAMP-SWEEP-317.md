@@ -1,6 +1,6 @@
 # WO-BANNER-STAMP-SWEEP-317 — Stamp shipped READY banners after #316
 
-**Status:** READY · EXECUTE · LOW · docs-only tip-honesty  
+**Status:** DONE · origin `1ad0a50` (#318) · tip-honesty stamp 2026-08-02 (sweep landed on main; banner was stale READY)
 **Seat:** `impl-aiclient-cursor`  
 **Branch:** `wo/BANNER-STAMP-SWEEP-317`  
 **Depends:** main ≥ `2497c16` (#316)

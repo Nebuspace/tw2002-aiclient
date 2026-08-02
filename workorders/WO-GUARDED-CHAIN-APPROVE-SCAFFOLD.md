@@ -1,6 +1,6 @@
 # WO-GUARDED-CHAIN-APPROVE-SCAFFOLD — Approve and run an exact discovered trade chain
 
-**Status:** OFFLINE COMPLETE · HIGH · money-path · Max-approved 2026-07-30
+**Status:** DONE · origin `03b96e0` (#267) · tip-honesty stamp 2026-08-02 (product on main; banner was stale OFFLINE COMPLETE)
 **Branch:** `wo/GUARDED-CHAIN-APPROVE-SCAFFOLD`  
 **Depends on:** #266 (`WO-PLAY-GATHER-CONTINUE`)
 

@@ -1,6 +1,6 @@
 # WO-GATHER-THREE-COMMODITY-PROMPTS — Decline every new-port commodity prompt
 
-**Status:** OFFLINE COMPLETE · HIGH · money-path · Max-approved 2026-07-30
+**Status:** DONE · origin `dfc560f` (#268) · tip-honesty stamp 2026-08-02 (product on main; banner was stale OFFLINE COMPLETE)
 
 ## Goal
 

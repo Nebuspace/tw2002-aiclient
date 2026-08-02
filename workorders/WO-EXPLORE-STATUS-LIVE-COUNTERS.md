@@ -1,6 +1,6 @@
 # WO-EXPLORE-STATUS-LIVE-COUNTERS — explore status must report mid-run progress
 
-**Status:** SEAT-DONE · awaiting hub Accept · Cursor (`impl-aiclient-cursor`)  
+**Status:** DONE · origin `d5476c2` (#145) · tip-honesty stamp 2026-08-02 (product on main; banner was stale SEAT-DONE awaiting Accept)
 **Posted:** 2026-07-28T02:52Z bank · EXEC seeded overnight after #142+#143 · seat STATUS 2026-07-28T04:11Z  
 **Refs:** wire-class W8 · overnight carte blanche
 

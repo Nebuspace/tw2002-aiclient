@@ -1,6 +1,6 @@
 # WO-STATUS-STAMP-SWEEP-248 — stamp shipped Play/autoloop WOs DONE
 
-**Status:** OPEN · EXECUTE · LOW · queue honesty · Cursor-only  
+**Status:** DONE · origin `40ba197` (#249) · tip-honesty stamp 2026-08-02 (sweep landed on main; banner was stale OPEN)
 **Posted / seeded:** 2026-07-30T08:27Z · hub (post-#248; DECISIONS overlay tranche closed)  
 **Seat:** `impl-aiclient-cursor`  
 **Depends:** `main` ≥ `70cffa6`  

@@ -1,6 +1,6 @@
 # WO-CLASSIFY-FIGHTER-ENCOUNTER-ANCHOR — the toll `Option?` prompt has no gate anchor
 
-**Status:** OPEN · EXECUTE · HIGH · hub ruling **(a)** 2026-07-28 (armed-eligible `fighter_encounter`; Max combat GO entailed)
+**Status:** DONE · origin `df857f9` (#207) · tip-honesty stamp 2026-08-02 (product on main; banner was stale OPEN/EXECUTE)
 **Seat:** Claude Code (`impl-claudecode-aiclient`) · Live DEFERRED → Cursor
 **PR branch:** `wo/CLASSIFY-FIGHTER-ENCOUNTER-ANCHOR`
 **Found:** 2026-07-28 by `impl-claudecode-aiclient` while executing `WO-COMBAT-ENCOUNTER-POLICY-EXEC`

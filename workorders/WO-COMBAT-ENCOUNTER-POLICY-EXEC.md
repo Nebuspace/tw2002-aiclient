@@ -1,6 +1,6 @@
 # WO-COMBAT-ENCOUNTER-POLICY-EXEC — NPC auto-fight at force_share ≥ 0.90
 
-**Status:** OPEN · EXECUTE · HIGH · Claude Code (`impl-claudecode-aiclient`)  
+**Status:** DONE · origin `5ffb264` (#206) · tip-honesty stamp 2026-08-02 (exec ship shared with policy WO; banner was stale OPEN/EXECUTE)
 **Posted:** 2026-07-28T22:36Z · Max GO — formula + canon auto-fight amend  
 **Depends:** canon patch on this branch (`toll-and-defense.md` + DECISIONS RESOLVED)  
 **Refs:** banked `WO-COMBAT-ENCOUNTER-POLICY` · CC CANON-CONFLICT 22:34Z

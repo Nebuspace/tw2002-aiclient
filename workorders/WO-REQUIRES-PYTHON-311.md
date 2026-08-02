@@ -1,6 +1,6 @@
 # WO-REQUIRES-PYTHON-311 — Align declared Python floor with reality
 
-**Status:** SEAT-DONE · awaiting hub Accept · Cursor (`impl-aiclient-cursor`)  
+**Status:** DONE · origin `e5905df` (#148) · tip-honesty stamp 2026-08-02 (product on main; banner was stale SEAT-DONE awaiting Accept)
 **Posted:** 2026-07-28T04:20Z · hub ruling overnight (CC DECISION-NEEDED) · seat STATUS 2026-07-28T04:26Z  
 **Refs:** CC 04:16:48Z · `pyproject.toml` requires-python · tomllib/tomli gap
 
