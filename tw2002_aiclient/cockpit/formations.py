@@ -6,15 +6,15 @@ only, mirroring ``tw2002_aiclient/cockpit/focus.py``'s discipline.
 
 FORMATIONS lists discovered galaxy topologies by name with a short blurb
 (`canon/surfaces/trainer-cockpit.md` "Left gutter": "`[FORMATIONS]` --
-discovered galaxy topologies by name with a short blurb"). As of this WO
-the live daemon status carries no formations-panel payload at all -- the
-full TW-16 formations catalog wire is explicitly out of this WO's scope
-(WO scope note: "panel chrome + honesty first", not the catalog itself;
-``explore.py``'s own ``plan_find_formations`` already documents "no
-catalogue was reachable" as its own honest state) -- so every real call
-renders the honest-empty panel until a later WO (WO-FORMATIONS-CATALOG-PORT,
-named in ``tests/test_status_vocabulary_guard.py``'s STARVED_ALLOWLIST)
-wires a real catalog into the daemon ``status`` verb.
+discovered galaxy topologies by name with a short blurb"). The daemon
+``status`` verb may carry a nested ``formations_panel`` payload produced
+by ``world_stats.WorldStats`` (dead-end-only items from the mapped warp
+graph; see ``tw2002_aiclient/formations.catalog_world`` and
+WO-FORMATIONS-CATALOG-PORT). Explore's ``find_formations`` intent routes
+via the same catalogue through ``plan_find_formations``. This module is
+the render layer only: absent/None/non-dict ``formations_panel``, empty
+``items``, or items lacking a usable ``name`` render the single-line
+honest-empty state — never a fabricated topology.
 
 Status-dict field mapping. ``status`` is the daemon's ``status`` verb
 response shape. FORMATIONS reads a nested ``status["formations_panel"]``
