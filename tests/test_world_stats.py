@@ -174,6 +174,9 @@ def test_a_refresh_supplies_the_count(wm):
         "ok": True,
         "known_sectors": 812,
         "dead_end_count": 0,
+        "formations_count": 0,
+        "genesis_count": 0,
+        "formations_panel": {"items": []},
     }
     assert wm.calls == ["w-1"]
 
@@ -184,7 +187,10 @@ def test_zero_is_supplied_not_swallowed(wm):
     wm.results = [0]
     s = world_stats.WorldStats()
     s.refresh("w-1")
-    assert s.merge({}) == {"known_sectors": 0, "dead_end_count": 0}
+    assert s.merge({}) == {"known_sectors": 0, "dead_end_count": 0,
+        "formations_count": 0,
+        "genesis_count": 0,
+        "formations_panel": {"items": []}}
 
 
 def test_it_never_mutates_the_status_it_is_given(wm):
@@ -205,6 +211,9 @@ def test_a_supplied_value_wins(wm):
     assert s.merge({"known_sectors": 99}) == {
         "known_sectors": 99,
         "dead_end_count": 0,
+        "formations_count": 0,
+        "genesis_count": 0,
+        "formations_panel": {"items": []},
     }
 
 
@@ -215,6 +224,9 @@ def test_a_supplied_none_is_filled_in(wm):
     assert s.merge({"known_sectors": None}) == {
         "known_sectors": 5,
         "dead_end_count": 0,
+        "formations_count": 0,
+        "genesis_count": 0,
+        "formations_panel": {"items": []},
     }
 
 
@@ -229,14 +241,20 @@ def test_junk_counts_are_refused(wm, bad):
     s = world_stats.WorldStats()
     s.refresh("w-1")
     # known_sectors refused; dead-end scan still completed over [].
-    assert s.merge({"ok": True}) == {"ok": True, "dead_end_count": 0}
+    assert s.merge({"ok": True}) == {"ok": True, "dead_end_count": 0,
+        "formations_count": 0,
+        "genesis_count": 0,
+        "formations_panel": {"items": []}}
 
 
 def test_a_raising_world_model_is_swallowed(wm):
     wm.results = [RuntimeError("store on fire")]
     s = world_stats.WorldStats()
     s.refresh("w-1")
-    assert s.merge({"ok": True}) == {"ok": True, "dead_end_count": 0}
+    assert s.merge({"ok": True}) == {"ok": True, "dead_end_count": 0,
+        "formations_count": 0,
+        "genesis_count": 0,
+        "formations_panel": {"items": []}}
 
 
 def test_a_failed_refresh_keeps_the_last_observed_count(wm):
@@ -247,9 +265,15 @@ def test_a_failed_refresh_keeps_the_last_observed_count(wm):
     s = world_stats.WorldStats()
     s.refresh("w-1")
     s.refresh("w-1")
-    assert s.merge({}) == {"known_sectors": 812, "dead_end_count": 0}
+    assert s.merge({}) == {"known_sectors": 812, "dead_end_count": 0,
+        "formations_count": 0,
+        "genesis_count": 0,
+        "formations_panel": {"items": []}}
     s.refresh("w-1")
-    assert s.merge({}) == {"known_sectors": 812, "dead_end_count": 0}
+    assert s.merge({}) == {"known_sectors": 812, "dead_end_count": 0,
+        "formations_count": 0,
+        "genesis_count": 0,
+        "formations_panel": {"items": []}}
 
 
 def test_a_non_dict_status_passes_through_untouched(wm):
@@ -274,6 +298,9 @@ def test_wrap_overlays_any_provider(wm):
         "ok": True,
         "known_sectors": 812,
         "dead_end_count": 0,
+        "formations_count": 0,
+        "genesis_count": 0,
+        "formations_panel": {"items": []},
     }
 
 
@@ -293,6 +320,9 @@ def test_the_two_overlays_compose_in_either_order(wm):
         "ok": True,
         "known_sectors": 812,
         "dead_end_count": 0,
+        "formations_count": 0,
+        "genesis_count": 0,
+        "formations_panel": {"items": []},
         "chain_hops": 3,
         "chain_unit": "hops",
     }
@@ -322,6 +352,9 @@ def test_nonempty_landmarks_supply_sectors_and_found(wm):
         "ok": True,
         "known_sectors": 3,
         "dead_end_count": 0,
+        "formations_count": 0,
+        "genesis_count": 0,
+        "formations_panel": {"items": []},
         "stardock_sectors": [11, 42],
         "stardock_found": True,
     }
@@ -338,6 +371,9 @@ def test_empty_landmark_scan_omits_stardock_keys(wm):
         "ok": True,
         "known_sectors": 0,
         "dead_end_count": 0,
+        "formations_count": 0,
+        "genesis_count": 0,
+        "formations_panel": {"items": []},
     }
     assert "stardock_found" not in s.merge({})
     assert "stardock_sectors" not in s.merge({})
@@ -365,6 +401,9 @@ def test_stardock_does_not_clobber_caller_values(wm):
         "stardock_found": False,
         "known_sectors": 1,
         "dead_end_count": 0,
+        "formations_count": 0,
+        "genesis_count": 0,
+        "formations_panel": {"items": []},
     }
 
 
@@ -396,6 +435,9 @@ def test_wrap_reads_only_the_cache(wm):
         "ok": True,
         "known_sectors": 5,
         "dead_end_count": 0,
+        "formations_count": 0,
+        "genesis_count": 0,
+        "formations_panel": {"items": []},
         "stardock_sectors": [3],
         "stardock_found": True,
     }
@@ -517,6 +559,9 @@ def test_has_port_does_not_clobber_caller(tmp_path, wm):
         "has_port": False,
         "known_sectors": 1,
         "dead_end_count": 0,
+        "formations_count": 0,
+        "genesis_count": 0,
+        "formations_panel": {"items": []},
     }
 
 
@@ -611,3 +656,35 @@ def test_wrap_does_not_rescan_dead_ends(wm):
     assert s.wrap(lambda: {})()["dead_end_count"] == 1
     assert len(wm.sector_list_calls) == n
 
+
+
+# ------------------------------------------------- formations (WO-FORMATIONS-CATALOG-PORT)
+
+
+def test_formations_count_equals_genesis_and_panel_len(wm):
+    """Dead-end-only catalog: formations_count == genesis_count == panel items."""
+    wm.results = [3]
+    wm.sector_lists = [
+        [
+            {"sector_id": 1, "warps": [2]},
+            {"sector_id": 2, "warps": [1, 3]},
+            {"sector_id": 4, "warps": [9]},
+        ]
+    ]
+    s = world_stats.WorldStats()
+    s.refresh("w-1")
+    merged = s.merge({})
+    assert merged["formations_count"] == 2
+    assert merged["genesis_count"] == 2
+    assert merged["dead_end_count"] == 2
+    items = merged["formations_panel"]["items"]
+    assert len(items) == 2
+    assert {i["name"] for i in items} == {"Dead-end #1", "Dead-end #4"}
+
+
+def test_formations_omitted_before_refresh(wm):
+    s = world_stats.WorldStats()
+    merged = s.merge({"ok": True})
+    assert "formations_count" not in merged
+    assert "genesis_count" not in merged
+    assert "formations_panel" not in merged

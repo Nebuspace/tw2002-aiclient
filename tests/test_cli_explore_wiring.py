@@ -190,3 +190,40 @@ def test_explore_status_ok_false_returns_nonzero(monkeypatch):
                         lambda *a, **kw: {"ok": False, "error": "not_running"})
     args = cli.build_parser().parse_args(["explore", "status", "--json"])
     assert args.func(args) != 0
+
+
+def test_explore_start_parses_intent_find_formations():
+    args = cli.build_parser().parse_args([
+        "explore", "start", "--world-id", "ona",
+        "--intent", "find_formations",
+    ])
+    assert args.intent == "find_formations"
+
+
+def test_explore_start_rejects_unknown_intent():
+    with pytest.raises(SystemExit) as exc:
+        cli.build_parser().parse_args([
+            "explore", "start", "--world-id", "ona",
+            "--intent", "not_a_real_intent",
+        ])
+    assert exc.value.code == 2
+
+
+def test_explore_start_sends_intent(monkeypatch):
+    seen = {}
+
+    def fake_send(verb, payload, run_dir=None):
+        seen["verb"] = verb
+        seen["payload"] = payload
+        return {"ok": True}
+
+    monkeypatch.setattr(cli, "send_request", fake_send)
+    monkeypatch.setattr(cli, "print_response", lambda *a, **k: None)
+    args = cli.build_parser().parse_args([
+        "explore", "start", "--world-id", "ona",
+        "--intent", "find_formations",
+    ])
+    assert args.func(args) == 0
+    assert seen["verb"] == "explore_start"
+    assert seen["payload"]["intent"] == "find_formations"
+    assert seen["payload"]["world_id"] == "ona"

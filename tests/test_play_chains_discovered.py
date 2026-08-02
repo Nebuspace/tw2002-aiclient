@@ -587,6 +587,9 @@ def test_the_cached_scalars_reach_the_real_status_provider(monkeypatch):
         "chain_hops": 3, "chain_unit": "hops",
         "known_sectors": SECTOR_COUNT,
         "dead_end_count": 0,
+        "formations_count": 0,
+        "genesis_count": 0,
+        "formations_panel": {"items": []},
     }
 
 
@@ -754,6 +757,9 @@ def test_the_refresh_is_keyed_by_this_profiles_world_id(monkeypatch):
     assert _screen.world_stats.merge({}) == {
         "known_sectors": SECTOR_COUNT,
         "dead_end_count": 0,
+        "formations_count": 0,
+        "genesis_count": 0,
+        "formations_panel": {"items": []},
     }
 
 
@@ -772,6 +778,9 @@ def test_a_raising_world_model_costs_the_count_not_the_cockpit(monkeypatch):
     assert screen.world_stats.merge({"ok": True}) == {
         "ok": True,
         "dead_end_count": 0,
+        "formations_count": 0,
+        "genesis_count": 0,
+        "formations_panel": {"items": []},
     }, "fabricated a known_sectors count"
     assert _scalars_after(screen) == {"chain_hops": 3, "chain_unit": "hops"}
 
