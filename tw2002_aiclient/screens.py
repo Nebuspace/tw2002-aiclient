@@ -1691,9 +1691,9 @@ class PlayShellScreen:
         # FORMATIONS retargets the `left_gutter` region key -- FOCUS's own
         # slot pre-this-WO, now claimed by a genuinely tall panel that
         # extends the left column below GOALS down toward LOGS (WO scope
-        # item 2/3). Honest-empty via `formations.compose_formations_panel`
-        # until a later WO wires a real catalog (see that module's
-        # docstring).
+        # item 2/3). `world_stats.WorldStats` supplies `formations_panel`
+        # on status (#317); `cockpit_formations.compose_formations_panel`
+        # renders it or the honest-empty state (see that module's docstring).
         left = regions["left_gutter"]
         cockpit_draw.draw_box(
             self.stdscr, left, weight="thin", attr=self._chrome_attr,
