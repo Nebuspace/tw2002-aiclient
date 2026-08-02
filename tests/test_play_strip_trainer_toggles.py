@@ -69,6 +69,7 @@ def test_all_three_toggles_default_on():
     assert play.port_trade_on is True
     assert play.cargo_upgrade_on is True
     assert play.ship_upgrade_on is True
+    assert play.find_stardock_on is True
 
 
 # --------------------------------------------------------------------------
@@ -102,6 +103,17 @@ def test_s_toggles_ship_upgrade_only(key):
     assert play.cargo_upgrade_on is True
 
 
+
+@pytest.mark.parametrize("key", [ord("f"), ord("F")])
+def test_f_toggles_find_stardock_only(key):
+    play = _make_play()
+    assert play.handle_key(key) is None
+    assert play.find_stardock_on is False
+    assert play.port_trade_on is True
+    assert play.cargo_upgrade_on is True
+    assert play.ship_upgrade_on is True
+
+
 def test_second_press_flips_back():
     play = _make_play()
     play.handle_key(ord("p"))
@@ -114,7 +126,7 @@ def test_second_press_flips_back():
 # No confirm gate -- these spend nothing, they are display-only chrome
 # --------------------------------------------------------------------------
 
-@pytest.mark.parametrize("key", [ord("p"), ord("c"), ord("s")])
+@pytest.mark.parametrize("key", [ord("f"), ord("p"), ord("c"), ord("s")])
 def test_toggle_keys_raise_no_confirm_gate(key):
     play = _make_play()
     assert play._arm_confirm is None
@@ -123,14 +135,19 @@ def test_toggle_keys_raise_no_confirm_gate(key):
 
 
 def test_confirm_gate_intercepts_toggle_keys_while_up():
-    """The gate's total capture (WO-P5-063) covers P/C/S too -- a `y/N`
+    """The gate's total capture (WO-P5-063) covers F/P/C/S too -- a `y/N`
     prompt for something else must not let a toggle key slip through and
     silently flip local chrome state underneath it."""
     play = _make_play()
     play.begin_arm_confirm("Explore", cycles=5)
-    before = play.port_trade_on
-    assert play.handle_key(ord("p")) is None, "toggle fired through an open confirm gate"
-    assert play.port_trade_on == before, "toggle state changed while the confirm gate was up"
+    before_f = play.find_stardock_on
+    before_p = play.port_trade_on
+    assert play.handle_key(ord("f")) is None, "toggle fired through an open confirm gate"
+    assert play.find_stardock_on is before_f
+    assert play._arm_confirm is None  # non-y dismisses the gate
+    play.begin_arm_confirm("Explore", cycles=5)
+    assert play.handle_key(ord("p")) is None
+    assert play.port_trade_on == before_p, "toggle state changed while the confirm gate was up"
 
 
 # --------------------------------------------------------------------------

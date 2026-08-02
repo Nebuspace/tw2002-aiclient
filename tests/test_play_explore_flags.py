@@ -121,7 +121,7 @@ def _drive(monkeypatch, keys, *, ensure=None, explore=None, spectating=False):
     return calls, seen.get("screen")
 
 _E, _Y = ord("E"), ord("y")
-_D, _F = ord("D"), ord("F")
+_D, _X = ord("D"), ord("X")
 
 # Confirm actions, derived from the module's own constants so the gate-tuple
 # pins below stay readable. OFF-marker *content* is pinned by LITERAL in
@@ -156,13 +156,13 @@ def test_dock_toggle_disables_gather_on_e_restart(monkeypatch) -> None:
     assert calls[0]["fight_tolls"] is False, calls[0]
 
 def test_tolls_toggle_forwards_true_and_keeps_dock_on(monkeypatch) -> None:
-    calls, _screen = _drive(monkeypatch, [_F, _E], spectating=True)
+    calls, _screen = _drive(monkeypatch, [_X, _E], spectating=True)
     assert len(calls) == 1, calls
     assert calls[0]["fight_tolls"] is True, calls[0]
     assert calls[0]["dock_new_ports"] is True, calls[0]
 
 def test_dock_off_plus_tolls_on_forwards_both(monkeypatch) -> None:
-    calls, _screen = _drive(monkeypatch, [_D, _F, _E], spectating=True)
+    calls, _screen = _drive(monkeypatch, [_D, _X, _E], spectating=True)
     assert len(calls) == 1, calls
     assert calls[0]["dock_new_ports"] is False, calls[0]
     assert calls[0]["fight_tolls"] is True, calls[0]
@@ -172,19 +172,19 @@ def test_toggling_twice_returns_to_default_on(monkeypatch) -> None:
     assert calls[0]["dock_new_ports"] is True, calls[0]
 
 def test_toggles_alone_do_not_add_starts_beyond_ensure_kick(monkeypatch) -> None:
-    """App-armed ensure may kick once; `D`/`F` alone never start another run."""
-    calls, screen = _drive(monkeypatch, [_D, _F])
+    """App-armed ensure may kick once; `D`/`X` alone never start another run."""
+    calls, screen = _drive(monkeypatch, [_D, _X])
     assert len(calls) == 1, calls  # ensure kick only
     assert screen.gate_raises == [], screen.gate_raises
 
 def test_toggles_alone_arm_nothing_when_not_app_armed(monkeypatch) -> None:
-    calls, screen = _drive(monkeypatch, [_D, _F], spectating=True)
+    calls, screen = _drive(monkeypatch, [_D, _X], spectating=True)
     assert calls == [], calls
     assert screen.gate_raises == [], screen.gate_raises
 
 def test_toggles_do_nothing_when_no_explore_offer_is_standing(monkeypatch) -> None:
     calls, screen = _drive(
-        monkeypatch, [_D, _F, _E],
+        monkeypatch, [_D, _X, _E],
         ensure=_Result(ok=True, classification="unknown"),
         spectating=True,
     )
@@ -271,7 +271,7 @@ def test_toggle_resolvers_reject_non_keycodes(bad) -> None:
 def test_toggle_resolvers_accept_both_cases() -> None:
     for k in (ord("d"), ord("D")):
         assert explore_flags.resolve_dock_toggle_key(k) is True
-    for k in (ord("f"), ord("F")):
+    for k in (ord("x"), ord("X")):
         assert explore_flags.resolve_tolls_toggle_key(k) is True
 
 def test_the_two_toggles_do_not_share_a_key() -> None:

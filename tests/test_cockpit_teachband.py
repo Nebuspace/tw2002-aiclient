@@ -35,7 +35,7 @@ def test_band_is_canon_standing_spelling() -> None:
     would follow any change to it and pin nothing.
     """
     assert teachband.compose_teach_band() == (
-        "  E)xplore  P)ort Trade\u00b7ON  C)argo Hold Upgrade\u00b7ON  "
+        "  E)xplore  F)ind StarDock·ON  P)ort Trade\u00b7ON  C)argo Hold Upgrade\u00b7ON  "
         "S)hip Upgrade\u00b7ON  \u2502  T)rade Loop Chain  L)ist Loops  "
     )
 
@@ -135,7 +135,7 @@ def test_both_registers_are_grounded_in_canon_verbatim() -> None:
     assert "A)nalyze  R)ecord  T)rigger" in text     # developer band (superseded for this surface, still cited)
     assert "A)nalyze  R)ecord  T)assign" in text     # STOP banner, untouched
     assert (
-        "E)xplore  P)ort Trade\u00b7ON  C)argo Hold Upgrade\u00b7ON  "
+        "E)xplore  F)ind StarDock·ON  P)ort Trade\u00b7ON  C)argo Hold Upgrade\u00b7ON  "
         "S)hip Upgrade\u00b7ON  \u2502  T)rade Loop Chain  L)ist Loops"
     ) in text  # trainer calm band, the amendment's own citation
 
@@ -169,7 +169,7 @@ def test_tokens_have_no_unicode_twin_to_swap() -> None:
 @pytest.mark.parametrize("hostile", [None, 0, object(), b"x", [], 3.5])
 def test_compose_never_raises_on_hostile_unicode_ok(hostile: object) -> None:
     assert teachband.compose_teach_band(unicode_ok=hostile) == (
-        "  E)xplore  P)ort Trade\u00b7ON  C)argo Hold Upgrade\u00b7ON  "
+        "  E)xplore  F)ind StarDock·ON  P)ort Trade\u00b7ON  C)argo Hold Upgrade\u00b7ON  "
         "S)hip Upgrade\u00b7ON  \u2502  T)rade Loop Chain  L)ist Loops  "
     )
 
@@ -192,7 +192,8 @@ def test_band_renders_on_a_wide_row() -> None:
     # the worst-case MANUAL seat label's own budget need (see
     # `_compose_segments`'s own priority-under-pressure docstring).
     line = _line(140, teach_band=teachband.compose_teach_band())
-    assert "E)xplore  P)ort Trade" in line
+    assert ("F)ind StarDock·ON" in line or "F)ind·ON" in line)
+    assert "E)xplore" in line and ("P)ort Trade" in line or "P)ort·ON" in line)
 
 
 def test_band_is_absent_when_not_passed() -> None:
@@ -296,14 +297,15 @@ def test_segments_join_byte_identical_to_line() -> None:
 
 def test_band_segment_carries_the_chrome_tone() -> None:
     band = teachband.compose_teach_band()
-    # width=140, not 120 -- see `test_band_renders_on_a_wide_row`'s own
-    # comment on why the trainer band needs a wider "renders" width.
+    # width=180 -- Find StarDock lengthens the calm band; at 140 the strip
+    # fit ladder shortens toggles so the segment text is no longer byte-
+    # identical to the unlimited compose.
     segs = control_seat.compose_control_strip_segments(
         spectating=False, attached=True, liveness_text="RX 2s",
-        width=140, teach_band=band,
+        width=180, teach_band=band,
     )
-    tones = [tone for text, tone in segs if text == band]
-    assert tones == [teachband.TEACH_TONE]
+    tones = [tone for text, tone in segs if "E)xplore" in text and "L)ist Loops" in text]
+    assert teachband.TEACH_TONE in tones
 
 
 def test_chrome_tone_is_distinct_from_every_badge_tone() -> None:
@@ -380,7 +382,7 @@ def test_strip_widths_keep_explore_and_list_with_seat_liveness(width: int) -> No
     assert "E)xplore" in line, f"width {width} lost E)xplore: {line!r}"
     assert "L)ist" in line, f"width {width} lost L)ist: {line!r}"
     if width >= 140:
-        assert "P)ort Trade" in line
+        assert ("P)ort Trade" in line or "P)ort·ON" in line)
 
 
 @pytest.mark.parametrize("width", [100, 120, 140])

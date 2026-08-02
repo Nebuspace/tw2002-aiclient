@@ -972,17 +972,30 @@ def _start_policy_explore(
     tolls,
     status_starting: str | None = None,
 ) -> bool:
-    """Start/restart infinite find-StarDock explore (trainer policy path).
+    """Start/restart infinite Explore (trainer policy path).
 
-    ``min_sectors=_EXPLORE_POLICY_MIN_SECTORS`` (0) is exhaustive; intent is
-    always ``INTENT_FIND_STARDOCK``. Used after App-armed ensure and on `E`.
-    Never raises. Returns True when the adapter reported ok (caller should
-    keep explore_poll_active).
+    ``min_sectors=_EXPLORE_POLICY_MIN_SECTORS`` (0) is exhaustive. Intent is
+    ``INTENT_FIND_STARDOCK`` when ``play.find_stardock_on`` (default ON),
+    else ``INTENT_MAP_FILL`` (WO-FIND-STARDOCK-TOGGLE). Used after App-armed
+    ensure and on `E`. Never raises. Returns True when the adapter reported
+    ok (caller should keep explore_poll_active).
     """
-    play.status_line = status_starting or (
-        "starting explore — find StarDock (infinite)…"
+    find_dock = bool(getattr(play, "find_stardock_on", True))
+    intent = (
+        _explore.INTENT_FIND_STARDOCK if find_dock else _explore.INTENT_MAP_FILL
     )
-    play.explore_band = "find StarDock starting…"
+    if find_dock:
+        starting = status_starting or "starting explore — find StarDock (infinite)…"
+        band_start = "find StarDock starting…"
+        ok_status = "explore started — find StarDock (infinite)"
+        ok_band = "find StarDock…"
+    else:
+        starting = status_starting or "starting explore — map fill (infinite)…"
+        band_start = "map fill starting…"
+        ok_status = "explore started — map fill (infinite)"
+        ok_band = "map fill…"
+    play.status_line = starting
+    play.explore_band = band_start
     try:
         play.draw()
     except Exception:  # noqa: BLE001 — paint must not block start
@@ -991,7 +1004,7 @@ def _start_policy_explore(
         explore = adapters.explore_start_for_profile(
             profile,
             min_sectors=_EXPLORE_POLICY_MIN_SECTORS,
-            intent=_explore.INTENT_FIND_STARDOCK,
+            intent=intent,
             dock_new_ports=dock,
             fight_tolls=tolls,
         )
@@ -1001,8 +1014,8 @@ def _start_policy_explore(
         play.explore_decision_lines = None
         return False
     if getattr(explore, "ok", False):
-        play.status_line = "explore started — find StarDock (infinite)"
-        play.explore_band = "find StarDock…"
+        play.status_line = ok_status
+        play.explore_band = ok_band
         return True
     reason = getattr(explore, "reason", None) or "unknown"
     play.status_line = f"explore did not start — {reason}"
@@ -1561,7 +1574,9 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                 and explore_offered
                 and _explore_flags.resolve_tolls_toggle_key(key)
             ):
-                # `F` opts in to fighting toll demands. Same shape as `D`.
+                # `X` opts in to fighting toll demands (WO-FIND-STARDOCK-
+                # TOGGLE: calm `F` is Find StarDock; fight-tolls moved here).
+                # Same shape as `D`.
                 #
                 # Both toggles sit AFTER `handle_key`, which means pressing
                 # one while a confirm gate is standing clears that gate (the
@@ -1579,10 +1594,9 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                 play.status_line = _explore_flags.describe_tolls(explore_tolls_opt_in)
                 continue
             if action is None and explore_offered and key in _EXPLORE_OFFER_KEYS:
-                # WO-PLAY-STRIP-POLICY-AUTO REVISE: `E` starts/restarts the
-                # same infinite find-StarDock explore App-armed ensure kicks —
-                # no confirm, no intent cycle, min_sectors=0. Dock starts from
-                # Port Trade·ON and residual `D` may have flipped the local flag.
+                # WO-PLAY-STRIP-POLICY-AUTO REVISE + WO-FIND-STARDOCK-TOGGLE:
+                # `E` starts/restarts infinite Explore — find-StarDock when
+                # `F)ind StarDock·ON`, else map-fill. No confirm.
                 explore_poll_active = _start_policy_explore(
                     play,
                     profile,
