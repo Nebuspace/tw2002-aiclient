@@ -96,9 +96,9 @@ _FULL_STATUS = {**_TRACE_STATUS, **_GOALS_STATUS, **_FOCUS_STATUS}
 # covering order, labels, and glyph pass-through all at once (mirrors
 # ``test_cockpit_decisions.py``'s own
 # ``test_full_fixture_exact_lines_with_glyph_placement`` convention).
-# _FULL_STATUS carries no ``formations_panel`` key (WO-LEFT-GUTTER-NEST-
-# FOCUS-FORMATIONS: no producer exists yet, see STARVED_ALLOWLIST), so
-# FORMATIONS always renders its own honest-empty line here.
+# _FULL_STATUS omits ``formations_panel`` (fixture pin, not a claim that
+# world_stats lacks a producer — see ``test_world_stats.py``), so FORMATIONS
+# renders its honest-empty line here.
 _FULL_EXPECTED = [
     f"{GLYPH_CHOSEN} Trade chain +550.0cr/t loop @1<->3 margin 55/hold",
     f"{GLYPH_OTHER} Upgrade +200.0cr/t hold capacity +40",
@@ -169,8 +169,7 @@ def test_status_non_dict_types_never_raise_and_collapse():
 
 def test_all_three_sections_present_but_malformed_still_collapses():
     # autopilot_trace/focus keys present but empty-shaped, no GOALS fields
-    # at all, and no formations_panel key either (FORMATIONS has no
-    # producer yet -- always its own honest-empty) -- every section still
+    # at all, and no formations_panel key in this fixture -- every section still
     # independently resolves to its own honest-empty marker, so the whole
     # pane still collapses.
     status = {"autopilot_trace": {}, "focus": {"candidates": []}}
