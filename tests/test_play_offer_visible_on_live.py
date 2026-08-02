@@ -206,6 +206,9 @@ def test_explore_terminal_poll_refreshes_known_sectors(monkeypatch) -> None:
     assert play.world_stats.merge({}) == {
         "known_sectors": 42,
         "dead_end_count": 0,
+        "formations_count": 0,
+        "genesis_count": 0,
+        "formations_panel": {"items": []},
     }
 
 

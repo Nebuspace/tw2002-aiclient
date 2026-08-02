@@ -624,3 +624,11 @@ def test_live_trace_still_wins_over_explore_mode_coach(_fresh_coach_kb):
     assert any("loop @1<->3" in ln for ln in lines)
     assert not any("Density-scan before stepping" in ln for ln in lines)
 
+
+
+def test_genesis_count_positive_renders_hide_planet_card(_fresh_coach_kb):
+    """WO-FORMATIONS-CATALOG-PORT — genesis_count consumer wired like dead_end_count."""
+    lines = compose_decisions_lines({"genesis_count": 1}, width=60)
+    joined = "\n".join(lines)
+    assert lines, "expected a coach card from genesis_count>0"
+    assert "dead" in joined.lower() or "planet" in joined.lower() or "genesis" in joined.lower() or "hide" in joined.lower()

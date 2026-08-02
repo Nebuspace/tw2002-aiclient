@@ -14,8 +14,13 @@ port, merge ``has_port=True``. Unknown / missing sector / no port observation
 ``dead_end_count`` (WO-COACH-DEAD-END-COUNT) counts world-model sectors whose
 ``warps`` list has length exactly 1 (colonization dead-ends — **not**
 menu-map signature dead-ends). Pre-scan **omits**; a completed scan may
-report ``0``. ``genesis_count`` stays unproduced here (needs
-``catalog_provider.genesis_candidates``).
+report ``0``.
+
+``formations_count`` / ``genesis_count`` / ``formations_panel``
+(WO-FORMATIONS-CATALOG-PORT): same dead-end scan feeds the in-tree catalog.
+Under the dead-end-only detector, ``formations_count`` (panel item count)
+equals ``genesis_count`` (genesis-kind candidates). ``formations_panel`` is
+``{"items": [{"name", "blurb"}, ...]}`` for the FORMATIONS gutter.
 
 **What stays allowlisted.** Other GOALS world-model keys still have no honest
 producer here:
@@ -23,10 +28,6 @@ producer here:
 * ``galaxy_size`` — nothing in the package produces one, and `state_parser`
   explicitly refuses to invent one. The Map row already degrades to
   "· N sectors" without a denominator.
-* ``formations_count`` / ``genesis_count`` — need the
-  `catalog_provider.genesis_candidates` seam, which is unimplemented; with
-  the only available provider the planner reports ``mode="unavailable"`` by
-  its own first branch.
 
 StarDock is **not** starved at the landmarks layer anymore: explore / ingest
 writers record ``landmarks[]``, and ``explore.find_landmark_sectors`` +
@@ -65,6 +66,9 @@ STARDOCK_SECTORS_KEY = "stardock_sectors"
 STARDOCK_FOUND_KEY = "stardock_found"
 HAS_PORT_KEY = "has_port"
 DEAD_END_COUNT_KEY = "dead_end_count"
+FORMATIONS_COUNT_KEY = "formations_count"
+GENESIS_COUNT_KEY = "genesis_count"
+FORMATIONS_PANEL_KEY = "formations_panel"
 
 
 def _sector_from_status(status: object) -> int | None:
@@ -98,6 +102,10 @@ class WorldStats:
         "_has_port_seen",
         "_dead_end_count",
         "_dead_end_seen",
+        "_formations_count",
+        "_genesis_count",
+        "_formations_panel",
+        "_formations_seen",
     )
 
     def __init__(self) -> None:
@@ -108,6 +116,10 @@ class WorldStats:
         self._has_port_seen = False
         self._dead_end_count: int | None = None
         self._dead_end_seen = False
+        self._formations_count: int | None = None
+        self._genesis_count: int | None = None
+        self._formations_panel: dict | None = None
+        self._formations_seen = False
 
     def refresh(
         self,
@@ -127,9 +139,9 @@ class WorldStats:
         sector). A completed lookup that does not observe a port clears any
         prior True so a move to an unknown sector cannot leave a stale card.
 
-        ``dead_end_count`` scans on every refresh (same cadence as known
-        sectors). A completed scan may report ``0``; failure leaves the prior
-        observation in place.
+        ``dead_end_count`` / formations scalars scan on every refresh (same
+        cadence as known sectors). A completed scan may report ``0``; failure
+        leaves the prior observation in place.
 
         `world_model` / `explore` are imported here rather than at module scope
         because this module is imported by the cockpit wiring while `refresh`
@@ -189,11 +201,14 @@ class WorldStats:
     def _refresh_dead_ends(
         self, world_id: object, *, state_dir: object = None
     ) -> None:
-        """Count one-warp sectors. Never raises.
+        """Count one-warp sectors + feed formations scalars. Never raises.
 
-        Completed scan (including zero) sets ``_dead_end_seen``. A raising or
-        hostile ``all_sectors`` leaves the prior observation untouched —
-        never invents a positive count from junk.
+        Completed scan (including zero) sets ``_dead_end_seen`` and
+        ``_formations_seen``. A raising or hostile ``all_sectors`` leaves the
+        prior observation untouched — never invents a positive count from junk.
+
+        Under WO-FORMATIONS-CATALOG-PORT's dead-end-only catalog,
+        ``formations_count`` == ``genesis_count`` == dead-end count.
         """
         try:
             from tw2002_aiclient import world_model as _world_model
@@ -206,17 +221,35 @@ class WorldStats:
             return
         if not isinstance(sectors, list):
             return
-        count = 0
+        dead_end_ids: list[int] = []
         for record in sectors:
             if not isinstance(record, dict):
                 return
             warps = record.get("warps")
             if not isinstance(warps, list):
                 continue
-            if len(warps) == 1:
-                count += 1
+            if len(warps) != 1:
+                continue
+            sid = record.get("sector_id")
+            if isinstance(sid, bool) or not isinstance(sid, int):
+                continue
+            dead_end_ids.append(sid)
+        dead_end_ids.sort()
+        count = len(dead_end_ids)
         self._dead_end_count = count
         self._dead_end_seen = True
+        # Same observation feeds the formations panel / GOALS count / coach.
+        items = [
+            {
+                "name": f"Dead-end #{sid}",
+                "blurb": "one warp — defensible siting candidate",
+            }
+            for sid in dead_end_ids
+        ]
+        self._formations_count = count
+        self._genesis_count = count
+        self._formations_panel = {"items": items}
+        self._formations_seen = True
 
     def _refresh_has_port(
         self,
@@ -270,8 +303,8 @@ class WorldStats:
 
         **``has_port`` is True-or-omit.** Never merges ``False``.
 
-        **``dead_end_count``:** omitted until a completed scan; then a
-        non-negative int (including ``0``).
+        **``dead_end_count`` / formations:** omitted until a completed scan;
+        then non-negative ints (including ``0``) and a panel payload.
         """
         if not isinstance(status, dict):
             return status
@@ -280,6 +313,7 @@ class WorldStats:
             and not self._stardock_seen
             and not self._has_port_seen
             and not self._dead_end_seen
+            and not self._formations_seen
         ):
             return status
         merged = dict(status)
@@ -294,6 +328,15 @@ class WorldStats:
             merged[HAS_PORT_KEY] = True
         if self._dead_end_seen and merged.get(DEAD_END_COUNT_KEY) is None:
             merged[DEAD_END_COUNT_KEY] = self._dead_end_count
+        if self._formations_seen:
+            if merged.get(FORMATIONS_COUNT_KEY) is None:
+                merged[FORMATIONS_COUNT_KEY] = self._formations_count
+            if merged.get(GENESIS_COUNT_KEY) is None:
+                merged[GENESIS_COUNT_KEY] = self._genesis_count
+            if merged.get(FORMATIONS_PANEL_KEY) is None and self._formations_panel is not None:
+                merged[FORMATIONS_PANEL_KEY] = {
+                    "items": list(self._formations_panel.get("items", [])),
+                }
         return merged
 
     def wrap(self, provider):

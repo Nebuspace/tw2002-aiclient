@@ -948,6 +948,10 @@ def cmd_explore_start(args):
     # sending keeps an explicit arm decision on the wire.
     payload["dock_new_ports"] = bool(getattr(args, "dock_new_ports", False))
     payload["fight_tolls"] = bool(getattr(args, "fight_tolls", False))
+    # WO-FORMATIONS-CATALOG-PORT: opt-in intent; omitted → daemon default map_fill.
+    intent = getattr(args, "intent", None)
+    if intent:
+        payload["intent"] = intent
     resp = send_request("explore_start", payload, run_dir=run_dir)
     print_response(resp, args)
     return 0 if resp.get("ok") else 1
@@ -1727,6 +1731,18 @@ def build_parser() -> argparse.ArgumentParser:
                     default=False, dest="fight_tolls",
                     help="let the toll policy answer fighter encounters "
                          "(Attack/Retreat only, never Pay; OFF by default)")
+    # WO-FORMATIONS-CATALOG-PORT: closed set mirrors explore.INTENTS (not
+    # ARMABLE_INTENTS — Play E-cycle stays 2-wide; formations is CLI-only).
+    from tw2002_aiclient import explore as _explore_intents
+
+    sp.add_argument(
+        "--intent",
+        choices=sorted(_explore_intents.INTENTS),
+        default=None,
+        dest="intent",
+        help="explore intent (default daemon: map_fill; find_formations is "
+             "CLI-armable, not on Play's E cycle)",
+    )
     sp.add_argument("--run-dir", default=None, metavar="PATH", dest="run_dir",
                     help="daemon run directory override")
     sp.add_argument("--json", action="store_true", help="machine-parseable JSON output")

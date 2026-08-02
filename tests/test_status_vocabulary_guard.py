@@ -52,21 +52,8 @@ STARVED_ALLOWLIST: dict[str, tuple[str, str]] = {
     #    list). The other four were starved one layer deeper than the panel —
     #    the reader existed, the writer never did. Each reason below is the
     #    evidence, not the original assumption:
-    "formations_count": (
-        "BLOCKED",
-        "needs `catalog_provider.genesis_candidates`; that seam is unimplemented "
-        "and the planner returns mode='unavailable' — WO-FORMATIONS-CATALOG-PORT",
-    ),
-    # formations_panel — read by cockpit.formations.compose_formations_panel
-    # (WO-LEFT-GUTTER-NEST-FOCUS-FORMATIONS). Same catalog-seam gap as
-    # formations_count above (distinct field: a by-name/blurb list, not a
-    # count) — no producer exists until the daemon status verb wires a real
-    # discovered-topology payload; the panel renders honest-empty until then.
-    "formations_panel": (
-        "BLOCKED",
-        "needs a discovered-topology-by-name payload from the daemon status verb; "
-        "that seam is unimplemented — WO-FORMATIONS-CATALOG-PORT",
-    ),
+    # formations_count / formations_panel — supplied by world_stats.WorldStats
+    # (WO-FORMATIONS-CATALOG-PORT); dead-end-only catalog.
     # stardock_found / stardock_sectors — supplied by world_stats.WorldStats
     # (WO-GOALS-STARDOCK-STATUS); landmarks writers already on main.
     # -- T3: no extractor exists; needs new screen parsing and captured fixtures.

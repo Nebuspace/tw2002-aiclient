@@ -866,11 +866,15 @@ def _adjacent_hop_toward(
 
 INTENT_MAP_FILL = "map_fill"
 INTENT_FIND_STARDOCK = "find_stardock"
+INTENT_FIND_FORMATIONS = "find_formations"
 #: The intents a caller may arm. Deliberately a closed set: an unknown intent
 #: is REFUSED by the daemon rather than silently falling back to map-fill,
 #: because a run that quietly does something other than what the confirm line
 #: promised is exactly what the arm gate exists to prevent.
-INTENTS = frozenset({INTENT_MAP_FILL, INTENT_FIND_STARDOCK})
+#:
+#: ``find_formations`` is CLI/daemon-armable (WO-FORMATIONS-CATALOG-PORT) but
+#: deliberately NOT in ``ARMABLE_INTENTS`` — Play's E-cycle stays 2-wide (#247).
+INTENTS = frozenset({INTENT_MAP_FILL, INTENT_FIND_STARDOCK, INTENT_FIND_FORMATIONS})
 
 #: Cycle order for the Play `E` offer. ORDERED (a frozenset is not) and
 #: map-fill FIRST so the first `E` press raises exactly the prompt it raised
@@ -879,9 +883,8 @@ INTENTS = frozenset({INTENT_MAP_FILL, INTENT_FIND_STARDOCK})
 #:
 #: A fuller trainer-panel cycle (off → mapfill → stardock → formations) was
 #: never product-wired and was retired (WO-RETIRE-CYCLE-EXPLORE-MODE / #247).
-#: `formations` still has no armable path (`plan_find_formations` has no
-#: product callers); Play stays on these two daemon intents only. Unifying
-#: panel mode names with daemon intents waits on the WO that wires formations.
+#: Formations is a separate CLI intent (`tw explore start --intent
+#: find_formations`); Play stays on these two daemon intents only.
 ARMABLE_INTENTS: tuple[str, ...] = (INTENT_MAP_FILL, INTENT_FIND_STARDOCK)
 
 
@@ -949,6 +952,33 @@ def warp_target_for_intent(
             deny=deny,
         )
         return IntentTick(next_sector=target, reason=reason)
+    if intent == INTENT_FIND_FORMATIONS:
+        # Product call path for WO-FORMATIONS-CATALOG-PORT: real in-tree
+        # catalog_provider (dead-end-only). Never import twclient.
+        from tw2002_aiclient.formations import catalog_world
+
+        plan = plan_find_formations(
+            world_id,
+            current_sector=current_sector,
+            turn_budget=turn_budget,
+            epsilon=epsilon,
+            state_dir=state_dir,
+            rng=rng,
+            catalog_provider=catalog_world,
+        )
+        if plan.mode == "arrived":
+            return IntentTick(next_sector=None, goal_reached=True)
+        if plan.mode == "unavailable":
+            return IntentTick(
+                next_sector=None,
+                reason="explore_exhausted:formations_unavailable",
+            )
+        if plan.next_sector is None:
+            reason = plan.mode or "no_hop"
+            if not reason.startswith("explore_exhausted"):
+                reason = f"explore_exhausted:{reason}"
+            return IntentTick(next_sector=None, reason=reason)
+        return IntentTick(next_sector=int(plan.next_sector))
     if intent != INTENT_FIND_STARDOCK:
         return IntentTick(next_sector=None, reason=f"explore_exhausted:unknown_intent:{intent}")
 
