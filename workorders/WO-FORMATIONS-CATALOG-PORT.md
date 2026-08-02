@@ -1,6 +1,6 @@
 # WO-FORMATIONS-CATALOG-PORT — Port formations catalogue into tw2002_aiclient
 
-**Status:** OPEN · EXECUTE · HIGH · seat `impl-aiclient-cursor` only  
+**Status:** DONE · origin `20b4646` (#317) · tip-honesty stamp 2026-08-02 (product on main; banner was stale OPEN/EXECUTE)
 **Posted:** 2026-07-28T04:41Z · **Re-scoped:** 2026-08-02T03:10Z (hub · after CC misroute STOP)  
 **Branch:** `wo/FORMATIONS-CATALOG-PORT` · PR #317  
 **Zone:** `tw2002-aiclient` only — never Sectorwars  

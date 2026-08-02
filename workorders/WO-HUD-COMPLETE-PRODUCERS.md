@@ -1,6 +1,6 @@
 # WO-HUD-COMPLETE-PRODUCERS
 
-**Status:** BUILT · offline green · live blocked once on unlimited-turn confirm · REVISE in flight  
+**Status:** DONE · origin `f5db859` (#254) · tip-honesty stamp 2026-08-02 (product on main; banner was stale BUILT)
 **Depends:** `main` ≥ `102681e` · HUD bridge #226 · daemon lifecycle #252
 
 ## Goal

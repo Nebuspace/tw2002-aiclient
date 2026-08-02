@@ -1,6 +1,6 @@
 # WO-COMBAT-ENCOUNTER-POLICY — programmatic fight/retreat on encounter prompt
 
-**Status:** OPEN · EXECUTE · HIGH · Max GO 2026-07-28 (90% auto-fight NPC) · see WO-COMBAT-ENCOUNTER-POLICY-EXEC  
+**Status:** DONE · origin `5ffb264` (#206) · tip-honesty stamp 2026-08-02 (product on main; banner was stale OPEN/EXECUTE)
 **Posted:** 2026-07-28T02:52Z · hub bank from #128 live mine/fighter halt  
 **Refs:** Max wording quoted in CC STATUS 2026-07-28T02:51:51Z · AP-12 emit_key_if_safe
 

@@ -1,6 +1,6 @@
 # WO-PLAY-GATHER-CONTINUE — Gather port data without halting Explore
 
-**Status:** APPROVED · orchestrator-owned lead-seat build  
+**Status:** DONE · origin `fcdc09b` (#266) · tip-honesty stamp 2026-08-02 (product on main; banner was stale APPROVED)
 **Approved:** 2026-07-30 · Max selected guarded-chain contract  
 **Branch:** `wo/PLAY-GATHER-CONTINUE`
 

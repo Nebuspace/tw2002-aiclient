@@ -1,6 +1,6 @@
 # WO-TEST-STATE-PARSER-REHAB — Delete archive parse_state suite
 
-**Status:** SEAT-DONE · awaiting hub Accept · Cursor (`impl-aiclient-cursor`)  
+**Status:** DONE · origin `2defd0f` (#153) · tip-honesty stamp 2026-08-02 (product on main; banner was stale SEAT-DONE awaiting Accept)
 **Posted:** banked #149 · EXEC after #151 · seat STATUS 2026-07-28T04:50Z  
 **Refs:** AUDIT-TEST-IGNORE-LIST-LANDMINE.md · #151 DELETE lesson
 

@@ -1,6 +1,6 @@
 # WO-ADAPTER-FRESHNESS-FUTURE-TS — Clamp future-timestamp delta in _is_fresh
 
-**Status:** IN PROGRESS · EXECUTE · MED · Cursor-class · impl-aiclient-cursor  
+**Status:** DONE · origin `ff48656` (#131) · tip-honesty stamp 2026-08-02 (product on main; banner was stale IN PROGRESS)
 **Posted:** 2026-07-28T00:15:00Z · banked from WO-CHAIN-DETECT-PORT STATUS  
 **Seeded for execute:** 2026-07-28T01:36Z · hub  
 **Seat:** impl-aiclient-cursor  

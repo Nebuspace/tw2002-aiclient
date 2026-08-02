@@ -1,6 +1,6 @@
 # WO-TEST-FORMATIONS-REHAB — Delete orphan formations test (no producer)
 
-**Status:** SEAT-DONE · awaiting hub Accept · Cursor (`impl-aiclient-cursor`)  
+**Status:** DONE · origin `07835a3` (#151) · tip-honesty stamp 2026-08-02 (product on main; banner was stale SEAT-DONE awaiting Accept)
 **Posted:** banked #149 · EXEC · **REVISE (a) DELETE** hub 2026-07-28T04:41:32Z · seat STATUS 2026-07-28T04:42Z  
 **Refs:** ignore-list audit HIGH · #142 · CC evidence (no formations producer on tip) · port bank #152
 

@@ -1,6 +1,6 @@
 # WO-TEST-IGNORE-LIST-LANDMINE-AUDIT — What the 39 ignored tests hide
 
-**Status:** SEAT-DONE · awaiting hub Accept · Cursor (`impl-aiclient-cursor`)  
+**Status:** DONE · origin `da68323` (#149) · tip-honesty stamp 2026-08-02 (product on main; banner was stale SEAT-DONE awaiting Accept)
 **Posted:** 2026-07-28T04:26Z overnight · after formations landmine + CC correction · seat STATUS 2026-07-28T04:33Z  
 **Refs:** pytest.ini --ignore list · CC 04:16:48Z (37/39 hard-fail on twclient) · wire plan
 
