@@ -1,6 +1,6 @@
 # WO-STRIP-HOTFIX-FIT-TRADE-LOGS
 
-**Status:** READY · EXECUTE · HIGH · Max GO 2026-07-31 ("dont wait… go fix")
+**Status:** DONE · origin `efeb7e7` (#299) · tip-honesty stamp 2026-08-02 (product on main; banner was stale READY)
 **Seat:** `impl-aiclient-cursor`
 **Branch:** `wo/STRIP-HOTFIX-FIT-TRADE-LOGS`
 **Depends:** `main` ≥ `e6ef566` (#298)

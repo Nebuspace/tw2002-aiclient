@@ -1,6 +1,6 @@
 # WO-FOLD-EMPTY-DECISIONS-DOC
 
-**Status:** READY · EXECUTE · LOW · comment-only (hub note from #285 Accept)
+**Status:** DONE · origin `c4d50dc` (#287) · tip-honesty stamp 2026-08-02 (product on main; banner was stale READY)
 **Seat:** `impl-aiclient-cursor`
 **Branch:** `wo/FOLD-EMPTY-DECISIONS-DOC`
 **Depends:** `main` ≥ `bf3c268` (#285 calm-empty HELP)

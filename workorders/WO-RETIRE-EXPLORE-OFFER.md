@@ -1,6 +1,6 @@
 # WO-RETIRE-EXPLORE-OFFER
 
-**Status:** READY · EXECUTE · MED · Play honesty · Cursor  
+**Status:** DONE · origin `245dfe3` (#304) · tip-honesty stamp 2026-08-02 (product on main; banner was stale READY)
 **Seat:** `impl-aiclient-cursor`  
 **Branch:** `wo/RETIRE-EXPLORE-OFFER`  
 **Depends:** `main` ≥ `1df5ab2` (#303 help vocab)

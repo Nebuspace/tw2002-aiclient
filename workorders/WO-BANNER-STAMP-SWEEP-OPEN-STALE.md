@@ -1,6 +1,6 @@
 # WO-BANNER-STAMP-SWEEP-OPEN-STALE
 
-**Status:** READY · EXECUTE · LOW · docs-only tip-honesty
+**Status:** DONE · origin `b81c225` (#288) · tip-honesty stamp 2026-08-02 (sweep landed on main; banner was stale READY)
 **Seat:** `impl-aiclient-cursor`
 **Branch:** `wo/BANNER-STAMP-SWEEP-OPEN-STALE`
 **Depends:** `main` ≥ `c4d50dc`

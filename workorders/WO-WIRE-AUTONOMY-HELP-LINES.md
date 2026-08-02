@@ -1,6 +1,6 @@
 # WO-WIRE-AUTONOMY-HELP-LINES
 
-**Status:** READY · EXECUTE · MED · unused-code WIRE (IDLE-KICK refill)
+**Status:** DONE · origin `bf3c268` (#285) · tip-honesty stamp 2026-08-02 (product on main; banner was stale READY)
 **Seat:** `impl-aiclient-cursor`
 **Branch:** `wo/WIRE-AUTONOMY-HELP-LINES`
 **Depends:** `main` ≥ `1bcd3c8` (#282 teachband tokens + `compose_autonomy_help_lines`)

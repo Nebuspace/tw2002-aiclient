@@ -1,6 +1,6 @@
 # WO-DEATH-RESPAWN
 
-**Status:** READY · banked until #307 merges · HIGH · Max live 2026-08-01  
+**Status:** DONE · origin `96c2716` (#308) · tip-honesty stamp 2026-08-02 (product on main; banner was stale READY)
 **Seat:** `impl-aiclient-cursor`  
 **Branch:** `wo/DEATH-RESPAWN`  
 **Depends:** `main` ≥ `ad0aff8` · after **#307** WARP-CONFIRM (avoid→N) lands  

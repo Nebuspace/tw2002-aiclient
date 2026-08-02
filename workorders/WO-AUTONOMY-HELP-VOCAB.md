@@ -1,6 +1,6 @@
 # WO-AUTONOMY-HELP-VOCAB
 
-**Status:** READY · EXECUTE · HIGH · Play-visible · Cursor  
+**Status:** DONE · origin `1df5ab2` (#303) · tip-honesty stamp 2026-08-02 (product on main; banner was stale READY)
 **Seat:** `impl-aiclient-cursor`  
 **Branch:** `wo/AUTONOMY-HELP-VOCAB`  
 **Depends:** `main` ≥ `183ac8e` (strip policy + trade backoff)

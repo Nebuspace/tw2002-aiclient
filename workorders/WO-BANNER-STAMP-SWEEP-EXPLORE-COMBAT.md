@@ -1,6 +1,6 @@
 # WO-BANNER-STAMP-SWEEP-EXPLORE-COMBAT
 
-**Status:** READY · EXECUTE · LOW · docs-only tip-honesty
+**Status:** DONE · origin `8d86ad0` (#293) · tip-honesty stamp 2026-08-02 (sweep landed on main; banner was stale READY)
 **Seat:** `impl-aiclient-cursor`
 **Branch:** `wo/BANNER-STAMP-SWEEP-EXPLORE-COMBAT`
 **Depends:** `main` ≥ `f22dd10`

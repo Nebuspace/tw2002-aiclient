@@ -1,6 +1,6 @@
 # WO-DRAFT-APPROVE-KERNEL-BRIDGE — cockpit Analyze approval → kernel rule store
 
-**Status:** READY · visible automation (follow-on #222)
+**Status:** DONE · origin `84ad771` (#223) · tip-honesty stamp 2026-08-02 (product on main; banner was stale READY)
 **Seat:** `impl-claudecode-aiclient`
 **Branch:** `wo/DRAFT-APPROVE-KERNEL-BRIDGE`
 **Depends:** `main` ≥ `974a8a8` (rule writer + promote on main)

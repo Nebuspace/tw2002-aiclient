@@ -1,6 +1,6 @@
 # WO-WARP-CONFIRM-Y
 
-**Status:** REVISE · EXECUTE · CRITICAL · hub reject of always-Y tip `be413ed` · Max live-repro'd avoid→Y→mines→pod destroyed · Cursor  
+**Status:** DONE · origin `35b9bb9` (#307) · tip-honesty stamp 2026-08-02 (product on main; banner was stale READY)
 **Seat:** `impl-aiclient-cursor`  
 **Branch:** `wo/WARP-CONFIRM-Y`  
 **Depends:** `main` ≥ `9b78c57`  

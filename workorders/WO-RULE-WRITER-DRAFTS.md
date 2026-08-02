@@ -1,6 +1,6 @@
 # WO-RULE-WRITER-DRAFTS — persist inert rule drafts under `state/rules/_drafts/`
 
-**Status:** READY · automation frontier (follow-on #221)
+**Status:** DONE · origin `974a8a8` (#222) · tip-honesty stamp 2026-08-02 (product on main; banner was stale READY)
 **Seat:** `impl-claudecode-aiclient`
 **Branch:** `wo/RULE-WRITER-DRAFTS`
 **Depends:** `main` ≥ `46ae461` (`tw reflex` + `rules/store.py` on main)

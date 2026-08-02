@@ -1,6 +1,6 @@
 # WO-PLAY-STRIP-POLICY-AUTO
 
-**Status:** READY · EXECUTE · HIGH · Max GO 2026-07-31 (trainer strip redesign wave 3/3)
+**Status:** DONE · origin `ccb00bb` (#297) · tip-honesty stamp 2026-08-02 (product on main; banner was stale READY)
 **Seat:** `impl-aiclient-cursor`
 **Branch:** `wo/PLAY-STRIP-POLICY-AUTO`
 **Depends:** DECISION `RESOLVED-TRAINER-STRIP-AND-GUTTER-20260731` · chrome #295 + gutter #296 on `main` (≥ `e1f96c4`)
