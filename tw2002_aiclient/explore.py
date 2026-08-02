@@ -672,10 +672,11 @@ def explore_decision_lines_from_run(run: object) -> list[str] | None:
     """Product seam for ``explore_status.run`` → DECISIONS lines.
 
     Maps daemon intents onto the panel mode names ``format_explore_decision_lines``
-    already knows (``map_fill``→``mapfill``, ``find_stardock``→``stardock``) and
-    builds the minimal plan-shaped object that composer reads. Returns ``None``
-    when the run is unusable so the caller clears the overlay rather than
-    inventing chrome. Does not fork a second string table.
+    already knows (``map_fill``→``mapfill``, ``find_stardock``→``stardock``,
+    ``find_formations``→``formations``) and builds the minimal plan-shaped
+    object that composer reads. Returns ``None`` when the run is unusable so
+    the caller clears the overlay rather than inventing chrome. Does not fork
+    a second string table.
 
     WO-EXPLORE-DECISION-FLAGS: when ``dock_new_ports`` / ``fight_tolls`` are
     present on the run dict, append one flags line using
@@ -700,6 +701,9 @@ def explore_decision_lines_from_run(run: object) -> list[str] | None:
     elif intent == INTENT_FIND_STARDOCK:
         plan = SimpleNamespace(next_sector=nxt, mode="live")
         lines = format_explore_decision_lines("stardock", plan)
+    elif intent == INTENT_FIND_FORMATIONS:
+        plan = SimpleNamespace(next_sector=nxt, mode="live")
+        lines = format_explore_decision_lines("formations", plan)
     else:
         return None
     extra: list[str] = []

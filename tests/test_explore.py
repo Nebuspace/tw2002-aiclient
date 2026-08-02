@@ -353,6 +353,20 @@ def test_format_explore_decision_lines_mapfill():
     assert "→9" in lines[1]
 
 
+def test_format_explore_decision_lines_formations():
+    """Thin formations DECISIONS pin (WO-FORMATIONS-DECISIONS-PANEL).
+    Broader coverage lives in ``test_explore_decision_lines_wire.py``.
+    """
+    from types import SimpleNamespace
+
+    from tw2002_aiclient.explore import format_explore_decision_lines
+
+    plan = SimpleNamespace(next_sector=9, mode="live")
+    lines = format_explore_decision_lines("formations", plan)
+    assert lines[0] == "FORMATIONS"
+    assert "→9" in lines[1]
+
+
 def test_plan_map_fill_prefers_port_neighborhood_over_nearer_unrelated(tmp_path: Path):
     """Accept-2 WO-PORT-CHAIN-SEED: seeded port fringe beats a depth-1 unrelated hop."""
     wid = "test+portseed"
