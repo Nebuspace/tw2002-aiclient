@@ -16,6 +16,10 @@ So ``formations_count`` (panel items) may exceed ``genesis_count``. See
 ``catalog_world`` (explore provider seam) and ``world_stats.WorldStats``
 both call it so panel / GOALS / coach cannot drift from
 ``plan_find_formations`` (WO-FORMATIONS-WORLD-STATS-VIA-CATALOG).
+
+``route_hazard_for_hop`` is the guard predicate for one-way / warp-sink
+hops (WO-ROUTE-HAZARD-GUARD) — callers STOP; they must not silently
+reroute.
 """
 
 from __future__ import annotations
@@ -31,6 +35,7 @@ __all__ = [
     "membership_map",
     "panel_items_from_catalog",
     "recommend_genesis",
+    "route_hazard_for_hop",
     "write_membership",
 ]
 
@@ -384,6 +389,37 @@ _KIND_TO_MEMBERSHIP = {
     "one_way": "one-way",
     "warp_sink": "warp-sink",
 }
+
+
+def route_hazard_for_hop(
+    graph: Mapping[int, Sequence[int]],
+    frm: int,
+    to: int,
+    *,
+    membership: Mapping[int, Sequence[str]] | None = None,
+) -> Optional[str]:
+    """Typed STOP reason if this hop crosses a known route hazard, else None.
+
+    Canon (``special-formations.md`` Dual consumer split): one-ways and
+    warp-sinks feed **guards that STOP**, never an autonomous reroute.
+    This predicate only names the hazard — callers must halt, not search
+    for an alternate path.
+
+    * One-way: directed ``frm→to`` among known sectors with no reverse.
+    * Warp-sink: ``to`` carries ``warp-sink`` in ``formation_membership``.
+    """
+    a = int(frm)
+    b = int(to)
+    if a in graph and b in graph:
+        outs_a = {int(x) for x in graph.get(a, ())}
+        outs_b = {int(x) for x in graph.get(b, ())}
+        if b in outs_a and a not in outs_b:
+            return f"route_hazard:one_way:{a}->{b}"
+    if membership is not None:
+        tags = {str(t) for t in (membership.get(b) or ())}
+        if "warp-sink" in tags:
+            return f"route_hazard:warp_sink:{b}"
+    return None
 
 
 def membership_map(catalog: FormationsCatalog) -> dict[int, list[str]]:
