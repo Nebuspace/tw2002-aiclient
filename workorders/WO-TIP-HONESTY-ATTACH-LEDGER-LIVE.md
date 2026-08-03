@@ -1,13 +1,13 @@
 # WO-TIP-HONESTY-ATTACH-LEDGER-LIVE — Tip honesty after #353
 
-> Status: **IN FLIGHT** · seat `impl-aiclient-cursor` · hub self-scope HANDOFF 2026-08-03T05:55:30Z
+> Status: **DONE** · origin `955f7ad` (#354) · seat `impl-aiclient-cursor` · Accept 2026-08-03
 
 ## Goal
 Correct tip comments that still claim attach ledger / LedgerWriter is deferred after #353 landed.
 
 ## Premise
 - `session/cli.py` ~850 still cites `_handle_attach` "record_attach_keystroke deferred"
-- `workorders/WO-DAEMON-LEDGER-WRITER-ATTACH.md` still IN FLIGHT after Accept
+- `workorders/WO-DAEMON-LEDGER-WRITER-ATTACH.md` stamped DONE with #353 Accept
 - `screens.py` approval comment still says LedgerWriter deferred
 
 ## Scope

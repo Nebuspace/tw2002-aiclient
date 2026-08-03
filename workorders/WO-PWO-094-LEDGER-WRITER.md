@@ -1,8 +1,8 @@
 # WO-PWO-094-LEDGER-WRITER — LedgerWriter (closes 094 + 025 residual)
 
-> Status: **IN FLIGHT** · seat `impl-aiclient-cursor` · hub GO 2026-08-03T05:00:12Z  
+> Status: **DONE** · origin `2644499` (#349) · seat `impl-aiclient-cursor` · Accept 2026-08-03  
 > Type: harden / substrate · PWO-094 (+ PWO-025 residual)  
-> Tip base: `528252a`
+> Tip base: `528252a` → merged `2644499`
 
 ## Goal
 Ship a reborn `LedgerWriter` that appends one actor-tagged row per dispatch (`actor∈{app,human}`), matching `trace-ledger` canon, with secret redaction (pairs PWO-111 — no reinvent).
