@@ -88,6 +88,7 @@ from typing import Callable, Mapping, Optional, Sequence
 from tw2002_aiclient import world_model
 from tw2002_aiclient.chains import TradeHop
 from tw2002_aiclient.explore import known_graph
+from tw2002_aiclient.formations import route_hazard_for_hop
 
 # port-economics.md's "Ore" is the same commodity state_parser._COMMODITIES
 # spells out as "Fuel Ore" -- this maps the doc's name to the parser's.
@@ -530,6 +531,7 @@ def build_trade_hops(
         return (), None
 
     graph = known_graph(world_id, state_dir=state_dir)
+    membership = _membership_index(world_id, state_dir=state_dir)
     commodity_maps = _commodity_maps(ports)
 
     # Phase 1 -- cheap filters only (no routing). Collect priced
@@ -593,6 +595,8 @@ def build_trade_hops(
         path = paths_from[frm].get(to)
         if path is None:
             continue  # no known route -- fail-closed, no hop
+        if _path_has_route_hazard(graph, path, membership=membership):
+            continue  # shortest path is a route hazard — exclude, no detour
         turns = len(path) - 1  # path inclusive of both endpoints
         if turns <= 0:
             continue
@@ -662,6 +666,37 @@ def _class_ports(
             continue
         ports[sector_id] = (cls, port.get("last_seen_ts"))
     return ports
+
+
+
+def _membership_index(world_id: str, *, state_dir=None) -> dict[int, tuple[str, ...]]:
+    """sector_id → formation_membership tags (empty when unset)."""
+    out: dict[int, tuple[str, ...]] = {}
+    for rec in world_model.all_sectors(world_id, state_dir=state_dir):
+        tags = rec.get("formation_membership") or ()
+        if tags:
+            try:
+                out[int(rec["sector_id"])] = tuple(str(t) for t in tags)
+            except (KeyError, TypeError, ValueError):
+                continue
+    return out
+
+
+def _path_has_route_hazard(
+    graph: Mapping[int, Sequence[int]],
+    path: Sequence[int],
+    *,
+    membership: Mapping[int, Sequence[str]] | None = None,
+) -> bool:
+    """True when the planned shortest path crosses a known route hazard.
+
+    WO-TRADE-HAZARD-PATH-EXCLUDE: exclude the hop/pair — never search an
+    alternate path (canon Dual-consumer: STOP/exclude, not reroute).
+    """
+    for a, b in zip(path, path[1:]):
+        if route_hazard_for_hop(graph, a, b, membership=membership) is not None:
+            return True
+    return False
 
 
 def _bfs_paths_from(
@@ -789,6 +824,7 @@ def build_candidate_pairs(
         )
 
     graph = known_graph(world_id, state_dir=state_dir)
+    membership = _membership_index(world_id, state_dir=state_dir)
     path_cache: dict[int, dict[int, tuple[int, ...]]] = {}
 
     def _paths_from(sector: int) -> dict[int, tuple[int, ...]]:
@@ -823,6 +859,10 @@ def build_candidate_pairs(
             path_ba = _paths_from(sector_b).get(sector_a)
             if path_ab is None or path_ba is None:
                 continue  # compatible posture, no known route -- fail-closed, no pair
+            if _path_has_route_hazard(graph, path_ab, membership=membership) or _path_has_route_hazard(
+                graph, path_ba, membership=membership
+            ):
+                continue  # shortest path is a route hazard — exclude, no detour
             turns = (len(path_ab) - 1) + (len(path_ba) - 1)
             if turns <= 0:
                 continue
