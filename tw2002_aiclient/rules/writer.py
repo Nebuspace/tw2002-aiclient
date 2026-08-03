@@ -43,6 +43,7 @@ import tempfile
 from pathlib import Path
 from typing import Any, Mapping
 
+from ..alignment_gate import AlignmentRefusal, refuse_pvp_aggression_rule
 from ..rule_engine import RuleDocumentError, rule_from_dict, rule_to_dict
 from .store import resolve_roots
 
@@ -156,6 +157,10 @@ def write_draft(
     # here means a future change to either function cannot quietly bless a
     # draft without this line becoming visibly wrong.
     payload["approved"] = False
+    try:
+        refuse_pvp_aggression_rule(payload)
+    except AlignmentRefusal as exc:
+        raise RuleWriteError(str(exc)) from None
 
     _, directory = resolve_roots(
         state_dir=state_dir, rules_path=rules_path, drafts_path=drafts_path
@@ -203,6 +208,10 @@ def promote_draft(
         rule = rule_from_dict({**document, "approved": True})
     except RuleDocumentError as exc:
         raise RuleWriteError(f"draft {rule_id!r} is not promotable: {exc}") from None
+    try:
+        refuse_pvp_aggression_rule(rule_to_dict(rule))
+    except AlignmentRefusal as exc:
+        raise RuleWriteError(str(exc)) from None
 
     payload = rule_to_dict(rule)
     payload["approved"] = True

@@ -26,7 +26,7 @@
 | Secrets resolve precedence | **LIVE** | `session/credentials.py` env → secrets file · credentials/redaction tests |
 | Redaction on all send paths | **TX-LIVE** | `_log_tx`/`log_redacted` + LOGS + login/attach/status/ensure tests; ledger = PWO-094 MISSING |
 | Action-safety byte guards | **PARTIAL** | NEVER_AUTO · classify · crawler · trade_driver Paladin · sector_explore — scattered, no unified module |
-| Alignment no PvP aggression | **MISSING** | coach prose only (`toll_math` anti-PK); no teacher/rule rejection gate |
+| Alignment no PvP aggression | **LIVE** | `alignment_gate` at `write_draft`/`promote_draft`/`bridge_to_kernel_document`; corp-toll negative control |
 | Hypothesis-tag discipline CI | **MISSING** | `coach_kb` flags / params exist; no CI script failing untagged numbers |
 | Public-bound lint | **LIVE** | `scripts/path-leak-scan.sh` · `scripts/githooks/pre-commit` |
 
@@ -53,11 +53,12 @@
 - **Proof:** unit per guard class.
 - **Hazards:** Scattered guards ≠ complete coverage — do not claim DONE without map.
 
-### PWO-113 — Alignment: no PvP aggression rules (HARDEN) — **MISSING**
+### PWO-113 — Alignment: no PvP aggression rules (HARDEN) — **LIVE**
 - **Depends-on:** 070 · 081
-- **Accept:** teacher/rule pipeline rejects PvP-harm proposals.
-- **Proof:** unit reject fixtures.
-- **Hazards:** Coach tip text is not a gate.
+- **Live state:** `tw2002_aiclient/alignment_gate.py` refused at writer + promote + draft bridge; `tests/test_alignment_gate.py`.
+- **Accept residual:** screen-class coverage grows with classifier; fire-time remains `fighter_toll_policy`.
+- **Proof:** four DoD pins (refuse write / refuse promote / refuse bridge / corp-toll allow).
+- **Hazards:** Do not conflate with PWO-112 action-safety rails.
 
 ### PWO-114 — Hypothesis-tag discipline CI (HARDEN) — **MISSING**
 - **Depends-on:** 100
@@ -79,12 +80,12 @@
 005 ──► 110 LIVE
 020 ──► 111 TX-LIVE (ledger pairs with 094)
 081·083 ──► 112 PARTIAL
-070·081 ──► 113 MISSING
+070·081 ──► 113 LIVE
 100 ──► 114 MISSING
 — ──► 115 LIVE
 ```
 
-**Suggested first execute after PREP Accept:** **PWO-113 alignment gate** (clear MISSING, safety-critical) *or* **PWO-112 coverage map**. 111 TX-LIVE closed (ledger→094). 114 waits on 100/092 chain.
+**Suggested first execute after PREP Accept:** **PWO-112 coverage map** or **PWO-114** (after 100/092). 113 LIVE.
 
 ---
 
