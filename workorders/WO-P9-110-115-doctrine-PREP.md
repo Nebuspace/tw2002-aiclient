@@ -14,7 +14,7 @@
 - **Doctrine is teeth, not prose.** PREP marks what is enforceable in product/CI vs aspirational coach text.
 - **Secrets never in logs/argv/history/repo.** Pair 110/111 with ledger work (094).
 - **What already landed (tip):** credentials precedence · redaction on several paths · scattered NEVER_AUTO / Paladin / crawl guards · path-leak public-bound lint.
-- **What Phase 9 still owes:** full send-path redaction audit · unified action-safety module (or proven coverage map). Hypothesis-tag CI LIVE (PWO-114).
+- **What Phase 9 still owes:** full send-path redaction audit (ledger → 094). Action-safety coverage map LIVE (PWO-112).
 - **HOLDs:** force-push · secrets in coord · public-repo personal identifiers.
 
 ---
@@ -25,7 +25,7 @@
 |---|---|---|
 | Secrets resolve precedence | **LIVE** | `session/credentials.py` env → secrets file · credentials/redaction tests |
 | Redaction on all send paths | **TX-LIVE** | `_log_tx`/`log_redacted` + LOGS + login/attach/status/ensure tests; ledger = PWO-094 MISSING |
-| Action-safety byte guards | **PARTIAL** | NEVER_AUTO · classify · crawler · trade_driver Paladin · sector_explore — scattered, no unified module |
+| Action-safety byte guards | **LIVE** | `action_safety.py` coverage map + unit-per-class pins; NEVER_AUTO consumer audit retained |
 | Alignment no PvP aggression | **LIVE** | `alignment_gate` at `write_draft`/`promote_draft`/`bridge_to_kernel_document`; corp-toll negative control |
 | Hypothesis-tag discipline CI | **LIVE** | `scripts/hypothesis_tag_ci_guard.py` in suite.yml; deliberate-fail via `--self-test-fail` |
 | Public-bound lint | **LIVE** | `scripts/path-leak-scan.sh` · `scripts/githooks/pre-commit` |
@@ -47,11 +47,12 @@
 - **Proof:** `tests/test_login_redaction.py` · `test_attach_redaction.py` · `test_status_prompt_redaction.py` · `test_ensure_login_error_redaction.py` · `test_secrets_store_redaction.py`.
 - **Hazards:** New send sites must pass `secret=`; never put passwords in `cli --keys` argv.
 
-### PWO-112 — Action-safety byte guards (HARDEN) — **PARTIAL**
-- **Depends-on:** 081 · 083
-- **Accept residual:** destructive macros blocked with one proven coverage map (module or documented inventory + tests).
-- **Proof:** unit per guard class.
-- **Hazards:** Scattered guards ≠ complete coverage — do not claim DONE without map.
+### PWO-112 — Action-safety byte guards (HARDEN) — **LIVE**
+- **Depends-on:** 081 · 083 (satisfied)
+- **Live state:** `tw2002_aiclient/action_safety.py` proven coverage map (canon ladder → source marker + proof test); `tests/test_action_safety_coverage.py`.
+- **Accept residual:** none for 112 — map is the DONE claim; depth audits (e.g. NEVER_AUTO) remain referenced.
+- **Proof:** `pytest tests/test_action_safety_coverage.py`.
+- **Hazards:** Scattered guards alone ≠ DONE — held via map pins.
 
 ### PWO-113 — Alignment: no PvP aggression rules (HARDEN) — **LIVE**
 - **Depends-on:** 070 · 081
