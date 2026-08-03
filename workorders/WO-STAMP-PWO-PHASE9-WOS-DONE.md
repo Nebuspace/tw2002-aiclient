@@ -1,6 +1,6 @@
 # WO-STAMP-PWO-PHASE9-WOS-DONE — Stamp LIVE Phase-9 / doctrine WOs DONE
 
-> Status: **IN FLIGHT** · seat `impl-aiclient-cursor` · standing self-scope after #357  
+> Status: **DONE** · origin `1bb231c` (#358) · seat `impl-aiclient-cursor` · Accept 2026-08-03  
 > Type: docs stamp
 
 ## Goal

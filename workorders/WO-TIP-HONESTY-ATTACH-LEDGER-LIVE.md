@@ -6,7 +6,7 @@
 Correct tip comments that still claim attach ledger / LedgerWriter is deferred after #353 landed.
 
 ## Premise
-- `session/cli.py` ~850 still cites `_handle_attach` "record_attach_keystroke deferred"
+- `session/cli.py` ~850 *had* cited `_handle_attach` "record_attach_keystroke deferred" (fixed in #354)
 - `workorders/WO-DAEMON-LEDGER-WRITER-ATTACH.md` stamped DONE with #353 Accept
 - `screens.py` approval comment still says LedgerWriter deferred
 

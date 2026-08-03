@@ -15,7 +15,7 @@ Honest disposition for ignored `tests/test_clean_preempt.py` (twclient-era). Con
 |---|---|
 | Collect | `ModuleNotFoundError: twclient` (`protocol`, `ControlLock`, `LedgerWriter`) |
 | Archive shape | `protocol.dispatch` do/send/haggle → Trace-Ledger `interrupted_by_human`; `record_attach_keystroke` actor/secret; wiring `is_driver_fenced` into skills/crawl |
-| Reborn gaps for those proofs | `daemon.py` attach: **"Ledger/record_attach_keystroke deferred (no ledger)"**; `tests/test_skills.py` already DELETED (#171) |
+| Reborn gaps for those proofs *(at DELETE time)* | attach Trace-Ledger was deferred then; **LIVE now** (#353/#355). `tests/test_skills.py` already DELETED (#171). DELETE disposition unchanged — fence covered by live control-lock pins. |
 | Live superseding fence pins | `tests/test_control_lock.py` (WO-CLEANPREEMPT fence courtesy + autoloop fence blocks) · `tests/test_wedged_send_fence.py` · session `is_driver_fenced` / `take_human` |
 
 Rehab would invent ledger + archive `do`/`send` interrupt flagging, not lift a still-live contract.
