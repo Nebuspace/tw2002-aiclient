@@ -188,6 +188,39 @@ def read_entries(path: str | Path | None = None) -> list[dict[str, Any]]:
     return entries
 
 
+def live_actor_counts(
+    path: str | Path | None = None,
+) -> tuple[int | None, int | None]:
+    """Count live ``app`` / ``human`` rows for the coverage meter.
+
+    Returns ``(None, None)`` when the ledger file is absent (counts
+    *unavailable* → ``COV ?``). Returns ``(0, 0)`` when the file exists but
+    has no countable live rows (known-empty window → ``COV ? · App 0 · Hum 0``).
+
+    Only ``VALID_SENDERS`` actors count; unknown / missing / ``ai`` rows are
+    skipped (never invent a third live driver). Never raises.
+    """
+    p = Path(path) if path is not None else DEFAULT_LEDGER_PATH
+    try:
+        if not p.exists():
+            return None, None
+    except OSError:
+        return None, None
+    app_n = 0
+    human_n = 0
+    try:
+        for entry in read_entries(p):
+            actor = entry.get("actor")
+            if actor == "app":
+                app_n += 1
+            elif actor == "human":
+                human_n += 1
+    except OSError:
+        return None, None
+    return app_n, human_n
+
+
+
 def render_keystroke(input_text: str) -> str:
     if input_text == REDACTED:
         return f"«{REDACTED}»"

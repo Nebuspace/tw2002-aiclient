@@ -19,13 +19,12 @@ failure the audit's lens 3 hunts, and it would have shipped invisibly.
 This file closes that gap by asserting the meter on the settled cockpit of a
 real terminal, which is reachable only through the real draw path.
 
-The meter takes no live input on tip (there is no ledger -- PWO-025 is
-PARTIAL, ``LedgerWriter`` deferred in ``session/daemon.py``), so the settled
-cockpit renders the honest-unknown reading and one capture is the whole
-fixture -- same shape as the teach band's suite, which likewise has no
-status to stub into the poll. ``adapters.ensure_session`` is stubbed inside
-the spawned process and ``TW_RUN_DIR`` points at an isolated per-test tmp
-dir, never ``run/twd.sock``.
+When ``state/ledger.jsonl`` is absent the settled cockpit still renders
+the honest-unknown reading (``COV ?``) -- counts unavailable, not a
+fabricated share. One capture is the whole fixture for the wire pin.
+``adapters.ensure_session`` is stubbed inside the spawned process and
+``TW_RUN_DIR`` points at an isolated per-test tmp dir, never
+``run/twd.sock``.
 """
 
 from __future__ import annotations
@@ -119,9 +118,7 @@ def test_coverage_meter_is_visible_on_a_real_terminal(_capture) -> None:
 
 @_PTY_SKIP
 def test_meter_reads_honest_unknown_not_a_fabricated_share(_capture) -> None:
-    """There is no ledger on tip, so a percentage on this screen would be
-    invented. Asserts the *absence* of the failure, not just the presence of
-    the gauge: a meter reading `COV 0%` would satisfy the test above."""
+    """Absent ledger → counts unavailable. Asserts no fabricated `COV 0%`."""
     grid = pyte_grid(_capture, FULL_ROWS, FULL_COLS)
     assert find_text(grid, "COV ?")
     assert not find_text(grid, "COV 0%"), "fabricated a 0% share with no ledger"
