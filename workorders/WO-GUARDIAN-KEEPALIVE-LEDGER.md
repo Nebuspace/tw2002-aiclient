@@ -1,8 +1,8 @@
 # WO-GUARDIAN-KEEPALIVE-LEDGER — Guardian D10 keepalive → Trace-Ledger
 
-> Status: **IN FLIGHT** · seat `impl-aiclient-cursor` · hub GO 2026-08-03T05:57:30Z  
+> Status: **DONE** · origin `7e0fc20` (#355) · seat `impl-aiclient-cursor` · Accept 2026-08-03  
 > Type: wire · substrate  
-> Tip base: after #353 (`b1fa950`) · sibling tip-honesty #354 may land in parallel
+> Tip base: after #353 (`b1fa950`); tip-honesty sibling #354 landed `955f7ad`
 
 ## Goal
 Append one actor-tagged Trace-Ledger row when SessionGuardian's D10 idle keepalive sends a blank Enter — that path calls `session.send` directly and never enters `protocol.dispatch` / `_record_ledger`.
