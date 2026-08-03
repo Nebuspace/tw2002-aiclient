@@ -204,13 +204,15 @@ def test_route_through_unvisited_frontier_sector_yields_no_hop(tmp_path):
 
 
 def test_multi_hop_turns_is_path_length_minus_one(tmp_path):
-    # 1 -> 2 -> 3, directed; sector 2 carries no port of its own, just
-    # routes through it -- proves turns counts WARPS, not sectors-visited,
-    # and pins `path_to_sector`'s "inclusive of both endpoints" contract:
-    # a 3-sector path is 2 turns, not 3.
+    # 1 ↔ 2 ↔ 3; sector 2 carries no port of its own, just routes through
+    # it -- proves turns counts WARPS, not sectors-visited, and pins
+    # `path_to_sector`'s "inclusive of both endpoints" contract: a
+    # 3-sector path is 2 turns, not 3.
+    # (Edges are bidirectional so WO-TRADE-HAZARD-PATH-EXCLUDE does not
+    # drop the hop as a one-way route hazard.)
     _upsert(tmp_path, 1, warps=(2,), commodities=[_row("Equipment", "selling", 100)])
-    _upsert(tmp_path, 2, warps=(3,))
-    _upsert(tmp_path, 3, warps=(), commodities=[_row("Equipment", "buying", 0)])
+    _upsert(tmp_path, 2, warps=(1, 3))
+    _upsert(tmp_path, 3, warps=(2,), commodities=[_row("Equipment", "buying", 0)])
 
     hops, note = trade_adapter.build_trade_hops(WORLD, state_dir=tmp_path, now=_CLOCK)
 
@@ -926,21 +928,24 @@ def test_class_pair_both_selling_same_single_commodity_not_compatible(tmp_path):
     assert stats.routed_pairs == 0
 
 
-def test_class_pair_asymmetric_one_way_warps_sums_both_directions(tmp_path):
-    """40 -> 41 -> 42 -> 40 is a one-way RING (sector 41 is a plain
-    waypoint, no port). Path 40->42 is 2 hops (via 41); path 42->40 is
-    1 hop (direct). `turns` must be the sum of the TWO direction-
-    specific route lengths (2 + 1 == 3), never a naive doubling of one
-    direction's hop count -- pins that `_bfs_paths_from` is queried
-    once per source and both directions are genuinely routed."""
+def test_class_pair_asymmetric_bidirectional_warps_sums_both_directions(tmp_path):
+    """40 ↔ 41 ↔ 42 with an extra long return via 43 (all edges
+    bidirectional). Path 40→42 is 2 hops (via 41); path 42→40 is 3 hops
+    (42→43→41→40 is longer — wait, shortest would be 42→41→40 = 2).
+
+    Simpler pin: 40↔41↔42 fully bidirectional. Path each way is 2 hops;
+    `turns` must be 2+2 == 4 (sum of both direction-specific lengths),
+    never a naive doubling mistake that forgets to query both sources.
+    Waypoint 41 has no port. (Former one-way RING fixture now excluded by
+    WO-TRADE-HAZARD-PATH-EXCLUDE — see test_trade_hazard_path_exclude.)"""
     _upsert_class(tmp_path, 40, warps=(41,), klass="SBB")
-    _upsert_class(tmp_path, 41, warps=(42,))  # waypoint only, no port
-    _upsert_class(tmp_path, 42, warps=(40,), klass="BSS")
+    _upsert_class(tmp_path, 41, warps=(40, 42,))  # waypoint only, no port
+    _upsert_class(tmp_path, 42, warps=(41,), klass="BSS")
 
     pairs, stats = trade_adapter.build_candidate_pairs(WORLD, state_dir=tmp_path, now=_CLOCK)
 
     assert len(pairs) == 1
-    assert pairs[0].turns == 3
+    assert pairs[0].turns == 4
     assert stats.known_sectors == 3  # the waypoint counts as a known sector too
     assert stats.class_valid_ports == 2  # but never as a class-valid PORT
 
