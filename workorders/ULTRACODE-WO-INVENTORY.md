@@ -224,7 +224,7 @@ Banked hygiene (not a PWO id): **pty mid-flush settle** — PREP `workorders/WO-
 | PWO-084 | Re-validate every cycle — **LIVE** (player/autoloop per-cycle start-anchor re-check; tip 2026-08-03 sweep) | harden | 083 | Multi-cycle re-match | halt on drift | unit | app-autopilot-model |
 | PWO-085 | Remove/replace MODE_AI_PILOT **LIVE gated** (product; residual test rehab) | harden | 060·083 | Finding closed or mode gone | no live ai sender | grep+tests | control divergence |
 | PWO-086 | Actor enum {app,human} only **LIVE** (`VALID_SENDERS`) | harden | 025 | No `ai` live actor | ledger invariant | tests | conventions |
-| PWO-087 | Auto-haggle as guarded rule — **PARTIAL** (`session/haggle.py` + tip tests #337; `trade_driver` still Auto-haggle OFF) | harden | 081 | Built-in rule archetype | haggle tests | pytest+live | auto-haggle |
+| PWO-087 | Auto-haggle as guarded rule — **LIVE** (`session/haggle.py` + tip tests #337; `trade_driver` opt-in `auto_haggle=False` default — WO-PWO-087 / Max GO) | harden | 081 | Built-in rule archetype | haggle tests | pytest+live | auto-haggle |
 | PWO-088 | Priority engine ranks taught only — **DONE/PARTIAL** (Accept met: unknown-screen = 083; FOCUS Layer-2 display-only; no live EV driver; full kernel = parked B) | harden | 081·034 | Never picks unknown screens | unit | priority-engine |
 
 ### Phase 7 — World stores & learning substrate

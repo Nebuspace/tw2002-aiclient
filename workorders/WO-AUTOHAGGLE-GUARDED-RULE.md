@@ -14,9 +14,10 @@ Accept:
   current-line resolution shape with acceptance context.
 - A stale or bare command prompt is `desync_fallback`.
 - The haggle tests import the tip module, never `twclient`.
-- Tip `trade_driver.py` still documents **Auto-haggle OFF** (accept-default
-  only). This WO lands the tip-owned resolver + tests; enabling counters on
-  the trade path / rule-fire arming is a follow-on (explicit claim).
+- Tip `trade_driver.py` historically documented **Auto-haggle OFF**
+  (accept-default only). This WO landed the tip-owned resolver + tests;
+  opt-in trade-path wiring is **WO-PWO-087-AUTO-HAGGLE-WIRE** (Max GO
+  2026-08-03; default still OFF).
 
 Proof:
 

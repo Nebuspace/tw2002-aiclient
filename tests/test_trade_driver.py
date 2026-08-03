@@ -846,3 +846,52 @@ def test_on_progress_callback_exception_is_swallowed_never_aborts_the_chain(tmp_
     result = _run(session, _two_port_loop_chain(), world_id, tmp_path, 100, on_progress=boom)
 
     assert result.completed is True  # a pure telemetry failure must never halt the money path
+
+
+def test_auto_haggle_defaults_off():
+    """PWO-087 standing invariant: TradeDriverConfig.auto_haggle is False."""
+    assert TradeDriverConfig().auto_haggle is False
+
+
+def test_accept_offer_blank_enter_when_auto_haggle_off():
+    """Default path still blank-accepts — never counters."""
+    from tw2002_aiclient.trade_driver import _accept_offer
+
+    screens = [
+        "We'll sell them for 2000 credits.\nYour offer [2000] ? ",
+        "You have 8,000 credits and 50 empty cargo holds.\n\nCommand [TL=00:00:08]:[1] (?=Help)? : ",
+    ]
+    session = FakeChainSession(screens, initial_credits=10_000)
+    ctx = _StepCtx(session, TradeDriverConfig(auto_haggle=False), lambda: False, lambda: True)
+    _accept_offer(ctx, fair_value=1500)
+    session.sleep(0.01)
+    assert session.sent == [("", True, False)]
+
+
+def test_accept_offer_runs_haggle_when_enabled():
+    """Opt-in: auto_haggle=True delegates to run_haggle (may counter)."""
+    from tw2002_aiclient.trade_driver import _accept_offer
+    from tests.test_haggle import FakePortSession, _scripted
+
+    # Same capture shape as test_haggle sell-direction converge.
+    responses = [
+        "We'll sell them for 753 credits.\nYour offer [753] ? ",
+        "Cheapskate.  Here, take them and leave me alone.\n\n"
+        "You have 112,187 credits and 0 empty cargo holds.\n\n"
+        "Command [TL=00:00:00]:[27584] (?=Help)? : ",
+    ]
+    session = FakePortSession(
+        "We'll sell them for 758 credits.\nYour offer [758] ? ",
+        _scripted(responses),
+    )
+    ctx = _StepCtx(
+        session,
+        TradeDriverConfig(auto_haggle=True, step_timeout_s=2.0),
+        lambda: False,
+        lambda: True,
+    )
+    _accept_offer(ctx, fair_value=None)  # use port baseline; still counters aggressively
+    assert session.sent, "expected at least one send"
+    assert session.sent[0][0] != "", f"expected counter, got {session.sent!r}"
+    assert session.sent[0][0].isdigit()
+    assert int(session.sent[0][0]) < 758

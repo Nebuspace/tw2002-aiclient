@@ -3,7 +3,7 @@
 > Status: **PREP refreshed** 2026-08-03 · tip honesty pass (DOCS-PWO-080-086-HONESTY) · seat `impl-aiclient-cursor`  
 > Phase: 6 · Type: PREP (inventory + tightened Accept/Proof) · Execute: hub HANDOFF only  
 > Canon: `canon/architecture/app-autopilot-model.md` · `canon/architecture/rule-macro-engine.md` · `canon/engine/screen-understanding.md` · `canon/engine/macros.md` · `canon/engine/priority-engine.md`  
-> Refs: `ULTRACODE-WO-INVENTORY.md` Phase 6 · scout tip-map (080–086 LIVE · 087 PARTIAL #337 · 088 DONE/PARTIAL A+C)
+> Refs: `ULTRACODE-WO-INVENTORY.md` Phase 6 · scout tip-map (080–086 LIVE · 087 LIVE (opt-in wire) · 088 DONE/PARTIAL A+C)
 
 **No product edited in this WO.** Live-state below is tip reality only.
 
@@ -31,7 +31,7 @@
 | Re-validate every cycle | **LIVE** | player/autoloop per-cycle start-anchor re-check |
 | MODE_AI_PILOT retired (product) | **LIVE** (gated) | Lock modes + UI vocabulary gate; archive tests may still expect AI-PILOT |
 | Actor enum `{app,human}` | **LIVE** | `session.VALID_SENDERS` |
-| Auto-haggle as guarded rule | **PARTIAL** | `session/haggle.py` + tests (#337); `trade_driver` Auto-haggle OFF |
+| Auto-haggle as guarded rule | **LIVE** | `session/haggle.py` + tests (#337); `trade_driver` opt-in `auto_haggle` (default OFF) |
 | Priority engine ranks taught only | **DONE/PARTIAL** | FOCUS Layer-2 only (`focus_status`); Accept met via 083 stop-on-unknown; full 13-obj kernel = parked WO-PRIORITY-ENGINE-KERNEL (hub B) |
 
 ---

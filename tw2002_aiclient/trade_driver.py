@@ -1,8 +1,9 @@
 """Guarded one-pass trade-chain execution.
 
 `autopilot.py`'s own module docstring cut EXECUTE to navigation-only and
-explicitly deferred "a fuller haggle-wired trade-loop driver" as a
-follow-up. This module is that follow-up: given a `chains.ProfitChain`
+deferred "a fuller haggle-wired trade-loop driver" as a follow-up. This
+module is that follow-up (buy/sell cascade LIVE; auto-haggle opt-in via
+``TradeDriverConfig.auto_haggle``, default OFF): given a `chains.ProfitChain`
 already discovered by `trade_adapter.build_trade_hops` +
 `chains.longest_profit_chain`, `run_chain()` drives the WHOLE loop --
 navigate -> dock -> buy -> navigate -> dock -> sell -> repeat -- end to
@@ -55,12 +56,12 @@ Every other send is a bare sector number (nav), a bare non-negative
 integer (a quantity), `"0"` (decline a commodity we don't want), or `""`
 (accept the port's own current offer -- no countering).
 
-**Auto-haggle OFF.** This module NEVER counters an offer: `_accept_offer()`
-always sends a blank line, accepting the port's own current default. If a
-particular server variant refuses a bare accept and forces at least one
-counter, the resulting screen fails every recognized confirm shape and
-`send_and_confirm` reports `confirmed=False` -- this module HOLDs cleanly
-(`"unconfirmed_send:..."`) rather than ever implementing counter logic.
+**Auto-haggle default OFF.** `_accept_offer()` accepts the port's current
+default with a blank line unless ``TradeDriverConfig.auto_haggle`` is
+explicitly ``True`` (PWO-087 / Max GO 2026-08-03). When enabled, the tip
+``session.haggle.run_haggle`` guarded resolver may counter within its
+threshold / round-cap; desync / no-active-haggle outcomes HOLD the chain.
+Default remains OFF so existing callers never silently start negotiating.
 
 **Fresh-render gate before every send (HIGH-2/TOCTOU discipline).** Every
 send in this module is preceded by a FRESH `session.render()` call whose
@@ -295,6 +296,8 @@ class TradeDriverConfig:
     credit_delta_epsilon: int = DEFAULT_CREDIT_DELTA_EPSILON
     price_floor_prices: Mapping[str, float] = field(default_factory=lambda: dict(DEFAULT_FLOOR_PRICES))
     price_ceiling_multiplier: float = DEFAULT_CEILING_MULTIPLIER
+    # PWO-087: opt-in only. Default False = blank-accept (standing safety).
+    auto_haggle: bool = False
 
 
 @dataclass(frozen=True)
@@ -516,14 +519,28 @@ def _send_qty(ctx: _StepCtx, qty: int) -> None:
     _confirmed_send(ctx, str(qty), _OFFER_OR_CASCADE_PATTERN, enter=True)
 
 
-def _accept_offer(ctx: _StepCtx) -> None:
-    """Fixed-price ACCEPT path only: a blank line always accepts
-    whatever the port's own current default is, never a counter-offer.
-    If a server variant refuses a bare accept, the resulting screen
-    fails to confirm and `_confirmed_send` raises `ChainHold
-    ("unconfirmed_send:...")` -- the bounded-HOLD backstop, never
-    counter logic (see module docstring)."""
-    _confirmed_send(ctx, "", _CASCADE_ENTRY_PATTERN, enter=True)
+def _accept_offer(ctx: _StepCtx, *, fair_value: Optional[int] = None) -> None:
+    """Accept the live OFFER — blank Enter by default; optional guarded haggle.
+
+    When ``ctx.config.auto_haggle`` is False (default), sends a blank line
+    accepting the port's current default. When True, delegates to
+    ``session.haggle.run_haggle`` (threshold / round-cap / desync HOLD).
+    """
+    if not ctx.config.auto_haggle:
+        _confirmed_send(ctx, "", _CASCADE_ENTRY_PATTERN, enter=True)
+        return
+
+    from .session.haggle import HaggleOutcome, run_haggle
+
+    result = run_haggle(
+        ctx.session,
+        fair_value=fair_value,
+        step_timeout=ctx.config.step_timeout_s,
+    )
+    outcome = result.get("outcome")
+    if outcome in (HaggleOutcome.ACCEPTED, HaggleOutcome.ROUND_CAP_FALLBACK):
+        return
+    raise ChainHold(f"haggle_{outcome or 'unknown'}")
 
 
 def _sanity_check_delta(
@@ -631,7 +648,17 @@ def _trade_target(
             # budget -- just stop here.
             raise ChainHold(f"over_budget:{hop_index}:{direction}:{hop.commodity}")
 
-    _accept_offer(ctx)
+    # Fair-value estimate for optional auto-haggle (unit estimate × qty).
+    # When auto_haggle is False this is unused; when True it seeds
+    # run_haggle's threshold reference (baseline alone ≈ immediate accept).
+    fair_value = None
+    if port_row is not None and qty > 0:
+        unit = _commodity_price(
+            port_row, config.price_floor_prices, config.price_ceiling_multiplier
+        )
+        if unit is not None and unit > 0:
+            fair_value = int(unit * qty)
+    _accept_offer(ctx, fair_value=fair_value)
     after_text = ctx.fresh()[0]
     after_credits = _current_strict_credits(ctx.session, caps, after_text)
     if not _sanity_check_delta(
