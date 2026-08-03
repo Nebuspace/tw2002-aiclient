@@ -399,3 +399,15 @@ no rewrite/delete of existing rows.
 
 **Refs:** hub GO ledger Option A · `ledger.py` · world-identity.md global-sink note.
 
+## DECISION-PWO-106-GENESIS-CONFIRM-SEAM (2026-08-03)
+
+**Status:** Accepted (hub GO B-Option-A 2026-08-03T13:59:00Z)
+
+Ship `genesis_confirm.genesis_send_if_confirmed` as the only choke-point for a future App Genesis send; reuse `cockpit.armconfirm` default-deny. No stub adapter in this WO (B-Option-B HELD).
+
+## DECISION-PWO-107-SHIP-UPGRADE-DECISION-PORT (2026-08-03)
+
+**Status:** Accepted (hub GO C-Option-A 2026-08-03T13:59:00Z)
+
+Port archive TW-30 `ship_upgrade_decision` into `tw2002_aiclient/` as recommend-only; wire DECISIONS from `UpgradeDecision`. Purchase adapter (C-Option-B) HELD.
+
