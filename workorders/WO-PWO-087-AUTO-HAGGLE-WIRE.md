@@ -1,8 +1,8 @@
 # WO-PWO-087-AUTO-HAGGLE-WIRE — Opt-in auto-haggle in trade_driver
 
-> Status: **IN FLIGHT** · seat `impl-aiclient-cursor` · Max GO via hub 2026-08-03T12:33:10Z  
+> Status: **DONE** · origin `37fd42d` (#360) · seat `impl-aiclient-cursor` · Accept 2026-08-03  
 > Type: harden · PWO-087  
-> Tip base: `3726c49`
+> Tip base: `3726c49` → merged `37fd42d`
 
 ## Goal
 Wire tip `session/haggle.run_haggle` into `trade_driver._accept_offer`, with **`TradeDriverConfig.auto_haggle` default False** (available, not hard-disabled).
