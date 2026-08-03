@@ -1141,6 +1141,23 @@ def _driver_was_fenced(server) -> bool:
         return False
 
 
+
+def _ledger_world_id(session) -> str | None:
+    """Best-effort world slug for Trace-Ledger stamps. Never raises."""
+    profile_name = getattr(session, "auto_login_profile", None)
+    if not profile_name:
+        return None
+    try:
+        profile, err = _load_profile(profile_name)
+        if profile is None or err is not None:
+            return None
+        from tw2002_aiclient import world_identity
+
+        return world_identity.world_id_from_profile(profile)
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def _record_ledger(
     server,
     session,
@@ -1179,6 +1196,7 @@ def _record_ledger(
             actor=actor,
             session_id=session_id,
             interrupted_by_human=bool(interrupted_by_human),
+            world_id=_ledger_world_id(session),
         )
     except Exception:  # noqa: BLE001 -- ledger must never fail the verb
         return
@@ -1216,6 +1234,7 @@ def record_attach_keystroke(server, session, pre_text, input_text, secret) -> No
             settled_class=settled_class,
             actor="human",
             session_id=session_id,
+            world_id=_ledger_world_id(session),
         )
     except Exception:  # noqa: BLE001
         return

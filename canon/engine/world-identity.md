@@ -142,14 +142,11 @@ the doc is the prescription, not the description.
   remains for callers that omit `world_id`, with `migrate_flat_rules_to_world` on first scoped
   I/O (DECISION-RULES-WORLD-MIGRATE-ON-READ).
 
-- **The trace ledger is a single global sink.** The ledger appends every session's rows to one
-  shared file (`state/ledger.jsonl`) rather than a per-world store. Each row does carry a
-  `session_id` (and actor attribution), so a retro pass *can* slice by session — but it cannot
-  cleanly slice by world without correlating sessions to worlds out of band. The prescription is
-  that retro/candidate-mining reads a **world-scoped** view; whether that is achieved by a per-world
-  ledger path or by stamping each row with the world slug and filtering is an implementation choice
-  the ledger and candidate-mining concepts should settle, but the current global-sink shape does not
-  yet honor the per-world keying rule.
+- **The trace ledger is a single global sink with row-level world stamps (Option A).** Rows still
+  append to one shared file (`state/ledger.jsonl`). New rows may carry a `world_id` stamp
+  (DECISION-LEDGER-WORLD-ID-STAMP); `read_entries(..., world_id=)` filters. Existing rows are never
+  rewritten. A per-world ledger *path* (Option B) remains held — not required for world-scoped
+  retro reads once stamps are present on new traffic.
 
 - **Handle-less registration profiles fall back to a per-profile path, by design.** Because the
   keying rule (correctly) refuses to derive a world slug from a profile with no character handle, a
