@@ -243,7 +243,7 @@ Banked hygiene (not a PWO id): **pty mid-flush settle** — PREP `workorders/WO-
 
 ### Phase 8 — Strategy as taught behaviors (human-approved)
 
-> PREP: `workorders/WO-P8-100-107-strategy-PREP.md` — tip honesty 2026-08-03: 101/102/103/104/105 LIVE; 100/106/107 PARTIAL. Do not invent 092 under 100 cover.
+> PREP: `workorders/WO-P8-100-107-strategy-PREP.md` — tip honesty 2026-08-03: 100–105 LIVE; 106/107 DONE/PARTIAL (Option A #368; Option B HELD). Do not invent 092 introspector under 100 cover.
 
 | ID | Title | Type | Depends | Goal | Accept | Proof | Canon |
 |----|-------|------|---------|------|--------|-------|-------|
