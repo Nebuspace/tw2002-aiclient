@@ -25,7 +25,7 @@
 |---|---|---|
 | Port economics params | **PARTIAL** | `trade_adapter.py` floors/spreads · `data/coach/params.json` — no standalone port-economics store; depends on 092 |
 | Trade loop define/rank | **LIVE** | `chains.py` · `trade_adapter.py` · `chain_search.py` · `chain_detect.py` + tests |
-| Trade loop run + depletion STOP | **PARTIAL** | `trade_driver.py` present; default suite **ignores** driver tests |
+| Trade loop run + depletion STOP | **LIVE** | `trade_driver.py` + suite collects `test_trade_driver.py` (26; depleted STOP proven) |
 | Exploration frontier BFS | **LIVE** | `explore.py` · `session/sector_explore.py` + tests |
 | Toll fight/pay/reroute | **LIVE** | `session/fighter_toll_policy.py` + tests |
 | Formations locate/catalog | **LIVE** | `formations.py` · `world_stats.py` · `tests/test_formations_catalog.py` (WO-FORMATIONS-CATALOG-PORT) |
@@ -49,12 +49,12 @@
 - **Proof:** `tests/test_chains.py` · `tests/test_trade_adapter.py`.
 - **Hazards:** Ranking ≠ live send.
 
-### PWO-102 — Trade loop run + depletion STOP (BUILD) — **PARTIAL**
+### PWO-102 — Trade loop run + depletion STOP (BUILD) — **LIVE**
 - **Depends-on:** 101 · 083
-- **Live state:** driver module exists; suite exclusion means gate does not prove it.
-- **Accept residual:** STOP on depletion proven in default suite (or documented carve-out + live prove).
-- **Proof:** un-ignore or dedicated job + fixture/live.
-- **Hazards:** Money-path — Max GO for live arm; Auto-haggle still OFF (#337 residual).
+- **Live state:** `trade_driver.py` + `tests/test_trade_driver.py` in default suite (26 FakeChainSession tests; `test_depleted_stock_stops_the_chain_cleanly`).
+- **Accept residual:** live TWGS arm remains Max-gated / separate prove — offline suite gate met.
+- **Proof:** default `pytest` collects + green on `test_trade_driver.py`.
+- **Hazards:** Money-path live arm still Max GO; Auto-haggle still OFF (#337 residual).
 
 ### PWO-103 — Exploration frontier BFS (BUILD) — **LIVE**
 - **Depends-on:** 091 · 083
@@ -91,7 +91,7 @@
 ## 3. Depends-on graph
 
 ```
-092 MISSING ──► 100 PARTIAL ──► 101 LIVE ──► 102 PARTIAL
+092 MISSING ──► 100 PARTIAL ──► 101 LIVE ──► 102 LIVE
 091·083 ──► 103 LIVE
 081 ──► 104 LIVE
 091 ──► 105 LIVE
@@ -99,7 +99,7 @@
 096 ──► 107 PARTIAL
 ```
 
-**Suggested first execute after PREP Accept:** **PWO-102 suite-gate honesty** (un-ignore/prove depletion STOP) *or* **PWO-106 Genesis confirm** — both close real PARTIAL without inventing 092. Full 100 waits on 092.
+**Suggested first execute after PREP Accept:** **PWO-106 Genesis confirm** or **PWO-107 upgrade engine** — 102 suite-gate CLOSED. Full 100 waits on 092.
 
 ---
 
