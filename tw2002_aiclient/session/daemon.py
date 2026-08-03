@@ -361,7 +361,7 @@ class CommandHandler(socketserver.StreamRequestHandler):
         each subsequent line is one raw keystroke frame `{"key": "..."}`
         forwarded via `session.send_raw(..., control_lock=..., sender=
         "human")`. Release on any exit so a crashed attach cannot wedge
-        MODE_HUMAN. Ledger/record_attach_keystroke deferred (no ledger).
+        MODE_HUMAN. LedgerWriter / record_attach_keystroke deferred (no ledger).
         """
         lock = self.server.control_lock
         session = self.server.session
