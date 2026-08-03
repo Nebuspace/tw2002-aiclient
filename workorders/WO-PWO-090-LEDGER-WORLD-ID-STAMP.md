@@ -1,6 +1,6 @@
 # WO-PWO-090-LEDGER-WORLD-ID-STAMP — Trace ledger world_id row stamp (Option A)
 
-**Status:** build
+**Status:** DONE · merged `6244787` (#366) · tip-honesty stamp after Accept
 **Hub GO:** 2026-08-03T13:29:00Z (Option A; Option B held)
 **Branch:** wo/PWO-090-LEDGER-WORLD-ID-STAMP
 
