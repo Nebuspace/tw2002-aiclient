@@ -247,7 +247,7 @@ Banked hygiene (not a PWO id): **pty mid-flush settle** — PREP `workorders/WO-
 
 | ID | Title | Type | Depends | Goal | Accept | Proof | Canon |
 |----|-------|------|---------|------|--------|-------|-------|
-| PWO-100 | Port economics params — **PARTIAL** (adapter/coach numbers; no standalone module; blocked on 092) | build | 092 | Hypothesis-tagged numbers | tags present | unit | port-economics |
+| PWO-100 | Port economics params — **LIVE** (`port_economics.py` HypothesisParam substrate; adapter re-exports; coach port keys tagged; 114 CI gate still deferred) | build | 092 | Hypothesis-tagged numbers | tags present | unit | port-economics |
 | PWO-101 | Trade loop define/rank — **LIVE** (`chains` + `trade_adapter` + tests) | build | 100·081 | Credits/turn ranking | unit | trade-loops |
 | PWO-102 | Trade loop run + depletion STOP — **LIVE** (`trade_driver` + suite `test_trade_driver` incl. depleted STOP; tip 2026-08-03) | build | 101·083 | STOP on depletion | live/fixture | trade-loops |
 | PWO-103 | Exploration frontier BFS — **LIVE** (`explore` + `sector_explore`) | build | 091·083 | Stops on unknown sector UI | live | exploration-policy |
