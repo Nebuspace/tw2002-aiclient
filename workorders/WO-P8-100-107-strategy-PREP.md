@@ -23,7 +23,7 @@
 
 | Piece | Tip `aad330c` | Notes |
 |---|---|---|
-| Port economics params | **LIVE** | `port_economics.py` HypothesisParam substrate · `trade_adapter` re-exports · coach port keys tagged; 114 CI enforcement deferred |
+| Port economics params | **LIVE** | `port_economics.py` HypothesisParam substrate · `trade_adapter` re-exports · coach port keys tagged; 114 CI LIVE |
 | Trade loop define/rank | **LIVE** | `chains.py` · `trade_adapter.py` · `chain_search.py` · `chain_detect.py` + tests |
 | Trade loop run + depletion STOP | **LIVE** | `trade_driver.py` + suite collects `test_trade_driver.py` (26; depleted STOP proven) |
 | Exploration frontier BFS | **LIVE** | `explore.py` · `session/sector_explore.py` + tests |
@@ -39,7 +39,7 @@
 ### PWO-100 — Port economics params (BUILD) — **LIVE**
 - **Depends-on:** 092 (satisfied · tip `73e7428`)
 - **Live state:** `port_economics.py` HypothesisParam substrate; `trade_adapter` re-exports floors/ceiling/spread; coach port keys load via tagged `params.json`.
-- **Accept residual:** PWO-114 CI enforcement of tag presence (out of 100 scope).
+- **Accept residual:** none (PWO-114 CI enforcement LIVE).
 - **Proof:** `tests/test_port_economics.py`.
 - **Hazards:** Do not invent 092 under 100 cover — held.
 
