@@ -1824,7 +1824,11 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                 # Branch on status before claiming a count (absent ≠ empty ≠
                 # blind). Drafts stay invisible (include_drafts=False).
                 try:
-                    store = _rule_store.read_rule_store()
+                    try:
+                        _rules_wid = _world_identity.world_id_from_profile(profile)
+                    except Exception:  # noqa: BLE001
+                        _rules_wid = None
+                    store = _rule_store.read_rule_store(world_id=_rules_wid)
                 except Exception as exc:  # noqa: BLE001
                     play.rules_library_session.open([], "unreadable")
                     play.status_line = (
@@ -2392,8 +2396,14 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                         priority=values.get("priority"),
                         scope=values.get("scope"),
                     )
-                    _rules_writer.write_draft(document)
-                    blessed = _rules_writer.promote_draft(str(values["rule_id"]))
+                    try:
+                        _rw_wid = _world_identity.world_id_from_profile(profile)
+                    except Exception:  # noqa: BLE001
+                        _rw_wid = None
+                    _rules_writer.write_draft(document, world_id=_rw_wid)
+                    blessed = _rules_writer.promote_draft(
+                        str(values["rule_id"]), world_id=_rw_wid
+                    )
                 except (
                     _draft_approve.DraftBridgeError,
                     _rules_writer.RuleWriteError,

@@ -29,6 +29,9 @@ from tw2002_aiclient.rules.store import (
     STATUS_OK,
     STATUS_PARTIAL,
     STATUS_UNREADABLE,
+    drafts_dir,
+    legacy_flat_rules_dir,
+    migrate_flat_rules_to_world,
     read_rule_store,
     rules_dir,
 )
@@ -283,4 +286,47 @@ def test_the_store_actually_calls_the_kernel_parser(monkeypatch, tmp_path):
 def test_rules_dir_is_pure_path_math(tmp_path):
     """No filesystem touch -- the seam tests point at `tmp_path` through."""
     assert rules_dir(tmp_path) == tmp_path / "rules"
+    assert rules_dir(tmp_path, world_id="host__A__pilot") == (
+        tmp_path / "world" / "host__A__pilot" / "rules"
+    )
+    assert drafts_dir(tmp_path, world_id="w") == (
+        tmp_path / "world" / "w" / "rules" / "_drafts"
+    )
+    assert legacy_flat_rules_dir(tmp_path) == tmp_path / "rules"
     assert not (tmp_path / "rules").exists()
+
+
+# ---------------------------------------------------------------------------
+# PWO-090 residual — world-scoped paths + migrate-on-first-read
+# ---------------------------------------------------------------------------
+
+
+def test_migrate_flat_rules_to_world_copies_once(tmp_path):
+    write(tmp_path / "rules", "a.json", GOOD)
+    write(tmp_path / "rules" / "_drafts", "b.json", {**GOOD, "rule_id": "draft-b", "approved": False})
+    first = migrate_flat_rules_to_world("host__A__pilot", state_dir=tmp_path)
+    assert first["migrated"] is True
+    assert first["copied"] == 2
+    world = tmp_path / "world" / "host__A__pilot" / "rules"
+    assert (world / "a.json").is_file()
+    assert (world / "_drafts" / "b.json").is_file()
+    assert (tmp_path / "rules" / "a.json").is_file()
+    second = migrate_flat_rules_to_world("host__A__pilot", state_dir=tmp_path)
+    assert second["migrated"] is False
+    assert second["copied"] == 0
+
+
+def test_read_rule_store_migrates_then_lists_world(tmp_path):
+    write(tmp_path / "rules", "a.json", GOOD)
+    report = read_rule_store(state_dir=tmp_path, world_id="host__A__pilot")
+    assert report["status"] == STATUS_OK
+    assert len(report["rules"]) == 1
+    assert report["rules"][0].rule_id == "dock-when-idle"
+    assert (tmp_path / "world" / "host__A__pilot" / "rules" / "a.json").is_file()
+
+
+def test_read_without_world_id_stays_flat(tmp_path):
+    write(tmp_path / "rules", "a.json", GOOD)
+    report = read_rule_store(state_dir=tmp_path)
+    assert report["status"] == STATUS_OK
+    assert not (tmp_path / "world").exists()

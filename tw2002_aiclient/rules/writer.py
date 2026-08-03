@@ -45,6 +45,7 @@ from typing import Any, Mapping
 
 from ..alignment_gate import AlignmentRefusal, refuse_pvp_aggression_rule
 from ..rule_engine import RuleDocumentError, rule_from_dict, rule_to_dict
+from .migrate import migrate_flat_rules_to_world
 from .store import resolve_roots
 
 __all__ = [
@@ -129,7 +130,12 @@ def _atomic_write_json(path: Path, payload: dict) -> None:
 
 
 def write_draft(
-    document: Mapping[str, Any], *, state_dir=None, rules_path=None, drafts_path=None
+    document: Mapping[str, Any],
+    *,
+    state_dir=None,
+    rules_path=None,
+    drafts_path=None,
+    world_id=None,
 ) -> Path:
     """Persist *document* as an inert draft. Returns the path written.
 
@@ -162,8 +168,13 @@ def write_draft(
     except AlignmentRefusal as exc:
         raise RuleWriteError(str(exc)) from None
 
+    if rules_path is None and world_id is not None and str(world_id).strip():
+        migrate_flat_rules_to_world(str(world_id).strip(), state_dir=state_dir)
     _, directory = resolve_roots(
-        state_dir=state_dir, rules_path=rules_path, drafts_path=drafts_path
+        state_dir=state_dir,
+        rules_path=rules_path,
+        drafts_path=drafts_path,
+        world_id=world_id,
     )
     path = directory / f"{safe_stem(rule.rule_id)}.json"
     _refuse_stem_collision(path, rule.rule_id)
@@ -178,6 +189,7 @@ def promote_draft(
     rules_path=None,
     drafts_path=None,
     remove_draft: bool = True,
+    world_id=None,
 ) -> Path:
     """Bless one draft into the live library. **The only path to ``approved: True``.**
 
@@ -191,8 +203,13 @@ def promote_draft(
     promoting is exactly when a malformed one appears. Approving is the last
     moment the refusal is still cheap.
     """
+    if rules_path is None and world_id is not None and str(world_id).strip():
+        migrate_flat_rules_to_world(str(world_id).strip(), state_dir=state_dir)
     blessed, drafts = resolve_roots(
-        state_dir=state_dir, rules_path=rules_path, drafts_path=drafts_path
+        state_dir=state_dir,
+        rules_path=rules_path,
+        drafts_path=drafts_path,
+        world_id=world_id,
     )
     stem = safe_stem(rule_id)
     src = drafts / f"{stem}.json"

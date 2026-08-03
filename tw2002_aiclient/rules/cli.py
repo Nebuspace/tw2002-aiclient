@@ -86,7 +86,11 @@ def cmd_rule_draft(args) -> int:
     """
     try:
         document = _document_from_args(args)
-        path = write_draft(document, state_dir=getattr(args, "state_dir", None))
+        path = write_draft(
+            document,
+            state_dir=getattr(args, "state_dir", None),
+            world_id=getattr(args, "world_id", None),
+        )
     except RuleWriteError as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 1
@@ -109,7 +113,11 @@ def cmd_rule_approve(args) -> int:
     names one rule, and there is no ``--all``.
     """
     try:
-        path = promote_draft(args.rule_id, state_dir=getattr(args, "state_dir", None))
+        path = promote_draft(
+            args.rule_id,
+            state_dir=getattr(args, "state_dir", None),
+            world_id=getattr(args, "world_id", None),
+        )
     except RuleWriteError as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 1
@@ -131,7 +139,11 @@ def cmd_rule_list(args) -> int:
     precisely so this does not flatten them.
     """
     state_dir = getattr(args, "state_dir", None)
-    report = read_rule_store(state_dir=state_dir, include_drafts=True)
+    report = read_rule_store(
+        state_dir=state_dir,
+        include_drafts=True,
+        world_id=getattr(args, "world_id", None),
+    )
     if getattr(args, "json", False):
         print(
             json.dumps(
@@ -146,7 +158,9 @@ def cmd_rule_list(args) -> int:
         )
         return 0
 
-    blessed, drafts_root = resolve_roots(state_dir=state_dir)
+    blessed, drafts_root = resolve_roots(
+        state_dir=state_dir, world_id=getattr(args, "world_id", None)
+    )
     print(f"store: {blessed}  ({report['status']})")
     for rule in report["rules"]:
         print(f"  approved  {rule.rule_id}  {rule.screen_match} -> {rule.do}  p{rule.priority}")
@@ -199,6 +213,13 @@ def add_rule_parser(sub) -> None:
     sp.add_argument("--priority", type=int, help="higher wins; ties are a STOP, not a coin flip")
     sp.add_argument("--scope", help="one-shot (default) or repeating")
     sp.add_argument("--state-dir", dest="state_dir", help="override the state/ root")
+    sp.add_argument(
+        "--world-id",
+        dest="world_id",
+        default=None,
+        metavar="SLUG",
+        help="world-scoped store under state/world/<slug>/rules (migrates flat on first I/O)",
+    )
     sp.add_argument("--json", action="store_true", help="machine-readable output")
     sp.set_defaults(func=cmd_rule_draft)
 
@@ -212,6 +233,13 @@ def add_rule_parser(sub) -> None:
     )
     sp.add_argument("rule_id", help="the rule_id to approve")
     sp.add_argument("--state-dir", dest="state_dir", help="override the state/ root")
+    sp.add_argument(
+        "--world-id",
+        dest="world_id",
+        default=None,
+        metavar="SLUG",
+        help="world-scoped store under state/world/<slug>/rules (migrates flat on first I/O)",
+    )
     sp.add_argument("--json", action="store_true", help="machine-readable output")
     sp.set_defaults(func=cmd_rule_approve)
 
@@ -221,5 +249,12 @@ def add_rule_parser(sub) -> None:
         description="List the rule library, keeping approved and draft rules apart.",
     )
     sp.add_argument("--state-dir", dest="state_dir", help="override the state/ root")
+    sp.add_argument(
+        "--world-id",
+        dest="world_id",
+        default=None,
+        metavar="SLUG",
+        help="world-scoped store under state/world/<slug>/rules (migrates flat on first I/O)",
+    )
     sp.add_argument("--json", action="store_true", help="machine-readable output")
     sp.set_defaults(func=cmd_rule_list)

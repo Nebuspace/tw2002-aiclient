@@ -83,7 +83,7 @@ def test_write_draft_offers_no_way_to_ask_for_approval():
 
     params = set(inspect.signature(write_draft).parameters)
     assert "approved" not in params
-    assert params == {"document", "state_dir", "rules_path", "drafts_path"}
+    assert params == {"document", "state_dir", "rules_path", "drafts_path", "world_id"}
 
     with pytest.raises(TypeError):
         write_draft(DRAFT, approved=True)  # type: ignore[call-arg]
@@ -321,7 +321,7 @@ def test_writer_is_the_only_module_in_the_package_that_writes(tmp_path):
     split.
     """
     package = Path(store_mod.__file__).parent
-    offenders = _write_calls_outside(package, allowed="writer.py")
+    offenders = _write_calls_outside(package, allowed={"writer.py", "migrate.py"})
     assert offenders == [], (
         f"{offenders} write to disk; rules/writer.py is the only sanctioned "
         f"writer in this package"
@@ -362,11 +362,12 @@ def _dotted(func: ast.expr) -> str:
     return ".".join(reversed(parts))
 
 
-def _write_calls_outside(package: Path, *, allowed: str) -> list[str]:
-    """Every disk-mutating call in the package outside the allowed module."""
+def _write_calls_outside(package: Path, *, allowed: str | set[str]) -> list[str]:
+    """Every disk-mutating call in the package outside the allowed module(s)."""
+    allowed_names = {allowed} if isinstance(allowed, str) else set(allowed)
     found = []
     for path in sorted(package.glob("*.py")):
-        if path.name == allowed:
+        if path.name in allowed_names:
             continue
         tree = ast.parse(path.read_text(encoding="utf-8"))
         for node in ast.walk(tree):
