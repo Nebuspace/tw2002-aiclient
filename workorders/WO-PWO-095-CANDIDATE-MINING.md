@@ -1,8 +1,8 @@
 # WO-PWO-095-CANDIDATE-MINING — Candidate mining (no LLM)
 
-> Status: **IN FLIGHT** · seat `impl-aiclient-cursor` · hub GO 2026-08-03T05:06:57Z  
+> Status: **DONE** · origin `7788a33` (#350) · seat `impl-aiclient-cursor` · Accept 2026-08-03  
 > Type: build · PWO-095  
-> Tip base: `2644499` (PWO-094 LIVE)
+> Tip base: `2644499` → merged `7788a33`
 
 ## Goal
 Port the deterministic profit-miner: sliding-window over the reborn ledger → inert drafts under `state/skills/_drafts/`. Ranks candidates to *propose*; never scores a live action to play.

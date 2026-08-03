@@ -1,6 +1,6 @@
 # WO-TIP-HONESTY-ATTACH-LEDGER-LIVE — Tip honesty after #353
 
-> Status: **IN FLIGHT** · seat `impl-aiclient-cursor` · hub self-scope HANDOFF 2026-08-03T05:55:30Z
+> Status: **DONE** · origin `955f7ad` (#354) · seat `impl-aiclient-cursor` · Accept 2026-08-03
 
 ## Goal
 Correct tip comments that still claim attach ledger / LedgerWriter is deferred after #353 landed.

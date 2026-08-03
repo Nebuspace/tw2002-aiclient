@@ -1,6 +1,6 @@
 # WO-TIP-HONESTY-RECORDER-ATTACH-LEDGER — Recorder docstring after #353/#355
 
-> Status: **IN FLIGHT** · seat `impl-aiclient-cursor` · self-scoped after #355 Accept  
+> Status: **DONE** · origin `8f3a746` (#356) · seat `impl-aiclient-cursor` · Accept 2026-08-03  
 > Type: docs / tip honesty
 
 ## Goal
