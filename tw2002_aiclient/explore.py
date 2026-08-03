@@ -46,6 +46,43 @@ def _warps(rec: Mapping) -> tuple[int, ...]:
     return tuple(int(w) for w in raw)
 
 
+def _formation_membership_index(
+    world_id: str,
+    *,
+    state_dir=None,
+) -> dict[int, tuple[str, ...]]:
+    """sector_id → formation_membership tags (empty when unset)."""
+    out: dict[int, tuple[str, ...]] = {}
+    for rec in world_model.all_sectors(world_id, state_dir=state_dir):
+        tags = rec.get("formation_membership") or ()
+        if tags:
+            out[_sector_id(rec)] = tuple(str(t) for t in tags)
+    return out
+
+
+def _guard_route_hazard_hop(
+    graph: Mapping[int, Sequence[int]],
+    current_sector: int,
+    next_sector: int,
+    *,
+    world_id: str,
+    state_dir=None,
+) -> Optional[str]:
+    """STOP reason if ``current→next`` is a known route hazard; else None.
+
+    Never searches an alternate hop — callers must halt on a non-None return
+    (canon: hazards → guards that STOP, not autonomous reroute).
+    """
+    from tw2002_aiclient.formations import route_hazard_for_hop
+
+    return route_hazard_for_hop(
+        graph,
+        current_sector,
+        next_sector,
+        membership=_formation_membership_index(world_id, state_dir=state_dir),
+    )
+
+
 def known_graph(
     world_id: str,
     *,
@@ -955,6 +992,7 @@ def warp_target_for_intent(
             rng=rng,
             deny=deny,
         )
+        # map_fill_warp_target already applies the route-hazard guard.
         return IntentTick(next_sector=target, reason=reason)
     if intent == INTENT_FIND_FORMATIONS:
         # Product call path for WO-FORMATIONS-CATALOG-PORT: real in-tree
@@ -982,7 +1020,14 @@ def warp_target_for_intent(
             if not reason.startswith("explore_exhausted"):
                 reason = f"explore_exhausted:{reason}"
             return IntentTick(next_sector=None, reason=reason)
-        return IntentTick(next_sector=int(plan.next_sector))
+        nxt = int(plan.next_sector)
+        graph = known_graph(world_id, state_dir=state_dir)
+        hazard = _guard_route_hazard_hop(
+            graph, current_sector, nxt, world_id=world_id, state_dir=state_dir
+        )
+        if hazard is not None:
+            return IntentTick(next_sector=None, reason=hazard)
+        return IntentTick(next_sector=nxt)
     if intent != INTENT_FIND_STARDOCK:
         return IntentTick(next_sector=None, reason=f"explore_exhausted:unknown_intent:{intent}")
 
@@ -1009,7 +1054,14 @@ def warp_target_for_intent(
     # The runner re-checks adjacency against the known graph before sending,
     # which is where a planner that ever returned a non-adjacent hop is
     # caught -- one owner for that refusal, and it is the layer that sends.
-    return IntentTick(next_sector=int(plan.next_sector))
+    nxt = int(plan.next_sector)
+    graph = known_graph(world_id, state_dir=state_dir)
+    hazard = _guard_route_hazard_hop(
+        graph, current_sector, nxt, world_id=world_id, state_dir=state_dir
+    )
+    if hazard is not None:
+        return IntentTick(next_sector=None, reason=hazard)
+    return IntentTick(next_sector=nxt)
 
 
 def map_fill_warp_target(
@@ -1045,6 +1097,17 @@ def map_fill_warp_target(
     if plan.next_hop is not None and plan.mode != "exhausted":
         nxt = _adjacent_hop_toward(graph, current_sector, plan.next_hop)
         if nxt is not None:
+            hazard = _guard_route_hazard_hop(
+                graph,
+                current_sector,
+                nxt,
+                world_id=world_id,
+                state_dir=state_dir,
+            )
+            if hazard is not None:
+                # STOP — do not fall through to recovery (that would be a
+                # silent alternate route around the hazard).
+                return None, hazard
             return nxt, ""
     recovery = plan_exhausted_recovery(
         world_id,
@@ -1053,6 +1116,15 @@ def map_fill_warp_target(
         state_dir=state_dir,
     )
     if recovery.next_sector is not None:
+        hazard = _guard_route_hazard_hop(
+            graph,
+            current_sector,
+            int(recovery.next_sector),
+            world_id=world_id,
+            state_dir=state_dir,
+        )
+        if hazard is not None:
+            return None, hazard
         return recovery.next_sector, recovery.reason
     reason = recovery.reason or "explore_exhausted:no_recovery_target"
     if not reason.startswith("explore_exhausted"):

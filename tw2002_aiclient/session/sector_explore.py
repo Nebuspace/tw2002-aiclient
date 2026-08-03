@@ -1312,9 +1312,14 @@ class ExploreRunner:
                 if target is None:
                     exhaust = tick.reason
                     outcome = OUTCOME_HALTED
-                    reason = exhaust if exhaust.startswith("explore_exhausted") else (
-                        f"{REASON_EXPLORE_EXHAUSTED}:{exhaust or 'no_hop'}"
-                    )
+                    # Preserve typed route-hazard STOPs (formations → guards);
+                    # do not rebadge them as explore_exhausted.
+                    if exhaust.startswith("explore_exhausted") or exhaust.startswith(
+                        "route_hazard:"
+                    ):
+                        reason = exhaust
+                    else:
+                        reason = f"{REASON_EXPLORE_EXHAUSTED}:{exhaust or 'no_hop'}"
                     # Honest clear: no hop chosen this tick.
                     self._publish_progress(
                         report,
