@@ -741,8 +741,9 @@ class PlayShellScreen:
     "calm until it needs you". Its three bands name why the taught
     autopilot halted (a TYPED reason code resolved through the canon
     catalog, never invented prose), who the wire says holds the keyboard,
-    and the A/R/T teach moves available at the halt (labels only -- their
-    wires are PWO-066+). Because its presence depends on live daemon state
+    and the A/R/T teach moves available at the halt (labels on the banner;
+    calm-path A/R/T intents are live — PWO-066/067/069 + Trade-Loop ``T``).
+    Because its presence depends on live daemon state
     rather than terminal size alone, ``draw()`` resolves the frame in two
     passes: a size-only probe to decide whether any status consumer exists
     this tier, the single ``status_provider()`` poll, then the final
@@ -869,8 +870,9 @@ class PlayShellScreen:
     subscribe feed -- ``tests/test_spectate_no_send.py``'s structural
     guards).
 
-    The control-strip row's left side, which this docstring's own prior
-    revision left blank pending N5, carries the honest mode chip --
+    The control-strip row's left side (N5 operate cluster is live —
+    PWO-071 pause / Space; teach band is separate chrome) carries the
+    honest mode chip --
     ``cockpit.control_seat``'s ``APP_LABEL``/``MANUAL_LABEL``/
     ``SPECTATE_LABEL`` reading, remapped via ``trainer_labels=True``
     (WO-PLAY-STRIP-TRAINER-CHROME) to the merged Mode-key+seat wording
@@ -2069,9 +2071,10 @@ class PlayShellScreen:
         # raising composer degrades to the pre-existing liveness-only
         # right-justified row (never crashes the draw pass), same
         # containment discipline as every other composer call in this
-        # method. The A/R/T teach keys and run/record/panic cluster the
-        # canon mock shows on this row still belong to the N5
-        # mode-line-and-teach-controls WO -- not built here.
+        # method. A/R/T teach intents are handled in ``handle_key``
+        # (PWO-066 labels + 067/069 wires; ``T`` = Trade Loop per
+        # WO-EXPLORE-TRADE-MODE-SPLIT). N5 pause is PWO-071 / Space.
+        # This block only composes the mode-chip + liveness strip.
         control_strip = regions["control_strip"]
         control_strip_segments: list[tuple[str, int]] | None = None
         control_strip_fallback_lines: list[str] = []
