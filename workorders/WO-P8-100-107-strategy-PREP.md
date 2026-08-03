@@ -93,7 +93,7 @@
 ## 3. Depends-on graph
 
 ```
-092 LIVE kernel ──► 100 LIVE ──► 101 LIVE ──► 102 LIVE
+092 LIVE (Option A) ──► 100 LIVE ──► 101 LIVE ──► 102 LIVE
 091·083 ──► 103 LIVE
 081 ──► 104 LIVE
 091 ──► 105 LIVE

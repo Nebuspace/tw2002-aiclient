@@ -5,8 +5,9 @@ in canon only and carry **no** numbers. This module holds introspected
 per-world rows (Layer B) and **rejects** any row whose ``source`` does not
 begin with ``introspected`` — on both write and load.
 
-Ceiling (Option A): no live introspector, no send paths, no port-economics
-hypothesis floors (PWO-100). Fact table only — never selects actions.
+Ceiling: fixture/offline introspector LIVE (PWO-092 Option A); no live TWGS
+crawl/send in this module. No port-economics hypothesis floors (PWO-100).
+Fact table only — never selects actions.
 """
 
 from __future__ import annotations
@@ -37,6 +38,7 @@ __all__ = [
     "load_world_game_data",
     "persist_ship_row",
     "save_world_game_data",
+    "validate_cargo_hold_row",
     "validate_ship_row",
 ]
 
@@ -176,6 +178,18 @@ def validate_ship_row(row: Mapping[str, Any]) -> ShipRow:
         last_verified_ts=_require_ts(row["last_verified_ts"], kind="ship"),
     )
 
+
+
+def validate_cargo_hold_row(row: Mapping[str, Any]) -> CargoHoldRow:
+    """Validate a cargo-hold price row (source gate + required fields)."""
+    missing = REQUIRED_CARGO_HOLD_FIELDS - frozenset(row.keys())
+    if missing:
+        raise GameDataError(f"cargo_hold row missing fields: {sorted(missing)}")
+    return CargoHoldRow(
+        cost_per_hold=int(row["cost_per_hold"]),
+        source=_require_introspected(row["source"], kind="cargo_hold"),
+        last_verified_ts=_require_ts(row["last_verified_ts"], kind="cargo_hold"),
+    )
 
 def _ship_to_dict(ship: ShipRow) -> dict:
     out = asdict(ship)

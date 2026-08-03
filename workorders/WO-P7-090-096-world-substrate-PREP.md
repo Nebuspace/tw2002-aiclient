@@ -14,7 +14,7 @@
 - **Phase 6 residuals** — 087 LIVE (#360 auto-haggle opt-in default OFF); 088 DONE/PARTIAL (FOCUS Layer-2; full priority kernel parked). Phase 7 must not invent Phase-6 execute under PREP cover.
 - **AI never live-drives.** World/crawl/coach surfaces are substrate + recommend-only; no live AI sender.
 - **What already landed (tip):** world-id helpers · world-model persist · menu crawler · coach engine · LedgerWriter semantic schema (PWO-094) + world_id row-stamp (#366 Option A).
-- **What Phase 7 still owes:** introspector residual (092) · coach TTY polish residuals as Execute scopes them. Ledger wire LIVE (094 + daemon attach).
+- **What Phase 7 still owes:** coach TTY polish residuals as Execute scopes them · 092 Option B live introspect (HELD). Ledger wire LIVE (094 + daemon attach).
 - **HOLDs:** F2 · G2–G4 · north-star · Human→App · auth/secrets money-path · sacrificial live crawl without Max GO.
 
 ---
@@ -25,7 +25,7 @@
 |---|---|---|
 | World-id keying | **DONE** | loops #362 · rules #364 · ledger row-stamp #366 (Option A); map/game-data/menu world-scoped |
 | World-model persist/read | **LIVE** | `world_model.py` + `tests/test_world_model.py`; state_parser can feed writes |
-| Game-data two-layer store | **LIVE kernel** | `game_data.py` schema+source gate+persist; introspector still MISSING |
+| Game-data two-layer store | **LIVE** | `game_data.py` + `introspector.py` fixture/offline (Option A); live crawl Option B HELD |
 | Menu-map read-only crawl | **LIVE** | `menu/crawler.py` · `crawl_driver.py` · `knowledge.py` + crawler tests; live protocol verb still deferred |
 | Trace ledger append | **LIVE** | `ledger.py` LedgerWriter + world_id stamp/filter (#366); `tests/test_ledger.py` (PWO-094) |
 | Candidate mining (no LLM) | **LIVE** | `tw2002_aiclient/miner.py` + `tests/test_miner.py` (PWO-095) |
@@ -49,10 +49,10 @@
 - **Proof:** `tests/test_world_model.py` · explore tick write path.
 - **Hazards:** Claiming LIVE ≠ claiming every panel consumes it.
 
-### PWO-092 — Game-data two-layer store (BUILD) — **LIVE kernel** (introspector deferred)
+### PWO-092 — Game-data two-layer store (BUILD) — **LIVE** (Option A introspector)
 - **Depends-on:** 090
-- **Live state:** `tw2002_aiclient/game_data.py` — validate/load/persist with `introspected*` source gate; `tests/test_game_data.py` vs mock fixture.
-- **Accept residual:** live/fixture introspector (`introspector.py`) = separate WO (Option B/C).
+- **Live state:** `game_data.py` + `introspector.py` (fixture/offline parse → Layer-B rows); `tests/test_game_data.py` · `tests/test_introspector.py`.
+- **Accept residual:** live session introspect / TWGS crawl = Option B (fresh GO / Max-adjacent).
 - **Proof:** unit refuse non-introspected + fixture round-trip persist.
 - **Hazards:** Do not invent Layer-A numbers; PWO-100 floors stay out of this module.
 
@@ -90,7 +90,7 @@
 
 ```
 090 DONE ──► 091 LIVE
-            ├─► 092 LIVE kernel
+            ├─► 092 LIVE (Option A)
             └─► 093 LIVE
 025/041 ──► 094 LIVE ──► 095 LIVE
 036·091 ──► 096 LIVE
