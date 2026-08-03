@@ -213,18 +213,18 @@ Banked hygiene (not a PWO id): **pty mid-flush settle** — PREP `workorders/WO-
 
 ### Phase 6 — APP autopilot + rule engine (backend-heavy)
 
-> PREP: `workorders/WO-P6-080-088-autopilot-PREP.md` (tip `5b848f0`) — classify LIVE; state_parser MISSING; 085/086 LIVE gated; 081–084/087–088 MISSING. Do not invent Phase-5 chrome.
+> PREP: `workorders/WO-P6-080-088-autopilot-PREP.md` — tip honesty 2026-08-03: 080–086 LIVE; 087 PARTIAL (#337); 088 PARTIAL/gap. Do not invent Phase-5 chrome.
 
 | ID | Title | Type | Depends | Goal | Accept | Proof | Canon |
 |----|-------|------|---------|------|--------|-------|-------|
-| PWO-080 | Screen class + state parse — **PARTIAL** (classify LIVE; state_parser MISSING) | verify/harden | 020 | Settled→{class,state} | fixtures green | pytest | screen-understanding |
-| PWO-081 | Guarded rule schema — PREP | build | 080 | when+guards→macro | load/store | unit | rule-macro-engine |
-| PWO-082 | Macro capture + replay halt — PREP | build | 067·081 | Divergence halts | test+live | macros |
-| PWO-083 | Autopilot loop stop-on-unknown — PREP | harden | 081·064 | Unknown→STOP | no guess send | unit+live | app-autopilot-model |
-| PWO-084 | Re-validate every cycle — PREP | harden | 083 | Multi-cycle re-match | halt on drift | unit | app-autopilot-model |
+| PWO-080 | Screen class + state parse — **LIVE** (classify + `session/state_parser.py`; tip 2026-08-03 sweep) | verify/harden | 020 | Settled→{class,state} | fixtures green | pytest | screen-understanding |
+| PWO-081 | Guarded rule schema — **LIVE** (`rule_engine` + `rules/*` store/writer/reflex; tip 2026-08-03 sweep) | build | 080 | when+guards→macro | load/store | unit | rule-macro-engine |
+| PWO-082 | Macro capture + replay halt — **LIVE** (`record_macro` + `loops/player` divergence halt; tip 2026-08-03 sweep) | build | 067·081 | Divergence halts | test+live | macros |
+| PWO-083 | Autopilot loop stop-on-unknown — **LIVE** (`session/autoloop` novelty/hazard halt; tip 2026-08-03 sweep) | harden | 081·064 | Unknown→STOP | no guess send | unit+live | app-autopilot-model |
+| PWO-084 | Re-validate every cycle — **LIVE** (player/autoloop per-cycle start-anchor re-check; tip 2026-08-03 sweep) | harden | 083 | Multi-cycle re-match | halt on drift | unit | app-autopilot-model |
 | PWO-085 | Remove/replace MODE_AI_PILOT **LIVE gated** (product; residual test rehab) | harden | 060·083 | Finding closed or mode gone | no live ai sender | grep+tests | control divergence |
 | PWO-086 | Actor enum {app,human} only **LIVE** (`VALID_SENDERS`) | harden | 025 | No `ai` live actor | ledger invariant | tests | conventions |
-| PWO-087 | Auto-haggle as guarded rule — PREP | harden | 081 | Built-in rule archetype | haggle tests | pytest+live | auto-haggle |
+| PWO-087 | Auto-haggle as guarded rule — **PARTIAL** (`session/haggle.py` + tip tests #337; `trade_driver` still Auto-haggle OFF) | harden | 081 | Built-in rule archetype | haggle tests | pytest+live | auto-haggle |
 | PWO-088 | Priority engine ranks taught only — PREP | harden | 081·034 | Never picks unknown screens | unit | priority-engine |
 
 ### Phase 7 — World stores & learning substrate

@@ -1,9 +1,9 @@
 # WO-P6-080…088 — APP autopilot + rule engine · PREP
 
-> Status: **PREP** 2026-07-25 · tip `5b848f0` docs / product `d4a8829` (+ CC HARDEN WIP unstaged) · seat `impl-aiclient-cursor`  
+> Status: **PREP refreshed** 2026-08-03 · tip honesty pass (DOCS-PWO-080-086-HONESTY) · seat `impl-aiclient-cursor`  
 > Phase: 6 · Type: PREP (inventory + tightened Accept/Proof) · Execute: hub HANDOFF only  
 > Canon: `canon/architecture/app-autopilot-model.md` · `canon/architecture/rule-macro-engine.md` · `canon/engine/screen-understanding.md` · `canon/engine/macros.md` · `canon/engine/priority-engine.md`  
-> Refs: `ULTRACODE-WO-INVENTORY.md` Phase 6 · `WO-AUDIT-PHASE6-PREP.md` · scout tip-map (080 PARTIAL · 085/086 LIVE · rest MISSING)
+> Refs: `ULTRACODE-WO-INVENTORY.md` Phase 6 · scout tip-map (080–086 LIVE · 087 PARTIAL #337 · 088 PARTIAL/gap)
 
 **No product edited in this WO.** Live-state below is tip reality only.
 
@@ -23,23 +23,23 @@
 
 | Piece | Tip `d4a8829`+ | Notes |
 |---|---|---|
-| Screen class (`classify_screen`) | **LIVE** | `session/classify.py` → login/guardian/protocol |
-| Structured state parse (`state_parser`) | **MISSING** | Cited deferred in `protocol.py` / `goals.py` |
-| Guarded rule schema | **MISSING** | No load/store rule module |
-| Macro capture + replay halt | **MISSING** | LoopPlayer / SkillRecorder cut (`daemon.py`) |
-| Autopilot stop-on-unknown | **MISSING** | `autopilot.py` not ported |
-| Re-validate every cycle | **MISSING** | Depends on 083 |
+| Screen class (`classify_screen`) | **LIVE** | `session/classify.py` |
+| Structured state parse (`state_parser`) | **LIVE** | `session/state_parser.py` (sector/credits/turns/fighters/port) |
+| Guarded rule schema | **LIVE** | `rule_engine.py` + `rules/{store,writer,reflex,arm,cli}.py` |
+| Macro capture + replay halt | **LIVE** | `cockpit/record_macro.py` + `loops/player.py` divergence halt |
+| Autopilot stop-on-unknown | **LIVE** | `session/autoloop.py` novelty/hazard halt |
+| Re-validate every cycle | **LIVE** | player/autoloop per-cycle start-anchor re-check |
 | MODE_AI_PILOT retired (product) | **LIVE** (gated) | Lock modes + UI vocabulary gate; archive tests may still expect AI-PILOT |
 | Actor enum `{app,human}` | **LIVE** | `session.VALID_SENDERS` |
-| Auto-haggle as guarded rule | **MISSING** | Protocol defers `haggle` |
-| Priority engine ranks taught only | **MISSING** | FOCUS chrome kinds only; no engine |
+| Auto-haggle as guarded rule | **PARTIAL** | `session/haggle.py` + tests (#337); `trade_driver` Auto-haggle OFF |
+| Priority engine ranks taught only | **PARTIAL** | `focus_status` ranks display candidates; full EV engine gap = GAP-PWO-088 |
 
 ---
 
 ## 2. Per-PWO Accept + Proof
 
-### PWO-080 — Screen class + state parse (VERIFY/HARDEN) — **PARTIAL**
-- **Live state:** classify LIVE; state_parser MISSING.
+### PWO-080 — Screen class + state parse (VERIFY/HARDEN) — **LIVE**
+- **Live state:** classify LIVE; state_parser LIVE (`session/state_parser.py`).
 - **Accept:** Settled screen → `{class, state}` fixtures green; status/panel keys can be fed without inventing EV live-send.
 - **Proof:** classify fixtures · state parse unit · protocol status keys non-empty under fixture.
 - **Hazards:** Do not claim panel chrome DONE as data LIVE (status→panel wire gap).
@@ -92,7 +92,7 @@
 ## 3. Depends-on graph
 
 ```
-classify LIVE ──► 080 (state parse) ──► 081 (rules)
+classify+state_parser LIVE ──► 080 DONE ──► 081 LIVE (rules)
                                       ├─► 082 (w/ 067)
                                       ├─► 083 (w/ 064) ──► 084
                                       ├─► 087
