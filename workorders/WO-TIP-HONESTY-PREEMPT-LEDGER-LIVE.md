@@ -1,6 +1,6 @@
 # WO-TIP-HONESTY-PREEMPT-LEDGER-LIVE — Clean-preempt WO evidence after #353
 
-> Status: **IN FLIGHT** · seat `impl-aiclient-cursor` · standing self-scope after #358  
+> Status: **DONE** · origin `3726c49` (#359) · seat `impl-aiclient-cursor` · Accept 2026-08-03  
 > Type: docs / tip honesty
 
 ## Goal
