@@ -63,12 +63,12 @@
 - **Proof:** crawler unit/chokepoint tests.
 - **Hazards:** Live crawl is sacrificial; never commit crawl dumps.
 
-### PWO-094 — Trace ledger append semantics (HARDEN) — **PARTIAL**
-- **Depends-on:** 025 · 041
-- **Live state:** transcript_tail / logging_util / actor attribution; LedgerWriter cut noted in attach suite.
-- **Accept residual:** per-dispatch semantic rows matching `trace-ledger` canon.
-- **Proof:** unit schema + sample append.
-- **Hazards:** Secrets must never appear in ledger rows (pairs with 111).
+### PWO-094 — Trace ledger append semantics (HARDEN) — **LIVE**
+- **Depends-on:** 025 · 041 (satisfied)
+- **Live state:** `tw2002_aiclient/ledger.py` `LedgerWriter` — JSONL rows with `actor∈{app,human}`, required `session_id`, secret→`<redacted>`; `tests/test_ledger.py`.
+- **Accept residual:** daemon/session live-wire of every `do`/`send` choke-point (module + unit Accept met; product callers still adopting).
+- **Proof:** `pytest tests/test_ledger.py`.
+- **Hazards:** Secrets never in ledger rows — held via redaction pins.
 
 ### PWO-095 — Candidate mining no LLM (BUILD) — **MISSING**
 - **Depends-on:** 094
@@ -91,11 +91,11 @@
 090 PARTIAL ──► 091 LIVE
             ├─► 092 LIVE kernel
             └─► 093 LIVE
-025/041 ──► 094 PARTIAL ──► 095 MISSING
+025/041 ──► 094 LIVE ──► 095 MISSING
 036·091 ──► 096 LIVE
 ```
 
-**Suggested first execute after PREP Accept:** **PWO-094 ledger** *or* Option B introspector *or* **PWO-100** (now unblocked for honesty). 092 kernel LIVE.
+**Suggested first execute after PREP Accept:** **PWO-095** mining *or* Option B introspector. 092/094 LIVE.
 
 ---
 

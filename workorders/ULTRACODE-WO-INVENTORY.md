@@ -154,7 +154,7 @@ Types: `bootstrap` · `verify` · `build` · `extend` · `harden` · `docs-findi
 | PWO-022 | Ensure `--no-auto-arm` | harden | 020 | Ensure never surprise-arms trainer | AP off after ensure flag | status | app-autopilot-model |
 | PWO-023 | Login NEW vs RETURNING | harden | 020 | Branches over secure store | both paths proven | live or fixture | login-automaton |
 | PWO-024 | Game-select recovery | harden | 020 | Stuck `game_select` recoverable | reach main_command | `tw do` / ensure | login-automaton |
-| PWO-025 | Control-lock + actor tag **PARTIAL** — lock+`VALID_SENDERS` LIVE; **LedgerWriter / attach ledger MISSING** (`daemon.py` deferred) | harden | 020 | Every send tagged `{app,human}` | ledger rows actor∈{app,human} | ledger sample | control-and-escalation · trace-ledger |
+| PWO-025 | Control-lock + actor tag **LIVE** — lock+`VALID_SENDERS` + `LedgerWriter` (`ledger.py`; daemon per-dispatch wire may still land as follow-up) | harden | 020 | Every send tagged `{app,human}` | ledger rows actor∈{app,human} | ledger sample | control-and-escalation · trace-ledger |
 | PWO-026 | Settle detection baseline | verify/harden | 020 | Prompt/idle/timeout settle | no false ready | unit+live | settle-detection |
 | PWO-027 | Reconnect + login replay **DONE** 2026-07-24 (`e1f189c` · SessionGuardian D9) | build | 020 | Drop sock recovers | spectate/play survive recycle | stop sock / kill | resilience-and-reconnect |
 | PWO-028 | Idle keepalive off on unsafe **DONE** 2026-07-24 (`4db92a1` · D10 `main_command`-only) | harden | 027 | Keepalive suppressed on unsafe screens | no keepalive on Option? | test | resilience… |
@@ -229,7 +229,7 @@ Banked hygiene (not a PWO id): **pty mid-flush settle** — PREP `workorders/WO-
 
 ### Phase 7 — World stores & learning substrate
 
-> PREP: `workorders/WO-P7-090-096-world-substrate-PREP.md` — tip honesty 2026-08-03 (`aad330c`): 091/092(kernel)/093/096 LIVE; 090/094 PARTIAL; 095 MISSING. Parent: `WO-AUDIT-PHASE789-PREP.md`.
+> PREP: `workorders/WO-P7-090-096-world-substrate-PREP.md` — tip honesty 2026-08-03: 091/092(kernel)/093/094/096 LIVE; 090 PARTIAL; 095 MISSING. Parent: `WO-AUDIT-PHASE789-PREP.md`.
 
 | ID | Title | Type | Depends | Goal | Accept | Proof | Canon |
 |----|-------|------|---------|------|--------|-------|-------|
@@ -237,7 +237,7 @@ Banked hygiene (not a PWO id): **pty mid-flush settle** — PREP `workorders/WO-
 | PWO-091 | World-model persist/read — **LIVE** (`world_model.py` + tests) | build | 090·080 | Sector DB grows | files+API | explore tick | world-model |
 | PWO-092 | Game-data two-layer store — **LIVE kernel** (`game_data.py` source gate + world persist; introspector deferred; tip #092 WO) | build | 090 | Semantics≠DATA | no hardcoded stats in product | audit | game-data-store |
 | PWO-093 | Menu-map read-only crawl — **LIVE** (`menu/crawler` + knowledge; live verb deferred) | build | 090 | Never-commit crawler | sacrificial only | crawl | menu-map… |
-| PWO-094 | Trace ledger append semantics — **PARTIAL** (transcript/actor; no per-dispatch LedgerWriter) | harden | 025·041 | Per-dispatch rows | schema | unit | trace-ledger |
+| PWO-094 | Trace ledger append semantics — **LIVE** (`ledger.LedgerWriter` JSONL + actor∈{app,human} + secret redaction; unit schema/sample) | harden | 025·041 | Per-dispatch rows | schema | unit | trace-ledger |
 | PWO-095 | Candidate mining (no LLM) — **MISSING** (miner/analyze banked or archive-only) | build | 094 | Recurring patterns→candidates | dry-run | unit | candidate-mining |
 | PWO-096 | Coaching tips read-only — **LIVE** (`coach_engine` + KB + decisions) | build | 036·091 | Options never act | TTY | coaching-engine |
 
@@ -258,12 +258,12 @@ Banked hygiene (not a PWO id): **pty mid-flush settle** — PREP `workorders/WO-
 
 ### Phase 9 — Doctrine / safety teeth
 
-> PREP: `workorders/WO-P9-110-115-doctrine-PREP.md` — tip honesty 2026-08-03: 110/111(TX)/112/113/114/115 LIVE; ledger redaction → 094.
+> PREP: `workorders/WO-P9-110-115-doctrine-PREP.md` — tip honesty 2026-08-03: 110/111(TX)/112/113/114/115 LIVE; ledger redaction via PWO-094 LIVE.
 
 | ID | Title | Type | Depends | Goal | Accept | Proof | Canon |
 |----|-------|------|---------|------|--------|-------|-------|
 | PWO-110 | Secrets resolve precedence — **LIVE** (`session/credentials.py`) | harden | 005 | env > secrets file | tests | secrets-and-credentials |
-| PWO-111 | Redaction on all send paths — **TX-LIVE** (login/attach/do--secret → `_log_tx`/`log_redacted` + LOGS; ledger = PWO-094; tip 2026-08-03) | harden | 020 | No password in logs/ledger | scan | secrets… |
+| PWO-111 | Redaction on all send paths — **TX-LIVE** (login/attach/do--secret → `_log_tx`/`log_redacted` + LOGS; ledger redaction LIVE via PWO-094 `LedgerWriter`) | harden | 020 | No password in logs/ledger | scan | secrets… |
 | PWO-112 | Action-safety byte guards — **LIVE** (`action_safety.py` coverage map + unit-per-class pins; NEVER_AUTO audit retained) | harden | 081·083 | Destructive macros blocked | unit | action-safety-guards |
 | PWO-113 | Alignment: no PvP aggression rules — **LIVE** (`alignment_gate` at writer/promote/bridge; tip #113 WO) | harden | 070·081 | Teacher cannot propose PvP harm | unit | alignment-and-conduct |
 | PWO-114 | Hypothesis-tag discipline CI — **LIVE** (`scripts/hypothesis_tag_ci_guard.py` in suite.yml; deliberate-fail fixture via `--self-test-fail`) | harden | 100 | Untagged numbers fail check | script | conventions |

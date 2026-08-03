@@ -14,7 +14,7 @@
 - **Doctrine is teeth, not prose.** PREP marks what is enforceable in product/CI vs aspirational coach text.
 - **Secrets never in logs/argv/history/repo.** Pair 110/111 with ledger work (094).
 - **What already landed (tip):** credentials precedence · redaction on several paths · scattered NEVER_AUTO / Paladin / crawl guards · path-leak public-bound lint.
-- **What Phase 9 still owes:** full send-path redaction audit (ledger → 094). Action-safety coverage map LIVE (PWO-112).
+- **What Phase 9 still owes:** RX verbatim residual + attach heuristic residual (ledger redaction LIVE via 094). Action-safety coverage map LIVE (PWO-112).
 - **HOLDs:** force-push · secrets in coord · public-repo personal identifiers.
 
 ---
@@ -24,7 +24,7 @@
 | Piece | Tip `aad330c` | Notes |
 |---|---|---|
 | Secrets resolve precedence | **LIVE** | `session/credentials.py` env → secrets file · credentials/redaction tests |
-| Redaction on all send paths | **TX-LIVE** | `_log_tx`/`log_redacted` + LOGS + login/attach/status/ensure tests; ledger = PWO-094 MISSING |
+| Redaction on all send paths | **TX-LIVE** | `_log_tx`/`log_redacted` + LOGS + login/attach/status/ensure tests; ledger redaction LIVE via PWO-094 |
 | Action-safety byte guards | **LIVE** | `action_safety.py` coverage map + unit-per-class pins; NEVER_AUTO consumer audit retained |
 | Alignment no PvP aggression | **LIVE** | `alignment_gate` at `write_draft`/`promote_draft`/`bridge_to_kernel_document`; corp-toll negative control |
 | Hypothesis-tag discipline CI | **LIVE** | `scripts/hypothesis_tag_ci_guard.py` in suite.yml; deliberate-fail via `--self-test-fail` |
@@ -43,7 +43,7 @@
 ### PWO-111 — Redaction on all send paths (HARDEN) — **TX-LIVE** (ledger deferred)
 - **Depends-on:** 020
 - **Live state:** password TX routes `secret=True` → `connection._log_tx` → `TranscriptLogger.log_redacted` + `TranscriptTail.append_redacted`; login/attach/do--secret/status/ensure suites green.
-- **Accept residual (named, not claimed DONE):** (1) LedgerWriter redaction = **PWO-094**; (2) RX screen/prompt verbatim by canon; (3) attach heuristic misses non-keyword prompts (documented residual test).
+- **Accept residual (named, not claimed DONE):** (1) LedgerWriter redaction = **PWO-094 LIVE**; (2) RX screen/prompt verbatim by canon; (3) attach heuristic misses non-keyword prompts (documented residual test).
 - **Proof:** `tests/test_login_redaction.py` · `test_attach_redaction.py` · `test_status_prompt_redaction.py` · `test_ensure_login_error_redaction.py` · `test_secrets_store_redaction.py`.
 - **Hazards:** New send sites must pass `secret=`; never put passwords in `cli --keys` argv.
 
