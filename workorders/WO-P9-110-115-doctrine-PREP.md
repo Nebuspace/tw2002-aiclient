@@ -24,7 +24,7 @@
 | Piece | Tip `aad330c` | Notes |
 |---|---|---|
 | Secrets resolve precedence | **LIVE** | `session/credentials.py` env → secrets file · credentials/redaction tests |
-| Redaction on all send paths | **PARTIAL** | logging_util · transcript_tail · login/attach/macro tests; ledger path incomplete |
+| Redaction on all send paths | **TX-LIVE** | `_log_tx`/`log_redacted` + LOGS + login/attach/status/ensure tests; ledger = PWO-094 MISSING |
 | Action-safety byte guards | **PARTIAL** | NEVER_AUTO · classify · crawler · trade_driver Paladin · sector_explore — scattered, no unified module |
 | Alignment no PvP aggression | **MISSING** | coach prose only (`toll_math` anti-PK); no teacher/rule rejection gate |
 | Hypothesis-tag discipline CI | **MISSING** | `coach_kb` flags / params exist; no CI script failing untagged numbers |
@@ -40,11 +40,12 @@
 - **Proof:** `tests/test_credentials.py` · `tests/test_secrets_store_redaction.py`.
 - **Hazards:** Never log resolved password.
 
-### PWO-111 — Redaction on all send paths (HARDEN) — **PARTIAL**
+### PWO-111 — Redaction on all send paths (HARDEN) — **TX-LIVE** (ledger deferred)
 - **Depends-on:** 020
-- **Accept residual:** every send/log/ledger path redacts; scan clean.
-- **Proof:** redaction tests + `rg` of send sites + ledger sample when 094 lands.
-- **Hazards:** New send sites must route through the sink.
+- **Live state:** password TX routes `secret=True` → `connection._log_tx` → `TranscriptLogger.log_redacted` + `TranscriptTail.append_redacted`; login/attach/do--secret/status/ensure suites green.
+- **Accept residual (named, not claimed DONE):** (1) LedgerWriter redaction = **PWO-094**; (2) RX screen/prompt verbatim by canon; (3) attach heuristic misses non-keyword prompts (documented residual test).
+- **Proof:** `tests/test_login_redaction.py` · `test_attach_redaction.py` · `test_status_prompt_redaction.py` · `test_ensure_login_error_redaction.py` · `test_secrets_store_redaction.py`.
+- **Hazards:** New send sites must pass `secret=`; never put passwords in `cli --keys` argv.
 
 ### PWO-112 — Action-safety byte guards (HARDEN) — **PARTIAL**
 - **Depends-on:** 081 · 083
@@ -76,14 +77,14 @@
 
 ```
 005 ──► 110 LIVE
-020 ──► 111 PARTIAL (pairs with 094)
+020 ──► 111 TX-LIVE (ledger pairs with 094)
 081·083 ──► 112 PARTIAL
 070·081 ──► 113 MISSING
 100 ──► 114 MISSING
 — ──► 115 LIVE
 ```
 
-**Suggested first execute after PREP Accept:** **PWO-113 alignment gate** (clear MISSING, safety-critical) *or* **PWO-111 send-path redaction audit** (closes PARTIAL with evidence map). 114 waits on 100/092 chain.
+**Suggested first execute after PREP Accept:** **PWO-113 alignment gate** (clear MISSING, safety-critical) *or* **PWO-112 coverage map**. 111 TX-LIVE closed (ledger→094). 114 waits on 100/092 chain.
 
 ---
 
