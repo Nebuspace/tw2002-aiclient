@@ -28,7 +28,10 @@ __all__ = [
     "FormationsCatalog",
     "catalog_world",
     "formations_from_sectors",
+    "membership_map",
     "panel_items_from_catalog",
+    "recommend_genesis",
+    "write_membership",
 ]
 
 
@@ -373,6 +376,67 @@ def panel_items_from_catalog(catalog: FormationsCatalog) -> list[dict]:
     return items
 
 
+
+# Canon world-model membership tags use hyphens (world-model.md example).
+_KIND_TO_MEMBERSHIP = {
+    "dead_end": "dead-end",
+    "bubble": "bubble",
+    "one_way": "one-way",
+    "warp_sink": "warp-sink",
+}
+
+
+def membership_map(catalog: FormationsCatalog) -> dict[int, list[str]]:
+    """sector_id → formation kind tags for ``world_model.formation_membership``.
+
+    Tags are canon hyphen forms (``dead-end``, ``one-way``, …). Detector
+    internal kinds stay snake_case.
+    """
+    m: dict[int, list[str]] = {}
+    for f in catalog.formations:
+        tag = _KIND_TO_MEMBERSHIP.get(f.kind, f.kind)
+        for sid in f.sectors:
+            tags = m.setdefault(int(sid), [])
+            if tag not in tags:
+                tags.append(tag)
+    return m
+
+
+def write_membership(
+    world_id: str,
+    catalog: FormationsCatalog,
+    *,
+    state_dir: Any = None,
+) -> int:
+    """Upsert ``formation_membership`` lists; returns sectors updated.
+
+    Catalog-only side effect — still no Genesis / claim actions.
+    """
+    from tw2002_aiclient import world_model as _world_model
+
+    mmap = membership_map(catalog)
+    n = 0
+    kwargs: dict = {}
+    if state_dir is not None:
+        kwargs["state_dir"] = state_dir
+    for sid, tags in mmap.items():
+        _world_model.upsert_sector(
+            world_id,
+            {"sector_id": sid, "formation_membership": list(tags)},
+            **kwargs,
+        )
+        n += 1
+    return n
+
+
+def recommend_genesis(catalog: FormationsCatalog) -> list[Formation]:
+    """Operator-facing shortlist — identical to ``catalog.genesis_candidates``.
+
+    Still no production auto-caller beyond optional use; LOCATE/CATALOG/RECOMMEND only.
+    """
+    return list(catalog.genesis_candidates)
+
+
 def catalog_world(
     world_id: str,
     *,
@@ -394,4 +458,10 @@ def catalog_world(
     except Exception:  # noqa: BLE001 — provider seam must not raise
         return FormationsCatalog([])
     catalog = formations_from_sectors(sectors)
-    return catalog if catalog is not None else FormationsCatalog([])
+    if catalog is None:
+        return FormationsCatalog([])
+    try:
+        write_membership(world_id, catalog, state_dir=state_dir)
+    except Exception:  # noqa: BLE001 — provider seam must not raise
+        pass
+    return catalog

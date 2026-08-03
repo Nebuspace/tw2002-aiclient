@@ -753,3 +753,21 @@ def test_hazard_raises_formations_above_genesis(wm):
     # sector 3 has one warp → dead_end
     assert merged["genesis_count"] == merged["dead_end_count"]
     assert merged["formations_count"] > merged["genesis_count"]
+
+
+def test_world_stats_refresh_writes_formation_membership(tmp_path, monkeypatch):
+    """Status refresh stamps membership via write_membership (canon writeback)."""
+    from tw2002_aiclient import world_model
+
+    wid = "w-memb"
+    world_model.upsert_sector(
+        wid, {"sector_id": 1, "warps": [2]}, state_dir=tmp_path
+    )
+    world_model.upsert_sector(
+        wid, {"sector_id": 2, "warps": [1]}, state_dir=tmp_path
+    )
+    # Point world_stats at real world_model for this test (not FakeWM).
+    s = world_stats.WorldStats()
+    s.refresh(wid, state_dir=tmp_path)
+    rec = world_model.get_sector(wid, 1, state_dir=tmp_path)
+    assert "dead-end" in (rec.get("formation_membership") or [])
