@@ -112,5 +112,7 @@ def test_daemon_imports_record_attach_and_constructs_ledger() -> None:
     text = src.read_text(encoding="utf-8")
     assert "from ..ledger import LedgerWriter" in text
     assert "record_attach_keystroke" in text
-    assert "server.ledger = LedgerWriter()" in text
+    assert "ledger = LedgerWriter()" in text
+    assert "server.ledger = ledger" in text
+    assert "ledger=ledger" in text  # guardian shares same writer
     assert "LedgerWriter / record_attach_keystroke deferred" not in text

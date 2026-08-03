@@ -647,11 +647,14 @@ def main(argv=None):
     # D9 reconnect+login-replay (SessionGuardian) -- starts inert
     # (session.auto_login_profile is None until a successful `ensure`
     # records one) and stopped cleanly on daemon shutdown. D10 keepalive
-    # is stubbed inside guardian until WO-P2-028.
+    # (WO-P2-028) is LIVE; Trace-Ledger shares the same LedgerWriter as
+    # do/send/attach (WO-GUARDIAN-KEEPALIVE-LEDGER).
+    ledger = LedgerWriter()
     guardian = SessionGuardian(
         session,
         get_password=get_password,
         save_password=_save_password,
+        ledger=ledger,
     )
     guardian.start()
 
@@ -682,8 +685,8 @@ def main(argv=None):
     server.guardian = guardian
     server.watch_hub = watch_hub
     server.error_log = error_log
-    # WO-DAEMON-LEDGER-WRITER-ATTACH / PWO-094: Trace-Ledger for do/send/attach.
-    server.ledger = LedgerWriter()
+    # WO-DAEMON-LEDGER-WRITER-ATTACH / PWO-094: same Trace-Ledger as guardian keepalive.
+    server.ledger = ledger
     # WO-P2-025: mode + active-driver slot (replaces the earlier ensure-only
     # `threading.Lock` drive_lock). Eager so every request sees one lock;
     # protocol `_driving_dispatch` uses acquire_driver/release_driver.

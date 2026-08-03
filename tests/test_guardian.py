@@ -375,3 +375,40 @@ def test_reconnect_unverified_screen_is_not_reported_as_success():
     assert g.reconnect_count == 0
     assert g.last_reconnect_error is not None
     assert "automaton_stuck" in g.last_reconnect_error
+
+
+# -- WO-GUARDIAN-KEEPALIVE-LEDGER ------------------------------------------
+
+def test_keepalive_writes_app_ledger_row(tmp_path):
+    from tw2002_aiclient.ledger import read_entries, LedgerWriter
+
+    session = KeepaliveFakeSession(
+        "Command [TL=00:00:00]:[1] (?=Help)? :", last_rx=-1000.0
+    )
+    session.session_id = "guardian-keepalive-test"
+    ledger = LedgerWriter(path=tmp_path / "ledger.jsonl")
+    g = _guardian(session, idle_keepalive_ms=100, ledger=ledger)
+    g._tick()
+    assert session.sent == [("", False, "app")]
+    rows = read_entries(tmp_path / "ledger.jsonl")
+    assert len(rows) == 1
+    assert rows[0]["actor"] == "app"
+    assert rows[0]["session_id"] == "guardian-keepalive-test"
+    assert rows[0]["input"] == ""
+
+
+def test_keepalive_without_ledger_still_sends():
+    session = KeepaliveFakeSession(
+        "Command [TL=00:00:00]:[1] (?=Help)? :", last_rx=-1000.0
+    )
+    g = _guardian(session, idle_keepalive_ms=100)  # ledger=None
+    g._tick()
+    assert session.sent == [("", False, "app")]
+
+
+def test_daemon_shares_ledger_with_guardian():
+    src = __import__("pathlib").Path(__file__).resolve().parents[1] / "tw2002_aiclient" / "session" / "daemon.py"
+    text = src.read_text(encoding="utf-8")
+    assert "ledger = LedgerWriter()" in text
+    assert "ledger=ledger" in text
+    assert "server.ledger = ledger" in text
