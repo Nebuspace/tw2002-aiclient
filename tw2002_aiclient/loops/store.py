@@ -26,19 +26,20 @@ Canon
   (``canon/engine/macros.md §"Findings — code divergences (docs win)"``), so this reader flags every draft row
   and lists them only on explicit opt-in.
 
-Canon divergence (surfaced, not closed)
----------------------------------------
-``canon/engine/macros.md §"Send-and-confirm — never auto-fire an unverified prompt"`` requires the macro library be world-scoped
--- "never a global namespace shared across servers" -- while the path canon
-names above is flat. That gap is already a recorded canon finding
-(``canon/engine/world-identity.md §"Code divergence"``: "Macro / loop library is
-currently flat, not per-world ... must be migrated to the same per-world
-scoping"). This reader deliberately reads the **flat** path: a reader aimed
-at the not-yet-existent per-world location would report empty for the wrong
-reason, and would go blind the day a writer lands on the path canon records.
-``state_dir`` is injectable (same shape as ``menu/knowledge.py``'s
-``knowledge_path_for_world``) so the migration is a path change here, not a
-rewrite. Closing it is writer-side work; G3 is read-only.
+World scoping (PWO-090 / DECISION-LOOPS-WORLD-MIGRATE-ON-READ)
+-------------------------------------------------------------
+Canon requires the macro library be world-scoped
+(``canon/engine/world-identity.md``). Paths:
+
+* **World-scoped (default when ``world_id`` is supplied):**
+  ``state/world/<world_id>/skills/`` (+ ``_drafts/``).
+* **Legacy flat:** ``state/skills/`` — still returned when ``world_id`` is
+  omitted (tests / daemon-free callers without a profile).
+
+On first world-scoped read/write, ``migrate_flat_loops_to_world`` copies
+legacy flat JSON into the world path if the world store is empty and the
+flat store has files (idempotent; never deletes flat). Silent empty-world
+reads against a non-empty flat store are forbidden by that migrate step.
 
 The honesty contract
 --------------------
@@ -77,6 +78,7 @@ from __future__ import annotations
 
 import json
 import math
+import shutil
 import os
 from pathlib import Path
 from typing import Any, Mapping, Optional
@@ -110,20 +112,95 @@ _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 STATE_DIR = _PROJECT_ROOT / "state"
 
 
-def loops_dir(state_dir=None) -> Path:
-    """``state/skills`` -- the blessed (human-approved) macro library.
+def loops_dir(state_dir=None, *, world_id=None) -> Path:
+    """Blessed macro library directory (pure path math — no I/O).
 
-    ``state_dir`` overrides the ``state/`` root (tests point at ``tmp_path``);
-    it is also the seam the per-world migration recorded in this module's
-    docstring will move. Pure path math -- touches no filesystem.
+    * ``world_id`` set → ``state/world/<world_id>/skills`` (PWO-090).
+    * ``world_id`` omitted → legacy flat ``state/skills``.
+
+    ``state_dir`` overrides the ``state/`` root (tests use ``tmp_path``).
     """
+    base = Path(state_dir) if state_dir is not None else STATE_DIR
+    if world_id is not None and str(world_id).strip():
+        return base / "world" / str(world_id).strip() / STORE_DIRNAME
+    return base / STORE_DIRNAME
+
+
+def drafts_dir(state_dir=None, *, world_id=None) -> Path:
+    """Drafts directory under the same scoping as :func:`loops_dir`."""
+    return loops_dir(state_dir, world_id=world_id) / DRAFTS_DIRNAME
+
+
+def legacy_flat_loops_dir(state_dir=None) -> Path:
+    """Explicit legacy flat ``state/skills`` (never world-scoped)."""
     base = Path(state_dir) if state_dir is not None else STATE_DIR
     return base / STORE_DIRNAME
 
 
-def drafts_dir(state_dir=None) -> Path:
-    """``state/skills/_drafts`` -- mined proposals, inert until promoted."""
-    return loops_dir(state_dir) / DRAFTS_DIRNAME
+def migrate_flat_loops_to_world(world_id: str, *, state_dir=None) -> dict:
+    """Copy legacy flat skills into ``state/world/<world_id>/skills`` once.
+
+    Policy (DECISION-LOOPS-WORLD-MIGRATE-ON-READ, hub GO 2026-08-03):
+
+    * Fresh installs / empty flat → no-op (``migrated=False``, ``copied=0``).
+    * World store already has ``*.json`` → no-op (already scoped).
+    * Flat has ``*.json`` and world store empty → copy files (incl. ``_drafts/``).
+    * Never deletes the flat tree (operator can remove manually later).
+
+    Returns ``{"migrated": bool, "copied": int, "world_dir": str, "flat_dir": str}``.
+    """
+    if world_id is None or not str(world_id).strip():
+        raise ValueError("world_id is required for migrate_flat_loops_to_world")
+    wid = str(world_id).strip()
+    flat = legacy_flat_loops_dir(state_dir)
+    world = loops_dir(state_dir, world_id=wid)
+    result = {
+        "migrated": False,
+        "copied": 0,
+        "world_dir": str(world),
+        "flat_dir": str(flat),
+    }
+
+    def _json_files(root: Path) -> list[Path]:
+        # Open-and-classify, never Path.exists/is_file/is_dir — those collapse
+        # permission-denied into "absent" (see test_the_loader_never_asks…).
+        try:
+            candidates = sorted(root.rglob("*.json"))
+        except OSError:
+            return []
+        out: list[Path] = []
+        for path in candidates:
+            try:
+                with path.open("rb"):
+                    pass
+            except OSError:
+                continue
+            out.append(path)
+        return out
+
+    if _json_files(world):
+        return result
+    flat_files = _json_files(flat)
+    if not flat_files:
+        return result
+
+    world.mkdir(parents=True, exist_ok=True)
+    copied = 0
+    for src in flat_files:
+        rel = src.relative_to(flat)
+        dest = world / rel
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            with dest.open("xb") as out_f, src.open("rb") as in_f:
+                shutil.copyfileobj(in_f, out_f)
+        except FileExistsError:
+            continue
+        except OSError:
+            continue
+        copied += 1
+    result["migrated"] = copied > 0
+    result["copied"] = copied
+    return result
 
 
 def _finite_number(value) -> Optional[float]:
@@ -289,6 +366,7 @@ def read_loop_store(
     state_dir=None,
     skills_dir=None,
     drafts_path=None,
+    world_id=None,
 ) -> dict[str, Any]:
     """Read the taught-macro store and report what is actually in it.
 
@@ -307,13 +385,23 @@ def read_loop_store(
     the result, because a reader that dies on a corrupt file tells the
     operator less than one that names it.
     """
-    blessed = Path(skills_dir) if skills_dir is not None else loops_dir(state_dir)
+    if skills_dir is None and world_id is not None and str(world_id).strip():
+        migrate_flat_loops_to_world(str(world_id).strip(), state_dir=state_dir)
+    blessed = (
+        Path(skills_dir)
+        if skills_dir is not None
+        else loops_dir(state_dir, world_id=world_id)
+    )
     roots = [_read_root(blessed, draft=False)]
     if include_drafts:
         drafts = (
             Path(drafts_path)
             if drafts_path is not None
-            else (blessed / DRAFTS_DIRNAME if skills_dir is not None else drafts_dir(state_dir))
+            else (
+                blessed / DRAFTS_DIRNAME
+                if skills_dir is not None
+                else drafts_dir(state_dir, world_id=world_id)
+            )
         )
         roots.append(_read_root(drafts, draft=True))
 

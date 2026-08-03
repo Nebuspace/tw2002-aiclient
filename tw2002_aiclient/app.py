@@ -1777,7 +1777,11 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                 except Exception:  # noqa: BLE001
                     discovered = None
                 try:
-                    store = _loop_store.read_loop_store()
+                    try:
+                        _loops_wid = _world_identity.world_id_from_profile(profile)
+                    except Exception:  # noqa: BLE001
+                        _loops_wid = None
+                    store = _loop_store.read_loop_store(world_id=_loops_wid)
                 except Exception as exc:  # noqa: BLE001
                     # A raising store read must not take the play loop down.
                     # Type name only, never `str(exc)` -- a store path is not
@@ -2451,7 +2455,11 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                     play.status_line = f"recording — {name!r}  (press R to stop)"
                 else:
                     # Stop recording: finalise and save.
-                    save = play.record_session.save()
+                    try:
+                        _rec_wid = _world_identity.world_id_from_profile(profile)
+                    except Exception:  # noqa: BLE001
+                        _rec_wid = None
+                    save = play.record_session.save(world_id=_rec_wid)
                     if save is not None:
                         play.status_line = (
                             f"recorded {save.steps} step(s) → {save.path.name}"

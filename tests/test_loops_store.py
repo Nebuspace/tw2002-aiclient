@@ -15,7 +15,13 @@ from pathlib import Path
 import pytest
 
 from tw2002_aiclient.loops.list_view import format_loop_row, format_loops_report
-from tw2002_aiclient.loops.store import read_loop_store
+from tw2002_aiclient.loops.store import (
+    drafts_dir,
+    legacy_flat_loops_dir,
+    loops_dir,
+    migrate_flat_loops_to_world,
+    read_loop_store,
+)
 from tw2002_aiclient.session import cli
 
 # The recorded-macro corpus these schema-conformance tests read.
@@ -555,3 +561,65 @@ def test_loops_is_on_help_now_that_the_cli_wire_landed():
     assert "loops" in help_text
     assert cli.build_parser().parse_args(["loops"]).func is cli.cmd_loops
     assert "autoloop" not in help_text
+
+
+# --------------------------------------------------------------------------
+# PWO-090 — world-scoped paths + migrate-on-first-read
+# --------------------------------------------------------------------------
+
+
+def test_loops_dir_world_scoped_vs_flat(tmp_path):
+    assert loops_dir(tmp_path) == tmp_path / "skills"
+    assert loops_dir(tmp_path, world_id="host__A__pilot") == (
+        tmp_path / "world" / "host__A__pilot" / "skills"
+    )
+    assert drafts_dir(tmp_path, world_id="w") == (
+        tmp_path / "world" / "w" / "skills" / "_drafts"
+    )
+    assert legacy_flat_loops_dir(tmp_path) == tmp_path / "skills"
+
+
+def test_migrate_flat_to_world_copies_once(tmp_path):
+    flat = tmp_path / "skills"
+    flat.mkdir()
+    (flat / "ore-run.json").write_text(json.dumps(RECORDED), encoding="utf-8")
+    draft = flat / "_drafts"
+    draft.mkdir()
+    (draft / "mined.json").write_text("{}", encoding="utf-8")
+
+    first = migrate_flat_loops_to_world("host__A__pilot", state_dir=tmp_path)
+    assert first["migrated"] is True
+    assert first["copied"] == 2
+    world = tmp_path / "world" / "host__A__pilot" / "skills"
+    assert (world / "ore-run.json").is_file()
+    assert (world / "_drafts" / "mined.json").is_file()
+    # Flat preserved (never deleted).
+    assert (flat / "ore-run.json").is_file()
+
+    second = migrate_flat_loops_to_world("host__A__pilot", state_dir=tmp_path)
+    assert second["migrated"] is False
+    assert second["copied"] == 0
+
+
+def test_migrate_noop_when_flat_empty(tmp_path):
+    result = migrate_flat_loops_to_world("fresh", state_dir=tmp_path)
+    assert result["migrated"] is False
+    assert result["copied"] == 0
+    assert not (tmp_path / "world" / "fresh" / "skills").exists()
+
+
+def test_read_loop_store_migrates_then_lists_world(tmp_path):
+    _write_store(tmp_path, {"ore-run": RECORDED})
+    result = read_loop_store(state_dir=tmp_path, world_id="host__A__pilot")
+    assert result["status"] == "ok"
+    names = {row["name"] for row in result["loops"]}
+    assert "ore-run" in names
+    assert (tmp_path / "world" / "host__A__pilot" / "skills" / "ore-run.json").is_file()
+
+
+def test_read_without_world_id_stays_flat(tmp_path):
+    _write_store(tmp_path, {"ore-run": RECORDED})
+    result = read_loop_store(state_dir=tmp_path)
+    assert result["status"] == "ok"
+    assert "ore-run" in {row["name"] for row in result["loops"]}
+    assert not (tmp_path / "world").exists()

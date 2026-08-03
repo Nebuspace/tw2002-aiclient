@@ -160,9 +160,18 @@ def write_mined_draft(
     start_anchor: int | None,
     drafts_path: str | Path | None = None,
     state_dir: str | Path | None = None,
+    world_id: str | None = None,
 ) -> Path:
     """Write an inert mined draft — never to the blessed skills tree."""
-    directory = Path(drafts_path) if drafts_path is not None else drafts_dir(state_dir)
+    from tw2002_aiclient.loops.store import migrate_flat_loops_to_world
+
+    if drafts_path is None and world_id is not None and str(world_id).strip():
+        migrate_flat_loops_to_world(str(world_id).strip(), state_dir=state_dir)
+    directory = (
+        Path(drafts_path)
+        if drafts_path is not None
+        else drafts_dir(state_dir, world_id=world_id)
+    )
     document = {
         "name": name,
         "source": "mined",
@@ -182,6 +191,7 @@ def propose_drafts(
     top_k: int = _DEFAULT_TOP_K,
     drafts_dir_path: str | Path | None = None,
     state_dir: str | Path | None = None,
+    world_id: str | None = None,
 ) -> list[dict[str, Any]]:
     """Write top profitable patterns as inert drafts (never auto-promote)."""
     proposed: list[dict[str, Any]] = []
@@ -207,6 +217,7 @@ def propose_drafts(
             start_anchor=pattern.get("start_anchor"),
             drafts_path=drafts_dir_path,
             state_dir=state_dir,
+            world_id=world_id,
         )
         proposed.append({"name": name, "path": str(path), **dict(pattern)})
     return proposed
@@ -221,6 +232,7 @@ def mine_ledger(
     ledger_path: str | Path | None = None,
     drafts_dir_path: str | Path | None = None,
     state_dir: str | Path | None = None,
+    world_id: str | None = None,
 ) -> dict[str, Any]:
     """Mine + optionally propose inert drafts. Never promotes / never sends."""
     patterns = mine_patterns(
@@ -232,6 +244,7 @@ def mine_ledger(
             top_k=top_k,
             drafts_dir_path=drafts_dir_path,
             state_dir=state_dir,
+            world_id=world_id,
         )
         if propose
         else []

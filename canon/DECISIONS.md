@@ -341,3 +341,26 @@ Do not leave `"prompt": rows[-1]` feeding both sides unchanged. Thin follow-on W
 
 **Refs:** #122 artifact correction · WO-CHAIN-DETECT-PORT · WO-CHAIN-DETECT-WIRE · CC 2026-07-27T23:31:10Z
 
+## Pending — loops world-scope migrate-on-first-read (PWO-090 · hub GO 2026-08-03)
+
+**ID:** `DECISION-LOOPS-WORLD-MIGRATE-ON-READ`
+
+**Context:** `canon/engine/world-identity.md` requires the macro / loop library under
+`state/world/<world_id>/skills/`. Pre-PWO-090 code used a flat `state/skills/` tree.
+Hub GO (2026-08-03T12:56:30Z) required an explicit migrate-or-exempt DECISION — silent
+empty-world reads against a non-empty flat store are forbidden.
+
+**Decision (Pending Max Accept of prose if folded further into FEATURES):**
+1. **Fresh installs** write/read `state/world/<world_id>/skills/` (+ `_drafts/`) when a
+   `world_id` is supplied (product cockpit, `tw loops --world-id`, `tw record --world-id`,
+   autoloop when a marked profile can form an identity).
+2. **Legacy flat data** migrates **on first world-scoped read or write** via
+   `migrate_flat_loops_to_world`: if the world store has no `*.json` and the flat store
+   has any, copy files (including `_drafts/`) into the world path. **Idempotent.** Never
+   deletes the flat tree (operator may remove later).
+3. **Callers without `world_id`** (daemon-free tests, `tw loops` with no flag) keep the
+   legacy flat path — no silent migrate without a world key.
+4. Not a money-path / live-send change — filesystem scoping only.
+
+**Refs:** hub GO PWO-090 · `loops/store.py` · `canon/engine/world-identity.md` §Code divergence.
+

@@ -23,7 +23,7 @@
 
 | Piece | Tip `aad330c` | Notes |
 |---|---|---|
-| World-id keying | **PARTIAL** | `world_identity.py` · `world_model.py` · `world_stats.py` · `session/sector_explore.py` — not every store imports the scheme (`loops/store.py` still flat) |
+| World-id keying | **PARTIAL→mostly DONE for loops** | `world_identity.py` · `world_model.py` · `world_stats.py` · `session/sector_explore.py` · `loops/store.py` world path + migrate (PWO-090); other stores may still lag |
 | World-model persist/read | **LIVE** | `world_model.py` + `tests/test_world_model.py`; state_parser can feed writes |
 | Game-data two-layer store | **LIVE kernel** | `game_data.py` schema+source gate+persist; introspector still MISSING |
 | Menu-map read-only crawl | **LIVE** | `menu/crawler.py` · `crawl_driver.py` · `knowledge.py` + crawler tests; live protocol verb still deferred |
@@ -35,7 +35,7 @@
 
 ## 2. Per-PWO Accept + Proof
 
-### PWO-090 — World-id keying everywhere (HARDEN) — **PARTIAL**
+### PWO-090 — World-id keying everywhere (HARDEN) — **PARTIAL** (loops store DONE · migrate-on-read)
 - **Depends-on:** 014
 - **Live state:** helpers + world_model/stats/explore use a scheme; colocated-everywhere not proven.
 - **Accept residual:** every durable store keys by the same world-id scheme; loops/macros colocated or explicitly exempted with DECISION.

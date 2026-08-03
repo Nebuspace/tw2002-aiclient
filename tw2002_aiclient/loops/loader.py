@@ -594,6 +594,7 @@ def load_loop(
     state_dir=None,
     skills_dir=None,
     drafts_path=None,
+    world_id=None,
 ) -> Loop:
     """Load the taught macro called ``name``, validated for execution.
 
@@ -610,15 +611,27 @@ def load_loop(
     expressed by file location.
 
     Path arguments mirror ``store.read_loop_store`` exactly, so tests and the
-    eventual per-world migration have one shape to learn.
+    per-world path (``world_id``) share one shape.
     """
-    blessed = Path(skills_dir) if skills_dir is not None else loops_dir(state_dir)
+    from .store import migrate_flat_loops_to_world
+
+    if skills_dir is None and world_id is not None and str(world_id).strip():
+        migrate_flat_loops_to_world(str(world_id).strip(), state_dir=state_dir)
+    blessed = (
+        Path(skills_dir)
+        if skills_dir is not None
+        else loops_dir(state_dir, world_id=world_id)
+    )
     roots: list[tuple[Path, bool]] = [(blessed, False)]
     if include_drafts:
         drafts = (
             Path(drafts_path)
             if drafts_path is not None
-            else (blessed / DRAFTS_DIRNAME if skills_dir is not None else drafts_dir(state_dir))
+            else (
+                blessed / DRAFTS_DIRNAME
+                if skills_dir is not None
+                else drafts_dir(state_dir, world_id=world_id)
+            )
         )
         roots.append((drafts, True))
 
