@@ -14,7 +14,7 @@
 - **Phase 7 gaps block some Phase-8 Accepts** — notably 100 depends on 092 (game-data) which is MISSING; economics numbers today live in adapter/coach data.
 - **Human-approved only.** Strategy modules recommend / rank / STOP; purchases and Genesis remain human one-shots.
 - **What already landed (tip):** chains/trade_adapter · trade_driver · explore BFS · fighter toll policy · formations catalog · coach cards for genesis/holds.
-- **What Phase 8 still owes:** colonization confirm TTY · ship-upgrade decision engine · PWO-114 hypothesis CI gate (100 LIVE).
+- **What Phase 8 still owes:** colonization confirm TTY · ship-upgrade decision engine (100+114 LIVE).
 - **HOLDs:** money-path live arms without Max GO · inventing Human→App · AI live-drive.
 
 ---
@@ -23,7 +23,7 @@
 
 | Piece | Tip `aad330c` | Notes |
 |---|---|---|
-| Port economics params | **LIVE** | `port_economics.py` HypothesisParam substrate · `trade_adapter` re-exports · coach port keys tagged; 114 CI enforcement deferred |
+| Port economics params | **LIVE** | `port_economics.py` HypothesisParam substrate · `trade_adapter` re-exports · coach port keys tagged; 114 CI LIVE |
 | Trade loop define/rank | **LIVE** | `chains.py` · `trade_adapter.py` · `chain_search.py` · `chain_detect.py` + tests |
 | Trade loop run + depletion STOP | **LIVE** | `trade_driver.py` + suite collects `test_trade_driver.py` (26; depleted STOP proven) |
 | Exploration frontier BFS | **LIVE** | `explore.py` · `session/sector_explore.py` + tests |
@@ -39,7 +39,7 @@
 ### PWO-100 — Port economics params (BUILD) — **LIVE**
 - **Depends-on:** 092 (satisfied · tip `73e7428`)
 - **Live state:** `port_economics.py` HypothesisParam substrate; `trade_adapter` re-exports floors/ceiling/spread; coach port keys load via tagged `params.json`.
-- **Accept residual:** PWO-114 CI enforcement of tag presence (out of 100 scope).
+- **Accept residual:** none (PWO-114 CI enforcement LIVE).
 - **Proof:** `tests/test_port_economics.py`.
 - **Hazards:** Do not invent 092 under 100 cover — held.
 

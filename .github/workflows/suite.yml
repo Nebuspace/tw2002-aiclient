@@ -81,6 +81,12 @@ jobs:
         # Pin skipped == 0. Fail closed on missing/toy XML (tests must be thousands).
         run: python scripts/ci_skip_count_guard.py junit.xml
 
+      - name: Hypothesis-tag discipline (PWO-114)
+        # Real port_economics.assert_all_unverified_tagged — not a mock.
+        # Deliberate-fail fixture is proven offline via
+        # scripts/test_hypothesis_tag_ci_guard.sh (not this step).
+        run: python scripts/hypothesis_tag_ci_guard.py
+
       - name: Upload test results on failure
         if: failure()
         uses: actions/upload-artifact@v6

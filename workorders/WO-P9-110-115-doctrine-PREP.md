@@ -14,7 +14,7 @@
 - **Doctrine is teeth, not prose.** PREP marks what is enforceable in product/CI vs aspirational coach text.
 - **Secrets never in logs/argv/history/repo.** Pair 110/111 with ledger work (094).
 - **What already landed (tip):** credentials precedence · redaction on several paths · scattered NEVER_AUTO / Paladin / crawl guards · path-leak public-bound lint.
-- **What Phase 9 still owes:** full send-path redaction audit · unified action-safety module (or proven coverage map) · teacher PvP rejection gate · hypothesis-tag CI script.
+- **What Phase 9 still owes:** full send-path redaction audit · unified action-safety module (or proven coverage map). Hypothesis-tag CI LIVE (PWO-114).
 - **HOLDs:** force-push · secrets in coord · public-repo personal identifiers.
 
 ---
@@ -27,7 +27,7 @@
 | Redaction on all send paths | **TX-LIVE** | `_log_tx`/`log_redacted` + LOGS + login/attach/status/ensure tests; ledger = PWO-094 MISSING |
 | Action-safety byte guards | **PARTIAL** | NEVER_AUTO · classify · crawler · trade_driver Paladin · sector_explore — scattered, no unified module |
 | Alignment no PvP aggression | **LIVE** | `alignment_gate` at `write_draft`/`promote_draft`/`bridge_to_kernel_document`; corp-toll negative control |
-| Hypothesis-tag discipline CI | **MISSING** | `coach_kb` flags / params exist; no CI script failing untagged numbers |
+| Hypothesis-tag discipline CI | **LIVE** | `scripts/hypothesis_tag_ci_guard.py` in suite.yml; deliberate-fail via `--self-test-fail` |
 | Public-bound lint | **LIVE** | `scripts/path-leak-scan.sh` · `scripts/githooks/pre-commit` |
 
 ---
@@ -60,11 +60,12 @@
 - **Proof:** four DoD pins (refuse write / refuse promote / refuse bridge / corp-toll allow).
 - **Hazards:** Do not conflate with PWO-112 action-safety rails.
 
-### PWO-114 — Hypothesis-tag discipline CI (HARDEN) — **MISSING**
-- **Depends-on:** 100
-- **Accept:** untagged numbers fail check in CI.
-- **Proof:** script + fixture fail case.
-- **Hazards:** Depends on 100 param surface; coach_kb flags alone ≠ CI.
+### PWO-114 — Hypothesis-tag discipline CI (HARDEN) — **LIVE**
+- **Depends-on:** 100 (satisfied · tip `6824d5d`)
+- **Live state:** `scripts/hypothesis_tag_ci_guard.py` runs real `assert_all_unverified_tagged` in suite.yml; `--self-test-fail` proves untagged fixture reddens.
+- **Accept residual:** none for 114.
+- **Proof:** `./scripts/test_hypothesis_tag_ci_guard.sh` · CI suite step.
+- **Hazards:** coach_kb flags alone ≠ CI — held; guard imports real module.
 
 ### PWO-115 — Public-bound lint (HARDEN) — **LIVE**
 - **Depends-on:** —
@@ -81,11 +82,11 @@
 020 ──► 111 TX-LIVE (ledger pairs with 094)
 081·083 ──► 112 PARTIAL
 070·081 ──► 113 LIVE
-100 ──► 114 MISSING
+100 ──► 114 LIVE
 — ──► 115 LIVE
 ```
 
-**Suggested first execute after PREP Accept:** **PWO-112 coverage map** or **PWO-114** (after 100/092). 113 LIVE.
+**Suggested first execute after PREP Accept:** **PWO-112 coverage map** (114 LIVE). 113 LIVE.
 
 ---
 
