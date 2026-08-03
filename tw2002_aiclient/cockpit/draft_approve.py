@@ -37,6 +37,7 @@ from __future__ import annotations
 
 from typing import Any, Mapping, Optional
 
+from tw2002_aiclient.alignment_gate import AlignmentRefusal, refuse_pvp_aggression_rule
 from tw2002_aiclient.cockpit import assign_trigger
 
 CONFIRM = "confirm"
@@ -199,6 +200,11 @@ def bridge_to_kernel_document(
         # that ever appears must be judged by the kernel's parser, not
         # translated by a second opinion here.
         document["guards"] = guards
+    try:
+        refuse_pvp_aggression_rule(document)
+    except AlignmentRefusal as exc:
+        raise DraftBridgeError(str(exc)) from None
+
     return document
 
 
