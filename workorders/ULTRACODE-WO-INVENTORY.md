@@ -233,7 +233,7 @@ Banked hygiene (not a PWO id): **pty mid-flush settle** — PREP `workorders/WO-
 
 | ID | Title | Type | Depends | Goal | Accept | Proof | Canon |
 |----|-------|------|---------|------|--------|-------|-------|
-| PWO-090 | World-id keying everywhere — **DONE/PARTIAL** (loops+migrate LIVE #362; ledger global-sink residual; rules store still flat) | harden | 014 | One key scheme | stores colocated | unit | world-identity |
+| PWO-090 | World-id keying everywhere — **DONE/PARTIAL** (loops #362 + rules #364 LIVE; ledger global-sink residual HOLD) | harden | 014 | One key scheme | stores colocated | unit | world-identity |
 | PWO-091 | World-model persist/read — **LIVE** (`world_model.py` + tests) | build | 090·080 | Sector DB grows | files+API | explore tick | world-model |
 | PWO-092 | Game-data two-layer store — **LIVE kernel** (`game_data.py` source gate + world persist; introspector deferred; tip #092 WO) | build | 090 | Semantics≠DATA | no hardcoded stats in product | audit | game-data-store |
 | PWO-093 | Menu-map read-only crawl — **LIVE** (`menu/crawler` + knowledge; live verb deferred) | build | 090 | Never-commit crawler | sacrificial only | crawl | menu-map… |

@@ -1,6 +1,6 @@
 # WO-PWO-090-RULES-WORLD-SCOPE — Reflex rules world-scoped paths + migrate-on-read
 
-**Status:** build
+**Status:** DONE · merged `698003e` (#364) · tip-honesty stamp after Accept
 **Hub GO:** 2026-08-03T13:12:30Z
 **Seat:** impl-aiclient-cursor
 **Branch:** wo/PWO-090-RULES-WORLD-SCOPE
