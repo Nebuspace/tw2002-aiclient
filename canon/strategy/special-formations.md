@@ -136,18 +136,23 @@ Coaching surface, after a mapping pass:
 
 # Code reality
 
-- The detector is `formations.py` — `detect_formations(graph)` is the pure topology pass
+- The detector is `formations.py` — `formations_from_sectors` / the pure topology pass
   (`_dead_ends` / `_bubbles` / `_one_ways` / `_warp_sinks`), and `catalog_world(world_id)` runs it over
   the warp graph supplied by `explore.known_graph` (which reads `world_model`). This matches the reborn
   contract as written: LOCATE / CATALOG / RECOMMEND, no Genesis or claim action anywhere in the module.
-- **Code reality (defined-but-unwired, no divergence from the reborn target):** the world-model
-  writeback trio — `membership_map`, `write_membership` (upserts `formation_membership` onto each
-  sector), and `recommend_genesis` (the operator-facing shortlist, identical to
-  `catalog.genesis_candidates`) — is **parked** (WO-FA14, 2026-07-23): unit-tested, optional-by-design,
-  with no production caller yet. Live spectate/explore call only `catalog_world`. This is a wiring gap,
-  not a doctrine divergence — the parked functions are catalog-only side effects that still take no
-  Genesis or claim action, fully consistent with the standing rule. Recorded here so the gap is visible,
-  not silently conformed.
+  `WorldStats.refresh` shares the same detector so panel / GOALS / coach cannot drift from explore.
+- **Membership writeback (wired):** `membership_map` / `write_membership` stamp canon-hyphen
+  `formation_membership` tags after a successful scan — called from `catalog_world` and
+  `WorldStats.refresh` (WO-FORMATIONS-MEMBERSHIP-WRITEBACK / #326). Still catalog-only side effects;
+  no Genesis or claim action. `recommend_genesis` remains an alias of `genesis_candidates` with no
+  new auto-caller beyond that.
+- **Route-hazard guards (wired):** Dual-consumer STOP, not reroute —
+  `route_hazard_for_hop` feeds explore (`WO-ROUTE-HAZARD-GUARD` / #327) and trade navigate
+  (`WO-TRADE-ROUTE-HAZARD-GUARD` / #328); trade hop/pair discovery excludes hazardous shortest paths
+  (`WO-TRADE-HAZARD-PATH-EXCLUDE` / #329). No silent alternate-path search.
+- **Still open:** STOP-banner catalog label for `route_hazard` (needs a row in
+  `control-and-escalation.md` before `INTERVENTION_REASON_LABELS` can claim it — raw passthrough
+  remains honest until then).
 
 # Citations
 
@@ -155,7 +160,8 @@ Coaching surface, after a mapping pass:
 - Design history §15.5 — Special-Formation detector and Genesis appetite (recast under the reborn
   vision: the appetite becomes a priority-ranking input to human-confirmed siting, not an autonomous
   Genesis driver).
-- Code: `formations.py` (topology pass, catalog, parked writeback trio), `explore.py` (`known_graph`),
+- Code: `formations.py` (topology pass, catalog, membership writeback, `route_hazard_for_hop`),
+  `explore.py` / `trade_driver.py` / `trade_adapter.py` (hazard STOP / exclude),
   `world_model.py` (`warps`, `formation_membership`, per-world sector store).
 - Cross-cutting map — OKF Final Vision Map, `strategy/special-formations.md` section and Operator
   rulings (RESOLVED 2026-07-23): planet-colonization and special-formations kept separate because
