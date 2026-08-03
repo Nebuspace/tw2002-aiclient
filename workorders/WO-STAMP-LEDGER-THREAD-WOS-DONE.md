@@ -1,6 +1,6 @@
 # WO-STAMP-LEDGER-THREAD-WOS-DONE — Stamp ledger-thread WOs DONE
 
-> Status: **IN FLIGHT** · seat `impl-aiclient-cursor` · hub HANDOFF 2026-08-03T06:11:05Z  
+> Status: **DONE** · origin `5618be3` (#357) · seat `impl-aiclient-cursor` · Accept 2026-08-03  
 > Type: docs stamp
 
 ## Goal

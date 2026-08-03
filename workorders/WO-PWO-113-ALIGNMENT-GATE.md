@@ -1,8 +1,8 @@
 # WO-PWO-113-ALIGNMENT-GATE — Refuse PvP-aggression rule proposals
 
-> Status: **IN FLIGHT** · seat `impl-aiclient-cursor` · hub GO plan B 2026-08-03T03:15:01Z  
+> Status: **DONE** · origin `f5e3b18` (#344) · seat `impl-aiclient-cursor` · Accept 2026-08-03  
 > Type: product safety gate · PWO-113  
-> Tip base: `40b8d8a`
+> Tip base: `40b8d8a` → merged `f5e3b18`
 
 ## Goal
 Teacher/rule pipeline rejects PvP-harm proposals at the write/promote/bridge choke — not coach prose, not fire-time toll alone.

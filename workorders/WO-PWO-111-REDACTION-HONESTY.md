@@ -1,8 +1,8 @@
 # WO-PWO-111-REDACTION-HONESTY — Tip honesty: TX redaction LIVE / ledger → 094
 
-> Status: **IN FLIGHT** · seat `impl-aiclient-cursor` · hub GO 2026-08-03T03:04:42Z  
+> Status: **DONE** · origin `40b8d8a` (#343) · seat `impl-aiclient-cursor` · Accept 2026-08-03  
 > Type: docs tip-honesty · PWO-111  
-> Tip base: `1375eed`
+> Tip base: `1375eed` → merged `40b8d8a` (ledger redaction later LIVE via #349)
 
 ## Goal
 Close the dishonest PARTIAL on PWO-111: tip-prove TX send/log redaction is LIVE; keep ledger redaction on PWO-094 (LedgerWriter deferred).
