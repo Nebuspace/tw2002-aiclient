@@ -187,6 +187,8 @@ INTERVENTION_REASON_LABELS = {
     "turns_stale": "turns stale",
     "turns_unreadable": "turns unreadable",
     "fighters_zero": "fighters zero",
+    # WO-STOPBANNER-ROUTE-HAZARD-LABEL / #327–#329: formations Dual-consumer STOP.
+    "route_hazard": "route hazard",
 }
 
 # Canon's own empty/unknown marker -- "an empty code renders ``"?"``"

@@ -150,9 +150,9 @@ Coaching surface, after a mapping pass:
   `route_hazard_for_hop` feeds explore (`WO-ROUTE-HAZARD-GUARD` / #327) and trade navigate
   (`WO-TRADE-ROUTE-HAZARD-GUARD` / #328); trade hop/pair discovery excludes hazardous shortest paths
   (`WO-TRADE-HAZARD-PATH-EXCLUDE` / #329). No silent alternate-path search.
-- **Still open:** STOP-banner catalog label for `route_hazard` (needs a row in
-  `control-and-escalation.md` before `INTERVENTION_REASON_LABELS` can claim it — raw passthrough
-  remains honest until then).
+- **STOP banner:** `route_hazard` is in the escalation catalog and
+  `INTERVENTION_REASON_LABELS` (WO-STOPBANNER-ROUTE-HAZARD-LABEL); qualified codes render
+  `route hazard: <detail>` via the existing qualifier split.
 
 # Citations
 
