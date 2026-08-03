@@ -364,3 +364,20 @@ empty-world reads against a non-empty flat store are forbidden.
 
 **Refs:** hub GO PWO-090 · `loops/store.py` · `canon/engine/world-identity.md` §Code divergence.
 
+## Pending — rules world-scope migrate-on-first-read (PWO-090 residual · hub GO 2026-08-03)
+
+**ID:** `DECISION-RULES-WORLD-MIGRATE-ON-READ`
+
+**Context:** Same class as DECISION-LOOPS-WORLD-MIGRATE-ON-READ. Reflex rules lived under flat
+`state/rules/`; canon world-identity requires per-world durable stores. Hub GO 2026-08-03T13:12:30Z
+chose rules over ledger for this residual (ledger HOLD — money-path audit trail).
+
+**Decision (Pending Max Accept of prose if folded further):**
+1. With `world_id`: `state/world/<world_id>/rules/` (+ `_drafts/`).
+2. Legacy flat migrates on first world-scoped read/write via `migrate_flat_rules_to_world`
+   (idempotent; never deletes flat).
+3. Callers without `world_id` keep flat path.
+4. Not a live-send change — filesystem scoping only.
+
+**Refs:** hub GO rules-store · `rules/store.py` · loops precedent PWO-090.
+

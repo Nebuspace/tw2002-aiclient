@@ -137,6 +137,11 @@ the doc is the prescription, not the description.
   see the flat tree — product cockpit / autoloop (profile-derived) / CLI `--world-id` are the
   world-scoped paths. (Start-anchor / send-and-confirm guards remain the replay backstop.)
 
+- **Rules library world-scoping (PWO-090 residual).** When a `world_id` is supplied, the reflex
+  store reads/writes `state/world/<world_id>/rules/` (+ `_drafts/`). Legacy flat `state/rules/`
+  remains for callers that omit `world_id`, with `migrate_flat_rules_to_world` on first scoped
+  I/O (DECISION-RULES-WORLD-MIGRATE-ON-READ).
+
 - **The trace ledger is a single global sink.** The ledger appends every session's rows to one
   shared file (`state/ledger.jsonl`) rather than a per-world store. Each row does carry a
   `session_id` (and actor attribution), so a retro pass *can* slice by session — but it cannot

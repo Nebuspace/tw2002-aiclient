@@ -59,6 +59,8 @@ __all__ = [
     "STATUS_PARTIAL",
     "STATUS_UNREADABLE",
     "drafts_dir",
+    "legacy_flat_rules_dir",
+    "migrate_flat_rules_to_world",
     "read_rule_store",
     "resolve_roots",
     "rules_dir",
@@ -80,18 +82,22 @@ STATUS_PARTIAL = "partial"
 STATUS_UNREADABLE = "unreadable"
 
 
-def rules_dir(state_dir=None) -> Path:
-    """``state/rules`` -- the human-approved reflex library.
+def rules_dir(state_dir=None, *, world_id=None) -> Path:
+    """Blessed reflex library directory (pure path math — no I/O).
 
-    ``state_dir`` overrides the ``state/`` root (tests point at ``tmp_path``).
-    Pure path math -- touches no filesystem.
+    * ``world_id`` set → ``state/world/<world_id>/rules`` (PWO-090 residual).
+    * ``world_id`` omitted → legacy flat ``state/rules``.
+
+    ``state_dir`` overrides the ``state/`` root (tests use ``tmp_path``).
     """
     base = Path(state_dir) if state_dir is not None else STATE_DIR
+    if world_id is not None and str(world_id).strip():
+        return base / "world" / str(world_id).strip() / RULES_DIRNAME
     return base / RULES_DIRNAME
 
 
-def drafts_dir(state_dir=None) -> Path:
-    """``state/rules/_drafts`` -- proposals, inert until a human promotes one.
+def drafts_dir(state_dir=None, *, world_id=None) -> Path:
+    """Drafts directory under the same scoping as :func:`rules_dir`.
 
     The blessed listing skips this directory for free rather than by a rule:
     it iterates names ending in ``.json``, and ``_drafts`` is a directory. That
@@ -102,10 +108,25 @@ def drafts_dir(state_dir=None) -> Path:
     DRAFTS_DIRNAME``, so this convenience accessor cannot disagree with the
     resolution the reader and writer actually use.
     """
-    return resolve_roots(state_dir=state_dir)[1]
+    return resolve_roots(state_dir=state_dir, world_id=world_id)[1]
 
 
-def resolve_roots(*, state_dir=None, rules_path=None, drafts_path=None) -> tuple[Path, Path]:
+
+def legacy_flat_rules_dir(state_dir=None) -> Path:
+    """Explicit legacy flat ``state/rules`` (never world-scoped)."""
+    from .migrate import legacy_flat_rules_dir as _legacy
+
+    return _legacy(state_dir)
+
+
+def migrate_flat_rules_to_world(world_id: str, *, state_dir=None) -> dict:
+    """See :func:`tw2002_aiclient.rules.migrate.migrate_flat_rules_to_world`."""
+    from .migrate import migrate_flat_rules_to_world as _migrate
+
+    return _migrate(world_id, state_dir=state_dir)
+
+
+def resolve_roots(*, state_dir=None, rules_path=None, drafts_path=None, world_id=None) -> tuple[Path, Path]:
     """``(blessed_dir, drafts_dir)`` from the three override knobs.
 
     **Every module in this package resolves those two directories here, and
@@ -122,7 +143,11 @@ def resolve_roots(*, state_dir=None, rules_path=None, drafts_path=None) -> tuple
     as a sibling of it; an override of the library must carry its drafts with
     it or it is not the same store.
     """
-    blessed = Path(rules_path) if rules_path is not None else rules_dir(state_dir)
+    blessed = (
+        Path(rules_path)
+        if rules_path is not None
+        else rules_dir(state_dir, world_id=world_id)
+    )
     if drafts_path is not None:
         return blessed, Path(drafts_path)
     return blessed, blessed / DRAFTS_DIRNAME
@@ -230,6 +255,7 @@ def read_rule_store(
     state_dir=None,
     rules_path=None,
     drafts_path=None,
+    world_id=None,
 ) -> dict[str, Any]:
     """Read the rule library and report what is actually in it.
 
@@ -257,8 +283,13 @@ def read_rule_store(
     reader that dies on a corrupt file tells the operator less than one that
     names it.
     """
+    if rules_path is None and world_id is not None and str(world_id).strip():
+        migrate_flat_rules_to_world(str(world_id).strip(), state_dir=state_dir)
     blessed, drafts = resolve_roots(
-        state_dir=state_dir, rules_path=rules_path, drafts_path=drafts_path
+        state_dir=state_dir,
+        rules_path=rules_path,
+        drafts_path=drafts_path,
+        world_id=world_id,
     )
     roots = [_read_root(blessed, draft=False)]
     if include_drafts:
