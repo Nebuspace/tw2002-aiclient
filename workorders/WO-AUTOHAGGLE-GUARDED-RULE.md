@@ -14,8 +14,9 @@ Accept:
   current-line resolution shape with acceptance context.
 - A stale or bare command prompt is `desync_fallback`.
 - The haggle tests import the tip module, never `twclient`.
-- This worktree's tip has no `trade_driver.py`; no trade-chain integration
-  or automatic arming is included until a later rule-arming work order.
+- Tip `trade_driver.py` still documents **Auto-haggle OFF** (accept-default
+  only). This WO lands the tip-owned resolver + tests; enabling counters on
+  the trade path / rule-fire arming is a follow-on (explicit claim).
 
 Proof:
 
