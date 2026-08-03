@@ -735,3 +735,21 @@ def test_bubble_counts_in_formations_not_dead_end_only(wm):
     names = {i["name"] for i in merged["formations_panel"]["items"]}
     assert "Dead-end #1" in names
     assert "Bubble #10" in names
+
+
+def test_hazard_raises_formations_above_genesis(wm):
+    wm.results = [3]
+    wm.sector_lists = [
+        [
+            {"sector_id": 1, "warps": [2]},
+            {"sector_id": 2, "warps": [3]},
+            {"sector_id": 3, "warps": [2]},
+        ]
+    ]
+    s = world_stats.WorldStats()
+    s.refresh("w-1")
+    merged = s.merge({})
+    # dead-ends at 1? 1 has one warp → dead_end; also one_way 1→2
+    # sector 3 has one warp → dead_end
+    assert merged["genesis_count"] == merged["dead_end_count"]
+    assert merged["formations_count"] > merged["genesis_count"]

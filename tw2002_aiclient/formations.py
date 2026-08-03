@@ -1,14 +1,16 @@
 """In-tree formations catalogue — LOCATE / CATALOG / RECOMMEND only.
 
-WO-FORMATIONS-CATALOG-PORT (+ WO-FORMATIONS-BUBBLE-DETECT). Reads the mapped
+WO-FORMATIONS-CATALOG-PORT · BUBBLE-DETECT · HAZARD-DETECT. Reads the mapped
 warp graph from ``world_model`` and surfaces topology facts. It never deploys
 Genesis, never claims space, and never sends a keystroke.
 
-Detector scope today: **dead-ends** (out-degree 1) and **bubbles**
-(single-entrance pockets with ≥2 interior sectors). One-way / warp-sink
-shapes stay for a later WO. Under this scope every catalogued item is a
-genesis-kind siting candidate, so ``formations_count`` equals
-``genesis_count``. See ``canon/strategy/special-formations.md``.
+Detector scope today:
+
+* **dead-ends** / **bubbles** — genesis (siting) candidates
+* **one_way** / **warp_sink** — route hazards (not genesis)
+
+So ``formations_count`` (panel items) may exceed ``genesis_count``. See
+``canon/strategy/special-formations.md``.
 
 ``formations_from_sectors`` is the single pure detector.
 ``catalog_world`` (explore provider seam) and ``world_stats.WorldStats``
@@ -51,6 +53,7 @@ class FormationsCatalog:
     @property
     def genesis_candidates(self) -> list[Formation]:
         # Dead-ends and bubbles are siting / genesis candidates.
+        # One-ways / warp-sinks are route hazards — not genesis.
         return [
             f
             for f in self._formations
@@ -93,12 +96,31 @@ def _undirected(graph: Mapping[int, Sequence[int]]) -> dict[int, set[int]]:
         for b in warps:
             b = int(b)
             if b not in adj:
-                # Warp to an unmapped id — skip undirected pocket math
-                # until both ends are known.
                 continue
             adj[a].add(b)
             adj[b].add(a)
     return adj
+
+
+def _components(undirected: Mapping[int, set[int]]) -> list[set[int]]:
+    seen: set[int] = set()
+    comps: list[set[int]] = []
+    for start in undirected:
+        if start in seen:
+            continue
+        stack = [start]
+        comp: set[int] = set()
+        while stack:
+            n = stack.pop()
+            if n in comp:
+                continue
+            comp.add(n)
+            for nxt in undirected.get(n, ()):
+                if nxt not in comp:
+                    stack.append(nxt)
+        seen |= comp
+        comps.append(comp)
+    return comps
 
 
 def _dead_ends(graph: Mapping[int, Sequence[int]]) -> list[Formation]:
@@ -122,14 +144,7 @@ def _bubbles(
     graph: Mapping[int, Sequence[int]],
     undirected: Mapping[int, set[int]],
 ) -> list[Formation]:
-    """Pockets sealed behind a single entrance (interior size ≥ 2).
-
-    Ported from archive ``twclient.formations._bubbles`` (TW-16). For each
-    candidate entrance E and neighbor N, grow the component reachable from N
-    without traversing E. If every edge leaving that component lands only on
-    E, it is a sealed pocket. Prefer the smaller side of a bridge so the
-    open map is never catalogued as a bubble; keep innermost pockets only.
-    """
+    """Pockets sealed behind a single entrance (interior size ≥ 2)."""
     out: list[Formation] = []
     seen_keys: set[tuple[int, ...]] = set()
     n_all = len(undirected)
@@ -147,7 +162,6 @@ def _bubbles(
                         stack.append(y)
             if len(comp) < 2:
                 continue
-            # Smaller side of the cut only (hideout intuition).
             if len(comp) >= n_all - 1:
                 continue
             sealed = True
@@ -160,7 +174,6 @@ def _bubbles(
                     break
             if not sealed:
                 continue
-            # Exactly one door from entrance into the open map.
             outside = undirected.get(entrance, set()) - comp
             if len(outside) != 1:
                 continue
@@ -176,7 +189,6 @@ def _bubbles(
                     detail="single-entrance pocket",
                 )
             )
-    # Prefer innermost pockets — drop any bubble that properly contains another.
     keep: list[Formation] = []
     for f in out:
         if any(set(g.sectors) < set(f.sectors) for g in out if g is not f):
@@ -185,8 +197,101 @@ def _bubbles(
     return keep
 
 
+def _one_ways(graph: Mapping[int, Sequence[int]]) -> list[Formation]:
+    """Directed A→B with no reverse B→A among known sectors (archive port)."""
+    out: list[Formation] = []
+    for a, warps in graph.items():
+        a = int(a)
+        for b in warps:
+            b = int(b)
+            if b not in graph:
+                continue
+            if a not in {int(x) for x in graph[b]}:
+                out.append(
+                    Formation(
+                        kind="one_way",
+                        sectors=(a, b),
+                        detail=f"{a}→{b} with no reverse warp",
+                    )
+                )
+    return out
+
+
+def _reachable(graph: Mapping[int, Sequence[int]], start: int) -> set[int]:
+    if start not in graph:
+        return set()
+    seen = {start}
+    stack = [start]
+    while stack:
+        n = stack.pop()
+        for nxt in graph.get(n, ()):
+            nxt = int(nxt)
+            if nxt in graph and nxt not in seen:
+                seen.add(nxt)
+                stack.append(nxt)
+    return seen
+
+
+def _warp_sinks(graph: Mapping[int, Sequence[int]]) -> list[Formation]:
+    """Sectors enterable but without a return path (archive port).
+
+    Pure dead-ends are not double-labeled as sinks.
+    """
+    if len(graph) < 2:
+        return []
+    known = set(int(s) for s in graph)
+    can_reach: dict[int, set[int]] = {
+        s: _reachable(graph, s) for s in known
+    }
+    sink_sectors: set[int] = set()
+    for s in known:
+        outs = {int(x) for x in graph.get(s, ()) if int(x) in known}
+        reach_from_s = can_reach[s]
+        inbounders = [t for t in known if t != s and s in can_reach[t]]
+        if not inbounders:
+            continue
+        trapped = any(t not in reach_from_s for t in inbounders)
+        if trapped or (not outs and inbounders):
+            sink_sectors.add(s)
+
+    for sid, warps in graph.items():
+        if len(tuple(warps)) == 1:
+            sink_sectors.discard(int(sid))
+
+    if not sink_sectors:
+        return []
+
+    und = _undirected({s: graph[s] for s in sink_sectors if s in graph})
+    for s in sink_sectors:
+        und.setdefault(s, set())
+    comps = _components(und) if und else [{s} for s in sink_sectors]
+    covered: set[int] = set()
+    formations: list[Formation] = []
+    for comp in comps:
+        members = sorted(comp & sink_sectors)
+        if not members:
+            continue
+        covered.update(members)
+        formations.append(
+            Formation(
+                kind="warp_sink",
+                sectors=tuple(members),
+                detail="no return path to open map",
+            )
+        )
+    for s in sorted(sink_sectors - covered):
+        formations.append(
+            Formation(
+                kind="warp_sink",
+                sectors=(s,),
+                detail="no return path to open map",
+            )
+        )
+    return formations
+
+
 def formations_from_sectors(sectors: object) -> Optional[FormationsCatalog]:
-    """Pure dead-end + bubble detector over an ``all_sectors``-shaped list.
+    """Pure topology detector over an ``all_sectors``-shaped list.
 
     Returns ``None`` when the input is hostile (not a list, or a non-dict
     record mid-scan) so callers that preserve a prior observation
@@ -204,6 +309,8 @@ def formations_from_sectors(sectors: object) -> Optional[FormationsCatalog]:
     found: list[Formation] = []
     found.extend(_dead_ends(graph))
     found.extend(_bubbles(graph, _undirected(graph)))
+    found.extend(_one_ways(graph))
+    found.extend(_warp_sinks(graph))
     found.sort(
         key=lambda f: (
             f.kind,
@@ -240,6 +347,22 @@ def panel_items_from_catalog(catalog: FormationsCatalog) -> list[dict]:
                     "blurb": "single-entrance pocket — genesis candidate",
                 }
             )
+        elif formation.kind == "one_way":
+            a, b = formation.sectors[0], formation.sectors[1] if len(formation.sectors) > 1 else "?"
+            items.append(
+                {
+                    "name": f"One-way {a}→{b}",
+                    "blurb": "route hazard — no reverse warp",
+                }
+            )
+        elif formation.kind == "warp_sink":
+            sid = formation.sectors[0]
+            items.append(
+                {
+                    "name": f"Warp-sink #{sid}",
+                    "blurb": "route hazard — no return path",
+                }
+            )
         else:
             sid = formation.sectors[0]
             name = f"{formation.kind} #{sid}"
@@ -255,8 +378,8 @@ def catalog_world(
     *,
     state_dir: Any = None,
 ) -> FormationsCatalog:
-    """Scan the world-model for dead-end + bubble formations. Never raises
-    to callers of the provider seam — hostile stores yield an empty catalogue.
+    """Scan the world-model for formations + hazards. Never raises to callers
+    of the provider seam — hostile stores yield an empty catalogue.
 
     Callable shape matches ``plan_find_formations``'s ``catalog_provider``:
     ``(world_id, *, state_dir=None) -> object`` with ``.genesis_candidates``.
