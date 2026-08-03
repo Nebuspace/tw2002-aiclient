@@ -411,9 +411,15 @@ Ship `genesis_confirm.genesis_send_if_confirmed` as the only choke-point for a f
 
 Port archive TW-30 `ship_upgrade_decision` into `tw2002_aiclient/` as recommend-only; wire DECISIONS from `UpgradeDecision`. Purchase adapter (C-Option-B) HELD.
 
+
 ## DECISION-PWO-092-INTROSPECTOR-FIXTURE (2026-08-03)
 
 **Status:** Accepted (hub GO Propose A 2026-08-03T15:20:00Z)
 
 Port archive introspector as pure text→rows for fixture/offline only. No live TWGS crawl or send. Option B (live session introspect) HELD.
 
+## DECISION-PWO-111-RX-REDACTION — RX transcript gate (2026-08-03)
+
+**Status:** Accepted (hub GO Propose B 2026-08-03T15:22:00Z)
+
+RX **transcript logging** reuses TX / ledger password-anchor (`password` RE) **or** post-`secret=True` operator-TX echo window → `log_redacted`. Live screen/`watch` paint residual remains named in `secrets-and-credentials.md` Code Divergence #1. No new match vocabulary; no parse/classify/session-control changes.

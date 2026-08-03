@@ -83,11 +83,12 @@ scripted login automaton's `--secret` sends but also a raw human keystroke typed
 interactive attach session that happens to land on a password prompt — the same redaction
 contract, applied identically on both the encoded-text and raw-byte send channels.
 
-The **TX (send) channel** is redacted by design. The **RX (receive) channel is transcribed
-verbatim** — see [Code Divergence](#code-divergence) — so the no-leak guarantee on the receive
-side rests on the standard telnet property that a password prompt suppresses local echo and the
-server does not echo the typed secret back. That boundary is stated here honestly rather than
-papered over.
+The **TX (send) channel** is redacted by design. The **RX transcript log** applies the
+same password-anchor / ``secret=True`` gate (PWO-111): matching chunks and the post-secret echo
+window write ``log_redacted``, never ``log_raw``. **Live screen / ``watch`` paint** of the receive
+buffer remains unfiltered — see [Code Divergence](#code-divergence) — so a structured mirror that
+leaves the session must still omit or redact, while the operator's own eyes on their own game may
+see an echoing server.
 
 # The Credential Bank — metadata only (TW-31)
 
@@ -129,7 +130,7 @@ Redaction sinks (a secret-bearing send uses one; none logs a byte count):
 |---|---|---|
 | TX encoded-text send (scripted login) | `--secret` send | Yes — redaction marker only |
 | TX raw-byte send (interactive attach keystroke) | live secret-prompt detection | Yes — same contract, decided fresh at send time |
-| RX receive transcript | server output | **No — verbatim** (see Code Divergence) |
+| RX receive transcript | server output | **Yes — password-anchor / post-secret gate** (live paint still open; see Code Divergence) |
 
 # Examples
 
@@ -152,13 +153,12 @@ Redaction sinks (a secret-bearing send uses one; none logs a byte count):
 or falls short of, the reborn target. They are documentation findings — this concept edits no
 code.)*
 
-1. **RX transcript is unredacted (TX-only redaction) — and the same class can leave via the
-   live status verb.** Redaction is enforced on the *send* side; the receive-side reader logs
-   every received frame verbatim. The no-leak guarantee on the RX channel therefore relies on the
-   standard telnet behavior that a password prompt suppresses local echo and the server does not
-   echo the secret. This holds for conventional TW2002 login flows, but the invariant "secrets
-   never touch logs" is *structurally* enforced only on TX; a server that ever echoed a typed
-   password back would capture it into the RX transcript.
+1. **RX transcript logging — CLOSED for password-anchor / post-secret (PWO-111); live paint
+   residual remains.** The on-disk transcript reader now routes password-shaped RX chunks and the
+   post-``secret=True`` echo window through ``log_redacted`` (same vocabulary as TX / ledger). A
+   server that echoes a typed password no longer persists it into ``session-*.log``. **Still open:**
+   live pyte paint / ``screen`` / ``watch`` may still show echo (operator eyes on their own game);
+   structured mirrors that leave the session stay on the omit/redact path below.
 
    **Status-verb wire (Mack PoC, P3-041):** the same root cause is not limited to the on-disk
    transcript log file. `status["prompt"]` (and any other response field that mirrors the live
@@ -207,7 +207,7 @@ code.)*
 `save_password()`, CSPRNG `generate_password()`, `allow_register` gate)
 [2] twclient/logging_util.py (`log_redacted()` — redaction marker, no byte count)
 [3] twclient/connection.py + twclient/session.py (fresh-at-send-time secret detection; TX-side
-redaction on both send channels; unredacted RX reader loop)
+redaction on both send channels; RX transcript gate via password-anchor / post-secret)
 [4] twclient/player_bank.py (TW-31 credential bank — metadata-only by construction, notes-key
 denylist, scalar-only value guard)
 [5] CLAUDE.md — Hard rules (secrets never touch logs/argv/history/repo; single-connection

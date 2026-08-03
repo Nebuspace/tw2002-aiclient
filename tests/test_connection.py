@@ -81,3 +81,58 @@ def test_send_bytes_with_no_logger_never_raises():
     conn = TelnetConnection(FAKE_HOST, FAKE_PORT, terminal=None, negotiator=None, logger=None)
     conn._sock = _StubSocket()
     conn.send_bytes(SENTINEL, secret=True)
+
+
+def test_rx_ordinary_chunk_logs_raw(tmp_path):
+    conn, logger = _make_conn(tmp_path)
+    conn._log_rx(b"Command [TL=100]:")
+    logger.close()
+    content = open(logger.path, encoding="utf-8").read()
+    assert "Command [TL=100]:" in content
+    assert "RX" in content
+    assert "secret input redacted" not in content
+
+
+def test_rx_password_anchor_redacts_without_secret_pending(tmp_path):
+    conn, logger = _make_conn(tmp_path)
+    assert conn._redact_rx is False
+    conn._log_rx(b"Enter your password:\r\n")
+    logger.close()
+    content = open(logger.path, encoding="utf-8").read()
+    assert "Enter your password" not in content
+    assert "RX <<secret input redacted>>" in content
+
+
+def test_rx_after_secret_tx_redacts_echo_without_password_word(tmp_path):
+    conn, logger = _make_conn(tmp_path)
+    conn.send_bytes(SENTINEL, secret=True)
+    assert conn._redact_rx is True
+    conn._log_rx(SENTINEL)  # echoing server — no "password" word
+    logger.close()
+    content = open(logger.path, encoding="utf-8").read()
+    assert SENTINEL.decode() not in content
+    assert content.count("secret input redacted") >= 2  # TX + RX
+    assert SENTINEL not in open(logger.path, "rb").read()
+
+
+def test_rx_clears_after_non_secret_operator_tx(tmp_path):
+    conn, logger = _make_conn(tmp_path)
+    conn.send_bytes(SENTINEL, secret=True)
+    assert conn._redact_rx is True
+    conn.send_bytes(b"D")  # ordinary keystroke clears the window
+    assert conn._redact_rx is False
+    conn._log_rx(b"Sector 1\r\n")
+    logger.close()
+    content = open(logger.path, encoding="utf-8").read()
+    assert "Sector 1" in content
+
+
+def test_tx_iac_does_not_clear_rx_redact_window(tmp_path):
+    conn, logger = _make_conn(tmp_path)
+    conn.send_bytes(SENTINEL, secret=True)
+    assert conn._redact_rx is True
+    conn._send_raw(b"\xff\xfc\x01")  # IAC negotiation reply
+    assert conn._redact_rx is True
+    conn._log_rx(SENTINEL)
+    logger.close()
+    assert SENTINEL.decode() not in open(logger.path, encoding="utf-8").read()
