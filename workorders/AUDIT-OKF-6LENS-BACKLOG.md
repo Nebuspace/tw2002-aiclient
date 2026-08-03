@@ -39,7 +39,7 @@ Committable twin: `workorders/AUDIT-OKF-6LENS-BACKLOG.md`. Draft WOs: `workorder
 | ID | P | Gap | Paths | Depends |
 |---|---|---|---|---|
 | A-L1-052-TIP | P1 | ULTRACODE still says PWO-052 PREP while viewport PREP file stamps DONE | `ULTRACODE-WO-INVENTORY.md` | **CLOSED** — inventory row already **DONE** `de47a26` (no stale PREP claim) |
-| A-L1-025-LEDGER | P1 | PWO-025 Accept needs ledger actor tags; daemon still “LedgerWriter deferred” | `session/daemon.py` · future `ledger.py` | 041 partial |
+| A-L1-025-LEDGER | P1 | PWO-025 Accept needs ledger actor tags; daemon still “LedgerWriter deferred” | `session/daemon.py` · future `ledger.py` | **CLOSED** — honesty confirmed PARTIAL: lock+`VALID_SENDERS` LIVE; `LedgerWriter` still deferred (`daemon.py` attach docstring). Product ledger = PWO-094 |
 | A-L1-P6-PREP | P2 | Phase 6–9 lack tip-honest PREP like Phase 5 | `workorders/WO-P6-*-PREP.md` (new) | after 061 entry |
 | A-L1-062-072 | — | Arm/STOP/A·R·T/N5/coverage | (existing PREP) | **064 DONE `af62889`**; **062 EXECUTING**; 066 staged |
 
@@ -54,7 +54,7 @@ Committable twin: `workorders/AUDIT-OKF-6LENS-BACKLOG.md`. Draft WOs: `workorder
 | ID | P | Gap | Paths | Depends |
 |---|---|---|---|---|
 | A-L3-ATTACH-READ | P0 | `AttachInputConn` unbounded `readline` | `session/attach_client.py` | none (banked) |
-| A-L3-D10-PROOF | P1 | Guardian D10 keepalive present; unsafe-screen suppress Accept not tip-proven as 028 DONE | `session/guardian.py` · inventory | 027 |
+| A-L3-D10-PROOF | P1 | Guardian D10 keepalive present; unsafe-screen suppress Accept not tip-proven as 028 DONE | `session/guardian.py` · inventory | **CLOSED** — tip-proven DONE: ULTRACODE PWO-028 `4db92a1`; `tests/test_guardian.py` D10 (`test_keepalive_never_fires_on_*`) |
 | A-L3-GUARDIAN-STOP | P2 | Guardian notes STOP+Human escalate “follow-up” | `guardian.py:166` | 064/065 |
 | A-L3-ART-HINTS | P1 | screens comments reserve A/R/T / N5 — unwired | `screens.py` | 066/071 |
 | A-L3-SESSION-F6 | P3 | Transcript order before vs after `sendall` | `connection.py` · `session.py` | **BANKED** |
@@ -86,8 +86,8 @@ Committable twin: `workorders/AUDIT-OKF-6LENS-BACKLOG.md`. Draft WOs: `workorder
 
 1. ~~**WO-AUDIT-HARDEN-ATTACH**~~ (**DONE** `88004d8` · WO tip-stamped)
 2. ~~**WO-AUDIT-OKF-052-TIP**~~ (**CLOSED** — ULTRACODE 052 DONE `de47a26`; no false PREP claim)
-3. **WO-AUDIT-P025-LEDGER-HONESTY** (P1 · docs+thin PREP; product later)
-4. **WO-AUDIT-P028-KEEPALIVE-STATUS** (P1 · tip inventory honesty / proof gap)
+3. ~~**WO-AUDIT-P025-LEDGER-HONESTY**~~ (**CLOSED** — tip PARTIAL honesty; LedgerWriter still deferred)
+4. ~~**WO-AUDIT-P028-KEEPALIVE-STATUS**~~ (**CLOSED** — tip D10 DONE; unsafe-screen suppress proven)
 5. **WO-AUDIT-LEGACY-WO-INDEX** (P2 · docs)
 6. **WO-AUDIT-PHASE6-PREP** (P2 · docs PREP; do not invent product scope)
 7. ~~**WO-AUDIT-CTRL-RBRACKET-APP-HOLD**~~ (**Ruled** Batch 2/3 — no-op stay App; CC product pin)
