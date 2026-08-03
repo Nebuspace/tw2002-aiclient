@@ -40,7 +40,7 @@ Committable twin: `workorders/AUDIT-OKF-6LENS-BACKLOG.md`. Draft WOs: `workorder
 |---|---|---|---|---|
 | A-L1-052-TIP | P1 | ULTRACODE still says PWO-052 PREP while viewport PREP file stamps DONE | `ULTRACODE-WO-INVENTORY.md` | **CLOSED** — inventory row already **DONE** `de47a26` (no stale PREP claim) |
 | A-L1-025-LEDGER | P1 | PWO-025 Accept needs ledger actor tags; daemon still “LedgerWriter deferred” | `session/daemon.py` · future `ledger.py` | **CLOSED** — honesty confirmed PARTIAL: lock+`VALID_SENDERS` LIVE; `LedgerWriter` still deferred (`daemon.py` attach docstring). Product ledger = PWO-094 |
-| A-L1-P6-PREP | P2 | Phase 6–9 lack tip-honest PREP like Phase 5 | `workorders/WO-P6-*-PREP.md` (new) | after 061 entry |
+| A-L1-P6-PREP | P2 | Phase 6–9 lack tip-honest PREP like Phase 5 | `WO-P6-080-088-autopilot-PREP.md` · `WO-P7/P8/P9-*-PREP.md` | **CLOSED** — P6 PREP tip-honest; P7–P9 PREP via `WO-AUDIT-PHASE789-PREP` (this PR) |
 | A-L1-062-072 | — | Arm/STOP/A·R·T/N5/coverage | (existing PREP) | **064 DONE `af62889`**; **062 DONE `b712637`**; **066–071 DONE** (ULTRACODE honesty #335) |
 
 ### L2 — Code↔canon divergence

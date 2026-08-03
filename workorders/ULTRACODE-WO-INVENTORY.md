@@ -229,39 +229,45 @@ Banked hygiene (not a PWO id): **pty mid-flush settle** — PREP `workorders/WO-
 
 ### Phase 7 — World stores & learning substrate
 
+> PREP: `workorders/WO-P7-090-096-world-substrate-PREP.md` — tip honesty 2026-08-03 (`aad330c`): 091/093/096 LIVE; 090/094 PARTIAL; 092/095 MISSING. Parent: `WO-AUDIT-PHASE789-PREP.md`.
+
 | ID | Title | Type | Depends | Goal | Accept | Proof | Canon |
 |----|-------|------|---------|------|--------|-------|-------|
-| PWO-090 | World-id keying everywhere | harden | 014 | One key scheme | stores colocated | unit | world-identity |
-| PWO-091 | World-model persist/read | build | 090·080 | Sector DB grows | files+API | explore tick | world-model |
-| PWO-092 | Game-data two-layer store | build | 090 | Semantics≠DATA | no hardcoded stats in product | audit | game-data-store |
-| PWO-093 | Menu-map read-only crawl | build | 090 | Never-commit crawler | sacrificial only | crawl | menu-map… |
-| PWO-094 | Trace ledger append semantics | harden | 025·041 | Per-dispatch rows | schema | unit | trace-ledger |
-| PWO-095 | Candidate mining (no LLM) | build | 094 | Recurring patterns→candidates | dry-run | unit | candidate-mining |
-| PWO-096 | Coaching tips read-only | build | 036·091 | Options never act | TTY | coaching-engine |
+| PWO-090 | World-id keying everywhere — **PARTIAL** (`world_identity` + stores; not colocated everywhere) | harden | 014 | One key scheme | stores colocated | unit | world-identity |
+| PWO-091 | World-model persist/read — **LIVE** (`world_model.py` + tests) | build | 090·080 | Sector DB grows | files+API | explore tick | world-model |
+| PWO-092 | Game-data two-layer store — **MISSING** (canon only; banked tests deleted) | build | 090 | Semantics≠DATA | no hardcoded stats in product | audit | game-data-store |
+| PWO-093 | Menu-map read-only crawl — **LIVE** (`menu/crawler` + knowledge; live verb deferred) | build | 090 | Never-commit crawler | sacrificial only | crawl | menu-map… |
+| PWO-094 | Trace ledger append semantics — **PARTIAL** (transcript/actor; no per-dispatch LedgerWriter) | harden | 025·041 | Per-dispatch rows | schema | unit | trace-ledger |
+| PWO-095 | Candidate mining (no LLM) — **MISSING** (miner/analyze banked or archive-only) | build | 094 | Recurring patterns→candidates | dry-run | unit | candidate-mining |
+| PWO-096 | Coaching tips read-only — **LIVE** (`coach_engine` + KB + decisions) | build | 036·091 | Options never act | TTY | coaching-engine |
 
 ### Phase 8 — Strategy as taught behaviors (human-approved)
 
+> PREP: `workorders/WO-P8-100-107-strategy-PREP.md` — tip honesty 2026-08-03: 101/103/104/105 LIVE; 100/102/106/107 PARTIAL. Do not invent 092 under 100 cover.
+
 | ID | Title | Type | Depends | Goal | Accept | Proof | Canon |
 |----|-------|------|---------|------|--------|-------|-------|
-| PWO-100 | Port economics params | build | 092 | Hypothesis-tagged numbers | tags present | unit | port-economics |
-| PWO-101 | Trade loop define/rank | build | 100·081 | Credits/turn ranking | unit | trade-loops |
-| PWO-102 | Trade loop run + depletion STOP | build | 101·083 | STOP on depletion | live/fixture | trade-loops |
-| PWO-103 | Exploration frontier BFS | build | 091·083 | Stops on unknown sector UI | live | exploration-policy |
-| PWO-104 | Toll fight/pay/reroute guards | build | 081 | NPC only; combat escalates | unit+live | toll-and-defense |
-| PWO-105 | Formations locate/catalog | build | 091 | Recommend only | unit | special-formations |
-| PWO-106 | Colonization recommend + Genesis confirm | build | 096 | Genesis human one-shot | TTY confirm | planet-colonization |
-| PWO-107 | Ship/holds upgrade recommend | build | 096 | Purchase human-approved | TTY | ship-progression |
+| PWO-100 | Port economics params — **PARTIAL** (adapter/coach numbers; no standalone module; blocked on 092) | build | 092 | Hypothesis-tagged numbers | tags present | unit | port-economics |
+| PWO-101 | Trade loop define/rank — **LIVE** (`chains` + `trade_adapter` + tests) | build | 100·081 | Credits/turn ranking | unit | trade-loops |
+| PWO-102 | Trade loop run + depletion STOP — **PARTIAL** (`trade_driver` present; suite ignores driver tests) | build | 101·083 | STOP on depletion | live/fixture | trade-loops |
+| PWO-103 | Exploration frontier BFS — **LIVE** (`explore` + `sector_explore`) | build | 091·083 | Stops on unknown sector UI | live | exploration-policy |
+| PWO-104 | Toll fight/pay/reroute guards — **LIVE** (`fighter_toll_policy`) | build | 081 | NPC only; combat escalates | unit+live | toll-and-defense |
+| PWO-105 | Formations locate/catalog — **LIVE** (`formations.py` + catalog tests) | build | 091 | Recommend only | unit | special-formations |
+| PWO-106 | Colonization recommend + Genesis confirm — **PARTIAL** (recommend/coach; no TTY Genesis one-shot) | build | 096 | Genesis human one-shot | TTY confirm | planet-colonization |
+| PWO-107 | Ship/holds upgrade recommend — **PARTIAL** (coach card only; upgrade engine banked) | build | 096 | Purchase human-approved | TTY | ship-progression |
 
 ### Phase 9 — Doctrine / safety teeth
 
+> PREP: `workorders/WO-P9-110-115-doctrine-PREP.md` — tip honesty 2026-08-03: 110/115 LIVE; 111/112 PARTIAL; 113/114 MISSING.
+
 | ID | Title | Type | Depends | Goal | Accept | Proof | Canon |
 |----|-------|------|---------|------|--------|-------|-------|
-| PWO-110 | Secrets resolve precedence | harden | 005 | env > secrets file | tests | secrets-and-credentials |
-| PWO-111 | Redaction on all send paths | harden | 020 | No password in logs/ledger | scan | secrets… |
-| PWO-112 | Action-safety byte guards | harden | 081·083 | Destructive macros blocked | unit | action-safety-guards |
-| PWO-113 | Alignment: no PvP aggression rules | harden | 070·081 | Teacher cannot propose PvP harm | unit | alignment-and-conduct |
-| PWO-114 | Hypothesis-tag discipline CI | harden | 100 | Untagged numbers fail check | script | conventions |
-| PWO-115 | Public-bound lint | harden | — | No personal FQDN/names in canon/WOs | lint | conventions |
+| PWO-110 | Secrets resolve precedence — **LIVE** (`session/credentials.py`) | harden | 005 | env > secrets file | tests | secrets-and-credentials |
+| PWO-111 | Redaction on all send paths — **PARTIAL** (several paths; ledger incomplete) | harden | 020 | No password in logs/ledger | scan | secrets… |
+| PWO-112 | Action-safety byte guards — **PARTIAL** (scattered NEVER_AUTO/Paladin/crawl; no unified module) | harden | 081·083 | Destructive macros blocked | unit | action-safety-guards |
+| PWO-113 | Alignment: no PvP aggression rules — **MISSING** (coach prose ≠ gate) | harden | 070·081 | Teacher cannot propose PvP harm | unit | alignment-and-conduct |
+| PWO-114 | Hypothesis-tag discipline CI — **MISSING** (schema flags exist; no CI fail script) | harden | 100 | Untagged numbers fail check | script | conventions |
+| PWO-115 | Public-bound lint — **LIVE** (`scripts/path-leak-scan.sh` + githook) | harden | — | No personal FQDN/names in canon/WOs | lint | conventions |
 
 ---
 
