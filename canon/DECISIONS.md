@@ -381,3 +381,21 @@ chose rules over ledger for this residual (ledger HOLD — money-path audit trai
 
 **Refs:** hub GO rules-store · `rules/store.py` · loops precedent PWO-090.
 
+## Pending — ledger world_id row stamp (PWO-090 residual · hub GO Option A 2026-08-03)
+
+**ID:** `DECISION-LEDGER-WORLD-ID-STAMP`
+
+**Context:** Trace ledger remains a single append-only `state/ledger.jsonl` (passive
+dispatch-trace sink — records decisions; never chooses a live keystroke). Hub GO
+2026-08-03T13:29:00Z chose Option A over per-world path migrate (Option B held):
+additive `world_id` stamp on new rows + filter on read. Money-path audit trail —
+no rewrite/delete of existing rows.
+
+**Decision:**
+1. New rows may include `world_id` when the session can form an identity (profile-derived).
+2. `read_entries(..., world_id=)` returns only matching stamped rows; unstamped legacy rows stay on disk and are excluded from filtered reads.
+3. No per-world ledger path / migrate without a fresh proposal (Option B).
+4. Never invent a slug; omit the field when unknown.
+
+**Refs:** hub GO ledger Option A · `ledger.py` · world-identity.md global-sink note.
+

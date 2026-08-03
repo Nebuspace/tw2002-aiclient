@@ -151,3 +151,61 @@ def test_trail_render_keeps_redaction() -> None:
     )
     assert REDACTED in line
     assert "s3cret" not in line
+
+
+def test_record_do_stamps_world_id(tmp_path: Path) -> None:
+    path = tmp_path / "ledger.jsonl"
+    writer = LedgerWriter(path=path)
+    entry = writer.record_do(
+        PRE,
+        "158",
+        secret=False,
+        post_text=POST,
+        settled_class="port_trade",
+        actor="app",
+        session_id="sess-w",
+        world_id="host__A__pilot",
+    )
+    assert entry["world_id"] == "host__A__pilot"
+    assert json.loads(path.read_text(encoding="utf-8").strip())["world_id"] == "host__A__pilot"
+
+
+def test_record_do_omits_world_id_when_unknown(tmp_path: Path) -> None:
+    path = tmp_path / "ledger.jsonl"
+    writer = LedgerWriter(path=path)
+    entry = writer.record_do(
+        PRE,
+        "158",
+        secret=False,
+        post_text=POST,
+        settled_class="port_trade",
+        actor="app",
+        session_id="sess-plain",
+    )
+    assert "world_id" not in entry
+    assert "world_id" not in json.loads(path.read_text(encoding="utf-8").strip())
+
+
+def test_read_entries_filters_by_world_id_without_rewriting(tmp_path: Path) -> None:
+    path = tmp_path / "ledger.jsonl"
+    writer = LedgerWriter(path=path)
+    writer.record_do(
+        PRE, "1", secret=False, post_text=POST, settled_class="x",
+        actor="app", session_id="s1", world_id="world-a",
+    )
+    writer.record_do(
+        PRE, "2", secret=False, post_text=POST, settled_class="x",
+        actor="human", session_id="s2", world_id="world-b",
+    )
+    writer.record_do(
+        PRE, "3", secret=False, post_text=POST, settled_class="x",
+        actor="app", session_id="s3",
+    )  # legacy-shaped: no stamp
+    raw_before = path.read_text(encoding="utf-8")
+    filtered = read_entries(path, world_id="world-a")
+    assert len(filtered) == 1
+    assert filtered[0]["input"] == "1"
+    assert filtered[0]["world_id"] == "world-a"
+    # append-only: filter must not rewrite disk
+    assert path.read_text(encoding="utf-8") == raw_before
+    assert len(read_entries(path)) == 3

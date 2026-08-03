@@ -4,6 +4,11 @@ Canon: ``canon/engine/trace-ledger.md``. Append-only rows at
 ``state/ledger.jsonl`` (path overridable for tests). Passive passive substrate —
 records decisions; never chooses a live keystroke.
 
+World scoping (PWO-090 residual / DECISION-LEDGER-WORLD-ID-STAMP): new rows
+may carry an optional ``world_id`` stamp; :func:`read_entries` can filter by
+it. Existing rows are never rewritten. No per-world ledger path (Option B
+held).
+
 Actor attribution is the reborn invariant: live senders are
 ``VALID_SENDERS`` (``app``, ``human``) only — never ``ai``.
 
@@ -129,12 +134,17 @@ class LedgerWriter:
         capture: str | None = None,
         intent: str | None = None,
         interrupted_by_human: bool = False,
+        world_id: str | None = None,
     ) -> dict[str, Any]:
         """Build and append one per-dispatch row.
 
         ``actor`` must be in ``VALID_SENDERS`` (``app``|``human``). ``session_id``
         is required on every row per canon. Secret sends never persist the
         credential — ``input`` and ``prompt`` become ``<redacted>``.
+
+        ``world_id``, when a non-empty string, is stamped on the row so retro /
+        mining can filter without splitting the JSONL file. Omitted when
+        unknown — never invent a slug; never rewrite older rows.
         """
         if actor not in VALID_SENDERS:
             raise ValueError(
@@ -166,25 +176,40 @@ class LedgerWriter:
             entry["capture"] = capture
         if intent is not None:
             entry["intent"] = intent
+        if world_id is not None and str(world_id).strip():
+            entry["world_id"] = str(world_id).strip()
         self.append(entry)
         return entry
 
 
-def read_entries(path: str | Path | None = None) -> list[dict[str, Any]]:
-    """Read the ledger in append order; skip corrupt trailing lines."""
+def read_entries(
+    path: str | Path | None = None,
+    *,
+    world_id: str | None = None,
+) -> list[dict[str, Any]]:
+    """Read the ledger in append order; skip corrupt trailing lines.
+
+    When ``world_id`` is a non-empty string, return only rows whose stamped
+    ``world_id`` matches (exact). Rows lacking the field are excluded from a
+    filtered read — they stay on disk untouched (Option A: no rewrite).
+    """
     p = Path(path) if path is not None else DEFAULT_LEDGER_PATH
     if not p.exists():
         return []
     entries: list[dict[str, Any]] = []
+    want = str(world_id).strip() if world_id is not None and str(world_id).strip() else None
     with open(p, encoding="utf-8") as fh:
         for line in fh:
             line = line.strip()
             if not line:
                 continue
             try:
-                entries.append(json.loads(line))
+                row = json.loads(line)
             except json.JSONDecodeError:
                 continue
+            if want is not None and row.get("world_id") != want:
+                continue
+            entries.append(row)
     return entries
 
 
