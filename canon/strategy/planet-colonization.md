@@ -166,11 +166,12 @@ STOP-guarded every tick.
   from design history; there is no module that reads or models planet production, and no live capture
   of a planet screen. This is a build gap, not a behavioral defect — recorded so the docs win and the
   gap is not silently conformed away.
-- **`formations.py`'s Genesis-recommendation trio is parked, not wired** (WO-FA14). `membership_map`,
-  `write_membership`, and `recommend_genesis` are unit-tested but have no production caller; live
-  spectate/explore call only the read-only `catalog_world`. So the dead-end/bubble siting inputs are
-  *computed* but the operator-facing shortlist surface is dormant — a present-but-unwired capability,
-  consistent with (and losing nothing under) the RECOMMEND-only doctrine, since it drives nothing.
+- **Formations siting inputs are computed and membership is written** (#326): dead-end/bubble
+  genesis candidates flow through the shared detector / panel / `recommend_genesis` alias. There is
+  still **no autonomous Genesis deploy** and no new product surface that auto-invokes
+  `recommend_genesis` beyond the catalogue — RECOMMEND-only doctrine holds. Membership writeback and
+  route-hazard guards are documented in [Special Formations](/strategy/special-formations.md)
+  § Code reality (#326–#331).
 - **The priority layer's inherited "never-idle" appetite is counter-canon here.** The AI-first
   originals carried a per-cycle EV-selection habit (the autopilot's `EXPLORE_BASELINE_EV` "never
   idle" floor and `trade_driver`'s autonomous chain runner) in which a computed payoff could pick the
@@ -187,8 +188,8 @@ STOP-guarded every tick.
   unverified in source).
 - design history §12 / §15.5 — the special-formation detector and Genesis appetite: locate/catalog
   candidates, human-confirmed commit.
-- `formations.py` — the dead-end / bubble Genesis-candidate topology pass and its parked
-  recommendation trio (WO-FA14).
+- `formations.py` — the dead-end / bubble Genesis-candidate topology pass, membership writeback,
+  and `recommend_genesis` alias (no autonomous deploy).
 - `world_model.py` — the warp-graph and landmark substrate the siting scorer reads (planets surface
   only as an `own_planet` landmark and a density-scan `500=planet` presence hint; no production
   fields).

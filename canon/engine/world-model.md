@@ -250,12 +250,12 @@ holds structurally. Two things worth recording:
   is wired in the code at all — the `1=beacon…500=planet` table is authored here as the target
   semantics and awaits a real scan capture and an implementing parser. Recorded as a build gap, not a
   behavioral defect.
-- **`formations.py`'s membership-write trio is parked, not wired.** `membership_map`,
-  `write_membership`, and `recommend_genesis` are unit-tested but have no production caller (parked
-  under WO-FA14); live spectate/explore only call the read-only `catalog_world`. So a sector's
-  `formation_membership` field is populated in principle but not yet on the live write path — a
-  present-but-dormant capability, consistent with the LOCATE/CATALOG/RECOMMEND-only doctrine (nothing
-  is lost by its being dormant, since it drives nothing).
+- **`formations.py` membership writeback is wired** (WO-FORMATIONS-MEMBERSHIP-WRITEBACK / #326).
+  `catalog_world` and `WorldStats.refresh` call `write_membership` after a successful scan, stamping
+  canon-hyphen `formation_membership` tags. Still LOCATE/CATALOG/RECOMMEND-only — no Genesis or claim
+  action. `recommend_genesis` remains an alias of `genesis_candidates` without a separate auto-caller.
+  Route-hazard STOP/exclude for explore/trade is also wired (#327–#329); see
+  [Special Formations](/strategy/special-formations.md) § Code reality.
 
 # Citations
 
@@ -267,6 +267,6 @@ holds structurally. Two things worth recording:
   always-advance `last_seen_ts` ruling.
 - `explore.py` — frontier BFS, shortest-path (`path_to_sector`) pathfinding primitive, exhausted-frontier recovery.
 - `state_parser.py` — the last-match anchoring discipline, the plain-visit and batch/CIM write mappings.
-- `formations.py` — the topology catalog (dead-end / bubble / one-way / warp-sink) and its parked membership-write trio.
+- `formations.py` — the topology catalog (dead-end / bubble / one-way / warp-sink), membership writeback, and `route_hazard_for_hop`.
 - canon/research/archive-port-patterns.md AP-06 (per-sector file layout, fcntl lock scope, atomic
   rename pattern, field-level and nested-port merge algorithms, write_from_state class-omit rule).
