@@ -98,10 +98,11 @@ canonical here, not merely a per-surface style choice:
 - **Human** (the live `tw attach` seat holds the keyboard) — **yellow (`warn`)**. Deliberate, not an
   error: with the human flying, autopilot is stood down and the surface is in its
   attention-with-you register — the human is the one thing that must not be ignored.
-- **The teach-overlay (AI) indicator** — **cyan (`info`)**, non-bold. `[ASPIRATIONAL]` Shown *only*
-  while an Analyze pass is open; it is chrome/neutral by design — an overlay annotation, never a
-  live-drive slice — and its non-bold cyan visually separates it from the bold App/Human live-holder
-  chips.
+- **The teach-overlay (AI) indicator** — **cyan (`info`)**, non-bold. **LIVE** (WO-P5-069 /
+  `cockpit.analyze.OVERLAY_LABEL` replaces the calm teach band while `analyze_session.is_open` —
+  `screens.py` PlayShell draw). Shown *only* while an Analyze pass is open; it is chrome/neutral by
+  design — an overlay annotation, never a live-drive slice — and its non-bold cyan visually separates
+  it from the bold App/Human live-holder chips.
 - **Spectate** (not a dual member; takes no lock) — **muted / plain**. Deliberately uncolored —
   "nothing to see here," idle/parked.
 
