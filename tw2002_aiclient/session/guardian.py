@@ -22,7 +22,9 @@ A single daemon thread polls session health every few seconds:
   Enter — but ONLY when the current screen classifies as `main_command`.
   Never on password / trade / confirm / combat / unknown (a stray Enter
   could accept a default purchase or desync a credential prompt). Actor-
-  tagged `app`. ≤ one send per idle window (send resets the idle anchor).
+  tagged `app`, with a Trace-Ledger row when a `ledger` is injected
+  (WO-GUARDIAN-KEEPALIVE-LEDGER). ≤ one send per idle window (send resets
+  the idle anchor).
   Disconnected / reconnect-in-flight ticks never nudge (`_tick` routes
   drops to D9; `_reconnect_in_flight` + connected guard block D10 mid-burst).
 """
@@ -50,10 +52,14 @@ class SessionGuardian:
         idle_keepalive_ms=_IDLE_KEEPALIVE_MS,
         reconnect_backoff_s=_RECONNECT_BACKOFF_S,
         max_reconnect_attempts=_MAX_RECONNECT_ATTEMPTS,
+        ledger=None,
     ):
         self.session = session
         self.get_password = get_password
         self.save_password = save_password
+        # Optional Trace-Ledger (daemon passes LedgerWriter). Keepalive
+        # bypasses protocol.dispatch, so rows are written here directly.
+        self.ledger = ledger
         # Injected (not hard-imported) so tests can supply a fake profile
         # store / classifier without touching disk — mirrors login.run_login's
         # DI. Defaults resolve lazily for live daemon use.
@@ -170,6 +176,40 @@ class SessionGuardian:
 
     # -- D10 (WO-P2-028) ---------------------------------------------------
 
+
+    def _record_keepalive_ledger(self, pre_text: str) -> None:
+        """Append one Trace-Ledger row for a D10 keepalive send. Never raises."""
+        ledger = self.ledger
+        if ledger is None:
+            return
+        session = self.session
+        try:
+            from types import SimpleNamespace
+
+            from .protocol import _record_ledger
+
+            post_text = session.render_text(session.render())
+            rows = session.render()
+            prompt = rows[-1].strip() if rows else ""
+            classify_screen = self._resolve_classify_screen()
+            settled = classify_screen(post_text, prompt)
+            resp = {
+                "screen": post_text.splitlines(),
+                "classification": settled if isinstance(settled, str) else "unknown",
+            }
+            server = SimpleNamespace(ledger=ledger, control_lock=None)
+            _record_ledger(
+                server,
+                session,
+                pre_text,
+                "",
+                secret=False,
+                resp=resp,
+                actor="app",
+            )
+        except Exception:  # noqa: BLE001 -- ledger must never kill the guardian tick
+            return
+
     def _maybe_keepalive(self):
         session = self.session
         # Drop path owns the poll: never nudge while disconnected or while
@@ -194,7 +234,11 @@ class SessionGuardian:
         if cls != "main_command":
             return  # conservative: only ever nudge the single safest screen
         try:
+            # WO-GUARDIAN-KEEPALIVE-LEDGER: pre-send screen for Trace-Ledger
+            # (keepalive never enters protocol.dispatch / _record_ledger).
+            pre_text = text
             session.send("", enter=True, secret=False, sender="app")
             self._last_keepalive_mono = time.monotonic()
+            self._record_keepalive_ledger(pre_text)
         except OSError:
             pass  # mid-drop — D9 picks it up next tick; do not stamp
