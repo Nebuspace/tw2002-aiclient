@@ -286,13 +286,21 @@ def _assert_absent(sinks: dict[str, str], needles=NEEDLES):
 def _assert_transcript_marker_fired(log_dir: Path, expected: int | None = None):
     """The non-vacuity bookend for every transcript assertion in this file: an
     absence alone cannot tell "properly redacted" from "this path never logged
-    anything at all" -- a dead call site would pass just as silently."""
+    anything at all" -- a dead call site would pass just as silently.
+
+    Counts **TX** redaction markers only (secret sends). RX markers are a
+    separate PWO-111 choke and must not inflate the send-count pin.
+    """
     body = "".join(p.read_text(encoding="utf-8", errors="replace") for p in _transcript_logs(log_dir))
-    count = body.count("secret input redacted")
+    tx_count = sum(
+        1
+        for line in body.splitlines()
+        if "secret input redacted" in line and "] TX" in line
+    )
     if expected is None:
-        assert count >= 1, "no redaction marker fired -- the secret send never happened"
+        assert tx_count >= 1, "no TX redaction marker fired -- the secret send never happened"
     else:
-        assert count == expected, f"expected {expected} redaction markers, got {count}"
+        assert tx_count == expected, f"expected {expected} TX redaction markers, got {tx_count}"
 
 
 class _BareServer:
@@ -519,12 +527,14 @@ def test_rejected_password_keeps_the_credential_out_of_every_sink(cfg, tmp_path,
     assert server.received == [SENTINEL]  # sent exactly once -- and it DID travel
     _assert_absent(sinks)
     _assert_transcript_marker_fired(logs, expected=1)
-    # The shell-level check on a FAILURE path too, not only on the green one:
-    # the transcript here carries real RX control bytes (the fake's own ANSI
-    # clear-and-home before every screen), which is exactly the file shape a
-    # bare `grep` would skip as "binary" and report falsely clean.
+    # Shell-level check on a FAILURE path too: credential must not appear even
+    # under `grep -a`. RX frames at the password gate (and the post-secret
+    # echo window) are now fully redacted markers (PWO-111), so we no longer
+    # require ANSI bytes in the file as proof the RX path ran — the RX
+    # redaction markers are that proof.
     for path in _transcript_logs(logs):
-        assert b"\x1b" in path.read_bytes()
+        raw = path.read_bytes()
+        assert b"RX <<secret input redacted>>" in raw
         assert _grep_a_contains(path, SENTINEL) is False
 
 
@@ -980,34 +990,26 @@ def test_an_echoing_server_no_longer_reaches_the_login_error_text(
     that update, and the direction of travel is the point: the leak was measured
     first and pinned positively, so closing it had to fail loudly.
 
-    Canon (`doctrine/secrets-and-credentials.md`, Code Divergence #1) states the
-    RX-side no-leak guarantee honestly: redaction is structural on TX only, and
-    the receive channel is transcribed verbatim, so the guarantee rests on the
-    telnet property that a password prompt suppresses echo. That divergence is
-    real and is NOT closed here -- the transcript and the screen still carry
-    what an echoing server painted, and the last two assertions below keep
-    saying so.
+    What IS closed (error text): the login automaton's own diagnostic string.
+    `automaton_stuck` used to quote the observed prompt line verbatim, so on an
+    echoing server the app made a fresh COPY of the credential into a diagnostic
+    string and `_dispatch_ensure` folded it into `resp["error"]` -- the CLI's
+    JSON. `login.LoginStalled` cannot carry screen text.
 
-    What IS closed is the third surface, the one the app built itself: the login
-    automaton's own error text. `automaton_stuck` used to quote the observed
-    prompt line verbatim, so on an echoing server the app made a fresh COPY of
-    the credential into a diagnostic string and `_dispatch_ensure` folded it
-    into `resp["error"]` -- the CLI's JSON. `login.LoginStalled` cannot carry
-    screen text, which is why this sweeps every EXCEPTION rendering rather than
-    only `str()`: the fix is structural, so it must hold for `repr`, the
-    `__cause__`/`__context__` chain and the formatted traceback too, not just
-    for the one rendering that happened to be checked.
+    What IS closed (PWO-111 RX transcript): after a ``secret=True`` password
+    send, RX chunks (including echo without the word ``password``) route through
+    ``log_redacted`` — same vocabulary as TX. The live pyte screen may still
+    paint the echo (live-paint residual / Code Divergence #1 narrowed); that is
+    deliberate and still asserted below as non-vacuity for the error-text claim.
 
-    Deliberately NOT swept here: the transcript and the live screen. Those are
-    Code Divergence #1's own territory (RX is verbatim by design) and asserting
-    their cleanliness would be asserting something canon says is false. The
-    ensure/CLI JSON surface is swept end-to-end in
-    `tests/test_ensure_login_error_redaction.py`.
+    Deliberately NOT swept here: the live screen paint. That remains the human's
+    own eyes on their own game. The ensure/CLI JSON surface is swept end-to-end
+    in `tests/test_ensure_login_error_redaction.py`.
     """
     monkeypatch.setattr(login, "_STEP_SETTLE_TIMEOUT_S", 1.0)
     _write_secrets(cfg, text=_good_secrets_text())
     # Step 2 echoes back exactly what the client sent -- the one server
-    # behavior canon's RX guarantee assumes will never happen.
+    # behavior that used to land the credential in the transcript.
     script = [(_PASSWORD_SCREEN, True), (lambda last: last, False)]
     logs = tmp_path / "logs"
 
@@ -1037,12 +1039,14 @@ def test_an_echoing_server_no_longer_reaches_the_login_error_text(
     for name, body in _exception_renderings(excinfo.value).items():
         assert SENTINEL not in body, f"the credential reached {name}"
 
-    # Unchanged and still honest: TX redaction held, and what reached the
-    # transcript came back from the server on RX -- Code Divergence #1, not a
-    # regression of this fix.
+    # TX + RX transcript redaction held (PWO-111): echo must not persist.
     body = "".join(p.read_text(encoding="utf-8", errors="replace") for p in _transcript_logs(logs))
     assert "secret input redacted" in body
     assert "RX" in body
+    assert SENTINEL not in body
+    assert SENTINEL.encode() not in b"".join(
+        p.read_bytes() for p in _transcript_logs(logs)
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -1245,12 +1249,21 @@ def _leaky_log_tx(self, channel, data, secret, exc):
     """`connection.py`'s `_log_tx` with the `if secret:` redaction choke
     removed -- the single branch every send on both channels and BOTH outcomes
     routes through. Patched in, never edited on disk; `monkeypatch` reverts at
-    teardown."""
+    teardown. Does not arm the RX echo window (paired with `_leaky_log_rx`)."""
     if not self.logger:
         return
     from tw2002_aiclient.session.connection import _tx_direction
 
     self.logger.log_raw(_tx_direction(channel, exc), data)
+
+
+def _leaky_log_rx(self, data):
+    """`connection.py`'s `_log_rx` with the password-anchor / post-secret gate
+    removed — so falsification can prove the TX leak without RX markers
+    masking the "no redaction fired" assertion."""
+    if not self.logger or not data:
+        return
+    self.logger.log_raw("RX", data)
 
 
 def _drive_rejection(tmp_path, cfg):
@@ -1278,6 +1291,7 @@ def test_falsification_removing_the_redaction_choke_leaks_on_the_FAILURE_path_RE
     never been shown capable of going red at all."""
     monkeypatch.setattr(login, "_RETURNING_REJECT_SETTLE_S", 0.3)
     monkeypatch.setattr(TelnetConnection, "_log_tx", _leaky_log_tx)
+    monkeypatch.setattr(TelnetConnection, "_log_rx", _leaky_log_rx)
     logs, server = _drive_rejection(tmp_path, cfg)
 
     body = "".join(p.read_text(encoding="utf-8", errors="replace") for p in _transcript_logs(logs))
@@ -1308,6 +1322,7 @@ def test_falsification_removing_the_redaction_choke_leaks_on_the_SUCCESS_path_RE
     """The same injection against the green control, so the falsification
     covers both the path that completes and the path that fails."""
     monkeypatch.setattr(TelnetConnection, "_log_tx", _leaky_log_tx)
+    monkeypatch.setattr(TelnetConnection, "_log_rx", _leaky_log_rx)
     _write_secrets(cfg, text=_good_secrets_text())
     fake = FakeTWGS(handle=HANDLE, game_letter=GAME_LETTER, password=SENTINEL, mode="returning")
     logs = tmp_path / "logs"

@@ -14,7 +14,7 @@
 - **Doctrine is teeth, not prose.** PREP marks what is enforceable in product/CI vs aspirational coach text.
 - **Secrets never in logs/argv/history/repo.** Pair 110/111 with ledger work (094).
 - **What already landed (tip):** credentials precedence · redaction on several paths · scattered NEVER_AUTO / Paladin / crawl guards · path-leak public-bound lint.
-- **What Phase 9 still owes:** RX verbatim residual + attach heuristic residual (ledger redaction LIVE via 094). Action-safety coverage map LIVE (PWO-112).
+- **What Phase 9 still owes:** attach heuristic residual (RX transcript gate LIVE via PWO-111; live-paint residual named in doctrine). Ledger redaction LIVE via 094. Action-safety coverage map LIVE (PWO-112).
 - **HOLDs:** force-push · secrets in coord · public-repo personal identifiers.
 
 ---
@@ -40,11 +40,11 @@
 - **Proof:** `tests/test_credentials.py` · `tests/test_secrets_store_redaction.py`.
 - **Hazards:** Never log resolved password.
 
-### PWO-111 — Redaction on all send paths (HARDEN) — **TX-LIVE** (ledger redaction LIVE via 094)
+### PWO-111 — Redaction on all send paths (HARDEN) — **TX+RX-LOG LIVE** (ledger redaction LIVE via 094)
 - **Depends-on:** 020
-- **Live state:** password TX routes `secret=True` → `connection._log_tx` → `TranscriptLogger.log_redacted` + `TranscriptTail.append_redacted`; login/attach/do--secret/status/ensure suites green.
-- **Accept residual (named, not claimed DONE):** (1) LedgerWriter redaction = **PWO-094 LIVE**; (2) RX screen/prompt verbatim by canon; (3) attach heuristic misses non-keyword prompts (documented residual test).
-- **Proof:** `tests/test_login_redaction.py` · `test_attach_redaction.py` · `test_status_prompt_redaction.py` · `test_ensure_login_error_redaction.py` · `test_secrets_store_redaction.py`.
+- **Live state:** password TX routes `secret=True` → `connection._log_tx` → `TranscriptLogger.log_redacted` + `TranscriptTail.append_redacted`; RX transcript via `_log_rx` / `should_redact_rx` (password-anchor **or** post-secret window); login/attach/do--secret/status/ensure + connection RX pins green.
+- **Accept residual (named, not claimed DONE):** (1) LedgerWriter redaction = **PWO-094 LIVE**; (2) live screen/`watch` paint may still show echo (doctrine residual — not the transcript log); (3) attach heuristic misses non-keyword prompts (documented residual test).
+- **Proof:** `tests/test_login_redaction.py` · `test_connection.py` (RX pins) · `test_logging_util.py` · `test_attach_redaction.py` · `test_status_prompt_redaction.py` · `test_ensure_login_error_redaction.py` · `test_secrets_store_redaction.py`.
 - **Hazards:** New send sites must pass `secret=`; never put passwords in `cli --keys` argv.
 
 ### PWO-112 — Action-safety byte guards (HARDEN) — **LIVE**
@@ -80,14 +80,14 @@
 
 ```
 005 ──► 110 LIVE
-020 ──► 111 TX-LIVE (ledger redaction LIVE via 094)
+020 ──► 111 TX+RX-LOG LIVE (ledger redaction LIVE via 094)
 081·083 ──► 112 LIVE
 070·081 ──► 113 LIVE
 100 ──► 114 LIVE
 — ──► 115 LIVE
 ```
 
-**Suggested first execute after PREP Accept:** Phase 9 TX/ledger redaction LIVE; remaining named residuals = RX verbatim + attach heuristic (111). 112–115 LIVE.
+**Suggested first execute after PREP Accept:** Phase 9 TX+RX-log/ledger redaction LIVE; remaining named residual on 111 = attach heuristic (+ live-paint echo). 112–115 LIVE.
 
 ---
 

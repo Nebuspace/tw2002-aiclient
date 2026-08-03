@@ -41,6 +41,15 @@ def test_log_raw_empty_bytes_is_a_no_op(tmp_path):
     assert content == ""
 
 
+def test_should_redact_rx_password_anchor_and_secret_pending():
+    from tw2002_aiclient.session.logging_util import should_redact_rx
+
+    assert should_redact_rx("Enter your Password:", secret_pending=False) is True
+    assert should_redact_rx("Command [TL=1]:", secret_pending=False) is False
+    assert should_redact_rx("hunter2", secret_pending=True) is True
+    assert should_redact_rx("hunter2", secret_pending=False) is False
+
+
 def test_transcript_file_is_owner_only_0600(tmp_path):
     logger = TranscriptLogger(str(tmp_path))
     logger.close()

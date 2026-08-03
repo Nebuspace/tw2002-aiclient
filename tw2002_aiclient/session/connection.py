@@ -61,6 +61,8 @@ import socket
 import threading
 import time
 
+from .logging_util import should_redact_rx
+
 # TX transcript channel tags. The `-FAILED` variants are built from these by
 # `_tx_direction()` below.
 TX_CHANNEL = "TX"
@@ -159,6 +161,11 @@ class TelnetConnection:
         self._sock = None
         self._reader_thread = None
         self._stop = threading.Event()
+        # PWO-111: after an operator ``secret=True`` TX, RX transcript writes
+        # stay redacted until the next non-secret operator TX (echo window).
+        # TX-IAC never sets or clears this — negotiation replies are not
+        # operator input and must not close the window early.
+        self._redact_rx = False
 
     def connect(self, timeout=10):
         self._sock = socket.create_connection((self.host, self.port), timeout=timeout)
@@ -228,8 +235,7 @@ class TelnetConnection:
                     break
                 if not data:
                     break
-                if self.logger:
-                    self.logger.log_raw("RX", data)
+                self._log_rx(data)
                 clean = self.negotiator.feed(data)
                 pending = self.negotiator.pop_pending_output()
                 with self.lock:
@@ -273,6 +279,22 @@ class TelnetConnection:
             if self._reader_generation == generation:
                 self.connected = False
 
+    def _log_rx(self, data: bytes):
+        """Write the ONE transcript record for a received chunk (PWO-111).
+
+        Gate mirrors TX / ledger vocabulary via ``should_redact_rx``:
+        password-anchor match **or** a pending ``secret=True`` operator TX.
+        Additive only — never un-redacts. Does not touch parse / classify /
+        pyte feed (those still see raw ``data``).
+        """
+        if not self.logger or not data:
+            return
+        text = data.decode("latin-1")
+        if should_redact_rx(text, secret_pending=self._redact_rx):
+            self.logger.log_redacted("RX")
+        else:
+            self.logger.log_raw("RX", data)
+
     def _log_tx(self, channel: str, data: bytes, secret: bool, exc):
         """Write the ONE transcript record for a TX that has already
         resolved -- `exc=None` for a completed send, the raised exception
@@ -291,7 +313,14 @@ class TelnetConnection:
         re-derived, or second-guessed here (see the module docstring).
         Failure changes only the `direction` TAG -- never which sink fires,
         and never what that sink receives as content.
+
+        Operator TX also arms/disarms the RX echo window (`_redact_rx`).
         """
+        if channel == TX_CHANNEL:
+            # Arm on secret; clear only on a later non-secret operator TX.
+            # Failed secret sends still arm — bytes may already be on the
+            # wire and an echoing server can still paint them back.
+            self._redact_rx = bool(secret)
         if not self.logger:
             return
         direction = _tx_direction(channel, exc)
