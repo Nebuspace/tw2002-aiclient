@@ -81,13 +81,13 @@
 ```
 005 ──► 110 LIVE
 020 ──► 111 TX-LIVE (ledger pairs with 094)
-081·083 ──► 112 PARTIAL
+081·083 ──► 112 LIVE
 070·081 ──► 113 LIVE
 100 ──► 114 LIVE
 — ──► 115 LIVE
 ```
 
-**Suggested first execute after PREP Accept:** **PWO-112 coverage map** (114 LIVE). 113 LIVE.
+**Suggested first execute after PREP Accept:** Phase 9 residuals are LIVE except ledger redaction → 094. 113/114 LIVE.
 
 ---
 
