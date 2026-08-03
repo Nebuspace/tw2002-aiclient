@@ -89,22 +89,18 @@ from tw2002_aiclient import world_model
 from tw2002_aiclient.chains import TradeHop
 from tw2002_aiclient.explore import known_graph
 from tw2002_aiclient.formations import route_hazard_for_hop
+from tw2002_aiclient.port_economics import (
+    hypothesized_buy_sell_spread_of_floor,
+    hypothesized_ceiling_multiplier,
+    hypothesized_floor_prices,
+)
 
-# port-economics.md's "Ore" is the same commodity state_parser._COMMODITIES
-# spells out as "Fuel Ore" -- this maps the doc's name to the parser's.
-DEFAULT_FLOOR_PRICES: Mapping[str, float] = {
-    "Fuel Ore": 20.0,
-    "Organics": 30.0,
-    "Equipment": 40.0,
-}
-DEFAULT_CEILING_MULTIPLIER = 2.0  # this module's own interpolation choice -- UNVERIFIED, not from the doc
-# Posture spread as a fraction of floor (UNVERIFIED modeling, WO-TRADE-
-# ADAPTER-BUY-SELL-SPREAD). At equal pct, selling-posture estimate is mid
-# minus ``floor * spread`` and buying-posture is mid plus that delta, so a
-# complementary hop clears ``margin = 2 * floor * spread > 0``. Not a claim
-# about live TWGS bid/ask tables — a named knob so Gather pct=100 worlds
-# are not permanently margin-zero under the estimator.
-DEFAULT_BUY_SELL_SPREAD_OF_FLOOR = 0.05
+# Pricing knobs — authored as HypothesisParam in port_economics (PWO-100).
+# Re-exported here so existing TradeAdapterConfig / trade_driver call sites
+# keep working; do not re-introduce silent floor/ceiling/spread literals.
+DEFAULT_FLOOR_PRICES: Mapping[str, float] = hypothesized_floor_prices()
+DEFAULT_CEILING_MULTIPLIER = hypothesized_ceiling_multiplier()
+DEFAULT_BUY_SELL_SPREAD_OF_FLOOR = hypothesized_buy_sell_spread_of_floor()
 DEFAULT_MAX_AGE_S = 3600.0  # drop a port reading older than this as stale (1h)
 DEFAULT_MAX_HOPS = 500  # bounded compute/output on a large known map
 # Bounds expensive *route-search* work in build_trade_hops (one BFS per
