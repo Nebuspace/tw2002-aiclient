@@ -258,12 +258,12 @@ Banked hygiene (not a PWO id): **pty mid-flush settle** — PREP `workorders/WO-
 
 ### Phase 9 — Doctrine / safety teeth
 
-> PREP: `workorders/WO-P9-110-115-doctrine-PREP.md` — tip honesty 2026-08-03: 110/115 LIVE; 111/112 PARTIAL; 113/114 MISSING.
+> PREP: `workorders/WO-P9-110-115-doctrine-PREP.md` — tip honesty 2026-08-03: 110/111(TX)/115 LIVE; 112 PARTIAL; 113/114 MISSING; ledger redaction → 094.
 
 | ID | Title | Type | Depends | Goal | Accept | Proof | Canon |
 |----|-------|------|---------|------|--------|-------|-------|
 | PWO-110 | Secrets resolve precedence — **LIVE** (`session/credentials.py`) | harden | 005 | env > secrets file | tests | secrets-and-credentials |
-| PWO-111 | Redaction on all send paths — **PARTIAL** (several paths; ledger incomplete) | harden | 020 | No password in logs/ledger | scan | secrets… |
+| PWO-111 | Redaction on all send paths — **TX-LIVE** (login/attach/do--secret → `_log_tx`/`log_redacted` + LOGS; ledger = PWO-094; tip 2026-08-03) | harden | 020 | No password in logs/ledger | scan | secrets… |
 | PWO-112 | Action-safety byte guards — **PARTIAL** (scattered NEVER_AUTO/Paladin/crawl; no unified module) | harden | 081·083 | Destructive macros blocked | unit | action-safety-guards |
 | PWO-113 | Alignment: no PvP aggression rules — **MISSING** (coach prose ≠ gate) | harden | 070·081 | Teacher cannot propose PvP harm | unit | alignment-and-conduct |
 | PWO-114 | Hypothesis-tag discipline CI — **MISSING** (schema flags exist; no CI fail script) | harden | 100 | Untagged numbers fail check | script | conventions |
