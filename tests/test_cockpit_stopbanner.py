@@ -63,6 +63,7 @@ CANON_CATALOG = {
     "turns_stale": "turns stale",
     "turns_unreadable": "turns unreadable",
     "fighters_zero": "fighters zero",
+    "route_hazard": "route hazard",
 }
 
 WIDE = 120
@@ -103,6 +104,15 @@ def test_module_catalog_matches_canon_exactly_no_extra_no_missing():
 # ---------------------------------------------------------------------------
 # 2. The honesty requirement -- an UNKNOWN code must not grow prose.
 # ---------------------------------------------------------------------------
+
+
+def test_route_hazard_qualified_code_renders_label_plus_detail():
+    """WO-STOPBANNER-ROUTE-HAZARD-LABEL: explore/trade emit
+    ``route_hazard:one_way:A->B`` — base maps, detail passes through."""
+    lines = stopbanner.compose_stop_banner_lines(
+        _halt("route_hazard:one_way:2->3"), width=WIDE
+    )
+    assert lines[0] == "! STOP — route hazard: one_way:2->3"
 
 
 def test_unknown_code_passes_through_as_its_own_text_never_invented_prose():
