@@ -13,8 +13,8 @@
 
 - **Phase 6 residuals** — 087 LIVE (#360 auto-haggle opt-in default OFF); 088 DONE/PARTIAL (FOCUS Layer-2; full priority kernel parked). Phase 7 must not invent Phase-6 execute under PREP cover.
 - **AI never live-drives.** World/crawl/coach surfaces are substrate + recommend-only; no live AI sender.
-- **What already landed (tip):** world-id helpers · world-model persist · menu crawler · coach engine · partial ledger/transcript paths.
-- **What Phase 7 still owes:** colocated world-id across *all* stores · two-layer game-data store · per-dispatch trace ledger · candidate mining (no LLM) · coach TTY polish residuals as Execute scopes them.
+- **What already landed (tip):** world-id helpers · world-model persist · menu crawler · coach engine · LedgerWriter semantic schema (PWO-094) + world_id row-stamp (#366 Option A).
+- **What Phase 7 still owes:** introspector residual (092) · coach TTY polish residuals as Execute scopes them · any remaining product-caller adopt of ledger wire (094 Accept residual).
 - **HOLDs:** F2 · G2–G4 · north-star · Human→App · auth/secrets money-path · sacrificial live crawl without Max GO.
 
 ---
@@ -27,7 +27,7 @@
 | World-model persist/read | **LIVE** | `world_model.py` + `tests/test_world_model.py`; state_parser can feed writes |
 | Game-data two-layer store | **LIVE kernel** | `game_data.py` schema+source gate+persist; introspector still MISSING |
 | Menu-map read-only crawl | **LIVE** | `menu/crawler.py` · `crawl_driver.py` · `knowledge.py` + crawler tests; live protocol verb still deferred |
-| Trace ledger append | **PARTIAL** | transcript/logging + actor attribution; no per-dispatch LedgerWriter semantic schema on tip |
+| Trace ledger append | **LIVE** | `ledger.py` LedgerWriter + world_id stamp/filter (#366); `tests/test_ledger.py` (PWO-094) |
 | Candidate mining (no LLM) | **LIVE** | `tw2002_aiclient/miner.py` + `tests/test_miner.py` (PWO-095) |
 | Coaching tips read-only | **LIVE** | `coach_engine.py` · `coach_kb.py` · `data/coach/*` · cockpit decisions + tests |
 
@@ -89,7 +89,7 @@
 ## 3. Depends-on graph
 
 ```
-090 DONE/PARTIAL (loops) ──► 091 LIVE
+090 DONE ──► 091 LIVE
             ├─► 092 LIVE kernel
             └─► 093 LIVE
 025/041 ──► 094 LIVE ──► 095 LIVE

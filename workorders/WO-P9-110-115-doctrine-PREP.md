@@ -40,7 +40,7 @@
 - **Proof:** `tests/test_credentials.py` · `tests/test_secrets_store_redaction.py`.
 - **Hazards:** Never log resolved password.
 
-### PWO-111 — Redaction on all send paths (HARDEN) — **TX-LIVE** (ledger deferred)
+### PWO-111 — Redaction on all send paths (HARDEN) — **TX-LIVE** (ledger redaction LIVE via 094)
 - **Depends-on:** 020
 - **Live state:** password TX routes `secret=True` → `connection._log_tx` → `TranscriptLogger.log_redacted` + `TranscriptTail.append_redacted`; login/attach/do--secret/status/ensure suites green.
 - **Accept residual (named, not claimed DONE):** (1) LedgerWriter redaction = **PWO-094 LIVE**; (2) RX screen/prompt verbatim by canon; (3) attach heuristic misses non-keyword prompts (documented residual test).
@@ -80,14 +80,14 @@
 
 ```
 005 ──► 110 LIVE
-020 ──► 111 TX-LIVE (ledger pairs with 094)
+020 ──► 111 TX-LIVE (ledger redaction LIVE via 094)
 081·083 ──► 112 LIVE
 070·081 ──► 113 LIVE
 100 ──► 114 LIVE
 — ──► 115 LIVE
 ```
 
-**Suggested first execute after PREP Accept:** Phase 9 residuals are LIVE except ledger redaction → 094. 113/114 LIVE.
+**Suggested first execute after PREP Accept:** Phase 9 TX/ledger redaction LIVE; remaining named residuals = RX verbatim + attach heuristic (111). 112–115 LIVE.
 
 ---
 
