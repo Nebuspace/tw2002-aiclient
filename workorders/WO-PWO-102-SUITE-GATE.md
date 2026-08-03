@@ -1,8 +1,8 @@
 # WO-PWO-102-SUITE-GATE — Un-ignore trade_driver depletion STOP in default suite
 
-> Status: **IN FLIGHT** · seat `impl-aiclient-cursor` · hub GO 2026-08-03T02:56:52Z  
+> Status: **DONE** · origin `1375eed` (#342) · seat `impl-aiclient-cursor` · Accept 2026-08-03  
 > Type: test-gate / tip honesty · PWO-102  
-> Tip base: `c2ca47a`
+> Tip base: `c2ca47a` → merged `1375eed`
 
 ## Goal
 Close PWO-102 PARTIAL: prove trade-loop depletion STOP in the **default** suite by un-ignoring `tests/test_trade_driver.py` (already green offline).

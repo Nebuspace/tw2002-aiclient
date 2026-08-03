@@ -1,8 +1,8 @@
 # WO-PWO-112-ACTION-SAFETY-COVERAGE — proven action-safety coverage map
 
-> Status: **IN FLIGHT** · seat `impl-aiclient-cursor` · hub GO 2026-08-03T04:53:23Z  
+> Status: **DONE** · origin `528252a` (#348) · seat `impl-aiclient-cursor` · Accept 2026-08-03  
 > Type: harden · PWO-112  
-> Tip base: `e065ffa`
+> Tip base: `e065ffa` → merged `528252a`
 
 ## Goal
 Close PWO-112 Accept residual: **one proven coverage map** of action-safety byte guards (canon ladder → source marker + unit proof), without claiming DONE on scattered guards alone.

@@ -1,8 +1,8 @@
 # WO-PWO-114-HYPOTHESIS-TAG-CI — hypothesis-tag discipline CI gate
 
-> Status: **IN FLIGHT** · seat `impl-aiclient-cursor` · hub GO 2026-08-03T04:28:20Z  
+> Status: **DONE** · origin `e065ffa` (#347) · seat `impl-aiclient-cursor` · Accept 2026-08-03  
 > Type: harden / CI · PWO-114  
-> Tip base: `6824d5d`
+> Tip base: `6824d5d` → merged `e065ffa`
 
 ## Goal
 Make PWO-100's `assert_all_unverified_tagged` **run in CI**, with a deliberate-fail fixture proving the gate bites.

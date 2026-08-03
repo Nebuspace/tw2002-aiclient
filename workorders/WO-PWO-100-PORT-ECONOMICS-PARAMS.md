@@ -1,8 +1,8 @@
 # WO-PWO-100-PORT-ECONOMICS-PARAMS — hypothesis-tagged port-economics substrate
 
-> Status: **IN FLIGHT** · seat `impl-aiclient-cursor` · hub GO 2026-08-03T04:03:29Z  
+> Status: **DONE** · origin `6824d5d` (#346) · seat `impl-aiclient-cursor` · Accept 2026-08-03  
 > Type: product substrate · PWO-100  
-> Tip base: `73e7428`
+> Tip base: `73e7428` → merged `6824d5d`
 
 ## Goal
 Ship a standalone **hypothesis-tagged** port-economics params module so product stats are not silent hardcoded literals in `trade_adapter`.

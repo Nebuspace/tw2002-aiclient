@@ -1,8 +1,8 @@
 # WO-PWO-092-GAME-DATA-KERNEL — Layer-B game_data store (Option A)
 
-> Status: **IN FLIGHT** · seat `impl-aiclient-cursor` · hub GO Option A 2026-08-03T03:53:35Z  
+> Status: **DONE** · origin `73e7428` (#345) · seat `impl-aiclient-cursor` · Accept 2026-08-03  
 > Type: product substrate · PWO-092  
-> Tip base: `f5e3b18`
+> Tip base: `f5e3b18` → merged `73e7428`
 
 ## Goal
 Ship the two-layer game-data **kernel**: schema + `introspected` source gate (write+load) + world-keyed persist, proven against `tests/fixtures/mock_game_data.json`.
