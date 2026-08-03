@@ -1,7 +1,7 @@
 # WO-P5-060…072 — Mode line, escalation & teach · PREP
 
-> Status: **PREP + 060/061 DONE · 064 DONE `af62889` · 062 DONE `b712637` · 066 STAGED** 2026-07-25 · kernel `d4a8829` · entry **`420430d`** · entry-APP **`7c0e882`** · seat `impl-aiclient-cursor`  
-> Phase: 5 · Type: PREP (inventory + tightened Accept/Proof) · Execute: hub HANDOFF `@ 12:00:25Z` → CC; **serialize ruling `@ 12:02:18Z`:** **064 → 062 → 066**; **064 CLOSED** `af62889` · **062 CLOSED** `b712637` (origin stack `d41e9dc`) · **066** still STAGED  
+> Status: **PREP + 060/061 DONE · 064 DONE `af62889` · 062 DONE `b712637` · 066–071 DONE** (inventory honesty 2026-08-03) · kernel `d4a8829` · entry **`420430d`** · entry-APP **`7c0e882`** · seat `impl-aiclient-cursor`  
+> Phase: 5 · Type: PREP (inventory + tightened Accept/Proof) · Execute: hub HANDOFF `@ 12:00:25Z` → CC; **serialize ruling `@ 12:02:18Z`:** **064 → 062 → 066**; **064 CLOSED** `af62889` · **062 CLOSED** `b712637` (origin stack `d41e9dc`) · **066–071 CLOSED** (see ULTRACODE + WO-P5-06x)  
 > Canon: `canon/surfaces/mode-line-and-teach-controls.md` · `canon/architecture/control-and-escalation.md` · `canon/engine/ai-teacher.md` · `canon/architecture/app-autopilot-model.md` · `canon/engine/coverage-metrics.md` · `canon/engine/macros.md` · `canon/architecture/rule-macro-engine.md` · **ADR-002**  
 > Refs: `ULTRACODE-WO-INVENTORY.md` Phase-5 rows · Phase 4 CLOSED (`bba53d4`) · PWO-060 (`2ca3154`) · PWO-061 kernel (`d4a8829`) · **061-ENTRY `420430d`** · **Max Ruled Batch 1b:** Mode=Ctrl-A · attached `M`=Move · no printable Mode · **Batch 2/3:** `APP` chip · Spectate≠Mode · Ctrl-]@App-hold no-op · north-star SIGNED · log_note RETIRE · secrets never-live · entry chip=APP · **PWO-064 `af62889`** · **PWO-062 `b712637`**
 
