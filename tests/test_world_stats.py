@@ -711,3 +711,27 @@ def test_world_stats_agrees_with_catalog_world_on_same_sectors(wm):
     assert merged["formations_panel"]["items"] == formations.panel_items_from_catalog(
         cat
     )
+
+
+def test_bubble_counts_in_formations_not_dead_end_only(wm):
+    """Bubble is genesis/formations; dead_end_count stays out-degree-1 only."""
+    wm.results = [5]
+    wm.sector_lists = [
+        [
+            {"sector_id": 1, "warps": [2]},
+            {"sector_id": 2, "warps": [1, 10]},
+            {"sector_id": 10, "warps": [2, 11, 12]},
+            {"sector_id": 11, "warps": [10, 12]},
+            {"sector_id": 12, "warps": [10, 11]},
+        ]
+    ]
+    s = world_stats.WorldStats()
+    s.refresh("w-1")
+    merged = s.merge({})
+    # sector 1 is a dead-end; bubble is separate genesis item
+    assert merged["dead_end_count"] == 1
+    assert merged["formations_count"] == 2  # dead-end + bubble
+    assert merged["genesis_count"] == 2
+    names = {i["name"] for i in merged["formations_panel"]["items"]}
+    assert "Dead-end #1" in names
+    assert "Bubble #10" in names

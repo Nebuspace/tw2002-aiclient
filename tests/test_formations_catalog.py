@@ -147,3 +147,38 @@ def test_catalog_world_maps_abort_to_empty(monkeypatch):
     monkeypatch.setattr(world_model, "all_sectors", boom)
     cat = formations.catalog_world(WORLD)
     assert cat.formations == []
+
+
+def test_formations_from_sectors_finds_bubble():
+    # Archive fixture: pocket {10,11,12} entered only via 10↔2; outside 1—2
+    sectors = [
+        {"sector_id": 1, "warps": [2]},
+        {"sector_id": 2, "warps": [1, 10]},
+        {"sector_id": 10, "warps": [2, 11, 12]},
+        {"sector_id": 11, "warps": [10, 12]},
+        {"sector_id": 12, "warps": [10, 11]},
+    ]
+    cat = formations.formations_from_sectors(sectors)
+    assert cat is not None
+    bubbles = [f for f in cat.formations if f.kind == "bubble"]
+    assert len(bubbles) == 1
+    assert set(bubbles[0].sectors) == {10, 11, 12}
+    assert bubbles[0].entrance == 10
+    assert bubbles[0] in cat.genesis_candidates
+    items = formations.panel_items_from_catalog(cat)
+    assert any(i["name"] == "Bubble #10" for i in items)
+
+
+def test_catalog_world_bubble_via_world_model(tmp_path: Path):
+    for rec in (
+        {"sector_id": 1, "warps": [2]},
+        {"sector_id": 2, "warps": [1, 10]},
+        {"sector_id": 10, "warps": [2, 11, 12]},
+        {"sector_id": 11, "warps": [10, 12]},
+        {"sector_id": 12, "warps": [10, 11]},
+    ):
+        world_model.upsert_sector(WORLD, rec, state_dir=tmp_path)
+    cat = formations.catalog_world(WORLD, state_dir=tmp_path)
+    bubbles = [f for f in cat.formations if f.kind == "bubble"]
+    assert len(bubbles) == 1
+    assert bubbles[0].entrance == 10

@@ -19,7 +19,7 @@ report ``0``.
 ``formations_count`` / ``genesis_count`` / ``formations_panel``
 (WO-FORMATIONS-CATALOG-PORT · WO-FORMATIONS-WORLD-STATS-VIA-CATALOG): the
 same pure detector as explore (``formations.formations_from_sectors``).
-Under the dead-end-only detector, ``formations_count`` (panel item count)
+Under the dead-end + bubble detector, ``formations_count`` (panel item count)
 equals ``genesis_count`` (genesis-kind candidates). ``formations_panel`` is
 ``{"items": [{"name", "blurb"}, ...]}`` for the FORMATIONS gutter.
 
@@ -208,8 +208,9 @@ class WorldStats:
         ``_formations_seen``. A raising or hostile ``all_sectors`` leaves the
         prior observation untouched — never invents a positive count from junk.
 
-        Under WO-FORMATIONS-CATALOG-PORT's dead-end-only catalog,
-        ``formations_count`` == ``genesis_count`` == dead-end count.
+        Under dead-end + bubble scope (hazards deferred),
+        ``formations_count`` == ``genesis_count`` (panel item count).
+        ``dead_end_count`` remains dead-end-kind only.
 
         WO-FORMATIONS-WORLD-STATS-VIA-CATALOG: detection is
         ``formations.formations_from_sectors`` — the same pure pass explore's
