@@ -162,6 +162,8 @@ from typing import Callable, Mapping, Optional
 
 from .chains import ProfitChain, TradeHop
 from .explore import known_graph, path_to_sector
+from .formations import route_hazard_for_hop
+from . import world_model
 from .session.classify import classify_screen, is_avoid_danger_warp
 from .session.settle import send_and_confirm
 from .session.state_parser import (
@@ -719,16 +721,28 @@ def _navigate(
     turns_budget: int,
     caps,
     hop_index: int,
+    *,
+    membership: Mapping[int, tuple] | None = None,
 ) -> int:
     """One warp at a time along the known-graph shortest path from `frm`
     to `to`, each gated fresh (HIGH-2 classify check + a non-adjacent
     backstop mirroring `autopilot.py`'s own HIGH fix) -- never the
-    chain's own far-side sector fired blind."""
+    chain's own far-side sector fired blind.
+
+    WO-TRADE-ROUTE-HAZARD-GUARD: before any send, scan the planned path
+    for known one-way / warp-sink hops. Hazard → ChainHold (STOP) — never
+    an autonomous detour (canon Dual-consumer split).
+    """
     if frm == to:
         return turns_budget
     path = path_to_sector(graph, frm, to)
     if path is None or len(path) < 2:
         raise ChainHold(f"route_unknown:{hop_index}")
+
+    for a, b in zip(path, path[1:]):
+        hazard = route_hazard_for_hop(graph, a, b, membership=membership)
+        if hazard is not None:
+            raise ChainHold(f"{hazard}:{hop_index}")
 
     for next_sector in path[1:]:
         if ctx.aborted():
@@ -844,6 +858,11 @@ def run_chain(
 
     ctx = _StepCtx(session, config, should_abort, is_armed)
     graph = known_graph(world_id, state_dir=state_dir)
+    membership: dict[int, tuple[str, ...]] = {}
+    for rec in world_model.all_sectors(world_id, state_dir=state_dir):
+        tags = rec.get("formation_membership") or ()
+        if tags:
+            membership[int(rec["sector_id"])] = tuple(str(t) for t in tags)
 
     start_text, start_prompt = ctx.fresh()
     start_sector = read_current_sector(start_prompt)
@@ -891,7 +910,10 @@ def run_chain(
             bought_qty, buy_total, turns_budget = _visit_port(
                 ctx, hop, "buy", 0, caps, config, turns_budget, hop_index
             )
-            turns_budget = _navigate(ctx, graph, hop.frm, hop.to, turns_budget, caps, hop_index)
+            turns_budget = _navigate(
+                ctx, graph, hop.frm, hop.to, turns_budget, caps, hop_index,
+                membership=membership,
+            )
             _sold_qty, sell_total, turns_budget = _visit_port(
                 ctx, hop, "sell", bought_qty, caps, config, turns_budget, hop_index
             )
