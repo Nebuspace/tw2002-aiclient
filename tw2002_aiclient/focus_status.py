@@ -7,7 +7,8 @@ producer. It never sends, never arms, and never invents a money-path.
 Canon: `canon/engine/priority-engine.md` Layer 2 — FOCUS. Kinds mirror the
 engine vocabulary (``run_chain`` / ``explore`` / ``upgrade``). Sort:
 ungated by ``ev_per_turn`` descending, gated last. The composer trusts
-this order.
+this order. This is **not** the full 13-objective priority-engine kernel
+(catalog / RT / stay-vs-leave) — that remains a parked follow-on.
 """
 
 from __future__ import annotations
