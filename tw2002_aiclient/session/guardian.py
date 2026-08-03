@@ -14,7 +14,7 @@ A single daemon thread polls session health every few seconds:
   back at a *verified* `main_command` — without the driving surface
   needing to notice the drop. Exhaustion / unverified screens fail loud
   (`last_reconnect_error`); never report resume success on an unknown
-  screen. Escalate-to-Human keyboard handoff is a follow-up (canon Code
+  screen. Escalate-to-Human keyboard handoff is PWO-065 STOP/attach (canon Code
   Divergence); this module records the error and stops the burst.
 
 - **D10:** when the session has been idle past `idle_keepalive_ms` (default
@@ -163,7 +163,8 @@ class SessionGuardian:
             # Exhausted attempts -- give up until the next drop-detection
             # tick naturally retries (still not connected, so _tick() will
             # call back in here on the next poll). Fail-loud via
-            # last_reconnect_error; STOP+Human escalate wiring is follow-up.
+            # last_reconnect_error; keyboard escalate is PWO-065 STOP banner
+            # prompt-to-attach (not auto-MODE_HUMAN from reconnect).
         finally:
             self._reconnect_in_flight = False
 
