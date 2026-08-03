@@ -17,7 +17,8 @@ menu-map signature dead-ends). Pre-scan **omits**; a completed scan may
 report ``0``.
 
 ``formations_count`` / ``genesis_count`` / ``formations_panel``
-(WO-FORMATIONS-CATALOG-PORT): same dead-end scan feeds the in-tree catalog.
+(WO-FORMATIONS-CATALOG-PORT · WO-FORMATIONS-WORLD-STATS-VIA-CATALOG): the
+same pure detector as explore (``formations.formations_from_sectors``).
 Under the dead-end-only detector, ``formations_count`` (panel item count)
 equals ``genesis_count`` (genesis-kind candidates). ``formations_panel`` is
 ``{"items": [{"name", "blurb"}, ...]}`` for the FORMATIONS gutter.
@@ -209,9 +210,18 @@ class WorldStats:
 
         Under WO-FORMATIONS-CATALOG-PORT's dead-end-only catalog,
         ``formations_count`` == ``genesis_count`` == dead-end count.
+
+        WO-FORMATIONS-WORLD-STATS-VIA-CATALOG: detection is
+        ``formations.formations_from_sectors`` — the same pure pass explore's
+        ``catalog_world`` uses — so panel / GOALS / coach cannot drift from
+        ``plan_find_formations``.
         """
         try:
             from tw2002_aiclient import world_model as _world_model
+            from tw2002_aiclient.formations import (
+                formations_from_sectors,
+                panel_items_from_catalog,
+            )
 
             kwargs = {}
             if state_dir is not None:
@@ -219,36 +229,16 @@ class WorldStats:
             sectors = _world_model.all_sectors(world_id, **kwargs)
         except Exception:  # noqa: BLE001
             return
-        if not isinstance(sectors, list):
+        catalog = formations_from_sectors(sectors)
+        if catalog is None:
             return
-        dead_end_ids: list[int] = []
-        for record in sectors:
-            if not isinstance(record, dict):
-                return
-            warps = record.get("warps")
-            if not isinstance(warps, list):
-                continue
-            if len(warps) != 1:
-                continue
-            sid = record.get("sector_id")
-            if isinstance(sid, bool) or not isinstance(sid, int):
-                continue
-            dead_end_ids.append(sid)
-        dead_end_ids.sort()
-        count = len(dead_end_ids)
-        self._dead_end_count = count
+        dead_end_n = sum(1 for f in catalog.formations if f.kind == "dead_end")
+        self._dead_end_count = dead_end_n
         self._dead_end_seen = True
         # Same observation feeds the formations panel / GOALS count / coach.
-        items = [
-            {
-                "name": f"Dead-end #{sid}",
-                "blurb": "one warp — defensible siting candidate",
-            }
-            for sid in dead_end_ids
-        ]
-        self._formations_count = count
-        self._genesis_count = count
-        self._formations_panel = {"items": items}
+        self._formations_count = len(catalog.formations)
+        self._genesis_count = len(catalog.genesis_candidates)
+        self._formations_panel = {"items": panel_items_from_catalog(catalog)}
         self._formations_seen = True
 
     def _refresh_has_port(

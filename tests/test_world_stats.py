@@ -688,3 +688,26 @@ def test_formations_omitted_before_refresh(wm):
     assert "formations_count" not in merged
     assert "genesis_count" not in merged
     assert "formations_panel" not in merged
+
+
+def test_world_stats_agrees_with_catalog_world_on_same_sectors(wm):
+    """Panel/counts come from formations_from_sectors — same as catalog_world."""
+    sectors = [
+        {"sector_id": 10, "warps": [11]},
+        {"sector_id": 11, "warps": [10, 12]},
+        {"sector_id": 12, "warps": [11]},
+    ]
+    wm.results = [3]
+    wm.sector_lists = [sectors]
+    s = world_stats.WorldStats()
+    s.refresh("w-1")
+    merged = s.merge({})
+    from tw2002_aiclient import formations
+
+    cat = formations.formations_from_sectors(sectors)
+    assert cat is not None
+    assert merged["formations_count"] == len(cat.formations)
+    assert merged["genesis_count"] == len(cat.genesis_candidates)
+    assert merged["formations_panel"]["items"] == formations.panel_items_from_catalog(
+        cat
+    )

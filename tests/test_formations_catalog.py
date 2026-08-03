@@ -111,3 +111,39 @@ def test_warp_target_routes_formations_intent(tmp_path: Path):
     )
     assert arrived.goal_reached is True
     assert arrived.next_sector is None
+
+
+def test_formations_from_sectors_abort_vs_empty():
+    assert formations.formations_from_sectors(None) is None
+    assert formations.formations_from_sectors("nope") is None
+    assert formations.formations_from_sectors([{"sector_id": 1, "warps": [2]}, "x"]) is None
+    empty = formations.formations_from_sectors([])
+    assert empty is not None
+    assert empty.formations == []
+    assert empty.genesis_candidates == []
+
+
+def test_panel_items_from_catalog_dead_end_shape():
+    cat = formations.FormationsCatalog(
+        [
+            formations.Formation(
+                kind="dead_end", sectors=(7,), entrance=8, detail="one warp → 8"
+            )
+        ]
+    )
+    items = formations.panel_items_from_catalog(cat)
+    assert items == [
+        {
+            "name": "Dead-end #7",
+            "blurb": "one warp — defensible siting candidate",
+        }
+    ]
+
+
+def test_catalog_world_maps_abort_to_empty(monkeypatch):
+    def boom(*_a, **_k):
+        raise RuntimeError("store down")
+
+    monkeypatch.setattr(world_model, "all_sectors", boom)
+    cat = formations.catalog_world(WORLD)
+    assert cat.formations == []
