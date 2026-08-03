@@ -213,7 +213,7 @@ Banked hygiene (not a PWO id): **pty mid-flush settle** — PREP `workorders/WO-
 
 ### Phase 6 — APP autopilot + rule engine (backend-heavy)
 
-> PREP: `workorders/WO-P6-080-088-autopilot-PREP.md` (tip `5b848f0`) — classify LIVE; state_parser MISSING; 085/086 LIVE gated; 081–084/087–088 MISSING. Do not invent Phase-5 chrome.
+> PREP: `workorders/WO-P6-080-088-autopilot-PREP.md` — tip honesty 2026-08-03: 080–086 LIVE; 087 PARTIAL (#337); 088 PARTIAL/gap. Do not invent Phase-5 chrome.
 
 | ID | Title | Type | Depends | Goal | Accept | Proof | Canon |
 |----|-------|------|---------|------|--------|-------|-------|

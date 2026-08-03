@@ -38,7 +38,7 @@
 
 ## 2. Per-PWO Accept + Proof
 
-### PWO-080 — Screen class + state parse (VERIFY/HARDEN) — **PARTIAL**
+### PWO-080 — Screen class + state parse (VERIFY/HARDEN) — **LIVE**
 - **Live state:** classify LIVE; state_parser LIVE (`session/state_parser.py`).
 - **Accept:** Settled screen → `{class, state}` fixtures green; status/panel keys can be fed without inventing EV live-send.
 - **Proof:** classify fixtures · state parse unit · protocol status keys non-empty under fixture.
