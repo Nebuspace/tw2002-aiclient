@@ -14,7 +14,7 @@
 - **Phase 7 gaps block some Phase-8 Accepts** — notably 100 depends on 092 (game-data) which is MISSING; economics numbers today live in adapter/coach data.
 - **Human-approved only.** Strategy modules recommend / rank / STOP; purchases and Genesis remain human one-shots.
 - **What already landed (tip):** chains/trade_adapter · trade_driver · explore BFS · fighter toll policy · formations catalog · coach cards for genesis/holds.
-- **What Phase 8 still owes:** colonization confirm TTY · ship-upgrade decision engine · PWO-114 hypothesis CI gate (100 LIVE).
+- **What Phase 8 still owes:** colonization confirm TTY · ship-upgrade decision engine (100+114 LIVE).
 - **HOLDs:** money-path live arms without Max GO · inventing Human→App · AI live-drive.
 
 ---

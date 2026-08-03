@@ -247,7 +247,7 @@ Banked hygiene (not a PWO id): **pty mid-flush settle** — PREP `workorders/WO-
 
 | ID | Title | Type | Depends | Goal | Accept | Proof | Canon |
 |----|-------|------|---------|------|--------|-------|-------|
-| PWO-100 | Port economics params — **LIVE** (`port_economics.py` HypothesisParam substrate; adapter re-exports; coach port keys tagged; 114 CI gate still deferred) | build | 092 | Hypothesis-tagged numbers | tags present | unit | port-economics |
+| PWO-100 | Port economics params — **LIVE** (`port_economics.py` HypothesisParam substrate; adapter re-exports; coach port keys tagged; 114 CI LIVE) | build | 092 | Hypothesis-tagged numbers | tags present | unit | port-economics |
 | PWO-101 | Trade loop define/rank — **LIVE** (`chains` + `trade_adapter` + tests) | build | 100·081 | Credits/turn ranking | unit | trade-loops |
 | PWO-102 | Trade loop run + depletion STOP — **LIVE** (`trade_driver` + suite `test_trade_driver` incl. depleted STOP; tip 2026-08-03) | build | 101·083 | STOP on depletion | live/fixture | trade-loops |
 | PWO-103 | Exploration frontier BFS — **LIVE** (`explore` + `sector_explore`) | build | 091·083 | Stops on unknown sector UI | live | exploration-policy |
@@ -258,7 +258,7 @@ Banked hygiene (not a PWO id): **pty mid-flush settle** — PREP `workorders/WO-
 
 ### Phase 9 — Doctrine / safety teeth
 
-> PREP: `workorders/WO-P9-110-115-doctrine-PREP.md` — tip honesty 2026-08-03: 110/111(TX)/113/115 LIVE; 112 PARTIAL; 114 MISSING; ledger redaction → 094.
+> PREP: `workorders/WO-P9-110-115-doctrine-PREP.md` — tip honesty 2026-08-03: 110/111(TX)/113/114/115 LIVE; 112 PARTIAL; ledger redaction → 094.
 
 | ID | Title | Type | Depends | Goal | Accept | Proof | Canon |
 |----|-------|------|---------|------|--------|-------|-------|
@@ -266,7 +266,7 @@ Banked hygiene (not a PWO id): **pty mid-flush settle** — PREP `workorders/WO-
 | PWO-111 | Redaction on all send paths — **TX-LIVE** (login/attach/do--secret → `_log_tx`/`log_redacted` + LOGS; ledger = PWO-094; tip 2026-08-03) | harden | 020 | No password in logs/ledger | scan | secrets… |
 | PWO-112 | Action-safety byte guards — **PARTIAL** (scattered NEVER_AUTO/Paladin/crawl; no unified module) | harden | 081·083 | Destructive macros blocked | unit | action-safety-guards |
 | PWO-113 | Alignment: no PvP aggression rules — **LIVE** (`alignment_gate` at writer/promote/bridge; tip #113 WO) | harden | 070·081 | Teacher cannot propose PvP harm | unit | alignment-and-conduct |
-| PWO-114 | Hypothesis-tag discipline CI — **MISSING** (schema flags exist; no CI fail script) | harden | 100 | Untagged numbers fail check | script | conventions |
+| PWO-114 | Hypothesis-tag discipline CI — **LIVE** (`scripts/hypothesis_tag_ci_guard.py` in suite.yml; deliberate-fail fixture via `--self-test-fail`) | harden | 100 | Untagged numbers fail check | script | conventions |
 | PWO-115 | Public-bound lint — **LIVE** (`scripts/path-leak-scan.sh` + githook) | harden | — | No personal FQDN/names in canon/WOs | lint | conventions |
 
 ---
