@@ -1,8 +1,8 @@
 # WO-WIRE-COVERAGE-LEDGER-COUNTS — Coverage meter ← ledger actor counts
 
-> Status: **IN FLIGHT** · seat `impl-aiclient-cursor` · hub self-scope HANDOFF 2026-08-03T05:41:00Z  
+> Status: **DONE** · origin `2107718` (#351) · seat `impl-aiclient-cursor` · Accept 2026-08-03  
 > Type: wire · cockpit pin  
-> Tip base: `7788a33` (PWO-094 LedgerWriter LIVE)
+> Tip base: `7788a33` → merged `2107718`
 
 ## Goal
 Replace the always-`None` coverage-meter counts in `screens.py` with real `app`/`human` tallies from the trace ledger now that `LedgerWriter` exists.
