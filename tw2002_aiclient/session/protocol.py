@@ -1117,6 +1117,110 @@ def _dispatch_reflex_arm(args, session, server):
     return _dispatch_autoloop_start(payload, server)
 
 
+
+def _current_session_id(session) -> str | None:
+    """Daemon continuous-play session id for ledger rows (never invent)."""
+    sid = getattr(session, "session_id", None)
+    if isinstance(sid, str) and sid:
+        return sid
+    logger = getattr(session, "logger", None)
+    sid = getattr(logger, "session_id", None) if logger is not None else None
+    if isinstance(sid, str) and sid:
+        return sid
+    return None
+
+
+def _driver_was_fenced(server) -> bool:
+    """True when attach fenced this dispatch mid-flight (CleanPreempt)."""
+    lock = getattr(server, "control_lock", None)
+    if lock is None:
+        return False
+    try:
+        return bool(lock.is_driver_fenced())
+    except Exception:  # noqa: BLE001 -- ledger must never crash the verb
+        return False
+
+
+def _record_ledger(
+    server,
+    session,
+    pre_text,
+    input_text,
+    *,
+    secret: bool,
+    resp,
+    actor: str,
+    interrupted_by_human: bool = False,
+) -> None:
+    """Append one Trace-Ledger row for a do/send that already hit the wire.
+
+    ``server.ledger`` absent (bare test harness) → silent no-op.
+    Missing ``session_id`` → skip (never invent). Actor must be a live
+    sender (`app`/`human`) — never ``ai``.
+    """
+    ledger = getattr(server, "ledger", None)
+    if ledger is None:
+        return
+    session_id = _current_session_id(session)
+    if not session_id:
+        return
+    if actor not in ("app", "human"):
+        # Reborn north-star: AI never live-drives. Refuse to attribute.
+        return
+    post_text = "\n".join(resp.get("screen") or [])
+    settled_class = resp.get("classification") or "unknown"
+    try:
+        ledger.record_do(
+            pre_text,
+            input_text,
+            secret=bool(secret),
+            post_text=post_text,
+            settled_class=settled_class,
+            actor=actor,
+            session_id=session_id,
+            interrupted_by_human=bool(interrupted_by_human),
+        )
+    except Exception:  # noqa: BLE001 -- ledger must never fail the verb
+        return
+
+
+def record_attach_keystroke(server, session, pre_text, input_text, secret) -> None:
+    """Route a ``tw attach`` keystroke into the same Trace-Ledger as do/send.
+
+    Called from ``daemon.CommandHandler._handle_attach`` after ``send_raw``.
+    Actor is always ``human``. Uses the caller's ``secret`` flag (same
+    decision as ``session.last_sent_secret``) so transcript + ledger agree.
+    """
+    ledger = getattr(server, "ledger", None)
+    if ledger is None:
+        return
+    session_id = _current_session_id(session)
+    if not session_id:
+        return
+    try:
+        post_text = session.render_text(session.render())
+    except Exception:  # noqa: BLE001
+        post_text = ""
+    post_lines = post_text.splitlines()
+    post_prompt = post_lines[-1].strip() if post_lines else ""
+    try:
+        settled_class = classify_screen(post_text, post_prompt)
+    except Exception:  # noqa: BLE001
+        settled_class = "unknown"
+    try:
+        ledger.record_do(
+            pre_text,
+            input_text,
+            secret=bool(secret),
+            post_text=post_text,
+            settled_class=settled_class,
+            actor="human",
+            session_id=session_id,
+        )
+    except Exception:  # noqa: BLE001
+        return
+
+
 def dispatch(session, verb, args, server):
     """The daemon's one dispatch chokepoint. A malformed/unrecognized
     `verb` is answered with a structured error, never an exception --
@@ -1158,9 +1262,9 @@ def dispatch(session, verb, args, server):
         return _dispatch_ensure(session, args, server)
 
     if verb == "do":
-        # WO-P2-OPS-VERB-B: send + wait_settle. Ledger/skill_step cut until
-        # those modules land — history ring + last_sender="app" still prove
-        # the drive path. wait_prompt is case-sensitive (settle.py HARD RULE).
+        # WO-P2-OPS-VERB-B: send + wait_settle. Trace-Ledger via
+        # `_record_ledger` (PWO-094 LedgerWriter; WO-DAEMON-LEDGER-WRITER-ATTACH).
+        # wait_prompt is case-sensitive (settle.py HARD RULE).
         #
         # WO-DO-SETTLE-RX-GUARD: this is the ONE settle in the protocol
         # that follows a send of our own, so it is the one that must not
@@ -1215,6 +1319,7 @@ def dispatch(session, verb, args, server):
             secret = args.get("secret", False)
             wait_prompt = args.get("wait_prompt")
             try:
+                pre_text = session.render_text(session.render())
                 session.send(text, enter=enter, secret=secret, sender="app")
                 reason, elapsed = session.wait_settle(
                     wait_prompt=wait_prompt,
@@ -1230,6 +1335,17 @@ def dispatch(session, verb, args, server):
             session.record_history(
                 "do", history_args, resp["prompt"], resp["classification"], reason
             )
+            # WO-DAEMON-LEDGER-WRITER-ATTACH: Trace-Ledger row for this App send.
+            _record_ledger(
+                server,
+                session,
+                pre_text,
+                text,
+                secret=secret,
+                resp=resp,
+                actor="app",
+                interrupted_by_human=_driver_was_fenced(server),
+            )
             return resp
 
     if verb == "send":
@@ -1243,11 +1359,22 @@ def dispatch(session, verb, args, server):
             text = args.get("input", "")
             enter = args.get("enter", True)
             secret = args.get("secret", False)
+            pre_text = session.render_text(session.render())
             session.send(text, enter=enter, secret=secret, sender="app")
             resp = build_response(session)
             history_args = {**args, "input": "<redacted>"} if secret else args
             session.record_history(
                 "send", history_args, resp["prompt"], resp["classification"], None
+            )
+            _record_ledger(
+                server,
+                session,
+                pre_text,
+                text,
+                secret=secret,
+                resp=resp,
+                actor="app",
+                interrupted_by_human=_driver_was_fenced(server),
             )
             return resp
 

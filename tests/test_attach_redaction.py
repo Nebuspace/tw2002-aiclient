@@ -2,8 +2,8 @@
 
 Proves ``Session.send_raw`` redacts the transcript LOG and ``last_sent``
 (→ ``build_response`` ``sent_input``) when the current prompt is a secret
-prompt. Ledger / ``record_attach_keystroke`` remain cut (no ``LedgerWriter``
-at tip) — STATUS discloses that gap; this suite does not invent a ledger.
+prompt. Ledger attach rows are covered by ``tests/test_daemon_ledger_attach.py``
+(WO-DAEMON-LEDGER-WRITER-ATTACH); this suite stays on the transcript path.
 
 MT-01 / WO-AUDIT-ATTACH-REDACTION-FAILPATH also proves the **failure** path:
 a ``sendall`` that raises under a secret prompt must not leave the sentinel
