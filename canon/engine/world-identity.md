@@ -129,14 +129,13 @@ consumers enumerated above are **not yet world-keyed** in the current code. Thes
 divergences (DOCS WIN): the target is that every durable store keys on the world identity; where the
 code has not caught up, the doc is the prescription, not the description.
 
-- **Macro / loop library is currently flat, not per-world.** The macro store writes to a single
-  shared location (`state/skills/<name>.json` and a sibling drafts directory) with **no world slug
-  in the path**. A macro taught in one world is therefore visible to — and replayable in — every
-  world, which the reset-semantics section above forbids. The map, game-data, and menu-map stores
-  already live under the per-world directory (`state/world/<world-slug>/…`); the macro library must
-  be migrated to the same per-world scoping. (A macro's own start-anchor/send-and-confirm guards
-  independently refuse a mismatched replay, so this is not an open safety hole today — but it is a
-  keying divergence from the invariant, and the guards are a backstop, not the scope boundary.)
+- **Macro / loop library world-scoping (PWO-090).** When a `world_id` is supplied, the macro store
+  reads/writes `state/world/<world_id>/skills/` (+ `_drafts/`), matching map / game-data / menu-map.
+  Legacy flat `state/skills/` remains for callers that omit `world_id`, and
+  `migrate_flat_loops_to_world` copies flat → world on first world-scoped read/write when the world
+  store is empty (DECISION-LOOPS-WORLD-MIGRATE-ON-READ). Callers that never pass `world_id` still
+  see the flat tree — product cockpit / autoloop (profile-derived) / CLI `--world-id` are the
+  world-scoped paths. (Start-anchor / send-and-confirm guards remain the replay backstop.)
 
 - **The trace ledger is a single global sink.** The ledger appends every session's rows to one
   shared file (`state/ledger.jsonl`) rather than a per-world store. Each row does carry a

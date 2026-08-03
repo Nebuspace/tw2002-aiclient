@@ -1119,6 +1119,27 @@ class AutoLoopRunner:
 
     # -- internals ------------------------------------------------------
 
+    def _resolve_world_id(self):
+        """Best-effort world slug from the session's marked profile.
+
+        Returns ``None`` when no profile is marked or identity cannot be
+        formed — callers then keep the legacy flat ``state/skills`` path.
+        Never raises.
+        """
+        profile_name = getattr(self._session, "auto_login_profile", None)
+        if not profile_name:
+            return None
+        try:
+            from tw2002_aiclient.session.protocol import _load_profile
+            from tw2002_aiclient import world_identity
+
+            profile, err = _load_profile(profile_name)
+            if profile is None or err is not None:
+                return None
+            return world_identity.world_id_from_profile(profile)
+        except Exception:  # noqa: BLE001
+            return None
+
     def _load(self, name: str):
         """Resolve ``name`` to a validated macro, or refuse with a typed
         code that keeps the loader's four outcomes apart.
@@ -1129,7 +1150,11 @@ class AutoLoopRunner:
         loader's PATHS and per-step defects are not, because those are
         server-side layout the client never had."""
         try:
-            return load_loop(name, state_dir=self._state_dir)
+            return load_loop(
+                name,
+                state_dir=self._state_dir,
+                world_id=self._resolve_world_id(),
+            )
         except LoopNotFound:
             raise AutoLoopRefused(f"loop_not_found:{name}") from None
         except LoopUnreadable:

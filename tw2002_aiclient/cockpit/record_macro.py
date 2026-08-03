@@ -222,6 +222,7 @@ class RecordSession:
         *,
         state_dir=None,
         skills_dir: object = None,
+        world_id=None,
     ) -> Optional[SaveResult]:
         """Finalise the recording and save to the macro store.
 
@@ -239,7 +240,7 @@ class RecordSession:
         ``state_dir`` and ``skills_dir`` are the same injection seams
         :class:`~tw2002_aiclient.loops.recorder.LoopRecorder` exposes
         (tests point them at ``tmp_path``); ``None`` uses the package
-        default (``state/skills/``).
+        default (``state/skills/`` flat, or ``state/world/<id>/skills/`` when ``world_id`` is set).
 
         Never raises.
         """
@@ -256,6 +257,7 @@ class RecordSession:
                 blessed=True,
                 state_dir=state_dir,
                 skills_dir=skills_dir if skills_dir is None else skills_dir,
+                world_id=world_id,
             )
             return SaveResult(path=path, name=recorder.name, steps=len(recorder.steps))
         except (RecorderError, InvalidName, EmptyRecording, NoStartAnchor, Exception):

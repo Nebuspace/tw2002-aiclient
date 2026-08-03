@@ -697,7 +697,10 @@ def cmd_loops(args):
     from tw2002_aiclient.loops.list_view import format_loops_report
     from tw2002_aiclient.loops.store import read_loop_store
 
-    result = read_loop_store(include_drafts=bool(getattr(args, "include_drafts", False)))
+    result = read_loop_store(
+        include_drafts=bool(getattr(args, "include_drafts", False)),
+        world_id=getattr(args, "world_id", None),
+    )
 
     if getattr(args, "json", False):
         # The reader's result verbatim. No ``ok: True`` is synthesized over
@@ -912,7 +915,10 @@ def cmd_record(args):
                 raw_step.get("screen"),
                 confirm_exact=bool(raw_step.get("confirm_exact", False)),
             )
-        path = recorder.save(blessed=blessed)
+        path = recorder.save(
+            blessed=blessed,
+            world_id=getattr(args, "world_id", None),
+        )
     except (RecorderError, TypeError) as e:
         print(f"ERROR: {e}")
         return 1
@@ -1628,7 +1634,7 @@ def build_parser() -> argparse.ArgumentParser:
         # ASCII, deliberately -- same discipline as attach/menumap help.
         help=(
             "list the learned-loop (taught-macro) store -- names, provenance, "
-            "profit metadata; reads state/skills directly, never sends"
+            "profit metadata; reads state/skills (or --world-id path), never sends"
         ),
     )
     sp.add_argument(
@@ -1636,6 +1642,13 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         dest="include_drafts",
         help="also list mined drafts, tagged [DRAFT] (inert until a human promotes them)",
+    )
+    sp.add_argument(
+        "--world-id",
+        default=None,
+        dest="world_id",
+        metavar="SLUG",
+        help="world-scoped store under state/world/<slug>/skills (migrates flat on first read)",
     )
     sp.add_argument("--json", action="store_true", help="machine-parseable JSON output")
     sp.set_defaults(func=cmd_loops)
@@ -1686,6 +1699,13 @@ def build_parser() -> argparse.ArgumentParser:
         "--draft",
         action="store_true",
         help="write to state/skills/_drafts/ (inert) instead of the blessed store",
+    )
+    sp.add_argument(
+        "--world-id",
+        default=None,
+        dest="world_id",
+        metavar="SLUG",
+        help="write under state/world/<slug>/skills (migrates flat on first write)",
     )
     sp.add_argument("--json", action="store_true", help="machine-parseable JSON output")
     sp.set_defaults(func=cmd_record)

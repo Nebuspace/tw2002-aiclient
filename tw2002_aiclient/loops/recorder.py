@@ -407,6 +407,7 @@ class LoopRecorder:
         state_dir=None,
         skills_dir=None,
         drafts_path=None,
+        world_id=None,
     ) -> Path:
         """Write the finished document and return its path.
 
@@ -417,8 +418,16 @@ class LoopRecorder:
         the round trip.
         """
         document = self.document()  # raises EmptyRecording first; nothing is written on a refusal
+        from .store import migrate_flat_loops_to_world
+
+        if skills_dir is None and world_id is not None and str(world_id).strip():
+            migrate_flat_loops_to_world(str(world_id).strip(), state_dir=state_dir)
         if blessed:
-            directory = Path(skills_dir) if skills_dir is not None else loops_dir(state_dir)
+            directory = (
+                Path(skills_dir)
+                if skills_dir is not None
+                else loops_dir(state_dir, world_id=world_id)
+            )
         else:
             directory = (
                 Path(drafts_path)
@@ -426,7 +435,7 @@ class LoopRecorder:
                 else (
                     Path(skills_dir) / DRAFTS_DIRNAME
                     if skills_dir is not None
-                    else drafts_dir(state_dir)
+                    else drafts_dir(state_dir, world_id=world_id)
                 )
             )
         stem = _sanitize_stem(self.name)
