@@ -11,7 +11,7 @@
 
 ## 0. Strategic framing
 
-- **Phase 6 residuals still open** — 087 PARTIAL (trade_driver Auto-haggle OFF); 088 DONE/PARTIAL (FOCUS Layer-2; full priority kernel parked). Phase 7 must not invent Phase-6 execute under PREP cover.
+- **Phase 6 residuals** — 087 LIVE (#360 auto-haggle opt-in default OFF); 088 DONE/PARTIAL (FOCUS Layer-2; full priority kernel parked). Phase 7 must not invent Phase-6 execute under PREP cover.
 - **AI never live-drives.** World/crawl/coach surfaces are substrate + recommend-only; no live AI sender.
 - **What already landed (tip):** world-id helpers · world-model persist · menu crawler · coach engine · partial ledger/transcript paths.
 - **What Phase 7 still owes:** colocated world-id across *all* stores · two-layer game-data store · per-dispatch trace ledger · candidate mining (no LLM) · coach TTY polish residuals as Execute scopes them.
@@ -23,7 +23,7 @@
 
 | Piece | Tip `aad330c` | Notes |
 |---|---|---|
-| World-id keying | **PARTIAL→mostly DONE for loops** | `world_identity.py` · `world_model.py` · `world_stats.py` · `session/sector_explore.py` · `loops/store.py` world path + migrate (PWO-090); other stores may still lag |
+| World-id keying | **DONE/PARTIAL** | loops+migrate LIVE (#362); map/game-data/menu world-scoped; **ledger** still global `state/ledger.jsonl`; **rules** store still flat `state/rules` |
 | World-model persist/read | **LIVE** | `world_model.py` + `tests/test_world_model.py`; state_parser can feed writes |
 | Game-data two-layer store | **LIVE kernel** | `game_data.py` schema+source gate+persist; introspector still MISSING |
 | Menu-map read-only crawl | **LIVE** | `menu/crawler.py` · `crawl_driver.py` · `knowledge.py` + crawler tests; live protocol verb still deferred |
@@ -35,7 +35,7 @@
 
 ## 2. Per-PWO Accept + Proof
 
-### PWO-090 — World-id keying everywhere (HARDEN) — **PARTIAL** (loops store DONE · migrate-on-read)
+### PWO-090 — World-id keying everywhere (HARDEN) — **DONE/PARTIAL** (loops+migrate LIVE #362 · ledger/rules residual)
 - **Depends-on:** 014
 - **Live state:** helpers + world_model/stats/explore use a scheme; colocated-everywhere not proven.
 - **Accept residual:** every durable store keys by the same world-id scheme; loops/macros colocated or explicitly exempted with DECISION.
@@ -89,7 +89,7 @@
 ## 3. Depends-on graph
 
 ```
-090 PARTIAL ──► 091 LIVE
+090 DONE/PARTIAL (loops) ──► 091 LIVE
             ├─► 092 LIVE kernel
             └─► 093 LIVE
 025/041 ──► 094 LIVE ──► 095 LIVE

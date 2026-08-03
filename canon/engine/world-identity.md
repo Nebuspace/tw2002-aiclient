@@ -124,10 +124,10 @@ exists.
 
 # Code divergence
 
-The reborn keying rule is implemented and matches this doc for the map-shaped stores, but two
-consumers enumerated above are **not yet world-keyed** in the current code. These are recorded as
-divergences (DOCS WIN): the target is that every durable store keys on the world identity; where the
-code has not caught up, the doc is the prescription, not the description.
+The reborn keying rule is implemented and matches this doc for the map-shaped stores and the
+taught-macro library (PWO-090 / #362). Remaining divergences below are recorded (DOCS WIN): the
+target is that every durable store keys on the world identity; where the code has not caught up,
+the doc is the prescription, not the description.
 
 - **Macro / loop library world-scoping (PWO-090).** When a `world_id` is supplied, the macro store
   reads/writes `state/world/<world_id>/skills/` (+ `_drafts/`), matching map / game-data / menu-map.
