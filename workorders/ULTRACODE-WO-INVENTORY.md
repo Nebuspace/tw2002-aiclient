@@ -229,13 +229,13 @@ Banked hygiene (not a PWO id): **pty mid-flush settle** — PREP `workorders/WO-
 
 ### Phase 7 — World stores & learning substrate
 
-> PREP: `workorders/WO-P7-090-096-world-substrate-PREP.md` — tip honesty 2026-08-03 (`aad330c`): 091/093/096 LIVE; 090/094 PARTIAL; 092/095 MISSING. Parent: `WO-AUDIT-PHASE789-PREP.md`.
+> PREP: `workorders/WO-P7-090-096-world-substrate-PREP.md` — tip honesty 2026-08-03 (`aad330c`): 091/092(kernel)/093/096 LIVE; 090/094 PARTIAL; 095 MISSING. Parent: `WO-AUDIT-PHASE789-PREP.md`.
 
 | ID | Title | Type | Depends | Goal | Accept | Proof | Canon |
 |----|-------|------|---------|------|--------|-------|-------|
 | PWO-090 | World-id keying everywhere — **PARTIAL** (`world_identity` + stores; not colocated everywhere) | harden | 014 | One key scheme | stores colocated | unit | world-identity |
 | PWO-091 | World-model persist/read — **LIVE** (`world_model.py` + tests) | build | 090·080 | Sector DB grows | files+API | explore tick | world-model |
-| PWO-092 | Game-data two-layer store — **MISSING** (canon only; banked tests deleted) | build | 090 | Semantics≠DATA | no hardcoded stats in product | audit | game-data-store |
+| PWO-092 | Game-data two-layer store — **LIVE kernel** (`game_data.py` source gate + world persist; introspector deferred; tip #092 WO) | build | 090 | Semantics≠DATA | no hardcoded stats in product | audit | game-data-store |
 | PWO-093 | Menu-map read-only crawl — **LIVE** (`menu/crawler` + knowledge; live verb deferred) | build | 090 | Never-commit crawler | sacrificial only | crawl | menu-map… |
 | PWO-094 | Trace ledger append semantics — **PARTIAL** (transcript/actor; no per-dispatch LedgerWriter) | harden | 025·041 | Per-dispatch rows | schema | unit | trace-ledger |
 | PWO-095 | Candidate mining (no LLM) — **MISSING** (miner/analyze banked or archive-only) | build | 094 | Recurring patterns→candidates | dry-run | unit | candidate-mining |
