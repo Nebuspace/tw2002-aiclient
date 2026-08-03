@@ -25,7 +25,7 @@
 |---|---|---|
 | World-id keying | **PARTIAL** | `world_identity.py` · `world_model.py` · `world_stats.py` · `session/sector_explore.py` — not every store imports the scheme (`loops/store.py` still flat) |
 | World-model persist/read | **LIVE** | `world_model.py` + `tests/test_world_model.py`; state_parser can feed writes |
-| Game-data two-layer store | **MISSING** | Canon only; banked `test_game_data*` / `test_game_knowledge*` deleted per `pytest.ini` |
+| Game-data two-layer store | **LIVE kernel** | `game_data.py` schema+source gate+persist; introspector still MISSING |
 | Menu-map read-only crawl | **LIVE** | `menu/crawler.py` · `crawl_driver.py` · `knowledge.py` + crawler tests; live protocol verb still deferred |
 | Trace ledger append | **PARTIAL** | transcript/logging + actor attribution; no per-dispatch LedgerWriter semantic schema on tip |
 | Candidate mining (no LLM) | **MISSING** | `tw mine` / miner tests banked or archive `twclient.analyze` only |
@@ -49,11 +49,12 @@
 - **Proof:** `tests/test_world_model.py` · explore tick write path.
 - **Hazards:** Claiming LIVE ≠ claiming every panel consumes it.
 
-### PWO-092 — Game-data two-layer store (BUILD) — **MISSING**
+### PWO-092 — Game-data two-layer store (BUILD) — **LIVE kernel** (introspector deferred)
 - **Depends-on:** 090
-- **Accept:** Semantics≠DATA layers; no hardcoded ship/port stats in product modules.
-- **Proof:** audit + unit round-trip when module lands.
-- **Hazards:** Do not revive archive BANK tests as product without a port WO.
+- **Live state:** `tw2002_aiclient/game_data.py` — validate/load/persist with `introspected*` source gate; `tests/test_game_data.py` vs mock fixture.
+- **Accept residual:** live/fixture introspector (`introspector.py`) = separate WO (Option B/C).
+- **Proof:** unit refuse non-introspected + fixture round-trip persist.
+- **Hazards:** Do not invent Layer-A numbers; PWO-100 floors stay out of this module.
 
 ### PWO-093 — Menu-map read-only crawl (BUILD) — **LIVE**
 - **Depends-on:** 090
@@ -88,13 +89,13 @@
 
 ```
 090 PARTIAL ──► 091 LIVE
-            ├─► 092 MISSING
+            ├─► 092 LIVE kernel
             └─► 093 LIVE
 025/041 ──► 094 PARTIAL ──► 095 MISSING
 036·091 ──► 096 LIVE
 ```
 
-**Suggested first execute after PREP Accept:** **PWO-092 game-data store** (unblocks honest 100 economics) *or* **PWO-094 ledger semantics** (unblocks 095) — hub picks; both are real MISSING/PARTIAL kernels.
+**Suggested first execute after PREP Accept:** **PWO-094 ledger** *or* Option B introspector *or* **PWO-100** (now unblocked for honesty). 092 kernel LIVE.
 
 ---
 
