@@ -41,7 +41,7 @@ Committable twin: `workorders/AUDIT-OKF-6LENS-BACKLOG.md`. Draft WOs: `workorder
 | A-L1-052-TIP | P1 | ULTRACODE still says PWO-052 PREP while viewport PREP file stamps DONE | `ULTRACODE-WO-INVENTORY.md` | **CLOSED** — inventory row already **DONE** `de47a26` (no stale PREP claim) |
 | A-L1-025-LEDGER | P1 | PWO-025 Accept needs ledger actor tags; daemon still “LedgerWriter deferred” | `session/daemon.py` · future `ledger.py` | **CLOSED** — honesty confirmed PARTIAL: lock+`VALID_SENDERS` LIVE; `LedgerWriter` still deferred (`daemon.py` attach docstring). Product ledger = PWO-094 |
 | A-L1-P6-PREP | P2 | Phase 6–9 lack tip-honest PREP like Phase 5 | `workorders/WO-P6-*-PREP.md` (new) | after 061 entry |
-| A-L1-062-072 | — | Arm/STOP/A·R·T/N5/coverage | (existing PREP) | **064 DONE `af62889`**; **062 EXECUTING**; 066 staged |
+| A-L1-062-072 | — | Arm/STOP/A·R·T/N5/coverage | (existing PREP) | **064 DONE `af62889`**; **062 DONE `b712637`**; **066–071 DONE** (ULTRACODE honesty #335) |
 
 ### L2 — Code↔canon divergence
 | ID | P | Gap | Paths | Depends |
@@ -65,7 +65,7 @@ Committable twin: `workorders/AUDIT-OKF-6LENS-BACKLOG.md`. Draft WOs: `workorder
 ### L4 — Cleanup
 | ID | P | Gap | Paths | Depends |
 |---|---|---|---|---|
-| A-L4-LEGACY-WO | P2 | Root `WO-00…17` map to PWO but look like live queue | `workorders/WO-0*.md` · README | docs |
+| A-L4-LEGACY-WO | P2 | Root `WO-00…17` map to PWO but look like live queue | `workorders/WO-0*.md` · README | **CLOSED** — `WO-AUDIT-LEGACY-WO-INDEX` EXECUTED 2026-07-25; README live-queue banner + LEGACY-SURFACE on WO-00…17 |
 | A-L4-ARCHIVE-CITES | P2 | Many canon cites still archive-only symbols where tip has `cockpit/` | canon surfaces | progressive |
 
 ### L5 — Doc-gaps / design-flaws
@@ -88,7 +88,7 @@ Committable twin: `workorders/AUDIT-OKF-6LENS-BACKLOG.md`. Draft WOs: `workorder
 2. ~~**WO-AUDIT-OKF-052-TIP**~~ (**CLOSED** — ULTRACODE 052 DONE `de47a26`; no false PREP claim)
 3. ~~**WO-AUDIT-P025-LEDGER-HONESTY**~~ (**CLOSED** — tip PARTIAL honesty; LedgerWriter still deferred)
 4. ~~**WO-AUDIT-P028-KEEPALIVE-STATUS**~~ (**CLOSED** — tip D10 DONE; unsafe-screen suppress proven)
-5. **WO-AUDIT-LEGACY-WO-INDEX** (P2 · docs)
+5. ~~**WO-AUDIT-LEGACY-WO-INDEX**~~ (**CLOSED** — EXECUTED 2026-07-25; backlog A-L4 stamped)
 6. **WO-AUDIT-PHASE6-PREP** (P2 · docs PREP; do not invent product scope)
 7. ~~**WO-AUDIT-CTRL-RBRACKET-APP-HOLD**~~ (**Ruled** Batch 2/3 — no-op stay App; CC product pin)
 8. ~~**WO-AUDIT-APP-LABEL-CASE**~~ (**Ruled** Batch 2/3 — chip `APP` docs-win)
