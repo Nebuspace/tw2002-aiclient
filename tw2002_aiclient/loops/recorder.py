@@ -73,22 +73,19 @@ is told. It never originates one.
 
 This is a real, disclosed scope decision, not an oversight. A macro's
 schema (``macros.md`` §Schema) needs an ``input`` field per step -- the
-keystroke itself -- and there is no way to observe "what the human just
-pressed" without being the code that forwards it, or reading it back off a
-capture surface that does not exist yet: ``daemon.py``'s own
-``_handle_attach`` comment records "Ledger/record_attach_keystroke deferred
-(no ledger)" -- nothing today already logs a human's raw keystroke
-alongside its resulting classified screen. Wiring a live capture onto an
-in-progress ``tw attach`` session is exactly "the daemon" this WO's Scope
-excludes, and it touches the control-lock/driving-dispatch machinery X3/X4
-own. So the boundary drawn here is: this module turns an ALREADY-KNOWN
-sequence of (keystrokes, resulting screen) pairs into a validated,
-storable ``Loop`` document, and the CLI verb built on top of it
-(``tw record`` / ``cli.cmd_record``) supplies that sequence from an
-explicit capture manifest -- itself assembled from the EXISTING,
+keystroke itself -- and this module still does not observe live presses:
+it only records what a caller already supplies. Attach keystrokes *do*
+land in the Trace-Ledger now (``record_attach_keystroke`` / #353), but the
+recorder does not consume ledger rows into a macro. Bridging ledger→
+recorder (or wiring live ``tw attach`` capture into this module) remains
+follow-up that touches control-lock/driving-dispatch machinery X3/X4 own
+and is outside this WO's Scope. So the boundary drawn here is: this
+module turns an ALREADY-KNOWN sequence of (keystrokes, resulting screen)
+pairs into a validated, storable ``Loop`` document, and the CLI verb built
+on top of it (``tw record`` / ``cli.cmd_record``) supplies that sequence
+from an explicit capture manifest -- itself assembled from the EXISTING,
 already-shipped ``do``/``screen`` wire verbs (zero ``protocol.py``
-changes) -- rather than from new live-attach instrumentation this WO does
-not build. See ``cmd_record``'s own docstring for the manifest shape and
+changes). See ``cmd_record``'s own docstring for the manifest shape and
 the follow-up work this leaves on the table.
 
 Blessed, not draft -- the design call (Max-ruled 2026-07-26)

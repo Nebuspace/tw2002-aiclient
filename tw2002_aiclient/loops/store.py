@@ -208,9 +208,10 @@ def _row(document: Mapping[str, Any], *, draft: bool) -> dict[str, Any]:
 
     Profit is likewise read, never derived. The archive additionally computed
     a ``demo_profit`` by summing ledger rows tagged with the macro's capture
-    name; there is no ledger in the reborn tree, and an absent or failed
-    ledger read sums to ``0``, which its CLI rendered as ``"+0cr demo"`` -- a
-    definite economic claim manufactured from no data. Not carried.
+    name; the Trace-Ledger exists again (#353/#355) but this listing path
+    still does not sum it, and an absent or failed ledger read summing to
+    ``0`` would render as ``"+0cr demo"`` -- a definite economic claim
+    manufactured from no data. Not carried.
     """
     source = document.get("source")
     row: dict[str, Any] = {
