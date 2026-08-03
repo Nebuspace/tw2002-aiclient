@@ -175,4 +175,4 @@ Pending (not blocking PREP Accept): DOC-GAP-M-FROM-SPECTATE · DOC-GAP-POST-DETA
 
 ## 5. Execute readiness
 
-**PWO-060 DONE** (`2ca3154`). **PWO-061 DONE** — kernel `d4a8829` + entry Accept #2 **`420430d`** · entry-APP **`7c0e882`**. log_note RETIRE `4280d8a`. **Serialize:** **064 DONE `af62889`** → **062 DONE `b712637`** → **066 STAGED**. Also staged ⏳: 063 · 065 · 067–072. **OPEN-003 CLOSED** · ops spectate **RETIRED** · **G2 1/2 DONE `438ef10`** · G2 2/2 in flight. Cursor docs: OKF status-truth only unless hub assigns product.
+**PWO-060 DONE** (`2ca3154`). **PWO-061 DONE** — kernel `d4a8829` + entry Accept #2 **`420430d`** · entry-APP **`7c0e882`**. log_note RETIRE `4280d8a`. **Serialize:** **064 DONE `af62889`** → **062 DONE `b712637`** → **066–071 DONE**. Also staged ⏳: 063 · 065 · 070 · 072 (067–069/071 closed — see ULTRACODE). **OPEN-003 CLOSED** · ops spectate **RETIRED** · **G2 1/2 DONE `438ef10`** · G2 2/2 in flight. Cursor docs: OKF status-truth only unless hub assigns product.
