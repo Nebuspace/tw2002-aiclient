@@ -14,7 +14,7 @@
 - **Phase 6 residuals** — 087 LIVE (#360 auto-haggle opt-in default OFF); 088 DONE/PARTIAL (FOCUS Layer-2; full priority kernel parked). Phase 7 must not invent Phase-6 execute under PREP cover.
 - **AI never live-drives.** World/crawl/coach surfaces are substrate + recommend-only; no live AI sender.
 - **What already landed (tip):** world-id helpers · world-model persist · menu crawler · coach engine · LedgerWriter semantic schema (PWO-094) + world_id row-stamp (#366 Option A).
-- **What Phase 7 still owes:** introspector residual (092) · coach TTY polish residuals as Execute scopes them · any remaining product-caller adopt of ledger wire (094 Accept residual).
+- **What Phase 7 still owes:** introspector residual (092) · coach TTY polish residuals as Execute scopes them. Ledger wire LIVE (094 + daemon attach).
 - **HOLDs:** F2 · G2–G4 · north-star · Human→App · auth/secrets money-path · sacrificial live crawl without Max GO.
 
 ---
@@ -66,7 +66,7 @@
 ### PWO-094 — Trace ledger append semantics (HARDEN) — **LIVE**
 - **Depends-on:** 025 · 041 (satisfied)
 - **Live state:** `tw2002_aiclient/ledger.py` `LedgerWriter` — JSONL rows with `actor∈{app,human}`, required `session_id`, secret→`<redacted>`; `tests/test_ledger.py`.
-- **Accept residual:** daemon/session live-wire of every `do`/`send` choke-point (module + unit Accept met; product callers still adopting).
+- **Accept residual:** none for attach — `protocol._record_ledger` LIVE on do/send/attach; missing ledger file still yields honest COV `?`.
 - **Proof:** `pytest tests/test_ledger.py`.
 - **Hazards:** Secrets never in ledger rows — held via redaction pins.
 
