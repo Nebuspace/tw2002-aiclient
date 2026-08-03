@@ -1,6 +1,6 @@
 # WO-PWO-090-LOOPS-WORLD-SCOPE — Macro / loop library world-scoped paths + migrate-on-read
 
-**Status:** build  
+**Status:** DONE · merged `6772c54` (#362) · tip-honesty stamp after Accept  
 **Hub GO:** 2026-08-03T12:56:30Z (migrate WO required first — DECISION explicit)  
 **Seat:** `impl-aiclient-cursor`  
 **Branch:** `wo/PWO-090-LOOPS-WORLD-SCOPE`

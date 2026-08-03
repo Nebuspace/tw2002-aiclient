@@ -213,7 +213,7 @@ Banked hygiene (not a PWO id): **pty mid-flush settle** — PREP `workorders/WO-
 
 ### Phase 6 — APP autopilot + rule engine (backend-heavy)
 
-> PREP: `workorders/WO-P6-080-088-autopilot-PREP.md` — tip honesty 2026-08-03: 080–086 LIVE; 087 PARTIAL (#337); 088 PARTIAL/gap. Do not invent Phase-5 chrome.
+> PREP: `workorders/WO-P6-080-088-autopilot-PREP.md` — tip honesty 2026-08-03: 080–086 LIVE; 087 LIVE (#337+#360 auto-haggle wire default OFF); 088 DONE/PARTIAL (kernel parked B). Do not invent Phase-5 chrome.
 
 | ID | Title | Type | Depends | Goal | Accept | Proof | Canon |
 |----|-------|------|---------|------|--------|-------|-------|
@@ -229,11 +229,11 @@ Banked hygiene (not a PWO id): **pty mid-flush settle** — PREP `workorders/WO-
 
 ### Phase 7 — World stores & learning substrate
 
-> PREP: `workorders/WO-P7-090-096-world-substrate-PREP.md` — tip honesty 2026-08-03: 091/092(kernel)/093/094/095/096 LIVE; 090 PARTIAL. Parent: `WO-AUDIT-PHASE789-PREP.md`.
+> PREP: `workorders/WO-P7-090-096-world-substrate-PREP.md` — tip honesty 2026-08-03: 090 loops+migrate LIVE (#362); 091/092(kernel)/093/094/095/096 LIVE; ledger world-scope residual. Parent: `WO-AUDIT-PHASE789-PREP.md`.
 
 | ID | Title | Type | Depends | Goal | Accept | Proof | Canon |
 |----|-------|------|---------|------|--------|-------|-------|
-| PWO-090 | World-id keying everywhere — **PARTIAL** (loops store + migrate DONE; other stores may lag) | harden | 014 | One key scheme | stores colocated | unit | world-identity |
+| PWO-090 | World-id keying everywhere — **DONE/PARTIAL** (loops+migrate LIVE #362; ledger global-sink residual; rules store still flat) | harden | 014 | One key scheme | stores colocated | unit | world-identity |
 | PWO-091 | World-model persist/read — **LIVE** (`world_model.py` + tests) | build | 090·080 | Sector DB grows | files+API | explore tick | world-model |
 | PWO-092 | Game-data two-layer store — **LIVE kernel** (`game_data.py` source gate + world persist; introspector deferred; tip #092 WO) | build | 090 | Semantics≠DATA | no hardcoded stats in product | audit | game-data-store |
 | PWO-093 | Menu-map read-only crawl — **LIVE** (`menu/crawler` + knowledge; live verb deferred) | build | 090 | Never-commit crawler | sacrificial only | crawl | menu-map… |
