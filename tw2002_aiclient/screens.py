@@ -2121,8 +2121,8 @@ class PlayShellScreen:
             # `(None, None)` → honest `COV ?`; empty file → `(0, 0)` →
             # `COV ? · App 0 · Hum 0`. Never invent from `status` /
             # `last_sender` (one keystroke ≠ session share). Daemon
-            # per-dispatch attach may still be a residual — until then the
-            # meter stays `?` whenever `state/ledger.jsonl` is missing.
+            # per-dispatch LedgerWriter attach is LIVE; the meter still
+            # stays `?` whenever `state/ledger.jsonl` is missing/empty.
             #
             # Passed as an explicit `(text, tone)` pair, not a bare string:
             # `control_seat._safe_arm_chip` 2-unpacks its argument, so a

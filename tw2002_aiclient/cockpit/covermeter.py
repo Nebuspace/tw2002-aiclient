@@ -64,8 +64,9 @@ did not happen.
 (`screens.py` → `ledger.live_actor_counts` after PWO-094). An absent ledger
 file yields `COV ?` (counts unavailable); a present empty ledger yields
 `COV ? · App 0 · Hum 0`. This composer never opens the ledger itself —
-it stays a pure string builder. Daemon per-dispatch attach of
-`LedgerWriter` may still be residual; missing rows stay honest `?`.
+it stays a pure string builder. Daemon per-dispatch `LedgerWriter` attach
+is LIVE (WO-DAEMON-LEDGER-WRITER-ATTACH / protocol `_record_ledger`); an
+absent or empty ledger file still yields honest `?` / zero counts.
 
 Note that the legacy-actor mapping canon's "Code divergence" section warns
 about (fold legacy `trainer` -> `app`, exclude legacy `ai` from the live
