@@ -1124,7 +1124,8 @@ class PlayShellScreen:
         self.pending_analyze_draft: dict | None = None
         # WO-PLAY-RULE-IDENTITY: typed-entry session (None when idle).
         self._rule_identity: dict | None = None
-        # Test-visible approval attribution (full LedgerWriter is deferred).
+        # Test-visible approval attribution (daemon Trace-Ledger is LIVE for
+        # do/send/attach; this list remains the Play-side approval event sink).
         self.approval_ledger_events: list[dict] = []
 
     def begin_draft_approve(self, draft: object = None) -> None:

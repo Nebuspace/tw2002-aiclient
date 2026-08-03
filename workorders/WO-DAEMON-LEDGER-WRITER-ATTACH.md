@@ -1,8 +1,8 @@
 # WO-DAEMON-LEDGER-WRITER-ATTACH — Daemon send choke → LedgerWriter
 
-> Status: **IN FLIGHT** · seat `impl-aiclient-cursor` · hub GO 2026-08-03T05:46:20Z  
+> Status: **DONE** · origin `b1fa950` (#353) · seat `impl-aiclient-cursor` · Accept 2026-08-03  
 > Type: wire · substrate  
-> Tip base: `2107718` (coverage←ledger LIVE; LedgerWriter module LIVE)
+> Tip base: `2107718` → merged `b1fa950`
 
 ## Goal
 Append actor-tagged Trace-Ledger rows at the daemon send choke so live do/send/attach populate `state/ledger.jsonl` (coverage meter + miner stop seeing empty/absent ledgers).

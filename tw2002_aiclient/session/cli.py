@@ -844,10 +844,10 @@ def cmd_record(args):
     operator presses keys once, live, and the macro falls out the other
     end) is real, useful follow-up work this WO's Scope explicitly excludes
     ("NOT... the daemon") -- it would touch the control-lock/driving-dispatch
-    machinery X3/X4 own, and there is nowhere today that already logs a raw
-    human keystroke alongside its resulting classified screen
-    (``daemon.py``'s own ``_handle_attach`` comment: "Ledger/
-    record_attach_keystroke deferred"). Until that lands, the recipe is::
+    machinery X3/X4 own. Attach keystrokes *do* land in the Trace-Ledger now
+    (WO-DAEMON-LEDGER-WRITER-ATTACH / #353), but the recorder still does not
+    consume them into a macro. Until a follow-up bridges ledger→recorder,
+    the recipe is::
 
         tw screen --json > anchor.json     # BEFORE the first keystroke
         tw do 'P' --json > step0.json      # for each step, in order
