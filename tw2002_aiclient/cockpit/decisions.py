@@ -128,6 +128,10 @@ from __future__ import annotations
 from tw2002_aiclient import chain_status as _chain_status
 from tw2002_aiclient import coach_engine as _coach
 from tw2002_aiclient import coach_kb as _coach_kb
+from tw2002_aiclient.ship_upgrade_decision import (
+    compose_upgrade_decision_lines,
+    upgrade_decision_from_status,
+)
 
 from . import autonomy_keys
 from .focus import _format_ev, _kind_label, _safe_bool, _safe_float
@@ -182,6 +186,22 @@ def _loop_depleting_from_intervention(status: dict) -> bool:
     return False
 
 
+def _upgrade_decision_lines(status: dict, *, width: int) -> list[str]:
+    """PWO-107 Option A: recommend-only UpgradeDecision callouts, or ``[]``.
+
+    Prefer a live TW-30 decision over the generic holds_first strategy card
+    when status carries upgrade inputs / a precomputed decision. Never sends.
+    """
+    try:
+        decision = upgrade_decision_from_status(status)
+        if decision is None:
+            return []
+        lines = compose_upgrade_decision_lines(decision, width=max(0, width))
+        return [_clip(line, width=width) for line in lines]
+    except Exception:  # noqa: BLE001 -- never-raises
+        return []
+
+
 def _coach_lines(status: dict, *, width: int) -> list[str]:
     """Authored coach callouts for ``status``, or ``[]`` when none apply.
 
@@ -189,6 +209,10 @@ def _coach_lines(status: dict, *, width: int) -> list[str]:
     caller renders as the same honest-empty state it would have shown anyway.
     """
     try:
+        # PWO-107 Option A: concrete UpgradeDecision wins over generic cards.
+        upgrade_lines = _upgrade_decision_lines(status, width=width)
+        if upgrade_lines:
+            return upgrade_lines
         kb = _kb()
         if kb is None:
             return []

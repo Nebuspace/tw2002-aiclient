@@ -74,17 +74,19 @@
 - **Proof:** formations catalog tests.
 - **Hazards:** Recommend ≠ auto-warp.
 
-### PWO-106 — Colonization recommend + Genesis confirm (BUILD) — **PARTIAL**
+### PWO-106 — Colonization recommend + Genesis confirm (BUILD) — **DONE/PARTIAL** (Option A seam LIVE)
 - **Depends-on:** 096
-- **Accept residual:** TTY Genesis human one-shot confirm before any App send.
-- **Proof:** TTY/fixture confirm gate.
-- **Hazards:** Never auto-Genesis.
+- **Live state:** `genesis_confirm.py` — armconfirm-reuse default-deny; `genesis_send_if_confirmed` refuse-without-CONFIRM; no production caller yet.
+- **Accept residual:** Option B Genesis adapter + TTY fire path (fresh GO).
+- **Proof:** `tests/test_genesis_confirm.py`.
+- **Hazards:** Never auto-Genesis; never bypass the seam.
 
-### PWO-107 — Ship/holds upgrade recommend (BUILD) — **PARTIAL**
+### PWO-107 — Ship/holds upgrade recommend (BUILD) — **DONE/PARTIAL** (Option A engine LIVE)
 - **Depends-on:** 096
-- **Accept residual:** purchase human-approved decision path (not coach card alone).
-- **Proof:** unit + TTY confirm.
-- **Hazards:** Money-path; do not revive banked tests as proof without port.
+- **Live state:** `ship_upgrade_decision.py` ported; DECISIONS surfaces `UpgradeDecision` when status carries inputs.
+- **Accept residual:** Option B purchase adapter behind armconfirm (fresh GO).
+- **Proof:** `tests/test_ship_upgrade_decision.py`.
+- **Hazards:** Money-path purchase stays HELD; recommend ≠ buy.
 
 ---
 
@@ -95,11 +97,11 @@
 091·083 ──► 103 LIVE
 081 ──► 104 LIVE
 091 ──► 105 LIVE
-096 ──► 106 PARTIAL
-096 ──► 107 PARTIAL
+096 ──► 106 DONE/PARTIAL (Option A)
+096 ──► 107 DONE/PARTIAL (Option A)
 ```
 
-**Suggested first execute after PREP Accept:** **PWO-106 Genesis confirm** or **PWO-107 upgrade engine** — 102 suite-gate CLOSED. Full 100 waits on 092.
+**Suggested first execute after PREP Accept:** Option B halves for 106/107 (propose-first) *or* ungated Phase-8 residual. 102 suite-gate CLOSED. Full 100 waits on 092.
 
 ---
 

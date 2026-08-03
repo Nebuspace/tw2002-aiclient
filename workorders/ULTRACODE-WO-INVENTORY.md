@@ -253,8 +253,8 @@ Banked hygiene (not a PWO id): **pty mid-flush settle** — PREP `workorders/WO-
 | PWO-103 | Exploration frontier BFS — **LIVE** (`explore` + `sector_explore`) | build | 091·083 | Stops on unknown sector UI | live | exploration-policy |
 | PWO-104 | Toll fight/pay/reroute guards — **LIVE** (`fighter_toll_policy`) | build | 081 | NPC only; combat escalates | unit+live | toll-and-defense |
 | PWO-105 | Formations locate/catalog — **LIVE** (`formations.py` + catalog tests) | build | 091 | Recommend only | unit | special-formations |
-| PWO-106 | Colonization recommend + Genesis confirm — **PARTIAL** (recommend/coach; no TTY Genesis one-shot) | build | 096 | Genesis human one-shot | TTY confirm | planet-colonization |
-| PWO-107 | Ship/holds upgrade recommend — **PARTIAL** (coach card only; upgrade engine banked) | build | 096 | Purchase human-approved | TTY | ship-progression |
+| PWO-106 | Colonization recommend + Genesis confirm — **DONE/PARTIAL** (Option A `genesis_confirm` seam LIVE; adapter/send Option B HELD) | build | 096 | Genesis human one-shot | unit seam | planet-colonization |
+| PWO-107 | Ship/holds upgrade recommend — **DONE/PARTIAL** (Option A `ship_upgrade_decision` port + DECISIONS wire LIVE; purchase adapter Option B HELD) | build | 096 | Purchase human-approved | unit | ship-progression |
 
 ### Phase 9 — Doctrine / safety teeth
 
