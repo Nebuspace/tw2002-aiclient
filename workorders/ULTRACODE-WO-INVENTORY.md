@@ -235,7 +235,7 @@ Banked hygiene (not a PWO id): **pty mid-flush settle** — PREP `workorders/WO-
 |----|-------|------|---------|------|--------|-------|-------|
 | PWO-090 | World-id keying everywhere — **DONE** (loops #362 · rules #364 · ledger row-stamp #366 Option A) | harden | 014 | One key scheme | stores colocated | unit | world-identity |
 | PWO-091 | World-model persist/read — **LIVE** (`world_model.py` + tests) | build | 090·080 | Sector DB grows | files+API | explore tick | world-model |
-| PWO-092 | Game-data two-layer store — **LIVE kernel** (`game_data.py` source gate + world persist; introspector deferred; tip #092 WO) | build | 090 | Semantics≠DATA | no hardcoded stats in product | audit | game-data-store |
+| PWO-092 | Game-data two-layer store — **LIVE** (`game_data.py` + fixture/offline `introspector.py` Option A; live crawl Option B HELD) | build | 090 | Semantics≠DATA | no hardcoded stats in product | unit | game-data-store |
 | PWO-093 | Menu-map read-only crawl — **LIVE** (`menu/crawler` + knowledge; live verb deferred) | build | 090 | Never-commit crawler | sacrificial only | crawl | menu-map… |
 | PWO-094 | Trace ledger append semantics — **LIVE** (`ledger.LedgerWriter` JSONL + actor∈{app,human} + secret redaction; unit schema/sample) | harden | 025·041 | Per-dispatch rows | schema | unit | trace-ledger |
 | PWO-095 | Candidate mining (no LLM) — **LIVE** (`miner.py` + `tests/test_miner.py`; inert `_drafts/`) | build | 094 | Recurring patterns→candidates | dry-run | unit | candidate-mining |
