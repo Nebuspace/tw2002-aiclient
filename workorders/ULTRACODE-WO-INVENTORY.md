@@ -203,12 +203,12 @@ Banked hygiene (not a PWO id): **pty mid-flush settle** — PREP `workorders/WO-
 | PWO-063 | Confirm-to-arm dialog — PREP (staged · needs 062) | build | 062 | Arm requires explicit confirm | no silent arm | TTY | mode-line confirm-gate |
 | PWO-064 | STOP banner from reason codes **DONE** 2026-07-25 (`af62889` · catalog-only · `?`/raw) | build | 060·020 | Typed labels only | catalog coverage | inject status | control… catalog |
 | PWO-065 | Intervention → Human keyboard — PREP (staged · needs 064) | harden | 064·061 | STOP hands control | Human can type | live halt | control… escalate |
-| PWO-066 | Teach strip A/R/T visible — **STAGED** (after 062 · serialize `@ 12:02:18Z`) | build | 060 | Affordances shown | labels present | TTY | mode-line A/R/T |
-| PWO-067 | `R` Record macro wire — PREP | build | 066 | Human-init record | macro file/ledger | TTY+cli | macros |
-| PWO-068 | `T` Assign-trigger scaffold — PREP | build | 066 | Bind screen→macro stub | no live drive | TTY | rule-macro-engine |
-| PWO-069 | `A` Analyze on-demand only — PREP | build | 066 | Never auto-fires | press required | TTY | ai-teacher |
+| PWO-066 | Teach strip A/R/T visible — **DONE** (`WO-P5-066.md` paper close · extreme audit 2026-07-27) | build | 060 | Affordances shown | labels present | TTY | mode-line A/R/T |
+| PWO-067 | `R` Record macro wire — **DONE** `9f37f4d` (#89) + Accept#2 `bf390ff` (#90) | build | 066 | Human-init record | macro file/ledger | TTY+cli | macros |
+| PWO-068 | `T` Assign-trigger scaffold — **DONE** `a653b7e` (#88); calm `T` later = Trade Loop (`WO-EXPLORE-TRADE-MODE-SPLIT`) | build | 066 | Bind screen→macro stub | no live drive | TTY | rule-macro-engine |
+| PWO-069 | `A` Analyze on-demand only — **DONE** `22fa4ca` (#91) | build | 066 | Never auto-fires | press required | TTY | ai-teacher |
 | PWO-070 | Analyze draft → human approve — PREP | build | 069 | Draft not live | approval gate | TTY/cli | ai-teacher · doctrine |
-| PWO-071 | Operate-the-app cluster (N5) — PREP | build | 060 | Pause/resume/stop taught run | controls work | TTY | mode-line N5 |
+| PWO-071 | Operate-the-app cluster (N5) — **DONE** `11595d8` (#96) | build | 060 | Pause/resume/stop taught run | controls work | TTY | mode-line N5 |
 | PWO-072 | Coverage meter strip — PREP | build | 060·025 | Taught vs escalation share | `?` if unknown | TTY | coverage-metrics |
 
 ### Phase 6 — APP autopilot + rule engine (backend-heavy)
