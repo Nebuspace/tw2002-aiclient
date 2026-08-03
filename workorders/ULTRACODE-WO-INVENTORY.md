@@ -209,7 +209,7 @@ Banked hygiene (not a PWO id): **pty mid-flush settle** — PREP `workorders/WO-
 | PWO-069 | `A` Analyze on-demand only — **DONE** `22fa4ca` (#91) | build | 066 | Never auto-fires | press required | TTY | ai-teacher |
 | PWO-070 | Analyze draft → human approve — PREP | build | 069 | Draft not live | approval gate | TTY/cli | ai-teacher · doctrine |
 | PWO-071 | Operate-the-app cluster (N5) — **DONE** `11595d8` (#96) | build | 060 | Pause/resume/stop taught run | controls work | TTY | mode-line N5 |
-| PWO-072 | Coverage meter strip — **LIVE** (composer + `live_actor_counts` wire; daemon attach may still be residual) | build | 060·025 | Taught vs escalation share | `?` if unknown | TTY | coverage-metrics |
+| PWO-072 | Coverage meter strip — **LIVE** (composer + `live_actor_counts` wire; daemon LedgerWriter attach LIVE) | build | 060·025 | Taught vs escalation share | `?` if unknown | TTY | coverage-metrics |
 
 ### Phase 6 — APP autopilot + rule engine (backend-heavy)
 
