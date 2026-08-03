@@ -182,3 +182,32 @@ def test_catalog_world_bubble_via_world_model(tmp_path: Path):
     bubbles = [f for f in cat.formations if f.kind == "bubble"]
     assert len(bubbles) == 1
     assert bubbles[0].entrance == 10
+
+
+def test_one_way_warp_not_genesis():
+    sectors = [
+        {"sector_id": 1, "warps": [2]},
+        {"sector_id": 2, "warps": [3]},
+        {"sector_id": 3, "warps": [2]},
+    ]
+    cat = formations.formations_from_sectors(sectors)
+    assert cat is not None
+    ones = [f for f in cat.formations if f.kind == "one_way"]
+    assert any(f.sectors == (1, 2) for f in ones)
+    assert all(f not in cat.genesis_candidates for f in ones)
+    items = formations.panel_items_from_catalog(cat)
+    assert any(i["name"] == "One-way 1→2" for i in items)
+
+
+def test_warp_sink_not_genesis():
+    sectors = [
+        {"sector_id": 1, "warps": [2, 4]},
+        {"sector_id": 2, "warps": [1]},
+        {"sector_id": 4, "warps": []},
+    ]
+    cat = formations.formations_from_sectors(sectors)
+    assert cat is not None
+    sinks = [f for f in cat.formations if f.kind == "warp_sink"]
+    assert any(4 in f.sectors for f in sinks)
+    assert all(f not in cat.genesis_candidates for f in sinks)
+    assert len(cat.formations) > len(cat.genesis_candidates)
