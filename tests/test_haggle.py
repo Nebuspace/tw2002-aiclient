@@ -3,7 +3,7 @@ scripted fake port session, seeded from real captured haggle exchanges
 against twgs.test.example (2026-07-19, see haggle.py's module
 docstring for the raw transcripts these numbers come from)."""
 
-from twclient.haggle import HaggleOutcome, run_haggle
+from tw2002_aiclient.session.haggle import HaggleOutcome, run_haggle
 
 
 class FakePortSession:
