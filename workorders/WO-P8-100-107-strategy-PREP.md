@@ -11,7 +11,7 @@
 
 ## 0. Strategic framing
 
-- **Phase 7 gaps block some Phase-8 Accepts** — notably 100 depends on 092 (game-data) which is MISSING; economics numbers today live in adapter/coach data.
+- **Phase 7 residuals** — 092 LIVE kernel (introspector deferred); 100 LIVE on tip. Do not invent introspector under 100 cover.
 - **Human-approved only.** Strategy modules recommend / rank / STOP; purchases and Genesis remain human one-shots.
 - **What already landed (tip):** chains/trade_adapter · trade_driver · explore BFS · fighter toll policy · formations catalog · coach cards for genesis/holds.
 - **What Phase 8 still owes:** colonization confirm TTY · ship-upgrade decision engine (100+114 LIVE).
@@ -29,8 +29,8 @@
 | Exploration frontier BFS | **LIVE** | `explore.py` · `session/sector_explore.py` + tests |
 | Toll fight/pay/reroute | **LIVE** | `session/fighter_toll_policy.py` + tests |
 | Formations locate/catalog | **LIVE** | `formations.py` · `world_stats.py` · `tests/test_formations_catalog.py` (WO-FORMATIONS-CATALOG-PORT) |
-| Colonization + Genesis confirm | **PARTIAL** | `formations.recommend_genesis` · coach `dead_end_planet` — no TTY Genesis one-shot gate |
-| Ship/holds upgrade recommend | **PARTIAL** | coach `holds_first` + shipyard trigger tests; no TW-30 upgrade engine (`test_ship_upgrade_decision` banked) |
+| Colonization + Genesis confirm | **DONE/PARTIAL** | Option A `genesis_confirm` seam LIVE (#368); Genesis adapter/send Option B HELD |
+| Ship/holds upgrade recommend | **DONE/PARTIAL** | Option A `ship_upgrade_decision` + DECISIONS wire LIVE (#368); purchase adapter Option B HELD |
 
 ---
 
@@ -93,7 +93,7 @@
 ## 3. Depends-on graph
 
 ```
-092 MISSING ──► 100 PARTIAL ──► 101 LIVE ──► 102 LIVE
+092 LIVE kernel ──► 100 LIVE ──► 101 LIVE ──► 102 LIVE
 091·083 ──► 103 LIVE
 081 ──► 104 LIVE
 091 ──► 105 LIVE
