@@ -13,8 +13,9 @@ on the wire (WO-AUDIT-F5-TYPE-NAME). It is not part of the run-dir contract
 Ported from `archive/pre-rebirth-2026-07-23/code/twclient/daemon.py`
 (WO-P2-020, Wave-3 + WO-P2-025 control-lock wire + WO-P2-027 SessionGuardian
 D9 reconnect/replay + WO-P2-G4-X4 background loop player). Still cut vs
-archive: `LedgerWriter`, `SkillRecorder`, `FrameRecorder` (`ledger.py`,
-`frame_recorder.py`, `autopilot.py`); the archive's `loop_player.py` is
+archive: `SkillRecorder`, `FrameRecorder` (`frame_recorder.py`,
+`autopilot.py`); `LedgerWriter` is LIVE (WO-DAEMON-LEDGER-WRITER-ATTACH).
+The archive's `loop_player.py` is
 re-rooted as `loops/player.py` (X3) driven by `session/autoloop.py` (X4),
 one pass per start rather than a bounded cycle loop. Guardian D10 keepalive
 stays stubbed until WO-P2-028. Live verbs: `ensure`/`status`/`screen`/`stop`
@@ -44,7 +45,8 @@ from .stardock_hold import StardockHoldRunner
 from .control_lock import ControlLock, ControlModeConflict
 from .credentials import get_password
 from .guardian import SessionGuardian
-from .protocol import _save_password, dispatch
+from ..ledger import LedgerWriter
+from .protocol import _save_password, dispatch, record_attach_keystroke
 from .session import Session
 from .watch import WatchHub
 
@@ -361,7 +363,9 @@ class CommandHandler(socketserver.StreamRequestHandler):
         each subsequent line is one raw keystroke frame `{"key": "..."}`
         forwarded via `session.send_raw(..., control_lock=..., sender=
         "human")`. Release on any exit so a crashed attach cannot wedge
-        MODE_HUMAN. LedgerWriter / record_attach_keystroke deferred (no ledger).
+        MODE_HUMAN. Each keystroke also appends a Trace-Ledger row via
+        `record_attach_keystroke` (actor=human; secret from
+        `session.last_sent_secret`).
         """
         lock = self.server.control_lock
         session = self.server.session
@@ -435,7 +439,16 @@ class CommandHandler(socketserver.StreamRequestHandler):
                     # costume, phantom `human> ` row and all.
                     self._respond({"ok": False, "error": "empty_key"})
                     continue
+                pre_text = session.render_text(session.render())
                 session.send_raw(data, control_lock=lock, sender="human")
+                # Same secret decision as the transcript sink (send_raw).
+                record_attach_keystroke(
+                    self.server,
+                    session,
+                    pre_text,
+                    session.last_sent,
+                    session.last_sent_secret,
+                )
                 self._respond({"ok": True})
         except (BrokenPipeError, ConnectionResetError, OSError):
             pass
@@ -669,6 +682,8 @@ def main(argv=None):
     server.guardian = guardian
     server.watch_hub = watch_hub
     server.error_log = error_log
+    # WO-DAEMON-LEDGER-WRITER-ATTACH / PWO-094: Trace-Ledger for do/send/attach.
+    server.ledger = LedgerWriter()
     # WO-P2-025: mode + active-driver slot (replaces the earlier ensure-only
     # `threading.Lock` drive_lock). Eager so every request sees one lock;
     # protocol `_driving_dispatch` uses acquire_driver/release_driver.
