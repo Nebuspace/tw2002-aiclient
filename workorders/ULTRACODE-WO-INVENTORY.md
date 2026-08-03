@@ -243,13 +243,13 @@ Banked hygiene (not a PWO id): **pty mid-flush settle** — PREP `workorders/WO-
 
 ### Phase 8 — Strategy as taught behaviors (human-approved)
 
-> PREP: `workorders/WO-P8-100-107-strategy-PREP.md` — tip honesty 2026-08-03: 101/103/104/105 LIVE; 100/102/106/107 PARTIAL. Do not invent 092 under 100 cover.
+> PREP: `workorders/WO-P8-100-107-strategy-PREP.md` — tip honesty 2026-08-03: 101/102/103/104/105 LIVE; 100/106/107 PARTIAL. Do not invent 092 under 100 cover.
 
 | ID | Title | Type | Depends | Goal | Accept | Proof | Canon |
 |----|-------|------|---------|------|--------|-------|-------|
 | PWO-100 | Port economics params — **PARTIAL** (adapter/coach numbers; no standalone module; blocked on 092) | build | 092 | Hypothesis-tagged numbers | tags present | unit | port-economics |
 | PWO-101 | Trade loop define/rank — **LIVE** (`chains` + `trade_adapter` + tests) | build | 100·081 | Credits/turn ranking | unit | trade-loops |
-| PWO-102 | Trade loop run + depletion STOP — **PARTIAL** (`trade_driver` present; suite ignores driver tests) | build | 101·083 | STOP on depletion | live/fixture | trade-loops |
+| PWO-102 | Trade loop run + depletion STOP — **LIVE** (`trade_driver` + suite `test_trade_driver` incl. depleted STOP; tip 2026-08-03) | build | 101·083 | STOP on depletion | live/fixture | trade-loops |
 | PWO-103 | Exploration frontier BFS — **LIVE** (`explore` + `sector_explore`) | build | 091·083 | Stops on unknown sector UI | live | exploration-policy |
 | PWO-104 | Toll fight/pay/reroute guards — **LIVE** (`fighter_toll_policy`) | build | 081 | NPC only; combat escalates | unit+live | toll-and-defense |
 | PWO-105 | Formations locate/catalog — **LIVE** (`formations.py` + catalog tests) | build | 091 | Recommend only | unit | special-formations |
