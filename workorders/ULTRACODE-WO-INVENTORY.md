@@ -229,7 +229,7 @@ Banked hygiene (not a PWO id): **pty mid-flush settle** — PREP `workorders/WO-
 
 ### Phase 7 — World stores & learning substrate
 
-> PREP: `workorders/WO-P7-090-096-world-substrate-PREP.md` — tip honesty 2026-08-03: 091/092(kernel)/093/094/096 LIVE; 090 PARTIAL; 095 MISSING. Parent: `WO-AUDIT-PHASE789-PREP.md`.
+> PREP: `workorders/WO-P7-090-096-world-substrate-PREP.md` — tip honesty 2026-08-03: 091/092(kernel)/093/094/095/096 LIVE; 090 PARTIAL. Parent: `WO-AUDIT-PHASE789-PREP.md`.
 
 | ID | Title | Type | Depends | Goal | Accept | Proof | Canon |
 |----|-------|------|---------|------|--------|-------|-------|
@@ -238,7 +238,7 @@ Banked hygiene (not a PWO id): **pty mid-flush settle** — PREP `workorders/WO-
 | PWO-092 | Game-data two-layer store — **LIVE kernel** (`game_data.py` source gate + world persist; introspector deferred; tip #092 WO) | build | 090 | Semantics≠DATA | no hardcoded stats in product | audit | game-data-store |
 | PWO-093 | Menu-map read-only crawl — **LIVE** (`menu/crawler` + knowledge; live verb deferred) | build | 090 | Never-commit crawler | sacrificial only | crawl | menu-map… |
 | PWO-094 | Trace ledger append semantics — **LIVE** (`ledger.LedgerWriter` JSONL + actor∈{app,human} + secret redaction; unit schema/sample) | harden | 025·041 | Per-dispatch rows | schema | unit | trace-ledger |
-| PWO-095 | Candidate mining (no LLM) — **MISSING** (miner/analyze banked or archive-only) | build | 094 | Recurring patterns→candidates | dry-run | unit | candidate-mining |
+| PWO-095 | Candidate mining (no LLM) — **LIVE** (`miner.py` + `tests/test_miner.py`; inert `_drafts/`) | build | 094 | Recurring patterns→candidates | dry-run | unit | candidate-mining |
 | PWO-096 | Coaching tips read-only — **LIVE** (`coach_engine` + KB + decisions) | build | 036·091 | Options never act | TTY | coaching-engine |
 
 ### Phase 8 — Strategy as taught behaviors (human-approved)

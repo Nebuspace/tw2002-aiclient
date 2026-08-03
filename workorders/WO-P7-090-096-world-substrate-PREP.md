@@ -28,7 +28,7 @@
 | Game-data two-layer store | **LIVE kernel** | `game_data.py` schema+source gate+persist; introspector still MISSING |
 | Menu-map read-only crawl | **LIVE** | `menu/crawler.py` · `crawl_driver.py` · `knowledge.py` + crawler tests; live protocol verb still deferred |
 | Trace ledger append | **PARTIAL** | transcript/logging + actor attribution; no per-dispatch LedgerWriter semantic schema on tip |
-| Candidate mining (no LLM) | **MISSING** | `tw mine` / miner tests banked or archive `twclient.analyze` only |
+| Candidate mining (no LLM) | **LIVE** | `tw2002_aiclient/miner.py` + `tests/test_miner.py` (PWO-095) |
 | Coaching tips read-only | **LIVE** | `coach_engine.py` · `coach_kb.py` · `data/coach/*` · cockpit decisions + tests |
 
 ---
@@ -70,11 +70,12 @@
 - **Proof:** `pytest tests/test_ledger.py`.
 - **Hazards:** Secrets never in ledger rows — held via redaction pins.
 
-### PWO-095 — Candidate mining no LLM (BUILD) — **MISSING**
+### PWO-095 — Candidate mining no LLM (BUILD) — **LIVE**
 - **Depends-on:** 094
-- **Accept:** recurring patterns → candidates dry-run; no LLM required.
-- **Proof:** unit dry-run.
-- **Hazards:** Archive `twclient.analyze` is not the reborn miner.
+- **Live state:** `tw2002_aiclient/miner.py` — sliding-window ledger mine → inert `_drafts/` JSON; CLI dry-run.
+- **Accept residual:** `tw mine` console verb wiring is optional follow-up (module CLI proves Accept).
+- **Proof:** `tests/test_miner.py` · `python -m tw2002_aiclient.miner`.
+- **Hazards:** Ranks proposals only — never scores a live action / never sends.
 
 ### PWO-096 — Coaching tips read-only (BUILD) — **LIVE**
 - **Depends-on:** 036 · 091
@@ -91,11 +92,11 @@
 090 PARTIAL ──► 091 LIVE
             ├─► 092 LIVE kernel
             └─► 093 LIVE
-025/041 ──► 094 LIVE ──► 095 MISSING
+025/041 ──► 094 LIVE ──► 095 LIVE
 036·091 ──► 096 LIVE
 ```
 
-**Suggested first execute after PREP Accept:** **PWO-095** mining *or* Option B introspector. 092/094 LIVE.
+**Suggested first execute after PREP Accept:** Option B introspector *or* next ungated Phase-7 residual. 092/094/095 LIVE.
 
 ---
 
