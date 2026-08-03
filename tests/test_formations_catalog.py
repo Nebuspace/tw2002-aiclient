@@ -211,3 +211,23 @@ def test_warp_sink_not_genesis():
     assert any(4 in f.sectors for f in sinks)
     assert all(f not in cat.genesis_candidates for f in sinks)
     assert len(cat.formations) > len(cat.genesis_candidates)
+
+
+def test_write_membership_stamps_canon_tags(tmp_path: Path):
+    world_model.upsert_sector(
+        WORLD, {"sector_id": 5, "warps": [6]}, state_dir=tmp_path
+    )
+    world_model.upsert_sector(
+        WORLD, {"sector_id": 6, "warps": [5, 7]}, state_dir=tmp_path
+    )
+    world_model.upsert_sector(
+        WORLD, {"sector_id": 7, "warps": [6]}, state_dir=tmp_path
+    )
+    cat = formations.catalog_world(WORLD, state_dir=tmp_path)
+    assert any(f.kind == "dead_end" for f in cat.formations)
+    rec5 = world_model.get_sector(WORLD, 5, state_dir=tmp_path)
+    assert rec5 is not None
+    assert "dead-end" in (rec5.get("formation_membership") or [])
+    mmap = formations.membership_map(cat)
+    assert 5 in mmap and "dead-end" in mmap[5]
+    assert formations.recommend_genesis(cat) == list(cat.genesis_candidates)

@@ -222,6 +222,7 @@ class WorldStats:
             from tw2002_aiclient.formations import (
                 formations_from_sectors,
                 panel_items_from_catalog,
+                write_membership,
             )
 
             kwargs = {}
@@ -241,6 +242,11 @@ class WorldStats:
         self._genesis_count = len(catalog.genesis_candidates)
         self._formations_panel = {"items": panel_items_from_catalog(catalog)}
         self._formations_seen = True
+        # Canon writeback: stamp formation_membership on mapped sectors.
+        try:
+            write_membership(str(world_id), catalog, state_dir=state_dir)
+        except Exception:  # noqa: BLE001 — never break status refresh
+            pass
 
     def _refresh_has_port(
         self,
