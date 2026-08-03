@@ -22,6 +22,7 @@ from tw2002_aiclient.cockpit import chain_bubbles as cockpit_chain_bubbles
 from tw2002_aiclient.cockpit import chains as cockpit_chains
 from tw2002_aiclient.cockpit import control_seat as cockpit_control_seat
 from tw2002_aiclient.cockpit import covermeter as cockpit_covermeter
+from tw2002_aiclient.ledger import live_actor_counts
 from tw2002_aiclient.cockpit import reflex_controls as cockpit_reflex_controls
 from tw2002_aiclient.cockpit import rules_library as cockpit_rules_library
 from tw2002_aiclient.cockpit import decisions as cockpit_decisions
@@ -2113,25 +2114,14 @@ class PlayShellScreen:
             # which already reads this SAME shared `status` snapshot and
             # `now_val`, not a second poll).
             #
-            # WO-P5-072: the coverage meter — App-vs-Human live share.
-            #
-            # The counts are passed as `None` because THERE IS NO SOURCE FOR
-            # THEM ON TIP, not as a placeholder someone should fill with a
-            # plausible number. PWO-025 is PARTIAL: the control lock and
-            # `VALID_SENDERS` are live, but `LedgerWriter` / the attach
-            # keystroke ledger are still deferred in `session/daemon.py`, so
-            # nothing in this tree records the per-send `actor` rows the
-            # metric counts. `compose_coverage_meter` therefore renders
-            # `COV ?` here on every draw, which is canon's required reading
-            # ("Honest `?` when shares unknown — never invent",
-            # `canon/engine/coverage-metrics.md`).
-            #
-            # When the ledger lands, ONLY this call changes — two counts
-            # replace the two `None`s and the rest of the chain is already
-            # correct. Deliberately NOT derived from `status`: the daemon's
-            # status payload carries no coverage block, and synthesising one
-            # from `last_sender` would report the most recent keystroke as
-            # if it were a session-wide share.
+            # WO-P5-072 / WO-WIRE-COVERAGE-LEDGER-COUNTS: coverage meter
+            # App-vs-Human share from the trace ledger (PWO-094 `LedgerWriter`
+            # rows). Counts come from `live_actor_counts` — absent file →
+            # `(None, None)` → honest `COV ?`; empty file → `(0, 0)` →
+            # `COV ? · App 0 · Hum 0`. Never invent from `status` /
+            # `last_sender` (one keystroke ≠ session share). Daemon
+            # per-dispatch attach may still be a residual — until then the
+            # meter stays `?` whenever `state/ledger.jsonl` is missing.
             #
             # Passed as an explicit `(text, tone)` pair, not a bare string:
             # `control_seat._safe_arm_chip` 2-unpacks its argument, so a
@@ -2139,9 +2129,12 @@ class PlayShellScreen:
             # characters, split into text and tone) — a failure that would
             # look identical to "the meter didn't fit".
             try:
+                app_n, human_n = live_actor_counts(
+                    getattr(self, "ledger_path", None)
+                )
                 meter_chip = (
                     cockpit_covermeter.compose_coverage_meter(
-                        app=None, human=None, unicode_ok=uok
+                        app=app_n, human=human_n, unicode_ok=uok
                     ),
                     cockpit_covermeter.METER_TONE,
                 )

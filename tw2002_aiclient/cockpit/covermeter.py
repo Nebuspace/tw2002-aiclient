@@ -60,14 +60,12 @@ A zero-keystroke window must never render `COV 0%`. That would state that
 the app carried none of the driving, which is a claim about a session that
 did not happen.
 
-**On tip this widget renders `COV ?` in the live product, always.** There is
-no ledger in the tree (`PWO-025` is PARTIAL -- the lock and `VALID_SENDERS`
-are live, but `LedgerWriter` / the attach ledger are still deferred in
-`session/daemon.py`), so nothing can supply the counts. That is the
-canon-mandated outcome -- "Honest `?` when shares unknown -- never invent"
--- and not a placeholder to be filled with a plausible-looking number. When
-the ledger lands, the counts arrive through this module's existing keyword
-arguments and nothing here changes.
+**Counts arrive via keyword arguments** from the product draw path
+(`screens.py` → `ledger.live_actor_counts` after PWO-094). An absent ledger
+file yields `COV ?` (counts unavailable); a present empty ledger yields
+`COV ? · App 0 · Hum 0`. This composer never opens the ledger itself —
+it stays a pure string builder. Daemon per-dispatch attach of
+`LedgerWriter` may still be residual; missing rows stay honest `?`.
 
 Note that the legacy-actor mapping canon's "Code divergence" section warns
 about (fold legacy `trainer` -> `app`, exclude legacy `ai` from the live
