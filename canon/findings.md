@@ -157,7 +157,7 @@ Source tip at audit: `922739b`. Product fixes: F1 DONE `7e13b7d` · F2/F3/F4 in 
 | ID | Gap | Tip reality |
 |---|---|---|
 | SESSION-F6-TRANSCRIPT-ORDER | `connection.py` / `session.py` / `_send_raw`+TX-IAC log-AFTER `sendall`; fail path type/phrase only | **DONE** origin `a33825a` (orphan preserve `c21cd1c` — do not rebuild) — scope includes `_send_raw`/TX-IAC, not only the two banked files |
-| SESSION-F7-STATUS-DAEMON-RUNNING | `cli.py` `cmd_status` stamps `daemon_running: True` over failed round-trip (PID reuse) | **BANKED** — exit code stays honest; `--json` self-contradicts · MISSING-TESTS MT-03 |
+| SESSION-F7-STATUS-DAEMON-RUNNING | `cli.py` `cmd_status` stamps `daemon_running: True` over failed round-trip (PID reuse) | **DONE** tip `b2ef693` · `WO-MT-03-STATUS-DAEMON-RUNNING` — `daemon_running` follows round-trip `ok`; failed RT sets `status_unreachable` + rc 1; pinned by `tests/test_cli_status_daemon_running_honesty.py` |
 | SESSION-F8-WATCH-FRAME-GAP | `cli.py` `tw watch` swallows unparseable frames; `--frames N` counts only parsed | **BANKED** — invisible gap on corruption · MISSING-TESTS MT-04 |
 | SESSION-AUDIT-COVERAGE-GAP | `classify.py` + companions (`credentials` · `env` · `iac` · `terminal` · `player_bank`) | **REPORT LANDED** — `audit/session-classify-audit-coverage-20260726.md` (classify end-to-end; companions scoped-next). Prior "634 lines / only secret-prompt tests" wording was **stale**. Residuals C-01…C-07 banked as suggested WOs. MT-11 restated. |
 | SESSION-F5-INTERNAL-ERROR-STR | `daemon.py` widest catch `internal_error:{e}` vs type-name-only siblings | **Ruled (A)** Max `@ 14:28:33Z` — wire type-name-only + local traceback; **DONE** tip via `WO-AUDIT-F5-TYPE-NAME` |
