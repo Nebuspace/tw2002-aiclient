@@ -4,11 +4,12 @@
 ``status["focus"]["candidates"]`` and never ranks. This module is the
 producer. It never sends, never arms, and never invents a money-path.
 
-Canon: `canon/engine/priority-engine.md` Layer 2 — FOCUS. Kinds mirror the
-engine vocabulary (``run_chain`` / ``explore`` / ``upgrade``). Sort:
-ungated by ``ev_per_turn`` descending, gated last. The composer trusts
-this order. This is **not** the full 13-objective priority-engine kernel
-(catalog / RT / stay-vs-leave) — that remains a parked follow-on.
+Canon: `canon/engine/priority-engine.md` Layer 2 — FOCUS + boolean-weight
+overlay. Kinds mirror the engine vocabulary (``run_chain`` / ``explore`` /
+``upgrade``). Sort: unmet prerequisite weight ``(0, weight)`` above action EV
+``(1, ev)``; gated last. The composer trusts this order. This is **not** the
+full 13-objective priority-engine kernel (RT / stay-vs-leave) — that remains
+a parked follow-on.
 """
 
 from __future__ import annotations
@@ -23,6 +24,10 @@ FOCUS_KEY = "focus"
 # Canon ``EXPLORE_BASELINE_EV`` — explore stays visible so FOCUS is never
 # an empty suggestion list when the map still has work (suggestion only).
 EXPLORE_BASELINE_EV = 0.01
+
+# Canon weight ladder (priority-engine.md objective table) — catalog booleans.
+WEIGHT_SHIP_PRICES = 80
+WEIGHT_HOLD_PRICE = 75
 
 
 def _sector_from_status(status: object) -> object | None:
@@ -70,6 +75,22 @@ def _stardock_known(status: object) -> bool:
     return isinstance(sectors, (list, tuple)) and len(sectors) > 0
 
 
+def _ship_prices_met(status: object) -> bool:
+    if not isinstance(status, dict):
+        return False
+    count = status.get("ship_prices_count")
+    if isinstance(count, bool) or not isinstance(count, int):
+        return False
+    return count > 0
+
+
+def _hold_price_met(status: object) -> bool:
+    if not isinstance(status, dict):
+        return False
+    label = status.get("hold_price_label")
+    return isinstance(label, str) and bool(label.strip())
+
+
 def _priced_chain(chain_scalars: ChainScalars | None, status: object) -> object | None:
     if chain_scalars is None:
         return None
@@ -101,6 +122,22 @@ def recommend_focus_candidates(
     candidates: list[dict] = []
     try:
         status_d = status if isinstance(status, dict) else {}
+        dock_known = _stardock_known(status_d)
+        ships_met = _ship_prices_met(status_d)
+        hold_met = _hold_price_met(status_d)
+
+        # Unmet catalog prerequisites (StarDock known) → weight-boost explore
+        # and ⊘-gate upgrade until the quote exists.
+        overlay_weight: int | None = None
+        upgrade_gate: str | None = None
+        if dock_known:
+            if not ships_met:
+                overlay_weight = WEIGHT_SHIP_PRICES
+                upgrade_gate = "ship prices unknown"
+            elif not hold_met:
+                overlay_weight = WEIGHT_HOLD_PRICE
+                upgrade_gate = "hold price unknown"
+
         chain = _priced_chain(chain_scalars, status_d)
         has_executable = False
         if chain is not None:
@@ -115,12 +152,18 @@ def recommend_focus_candidates(
                         "ev_per_turn": _chain_ev(chain),
                         "gated": False,
                         "gate_reason": None,
+                        "priority_weight": None,
                     }
                 )
 
         # Explore: always a suggestion when there is no executable chain yet,
-        # or StarDock is still unknown (map / landmark work remains).
-        need_explore = (not has_executable) or (not _stardock_known(status_d))
+        # or StarDock is still unknown, or a catalog prereq is unmet (hunt /
+        # price at dock). Overlay weight raises it above EV until satisfied.
+        need_explore = (
+            (not has_executable)
+            or (not dock_known)
+            or (overlay_weight is not None)
+        )
         if need_explore:
             candidates.append(
                 {
@@ -128,30 +171,31 @@ def recommend_focus_candidates(
                     "ev_per_turn": EXPLORE_BASELINE_EV,
                     "gated": False,
                     "gate_reason": None,
+                    "priority_weight": overlay_weight,
                 }
             )
 
         # Upgrade: omit entirely until StarDock is known (Accept #3 — omit).
-        if _stardock_known(status_d):
+        if dock_known:
             empty = _cargo_empty_holds(status_d)
-            hold_label = status_d.get("hold_price_label")
-            hold_known = isinstance(hold_label, str) and bool(hold_label.strip())
-            if empty is None:
+            if upgrade_gate is not None:
+                candidates.append(
+                    {
+                        "kind": "upgrade",
+                        "ev_per_turn": None,
+                        "gated": True,
+                        "gate_reason": upgrade_gate,
+                        "priority_weight": None,
+                    }
+                )
+            elif empty is None:
                 candidates.append(
                     {
                         "kind": "upgrade",
                         "ev_per_turn": None,
                         "gated": True,
                         "gate_reason": "empty holds unknown",
-                    }
-                )
-            elif not hold_known:
-                candidates.append(
-                    {
-                        "kind": "upgrade",
-                        "ev_per_turn": None,
-                        "gated": True,
-                        "gate_reason": "hold price unknown",
+                        "priority_weight": None,
                     }
                 )
             else:
@@ -161,6 +205,7 @@ def recommend_focus_candidates(
                         "ev_per_turn": None,
                         "gated": False,
                         "gate_reason": None,
+                        "priority_weight": None,
                     }
                 )
     except Exception:  # noqa: BLE001
@@ -170,22 +215,22 @@ def recommend_focus_candidates(
 
 
 def _rank_candidates(candidates: list[dict]) -> list[dict]:
-    ungated: list[dict] = []
-    gated: list[dict] = []
-    for c in candidates:
-        if c.get("gated"):
-            gated.append(c)
-        else:
-            ungated.append(c)
+    """Boolean-weight overlay sort: unmet weight → EV → gated."""
 
-    def _ev_key(c: dict) -> tuple:
+    def _sort_key(c: dict) -> tuple:
+        if c.get("gated"):
+            return (2, 0, 0.0)
+        weight = c.get("priority_weight")
+        if isinstance(weight, bool) or not isinstance(weight, int) or weight <= 0:
+            pass
+        else:
+            return (0, -weight, 0.0)
         ev = c.get("ev_per_turn")
         if isinstance(ev, bool) or not isinstance(ev, (int, float)):
-            return (1, 0.0)
-        return (0, -float(ev))
+            return (1, 0, 0.0)
+        return (1, 0, -float(ev))
 
-    ungated.sort(key=_ev_key)
-    return ungated + gated
+    return sorted(candidates, key=_sort_key)
 
 
 class FocusScalars:

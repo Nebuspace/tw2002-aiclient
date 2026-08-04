@@ -654,10 +654,9 @@ def _poll_explore_status(play: PlayShellScreen, *, run_dir) -> bool:
                     status = provider()
                 except Exception:  # noqa: BLE001
                     status = None
-            play.world_stats.refresh(
-                _world_identity.world_id_from_profile(play.profile),
-                status=status,
-            )
+            _wid = _world_identity.world_id_from_profile(play.profile)
+            play.world_stats.refresh(_wid, status=status)
+            play.game_data_stats.refresh(_wid)
         except Exception:  # noqa: BLE001 — count is best-effort; keep the loop
             pass
     return keep_polling
@@ -1152,10 +1151,12 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
     # Both overlays compose by wrapping: each adds only its own keys, each
     # declines to clobber a value the layer beneath already supplied, and each
     # maps a `None` provider to `None`, so the order is not load-bearing.
-    # FOCUS wraps outermost so it sees chain + world scalars already merged.
+    # FOCUS wraps outermost so it sees chain + world + game-data scalars.
     play.status_provider = play.focus_scalars.wrap(
-        play.world_stats.wrap(
-            play.chain_scalars.wrap(_daemon_status_provider(run_dir))
+        play.game_data_stats.wrap(
+            play.world_stats.wrap(
+                play.chain_scalars.wrap(_daemon_status_provider(run_dir))
+            )
         )
     )
     play.status_line = "Ensuring session…"
@@ -1769,10 +1770,9 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                             status = provider()
                         except Exception:  # noqa: BLE001
                             status = None
-                    play.world_stats.refresh(
-                        _world_identity.world_id_from_profile(profile),
-                        status=status,
-                    )
+                    _wid = _world_identity.world_id_from_profile(profile)
+                    play.world_stats.refresh(_wid, status=status)
+                    play.game_data_stats.refresh(_wid)
                 except Exception:  # noqa: BLE001
                     pass
                 try:

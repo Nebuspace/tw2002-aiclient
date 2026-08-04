@@ -1,0 +1,118 @@
+"""Game-data scalars on ``status`` — ship price count + hold quote label.
+
+Canon: ``canon/engine/priority-engine.md`` Layer-1 GOALS keys ``ship_prices_count``
+/ ``hold_price_label``, fed from Layer-B ``game_data`` (capture loop persists;
+this module is the status merge). Off-draw refresh only — same seam as
+``WorldStats`` / ``ChainScalars``.
+
+Empty successful load may emit ``ship_prices_count=0`` (honest "looked, none
+priced yet"). Hold label is omit-until-known (no blank key from an empty
+cargo_holds tuple). Never invents numbers; never raises on the draw path.
+"""
+
+from __future__ import annotations
+
+__all__ = [
+    "GameDataStats",
+    "SHIP_PRICES_COUNT_KEY",
+    "HOLD_PRICE_LABEL_KEY",
+]
+
+SHIP_PRICES_COUNT_KEY = "ship_prices_count"
+HOLD_PRICE_LABEL_KEY = "hold_price_label"
+
+
+def _format_hold_label(cost_per_hold: int) -> str:
+    """Human GOALS detail — matches fixture spelling (``1,200cr``)."""
+    return f"{cost_per_hold:,}cr"
+
+
+class GameDataStats:
+    """Caches Layer-B catalog scalars for GOALS / FOCUS overlay. Never raises."""
+
+    __slots__ = (
+        "_ship_prices_count",
+        "_ships_seen",
+        "_hold_price_label",
+        "_hold_seen",
+    )
+
+    def __init__(self) -> None:
+        self._ship_prices_count: int | None = None
+        self._ships_seen = False
+        self._hold_price_label: str | None = None
+        self._hold_seen = False
+
+    def refresh(
+        self,
+        world_id: object,
+        *,
+        state_dir: object = None,
+    ) -> None:
+        """Re-read ``game_data.json`` for this world. Never raises.
+
+        No on-disk store → leave prior observation (or unseen). An empty
+        successful load may emit ``ship_prices_count=0``.
+        """
+        try:
+            from tw2002_aiclient import game_data as _game_data
+
+            kwargs = {}
+            if state_dir is not None:
+                kwargs["state_dir"] = state_dir
+            path = _game_data.game_data_path(str(world_id), **kwargs)
+            if not path.exists():
+                return
+            data = _game_data.load_world_game_data(str(world_id), **kwargs)
+        except Exception:  # noqa: BLE001
+            return
+        priced = 0
+        try:
+            for ship in data.ships:
+                cost = getattr(ship, "base_cost_credits", None)
+                if isinstance(cost, bool) or not isinstance(cost, int):
+                    continue
+                if cost > 0:
+                    priced += 1
+        except Exception:  # noqa: BLE001
+            return
+        self._ship_prices_count = priced
+        self._ships_seen = True
+        try:
+            holds = data.cargo_holds
+            if holds:
+                cost = getattr(holds[0], "cost_per_hold", None)
+                if isinstance(cost, bool) or not isinstance(cost, int) or cost < 0:
+                    self._hold_seen = False
+                    self._hold_price_label = None
+                else:
+                    self._hold_price_label = _format_hold_label(cost)
+                    self._hold_seen = True
+            else:
+                # Successful load, no quote yet — omit (unknown), do not emit blank.
+                self._hold_seen = False
+                self._hold_price_label = None
+        except Exception:  # noqa: BLE001
+            pass
+
+    def merge(self, status: object) -> dict | None:
+        """Attach cached catalog keys; never mutates input; never clobbers."""
+        if not isinstance(status, dict):
+            return status
+        if not self._ships_seen and not self._hold_seen:
+            return status
+        merged = dict(status)
+        if self._ships_seen and merged.get(SHIP_PRICES_COUNT_KEY) is None:
+            merged[SHIP_PRICES_COUNT_KEY] = self._ship_prices_count
+        if self._hold_seen and merged.get(HOLD_PRICE_LABEL_KEY) is None:
+            merged[HOLD_PRICE_LABEL_KEY] = self._hold_price_label
+        return merged
+
+    def wrap(self, provider):
+        if provider is None:
+            return None
+
+        def _merged():
+            return self.merge(provider())
+
+        return _merged
