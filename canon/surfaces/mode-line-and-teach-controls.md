@@ -65,6 +65,9 @@ The chrome above is now backed by real behavior, not just a rendered `·ON`/`·O
     each port). Label must match behavior (not legacy Assign-Trigger).
   - **`P)ort Trade·ON`** — money gate for Trade Loop **execution** only. It does **not** control
     Explore gather docks (`dock_new_ports` is Explore’s discovery concern, decoupled from P).
+    Play defaults and the deliberate `dock_new_ports` vs `fight_tolls` asymmetry live in
+    [exploration-policy](/strategy/exploration-policy.md) § Play explore flags
+    (`AUDIT-CANON-DRAFT-EXPLORE-FLAGS-ASYMMETRY`).
 - **`C)argo Hold Upgrade·ON` gate a real App-armed auto-fire** for hold-buy when APP-ARMED and the
   toggle is ON (unchanged by the Explore/Trade split). Manual fallbacks remain sovereign.
 - **Trade Loop execution is not silent FOCUS auto-fire during Explore.** Under APP-ARMED +
