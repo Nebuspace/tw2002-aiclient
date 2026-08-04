@@ -61,11 +61,16 @@ Starved — `protocol._status_response` emits top-level `turns_left` / `credits`
 weight-100 gating still does not *require* those scalars before other suggestions (overlay bridge
 covers catalog #4/#5, not the turns/credits boolean).
 
+**2026-08-04 honesty pass (`AUDIT-CANON-FIX-STALE-STARDOCK-LANDMARK-STATUS`):** row 3 is no longer
+Starved — `WO-WM-LANDMARKS-WRITE` landed; `world_model.add_landmark` is called from
+`sector_explore` on StarDock recognition, and `world_stats.WorldStats` merges `stardock_sectors` /
+`stardock_found` onto status for GOALS.
+
 | # | Priority | Type | Weight | Depends on | Status in code (2026-08-04) |
 |---:|---|---|---:|---|---|
 | 1 | Turns & credit count known | Boolean | 100 | — | **Partial** — writers live: `_status_response` emits `turns_left` + `credits` when sticky OUTCOME_READ (`protocol.py`); GOALS Turns/Credits rows consume them. Still omit-until-read (honest `?` before `I`/`observe_*`). FOCUS does not yet weight-gate on unmet #1. |
 | 2 | Current-ship type identified | Boolean | 90 | #1 | Planned — no live current-ship introspection adapter; `ShipSpec`/`PlayerState` exist for scoring but aren't fed live |
-| 3 | StarDock located | Boolean | 85 | explore when unknown | **Starved** — the READER is implemented (`explore.find_landmark_sectors()`), the WRITER never was: no code writes `landmarks[]`, so the lookup returns `[]` however much is explored and GOALS can never show `StarDock @…`. Blocked on `WO-WM-LANDMARKS-WRITE` |
+| 3 | StarDock located | Boolean | 85 | explore when unknown | **Implemented** — writer: `world_model.add_landmark` from explore (`sector_explore`); reader: `explore.find_landmark_sectors` + `WorldStats` → `stardock_sectors`/`stardock_found`; GOALS paints `StarDock @…` when present. Empty landmark scan still omits keys (honest `?`), never invents `stardock_found=False`. |
 | 4 | Cost of other ships known | Boolean | 80 | #3 | Partial — GOALS gated until dock found; catalog not yet on live `WorldSnapshot.ship_catalog` |
 | 5 | Cost of cargo-hold upgrades known | Boolean | 75 | #3 | Partial — GOALS gated until dock found; quote via `get_cargo_hold_price()` when captured |
 | 6 | Obtain fighters (aboard > 0) | Boolean | 73 | #1 (Class-0 at Sol always reachable) | Partial — GOALS shows aboard count + credit-gated status via `afford_fighters()`; buy EXECUTE Planned |
