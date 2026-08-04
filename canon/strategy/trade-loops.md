@@ -61,8 +61,9 @@ for turns-per-warp by ship).
 
 ## Chain execute-floor thresholds — rule-guard inputs
 
-These are code constants (`priority_engine.py`), not game numbers — they gate which taught macros
-are *offerable* and how the earn-vs-search band is chosen:
+These are code constants (`tw2002_aiclient/chains.py` — tip home; archived name `priority_engine.py`
+is not reborn), not game numbers — they gate which taught macros are *offerable* and how the
+earn-vs-search band is chosen:
 
 - **`MIN_CHAIN_LINKS_TO_EXECUTE = 2`** — a chain shorter than two links (a single hop, or empty) is
   discovery-only: it is never offered as an executable earn macro; below it the layer prefers to
@@ -157,7 +158,7 @@ Profit-per-turn ranking [H1, illustrative]:
   Loop Q: +500 cr / 10 turns = 50 cr/turn
   Q earns more per trip but P earns more per turn — P wins on the scorer.
 
-Execute-floor bands (rule-guard inputs, priority_engine.py):
+Execute-floor bands (rule-guard inputs, `chains.py`):
   best chain links   layer behavior
   0–1                discovery-only — not offered as an earn macro; prefer search/explore
   2–3                earn on the known chain; ship upgrade NOT yet prioritized
@@ -216,9 +217,9 @@ trade path are recorded here explicitly:
   the UNVERIFIED floor-price / linear stock-price model deferred to Port Economics.
 - Code module `trade_driver.py` — `run_chain()` end-to-end drive, `should_abort`/`is_armed` gates,
   fresh-render + PALADIN allowlist, `ChainHold("depleted:...")` / `realized_margin_below_floor`.
-- Code module `priority_engine.py` — `MIN_CHAIN_LINKS_TO_EXECUTE=2`,
+- Code module `chains.py` — also owns `MIN_CHAIN_LINKS_TO_EXECUTE=2`,
   `CHAIN_LINKS_PREFER_SEARCH_BELOW=2`, `MIN_CHAIN_LINKS_FOR_SHIP_UPGRADE=4` and the earn-vs-search
-  band.
+  band (constants cited above; tip home is `chains.py`, not archived `priority_engine.py`).
 - Code module `autopilot.py` — the per-tick continuous-EV `SELECT` scorer and
   `EXPLORE_BASELINE_EV = 0.01` (recorded as a reborn divergence).
 - Reimagined from `knowledge/strategies/pair-trade-loops.md` (raw material; re-rooted in the reborn
