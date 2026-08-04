@@ -280,6 +280,10 @@ Max delegated the standing 🧑‍⚖️ parked gates to hub (Samantha). Treat t
 
 **Prefer honest substitute or controlled loud failure over silent content holes.** ASCII mode may use the documented TW-safe substitute table (`+|-/` etc.). Em-dash and other non-encodable glyphs: substitute per table **or** fail the write with a typed/logged error — never drop characters with a successful-looking send. Silent holes are the defect.
 
+**Tip home:** `tw2002_aiclient/session/tty_encode.py` — `substitute_for_tty` / `encode_for_tty` apply the operator-glyph substitute table and retry; still-unencodable → raise `UnicodeEncodeError` for a loud CLI ERROR (never `errors="ignore"`). Module cites this §B / WO-ASCII-ENCODE-HONESTY. Product choke under non-UTF-8 stdout for ★ / em-dash / … on some CLI paths remains **BANKED** as `CLI-ASCII-WRITE-CHOKE` in [findings](findings.md) (STAGED pending Max glyph ruling) — the encode helper is the contract; wiring every writer is separate.
+
+*(Honesty pass `AUDIT-CANON-DRAFT-TTY-GLYPH-TABLE-CROSSREF`, 2026-08-04.)*
+
 ### C — Secrets surfaces (`repr(UnicodeDecodeError)` / `get_password` / stuck-login wire)
 
 **GO rehab:** decode/permission failures → typed redacted errors; **never** put secret or undecoded secret-adjacent bytes into `repr()`, exception strings, CLI JSON, or logs. `get_password` failure → `None` or typed error without payload leak. Stuck-login RX-on-wire stays redacted. Orthogonal to ensure-JSON MT-07 (already separate).
