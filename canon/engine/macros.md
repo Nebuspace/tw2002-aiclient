@@ -249,7 +249,9 @@ noted, not conformed away.
   keystroke-to-step transcription while a session runs. The lane disclosed this as a deliberate,
   correctly-scoped first step and the hub Accepted it as honest; wiring a live `tw attach` session
   directly into the recorder is real, named future work the X6 WO's own scope excluded, not an
-  abandonment of the target above. See [CLI Verb Surface](/architecture/cli-verbs.md)'s
+  abandonment of the target above — tracked as
+  [`WO-AUDIT-BUILD-CLI-LIVE-ATTACH-RECORDER-X6`](../../workorders/WO-AUDIT-BUILD-CLI-LIVE-ATTACH-RECORDER-X6.md).
+  See [CLI Verb Surface](/architecture/cli-verbs.md)'s
   Implementation status for the mirrored note and the exact shipped arguments
   (`tw2002_aiclient/loops/recorder.py`, `cmd_record` in `tw2002_aiclient/session/cli.py`).
 - **The never-auto-action gate defers §A.2's taught-chain exemption — by design, not by omission.**
