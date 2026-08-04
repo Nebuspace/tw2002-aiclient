@@ -25,6 +25,7 @@ from tw2002_aiclient.cockpit import draft_approve as _draft_approve
 from tw2002_aiclient.cockpit import draw as _cockpit_draw
 from tw2002_aiclient.cockpit import explore_flags as _explore_flags
 from tw2002_aiclient.cockpit import live_refresh as _live_refresh
+from tw2002_aiclient import game_data_capture as _game_data_capture
 from tw2002_aiclient.cockpit import record_macro as _record_macro
 from tw2002_aiclient.cockpit import reflex_controls as _reflex_controls
 from tw2002_aiclient.cockpit import rules_library as _rules_library
@@ -1312,6 +1313,9 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
     # chain and sector rows. Per session, so a world that outgrew the chain
     # budget last time is not held against a different profile this time.
     live = _live_refresh.LiveRefresh()
+    # AUDIT-BUILD-GAMEDATA-CAPTURE-LOOP: opportunistic Layer-B persist when
+    # the watch feed already shows a StarDock listing (no crawl/send).
+    gamedata_capture = _game_data_capture.GameDataCapture()
     guard = _DeadTerminalGuard()
     try:
         while True:
@@ -1349,6 +1353,9 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                 # on an unusable host, and that raise belongs inside the
                 # module that promises not to raise.
                 live.tick(play, profile)
+                # Same idle tick: capture shipyard/cargo listings already on
+                # the settle-edge watch event (never-raises; Option B HELD).
+                gamedata_capture.tick(play, profile)
                 continue
             if attach_conn is not None and key != 27:
                 # Attached: canon mode-line-and-teach-controls.md §"`Ctrl-A` — the App↔Human Mode switch"

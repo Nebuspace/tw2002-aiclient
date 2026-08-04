@@ -36,6 +36,7 @@ __all__ = [
     "game_data_path",
     "load_game_data",
     "load_world_game_data",
+    "persist_cargo_hold_row",
     "persist_ship_row",
     "save_world_game_data",
     "validate_cargo_hold_row",
@@ -418,3 +419,30 @@ def persist_ship_row(
         path = game_data_path(world_id, state_dir=state_dir)
         _atomic_write_json(path, game_data_to_dict(updated))
     return ship
+
+
+def persist_cargo_hold_row(
+    world_id: str, row: Mapping[str, Any], *, state_dir: str | Path | None = None
+) -> CargoHoldRow:
+    """Validate + replace the world's singleton cargo-hold quote row.
+
+    StarDock quotes one per-hold price at a time; the store keeps the latest
+    introspected quote (not a multi-row history).
+    """
+    payload = dict(row)
+    if not payload.get("last_verified_ts"):
+        payload["last_verified_ts"] = _now_iso()
+    hold = validate_cargo_hold_row(payload)
+    with _file_lock(game_data_path(world_id, state_dir=state_dir)):
+        data = load_world_game_data(world_id, state_dir=state_dir)
+        updated = GameData(
+            world_id=world_id,
+            ships=data.ships,
+            scanners=data.scanners,
+            transwarp=data.transwarp,
+            items=data.items,
+            cargo_holds=(hold,),
+        )
+        path = game_data_path(world_id, state_dir=state_dir)
+        _atomic_write_json(path, game_data_to_dict(updated))
+    return hold
