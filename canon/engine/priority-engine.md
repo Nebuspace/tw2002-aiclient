@@ -81,7 +81,7 @@ Starved — `WO-WM-LANDMARKS-WRITE` landed; `world_model.add_landmark` is called
 | 10 | Locate special formation for planet placement | Range | 55 | map exploration | Partial — `formations.py` detects dead-ends/bubbles/one-ways/warp-sinks + `genesis_candidates`; no deploy |
 | 11 | Place planet to earn resources | Boolean | 50 | #10 candidate chosen | Planned — genesis deploy excluded from app candidate kinds (human-confirmed one-shot only) |
 | 12 | Map 100% of galaxy | Range (→100%) | 45 | — | Partial — GOALS shows `N/total (pct%)`; `explore.known_graph()` + frontier BFS; galaxy size often unknown until mapped |
-| 13 | Longest trade-loop chain identified | Range | 40 | ports known | Partial — `chains.longest_profit_chain()`; execute floor ≥2 links; ship hull deferred until ≥4 |
+| 13 | Longest trade-loop chain identified | Range | 40 | ports known | Partial — `chains.longest_profit_chain()`; execute floor ≥2 links; ship hull deferred until ≥4 ([Chain execute-floor thresholds](#chain-execute-floor-thresholds-ordering-inputs) · `MIN_CHAIN_LINKS_FOR_SHIP_UPGRADE=4` — short chains fund fighters + holds first; see also [trade-loops](/strategy/trade-loops.md) § thresholds) |
 | — | Sector-based threats (mines/fighters) | Boolean | 35 | sector visited | Implemented — `world_model` persists threats; `route_hazard_for_hop` STOPs / path-excludes on known mines or fighter presence (WO-AUDIT-BUILD-SECTOR-THREAT-FIGHTERS-GUARD-INPUT) |
 
 ### Weight dominates until satisfied
