@@ -178,30 +178,25 @@ A mode-switch example, independent of any escalation:
    whatever screen is now on screen.
 ```
 
-# Code Divergence
+# Code Divergence (resolved)
 
-`control_lock.py` (the daemon's existing control-mode state machine) currently defines
-`MODE_AI_PILOT` as a live-drive mode: the default mode, in which "the AI drives," with
-`do`/`send`/`play`/`replay`/`haggle` verbs dispatching keystrokes while it holds. Under this
-canon, an AI live-drive mode does not exist — the AI never sends a live keystroke, by either of
-the two invariants above. `MODE_AI_PILOT` as a *drive* mode is a direct contradiction of ruled
-canon and is slated for retirement or repurposing: most plausibly as the invocation point for the
-AI teach overlay (an "Analyze" trigger) rather than as a mode that grants send-verb access. This is
-a documentation-only finding — `control_lock.py` is not edited by this concept; the code fix is a
-separate future work order.
+**2026-08-04 honesty pass (`AUDIT-CANON-DRAFT-AI-PILOT-RETIREMENT-STALE`):** tip
+`tw2002_aiclient/session/control_lock.py` defines exactly `{app, human, spectate}` —
+`MODE_APP` / `MODE_HUMAN` / `MODE_SPECTATE`. Pre-rebirth `MODE_AI_PILOT` / `ai_pilot` as a
+live-drive mode is **retired** (do-not-revive). Background LoopPlayer still takes an exclusive
+App hold, but that hold **collapses to mode `app`** — it is not a fourth drive-mode string on
+the wire. Analyze remains a human-invoked teach overlay, never a send-verb grant.
 
-The other three existing modes map cleanly onto this canon:
-
-| `control_lock.py` mode | canon mode |
+| tip `control_lock.py` mode | canon mode |
 |---|---|
+| `app` (`MODE_APP`) | App (taught-screen autopilot; auto_loop hold stays `app`) |
 | `human` (`MODE_HUMAN`) | Human |
-| `auto_loop` (`MODE_AUTO_LOOP`) | App (autopilot) — the background LoopPlayer driving a learned skill solo |
 | `spectate` (`MODE_SPECTATE`) | Spectate |
-| `ai_pilot` (`MODE_AI_PILOT`) | **no canon equivalent as a drive mode** — see above |
+| ~~`ai_pilot` (`MODE_AI_PILOT`)~~ | **retired** — no canon drive-mode equivalent; do not revive |
 
 # Citations
 
 [1] USERDOCS/aiclient_ui.md (mode line + hotkeys sketch)
-[2] canon/log.md 2026-07-23 (AI role ruling)
-[3] twclient/control_lock.py (existing control-mode state machine)
-[4] twclient/intervention_labels.py (enumerated intervention reason-code → human-label map; shared by product adapters and spectate layout)
+[2] canon/log.md 2026-07-23 (AI role ruling) + findings.md §1 (do-not-revive)
+[3] tw2002_aiclient/session/control_lock.py (tip control-mode state machine — `{app, human, spectate}`)
+[4] twclient/intervention_labels.py (enumerated intervention reason-code → human-label map; shared by product adapters and spectate layout; archive/port-source)
