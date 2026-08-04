@@ -188,6 +188,9 @@ class LiveRefresh:
                 except Exception:  # noqa: BLE001 — sector lookup is best-effort
                     status = None
             play.world_stats.refresh(world_id, status=status)
+            gds = getattr(play, "game_data_stats", None)
+            if gds is not None:
+                gds.refresh(world_id)
         except Exception:  # noqa: BLE001
             pass
 

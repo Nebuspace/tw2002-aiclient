@@ -177,10 +177,10 @@ full stop).
 | Boolean met | `(1, action_ev)` | Normal cr/turn ranking of taught behaviors resumes |
 | Range goal | `(0, weight × (1 − progress))` | Partial credit keeps it visible but below hard blockers |
 
-The overlay bridge is **not built yet** — today the catalog booleans surface in GOALS but do not gate
-the FOCUS ranking (open gap). When built, an unmet prerequisite raises the priority of the taught
-behavior that would satisfy it (e.g. "go price ports," "hunt StarDock"), and gates the dependent
-behavior's suggestion with a `⊘` until the prerequisite passes.
+The overlay bridge is **built** (`focus_status.recommend_focus_candidates` +
+`game_data_stats.GameDataStats`): catalog booleans from Layer-B `game_data` merge onto
+`status`, unmet prerequisites raise explore via `(0, weight)` and gate upgrade with `⊘`
+until ship/hold quotes exist. Full 13-objective kernel (RT / stay-vs-leave) remains parked.
 
 ## Two-layer information architecture
 

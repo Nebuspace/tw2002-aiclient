@@ -65,8 +65,8 @@ STARVED_ALLOWLIST: dict[str, tuple[str, str]] = {
     # credits — supplied by protocol._status_response from credits_snapshot
     # (WO-STATUS-CREDITS); distinct from hud.credits which WO-HUD-STATUS-BRIDGE
     # already emitted. fighters_aboard — same pattern (WO-STATUS-FIGHTERS-ABOARD).
-    "ship_prices_count": ("T3", "needs shipyard-screen parsing; gated by stardock_found"),
-    "hold_price_label": ("T3", "needs shipyard-screen parsing; gated by stardock_found"),
+    # ship_prices_count / hold_price_label — supplied by game_data_stats.GameDataStats
+    # (WO-AUDIT-BUILD-SHIPPROG-FOCUS-OVERLAY) from Layer-B game_data.json.
     "fighter_buy_status": ("T3", "needs shipyard-screen parsing"),
     # -- T4: whole nested panel payloads, each its own surface-sized WO.
     "autopilot_trace": ("T4", "whole DECISIONS trace payload; no autopilot emits one yet"),

@@ -64,7 +64,63 @@ def test_focus_upgrade_omitted_when_stardock_unknown():
 
 
 def test_focus_upgrade_gated_when_stardock_known_but_holds_unknown():
+    """Ship/hold quotes unmet → catalog gate (not empty-holds) while StarDock known."""
     status = {"stardock_found": True, "stardock_sectors": [1]}
+    cands = recommend_focus_candidates(status, chain_scalars=ChainScalars())
+    upgrade = next(c for c in cands if c["kind"] == "upgrade")
+    assert upgrade["gated"] is True
+    assert "ship prices" in (upgrade.get("gate_reason") or "")
+
+
+def test_focus_overlay_explore_beats_chain_when_ship_prices_unmet():
+    """Unmet weight-80 ship prices → explore sorts above executable chain EV."""
+    cs = ChainScalars()
+    cs.update(_result(chains_=[_chain([50, 51, 52, 50], cr_per_turn=80.0)]))
+    status = {
+        "hud": {"sector": {"value": 51, "age_s": 0.0}},
+        "stardock_found": True,
+        "stardock_sectors": [1],
+        "ship_prices_count": 0,
+    }
+    cands = recommend_focus_candidates(status, chain_scalars=cs)
+    assert cands[0]["kind"] == "explore"
+    assert cands[0].get("priority_weight") == 80
+    upgrade = next(c for c in cands if c["kind"] == "upgrade")
+    assert upgrade["gated"] is True
+    assert "ship prices" in (upgrade.get("gate_reason") or "")
+    lines = compose_focus_lines(
+        {"focus": {"candidates": cands}}, width=40
+    )
+    assert any("⊘" in ln and "Upgrade" in ln for ln in lines)
+
+
+def test_focus_overlay_clears_when_catalog_met():
+    """Priced ships + hold label → normal EV ranking; upgrade ungated with empty holds."""
+    cs = ChainScalars()
+    cs.update(_result(chains_=[_chain([50, 51, 52, 50], cr_per_turn=80.0)]))
+    status = {
+        "hud": {
+            "sector": {"value": 51, "age_s": 0.0},
+            "cargo": {"value": 3, "age_s": 0.0},
+        },
+        "stardock_found": True,
+        "stardock_sectors": [1],
+        "ship_prices_count": 4,
+        "hold_price_label": "1,200cr",
+    }
+    cands = recommend_focus_candidates(status, chain_scalars=cs)
+    assert cands[0]["kind"] == "run_chain"
+    upgrade = next(c for c in cands if c["kind"] == "upgrade")
+    assert upgrade["gated"] is False
+
+
+def test_focus_upgrade_gated_empty_holds_when_catalog_met():
+    status = {
+        "stardock_found": True,
+        "stardock_sectors": [1],
+        "ship_prices_count": 2,
+        "hold_price_label": "500cr",
+    }
     cands = recommend_focus_candidates(status, chain_scalars=ChainScalars())
     upgrade = next(c for c in cands if c["kind"] == "upgrade")
     assert upgrade["gated"] is True

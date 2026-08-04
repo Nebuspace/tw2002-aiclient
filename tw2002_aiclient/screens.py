@@ -15,6 +15,7 @@ import curses
 from tw2002_aiclient import chain_status as _chain_status
 from tw2002_aiclient import focus_status as _focus_status
 from tw2002_aiclient import world_stats as _world_stats
+from tw2002_aiclient import game_data_stats as _game_data_stats
 from tw2002_aiclient.cockpit import analyze as cockpit_analyze
 from tw2002_aiclient.cockpit import armconfirm as cockpit_armconfirm
 from tw2002_aiclient.cockpit import autoloop_controls as cockpit_autoloop_controls
@@ -971,6 +972,9 @@ class PlayShellScreen:
         # chains-popup branch and explore terminal poll (see app.py); constructed
         # here for the same reason as `chain_scalars`.
         self.world_stats = _world_stats.WorldStats()
+        # WO-AUDIT-BUILD-SHIPPROG-FOCUS-OVERLAY: Layer-B catalog → status
+        # (ship_prices_count / hold_price_label) for GOALS + FOCUS overlay.
+        self.game_data_stats = _game_data_stats.GameDataStats()
         # WO-PRIORITY-ENGINE-FOCUS-WIRE: FOCUS candidates overlay (display
         # only). Bound to chain_scalars so merge can see priced cycles.
         self.focus_scalars = _focus_status.FocusScalars(self.chain_scalars)
