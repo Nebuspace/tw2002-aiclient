@@ -293,11 +293,11 @@ every App-executed keystroke — autopilot, learned-loop playback, auto-haggle a
 a future work order and the full row schema is [the Trace Ledger](/engine/trace-ledger.md)'s to
 carry.
 
-**(2) `MODE_AI_PILOT` as a live-drive mode.** The control-lock still defines an `ai_pilot` mode in
-which "the AI drives." That contradicts the reborn control model. This divergence is **already
-recorded** by [Control & Escalation](/architecture/control-and-escalation.md)'s Code Divergence
-section — it is not restated here; the carrier mechanics above describe the `{app, human}` target
-state.
+**(2) `MODE_AI_PILOT` — retired on tip (2026-08-04).** Tip
+`tw2002_aiclient/session/control_lock.py` keeps only `{app, human, spectate}`. Resolution lives in
+[Control & Escalation](/architecture/control-and-escalation.md) (Code Divergence · resolved);
+carrier mechanics above describe the `{app, human}` live-sender target that tip now matches.
+(`AUDIT-CANON-DRAFT-AI-PILOT-RETIREMENT-STALE`.)
 
 # Citations
 
@@ -309,7 +309,7 @@ one-round-trip settle-return shape
 subscribe/attach lifetime-connections
 [4] twclient/connection.py, iac.py, terminal.py — background reader thread, hand-rolled IAC
 stripping, CP437 80×25 pyte render
-[5] twclient/control_lock.py — the active-driver slot, human-preemption fencing, and mode machine
+[5] tw2002_aiclient/session/control_lock.py — tip active-driver slot, human-preemption fencing, `{app, human, spectate}` modes
 [6] twclient/session.py, protocol.py — the send choke point, boundary redaction across all three
 sinks, and the `{actor, session_id}` ledger tag
 [7] twclient/env.py — the host/port resolution precedence chain
