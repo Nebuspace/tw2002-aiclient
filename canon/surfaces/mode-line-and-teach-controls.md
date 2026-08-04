@@ -36,6 +36,23 @@ A/R/T teach-loop mechanics, the STOP banner's own `teach:` line, and the confirm
   reachable by their existing keys** — only the standing chrome that advertises them on THIS calm
   band changes. The STOP banner's own escalation `teach:` line (`A)nalyze  R)ecord  T)assign`,
   below) is untouched — a different surface, not this calm band.
+
+**Tip token SSOT (do not let chrome and handlers drift).** Calm-band spellings and the keys that
+offer them are owned by tip modules — import the `*_TOKEN` / help strings; do not re-type labels:
+
+| Concern | Module | Load-bearing symbols |
+|---|---|---|
+| Standing calm teachband chrome | `tw2002_aiclient/cockpit/teachband.py` | `compose_teach_band`, `TEACH_TOKENS` (imports below) |
+| Explore / policy / Mode / L·T help | `tw2002_aiclient/cockpit/autonomy_keys.py` | `EXPLORE_TOKEN`, `compose_autonomy_help_lines`, `MODE_HELP` … |
+| Reflex offer (retired from *calm* chrome; key still live) | `tw2002_aiclient/cockpit/reflex_controls.py` | `REFLEX_TOKEN` (`V)reflex`), `REFLEX_OFFER_KEYS`, `compose_reflex_confirm_action` |
+| Loops popup spelling | `tw2002_aiclient/cockpit/chains.py` | `CHAINS_TOKEN` (re-exported as List-Loops on the calm band) |
+
+`teachband` imports `REFLEX_TOKEN` / `EXPLORE_TOKEN` / `CHAINS_TOKEN` so the strip and the key
+handler cannot disagree on a label — same pattern as `panic.PANIC_TOKEN`. A future edit that
+"tidies" a TOKEN string in one module only is a defect.
+
+*(Honesty pass `AUDIT-CANON-DRAFT-TEACH-BAND-CROSSREF`, 2026-08-04.)*
+
 - **CONN moves to the profile/title strip**, beside the host identity, as a slow-flash green `●`
   while connected (offline/unknown stays honest non-green, never a lying pulse) — it no longer
   renders on this bottom control strip.
@@ -504,6 +521,9 @@ The reborn contract above is the target; the current code still carries pre-rebo
 - [trainer-cockpit](/surfaces/trainer-cockpit.md) — renders this cluster and mode line in the frame.
 - [spectate-and-attach](/surfaces/spectate-and-attach.md) — the read-only viewer (no lock) versus the
   live keyboard seat (`tw attach`, crash-safe lock release).
+- Tip calm-band / teach tokens — `cockpit/teachband.py`, `cockpit/autonomy_keys.py`,
+  `cockpit/reflex_controls.py` (`REFLEX_TOKEN`), `cockpit/chains.py` (`CHAINS_TOKEN`) — see
+  **Tip token SSOT** above (`AUDIT-CANON-DRAFT-TEACH-BAND-CROSSREF`).
 - Code modules grounded against: `spectate_app.py` (`_handle_key`, control strip),
   `spectate_layout.py` (`_MODE_BADGES`, `format_mode_badge`, `compose_control_strip`,
   `format_autonomy_counts`, `compose_intervention_strip`), `control_lock.py` (the mode state
