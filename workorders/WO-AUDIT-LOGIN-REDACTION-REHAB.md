@@ -1,9 +1,9 @@
 # WO-AUDIT-LOGIN-REDACTION-REHAB — Port test_login_redaction.py off twclient and un-ignore
 
 > Reconstructed from coord HANDOFF bodies (2026-07-25 backfill).
-> Status: **STAGED** 2026-07-25 · queued behind F5-A + socket-mode + SURROGATE-ASCII Accept/Push · Max: "now-or-soon → hub picks SOON"
+> Status: **DONE** tip `6278c1e` · stamp-corrected `WO-TIP-STAMP-LOGIN-REDACTION-SUITE` (2026-08-04)
 > Type: harden · Priority: P0 · Lens: L3 defined-but-unwired
-> Refs: `tests/test_login_redaction.py` (currently `--ignore`d) · `tw2002_aiclient/session/login.py:58` · `canon/architecture/secrets-and-credentials.md`
+> Refs: `tests/test_login_redaction.py` · `tw2002_aiclient/session/login.py` · `canon/architecture/secrets-and-credentials.md`
 
 ## Goal
 Port `tests/test_login_redaction.py` off `twclient` → `tw2002_aiclient`; keep sentinel + falsification teeth; un-ignore in `pytest.ini` only when green. Prove password never in: return values / `LoginError` / transcript / ledger sinks (same Accept family as module docstring `login.py:58`). Makes `login.py:58`'s written guarantee testable.
