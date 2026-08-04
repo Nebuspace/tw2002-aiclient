@@ -11,7 +11,6 @@ import curses
 
 from tw2002_aiclient import adapters
 from tw2002_aiclient import daemon_lifecycle
-from tw2002_aiclient.cockpit import analyze as _analyze
 from tw2002_aiclient.cockpit import assign_trigger as _assign_trigger
 from tw2002_aiclient.cockpit import autoloop_controls as _autoloop_controls
 from tw2002_aiclient import explore as _explore
@@ -47,7 +46,6 @@ from tw2002_aiclient.session.autoloop import CYCLES_HARD_CEILING
 from tw2002_aiclient.session.trade_chain import (
     DEFAULT_CASH_FLOOR as _TRADE_CASH_FLOOR,
     DEFAULT_TURN_RESERVE as _TRADE_TURN_RESERVE,
-    discovery_blocks_start as _trade_discovery_blocks_start,
 )
 from tw2002_aiclient.session.stardock_hold import (
     DEFAULT_CASH_FLOOR as _HOLD_CASH_FLOOR,
