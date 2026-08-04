@@ -341,10 +341,12 @@ the old "autonomy" naming is the retired autonomy-graduation gauge. The meter's 
 lives in [Coverage Metrics](/engine/coverage-metrics.md); the naming/semantics in the spectate layer
 are recorded as a divergence to be renamed toward App-vs-Human coverage, not silently reconciled.
 
-**`MODE_AI_PILOT` as a live-drive mode.** Attach's `take_human()` fences an in-flight *ai_pilot*
-dispatch — the very live-drive mode the reborn model retires (the AI never sends a live keystroke).
-This is the same divergence already recorded canonically in
-[Control & Escalation](/architecture/control-and-escalation.md); it is referenced here, not restated.
+**`MODE_AI_PILOT` — retired on tip (2026-08-04).** Attach's `take_human()` still fences an
+in-flight App dispatch / auto_loop hold (not an `ai_pilot` mode string — that drive mode is gone
+from tip `tw2002_aiclient/session/control_lock.py`). The AI never sends a live keystroke; live
+senders remain `{app, human}` only. Resolution recorded in
+[Control & Escalation](/architecture/control-and-escalation.md)
+(`AUDIT-CANON-DRAFT-AI-PILOT-RETIREMENT-STALE`).
 
 # Citations
 
@@ -352,9 +354,9 @@ This is the same divergence already recorded canonically in
 [2] twclient/spectate_layout.py (pure dashboard layout — panes, color tones, autonomy-ratio compose)
 [3] twclient/interactive_app.py (`tw attach`; two-connection design; AttachInputConn; Ctrl-] detach)
 [4] twclient/watch.py (WatchHub settle-edge push-stream engine; broadcast to a subscriber set)
-[5] twclient/control_lock.py (control-mode state machine; take_human/release_human; MODE_SPECTATE pause state)
+[5] tw2002_aiclient/session/control_lock.py (tip control-mode state machine; take_human/release_human; MODE_SPECTATE pause state; `{app, human, spectate}` only)
 [6] twclient/daemon.py (_handle_attach — take_human on connect, try/finally release_human on every exit path)
-[7] canon/architecture/control-and-escalation.md (the control dual, {app,human} attribution, MODE_AI_PILOT divergence)
+[7] canon/architecture/control-and-escalation.md (the control dual, {app,human} attribution; MODE_AI_PILOT retirement DONE)
 [8] twclient/terminal.py (color_map RLE per-cell SGR encode — game bytes only; chrome borders live in cockpit/draw.py on tip)
 [9] twclient/spectate_app.py (_SEMANTIC_COLORS 7-tone table; _ColorPairs lazy allocation; viewport red-on-disconnect border)
 [10] .samantha/plans/ui-polish-assessment.md (shared visual vocabulary — grounded color/glyph/border/fold tables; forward-ref for /surfaces/visual-language.md)

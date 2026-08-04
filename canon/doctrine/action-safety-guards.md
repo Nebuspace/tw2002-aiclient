@@ -243,11 +243,12 @@ code.)*
    novelty-halt rail is the guard that must eventually *replace* the never-idle EV floor — the two
    cannot both be the App's behavior on an unknown screen.
 
-3. **A live-drive `ai_pilot` mode still exists in the control lock.** The control state machine
-   retains an `MODE_AI_PILOT` that lets automated dispatch drive the wire — in tension with "AI
-   never sends a live keystroke; live senders are {App, human} only." The finding is owned by
-   [control & escalation](/architecture/control-and-escalation.md); referenced here because the
-   guards in this doctrine presuppose the {App, human}-only sender set that mode contradicts.
+3. **`ai_pilot` live-drive mode — RETIRED on tip (2026-08-04).** Pre-rebirth control-lock exposed
+   `MODE_AI_PILOT`; tip `tw2002_aiclient/session/control_lock.py` keeps only
+   `{app, human, spectate}`. Guards in this doctrine presuppose the {App, human}-only sender
+   set — that invariant now matches tip code. Historical finding + do-not-revive flag live in
+   [control & escalation](/architecture/control-and-escalation.md) and [findings](/findings.md) §1.
+   (`AUDIT-CANON-DRAFT-AI-PILOT-RETIREMENT-STALE`.)
 
 # Citations
 
@@ -264,7 +265,7 @@ driver-fence, safe-emit chokepoint (via twclient/menu_crawler.py)
 stop-loss (fail-closed on any answer that is not a fresh above-floor balance), hazard/novelty
 halts, arm-confirm launch gate
 [6] twclient/priority_engine.py — `explore_baseline_ev` never-idle EV floor (Code Divergence #2)
-[7] twclient/control_lock.py — `MODE_AI_PILOT` live-drive mode (Code Divergence #3)
+[7] tw2002_aiclient/session/control_lock.py — tip modes `{app, human, spectate}`; `MODE_AI_PILOT` retired (resolved Code Divergence #3)
 [8] CLAUDE.md — Hard rules (send-path redaction, single-connection daemon, case-sensitive
 wait_prompt, last-match state_parser anchoring)
 [9] tw2002_aiclient/loops/player.py (`_check_floor`) — the reborn stop-loss guard that actually

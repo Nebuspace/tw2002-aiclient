@@ -15,15 +15,17 @@ inventory of live root defects (the packages named in older rows lived under
 
 ## Documented divergences (minimum four)
 
-### 1. AI-pilot drive mode (no canon equivalent)
+### 1. AI-pilot drive mode (no canon equivalent) — RETIRED on tip
 
-**Canon:** `canon/architecture/control-and-escalation.md` (Code Divergence) — also cross-cited
-from `canon/architecture/session-engine.md`.
+**Canon:** `canon/architecture/control-and-escalation.md` (Code Divergence · resolved) — also
+cross-cited from `canon/architecture/session-engine.md`.
 
 Pre-rebirth control-lock exposed `MODE_AI_PILOT` / `ai_pilot` as a mode in which "the AI drives."
 Reborn north-star / control-and-escalation: live keyboard holders are `{app, human}` only; the AI
-is a spectator-teacher that never live-drives. That drive mode has no canon equivalent and must
-not return.
+is a spectator-teacher that never live-drives. **Tip status (2026-08-04):**
+`tw2002_aiclient/session/control_lock.py` defines only `{app, human, spectate}` — the drive mode
+is gone from product code. Remains a **do-not-revive** flag (not an open tip defect).
+(`AUDIT-CANON-DRAFT-AI-PILOT-RETIREMENT-STALE`.)
 
 ### 2. EV-every-tick picker vs stop-on-unknown run-loop
 
