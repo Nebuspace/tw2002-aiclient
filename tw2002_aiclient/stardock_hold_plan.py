@@ -86,8 +86,83 @@ def plan_from_evidence(
     )
 
 
-def plan_from_status(world_id: object, status: object) -> Optional[StardockHoldPlan]:
-    """Build a plan from GOALS/HUD status evidence. Never raises."""
+def compute_auto_max_qty(
+    *,
+    empty_holds: object,
+    hold_price: object,
+    credits: object,
+    cash_floor: object = 0,
+) -> Optional[int]:
+    """Qty that fills empty holds toward ship max as credits allow (TW-22).
+
+    ``empty_holds`` is room to the ship's current max; spendable credits are
+    ``credits - cash_floor``. Returns ``None`` when nothing honest can be bought.
+    """
+    empty = _pos_int(empty_holds)
+    price = _pos_int(hold_price)
+    cash = _pos_int(credits)
+    floor = _pos_int(cash_floor)
+    if empty is None or empty <= 0:
+        return None
+    if price is None or price <= 0:
+        return None
+    if cash is None or floor is None:
+        return None
+    spendable = cash - floor
+    if spendable < price:
+        return None
+    qty = min(empty, spendable // price)
+    return qty if qty >= 1 else None
+
+
+def _cargo_empty_from_status(status: dict) -> object:
+    hud = status.get("hud") if isinstance(status.get("hud"), dict) else {}
+    cargo_cell = hud.get("cargo") if isinstance(hud, dict) else None
+    value = (
+        cargo_cell.get("value")
+        if isinstance(cargo_cell, dict)
+        else cargo_cell
+    )
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value if value >= 0 else None
+    if isinstance(value, str):
+        head = value.strip().split(" ", 1)[0].replace(",", "")
+        if head.isdigit():
+            return int(head)
+    return None
+
+
+def _credits_from_status(status: dict) -> object:
+    top = status.get("credits")
+    if isinstance(top, bool):
+        pass
+    elif isinstance(top, int) and top >= 0:
+        return top
+    hud = status.get("hud") if isinstance(status.get("hud"), dict) else {}
+    credits_cell = hud.get("credits") if isinstance(hud, dict) else None
+    value = (
+        credits_cell.get("value")
+        if isinstance(credits_cell, dict)
+        else credits_cell
+    )
+    return value
+
+
+def plan_from_status(
+    world_id: object,
+    status: object,
+    *,
+    auto_max: bool = False,
+    cash_floor: object = 0,
+) -> Optional[StardockHoldPlan]:
+    """Build a plan from GOALS/HUD status evidence. Never raises.
+
+    ``auto_max=True`` (TW-22): qty expands toward empty-hold capacity as
+    credits allow (after ``cash_floor``). Default remains qty=1 for manual
+    one-shot offers.
+    """
     try:
         if not isinstance(status, dict):
             return None
@@ -97,32 +172,32 @@ def plan_from_status(world_id: object, status: object) -> Optional[StardockHoldP
             dock = sectors[0]
         elif status.get("stardock_found") is True:
             dock = status.get("stardock_sector")
-        hud = status.get("hud") if isinstance(status.get("hud"), dict) else {}
-        cargo_cell = hud.get("cargo") if isinstance(hud, dict) else None
-        empty = (
-            cargo_cell.get("value")
-            if isinstance(cargo_cell, dict)
-            else cargo_cell
-        )
-        credits_cell = hud.get("credits") if isinstance(hud, dict) else None
-        credits = (
-            credits_cell.get("value")
-            if isinstance(credits_cell, dict)
-            else credits_cell
-        )
+        empty = _cargo_empty_from_status(status)
+        credits = _credits_from_status(status)
         price = status.get("hold_price")
         if price is None:
             label = status.get("hold_price_label")
             if isinstance(label, str):
                 digits = "".join(ch for ch in label if ch.isdigit())
                 price = int(digits) if digits else None
+        if auto_max:
+            qty = compute_auto_max_qty(
+                empty_holds=empty,
+                hold_price=price,
+                credits=credits,
+                cash_floor=cash_floor,
+            )
+            if qty is None:
+                return None
+        else:
+            qty = 1
         return plan_from_evidence(
             world_id,
             stardock_sector=dock,
             empty_holds=empty,
             hold_price=price,
             credits=credits,
-            qty=1,
+            qty=qty,
         )
     except Exception:  # noqa: BLE001
         return None
