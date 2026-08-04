@@ -2889,6 +2889,16 @@ def main(argv: list[str] | None = None) -> int:
         )
         print("Try 'tw2002-aiclient --help' for usage.", file=sys.stderr)
         return 2
+    # AUDIT-WIRE-ACTION-SAFETY-COVERAGE-STARTUP-ASSERT: fail loud before
+    # curses if the PWO-112 coverage map drifted (missing source/proof pin).
+    # --help above stays free of this I/O so argv help still works offline.
+    try:
+        from tw2002_aiclient.action_safety import assert_coverage_map_intact
+
+        assert_coverage_map_intact()
+    except AssertionError as exc:
+        print(f"action-safety coverage map broken: {exc}", file=sys.stderr)
+        return 1
     try:
         curses.wrapper(_run)
     except DeadTerminalError as exc:
