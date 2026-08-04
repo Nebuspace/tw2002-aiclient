@@ -88,9 +88,10 @@ STOP banner renders the code's short label, and the same code is what the ledger
 read. Reason is a typed value throughout — the display label is a lookup, never the wire form.
 
 The catalog as it actually exists is the `INTERVENTION_REASON_LABELS` map in
-`twclient/intervention_labels.py` — the single source of truth shared by the trainer/product
-adapters and the read-only spectate layout. Its codes, grouped by the STOP-cause family they
-express:
+`tw2002_aiclient/cockpit/stopbanner.py` — tip home for the typed reason-code → label lookup
+(reborn; ADR-001). Archive name `twclient/intervention_labels.py` is gone. Extraction trigger
+(second consumer, e.g. spectate) is noted in that module's docstring. Its codes, grouped by the
+STOP-cause family they express:
 
 | reason code | human label | STOP-cause family |
 |---|---|---|
@@ -199,4 +200,4 @@ the wire. Analyze remains a human-invoked teach overlay, never a send-verb grant
 [1] USERDOCS/aiclient_ui.md (mode line + hotkeys sketch)
 [2] canon/log.md 2026-07-23 (AI role ruling) + findings.md §1 (do-not-revive)
 [3] tw2002_aiclient/session/control_lock.py (tip control-mode state machine — `{app, human, spectate}`)
-[4] twclient/intervention_labels.py (enumerated intervention reason-code → human-label map; shared by product adapters and spectate layout; archive/port-source)
+[4] tw2002_aiclient/cockpit/stopbanner.py (`INTERVENTION_REASON_LABELS` / `intervention_reason_label` — tip catalog; archive `twclient/intervention_labels.py` retired)

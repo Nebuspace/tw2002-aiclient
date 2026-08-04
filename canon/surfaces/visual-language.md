@@ -143,7 +143,7 @@ gate chrome.)
 |---|---|---|---|
 | `✓` | `✓` (no swap) | met / known — a satisfied GOALS/FOCUS condition | `compose_primary_goals_lines` |
 | `·` | `·` (no swap) | in progress / partial, or "other candidate" in a decision trace, or a header separator | `compose_primary_goals_lines` / `format_autopilot_trace_lines` |
-| `?` | `?` (no swap) | unknown — an unresolved GOALS condition, an empty/unrecognized STOP reason code, or an unrecognized mode badge | `compose_primary_goals_lines` / `intervention_labels.py` / `format_mode_badge` |
+| `?` | `?` (no swap) | unknown — an unresolved GOALS condition, an empty/unrecognized STOP reason code, or an unrecognized mode badge | `compose_primary_goals_lines` / `cockpit/stopbanner.py` / `format_mode_badge` |
 | `⊘` | `⊘` (no swap) | blocked / gated — an unmet prerequisite, a gated autopilot-trace candidate, or `[ASPIRATIONAL]` a non-connectable catalog entry | `compose_primary_goals_lines` / `format_autopilot_trace_lines` |
 | `✦` | `*` | freshness mark — **non-negotiable per `TUI-POLISH-PLAN.md`**; appears on every persisted value as `✦ Ns ago` / `✦ now`, dims past 20s | `format_freshness` |
 | `★` | `★` (no swap) | centerpiece / you-are-here / chosen-action — the MENU MAP marker (`here ★{cur}`), the autopilot-trace chosen action, the longest Loops chain | `format_autopilot_trace_lines` / `menu_map_view.py` |
