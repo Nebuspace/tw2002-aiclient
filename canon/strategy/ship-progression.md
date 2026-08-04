@@ -196,6 +196,27 @@ this concept prescribes. The prescription stands; these are recorded, not silent
   from Layer-B catalog is not yet required — HUD empty-holds already is room to
   the ship's current max. Live StarDock capture (game_data) feeds the hold price.
 
+## One-pass StarDock hold driver (tip)
+
+The execute path for a human-approved (or App-armed `C)argo Hold Upgrade·ON`) hold buy is
+**not** a multi-hop navigator and **not** a trade-chain runner. Tip modules:
+
+| Module | Role |
+|---|---|
+| `tw2002_aiclient/stardock_hold_plan.py` | Pure evidence → `StardockHoldPlan` (world_id, fingerprint, sector, empty, unit price, credits, qty). Incomplete/hostile fields → `None` (fail-closed). Parses quote + P-QTY range from screen text. |
+| `tw2002_aiclient/stardock_hold_driver.py` | `run_hold_purchase(session, plan, should_abort=, is_armed=)` — **one send**: the planned qty string. Expects quote (+ qty prompt) already on screen. |
+
+**Safety pins (do not "simplify" away):**
+
+- Never pays fighter tolls; never calls explore / trade_chain.
+- Refuses unknown P-QTY ranges (`unknown_qty_range`) and qty outside the stated range.
+- Refuses when on-screen unit price ≠ plan (`hold_price_mismatch`).
+- Re-checks `should_abort` / `is_armed` before send; Mode-leave halt covers this runner
+  (`stardock_hold_stop` — see [mode-line](/surfaces/mode-line-and-teach-controls.md)).
+- Display/session sends only — sibling of the guarded trade one-pass shape, money-path adjacent.
+
+*(Honesty pass `AUDIT-CANON-DRAFT-STARDOCK-HOLD-DRIVER-COVERAGE`, 2026-08-04.)*
+
 - **The autopilot's per-cycle EV picker contradicts recommend-only.** `autopilot.py` selects each
   tick's action by expected-value-per-turn across candidates, and an upgrade candidate would compete in
   that picker — a computed EV *winning* the right to execute. That is exactly the "autonomous candidate
@@ -238,14 +259,18 @@ this concept prescribes. The prescription stands; these are recorded, not silent
   ship, rationale, projected_payback, flags}`), `game_data.py` (the introspected per-world ship rows
   and the `ship_row_to_spec` bridge that feeds the engine), `chains.py` (the longest-profit-chain
   finder whose loop economics the loop-stock match and per-turn metric depend on), `autopilot.py` (the
-  per-cycle EV picker and `EXPLORE_BASELINE_EV` no-idle floor recorded as divergences), and
-  `trade_driver.py` (the autonomous chain runner recorded as a divergence).
+  per-cycle EV picker and `EXPLORE_BASELINE_EV` no-idle floor recorded as divergences),
+  `trade_driver.py` (the autonomous chain runner recorded as a divergence), and tip hold-buy execute
+  — `stardock_hold_plan.py` / `stardock_hold_driver.py` (`run_hold_purchase` one-pass; refuse unknown
+  qty range / price mismatch; never toll-pay or trade_chain).
 - Cross-cutting invariants and consumers — [game-data-store](/engine/game-data-store.md) (the
   introspected ship stat rows and per-hold price this engine reads, never hardcodes),
   [priority-engine](/engine/priority-engine.md) (which *ranks* an upgrade recommendation among
   suggestions — ordering, never a live action-picker that lets EV override stop-on-unknown),
   [trade-loops](/strategy/trade-loops.md) (the loop-stock depth an upgrade's capacity must match),
   [action-safety-guards](/doctrine/action-safety-guards.md) (the human-approval confirm gate every
-  dock purchase passes through), and [menu-map-and-introspection](/engine/menu-map-and-introspection.md)
+  dock purchase passes through), [mode-line-and-teach-controls](/surfaces/mode-line-and-teach-controls.md)
+  (`C)argo Hold Upgrade·ON` + Mode-leave `stardock_hold_stop`), and
+  [menu-map-and-introspection](/engine/menu-map-and-introspection.md)
   (the read-only shipyard navigation that captures the catalog and the StarDock landmark auto-max-holds
   keys off).
