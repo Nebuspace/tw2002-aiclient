@@ -194,7 +194,7 @@ surface presents that handoff as a banner that carries:
 - **A typed reason code**, not free text. The banner renders the escalation's reason *code* resolved
   through the enumerated catalog owned by
   [control-and-escalation](/architecture/control-and-escalation.md) and implemented as
-  `INTERVENTION_REASON_LABELS` / `intervention_reason_label()` in `intervention_labels.py` — the
+  `INTERVENTION_REASON_LABELS` / `intervention_reason_label()` in `cockpit/stopbanner.py` — the
   banner shows the code's short human label, never an ad-hoc string. (The catalog is open by
   construction: an unrecognized code passes through as its own text, an empty code renders `"?"`.)
 - **Keyboard → Human.** The banner makes explicit that control has passed to the human — the mode
@@ -371,7 +371,7 @@ control strip, before the ticker — so a halt always surfaces even as the termi
 at all; a halt muscles a bold-yellow row ahead of everything optional.
 
 **The reason is a typed code, never free text.** Each label comes from the enumerated catalog —
-`intervention_reason_label()` / `INTERVENTION_REASON_LABELS` (`intervention_labels.py`) — rendering the
+`intervention_reason_label()` / `INTERVENTION_REASON_LABELS` (`cockpit/stopbanner.py`) — rendering the
 code's short human label (e.g. `autopilot_no_candidates` → its label). The catalog is open by
 construction: an unrecognized code passes through as its own text; an **empty code renders `"?"`** — the
 banner never invents a message and never blanks. The full banner as reborn-specified carries three
@@ -531,4 +531,4 @@ The reborn contract above is the target; the current code still carries pre-rebo
   `spectate_layout.py` (`_MODE_BADGES`, `format_mode_badge`, `compose_control_strip`,
   `format_autonomy_counts`, `compose_intervention_strip`), `control_lock.py` (the mode state
   machine + `take_human` immediacy), `interactive_app.py` (`tw attach`, the live keyboard seat),
-  `intervention_labels.py` (the typed reason-code labels the STOP banner renders).
+  `cockpit/stopbanner.py` (the typed reason-code labels the STOP banner renders).

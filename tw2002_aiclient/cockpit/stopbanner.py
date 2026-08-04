@@ -38,17 +38,12 @@ fabricated reason is worse than no reason at all.
 
 # Catalog home (deliberate, flagged)
 
-Canon cites the catalog's as-built home as ``twclient/
-intervention_labels.py`` -- "the single source of truth shared by the
-trainer/product adapters and the read-only spectate layout". There is no
-``twclient`` package in the reborn tree (ADR-001 consolidates everything
-under ``tw2002_aiclient``), and the reborn tree has exactly ONE consumer
-today: this banner. So the catalog lives here, under its canon-cited
-symbol names (``INTERVENTION_REASON_LABELS`` /
-``intervention_reason_label``), rather than in a one-consumer module of
-its own. **Extraction trigger:** the moment a SECOND surface needs these
-codes (the spectate-layout port, or the PWO-065 handoff), lift both
-symbols into their own module unchanged -- a pure move, no rename.
+Tip canon cites this module as the home for ``INTERVENTION_REASON_LABELS`` /
+``intervention_reason_label`` ([control-and-escalation](/architecture/control-and-escalation.md)).
+Archive name ``twclient/intervention_labels.py`` is retired (ADR-001). The reborn tree has exactly
+ONE consumer today: this banner. **Extraction trigger:** the moment a SECOND surface needs these
+codes (the spectate-layout port, or the PWO-065 handoff), lift both symbols into their own module
+unchanged -- a pure move, no rename.
 
 # Wire contract (this composer DEFINES it, as ``logsband.py`` did)
 
