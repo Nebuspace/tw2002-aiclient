@@ -35,6 +35,7 @@ an override of the escalate-on-unknown contract in
 | The dependency graph (explore is the shared secondary) | The rule/screen-match guards themselves ([rule-macro-engine](/architecture/rule-macro-engine.md)) |
 | The round-trip (RT) travel-cost model, the pre-flight checklist, and stay-vs-leave EV | Firing anything — the engine emits an ordering, not an action |
 | The boolean-weight overlay sort key, recast as **rule/behavior prioritization** | Human-facing coaching prose ([coaching-engine](/engine/coaching-engine.md) teaches; this ranks) |
+| FOCUS → confirm offer selection (`autonomy_policy.choose_offer`) | Live sends / arm confirm chrome (play loop + [mode-line-and-teach-controls](/surfaces/mode-line-and-teach-controls.md)) |
 
 The boundary is load-bearing: the ordering this engine produces is consumed **downstream of**
 stop-on-unknown, never upstream of it. A computed EV that outranks everything still yields to an
@@ -212,6 +213,47 @@ app's chosen action.** It says "here is what would be worth doing, in order"; wh
 actually runs is gated by human-arming and by stop-on-unknown at the run-loop, not by FOCUS's top row.
 Readable labels map `run_chain` → "Trade chain," `upgrade` → "Upgrade," `explore` → "Explore."
 
+## Autonomy offer selection (FOCUS → confirm)
+
+Between FOCUS's ranked list and a live send sits a thin **pure** selector —
+`autonomy_policy.choose_offer` — that turns FOCUS candidates into one
+operator-facing `AutonomyOffer`. It is **not** a second priority engine and
+**not** a live action-picker.
+
+| Owns | Does NOT own |
+|---|---|
+| Mapping FOCUS candidates → one `AutonomyOffer` (`explore` / `run_chain` / `upgrade` / `idle`) | Ranking weights / EV (that is this concept's Layer 2 / `recommend_*`) |
+| Early-game StarDock bias when no ungated trade chain exists | Arming, confirm chrome, or keystrokes (`begin_arm_confirm` / App-armed auto-fire in `app.py`) |
+| Gating `upgrade` when hold-arm capability is unknown (`has_hold_arm=False`) | Port Trade / hold auto-fire policy (trainer strip toggles; silent FOCUS `run_chain` auto-fire is refused per explore-vs-trade mode split) |
+
+**Contract.** `choose_offer(status)` reads `status["focus"]["candidates"]` only.
+Each candidate must carry `kind ∈ {explore, run_chain, upgrade}` and a bool
+`gated`. Broken / missing FOCUS → `idle` with an honest reason. It never
+calls adapters, never touches money boundaries, and never invents a kind
+FOCUS did not list.
+
+**Selection order (code-grounded).**
+
+1. If no ungated `run_chain` is eligible **and** StarDock is unknown → offer
+   `explore` with intent `find_stardock` (early-game bias).
+2. Else first ungated eligible candidate (FOCUS order preserved).
+3. Else first gated eligible candidate (still confirmable; reason carries
+   `gate_reason` or `"preconditions incomplete"`).
+4. Else `idle`.
+
+**Consumers.**
+
+- **`O` (offer)** — operator confirm path: `choose_offer` → `begin_arm_confirm`
+  → human `y` before any runner starts.
+- **App-armed auto-fire** — same selector for Port Trade / Cargo Hold Upgrade
+  kinds only; explore stays confirm-gated. Live silent FOCUS trade auto-fire
+  is refused; hold upgrade may auto-fire when the strip toggle allows.
+
+Grounded in `tw2002_aiclient/autonomy_policy.py` and the play-loop call sites
+in `tw2002_aiclient/app.py`. Cockpit key chrome lives in
+`cockpit/autonomy_keys.py` (vocabulary cross-ref deferred —
+`AUDIT-CANON-DRAFT-TEACH-BAND-CROSSREF`).
+
 ## Fighter economics
 
 Fighters (objective #6, weight 73) are gated by **credits**, never by location: the Class-0 port at
@@ -281,6 +323,8 @@ code diverges in these specific ways — recorded here so the divergence is visi
   app-autopilot-model, the never-idle framing retired.
 - **Grounded in code:** `twclient/priority_engine.py` (`recommend_actions()`, `stay_vs_leave_upgrade()`,
   `travel_cost_rt_turns()`, `afford_fighters()`, the chain-link + fighter constants);
+  `tw2002_aiclient/autonomy_policy.py` (`choose_offer`, `AutonomyOffer` — FOCUS → confirm selector);
+  `tw2002_aiclient/app.py` (`O` offer + App-armed auto-fire consumers);
   `twclient/autopilot.py` (`select()`, `_score_chain/_upgrade/_explore()`, `EXPLORE_BASELINE_EV`,
   `_priority_engine_focus_kind()`); `twclient/chains.py` (`ProfitChain`, `rank_chains()`,
   `longest_profit_chain()`); `twclient/explore.py` (`known_graph()`, `frontier_edges()`,
@@ -296,4 +340,5 @@ code diverges in these specific ways — recorded here so the divergence is visi
   [exploration-policy](/strategy/exploration-policy.md), [toll-and-defense](/strategy/toll-and-defense.md),
   [planet-colonization](/strategy/planet-colonization.md),
   [special-formations](/strategy/special-formations.md), [ship-progression](/strategy/ship-progression.md),
-  [coaching-engine](/engine/coaching-engine.md).
+  [coaching-engine](/engine/coaching-engine.md),
+  [mode-line-and-teach-controls](/surfaces/mode-line-and-teach-controls.md) (confirm / strip consumers).
