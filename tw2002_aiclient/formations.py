@@ -18,8 +18,9 @@ both call it so panel / GOALS / coach cannot drift from
 ``plan_find_formations`` (WO-FORMATIONS-WORLD-STATS-VIA-CATALOG).
 
 ``route_hazard_for_hop`` is the guard predicate for one-way / warp-sink
-hops (WO-ROUTE-HAZARD-GUARD) — callers STOP; they must not silently
-reroute.
+hops (WO-ROUTE-HAZARD-GUARD) and known sector threats (mines / fighters —
+WO-AUDIT-BUILD-SECTOR-THREAT-FIGHTERS-GUARD-INPUT). Callers STOP; they
+must not silently reroute.
 """
 
 from __future__ import annotations
@@ -36,6 +37,7 @@ __all__ = [
     "panel_items_from_catalog",
     "recommend_genesis",
     "route_hazard_for_hop",
+    "threat_hazard_for_sector",
     "write_membership",
 ]
 
@@ -391,22 +393,61 @@ _KIND_TO_MEMBERSHIP = {
 }
 
 
+def threat_hazard_for_sector(
+    sector_id: int, threats: Mapping[str, Any] | None
+) -> Optional[str]:
+    """Typed STOP reason if ``threats`` names a known mine/fighter hazard.
+
+    * ``mines is True`` → ``route_hazard:mines:<id>``
+    * ``fighters`` count ``> 0`` (int or ``{count: int, …}``) →
+      ``route_hazard:fighters:<id>``
+    * ``fighters is None`` / missing / zero → not a hazard (never observed
+      must not invent danger; zero is an explicit clear observation)
+
+    Canon (``toll-and-defense.md``): known mines/fighters on a planned
+    crossing are route-hazard STOP inputs — not silent drive-through.
+    """
+    if not isinstance(threats, Mapping):
+        return None
+    sid = int(sector_id)
+    if threats.get("mines") is True:
+        return f"route_hazard:mines:{sid}"
+    fighters = threats.get("fighters")
+    count: int | None = None
+    if isinstance(fighters, bool):
+        # Broken fact shape — refuse as hazard rather than treat True as 1.
+        if fighters:
+            return f"route_hazard:fighters:{sid}"
+    elif isinstance(fighters, int):
+        count = fighters
+    elif isinstance(fighters, Mapping):
+        raw = fighters.get("count")
+        if isinstance(raw, int):
+            count = raw
+    if count is not None and count > 0:
+        return f"route_hazard:fighters:{sid}"
+    return None
+
+
 def route_hazard_for_hop(
     graph: Mapping[int, Sequence[int]],
     frm: int,
     to: int,
     *,
     membership: Mapping[int, Sequence[str]] | None = None,
+    threats_by_sector: Mapping[int, Mapping[str, Any]] | None = None,
 ) -> Optional[str]:
     """Typed STOP reason if this hop crosses a known route hazard, else None.
 
     Canon (``special-formations.md`` Dual consumer split): one-ways and
     warp-sinks feed **guards that STOP**, never an autonomous reroute.
-    This predicate only names the hazard — callers must halt, not search
-    for an alternate path.
+    Sector threats (mines / fighters) follow the same STOP rail
+    (``toll-and-defense.md``). This predicate only names the hazard —
+    callers must halt, not search for an alternate path.
 
     * One-way: directed ``frm→to`` among known sectors with no reverse.
     * Warp-sink: ``to`` carries ``warp-sink`` in ``formation_membership``.
+    * Threats: ``to`` has known mines or fighter presence in world-model.
     """
     a = int(frm)
     b = int(to)
@@ -419,6 +460,10 @@ def route_hazard_for_hop(
         tags = {str(t) for t in (membership.get(b) or ())}
         if "warp-sink" in tags:
             return f"route_hazard:warp_sink:{b}"
+    if threats_by_sector is not None:
+        threat = threat_hazard_for_sector(b, threats_by_sector.get(b))
+        if threat is not None:
+            return threat
     return None
 
 

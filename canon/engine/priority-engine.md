@@ -81,7 +81,7 @@ Starved — `WO-WM-LANDMARKS-WRITE` landed; `world_model.add_landmark` is called
 | 11 | Place planet to earn resources | Boolean | 50 | #10 candidate chosen | Planned — genesis deploy excluded from app candidate kinds (human-confirmed one-shot only) |
 | 12 | Map 100% of galaxy | Range (→100%) | 45 | — | Partial — GOALS shows `N/total (pct%)`; `explore.known_graph()` + frontier BFS; galaxy size often unknown until mapped |
 | 13 | Longest trade-loop chain identified | Range | 40 | ports known | Partial — `chains.longest_profit_chain()`; execute floor ≥2 links; ship hull deferred until ≥4 |
-| — | Sector-based threats (mines/fighters) | Boolean | 35 | sector visited | Partial — `world_model` persists per-sector threats; not yet a scorer/guard input |
+| — | Sector-based threats (mines/fighters) | Boolean | 35 | sector visited | Implemented — `world_model` persists threats; `route_hazard_for_hop` STOPs / path-excludes on known mines or fighter presence (WO-AUDIT-BUILD-SECTOR-THREAT-FIGHTERS-GUARD-INPUT) |
 
 ### Weight dominates until satisfied
 
