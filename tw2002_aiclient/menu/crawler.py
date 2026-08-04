@@ -316,11 +316,6 @@ ENTER_EDGE_KEY = "<enter>"
 _DEFAULT_MAX_NODES = 200
 
 
-class MenuCrawlError(Exception):
-    """A structural crawl failure -- never an ordinary unsafe/unexplored
-    screen, which is handled silently by design (see module docstring)."""
-
-
 # -- screen-level safety classification ---------------------------------------
 
 # Distinctive shapes of a commit / confirm / purchase / combat gate.
