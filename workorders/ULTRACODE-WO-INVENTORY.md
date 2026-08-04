@@ -258,12 +258,12 @@ Banked hygiene (not a PWO id): **pty mid-flush settle** — PREP `workorders/WO-
 
 ### Phase 9 — Doctrine / safety teeth
 
-> PREP: `workorders/WO-P9-110-115-doctrine-PREP.md` — tip honesty 2026-08-03: 110/111(TX)/112/113/114/115 LIVE; ledger redaction via PWO-094 LIVE.
+> PREP: `workorders/WO-P9-110-115-doctrine-PREP.md` — tip honesty 2026-08-04: 110/111(TX+RX-LOG)/112/113/114/115 LIVE; ledger via PWO-094 LIVE; 111 residuals = attach heuristic + live-paint echo.
 
 | ID | Title | Type | Depends | Goal | Accept | Proof | Canon |
 |----|-------|------|---------|------|--------|-------|-------|
 | PWO-110 | Secrets resolve precedence — **LIVE** (`session/credentials.py`) | harden | 005 | env > secrets file | tests | secrets-and-credentials |
-| PWO-111 | Redaction on send + RX transcript — **TX+RX-LOG LIVE** (`_log_tx`/`_log_rx`/`log_redacted` + LOGS; ledger via PWO-094; live-paint residual named) | harden | 020 | No password in logs/ledger | scan | secrets… |
+| PWO-111 | Redaction on send + RX transcript — **TX+RX-LOG LIVE** (`_log_tx`/`_log_rx`/`log_redacted` + LOGS; ledger via PWO-094; residuals: live-paint echo + attach heuristic non-keyword prompts) | harden | 020 | No password in logs/ledger | scan | secrets… |
 | PWO-112 | Action-safety byte guards — **LIVE** (`action_safety.py` coverage map + unit-per-class pins; NEVER_AUTO audit retained) | harden | 081·083 | Destructive macros blocked | unit | action-safety-guards |
 | PWO-113 | Alignment: no PvP aggression rules — **LIVE** (`alignment_gate` at writer/promote/bridge; tip #113 WO) | harden | 070·081 | Teacher cannot propose PvP harm | unit | alignment-and-conduct |
 | PWO-114 | Hypothesis-tag discipline CI — **LIVE** (`scripts/hypothesis_tag_ci_guard.py` in suite.yml; deliberate-fail fixture via `--self-test-fail`) | harden | 100 | Untagged numbers fail check | script | conventions |

@@ -218,12 +218,13 @@ parsed.
 One further boundary worth stating: the secret-prompt predicate `is_probable_secret_prompt()`
 lives in `classify.py` but is a *redaction* helper for the interactive attach keystroke path, not
 a classification anchor. It is deliberately broader and fail-safe (it errs toward treating an
-ambiguous prompt as a secret) precisely because it must never let a password reach the transcript
-in cleartext. The narrow `login_password` gate anchor stays narrow because it also drives the
-automated login automaton's decisions, not just its logging. The redaction discipline itself
-(every secret send routes through `log_redacted()`; no secret ever touches logs, argv, or the
-repo) is owned by [Secrets & Credentials](/doctrine/secrets-and-credentials.md) — stated once,
-deferred here.
+ambiguous keyword-bearing prompt as a secret) so password-shaped prompts redact TX. It is still
+a *heuristic*: prompts with none of its keyword vocabulary can still log attach keystrokes in
+cleartext (named residual — pinned by attach redaction tests). The narrow `login_password` gate
+anchor stays narrow because it also drives the automated login automaton's decisions, not just
+its logging. The redaction discipline itself (every secret send routes through `log_redacted()`;
+no secret ever touches logs, argv, or the repo) is owned by
+[Secrets & Credentials](/doctrine/secrets-and-credentials.md) — stated once, deferred here.
 
 # Verification status
 

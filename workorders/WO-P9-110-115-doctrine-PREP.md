@@ -1,11 +1,11 @@
 # WO-P9-110…115 — Doctrine / safety teeth · PREP
 
-> Status: **PREP** 2026-08-03 · tip honesty · seat `impl-aiclient-cursor`  
+> Status: **PREP** 2026-08-04 · tip honesty · seat `impl-aiclient-cursor`  
 > Phase: 9 · Type: PREP (inventory + tightened Accept/Proof) · Execute: hub HANDOFF only  
 > Canon: `canon/doctrine/secrets-and-credentials.md` · `action-safety-guards.md` · `alignment-and-conduct.md` · conventions (hypothesis-tag · public-bound)  
 > Refs: `ULTRACODE-WO-INVENTORY.md` Phase 9 · parent `WO-AUDIT-PHASE789-PREP.md`
 
-**No product edited in this WO.** Live-state below is tip reality only (`aad330c`).
+**No product edited in this WO.** Live-state below is tip reality only (`86a90ca` — TX+RX-LOG via #373).
 
 ---
 
@@ -21,10 +21,10 @@
 
 ## 1. Tip inventory (vs canon target)
 
-| Piece | Tip `aad330c` | Notes |
+| Piece | Tip `86a90ca` | Notes |
 |---|---|---|
 | Secrets resolve precedence | **LIVE** | `session/credentials.py` env → secrets file · credentials/redaction tests |
-| Redaction on all send paths | **TX-LIVE** | `_log_tx`/`log_redacted` + LOGS + login/attach/status/ensure tests; ledger redaction LIVE via PWO-094 |
+| Redaction on all send paths | **TX+RX-LOG LIVE** | `_log_tx`/`_log_rx`/`log_redacted` + LOGS + login/attach/status/ensure + connection RX pins; ledger via PWO-094; live-paint + attach-heuristic residuals named |
 | Action-safety byte guards | **LIVE** | `action_safety.py` coverage map + unit-per-class pins; NEVER_AUTO consumer audit retained |
 | Alignment no PvP aggression | **LIVE** | `alignment_gate` at `write_draft`/`promote_draft`/`bridge_to_kernel_document`; corp-toll negative control |
 | Hypothesis-tag discipline CI | **LIVE** | `scripts/hypothesis_tag_ci_guard.py` in suite.yml; deliberate-fail via `--self-test-fail` |
