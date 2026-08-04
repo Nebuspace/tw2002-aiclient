@@ -128,15 +128,28 @@ would scroll the `Your fighters: N vs. theirs: M` line off pyte's 25-line viewpo
 could Attack/Retreat. The seed never raises: a failed probe must not break the join. This is the one
 place the dashboard causes a send, and it is a safe read-only introspection, not a play move.
 
-**Cargo and profit semantics.** CARGO explains **hold occupancy**: **empty** and **total** when
-ship-info states `Total Holds : N - Empty=M` (filled = N−M is implied). Port-commerce lines that
-only name empty holds still update empty. It is never inferred from port **market** commodity rows.
-Per-commodity holdings (Fuel Ore / Organics / Equipment) stick from verified trade
-buy/sell (`WO-HUD-CARGO-HOLDINGS`; HUD e.g. `10 empty / 60 · Equ 50`) — never from market quotes.
+**Cargo and profit semantics (`session/hud_tracking.py`).** CARGO explains **hold occupancy**:
+**empty** and **total** when ship-info states `Total Holds : N - Empty=M` (filled = N−M is
+implied). Port-commerce lines that only name empty holds still update empty. The pure extractors
+live in `tw2002_aiclient/session/hud_tracking.py` (`read_empty_cargo_holds` → `CargoRead`;
+`format_cargo_hud_value` for the painted cell). Session sticky wrappers
+(`Session.observe_cargo` / `cargo_snapshot` / `set_holdings` / `adjust_holdings`) call those
+helpers and age the last good read — they never invent from silence.
+
+**Honesty contract (do not "tidy").** Market / port commodity rows are **not** a cargo write
+path. `observe_holdings` is intentionally a non-write until a captured ship-info shape states
+Ore/Org/Equ hold lines (`WO-HUD-CARGO-HOLDINGS` sticky holdings come only from verified trade
+buy/sell; HUD e.g. `10 empty / 60 · Equ 50`). Unknown until first verified write paints as
+absent/`—`, never as `0` (a zero empty-hold count is a real game state). This matches the
+world-model landmark rule: **silence is not a denial** — see
+[world-model](/engine/world-model.md) landmark asymmetry.
+
 Ship-info per-commodity hold lines are not parsed yet (no fixture shape).
 PROFIT is the strict current credit balance minus the first strict balance observed in this daemon
 session. The first observation therefore establishes a truthful `0` baseline; later credits-less
 screens preserve and age that value rather than resetting it.
+
+*(Honesty pass `AUDIT-CANON-DRAFT-HUD-TRACKING-COVERAGE`, 2026-08-04.)*
 
 ## Liveness and TX transparency — killing "is it frozen?"
 
@@ -503,6 +516,11 @@ reborn module is cited; prefer `tw2002_aiclient/cockpit/*` for chrome that has a
   Shared vocabulary forward-referenced to the staged `visual-language.md` concept (operator-gated).
 - **Cold-join HUD seed** — `hud_seed.py` (`seed_hud_after_join`, the single `I` ship-info probe,
   fighter-`Option?` deferral, age-gated `force` re-probe).
+- **HUD cargo sticky / extract honesty** — `tw2002_aiclient/session/hud_tracking.py`
+  (`read_empty_cargo_holds`, `CargoRead` / `CargoSnapshot` / `CargoHoldings`,
+  `format_cargo_hud_value`, never-from-market contract) · session sticky callers in
+  `session/session.py` (`observe_cargo`, `cargo_snapshot`, `adjust_holdings`,
+  `observe_holdings` non-write) · paint via `session/protocol.py`.
 - **Reimagined from** — `USERDOCS/aiclient_ui.md` and the TUI sections of
   [/engine/priority-engine.md](/engine/priority-engine.md) (GOALS/FOCUS two-layer panel model;
   folded from retired root `priority_engine.md` / USERDOCS draft), re-rooted in the reborn
