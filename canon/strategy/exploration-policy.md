@@ -173,6 +173,28 @@ the target; the code is noted as diverging, not silently conformed to):
   the reborn vision and is re-scoped to human-armed, stop-on-unknown taught behaviors; the §15.4
   auto-explore behaviors it composes are the human-armed intents above, not an autonomous drive.
 
+## Play explore flags — asymmetric by design
+
+Play chrome exposes two explore automation booleans via
+`tw2002_aiclient/cockpit/explore_flags.py` (wired through `adapters.explore_start_for_profile` /
+daemon protocol):
+
+| Flag | Play default | Meaning |
+|---|---|---|
+| `dock_new_ports` (gather) | **ON** (Max GO 2026-07-30 · WO-PLAY-EXPLORE-GATHER-DEFAULT-ON) | First-sight ports are entered for commodity ingest while Explore maps. Decoupled from `P)ort Trade·ON` (money gate for Trade Loop *execution* only — see [mode-line](/surfaces/mode-line-and-teach-controls.md)). |
+| `fight_tolls` | **OFF** | Combat opt-in (`X`); calm `F` remains Find StarDock. |
+
+CLI/daemon library defaults stay OFF for both — only the Play surface flipped gather ON.
+
+**Do not tidy into symmetry.** `adapters.py` coerces `dock_new_ports` with `bool(...)` but
+forwards `fight_tolls` **un-coerced** so a non-bool such as `"no"` reaches the daemon and trips
+`invalid_fight_tolls` (coerced, `bool("no")` is `True` — an operator who declined combat would
+have armed it). Hub-Accept'd 2026-07-29. `explore_flags.py` therefore holds real `bool`s and
+never calls `bool()` on either flag (pins in `tests/test_play_explore_flags.py`). A future
+"cleanup" that symmetrizes the two would be a defect, not a polish.
+
+*(Honesty pass `AUDIT-CANON-DRAFT-EXPLORE-FLAGS-ASYMMETRY`, 2026-08-04.)*
+
 # Citations
 
 - design history §11 — explore/exploit appetite design (reborn-reframed: appetite = priority input,
@@ -185,3 +207,5 @@ the target; the code is noted as diverging, not silently conformed to):
 - source module `world_model.py` — TW-06 persisted per-world sector store (G1 write target)
 - source module `autopilot.py` — recorded EV-select / EXPLORE_BASELINE_EV divergence
 - source module `trade_driver.py` — recorded autonomous chain-runner divergence
+- tip Play flags — `tw2002_aiclient/cockpit/explore_flags.py` · `adapters.explore_start_for_profile`
+  dock/fight asymmetry · [mode-line](/surfaces/mode-line-and-teach-controls.md) Explore vs `P` split
