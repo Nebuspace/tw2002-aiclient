@@ -1099,7 +1099,10 @@ def _autonomy_auto_fire(
     if not play.cargo_upgrade_on:
         return False, False
     plan = _stardock_hold_plan.plan_from_status(
-        _world_identity.world_id_from_profile(profile), status or {}
+        _world_identity.world_id_from_profile(profile),
+        status or {},
+        auto_max=True,
+        cash_floor=_HOLD_CASH_FLOOR,
     )
     if plan is None:
         return False, False

@@ -188,12 +188,13 @@ this concept prescribes. The prescription stands; these are recorded, not silent
   turns/alignment/holds, and a captured shipyard catalog and calls `choose_upgrade`. The engine is
   correct in isolation; the wiring that feeds it real numbers is the missing link.
 
-- **Coded auto-max-holds (TW-22) is specified, not yet built.** The behavior described above — detect
-  the earliest shipyard opportunity, expand holds toward the ship's max, human-approved — has no
-  implemented driver yet. It depends on the world-model's StarDock-landmark detection and on live
-  game-data (per-ship max holds, per-hold price), both of which are themselves only partially wired
-  (the game-data store refuses un-introspected numbers, and no live StarDock capture has landed). Until
-  then, growing holds remains a manual order at the dock.
+- **Coded auto-max-holds (TW-22) — recognition + toward-max qty LIVE; catalog ship
+  max still optional.** App-armed Cargo Hold Upgrade (`_autonomy_auto_fire` +
+  `stardock_hold_plan.plan_from_status(..., auto_max=True)`) expands qty toward
+  empty-hold capacity as credits allow (after cash floor), reusing the existing
+  one-pass driver. Manual `H` / confirm offers stay qty=1. Per-ship `max_holds`
+  from Layer-B catalog is not yet required — HUD empty-holds already is room to
+  the ship's current max. Live StarDock capture (game_data) feeds the hold price.
 
 - **The autopilot's per-cycle EV picker contradicts recommend-only.** `autopilot.py` selects each
   tick's action by expected-value-per-turn across candidates, and an upgrade candidate would compete in
