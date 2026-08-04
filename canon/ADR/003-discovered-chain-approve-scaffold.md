@@ -58,6 +58,16 @@ automatic substitution/rotation remains forbidden.
   daemon run-loop, preserving its arm, abort, floor, depletion, reconciliation,
   and PALADIN rails.
 - Live proof that spends turns or credits remains a separate sacrificial gate.
+- **Display honesty for partial discovery** lives in tip
+  `tw2002_aiclient/chain_search_view.py` (pure formatter; no arm/send path). The
+  `L)chains` modal's discovered section is composed here via
+  `cockpit/chains.compose_chain_lines` — dependency points *into* the formatter,
+  never the reverse. Truncation is part of the rendering, not a footnote:
+  any truncated search prepends a `PARTIAL_*` banner; an empty *and* truncated
+  result says *"none found in the part searched (not exhaustive)"*, never a bare
+  *"no profit chains"* (absence was not established). Blurring this listing with
+  `cockpit/chains.py`'s recorded-macro ARM `rows` (money path) is a safety defect.
+  (`AUDIT-CANON-DRAFT-CHAINSEARCH-HONESTY-CONTRACT`, 2026-08-04.)
 
 ---
 
@@ -67,3 +77,4 @@ automatic substitution/rotation remains forbidden.
 - `canon/strategy/trade-loops.md`
 - `canon/architecture/app-autopilot-model.md`
 - `workorders/WO-GUARDED-CHAIN-APPROVE-SCAFFOLD.md`
+- tip: `tw2002_aiclient/chain_search_view.py` · `cockpit/chains.py`
