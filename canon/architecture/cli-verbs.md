@@ -208,8 +208,9 @@ or by script from real `tw do`/`tw screen --json` output — see `cmd_record`'s 
 exact recipe) and `--draft` (write to `state/skills/_drafts/` instead of the blessed store);
 daemon-free like `loops` above — no `--run-dir`, never opens a socket, never sends. Wiring a
 *live* `tw attach` session directly into the recorder, so keystrokes become steps as they are
-pressed, is real future work X6's own scope explicitly excluded, not a change of target — see
-[Macros](/engine/macros.md)'s Findings for the mirrored note.
+pressed, is real future work X6's own scope explicitly excluded, not a change of target — tracked
+as [`WO-AUDIT-BUILD-CLI-LIVE-ATTACH-RECORDER-X6`](../../workorders/WO-AUDIT-BUILD-CLI-LIVE-ATTACH-RECORDER-X6.md);
+see [Macros](/engine/macros.md)'s Findings for the mirrored note.
 
 **NOT on tip as a `tw` CLI verb (HOLD / later / retired — do not document as shipped):**
 `spectate` (**RETIRED / WONTBUILD** — Max `@ 13:13:55Z`; in-cockpit Spectate LIVE via PWO-055),
