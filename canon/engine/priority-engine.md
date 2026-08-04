@@ -55,9 +55,15 @@ working *reader* and no *writer* — the shape that renders an honest `?` foreve
 stays green, because tests supply what the product does not. When updating this column, state which
 side is missing: "implemented" describing a consumer alone is how these two rows stayed wrong.
 
-| # | Priority | Type | Weight | Depends on | Status in code (2026-07-28) |
+**2026-08-04 honesty pass (`AUDIT-CANON-FIX-STALE-TURNSLEFT-CREDITS-STATUS`):** row 1 is no longer
+Starved — `protocol._status_response` emits top-level `turns_left` / `credits` on OUTCOME_READ
+(`WO-STATUS-CREDITS` · `WO-HUD-STATUS-BRIDGE`); GOALS renders them when present. Residual: FOCUS
+weight-100 gating still does not *require* those scalars before other suggestions (overlay bridge
+covers catalog #4/#5, not the turns/credits boolean).
+
+| # | Priority | Type | Weight | Depends on | Status in code (2026-08-04) |
 |---:|---|---|---:|---|---|
-| 1 | Turns & credit count known | Boolean | 100 | — | **Starved** — no code produces `turns_left` at all (every occurrence in the package is prose; `state_parser` line 421 states it *declines* the archive's forging regex rather than reimplementing it). Credits: `read_credits_balance` exists but is not wired onto `status`. `hud_seed` sends `I` as documented. GOALS reads both keys and can only render `?` |
+| 1 | Turns & credit count known | Boolean | 100 | — | **Partial** — writers live: `_status_response` emits `turns_left` + `credits` when sticky OUTCOME_READ (`protocol.py`); GOALS Turns/Credits rows consume them. Still omit-until-read (honest `?` before `I`/`observe_*`). FOCUS does not yet weight-gate on unmet #1. |
 | 2 | Current-ship type identified | Boolean | 90 | #1 | Planned — no live current-ship introspection adapter; `ShipSpec`/`PlayerState` exist for scoring but aren't fed live |
 | 3 | StarDock located | Boolean | 85 | explore when unknown | **Starved** — the READER is implemented (`explore.find_landmark_sectors()`), the WRITER never was: no code writes `landmarks[]`, so the lookup returns `[]` however much is explored and GOALS can never show `StarDock @…`. Blocked on `WO-WM-LANDMARKS-WRITE` |
 | 4 | Cost of other ships known | Boolean | 80 | #3 | Partial — GOALS gated until dock found; catalog not yet on live `WorldSnapshot.ship_catalog` |
