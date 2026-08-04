@@ -151,6 +151,25 @@ screens preserve and age that value rather than resetting it.
 
 *(Honesty pass `AUDIT-CANON-DRAFT-HUD-TRACKING-COVERAGE`, 2026-08-04.)*
 
+**Idle-tick live refresh (`cockpit/live_refresh.py`) — budget, not throttle.** GOALS /
+HUD world+chain readouts used to update mainly on `L` (or explore *completion*), so an
+always-on surface stayed empty through a whole explore run. Tip idle tick (~1 Hz) now
+refreshes:
+
+| Half | Interval | Guard |
+|---|---|---|
+| `world_stats` (cheap directory count) | `WORLD_STATS_INTERVAL_S` (5s) | throttle-ish — cost stays small |
+| `chain_scalars` / recompute | `CHAIN_INTERVAL_S` (10s) | **self-measuring budget** `CHAIN_BUDGET_S` (0.25s ≈ ¼ of the 1 Hz tick) |
+
+Measured `chain_search.recompute` cost grows steeply with ports (tens of ms → seconds →
+minutes on large worlds). A pure throttle only makes freezes rarer; one over-budget call
+**retires automatic chain refresh for the rest of that play session** (`chain_auto_retired`),
+falling back to `L`. Skipped refresh keeps the previous value — never fabricates or clears.
+Bounding `build_trade_hops`' O(ports²) work is a separate WO; this module deliberately does
+not touch it.
+
+*(Honesty pass `AUDIT-CANON-DRAFT-LIVEREFRESH-BUDGET-DESIGN`, 2026-08-04.)*
+
 ## Liveness and TX transparency — killing "is it frozen?"
 
 A machine on a settled screen and a machine that has hung look identical unless the dashboard proves
@@ -521,6 +540,9 @@ reborn module is cited; prefer `tw2002_aiclient/cockpit/*` for chrome that has a
   `format_cargo_hud_value`, never-from-market contract) · session sticky callers in
   `session/session.py` (`observe_cargo`, `cargo_snapshot`, `adjust_holdings`,
   `observe_holdings` non-write) · paint via `session/protocol.py`.
+- **Idle-tick live refresh** — `tw2002_aiclient/cockpit/live_refresh.py` (`LiveRefresh`,
+  `CHAIN_BUDGET_S` self-retirement, world vs chain intervals;
+  `AUDIT-CANON-DRAFT-LIVEREFRESH-BUDGET-DESIGN`).
 - **Reimagined from** — `USERDOCS/aiclient_ui.md` and the TUI sections of
   [/engine/priority-engine.md](/engine/priority-engine.md) (GOALS/FOCUS two-layer panel model;
   folded from retired root `priority_engine.md` / USERDOCS draft), re-rooted in the reborn
