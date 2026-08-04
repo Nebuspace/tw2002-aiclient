@@ -528,6 +528,7 @@ def build_trade_hops(
 
     graph = known_graph(world_id, state_dir=state_dir)
     membership = _membership_index(world_id, state_dir=state_dir)
+    threats_by_sector = _threats_index(world_id, state_dir=state_dir)
     commodity_maps = _commodity_maps(ports)
 
     # Phase 1 -- cheap filters only (no routing). Collect priced
@@ -591,7 +592,12 @@ def build_trade_hops(
         path = paths_from[frm].get(to)
         if path is None:
             continue  # no known route -- fail-closed, no hop
-        if _path_has_route_hazard(graph, path, membership=membership):
+        if _path_has_route_hazard(
+            graph,
+            path,
+            membership=membership,
+            threats_by_sector=threats_by_sector,
+        ):
             continue  # shortest path is a route hazard — exclude, no detour
         turns = len(path) - 1  # path inclusive of both endpoints
         if turns <= 0:
@@ -678,11 +684,25 @@ def _membership_index(world_id: str, *, state_dir=None) -> dict[int, tuple[str, 
     return out
 
 
+def _threats_index(world_id: str, *, state_dir=None) -> dict[int, dict]:
+    """sector_id → threats mapping (mines / fighters) for path exclude."""
+    out: dict[int, dict] = {}
+    for rec in world_model.all_sectors(world_id, state_dir=state_dir):
+        threats = rec.get("threats")
+        if isinstance(threats, dict):
+            try:
+                out[int(rec["sector_id"])] = threats
+            except (KeyError, TypeError, ValueError):
+                continue
+    return out
+
+
 def _path_has_route_hazard(
     graph: Mapping[int, Sequence[int]],
     path: Sequence[int],
     *,
     membership: Mapping[int, Sequence[str]] | None = None,
+    threats_by_sector: Mapping[int, Mapping] | None = None,
 ) -> bool:
     """True when the planned shortest path crosses a known route hazard.
 
@@ -690,7 +710,16 @@ def _path_has_route_hazard(
     alternate path (canon Dual-consumer: STOP/exclude, not reroute).
     """
     for a, b in zip(path, path[1:]):
-        if route_hazard_for_hop(graph, a, b, membership=membership) is not None:
+        if (
+            route_hazard_for_hop(
+                graph,
+                a,
+                b,
+                membership=membership,
+                threats_by_sector=threats_by_sector,
+            )
+            is not None
+        ):
             return True
     return False
 
@@ -821,6 +850,7 @@ def build_candidate_pairs(
 
     graph = known_graph(world_id, state_dir=state_dir)
     membership = _membership_index(world_id, state_dir=state_dir)
+    threats_by_sector = _threats_index(world_id, state_dir=state_dir)
     path_cache: dict[int, dict[int, tuple[int, ...]]] = {}
 
     def _paths_from(sector: int) -> dict[int, tuple[int, ...]]:
@@ -855,8 +885,16 @@ def build_candidate_pairs(
             path_ba = _paths_from(sector_b).get(sector_a)
             if path_ab is None or path_ba is None:
                 continue  # compatible posture, no known route -- fail-closed, no pair
-            if _path_has_route_hazard(graph, path_ab, membership=membership) or _path_has_route_hazard(
-                graph, path_ba, membership=membership
+            if _path_has_route_hazard(
+                graph,
+                path_ab,
+                membership=membership,
+                threats_by_sector=threats_by_sector,
+            ) or _path_has_route_hazard(
+                graph,
+                path_ba,
+                membership=membership,
+                threats_by_sector=threats_by_sector,
             ):
                 continue  # shortest path is a route hazard — exclude, no detour
             turns = (len(path_ab) - 1) + (len(path_ba) - 1)

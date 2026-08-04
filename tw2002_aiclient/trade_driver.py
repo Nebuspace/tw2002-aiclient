@@ -750,6 +750,7 @@ def _navigate(
     hop_index: int,
     *,
     membership: Mapping[int, tuple] | None = None,
+    threats_by_sector: Mapping[int, Mapping] | None = None,
 ) -> int:
     """One warp at a time along the known-graph shortest path from `frm`
     to `to`, each gated fresh (HIGH-2 classify check + a non-adjacent
@@ -757,8 +758,8 @@ def _navigate(
     chain's own far-side sector fired blind.
 
     WO-TRADE-ROUTE-HAZARD-GUARD: before any send, scan the planned path
-    for known one-way / warp-sink hops. Hazard → ChainHold (STOP) — never
-    an autonomous detour (canon Dual-consumer split).
+    for known one-way / warp-sink / sector-threat hops. Hazard → ChainHold
+    (STOP) — never an autonomous detour (canon Dual-consumer split).
     """
     if frm == to:
         return turns_budget
@@ -767,7 +768,13 @@ def _navigate(
         raise ChainHold(f"route_unknown:{hop_index}")
 
     for a, b in zip(path, path[1:]):
-        hazard = route_hazard_for_hop(graph, a, b, membership=membership)
+        hazard = route_hazard_for_hop(
+            graph,
+            a,
+            b,
+            membership=membership,
+            threats_by_sector=threats_by_sector,
+        )
         if hazard is not None:
             raise ChainHold(f"{hazard}:{hop_index}")
 
@@ -886,10 +893,14 @@ def run_chain(
     ctx = _StepCtx(session, config, should_abort, is_armed)
     graph = known_graph(world_id, state_dir=state_dir)
     membership: dict[int, tuple[str, ...]] = {}
+    threats_by_sector: dict[int, dict] = {}
     for rec in world_model.all_sectors(world_id, state_dir=state_dir):
         tags = rec.get("formation_membership") or ()
         if tags:
             membership[int(rec["sector_id"])] = tuple(str(t) for t in tags)
+        threats = rec.get("threats")
+        if isinstance(threats, dict):
+            threats_by_sector[int(rec["sector_id"])] = threats
 
     start_text, start_prompt = ctx.fresh()
     start_sector = read_current_sector(start_prompt)
@@ -940,6 +951,7 @@ def run_chain(
             turns_budget = _navigate(
                 ctx, graph, hop.frm, hop.to, turns_budget, caps, hop_index,
                 membership=membership,
+                threats_by_sector=threats_by_sector,
             )
             _sold_qty, sell_total, turns_budget = _visit_port(
                 ctx, hop, "sell", bought_qty, caps, config, turns_budget, hop_index

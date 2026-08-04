@@ -60,6 +60,20 @@ def _formation_membership_index(
     return out
 
 
+def _threats_by_sector_index(
+    world_id: str,
+    *,
+    state_dir=None,
+) -> dict[int, dict]:
+    """sector_id → threats mapping for route-hazard STOP checks."""
+    out: dict[int, dict] = {}
+    for rec in world_model.all_sectors(world_id, state_dir=state_dir):
+        threats = rec.get("threats")
+        if isinstance(threats, dict):
+            out[_sector_id(rec)] = threats
+    return out
+
+
 def _guard_route_hazard_hop(
     graph: Mapping[int, Sequence[int]],
     current_sector: int,
@@ -80,6 +94,7 @@ def _guard_route_hazard_hop(
         current_sector,
         next_sector,
         membership=_formation_membership_index(world_id, state_dir=state_dir),
+        threats_by_sector=_threats_by_sector_index(world_id, state_dir=state_dir),
     )
 
 
