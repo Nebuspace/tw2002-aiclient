@@ -158,7 +158,7 @@ Profit-per-turn ranking [H1, illustrative]:
   Loop Q: +500 cr / 10 turns = 50 cr/turn
   Q earns more per trip but P earns more per turn — P wins on the scorer.
 
-Execute-floor bands (rule-guard inputs, priority_engine.py):
+Execute-floor bands (rule-guard inputs, `chains.py`):
   best chain links   layer behavior
   0–1                discovery-only — not offered as an earn macro; prefer search/explore
   2–3                earn on the known chain; ship upgrade NOT yet prioritized
