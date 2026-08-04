@@ -502,7 +502,10 @@ The reborn contract above is the target; the current code still carries pre-rebo
   approve-scaffold. Enter only raises the visible default-deny gate; `y`
   confirms one fingerprint, one route, one pass, and the displayed cash/turn
   floors. Partial/truncated discovery cannot arm, and no current-best
-  substitution is allowed. Panic halts either runtime.
+  substitution is allowed. Panic halts either runtime. Tip display of the
+  discovered section is `tw2002_aiclient/chain_search_view.py` — partial
+  listings must wear a `PARTIAL_*` banner; truncated-empty ≠ "no chains"
+  (see ADR-003 Consequences · `AUDIT-CANON-DRAFT-CHAINSEARCH-HONESTY-CONTRACT`).
 
 # Citations
 
