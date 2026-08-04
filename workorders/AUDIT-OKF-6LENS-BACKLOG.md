@@ -58,7 +58,7 @@ Committable twin: `workorders/AUDIT-OKF-6LENS-BACKLOG.md`. Draft WOs: `workorder
 | A-L3-GUARDIAN-STOP | P2 | Guardian notes STOP+Human escalate “follow-up” | `guardian.py:166` | **CLOSED** — PWO-065 LIVE (STOP prompt-to-attach); guardian comment repaired to cite 065 |
 | A-L3-ART-HINTS | P1 | screens comments reserve A/R/T / N5 — unwired | `screens.py` | **CLOSED** — tip wired: `WO-P5-066` DONE · `WO-P5-071` DONE `11595d8`; A/R/T intents in `screens.handle_key`; stale “not built here” comments repaired |
 | A-L3-SESSION-F6 | P3 | Transcript order before vs after `sendall` | `connection.py` · `session.py` | **BANKED** |
-| A-L3-SESSION-F7 | P3 | `daemon_running` over failed status round-trip | `cli.py` | **BANKED** |
+| A-L3-SESSION-F7 | P3 | `daemon_running` over failed status round-trip | `cli.py` | **DONE** tip `b2ef693` |
 | A-L3-SESSION-F8 | P3 | watch frame parse gaps vs `--frames N` | `cli.py` | **BANKED** |
 | A-L3-CLASSIFY-AUDIT | P2 | `classify.py` unaudited (except secret-prompt regex) | `session/classify.py` | **CLOSED** — `WO-SESSION-CLASSIFY-AUDIT-COVERAGE` DONE `a4347f0` (#12) + tip classify WOs/tests |
 
