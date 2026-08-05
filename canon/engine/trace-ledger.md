@@ -165,21 +165,17 @@ Ledger rows (illustrative — reborn actor values):
 
 # Code divergence
 
-The reborn actor model above prescribes `{app, human}` live senders with the AI as author-only. The
-current code still carries the **pre-reborn three-value enum and a live `ai` default**:
+The reborn actor model above (`{app, human}` live senders; AI author-only) is **tip reality** for
+the write path. Remaining gaps are keying / consumer wiring, not the enum:
 
-- **`ledger.py`'s `record_do()` declares `actor` as one of `{"ai", "trainer", "human"}` and defaults
-  it to `"ai"`.** The default `"ai"` is applied to the direct `do`/`send` dispatch path in
-  `protocol.py` — i.e. the code treats an LLM-decided send as a *live* `ai` actor value. Under the
-  reborn vision there is **no live `ai` sender**: that path is a deterministic app playback or a
-  human keystroke, and AI is a rule author whose contribution is not a ledger `actor` value at all.
-  The mapping the code must move to: **`trainer` → `app`** (a deterministic no-LLM engine send), the
-  default becomes `app` (or is made explicit per call site), and the `ai` live value is **retired**
-  from the enum. `human` is already correct. Docs win: `{app, human}` is the target; the code's
-  `{ai, trainer, human}` with an `ai` default is the divergence to close. (Old rows already written
-  with `actor: "ai"`/`"trainer"` are not migrated in place — the "missing/legacy value = read as
-  best-effort" convention keeps them readable; a retro pass should map a legacy `trainer` to `app`
-  and treat a legacy `ai` row as authored-decision provenance, not a live-sender count.)
+- **Ledger live-sender enum — tip closed.** Tip `ledger.LedgerWriter.record_do` requires
+  `actor ∈ VALID_SENDERS` (`app`|`human`); `session.VALID_SENDERS` matches. There is no live `ai`
+  default and no `trainer` synonym on the write path. Legacy `{ai, trainer, human}` vocabulary is
+  archive / old-row caution only — `live_actor_counts` skips unknown/`ai` rows (never invents a
+  third live driver). Old rows written with `actor: "ai"`/`"trainer"` are not migrated in place;
+  a retro pass may map legacy `trainer` → `app` and treat legacy `ai` as authored-decision
+  provenance, not a live-sender count. (Same closed note lives in
+  [coverage-metrics](/engine/coverage-metrics.md).)
 
 - **The ledger is a single global sink (`state/ledger.jsonl`), not per-world.** Rows carry
   `session_id` (so a retro can slice by session) but not a world slug, so a clean per-world slice

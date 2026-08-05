@@ -174,20 +174,14 @@ conformed):
   built: the two share the draft-and-approve gate, but the miner groups *recurring profitable*
   sequences across a session, whereas the teacher reasons about *one specific hard screen* on demand.)
 
-- **`control_lock.py`'s `MODE_AI_PILOT` is a live-AI-driver mode.** It is the daemon's *default* mode,
-  documented as "the AI drives — do/send/play/replay/haggle always succeed." Under the reborn vision
-  there is **no live AI driver** at all: that default should be an *app* pilot (deterministic taught
-  playback that stops on the unknown), and the AI's only role is the on-demand teacher. The likely
-  reborn repurposing is to rename/reframe this mode as app-pilot and treat "invoke the teacher" as an
-  explicit on-demand action, not a standing "the AI is driving" state. Recorded as a naming/semantics
-  divergence, not a defect in the lock's exclusivity machinery (which is correct — see
-  [control-and-escalation](/architecture/control-and-escalation.md)).
+- **`control_lock.py` `MODE_AI_PILOT` — RETIRED on tip (2026-08-04).** Tip keeps only
+  `{app, human, spectate}`; there is no live-AI-driver mode. Historical finding + do-not-revive
+  live in [control-and-escalation](/architecture/control-and-escalation.md) (and
+  [alignment-and-conduct](/doctrine/alignment-and-conduct.md)). Not an open divergence here.
 
-- **The ledger still defaults `actor="ai"` on the direct dispatch path** (`ledger.py` /
-  `protocol.py`), i.e. the code models an LLM-decided send as a *live* `ai` actor. The reborn record
-  has no live `ai` sender; this is tracked in full under [trace-ledger](/engine/trace-ledger.md) and
-  is the ledger-side face of the same "AI drives" pre-reborn assumption this concept retires on the
-  authoring side.
+- **Ledger live-sender enum — tip closed.** Tip `record_do` accepts only `app`|`human`
+  (`VALID_SENDERS`); there is no live `ai` default on the dispatch path. Full note under
+  [trace-ledger](/engine/trace-ledger.md) / [coverage-metrics](/engine/coverage-metrics.md).
 
 - **Pre-reborn "engine/AI keeps driving over the unknown" evidence** the teacher-only model corrects
   (owned in detail elsewhere, noted here as motivation): autopilot's *per-cycle EV action selection*
