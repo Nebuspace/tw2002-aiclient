@@ -62,6 +62,8 @@ lesson as ``strip.py``'s ``_clean``.
 
 from __future__ import annotations
 
+from tw2002_aiclient.game_data_stats import HOLD_PRICE_LABEL_KEY, SHIP_PRICES_COUNT_KEY
+
 GLYPH_MET = "✓"
 GLYPH_PARTIAL = "·"
 GLYPH_UNKNOWN = "?"
@@ -270,7 +272,7 @@ def compose_goals_lines(status: dict | None, *, width: int) -> list[str]:
         lines.append(_row(GLYPH_PARTIAL, _label("chain", short=short), "none yet", width=width))
 
     # -- Ship prices (gated on a confirmed-not-found StarDock) -----------
-    ship_prices = _safe_int(status.get("ship_prices_count"))
+    ship_prices = _safe_int(status.get(SHIP_PRICES_COUNT_KEY))
     if dock_blocked:
         lines.append(_row(GLYPH_BLOCKED, _label("ship_prices", short=short), UNKNOWN_DETAIL, width=width))
     elif ship_prices is None:
@@ -282,12 +284,12 @@ def compose_goals_lines(status: dict | None, *, width: int) -> list[str]:
         lines.append(_row(GLYPH_PARTIAL, _label("ship_prices", short=short), "price?", width=width))
 
     # -- Hold price (same gate) ------------------------------------------
-    hold_label = _safe_str(status.get("hold_price_label"))
+    hold_label = _safe_str(status.get(HOLD_PRICE_LABEL_KEY))
     if dock_blocked:
         lines.append(_row(GLYPH_BLOCKED, _label("hold_price", short=short), UNKNOWN_DETAIL, width=width))
     elif hold_label:
         lines.append(_row(GLYPH_MET, _label("hold_price", short=short), hold_label, width=width))
-    elif "hold_price_label" in status:
+    elif HOLD_PRICE_LABEL_KEY in status:
         # Key present but blank — a quote was attempted and came back
         # empty, distinct from never having asked at all.
         lines.append(_row(GLYPH_PARTIAL, _label("hold_price", short=short), "price?", width=width))
