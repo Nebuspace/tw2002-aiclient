@@ -516,6 +516,45 @@ def cmd_history(args):
     return 0 if resp.get("ok") else 1
 
 
+def cmd_log(args):
+    """WO-WIRE-CLI-LOG-TRAIL-VERB: render the trace ledger as a trail.
+
+    Daemon-free filesystem read of ``state/ledger.jsonl`` (override with
+    ``--ledger``). ``tw trail`` is the same handler. Never sends; never
+    chooses a live keystroke — the ledger is teach/measure only
+    (``canon/engine/trace-ledger.md``).
+    """
+    from tw2002_aiclient.ledger import (
+        DEFAULT_LEDGER_PATH,
+        read_entries,
+        render_trail_line,
+    )
+
+    path = getattr(args, "ledger", None)
+    world_id = getattr(args, "world_id", None)
+    try:
+        n = int(getattr(args, "n", 20))
+    except (TypeError, ValueError):
+        n = 20
+    if n < 0:
+        n = 0
+    entries = read_entries(path, world_id=world_id)
+    slice_ = entries[-n:] if n else []
+    resolved = Path(path) if path is not None else DEFAULT_LEDGER_PATH
+    if getattr(args, "json", False):
+        print(
+            json.dumps(
+                {"ok": True, "path": str(resolved), "entries": slice_},
+                ensure_ascii=False,
+                default=str,
+            )
+        )
+        return 0
+    for entry in slice_:
+        print_tty(render_trail_line(entry))
+    return 0
+
+
 def cmd_watch(args):
     """WO-P2-OPS-VERB-E2: tail the settle-edge push-stream (read-only).
 
@@ -1567,6 +1606,35 @@ def build_parser() -> argparse.ArgumentParser:
                      help="daemon run directory override (default: project-rooted run/)")
     sp.add_argument("--json", action="store_true", help="machine-parseable JSON output")
     sp.set_defaults(func=cmd_history)
+
+    # WO-WIRE-CLI-LOG-TRAIL-VERB: same handler for `log` and `trail`.
+    _log_help = (
+        "render the trace ledger as QUESTION -> KEYSTROKE -> RESULT "
+        "(filesystem read; daemon not required)"
+    )
+    for _verb in ("log", "trail"):
+        sp = sub.add_parser(_verb, help=_log_help)
+        sp.add_argument(
+            "--n",
+            type=int,
+            default=20,
+            help="max trail rows to print, most recent (default 20)",
+        )
+        sp.add_argument(
+            "--ledger",
+            default=None,
+            metavar="PATH",
+            help="ledger JSONL path (default: state/ledger.jsonl)",
+        )
+        sp.add_argument(
+            "--world-id",
+            default=None,
+            dest="world_id",
+            metavar="SLUG",
+            help="only rows stamped with this world_id",
+        )
+        sp.add_argument("--json", action="store_true", help="machine-parseable JSON output")
+        sp.set_defaults(func=cmd_log)
 
     sp = sub.add_parser(
         "watch",
