@@ -156,19 +156,23 @@ recorded, not silently conformed to).
 
 ## Code divergence
 
-- **`fighter_toll_policy.decide_fighter_option` auto-selects Attack (`"A"`).** Target
-  (Max GO 2026-07-28): Attack only when `force_share ≥ force_share_auto_attack` (default
-  0.90) ∧ `enemy ≤ winnable_enemy_band` ∧ both counts present ∧ NPC-only; then
-  `next_fighter_option_input` may auto-commit a clamped quantity on `How many fighters…`
-  only when counts are still present; unreadable at qty ⇒ never `max_avail`, STOP that
-  owns the prompt (no `A` re-fire loop). Keep Retreat / never-Pay / unparseable-at-Option.
-  Re-validate screen-match every tick so a mid-fight unrecognized frame halts.
+- **`force_share` auto-Attack gate — RESOLVED on tip (WO-CANON-DRAFT-TOLL-DEFENSE-STALE-DIVERGENCE-NOTE).**
+  Tip `session/fighter_toll_policy.py` (`decide_encounter` / `decide_quantity` /
+  `next_encounter_input`; Max GO 2026-07-28) Attack-selects `"A"` only when
+  `force_share ≥ force_share_auto_attack` (default 0.90) ∧ `enemy ≤ winnable_enemy_band`
+  ∧ both counts present ∧ NPC-only; quantity commit is clamped and **never**
+  `max_avail` when counts are unreadable (STOP owns the prompt — no `A` re-fire loop).
+  Retreat / never-Pay / unparseable-at-Option remain. The old
+  `decide_fighter_option` / `next_fighter_option_input` names are gone; do not cite them
+  as missing rails. Separate design question (human-approval before any auto-Attack)
+  stays outside this tip-catchup — see gated escalate rows if present.
 - **Autopilot per-cycle EV selection + "never idle" appetite.** The legacy autopilot
   picks an action each cycle by expected value, backed by an `EXPLORE_BASELINE_EV`
   floor that keeps it moving rather than ever idling. Under the reborn vision the
   reroute-vs-fight EV is a *ranking/coaching* input only; it must not act as a live
   per-cycle action-picker, and the "never idle / keep-driving" appetite is retired in
-  favor of depletion/hazard STOP-guards.
+  favor of depletion/hazard STOP-guards. Tip has no `autopilot.py`; `EXPLORE_BASELINE_EV`
+  is suggestion-only in `focus_status.py` (display subdivergence closed elsewhere).
 - **`trade_driver`'s autonomous chain runner** executes a taught chain end-to-end on its
   own. The reborn target is a HUMAN-ARMED taught behavior that re-validates screen_match
   every tick and halts on the first unrecognized frame — a toll/mine encountered mid-chain
