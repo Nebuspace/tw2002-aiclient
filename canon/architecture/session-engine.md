@@ -305,11 +305,11 @@ carrier mechanics above describe the `{app, human}` live-sender target that tip 
 one-round-trip settle-return shape
 [2] internal design history (v2) — the transparency TX channel and the send-time attribution/
 `session_id` substrate (TW-05)
-[3] twclient/daemon.py, cli.py — the two-process split, pidfile single-connection guard, and the
-subscribe/attach lifetime-connections
-[4] twclient/connection.py, iac.py, terminal.py — background reader thread, hand-rolled IAC
-stripping, CP437 80×25 pyte render
+[3] tw2002_aiclient/session/daemon.py, session/cli.py — the two-process split, pidfile
+single-connection guard, and the subscribe/attach lifetime-connections
+[4] tw2002_aiclient/session/connection.py, iac.py, terminal.py — background reader thread,
+hand-rolled IAC stripping, CP437 80×25 pyte render
 [5] tw2002_aiclient/session/control_lock.py — tip active-driver slot, human-preemption fencing, `{app, human, spectate}` modes
-[6] twclient/session.py, protocol.py — the send choke point, boundary redaction across all three
-sinks, and the `{actor, session_id}` ledger tag
-[7] twclient/env.py — the host/port resolution precedence chain
+[6] tw2002_aiclient/session/session.py, protocol.py — the send choke point, boundary redaction
+across all three sinks, and the `{actor, session_id}` ledger tag
+[7] tw2002_aiclient/session/env.py — the host/port resolution precedence chain
