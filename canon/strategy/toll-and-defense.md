@@ -48,8 +48,8 @@ model.
 | `surrender_upside` | ~10× ⇒ tends free/full surrender; ~5× ⇒ ~even odds of partial; ~2× ⇒ smaller chance [hypothesis] | Approximate bands by attack-strength ratio. Bands, not guarantees; coaching input only. |
 | `missile_bypass_fraction` | ~7% [hypothesis] | Fraction of missile damage that bypasses fighter defense directly — the argument for a standing shield reserve even when fighters alone look sufficient. |
 | `min_shield_reserve` | ~10% of fighter count [hypothesis] | Standing shield floor to blunt the bypass-damage risk. |
-| `reserve_floor` (deploy/sell clamp) | 5 aboard [hypothesis: `DEFAULT_FIGHTER_RESERVE`] | Small early-game floor: never sell/deploy a ship below this, so a lone toll can still be answered after routine trade. |
-| `defense_fighter_floor` (upgrade) | 20 aboard [hypothesis: `keep_min_defense_fighters`] | Larger standing defense floor on the upgrade path; distinct from the small reserve above. |
+| `reserve_floor` (deploy/sell clamp) | 5 aboard — **LIVE** tip `DEFAULT_FIGHTER_RESERVE` in `session/fighter_toll_policy.py` | Small early-game floor: never sell/deploy a ship below this, so a lone toll can still be answered after routine trade. |
+| `defense_fighter_floor` (upgrade) | 20 aboard [hypothesis: `keep_min_defense_fighters`] — **NOT ON TIP** | Larger standing defense floor on the upgrade path was sketched as distinct from the small reserve above. Tip has **no** `defense_fighter_floor` / `keep_min_defense_fighters` symbol; do not cite them as importable. Building the second floor is a separate product WO (may be Max-gated as defense policy). Until then, only `DEFAULT_FIGHTER_RESERVE=5` clamps live quantity. |
 | `winnable_enemy_band` | ≤ 3 enemies [hypothesis: `DEFAULT_AUTO_ATTACK_MAX_ENEMY`] | "Single or few." Above this, auto-Attack is forbidden even if force_share is high. |
 | `force_share_auto_attack` | ≥ 0.90 [Max GO 2026-07-28] | Autonomous NPC Attack allowed when `force_share = own / (own + enemy) ≥` this value **and** `enemy ≤ winnable_enemy_band` **and** both counts are present. Name the ratio **force_share** (not `win_est`). |
 
@@ -88,10 +88,11 @@ cycle**:
   known/suspected mined sector on a route is a route-hazard guard input that STOPS the
   planned crossing and escalates — it is not silently driven through.
 
-The reserve floors (`reserve_floor`, `defense_fighter_floor`) are quantity **clamps**:
-they bound how many fighters a deploy/sell **or** an auto-Attack quantity commit may
-shed/spend so the ship is never left defenceless below the configured floor. They are
-not themselves a combat trigger.
+The live reserve floor today is **`DEFAULT_FIGHTER_RESERVE` (5)** — a quantity
+**clamp** on deploy/sell / auto-Attack commits so the ship is never left
+defenceless below that floor. It is not itself a combat trigger. A larger
+documented `defense_fighter_floor` (20) remains **unbuilt hypothesis** (see
+schema table) — do not treat it as a tip constant.
 
 # Reroute-vs-fight EV — a coaching / priority input
 
