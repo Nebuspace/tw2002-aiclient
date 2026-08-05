@@ -70,7 +70,9 @@ Profiles (server, handle, game letter) live in `config/profiles.toml`, copied fr
 file: they're resolved from a `TW2002_PASSWORD_<PROFILE>` environment variable first, or a
 chmod-600 `config/secrets.json` otherwise (registering a new character writes its generated
 password there for you). Either way, a password never appears in a log, an argument list, your
-shell history, or this repo.
+shell history, or this repo. (`tw attach --keys` *does* put its payload on argv/history by
+design for scripted attach — never put a password there; see
+[`canon/doctrine/secrets-and-credentials.md`](canon/doctrine/secrets-and-credentials.md).)
 
 ## Under the hood
 
