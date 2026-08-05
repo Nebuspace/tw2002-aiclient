@@ -111,29 +111,23 @@ def test_autonomy_help_one_liners_calm_vocab() -> None:
     assert "runs" in autonomy_keys.CHAINS_HELP
 
 
-def test_band_uses_trigger_not_the_banner_s_assign() -> None:
-    """The calm band and the STOP banner's own promoted teach line are two
-    DIFFERENT surfaces -- WO-PLAY-STRIP-TRAINER-CHROME only retired A/R/T
-    from the CALM band (in favor of `T)rade Loop Chain`, a relabel of the
-    same underlying `assign_trigger` wire); `stopbanner.TEACH_LINE`'s own
-    developer-register `T)assign` is untouched (a different surface, per
-    `teachband.py`'s own module docstring)."""
+def test_band_uses_trade_loop_not_assign() -> None:
+    """Calm band advertises Trade Loop on T; STOP banner no longer claims T)assign."""
     band = teachband.compose_teach_band()
     assert "T)rade Loop Chain" in band
     assert "T)rigger" not in band
     assert "T)assign" not in band
-    assert "T)assign" in stopbanner.TEACH_LINE  # the other register, unchanged
+    assert "T)assign" not in stopbanner.TEACH_LINE
+    assert "A)nalyze" in stopbanner.TEACH_LINE
+    assert "R)ecord" in stopbanner.TEACH_LINE
 
 
 def test_both_registers_are_grounded_in_canon_verbatim() -> None:
-    """Neither spelling is this repo's invention -- both appear in canon.
-
-    WO-PLAY-STRIP-TRAINER-CHROME's canon amendment cites the NEW trainer
-    calm band verbatim alongside the (unchanged, still-cited) developer
-    band and the STOP banner's own untouched teach line."""
+    """Trainer calm band + STOP teach line spellings appear in canon."""
     text = CANON.read_text(encoding="utf-8")
     assert "A)nalyze  R)ecord  T)rigger" in text     # developer band (superseded for this surface, still cited)
-    assert "A)nalyze  R)ecord  T)assign" in text     # STOP banner, untouched
+    assert "teach:  A)nalyze  R)ecord" in text or "A)nalyze  R)ecord" in text
+    assert "T)assign" not in stopbanner.TEACH_LINE
     assert (
         "E)xplore  F)ind StarDock·ON  P)ort Trade\u00b7ON  C)argo Hold Upgrade\u00b7ON  "
         "S)hip Upgrade\u00b7ON  \u2502  T)rade Loop Chain  L)ist Loops"

@@ -34,8 +34,9 @@ A/R/T teach-loop mechanics, the STOP banner's own `teach:` line, and the confirm
   the `KEY)verb` rule below). The retired tokens' underlying features (Analyze, Record, reflex, the
   rules library, the hold/offer confirm gates, the Trade-Loop-Chains popup, panic) are **all still
   reachable by their existing keys** — only the standing chrome that advertises them on THIS calm
-  band changes. The STOP banner's own escalation `teach:` line (`A)nalyze  R)ecord  T)assign`,
-  below) is untouched — a different surface, not this calm band.
+  band changes. The STOP banner's own escalation `teach:` line is tip
+  `A)nalyze  R)ecord` only (no false `T)assign` after calm `T` → Trade Loop) —
+  a different surface, not this calm band.
 
 **Tip token SSOT (do not let chrome and handlers drift).** Calm-band spellings and the keys that
 offer them are owned by tip modules — import the `*_TOKEN` / help strings; do not re-type labels:
@@ -144,10 +145,9 @@ the teach / operate keys on this surface include:
 - **Calm `T` — Trade Loop Chain** (Max DECISION · WO-EXPLORE-TRADE-MODE-SPLIT). Starts/stops the
   L-armed Trade Loop (`trade_loop_toggle`). This is **not** Assign-Trigger on the calm path.
 - **Assign-Trigger** (bind screen-match + guards → proposed rule) remains a tip module
-  (`cockpit/assign_trigger.py` + `app.py` handler) and is still named on the STOP banner's
-  `teach: A)nalyze R)ecord T)assign` line — but **no calm key currently emits** `assign_trigger`
-  after `T` was remapped to Trade Loop. Residual: re-home Assign-Trigger to a non-colliding key
-  or stop advertising `T)assign` on the banner (follow-on; not invent here).
+  (`cockpit/assign_trigger.py` + `app.py` handler). Calm `T` is Trade Loop; the STOP
+  banner teach line is **`teach:  A)nalyze  R)ecord` only** (no false `T)assign`).
+  Re-homing Assign-Trigger to a non-colliding key is a follow-on WO.
 
 Analyze / Record proposals remain **proposals, never live keystrokes.** Every proposed rule
 surfaces an **approve/reject** affordance and is **inert until the human approves it**.
@@ -242,10 +242,11 @@ strip beside the host identity (see the amendment above; the profile strip itsel
 ```
 ! STOP — autopilot halted            [ HUMAN — YOU HAVE CONTROL ]
   reason: autopilot no candidates    keyboard handed to you
-  teach:  A)nalyze this screen   R)ecord a macro   T)assign a trigger
+  teach:  A)nalyze this screen   R)ecord a macro
 ```
 The reason is a typed code (`autopilot_no_candidates`) resolved to its short label; the mode line has
-flipped to Human; the three teach moves are offered as affordances on the halt.
+flipped to Human; wired teach moves (Analyze / Record) are offered as affordances on the halt.
+Assign-Trigger is not advertised here until it has a non-colliding key again.
 
 ## Launching a taught run — the confirm gate
 
@@ -379,7 +380,7 @@ construction: an unrecognized code passes through as its own text; an **empty co
 banner never invents a message and never blanks. The full banner as reborn-specified carries three
 bands — the `! STOP` reason line (yellow-bold), the `[ HUMAN — YOU HAVE CONTROL ]` keyboard-handoff
 marker (the mode chip has flipped to the yellow Human register), and the `teach:` affordance line
-(`A)nalyze  R)ecord  T)assign`). Red is *not* used here — red is reserved for hard link-down (the
+(`A)nalyze  R)ecord` — Assign-Trigger unbound after calm `T` → Trade Loop). Red is *not* used here — red is reserved for hard link-down (the
 viewport's own border reddens on disconnect); an autopilot halt is a **warning**, a screen it hasn't
 been taught yet, not a failure, so it wears yellow.
 
@@ -489,9 +490,9 @@ The reborn contract above is the target; the current code still carries pre-rebo
   Mode attach is **Ctrl-A** (`MODE_KEY`), not printable `A`. Calm `T`/`t` →
   Trade Loop (`trade_loop_toggle`, WO-EXPLORE-TRADE-MODE-SPLIT).
   **Residual:** Assign-Trigger module + `app.py` handler remain, but no key
-  emits `assign_trigger` after the calm-`T` remap; STOP banner still paints
-  `T)assign` — bank a follow-on to re-key or re-label, do not silently claim
-  Assign-Trigger is calm-`T`.
+  emits `assign_trigger` after the calm-`T` remap. STOP banner teach line is
+  now `A)nalyze  R)ecord` only (false `T)assign` removed). Re-key Assign-Trigger
+  is a follow-on — do not silently claim Assign-Trigger is calm-`T`.
 - **The auto meter "AI" count — tip closed.** Archive
   `spectate_layout.format_autonomy_counts` rendered `App / AI · Hum`. Tip
   meter is `cockpit/covermeter.py` App-vs-Human only (`COV`; no live AI slice) —
