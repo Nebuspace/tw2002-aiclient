@@ -1600,7 +1600,13 @@ def build_parser() -> argparse.ArgumentParser:
         "--keys",
         default=None,
         metavar="BYTES",
-        help="scripted keystroke(s) then detach (unicode-escape; no TTY required)",
+        # Pure ASCII (WO-ASCII-ENCODE-HONESTY): help prints on the same
+        # ascii/latin-1 terminals where attach encoding matters. Doctrine
+        # draft in secrets-and-credentials.md Invariant 1; KEYS-ARGV stamp.
+        help=(
+            "scripted keystrokes then detach (unicode-escape; no TTY). "
+            "NEVER a password - lands in argv/history"
+        ),
     )
     sp.add_argument("--run-dir", default=None, metavar="PATH", dest="run_dir",
                      help="daemon run directory override (default: project-rooted run/)")

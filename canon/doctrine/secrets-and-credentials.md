@@ -26,9 +26,9 @@ what the operator uses to choose which credential; this concept is the disciplin
    **Operator hazard (tip honesty · 2026-07-25):** `tw attach --keys …` *does* place its payload on
    argv / shell history by design (scripted/non-TTY automation). That flag is therefore **not a
    credential channel** — never put a password or PIN in `--keys`. Prefer interactive attach (secret
-   prompts hit the redaction sink) or env / chmod-600 `secrets.json`. Draft argparse help copy for
-   product (no `.py` in this docs tick):
-   `scripted keystrokes then detach (unicode-escape; no TTY). NEVER a password — lands in argv/history.`
+   prompts hit the redaction sink) or env / chmod-600 `secrets.json`. Product argparse help
+   (ASCII-safe, `tw attach --help`) lands the same warning:
+   `scripted keystrokes then detach (unicode-escape; no TTY). NEVER a password - lands in argv/history.`
 
 2. **Every password send routes through the redaction sink.** A keystroke that carries a secret
    is logged as a redaction marker, never as its bytes — and never with a byte count, since a
