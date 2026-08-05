@@ -142,14 +142,17 @@ The **mode-line-and-teach-controls** surface renders the STOP banner from this t
 takes the escalation's reason *code*, resolves it through `intervention_reason_label()`, and shows
 the resulting short label — the banner reason is a typed code, not free text.
 
-**Code divergence.** The STOP-cause families above (guard-STOP, unrecognized-screen, novelty-halt,
-depletion, hazard, desync, human-sovereignty preemption) are the canonical taxonomy; the actual
-`INTERVENTION_REASON_LABELS` map does not yet carry a *dedicated* code for every family boundary —
-e.g. "unrecognized-screen" and "novelty-halt" are both expressed through the autopilot/explore
-codes above rather than a single generic `unrecognized_screen` code, and there is no distinct
-`guard_stop` code separate from the general `autopilot_halted`. The map as-is is the ground truth
-this catalog is grounded in; tightening the codes to one-per-family is a possible future code change,
-recorded here as divergence — the doc is not conformed down to the current code.
+**Code divergence — tip-closed (WO-FIX-CONTROL-ESCALATION-STOP-CAUSE-CODES).** The STOP-cause
+families above (guard-STOP, unrecognized-screen, novelty-halt, depletion, hazard, desync,
+human-sovereignty preemption) remain the canonical taxonomy. Tip `INTERVENTION_REASON_LABELS`
+already carries **dedicated** codes covering each family (e.g. `unrecognized_screen`,
+`route_hazard`, `floor_reached` / `turn_budget_exhausted`, `reconnect_exhausted` /
+`credits_unreadable`, `human_attach_blocks_trainer` / `operator_stop`, plus many guard-STOP
+anchors). Families are many-codes-to-one-family by design — the catalog does **not** require a
+single unused generic `guard_stop` / `novelty_halt` token. Prior prose claiming
+"unrecognized-screen and novelty-halt are only autopilot/explore codes" / "no
+`unrecognized_screen`" was stale vs tip `stopbanner.py`. Unmapped codes still pass through RAW
+(Max ruling 1A). Optional one-per-family aliases are not owed.
 
 # Schema
 
