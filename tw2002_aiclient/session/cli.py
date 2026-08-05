@@ -555,6 +555,55 @@ def cmd_log(args):
     return 0
 
 
+def cmd_report(args):
+    """WO-BUILD-POST-SESSION-ACTION-REPORT: app-action digest from the ledger.
+
+    Daemon-free filesystem read. Emphasizes ``actor=app`` rows for post-session
+    accountability. Never sends. Optional ``--out`` writes the same text to a
+    file artifact.
+    """
+    from tw2002_aiclient.session_report import (
+        build_session_report,
+        format_session_report,
+        write_session_report,
+    )
+
+    report = build_session_report(
+        path=getattr(args, "ledger", None),
+        session_id=getattr(args, "session_id", None),
+        world_id=getattr(args, "world_id", None),
+        include_interrupted=bool(getattr(args, "include_interrupted", False)),
+    )
+    text = format_session_report(report)
+    out = getattr(args, "out", None)
+    if out:
+        write_session_report(report, out)
+    if getattr(args, "json", False):
+        payload = {
+            "ok": True,
+            "session_id": report.session_id,
+            "ledger_path": report.ledger_path,
+            "human_count": report.human_count,
+            "skipped_interrupted": report.skipped_interrupted,
+            "notes": list(report.notes),
+            "app_actions": [
+                {
+                    "ts": r.ts,
+                    "screen": r.screen,
+                    "rule_id": r.rule_id,
+                    "target_player": r.target_player,
+                    "input_summary": r.input_summary,
+                    "session_id": r.session_id,
+                }
+                for r in report.app_actions
+            ],
+        }
+        print(json.dumps(payload, ensure_ascii=False))
+        return 0
+    print_tty(text)
+    return 0
+
+
 def cmd_watch(args):
     """WO-P2-OPS-VERB-E2: tail the settle-edge push-stream (read-only).
 
@@ -1671,6 +1720,47 @@ def build_parser() -> argparse.ArgumentParser:
         )
         sp.add_argument("--json", action="store_true", help="machine-parseable JSON output")
         sp.set_defaults(func=cmd_log)
+
+    sp = sub.add_parser(
+        "report",
+        help=(
+            "post-session action report — summarize app-attributed ledger "
+            "dispatches (filesystem read; daemon not required)"
+        ),
+    )
+    sp.add_argument(
+        "--ledger",
+        default=None,
+        metavar="PATH",
+        help="ledger JSONL path (default: state/ledger.jsonl)",
+    )
+    sp.add_argument(
+        "--session-id",
+        default=None,
+        dest="session_id",
+        metavar="ID",
+        help="only rows for this session_id",
+    )
+    sp.add_argument(
+        "--world-id",
+        default=None,
+        dest="world_id",
+        metavar="SLUG",
+        help="only rows stamped with this world_id",
+    )
+    sp.add_argument(
+        "--out",
+        default=None,
+        metavar="PATH",
+        help="also write the text digest to this path",
+    )
+    sp.add_argument(
+        "--include-interrupted",
+        action="store_true",
+        help="include app rows marked interrupted_by_human",
+    )
+    sp.add_argument("--json", action="store_true", help="machine-parseable JSON output")
+    sp.set_defaults(func=cmd_report)
 
     sp = sub.add_parser(
         "watch",
