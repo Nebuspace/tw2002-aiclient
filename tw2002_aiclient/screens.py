@@ -1151,8 +1151,8 @@ class PlayShellScreen:
         # own bold policy (outer frame bold, everything else non-bold,
         # including the viewport-border danger flip, which stays non-bold
         # even though the table's "danger" entry is bold=True elsewhere).
-        info_fg_name, _unused_info_bold = _SEMANTIC_COLORS.get("info", ("cyan", False))
-        danger_fg_name, _unused_danger_bold = _SEMANTIC_COLORS.get("danger", ("red", True))
+        info_fg_name, _ = _SEMANTIC_COLORS.get("info", ("cyan", False))
+        danger_fg_name, _ = _SEMANTIC_COLORS.get("danger", ("red", True))
         # The STOP banner is the one surface on this screen that IS bold by
         # canon rather than by this class's own policy: `mode-line-and-
         # teach-controls.md` "The STOP / escalation banner styling" paints
@@ -1161,7 +1161,7 @@ class PlayShellScreen:
         # autopilot halt is a screen it has not been taught yet, a warning,
         # not a failure), and neither is A_REVERSE (reserved as the one
         # selected/active/badge signal).
-        warn_fg_name, _unused_warn_bold = _SEMANTIC_COLORS.get("warn", ("yellow", True))
+        warn_fg_name, _ = _SEMANTIC_COLORS.get("warn", ("yellow", True))
         if not curses.has_colors():
             # Monochrome: bold marks the outer frame apart from the thin
             # instrument chrome, same as the launcher's monochrome fallback.
@@ -1333,7 +1333,7 @@ class PlayShellScreen:
             # Any other tone (None, SPECTATE's muted, separators, liveness)
             # stays plain A_NORMAL — unreversed, no badge treatment.
             return curses.A_NORMAL
-        fg_name, _unused_bold = _SEMANTIC_COLORS.get(tone, ("default", False))
+        fg_name, _ = _SEMANTIC_COLORS.get(tone, ("default", False))
         base = _shared_pairs.attr_for(fg_name)
         return base | curses.A_BOLD | curses.A_REVERSE
 
