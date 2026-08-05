@@ -450,11 +450,11 @@ The marker set the cockpit uses:
   suffix · `·` the header separator.
 - **Motion glyphs:** spinner `⠋…⠏` · heartbeat `●`/`○` · sparkline `▁…█` · fuel/bar `█`/`░` ·
   delta chip `▲`/`▼` (ASCII twins `\|/-` · `*`/`.` · `.-=#` · `#`/`.` · `^`/`v`).
-- **Mode badges** (`_MODE_BADGES`, reverse-video tone-colored chips): `AUTO-LOOP` (ok/green) ·
+- **Mode badges** (tip `cockpit/control_seat.py` App/Human dual chips): `APP` (ok/green) ·
   `MANUAL — YOU HAVE CONTROL` (warn/yellow) · `SPECTATE` (muted/plain) · the AI-teach badge
   (info/cyan) is a **teach-overlay indicator** shown while an Analyze pass is open — **not** a live
-  drive-mode. *(The build's `_MODE_BADGES` still carries an `ai_pilot: "AI-PILOT"` entry — the
-  recorded divergence from the App/Human dual; see Code divergence.)*
+  drive-mode. Tip has **no** live `ai_pilot` / `AI-PILOT` badge value (WO-CANON-DRAFT-CONTROL-LOCK-AI-PILOT-STALE —
+  prior "build `_MODE_BADGES` still carries ai_pilot" claim was archive-only / stale).
 
 ## Feel — the builder's north star
 
@@ -507,13 +507,12 @@ reborn module is cited; prefer `tw2002_aiclient/cockpit/*` for chrome that has a
   live meter. DOCS WIN — the meter math is recast in [coverage-metrics](/engine/coverage-metrics.md);
   this cell's `App/(App+AI)` formula and its `AI` live-denominator term are the recorded divergence.
   **Not on tip play shell today** — recorded so the port does not revive it.
-- **Mode badge may still carry an AI/auto-loop live position.** Archived `format_mode_badge()` /
-  `_MODE_BADGES` render the control-strip mode from `control_lock`'s modes, which historically
-  include `ai_pilot` / `auto_loop` alongside `human`. The reborn mode line is an **App/Human dual
-  with no third "AI drives" slot** (AI shows only as a teach-overlay indicator). Tip play shell
-  (PWO-060 · `2ca3154`) ships that dual (`APP` XOR MANUAL) with a vocabulary gate; archive
-  AI-as-a-mode badge values remain a recorded port-source divergence — do not revive. The corrected
-  contract is owned by [mode-line-and-teach-controls](/surfaces/mode-line-and-teach-controls.md).
+- **Mode badge AI/auto-loop live position — tip-closed (WO-CANON-DRAFT-CONTROL-LOCK-AI-PILOT-STALE).**
+  Archived `format_mode_badge()` / `_MODE_BADGES` rendered `ai_pilot` / `auto_loop` alongside
+  `human`. Tip play shell (PWO-060 · `control_seat.py`) ships **App/Human dual only** (`APP` XOR
+  MANUAL) with a vocabulary gate — zero product-path `AI-PILOT` / `ai_pilot` badge values. Archive
+  AI-as-a-mode remains port-source only — do not revive. Contract owned by
+  [mode-line-and-teach-controls](/surfaces/mode-line-and-teach-controls.md).
 
 # Citations
 
