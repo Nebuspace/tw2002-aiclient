@@ -12,7 +12,7 @@ timestamp: 2026-07-23T20:20:02Z
 > before being treated as fact. Each is a **configurable coaching/guard parameter**, never a
 > hardcoded constant, and the concrete per-server values are introspected live into the
 > [Game-Data Store](/engine/game-data-store.md) — this document authors the portable *model shape*
-> (there is a floor; Equipment's floor sits above Organics' above Ore's; stock depletes and
+> (there is a floor; Equipment's floor sits above Organics' above Fuel Ore's; stock depletes and
 > regrows), not the server's actual numbers. The hypothesis discipline is itself a safety rule (see
 > its own section below).
 
@@ -69,14 +69,14 @@ A port's worth to a loop is characterized by four figures, all derived from the 
   (below) — a *hazard* input, not a profit input.
 
 **Equipment is the premium commodity (H3, hypothesis).** Its higher hypothesized floor makes an
-Equipment **sell** leg out-earn an equivalent Ore or Organics leg, all else equal — so a loop
+Equipment **sell** leg out-earn an equivalent Fuel Ore or Organics leg, all else equal — so a loop
 ending in an Equipment sell is preferred *as a ranking input*, never as a reason to override a STOP.
 Confirm the floor values before relying on this preference.
 
 ## Floor-price model (hypothesis)
 
 The floor is the price a commodity's value decays toward as a port's stock of it fills. The
-**portable semantic** is only the ordering — Equipment's floor sits above Organics', above Ore's.
+**portable semantic** is only the ordering — Equipment's floor sits above Organics', above Fuel Ore's.
 The concrete credits/unit figures are unverified starting hypotheses, to be confirmed or introspected
 per server, never authored as fact:
 
@@ -135,7 +135,7 @@ below) — never silently conform the doc to the code.
 # Examples
 
 - **Ranking two candidate loops.** Loop A ends in an Equipment sell far from floor with wide `pct`
-  headroom on all four legs; Loop B ends in an Ore sell already near floor with one leg at low
+  headroom on all four legs; Loop B ends in a Fuel Ore sell already near floor with one leg at low
   `amount`. The priority engine reads this substrate and *ranks A above B* — surfaces A as the
   coached/replayed loop first. It does **not** send a keystroke toward A; it orders a suggestion.
 - **A loop hits depletion mid-run.** The predicted `remaining_trades` on the active loop crosses
