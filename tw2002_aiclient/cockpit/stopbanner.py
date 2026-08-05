@@ -185,6 +185,8 @@ INTERVENTION_REASON_LABELS = {
     "fighters_zero": "fighters zero",
     # WO-STOPBANNER-ROUTE-HAZARD-LABEL / #327–#329: formations Dual-consumer STOP.
     "route_hazard": "route hazard",
+    # WO-FIX-SESSIONGUARDIAN-EXHAUSTED-RECONNECT-SILENT
+    "reconnect_exhausted": "reconnect exhausted",
 }
 
 # Canon's own empty/unknown marker -- "an empty code renders ``"?"``"

@@ -64,6 +64,7 @@ CANON_CATALOG = {
     "turns_unreadable": "turns unreadable",
     "fighters_zero": "fighters zero",
     "route_hazard": "route hazard",
+    "reconnect_exhausted": "reconnect exhausted",
 }
 
 WIDE = 120

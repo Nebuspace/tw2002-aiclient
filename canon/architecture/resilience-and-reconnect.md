@@ -172,16 +172,13 @@ target="main_command")` with the saved credential through the redacted secret pa
 that fires **only** when the current screen classifies as `main_command`. Those match the reborn
 target.
 
-The one divergence is in the **reconnect × control contract**. When reconnect + replay exhausts all
-attempts (a persistent bad credential, a repeated unrecognized post-drop screen), the guardian today
-**silently gives up** — it records `last_reconnect_error`, swallows the failure, and simply lets the
-next poll tick retry, with no wired escalation to the control layer and no positive handoff of the
-keyboard to the Human. The canonical contract requires that an unverified / unknown post-resume state
-raise a **STOP + escalate-on-unknown** signal to the human, exactly as the App autopilot does on an
-unrecognized screen. Bridging `SessionGuardian`'s exhausted-reconnect / replay-failure paths to the
-control-and-escalation STOP mechanic (a typed escalation reason handed to the Human, keyboard
-transferred) is a follow-up work order — this concept does not edit `guardian.py`; the code fix is
-tracked separately.
+**Reconnect × control (shipped WO-FIX-SESSIONGUARDIAN-EXHAUSTED-RECONNECT-SILENT).** When
+reconnect + replay exhausts all attempts, the guardian sets a sticky `reconnect_exhausted` flag that
+suppresses further auto-retry (no silent forever-poll), records `last_reconnect_error`, and the
+`status` verb surfaces typed reason `reconnect_exhausted` on `status["intervention"]` for the STOP
+banner. There is **no** auto-`MODE_HUMAN` — keyboard escalate stays operator-driven (attach / teach
+moves). The sticky clears on a successful D9 reconnect, on `clear_reconnect_exhausted()`, or when a
+later tick observes the socket already connected again (manual ensure).
 
 (Minor, sub-divergence: the keepalive's blank Enter is a live App-class keystroke but is not yet
 explicitly actor-tagged `app` at the send site — the send-time actor tag is owned by

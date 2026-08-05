@@ -381,6 +381,24 @@ def _status_response(session, server):
     intervention = autoloop.intervention_block(arm)
     if intervention is None:
         intervention = trade_chain.intervention_block(trade)
+    # WO-FIX-SESSIONGUARDIAN-EXHAUSTED-RECONNECT-SILENT: sticky D9 exhaust
+    # surfaces the same STOP-banner wire. Merge reasons when a loop halt
+    # is already present — reconnect failure is not quieter than a halt.
+    guardian = getattr(server, "guardian", None)
+    if guardian is not None and getattr(guardian, "reconnect_exhausted", False):
+        g_reason = {"code": "reconnect_exhausted"}
+        if intervention is None:
+            intervention = {"needs_attention": True, "reasons": [g_reason]}
+        else:
+            existing = intervention.get("reasons") or []
+            codes = {
+                (r.get("code") if isinstance(r, dict) else r) for r in existing
+            }
+            if "reconnect_exhausted" not in codes:
+                intervention = {
+                    "needs_attention": True,
+                    "reasons": list(existing) + [g_reason],
+                }
     if intervention is not None:
         resp["intervention"] = intervention
     if lock is not None:
