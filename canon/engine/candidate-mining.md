@@ -171,15 +171,13 @@ and stays split from the teacher — is largely what `miner.py` and `analyze.py`
 draft-only output are all present and correct). The divergences are in framing and in a sibling module,
 not in the miner's own safety:
 
-- **`analyze.py` still carries the pre-reborn "AI vs trainer" retro framing.** Its output note says *"AI
-  vs trainer split sharpens after TW-05"*, and the source concept (`autonomy-loop.md`) described the
-  retro as *filtering to the `actor=ai` decisions specifically*. Under the reborn vision there is **no
-  live `ai` actor** — the retro mines recurring profitable input-subsequences regardless of a live-AI
-  attribution, because the only live senders are `{app, human}` (see [trace-ledger](/engine/trace-ledger.md)).
-  The current code is in fact already actor-agnostic (it mines all rows, not an `ai` slice), so the
-  divergence is only the stale *note* promising an AI/trainer split that the reborn model retires. Docs
-  win: the retro's job is "recurring profitable decisions worth codifying," not "AI decisions worth
-  codifying."
+- **`analyze.py` / miner "AI vs trainer" retro framing — tip closed.** Tip Python no longer
+  carries the pre-reborn output note *"AI vs trainer split sharpens after TW-05"* (repo-wide
+  string absent). The miner/analyze path is actor-agnostic — it mines recurring profitable
+  input-subsequences across live `{app, human}` rows, not an `ai` slice (see
+  [trace-ledger](/engine/trace-ledger.md)). The retro's job remains "recurring profitable decisions
+  worth codifying," not "AI decisions worth codifying." Archive `autonomy-loop.md` framing is
+  do-not-revive.
 
 - **The counter-canon mining must never become is live in a sibling autopilot.** Mining itself correctly
   ranks-to-propose, but the same cr/turn scorer is, in the current codebase, also wired into a
