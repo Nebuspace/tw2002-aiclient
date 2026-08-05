@@ -87,6 +87,12 @@ and hands the keyboard back, it names *why* with a code drawn from a fixed catal
 STOP banner renders the code's short label, and the same code is what the ledger and any spectator
 read. Reason is a typed value throughout — the display label is a lookup, never the wire form.
 
+Qualified producer detail uses the shared `<code>:<detail>` shape
+(`never_auto_action:money_prompt`) owned by `tw2002_aiclient/halt_reasons.py`
+(`qualify` / `halt_reason_code` / `QUALIFIER_SEP`) — the one encoder/decoder for
+`loops/player.py` and `session/sector_explore.py`, dependency-neutral by construction.
+Banner labels still look up the bare *code* half via the catalog below.
+
 The catalog as it actually exists is the `INTERVENTION_REASON_LABELS` map in
 `tw2002_aiclient/cockpit/stopbanner.py` — tip home for the typed reason-code → label lookup
 (reborn; ADR-001). Archive name `twclient/intervention_labels.py` is gone. Extraction trigger
@@ -201,3 +207,4 @@ the wire. Analyze remains a human-invoked teach overlay, never a send-verb grant
 [2] canon/log.md 2026-07-23 (AI role ruling) + findings.md §1 (do-not-revive)
 [3] tw2002_aiclient/session/control_lock.py (tip control-mode state machine — `{app, human, spectate}`)
 [4] tw2002_aiclient/cockpit/stopbanner.py (`INTERVENTION_REASON_LABELS` / `intervention_reason_label` — tip catalog; archive `twclient/intervention_labels.py` retired)
+[5] tw2002_aiclient/halt_reasons.py (`qualify` / `halt_reason_code` — shared `<code>:<detail>` shape for loop/explore producers)

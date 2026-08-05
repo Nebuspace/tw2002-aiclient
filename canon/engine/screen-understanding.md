@@ -299,7 +299,9 @@ Rendered (settled):
   Speak the word:
 
 classify_screen(...) -> "unknown"     # no anchor matches
-  => autopilot STOPS, keyboard to the human (Control & Escalation owns the handoff)
+  => autopilot STOPS, keyboard to the human (Control & Escalation owns the handoff;
+     typed STOP codes / `<code>:<detail>` qualify shape → `halt_reasons.py`,
+     labels → `cockpit/stopbanner.py`)
 ```
 
 Stale-scrollback, why last-match is load-bearing:
