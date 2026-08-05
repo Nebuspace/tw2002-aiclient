@@ -290,14 +290,20 @@ def test_handoff_band_degrades_to_question_mark_when_the_holder_is_unknown(statu
 
 def test_teach_band_offers_the_three_moves_as_labels():
     lines = stopbanner.compose_stop_banner_lines(_halt("autopilot_halted"), width=WIDE)
-    assert lines[2] == "teach:  A)nalyze  R)ecord  T)assign"
+    assert lines[2] == "teach:  A)nalyze  R)ecord"
     assert lines[2] == stopbanner.TEACH_LINE
 
 
-@pytest.mark.parametrize("token", ["A)nalyze", "R)ecord", "T)assign"])
+@pytest.mark.parametrize("token", ["A)nalyze", "R)ecord"])
 def test_each_teach_affordance_is_visible_at_the_halt(token):
     lines = stopbanner.compose_stop_banner_lines(_halt("explore_exhausted"), width=WIDE)
     assert token in lines[2]
+
+
+def test_teach_line_does_not_advertise_unbound_assign_trigger():
+    """Calm T is Trade Loop; TEACH_LINE must not claim T)assign."""
+    assert "T)assign" not in stopbanner.TEACH_LINE
+    assert "assign" not in stopbanner.TEACH_LINE.lower()
 
 
 def test_teach_band_is_labels_only_and_never_claims_a_move_is_running():

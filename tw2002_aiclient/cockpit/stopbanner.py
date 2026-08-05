@@ -76,7 +76,8 @@ enumerates the reborn banner as three bands, in this order:
 
 1. ``! STOP — <label(s)>`` -- the reason line, "led by a bare ``!``".
 2. ``[ HUMAN — YOU HAVE CONTROL ]`` -- the keyboard-handoff marker.
-3. ``teach:  A)nalyze  R)ecord  T)assign`` -- the three teach moves.
+3. ``teach:  A)nalyze  R)ecord`` -- wired teach moves (Assign-Trigger key
+   unbound after calm ``T`` → Trade Loop; do not advertise ``T)assign``).
 
 (That doc's illustrative mock also splits the reason across a ``! STOP —
 <label>`` line and a second ``reason: <label>`` line. This module renders
@@ -249,11 +250,12 @@ UNKNOWN_HOLDER_MARKER = "[ ? ]"
 # appears only at a halt and only when the human does not hold the keyboard.
 ATTACH_AFFORDANCE = "press ^A to take the keyboard"
 
-# Band 3. Canon-cited verbatim: the teach triad "move off the band and
-# onto the banner's dedicated `teach:` line" as `A)nalyze  R)ecord
-# T)assign` (note `T)assign` on the banner, vs the hint band's own
-# `T)rigger`). Labels only -- PWO-066+ owns the wires.
-TEACH_LINE = "teach:  A)nalyze  R)ecord  T)assign"
+# Band 3. Teach moves that actually bind on tip: Analyze + Record.
+# ``T)assign`` was retired from this line after calm ``T`` became Trade Loop
+# (WO-EXPLORE-TRADE-MODE-SPLIT) — advertising Assign-Trigger on ``T`` was a
+# lie. Assign-Trigger module/handler remain; re-key is a separate WO.
+# Labels only for wired moves — PWO-066+/067/069 own the wires.
+TEACH_LINE = "teach:  A)nalyze  R)ecord"
 
 # The full banner's height, in rows -- one per band. `cockpit.layout`
 # imports this rather than spelling `3` a second time.

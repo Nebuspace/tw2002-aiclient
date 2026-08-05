@@ -54,10 +54,10 @@ trainer-plain vocabulary:
   not this retired `P`.
 
 The STOP banner's own `teach:` line (`cockpit.stopbanner.TEACH_LINE`,
-`A)nalyze R)ecord T)assign`) is a DIFFERENT register/surface entirely and
-is untouched by this WO -- it names the same underlying Record/Trigger
-affordances at the moment of a halt, in the developer spelling canon's
-escalation banner still uses. This module never imported `TEACH_LINE`
+`A)nalyze R)ecord`) is a DIFFERENT register/surface entirely and
+is untouched by this WO -- it names the wired Record/Analyze
+affordances at the moment of a halt. Assign-Trigger is no longer
+advertised there (calm `T` is Trade Loop). This module never imported `TEACH_LINE`
 before and still does not.
 
 # History (why the old band's shape looked the way it did)

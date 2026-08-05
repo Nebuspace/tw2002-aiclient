@@ -244,7 +244,7 @@ def test_halt_paints_all_three_bands_on_the_banner_rows(monkeypatch):
     assert _row_text(win, banner["y"] + 2, banner) == stopbanner.TEACH_LINE
 
 
-@pytest.mark.parametrize("token", ["A)nalyze", "R)ecord", "T)assign"])
+@pytest.mark.parametrize("token", ["A)nalyze", "R)ecord"])
 def test_teach_affordances_are_visible_on_screen_at_a_halt(monkeypatch, token):
     win = _RecordingWin(FULL_ROWS, FULL_COLS)
     screen = _screen(monkeypatch, win, _halt_status("autopilot_halted"))
