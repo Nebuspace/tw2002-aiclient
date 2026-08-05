@@ -207,19 +207,20 @@ this concept prescribes. The prescription stands; these are recorded, not silent
   matters: the store still refuses any *authored* number, but the parser's field-mapping is itself
   unproven against reality.
 
-- **`tw probe` today classifies front-ends; it does not yet populate game-data rows.** The L0 probe
+- **`tw probe` today classifies front-ends; it does not populate game-data rows.** The L0 probe
   (`probe.py`) currently connects, reads the opening banner, classifies the server front-end
   (`twgs-direct` / `bbs` / …), and patches the server catalog's status — it is the *entry rung* of
-  the read-only introspection path, but it does **not** yet drive in-game catalog screens into this
-  store's ship/scanner/TransWarp/item rows. The prescription is that the same never-commit path,
-  extended over in-game listings, is what fills these rows VIEW-only; the wiring from "classify a
-  banner" to "capture a shipyard listing into a per-world game-data row" is not yet built.
+  the read-only introspection path, but it does **not** drive in-game catalog screens into this
+  store's ship/scanner/TransWarp/item rows. That fill path is a separate product surface
+  (`game_data_capture` below), not an extension of `tw probe`.
 
-- **The introspecting parser is defined but not yet wired to a live capture-and-persist loop.**
-  `introspector.py` (pure text→rows) and `game_data.py` (validate + persist into the per-world
-  store) both exist and round-trip cleanly in tests, but no live daemon flow yet captures a real
-  StarDock screen, hands it to the parser, and calls the persist path. The write lane is built and
-  gated; the live trigger that feeds it is the missing link.
+- **Opportunistic StarDock capture→persist is LIVE on tip.** `game_data_capture.py`
+  (`GameDataCapture.tick` → `capture_screen`) parses shipyard / cargo-hold listing text already on
+  the settle-edge watch event and persists Layer-B rows via `game_data` — never sends, never crawls.
+  Wired from `app.py`'s play-loop idle tick (`gamedata_capture.tick`). Introspector grammar remains
+  provisional-by-construction until a broader live-capture corpus refines it; the *trigger* that
+  was "the missing link" is no longer missing. PWO-092 Option B (navigating live introspection)
+  stays HELD.
 
 - **The store's authored numeric layer is deliberately empty.** By design there are *no* stat values
   in the portable reference, and the introspected store on a fresh world is empty until a real
@@ -239,8 +240,9 @@ this concept prescribes. The prescription stands; these are recorded, not silent
 - Code modules — `game_data.py` (the schema, the introspected-only `source` gate on both write and
   load, the per-world persist/query bridge, the singleton cargo-hold quote), `introspector.py` (the
   pure text→rows parser, its no-clock / stamp-at-write-time contract, and its last-header
-  stale-scrollback anchoring — the same LAST-match discipline `state_parser.py` uses), and
-  `probe.py` (the L0 read-only, credential-free catalog probe).
+  stale-scrollback anchoring — the same LAST-match discipline `state_parser.py` uses),
+  `game_data_capture.py` (opportunistic settle-edge capture→persist; never-send), and
+  `probe.py` (the L0 read-only, credential-free catalog probe — classifies banners; does not fill rows).
 - Cross-cutting invariants — [world-identity](/engine/world-identity.md) (host + game-letter +
   character keying), the read-only never-commit crawl contract owned by
   [menu-map-and-introspection](/engine/menu-map-and-introspection.md), and the economic consumers
