@@ -609,6 +609,11 @@ def cmd_menumap(args):
     """WO-P2-OPS-VERB-G1: read-only menu-map inspector (coverage / orphans /
     you-are-here). Never sends. Localizes the live screen when a daemon is up.
 
+    Optional ``--to SIG`` runs ``plan_nav`` against the live screen (dry
+    keystroke plan only — still never sends). Needs a successful localize;
+    without a live look the verb refuses the plan rather than inventing a
+    route from store-only state.
+
     The you-are-here line has THREE states, not two, because "we looked and
     you are not on the map" and "we never managed to look" are different
     facts and the operator can act on only one of them:
@@ -620,17 +625,16 @@ def cmd_menumap(args):
     * ``here ? <reason>`` -- the lookup never happened: no daemon, an
       unusable ``screen`` response, a blank screen, or a raised lookup.
 
-    The exit code stays 0 for all three: the map report itself succeeded
-    (counts, coverage, dead-ends, orphans are all real), and only the
-    you-are-here marker is unavailable. A scripted caller that needs to
-    branch on it reads ``here_unknown`` from ``--json``.
+    The exit code stays 0 for the three here-states when ``--to`` is absent:
+    the map report itself succeeded. With ``--to``, exit is 0 only when the
+    plan is ``ok`` (already-there counts as ok with empty steps).
     """
     from tw2002_aiclient.menu import knowledge as menu_knowledge
     from tw2002_aiclient.menu.map_view import (
         format_menu_map_report,
         menu_map_summary_from_store,
     )
-    from tw2002_aiclient.menu.nav import localize
+    from tw2002_aiclient.menu.nav import localize, plan_nav
 
     path = args.path
     if not path and getattr(args, "world_id", None):
@@ -641,6 +645,7 @@ def cmd_menumap(args):
 
     run_dir = _resolve_run_dir(getattr(args, "run_dir", None))
     current_sig = None
+    screen_text = None
     # Why we could not localize, or None once localize actually answered.
     # Every branch below that leaves `current_sig` unset names itself here:
     # four separate ways of FAILING TO LOOK used to render byte-for-byte
@@ -663,6 +668,7 @@ def cmd_menumap(args):
                 # `screen` verb ok, but nothing on the screen to localize --
                 # `localize` is never called, so it never said off-map.
                 here_unknown = "screen is blank"
+                screen_text = None
             else:
                 try:
                     node = localize(screen_text, path)
@@ -683,13 +689,43 @@ def cmd_menumap(args):
         print_tty(f"ERROR: {e}")
         return 1
 
+    to_sig = getattr(args, "to_sig", None)
+    plan = None
+    if to_sig:
+        if here_unknown is not None or screen_text is None:
+            reason = here_unknown or "no live screen"
+            print_tty(f"ERROR: cannot plan_nav ({reason})")
+            return 1
+        plan = plan_nav(screen_text, to_sig, path)
+
     if getattr(args, "json", False):
         # JSON stays raw Unicode (machine codecs); operator text lines go
         # through print_tty so ★ / — / · never silent-drop on ASCII TTYs.
-        print(json.dumps({"ok": True, "path": path, **summary}))
+        payload = {"ok": True, "path": path, **summary}
+        if plan is not None:
+            payload["plan"] = plan
+            payload["ok"] = bool(plan.get("ok"))
+        print(json.dumps(payload))
+        if plan is not None and not plan.get("ok"):
+            return 1
         return 0
     for line in format_menu_map_report(summary):
         print_tty(line)
+    if plan is not None:
+        if plan.get("ok"):
+            steps = plan.get("steps") or []
+            if not steps:
+                print_tty(f"plan: already at {to_sig}")
+            else:
+                print_tty(f"plan: {len(steps)} step(s) -> {to_sig}")
+                for step in steps:
+                    key = step.get("key")
+                    dest = step.get("to_node")
+                    kind = step.get("kind") or "?"
+                    print_tty(f"  [{kind}] {key!r} -> {dest}")
+        else:
+            print_tty(f"plan: failed ({plan.get('reason') or 'unknown'})")
+            return 1
     return 0
 
 
@@ -1701,6 +1737,16 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--run-dir", default=None, metavar="PATH", dest="run_dir",
                      help="daemon run directory override (default: project-rooted run/)")
     sp.add_argument("--json", action="store_true", help="machine-parseable JSON output")
+    sp.add_argument(
+        "--to",
+        dest="to_sig",
+        default=None,
+        metavar="SIG",
+        help=(
+            "dry plan_nav to this menu-map signature (never sends; "
+            "needs live localize)"
+        ),
+    )
     sp.set_defaults(func=cmd_menumap)
 
     sp = sub.add_parser(
