@@ -77,13 +77,14 @@ bound at replay time (e.g. `{qty}` → `50` on one run, `100` on another). Repla
 each step's `input` before sending; a step with no matching placeholder is sent verbatim, so a literal
 `{` in a keystroke never breaks a run.
 
-> **Code divergence (parameterization is replay-side only).** In `skills.py` today, capture records
-> each keystroke **literally** (`record_step` stores the raw input), and `_apply_params` only
-> substitutes where the stored input *already* contains a `{…}` placeholder. Recording never produces
-> placeholders, so numeric generalization currently requires a human to hand-edit the macro JSON. The
-> "numeric inputs generalizable" capability the target vision calls for is present at replay but has
-> **no capture-time generalization step** — a recorded macro replays the exact numbers it was taught
-> until edited. Recorded, not silently conformed.
+> **Code divergence (parameterization is replay-side only).** In tip
+> `tw2002_aiclient/loops/player.py` today, capture records each keystroke **literally** (and the
+> shipped X6 recorder writes the same literal shape), while `_apply_params` only substitutes where
+> the stored input *already* contains a `{…}` placeholder. Recording never produces placeholders, so
+> numeric generalization currently requires a human to hand-edit the macro JSON. The "numeric inputs
+> generalizable" capability the target vision calls for is present at replay but has **no capture-time
+> generalization step** — a recorded macro replays the exact numbers it was taught until edited.
+> Recorded, not silently conformed. (Pre-rebirth port-source: archived `twclient/skills.py`.)
 
 ## Deterministic replay — one confirmed step at a time
 
@@ -297,11 +298,12 @@ noted, not conformed away.
 - Internal design history — the macro/skill record-replay substrate (DESIGN-v2 §3 item 11b/11d), and the
   three named safety scars: TW-02 (send/settle race, the −75-alignment colonist misfire → send-and-
   confirm), TW-03 (wrong-sector replay → start-anchor), TW-04 (replay-ledgering, `actor=trainer` rows).
-- Code modules (plain-text): `skills.py` (record/replay/play, start-anchor guard, halt-on-divergence,
-  parameter substitution, per-cycle stop-loss rails); `settle.py` (`send_and_confirm` — positive
-  confirmation vs idle-only, the stale-pre-send-match guard); `ledger.py` (`actor`/`session_id`
-  attribution, redaction); `classify.py` (post-step screen classification); `state_parser.py` (current-
-  sector read for the start-anchor check).
+- Code modules (plain-text): `tw2002_aiclient/loops/player.py` (replay/play, start-anchor guard,
+  halt-on-divergence, parameter substitution, per-cycle stop-loss rails — live successor of archived
+  `twclient/skills.py`); `settle.py` (`send_and_confirm` — positive confirmation vs idle-only, the
+  stale-pre-send-match guard); `ledger.py` (`actor`/`session_id` attribution, redaction);
+  `classify.py` (post-step screen classification); `state_parser.py` (current-sector read for the
+  start-anchor check).
 - Greenfield tip modules (importable, WO-P2-G4): `tw2002_aiclient/loops/recorder.py` (`LoopRecorder`
   — the shipped X6 manifest writer); `cmd_record` in `tw2002_aiclient/session/cli.py` (the CLI
   wrapper); see [CLI Verb Surface](/architecture/cli-verbs.md) for the full shipped-vs-catalog note.
