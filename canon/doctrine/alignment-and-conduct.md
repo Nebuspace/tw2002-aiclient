@@ -159,10 +159,12 @@ AI teacher (on-demand, retrospective) — proposal refused at the doctrine layer
   is that even NPC-only combat math fires only through an approved, guarded taught rule that halts
   and escalates on the first unrecognized frame. The reserve / max-enemy defaults are configurable
   guard parameters, not asserted game facts. (DOCS WIN: recorded, not conformed.)
-- **`control_lock.py` `MODE_AI_PILOT` ("the AI drives")** contradicts "AI never sends a live
-  keystroke." Per bundle convention, the canonical statement of that divergence lives in
-  [control-and-escalation](/architecture/control-and-escalation.md); it is referenced here, not
-  restated, and does not weaken the actor rule that live senders are `{app, human}` only.
+- **`control_lock.py` `MODE_AI_PILOT` ("the AI drives") — RETIRED on tip (2026-08-04).** Pre-rebirth
+  control-lock exposed an AI-drive mode that contradicted "AI never sends a live keystroke." Tip
+  keeps only `{app, human, spectate}`; the actor rule (live senders `{app, human}` only) matches
+  tip code. Historical finding + do-not-revive flag live in
+  [control-and-escalation](/architecture/control-and-escalation.md) (and action-safety-guards Code
+  Divergence #3). Not an open divergence here.
 
 # Citations
 
