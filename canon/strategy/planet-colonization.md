@@ -171,7 +171,9 @@ STOP-guarded every tick.
   still **no autonomous Genesis deploy** and no new product surface that auto-invokes
   `recommend_genesis` beyond the catalogue — RECOMMEND-only doctrine holds. Membership writeback and
   route-hazard guards are documented in [Special Formations](/strategy/special-formations.md)
-  § Code reality (#326–#331).
+  § Code reality (#326–#331). The confirm-to-send choke-point for any future App Genesis send is
+  documented under [Action-Safety Guards](/doctrine/action-safety-guards.md)
+  § Genesis confirm-to-send choke-point (`genesis_confirm.py`, Option A shipped / Option B HELD).
 - **The priority layer's inherited "never-idle" appetite is counter-canon here.** The AI-first
   originals carried a per-cycle EV-selection habit (the autopilot's `EXPLORE_BASELINE_EV` "never
   idle" floor and `trade_driver`'s autonomous chain runner) in which a computed payoff could pick the

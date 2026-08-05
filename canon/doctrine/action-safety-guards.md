@@ -174,6 +174,21 @@ colonization is owned by [planet-colonization](/strategy/planet-colonization.md)
 purchases by [ship-progression](/strategy/ship-progression.md); this doctrine states the general
 rule they specialize: an irreversible action crosses to the human, always.
 
+## Genesis confirm-to-send choke-point (tip)
+
+Any future App Genesis *send* must pass through
+`tw2002_aiclient/genesis_confirm.py::genesis_send_if_confirmed` — the only approved
+choke-point. It reuses `cockpit.armconfirm`'s default-deny `y`/`Y` policy
+(`compose_genesis_confirm_line` / `resolve_genesis_confirm_key`). Disposition other
+than CONFIRM, a missing/non-callable `send`, or an empty payload returns `refused`
+and **never** invokes transport send. Cancel clears the pending arm; another Genesis
+requires a fresh arm + confirm (never sticky, never default-yes).
+
+**Option A (shipped):** gate only — no Genesis adapter / stub in-tree.
+**Option B (HELD):** stub adapter + end-to-end fire — needs a fresh Max GO
+([DECISIONS](/DECISIONS.md) PWO-106 line). Recommendation surfaces
+(`formations.py` / `recommend_genesis`) stay RECOMMEND-only until that GO.
+
 # Schema
 
 The guard ladder, from per-keystroke to whole-run, each failing *closed* (toward STOP/escalate):
@@ -190,6 +205,7 @@ The guard ladder, from per-keystroke to whole-run, each failing *closed* (toward
 | Launch | arm-confirm | run/loop start | preconditions unconfirmed ⇒ instant-die, never arm blind |
 | Crawl | sacrificial-only gate | live crawl start | non-sacrificial profile ⇒ refuse before any connection |
 | Always | human-confirmed irreversible | Genesis / purchase / colonize | never an autonomous candidate; human one-shot only |
+| Always | genesis confirm-to-send | future App Genesis send | only via `genesis_send_if_confirmed`; else `refused` (Option B HELD) |
 
 Every STOP carries a typed reason-code from the escalation catalog owned by
 [control & escalation](/architecture/control-and-escalation.md) (unrecognized-screen · guard-STOP ·
@@ -271,3 +287,5 @@ wait_prompt, last-match state_parser anchoring)
 [9] tw2002_aiclient/loops/player.py (`_check_floor`) — the reborn stop-loss guard that actually
 ships this rail today, as four distinct fail-closed codes: `HALT_CREDITS_UNKNOWN`,
 `HALT_CREDITS_STALE`, `HALT_CREDITS_UNREADABLE`, `HALT_FLOOR_REACHED`
+[10] tw2002_aiclient/genesis_confirm.py — Genesis confirm-to-send choke-point
+(`genesis_send_if_confirmed`); Option A gate-only on tip; Option B HELD
