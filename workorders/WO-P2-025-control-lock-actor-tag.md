@@ -88,7 +88,7 @@ rg -n "ai_pilot|MODE_AI_PILOT" tw2002_aiclient/   # expect no match
 | `tests/test_attach_redaction.py` | **DEFER** | Docstring note; Cipher-adjacent — still `--ignore`d |
 | `tests/test_clean_preempt.py` | **DEFER** | Out of wave B (unchanged) |
 
-`pytest.ini`: un-ignored control_lock / actor_attribution / tw04_toctou after 53 passed under `--override-ini=addopts=`. Drafts under `workorders/drafts/WO-P2-025-lane3/` are historical.
+`pytest.ini`: un-ignored control_lock / actor_attribution / tw04_toctou after 53 passed under `--override-ini=addopts=`. Lane-3 `.draft` files lived only under gitignored `workorders/drafts/` (never on tip); directory removed locally (WO-CLEANUP-WO-P2-025-LANE3-SUPERSEDED-DRAFTS). Live tests are under `tests/`.
 
 ---
 
