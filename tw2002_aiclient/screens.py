@@ -2441,11 +2441,11 @@ class PlayShellScreen:
             if self._conn_focused:
                 return "conn_activate"
             return None
-        # WO-PLAY-AUTOLOOP-START: canon's ``L)chains``.  Toggle, matching the
-        # Analyze overlay's posture: a second press closes.  Both cases bind.
-        # Returns a pure INTENT only -- this class has no send path
-        # (``tests/test_spectate_no_send.py``'s guards remain intact).
-        if key in (ord("l"), ord("L")):
+        # WO-PLAY-AUTOLOOP-START / WO-WIRE-CHAINS-ARM-ACTION-AND-OFFER-KEY:
+        # ``L)ist Loops`` via ``resolve_chains_offer_key`` (same offer-key
+        # seam as rules/reflex). Toggle: second press closes. Pure INTENT
+        # only -- no send path (``tests/test_spectate_no_send.py``).
+        if cockpit_chains.resolve_chains_offer_key(key):
             if _cs is not None and _cs.is_open:
                 return "chains_close"
             return "chains_open"

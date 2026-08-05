@@ -363,7 +363,11 @@ def test_taught_arm_flow_unregressed_with_discovered_present(monkeypatch):
     assert [name for (name, _kw) in arm] == ["ore-run-K7"]
     assert explore == []
     assert screen.trade_calls == []
-    assert screen.trade_loop_arm == {"kind": "taught", "name": "ore-run-K7"}
+    assert screen.trade_loop_arm == {
+        "kind": "taught",
+        "name": "ore-run-K7",
+        "steps": 12,
+    }
 
 
 def test_a_raising_finder_does_not_take_down_the_play_loop(monkeypatch):

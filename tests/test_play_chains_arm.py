@@ -146,8 +146,14 @@ def test_enter_arms_trade_loop_without_starting(monkeypatch) -> None:
     arm, _explore, screen = _drive(monkeypatch, [L, ENTER])
     assert arm == [], "Enter alone started a run"
     assert screen.gate_raises == [], "mode-split arms without y-gate"
-    assert screen.trade_loop_arm == {"kind": "taught", "name": "ore-run-K7"}
+    assert screen.trade_loop_arm == {
+        "kind": "taught",
+        "name": "ore-run-K7",
+        "steps": 12,
+    }
     assert "press T to run" in (screen.status_line or "")
+    assert "Arm ore-run-K7" in (screen.status_line or "")
+    assert "one pass" in (screen.status_line or "")
 
 
 def test_l_enter_t_starts_the_selected_loop(monkeypatch) -> None:
@@ -245,7 +251,11 @@ def test_moving_the_cursor_arms_the_row_under_cursor(monkeypatch) -> None:
     arm, _explore, screen = _drive(monkeypatch, [L, DOWN, ENTER, T])
     assert len(arm) == 1
     assert arm[0][0] == "fuel-shuttle"
-    assert screen.trade_loop_arm == {"kind": "taught", "name": "fuel-shuttle"}
+    assert screen.trade_loop_arm == {
+        "kind": "taught",
+        "name": "fuel-shuttle",
+        "steps": 8,
+    }
 
 
 def test_an_empty_store_arms_nothing(monkeypatch) -> None:
@@ -279,4 +289,8 @@ def test_a_daemon_refusal_is_surfaced_not_smoothed(monkeypatch) -> None:
 def test_bare_enter_never_starts_a_runner(monkeypatch) -> None:
     arm, _explore, screen = _drive(monkeypatch, [L, ENTER, ENTER])
     assert arm == []
-    assert screen.trade_loop_arm == {"kind": "taught", "name": "ore-run-K7"}
+    assert screen.trade_loop_arm == {
+        "kind": "taught",
+        "name": "ore-run-K7",
+        "steps": 12,
+    }
