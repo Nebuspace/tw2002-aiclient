@@ -43,6 +43,16 @@ def _event_from_fixture(name: str, classification: str) -> dict:
     }
 
 
+def test_capture_screen_persists_shipyard_directly(tmp_path: Path):
+    """Module entry used by GameDataCapture._tick (was previously dead)."""
+    text = (FIXTURES / "stardock_shipyard_listing.txt").read_text(encoding="utf-8")
+    result = gdc.capture_screen(WORLD_ID, text, screen_class="main_command", state_dir=tmp_path)
+    assert result.attempted is True
+    assert result.ships_persisted >= 1
+    loaded = gd.load_world_game_data(WORLD_ID, state_dir=tmp_path)
+    assert len(loaded.ships) == result.ships_persisted
+
+
 def test_tick_persists_shipyard_rows(tmp_path: Path):
     play = _Play(_event_from_fixture("stardock_shipyard_listing.txt", "main_command"))
     result = gdc.GameDataCapture().tick(play, _Profile(), state_dir=tmp_path)
@@ -52,6 +62,13 @@ def test_tick_persists_shipyard_rows(tmp_path: Path):
     loaded = gd.load_world_game_data(WORLD_ID, state_dir=tmp_path)
     assert len(loaded.ships) == result.ships_persisted
     assert all(s.source.startswith("introspected") for s in loaded.ships)
+
+
+def test_tick_routes_through_capture_screen():
+    import inspect
+
+    src = inspect.getsource(gdc.GameDataCapture._tick)
+    assert "capture_screen(" in src
 
 
 def test_tick_skips_main_command_without_listing(tmp_path: Path):
