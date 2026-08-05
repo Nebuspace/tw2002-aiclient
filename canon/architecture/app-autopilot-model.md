@@ -163,13 +163,15 @@ canon above is the prescriptive target; the code conforms to it in future work o
   fail-closed per-profile arm flag, dry-run-never-sends, and `send_and_confirm` on every send — so
   the divergence is the *framing* of SELECT and the auto-driver justification, not a wholesale
   absence of safety rails.)
-- **`EXPLORE_BASELINE_EV = 0.01` — the "no idle (§11)" auto-driver.** `autopilot.py` seeds a
-  tiny, strictly-positive explore EV specifically so "a tick always has SOMETHING to do even with
-  zero known chains," i.e. the app keeps driving when it has nothing taught to do. This is the
-  retired "never-idle keep-driving" appetite the reborn model explicitly abolishes: with nothing
-  armed and recognized, the correct behavior is to STOP and wait for the human, not to manufacture
-  an explore action. Recorded as a divergence here; the same constant's exploration-policy face is
-  recorded in [Frontier Exploration Policy](/strategy/exploration-policy.md).
+- **`EXPLORE_BASELINE_EV = 0.01` — tip subdivergence closed (display-only).** Archived
+  `autopilot.py` seeded this constant as a "no idle" auto-driver so a tick always manufactured an
+  explore action. Tip has **no** `autopilot.py`; the surviving constant lives in
+  `tw2002_aiclient/focus_status.py` as a **suggestion-only** FOCUS floor (comment: keep explore
+  visible when the map still has work — never sends / arms / drives a keystroke). The never-idle
+  *driver* appetite is abolished on tip. Whether a display-only floor is itself correct policy vs a
+  strict novelty-halt empty FOCUS remains a separate gated design question
+  (`WO-FIX-EXPLORE-BASELINE-EV-NEVER-IDLE` / exploration-policy). Recorded here as closed for the
+  "auto-driver" half only.
 - **`priority_engine.recommend_actions()` wired as a live `select()` override.** `autopilot.py`
   consults the priority engine and, when it disagrees with the EV winner, lets it *re-pick the
   live action* for the tick. In the reborn model that ranking may order which taught behaviors are
@@ -194,14 +196,16 @@ canon above is the prescriptive target; the code conforms to it in future work o
   execution-gated," and its home is moved here from the priority engine (see the recast section
   above). Recorded as a scope divergence from the original spec.
 
-These are documentation-only findings — this concept edits no code. Retiring the per-cycle EV
-picker, the `EXPLORE_BASELINE_EV` auto-driver, and the priority-engine live override, and reframing
-the two drivers and the loop-player as human-armed taught behaviors, are separate future work
-orders.
+These are documentation-only findings — this concept edits no code. The archived per-cycle EV
+picker / live priority override remain do-not-revive; tip's `EXPLORE_BASELINE_EV` is suggestion-only
+in FOCUS. Reframing remaining drivers as human-armed taught behaviors, and the design ruling on
+whether a display-only explore floor should retire, are separate work orders.
 
 # Citations
 
-[1] twclient/autopilot.py (`AutopilotEngine` ASSESS→SELECT→EXECUTE→RECORD tick loop; `select()` continuous per-tick EV scorer; `EXPLORE_BASELINE_EV=0.01` "no idle"; `priority_engine` `select()` override; `HIGH-2` live re-classify-before-send stop-on-unknown; per-profile `autonomous` arm flag; dry-run-never-sends)
+[1] archive `twclient/autopilot.py` (historical ASSESS→SELECT→EXECUTE→RECORD / per-tick EV /
+`EXPLORE_BASELINE_EV` "no idle" — do-not-revive); tip `tw2002_aiclient/focus_status.py`
+(`EXPLORE_BASELINE_EV` suggestion-only FOCUS floor)
 [2] twclient/trade_driver.py (`run_chain()` end-to-end chain runner; fresh-render gate per send; required `is_armed`/`should_abort` predicates; `ChainHold` depletion/turn-floor/cargo-stranded STOPs; Paladin `_ALLOWED_LETTER_SENDS` allowlist)
 [3] twclient/loop_player.py (`LoopPlayer` background AUTO-LOOP driver; human-armed `enter_auto_loop`; bounded cycle cap; pause/stop; `surprise`/`floor_reached`/`credits_unknown` STOPs)
 [4] twclient/control_lock.py (`MODE_AUTO_LOOP` exclusive control mode; `enter_auto_loop`/`leave_auto_loop`; the App/Human live-driver dual)
