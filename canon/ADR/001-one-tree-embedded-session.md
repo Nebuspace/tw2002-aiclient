@@ -16,6 +16,12 @@ Filename convention: `/ADR/001-one-tree-embedded-session.md`
 
 Accepted · Accepted 2026-07-24 by Max
 
+**Folded packaging rule (live tip):** one top-level `tw2002_aiclient` tree with daemon-core under
+`session/` is also stated in [`session-engine.md` Schema](/architecture/session-engine.md)
+(row *One package tree · ADR-001*) and the packaging prose there. This ADR remains the decision
+record; the Follow-on checklist below is **historical** (relocate DONE) — append-only, not open work
+(WO-CANON-ROLLUP-ADR-001-TRIM-CHECKLIST).
+
 ---
 
 ## Context
