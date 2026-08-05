@@ -678,6 +678,31 @@ def test_bubble_subject_falls_back_to_pair_when_chain_empty():
     assert cs.best_chain is None
 
 
+def test_goals_hops_match_bubble_pair_fallback_not_none_yet():
+    """WO-FIX-GOALS-CHAIN-ROW: bubble paints a class pair → GOALS must not say none yet."""
+    from tw2002_aiclient.cockpit.goals import compose_goals_lines
+
+    cs = ChainScalars()
+    cs.update(_result(chains_=(), reason="no_closed_cycle"))
+    cs.update_pairs(_PairResult(pairs=[_Pair(10, 20)]))
+    merged = cs.merge({})
+    assert merged["chain_hops"] == 2
+    assert merged["chain_unit"] == "hops"
+    row = compose_goals_lines(merged, width=40)[5]
+    assert "none yet" not in row
+    assert "2 hop" in row
+
+
+def test_goals_hops_from_pair_only_without_priced_seen():
+    """Pair refresh can land while priced half never established `_seen`."""
+    cs = ChainScalars()
+    cs.update_pairs(_PairResult(pairs=[_Pair(7, 8)]))
+    assert cs.seen is False
+    merged = cs.merge({})
+    assert merged["chain_hops"] == 2
+    assert cs.bubble_subject()[0] is not None
+
+
 def test_bubble_subject_empty_when_both_absent():
     cs = ChainScalars()
     assert cs.bubble_subject() == (None, None)

@@ -347,7 +347,13 @@ class ChainScalars:
     def _display_hops_unit(
         self, current_sector: object = None
     ) -> tuple[int | None, str | None]:
-        """Hop scalars for GOALS / coach — same chain pick as the bubble strip."""
+        """Hop scalars for GOALS / coach — same chain pick as the bubble strip.
+
+        WO-FIX-GOALS-CHAIN-ROW-KEYPRESS-GATED-STALE: when the strip falls back
+        to a class pair (priced search empty / incomplete), GOALS must not keep
+        saying ``none yet`` (``_hops == 0``) while the bubble visibly paints that
+        pair. Derive hops from the same adapted subject ``bubble_subject`` uses.
+        """
         priced = self._bubble_priced_chain(current_sector)
         if priced is not None:
             try:
@@ -356,6 +362,18 @@ class ChainScalars:
                 hops, unit = None, None
             if isinstance(hops, int) and not isinstance(hops, bool):
                 return hops, unit if isinstance(unit, str) and unit else "hops"
+        if self._best_pair is not None:
+            adapted = pair_as_chain_like(self._best_pair)
+            if adapted is not None:
+                try:
+                    hops, _unit = chain_hop_count_and_unit(adapted)
+                except Exception:  # noqa: BLE001
+                    hops = None
+                # Always "hops": pair_as_chain_like is a sector cycle, and
+                # chain_hop_count_and_unit's dict path defaults unit via
+                # source=None → "steps", which would mislabel GOALS.
+                if isinstance(hops, int) and not isinstance(hops, bool) and hops:
+                    return hops, "hops"
         return self._hops, self._unit
 
     def bubble_subject(
@@ -401,12 +419,13 @@ class ChainScalars:
         """``status`` with the cached scalars added; never mutates the input.
 
         Returns the argument unchanged when it is not a dict (the provider's
-        own "no status" signal must survive untouched), and adds nothing before
-        a discovery has been seen.
+        own "no status" signal must survive untouched). Adds nothing before a
+        discovery has been *established* — priced ``_seen``, or a class-pair
+        fallback the bubble would already paint (WO-FIX-GOALS-CHAIN-ROW).
 
-        Hop / unit scalars follow the same local-prefer policy as
-        ``bubble_subject`` (WO-CHAIN-GOALS-MATCH-BUBBLE). When
-        ``current_sector`` is omitted, the HUD sector cell on ``status`` is
+        Hop / unit scalars follow the same local-prefer + pair-fallback policy
+        as ``bubble_subject`` (WO-CHAIN-GOALS-MATCH-BUBBLE + GOALS-CHAIN-ROW).
+        When ``current_sector`` is omitted, the HUD sector cell on ``status`` is
         used if present — so the wrapped status provider aligns GOALS with
         the bubble strip without a second call site.
 
@@ -418,11 +437,16 @@ class ChainScalars:
         """
         if not isinstance(status, dict):
             return status
-        if not self._seen:
+        # Pair-only sessions (priced half never "seen", or auto-retired before
+        # a completed priced result) still owe GOALS the bubble's hops — same
+        # WO-FIX-GOALS-CHAIN-ROW honesty as `_display_hops_unit`'s pair branch.
+        if not self._seen and self._best_pair is None:
             return status
         if current_sector is None:
             current_sector = self._sector_from_status(status)
         hops, unit = self._display_hops_unit(current_sector)
+        if hops is None and not self._seen:
+            return status
         merged = dict(status)
         if merged.get(HOPS_KEY) is None:
             merged[HOPS_KEY] = hops
