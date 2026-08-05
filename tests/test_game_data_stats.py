@@ -73,3 +73,17 @@ def test_game_data_stats_does_not_clobber():
     merged = gds.merge(prior)
     assert merged["ship_prices_count"] == 4
     assert merged["hold_price_label"] == "1,200cr"
+
+
+def test_status_key_constants_have_product_readers():
+    """Tip-stamp: keys are not write-only (WO-CLEANUP-GAME-DATA-STATS-DEAD-KEYS FP)."""
+    import inspect
+
+    from tw2002_aiclient import focus_status, stardock_hold_plan
+    from tw2002_aiclient.cockpit import goals
+
+    assert "SHIP_PRICES_COUNT_KEY" in inspect.getsource(focus_status)
+    assert "HOLD_PRICE_LABEL_KEY" in inspect.getsource(focus_status)
+    assert "SHIP_PRICES_COUNT_KEY" in inspect.getsource(goals)
+    assert "HOLD_PRICE_LABEL_KEY" in inspect.getsource(goals)
+    assert "HOLD_PRICE_LABEL_KEY" in inspect.getsource(stardock_hold_plan)

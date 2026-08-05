@@ -8,6 +8,8 @@ import re
 from dataclasses import dataclass
 from typing import Optional
 
+from tw2002_aiclient.game_data_stats import HOLD_PRICE_LABEL_KEY
+
 
 @dataclass(frozen=True)
 class StardockHoldPlan:
@@ -176,7 +178,7 @@ def plan_from_status(
         credits = _credits_from_status(status)
         price = status.get("hold_price")
         if price is None:
-            label = status.get("hold_price_label")
+            label = status.get(HOLD_PRICE_LABEL_KEY)
             if isinstance(label, str):
                 digits = "".join(ch for ch in label if ch.isdigit())
                 price = int(digits) if digits else None

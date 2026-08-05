@@ -18,6 +18,7 @@ __all__ = ["FocusScalars", "recommend_focus_candidates", "FOCUS_KEY"]
 
 from tw2002_aiclient.chains import is_executable_chain
 from tw2002_aiclient.chain_status import ChainScalars
+from tw2002_aiclient.game_data_stats import HOLD_PRICE_LABEL_KEY, SHIP_PRICES_COUNT_KEY
 
 FOCUS_KEY = "focus"
 
@@ -78,7 +79,7 @@ def _stardock_known(status: object) -> bool:
 def _ship_prices_met(status: object) -> bool:
     if not isinstance(status, dict):
         return False
-    count = status.get("ship_prices_count")
+    count = status.get(SHIP_PRICES_COUNT_KEY)
     if isinstance(count, bool) or not isinstance(count, int):
         return False
     return count > 0
@@ -87,7 +88,7 @@ def _ship_prices_met(status: object) -> bool:
 def _hold_price_met(status: object) -> bool:
     if not isinstance(status, dict):
         return False
-    label = status.get("hold_price_label")
+    label = status.get(HOLD_PRICE_LABEL_KEY)
     return isinstance(label, str) and bool(label.strip())
 
 

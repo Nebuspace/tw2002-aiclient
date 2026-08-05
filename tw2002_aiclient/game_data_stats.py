@@ -5,6 +5,11 @@ Canon: ``canon/engine/priority-engine.md`` Layer-1 GOALS keys ``ship_prices_coun
 this module is the status merge). Off-draw refresh only — same seam as
 ``WorldStats`` / ``ChainScalars``.
 
+**Readers (not write-only):** ``cockpit/goals.py``, ``focus_status.py``, and
+``stardock_hold_plan.py`` consume these status keys via
+``SHIP_PRICES_COUNT_KEY`` / ``HOLD_PRICE_LABEL_KEY``. Tip-stamp
+``WO-TIP-STAMP-GAME-DATA-STATS-KEYS-LIVE`` closed the false "dead keys" audit.
+
 Empty successful load may emit ``ship_prices_count=0`` (honest "looked, none
 priced yet"). Hold label is omit-until-known (no blank key from an empty
 cargo_holds tuple). Never invents numbers; never raises on the draw path.
