@@ -132,3 +132,49 @@ def test_cmd_menumap_world_id_resolves_path(tmp_path, capsys, monkeypatch):
     payload = json.loads(capsys.readouterr().out)
     assert payload["path"] == str(path)
     assert payload["node_count"] == 1
+
+
+def test_menumap_accepts_to_sig():
+    parser = cli.build_parser()
+    args = parser.parse_args(["menumap", "--path", "/tmp/gk.json", "--to", "sig-b"])
+    assert args.to_sig == "sig-b"
+
+
+def test_cmd_menumap_to_plans_without_send(tmp_path, capsys, monkeypatch):
+    path = tmp_path / "game_knowledge.json"
+    sig_a = menu_signature(SCREEN_A)
+    screen_b = "=== Ship ===\n(Q) Quit\n"
+    sig_b = menu_signature(screen_b)
+    menu_knowledge.upsert_menu_node(path, sig_a, label="Computer")
+    menu_knowledge.upsert_menu_node(path, sig_b, label="Ship")
+    menu_knowledge.upsert_menu_edge(path, sig_a, "2", sig_b, kind="nav")
+
+    monkeypatch.setattr(cli, "daemon_alive", lambda _rd=None: True)
+
+    def fake_send(verb, args_payload, *, timeout=15.0, run_dir=None):
+        assert verb == "screen"
+        return {"ok": True, "screen": SCREEN_A.splitlines()}
+
+    monkeypatch.setattr(cli, "send_request", fake_send)
+    args = cli.build_parser().parse_args(
+        ["menumap", "--path", str(path), "--to", sig_b, "--json"]
+    )
+    assert cli.cmd_menumap(args) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["ok"] is True
+    assert payload["plan"]["ok"] is True
+    assert payload["plan"]["steps"][0]["key"] == "2"
+    assert payload["plan"]["steps"][0]["to_node"] == sig_b
+
+
+def test_cmd_menumap_to_refuses_without_daemon(tmp_path, capsys, monkeypatch):
+    path = tmp_path / "game_knowledge.json"
+    menu_knowledge.upsert_menu_node(path, "sig-a", label="Computer")
+    monkeypatch.setattr(cli, "daemon_alive", lambda _rd=None: False)
+    args = cli.build_parser().parse_args(
+        ["menumap", "--path", str(path), "--to", "sig-b"]
+    )
+    assert cli.cmd_menumap(args) == 1
+    err = capsys.readouterr().out
+    assert "cannot plan_nav" in err
+    assert "no daemon" in err

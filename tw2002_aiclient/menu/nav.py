@@ -33,9 +33,11 @@ def localize(screen_text: str, path) -> Optional[dict[str, Any]]:
 def plan_nav(screen_text: str, target_sig: str, path) -> dict[str, Any]:
     """Compose localize → ``find_menu_path`` → keystroke steps (or a typed fail).
 
-    PARKED 2026-07-23 (WO-FA14): FA8 wired ``localize`` into spectate/`tw menumap`;
-    this planner + daemon-side keystroke execution remain consumer-less
-    (unit-tested). Do not delete — router WO still owns the send half.
+    PARKED send-half 2026-07-23 (WO-FA14): FA8 wired ``localize`` into
+    spectate/`tw menumap`; the planner gained a dry CLI consumer via
+    ``tw menumap --to`` (WO-WIRE-PLAN-NAV-DETERMINISTIC-NAV) — still never
+    sends. Daemon-side keystroke execution of a computed route remains a
+    separate WO. Do not delete — router WO still owns the send half.
 
     Returns a dict:
       ``ok`` True + ``steps`` (list of ``{key,to_node,kind,desc}``, maybe empty

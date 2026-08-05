@@ -236,12 +236,12 @@ introspector cannot guess, the probe cannot type. The divergences worth recordin
   agent on a live account. The behavior already matches (the A+C gate is human-armed), but the
   naming predates the recast and is recorded here rather than silently reconciled.
 - **Deterministic-nav execution is not wired.** `menu_nav.plan_nav` (localize → route → keystroke
-  steps) is **parked / consumer-less** (WO-FA14): FA8 wired `localize` into `tw menumap`'s
-  you-are-here, but the *planner* and the **daemon-side keystroke execution** of a computed route
-  remain unit-tested only, with no live send path. The prescriptive rule — an `action`-class edge
-  is gated exactly like a rule, never fired blind — is therefore stated here as the target the send
-  half must honor when it lands, not as behavior a live executor enforces today. Do not delete the
-  parked planner; the router WO still owns the send half.
+  steps) has a **dry CLI consumer** — `tw menumap --to <sig>` prints the planned steps and
+  **never sends** (WO-WIRE-PLAN-NAV-DETERMINISTIC-NAV). The **daemon-side keystroke execution** of a
+  computed route remains unbuilt. The prescriptive rule — an `action`-class edge is gated exactly
+  like a rule, never fired blind — is therefore still the target the send half must honor when it
+  lands, not behavior a live executor enforces today. Do not delete the planner; the router WO
+  still owns the send half.
 - **No live-captured StarDock/shipyard screen yet.** `introspector.py`'s row grammar (the columnar
   ship table; the Name/Cost equipment tables; the per-hold cargo-price line) is **constructed**
   from the documented TW2002 listing convention plus this project's own real-capture divider
