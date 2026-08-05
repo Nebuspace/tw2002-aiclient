@@ -1,15 +1,11 @@
-"""Honest greenfield gap proof: ``tw log`` / ``tw trail`` are not wired.
-
-Live ``cli.build_parser()`` exposes the shipped ops verb table (see README Verb
-reference / ``WO-P2-OPS-VERB-SURFACE``). A ledger CLI verb waits on a later WO —
-do not invent one here.
-"""
+"""``tw log`` / ``tw trail`` — trace-ledger trail renderer (WO-WIRE-CLI-LOG-TRAIL-VERB)."""
 
 from __future__ import annotations
 
-import pytest
+import json
 
 from tw2002_aiclient.session import cli
+
 
 # Keep in sync with README Verb reference (shipped) + cli.build_parser().
 _SHIPPED_VERBS = frozenset(
@@ -25,34 +21,16 @@ _SHIPPED_VERBS = frozenset(
         "watch",
         "attach",
         "menumap",
-        # WO-P2-G3 slice 2/2 -- `tw loops`, the daemon-free learned-loop
-        # listing. Behaviour: tests/test_cli_loops.py.
         "loops",
-        # WO-P2-G4-X6 -- `tw record`, the daemon-free manifest-driven macro
-        # writer. Behaviour: tests/test_cli_record.py.
         "record",
-        # WO-EXPLORE-CLI-INVOKE -- `tw explore`, nested start|stop|status.
-        # Behaviour: tests/test_cli_explore_wiring.py.
         "explore",
-        # WO-CHAIN-DETECT-WIRE (re-scoped 2026-07-28) -- `tw pairs`, the
-        # daemon-free class-derived DISCOVERED-pair-loop listing. Behaviour:
-        # tests/test_cli_pairs.py.
         "pairs",
-        # WO-CHAIN-NPORT-WIRE -- `tw chains`, the daemon-free DISCOVERED
-        # N-port profit-cycle listing (the general case `pairs` is the
-        # 2-port special case of). Behaviour: tests/test_cli_chains.py.
         "chains",
-        # WO-REFLEX-CLIENT-REACH -- `tw reflex`, the READ-ONLY view of what
-        # the taught rule library proposes for the live screen. Proposes
-        # only: it names a macro, never arms or runs one. Behaviour:
-        # tests/test_reflex_client_reach.py.
         "reflex",
-        # WO-RULE-WRITER-DRAFTS -- `tw rule`, nested draft|approve|list. The
-        # daemon-free rule authoring tree: `draft` writes an INERT rule and
-        # cannot bless one, `approve` is the sole human act that makes a rule
-        # eligible to fire. Handlers live in `tw2002_aiclient/rules/cli.py`.
-        # Behaviour: tests/test_cli_rule_wiring.py.
         "rule",
+        # WO-WIRE-CLI-LOG-TRAIL-VERB — filesystem trail over state/ledger.jsonl.
+        "log",
+        "trail",
     }
 )
 
@@ -71,6 +49,8 @@ def test_parser_shipped_verb_allowlist():
     attach = parser.parse_args(["attach"])
     menumap = parser.parse_args(["menumap", "--path", "x"])
     loops = parser.parse_args(["loops"])
+    log = parser.parse_args(["log"])
+    trail = parser.parse_args(["trail", "--n", "5"])
     assert status.func is cli.cmd_status
     assert ensure.func is cli.cmd_ensure
     assert screen.func is cli.cmd_screen
@@ -83,22 +63,65 @@ def test_parser_shipped_verb_allowlist():
     assert attach.func is cli.cmd_attach
     assert menumap.func is cli.cmd_menumap
     assert loops.func is cli.cmd_loops
-    # Subparser choices are exactly the live verb table.
+    assert log.func is cli.cmd_log
+    assert trail.func is cli.cmd_log
+    assert trail.n == 5
     sub = next(
         a for a in parser._actions if getattr(a, "choices", None) is not None
     )
     assert set(sub.choices) == set(_SHIPPED_VERBS)
 
 
-def test_log_verb_is_not_wired():
-    parser = cli.build_parser()
-    with pytest.raises(SystemExit) as exc:
-        parser.parse_args(["log"])
-    assert exc.value.code == 2
+def test_log_renders_trail_lines(tmp_path, capsys):
+    ledger = tmp_path / "ledger.jsonl"
+    rows = [
+        {
+            "ts": "2026-08-05T07:08:45Z",
+            "settled_class": "port_trade",
+            "prompt": "your offer [158]?",
+            "input": "158",
+            "reward": {"d_credits": 230},
+            "pre_state": {"credits": 96553},
+            "post_state": {"credits": 96783},
+        },
+        {
+            "ts": "2026-08-05T07:09:01Z",
+            "settled_class": "main_command",
+            "prompt": "Command [TL=…]:",
+            "input": "D",
+            "reward": {},
+        },
+    ]
+    ledger.write_text("\n".join(json.dumps(r) for r in rows) + "\n", encoding="utf-8")
+    args = cli.build_parser().parse_args(["log", "--ledger", str(ledger), "--n", "1"])
+    assert cli.cmd_log(args) == 0
+    out = capsys.readouterr().out
+    assert "main_command" in out
+    assert "port_trade" not in out  # --n 1 → most recent only
 
 
-def test_trail_alias_is_not_wired():
-    parser = cli.build_parser()
-    with pytest.raises(SystemExit) as exc:
-        parser.parse_args(["trail"])
-    assert exc.value.code == 2
+def test_trail_alias_same_handler(tmp_path, capsys):
+    ledger = tmp_path / "ledger.jsonl"
+    ledger.write_text(
+        json.dumps(
+            {
+                "ts": "2026-08-05T07:08:45Z",
+                "settled_class": "port_trade",
+                "prompt": "x",
+                "input": "",
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    args = cli.build_parser().parse_args(["trail", "--ledger", str(ledger)])
+    assert args.func is cli.cmd_log
+    assert cli.cmd_log(args) == 0
+    assert "port_trade" in capsys.readouterr().out
+
+
+def test_log_missing_ledger_is_empty_ok(tmp_path, capsys):
+    missing = tmp_path / "nope.jsonl"
+    args = cli.build_parser().parse_args(["log", "--ledger", str(missing)])
+    assert cli.cmd_log(args) == 0
+    assert capsys.readouterr().out == ""

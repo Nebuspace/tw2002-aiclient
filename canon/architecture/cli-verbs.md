@@ -179,7 +179,8 @@ tw mine --min-support 3            # propose draft skills from the ledger
 # Implementation status (tip `13f34a8` + M3 WO-P2-G4 X1–X6 · live `./tw --help`)
 
 **LIVE ops verbs today:** `status`, `ensure`, `screen`, `stop`, `do`, `send`, `read`, `history`,
-`watch`, `attach`, `menumap`, `loops`, `pairs`, `record`.
+`watch`, `attach`, `menumap`, `loops`, `pairs`, `record`, `log`/`trail` (WO-WIRE-CLI-LOG-TRAIL-VERB —
+filesystem trail over `state/ledger.jsonl`).
 
 `pairs` (**WO-CHAIN-DETECT-WIRE**, re-scoped 2026-07-28) is the thin product caller over the
 class-derived pair-loop path: `chain_detect.recompute` reads a world's `state/world/<world-id>`
