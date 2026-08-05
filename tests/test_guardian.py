@@ -346,6 +346,54 @@ def test_reconnect_gives_up_after_max_attempts_without_raising():
     assert session.reconnect_calls == 3
     assert g.reconnect_count == 0
     assert "down" in g.last_reconnect_error
+    assert g.reconnect_exhausted is True
+    # Sticky: a later poll must NOT silently forever-retry.
+    g._tick()
+    assert session.reconnect_calls == 3
+
+
+def test_reconnect_exhausted_clears_on_manual_clear_and_allows_retry():
+    session = ReconnectFakeSession(
+        steps=[{"screen": "unused", "expect": None}],
+        reconnect_outcomes=[OSError("down")] * 6,
+    )
+    session.auto_login_profile = "default"
+    g = _guardian(session, max_reconnect_attempts=2)
+    g._tick()
+    assert g.reconnect_exhausted is True
+    assert session.reconnect_calls == 2
+    g.clear_reconnect_exhausted()
+    assert g.reconnect_exhausted is False
+    g._tick()
+    assert session.reconnect_calls == 4
+    assert g.reconnect_exhausted is True
+
+
+def test_reconnect_exhausted_clears_when_socket_comes_back():
+    session = ReconnectFakeSession(
+        steps=[{"screen": "unused", "expect": None}],
+        reconnect_outcomes=[OSError("down")] * 3,
+    )
+    session.auto_login_profile = "default"
+    g = _guardian(session, max_reconnect_attempts=2)
+    g._tick()
+    assert g.reconnect_exhausted is True
+    session.conn.connected = True  # manual ensure / attach restored the link
+    g._tick()
+    assert g.reconnect_exhausted is False
+
+
+def test_reconnect_exhausted_does_not_take_human_mode():
+    """(C) exhaustion must not auto-MODE_HUMAN / touch a control lock."""
+    session = ReconnectFakeSession(
+        steps=[{"screen": "unused", "expect": None}],
+        reconnect_outcomes=[OSError("down")] * 3,
+    )
+    session.auto_login_profile = "default"
+    g = _guardian(session, max_reconnect_attempts=2)
+    g._tick()
+    assert g.reconnect_exhausted is True
+    assert not hasattr(g, "control_lock") or g.__dict__.get("control_lock") is None
 
 
 def test_reconnect_without_saved_password_surfaces_as_last_error_not_a_crash():
@@ -412,3 +460,42 @@ def test_daemon_shares_ledger_with_guardian():
     assert "ledger = LedgerWriter()" in text
     assert "ledger=ledger" in text
     assert "server.ledger = ledger" in text
+
+
+# -- WO-FIX-SESSIONGUARDIAN-EXHAUSTED-RECONNECT-SILENT (status wire) --------
+
+def test_status_surfaces_reconnect_exhausted_intervention(tmp_path):
+    """(B) sticky exhaust appears on status["intervention"] with typed code."""
+    from tw2002_aiclient.session import protocol
+    from tw2002_aiclient.session.session import Session
+
+    class _Server:
+        watch_hub = None
+        control_lock = None
+        autoloop = None
+        trade_chain = None
+        guardian = None
+
+    session = Session("127.0.0.1", 65000, "sg-exhaust", str(tmp_path))
+    session.conn.connected = False
+    g = _guardian(
+        ReconnectFakeSession(
+            steps=[{"screen": "unused", "expect": None}],
+            reconnect_outcomes=[OSError("down")] * 3,
+        ),
+        max_reconnect_attempts=2,
+    )
+    g.session.auto_login_profile = "default"
+    g._tick()
+    assert g.reconnect_exhausted is True
+    server = _Server()
+    server.guardian = g
+    # Minimal screen surface for _status_response classify path
+    session.conn.connected = False
+    resp = protocol._status_response(session, server)
+    assert resp["intervention"]["needs_attention"] is True
+    codes = [
+        (r.get("code") if isinstance(r, dict) else r)
+        for r in resp["intervention"]["reasons"]
+    ]
+    assert "reconnect_exhausted" in codes

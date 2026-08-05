@@ -14,8 +14,11 @@ A single daemon thread polls session health every few seconds:
   back at a *verified* `main_command` — without the driving surface
   needing to notice the drop. Exhaustion / unverified screens fail loud
   (`last_reconnect_error`); never report resume success on an unknown
-  screen. Escalate-to-Human keyboard handoff is PWO-065 STOP/attach (canon Code
-  Divergence); this module records the error and stops the burst.
+  screen. After ``max_reconnect_attempts`` fails, a sticky
+  ``reconnect_exhausted`` flag suppresses further auto-retry until a
+  successful reconnect (or ``clear_reconnect_exhausted``) — the status
+  verb surfaces typed reason ``reconnect_exhausted`` for the STOP banner.
+  No auto-MODE_HUMAN from this path (keyboard escalate stays manual).
 
 - **D10:** when the session has been idle past `idle_keepalive_ms` (default
   45s, under the observed first inactivity warning), send a harmless blank
@@ -73,6 +76,11 @@ class SessionGuardian:
         self._thread = threading.Thread(target=self._loop, daemon=True)
         self.last_reconnect_error = None
         self.reconnect_count = 0
+        # Sticky after a full reconnect burst fails (WO-FIX-SESSIONGUARDIAN-
+        # EXHAUSTED-RECONNECT-SILENT). Suppresses silent forever-retry while
+        # disconnected; cleared on successful reconnect / explicit clear /
+        # observing connected again (manual ensure).
+        self.reconnect_exhausted = False
         # Set for the whole reconnect+replay burst so D10 cannot nudge
         # while connected has flipped True mid-login (password screen, etc.).
         self._reconnect_in_flight = False
@@ -80,6 +88,10 @@ class SessionGuardian:
         # further nudges until idle rebuilds from this mono stamp (RX echo
         # may also advance last_rx; we take the later of the two).
         self._last_keepalive_mono = None
+
+    def clear_reconnect_exhausted(self) -> None:
+        """Allow another auto-reconnect burst (operator / ensure cleared)."""
+        self.reconnect_exhausted = False
 
     def _resolve_load_profile(self):
         if self._load_profile is not None:
@@ -128,10 +140,14 @@ class SessionGuardian:
 
     def _tick(self):
         session = self.session
-        if not session.conn.connected:
-            self._maybe_reconnect()
+        if session.conn.connected:
+            # Manual ensure/reconnect may restore the socket outside D9 —
+            # drop the sticky escalate so status stops claiming exhaustion.
+            if self.reconnect_exhausted:
+                self.clear_reconnect_exhausted()
+            self._maybe_keepalive()
             return
-        self._maybe_keepalive()
+        self._maybe_reconnect()
 
     # -- D9 ----------------------------------------------------------------
 
@@ -139,6 +155,8 @@ class SessionGuardian:
         session = self.session
         if not session.auto_login_profile:
             return  # never seen a successful login -- nothing to replay
+        if self.reconnect_exhausted:
+            return  # sticky: no silent forever-retry (status surfaces it)
         from .login import LoginError, run_login
 
         load_profile = self._resolve_load_profile()
@@ -162,15 +180,15 @@ class SessionGuardian:
                     )
                     self.reconnect_count += 1
                     self.last_reconnect_error = None
+                    self.reconnect_exhausted = False
                     return
                 except (OSError, LoginError) as e:
                     self.last_reconnect_error = str(e)
                     self._stop.wait(self.reconnect_backoff_s)
-            # Exhausted attempts -- give up until the next drop-detection
-            # tick naturally retries (still not connected, so _tick() will
-            # call back in here on the next poll). Fail-loud via
-            # last_reconnect_error; keyboard escalate is PWO-065 STOP banner
-            # prompt-to-attach (not auto-MODE_HUMAN from reconnect).
+            # Exhausted attempts — sticky fail-loud (not silent poll-retry).
+            # status["intervention"] carries code reconnect_exhausted; no
+            # auto-MODE_HUMAN (keyboard escalate stays operator-driven).
+            self.reconnect_exhausted = True
         finally:
             self._reconnect_in_flight = False
 
