@@ -227,19 +227,19 @@ shell today, only over the daemon's own socket protocol):**
 - **`state`** (**X1**, `protocol.py` `verb == "state"`) — the parsed current-sector read replay's
   start-anchor guard depends on. `WO-P2-G4-X1-STATE-SECTOR-READ` scoped a CLI wrapper as optional
   ("+ thin CLI if honesty requires") and none landed.
-- **`autoloop_start` / `autoloop_stop` / `autoloop_status`** (**X4/X5**, `protocol.py`) — the
-  background AUTO-LOOP player. **Not** the catalog's four-verb `{start,stop,pause,resume}`
-  surface below: three wire verbs shipped, and `pause`/`resume` fall through to `unknown_verb` —
-  argued down, not silently dropped (X4's own commit message: "Pause and resume are controls on a
-  REPEATING loop; with one pass there is no cycle boundary to pause at, and a mid-macro pause is
-  an indefinite hold on a half-executed transaction — a new safety surface with no contract and no
-  rails"). Of the catalog row's key args, only `name` and `floor` are accepted
-  (`autoloop.ARGS_AUTOLOOP_START`), and `floor` is genuinely **enforced** since X5 — a floored run
-  halts fail-closed on `credits_unknown`/`credits_stale` rather than merely being remembered.
-  `cycles`, `param`, and `force` are **refused** as `unsupported_arg`, never silently ignored — a
-  caller asking for ten cycles and getting one would have been lied to by a surface that looked
-  like it agreed. No `tw autoloop` CLI subparser exists at X4, X5, or X6; the catalog row states
-  the full future target, this paragraph states wire-level reality today.
+- **`autoloop_start` / `autoloop_stop` / `autoloop_status` / `autoloop_pause` / `autoloop_relaunch`**
+  (**X4/X5** + WO-AUTOLOOP-PAUSE-RESUME, `protocol.py`) — the background AUTO-LOOP player.
+  **Not** the catalog's four-verb `{start,stop,pause,resume}` surface below: five wire verbs
+  shipped. `autoloop_pause` and `autoloop_relaunch` landed under the 2026-07-27 hub ruling
+  (options 1+3): pause parks intent and hands the keyboard back; relaunch re-arms from macro
+  step 1 (a fresh start that re-issues sends already made — **not** a thaw).
+  **`autoloop_resume` stays `unknown_verb` deliberately** — a caller asking for continuation must
+  not silently get a relaunch. Of the catalog row's key args, `name`, `floor`, `turn_budget`, and
+  `cycles` are accepted (`autoloop.ARGS_AUTOLOOP_START`) because each is **enforced**: `floor` and
+  `turn_budget` halt fail-closed when unobservable/exhausted; `cycles` is clamped to
+  `CYCLES_HARD_CEILING` (never unbounded). `param` and `force` are **refused** as
+  `unsupported_arg`, never silently ignored. No `tw autoloop` CLI subparser wraps these; the
+  catalog row states the full future target, this paragraph states wire-level reality today.
 
 The catalog tables below are the **prescriptive full vocabulary** (target). Prefer this status
 block when answering "what can I run right now?"
@@ -266,9 +266,9 @@ block when answering "what can I run right now?"
    correctly-scoped increment; live-attach capture is deferred, real future work, not abandoned
    target. This is this concept's first instance of DOCS WIN running in reverse: a genuinely
    Accepted shipped-shape difference that canon must catch up to, rather than code drifting from a
-   canon that stayed right. `autoloop`'s wire-vs-CLI split (Implementation status above) and its
-   `pause`/`resume` refusal are the same class of finding — recorded there rather than repeated
-   here.
+   canon that stayed right. `autoloop`'s wire-vs-CLI split and its pause + relaunch-not-resume
+   contract (Implementation status above; citations [5]/[6]) are the same class of finding —
+   recorded there rather than repeated here.
 
 # Citations
 
@@ -277,8 +277,9 @@ block when answering "what can I run right now?"
 [3] Archive `twclient/cli.py` — port-source for verbs not yet restored
 [4] Project `CLAUDE.md` — hard rules / seat context
 [5] `tw2002_aiclient/session/protocol.py` — `dispatch()`, the wire-verb chokepoint (`state`,
-    `autoloop_start`/`_stop`/`_status`) and each verb's accepted/refused argument set
-[6] `tw2002_aiclient/session/autoloop.py` — `ARGS_AUTOLOOP_START`, the X4/X5 refusal reasoning for
-    `cycles`/`param`/`force`/`pause`/`resume`
+    `autoloop_start`/`_stop`/`_status`/`_pause`/`_relaunch`; `autoloop_resume` deliberately
+    `unknown_verb`) and each verb's accepted/refused argument set
+[6] `tw2002_aiclient/session/autoloop.py` — `ARGS_AUTOLOOP_START` (`name`/`floor`/`turn_budget`/
+    `cycles`), `CYCLES_HARD_CEILING`, and refusal of `param`/`force` as `unsupported_arg`
 [7] `tw2002_aiclient/loops/recorder.py` + `cmd_record` (`tw2002_aiclient/session/cli.py`) — the X6
     manifest-based recorder's real shape
