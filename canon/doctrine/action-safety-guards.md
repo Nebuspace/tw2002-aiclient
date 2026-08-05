@@ -234,6 +234,16 @@ desync · depletion · hazard · novelty-halt); surfaces render the label, never
   who pilots through it — and, later and on-demand, may invoke the AI teacher to propose a rule
   draft covering it.
 
+# Coverage-map boot gate (PWO-112)
+
+Tip enforces the guard inventory at **product TUI startup**, not only under test.
+`tw2002_aiclient/app.py`'s `main()` calls `action_safety.assert_coverage_map_intact()` **before**
+`curses.wrapper` — if any inventory row lost its source file, source marker, proof test, or proof
+marker, the process prints the assertion and exits **1** (fail closed). `--help` / `-h` stay
+exempt so argv help still works offline without touching the map. Claiming the coverage map DONE
+without this gate staying green is the hazard the prep doc named; the boot assert is the live
+enforcement tooth.
+
 # Code Divergence
 
 *(DOCS WIN: canon is prescriptive; these record where the current implementation diverges from, or
@@ -289,3 +299,5 @@ ships this rail today, as four distinct fail-closed codes: `HALT_CREDITS_UNKNOWN
 `HALT_CREDITS_STALE`, `HALT_CREDITS_UNREADABLE`, `HALT_FLOOR_REACHED`
 [10] tw2002_aiclient/genesis_confirm.py — Genesis confirm-to-send choke-point
 (`genesis_send_if_confirmed`); Option A gate-only on tip; Option B HELD
+[11] tw2002_aiclient/action_safety.py (`assert_coverage_map_intact`) + `app.py` `main()` —
+PWO-112 coverage-map inventory; boot fail-closed before curses (`--help` exempt)
