@@ -141,32 +141,30 @@ analyze after the fact, growing the repertoire so a similar screen counts toward
 
 # Code divergence
 
-The reborn metric above is prescriptive; the current code and its source concept still carry the
-pre-reborn shape:
+The reborn metric above is the tip target. Archive / pre-reborn shapes remain
+do-not-revive; tip measurement of the live share is **shipped**.
 
-- **The old "autonomy ratio" formula and its 50% north-star.** `knowledge/architecture/autonomy-loop.md`
-  defines `autonomy = trainer / (ai + trainer)`, **excludes** `human`, and frames "crossing 50%" as the
-  trainer's concrete definition of "flying itself." All three of those are retired here: the denominator
-  becomes `app + human` (human *included*, as the escalation term), the `ai` term is removed (no live ai
-  sender), and there is **no graduation threshold** — coverage is a description, not a finish line. Docs
-  win: the recast `app / (app + human)` coverage gauge is the target; the `trainer / (ai + trainer)`
-  graduation gauge is the divergence to close.
+- **The old "autonomy ratio" formula and its 50% north-star (archive only).**
+  `knowledge/architecture/autonomy-loop.md` defined `autonomy = trainer / (ai + trainer)`,
+  **excluded** `human`, and framed "crossing 50%" as "flying itself." All three are
+  retired: denominator is `app + human`, live `ai` is gone, and there is **no
+  graduation threshold**. Do not revive `spectate_layout.format_autonomy_counts`
+  (`App N / AI N · Hum N`).
 
-- **The ledger's live `ai` actor value.** `ledger.py`'s `record_do()` still declares `actor` as one of
-  `{"ai", "trainer", "human"}` and defaults it to `"ai"`, so a naive count over today's rows would find
-  live `ai`-attributed keystrokes and a coverage computation would have to map them first. The target
-  mapping (owned by the [trace ledger](/engine/trace-ledger.md) divergence note): legacy `trainer` → `app`,
-  the `ai` live value retired, and a legacy `ai` row read as *authored-decision provenance*, not a
-  live-sender count. Until the enum is migrated, a coverage reader must fold legacy `trainer` into `app`
-  and must **not** count legacy `ai` rows toward the live denominator.
+- **Ledger live-sender enum — tip closed.** Tip `ledger.LedgerWriter.record_do`
+  requires `actor ∈ VALID_SENDERS` (`app`|`human`); `session.VALID_SENDERS` matches.
+  Legacy `{ai, trainer, human}` vocabulary is archive / old-row caution only.
+  `ledger.live_actor_counts` counts only `app`/`human` and skips unknown/`ai` rows
+  (never invents a third live driver).
 
-- **No coverage-metrics computation exists in code yet.** There is no module that reads the ledger and
-  emits `app/(app+human)`, the escalation frequency, or the teaching-provenance count; this concept
-  specifies the metric the cockpit's auto-% meter and any retro summary should compute, over the
-  attribution the ledger already records. The counterpart session-retro tool (grouping a session's rows
-  to surface codification candidates) is likewise prescribed, not built — that mechanism is now homed in
-  candidate-mining / the AI teacher, and this concept keeps only the *measurement* half of the old
-  autonomy loop.
+- **Live coverage computation — tip shipped (WO-P5-072 / PWO-094 /
+  WO-WIRE-COVERAGE-LEDGER-COUNTS).** `cockpit/covermeter.py` computes
+  `app/(app+human)` (+ honest `?` for unavailable / empty window);
+  `ledger.live_actor_counts` folds the ledger; `screens.py` wires the meter on
+  the control strip. Queue claim "zero code exists" was stale.
+  **Still prescribed, not built here:** the teaching-provenance axis (approved
+  AI-drafted rules) and the session-retro candidate-mining surface — those stay
+  with candidate-mining / the AI teacher, not this meter.
 
 # Citations
 
@@ -187,6 +185,7 @@ pre-reborn shape:
   actor attribution, §19 autonomy ratio as the same axis as token efficiency), reimagined here from
   `knowledge/architecture/autonomy-loop.md` as coverage; the session-retro half of that doc is carried
   by candidate-mining / the AI teacher, not here.
-- Code modules (plain-text): `ledger.py` (the `actor`/`session_id` rows this metric counts, and the
-  current `{ai, trainer, human}` enum with an `ai` default that must be mapped); `miner.py` / `skills.py`
-  (the pattern-learning substrate the teaching-provenance axis draws on).
+- Code modules (plain-text): `ledger.py` (`VALID_SENDERS` + `live_actor_counts`);
+  `cockpit/covermeter.py` (share math + `COV` meter); `screens.py` (control-strip
+  wire); `session/session.py` (`VALID_SENDERS`). Teaching-provenance /
+  session-retro remain with `miner.py` / AI-teacher surfaces, not this meter.
