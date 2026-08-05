@@ -72,7 +72,7 @@ Starved — `WO-WM-LANDMARKS-WRITE` landed; `world_model.add_landmark` is called
 | 1 | Turns & credit count known | Boolean | 100 | — | **Partial** — writers live: `_status_response` emits `turns_left` + `credits` when sticky OUTCOME_READ (`protocol.py`); GOALS Turns/Credits rows consume them. Still omit-until-read (honest `?` before `I`/`observe_*`). FOCUS does not yet weight-gate on unmet #1. |
 | 2 | Current-ship type identified | Boolean | 90 | #1 | Planned — no live current-ship introspection adapter; `ShipSpec`/`PlayerState` exist for scoring but aren't fed live |
 | 3 | StarDock located | Boolean | 85 | explore when unknown | **Implemented** — writer: `world_model.add_landmark` from explore (`sector_explore`); reader: `explore.find_landmark_sectors` + `WorldStats` → `stardock_sectors`/`stardock_found`; GOALS paints `StarDock @…` when present. Empty landmark scan still omits keys (honest `?`), never invents `stardock_found=False`. |
-| 4 | Cost of other ships known | Boolean | 80 | #3 | Partial — GOALS gated until dock found; catalog not yet on live `WorldSnapshot.ship_catalog` |
+| 4 | Cost of other ships known | Boolean | 80 | #3 | **Partial (live-bridged)** — writer: `GameDataStats.refresh` loads Layer-B `game_data` ships and merges `ship_catalog` (`[{ship_name, cost}, …]` for `cost > 0`) plus `ship_prices_count` onto status (`game_data_stats.py`); readers: GOALS + FOCUS overlay + priority-engine pre-flight. Still omit-until-load (no invent). |
 | 5 | Cost of cargo-hold upgrades known | Boolean | 75 | #3 | Partial — GOALS gated until dock found; quote via `get_cargo_hold_price()` when captured |
 | 6 | Obtain fighters (aboard > 0) | Boolean | 73 | #1 (Class-0 at Sol always reachable) | Partial — GOALS paints `fighters_aboard` + optional `fighter_buy_status` string (`goals.py`); **no** tip `afford_fighters()` module and **no** buy EXECUTE (still Planned / Max-GO) |
 | 7 | Cost of fighters known | Boolean | 70 | #1 (Class-0 assumed reachable) | Partial — canon still names `FIGHTER_UNIT_PRICE_CLASS0 = 100` as an **UNVERIFIED hypothesis**; tip Python has **zero** references to that constant (no producer for a numeric price yet) |
@@ -141,8 +141,8 @@ All five must hold before an upgrade behavior is allowed to outrank a running tr
 ordering. None of this authorizes a live keystroke on an unknown screen — it only decides whether the
 *upgrade suggestion* is offerable and how it sorts.
 
-1. **Target ship + price known** — an introspected catalog row with `cost > 0` (`ship_catalog`; live
-   bridge Planned).
+1. **Target ship + price known** — an introspected catalog row with `cost > 0`
+   (`status["ship_catalog"]` via `GameDataStats` / Layer-B `game_data`; live-bridged).
 2. **One-way path to StarDock known** — `stardock_route` with `len > 1`, or at-dock (`len == 1`);
    unknown route fail-closes (`upgrade: path to StarDock unknown`).
 3. **Return path to interrupted work known** → compute `travel_cost_rt`.
@@ -192,7 +192,13 @@ full stop).
 The overlay bridge is **built** (`focus_status.recommend_focus_candidates` +
 `game_data_stats.GameDataStats`): catalog booleans from Layer-B `game_data` merge onto
 `status`, unmet prerequisites raise explore via `(0, weight)` and gate upgrade with `⊘`
-until ship/hold quotes exist. Full 13-objective kernel (RT / stay-vs-leave) remains parked.
+until ship/hold quotes exist. **RT / stay-vs-leave** is live on the FOCUS path
+(`priority_engine.upgrade_gate_while_chaining` ← `stay_vs_leave_upgrade` /
+`travel_cost_rt_turns`): while an executable chain is present, upgrade is fail-closed
+without known StarDock/return hops + economics, and demoted (gated) when stay-vs-leave
+says stay — even if headline upgrade EV is higher. Remaining catalog rows (#2 ship-type
+writer, #5 hold-quote beyond label, #6–#13 EXECUTE surfaces) stay Partial/Planned per
+the Status column; this WO does not invent those writers.
 
 ## Two-layer information architecture
 

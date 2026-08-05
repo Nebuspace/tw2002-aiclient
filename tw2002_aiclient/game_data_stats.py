@@ -5,6 +5,9 @@ Canon: ``canon/engine/priority-engine.md`` Layer-1 GOALS keys ``ship_prices_coun
 this module is the status merge). Off-draw refresh only — same seam as
 ``WorldStats`` / ``ChainScalars``.
 
+Also merges ``ship_catalog`` — priced ``{ship_name, cost}`` rows for the
+priority-engine pre-flight / catalog #4 live bridge (WO-PRIORITY-ENGINE-KERNEL).
+
 **Readers (not write-only):** ``cockpit/goals.py``, ``focus_status.py``, and
 ``stardock_hold_plan.py`` consume these status keys via
 ``SHIP_PRICES_COUNT_KEY`` / ``HOLD_PRICE_LABEL_KEY``. Tip-stamp
@@ -21,10 +24,12 @@ __all__ = [
     "GameDataStats",
     "SHIP_PRICES_COUNT_KEY",
     "HOLD_PRICE_LABEL_KEY",
+    "SHIP_CATALOG_KEY",
 ]
 
 SHIP_PRICES_COUNT_KEY = "ship_prices_count"
 HOLD_PRICE_LABEL_KEY = "hold_price_label"
+SHIP_CATALOG_KEY = "ship_catalog"
 
 
 def _format_hold_label(cost_per_hold: int) -> str:
@@ -40,6 +45,7 @@ class GameDataStats:
         "_ships_seen",
         "_hold_price_label",
         "_hold_seen",
+        "_ship_catalog",
     )
 
     def __init__(self) -> None:
@@ -47,6 +53,7 @@ class GameDataStats:
         self._ships_seen = False
         self._hold_price_label: str | None = None
         self._hold_seen = False
+        self._ship_catalog: list[dict] | None = None
 
     def refresh(
         self,
@@ -72,17 +79,22 @@ class GameDataStats:
         except Exception:  # noqa: BLE001
             return
         priced = 0
+        catalog: list[dict] = []
         try:
             for ship in data.ships:
                 cost = getattr(ship, "base_cost_credits", None)
+                name = getattr(ship, "ship_name", None)
                 if isinstance(cost, bool) or not isinstance(cost, int):
                     continue
                 if cost > 0:
                     priced += 1
+                    if isinstance(name, str) and name.strip():
+                        catalog.append({"ship_name": name.strip(), "cost": cost})
         except Exception:  # noqa: BLE001
             return
         self._ship_prices_count = priced
         self._ships_seen = True
+        self._ship_catalog = catalog
         try:
             holds = data.cargo_holds
             if holds:
@@ -109,6 +121,8 @@ class GameDataStats:
         merged = dict(status)
         if self._ships_seen and merged.get(SHIP_PRICES_COUNT_KEY) is None:
             merged[SHIP_PRICES_COUNT_KEY] = self._ship_prices_count
+        if self._ships_seen and merged.get(SHIP_CATALOG_KEY) is None:
+            merged[SHIP_CATALOG_KEY] = list(self._ship_catalog or ())
         if self._hold_seen and merged.get(HOLD_PRICE_LABEL_KEY) is None:
             merged[HOLD_PRICE_LABEL_KEY] = self._hold_price_label
         return merged
