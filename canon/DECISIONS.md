@@ -312,6 +312,24 @@ Accepted: owner removes on Accept/abandon; `preserve/<wo-id>` if tip ∉ origin;
 **Owner:** impl-aiclient-cursor / impl-claudecode-aiclient (whichever seat picks it up).
 **Ref:** `canon/architecture/app-autopilot-model.md`, `canon/engine/priority-engine.md`, `canon/strategy/exploration-policy.md`, `canon/strategy/candidate-mining.md`, `canon/doctrine/action-safety-guards.md`, `canon/surfaces/screen-understanding.md`; PR #431 (citation half).
 
+**Correction (hub 2026-08-05 · Max direct clarification, same day):** the "coaching-only, never auto-firing" framing above overstated the constraint and is **superseded** by this note. Max: *"AI live driving is not the same thing as autopilot acting and firing programmatically — we are OK designing autopilot automation into aiclient that takes that kind of action even against another human. The human learns by watching the action and then later by the report [...] provided post-session of what happened."*
+
+The invariant this repo actually holds is `AI never live-drives` — the **AI/LLM teacher** never reasons live over the next keystroke (`north-star.md` lines 26-34: "Zero AI reasoning runs per cycle"). That is a hard, unchanged rule. It does **not** forbid the **`app` layer** — the deterministic, taught/armed autopilot — from executing a rule's action programmatically once that rule has been human-approved at teach/arm time, including firing against another human. `app` is a legitimate live sender in its own right (`CLAUDE.md:63`, "Live senders are `{app, human}` only"); "coaching-only" was never a real constraint on it.
+
+So: the EV ranking function this entry authorizes may, once built out and wired to a taught/armed rule, drive an `app`-layer autonomous action — not just surface a suggestion to a human. What stays fixed: the *rule* is human-approved before it can fire (teach-time gate, not per-firing gate), and the AI/LLM itself never picks the live keystroke. Accountability for autonomous `app` action is a **post-session report**, not live per-firing approval — see the new post-session-action-report entry below for that gap.
+
+Any WO building this function should design for eventual `app`-layer auto-fire from the start (behind the existing teach/arm gate), not architect a coaching-only ceiling that would need to be torn out later.
+
+### post-session-action-report — DOC-GAP: no dedicated end-of-session digest exists (hub 2026-08-05 · Max direct clarification)
+
+**Gap:** Max's clarification above (see the correction just above) names a specific accountability surface for autonomous `app`-layer action: *"the human learns by watching the action and then later by the report [...] provided post-session of what happened."* No canon doc currently describes a purpose-built post-session report. `grep -rln "post-session\|session report\|session summary\|after-action\|session recap" canon/` returns zero hits.
+
+**What exists today, and why it's not the same thing:** `canon/engine/trace-ledger.md` is the append-only per-dispatch substrate with `{app, human}` actor attribution — every action already gets recorded there with its actor, and `tw log` / `tw trail` let a human query it directly. But that's an ad-hoc, pull-based query tool, not a delivered end-of-session artifact — nothing summarizes or surfaces it unprompted when a session ends, and nothing distinguishes "here's everything `app` did autonomously while you weren't watching" as its own reviewable digest.
+
+**Design direction (not yet ruled, staged for a WO):** a session-end (or on-demand) report generator that reads the trace ledger — consistent with the ledger's existing "passive substrate, never a live-decision input" doctrine (`trace-ledger.md` lines ~108-150: reading it to act live would be a forbidden self-driving loop; reading it *after* the session to report is not that) — and produces a human-facing summary emphasizing `app`-attributed autonomous actions, especially any taken against another human/player. This is additive: a fifth consumer of the ledger alongside the four documented ones (candidate-mining, AI teacher, direct human trail-reading, coverage-metrics).
+
+**Next step:** stage a BUILD-WO in `queue-aiclient.md` once a seat sketches the report's shape (fields, delivery surface — CLI printout at session-end vs. a file artifact vs. both). Not blocking the EV-ranking build above; the two can land independently, but the EV-ranking WO's `app`-layer auto-fire should not ship to a live/real-account context ahead of this report existing, per the accountability chain Max described.
+
 ### A.2 clarification — never-auto-action vs auto-haggle (hub 2026-07-26 · Max carte blanche)
 
 **Ruled:** never-auto-action means **no unattended freestyle** on money/quantity screens — not a ban on **human-armed, guarded, taught** money-path rules.
