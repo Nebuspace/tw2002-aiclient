@@ -337,12 +337,12 @@ The control strip lays out strictly **left-to-right** (`compose_control_strip` �
    channel. When a taught run is live, the band's slot is claimed instead by the AUTO-LOOP
    cycle-progress bar (`Playing <name> ▸ cycle/total [███░░]`) — never both, there is only room for one.
 
-The reborn hint band is `^A)ode  A)nalyze  R)ecord  T)rigger  L)chains  P panic`; every token uses the
-uniform `KEY)verb` shape so the hotkey letter is scannable at the head of each token (`^A` = Ctrl-A
-Mode per ADR-002). (As-built the band is still `CONTROL_HINTS = "M)ode  L)chains  E)xplore  Spc pause
-X stop  P panic  A)ttach"` until 061-entry lands — tip honesty; see Code divergence.)
+The reborn hint-band *shape* is still `KEY)verb` with **Ctrl-A** as Mode (ADR-002 — no printable
+`M)ode`). Tip no longer ships a `CONTROL_HINTS = "M)ode …"` constant; that archive string is gone
+from product Python. Mode lives on the chip as `^A)APP-ARMED` / `^A)MANUAL-HUMAN` (narrows under
+width pressure); the calm explore/goals band is composed separately (below).
 
-**Trainer surface (per the amendment above):** the mode chip already carries the `^A)` chord
+**Trainer surface (tip):** the mode chip already carries the `^A)` chord
 (merged into `^A)APP-ARMED`/`^A)MANUAL-HUMAN`), and the hint band is
 `E)xplore  F)ind StarDock·ON  P)ort Trade·ON  C)argo Hold Upgrade·ON  S)hip Upgrade·ON  │  T)rade Loop Chain  L)ist Loops`
 — every token still uses the same uniform `KEY)verb` shape (P/C/S additionally carry a `·ON`/`·OFF`
@@ -436,8 +436,8 @@ events), so the strip breathes without churning the game screen.
 The control strip and its chip survive the cockpit fold ladder (`frame_layout`, `spectate_layout.py`).
 In the **`minimal`** tier (≥82 inner cols) there is no side gutter, so the mode line rides the packed
 header strip and the hint band abbreviates — but the tokens are chosen to fit **82 inner cols without
-truncating** (the as-built `CONTROL_HINTS` is length-budgeted to that width; a reborn band must hold the
-same budget). Height degrades **header → control → ticker → viewport-border** in that order, but the
+truncating** (tip bands are length-budgeted to that width; keep the same budget when extending). Height
+degrades **header → control → ticker → viewport-border** in that order, but the
 intervention strip's first-claim on leftover height means **a halt banner survives even as the control
 strip is squeezed** — the escalation is the last thing to fold, never the first. The body never scrolls
 horizontally: the hint band truncates from the right, it does not push the strip wider than the frame.
