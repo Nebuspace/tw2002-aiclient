@@ -489,7 +489,7 @@ Concretely, a builder should aim for:
 | Product in-cockpit spectate state | **LIVE** — muted `SPECTATE` chip + no-send tripwire (PWO-055); ops `tw spectate` **RETIRED / WONTBUILD** (Max `@ 13:13:55Z`) |
 | Product attach / detach | **LIVE** — Mode attach (Ctrl-A per ADR-002; tip historically bare `M`) · Ctrl-] detach · chip SPECTATE↔`MANUAL — YOU HAVE CONTROL` (PWO-056 · PWO-057 · tip `bba53d4`) |
 | App / Human dual chips (no AI-PILOT) | **LIVE** — `APP` XOR `MANUAL — YOU HAVE CONTROL` · strict gate · vocabulary AST (PWO-060 · tip `2ca3154`) |
-| App-hold → Human (Ctrl-A) | **LIVE** (PWO-061 KERNEL · `d4a8829` · test-only pins; 056 path migrating off printable `M`) — Human→App entry = **Ctrl-A** (ADR-002 / Batch 1b; CC `WO-P5-061-ENTRY`); full 061 **not CLOSED** |
+| App↔Human Mode (Ctrl-A) | **LIVE** (WO-P5-061-ENTRY / ADR-002 · `MODE_KEY`) — both directions; attached bare `M` = TW Move. Prior "full 061 not CLOSED" / migrate-off-`M` hedges retired (WO-FIX-ADR-002-COMPLETION-CLAIM-VS-UNCLOSED-SEAM). |
 | Mode line teach A·R·T / STOP / arm / N5 / coverage | **NOT** — remaining Phase 5+ |
 | Coverage meter / chains library / formations | **NOT** on tip play shell (archive / later WOs) |
 

@@ -45,7 +45,10 @@ deliberate no-op stay App.
 
 - Six signed concepts folded to this ADR: `mode-line-and-teach-controls`, `control-and-escalation`,
   `index`, `spectate-and-attach`, `trainer-cockpit`, `visual-language`.
-- Product (`WO-P5-061-ENTRY`) implements Ctrl-A; docs-win until tip lands.
+- Product (`WO-P5-061-ENTRY`) **LIVE on tip** — `MODE_KEY` (ASCII 1) toggles App↔Human both
+  directions (`screens.py` unattached attach path + `app.py` attached → App-hold). Attached bare
+  `M` is Move passthrough. (WO-FIX-ADR-002-COMPLETION-CLAIM-VS-UNCLOSED-SEAM — tip landed; prior
+  "docs-win until tip lands" hedge retired.)
 - GNU `screen` / common `tmux` Ctrl-A prefixes may eat Mode — operator escape/rebind; no second Mode key.
 - DOC-GAP-M-FROM-SPECTATE **SUPERSEDED/CLOSED**.
 

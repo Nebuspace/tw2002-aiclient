@@ -480,10 +480,10 @@ The reborn contract above is the target; the current code still carries pre-rebo
   `human → "MANUAL — YOU HAVE CONTROL"`, `spectate → "SPECTATE"`. Tip play shell (PWO-060 ·
   `2ca3154`) ships the reborn **App/Human dual** (`APP` XOR MANUAL) with an AST vocabulary gate —
   archive AI-PILOT remains port-source only.
-- **Mode does not yet fully toggle App↔Human on tip.** Product: Spectate→Human was bare `M` (PWO-056);
-  App-hold→Human (PWO-061 KERNEL · `d4a8829`) is LIVE; Human→App entry = **Ctrl-A** (Batch 1b /
-  ADR-002; CC `WO-P5-061-ENTRY`). Attached bare `M` = Move. Archive `spectate_app._handle_key` cycles
-  `ai_pilot ↔ spectate` — port-source only. Canon's App↔Human Mode is Ctrl-A.
+- **Mode toggles App↔Human on tip via Ctrl-A.** `MODE_KEY` (WO-P5-061-ENTRY / ADR-002) attaches from
+  App/Spectate and returns to App-hold while Human-attached. Attached bare `M` = Move. Archive
+  `spectate_app._handle_key` cycles `ai_pilot ↔ spectate` — port-source only. Prior "does not yet
+  fully toggle" / migrate-off-`M` hedges retired (WO-FIX-ADR-002-COMPLETION-CLAIM-VS-UNCLOSED-SEAM).
 - **`A` / `R` teach moves are wired on tip; calm `T` is Trade Loop.** Queue claim
   "A launches tw attach; R/T absent" was stale archive framing. Tip:
   printable `A`/`a` → Analyze overlay (WO-P5-069); `R`/`r` → Record (WO-P5-067);
