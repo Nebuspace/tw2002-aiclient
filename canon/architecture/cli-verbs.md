@@ -119,8 +119,8 @@ config is isolated, and print the run-dir path they would have targeted (WO-CLI-
 | `loops` | List every learned loop with profit metadata — CLI twin of the in-TUI Learned-Loops Library. | `--include-drafts` | `read-only` | [Rule–Macro Engine](/architecture/rule-macro-engine.md) |
 | `pairs` | List class-derived DISCOVERED pair loops for a world — margin-unknown candidates, never the taught `L)chains` library (reads `state/world/<world-id>` directly, never sends). | `--world-id` (required) `--json` | `read-only` | [Trade Loops](/strategy/trade-loops.md) |
 | `players {list,add,next}` | Multi-character rotation bank (reads/writes `state/player_bank.json`; no daemon, no game keystrokes). | `add <profile>` `--note k=v` `next --current` | `read-only` | [Session Engine](/architecture/session-engine.md) |
-| `servers list` | Print the `config/servers.toml` catalog (no live connection). | — | `read-only` | [Session Engine](/architecture/session-engine.md) |
-| `probe [server]` | Read-only catalog probe: IAC-only (L0), optional `--menu` peeks the TWGS game list; connects to catalog endpoints, not the live session. | `--all` `--menu` `--write-catalog` | `read-only` | [Session Engine](/architecture/session-engine.md) |
+| `servers list` | Summarize `config/servers.inventory.json` provenance + optional liveness sidecar (no live session). | `--inventory` `--liveness` `--json` | `read-only` | [Session Engine](/architecture/session-engine.md) |
+| `probe` | TCP-only catalog probe (no login / no turns); writes `config/servers.liveness.json`. Same engine as `scripts/catalog-tcp-probe.py`. | `--limit` `--timeout` `--out` `--json` | `read-only` | [Session Engine](/architecture/session-engine.md) |
 
 ## Teach (retrospective, human-invoked)
 
@@ -215,10 +215,11 @@ see [Macros](/engine/macros.md)'s Findings for the mirrored note.
 
 **NOT on tip as a `tw` CLI verb (HOLD / later / retired — do not document as shipped):**
 `spectate` (**RETIRED / WONTBUILD** — Max `@ 13:13:55Z`; in-cockpit Spectate LIVE via PWO-055),
-`start` (ensure covers spawn), `log`/`trail`, `frames`, `analyze`/`mine`, `replay`,
-`play`/`haggle`/`autopilot`/`crawl`, `players`/`servers`/`probe`, `aiclient` as a separate curses
+`start` (ensure covers spawn), `frames`, `analyze`/`mine`, `replay`,
+`play`/`haggle`/`autopilot`/`crawl`, `players`, `aiclient` as a separate curses
 product entry (product is `./tw2002-aiclient`). `record` moved off this list into LIVE above —
-X6 shipped it.
+X6 shipped it. `log`/`trail`, `servers list`, and `probe` shipped (WO-WIRE-CLI-LOG-TRAIL-VERB /
+WO-BUILD-SERVERS-PROBE-CLI-VERBS) — removed from this HOLD list.
 
 **WIRE-ONLY (a daemon protocol verb exists; no `tw` CLI subparser wraps it — not runnable from a
 shell today, only over the daemon's own socket protocol):**
