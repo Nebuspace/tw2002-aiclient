@@ -95,7 +95,7 @@ def test_focus_overlay_explore_beats_chain_when_ship_prices_unmet():
 
 
 def test_focus_overlay_clears_when_catalog_met():
-    """Priced ships + hold label → normal EV ranking; upgrade ungated with empty holds."""
+    """Priced ships + hold label → normal EV ranking; upgrade RT-gated while chaining."""
     cs = ChainScalars()
     cs.update(_result(chains_=[_chain([50, 51, 52, 50], cr_per_turn=80.0)]))
     status = {
@@ -110,6 +110,22 @@ def test_focus_overlay_clears_when_catalog_met():
     }
     cands = recommend_focus_candidates(status, chain_scalars=cs)
     assert cands[0]["kind"] == "run_chain"
+    upgrade = next(c for c in cands if c["kind"] == "upgrade")
+    # Executable chain → fail-closed without RT / upgrade economics.
+    assert upgrade["gated"] is True
+    assert "unknown" in (upgrade.get("gate_reason") or "")
+
+
+def test_focus_upgrade_ungated_without_chain_when_catalog_met():
+    """No executable chain → upgrade ungated once empty holds + catalog known."""
+    status = {
+        "hud": {"cargo": {"value": 3, "age_s": 0.0}},
+        "stardock_found": True,
+        "stardock_sectors": [1],
+        "ship_prices_count": 4,
+        "hold_price_label": "1,200cr",
+    }
+    cands = recommend_focus_candidates(status, chain_scalars=ChainScalars())
     upgrade = next(c for c in cands if c["kind"] == "upgrade")
     assert upgrade["gated"] is False
 
@@ -141,3 +157,59 @@ def test_compose_focus_lines_nonempty_on_merged_status():
     lines = compose_focus_lines(merged, width=40)
     assert lines and lines[0] != "—"
     assert any("Trade chain" in ln or "Explore" in ln for ln in lines)
+
+
+def test_focus_stay_vs_leave_demotes_upgrade_behind_chain():
+    """Accept — stay_vs_leave stay → upgrade gated; run_chain stays on top."""
+    cs = ChainScalars()
+    cs.update(_result(chains_=[_chain([50, 51, 52, 50], cr_per_turn=500.0)]))
+    status = {
+        "hud": {
+            "sector": {"value": 51, "age_s": 0.0},
+            "cargo": {"value": 3, "age_s": 0.0},
+        },
+        "stardock_found": True,
+        "stardock_sectors": [1],
+        "ship_prices_count": 4,
+        "hold_price_label": "1,200cr",
+        "hops_to_stardock": 20,
+        "hops_return_to_work": 20,
+        "turns_per_warp": 1,
+        "turns_left": 100,
+        "turn_reserve": 0,
+        # High headline EV, but RT forgone beats gain (stay).
+        "upgrade_extra_cr_per_turn": 50.0,
+        "upgrade_payback": 20.0,
+    }
+    cands = recommend_focus_candidates(status, chain_scalars=cs)
+    assert cands[0]["kind"] == "run_chain"
+    upgrade = next(c for c in cands if c["kind"] == "upgrade")
+    assert upgrade["gated"] is True
+    assert "stay trading" in (upgrade.get("gate_reason") or "")
+    assert upgrade.get("travel_cost_rt") == 40  # (20+20)*1
+
+
+def test_focus_leave_for_upgrade_when_gain_beats_rt():
+    cs = ChainScalars()
+    cs.update(_result(chains_=[_chain([50, 51, 52, 50], cr_per_turn=100.0)]))
+    status = {
+        "hud": {
+            "sector": {"value": 51, "age_s": 0.0},
+            "cargo": {"value": 3, "age_s": 0.0},
+        },
+        "stardock_found": True,
+        "stardock_sectors": [1],
+        "ship_prices_count": 4,
+        "hold_price_label": "1,200cr",
+        "hops_to_stardock": 2,
+        "hops_return_to_work": 2,
+        "turns_per_warp": 1,
+        "turns_left": 100,
+        "turn_reserve": 0,
+        "upgrade_extra_cr_per_turn": 400.0,
+        "upgrade_payback": 5.0,
+    }
+    cands = recommend_focus_candidates(status, chain_scalars=cs)
+    upgrade = next(c for c in cands if c["kind"] == "upgrade")
+    assert upgrade["gated"] is False
+    assert upgrade["ev_per_turn"] == 400.0

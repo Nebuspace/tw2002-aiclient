@@ -7,9 +7,11 @@ producer. It never sends, never arms, and never invents a money-path.
 Canon: `canon/engine/priority-engine.md` Layer 2 — FOCUS + boolean-weight
 overlay. Kinds mirror the engine vocabulary (``run_chain`` / ``explore`` /
 ``upgrade``). Sort: unmet prerequisite weight ``(0, weight)`` above action EV
-``(1, ev)``; gated last. The composer trusts this order. This is **not** the
-full 13-objective priority-engine kernel (RT / stay-vs-leave) — that remains
-a parked follow-on.
+``(1, ev)``; gated last. The composer trusts this order.
+
+RT / stay-vs-leave (``priority_engine.upgrade_gate_while_chaining``) demotes
+an upgrade behind a running executable chain when pre-flight fails or
+``stay_vs_leave_upgrade`` says stay — never invents hop counts.
 """
 
 from __future__ import annotations
@@ -19,6 +21,7 @@ __all__ = ["FocusScalars", "recommend_focus_candidates", "FOCUS_KEY"]
 from tw2002_aiclient.chains import is_executable_chain
 from tw2002_aiclient.chain_status import ChainScalars
 from tw2002_aiclient.game_data_stats import HOLD_PRICE_LABEL_KEY, SHIP_PRICES_COUNT_KEY
+from tw2002_aiclient.priority_engine import hops_of_path, upgrade_gate_while_chaining
 
 FOCUS_KEY = "focus"
 
@@ -92,6 +95,71 @@ def _hold_price_met(status: object) -> bool:
     return isinstance(label, str) and bool(label.strip())
 
 
+def _optional_int(value: object) -> int | None:
+    if isinstance(value, bool) or not isinstance(value, int):
+        return None
+    return value
+
+
+def _optional_float(value: object) -> float | None:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    return float(value)
+
+
+def _hops_to_stardock(status: dict) -> int | None:
+    raw = status.get("hops_to_stardock")
+    hops = _optional_int(raw)
+    if hops is not None:
+        return hops if hops >= 0 else None
+    route = status.get("stardock_route")
+    if isinstance(route, (list, tuple)):
+        try:
+            return hops_of_path(tuple(int(s) for s in route))
+        except (TypeError, ValueError):
+            return None
+    return None
+
+
+def _hops_return_to_work(status: dict) -> int | None:
+    raw = status.get("hops_return_to_work")
+    hops = _optional_int(raw)
+    if hops is not None:
+        return hops if hops >= 0 else None
+    path = status.get("return_path_to_work")
+    if isinstance(path, (list, tuple)):
+        try:
+            return hops_of_path(tuple(int(s) for s in path))
+        except (TypeError, ValueError):
+            return None
+    return None
+
+
+def _productive_turns(status: dict) -> int | None:
+    turns_left = _optional_int(status.get("turns_left"))
+    if turns_left is None:
+        return None
+    reserve = _optional_int(status.get("turn_reserve")) or 0
+    if reserve < 0:
+        reserve = 0
+    return turns_left - reserve
+
+
+def _upgrade_economics(status: dict) -> tuple[float | None, float | None]:
+    """``(upgrade_extra_cr_per_turn, payback)`` — omit rather than invent."""
+    extra = _optional_float(status.get("upgrade_extra_cr_per_turn"))
+    payback = _optional_float(status.get("upgrade_payback"))
+    if extra is not None and payback is not None:
+        return extra, payback
+    decision = status.get("upgrade_decision")
+    if isinstance(decision, dict):
+        if extra is None:
+            extra = _optional_float(decision.get("upgrade_extra_cr_per_turn"))
+        if payback is None:
+            payback = _optional_float(decision.get("projected_payback"))
+    return extra, payback
+
+
 def _priced_chain(chain_scalars: ChainScalars | None, status: object) -> object | None:
     if chain_scalars is None:
         return None
@@ -141,16 +209,18 @@ def recommend_focus_candidates(
 
         chain = _priced_chain(chain_scalars, status_d)
         has_executable = False
+        chain_ev: float | None = None
         if chain is not None:
             try:
                 has_executable = bool(is_executable_chain(chain))  # type: ignore[arg-type]
             except Exception:  # noqa: BLE001
                 has_executable = False
             if has_executable:
+                chain_ev = _chain_ev(chain)
                 candidates.append(
                     {
                         "kind": "run_chain",
-                        "ev_per_turn": _chain_ev(chain),
+                        "ev_per_turn": chain_ev,
                         "gated": False,
                         "gate_reason": None,
                         "priority_weight": None,
@@ -179,36 +249,36 @@ def recommend_focus_candidates(
         # Upgrade: omit entirely until StarDock is known (Accept #3 — omit).
         if dock_known:
             empty = _cargo_empty_holds(status_d)
+            upgrade_ev: float | None = None
+            travel_rt: int | None = None
             if upgrade_gate is not None:
-                candidates.append(
-                    {
-                        "kind": "upgrade",
-                        "ev_per_turn": None,
-                        "gated": True,
-                        "gate_reason": upgrade_gate,
-                        "priority_weight": None,
-                    }
-                )
+                pass
             elif empty is None:
-                candidates.append(
-                    {
-                        "kind": "upgrade",
-                        "ev_per_turn": None,
-                        "gated": True,
-                        "gate_reason": "empty holds unknown",
-                        "priority_weight": None,
-                    }
+                upgrade_gate = "empty holds unknown"
+            elif has_executable:
+                # Pre-flight + stay-vs-leave while a chain is executable.
+                extra, payback = _upgrade_economics(status_d)
+                gated, reason, upgrade_ev, travel_rt = upgrade_gate_while_chaining(
+                    chain_cr_per_turn=chain_ev,
+                    upgrade_extra_cr_per_turn=extra,
+                    upgrade_payback=payback,
+                    hops_to_stardock=_hops_to_stardock(status_d),
+                    hops_return_to_work=_hops_return_to_work(status_d),
+                    turns_per_warp=_optional_int(status_d.get("turns_per_warp")),
+                    productive_turns=_productive_turns(status_d),
                 )
-            else:
-                candidates.append(
-                    {
-                        "kind": "upgrade",
-                        "ev_per_turn": None,
-                        "gated": False,
-                        "gate_reason": None,
-                        "priority_weight": None,
-                    }
-                )
+                if gated:
+                    upgrade_gate = reason or "upgrade: stay trading"
+            candidates.append(
+                {
+                    "kind": "upgrade",
+                    "ev_per_turn": upgrade_ev,
+                    "gated": upgrade_gate is not None,
+                    "gate_reason": upgrade_gate,
+                    "priority_weight": None,
+                    "travel_cost_rt": travel_rt,
+                }
+            )
     except Exception:  # noqa: BLE001
         return []
 
