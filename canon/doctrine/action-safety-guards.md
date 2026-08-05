@@ -278,19 +278,21 @@ code.)*
 
 # Citations
 
-[1] twclient/skills.py — start-anchor check (`_check_start_anchor`, TW-03), send-and-confirm replay
-gate (TW-02), `ReplayDivergence` halt-on-surprise, `_MAX_PLAY_CYCLES` rail
-[2] twclient/haggle.py — fresh-render pre-send gate (`wait_until_settled`), positive-evidence
-resolution (`_resolution_evidence`, `_evidence_backed_price`, credits-delta), `DESYNC_FALLBACK`,
-TW-01 money-path hardening (78-turn misfire)
-[3] twclient/fighter_toll_policy.py — Option? toll/combat resolver, never-auto-Pay, reserve-floor
-deploy/sell clamps, retreat-when-unreadable
-[4] twclient/crawl_driver.py — `crawl_sacrificial` startup gate, boundary-aligned abort /
-driver-fence, safe-emit chokepoint (via twclient/menu_crawler.py)
-[5] twclient/loop_player.py + twclient/autopilot.py — turn-budget hard cap, strict-balance
-stop-loss (fail-closed on any answer that is not a fresh above-floor balance), hazard/novelty
-halts, arm-confirm launch gate
-[6] twclient/priority_engine.py — `explore_baseline_ev` never-idle EV floor (Code Divergence #2)
+[1] tw2002_aiclient/loops/player.py — start-anchor check (`_check_start_anchor`, TW-03),
+send-and-confirm replay gate (TW-02), `ReplayDivergence` halt-on-surprise; cycle hard-cap cousin
+is `CYCLES_HARD_CEILING` in `session/autoloop.py` (archived `_MAX_PLAY_CYCLES`)
+[2] tw2002_aiclient/session/haggle.py — fresh-render pre-send gate (`settle.wait_until_settled`),
+positive-evidence resolution (`_resolution_evidence`, `_evidence_backed_price`, credits-delta),
+`DESYNC_FALLBACK`, TW-01 money-path hardening (78-turn misfire)
+[3] tw2002_aiclient/session/fighter_toll_policy.py — Option? toll/combat resolver, never-auto-Pay,
+reserve-floor deploy/sell clamps, retreat-when-unreadable
+[4] tw2002_aiclient/menu/crawl_driver.py — `crawl_sacrificial` startup gate, boundary-aligned abort /
+driver-fence, safe-emit chokepoint (via `tw2002_aiclient/menu/crawler.py`)
+[5] tw2002_aiclient/loops/player.py — turn-budget / strict-balance stop-loss (fail-closed on any
+answer that is not a fresh above-floor balance), hazard/novelty halts, arm-confirm launch gate.
+No tip `autopilot.py` — archived EV-select live-drive is do-not-revive.
+[6] tw2002_aiclient/focus_status.py — `EXPLORE_BASELINE_EV` suggestion-only FOCUS floor (no tip
+`priority_engine.py`; archived never-idle EV appetite is do-not-revive / Code Divergence #2)
 [7] tw2002_aiclient/session/control_lock.py — tip modes `{app, human, spectate}`; `MODE_AI_PILOT` retired (resolved Code Divergence #3)
 [8] CLAUDE.md — Hard rules (send-path redaction, single-connection daemon, case-sensitive
 wait_prompt, last-match state_parser anchoring)
