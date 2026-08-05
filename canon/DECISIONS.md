@@ -301,6 +301,17 @@ Max delegated the standing 🧑‍⚖️ parked gates to hub (Samantha). Treat t
 
 Accepted: owner removes on Accept/abandon; `preserve/<wo-id>` if tip ∉ origin; hub mass-prune only after `🧹 PRUNE-INTENT` + seat ACK; **never remove a LOCKED worktree** (lock carries PID; `kill -0` detects stale); soft ceiling **12 is a reporting trigger**, not a removal trigger (CC amendment B). Hub may lift 🧹 PRUNE PAUSED after seats ACK this Accept note.
 
+### six-archived-modules-reroute-vs-fight-ev — RULED: build the EV ranking function, coaching-only, never auto-firing (hub 2026-08-05 · Max carte blanche)
+
+**Ruled:** the reroute-vs-fight EV comparison that six canon docs (`app-autopilot-model.md`, `priority-engine.md`, `exploration-policy.md`, `candidate-mining.md`, `action-safety-guards.md`, `screen-understanding.md`) name is **scheduled to be rebuilt** — as a pure ranking/scoring function feeding the existing priority engine and coach card, **never** as an auto-firing decision-maker. This resolves the design-scope half of the citation-hygiene escalation (the citation half already landed via PR #431, remapping the six docs' stale `twclient/*.py` references to live paths).
+
+**Scope, precisely:** the function computes and *ranks* candidate actions by expected value; it surfaces the top-ranked option to the coach card / replay UI for the human to act on. It does **not** select, queue, or execute any action on its own — that would violate this repo's foundational invariant (`AI never live-drives`, live senders are `{app, human}` only). If a later WO's implementation drifts toward auto-selection under any framing (e.g. "auto-apply the top-ranked reroute"), that's a new escalation, not covered by this ruling.
+
+**Why build now:** the 2026-07-23 rebirth archived the old `twclient/autopilot.py` / `priority_engine.py` / `loop_player.py` run-loop wholesale with no successor for the run-loop/priority-select surface — six docs describing this in present tense were describing dead code, not live behavior (now fixed per PR #431). Leaving the feature permanently unbuilt would mean six canon docs keep describing a target that never arrives; building the coaching-only kernel closes that gap without reintroducing any live-driving risk.
+
+**Owner:** impl-aiclient-cursor / impl-claudecode-aiclient (whichever seat picks it up).
+**Ref:** `canon/architecture/app-autopilot-model.md`, `canon/engine/priority-engine.md`, `canon/strategy/exploration-policy.md`, `canon/strategy/candidate-mining.md`, `canon/doctrine/action-safety-guards.md`, `canon/surfaces/screen-understanding.md`; PR #431 (citation half).
+
 ### A.2 clarification — never-auto-action vs auto-haggle (hub 2026-07-26 · Max carte blanche)
 
 **Ruled:** never-auto-action means **no unattended freestyle** on money/quantity screens — not a ban on **human-armed, guarded, taught** money-path rules.
