@@ -127,29 +127,31 @@ cleanly rather than being interleaved. This is a presentation summary only; the 
 clean-cutover mechanics live in [control-and-escalation](/architecture/control-and-escalation.md)
 and the control-lock. The mode line reflects the new holder the moment the switch lands.
 
-## The teach hotkeys — A / R / T are the three escalation/teach moves
+## The teach hotkeys — A / R (and calm T)
 
-At an escalation moment (or any time the human wants to grow the repertoire), three keys map to the
-three teach moves the human can make. None of them is a live drive; all three feed the
-**human-approval teach loop**:
+At an escalation moment (or any time the human wants to grow the repertoire),
+the teach / operate keys on this surface include:
 
 - **`A` — Analyze.** Invoke the retrospective [AI teacher](/engine/ai-teacher.md) on the current
   screen / escalation moment. The teacher reads the settled screen, parsed state, and surrounding
   ledger *after the fact* and returns a **draft** guarded rule for the human to approve, edit, or
   discard. On-demand only — the AI never proposes unless the human presses `A`. While a pass is open,
-  the teach-overlay indicator shows on the mode line.
+  the teach-overlay indicator shows on the mode line. **Tip:** `PlayShellScreen` → `analyze_open` /
+  `analyze_close` (WO-P5-069); printable `A` is **not** attach (Mode is Ctrl-A).
 - **`R` — Record.** Capture a [macro](/engine/macros.md): record the human's own keystroke
   demonstration as a replayable taught sequence. The captured macro is the `do` a rule will later
-  play.
-- **`T` — Assign-Trigger.** Bind a screen-match + guards to a recorded macro, producing a **proposed
-  rule** (`when(screen_match + guards) → do(macro)`; see
-  [rule-macro-engine](/architecture/rule-macro-engine.md)). Assigning a trigger drafts the rule; it
-  does not arm it to fire.
+  play. **Tip:** `record_toggle` (WO-P5-067).
+- **Calm `T` — Trade Loop Chain** (Max DECISION · WO-EXPLORE-TRADE-MODE-SPLIT). Starts/stops the
+  L-armed Trade Loop (`trade_loop_toggle`). This is **not** Assign-Trigger on the calm path.
+- **Assign-Trigger** (bind screen-match + guards → proposed rule) remains a tip module
+  (`cockpit/assign_trigger.py` + `app.py` handler) and is still named on the STOP banner's
+  `teach: A)nalyze R)ecord T)assign` line — but **no calm key currently emits** `assign_trigger`
+  after `T` was remapped to Trade Loop. Residual: re-home Assign-Trigger to a non-colliding key
+  or stop advertising `T)assign` on the banner (follow-on; not invent here).
 
-All three produce **proposals, never live keystrokes.** Every proposed rule surfaces an
-**approve/reject** affordance and is **inert until the human approves it** — an unapproved draft
-cannot fire a single keystroke. AI proposals in particular are on-demand only (they exist only
-because the human pressed `A`).
+Analyze / Record proposals remain **proposals, never live keystrokes.** Every proposed rule
+surfaces an **approve/reject** affordance and is **inert until the human approves it**.
+AI proposals exist only because the human pressed `A`.
 
 ## The operate-the-APP control cluster (N5)
 
@@ -481,14 +483,19 @@ The reborn contract above is the target; the current code still carries pre-rebo
   App-hold→Human (PWO-061 KERNEL · `d4a8829`) is LIVE; Human→App entry = **Ctrl-A** (Batch 1b /
   ADR-002; CC `WO-P5-061-ENTRY`). Attached bare `M` = Move. Archive `spectate_app._handle_key` cycles
   `ai_pilot ↔ spectate` — port-source only. Canon's App↔Human Mode is Ctrl-A.
-- **`A`/`R`/`T` are not wired as the teach moves.** `spectate_app` binds `A` to *launch `tw attach`*
-  (not Analyze), and `R` (Record) and `T` (Assign-Trigger) are absent from the key handler entirely;
-  the `USERDOCS/aiclient_ui.md` sketch listed `A`/`R`/`T`/`M` but the teach loop behind them is not
-  implemented on this surface yet.
-- **The auto meter shows a live "AI" count.** `spectate_layout.format_autonomy_counts` renders
-  `"App {app} / AI {ai} · Hum {human}"` with a live `ai` (llm-pilot) count as a first-class slice.
-  The reborn meter is **App-vs-Human live share** with live AI ≡ 0; any AI figure is a separate
-  labeled teaching-provenance axis, not a live-drive slice.
+- **`A` / `R` teach moves are wired on tip; calm `T` is Trade Loop.** Queue claim
+  "A launches tw attach; R/T absent" was stale archive framing. Tip:
+  printable `A`/`a` → Analyze overlay (WO-P5-069); `R`/`r` → Record (WO-P5-067);
+  Mode attach is **Ctrl-A** (`MODE_KEY`), not printable `A`. Calm `T`/`t` →
+  Trade Loop (`trade_loop_toggle`, WO-EXPLORE-TRADE-MODE-SPLIT).
+  **Residual:** Assign-Trigger module + `app.py` handler remain, but no key
+  emits `assign_trigger` after the calm-`T` remap; STOP banner still paints
+  `T)assign` — bank a follow-on to re-key or re-label, do not silently claim
+  Assign-Trigger is calm-`T`.
+- **The auto meter "AI" count — tip closed.** Archive
+  `spectate_layout.format_autonomy_counts` rendered `App / AI · Hum`. Tip
+  meter is `cockpit/covermeter.py` App-vs-Human only (`COV`; no live AI slice) —
+  see [coverage-metrics](/engine/coverage-metrics.md) tip-stamp.
 - **App chip wire-reachability.** Composer + `play.attached` plumbing are LIVE (060); App→Human via
   Mode is proven (061 kernel). Human→App entry = **Ctrl-A** (Batch 1b Ruled; CC `WO-P5-061-ENTRY`).
   Chip text **`APP`**. Ctrl-] from App-hold = **Ruled no-op stay App** (Batch 2/3). Spectate≠Mode.
