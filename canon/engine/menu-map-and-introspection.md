@@ -230,11 +230,11 @@ The read-only machinery is broadly faithful to the reborn target — the crawler
 introspector cannot guess, the probe cannot type. The divergences worth recording are about
 *framing* and *un-wired reach*, not unsafe behavior:
 
-- **"AI-driven crawl" language in `menu_crawler.py` / `game_knowledge.py`.** The module docstrings
-  still describe the crawl as "AI-driven." The reborn contract recasts it to **human-invoked,
-  supervised** exploration (sacrificial character + hub abort); the crawl is never an autonomous
-  agent on a live account. The behavior already matches (the A+C gate is human-armed), but the
-  naming predates the recast and is recorded here rather than silently reconciled.
+- **"AI-driven crawl" language — tip-closed (WO-CANON-DRAFT-MENU-CRAWLER-AI-DRIVEN-TERMINOLOGY).**
+  Tip `menu/crawler.py` docstring is **human-invoked, supervised discovery — never an autonomous
+  agent** (archived "AI-driven" framing named as retired). `menu/knowledge.py` has no AI-driven
+  claim. Live paths are `menu/crawler.py` + `menu/knowledge.py` (not archived `menu_crawler.py` /
+  `game_knowledge.py`). Behavior already matched the reborn A+C gate; naming now matches tip.
 - **Deterministic-nav execution is not wired.** `menu_nav.plan_nav` (localize → route → keystroke
   steps) has a **dry CLI consumer** — `tw menumap --to <sig>` prints the planned steps and
   **never sends** (WO-WIRE-PLAN-NAV-DETERMINISTIC-NAV). The **daemon-side keystroke execution** of a
