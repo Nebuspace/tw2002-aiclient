@@ -93,22 +93,15 @@ class GameDataCapture:
         fingerprint = f"{world_id}:{kind}:{_text_fingerprint(text)}"
         if fingerprint == self._last_fingerprint:
             return CaptureResult(False, hint or kind, reason="unchanged")
-        ships_n = 0
-        cargo_ok = False
-        if ships:
-            for row in ships:
-                _game_data.persist_ship_row(world_id, row, state_dir=state_dir)
-                ships_n += 1
-        if cargo is not None:
-            _game_data.persist_cargo_hold_row(world_id, cargo, state_dir=state_dir)
-            cargo_ok = True
-        self._last_fingerprint = fingerprint
-        return CaptureResult(
-            True,
-            hint or kind,
-            ships_persisted=ships_n,
-            cargo_persisted=cargo_ok,
+        result = capture_screen(
+            world_id,
+            text,
+            screen_class=hint or kind,
+            state_dir=state_dir,
         )
+        if result.attempted:
+            self._last_fingerprint = fingerprint
+        return result
 
 
 def screen_text_from_event(event: object) -> str:
