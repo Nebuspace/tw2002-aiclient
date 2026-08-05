@@ -218,50 +218,49 @@ An unrecognized screen (escalate-on-unknown):
 
 # Code Divergence
 
-The reborn reflex layer described above **does not yet exist as a module**. There is no code that
-composes `screen_match` + `guards` + a named macro into a prioritized, scoped, human-approved rule
-and runs the lookup-only reflex loop. This is the single biggest missing subsystem of the reborn
-architecture, recorded here (DOCS WIN) rather than reconciled away.
+**Tip honesty (2026-08-05 · `WO-CANON-FIX-RULE-MACRO-ENGINE-STALE-DIVERGENCE`):** the reborn
+reflex layer **ships**. Claiming it "does not yet exist" was stale — do not reintroduce that
+wording. Live homes:
 
-- **Per-cycle EV scoring vs. lookup-only reflex.** `twclient/autopilot.py`'s `select()` is a
-  *continuous cost-benefit scorer*: each tick it re-scores every candidate action (`_score_chain` /
-  `_score_upgrade` / `_score_explore`), ranks them by `ev_per_turn`, and picks the highest —
-  optionally overridden by `priority_engine.recommend_actions()` (RT-aware / link-count focus). This
-  is exactly the **per-cycle expected-value action-picker** the reborn model retires: it *reasons*
-  about what to do each cycle instead of *recognizing a taught screen and playing its macro*, and it
-  can choose a live action on a screen no human ever taught. Under this canon the per-cycle EV select
-  is a divergence, not a carry. (The *run-loop* half of the same divergence — the ASSESS→SELECT→
-  EXECUTE→RECORD tick loop that drives it — is dispositioned in
-  [the APP Autopilot Model](/architecture/app-autopilot-model.md); this concept records the
-  single-cycle "score-and-pick vs. lookup-and-play" divergence.)
-- **`priority_engine.py` is a strategic ranker, not a reflex.** `recommend_actions()` ranks `run_chain` / `upgrade` / `explore` by cr/turn with round-trip and
-  link-count gating. In the reborn model that ranking informs *which taught behavior a human prefers*
-  ([Priority Engine](/engine/priority-engine.md)); it must **not** be wired as the live per-cycle
-  action-picker that lets a computed EV win over an unrecognized screen. Its current role as a
-  `select()` override is part of the same per-cycle-scoring divergence above.
-- **No `guards` / `priority` / `scope` / `approved` fields on the stored unit.**
-  `twclient/skills.py`'s `save_skill()` persists `{steps, source, mined_stats, start_anchor}` — it
-  carries the macro and its start-anchor replay-safety, but there is no `screen_match`, no typed
-  `guards`, no `priority` integer, no `scope`, and no `approved` flag. The rule schema in this
-  concept is a target the skill store must grow into; today a "rule" is effectively just a macro plus
-  a start-anchor.
-- **Auto-haggle money-path finding (verified 78-turn misfire).** The auto-haggle archetype has a
-  recorded real-world misfire in which a counter-offer computed off a **stale / transitional render**
-  produced a wrong result; the fresh-render pre-send gate and `DESYNC_FALLBACK` hardening in
-  `twclient/haggle.py` exist precisely to close it, and per operator ruling 2026-07-23 those guards
-  are **mandatory** for shipping auto-haggle on-by-default. Recorded here as a money-path finding so
-  the archetype is never treated as an unguarded default.
+| Piece | Tip home |
+|---|---|
+| Lookup-only kernel (`screen_match` + `guards` + `priority` + `scope` + `approved` → macro or typed STOP) | `tw2002_aiclient/rule_engine.py` (`select_rule`, `Rule` / `Guard` / `Decision`) |
+| Persist / approve / CLI | `tw2002_aiclient/rules/store.py`, `writer.py`, `cli.py` (`rule approve` is the only path to `approved: True`) |
+| Live propose (classification + facts → `Decision`) | `tw2002_aiclient/rules/reflex.py` (`propose_macro`); called from `session/protocol.py` |
+| Human arm before bytes move | `tw2002_aiclient/rules/arm.py` + taught run path (`arm-confirm` → autoloop → `loops.player.replay_loop`) |
 
-These are documentation-only findings — this concept edits no code. The reflex engine, the rule
-schema fields, and the retirement of the per-cycle EV picker are separate future work orders.
+A `Decision` naming a macro is still a **proposal** — selecting does not bypass
+`NEVER_AUTO_ACTION_CLASSES` or the human arm-confirm rail (see `rules/reflex.py` module docstring).
+
+Honest residuals (not "engine missing"):
+
+- **Per-cycle EV action-picker is retired from the live driver.** Archive
+  `archive/pre-rebirth-2026-07-23/twclient/autopilot.py` still shows the old
+  score-every-tick `select()` / `_score_chain` pattern. Product tip must not re-wire that as the
+  live chooser on an unrecognized screen. Strategic EV *display* (e.g. cockpit FOCUS /
+  `focus_status.py` ranking) may still surface `ev_per_turn` for the human — that is a ranker /
+  coach surface, not the reflex loop.
+- **`priority_engine` remains a strategic ranker, not a reflex.**
+  `recommend_actions()` informs which taught behavior a human prefers
+  ([Priority Engine](/engine/priority-engine.md)); it must **not** override `select_rule` so a
+  computed EV wins over `autopilot_no_candidates`.
+- **Auto-haggle money-path finding (verified 78-turn misfire).** Stale/transitional-render
+  counter-offer misfire; fresh-render pre-send gate + `DESYNC_FALLBACK` hardening remain
+  **mandatory** for on-by-default auto-haggle (operator ruling 2026-07-23). Live port may live under
+  `tw2002_aiclient/` or still cite archive `twclient/haggle.py` until a WO retargets — the finding
+  stands either way.
+
+This section records tip↔prose honesty. Product WOs for remaining residuals (EV display vs driver
+discipline, auto-haggle default arming, AI-teacher draft author) are separate queue rows — not a
+rebuild of the kernel.
 
 # Citations
 
-[1] twclient/autopilot.py (per-cycle EV `select()` scorer + `priority_engine` override — the retired live action-picker)
-[2] twclient/priority_engine.py (`recommend_actions()` strategic ranker — informs behavior ordering, not a live per-cycle picker)
-[3] twclient/skills.py (macro store: `start_anchor` + steps; no guards/priority/scope/approved fields yet)
-[4] twclient/classify.py (screen classification anchors feeding `screen_match`)
-[5] twclient/state_parser.py (best-effort guard facts — credits/fighters/sector — LAST-match anchored, unknown-first-class)
-[6] twclient/haggle.py (auto-haggle archetype: fresh-render pre-send gate + `DESYNC_FALLBACK`; the money-path misfire hardening)
-[7] twclient/fighter_toll_policy.py (fighter-toll archetype: reserve policy, safe-retreat, never blind-pay)
-[8] canon/log.md 2026-07-23 (operator ruling: auto-haggle on-by-default as a guarded rule with mandatory hardening)
+[1] `tw2002_aiclient/rule_engine.py` (lookup-only `select_rule` kernel — shipped)
+[2] `tw2002_aiclient/rules/reflex.py` / `store.py` / `writer.py` / `cli.py` / `arm.py` (product body around the kernel)
+[3] `tw2002_aiclient/session/protocol.py` (`propose_macro` call sites)
+[4] `archive/pre-rebirth-2026-07-23/twclient/autopilot.py` (retired per-cycle EV `select()` — reference only)
+[5] `tw2002_aiclient/focus_status.py` / cockpit FOCUS (strategic `ev_per_turn` display — not the live picker)
+[6] Priority Engine concept + product ranker (behavior ordering, not reflex override)
+[7] classify / state_parser (screen class + guard facts feeding `screen_match` / guards)
+[8] auto-haggle hardening + canon/log.md 2026-07-23 (mandatory guards for on-by-default)
