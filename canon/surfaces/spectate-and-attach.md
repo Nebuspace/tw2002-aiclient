@@ -27,7 +27,7 @@ daemon/CLI split beneath them (see [the Session Engine](/architecture/session-en
 | Product play-shell watch subscribe | **LIVE** (PWO-050 · `watchfeed.py`) — settle-edge consumed for GAME paint (PWO-052/053) |
 | Product play-shell GAME viewport | **LIVE** glyph + per-cell color paint 80×25 (PWO-052 · PWO-053); disconnect chrome **LIVE** (PWO-054) |
 | Product in-cockpit spectate state | **LIVE** (PWO-055) — `spectating` + muted `SPECTATE` chip + no-send tripwire |
-| Product cockpit attach (Mode) | **LIVE** (PWO-056 · tip `2c2decc`) — Human lock + chip → `MANUAL — YOU HAVE CONTROL`; Mode chord = **Ctrl-A** (ADR-002; migrate off printable `M`) |
+| Product cockpit attach (Mode) | **LIVE** (PWO-056 · tip `2c2decc` · WO-P5-061-ENTRY) — Human lock + chip → `MANUAL — YOU HAVE CONTROL`; Mode chord = **Ctrl-A** (ADR-002; tip `MODE_KEY`, not printable `M`) |
 | Product cockpit detach (Ctrl-]) | **LIVE** (PWO-057 · tip `bba53d4`) — lock released · SPECTATE restored · Esc≠detach |
 
 Target contracts below remain prescriptive for ops F2 / Phase-5 surfaces not yet on tip.
