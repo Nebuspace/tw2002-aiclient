@@ -245,3 +245,20 @@ def test_the_module_has_no_send_path():
     src = inspect.getsource(chains)
     assert "adapters" not in src
     assert "send_request" not in src
+
+
+def test_screens_dispatches_via_resolve_chains_offer_key() -> None:
+    """WO-WIRE-CHAINS-ARM-ACTION-AND-OFFER-KEY: L must go through the helper."""
+    import ast
+    from pathlib import Path
+
+    src = Path(chains.__file__).resolve().parents[1] / "screens.py"
+    tree = ast.parse(src.read_text(encoding="utf-8"))
+    calls = [
+        n
+        for n in ast.walk(tree)
+        if isinstance(n, ast.Call)
+        and isinstance(n.func, ast.Attribute)
+        and n.func.attr == "resolve_chains_offer_key"
+    ]
+    assert calls, "screens.py must call resolve_chains_offer_key for L"
