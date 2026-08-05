@@ -38,7 +38,7 @@ row of `{name, status, amount, pct}`:
 
 | Field | Meaning | Source |
 |---|---|---|
-| `name` | One of `Fuel Ore`, `Organics`, `Equipment` (the three tradeable commodities). | `_COMMODITIES` in `state_parser.py`. |
+| `name` | One of `Fuel Ore`, `Organics`, `Equipment` (the three tradeable commodities). | `COMMERCE_COMMODITIES` in `state_parser.py`. |
 | `status` | `buying` or `selling` — the port's posture on that commodity (a **buying** leg is a sink for the player, a **selling** leg a source). | commodity-row regex. |
 | `amount` | The port's current **trading amount** in units (the raw stock figure, e.g. `2650`). | second column of the trade row. |
 | `pct` | **% of max** — how full that commodity's stock sits relative to its own ceiling (0–100). | the `%`-suffixed column. |
@@ -163,7 +163,7 @@ must be brought to the doc, not the reverse:
   economics substrate as fuel for an autonomous EV-maximizing trainer. It is re-scoped: the
   substrate feeds a human-armed, priority-ranked, teacher-assisted trainer — the priority layer
   orders behaviors and suggestions, it is not a computed-EV action-picker.
-- **Naming.** Legacy strategy prose says "Ore"; the code (`state_parser._COMMODITIES`) and the
+- **Naming.** Legacy strategy prose says "Ore"; the code (`state_parser.COMMERCE_COMMODITIES`) and the
   world-model port record use **`Fuel Ore`** — the doc uses the code's name so a scored figure keys
   to a real stored commodity row.
 - **No floor/regrowth/plague fields exist in code.** `state_parser`/`world_model` observe and
@@ -179,7 +179,7 @@ must be brought to the doc, not the reverse:
   research, unverified against the live game.
 - design history §16.2 — regrowth rate, route-longevity/depletion formula (H2), floor prices,
   plague-ceiling heuristic; Equipment-premium ordering (H3).
-- `state_parser.py` (`parse_state`, `_COMMODITIES`, commodity-row and port-class-code parsing) —
+- `state_parser.py` (`parse_state`, `COMMERCE_COMMODITIES`, commodity-row and port-class-code parsing) —
   what the client actually observes per commodity.
 - `world_model.py` (`write_from_state`, `write_port_only`, the per-sector `port` record) — the
   persisted profit database this substrate scores against.
