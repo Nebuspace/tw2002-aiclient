@@ -1810,13 +1810,20 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                 if not isinstance(name, str) or not name.strip():
                     play.status_line = "nothing to arm — taught loop has no name"
                     continue
+                # WO-WIRE-CHAINS-ARM-ACTION-AND-OFFER-KEY: ``compose_arm_action``
+                # is the disclosure clause for the L-armed taught row. Money
+                # still spends on T with Port Trade·ON (mode-split; no y-gate
+                # on Enter — see ``tests/test_play_chains_arm.py``).
+                steps = selected.get("steps") if isinstance(selected, dict) else None
                 play.trade_loop_arm = {
                     "kind": "taught",
                     "name": name.strip(),
+                    "steps": steps,
                 }
                 play.chains_session.close()
                 play.status_line = (
-                    f"Trade loop armed — taught {name.strip()} · press T to run"
+                    f"{_chains.compose_arm_action(play.trade_loop_arm)}"
+                    " · press T to run"
                 )
                 continue
             if action == "trade_loop_toggle":
