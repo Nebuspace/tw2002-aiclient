@@ -2589,9 +2589,11 @@ def _apply_presence(screen: LauncherScreen, *, run_dir=None) -> None:
     )
     try:
         presence = daemon_lifecycle.read_presence(run_dir=run_dir)
-        active = daemon_lifecycle.online_profile_name(presence)
         updated = [
-            replace(row, online=(active is not None and row.name == active))
+            replace(
+                row,
+                online=daemon_lifecycle.is_profile_online(presence, row.name),
+            )
             for row in screen.profiles
         ]
         screen.set_profiles(updated)
