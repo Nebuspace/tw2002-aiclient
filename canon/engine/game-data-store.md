@@ -219,8 +219,10 @@ this concept prescribes. The prescription stands; these are recorded, not silent
   the settle-edge watch event and persists Layer-B rows via `game_data` — never sends, never crawls.
   Wired from `app.py`'s play-loop idle tick (`gamedata_capture.tick`). Introspector grammar remains
   provisional-by-construction until a broader live-capture corpus refines it; the *trigger* that
-  was "the missing link" is no longer missing. PWO-092 Option B (navigating live introspection)
-  stays HELD.
+  was "the missing link" is no longer missing. PWO-092 Option B (navigate/send
+  to reach StarDock catalog screens for an active crawl) stays HELD. Passive
+  current-ship `I` parse (PR #471 · `parse_current_ship_info`) is a separate
+  no-send path and does not lift that hold.
 
 - **The store's authored numeric layer is deliberately empty.** By design there are *no* stat values
   in the portable reference, and the introspected store on a fresh world is empty until a real

@@ -1,15 +1,22 @@
-"""PWO-092 Option A — game-data introspector (fixture/offline only).
+"""PWO-092 — game-data introspector (pure text→rows; never sends).
 
 Pure text -> structured rows, like ``state_parser``: no I/O, no daemon touch,
-no live TWGS crawl, no send paths. Turns a rendered StarDock/shipyard/
-equipment screen buffer into Layer-B ``game_data`` row dicts.
+no live TWGS crawl, no send paths.
+
+- **Option A (Accepted):** StarDock/shipyard/equipment listing buffers →
+  Layer-B ``game_data`` row dicts (fixture/offline + opportunistic capture).
+- **Passive current-ship ``I`` parse (LIVE · PR #471):**
+  ``parse_current_ship_info`` → ``Session.observe_current_ship`` / status
+  ``ship_type`` / ``current_ship``. Still no send — parses text already on
+  screen from a human-issued ``I``.
+- **Option B (HELD):** navigate/send to reach StarDock catalog screens for
+  an active crawl. Distinct from both Option A and the passive ``I`` path.
 
 ``source`` always begins with ``introspected``. ``last_verified_ts`` is
 omitted here — the persist layer stamps it on write.
 
 PROVENANCE: tip fixtures under ``tests/fixtures/stardock_*.txt`` are
 constructed listings (same caveat as archive); refine when live captures land.
-Live introspect over a session (Option B) stays HELD.
 """
 
 import re
