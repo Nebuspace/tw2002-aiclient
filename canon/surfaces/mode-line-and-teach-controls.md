@@ -3,7 +3,7 @@ type: System
 title: Mode Line, Teach Hotkeys & the Escalation Handoff (UX)
 description: The cockpit interaction contract — the App/Human actor indicator, the Ctrl-A Mode chord and A/R/T keys, the operate-the-app control cluster, and how STOP-and-handoff is presented to the human.
 tags: [surface, mode-line, teach-controls, escalation-handoff, human-approval, confirm-gate, prescriptive]
-timestamp: 2026-07-23T20:55:51Z
+timestamp: 2026-08-06T01:46:00Z
 ---
 
 This is the cockpit's **interaction contract**: the small band of always-visible chrome that tells
@@ -160,9 +160,10 @@ The controls that *operate the app's autopilot* all live on this surface — the
 is owned here. The cluster is:
 
 - **The mode selector** — the Ctrl-A App↔Human Mode switch above.
-- **Run / record / panic controls** — launch a taught run, record a macro (`R`), and a **panic**
-  control that halts *all* automation and parks the app in a non-driving paused state. What a run and
-  a panic actually arm and halt is [app-autopilot-model](/architecture/app-autopilot-model.md);
+- **Run / record / panic / pause controls** — launch a taught run, record a macro (`R`), a **panic**
+  control that halts *all* automation and parks the app in a non-driving paused state, and a
+  **Space pause** that parks a taught AUTO-LOOP without spending (see Pause & relaunch below). What a
+  run and a panic actually arm and halt is [app-autopilot-model](/architecture/app-autopilot-model.md);
   this surface owns how they are presented and gated.
 - **The Trade-Loop-Chains library popup** — a modal listing the taught trade-loop chains the human
   can launch (see [trade-loops](/strategy/trade-loops.md)); selecting a chain arms a launch.
@@ -187,6 +188,32 @@ unguarded live action burned turns — and it applies to every arm/launch afford
 The FOCUS panel and any coaching suggestions are **ranked suggestions, never the app's chosen
 action**: they inform the human, they do not arm or launch anything (see
 [coaching-engine](/engine/coaching-engine.md)).
+
+### Pause (Space) & relaunch (G) — taught AUTO-LOOP (shipped)
+
+These keys operate the **taught AUTO-LOOP runner** already live on tip
+(`cockpit/autoloop_controls.py`, daemon wire `autoloop_pause` / `autoloop_relaunch`). This section
+documents existing confirm-gated behavior — it does **not** authorize a new money path.
+
+- **Space — pause (ungated).** Halts further sends from the taught run and parks it. Pause spends
+  nothing, so it shares panic's "confirm protects the direction that spends" posture: no `y/N`
+  gate. Tip status copy: `paused — taught run parked (Ctrl-A to drive, G to relaunch)`.
+- **G / g — relaunch offer (confirm-gated).** Offers a relaunch of the *paused* run. There is **no**
+  `resume` / `autoloop_resume` on this surface or on the wire (hub ruling 2026-07-27, options 1+3):
+  `replay_loop` has no start index, so re-arming always replays the macro **from step 1** and
+  **re-issues sends already made**. Naming it "resume" would be a lie; the confirm line must say
+  **Relaunch**.
+- **Disclosure is load-bearing.** The daemon response (and the cockpit preview before confirm)
+  carries `replays_from_start: true` and `sends_already_issued`. The confirm action text states
+  that meaning in prose (`Relaunch — replays from the beginning, N sends already issued`), then
+  the shared arm-confirm suffix (`LIVE?  y/N`). `sends_already_issued` is `None` when the player
+  never produced a count — that is **unknown, not zero**, and must render as `?`, never as
+  `"0 sends already issued"`.
+- **Strict preconditions.** Relaunch is refused when nothing was deliberately paused (`not_paused`
+  — a panic/stop is not relaunchable), when no macro name remains (`no_resumable_run`), or when
+  the runner is unavailable. Only `y`/`Y` fires; Enter/Esc/non-`y` default-deny.
+- **Not a shell `tw` verb.** Wire verbs exist; there is no `tw autoloop` CLI wrapper — see
+  [cli-verbs](/architecture/cli-verbs.md) Implementation status.
 
 ## The STOP banner — a typed reason, keyboard→Human, and the three moves
 
@@ -472,6 +499,11 @@ presses, and never invents a reason it doesn't have.
 
 # Code divergence
 
+- **Space pause + G relaunch canonized (WO-CANON-DRAFT-AUTOLOOP-RELAUNCH-ZERO-COVERAGE).** Tip keys and
+  wire semantics (`replays_from_start`, `sends_already_issued` honest-`?`) are documented under
+  N5 Pause & relaunch above — closes the prior "no canon citation pins this key" gap in
+  `cockpit/autoloop_controls.py`.
+
 The reborn contract above is the target; the current code still carries pre-reborn framing in places
 (DOCS WIN — recorded, not silently reconciled):
 
@@ -523,6 +555,8 @@ The reborn contract above is the target; the current code still carries pre-rebo
 - [rule-macro-engine](/architecture/rule-macro-engine.md) — the `when(screen_match + guards) → do(macro)`
   data model the A/R/T keys assemble.
 - [app-autopilot-model](/architecture/app-autopilot-model.md) — what run/panic arm and halt.
+- `tw2002_aiclient/cockpit/autoloop_controls.py` — Space pause + G relaunch offer / confirm label.
+- `tw2002_aiclient/session/protocol.py::_dispatch_autoloop_relaunch` — wire disclosure contract.
 - [ai-teacher](/engine/ai-teacher.md) — the retrospective, on-demand teacher `A`/Analyze invokes.
 - [macros](/engine/macros.md) — the taught keystroke capture `R`/Record produces.
 - [coverage-metrics](/engine/coverage-metrics.md) — the App-vs-Human live-share meter and the
