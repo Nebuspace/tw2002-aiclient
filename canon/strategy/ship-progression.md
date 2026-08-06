@@ -186,8 +186,12 @@ this concept prescribes. The prescription stands; these are recorded, not silent
   `game_data.ship_row_to_spec`; current-ship type from live `I` screens is
   `introspector.parse_current_ship_info` → status `ship_type` / `current_ship`, with
   `ship_spec_from_current_info` enriching only when a catalog row matches (cost/shields
-  never invented from I-info alone). Still missing: a live flow that reads loop economics
-  + player turns and calls `choose_upgrade` on every FOCUS tick.
+  never invented from I-info alone). FOCUS coach path is LIVE: `cockpit/decisions.py`
+  `_upgrade_decision_lines` → `upgrade_decision_from_status` → `choose_upgrade` when status
+  carries `upgrade_catalog` + `upgrade_player` + `upgrade_loop` (or a precomputed
+  `upgrade_decision`). Still missing: status producers that populate those loop-economics
+  and player-turns inputs on every FOCUS tick (without them the caller returns `None` and
+  coach falls through).
 
 - **Coded auto-max-holds (TW-22) — recognition + toward-max qty LIVE; catalog ship
   max still optional.** App-armed Cargo Hold Upgrade (`_autonomy_auto_fire` +
