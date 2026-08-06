@@ -54,9 +54,10 @@ COVERAGE: tuple[GuardCoverage, ...] = (
         canon_layer="Per-cycle",
         source_relpath="loops/player.py",
         source_marker="start_anchor",
-        proof_test_relpath="tests/test_replay_ledger_integration.py",
+        proof_test_relpath="tests/test_loop_player.py",
         proof_marker="start_anchor_mismatch",
-        notes="Sector mismatch / null anchor refuse unless force=True",
+        notes="Sector mismatch / null anchor refuse unless force=True "
+        "(live replay_loop pin; was archive test_replay_ledger_integration)",
     ),
     GuardCoverage(
         guard_id="novelty_halt",

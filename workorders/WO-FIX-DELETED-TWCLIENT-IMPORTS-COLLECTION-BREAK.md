@@ -18,6 +18,8 @@ Remove four ignored test files that still `from twclient import …` after ADR-0
 
 Same class as #168–#176 archive DELETE batches. Drop matching `--ignore=` lines in `pytest.ini`.
 
+**REVISE (hub REJECT #474):** `action_safety.COVERAGE` `guard_id=start_anchor` pointed at the deleted file's `start_anchor_mismatch` marker. Live proof already lives in `tests/test_loop_player.py` (`HALT_START_ANCHOR_MISMATCH == "start_anchor_mismatch"` + replay_loop mismatch cases). Repoint `proof_test_relpath` there — do **not** restore the archive suite.
+
 ## Out of bounds
 
 - `tests/test_crawl_start_protocol.py` (still KEEP-IGNORED — daemon crawl verb)
