@@ -201,23 +201,17 @@ in the coach itself but in *sibling engines* that share its cr/turn strategy voc
 line the coach never crosses — recorded here so this concept is not misread as blessing them (docs win: the
 reborn target is that strategy *ranks and teaches*, it does not live-drive):
 
-- **`autopilot.select()` is a per-cycle EV action-picker with a "never-idle" floor.** `autopilot.py`'s
-  SELECT stage scores every candidate action by expected cr/turn *from scratch every tick* and picks one to
-  execute, and it carries an `EXPLORE_BASELINE_EV = 0.01` explore floor whose stated purpose is that a
-  lower-EV pursuit is never left idle — a computed EV can win the tick over whatever screen is showing. That
-  is exactly the live per-cycle action-picker the reborn vision forbids: the strategic PRIORITY layer must
-  *rank/order* which taught behaviors run, never let a computed EV override stop-on-unknown or drive a
-  keystroke. The reborn correction retires the never-idle appetite and the `EXPLORE_BASELINE_EV`
-  auto-driver justification; the runtime fix is owned by [app-autopilot-model](/architecture/app-autopilot-model.md)
-  and [priority-engine](/engine/priority-engine.md), not by the coach.
+- **Archived `autopilot.select()` EV picker + never-idle floor — do-not-revive.** Pre-rebirth
+  `twclient/autopilot.py` scored candidates every tick and used `EXPLORE_BASELINE_EV` so a pursuit was
+  never left idle. That module is **archive-only** (no live import). Tip ranking/FOCUS suggestion
+  contracts live in [priority-engine](/engine/priority-engine.md) and
+  [app-autopilot-model](/architecture/app-autopilot-model.md); the coach never depended on the archived
+  picker and must not be read as blessing a revive.
 
-- **`priority_engine.recommend_actions()` carries the same `explore_baseline_ev` and can be wired as a
-  driver.** The priority engine's own module note describes it wiring `rank_action_priorities()` into
-  `autopilot.select()`, and it too defaults an `explore_baseline_ev` (0.01, doubled for a pending pursuit).
-  Used as a live per-tick selector this is the same divergence; the coach depends on none of it — it reads
-  the world-model and the KB directly and renders text. The priority engine's *legitimate* reborn role is to
-  order which taught behaviors/suggestions are offered, which is compatible with coaching; its
-  action-picker wiring is the divergence.
+- **`recommend_actions()` / explore floor as live driver — archive wiring only.** Archive notes wired
+  `rank_action_priorities()` into `autopilot.select()`. Tip's legitimate role is ordering taught
+  behaviors/suggestions for coaching/FOCUS; it must not restore a live per-tick selector. The coach
+  reads world-model + KB directly and renders text.
 
 - **Guarded chain execution is separate from coaching (ADR-003).**
   `TradeChainRunner` may execute one exact human-approved discovered
@@ -227,12 +221,11 @@ reborn target is that strategy *ranks and teaches*, it does not live-drive):
   [trade-loops](/strategy/trade-loops.md) and
   [app-autopilot-model](/architecture/app-autopilot-model.md).
 
-- **The §22 / TW-23 capstone is re-scoped, not an AI-driver.** `autopilot.py` still frames itself as the
-  "§22/§23 autonomous goal-orchestrator" whose EXECUTE stage sends navigation keystrokes. The reborn
-  re-scope keeps the deterministic, taught-screen, human-armed, stop-on-unknown parts and retires the
-  "orchestrator that drives itself" framing. Noted so the capstone's own docstring is read through the
-  reborn lens; the coaching engine sits entirely on the teaching side of that re-scope and is unaffected by
-  it.
+- **§22 / TW-23 capstone framing — archive docstring only, do-not-revive as AI-driver.** Archived
+  `autopilot.py` framed itself as the autonomous goal-orchestrator. Reborn re-scope keeps deterministic,
+  taught-screen, human-armed, stop-on-unknown parts under
+  [app-autopilot-model](/architecture/app-autopilot-model.md). Coaching sits entirely on the teaching
+  side and is unaffected.
 
 None of the above touches the coaching engine's own safety: it has no send path, so even alongside a
 diverging autopilot it can only ever teach.

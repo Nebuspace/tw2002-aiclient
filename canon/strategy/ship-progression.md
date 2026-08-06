@@ -217,15 +217,12 @@ The execute path for a human-approved (or App-armed `C)argo Hold Upgrade·ON`) h
 
 *(Honesty pass `AUDIT-CANON-DRAFT-STARDOCK-HOLD-DRIVER-COVERAGE`, 2026-08-04.)*
 
-- **The autopilot's per-cycle EV picker contradicts recommend-only.** `autopilot.py` selects each
-  tick's action by expected-value-per-turn across candidates, and an upgrade candidate would compete in
-  that picker — a computed EV *winning* the right to execute. That is exactly the "autonomous candidate
-  that competes to execute" this concept forbids: under the reborn framing an upgrade is a
-  recommendation and a human-approved one-shot, not an EV competitor. Related is
-  `EXPLORE_BASELINE_EV` and its "no idle (§11)" comment — a deliberately tiny positive floor that
-  guarantees the loop always has *something* to do so it never sits idle. That never-idle,
-  keep-driving appetite is an AI-first artifact the reborn vision retires: the target is
-  stop-on-unrecognized, not fill-every-tick.
+- **Archived autopilot per-cycle EV picker — do-not-revive.** Pre-rebirth `twclient/autopilot.py`
+  selected each tick's action by expected-value-per-turn across candidates (an upgrade could compete
+  to execute). That module is **archive-only**. Under the reborn framing an upgrade is a
+  recommend-only / human-confirmed spend, never an unsupervised EV winner. Archive
+  `EXPLORE_BASELINE_EV` "no idle" keep-driving is likewise do-not-revive; tip explore floor is
+  FOCUS suggestion-only ([app-autopilot-model](/architecture/app-autopilot-model.md)).
 
 - **Guarded discovered-chain framing resolved by ADR-003.** `TradeChainRunner`
   now requires an exact human-confirmed fingerprint, daemon re-resolution, and
@@ -258,9 +255,9 @@ The execute path for a human-approved (or App-armed `C)argo Hold Upgrade·ON`) h
   throughput metric; the payback computation; and the best-of-eligible chooser returning `{recommend,
   ship, rationale, projected_payback, flags}`), `game_data.py` (the introspected per-world ship rows
   and the `ship_row_to_spec` bridge that feeds the engine), `chains.py` (the longest-profit-chain
-  finder whose loop economics the loop-stock match and per-turn metric depend on), `autopilot.py` (the
-  per-cycle EV picker and `EXPLORE_BASELINE_EV` no-idle floor recorded as divergences),
-  `trade_driver.py` (the autonomous chain runner recorded as a divergence), and tip hold-buy execute
+  finder whose loop economics the loop-stock match and per-turn metric depend on), archive-only
+  `twclient/autopilot.py` (do-not-revive EV picker / `EXPLORE_BASELINE_EV` auto-driver),
+  `trade_driver.py` (arm-gated chain runner), and tip hold-buy execute
   — `stardock_hold_plan.py` / `stardock_hold_driver.py` (`run_hold_purchase` one-pass; refuse unknown
   qty range / price mismatch; never toll-pay or trade_chain).
 - Cross-cutting invariants and consumers — [game-data-store](/engine/game-data-store.md) (the
