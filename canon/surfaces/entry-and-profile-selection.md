@@ -389,12 +389,12 @@ paladin-main     PaladinPrime     tw2002.briancmoses.com   A   2026-07-23     ok
   surface currently *displays* the rotation touchpoint; automated whose-turn-is-it rotation across the
   bank remains a separate future wave.
 
-- **The no-collusion boundary is enforced by doctrine + review, not by a UI affordance.** No code path
-  on this surface prevents an operator from manually transferring resources between their own
-  characters in-game; the boundary lives in alignment-and-conduct and in the bank's design intent
-  (metadata-only, independent players). This document requires the boundary be *shown* at the
-  rotation touchpoint — that display is a target of the consolidated surface, not present in the raw
-  `tw players list` output today.
+- **The no-collusion boundary is shown on the launcher bank view; CLI list is still absent.**
+  `BankViewScreen` paints `BOUNDARY_LINE_1` / `BOUNDARY_LINE_2` at the rotation touchpoint
+  (independent characters · never transfer credits/cargo/assets between them). Doctrine + review
+  still own enforcement (no code path can stop in-game manual transfers). Residual: there is no
+  `tw players list` CLI subcommand on tip — when one lands, it must print the same boundary lines
+  so the CLI touchpoint matches the TUI.
 
 # Citations
 

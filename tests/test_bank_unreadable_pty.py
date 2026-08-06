@@ -37,6 +37,8 @@ pytestmark = pytest.mark.pty_ui
 
 
 from tw2002_aiclient.screens import (
+    BOUNDARY_LINE_1,
+    BOUNDARY_LINE_2,
     BANK_EMPTY_LINE,
     BANK_UNREADABLE_HEAD,
     BANK_UNREADABLE_HINT,
@@ -128,6 +130,9 @@ def test_absent_bank_paints_the_empty_listing(tmp_path):
     assert BANK_EMPTY_LINE in grid
     assert HEADER_TOKEN in grid
     assert BANK_UNREADABLE_HEAD not in grid
+    # No-collusion boundary at the rotation touchpoint (entry-and-profile-selection).
+    assert BOUNDARY_LINE_1 in grid
+    assert BOUNDARY_LINE_2 in grid
 
 
 @_PTY_SKIP
