@@ -15,7 +15,7 @@ def test_coverage_map_intact() -> None:
     assert_coverage_map_intact()
 
 
-def test_coverage_ids_unique_and_nonempty() -> None:
+def test_guard_ids_unique_and_nonempty() -> None:
     ids = [g.guard_id for g in action_safety.all_coverage()]
     assert ids
     assert len(ids) == len(set(ids))

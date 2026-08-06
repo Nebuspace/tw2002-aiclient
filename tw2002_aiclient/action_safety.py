@@ -156,10 +156,6 @@ def all_coverage() -> tuple[GuardCoverage, ...]:
     return COVERAGE
 
 
-def coverage_ids() -> frozenset[str]:
-    return frozenset(g.guard_id for g in COVERAGE)
-
-
 def source_path(entry: GuardCoverage) -> Path:
     return _PKG_ROOT / entry.source_relpath
 
