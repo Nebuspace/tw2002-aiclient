@@ -197,7 +197,11 @@ Two costs, stated rather than discovered later:
      settle is never asserted when the game has said NOTHING at all.
 """
 
+from __future__ import annotations
+
 import re
+from dataclasses import dataclass
+from typing import Any, Mapping
 
 # The stability re-check pause after an initial confirm_prompt match --
 # short enough to stay unnoticeable in a real 8s+ step budget, long
@@ -230,6 +234,62 @@ MATCH_SCOPES = (
     MATCH_SCOPE_PROMPT_LINE,
     MATCH_SCOPE_CURSOR_LINE,
 )
+
+
+@dataclass(frozen=True)
+class SettleProfile:
+    """Named settle-parameter bundle (canon: settle-detection.md § profiles).
+
+    ``confirm_prompt`` defaults to unset-via-None for idle-confirm profiles;
+    positive-shape callers still pass the regex via overrides / kwargs.
+    """
+
+    retry_unstable_idle: bool = False
+    match_scope: str = MATCH_SCOPE_SCREEN
+    timeout_s: float = 8.0
+    debounce_ms: int = 350
+    # None = stable-idle confirm mode; str = positive-shape (usually overridden).
+    confirm_prompt: str | None = None
+
+
+# Screen-class / situation keys → defaults. Callers migrate onto
+# :func:`send_and_confirm_for` incrementally; raw :func:`send_and_confirm`
+# remains the load-bearing primitive.
+SETTLE_PROFILES: Mapping[str, SettleProfile] = {
+    # Menu / crawl / recorded step: confirm via stable idle.
+    "stable_idle": SettleProfile(retry_unstable_idle=False, confirm_prompt=None),
+    # Hub-warp / explore hop animation: keep polling through unstable idles.
+    "warp_unstable": SettleProfile(retry_unstable_idle=True, confirm_prompt=None),
+    # Positive next-screen shape; caller must supply confirm_prompt override.
+    "positive_shape": SettleProfile(retry_unstable_idle=False),
+}
+
+
+def resolve_settle_kwargs(profile: str, **overrides: Any) -> dict[str, Any]:
+    """Merge a named profile's defaults with per-call overrides.
+
+    Unknown ``profile`` → ``KeyError`` (fail closed before any send).
+    """
+    base = SETTLE_PROFILES[profile]
+    kwargs: dict[str, Any] = {
+        "confirm_prompt": base.confirm_prompt,
+        "timeout_s": base.timeout_s,
+        "debounce_ms": base.debounce_ms,
+        "retry_unstable_idle": base.retry_unstable_idle,
+        "match_scope": base.match_scope,
+    }
+    kwargs.update(overrides)
+    return kwargs
+
+
+def send_and_confirm_for(session, text, *, profile: str, enter: bool = True, secret: bool = False, **overrides: Any):
+    """``send_and_confirm`` with settle parameters from :data:`SETTLE_PROFILES`.
+
+    ``enter`` / ``secret`` stay explicit per send (never profile-defaulted) —
+    same founding scar as the bare helper.
+    """
+    kwargs = resolve_settle_kwargs(profile, **overrides)
+    return send_and_confirm(session, text, enter=enter, secret=secret, **kwargs)
 
 
 def _match_source(session, match_scope):

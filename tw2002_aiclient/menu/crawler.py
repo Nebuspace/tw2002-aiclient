@@ -111,7 +111,7 @@ import re
 from collections import deque
 
 from ..session.classify import NEVER_AUTO_ACTION_CLASSES, classify_screen
-from ..session.settle import send_and_confirm, wait_until_settled
+from ..session.settle import send_and_confirm_for, wait_until_settled
 from .knowledge import (
     MENU_EDGE_KINDS,
     record_crawl_status,
@@ -692,8 +692,8 @@ def emit_key_if_safe(session, from_node, key, label, category, emitted_keys, sen
     # `if not emitted` return always fires first). Kept for correctness if
     # this function is ever called directly.
     enter = key == ""
-    _reason, _elapsed, confirmed = send_and_confirm(
-        session, key, confirm_prompt=None, enter=enter, secret=False, timeout_s=step_timeout,
+    _reason, _elapsed, confirmed = send_and_confirm_for(
+        session, key, profile="stable_idle", enter=enter, secret=False, timeout_s=step_timeout,
     )
     emitted_keys.append(resolved)
     if not confirmed:

@@ -218,16 +218,12 @@ prescribes consolidating these into one first-class registry so the "absorbed vs
 boundary is defined in exactly one place; recorded here as a divergence, not reconciled by this
 concept.
 
-**(2) Per-screen settle profiles are ad-hoc caller flags, not a declarative screen-keyed table.**
-The warp-aware behavior specified above exists in the code, but as **per-call parameters** on
-`settle.send_and_confirm()` — a caller passes `confirm_prompt` (positive-shape mode),
-`confirm_prompt=None` (stable-idle mode), and `retry_unstable_idle=True` (the warp/explore
-"keep polling through an unstable idle" behavior). There is no screen-keyed *profile registry* that
-maps a screen class (e.g. "warp/hub animation") to its settle parameters automatically; each caller
-must know to pass the right flags. The canon prescribes promoting these into named, screen-associated
-settle profiles so warp-awareness is selected by *what screen it is*, not by each caller
-remembering the correct flags. Recorded as a divergence; the code fix is a separate future work
-order.
+**(2) Per-screen settle profiles — registry LIVE; callers migrating.**
+Tip (WO-CLEANUP-SETTLE-PROFILES-DECLARATIVE-TABLE): `settle.SETTLE_PROFILES` +
+`send_and_confirm_for(..., profile=...)` name `stable_idle` / `warp_unstable` /
+`positive_shape`. Raw `send_and_confirm()` remains the primitive. Residual: not
+every product caller has migrated onto the registry yet (incremental).
+
 
 # Citations
 
