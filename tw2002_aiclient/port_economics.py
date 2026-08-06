@@ -172,7 +172,14 @@ def assert_all_unverified_tagged() -> None:
 def load_coach_port_economics_params(
     params_path: str | Path | None = None,
 ) -> tuple[CoachParam, ...]:
-    """Coach params that belong to the port-economics substrate.
+    """Schema helper: port-economics keys must exist in coach ``params.json``.
+
+    Intentionally **not** wired into ``cockpit/decisions`` coach-session start —
+    the panel already loads the full KB via ``load_coach_kb``, and Max's
+    2026-08-05 ruling keeps floor/regrowth/plague numbers permanently
+    unconfirmed (no live scoring consumer for this subset yet). Kept for
+    contract tests that ``COACH_PORT_ECONOMICS_KEYS`` are present with
+    ``verified_vs_live`` (complement to ``assert_all_unverified_tagged``).
 
     Requires each row to carry ``verified_vs_live`` (schema-enforced by
     ``coach_kb.validate_param``). Does not invent introspected values.
