@@ -135,6 +135,8 @@ class LedgerWriter:
         intent: str | None = None,
         interrupted_by_human: bool = False,
         world_id: str | None = None,
+        rule_id: str | None = None,
+        target_player: str | None = None,
     ) -> dict[str, Any]:
         """Build and append one per-dispatch row.
 
@@ -145,6 +147,9 @@ class LedgerWriter:
         ``world_id``, when a non-empty string, is stamped on the row so retro /
         mining can filter without splitting the JSONL file. Omitted when
         unknown — never invent a slug; never rewrite older rows.
+
+        ``rule_id`` / ``target_player`` are optional accountability stamps for
+        the post-session report (omit when unknown — never invent).
         """
         if actor not in VALID_SENDERS:
             raise ValueError(
@@ -178,6 +183,10 @@ class LedgerWriter:
             entry["intent"] = intent
         if world_id is not None and str(world_id).strip():
             entry["world_id"] = str(world_id).strip()
+        if rule_id is not None and str(rule_id).strip():
+            entry["rule_id"] = str(rule_id).strip()
+        if target_player is not None and str(target_player).strip():
+            entry["target_player"] = str(target_player).strip()
         self.append(entry)
         return entry
 

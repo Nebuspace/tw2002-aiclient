@@ -1186,6 +1186,8 @@ def _record_ledger(
     resp,
     actor: str,
     interrupted_by_human: bool = False,
+    rule_id: str | None = None,
+    target_player: str | None = None,
 ) -> None:
     """Append one Trace-Ledger row for a do/send that already hit the wire.
 
@@ -1215,10 +1217,20 @@ def _record_ledger(
             session_id=session_id,
             interrupted_by_human=bool(interrupted_by_human),
             world_id=_ledger_world_id(session),
+            rule_id=rule_id,
+            target_player=target_player,
         )
     except Exception:  # noqa: BLE001 -- ledger must never fail the verb
         return
 
+
+def _optional_stamp(args: object, key: str) -> str | None:
+    if not isinstance(args, dict):
+        return None
+    raw = args.get(key)
+    if isinstance(raw, str) and raw.strip():
+        return raw.strip()
+    return None
 
 def record_attach_keystroke(server, session, pre_text, input_text, secret) -> None:
     """Route a ``tw attach`` keystroke into the same Trace-Ledger as do/send.
@@ -1382,6 +1394,8 @@ def dispatch(session, verb, args, server):
                 resp=resp,
                 actor="app",
                 interrupted_by_human=_driver_was_fenced(server),
+                rule_id=_optional_stamp(args, "rule_id"),
+                target_player=_optional_stamp(args, "target_player"),
             )
             return resp
 
@@ -1412,6 +1426,8 @@ def dispatch(session, verb, args, server):
                 resp=resp,
                 actor="app",
                 interrupted_by_human=_driver_was_fenced(server),
+                rule_id=_optional_stamp(args, "rule_id"),
+                target_player=_optional_stamp(args, "target_player"),
             )
             return resp
 

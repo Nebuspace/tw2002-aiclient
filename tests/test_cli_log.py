@@ -31,6 +31,8 @@ _SHIPPED_VERBS = frozenset(
         # WO-WIRE-CLI-LOG-TRAIL-VERB — filesystem trail over state/ledger.jsonl.
         "log",
         "trail",
+        # WO-BUILD-POST-SESSION-ACTION-REPORT — app-action digest.
+        "report",
         # WO-BUILD-SERVERS-PROBE-CLI-VERBS — inventory summarize + TCP probe.
         "servers",
         "probe",

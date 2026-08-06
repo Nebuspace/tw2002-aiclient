@@ -108,7 +108,7 @@ surfaces the same hard rule covers.
 
 # Passive substrate — it never decides
 
-The ledger is written by the dispatch path and read by four consumers, none of which is a live
+The ledger is written by the dispatch path and read by five consumers, none of which is a live
 driver:
 
 - **Candidate-mining** reads ledger slices to find recurring, profitable input-subsequences and
@@ -120,6 +120,11 @@ driver:
 - **The human** reads the trail directly (below).
 - **Coverage metrics** count rows by `actor` to gauge how much of the *known* the taught app is
   handling versus how often it escalated (see [coverage-metrics](/engine/coverage-metrics.md)).
+- **Post-session action report** (`tw report` / `session_report.py`) — a delivered digest of
+  `actor=app` dispatches (screen / rule_id / timestamp / optional PvP target) for accountability
+  after autonomous taught-rule fire. Pull-based CLI is the primary delivery surface; `--out`
+  writes the same text as a file artifact. Reading the ledger *after* the fact to report is not
+  a live-decision loop.
 
 A store that read *itself* to choose the next live keystroke would be a self-driving loop — exactly
 the shape the reborn trainer forbids. The ledger is read to *teach* and to *measure*, never to act.
