@@ -336,9 +336,6 @@ def test_run_chain_auto_fire_dead_even_when_discovery_complete(monkeypatch):
     """Cooldown/anchor paths are retired with FOCUS trade auto-fire."""
     monkeypatch.setattr(_autonomy_policy, "choose_offer", lambda *_a, **_k: _offer("run_chain"))
     monkeypatch.setattr(_trade_chain_plan, "plan_from_chain", lambda *_a, **_k: _TRADE_PLAN)
-    monkeypatch.setattr(
-        app_mod, "_trade_chain_discovery_preflight", lambda *_a, **_k: _CompleteDiscovery()
-    )
     calls = []
     monkeypatch.setattr(
         adapters, "trade_chain_start", lambda *a, **k: calls.append(1) or _TradeResult(ok=True)
