@@ -3,7 +3,7 @@ type: Reference
 title: Toll & Defense Math (NPC-only)
 description: Fight/pay/reroute decision math feeding the fighter-toll guarded rule — NPC targets only, where combat is a prime escalation moment.
 tags: [strategy, combat, defense, toll, npc-only, hypothesis]
-timestamp: 2026-07-28T22:36:00Z
+timestamp: 2026-08-06T02:02:00Z
 ---
 
 # Scope
@@ -41,21 +41,20 @@ Toll/defense math is a small set of portable *semantics*. Author the semantics; 
 the per-server values to configuration and to live observation folded into the world
 model.
 
-| Parameter | Hypothesized value | Meaning / role |
+| Parameter | Value / status | Meaning / role |
 |---|---|---|
-| `min_fighters_to_win` | `(defender_fighters × defender_odds) ÷ your_odds` [hypothesis] | Threshold that a fight is *survivable in principle*. Coaching / ranking input — not a substitute for the auto-Attack gate. |
-| `shield_reserve_multiplier` | 2:1 [hypothesis] | Shields count double their nominal value toward effective defense in the min-fighters comparison. |
-| `surrender_upside` | ~10× ⇒ tends free/full surrender; ~5× ⇒ ~even odds of partial; ~2× ⇒ smaller chance [hypothesis] | Approximate bands by attack-strength ratio. Bands, not guarantees; coaching input only. |
-| `missile_bypass_fraction` | ~7% [hypothesis] | Fraction of missile damage that bypasses fighter defense directly — the argument for a standing shield reserve even when fighters alone look sufficient. |
-| `min_shield_reserve` | ~10% of fighter count [hypothesis] | Standing shield floor to blunt the bypass-damage risk. |
 | `reserve_floor` (deploy/sell clamp) | 5 aboard — **LIVE** tip `DEFAULT_FIGHTER_RESERVE` in `session/fighter_toll_policy.py` | Small early-game floor: never sell/deploy a ship below this, so a lone toll can still be answered after routine trade. |
-| `defense_fighter_floor` (upgrade) | 20 aboard [hypothesis: `keep_min_defense_fighters`] — **NOT ON TIP** | Larger standing defense floor on the upgrade path was sketched as distinct from the small reserve above. Tip has **no** `defense_fighter_floor` / `keep_min_defense_fighters` symbol; do not cite them as importable. Building the second floor is a separate product WO (may be Max-gated as defense policy). Until then, only `DEFAULT_FIGHTER_RESERVE=5` clamps live quantity. |
-| `winnable_enemy_band` | ≤ 3 enemies [hypothesis: `DEFAULT_AUTO_ATTACK_MAX_ENEMY`] | "Single or few." Above this, auto-Attack is forbidden even if force_share is high. |
+| `winnable_enemy_band` | ≤ 3 enemies — tip default `DEFAULT_AUTO_ATTACK_MAX_ENEMY` (config) | "Single or few." Above this, auto-Attack is forbidden even if force_share is high. |
 | `force_share_auto_attack` | ≥ 0.90 [Max GO 2026-07-28] | Autonomous NPC Attack allowed when `force_share = own / (own + enemy) ≥` this value **and** `enemy ≤ winnable_enemy_band` **and** both counts are present. Name the ratio **force_share** (not `win_est`). |
 
-`your_odds` / `defender_odds` are the combat-odds terms of the server's fight
-resolution; they are server semantics, not fixed numbers, and belong in configuration.
-They inform coaching/`min_fighters_to_win`; they do **not** replace the `force_share` gate.
+**Stripped (WO-ESCALATE-TOLL-DEFENSE-UNBUILT-CONSTANTS · Max Option B 2026-08-05).** The following
+third-party / design-history numbers are **not** canon constants and must not be treated as
+computable today: `shield_reserve_multiplier` (was 2:1), `missile_bypass_fraction` (was ~7%),
+`keep_min_defense_fighters` / `defense_fighter_floor` (was 20), plus the
+`min_fighters_to_win` formula, surrender-ratio bands, and `min_shield_reserve` % floor that
+depended on them. They remain research notes only until a real design pass measures live combat.
+Do not encode them into tip code or coach them as operational math. Only the LIVE / Max-ratified
+rows above drive the auto-Attack gate and quantity clamps.
 
 # Toll-dialogue guard behavior (I5)
 
@@ -91,8 +90,8 @@ cycle**:
 The live reserve floor today is **`DEFAULT_FIGHTER_RESERVE` (5)** — a quantity
 **clamp** on deploy/sell / auto-Attack commits so the ship is never left
 defenceless below that floor. It is not itself a combat trigger. A larger
-documented `defense_fighter_floor` (20) remains **unbuilt hypothesis** (see
-schema table) — do not treat it as a tip constant.
+upgrade-path defense floor is **not canonized** (stripped Option B) — do not invent
+`defense_fighter_floor` / `keep_min_defense_fighters` on tip.
 
 # Reroute-vs-fight EV — a coaching / priority input
 
@@ -125,14 +124,15 @@ only.
    world model's `threats.fighters` / `threats.mines` (`/engine/world-model.md`), or take
    a fresh density-scan reading (`/strategy/exploration-policy.md`) if the record is
    stale.
-2. Compute `min_fighters_to_win` (with the 2:1 shield reserve) and compare against the
-   current fighter/shield loadout — as *information*, not as a trigger below the gate.
-3. If reroute turn-cost < expected fight-cost **and** force_share is below the auto-Attack
+2. Compare observed own vs enemy fighter counts (and any shields the screen shows) against the
+   LIVE `force_share` / band gate — as *information* for coaching and priority ranking, not as a
+   trigger to invent fight math from stripped hypotheses.
+3. If a taught reroute looks cheaper than engaging **and** force_share is below the auto-Attack
    gate, the priority layer ranks the reroute macro above escalation and the human is
-   coached toward it.
+   coached toward it. Do not compute expected fight-cost from unconfirmed bypass/shield multipliers.
 4. On the live toll dialogue: Never Pay; 0 own fighters ⇒ Retreat; unparseable ⇒ Retreat;
-   if `force_share` gate + band + NPC hold ⇒ Attack + quantity clamp; else Retreat or
-   STOP-and-escalate. Keep `min_shield_reserve` coaching visible.
+   if `force_share` gate + band + NPC hold ⇒ Attack + quantity clamp (`DEFAULT_FIGHTER_RESERVE`);
+   else Retreat or STOP-and-escalate.
 5. Record the outcome (fighters/shields spent, sector, result) so the world model's threat
    entry stays current for the next pass.
 
@@ -185,14 +185,14 @@ recorded, not silently conformed to).
 
 # Verification status
 
-UNVERIFIED against the live game for most numeric hypotheses. The minimum-fighters
-formula, the 2:1 shield reserve, the surrender-ratio bands (~10× / ~5× / ~2×), the ~7%
-missile-bypass fraction, the ~10% shield-reserve floor, and the reserve defaults (5 / 20 /
-≤3) are carried from third-party TW2002-variant strategy-guide research and from the
-current client defaults, and must be confirmed against direct in-game combat observation
-before being relied on operationally. Encode every one as a configurable parameter, never
-a hardcoded constant. **`force_share_auto_attack = 0.90` is Max-ratified as the
-operational default** (still overridable in config).
+**Operational (LIVE / Max-ratified):** `force_share_auto_attack = 0.90`,
+`DEFAULT_FIGHTER_RESERVE = 5`, and the tip `winnable_enemy_band` default. These are the only
+numbers this concept treats as computable for auto-Attack / clamps today.
+
+**Stripped / UNVERIFIED (Option B):** minimum-fighters formula, 2:1 shield reserve,
+surrender-ratio bands, ~7% missile-bypass, ~10% shield-reserve floor, and
+`keep_min_defense_fighters=20` are **not** canon — third-party research notes only until a
+measured design pass. Do not hardcode them; do not coach them as if tip implements them.
 
 # Citations
 
