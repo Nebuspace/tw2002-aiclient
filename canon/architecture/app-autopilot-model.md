@@ -206,10 +206,10 @@ whether a display-only explore floor should retire, are separate work orders.
 [1] archive `twclient/autopilot.py` (historical ASSESS→SELECT→EXECUTE→RECORD / per-tick EV /
 `EXPLORE_BASELINE_EV` "no idle" — do-not-revive); tip `tw2002_aiclient/focus_status.py`
 (`EXPLORE_BASELINE_EV` suggestion-only FOCUS floor)
-[2] twclient/trade_driver.py (`run_chain()` end-to-end chain runner; fresh-render gate per send; required `is_armed`/`should_abort` predicates; `ChainHold` depletion/turn-floor/cargo-stranded STOPs; Paladin `_ALLOWED_LETTER_SENDS` allowlist)
-[3] twclient/loop_player.py (`LoopPlayer` background AUTO-LOOP driver; human-armed `enter_auto_loop`; bounded cycle cap; pause/stop; `surprise`/`floor_reached`/`credits_unknown` STOPs)
-[4] twclient/control_lock.py (`MODE_AUTO_LOOP` exclusive control mode; `enter_auto_loop`/`leave_auto_loop`; the App/Human live-driver dual)
-[5] twclient/priority_engine.py (`recommend_actions()` strategic ranker — informs behavior ordering, not a live per-cycle picker; `MIN_CHAIN_LINKS_TO_EXECUTE` execute floor)
-[6] twclient/settle.py (`send_and_confirm` — the send-and-confirm net every driver send routes through)
+[2] `tw2002_aiclient/trade_driver.py` (`run_chain()` end-to-end chain runner; fresh-render gate per send; required `is_armed`/`should_abort` predicates; `ChainHold` depletion/turn-floor/cargo-stranded STOPs; Paladin `_ALLOWED_LETTER_SENDS` allowlist)
+[3] `tw2002_aiclient/session/autoloop.py` (background AUTO-LOOP driver; ported from archive `twclient/loop_player.py`; human-armed enter; bounded cycle cap; pause/stop; `surprise`/`floor_reached`/`credits_unknown` STOPs)
+[4] `tw2002_aiclient/session/control_lock.py` (active-driver slot; App/Human live-driver dual; AUTO-LOOP enter/leave fencing)
+[5] `tw2002_aiclient/priority_engine.py` (`recommend_actions()` strategic ranker — informs behavior ordering, not a live per-cycle picker; `MIN_CHAIN_LINKS_TO_EXECUTE` execute floor)
+[6] `tw2002_aiclient/session/settle.py` (`send_and_confirm` — the send-and-confirm net every driver send routes through)
 [7] canon/architecture/control-and-escalation.md (owns the stop-on-unknown, arm-confirm, and escalation-handoff invariants this loop enforces)
 [8] canon/architecture/rule-macro-engine.md (the single-cycle `when→do` decision this run-loop repeats)

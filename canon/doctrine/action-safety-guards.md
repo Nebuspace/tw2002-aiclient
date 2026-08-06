@@ -144,8 +144,8 @@ which owns the run-loop; here they are named as safety rails.
   both: an adapter answer that is not a usable balance at all (`credits_unreadable` — e.g. a raw
   tuple or a non-int, never truthiness-tested as if it were a healthy reading), and a genuine
   reading at or below the line (`floor_reached`, the depletion outcome itself, not a desync).
-  `floor_reached` and `credits_unreadable` do not yet carry a cockpit label and render as their
-  raw code on the STOP banner — a real gap, banked here, not closed by this doctrine. In
+  Cockpit STOP-banner labels for both are LIVE on tip (`cockpit/stopbanner.py` maps
+  `credits_unreadable` → "credits unreadable", `floor_reached` → "floor reached"). In
   multiplayer, where a hostile server frame could forge a balance line, arming this stop-loss
   carries a documented forged-balance caveat and its own arming gate.
 
