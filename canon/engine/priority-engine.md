@@ -317,14 +317,15 @@ or archive history differs, the gap is recorded here — never silently erased:
    ([app-autopilot-model](/architecture/app-autopilot-model.md)); it must never justify unsupervised
    keep-driving. Recast of explore appetite: [exploration-policy](/strategy/exploration-policy.md).
 
-4. **`trade_driver.run_chain()` is an autonomous whole-loop chain runner.**
-   Tip `trade_driver.run_chain()` drives an entire profit-chain from start to end synchronously in one
-   call. It is interruptible (halts within one send-step of a stop signal) and fail-closed-armed
-   (requires an explicit arm token), which is the right safety shape — but a chain "runner" that plays
-   the whole loop is a run-loop/behavior-execution concern, and its stop-on-unknown re-validation and
-   human-arm contract are owned by [app-autopilot-model](/architecture/app-autopilot-model.md), not by
-   this ranking layer. (Sibling docs already mark the arm-gate shape ADR-003-resolved; keep that
-   cross-reference consistent — see queue `WO-CANON-DRAFT-PRIORITY-ENGINE-TRADE-DRIVER-SAFETY-CROSSREF`.)
+4. **`trade_driver.run_chain()` arm-gate shape — ADR-003-resolved (not an open divergence).**
+   Tip `trade_driver.run_chain()` still drives a whole profit-chain synchronously in one call, but
+   the fail-closed arm / interrupt / exclusive-hold contract is **resolved by ADR-003** the same way
+   [trade-loops](/strategy/trade-loops.md) and [ship-progression](/strategy/ship-progression.md)
+   already record: guarded run only behind `TradeChainRunner` (exact human-confirmed fingerprint,
+   daemon re-resolution, one-pass bound, stop/disarm checked at every send). Ownership of the
+   run-loop / stop-on-unknown half remains
+   [app-autopilot-model](/architecture/app-autopilot-model.md); this ranking layer does not pick or
+   rotate chains. Do not re-list the arm-gate as an unresolved priority-engine divergence.
 
 5. **The §22/TW-23 run-loop capstone is re-homed (archive framing only).** The ASSESS→SELECT→EXECUTE→RECORD
    tick loop lived in archived `autopilot.py`'s module docstring. In the reborn map it **lives in
