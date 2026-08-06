@@ -1,28 +1,34 @@
-# WO-BUILD-POST-SESSION-ACTION-REPORT — Post-session app-action accountability digest
+# WO-BUILD-POST-SESSION-ACTION-REPORT
 
-> Status: READY (HANDOFF 2026-08-05T23:03:49Z)
-> Refs: `canon/DECISIONS.md` post-session-action-report DOC-GAP · `canon/engine/trace-ledger.md`
+**Status:** OPEN (in PR) — tip-close / already shipped  
+**Priority:** HIGH (queue) · **Outcome:** DONE on tip  
+**Claimed-by:** impl-aiclient-cursor  
+**Source:** Cycle-39 / queue-aiclient.md
 
 ## Goal
 
-Build the post-session action report Max named: human learns later by a report of what
-`app` did autonomously. Fifth ledger consumer; never a live-decision input.
+Build the post-session action report Max named for autonomous `app` accountability.
 
-## Delivery choice
+## Tip-verify (2026-08-06 @ main `52028b4`)
 
-**CLI-invocable `tw report`** (primary) + optional `--out PATH` file artifact.
-Why: pull-based matches the ledger doctrine; operators can review mid-session or after
-exit without depending on process-exit hooks. Session-end can call the same formatter later.
+| Check | Result |
+|---|---|
+| Module | `tw2002_aiclient/session_report.py` LIVE |
+| CLI | `tw report` registered in `session/cli.py` (~1725) |
+| Canon | `trace-ledger.md` already lists post-session report as fifth consumer |
+| DECISIONS | DOC-GAP entry was stale — flipped CLOSED/SHIPPED in this PR |
 
-## Scope
+## Decision
 
-- `tw2002_aiclient/session_report.py` — build/format/write
-- `tw report` CLI verb
-- Optional `rule_id` / `target_player` stamps on ledger `record_do` (omit when unknown)
-- Canon: fifth consumer section in `trace-ledger.md`
-- Tests
+**Tip-close BUILD row — product already shipped** (prior PR wave, incl. post-session report work).
+No new product code this pass. DECISIONS gap text corrected so the next audit does not re-stage.
 
 ## Accept
 
-Report lists every app-attributed dispatch: taught-rule id (or `?` when unstamped),
-target screen (`settled_class`), timestamp; PvP `target_player` when stamped.
+- [ ] Tip-verify table stands
+- [ ] DECISIONS post-session entry marked CLOSED/SHIPPED
+- [ ] WO evidence file present
+
+## live-prove
+
+`n/a` — tip-close of already-shipped offline CLI; optional follow-up live `tw report` smoke is nice-to-have, not required to close the false-gap.
