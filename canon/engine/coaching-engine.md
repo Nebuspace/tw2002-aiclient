@@ -177,8 +177,10 @@ described an implementation that did not exist. What is true at tip:
   warp-degree-1 count), `explore_mode` (run intent from `explore_run_wire` while running+report), and
   `loop_depleting` (derived fail-closed from `status["intervention"]`, identity-true only). Top-level
   `status` also emits `credits` for GOALS; that key is not a coach-trigger input.
-  **Still no status producer:** `genesis_count` — needs an honest `catalog_provider.genesis_candidates`
-  reader (formations catalog); `at_dead_end` still fires from `dead_end_count` alone when that is > 0.
+  **`genesis_count` status producer is LIVE on tip** — `world_stats.py` merges
+  `GENESIS_COUNT_KEY` from `catalog.genesis_candidates` length;
+  `cockpit/decisions.py` reads `status.get("genesis_count")`. Do not re-list as
+  missing. `at_dead_end` still fires from `dead_end_count` alone when that is > 0.
   **`prompt` is deliberately absent and must stay so.** `session/protocol.py:: _status_response` omits it
   because on a server that echoes at the password gate that line *is* the operator's credential
   (`canon/doctrine/secrets-and-credentials.md`, Code Divergence #1). Prompt-keyed arms — the
