@@ -438,9 +438,17 @@ Port archive TW-30 `ship_upgrade_decision` into `tw2002_aiclient/` as recommend-
 
 ## DECISION-PWO-092-INTROSPECTOR-FIXTURE (2026-08-03)
 
-**Status:** Accepted (hub GO Propose A 2026-08-03T15:20:00Z)
+**Status:** Accepted (hub GO Propose A 2026-08-03T15:20:00Z) · tip-amended 2026-08-06
 
-Port archive introspector as pure text→rows for fixture/offline only. No live TWGS crawl or send. Option B (live session introspect) HELD.
+Port archive introspector as pure text→rows; no live TWGS crawl or send.
+Option A shipped. **Option B** (navigate/send to reach StarDock listing
+screens for an active crawl) remains **HELD**.
+
+**Amendment (PR #471 · 2026-08-06):** passive parse of already-on-screen
+current-ship `I` info (`parse_current_ship_info` →
+`Session.observe_current_ship`) is LIVE and is **not** Option B — no
+navigation, no send. Distinct from opportunistic StarDock capture
+(`game_data_capture`), which also never sends.
 
 ## DECISION-PWO-111-RX-REDACTION — RX transcript gate (2026-08-03)
 
