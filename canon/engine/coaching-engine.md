@@ -191,6 +191,24 @@ described an implementation that did not exist. What is true at tip:
   `classify_screen` today (`port_trade` via content anchors on fuel ore/organics/equipment/
   commodity/trading-port text; `cim_report` via the exclusive CIM block probe). Tip pin:
   `tests/test_classify.py::test_port_trade`.
+
+- **`chain_hops` / `chain_unit` producer (`chain_status.py`) — LIVE.** The pre-rebirth producer lived
+  in deleted `spectate_app.py`. Tip `tw2002_aiclient/chain_status.py` (`ChainScalars`) is the
+  product writer for those two status fields that GOALS (`cockpit/goals.py`) and the coach trigger
+  map both read:
+  - **Cache, not recompute.** Discovered chains are computed client-side on demand (chains popup /
+    discovery paths pull `chain_search` + trade_adapter + world_model, ~40ms). DECISIONS/GOALS redraw
+    continuously against a tight dead-terminal budget, so this module never imports the finder and
+    never runs a search on the draw path — it only caches scalars when a discovery already ran for
+    its own reasons.
+  - **Honest absence.** Before a discovery has established something, it contributes **nothing** to
+    `status` (GOALS shows unknown — true: we have not looked, or the search was inconclusive). It
+    never fabricates a zero from not having run. The single case that reports zero is a completed,
+    untruncated search over a world with a map — there "none yet" is a fact.
+  - **Adapters.** `as_chain_like` / `pair_as_chain_like` feed coach composition without inventing
+    margin. Wired from `PlayShellScreen.chain_scalars` + idle/discovery update sites in `app.py` /
+    `screens.py`; also consumed by `focus_status` / `cockpit/decisions`.
+
 - **Authored but unreachable:** `strategies.json` carries eight cards; the trigger map can produce seven
   ids. The sole authored-unreachable card is `planet_production` (`when_trigger=planet_management`) — it
   still needs an honest planet/genesis producer and must not be marked wired without one.
@@ -263,7 +281,8 @@ diverging autopilot it can only ever teach.
 - Code modules (plain text) — **at tip:** `coach_kb.py` (`StrategyCard` / `CoachParam` loader + schema
   validation, I1/I4), `coach_engine.py` (`infer_coach_triggers` = I2 trigger map, `compose_decisions_coach`
   = I3 advice renderer, plus the honest empty-state placeholder), `chain_units.py` (the hop/step arithmetic
-  the trigger map consumes), `cockpit/decisions.py` (reborn DECISIONS consumer — fail-closed KB load,
+  the trigger map consumes), `chain_status.py` (`ChainScalars` — cached `chain_hops`/`chain_unit`
+  producer; honest absence; never imports `chain_search` on the draw path), `cockpit/decisions.py` (reborn DECISIONS consumer — fail-closed KB load,
   yield-to-live-trace, coach call when the pane would otherwise be idle). **Port-source only, deleted at
   the rebirth:** `spectate_layout.py` (original home of the two I2/I3 functions), `spectate_app.py`
   (pre-rebirth Decisions-pane wiring). Data: `data/coach/strategies.json` and `data/coach/params.json`
