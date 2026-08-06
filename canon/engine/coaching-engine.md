@@ -187,9 +187,10 @@ described an implementation that did not exist. What is true at tip:
   ever asking for it. `at_shipyard` *does* fire from the cockpit when top-level `fighters_aboard == 0`
   (wired by `WO-STATUS-FIGHTERS-ABOARD`).
   **`docked_at_port` paths at tip:** `has_port is True` (primary idle path) or
-  `classification in ("port_trade", "cim_report")`. `cim_report` is produced by `classify_screen` today;
-  `port_trade` remains in the trigger map's anchor list but is not emitted by the classifier on the current
-  fixture corpus — a classifier gap, not an engine one. Do not invent classifier capability in this concept.
+  `classification in ("port_trade", "cim_report")`. Both classes are produced by
+  `classify_screen` today (`port_trade` via content anchors on fuel ore/organics/equipment/
+  commodity/trading-port text; `cim_report` via the exclusive CIM block probe). Tip pin:
+  `tests/test_classify.py::test_port_trade`.
 - **Authored but unreachable:** `strategies.json` carries eight cards; the trigger map can produce seven
   ids. The sole authored-unreachable card is `planet_production` (`when_trigger=planet_management`) — it
   still needs an honest planet/genesis producer and must not be marked wired without one.
