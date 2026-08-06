@@ -40,6 +40,25 @@ The one classically-cited exception — defending a victim from an aggressor —
 autonomous trigger**. It reaches the operator as a coaching surface (the situation plus the math),
 and the operator, not the app, makes the call. The trainer never charges in on its own.
 
+## Proposal-time alignment gate (`alignment_gate.py`)
+
+M1's "no taught rule may encode initiate-PvP" is enforced at **proposal / write time** by
+`tw2002_aiclient/alignment_gate.py` (`refuse_pvp_aggression_rule`), called from the rule writer and
+draft→kernel bridge before a document can become an approvable taught rule:
+
+- **Screen denylist** — exact / substring matches on `screen_match` for player-combat frames
+  (`player_attack`, `pvp_*`, `player_combat`, …).
+- **Do denylist** — exact `do` / macro names that mean initiate-PvP regardless of screen
+  (`attack-player`, `pvp-attack`, `initiate-pvp`, `hunt-player`, …).
+- **Attack-on-PvP-screen** — bare `a` / `attack` / `attack-npc` refused only when the matched
+  screen is already PvP (corp-toll frames are an explicit negative control so NPC Attack stays
+  teachable).
+
+This is a **proposal gate**, not a fire-time combat resolver. Fire-time NPC-toll PvP boundary
+(`pvp_hard_stop`) lives in `session/fighter_toll_policy` and must stay distinct — symmetrizing the
+two would blur M1's authoring refuse with NPC toll math. Coach prose is not a gate; this path does
+not invent a screen classifier.
+
 # Mis-identification is a first-class hazard (M1)
 
 Even *recommending* defensive combat requires **reliable identification of attacker and victim**.
@@ -175,5 +194,7 @@ AI teacher (on-demand, retrospective) — proposal refused at the doctrine layer
 [3] design history §16.4 — do-not-bake ruling on multi-account and griefing exploit classes.
 [4] Operator rulings (RESOLVED 2026-07-23) — AI on-demand-only; combat human-gated, NPC-only math;
     no-collusion boundary canonically homed here with secrets cross-linking in.
-[5] Code modules (plain-text reference): `fighter_toll_policy.py` (NPC toll/combat resolution),
-    `control_lock.py` (control-mode state machine); CLAUDE.md "Architecture map" + "Hard rules".
+[5] Code modules (plain-text reference): `alignment_gate.py` (proposal-time PvP refuse /
+    denylist — M1), `fighter_toll_policy.py` (NPC toll/combat resolution + fire-time
+    `pvp_hard_stop`), `control_lock.py` (control-mode state machine); CLAUDE.md "Architecture map"
+    + "Hard rules".
