@@ -202,14 +202,13 @@ is recorded here, never silently reconciled into the doc.
   same approval/priority/scope machinery as every other rule*, rather than hardcoded control flow. The
   strategy and guards carry unchanged; the framing is the change.
 
-- **Autopilot's per-cycle EV select vs stop-on-unknown (recorded, owned elsewhere).** In today's
-  code the surrounding autopilot run-loop can pick actions per-cycle by expected value over screens,
-  including screens it was not taught — the divergence from the reborn *stop-on-unknown* spine.
-  Auto-haggle itself is correctly STOP-safe (Guards 1–3), so this divergence is about the *loop that
-  invokes it*, not the rule; it is recorded in full under
-  [app-autopilot-model](/architecture/app-autopilot-model.md) and noted here only because the 78-turn
-  misfire surfaced *during* such an autopilot run. The rule's guards are what kept a per-cycle loop
-  from turning a desync into a fabricated trade.
+- **Autopilot's per-cycle EV select vs stop-on-unknown (archive-only — do-not-revive).** The
+  surrounding pre-rebirth autopilot run-loop that could pick actions per-cycle by expected value over
+  untaught screens lived in `archive/.../twclient/autopilot.py` and is **gone from tip**. Auto-haggle
+  itself is correctly STOP-safe (Guards 1–3); this note is only that the historical 78-turn misfire
+  surfaced *during* such an archived autopilot run — not that a live EV picker still invokes haggle.
+  Full archive disposition: [app-autopilot-model](/architecture/app-autopilot-model.md). The rule's
+  guards remain what prevent a desync from becoming a fabricated trade.
 
 # Citations
 

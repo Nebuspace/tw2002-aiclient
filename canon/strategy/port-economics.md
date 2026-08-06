@@ -147,16 +147,16 @@ below) — never silently conform the doc to the code.
 
 # Code divergence
 
-Recorded per DOCS WIN — the reborn target above is the spec; current code diverges as follows and
-must be brought to the doc, not the reverse:
+Recorded per DOCS WIN — the reborn target above is the spec. Tip gaps below must be brought to the
+doc; **archive-only** shapes are do-not-revive (not open tip defects to "fix"):
 
-- **Autopilot per-cycle EV select + `EXPLORE_BASELINE_EV` "never idle."** The current autopilot
-  consumes economic figures as a **live per-cycle expected-value action-picker** with a baseline
-  explore-EV floor that keeps it driving rather than ever sitting idle. The reborn target retires
-  the "never-idle keep-driving" appetite: these numbers feed *ranking, guards, and coaching only*,
-  and depletion/idle is a STOP-guard, not a reason to keep the ship moving.
-- **`trade_driver` autonomous chain runner.** The current trade driver runs a trade chain
-  autonomously across sectors. The reborn target requires stop-on-unknown re-validated **every
+- **Archived autopilot per-cycle EV select + `EXPLORE_BASELINE_EV` "never idle" — do-not-revive.**
+  Pre-rebirth `twclient/autopilot.py` consumed economic figures as a live per-cycle EV action-picker
+  with a baseline explore floor that kept driving. That module is **gone from tip**. These numbers
+  feed *ranking, guards, and coaching only*; depletion/idle is a STOP-guard, not a reason to keep
+  the ship moving. See [app-autopilot-model](/architecture/app-autopilot-model.md).
+- **`trade_driver` autonomous chain runner.** Tip trade driver can still run a trade chain across
+  sectors under arm/guards. The reborn target requires stop-on-unknown re-validated **every
   cycle** and a **human-armed** loop before any background run — a chain is a taught behavior the
   human arms, not a self-launching runner.
 - **§22 / TW-23 autonomous-trainer capstone re-scope.** The original AI-first capstone framed this

@@ -147,31 +147,26 @@ operationally, and never hardcode these per-server.
 
 # Code divergence
 
-The current code predates the reborn framing in three places. Recorded here per DOCS-WIN (docs are
-the target; the code is noted as diverging, not silently conformed to):
+The tip/archive history predates the reborn framing in places. Recorded here per DOCS-WIN (docs are
+the target). **Archive-only** shapes are do-not-revive — not open tip defects to "fix":
 
-- **`autopilot.py` — the "never-idle" explore baseline.** `EXPLORE_BASELINE_EV = 0.01` (autopilot.py
-  ~line 269) exists specifically so a per-cycle EV SELECT always has *something* to do — the explore
-  candidate is picked "whenever nothing else scores higher … so a tick always has SOMETHING to do,"
-  with the rationale string `"keep exploring (…) — no idle (§11)"` (~line 742). This is exactly the
-  retired "never-idle keep-driving" appetite. Reborn target: explore is a human-armed opt-in
-  behavior, not a positive-EV floor that auto-fills idle ticks; `EXPLORE_BASELINE_EV` should not
-  survive as an auto-driver justification.
-- **`autopilot.py` — per-cycle EV action-picker.** The autopilot builds `Candidate(kind="explore",
-  ev_per_turn=…)` rows and SELECTs the highest-EV candidate each tick. In the reborn model the
-  priority layer *ranks/orders* taught behaviors and suggestions; it must not be a live per-cycle
-  picker where a computed EV can win over an unrecognized screen. The stop-on-unknown gate must sit
-  above SELECT, not compete inside it.
-- **`trade_driver.py` — autonomous chain runner.** `run_chain()` drives a whole `ProfitChain` end-to-
-  end synchronously in one call (routed from `AutopilotEngine._execute_chain()`); it carries
-  interruptibility and fail-closed arming, but its shape is autonomous multi-step driving. Reborn
-  target: a chain is a taught, human-armed repeating macro that re-validates and STOPS on unknown
-  each step — the arm-confirm + per-step novelty-halt must bound it.
-- **§22.4 / TW-23 capstone re-scope.** `DESIGN-v2.md` §22.4 still describes a "full-autopilot
-  capstone" that "goes AUTOPILOT → seeks to DOUBLE starting credits autonomously," orchestrating
-  explore + chain-find + holds + loop-trade. That autonomous-doubling end-state is counter-canon in
-  the reborn vision and is re-scoped to human-armed, stop-on-unknown taught behaviors; the §15.4
-  auto-explore behaviors it composes are the human-armed intents above, not an autonomous drive.
+- **Archived `autopilot.py` "never-idle" explore baseline — do-not-revive.** Pre-rebirth
+  `EXPLORE_BASELINE_EV = 0.01` existed so a per-cycle EV SELECT always had *something* to do
+  (`"keep exploring (…) — no idle (§11)"`). That module is **gone from tip**. Reborn: explore is a
+  human-armed opt-in behavior; tip may keep a FOCUS *suggestion* floor only
+  ([app-autopilot-model](/architecture/app-autopilot-model.md)).
+- **Archived `autopilot.py` per-cycle EV action-picker — do-not-revive.** Archive built
+  `Candidate(kind="explore", …)` rows and SELECTed the highest-EV candidate each tick. Tip priority
+  *ranks/orders* taught behaviors and suggestions; it must not revive a live per-cycle picker where
+  a computed EV can win over an unrecognized screen. Stop-on-unknown sits above SELECT.
+- **`trade_driver.py` — autonomous chain runner (tip — arm/guards).** `run_chain()` can drive a whole
+  `ProfitChain` end-to-end synchronously; it carries interruptibility and fail-closed arming, but its
+  shape is multi-step driving. Reborn: a chain is a taught, human-armed repeating macro that
+  re-validates and STOPS on unknown each step.
+- **§22.4 / TW-23 capstone re-scope.** Design history §22.4 still describes a "full-autopilot
+  capstone" that "goes AUTOPILOT → seeks to DOUBLE starting credits autonomously." That
+  autonomous-doubling end-state is counter-canon and re-scoped to human-armed, stop-on-unknown taught
+  behaviors; the §15.4 auto-explore behaviors it composes are human-armed intents, not idle-fill drive.
 
 ## Play explore flags — asymmetric by design
 
@@ -205,7 +200,7 @@ never calls `bool()` on either flag (pins in `tests/test_play_explore_flags.py`)
 - source module `explore.py` — TW-14 frontier/BFS planner (Map-fill / Find-StarDock / Find-Formations,
   recovery policy, adjacent-hop resolution)
 - source module `world_model.py` — TW-06 persisted per-world sector store (G1 write target)
-- source module `autopilot.py` — recorded EV-select / EXPLORE_BASELINE_EV divergence
+- source module `autopilot.py` — **archive-only** EV-select / `EXPLORE_BASELINE_EV` (do-not-revive)
 - source module `trade_driver.py` — recorded autonomous chain-runner divergence
 - tip Play flags — `tw2002_aiclient/cockpit/explore_flags.py` · `adapters.explore_start_for_profile`
   dock/fight asymmetry · [mode-line](/surfaces/mode-line-and-teach-controls.md) Explore vs `P` split

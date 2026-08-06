@@ -297,42 +297,37 @@ is measured.
 # Code divergences (DOCS WIN — recorded, not silently conformed)
 
 The reborn target is: the priority engine **ranks/orders**; it never selects a live keystroke, and the
-run-loop re-validates the screen-match every cycle and stops on the first unrecognized frame. Current
-code diverges in these specific ways — recorded here so the divergence is visible, not erased:
+run-loop re-validates the screen-match every cycle and stops on the first unrecognized frame. Where tip
+or archive history differs, the gap is recorded here — never silently erased:
 
-1. **`autopilot.select()` is a per-cycle EV action-picker.** `twclient/autopilot.py` scores
-   `run_chain` / `upgrade` / `explore` "from scratch, every tick" and picks the highest EV
-   (`ranked = sorted(candidates, key=ev_per_turn, reverse=True); chosen = ranked[0]`), then live-sends
-   one keystroke. This is the AI-first "compute EV and drive" shape; the reborn model wants the
-   ordering to feed a taught-behavior run-loop that stops on the unknown, not a per-tick EV selector
-   that assumes the next screen is drivable. The run-loop half of this divergence is recorded in
+1. **Archived `autopilot.select()` per-cycle EV action-picker — do-not-revive.** Pre-rebirth
+   `archive/.../twclient/autopilot.py` scored `run_chain` / `upgrade` / `explore` "from scratch, every
+   tick" and live-sent the highest EV. That module is **gone from tip** (rebirth cut); there is no live
+   import path. Do not "fix the divergence" against dead code — the reborn run-loop contract lives in
    [app-autopilot-model](/architecture/app-autopilot-model.md).
 
-2. **`priority_engine.recommend_actions()` is consumed as a live per-tick override.**
-   `autopilot.select()` calls `_priority_engine_focus_kind(...)` and, when the engine's focus disagrees
-   with the raw-EV winner, reorders and drives that kind live (`reason_prefix = "priority engine"`).
-   The reborn role of `recommend_actions()` is to *order taught behaviors and suggestions*, read
-   downstream of stop-on-unknown — not to pick the live keystroke for the current tick.
+2. **Archived live per-tick override of `recommend_actions()` — do-not-revive.** The same archived
+   `autopilot.select()` called `_priority_engine_focus_kind(...)` and could reorder/drive when the
+   engine disagreed with raw EV. Tip's ranking role is *order taught behaviors and suggestions*
+   downstream of stop-on-unknown — not pick the live keystroke. No tip caller restores that override.
 
-3. **`EXPLORE_BASELINE_EV = 0.01` encodes a "never idle" appetite.** `autopilot._score_explore()`
-   emits a fixed tiny baseline EV "so the client never idles when a frontier hop exists." The reborn
-   vision retires never-idle keep-driving: explore is a taught, human-armed, turn-budgeted behavior
-   that STOPS on any unrecognized sector screen, and depletion/exhaustion is a **STOP-and-escalate**
-   guard, not a reason to keep driving. `recommend_actions()` still accepts `explore_baseline_ev` as a
-   parameter; its use as an auto-driver justification is the divergence. Recast lives in
-   [exploration-policy](/strategy/exploration-policy.md).
+3. **Archived `EXPLORE_BASELINE_EV` auto-driver floor — do-not-revive (tip is suggestion-only).**
+   Archive `autopilot._score_explore()` used a fixed tiny baseline EV "so the client never idles."
+   Tip may still surface an explore floor as FOCUS suggestion only
+   ([app-autopilot-model](/architecture/app-autopilot-model.md)); it must never justify unsupervised
+   keep-driving. Recast of explore appetite: [exploration-policy](/strategy/exploration-policy.md).
 
 4. **`trade_driver.run_chain()` is an autonomous whole-loop chain runner.**
-   `twclient/trade_driver.py`'s `run_chain()` drives an entire profit-chain from start to end
-   synchronously in one call, routed from a chosen `run_chain` candidate. It is interruptible
-   (halts within one send-step of a stop signal) and fail-closed-armed (requires an explicit arm
-   token), which is the right safety shape — but a chain "runner" that plays the whole loop is a
-   run-loop/behavior-execution concern, and its stop-on-unknown re-validation and human-arm contract
-   are owned by [app-autopilot-model](/architecture/app-autopilot-model.md), not by this ranking layer.
+   Tip `trade_driver.run_chain()` drives an entire profit-chain from start to end synchronously in one
+   call. It is interruptible (halts within one send-step of a stop signal) and fail-closed-armed
+   (requires an explicit arm token), which is the right safety shape — but a chain "runner" that plays
+   the whole loop is a run-loop/behavior-execution concern, and its stop-on-unknown re-validation and
+   human-arm contract are owned by [app-autopilot-model](/architecture/app-autopilot-model.md), not by
+   this ranking layer. (Sibling docs already mark the arm-gate shape ADR-003-resolved; keep that
+   cross-reference consistent — see queue `WO-CANON-DRAFT-PRIORITY-ENGINE-TRADE-DRIVER-SAFETY-CROSSREF`.)
 
-5. **The §22/TW-23 run-loop capstone is re-homed.** The autonomous goal-orchestrator run-loop (the
-   ASSESS→SELECT→EXECUTE→RECORD tick loop, §22/§23 Phase 1) is described in `autopilot.py`'s module
-   docstring as living with the scorer. In the reborn map it **moves to
+5. **The §22/TW-23 run-loop capstone is re-homed (archive framing only).** The ASSESS→SELECT→EXECUTE→RECORD
+   tick loop lived in archived `autopilot.py`'s module docstring. In the reborn map it **lives in
    [app-autopilot-model](/architecture/app-autopilot-model.md)**; this concept keeps only the
    ranking/ordering half. Do not re-file the control-runtime / stop-on-unknown concern here.
 
@@ -348,15 +343,12 @@ code diverges in these specific ways — recorded here so the divergence is visi
   catalog, weight ladder, RT travel-cost model, two-layer IA) — content lives here; root file deleted
   (Max GO 2026-07-25). Re-rooted in the reborn vision; the §22 capstone framing retired to
   app-autopilot-model, the never-idle framing retired.
-- **Grounded in code:** `twclient/priority_engine.py` (`recommend_actions()`, `stay_vs_leave_upgrade()`,
-  `travel_cost_rt_turns()`, `afford_fighters()`, the chain-link + fighter constants);
-  `tw2002_aiclient/autonomy_policy.py` (`choose_offer`, `AutonomyOffer` — FOCUS → confirm selector);
-  `tw2002_aiclient/app.py` (`O` offer + App-armed auto-fire consumers);
-  `twclient/autopilot.py` (`select()`, `_score_chain/_upgrade/_explore()`, `EXPLORE_BASELINE_EV`,
-  `_priority_engine_focus_kind()`); `twclient/chains.py` (`ProfitChain`, `rank_chains()`,
-  `longest_profit_chain()`); `twclient/explore.py` (`known_graph()`, `frontier_edges()`,
-  `path_to_sector()`, `plan_map_fill()`); `twclient/ship_upgrade_decision.py` (`ShipSpec`,
-  `LoopEconomics`, decision engine); `twclient/trade_driver.py` (`run_chain()` whole-loop runner).
+- **Grounded in code:** tip `tw2002_aiclient/priority_engine.py` / `focus_status.py` (ranking +
+  FOCUS suggestion floor); `tw2002_aiclient/autonomy_policy.py` (`choose_offer`, `AutonomyOffer`);
+  `tw2002_aiclient/app.py` (`O` offer + App-armed auto-fire consumers); tip chain/explore/ship/
+  trade modules under `tw2002_aiclient/`. **Archive-only (do-not-revive):**
+  `archive/pre-rebirth-2026-07-23/.../twclient/autopilot.py` (`select()`, EV scorers,
+  `EXPLORE_BASELINE_EV` auto-driver, `_priority_engine_focus_kind()`).
 - **Cross-links:** [north-star](/architecture/north-star.md) (the strategic layer within the reborn
   vision), [app-autopilot-model](/architecture/app-autopilot-model.md) (consumes this ordering; never
   lets it pick a live action over an unknown screen — owns the run-loop and the §22 capstone),
