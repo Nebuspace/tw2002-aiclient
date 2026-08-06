@@ -208,6 +208,11 @@ class Session:
         # unknown must not look alike).
         self.last_fighters = None
         self.last_fighters_ts = None
+        # WO-BUILD-LIVE-SHIP-INTROSPECTION-ADAPTER: last I-info current-ship
+        # observation (ship_type + optional holds/fighters/warp). Written only
+        # by observe_current_ship; omit-until-known on status.
+        self.last_current_ship = None
+        self.last_current_ship_ts = None
         # WO-HUD-STATUS-BRIDGE: the sector the operator was last SHOWN, for
         # display only. Deliberately NOT `_last_sector` above -- that one is
         # epoch-invalidated so a world-model write can never land against a
@@ -732,6 +737,32 @@ class Session:
                 fighters=fighters,
                 age_s=max(0.0, time.monotonic() - ts),
             )
+
+    def observe_current_ship(self, rendered_text):
+        """Capture current-ship type (+ vitals) from an ``I`` ship-info screen.
+
+        Non-clobber: screens without a ``Ship Info`` type leave the sticky
+        pair alone. Never invents catalog cost/shields.
+        """
+        from tw2002_aiclient.introspector import parse_current_ship_info
+
+        parsed = parse_current_ship_info(rendered_text)
+        if not isinstance(parsed, dict):
+            return
+        with self.lock:
+            self.last_current_ship = dict(parsed)
+            self.last_current_ship_ts = time.monotonic()
+
+    def current_ship_snapshot(self):
+        """Last I-info current-ship observation, or None until first read."""
+        with self.lock:
+            ship = self.last_current_ship
+            ts = self.last_current_ship_ts
+            if ship is None or ts is None:
+                return None
+            out = dict(ship)
+            out["age_s"] = max(0.0, time.monotonic() - ts)
+            return out
 
     def observe_sector(self, prompt_line=""):
         """Capture the sector this screen's prompt states, for the HUD.

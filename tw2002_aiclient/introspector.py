@@ -244,3 +244,79 @@ def parse_item_listing(
             row["effect_notes"] = notes
         rows.append(row)
     return rows
+
+
+# -- current-ship I-info (priority-engine row 2) ---------------------------
+#
+# Live `I` ship-info screens state the hull the player *has in hand* — not a
+# shipyard catalog row. Labels below are captured from
+# `tests/fixtures/ship_info_screen.txt` (live TWGS shape). Absence → None;
+# never invent cost/shields/alignment from a screen that does not show them.
+
+_SHIP_NAME_RE = re.compile(
+    r"^[ \t]*Ship[ \t]+Name[ \t]*:[ \t]*(?P<name>\S.*\S|\S)[ \t]*$",
+    re.IGNORECASE | re.MULTILINE,
+)
+_SHIP_INFO_RE = re.compile(
+    r"^[ \t]*Ship[ \t]+Info[ \t]*:[ \t]*(?P<info>\S.*\S|\S)[ \t]*$",
+    re.IGNORECASE | re.MULTILINE,
+)
+_SHIP_INFO_PORTED_KILLS_RE = re.compile(
+    r"\s+Ported=\d+\s+Kills=\d+\s*$",
+    re.IGNORECASE,
+)
+_TURNS_TO_WARP_RE = re.compile(
+    r"^[ \t]*Turns[ \t]+to[ \t]+Warp[ \t]*:[ \t]*(?P<n>\d+)[ \t]*$",
+    re.IGNORECASE | re.MULTILINE,
+)
+_TOTAL_HOLDS_INFO_RE = re.compile(
+    r"^[ \t]*Total[ \t]+Holds[ \t]*:[ \t]*(?P<total>\d[\d,]*)"
+    r"[ \t]*-[ \t]*Empty[ \t]*=[ \t]*(?P<empty>\d[\d,]*)[ \t]*$",
+    re.IGNORECASE | re.MULTILINE,
+)
+_FIGHTERS_INFO_RE = re.compile(
+    r"^[ \t]*Fighters[ \t]*:[ \t]*(?P<n>\d[\d,]*)[ \t]*$",
+    re.IGNORECASE | re.MULTILINE,
+)
+
+
+def parse_current_ship_info(
+    rendered_text: str, *, source: str = "introspected: ship_info"
+) -> "dict | None":
+    """Parse an ``I`` ship-info screen into a current-ship observation.
+
+    Returns ``None`` when the screen does not state a ship type (the
+    ``Ship Info`` line after stripping ``Ported=``/``Kills=``). Never invents
+    catalog fields (cost, shields, alignment). ``source`` always begins with
+    ``introspected``.
+    """
+    if not isinstance(rendered_text, str) or not rendered_text.strip():
+        return None
+    info_matches = list(_SHIP_INFO_RE.finditer(rendered_text))
+    if not info_matches:
+        return None
+    info_raw = info_matches[-1].group("info").strip()
+    ship_type = _SHIP_INFO_PORTED_KILLS_RE.sub("", info_raw).strip()
+    if not ship_type:
+        return None
+
+    out: dict = {
+        "ship_type": ship_type,
+        "ship_info_raw": info_raw,
+        "source": source,
+    }
+    name_matches = list(_SHIP_NAME_RE.finditer(rendered_text))
+    if name_matches:
+        out["ship_name"] = name_matches[-1].group("name").strip()
+    warp_matches = list(_TURNS_TO_WARP_RE.finditer(rendered_text))
+    if warp_matches:
+        out["turns_per_warp"] = int(warp_matches[-1].group("n"))
+    holds_matches = list(_TOTAL_HOLDS_INFO_RE.finditer(rendered_text))
+    if holds_matches:
+        m = holds_matches[-1]
+        out["total_holds"] = _to_int(m.group("total"))
+        out["empty_holds"] = _to_int(m.group("empty"))
+    ftr_matches = list(_FIGHTERS_INFO_RE.finditer(rendered_text))
+    if ftr_matches:
+        out["fighters"] = _to_int(ftr_matches[-1].group("n"))
+    return out

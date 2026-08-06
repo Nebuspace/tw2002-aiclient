@@ -33,6 +33,12 @@ def _observe(session, text: str, prompt: str) -> None:
     session.observe_credits(text)
     session.observe_turns(text, prompt)
     session.observe_cargo(text)
+    observe_fighters = getattr(session, "observe_fighters", None)
+    if callable(observe_fighters):
+        observe_fighters(text)
+    observe_current_ship = getattr(session, "observe_current_ship", None)
+    if callable(observe_current_ship):
+        observe_current_ship(text)
     session.observe_sector(prompt)
 
 
