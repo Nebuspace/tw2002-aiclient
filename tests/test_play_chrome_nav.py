@@ -24,7 +24,7 @@ from pathlib import Path
 import pytest
 
 from tw2002_aiclient.adapters import EnsureResult
-from tw2002_aiclient.screens import PLAY_SUBTITLE, PLAY_TITLE, ProfileRow, PlayShellScreen
+from tw2002_aiclient.screens import PLAY_TITLE, ProfileRow, PlayShellScreen
 
 from .pty_helpers import (
     find_text,
@@ -207,8 +207,7 @@ def test_run_play_esc_returns_back_without_stopping_fake_session(monkeypatch):
     assert PLAY_TITLE.strip() in joined
     # PWO-051: the GAME viewport's placeholder text is gone -- at this
     # small (24x80, no_border) tier the center region draws nothing at all
-    # rather than any flat placeholder line (PLAY_SUBTITLE was already
-    # retired from chrome pre-dating this WO; see its own module comment).
+    # rather than any flat placeholder line (PLAY_SUBTITLE removed).
     assert "placeholder" not in joined.lower()
 
 

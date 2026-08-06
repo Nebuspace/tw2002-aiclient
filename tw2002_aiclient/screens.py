@@ -483,11 +483,6 @@ class LauncherScreen:
 
 
 PLAY_TITLE = " PLAY SHELL "
-# Retained for import compatibility (tests/test_play_chrome_nav.py imports
-# this name at module level) -- the chrome itself no longer draws this flat
-# placeholder line; the GAME panel itself now draws an honest blank grid
-# (PWO-051) rather than any placeholder text (PWO-031/033).
-PLAY_SUBTITLE = " (placeholder — cockpit chrome is a later WO) "
 BANK_TITLE = " PLAYER BANK "
 
 # The bank view's two negatives, kept apart on screen because they are not the
