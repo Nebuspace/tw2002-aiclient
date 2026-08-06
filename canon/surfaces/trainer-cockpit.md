@@ -133,7 +133,7 @@ place the dashboard causes a send, and it is a safe read-only introspection, not
 implied). Port-commerce lines that only name empty holds still update empty. The pure extractors
 live in `tw2002_aiclient/session/hud_tracking.py` (`read_empty_cargo_holds` → `CargoRead`;
 `format_cargo_hud_value` for the painted cell). Session sticky wrappers
-(`Session.observe_cargo` / `cargo_snapshot` / `set_holdings` / `adjust_holdings`) call those
+(`Session.observe_cargo` / `cargo_snapshot` / `adjust_holdings` / `observe_holdings`) call those
 helpers and age the last good read — they never invent from silence.
 
 **Honesty contract (do not "tidy").** Market / port commodity rows are **not** a cargo write
