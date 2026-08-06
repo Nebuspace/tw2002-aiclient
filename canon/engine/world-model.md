@@ -246,10 +246,12 @@ holds structurally. Two things worth recording:
 
 - **The batch/CIM and density-scan ingestion paths are partly unlanded against a live game.**
   `parse_port_report` exists and is unit-tested, but no live multi-sector CIM/scan screen has been
-  captured yet, so its row grammar is a hypothesis (above). No density-scan value-table interpreter
-  is wired in the code at all — the `1=beacon…500=planet` table is authored here as the target
-  semantics and awaits a real scan capture and an implementing parser. Recorded as a build gap, not a
-  behavioral defect.
+  captured yet, so its row grammar is a hypothesis (above). **Tip (WO-BUILD-DENSITY-SCAN-VALUE-TABLE-PARSER):**
+  `tw2002_aiclient.density_scan.parse_density_scan` + `DENSITY_VALUE_TABLE` land the raw
+  `sector → density` extract and the canon atom table; row grammar remains a **hypothesis** (synthetic
+  fixtures only — no live multi-sector density screen capture yet). World-model writeback /
+  presence-via-absence decoding are **still unlanded** — this is an interpreter kernel, not an
+  ingestion path. Recorded as a residual build gap (writeback), not a behavioral defect.
 - **`formations.py` membership writeback is wired** (WO-FORMATIONS-MEMBERSHIP-WRITEBACK / #326).
   `catalog_world` and `WorldStats.refresh` call `write_membership` after a successful scan, stamping
   canon-hyphen `formation_membership` tags. Still LOCATE/CATALOG/RECOMMEND-only — no Genesis or claim
