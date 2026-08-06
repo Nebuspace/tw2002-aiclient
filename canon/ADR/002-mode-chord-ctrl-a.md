@@ -43,8 +43,10 @@ deliberate no-op stay App.
 
 ## Consequences
 
-- Six signed concepts folded to this ADR: `mode-line-and-teach-controls`, `control-and-escalation`,
-  `index`, `spectate-and-attach`, `trainer-cockpit`, `visual-language`.
+- **Canonical prose home:** [Control & Escalation — The Mode Switch](/architecture/control-and-escalation.md#the-mode-switch)
+  (Ctrl-A Mode · attached bare `M` = TW Move · Spectate ≠ Mode · no printable Mode). Sibling
+  surfaces (`mode-line-and-teach-controls`, `spectate-and-attach`, `trainer-cockpit`,
+  `visual-language`, `index`) cite ADR-002 as the decision record; they do not re-litigate it.
 - Product (`WO-P5-061-ENTRY`) **LIVE on tip** — `MODE_KEY` (ASCII 1) toggles App↔Human both
   directions (`screens.py` unattached attach path + `app.py` attached → App-hold). Attached bare
   `M` is Move passthrough. (WO-FIX-ADR-002-COMPLETION-CLAIM-VS-UNCLOSED-SEAM — tip landed; prior
