@@ -12,8 +12,28 @@ timestamp: 2026-07-30T22:01:00Z
 
 ## Status
 
-Accepted · Accepted 2026-07-30 by Max (`Continue; your choice` after the
-B1/B2 choice; Samantha selected recommended B2 approve-scaffold)
+**Distributed-fold: 6/8** · Accepted 2026-07-30 by Max (`Continue; your choice` after the
+B1/B2 choice; Samantha selected recommended B2 approve-scaffold) ·
+_(re-verified 2026-08-06)_
+
+Durable prose lives primarily in [`trade-loops.md`](/strategy/trade-loops.md)
+(Discovered → approved semantic plan · tip `trade_chain_plan.py`). This ADR remains
+the decision record / pointer.
+
+**Confirmed on tip (6):**
+1. Exact-fingerprint approve-scaffold (`trade_chain_plan.plan_from_chain` / preview)
+2. Separate default-deny confirm gate (`begin_arm_confirm` · arm ≠ Enter alone)
+3. Daemon start re-derive + refuse on missing/partial/stale fingerprint
+4. One-pass authority (repeat needs another confirm)
+5. Partial-discovery display honesty (`chain_search_view.py` · `PARTIAL_*` banner;
+   empty+truncated ≠ bare "no profit chains") — re-verified tip module present
+6. Guarded tip `trade_driver.run_chain` under arm/abort/floor rails (divergence
+   closed in trade-loops ADR-003 section)
+
+**Still design-intent / process (2 — do not blanket-Fold):**
+7. Sacrificial live-prove gate for turn/credit-spending proof (hub/Max process,
+   not a missing tip module)
+8. Bounded-repeat contract (explicitly future; one-pass until separately reviewed)
 
 ---
 

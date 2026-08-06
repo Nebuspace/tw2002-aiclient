@@ -79,7 +79,7 @@ marked _(planned)_ are not yet written; entries marked ✅ written exist on disk
 
 * [ADR-001 — One tree, embedded session](/ADR/001-one-tree-embedded-session.md) — Collapses the Phase-0 two-top-level-package scaffold into one `tw2002_aiclient` import tree with the daemon-core under `session/`, plus app-owned daemon lifecycle and an exit-time stop-the-daemon-too confirm popup. — _(Folded into [session-engine](/architecture/session-engine.md) · re-verified 2026-08-06)_
 * [ADR-002 — Mode chord Ctrl-A](/ADR/002-mode-chord-ctrl-a.md) — Mode = Ctrl-A; no printable Mode; attached `M` = Move; Spectate ≠ Mode dual. — _(Folded into [control-and-escalation § Mode Switch](/architecture/control-and-escalation.md#the-mode-switch) · re-verified 2026-08-06)_
-* [ADR-003 — Discovered-chain approve scaffold](/ADR/003-discovered-chain-approve-scaffold.md) — A discovered ProfitChain arms only through an exact human-approved semantic scaffold plus a separate confirm gate. — _(Accepted 2026-07-30)_
+* [ADR-003 — Discovered-chain approve scaffold](/ADR/003-discovered-chain-approve-scaffold.md) — A discovered ProfitChain arms only through an exact human-approved semantic scaffold plus a separate confirm gate. — _(Distributed-fold: 6/8 · re-verified 2026-08-06 · prose home [trade-loops](/strategy/trade-loops.md))_
 
 See also [`/DECISIONS.md`](/DECISIONS.md) — the live open-questions workspace feeding future ADRs.
 
