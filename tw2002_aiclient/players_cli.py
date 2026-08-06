@@ -35,7 +35,7 @@ def add_players_parsers(sub: argparse._SubParsersAction) -> None:
     """Register ``tw players next`` under the top-level ``players`` verb."""
     sp_players = sub.add_parser(
         "players",
-        help="player-bank rotation helpers (metadata only — never logs in)",
+        help="player-bank rotation helpers (metadata only - never logs in)",
     )
     players_sub = sp_players.add_subparsers(dest="players_verb")
     sp_next = players_sub.add_parser(

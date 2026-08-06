@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 
 from tw2002_aiclient.session import cli
+from tw2002_aiclient import players_cli
 
 
 # Keep in sync with README Verb reference (shipped) + cli.build_parser().
@@ -36,6 +37,8 @@ _SHIPPED_VERBS = frozenset(
         # WO-BUILD-SERVERS-PROBE-CLI-VERBS — inventory summarize + TCP probe.
         "servers",
         "probe",
+        # WO-BUILD-PLAYER-ROTATION-SELECTOR — read-only next_player surface.
+        "players",
     }
 )
 
@@ -71,6 +74,8 @@ def test_parser_shipped_verb_allowlist():
     assert log.func is cli.cmd_log
     assert trail.func is cli.cmd_log
     assert trail.n == 5
+    players_next = parser.parse_args(["players", "next"])
+    assert players_next.func is players_cli.cmd_players_next
     sub = next(
         a for a in parser._actions if getattr(a, "choices", None) is not None
     )
