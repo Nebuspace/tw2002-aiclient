@@ -202,13 +202,12 @@ def compose_profile_strip_segments(
 
 
 def compose_profile_strip_from_row(row: object, *, width: int, unicode_ok: bool = True) -> str:
-    """Convenience wrapper over a duck-typed profile row.
+    """Deprecated string-only duck-typed row wrapper — keep for import compat.
 
-    Accepts anything exposing ``host``/``server``/``game_letter``/``handle``
-    attributes (e.g. ``screens.ProfileRow``) without importing ``screens.py``
-    (which pulls ``curses``) — mirrors the launcher's own host-fallback,
-    ``row.host or row.server or "?"`` (``screens.py:231``). Missing
-    attributes degrade to ``None`` fields rather than raising.
+    Live paint uses :func:`compose_profile_strip_segments_from_row` only.
+    This shim remains so pinned historical ``screens.py`` blobs loaded by
+    ``tests/test_safe_addstr_choke.py`` (import against *current* strip.py)
+    still resolve. Do not wire new product callers here.
     """
     host = getattr(row, "host", None) or getattr(row, "server", None)
     return compose_profile_strip(
@@ -227,9 +226,14 @@ def compose_profile_strip_segments_from_row(
     unicode_ok: bool = True,
     conn_chip: "tuple[str, str | None] | None" = None,
 ) -> "list[tuple[str, str | None]]":
-    """``compose_profile_strip_segments``'s duck-typed row wrapper --
-    mirrors ``compose_profile_strip_from_row``'s own host-fallback
-    convention verbatim, plus the optional ``conn_chip`` segment."""
+    """``compose_profile_strip_segments``'s duck-typed row wrapper.
+
+    Accepts anything exposing ``host``/``server``/``game_letter``/``handle``
+    (e.g. ``screens.ProfileRow``) without importing ``screens.py``. Host
+    fallback mirrors the launcher: ``row.host or row.server or "?"``-equivalent
+    via ``getattr`` (missing attrs → ``None``). Optional ``conn_chip`` segment
+    is all-or-nothing at tight widths.
+    """
     host = getattr(row, "host", None) or getattr(row, "server", None)
     return compose_profile_strip_segments(
         host=host,

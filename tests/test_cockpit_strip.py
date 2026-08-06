@@ -13,8 +13,8 @@ from tw2002_aiclient.cockpit.strip import (
     MISSING_IDENTITY,
     SEP,
     compose_profile_strip,
-    compose_profile_strip_from_row,
     compose_profile_strip_segments,
+    compose_profile_strip_segments_from_row,
 )
 
 
@@ -239,13 +239,18 @@ def test_broken_profile_at_minimal_width_no_exception():
 
 
 # ---------------------------------------------------------------------------
-# compose_profile_strip_from_row — duck-typed row wrapper
+# compose_profile_strip_segments_from_row — duck-typed row wrapper
+# (product callers use this; the string-only from_row helper was retired)
 # ---------------------------------------------------------------------------
+
+
+def _joined(segments):
+    return "".join(text for text, _tone in segments)
 
 
 def test_from_row_uses_host_over_server():
     row = SimpleNamespace(host="resolved.example.net", server="catalog-key", game_letter="B", handle="Nav")
-    result = compose_profile_strip_from_row(row, width=80)
+    result = _joined(compose_profile_strip_segments_from_row(row, width=80))
     # Exact host token (not startswith) — CodeQL py/incomplete-url-substring-sanitization
     assert result.split(f" {SEP} ", 1)[0] == "resolved.example.net"
     assert "catalog-key" not in result
@@ -253,19 +258,21 @@ def test_from_row_uses_host_over_server():
 
 def test_from_row_falls_back_to_server_when_host_missing():
     row = SimpleNamespace(host="", server="catalog-key", game_letter="B", handle="Nav")
-    result = compose_profile_strip_from_row(row, width=80)
+    result = _joined(compose_profile_strip_segments_from_row(row, width=80))
     assert result.split(f" {SEP} ", 1)[0] == "catalog-key"
 
 
 def test_from_row_missing_attributes_no_crash():
     row = SimpleNamespace()  # nothing set at all
-    result = compose_profile_strip_from_row(row, width=80)
+    result = _joined(compose_profile_strip_segments_from_row(row, width=80))
     assert result == compose_profile_strip(host=None, game_letter=None, handle=None, width=80)
 
 
 def test_from_row_ascii_mode_propagates():
     row = SimpleNamespace(host="host", server="", game_letter="A", handle="Captain")
-    result = compose_profile_strip_from_row(row, width=80, unicode_ok=False)
+    result = _joined(
+        compose_profile_strip_segments_from_row(row, width=80, unicode_ok=False)
+    )
     # unicode_ok still threads through to the underlying call even though
     # today's glyph set (NO-SWAP ·/—) makes it a no-op on the output.
     assert result == compose_profile_strip(
