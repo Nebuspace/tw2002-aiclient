@@ -137,8 +137,4 @@ def test_the_armable_intents_are_a_closed_ordered_set():
         explore_mod.INTENT_FIND_STARDOCK,
     )
     assert set(explore_mod.ARMABLE_INTENTS) <= explore_mod.INTENTS
-
-
-def test_next_armable_intent_never_raises_and_restarts_on_junk():
-    for bogus in (None, "", "formations", 7, [], object()):
-        assert explore_mod.next_armable_intent(bogus) == explore_mod.INTENT_MAP_FILL
+    assert not hasattr(explore_mod, "next_armable_intent")
