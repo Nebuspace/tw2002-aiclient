@@ -1724,7 +1724,7 @@ def build_parser() -> argparse.ArgumentParser:
     sp = sub.add_parser(
         "report",
         help=(
-            "post-session action report — summarize app-attributed ledger "
+            "post-session action report - summarize app-attributed ledger "
             "dispatches (filesystem read; daemon not required)"
         ),
     )
