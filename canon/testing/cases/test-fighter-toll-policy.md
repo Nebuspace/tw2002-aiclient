@@ -28,6 +28,6 @@ _WO-FIGHTER-FLOOR-TOLL — fighter reserve + Option?_
 | `test_toll_banner_without_vs_line_still_detects_theirs` | Toll banner without vs line still detects theirs. |
 | `test_attack_qty_prompt_preferred_over_option` | Live Ona: qty prompt + stale Option? |
 | `test_attack_qty_uses_max_when_counts_missing` | Attack qty uses max when counts missing. |
-| `test_decide_never_selects_pay_even_if_allow_pay_kwarg_present` | Decide never selects pay even if allow pay kwarg present. |
+| `test_pay_is_never_selected_even_when_the_key_is_offered` | Decide never selects Pay even when the Pay key is offered on-screen. |
 | `test_parse_fighter_option_does_not_detect_from_scrollback_when_prompt_line_given` | Accept-3 root: after Retreat the Option? |
 | `test_parse_attack_qty_does_not_detect_from_scrollback_when_prompt_line_given` | Sibling to the Option? |

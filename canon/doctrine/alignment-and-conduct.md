@@ -171,7 +171,7 @@ AI teacher (on-demand, retrospective) — proposal refused at the doctrine layer
   corp-fighter toll is "clearly winnable" (few enemies, `yours >= theirs`), resolving the
   `Option?` dialogue *this cycle* rather than as a human-approved taught rule that STOPs on the
   unknown. It is well-guarded against the worst failures — **never auto-Pay** (`P` requires an
-  explicit hub GO; `allow_pay` is a documentation-only parameter that never changes behavior),
+  explicit hub GO; `decide_encounter` has no `allow_pay` mute — Pay is structurally unreachable),
   retreat-on-unparsed-counts, and NPC-toll-scoped — and the `-75` colonist scar's send-and-confirm
   spirit is partly honored via the post-Attack quantity commit. But it fires an autonomous combat
   action without a per-behavior human-approval gate and without stop-on-unknown; the reborn target

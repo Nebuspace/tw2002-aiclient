@@ -130,10 +130,13 @@ def test_pvp_is_a_hard_stop_and_the_math_never_runs():
 
 
 def test_pay_is_never_selected_even_when_the_key_is_offered():
-    for allow in (False, True):
-        for frame in (_frame(9, 1, OPTION_WITH_PAY), _frame(1, 9, OPTION_WITH_PAY), _frame(prompt=OPTION_WITH_PAY)):
-            d = ftp.decide_encounter(ftp.parse_encounter(frame), allow_pay=allow)
-            assert d.key != "P"
+    for frame in (
+        _frame(9, 1, OPTION_WITH_PAY),
+        _frame(1, 9, OPTION_WITH_PAY),
+        _frame(prompt=OPTION_WITH_PAY),
+    ):
+        d = ftp.decide_encounter(ftp.parse_encounter(frame))
+        assert d.key != "P"
 
 
 def test_an_unratified_threshold_never_fights():
