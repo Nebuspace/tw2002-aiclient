@@ -135,15 +135,15 @@ def _toggle_token(label: str, on: object) -> str:
 
 # Canon's standing calm-band spelling (DECISION
 # `RESOLVED-TRAINER-STRIP-AND-GUTTER-20260731` point 2 + Find StarDock).
-# A tuple, not a flat string, so a later WO can extend it additively.
-# Rendered at the DEFAULT (all-ON) toggle state -- `compose_teach_band`'s
-# own toggle kwargs recompute tokens for any other state; this tuple is
-# the reference/default reading other modules may check membership against.
 # Cluster separator between the Explore toggle cluster (E+F+P+C+S) and the
 # loop-tools cluster (T+L). Own TEACH_TOKENS element so membership checks
 # work; NO-SWAP like middle-dot ``·`` (no ASCII twin on ``unicode_ok=False``).
 CLUSTER_SEP = "│"  # │
 
+# Default (all toggles ON) calm-band token list — SSOT for
+# ``compose_teach_band`` when every toggle kwarg is ``True``, and the
+# membership reference other modules / tests check against (REFLEX / RULES /
+# HOLD deliberately excluded).
 TEACH_TOKENS: tuple[str, ...] = (
     EXPLORE_TOKEN,
     _toggle_token(FIND_STARDOCK_LABEL, True),
@@ -400,14 +400,24 @@ def compose_teach_band(
                 ship_upgrade_on=ship_upgrade_on,
             )
 
-    tokens = (
-        EXPLORE_TOKEN,
-        _toggle_token(FIND_STARDOCK_LABEL, find_stardock_on),
-        _toggle_token(PORT_TRADE_LABEL, port_trade_on),
-        _toggle_token(CARGO_UPGRADE_LABEL, cargo_upgrade_on),
-        _toggle_token(SHIP_UPGRADE_LABEL, ship_upgrade_on),
-        CLUSTER_SEP,
-        TRADE_LOOP_CHAIN_TOKEN,
-        LOOPS_TOKEN,
-    )
+    # Default all-ON band: TEACH_TOKENS is the single source of truth
+    # (WO-CLEANUP-TEACHBAND-TEACH-TOKENS-WIRE-OR-RETIRE).
+    if (
+        find_stardock_on is True
+        and port_trade_on is True
+        and cargo_upgrade_on is True
+        and ship_upgrade_on is True
+    ):
+        tokens = TEACH_TOKENS
+    else:
+        tokens = (
+            EXPLORE_TOKEN,
+            _toggle_token(FIND_STARDOCK_LABEL, find_stardock_on),
+            _toggle_token(PORT_TRADE_LABEL, port_trade_on),
+            _toggle_token(CARGO_UPGRADE_LABEL, cargo_upgrade_on),
+            _toggle_token(SHIP_UPGRADE_LABEL, ship_upgrade_on),
+            CLUSTER_SEP,
+            TRADE_LOOP_CHAIN_TOKEN,
+            LOOPS_TOKEN,
+        )
     return f"{BAND_PAD}{TOKEN_GAP.join(tokens)}{BAND_PAD}"
