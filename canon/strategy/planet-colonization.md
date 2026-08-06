@@ -2,9 +2,17 @@
 type: Strategy
 title: Planet Colonization & Production (human-gated)
 description: Whether and where to colonize plus the turn-free production-income model — a recommendation the trainer surfaces to the operator; every Genesis deploy or colonize is a deliberate human-confirmed one-shot.
-tags: [strategy, colonization, planets, production, human-gated, hypothesis, prescriptive]
+tags: [strategy, colonization, planets, production, human-gated, hypothesis, prescriptive, not-built]
 timestamp: 2026-07-23T20:20:51Z
 ---
+
+> **Status: NOT-BUILT / deferred (Max carte blanche 2026-08-05).** Planet-colonization
+> *automation* and every production/regrowth/plague **number** below are design-history
+> hypotheses — not near-term build scope and not planning constants. Formations LOCATE /
+> CATALOG / RECOMMEND topology is the only tip-backed half. Do not treat this concept as a
+> ready-to-implement production-engine spec until live numbers are measured on a real server
+> (see Verification status · Code divergence). Ruling:
+> `canon/DECISIONS.md` § 2026-08-05 batch · `WO-ESCALATE-PLANET-COLONIZATION-HYPOTHESIS-NUMBERS`.
 
 Planet colonization is the no-PvP builder's economic centerpiece: a colonized planet is a
 turn-free, compounding income source — production accrues while the operator does nothing, unlike
@@ -161,11 +169,12 @@ STOP-guarded every tick.
 
 # Code divergence
 
-- **No planet-production engine exists in code.** The entire H5 production model (stored-cargo bonus,
-  compounding, buy-threshold, plague spread, GF-growth scouting) is authored here as target semantics
-  from design history; there is no module that reads or models planet production, and no live capture
-  of a planet screen. This is a build gap, not a behavioral defect — recorded so the docs win and the
-  gap is not silently conformed away.
+- **NOT-BUILT / deferred — no planet-production engine in tip.** The entire H5 production model
+  (stored-cargo bonus, compounding, buy-threshold, plague spread, GF-growth scouting) is authored
+  here as *portable hypothesis semantics* from design history. There is no module that reads or
+  models planet production, and no live capture of a planet screen. Per the 2026-08-05 ruling this
+  is **explicitly deferred**, not a next-up BUILD authorization — recorded so the doc does not read
+  as ready-to-implement spec prose.
 - **Formations siting inputs are computed and membership is written** (#326): dead-end/bubble
   genesis candidates flow through the shared detector / panel / `recommend_genesis` alias. There is
   still **no autonomous Genesis deploy** and no new product surface that auto-invokes
@@ -174,13 +183,10 @@ STOP-guarded every tick.
   § Code reality (#326–#331). The confirm-to-send choke-point for any future App Genesis send is
   documented under [Action-Safety Guards](/doctrine/action-safety-guards.md)
   § Genesis confirm-to-send choke-point (`genesis_confirm.py`, Option A shipped / Option B HELD).
-- **The priority layer's inherited "never-idle" appetite is counter-canon here.** The AI-first
-  originals carried a per-cycle EV-selection habit (the autopilot's `EXPLORE_BASELINE_EV` "never
-  idle" floor and `trade_driver`'s autonomous chain runner) in which a computed payoff could pick the
-  next live action. In the reborn framing that is explicitly excised for colonization: a production
+- **Archived "never-idle" EV appetite — do-not-revive (framing only here).** Pre-rebirth autopilot
+  EV-select / `EXPLORE_BASELINE_EV` keep-driving is archive-only. In the reborn framing a production
   EV never fires a deploy, and a colonization score never outranks stop-on-unknown. The priority
-  engine ranks these recommendations; it does not execute them. Recorded as a framing divergence the
-  reborn priority-engine and app-autopilot-model docs also carry.
+  engine ranks these recommendations; it does not execute them.
 
 # Citations
 
