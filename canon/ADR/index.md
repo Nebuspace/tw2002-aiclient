@@ -32,6 +32,6 @@ easy retrofit size.
 
 | # | Title | Status | Date |
 |---|-------|--------|------|
-| [001](001-one-tree-embedded-session.md) | One Package Tree, Embedded Session Engine | Accepted · prose home [session-engine](../architecture/session-engine.md) | 2026-07-24 |
-| [002](002-mode-chord-ctrl-a.md) | Mode Chord Is Ctrl-A (No Printable Mode) | Accepted · prose home [control-and-escalation § Mode Switch](../architecture/control-and-escalation.md#the-mode-switch) | 2026-07-25 |
+| [001](001-one-tree-embedded-session.md) | One Package Tree, Embedded Session Engine | **Folded into** [session-engine](../architecture/session-engine.md) _(re-verified 2026-08-06)_ | 2026-07-24 |
+| [002](002-mode-chord-ctrl-a.md) | Mode Chord Is Ctrl-A (No Printable Mode) | **Folded into** [control-and-escalation § Mode Switch](../architecture/control-and-escalation.md#the-mode-switch) _(re-verified 2026-08-06)_ | 2026-07-25 |
 | [003](003-discovered-chain-approve-scaffold.md) | Discovered Chains Require Exact Approve-Scaffold Before Arm | Accepted | 2026-07-30 |
