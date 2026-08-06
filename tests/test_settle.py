@@ -386,3 +386,34 @@ def test_send_and_confirm_none_mode_never_idle_confirms_with_zero_bytes_since_se
     reason, elapsed, confirmed = send_and_confirm(s, "M", confirm_prompt=None, enter=True, timeout_s=0.3)
     assert reason == "timeout"
     assert confirmed is False
+
+
+# --- WO-CLEANUP-SETTLE-PROFILES-DECLARATIVE-TABLE ---------------------------
+
+from tw2002_aiclient.session.settle import (
+    SETTLE_PROFILES,
+    resolve_settle_kwargs,
+    send_and_confirm_for,
+)
+
+
+def test_settle_profiles_named_keys() -> None:
+    assert set(SETTLE_PROFILES) >= {"stable_idle", "warp_unstable", "positive_shape"}
+    assert SETTLE_PROFILES["warp_unstable"].retry_unstable_idle is True
+    assert SETTLE_PROFILES["stable_idle"].confirm_prompt is None
+
+
+def test_resolve_settle_kwargs_merges_overrides() -> None:
+    kwargs = resolve_settle_kwargs("positive_shape", confirm_prompt=r"Offer")
+    assert kwargs["confirm_prompt"] == r"Offer"
+    assert kwargs["retry_unstable_idle"] is False
+
+
+def test_send_and_confirm_for_stable_idle_matches_bare_helper() -> None:
+    s = StagedSession(stages=[(0.05, "ok")], initial_text="")
+    reason, elapsed, confirmed = send_and_confirm_for(
+        s, "M", profile="stable_idle", enter=True, timeout_s=2.0
+    )
+    assert confirmed is True
+    assert reason == "idle"
+    assert s.sent == [("M", True, False)]

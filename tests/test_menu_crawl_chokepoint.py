@@ -27,9 +27,12 @@ from tw2002_aiclient.menu import crawler
 
 _MENU_PKG = Path(menu.__file__).resolve().parent
 
-# The primitive that actually reaches `session.send()`. The crawler is
-# allowed exactly one call site for it.
-_SEND_PRIMITIVE = "send_and_confirm"
+# The primitives that actually reach `session.send()` (via settle). The
+# crawler is allowed exactly one call site for any of these. Includes the
+# profile wrapper `send_and_confirm_for` (thin merge → `send_and_confirm`
+# outside the menu package) so migrating onto named settle profiles does
+# not falsely report zero chokepoint sites.
+_SEND_PRIMITIVES = frozenset({"send_and_confirm", "send_and_confirm_for"})
 
 # Attribute calls that would BYPASS the primitive and touch the wire
 # directly. None of these may appear anywhere in the package.
@@ -80,12 +83,13 @@ def _scan(path):
 
     # Alias resolution: `from x import send_and_confirm as s` and
     # `import x.settle as s` both have to resolve back to the primitive.
-    direct_aliases = set()   # local NAMES bound to the primitive itself
+    # Profile wrapper `send_and_confirm_for` counts the same (one site).
+    direct_aliases = set()   # local NAMES bound to a send primitive itself
     module_aliases = set()   # local names bound to a module exposing it
     for node in ast.walk(tree):
         if isinstance(node, ast.ImportFrom):
             for alias in node.names:
-                if alias.name == _SEND_PRIMITIVE:
+                if alias.name in _SEND_PRIMITIVES:
                     direct_aliases.add(alias.asname or alias.name)
                 elif alias.name.split(".")[-1] == "settle":
                     module_aliases.add(alias.asname or alias.name)
@@ -115,7 +119,7 @@ def _scan(path):
                 findings.append(("reflection", where, node))
         elif isinstance(fn, ast.Attribute):
             base_is_settle = isinstance(fn.value, ast.Name) and fn.value.id in module_aliases
-            if fn.attr == _SEND_PRIMITIVE or (base_is_settle and fn.attr == _SEND_PRIMITIVE):
+            if fn.attr in _SEND_PRIMITIVES or (base_is_settle and fn.attr in _SEND_PRIMITIVES):
                 findings.append(("send_primitive", where, node))
             elif fn.attr in _RAW_SEND_ATTRS:
                 findings.append(("raw_send", where, node))
