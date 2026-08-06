@@ -3,7 +3,7 @@ type: Reference
 title: CLI Verb Surface — the tw Vocabulary
 description: The single catalog of every one-shot tw verb — its effect, key arguments, actor-class, and owning concept — anchored to the human-approval gate and the stop-on-unknown escalation.
 tags: [architecture, cli, verbs, reference, control]
-timestamp: 2026-07-24T22:07:00Z
+timestamp: 2026-08-06T01:28:00Z
 ---
 
 `tw` is the stateless one-shot CLI a Bash-driving caller — a human at a shell, a script, or the
@@ -33,10 +33,10 @@ Three carve-outs to the one-shot shape, all deliberate:
   `watch` subscribes to the settle-edge push stream until `--frames N` or Ctrl-C; `spectate`,
   `attach`, and `aiclient` are long-running curses/TUI sessions, not one-shots.
 - **Daemon-free reads** never touch the socket at all — they read on-disk artifacts directly, so
-  they work with the daemon stopped: `log`/`trail` (reads `state/ledger.jsonl`), `frames` (reads
-  `state/frames/`), `analyze` and `mine` (read the ledger), `loops`/`menumap`/`players`/`servers`
-  (read their own stores/catalogs), `pairs` (reads `state/world/<world-id>` directly). `probe` opens
-  its own throwaway connections to *catalog* endpoints, never the live game session.
+  they work with the daemon stopped. **LIVE today:** `log`/`trail`/`report` (ledger),
+  `loops`/`menumap`/`pairs`/`chains`/`record`/`reflex`/`rule` (stores), `servers`/`probe`
+  (catalog). **TARGET (not a `tw` subparser yet):** `frames`, `analyze`/`mine`, `players`.
+  `probe` opens its own throwaway connections to *catalog* endpoints, never the live game session.
 - **Session-establishing verbs** (`start`, `ensure`) may spawn the daemon before the round trip.
 
 # Actor Classes
@@ -80,7 +80,11 @@ that obey them.
 
 # Schema
 
-The authoritative verb list is `twclient/cli.py`'s `build_parser()` — this table is derived from it
+The authoritative LIVE verb list is `tw2002_aiclient/session/cli.py`'s `build_parser()` (ADR-001) —
+run `./tw --help` for tip truth. The catalog tables that follow are the **prescriptive TARGET
+vocabulary** (what the surface is allowed to grow into). Prefer
+**Implementation status** below when answering "what can I run
+right now?" — never treat a TARGET-only row as a shipped `tw` subcommand.
 (README/DESIGN drift is recorded under [Code Divergence](#code-divergence) below). Key args lists
 only the load-bearing flags; `--json` (machine output) and `--run-dir PATH` (target a non-default
 daemon socket) are available on essentially every verb and are omitted for brevity.
@@ -92,7 +96,7 @@ config is isolated, and print the run-dir path they would have targeted (WO-CLI-
 
 | verb | one-line effect | key args | actor-class | owning concept |
 |---|---|---|---|---|
-| `start` | Spawn the daemon, connect, negotiate, return the first settled screen. | `--host` `--port` `--name` `--timeout` | `drives {app,human}` | [Session Engine](/architecture/session-engine.md) |
+| `start` | **TARGET as `tw start`** (ensure covers spawn on tip). Spawn the daemon, connect, negotiate, return the first settled screen. | `--host` `--port` `--name` `--timeout` | `drives {app,human}` | [Session Engine](/architecture/session-engine.md) |
 | `do "<input>"` | **Primary verb.** Send input, wait until settled, return the new screen + `settled_reason`. | `--wait-prompt REGEX` `--secret` `--no-enter` `--timeout` | `drives {app,human}` | [Session Engine](/architecture/session-engine.md) |
 | `screen` | Current settled screen, prompt, classification — non-destructive. | `--compact` `--raw` | `read-only` | [Session Engine](/architecture/session-engine.md) |
 | `status` | Daemon alive? connected? idle-ms? classification? `--json` adds `autopilot` + `intervention{needs_attention}`. | — | `read-only` | [Control & Escalation](/architecture/control-and-escalation.md) |
@@ -104,7 +108,7 @@ config is isolated, and print the run-dir path they would have targeted (WO-CLI-
 |---|---|---|---|---|
 | `send "<input>"` | Raw send, no wait (rare / low-level). | `--secret` `--no-enter` | `drives {app,human}` | [Session Engine](/architecture/session-engine.md) |
 | `read` | Wait-and-return WITHOUT sending — for unsolicited server output. | `--wait-prompt REGEX` `--timeout` | `read-only` | [Session Engine](/architecture/session-engine.md) |
-| `state` | Parsed structured game-state only (sector/credits/turns/port…). | — | `read-only` | [Session Engine](/architecture/session-engine.md) |
+| `state` | **WIRE-ONLY today** (daemon protocol; no `tw state` subparser). Parsed structured game-state only (sector/credits/turns/port…). | — | `read-only` | [Session Engine](/architecture/session-engine.md) |
 | `history` | Recent screens/commands (full transcript lives in `logs/`). | `--n N` | `read-only` | [Session Engine](/architecture/session-engine.md) |
 | `ensure [target]` | Idempotent auto-login: classify → no-op if already at `target`, else register/log in to it, spawning the daemon first if needed. | `--profile NAME` (required) `--timeout` `--no-auto-arm` | `drives {app,human}` | [Session Engine](/architecture/session-engine.md) |
 
@@ -114,11 +118,11 @@ config is isolated, and print the run-dir path they would have targeted (WO-CLI-
 |---|---|---|---|---|
 | `watch` | Tail the settle-edge push stream (holds the socket; exits on `--frames`/Ctrl-C). | `--frames N` | `read-only` | [Session Engine](/architecture/session-engine.md) |
 | `log` (alias `trail`) | Human-readable per-action trail — QUESTION → KEYSTROKE → RESULT (reads `state/ledger.jsonl`; no daemon). | `--n N` | `read-only` | [Session Engine](/architecture/session-engine.md) |
-| `frames {tail,show,grep,diff}` | Post-mortem over full 80×25 settle frames in `state/frames/` (no daemon). | `--session ID` `-n N` `seq` `pattern` | `read-only` | [Session Engine](/architecture/session-engine.md) |
+| `frames {tail,show,grep,diff}` | **TARGET — not a `tw` CLI verb yet.** Post-mortem over full 80×25 settle frames in `state/frames/` (no daemon). | `--session ID` `-n N` `seq` `pattern` | `read-only` | [Session Engine](/architecture/session-engine.md) |
 | `menumap` | Read-only menu-map inspector — coverage, orphans, you-are-here ★ / off-map (never sends). | `--profile` \| `--world-id` \| `--path` | `read-only` | [Session Engine](/architecture/session-engine.md) |
 | `loops` | List every learned loop with profit metadata — CLI twin of the in-TUI Learned-Loops Library. | `--include-drafts` | `read-only` | [Rule–Macro Engine](/architecture/rule-macro-engine.md) |
 | `pairs` | List class-derived DISCOVERED pair loops for a world — margin-unknown candidates, never the taught `L)chains` library (reads `state/world/<world-id>` directly, never sends). | `--world-id` (required) `--json` | `read-only` | [Trade Loops](/strategy/trade-loops.md) |
-| `players {list,add,next}` | Multi-character rotation bank (reads/writes `state/player_bank.json`; no daemon, no game keystrokes). | `add <profile>` `--note k=v` `next --current` | `read-only` | [Session Engine](/architecture/session-engine.md) |
+| `players {list,add,next}` | **TARGET — not a `tw` CLI verb yet.** Multi-character rotation bank (reads/writes `state/player_bank.json`; no daemon, no game keystrokes). | `add <profile>` `--note k=v` `next --current` | `read-only` | [Session Engine](/architecture/session-engine.md) |
 | `servers list` | Summarize `config/servers.inventory.json` provenance + optional liveness sidecar (no live session). | `--inventory` `--liveness` `--json` | `read-only` | [Session Engine](/architecture/session-engine.md) |
 | `probe` | TCP-only catalog probe (no login / no turns); writes `config/servers.liveness.json`. Same engine as `scripts/catalog-tcp-probe.py`. | `--limit` `--timeout` `--out` `--json` | `read-only` | [Session Engine](/architecture/session-engine.md) |
 
@@ -126,28 +130,32 @@ config is isolated, and print the run-dir path they would have targeted (WO-CLI-
 
 | verb | one-line effect | key args | actor-class | owning concept |
 |---|---|---|---|---|
-| `record <manifest>` | Write a taught macro from an **already-captured** JSON demonstration manifest — daemon-free, never sends. Shipped shape (X6); see [Implementation status](#implementation-status) and [Macros](/engine/macros.md)'s Findings for how this differs from the live start/stop bracket capture this row originally specified. | `manifest` (path) `--draft` | `teach` | [Rule–Macro Engine](/architecture/rule-macro-engine.md) |
-| `analyze <session>` | Session-retro: group recurring ledger decisions, rank profitable ones as candidates to codify (proposes, never applies). | `--min-support` `--top` | `teach` | [Rule–Macro Engine](/architecture/rule-macro-engine.md) |
-| `mine` (alias `patterns`) | Mine the Trace-Ledger for recurring profitable input-subsequences; proposes drafts under `state/skills/_drafts/`. | `--min-support` | `teach` | [Rule–Macro Engine](/architecture/rule-macro-engine.md) |
+| `record <manifest>` | **LIVE.** Write a taught macro from an **already-captured** JSON demonstration manifest — daemon-free, never sends. Shipped shape (X6); see Implementation status and [Macros](/engine/macros.md)'s Findings for how this differs from the live start/stop bracket capture this row originally specified. | `manifest` (path) `--draft` | `teach` | [Rule–Macro Engine](/architecture/rule-macro-engine.md) |
+| `analyze <session>` | **TARGET — not a `tw` CLI verb yet.** Session-retro: group recurring ledger decisions, rank profitable ones as candidates to codify (proposes, never applies). | `--min-support` `--top` | `teach` | [Rule–Macro Engine](/architecture/rule-macro-engine.md) |
+| `mine` (alias `patterns`) | **TARGET — not a `tw` CLI verb yet.** Mine the Trace-Ledger for recurring profitable input-subsequences; proposes drafts under `state/skills/_drafts/`. (Standalone `miner.py` exists; flag is `--top-k`, not `--top`.) | `--min-support` | `teach` | [Rule–Macro Engine](/architecture/rule-macro-engine.md) |
 
-## App-drive (deterministic macro / loop / pilot playback)
+## App-drive (deterministic macro / loop / pilot playback) — TARGET unless noted
+
+None of these rows are `tw` CLI subparsers on tip today (Option B · WO-ESCALATE-CLI-VERBS).
+Autoloop *wire* verbs exist on the daemon socket — see Implementation status — but there is no
+`tw autoloop` / `tw play` / `tw haggle` / `tw autopilot` / `tw crawl` / `tw replay` shell entry.
 
 | verb | one-line effect | key args | actor-class | owning concept |
 |---|---|---|---|---|
-| `replay <name>` | Re-issue a saved skill's steps, halting on the first divergence from what was recorded/mined. | `--param k=v` `--step-timeout` `--force` | `drives {app}` | [Rule–Macro Engine](/architecture/rule-macro-engine.md) |
-| `play <name>` | Run a learned skill for N cycles synchronously; halts on surprise or a rail (`--cycles`/`--floor`). | `--cycles` `--floor` `--param k=v` | `drives {app}` | [Rule–Macro Engine](/architecture/rule-macro-engine.md) |
-| `autoloop {start,stop,pause,resume}` | Drive the background AUTO-LOOP player; `start` returns immediately (watch progress via `spectate`/`watch`). | `name` `--cycles` `--floor` `--param k=v` | `drives {app}` | [Rule–Macro Engine](/architecture/rule-macro-engine.md) |
-| `haggle` | Deterministic auto-haggle (NO LLM) for the port OFFER sub-dialogue the session must already sit at. | `--fair-value` `--accept-threshold-pct` `--round-cap` | `drives {app}` | [Rule–Macro Engine](/architecture/rule-macro-engine.md) |
-| `autopilot {preview,start,stop}` | Autonomous goal-orchestrator; `preview` is a safe dry-run (never sends), `start`/`stop` arm/halt the background driver. | `--profile` `--max-ticks` `--cash-floor` | `drives {app}` (preview: `read-only`) | [Priority Engine](/engine/priority-engine.md) |
-| `crawl` | Drive a hub-supervised menu crawl against a `crawl_sacrificial` profile's world (refused for opt-out profiles). | `--profile` (required) `--max-nodes` `--path` | `drives {app}` | [Session Engine](/architecture/session-engine.md) |
+| `replay <name>` | **TARGET.** Re-issue a saved skill's steps, halting on the first divergence from what was recorded/mined. | `--param k=v` `--step-timeout` `--force` | `drives {app}` | [Rule–Macro Engine](/architecture/rule-macro-engine.md) |
+| `play <name>` | **TARGET.** Run a learned skill for N cycles synchronously; halts on surprise or a rail (`--cycles`/`--floor`). | `--cycles` `--floor` `--param k=v` | `drives {app}` | [Rule–Macro Engine](/architecture/rule-macro-engine.md) |
+| `autoloop {start,stop,pause,resume}` | **TARGET as `tw` CLI.** Wire verbs `autoloop_*` exist (see Implementation status); no shell subparser. Catalog `{resume}` deliberately does not match wire (`relaunch` instead of thaw). | `name` `--cycles` `--floor` `--param k=v` | `drives {app}` | [Rule–Macro Engine](/architecture/rule-macro-engine.md) |
+| `haggle` | **TARGET.** Deterministic auto-haggle (NO LLM) for the port OFFER sub-dialogue the session must already sit at. Engine code may exist; not exposed as `tw haggle`. | `--fair-value` `--accept-threshold-pct` `--round-cap` | `drives {app}` | [Rule–Macro Engine](/architecture/rule-macro-engine.md) |
+| `autopilot {preview,start,stop}` | **TARGET.** Autonomous goal-orchestrator; `preview` is a safe dry-run (never sends), `start`/`stop` arm/halt the background driver. Tip has no `tw autopilot`. | `--profile` `--max-ticks` `--cash-floor` | `drives {app}` (preview: `read-only`) | [Priority Engine](/engine/priority-engine.md) |
+| `crawl` | **TARGET.** Drive a hub-supervised menu crawl against a `crawl_sacrificial` profile's world (refused for opt-out profiles). | `--profile` (required) `--max-nodes` `--path` | `drives {app}` | [Session Engine](/architecture/session-engine.md) |
 
 ## Human-facing surfaces
 
 | verb | one-line effect | key args | actor-class | owning concept |
 |---|---|---|---|---|
-| `spectate` | Ops read-only curses HUD over the running daemon, decoupled from whoever drives (`--snapshot` for scripting). | `--snapshot` `--frames` | `read-only` | [Spectate & Attach](/surfaces/spectate-and-attach.md) |
-| `attach` | Interactive live console — take the keyboard and play by hand; Ctrl-] hands control back. | — | `drives {human}` | [Spectate & Attach](/surfaces/spectate-and-attach.md) |
-| `aiclient` | Product TUI — profile launcher, create form, Autopilot ON/OFF (same as `./tw2002-aiclient`). | — | `drives {app,human}` | [Entry & Profile Selection](/surfaces/entry-and-profile-selection.md) → [The Trainer Cockpit](/surfaces/trainer-cockpit.md) |
+| `spectate` | **RETIRED / WONTBUILD as `tw spectate`** (Max). Ops read-only curses HUD — in-cockpit Spectate is the live surface. | `--snapshot` `--frames` | `read-only` | [Spectate & Attach](/surfaces/spectate-and-attach.md) |
+| `attach` | **LIVE.** Interactive live console — take the keyboard and play by hand; Ctrl-] hands control back. | — | `drives {human}` | [Spectate & Attach](/surfaces/spectate-and-attach.md) |
+| `aiclient` | **Not a `tw` subcommand** — product TUI is `./tw2002-aiclient` / `python -m tw2002_aiclient`. | — | `drives {app,human}` | [Entry & Profile Selection](/surfaces/entry-and-profile-selection.md) → [The Trainer Cockpit](/surfaces/trainer-cockpit.md) |
 
 # Examples
 
@@ -163,24 +171,30 @@ tw status --json                   # intervention.needs_attention? still mine to
 Observe a live drive without touching the lock (a second terminal, App or human driving):
 
 ```
-tw spectate                        # read-only HUD, contends for nothing
 tw watch --frames 5                # capture 5 settle-edge events into a transcript
 tw log --n 20                      # the QUESTION → KEYSTROKE → RESULT trail, daemon or not
+# spectate: in-cockpit only (no tw spectate — RETIRED)
 ```
 
-Teach after an escalation (retrospective, proposes — never fires):
+Teach after an escalation (retrospective, proposes — never fires). **TARGET examples — these
+`tw` verbs are not on tip yet** (ledger mining / analyze stay engine-or-script paths until their
+own WOs land):
 
 ```
-tw analyze all --top 10            # rank recurring decisions worth codifying
-tw mine --min-support 3            # propose draft skills from the ledger
+# TARGET (not runnable today):
+# tw analyze all --top 10
+# tw mine --min-support 3
+# LIVE today for taught-rule authoring:
+tw reflex                          # what the blessed library proposes for the live screen
+tw rule …                          # draft / approve path (see tw rule --help)
 # a human reviews and approves before anything the App plays back can ever fire
 ```
 
-# Implementation status (tip `13f34a8` + M3 WO-P2-G4 X1–X6 · live `./tw --help`)
+# Implementation status (tip `f04b96b` · live `./tw --help`)
 
-**LIVE ops verbs today:** `status`, `ensure`, `screen`, `stop`, `do`, `send`, `read`, `history`,
-`watch`, `attach`, `menumap`, `loops`, `pairs`, `record`, `log`/`trail` (WO-WIRE-CLI-LOG-TRAIL-VERB —
-filesystem trail over `state/ledger.jsonl`).
+**LIVE `tw` verbs today** (from `build_parser()`): `status`, `ensure`, `screen`, `stop`, `do`,
+`send`, `read`, `history`, `log`/`trail`, `report`, `watch`, `attach`, `menumap`, `loops`, `pairs`,
+`chains`, `record`, `explore` (`start`/`stop`/`status`), `reflex`, `rule`, `servers`, `probe`.
 
 `pairs` (**WO-CHAIN-DETECT-WIRE**, re-scoped 2026-07-28) is the thin product caller over the
 class-derived pair-loop path: `chain_detect.recompute` reads a world's `state/world/<world-id>`
@@ -213,13 +227,12 @@ pressed, is real future work X6's own scope explicitly excluded, not a change of
 as [`WO-AUDIT-BUILD-CLI-LIVE-ATTACH-RECORDER-X6`](../../workorders/WO-AUDIT-BUILD-CLI-LIVE-ATTACH-RECORDER-X6.md);
 see [Macros](/engine/macros.md)'s Findings for the mirrored note.
 
-**NOT on tip as a `tw` CLI verb (HOLD / later / retired — do not document as shipped):**
-`spectate` (**RETIRED / WONTBUILD** — Max `@ 13:13:55Z`; in-cockpit Spectate LIVE via PWO-055),
+**NOT a `tw` CLI verb on tip (HOLD / later / retired — do not document as runnable):**
+`spectate` (**RETIRED / WONTBUILD** — Max; in-cockpit Spectate LIVE via PWO-055),
 `start` (ensure covers spawn), `frames`, `analyze`/`mine`, `replay`,
-`play`/`haggle`/`autopilot`/`crawl`, `players`, `aiclient` as a separate curses
-product entry (product is `./tw2002-aiclient`). `record` moved off this list into LIVE above —
-X6 shipped it. `log`/`trail`, `servers list`, and `probe` shipped (WO-WIRE-CLI-LOG-TRAIL-VERB /
-WO-BUILD-SERVERS-PROBE-CLI-VERBS) — removed from this HOLD list.
+`play`/`haggle`/`autopilot`/`crawl`/`autoloop` (shell), `players`, `aiclient` as a separate curses
+product entry (product is `./tw2002-aiclient`). `record`, `log`/`trail`, `servers`/`probe`,
+`report`, `chains`, `explore`, `reflex`, `rule` are LIVE — not on this HOLD list.
 
 **WIRE-ONLY (a daemon protocol verb exists; no `tw` CLI subparser wraps it — not runnable from a
 shell today, only over the daemon's own socket protocol):**
@@ -229,7 +242,7 @@ shell today, only over the daemon's own socket protocol):**
   ("+ thin CLI if honesty requires") and none landed.
 - **`autoloop_start` / `autoloop_stop` / `autoloop_status` / `autoloop_pause` / `autoloop_relaunch`**
   (**X4/X5** + WO-AUTOLOOP-PAUSE-RESUME, `protocol.py`) — the background AUTO-LOOP player.
-  **Not** the catalog's four-verb `{start,stop,pause,resume}` surface below: five wire verbs
+  **Not** the catalog's four-verb `{start,stop,pause,resume}` surface: five wire verbs
   shipped. `autoloop_pause` and `autoloop_relaunch` landed under the 2026-07-27 hub ruling
   (options 1+3): pause parks intent and hands the keyboard back; relaunch re-arms from macro
   step 1 (a fresh start that re-issues sends already made — **not** a thaw).
@@ -241,14 +254,15 @@ shell today, only over the daemon's own socket protocol):**
   `unsupported_arg`, never silently ignored. No `tw autoloop` CLI subparser wraps these; the
   catalog row states the full future target, this paragraph states wire-level reality today.
 
-The catalog tables below are the **prescriptive full vocabulary** (target). Prefer this status
+The catalog tables **above** are the **prescriptive full vocabulary** (target). Prefer this status
 block when answering "what can I run right now?"
 
 # Code Divergence
 
-1. **Catalog vs tip help.** This concept still lists the full reborn/archive-derived verb set
-   (including teach / App-drive / spectate). Tip `13f34a8` only ships the LIVE set above — honesty
-   gate: never claim a HOLD or unported verb is runnable.
+1. **Catalog vs tip help (WO-ESCALATE-CLI-VERBS Option B).** Catalog rows for teach / App-drive /
+   HOLD verbs are marked **TARGET** (or WIRE-ONLY / RETIRED) so they cannot be read as shipped
+   `tw` subcommands. Tip `f04b96b` LIVE set is listed in Implementation status — honesty gate:
+   never claim a HOLD or unported verb is runnable.
 
 2. **Citations historically pointed at `twclient/cli.py`.** Authoritative tip parser is
    `tw2002_aiclient/session/cli.py` (ADR-001 relocate). Archive paths remain port-source for verbs
