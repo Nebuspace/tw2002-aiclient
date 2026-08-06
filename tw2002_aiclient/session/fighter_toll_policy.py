@@ -153,15 +153,14 @@ def decide_encounter(
     force_share_auto_attack: Optional[float] = DEFAULT_FORCE_SHARE_AUTO_ATTACK,
     winnable_enemy_band: int = DEFAULT_AUTO_ATTACK_MAX_ENEMY,
     reserve: int = DEFAULT_FIGHTER_RESERVE,
-    allow_pay: bool = False,
 ) -> EncounterDecision:
     """Attack / Retreat / STOP for a parsed ``Option?`` frame.
 
-    ``allow_pay`` exists so a test can prove Pay is never chosen; it does not
-    change behaviour. ``force_share_auto_attack=None`` means the threshold is
-    unratified — the guard then never attacks (fail closed).
+    Never selects Pay (``P``) — that exit is human-only. ``reserve`` is
+    accepted for call-site compatibility but unused. ``force_share_auto_attack=None``
+    means the threshold is unratified — the guard then never attacks (fail closed).
     """
-    del allow_pay, reserve  # documented, never behavioural — see canon § I5.
+    del reserve  # documented, never behavioural — see canon § I5.
 
     if not state.detected:
         return EncounterDecision(False, None, "not_encounter")
