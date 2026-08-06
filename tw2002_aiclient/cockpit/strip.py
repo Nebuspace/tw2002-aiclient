@@ -201,6 +201,24 @@ def compose_profile_strip_segments(
     return out
 
 
+def compose_profile_strip_from_row(row: object, *, width: int, unicode_ok: bool = True) -> str:
+    """Deprecated string-only duck-typed row wrapper — keep for import compat.
+
+    Live paint uses :func:`compose_profile_strip_segments_from_row` only.
+    This shim remains so pinned historical ``screens.py`` blobs loaded by
+    ``tests/test_safe_addstr_choke.py`` (import against *current* strip.py)
+    still resolve. Do not wire new product callers here.
+    """
+    host = getattr(row, "host", None) or getattr(row, "server", None)
+    return compose_profile_strip(
+        host=host,
+        game_letter=getattr(row, "game_letter", None),
+        handle=getattr(row, "handle", None),
+        width=width,
+        unicode_ok=unicode_ok,
+    )
+
+
 def compose_profile_strip_segments_from_row(
     row: object,
     *,
