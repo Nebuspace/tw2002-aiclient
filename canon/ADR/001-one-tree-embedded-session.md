@@ -19,8 +19,8 @@ Accepted · Accepted 2026-07-24 by Max
 **Folded packaging rule (live tip):** one top-level `tw2002_aiclient` tree with daemon-core under
 `session/` is also stated in [`session-engine.md` Schema](/architecture/session-engine.md)
 (row *One package tree · ADR-001*) and the packaging prose there. This ADR remains the decision
-record; the Follow-on checklist below is **historical** (relocate DONE) — append-only, not open work
-(WO-CANON-ROLLUP-ADR-001-TRIM-CHECKLIST).
+record / pointer; the relocate Follow-on checklist was historical (DONE) and has been removed
+(`WO-CANON-ROLLUP-ADR-001-TRIM-CHECKLIST-CONFIRM`).
 
 ---
 
@@ -104,42 +104,5 @@ are **historical** — the relocate is done.
 new ADR superseding this one. Console-script entry points must resolve into
 `tw2002_aiclient.session.*`, never a sibling root.
 
-**Follow-on work (historical checklist — relocate DONE on tip):**
-
-The itemized relocate list that follows was the Accept-gated debt; it is retained as the record of
-what was moved, not as open work:
-
-1. **Relocate `twclient/` → `tw2002_aiclient/session/`.** Physically move every module currently
-   under `twclient/` (`daemon.py`, `cli.py`, `connection.py`, `iac.py`, `session.py`, `terminal.py`,
-   `settle.py`, `classify.py`, `state_parser.py`, `protocol.py`, `control_lock.py`, `credentials.py`,
-   `login.py`, `guardian.py`, `haggle.py`, `ledger.py`, `skills.py`, `miner.py`, `loop_player.py`,
-   `watch.py`, `spectate_app.py`, `spectate_layout.py`, `interactive_app.py`, `logging_util.py`,
-   `env.py`, `world_identity.py`, `player_bank.py`, and any other current `twclient/*` module — per
-   the project `CLAUDE.md` Architecture map and current repo contents) into
-   `tw2002_aiclient/session/`.
-2. **Update every internal import** referencing `twclient.*` to `tw2002_aiclient.session.*` across
-   the codebase (product app, tests, and any cross-referencing module).
-3. **Update `pyproject.toml`**: collapse `packages.find` `include` to `tw2002_aiclient*` only (drop
-   `twclient*`); add/repoint the `tw` and `twd` console-script entry points at
-   `tw2002_aiclient.session.cli:main` / `tw2002_aiclient.session.daemon:main` (exact entry-point
-   names to be confirmed against the actual `main()`/`cmd_*` dispatch shape at relocation time).
-4. **Update WO-P0 / WO-P1 Proof paths.** Every workorder whose Proof section shells out against
-   `twclient` module paths must be repointed at `tw2002_aiclient.session.*` — at minimum
-   `WO-P0-003-greenfield-package-scaffold.md`, `WO-P0-004-dev-seat-smoke.md`,
-   `WO-P0-005-config-and-secrets-layout.md`, `WO-04-ensure-daemon-wire.md`,
-   `WO-07-intervention-banner.md`, `WO-09-world-identity-strip.md`,
-   `WO-11-game-viewport-center.md`, `WO-12-logs-panel.md`, `WO-P1-012-create-profile-form.md`,
-   `WO-P1-015-player-bank-touchpoint.md`, and the WO-P2 daemon-core batch
-   (`WO-P2-020` through `WO-P2-028`) — re-grep at relocation time for any that have landed or been
-   added meanwhile.
-5. **Update the session-engine module Citations.** `canon/architecture/session-engine.md`'s
-   Citations section ([3]–[7]) currently cites `twclient/daemon.py`, `twclient/connection.py`,
-   `twclient/iac.py`, `twclient/terminal.py`, `twclient/control_lock.py`, `twclient/session.py`,
-   `twclient/protocol.py`, `twclient/env.py` — these must be repointed to their
-   `tw2002_aiclient/session/*` paths once the relocate lands (not touched by this ADR; this ADR adds
-   a new section instead of mass-rewriting Citations, per its own scope).
-6. **`archive/` references are explicitly out of scope** — historical citations to `twclient/` under
-   `archive/` describe a past state and are never rewritten by the relocate WO.
-
-None of the above may be executed before this ADR's Status moves to **Accepted** by Max — until
-then it is deferred code-debt, listed here so it is not lost, not started.
+*(Historical Follow-on relocate checklist removed 2026-08-06 — work completed on tip; see git
+history of this ADR and `WO-CANON-ROLLUP-ADR-001-TRIM-CHECKLIST-CONFIRM`.)*
