@@ -16,10 +16,13 @@ A mock proves the handler; only the real condition proves the classification.
 import errno
 import json
 import os
+from datetime import datetime, timezone
 
 import pytest
 
 from tw2002_aiclient.session import credentials, player_bank
+from tw2002_aiclient.session.cli import build_parser
+from tw2002_aiclient import players_cli
 
 # chmod-based denial proves nothing as root: the kernel lets root read a
 # 000 file, so the "denied" branch would never be reached and the test
@@ -731,3 +734,48 @@ def test_bank_unreadable_message_carries_reason_and_path():
     assert exc.path == "/nowhere/player_bank.json"
     assert "Permission denied" in str(exc)
     assert "/nowhere/player_bank.json" in str(exc)
+
+
+# --- WO-BUILD-PLAYER-ROTATION-SELECTOR ---------------------------------------
+
+
+def test_next_player_prefers_never_then_oldest() -> None:
+    rows = [
+        {"name": "recent", "last_played": "2026-08-06T12:00:00+00:00"},
+        {"name": "alpha", "last_played": "never"},
+        {"name": "older", "last_played": "2026-07-01T00:00:00Z"},
+    ]
+    now = datetime(2026, 8, 6, 15, 0, tzinfo=timezone.utc)
+    assert player_bank.next_player(rows, cooldown_hours=24, now=now) == "alpha"
+    # drop never → oldest outside window
+    assert (
+        player_bank.next_player(rows[0:1] + rows[2:], cooldown_hours=24, now=now)
+        == "older"
+    )
+
+
+def test_next_player_skips_cooldown_broken_and_unknown() -> None:
+    now = datetime(2026, 8, 6, 15, 0, tzinfo=timezone.utc)
+    rows = [
+        {"name": "hot", "last_played": "2026-08-06T10:00:00+00:00"},
+        {"name": "broke", "last_played": "never", "error": "bad profile"},
+        {"name": "cut", "last_played": "2026-07-01T00:00:00+0" + player_bank.TRUNCATED},
+        {"name": "ok", "last_played": "2026-07-01T00:00:00+00:00"},
+    ]
+    assert player_bank.next_player(rows, cooldown_hours=24, now=now) == "ok"
+    assert player_bank.next_player([], cooldown_hours=24, now=now) is None
+    assert player_bank.next_player(None, cooldown_hours=24, now=now) is None
+
+
+def test_next_player_zero_cooldown_includes_recent() -> None:
+    now = datetime(2026, 8, 6, 15, 0, tzinfo=timezone.utc)
+    rows = [
+        {"name": "b", "last_played": "2026-08-06T14:00:00+00:00"},
+        {"name": "a", "last_played": "2026-08-06T13:00:00+00:00"},
+    ]
+    assert player_bank.next_player(rows, cooldown_hours=0, now=now) == "a"
+
+
+def test_tw_players_next_wires_to_cmd() -> None:
+    args = build_parser().parse_args(["players", "next"])
+    assert args.func is players_cli.cmd_players_next
