@@ -816,21 +816,6 @@ def _trade_auto_fire_map_marker(play: PlayShellScreen, status) -> tuple:
     return (sector, known_n)
 
 
-def _trade_chain_discovery_preflight(world_id: str):
-    """Client-side recompute for the same truncated gate as the runner.
-
-    Returns a discovery result or ``None`` when recompute itself fails
-    (transport/IO) — caller then falls through to ``trade_chain_start``,
-    which still refuses honestly daemon-side.
-    """
-    try:
-        from tw2002_aiclient import chain_search
-
-        return chain_search.recompute(world_id)
-    except Exception:  # noqa: BLE001
-        return None
-
-
 def _stop_live_runners(*, run_dir) -> tuple[bool, list[str]]:
     """Idempotent halt-all for every runner this play surface can start --
     explore, autoloop, trade-chain, and (new to this WO) the StarDock hold
