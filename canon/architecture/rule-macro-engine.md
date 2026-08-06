@@ -3,7 +3,7 @@ type: System
 title: The Guarded Rule–Macro Engine (the reflex layer)
 description: The deterministic single-cycle decision unit the app plays — `when(screen_match + guards) → do(macro)`, prioritized and scoped — firing only on taught screens, never guessing, and never running a line of AI reasoning per cycle.
 tags: [architecture, autopilot, rules, macros, guards, determinism, human-in-the-loop]
-timestamp: 2026-07-23T20:11:59Z
+timestamp: 2026-08-06T02:39:00Z
 ---
 
 The reflex layer is the deterministic decision unit the **App** plays: a settled screen comes in,
@@ -107,6 +107,38 @@ but the reflex loop **never considers it** — it is not in the set the "collect
 draws from. A draft has no priority standing, cannot win a tie, and cannot fire. Approval is the
 one transition that moves a rule from inert-draft into the live, fireable set. Nothing the AI writes
 drives a keystroke autonomously; nothing a miner proposes fires until a human approves it.
+
+## Draft stub → kernel document bridge (no invented defaults)
+
+Analyze / teach overlays produce a **pre-kernel draft stub** whose vocabulary is deliberately
+disjoint from the fireable kernel rule schema:
+
+| Stub (pre-kernel) | Kernel (fireable) |
+|---|---|
+| `when` / `do` / `source` / `playback_eligible` | `rule_id` / `screen_match` / `do` / `priority` (+ `guards` / `scope` / `approved`) |
+
+The kernel parser rejects unknown fields, so stub-only keys (`source`, `playback_eligible`) cannot
+ride along. Conversely, a stub has **no** `rule_id` or `priority` — those are human decisions, not
+teacher observations.
+
+`tw2002_aiclient/cockpit/draft_approve.py::bridge_to_kernel_document` is the one crossing. It is a
+**pure translation** (no filesystem, no approval side-effect) and it **refuses rather than invents**:
+
+- What the teacher observed (e.g. screen class → `screen_match`) may be carried across.
+- What only a human can decide — *what to call this* (`rule_id`), *what it does* (`do`), *how it
+  ranks* (`priority`), *scope* — must be supplied as explicit arguments; absence is a hard refuse,
+  never a defaulted value.
+
+That asymmetry is **Max's ruling of 2026-07-29: no invented defaults** (logged in
+[DECISIONS](/DECISIONS.md)). A minted default `priority` is the named worst failure mode: every
+AI-authored rule would arrive at the same rank, and the kernel STOPs on a tie
+(`autopilot_ambiguous_rules`) rather than guessing — so a default would convert "the teacher
+proposed something" into "the autopilot halts" exactly when the library became useful. Tip identity
+collection (`create_identity_session` / `HUMAN_SUPPLIED_FIELDS`) enforces the same refuse-not-default
+posture on empty fields.
+
+Cockpit approve → bridge → `rules.writer` promote remains the only path from inert draft to
+`approved: True`. The bridge never arms and never sends.
 
 # Guards That STOP Rather Than Fire
 
@@ -226,6 +258,7 @@ wording. Live homes:
 |---|---|
 | Lookup-only kernel (`screen_match` + `guards` + `priority` + `scope` + `approved` → macro or typed STOP) | `tw2002_aiclient/rule_engine.py` (`select_rule`, `Rule` / `Guard` / `Decision`) |
 | Persist / approve / CLI | `tw2002_aiclient/rules/store.py`, `writer.py`, `cli.py` (`rule approve` is the only path to `approved: True`) |
+| Draft stub → kernel bridge (refuse, never invent `rule_id`/`priority`) | `tw2002_aiclient/cockpit/draft_approve.py` (`bridge_to_kernel_document`, Max 2026-07-29) |
 | Live propose (classification + facts → `Decision`) | `tw2002_aiclient/rules/reflex.py` (`propose_macro`); called from `session/protocol.py` |
 | Human arm before bytes move | `tw2002_aiclient/rules/arm.py` + taught run path (`arm-confirm` → autoloop → `loops.player.replay_loop`) |
 
@@ -264,3 +297,5 @@ rebuild of the kernel.
 [6] Priority Engine concept + product ranker (behavior ordering, not reflex override)
 [7] classify / state_parser (screen class + guard facts feeding `screen_match` / guards)
 [8] auto-haggle hardening + canon/log.md 2026-07-23 (mandatory guards for on-by-default)
+[9] `tw2002_aiclient/cockpit/draft_approve.py` — stub/kernel vocabularies + `bridge_to_kernel_document` (no invented defaults)
+[10] canon/DECISIONS.md — Max 2026-07-29 no-invented-defaults ruling
