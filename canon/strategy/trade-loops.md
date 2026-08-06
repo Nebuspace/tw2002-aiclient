@@ -134,6 +134,17 @@ explicitly unresolved. Accepting that scaffold still sends nothing. A separate
 default-deny `y/N` arm names the exact route, one-pass bound, cash floor, and
 turn reserve.
 
+**Tip module — `trade_chain_plan.py`.** Pure preview/identity builder for that
+scaffold: `plan_from_chain(world_id, ProfitChain) → TradeChainPlan | None`
+stamps a stable SHA-256 `fingerprint` over the canonical sector ring + hop
+commodities (turns / `cr_per_turn` for display only). `compose_confirm_action`
+formats the default-deny confirm line (`Trade <route> — <commodities>; one
+pass…`). `resolve_exact_chain` re-matches the armed fingerprint against a fresh
+discovery list and refuses unless exactly one chain matches. The module
+**sends nothing** — `app.py` holds a `pending_confirm_trade: TradeChainPlan`
+only until the human confirms; daemon re-resolution and sends live under
+`TradeChainRunner` (below).
+
 The daemon then recomputes discovery from the current world model and requires
 one exact fingerprint match. Missing, changed, partial, truncated, or ambiguous
 identity refuses before the control lock or first send; the current best chain
