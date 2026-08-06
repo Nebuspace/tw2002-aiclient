@@ -69,13 +69,27 @@ still name historical `twclient/*` paths are **port-source aliases** — prefer
 **App-owned daemon lifecycle.** The aiclient app — the process the player actually runs — may
 start/ensure the daemon on entry (via `tw ensure`-equivalent machinery), so the player never has to
 invoke `twd` by hand. On the player's **exit** from the aiclient app, a confirm popup asks whether to
-stop the daemon along with the client — **"Stop the daemon too? (Yes / No)"**, defaulting to **No**
-(leave the daemon running, session reattachable) — rather than silently leaving a live game session
-either orphaned in the background or force-killed out from under a reattachable session. `tw stop`
-remains the deliberate, explicit full-stop verb for when the player does want to end the daemon too.
-The popup itself is a surface concern; it is specified in
+stop the daemon along with the client — **"Stop daemon and disconnect \<profile\>? y/N"** (tip copy;
+default **No** = quit client, leave daemon running / session reattachable) — rather than silently
+leaving a live game session either orphaned in the background or force-killed out from under a
+reattachable session. `tw stop` remains the deliberate, explicit full-stop verb for when the player
+does want to end the daemon too. The popup itself is a surface concern; it is specified in
 [the Trainer Cockpit](/surfaces/trainer-cockpit.md)'s "Exit flow" section, which this section
 cross-links as the UX home for the decision this lifecycle rule makes possible.
+
+Tip implementation lives in `tw2002_aiclient/daemon_lifecycle.py` — bounded, **never-raising**
+wrappers around the existing `status` / `stop` protocol verbs (not a second daemon control plane):
+
+- **Presence vocabulary** — `PRESENCE_OFFLINE` / `PRESENCE_ONLINE` / `PRESENCE_UNREACHABLE`. ONLINE
+  only when `connected is True` and `replay_arm.profile` is a non-empty exact string; transport /
+  protocol failure while a pidfile looks alive → UNREACHABLE (honest unknown; never invent ONLINE).
+- **At most one ONLINE profile** — launcher overlay (`app._apply_presence`) marks rows via
+  `is_profile_online` (exact name match against the single ONLINE profile; not case-folded).
+- **Budgets** — `STATUS_TIMEOUT_S=2.0` (presence must not stall the launcher); `STOP_TIMEOUT_S=15.0`.
+- **Quit confirm** — default-deny key posture shared with arm confirm (`y`/`Y` only); on confirm,
+  **exactly one** `stop` attempt. Stop failure keeps the app open with an honest note — never claims
+  a disconnect that did not happen. Esc→launcher is outside this module's callers by design (zero
+  `stop` traffic).
 
 # Single-Connection Invariant
 
@@ -313,3 +327,5 @@ hand-rolled IAC stripping, CP437 80×25 pyte render
 [6] tw2002_aiclient/session/session.py, protocol.py — the send choke point, boundary redaction
 across all three sinks, and the `{actor, session_id}` ledger tag
 [7] tw2002_aiclient/session/env.py — the host/port resolution precedence chain
+[8] tw2002_aiclient/daemon_lifecycle.py — app-owned presence + quit-stop helpers
+    (OFFLINE/ONLINE/UNREACHABLE; bounded status/stop; at-most-one ONLINE; single stop on confirm)
