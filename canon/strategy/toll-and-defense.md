@@ -173,11 +173,15 @@ recorded, not silently conformed to).
   per-cycle action-picker, and the "never idle / keep-driving" appetite is retired in
   favor of depletion/hazard STOP-guards. Tip has no `autopilot.py`; `EXPLORE_BASELINE_EV`
   is suggestion-only in `focus_status.py` (display subdivergence closed elsewhere).
-- **`trade_driver`'s autonomous chain runner** executes a taught chain end-to-end on its
-  own. The reborn target is a HUMAN-ARMED taught behavior that re-validates screen_match
-  every tick and halts on the first unrecognized frame — a toll/mine encountered mid-chain
-  is a STOP unless the fighter-toll guard's force_share gate applies, not something the
-  runner invents via EV.
+- **`trade_driver`'s autonomous chain runner** executes a taught chain end-to-end under
+  fail-closed arm predicates (`is_armed` / `should_abort` via `TradeChainRunner` / ADR-003).
+  **Option C fact-find (2026-08-06):** there is **no** kernel `screen_match` field check inside
+  `run_chain()`, but tip **does** re-validate the live screen every navigation step and at port
+  cascade prompts via `classify_screen` + `ChainHold` on unexpected classes
+  (`_navigate` requires `main_command` before each warp send; warp_confirm / avoid-DANGER handled;
+  `_visit_port` HOLDs on unexpected cascade screens). Mid-chain toll/mine still STOP unless the
+  fighter-toll guard's force_share gate applies — the runner does not invent via EV. See
+  `WO-ESCALATE-TRADE-DRIVER-CHAIN-RUNNER-SCREEN-MATCH-NO-CANON`.
 - **§22 / TW-23 capstone re-scope.** The original autonomous-trainer capstone framed the
   toll/defense math as an input to an EV-maximizing pilot. It is re-scoped here to a
   guard + priority-scoring + coaching spec, with the narrow Max-ratified auto-Attack gate
