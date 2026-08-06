@@ -190,12 +190,15 @@ the write path. Remaining gaps are keying / consumer wiring, not the enum:
   concept and candidate-mining should settle. Recorded here as a keying divergence, not a defect in
   the row shape itself.
 
-- **The `intent`/`interrupted_by_human` provenance carried, not yet consumed.** `record_do()` also
-  writes an optional `intent` and an `interrupted_by_human` flag (set when a `tw attach` seized the
-  control lock mid-dispatch, corrupting that row's action→outcome mapping). The flag's intended
-  consumer — a learning-loop pass that must *skip* a corrupted row rather than trust it — is not yet
-  live. The field is correct and additive; the divergence is only that its guard is written but not
-  yet read.
+- **The `intent` field is carried; `interrupted_by_human` is consumed by the
+  post-session report.** `record_do()` writes optional `intent` and
+  `interrupted_by_human` (set when a `tw attach` seized the control lock
+  mid-dispatch, corrupting that row's action→outcome mapping). Tip
+  `session_report.py` **skips** `interrupted_by_human` app rows by default
+  (`skipped interrupted_by_human app rows: N`); `tw report --include-interrupted`
+  (`session/cli.py`) opts them back in. A future learning-loop / miner pass may
+  still grow additional consumers — that is additive, not a "written but unread"
+  gap for the report path.
 
 # Citations
 
