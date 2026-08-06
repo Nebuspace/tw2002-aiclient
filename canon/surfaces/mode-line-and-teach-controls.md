@@ -144,6 +144,10 @@ the teach / operate keys on this surface include:
   play. **Tip:** `record_toggle` (WO-P5-067).
 - **Calm `T` — Trade Loop Chain** (Max DECISION · WO-EXPLORE-TRADE-MODE-SPLIT). Starts/stops the
   L-armed Trade Loop (`trade_loop_toggle`). This is **not** Assign-Trigger on the calm path.
+  Confirm preview identity for a discovered chain comes from tip
+  `trade_chain_plan.py` (`TradeChainPlan` / `compose_confirm_action`) — see
+  [trade-loops § Discovered → approved semantic plan](/strategy/trade-loops.md#discovered--approved-semantic-plan-adr-003);
+  calm `T` never itself invents a fingerprint or send path.
 - **Assign-Trigger** (bind screen-match + guards → proposed rule) remains a tip module
   (`cockpit/assign_trigger.py` + `app.py` handler). Calm `T` is Trade Loop; the STOP
   banner teach line is **`teach:  A)nalyze  R)ecord` only** (no false `T)assign`).
