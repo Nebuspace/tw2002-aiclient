@@ -143,28 +143,19 @@ inventory for traceability and are never separate `servers.toml` entries:
 
 ## 5. Known exception — `twgs.exiled.org:2002`
 
-Recorded rather than quietly corrected, because resolving it is a **curation
-decision**, not a documentation one.
+**Ruled closed** by [DECISIONS.md § E](/DECISIONS.md) (catalog public names +
+`twgs.exiled.org`): **keep** the endpoint with honest `archive_seed` /
+known-exception status — do not drop it from the address book, and do not
+claim it was absent from the greenfield scrape when it was not.
 
 `twgs.exiled.org:2002` carries `status=archive_seed` in both `servers.toml` and
-the inventory, and until this pass its inventory note read *"absent from
-2026-07-25 greenfield scrape"*.  **That was wrong.**  The endpoint *is* in the
-greenfield scrape — in the MicroBlaster **graveyard**, listed as dead under the
-name `eXiled`.  The note has been corrected to say so.
+the inventory. An earlier inventory note said it was *"absent from the
+2026-07-25 greenfield scrape"* — **that was wrong.** The endpoint *is* in the
+greenfield scrape, in the MicroBlaster **graveyard**, listed as dead under the
+name `eXiled`. The note has been corrected to say so.
 
-Two consequences, both left open:
-
-1. **It contradicts the Dead-entries policy.**  That policy says a dead entry
-   is not baked into `servers.toml` unless it is *also* on a live/listed
-   source.  This endpoint is on no live/listed source — it is dead on
-   MicroBlaster and absent from BBSGuide — yet it sits in `servers.toml`.  It
-   is the only entry in the catalog that does this.
-2. **The fix is a judgement call.**  Dropping it from `servers.toml`, or
-   reclassifying it `dead`, changes what an operator is offered in the address
-   book.  This pass deliberately did **not** make that call: the note now
-   states the truth, and the membership question is left to whoever owns
-   catalog curation.
-
-Note the asymmetry with the *Dual-status endpoints* policy row: those three
-endpoints stay in `servers.toml` because a live source (BBSGuide) still lists
-them.  This one has no such backing.
+It remains the catalog's known exception to the Dead-entries policy (dead on
+MicroBlaster, absent from BBSGuide, yet kept in `servers.toml` by deliberate
+ruling — not an unresolved curation question). Contrast the *Dual-status
+endpoints* policy row: those stay because a live source (BBSGuide) still lists
+them; this one stays because § E said keep it with honest provenance.
