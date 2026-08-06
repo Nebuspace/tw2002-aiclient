@@ -262,19 +262,24 @@ Accepted: owner removes on Accept/abandon; `preserve/<wo-id>` if tip ∉ origin;
 
 The invariant this repo actually holds is `AI never live-drives` — the **AI/LLM teacher** never reasons live over the next keystroke (`north-star.md` lines 26-34: "Zero AI reasoning runs per cycle"). That is a hard, unchanged rule. It does **not** forbid the **`app` layer** — the deterministic, taught/armed autopilot — from executing a rule's action programmatically once that rule has been human-approved at teach/arm time, including firing against another human. `app` is a legitimate live sender in its own right (`CLAUDE.md:63`, "Live senders are `{app, human}` only"); "coaching-only" was never a real constraint on it.
 
-So: the EV ranking function this entry authorizes may, once built out and wired to a taught/armed rule, drive an `app`-layer autonomous action — not just surface a suggestion to a human. What stays fixed: the *rule* is human-approved before it can fire (teach-time gate, not per-firing gate), and the AI/LLM itself never picks the live keystroke. Accountability for autonomous `app` action is a **post-session report**, not live per-firing approval — see the new post-session-action-report entry below for that gap.
+So: the EV ranking function this entry authorizes may, once built out and wired to a taught/armed rule, drive an `app`-layer autonomous action — not just surface a suggestion to a human. What stays fixed: the *rule* is human-approved before it can fire (teach-time gate, not per-firing gate), and the AI/LLM itself never picks the live keystroke. Accountability for autonomous `app` action is a **post-session report**, not live per-firing approval — see the post-session-action-report entry below (**SHIPPED** on tip: `tw report` / `session_report.py`).
 
 Any WO building this function should design for eventual `app`-layer auto-fire from the start (behind the existing teach/arm gate), not architect a coaching-only ceiling that would need to be torn out later.
 
-### post-session-action-report — DOC-GAP: no dedicated end-of-session digest exists (hub 2026-08-05 · Max direct clarification)
+### post-session-action-report — CLOSED / SHIPPED on tip (hub 2026-08-05 DOC-GAP · tip-closed 2026-08-06)
 
-**Gap:** Max's clarification above (see the correction just above) names a specific accountability surface for autonomous `app`-layer action: *"the human learns by watching the action and then later by the report [...] provided post-session of what happened."* No canon doc currently describes a purpose-built post-session report. `grep -rln "post-session\|session report\|session summary\|after-action\|session recap" canon/` returns zero hits.
+**Original gap (2026-08-05):** Max named a post-session accountability digest for autonomous `app`
+action; DECISIONS staged a BUILD-WO while only pull-based `tw log`/`tw trail` existed.
 
-**What exists today, and why it's not the same thing:** `canon/engine/trace-ledger.md` is the append-only per-dispatch substrate with `{app, human}` actor attribution — every action already gets recorded there with its actor, and `tw log` / `tw trail` let a human query it directly. But that's an ad-hoc, pull-based query tool, not a delivered end-of-session artifact — nothing summarizes or surfaces it unprompted when a session ends, and nothing distinguishes "here's everything `app` did autonomously while you weren't watching" as its own reviewable digest.
+**Tip (2026-08-06):** **LIVE.** `tw2002_aiclient/session_report.py`
+(`build_session_report` / `format_session_report` / `write_session_report`) + CLI verb `tw report`
+(daemon-free ledger read; emphasizes `actor=app`; optional `--out` file). Canon home today:
+[trace-ledger](/engine/trace-ledger.md) fifth-consumer bullet. A dedicated OKF concept stub
+(`WO-CANON-DRAFT-POST-SESSION-REPORT-STUB`) remains optional Max-gated follow-on for index
+discoverability — not blocking this BUILD row.
 
-**Design direction (not yet ruled, staged for a WO):** a session-end (or on-demand) report generator that reads the trace ledger — consistent with the ledger's existing "passive substrate, never a live-decision input" doctrine (`trace-ledger.md` lines ~108-150: reading it to act live would be a forbidden self-driving loop; reading it *after* the session to report is not that) — and produces a human-facing summary emphasizing `app`-attributed autonomous actions, especially any taken against another human/player. This is additive: a fifth consumer of the ledger alongside the four documented ones (candidate-mining, AI teacher, direct human trail-reading, coverage-metrics).
-
-**Next step:** stage a BUILD-WO in `queue-aiclient.md` once a seat sketches the report's shape (fields, delivery surface — CLI printout at session-end vs. a file artifact vs. both). Not blocking the EV-ranking build above; the two can land independently, but the EV-ranking WO's `app`-layer auto-fire should not ship to a live/real-account context ahead of this report existing, per the accountability chain Max described.
+**Residual (not this WO):** unprompted session-end auto-print is still optional delivery polish;
+primary surface is on-demand `tw report` as shipped.
 
 ### 2026-08-05 batch — Max carte blanche on aiclient gated-queue rulings
 
