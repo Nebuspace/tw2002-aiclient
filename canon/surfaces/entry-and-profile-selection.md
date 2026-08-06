@@ -103,6 +103,14 @@ character" shape; an ordinary profile names its character explicitly.
 must be registered, the password is generated and persisted by the automaton (see
 secrets-and-credentials), never typed into a field this surface then echoes.
 
+**Tip module — `create_form_screen.py`.** The Create-New-Player TUI form (extracted from
+`screens` · WO-SCREENS-CREATE-FORM-SPLIT) collects only non-secret fields: catalog
+`server` picker, `game_letter`, and `handle`. Credentials/secrets are **never
+collected or shown** on this surface — field kinds are server/text only; there is
+no password widget. `validate_create_form` is UI-side refuse (empty letter,
+unknown catalog key, duplicate handle) and does not write. Persist still goes
+through `credentials.create_profile()` after the form accepts.
+
 ## World identity on entry
 
 Selecting a player is the moment the **world identity** is fixed. A world is *not* just a server — it
@@ -411,7 +419,8 @@ paladin-main     PaladinPrime     tw2002.briancmoses.com   A   2026-07-23     ok
   catalog and WO-MS-3/L0 probe work that built the known-server directory.
 
 - **Code modules:** `credentials.py` (`list_profile_summaries`, `create_profile`, `load_profile`,
-  `Profile`, env-first password resolution); `world_identity.py` (`world_id`,
+  `Profile`, env-first password resolution); `create_form_screen.py` (Create-New-Player TUI —
+  server/game_letter/handle only; no secret fields); `world_identity.py` (`world_id`,
   `world_id_from_profile`); `cli.py` (`cmd_servers_list`, `cmd_players_list`, `cmd_players_add`,
   `cmd_aiclient`); `player_bank.py` (metadata-only bank, secret-shaped-key notes filter);
   `config/servers.toml` (the tracked server catalog); `config/profiles.toml.example` (the tracked
