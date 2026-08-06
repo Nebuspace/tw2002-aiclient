@@ -34,8 +34,9 @@ def plan_nav(screen_text: str, target_sig: str, path) -> dict[str, Any]:
     """Compose localize → ``find_menu_path`` → keystroke steps (or a typed fail).
 
     PARKED send-half was WO-FA14; the send half now lives in
-    ``menu.nav_exec.run_nav`` (WO-BUILD-DETERMINISTIC-NAV-EXECUTOR) — still
-    never fires unarmed, and refuses ``action``-kind edges.
+    ``menu_nav_exec.run_nav`` (WO-BUILD-DETERMINISTIC-NAV-EXECUTOR) — outside
+    the crawl ``menu`` package so the crawl chokepoint stays sole
+    ``emit_key_if_safe``. Still never fires unarmed; refuses ``action`` edges.
 
     Returns a dict:
       ``ok`` True + ``steps`` (list of ``{key,to_node,kind,desc}``, maybe empty

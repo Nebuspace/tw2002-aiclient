@@ -6,22 +6,36 @@ sends when ``is_armed()`` is false. Re-checks ``should_abort`` / ``is_armed``
 before every keystroke. Off-map after a step → halt (stop-on-unknown).
 
 This module never invents a route — callers pass a ``plan_nav`` result.
+
+Session contract is concrete (no ``getattr`` duck-typing): ``send`` +
+``rendered_text`` — missing attributes fail closed via AttributeError.
+Lives outside ``menu/`` so the crawl AST chokepoint
+(``emit_key_if_safe``) stays the sole send path in that package.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Callable, Optional
+from typing import Any, Callable, Optional, Protocol
 
-from .nav import localize
+from tw2002_aiclient.menu.nav import localize
 
 __all__ = [
     "SAFE_EDGE_KINDS",
     "NavRunResult",
+    "NavSession",
     "run_nav",
 ]
 
 SAFE_EDGE_KINDS = frozenset({"nav", "info"})
+
+
+class NavSession(Protocol):
+    """Minimal session surface for armed nav execution."""
+
+    def send(self, payload: str) -> None: ...
+
+    def rendered_text(self) -> str: ...
 
 
 @dataclass(frozen=True)
@@ -33,39 +47,8 @@ class NavRunResult:
     steps_done: int
 
 
-def _screen_text(session: object) -> str:
-    for name in ("rendered_text", "screen_text", "last_text"):
-        fn = getattr(session, name, None)
-        if callable(fn):
-            try:
-                text = fn()
-            except Exception:  # noqa: BLE001
-                continue
-            if isinstance(text, str):
-                return text
-    rows_fn = getattr(session, "render", None)
-    text_fn = getattr(session, "render_text", None)
-    if callable(rows_fn) and callable(text_fn):
-        try:
-            rows = rows_fn()
-            text = text_fn(rows)
-            if isinstance(text, str):
-                return text
-        except Exception:  # noqa: BLE001
-            pass
-    text = getattr(session, "text", None)
-    return text if isinstance(text, str) else ""
-
-
-def _send(session: object, payload: str) -> None:
-    send = getattr(session, "send", None)
-    if not callable(send):
-        raise RuntimeError("session_send_unavailable")
-    send(payload)
-
-
 def run_nav(
-    session: object,
+    session: NavSession,
     plan: dict[str, Any],
     path: object,
     *,
@@ -119,9 +102,13 @@ def run_nav(
                 done,
             )
         try:
-            _send(session, key)
+            session.send(key)
             sends += 1
             done += 1
+        except AttributeError:
+            return NavRunResult(
+                False, "halted", "send_failed:AttributeError", sends, done
+            )
         except Exception as exc:  # noqa: BLE001
             return NavRunResult(
                 False,
@@ -131,7 +118,22 @@ def run_nav(
                 done,
             )
         # Stop-on-unknown: after each hop, must still localize on-map.
-        text = _screen_text(session)
+        try:
+            text = session.rendered_text()
+        except AttributeError:
+            return NavRunResult(
+                False, "halted", "screen_failed:AttributeError", sends, done
+            )
+        except Exception as exc:  # noqa: BLE001
+            return NavRunResult(
+                False,
+                "halted",
+                f"screen_failed:{type(exc).__name__}",
+                sends,
+                done,
+            )
+        if not isinstance(text, str):
+            return NavRunResult(False, "halted", "screen_unreadable", sends, done)
         node = localize(text, path)
         if node is None:
             return NavRunResult(False, "halted", "off_map", sends, done)

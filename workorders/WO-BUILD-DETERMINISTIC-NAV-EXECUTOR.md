@@ -12,9 +12,13 @@ must never send.
 
 ## Scope
 
-- `tw2002_aiclient/menu/nav_exec.py` — `run_nav`
+- `tw2002_aiclient/menu_nav_exec.py` — `run_nav` (outside crawl `menu/` package)
 - `tests/test_nav_exec.py` — antifire pin + action refusal + happy path
 - `canon/engine/menu-map-and-introspection.md` — tip-stamp divergence
+
+**Package placement:** not under `menu/` — that package's AST chokepoint allows
+exactly one send path (`crawler.emit_key_if_safe`). Taught/armed nav execution
+is a different rail; putting it beside the crawl would fail the structural sweep.
 
 ## Taught/armed antifire (PR statement)
 

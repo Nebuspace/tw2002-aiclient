@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from tw2002_aiclient.menu import knowledge
 from tw2002_aiclient.menu.nav import plan_nav
-from tw2002_aiclient.menu.nav_exec import run_nav
+from tw2002_aiclient.menu_nav_exec import run_nav
 from tw2002_aiclient.menu.sig import menu_signature
 
 SCREEN_A = "=== Computer ===\n(1) Status\n(2) Ship\n"
