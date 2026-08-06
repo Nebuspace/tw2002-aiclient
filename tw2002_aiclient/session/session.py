@@ -657,14 +657,6 @@ class Session:
             if read.total_holds is not None:
                 self.last_cargo_total = read.total_holds
 
-    def set_holdings(self, fuel_ore=0, organics=0, equipment=0):
-        """Replace sticky Ore/Org/Equ holdings after a verified write."""
-        holdings = CargoHoldings(
-            fuel_ore=fuel_ore, organics=organics, equipment=equipment
-        )
-        with self.lock:
-            self.last_cargo_holdings = holdings
-
     def adjust_holdings(self, commodity, delta):
         """Buy (+delta) / sell (−delta) one hop commodity; clamp each field ≥0.
 
