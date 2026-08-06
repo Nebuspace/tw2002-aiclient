@@ -1,9 +1,13 @@
 # WO-CANON-DRAFT-ARCHIVED-AUTOPILOT-FIVE-DOC-SWEEP
 
-**Status:** IN FLIGHT (impl-aiclient-cursor)
+**Status:** DONE · tip-close · PR #448 (`adaa0ac`) · 2026-08-06 re-verify
 **Priority:** HIGH
 **Gated:** no
 **Folded:** `WO-CANON-DRAFT-AUTOHAGGLE-ARCHIVED-AUTOPILOT-NOTE`
+
+**Tip-close (Cycle-43 queue re-flag):** all five named docs + auto-haggle already carry
+archive-only / do-not-revive wording on tip; `rg -l 'import autopilot|autopilot.select'
+tw2002_aiclient --glob '*.py'` → empty. No further canon edit required.
 
 ## Goal
 
