@@ -153,6 +153,13 @@ recorded, not silently conformed to).
   guard correctly refuses Pay unconditionally, Retreats on 0 fighters, and Retreats when
   counts are unparseable — all reborn-aligned safe exits. `max_deployable` /
   `clamp_deploy_or_sell_qty` implement the reserve-floor clamps.
+- **Reroute-vs-fight EV ranking kernel — LIVE on tip (`reroute_vs_fight.py`).** Pure
+  comparison of caller-supplied extra-hop turn cost vs expected fight cost; emits
+  `preferred ∈ {reroute, fight, unknown}` + gated reasons for priority/coach
+  (`toll_ev_to_status`). Never sends, never invents hops, never imports into
+  `decide_encounter`. Eventual `app` auto-fire of a ranked preference still requires a
+  taught/armed rule (DECISIONS six-archived-modules correction) — not wired in this
+  kernel.
 
 ## Code divergence
 
@@ -169,10 +176,12 @@ recorded, not silently conformed to).
 - **Autopilot per-cycle EV selection + "never idle" appetite.** The legacy autopilot
   picks an action each cycle by expected value, backed by an `EXPLORE_BASELINE_EV`
   floor that keeps it moving rather than ever idling. Under the reborn vision the
-  reroute-vs-fight EV is a *ranking/coaching* input only; it must not act as a live
-  per-cycle action-picker, and the "never idle / keep-driving" appetite is retired in
-  favor of depletion/hazard STOP-guards. Tip has no `autopilot.py`; `EXPLORE_BASELINE_EV`
-  is suggestion-only in `focus_status.py` (display subdivergence closed elsewhere).
+  reroute-vs-fight EV is a *ranking* input (priority + coaching; tip kernel
+  `reroute_vs_fight.py`) that may later drive **`app`-layer** auto-fire only behind a
+  taught/armed rule — it must not act as a live per-cycle action-picker, and the
+  "never idle / keep-driving" appetite is retired in favor of depletion/hazard
+  STOP-guards. Tip has no `autopilot.py`; `EXPLORE_BASELINE_EV` is suggestion-only in
+  `focus_status.py` (display subdivergence closed elsewhere).
 - **`trade_driver`'s autonomous chain runner** executes a taught chain end-to-end under
   fail-closed arm predicates (`is_armed` / `should_abort` via `TradeChainRunner` / ADR-003).
   **Option C fact-find (2026-08-06):** there is **no** kernel `screen_match` field check inside
