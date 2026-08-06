@@ -167,6 +167,8 @@ is owned here. The cluster is:
   this surface owns how they are presented and gated.
 - **The Trade-Loop-Chains library popup** — a modal listing the taught trade-loop chains the human
   can launch (see [trade-loops](/strategy/trade-loops.md)); selecting a chain arms a launch.
+- **The blessed rules peek (`U)rules`)** — read-only overlay of the approved rule library (see
+  below). Peek only: no arm, promote, or send path.
 - **The play-launch confirm** — see the confirm-gate below.
 - **Whole-app exit confirm** — `q` that would exit the **client process** (from Play, or after a
   bank/launcher quit routes here) raises **"Stop daemon and disconnect \<profile\>? y/N"** before
@@ -176,6 +178,26 @@ is owned here. The cluster is:
   only returns to the launcher is outside this cluster — it must issue **zero** `stop` traffic.
   Exact popup ownership for Play chrome lives with this surface's N5 contract; the launcher hosts
   the same dialog when `q` is pressed there (one app-lifecycle bookend, two entry points).
+
+### Blessed rules peek (`U)rules`) — read-only library (shipped)
+
+Tip: `cockpit/rules_library.py` + `PlayShellScreen` (`U`/`u` toggle). Same overlay idiom as Analyze /
+Chains — never auto-opens. Drafts never appear; the caller passes the blessed `rules` list only
+(`include_drafts=False`).
+
+**Store statuses** (branch on `read_rule_store` `status` before claiming a count — an empty
+`rules` list is true for absent, empty-ok, and unreadable):
+
+| Status | Operator sentence (tip copy) |
+|---|---|
+| `ok` with rows | Scrollable list: `rule_id`, `do`, `screen_match`, `prio`, `scope` (`one-shot`/`repeating` or `?`) |
+| `ok` empty | `no blessed rules yet` |
+| `absent` | `rule library absent — nothing written yet` |
+| `unreadable` | `rule store unreadable — cannot list` |
+| `partial` | Banner `PARTIAL — some rule files unreadable`; lists what parsed, or the unreadable empty line if none |
+
+**Cursor / dismiss.** While open, cursor owns scroll (`▸` / `>` selected row). Toggle `U` again or
+the shared dismiss-first posture closes the peek — never arms a rule from this panel.
 
 ### Confirm-gate — never one keystroke to live money
 
