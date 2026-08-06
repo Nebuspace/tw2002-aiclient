@@ -941,17 +941,10 @@ INTENTS = frozenset({INTENT_MAP_FILL, INTENT_FIND_STARDOCK, INTENT_FIND_FORMATIO
 #: never product-wired and was retired (WO-RETIRE-CYCLE-EXPLORE-MODE / #247).
 #: Formations is a separate CLI intent (`tw explore start --intent
 #: find_formations`); Play stays on these two daemon intents only.
+#: The old Play E-cycle helper ``next_armable_intent`` was retired with
+#: ``cycle_explore_mode`` (#247 / WO-RETIRE-CYCLE-EXPLORE-MODE) — tip Play
+#: arms via find-stardock toggle, not a rotating offer cycle.
 ARMABLE_INTENTS: tuple[str, ...] = (INTENT_MAP_FILL, INTENT_FIND_STARDOCK)
-
-
-def next_armable_intent(current: object) -> str:
-    """The next intent in the Play offer cycle. Never raises; anything
-    unrecognised restarts at map-fill."""
-    try:
-        i = ARMABLE_INTENTS.index(current)  # type: ignore[arg-type]
-    except (ValueError, TypeError):
-        return ARMABLE_INTENTS[0]
-    return ARMABLE_INTENTS[(i + 1) % len(ARMABLE_INTENTS)]
 
 
 @dataclass(frozen=True)
