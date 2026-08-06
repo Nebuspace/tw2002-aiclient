@@ -180,13 +180,14 @@ keyboard instead.
 DOCS WIN: the following are places where the current implementation diverges from the reborn target
 this concept prescribes. The prescription stands; these are recorded, not silently conformed to.
 
-- **The decision engine is built; its live inputs are not yet wired.** `ship_upgrade_decision.py`
+- **The decision engine is built; its live inputs are partially wired.** `ship_upgrade_decision.py`
   implements the five gates, the holds-per-turn metric, the payback computation, and the
-  best-of-eligible chooser as pure logic — every input (`ShipSpec`, `LoopEconomics`, `PlayerState`) is
-  today a mockable stand-in. The bridge from the introspected per-world game-data store to `ShipSpec`
-  exists (`game_data.ship_row_to_spec`), but no live flow yet reads the current loop economics, player
-  turns/alignment/holds, and a captured shipyard catalog and calls `choose_upgrade`. The engine is
-  correct in isolation; the wiring that feeds it real numbers is the missing link.
+  best-of-eligible chooser as pure logic. The bridge from Layer-B rows to `ShipSpec` is
+  `game_data.ship_row_to_spec`; current-ship type from live `I` screens is
+  `introspector.parse_current_ship_info` → status `ship_type` / `current_ship`, with
+  `ship_spec_from_current_info` enriching only when a catalog row matches (cost/shields
+  never invented from I-info alone). Still missing: a live flow that reads loop economics
+  + player turns and calls `choose_upgrade` on every FOCUS tick.
 
 - **Coded auto-max-holds (TW-22) — recognition + toward-max qty LIVE; catalog ship
   max still optional.** App-armed Cargo Hold Upgrade (`_autonomy_auto_fire` +

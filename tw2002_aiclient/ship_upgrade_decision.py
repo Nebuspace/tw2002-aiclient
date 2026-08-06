@@ -247,6 +247,105 @@ def choose_upgrade(
     return best
 
 
+def _catalog_row_matches_ship_type(row_name: str, ship_type: str) -> bool:
+    """True when a shipyard catalog name plausibly matches an I-info type line.
+
+    Match is case-insensitive exact, or catalog name as a whole-word/substring
+    of the type string (e.g. catalog ``Dragon Quest`` vs type
+    ``4 Dragons Ltd Dragon Quest``). Never fuzzy-guesses across unrelated names.
+    """
+    a = (row_name or "").strip().lower()
+    b = (ship_type or "").strip().lower()
+    if not a or not b:
+        return False
+    if a == b:
+        return True
+    if a in b:
+        # Require a token boundary so short names don't false-match.
+        idx = b.find(a)
+        before_ok = idx == 0 or not b[idx - 1].isalnum()
+        after = idx + len(a)
+        after_ok = after >= len(b) or not b[after].isalnum()
+        return before_ok and after_ok
+    return False
+
+
+def ship_spec_from_current_info(
+    info: object,
+    catalog: Sequence[object] | None = None,
+    *,
+    player_alignment: Optional[int] = None,
+) -> Optional[ShipSpec]:
+    """Build a :class:`ShipSpec` from an I-info observation (+ optional catalog).
+
+    Live screen supplies holds / fighters / turns_per_warp when present.
+    Cost, shields, and alignment come **only** from a matching Layer-B catalog
+    row (via ``game_data.ship_row_to_spec``) — never invented. No catalog match
+    → ``None`` (type may still be known on status for priority row 2).
+    """
+    if not isinstance(info, dict):
+        return None
+    ship_type = info.get("ship_type")
+    if not isinstance(ship_type, str) or not ship_type.strip():
+        return None
+    if not catalog:
+        return None
+
+    from .game_data import ShipRow, ship_row_to_spec
+
+    match = None
+    for item in catalog:
+        if isinstance(item, ShipRow):
+            name = item.ship_name
+            row = item
+        elif isinstance(item, dict):
+            name = item.get("ship_name")
+            row = item
+        elif isinstance(item, ShipSpec):
+            name = item.name
+            row = item
+        else:
+            continue
+        if not isinstance(name, str):
+            continue
+        if _catalog_row_matches_ship_type(name, ship_type):
+            match = row
+            break
+    if match is None:
+        return None
+
+    if isinstance(match, ShipSpec):
+        base = match
+    else:
+        commissioned = True
+        if player_alignment is not None and isinstance(match, (ShipRow, dict)):
+            req = (
+                match.alignment_requirement
+                if isinstance(match, ShipRow)
+                else match.get("alignment_requirement")
+            )
+            if req is not None:
+                try:
+                    commissioned = int(player_alignment) >= int(req)
+                except (TypeError, ValueError):
+                    commissioned = True
+        base = ship_row_to_spec(match, commissioned=commissioned)
+
+    holds = info.get("total_holds")
+    fighters = info.get("fighters")
+    warp = info.get("turns_per_warp")
+    return ShipSpec(
+        name=base.name,
+        cost=base.cost,
+        holds=int(holds) if isinstance(holds, int) else base.holds,
+        turns_per_warp=int(warp) if isinstance(warp, int) and warp >= 1 else base.turns_per_warp,
+        fighters=int(fighters) if isinstance(fighters, int) else base.fighters,
+        shields=base.shields,
+        alignment_req=base.alignment_req,
+        commissioned=base.commissioned,
+    )
+
+
 def compose_upgrade_decision_lines(
     decision: UpgradeDecision,
     *,

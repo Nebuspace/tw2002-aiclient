@@ -15,6 +15,7 @@ from tw2002_aiclient.game_data import (
     load_world_game_data,
     persist_ship_row,
     save_world_game_data,
+    ship_row_to_spec,
     validate_ship_row,
 )
 
@@ -127,3 +128,14 @@ def test_persist_refuses_non_introspected_before_write(tmp_path):
             state_dir=tmp_path,
         )
     assert not game_data_path("test-world", state_dir=tmp_path).exists()
+
+
+def test_ship_row_to_spec_bridge():
+    data = load_game_data(FIXTURE)
+    spec = ship_row_to_spec(data.ships[0])
+    assert spec.name == "Fixture Scout"
+    assert spec.holds == data.ships[0].max_holds
+    assert spec.cost == data.ships[0].base_cost_credits
+    assert spec.turns_per_warp == data.ships[0].turns_per_warp
+    assert spec.fighters == data.ships[0].max_fighters
+    assert spec.shields == data.ships[0].max_shields

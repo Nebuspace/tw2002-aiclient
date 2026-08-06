@@ -319,6 +319,9 @@ def _status_response(session, server):
     observe_fighters = getattr(session, "observe_fighters", None)
     if callable(observe_fighters):
         observe_fighters(text)
+    observe_current_ship = getattr(session, "observe_current_ship", None)
+    if callable(observe_current_ship):
+        observe_current_ship(text)
     observe_sector = getattr(session, "observe_sector", None)
     if callable(observe_sector):
         observe_sector(prompt_line)
@@ -434,6 +437,28 @@ def _status_response(session, server):
     fighters = _fighters_snapshot(session)
     if fighters is not None and fighters.outcome == OUTCOME_READ:
         resp["fighters_aboard"] = fighters.fighters
+    # WO-BUILD-LIVE-SHIP-INTROSPECTION-ADAPTER: priority-engine row 2.
+    # Emit only after a genuine I-info type read; omit otherwise (never invent).
+    current_ship_snap = getattr(session, "current_ship_snapshot", None)
+    if callable(current_ship_snap):
+        ship = current_ship_snap()
+        if isinstance(ship, dict) and isinstance(ship.get("ship_type"), str):
+            payload = {
+                k: ship[k]
+                for k in (
+                    "ship_type",
+                    "ship_name",
+                    "turns_per_warp",
+                    "total_holds",
+                    "empty_holds",
+                    "fighters",
+                    "source",
+                    "age_s",
+                )
+                if k in ship
+            }
+            resp["current_ship"] = payload
+            resp["ship_type"] = ship["ship_type"]
     # WO-STATUS-CREDITS: GOALS Credits reads TOP-LEVEL `credits`, distinct
     # from `hud.credits` (same sticky). Emit only on OUTCOME_READ; omit
     # otherwise (never invent 0 from absence — GOALS must stay `?`).

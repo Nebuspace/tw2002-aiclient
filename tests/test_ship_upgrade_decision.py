@@ -275,3 +275,41 @@ def test_decisions_panel_surfaces_upgrade_decision():
     lines = compose_decisions_lines(status, width=60)
     assert any("Upgrade" in line for line in lines)
     assert any("Merchant" in line or "payback" in line.lower() for line in lines)
+
+
+def test_ship_spec_from_current_info_needs_catalog_match():
+    from tw2002_aiclient.introspector import parse_current_ship_info
+    from tw2002_aiclient.ship_upgrade_decision import ship_spec_from_current_info
+    from pathlib import Path
+
+    text = (Path(__file__).parent / "fixtures" / "ship_info_screen.txt").read_text()
+    info = parse_current_ship_info(text)
+    assert info is not None
+    assert ship_spec_from_current_info(info, catalog=None) is None
+    assert ship_spec_from_current_info(info, catalog=[]) is None
+
+    catalog = [
+        {
+            "ship_name": "Dragon Quest",
+            "max_holds": 75,
+            "max_fighters": 200,
+            "max_shields": 50,
+            "combat_odds_modifier": 1.0,
+            "turns_per_warp": 3,
+            "base_cost_credits": 99_000,
+            "alignment_requirement": 0,
+            "rank_requirement": None,
+            "transwarp_capable": False,
+            "special_abilities": [],
+            "source": "introspected: test",
+            "last_verified_ts": "2026-08-06T00:00:00Z",
+        }
+    ]
+    spec = ship_spec_from_current_info(info, catalog=catalog)
+    assert spec is not None
+    assert spec.name == "Dragon Quest"
+    assert spec.cost == 99_000
+    assert spec.holds == 60  # live I-info total, not catalog max
+    assert spec.fighters == 150
+    assert spec.turns_per_warp == 3
+    assert spec.shields == 50  # catalog only

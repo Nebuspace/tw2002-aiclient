@@ -39,6 +39,7 @@ __all__ = [
     "persist_cargo_hold_row",
     "persist_ship_row",
     "save_world_game_data",
+    "ship_row_to_spec",
     "validate_cargo_hold_row",
     "validate_ship_row",
 ]
@@ -129,6 +130,52 @@ class GameData:
 
 def empty_game_data(world_id: Optional[str] = None) -> GameData:
     return GameData(world_id=world_id)
+
+
+def ship_row_to_spec(
+    row: ShipRow | Mapping[str, Any],
+    *,
+    commissioned: bool = True,
+) -> Any:
+    """Bridge a Layer-B shipyard ``ShipRow`` (or dict) into ``ShipSpec``.
+
+    Pure mapping — no I/O. Catalog ``ship_name`` becomes the scoring label;
+    live current-ship screens use :func:`ship_upgrade_decision.ship_spec_from_current_info`
+    (which may call this after a catalog match).
+    """
+    from .ship_upgrade_decision import ShipSpec
+
+    if isinstance(row, ShipRow):
+        name = row.ship_name
+        cost = row.base_cost_credits
+        holds = row.max_holds
+        turns_per_warp = row.turns_per_warp
+        fighters = row.max_fighters
+        shields = row.max_shields
+        align = row.alignment_requirement
+    elif isinstance(row, Mapping):
+        name = row.get("ship_name")
+        if not isinstance(name, str) or not name.strip():
+            raise GameDataError("ship_row_to_spec requires ship_name")
+        cost = int(row.get("base_cost_credits") or 0)
+        holds = int(row.get("max_holds") or 0)
+        turns_per_warp = int(row.get("turns_per_warp") or 1)
+        fighters = int(row.get("max_fighters") or 0)
+        shields = int(row.get("max_shields") or 0)
+        align_raw = row.get("alignment_requirement")
+        align = int(align_raw) if align_raw is not None else None
+    else:
+        raise GameDataError(f"ship_row_to_spec: unsupported row type {type(row)!r}")
+    return ShipSpec(
+        name=str(name).strip(),
+        cost=max(0, cost),
+        holds=max(0, holds),
+        turns_per_warp=max(1, turns_per_warp),
+        fighters=max(0, fighters),
+        shields=max(0, shields),
+        alignment_req=int(align or 0),
+        commissioned=commissioned is True,
+    )
 
 
 def _now_iso() -> str:

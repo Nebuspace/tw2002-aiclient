@@ -18,6 +18,7 @@ import pytest
 from tw2002_aiclient.game_data import load_game_data, validate_cargo_hold_row, validate_ship_row
 from tw2002_aiclient.introspector import (
     parse_cargo_hold_price,
+    parse_current_ship_info,
     parse_item_listing,
     parse_scanner_listing,
     parse_shipyard_listing,
@@ -270,3 +271,25 @@ def test_parse_item_listing_skips_malformed_row_without_crashing():
     rows = parse_item_listing(text)
     assert len(rows) == 2
     assert all("Not A Real Item Row" not in r["item_name"] for r in rows)
+
+
+# -- parse_current_ship_info (live I-info) ---------------------------------
+
+
+def test_parse_current_ship_info_live_fixture():
+    text = _load_fixture("ship_info_screen.txt")
+    info = parse_current_ship_info(text)
+    assert info is not None
+    assert info["ship_type"] == "4 Dragons Ltd Dragon Quest"
+    assert info["ship_name"] == "SurveyorShip"
+    assert info["turns_per_warp"] == 3
+    assert info["total_holds"] == 60
+    assert info["empty_holds"] == 60
+    assert info["fighters"] == 150
+    assert info["source"].startswith("introspected")
+    assert "Ported=" not in info["ship_type"]
+
+
+def test_parse_current_ship_info_absent_without_ship_info_line():
+    assert parse_current_ship_info("Command [TL=00:00:00]:[1] (?=Help)? :") is None
+    assert parse_current_ship_info("Sector  : 1\nShip Name      : OnlyName\n") is None
