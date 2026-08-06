@@ -330,6 +330,46 @@ Any WO building this function should design for eventual `app`-layer auto-fire f
 
 **Next step:** stage a BUILD-WO in `queue-aiclient.md` once a seat sketches the report's shape (fields, delivery surface — CLI printout at session-end vs. a file artifact vs. both). Not blocking the EV-ranking build above; the two can land independently, but the EV-ranking WO's `app`-layer auto-fire should not ship to a live/real-account context ahead of this report existing, per the accountability chain Max described.
 
+### 2026-08-05 batch — Max carte blanche on aiclient gated-queue rulings
+
+Max: "Carte Blanche to make the decisions for aiclient." Applying the same pattern as the earlier Sectorwars2102 batch this session: rule → log here → build unblocks; the hard safety list (AI-safety/autonomous-money-path code, new deps, secrets) stays Max-gated regardless of the general grant — those items are left Pending below with the reasoning for why, not ruled on.
+
+**Ruled (unblocked, queue rows updated):**
+
+- **`WO-ESCALATE-TRADE-DRIVER-CHAIN-RUNNER-SCREEN-MATCH-NO-CANON`** — Option C: have an implementer read `trade_driver.py`'s `run_chain()` internals first and report back whether per-hop `screen_match` re-validation already exists. This is fact-finding, not a design call yet — if the report comes back ambiguous, it re-escalates for a real ruling; if it's clearly (A) or (B), the implementer's own finding closes it without a second round-trip.
+- **`WO-ESCALATE-DRAFT-APPROVE-UNBRIDGED-BACKLOG-NO-CANON`** — Option A: leave as-is, no expiry/visibility surface needed. Rare enough in practice (an approved-but-never-bridged draft) not to warrant new UI or a TTL policy; revisit only if it becomes a live operator complaint.
+- **`WO-ESCALATE-FIGHTER-UNIT-PRICE-UNVERIFIED`** — keep `FIGHTER_UNIT_PRICE_CLASS0` Planned-only / explicitly unverified. Do not encode a guessed number into priority-catalog rows #6/#7; those stay blocked until the real TW2002 fighter price is sourced from a live server, not invented.
+- **`WO-ESCALATE-CLI-VERBS-DOC-VS-LIVE-MISMATCH`** — Option B: correct `cli-verbs.md` to stop presenting `replay/play/autoloop/haggle/autopilot/analyze/mine` as live `tw` subcommands when none are registered in `session/cli.py`'s `build_parser`. Wiring them for real (Option A) is deferred — several of the underlying engines (autopilot, haggle) are themselves still gated/partially-safety-adjacent, so wiring the CLI surface ahead of those individual rulings would front-run them. Fix the doc now; wire each verb through its own existing (or future) WO as that engine's gating resolves.
+- **`WO-ESCALATE-TOLL-DEFENSE-UNBUILT-CONSTANTS`** — Option B: strip `keep_min_defense_fighters=20`, `shield_reserve_multiplier=2:1`, `missile_bypass_fraction≈7%` from canon as unconfirmed noise until a real design pass. Doc already self-flags `[hypothesis]` but still presents step-3 math as computable today — that's the part that's misleading and should go, not a build authorization for these specific numbers.
+- **Port-economics floor/regrowth/plague numbers** (queue-aiclient.md:169) — mark permanently-unconfirmed in canon rather than investing in live per-server introspection right now. Same posture as the planet-colonization ruling below — third-party strategy-guide numbers don't get encoded as canon constants until someone actually measures them live.
+- **Auto-haggle tuning defaults registry-migration** (queue-aiclient.md:170) — not urgent. Convergence behavior is already live-proven with the current hardcoded defaults (~15% aggression, ~5% accept, round cap 4); migrating to registry-driven per-server knobs matches the project's stated data-driven-registries preference but is a LOW-priority future WO, not a blocker on anything.
+- **Toll resolver reserve floor / winnable-enemy-count band** (queue-aiclient.md:171) — verify-first: check whether code already exposes an override path before concluding it's hardcoded. If genuinely hardcoded, same LOW-priority registry-migration treatment as the haggle defaults above, not an urgent fix.
+- **Ledger world_id: single-ledger Option A ratification** (queue-aiclient.md:188) — ratify Option A (single ledger, row-level `world_id` stamp) as the accepted design. It's already the de facto shipped implementation (`WO-PWO-090-LEDGER-WORLD-ID-STAMP`, merged `6244787` #366) with real behavior riding on it; this closes the missing paper trail, not a design change.
+- **`WO-CANON-DRAFT-AUTOLOOP-RELAUNCH-ZERO-COVERAGE`** — proceed: draft canon coverage of `autoloop_relaunch`'s existing shipped semantics (`replays_from_start`, `sends_already_issued`) in `mode-line-and-teach-controls.md` alongside the existing `Spc` pause documentation. This is describing already-live, already-confirm-gated behavior — a doc-honesty fix, not new authorization for the replay mechanism itself (which already ships and is already confirm-gated).
+- **3 stale citation/threshold doc corrections** (queue-aiclient.md:201) — proceed on all three: (1) correct `action-safety-guards.md`'s stale "still an open gap" note for floor_reached/credits_unreachable STOP-banner labels, since `stopbanner.py` already maps both (landed 2026-07-26, after the doc's timestamp); (2) correct the plain-English fighter-toll description to cite the real `force_share>=0.90` threshold instead of an implied 1:1 bar; (3) fix the `twclient/*` dead citation paths to their real `tw2002_aiclient/session|menu|loops` equivalents (or note no-tip-equivalent for `priority_engine.py`/`autopilot.py`, consistent with the reroute-vs-fight-EV ruling above — that module is scheduled to be (re)built, not falsely claimed to exist yet).
+- **`WO-ESCALATE-PLANET-COLONIZATION-HYPOTHESIS-NUMBERS`** — mark explicitly NOT-BUILT/deferred in `planet-colonization.md`, same posture as port-economics above. Planet-colonization automation is not near-term in-scope; the doc should stop reading as ready-to-implement spec prose until someone actually measures live production/regrowth/plague numbers on a real server.
+
+**Left Pending — stays Max-gated (hard safety-list carve-out, not covered by this carte blanche):**
+
+- **`WO-ESCALATE-EXPLORE-BASELINE-EV-VS-NOVELTY-HALT`** / **`WO-ESCALATE-AUTOPILOT-EV-SELECTOR-VS-NOVELTY-HALT-CONTRADICTION`** / **`WO-FIX-EXPLORE-BASELINE-EV-NEVER-IDLE`** — AI-safety/autopilot-behavior precedence call (when the never-idle floor retires in favor of strict stop-on-unknown). This changes what the autopilot does when it doesn't know what's happening — squarely the kind of call that needs your eyes, not a design-scope default.
+- **`WO-FIX-TRADE-DRIVER-RUN-CHAIN-ARM-GATE`** — autonomous money-path arm-gate hardening. Safety-list item by its own tag.
+- **`WO-FIX-FIGHTER-TOLL-HUMAN-APPROVAL-GATE`** (and its duplicate at queue-aiclient.md:187) — combat/money-adjacent AI-safety: whether NPC-toll auto-Attack needs a per-fire human-approval gate on top of the existing force_share≥0.90 guard. Same reasoning as above — this is exactly the class of call the safety list exists to reserve for you.
+- **3 DECISIONS.md entries "Pending Max Accept of prose"** (queue-aiclient.md:202, LOOPS/RULES-WORLD-MIGRATE-ON-READ, LEDGER-WORLD-ID-STAMP) — these are pure ratification-lag (code already shipped and matches), genuinely trivial, but "marking canonical prose Accepted" is the one canon-stewardship action this project's own convention reserves for a direct human nod rather than a design ruling. Flagging for your next pass rather than self-accepting — should take one line from you.
+
+### Max 2026-07-29 — no invented defaults on draft→kernel bridge (WO-CANON-DRAFT-KERNEL-BRIDGE)
+
+**Ruled:** when translating an Analyze/teach **draft stub** (`when`/`do`/`source`/`playback_eligible`)
+into a fireable **kernel rule document** (`rule_id`/`screen_match`/`do`/`priority`), the bridge
+**refuses missing human-owned fields** rather than minting defaults. Tip:
+`cockpit/draft_approve.py::bridge_to_kernel_document` + identity-session collection.
+
+**Why:** a defaulted `priority` would place every AI-authored rule at the same rank; the kernel
+STOPs on ambiguous ties (`autopilot_ambiguous_rules`) instead of guessing — so inventing a default
+turns "teacher proposed a draft" into "autopilot halts" at the moment the library becomes useful.
+`rule_id` / `do` / `scope` are likewise human decisions, not teacher observations.
+
+**Canon home:** [rule-macro-engine](/architecture/rule-macro-engine.md) § Draft stub → kernel document bridge.
+
 ### A.2 clarification — never-auto-action vs auto-haggle (hub 2026-07-26 · Max carte blanche)
 
 **Ruled:** never-auto-action means **no unattended freestyle** on money/quantity screens — not a ban on **human-armed, guarded, taught** money-path rules.
