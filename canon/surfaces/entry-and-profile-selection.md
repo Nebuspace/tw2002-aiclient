@@ -383,11 +383,14 @@ paladin-main     PaladinPrime     tw2002.briancmoses.com   A   2026-07-23     ok
   (`list_profile_summaries`, `create_profile`, `list_servers`, `player_bank`) already exist and are
   what a single surface would compose. Recorded, not silently conformed.
 
-- **`tw players next` rotation selection is present but the rotation *driver* is not yet wired.**
-  `player_bank.py` tracks `last_played` / `turns_state` and exposes selection, but its module
-  docstring notes the daemon-side, window-gated rotation driver "is NOT part of this wave." The entry
-  surface currently *displays* the rotation touchpoint; automated whose-turn-is-it rotation across the
-  bank remains a separate future wave.
+- **`tw players next` rotation selection is LIVE; the rotation *driver* is not yet wired.**
+  Tip (WO-BUILD-PLAYER-ROTATION-SELECTOR): `player_bank.next_player` + `tw players next`
+  (`players_cli.py`) pick a read-only next profile under a default 24h cooldown window.
+  Never logs in / never auto-switches. The daemon-side, window-gated rotation *driver*
+  (auto whose-turn-is-it across the bank) remains a separate future wave
+  (`WO-BUILD-PLAYER-BANK-ROTATION-DRIVER`). Residual: there is still no `tw players list`
+  CLI subcommand on tip — when one lands, it must print the same boundary lines as the
+  TUI bank view.
 
 - **The no-collusion boundary is shown on the launcher bank view; CLI list is still absent.**
   `BankViewScreen` paints `BOUNDARY_LINE_1` / `BOUNDARY_LINE_2` at the rotation touchpoint

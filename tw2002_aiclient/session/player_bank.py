@@ -2,7 +2,8 @@
 
 Tracks which characters exist (linked to profile names) plus ``last_played`` /
 ``turns_state``. Passwords are never stored here — structurally absent.
-The rotation *driver* is out of scope for this wave.
+:func:`next_player` is the read-only rotation *selector* (``tw players next``);
+the rotation *driver* (auto-login / auto-switch) is out of scope for this wave.
 
 The honesty contract (WO-AUDIT-PLAYER-BANK-STORE-HONESTY)
 ---------------------------------------------------------
@@ -67,6 +68,7 @@ from __future__ import annotations
 
 import json
 import os
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from tw2002_aiclient.session import credentials
@@ -97,6 +99,11 @@ TURNS_UNKNOWN = "-"
 # timestamp content, so a marked value still fits the column exactly.
 LAST_PLAYED_WIDTH = 21
 TRUNCATED = "…"
+
+# Default window for :func:`next_player` — skip anyone whose last_played falls
+# inside this many hours of ``now``. Pure selector default; the daemon rotation
+# *driver* (auto-login / auto-switch) remains a separate wave.
+DEFAULT_ROTATION_COOLDOWN_HOURS = 24.0
 
 # Why the bank could not be read. Coarse enough for a caller to branch on,
 # distinct where the operator's next action differs: fixing permissions,
@@ -225,6 +232,85 @@ def _rotation_columns(stored: dict) -> tuple[str, str]:
     turns = stored.get("turns_state")
     turns_state = TURNS_UNKNOWN if turns in (None, "") else str(turns)
     return last_played, turns_state
+
+
+def _classify_last_played(raw: object) -> tuple[str, datetime | None]:
+    """Return ``(kind, instant)`` for rotation ranking.
+
+    * ``("never", None)`` — honest empty sentinel / blank.
+    * ``("ok", aware_dt)`` — parseable ISO-ish stamp (``Z`` or offset).
+    * ``("unknown", None)`` — truncated display cut, junk, or naive/unparseable.
+    """
+    text = str(raw or "").strip()
+    if not text or text == NEVER:
+        return "never", None
+    if text.endswith(TRUNCATED):
+        return "unknown", None
+    candidate = text.replace("Z", "+00:00") if text.endswith("Z") else text
+    try:
+        instant = datetime.fromisoformat(candidate)
+    except ValueError:
+        return "unknown", None
+    if instant.tzinfo is None:
+        instant = instant.replace(tzinfo=timezone.utc)
+    return "ok", instant.astimezone(timezone.utc)
+
+
+def next_player(
+    rows: list[dict[str, str]] | None,
+    *,
+    cooldown_hours: float = DEFAULT_ROTATION_COOLDOWN_HOURS,
+    now: datetime | None = None,
+) -> str | None:
+    """Pick the next profile name to play — read-only selection, never logs in.
+
+    Window gate: rows whose ``last_played`` is within ``cooldown_hours`` of
+    ``now`` are skipped. Among the rest, prefer ``never``, then oldest stamp,
+    then name (stable). Broken profiles (``error`` key) are never selected.
+    Truncated / unparseable stamps fail closed when a cooldown is active.
+    Empty / non-list input → ``None``. Does not raise.
+    """
+    if not isinstance(rows, list) or not rows:
+        return None
+    try:
+        cooldown = float(cooldown_hours)
+    except (TypeError, ValueError):
+        cooldown = DEFAULT_ROTATION_COOLDOWN_HOURS
+    if cooldown < 0:
+        cooldown = 0.0
+    clock = now if isinstance(now, datetime) else datetime.now(timezone.utc)
+    if clock.tzinfo is None:
+        clock = clock.replace(tzinfo=timezone.utc)
+    else:
+        clock = clock.astimezone(timezone.utc)
+    cutoff = clock - timedelta(hours=cooldown)
+
+    best_name: str | None = None
+    best_key: tuple | None = None
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        if row.get("error"):
+            continue
+        name = str(row.get("name") or "").strip()
+        if not name:
+            continue
+        kind, instant = _classify_last_played(row.get("last_played"))
+        if kind == "never":
+            key: tuple = (0, name)
+        elif kind == "ok" and instant is not None:
+            if cooldown > 0 and instant > cutoff:
+                continue
+            key = (1, instant.timestamp(), name)
+        else:
+            # unknown — cannot prove out-of-window; skip when cooling down
+            if cooldown > 0:
+                continue
+            key = (2, name)
+        if best_key is None or key < best_key:
+            best_key = key
+            best_name = name
+    return best_name
 
 
 def list_players() -> list[dict[str, str]]:

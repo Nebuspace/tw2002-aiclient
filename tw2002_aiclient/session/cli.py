@@ -2024,6 +2024,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     add_catalog_parsers(sub)
 
+    # WO-BUILD-PLAYER-ROTATION-SELECTOR: read-only next_player surface.
+    from ..players_cli import add_players_parsers
+
+    add_players_parsers(sub)
+
     return parser
 
 
