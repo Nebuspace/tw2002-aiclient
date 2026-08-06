@@ -1,15 +1,16 @@
-"""WO-P5-068 — T Assign-Trigger scaffold.
+"""WO-P5-068 — Assign-Trigger scaffold (+ WO-BUILD-ASSIGN-TRIGGER-REKEY disposition).
 
 Pins:
 
 1.  Schema round-trip: ``create_stub`` returns the correct ``when+guards``
     structure; ``"do"`` is always ``None``; ``screen`` is stamped correctly.
 2.  ``StubStore`` get/set/clear lifecycle.
-3.  ``T`` key returns ``"assign_trigger"`` intent from ``PlayShellScreen.
-    handle_key`` (both cases: ``t`` and ``T``).
-4.  ``T`` does NOT call ``explore_start`` / send — no fire path on assign.
-5.  Explore ``E`` path is unchanged by this WO.
+3.  Calm ``T`` returns ``"trade_loop_toggle"`` (not ``assign_trigger``) —
+    Assign-Trigger is retired from the calm band (hub 2026-08-06 ruling).
+4.  Calm ``T`` does NOT call ``explore_start`` / send — no fire path on that key.
+5.  Explore ``E`` path is unchanged.
 6.  The ``assign_trigger`` module itself has no send path (grep guard).
+7.  No printable calm letter emits ``assign_trigger`` intent.
 """
 
 from __future__ import annotations
@@ -177,6 +178,16 @@ def test_e_key_is_not_assign_trigger() -> None:
         result = play.handle_key(ord(key_char))
         assert result != "assign_trigger", (
             f"E ({key_char!r}) returned 'assign_trigger' — explore lane stolen"
+        )
+
+
+def test_no_printable_calm_key_emits_assign_trigger() -> None:
+    """Hub ruling: Assign-Trigger is retired from the calm band, not remapped."""
+    play = _make_play()
+    for code in range(ord(" "), 127):
+        result = play.handle_key(code)
+        assert result != "assign_trigger", (
+            f"printable key {code!r}/{chr(code)!r} emitted assign_trigger"
         )
 
 

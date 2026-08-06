@@ -149,9 +149,14 @@ the teach / operate keys on this surface include:
   [trade-loops § Discovered → approved semantic plan](/strategy/trade-loops.md#discovered--approved-semantic-plan-adr-003);
   calm `T` never itself invents a fingerprint or send path.
 - **Assign-Trigger** (bind screen-match + guards → proposed rule) remains a tip module
-  (`cockpit/assign_trigger.py` + `app.py` handler). Calm `T` is Trade Loop; the STOP
-  banner teach line is **`teach:  A)nalyze  R)ecord` only** (no false `T)assign`).
-  Re-homing Assign-Trigger to a non-colliding key is a follow-on WO.
+  (`cockpit/assign_trigger.py` + `app.py` handler for non-calm / programmatic callers such as
+  draft-approve). Calm `T` is Trade Loop; the STOP banner teach line is
+  **`teach:  A)nalyze  R)ecord` only** (no false `T)assign`).
+  **Calm-band disposition (hub 2026-08-06 · WO-BUILD-ASSIGN-TRIGGER-REKEY):** Assign-Trigger is
+  **retired from the calm band**, not remapped to a new letter — Max's explore/trade-loop ruling
+  already excludes it from the retired-tokens keep-list (Analyze, Record, reflex, rules, hold/offer,
+  panic). Backend + handler stay for non-calm entry points; do not invent a calm key.
+
 
 Analyze / Record proposals remain **proposals, never live keystrokes.** Every proposed rule
 surfaces an **approve/reject** affordance and is **inert until the human approves it**.
@@ -547,10 +552,12 @@ The reborn contract above is the target; the current code still carries pre-rebo
   printable `A`/`a` → Analyze overlay (WO-P5-069); `R`/`r` → Record (WO-P5-067);
   Mode attach is **Ctrl-A** (`MODE_KEY`), not printable `A`. Calm `T`/`t` →
   Trade Loop (`trade_loop_toggle`, WO-EXPLORE-TRADE-MODE-SPLIT).
-  **Residual:** Assign-Trigger module + `app.py` handler remain, but no key
-  emits `assign_trigger` after the calm-`T` remap. STOP banner teach line is
-  now `A)nalyze  R)ecord` only (false `T)assign` removed). Re-key Assign-Trigger
-  is a follow-on — do not silently claim Assign-Trigger is calm-`T`.
+  **Residual closed (WO-BUILD-ASSIGN-TRIGGER-REKEY · hub 2026-08-06):** Assign-Trigger
+  module + `app.py` handler remain for non-calm / programmatic callers, but **no calm key**
+  emits `assign_trigger` — Max's explore/trade-loop ruling retired it from the calm band
+  (not remapped). STOP banner teach line stays `A)nalyze  R)ecord` only. Do not silently
+  claim Assign-Trigger is calm-`T`, and do not invent a replacement calm letter without a
+  fresh Max ruling.
 - **The auto meter "AI" count — tip closed.** Archive
   `spectate_layout.format_autonomy_counts` rendered `App / AI · Hum`. Tip
   meter is `cockpit/covermeter.py` App-vs-Human only (`COV`; no live AI slice) —
