@@ -132,6 +132,15 @@ def test_a_first_sight_port_with_no_stored_commodities_docks():
     ) is True
 
 
+def test_class_0_special_stardock_is_skipped_not_docked():
+    """FALSIFICATION (WO-FIX-EXPLORE-SKIP-SPECIAL-PORTS): Class 0 Special
+    (StarDock) flyby is present-but-classless (`port == {}`). Docking spends
+    a turn, lands on the equipment buy-menu, and halted live explore with
+    `dock_report_unreadable`. Skip — StarDock never sells commodities."""
+    assert sx.port_needs_dock(PortRead(observed=True, port={}), None) is False
+    assert sx.port_needs_dock(PortRead(observed=True, port={"name": "Sol"}), None) is False
+
+
 def test_a_port_whose_commodities_we_hold_is_not_re_docked():
     stored = {"class": "BBS", "commodities": [{"name": "Fuel Ore"}]}
     assert sx.port_needs_dock(PortRead(observed=True, port={"class": "BBS"}), stored) is False

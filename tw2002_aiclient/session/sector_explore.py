@@ -516,6 +516,11 @@ def port_needs_dock(flyby, stored_port) -> bool:
     * that observation was not ``Ports : None``. A positive "no port here"
       must never produce a dock — there is nothing to dock with, and this is
       the pin the WO calls for by name;
+    * the flyby carries a commodity class triple (``([BS]{3})``). Class 0
+      Special / StarDock reads as *present but classless* (``port == {}``);
+      docking there lands on the equipment buy-menu, not a commerce report,
+      and used to halt the whole explore run as ``dock_report_unreadable``
+      (WO-FIX-EXPLORE-SKIP-SPECIAL-PORTS / live-drive 2026-08-06);
     * the world model holds no non-empty ``commodities`` for the sector.
 
     That last clause is what stops a re-dock every hop: once a report has been
@@ -530,6 +535,9 @@ def port_needs_dock(flyby, stored_port) -> bool:
     port = getattr(flyby, "port", None)
     if not isinstance(port, dict):
         # `observed=True, port=None` -- "Ports : None", positively no port.
+        return False
+    # Present-but-classless (Class 0 Special / StarDock): nothing to price.
+    if not port.get("class"):
         return False
     if isinstance(stored_port, dict) and stored_port.get("commodities"):
         return False
