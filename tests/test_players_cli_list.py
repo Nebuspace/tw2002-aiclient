@@ -53,6 +53,48 @@ def test_cmd_players_list_unreadable_exits_2(monkeypatch, capsys):
     assert "unreadable" in err
 
 
+def test_cmd_players_list_marks_the_rotation_due_row(monkeypatch, capsys):
+    from datetime import datetime, timedelta, timezone
+
+    now = datetime.now(timezone.utc)
+    monkeypatch.setattr(
+        player_bank,
+        "list_players",
+        lambda: [
+            {"name": "alpha", "handle": "A", "host": "h", "game_letter": "A",
+             "last_played": now.isoformat(), "turns_state": "-"},
+            {"name": "bravo", "handle": "B", "host": "h", "game_letter": "A",
+             "last_played": "never", "turns_state": "-"},
+        ],
+    )
+    args = cli.build_parser().parse_args(["players", "list"])
+    assert players_cli.cmd_players_list(args) == 0
+    out = capsys.readouterr().out
+    bravo_line = next(ln for ln in out.splitlines() if "bravo" in ln)
+    alpha_line = next(ln for ln in out.splitlines() if "alpha" in ln)
+    assert bravo_line.startswith("→")
+    assert not alpha_line.startswith("→")
+
+
+def test_cmd_players_list_no_marker_when_all_in_cooldown(monkeypatch, capsys):
+    from datetime import datetime, timezone
+
+    now = datetime.now(timezone.utc)
+    monkeypatch.setattr(
+        player_bank,
+        "list_players",
+        lambda: [
+            {"name": "alpha", "handle": "A", "host": "h", "game_letter": "A",
+             "last_played": now.isoformat(), "turns_state": "-"},
+        ],
+    )
+    args = cli.build_parser().parse_args(["players", "list"])
+    assert players_cli.cmd_players_list(args) == 0
+    out = capsys.readouterr().out
+    alpha_line = next(ln for ln in out.splitlines() if "alpha" in ln)
+    assert not alpha_line.startswith("→")
+
+
 def test_cmd_players_list_marks_broken_profile(monkeypatch, capsys):
     monkeypatch.setattr(
         player_bank,
