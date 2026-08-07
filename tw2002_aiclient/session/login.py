@@ -222,6 +222,7 @@ _POST_GAME_SELECT_PROGRESS = frozenset(
     {
         "login_name",
         "login_alias",
+        "connect_splash",
         "login_password",
         "ansi_prompt",
         "char_create",
@@ -646,6 +647,15 @@ def _decide(cls, text, prompt, profile, state, get_password, save_password, sess
         if callable(saver):
             saver(profile.name, alias)
         return alias, False, None
+
+    if cls == "connect_splash":
+        # WO-FIX-LOGIN-ANSI-SPLASH-UNHANDLED: A/B/C picks which *game copy*
+        # on this BBS (sursum_corda), NOT the TWGS door letter. Prefer
+        # profile.game_letter when it is A/B/C; otherwise default A.
+        letter = str(getattr(profile, "game_letter", "") or "").strip().upper()
+        if letter not in {"A", "B", "C"}:
+            letter = "A"
+        return letter, False, None
 
     if cls == "ansi_prompt":
         return "Y", False, None
