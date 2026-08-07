@@ -227,13 +227,13 @@ every product caller has migrated onto the registry yet (incremental).
 
 # Citations
 
-[1] twclient/settle.py (`wait_for_settle`, `wait_until_settled`, `send_and_confirm`; case-sensitive
-    `wait_prompt`; send/settle-race and warp-animation handling)
-[2] twclient/session.py (the live settle-detection protocol surface: `rx_count`, `last_rx`,
+[1] `tw2002_aiclient/session/settle.py` (`wait_for_settle`, `wait_until_settled`, `send_and_confirm`; case-sensitive
+    `wait_prompt`; send/settle-race and warp-animation handling; ported from archive `twclient/settle.py`)
+[2] `tw2002_aiclient/session/session.py` (the live settle-detection protocol surface: `rx_count`, `last_rx`,
     `clock`, `sleep`, `render_text`, `wait_settle`)
-[3] twclient/watch.py (`WatchHub` settle-edge push stream; explicit no-auto-handling boundary)
-[4] twclient/terminal.py (pyte-backed render the settle wait polls)
-[5] twclient/classify.py (`pause_key` and other gate anchors — interjection classification today)
+[3] `tw2002_aiclient/session/watch.py` (`WatchHub` settle-edge push stream; explicit no-auto-handling boundary)
+[4] `tw2002_aiclient/session/terminal.py` (pyte-backed render the settle wait polls)
+[5] `tw2002_aiclient/session/classify.py` (`pause_key` and other gate anchors — interjection classification today)
 [6] Historical settle design (retired root `DESIGN.md` §6, now owned here); DESIGN-v2.md §8 (send/settle race, B4/B5 — internal planning history)
 [7] [/research/tw2002-screen-patterns.md](/research/tw2002-screen-patterns.md) (P-SETTLE-LINE · P-SUPPRESS — prompt-line scope + suppressed sub-prompts)
 [8] [/research/archive-port-patterns.md](/research/archive-port-patterns.md) AP-02 (send_and_confirm detailed algorithm, stale pre-send guard, stability re-check, retry_unstable_idle, wait_until_settled pre-read gate)
