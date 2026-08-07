@@ -45,6 +45,8 @@ def cmd_players_list(args: argparse.Namespace) -> int:
     if not rows:
         print(BANK_EMPTY_LINE)
         return 0
+    cooldown = float(getattr(args, "cooldown_hours", player_bank.DEFAULT_ROTATION_COOLDOWN_HOURS))
+    due = player_bank.next_player(rows, cooldown_hours=cooldown)
     # Column layout mirrors BankViewScreen header/rows.
     print(f"{'name':<16} {'handle':<16} {'host':<24} {'game':<3} {'last_played':<21} turns")
     for entry in rows:
@@ -52,8 +54,9 @@ def cmd_players_list(args: argparse.Namespace) -> int:
         err = entry.get("error")
         if err:
             name = f"{name}!"
+        marker = "→ " if entry.get("name") == due else "  "
         print(
-            f"{name:<16} "
+            f"{marker}{name:<16} "
             f"{entry.get('handle', '?'):<16} "
             f"{entry.get('host', '?'):<24} "
             f"{entry.get('game_letter', '?'):<3} "
@@ -88,5 +91,12 @@ def add_players_parsers(sub: argparse._SubParsersAction) -> None:
     sp_list = players_sub.add_parser(
         "list",
         help="list bank profiles with no-collusion boundary lines (read-only)",
+    )
+    sp_list.add_argument(
+        "--cooldown-hours",
+        type=float,
+        default=player_bank.DEFAULT_ROTATION_COOLDOWN_HOURS,
+        metavar="H",
+        help=f"mark the rotation-due row using this cooldown window (default {player_bank.DEFAULT_ROTATION_COOLDOWN_HOURS:g})",
     )
     sp_list.set_defaults(func=cmd_players_list)
