@@ -203,12 +203,12 @@ code.)*
 
 # Citations
 
-[1] twclient/credentials.py (profile shape, env-first `get_password()`, atomic chmod-600
-`save_password()`, CSPRNG `generate_password()`, `allow_register` gate)
-[2] twclient/logging_util.py (`log_redacted()` — redaction marker, no byte count)
-[3] twclient/connection.py + twclient/session.py (fresh-at-send-time secret detection; TX-side
+[1] `tw2002_aiclient/session/credentials.py` (profile shape, env-first `get_password()`, atomic chmod-600
+`save_password()`, CSPRNG `generate_password()`, `allow_register` gate; ported from archive `twclient/credentials.py`)
+[2] `tw2002_aiclient/session/logging_util.py` (`log_redacted()` — redaction marker, no byte count)
+[3] `tw2002_aiclient/session/connection.py` + `tw2002_aiclient/session/session.py` (fresh-at-send-time secret detection; TX-side
 redaction on both send channels; RX transcript gate via password-anchor / post-secret)
-[4] twclient/player_bank.py (TW-31 credential bank — metadata-only by construction, notes-key
+[4] `tw2002_aiclient/session/player_bank.py` (TW-31 credential bank — metadata-only by construction, notes-key
 denylist, scalar-only value guard)
 [5] CLAUDE.md — Hard rules (secrets never touch logs/argv/history/repo; single-connection
 pidfile; gitignored `config/`/`run/`/`state/`/`logs/`; only `profiles.toml.example` +
