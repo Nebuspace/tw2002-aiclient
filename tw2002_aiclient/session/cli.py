@@ -2226,6 +2226,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     add_mine_parsers(sub)
 
+    # WO-BUILD-AI-TEACHER-ANALYZE-CLI: on-demand retrospective AI teacher
+    # (filesystem only, never sends). Same line-cap reason as mine_cli.
+    from ..teach_cli import add_teach_parser
+
+    add_teach_parser(sub)
+
     return parser
 
 
