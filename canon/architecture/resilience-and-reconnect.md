@@ -165,12 +165,12 @@ An unrecoverable resume that escalates instead of guessing:
 
 # Code Divergence
 
-The current `twclient/guardian.py` implements the reconnect + login-replay + keepalive facets as
-this canon prescribes for the mechanical parts — drop-detection via the connection flag,
+The current `tw2002_aiclient/session/guardian.py` implements the reconnect + login-replay + keepalive
+facets as this canon prescribes for the mechanical parts — drop-detection via the connection flag,
 bounded-attempt reconnect gated on a recorded `auto_login_profile`, login-replay via `run_login(...,
 target="main_command")` with the saved credential through the redacted secret path, and a keepalive
 that fires **only** when the current screen classifies as `main_command`. Those match the reborn
-target.
+target. (Archive port-source: `twclient/guardian.py`.)
 
 **Reconnect × control (shipped WO-FIX-SESSIONGUARDIAN-EXHAUSTED-RECONNECT-SILENT).** When
 reconnect + replay exhausts all attempts, the guardian sets a sticky `reconnect_exhausted` flag that
@@ -187,8 +187,8 @@ canonically, an App-class send.)
 
 # Citations
 
-[1] twclient/guardian.py (SessionGuardian — reconnect, login-replay, idle-keepalive)
-[2] twclient/login.py (run_login automaton replayed on resume; saved-credential / secret-send discipline)
-[3] twclient/connection.py (TelnetConnection reader thread, connection flag, redacted send path)
+[1] `tw2002_aiclient/session/guardian.py` (SessionGuardian — reconnect, login-replay, idle-keepalive; ported from archive `twclient/guardian.py`)
+[2] `tw2002_aiclient/session/login.py` (run_login automaton replayed on resume; saved-credential / secret-send discipline)
+[3] `tw2002_aiclient/session/connection.py` (TelnetConnection reader thread, connection flag, redacted send path)
 [4] canon/architecture/control-and-escalation.md (escalate-on-unknown, the App/Human dual)
 [5] DESIGN-v2.md §3 v2.1 item 4 (D9 reconnect + login-replay; D10 conservative idle-keepalive)

@@ -189,7 +189,7 @@ A refusal (fail-loud, never a guess):
 **The login automaton is authored-in-code, not a set of taught rules — by design, and it is the one
 sanctioned exception to "the App plays only taught screens."** In the reborn model the App drives
 by matching *human-taught, human-approved* guarded rules and STOPs (hands the keyboard to the
-human) on anything unrecognized. The login automaton (`twclient/login.py`) is instead a built-in,
+human) on anything unrecognized. The login automaton (`tw2002_aiclient/session/login.py`) is instead a built-in,
 hard-coded expect/respond table that drives deterministically before any control dual or rule set
 exists. This is consistent with the vision's disposition for this concept (control-neutral; it
 precedes the App/Human dual because no game control exists until logged in), and it preserves the
@@ -214,9 +214,9 @@ must respect that invariant exactly.
 
 # Citations
 
-[1] twclient/login.py (the automaton: `run_login`, `_decide`, NEW/RETURNING branch, name-bank rider)
-[2] twclient/credentials.py (env-first `get_password`, chmod-600 secrets store, `allow_register` gate)
-[3] twclient/classify.py (`classify_screen`, gate-vs-content anchors, game-select/interstitial recognition)
+[1] `tw2002_aiclient/session/login.py` (the automaton: `run_login`, `_decide`, NEW/RETURNING branch, name-bank rider; ported from archive `twclient/login.py`)
+[2] `tw2002_aiclient/session/credentials.py` (env-first `get_password`, chmod-600 secrets store, `allow_register` gate)
+[3] `tw2002_aiclient/session/classify.py` (`classify_screen`, gate-vs-content anchors, game-select/interstitial recognition)
 [4] DESIGN-v2.md §B1/B2/B3 (login automaton, secure store, NEW-vs-RETURNING branch — internal planning history)
 [5] canon/log.md 2026-07-23 (reborn control-neutrality disposition for this concept)
 [6] canon/research/archive-port-patterns.md AP-03 (reactive loop pseudocode, nuisance table,
