@@ -20,7 +20,10 @@ it binds three distinct actors, each with a different reach:
   contact with conduct is what it is permitted to *propose* as a rule DRAFT — and every draft is an
   inert, human-approved-before-fire proposal, never an action.
 
-Live keystroke senders are **`{app, human}` only**. There is no autonomous "trainer" that decides
+Live keystroke senders are **`{app, human}` only, for play**. (A narrow, sacrificial-account-only,
+manual-only development/debugging exception exists — see
+[dev-drive-exception](/doctrine/dev-drive-exception.md) — and does not apply to play.) There is no
+autonomous "trainer" that decides
 whom to fight; the whole point of this document is to bound the app's taught behaviors and the AI's
 proposals so that neither can drift the operator into griefing or an exploit they did not choose.
 

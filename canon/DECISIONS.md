@@ -52,6 +52,16 @@ RULES:
 
 <!-- Items with a human decision on record. Waiting for ADR drafting or already captured. -->
 
+### RESOLVED-DEV-DRIVE-EXCEPTION — narrow, sacrificial-only, manual AI live-drive for development (Max direct, 2026-08-07)
+
+**Edge:** Change — every doctrine/engine doc in this bundle states without qualification that live keystroke senders are `{app, human}` only and the AI never sends one. Max asked directly for an exception scoped to development/debugging.
+
+**Ruling (Max, 2026-08-07 — "You are OK live driving it if its for the purpose of development! Add that to canon!"):** clarified via follow-up question to exactly three conditions, all required simultaneously: (1) sacrificial account only (`crawl_sacrificial = true`), (2) manual, one action at a time — never a standing autopilot/loop/taught rule, (3) logged as a distinct third sender class, never folded into `app` or `human`.
+
+**Canon home:** [dev-drive-exception](/doctrine/dev-drive-exception.md) (new doc, full schema + "what this does not authorize" + Code divergence noting this is canon-only today — no `VALID_SENDERS` third value, no runtime `crawl_sacrificial` gate check yet). Pointer addenda added to [ai-teacher](/engine/ai-teacher.md) and [alignment-and-conduct](/doctrine/alignment-and-conduct.md) — additive only, does not weaken the `{app, human}`-for-play framing either document already carries.
+
+**Status:** RESOLVED / canon-only. Follow-up WO (code enforcement: third `VALID_SENDERS` value + `crawl_sacrificial` gate) not yet filed — optional, sequenced behind in-flight work.
+
 ### RESOLVED-EXPLORE-VS-TRADE-LOOP-MODES — two operator modes (Max ratify 2026-08-01)
 
 **Edge:** Change + Conflict — Max clarified the trainer mental model; live Play had conflated Explore gather with Trade Loop execution.
