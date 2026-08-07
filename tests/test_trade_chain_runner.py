@@ -150,6 +150,87 @@ def test_exact_start_runs_once_and_stop_reaches_abort_predicate(monkeypatch):
     assert lock.is_auto_loop_held() is False
 
 
+def test_start_refuses_unreachable_start_anchor_before_lock(monkeypatch, tmp_path):
+    """Known position in a directed sink must not arm (WO reachability)."""
+    from tw2002_aiclient import world_model
+
+    chain = _chain()
+    plan = plan_from_chain("world-a", chain)
+    monkeypatch.setattr(
+        trade_chain.chain_search,
+        "recompute",
+        lambda *a, **k: _discovered(chain),
+    )
+    # Directed: 99 → nowhere toward 1; undirected would still "connect" if
+    # we invented reverse edges — we must not.
+    world_model.upsert_sector(
+        "world-a", {"sector_id": 99, "warps": [98]}, state_dir=tmp_path
+    )
+    world_model.upsert_sector(
+        "world-a", {"sector_id": 98, "warps": []}, state_dir=tmp_path
+    )
+    world_model.upsert_sector(
+        "world-a", {"sector_id": 1, "warps": [2]}, state_dir=tmp_path
+    )
+    world_model.upsert_sector(
+        "world-a", {"sector_id": 2, "warps": [1]}, state_dir=tmp_path
+    )
+
+    class _Stuck(_Session):
+        def last_known_sector(self):
+            return 99
+
+    lock = ControlLock()
+    runner = trade_chain.TradeChainRunner(_Stuck(), lock, state_dir=tmp_path)
+
+    with pytest.raises(
+        trade_chain.TradeChainRefused, match=r"start_anchor_unreachable:99:1"
+    ):
+        runner.start("world-a", plan.fingerprint)
+
+    assert runner.snapshot().running is False
+    assert lock.is_auto_loop_held() is False
+
+
+def test_start_allows_when_already_at_start_anchor(monkeypatch, tmp_path):
+    chain = _chain()
+    plan = plan_from_chain("world-a", chain)
+    monkeypatch.setattr(
+        trade_chain.chain_search,
+        "recompute",
+        lambda *a, **k: _discovered(chain),
+    )
+    ran = {"n": 0}
+
+    def _run(_session, resolved, **kwargs):
+        ran["n"] += 1
+        return ChainRunResult(
+            completed=True,
+            hops_completed=2,
+            steps=4,
+            credits_delta=10,
+            stop_reason="completed",
+        )
+
+    monkeypatch.setattr(trade_chain, "run_chain", _run)
+
+    class _AtAnchor(_Session):
+        def last_known_sector(self):
+            return 1
+
+    runner = trade_chain.TradeChainRunner(_AtAnchor(), ControlLock(), state_dir=tmp_path)
+    snap = runner.start("world-a", plan.fingerprint)
+    assert snap.running is True
+    runner.stop()
+    assert ran["n"] == 1
+
+
+def test_refuse_helper_skips_when_sector_memory_absent(tmp_path):
+    trade_chain.refuse_if_start_anchor_unreachable(
+        _Session(), "world-a", 1, state_dir=tmp_path
+    )
+
+
 def test_unknown_turns_halts_without_invoking_driver(monkeypatch):
     chain = _chain()
     plan = plan_from_chain("world-a", chain)

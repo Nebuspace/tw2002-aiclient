@@ -51,10 +51,12 @@ skip): explore past sector-1 Class 0, discover priced routes, arm via
 1. Live explore past Class 0 without `dock_report_unreadable` — **met**.
 2. Credits before/after + blocker named honestly — **met** (99000→99000,
    blocker = hop-cap / `chain_discovery_partial`).
-3. Double-money proof — **deferred** to hop-cap follow-on + re-run.
+3. Double-money proof — **deferred** past hop-cap (#511) to
+   `WO-FIX-CHAIN-ARM-START-ANCHOR-REACHABLE` (directed sink /
+   `start_anchor_mismatch` at 6461→882) + re-arm from a reachable seat.
 
 ## Refs
 
-Parent findings; `#509`; `#510`; `trade_adapter.DEFAULT_MAX_HOPS`;
+Parent findings; `#509`; `#510`; `#511`; `trade_adapter.DEFAULT_MAX_HOPS`;
 `session/trade_chain.discovery_blocks_start`; hub HANDOFF 2026-08-07T06:07Z
 (standing carte-blanche disposable arm).
