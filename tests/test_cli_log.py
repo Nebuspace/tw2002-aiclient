@@ -28,6 +28,8 @@ _SHIPPED_VERBS = frozenset(
         "explore",
         "pairs",
         "chains",
+        # WO-BUILD-TRADE-CHAIN-CLI-VERB — arm live trade_chain_* RPC.
+        "chain",
         "reflex",
         "rule",
         # WO-WIRE-CLI-LOG-TRAIL-VERB — filesystem trail over state/ledger.jsonl.
