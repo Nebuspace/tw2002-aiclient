@@ -46,3 +46,25 @@ def test_bank_view_paints_no_collusion_boundary_lines(monkeypatch) -> None:
     joined = "\n".join(stdscr.texts)
     assert BOUNDARY_LINE_1 in joined
     assert BOUNDARY_LINE_2 in joined
+
+
+def test_bank_view_marks_broken_profile_row(monkeypatch) -> None:
+    monkeypatch.setattr(curses, "has_colors", lambda: False)
+    stdscr = _RecordingStdscr()
+    BankViewScreen(
+        stdscr,
+        entries=[
+            {
+                "name": "broken",
+                "handle": "?",
+                "host": "?",
+                "game_letter": "?",
+                "last_played": "never",
+                "turns_state": "-",
+                "error": "missing host",
+            }
+        ],
+    ).draw()
+    joined = "\n".join(stdscr.texts)
+    assert "broken!" in joined
+    assert "error: missing host" in joined

@@ -2631,16 +2631,30 @@ class BankViewScreen:
             for entry in self.entries:
                 if y >= max_y - 2:
                     break
+                name = str(entry.get("name") or "?")
+                row_err = entry.get("error")
+                if row_err:
+                    name = f"{name}!"
                 line = (
-                    f"{entry.get('name', '?'):<16} "
+                    f"{name:<16} "
                     f"{entry.get('handle', '?'):<16} "
                     f"{entry.get('host', '?'):<24} "
                     f"{entry.get('game_letter', '?'):<3} "
                     f"{entry.get('last_played', 'never'):<21} "
                     f"{entry.get('turns_state', '-')}"
                 )
-                _safe_addstr(self.stdscr, y, 3, line, curses.A_NORMAL)
+                # Broken profile = warn tone (visible + diagnosable), not normal.
+                attr = self._warn if row_err else curses.A_NORMAL
+                _safe_addstr(self.stdscr, y, 3, line, attr)
                 y += 1
+                if row_err and y < max_y - 2:
+                    detail = str(row_err)
+                    if len(detail) > max(8, max_x - 12):
+                        detail = detail[: max(8, max_x - 15)] + "..."
+                    _safe_addstr(
+                        self.stdscr, y, 5, f"error: {detail}", self._warn
+                    )
+                    y += 1
 
         _safe_addstr(
             self.stdscr,

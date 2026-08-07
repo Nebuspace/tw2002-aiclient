@@ -370,12 +370,9 @@ def list_players() -> list[dict[str, str]]:
     ``entry.get("error")`` is a surface's entire branch (the launcher already
     branches exactly that way on ``ProfileRow.error``).
 
-    ⚠️ ``screens.py``'s ``BankViewScreen`` does NOT yet read ``error``: it
-    prints the six columns only, so a broken row currently renders as an
-    ordinary table row. Listing it is strictly better than dropping it, but the
-    fix is only complete once that screen grows the one branch its sibling
-    launcher list already has (``screens.py``'s ``if row.error:``). Until then
-    this docstring is the contract, not the screen.
+    ``screens.py``'s ``BankViewScreen`` and ``tw players list`` both mark
+    broken rows (name``!`` + ``error:`` follow-up) — WO-FIX-BANKVIEW-BROKEN-
+    PROFILE-ERROR closed the TUI half that previously painted six columns only.
 
     The one row still dropped is a summary with no ``name`` at all. That is
     structurally unreachable from ``load_profile_summaries`` (names are TOML
