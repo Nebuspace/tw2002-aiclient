@@ -1117,7 +1117,7 @@ _ANCHORS = _GATE_ANCHORS + _CONTENT_ANCHORS
 # Every class name either entry point can return: the anchor tables plus
 # `cim_report` (decided ahead of them by `_is_genuine_cim_report`) and the
 # `unknown` fall-through. Private -- its only job is the assert below.
-_RETURNABLE_CLASSES = frozenset(name for name, _matcher in _ANCHORS) | {"cim_report", "ship_destroyed", "unknown"}
+_RETURNABLE_CLASSES = frozenset(name for name, _matcher in _ANCHORS) | {"cim_report", "ship_destroyed", "connect_splash", "unknown"}
 
 # -- the never-auto-action pin --------------------------------------------
 #
@@ -1248,6 +1248,18 @@ def _is_ship_destroyed(full_text: str) -> bool:
     return has_destroyed or has_scratch
 
 
+
+# WO-FIX-LOGIN-ANSI-SPLASH-UNHANDLED: sursum_corda-style connect splash.
+# Body (not prompt-line) cue — "Timed out..." may be the last row.
+_CONNECT_SPLASH_RE = re.compile(
+    r"Please\s+press\s+A\s+B\s+or\s+C\s+to\s+play\s+after\s+connect",
+    re.I,
+)
+
+
+def _is_connect_splash(full_text: str) -> bool:
+    return bool(_CONNECT_SPLASH_RE.search(full_text or ""))
+
 def classify(rendered_text: str) -> str:
     """Whole-text anchor scan, gate anchors checked first. Simple and
     order-dependent — fine for a single isolated string (tests, one-off
@@ -1300,6 +1312,8 @@ def classify(rendered_text: str) -> str:
     way to evaluate on their own."""
     if _is_ship_destroyed(rendered_text):
         return "ship_destroyed"
+    if _is_connect_splash(rendered_text):
+        return "connect_splash"
     if _is_genuine_cim_report(rendered_text):
         return "cim_report"
     lines = rendered_text.splitlines()
@@ -1350,6 +1364,8 @@ def classify_screen(full_text: str, prompt_line: str) -> str:
     docstring)."""
     if _is_ship_destroyed(full_text):
         return "ship_destroyed"
+    if _is_connect_splash(full_text):
+        return "connect_splash"
     if _is_genuine_cim_report(full_text):
         return "cim_report"
     if (

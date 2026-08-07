@@ -481,6 +481,9 @@ _PORT_QUANTITY_PROMPT_RE = re.compile(
     r"\s+\[\s*\d[\d,]*\s*\]\?\s*$",
     re.IGNORECASE,
 )
+# Live TWGS qty prompts often carry SGR (with or without ESC) in the same
+# row as the words — e.g. joes_tavern `How many holds of [1;36mFuel Ore…`.
+_ANSI_SGR_RE = re.compile(r"(?:\x1b)?\[[0-9;]*m")
 _PORT_QUANTITY_OR_COMMAND_PATTERN = (
     r"(?i:(?:How\s+many\s+holds\s+of\s+(?:Fuel\s+Ore|Organics|Equipment)"
     r"(?:\s+do\s+you\s+want\s+to\s+(?:buy|sell))?"
@@ -488,6 +491,11 @@ _PORT_QUANTITY_OR_COMMAND_PATTERN = (
     r"|Command\s*\[\s*TL\s*=.*\]\s*.*:\s*))$"
 )
 _MAX_GATHER_DECLINES = 3
+
+
+def _plain_prompt(prompt: str) -> str:
+    """Strip SGR so quantity / menu markers can fullmatch live rows."""
+    return _ANSI_SGR_RE.sub("", prompt or "")
 
 
 def _active_input_line(session, rows) -> str:
@@ -845,6 +853,10 @@ class ExploreRunner:
             enter=False,
             timeout_s=self._timeout_s,
             debounce_ms=self._debounce_ms,
+            # WO-FIX-EXPLORE-PORT-DOCK-CONFIRM-FAILED: docking paints a large
+            # commerce screen with the same mid-paint unstable-idle shape as
+            # nav warps (live joes_tavern confirm_failed on Fuel Ore qty).
+            retry_unstable_idle=True,
         )
         rows = self._session.render()
         return (
@@ -898,7 +910,7 @@ class ExploreRunner:
         # "this menu is scrollback", and those differ by exactly one turn and
         # one trade. Same idiom the rest of the module already uses: `classify`
         # matches its gate anchors against `prompt_line` only, for this reason.
-        if _PORT_MENU_MARKER not in prompt.lower():
+        if _PORT_MENU_MARKER not in _plain_prompt(prompt).lower():
             return HALT_DOCK_MENU_UNRECOGNIZED, 1, 0
         confirmed, full_text, prompt = self._send_dock_letter("T")
         # The turn is deducted by the server at `Docking...`, so it is spent
@@ -937,7 +949,7 @@ class ExploreRunner:
                 return None, sends
             if (
                 klass != "money_prompt"
-                or _PORT_QUANTITY_PROMPT_RE.fullmatch(prompt) is None
+                or _PORT_QUANTITY_PROMPT_RE.fullmatch(_plain_prompt(prompt)) is None
                 or sends >= _MAX_GATHER_DECLINES
             ):
                 return halt, sends
@@ -950,6 +962,7 @@ class ExploreRunner:
                 timeout_s=self._timeout_s,
                 debounce_ms=self._debounce_ms,
                 match_scope=_gather_match_scope(self._session),
+                retry_unstable_idle=True,
             )
             sends += 1
             if not confirmed:
