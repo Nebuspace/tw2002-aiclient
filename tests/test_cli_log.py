@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 
 from tw2002_aiclient.session import cli
+from tw2002_aiclient import mine_cli
 from tw2002_aiclient import players_cli
 
 
@@ -39,6 +40,9 @@ _SHIPPED_VERBS = frozenset(
         "probe",
         # WO-BUILD-PLAYER-ROTATION-SELECTOR — read-only next_player surface.
         "players",
+        # WO-BUILD-WIRE-TW-MINE-CLI-VERB — ledger candidate mining.
+        "mine",
+        "patterns",
     }
 )
 
@@ -76,6 +80,11 @@ def test_parser_shipped_verb_allowlist():
     assert trail.n == 5
     players_next = parser.parse_args(["players", "next"])
     assert players_next.func is players_cli.cmd_players_next
+    mine = parser.parse_args(["mine", "--no-propose"])
+    patterns = parser.parse_args(["patterns", "--top-k", "1"])
+    assert mine.func is mine_cli.cmd_mine
+    assert patterns.func is mine_cli.cmd_mine
+    assert patterns.top_k == 1
     sub = next(
         a for a in parser._actions if getattr(a, "choices", None) is not None
     )
