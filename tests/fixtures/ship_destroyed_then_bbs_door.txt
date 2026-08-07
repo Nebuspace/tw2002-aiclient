@@ -1,0 +1,23 @@
+Sector  : 2850 in uncharted space (unexplored).
+Fighters: 160 (The Red Dragon) [Offensive]
+Warps to Sector(s) :  (5504) - (6815) - 13457
+
+Fighter Attack!
+Combat computer reports damages of 6 battle points!
+Life Support knocked out!  Energy generation shut down!
+
+Your *** Scorched *** has been destroyed!
+
+You will have to start over from scratch!
+Maybe you'll have better luck with a different ship!
+
+   ==-- Trade Wars 2002 --==
+
+   T - Play Trade Wars 2002
+   I - Introduction & Help
+   S - View Game Settings
+   H - High scores
+   M - View Access Modes
+   X - Exit
+
+Enter your choice: 
