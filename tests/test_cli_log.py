@@ -45,6 +45,8 @@ _SHIPPED_VERBS = frozenset(
         # WO-BUILD-WIRE-TW-MINE-CLI-VERB — ledger candidate mining.
         "mine",
         "patterns",
+        # WO-BUILD-AI-TEACHER-ANALYZE-CLI — on-demand retrospective AI teacher.
+        "teach",
     }
 )
 
