@@ -195,20 +195,42 @@ def _is_module_entry_menu(text: str, prompt: str) -> bool:
 
 
 def _menu_offers_game_letter(text: str, prompt: str, letter: str) -> bool:
-    """True when the live option list (or screen) offers ``<L>`` for letter.
+    """True when the CURRENT option block offers ``<L>`` for letter.
 
     WO-FIX-LOGIN-MULTIGAME-BBS-MENU-UNHANDLED: moon_base_alpha TWGS door
     paints ``<T> TradeWars Academy`` and classifies as ``menu``, not
     ``game_select`` (no "Select a game" cue). Sending the profile letter
-    is only safe when that letter tag is actually on the current menu.
+    is only safe when that letter tag is on the live option list — never
+    whole-screen fallback (stale ``<F>`` from an earlier door must not
+    vouch for a later menu).
     """
     L = (letter or "").strip()
     if not L or len(L) != 1:
         return False
-    window = _option_block_above_prompt(text, prompt) or (text or "")
+    window = _option_block_above_prompt(text, prompt)
+    if not window:
+        return False
     return bool(
         re.search(rf"<\s*{re.escape(L)}\s*>", window, re.IGNORECASE)
     )
+
+
+def _is_multigame_letter_menu_send(
+    cls: str, send_text, text: str, prompt: str
+) -> bool:
+    """True when this menu send is a TWGS multi-game ``<L>`` pick (no CRLF).
+
+    Module-entry ``T - Play Trade Wars 2002`` is a different shape: FakeTWGS
+    and live a-net expect a line-terminated ``T``. Do not fold that path into
+    the single-key / no-Enter latch used for ``<L>`` doors.
+    """
+    if cls != "menu":
+        return False
+    if not isinstance(send_text, str) or len(send_text) != 1 or not send_text.isalpha():
+        return False
+    if _is_module_entry_menu(text, prompt):
+        return False
+    return _menu_offers_game_letter(text, prompt, send_text)
 
 
 _TRADER_NAME_CHOICE_RE = re.compile(r"\(N\)ew\s+Name\s+or\s+\(B\)BS\s+Name", re.I)
@@ -512,26 +534,16 @@ def run_login(
 
         send_text, secret, wait_hint = action
         # TWGS menu-style single-key selections (game_select's "Select a
-        # game :" and multi-game BBS doors classified as `menu`) must NOT
-        # get a trailing CRLF -- settle.py's live phantom-blank-line hazard.
-        enter = not (
-            cls == "game_select"
-            or (
-                cls == "menu"
-                and isinstance(send_text, str)
-                and len(send_text) == 1
-                and send_text.isalpha()
-            )
-        )
+        # game :" and multi-game BBS ``<L>`` doors classified as `menu`)
+        # must NOT get a trailing CRLF -- settle.py's live phantom-blank-line
+        # hazard. Module-entry ``T`` stays line-terminated (FakeTWGS /
+        # a-net ``_expect_line``).
+        multigame_letter = _is_multigame_letter_menu_send(cls, send_text, text, prompt)
+        enter = not (cls == "game_select" or multigame_letter)
         _reason, _elapsed, confirmed = send_and_confirm(
             session, send_text, confirm_prompt=wait_hint, enter=enter, secret=secret, timeout_s=_STEP_SETTLE_TIMEOUT_S
         )
-        if cls == "game_select" or (
-            cls == "menu"
-            and isinstance(send_text, str)
-            and len(send_text) == 1
-            and send_text.isalpha()
-        ):
+        if cls == "game_select" or multigame_letter:
             session.game_select_letter_sent = True
         if not confirmed:
             # The send went out, but the resulting screen was never
