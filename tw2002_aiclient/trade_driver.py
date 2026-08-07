@@ -356,11 +356,27 @@ class _StepCtx:
         return full_text, prompt_line
 
 
-def _confirmed_send(ctx: _StepCtx, text: str, confirm_prompt: Optional[str], *, enter: bool) -> None:
+def _confirmed_send(
+    ctx: _StepCtx,
+    text: str,
+    confirm_prompt: Optional[str],
+    *,
+    enter: bool,
+    retry_unstable_idle: bool = False,
+) -> None:
     """The one place every actual send in this module funnels through:
     the fail-closed arm gate (A-C1), the abort predicate (A-M1), the
     step budget, a shape-assert (A-C2), then `settle.send_and_confirm` --
-    and a clean `ChainHold` the instant any of those refuse."""
+    and a clean `ChainHold` the instant any of those refuse.
+
+    ``retry_unstable_idle`` is for nav warps only (WO-DIAGNOSE-TRADE-CHAIN-
+    UNCONFIRMED-SEND-HALT): mid-warp / multi-packet paints can flash an
+    idle then emit more bytes during the stability window — settle's
+    default fail-fast then returns confirmed=False even though the hop
+    landed (live academy_of_tradewars 2026-08-07, sector 10396). Matches
+    ``sector_explore`` / settle ``warp_unstable``. Qty/offer/dock sends
+    keep the default False.
+    """
     if not ctx.armed():
         raise ChainHold("armed_off")
     if ctx.aborted():
@@ -375,7 +391,12 @@ def _confirmed_send(ctx: _StepCtx, text: str, confirm_prompt: Optional[str], *, 
     if text != "" and not text.isdigit() and text not in _ALLOWED_LETTER_SENDS:
         raise PaladinViolation(f"refused_disallowed_send_shape:{text!r}")
     _reason, _elapsed, confirmed = send_and_confirm(
-        ctx.session, text, confirm_prompt, enter=enter, timeout_s=ctx.config.step_timeout_s
+        ctx.session,
+        text,
+        confirm_prompt,
+        enter=enter,
+        timeout_s=ctx.config.step_timeout_s,
+        retry_unstable_idle=retry_unstable_idle,
     )
     ctx.steps += 1
     if not confirmed:
@@ -792,7 +813,11 @@ def _navigate(
         live_warps = read_warps_from_sector_status(full_text)
         if live_warps is not None and next_sector not in live_warps:
             raise ChainHold(f"non_adjacent_nav:{hop_index}:{next_sector}")
-        _confirmed_send(ctx, str(next_sector), None, enter=True)
+        # WO-DIAGNOSE-TRADE-CHAIN-UNCONFIRMED-SEND-HALT: retry unstable idle
+        # on nav warps (same shape as sector_explore mid-warp paints).
+        _confirmed_send(
+            ctx, str(next_sector), None, enter=True, retry_unstable_idle=True
+        )
         turns_budget -= 1
         # WO-WARP-CONFIRM-Y (REVISE, hub reject of always-Y): TWGS avoid-list
         # mid-warp Y/N after *this* hop. Intentional by construction (we just
@@ -806,9 +831,13 @@ def _navigate(
         full_text, prompt_line = ctx.fresh()
         if classify_screen(full_text, prompt_line) == "warp_confirm":
             if is_avoid_danger_warp(full_text):
-                _confirmed_send(ctx, "N", None, enter=False)
+                _confirmed_send(
+                    ctx, "N", None, enter=False, retry_unstable_idle=True
+                )
                 raise ChainHold(f"avoid_declined:{hop_index}:{next_sector}")
-            _confirmed_send(ctx, "Y", None, enter=False)
+            _confirmed_send(
+                ctx, "Y", None, enter=False, retry_unstable_idle=True
+            )
     return turns_budget
 
 
