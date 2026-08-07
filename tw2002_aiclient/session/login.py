@@ -89,6 +89,11 @@ from .settle import send_and_confirm
 _MAX_STEPS = 60
 _STEP_SETTLE_TIMEOUT_S = 12.0
 _MAX_PASSWORD_RETRIES = 6
+# WO-FIX-LOGIN-ALIAS-PROMPT-UNHANDLED: bounded Alias retries (same spirit as
+# password retries) — never an unbounded name hunt.
+_MAX_ALIAS_RETRIES = 6
+_ALIAS_SUFFIX_LEN = 3
+_ALIAS_MAX_LEN = 20
 _STAGNANT_ROUNDS_LIMIT = 3
 # Path-specific grace for the RETURNING login_password reappearance only
 # (Mack HIGH follow-up) -- covers a realistic multi-hundred-ms-to-a-couple-
@@ -216,6 +221,7 @@ _OUTER_NAME_REJECTED_RE = re.compile(r"login\s+name\s+is\s+required", re.I)
 _POST_GAME_SELECT_PROGRESS = frozenset(
     {
         "login_name",
+        "login_alias",
         "login_password",
         "ansi_prompt",
         "char_create",
@@ -350,7 +356,15 @@ class LoginProfile:
         self.clear_avoids_on_login = bool(clear_avoids_on_login)
 
 
-def run_login(session, profile, get_password, save_password, target="main_command", trace=None):
+def run_login(
+    session,
+    profile,
+    get_password,
+    save_password,
+    target="main_command",
+    trace=None,
+    save_alias=None,
+):
     """Drive `session` from wherever it currently is to `target`
     classification. `get_password(profile_name) -> str|None` and
     `save_password(profile_name, password)` are injected (not imported
@@ -358,6 +372,12 @@ def run_login(session, profile, get_password, save_password, target="main_comman
     -- the live path (`protocol.py`) wires them to
     `credentials.get_password` / a local secrets-file writer (see that
     module's `_save_password`).
+
+    Optional ``save_alias(profile_name, alias)`` records the in-game Alias
+    when a TWGS dialect rejects ``profile.handle`` (WO-FIX-LOGIN-ALIAS-
+    PROMPT-UNHANDLED). Alias is not a secret; the live saver merges it into
+    the secrets entry as ``in_game_alias`` so it stays discoverable next to
+    the password without inventing a third store.
 
     Returns `(final_classification, steps_taken)`. Raises `LoginError` on
     failure to progress. Never returns without either reaching `target`
@@ -371,6 +391,10 @@ def run_login(session, profile, get_password, save_password, target="main_comman
         # spent its one retry this run? See `_decide()`'s `login_name`
         # branch.
         "outer_name_handle_tried": False,
+        # WO-FIX-LOGIN-ALIAS-PROMPT-UNHANDLED
+        "alias": None,
+        "alias_attempts": 0,
+        "save_alias": save_alias,
     }
     stagnant_rounds = 0
     last_signature = None
@@ -419,7 +443,9 @@ def run_login(session, profile, get_password, save_password, target="main_comman
         if cls == target:
             return cls, step
 
-        action = _decide(cls, text, prompt, profile, state, get_password, save_password, session)
+        action = _decide(
+            cls, text, prompt, profile, state, get_password, save_password, session
+        )
 
         if action is None:
             signature = (cls, prompt)
@@ -606,6 +632,21 @@ def _decide(cls, text, prompt, profile, state, get_password, save_password, sess
             return "", False, None
         return profile.handle, False, None
 
+    if cls == "login_alias":
+        # WO-FIX-LOGIN-ALIAS-PROMPT-UNHANDLED: server rejected the configured
+        # handle and demands a distinct Alias. Mint handle+suffix, persist,
+        # bounded retries — never automaton_stuck on this known gate.
+        state["registering"] = True
+        state["alias_attempts"] += 1
+        if state["alias_attempts"] > _MAX_ALIAS_RETRIES:
+            raise LoginError(f"alias_retries_exhausted:profile={profile.name}")
+        alias = _fresh_alias(getattr(profile, "handle", None) or "Trader")
+        state["alias"] = alias
+        saver = state.get("save_alias")
+        if callable(saver):
+            saver(profile.name, alias)
+        return alias, False, None
+
     if cls == "ansi_prompt":
         return "Y", False, None
 
@@ -740,3 +781,21 @@ def _fresh_password(length=8):
     (WO-PASSWORD-MINT-CANON).  Single source of truth for CSPRNG alnum ≤8."""
     from .credentials import generate_password
     return generate_password(length)
+
+
+def _fresh_alias(handle: str) -> str:
+    """Handle + short CSPRNG suffix for TWGS Alias prompts (bounded retries)."""
+    import secrets
+    import string
+
+    alphabet = string.ascii_letters + string.digits
+    suffix = "".join(secrets.choice(alphabet) for _ in range(_ALIAS_SUFFIX_LEN))
+    base = (handle or "Trader").strip() or "Trader"
+    # Drop characters some hosts reject in aliases; keep alnum.
+    cleaned = "".join(ch for ch in base if ch.isalnum())
+    if not cleaned:
+        cleaned = "Trader"
+    max_base = max(1, _ALIAS_MAX_LEN - len(suffix))
+    if len(cleaned) > max_base:
+        cleaned = cleaned[:max_base]
+    return f"{cleaned}{suffix}"

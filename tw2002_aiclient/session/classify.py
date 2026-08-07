@@ -990,6 +990,13 @@ def _is_main_command(text: str) -> bool:
 _GATE_ANCHORS = [
     ("pause_key", _regex_matcher(re.compile(r"\[\s*pause\s*\]|press\s+.*\bkey\b|--\s*more\s*--", re.I))),
     ("login_password", _regex_matcher(_LOGIN_PASSWORD_RE)),
+    # WO-FIX-LOGIN-ALIAS-PROMPT-UNHANDLED: some TWGS dialects reject the
+    # configured handle and demand a separate Alias (live a_net_online).
+    # Must beat any generic name phrasing; prompt-line gated.
+    (
+        "login_alias",
+        _regex_matcher(re.compile(r"what\s+alias\s+do\s+you\s+want\s+to\s+use", re.I)),
+    ),
     (
         "login_name",
         _regex_matcher(re.compile(r"what\s+is\s+your\s+name|enter\s+your\s+name|your\s+name\s*[?:]", re.I)),

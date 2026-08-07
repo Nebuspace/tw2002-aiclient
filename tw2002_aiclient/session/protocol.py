@@ -1644,6 +1644,20 @@ def _save_password(profile_name, password):
     call reads it straight back. A follow-on WO should promote this into
     `credentials.py` itself rather than leaving the write side split
     across two modules."""
+    _merge_secret_entry(profile_name, password=password)
+
+
+def _save_in_game_alias(profile_name, alias):
+    """Persist the Alias the TWGS host accepted (or last attempted).
+
+    WO-FIX-LOGIN-ALIAS-PROMPT-UNHANDLED: non-secret field ``in_game_alias``
+    merged into the existing secrets entry so it stays discoverable beside
+    the password without a third store. Does not clobber ``password``.
+    """
+    _merge_secret_entry(profile_name, in_game_alias=alias)
+
+
+def _merge_secret_entry(profile_name, **fields):
     from . import credentials
 
     path = credentials.SECRETS_PATH
@@ -1652,7 +1666,15 @@ def _save_password(profile_name, password):
     if path.exists():
         with open(path, encoding="utf-8") as f:
             data = json.load(f)
-    data[profile_name] = {"password": password}
+    entry = data.get(profile_name)
+    if not isinstance(entry, dict):
+        entry = {}
+    else:
+        entry = dict(entry)
+    for key, value in fields.items():
+        if value is not None:
+            entry[key] = value
+    data[profile_name] = entry
     tmp_path = path.with_suffix(path.suffix + ".tmp")
     fd = os.open(str(tmp_path), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     with os.fdopen(fd, "w", encoding="utf-8") as f:
@@ -1957,6 +1979,7 @@ def _dispatch_ensure(session, args, server):
                 profile,
                 get_password=credentials.get_password,
                 save_password=_save_password,
+                save_alias=_save_in_game_alias,
                 target=target,
             )
         except LoginError as e:
