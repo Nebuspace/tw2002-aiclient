@@ -8,6 +8,7 @@ from dataclasses import dataclass, replace
 from typing import Optional
 
 from .. import chain_search
+from ..explore import known_graph, path_to_sector
 from ..trade_chain_plan import plan_from_chain, resolve_exact_chain
 from ..trade_driver import ChainRunResult, run_chain
 from .control_lock import ControlModeConflict
@@ -42,6 +43,37 @@ def discovery_blocks_start(discovered) -> bool:
         return False
     found = getattr(discovered, "chains", None)
     return not isinstance(found, (tuple, list)) or len(found) == 0
+
+
+def refuse_if_start_anchor_unreachable(
+    session,
+    world_id: str,
+    start_anchor: int,
+    *,
+    state_dir=None,
+) -> None:
+    """Fail closed before arm when known position cannot directed-reach the
+    chain start_anchor (WO-FIX-CHAIN-ARM-START-ANCHOR-REACHABLE).
+
+    Skips when position memory is absent — the driver still halts on
+    ``start_anchor_unknown`` / mismatch after arm. Gates only the live
+    directed-sink case: known sector, no outbound path to the anchor.
+    Travel-to-anchor when a path *does* exist remains a follow-on.
+    """
+    probe = getattr(session, "last_known_sector", None)
+    if not callable(probe):
+        return
+    current = probe()
+    if current is None or isinstance(current, bool) or not isinstance(current, int):
+        return
+    if current == start_anchor:
+        return
+    graph = known_graph(world_id, state_dir=state_dir)
+    if path_to_sector(graph, current, start_anchor) is not None:
+        return
+    raise TradeChainRefused(
+        f"start_anchor_unreachable:{current}:{start_anchor}"
+    )
 
 
 @dataclass(frozen=True)
@@ -198,6 +230,12 @@ class TradeChainRunner:
         plan = plan_from_chain(world_id.strip(), chain)
         if plan is None:
             raise TradeChainRefused("chain_plan_invalid")
+        refuse_if_start_anchor_unreachable(
+            self._session,
+            plan.world_id,
+            plan.start_anchor,
+            state_dir=self._state_dir,
+        )
 
         stop = threading.Event()
         report = TradeRunReport(
