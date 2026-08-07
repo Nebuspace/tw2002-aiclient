@@ -300,7 +300,7 @@ $ tw do "hunter2" --secret --wait-prompt "Command \["
 **(1) Send-time actor tag emits `ai`/`trainer`, not `app`.** The reborn model has exactly two live
 senders, `{app, human}`. The code's ledger attribution currently tags App-originated sends with a
 richer, older vocabulary: `do`/`send` dispatch hardcode `actor="ai"`, `haggle` and the background
-AUTO-LOOP driver (`loop_player.py`) tag `actor="trainer"`, and `_current_actor()` returns `"ai"` in
+AUTO-LOOP driver (`session/autoloop.py`, archive `loop_player.py`) tag `actor="trainer"`, and `_current_actor()` returns `"ai"` in
 the default mode. Human keystrokes are already tagged `actor="human"` (attach). Under this canon
 every App-executed keystroke — autopilot, learned-loop playback, auto-haggle alike — is a single
 `app` sender; `ai` and `trainer` collapse into `app`. Documentation-only finding; the tag rename is

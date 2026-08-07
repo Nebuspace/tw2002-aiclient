@@ -184,13 +184,14 @@ canon above is the prescriptive target; the code conforms to it in future work o
   lock, executes one pass, and surfaces each `ChainHold` as a terminal STOP.
   Fresh-render, arm/abort, floor, reconciliation, and Paladin checks remain at
   every send. No finder-initiated launch or replacement-chain rotation exists.
-- **`loop_player.py` is the background AUTO-LOOP driver.** It runs a saved skill as a bounded
-  (hard cycle cap), human-armed, pause/stop-able background thread that halts on replay divergence
-  (`surprise`) and on a fail-closed below-floor / unconfirmable-balance check (`floor_reached` /
-  `credits_unknown`), entering/leaving `auto_loop` exclusively. It is the closest of the three to
-  the reborn posture already; its only divergence is the surrounding "unattended autonomous trader"
-  framing, which this concept recasts to "human-armed repeating taught behavior that STOPs on the
-  unknown and on depletion." Recorded as a divergence in framing.
+- **`session/autoloop.py` is the background AUTO-LOOP driver** (ported from archive
+  `twclient/loop_player.py`). It runs a saved skill as a bounded (hard cycle cap), human-armed,
+  pause/stop-able background thread that halts on replay divergence (`surprise`) and on a
+  fail-closed below-floor / unconfirmable-balance check (`floor_reached` / `credits_unknown`),
+  entering/leaving `auto_loop` exclusively. It is the closest of the three to the reborn posture
+  already; its only divergence is the surrounding "unattended autonomous trader" framing, which
+  this concept recasts to "human-armed repeating taught behavior that STOPs on the unknown and on
+  depletion." Recorded as a divergence in framing.
 - **§22 / TW-23 capstone re-scoped.** The unattended AI-goal-seeking "double the starting credits"
   capstone is re-scoped to "APP orchestrates ONLY taught behaviors and STOPS on the unknown,
   execution-gated," and its home is moved here from the priority engine (see the recast section
