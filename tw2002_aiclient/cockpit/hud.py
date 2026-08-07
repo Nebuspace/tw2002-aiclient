@@ -119,9 +119,12 @@ turns fuel-gauge) the archive's ``compose_hud_cells`` also computed — out
 of scope; this WO's API contract is deliberately the simpler
 ``(value, age_s) -> (text, stale)`` shape, and that polish belongs to the
 liveness/motion work (`trainer-cockpit.md` "Liveness & motion"), not this
-freshness-focused composer. **Never wires the trace ledger as a live HUD
-source** (`trainer-cockpit.md` N4/N8: "the trace ledger is history only");
-this module has no ledger import and never will.
+freshness-focused composer. ``cockpit.tones.gauge_semantic`` stays
+intentional scaffolding until a ``turns_max``-aware fuel-gauge follow-on
+owns that wire (WO-CANON-DRAFT-GAUGE-SEMANTIC-WIRE-CONSUMER). **Never
+wires the trace ledger as a live HUD source** (`trainer-cockpit.md`
+N4/N8: "the trace ledger is history only"); this module has no ledger
+import and never will.
 
 D5: no ``ai_pilot``/imperative-mood text anywhere — this module renders
 read-only observations (a label and a stamped value), never a command.
