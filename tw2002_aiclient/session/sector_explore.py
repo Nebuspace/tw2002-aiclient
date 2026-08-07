@@ -31,6 +31,11 @@ from ..loops.player import (
 from .classify import NEVER_AUTO_ACTION_CLASSES, classify_screen, is_avoid_danger_warp
 from .control_lock import ControlLock, ControlModeConflict
 from . import fighter_toll_policy
+from .explore_defensive_posture import (
+    HALT_DEFENSIVE_POSTURE,
+    decide_defensive_posture,
+    hops_to_stardock,
+)
 from .state_parser import (
     OUTCOME_READ,
     read_current_sector,
@@ -51,6 +56,7 @@ __all__ = [
     "DOCK_LETTER_ALLOWLIST",
     "FIGHT_FORBIDDEN_KEYS",
     "FIGHT_LETTER_ALLOWLIST",
+    "HALT_DEFENSIVE_POSTURE",
     "HALT_FIGHT_CONFIRM_FAILED",
     "HALT_FIGHT_FORBIDDEN_KEY",
     "HALT_FIGHT_NO_KEY",
@@ -59,6 +65,7 @@ __all__ = [
     "HALT_DOCK_MENU_UNRECOGNIZED",
     "HALT_DOCK_POSITION_UNKNOWN",
     "HALT_DOCK_REPORT_UNREADABLE",
+    "HALT_SHIP_DESTROYED",
     "MOVEMENT_SCREEN_CLASS",
     "explore_run_wire",
     "observe_explore",
@@ -85,6 +92,27 @@ REASON_DRIVER_ERROR = "explore_driver_error"
 
 def _utc_now() -> str:
     return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+
+
+def _read_fighters_and_credits(session) -> tuple[Optional[int], Optional[int]]:
+    """Sticky fighters/credits from the session, or None when never observed."""
+    fighters_n: Optional[int] = None
+    credits_n: Optional[int] = None
+    snap_f = getattr(session, "fighters_snapshot", None)
+    if callable(snap_f):
+        fs = snap_f()
+        if getattr(fs, "outcome", None) == OUTCOME_READ:
+            raw = getattr(fs, "fighters", None)
+            if isinstance(raw, int) and not isinstance(raw, bool):
+                fighters_n = raw
+    snap_c = getattr(session, "credits_snapshot", None)
+    if callable(snap_c):
+        cs = snap_c()
+        if getattr(cs, "outcome", None) == OUTCOME_READ:
+            raw_c = getattr(cs, "balance", None)
+            if isinstance(raw_c, int) and not isinstance(raw_c, bool):
+                credits_n = raw_c
+    return fighters_n, credits_n
 
 
 class ExploreRefused(Exception):
@@ -1039,6 +1067,13 @@ class ExploreRunner:
         # avoided for the rest of this explore.
         denied_sectors: Set[int] = set()
         turns = report.turns_remaining
+        # WO-FIX-EXPLORE-NO-DEFENSIVE-POSTURE-BEFORE-UNCHARTED: map-fill only.
+        # Seek a known StarDock before uncharted warps when under the fighter
+        # floor; halt at the dealer for a human-approved buy (no auto-spend).
+        # Skip paths leave posture_done and behave as today.
+        posture_done = report.intent != _explore.INTENT_MAP_FILL
+        seeking_dealer = False
+        posture_qty = 0
         try:
             while not stop.is_set():
                 if getattr(self._session, "should_abort", lambda: False)():
@@ -1309,8 +1344,40 @@ class ExploreRunner:
                     outcome = OUTCOME_HALTED
                     reason = f"{REASON_EXPLORE_EXHAUSTED}:turn_budget"
                     break
+                # Defensive posture gate (map-fill): under-floor + known dealer
+                # within detour budget → route to StarDock, then named halt for
+                # purchase. No taught auto-spend (canon ship-progression: credit
+                # leave is human-approved); skip_* keeps today's explore.
+                if not posture_done:
+                    fighters_n, credits_n = _read_fighters_and_credits(self._session)
+                    hops = hops_to_stardock(
+                        report.world_id,
+                        current,
+                        state_dir=self._state_dir,
+                    )
+                    decision = decide_defensive_posture(
+                        fighters_aboard=fighters_n,
+                        credits=credits_n,
+                        hops_to_dealer=hops,
+                        turns_remaining=turns,
+                    )
+                    if decision.action == "seek_dealer":
+                        seeking_dealer = True
+                        posture_qty = decision.qty
+                        if hops == 0 or klass in STARDOCK_SCREEN_CLASSES:
+                            outcome = OUTCOME_HALTED
+                            reason = f"{HALT_DEFENSIVE_POSTURE}:buy_{posture_qty}"
+                            break
+                    else:
+                        posture_done = True
+                        seeking_dealer = False
+                plan_intent = (
+                    _explore.INTENT_FIND_STARDOCK
+                    if seeking_dealer and not posture_done
+                    else report.intent
+                )
                 tick = warp_target_for_intent(
-                    report.intent,
+                    plan_intent,
                     report.world_id,
                     current_sector=current,
                     turn_budget=turns,
@@ -1318,6 +1385,10 @@ class ExploreRunner:
                     deny=frozenset(denied_sectors),
                 )
                 if tick.goal_reached:
+                    if seeking_dealer and not posture_done:
+                        outcome = OUTCOME_HALTED
+                        reason = f"{HALT_DEFENSIVE_POSTURE}:buy_{posture_qty}"
+                        break
                     # find_stardock ARRIVED. A completed goal is not an
                     # exhausted frontier, and the report must not conflate
                     # them -- see `explore.IntentTick`.
@@ -1326,6 +1397,11 @@ class ExploreRunner:
                     break
                 target = tick.next_sector
                 if target is None:
+                    if seeking_dealer and not posture_done:
+                        # Dealer became unreachable mid-seek — degrade.
+                        posture_done = True
+                        seeking_dealer = False
+                        continue
                     exhaust = tick.reason
                     outcome = OUTCOME_HALTED
                     # Preserve typed route-hazard STOPs (formations → guards);
