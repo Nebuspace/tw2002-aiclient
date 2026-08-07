@@ -178,3 +178,96 @@ def test_cmd_menumap_to_refuses_without_daemon(tmp_path, capsys, monkeypatch):
     err = capsys.readouterr().out
     assert "cannot plan_nav" in err
     assert "no daemon" in err
+
+
+def test_menumap_exec_requires_arm_flag():
+    parser = cli.build_parser()
+    args = parser.parse_args(
+        ["menumap", "--path", "/tmp/gk.json", "--to", "sig-b", "--exec"]
+    )
+    assert args.exec_nav is True
+    assert args.arm_nav is False
+
+
+def test_cmd_menumap_exec_without_arm_refuses(tmp_path, capsys, monkeypatch):
+    path = tmp_path / "game_knowledge.json"
+    sig_a = menu_signature(SCREEN_A)
+    screen_b = "=== Ship ===\n(Q) Quit\n"
+    sig_b = menu_signature(screen_b)
+    menu_knowledge.upsert_menu_node(path, sig_a, label="Computer")
+    menu_knowledge.upsert_menu_node(path, sig_b, label="Ship")
+    menu_knowledge.upsert_menu_edge(path, sig_a, "2", sig_b, kind="nav")
+    monkeypatch.setattr(cli, "daemon_alive", lambda _rd=None: True)
+    calls = []
+
+    def fake_send(verb, args_payload, *, timeout=15.0, run_dir=None):
+        calls.append(verb)
+        assert verb == "screen"
+        return {"ok": True, "screen": SCREEN_A.splitlines()}
+
+    monkeypatch.setattr(cli, "send_request", fake_send)
+    ran = []
+
+    def boom(*_a, **_k):
+        ran.append(1)
+        raise AssertionError("run_nav must not be called unarmed")
+
+    monkeypatch.setattr("tw2002_aiclient.menu_nav_exec.run_nav", boom)
+    args = cli.build_parser().parse_args(
+        ["menumap", "--path", str(path), "--to", sig_b, "--exec"]
+    )
+    assert cli.cmd_menumap(args) == 1
+    out = capsys.readouterr().out
+    assert "requires --arm" in out
+    assert ran == []
+    assert calls == ["screen"]  # plan only; no do
+
+
+def test_cmd_menumap_exec_arm_calls_run_nav(tmp_path, capsys, monkeypatch):
+    path = tmp_path / "game_knowledge.json"
+    sig_a = menu_signature(SCREEN_A)
+    screen_b = "=== Ship ===\n(Q) Quit\n"
+    sig_b = menu_signature(screen_b)
+    menu_knowledge.upsert_menu_node(path, sig_a, label="Computer")
+    menu_knowledge.upsert_menu_node(path, sig_b, label="Ship")
+    menu_knowledge.upsert_menu_edge(path, sig_a, "2", sig_b, kind="nav")
+    monkeypatch.setattr(cli, "daemon_alive", lambda _rd=None: True)
+
+    def fake_send(verb, args_payload, *, timeout=15.0, run_dir=None):
+        if verb == "screen":
+            return {"ok": True, "screen": SCREEN_A.splitlines()}
+        raise AssertionError(f"unexpected verb {verb}")
+
+    monkeypatch.setattr(cli, "send_request", fake_send)
+    seen = {}
+
+    def fake_run_nav(session, plan, path_arg, *, should_abort, is_armed):
+        seen["armed"] = bool(is_armed())
+        seen["steps"] = len(plan.get("steps") or [])
+        from tw2002_aiclient.menu_nav_exec import NavRunResult
+
+        return NavRunResult(True, "completed", None, 1, 1)
+
+    monkeypatch.setattr("tw2002_aiclient.menu_nav_exec.run_nav", fake_run_nav)
+    # Import path used inside cmd_menumap — patch the module attribute after import.
+    import tw2002_aiclient.menu_nav_exec as nav_exec
+
+    monkeypatch.setattr(nav_exec, "run_nav", fake_run_nav)
+    args = cli.build_parser().parse_args(
+        [
+            "menumap",
+            "--path",
+            str(path),
+            "--to",
+            sig_b,
+            "--exec",
+            "--arm",
+            "--json",
+        ]
+    )
+    assert cli.cmd_menumap(args) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["exec"]["ok"] is True
+    assert payload["exec"]["sends_issued"] == 1
+    assert seen["armed"] is True
+    assert seen["steps"] == 1

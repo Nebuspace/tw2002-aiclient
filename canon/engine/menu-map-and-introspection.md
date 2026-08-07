@@ -235,16 +235,18 @@ introspector cannot guess, the probe cannot type. The divergences worth recordin
   agent** (archived "AI-driven" framing named as retired). `menu/knowledge.py` has no AI-driven
   claim. Live paths are `menu/crawler.py` + `menu/knowledge.py` (not archived `menu_crawler.py` /
   `game_knowledge.py`). Behavior already matched the reborn A+C gate; naming now matches tip.
-- **Deterministic-nav execution — kernel LIVE (`menu_nav_exec.run_nav`).**
-  `plan_nav` still has the dry CLI consumer (`tw menumap --to`, never sends).
+- **Deterministic-nav execution — kernel LIVE (`menu_nav_exec.run_nav`);
+  CLI consumer LIVE (`tw menumap --to … --exec --arm`).**
+  `plan_nav` keeps the dry CLI path (`tw menumap --to`, never sends).
   The send half lives **outside** the crawl `menu/` package (so
   `emit_key_if_safe` remains the sole crawl send chokepoint):
   `run_nav(session, plan, path, should_abort=, is_armed=)` — unarmed → zero
   sends (`not_armed`); ``action`` edges → `action_edge_requires_rule` without
   sending; re-checks arm/abort each step; off-map / localization mismatch →
   halt. Concrete session contract (`send` + `rendered_text`), no getattr
-  duck-typing. Daemon/CLI wire that supplies a taught/armed predicate remains
-  the next consumer.
+  duck-typing. Product CLI: `--exec` without `--arm` refuses with zero
+  sends; together they drive a daemon `do`/`screen` adapter through
+  `run_nav`.
 - **No live-captured StarDock/shipyard screen yet.** `introspector.py`'s row grammar (the columnar
   ship table; the Name/Cost equipment tables; the per-hold cargo-price line) is **constructed**
   from the documented TW2002 listing convention plus this project's own real-capture divider
