@@ -90,3 +90,12 @@ Live session: `academy_of_tradewars` (sacrificial), 2026-08-07. Credits 99000 â†
 (+3957), halted `unconfirmed_send:'10396'` after 6/16 hops, 99 sends. Parent:
 `WO-LIVE-WITNESS-FIRST-TRADE-LOOP`. `trade_driver.py:382`, `session/autoloop.py:670-699`,
 `session/settle.py`.
+
+## Evidence (2026-08-07 seat diagnose)
+
+Session log `logs/session-20260807T063427Z.log` (sacrificial credit proof):
+final TX `10396` at 06:40:46 painted Sector + Command on wire; chain did not
+continue (next TX was `i` at 06:40:49). `_navigate` was confirming warps with
+`confirm_prompt=None` and default `retry_unstable_idle=False`. Fix: pass
+`retry_unstable_idle=True` on nav warps (same as `sector_explore` /
+settle `warp_unstable`). Offline pin: `tests/test_trade_nav_retry_unstable_idle.py`.
