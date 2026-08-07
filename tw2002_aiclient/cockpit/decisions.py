@@ -313,6 +313,47 @@ IMPERATIVE_DENYLIST = frozenset(
 )
 
 
+def _first_word(phrase: object) -> str:
+    text = _safe_str(phrase) or ""
+    token = text.split()[0] if text.split() else text
+    return token.rstrip("…").lower()
+
+
+def assert_authored_imperative_denylist() -> None:
+    """Fail loud if DECISIONS-authored fixed vocabulary starts with a denylist verb.
+
+    WO-WIRE-IMPERATIVE-DENYLIST-RUNTIME-CHECK: the frozenset is not test-only
+    decoration — product startup (and this assert) re-check the same fixed
+    phrases ``tests/test_cockpit_decisions.py`` pins. Does **not** sanitize
+    arbitrary wire ``rationale`` / ``kind`` strings (see module docstring).
+    """
+    from .focus import _KIND_LABELS
+
+    phrases: list[str] = []
+    phrases.extend(str(v) for v in _KIND_LABELS.values())
+    phrases.append(UNKNOWN_DETAIL)
+    phrases.append("Exploring…")
+    for attr in (
+        "EXPLORE_HELP",
+        "POLICY_HELP",
+        "MODE_HELP",
+        "CHAINS_HELP",
+    ):
+        val = getattr(autonomy_keys, attr, None)
+        if isinstance(val, str) and val:
+            phrases.append(val)
+    bad: list[str] = []
+    for phrase in phrases:
+        word = _first_word(phrase)
+        if word and word in IMPERATIVE_DENYLIST:
+            bad.append(f"{word!r} in {phrase!r}")
+    if bad:
+        raise AssertionError(
+            "DECISIONS authored vocabulary hits IMPERATIVE_DENYLIST: "
+            + "; ".join(bad)
+        )
+
+
 def _clip(text: str, *, width: int) -> str:
     if width <= 0:
         return ""

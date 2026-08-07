@@ -2797,6 +2797,17 @@ def main(argv: list[str] | None = None) -> int:
     except AssertionError as exc:
         print(f"action-safety coverage map broken: {exc}", file=sys.stderr)
         return 1
+    # WO-WIRE-IMPERATIVE-DENYLIST-RUNTIME-CHECK: authored DECISIONS vocab
+    # must not start with an imperative denylist verb (same pin as tests).
+    try:
+        from tw2002_aiclient.cockpit.decisions import (
+            assert_authored_imperative_denylist,
+        )
+
+        assert_authored_imperative_denylist()
+    except AssertionError as exc:
+        print(f"DECISIONS imperative denylist broken: {exc}", file=sys.stderr)
+        return 1
     try:
         curses.wrapper(_run)
     except DeadTerminalError as exc:
