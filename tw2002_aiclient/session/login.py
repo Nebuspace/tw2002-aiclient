@@ -194,6 +194,23 @@ def _is_module_entry_menu(text: str, prompt: str) -> bool:
     return bool(window and _MODULE_ENTRY_MENU_RE.search(window))
 
 
+def _menu_offers_game_letter(text: str, prompt: str, letter: str) -> bool:
+    """True when the live option list (or screen) offers ``<L>`` for letter.
+
+    WO-FIX-LOGIN-MULTIGAME-BBS-MENU-UNHANDLED: moon_base_alpha TWGS door
+    paints ``<T> TradeWars Academy`` and classifies as ``menu``, not
+    ``game_select`` (no "Select a game" cue). Sending the profile letter
+    is only safe when that letter tag is actually on the current menu.
+    """
+    L = (letter or "").strip()
+    if not L or len(L) != 1:
+        return False
+    window = _option_block_above_prompt(text, prompt) or (text or "")
+    return bool(
+        re.search(rf"<\s*{re.escape(L)}\s*>", window, re.IGNORECASE)
+    )
+
+
 _TRADER_NAME_CHOICE_RE = re.compile(r"\(N\)ew\s+Name\s+or\s+\(B\)BS\s+Name", re.I)
 _SHIP_NAME_PROMPT_RE = re.compile(r"name\s+your\s+ship", re.I)
 _SHIP_CONFIRM_RE = re.compile(r"is\s+what\s+you\s+want\s*\?", re.I)
@@ -423,7 +440,7 @@ def run_login(
         # keeps the stale-redraw test green while still recovering a genuine
         # persistent re-entry on the second stagnant iteration.
         if (
-            cls == "game_select"
+            cls in ("game_select", "menu")
             and getattr(session, "game_select_answered", False)
             and stagnant_rounds >= 1
         ):
@@ -495,13 +512,26 @@ def run_login(
 
         send_text, secret, wait_hint = action
         # TWGS menu-style single-key selections (game_select's "Select a
-        # game :") must NOT get a trailing CRLF -- settle.py's live
-        # phantom-blank-line hazard.
-        enter = cls != "game_select"
+        # game :" and multi-game BBS doors classified as `menu`) must NOT
+        # get a trailing CRLF -- settle.py's live phantom-blank-line hazard.
+        enter = not (
+            cls == "game_select"
+            or (
+                cls == "menu"
+                and isinstance(send_text, str)
+                and len(send_text) == 1
+                and send_text.isalpha()
+            )
+        )
         _reason, _elapsed, confirmed = send_and_confirm(
             session, send_text, confirm_prompt=wait_hint, enter=enter, secret=secret, timeout_s=_STEP_SETTLE_TIMEOUT_S
         )
-        if cls == "game_select":
+        if cls == "game_select" or (
+            cls == "menu"
+            and isinstance(send_text, str)
+            and len(send_text) == 1
+            and send_text.isalpha()
+        ):
             session.game_select_letter_sent = True
         if not confirmed:
             # The send went out, but the resulting screen was never
@@ -665,8 +695,19 @@ def _decide(cls, text, prompt, profile, state, get_password, save_password, sess
             return None
         return profile.game_letter, False, None
 
-    if cls == "menu" and _is_module_entry_menu(text, prompt):
-        return "T", False, None
+    if cls == "menu":
+        # Module-entry Play TW2002 door (a-net shape).
+        if _is_module_entry_menu(text, prompt):
+            return "T", False, None
+        # WO-FIX-LOGIN-MULTIGAME-BBS-MENU-UNHANDLED: TWGS multi-game door
+        # classified as `menu` (no "Select a game" string). Send the
+        # configured letter only when `<L>` is on the live menu — same
+        # one-shot latch as game_select.
+        letter = str(getattr(profile, "game_letter", "") or "").strip()
+        if letter and _menu_offers_game_letter(text, prompt, letter):
+            if getattr(session, "game_select_answered", False):
+                return None
+            return letter[:1].upper(), False, None
 
     if cls == "char_create":
         # Auto-creating a character on a real server is a policy call,
