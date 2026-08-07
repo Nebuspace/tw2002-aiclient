@@ -2029,6 +2029,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     add_players_parsers(sub)
 
+    # WO-BUILD-WIRE-TW-MINE-CLI-VERB: ledger candidate mining (filesystem only).
+    from ..mine_cli import add_mine_parsers
+
+    add_mine_parsers(sub)
+
     return parser
 
 

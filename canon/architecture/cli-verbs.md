@@ -35,7 +35,8 @@ Three carve-outs to the one-shot shape, all deliberate:
 - **Daemon-free reads** never touch the socket at all — they read on-disk artifacts directly, so
   they work with the daemon stopped. **LIVE today:** `log`/`trail`/`report` (ledger),
   `loops`/`menumap`/`pairs`/`chains`/`record`/`reflex`/`rule` (stores), `servers`/`probe`
-  (catalog). **TARGET (not a `tw` subparser yet):** `frames`, `analyze`/`mine`, `players`.
+  (catalog), `players` (rotation metadata), `mine`/`patterns` (candidate mining).
+  **TARGET (not a `tw` subparser yet):** `frames`, `analyze`.
   `probe` opens its own throwaway connections to *catalog* endpoints, never the live game session.
 - **Session-establishing verbs** (`start`, `ensure`) may spawn the daemon before the round trip.
 
@@ -132,7 +133,7 @@ config is isolated, and print the run-dir path they would have targeted (WO-CLI-
 |---|---|---|---|---|
 | `record <manifest>` | **LIVE.** Write a taught macro from an **already-captured** JSON demonstration manifest — daemon-free, never sends. Shipped shape (X6); see Implementation status and [Macros](/engine/macros.md)'s Findings for how this differs from the live start/stop bracket capture this row originally specified. | `manifest` (path) `--draft` | `teach` | [Rule–Macro Engine](/architecture/rule-macro-engine.md) |
 | `analyze <session>` | **TARGET — not a `tw` CLI verb yet.** Session-retro: group recurring ledger decisions, rank profitable ones as candidates to codify (proposes, never applies). | `--min-support` `--top` | `teach` | [Rule–Macro Engine](/architecture/rule-macro-engine.md) |
-| `mine` (alias `patterns`) | **TARGET — not a `tw` CLI verb yet.** Mine the Trace-Ledger for recurring profitable input-subsequences; proposes drafts under `state/skills/_drafts/`. (Standalone `miner.py` exists; flag is `--top-k`, not `--top`.) | `--min-support` | `teach` | [Rule–Macro Engine](/architecture/rule-macro-engine.md) |
+| `mine` (alias `patterns`) | **LIVE.** Mine the Trace-Ledger for recurring profitable input-subsequences; proposes inert drafts under `state/skills/_drafts/`. Flag is `--top-k` (not `--top`). | `--min-support` `--top-k` `--ledger` `--drafts` `--no-propose` `--json` | `teach` | [Candidate Mining](/engine/candidate-mining.md) · [Rule–Macro Engine](/architecture/rule-macro-engine.md) |
 
 ## App-drive (deterministic macro / loop / pilot playback) — TARGET unless noted
 
@@ -229,10 +230,10 @@ see [Macros](/engine/macros.md)'s Findings for the mirrored note.
 
 **NOT a `tw` CLI verb on tip (HOLD / later / retired — do not document as runnable):**
 `spectate` (**RETIRED / WONTBUILD** — Max; in-cockpit Spectate LIVE via PWO-055),
-`start` (ensure covers spawn), `frames`, `analyze`/`mine`, `replay`,
-`play`/`haggle`/`autopilot`/`crawl`/`autoloop` (shell), `players`, `aiclient` as a separate curses
+`start` (ensure covers spawn), `frames`, `analyze`, `replay`,
+`play`/`haggle`/`autopilot`/`crawl`/`autoloop` (shell), `aiclient` as a separate curses
 product entry (product is `./tw2002-aiclient`). `record`, `log`/`trail`, `servers`/`probe`,
-`report`, `chains`, `explore`, `reflex`, `rule` are LIVE — not on this HOLD list.
+`report`, `chains`, `explore`, `reflex`, `rule`, `players`, `mine`/`patterns` are LIVE — not on this HOLD list.
 
 **WIRE-ONLY (a daemon protocol verb exists; no `tw` CLI subparser wraps it — not runnable from a
 shell today, only over the daemon's own socket protocol):**
