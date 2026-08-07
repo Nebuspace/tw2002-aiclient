@@ -318,13 +318,15 @@ LAST-match   -> credits = 100,485  (correct)
 
 # Citations
 
-[1] `twclient/classify.py` — gate/content anchor split, prompt-line discipline, `cim_report` and
-    `game_select` exclusivity hardening, `is_probable_secret_prompt` redaction predicate.
-[2] `twclient/state_parser.py` — last-match invariant, line-shape provenance, block-scoped
+[1] `tw2002_aiclient/session/classify.py` — gate/content anchor split, prompt-line discipline, `cim_report` and
+    `game_select` exclusivity hardening, `is_probable_secret_prompt` redaction predicate
+    (ported from archive `twclient/classify.py`).
+[2] `tw2002_aiclient/session/state_parser.py` — last-match invariant, line-shape provenance, block-scoped
     commodity reads, `sector_from_command_prompt`, the documented forged-last-match residual family.
-[3] `twclient/terminal.py` — the fixed 80×25 pyte grid (no scrollback), CP437 decode, cropped
+[3] `tw2002_aiclient/session/terminal.py` — the fixed 80×25 pyte grid (no scrollback), CP437 decode, cropped
     render — the substrate the stale-scrollback discipline exists to survive.
-[4] `twclient/menu_sig.py` — the shared, dependency-light menu-signature primitive.
+[4] `tw2002_aiclient/menu/sig.py` — the shared, dependency-light menu-signature primitive
+    (archive name `twclient/menu_sig.py`).
 [5] CLAUDE.md "Hard rules" — `wait_prompt` case-sensitivity, `state_parser` last-match, secrets
     never touch logs/argv/repo, single-connection pidfile.
 [6] `.samantha/plans/okf-final-vision-map.md` — `engine/screen-understanding.md` spec
