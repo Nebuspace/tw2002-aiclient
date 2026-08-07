@@ -393,8 +393,8 @@ paladin-main     PaladinPrime     tw2002.briancmoses.com   A   2026-07-23     ok
 - **`tw players list` is LIVE (WO-BUILD-TW-PLAYERS-LIST).** Prints the same
   `BOUNDARY_LINE_1` / `BOUNDARY_LINE_2` no-collusion lines as `BankViewScreen`, then
   metadata rows from `player_bank.list_players` (never logs in). Broken profiles are
-  marked with `!` + an `error:` follow-up line (TUI still paints six columns only —
-  residual on the screen, not the CLI).
+  marked with `!` + an `error:` follow-up line on both CLI and TUI
+  (`BankViewScreen` — WO-FIX-BANKVIEW-BROKEN-PROFILE-ERROR).
 
 - **The no-collusion boundary is shown on the launcher bank view and on `tw players list`.**
   Doctrine + review still own enforcement (no code path can stop in-game manual transfers).
