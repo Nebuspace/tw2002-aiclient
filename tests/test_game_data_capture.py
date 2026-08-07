@@ -105,6 +105,29 @@ def test_tick_persists_cargo_hold_quote(tmp_path: Path):
     assert loaded.cargo_holds[0].source.startswith("introspected")
 
 
+def test_tick_persists_equipment_listings(tmp_path: Path):
+    """Wire parse_scanner/transwarp/item_listing into opportunistic capture."""
+    play = _Play(_event_from_fixture("stardock_equipment_listing.txt", "main_command"))
+    result = gdc.GameDataCapture().tick(play, _Profile(), state_dir=tmp_path)
+    assert result.attempted is True
+    assert result.scanners_persisted == 2
+    assert result.transwarp_persisted == 1
+    assert result.items_persisted == 2
+    loaded = gd.load_world_game_data(WORLD_ID, state_dir=tmp_path)
+    assert len(loaded.scanners) == 2
+    assert len(loaded.transwarp) == 1
+    assert len(loaded.items) == 2
+    assert all(s.source.startswith("introspected") for s in loaded.scanners)
+
+
+def test_capture_screen_persists_equipment_directly(tmp_path: Path):
+    text = (FIXTURES / "stardock_equipment_listing.txt").read_text(encoding="utf-8")
+    result = gdc.capture_screen(WORLD_ID, text, screen_class="main_command", state_dir=tmp_path)
+    assert result.attempted is True
+    assert result.scanners_persisted >= 1
+    assert result.items_persisted >= 1
+
+
 def test_tick_never_raises_on_broken_provider(tmp_path: Path):
     play = _Play(None)
     play.viewport_provider = lambda: (_ for _ in ()).throw(RuntimeError("boom"))

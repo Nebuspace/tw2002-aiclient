@@ -1,8 +1,9 @@
 """Opportunistic Layer-B game-data capture (AUDIT-BUILD-GAMEDATA-CAPTURE-LOOP).
 
 When a settle-edge watch event's screen text already contains a StarDock
-shipyard listing or cargo-hold quote (introspector header/footer grammar),
-parse and persist Layer-B rows. Pure observe path: no send, no crawl, no
+shipyard listing, cargo-hold quote, or equipment catalog (scanner /
+TransWarp / special devices — introspector header/footer grammar), parse
+and persist Layer-B rows. Pure observe path: no send, no crawl, no
 connection open.
 
 Why not ``classify_screen`` alone: live fixtures end with ``main_command``
@@ -36,6 +37,7 @@ CAPTURE_SCREEN_CLASSES = frozenset(
     {
         "stardock_shipyard_listing",
         "stardock_cargo_hold_quote",
+        "stardock_equipment_listing",
     }
 )
 
@@ -48,6 +50,9 @@ class CaptureResult:
     screen_class: Optional[str]
     ships_persisted: int = 0
     cargo_persisted: bool = False
+    scanners_persisted: int = 0
+    transwarp_persisted: int = 0
+    items_persisted: int = 0
     reason: Optional[str] = None
 
 
@@ -81,7 +86,16 @@ class GameDataCapture:
                 hint = raw
         ships = _introspector.parse_shipyard_listing(text)
         cargo = _introspector.parse_cargo_hold_price(text)
-        if not ships and cargo is None:
+        scanners = _introspector.parse_scanner_listing(text)
+        transwarp = _introspector.parse_transwarp_listing(text)
+        items = _introspector.parse_item_listing(text)
+        if (
+            not ships
+            and cargo is None
+            and not scanners
+            and not transwarp
+            and not items
+        ):
             return CaptureResult(False, hint, reason="no_listing")
         try:
             world_id = _world_identity.world_id_from_profile(profile)
@@ -89,7 +103,7 @@ class GameDataCapture:
             return CaptureResult(False, hint, reason="no_world_id")
         if not isinstance(world_id, str) or not world_id:
             return CaptureResult(False, hint, reason="no_world_id")
-        kind = "shipyard" if ships else "cargo_hold"
+        kind = _listing_kind(ships, cargo, scanners, transwarp, items)
         fingerprint = f"{world_id}:{kind}:{_text_fingerprint(text)}"
         if fingerprint == self._last_fingerprint:
             return CaptureResult(False, hint or kind, reason="unchanged")
@@ -135,10 +149,22 @@ def capture_screen(
     """Parse + persist from raw screen text. Never sends."""
     ships = _introspector.parse_shipyard_listing(text)
     cargo = _introspector.parse_cargo_hold_price(text)
-    if not ships and cargo is None:
+    scanners = _introspector.parse_scanner_listing(text)
+    transwarp = _introspector.parse_transwarp_listing(text)
+    items = _introspector.parse_item_listing(text)
+    if (
+        not ships
+        and cargo is None
+        and not scanners
+        and not transwarp
+        and not items
+    ):
         return CaptureResult(False, screen_class, reason="no_listing")
     ships_n = 0
     cargo_ok = False
+    scanners_n = 0
+    transwarp_n = 0
+    items_n = 0
     if ships:
         for row in ships:
             _game_data.persist_ship_row(world_id, row, state_dir=state_dir)
@@ -146,12 +172,41 @@ def capture_screen(
     if cargo is not None:
         _game_data.persist_cargo_hold_row(world_id, cargo, state_dir=state_dir)
         cargo_ok = True
+    for row in scanners:
+        _game_data.persist_scanner_row(world_id, row, state_dir=state_dir)
+        scanners_n += 1
+    for row in transwarp:
+        _game_data.persist_transwarp_row(world_id, row, state_dir=state_dir)
+        transwarp_n += 1
+    for row in items:
+        _game_data.persist_item_row(world_id, row, state_dir=state_dir)
+        items_n += 1
+    kind = _listing_kind(ships, cargo, scanners, transwarp, items)
     return CaptureResult(
         True,
-        screen_class or ("shipyard" if ships else "cargo_hold"),
+        screen_class or kind,
         ships_persisted=ships_n,
         cargo_persisted=cargo_ok,
+        scanners_persisted=scanners_n,
+        transwarp_persisted=transwarp_n,
+        items_persisted=items_n,
     )
+
+
+def _listing_kind(
+    ships: object,
+    cargo: object,
+    scanners: object,
+    transwarp: object,
+    items: object,
+) -> str:
+    if ships:
+        return "shipyard"
+    if cargo is not None:
+        return "cargo_hold"
+    if scanners or transwarp or items:
+        return "equipment"
+    return "unknown"
 
 
 def _latest_event(play: object) -> Optional[dict[str, Any]]:
