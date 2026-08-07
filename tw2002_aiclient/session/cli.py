@@ -659,9 +659,13 @@ def cmd_menumap(args):
     you-are-here). Never sends. Localizes the live screen when a daemon is up.
 
     Optional ``--to SIG`` runs ``plan_nav`` against the live screen (dry
-    keystroke plan only — still never sends). Needs a successful localize;
+    keystroke plan by default — never sends). Needs a successful localize;
     without a live look the verb refuses the plan rather than inventing a
     route from store-only state.
+
+    ``--exec --arm`` (both required) runs ``menu_nav_exec.run_nav`` against
+    the planned steps via daemon ``do``/``screen``. Without ``--arm``,
+    ``--exec`` refuses with zero sends (fail-closed antifire).
 
     The you-are-here line has THREE states, not two, because "we looked and
     you are not on the map" and "we never managed to look" are different
@@ -747,6 +751,32 @@ def cmd_menumap(args):
             return 1
         plan = plan_nav(screen_text, to_sig, path)
 
+    want_exec = bool(getattr(args, "exec_nav", False))
+    armed = bool(getattr(args, "arm_nav", False))
+    exec_result = None
+    if want_exec:
+        if not to_sig:
+            print_tty("ERROR: --exec requires --to SIG")
+            return 1
+        if not armed:
+            print_tty("ERROR: --exec requires --arm (refuse unarmed; zero sends)")
+            return 1
+        if plan is None or not plan.get("ok"):
+            print_tty(
+                f"ERROR: cannot exec_nav ({(plan or {}).get('reason') or 'no plan'})"
+            )
+            return 1
+        from tw2002_aiclient.menu_nav_exec import run_nav
+
+        session = _MenumapNavSession(run_dir)
+        exec_result = run_nav(
+            session,
+            plan,
+            path,
+            should_abort=lambda: False,
+            is_armed=lambda: True,  # --arm already gated above
+        )
+
     if getattr(args, "json", False):
         # JSON stays raw Unicode (machine codecs); operator text lines go
         # through print_tty so ★ / — / · never silent-drop on ASCII TTYs.
@@ -754,7 +784,18 @@ def cmd_menumap(args):
         if plan is not None:
             payload["plan"] = plan
             payload["ok"] = bool(plan.get("ok"))
+        if exec_result is not None:
+            payload["exec"] = {
+                "ok": exec_result.ok,
+                "outcome": exec_result.outcome,
+                "reason": exec_result.reason,
+                "sends_issued": exec_result.sends_issued,
+                "steps_done": exec_result.steps_done,
+            }
+            payload["ok"] = bool(exec_result.ok)
         print(json.dumps(payload))
+        if exec_result is not None:
+            return 0 if exec_result.ok else 1
         if plan is not None and not plan.get("ok"):
             return 1
         return 0
@@ -775,7 +816,49 @@ def cmd_menumap(args):
         else:
             print_tty(f"plan: failed ({plan.get('reason') or 'unknown'})")
             return 1
+    if exec_result is not None:
+        if exec_result.ok:
+            print_tty(
+                f"exec: completed ({exec_result.sends_issued} send(s))"
+            )
+            return 0
+        print_tty(
+            f"exec: {exec_result.outcome}"
+            f" ({exec_result.reason or 'unknown'};"
+            f" sends={exec_result.sends_issued})"
+        )
+        return 1
     return 0
+
+
+class _MenumapNavSession:
+    """Daemon adapter for ``menu_nav_exec.run_nav`` (send + rendered_text)."""
+
+    def __init__(self, run_dir) -> None:
+        self._run_dir = run_dir
+
+    def send(self, payload: str) -> None:
+        # Menu single-keys: no trailing Enter (same as crawl chokepoint).
+        enter = payload == ""
+        resp = send_request(
+            "do",
+            {
+                "input": payload,
+                "enter": enter,
+                "secret": False,
+                "timeout": 8.0,
+            },
+            timeout=13.0,
+            run_dir=self._run_dir,
+        )
+        if not resp.get("ok"):
+            raise RuntimeError(resp.get("error") or "do failed")
+
+    def rendered_text(self) -> str:
+        resp = send_request("screen", {}, run_dir=self._run_dir)
+        if not resp.get("ok"):
+            raise RuntimeError(resp.get("error") or "screen failed")
+        return "\n".join(resp.get("screen") or [])
 
 
 def cmd_loops(args):
@@ -1809,8 +1892,8 @@ def build_parser() -> argparse.ArgumentParser:
     sp = sub.add_parser(
         "menumap",
         help=(
-            "read-only menu-map inspector: coverage, dead-ends, orphans, "
-            "and you-are-here * / off-map -- never sends"
+            "menu-map inspector: coverage, dead-ends, orphans, "
+            "you-are-here; dry --to plan, or --exec --arm to send"
         ),
     )
     sp.add_argument(
@@ -1833,9 +1916,21 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         metavar="SIG",
         help=(
-            "dry plan_nav to this menu-map signature (never sends; "
+            "plan_nav to this menu-map signature (dry unless --exec --arm; "
             "needs live localize)"
         ),
+    )
+    sp.add_argument(
+        "--exec",
+        dest="exec_nav",
+        action="store_true",
+        help="execute plan_nav steps via menu_nav_exec (requires --to and --arm)",
+    )
+    sp.add_argument(
+        "--arm",
+        dest="arm_nav",
+        action="store_true",
+        help="human arm gate for --exec (without this, --exec refuses with zero sends)",
     )
     sp.set_defaults(func=cmd_menumap)
 

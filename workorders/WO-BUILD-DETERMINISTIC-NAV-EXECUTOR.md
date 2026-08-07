@@ -1,6 +1,6 @@
 # WO-BUILD-DETERMINISTIC-NAV-EXECUTOR
 
-**Status:** IN PROGRESS  
+**Status:** DONE (kernel) — CLI residual closed by WO-WIRE-MENUMAP-NAV-EXEC  
 **Priority:** MED  
 **Gated:** no (hub GO 2026-08-06 — strictly taught/armed-gated)
 
@@ -33,7 +33,7 @@ predicate that is true only after human teach/arm (same shape as
 1. Unarmed → zero sends (unit pin).
 2. `action` step → refuse without send.
 3. Armed `nav` path → sends keys; stop-on-unknown on off-map.
-4. live-prove: n/a (offline kernel; live wire is a later consumer).
+4. live-prove: n/a (offline kernel; CLI wire = WO-WIRE-MENUMAP-NAV-EXEC).
 
 ## Proof
 
