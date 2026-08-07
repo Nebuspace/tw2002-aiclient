@@ -37,11 +37,17 @@ __all__ = [
     "load_game_data",
     "load_world_game_data",
     "persist_cargo_hold_row",
+    "persist_item_row",
+    "persist_scanner_row",
     "persist_ship_row",
+    "persist_transwarp_row",
     "save_world_game_data",
     "ship_row_to_spec",
     "validate_cargo_hold_row",
+    "validate_item_row",
+    "validate_scanner_row",
     "validate_ship_row",
+    "validate_transwarp_row",
 ]
 
 REQUIRED_SHIP_FIELDS = frozenset(
@@ -62,6 +68,13 @@ REQUIRED_SHIP_FIELDS = frozenset(
     }
 )
 REQUIRED_CARGO_HOLD_FIELDS = frozenset({"cost_per_hold", "source", "last_verified_ts"})
+REQUIRED_SCANNER_FIELDS = frozenset(
+    {"scanner_type", "cost_credits", "source", "last_verified_ts"}
+)
+REQUIRED_TRANSWARP_FIELDS = frozenset({"cost_credits", "source", "last_verified_ts"})
+REQUIRED_ITEM_FIELDS = frozenset(
+    {"item_name", "cost_credits", "source", "last_verified_ts"}
+)
 
 
 class GameDataError(ValueError):
@@ -237,6 +250,44 @@ def validate_cargo_hold_row(row: Mapping[str, Any]) -> CargoHoldRow:
         cost_per_hold=int(row["cost_per_hold"]),
         source=_require_introspected(row["source"], kind="cargo_hold"),
         last_verified_ts=_require_ts(row["last_verified_ts"], kind="cargo_hold"),
+    )
+
+
+def validate_scanner_row(row: Mapping[str, Any]) -> ScannerRow:
+    missing = REQUIRED_SCANNER_FIELDS - frozenset(row.keys())
+    if missing:
+        raise GameDataError(f"scanner row missing fields: {sorted(missing)}")
+    return ScannerRow(
+        scanner_type=str(row["scanner_type"]),
+        cost_credits=int(row["cost_credits"]),
+        capability_notes=str(row.get("capability_notes") or ""),
+        source=_require_introspected(row["source"], kind="scanner"),
+        last_verified_ts=_require_ts(row["last_verified_ts"], kind="scanner"),
+    )
+
+
+def validate_transwarp_row(row: Mapping[str, Any]) -> TranswarpRow:
+    missing = REQUIRED_TRANSWARP_FIELDS - frozenset(row.keys())
+    if missing:
+        raise GameDataError(f"transwarp row missing fields: {sorted(missing)}")
+    return TranswarpRow(
+        cost_credits=int(row["cost_credits"]),
+        range_notes=str(row.get("range_notes") or ""),
+        source=_require_introspected(row["source"], kind="transwarp"),
+        last_verified_ts=_require_ts(row["last_verified_ts"], kind="transwarp"),
+    )
+
+
+def validate_item_row(row: Mapping[str, Any]) -> ItemRow:
+    missing = REQUIRED_ITEM_FIELDS - frozenset(row.keys())
+    if missing:
+        raise GameDataError(f"item row missing fields: {sorted(missing)}")
+    return ItemRow(
+        item_name=str(row["item_name"]),
+        cost_credits=int(row["cost_credits"]),
+        effect_notes=str(row.get("effect_notes") or ""),
+        source=_require_introspected(row["source"], kind="item"),
+        last_verified_ts=_require_ts(row["last_verified_ts"], kind="item"),
     )
 
 def _ship_to_dict(ship: ShipRow) -> dict:
@@ -493,3 +544,79 @@ def persist_cargo_hold_row(
         path = game_data_path(world_id, state_dir=state_dir)
         _atomic_write_json(path, game_data_to_dict(updated))
     return hold
+
+
+def persist_scanner_row(
+    world_id: str, row: Mapping[str, Any], *, state_dir: str | Path | None = None
+) -> ScannerRow:
+    """Validate + upsert one scanner catalog row by ``scanner_type``."""
+    payload = dict(row)
+    if not payload.get("last_verified_ts"):
+        payload["last_verified_ts"] = _now_iso()
+    scanner = validate_scanner_row(payload)
+    with _file_lock(game_data_path(world_id, state_dir=state_dir)):
+        data = load_world_game_data(world_id, state_dir=state_dir)
+        scanners = [s for s in data.scanners if s.scanner_type != scanner.scanner_type]
+        scanners.append(scanner)
+        updated = GameData(
+            world_id=world_id,
+            ships=data.ships,
+            scanners=tuple(scanners),
+            transwarp=data.transwarp,
+            items=data.items,
+            cargo_holds=data.cargo_holds,
+        )
+        path = game_data_path(world_id, state_dir=state_dir)
+        _atomic_write_json(path, game_data_to_dict(updated))
+    return scanner
+
+
+def persist_transwarp_row(
+    world_id: str, row: Mapping[str, Any], *, state_dir: str | Path | None = None
+) -> TranswarpRow:
+    """Validate + replace the world's TransWarp install quote (singleton).
+
+    StarDock shows one drive offering; the store keeps the latest quote.
+    """
+    payload = dict(row)
+    if not payload.get("last_verified_ts"):
+        payload["last_verified_ts"] = _now_iso()
+    tw = validate_transwarp_row(payload)
+    with _file_lock(game_data_path(world_id, state_dir=state_dir)):
+        data = load_world_game_data(world_id, state_dir=state_dir)
+        updated = GameData(
+            world_id=world_id,
+            ships=data.ships,
+            scanners=data.scanners,
+            transwarp=(tw,),
+            items=data.items,
+            cargo_holds=data.cargo_holds,
+        )
+        path = game_data_path(world_id, state_dir=state_dir)
+        _atomic_write_json(path, game_data_to_dict(updated))
+    return tw
+
+
+def persist_item_row(
+    world_id: str, row: Mapping[str, Any], *, state_dir: str | Path | None = None
+) -> ItemRow:
+    """Validate + upsert one special-device/ordnance row by ``item_name``."""
+    payload = dict(row)
+    if not payload.get("last_verified_ts"):
+        payload["last_verified_ts"] = _now_iso()
+    item = validate_item_row(payload)
+    with _file_lock(game_data_path(world_id, state_dir=state_dir)):
+        data = load_world_game_data(world_id, state_dir=state_dir)
+        items = [i for i in data.items if i.item_name != item.item_name]
+        items.append(item)
+        updated = GameData(
+            world_id=world_id,
+            ships=data.ships,
+            scanners=data.scanners,
+            transwarp=data.transwarp,
+            items=tuple(items),
+            cargo_holds=data.cargo_holds,
+        )
+        path = game_data_path(world_id, state_dir=state_dir)
+        _atomic_write_json(path, game_data_to_dict(updated))
+    return item
