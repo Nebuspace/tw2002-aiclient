@@ -633,6 +633,17 @@ def test_negative_max_hops_raises_at_construction():
         trade_adapter.TradeAdapterConfig(max_hops=-1)
 
 
+def test_default_max_hops_covers_academy_scale_candidate_counts():
+    """WO-FIX-TRADE-ADAPTER-HOP-CAP-FOR-CHAIN-ARM: live academy map after
+    full explore produced 1554 priced candidates; the old ceiling of 500
+    starved cycle search. Default config must inherit a ceiling above that
+    observed count (5000) so daemon/`tw chains` discovery is not empty-
+    truncated on the same shape of world."""
+    assert trade_adapter.DEFAULT_MAX_HOPS == 5000
+    assert trade_adapter.TradeAdapterConfig().max_hops == trade_adapter.DEFAULT_MAX_HOPS
+    assert trade_adapter.DEFAULT_MAX_HOPS > 1554
+
+
 # -- max_route_searches (WO-CHAIN-WORK-BOUND) ---------------------------------
 
 

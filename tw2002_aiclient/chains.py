@@ -76,8 +76,9 @@ DEFAULT_MAX_SEARCH_STEPS = 100_000
 search (summed over every start sector, not per-start). Protects both
 wall-clock time and the Python call stack on pathological graphs --
 `trade_adapter.DEFAULT_MAX_HOPS` bounds the ADAPTER's edge output, not
-the finder's search cost, and 500 mutually-compatible edges over ~23
-sectors is already a complete K23 (see WO-CHAIN-SEARCH-BUDGET: an
+the finder's search cost, and a few thousand mutually-compatible edges
+(see that constant's live-witness rationale) is already a dense graph
+(see WO-CHAIN-SEARCH-BUDGET: an
 unbranched ring of ~999 sectors overflowed Python's recursion limit
 before this budget existed; a complete K9 took 6.43s for one chain).
 This is a safety rail, not an EV-optimizer -- canon's hop-count-desc/

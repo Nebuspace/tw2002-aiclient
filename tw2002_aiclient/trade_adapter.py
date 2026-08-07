@@ -102,7 +102,17 @@ DEFAULT_FLOOR_PRICES: Mapping[str, float] = hypothesized_floor_prices()
 DEFAULT_CEILING_MULTIPLIER = hypothesized_ceiling_multiplier()
 DEFAULT_BUY_SELL_SPREAD_OF_FLOOR = hypothesized_buy_sell_spread_of_floor()
 DEFAULT_MAX_AGE_S = 3600.0  # drop a port reading older than this as stale (1h)
-DEFAULT_MAX_HOPS = 500  # bounded compute/output on a large known map
+# Bounded edge-list ceiling (not a target truncation size). Live witness
+# 2026-08-07 (WO-FIX-TRADE-ADAPTER-HOP-CAP-FOR-CHAIN-ARM): after #510 let
+# explore fully map an academy-scale world (~70 commodity ports), priced
+# candidates reached 1554 from 4992 compatible pairs. The prior ceiling of
+# 500 returned a margin-ranked prefix with *no* closed cycle, so
+# ``tw chains`` / ``trade_chain.start`` reported ``chain_discovery_partial``
+# despite thousands of cycles existing once the full candidate set was
+# searched. 5000 ≈ 3× that observed candidate count — headroom for denser
+# maps without unbounded O(ports²) emission. Finder cost stays separately
+# bounded by ``chains.DEFAULT_MAX_SEARCH_STEPS`` / daemon 500k deepen.
+DEFAULT_MAX_HOPS = 5000
 # Bounds expensive *route-search* work in build_trade_hops (one BFS per
 # source sector). Caps OUTPUT separately via max_hops; this caps WORK
 # before the full candidate list is routed (WO-CHAIN-WORK-BOUND).
