@@ -13,7 +13,10 @@ to look at that moment and *propose* a rule that would handle it next time. The 
 the parsed state, and the surrounding ledger/frames retrospectively, and returns a **draft** guarded
 rule: a `when → do` a human can read, edit, approve, or throw away. Until a human approves it, that
 draft is inert — it cannot fire a single keystroke. The AI is a *teacher*, an author of rules a
-human ratifies; it is never one of the two live keystroke senders. This concept is prescriptive: it
+human ratifies; it is never one of the two live keystroke senders **for play**. (A narrow,
+sacrificial-account-only, manual-only development/debugging exception exists — see
+[dev-drive-exception](/doctrine/dev-drive-exception.md) — and does not apply to play.) This concept
+is prescriptive: it
 specifies the author-only contract, the on-demand invocation, and the draft-and-approve gate the
 reborn trainer targets, and records where the current code still carries the pre-reborn "the AI
 drives" shape.
