@@ -227,6 +227,12 @@ STARDOCK_SCREEN_CLASSES = frozenset(
 #: `dock_screen_unrecognized` string stood for two different failures.
 HALT_NOT_DRIVABLE = "halt_not_drivable"
 
+#: WO-FIX-EXPLORE-SHIP-DESTRUCTION-HANG: player ship destroyed mid-explore.
+#: Named (not bare halt_not_drivable:ship_destroyed) so `tw explore status`
+#: surfaces a reason operators can act on, and so the mid-warp
+#: `sector_display` continue cannot swallow the outcome.
+HALT_SHIP_DESTROYED = "halt_ship_destroyed"
+
 #: `classify`'s own "I could not name this" sentinel. Named here rather than
 #: inlined so the gate and its pins read the SAME literal -- a drifting
 #: spelling would silently route genuine unknowns down the named-class branch
@@ -274,6 +280,8 @@ def _gate_screen(full_text: str, prompt_line: str) -> tuple[Optional[str], str]:
     still passes.
     """
     klass = classify_screen(full_text, prompt_line)
+    if klass == "ship_destroyed":
+        return HALT_SHIP_DESTROYED, klass
     if klass in NEVER_AUTO_ACTION_CLASSES:
         return _qualify(HALT_NEVER_AUTO_ACTION, klass), klass
     if klass != MOVEMENT_SCREEN_CLASS:

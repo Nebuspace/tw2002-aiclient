@@ -1110,7 +1110,7 @@ _ANCHORS = _GATE_ANCHORS + _CONTENT_ANCHORS
 # Every class name either entry point can return: the anchor tables plus
 # `cim_report` (decided ahead of them by `_is_genuine_cim_report`) and the
 # `unknown` fall-through. Private -- its only job is the assert below.
-_RETURNABLE_CLASSES = frozenset(name for name, _matcher in _ANCHORS) | {"cim_report", "unknown"}
+_RETURNABLE_CLASSES = frozenset(name for name, _matcher in _ANCHORS) | {"cim_report", "ship_destroyed", "unknown"}
 
 # -- the never-auto-action pin --------------------------------------------
 #
@@ -1213,6 +1213,34 @@ def is_avoid_danger_warp(full_text: str) -> bool:
     return bool(_AVOID_DANGER_RE.search(full_text or ""))
 
 
+# WO-FIX-EXPLORE-SHIP-DESTRUCTION-HANG: player ship destruction is a
+# whole-screen outcome that can sit ABOVE an outer-BBS door menu (or
+# still share a Sector body with the death text). Content-anchor
+# `sector_display` would otherwise win on the stale Sector line and
+# explore's mid-warp continue would spin forever. Checked as a pre-pass
+# (like `cim_report`) so it beats every content/gate shape.
+
+
+def _is_ship_destroyed(full_text: str) -> bool:
+    """True when the live buffer carries player-ship destruction prose.
+
+    Requires the destruction announcement (has been destroyed!) OR the
+    start-over line; Life Support alone is corroboration only when paired
+    with one of those (combat damage messages can say Life Support without
+    ending the ship). The `has been destroyed` / start-over pair is the
+    load-bearing signal from the live gone_rogue transcript.
+    """
+    if not full_text:
+        return False
+    has_destroyed = bool(
+        re.search(r"has\s+been\s+destroyed\s*!", full_text, re.I)
+    )
+    has_scratch = bool(
+        re.search(r"start\s+over\s+from\s+scratch", full_text, re.I)
+    )
+    return has_destroyed or has_scratch
+
+
 def classify(rendered_text: str) -> str:
     """Whole-text anchor scan, gate anchors checked first. Simple and
     order-dependent — fine for a single isolated string (tests, one-off
@@ -1263,6 +1291,8 @@ def classify(rendered_text: str) -> str:
     current prompt line PLUS other content found elsewhere in the full
     screen, which the ordinary single-line gate anchors below have no
     way to evaluate on their own."""
+    if _is_ship_destroyed(rendered_text):
+        return "ship_destroyed"
     if _is_genuine_cim_report(rendered_text):
         return "cim_report"
     lines = rendered_text.splitlines()
@@ -1283,6 +1313,7 @@ def classify(rendered_text: str) -> str:
         if matcher(rendered_text):
             return name
     return "unknown"
+
 
 
 def classify_screen(full_text: str, prompt_line: str) -> str:
@@ -1310,6 +1341,8 @@ def classify_screen(full_text: str, prompt_line: str) -> str:
     full screen -- a shape the ordinary prompt-line-only gate-anchor
     pass below can't evaluate on its own (see each function's own
     docstring)."""
+    if _is_ship_destroyed(full_text):
+        return "ship_destroyed"
     if _is_genuine_cim_report(full_text):
         return "cim_report"
     if (
