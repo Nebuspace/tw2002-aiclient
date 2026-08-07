@@ -17,7 +17,7 @@ def test_cmd_players_list_prints_boundary_and_rows(tmp_path, monkeypatch, capsys
         {
             "name": "alpha",
             "handle": "Alpha",
-            "host": "example.com",
+            "host": "local-bbs",
             "game_letter": "A",
             "last_played": "never",
             "turns_state": "-",
@@ -30,7 +30,7 @@ def test_cmd_players_list_prints_boundary_and_rows(tmp_path, monkeypatch, capsys
     assert BOUNDARY_LINE_2 in out
     assert out.index(BOUNDARY_LINE_1) < out.index("alpha")
     assert "alpha" in out
-    assert "example.com" in out
+    assert "local-bbs" in out
 
 
 def test_cmd_players_list_empty_uses_bank_empty_line(monkeypatch, capsys):
