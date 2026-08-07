@@ -388,16 +388,16 @@ paladin-main     PaladinPrime     tw2002.briancmoses.com   A   2026-07-23     ok
   (`players_cli.py`) pick a read-only next profile under a default 24h cooldown window.
   Never logs in / never auto-switches. The daemon-side, window-gated rotation *driver*
   (auto whose-turn-is-it across the bank) remains a separate future wave
-  (`WO-BUILD-PLAYER-BANK-ROTATION-DRIVER`). Residual: there is still no `tw players list`
-  CLI subcommand on tip — when one lands, it must print the same boundary lines as the
-  TUI bank view.
+  (`WO-BUILD-PLAYER-BANK-ROTATION-DRIVER`).
 
-- **The no-collusion boundary is shown on the launcher bank view; CLI list is still absent.**
-  `BankViewScreen` paints `BOUNDARY_LINE_1` / `BOUNDARY_LINE_2` at the rotation touchpoint
-  (independent characters · never transfer credits/cargo/assets between them). Doctrine + review
-  still own enforcement (no code path can stop in-game manual transfers). Residual: there is no
-  `tw players list` CLI subcommand on tip — when one lands, it must print the same boundary lines
-  so the CLI touchpoint matches the TUI.
+- **`tw players list` is LIVE (WO-BUILD-TW-PLAYERS-LIST).** Prints the same
+  `BOUNDARY_LINE_1` / `BOUNDARY_LINE_2` no-collusion lines as `BankViewScreen`, then
+  metadata rows from `player_bank.list_players` (never logs in). Broken profiles are
+  marked with `!` + an `error:` follow-up line (TUI still paints six columns only —
+  residual on the screen, not the CLI).
+
+- **The no-collusion boundary is shown on the launcher bank view and on `tw players list`.**
+  Doctrine + review still own enforcement (no code path can stop in-game manual transfers).
 
 # Citations
 

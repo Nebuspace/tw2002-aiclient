@@ -1,8 +1,8 @@
-"""``tw players next`` — rotation selector CLI (WO-BUILD-PLAYER-ROTATION-SELECTOR).
+"""``tw players`` — player-bank CLI (rotation next + list).
 
-Read-only: prints the next profile name (or an honest empty message). Never
-opens the session socket, never logs in, never auto-switches. Lives outside
-``session/cli.py`` for the same line-cap reason as ``catalog_cli`` / ``rules.cli``.
+Read-only metadata: never opens the session socket, never logs in, never
+auto-switches. Lives outside ``session/cli.py`` for the same line-cap reason
+as ``catalog_cli`` / ``rules.cli``.
 """
 
 from __future__ import annotations
@@ -10,9 +10,10 @@ from __future__ import annotations
 import argparse
 import sys
 
+from tw2002_aiclient.screens import BANK_EMPTY_LINE, BOUNDARY_LINE_1, BOUNDARY_LINE_2
 from tw2002_aiclient.session import player_bank
 
-__all__ = ["add_players_parsers", "cmd_players_next"]
+__all__ = ["add_players_parsers", "cmd_players_list", "cmd_players_next"]
 
 
 def cmd_players_next(args: argparse.Namespace) -> int:
@@ -31,11 +32,44 @@ def cmd_players_next(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_players_list(args: argparse.Namespace) -> int:
+    """Print bank rows + no-collusion boundary lines (TUI twin). Never logs in."""
+    # Boundary first — same strings as BankViewScreen (canon residual).
+    print(BOUNDARY_LINE_1)
+    print(BOUNDARY_LINE_2)
+    try:
+        rows = player_bank.list_players()
+    except player_bank.BankUnreadable as exc:
+        print(f"player bank unreadable ({exc.cause}): {exc.reason}", file=sys.stderr)
+        return 2
+    if not rows:
+        print(BANK_EMPTY_LINE)
+        return 0
+    # Column layout mirrors BankViewScreen header/rows.
+    print(f"{'name':<16} {'handle':<16} {'host':<24} {'game':<3} {'last_played':<21} turns")
+    for entry in rows:
+        name = entry.get("name", "?")
+        err = entry.get("error")
+        if err:
+            name = f"{name}!"
+        print(
+            f"{name:<16} "
+            f"{entry.get('handle', '?'):<16} "
+            f"{entry.get('host', '?'):<24} "
+            f"{entry.get('game_letter', '?'):<3} "
+            f"{entry.get('last_played', 'never'):<21} "
+            f"{entry.get('turns_state', '-')}"
+        )
+        if err:
+            print(f"  error: {err}")
+    return 0
+
+
 def add_players_parsers(sub: argparse._SubParsersAction) -> None:
-    """Register ``tw players next`` under the top-level ``players`` verb."""
+    """Register ``tw players next`` / ``tw players list``."""
     sp_players = sub.add_parser(
         "players",
-        help="player-bank rotation helpers (metadata only - never logs in)",
+        help="player-bank helpers (metadata only - never logs in)",
     )
     players_sub = sp_players.add_subparsers(dest="players_verb")
     sp_next = players_sub.add_parser(
@@ -50,3 +84,9 @@ def add_players_parsers(sub: argparse._SubParsersAction) -> None:
         help=f"skip last_played within this many hours (default {player_bank.DEFAULT_ROTATION_COOLDOWN_HOURS:g})",
     )
     sp_next.set_defaults(func=cmd_players_next)
+
+    sp_list = players_sub.add_parser(
+        "list",
+        help="list bank profiles with no-collusion boundary lines (read-only)",
+    )
+    sp_list.set_defaults(func=cmd_players_list)

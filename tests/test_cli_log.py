@@ -80,6 +80,8 @@ def test_parser_shipped_verb_allowlist():
     assert trail.n == 5
     players_next = parser.parse_args(["players", "next"])
     assert players_next.func is players_cli.cmd_players_next
+    players_list = parser.parse_args(["players", "list"])
+    assert players_list.func is players_cli.cmd_players_list
     mine = parser.parse_args(["mine", "--no-propose"])
     patterns = parser.parse_args(["patterns", "--top-k", "1"])
     assert mine.func is mine_cli.cmd_mine
