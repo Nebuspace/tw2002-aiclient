@@ -1,30 +1,43 @@
 # WO-CLEANUP-LOGS-DIR-ROTATION
 
-**Status:** DONE (gitignore coverage confirmed — no repo rotation required)
-**Priority:** LOW
-**Gated:** no
+**Status:** in flight (impl-aiclient-cursor)  
+**Priority:** LOW (Cycle-48 disk-hygiene)  
+**Depends-on:** none
 
 ## Goal
 
-Cycle-42 flagged ~807 local session log files (~406 empty, ~12MB) under `logs/`
-with no cleanup/rotation. Decide: add rotation, or confirm `.gitignore` already
-keeps them out of the repo.
+Close the session-log disk-hygiene debt: confirm `logs/` never enters git,
+and provide an optional local rotator for the empty/aged `session-*.log`
+files `TranscriptLogger` creates at daemon start.
 
-## Verify-first (tip `22b799b`)
+## Evidence (verify-first)
 
-| Check | Result |
-|---|---|
-| `.gitignore` line 3 | `logs/` |
-| `git check-ignore -v logs/session.log` | ignored via `.gitignore:3:logs/` |
-| `git ls-files logs` | **0** tracked paths |
+1. `.gitignore` line 3: `logs/` — confirmed.
+2. `git ls-files logs/` → **0** tracked paths.
+3. Local seat sample (not committed): ~807 files · ~406 zero-byte · ~12M —
+   start-creates-file pattern from `session/logging_util.py` `TranscriptLogger`.
 
-Session logs are **local-only**; they cannot land in a commit via normal add.
-Repo hygiene debt is closed by this confirmation. Optional local rotation (mtime
-prune of empty/old files) remains operator-side tooling — out of scope for this
-tip-close; bank a future LOW WO only if Max wants an automated prune script.
+## Scope
+
+- `scripts/rotate-session-logs.sh` — delete 0-byte `session-*.log`; optional
+  `--days N` age prune; `--dry-run`; never stages/commits
+- this WO file
 
 ## Accept
 
-1. WO records the gitignore / zero-tracked evidence above.
-2. No product code change.
-3. live-prove: n/a.
+1. `logs/` remains gitignored; zero tracked files under `logs/`.
+2. `scripts/rotate-session-logs.sh --dry-run` exits 0 against an empty or
+   missing log dir (and against a real `logs/` when present).
+3. Script only matches `session-*.log` under the chosen log dir (`--log-dir`
+   or repo `logs/`).
+
+## Proof
+
+```bash
+git check-ignore -v logs/
+git ls-files logs/ | wc -l   # expect 0
+bash scripts/rotate-session-logs.sh --dry-run
+bash -n scripts/rotate-session-logs.sh
+```
+
+Live-prove: **n/a** (local hygiene script + gitignore confirm; no session path).
