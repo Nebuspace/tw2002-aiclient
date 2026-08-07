@@ -1186,6 +1186,36 @@ def cmd_explore_status(args):
     return 0 if resp.get("ok") else 1
 
 
+def cmd_chain_start(args):
+    """WO-BUILD-TRADE-CHAIN-CLI-VERB: arm a discovered trade chain (daemon RPC)."""
+    run_dir = _resolve_run_dir(args.run_dir)
+    payload = {
+        "world_id": args.world_id,
+        "fingerprint": args.fingerprint,
+        "cash_floor": int(args.cash_floor),
+        "turn_reserve": int(args.turn_reserve),
+    }
+    resp = send_request("trade_chain_start", payload, run_dir=run_dir)
+    print_response(resp, args)
+    return 0 if resp.get("ok") else 1
+
+
+def cmd_chain_stop(args):
+    """WO-BUILD-TRADE-CHAIN-CLI-VERB: stop the running trade chain."""
+    run_dir = _resolve_run_dir(args.run_dir)
+    resp = send_request("trade_chain_stop", {}, run_dir=run_dir)
+    print_response(resp, args)
+    return 0 if resp.get("ok") else 1
+
+
+def cmd_chain_status(args):
+    """WO-BUILD-TRADE-CHAIN-CLI-VERB: query trade chain status."""
+    run_dir = _resolve_run_dir(args.run_dir)
+    resp = send_request("trade_chain_status", {}, run_dir=run_dir)
+    print_response(resp, args)
+    return 0 if resp.get("ok") else 1
+
+
 def cmd_reflex(args):
     """WO-REFLEX-CLIENT-REACH: what the taught rule library PROPOSES, read-only.
 
@@ -2084,6 +2114,73 @@ def build_parser() -> argparse.ArgumentParser:
                     help="daemon run directory override")
     sp.add_argument("--json", action="store_true", help="machine-parseable JSON output")
     sp.set_defaults(func=cmd_explore_status)
+
+    # --- chain sub-group (WO-BUILD-TRADE-CHAIN-CLI-VERB) ---
+    # Distinct from `tw chains` (discovery list, offline). This subgroup arms
+    # the already-live trade_chain_* daemon RPC — fail-closed: operator must
+    # name world_id + fingerprint (no auto-pick).
+    from tw2002_aiclient.session.trade_chain import (
+        DEFAULT_CASH_FLOOR as _CHAIN_CASH_FLOOR,
+        DEFAULT_TURN_RESERVE as _CHAIN_TURN_RESERVE,
+    )
+
+    sp_ch = sub.add_parser(
+        "chain",
+        help="trade chain runner: start|stop|status (routes to daemon trade_chain_* verbs)",
+    )
+    ch_sub = sp_ch.add_subparsers(dest="chain_verb")
+    sp_ch.set_defaults(func=lambda _: (sp_ch.print_help() or 0), run_dir=None, json=False)
+
+    sp = ch_sub.add_parser(
+        "start",
+        help="start a discovered trade chain (requires human-confirmed fingerprint)",
+    )
+    sp.add_argument(
+        "--world-id",
+        required=True,
+        dest="world_id",
+        metavar="SLUG",
+        help="world_id slug (state/world/<slug>/)",
+    )
+    sp.add_argument(
+        "--fingerprint",
+        required=True,
+        dest="fingerprint",
+        metavar="FP",
+        help="exact chain fingerprint from tw chains / discovery (fail-closed)",
+    )
+    sp.add_argument(
+        "--cash-floor",
+        type=int,
+        default=_CHAIN_CASH_FLOOR,
+        dest="cash_floor",
+        metavar="N",
+        help=f"stop below this credit balance (default {_CHAIN_CASH_FLOOR})",
+    )
+    sp.add_argument(
+        "--turn-reserve",
+        type=int,
+        default=_CHAIN_TURN_RESERVE,
+        dest="turn_reserve",
+        metavar="N",
+        help=f"keep at least this many turns (default {_CHAIN_TURN_RESERVE})",
+    )
+    sp.add_argument("--run-dir", default=None, metavar="PATH", dest="run_dir",
+                    help="daemon run directory override")
+    sp.add_argument("--json", action="store_true", help="machine-parseable JSON output")
+    sp.set_defaults(func=cmd_chain_start)
+
+    sp = ch_sub.add_parser("stop", help="stop the running trade chain")
+    sp.add_argument("--run-dir", default=None, metavar="PATH", dest="run_dir",
+                    help="daemon run directory override")
+    sp.add_argument("--json", action="store_true", help="machine-parseable JSON output")
+    sp.set_defaults(func=cmd_chain_stop)
+
+    sp = ch_sub.add_parser("status", help="query trade chain status")
+    sp.add_argument("--run-dir", default=None, metavar="PATH", dest="run_dir",
+                    help="daemon run directory override")
+    sp.add_argument("--json", action="store_true", help="machine-parseable JSON output")
+    sp.set_defaults(func=cmd_chain_status)
 
     # WO-REFLEX-CLIENT-REACH. `help` says "propose", never "run": this verb is
     # read-only and the wording is the only thing an operator reads before
