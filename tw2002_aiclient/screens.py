@@ -838,8 +838,10 @@ class PlayShellScreen:
     bold exception and the GAME viewport border's own STATE flip: cyan
     chrome by default, red non-bold the instant the same shared ``status``
     snapshot carries a real, definite ``connected: False`` (see
-    ``_viewport_border_attr``). No gauge surface renders here
-    (``gauge_semantic`` ships classifier-only, with no wired consumer yet).
+    ``_viewport_border_attr``). No gauge surface renders here —
+    ``gauge_semantic`` is **intentional scaffolding** pending a turns-max /
+    HUD fuel-gauge follow-on (WO-CANON-DRAFT-GAUGE-SEMANTIC-WIRE-CONSUMER;
+    PWO-040 already banked the same deferral).
     The App/Human mode badge *does* render on the control strip via
     ``cockpit.control_seat`` (WO-P5-060 LIVE) -- see the paragraphs below;
     an older revision of this docstring falsely claimed there was no badge.

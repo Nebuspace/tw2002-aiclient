@@ -224,9 +224,17 @@ def gauge_semantic(fraction: object) -> str:
     ``"danger"`` (canon: "ok >=0.5, warn >=0.2, else danger"). Ported from
     the archive's ``gauge_semantic`` (`spectate_layout.py` ~2697-2706).
 
+    **Intentional scaffolding** (WO-CANON-DRAFT-GAUGE-SEMANTIC-WIRE-CONSUMER):
+    no product caller on tip. The archive only invoked this from
+    ``_turns_cell`` once ``tracked["_turns_max"]`` was known; the reborn
+    tree has no ``turns_max`` accumulator, and ``cockpit/hud.py`` banks the
+    turns fuel-gauge as a motion follow-on outside the freshness composer.
+    Parked here (test-covered) until that follow-on lands — do not invent a
+    no-op caller.
+
     The archive never hardened this function against a non-numeric
-    ``fraction`` — it has no wire-facing callers today, so there is no
-    archived precedent for the hostile-input branch. This module pins one
+    ``fraction`` — with no wire-facing callers there is no archived
+    precedent for the hostile-input branch. This module pins one
     deliberately, following the same "never claim more than the data
     supports" spirit ``status_semantic``'s honest-unknown framing and
     ``hud.py``'s non-finite-age policy already establish elsewhere in this
