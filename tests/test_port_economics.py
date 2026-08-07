@@ -54,8 +54,7 @@ def test_coach_port_economics_params_require_verified_flag() -> None:
 
 
 def test_coach_port_economics_missing_key_raises(tmp_path: Path) -> None:
-    # Minimal strategies stub + incomplete params
-    strategies = DEFAULT_DATA_DIR / "strategies.json"
+    # Incomplete params only — strategies.json is not consulted.
     params = tmp_path / "params.json"
     params.write_text(
         '{"version": 1, "params": ['
@@ -65,5 +64,13 @@ def test_coach_port_economics_missing_key_raises(tmp_path: Path) -> None:
     )
     with pytest.raises(ValueError, match="missing port-economics keys"):
         port_economics.load_coach_port_economics_params(params)
-    # silence unused — strategies must exist on tip
-    assert strategies.is_file()
+
+
+def test_coach_port_economics_params_only_no_strategies_needed(tmp_path: Path) -> None:
+    """Schema helper must not require strategies.json (values unused)."""
+    tip = DEFAULT_DATA_DIR / "params.json"
+    raw = tip.read_text(encoding="utf-8")
+    alone = tmp_path / "params.json"
+    alone.write_text(raw, encoding="utf-8")
+    rows = port_economics.load_coach_port_economics_params(alone)
+    assert {p.key for p in rows} == port_economics.COACH_PORT_ECONOMICS_KEYS

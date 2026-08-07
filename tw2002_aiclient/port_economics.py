@@ -14,11 +14,12 @@ Does **not** invent Layer-B game_data rows or mark anything ``introspected``.
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Mapping
 
-from tw2002_aiclient.coach_kb import CoachParam, DEFAULT_DATA_DIR, load_coach_kb
+from tw2002_aiclient.coach_kb import CoachParam, DEFAULT_DATA_DIR, validate_param
 
 # Canon portable ordering only — Equipment > Organics > Fuel Ore.
 # Concrete credits/unit figures are unverified starting hypotheses.
@@ -183,20 +184,19 @@ def load_coach_port_economics_params(
 
     Requires each row to carry ``verified_vs_live`` (schema-enforced by
     ``coach_kb.validate_param``). Does not invent introspected values.
+
+    Params-only: does **not** load ``strategies.json`` (WO-CLEANUP-PORT-ECONOMICS-
+    UNUSED-STRATEGIES-PATH) — that file is irrelevant to this schema check.
     """
     path = Path(params_path) if params_path is not None else DEFAULT_DATA_DIR / "params.json"
-    # strategies path unused for values — load_coach_kb needs a strategies file.
-    strategies = DEFAULT_DATA_DIR / "strategies.json"
-    kb = load_coach_kb(strategies, path)
-    selected = tuple(p for p in kb.params if p.key in COACH_PORT_ECONOMICS_KEYS)
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(raw, dict):
+        raise ValueError("params root must be a JSON object")
+    params = tuple(validate_param(p) for p in raw.get("params") or ())
+    selected = tuple(p for p in params if p.key in COACH_PORT_ECONOMICS_KEYS)
     missing = COACH_PORT_ECONOMICS_KEYS - {p.key for p in selected}
     if missing:
         raise ValueError(
             f"coach params missing port-economics keys: {sorted(missing)}"
         )
-    for p in selected:
-        if p.verified_vs_live:
-            # Live-confirm may flip this later; today tip is all false — surface
-            # if someone marks verified without a matching WO.
-            pass
     return selected
