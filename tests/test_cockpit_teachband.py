@@ -40,6 +40,17 @@ def test_band_is_canon_standing_spelling() -> None:
     )
 
 
+def test_default_compose_uses_teach_tokens_ssot() -> None:
+    """All-ON default band is built from TEACH_TOKENS (WIRE, not retire)."""
+    expected = (
+        f"{teachband.BAND_PAD}"
+        f"{teachband.TOKEN_GAP.join(teachband.TEACH_TOKENS)}"
+        f"{teachband.BAND_PAD}"
+    )
+    assert teachband.compose_teach_band() == expected
+    assert teachband.compose_teach_band() is not teachband.TEACH_TOKENS  # joined str
+
+
 def test_band_imports_reflex_token_spelling() -> None:
     """WO-PLAY-STRIP-TRAINER-CHROME retired V)reflex/U)rules/H)old?/O)ffer?/
     L)chains/P panic from the CALM BAND (their underlying modules and key
