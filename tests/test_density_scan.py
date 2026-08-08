@@ -35,3 +35,13 @@ def test_junk_and_non_string_fail_closed() -> None:
     assert parse_density_scan("") == {}
     assert parse_density_scan("Density Scanner for sale 50,000") == {}
     assert parse_density_scan("Sector abc Density: 5") == {}
+
+
+def test_decode_helpers_fail_closed_on_junk() -> None:
+    from tw2002_aiclient.density_scan import (
+        decode_density_atoms,
+        fighter_presence_hypothesis,
+    )
+
+    assert decode_density_atoms(None) == []
+    assert fighter_presence_hypothesis(None) is None
