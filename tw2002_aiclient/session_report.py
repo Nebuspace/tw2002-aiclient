@@ -21,7 +21,7 @@ __all__ = [
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any, Mapping
 
 from tw2002_aiclient.ledger import DEFAULT_LEDGER_PATH, read_entries
 from tw2002_aiclient.session.session import VALID_SENDERS
