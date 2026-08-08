@@ -1,6 +1,6 @@
 # WO-FIX-FIGHTER-TOLL-RESERVE-FLOOR-CLAMP-MISSING
 
-**Status:** IN FLIGHT · self-seeded by impl-aiclient-cursor
+**Status:** IMPLEMENTING · PR #568
 **Posted:** 2026-08-08 · orchestrator HANDOFF HIGH batch (carte-blanche ruled READY)
 
 ## Goal

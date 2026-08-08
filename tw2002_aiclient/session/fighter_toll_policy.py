@@ -236,6 +236,7 @@ def decide_quantity(
     prompt_line: str = "",
     *,
     winnable_enemy_band: int = DEFAULT_AUTO_ATTACK_MAX_ENEMY,
+    reserve: int = DEFAULT_FIGHTER_RESERVE,
 ) -> EncounterDecision:
     """Answer ``How many fighters…`` — or halt, but never spend everything.
 
@@ -243,6 +244,11 @@ def decide_quantity(
     be read. That is the single most dangerous branch in this flow and canon
     now forbids it by name, so the unreadable path here returns a halting STOP
     instead. See the module docstring.
+
+    ``reserve`` (canon ``reserve_floor``) is a quantity clamp: never auto-commit
+    more than ``max(0, max_avail - reserve)``. If matching ``theirs`` would
+    breach the floor, halt — do not under-commit into a losing fight and do not
+    spend the complement down to zero.
     """
     qty = parse_quantity_prompt(screen_text, prompt_line)
     if qty is None:
@@ -268,9 +274,25 @@ def decide_quantity(
         return EncounterDecision(
             True, None, "qty_band_exceeded_stop", yours, theirs, halt=True
         )
-    commit = min(max(theirs, 1), max_avail)
+    floor = max(0, int(reserve))
+    spendable = max(0, max_avail - floor)
+    needed = max(theirs, 1)
+    if needed > spendable:
+        return EncounterDecision(
+            True,
+            None,
+            f"qty_reserve_floor_stop:need={needed}:spendable={spendable}:reserve={floor}",
+            yours,
+            theirs,
+            halt=True,
+        )
+    commit = min(needed, spendable)
     return EncounterDecision(
-        True, str(commit), f"qty_commit:{commit}:max={max_avail}", yours, theirs
+        True,
+        str(commit),
+        f"qty_commit:{commit}:max={max_avail}:reserve={floor}",
+        yours,
+        theirs,
     )
 
 
@@ -280,6 +302,7 @@ def next_encounter_input(
     *,
     force_share_auto_attack: Optional[float] = DEFAULT_FORCE_SHARE_AUTO_ATTACK,
     winnable_enemy_band: int = DEFAULT_AUTO_ATTACK_MAX_ENEMY,
+    reserve: int = DEFAULT_FIGHTER_RESERVE,
 ) -> EncounterDecision:
     """One flow for the whole encounter, quantity prompt first.
 
@@ -288,7 +311,10 @@ def next_encounter_input(
     re-sends Attack against a live quantity prompt.
     """
     qty = decide_quantity(
-        screen_text, prompt_line, winnable_enemy_band=winnable_enemy_band
+        screen_text,
+        prompt_line,
+        winnable_enemy_band=winnable_enemy_band,
+        reserve=reserve,
     )
     if qty.detected:
         return qty
@@ -296,4 +322,5 @@ def next_encounter_input(
         parse_encounter(screen_text, prompt_line),
         force_share_auto_attack=force_share_auto_attack,
         winnable_enemy_band=winnable_enemy_band,
+        reserve=reserve,
     )
