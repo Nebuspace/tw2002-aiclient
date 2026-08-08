@@ -95,3 +95,43 @@ def test_star_wins_over_caption():
     joined = "\n".join(lines)
     assert "★" in joined
     assert "class pair" not in joined
+
+
+_BOX_UNICODE = ("╭", "╮", "╰", "╯", "─", "│", "═", "○", "★", "…")
+
+
+def test_ascii_mode_emits_no_unicode_box_glyphs():
+    """WO-FIX-CHAIN-BUBBLES-ASCII-UNICODE-LEAK Accept pin."""
+    lines = chain_bubbles.compose_chain_bubbles(
+        _Chain([100, 101, 100]),
+        current_sector=100,
+        port_classes={100: "BSB", 101: "SSS"},
+        width=80,
+        unicode_ok=False,
+    )
+    joined = "\n".join(lines)
+    for glyph in _BOX_UNICODE:
+        assert glyph not in joined, f"ascii mode leaked {glyph!r}"
+    assert "*" in joined
+    assert "=====" in joined or "=" in joined
+    assert "+" in joined
+
+
+def test_ascii_empty_placeholder_uses_o_o_twin():
+    lines = chain_bubbles.compose_chain_bubbles(None, width=40, unicode_ok=False)
+    joined = "\n".join(lines)
+    assert "o o" in joined
+    assert "○" not in joined
+
+
+def test_unicode_mode_byte_identical_to_default():
+    """Explicit unicode_ok=True matches the historical default path."""
+    args = dict(
+        current_sector=100,
+        port_classes={100: "BSB", 101: "SSS"},
+        width=80,
+    )
+    chain = _Chain([100, 101, 100])
+    assert chain_bubbles.compose_chain_bubbles(
+        chain, unicode_ok=True, **args
+    ) == chain_bubbles.compose_chain_bubbles(chain, **args)

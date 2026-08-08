@@ -1833,6 +1833,7 @@ class PlayShellScreen:
                     known_ports=self.chain_scalars.known_ports or None,
                     width=chain_region["w"],
                     caption=caption,
+                    unicode_ok=uok,
                 )
             except Exception:  # noqa: BLE001 -- never crash the draw pass
                 bubble_lines = [""] * cockpit_chain_bubbles.CHAIN_VIZ_H
