@@ -116,8 +116,19 @@ STATE_DIR = PROJECT_ROOT / "state"
 WORLD_DIR = STATE_DIR / "world"
 SECTORS_SUBDIR = "sectors"
 
-_SECTOR_FIELDS = ("warps", "port", "threats", "landmarks", "formation_membership")
+_SECTOR_FIELDS = (
+    "warps",
+    "port",
+    "threats",
+    "landmarks",
+    "formation_membership",
+    "density_scan",
+)
 _PORT_FIELDS = ("class", "commodities", "last_seen_ts")
+
+#: Verification stamp for density-scan writeback until a live multi-sector
+#: capture confirms the row grammar (canon/engine/world-model.md).
+DENSITY_SCAN_VERIFICATION = "HYPOTHESIS"
 
 
 class WorldModelError(Exception):
@@ -545,6 +556,53 @@ def write_from_state(world_id, parsed_state, state_dir=None, now=None):
     if isinstance(port_out, dict) and port_out.get("commodities"):
         _record_port_floor_observation(sector_id, port_out, state_dir=state_dir)
     return merged
+
+
+def write_density_scan(world_id, readings, state_dir=None, now=None):
+    """Persist density-scan readings into each sector's ``density_scan`` field.
+
+    ``readings`` is ``{sector_id: density_value}`` from
+    :func:`tw2002_aiclient.density_scan.parse_density_scan`. Empty / non-dict
+    / junk entries write nothing (fail-closed). Never mutates ``threats`` or
+    ``port`` — hypothesis decode stays inside ``density_scan`` so route-hazard
+    guards cannot STOP on unverified atoms. Never sends keystrokes.
+
+    Each written object is tagged ``verification: HYPOTHESIS`` until a live
+    multi-sector density screen confirms the grammar.
+    """
+    if not isinstance(readings, dict) or not readings:
+        return []
+    from tw2002_aiclient.density_scan import (
+        decode_density_atoms,
+        fighter_presence_hypothesis,
+    )
+
+    written = []
+    for sector_id, density in readings.items():
+        if isinstance(sector_id, bool) or not isinstance(sector_id, int):
+            continue
+        if sector_id <= 0:
+            continue
+        if isinstance(density, bool) or not isinstance(density, int) or density < 0:
+            continue
+        atoms = decode_density_atoms(density)
+        fighter = fighter_presence_hypothesis(density)
+        payload = {
+            "value": density,
+            "atoms": list(atoms),
+            "verification": DENSITY_SCAN_VERIFICATION,
+            "source": "density_scan",
+        }
+        if fighter is not None:
+            payload["fighter_presence"] = fighter
+        merged = upsert_sector(
+            world_id,
+            {"sector_id": sector_id, "density_scan": payload},
+            state_dir=state_dir,
+            now=now,
+        )
+        written.append(merged)
+    return written
 
 
 def write_port_only(world_id, sector_id, parsed_port, state_dir=None, now=None):
