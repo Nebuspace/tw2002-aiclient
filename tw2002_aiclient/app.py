@@ -1635,7 +1635,7 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                 )
                 continue
             if action == "genesis_offer":
-                # WO-WIRE-GENESIS-CONFIRM-UI: U raises the confirm-to-send
+                # WO-WIRE-GENESIS-CONFIRM-UI: Z raises the confirm-to-send
                 # gate only. No transport call until genesis_confirm + y.
                 pending_confirm_action = "genesis"
                 pending_confirm_loop = None

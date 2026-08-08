@@ -2538,9 +2538,9 @@ class PlayShellScreen:
         # existing default-deny armconfirm gate. Never a send path.
         if cockpit_reflex_controls.resolve_reflex_offer_key(key):
             return cockpit_reflex_controls.REFLEX_OFFER_INTENT
-        # WO-WIRE-GENESIS-CONFIRM-UI: U offers the Genesis confirm-to-send
-        # gate (display + app choke-point). Never a silent send.
-        if key in (ord("u"), ord("U")):
+        # WO-WIRE-GENESIS-CONFIRM-UI: Z offers the Genesis confirm-to-send
+        # gate (U is Rules Library). Never a silent send.
+        if key in (ord("z"), ord("Z")):
             return "genesis_offer"
         # WO-PLAY-STRIP-TRAINER-CHROME REVISE (hub 2026-07-31) +
         # WO-FIND-STARDOCK-TOGGLE: F/P/C/S are the trainer calm band's own
