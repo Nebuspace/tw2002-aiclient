@@ -313,3 +313,32 @@ def test_ship_spec_from_current_info_needs_catalog_match():
     assert spec.fighters == 150
     assert spec.turns_per_warp == 3
     assert spec.shields == 50  # catalog only
+
+
+def test_ship_spec_from_current_info_alignment_gate():
+    from tw2002_aiclient.ship_upgrade_decision import ship_spec_from_current_info
+
+    catalog = [
+        {
+            "ship_name": "Imperial Starship",
+            "max_holds": 200,
+            "max_fighters": 500,
+            "max_shields": 200,
+            "combat_odds_modifier": 1.2,
+            "turns_per_warp": 2,
+            "base_cost_credits": 500_000,
+            "alignment_requirement": 1000,
+            "rank_requirement": None,
+            "transwarp_capable": False,
+            "special_abilities": [],
+            "source": "introspected: test",
+            "last_verified_ts": "2026-08-08T00:00:00Z",
+        }
+    ]
+    info = {"ship_type": "Imperial Starship", "total_holds": 40, "fighters": 10}
+    blocked = ship_spec_from_current_info(info, catalog=catalog, player_alignment=2)
+    assert blocked is not None
+    assert blocked.commissioned is False
+    ok = ship_spec_from_current_info(info, catalog=catalog, player_alignment=1000)
+    assert ok is not None
+    assert ok.commissioned is True
