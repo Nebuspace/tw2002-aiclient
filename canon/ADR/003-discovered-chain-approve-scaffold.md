@@ -32,8 +32,14 @@ the decision record / pointer.
 
 **Still design-intent / process (2 — do not blanket-Fold):**
 7. Sacrificial live-prove gate for turn/credit-spending proof (hub/Max process,
-   not a missing tip module)
-8. Bounded-repeat contract (explicitly future; one-pass until separately reviewed)
+   not a missing tip module) — tracked as an open residual item in
+   `workorders/WO-CANON-ROLLUP-ADR-003-DISTRIBUTED-FOLD-TAG.md` (Accept #2);
+   no dedicated hub/Max-process WO beyond that pointer exists yet.
+8. Bounded-repeat contract (explicitly future; one-pass until separately reviewed) —
+   same tracking: `workorders/WO-CANON-ROLLUP-ADR-003-DISTRIBUTED-FOLD-TAG.md`
+   (Accept #2) names it a residual alongside item 7; no separate design/build WO
+   exists yet — untracked beyond this pointer, needs one when the bounded-repeat
+   review is actually scoped.
 
 ---
 

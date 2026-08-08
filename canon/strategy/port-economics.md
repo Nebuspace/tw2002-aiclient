@@ -166,12 +166,40 @@ doc; **archive-only** shapes are do-not-revive (not open tip defects to "fix"):
 - **Naming.** Legacy strategy prose says "Ore"; the code (`state_parser.COMMERCE_COMMODITIES`) and the
   world-model port record use **`Fuel Ore`** — the doc uses the code's name so a scored figure keys
   to a real stored commodity row.
-- **No floor/regrowth/plague fields exist in code.** `state_parser`/`world_model` observe and
-  persist only `amount` (trading units) and `pct` (% of max) plus the class code — there is no
-  stored floor price, regrowth rate, or absolute stock-ceiling field. Every number in the
-  Floor-price and Depletion sections is therefore a pure external hypothesis with no code backing
-  yet; `distance-to-floor` is approximated by `pct` until a live floor is confirmed, and the
-  `min(stock)` depletion input maps to the minimum of the legs' observed `amount` fields.
+- **No floor/regrowth/plague fields exist in `state_parser`/`world_model`.** Those modules observe
+  and persist only `amount` (trading units) and `pct` (% of max) plus the class code — there is no
+  stored floor price, regrowth rate, or absolute stock-ceiling field there. `distance-to-floor` is
+  approximated by `pct` until a live floor is confirmed, and the `min(stock)` depletion input maps
+  to the minimum of the legs' observed `amount` fields.
+- **`port_floor_capture.py` — a pure analysis module now exists (this session), but it does not
+  change the "unconfirmed hypothesis" status above.** It is a separate, opt-in observation-history
+  analyzer, not a live floor/regrowth field on the world-model port record:
+  - `estimate_regrowth_rate(observations)` — per `(sector_id, port_id, commodity)`, averages
+    pct-of-max recovered per real-time day over consecutive-visit pairs the caller marks
+    `traded_since_prior=False` where `pct` rose; identities with zero qualifying pairs are omitted.
+  - `estimate_floor_price(observations)` — per identity, a least-squares fit of observed
+    `price_per_unit` (populated only from a completed haggle's `final_price`) against `pct`,
+    evaluated at `pct=100`; identities with fewer than two distinctly-priced observations are
+    omitted.
+  - `analyze_port_history(observations)` — convenience wrapper returning a `PortEconomicsReport`
+    with both dicts keyed by `PortIdentity`.
+  - Every result (`RegrowthEstimate` / `FloorPriceEstimate`) carries `tag="observed_estimate"`,
+    a `sample_count`, and a raw `evidence` tuple, plus `verified_vs_live: bool = False`
+    **unconditionally** — this module never flips that flag itself; doing so is a live-prove
+    decision left to whoever owns a future capture loop. It is a pure function over
+    caller-supplied `PortObservation` rows (no socket I/O, no live-send, no auto-visiting a port).
+  - **`tw port-floor {snapshot,analyze}`** (`port_floor_cli.py`, registered via
+    `add_port_floor_parsers` in `session/cli.py`) is the filesystem-only CLI surface: `snapshot
+    --world-dir PATH [--store PATH] [--world-id SLUG]` ingests a world directory's `sectors/*.json`
+    port records into a JSONL observation store (default
+    `state/port_floor_observations.jsonl`), and `analyze [--store PATH]` runs
+    `analyze_port_history` over that store and prints/JSON-dumps the report. Neither subcommand
+    opens a session socket or sends a keystroke.
+  - **Still true, unchanged by this module's existence:** every emitted number remains a
+    synthetic-fixture-proven estimate only — `verified_vs_live=False` on every result, always. The
+    module supplies the missing *analysis step* over repeated real observations; it does not
+    itself supply or claim real observations, and it does not promote the Floor-price/Depletion
+    sections above from hypothesis to confirmed.
 
 # Citations
 
