@@ -452,6 +452,7 @@ def _status_response(session, server):
                     "total_holds",
                     "empty_holds",
                     "fighters",
+                    "alignment",
                     "source",
                     "age_s",
                 )
@@ -459,6 +460,11 @@ def _status_response(session, server):
             }
             resp["current_ship"] = payload
             resp["ship_type"] = ship["ship_type"]
+            # WO-WIRE-SHIP-CATALOG-ALIGNMENT-RANK-LIVE: top-level standing for
+            # upgrade catalog commissioned= (omit until genuine I-info parse).
+            align = ship.get("alignment")
+            if isinstance(align, int) and not isinstance(align, bool):
+                resp["alignment"] = align
     # WO-STATUS-CREDITS: GOALS Credits reads TOP-LEVEL `credits`, distinct
     # from `hud.credits` (same sticky). Emit only on OUTCOME_READ; omit
     # otherwise (never invent 0 from absence — GOALS must stay `?`).
