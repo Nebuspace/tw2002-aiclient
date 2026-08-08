@@ -184,6 +184,46 @@ def test_quantity_prompt_wins_when_both_frames_are_on_screen():
     assert d.reason.startswith("qty_commit:")
 
 
+
+
+def test_quantity_never_commits_past_reserve_floor():
+    """FALSIFICATION: auto-commit must leave DEFAULT_FIGHTER_RESERVE aboard.
+
+    max_avail=6, theirs=2 (inside band), reserve=5 → spendable=1 < needed=2 → halt.
+    Never commit the full complement ("6").
+    """
+    d = ftp.decide_quantity(_qty_frame(6, vs=(6, 2)), reserve=5)
+    assert d.halt is True
+    assert d.key is None
+    assert d.key != "6"
+    assert d.reason.startswith("qty_reserve_floor_stop:")
+
+
+def test_quantity_clamps_commit_to_spendable_under_reserve():
+    """theirs fits under spendable — commit theirs, not max_avail."""
+    d = ftp.decide_quantity(_qty_frame(20, vs=(20, 2)), reserve=5)
+    assert d.halt is False
+    assert d.key == "2"
+    assert "reserve=5" in d.reason
+
+
+def test_quantity_default_reserve_matches_module_constant():
+    d = ftp.decide_quantity(_qty_frame(6, vs=(6, 2)))
+    # DEFAULT_FIGHTER_RESERVE=5 → spendable=1 < needed=2 → halt
+    assert d.halt is True
+    assert d.key is None
+    assert "qty_reserve_floor_stop" in d.reason
+
+
+def test_next_encounter_input_passes_reserve_into_quantity():
+    # max_avail=5, reserve=5 → spendable=0 < theirs=1 → halt via reserve path
+    both = _frame(9, 1) + "\n" + _qty_frame(5, vs=(9, 1))
+    d = ftp.next_encounter_input(both, reserve=5)
+    assert d.halt is True
+    assert d.key is None
+    assert d.reason.startswith("qty_reserve_floor_stop:")
+
+
 # --- structural pins -------------------------------------------------------
 
 
