@@ -48,13 +48,13 @@ Correction vs CC **04:16:48Z** (“37/39 hard-fail on twclient”): **36** hard-
 | `tests/test_game_data_persist.py` | TWCLIENT | game_data persist | BANK-DELETE |
 | `tests/test_game_knowledge.py` | TWCLIENT | game_knowledge | BANK-DELETE |
 | `tests/test_game_knowledge_learned_rules.py` | TWCLIENT | learned rules | BANK-DELETE |
-| `tests/test_haggle.py` | TWCLIENT | haggle pure | KEEP until haggle port |
+| `tests/test_haggle.py` | (was TWCLIENT) | haggle pure | **UN-IGNORED** `WO-CLEANUP-UNIGNORE-HAGGLE-LEDGER-SUITE` — tip imports `tw2002_aiclient.session.haggle` |
 | `tests/test_hud_seed.py` | TWCLIENT | HUD seed | BANK-REHAB → cockpit hud (partial live suite exists) |
 | `tests/test_integration_introspect_persist.py` | TWCLIENT | introspect persist | BANK-DELETE |
 | `tests/test_interactive_app.py` | TWCLIENT | interactive app PTY | BANK-REHAB MED (overlap with live app tests) |
 | `tests/test_intervention_labels.py` | TWCLIENT | intervention labels | BANK-DELETE |
 | `tests/test_introspector.py` | TWCLIENT | introspector | BANK-DELETE |
-| `tests/test_ledger.py` | TWCLIENT | ledger | KEEP / BANK when ledger ported |
+| `tests/test_ledger.py` | (was TWCLIENT) | ledger | **UN-IGNORED** `WO-CLEANUP-UNIGNORE-HAGGLE-LEDGER-SUITE` — tip imports `tw2002_aiclient.ledger` |
 | `tests/test_miner.py` | TWCLIENT | miner | BANK-DELETE |
 | `tests/test_name_bank.py` | TWCLIENT | name bank | BANK-DELETE |
 | `tests/test_probe.py` | TWCLIENT | probe | BANK-DELETE |
