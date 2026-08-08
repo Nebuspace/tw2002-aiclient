@@ -632,3 +632,17 @@ def test_genesis_count_positive_renders_hide_planet_card(_fresh_coach_kb):
     joined = "\n".join(lines)
     assert lines, "expected a coach card from genesis_count>0"
     assert "dead" in joined.lower() or "planet" in joined.lower() or "genesis" in joined.lower() or "hide" in joined.lower()
+
+
+def test_toll_ev_preferred_surfaces_on_coach_card(_fresh_coach_kb):
+    """WO-WIRE-REROUTE-EV-TO-PRIORITY-COACH: status toll_ev → DECISIONS line."""
+    lines = compose_decisions_lines(
+        {
+            "classification": "fighter_encounter",
+            "toll_ev": {"preferred": "reroute", "gated": False},
+        },
+        width=60,
+    )
+    joined = "\n".join(lines)
+    assert "EV:reroute" in joined
+    assert any("Toll" in ln or "toll" in ln.lower() or "gate" in ln.lower() for ln in lines) or "EV:reroute" in joined

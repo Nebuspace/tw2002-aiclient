@@ -250,7 +250,15 @@ def _coach_lines(status: dict, *, width: int) -> list[str]:
         lines = _coach.compose_decisions_coach(kb, triggers, width=max(0, width))
         if lines == _coach.compose_decisions_placeholder():
             return []
-        return [_clip(line, width=width) for line in lines]
+        out = [_clip(line, width=width) for line in lines]
+        # WO-WIRE-REROUTE-EV-TO-PRIORITY-COACH: surface ranking preferred on
+        # the toll card path. Display-only — never a send instruction.
+        toll_ev = status.get("toll_ev")
+        if isinstance(toll_ev, dict):
+            preferred = toll_ev.get("preferred")
+            if isinstance(preferred, str) and preferred:
+                out.append(_clip(f" EV:{preferred}", width=width))
+        return out
     except Exception:  # noqa: BLE001 -- see the never-raises contract above
         return []
 

@@ -133,6 +133,7 @@ def test_no_input_yields_no_triggers():
         ({"explore_mode": "auto"}, "exploring_frontier"),
         ({"prompt": "Option? "}, "toll_or_gate"),
         ({"prompt": "How many fighters to use?"}, "toll_or_gate"),
+        ({"classification": "fighter_encounter"}, "toll_or_gate"),
         ({"chain": {"source": "discovered", "steps": 3}}, "chain_opportunity"),
         ({"loop_depleting": True}, "loop_depleting"),
     ],
