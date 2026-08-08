@@ -246,12 +246,15 @@ holds structurally. Two things worth recording:
 
 - **The batch/CIM and density-scan ingestion paths are partly unlanded against a live game.**
   `parse_port_report` exists and is unit-tested, but no live multi-sector CIM/scan screen has been
-  captured yet, so its row grammar is a hypothesis (above). **Tip (WO-BUILD-DENSITY-SCAN-VALUE-TABLE-PARSER):**
-  `tw2002_aiclient.density_scan.parse_density_scan` + `DENSITY_VALUE_TABLE` land the raw
-  `sector → density` extract and the canon atom table; row grammar remains a **hypothesis** (synthetic
-  fixtures only — no live multi-sector density screen capture yet). World-model writeback /
-  presence-via-absence decoding are **still unlanded** — this is an interpreter kernel, not an
-  ingestion path. Recorded as a residual build gap (writeback), not a behavioral defect.
+  captured yet, so its row grammar is a hypothesis (above). **Tip (WO-BUILD-DENSITY-SCAN-VALUE-TABLE-PARSER
+  + WO-WIRE-DENSITY-SCAN-WRITEBACK):** `tw2002_aiclient.density_scan.parse_density_scan` +
+  `DENSITY_VALUE_TABLE` land the raw `sector → density` extract and the canon atom table; row grammar
+  remains a **hypothesis** (synthetic fixtures only — no live multi-sector density screen capture yet).
+  Opportunistic writeback is wired (`density_scan_capture` idle-tick →
+  `world_model.write_density_scan`) into a sector `density_scan` observation always stamped
+  `verification: HYPOTHESIS` (decoded atoms + presence-via-absence fighter signal stay inside that
+  field — they do **not** mutate `threats`/`port` until a live capture promotes the grammar). Recorded
+  as a residual verification gap (live capture), not a missing ingestion path.
 - **`formations.py` membership writeback is wired** (WO-FORMATIONS-MEMBERSHIP-WRITEBACK / #326).
   `catalog_world` and `WorldStats.refresh` call `write_membership` after a successful scan, stamping
   canon-hyphen `formation_membership` tags. Still LOCATE/CATALOG/RECOMMEND-only — no Genesis or claim
