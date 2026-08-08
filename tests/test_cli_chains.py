@@ -111,6 +111,66 @@ def test_json_output_carries_the_cycle(world):
     assert len(payload["chains"][0]["hops"]) == 3
 
 
+def test_cmd_chains_requests_yield_rank(world, monkeypatch):
+    """Earn CLI surface must ask recompute for yield-first ordering."""
+    from tw2002_aiclient import chain_search
+
+    seen: dict = {}
+    real = chain_search.recompute
+
+    def _capture(world_id, **kwargs):
+        seen["rank"] = kwargs.get("rank")
+        return real(world_id, **kwargs)
+
+    monkeypatch.setattr(chain_search, "recompute", _capture)
+    rc, _ = _run(["chains", "--world-id", W, "--json"])
+    assert rc == 0
+    assert seen.get("rank") == chain_search.RANK_YIELD
+
+
+def test_cmd_chains_json_lists_yield_first_when_short_rich_and_long_thin(
+    world, monkeypatch
+):
+    """Pin #523: CLI JSON tops 2-hop@3.5 over 9-hop@1.0."""
+    from tw2002_aiclient import chain_search, chains
+
+    short_rich = chains.ProfitChain(
+        sectors=(100, 101, 100),
+        hops=(
+            chains.TradeHop(100, 101, "A", 3.5, 1),
+            chains.TradeHop(101, 100, "B", 3.5, 1),
+        ),
+        overall_profit=7.0,
+        turns=2,
+        cr_per_turn=3.5,
+        cr_per_execution=7.0,
+    )
+    long_thin = chains.ProfitChain(
+        sectors=tuple(range(1, 10)) + (1,),
+        hops=tuple(
+            chains.TradeHop(i, i + 1 if i < 9 else 1, "X", 1.0, 1) for i in range(1, 10)
+        ),
+        overall_profit=9.0,
+        turns=9,
+        cr_per_turn=1.0,
+        cr_per_execution=9.0,
+    )
+
+    def _yield_payload(world_id, **kwargs):
+        assert kwargs.get("rank") == chain_search.RANK_YIELD
+        ranked = chains.rank_chains_by_yield([long_thin, short_rich])
+        return chain_search.ProfitChainResult(
+            world_id=world_id, chains=tuple(ranked), reason=None
+        )
+
+    monkeypatch.setattr(chain_search, "recompute", _yield_payload)
+    rc, out = _run(["chains", "--world-id", W, "--json"])
+    assert rc == 0
+    payload = json.loads(out)
+    assert payload["chains"][0]["cr_per_turn"] == 3.5
+    assert len(payload["chains"][0]["hops"]) == 2
+
+
 def test_json_carries_the_two_truncation_notes_as_SEPARATE_fields(world):
     """A machine consumer must be able to tell 'I did not consider every
     hop' from 'I did not finish searching the hops I had'. One merged

@@ -78,6 +78,52 @@ def test_longer_cycle_preferred_over_shorter_higher_cprt():
     assert chain.sectors[0] == 1
 
 
+def _ranked_stub(*, hops: int, cr_per_turn: float, start: int = 1) -> ProfitChain:
+    """Minimal ProfitChain for ranking pins (sectors/hops shapes unused by sort)."""
+    hop_tuple = tuple(
+        TradeHop(start + i, start + ((i + 1) % hops), "X", 1.0, 1)
+        for i in range(hops)
+    )
+    sectors = tuple(start + i for i in range(hops)) + (start,)
+    return ProfitChain(
+        sectors=sectors,
+        hops=hop_tuple,
+        overall_profit=cr_per_turn * hops,
+        turns=hops,
+        cr_per_turn=cr_per_turn,
+        cr_per_execution=cr_per_turn * hops,
+    )
+
+
+def test_rank_chains_hop_count_first_buries_short_rich_pair():
+    """Canon discovery order (#523 surface bug when reused for earn)."""
+    short_rich = _ranked_stub(hops=2, cr_per_turn=3.5, start=100)
+    long_thin = _ranked_stub(hops=9, cr_per_turn=1.0, start=1)
+    ranked = chains_module.rank_chains([short_rich, long_thin])
+    assert ranked[0] is long_thin
+    assert ranked[0].cr_per_turn == 1.0
+    assert len(ranked[0].hops) == 9
+
+
+def test_rank_chains_by_yield_surfaces_short_rich_over_long_thin():
+    """Earn / credit-doubling pin: 2-hop @ 3.5 tops 9-hop @ 1.0."""
+    short_rich = _ranked_stub(hops=2, cr_per_turn=3.5, start=100)
+    long_thin = _ranked_stub(hops=9, cr_per_turn=1.0, start=1)
+    ranked = chains_module.rank_chains_by_yield([long_thin, short_rich])
+    assert ranked[0] is short_rich
+    assert ranked[0].cr_per_turn == 3.5
+    assert len(ranked[0].hops) == 2
+    assert ranked[1] is long_thin
+
+
+def test_rank_chains_by_yield_tiebreaks_equal_yield_by_hop_count():
+    a = _ranked_stub(hops=2, cr_per_turn=3.5, start=10)
+    b = _ranked_stub(hops=4, cr_per_turn=3.5, start=50)
+    ranked = chains_module.rank_chains_by_yield([a, b])
+    assert ranked[0] is b
+    assert len(ranked[0].hops) == 4
+
+
 def test_tie_on_length_higher_cr_per_turn_wins():
     hops = [
         TradeHop(1, 2, "A", 10, 1),

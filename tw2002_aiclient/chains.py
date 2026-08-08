@@ -250,9 +250,28 @@ def _search_cycles(
 
 
 def rank_chains(chains: Sequence[ProfitChain]) -> list[ProfitChain]:
+    """Canon discovery / priority-layer order: hop-count desc, then cr/turn.
+
+    See `canon/strategy/trade-loops.md` § Ranking. Earn / credit-doubling
+    surfaces that want yield-first use `rank_chains_by_yield` instead —
+    do not flip this default.
+    """
     return sorted(
         chains,
         key=lambda c: (len(c.hops), c.cr_per_turn),
+        reverse=True,
+    )
+
+
+def rank_chains_by_yield(chains: Sequence[ProfitChain]) -> list[ProfitChain]:
+    """Earn-surface order: credits-per-turn desc, then hop-count desc.
+
+    Keeps a short high-yield pair (e.g. 2-hop @ 3.5) above a long thin
+    cycle (e.g. 9-hop @ 1.0). Discovery/explore keeps `rank_chains`.
+    """
+    return sorted(
+        chains,
+        key=lambda c: (c.cr_per_turn, len(c.hops)),
         reverse=True,
     )
 

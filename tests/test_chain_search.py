@@ -161,3 +161,67 @@ def test_result_is_frozen():
     r = chain_search.ProfitChainResult(world_id="w", chains=())
     with pytest.raises(Exception):
         r.world_id = "other"  # type: ignore[misc]
+
+
+# -- dual ranking (WO-FIX-CHAIN-DISCOVERY-RANK-SORT-ORDER) -----------------
+
+
+def _fake_chain(*, hops: int, cr_per_turn: float, start: int) -> chains.ProfitChain:
+    hop_tuple = tuple(
+        chains.TradeHop(start + i, start + ((i + 1) % hops), "X", 1.0, 1)
+        for i in range(hops)
+    )
+    sectors = tuple(start + i for i in range(hops)) + (start,)
+    return chains.ProfitChain(
+        sectors=sectors,
+        hops=hop_tuple,
+        overall_profit=cr_per_turn * hops,
+        turns=hops,
+        cr_per_turn=cr_per_turn,
+        cr_per_execution=cr_per_turn * hops,
+    )
+
+
+def test_recompute_default_rank_keeps_hop_count_order(monkeypatch, tmp_path: Path):
+    short_rich = _fake_chain(hops=2, cr_per_turn=3.5, start=100)
+    long_thin = _fake_chain(hops=9, cr_per_turn=1.0, start=1)
+    # Finder already hop-ranked (long first) — default must not flip.
+    monkeypatch.setattr(
+        trade_adapter,
+        "build_trade_hops",
+        lambda *a, **k: ((chains.TradeHop(1, 2, "X", 1.0, 1),), None),
+    )
+    monkeypatch.setattr(
+        chains,
+        "find_profit_chains_with_note",
+        lambda *a, **k: ([long_thin, short_rich], None),
+    )
+    result = chain_search.recompute(W, state_dir=tmp_path, now=CLOCK)
+    assert result.chains[0] is long_thin
+    assert len(result.chains[0].hops) == 9
+
+
+def test_recompute_rank_yield_surfaces_short_rich(monkeypatch, tmp_path: Path):
+    short_rich = _fake_chain(hops=2, cr_per_turn=3.5, start=100)
+    long_thin = _fake_chain(hops=9, cr_per_turn=1.0, start=1)
+    monkeypatch.setattr(
+        trade_adapter,
+        "build_trade_hops",
+        lambda *a, **k: ((chains.TradeHop(1, 2, "X", 1.0, 1),), None),
+    )
+    monkeypatch.setattr(
+        chains,
+        "find_profit_chains_with_note",
+        lambda *a, **k: ([long_thin, short_rich], None),
+    )
+    result = chain_search.recompute(
+        W, state_dir=tmp_path, now=CLOCK, rank=chain_search.RANK_YIELD
+    )
+    assert result.chains[0] is short_rich
+    assert result.chains[0].cr_per_turn == 3.5
+    assert len(result.chains[0].hops) == 2
+
+
+def test_recompute_rejects_unknown_rank(tmp_path: Path):
+    with pytest.raises(ValueError, match="unknown rank"):
+        chain_search.recompute(W, state_dir=tmp_path, now=CLOCK, rank="nonsense")
