@@ -89,6 +89,18 @@ class SessionGuardian:
         # may also advance last_rx; we take the later of the two).
         self._last_keepalive_mono = None
 
+    @property
+    def reconnecting(self) -> bool:
+        """True for the whole D9 reconnect+login-replay burst (same flag
+        that already blocks D10 mid-burst, `_tick`'s docstring above).
+        Public so another driver sharing this session (`ExploreRunner`,
+        `TradeChainRunner`) can tell "the screen just changed out from
+        under me because a background reconnect is replaying login" apart
+        from "the screen is genuinely a halt" -- WO-DIAGNOSE-EXPLORE-HALT-
+        GAME-SELECT-LIVE-SESSION. Read-only: only this guardian's own
+        `_maybe_reconnect` sets the underlying flag."""
+        return self._reconnect_in_flight
+
     def clear_reconnect_exhausted(self) -> None:
         """Allow another auto-reconnect burst (operator / ensure cleared)."""
         self.reconnect_exhausted = False
