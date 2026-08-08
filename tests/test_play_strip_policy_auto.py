@@ -352,7 +352,27 @@ def test_trade_stop_start_anchor_unknown_still_updates_band():
         "run": {"route": "8>9>8", "outcome": "halted", "reason": "start_anchor_unknown"},
     }
     assert app_mod._apply_trade_chain_band(play, raw) is False
-    assert "start_anchor_unknown" in play.status_line
+    assert "start anchor unknown" in play.status_line
+    assert "start_anchor_unknown" not in play.status_line
+
+
+def test_trade_stop_driver_error_surfaces_exception_class():
+    """WO-WIRE-CHAIN-STOP-REASON-LABELS: crash reads run_wire error field."""
+    play = _FakePlay(status={"hud": {"sector": {"value": 5}}})
+    raw = {
+        "running": False,
+        "run": {
+            "route": "1>2>1",
+            "outcome": "crashed",
+            "reason": "driver_error",
+            "error": "ValueError",
+        },
+    }
+    assert app_mod._apply_trade_chain_band(play, raw) is False
+    assert "driver error" in play.status_line
+    assert "ValueError" in play.status_line
+    assert "driver_error" not in play.status_line
+
 
 def test_discovery_blocks_start_only_when_truncated_and_empty():
     from tw2002_aiclient.session import trade_chain as tc

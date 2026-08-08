@@ -65,6 +65,43 @@ CANON_CATALOG = {
     "fighters_zero": "fighters zero",
     "route_hazard": "route hazard",
     "reconnect_exhausted": "reconnect exhausted",
+    "armed_off": "armed off",
+    "aborted": "chain aborted",
+    "max_steps_exceeded": "max steps exceeded",
+    "unconfirmed_send": "unconfirmed send",
+    "unexpected_screen": "unexpected screen",
+    "price_unknown": "price unknown",
+    "cargo_stranded": "cargo stranded",
+    "unaffordable": "cannot afford",
+    "over_budget": "over budget",
+    "credit_delta_anomaly": "credit delta anomaly",
+    "turn_floor": "turn floor",
+    "max_commodity_prompts_exceeded": "max commodity prompts exceeded",
+    "depleted": "stock depleted",
+    "route_unknown": "route unknown",
+    "non_adjacent_nav": "non-adjacent nav",
+    "avoid_declined": "avoid declined",
+    "realized_margin_unknown": "realized margin unknown",
+    "realized_margin_below_floor": "realized margin below floor",
+    "world_id_unknown": "world id unknown",
+    "turns_left_unknown": "turns left unknown",
+    "start_anchor_unknown": "start anchor unknown",
+    "start_anchor_unreachable": "start anchor unreachable",
+    "haggle_desync_fallback": "haggle desync fallback",
+    "haggle_no_active_haggle": "haggle no active haggle",
+    "haggle_unknown": "haggle unknown",
+    "driver_error": "driver error",
+    "invalid_world_id": "invalid world id",
+    "invalid_fingerprint": "invalid fingerprint",
+    "invalid_cash_floor": "invalid cash floor",
+    "invalid_turn_reserve": "invalid turn reserve",
+    "chain_discovery_failed": "chain discovery failed",
+    "chain_discovery_partial": "chain discovery partial",
+    "chain_identity_stale": "chain identity stale",
+    "chain_plan_invalid": "chain plan invalid",
+    "already_running": "already running",
+    "another_app_run_winding_down": "another app run winding down",
+    "thread_start_failed": "thread start failed",
 }
 
 WIDE = 120
@@ -114,6 +151,25 @@ def test_route_hazard_qualified_code_renders_label_plus_detail():
         _halt("route_hazard:one_way:2->3"), width=WIDE
     )
     assert lines[0] == "! STOP — route hazard: one_way:2->3"
+
+
+def test_no_catalog_code_maps_to_itself_raw():
+    """WO-WIRE-CHAIN-STOP-REASON-LABELS Accept: every catalogued code has a
+    human label distinct from the raw internal code string."""
+    for code, label in stopbanner.INTERVENTION_REASON_LABELS.items():
+        assert label != code, f"{code!r} still maps to itself raw"
+        assert label, f"{code!r} has an empty label"
+
+
+def test_trade_chain_qualified_codes_render_label_not_raw():
+    """Parametrized trade_driver holds resolve by base — never the raw string."""
+    raw = "credit_delta_anomaly:2:buy:Equipment"
+    label = stopbanner.intervention_reason_label(raw)
+    assert label != raw
+    assert label.startswith("credit delta anomaly:")
+    lines = stopbanner.compose_stop_banner_lines(_halt(raw), width=WIDE)
+    assert "credit delta anomaly" in lines[0]
+    assert raw not in lines[0]
 
 
 def test_unknown_code_passes_through_as_its_own_text_never_invented_prose():

@@ -732,7 +732,21 @@ def _apply_trade_chain_band(play: PlayShellScreen, raw: object) -> bool:
     if outcome == "completed":
         play.status_line = f"trade completed — {route}"
     elif outcome is not None:
-        play.status_line = f"trade stopped — {reason}"
+        # WO-WIRE-CHAIN-STOP-REASON-LABELS: human label (never raw code when
+        # catalogued). Driver crashes keep reason=driver_error and put the
+        # exception class on run["error"] — surface that class, not just the
+        # generic code.
+        from tw2002_aiclient.cockpit.stopbanner import intervention_reason_label
+
+        label = intervention_reason_label(reason)
+        if reason == "driver_error":
+            err = run.get("error")
+            if isinstance(err, str) and err.strip():
+                play.status_line = f"trade stopped — {label} ({err.strip()})"
+            else:
+                play.status_line = f"trade stopped — {label}"
+        else:
+            play.status_line = f"trade stopped — {label}"
     return False
 
 
