@@ -135,3 +135,20 @@ def test_toll_ev_to_status_shape():
     d = toll_ev_to_status(ev)
     assert d["preferred"] == "reroute"
     assert "rationale" in d
+
+
+def test_toll_ev_for_screen_product_wire_from_option_frame():
+    """WO-WIRE-REROUTE-EV-TO-PRIORITY-COACH: screen → status["toll_ev"]."""
+    from tw2002_aiclient.reroute_vs_fight import toll_ev_for_screen
+
+    text = "Your fighters: 500 vs. theirs: 1\nOption? (A,D,I,R,S,?):?"
+    d = toll_ev_for_screen(text, "Option? (A,D,I,R,S,?):?")
+    assert d is not None
+    assert d["preferred"] in ("reroute", "fight", "unknown")
+    assert "force_share" in d
+
+
+def test_toll_ev_for_screen_omits_when_not_an_encounter():
+    from tw2002_aiclient.reroute_vs_fight import toll_ev_for_screen
+
+    assert toll_ev_for_screen("Command [TL=00:00:00]:[1]", "Command [TL=00:00:00]:[1]") is None
