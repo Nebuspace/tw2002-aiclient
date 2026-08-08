@@ -540,7 +540,11 @@ def write_from_state(world_id, parsed_state, state_dir=None, now=None):
     if "threats" in parsed_state:
         record["threats"] = dict(parsed_state["threats"])
 
-    return upsert_sector(world_id, record, state_dir=state_dir, now=now)
+    merged = upsert_sector(world_id, record, state_dir=state_dir, now=now)
+    port_out = record.get("port")
+    if isinstance(port_out, dict) and port_out.get("commodities"):
+        _record_port_floor_observation(sector_id, port_out, state_dir=state_dir)
+    return merged
 
 
 def write_port_only(world_id, sector_id, parsed_port, state_dir=None, now=None):
@@ -591,4 +595,22 @@ def write_port_only(world_id, sector_id, parsed_port, state_dir=None, now=None):
         "last_seen_ts": _now_iso(now),
     }
     record = {"sector_id": sector_id, "port": port_record}
-    return upsert_sector(world_id, record, state_dir=state_dir, now=now)
+    merged = upsert_sector(world_id, record, state_dir=state_dir, now=now)
+    if port_record.get("commodities"):
+        _record_port_floor_observation(sector_id, port_record, state_dir=state_dir)
+    return merged
+
+
+def _record_port_floor_observation(sector_id, port_dict, *, state_dir=None):
+    """Best-effort append to the port-floor observation JSONL (WO capture loop).
+
+    Never raises — world_model writes must not fail because the capture
+    store is missing or unwritable. ``traded_since_prior`` stays unknown
+    here; only an operator/ledger-aware caller can set False/True.
+    """
+    try:
+        from tw2002_aiclient.port_floor_capture import record_port_write
+
+        record_port_write(sector_id, port_dict, state_dir=state_dir)
+    except Exception:
+        return

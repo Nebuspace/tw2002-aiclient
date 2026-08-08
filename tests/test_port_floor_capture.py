@@ -15,8 +15,14 @@ from tw2002_aiclient.port_floor_capture import (
     PortIdentity,
     PortObservation,
     analyze_port_history,
+    append_observations,
     estimate_floor_price,
     estimate_regrowth_rate,
+    load_observations,
+    observation_from_dict,
+    observation_to_dict,
+    observations_from_port_record,
+    observations_from_world_dir,
 )
 
 T0 = datetime(2026, 8, 1, 0, 0, 0, tzinfo=timezone.utc)
@@ -155,3 +161,85 @@ def test_no_observations_yields_empty_report():
     report = analyze_port_history([])
     assert report.regrowth == {}
     assert report.floor_price == {}
+
+
+def test_observation_json_round_trip(tmp_path):
+    obs = _obs(pct=40, amount=800, price_per_unit=19.5, traded_since_prior=False)
+    path = tmp_path / "obs.jsonl"
+    assert append_observations(path, [obs]) == 1
+    loaded = load_observations(path)
+    assert len(loaded) == 1
+    assert loaded[0].sector_id == obs.sector_id
+    assert loaded[0].pct == 40
+    assert loaded[0].price_per_unit == 19.5
+    assert loaded[0].traded_since_prior is False
+    assert observation_from_dict(observation_to_dict(obs)) is not None
+
+
+def test_observations_from_port_record_skips_malformed():
+    port = {
+        "last_seen_ts": "2026-08-07T12:00:00Z",
+        "commodities": [
+            {"name": "Fuel Ore", "status": "buying", "amount": 100, "pct": 50},
+            {"name": "Organics", "status": "selling"},  # missing amount/pct
+            "not-a-dict",
+        ],
+    }
+    rows = observations_from_port_record(42, port)
+    assert len(rows) == 1
+    assert rows[0].sector_id == 42
+    assert rows[0].commodity == "Fuel Ore"
+    assert rows[0].pct == 50
+    assert rows[0].traded_since_prior is None
+
+
+def test_observations_from_world_dir(tmp_path):
+    sectors = tmp_path / "sectors"
+    sectors.mkdir()
+    (sectors / "99.json").write_text(
+        '{"sector_id": 99, "port": {"last_seen_ts": "2026-08-07T01:00:00Z",'
+        ' "commodities": [{"name": "Equipment", "status": "selling",'
+        ' "amount": 10, "pct": 5}]}}\n',
+        encoding="utf-8",
+    )
+    (sectors / "100.json").write_text('{"sector_id": 100, "port": null}\n', encoding="utf-8")
+    rows = observations_from_world_dir(tmp_path)
+    assert len(rows) == 1
+    assert rows[0].sector_id == 99
+    assert rows[0].commodity == "Equipment"
+
+
+def test_world_model_write_port_only_appends_observations(tmp_path):
+    from tw2002_aiclient import world_model
+
+    world_model.write_port_only(
+        "w-test",
+        4309,
+        {
+            "commodities": [
+                {"name": "Fuel Ore", "status": "buying", "amount": 500, "pct": 20},
+                {"name": "Organics", "status": "selling", "amount": 100, "pct": 8},
+            ]
+        },
+        state_dir=tmp_path,
+    )
+    store = tmp_path / "port_floor_observations.jsonl"
+    loaded = load_observations(store)
+    assert len(loaded) == 2
+    assert {o.commodity for o in loaded} == {"Fuel Ore", "Organics"}
+    assert all(o.sector_id == 4309 for o in loaded)
+    assert all(o.traded_since_prior is None for o in loaded)
+
+
+def test_world_model_write_port_only_skips_empty_commodities(tmp_path):
+    from tw2002_aiclient import world_model
+
+    world_model.write_port_only(
+        "w-test",
+        1,
+        {"commodities": []},
+        state_dir=tmp_path,
+    )
+    store = tmp_path / "port_floor_observations.jsonl"
+    assert not store.exists()
+    assert load_observations(store) == []
