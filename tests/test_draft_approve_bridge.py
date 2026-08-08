@@ -33,7 +33,6 @@ from tw2002_aiclient.cockpit.draft_approve import (
     DraftBridgeError,
     HUMAN_SUPPLIED_FIELDS,
     bridge_to_kernel_document,
-    compose_bridge_command,
     create_analyze_draft,
     promote_to_approved,
     screen_of,
@@ -279,30 +278,6 @@ def test_the_raw_stub_still_cannot_reach_the_store(tmp_path):
 # ---------------------------------------------------------------------------
 
 
-def test_the_command_carries_the_observed_screen_and_leaves_the_rest_blank():
-    """Ruling A: the cockpit hands over what it knows and asks for the rest.
-
-    Placeholders are uppercase so the line is visibly not runnable as printed.
-    A command with plausible values filled in would invite exactly the minted
-    defaults the ruling forbids — typed by a human who thought they were
-    accepting a suggestion rather than authoring one.
-    """
-    command = compose_bridge_command("main_command")
-
-    assert command.startswith("tw rule draft ")
-    assert "--screen main_command" in command
-    for placeholder in ("--rule-id ID", "--do MACRO", "--priority N"):
-        assert placeholder in command
-    # No value that could be mistaken for a real suggestion.
-    assert "dock" not in command and "--priority 0" not in command
-
-
-@pytest.mark.parametrize("hostile", [None, 0, "", [], {}, object()])
-def test_the_command_never_raises_and_degrades_to_a_question_mark(hostile):
-    command = compose_bridge_command(hostile)
-    assert command.startswith("tw rule draft --screen ?")
-
-
 def _run_play_calls() -> set:
     """Names called inside `app._run_play`, the curses loop that owns the gate."""
     from pathlib import Path
@@ -325,8 +300,8 @@ def test_the_cockpit_gate_is_actually_wired_to_the_bridge_hint():
 
     Historically this asserted ``compose_bridge_command`` (CLI-only path).
     WO-PLAY-RULE-IDENTITY replaced that with typed entry + write/promote;
-    the CLI composer remains as a fallback helper but must not be the Play
-    gate's only next step.
+    the CLI composer has since been retired (WO-CLEANUP-COMPOSE-BRIDGE-
+    COMMAND-UNREACHABLE) as it never gained a caller outside its own tests.
     """
     called = _run_play_calls()
     assert "bridge_to_kernel_document" in called, (
@@ -394,22 +369,3 @@ def test_that_claim_guard_reads_literals_rather_than_comments(tmp_path):
     assert "not yet a rule" in said
 
 
-def test_the_command_is_the_one_the_cli_actually_accepts():
-    """A hint naming flags the CLI does not have is worse than no hint.
-
-    Parsed through the real `build_parser`, so a renamed flag on either side
-    breaks here rather than stranding an operator at a usage error.
-    """
-    from tw2002_aiclient.session import cli
-
-    words = compose_bridge_command("main_command").split()
-    assert words[0] == "tw"
-    argv = words[1:]
-    argv[argv.index("ID")] = "r"
-    argv[argv.index("MACRO")] = "m"
-    argv[argv.index("N")] = "7"
-
-    args = cli.build_parser().parse_args(argv)
-    assert (args.screen_match, args.rule_id, args.do, args.priority) == (
-        "main_command", "r", "m", 7,
-    )

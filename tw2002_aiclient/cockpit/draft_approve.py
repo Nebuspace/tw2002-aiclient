@@ -224,17 +224,6 @@ def promote_to_approved(draft: object) -> dict | None:
     return out
 
 
-def compose_bridge_command(screen: object = None) -> str:
-    """CLI fallback when an operator prefers the shell over Play typed-entry.
-
-    Play's primary path is :func:`create_identity_session` (WO-PLAY-RULE-IDENTITY).
-    This line remains for operators who leave the client; placeholders stay
-    UPPERCASE so it is obvious the printed command is not runnable as-is.
-    """
-    label = screen if isinstance(screen, str) and screen else "?"
-    return f"tw rule draft --screen {label} --rule-id ID --do MACRO --priority N"
-
-
 def compose_draft_approve_line(screen: object = None, *, unicode_ok: object = True) -> str:
     """``Approve analyze draft (<screen>)?  y/N`` — never raises."""
     label = screen if isinstance(screen, str) and screen else "?"
