@@ -34,9 +34,11 @@ from types import SimpleNamespace
 import pytest
 
 from tw2002_aiclient import adapters, app as app_mod
+from tw2002_aiclient import chain_detect as chain_detect_mod
 from tw2002_aiclient import chain_search as chain_search_mod
 from tw2002_aiclient import chain_search_view as V
 from tw2002_aiclient.chains import ProfitChain, TradeHop
+from tw2002_aiclient import explore as explore_mod
 from tw2002_aiclient import screens as screens_mod
 from tw2002_aiclient import world_model as world_model_mod
 from tw2002_aiclient.cockpit import chains
@@ -205,12 +207,20 @@ def _drive(monkeypatch, keys, *, store, recompute, sector_count=SECTOR_COUNT):
     hermetic — no read of the real `state/world/` tree.
 
     `sector_count` controls the OTHER world-model read this branch now makes
-    (`world_stats.refresh`), for the same hermetic reason and then some: left
-    unpatched it would count sector files under the operator's real
-    `state/world/`, so the assertions below would pass or fail according to
-    how much the human had explored — a test that reddens exactly when the
-    product is in use. Pass a `BaseException` to drive the raising-store case;
-    `None` models a store that cannot be counted.
+    (`world_stats.refresh` → `known_sector_count`), for the same hermetic
+    reason and then some: left unpatched it would count sector files under
+    the operator's real `state/world/`, so the assertions below would pass
+    or fail according to how much the human had explored — a test that
+    reddens exactly when the product is in use. Pass a `BaseException` to
+    drive the raising-store case; `None` models a store that cannot be
+    counted.
+
+    WO-FIX-PLAY-CHAINS-TEST-STATE-ISOLATION: `known_sector_count` alone is
+    not enough. The same L) keypress also runs `all_sectors` (dead-end /
+    formations panel) and `chain_detect.recompute` (class-pair hop
+    fallback into GOALS). Those must be hermetic too, or a populated
+    operator world leaks into assertions that expect empty map stats /
+    no scalars after a raising finder.
     """
     arm_calls: list = []
     trade_calls: list = []
@@ -244,6 +254,21 @@ def _drive(monkeypatch, keys, *, store, recompute, sector_count=SECTOR_COUNT):
     # `world_stats.refresh` imports `world_model` lazily, so the patch target
     # is the real module -- the lazy import resolves to the same object.
     monkeypatch.setattr(world_model_mod, "known_sector_count", _count)
+    # Empty completed scan — not a raise — so refresh records zero
+    # dead-ends / formations instead of retaining junk or reading disk.
+    # Must be a list — formations_from_sectors treats non-list as hostile
+    # (None → retain prior / omit), which would skip the zero pins.
+    monkeypatch.setattr(world_model_mod, "all_sectors", lambda wid, **kw: [])
+    monkeypatch.setattr(
+        explore_mod, "find_landmark_sectors", lambda wid, landmark, **kw: [],
+    )
+    # Completed-empty pair result clears best_pair; a raise would retain
+    # and a live recompute would invent hop scalars from operator state.
+    monkeypatch.setattr(
+        chain_detect_mod,
+        "recompute",
+        lambda wid, **kw: SimpleNamespace(pairs=(), reason=None, world_id=wid),
+    )
 
     def _arm(name=None, **kw):
         arm_calls.append((name, kw))
