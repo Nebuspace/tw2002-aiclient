@@ -145,18 +145,37 @@ def _cr_per_turn_text(value: object) -> str:
     return f"{value:.0f}/t"
 
 
-def _format_one_chain(chain: object, *, marker: str, width: int) -> str:
+def _format_one_chain(
+    chain: object,
+    *,
+    marker: str,
+    width: int,
+    hold_count: int | None = None,
+) -> str:
     """One row. `hops_text`, `cr_text` and `SOURCE_TAG` are computed and
     reserved FIRST and never truncated -- hop-count and cr/turn are the
     genuinely-known, never-fabricated numbers on this row, and the
     provenance tag is what keeps it from being read as a taught macro.
     Discovery-only (below-floor) rows append ``DISCOVERY_TAG``. Only the
     sector ring is clipped, the same "protect the count, clip the
-    description" discipline `compose_chain_lines` uses."""
+    description" discipline `compose_chain_lines` uses.
+
+    When ``hold_count`` is a positive int, the /t cell is *hold-scaled*
+    trip EV (unit ``cr_per_turn`` × holds) so unit margins are not read as
+    trip P&L. Ranking still uses the unit field. Unknown holds → unit /t.
+    """
+    from tw2002_aiclient.chains import hold_scaled_cr_per_turn
+
     marker_text = f"{marker} " if marker else "  "
     hops_text = _hops_text(getattr(chain, "hops", None))
     turns_text = _turns_text(getattr(chain, "turns", None))
-    cr_text = _cr_per_turn_text(getattr(chain, "cr_per_turn", None))
+    unit_cr = getattr(chain, "cr_per_turn", None)
+    display_cr = unit_cr
+    if hold_count is not None:
+        scaled = hold_scaled_cr_per_turn(unit_cr, hold_count)
+        if scaled is not None:
+            display_cr = scaled
+    cr_text = _cr_per_turn_text(display_cr)
     body = _sectors_text(getattr(chain, "sectors", None))
     discovery = f" {DISCOVERY_TAG}" if not _chain_is_executable(chain) else ""
 
@@ -175,6 +194,7 @@ def format_profit_chain_lines(
     selected_index: int | None = None,
     window_start: int = 0,
     window_size: int | None = None,
+    hold_count: object = None,
 ) -> list[str]:
     """The listing's body lines. Never raises regardless of `payload`'s shape.
 
@@ -192,6 +212,10 @@ def format_profit_chain_lines(
     ``window_start``. When the full set exceeds the window, emit a
     ``showing N of M`` indicator and format only the visible rows (popup
     pagination — CLI callers leave ``window_size=None`` and see every row).
+
+    ``hold_count`` (optional): positive ship holds. When known, /t cells
+    show hold-scaled trip EV and a ``hold-scaled ×N`` banner is prepended
+    so unit margins are not mistaken for trip P&L. Junk / missing → unit.
     """
     try:
         w = int(width)
@@ -201,6 +225,15 @@ def format_profit_chain_lines(
     best = BEST_UNICODE if unicode_ok else BEST_ASCII
     selected = SELECTED_UNICODE if unicode_ok else SELECTED_ASCII
     partial_banner = PARTIAL_UNICODE if unicode_ok else PARTIAL_ASCII
+
+    holds: int | None = None
+    if (
+        hold_count is not None
+        and not isinstance(hold_count, bool)
+        and isinstance(hold_count, int)
+        and hold_count > 0
+    ):
+        holds = hold_count
 
     # Computed by getattr, not via `payload.truncated`, so a duck-typed
     # stand-in without the property still renders honestly.
@@ -252,6 +285,8 @@ def format_profit_chain_lines(
     lines = [TITLE]
     if truncated:
         lines.append(partial_banner)
+    if holds is not None:
+        lines.append(f"hold-scaled ×{holds}")
     if show_indicator:
         # N = rows in this viewport; M = full discovered set.
         lines.append(f"showing {end - start} of {total}")
@@ -263,6 +298,7 @@ def format_profit_chain_lines(
                 chain,
                 marker=marker,
                 width=w,
+                hold_count=holds,
             )
         )
     return lines

@@ -14,6 +14,7 @@ here decides which chain to run -- that is the priority layer's job.
 
 from __future__ import annotations
 
+import math
 from collections import defaultdict
 from dataclasses import dataclass
 from typing import Mapping, Optional, Sequence
@@ -247,6 +248,49 @@ def _search_cycles(
             f"sector(s) fully searched before truncation) -- result is partial"
         )
     return rank_chains(list(found.values())), note
+
+
+
+def hold_scaled_cr_per_turn(cr_per_turn: object, hold_count: object) -> Optional[float]:
+    """Trip-rate EV: unit ``cr_per_turn`` × live hold count.
+
+    Finder ``ProfitChain.cr_per_turn`` is *per-hold unit margin* (sum of hop
+    margins / turns). Display / earn glances that need trip P&L scale by
+    ship holds. Fail-closed: non-finite cr, non-positive int holds → None.
+    Never invents a hold count. Ranking stays on the unit field (#527).
+    """
+    if isinstance(cr_per_turn, bool) or not isinstance(cr_per_turn, (int, float)):
+        return None
+    cr = float(cr_per_turn)
+    if not math.isfinite(cr):
+        return None
+    if isinstance(hold_count, bool) or not isinstance(hold_count, int):
+        return None
+    if hold_count <= 0:
+        return None
+    return cr * float(hold_count)
+
+
+def hold_count_from_status(status: object) -> Optional[int]:
+    """Positive live hold count from a status mapping, or None.
+
+    Prefers ``upgrade_player.current_holds``, then ``current_ship.total_holds``
+    — same keys ``chain_status.ChainScalars`` already reads for depletion.
+    """
+    if not isinstance(status, Mapping):
+        return None
+    player = status.get("upgrade_player")
+    if isinstance(player, Mapping):
+        holds = player.get("current_holds")
+        if isinstance(holds, int) and not isinstance(holds, bool) and holds > 0:
+            return holds
+    ship = status.get("current_ship")
+    if isinstance(ship, Mapping):
+        holds = ship.get("total_holds")
+        if isinstance(holds, int) and not isinstance(holds, bool) and holds > 0:
+            return holds
+    return None
+
 
 
 def rank_chains(chains: Sequence[ProfitChain]) -> list[ProfitChain]:

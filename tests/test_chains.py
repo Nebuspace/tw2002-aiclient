@@ -564,3 +564,34 @@ def test_in_degree_zero_start_does_not_starve_budget_for_real_pairs():
     assert any(
         len(c.hops) == 2 and set(c.sectors[:2]) == {1, 2} for c in found
     ), ([(len(c.hops), c.sectors) for c in found[:5]], note)
+
+
+def test_hold_scaled_cr_per_turn_multiplies_unit_by_holds():
+    from tw2002_aiclient.chains import hold_scaled_cr_per_turn
+
+    assert hold_scaled_cr_per_turn(3.5, 100) == 350.0
+    assert hold_scaled_cr_per_turn(1.0, 20) == 20.0
+
+
+def test_hold_scaled_cr_per_turn_fail_closed():
+    from tw2002_aiclient.chains import hold_scaled_cr_per_turn
+
+    assert hold_scaled_cr_per_turn(3.5, None) is None
+    assert hold_scaled_cr_per_turn(3.5, 0) is None
+    assert hold_scaled_cr_per_turn(3.5, -1) is None
+    assert hold_scaled_cr_per_turn(3.5, True) is None
+    assert hold_scaled_cr_per_turn(None, 10) is None
+    assert hold_scaled_cr_per_turn(True, 10) is None
+    assert hold_scaled_cr_per_turn(float("nan"), 10) is None
+
+
+def test_hold_count_from_status_prefers_upgrade_player():
+    from tw2002_aiclient.chains import hold_count_from_status
+
+    assert hold_count_from_status(
+        {"upgrade_player": {"current_holds": 55}, "current_ship": {"total_holds": 10}}
+    ) == 55
+    assert hold_count_from_status({"current_ship": {"total_holds": 40}}) == 40
+    assert hold_count_from_status({}) is None
+    assert hold_count_from_status({"upgrade_player": {"current_holds": 0}}) is None
+    assert hold_count_from_status(None) is None

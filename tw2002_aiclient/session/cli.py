@@ -1018,6 +1018,13 @@ def cmd_chains(args):
     # keeps default hop-count ranking via recompute's RANK_HOPS).
     result = chain_search.recompute(args.world_id, rank=chain_search.RANK_YIELD)
 
+    from tw2002_aiclient.chains import hold_scaled_cr_per_turn
+
+    # Optional offline hold scale (daemon-free CLI has no live ship status).
+    holds = getattr(args, "holds", None)
+    if isinstance(holds, bool) or not isinstance(holds, int) or holds <= 0:
+        holds = None
+
     if getattr(args, "json", False):
         # Additive fingerprint per row: same identity ``tw chain start
         # --fingerprint`` validates via plan_from_chain / resolve_exact_chain.
@@ -1027,6 +1034,10 @@ def cmd_chains(args):
             row = asdict(chain)
             plan = plan_from_chain(result.world_id, chain)
             row["fingerprint"] = None if plan is None else plan.fingerprint
+            # Unit cr_per_turn stays canonical; scaled field is display EV.
+            row["cr_per_turn_hold_scaled"] = hold_scaled_cr_per_turn(
+                row.get("cr_per_turn"), holds
+            )
             chain_rows.append(row)
         print(
             json.dumps(
@@ -1038,11 +1049,14 @@ def cmd_chains(args):
                     "adapter_note": result.adapter_note,
                     "search_note": result.search_note,
                     "truncated": result.truncated,
+                    "hold_count": holds,
                 }
             )
         )
     else:
-        for line in chain_search_view.format_profit_chain_lines(result):
+        for line in chain_search_view.format_profit_chain_lines(
+            result, hold_count=holds
+        ):
             print_tty(line)
     return 0
 
@@ -2031,6 +2045,17 @@ def build_parser() -> argparse.ArgumentParser:
         dest="world_id",
         metavar="SLUG",
         help="world_id slug (state/world/<slug>/)",
+    )
+    sp.add_argument(
+        "--holds",
+        type=int,
+        default=None,
+        dest="holds",
+        metavar="N",
+        help=(
+            "optional ship hold count: scale displayed cr/turn to trip EV "
+            "(unit margins x N); omit to leave unit cr/turn"
+        ),
     )
     sp.add_argument("--json", action="store_true", help="machine-parseable JSON output")
     sp.set_defaults(func=cmd_chains)

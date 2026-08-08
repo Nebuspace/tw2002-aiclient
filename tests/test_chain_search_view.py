@@ -236,3 +236,33 @@ def test_small_set_below_window_unchanged_no_indicator():
     assert not any("showing" in ln for ln in lines)
     assert sum(1 for ln in lines if V.SOURCE_TAG in ln) == 3
 
+
+
+def test_hold_scaled_display_multiplies_cr_per_turn_and_banners():
+    """Unit 3.5 × 100 holds → 350/t with explicit banner."""
+    lines = V.format_profit_chain_lines(
+        _payload([_chain((10, 12, 11, 10), 3, 3, 3.5)]),
+        hold_count=100,
+    )
+    body = "\n".join(lines)
+    assert "hold-scaled ×100" in body
+    assert "350/t" in body
+    assert "4/t" not in body  # would be unit 3.5 rounded
+
+
+def test_hold_scaled_omitted_keeps_unit_cr_per_turn():
+    lines = V.format_profit_chain_lines(
+        _payload([_chain((10, 12, 11, 10), 3, 3, 30.0)]),
+    )
+    body = "\n".join(lines)
+    assert "hold-scaled" not in body
+    assert "30/t" in body
+
+
+def test_hold_scaled_junk_hold_count_keeps_unit():
+    lines = V.format_profit_chain_lines(
+        _payload([_chain((10, 12, 11, 10), 3, 3, 30.0)]),
+        hold_count=0,
+    )
+    assert "hold-scaled" not in "\n".join(lines)
+    assert "30/t" in "\n".join(lines)

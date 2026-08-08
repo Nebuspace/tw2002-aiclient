@@ -388,6 +388,7 @@ def compose_chain_lines(
     unicode_ok: bool = True,
     width: int = 40,
     discovered_window: int | None = None,
+    hold_count: object = None,
 ) -> list[str]:
     """The popup's body lines. Never raises; a session of the wrong shape
     renders the empty placeholder rather than blowing up the draw pass.
@@ -414,6 +415,9 @@ def compose_chain_lines(
     per frame. When set, the session's ``discovered_scroll`` tracks the
     cursor and the formatter emits ``showing N of M``. Omit (CLI / small
     tests) to format the full discovered set.
+
+    ``hold_count`` (optional): positive ship holds forwarded to the
+    discovered formatter for hold-scaled /t display. Omit → unit margins.
     """
     sel = SELECTED_UNICODE if unicode_ok else SELECTED_ASCII
     empty = EMPTY_UNICODE if unicode_ok else EMPTY_ASCII
@@ -488,6 +492,7 @@ def compose_chain_lines(
                 ),
                 window_start=window_start,
                 window_size=window_size,
+                hold_count=hold_count,
             )
         )
     return lines

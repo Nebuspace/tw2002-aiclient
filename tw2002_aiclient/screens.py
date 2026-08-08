@@ -2248,11 +2248,20 @@ class PlayShellScreen:
                 # TITLE + taught rows + blank + disc TITLE + showing + PARTIAL
                 _overhead = 1 + _taught_n + 1 + 1 + 1 + 1
                 _disc_window = max(1, _inner_h - _overhead)
+                from tw2002_aiclient.chains import hold_count_from_status as _holds_from
+
+                _hold_status = status
+                if _hold_status is None and self.status_provider is not None:
+                    try:
+                        _hold_status = self.status_provider()
+                    except Exception:  # noqa: BLE001
+                        _hold_status = None
                 lines = cockpit_chains.compose_chain_lines(
                     _cs_draw,
                     unicode_ok=uok,
                     width=(_w - 4) if isinstance(_w, int) else 40,
                     discovered_window=_disc_window,
+                    hold_count=_holds_from(_hold_status),
                 )
                 cockpit_draw.draw_lines(
                     self.stdscr, regions.get("center"), lines, curses.A_NORMAL, boxed=True
