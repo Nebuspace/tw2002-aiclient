@@ -132,3 +132,84 @@ def test_plan_from_status_auto_max_parses_empty_holds_string():
     assert plan is not None
     assert plan.qty == 5
     assert plan.empty_holds == 5
+
+
+def test_plan_from_status_auto_max_uses_catalog_max_holds_headroom():
+    """Resolvable Layer-B catalog max binds the clamp (not HUD cargo empty)."""
+    status = {
+        "stardock_sectors": [751],
+        "credits": 100_000,
+        "hold_price": 1000,
+        # Observed empty cargo is only 5 — catalog room to max is 75-40=35.
+        "hud": {"cargo": {"value": "5 empty / 40"}},
+        "current_ship": {
+            "ship_type": "4 Dragons Ltd Dragon Quest",
+            "total_holds": 40,
+        },
+        "upgrade_catalog": [
+            {
+                "name": "Dragon Quest",
+                "cost": 99_000,
+                "holds": 75,
+                "turns_per_warp": 3,
+                "fighters": 100,
+                "shields": 50,
+                "alignment_req": 0,
+                "commissioned": True,
+            }
+        ],
+    }
+    plan = plan_from_status(
+        "world-a", status, auto_max=True, cash_floor=0
+    )
+    assert plan is not None
+    assert plan.empty_holds == 35
+    assert plan.qty == 35
+
+
+def test_plan_from_status_auto_max_falls_back_when_catalog_unresolvable():
+    """No matching catalog row → observed HUD empty (fail-closed, no invent)."""
+    status = {
+        "stardock_sectors": [751],
+        "credits": 50_000,
+        "hold_price": 1000,
+        "hud": {"cargo": {"value": "8 empty / 40"}},
+        "current_ship": {
+            "ship_type": "Unknown Hull",
+            "total_holds": 40,
+        },
+        "upgrade_catalog": [
+            {
+                "name": "Dragon Quest",
+                "cost": 99_000,
+                "holds": 75,
+                "turns_per_warp": 3,
+                "fighters": 100,
+                "shields": 50,
+                "alignment_req": 0,
+                "commissioned": True,
+            }
+        ],
+    }
+    plan = plan_from_status(
+        "world-a", status, auto_max=True, cash_floor=0
+    )
+    assert plan is not None
+    assert plan.empty_holds == 8
+    assert plan.qty == 8
+
+
+def test_plan_from_status_auto_max_falls_back_without_catalog():
+    status = {
+        "stardock_sectors": [751],
+        "credits": 50_000,
+        "hold_price": 1000,
+        "hud": {"cargo": {"value": 10}},
+        "current_ship": {"ship_type": "Merchant Cruiser", "total_holds": 40},
+    }
+    plan = plan_from_status(
+        "world-a", status, auto_max=True, cash_floor=0
+    )
+    assert plan is not None
+    assert plan.empty_holds == 10
+    assert plan.qty == 10
