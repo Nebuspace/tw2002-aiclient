@@ -4,13 +4,19 @@ Canon: ``canon/engine/priority-engine.md``. Pure logic — emits ordering
 inputs for FOCUS; never sends, never arms, never invents hop counts.
 
 Ported kernel from the archived ``twclient/priority_engine.py`` RT /
-stay-vs-leave primitives (WO-PRIORITY-ENGINE-KERNEL). Chain-link floors
-live in ``chains.py``; this module does not re-export EXECUTE surfaces.
+stay-vs-leave primitives (WO-PRIORITY-ENGINE-KERNEL) plus recommend-only
+``afford_fighters`` (WO-BUILD-FIGHTER-AFFORDABILITY-DECISION-ENGINE).
+Chain-link floors live in ``chains.py``; this module does not re-export
+EXECUTE / purchase surfaces.
 """
 
 from __future__ import annotations
 
 __all__ = [
+    "FIGHTER_SMALL_STACK",
+    "FighterAffordability",
+    "afford_fighters",
+    "fighter_buy_status_label",
     "hops_of_path",
     "travel_cost_rt_turns",
     "compute_return_path",
@@ -18,9 +24,8 @@ __all__ = [
     "upgrade_gate_while_chaining",
 ]
 
+from dataclasses import dataclass
 from typing import Mapping, Optional, Sequence
-
-from tw2002_aiclient.explore import path_to_sector
 
 
 def hops_of_path(path: Optional[Sequence[int]]) -> Optional[int]:
@@ -49,6 +54,10 @@ def compute_return_path(
     to_sector: int,
 ) -> Optional[tuple[int, ...]]:
     """Shortest known-graph path for the return leg (e.g. StarDock → chain)."""
+    # Late import: explore → world_model must stay off the decisions/goals
+    # cold-import path (test_the_decisions_import_graph_does_not_pull_the_finder).
+    from tw2002_aiclient.explore import path_to_sector
+
     return path_to_sector(graph, from_sector, to_sector)
 
 
@@ -156,3 +165,145 @@ def upgrade_gate_while_chaining(
     if not leave:
         return True, reason, None, travel_rt
     return False, reason, float(upgrade_extra_cr_per_turn), travel_rt
+
+# ---------------------------------------------------------------------------
+# Fighter affordability — recommend / display only (no purchase sends)
+# ---------------------------------------------------------------------------
+
+FIGHTER_SMALL_STACK: int = 5
+"""Default desired stack size for recommendations — configurable preference,
+not a measured live-server fact. Unit price is never defaulted here."""
+
+_FIGHTER_BUY_STATUS_LABELS: dict[str, str] = {
+    "buy_fighters": "can buy",
+    "upgrade_holds": "holds first",
+    "buy_ship": "ship later",
+    "keep_trade_float": "need credits",
+    "insufficient_credits": "need credits",
+    "price_unknown": "price?",
+}
+
+
+@dataclass(frozen=True)
+class FighterAffordability:
+    """Affordability verdict for buying a small fighter stack at a Class-0 port.
+
+    Spending priority (canon AP-09 / priority-engine Fighter economics):
+    1. Reserve ``trade_float`` first (working capital).
+    2. Holds upgrade (weight 75) when quote known + affordable.
+    3. Buy fighters (weight 73) with remaining discretionary credits.
+    4. Ship hull (weight 60) noted only — does not redirect this helper.
+
+    Recommend/display only — never arms a purchase send. Class-0 / Sol is
+    always reachable; location is never the gate. ``fighter_unit_price`` must
+    be injected (captured or operator-supplied); tip does **not** ship a
+    pretended-measured ``FIGHTER_UNIT_PRICE_CLASS0`` default.
+    """
+
+    recommendation: str
+    can_afford: Optional[bool]
+    fighter_stack_cost: Optional[int]
+    discretionary: Optional[int]
+    reason: str
+
+
+def fighter_buy_status_label(recommendation: str) -> str:
+    """Short GOALS detail for a ``FighterAffordability.recommendation``."""
+    return _FIGHTER_BUY_STATUS_LABELS.get(recommendation, "price?")
+
+
+def afford_fighters(
+    *,
+    credits: Optional[int],
+    fighter_unit_price: Optional[int] = None,
+    desired_count: int = FIGHTER_SMALL_STACK,
+    hold_upgrade_quote: Optional[int] = None,
+    cheapest_ship_price: Optional[int] = None,
+    trade_float: Optional[int] = None,
+) -> FighterAffordability:
+    """Recommend the right spend given credits and competing priorities.
+
+    All ``None`` inputs fail-closed — never invented. Unknown credits or
+    unknown ``fighter_unit_price`` → ``price_unknown`` (no hypothesis default).
+
+    ``cheapest_ship_price`` is accepted for API completeness but does not
+    influence the recommendation today (ship weight 60 < fighter 73).
+    """
+    _ = cheapest_ship_price  # reserved; ship deferral lives elsewhere
+    desired_count = max(1, int(desired_count))
+
+    if credits is None:
+        return FighterAffordability(
+            recommendation="price_unknown",
+            can_afford=None,
+            fighter_stack_cost=None,
+            discretionary=None,
+            reason="credits unknown — cannot evaluate fighter buy",
+        )
+
+    if fighter_unit_price is None:
+        disc = int(credits) - int(trade_float or 0)
+        return FighterAffordability(
+            recommendation="price_unknown",
+            can_afford=None,
+            fighter_stack_cost=None,
+            discretionary=disc,
+            reason=(
+                "fighter unit price not yet captured from Class-0 screen; "
+                "Sol/Class-0 reachable — visit to confirm price"
+            ),
+        )
+
+    credits_i = int(credits)
+    unit = int(fighter_unit_price)
+    float_reserve = int(trade_float) if trade_float is not None else 0
+    stack_cost = unit * desired_count
+    discretionary = credits_i - float_reserve
+
+    if discretionary < 0:
+        return FighterAffordability(
+            recommendation="keep_trade_float",
+            can_afford=False,
+            fighter_stack_cost=stack_cost,
+            discretionary=discretionary,
+            reason=(
+                f"credits {credits_i:,}cr < trade_float {float_reserve:,}cr reserve; "
+                "preserve working capital before any combat spend"
+            ),
+        )
+
+    if discretionary < stack_cost:
+        shortfall = stack_cost - discretionary
+        return FighterAffordability(
+            recommendation="insufficient_credits",
+            can_afford=False,
+            fighter_stack_cost=stack_cost,
+            discretionary=discretionary,
+            reason=(
+                f"need {stack_cost:,}cr for {desired_count} fighters; "
+                f"have {discretionary:,}cr discretionary — short {shortfall:,}cr"
+            ),
+        )
+
+    if hold_upgrade_quote is not None and int(hold_upgrade_quote) <= discretionary:
+        return FighterAffordability(
+            recommendation="upgrade_holds",
+            can_afford=True,
+            fighter_stack_cost=stack_cost,
+            discretionary=discretionary,
+            reason=(
+                f"hold upgrade {int(hold_upgrade_quote):,}cr affordable and higher "
+                f"priority (weight 75 > 73) — upgrade holds before fighter buy"
+            ),
+        )
+
+    return FighterAffordability(
+        recommendation="buy_fighters",
+        can_afford=True,
+        fighter_stack_cost=stack_cost,
+        discretionary=discretionary,
+        reason=(
+            f"{desired_count} fighters × {unit:,}cr = {stack_cost:,}cr; "
+            f"have {discretionary:,}cr discretionary — go to Sol/Class-0 to buy"
+        ),
+    )

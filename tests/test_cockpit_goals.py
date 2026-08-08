@@ -185,8 +185,34 @@ def test_hold_price_blank_string_key_present_is_partial():
 
 
 def test_fighters_zero_shows_default_buy_status():
+    # No credits / injected unit price → afford_fighters fail-closes to price?
     lines = compose_goals_lines({"fighters_aboard": 0}, width=40)
-    assert lines[8] == "· Fighters 0 (need some)"
+    assert lines[8] == "· Fighters 0 (price?)"
+
+
+def test_fighters_zero_afford_fighters_can_buy_label():
+    lines = compose_goals_lines(
+        {
+            "fighters_aboard": 0,
+            "credits": 1000,
+            "fighter_unit_price": 100,
+        },
+        width=40,
+    )
+    assert lines[8] == "· Fighters 0 (can buy)"
+
+
+def test_fighters_zero_holds_first_when_hold_quote_affordable():
+    lines = compose_goals_lines(
+        {
+            "fighters_aboard": 0,
+            "credits": 2000,
+            "fighter_unit_price": 100,
+            "hold_price": 800,
+        },
+        width=40,
+    )
+    assert lines[8] == "· Fighters 0 (holds first)"
 
 
 def test_fighters_zero_shows_supplied_buy_status():

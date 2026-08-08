@@ -51,6 +51,7 @@ def test_game_data_stats_merge_ship_and_hold(tmp_path):
     merged = gds.merge({})
     assert merged["ship_prices_count"] == 1
     assert merged["hold_price_label"] == "1,200cr"
+    assert merged["hold_price"] == 1200
 
 
 def test_game_data_stats_zero_ships_emits_count(tmp_path):

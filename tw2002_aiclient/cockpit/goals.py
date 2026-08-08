@@ -52,7 +52,8 @@ fields are wired back in — it just starts reading real data:
 | Ship prices  | ``ship_prices_count`` (int) — ``⊘`` if StarDock confirmed |
 |              | not found (``stardock_found is False``)                  |
 | Hold price   | ``hold_price_label`` (str) — same ``⊘`` gate              |
-| Fighters     | ``fighters_aboard`` (int), ``fighter_buy_status`` (str)   |
+| Fighters     | ``fighters_aboard``; ``fighter_buy_status`` override or
+|              | ``afford_fighters`` label (price injected via status)     |
 
 No field is ever invented: a missing/None key renders ``?``/``—``, never a
 guessed value. Malformed values (wrong type, control characters, etc.) are
@@ -63,6 +64,10 @@ lesson as ``strip.py``'s ``_clean``.
 from __future__ import annotations
 
 from tw2002_aiclient.game_data_stats import HOLD_PRICE_LABEL_KEY, SHIP_PRICES_COUNT_KEY
+from tw2002_aiclient.priority_engine import (
+    afford_fighters,
+    fighter_buy_status_label,
+)
 
 GLYPH_MET = "✓"
 GLYPH_PARTIAL = "·"
@@ -171,6 +176,59 @@ def _row(glyph: str, label: str, detail: str, *, width: int) -> str:
     text = f"{glyph} {label} {detail}".rstrip()
     return text[:width]
 
+
+
+def _positive_int(value: object) -> int | None:
+    if isinstance(value, bool) or not isinstance(value, int):
+        return None
+    return value if value > 0 else None
+
+
+def _hold_upgrade_quote_from_status(status: dict) -> int | None:
+    """Parse hold unit quote for affordability — never invent."""
+    direct = _positive_int(status.get("hold_price"))
+    if direct is not None:
+        return direct
+    label = status.get(HOLD_PRICE_LABEL_KEY)
+    if isinstance(label, str):
+        digits = "".join(ch for ch in label if ch.isdigit())
+        if digits:
+            try:
+                n = int(digits)
+            except ValueError:
+                return None
+            return n if n > 0 else None
+    return None
+
+
+def _fighter_unit_price_from_status(status: dict) -> int | None:
+    """Injected Class-0 unit price only — no tip hypothesis default."""
+    for key in ("fighter_unit_price", "fighter_price_class0"):
+        n = _positive_int(status.get(key))
+        if n is not None:
+            return n
+    return None
+
+
+def _trade_float_from_status(status: dict) -> int | None:
+    raw = status.get("trade_float")
+    if isinstance(raw, bool) or not isinstance(raw, int):
+        return None
+    return raw if raw >= 0 else None
+
+
+def _fighter_buy_status_from_status(status: dict) -> str:
+    """Explicit override wins; else recommend-only afford_fighters label."""
+    override = _safe_str(status.get("fighter_buy_status"))
+    if override:
+        return override
+    verdict = afford_fighters(
+        credits=_safe_int(status.get("credits")),
+        fighter_unit_price=_fighter_unit_price_from_status(status),
+        hold_upgrade_quote=_hold_upgrade_quote_from_status(status),
+        trade_float=_trade_float_from_status(status),
+    )
+    return fighter_buy_status_label(verdict.recommendation)
 
 def compose_goals_lines(status: dict | None, *, width: int) -> list[str]:
     """Compose the GOALS panel's fixed 9-line status readout.
@@ -303,7 +361,7 @@ def compose_goals_lines(status: dict | None, *, width: int) -> list[str]:
     elif fighters > 0:
         lines.append(_row(GLYPH_MET, _label("fighters", short=short), str(fighters), width=width))
     else:
-        buy_status = _safe_str(status.get("fighter_buy_status")) or "need some"
+        buy_status = _fighter_buy_status_from_status(status)
         lines.append(_row(GLYPH_PARTIAL, _label("fighters", short=short), f"0 ({buy_status})", width=width))
 
     return lines

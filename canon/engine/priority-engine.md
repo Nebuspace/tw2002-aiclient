@@ -74,7 +74,7 @@ Starved — `WO-WM-LANDMARKS-WRITE` landed; `world_model.add_landmark` is called
 | 3 | StarDock located | Boolean | 85 | explore when unknown | **Implemented** — writer: `world_model.add_landmark` from explore (`sector_explore`); reader: `explore.find_landmark_sectors` + `WorldStats` → `stardock_sectors`/`stardock_found`; GOALS paints `StarDock @…` when present. Empty landmark scan still omits keys (honest `?`), never invents `stardock_found=False`. |
 | 4 | Cost of other ships known | Boolean | 80 | #3 | **Partial (live-bridged)** — writer: `GameDataStats.refresh` loads Layer-B `game_data` ships and merges `ship_catalog` (`[{ship_name, cost}, …]` for `cost > 0`) plus `ship_prices_count` onto status (`game_data_stats.py`); readers: GOALS + FOCUS overlay + priority-engine pre-flight. Still omit-until-load (no invent). |
 | 5 | Cost of cargo-hold upgrades known | Boolean | 75 | #3 | Partial — GOALS gated until dock found; quote via `introspector.parse_cargo_hold_price()` when captured (re-verified 2026-08-08: prior citation `get_cargo_hold_price()` did not exist in tip) |
-| 6 | Obtain fighters (aboard > 0) | Boolean | 73 | #1 (Class-0 at Sol always reachable) | Partial — GOALS paints `fighters_aboard` + optional `fighter_buy_status` string (`goals.py`); **no** tip `afford_fighters()` module and **no** buy EXECUTE (still Planned / Max-GO) |
+| 6 | Obtain fighters (aboard > 0) | Boolean | 73 | #1 (Class-0 at Sol always reachable) | Partial — tip `afford_fighters()` recommend/display (`priority_engine.py`) feeds GOALS labels when unit price is injected; **no** buy EXECUTE (still Planned / Max-GO) |
 | 7 | Cost of fighters known | Boolean | 70 | #1 (Class-0 assumed reachable) | Partial — canon still names `FIGHTER_UNIT_PRICE_CLASS0 = 100` as an **UNVERIFIED hypothesis**; tip Python has **zero** references to that constant (no producer for a numeric price yet) |
 | 8 | Purchase additional cargo holds | Boolean | 65 | #5, credits, RT cost | **Partial (EXECUTE live)** — decision logic in `ship_upgrade_decision.py`; confirm-armed buy via `stardock_hold_driver.run_hold_purchase` + `session/stardock_hold.StardockHoldRunner` (not navigation-only; re-verified 2026-08-08) |
 | 9 | Purchase ship with larger holds | Boolean | 60 | #4, loop economics, RT cost | Partial — `ship_upgrade_decision.evaluate_candidate()`/`choose_upgrade()` score holds-only cr/turn (re-verified 2026-08-08: prior citation `_score_upgrade()` did not exist in tip); live catalog/loop inputs missing; travel one-way only today |
@@ -266,27 +266,27 @@ Fighters (objective #6, weight 73) are gated by **credits**, never by location: 
 Sol (sector 1) is the game-start sector and is **always reachable**, so `⊘ need StarDock` must never
 gate this row.
 
-**Tip honesty (2026-08-04 · `AUDIT-BUILD-FIGHTER-PURCHASE-EXECUTE`):** reborn tip does **not** yet
-ship `FighterAffordability.afford_fighters(...)` or a `FIGHTER_UNIT_PRICE_CLASS0` constant in
-Python — those names live in this canon (+ archive-port AP-09 narrative) as the *target* spending
-priority, not as importable tip symbols. What ships today:
+**Tip honesty (2026-08-08 · `WO-BUILD-FIGHTER-AFFORDABILITY-DECISION-ENGINE`):** tip ships
+recommend-only `FighterAffordability` / `afford_fighters(...)` in `priority_engine.py`. Unit price
+is **injected** (status `fighter_unit_price` / `fighter_price_class0`, or caller kwarg) — tip does
+**not** define a `FIGHTER_UNIT_PRICE_CLASS0` constant that pretends the community hypothesis is
+measured. What ships today:
 
-- GOALS (`cockpit/goals.py`) paints `fighters_aboard` and, when present, a free-form
-  `fighter_buy_status` string (vocabulary guard still tags that key as needing shipyard-screen
-  parsing — not a scored affordability result).
+- GOALS (`cockpit/goals.py`) paints `fighters_aboard`; when count is zero it uses an explicit
+  `fighter_buy_status` override if present, otherwise the short label from `afford_fighters`
+  (fail-closed `price?` until credits + unit price are known).
 - **Buy EXECUTE** (one-shot Class-0 purchase mirroring `stardock_hold_driver` guard shape) remains
-  **Planned** and **Max-gated** until (a) a live/captured Class-0 unit price replaces the hypothesis
-  below and (b) Max GO's the money-path arm.
+  **Planned** and **Max-gated** until (a) a live/captured Class-0 unit price feeds consumers and
+  (b) Max GO's the money-path arm.
 
-**Target spending priority** (when `afford_fighters` is reborn): reserve the trade float (working
-capital) first, then prefer a hold upgrade (weight 75) over a fighter buy (73) when a hold quote is
-known and affordable, then buy fighters if discretionary credits cover the stack. Every `None`
-input fail-closes to `price_unknown` rather than guessing.
+**Spending priority** (`afford_fighters`): reserve the trade float (working capital) first, then
+prefer a hold upgrade (weight 75) over a fighter buy (73) when a hold quote is known and
+affordable, then buy fighters if discretionary credits cover the stack. Every `None` input
+fail-closes to `price_unknown` rather than guessing.
 
-`FIGHTER_UNIT_PRICE_CLASS0 = 100 cr` per fighter remains a **[hypothesis] placeholder** — sourced
-from community guides, UNVERIFIED against the live game; treat it as configurable until confirmed by
-an introspected Class-0 port screen. **Do not** invent a tip constant that pretends the hypothesis
-is measured.
+`FIGHTER_UNIT_PRICE_CLASS0 = 100 cr` per fighter remains a **[hypothesis] placeholder** in canon /
+research only — sourced from community guides, UNVERIFIED against the live game. Inject a captured
+price; **do not** invent a tip constant that pretends the hypothesis is measured.
 
 > **Verification status:** UNVERIFIED (hypothesis). `FIGHTER_UNIT_PRICE_CLASS0 = 100 cr/fighter`,
 > `FIGHTER_SMALL_STACK = 5`, the chain-link thresholds (2 / 2 / 4), and the weight ladder values
@@ -332,11 +332,11 @@ or archive history differs, the gap is recorded here — never silently erased:
    [app-autopilot-model](/architecture/app-autopilot-model.md)**; this concept keeps only the
    ranking/ordering half. Do not re-file the control-runtime / stop-on-unknown concern here.
 
-6. **Fighter affordability is canon-ahead of tip.** Archive/AP-09 and earlier drafts of this file
-   describe `afford_fighters()` + `FIGHTER_UNIT_PRICE_CLASS0` as if tip-imported. Tip Python has
-   **zero** hits for those symbols (2026-08-04 tip sweep); GOALS only paints `fighters_aboard` /
-   `fighter_buy_status`. The Fighter economics section above records the target priority; buy
-   EXECUTE stays Max-gated (`AUDIT-BUILD-FIGHTER-PURCHASE-EXECUTE`).
+6. **Fighter buy EXECUTE remains canon-ahead of tip.** Recommend-only `afford_fighters()` shipped
+   (`WO-BUILD-FIGHTER-AFFORDABILITY-DECISION-ENGINE`); tip still has **no**
+   `FIGHTER_UNIT_PRICE_CLASS0` constant and **no** Class-0 purchase driver. Live price capture +
+   Max-gated buy EXECUTE stay separate (`WO-BUILD-FIGHTER-CLASS0-LIVE-PRICE-CAPTURE` /
+   `AUDIT-BUILD-FIGHTER-PURCHASE-EXECUTE`).
 
 # Citations
 

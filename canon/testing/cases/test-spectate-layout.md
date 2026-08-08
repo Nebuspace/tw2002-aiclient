@@ -87,7 +87,7 @@ _Spectator dashboard layout tests — pure functions, no curses/terminal involve
 | `test_format_autopilot_trace_lines_chosen_gated_and_hold` | Format autopilot trace lines chosen gated and hold. |
 | `test_compose_hud_cells_appends_autonomy_when_provided` | Compose hud cells appends autonomy when provided. |
 | `test_compose_primary_goals_fighters_line` | Compose primary goals fighters line. |
-| `test_compose_primary_goals_fighters_buy_status_labels` | fighter_buy_status overrides 'need some' fallback when fighters count is zero. |
+| `test_compose_primary_goals_fighters_buy_status_labels` / goals fighter affordability pins | fighter_buy_status override wins; else afford_fighters label (price? / can buy / …). |
 | `test_compose_primary_goals_ship_hold_prices_gated_without_stardock` | Compose primary goals ship hold prices gated without stardock. |
 | `test_update_tracked_stats_records_fighters_aboard` | Update tracked stats records fighters aboard. |
 | `test_compose_primary_goals_and_chain_highlight` | Compose primary goals and chain highlight. |
