@@ -282,8 +282,8 @@ def test_send_raw_uses_the_current_screen_at_send_time_not_a_stale_pre_wait_snap
     assert session.last_sent_secret is True
 
 
-def test_valid_senders_are_app_and_human_only():
-    assert VALID_SENDERS == ("app", "human")
+def test_valid_senders_are_app_human_dev_only():
+    assert VALID_SENDERS == ("app", "human", "dev")
 
 
 def test_record_history_caps_at_history_cap(tmp_path):
