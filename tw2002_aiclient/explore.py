@@ -289,16 +289,39 @@ def reachable_sectors(
 def densest_reachable_sector(
     graph: Mapping[int, Sequence[int]],
     start: int,
+    *,
+    world_id: str | None = None,
+    state_dir=None,
 ) -> Optional[int]:
-    """Highest out-degree sector reachable from ``start`` on the known graph.
+    """Highest-density reachable sector; falls back to out-degree.
 
-    Tie-break: lowest sector id (stable, never random). Returns ``None``
-    when ``start`` is absent from the graph.
+    WO-WIRE-DENSITY-SCAN-CONSUMER: when ``world_id`` is set and a sector has a
+    persisted ``density_scan.value``, that value ranks first. Sectors without a
+    reading still compete by known-graph out-degree (prior heuristic). Tie-break:
+    lowest sector id. Returns ``None`` when ``start`` is absent from the graph.
+    Never invents density readings or warps.
     """
     reachable = reachable_sectors(graph, start)
     if not reachable:
         return None
-    return max(reachable, key=lambda sid: (len(tuple(graph.get(sid, ()))), -sid))
+
+    def _score(sid: int) -> tuple:
+        dens: Optional[int] = None
+        if isinstance(world_id, str) and world_id:
+            from tw2002_aiclient.world_model import get_sector
+
+            rec = get_sector(world_id, sid, state_dir=state_dir)
+            ds = rec.get("density_scan") if isinstance(rec, dict) else None
+            if isinstance(ds, dict):
+                raw = ds.get("value")
+                if isinstance(raw, int) and not isinstance(raw, bool) and raw >= 0:
+                    dens = raw
+        degree = len(tuple(graph.get(sid, ())))
+        has_scan = 1 if dens is not None else 0
+        dens_val = dens if dens is not None else -1
+        return (has_scan, dens_val, degree, -sid)
+
+    return max(reachable, key=_score)
 
 
 def plan_exhausted_recovery(
@@ -350,7 +373,9 @@ def plan_exhausted_recovery(
             reason="recovery:stardock",
         )
 
-    densest = densest_reachable_sector(graph, cur)
+    densest = densest_reachable_sector(
+        graph, cur, world_id=world_id, state_dir=state_dir
+    )
     if densest is not None and densest != cur:
         path = path_to_sector(graph, cur, densest)
         if path is not None and len(path) > 1:
