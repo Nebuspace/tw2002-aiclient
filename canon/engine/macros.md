@@ -76,18 +76,22 @@ only when a human promotes it into the blessed store.
 
 A macro is meant to be *reusable*, which means the concrete numbers a human typed during one
 demonstration (a hold count, an offer, a sector id) should be able to generalize into named parameters
-bound at replay time (e.g. `{qty}` → `50` on one run, `100` on another). Replay substitutes params into
-each step's `input` before sending; a step with no matching placeholder is sent verbatim, so a literal
-`{` in a keystroke never breaks a run.
+bound at replay time (e.g. `{qty}` → `50` on one run, `100` on another) — **this is the target
+vision**; see the Code divergence note immediately below for what tip actually does today (nothing:
+no placeholder is ever produced or resolved on either side).
 
-> **Code divergence (parameterization is replay-side only).** In tip
-> `tw2002_aiclient/loops/player.py` today, capture records each keystroke **literally** (and the
-> shipped X6 recorder writes the same literal shape), while `_apply_params` only substitutes where
-> the stored input *already* contains a `{…}` placeholder. Recording never produces placeholders, so
-> numeric generalization currently requires a human to hand-edit the macro JSON. The "numeric inputs
-> generalizable" capability the target vision calls for is present at replay but has **no capture-time
-> generalization step** — a recorded macro replays the exact numbers it was taught until edited.
-> Recorded, not silently conformed. (Pre-rebirth port-source: archived `twclient/skills.py`.)
+> **Code divergence (re-verified 2026-08-08: parameterization does not exist on EITHER side, not
+> just capture-side as previously recorded here).** In tip `tw2002_aiclient/loops/player.py`, capture
+> records each keystroke **literally** (and the shipped X6 recorder writes the same literal shape),
+> and `replay_loop` sends `step.input` to `session.send_and_confirm` verbatim — grep-confirmed there
+> is no `_apply_params` function or any other placeholder-substitution call site anywhere in tip.
+> (The prior wording here claimed `_apply_params` substituted into pre-existing `{…}` tokens at
+> replay time; that function does not exist in tip and this doc's own citation of it was itself
+> stale.) Recording never produces placeholders and replay never resolves them, so numeric
+> generalization today requires a human to hand-edit the macro JSON **and** the replayed keystroke to
+> literally equal what's in the file — there is no `{qty}`-style binding anywhere in the live path.
+> The "numeric inputs generalizable" capability the target vision calls for is **not built on either
+> side**. Recorded, not silently conformed. (Pre-rebirth port-source: archived `twclient/skills.py`.)
 
 ## Deterministic replay — one confirmed step at a time
 
