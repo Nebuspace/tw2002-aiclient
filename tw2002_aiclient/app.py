@@ -25,6 +25,7 @@ from tw2002_aiclient.cockpit import draw as _cockpit_draw
 from tw2002_aiclient.cockpit import explore_flags as _explore_flags
 from tw2002_aiclient.cockpit import live_refresh as _live_refresh
 from tw2002_aiclient import density_scan_capture as _density_scan_capture
+from tw2002_aiclient import cim_report_capture as _cim_report_capture
 from tw2002_aiclient import game_data_capture as _game_data_capture
 from tw2002_aiclient.cockpit import record_macro as _record_macro
 from tw2002_aiclient.cockpit import reflex_controls as _reflex_controls
@@ -1227,6 +1228,9 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
     # WO-WIRE-DENSITY-SCAN-WRITEBACK: opportunistic density-scan → world_model
     # writeback (HYPOTHESIS-tagged; no crawl/send).
     density_capture = _density_scan_capture.DensityScanCapture()
+    # WO-WIRE-BULK-UPSERT-CIM-INGEST: opportunistic CIM report → bulk_upsert
+    # (gated on classify == cim_report; no crawl/send).
+    cim_capture = _cim_report_capture.CimReportCapture()
     guard = _DeadTerminalGuard()
     try:
         while True:
@@ -1267,6 +1271,9 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                 # Same idle tick: density-scan rows → world_model density_scan
                 # field (HYPOTHESIS; never-raises; no live-drive).
                 density_capture.tick(play, profile)
+                # Same idle tick: genuine CIM port report → bulk_upsert
+                # (never-raises; provenance-gated; no live-drive).
+                cim_capture.tick(play, profile)
                 continue
             if attach_conn is not None and key != 27:
                 # Attached: canon mode-line-and-teach-controls.md §"`Ctrl-A` — the App↔Human Mode switch"
