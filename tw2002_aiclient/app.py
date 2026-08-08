@@ -11,6 +11,7 @@ import curses
 
 from tw2002_aiclient import adapters
 from tw2002_aiclient import daemon_lifecycle
+from tw2002_aiclient import genesis_confirm as _genesis_confirm
 from tw2002_aiclient.cockpit import assign_trigger as _assign_trigger
 from tw2002_aiclient.cockpit import autoloop_controls as _autoloop_controls
 from tw2002_aiclient import explore as _explore
@@ -1632,6 +1633,45 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                     _reflex_controls.compose_reflex_confirm_action(macro),
                     cycles=offer_cycles,
                 )
+                continue
+            if action == "genesis_offer":
+                # WO-WIRE-GENESIS-CONFIRM-UI: Z raises the confirm-to-send
+                # gate only. No transport call until genesis_confirm + y.
+                pending_confirm_action = "genesis"
+                pending_confirm_loop = None
+                pending_confirm_hold = None
+                pending_confirm_reflex = None
+                sector = None
+                try:
+                    snap = play.status_provider() if callable(
+                        getattr(play, "status_provider", None)
+                    ) else None
+                    if isinstance(snap, dict):
+                        sector = snap.get("sector") or snap.get("last_known_sector")
+                except Exception:  # noqa: BLE001
+                    sector = None
+                play.begin_genesis_confirm(sector)
+                play.status_line = "Genesis confirm — y to send, any other key cancels"
+                continue
+            if action == "genesis_confirm":
+                # Choke-point: only CONFIRM + callable send + payload may fire.
+                pending_confirm_action = None
+                send_fn = None
+                if attach_conn is not None and callable(
+                    getattr(attach_conn, "send", None)
+                ):
+                    send_fn = attach_conn.send
+                outcome = _genesis_confirm.genesis_send_if_confirmed(
+                    disposition=_genesis_confirm.CONFIRM,
+                    send=send_fn,
+                    payload="G",
+                )
+                if outcome == _genesis_confirm.SENT:
+                    play.status_line = "Genesis sent"
+                else:
+                    play.status_line = (
+                        "Genesis refused — need Human attach + confirm (no silent send)"
+                    )
                 continue
             if action == "chains_open":
                 # WO-PLAY-AUTOLOOP-START: canon's `L)chains`. The store read

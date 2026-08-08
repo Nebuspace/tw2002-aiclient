@@ -81,10 +81,9 @@ def test_confirm_without_send_or_payload_refuses():
 
 
 def test_no_production_caller_of_genesis_send_if_confirmed():
-    """Accept pin: gate exists; no product path invokes it yet (Option A).
+    """WO-WIRE-GENESIS-CONFIRM-UI: product choke-point lives in app.py only.
 
-    A future Genesis adapter WO must update this pin deliberately when it
-    adds the first production caller — same shape as early armconfirm.
+    Screens raise/resolve the gate; app.py alone may invoke send-if-confirmed.
     """
     root = Path(__file__).resolve().parents[1] / "tw2002_aiclient"
     callers: list[str] = []
@@ -97,4 +96,34 @@ def test_no_production_caller_of_genesis_send_if_confirmed():
             name = getattr(func, "attr", None) or getattr(func, "id", None)
             if isinstance(node, ast.Call) and name == "genesis_send_if_confirmed":
                 callers.append(path.name)
-    assert callers == [], f"unexpected production callers: {callers}"
+    assert callers == ["app.py"], f"unexpected production callers: {callers}"
+
+
+def test_screens_compose_and_resolve_are_wired():
+    """Accept: compose/resolve appear in screens.py (gate UI), not only tests."""
+    text = (
+        Path(__file__).resolve().parents[1]
+        / "tw2002_aiclient"
+        / "screens.py"
+    ).read_text(encoding="utf-8")
+    assert "compose_genesis_confirm_line" in text
+    assert "resolve_genesis_confirm_key" in text
+    assert "begin_genesis_confirm" in text
+
+
+def test_play_shell_genesis_confirm_gate_default_deny():
+    """screens.py: begin + resolve — cancel never becomes genesis_confirm."""
+    from tw2002_aiclient.screens import PlayShellScreen
+
+    play = object.__new__(PlayShellScreen)
+    play._arm_confirm = None
+    play._genesis_confirm = None
+    play._draft_approve = None
+    play._rule_identity = None
+    play.analyze_session = None
+    play.begin_genesis_confirm(99)
+    assert play._genesis_confirm == 99
+    assert play.handle_key(ord("n")) is None
+    assert play._genesis_confirm is None
+    play.begin_genesis_confirm(1)
+    assert play.handle_key(ord("y")) == "genesis_confirm"
