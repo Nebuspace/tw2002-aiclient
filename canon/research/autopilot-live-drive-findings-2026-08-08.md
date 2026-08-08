@@ -13,9 +13,9 @@ live-drive research). Authorization: `CLAUDE.md:63` (post-#545) + `canon/doctrin
 
 **Profile:** `scout_academy` (`config/profiles.toml`), `crawl_sacrificial = true` — confirmed via
 `credentials.is_crawl_sacrificial("scout_academy")` gate now live (PR #546, merged `999ddc7`).
-**Server:** `tradewarsacademy.com:2002` (`academy_of_tradewars` catalog key), live TCP-probed before
-connecting. **Character:** Lieutenant J.G. Sextant, same character as an earlier session's
-credit-doubling attempt (baseline continuity below matches its logged 97,809-credit state).
+**Server:** catalog key `academy_of_tradewars`, live TCP-probed before connecting. **Character:**
+Lieutenant J.G. Sextant, same character as an earlier session's credit-doubling attempt (baseline
+continuity below matches its logged 97,809-credit state).
 
 **Session establishment:** `tw ensure --profile scout_academy --timeout 45 --json` → `"ok": true`,
 `"classification": "main_command"`, 11 automaton steps. Baseline captured:
