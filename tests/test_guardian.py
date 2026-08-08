@@ -283,6 +283,24 @@ def test_keepalive_skipped_during_reconnect_burst():
     assert session.sent == []
 
 
+def test_reconnecting_property_mirrors_the_private_flag():
+    """WO-DIAGNOSE-EXPLORE-HALT-GAME-SELECT-LIVE-SESSION: the public
+    read-only surface another driver (ExploreRunner) polls -- pinned
+    separately from the private flag so a rename of the internal
+    attribute is caught here rather than silently breaking that
+    consumer's `getattr(guardian, "reconnecting", False)` into an
+    always-False no-op."""
+    session = KeepaliveFakeSession(
+        "Command [TL=00:00:00]:[1] (?=Help)? :", last_rx=-1000.0
+    )
+    g = _guardian(session)
+    assert g.reconnecting is False
+    g._reconnect_in_flight = True
+    assert g.reconnecting is True
+    g._reconnect_in_flight = False
+    assert g.reconnecting is False
+
+
 # -- D9 reconnect + login-replay (WO-P2-027) --------------------------------
 
 def test_reconnect_skipped_without_a_recorded_profile():

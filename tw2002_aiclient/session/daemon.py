@@ -707,6 +707,11 @@ def main(argv=None):
         session,
         server.control_lock,
         log_error=lambda exc: _log_dispatch_error(server, "sector_explore", exc),
+        # WO-DIAGNOSE-EXPLORE-HALT-GAME-SELECT-LIVE-SESSION: lets the
+        # runner tell a guardian reconnect-replay's own transient screen
+        # apart from a genuine halt. `server.guardian` is already
+        # constructed above.
+        guardian=guardian,
     )
     server.trade_chain = TradeChainRunner(
         session,

@@ -2217,10 +2217,25 @@ class PlayShellScreen:
             try:
                 _center = regions.get("center") or {}
                 _w = _center.get("w")
+                _h = _center.get("h")
+                # Boxed interior height; reserve taught section + blank +
+                # discovered title + optional showing/PARTIAL lines so the
+                # discovered body is windowed (WO-FIX-CHAINS-POPUP-
+                # DISCOVERED-PAGINATION) instead of formatting every cycle.
+                _inner_h = (_h - 2) if isinstance(_h, int) and _h > 2 else 24
+                _taught_n = (
+                    len(_cs_draw.rows)
+                    if isinstance(getattr(_cs_draw, "rows", None), list) and _cs_draw.rows
+                    else 1
+                )
+                # TITLE + taught rows + blank + disc TITLE + showing + PARTIAL
+                _overhead = 1 + _taught_n + 1 + 1 + 1 + 1
+                _disc_window = max(1, _inner_h - _overhead)
                 lines = cockpit_chains.compose_chain_lines(
                     _cs_draw,
                     unicode_ok=uok,
                     width=(_w - 4) if isinstance(_w, int) else 40,
+                    discovered_window=_disc_window,
                 )
                 cockpit_draw.draw_lines(
                     self.stdscr, regions.get("center"), lines, curses.A_NORMAL, boxed=True

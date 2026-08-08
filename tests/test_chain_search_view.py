@@ -188,3 +188,51 @@ def test_absurd_widths_do_not_raise(width):
         _payload([_chain((1, 2, 3, 1), 3, 3, 30.0)]), width=width
     )
     assert isinstance(lines, list) and len(lines) >= 2
+
+
+# -- viewport windowing (WO-FIX-CHAINS-POPUP-DISCOVERED-PAGINATION) ----------
+
+
+def _many_chains(n: int):
+    return [
+        _chain((i, i + 1, i), 2, 2, float(i + 1))
+        for i in range(1, n + 1)
+    ]
+
+
+def test_window_size_bounds_formatted_rows_and_shows_n_of_m():
+    """Only the visible slice is formatted; indicator names the viewport."""
+    lines = V.format_profit_chain_lines(
+        _payload(_many_chains(200)),
+        window_start=0,
+        window_size=10,
+        selected_index=0,
+    )
+    body = [ln for ln in lines if ln != V.TITLE and "showing" not in ln]
+    assert any(ln.startswith("showing 10 of 200") for ln in lines), lines
+    assert len(body) == 10
+    assert lines[0] == V.TITLE
+
+
+def test_window_tracks_selected_index_past_the_fold():
+    lines = V.format_profit_chain_lines(
+        _payload(_many_chains(200)),
+        window_start=40,
+        window_size=10,
+        selected_index=45,
+    )
+    assert any(ln.startswith("showing 10 of 200") for ln in lines)
+    # Selected glyph on the in-window absolute index 45 (= offset 5).
+    chain_rows = [ln for ln in lines if V.SOURCE_TAG in ln]
+    assert len(chain_rows) == 10
+    assert any(ln.startswith(V.SELECTED_UNICODE) for ln in chain_rows)
+
+
+def test_small_set_below_window_unchanged_no_indicator():
+    chains = _many_chains(3)
+    lines = V.format_profit_chain_lines(
+        _payload(chains), window_start=0, window_size=10
+    )
+    assert not any("showing" in ln for ln in lines)
+    assert sum(1 for ln in lines if V.SOURCE_TAG in ln) == 3
+
