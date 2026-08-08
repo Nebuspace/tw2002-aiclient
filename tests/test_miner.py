@@ -10,6 +10,7 @@ from pathlib import Path
 
 import pytest
 
+from tw2002_aiclient import candidate_mining
 from tw2002_aiclient.ledger import REDACTED
 from tw2002_aiclient.miner import mine_ledger, mine_patterns, propose_drafts
 
@@ -149,6 +150,26 @@ def test_mine_ledger_end_to_end(tmp_path: Path, synthetic_ledger: list[dict]) ->
     assert result["patterns"]
     assert result["drafts"]
     assert list(drafts.glob("*.json"))
+
+
+def test_candidate_mining_facade_reuses_miner_and_drafts_shape(
+    synthetic_ledger: list[dict], tmp_path: Path
+) -> None:
+    """Canon name resolves to the same miner; drafts stay under _drafts/."""
+    assert candidate_mining.CandidateMining is mine_ledger
+    drafts_path = tmp_path / "skills" / "_drafts"
+    result = candidate_mining.CandidateMining(
+        entries=synthetic_ledger,
+        drafts_dir_path=drafts_path,
+        min_support=2,
+        top_k=1,
+    )
+    assert result["drafts"]
+    path = Path(result["drafts"][0]["path"])
+    assert path.parent.name == "_drafts"
+    doc = json.loads(path.read_text(encoding="utf-8"))
+    assert doc["source"] == "mined"
+    assert "blessed" not in doc
 
 
 def test_cli_dry_run(tmp_path: Path, synthetic_ledger: list[dict]) -> None:
