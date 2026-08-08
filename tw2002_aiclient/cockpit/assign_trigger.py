@@ -132,3 +132,47 @@ class StubStore:
         Never raises.
         """
         self._stub = None
+
+
+def summarize_store(store: object = None) -> str:
+    """Product reader for :meth:`StubStore.get` — one-line chrome text.
+
+    WO-WIRE-STUB-STORE-APPROVED-READER: ``get()`` had setters but no product
+    caller; Play status composition and the Assign-Trigger / approve
+    handlers call this so the operator can see whether the held stub is
+    still a draft or ``approved`` + ``playback_eligible``. Returns ``""``
+    when the store is empty or unreadable. Never raises.
+    """
+    try:
+        getter = getattr(store, "get", None)
+        stub = getter() if callable(getter) else None
+    except Exception:  # noqa: BLE001
+        return ""
+    if not isinstance(stub, dict):
+        return ""
+    when = stub.get("when") if isinstance(stub.get("when"), dict) else {}
+    screen = when.get("screen") if isinstance(when.get("screen"), str) else ""
+    screen = screen or "?"
+    approved = stub.get("approved") is True
+    eligible = stub.get("playback_eligible") is True
+    if approved and eligible:
+        return f"trigger approved — screen: {screen}"
+    if approved:
+        return f"trigger approved (not playback-eligible) — screen: {screen}"
+    return f"trigger draft — screen: {screen}"
+
+
+def is_approved_playback_stub(store: object = None) -> bool:
+    """True only when ``get()`` holds ``approved`` and ``playback_eligible``.
+
+    Fail-closed: missing store, non-dict stub, or either flag unset → False.
+    Never raises. Inspection only — does not arm or dispatch keystrokes.
+    """
+    try:
+        getter = getattr(store, "get", None)
+        stub = getter() if callable(getter) else None
+    except Exception:  # noqa: BLE001
+        return False
+    if not isinstance(stub, dict):
+        return False
+    return stub.get("approved") is True and stub.get("playback_eligible") is True

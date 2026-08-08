@@ -11,6 +11,7 @@ import curses
 
 from tw2002_aiclient import adapters
 from tw2002_aiclient import daemon_lifecycle
+from tw2002_aiclient import genesis_confirm as _genesis_confirm
 from tw2002_aiclient.cockpit import assign_trigger as _assign_trigger
 from tw2002_aiclient.cockpit import autoloop_controls as _autoloop_controls
 from tw2002_aiclient import explore as _explore
@@ -25,6 +26,7 @@ from tw2002_aiclient.cockpit import draw as _cockpit_draw
 from tw2002_aiclient.cockpit import explore_flags as _explore_flags
 from tw2002_aiclient.cockpit import live_refresh as _live_refresh
 from tw2002_aiclient import density_scan_capture as _density_scan_capture
+from tw2002_aiclient import cim_report_capture as _cim_report_capture
 from tw2002_aiclient import game_data_capture as _game_data_capture
 from tw2002_aiclient.cockpit import record_macro as _record_macro
 from tw2002_aiclient.cockpit import reflex_controls as _reflex_controls
@@ -1227,6 +1229,9 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
     # WO-WIRE-DENSITY-SCAN-WRITEBACK: opportunistic density-scan → world_model
     # writeback (HYPOTHESIS-tagged; no crawl/send).
     density_capture = _density_scan_capture.DensityScanCapture()
+    # WO-WIRE-BULK-UPSERT-CIM-INGEST: opportunistic CIM report → bulk_upsert
+    # (gated on classify == cim_report; no crawl/send).
+    cim_capture = _cim_report_capture.CimReportCapture()
     guard = _DeadTerminalGuard()
     try:
         while True:
@@ -1267,6 +1272,9 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                 # Same idle tick: density-scan rows → world_model density_scan
                 # field (HYPOTHESIS; never-raises; no live-drive).
                 density_capture.tick(play, profile)
+                # Same idle tick: genuine CIM port report → bulk_upsert
+                # (never-raises; provenance-gated; no live-drive).
+                cim_capture.tick(play, profile)
                 continue
             if attach_conn is not None and key != 27:
                 # Attached: canon mode-line-and-teach-controls.md §"`Ctrl-A` — the App↔Human Mode switch"
@@ -1632,6 +1640,45 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                     _reflex_controls.compose_reflex_confirm_action(macro),
                     cycles=offer_cycles,
                 )
+                continue
+            if action == "genesis_offer":
+                # WO-WIRE-GENESIS-CONFIRM-UI: Z raises the confirm-to-send
+                # gate only. No transport call until genesis_confirm + y.
+                pending_confirm_action = "genesis"
+                pending_confirm_loop = None
+                pending_confirm_hold = None
+                pending_confirm_reflex = None
+                sector = None
+                try:
+                    snap = play.status_provider() if callable(
+                        getattr(play, "status_provider", None)
+                    ) else None
+                    if isinstance(snap, dict):
+                        sector = snap.get("sector") or snap.get("last_known_sector")
+                except Exception:  # noqa: BLE001
+                    sector = None
+                play.begin_genesis_confirm(sector)
+                play.status_line = "Genesis confirm — y to send, any other key cancels"
+                continue
+            if action == "genesis_confirm":
+                # Choke-point: only CONFIRM + callable send + payload may fire.
+                pending_confirm_action = None
+                send_fn = None
+                if attach_conn is not None and callable(
+                    getattr(attach_conn, "send", None)
+                ):
+                    send_fn = attach_conn.send
+                outcome = _genesis_confirm.genesis_send_if_confirmed(
+                    disposition=_genesis_confirm.CONFIRM,
+                    send=send_fn,
+                    payload="G",
+                )
+                if outcome == _genesis_confirm.SENT:
+                    play.status_line = "Genesis sent"
+                else:
+                    play.status_line = (
+                        "Genesis refused — need Human attach + confirm (no silent send)"
+                    )
                 continue
             if action == "chains_open":
                 # WO-PLAY-AUTOLOOP-START: canon's `L)chains`. The store read
@@ -2257,8 +2304,11 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                 # rule engine + approval gate land in WO-070 family.
                 stub = _assign_trigger.create_stub(play.current_classification)
                 play.stub_store.set(stub)
-                screen_label = play.current_classification or "?"
-                play.status_line = f"trigger stub set — screen: {screen_label}"
+                # WO-WIRE-STUB-STORE-APPROVED-READER: product get() via summarize.
+                play.status_line = (
+                    _assign_trigger.summarize_store(play.stub_store)
+                    or f"trigger stub set — screen: {play.current_classification or '?'}"
+                )
                 continue
             if action == "analyze_open":
                 # WO-P5-069: A Analyze on-demand overlay — open.
@@ -2340,6 +2390,9 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                 approved = _draft_approve.promote_to_approved(stub)
                 if approved is not None:
                     play.stub_store.set(approved)
+                # WO-WIRE-STUB-STORE-APPROVED-READER: product get() confirms
+                # approved + playback_eligible landed in the store.
+                stub_chrome = _assign_trigger.summarize_store(play.stub_store)
                 play.approval_ledger_events.append(
                     {
                         "actor": "app",
@@ -2351,7 +2404,13 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                         "do": values.get("do"),
                         "scope": values.get("scope"),
                         "path": str(blessed),
+                        "stub_playback_eligible": (
+                            _assign_trigger.is_approved_playback_stub(play.stub_store)
+                        ),
                     }
+                )
+                play.status_line = stub_chrome or (
+                    f"rule written — {values.get('rule_id')}"
                 )
                 play.status_line = _draft_approve.compose_rule_blessed_line(
                     values.get("rule_id"),

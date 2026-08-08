@@ -438,6 +438,46 @@ def test_exhausted_recovery_warps_toward_densest_hub(tmp_path: Path):
     assert plan.next_sector == 2
 
 
+def test_exhausted_recovery_prefers_density_scan_over_out_degree(tmp_path: Path):
+    """WO-WIRE-DENSITY-SCAN-CONSUMER: persisted density_scan.value ranks densest."""
+    from tw2002_aiclient.explore import densest_reachable_sector, plan_exhausted_recovery
+    from tw2002_aiclient import world_model as wm
+
+    wid = "test+dens-scan-rank"
+    _seed(
+        wid,
+        tmp_path,
+        [
+            {"sector_id": 1, "warps": [2, 3], "landmarks": []},
+            {"sector_id": 2, "warps": [1, 4, 5, 6], "landmarks": []},  # out-degree 4
+            {"sector_id": 3, "warps": [1], "landmarks": []},  # out-degree 1
+            {"sector_id": 4, "warps": [2], "landmarks": []},
+            {"sector_id": 5, "warps": [2], "landmarks": []},
+            {"sector_id": 6, "warps": [2], "landmarks": []},
+        ],
+    )
+    # Without scan data, out-degree wins → sector 2.
+    assert densest_reachable_sector(
+        {1: [2, 3], 2: [1, 4, 5, 6], 3: [1], 4: [2], 5: [2], 6: [2]},
+        1,
+        world_id=wid,
+        state_dir=tmp_path,
+    ) == 2
+    wm.write_density_scan(wid, {3: 200, 2: 10}, state_dir=tmp_path)
+    assert densest_reachable_sector(
+        {1: [2, 3], 2: [1, 4, 5, 6], 3: [1], 4: [2], 5: [2], 6: [2]},
+        1,
+        world_id=wid,
+        state_dir=tmp_path,
+    ) == 3
+    recovery = plan_exhausted_recovery(
+        wid, current_sector=1, turn_budget=5, state_dir=tmp_path,
+    )
+    assert recovery.policy == "densest"
+    assert recovery.target_sector == 3
+    assert recovery.next_sector == 3
+
+
 def test_exhausted_recovery_prefers_stardock_when_landmark_known(tmp_path: Path):
     from tw2002_aiclient.explore import plan_exhausted_recovery
 
