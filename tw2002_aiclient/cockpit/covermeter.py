@@ -71,7 +71,9 @@ absent or empty ledger file still yields honest `?` / zero counts.
 Note that the legacy-actor mapping canon's "Code divergence" section warns
 about (fold legacy `trainer` -> `app`, exclude legacy `ai` from the live
 denominator) describes the *archive's* ledger. Tip's send choke point is
-already clean -- `session/session.py:67` `VALID_SENDERS = ("app", "human")`
+already clean -- `session/session.py` `VALID_SENDERS = ("app", "human", "dev")`
+(the third, sacrificial-only `dev` value per `canon/doctrine/dev-drive-exception.md`
+never reaches this composer's Hum/App counts -- see that doc's own scope) --
 and a legacy sender raises, pinned by `tests/test_actor_attribution.py` --
 so this module implements no mapping layer for an enum the live tree cannot
 produce.

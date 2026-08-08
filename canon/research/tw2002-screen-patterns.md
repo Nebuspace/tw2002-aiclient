@@ -26,8 +26,8 @@ Method notes and dead ends are retired; only **useful patterns** remain here.
 | ID | Pattern | Lane | Priority | Status vs tree (2026-07-25) |
 |---|---|---|---|---|
 | P-BLOCK | `-=-=- <Title> -=-=-` / `End of …` report-block delimiter | classify | P0 | Only CIM Port Report hardcoded; ≥14 titles in fixtures |
-| P-QTY | Quantity prompts with bracketed **range** vs **default** | classify + safety | P0 | StarDock holds → `unknown`; no StarDock classify tests |
-| P-SETTLE-LINE | `wait_prompt` must scope to **current prompt line**, not whole screen | settle | P0 | Gate classify already prompt-line; settle still whole-screen `render_text()` |
+| P-QTY | Quantity prompts with bracketed **range** vs **default** | classify + safety | P0 | StarDock cargo/shipyard screens wired as `stardock_cargo_hold_quote` / `stardock_shipyard_listing` (`classify.py:151-152`; shipped `47e52ce`) + classify tests |
+| P-SETTLE-LINE | `wait_prompt` must scope to **current prompt line**, not whole screen | settle | P0 | `MATCH_SCOPE_PROMPT_LINE` wired + tested (`settle.py:230`, `318-322`; shipped `728e890`) |
 | P-SUPPRESS | Server may disable interactive sub-prompts | settle | P1 | Document; timeout-only waits hang meaninglessly |
 | P-GATES | Planet / Citadel / StarDock / Tavern gate classes | classify | P1 | Absent as `screen_class` gates (Planet step exists only in login) |
 | P-PORT-MASK | `port_trade` never wins on docked-port **display** | classify | P1 | Content anchor loses to `main_command` on prompt line |
