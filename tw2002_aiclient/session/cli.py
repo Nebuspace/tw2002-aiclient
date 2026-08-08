@@ -1011,6 +1011,7 @@ def cmd_chains(args):
     from dataclasses import asdict
 
     from tw2002_aiclient import chain_search, chain_search_view
+    from tw2002_aiclient.trade_chain_plan import plan_from_chain
 
     # Earn / credit-doubling surface: yield-first so short high cr/turn
     # pairs surface above long thin hop-count winners (discovery modal
@@ -1018,11 +1019,20 @@ def cmd_chains(args):
     result = chain_search.recompute(args.world_id, rank=chain_search.RANK_YIELD)
 
     if getattr(args, "json", False):
+        # Additive fingerprint per row: same identity ``tw chain start
+        # --fingerprint`` validates via plan_from_chain / resolve_exact_chain.
+        # null when plan_from_chain refuses (sub-floor / incomplete chain).
+        chain_rows = []
+        for chain in result.chains:
+            row = asdict(chain)
+            plan = plan_from_chain(result.world_id, chain)
+            row["fingerprint"] = None if plan is None else plan.fingerprint
+            chain_rows.append(row)
         print(
             json.dumps(
                 {
                     "world_id": result.world_id,
-                    "chains": [asdict(c) for c in result.chains],
+                    "chains": chain_rows,
                     "reason": result.reason,
                     "detail": result.detail,
                     "adapter_note": result.adapter_note,
