@@ -117,14 +117,18 @@ def compute_auto_max_qty(
     return qty if qty >= 1 else None
 
 
-def _cargo_empty_from_status(status: dict) -> object:
+def _cargo_hud_value(status: dict) -> object:
     hud = status.get("hud") if isinstance(status.get("hud"), dict) else {}
     cargo_cell = hud.get("cargo") if isinstance(hud, dict) else None
-    value = (
+    return (
         cargo_cell.get("value")
         if isinstance(cargo_cell, dict)
         else cargo_cell
     )
+
+
+def _cargo_empty_from_status(status: dict) -> object:
+    value = _cargo_hud_value(status)
     if isinstance(value, bool):
         return None
     if isinstance(value, int):
@@ -134,6 +138,106 @@ def _cargo_empty_from_status(status: dict) -> object:
         if head.isdigit():
             return int(head)
     return None
+
+
+def _cargo_total_from_hud(status: dict) -> Optional[int]:
+    """Parse ``N empty / T`` HUD text → total holds ``T`` (observed capacity)."""
+    value = _cargo_hud_value(status)
+    if not isinstance(value, str):
+        return None
+    match = re.search(
+        r"(\d+)\s*empty\s*/\s*(\d+)",
+        value,
+        flags=re.IGNORECASE,
+    )
+    if match is None:
+        return None
+    try:
+        total = int(match.group(2))
+    except ValueError:
+        return None
+    return total if total >= 0 else None
+
+
+def _ship_type_from_status(status: dict) -> Optional[str]:
+    current = status.get("current_ship")
+    if isinstance(current, dict):
+        ship_type = current.get("ship_type")
+        if isinstance(ship_type, str) and ship_type.strip():
+            return ship_type.strip()
+    top = status.get("ship_type")
+    if isinstance(top, str) and top.strip():
+        return top.strip()
+    return None
+
+
+def _current_holds_from_status(status: dict) -> Optional[int]:
+    """Live owned-hold count — never invents from catalog max alone."""
+    player = status.get("upgrade_player")
+    if isinstance(player, dict):
+        holds = player.get("current_holds")
+        if isinstance(holds, int) and not isinstance(holds, bool) and holds >= 0:
+            return holds
+    current = status.get("current_ship")
+    if isinstance(current, dict):
+        holds = current.get("total_holds")
+        if isinstance(holds, int) and not isinstance(holds, bool) and holds >= 0:
+            return holds
+    return _cargo_total_from_hud(status)
+
+
+def _catalog_max_holds_from_status(status: dict) -> Optional[int]:
+    """Layer-B catalog ``max_holds`` for the current ship type, or ``None``.
+
+    Reads ``upgrade_catalog`` rows (``holds`` / ``max_holds``). Cost/shields are
+    never consulted — holds-only. Unmatched / hostile → ``None`` (fail-closed).
+    """
+    ship_type = _ship_type_from_status(status)
+    catalog = status.get("upgrade_catalog")
+    if ship_type is None or not isinstance(catalog, list):
+        return None
+    # Reuse the shipyard name matcher so I-info type lines stay consistent
+    # with ship_upgrade_decision (e.g. ``4 Dragons Ltd Dragon Quest``).
+    from tw2002_aiclient.ship_upgrade_decision import (
+        _catalog_row_matches_ship_type,
+    )
+
+    for row in catalog:
+        if not isinstance(row, dict):
+            continue
+        name = row.get("name")
+        if not isinstance(name, str) or not name.strip():
+            name = row.get("ship_name")
+        if not isinstance(name, str) or not name.strip():
+            continue
+        if not _catalog_row_matches_ship_type(name, ship_type):
+            continue
+        for key in ("max_holds", "holds"):
+            raw = row.get(key)
+            if isinstance(raw, int) and not isinstance(raw, bool) and raw > 0:
+                return raw
+        return None
+    return None
+
+
+def _auto_max_room(
+    status: dict, observed_empty: object
+) -> object:
+    """Ceiling for auto-max qty: catalog headroom when resolvable, else HUD empty.
+
+    Catalog headroom = ``catalog_max_holds - current_holds``. Incomplete or
+    inconsistent evidence falls back to observed empty holds — never fabricates
+    a max.
+    """
+    catalog_max = _catalog_max_holds_from_status(status)
+    current = _current_holds_from_status(status)
+    if (
+        catalog_max is not None
+        and current is not None
+        and catalog_max >= current
+    ):
+        return catalog_max - current
+    return observed_empty
 
 
 def _credits_from_status(status: dict) -> object:
@@ -161,9 +265,10 @@ def plan_from_status(
 ) -> Optional[StardockHoldPlan]:
     """Build a plan from GOALS/HUD status evidence. Never raises.
 
-    ``auto_max=True`` (TW-22): qty expands toward empty-hold capacity as
-    credits allow (after ``cash_floor``). Default remains qty=1 for manual
-    one-shot offers.
+    ``auto_max=True`` (TW-22): qty expands toward ship-max room as credits
+    allow (after ``cash_floor``). Room prefers Layer-B catalog ``max_holds``
+    minus owned holds when resolvable; otherwise HUD empty (fail-closed).
+    Default remains qty=1 for manual one-shot offers.
     """
     try:
         if not isinstance(status, dict):
@@ -174,7 +279,12 @@ def plan_from_status(
             dock = sectors[0]
         elif status.get("stardock_found") is True:
             dock = status.get("stardock_sector")
-        empty = _cargo_empty_from_status(status)
+        observed_empty = _cargo_empty_from_status(status)
+        empty = (
+            _auto_max_room(status, observed_empty)
+            if auto_max
+            else observed_empty
+        )
         credits = _credits_from_status(status)
         price = status.get("hold_price")
         if price is None:
