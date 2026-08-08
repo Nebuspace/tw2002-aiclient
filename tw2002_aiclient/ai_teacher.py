@@ -36,6 +36,7 @@ __all__ = [
     "AITeacherBackendNotConfigured",
     "AnalyzeBackend",
     "analyze_escalation",
+    "complete_cockpit_analyze",
     "gather_escalation_context",
     "no_backend_configured",
 ]
@@ -120,3 +121,57 @@ def analyze_escalation(
 
     path = write_draft(document, state_dir=state_dir, world_id=world_id)
     return {"declined": False, "draft": str(path)}
+
+
+def complete_cockpit_analyze(
+    screen_class: object = None,
+    *,
+    status_frame: Mapping[str, Any] | None = None,
+    ledger_entries: list[dict] | None = None,
+    backend: AnalyzeBackend | None = None,
+    state_dir=None,
+    world_id: str | None = None,
+) -> dict:
+    """Finish one Play-cockpit Analyze close (WO-WIRE-COCKPIT-ANALYZE-TO-AI-TEACHER).
+
+    Tries the retrospective teacher first. When no backend is wired
+    (:class:`AITeacherBackendNotConfigured`), falls back to the scaffold
+    stub from :func:`tw2002_aiclient.cockpit.draft_approve.create_analyze_draft`
+    so the existing y/N identity gate keeps working without an LLM.
+
+    Returns one of:
+
+    - ``{"path": "scaffold", "draft": <stub dict>}``
+    - ``{"path": "teacher", "declined": True, "reason": ...}``
+    - ``{"path": "teacher", "declined": False, "draft": <path str>}``
+    """
+    # Late import: draft_approve is cockpit UI; keep ai_teacher import-light
+    # for CLI / tests that only need analyze_escalation.
+    from .cockpit import draft_approve as _draft_approve
+
+    frame: dict[str, Any]
+    if isinstance(status_frame, Mapping):
+        frame = dict(status_frame)
+    else:
+        frame = {}
+    if screen_class is not None and "screen" not in frame:
+        frame["screen"] = screen_class
+
+    context = gather_escalation_context(frame, ledger_entries)
+    active_backend: AnalyzeBackend = (
+        backend if backend is not None else no_backend_configured
+    )
+
+    try:
+        result = analyze_escalation(
+            context,
+            active_backend,
+            state_dir=state_dir,
+            world_id=world_id,
+        )
+    except AITeacherBackendNotConfigured:
+        stub = _draft_approve.create_analyze_draft(screen_class)
+        return {"path": "scaffold", "draft": stub}
+
+    out = {"path": "teacher", **result}
+    return out

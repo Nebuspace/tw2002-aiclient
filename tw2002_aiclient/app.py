@@ -2325,14 +2325,48 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                 continue
             if action == "analyze_close":
                 # WO-P5-069: A Analyze on-demand overlay — close.
-                # WO-P5-070: closing produces an inert draft and raises the
-                # human approval gate — unapproved drafts never reach stub_store.
+                # WO-WIRE-COCKPIT-ANALYZE-TO-AI-TEACHER: prefer ai_teacher
+                # (canon Screen Analyze); fall back to scaffold draft when
+                # no LLM backend is configured (preserves WO-P5-070 y/N gate).
                 play.analyze_session.close()
-                draft = _draft_approve.create_analyze_draft(play.current_classification)
-                play.pending_analyze_draft = draft
-                play.begin_draft_approve(draft)
-                screen_label = (draft.get("when") or {}).get("screen") or "?"
-                play.status_line = f"analyze draft ({screen_label}) — y/N to approve"
+                from tw2002_aiclient import ai_teacher as _ai_teacher
+                from tw2002_aiclient import ledger as _ledger
+
+                _an_wid = None
+                try:
+                    _an_wid = _world_identity.world_id_from_profile(profile)
+                except Exception:
+                    _an_wid = None
+                try:
+                    _entries = _ledger.read_entries(world_id=_an_wid)
+                except Exception:
+                    _entries = []
+                _backend = getattr(play, "ai_teacher_backend", None)
+                _result = _ai_teacher.complete_cockpit_analyze(
+                    play.current_classification,
+                    ledger_entries=_entries,
+                    backend=_backend,
+                    world_id=_an_wid,
+                )
+                if _result.get("path") == "scaffold":
+                    draft = _result["draft"]
+                    play.pending_analyze_draft = draft
+                    play.begin_draft_approve(draft)
+                    screen_label = (draft.get("when") or {}).get("screen") or "?"
+                    play.status_line = (
+                        f"analyze draft ({screen_label}) — y/N to approve"
+                    )
+                elif _result.get("declined"):
+                    play.pending_analyze_draft = None
+                    play.status_line = (
+                        f"analyze declined — {_result.get('reason') or 'ethos'}"
+                    )
+                else:
+                    play.pending_analyze_draft = None
+                    play.status_line = (
+                        f"AI draft written: {_result.get('draft')} — "
+                        "inert until tw rule approve"
+                    )
                 continue
             if action == "draft_approve":
                 # WO-PLAY-RULE-IDENTITY: y accepts the *proposal* and opens
