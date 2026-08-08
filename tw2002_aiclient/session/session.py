@@ -22,6 +22,7 @@ import time
 
 from .classify import classify_screen, is_probable_secret_prompt
 from .connection import TelnetConnection, tx_failure_phrase
+from .credentials import is_crawl_sacrificial
 from .iac import TelnetHandler
 from .hud_tracking import (
     CargoHoldings,
@@ -81,9 +82,22 @@ _FENCE_UNBLOCK_WAIT_S = 1.0
 # The archive's session.py never actually carried a sender argument at all
 # (the {ai,trainer,human} vocabulary the Code Divergence section flags
 # lived one layer up, in protocol.py's dispatch and loop_player.py) --
-# this port adds the tag at the choke point canon specifies, scoped to
-# just the two reborn-legal values.
-VALID_SENDERS = ("app", "human")
+# this port adds the tag at the choke point canon specifies.
+#
+# "dev" (canon: dev-drive-exception.md, human ruling 2026-08-07) is the
+# third, sacrificial-only, manual sender authorized for an AI agent's own
+# development/debugging keystrokes -- never real play. It is gated BELOW,
+# at the same choke points that already validate "app"/"human": send()
+# and send_raw() both refuse a "dev" sender unless
+# `credentials.is_crawl_sacrificial(self.auto_login_profile)` is exactly
+# True, checked fresh on every call (never cached -- a profile's flag
+# could change between calls, and a stale True is exactly the kind of
+# trust this gate exists to refuse). No autopilot/taught-rule/macro path
+# constructs a Session and passes sender="dev" anywhere in this codebase
+# today -- that remains true only because nothing calls it, not because
+# anything stops a future caller; the sacrificial-profile check is the
+# actual enforcement, not the absence of a caller.
+VALID_SENDERS = ("app", "human", "dev")
 
 
 class Session:
@@ -908,15 +922,33 @@ class Session:
         self._tail_send(secret, display_line)
         self.tail.append_line(f"<<send failed: {tx_failure_phrase(exc)}>>")
 
+    def _require_dev_sender_authorized(self, sender):
+        """Second, sacrificial-only gate for `sender="dev"` -- runs AFTER
+        the `VALID_SENDERS` membership check, never instead of it. A no-op
+        for `"app"`/`"human"`. Checked fresh on every call against
+        `self.auto_login_profile` (never cached): an unset profile (no
+        `mark_profile()` call yet) or any profile whose `crawl_sacrificial`
+        flag is not exactly `True` refuses. Canon:
+        `canon/doctrine/dev-drive-exception.md`."""
+        if sender != "dev":
+            return
+        profile = getattr(self, "auto_login_profile", None)
+        if not profile or not is_crawl_sacrificial(profile):
+            raise ValueError(
+                f"sender='dev' refused: profile {profile!r} is not flagged "
+                f"crawl_sacrificial=true (canon/doctrine/dev-drive-exception.md)"
+            )
+
     def send(self, text, enter=True, secret=False, sender="app"):
         """Automated/scripted send -- text plus an optional auto-appended
-        CRLF. `sender` is the canon `{app, human}` send-time actor tag
-        (session-engine.md); defaults to `"app"` since every caller of
-        this method today is App-side dispatch (do/haggle/auto-loop), not
-        a raw human keystroke (that path is send_raw() below, which
-        defaults to `"human"`)."""
+        CRLF. `sender` is the canon `{app, human, dev}` send-time actor tag
+        (session-engine.md; `dev` per dev-drive-exception.md); defaults to
+        `"app"` since every caller of this method today is App-side
+        dispatch (do/haggle/auto-loop), not a raw human keystroke (that
+        path is send_raw() below, which defaults to `"human"`)."""
         if sender not in VALID_SENDERS:
             raise ValueError(f"sender must be one of {VALID_SENDERS}, got {sender!r}")
+        self._require_dev_sender_authorized(sender)
         with self.send_lock:
             # Invalidate the remembered sector BEFORE the byte can reach the
             # wire, never after: a send that raises may still have moved the
@@ -1006,6 +1038,7 @@ class Session:
         redacts it for a `secret=True` do/send call."""
         if sender not in VALID_SENDERS:
             raise ValueError(f"sender must be one of {VALID_SENDERS}, got {sender!r}")
+        self._require_dev_sender_authorized(sender)
         if control_lock is not None:
             deadline = time.monotonic() + _FENCE_WAIT_TIMEOUT_S
             while control_lock.is_driver_fenced() and time.monotonic() < deadline:

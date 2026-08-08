@@ -452,6 +452,34 @@ def get_password(profile: str) -> str | None:
     return None
 
 
+def is_crawl_sacrificial(profile: str) -> bool:
+    """Fail-closed read of `profile`'s `crawl_sacrificial` flag from
+    ``profiles.toml`` -- the same flag `menu.crawl_driver.run_live_crawl`
+    already gates a live crawl on, reused here (not re-derived) for the
+    `dev`-sender live-drive exception (`canon/doctrine/dev-drive-exception.md`).
+
+    Returns `False` -- never raises -- for every negative shape: no store,
+    no such profile, a malformed profile section, or a flag that is present
+    but not the exact literal `True` (a truthy stand-in like `"true"` or
+    `1` is not consent, mirroring `crawl_driver._SACRIFICIAL_FLAG`'s own
+    `is True` check). A store read failure (`ProfileStoreUnreadable` /
+    `ProfileStoreMalformed`) also refuses rather than propagating: a
+    caller gating a live keystroke on this needs "not confirmed
+    sacrificial" to mean the same thing whether the store is missing,
+    empty, or unreadable -- never partially trust an unreadable store.
+    """
+    try:
+        data = _load_toml_store(PROFILES_PATH)
+    except ProfileConnectionError:
+        return False
+    if data is None:
+        return False
+    meta = data.get(profile)
+    if not isinstance(meta, dict):
+        return False
+    return meta.get("crawl_sacrificial") is True
+
+
 def list_servers(path: Path | None = None) -> list[dict[str, object]]:
     """Return catalog rows from ``config/servers.toml`` (key, name, host, port).
 
