@@ -7,6 +7,7 @@ import json
 from tw2002_aiclient.session import cli
 from tw2002_aiclient import mine_cli
 from tw2002_aiclient import players_cli
+from tw2002_aiclient import port_floor_cli
 
 
 # Keep in sync with README Verb reference (shipped) + cli.build_parser().
@@ -47,6 +48,8 @@ _SHIPPED_VERBS = frozenset(
         "patterns",
         # WO-BUILD-AI-TEACHER-ANALYZE-CLI — on-demand retrospective AI teacher.
         "teach",
+        # WO-BUILD-PORT-FLOOR-PRICE-LIVE-CAPTURE — filesystem observation store.
+        "port-floor",
     }
 )
 
@@ -91,6 +94,12 @@ def test_parser_shipped_verb_allowlist():
     assert mine.func is mine_cli.cmd_mine
     assert patterns.func is mine_cli.cmd_mine
     assert patterns.top_k == 1
+    port_floor_snap = parser.parse_args(
+        ["port-floor", "snapshot", "--world-dir", "x"]
+    )
+    assert port_floor_snap.func is port_floor_cli.cmd_port_floor_snapshot
+    port_floor_an = parser.parse_args(["port-floor", "analyze"])
+    assert port_floor_an.func is port_floor_cli.cmd_port_floor_analyze
     sub = next(
         a for a in parser._actions if getattr(a, "choices", None) is not None
     )

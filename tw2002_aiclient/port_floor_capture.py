@@ -38,8 +38,10 @@ This module is that missing analysis step, and nothing more:
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
+from pathlib import Path
 from typing import Sequence
 
 __all__ = [
@@ -49,7 +51,23 @@ __all__ = [
     "FloorPriceEstimate",
     "PortEconomicsReport",
     "analyze_port_history",
+    "OBSERVATIONS_FILENAME",
+    "default_observations_path",
+    "observation_to_dict",
+    "observation_from_dict",
+    "load_observations",
+    "append_observations",
+    "observations_from_port_record",
+    "observations_from_world_dir",
+    "record_port_write",
 ]
+
+# Sibling of ``state/world/`` when using the default layout; under a
+# world_model ``state_dir`` override it lives inside that world-parent dir.
+OBSERVATIONS_FILENAME = "port_floor_observations.jsonl"
+
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+_STATE_DIR = _PROJECT_ROOT / "state"
 
 
 @dataclass(frozen=True)
@@ -225,3 +243,224 @@ def analyze_port_history(observations: Sequence[PortObservation]) -> PortEconomi
         regrowth=estimate_regrowth_rate(observations),
         floor_price=estimate_floor_price(observations),
     )
+
+
+def default_observations_path(state_dir: Path | str | None = None) -> Path:
+    """JSONL store path. ``state_dir`` matches ``world_model``'s override:
+    the parent of per-world dirs (default ``state/world`` → store at
+    ``state/port_floor_observations.jsonl``; test tmp world-parent →
+    ``<tmp>/port_floor_observations.jsonl``)."""
+
+    if state_dir is None:
+        return _STATE_DIR / OBSERVATIONS_FILENAME
+    base = Path(state_dir)
+    # Default WORLD_DIR is ``state/world`` — keep the store next to ``world/``.
+    if base.name == "world":
+        return base.parent / OBSERVATIONS_FILENAME
+    return base / OBSERVATIONS_FILENAME
+
+
+def _parse_timestamp(value: object) -> datetime | None:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        ts = value
+        if ts.tzinfo is None:
+            return ts.replace(tzinfo=timezone.utc)
+        return ts
+    text = str(value).strip()
+    if not text:
+        return None
+    if text.endswith("Z"):
+        text = text[:-1] + "+00:00"
+    try:
+        ts = datetime.fromisoformat(text)
+    except ValueError:
+        return None
+    if ts.tzinfo is None:
+        ts = ts.replace(tzinfo=timezone.utc)
+    return ts
+
+
+def observation_to_dict(obs: PortObservation) -> dict:
+    return {
+        "sector_id": obs.sector_id,
+        "commodity": obs.commodity,
+        "status": obs.status,
+        "amount": obs.amount,
+        "pct": obs.pct,
+        "timestamp": obs.timestamp.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "port_id": obs.port_id,
+        "price_per_unit": obs.price_per_unit,
+        "traded_since_prior": obs.traded_since_prior,
+    }
+
+
+def observation_from_dict(payload: dict) -> PortObservation | None:
+    try:
+        sector_id = int(payload["sector_id"])
+        commodity = str(payload["commodity"])
+        status = str(payload["status"])
+        amount = int(payload["amount"])
+        pct = int(payload["pct"])
+    except (KeyError, TypeError, ValueError):
+        return None
+    ts = _parse_timestamp(payload.get("timestamp"))
+    if ts is None:
+        return None
+    price = payload.get("price_per_unit")
+    if price is not None:
+        try:
+            price = float(price)
+        except (TypeError, ValueError):
+            price = None
+    traded = payload.get("traded_since_prior", None)
+    if traded is not None:
+        traded = bool(traded)
+    port_id = payload.get("port_id")
+    if port_id is not None:
+        port_id = str(port_id)
+    return PortObservation(
+        sector_id=sector_id,
+        commodity=commodity,
+        status=status,
+        amount=amount,
+        pct=pct,
+        timestamp=ts,
+        port_id=port_id,
+        price_per_unit=price,
+        traded_since_prior=traded,
+    )
+
+
+def load_observations(path: Path | str) -> list[PortObservation]:
+    p = Path(path)
+    if not p.is_file():
+        return []
+    out: list[PortObservation] = []
+    with p.open(encoding="utf-8") as fh:
+        for line in fh:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                payload = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if not isinstance(payload, dict):
+                continue
+            obs = observation_from_dict(payload)
+            if obs is not None:
+                out.append(obs)
+    return out
+
+
+def append_observations(path: Path | str, observations: Sequence[PortObservation]) -> int:
+    """Append observations as JSONL. Returns count written. Creates parents."""
+
+    rows = list(observations)
+    if not rows:
+        return 0
+    p = Path(path)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    with p.open("a", encoding="utf-8") as fh:
+        for obs in rows:
+            fh.write(json.dumps(observation_to_dict(obs), sort_keys=True) + "\n")
+    return len(rows)
+
+
+def observations_from_port_record(
+    sector_id: int,
+    port_dict: dict,
+    *,
+    traded_since_prior: bool | None = None,
+    timestamp: datetime | None = None,
+    port_id: str | None = None,
+) -> list[PortObservation]:
+    """One :class:`PortObservation` per commodity row with amount+pct."""
+
+    ts = timestamp or _parse_timestamp(port_dict.get("last_seen_ts"))
+    if ts is None:
+        ts = datetime.now(timezone.utc)
+    commodities = port_dict.get("commodities") or []
+    out: list[PortObservation] = []
+    if not isinstance(commodities, list):
+        return out
+    for row in commodities:
+        if not isinstance(row, dict):
+            continue
+        try:
+            name = str(row["name"])
+            status = str(row["status"])
+            amount = int(row["amount"])
+            pct = int(row["pct"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        out.append(
+            PortObservation(
+                sector_id=int(sector_id),
+                commodity=name,
+                status=status,
+                amount=amount,
+                pct=pct,
+                timestamp=ts,
+                port_id=port_id,
+                traded_since_prior=traded_since_prior,
+            )
+        )
+    return out
+
+
+def observations_from_world_dir(world_dir: Path | str) -> list[PortObservation]:
+    """Scan a world directory's ``sectors/*.json`` (or flat ``*.json``)."""
+
+    root = Path(world_dir)
+    sectors_dir = root / "sectors"
+    if sectors_dir.is_dir():
+        paths = sorted(sectors_dir.glob("*.json"))
+    else:
+        paths = sorted(root.glob("*.json"))
+    out: list[PortObservation] = []
+    for path in paths:
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        if not isinstance(payload, dict):
+            continue
+        port = payload.get("port")
+        if not isinstance(port, dict):
+            continue
+        try:
+            sector_id = int(payload.get("sector_id", path.stem))
+        except (TypeError, ValueError):
+            continue
+        out.extend(observations_from_port_record(sector_id, port))
+    return out
+
+
+def record_port_write(
+    sector_id: int,
+    port_dict: dict,
+    *,
+    state_dir: Path | str | None = None,
+    traded_since_prior: bool | None = None,
+) -> int:
+    """Best-effort append for world_model write hooks. Never raises."""
+
+    try:
+        if not isinstance(port_dict, dict):
+            return 0
+        commodities = port_dict.get("commodities") or []
+        if not commodities:
+            return 0
+        obs = observations_from_port_record(
+            sector_id,
+            port_dict,
+            traded_since_prior=traded_since_prior,
+        )
+        if not obs:
+            return 0
+        return append_observations(default_observations_path(state_dir), obs)
+    except Exception:
+        return 0
