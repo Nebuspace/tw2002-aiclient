@@ -110,7 +110,7 @@
 1. Do not claim Phase-8 COMPLETE because several modules are LIVE — PARTIAL residuals are load-bearing.
 2. Money-path live arms need Max sacrificial GO.
 3. Coach cards ≠ decision engines.
-4. Auto-haggle trade-arm is a separate WO (`WO-AUTOHAGGLE-TRADE-ARM` candidate), not 102 cover.
+4. Auto-haggle trade-arm **ships** (`TradeDriverConfig.auto_haggle` default OFF — PWO-087 / #360 `37fd42d`); not 102 cover. Do not re-stage as a candidate.
 
 ---
 
