@@ -21,6 +21,7 @@ from tw2002_aiclient.session.fighter_toll_policy import (
     DEFAULT_AUTO_ATTACK_MAX_ENEMY,
     DEFAULT_FORCE_SHARE_AUTO_ATTACK,
     force_share as _force_share,
+    parse_encounter,
 )
 
 __all__ = [
@@ -29,6 +30,7 @@ __all__ = [
     "reroute_turn_cost",
     "compare_reroute_vs_fight",
     "toll_ev_to_status",
+    "toll_ev_for_screen",
 ]
 
 Preferred = Literal["reroute", "fight", "unknown"]
@@ -273,3 +275,29 @@ def toll_ev_to_status(ev: RerouteVsFightEV) -> dict:
         "gate_reason": ev.gate_reason,
         "rationale": ev.rationale,
     }
+
+
+def toll_ev_for_screen(
+    screen_text: str,
+    prompt_line: str = "",
+    *,
+    turns_per_warp: Optional[int] = None,
+    extra_hops: Optional[int] = None,
+) -> Optional[dict]:
+    """Compute ``status["toll_ev"]`` from a live Option? frame, or omit.
+
+    Product wire for WO-WIRE-REROUTE-EV-TO-PRIORITY-COACH: read-only ranking
+    for coach/priority display. Never sends. ``fighter_toll_policy`` must not
+    import this module (decide_encounter pin stays one-way).
+    """
+    state = parse_encounter(screen_text or "", prompt_line or "")
+    if not state.detected:
+        return None
+    ev = compare_reroute_vs_fight(
+        extra_hops=extra_hops,
+        turns_per_warp=turns_per_warp,
+        own_fighters=state.yours,
+        enemy_fighters=state.theirs,
+        is_pvp=bool(state.is_pvp),
+    )
+    return toll_ev_to_status(ev)

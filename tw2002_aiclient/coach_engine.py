@@ -85,6 +85,11 @@ def infer_coach_triggers(
         _add("exploring_frontier")
     if "option?" in prompt_l or "fighters to use" in prompt_l:
         _add("toll_or_gate")
+    # Status-verb path withholds the live prompt (credential safety), so the
+    # Option? substring never reaches this consumer. Classification is the
+    # closed substitute that still fires the toll card (WO-WIRE-REROUTE-EV).
+    if cls == "fighter_encounter":
+        _add("toll_or_gate")
     return found
 
 

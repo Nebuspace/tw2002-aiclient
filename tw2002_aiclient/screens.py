@@ -18,6 +18,7 @@ from tw2002_aiclient import world_stats as _world_stats
 from tw2002_aiclient import game_data_stats as _game_data_stats
 from tw2002_aiclient.cockpit import analyze as cockpit_analyze
 from tw2002_aiclient.cockpit import armconfirm as cockpit_armconfirm
+from tw2002_aiclient import genesis_confirm as cockpit_genesis_confirm
 from tw2002_aiclient.cockpit import autoloop_controls as cockpit_autoloop_controls
 from tw2002_aiclient.cockpit import chain_bubbles as cockpit_chain_bubbles
 from tw2002_aiclient.cockpit import chains as cockpit_chains
@@ -922,6 +923,9 @@ class PlayShellScreen:
     _draft_approve: dict | None = None
     # WO-PLAY-RULE-IDENTITY: sequential typed entry for rule_id / do / priority.
     _rule_identity: dict | None = None
+    # WO-WIRE-GENESIS-CONFIRM-UI: pending Genesis confirm-to-send gate.
+    # ``None`` = no gate; otherwise the sector label (or ``True``) for the line.
+    _genesis_confirm: object | None = None
 
     # WO-PLAY-OFFER-VISIBLE-ON-LIVE: text that CLAIMS the hint band's slot.
     #
@@ -1079,6 +1083,8 @@ class PlayShellScreen:
         # default of the same name above for why it is declared there too;
         # this instance assignment is the ordinary path.
         self._arm_confirm: tuple[object, object] | None = None
+        # WO-WIRE-GENESIS-CONFIRM-UI: see class-level default.
+        self._genesis_confirm: object | None = None
         # WO-P5-068: the most-recently confirmed screen classification, set
         # by app.py after ensure_session() so Assign-Trigger (non-calm path)
         # can stamp the stub's ``when.screen`` field.  ``None`` before any
@@ -1351,6 +1357,16 @@ class PlayShellScreen:
         daemon call behind it in this WO.
         """
         self._arm_confirm = (action, cycles)
+
+    def begin_genesis_confirm(self, sector: object = None) -> None:
+        """Raise the Genesis confirm-to-send gate (WO-WIRE-GENESIS-CONFIRM-UI).
+
+        Arms **nothing** and sends **nothing**. Draws the y/N line; the next
+        keystroke goes through ``resolve_genesis_confirm_key``. Only ``y``/
+        ``Y`` yields ``"genesis_confirm"`` for app.py to pass through
+        ``genesis_send_if_confirmed``.
+        """
+        self._genesis_confirm = True if sector is None else sector
 
     def _arm_confirm_attr(self) -> int:
         """The confirm gate's attr: table-row ``danger`` (red **BOLD**) plus
@@ -2289,6 +2305,21 @@ class PlayShellScreen:
                 # gate. Cancelling is the only honest recovery.
                 self._arm_confirm = None
 
+        # WO-WIRE-GENESIS-CONFIRM-UI: Genesis confirm-to-send (same strip row
+        # priority as arm confirm; arm confirm outranks when both somehow up).
+        if self._arm_confirm is None and self._genesis_confirm is not None:
+            try:
+                sector = (
+                    None if self._genesis_confirm is True else self._genesis_confirm
+                )
+                line = cockpit_genesis_confirm.compose_genesis_confirm_line(sector)
+                cockpit_draw.draw_lines(
+                    self.stdscr, control_strip, [line],
+                    self._arm_confirm_attr(), boxed=False,
+                )
+            except Exception:  # noqa: BLE001
+                self._genesis_confirm = None
+
         # WO-P5-070: draft approval gate — same row priority as arm confirm.
         if self._draft_approve is not None:
             try:
@@ -2362,6 +2393,14 @@ class PlayShellScreen:
                 # "arm write-back is still read-only (062 stub); this WO only
                 # adds the confirm gate, not the daemon call."
                 return "arm_confirm"
+            return None
+        # WO-WIRE-GENESIS-CONFIRM-UI: total-capture Genesis confirm gate
+        # (same ordering contract as arm confirm — before Esc/quit).
+        if self._genesis_confirm is not None:
+            outcome = cockpit_genesis_confirm.resolve_genesis_confirm_key(key)
+            self._genesis_confirm = None
+            if outcome == cockpit_genesis_confirm.CONFIRM:
+                return "genesis_confirm"
             return None
         # WO-PLAY-RULE-IDENTITY: typed entry captures the strip while up
         # (same total-capture contract as arm confirm / draft approve).
@@ -2499,6 +2538,10 @@ class PlayShellScreen:
         # existing default-deny armconfirm gate. Never a send path.
         if cockpit_reflex_controls.resolve_reflex_offer_key(key):
             return cockpit_reflex_controls.REFLEX_OFFER_INTENT
+        # WO-WIRE-GENESIS-CONFIRM-UI: Z offers the Genesis confirm-to-send
+        # gate (U is Rules Library). Never a silent send.
+        if key in (ord("z"), ord("Z")):
+            return "genesis_offer"
         # WO-PLAY-STRIP-TRAINER-CHROME REVISE (hub 2026-07-31) +
         # WO-FIND-STARDOCK-TOGGLE: F/P/C/S are the trainer calm band's own
         # local chrome toggles -- Find StarDock, Port Trade, Cargo Hold
