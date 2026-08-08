@@ -2221,6 +2221,9 @@ def build_parser() -> argparse.ArgumentParser:
     from ..rules.cli import add_rule_parser
 
     add_rule_parser(sub)
+    from ..skill_cli import add_skill_parser
+
+    add_skill_parser(sub)
 
     # WO-BUILD-SERVERS-PROBE-CLI-VERBS: catalog verbs live in catalog_cli
     # (daemon-free inventory/TCP probe) so this file stays under the line

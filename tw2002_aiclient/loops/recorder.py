@@ -169,8 +169,10 @@ __all__ = [
     "EmptyRecording",
     "InvalidName",
     "LoopRecorder",
+    "LoopWriteError",
     "NoStartAnchor",
     "RecorderError",
+    "promote_draft",
 ]
 
 
@@ -219,6 +221,124 @@ class EmptyRecording(RecorderError):
     Refused for the same reason ``loader.py`` refuses a stored document with
     no steps: "a macro with nothing to press cannot have come from a
     capture, and would loop forever under a repeating scope"."""
+
+
+class LoopWriteError(RecorderError):
+    """A draft was refused before (or while) crossing into the blessed store.
+
+    Mirrors ``rules.writer.RuleWriteError``: promote failures are operator-
+    actionable messages, never half-written blessed files.
+    """
+
+
+def promote_draft(
+    name: str,
+    *,
+    state_dir=None,
+    skills_dir=None,
+    drafts_path=None,
+    remove_draft: bool = True,
+    world_id=None,
+) -> Path:
+    """Bless one mined/AI draft into the live skills library.
+
+    WO-WIRE-MINED-SKILLS-PROMOTE-CLI: the skills mirror of
+    ``rules.writer.promote_draft``. Approval is filesystem location — drafts
+    under ``_drafts/`` are inert; this is the only product path that moves
+    one into the blessed tree. Reached only from ``tw skill approve``.
+
+    Re-validates through ``load_loop`` on the way out so a hand-edited draft
+    cannot land unplayable. Never auto-called by ``miner.write_mined_draft``.
+    """
+    import json
+
+    from .loader import LoopLoadError, LoopNotFound, load_loop
+    from .store import migrate_flat_loops_to_world
+
+    name = _validate_name(name)
+    if skills_dir is None and world_id is not None and str(world_id).strip():
+        migrate_flat_loops_to_world(str(world_id).strip(), state_dir=state_dir)
+    blessed = (
+        Path(skills_dir)
+        if skills_dir is not None
+        else loops_dir(state_dir, world_id=world_id)
+    )
+    drafts = (
+        Path(drafts_path)
+        if drafts_path is not None
+        else (
+            Path(skills_dir) / DRAFTS_DIRNAME
+            if skills_dir is not None
+            else drafts_dir(state_dir, world_id=world_id)
+        )
+    )
+
+    try:
+        load_loop(
+            name,
+            include_drafts=False,
+            state_dir=state_dir,
+            skills_dir=skills_dir,
+            drafts_path=drafts_path,
+            world_id=world_id,
+        )
+    except LoopNotFound:
+        pass
+    except LoopLoadError as exc:
+        raise LoopWriteError(f"draft {name!r} is not promotable: {exc}") from None
+    else:
+        raise LoopWriteError(
+            f"loop {name!r} is already in the blessed store at {blessed} "
+            "-- promote moves drafts only"
+        )
+
+    try:
+        loop = load_loop(
+            name,
+            include_drafts=True,
+            state_dir=state_dir,
+            skills_dir=skills_dir,
+            drafts_path=drafts_path,
+            world_id=world_id,
+        )
+    except LoopNotFound as exc:
+        raise LoopWriteError(f"no draft named {name!r} under {drafts}") from None
+    except LoopLoadError as exc:
+        raise LoopWriteError(f"draft {name!r} is not promotable: {exc}") from None
+    if not loop.draft:
+        raise LoopWriteError(
+            f"loop {name!r} resolved as blessed, not a draft -- refuse promote"
+        )
+
+    src = Path(loop.path)
+    try:
+        document = json.loads(src.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        raise LoopWriteError(f"draft {name!r} could not be read: {exc}") from None
+    if not isinstance(document, dict):
+        raise LoopWriteError(f"draft {name!r} is not a loop document")
+
+    # Re-validate the bytes we are about to write (hand-edit window).
+    from .loader import _build_loop
+
+    try:
+        _build_loop(document, src, draft=False)
+    except LoopLoadError as exc:
+        raise LoopWriteError(f"draft {name!r} is not promotable: {exc}") from None
+
+    blessed.mkdir(parents=True, exist_ok=True)
+    dest = blessed / src.name
+    if dest.resolve() == src.resolve():
+        raise LoopWriteError(
+            f"draft {name!r} path collides with blessed destination {dest}"
+        )
+    _atomic_write_json(dest, document)
+    if remove_draft:
+        try:
+            src.unlink()
+        except OSError:
+            pass
+    return dest
 
 
 def _rows_to_text_and_prompt(rows) -> tuple[str, str]:
