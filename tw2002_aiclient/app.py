@@ -2257,8 +2257,11 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                 # rule engine + approval gate land in WO-070 family.
                 stub = _assign_trigger.create_stub(play.current_classification)
                 play.stub_store.set(stub)
-                screen_label = play.current_classification or "?"
-                play.status_line = f"trigger stub set — screen: {screen_label}"
+                # WO-WIRE-STUB-STORE-APPROVED-READER: product get() via summarize.
+                play.status_line = (
+                    _assign_trigger.summarize_store(play.stub_store)
+                    or f"trigger stub set — screen: {play.current_classification or '?'}"
+                )
                 continue
             if action == "analyze_open":
                 # WO-P5-069: A Analyze on-demand overlay — open.
@@ -2340,6 +2343,9 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                 approved = _draft_approve.promote_to_approved(stub)
                 if approved is not None:
                     play.stub_store.set(approved)
+                # WO-WIRE-STUB-STORE-APPROVED-READER: product get() confirms
+                # approved + playback_eligible landed in the store.
+                stub_chrome = _assign_trigger.summarize_store(play.stub_store)
                 play.approval_ledger_events.append(
                     {
                         "actor": "app",
@@ -2351,7 +2357,13 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                         "do": values.get("do"),
                         "scope": values.get("scope"),
                         "path": str(blessed),
+                        "stub_playback_eligible": (
+                            _assign_trigger.is_approved_playback_stub(play.stub_store)
+                        ),
                     }
+                )
+                play.status_line = stub_chrome or (
+                    f"rule written — {values.get('rule_id')}"
                 )
                 play.status_line = _draft_approve.compose_rule_blessed_line(
                     values.get("rule_id"),

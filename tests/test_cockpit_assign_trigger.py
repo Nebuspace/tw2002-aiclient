@@ -302,3 +302,42 @@ def test_a_still_not_bound() -> None:
     play.analyze_session.open()
     # Session now open → second A returns analyze_close
     assert play.handle_key(ord("a")) == "analyze_close"
+
+
+# --------------------------------------------------------------------------
+# 4 — Product get() reader (WO-WIRE-STUB-STORE-APPROVED-READER)
+# --------------------------------------------------------------------------
+
+
+def test_summarize_store_reads_get_for_draft_and_approved() -> None:
+    store = assign_trigger.StubStore()
+    assert assign_trigger.summarize_store(store) == ""
+    store.set(assign_trigger.create_stub("main_command"))
+    assert assign_trigger.summarize_store(store) == "trigger draft — screen: main_command"
+    assert assign_trigger.is_approved_playback_stub(store) is False
+    from tw2002_aiclient.cockpit import draft_approve
+
+    approved = draft_approve.promote_to_approved(store.get())
+    store.set(approved)
+    assert assign_trigger.summarize_store(store) == (
+        "trigger approved — screen: main_command"
+    )
+    assert assign_trigger.is_approved_playback_stub(store) is True
+
+
+def test_app_assign_trigger_calls_summarize_store() -> None:
+    """Product call site: assign_trigger / approve paths read via summarize_store."""
+    import ast
+    from pathlib import Path
+
+    src = Path("tw2002_aiclient/app.py").read_text()
+    assert "summarize_store" in src
+    assert "is_approved_playback_stub" in src
+    tree = ast.parse(src)
+    names = {
+        n.attr
+        for n in ast.walk(tree)
+        if isinstance(n, ast.Attribute)
+    }
+    assert "summarize_store" in names
+    assert "is_approved_playback_stub" in names
