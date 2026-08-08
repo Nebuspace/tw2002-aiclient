@@ -1488,3 +1488,77 @@ def sector_wire(read: SectorRead) -> dict:
     if read.reason is not None:
         wire["reason"] = read.reason
     return wire
+
+# -- Batch/CIM port-report parsing (world-model write hook / WO-WIRE-BULK-UPSERT-CIM-INGEST)
+#
+# PROVENANCE CAVEAT: no live-captured multi-sector CIM/scan screen exists in this
+# repo yet. Row grammar is CONSTRUCTED (three-letter Buy/Sell class + this
+# project's divider style). Callers must gate on classify_screen == "cim_report"
+# before ingesting — never trust the report shape alone (mack Finding 2).
+_CIM_HEADER_RE = re.compile(r"^-=-=-\s+Port Report \(CIM\)\s+-=-=-$")
+_CIM_FOOTER_RE = re.compile(r"^-=-=-\s+End of Report\s+-=-=-$")
+_ROW_SECTOR_RE = re.compile(r"^Sector\s+(\S+)")
+_ROW_PORT_CLASS_RE = re.compile(r"Class:\s*([BS]{3})\b")
+_PCT_RE_FRAGMENT = r"(?:100|[0-9]{1,2})"
+_ROW_PORT_PCTS_RE = re.compile(
+    rf"F:({_PCT_RE_FRAGMENT})%\s+O:({_PCT_RE_FRAGMENT})%\s+E:({_PCT_RE_FRAGMENT})%"
+)
+_ROW_WARPS_RE = re.compile(r"Warps:\s*([\d\-]+)")
+
+
+def _latest_cim_report_lines(rendered_text: str) -> list:
+    """Raw lines strictly between the LATEST CIM header and its first footer.
+
+    Last-header-wins (stale-scrollback discipline). Unclosed reports → [].
+    """
+    lines = rendered_text.splitlines()
+    header_idx = None
+    for i, line in enumerate(lines):
+        if _CIM_HEADER_RE.match(line.strip()):
+            header_idx = i
+    if header_idx is None:
+        return []
+    for j in range(header_idx + 1, len(lines)):
+        if _CIM_FOOTER_RE.match(lines[j].strip()):
+            return lines[header_idx + 1 : j]
+    return []
+
+
+def parse_port_report(rendered_text: str) -> list:
+    """Batch-ingest a CIM / multi-sector port report into partial sector dicts.
+
+    Each dict is ``{"sector_id": int, ...}`` plus only ``warps`` / ``port``
+    fields the row actually encodes. Feeds ``world_model.bulk_upsert``.
+    Unanchored / empty-content rows are skipped (never guessed).
+    """
+    records = []
+    for raw_line in _latest_cim_report_lines(rendered_text):
+        line = raw_line.strip()
+        m = _ROW_SECTOR_RE.match(line)
+        if not m or not m.group(1).isdigit():
+            continue
+        record = {"sector_id": int(m.group(1))}
+
+        cls_m = _ROW_PORT_CLASS_RE.search(line)
+        pct_m = _ROW_PORT_PCTS_RE.search(line)
+        if cls_m and pct_m:
+            code = cls_m.group(1)
+            commodities = [
+                {
+                    "name": name,
+                    "status": "buying" if letter == "B" else "selling",
+                    "pct": int(pct),
+                }
+                for name, letter, pct in zip(COMMERCE_COMMODITIES, code, pct_m.groups())
+            ]
+            record["port"] = {"class": code, "commodities": commodities}
+
+        warp_m = _ROW_WARPS_RE.search(line)
+        if warp_m:
+            warps = [int(x) for x in re.findall(r"\d+", warp_m.group(1))]
+            if warps:
+                record["warps"] = warps
+
+        if len(record) > 1:
+            records.append(record)
+    return records
