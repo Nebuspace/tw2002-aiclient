@@ -46,6 +46,8 @@ _SHIPPED_VERBS = frozenset(
         # WO-BUILD-WIRE-TW-MINE-CLI-VERB — ledger candidate mining.
         "mine",
         "patterns",
+        # WO-WIRE-MINED-SKILLS-PROMOTE-CLI — promote mined drafts (tw skill approve).
+        "skill",
         # WO-BUILD-AI-TEACHER-ANALYZE-CLI — on-demand retrospective AI teacher.
         "teach",
         # WO-BUILD-PORT-FLOOR-PRICE-LIVE-CAPTURE — filesystem observation store.
@@ -94,6 +96,11 @@ def test_parser_shipped_verb_allowlist():
     assert mine.func is mine_cli.cmd_mine
     assert patterns.func is mine_cli.cmd_mine
     assert patterns.top_k == 1
+    from tw2002_aiclient import skill_cli
+
+    skill_approve = parser.parse_args(["skill", "approve", "mined-0-demo"])
+    assert skill_approve.func is skill_cli.cmd_skill_approve
+    assert skill_approve.name == "mined-0-demo"
     port_floor_snap = parser.parse_args(
         ["port-floor", "snapshot", "--world-dir", "x"]
     )
