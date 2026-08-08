@@ -105,6 +105,15 @@ COVERAGE: tuple[GuardCoverage, ...] = (
         notes="Toll Pay is human-gated; App never selects P",
     ),
     GuardCoverage(
+        guard_id="fighter_toll_attack_approval",
+        canon_layer="Resolver",
+        source_relpath="session/fighter_toll_policy.py",
+        source_marker="attack_behavior_not_approved",
+        proof_test_relpath="tests/test_fighter_toll_policy.py",
+        proof_marker="attack_behavior_not_approved",
+        notes="Approve-once Attack gate; default fail-closed without attack_approved",
+    ),
+    GuardCoverage(
         guard_id="trade_paladin_letters",
         canon_layer="Resolver",
         source_relpath="trade_driver.py",

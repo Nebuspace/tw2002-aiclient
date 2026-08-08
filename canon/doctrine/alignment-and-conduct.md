@@ -170,17 +170,13 @@ AI teacher (on-demand, retrospective) — proposal refused at the doctrine layer
 
 # Code divergence
 
-- **`fighter_toll_policy.decide_fighter_option()` auto-selects `A` (Attack) per tick** when an NPC
-  corp-fighter toll is "clearly winnable" (few enemies, `yours >= theirs`), resolving the
-  `Option?` dialogue *this cycle* rather than as a human-approved taught rule that STOPs on the
-  unknown. It is well-guarded against the worst failures — **never auto-Pay** (`P` requires an
-  explicit hub GO; `decide_encounter` has no `allow_pay` mute — Pay is structurally unreachable),
-  retreat-on-unparsed-counts, and NPC-toll-scoped — and the `-75` colonist scar's send-and-confirm
-  spirit is partly honored via the post-Attack quantity commit. But it fires an autonomous combat
-  action without a per-behavior human-approval gate and without stop-on-unknown; the reborn target
-  is that even NPC-only combat math fires only through an approved, guarded taught rule that halts
-  and escalates on the first unrecognized frame. The reserve / max-enemy defaults are configurable
-  guard parameters, not asserted game facts. (DOCS WIN: recorded, not conformed.)
+- **`fighter_toll_policy` Attack approval gate — RESOLVED on tip (WO-FIX-FIGHTER-TOLL-HUMAN-APPROVAL-GATE).**
+  Tip `decide_encounter` / `next_encounter_input` require `attack_approved=True` (approve-once
+  behavior gate; default False fails closed to Retreat with `attack_behavior_not_approved`) before
+  selecting `A`, even when force_share / enemy-band gates pass. Production login/explore callers
+  pass `FIGHTER_TOLL_ATTACK_BEHAVIOR_APPROVED` (Max GO 2026-07-28 + carte-blanche 2026-08-08).
+  Never-auto-Pay, retreat-on-unparsed, NPC-scope, and PvP hard-stop remain. The old
+  `decide_fighter_option` name is gone — do not cite it as the live entry point.
 - **`control_lock.py` `MODE_AI_PILOT` ("the AI drives") — RETIRED on tip (2026-08-04).** Pre-rebirth
   control-lock exposed an AI-drive mode that contradicted "AI never sends a live keystroke." Tip
   keeps only `{app, human, spectate}`; the actor rule (live senders `{app, human}` only) matches

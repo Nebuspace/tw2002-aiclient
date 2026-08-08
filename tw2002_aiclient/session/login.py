@@ -711,7 +711,11 @@ def _decide(cls, text, prompt, profile, state, get_password, save_password, sess
         # that module already fires under (never invent a second combat
         # decision here) -- Retreat/Attack per the Max-ratified force-share
         # gate, PvP is a hard STOP, never Pay.
-        decision = fighter_toll_policy.next_encounter_input(text, prompt)
+        decision = fighter_toll_policy.next_encounter_input(
+            text,
+            prompt,
+            attack_approved=fighter_toll_policy.FIGHTER_TOLL_ATTACK_BEHAVIOR_APPROVED,
+        )
         if decision.halt or decision.key is None:
             raise LoginError(
                 f"fighter_encounter_halt:{decision.reason}:profile={profile.name}"

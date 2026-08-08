@@ -171,8 +171,9 @@ recorded, not silently conformed to).
   `max_avail` when counts are unreadable (STOP owns the prompt — no `A` re-fire loop).
   Retreat / never-Pay / unparseable-at-Option remain. The old
   `decide_fighter_option` / `next_fighter_option_input` names are gone; do not cite them
-  as missing rails. Separate design question (human-approval before any auto-Attack)
-  stays outside this tip-catchup — see gated escalate rows if present.
+  as missing rails. Per-behavior Attack approval gate is tip-closed
+  (WO-FIX-FIGHTER-TOLL-HUMAN-APPROVAL-GATE): `attack_approved` fail-closed on
+  `decide_encounter`; production callers pass `FIGHTER_TOLL_ATTACK_BEHAVIOR_APPROVED`.
 - **Autopilot per-cycle EV selection + "never idle" appetite.** The legacy autopilot
   picks an action each cycle by expected value, backed by an `EXPLORE_BASELINE_EV`
   floor that keeps it moving rather than ever idling. Under the reborn vision the

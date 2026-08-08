@@ -60,7 +60,10 @@ def test_force_share_refuses_an_empty_engagement_rather_than_guessing():
 
 
 def test_attacks_an_npc_toll_at_or_above_the_gate():
-    d = ftp.decide_encounter(ftp.parse_encounter(_frame(9, 1)))
+    d = ftp.decide_encounter(
+        ftp.parse_encounter(_frame(9, 1)),
+        attack_approved=True,
+    )
     assert (d.key, d.halt) == ("A", False)
     assert d.reason.startswith("attack_npc:")
 
@@ -68,7 +71,29 @@ def test_attacks_an_npc_toll_at_or_above_the_gate():
 @pytest.mark.parametrize("yours,theirs", [(89, 1), (60, 1), (20, 1)])
 def test_max_ratified_examples_all_fight(yours, theirs):
     # The examples Max gave when ratifying the 0.90 gate.
-    assert ftp.decide_encounter(ftp.parse_encounter(_frame(yours, theirs))).key == "A"
+    assert (
+        ftp.decide_encounter(
+            ftp.parse_encounter(_frame(yours, theirs)),
+            attack_approved=True,
+        ).key
+        == "A"
+    )
+
+
+def test_unapproved_winnable_toll_retreats():
+    """FALSIFICATION: force_share-passing Attack must not fire without approval."""
+    d = ftp.decide_encounter(ftp.parse_encounter(_frame(9, 1)))
+    assert (d.key, d.halt) == ("R", False)
+    assert d.reason == "attack_behavior_not_approved"
+
+
+def test_next_encounter_input_forwards_attack_approved():
+    d = ftp.next_encounter_input(
+        _frame(9, 1),
+        attack_approved=ftp.FIGHTER_TOLL_ATTACK_BEHAVIOR_APPROVED,
+    )
+    assert (d.key, d.halt) == ("A", False)
+    assert d.reason.startswith("attack_npc:")
 
 
 def test_retreats_just_below_the_gate():
@@ -130,12 +155,15 @@ def test_pvp_is_a_hard_stop_and_the_math_never_runs():
 
 
 def test_pay_is_never_selected_even_when_the_key_is_offered():
-    for frame in (
-        _frame(9, 1, OPTION_WITH_PAY),
-        _frame(1, 9, OPTION_WITH_PAY),
-        _frame(prompt=OPTION_WITH_PAY),
+    for frame, approved in (
+        (_frame(9, 1, OPTION_WITH_PAY), True),
+        (_frame(1, 9, OPTION_WITH_PAY), True),
+        (_frame(prompt=OPTION_WITH_PAY), False),
     ):
-        d = ftp.decide_encounter(ftp.parse_encounter(frame))
+        d = ftp.decide_encounter(
+            ftp.parse_encounter(frame),
+            attack_approved=approved,
+        )
         assert d.key != "P"
 
 
