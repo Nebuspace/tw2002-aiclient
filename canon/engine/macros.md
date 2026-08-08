@@ -60,8 +60,11 @@ and (when the human supplied one) a `wait_prompt` shape. `stop` writes exactly o
 macro, stamped with the `start_anchor` sector the human was standing in when recording began.
 
 Capture honors the same redaction contract as the rest of the system: a `--secret` send (a password,
-or anything flagged secret) mid-capture is **dropped, never persisted** into a replayable macro. A
-credential must never live in a file that gets pressed back.
+or anything flagged secret) mid-capture has its **plaintext replaced with a `REDACTED_SENTINEL`
+placeholder**, not dropped outright — the step itself is kept (preserving the macro's step-count and
+sequencing) but the keystroke bytes never are. A credential must never live in a file that gets
+pressed back; the resulting screen rows are kept verbatim (RX is not redacted — only the TX
+keystroke).
 
 The recording is a *human demonstration*, full stop. There is no live AI in the capture loop. Saving a
 recorded macro blesses it by default (`LoopRecorder.save(blessed=True)`; CLI `--draft` for the inert
