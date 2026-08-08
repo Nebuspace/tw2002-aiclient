@@ -3,9 +3,22 @@
 Pure strings only — no curses, no discovery imports, never raises on hostile
 shapes. Semantics ported from pre-rebirth ``4a11a36:twclient/spectate_layout.py``
 (``compose_chain_bubbles``) plus the port-only filter from ``af4c230``.
+
+WO-FIX-CHAIN-BUBBLES-ASCII-UNICODE-LEAK: box / connector / empty / star glyphs
+switch on the same ``unicode_ok()`` flag ``draw.py`` uses (``TW2002_ASCII=1``),
+with ASCII twins matching ``draw.THIN_ASCII`` / ``DOUBLE_ASCII`` and
+``chains.EMPTY_ASCII``.
 """
 
 from __future__ import annotations
+
+from tw2002_aiclient.cockpit.draw import (
+    DOUBLE_ASCII,
+    DOUBLE_UNICODE,
+    THIN_ASCII,
+    THIN_UNICODE,
+    unicode_ok as draw_unicode_ok,
+)
 
 __all__ = [
     "CHAIN_VIZ_H",
@@ -15,8 +28,14 @@ __all__ = [
 ]
 
 CHAIN_VIZ_H = 5
-_CHAIN_CONNECTOR = "═════"
-_CHAIN_EMPTY_PLACEHOLDER = "○ ○  no trade loop yet"
+_CHAIN_CONNECTOR_U = DOUBLE_UNICODE["h"] * 5
+_CHAIN_CONNECTOR_A = DOUBLE_ASCII["h"] * 5
+_CHAIN_EMPTY_PLACEHOLDER_U = "○ ○  no trade loop yet"
+_CHAIN_EMPTY_PLACEHOLDER_A = "o o  no trade loop yet"
+_STAR_U = "★"
+_STAR_A = "*"
+_ELLIPSIS_U = "…"
+_ELLIPSIS_A = "..."
 
 
 def chain_bubble_sectors(chain: object) -> list[int]:
@@ -110,6 +129,13 @@ def _center_block(lines: list[str], width: int, height: int) -> list[str]:
     return out
 
 
+def _resolve_unicode_ok(unicode_ok: object) -> bool:
+    """``None`` → ``draw.unicode_ok()``; otherwise coerce like sibling composers."""
+    if unicode_ok is None:
+        return draw_unicode_ok()
+    return bool(unicode_ok)
+
+
 def compose_chain_bubbles(
     chain: object,
     *,
@@ -119,14 +145,27 @@ def compose_chain_bubbles(
     active_sector: object = None,
     known_ports: object = None,
     caption: object = None,
+    unicode_ok: object = None,
 ) -> list[str]:
     """Return exactly ``CHAIN_VIZ_H`` centered lines. Never raises.
 
     ``caption`` (WO-CHAIN-BUBBLE-PAIR-FALLBACK): optional short label under
     the bubbles when the operator is not on a painted sector — used to mark
     an unpriced class-pair fallback without inventing margin chrome.
+
+    ``unicode_ok`` defaults to ``draw.unicode_ok()`` (``TW2002_ASCII=1``) so
+    the PTY / env path matches every other chrome surface; callers that pass
+    an explicit flag keep unit-test control.
     """
     try:
+        uok = _resolve_unicode_ok(unicode_ok)
+        thin = THIN_UNICODE if uok else THIN_ASCII
+        conn = _CHAIN_CONNECTOR_U if uok else _CHAIN_CONNECTOR_A
+        empty_ph = (
+            _CHAIN_EMPTY_PLACEHOLDER_U if uok else _CHAIN_EMPTY_PLACEHOLDER_A
+        )
+        star_glyph = _STAR_U if uok else _STAR_A
+        ellipsis = _ELLIPSIS_U if uok else _ELLIPSIS_A
         try:
             width_i = max(8, int(width))  # type: ignore[arg-type]
         except (TypeError, ValueError):
@@ -134,7 +173,7 @@ def compose_chain_bubbles(
         classes: dict = port_classes if isinstance(port_classes, dict) else {}
         sectors = filter_port_only_sectors(chain_bubble_sectors(chain), known_ports)
         if not sectors:
-            return _center_block([_CHAIN_EMPTY_PLACEHOLDER], width_i, CHAIN_VIZ_H)
+            return _center_block([empty_ph], width_i, CHAIN_VIZ_H)
 
         try:
             cur = int(current_sector) if current_sector is not None else None  # type: ignore[arg-type]
@@ -148,7 +187,6 @@ def compose_chain_bubbles(
 
         inner = _bubble_inner_w(sectors)
         bubble_w = inner + 2
-        conn = _CHAIN_CONNECTOR
         conn_w = len(conn)
 
         def _one_bubble(sid: int) -> tuple[str, str, str, str]:
@@ -156,16 +194,16 @@ def compose_chain_bubbles(
             if cls is None or cls == "":
                 cls = "?"
             cls = str(cls)[:inner]
-            top = "╭" + ("─" * inner) + "╮"
-            mid_sec = "│" + _pad_center(str(sid), inner) + "│"
-            mid_cls = "│" + _pad_center(cls, inner) + "│"
-            bot = "╰" + ("─" * inner) + "╯"
+            top = thin["tl"] + (thin["h"] * inner) + thin["tr"]
+            mid_sec = thin["v"] + _pad_center(str(sid), inner) + thin["v"]
+            mid_cls = thin["v"] + _pad_center(cls, inner) + thin["v"]
+            bot = thin["bl"] + (thin["h"] * inner) + thin["br"]
             return top, mid_sec, mid_cls, bot
 
         def _fit_count(n: int, truncated: bool) -> int:
             art = n * bubble_w + max(0, n - 1) * conn_w
             if truncated:
-                art += 1 + len(f"… {len(sectors)}h")
+                art += 1 + len(f"{ellipsis} {len(sectors)}h")
             return art
 
         show_n = len(sectors)
@@ -198,7 +236,10 @@ def compose_chain_bubbles(
             mids_c.append(mc)
             bots.append(b)
             stars.append(
-                _pad_center("★" if cur is not None and sid == cur else " ", bubble_w)
+                _pad_center(
+                    star_glyph if cur is not None and sid == cur else " ",
+                    bubble_w,
+                )
             )
 
         top_ln = "".join(tops)
@@ -207,7 +248,7 @@ def compose_chain_bubbles(
         bot_ln = "".join(bots)
         star_ln = "".join(stars)
         if truncated:
-            suffix = f" … {len(sectors)}h"
+            suffix = f" {ellipsis} {len(sectors)}h"
             mid_s_ln = mid_s_ln + suffix
             pad = len(suffix)
             top_ln = top_ln + (" " * pad)
@@ -216,8 +257,8 @@ def compose_chain_bubbles(
             star_ln = star_ln + (" " * pad)
 
         # Honest "class pair" chrome: only when no current-sector star is
-        # painted (★ wins); never invents credits/turn.
-        if caption and "★" not in star_ln:
+        # painted (★/* wins); never invents credits/turn.
+        if caption and star_glyph not in star_ln:
             try:
                 cap = str(caption).strip()
             except Exception:  # noqa: BLE001
@@ -229,4 +270,12 @@ def compose_chain_bubbles(
             [top_ln, mid_s_ln, mid_c_ln, bot_ln, star_ln], width_i, CHAIN_VIZ_H
         )
     except Exception:  # noqa: BLE001 -- never raise to the draw path
-        return _center_block([_CHAIN_EMPTY_PLACEHOLDER], 82, CHAIN_VIZ_H)
+        uok = True
+        try:
+            uok = _resolve_unicode_ok(unicode_ok)
+        except Exception:  # noqa: BLE001
+            uok = True
+        empty_ph = (
+            _CHAIN_EMPTY_PLACEHOLDER_U if uok else _CHAIN_EMPTY_PLACEHOLDER_A
+        )
+        return _center_block([empty_ph], 82, CHAIN_VIZ_H)
