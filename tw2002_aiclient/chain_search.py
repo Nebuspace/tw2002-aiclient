@@ -68,13 +68,23 @@ REASON_NO_WORLD_MODEL = "no_world_model"  # this world has never recorded a sect
 REASON_NO_TRADEABLE_HOPS = "no_tradeable_hops"  # sectors known; no priced, routable, direction-compatible hop
 REASON_NO_CLOSED_CYCLE = "no_closed_cycle"  # hops exist; none of them close a profitable cycle
 
+# Dual ranking (WO-FIX-CHAIN-DISCOVERY-RANK-SORT-ORDER): canon discovery /
+# explore keeps hop-count-first; earn / CLI credit-doubling surfaces ask
+# for yield-first. Default stays RANK_HOPS so L)chains / bubble callers
+# do not silently flip.
+RANK_HOPS = "hops"
+RANK_YIELD = "yield"
+_RANK_VALUES = frozenset({RANK_HOPS, RANK_YIELD})
+
 
 @dataclass(frozen=True)
 class ProfitChainResult:
     """The one frozen result `recompute` returns.
 
-    `chains` is already ranked by `chains.rank_chains` (hop-count desc, then
-    cr/turn desc) and is non-empty exactly when `reason` is `None`.
+    `chains` is ranked per `recompute(..., rank=)` — default
+    `chains.rank_chains` (hop-count desc, then cr/turn); earn surfaces
+    may request `rank=RANK_YIELD` (`rank_chains_by_yield`). Non-empty
+    exactly when `reason` is `None`.
 
     `adapter_note` and `search_note` are independent and BOTH may be set.
     Neither is cleared on an empty result -- see the module docstring: a
@@ -106,6 +116,7 @@ def recompute(
     min_hops: int = chains_module.MIN_CHAIN_LINKS_TO_EXECUTE,
     max_hops: Optional[int] = None,
     max_search_steps: int = chains_module.DEFAULT_MAX_SEARCH_STEPS,
+    rank: str = RANK_HOPS,
 ) -> ProfitChainResult:
     """Recompute N-port profit cycles for `world_id` from its current
     world-model state.
@@ -118,7 +129,16 @@ def recompute(
     `min_hops` defaults to `chains.MIN_CHAIN_LINKS_TO_EXECUTE` rather than a
     literal `2`, so the discovery floor cannot drift from the canon-backed
     execute-floor constant without one of them failing its own pin.
+
+    `rank` selects the post-search order: ``RANK_HOPS`` (default, canon
+    discovery) or ``RANK_YIELD`` (earn / CLI). Finder output is hop-ranked;
+    yield re-ranks without changing the search itself.
     """
+    if rank not in _RANK_VALUES:
+        raise ValueError(
+            f"unknown rank={rank!r}; expected one of {sorted(_RANK_VALUES)}"
+        )
+
     hops, adapter_note = trade_adapter.build_trade_hops(
         world_id, state_dir=state_dir, config=config, now=now
     )
@@ -157,6 +177,9 @@ def recompute(
             adapter_note=adapter_note,
             search_note=search_note,
         )
+
+    if rank == RANK_YIELD:
+        found = chains_module.rank_chains_by_yield(found)
 
     return ProfitChainResult(
         world_id=world_id,

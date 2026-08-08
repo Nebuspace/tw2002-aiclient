@@ -1012,7 +1012,10 @@ def cmd_chains(args):
 
     from tw2002_aiclient import chain_search, chain_search_view
 
-    result = chain_search.recompute(args.world_id)
+    # Earn / credit-doubling surface: yield-first so short high cr/turn
+    # pairs surface above long thin hop-count winners (discovery modal
+    # keeps default hop-count ranking via recompute's RANK_HOPS).
+    result = chain_search.recompute(args.world_id, rank=chain_search.RANK_YIELD)
 
     if getattr(args, "json", False):
         print(
