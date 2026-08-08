@@ -285,6 +285,7 @@ from typing import Optional, Protocol
 
 from ..halt_reasons import QUALIFIER_SEP, halt_reason_code, qualify as _qualify
 from ..session.classify import NEVER_AUTO_ACTION_CLASSES, classify_screen
+from ..session.hud_tracking import ProfitSnapshot
 from ..session.state_parser import (
     OUTCOME_ABSENT,
     OUTCOME_READ,
@@ -313,6 +314,10 @@ __all__ = [
     "HALT_HAZARD_ZERO_FIGHTERS",
     "HALT_NEVER_AUTO_ACTION",
     "HALT_POST_CLASS",
+    "HALT_PROFIT_STALE",
+    "HALT_PROFIT_TARGET_REACHED",
+    "HALT_PROFIT_UNKNOWN",
+    "HALT_PROFIT_UNREADABLE",
     "HALT_REASONS",
     "HALT_SCREEN_UNREADABLE",
     "HALT_SETTLE_FAILED",
@@ -425,6 +430,24 @@ HALT_HAZARD_GAME_SELECT = "autopilot_game_select"
 # hazard -- fighters aboard known and exactly zero (WO-AUTOLOOP-HAZARD-HALT).
 HALT_HAZARD_ZERO_FIGHTERS = "fighters_zero"
 
+# target-reached -- WO-BUILD-PROFIT-TARGET-HALT. Profit (credits delta from
+# this daemon session's first strict balance, `Session.profit_snapshot()`)
+# is AT OR ABOVE the target the run was armed with. A stop CONDITION, not a
+# new autonomy grant or arming path -- an additional rail at the same
+# send choke-point `HALT_FLOOR_REACHED` already occupies, mirroring its
+# exact fail-closed shape (see `_check_profit_target`).
+HALT_PROFIT_TARGET_REACHED = "profit_target_reached"
+# desync -- no profit has EVER been observed. Mirror of credits_unknown:
+# arm-confirm fails closed rather than playing blind on a target run.
+HALT_PROFIT_UNKNOWN = "profit_unknown"
+# desync -- last-known profit reading is too old to trust for a send
+# decision. Mirror of credits_stale.
+HALT_PROFIT_STALE = "profit_stale"
+# desync -- the port answered profit() with something that is not a
+# ProfitSnapshot (adapter fault; never truthiness-tested). Mirror of
+# credits_unreadable.
+HALT_PROFIT_UNREADABLE = "profit_unreadable"
+
 HALT_REASONS = frozenset({
     HALT_SETTLE_FAILED,
     HALT_SCREEN_UNREADABLE,
@@ -448,6 +471,10 @@ HALT_REASONS = frozenset({
     HALT_TURNS_UNREADABLE,
     HALT_HAZARD_GAME_SELECT,
     HALT_HAZARD_ZERO_FIGHTERS,
+    HALT_PROFIT_TARGET_REACHED,
+    HALT_PROFIT_UNKNOWN,
+    HALT_PROFIT_STALE,
+    HALT_PROFIT_UNREADABLE,
 })
 
 # How old a balance may be and still gate a send. AP-13's number
@@ -691,6 +718,22 @@ class ReplaySession(Protocol):
         confirmed zero halts ``fighters_zero``. Return the snapshot object,
         never a bare int."""
 
+    def profit(self) -> ProfitSnapshot:
+        """What the runtime knows about profit (credits delta from this
+        daemon session's first strict balance) RIGHT NOW: a
+        :class:`~tw2002_aiclient.session.hud_tracking.ProfitSnapshot`.
+
+        Required **iff** the run was given a ``profit_target``; unreached
+        on an untargeted run -- same split as :meth:`credits`.
+        :func:`replay_loop` refuses a target handed to a port that cannot
+        answer this, at entry, so "a target was accepted" and "a target
+        can be enforced" stay the same condition.
+
+        Return the snapshot object, never a bare int or ``(profit, ts)``
+        pair -- anything that is not a ``ProfitSnapshot`` halts
+        (:data:`HALT_PROFIT_UNREADABLE`). An adapter over the daemon core
+        implements this with ``Session.profit_snapshot()``."""
+
 
 # ---------------------------------------------------------------------------
 # What a caller gets back
@@ -818,6 +861,7 @@ class _Observation:
     credits: object = None
     turns: object = None
     fighters: object = None
+    profit: object = None
 
 
 def _is_screen(value) -> bool:
@@ -835,7 +879,9 @@ def _is_screen(value) -> bool:
     )
 
 
-def _observe(session, *, want_credits: bool = False, want_turns: bool = False) -> _Observation:
+def _observe(
+    session, *, want_credits: bool = False, want_turns: bool = False, want_profit: bool = False
+) -> _Observation:
     """Settle, read, classify -- in that order, always.
 
     The order is the safety property, not a convenience: ``state`` is the
@@ -872,6 +918,9 @@ def _observe(session, *, want_credits: bool = False, want_turns: bool = False) -
     # Hazard rail: fighters are best-effort. A port without fighters()
     # skips the zero-fighter half; game_select + settle still fire.
     fighters = session.fighters() if callable(getattr(session, "fighters", None)) else None
+    # Same "asked at all only when armed" rule as credits/turns -- a run
+    # with no profit_target never calls profit().
+    profit = session.profit() if want_profit else None
     return _Observation(
         klass=classify_screen(full_text, prompt_line),
         sector=read_current_sector(prompt_line),
@@ -880,6 +929,7 @@ def _observe(session, *, want_credits: bool = False, want_turns: bool = False) -
         credits=credits,
         turns=turns,
         fighters=fighters,
+        profit=profit,
     )
 
 
@@ -989,6 +1039,50 @@ def _check_floor(credits, floor: Optional[int], stale_ms: int) -> Optional[str]:
     # Strictly above, matching the archived rail (`bal <= floor` halts): a
     # floor of 500 means "stop at 500", not "stop below 500".
     return None if balance > floor else HALT_FLOOR_REACHED
+
+
+def _check_profit_target(profit, profit_target: Optional[int], stale_ms: int) -> Optional[str]:
+    """May the App spend at this boundary, or has profit already met the
+    target? ``None`` means yes, proceed.
+
+    Structural twin of :func:`_check_floor`, mirrored deliberately
+    (WO-BUILD-PROFIT-TARGET-HALT): an additional stop CONDITION at the
+    same choke-point, not a new autonomy grant. The direction is inverted
+    from the floor (a floor halts BELOW a number; a target halts AT OR
+    ABOVE one), but the fail-closed ladder is identical -- every path
+    except one halts. The single non-halting path requires all four of: a
+    target was set, the port answered with a real :class:`ProfitSnapshot`,
+    that snapshot carries an affirmative reading, that reading is young
+    enough, and the number is strictly below the target. Anything else --
+    an absent history, an age past the window, an adapter that answered
+    with something else, a profit at or above the target -- stops the run.
+    There is deliberately no "assume we're fine" branch, for the same
+    reason `_check_floor` has none: a target-halt that proceeds on an
+    unknown profit is not a target-halt.
+
+    ``profit_target is None`` returns ``None`` immediately: an untargeted
+    run has nothing to check and must not be made to depend on a profit
+    reading it never asked about.
+    """
+    if profit_target is None:
+        return None
+    if not isinstance(profit, ProfitSnapshot):
+        return HALT_PROFIT_UNREADABLE
+    if profit.outcome != OUTCOME_READ:
+        return HALT_PROFIT_UNKNOWN
+    age_s = profit.age_s
+    fresh = (
+        isinstance(age_s, (int, float))
+        and not isinstance(age_s, bool)
+        and math.isfinite(age_s)
+        and 0 <= age_s <= stale_ms / 1000.0
+    )
+    if not fresh:
+        return HALT_PROFIT_STALE
+    amount = profit.profit
+    if not isinstance(amount, int) or isinstance(amount, bool):
+        return HALT_PROFIT_UNREADABLE
+    return HALT_PROFIT_TARGET_REACHED if amount >= profit_target else None
 
 
 def _check_turn_budget(turns, turn_budget: Optional[int], stale_ms: int) -> Optional[str]:
@@ -1120,6 +1214,8 @@ def replay_loop(
     credits_stale_ms: int = CREDITS_STALE_MS,
     turn_budget: Optional[int] = None,
     turns_stale_ms: int = TURNS_STALE_MS,
+    profit_target: Optional[int] = None,
+    profit_stale_ms: int = CREDITS_STALE_MS,
 ) -> ReplayResult:
     """Replay one taught macro against a live session, one confirmed step
     at a time, halting the instant reality disagrees.
@@ -1159,6 +1255,15 @@ def replay_loop(
 
     ``credits_stale_ms`` / ``turns_stale_ms`` are how old a sticky reading
     may be and still gate a send. A non-positive window is refused at entry.
+
+    ``profit_target`` is an optional ADDITIONAL stop -- halt the instant
+    profit (credits delta from this daemon session's first strict balance,
+    see :meth:`ReplaySession.profit`) reaches or exceeds it, mirroring
+    ``floor``'s exact shape with the direction inverted. ``None`` means
+    :meth:`ReplaySession.profit` is never called. A target against a port
+    that cannot answer profit raises at entry, same as an unenforceable
+    floor. ``profit_stale_ms`` is its staleness window, same rule as
+    ``credits_stale_ms``.
 
     Returns a :class:`ReplayResult` and does not raise for any game
     outcome; halting is the normal, correct answer whenever the world has
@@ -1224,6 +1329,28 @@ def replay_loop(
             raise ValueError(
                 f"turns_stale_ms must be positive -- got {turns_stale_ms}."
             )
+    if profit_target is not None:
+        if isinstance(profit_target, bool) or not isinstance(profit_target, int):
+            raise TypeError(
+                "replay_loop's profit_target is a credit amount and must be an "
+                f"int -- got {type(profit_target).__name__}."
+            )
+        if not callable(getattr(session, "profit", None)):
+            raise TypeError(
+                "replay_loop was given profit_target=%r but this port cannot "
+                "observe profit (no callable profit()). A target accepted here "
+                "would be a flag that reads as a safety feature and stops "
+                "nothing -- refused instead." % (profit_target,)
+            )
+        if not isinstance(profit_stale_ms, int) or isinstance(profit_stale_ms, bool):
+            raise TypeError(
+                "profit_stale_ms must be an int (milliseconds) -- got "
+                f"{type(profit_stale_ms).__name__}."
+            )
+        if profit_stale_ms <= 0:
+            raise ValueError(
+                f"profit_stale_ms must be positive -- got {profit_stale_ms}."
+            )
 
     traces: list[StepTrace] = []
     sends_issued = 0
@@ -1241,9 +1368,12 @@ def replay_loop(
 
     want_credits = floor is not None
     want_turns = turn_budget is not None
+    want_profit = profit_target is not None
 
     # ---- boundary 0: the only boundary that also checks the anchor ----
-    observation = _observe(session, want_credits=want_credits, want_turns=want_turns)
+    observation = _observe(
+        session, want_credits=want_credits, want_turns=want_turns, want_profit=want_profit
+    )
     anchor_read = observation.sector
     reason = _gate(observation)
     if reason is None:
@@ -1259,6 +1389,8 @@ def replay_loop(
         reason = _check_floor(observation.credits, floor, credits_stale_ms)
     if reason is None:
         reason = _check_turn_budget(observation.turns, turn_budget, turns_stale_ms)
+    if reason is None:
+        reason = _check_profit_target(observation.profit, profit_target, profit_stale_ms)
     if reason is None:
         reason = _check_start_anchor(loop, anchor_read, force)
     if reason is not None:
@@ -1289,7 +1421,9 @@ def replay_loop(
             traces.append(_trace(index, step, confirmed=False, observed_class=None))
             return halted(HALT_CONFIRM_FAILED, index, anchor_read)
 
-        observation = _observe(session, want_credits=want_credits, want_turns=want_turns)
+        observation = _observe(
+            session, want_credits=want_credits, want_turns=want_turns, want_profit=want_profit
+        )
         reason = _gate(observation)
         if reason is None:
             reason = _check_hazard(observation)
@@ -1303,6 +1437,8 @@ def replay_loop(
             reason = _check_floor(observation.credits, floor, credits_stale_ms)
         if reason is None:
             reason = _check_turn_budget(observation.turns, turn_budget, turns_stale_ms)
+        if reason is None:
+            reason = _check_profit_target(observation.profit, profit_target, profit_stale_ms)
         if reason is None and observation.klass != step.expected_post_class:
             # An ordinary divergence: the screen is one the app can name,
             # it is simply not the one this step recorded. Checked AFTER

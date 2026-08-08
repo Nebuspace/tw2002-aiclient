@@ -256,7 +256,9 @@ STAND_DOWN_PAUSE = "pause"
 # be the dishonest option. `floor`, `turn_budget`, and `cycles` are here
 # because their rails / clamp are enforced -- an arg earns a place in
 # this set by being enforced, never by being plausible.
-ARGS_AUTOLOOP_START = frozenset({"name", "floor", "turn_budget", "cycles"})
+ARGS_AUTOLOOP_START = frozenset(
+    {"name", "floor", "turn_budget", "profit_target", "cycles"}
+)
 
 #: Hard ceiling on AutoLoop cycle count (WO-AUTOLOOP-CYCLES).
 #:
@@ -310,6 +312,18 @@ def _can_observe_turns(session) -> bool:
     sticky count) and ``turns_snapshot`` (reads it back) are required."""
     return callable(getattr(session, "observe_turns", None)) and callable(
         getattr(session, "turns_snapshot", None)
+    )
+
+
+def _can_observe_profit(session) -> bool:
+    """Can this session answer the profit-target's one question?
+
+    Profit has no separate observer -- ``observe_credits`` is what fills
+    both the sticky balance AND the profit delta (see
+    ``Session.observe_credits``), so this checks ``observe_credits`` +
+    ``profit_snapshot`` rather than a nonexistent ``observe_profit``."""
+    return callable(getattr(session, "observe_credits", None)) and callable(
+        getattr(session, "profit_snapshot", None)
     )
 
 
@@ -384,6 +398,10 @@ class RunReport:
     # Remaining-turns floor for this run, or `None` when unbudgeted.
     # Same reporting reason as `floor` (WO-AUTOLOOP-TURN-BUDGET).
     turn_budget: Optional[int] = None
+    # The profit target this run was armed with, or `None` for an
+    # untargeted run. Same reporting reason as `floor`
+    # (WO-BUILD-PROFIT-TARGET-HALT).
+    profit_target: Optional[int] = None
     # Effective cycle budget after clamp (always ≥1). Omitted request → 1.
     # Reported so resume / surfaces can see the bound that actually ran
     # (WO-AUTOLOOP-CYCLES), including when the caller asked for more than
@@ -502,6 +520,7 @@ def run_wire(snapshot: AutoLoopSnapshot) -> dict:
             # to be able to read as clearly as they read a number.
             "floor": report.floor,
             "turn_budget": report.turn_budget,
+            "profit_target": report.profit_target,
             "cycles": report.cycles,
             # 1-based current pass (WO-AUTOLOOP-CYCLE-PROGRESS). An int or
             # null — null means "pass not yet published" (omit chrome).
@@ -654,6 +673,14 @@ class _ReplayPort:
         same reason: a budgeted run was already refused at arm if this
         session cannot answer."""
         return self._session.turns_snapshot()
+
+    def profit(self) -> object:
+        """The session's sticky profit delta, forwarded WHOLE.
+
+        Twin of :meth:`credits` for the profit-target rail. Unguarded for
+        the same reason: a targeted run was already refused at arm if this
+        session cannot answer."""
+        return self._session.profit_snapshot()
 
     def fighters(self) -> object:
         """The session's sticky fighters-aboard count, forwarded WHOLE.
@@ -853,6 +880,7 @@ class AutoLoopRunner:
         name: str,
         floor: Optional[int] = None,
         turn_budget: Optional[int] = None,
+        profit_target: Optional[int] = None,
         cycles: Optional[int] = None,
     ) -> AutoLoopSnapshot:
         """Arm and run ``cycles`` passes (default 1) of the macro called ``name``,
@@ -935,6 +963,11 @@ class AutoLoopRunner:
                 raise AutoLoopRefused("invalid_turn_budget")
             if not _can_observe_turns(self._session):
                 raise AutoLoopRefused("turn_budget_unsupported")
+        if profit_target is not None:
+            if isinstance(profit_target, bool) or not isinstance(profit_target, int):
+                raise AutoLoopRefused("invalid_profit_target")
+            if not _can_observe_profit(self._session):
+                raise AutoLoopRefused("profit_target_unsupported")
         effective_cycles = 1
         if cycles is not None:
             if isinstance(cycles, bool) or not isinstance(cycles, int):
@@ -949,6 +982,7 @@ class AutoLoopRunner:
             started_at=_utc_now(),
             floor=floor,
             turn_budget=turn_budget,
+            profit_target=profit_target,
             cycles=effective_cycles,
             cycle=1,  # pass 1 about to begin (WO-AUTOLOOP-CYCLE-PROGRESS)
         )
@@ -1215,6 +1249,7 @@ class AutoLoopRunner:
                     port,
                     floor=live_report.floor,
                     turn_budget=live_report.turn_budget,
+                    profit_target=live_report.profit_target,
                 )
                 if result.sends_issued is not None:
                     total_sends += result.sends_issued

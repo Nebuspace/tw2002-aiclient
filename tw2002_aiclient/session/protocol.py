@@ -748,6 +748,8 @@ def _dispatch_trade_chain_start(args, server):
         kwargs["cash_floor"] = args["cash_floor"]
     if "turn_reserve" in args:
         kwargs["turn_reserve"] = args["turn_reserve"]
+    if "profit_target" in args:
+        kwargs["profit_target"] = args["profit_target"]
     try:
         snapshot = runner.start(
             args.get("world_id"),
@@ -872,6 +874,11 @@ def _dispatch_autoloop_start(args, server):
     runner = _autoloop_runner(server)
     if runner is None:
         return {"ok": False, "error": "autoloop_unavailable"}
+    # `profit_target` is ACCEPTED for the same reason as `floor` and
+    # `turn_budget` (WO-BUILD-PROFIT-TARGET-HALT): a targeted run observes
+    # profit off every settled render, re-checks before every send, and
+    # halts fail-closed when it cannot. `runner.start` makes the final
+    # refusal (`profit_target_unsupported`) if the session cannot observe.
     unsupported = sorted(set(args) - autoloop.ARGS_AUTOLOOP_START)
     if unsupported:
         return {"ok": False, "error": f"unsupported_arg:{unsupported[0]}"}
@@ -890,12 +897,21 @@ def _dispatch_autoloop_start(args, server):
         isinstance(turn_budget, bool) or not isinstance(turn_budget, int)
     ):
         return {"ok": False, "error": "invalid_turn_budget"}
+    profit_target = args.get("profit_target")
+    if profit_target is not None and (
+        isinstance(profit_target, bool) or not isinstance(profit_target, int)
+    ):
+        return {"ok": False, "error": "invalid_profit_target"}
     cycles = args.get("cycles")
     if cycles is not None and (isinstance(cycles, bool) or not isinstance(cycles, int)):
         return {"ok": False, "error": "invalid_cycles"}
     try:
         snapshot = runner.start(
-            name, floor=floor, turn_budget=turn_budget, cycles=cycles
+            name,
+            floor=floor,
+            turn_budget=turn_budget,
+            profit_target=profit_target,
+            cycles=cycles,
         )
     except autoloop.AutoLoopRefused as e:
         # Typed code, already in the runner's / control lock's / loader's

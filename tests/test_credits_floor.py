@@ -1154,7 +1154,7 @@ def test_the_arg_vocabulary_grew_by_exactly_the_enforced_rails(tmp_path):
     """Pinned as a set rather than as a count, so a future arg has to be
     argued for here as well as wired."""
     assert autoloop.ARGS_AUTOLOOP_START == frozenset(
-        {"name", "floor", "turn_budget", "cycles"}
+        {"name", "floor", "turn_budget", "profit_target", "cycles"}
     )
 
 

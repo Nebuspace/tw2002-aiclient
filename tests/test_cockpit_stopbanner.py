@@ -102,6 +102,10 @@ CANON_CATALOG = {
     "already_running": "already running",
     "another_app_run_winding_down": "another app run winding down",
     "thread_start_failed": "thread start failed",
+    "profit_target_reached": "profit target reached",
+    "profit_unknown": "profit unknown",
+    "profit_stale": "profit stale",
+    "profit_unreadable": "profit unreadable",
 }
 
 WIDE = 120

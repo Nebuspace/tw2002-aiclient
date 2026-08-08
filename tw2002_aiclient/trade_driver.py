@@ -995,6 +995,21 @@ def run_chain(
                     f"sold {sell_total}cr, margin {realized_margin:+d}cr -> chain aborted"
                 )
                 raise ChainHold(f"realized_margin_below_floor:{hop_index}:{realized_margin}")
+            profit_target = getattr(caps, "profit_target", None)
+            if profit_target is not None:
+                # ADDITIONAL stop, mirroring the cash_floor checks above:
+                # fail-closed on any unreadable/stale reading rather than
+                # assuming the target is unmet (WO-BUILD-PROFIT-TARGET-HALT).
+                current_credits = _current_strict_credits(
+                    session, caps, ctx.fresh()[0]
+                )
+                if current_credits is None or start_credits is None:
+                    raise ChainHold(f"profit_unknown:{hop_index}")
+                running_profit = current_credits - start_credits
+                if running_profit >= profit_target:
+                    raise ChainHold(
+                        f"profit_target_reached:{hop_index}:{running_profit}"
+                    )
             _emit_progress(on_progress, hop_index=hop_index, hops_total=len(chain.hops), steps=ctx.steps, done=False)
     except ChainHold as hold:
         stop_reason = hold.reason

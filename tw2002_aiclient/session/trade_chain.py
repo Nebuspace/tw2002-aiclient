@@ -15,7 +15,7 @@ from .control_lock import ControlModeConflict
 from .state_parser import OUTCOME_READ
 
 ARGS_TRADE_CHAIN_START = frozenset(
-    {"world_id", "fingerprint", "cash_floor", "turn_reserve"}
+    {"world_id", "fingerprint", "cash_floor", "turn_reserve", "profit_target"}
 )
 DEFAULT_CASH_FLOOR = 1_000
 DEFAULT_TURN_RESERVE = 10
@@ -81,6 +81,10 @@ class TradeCaps:
     cash_floor: int
     turn_reserve: int
     credits_stale_ms: int = DEFAULT_STATE_STALE_MS
+    # ADDITIONAL stop, mirroring cash_floor's exact fail-closed shape with
+    # the direction inverted (WO-BUILD-PROFIT-TARGET-HALT). `None` (the
+    # default) means no target was requested and the check never fires.
+    profit_target: Optional[int] = None
 
 
 @dataclass(frozen=True)
@@ -92,6 +96,7 @@ class TradeRunReport:
     cash_floor: int
     turn_reserve: int
     started_at: str
+    profit_target: Optional[int] = None
     outcome: Optional[str] = None
     reason: Optional[str] = None
     hops_completed: Optional[int] = None
@@ -132,6 +137,7 @@ def run_wire(snapshot: TradeSnapshot) -> dict:
         "commodities": list(report.commodities),
         "cash_floor": report.cash_floor,
         "turn_reserve": report.turn_reserve,
+        "profit_target": report.profit_target,
         "started_at": report.started_at,
         "hops_total": report.hops_total,
         "stop_requested": report.stop_requested,
@@ -188,6 +194,7 @@ class TradeChainRunner:
         *,
         cash_floor: int = DEFAULT_CASH_FLOOR,
         turn_reserve: int = DEFAULT_TURN_RESERVE,
+        profit_target: Optional[int] = None,
     ) -> TradeSnapshot:
         if not isinstance(world_id, str) or not world_id.strip():
             raise TradeChainRefused("invalid_world_id")
@@ -205,6 +212,10 @@ class TradeChainRunner:
             or turn_reserve < 0
         ):
             raise TradeChainRefused("invalid_turn_reserve")
+        if profit_target is not None and (
+            isinstance(profit_target, bool) or not isinstance(profit_target, int)
+        ):
+            raise TradeChainRefused("invalid_profit_target")
 
         try:
             # Map growth made the default 100k DFS budget return 0 cycles while
@@ -245,6 +256,7 @@ class TradeChainRunner:
             commodities=plan.commodities,
             cash_floor=cash_floor,
             turn_reserve=turn_reserve,
+            profit_target=profit_target,
             started_at=_utc_now(),
             hops_total=plan.hops,
         )
@@ -374,6 +386,7 @@ class TradeChainRunner:
                 caps = TradeCaps(
                     cash_floor=report.cash_floor,
                     turn_reserve=report.turn_reserve,
+                    profit_target=report.profit_target,
                 )
                 result = run_chain(
                     self._session,

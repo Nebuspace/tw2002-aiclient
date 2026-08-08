@@ -115,7 +115,7 @@ def test_proceed_on_unknown_is_impossible():
 
 def test_args_vocabulary_includes_turn_budget_and_cycles():
     assert autoloop.ARGS_AUTOLOOP_START == frozenset(
-        {"name", "floor", "turn_budget", "cycles"}
+        {"name", "floor", "turn_budget", "profit_target", "cycles"}
     )
 
 
