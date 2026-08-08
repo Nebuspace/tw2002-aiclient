@@ -12,15 +12,18 @@ from __future__ import annotations
 import re
 from typing import Any, Optional
 
+from tw2002_aiclient.haggle_params import DEFAULT_HAGGLE_PARAMS
+
 from .settle import send_and_confirm, wait_until_settled
 from .state_parser import OUTCOME_READ, read_credits_balance
 
-_DEFAULT_ROUND_CAP = 4
-_DEFAULT_ACCEPT_THRESHOLD_PCT = 5.0
-_DEFAULT_OPEN_AGGRESSION_PCT = 15.0
-_DEFAULT_STEP_TIMEOUT_S = 8.0
-_DEFAULT_FRESH_RENDER_DEBOUNCE_MS = 350
-_DEFAULT_FRESH_RENDER_TIMEOUT_S = 2.0
+# Defaults authored in ``data/haggle/params.json`` via haggle_params registry.
+_DEFAULT_ROUND_CAP = DEFAULT_HAGGLE_PARAMS.round_cap
+_DEFAULT_ACCEPT_THRESHOLD_PCT = DEFAULT_HAGGLE_PARAMS.accept_threshold_pct
+_DEFAULT_OPEN_AGGRESSION_PCT = DEFAULT_HAGGLE_PARAMS.open_aggression_pct
+_DEFAULT_STEP_TIMEOUT_S = DEFAULT_HAGGLE_PARAMS.step_timeout_s
+_DEFAULT_FRESH_RENDER_DEBOUNCE_MS = DEFAULT_HAGGLE_PARAMS.fresh_render_debounce_ms
+_DEFAULT_FRESH_RENDER_TIMEOUT_S = DEFAULT_HAGGLE_PARAMS.fresh_render_timeout_s
 
 _OFFER_RE = re.compile(
     r"We'll[ \t]+(?P<direction>buy|sell)[ \t]+them[ \t]+for[ \t]+"
