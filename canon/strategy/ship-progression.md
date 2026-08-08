@@ -180,18 +180,20 @@ keyboard instead.
 DOCS WIN: the following are places where the current implementation diverges from the reborn target
 this concept prescribes. The prescription stands; these are recorded, not silently conformed to.
 
-- **The decision engine is built; its live inputs are partially wired.** `ship_upgrade_decision.py`
-  implements the five gates, the holds-per-turn metric, the payback computation, and the
-  best-of-eligible chooser as pure logic. The bridge from Layer-B rows to `ShipSpec` is
-  `game_data.ship_row_to_spec`; current-ship type from live `I` screens is
-  `introspector.parse_current_ship_info` → status `ship_type` / `current_ship`, with
-  `ship_spec_from_current_info` enriching only when a catalog row matches (cost/shields
-  never invented from I-info alone). FOCUS coach path is LIVE: `cockpit/decisions.py`
-  `_upgrade_decision_lines` → `upgrade_decision_from_status` → `choose_upgrade` when status
-  carries `upgrade_catalog` + `upgrade_player` + `upgrade_loop` (or a precomputed
-  `upgrade_decision`). Still missing: status producers that populate those loop-economics
-  and player-turns inputs on every FOCUS tick (without them the caller returns `None` and
-  coach falls through).
+- **The decision engine is built; upgrade status producers are LIVE (PR #526).**
+  `ship_upgrade_decision.py` implements the five gates, the holds-per-turn metric, the
+  payback computation, and the best-of-eligible chooser as pure logic. The bridge from
+  Layer-B rows to `ShipSpec` is `game_data.ship_row_to_spec`; current-ship type from live
+  `I` screens is `introspector.parse_current_ship_info` → status `ship_type` /
+  `current_ship`, with `ship_spec_from_current_info` enriching only when a catalog row
+  matches (cost/shields never invented from I-info alone). Producers: `GameDataStats.merge`
+  calls `merge_upgrade_status_inputs` for `upgrade_catalog` / `upgrade_player` /
+  `upgrade_cost_per_hold` (`7fb66651`); `FocusScalars.merge` re-enters the same helper with
+  a priced chain to attach `upgrade_loop` when evidence exists. FOCUS coach path is LIVE:
+  `cockpit/decisions.py` `_upgrade_decision_lines` → `upgrade_decision_from_status` →
+  `choose_upgrade` when status carries `upgrade_catalog` + `upgrade_player` +
+  `upgrade_loop` (or a precomputed `upgrade_decision`). Incomplete evidence still returns
+  `None` and coach falls through — fail-closed omission, not a missing producer.
 
 - **Coded auto-max-holds (TW-22) — recognition + toward-max qty LIVE; catalog ship
   max still optional.** App-armed Cargo Hold Upgrade (`_autonomy_auto_fire` +
