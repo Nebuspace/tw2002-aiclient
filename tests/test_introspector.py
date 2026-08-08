@@ -286,6 +286,7 @@ def test_parse_current_ship_info_live_fixture():
     assert info["total_holds"] == 60
     assert info["empty_holds"] == 60
     assert info["fighters"] == 150
+    assert info["alignment"] == 2  # Rank and Exp … Alignment=2 Tolerant
     assert info["source"].startswith("introspected")
     assert "Ported=" not in info["ship_type"]
 
@@ -293,3 +294,20 @@ def test_parse_current_ship_info_live_fixture():
 def test_parse_current_ship_info_absent_without_ship_info_line():
     assert parse_current_ship_info("Command [TL=00:00:00]:[1] (?=Help)? :") is None
     assert parse_current_ship_info("Sector  : 1\nShip Name      : OnlyName\n") is None
+
+
+def test_parse_current_ship_info_negative_alignment():
+    text = (
+        "Ship Info      : Evil Scout Ported=0 Kills=0\n"
+        "Rank and Exp   : 10 points, Alignment=-350 Murderous\n"
+    )
+    info = parse_current_ship_info(text)
+    assert info is not None
+    assert info["alignment"] == -350
+
+
+def test_parse_current_ship_info_omits_alignment_when_absent():
+    text = "Ship Info      : Scout Ported=0 Kills=0\nTotal Holds    : 10 - Empty=10\n"
+    info = parse_current_ship_info(text)
+    assert info is not None
+    assert "alignment" not in info
