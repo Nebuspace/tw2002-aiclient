@@ -1,7 +1,7 @@
 """Game-data scalars on ``status`` — ship price count + hold quote label.
 
 Canon: ``canon/engine/priority-engine.md`` Layer-1 GOALS keys ``ship_prices_count``
-/ ``hold_price_label``, fed from Layer-B ``game_data`` (capture loop persists;
+/ ``hold_price_label`` / ``hold_price``, fed from Layer-B ``game_data`` (capture loop persists;
 this module is the status merge). Off-draw refresh only — same seam as
 ``WorldStats`` / ``ChainScalars``.
 
@@ -30,11 +30,13 @@ __all__ = [
     "GameDataStats",
     "SHIP_PRICES_COUNT_KEY",
     "HOLD_PRICE_LABEL_KEY",
+    "HOLD_PRICE_KEY",
     "SHIP_CATALOG_KEY",
 ]
 
 SHIP_PRICES_COUNT_KEY = "ship_prices_count"
 HOLD_PRICE_LABEL_KEY = "hold_price_label"
+HOLD_PRICE_KEY = "hold_price"
 SHIP_CATALOG_KEY = "ship_catalog"
 
 
@@ -142,6 +144,13 @@ class GameDataStats:
             merged[SHIP_CATALOG_KEY] = list(self._ship_catalog or ())
         if self._hold_seen and merged.get(HOLD_PRICE_LABEL_KEY) is None:
             merged[HOLD_PRICE_LABEL_KEY] = self._hold_price_label
+        # Numeric unit quote for GOALS afford_fighters (scanner-visible write).
+        if (
+            self._hold_seen
+            and self._cost_per_hold is not None
+            and merged.get(HOLD_PRICE_KEY) is None
+        ):
+            merged[HOLD_PRICE_KEY] = self._cost_per_hold
         # WO-WIRE-SHIP-SPEC-CATALOG-INTO-UPGRADE-DECISIONS: full catalog + player.
         if self._ships_seen or self._hold_seen:
             try:

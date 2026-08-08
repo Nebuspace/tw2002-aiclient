@@ -27,8 +27,6 @@ __all__ = [
 from dataclasses import dataclass
 from typing import Mapping, Optional, Sequence
 
-from tw2002_aiclient.explore import path_to_sector
-
 
 def hops_of_path(path: Optional[Sequence[int]]) -> Optional[int]:
     """Inclusive sector path → warp hop count. None / empty → unknown."""
@@ -56,6 +54,10 @@ def compute_return_path(
     to_sector: int,
 ) -> Optional[tuple[int, ...]]:
     """Shortest known-graph path for the return leg (e.g. StarDock → chain)."""
+    # Late import: explore → world_model must stay off the decisions/goals
+    # cold-import path (test_the_decisions_import_graph_does_not_pull_the_finder).
+    from tw2002_aiclient.explore import path_to_sector
+
     return path_to_sector(graph, from_sector, to_sector)
 
 
