@@ -83,7 +83,9 @@ diagnostic string.
 
 import re
 
+from . import fighter_toll_policy
 from .classify import classify_screen
+from .sector_explore import FIGHT_FORBIDDEN_KEYS, FIGHT_LETTER_ALLOWLIST
 from .settle import send_and_confirm
 
 _MAX_STEPS = 60
@@ -701,6 +703,28 @@ def _decide(cls, text, prompt, profile, state, get_password, save_password, sess
 
     if cls == "ansi_prompt":
         return "Y", False, None
+
+    if cls == "fighter_encounter":
+        # WO-FIX-LOGIN-FIGHTER-ENCOUNTER-UNHANDLED: a fresh registration can
+        # land in a hostile starting sector before `ensure` ever hands off to
+        # `sector_explore`'s own automaton. Reuse the SAME guarded policy
+        # that module already fires under (never invent a second combat
+        # decision here) -- Retreat/Attack per the Max-ratified force-share
+        # gate, PvP is a hard STOP, never Pay.
+        decision = fighter_toll_policy.next_encounter_input(text, prompt)
+        if decision.halt or decision.key is None:
+            raise LoginError(
+                f"fighter_encounter_halt:{decision.reason}:profile={profile.name}"
+            )
+        key = decision.key.upper()
+        # Independent second layer, mirroring sector_explore's own
+        # `_fight_key_permitted` -- a future edit to the policy's own logic
+        # cannot reach the socket without also editing here.
+        if key in FIGHT_FORBIDDEN_KEYS or key not in FIGHT_LETTER_ALLOWLIST:
+            raise LoginError(
+                f"fighter_encounter_forbidden_key:{key}:profile={profile.name}"
+            )
+        return key, False, None
 
     if cls == "game_select":
         # A real game-select prompt is answered exactly ONCE per TCP
