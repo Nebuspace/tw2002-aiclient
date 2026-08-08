@@ -1,6 +1,6 @@
 # WO-STAMP-PWO-087-DONE — Stamp PWO-087 + preempt tip-honesty DONE
 
-> Status: **IN FLIGHT** · seat `impl-aiclient-cursor` · self-scope after #360 Accept  
+> Status: **DONE** · origin `37fd42d` (#360) · seat `impl-aiclient-cursor` · stamped with WO-CANON-FIX-AUTOHAGGLE-TRADE-ARM-STALE-QUEUE  
 > Type: docs stamp
 
 ## Goal
