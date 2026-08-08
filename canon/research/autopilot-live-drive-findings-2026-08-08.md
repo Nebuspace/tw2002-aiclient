@@ -98,15 +98,28 @@ an operator manually re-deriving what the chain-planner should have found.
 
 # Axis 3 — Fighters purchase
 
-**NOT-ATTEMPTED.** Reason: not reached within this pass's time budget after the Axis-5
-investigation. The venue (hardware emporium / StarDock) was not visited this session. No claim is
-made about classification or taught-rule coverage either way — this is an honest gap, not a
-negative finding.
+**NOT-ATTEMPTED, with one concrete data point.** `tw do "P"` (dock at the current sector's port,
+Viking Major, Class 6/BSS) succeeded — real evidence of the port-trade screen:
+```
+Fuel Ore   Buying     910    100%       0
+Organics   Selling   1240    100%      10
+Equipment  Selling   1570    100%       0
+You don't have anything they want, and they don't have anything you can buy.
+You have 97,809 credits and 0 empty cargo holds.
+```
+This confirms a regular commodity port is NOT a StarDock — no fighters/cargo-hold/ship-purchase
+surface exists here. Reaching an actual StarDock requires navigation across sectors, which is
+exactly the job `tw explore --intent find_stardock` exists for (Axis-5 finding blocks this). Manual
+sector-by-sector navigation via `tw do` was judged out of this pass's time budget (unbounded turn
+count, no map). No claim is made about classification or taught-rule coverage for the fighters
+venue itself — this is an honest gap, not a negative finding.
 
 # Axis 4 — Cargo-holds and new-ship purchase
 
 **NOT-ATTEMPTED**, same reason as Axis 3 — `stardock_cargo_hold_quote` and
-`stardock_shipyard_listing` paths were not visited this session.
+`stardock_shipyard_listing` paths require a StarDock, not reached this session. Also confirmed:
+the character is holding 0 empty cargo holds (10/10 Organics) — any purchase test would first need
+to sell down cargo, itself blocked by the same port only wanting to sell, not buy, at this stop.
 
 # WO seeds
 
@@ -123,3 +136,13 @@ negative finding.
 - **WO-CANON-DRAFT-EXPLORE-SESSION-CONTINUITY** — document, once diagnosed, whatever
   `sector_explore.py` actually does re: session/connection continuity on `start()` — this research
   pass found the observable symptom but explicitly could not confirm the mechanism from the outside.
+- **WO-WIRE-DEV-SENDER-CLI-PATH** — cross-referenced from a parallel static-research pass this
+  session: `tw do`/`tw send` (protocol.py:1397,1439) hardcode `session.send(..., sender="app")` —
+  grep-confirmed zero reachable CLI path to `sender="dev"`. PR #546's `crawl_sacrificial` gate is
+  correct but currently unreachable product-side, so the manual half of
+  `dev-drive-exception.md`'s authorization is inert until a CLI surface (e.g. a `--sender dev` flag
+  on `tw do`, itself re-checking `is_crawl_sacrificial`, never trusting the caller) is built.
+  `_record_ledger` (protocol.py:1229) also still refuses `dev` — a second, independently-tracked
+  residual (already named in `dev-drive-exception.md`'s own Code divergence section), not folded
+  into this WO seed since it's a distinct decision (attribute vs. refuse) rather than a missing
+  code path.
