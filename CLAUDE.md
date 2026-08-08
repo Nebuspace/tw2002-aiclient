@@ -60,7 +60,7 @@ python3 -m venv .venv && .venv/bin/pip install -e .
 ## Hard rules
 
 - **Secrets never touch logs, argv, shell history, or the repo.** See `canon/doctrine/secrets-and-credentials.md`. `config/secrets.json` is chmod-600 + gitignored; `TW2002_PASSWORD_<PROFILE>` env-first. Every password send routes through the redaction sink. Public repo: no real personal names, handles, FQDNs, or usernames in committed artifacts.
-- **AI never live-drives.** Live senders are `{app, human}` only. Spectate is read-only. At escalation the human responds by hand, Records a macro, or Analyzes with the AI teacher — every rule is human-approved before it can fire.
+- **Live-driving a real player account stays `{app, human}` only** — the AI never drives real play. On a `crawl_sacrificial=true` profile, an AI agent MAY live-drive — manually (see `canon/doctrine/dev-drive-exception.md`) or via autopilot/chain execution (witness carte-blanche, Max 2026-07-21) — strictly to develop, debug, or prove this client works end-to-end, never to accumulate value for its own sake outside that purpose. Spectate of a real account stays read-only; escalations on a real account still route to the human.
 - **Single-connection, single-session daemon** (once the daemon module lands): one telnet socket; control-lock governs who may drive. Don't bypass it.
 - **`.claude/` and `.samantha/` are gitignored** (hub ruling) — framework install is local orchestration, not shippable client. Same for private journals (`DESIGN-v2.md`, `QUEUE.md`, etc. if reintroduced).
 - **Path-leak gate (both seats).** Do not commit operator-home absolute paths (`/Users/<username>/` or `/home/<username>/`).

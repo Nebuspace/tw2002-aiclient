@@ -30,7 +30,11 @@ conditions simultaneously:
   never a taught/armed rule, never an autopilot cycle, and never something the agent leaves running
   unattended. If the agent wants to repeat the same resolution many times, that is a sign the
   behavior should be *taught* (a macro/rule, human-approved per the existing model) — not driven
-  by hand indefinitely.
+  by hand indefinitely. **Autopilot/chain execution on a sacrificial profile is a separate,
+  already-authorized live-drive path** (witness carte-blanche, Max 2026-07-21) — it is not covered
+  by this doctrine's manual-keystroke scope and is not in conflict with it; the two authorizations
+  are cross-referenced, not contradictory. This document's own conditions (sacrificial-only,
+  development/debugging purpose, logged as what it is) still bound the manual path specifically.
 - **Development/debugging purpose only.** The action exists to verify a fix, reproduce a bug, or
   unblock a live-prove pass that would otherwise halt at the exact gap under investigation — never
   to play the game, accumulate credits/turns for their own sake, or substitute for the human's own
