@@ -317,18 +317,7 @@ def ship_spec_from_current_info(
     if isinstance(match, ShipSpec):
         base = match
     else:
-        commissioned = True
-        if player_alignment is not None and isinstance(match, (ShipRow, dict)):
-            req = (
-                match.alignment_requirement
-                if isinstance(match, ShipRow)
-                else match.get("alignment_requirement")
-            )
-            if req is not None:
-                try:
-                    commissioned = int(player_alignment) >= int(req)
-                except (TypeError, ValueError):
-                    commissioned = True
+        commissioned = commissioned_for_player(match, player_alignment)
         base = ship_row_to_spec(match, commissioned=commissioned)
 
     holds = info.get("total_holds")
@@ -346,7 +335,82 @@ def ship_spec_from_current_info(
     )
 
 
+def _alignment_requirement_of(row: object) -> Optional[int]:
+    """Catalog gate value, or None when ungated / unreadable."""
+    from .game_data import ShipRow
+
+    if isinstance(row, ShipRow):
+        req = row.alignment_requirement
+    elif isinstance(row, dict):
+        req = row.get("alignment_requirement")
+        if req is None and "alignment_req" in row:
+            req = row.get("alignment_req")
+    elif isinstance(row, ShipSpec):
+        # ShipSpec stores 0 for ungated; treat 0 as ungated when no other signal.
+        return None if row.alignment_req == 0 else int(row.alignment_req)
+    else:
+        return None
+    if req is None:
+        return None
+    try:
+        return int(req)
+    except (TypeError, ValueError):
+        return None
+
+
+def commissioned_for_player(
+    row: object,
+    player_alignment: Optional[int],
+) -> bool:
+    """True when the player may commission *row*.
+
+    Ungated catalog rows (``alignment_requirement is None``) always pass.
+    When player standing is unknown, keep ``True`` (omit-until-known) so the
+    catalog stays usable before an I-info Alignment=N read — matching prior
+    default — rather than fail-closed every gated hull.
+    When standing is known, apply ``player_alignment >= requirement``.
+    """
+    if isinstance(row, ShipSpec):
+        if player_alignment is None:
+            return row.commissioned is True
+        req = row.alignment_req
+        try:
+            return int(player_alignment) >= int(req or 0)
+        except (TypeError, ValueError):
+            return row.commissioned is True
+    req = _alignment_requirement_of(row)
+    if req is None:
+        return True
+    if player_alignment is None:
+        return True
+    try:
+        return int(player_alignment) >= int(req)
+    except (TypeError, ValueError):
+        return True
+
+
+def player_alignment_from_status(status: object) -> Optional[int]:
+    """Live trader standing from status or ``current_ship``; omit-until-known."""
+    if not isinstance(status, dict):
+        return None
+    for key in ("alignment", "player_alignment"):
+        raw = status.get(key)
+        if isinstance(raw, bool):
+            continue
+        if isinstance(raw, int):
+            return raw
+    current = status.get("current_ship")
+    if isinstance(current, dict):
+        raw = current.get("alignment")
+        if isinstance(raw, bool):
+            return None
+        if isinstance(raw, int):
+            return raw
+    return None
+
+
 def ship_spec_as_dict(spec: ShipSpec) -> dict:
+
     """Wire-shaped ShipSpec mapping for ``status["upgrade_catalog"]`` rows."""
     return {
         "name": spec.name,
@@ -360,11 +424,17 @@ def ship_spec_as_dict(spec: ShipSpec) -> dict:
     }
 
 
-def upgrade_catalog_from_ships(ships: Sequence[object] | None) -> list[dict]:
+def upgrade_catalog_from_ships(
+    ships: Sequence[object] | None,
+    *,
+    player_alignment: Optional[int] = None,
+) -> list[dict]:
     """Layer-B ``GameData.ships`` → ``upgrade_catalog`` rows (priced only).
 
     Cost/shields come from catalog rows via ``ship_row_to_spec`` — never invented.
-    Zero-cost / hostile rows are skipped. Never raises.
+    ``commissioned`` reflects live player standing when ``player_alignment`` is
+    provided (Gate #1 / alignment_rank). Zero-cost / hostile rows are skipped.
+    Never raises.
     """
     if not ships:
         return []
@@ -376,6 +446,17 @@ def upgrade_catalog_from_ships(ships: Sequence[object] | None) -> list[dict]:
             if isinstance(item, ShipSpec):
                 if item.cost <= 0:
                     continue
+                if player_alignment is not None:
+                    item = ShipSpec(
+                        name=item.name,
+                        cost=item.cost,
+                        holds=item.holds,
+                        turns_per_warp=item.turns_per_warp,
+                        fighters=item.fighters,
+                        shields=item.shields,
+                        alignment_req=item.alignment_req,
+                        commissioned=commissioned_for_player(item, player_alignment),
+                    )
                 out.append(ship_spec_as_dict(item))
                 continue
             if isinstance(item, ShipRow):
@@ -386,7 +467,10 @@ def upgrade_catalog_from_ships(ships: Sequence[object] | None) -> list[dict]:
                 continue
             if isinstance(cost, bool) or not isinstance(cost, int) or cost <= 0:
                 continue
-            spec = ship_row_to_spec(item)
+            spec = ship_row_to_spec(
+                item,
+                commissioned=commissioned_for_player(item, player_alignment),
+            )
             out.append(ship_spec_as_dict(spec))
         except Exception:  # noqa: BLE001 -- skip hostile row
             continue
@@ -419,8 +503,11 @@ def upgrade_player_from_status(
         fighters if isinstance(fighters, int) and not isinstance(fighters, bool) else None
     )
     current_shields = 0
+    player_align = player_alignment_from_status(status)
     if ships:
-        enriched = ship_spec_from_current_info(current, catalog=ships)
+        enriched = ship_spec_from_current_info(
+            current, catalog=ships, player_alignment=player_align
+        )
         if enriched is not None:
             if current_holds is None:
                 current_holds = enriched.holds
@@ -432,7 +519,7 @@ def upgrade_player_from_status(
     reserve = status.get("turn_reserve")
     if isinstance(reserve, bool) or not isinstance(reserve, int) or reserve < 0:
         reserve = 0
-    return {
+    out = {
         "turns_left": turns,
         "current_holds": current_holds,
         "turn_reserve": reserve,
@@ -440,6 +527,9 @@ def upgrade_player_from_status(
         "current_fighters": current_fighters if current_fighters is not None else 0,
         "current_shields": current_shields,
     }
+    if player_align is not None:
+        out["alignment"] = player_align
+    return out
 
 
 def upgrade_loop_from_chain(
@@ -509,8 +599,11 @@ def merge_upgrade_status_inputs(
         catalog = merged.get("upgrade_catalog")
         if not isinstance(catalog, list):
             catalog = None
+        player_align = player_alignment_from_status(merged)
         if catalog is None and ships:
-            built = upgrade_catalog_from_ships(ships)
+            built = upgrade_catalog_from_ships(
+                ships, player_alignment=player_align
+            )
             if built:
                 merged["upgrade_catalog"] = built
                 catalog = built

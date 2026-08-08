@@ -182,3 +182,85 @@ def test_merge_with_chain_lights_upgrade_decision_and_decisions_panel():
 
     lines = compose_decisions_lines(full, width=60)
     assert any("Upgrade" in line for line in lines)
+
+
+def test_upgrade_catalog_respects_player_alignment():
+    ships = (
+        ShipRow(
+            ship_name="Merchant Cruiser",
+            max_holds=75,
+            max_fighters=100,
+            max_shields=50,
+            combat_odds_modifier=1.0,
+            turns_per_warp=3,
+            base_cost_credits=50_000,
+            alignment_requirement=0,
+            rank_requirement=None,
+            transwarp_capable=False,
+            special_abilities=(),
+            source="introspected:test",
+            last_verified_ts="2026-08-08T00:00:00Z",
+        ),
+        ShipRow(
+            ship_name="Imperial Starship",
+            max_holds=200,
+            max_fighters=500,
+            max_shields=200,
+            combat_odds_modifier=1.2,
+            turns_per_warp=2,
+            base_cost_credits=500_000,
+            alignment_requirement=1000,
+            rank_requirement=None,
+            transwarp_capable=False,
+            special_abilities=(),
+            source="introspected:test",
+            last_verified_ts="2026-08-08T00:00:00Z",
+        ),
+    )
+    # Without standing: omit-until-known → both commissioned True (prior default).
+    raw = upgrade_catalog_from_ships(ships)
+    assert {r["name"]: r["commissioned"] for r in raw} == {
+        "Merchant Cruiser": True,
+        "Imperial Starship": True,
+    }
+    gated = upgrade_catalog_from_ships(ships, player_alignment=2)
+    by_name = {r["name"]: r["commissioned"] for r in gated}
+    assert by_name["Merchant Cruiser"] is True
+    assert by_name["Imperial Starship"] is False
+
+
+def test_merge_upgrade_status_applies_alignment_to_catalog():
+    ships = (
+        ShipRow(
+            ship_name="Imperial Starship",
+            max_holds=200,
+            max_fighters=500,
+            max_shields=200,
+            combat_odds_modifier=1.2,
+            turns_per_warp=2,
+            base_cost_credits=500_000,
+            alignment_requirement=1000,
+            rank_requirement=None,
+            transwarp_capable=False,
+            special_abilities=(),
+            source="introspected:test",
+            last_verified_ts="2026-08-08T00:00:00Z",
+        ),
+    )
+    status = {
+        "turns_left": 800,
+        "alignment": 2,
+        "current_ship": {
+            "ship_type": "Imperial Starship",
+            "total_holds": 40,
+            "fighters": 10,
+            "turns_per_warp": 2,
+            "alignment": 2,
+        },
+    }
+    merged = merge_upgrade_status_inputs(status, ships=ships, cost_per_hold=100)
+    assert isinstance(merged, dict)
+    cat = merged["upgrade_catalog"]
+    assert len(cat) == 1
+    assert cat[0]["commissioned"] is False
+    assert merged["upgrade_player"]["alignment"] == 2

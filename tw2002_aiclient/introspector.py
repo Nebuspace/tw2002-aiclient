@@ -285,6 +285,12 @@ _FIGHTERS_INFO_RE = re.compile(
     r"^[ \t]*Fighters[ \t]*:[ \t]*(?P<n>\d[\d,]*)[ \t]*$",
     re.IGNORECASE | re.MULTILINE,
 )
+# Live trader standing on the Rank/Exp line (I-info), e.g. "Alignment=2 Tolerant".
+# Signed so evil (negative) alignment is preserved. Last match wins.
+_PLAYER_ALIGNMENT_RE = re.compile(
+    r"Alignment\s*=\s*(?P<n>[+-]?\d+)",
+    re.IGNORECASE,
+)
 
 
 def parse_current_ship_info(
@@ -294,8 +300,9 @@ def parse_current_ship_info(
 
     Returns ``None`` when the screen does not state a ship type (the
     ``Ship Info`` line after stripping ``Ported=``/``Kills=``). Never invents
-    catalog fields (cost, shields, alignment). ``source`` always begins with
-    ``introspected``.
+    catalog fields (cost, shields, ship alignment_requirement). May include
+    live player ``alignment`` when the Rank/Exp line states ``Alignment=N``.
+    ``source`` always begins with ``introspected``.
     """
     if not isinstance(rendered_text, str) or not rendered_text.strip():
         return None
@@ -326,4 +333,8 @@ def parse_current_ship_info(
     ftr_matches = list(_FIGHTERS_INFO_RE.finditer(rendered_text))
     if ftr_matches:
         out["fighters"] = _to_int(ftr_matches[-1].group("n"))
+    # Player alignment (standing) — distinct from catalog alignment_requirement.
+    align_matches = list(_PLAYER_ALIGNMENT_RE.finditer(rendered_text))
+    if align_matches:
+        out["alignment"] = int(align_matches[-1].group("n"))
     return out
