@@ -162,9 +162,12 @@ do-not-revive; tip measurement of the live share is **shipped**.
   `app/(app+human)` (+ honest `?` for unavailable / empty window);
   `ledger.live_actor_counts` folds the ledger; `screens.py` wires the meter on
   the control strip. Queue claim "zero code exists" was stale.
-  **Still prescribed, not built here:** the teaching-provenance axis (approved
-  AI-drafted rules) and the session-retro candidate-mining surface — those stay
-  with candidate-mining / the AI teacher, not this meter.
+  **Teaching-provenance axis — tip shipped (WO-BUILD-COVERAGE-METRICS-TEACHING-PROVENANCE-AXIS).**
+  Rule documents may carry optional `origin` (`human` | `ai-approved`); absent
+  values bucket as legacy/`unknown`. `coverage_metrics.teaching_provenance_counts`
+  reports the third axis over approved rules without touching the live
+  app/human share (`covermeter` / `live_actor_counts`). Still prescribed beside
+  this meter: the session-retro candidate-mining surface.
 
 # Citations
 
@@ -187,5 +190,6 @@ do-not-revive; tip measurement of the live share is **shipped**.
   by candidate-mining / the AI teacher, not here.
 - Code modules (plain-text): `ledger.py` (`VALID_SENDERS` + `live_actor_counts`);
   `cockpit/covermeter.py` (share math + `COV` meter); `screens.py` (control-strip
-  wire); `session/session.py` (`VALID_SENDERS`). Teaching-provenance /
-  session-retro remain with `miner.py` / AI-teacher surfaces, not this meter.
+  wire); `session/session.py` (`VALID_SENDERS`); `rule_engine.py` (`origin` on
+  rules); `coverage_metrics.py` (teaching-provenance counts). Session-retro
+  candidate-mining remains with `miner.py` / AI-teacher surfaces.
