@@ -2054,7 +2054,7 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="N",
         help=(
             "optional ship hold count: scale displayed cr/turn to trip EV "
-            "(unit margins × N); omit to leave unit cr/turn"
+            "(unit margins x N); omit to leave unit cr/turn"
         ),
     )
     sp.add_argument("--json", action="store_true", help="machine-parseable JSON output")
