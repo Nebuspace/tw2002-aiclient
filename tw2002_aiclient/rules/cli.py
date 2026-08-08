@@ -74,6 +74,9 @@ def _document_from_args(args) -> dict:
     document = {f: getattr(args, f) for f in _SHORTHAND}
     if getattr(args, "scope", None) is not None:
         document["scope"] = args.scope
+    # Operator-authored shorthand draft — teaching provenance is human.
+    # ``--from-file`` paths leave origin to the document (or unknown if absent).
+    document["origin"] = "human"
     return document
 
 

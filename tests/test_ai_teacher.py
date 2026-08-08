@@ -101,6 +101,7 @@ def test_analyze_escalation_writes_inert_draft(tmp_path):
     on_disk = json.loads((tmp_path).joinpath("rules", "_drafts", "warp-confirm-yes.json").read_text())
     assert on_disk["approved"] is False
     assert on_disk["rule_id"] == "warp-confirm-yes"
+    assert on_disk["origin"] == "ai-approved"
     assert str(path).endswith("warp-confirm-yes.json")
 
 
