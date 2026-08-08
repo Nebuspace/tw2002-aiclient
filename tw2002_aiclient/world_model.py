@@ -375,6 +375,25 @@ def bulk_upsert(world_id, records, state_dir=None, now=None):
     return [upsert_sector(world_id, r, state_dir=state_dir, now=now) for r in records]
 
 
+def write_from_cim_report(world_id, rendered_text, state_dir=None, now=None):
+    """Product CIM ingest: ``parse_port_report`` → ``bulk_upsert``.
+
+    WO-WIRE-BULK-UPSERT-CIM-INGEST: this is the product call site for
+    ``bulk_upsert``. Callers must already have proven provenance
+    (``classify_screen`` → ``cim_report``); this function does not
+    re-classify — it only refuses empty/unparseable text by writing
+    nothing. Never invents sectors.
+    """
+    from tw2002_aiclient.session.state_parser import parse_port_report
+
+    if not isinstance(rendered_text, str) or not rendered_text.strip():
+        return []
+    records = parse_port_report(rendered_text)
+    if not records:
+        return []
+    return bulk_upsert(world_id, records, state_dir=state_dir, now=now)
+
+
 #: The landmark name recorded for StarDock. A single constant because the
 #: store dedups landmarks by `casefold()` but NOT by spelling -- "StarDock"
 #: and "Star Dock" would both survive as separate entries, and since
