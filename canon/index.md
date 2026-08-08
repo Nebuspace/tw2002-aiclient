@@ -32,6 +32,7 @@ marked _(planned)_ are not yet written; entries marked ✅ written exist on disk
 * [Game-Data Store](/engine/game-data-store.md) — Two-layer game knowledge: authored portable OKF semantics plus live per-server introspected DATA, never hardcoded stats. — ✅ written
 * [Menu Map & Read-Only Introspection](/engine/menu-map-and-introspection.md) — The per-world menu graph, the safety-critical read-only never-commit crawler that builds it, and deterministic menu navigation over it. — ✅ written
 * [The Trace Ledger](/engine/trace-ledger.md) — The append-only per-dispatch semantic record with `{app,human}` actor attribution — the single learning, observability, and retro substrate. — ✅ written
+* [Post-Session Action Report](/engine/post-session-action-report.md) — The pull-based `tw report` digest of a session's `actor=app` dispatches — accountability for autonomous armed-rule action after the fact, not per-firing approval. — ✅ written (stub — full detail in Trace Ledger)
 * [Macros](/engine/macros.md) — Taught keystroke sequences captured from human demonstration and replayed deterministically with halt-on-divergence — the unit a rule's `do` plays. — ✅ written
 * [The AI Teacher](/engine/ai-teacher.md) — The human-invoked retrospective AI that reads a screen or escalation moment and proposes a guarded rule DRAFT — never a live keystroke. — ✅ written
 * [Candidate Mining](/engine/candidate-mining.md) — The no-LLM machinery that mines the ledger for recurring profitable patterns into human-approved rule and loop candidates. — ✅ written
