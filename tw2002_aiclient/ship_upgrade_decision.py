@@ -346,6 +346,213 @@ def ship_spec_from_current_info(
     )
 
 
+def ship_spec_as_dict(spec: ShipSpec) -> dict:
+    """Wire-shaped ShipSpec mapping for ``status["upgrade_catalog"]`` rows."""
+    return {
+        "name": spec.name,
+        "cost": spec.cost,
+        "holds": spec.holds,
+        "turns_per_warp": spec.turns_per_warp,
+        "fighters": spec.fighters,
+        "shields": spec.shields,
+        "alignment_req": spec.alignment_req,
+        "commissioned": spec.commissioned is True,
+    }
+
+
+def upgrade_catalog_from_ships(ships: Sequence[object] | None) -> list[dict]:
+    """Layer-B ``GameData.ships`` → ``upgrade_catalog`` rows (priced only).
+
+    Cost/shields come from catalog rows via ``ship_row_to_spec`` — never invented.
+    Zero-cost / hostile rows are skipped. Never raises.
+    """
+    if not ships:
+        return []
+    from .game_data import ShipRow, ship_row_to_spec
+
+    out: list[dict] = []
+    for item in ships:
+        try:
+            if isinstance(item, ShipSpec):
+                if item.cost <= 0:
+                    continue
+                out.append(ship_spec_as_dict(item))
+                continue
+            if isinstance(item, ShipRow):
+                cost = item.base_cost_credits
+            elif isinstance(item, dict):
+                cost = item.get("base_cost_credits", item.get("cost"))
+            else:
+                continue
+            if isinstance(cost, bool) or not isinstance(cost, int) or cost <= 0:
+                continue
+            spec = ship_row_to_spec(item)
+            out.append(ship_spec_as_dict(spec))
+        except Exception:  # noqa: BLE001 -- skip hostile row
+            continue
+    return out
+
+
+def upgrade_player_from_status(
+    status: dict,
+    *,
+    ships: Sequence[object] | None = None,
+) -> Optional[dict]:
+    """Build ``upgrade_player`` from live status + optional GameData ships.
+
+    Requires genuine ``turns_left`` and ``current_ship.total_holds``. When
+    ``ships`` is provided, calls :func:`ship_spec_from_current_info` so shields
+    (catalog-only) enrich the player snapshot. Fail-closed → ``None``.
+    """
+    if not isinstance(status, dict):
+        return None
+    turns = status.get("turns_left")
+    if isinstance(turns, bool) or not isinstance(turns, int) or turns < 0:
+        return None
+    current = status.get("current_ship")
+    if not isinstance(current, dict):
+        return None
+    holds = current.get("total_holds")
+    fighters = current.get("fighters")
+    current_holds = holds if isinstance(holds, int) and not isinstance(holds, bool) else None
+    current_fighters = (
+        fighters if isinstance(fighters, int) and not isinstance(fighters, bool) else None
+    )
+    current_shields = 0
+    if ships:
+        enriched = ship_spec_from_current_info(current, catalog=ships)
+        if enriched is not None:
+            if current_holds is None:
+                current_holds = enriched.holds
+            if current_fighters is None:
+                current_fighters = enriched.fighters
+            current_shields = enriched.shields
+    if current_holds is None:
+        return None
+    reserve = status.get("turn_reserve")
+    if isinstance(reserve, bool) or not isinstance(reserve, int) or reserve < 0:
+        reserve = 0
+    return {
+        "turns_left": turns,
+        "current_holds": current_holds,
+        "turn_reserve": reserve,
+        "hostile_or_pvp": status.get("hostile_or_pvp") is True,
+        "current_fighters": current_fighters if current_fighters is not None else 0,
+        "current_shields": current_shields,
+    }
+
+
+def upgrade_loop_from_chain(
+    chain: object,
+    *,
+    current_holds: int,
+    catalog_max_holds: Optional[int] = None,
+) -> Optional[dict]:
+    """Honest ``upgrade_loop`` from a priced ProfitChain-like object.
+
+    ``margin_per_hold`` ← ``overall_profit`` (per-unit spread sum);
+    ``turns_per_cycle`` ← ``turns``. Stock capacity uses the canon
+    ``MIN_CHAIN_LINKS_FOR_SHIP_UPGRADE`` gate rather than inventing port
+    stock: short chains cap at ``current_holds`` (bigger hulls need chains);
+    long chains defer the stock gate to ROI by allowing up to the largest
+    known catalog hull. Never raises.
+    """
+    try:
+        overall = getattr(chain, "overall_profit", None)
+        turns = getattr(chain, "turns", None)
+        hops = getattr(chain, "hops", None)
+        if isinstance(overall, bool) or not isinstance(overall, (int, float)):
+            return None
+        if isinstance(turns, bool) or not isinstance(turns, int) or turns <= 0:
+            return None
+        margin = int(round(float(overall)))
+        if margin <= 0:
+            return None
+        try:
+            hop_count = len(hops) if hops is not None else 0
+        except TypeError:
+            hop_count = 0
+        from .chains import MIN_CHAIN_LINKS_FOR_SHIP_UPGRADE
+
+        cur = max(0, int(current_holds))
+        if hop_count < MIN_CHAIN_LINKS_FOR_SHIP_UPGRADE:
+            stock = cur
+        else:
+            cap = catalog_max_holds if isinstance(catalog_max_holds, int) else cur
+            stock = max(cur, cap, 1)
+        return {
+            "margin_per_hold": margin,
+            "turns_per_cycle": turns,
+            "stock_capacity": stock,
+        }
+    except Exception:  # noqa: BLE001 -- fail-closed
+        return None
+
+
+def merge_upgrade_status_inputs(
+    status: object,
+    *,
+    ships: Sequence[object] | None = None,
+    chain: object | None = None,
+    cost_per_hold: Optional[int] = None,
+) -> object:
+    """Attach ``upgrade_*`` keys when evidence exists; never mutates; never clobbers.
+
+    Call from ``GameDataStats.merge`` (catalog + player + hold cost) and from
+    ``FocusScalars.merge`` (loop from priced chain). Incomplete evidence → omit.
+    Never raises.
+    """
+    if not isinstance(status, dict):
+        return status
+    try:
+        merged = dict(status)
+        catalog = merged.get("upgrade_catalog")
+        if not isinstance(catalog, list):
+            catalog = None
+        if catalog is None and ships:
+            built = upgrade_catalog_from_ships(ships)
+            if built:
+                merged["upgrade_catalog"] = built
+                catalog = built
+
+        if (
+            merged.get("upgrade_cost_per_hold") is None
+            and isinstance(cost_per_hold, int)
+            and not isinstance(cost_per_hold, bool)
+            and cost_per_hold >= 0
+        ):
+            merged["upgrade_cost_per_hold"] = cost_per_hold
+
+        if merged.get("upgrade_player") is None:
+            player = upgrade_player_from_status(merged, ships=ships)
+            if player is not None:
+                merged["upgrade_player"] = player
+
+        if merged.get("upgrade_loop") is None and chain is not None:
+            player = merged.get("upgrade_player")
+            holds = 0
+            if isinstance(player, dict):
+                h = player.get("current_holds")
+                if isinstance(h, int) and not isinstance(h, bool):
+                    holds = h
+            max_holds: Optional[int] = None
+            if isinstance(catalog, list):
+                for row in catalog:
+                    if not isinstance(row, dict):
+                        continue
+                    rh = row.get("holds")
+                    if isinstance(rh, int) and not isinstance(rh, bool):
+                        max_holds = rh if max_holds is None else max(max_holds, rh)
+            loop = upgrade_loop_from_chain(
+                chain, current_holds=holds, catalog_max_holds=max_holds
+            )
+            if loop is not None:
+                merged["upgrade_loop"] = loop
+        return merged
+    except Exception:  # noqa: BLE001 -- never break the status path
+        return status
+
+
 def compose_upgrade_decision_lines(
     decision: UpgradeDecision,
     *,

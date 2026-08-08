@@ -8,6 +8,12 @@ this module is the status merge). Off-draw refresh only — same seam as
 Also merges ``ship_catalog`` — priced ``{ship_name, cost}`` rows for the
 priority-engine pre-flight / catalog #4 live bridge (WO-PRIORITY-ENGINE-KERNEL).
 
+Also merges ship-upgrade DECISIONS inputs (WO-WIRE-SHIP-SPEC-CATALOG-INTO-
+UPGRADE-DECISIONS): full ``upgrade_catalog`` (ShipSpec-shaped) + optional
+``upgrade_player`` / ``upgrade_cost_per_hold`` via
+``ship_upgrade_decision.merge_upgrade_status_inputs``. Loop economics attach
+later in ``FocusScalars`` when a priced chain is available.
+
 **Readers (not write-only):** ``cockpit/goals.py``, ``focus_status.py``, and
 ``stardock_hold_plan.py`` consume these status keys via
 ``SHIP_PRICES_COUNT_KEY`` / ``HOLD_PRICE_LABEL_KEY``. Tip-stamp
@@ -46,6 +52,8 @@ class GameDataStats:
         "_hold_price_label",
         "_hold_seen",
         "_ship_catalog",
+        "_ships",
+        "_cost_per_hold",
     )
 
     def __init__(self) -> None:
@@ -54,6 +62,8 @@ class GameDataStats:
         self._hold_price_label: str | None = None
         self._hold_seen = False
         self._ship_catalog: list[dict] | None = None
+        self._ships: tuple = ()
+        self._cost_per_hold: int | None = None
 
     def refresh(
         self,
@@ -96,19 +106,26 @@ class GameDataStats:
         self._ships_seen = True
         self._ship_catalog = catalog
         try:
+            self._ships = tuple(data.ships)
+        except Exception:  # noqa: BLE001
+            self._ships = ()
+        try:
             holds = data.cargo_holds
             if holds:
                 cost = getattr(holds[0], "cost_per_hold", None)
                 if isinstance(cost, bool) or not isinstance(cost, int) or cost < 0:
                     self._hold_seen = False
                     self._hold_price_label = None
+                    self._cost_per_hold = None
                 else:
                     self._hold_price_label = _format_hold_label(cost)
                     self._hold_seen = True
+                    self._cost_per_hold = cost
             else:
                 # Successful load, no quote yet — omit (unknown), do not emit blank.
                 self._hold_seen = False
                 self._hold_price_label = None
+                self._cost_per_hold = None
         except Exception:  # noqa: BLE001
             pass
 
@@ -125,6 +142,22 @@ class GameDataStats:
             merged[SHIP_CATALOG_KEY] = list(self._ship_catalog or ())
         if self._hold_seen and merged.get(HOLD_PRICE_LABEL_KEY) is None:
             merged[HOLD_PRICE_LABEL_KEY] = self._hold_price_label
+        # WO-WIRE-SHIP-SPEC-CATALOG-INTO-UPGRADE-DECISIONS: full catalog + player.
+        if self._ships_seen or self._hold_seen:
+            try:
+                from tw2002_aiclient.ship_upgrade_decision import (
+                    merge_upgrade_status_inputs,
+                )
+
+                enriched = merge_upgrade_status_inputs(
+                    merged,
+                    ships=self._ships if self._ships_seen else None,
+                    cost_per_hold=self._cost_per_hold if self._hold_seen else None,
+                )
+                if isinstance(enriched, dict):
+                    merged = enriched
+            except Exception:  # noqa: BLE001 -- upgrade overlay must not break status
+                pass
         return merged
 
     def wrap(self, provider):
