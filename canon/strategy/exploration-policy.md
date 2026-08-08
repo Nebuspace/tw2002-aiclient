@@ -190,6 +190,16 @@ never calls `bool()` on either flag (pins in `tests/test_play_explore_flags.py`)
 
 *(Honesty pass `AUDIT-CANON-DRAFT-EXPLORE-FLAGS-ASYMMETRY`, 2026-08-04.)*
 
+## Pre-uncharted defensive posture (sibling gate)
+
+Before map-fill commits to an **uncharted** warp, tip may consult the pure
+[Explore Defensive Posture](/strategy/explore-defensive-posture.md) decision
+(`session/explore_defensive_posture.py`): if fighters are under a judgment floor and a known
+StarDock dealer is in budget, explore seeks the dealer then halts for a human-gated purchase —
+it never auto-buys. Unknown / unreachable / unaffordable inputs fail closed to ordinary explore.
+Policy numbers there are judgment defaults, not Max-ratified combat math (do not conflate with the
+stripped toll-defense floors in [toll-and-defense](/strategy/toll-and-defense.md)).
+
 # Citations
 
 - design history §11 — explore/exploit appetite design (reborn-reframed: appetite = priority input,

@@ -1,5 +1,14 @@
 # Canon — Change Log
 
+## 2026-08-08
+
+- **WO-CANON-DRAFT-EXPLORE-DEFENSIVE-POSTURE-COVERAGE.** New strategy concept
+  `explore-defensive-posture.md` documents the five judgment policy constants in tip
+  `session/explore_defensive_posture.py` (fighter floor, credit fraction, unit price, dealer
+  detour ceiling, cash floor) with file:line citations — framed as judgment defaults, not
+  Max-ratified numbers, and explicitly distinguished from the stripped toll-defense combat
+  floors. Index + exploration-policy cross-link only; no code churn.
+
 ## 2026-07-26
 
 - **WO-CLI-VERBS-CANON-RECONCILE.** `cli-verbs.md`'s Implementation-status block caught up to M3
