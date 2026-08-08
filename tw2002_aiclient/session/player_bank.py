@@ -3,7 +3,8 @@
 Tracks which characters exist (linked to profile names) plus ``last_played`` /
 ``turns_state``. Passwords are never stored here — structurally absent.
 :func:`next_player` is the read-only rotation *selector* (``tw players next``);
-the rotation *driver* (auto-login / auto-switch) is out of scope for this wave.
+:func:`advance_rotation` is the rotation *driver* (``tw players rotate``) —
+decides whose turn is due, still never auto-logs-in or auto-switches.
 
 The honesty contract (WO-AUDIT-PLAYER-BANK-STORE-HONESTY)
 ---------------------------------------------------------
@@ -100,9 +101,10 @@ TURNS_UNKNOWN = "-"
 LAST_PLAYED_WIDTH = 21
 TRUNCATED = "…"
 
-# Default window for :func:`next_player` — skip anyone whose last_played falls
-# inside this many hours of ``now``. Pure selector default; the daemon rotation
-# *driver* (auto-login / auto-switch) remains a separate wave.
+# Default window for :func:`next_player` / :func:`advance_rotation` — skip
+# anyone whose last_played falls inside this many hours of ``now``. Shared by
+# both the selector and the driver; a daemon-side auto-login/auto-switch
+# consumer of the driver's decision remains a separate wave.
 DEFAULT_ROTATION_COOLDOWN_HOURS = 24.0
 
 # Why the bank could not be read. Coarse enough for a caller to branch on,
@@ -311,6 +313,75 @@ def next_player(
             best_key = key
             best_name = name
     return best_name
+
+
+class RotationDecision:
+    """One rotation-driver verdict: who's due, and why — never an action.
+
+    ``name`` is ``None`` when nobody is due; ``reason`` is ``"due"``,
+    ``"empty_bank"`` (no rows at all), or ``"none_eligible"`` (every row is
+    either cooling down, unparseable under an active cooldown, or broken —
+    :func:`next_player` does not itself distinguish those, so this driver
+    does not fabricate a finer distinction than its selector can prove).
+    """
+
+    __slots__ = ("name", "reason")
+
+    def __init__(self, name: str | None, reason: str) -> None:
+        self.name = name
+        self.reason = reason
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, RotationDecision):
+            return NotImplemented
+        return self.name == other.name and self.reason == other.reason
+
+    def __repr__(self) -> str:
+        return f"RotationDecision(name={self.name!r}, reason={self.reason!r})"
+
+
+def advance_rotation(
+    rows: list[dict[str, str]] | None = None,
+    *,
+    cooldown_hours: float = DEFAULT_ROTATION_COOLDOWN_HOURS,
+    now: datetime | None = None,
+) -> RotationDecision:
+    """Decide whose turn is due next — the rotation *driver*, still read-only.
+
+    Policy (this WO's explicit decision, per canon's "rotation driver is not
+    yet wired" gap): **round-robin by oldest-``last_played``-first** among
+    profiles outside the cooldown window, never-played breaking first. That
+    is exactly :func:`next_player`'s own key ordering (``(0, name)`` for
+    never-played, then ``(1, timestamp, name)`` oldest-first, unknown/broken
+    excluded or pushed last) — this driver does not re-derive that ordering,
+    it wraps the one selector that already proves it
+    (``test_next_player_prefers_never_then_oldest`` /
+    ``test_next_player_skips_cooldown_broken_and_unknown``).
+
+    ``rows`` defaults to :func:`list_players` when omitted, so a caller with
+    no rows in hand gets the same live bank ``tw players next`` reads
+    (:class:`BankUnreadable` propagates unchanged — this driver does not
+    convert it to a decision).
+
+    This is a **decision, not an action**: it never writes ``last_played``,
+    never opens a session, never sends a keystroke. No write path for
+    ``last_played`` exists anywhere in this codebase today (session-end
+    rotation bookkeeping is a separate future wave) — inventing one here
+    would mean recording a play session that never happened, which is the one
+    thing a decide-and-report driver must never do. Once that write path
+    lands, its caller is what marks a rotation *consumed*, at the point a
+    session genuinely ends, using the same ``name`` this function reported.
+    """
+    if rows is None:
+        rows = list_players()
+    name = next_player(rows, cooldown_hours=cooldown_hours, now=now)
+    if name is not None:
+        reason = "due"
+    elif not rows:
+        reason = "empty_bank"
+    else:
+        reason = "none_eligible"
+    return RotationDecision(name=name, reason=reason)
 
 
 def list_players() -> list[dict[str, str]]:

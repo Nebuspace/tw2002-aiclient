@@ -1,4 +1,4 @@
-"""``tw players`` — player-bank CLI (rotation next + list).
+"""``tw players`` — player-bank CLI (rotation next / rotate + list).
 
 Read-only metadata: never opens the session socket, never logs in, never
 auto-switches. Lives outside ``session/cli.py`` for the same line-cap reason
@@ -13,7 +13,12 @@ import sys
 from tw2002_aiclient.screens import BANK_EMPTY_LINE, BOUNDARY_LINE_1, BOUNDARY_LINE_2
 from tw2002_aiclient.session import player_bank
 
-__all__ = ["add_players_parsers", "cmd_players_list", "cmd_players_next"]
+__all__ = ["add_players_parsers", "cmd_players_list", "cmd_players_next", "cmd_players_rotate"]
+
+_ROTATE_REASON_TEXT = {
+    "empty_bank": "empty bank",
+    "none_eligible": "all cooling down, or only broken profiles",
+}
 
 
 def cmd_players_next(args: argparse.Namespace) -> int:
@@ -29,6 +34,28 @@ def cmd_players_next(args: argparse.Namespace) -> int:
         print("no eligible player (empty bank, all cooling down, or only broken profiles)")
         return 1
     print(name)
+    return 0
+
+
+def cmd_players_rotate(args: argparse.Namespace) -> int:
+    """Print the rotation driver's decision: who's due, and why. Never logs in.
+
+    Same round-robin-by-oldest policy as ``tw players next``
+    (:func:`player_bank.advance_rotation` wraps :func:`player_bank.next_player`
+    unchanged) — this verb only reports the driver's reasoning alongside it.
+    """
+    try:
+        rows = player_bank.list_players()
+    except player_bank.BankUnreadable as exc:
+        print(f"player bank unreadable ({exc.cause}): {exc.reason}", file=sys.stderr)
+        return 2
+    cooldown = float(getattr(args, "cooldown_hours", player_bank.DEFAULT_ROTATION_COOLDOWN_HOURS))
+    decision = player_bank.advance_rotation(rows, cooldown_hours=cooldown)
+    if decision.name is None:
+        reason_text = _ROTATE_REASON_TEXT.get(decision.reason, decision.reason)
+        print(f"no eligible player ({reason_text})")
+        return 1
+    print(decision.name)
     return 0
 
 
@@ -87,6 +114,19 @@ def add_players_parsers(sub: argparse._SubParsersAction) -> None:
         help=f"skip last_played within this many hours (default {player_bank.DEFAULT_ROTATION_COOLDOWN_HOURS:g})",
     )
     sp_next.set_defaults(func=cmd_players_next)
+
+    sp_rotate = players_sub.add_parser(
+        "rotate",
+        help="print the rotation driver's decision — who's due, and why (read-only)",
+    )
+    sp_rotate.add_argument(
+        "--cooldown-hours",
+        type=float,
+        default=player_bank.DEFAULT_ROTATION_COOLDOWN_HOURS,
+        metavar="H",
+        help=f"skip last_played within this many hours (default {player_bank.DEFAULT_ROTATION_COOLDOWN_HOURS:g})",
+    )
+    sp_rotate.set_defaults(func=cmd_players_rotate)
 
     sp_list = players_sub.add_parser(
         "list",
