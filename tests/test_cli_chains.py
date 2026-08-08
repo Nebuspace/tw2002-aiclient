@@ -293,3 +293,70 @@ def test_cmd_chains_never_touches_the_taught_arm_list():
 
     # And the positive half: it reaches the discovery modules, not the taught ones.
     assert any("chain_search" in m for m in imported), imported
+
+
+def test_json_hold_scaled_null_without_holds_flag(world):
+    rc, out = _run(["chains", "--world-id", W, "--json"])
+    assert rc == 0
+    payload = json.loads(out)
+    assert payload.get("hold_count") is None
+    assert payload["chains"], "fixture must discover ≥1 cycle"
+    assert payload["chains"][0]["cr_per_turn_hold_scaled"] is None
+    # Unit field unchanged.
+    assert isinstance(payload["chains"][0]["cr_per_turn"], (int, float))
+
+
+def test_json_hold_scaled_multiplies_when_holds_passed(world, monkeypatch):
+    from tw2002_aiclient import chain_search, chains
+
+    short = chains.ProfitChain(
+        sectors=(100, 101, 100),
+        hops=(
+            chains.TradeHop(100, 101, "A", 3.5, 1),
+            chains.TradeHop(101, 100, "B", 3.5, 1),
+        ),
+        overall_profit=7.0,
+        turns=2,
+        cr_per_turn=3.5,
+        cr_per_execution=7.0,
+    )
+
+    def _payload(world_id, **kwargs):
+        return chain_search.ProfitChainResult(
+            world_id=world_id, chains=(short,), reason=None
+        )
+
+    monkeypatch.setattr(chain_search, "recompute", _payload)
+    rc, out = _run(["chains", "--world-id", W, "--holds", "100", "--json"])
+    assert rc == 0
+    payload = json.loads(out)
+    assert payload["hold_count"] == 100
+    assert payload["chains"][0]["cr_per_turn"] == 3.5
+    assert payload["chains"][0]["cr_per_turn_hold_scaled"] == 350.0
+
+
+def test_text_hold_scaled_banner_when_holds_passed(world, monkeypatch):
+    from tw2002_aiclient import chain_search, chains
+
+    short = chains.ProfitChain(
+        sectors=(100, 101, 100),
+        hops=(
+            chains.TradeHop(100, 101, "A", 3.5, 1),
+            chains.TradeHop(101, 100, "B", 3.5, 1),
+        ),
+        overall_profit=7.0,
+        turns=2,
+        cr_per_turn=3.5,
+        cr_per_execution=7.0,
+    )
+
+    def _payload(world_id, **kwargs):
+        return chain_search.ProfitChainResult(
+            world_id=world_id, chains=(short,), reason=None
+        )
+
+    monkeypatch.setattr(chain_search, "recompute", _payload)
+    rc, out = _run(["chains", "--world-id", W, "--holds", "100"])
+    assert rc == 0
+    assert "hold-scaled ×100" in out
+    assert "350/t" in out
