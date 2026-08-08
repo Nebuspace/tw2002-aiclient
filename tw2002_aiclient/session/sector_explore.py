@@ -415,7 +415,11 @@ def _handle_encounter(
     expected, and guessing the next keystroke into a live combat screen is the
     exact failure this module exists to prevent.
     """
-    decision = fighter_toll_policy.next_encounter_input(full_text, prompt_line)
+    decision = fighter_toll_policy.next_encounter_input(
+        full_text,
+        prompt_line,
+        attack_approved=fighter_toll_policy.FIGHTER_TOLL_ATTACK_BEHAVIOR_APPROVED,
+    )
     if not decision.detected:
         return None
     if decision.halt:

@@ -55,6 +55,11 @@ DEFAULT_AUTO_ATTACK_MAX_ENEMY = 3
 #: canon `force_share_auto_attack` — Max-ratified 2026-07-28.
 DEFAULT_FORCE_SHARE_AUTO_ATTACK = 0.90
 
+#: Canon approve-once for the built-in NPC Attack behavior (Max GO 2026-07-28 +
+#: carte-blanche gate 2026-08-08). Production callers that may fire Attack must
+#: pass this explicitly — ``decide_encounter`` defaults to False (fail closed).
+FIGHTER_TOLL_ATTACK_BEHAVIOR_APPROVED = True
+
 # Pay (`P`) is optional on live toll screens, so the prompt is matched with and
 # without it. Pay is never auto-selected regardless (canon: "Never Pay").
 _OPTION_PROMPT_RE = re.compile(
@@ -153,12 +158,18 @@ def decide_encounter(
     force_share_auto_attack: Optional[float] = DEFAULT_FORCE_SHARE_AUTO_ATTACK,
     winnable_enemy_band: int = DEFAULT_AUTO_ATTACK_MAX_ENEMY,
     reserve: int = DEFAULT_FIGHTER_RESERVE,
+    attack_approved: bool = False,
 ) -> EncounterDecision:
     """Attack / Retreat / STOP for a parsed ``Option?`` frame.
 
     Never selects Pay (``P``) — that exit is human-only. ``reserve`` is
     accepted for call-site compatibility but unused. ``force_share_auto_attack=None``
     means the threshold is unratified — the guard then never attacks (fail closed).
+
+    ``attack_approved`` is the per-behavior (approve-once) human-approval gate.
+    Default False fails closed: even a force_share-passing NPC toll Retreats until
+    a caller passes ``FIGHTER_TOLL_ATTACK_BEHAVIOR_APPROVED`` (or an equivalent
+    explicit True after a human-approved taught rule arms this behavior).
     """
     del reserve  # documented, never behavioural — see canon § I5.
 
@@ -208,6 +219,14 @@ def decide_encounter(
             True,
             "R",
             f"force_share_below_gate:share={share:.4f}:gate={force_share_auto_attack}",
+            yours,
+            theirs,
+        )
+    if not attack_approved:
+        return EncounterDecision(
+            True,
+            "R",
+            "attack_behavior_not_approved",
             yours,
             theirs,
         )
@@ -303,12 +322,16 @@ def next_encounter_input(
     force_share_auto_attack: Optional[float] = DEFAULT_FORCE_SHARE_AUTO_ATTACK,
     winnable_enemy_band: int = DEFAULT_AUTO_ATTACK_MAX_ENEMY,
     reserve: int = DEFAULT_FIGHTER_RESERVE,
+    attack_approved: bool = False,
 ) -> EncounterDecision:
     """One flow for the whole encounter, quantity prompt first.
 
     The quantity ask is checked ahead of ``Option?`` because both can be on
     screen at once; answering the older ``Option?`` in that state is what
     re-sends Attack against a live quantity prompt.
+
+    ``attack_approved`` is forwarded to :func:`decide_encounter` only — quantity
+    commits happen after Attack was already authorized and sent.
     """
     qty = decide_quantity(
         screen_text,
@@ -323,4 +346,5 @@ def next_encounter_input(
         force_share_auto_attack=force_share_auto_attack,
         winnable_enemy_band=winnable_enemy_band,
         reserve=reserve,
+        attack_approved=attack_approved,
     )
