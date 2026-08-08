@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from dataclasses import dataclass
-from typing import Optional, Sequence
+from typing import Mapping, Optional, Sequence
 
 
 @dataclass(frozen=True)
@@ -274,6 +274,23 @@ def rank_chains_by_yield(chains: Sequence[ProfitChain]) -> list[ProfitChain]:
         key=lambda c: (c.cr_per_turn, len(c.hops)),
         reverse=True,
     )
+
+
+def rank_chains_by_longevity(
+    chains: Sequence[ProfitChain],
+    remaining_by_key: Mapping,
+    *,
+    base_rank: str = "discovery",
+) -> list[ProfitChain]:
+    """Down-rank chains whose predicted ``remaining_trades`` is low.
+
+    Thin wrapper over :func:`chain_depletion.rank_chains_by_longevity` so
+    discovery callers can import from ``chains`` without a second module.
+    Unknown remaining never counts as depleted.
+    """
+    from tw2002_aiclient.chain_depletion import rank_chains_by_longevity as _rank
+
+    return _rank(chains, remaining_by_key, base_rank=base_rank)
 
 
 def longest_profit_chain(

@@ -31,12 +31,27 @@ enumerates the split.
 
 from __future__ import annotations
 
-__all__ = ["ChainScalars", "as_chain_like", "pair_as_chain_like"]
+__all__ = [
+    "ChainScalars",
+    "as_chain_like",
+    "pair_as_chain_like",
+    "HOPS_KEY",
+    "UNIT_KEY",
+    "REMAINING_TRADES_KEY",
+    "NEARING_DEPLETION_KEY",
+    "EXPLORE_APPETITE_RAISED_KEY",
+    "DEPLETION_STOP_RECOMMENDED_KEY",
+]
 
 from tw2002_aiclient.chain_units import chain_hop_count_and_unit
 
 HOPS_KEY = "chain_hops"
 UNIT_KEY = "chain_unit"
+# WO-BUILD-CHAIN-DEPLETION-PREDICTOR — canon port-economics H2 signals.
+REMAINING_TRADES_KEY = "chain_remaining_trades"
+NEARING_DEPLETION_KEY = "chain_nearing_depletion"
+EXPLORE_APPETITE_RAISED_KEY = "explore_appetite_raised"
+DEPLETION_STOP_RECOMMENDED_KEY = "chain_depletion_stop_recommended"
 
 # Literal copy of ``chain_search.REASON_NO_WORLD_MODEL`` /
 # ``chain_detect.REASON_NO_WORLD_MODEL``. Copied, not imported: importing
@@ -72,19 +87,19 @@ def _valid_class_triple(cls: object) -> bool:
 
 def _port_snapshot_from_world(
     world_id: object, *, state_dir: object = None
-) -> tuple[dict[int, str], set[int]]:
-    """One lazy world-model scan → ``(port_classes, known_ports)``.
+) -> tuple[dict[int, str], set[int], dict[int, dict[str, object]]]:
+    """One lazy world-model scan → classes, known ports, commodity maps.
 
     Called only from ``ChainScalars.update`` after a successful discovery —
     never from the draw path. Hostile / missing worlds yield empty maps
-    (never raise).
+    (never raise). Commodity maps feed the depletion predictor (amounts only).
     """
     if not isinstance(world_id, str) or not world_id:
-        return {}, set()
+        return {}, set(), {}
     try:
         from tw2002_aiclient import world_model  # lazy — keep draw-path cold
     except Exception:  # noqa: BLE001
-        return {}, set()
+        return {}, set(), {}
     classes: dict[int, str] = {}
     known: set[int] = set()
     try:
@@ -92,7 +107,13 @@ def _port_snapshot_from_world(
             world_id, lambda s: bool(s.get("port")), state_dir=state_dir
         )
     except Exception:  # noqa: BLE001
-        return {}, set()
+        return {}, set(), {}
+    try:
+        from tw2002_aiclient.chain_depletion import ports_commodity_maps_from_records
+
+        commodity_maps = ports_commodity_maps_from_records(recs)
+    except Exception:  # noqa: BLE001
+        commodity_maps = {}
     for rec in recs:
         if not isinstance(rec, dict):
             continue
@@ -108,7 +129,7 @@ def _port_snapshot_from_world(
             cls = port.get("class")
             if _valid_class_triple(cls):
                 classes[sid] = cls  # type: ignore[assignment]
-    return classes, known
+    return classes, known, commodity_maps
 
 
 class ChainScalars:
@@ -164,6 +185,7 @@ class ChainScalars:
         self._priced_search_incomplete: bool = False
         self._port_classes: dict[int, str] = {}
         self._known_ports: set[int] = set()
+        self._commodity_maps: dict[int, dict[str, object]] = {}
 
     def update(self, discovered: object, *, state_dir: object = None) -> None:
         """Record the scalars for a `chain_search.recompute` result.
@@ -217,6 +239,7 @@ class ChainScalars:
                 self._priced_search_incomplete = False
                 self._port_classes = {}
                 self._known_ports = set()
+                self._commodity_maps = {}
                 return
             hops, unit = chain_hop_count_and_unit(chains[0])
         except Exception:  # noqa: BLE001 -- a hostile shape is an unknown, not a crash
@@ -233,11 +256,12 @@ class ChainScalars:
             self._ranked_chains = (chains[0],)
         self._priced_search_incomplete = False
         try:
-            classes, known = _port_snapshot_from_world(
+            classes, known, cmap = _port_snapshot_from_world(
                 getattr(discovered, "world_id", None), state_dir=state_dir
             )
             self._port_classes = classes
             self._known_ports = known
+            self._commodity_maps = commodities
         except Exception:  # noqa: BLE001 -- enrichment must not undo scalars
             pass
 
@@ -277,15 +301,17 @@ class ChainScalars:
         except Exception:  # noqa: BLE001 -- hostile shape is unknown, not a crash
             return
         try:
-            classes, known = _port_snapshot_from_world(
+            classes, known, commodities = _port_snapshot_from_world(
                 getattr(pair_result, "world_id", None), state_dir=state_dir
             )
             # Only overwrite when the snapshot actually found something —
             # a hostile/empty world_id must not wipe maps the chain half
             # already enriched on the same tick.
-            if classes or known:
+            if classes or known or commodities:
                 self._port_classes = classes
                 self._known_ports = known
+                if commodities:
+                    self._commodity_maps = commodities
         except Exception:  # noqa: BLE001 -- enrichment must not undo the pair
             pass
 
@@ -452,7 +478,67 @@ class ChainScalars:
             merged[HOPS_KEY] = hops
         if merged.get(UNIT_KEY) is None:
             merged[UNIT_KEY] = unit
+        # WO-BUILD-CHAIN-DEPLETION-PREDICTOR: remaining_trades when holds +
+        # commodity amounts are known. Omit-until-known; never invent stock.
+        self._merge_depletion_signals(merged)
         return merged
+
+    def _hold_count_from_status(self, status: dict) -> int | None:
+        player = status.get("upgrade_player")
+        if isinstance(player, dict):
+            holds = player.get("current_holds")
+            if isinstance(holds, int) and not isinstance(holds, bool) and holds > 0:
+                return holds
+        ship = status.get("current_ship")
+        if isinstance(ship, dict):
+            holds = ship.get("total_holds")
+            if isinstance(holds, int) and not isinstance(holds, bool) and holds > 0:
+                return holds
+        return None
+
+    def _display_chain_for_depletion(self, status: dict):
+        sector = self._sector_from_status(status)
+        priced = self._bubble_priced_chain(sector)
+        if priced is not None:
+            return priced
+        return self._best_chain
+
+    def _merge_depletion_signals(self, merged: dict) -> None:
+        try:
+            from tw2002_aiclient.chain_depletion import (
+                depletion_signals,
+                predict_remaining_trades,
+            )
+        except Exception:  # noqa: BLE001
+            return
+        if not self._commodity_maps:
+            return
+        hold_count = self._hold_count_from_status(merged)
+        if hold_count is None:
+            return
+        chain = self._display_chain_for_depletion(merged)
+        if chain is None:
+            return
+        remaining = predict_remaining_trades(
+            chain,
+            hold_count=hold_count,
+            ports_by_sector=self._commodity_maps,
+        )
+        if remaining is None:
+            return
+        signals = depletion_signals(remaining)
+        if merged.get(REMAINING_TRADES_KEY) is None and "remaining_trades" in signals:
+            merged[REMAINING_TRADES_KEY] = signals["remaining_trades"]
+        if merged.get(NEARING_DEPLETION_KEY) is None:
+            merged[NEARING_DEPLETION_KEY] = signals["nearing_depletion"] is True
+        if merged.get(EXPLORE_APPETITE_RAISED_KEY) is None:
+            merged[EXPLORE_APPETITE_RAISED_KEY] = (
+                signals["explore_appetite_raised"] is True
+            )
+        if merged.get(DEPLETION_STOP_RECOMMENDED_KEY) is None:
+            merged[DEPLETION_STOP_RECOMMENDED_KEY] = (
+                signals["stop_recommended"] is True
+            )
 
 
     def wrap(self, provider):
