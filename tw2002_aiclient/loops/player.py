@@ -283,7 +283,7 @@ import math
 from dataclasses import dataclass
 from typing import Optional, Protocol
 
-from ..halt_reasons import halt_reason_code, qualify as _qualify
+from ..halt_reasons import QUALIFIER_SEP, halt_reason_code, qualify as _qualify
 from ..session.classify import NEVER_AUTO_ACTION_CLASSES, classify_screen
 from ..session.state_parser import (
     OUTCOME_ABSENT,
@@ -326,6 +326,7 @@ __all__ = [
     "OUTCOME_COMPLETED",
     "OUTCOME_HALTED",
     "OUTCOMES",
+    "QUALIFIER_SEP",  # re-exported; cross-module tests pin this name
     "ReplayResult",
     "ReplaySession",
     "StepTrace",
