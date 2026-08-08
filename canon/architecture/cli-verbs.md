@@ -62,12 +62,18 @@ human must approve before the App can ever play them.
 
 ## Read-only-safe at any time vs. control-lock
 
-A caller may run the pure observers — **`status`, `screen`, `state`, `history`, `spectate`,
+A caller may run the pure observers — **`status`, `screen`, `history`,
 `watch`, `log`/`trail`, `frames`, `loops`, `menumap`, `pairs`, `servers`, `players`** — at **any** moment,
 including while the App or a human is mid-drive, because none of them touch the control lock. The
 `drives {*}` verbs contend for that lock; the control-lock arbitration (who may hold it, and the
 handoff on escalation) is specified in
 [Control & Escalation](/architecture/control-and-escalation.md), not here.
+
+`state` is **not** a `tw` CLI verb (WIRE-ONLY today — daemon protocol only, no `tw state`
+subparser; see the Session primitives table below) and `spectate` is **RETIRED / WONTBUILD as
+`tw spectate`** (Max) — the read-only Spectate surface lives in-cockpit instead (see
+[Spectate & Attach](/surfaces/spectate-and-attach.md)). Neither belongs on this "runnable at any
+moment" list of actual `tw` subcommands.
 
 # The Hard Rule
 
