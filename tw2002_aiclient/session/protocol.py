@@ -477,6 +477,19 @@ def _status_response(session, server):
         intent = run.get("intent")
         if isinstance(intent, str) and intent:
             resp["explore_mode"] = intent
+    # WO-WIRE-REROUTE-EV-TO-PRIORITY-COACH: omit-until-computed ranking for
+    # coach/priority display. Never sends. Only when classify already named
+    # the Option? frame — no speculative EV on calm screens.
+    if resp.get("classification") == "fighter_encounter":
+        tpw = None
+        ship = resp.get("current_ship")
+        if isinstance(ship, dict) and isinstance(ship.get("turns_per_warp"), int):
+            tpw = ship["turns_per_warp"]
+        from tw2002_aiclient.reroute_vs_fight import toll_ev_for_screen
+
+        toll_ev = toll_ev_for_screen(text, prompt_line, turns_per_warp=tpw)
+        if toll_ev is not None:
+            resp["toll_ev"] = toll_ev
     return resp
 
 
