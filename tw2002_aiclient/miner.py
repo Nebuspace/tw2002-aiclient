@@ -1,12 +1,14 @@
 """Candidate mining — deterministic drafts from the trace ledger (PWO-095).
 
-Canon: ``canon/engine/candidate-mining.md``. Pure read of ledger JSONL +
-pure write of inert drafts under ``state/skills/_drafts/``. Never imports
-session/protocol/connection — never touches the live wire.
+Canon concept id: ``candidate_mining`` (see also
+``tw2002_aiclient.candidate_mining`` facade). Spec:
+``canon/engine/candidate-mining.md``. Pure read of ledger JSONL + pure write
+of inert drafts under ``state/skills/_drafts/`` via ``loops.store.drafts_dir``.
+Never imports session/protocol/connection — never touches the live wire.
 
 Ranks candidates to *propose*; does not score a live action to play.
-Promotion (``blessed`` / non-draft save) is a distinct human-only step
-outside this module.
+Promotion is the existing skills ``_drafts/`` → blessed-store location gate
+(human-only); this module never auto-promotes.
 """
 
 from __future__ import annotations
