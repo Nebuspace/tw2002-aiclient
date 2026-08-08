@@ -586,6 +586,15 @@ def test_the_cached_scalars_reach_the_real_status_provider(monkeypatch):
     focus = got.pop("focus", None)
     assert isinstance(focus, dict)
     assert isinstance(focus.get("candidates"), list) and focus["candidates"]
+    # WO-WIRE-SHIP-SPEC-CATALOG-INTO-UPGRADE-DECISIONS: FocusScalars.merge
+    # also attaches upgrade_loop from the priced discovered chain — peel it
+    # off so this pin stays about chain/world scalar delivery.
+    upgrade_loop = got.pop("upgrade_loop", None)
+    if upgrade_loop is not None:
+        assert isinstance(upgrade_loop, dict)
+        assert {"margin_per_hold", "turns_per_cycle", "stock_capacity"} <= set(
+            upgrade_loop
+        )
     assert got == {
         "ok": True, "credits": 7,
         "chain_hops": 3, "chain_unit": "hops",
