@@ -1,0 +1,10 @@
+{
+  "round_cap": 4,
+  "accept_threshold_pct": 5.0,
+  "open_aggression_pct": 15.0,
+  "step_timeout_s": 8.0,
+  "fresh_render_debounce_ms": 350,
+  "fresh_render_timeout_s": 2.0,
+  "verified_vs_live": true,
+  "source_note": "Live-proven convergence defaults (canon/DECISIONS.md 2026-08-05 auto-haggle tuning); migrated from session/haggle.py module literals."
+}
