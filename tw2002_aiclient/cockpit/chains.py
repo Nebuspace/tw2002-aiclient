@@ -210,6 +210,10 @@ class ChainsSession:
         self.index: int = 0
         self.section: str = "taught"
         self.discovered_index: int = 0
+        # Viewport origin into the discovered list (WO-FIX-CHAINS-POPUP-
+        # DISCOVERED-PAGINATION). ``ensure_discovered_visible`` keeps
+        # ``discovered_index`` inside [scroll, scroll+window).
+        self.discovered_scroll: int = 0
         # Carried so the EMPTY rendering can tell "none taught" from "could
         # not read the store" -- see `store_status`.
         self.status: str = "unreadable"
@@ -245,6 +249,7 @@ class ChainsSession:
         self.is_open = True
         self.index = 0
         self.discovered_index = 0
+        self.discovered_scroll = 0
         self.status = status if status in ("ok", "partial", "unreadable") else "unreadable"
         self.discovered = _usable_discovered(discovered)
         self.section = "taught" if self.rows else (
@@ -255,6 +260,7 @@ class ChainsSession:
         self.is_open = False
         self.index = 0
         self.discovered_index = 0
+        self.discovered_scroll = 0
         self.section = "taught"
 
     def _selectable_discovered(self) -> list:
@@ -304,6 +310,32 @@ class ChainsSession:
             self.index = max(0, len(self.rows) + target)
             return
         self.discovered_index = max(0, min(len(discovered) - 1, target))
+
+    def ensure_discovered_visible(self, window_size: object) -> None:
+        """Keep ``discovered_index`` inside the scroll window.
+
+        Display-only: does not change which chain ``selected_discovered``
+        returns — only which slice the formatter will paint. Never raises.
+        """
+        if isinstance(window_size, bool) or not isinstance(window_size, int) or window_size < 1:
+            return
+        discovered = self._selectable_discovered()
+        n = len(discovered)
+        if n == 0:
+            self.discovered_scroll = 0
+            return
+        max_scroll = max(0, n - window_size)
+        scroll = self.discovered_scroll
+        if isinstance(scroll, bool) or not isinstance(scroll, int) or scroll < 0:
+            scroll = 0
+        idx = self.discovered_index
+        if isinstance(idx, bool) or not isinstance(idx, int):
+            idx = 0
+        if idx < scroll:
+            scroll = idx
+        elif idx >= scroll + window_size:
+            scroll = idx - window_size + 1
+        self.discovered_scroll = max(0, min(max_scroll, scroll))
 
     def selected(self) -> dict | None:
         """The row under the cursor, or ``None`` when there is nothing to
@@ -355,6 +387,7 @@ def compose_chain_lines(
     *,
     unicode_ok: bool = True,
     width: int = 40,
+    discovered_window: int | None = None,
 ) -> list[str]:
     """The popup's body lines. Never raises; a session of the wrong shape
     renders the empty placeholder rather than blowing up the draw pass.
@@ -376,6 +409,11 @@ def compose_chain_lines(
       there, not here), so every row carries its ``detected`` tag and none
       can carry the selection marker. No payload renders the honest
       "unavailable" line, never a fabricated absence.
+
+    ``discovered_window`` (optional): max discovered *body* rows to format
+    per frame. When set, the session's ``discovered_scroll`` tracks the
+    cursor and the formatter emits ``showing N of M``. Omit (CLI / small
+    tests) to format the full discovered set.
     """
     sel = SELECTED_UNICODE if unicode_ok else SELECTED_ASCII
     empty = EMPTY_UNICODE if unicode_ok else EMPTY_ASCII
@@ -423,6 +461,21 @@ def compose_chain_lines(
         lines.append(_search_view.TITLE)
         lines.append(f"{UNKNOWN}  {DISCOVERY_UNAVAILABLE_TEXT}")
     else:
+        window_size: int | None = None
+        window_start = 0
+        if (
+            discovered_window is not None
+            and not isinstance(discovered_window, bool)
+            and isinstance(discovered_window, int)
+            and discovered_window >= 1
+        ):
+            ensure = getattr(session, "ensure_discovered_visible", None)
+            if callable(ensure):
+                ensure(discovered_window)
+            window_size = discovered_window
+            scroll = getattr(session, "discovered_scroll", 0)
+            if not isinstance(scroll, bool) and isinstance(scroll, int) and scroll >= 0:
+                window_start = scroll
         lines.extend(
             _search_view.format_profit_chain_lines(
                 discovered,
@@ -433,6 +486,8 @@ def compose_chain_lines(
                     if section == "discovered"
                     else None
                 ),
+                window_start=window_start,
+                window_size=window_size,
             )
         )
     return lines

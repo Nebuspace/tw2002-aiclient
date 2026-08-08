@@ -247,6 +247,65 @@ def test_the_module_has_no_send_path():
     assert "send_request" not in src
 
 
+def test_discovered_scroll_keeps_selected_visible_past_fold():
+    """WO-FIX-CHAINS-POPUP-DISCOVERED-PAGINATION: move past the fold scrolls."""
+    from types import SimpleNamespace
+
+    many = tuple(
+        SimpleNamespace(
+            sectors=(i, i + 1, i),
+            hops=(object(), object()),
+            turns=2,
+            cr_per_turn=float(i),
+        )
+        for i in range(1, 201)
+    )
+    payload = SimpleNamespace(
+        chains=many, reason=None, detail=None, adapter_note=None, search_note=None
+    )
+    s = chains.ChainsSession()
+    s.open([], "ok", discovered=payload)
+    assert s.section == "discovered"
+    window = 10
+    # Walk deep into the list — selection still resolves; scroll follows.
+    for _ in range(45):
+        s.move(1)
+    assert s.discovered_index == 45
+    s.ensure_discovered_visible(window)
+    assert s.discovered_scroll == 45 - window + 1
+    lines = chains.compose_chain_lines(s, discovered_window=window)
+    assert any("showing 10 of 200" in ln for ln in lines), lines
+    from tw2002_aiclient import chain_search_view as V
+
+    tagged = [ln for ln in lines if V.SOURCE_TAG in ln]
+    assert len(tagged) == window
+    assert any(ln.startswith(V.SELECTED_UNICODE) for ln in tagged)
+
+
+def test_discovered_window_small_set_unchanged():
+    from types import SimpleNamespace
+
+    few = tuple(
+        SimpleNamespace(
+            sectors=(i, i + 1, i),
+            hops=(object(), object()),
+            turns=2,
+            cr_per_turn=1.0,
+        )
+        for i in range(1, 4)
+    )
+    payload = SimpleNamespace(
+        chains=few, reason=None, detail=None, adapter_note=None, search_note=None
+    )
+    s = chains.ChainsSession()
+    s.open([], "ok", discovered=payload)
+    lines = chains.compose_chain_lines(s, discovered_window=10)
+    assert not any("showing" in ln for ln in lines)
+    from tw2002_aiclient import chain_search_view as V
+
+    assert sum(1 for ln in lines if V.SOURCE_TAG in ln) == 3
+
+
 def test_screens_dispatches_via_resolve_chains_offer_key() -> None:
     """WO-WIRE-CHAINS-ARM-ACTION-AND-OFFER-KEY: L must go through the helper."""
     import ast

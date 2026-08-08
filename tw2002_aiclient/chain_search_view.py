@@ -173,6 +173,8 @@ def format_profit_chain_lines(
     unicode_ok: bool = True,
     width: int = 48,
     selected_index: int | None = None,
+    window_start: int = 0,
+    window_size: int | None = None,
 ) -> list[str]:
     """The listing's body lines. Never raises regardless of `payload`'s shape.
 
@@ -185,6 +187,11 @@ def format_profit_chain_lines(
 
     A truncated result -- EITHER stage -- gets a `PARTIAL_*` banner, and a
     truncated EMPTY result says so rather than claiming absence.
+
+    ``window_size`` (optional): format only the slice starting at
+    ``window_start``. When the full set exceeds the window, emit a
+    ``showing N of M`` indicator and format only the visible rows (popup
+    pagination — CLI callers leave ``window_size=None`` and see every row).
     """
     try:
         w = int(width)
@@ -218,10 +225,38 @@ def format_profit_chain_lines(
         lines.append(f"{UNKNOWN}  {text}")
         return lines
 
+    total = len(chains)
+    start = 0
+    if not isinstance(window_start, bool) and isinstance(window_start, int):
+        start = max(0, window_start)
+    size: int | None = None
+    if (
+        window_size is not None
+        and not isinstance(window_size, bool)
+        and isinstance(window_size, int)
+        and window_size >= 1
+    ):
+        size = window_size
+    if size is None:
+        start = 0
+        end = total
+        show_indicator = False
+    else:
+        start = min(start, max(0, total - 1))
+        end = min(total, start + size)
+        # Re-clamp start so a stale scroll never yields an empty window.
+        if end - start < size and start > 0:
+            start = max(0, end - size)
+        show_indicator = total > size
+
     lines = [TITLE]
     if truncated:
         lines.append(partial_banner)
-    for i, chain in enumerate(chains):
+    if show_indicator:
+        # N = rows in this viewport; M = full discovered set.
+        lines.append(f"showing {end - start} of {total}")
+    for i in range(start, end):
+        chain = chains[i]
         marker = selected if i == selected_index else (best if i == 0 else "")
         lines.append(
             _format_one_chain(
