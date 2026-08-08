@@ -126,7 +126,7 @@ def add_port_floor_parsers(sub: argparse._SubParsersAction) -> None:
         "--world-dir",
         required=True,
         metavar="PATH",
-        help="path to a world directory (…/state/world/<world_id>)",
+        help="path to a world directory (.../state/world/<world_id>)",
     )
     sp_snap.add_argument(
         "--store",
