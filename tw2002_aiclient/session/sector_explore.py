@@ -16,7 +16,7 @@ from typing import Optional, Set
 
 from .. import world_model
 from .. import explore as _explore
-from ..explore import known_graph, map_fill_warp_target, warp_target_for_intent
+from ..explore import known_graph, warp_target_for_intent
 from ..halt_reasons import qualify as _qualify
 from ..loops.player import (
     HALT_ABORTED,

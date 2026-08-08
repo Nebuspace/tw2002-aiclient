@@ -43,7 +43,6 @@ from tw2002_aiclient.cockpit import viewport as cockpit_viewport
 from tw2002_aiclient.cockpit import viewport_color as cockpit_viewport_color
 from tw2002_aiclient.cockpit.layout import frame_layout, nested_focus_region
 from tw2002_aiclient.cockpit.strip import compose_profile_strip_segments_from_row
-from tw2002_aiclient.session import credentials
 
 
 @dataclass(frozen=True)

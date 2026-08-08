@@ -35,7 +35,7 @@ the moment the library became useful.
 
 from __future__ import annotations
 
-from typing import Any, Mapping, Optional
+from typing import Any, Mapping
 
 from tw2002_aiclient.alignment_gate import AlignmentRefusal, refuse_pvp_aggression_rule
 from tw2002_aiclient.cockpit import assign_trigger

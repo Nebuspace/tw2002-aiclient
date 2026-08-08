@@ -60,7 +60,7 @@ of input shape.
 
 from __future__ import annotations
 
-from typing import Any, Mapping, Sequence
+from typing import Mapping, Sequence
 
 # Pure FORMATTER, not a finder: `chain_search_view` imports nothing of this
 # package and runs no discovery — it only renders a `chain_search`-shaped

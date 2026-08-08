@@ -326,6 +326,7 @@ __all__ = [
     "OUTCOME_COMPLETED",
     "OUTCOME_HALTED",
     "OUTCOMES",
+    "QUALIFIER_SEP",  # re-exported; cross-module tests pin this name
     "ReplayResult",
     "ReplaySession",
     "StepTrace",
