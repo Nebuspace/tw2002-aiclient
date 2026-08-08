@@ -314,12 +314,31 @@ class FocusScalars:
         self._chain_scalars = chain_scalars
 
     def merge(self, status: object) -> dict | None:
-        """Attach ``focus.candidates``; never mutates input; never clobbers."""
+        """Attach ``focus.candidates``; never mutates input; never clobbers.
+
+        Also attaches ``upgrade_loop`` from a priced chain when catalog/player
+        are already on status (WO-WIRE-SHIP-SPEC-CATALOG-INTO-UPGRADE-DECISIONS).
+        """
         if not isinstance(status, dict):
             return status
         if status.get(FOCUS_KEY) is not None:
             return status
         merged = dict(status)
+        # Loop economics need a priced chain — attach before FOCUS reads upgrade_*.
+        try:
+            from tw2002_aiclient.ship_upgrade_decision import merge_upgrade_status_inputs
+
+            chain = None
+            if self._chain_scalars is not None:
+                subject, _caption = self._chain_scalars.bubble_subject(
+                    current_sector=ChainScalars._sector_from_status(merged)
+                )
+                chain = subject
+            enriched = merge_upgrade_status_inputs(merged, chain=chain)
+            if isinstance(enriched, dict):
+                merged = enriched
+        except Exception:  # noqa: BLE001 -- upgrade overlay must not break focus
+            pass
         merged[FOCUS_KEY] = {
             "candidates": recommend_focus_candidates(
                 merged, chain_scalars=self._chain_scalars
