@@ -26,7 +26,7 @@ import re
 import threading
 import time
 from pathlib import Path
-from typing import Any, Mapping, Optional
+from typing import Any, Mapping
 
 from tw2002_aiclient.session.session import VALID_SENDERS
 from tw2002_aiclient.session.state_parser import (
