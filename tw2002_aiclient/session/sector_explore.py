@@ -80,6 +80,17 @@ SETTLE_TIMEOUT_S = 8.0
 SETTLE_DEBOUNCE_MS = 350
 STOP_JOIN_TIMEOUT_S = 5.0
 
+# WO-DIAGNOSE-EXPLORE-HALT-GAME-SELECT-LIVE-SESSION: bounded wait for a
+# SessionGuardian D9 reconnect+login-replay burst to clear before treating
+# a halt-classified screen as genuine. Sized above the guardian's own worst
+# case (5 attempts * 3.0s backoff each, plus connect+replay time) so a
+# real burst almost always finishes inside the wait; a burst that is STILL
+# running past this bound falls through to the ordinary halt unchanged --
+# this is a tolerance window, never a substitute for the guardian's own
+# exhaustion handling.
+RECONNECT_WAIT_TIMEOUT_S = 30.0
+RECONNECT_WAIT_POLL_S = 0.5
+
 ARGS_EXPLORE_START = frozenset(
     {"world_id", "min_sectors", "turn_budget", "intent", "dock_new_ports", "fight_tolls"}
 )
@@ -753,6 +764,7 @@ class ExploreRunner:
         log_error=None,
         timeout_s: float = SETTLE_TIMEOUT_S,
         debounce_ms: int = SETTLE_DEBOUNCE_MS,
+        guardian=None,
     ) -> None:
         self._session = session
         self._control_lock = control_lock
@@ -760,6 +772,12 @@ class ExploreRunner:
         self._log_error = log_error
         self._timeout_s = timeout_s
         self._debounce_ms = debounce_ms
+        # Optional (WO-DIAGNOSE-EXPLORE-HALT-GAME-SELECT-LIVE-SESSION): the
+        # daemon's SessionGuardian, if this runner has one. `None` in every
+        # existing test/caller that constructs an ExploreRunner directly --
+        # the reconnect-tolerant wait below is a no-op without it, exactly
+        # matching pre-fix behaviour (never a required dependency).
+        self._guardian = guardian
         self._mutex = threading.Lock()
         self._in_flight = False
         self._stop: Optional[threading.Event] = None
@@ -1241,6 +1259,36 @@ class ExploreRunner:
                             break
                         continue
                 if halt is not None:
+                    # WO-DIAGNOSE-EXPLORE-HALT-GAME-SELECT-LIVE-SESSION:
+                    # a halt-classified screen reached WHILE the guardian's
+                    # own D9 reconnect+login-replay burst is in flight is
+                    # not evidence this run cannot proceed -- it is the
+                    # replay's OWN transient screen (login lands on
+                    # `game_select` on a multi-game BBS before the replay
+                    # picks a game letter again), read by this loop with no
+                    # coordination between the two drivers sharing one
+                    # session. Wait, bounded, for the burst to clear, then
+                    # re-render and re-classify from the top of the loop --
+                    # a burst that is STILL running past the bound, or a
+                    # halt that persists once the burst has cleared (a
+                    # genuine unrecoverable screen, or reconnect_exhausted),
+                    # falls straight through to the unchanged halt below.
+                    if self._guardian is not None and getattr(self._guardian, "reconnecting", False):
+                        deadline = time.monotonic() + RECONNECT_WAIT_TIMEOUT_S
+                        while (
+                            getattr(self._guardian, "reconnecting", False)
+                            and time.monotonic() < deadline
+                            and not stop.is_set()
+                        ):
+                            stop.wait(RECONNECT_WAIT_POLL_S)
+                        # Only retry if the burst actually CLEARED during the
+                        # wait -- a deadline that expired while still
+                        # reconnecting must fall through to the ordinary
+                        # halt below, never loop back into another wait
+                        # (that would be an unbounded retry against a
+                        # burst that is never going to clear).
+                        if not stop.is_set() and not getattr(self._guardian, "reconnecting", False):
+                            continue
                     _attribute_landmark(
                         self._session,
                         report.world_id,
