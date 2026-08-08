@@ -480,7 +480,28 @@ class ChainScalars:
             merged[UNIT_KEY] = unit
         # WO-BUILD-CHAIN-DEPLETION-PREDICTOR: remaining_trades when holds +
         # commodity amounts are known. Omit-until-known; never invent stock.
-        self._merge_depletion_signals(merged)
+        # Writes MUST land on ``merged`` inside ``merge`` (not a helper) so
+        # tests/status_vocabulary emitted_keys sees producers on the returned
+        # dict — helper mutation is invisible to that scan.
+        signals = self._depletion_signals_for(merged)
+        if signals is not None:
+            if (
+                merged.get(REMAINING_TRADES_KEY) is None
+                and "remaining_trades" in signals
+            ):
+                merged[REMAINING_TRADES_KEY] = signals["remaining_trades"]
+            if merged.get(NEARING_DEPLETION_KEY) is None:
+                merged[NEARING_DEPLETION_KEY] = (
+                    signals["nearing_depletion"] is True
+                )
+            if merged.get(EXPLORE_APPETITE_RAISED_KEY) is None:
+                merged[EXPLORE_APPETITE_RAISED_KEY] = (
+                    signals["explore_appetite_raised"] is True
+                )
+            if merged.get(DEPLETION_STOP_RECOMMENDED_KEY) is None:
+                merged[DEPLETION_STOP_RECOMMENDED_KEY] = (
+                    signals["stop_recommended"] is True
+                )
         return merged
 
     def _hold_count_from_status(self, status: dict) -> int | None:
@@ -503,43 +524,31 @@ class ChainScalars:
             return priced
         return self._best_chain
 
-    def _merge_depletion_signals(self, merged: dict) -> None:
+    def _depletion_signals_for(self, status: dict) -> dict | None:
+        """Compute depletion signal dict, or ``None`` when omit-until-known."""
         try:
             from tw2002_aiclient.chain_depletion import (
                 depletion_signals,
                 predict_remaining_trades,
             )
         except Exception:  # noqa: BLE001
-            return
+            return None
         if not self._commodity_maps:
-            return
-        hold_count = self._hold_count_from_status(merged)
+            return None
+        hold_count = self._hold_count_from_status(status)
         if hold_count is None:
-            return
-        chain = self._display_chain_for_depletion(merged)
+            return None
+        chain = self._display_chain_for_depletion(status)
         if chain is None:
-            return
+            return None
         remaining = predict_remaining_trades(
             chain,
             hold_count=hold_count,
             ports_by_sector=self._commodity_maps,
         )
         if remaining is None:
-            return
-        signals = depletion_signals(remaining)
-        if merged.get(REMAINING_TRADES_KEY) is None and "remaining_trades" in signals:
-            merged[REMAINING_TRADES_KEY] = signals["remaining_trades"]
-        if merged.get(NEARING_DEPLETION_KEY) is None:
-            merged[NEARING_DEPLETION_KEY] = signals["nearing_depletion"] is True
-        if merged.get(EXPLORE_APPETITE_RAISED_KEY) is None:
-            merged[EXPLORE_APPETITE_RAISED_KEY] = (
-                signals["explore_appetite_raised"] is True
-            )
-        if merged.get(DEPLETION_STOP_RECOMMENDED_KEY) is None:
-            merged[DEPLETION_STOP_RECOMMENDED_KEY] = (
-                signals["stop_recommended"] is True
-            )
-
+            return None
+        return depletion_signals(remaining)
 
     def wrap(self, provider):
         """``provider`` with these scalars merged into whatever it returns.
