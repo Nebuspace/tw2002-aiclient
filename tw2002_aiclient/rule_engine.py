@@ -43,6 +43,9 @@ __all__ = [
     "POSTURE_STOP",
     "SCOPE_ONE_SHOT",
     "SCOPE_REPEATING",
+    "ORIGIN_HUMAN",
+    "ORIGIN_AI_APPROVED",
+    "VALID_ORIGINS",
     "select_rule",
     "rule_to_dict",
     "rule_from_dict",
@@ -76,6 +79,12 @@ POSTURE_STOP = "stop"
 
 SCOPE_ONE_SHOT = "one-shot"
 SCOPE_REPEATING = "repeating"
+
+# Teaching-provenance axis (canon/engine/coverage-metrics.md). Authorship of a
+# guarded rule — never a live-sender value. Absent on pre-field documents.
+ORIGIN_HUMAN = "human"
+ORIGIN_AI_APPROVED = "ai-approved"
+VALID_ORIGINS = (ORIGIN_HUMAN, ORIGIN_AI_APPROVED)
 
 _SCOPES = (SCOPE_ONE_SHOT, SCOPE_REPEATING)
 _POSTURES = (POSTURE_INELIGIBLE, POSTURE_STOP)
@@ -209,6 +218,9 @@ class Rule:
     scope: str = SCOPE_ONE_SHOT
     approved: bool = False
     guards: tuple = ()
+    # Teaching provenance: ``human`` | ``ai-approved`` | None (legacy / unknown).
+    # Never silently defaulted to either real origin when the field is absent.
+    origin: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -362,7 +374,7 @@ def select_rule(
 _GUARD_REQUIRED = ("fact", "op")
 _GUARD_OPTIONAL = ("value", "posture", "stop_reason")
 _RULE_REQUIRED = ("rule_id", "screen_match", "do", "priority")
-_RULE_OPTIONAL = ("scope", "approved", "guards")
+_RULE_OPTIONAL = ("scope", "approved", "guards", "origin")
 
 
 def _require_str(value: Any, field: str) -> str:
@@ -440,6 +452,16 @@ def rule_from_dict(payload: Any) -> Rule:
     if not isinstance(approved, bool):
         # A truthy string here is exactly how a draft becomes live by accident.
         raise RuleDocumentError(f"rule.approved must be a bool, got {approved!r}")
+    # Absent ``origin`` stays None (legacy/unknown bucket). Never invent human
+    # or ai-approved for a pre-field document.
+    if "origin" in payload:
+        origin = payload["origin"]
+        if origin not in VALID_ORIGINS:
+            raise RuleDocumentError(
+                f"rule.origin {origin!r} is not one of {list(VALID_ORIGINS)}"
+            )
+    else:
+        origin = None
     raw_guards = payload.get("guards", ())
     if isinstance(raw_guards, (str, bytes, Mapping)) or not isinstance(raw_guards, Iterable):
         raise RuleDocumentError("rule.guards must be a list of guard mappings")
@@ -451,11 +473,12 @@ def rule_from_dict(payload: Any) -> Rule:
         scope=scope,
         approved=approved,
         guards=tuple(guard_from_dict(g) for g in raw_guards),
+        origin=origin,
     )
 
 
 def rule_to_dict(rule: Rule) -> dict:
-    return {
+    out = {
         "rule_id": rule.rule_id,
         "screen_match": rule.screen_match,
         "do": rule.do,
@@ -464,6 +487,11 @@ def rule_to_dict(rule: Rule) -> dict:
         "approved": rule.approved,
         "guards": [guard_to_dict(g) for g in rule.guards],
     }
+    # Omit when unset so a legacy document round-trips without inventing the
+    # field — coverage then buckets it as unknown/legacy.
+    if rule.origin is not None:
+        out["origin"] = rule.origin
+    return out
 
 
 def document_from_dicts(payload: Any) -> tuple:

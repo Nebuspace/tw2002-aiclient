@@ -109,6 +109,8 @@ def analyze_escalation(
         "priority": raw["priority"],
         "scope": raw.get("scope", "one-shot"),
         "guards": raw.get("guards", []),
+        # Teaching provenance: AI-authored draft (becomes repertoire on approve).
+        "origin": "ai-approved",
     }
 
     try:
