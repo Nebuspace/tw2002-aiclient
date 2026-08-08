@@ -111,6 +111,57 @@ def test_json_output_carries_the_cycle(world):
     assert len(payload["chains"][0]["hops"]) == 3
 
 
+def test_json_emits_fingerprint_that_round_trips_chain_start_validation(world):
+    """WO-FIX-CLI-CHAINS-FINGERPRINT-EXPOSURE: emitted fp is what start accepts."""
+    from tw2002_aiclient import chain_search
+    from tw2002_aiclient.trade_chain_plan import plan_from_chain, resolve_exact_chain
+
+    rc, out = _run(["chains", "--world-id", W, "--json"])
+    assert rc == 0
+    payload = json.loads(out)
+    assert payload["chains"], "fixture world must discover ≥1 cycle"
+    row = payload["chains"][0]
+    assert "fingerprint" in row
+    fp = row["fingerprint"]
+    assert isinstance(fp, str) and len(fp) == 64
+
+    # Existing asdict fields still present (additive shape).
+    for key in ("sectors", "hops", "turns", "cr_per_turn", "cr_per_execution"):
+        assert key in row
+
+    # Same identity plan_from_chain / resolve_exact_chain use for start.
+    fresh = chain_search.recompute(W, rank=chain_search.RANK_YIELD)
+    matched = resolve_exact_chain(W, fp, fresh.chains)
+    assert matched is not None
+    assert plan_from_chain(W, matched).fingerprint == fp
+
+
+def test_json_fingerprint_null_when_plan_from_chain_refuses(world, monkeypatch):
+    """Sub-floor / incomplete chains emit fingerprint: null, not a fake id."""
+    from tw2002_aiclient import chain_search, chains
+
+    # One-hop cycle is below the 2-hop floor plan_from_chain requires.
+    thin = chains.ProfitChain(
+        sectors=(10, 11, 10),
+        hops=(chains.TradeHop(10, 11, "Fuel Ore", 1.0, 1),),
+        overall_profit=1.0,
+        turns=1,
+        cr_per_turn=1.0,
+        cr_per_execution=1.0,
+    )
+
+    def _payload(world_id, **kwargs):
+        return chain_search.ProfitChainResult(
+            world_id=world_id, chains=(thin,), reason=None
+        )
+
+    monkeypatch.setattr(chain_search, "recompute", _payload)
+    rc, out = _run(["chains", "--world-id", W, "--json"])
+    assert rc == 0
+    payload = json.loads(out)
+    assert payload["chains"][0]["fingerprint"] is None
+
+
 def test_cmd_chains_requests_yield_rank(world, monkeypatch):
     """Earn CLI surface must ask recompute for yield-first ordering."""
     from tw2002_aiclient import chain_search
