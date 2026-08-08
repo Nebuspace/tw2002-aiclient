@@ -16,7 +16,7 @@ A mock proves the handler; only the real condition proves the classification.
 import errno
 import json
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -779,3 +779,84 @@ def test_next_player_zero_cooldown_includes_recent() -> None:
 def test_tw_players_next_wires_to_cmd() -> None:
     args = build_parser().parse_args(["players", "next"])
     assert args.func is players_cli.cmd_players_next
+
+
+# --- WO-BUILD-PLAYER-BANK-ROTATION-DRIVER ------------------------------------
+
+
+def test_advance_rotation_prefers_never_then_oldest() -> None:
+    now = datetime.now(timezone.utc)
+    rows = [
+        {"name": "recent", "last_played": now.isoformat()},
+        {"name": "alpha", "last_played": "never"},
+        {"name": "older", "last_played": (now - timedelta(days=10)).isoformat()},
+    ]
+    decision = player_bank.advance_rotation(rows, cooldown_hours=24, now=now)
+    assert decision == player_bank.RotationDecision(name="alpha", reason="due")
+
+    decision2 = player_bank.advance_rotation(
+        rows[0:1] + rows[2:], cooldown_hours=24, now=now
+    )
+    assert decision2 == player_bank.RotationDecision(name="older", reason="due")
+
+
+def test_advance_rotation_matches_next_player_exactly() -> None:
+    """The driver must never diverge from the selector it wraps."""
+    now = datetime.now(timezone.utc)
+    rows = [
+        {"name": "hot", "last_played": now.isoformat()},
+        {"name": "broke", "last_played": "never", "error": "bad profile"},
+        {"name": "ok", "last_played": (now - timedelta(days=30)).isoformat()},
+    ]
+    for cooldown in (0, 24, 999):
+        assert player_bank.advance_rotation(rows, cooldown_hours=cooldown, now=now).name == (
+            player_bank.next_player(rows, cooldown_hours=cooldown, now=now)
+        )
+
+
+def test_advance_rotation_empty_bank_reason() -> None:
+    decision = player_bank.advance_rotation([], cooldown_hours=24)
+    assert decision == player_bank.RotationDecision(name=None, reason="empty_bank")
+
+
+def test_advance_rotation_none_eligible_reason() -> None:
+    now = datetime.now(timezone.utc)
+    rows = [{"name": "hot", "last_played": now.isoformat()}]
+    decision = player_bank.advance_rotation(rows, cooldown_hours=24, now=now)
+    assert decision == player_bank.RotationDecision(name=None, reason="none_eligible")
+
+
+def test_advance_rotation_defaults_rows_to_list_players(monkeypatch) -> None:
+    now = datetime.now(timezone.utc)
+    monkeypatch.setattr(
+        player_bank,
+        "list_players",
+        lambda: [{"name": "solo", "last_played": "never"}],
+    )
+    decision = player_bank.advance_rotation(cooldown_hours=24, now=now)
+    assert decision == player_bank.RotationDecision(name="solo", reason="due")
+
+
+def test_advance_rotation_propagates_bank_unreadable(monkeypatch) -> None:
+    def boom() -> list[dict[str, str]]:
+        raise player_bank.BankUnreadable("denied", "permission denied")
+
+    monkeypatch.setattr(player_bank, "list_players", boom)
+    with pytest.raises(player_bank.BankUnreadable):
+        player_bank.advance_rotation()
+
+
+def test_advance_rotation_never_writes_last_played(tmp_path, monkeypatch) -> None:
+    """The driver decides; it does not stamp any store — no write path exists."""
+    bank_path = tmp_path / "player_bank.json"
+    monkeypatch.setattr(player_bank, "BANK_PATH", bank_path)
+    now = datetime.now(timezone.utc)
+    rows = [{"name": "alpha", "last_played": "never"}]
+    decision = player_bank.advance_rotation(rows, cooldown_hours=24, now=now)
+    assert decision.name == "alpha"
+    assert not bank_path.exists()
+
+
+def test_tw_players_rotate_wires_to_cmd() -> None:
+    args = build_parser().parse_args(["players", "rotate"])
+    assert args.func is players_cli.cmd_players_rotate
