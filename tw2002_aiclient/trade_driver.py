@@ -869,6 +869,62 @@ def _emit_progress(
         on_progress(event)
 
 
+
+def _hold_count_from_session(session) -> int | None:
+    """Live hold count for depletion predictor; omit-until-known."""
+    snap = getattr(session, "current_ship_snapshot", None)
+    ship = None
+    if callable(snap):
+        try:
+            ship = snap()
+        except Exception:  # noqa: BLE001
+            ship = None
+    if not isinstance(ship, dict):
+        ship = getattr(session, "last_current_ship", None)
+    if not isinstance(ship, dict):
+        return None
+    holds = ship.get("total_holds")
+    if isinstance(holds, bool) or not isinstance(holds, int) or holds <= 0:
+        return None
+    return holds
+
+
+def _predicted_depletion_stop(
+    session,
+    chain: ProfitChain,
+    *,
+    world_id: str,
+    state_dir=None,
+) -> str | None:
+    """Return a ``stop_reason`` when predicted remaining_trades < 1, else None."""
+    try:
+        from tw2002_aiclient.chain_depletion import (
+            nearing_depletion,
+            ports_commodity_maps_from_records,
+            predict_remaining_trades,
+        )
+    except Exception:  # noqa: BLE001
+        return None
+    hold_count = _hold_count_from_session(session)
+    if hold_count is None:
+        return None
+    try:
+        recs = world_model.query(
+            world_id, lambda s: bool(s.get("port")), state_dir=state_dir
+        )
+        ports = ports_commodity_maps_from_records(recs)
+    except Exception:  # noqa: BLE001
+        return None
+    remaining = predict_remaining_trades(
+        chain, hold_count=hold_count, ports_by_sector=ports
+    )
+    if remaining is None:
+        return None
+    if nearing_depletion(remaining):
+        return f"depleted:predicted:remaining_trades={remaining:.4g}"
+    return None
+
+
 def run_chain(
     session,
     chain: ProfitChain,
@@ -917,6 +973,22 @@ def run_chain(
         return ChainRunResult(
             completed=False, hops_completed=0, steps=0, credits_delta=None,
             stop_reason="turns_left_unknown", trace=(),
+        )
+
+    # WO-BUILD-CHAIN-DEPLETION-PREDICTOR: predicted remaining_trades → STOP
+    # (canon: depletion is a STOP-guard, never autonomous rotation). Omit
+    # when holds/stock unknown — never invent a crisis from absence.
+    predicted_stop = _predicted_depletion_stop(
+        session, chain, world_id=world_id, state_dir=state_dir
+    )
+    if predicted_stop is not None:
+        return ChainRunResult(
+            completed=False,
+            hops_completed=0,
+            steps=0,
+            credits_delta=None,
+            stop_reason=predicted_stop,
+            trace=(),
         )
 
     ctx = _StepCtx(session, config, should_abort, is_armed)

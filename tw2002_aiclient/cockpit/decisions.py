@@ -169,8 +169,13 @@ _LOOP_DEPLETION_CODES = frozenset({"floor_reached", "turn_budget_exhausted"})
 
 
 def _loop_depleting_from_intervention(status: dict) -> bool:
-    """``True`` only when ``status["intervention"]["reasons"]`` carries a
-    depletion code. Never reads ``prompt``; never invents a halt."""
+    """``True`` when intervention carries a depletion code, or when the
+    chain remaining_trades predictor marks nearing depletion.
+
+    Never reads ``prompt``; never invents a halt from absence.
+    """
+    if status.get("chain_nearing_depletion") is True:
+        return True
     intervention = status.get("intervention")
     if not isinstance(intervention, dict):
         return False
