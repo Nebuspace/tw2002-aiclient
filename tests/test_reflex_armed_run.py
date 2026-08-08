@@ -80,8 +80,8 @@ class _SpyRunner:
 
         return AutoLoopSnapshot(running=False)
 
-    def start(self, name, floor=None, turn_budget=None, cycles=None):
-        self.started.append((name, floor, turn_budget, cycles))
+    def start(self, name, floor=None, turn_budget=None, profit_target=None, cycles=None):
+        self.started.append((name, floor, turn_budget, profit_target, cycles))
         if self._refuse is not None:
             from tw2002_aiclient.session import autoloop
 
@@ -441,7 +441,7 @@ def test_a_typed_y_reaches_the_real_autoloop_start(tmp_path, monkeypatch, capsys
     )
     assert resp["ok"] is True
     assert runner.started == [
-        ("dock", None, None, None)
+        ("dock", None, None, None, None)
     ], "the existing player was not the launcher"
 
 

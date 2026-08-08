@@ -227,6 +227,11 @@ INTERVENTION_REASON_LABELS = {
     "already_running": "already running",
     "another_app_run_winding_down": "another app run winding down",
     "thread_start_failed": "thread start failed",
+    # WO-BUILD-PROFIT-TARGET-HALT profit-target rail (parallel to floor_*).
+    "profit_target_reached": "profit target reached",
+    "profit_unknown": "profit unknown",
+    "profit_stale": "profit stale",
+    "profit_unreadable": "profit unreadable",
 }
 
 # Canon's own empty/unknown marker -- "an empty code renders ``"?"``"

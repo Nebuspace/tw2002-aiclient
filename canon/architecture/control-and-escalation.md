@@ -131,6 +131,10 @@ STOP-cause family they express:
 | `fighters_zero` | fighters zero | **hazard** — fighters aboard are known and exactly zero; autopilot will not press on |
 | `route_hazard` | route hazard | **hazard** — planned hop crosses a known one-way warp or enters a warp-sink; autopilot STOPs rather than cross |
 | `reconnect_exhausted` | reconnect exhausted | **desync** — SessionGuardian D9 reconnect+replay burned its attempt budget; sticky escalate, no silent forever-retry |
+| `profit_target_reached` | profit target reached | **depletion** — profit (credits delta from session start) at or above the armed profit_target |
+| `profit_unknown` | profit unknown | **desync** — no profit reading has ever been observed; autopilot will not act on an unknown profit |
+| `profit_stale` | profit stale | **desync** — the last-known profit value is too old to trust for a decision |
+| `profit_unreadable` | profit unreadable | **desync** — the profit port answered something that is not a readable snapshot |
 
 The catalog is **open by construction**: `intervention_reason_label()` passes an unrecognized code
 through as its own text (and maps an empty/`None` code to `"?"`), so a new STOP cause can ship a new

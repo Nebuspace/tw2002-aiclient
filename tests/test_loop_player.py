@@ -73,9 +73,11 @@ from .test_loop_loader import _SEND_SYMBOLS, _send_violations
 PKG_ROOT = Path(player_mod.__file__).resolve().parent.parent
 PLAYER_SRC = (PKG_ROOT / "loops" / "player.py").read_text(encoding="utf-8")
 
-# The two `session/` modules `player.py` is allowed to import, and the only
-# two: closed vocabularies canon requires it to DERIVE rather than restate.
-ALLOWED_SESSION_MODULES = frozenset({"classify", "state_parser"})
+# The `session/` modules `player.py` is allowed to import, and only these:
+# closed vocabularies canon requires it to DERIVE rather than restate.
+# `hud_tracking` is the `ProfitSnapshot` type (WO-BUILD-PROFIT-TARGET-HALT),
+# same read-only-type shape as `state_parser`'s snapshots.
+ALLOWED_SESSION_MODULES = frozenset({"classify", "state_parser", "hud_tracking"})
 #: WO-HALT-QUALIFY-CONSOLIDATE: package-root leaves the player may import
 #: across the `loops/` boundary. Same discipline as the session waiver --
 #: granted here, and PAID FOR by scanning the waived module itself below.
@@ -983,12 +985,15 @@ def test_the_player_reaches_the_wire_through_exactly_one_call():
     assert "send_and_confirm" in _SEND_SYMBOLS
 
 
-def test_the_two_waived_session_modules_are_themselves_provably_pure():
-    """The waiver is not taken on trust. ``classify`` and ``state_parser``
-    are the only ``session/`` modules the player may import, and they earn
-    that by passing the same no-send scan -- transitively, since neither
-    imports anything from this package at all, so their import closure is
-    the standard library.
+def test_the_waived_session_modules_are_themselves_provably_pure():
+    """The waiver is not taken on trust. ``classify``, ``state_parser``, and
+    ``hud_tracking`` are the only ``session/`` modules the player may
+    import, and they earn that by passing the same no-send scan --
+    transitively: each imports nothing from this package except, at most,
+    another module already in this same waived set (``hud_tracking``
+    imports ``state_parser``'s types), so the FULL import closure is still
+    bounded to the standard library plus this closed, individually-scanned
+    set -- never a path out to a module that hasn't itself been scanned.
     """
     for name in sorted(ALLOWED_SESSION_MODULES):
         source = (PKG_ROOT / "session" / f"{name}.py").read_text(encoding="utf-8")
@@ -997,9 +1002,13 @@ def test_the_two_waived_session_modules_are_themselves_provably_pure():
         tree = ast.parse(source)
         for node in ast.walk(tree):
             if isinstance(node, ast.ImportFrom):
+                if node.level == 1 and node.module in ALLOWED_SESSION_MODULES:
+                    # A relative sibling import within the waived set stays
+                    # inside the closure this test scans -- not an escape.
+                    continue
                 # `from __future__ import annotations` is the one relative-
-                # level-0 stdlib import these carry; anything reaching into
-                # the package would break the transitive claim.
+                # level-0 stdlib import these carry; anything else reaching
+                # into the package would break the transitive claim.
                 assert not node.level, f"{name}: relative import {node.module!r}"
                 assert not (node.module or "").startswith("tw2002_aiclient"), name
             elif isinstance(node, ast.Import):
@@ -1021,8 +1030,18 @@ def test_the_player_cannot_acquire_a_session():
         "credits_stale_ms",
         "turn_budget",
         "turns_stale_ms",
+        "profit_target",
+        "profit_stale_ms",
     ]
-    for keyword in ("force", "floor", "credits_stale_ms", "turn_budget", "turns_stale_ms"):
+    for keyword in (
+        "force",
+        "floor",
+        "credits_stale_ms",
+        "turn_budget",
+        "turns_stale_ms",
+        "profit_target",
+        "profit_stale_ms",
+    ):
         assert parameters[keyword].kind is inspect.Parameter.KEYWORD_ONLY, keyword
     # WO-P2-G4-X5: the floor is OFF by default and the freshness window is
     # not. A `floor` that defaulted to anything but None would arm a rail
@@ -1121,6 +1140,13 @@ def test_the_reason_vocabulary_is_closed_and_fully_reachable():
         player_mod.HALT_TURNS_UNREADABLE,
         player_mod.HALT_HAZARD_GAME_SELECT,
         player_mod.HALT_HAZARD_ZERO_FIGHTERS,
+        # WO-BUILD-PROFIT-TARGET-HALT's ADDITIONAL stop, mirroring the
+        # credit floor's four reasons with the direction inverted.
+        # Reachability is proven in tests/test_profit_target.py.
+        player_mod.HALT_PROFIT_TARGET_REACHED,
+        player_mod.HALT_PROFIT_UNKNOWN,
+        player_mod.HALT_PROFIT_STALE,
+        player_mod.HALT_PROFIT_UNREADABLE,
     }
     assert reported == HALT_REASONS
     # Canon's and the archive's own spellings, carried rather than re-coined.
