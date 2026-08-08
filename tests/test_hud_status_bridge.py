@@ -713,6 +713,26 @@ def test_encounter_toll_fighters_line_does_not_emit_fighters_aboard(
     assert "fighters_aboard" not in resp
 
 
+def test_fighter_encounter_status_emits_toll_ev(session, monkeypatch):
+    """WO-WIRE-REROUTE-EV-TO-PRIORITY-COACH: product call site on status."""
+    resp = _status(
+        session,
+        monkeypatch,
+        "Commander Rax is here.\nYour fighters: 500 vs. theirs: 1\n"
+        "Option? (A,D,I,R,S,?):?",
+    )
+    assert resp["classification"] == "fighter_encounter"
+    assert "toll_ev" in resp
+    assert resp["toll_ev"]["preferred"] in ("reroute", "fight", "unknown")
+    assert "prompt" not in resp
+
+
+def test_calm_screen_omits_toll_ev(session, monkeypatch):
+    resp = _status(session, monkeypatch, "Command [TL=00:00:00]:[1] (?=Help)? :")
+    assert resp.get("classification") != "fighter_encounter"
+    assert "toll_ev" not in resp
+
+
 def test_fighters_aboard_zero_is_emitted_not_omitted(session, monkeypatch):
     """A real reading of 0 is a fact (shipyard arm); omit is only for unknown."""
     resp = _status(session, monkeypatch, "Fighters       : 0\n", LIVE_PROMPT)
