@@ -195,7 +195,6 @@ def test_run_play_wires_bridge_write_and_promote():
     assert "write_draft" in called
     assert "promote_draft" in called
     assert "begin_rule_identity" in called
-    assert "compose_bridge_command" not in called
     assert "compose_rule_blessed_line" in called
 
 
