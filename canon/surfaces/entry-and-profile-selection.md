@@ -383,12 +383,15 @@ paladin-main     PaladinPrime     tw2002.briancmoses.com   A   2026-07-23     ok
   (`list_profile_summaries`, `create_profile`, `list_servers`, `player_bank`) already exist and are
   what a single surface would compose. Recorded, not silently conformed.
 
-- **`tw players next` rotation selection is LIVE; the rotation *driver* is not yet wired.**
-  Tip (WO-BUILD-PLAYER-ROTATION-SELECTOR): `player_bank.next_player` + `tw players next`
-  (`players_cli.py`) pick a read-only next profile under a default 24h cooldown window.
-  Never logs in / never auto-switches. The daemon-side, window-gated rotation *driver*
-  (auto whose-turn-is-it across the bank) remains a separate future wave
-  (`WO-BUILD-PLAYER-BANK-ROTATION-DRIVER`).
+- **`tw players next` rotation selection and the rotation *driver* are both LIVE.**
+  `player_bank.next_player` + `tw players next` (`players_cli.py`) pick a read-only next
+  profile under a default 24h cooldown window. `player_bank.advance_rotation` + `tw players
+  rotate` (WO-BUILD-PLAYER-BANK-ROTATION-DRIVER) wrap that same selector to report who's due
+  as a first-class decision (`RotationDecision(name, reason)`) — still decide-and-report only,
+  never a write: no `last_played` write path exists anywhere in this codebase today, so the
+  driver never fabricates a play session. Neither logs in / auto-switches. The daemon-side
+  consumer that would actually *act* on a driver decision (auto-login/auto-switch) remains a
+  separate future wave.
 
 - **`tw players list` is LIVE (WO-BUILD-TW-PLAYERS-LIST).** Prints the same
   `BOUNDARY_LINE_1` / `BOUNDARY_LINE_2` no-collusion lines as `BankViewScreen`, then
