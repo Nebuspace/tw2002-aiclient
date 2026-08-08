@@ -258,16 +258,17 @@ code.)*
    prescriptively. Recorded because the resolver ships **on by default** (operator ruling
    2026-07-23) — the hardening is what makes "on" safe, and it is non-negotiable, not optional.
 
-2. **The autopilot per-cycle EV selector contradicts stop-on-unknown.** The strategic run-loop
-   today selects an action every cycle by expected value, with an `EXPLORE_BASELINE_EV` (default
-   ~0.01 cr/turn) "never idle" floor that keeps it choosing an explore action rather than halting
-   when nothing productive is known. That is the *opposite* posture from the reborn novelty-halt
-   rail: instead of STOPping on an unrecognized/uncovered situation, it manufactures a low-value
-   action to stay busy. The canonical home of this finding is the run-loop's own doc
-   ([app-autopilot-model](/architecture/app-autopilot-model.md), with the `EXPLORE_BASELINE_EV`
-   strategic half in priority-engine / exploration-policy); it is recorded here too because the
-   novelty-halt rail is the guard that must eventually *replace* the never-idle EV floor — the two
-   cannot both be the App's behavior on an unknown screen.
+2. **Archived autopilot per-cycle EV selector vs stop-on-unknown — RESOLVED on tip (do-not-revive).**
+   Pre-rebirth `autopilot.py` / `priority_engine.py` selected an action every cycle by expected
+   value, with an `EXPLORE_BASELINE_EV` (default ~0.01 cr/turn) "never idle" floor that
+   manufactured an explore action rather than halting when nothing productive was known — the
+   *opposite* posture from the reborn novelty-halt rail. That never-idle EV-selector lived in
+   archived modules now flagged do-not-revive; tip has no `autopilot.py`. Today's
+   `EXPLORE_BASELINE_EV` survives only in `tw2002_aiclient/focus_status.py` as a suggestion-only
+   FOCUS floor (display `ev_per_turn`; zero autonomous-action consumers). Novelty-halt and the
+   historical never-idle floor no longer compete as App behavior on an unknown screen. Canonical
+   home of the closed finding: [app-autopilot-model](/architecture/app-autopilot-model.md)
+   (citation [6]).
 
 3. **`ai_pilot` live-drive mode — RETIRED on tip (2026-08-04).** Pre-rebirth control-lock exposed
    `MODE_AI_PILOT`; tip `tw2002_aiclient/session/control_lock.py` keeps only
