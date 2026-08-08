@@ -84,7 +84,7 @@ _FENCE_UNBLOCK_WAIT_S = 1.0
 # lived one layer up, in protocol.py's dispatch and loop_player.py) --
 # this port adds the tag at the choke point canon specifies.
 #
-# "dev" (canon: dev-drive-exception.md, Max ruling 2026-08-07) is the
+# "dev" (canon: dev-drive-exception.md, human ruling 2026-08-07) is the
 # third, sacrificial-only, manual sender authorized for an AI agent's own
 # development/debugging keystrokes -- never real play. It is gated BELOW,
 # at the same choke points that already validate "app"/"human": send()
