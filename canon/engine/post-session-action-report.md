@@ -40,8 +40,8 @@ forbids.
 
 **Delivery surface (as shipped):** CLI verb `tw report` (`tw2002_aiclient/session_report.py`,
 `tw2002_aiclient/session/cli.py: cmd_report`). Daemon-free — reads `state/ledger.jsonl` directly.
-Not yet cataloged in [CLI Verb Surface](/architecture/cli-verbs.md) — a residual doc gap, not a
-missing capability.
+Cataloged in [CLI Verb Surface](/architecture/cli-verbs.md) under Read-only introspection
+(WO-CANON-FIX-CLI-VERBS-TW-REPORT-MISSING).
 
 # Fields (as built — `session_report.py`)
 
