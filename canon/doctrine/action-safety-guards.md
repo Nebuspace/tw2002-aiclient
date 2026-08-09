@@ -12,10 +12,11 @@ screens) or the human (sovereign pilot); the AI is a retrospective, on-demand te
 rule DRAFTS and never touches the wire; every rule — human- or AI-authored — is human-approved
 before it can fire; a guard may STOP and hand the human the keyboard instead of acting. This
 concept is the other half: the *teeth*. It collects the concrete, byte-level guards — scattered
-today across the macro replay engine, the deterministic resolvers, the crawl driver, and the
-run-loop rails — that turn those invariants from a promise into a property the code structurally
-enforces. It does not re-derive the invariants (that is control-and-escalation's job, the single
-source); it names the guard that enforces each one and states the guarded contract prescriptively.
+today across the macro replay engine, the deterministic resolvers, and the run-loop rails, plus the
+now-retired crawl driver's still-live building blocks (K3, below) — that turn those invariants from
+a promise into a property the code structurally enforces. It does not re-derive the invariants
+(that is control-and-escalation's job, the single source); it names the guard that enforces each
+one and states the guarded contract prescriptively.
 
 The organizing rule is one sentence: **never fire an unverified or destructive action.** Every
 guard below is a specialization of it. "Unverified" means the action was chosen off a screen the
@@ -109,19 +110,26 @@ introspected live, never hardcoded here.
 # Read-only, never-commit crawl gate (K3)
 
 The menu crawler that discovers a world's dialogue graph must observe every screen without ever
-committing a destructive action. That never-commit guarantee is enforced *outside* the crawler's
-own traversal logic, by the live-crawl driver, and is cross-linked from
-[menu-map & introspection](/engine/menu-map-and-introspection.md). Two structural legs:
+committing a destructive action. That never-commit guarantee was designed to live *outside* the
+crawler's own traversal logic, in a live-crawl driver — but **tip has no live driver today**:
+`menu/crawl_driver.py` (`run_live_crawl()`) was retired (WO-CLEANUP-DEAD-SYMBOLS-BATCH-2026-08-05),
+zero product callers, because the daemon's `crawl_start` protocol verb has never been wired to a
+driver. Full picture cross-linked from
+[menu-map & introspection](/engine/menu-map-and-introspection.md) § "The guarantee lives in the
+supervised run, not the word-list". The retired driver's two structural legs, and what still lives
+on tip for a future rebuild to wire back up:
 
-- **Sacrificial-only startup gate.** A live crawl refuses outright — before opening a single
-  connection or invoking the session factory even once — on any profile not explicitly flagged
-  `crawl_sacrificial`. A crawl only ever runs under the disposable, zero-credit / zero-asset
-  character protocol, and this refusal is code-enforced, not a convention a caller could forget.
+- **Sacrificial-only startup gate.** The retired driver refused a live crawl outright — before
+  opening a single connection or invoking the session factory even once — on any profile not
+  explicitly flagged `crawl_sacrificial`. `credentials.is_crawl_sacrificial()`, the fail-closed
+  flag reader it read, is still live on tip, but today backs only the unrelated `dev`-sender
+  exception ([dev-drive exception](/doctrine/dev-drive-exception.md)), not a live crawl.
 
 - **Boundary-aligned abort.** A hub-supervisor abort signal, or a human `tw attach` fencing the
-  driver, lands the stop at the next screen boundary — never mid-send. Every candidate keystroke
-  the crawl could emit still passes through the crawler's single safe-emit chokepoint; the driver
-  adds the abort check *ahead* of the real session factory, so the stop is always clean.
+  driver, was meant to land the stop at the next screen boundary — never mid-send — via
+  `control_lock.is_driver_fenced()`, still live on tip. Every candidate keystroke the crawl could
+  emit still passes through the crawler's single safe-emit chokepoint; a rebuilt driver would add
+  the abort check *ahead* of the real session factory, so the stop stays clean.
 
 # Structural rails (L4) — turn-budget, stop-loss, hazard, novelty-halt
 
@@ -295,8 +303,12 @@ positive-evidence resolution (`_resolution_evidence`, `_evidence_backed_price`, 
 `DESYNC_FALLBACK`, TW-01 money-path hardening (78-turn misfire)
 [3] tw2002_aiclient/session/fighter_toll_policy.py — Option? toll/combat resolver, never-auto-Pay,
 reserve-floor deploy/sell clamps, retreat-when-unreadable
-[4] tw2002_aiclient/menu/crawl_driver.py — `crawl_sacrificial` startup gate, boundary-aligned abort /
-driver-fence, safe-emit chokepoint (via `tw2002_aiclient/menu/crawler.py`)
+[4] tw2002_aiclient/menu/crawl_driver.py — RETIRED (WO-CLEANUP-DEAD-SYMBOLS-BATCH-2026-08-05, zero
+product callers); held the `crawl_sacrificial` startup gate and boundary-aligned abort / driver-fence.
+Tip-live building blocks a future driver rebuild would wire back up:
+`tw2002_aiclient/session/credentials.py` (`is_crawl_sacrificial`),
+`tw2002_aiclient/session/control_lock.py` (`is_driver_fenced`); safe-emit chokepoint still live and
+enforced via `tw2002_aiclient/menu/crawler.py` regardless of driver status
 [5] tw2002_aiclient/loops/player.py — turn-budget / strict-balance stop-loss (fail-closed on any
 answer that is not a fresh above-floor balance), hazard/novelty halts, arm-confirm launch gate.
 No tip `autopilot.py` — archived EV-select live-drive is do-not-revive.

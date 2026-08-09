@@ -4,9 +4,12 @@ Rehabilitated from the archived `twclient.menu_crawler` suite onto the
 reborn `tw2002_aiclient.menu.crawler`. The safety vocabulary and its
 accepted residuals are canon (`canon/engine/menu-map-and-introspection.md`,
 "The lexical layers are best-effort defense-in-depth"); the never-commit
-GUARANTEE itself lives in the driver and is proven in
-tests/test_crawl_driver.py, with the chokepoint sweep and the adversarial
-forge attempts in tests/test_menu_crawl_chokepoint.py.
+GUARANTEE was designed to live in a live-crawl driver, but tip has no
+driver today (`tw2002_aiclient/menu/crawl_driver.py` retired,
+WO-CLEANUP-DEAD-SYMBOLS-BATCH-2026-08-05 -- its own test file,
+tests/test_crawl_driver.py, is gone with it). The chokepoint sweep and the
+adversarial forge attempts that this suite's guarantee still leans on live
+in tests/test_menu_crawl_chokepoint.py.
 
 `FakeMenuSession` walks a BRANCHING graph (unlike FakeReplaySession/
 FakeLoginSession's linear scripts): `transitions[(node_id, sent_text)]`
