@@ -174,8 +174,10 @@ def _load_prefix_screens_module(tmp_path: Path):
     The pinned blob still imports the retired
     ``compose_profile_strip_from_row`` helper at module load time even though
     these choke tests only exercise ``_safe_addstr``. Stub that symbol on
-    the live ``strip`` module for the duration of the load so the blob can
-    import without reviving product dead code."""
+    the live ``strip`` module only for the duration of the load so the blob
+    can import without reviving product dead code or leaving the live module
+    mutated for later tests."""
+    added_stub = False
     if not hasattr(cockpit_strip, "compose_profile_strip_from_row"):
 
         def _legacy_compose_profile_strip_from_row(
@@ -191,27 +193,32 @@ def _load_prefix_screens_module(tmp_path: Path):
             )
 
         cockpit_strip.compose_profile_strip_from_row = _legacy_compose_profile_strip_from_row
+        added_stub = True
 
-    blob = subprocess.run(
-        ["git", "show", f"{_PRE_FIX_TIP}:tw2002_aiclient/screens.py"],
-        cwd=REPO_ROOT,
-        capture_output=True,
-        check=True,
-        text=True,
-    ).stdout
-    module_path = tmp_path / "prefix_screens.py"
-    module_path.write_text(blob, encoding="utf-8")
-
-    spec = importlib.util.spec_from_file_location(
-        "tw2002_aiclient._prefix_screens_addstr_dedupe", module_path
-    )
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = module
     try:
-        spec.loader.exec_module(module)
+        blob = subprocess.run(
+            ["git", "show", f"{_PRE_FIX_TIP}:tw2002_aiclient/screens.py"],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            check=True,
+            text=True,
+        ).stdout
+        module_path = tmp_path / "prefix_screens.py"
+        module_path.write_text(blob, encoding="utf-8")
+
+        spec = importlib.util.spec_from_file_location(
+            "tw2002_aiclient._prefix_screens_addstr_dedupe", module_path
+        )
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = module
+        try:
+            spec.loader.exec_module(module)
+        finally:
+            del sys.modules[spec.name]
+        return module
     finally:
-        del sys.modules[spec.name]
-    return module
+        if added_stub:
+            del cockpit_strip.compose_profile_strip_from_row
 
 
 def test_old_safe_addstr_stopped_one_column_short_of_window_edge(tmp_path):
