@@ -202,7 +202,7 @@ tw rule …                                    # draft / approve path (see tw ru
 # a human reviews and approves before anything the App plays back can ever fire
 ```
 
-# Implementation status (tip `223a00d` · live `./tw --help` / `build_parser()`)
+# Implementation status (tip `13153a6` · live `./tw --help` / `build_parser()`)
 
 **LIVE `tw` verbs today** (re-verified 2026-08-09 against tip `build_parser()` choices):
 `attach`, `chain`, `chains`, `coach`, `do`, `ensure`, `explore`, `history`, `log`/`trail`,
@@ -275,7 +275,7 @@ block when answering "what can I run right now?"
 
 1. **Catalog vs tip help (WO-ESCALATE-CLI-VERBS Option B).** Catalog rows for teach / App-drive /
    HOLD verbs are marked **TARGET** (or WIRE-ONLY / RETIRED) so they cannot be read as shipped
-   `tw` subcommands. Tip `f04b96b` LIVE set is listed in Implementation status — honesty gate:
+   `tw` subcommands. Tip `13153a6` LIVE set is listed in Implementation status — honesty gate:
    never claim a HOLD or unported verb is runnable.
 
 2. **Citations historically pointed at `twclient/cli.py`.** Authoritative tip parser is
