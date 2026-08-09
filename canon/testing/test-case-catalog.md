@@ -23,7 +23,6 @@ Complete inventory of **2271 pytest test cases** across **129 modules** (`tests/
 | Module | Tests | Status | Blurb |
 |--------|-------|--------|-------|
 | [`test_aiclient_play_panels.py`](/testing/cases/test-aiclient-play-panels.md) | 8 | BANKED | Aiclient play panels. |
-| [`test_cockpit_arm.py`](/testing/cases/test-cockpit-arm.md) | 22 | active | Cockpit arm. |
 | [`test_cockpit_arm_pty.py`](/testing/cases/test-cockpit-arm-pty.md) | 5 | active | WO-P5-062 Accept #4 -- the ARM indicator on a real terminal. |
 | [`test_cockpit_arm_wiring.py`](/testing/cases/test-cockpit-arm-wiring.md) | 26 | active | Cockpit arm wiring. |
 | [`test_cockpit_attach.py`](/testing/cases/test-cockpit-attach.md) | 26 | active | WO-P4-056 lane A -- Ctrl-A attaches the cockpit to the daemon's Human control lock (canon `mode-line-and-teach-controls.md:40-47`). |

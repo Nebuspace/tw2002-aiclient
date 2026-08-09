@@ -28,7 +28,6 @@ OKF inventory of the pytest suite.
 * [test_cli_ops_verb_e2.py](/testing/cases/test-cli-ops-verb-e2.md) — Cli ops verb e2.
 * [test_cli_players.py](/testing/cases/test-cli-players.md) — `tw players` CLI verb tests -- no daemon involved, direct state/player_bank.json access (TW-31 client-side wiring, v1). _(BANKED)_
 * [test_cli_run_dir.py](/testing/cases/test-cli-run-dir.md) — WO-P2-021 — CLI / daemon run-dir wiring against the reborn session API.
-* [test_cockpit_arm.py](/testing/cases/test-cockpit-arm.md) — Cockpit arm.
 * [test_cockpit_arm_pty.py](/testing/cases/test-cockpit-arm-pty.md) — WO-P5-062 Accept #4 -- the ARM indicator on a real terminal.
 * [test_cockpit_arm_wiring.py](/testing/cases/test-cockpit-arm-wiring.md) — Cockpit arm wiring.
 * [test_cockpit_attach.py](/testing/cases/test-cockpit-attach.md) — Cockpit attach.
