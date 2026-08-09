@@ -22,8 +22,8 @@ is one of the trainer's irreversible, credit-spending actions; under the reborn 
 a human-approved one-shot — never a candidate that a computed expected-value can slip past to execute on
 its own. **Exception (trainer default):** under APP-ARMED with `C)argo Hold Upgrade·ON`, hold-buy may
 **App-arm auto-fire** per `RESOLVED-TRAINER-STRIP-AND-GUTTER-20260731` point 6 (soft confirm banked;
-see [mode-line-and-teach-controls](/surfaces/mode-line-and-teach-controls.md)). Ship upgrades and other
-major purchases remain confirm-gated until their engines exist. The decision engine ranks and explains;
+see [mode-line-and-teach-controls](/surfaces/mode-line-and-teach-controls.md)). Ship upgrades remain confirm-gated / recommend-only on the Mode-line `S)` toggle
+(see mode-line caveat); other major purchases stay confirm-gated until their drivers exist. The decision engine ranks and explains;
 coded auto-max-holds detects the opportunity and (when armed + toggle ON) may commit the hold purchase;
 manual paths and other purchase kinds still require explicit human approval. The engine's job is to
 make informed `{recommend, rationale, payback}` verdicts — and, for holds under the trainer default,
@@ -85,6 +85,12 @@ current state, and the economics of the loop they run, and returns a single `Upg
 ```
 UpgradeDecision { recommend: bool, ship, rationale: str, projected_payback: turns|None, flags }
 ```
+
+Honest cockpit status (do not read this engine as a live `S)hip Upgrade·ON`
+spender): the Mode-line toggle still **gates nothing yet** — recommend-only
+coach / FOCUS callouts until a future WO wires a real purchase path. See
+[mode-line-and-teach-controls](/surfaces/mode-line-and-teach-controls.md)
+§ Policy-auto amendment (`S)hip Upgrade·ON` caveat).
 
 It evaluates each candidate against **five gates**, every one a *refuse-closed* check — a candidate
 must clear all five to be recommended, and the most informative refusal is surfaced when nothing

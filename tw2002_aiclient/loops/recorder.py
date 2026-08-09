@@ -327,7 +327,7 @@ def promote_draft(
             drafts_path=drafts_path,
             world_id=world_id,
         )
-    except LoopNotFound as exc:
+    except LoopNotFound:
         raise LoopWriteError(f"no draft named {name!r} under {drafts}") from None
     except LoopLoadError as exc:
         raise LoopWriteError(f"draft {name!r} is not promotable: {exc}") from None

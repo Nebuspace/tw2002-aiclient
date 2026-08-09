@@ -85,13 +85,7 @@ import re
 
 from . import fighter_toll_policy
 from .classify import classify_screen
-from .interjection_registry import (
-    BEEN_ON_TODAY_RE as _BEEN_ON_TODAY_RE,
-    CLEAR_AVOIDS_RE as _CLEAR_AVOIDS_RE,
-    INACTIVITY_RE as _INACTIVITY_RE,
-    SHOW_LOG_RE as _SHOW_LOG_RE,
-    match_interjection,
-)
+from .interjection_registry import match_interjection
 from .sector_explore import FIGHT_FORBIDDEN_KEYS, FIGHT_LETTER_ALLOWLIST
 from .settle import send_and_confirm
 
@@ -121,9 +115,8 @@ _RETURNING_REJECT_SETTLE_S = 2.5
 # this closed-game refusal then returns the player to TWGS game_select
 # (hub capture anet-postpause-194645Z). Fail loud — never loop door↔Play.
 # Not an absorbable interjection (hard refuse, not a standing auto-response).
-# Nuisance absorb patterns: ``interjection_registry`` (re-exported above as
-# ``_SHOW_LOG_RE`` / ``_INACTIVITY_RE`` / ``_BEEN_ON_TODAY_RE`` /
-# ``_CLEAR_AVOIDS_RE`` for scrollback-scope pins).
+# Nuisance absorb patterns live in ``interjection_registry`` (matched via
+# ``match_interjection``); this module no longer re-exports the regex pins.
 _CLOSED_GAME_RE = re.compile(
     r"this\s+is\s+a\s+closed\s+game|request\s+a\s+player\s+account\s+from\s+the\s+game\s+administrator",
     re.I,
@@ -239,7 +232,7 @@ _OUTER_NAME_PROMPT_RE = re.compile(r"enter\s+for\s+none", re.I)
 # captured live against twgs.microblaster.net (see
 # audit/micro-unknown-step6-corpus-20260726.md). Matched against the WHOLE
 # screen (not just the current prompt line), the same discipline as
-# `_SHOW_LOG_RE` above: the rejection text sits a line or more ABOVE the
+# Like scrollback-scope interjections: the rejection text sits a line or more ABOVE the
 # re-printed prompt by the time it's next classified, never on the current
 # prompt line itself.
 _OUTER_NAME_REJECTED_RE = re.compile(r"login\s+name\s+is\s+required", re.I)

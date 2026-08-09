@@ -47,7 +47,11 @@ def endpoint_key(host: object, port: object) -> str:
 
 
 def load_inventory(path: Path | None = None) -> dict[str, Any]:
-    """Load the research inventory JSON. Raises on missing/malformed file."""
+    """Load the research inventory JSON. Raises on missing/malformed file.
+
+    Each row ``status`` must be in ``PROVENANCE_STATUSES`` when present —
+    the frozenset is the live validation vocabulary, not a test-only constant.
+    """
     inv_path = path or DEFAULT_INVENTORY_PATH
     raw = json.loads(inv_path.read_text(encoding="utf-8"))
     if not isinstance(raw, dict):
@@ -55,6 +59,19 @@ def load_inventory(path: Path | None = None) -> dict[str, Any]:
     servers = raw.get("servers")
     if not isinstance(servers, list):
         raise ValueError(f"inventory.servers must be a list: {inv_path}")
+    for i, row in enumerate(servers):
+        if not isinstance(row, dict):
+            raise ValueError(f"inventory.servers[{i}] must be an object: {inv_path}")
+        status = row.get("status")
+        if status is None or status == "":
+            raise ValueError(
+                f"inventory.servers[{i}].status missing: {inv_path}"
+            )
+        if not isinstance(status, str) or status not in PROVENANCE_STATUSES:
+            raise ValueError(
+                f"inventory.servers[{i}].status {status!r} not in "
+                f"PROVENANCE_STATUSES: {inv_path}"
+            )
     return raw
 
 

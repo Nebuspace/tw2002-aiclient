@@ -306,6 +306,7 @@ block when answering "what can I run right now?"
 # Citations
 
 [1] `tw2002_aiclient/session/cli.py` — `build_parser()`, tip authoritative LIVE verb list
+[1b] `tw2002_aiclient/mine_cli.py` — `add_mine_parsers` / `cmd_mine` (`tw mine` / `tw patterns` wrapper)
 [2] `canon/architecture/control-and-escalation.md` — actor model, approval gate, stop-on-unknown
 [3] Archive `twclient/cli.py` — port-source for verbs not yet restored
 [4] Project `CLAUDE.md` — hard rules / seat context

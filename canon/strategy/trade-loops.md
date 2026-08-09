@@ -44,6 +44,17 @@ the ship productive across more distinct legs is preferred, and among equal-leng
 that earns more per turn wins. This ordering feeds the priority layer as a *ranking* input for
 which taught loop to offer or prioritize — it is not a live per-cycle action-picker.
 
+
+### Discovery vs earn-surface ranking
+
+`rank_chains` (hop-count first, then credits-per-turn) is the **discovery /
+explore** ordering — longer rings win ties on length before yield.
+
+`rank_chains_by_yield` (credits-per-turn first) is the **earn-surface**
+ordering used by `tw chains` / `cmd_chains` when the operator wants the
+fattest credits-per-turn cycle, even if it is shorter. Both live in
+`chains.py`; this concept owns both rankings.
+
 ## The profit-per-TURN scorer [H1]
 
 Score a loop by **credits-per-turn, not credits-per-trip.** A loop with a smaller net profit but
@@ -220,7 +231,8 @@ trade path are recorded here explicitly:
   decision rather than be abandoned outright (reborn: that decision is the operator's, not an
   autonomous rotation).
 - Code module `chains.py` — `TradeHop`, `ProfitChain`, `find_profit_chains`, `rank_chains`
-  (hop-count desc then cr/turn desc), the three-metric shape; top chain = `find_profit_chains(...)[0]`.
+  (hop-count desc then cr/turn desc), `rank_chains_by_yield` (cr/turn-first for `tw chains`),
+  the three-metric shape; top chain = `find_profit_chains(...)[0]`.
 - canon/research/archive-port-patterns.md AP-07 (DFS chain-finder algorithm, cycle normalization,
   rank_chains sort key, chain_as_library_row wire format).
 - Code module `trade_adapter.py` — world-model port records → `TradeHop` edges; the buy-at-`frm`
