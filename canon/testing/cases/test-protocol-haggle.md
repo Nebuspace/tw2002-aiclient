@@ -1,18 +1,17 @@
 ---
 type: Reference
 title: Test Cases — test_protocol_haggle
-description: Protocol haggle.
+description: REMOVED — historical inventory; tip module absent. Protocol haggle.
 resource: repo://tw2002-aiclient/tests/test_protocol_haggle.py
 tags: [testing, catalog, pytest, inventory]
-timestamp: 2026-07-25T14:10:13Z
+timestamp: 2026-08-09T09:15:46Z
 ---
 
 # Test Cases — `tests/test_protocol_haggle.py`
 
 _Protocol haggle._
 
-> **BANKED** — excluded from the default pytest run via `pytest.ini --ignore`. Catalogued for completeness.
-
+> **REMOVED** — module absent on tip (not merely pytest-ignored). Catalogued for completeness (historical inventory).
 | Test | Blurb |
 |------|-------|
 | `test_haggle_verb_runs_the_negotiation_and_reports_the_outcome` | Haggle verb runs the negotiation and reports the outcome. |

@@ -1,18 +1,17 @@
 ---
 type: Reference
 title: Test Cases — test_skills
-description: Skill record/replay + playback tests (DESIGN-v2 §3 v2.1 item 11b/11d, C3) -- no network.
+description: REMOVED — historical inventory; tip module absent. Skill record/replay + playback tests (DESIGN-v2 §3 v2.1 item 11b/11d, C3) -- no network.
 resource: repo://tw2002-aiclient/tests/test_skills.py
 tags: [testing, catalog, pytest, inventory]
-timestamp: 2026-07-25T14:10:13Z
+timestamp: 2026-08-09T09:15:46Z
 ---
 
 # Test Cases — `tests/test_skills.py`
 
 _Skill record/replay + playback tests (DESIGN-v2 §3 v2.1 item 11b/11d, C3) -- no network._
 
-> **BANKED** — excluded from the default pytest run via `pytest.ini --ignore`. Catalogued for completeness.
-
+> **REMOVED** — module absent on tip (not merely pytest-ignored). Catalogued for completeness (historical inventory).
 | Test | Blurb |
 |------|-------|
 | `test_skill_recorder_not_recording_by_default` | Skill recorder not recording by default. |

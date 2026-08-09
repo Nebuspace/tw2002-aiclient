@@ -4,15 +4,14 @@ title: Test Cases — test_trade_driver
 description: tests/test_trade_driver.py -- WO-FA4 trade_driver.py: the money-path chain-execution driver.
 resource: repo://tw2002-aiclient/tests/test_trade_driver.py
 tags: [testing, catalog, pytest, inventory]
-timestamp: 2026-07-25T14:10:13Z
+timestamp: 2026-08-09T09:15:46Z
 ---
 
 # Test Cases — `tests/test_trade_driver.py`
 
 _tests/test_trade_driver.py -- WO-FA4 trade_driver.py: the money-path chain-execution driver._
 
-> **BANKED** — excluded from the default pytest run via `pytest.ini --ignore`. Catalogued for completeness.
-
+> **Active** on tip (default pytest collect). Historical case file once marked BANKED; tip module is collected — not among the tip **2** BANKED ignores (`test_analyze.py`, `test_crawl_start_protocol.py`). Headline inventory: **7437** tests · **308** active modules.
 | Test | Blurb |
 |------|-------|
 | `test_run_chain_completes_a_scripted_two_port_loop_with_exact_credits_math` | Run chain completes a scripted two port loop with exact credits math. |

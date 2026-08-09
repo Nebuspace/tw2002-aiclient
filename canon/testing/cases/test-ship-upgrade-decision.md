@@ -4,15 +4,14 @@ title: Test Cases — test_ship_upgrade_decision
 description: TW-30 ship-upgrade decision engine — unit coverage for all five §24 learnings.
 resource: repo://tw2002-aiclient/tests/test_ship_upgrade_decision.py
 tags: [testing, catalog, pytest, inventory]
-timestamp: 2026-07-25T14:10:13Z
+timestamp: 2026-08-09T09:15:46Z
 ---
 
 # Test Cases — `tests/test_ship_upgrade_decision.py`
 
 _TW-30 ship-upgrade decision engine — unit coverage for all five §24 learnings._
 
-> **BANKED** — excluded from the default pytest run via `pytest.ini --ignore`. Catalogued for completeness.
-
+> **Active** on tip (default pytest collect). Historical case file once marked BANKED; tip module is collected — not among the tip **2** BANKED ignores (`test_analyze.py`, `test_crawl_start_protocol.py`). Headline inventory: **7437** tests · **308** active modules.
 | Test | Blurb |
 |------|-------|
 | `test_remaining_productive_turns_respects_reserve` | Remaining productive turns respects reserve. |

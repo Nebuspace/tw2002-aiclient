@@ -1,18 +1,17 @@
 ---
 type: Reference
 title: Test Cases — test_world_model_integration
-description: World model integration.
+description: REMOVED — historical inventory; tip module absent. World model integration.
 resource: repo://tw2002-aiclient/tests/test_world_model_integration.py
 tags: [testing, catalog, pytest, inventory]
-timestamp: 2026-07-25T14:10:13Z
+timestamp: 2026-08-09T09:15:46Z
 ---
 
 # Test Cases — `tests/test_world_model_integration.py`
 
 _World model integration._
 
-> **BANKED** — excluded from the default pytest run via `pytest.ini --ignore`. Catalogued for completeness.
-
+> **REMOVED** — module absent on tip (not merely pytest-ignored). Catalogued for completeness (historical inventory).
 | Test | Blurb |
 |------|-------|
 | `test_do_with_a_sector_screen_persists_the_sector_queryable` | Do with a sector screen persists the sector queryable. |

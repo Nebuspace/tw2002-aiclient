@@ -1,18 +1,17 @@
 ---
 type: Reference
 title: Test Cases — test_game_knowledge
-description: Game Knowledge Store tests (TW-25) -- no network, tmp_path only, never touches the real config/ or state/ directories.
+description: REMOVED — historical inventory; tip module absent. Game Knowledge Store tests (TW-25) -- no network, tmp_path only, never touches the real config/ or state/ directories.
 resource: repo://tw2002-aiclient/tests/test_game_knowledge.py
 tags: [testing, catalog, pytest, inventory]
-timestamp: 2026-07-25T14:10:13Z
+timestamp: 2026-08-09T09:15:46Z
 ---
 
 # Test Cases — `tests/test_game_knowledge.py`
 
 _Game Knowledge Store tests (TW-25) -- no network, tmp_path only, never touches the real config/ or state/ directories._
 
-> **BANKED** — excluded from the default pytest run via `pytest.ini --ignore`. Catalogued for completeness.
-
+> **REMOVED** — module absent on tip (not merely pytest-ignored). Catalogued for completeness (historical inventory).
 | Test | Blurb |
 |------|-------|
 | `test_knowledge_path_uses_world_id_to_build_the_slug_directory` | Knowledge path uses world id to build the slug directory. |

@@ -1,18 +1,17 @@
 ---
 type: Reference
 title: Test Cases — test_servers
-description: WO-MS-1 server catalog tests.
+description: REMOVED — historical inventory; tip module absent. WO-MS-1 server catalog tests.
 resource: repo://tw2002-aiclient/tests/test_servers.py
 tags: [testing, catalog, pytest, inventory]
-timestamp: 2026-07-25T14:10:13Z
+timestamp: 2026-08-09T09:15:46Z
 ---
 
 # Test Cases — `tests/test_servers.py`
 
 _WO-MS-1 server catalog tests._
 
-> **BANKED** — excluded from the default pytest run via `pytest.ini --ignore`. Catalogued for completeness.
-
+> **REMOVED** — module absent on tip (not merely pytest-ignored). Catalogued for completeness (historical inventory).
 | Test | Blurb |
 |------|-------|
 | `test_catalog_has_39_servers` | MS-3c: live catalog pruned to twgs-direct/online (49→39). |

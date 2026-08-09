@@ -1,18 +1,17 @@
 ---
 type: Reference
 title: Test Cases — test_aiclient_adapters
-description: Unit tests for tw2002_aiclient ensure/autopilot adapters (mocked daemon).
+description: REMOVED — historical inventory; tip module absent. Unit tests for tw2002_aiclient ensure/autopilot adapters (mocked daemon).
 resource: repo://tw2002-aiclient/tests/test_aiclient_adapters.py
 tags: [testing, catalog, pytest, inventory]
-timestamp: 2026-07-25T14:10:13Z
+timestamp: 2026-08-09T09:15:46Z
 ---
 
 # Test Cases — `tests/test_aiclient_adapters.py`
 
 _Unit tests for tw2002_aiclient ensure/autopilot adapters (mocked daemon)._
 
-> **BANKED** — excluded from the default pytest run via `pytest.ini --ignore`. Catalogued for completeness.
-
+> **REMOVED** — module absent on tip (not merely pytest-ignored). Catalogued for completeness (historical inventory).
 | Test | Blurb |
 |------|-------|
 | `test_resolve_run_dir_defaults_to_shared_run` | Resolve run dir defaults to shared run. |

@@ -4,15 +4,14 @@ title: Test Cases — test_haggle
 description: Haggle.
 resource: repo://tw2002-aiclient/tests/test_haggle.py
 tags: [testing, catalog, pytest, inventory]
-timestamp: 2026-07-25T14:10:13Z
+timestamp: 2026-08-09T09:15:46Z
 ---
 
 # Test Cases — `tests/test_haggle.py`
 
 _Haggle._
 
-> **BANKED** — excluded from the default pytest run via `pytest.ini --ignore`. Catalogued for completeness.
-
+> **Active** on tip (default pytest collect). Historical case file once marked BANKED; tip module is collected — not among the tip **2** BANKED ignores (`test_analyze.py`, `test_crawl_start_protocol.py`). Headline inventory: **7437** tests · **308** active modules.
 | Test | Blurb |
 |------|-------|
 | `test_run_haggle_buy_direction_converges_in_two_rounds_like_the_real_capture` | Run haggle buy direction converges in two rounds like the real capture. |

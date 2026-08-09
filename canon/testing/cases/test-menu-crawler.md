@@ -4,15 +4,14 @@ title: Test Cases — test_menu_crawler
 description: Menu Crawler tests (TW-26) -- no network, mock/fixture screens only.
 resource: repo://tw2002-aiclient/tests/test_menu_crawler.py
 tags: [testing, catalog, pytest, inventory]
-timestamp: 2026-07-25T14:10:13Z
+timestamp: 2026-08-09T09:15:46Z
 ---
 
 # Test Cases — `tests/test_menu_crawler.py`
 
 _Menu Crawler tests (TW-26) -- no network, mock/fixture screens only._
 
-> **BANKED** — excluded from the default pytest run via `pytest.ini --ignore`. Catalogued for completeness.
-
+> **Active** on tip (default pytest collect). Historical case file once marked BANKED; tip module is collected — not among the tip **2** BANKED ignores (`test_analyze.py`, `test_crawl_start_protocol.py`). Headline inventory: **7437** tests · **308** active modules.
 | Test | Blurb |
 |------|-------|
 | `test_classify_option_label_safe_categories` | Classify option label safe categories. |

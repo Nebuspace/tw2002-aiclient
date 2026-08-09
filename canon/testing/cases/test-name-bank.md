@@ -1,18 +1,17 @@
 ---
 type: Reference
 title: Test Cases — test_name_bank
-description: Name bank tests (WO-MS-4 rider) -- no network, tmp_path only.
+description: REMOVED — historical inventory; tip module absent. Name bank tests (WO-MS-4 rider) -- no network, tmp_path only.
 resource: repo://tw2002-aiclient/tests/test_name_bank.py
 tags: [testing, catalog, pytest, inventory]
-timestamp: 2026-07-25T14:10:13Z
+timestamp: 2026-08-09T09:15:46Z
 ---
 
 # Test Cases — `tests/test_name_bank.py`
 
 _Name bank tests (WO-MS-4 rider) -- no network, tmp_path only._
 
-> **BANKED** — excluded from the default pytest run via `pytest.ini --ignore`. Catalogued for completeness.
-
+> **REMOVED** — module absent on tip (not merely pytest-ignored). Catalogued for completeness (historical inventory).
 | Test | Blurb |
 |------|-------|
 | `test_real_name_bank_loads_and_is_well_formed` | Real name bank loads and is well formed. |

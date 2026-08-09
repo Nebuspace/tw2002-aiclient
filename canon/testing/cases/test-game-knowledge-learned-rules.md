@@ -1,18 +1,17 @@
 ---
 type: Reference
 title: Test Cases — test_game_knowledge_learned_rules
-description: Learned-rule store tests — offline, tmp_path only.
+description: REMOVED — historical inventory; tip module absent. Learned-rule store tests — offline, tmp_path only.
 resource: repo://tw2002-aiclient/tests/test_game_knowledge_learned_rules.py
 tags: [testing, catalog, pytest, inventory]
-timestamp: 2026-07-25T14:10:13Z
+timestamp: 2026-08-09T09:15:46Z
 ---
 
 # Test Cases — `tests/test_game_knowledge_learned_rules.py`
 
 _Learned-rule store tests — offline, tmp_path only._
 
-> **BANKED** — excluded from the default pytest run via `pytest.ini --ignore`. Catalogued for completeness.
-
+> **REMOVED** — module absent on tip (not merely pytest-ignored). Catalogued for completeness (historical inventory).
 | Test | Blurb |
 |------|-------|
 | `test_new_knowledge_includes_learned_rules` | New knowledge includes learned rules. |

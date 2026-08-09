@@ -1,18 +1,17 @@
 ---
 type: Reference
 title: Test Cases — test_integration_introspect_persist
-description: TW-26/27 introspector-to-persist chain integration test.
+description: REMOVED — historical inventory; tip module absent. TW-26/27 introspector-to-persist chain integration test.
 resource: repo://tw2002-aiclient/tests/test_integration_introspect_persist.py
 tags: [testing, catalog, pytest, inventory]
-timestamp: 2026-07-25T14:10:13Z
+timestamp: 2026-08-09T09:15:46Z
 ---
 
 # Test Cases — `tests/test_integration_introspect_persist.py`
 
 _TW-26/27 introspector-to-persist chain integration test._
 
-> **BANKED** — excluded from the default pytest run via `pytest.ini --ignore`. Catalogued for completeness.
-
+> **REMOVED** — module absent on tip (not merely pytest-ignored). Catalogued for completeness (historical inventory).
 | Test | Blurb |
 |------|-------|
 | `test_shipyard_listing_parses_and_persists_end_to_end` | Shipyard listing parses and persists end to end. |
