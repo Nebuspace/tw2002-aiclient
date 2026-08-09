@@ -79,14 +79,15 @@ never drive recommendations that contradict reborn `canon/`.
 ## Stale `twclient` test collection (WO-TEST-SUITE-REHAB)
 
 **Symptom:** stale tests still `import twclient` (archive-only). Rehab buckets live in
-`workorders/WO-TEST-SUITE-REHAB.md`. **Default honesty (WO-TEST-COLLECT-HYGIENE):** `pytest.ini`
-`--ignore=`s every banked uncollectable file so `pytest --collect-only` / `pytest -q` run only the
-greenfield suite (0 collection ERRORS). Remove an ignore line when that file is rewritten/Accepted.
+`workorders/WO-TEST-SUITE-REHAB.md`. **Default honesty (WO-TEST-COLLECT-HYGIENE):** tip
+`pytest.ini` `--ignore=`s the remaining uncollectable BANKED modules (`test_analyze.py`,
+`test_crawl_start_protocol.py`) so `pytest --collect-only` / `pytest -q` stay green (0 collection
+ERRORS). Remove an ignore line when that file is rewritten/Accepted.
 
 **P2-025 control-lock (execute):** live `session/control_lock.py` modes `{app,human,spectate}`;
-daemon owns lock + thin attach; ensure via `acquire_driver`. Collectable:
-`test_control_lock` · `test_actor_attribution` · `test_tw04_toctou`. Attach rehab pair +
-`test_clean_preempt` remain ignored (DEFER). See WO-P2-025 §Lane 3 EXECUTE.
+daemon owns lock + thin attach; ensure via `acquire_driver`. Collectable on tip:
+`test_control_lock` · `test_actor_attribution` · `test_tw04_toctou` (and related attach suites).
+Historical `test_clean_preempt` is **REMOVED** from tip (not ignored). See WO-P2-025 §Lane 3 EXECUTE.
 
 **P2-026 settle (prep):** kernel already in `session/settle.py` + green `tests/test_settle.py`; execute
 likely verify + case-mismatch unit — see `workorders/WO-P2-026-settle-detection-baseline.md` §PREP.
@@ -96,9 +97,11 @@ D10 keepalive stubbed for 028). Daemon DI start/stop. Collectable `test_guardian
 green; keepalive skipped until 028. See WO-P2-027.
 
 **P3 harness rehab (D1 execute):** shared `tests/fake_client.py` + `tests/pty_helpers.py`
-(tw2002_aiclient-only; no `twclient`). Smoke collect green. Named Layer-B suites
-(`test_spectate_*` / `test_interactive_app` / `test_aiclient_play_panels`) stay ignored until
-owning PWO lifts them onto these helpers.
+(tw2002_aiclient-only; no `twclient`). Smoke collect green. Named Layer-B suites that once
+targeted ops `tw spectate` / interactive panels (`test_spectate_app` / `test_spectate_layout` /
+`test_interactive_app` / `test_aiclient_play_panels`) are **REMOVED** from tip — not ignored.
+In-cockpit Spectate coverage lives under tip suites such as `tests/test_cockpit_spectate.py`.
+Default ignore census is only `test_analyze.py` + `test_crawl_start_protocol.py`.
 
 ## Run-dir override (WO-P2-021)
 
@@ -166,7 +169,7 @@ Source tip at audit: `922739b`. Product fixes: F1 DONE `7e13b7d` · F2/F3/F4 in 
 | SESSION-F1-ATTACH-SEND-KEY-BOOL | Interactive `tw attach` discarded `send_key` bool → silent ATTACHED black hole | **DONE** tip `7e13b7d` (was `4754dd4`) · `WO-AUDIT-ATTACH-SEND-KEY-BOOL` |
 | SESSION-F1-MICRO-SETTLE-NUDGE | `cli.py` discarded post-spawn `send_request("read")` dict (was falsely banked as "benign settle-nudge") | **DONE** tip `61bdea2` · product now checks/retries settle `read` (WO-ENSURE-SPAWN-READINESS); prior "benign" claim reversed · MISSING-TESTS MT-09 amended |
 | SESSION-F1-MICRO-DOCSTRING | `cli.py` module docstring claimed `tw watch` is **the** lifetime-stream exception | **DONE** tip `9110a95` · `WO-MT-12-WATCH-DOCSTRING` — tip now names both `tw watch` and `tw attach` as lifetime socket holds |
-| P5-064-STALE-INTERVENTION-PATH | Canon / archive tests cite `twclient/intervention_labels.py` | **DONE** tip `af62889` catalog in `cockpit/stopbanner.py` · canon cites retargeted (`WO-TIP-STAMP-P5-064-STALE-INTERVENTION-PATH`); BANKED archive `test_intervention_labels.py` remains a separate ignore-list item |
+| P5-064-STALE-INTERVENTION-PATH | Canon / archive tests cite `twclient/intervention_labels.py` | **DONE** tip `af62889` catalog in `cockpit/stopbanner.py` · canon cites retargeted (`WO-TIP-STAMP-P5-064-STALE-INTERVENTION-PATH`); historical `test_intervention_labels.py` is **REMOVED** from tip (not on the ignore list) |
 | P5-064-SCREENS-BADGE-DOCSTRING | `screens.py` module docstring still says no dynamic App/Human mode badge | **FIXED** — docstring aligned to 060 `control_seat` chip · `WO-SCREENS-BADGE-DOCSTRING-STALE` |
 | F9-COCKPIT-UTF8-GARBAGE-FORWARD | Cockpit `getch()` path forwarded each UTF-8 byte `<256` as its own `send_key` | **DONE** tip `879280f` — refuse multi-byte UTF-8 getch + ungetch truncated lead; `WO-AUDIT-COCKPIT-UTF8-GETCH` CLOSED |
 | CLI-ASCII-WRITE-CHOKE | Non-UTF-8 stdout: `./tw --help` / `menumap` / `loops` crash mid-output on ★ / em-dash / … after attach-only ASCII banner fix `fec3ffe` | **BANKED** — docs do **not** close product. Reachable: `PYTHONIOENCODING=ascii\|latin-1` · `LC_ALL=en_US.ISO8859-1` · `LC_ALL=C` with UTF-8 mode **off** (bare `LC_ALL=C` does **not** crash — PEP 540). Product WO **STAGED** pending Max glyph ruling (A refuse / B NO-SWAP substitute / C other). MISSING-TESTS MT-05/06. Stub: `workorders/WO-AUDIT-CLI-ASCII-WRITE-CHOKE.md` |
