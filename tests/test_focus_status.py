@@ -7,6 +7,9 @@ from tw2002_aiclient.chain_status import ChainScalars
 from tw2002_aiclient.cockpit.focus import compose_focus_lines
 from tw2002_aiclient.focus_status import FocusScalars, recommend_focus_candidates
 
+# Catalog #1 must be met so lower-weight overlays / EV ranking are visible.
+_VITALS = {"turns_left": 100, "credits": 5000}
+
 
 def _hop(frm: int, to: int) -> chains.TradeHop:
     return chains.TradeHop(frm=frm, to=to, commodity="Fuel Ore", margin=50.0, turns=1)
@@ -37,7 +40,7 @@ def test_focus_run_chain_tops_when_executable_chain_exists():
     cs = ChainScalars()
     local = _chain([50, 51, 52, 50], cr_per_turn=80.0)
     cs.update(_result(chains_=[local]))
-    status = {"hud": {"sector": {"value": 51, "age_s": 0.0}}}
+    status = {"hud": {"sector": {"value": 51, "age_s": 0.0}}, **_VITALS}
     cands = recommend_focus_candidates(status, chain_scalars=cs)
     assert cands
     assert cands[0]["kind"] == "run_chain"
@@ -65,7 +68,7 @@ def test_focus_upgrade_omitted_when_stardock_unknown():
 
 def test_focus_upgrade_gated_when_stardock_known_but_holds_unknown():
     """Ship/hold quotes unmet → catalog gate (not empty-holds) while StarDock known."""
-    status = {"stardock_found": True, "stardock_sectors": [1]}
+    status = {"stardock_found": True, "stardock_sectors": [1], **_VITALS}
     cands = recommend_focus_candidates(status, chain_scalars=ChainScalars())
     upgrade = next(c for c in cands if c["kind"] == "upgrade")
     assert upgrade["gated"] is True
@@ -81,6 +84,7 @@ def test_focus_overlay_explore_beats_chain_when_ship_prices_unmet():
         "stardock_found": True,
         "stardock_sectors": [1],
         "ship_prices_count": 0,
+        **_VITALS,
     }
     cands = recommend_focus_candidates(status, chain_scalars=cs)
     assert cands[0]["kind"] == "explore"
@@ -107,6 +111,7 @@ def test_focus_overlay_clears_when_catalog_met():
         "stardock_sectors": [1],
         "ship_prices_count": 4,
         "hold_price_label": "1,200cr",
+        **_VITALS,
     }
     cands = recommend_focus_candidates(status, chain_scalars=cs)
     assert cands[0]["kind"] == "run_chain"
@@ -124,6 +129,7 @@ def test_focus_upgrade_ungated_without_chain_when_catalog_met():
         "stardock_sectors": [1],
         "ship_prices_count": 4,
         "hold_price_label": "1,200cr",
+        **_VITALS,
     }
     cands = recommend_focus_candidates(status, chain_scalars=ChainScalars())
     upgrade = next(c for c in cands if c["kind"] == "upgrade")
@@ -136,6 +142,7 @@ def test_focus_upgrade_gated_empty_holds_when_catalog_met():
         "stardock_sectors": [1],
         "ship_prices_count": 2,
         "hold_price_label": "500cr",
+        **_VITALS,
     }
     cands = recommend_focus_candidates(status, chain_scalars=ChainScalars())
     upgrade = next(c for c in cands if c["kind"] == "upgrade")
@@ -177,6 +184,7 @@ def test_focus_stay_vs_leave_demotes_upgrade_behind_chain():
         "turns_per_warp": 1,
         "turns_left": 100,
         "turn_reserve": 0,
+        "credits": 5000,
         # High headline EV, but RT forgone beats gain (stay).
         "upgrade_extra_cr_per_turn": 50.0,
         "upgrade_payback": 20.0,
@@ -206,6 +214,7 @@ def test_focus_leave_for_upgrade_when_gain_beats_rt():
         "turns_per_warp": 1,
         "turns_left": 100,
         "turn_reserve": 0,
+        "credits": 5000,
         "upgrade_extra_cr_per_turn": 400.0,
         "upgrade_payback": 5.0,
     }
@@ -213,3 +222,53 @@ def test_focus_leave_for_upgrade_when_gain_beats_rt():
     upgrade = next(c for c in cands if c["kind"] == "upgrade")
     assert upgrade["gated"] is False
     assert upgrade["ev_per_turn"] == 400.0
+
+
+def test_focus_weight100_explore_beats_chain_when_turns_credits_unknown():
+    """Catalog #1 unmet → explore weight-100 sorts above executable chain."""
+    cs = ChainScalars()
+    cs.update(_result(chains_=[_chain([50, 51, 52, 50], cr_per_turn=80.0)]))
+    status = {
+        "hud": {"sector": {"value": 51, "age_s": 0.0}},
+        "stardock_found": True,
+        "stardock_sectors": [1],
+        "ship_prices_count": 4,
+        "hold_price_label": "1,200cr",
+        # turns_left / credits intentionally omitted
+    }
+    cands = recommend_focus_candidates(status, chain_scalars=cs)
+    assert cands[0]["kind"] == "explore"
+    assert cands[0].get("priority_weight") == 100
+    upgrade = next(c for c in cands if c["kind"] == "upgrade")
+    assert upgrade["gated"] is True
+    assert "turns/credits" in (upgrade.get("gate_reason") or "")
+
+
+def test_focus_hops_return_from_warp_graph_via_compute_return_path():
+    """``warp_graph`` + dock + work_sector → hops_return via compute_return_path."""
+    cs = ChainScalars()
+    cs.update(_result(chains_=[_chain([50, 51, 52, 50], cr_per_turn=80.0)]))
+    # Linear: dock 1 — 2 — 50 (work). Return path length 3 → 2 hops.
+    status = {
+        "hud": {
+            "sector": {"value": 50, "age_s": 0.0},
+            "cargo": {"value": 3, "age_s": 0.0},
+        },
+        "stardock_found": True,
+        "stardock_sectors": [1],
+        "ship_prices_count": 4,
+        "hold_price_label": "1,200cr",
+        "warp_graph": {1: [2], 2: [1, 50], 50: [2]},
+        "work_sector": 50,
+        "hops_to_stardock": 2,
+        "turns_per_warp": 1,
+        "turns_left": 100,
+        "turn_reserve": 0,
+        "credits": 5000,
+        "upgrade_extra_cr_per_turn": 400.0,
+        "upgrade_payback": 5.0,
+    }
+    cands = recommend_focus_candidates(status, chain_scalars=cs)
+    upgrade = next(c for c in cands if c["kind"] == "upgrade")
+    assert upgrade["gated"] is False
+    assert upgrade.get("travel_cost_rt") == 4  # (2+2)*1
