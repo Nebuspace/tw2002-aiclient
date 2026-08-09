@@ -4,6 +4,11 @@ from tw2002_aiclient.stardock_hold_driver import run_hold_purchase
 from tw2002_aiclient.stardock_hold_plan import StardockHoldPlan, plan_from_evidence
 
 _FIXTURE = Path(__file__).resolve().parent / "fixtures" / "stardock_cargo_hold_quote.txt"
+_AT_MAX_FIXTURE = (
+    Path(__file__).resolve().parent
+    / "fixtures"
+    / "stardock_cargo_hold_quote_at_max.txt"
+)
 
 
 class FakeSession:
@@ -130,4 +135,25 @@ def test_qty_out_of_range_refused():
     assert result.ok is False
     assert result.outcome == "refused"
     assert result.reason == "qty_out_of_range"
+    assert session.sent == []
+
+
+def test_at_max_ceiling_screen_refused_unknown_qty_range():
+    """Defense-in-depth: `plan_from_status` already refuses to produce a
+    plan at the ceiling (TW-22), but if the driver is ever driven against
+    the "already carries the maximum" screen -- no `[lo-hi]` prompt on
+    screen at all -- it must still refuse rather than send a stray qty."""
+    session = FakeSession(_AT_MAX_FIXTURE.read_text(encoding="utf-8"))
+    plan = _plan()
+
+    result = run_hold_purchase(
+        session,
+        plan,
+        should_abort=lambda: False,
+        is_armed=lambda: True,
+    )
+
+    assert result.ok is False
+    assert result.outcome == "refused"
+    assert result.reason == "unknown_qty_range"
     assert session.sent == []
