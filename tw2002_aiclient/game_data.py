@@ -429,7 +429,16 @@ def load_world_game_data(world_id: str, *, state_dir: str | Path | None = None) 
 
 
 def save_world_game_data(data: GameData, *, state_dir: str | Path | None = None) -> Path:
-    """Persist a fully validated GameData document for ``data.world_id``."""
+    """Persist a fully validated GameData document for ``data.world_id``.
+
+    Bulk whole-document write. The live capture loop
+    (``game_data_capture.capture_screen`` / ``tick``) persists via
+    ``persist_*_row`` helpers, which upsert into the same
+    ``game_data.json`` path with their own load+lock+atomic-write — so
+    capture reaching disk does **not** require callers of this function.
+    Kept as the wholesale API (tests / full-document replace). Audit
+    tip-check WO-BUILD-GAME-DATA-SAVE-WORLD-INVESTIGATE: not a capture gap.
+    """
     if not data.world_id:
         raise GameDataError("cannot persist game_data without world_id")
     # Re-validate every row through the source gate before touching disk.
