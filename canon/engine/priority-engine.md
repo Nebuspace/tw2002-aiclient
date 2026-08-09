@@ -59,8 +59,8 @@ side is missing: "implemented" describing a consumer alone is how these two rows
 **2026-08-04 honesty pass (`AUDIT-CANON-FIX-STALE-TURNSLEFT-CREDITS-STATUS`):** row 1 is no longer
 Starved — `protocol._status_response` emits top-level `turns_left` / `credits` on OUTCOME_READ
 (`WO-STATUS-CREDITS` · `WO-HUD-STATUS-BRIDGE`); GOALS renders them when present. Residual: FOCUS
-weight-100 gating still does not *require* those scalars before other suggestions (overlay bridge
-covers catalog #4/#5, not the turns/credits boolean).
+weight-100 FOCUS overlay now gates on unmet turns/credits (catalog #1) before #4/#5
+overlays; GOALS still omit-until-read for the honest `?` before observe.
 
 **2026-08-04 honesty pass (`AUDIT-CANON-FIX-STALE-STARDOCK-LANDMARK-STATUS`):** row 3 is no longer
 Starved — `WO-WM-LANDMARKS-WRITE` landed; `world_model.add_landmark` is called from
@@ -69,7 +69,7 @@ Starved — `WO-WM-LANDMARKS-WRITE` landed; `world_model.add_landmark` is called
 
 | # | Priority | Type | Weight | Depends on | Status in code (re-verified 2026-08-08, mechanical grep pass) |
 |---:|---|---|---:|---|---|
-| 1 | Turns & credit count known | Boolean | 100 | — | **Partial** — writers live: `_status_response` emits `turns_left` + `credits` when sticky OUTCOME_READ (`protocol.py`); GOALS Turns/Credits rows consume them. Still omit-until-read (honest `?` before `I`/`observe_*`). FOCUS does not yet weight-gate on unmet #1. |
+| 1 | Turns & credit count known | Boolean | 100 | — | **Partial (FOCUS gated)** — writers live: `_status_response` emits `turns_left` + `credits` when sticky OUTCOME_READ (`protocol.py`); GOALS Turns/Credits rows consume them. Still omit-until-read (honest `?` before `I`/`observe_*`). FOCUS weight-100 overlay now boosts explore + ⊘-gates upgrade until both ints are present (`focus_status._turns_credits_met`). |
 | 2 | Current-ship type identified | Boolean | 90 | #1 | **Partial (live-bridged)** — writer: `introspector.parse_current_ship_info` + `Session.observe_current_ship` from `I` ship-info; status emits `ship_type` / `current_ship` omit-until-known. `ShipSpec` for upgrade scoring via `ship_spec_from_current_info` only when a Layer-B catalog row matches (cost/shields never invented from I-info alone). |
 | 3 | StarDock located | Boolean | 85 | explore when unknown | **Implemented** — writer: `world_model.add_landmark` from explore (`sector_explore`); reader: `explore.find_landmark_sectors` + `WorldStats` → `stardock_sectors`/`stardock_found`; GOALS paints `StarDock @…` when present. Empty landmark scan still omits keys (honest `?`), never invents `stardock_found=False`. |
 | 4 | Cost of other ships known | Boolean | 80 | #3 | **Partial (live-bridged)** — writer: `GameDataStats.refresh` loads Layer-B `game_data` ships and merges `ship_catalog` (`[{ship_name, cost}, …]` for `cost > 0`) plus `ship_prices_count` onto status (`game_data_stats.py`); readers: GOALS + FOCUS overlay + priority-engine pre-flight. Still omit-until-load (no invent). |

@@ -30,6 +30,7 @@ FOCUS_KEY = "focus"
 EXPLORE_BASELINE_EV = 0.01
 
 # Canon weight ladder (priority-engine.md objective table) — catalog booleans.
+WEIGHT_TURNS_CREDITS = 100
 WEIGHT_SHIP_PRICES = 80
 WEIGHT_HOLD_PRICE = 75
 
@@ -95,6 +96,19 @@ def _hold_price_met(status: object) -> bool:
     return isinstance(label, str) and bool(label.strip())
 
 
+def _turns_credits_met(status: object) -> bool:
+    """Catalog #1 — both top-level turns_left and credits are known ints."""
+    if not isinstance(status, dict):
+        return False
+    turns = status.get("turns_left")
+    credits = status.get("credits")
+    if isinstance(turns, bool) or not isinstance(turns, int):
+        return False
+    if isinstance(credits, bool) or not isinstance(credits, int):
+        return False
+    return True
+
+
 def _optional_int(value: object) -> int | None:
     if isinstance(value, bool) or not isinstance(value, int):
         return None
@@ -132,7 +146,22 @@ def _hops_return_to_work(status: dict) -> int | None:
             return hops_of_path(tuple(int(s) for s in path))
         except (TypeError, ValueError):
             return None
-    return None
+    # Optional in-status graph (tests / producers) — StarDock → work.
+    graph = status.get("warp_graph")
+    if not isinstance(graph, dict):
+        return None
+    docks = status.get("stardock_sectors")
+    work = _optional_int(status.get("work_sector"))
+    if not isinstance(docks, (list, tuple)) or not docks or work is None:
+        return None
+    try:
+        from tw2002_aiclient.priority_engine import compute_return_path
+
+        dock = int(docks[0])
+        computed = compute_return_path(graph, dock, work)
+        return hops_of_path(computed)
+    except Exception:  # noqa: BLE001 — never invent hops on the draw path
+        return None
 
 
 def _productive_turns(status: dict) -> int | None:
@@ -194,12 +223,16 @@ def recommend_focus_candidates(
         dock_known = _stardock_known(status_d)
         ships_met = _ship_prices_met(status_d)
         hold_met = _hold_price_met(status_d)
+        vitals_met = _turns_credits_met(status_d)
 
-        # Unmet catalog prerequisites (StarDock known) → weight-boost explore
-        # and ⊘-gate upgrade until the quote exists.
+        # Unmet catalog prerequisites → weight-boost explore and ⊘-gate upgrade.
+        # Catalog #1 (turns/credits, weight 100) dominates #4/#5 until satisfied.
         overlay_weight: int | None = None
         upgrade_gate: str | None = None
-        if dock_known:
+        if not vitals_met:
+            overlay_weight = WEIGHT_TURNS_CREDITS
+            upgrade_gate = "turns/credits unknown"
+        elif dock_known:
             if not ships_met:
                 overlay_weight = WEIGHT_SHIP_PRICES
                 upgrade_gate = "ship prices unknown"
