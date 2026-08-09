@@ -358,8 +358,8 @@ Axis 5.
 - design history §16.2 — density-scan value table (flagged as hypothesis in source)
 - design history §22.4 / TW-23 — full-autopilot capstone (re-scoped, DOCS-WIN)
 - source module `explore.py` — TW-14 frontier/BFS planner (Map-fill / Find-StarDock / Find-Formations,
-  recovery policy, adjacent-hop resolution); Chain-hunt planner is **canon-first** — not yet in tip
-  `explore.py` (follow-on build WO; do not treat Map-fill pick as Chain-hunt)
+  recovery policy, adjacent-hop resolution); Chain-hunt planner is **in tip** after PR #640 / merge
+  `39a8634c` (`INTENT_CHAIN_HUNT` / `plan_chain_hunt` in `explore.py` — do not treat Map-fill pick as Chain-hunt)
 - source module `world_model.py` — TW-06 persisted per-world sector store (G1 write target)
 - source module `autopilot.py` — **archive-only** EV-select / `EXPLORE_BASELINE_EV` (do-not-revive)
 - source module `trade_driver.py` — recorded autonomous chain-runner divergence
