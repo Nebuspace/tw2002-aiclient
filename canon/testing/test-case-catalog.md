@@ -81,7 +81,6 @@ Complete inventory of **2271 pytest test cases** across **129 modules** (`tests/
 
 | Module | Tests | Status | Blurb |
 |--------|-------|--------|-------|
-| [`test_crawl_driver.py`](/testing/cases/test-crawl-driver.md) | 25 | BANKED | Live-crawl driver tests — canon K3's two structural legs. |
 | [`test_crawl_start_protocol.py`](/testing/cases/test-crawl-start-protocol.md) | 6 | BANKED | protocol.py's `crawl_start` verb dispatch -- no network, same bare dispatch-harness convention as tests/test_protocol_haggle.py/ test_actor_attribution.py. |
 | [`test_menu_crawler.py`](/testing/cases/test-menu-crawler.md) | 63 | BANKED | Menu Crawler tests (TW-26) -- no network, mock/fixture screens only. |
 | [`test_menu_map_view.py`](/testing/cases/test-menu-map-view.md) | 9 | active | Menu-map inspector — pure tests on synthetic maps. |

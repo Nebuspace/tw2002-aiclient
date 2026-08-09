@@ -356,7 +356,8 @@ multiple DFS orderings, keep only the highest `cr_per_turn` entry.
 **Ranking:** `rank_chains(chains)` sorts by `(len(hops), cr_per_turn)` descending — longer chains
 rank above shorter ones at equal cr/turn, ensuring the most strategic route is surfaced first.
 
-**`longest_profit_chain(hops, **kwargs)`:** returns the top-ranked chain or `None`.
+**Top chain:** `find_profit_chains(hops, **kwargs)[0]` when non-empty, else `None` (the retired
+`longest_profit_chain` wrapper had zero product callers).
 
 **Reborn use:** the chain finder is a read-only planner. The App presents the discovered chain to
 the operator; the operator approves; the App replays a taught macro to execute one cycle.
