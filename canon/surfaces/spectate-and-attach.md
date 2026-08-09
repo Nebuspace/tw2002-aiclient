@@ -34,29 +34,36 @@ Target contracts below remain prescriptive for ops F2 / Phase-5 surfaces not yet
 
 # Spectate — the read-only observation surface
 
-`tw spectate` is a standalone curses dashboard that **subscribes** to the daemon's watch-stream and
-renders it, live, without ever entering the control rotation. It connects to an already-running
-daemon over the unix socket, opens a dedicated `subscribe` stream, and reads settle-edge events off
-it on a background thread feeding a queue — so the curses loop stays responsive to resize/Ctrl-C and
-never blocks on the network. Because it is a separate process reading a broadcast stream, it can run
-in its own terminal alongside whatever is driving the game.
+> **Tip reality (do not invent `tw spectate`):** ops `tw spectate` / `spectate_app.py` /
+> `spectate_layout.py` are **RETIRED / deleted** (Max · rebirth scaffold). Live observation is
+> **in-cockpit Spectate** ([Trainer Cockpit](/surfaces/trainer-cockpit.md) · PWO-055) plus daemon-free
+> `tw watch`. The prose below preserves the *target / historical* standalone-dashboard contract so
+> port notes stay readable; Implementation status + Code Divergence are authoritative for tip.
 
-**It holds no control lock.** In the control-mode state machine, `tw spectate` stays entirely out of
-the rotation — it never calls `take_human()`, never reserves the driver slot, and cannot be handed
-the keyboard. On the read stream it is strictly a reader: it never sends anything on the subscribe
-connection, and nothing it does reaches `session.send()` / `session.send_raw()` — no byte it
-produces ever hits the game wire.
+`tw spectate` *(historical target — not a tip verb)* is a standalone curses dashboard that
+**subscribes** to the daemon's watch-stream and renders it, live, without ever entering the control
+rotation. It connects to an already-running daemon over the unix socket, opens a dedicated
+`subscribe` stream, and reads settle-edge events off it on a background thread feeding a queue —
+so the curses loop stays responsive to resize/Ctrl-C and never blocks on the network. Because it is
+a separate process reading a broadcast stream, it can run in its own terminal alongside whatever is
+driving the game.
+
+**It holds no control lock.** In the control-mode state machine, a Spectate observer stays entirely
+out of the rotation — it never calls `take_human()`, never reserves the driver slot, and cannot be
+handed the keyboard. On the read stream it is strictly a reader: it never sends anything on the
+subscribe connection, and nothing it does reaches `session.send()` / `session.send_raw()` — no byte
+it produces ever hits the game wire.
 
 **Multiple spectators are safe (N1).** The watch-stream hub keeps a *set* of subscriber queues and
-broadcasts every settle-edge to all of them; any number of `tw spectate` clients (plus a live
-`tw attach`'s own read half) can watch the same session at once without contending, because none of
-them drives.
+broadcasts every settle-edge to all of them; any number of `tw watch` / in-cockpit Spectate
+subscribers (plus a live `tw attach`'s own read half) can watch the same session at once without
+contending, because none of them drives.
 
-The dashboard composes several panes over the streamed screen: the **GAME** viewport (the live
-cropped game screen in color), a parsed-state **HUD** sidebar (credits / sector / turns / cargo /
-profit plus world metrics), an event **LOG** ticker (newest settle-edges), a menu-map / priorities /
-port panel column, and a status/mode strip. The layout logic is pure and lives in
-`spectate_layout.py`, kept testable and separate from the curses I/O in `spectate_app.py`.
+The *historical* dashboard composed several panes over the streamed screen: the **GAME** viewport
+(the live cropped game screen in color), a parsed-state **HUD** sidebar (credits / sector / turns /
+cargo / profit plus world metrics), an event **LOG** ticker (newest settle-edges), a menu-map /
+priorities / port panel column, and a status/mode strip. On tip those panes live under
+`tw2002_aiclient/cockpit/` (not the deleted `spectate_layout.py` / `spectate_app.py`).
 
 ## Reborn framing of watched actors
 
@@ -281,7 +288,7 @@ hand-built on pure stdlib `curses` with zero added packages.
 
 # Schema
 
-| | Spectate (`tw spectate`) | Attach (`tw attach`) |
+| | Spectate (tip: in-cockpit / `tw watch`; ops `tw spectate` RETIRED) | Attach (`tw attach`) |
 |---|---|---|
 | Purpose | read-only observation dashboard | live interactive driving seat |
 | Connections | one `subscribe` read stream | `subscribe` read stream **+** persistent `attach` write connection |
@@ -294,12 +301,12 @@ hand-built on pure stdlib `curses` with zero added packages.
 # Examples
 
 ```
-Spectating a live session:
+Spectating a live session (tip):
 1. A daemon is already running and connected (`tw status` confirms it).
-2. In a second terminal: `tw spectate`. It opens a subscribe stream and paints the
-   GAME/HUD/LOG dashboard, seeded immediately with the current settled screen.
-3. Whatever is driving the game keeps driving; the spectator only watches. Any number
-   of additional `tw spectate` clients can attach at once — none of them touches the wire.
+2. Observe via the product cockpit Spectate chip / GAME viewport, or ops `tw watch`
+   (settle-edge tail). Do **not** run `tw spectate` — RETIRED / WONTBUILD.
+3. Whatever is driving the game keeps driving; observers only watch. Any number of
+   watch subscribers can attach at once — none of them touches the wire.
 ```
 
 ```
