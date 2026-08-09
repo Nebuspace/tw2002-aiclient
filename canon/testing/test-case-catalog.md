@@ -4,7 +4,7 @@ title: Test Case Catalog
 description: Inventory of every pytest case in tw2002-aiclient with a one-sentence blurb of what each asserts.
 resource: repo://tw2002-aiclient/tests
 tags: [testing, catalog, pytest, inventory]
-timestamp: 2026-08-09T05:30:00Z
+timestamp: 2026-08-09T20:55:00Z
 ---
 
 # Test Case Catalog
@@ -15,21 +15,22 @@ collection (not AST estimate):
 
 ```text
 .venv/bin/python -m pytest -n0 --collect-only
-→ 7437 tests collected   # footer is authoritative
+→ 7480 tests collected   # footer is authoritative
 .venv/bin/python -m pytest -n0 --collect-only -q
-→ 308 lines of form tests/test_*.py: <n>  (sum == 7437)
+→ 311 lines of form tests/test_*.py: <n>  (sum == 7480)
 ```
 
-`tests/test_*.py` on disk: **310** files. Default collect excludes the 2 BANKED ignores below.
+`tests/test_*.py` on disk: **313** files. Default collect excludes the 2 BANKED ignores below
+(313 − 2 = 311 active modules).
 
 Each module *should* link to a per-module OKF case file with per-test blurbs (regeneration of
 every case file is a separate catalog-refresh WO — this pass only corrects the stale headline
 counts).
 
-- **Active (default run):** 308 modules · **7437** tests
+- **Active (default run):** 311 modules · **7480** tests
 - **BANKED (ignored via `pytest.ini`):** 2 modules — `tests/test_analyze.py`,
   `tests/test_crawl_start_protocol.py` (still `import twclient`; collection ERRORs if un-ignored;
-  not included in the 7437)
+  not included in the 7480)
 
 > **Blurb rule:** first complete sentence of the function docstring when it is well-formed (ends with `.!?`, no truncated backticks); otherwise readable English derived from the `test_*` name. No runtime behavior is invented beyond name/docstring.
 
