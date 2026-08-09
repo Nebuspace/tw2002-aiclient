@@ -279,9 +279,9 @@ Honest residuals (not "engine missing"):
   computed EV wins over `autopilot_no_candidates`.
 - **Auto-haggle money-path finding (verified 78-turn misfire).** Stale/transitional-render
   counter-offer misfire; fresh-render pre-send gate + `DESYNC_FALLBACK` hardening remain
-  **mandatory** for on-by-default auto-haggle (operator ruling 2026-07-23). Live port may live under
-  `tw2002_aiclient/` or still cite archive `twclient/haggle.py` until a WO retargets — the finding
-  stands either way.
+  **mandatory** for on-by-default auto-haggle (operator ruling 2026-07-23). Tip live port is
+  `tw2002_aiclient/session/haggle.py` (params via `haggle_params.py` / `data/haggle/params.json`);
+  archive `twclient/haggle.py` is port-source only. The finding stands on tip.
 
 This section records tip↔prose honesty. Product WOs for remaining residuals (EV display vs driver
 discipline, auto-haggle default arming, AI-teacher draft author) are separate queue rows — not a
