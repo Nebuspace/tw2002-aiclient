@@ -4,11 +4,17 @@ from tw2002_aiclient.stardock_hold_plan import (
     compose_confirm_action,
     compute_auto_max_qty,
     parse_hold_qty_range,
+    parse_hold_unit_price,
     plan_from_evidence,
     plan_from_status,
 )
 
 _FIXTURE = Path(__file__).resolve().parent / "fixtures" / "stardock_cargo_hold_quote.txt"
+_AT_MAX_FIXTURE = (
+    Path(__file__).resolve().parent
+    / "fixtures"
+    / "stardock_cargo_hold_quote_at_max.txt"
+)
 
 
 def test_plan_stable_fingerprint_and_fields():
@@ -213,3 +219,45 @@ def test_plan_from_status_auto_max_falls_back_without_catalog():
     assert plan is not None
     assert plan.empty_holds == 10
     assert plan.qty == 10
+
+
+# -- at-max ceiling (TW-22 refuses to fire, not just parse-layer) ----------
+
+
+def test_parse_hold_qty_range_refuses_at_max_fixture():
+    """No `[lo-hi]` prompt on screen once already at the ceiling."""
+    text = _AT_MAX_FIXTURE.read_text(encoding="utf-8")
+    assert parse_hold_qty_range(text) is None
+
+
+def test_parse_hold_unit_price_refuses_at_max_fixture():
+    """No `Holds cost N credits each` line once already at the ceiling."""
+    text = _AT_MAX_FIXTURE.read_text(encoding="utf-8")
+    assert parse_hold_unit_price(text) is None
+
+
+def test_compute_auto_max_qty_refuses_at_ceiling():
+    """Zero empty holds (ceiling reached) refuses regardless of cash."""
+    assert (
+        compute_auto_max_qty(
+            empty_holds=0, hold_price=1000, credits=50_000, cash_floor=0
+        )
+        is None
+    )
+
+
+def test_plan_from_status_auto_max_refuses_at_ceiling():
+    """TW-22 mirrors `_autonomy_auto_fire`'s `plan is None` skip: an
+    at-max ship (0 empty holds, no price line to introspect) yields no
+    plan at all -- never a qty=0 plan, never a crash."""
+    status = {
+        "stardock_sectors": [751],
+        "credits": 50_000,
+        # No `hold_price` / HOLD_PRICE_LABEL_KEY -- the at-max quote has
+        # no price line for the introspector to have captured.
+        "hud": {"cargo": {"value": "0 empty / 40"}},
+    }
+    plan = plan_from_status(
+        "world-a", status, auto_max=True, cash_floor=0
+    )
+    assert plan is None
