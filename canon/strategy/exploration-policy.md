@@ -200,6 +200,50 @@ it never auto-buys. Unknown / unreachable / unaffordable inputs fail closed to o
 Policy numbers there are judgment defaults, not Max-ratified combat math (do not conflate with the
 stripped toll-defense floors in [toll-and-defense](/strategy/toll-and-defense.md)).
 
+## Session continuity on `ExploreRunner.start()` (tip contract)
+
+`tw explore start` does **not** open a second telnet connection and does **not**
+construct a new `Session`. The daemon owns one `ExploreRunner` wired at startup
+(`session/daemon.py` → `server.sector_explore = ExploreRunner(session, …,
+guardian=guardian)`). Protocol `_dispatch_explore_start` (`session/protocol.py`)
+resolves that runner and calls `runner.start(...)`; the driver thread
+(`ExploreRunner._run`, name `tw-sector-explore`) shares the **same** `Session`
+object and `control_lock` as every other auto-loop / CLI send path.
+
+**Gate vocabulary.** Each cycle re-renders and runs `_gate_screen`
+(`session/sector_explore.py`): `main_command` (movement) passes; never-auto
+classes halt as `never_auto_action:<klass>`; other named classes halt as
+`halt_not_drivable:<klass>`; genuine classifier unknowns halt as bare
+`unrecognized_screen`. Halt behaviour is stop-on-unknown — the reason string
+must not lie about whether `classify` named the screen.
+
+**Guardian reconnect overlap (why `game_select` was a false halt).** On a
+multi-game BBS, SessionGuardian D9 reconnect+login-replay transiently paints
+`game_select` while replaying into the same session. Before PR #554 /
+`WO-DIAGNOSE-EXPLORE-HALT-GAME-SELECT-LIVE-SESSION`, explore's gate treated that
+transient as a genuine `halt_not_drivable:game_select` even though a later
+`tw status` already showed `main_command` again. Tip now:
+
+1. Passes `guardian=` into `ExploreRunner` so the loop can observe
+   `guardian.reconnecting`.
+2. When a halt fires **while** `reconnecting` is true, waits a bounded window
+   (`RECONNECT_WAIT_TIMEOUT_S` / `RECONNECT_WAIT_POLL_S`) for the burst to
+   clear, then re-renders and re-gates from the top of the loop — never an
+   unbounded retry if the burst never clears.
+3. Uses settle profiles with `retry_unstable_idle=True` on explore waits so a
+   short unstable idle during recovery does not fail-fast the settle.
+
+This is **session continuity**, not a second connection: two drivers
+(guardian replay + explore) briefly share one session; explore must not
+mistake the replay's own screens for an unrecoverable explore halt.
+
+**Live evidence (post-fix).** Sacrificial `scout_academy` credit-doubling
+live-prove (2026-08-09) re-ran `tw explore start … --dock-new-ports` to
+`outcome=completed` after #554 — see coord STATUS for that prove and the
+research note update in
+[autopilot-live-drive-findings-2026-08-08](/research/autopilot-live-drive-findings-2026-08-08.md)
+Axis 5.
+
 # Citations
 
 - design history §11 — explore/exploit appetite design (reborn-reframed: appetite = priority input,
@@ -214,3 +258,4 @@ stripped toll-defense floors in [toll-and-defense](/strategy/toll-and-defense.md
 - source module `trade_driver.py` — recorded autonomous chain-runner divergence
 - tip Play flags — `tw2002_aiclient/cockpit/explore_flags.py` · `adapters.explore_start_for_profile`
   dock/fight asymmetry · [mode-line](/surfaces/mode-line-and-teach-controls.md) Explore vs `P` split
+- tip `session/sector_explore.py` — ExploreRunner same-session start + guardian reconnect wait (`RECONNECT_WAIT_*`) · `session/daemon.py` ExploreRunner wiring · `session/protocol.py` `_dispatch_explore_start`
