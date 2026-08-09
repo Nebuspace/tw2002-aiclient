@@ -90,13 +90,15 @@ no firing without every guard below:
    presses on past a screen it cannot positively identify — it accepts the currently-shown default
    safely or reports the desync, and escalates.
 
-**Fighter-toll resolver.** The Option? toll/combat resolver picks Attack only when the fight is
-clearly winnable (few enemies and at least as many fighters aboard), else Retreat, and **never
-auto-Pays** — a toll payment is human-gated, requiring an explicit hub GO, never selected by the
-App. When the vs-line has scrolled out of view and the counts cannot be read, it retreats
-(the safe direction), never attacks blind. Its reserve floor clamps every deploy/sell so aboard
-fighters cannot be driven to a level the ship cannot defend from. Combat is NPC-only math; PvP is a
-human escalation moment, not an App decision — the conduct boundary is owned by
+**Fighter-toll resolver.** The Option? toll/combat resolver picks Attack only when an **NPC**
+toll is clearly winnable: `force_share = own/(own+enemy) ≥ 0.90` (Max-ratified
+`force_share_auto_attack`) **and** enemy count within the winnable band — see
+[toll & defense](/strategy/toll-and-defense.md) § Schema; else Retreat, and **never auto-Pays** — a
+toll payment is human-gated, requiring an explicit hub GO, never selected by the App. When the
+vs-line has scrolled out of view and the counts cannot be read, it retreats (the safe direction),
+never attacks blind. Its reserve floor clamps every deploy/sell so aboard fighters cannot be
+driven to a level the ship cannot defend from. Combat is NPC-only math; PvP is a human escalation
+moment, not an App decision — the conduct boundary is owned by
 [toll & defense](/strategy/toll-and-defense.md).
 
 The reserve floor and the "clearly winnable" enemy band are **configurable policy knobs**, not
@@ -292,8 +294,9 @@ driver-fence, safe-emit chokepoint (via `tw2002_aiclient/menu/crawler.py`)
 [5] tw2002_aiclient/loops/player.py — turn-budget / strict-balance stop-loss (fail-closed on any
 answer that is not a fresh above-floor balance), hazard/novelty halts, arm-confirm launch gate.
 No tip `autopilot.py` — archived EV-select live-drive is do-not-revive.
-[6] tw2002_aiclient/focus_status.py — `EXPLORE_BASELINE_EV` suggestion-only FOCUS floor (no tip
-`priority_engine.py`; archived never-idle EV appetite is do-not-revive / Code Divergence #2)
+[6] tw2002_aiclient/focus_status.py — `EXPLORE_BASELINE_EV` suggestion-only FOCUS floor;
+tw2002_aiclient/priority_engine.py — strategic ranker only (no per-cycle EV live-drive); archived
+never-idle EV appetite is do-not-revive / Code Divergence #2
 [7] tw2002_aiclient/session/control_lock.py — tip modes `{app, human, spectate}`; `MODE_AI_PILOT` retired (resolved Code Divergence #3)
 [8] CLAUDE.md — Hard rules (send-path redaction, single-connection daemon, case-sensitive
 wait_prompt, last-match state_parser anchoring)
