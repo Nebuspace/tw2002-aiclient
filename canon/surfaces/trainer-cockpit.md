@@ -341,7 +341,8 @@ The frame uses a deliberate **two-weight** border system (`cockpit/draw.py` `DOU
   — the unifier that makes the three bands read as a single cockpit rather than four stacked widgets.
 - **Viewport zero-inset is an invariant, not a style choice.** The `[GAME UI]` box is titled
   `" GAME "` with the border on row/col 0 and content at (1,1), **zero inner padding**
-  (`_content_inset`, `spectate_app.py`). Any inward pad would shear the game's own CP437 box-art —
+  (tip viewport path in `screens.py` / cockpit; archive `_content_inset` in `spectate_app.py`
+  port-source). Any inward pad would shear the game's own CP437 box-art —
   this is why `VIEWPORT_W/H = GAME_W+2, GAME_H+2` (82×27) and never a padded inset.
 - **Titled thin boxes** carry their title at `addnstr(0, 2, " TITLE ")` in cyan: `HUD`, `LOG`,
   `DECISIONS`, `PRIORITIES`, `FORMATIONS`, `MENU MAP`, `TRADE LOOP CHAINS`.
