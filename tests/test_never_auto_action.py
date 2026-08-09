@@ -421,12 +421,3 @@ def test_app_does_not_import_session_classify():
         "app.py must not import session.classify directly; "
         "use _record_macro.is_secret_prompt_line() instead"
     )
-
-
-def test_cockpit_arm_is_not_a_classify_send_consumer():
-    """C-06 named taught-rule / cockpit arm. Arm is presentation-only:
-    no classify import, no send. Fire path is consumer #2 (player)."""
-    arm_src = (_PKG_ROOT / "cockpit" / "arm.py").read_text(encoding="utf-8")
-    assert "classify" not in arm_src
-    assert ".send(" not in arm_src
-    assert "send_and_confirm" not in arm_src

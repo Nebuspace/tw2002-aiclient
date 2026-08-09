@@ -61,7 +61,7 @@ _BANNED_TERMS = ("AI-PILOT", "ai_pilot", "AUTO-LOOP")
 # the walk — one named file per package the gate claims to cover does not.
 _SCAN_IDENTITY: tuple[Path, ...] = (
     Path("app.py"),  # package root
-    Path("cockpit") / "arm.py",
+    Path("cockpit") / "control_seat.py",
     Path("session") / "session.py",
     Path("menu") / "crawl_driver.py",
     Path("loops") / "player.py",
