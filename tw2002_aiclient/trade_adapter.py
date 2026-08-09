@@ -4,8 +4,8 @@ Pure logic: ZERO sends, ZERO execution. Reads `world_model`'s persisted
 port records (canon shape `{class, commodities:[{name, status, amount,
 pct}], last_seen_ts}` -- see world_model.py/state_parser.py) plus
 `explore.py`'s known-warp-graph routing, and emits `chains.TradeHop`
-edges so the chain-finder (`chains.find_profit_chains`/
-`longest_profit_chain`) can discover real, currently-known profit loops
+edges so the chain-finder (`chains.find_profit_chains` /
+`rank_chains`) can discover real, currently-known profit loops
 instead of only ever seeing an empty `hops` tuple. Wiring this output
 into a live autopilot snapshot is a later WO's job, not this module's --
 this file never imports session/protocol code or `adapters.py`, and

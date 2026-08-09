@@ -239,7 +239,7 @@ def test_goals_only_others_honest_empty_still_render():
         [
             "Celebrate longest profit chains",
             " Multi-hop adjacent station cycles where every hop margins p",
-            " → Run find_profit_chains / longest_profit_chain on the grap",
+            " → Run find_profit_chains + rank_chains on the graph.",
             GOALS_LABEL,
         ]
         + [

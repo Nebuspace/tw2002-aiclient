@@ -39,8 +39,8 @@ _SEND_PRIMITIVES = frozenset({"send_and_confirm", "send_and_confirm_for"})
 _RAW_SEND_ATTRS = frozenset({"send", "send_raw", "sendall"})
 
 # Reflection defeats a literal-node scan: `getattr(mod, "send")` reaches a
-# send path a name-based scanner never sees. Banned outright, with one
-# narrowly-scoped, predicate-checked exception (below).
+# send path a name-based scanner never sees. Banned outright in the menu
+# package (`run_live_crawl` gate retired with deleted `crawl_driver.py`).
 #
 # Split by call SHAPE deliberately. As a bare builtin these names are
 # always reflection; as an attribute they are ordinary method names on
@@ -54,13 +54,6 @@ _REFLECTION_BUILTINS = frozenset({
 _REFLECTION_ATTRS = frozenset({
     "__getattr__", "__getattribute__", "__setattr__", "__call__",
 })
-
-# The ONLY legitimate reflection in the package: canon's fail-closed
-# sacrificial gate, which must read a field off a profile object that may
-# not have it. Legitimized by a per-node PREDICATE, not by loosening the
-# ban — the same shape in any other function is still a violation.
-_GATE_ATTRS = frozenset({"crawl_sacrificial", "name"})
-
 
 def _module_string_constants(tree):
     """Module-level ``NAME = "literal"`` bindings, so the scanner can see
@@ -136,33 +129,6 @@ def _scan_package():
     return findings
 
 
-def _is_the_sanctioned_gate_getattr(where, node, consts):
-    """The predicate that legitimizes exactly the fail-closed gate reads.
-
-    Every clause is load-bearing: right file, right function, reading the
-    profile the gate was handed, a KNOWN literal attribute name (resolved
-    through a module constant if that is how it is spelled), and an
-    explicit third-argument default — which is what makes the read
-    fail-closed rather than raising."""
-    filename, func, _lineno = where
-    if filename != "crawl_driver.py" or func != "run_live_crawl":
-        return False
-    if len(node.args) != 3:
-        return False
-    obj, attr, default = node.args
-    if not (isinstance(obj, ast.Name) and obj.id == "profile"):
-        return False
-    if isinstance(attr, ast.Constant) and isinstance(attr.value, str):
-        attr_name = attr.value
-    elif isinstance(attr, ast.Name):
-        attr_name = consts.get(attr.id)
-    else:
-        return False  # a computed attribute name is never sanctioned
-    if attr_name not in _GATE_ATTRS:
-        return False
-    return isinstance(default, ast.Constant) and default.value in (False, None)
-
-
 # -- the structural sweep ------------------------------------------------------
 
 
@@ -183,29 +149,9 @@ def test_no_module_in_the_menu_package_touches_a_raw_send_path():
     assert raw == [], f"a send path bypassing the chokepoint exists: {raw}"
 
 
-def test_the_only_reflection_in_the_package_is_the_fail_closed_gate():
-    """A literal-node scan is blind to `getattr(mod, "send")`, so reflection
-    is banned outright rather than inspected. The gate's own two reads are
-    legitimized one node at a time by a predicate — the identical shape in
-    any other function stays a violation."""
-    unsanctioned = [
-        where
-        for kind, where, node, consts in _scan_package()
-        if kind == "reflection" and not _is_the_sanctioned_gate_getattr(where, node, consts)
-    ]
-    assert unsanctioned == [], f"unsanctioned reflection in the menu package: {unsanctioned}"
-
-
-def test_the_sanctioned_gate_reflection_is_actually_present():
-    """Non-vacuity for the test above: the allowlist is excusing real
-    nodes, not silently excusing nothing (which would leave the ban
-    passing for the wrong reason if the gate were ever deleted)."""
-    sanctioned = [
-        where
-        for kind, where, node, consts in _scan_package()
-        if kind == "reflection" and _is_the_sanctioned_gate_getattr(where, node, consts)
-    ]
-    assert len(sanctioned) == 2  # the flag read and the name read in the refusal message
+def test_no_reflection_in_the_menu_package():
+    reflection = [where for kind, where, _node, _consts in _scan_package() if kind == "reflection"]
+    assert reflection == [], f"reflection in the menu package: {reflection}"
 
 
 # -- bypass meta-tests: prove the scanner is not fooled ------------------------
@@ -247,53 +193,6 @@ def test_scanner_catches_a_direct_session_send(tmp_path):
     src = "def sneaky(session):\n    session.send('B', enter=False)\n"
     kinds = [k for k, _w, _n in _scan_source(src, tmp_path=tmp_path)]
     assert "raw_send" in kinds
-
-
-def test_the_gate_predicate_refuses_the_same_shape_in_another_function(tmp_path):
-    """Enclosing scope is part of the fact: a rogue function using the
-    gate's exact getattr shape is NOT sanctioned."""
-    src = (
-        'def run_live_crawl(profile):\n'
-        '    return getattr(profile, "crawl_sacrificial", False)\n'
-        'def rogue(profile):\n'
-        '    return getattr(profile, "crawl_sacrificial", False)\n'
-    )
-    findings = _scan_source(src, filename="crawl_driver.py", tmp_path=tmp_path)
-    consts = {}
-    sanctioned = [w for k, w, n in findings if k == "reflection" and _is_the_sanctioned_gate_getattr(w, n, consts)]
-    rejected = [w for k, w, n in findings if k == "reflection" and not _is_the_sanctioned_gate_getattr(w, n, consts)]
-    assert [w[1] for w in sanctioned] == ["run_live_crawl"]
-    assert [w[1] for w in rejected] == ["rogue"]
-
-
-def test_the_gate_predicate_refuses_a_computed_attribute_name(tmp_path):
-    """`getattr(profile, some_var, False)` inside the gate function is not
-    sanctioned: a computed attribute name is exactly how a scan gets
-    walked past."""
-    src = (
-        "def run_live_crawl(profile, which):\n"
-        "    return getattr(profile, which, False)\n"
-    )
-    findings = _scan_source(src, filename="crawl_driver.py", tmp_path=tmp_path)
-    assert all(
-        not _is_the_sanctioned_gate_getattr(w, n, {})
-        for k, w, n in findings
-        if k == "reflection"
-    )
-
-
-def test_the_gate_predicate_refuses_a_two_argument_getattr(tmp_path):
-    """Dropping the default turns a fail-closed read into a raising one."""
-    src = (
-        "def run_live_crawl(profile):\n"
-        '    return getattr(profile, "crawl_sacrificial")\n'
-    )
-    findings = _scan_source(src, filename="crawl_driver.py", tmp_path=tmp_path)
-    assert all(
-        not _is_the_sanctioned_gate_getattr(w, n, {})
-        for k, w, n in findings
-        if k == "reflection"
-    )
 
 
 # -- adversarial: attempts to push a state-changing key through ----------------
