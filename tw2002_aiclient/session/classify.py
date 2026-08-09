@@ -579,7 +579,6 @@ def _is_twgs_server_banner_game_select_menu(full_text: str, prompt_line: str) ->
         return False
     if not _twgs_banner_signals_coherent(lines, title_idx, version_idx, registered_idx):
         return False
-    banner_first_idx = min(title_idx, version_idx, registered_idx)
     banner_last_idx = max(title_idx, version_idx, registered_idx)
     if banner_last_idx >= prompt_idx:
         return False
