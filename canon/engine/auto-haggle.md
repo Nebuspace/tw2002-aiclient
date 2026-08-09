@@ -78,6 +78,19 @@ No search, no model — a fixed four-move policy off a reference price (an exter
 > constants. Tune per server/economy by editing the registry row. Floor prices and fair-value come
 > from [port-economics](/strategy/port-economics.md), not this rule.
 
+The registry is schema-enforced, not merely present. `load_haggle_params()` requires all eight keys
+(`round_cap`, `accept_threshold_pct`, `open_aggression_pct`, `step_timeout_s`,
+`fresh_render_debounce_ms`, `fresh_render_timeout_s`, `verified_vs_live`, `source_note`) and raises
+`ValueError` on any missing key rather than silently running with a partial shape — a malformed
+`data/haggle/params.json` fails closed at import time. A *missing* JSON file (not a malformed one)
+falls back to `BUILTIN_HAGGLE_PARAMS`, a literal mirror of the shipped registry row, so an unusual
+install layout still degrades to the same live-proven numbers rather than crashing.
+
+What was once tracked as a LOW-priority, "not urgent" registry-migration backlog item has **shipped**:
+`WO-BUILD-HAGGLE-PARAMS-REGISTRY` (#575) landed the registry substrate this section describes, and
+`DECISIONS.md` records it `DONE`. The "not urgent" label described backlog priority, not the eventual
+outcome — the registry is live, authored, and canon-covered today, not a still-open low-priority gap.
+
 # The mandatory guard contract (E3)
 
 Auto-haggle is on a money path, so "the screen went quiet" is **never** enough to act. Three guards
