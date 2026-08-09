@@ -2,7 +2,7 @@
 
 OKF inventory of the pytest suite.
 
-* [Test Case Catalog](/testing/test-case-catalog.md) — Inventory of every pytest case (2271 tests · 129 modules): one-sentence blurb per test; BANKED modules annotated.
+* [Test Case Catalog](/testing/test-case-catalog.md) — Inventory of every pytest case (**7437** tests · **308** active modules on tip 2026-08-09; **2** BANKED ignores): one-sentence blurb per test; REMOVED/BANKED modules annotated.
 
 ## Per-module case files
 
