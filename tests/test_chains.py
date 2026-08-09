@@ -29,8 +29,12 @@ from tw2002_aiclient.chains import (
     find_profit_chains,
     find_profit_chains_with_note,
     is_executable_chain,
-    longest_profit_chain,
 )
+
+
+def _top_chain(hops, **kwargs):
+    chains = find_profit_chains(hops, **kwargs)
+    return chains[0] if chains else None
 
 
 def _triangle():
@@ -42,7 +46,7 @@ def _triangle():
 
 
 def test_triangle_longest_chain():
-    chain = longest_profit_chain(_triangle())
+    chain = _top_chain(_triangle())
     assert chain is not None
     assert len(chain.hops) == 3
     assert chain.overall_profit == 90
@@ -58,7 +62,7 @@ def test_negative_hop_breaks_triangle():
         TradeHop(2, 3, "Organics", -5, 1),  # ignored
         TradeHop(3, 1, "Fuel Ore", 20, 1),
     ]
-    assert longest_profit_chain(hops) is None
+    assert _top_chain(hops) is None
     assert find_profit_chains(hops) == []
 
 
@@ -72,7 +76,7 @@ def test_longer_cycle_preferred_over_shorter_higher_cprt():
         TradeHop(2, 3, "Y", 10, 1),
         TradeHop(3, 1, "Z", 10, 1),
     ]
-    chain = longest_profit_chain(hops)
+    chain = _top_chain(hops)
     assert chain is not None
     assert len(chain.hops) == 3
     assert chain.sectors[0] == 1
@@ -131,7 +135,7 @@ def test_tie_on_length_higher_cr_per_turn_wins():
         TradeHop(3, 4, "C", 40, 1),
         TradeHop(4, 3, "D", 40, 1),  # 80/2 = 40 cr/turn
     ]
-    chain = longest_profit_chain(hops)
+    chain = _top_chain(hops)
     assert chain is not None
     assert len(chain.hops) == 2
     assert chain.cr_per_turn == 40.0
@@ -139,7 +143,7 @@ def test_tie_on_length_higher_cr_per_turn_wins():
 
 
 def test_empty_hops():
-    assert longest_profit_chain([]) is None
+    assert _top_chain([]) is None
     assert find_profit_chains([]) == []
 
 
@@ -149,7 +153,7 @@ def test_no_cycle_yields_no_chain():
         TradeHop(1, 2, "A", 10, 1),
         TradeHop(2, 3, "B", 10, 1),
     ]
-    assert longest_profit_chain(hops) is None
+    assert _top_chain(hops) is None
     assert find_profit_chains(hops) == []
 
 
@@ -175,7 +179,7 @@ def test_max_hops_bounds_the_search():
         TradeHop(4, 1, "D", 10, 1),
     ]
     assert find_profit_chains(hops, max_hops=3) == []
-    chain = longest_profit_chain(hops, max_hops=4)
+    chain = _top_chain(hops, max_hops=4)
     assert chain is not None
     assert len(chain.hops) == 4
 
@@ -455,7 +459,7 @@ def test_ring_5000_and_50000_return_normally_without_recursion_error():
     # shared constant, so the whole class has one threshold to reason about.
     for n in (5000, 50000):
         t0 = time.perf_counter()
-        chain = longest_profit_chain(_ring(n))
+        chain = _top_chain(_ring(n))
         elapsed = time.perf_counter() - t0
         assert chain is not None, f"ring({n}) found no chain"
         assert len(chain.hops) == n
@@ -472,7 +476,7 @@ def test_ring_999_crashes_the_legacy_recursive_algorithm_but_not_the_new_one():
     with pytest.raises(RecursionError):
         _legacy_find_profit_chains(hops)
 
-    chain = longest_profit_chain(hops)
+    chain = _top_chain(hops)
     assert chain is not None
     assert len(chain.hops) == 999
 
@@ -496,7 +500,7 @@ def test_iterative_search_never_touches_the_python_call_stack():
         with pytest.raises(RecursionError):
             _legacy_find_profit_chains(hops)
 
-        chain = longest_profit_chain(hops)
+        chain = _top_chain(hops)
         assert chain is not None
         assert len(chain.hops) == tight_limit + 200
     finally:
