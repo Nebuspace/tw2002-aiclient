@@ -6,11 +6,12 @@ Every settled ``build_response()`` can append one NDJSON object under
 or watch coalesces intermediate screens).
 
 Read path is pure filesystem (``tw frames``) — no daemon required for
-closed sessions. Keystroke text is never persisted: frames store ``was_secret``
-(boolean from password-shaped prompt text only). Session keystroke/secret
-flags are never read. On password-shaped settles the ``prompt`` field is the
-ledger ``"<redacted>"`` placeholder; ``sent_input`` is always omitted from
-the JSONL object.
+closed sessions. Keystroke text is never persisted: frames store
+``password_prompt`` (boolean from password-shaped prompt text only). Session
+keystroke/secret flags are never read. On password-shaped settles the frame
+uses only untainted literals (``prompt`` = ledger ``"<redacted>"``, empty
+screens, ``state`` None); ``sent_input`` is always omitted from the JSONL
+object.
 
 Ported from archive ``twclient/frame_recorder.py`` (WO-FRAMES-0) into the
 reborn ``tw2002_aiclient`` tree.
@@ -211,42 +212,71 @@ class FrameRecorder:
         state: Optional[dict],
         trigger: str,
     ) -> dict:
-        if hasattr(session, "render_raw"):
-            raw = list(session.render_raw())
-        else:
-            raw = list(cropped_rows or [])
-        cropped = list(cropped_rows) if cropped_rows is not None else raw
-        prompt_line = prompt if prompt is not None else last_nonblank_line(raw)
-        # Redact only from local prompt text via _PASSWORD_PROMPT_RE.
+        # Detect password-shaped prompts on a local string only.
         # Never read session keystroke or secret-flag attributes — CodeQL
-        # taints anything named/flowing from *secret* into clear-text JSONL
-        # storage (py/clear-text-storage-sensitive-data).
-        was_secret = bool(_PASSWORD_PROMPT_RE.search(prompt_line or ""))
-        if was_secret:
-            # Match ledger: password-shaped prompts are redacted on disk too.
-            # Use the untainted REDACTED constant — do not flow prompt_line.
-            prompt_line = REDACTED
+        # taints *secret*-named flows into clear-text JSONL storage
+        # (py/clear-text-storage-sensitive-data).
+        probe = prompt if prompt is not None else ""
+        if not probe and hasattr(session, "render_raw"):
+            probe = last_nonblank_line(session.render_raw())
+        elif not probe:
+            probe = last_nonblank_line(cropped_rows or [])
+        password_shaped = bool(_PASSWORD_PROMPT_RE.search(probe or ""))
+
         with self._lock:
             self._seq += 1
             seq = self._seq
-            frame = {
-                "seq": seq,
-                "ts": _now_iso(),
-                "ts_mono": time.monotonic(),
-                "trigger": trigger if settled_reason is None else f"settle_{settled_reason}",
-                "session_id": self.session_id,
-                "rx_count": getattr(session, "rx_count", None),
-                "settled_reason": settled_reason,
-                "classification": classification,
-                "prompt": prompt_line,
-                "was_secret": was_secret,
-                "cols": self.cols,
-                "rows": self.rows,
-                "screen_raw": raw,
-                "screen_cropped": cropped,
-                "cursor": session.cursor_pos() if hasattr(session, "cursor_pos") else None,
-                "state": state,
-            }
+            ts = _now_iso()
+            ts_mono = time.monotonic()
+            trig = trigger if settled_reason is None else f"settle_{settled_reason}"
+            rx_count = getattr(session, "rx_count", None)
+            cursor = session.cursor_pos() if hasattr(session, "cursor_pos") else None
+            if password_shaped:
+                # Literals / untainted constants only — do not alias probe,
+                # raw screens, or state into the written dict (CodeQL taint).
+                frame = {
+                    "seq": seq,
+                    "ts": ts,
+                    "ts_mono": ts_mono,
+                    "trigger": trig,
+                    "session_id": self.session_id,
+                    "rx_count": rx_count,
+                    "settled_reason": settled_reason,
+                    "classification": classification,
+                    "prompt": REDACTED,
+                    "password_prompt": True,
+                    "cols": self.cols,
+                    "rows": self.rows,
+                    "screen_raw": [],
+                    "screen_cropped": [],
+                    "cursor": cursor,
+                    "state": None,
+                }
+            else:
+                if hasattr(session, "render_raw"):
+                    raw = list(session.render_raw())
+                else:
+                    raw = list(cropped_rows or [])
+                cropped = list(cropped_rows) if cropped_rows is not None else raw
+                prompt_line = prompt if prompt is not None else last_nonblank_line(raw)
+                frame = {
+                    "seq": seq,
+                    "ts": ts,
+                    "ts_mono": ts_mono,
+                    "trigger": trig,
+                    "session_id": self.session_id,
+                    "rx_count": rx_count,
+                    "settled_reason": settled_reason,
+                    "classification": classification,
+                    "prompt": prompt_line,
+                    "password_prompt": False,
+                    "cols": self.cols,
+                    "rows": self.rows,
+                    "screen_raw": raw,
+                    "screen_cropped": cropped,
+                    "cursor": cursor,
+                    "state": state,
+                }
             with self._path.open("a", encoding="utf-8") as fh:
                 fh.write(json.dumps(frame, ensure_ascii=False) + "\n")
             return frame

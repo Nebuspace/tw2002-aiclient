@@ -114,39 +114,47 @@ def test_diff_shows_line_delta():
 
 
 def test_secret_sent_input_never_persisted(tmp_path):
-    """Password-shaped prompt → was_secret + redacted prompt; no sent_input."""
+    """Password-shaped prompt → password_prompt + redacted prompt; empty screens."""
     session = _FakeSession(["Password? "])
     rec = FrameRecorder("sec_sess", state_dir=tmp_path)
     session.frame_recorder = rec
     protocol.build_response(session)
     frames = read_frames("sec_sess", state_dir=tmp_path)
     assert "sent_input" not in frames[0]
-    assert frames[0]["was_secret"] is True
+    assert "was_secret" not in frames[0]
+    assert frames[0]["password_prompt"] is True
     assert frames[0]["prompt"] == "<redacted>"
+    assert frames[0]["screen_raw"] == []
+    assert frames[0]["screen_cropped"] == []
+    assert frames[0]["state"] is None
     blob = (tmp_path / "frames" / "sec_sess.jsonl").read_text(encoding="utf-8")
     assert '"sent_input"' not in blob
 
 
 def test_password_prompt_redacts_from_prompt_text_alone(tmp_path):
-    """Prompt-shape alone drives was_secret — no session secret flag."""
+    """Prompt-shape alone drives password_prompt — no session secret flag."""
     session = _FakeSession(["Enter your password:"])
     rec = FrameRecorder("pw_prompt", state_dir=tmp_path)
     session.frame_recorder = rec
     protocol.build_response(session)
     frames = read_frames("pw_prompt", state_dir=tmp_path)
-    assert frames[0]["was_secret"] is True
+    assert frames[0]["password_prompt"] is True
     assert frames[0]["prompt"] == "<redacted>"
+    assert frames[0]["screen_raw"] == []
+    assert frames[0]["screen_cropped"] == []
+    assert frames[0]["state"] is None
     assert "sent_input" not in frames[0]
+    assert "was_secret" not in frames[0]
 
 
 def test_non_secret_omits_sent_input(tmp_path):
-    """Non-password prompts: was_secret false; keystrokes never mirrored."""
+    """Non-password prompts: password_prompt false; keystrokes never mirrored."""
     session = _FakeSession(["Command [TL=40]:"])
     rec = FrameRecorder("plain_sess", state_dir=tmp_path)
     session.frame_recorder = rec
     protocol.build_response(session)
     frames = read_frames("plain_sess", state_dir=tmp_path)
-    assert frames[0]["was_secret"] is False
+    assert frames[0]["password_prompt"] is False
     assert "sent_input" not in frames[0]
     blob = (tmp_path / "frames" / "plain_sess.jsonl").read_text(encoding="utf-8")
     assert '"sent_input"' not in blob
