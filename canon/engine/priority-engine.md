@@ -200,6 +200,38 @@ says stay — even if headline upgrade EV is higher. Remaining catalog rows (#2 
 writer, #5 hold-quote beyond label, #6–#13 EXECUTE surfaces) stay Partial/Planned per
 the Status column; this WO does not invent those writers.
 
+### FOCUS ranking input — affordability raises explore (catalog extension)
+
+**Gap (canon-draft 2026-08-09):** nothing today compares current credits against a known
+`hold_upgrade_quote` / `fighter_unit_price` and feeds the result into FOCUS explore weighting.
+`afford_fighters()` (`priority_engine.py` ~215–309) already computes the affordability math
+(credits vs fighter/hold quotes; spending priority trade-float → hold upgrade → fighters) but
+only surfaces a GOALS label (`fighter_buy_status_label`). Mid-chain
+`upgrade_gate_while_chaining` (~103–167) only fires while an executable chain is present against
+a *known* StarDock detour — it is not an idle/between-runs trigger that nudges explore when
+credits clear a threshold.
+
+**Prescriptive ranking input (not a 14th objective row, not a live picker):**
+
+| Trigger | Effect on FOCUS | Must NOT do |
+|---|---|---|
+| Credits cross a **known** hold-upgrade cost and/or fighter unit cost (quotes present — omit-until-known; never invent prices) | Raise the `explore` candidate's `overlay_weight` / sort prominence so the suggestion is **louder** (Find-StarDock / fresh loops become more visible beside a grinding chain) | Autonomously switch FOCUS top-kind, arm explore, rotate off a running loop, or live-drive |
+| Same threshold while quotes are unknown | No boost — honest omit; GOALS/FOCUS keep `?` / ungated-absence rather than inventing affordability | Invent Class-0 / hold prices from placeholders |
+
+**Shared signal — reuse `explore_appetite_raised`, do not invent a twin.** Tip
+`chain_depletion.depletion_signals()` already writes `explore_appetite_raised` onto chain status
+when near depletion (`chain_depletion.py` ~148–165; key also in `chain_status.py`) — and **zero
+product readers consume it today**. Affordability is a **second OR-cause** of that same flag (and
+of the explore overlay boost in `focus_status.recommend_focus_candidates` ~214–312), not a second
+boolean. Depletion and affordability share one consumer path into FOCUS.
+
+Exact numerics (raw credits ≥ cost vs buffer above trade float; whether hold-upgrade vs fighter
+thresholds weight explore differently) stay Pending —
+`PENDING-AFFORDABILITY-EXPLORE-WEIGHT-DEFINITION` in [DECISIONS](/DECISIONS.md). Follow-on build WO
+wires the reader; this draft does not touch `afford_fighters` / `focus_status.py` /
+`chain_depletion.py` code. Cross-ref appetite framing:
+[exploration-policy](/strategy/exploration-policy.md) § Explore / exploit appetite.
+
 ## Two-layer information architecture
 
 The strategic layer renders in the cockpit as two related-but-distinct panels. Both are **read-only
