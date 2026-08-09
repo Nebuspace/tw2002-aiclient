@@ -264,23 +264,24 @@ noted, not conformed away.
   [Screen Understanding](/engine/screen-understanding.md)'s ruled tension-resolution (`DECISIONS.md`
   §A.2, Max carte blanche 2026-07-26) says never-auto-action "means no unattended freestyle, and
   human-armed guarded rules are exempt — auto-haggle and taught quantity chains may answer their own
-  shapes." §A.2 itself closes on a forward-looking note, not a present obligation: **"Harmless until a
-  haggle/trade module lands; this clears the gate so one can."** The ruling clears a gate for a future
-  module — it does not obligate today's replay guard to open it. The shipped guard
-  (`tw2002_aiclient/loops/player.py`'s `_gate()`) halts on *any* screen classified `money_prompt`
-  unconditionally (`reason: never_auto_action`), including a step inside a recorded, human-taught macro
-  — see the illustrative `ore-run` example above, and `test_a_macro_recorded_to_answer_a_money_prompt_still_halts_there`,
-  whose own docstring calls this "the intended behaviour until the arming substrate exists." This is a
-  correctly-sequenced deferral, recorded here as still-open rather than closed: the exemption §A.2
-  grants is conditioned on *human* arming, and no mechanism yet exists that can attest a human — rather
-  than the loop itself — authorized a given firing. Closing this gap is a code change, not a doc one —
-  and it must **not** be closed by adding a loop-settable bypass flag to `_gate()` (a `force`-style
-  carve-out for `money_prompt`): a flag the replay loop itself could set to answer its own money
-  question would **be** the loop arming itself, exactly the self-arming §A.2 forbids. The autoloop wire
-  verb applies the same reasoning to its own `force` parameter, refusing it outright rather than merely
-  ignoring it, because a socket verb has no way to attest that a human, rather than the loop, is behind
-  the request. Whatever surface eventually implements this exemption must itself be a human-attested
-  one; `_gate()`'s current unconditional refusal is the correct default until that surface exists.
+  shapes." The ruling's forward-looking note ("Harmless until a haggle/trade module lands…") is
+  **historical**: tip now ships `session/haggle.run_haggle` + `trade_driver` as the human-armed
+  guarded money path ([auto-haggle](/engine/auto-haggle.md)). That does **not** reopen
+  `loops/player.py`'s `_gate()` for recorded-macro replay. The shipped replay guard still
+  halts on *any* screen classified `money_prompt` unconditionally (`reason: never_auto_action`),
+  including a step inside a recorded, human-taught macro — see the illustrative `ore-run` example
+  above, and `test_a_macro_recorded_to_answer_a_money_prompt_still_halts_there`, whose own docstring
+  calls this "the intended behaviour until the arming substrate exists." Still-open residual is the
+  *replay-loop arming attestation* (a human-attested surface that can exempt a taught money step),
+  not the absence of a haggle module. Closing this gap is a code change, not a doc one — and it must
+  **not** be closed by adding a loop-settable bypass flag to `_gate()` (a `force`-style carve-out for
+  `money_prompt`): a flag the replay loop itself could set to answer its own money question would
+  **be** the loop arming itself, exactly the self-arming §A.2 forbids. The autoloop wire verb applies
+  the same reasoning to its own `force` parameter, refusing it outright rather than merely ignoring
+  it, because a socket verb has no way to attest that a human, rather than the loop, is behind the
+  request. Whatever surface eventually implements the replay exemption must itself be a
+  human-attested one; `_gate()`'s current unconditional refusal is the correct default until that
+  surface exists.
 
 # Citations
 
