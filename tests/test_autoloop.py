@@ -3,11 +3,10 @@
 
 The claims this suite exists to establish, in the order they matter:
 
-1. **The arm chip is TRUE, not merely non-blank.** ``cockpit/arm.py``
-   shipped with no setter because a write path against a runtime that
-   could not arm "would render ``ARM ON`` for a runtime that cannot arm:
-   a fabricated affirmative safety claim". The runtime can arm now, so
-   two states are forbidden and both are pinned here: armed while nothing
+1. **The arm state is TRUE, not merely non-blank.** The daemon ``status``
+   payload reports ``autopilot.running`` as a literal ``bool`` -- ``1 == True``
+   in Python, so an equality check would accept ``running: 1`` as armed.
+   Two states are forbidden and both are pinned here: armed while nothing
    is running, and unarmed while the player holds the lock. The second is
    proven structurally (the hold is a disjunct of the answer, read inside
    the runner's own mutex) rather than by sampling, because sampling two
@@ -39,7 +38,6 @@ from pathlib import Path
 
 import pytest
 
-from tw2002_aiclient.cockpit import arm as arm_chip
 from tw2002_aiclient.cockpit import stopbanner
 from tw2002_aiclient.loops.player import (
     HALT_ABORTED,
@@ -244,17 +242,13 @@ def test_the_fixtures_classify_the_same_way_through_this_files_read_path():
 
 
 def test_the_chip_reads_off_before_any_run_and_the_bool_is_literal():
-    """``arm.py`` resolves ``running`` with an ``is`` identity check in
-    both directions -- ``1 == True`` in Python, so an equality check would
-    accept ``running: 1`` as armed. The daemon therefore owes a literal
-    bool, not merely something falsy."""
+    """The daemon owes a literal ``bool`` for ``autopilot.running``, not
+    merely something falsy -- ``1 == True`` in Python."""
     session = WireSession([ANCHOR_158[0]])
     server = Server(session, ControlLock(), make_runner(Path("/nonexistent"), session))
     resp = protocol.dispatch(session, "status", {}, server)
 
     assert resp["autopilot"]["running"] is False
-    assert arm_chip.arm_state(resp) == arm_chip.ARM_OFF
-    assert arm_chip.arm_label(resp) == arm_chip.ARM_OFF_LABEL
     # No halt has happened, so the STOP banner has nothing to raise.
     assert "intervention" not in resp
     assert stopbanner.needs_attention(resp) is False
@@ -272,7 +266,7 @@ def test_the_chip_reads_on_for_exactly_as_long_as_the_run_is_live(tmp_path):
     runner = make_runner(tmp_path, session, lock)
     server = Server(session, lock, runner)
 
-    assert arm_chip.arm_state(protocol.dispatch(session, "status", {}, server)) == arm_chip.ARM_OFF
+    assert protocol.dispatch(session, "status", {}, server)["autopilot"]["running"] is False
 
     started = protocol.dispatch(session, "autoloop_start", {"name": "ore-run"}, server)
     assert started["ok"] is True and started["started"] is True
@@ -283,7 +277,6 @@ def test_the_chip_reads_on_for_exactly_as_long_as_the_run_is_live(tmp_path):
     assert started["run"]["loop"] == "ore-run"
     live = protocol.dispatch(session, "status", {}, server)
     assert live["autopilot"]["running"] is True
-    assert arm_chip.arm_state(live) == arm_chip.ARM_ON
     # ...and the thread really is there behind the claim.
     assert runner._thread is not None and runner._thread.is_alive()
     assert lock.is_auto_loop_held() is True
@@ -294,7 +287,6 @@ def test_the_chip_reads_on_for_exactly_as_long_as_the_run_is_live(tmp_path):
 
     done = protocol.dispatch(session, "status", {}, server)
     assert done["autopilot"]["running"] is False
-    assert arm_chip.arm_state(done) == arm_chip.ARM_OFF
     assert lock.is_auto_loop_held() is False
 
 
@@ -314,7 +306,6 @@ def test_a_held_lock_can_never_read_as_unarmed():
     assert runner._in_flight is False  # nothing running, by construction
     assert runner.snapshot().running is True
     assert autoloop.arm_block(runner.snapshot())["running"] is True
-    assert arm_chip.arm_state({"autopilot": autoloop.arm_block(runner.snapshot())}) == arm_chip.ARM_ON
 
 
 def test_a_daemon_with_no_runner_still_answers_from_the_lock():
@@ -329,7 +320,6 @@ def test_a_daemon_with_no_runner_still_answers_from_the_lock():
 
     resp = protocol.dispatch(session, "status", {}, server)
     assert resp["autopilot"]["running"] is True
-    assert arm_chip.arm_state(resp) == arm_chip.ARM_ON
 
     lock.leave_auto_loop(token)
     assert protocol.dispatch(session, "status", {}, server)["autopilot"]["running"] is False
@@ -436,7 +426,6 @@ def test_a_refused_start_never_leaves_the_chip_armed(tmp_path):
         assert lock.is_auto_loop_held() is False, args
         status = protocol.dispatch(session, "status", {}, server)
         assert status["autopilot"]["running"] is False, args
-        assert arm_chip.arm_state(status) == arm_chip.ARM_OFF, args
         assert session.sent == [], args
 
 
@@ -765,7 +754,6 @@ def test_a_stop_halts_the_run_with_its_own_code_and_releases_the_hold(tmp_path):
 
     status = protocol.dispatch(session, "status", {}, server)
     assert status["autopilot"]["running"] is False
-    assert arm_chip.arm_state(status) == arm_chip.ARM_OFF
     assert status["intervention"]["reasons"] == [{"code": HALT_ABORTED}]
 
 
@@ -931,8 +919,7 @@ def test_an_unconfirmed_send_is_not_read_as_confirmed(tmp_path, monkeypatch):
 
 
 def test_the_port_answers_literal_bools():
-    """``arm.py`` is not the only ``is``-checking consumer: the player
-    demands literal ``True`` from every port method it trusts."""
+    """The player demands literal ``True`` from every port method it trusts."""
     session = WireSession([ANCHOR_158[0]])
     port = autoloop._ReplayPort(session, ControlLock(), threading.Event())
 

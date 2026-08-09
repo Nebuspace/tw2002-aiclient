@@ -6,9 +6,8 @@ DECISION `RESOLVED-TRAINER-STRIP-AND-GUTTER-20260731` point 1 retires the
 separate, daemon-sourced ARM chip from THIS product's draw wiring: the
 merged seat chip (`^A)APP-ARMED`/`^A)MANUAL-HUMAN`, via
 `compose_control_strip_segments(..., trainer_labels=True)`) replaces it.
-`cockpit/arm.py` and `cockpit_arm.compose_arm_chip` are UNCHANGED and still
-exist as a pure composer (Layer-A: ``tests/test_cockpit_arm.py``) -- only
-``screens.py`` no longer calls them. This file now proves:
+``cockpit/arm.py`` was removed post-decision (WO-CLEANUP-COCKPIT-ARM-
+ORPHANED). This file now proves:
 
   1. **The merged seat chip renders correctly for all three seat states**,
      and never depends on the daemon's ``status["autopilot"]`` payload --
@@ -41,13 +40,7 @@ import curses
 import pytest
 
 from tw2002_aiclient import screens as screens_mod
-from tw2002_aiclient.cockpit import arm as cockpit_arm
 from tw2002_aiclient.cockpit import control_seat
-from tw2002_aiclient.cockpit.arm import (
-    ARM_OFF_LABEL,
-    ARM_ON_LABEL,
-    ARM_UNKNOWN_LABEL,
-)
 from tw2002_aiclient.cockpit.control_seat import (
     APP_LABEL,
     MANUAL_LABEL,
@@ -68,6 +61,13 @@ from tw2002_aiclient.cockpit.layout import frame_layout
 
 FULL_ROWS, FULL_COLS = 40, 180
 HANDLE = "Alpha"
+
+# Retired separate ARM chip labels (DECISION point 1). Kept as fixture names
+# for daemon-status variation tests -- the merged seat chip no longer reads
+# ``status["autopilot"]``, so these labels must never appear on the row.
+ARM_ON_LABEL = "ARM ON"
+ARM_OFF_LABEL = "ARM OFF"
+ARM_UNKNOWN_LABEL = "ARM ?"
 
 # The three seat states, as the literal ``(spectating, attached)`` pairs
 # ``control_seat`` actually gates on -- App-hold requires both to be the
@@ -210,25 +210,15 @@ def test_spectate_never_lies_an_armed_or_manual_seat(monkeypatch):
 
 
 def test_arm_reads_a_different_input_than_the_seat_badge_entirely(monkeypatch):
-    """The structural root of the independence above: the seat badge is
-    composed from this client's own two booleans and never sees the status
-    payload, while the arm chip is composed from the status payload and
-    never sees the booleans. Proved by handing the seat composer a status
-    dict's worth of nonsense and the arm composer a seat's worth -- neither
-    can act on the other's vocabulary."""
-    # Seat composer, given only arm vocabulary: no arm chip appears.
+    """The seat badge is composed from this client's own two booleans and
+    never sees the status payload. Proved by handing the seat composer a
+    status dict's worth of nonsense -- no arm chip appears."""
     seat_only = _joined_strip(
         spectating=False, attached=False, liveness_text="", width=60
     )
     assert APP_LABEL in seat_only
     for arm_text in _ARMS:
         assert arm_text not in seat_only
-    # Arm composer, given seat booleans as its payload: no seat label, and
-    # no arm claim invented from them either.
-    assert cockpit_arm.compose_arm_chip({"spectating": False, "attached": True}) == (
-        ARM_UNKNOWN_LABEL,
-        "warn",
-    )
 
 
 def test_lock_state_words_never_appear_in_any_arm_label():
@@ -288,34 +278,6 @@ def test_no_key_and_no_seat_transition_can_make_a_spectating_seat_read_armed(mon
                 assert _TRAINER_MERGED[seat_label] in row, (
                     f"key {key!r} at seat {seat_label!r} moved the merged label"
                 )
-
-
-def test_no_arm_chip_related_call_reaches_the_retired_composer(monkeypatch):
-    """The structural half of Accept #3, restated: ``screens.py`` no
-    longer imports or calls ``cockpit_arm.compose_arm_chip`` at all, so
-    there is nothing left for a key or seat transition to route into it.
-    Proved by spying on the composer itself (still reachable via
-    ``cockpit_arm`` directly, since the module is unchanged) and driving
-    every plausible key through a full draw pass -- the spy must never
-    fire."""
-    seen: list[object] = []
-    real = cockpit_arm.compose_arm_chip
-
-    def _spy(status):
-        seen.append(status)
-        return real(status)
-
-    monkeypatch.setattr(cockpit_arm, "compose_arm_chip", _spy)
-    win = _RecordingWin(FULL_ROWS, FULL_COLS)
-    screen = _screen(monkeypatch, win, {"autopilot": {"running": False}})
-    for key in _PLAUSIBLE_KEYS:
-        screen.handle_key(key)
-        screen.draw()
-
-    assert not seen, (
-        "screens.py's draw() reached the retired cockpit_arm.compose_arm_chip "
-        f"composer: {seen!r}"
-    )
 
 
 def test_the_cockpit_holds_no_arm_state_of_its_own(monkeypatch):
