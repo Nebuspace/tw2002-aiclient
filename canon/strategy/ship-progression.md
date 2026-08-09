@@ -229,6 +229,40 @@ The execute path for a human-approved (or App-armed `C)argo Hold Upgrade·ON`) h
 
 *(Honesty pass `AUDIT-CANON-DRAFT-STARDOCK-HOLD-DRIVER-COVERAGE`, 2026-08-04.)*
 
+## StarDock ship-purchase — no live purchase-confirm ground truth yet
+
+Ship *purchase* (as opposed to hold expansion on the current ship) has **no send/confirm driver
+built, and no live capture of the purchase-confirm screen exists to build one against.** A
+2026-08-08 live-drive pass on a sacrificial profile
+([`stardock-ship-purchase-capture-2026-08-08`](/research/stardock-ship-purchase-capture-2026-08-08.md))
+found:
+
+- The repo's historical fixture (`tests/fixtures/stardock_shipyard_listing.txt`, header `-=-=-
+  StarDock Shipyard - Ship Registration -=-=-`, reached via lowercase `s` at a `Command [TL=…]:`
+  prompt) does **not** reproduce on this server — `s`/`S` there answers **Long Range Scan**
+  instead, and no equivalent listing screen was found by any other letter.
+- No purchase-confirm prompt was reached anywhere on that server. `C`→`C` (Onboard Computer → View
+  Ship Catalog) is a **read-only** spec browser with no "Buy this ship (Y/N)?" and no credit
+  deduction. Exhaustively checking every letter in the top-level `?` help menu at StarDock found no
+  `Ship Dealer` / `Upgrade Ship` / `Buy New Ship` entry anywhere in the reachable menu tree on this
+  server.
+- Whether the fixture reflects a different TWGS build/version, a different server configuration, or
+  a feature this instance has disabled was **not determined** — it is an open gap, not a resolved
+  one.
+
+This does not change the deferred, human-approved framing above — ship purchase was already scoped
+as a one-shot the human approves, never an EV-picker candidate — it only confirms that the
+*mechanism* (what to actually send once a human has approved) still has no ground truth on any
+server this project has driven. **Recommendation, carried from the research doc: hold the
+send/confirm half of a purchase driver** until either a live server exposing the `s`/listing path is
+found and driven through an actual purchase, or a human manually captures that transcript once and
+drops it into `tests/fixtures/`. The decision engine (`ship_upgrade_decision.py`, above) and the
+listing parser (`introspector.parse_shipyard_listing`, [game-data-store](/engine/game-data-store.md))
+are already ground-truthed on their own inputs and need no further work for this gap — only the
+final "select + confirm + credits leave" keystroke sequence is missing evidence, the same
+grammar-vs-live-capture divergence [game-data-store](/engine/game-data-store.md) records for the
+listing screen itself.
+
 - **Archived autopilot per-cycle EV picker — do-not-revive.** Pre-rebirth `twclient/autopilot.py`
   selected each tick's action by expected-value-per-turn across candidates (an upgrade could compete
   to execute). That module is **archive-only**. Under the reborn framing an upgrade is a
@@ -272,6 +306,9 @@ The execute path for a human-approved (or App-armed `C)argo Hold Upgrade·ON`) h
   `trade_driver.py` (arm-gated chain runner), and tip hold-buy execute
   — `stardock_hold_plan.py` / `stardock_hold_driver.py` (`run_hold_purchase` one-pass; refuse unknown
   qty range / price mismatch; never toll-pay or trade_chain).
+- Research evidence — [`stardock-ship-purchase-capture-2026-08-08`](/research/stardock-ship-purchase-capture-2026-08-08.md)
+  (fixture-vs-live mismatch on the listing screen; no purchase-confirm ground truth on any server
+  driven yet; the send/confirm half of a purchase driver stays held until a live capture exists).
 - Cross-cutting invariants and consumers — [game-data-store](/engine/game-data-store.md) (the
   introspected ship stat rows and per-hold price this engine reads, never hardcodes),
   [priority-engine](/engine/priority-engine.md) (which *ranks* an upgrade recommendation among
