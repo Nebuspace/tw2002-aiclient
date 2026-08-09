@@ -1,18 +1,17 @@
 ---
 type: Reference
 title: Test Cases — test_hud_seed
-description: WO-HUD-CREDITS-TURNS-JOIN — cold-join I-probe + sticky turns.
+description: REMOVED — historical inventory; tip module absent. WO-HUD-CREDITS-TURNS-JOIN — cold-join I-probe + sticky turns.
 resource: repo://tw2002-aiclient/tests/test_hud_seed.py
 tags: [testing, catalog, pytest, inventory]
-timestamp: 2026-07-25T14:10:13Z
+timestamp: 2026-08-09T09:15:46Z
 ---
 
 # Test Cases — `tests/test_hud_seed.py`
 
 _WO-HUD-CREDITS-TURNS-JOIN — cold-join I-probe + sticky turns._
 
-> **BANKED** — excluded from the default pytest run via `pytest.ini --ignore`. Catalogued for completeness.
-
+> **REMOVED** — module absent on tip (not merely pytest-ignored). Catalogued for completeness (historical inventory).
 | Test | Blurb |
 |------|-------|
 | `test_seed_hud_skips_probe_when_already_known` | Seed hud skips probe when already known. |

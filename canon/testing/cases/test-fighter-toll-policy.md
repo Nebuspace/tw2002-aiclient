@@ -4,15 +4,14 @@ title: Test Cases — test_fighter_toll_policy
 description: WO-FIGHTER-FLOOR-TOLL — fighter reserve + Option?
 resource: repo://tw2002-aiclient/tests/test_fighter_toll_policy.py
 tags: [testing, catalog, pytest, inventory]
-timestamp: 2026-07-25T14:10:13Z
+timestamp: 2026-08-09T09:15:46Z
 ---
 
 # Test Cases — `tests/test_fighter_toll_policy.py`
 
 _WO-FIGHTER-FLOOR-TOLL — fighter reserve + Option?_
 
-> **BANKED** — excluded from the default pytest run via `pytest.ini --ignore`. Catalogued for completeness.
-
+> **Active** on tip (default pytest collect). Historical case file once marked BANKED; tip module is collected — not among the tip **2** BANKED ignores (`test_analyze.py`, `test_crawl_start_protocol.py`). Headline inventory: **7437** tests · **308** active modules.
 | Test | Blurb |
 |------|-------|
 | `test_default_reserve_is_small_and_documented` | Default reserve is small and documented. |

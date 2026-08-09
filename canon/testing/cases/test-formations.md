@@ -1,18 +1,17 @@
 ---
 type: Reference
 title: Test Cases — test_formations
-description: TW-16 formation detector tests.
+description: REMOVED — historical inventory; tip module absent. TW-16 formation detector tests.
 resource: repo://tw2002-aiclient/tests/test_formations.py
 tags: [testing, catalog, pytest, inventory]
-timestamp: 2026-07-25T14:10:13Z
+timestamp: 2026-08-09T09:15:46Z
 ---
 
 # Test Cases — `tests/test_formations.py`
 
 _TW-16 formation detector tests._
 
-> **BANKED** — excluded from the default pytest run via `pytest.ini --ignore`. Catalogued for completeness.
-
+> **REMOVED** — module absent on tip (not merely pytest-ignored). Catalogued for completeness (historical inventory).
 | Test | Blurb |
 |------|-------|
 | `test_dead_end` | Dead end. |

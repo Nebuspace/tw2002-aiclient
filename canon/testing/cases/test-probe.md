@@ -1,18 +1,17 @@
 ---
 type: Reference
 title: Test Cases — test_probe
-description: WO-MS-3 probe tests — classification, polite envelope, L0/L1 invariants.
+description: REMOVED — historical inventory; tip module absent. WO-MS-3 probe tests — classification, polite envelope, L0/L1 invariants.
 resource: repo://tw2002-aiclient/tests/test_probe.py
 tags: [testing, catalog, pytest, inventory]
-timestamp: 2026-07-25T14:10:13Z
+timestamp: 2026-08-09T09:15:46Z
 ---
 
 # Test Cases — `tests/test_probe.py`
 
 _WO-MS-3 probe tests — classification, polite envelope, L0/L1 invariants._
 
-> **BANKED** — excluded from the default pytest run via `pytest.ini --ignore`. Catalogued for completeness.
-
+> **REMOVED** — module absent on tip (not merely pytest-ignored). Catalogued for completeness (historical inventory).
 | Test | Blurb |
 |------|-------|
 | `test_classify_twgs_direct` | Classify twgs direct. |

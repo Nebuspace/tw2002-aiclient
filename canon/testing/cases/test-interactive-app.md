@@ -1,18 +1,17 @@
 ---
 type: Reference
 title: Test Cases — test_interactive_app
-description: Interactive app.
+description: REMOVED — historical inventory; tip module absent. Interactive app.
 resource: repo://tw2002-aiclient/tests/test_interactive_app.py
 tags: [testing, catalog, pytest, inventory]
-timestamp: 2026-07-25T14:10:13Z
+timestamp: 2026-08-09T09:15:46Z
 ---
 
 # Test Cases — `tests/test_interactive_app.py`
 
 _Interactive app._
 
-> **BANKED** — excluded from the default pytest run via `pytest.ini --ignore`. Catalogued for completeness.
-
+> **REMOVED** — module absent on tip (not merely pytest-ignored). Catalogued for completeness (historical inventory).
 | Test | Blurb |
 |------|-------|
 | `test_attach_forwards_a_real_keystroke_through_a_pty` | Attach forwards a real keystroke through a pty. |

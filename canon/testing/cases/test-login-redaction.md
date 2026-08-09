@@ -4,15 +4,14 @@ title: Test Cases — test_login_redaction
 description: Cipher security gate (2026-07-20): sentinel-password redaction proof across the TW-02 `send_and_confirm` login/password swap (a2e99f6).
 resource: repo://tw2002-aiclient/tests/test_login_redaction.py
 tags: [testing, catalog, pytest, inventory]
-timestamp: 2026-07-25T14:10:13Z
+timestamp: 2026-08-09T09:15:46Z
 ---
 
 # Test Cases — `tests/test_login_redaction.py`
 
 _Cipher security gate (2026-07-20): sentinel-password redaction proof across the TW-02 `send_and_confirm` login/password swap (a2e99f6)._
 
-> **BANKED** — excluded from the default pytest run via `pytest.ini --ignore`. Catalogued for completeness.
-
+> **Active** on tip (default pytest collect). Historical case file once marked BANKED; tip module is collected — not among the tip **2** BANKED ignores (`test_analyze.py`, `test_crawl_start_protocol.py`). Headline inventory: **7437** tests · **308** active modules.
 | Test | Blurb |
 |------|-------|
 | `test_green_sentinel_absent_from_log_transcript_with_redaction_on` | Green sentinel absent from log transcript with redaction on. |

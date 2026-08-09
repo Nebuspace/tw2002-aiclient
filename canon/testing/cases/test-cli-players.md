@@ -1,18 +1,17 @@
 ---
 type: Reference
 title: Test Cases — test_cli_players
-description: `tw players` CLI verb tests -- no daemon involved, direct state/player_bank.json access (TW-31 client-side wiring, v1).
+description: REMOVED — historical inventory; tip module absent. `tw players` CLI verb tests -- no daemon involved, direct state/player_bank.json access (TW-31 client-side wiring, v1).
 resource: repo://tw2002-aiclient/tests/test_cli_players.py
 tags: [testing, catalog, pytest, inventory]
-timestamp: 2026-07-25T14:10:13Z
+timestamp: 2026-08-09T09:15:46Z
 ---
 
 # Test Cases — `tests/test_cli_players.py`
 
 _`tw players` CLI verb tests -- no daemon involved, direct state/player_bank.json access (TW-31 client-side wiring, v1)._
 
-> **BANKED** — excluded from the default pytest run via `pytest.ini --ignore`. Catalogued for completeness.
-
+> **REMOVED** — module absent on tip (not merely pytest-ignored). Catalogued for completeness (historical inventory).
 | Test | Blurb |
 |------|-------|
 | `test_cmd_players_list_empty_bank_shows_hint_without_creating_file` | Cmd players list empty bank shows hint without creating file. |

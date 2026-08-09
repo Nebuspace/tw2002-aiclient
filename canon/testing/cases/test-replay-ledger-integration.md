@@ -1,18 +1,17 @@
 ---
 type: Reference
 title: Test Cases — test_replay_ledger_integration
-description: Replay ledger integration.
+description: REMOVED — historical inventory; tip module absent. Replay ledger integration.
 resource: repo://tw2002-aiclient/tests/test_replay_ledger_integration.py
 tags: [testing, catalog, pytest, inventory]
-timestamp: 2026-07-25T14:10:13Z
+timestamp: 2026-08-09T09:15:46Z
 ---
 
 # Test Cases — `tests/test_replay_ledger_integration.py`
 
 _Replay ledger integration._
 
-> **BANKED** — excluded from the default pytest run via `pytest.ini --ignore`. Catalogued for completeness.
-
+> **REMOVED** — module absent on tip (not merely pytest-ignored). Catalogued for completeness (historical inventory).
 | Test | Blurb |
 |------|-------|
 | `test_replay_verb_writes_a_real_ledger_row_with_actor_trainer_and_session_id` | Replay verb writes a real ledger row with actor trainer and session id. |

@@ -1,18 +1,17 @@
 ---
 type: Reference
 title: Test Cases — test_aiclient_play_panels
-description: Aiclient play panels.
+description: REMOVED — historical inventory; tip module absent. Aiclient play panels.
 resource: repo://tw2002-aiclient/tests/test_aiclient_play_panels.py
 tags: [testing, catalog, pytest, inventory]
-timestamp: 2026-07-25T14:10:13Z
+timestamp: 2026-08-09T09:15:46Z
 ---
 
 # Test Cases — `tests/test_aiclient_play_panels.py`
 
 _Aiclient play panels._
 
-> **BANKED** — excluded from the default pytest run via `pytest.ini --ignore`. Catalogued for completeness.
-
+> **REMOVED** — module absent on tip (not merely pytest-ignored). Catalogued for completeness (historical inventory).
 | Test | Blurb |
 |------|-------|
 | `test_compose_play_panels_metrics_and_goals_focus` | Compose play panels metrics and goals focus. |

@@ -1,18 +1,17 @@
 ---
 type: Reference
 title: Test Cases — test_clean_preempt
-description: Clean preempt.
+description: REMOVED — historical inventory; tip module absent. Clean preempt.
 resource: repo://tw2002-aiclient/tests/test_clean_preempt.py
 tags: [testing, catalog, pytest, inventory]
-timestamp: 2026-07-25T14:10:13Z
+timestamp: 2026-08-09T09:15:46Z
 ---
 
 # Test Cases — `tests/test_clean_preempt.py`
 
 _Clean preempt._
 
-> **BANKED** — excluded from the default pytest run via `pytest.ini --ignore`. Catalogued for completeness.
-
+> **REMOVED** — module absent on tip (not merely pytest-ignored). Catalogued for completeness (historical inventory).
 | Test | Blurb |
 |------|-------|
 | `test_do_verb_flags_interrupted_by_human_when_fenced_mid_flight` | Do verb flags interrupted by human when fenced mid flight. |

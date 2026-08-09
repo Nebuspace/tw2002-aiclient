@@ -1,18 +1,17 @@
 ---
 type: Reference
 title: Test Cases — test_protocol_trainer_panel
-description: Protocol trainer panel.
+description: REMOVED — historical inventory; tip module absent. Protocol trainer panel.
 resource: repo://tw2002-aiclient/tests/test_protocol_trainer_panel.py
 tags: [testing, catalog, pytest, inventory]
-timestamp: 2026-07-25T14:10:13Z
+timestamp: 2026-08-09T09:15:46Z
 ---
 
 # Test Cases — `tests/test_protocol_trainer_panel.py`
 
 _Protocol trainer panel._
 
-> **BANKED** — excluded from the default pytest run via `pytest.ini --ignore`. Catalogued for completeness.
-
+> **REMOVED** — module absent on tip (not merely pytest-ignored). Catalogued for completeness (historical inventory).
 | Test | Blurb |
 |------|-------|
 | `test_list_skills_empty_when_no_skills_saved` | List skills empty when no skills saved. |

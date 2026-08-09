@@ -1,18 +1,17 @@
 ---
 type: Reference
 title: Test Cases — test_state_parser
-description: Best-effort state-extraction tests — no network involved.
+description: REMOVED — historical inventory; tip module absent. Best-effort state-extraction tests — no network involved.
 resource: repo://tw2002-aiclient/tests/test_state_parser.py
 tags: [testing, catalog, pytest, inventory]
-timestamp: 2026-07-25T14:10:13Z
+timestamp: 2026-08-09T09:15:46Z
 ---
 
 # Test Cases — `tests/test_state_parser.py`
 
 _Best-effort state-extraction tests — no network involved._
 
-> **BANKED** — excluded from the default pytest run via `pytest.ini --ignore`. Catalogued for completeness.
-
+> **REMOVED** — module absent on tip (not merely pytest-ignored). Catalogued for completeness (historical inventory).
 | Test | Blurb |
 |------|-------|
 | `test_extracts_sector` | Extracts sector. |

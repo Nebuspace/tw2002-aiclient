@@ -1,18 +1,17 @@
 ---
 type: Reference
 title: Test Cases — test_frame_recorder
-description: WO-FRAMES-0 — frame recorder + build_response hook + CLI read path.
+description: REMOVED — historical inventory; tip module absent. WO-FRAMES-0 — frame recorder + build_response hook + CLI read path.
 resource: repo://tw2002-aiclient/tests/test_frame_recorder.py
 tags: [testing, catalog, pytest, inventory]
-timestamp: 2026-07-25T14:10:13Z
+timestamp: 2026-08-09T09:15:46Z
 ---
 
 # Test Cases — `tests/test_frame_recorder.py`
 
 _WO-FRAMES-0 — frame recorder + build_response hook + CLI read path._
 
-> **BANKED** — excluded from the default pytest run via `pytest.ini --ignore`. Catalogued for completeness.
-
+> **REMOVED** — module absent on tip (not merely pytest-ignored). Catalogued for completeness (historical inventory).
 | Test | Blurb |
 |------|-------|
 | `test_last_nonblank_prefers_qty_over_blank_pad` | Last nonblank prefers qty over blank pad. |

@@ -1,18 +1,17 @@
 ---
 type: Reference
 title: Test Cases — test_control_panel
-description: Control panel.
+description: REMOVED — historical inventory; tip module absent. Control panel.
 resource: repo://tw2002-aiclient/tests/test_control_panel.py
 tags: [testing, catalog, pytest, inventory]
-timestamp: 2026-07-25T14:10:13Z
+timestamp: 2026-08-09T09:15:46Z
 ---
 
 # Test Cases — `tests/test_control_panel.py`
 
 _Control panel._
 
-> **BANKED** — excluded from the default pytest run via `pytest.ini --ignore`. Catalogued for completeness.
-
+> **REMOVED** — module absent on tip (not merely pytest-ignored). Catalogued for completeness (historical inventory).
 | Test | Blurb |
 |------|-------|
 | `test_pressing_m_cycles_ai_pilot_to_spectate_and_back` | Pressing m cycles ai pilot to spectate and back. |
