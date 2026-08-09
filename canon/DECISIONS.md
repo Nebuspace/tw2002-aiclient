@@ -511,3 +511,12 @@ Folded, until the design review referenced by those queue rows resolves.
 
 **Refs:** `canon/ADR/003-discovered-chain-approve-scaffold.md` § Status items 7–8 ·
 `canon/ADR/index.md` § Lifecycle · `workorders/WO-ADR-003-RESIDUAL-7-8-TRACKING.md`.
+
+## DECISION-PORT-FLOOR-CAPTURE-HOLD-RATIONALE (2026-08-09)
+
+**Status:** Ruled (autonomous, carte-blanche 2026-08-09) — `port_floor_capture.py` stays analysis-only, never wired to write back into `port_economics.py`'s canonical hypothesis constants or any persisted world-model state. This is intentional, not stale scope-drift.
+
+**Reasoning.** Verified `port_floor_capture.py`'s own results are always `verified_vs_live=False` — every estimate is synthetic-fixture-derived, none live-observed yet. Port-economics floor/regrowth/plague numbers were separately ruled 2026-08-05 as "permanently unconfirmed, mark in canon" — writing an unverified estimate back into any persisted/authoritative field would make it *look* confirmed to any downstream reader, contradicting that ruling's intent. This differs from `density_scan_capture`/`cim_report_capture` (both wired) because those write observed *live* data into the world model — `port_floor_capture` writes a *derived estimate over possibly-still-synthetic observations*, a different trust tier. Held back by design, not priority drift; revisit only if/when floor-price numbers get genuinely live-verified (a precondition, not a scheduling question).
+
+**Refs:** `canon/strategy/port-economics.md` § Floor-price hypothesis / `port_floor_capture.py` ·
+`workorders/WO-PORT-FLOOR-CAPTURE-HOLD-RATIONALE.md`.
