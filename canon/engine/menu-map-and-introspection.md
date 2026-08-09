@@ -67,22 +67,33 @@ shape, and one part of it is easy to get wrong: *where the guarantee actually li
 
 ## The guarantee lives in the supervised run, not the word-list
 
-The bounding guarantee is the **A+C protocol**: a live crawl only ever runs under a disposable,
+The bounding guarantee is the **A+C protocol**: a live crawl must only ever run under a disposable,
 **zero-credit / zero-asset character (A)** plus a **hub-supervisor able to abort mid-crawl (C)**.
-That is what bounds the worst case to *nothing* — not the crawler's lexical label classification.
-`crawl_driver.py` holds the code-enforced half of this: `run_live_crawl()` refuses outright —
-before opening a single connection or asking for one session — unless the profile is explicitly
-flagged `crawl_sacrificial` (`credentials.py`). It is structural, not a convention a caller could
-forget: no branch below that gate can reach a keystroke-emitting path. A genuine sacrificial
-profile is expected to set both `crawl_sacrificial = true` and `allow_register = true`.
+That is what would bound the worst case to *nothing* — not the crawler's lexical label
+classification.
 
-The abort leg is equally structural. The crawler asks its `session_factory` for a fresh settled
-screen at every node boundary (it traverses by *replay from start*, never by stateful
-backtracking); the driver wraps that factory so the hub's `abort_check()` — and an independent
-`is_driver_fenced()` signal, raised the instant a human `tw attach` takes the control lock out
-from under an in-flight crawl — are checked *before* the real factory is ever touched. Either
-trigger lands the stop at the next screen boundary, **never mid-send**, and needs no cooperation
-from the crawler's own internals.
+**Tip has no live crawl driver today.** `menu/crawl_driver.py` — the module that held the
+code-enforced half of this (`run_live_crawl()`, which refused outright before opening a single
+connection unless the profile was explicitly flagged `crawl_sacrificial`) — was retired
+(WO-CLEANUP-DEAD-SYMBOLS-BATCH-2026-08-05): it had zero product callers, because the daemon's
+`crawl_start` protocol verb has never been wired to a driver (`tests/test_crawl_start_protocol.py`
+stays BANKED/ignored for exactly that reason). The read-only discovery machinery this concept
+describes (`menu/crawler.py`, below) is live and real; *driving* it against a live connection is
+not currently wired to anything. `credentials.is_crawl_sacrificial()` — the fail-closed
+`crawl_sacrificial` flag reader — is still live, but today it only backs the unrelated `dev`-sender
+exception (`canon/doctrine/dev-drive-exception.md`), not a live crawl. A genuine sacrificial
+profile is still expected to set both `crawl_sacrificial = true` and `allow_register = true`
+whenever a live driver is (re)built — the requirement below is the contract that rebuild must
+satisfy, not a description of code that exists today.
+
+The abort leg was equally structural, in the retired module: the crawler asks its
+`session_factory` for a fresh settled screen at every node boundary (it traverses by *replay from
+start*, never by stateful backtracking); the driver wrapped that factory so a hub abort check —
+and an independent `is_driver_fenced()` signal (still live, `session/control_lock.py`), raised the
+instant a human `tw attach` takes the control lock out from under an in-flight crawl — were checked
+*before* the real factory was ever touched. Either trigger was meant to land the stop at the next
+screen boundary, **never mid-send**, needing no cooperation from the crawler's own internals. A
+rebuilt driver must reinstate this, not merely the sacrificial-flag check above.
 
 ## The lexical layers are best-effort defense-in-depth
 
@@ -261,9 +272,12 @@ introspector cannot guess, the probe cannot type. The divergences worth recordin
 # Verification status
 
 - **VERIFIED (live-behaviour / tested):** the crawler's chokepoint and layered safety gates, the
-  `crawl_sacrificial` refusal gate, the abort/fence stop-at-boundary behavior, the menu-signature
-  keying shared with the navigator, the `nav|info|action` edge schema, and `tw probe`'s L0 IAC-only
-  / L1 single-CR envelope are exercised by the test suite and the read-only-by-construction design.
+  menu-signature keying shared with the navigator, the `nav|info|action` edge schema, and
+  `tw probe`'s L0 IAC-only / L1 single-CR envelope are exercised by the test suite and the
+  read-only-by-construction design. The `crawl_sacrificial` *flag reader*
+  (`credentials.is_crawl_sacrificial`) is live-tested; the live-crawl refusal gate and
+  abort/fence stop-at-boundary behavior that used to consume it are **retired, not live** — see
+  "The guarantee lives in the supervised run" above.
 - **HYPOTHESIS (constructed, not yet live-captured):** every concrete introspected value grammar in
   `introspector.py` (ship/scanner/TransWarp/item listing shapes, the cargo-hold per-unit price
   line). This bundle authors the portable *semantics* of these catalogs; the per-server *values*
@@ -312,8 +326,11 @@ localize(live_screen, path) -> None        => off-map: STOP, escalate — never 
 [1] `twclient/menu_crawler.py` — the read-only crawler: deny-by-default `classify_option_label`,
     `screen_state` per-screen gate, the single `emit_key_if_safe` chokepoint, BFS-via-replay
     traversal, the `nav|info|action` edge folding, and the accepted-residual analysis.
-[2] `twclient/crawl_driver.py` — the load-bearing safety leg: the `crawl_sacrificial` startup
-    refusal (A+C protocol) and the abort / driver-fence stop-at-boundary wrapper.
+[2] `twclient/crawl_driver.py` (archive) — the load-bearing safety leg: the `crawl_sacrificial`
+    startup refusal (A+C protocol) and the abort / driver-fence stop-at-boundary wrapper. Its tip
+    port (`menu/crawl_driver.py`) was retired 2026-08-05 (zero product callers, `crawl_start`
+    never wired to a driver) — see "The guarantee lives in the supervised run" above. No live
+    tip module implements this citation today.
 [3] `twclient/introspector.py` — the pure text-in/rows-out game-data introspector, last-match
     block anchoring, conservative omit-never-guess discipline, and the constructed-grammar
     provenance caveat.

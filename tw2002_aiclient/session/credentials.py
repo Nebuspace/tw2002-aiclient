@@ -208,11 +208,12 @@ class SecretStoreUnreadable(_StoreReadFailure, Exception):
     (measured: a 200 KB store rendered a 200,153-character `repr()`).
     `get_password` used to let that exception escape. Nothing on the login
     path reprs an exception, which is why no leak was ever observed there --
-    but `menu/crawl_driver.py` writes `repr(exc)` into a PERSISTED status
-    file and a JSONL log for its own broad catch, so the pattern was one
-    caller away from a durable, on-disk disclosure of the whole store
-    (driven end to end in `tests/test_secrets_store_redaction.py`). The
-    exposure depends on the error's SHAPE, not on the file: the same store,
+    but the now-retired `menu/crawl_driver.py` wrote `repr(exc)` into a
+    PERSISTED status file and a JSONL log for its own broad catch, so the
+    pattern was one caller away from a durable, on-disk disclosure of the
+    whole store (driven end to end in `tests/test_secrets_store_redaction.py`,
+    kept as a regression pin though the module that motivated it is gone).
+    The exposure depends on the error's SHAPE, not on the file: the same store,
     malformed rather than undecodable, raises `JSONDecodeError`, whose
     `repr()` is clean while `.doc` still holds the document -- so checking
     the cheap case and concluding "safe" is exactly the trap.
@@ -454,15 +455,17 @@ def get_password(profile: str) -> str | None:
 
 def is_crawl_sacrificial(profile: str) -> bool:
     """Fail-closed read of `profile`'s `crawl_sacrificial` flag from
-    ``profiles.toml`` -- the same flag `menu.crawl_driver.run_live_crawl`
-    already gates a live crawl on, reused here (not re-derived) for the
-    `dev`-sender live-drive exception (`canon/doctrine/dev-drive-exception.md`).
+    ``profiles.toml`` -- the same flag the now-retired live-crawl driver
+    (`menu.crawl_driver.run_live_crawl`, deleted -- zero product callers,
+    WO-CLEANUP-DEAD-SYMBOLS-BATCH-2026-08-05) gated a live crawl on, reused
+    here (not re-derived) for the `dev`-sender live-drive exception
+    (`canon/doctrine/dev-drive-exception.md`).
 
     Returns `False` -- never raises -- for every negative shape: no store,
     no such profile, a malformed profile section, or a flag that is present
     but not the exact literal `True` (a truthy stand-in like `"true"` or
-    `1` is not consent, mirroring `crawl_driver._SACRIFICIAL_FLAG`'s own
-    `is True` check). A store read failure (`ProfileStoreUnreadable` /
+    `1` is not consent, mirroring the retired driver's own `is True` check
+    on this same flag). A store read failure (`ProfileStoreUnreadable` /
     `ProfileStoreMalformed`) also refuses rather than propagating: a
     caller gating a live keystroke on this needs "not confirmed
     sacrificial" to mean the same thing whether the store is missing,
