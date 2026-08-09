@@ -513,7 +513,9 @@ def write_membership(
 def recommend_genesis(catalog: FormationsCatalog) -> list[Formation]:
     """Operator-facing shortlist — identical to ``catalog.genesis_candidates``.
 
-    Still no production auto-caller beyond optional use; LOCATE/CATALOG/RECOMMEND only.
+    Product explore / world_stats already consume ``catalog.genesis_candidates``
+    directly; this alias exists for call sites that want the free-function shape.
+    Not a missing bridge.
     """
     return list(catalog.genesis_candidates)
 

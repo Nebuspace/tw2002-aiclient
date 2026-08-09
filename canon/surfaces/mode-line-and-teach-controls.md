@@ -595,6 +595,7 @@ The reborn contract above is the target; the current code still carries pre-rebo
   data model the A/R/T keys assemble.
 - [app-autopilot-model](/architecture/app-autopilot-model.md) — what run/panic arm and halt.
 - `tw2002_aiclient/cockpit/autoloop_controls.py` — Space pause + G relaunch offer / confirm label.
+- `tw2002_aiclient/cockpit/cycle_progress.py` — AUTO-LOOP cycle/total progress composer for the Play hint band.
 - `tw2002_aiclient/session/protocol.py::_dispatch_autoloop_relaunch` — wire disclosure contract.
 - [ai-teacher](/engine/ai-teacher.md) — the retrospective, on-demand teacher `A`/Analyze invokes.
 - [macros](/engine/macros.md) — the taught keystroke capture `R`/Record produces.

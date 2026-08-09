@@ -225,7 +225,8 @@ not in the miner's own safety:
   paired with the retro is deliberately not carried here (it is recast under
   [coverage-metrics](/engine/coverage-metrics.md)).
 - Code modules (plain text): `miner.py` (sliding-window grouping, `<NUM>` normalization, cr/turn
-  ranking, redaction skip, start-anchor threading, draft proposal), `analyze.py` (session-retro
+  ranking, redaction skip, start-anchor threading, draft proposal), `mine_cli.py` (`tw mine` /
+  `tw patterns` CLI wrapper — `add_mine_parsers` / `cmd_mine`), `analyze.py` (session-retro
   slicing and ranking), `ledger.py` (the mined substrate and its reward math), `skills.py` (draft
   write and human promotion), and the Architecture map / Hard rules in `CLAUDE.md` (single-session
   daemon, secrets never touch logs/argv/repo).

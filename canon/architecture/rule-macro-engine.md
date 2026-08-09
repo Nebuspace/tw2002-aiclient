@@ -299,3 +299,4 @@ rebuild of the kernel.
 [8] auto-haggle hardening + canon/log.md 2026-07-23 (mandatory guards for on-by-default)
 [9] `tw2002_aiclient/cockpit/draft_approve.py` — stub/kernel vocabularies + `bridge_to_kernel_document` (no invented defaults)
 [10] canon/DECISIONS.md — Max 2026-07-29 no-invented-defaults ruling
+[11] `tw2002_aiclient/loops/list_view.py` — pure learned-loop listing composer (never silently renders empty on a read failure)

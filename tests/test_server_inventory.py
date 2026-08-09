@@ -126,3 +126,29 @@ def test_dead_provenance_excluded_from_planning_endpoints(tmp_path: Path):
     assert summary["provenance"]["dead"] == 1
     assert summary["planning_endpoint_count"] == 1
     assert summary["planning_endpoints"][0]["host"] == "live.example"
+
+
+def test_load_inventory_rejects_unknown_provenance_status(tmp_path: Path):
+    inv_path = tmp_path / "servers.inventory.json"
+    inv_path.write_text(
+        json.dumps(
+            {
+                "servers": [
+                    {
+                        "name": "Bad",
+                        "host": "bad.example",
+                        "port": 2002,
+                        "status": "connectable",
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    try:
+        inv.load_inventory(inv_path)
+    except ValueError as exc:
+        assert "PROVENANCE_STATUSES" in str(exc)
+        assert "connectable" in str(exc)
+    else:
+        raise AssertionError("expected ValueError for non-provenance status")

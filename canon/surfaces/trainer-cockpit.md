@@ -535,6 +535,7 @@ reborn module is cited; prefer `tw2002_aiclient/cockpit/*` for chrome that has a
   vocabulary: [visual-language](/surfaces/visual-language.md). Also `menu_map_view.py`
   (`here off-map` / `here ★`) and polish intent in `TUI-POLISH-PLAN.md` (BBS/DOS-door border echo,
   anti-gold-plating cut list, dark-only theme).
+- **Learned-loop listing composer** — `tw2002_aiclient/loops/list_view.py` (never silently empty on read failure).
 - **Cold-join HUD seed** — `hud_seed.py` (`seed_hud_after_join`, the single `I` ship-info probe,
   fighter-`Option?` deferral, age-gated `force` re-probe).
 - **HUD cargo sticky / extract honesty** — `tw2002_aiclient/session/hud_tracking.py`
