@@ -63,7 +63,7 @@ _SCAN_IDENTITY: tuple[Path, ...] = (
     Path("app.py"),  # package root
     Path("cockpit") / "arm.py",
     Path("session") / "session.py",
-    Path("menu") / "crawl_driver.py",
+    Path("menu") / "crawler.py",
     Path("loops") / "player.py",
 )
 

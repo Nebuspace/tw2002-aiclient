@@ -47,7 +47,6 @@ from pathlib import Path
 
 import pytest
 
-from tw2002_aiclient.menu.crawl_driver import run_live_crawl
 from tw2002_aiclient.session import credentials
 
 # Distinct from `tests/test_login_redaction.py`'s sentinel on purpose: if both
@@ -208,11 +207,6 @@ def _renderings(exc: BaseException) -> dict[str, str]:
         ),
         # guardian.py's broad catch.
         "guardian last_reconnect_error": f"guardian_tick_error:{type(exc).__name__}",
-        # crawl_driver.py's persisted stamp AND its JSONL line, both `repr(exc)`.
-        "crawl_driver persisted reason": json.dumps({"status": "error", "reason": repr(exc)}),
-        "crawl_driver jsonl line": json.dumps(
-            {"event": "phase", "phase": "error", "error": repr(exc)}
-        ),
     }
 
 
@@ -606,88 +600,3 @@ def test_str_of_a_json_decode_error_never_quotes_the_document(disposable, monkey
         assert needle not in str(exc)
         assert needle not in repr(exc), "repr is clean HERE -- do not generalize from it"
         assert needle in exc.doc, "...while the document is still on the exception"
-
-
-# ---------------------------------------------------------------------------
-# 4. crawl_driver — the durable sink named in the finding
-# ---------------------------------------------------------------------------
-
-
-class _SacrificialProfile:
-    """The only profile shape `run_live_crawl`'s Leg-1 gate accepts: the flag must
-    be exactly `True`."""
-
-    name = "crawl_storefail"
-    crawl_sacrificial = True
-
-
-def _crawl_paths(root: Path):
-    return root / "game_knowledge.json", root / "crawl.jsonl"
-
-
-def test_crawl_drivers_persisted_repr_carries_no_credential_when_the_store_fails(
-    tmp_path, monkeypatch
-):
-    """The finding's named caller, driven for real.
-
-    `run_live_crawl`'s broad `except Exception` writes `repr(exc)` into the
-    knowledge store's `last_crawl.reason` AND into the JSONL log — two durable,
-    on-disk sinks. A live crawl's `session_factory` must produce a logged-in
-    session, so `credentials.get_password` is exactly the call it makes; this
-    factory makes it against a real undecodable store.
-
-    Before this rehab the raw `UnicodeDecodeError` escaped and both files
-    received the whole document (the falsification below re-drives precisely that
-    shape and shows the sink carrying it). The typed error renders bounded, so
-    the same caller is safe — the hazard is closed at the source rather than by
-    sanitising each renderer.
-    """
-    cfg = tmp_path / "config"
-    store = _write_store(cfg, raw=_non_utf8_store_bytes())
-    _point_at(monkeypatch, cfg)
-    kpath, log_path = _crawl_paths(tmp_path)
-
-    def session_factory():
-        credentials.get_password(PROFILE)
-        raise AssertionError("unreachable -- the store read must fail first")
-
-    with pytest.raises(credentials.SecretStoreUnreadable) as excinfo:
-        run_live_crawl(_SacrificialProfile(), session_factory, path=kpath, log_path=log_path)
-
-    # Non-vacuity: the driver really did stamp an error built from `repr(exc)`,
-    # so the absence below is about a sink that had something to write.
-    stamped = json.loads(kpath.read_text(encoding="utf-8"))["menu_map"]["last_crawl"]
-    assert stamped["status"] == "error"
-    assert stamped["reason"] == repr(excinfo.value)
-    assert '"phase": "error"' in log_path.read_text(encoding="utf-8")
-
-    _assert_absent({**_renderings(excinfo.value), **_tree_sinks(tmp_path, sanctioned=store)})
-
-
-def test_falsification_the_pre_rehab_exception_really_does_reach_those_files(tmp_path):
-    """INJECTION — the sweep above has to be shown capable of failing.
-
-    Re-drives the identical crawl with the exception `get_password` raised BEFORE
-    this rehab: the decoder's own `UnicodeDecodeError`, obtained by decoding the
-    same bytes. Both persisted files then carry the entire store, and the sweep
-    goes red. Without this, "the crawl sink is clean" would rest on a check that
-    has never been shown able to go red — the same vacuity that kept a sibling
-    suite green while a real defect sat in its failure branch.
-    """
-    raw = _non_utf8_store_bytes()
-    kpath, log_path = _crawl_paths(tmp_path)
-
-    def session_factory():
-        raw.decode("utf-8")  # the pre-rehab raise, verbatim
-        raise AssertionError("unreachable -- the decode must fail first")
-
-    with pytest.raises(UnicodeDecodeError):
-        run_live_crawl(_SacrificialProfile(), session_factory, path=kpath, log_path=log_path)
-
-    body = kpath.read_text(encoding="utf-8") + log_path.read_text(encoding="utf-8")
-    assert all(needle in body for needle in NEEDLES), (
-        "the injected leak did not reach the persisted files -- this sweep would "
-        "not have caught the real one either"
-    )
-    with pytest.raises(AssertionError, match="leaked into"):
-        _assert_absent(_tree_sinks(tmp_path))
