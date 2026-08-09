@@ -163,8 +163,9 @@ The one contract between `tw` and `twd` is a newline-delimited JSON protocol ove
 unix-domain socket. Each request is `{"verb": <name>, "args": {...}}`; each response is one JSON
 line. Two verbs are lifetime exceptions to the one-shot shape — their connection *is* their
 lifetime rather than a single request/response: `subscribe` (the settle-edge push stream behind
-`tw watch`/`tw spectate`) and `attach` (an interactive `tw attach` session's whole control-lock
-hold; every subsequent line is one raw keystroke frame). A malformed request line is answered with
+`tw watch` / in-cockpit Spectate) and `attach` (an interactive `tw attach` session's whole control-lock
+hold; every subsequent line is one raw keystroke frame). Ops `tw spectate` is **RETIRED / WONTBUILD**
+(Max) — do not invent it. A malformed request line is answered with
 a structured error and **never crashes the daemon** — a bad request must not take the connection
 down. The response the driving verbs return is assembled at one choke point that renders the
 current screen, classifies it, parses best-effort state, and stamps the `settled_reason`; the

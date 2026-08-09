@@ -141,7 +141,8 @@ interjections belong there. When in doubt, a shape is surfaced, not registered.
 
 # Settle-Edge → Push: The Liveness Signal
 
-Settle detection also drives the **liveness stream** behind `tw watch` and `tw spectate`. A
+Settle detection also drives the **liveness stream** behind `tw watch` and in-cockpit Spectate
+(ops `tw spectate` **RETIRED**). A
 background watcher continuously observes the rendered screen and emits a *settle edge*: a moment
 where the screen has both (a) gone idle past the debounce window and (b) actually changed since the
 last edge it announced. Each edge is broadcast — carrying the same settled-frame shape and a
