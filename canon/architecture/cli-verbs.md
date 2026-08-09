@@ -202,7 +202,7 @@ tw rule …                                    # draft / approve path (see tw ru
 # a human reviews and approves before anything the App plays back can ever fire
 ```
 
-# Implementation status (tip `5b1b8e9` · live `./tw --help` / `build_parser()`)
+# Implementation status (tip `223a00d` · live `./tw --help` / `build_parser()`)
 
 **LIVE `tw` verbs today** (re-verified 2026-08-09 against tip `build_parser()` choices):
 `attach`, `chain`, `chains`, `coach`, `do`, `ensure`, `explore`, `history`, `log`/`trail`,
