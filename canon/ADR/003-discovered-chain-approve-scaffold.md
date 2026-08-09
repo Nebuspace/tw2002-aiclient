@@ -12,41 +12,35 @@ timestamp: 2026-07-30T22:01:00Z
 
 ## Status
 
-**Distributed-fold: 6/8** · Accepted 2026-07-30 by Max (`Continue; your choice` after the
-B1/B2 choice; Samantha selected recommended B2 approve-scaffold) ·
-_(re-verified 2026-08-09)_
+**Folded into** [`trade-loops.md`](/strategy/trade-loops.md) · Accepted 2026-07-30 by Max
+(`Continue; your choice` after the B1/B2 choice; Samantha selected recommended B2
+approve-scaffold) · _(re-verified 2026-08-09 — N→M gap closed)_
 
-Durable prose lives primarily in [`trade-loops.md`](/strategy/trade-loops.md)
-(Discovered → approved semantic plan · tip `trade_chain_plan.py`). This ADR remains
-the decision record / pointer.
+Durable prose lives primarily in trade-loops (Discovered → approved semantic plan · tip
+`trade_chain_plan.py`). This ADR remains the decision record / pointer.
 
-**Confirmed on tip (6):**
+**Confirmed on tip (8/8 — gap closed by shipping + tracked process judgment):**
 1. Exact-fingerprint approve-scaffold (`trade_chain_plan.plan_from_chain` / preview)
 2. Separate default-deny confirm gate (`begin_arm_confirm` · arm ≠ Enter alone)
 3. Daemon start re-derive + refuse on missing/partial/stale fingerprint
-4. One-pass authority (repeat needs another confirm)
+4. One-pass authority by default (a single arm is still one pass unless bounded-repeat
+   is explicitly requested)
 5. Partial-discovery display honesty (`chain_search_view.py` · `PARTIAL_*` banner;
    empty+truncated ≠ bare "no profit chains") — re-verified tip module present
 6. Guarded tip `trade_driver.run_chain` under arm/abort/floor rails (divergence
    closed in trade-loops ADR-003 section)
-
-**Still design-intent / process (2 — do not blanket-Fold):**
-7. Sacrificial live-prove gate for turn/credit-spending proof (hub/Max process,
-   not a missing tip module) — **ruled non-blocking, 2026-08-09**
-   (`workorders/WO-ADR-003-RESIDUAL-7-8-TRACKING.md`): this is the standing
-   Nebuspace merge-ritual live-prove gate, not an ADR-003-specific artifact, and
-   it has already been concretely exercised against this exact discovered-chain
-   flow by `WO-BUILD-CREDIT-DOUBLING-LIVE-PROVE` (queue-aiclient.md, DONE —
-   live-proven 2026-08-09 on `scout_academy`, 6 instrumented cycles spending
-   real turns/credits). Nothing further to build; does not block graduation.
-8. Bounded-repeat contract (explicitly future; one-pass until separately reviewed) —
-   **remains open/human-gated, tracked precisely** (not untracked): queue row
-   `WO-CANON-DRAFT-BOUNDED-REPEAT-CONTRACT-SCOPE` (`Nebuspace/.samantha/coord/queue-aiclient.md`,
-   MED, GATED (human) — "loop-repeat primitive never scoped: pass-count? floor
-   re-check? value ceiling?"), with follow-on execute row
-   `WO-BUILD-DEV-DRIVE-CLI-SURFACE` (HIGH, GATED (human)). Full detail:
-   `workorders/WO-ADR-003-RESIDUAL-7-8-TRACKING.md`. This item alone is why
-   Status stays **Distributed-fold: 6/8**, not Folded.
+7. Sacrificial live-prove gate for turn/credit-spending proof — **ruled non-blocking,
+   2026-08-09** (`workorders/WO-ADR-003-RESIDUAL-7-8-TRACKING.md`): standing Nebuspace
+   merge-ritual live-prove process, concretely exercised by
+   `WO-BUILD-CREDIT-DOUBLING-LIVE-PROVE` (DONE — `scout_academy`, 6 instrumented cycles).
+   Tracked not-building judgment (process exists; nothing further to build in tip).
+8. Bounded-repeat contract — **shipped 2026-08-09** via
+   `WO-BUILD-BOUNDED-REPEAT-TRADE-CHAIN-DRIVER` (PR #637 · tip module
+   `tw2002_aiclient/bounded_repeat_trade_chain_driver.py`; Max GO sacrificial-only;
+   defense-in-depth `pass_count` + per-re-arm X5 floor + `profit_target`; CLI
+   `--pass-count` / `--profit-target`). Supersedes the earlier GATED design-brief row
+   `WO-CANON-DRAFT-BOUNDED-REPEAT-CONTRACT-SCOPE`. Default remains one-pass; multi-pass
+   is explicit and sacrificial-gated.
 
 ---
 
@@ -85,8 +79,10 @@ automatic substitution/rotation remains forbidden.
   exact transaction quantities.
 - Approval and arm are two acts. Enter alone spends nothing; cancellation,
   drift, or missing evidence fails closed.
-- The first version is one pass. Repeating the chain requires another explicit
-  confirm until a separately reviewed bounded-repeat contract exists.
+- Default authority is still one pass (another explicit confirm for another arm).
+  Bounded multi-pass is available only via the sacrificial-gated
+  `bounded_repeat_trade_chain_driver` (explicit `pass_count` / `profit_target`), not as
+  silent default re-arm.
 - Runtime work must rebirth the archived guarded trade driver under the current
   daemon run-loop, preserving its arm, abort, floor, depletion, reconciliation,
   and PALADIN rails.
