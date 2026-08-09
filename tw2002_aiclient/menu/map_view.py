@@ -142,7 +142,13 @@ def format_menu_map_lines(summary: Mapping[str, Any] | None, cols: int = 22) -> 
 
 
 def format_menu_map_report(summary: Mapping[str, Any] | None) -> list[str]:
-    """Full CLI report: clip-safe header + explicit dead-end/orphan lists."""
+    """Full CLI report: clip-safe header + explicit dead-end/orphan lists.
+
+    When ``last_crawl`` is present (from ``get_crawl_status`` via
+    ``menu_map_summary_from_store``), append one provenance line so a partial
+    map is not silently readable as complete. Absent stamp → omit the line
+    (unknown provenance is not invented as "never crawled").
+    """
     lines = format_menu_map_lines(summary, cols=80)
     if not summary:
         # The report half of the branch fixed above. `(none)` is a claim about
@@ -160,6 +166,20 @@ def format_menu_map_report(summary: Mapping[str, Any] | None) -> list[str]:
     orphans = list(summary.get("orphans") or ())
     lines.append("dead-ends: " + (", ".join(dead) if dead else "(none)"))
     lines.append("orphans: " + (", ".join(orphans) if orphans else "(none)"))
+    crawl = summary.get("last_crawl")
+    if isinstance(crawl, Mapping) and crawl.get("status"):
+        status = str(crawl.get("status"))
+        reason = crawl.get("reason")
+        visited = crawl.get("nodes_visited")
+        frontier = crawl.get("frontier_remaining")
+        parts = [f"last-crawl: {status}"]
+        if reason:
+            parts.append(f"reason={reason}")
+        if visited is not None:
+            parts.append(f"visited={visited}")
+        if frontier is not None:
+            parts.append(f"frontier={frontier}")
+        lines.append(" · ".join(parts))
     return lines
 
 
@@ -168,12 +188,19 @@ def menu_map_summary_from_store(
     current_sig: Optional[str] = None,
     here_unknown: Optional[str] = None,
 ) -> dict[str, Any]:
-    """Thin wrapper: load menu-map from knowledge store, then summarize."""
-    from .knowledge import list_menu_edges, list_menu_nodes
+    """Thin wrapper: load menu-map from knowledge store, then summarize.
 
-    return menu_map_summary(
+    Attaches ``last_crawl`` from :func:`get_crawl_status` (None when the map
+    was never stamped). Product surface for the crawl-status stamp is
+    ``tw menumap`` — writer already live via crawler ``record_crawl_status``.
+    """
+    from .knowledge import get_crawl_status, list_menu_edges, list_menu_nodes
+
+    summary = menu_map_summary(
         list_menu_nodes(path),
         list_menu_edges(path),
         current_sig=current_sig,
         here_unknown=here_unknown,
     )
+    summary["last_crawl"] = get_crawl_status(path)
+    return summary

@@ -131,3 +131,42 @@ def test_format_menu_map_report_lists_coverage_and_orphans():
     assert "2/3 reachable" in joined
     assert "orphans: Z" in joined
     assert "dead-ends: B" in joined
+
+
+def test_summary_from_store_attaches_last_crawl(tmp_path):
+    from tw2002_aiclient.menu import knowledge as menu_knowledge
+
+    path = tmp_path / "gk.json"
+    menu_knowledge.upsert_menu_node(path, "A", label="Root")
+    assert menu_map_summary_from_store(path)["last_crawl"] is None
+    menu_knowledge.record_crawl_status(
+        path, status="truncated", reason="max_nodes", nodes_visited=2, frontier_remaining=1
+    )
+    crawl = menu_map_summary_from_store(path)["last_crawl"]
+    assert crawl["status"] == "truncated"
+    assert crawl["reason"] == "max_nodes"
+    assert crawl["nodes_visited"] == 2
+    assert crawl["frontier_remaining"] == 1
+
+
+def test_report_includes_last_crawl_line_when_stamped():
+    s = menu_map_summary([_node("A")], [])
+    s["last_crawl"] = {
+        "status": "aborted",
+        "reason": "human took keyboard",
+        "nodes_visited": 3,
+        "frontier_remaining": 2,
+        "ts": "2026-08-09T00:00:00Z",
+    }
+    report = "\n".join(format_menu_map_report(s))
+    assert "last-crawl: aborted" in report
+    assert "reason=human took keyboard" in report
+    assert "visited=3" in report
+    assert "frontier=2" in report
+
+
+def test_report_omits_last_crawl_when_unstamped():
+    s = menu_map_summary([_node("A")], [])
+    s["last_crawl"] = None
+    report = "\n".join(format_menu_map_report(s))
+    assert "last-crawl:" not in report
