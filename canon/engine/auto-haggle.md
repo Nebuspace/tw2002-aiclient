@@ -72,8 +72,11 @@ No search, no model — a fixed four-move policy off a reference price (an exter
 > **Verification status:** the "converges within ~2 rounds / a port barely moves off its own price"
 > behavior is *verified* against a real TWGS server (2026-07-19 live captures, reproduced verbatim by
 > the test suite). The strategy *parameters* (open aggression ~15%, accept threshold ~5%, round cap
-> 4) are configurable defaults, not canonical server constants — tune per server/economy. Floor
-> prices and fair-value come from [port-economics](/strategy/port-economics.md), not this rule.
+> 4) are **registry-driven defaults** — authored in `data/haggle/params.json` and loaded by
+> `tw2002_aiclient/haggle_params.py` (`load_haggle_params` / `DEFAULT_HAGGLE_PARAMS`; shipped
+> `WO-BUILD-HAGGLE-PARAMS-REGISTRY`, #575) — not silent module literals and not canonical server
+> constants. Tune per server/economy by editing the registry row. Floor prices and fair-value come
+> from [port-economics](/strategy/port-economics.md), not this rule.
 
 # The mandatory guard contract (E3)
 
