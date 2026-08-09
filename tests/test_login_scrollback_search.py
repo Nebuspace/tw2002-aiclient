@@ -1,9 +1,9 @@
 """WO-LOGIN-SCROLLBACK-SEARCH-AUDIT: pins for whole-grid vs scoped login
 searches in ``_decide``.
 
-- ``_SHOW_LOG_RE``: intentional whole-grid — phrase in the BODY (not only
-  the last line) must still fire.
-- ``_INACTIVITY_RE`` / ``_CLEAR_AVOIDS_RE``: scoped to prompt /
+- ``SHOW_LOG_RE`` (interjection_registry): intentional whole-grid — phrase
+  in the BODY (not only the last line) must still fire.
+- ``INACTIVITY_RE`` / ``CLEAR_AVOIDS_RE``: scoped to prompt /
   ``_option_block_above_prompt`` — stale banner above a blank separator
   must NOT fire against an unrelated current prompt; fresh body text in
   the current block still must.
@@ -15,6 +15,11 @@ searches in ``_decide``.
 from __future__ import annotations
 
 from tw2002_aiclient.session import login
+from tw2002_aiclient.session.interjection_registry import (
+    CLEAR_AVOIDS_RE,
+    INACTIVITY_RE,
+    SHOW_LOG_RE,
+)
 
 
 def _state():
@@ -53,9 +58,9 @@ def test_show_log_matches_body_not_only_last_line():
         "Command [TL=00:00:00]:\n"
     )
     prompt = "Command [TL=00:00:00]:"
-    assert login._SHOW_LOG_RE.search(text)
-    assert not login._SHOW_LOG_RE.search(prompt)
-    assert not login._SHOW_LOG_RE.search(text.splitlines()[-1])
+    assert SHOW_LOG_RE.search(text)
+    assert not SHOW_LOG_RE.search(prompt)
+    assert not SHOW_LOG_RE.search(text.splitlines()[-1])
     assert _decide("main_command", text, prompt) == ("N", False, None)
 
 
@@ -69,11 +74,11 @@ def test_inactivity_matches_body_not_only_last_line():
         "Command [TL=00:00:00]:\n"
     )
     prompt = "Command [TL=00:00:00]:"
-    assert login._INACTIVITY_RE.search(text)
-    assert not login._INACTIVITY_RE.search(prompt)
-    assert not login._INACTIVITY_RE.search(text.splitlines()[-1])
+    assert INACTIVITY_RE.search(text)
+    assert not INACTIVITY_RE.search(prompt)
+    assert not INACTIVITY_RE.search(text.splitlines()[-1])
     block = login._option_block_above_prompt(text, prompt)
-    assert login._INACTIVITY_RE.search(block)
+    assert INACTIVITY_RE.search(block)
     assert _decide("main_command", text, prompt) == ("", False, None)
 
 
@@ -88,7 +93,7 @@ def test_inactivity_stale_scrollback_does_not_blank_enter():
         "Command [TL=00:00:00]:\n"
     )
     prompt = "Command [TL=00:00:00]:"
-    assert login._INACTIVITY_RE.search(text)
+    assert INACTIVITY_RE.search(text)
     block = login._option_block_above_prompt(text, prompt)
     assert "inactivity" not in block.lower()
     assert _decide("main_command", text, prompt) is None
@@ -111,12 +116,12 @@ def test_clear_avoids_stale_scrollback_does_not_fire():
     )
     prompt = "Command [TL=00:00:00]:"
     # Whole-grid would still see the stale question…
-    assert login._CLEAR_AVOIDS_RE.search(text)
+    assert CLEAR_AVOIDS_RE.search(text)
     # …but prompt and the scoped option-block must not.
-    assert not login._CLEAR_AVOIDS_RE.search(prompt)
+    assert not CLEAR_AVOIDS_RE.search(prompt)
     block = login._option_block_above_prompt(text, prompt)
     assert "clear" not in block.lower()
-    assert not login._CLEAR_AVOIDS_RE.search(block)
+    assert not CLEAR_AVOIDS_RE.search(block)
     assert _decide("main_command", text, prompt) is None
 
 
