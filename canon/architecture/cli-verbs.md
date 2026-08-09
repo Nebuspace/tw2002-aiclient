@@ -139,7 +139,7 @@ config is isolated, and print the run-dir path they would have targeted (WO-CLI-
 | verb | one-line effect | key args | actor-class | owning concept |
 |---|---|---|---|---|
 | `record <manifest>` | **LIVE.** Write a taught macro from an **already-captured** JSON demonstration manifest — daemon-free, never sends. Shipped shape (X6); see Implementation status and [Macros](/engine/macros.md)'s Findings for how this differs from the live start/stop bracket capture this row originally specified. | `manifest` (path) `--draft` | `teach` | [Rule–Macro Engine](/architecture/rule-macro-engine.md) |
-| `analyze <session>` | **TARGET — not a `tw` CLI verb yet.** Session-retro: group recurring ledger decisions, rank profitable ones as candidates to codify (proposes, never applies). | `--min-support` `--top` | `teach` | [Rule–Macro Engine](/architecture/rule-macro-engine.md) |
+| `analyze <session>` | **TARGET — not a `tw` CLI verb yet.** Session-retro: group recurring ledger decisions, rank profitable ones as candidates to codify (proposes, never applies). | `--min-support` `--top-k` | `teach` | [Rule–Macro Engine](/architecture/rule-macro-engine.md) |
 | `mine` (alias `patterns`) | **LIVE.** Mine the Trace-Ledger for recurring profitable input-subsequences; proposes inert drafts under `state/skills/_drafts/`. Flag is `--top-k` (not `--top`). | `--min-support` `--top-k` `--ledger` `--drafts` `--no-propose` `--json` | `teach` | [Candidate Mining](/engine/candidate-mining.md) · [Rule–Macro Engine](/architecture/rule-macro-engine.md) |
 
 ## App-drive (deterministic macro / loop / pilot playback) — TARGET unless noted
@@ -184,15 +184,14 @@ tw log --n 20                      # the QUESTION → KEYSTROKE → RESULT trail
 # spectate: in-cockpit only (no tw spectate — RETIRED)
 ```
 
-Teach after an escalation (retrospective, proposes — never fires). **TARGET examples — these
-`tw` verbs are not on tip yet** (ledger mining / analyze stay engine-or-script paths until their
-own WOs land):
+Teach after an escalation (retrospective, proposes — never fires). `analyze` stays a **TARGET
+example — not a `tw` verb on tip yet**; `mine` already ships LIVE (see Teach table above):
 
 ```
 # TARGET (not runnable today):
-# tw analyze all --top 10
-# tw mine --min-support 3
+# tw analyze all --top-k 10
 # LIVE today for taught-rule authoring:
+tw mine --min-support 3            # mine the ledger for recurring profitable subsequences
 tw reflex                          # what the blessed library proposes for the live screen
 tw rule …                          # draft / approve path (see tw rule --help)
 # a human reviews and approves before anything the App plays back can ever fire
