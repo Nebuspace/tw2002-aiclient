@@ -214,3 +214,7 @@ denylist, scalar-only value guard)
 pidfile; gitignored `config/`/`run/`/`state/`/`logs/`; only `profiles.toml.example` +
 `servers.toml` tracked)
 [6] CLAUDE.local.md — public-repo posture and the leak gate that precedes every push
+[7] `tw2002_aiclient/cockpit/record_macro.py` (`RecordSession`, `is_secret_prompt_line`,
+`REDACTED_SENTINEL`) — R-key macro recorder replaces probable-password-prompt keystrokes with the
+sentinel at record time (never stores plaintext); cites this doctrine as authority. Live callers:
+`app.py` / `screens.py`.
