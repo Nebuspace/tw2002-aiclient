@@ -1204,6 +1204,25 @@ def cmd_explore_start(args):
     intent = getattr(args, "intent", None)
     if intent:
         payload["intent"] = intent
+    exhaust_depth = getattr(args, "exhaust_depth", None)
+    if exhaust_depth is not None:
+        payload["exhaust_depth"] = int(exhaust_depth)
+    # WO-BUILD-CHAIN-HUNT-SIBLING-EXHAUST-EXPLORE: fail closed before the wire
+    # when chain_hunt is selected without required flags (no invented defaults).
+    if intent == "chain_hunt":
+        missing = []
+        if args.turn_budget is None:
+            missing.append("--turn-budget")
+        if exhaust_depth is None:
+            missing.append("--exhaust-depth")
+        if missing:
+            print(
+                "error: chain_hunt requires "
+                + " and ".join(missing)
+                + " (no defaults; Pending numeric ruling)",
+                file=sys.stderr,
+            )
+            return 2
     resp = send_request("explore_start", payload, run_dir=run_dir)
     print_response(resp, args)
     return 0 if resp.get("ok") else 1
@@ -2116,7 +2135,8 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--min-sectors", type=int, default=None, dest="min_sectors",
                     help="minimum distinct sectors to visit (default daemon: 5)")
     sp.add_argument("--turn-budget", type=int, default=None, dest="turn_budget",
-                    help="maximum turns to spend (default daemon: 50)")
+                    help="maximum turns to spend (default daemon: 50; "
+                         "REQUIRED with --intent chain_hunt - no default)")
     # WO-EXPLORE-DOCK-DEFAULT-OFF / WO-EXPLORE-DOCK-DIALECT: default OFF.
     # Library default is already False; CLI matches it. Opt-in (turn-spend).
     #
@@ -2151,8 +2171,17 @@ def build_parser() -> argparse.ArgumentParser:
         choices=sorted(_explore_intents.INTENTS),
         default=None,
         dest="intent",
-        help="explore intent (default daemon: map_fill; find_formations is "
-             "CLI-armable, not on Play's E cycle)",
+        help="explore intent (default daemon: map_fill; find_formations / "
+             "chain_hunt are CLI-armable, not on Play's E cycle)",
+    )
+    sp.add_argument(
+        "--exhaust-depth",
+        type=int,
+        default=None,
+        dest="exhaust_depth",
+        metavar="N",
+        help="REQUIRED with --intent chain_hunt: max nested port-anchor depth "
+             "(no default; Pending numeric ruling)",
     )
     sp.add_argument("--run-dir", default=None, metavar="PATH", dest="run_dir",
                     help="daemon run directory override")

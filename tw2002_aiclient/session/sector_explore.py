@@ -92,7 +92,15 @@ RECONNECT_WAIT_TIMEOUT_S = 30.0
 RECONNECT_WAIT_POLL_S = 0.5
 
 ARGS_EXPLORE_START = frozenset(
-    {"world_id", "min_sectors", "turn_budget", "intent", "dock_new_ports", "fight_tolls"}
+    {
+        "world_id",
+        "min_sectors",
+        "turn_budget",
+        "intent",
+        "dock_new_ports",
+        "fight_tolls",
+        "exhaust_depth",
+    }
 )
 
 OUTCOME_COMPLETED = "completed"
@@ -157,6 +165,9 @@ class ExploreReport:
     # Max combat GO (`force_share >= 0.90`) implies it should be ON for a run
     # the operator did not arm for combat.
     fight_tolls: bool = False
+    # WO-BUILD-CHAIN-HUNT-SIBLING-EXHAUST-EXPLORE: required for chain_hunt only;
+    # None for other intents (no invented default).
+    exhaust_depth: Optional[int] = None
     # WO-WIRE-EXPLORE-DECISION-LINES: last planned warp hop for DECISIONS.
     # Updated when a tick chooses a target; null when unknown — never invent.
     next_sector: Optional[int] = None
@@ -206,6 +217,8 @@ def explore_run_wire(snapshot: ExploreSnapshot) -> dict:
             # Omitted originally, so status could not prove whether a run was
             # armed for combat (hub-banked observability gap, live #209).
             "fight_tolls": report.fight_tolls,
+            # Chain-hunt depth cap (int) or null when intent does not use it.
+            "exhaust_depth": report.exhaust_depth,
             # Last planned hop (int) or null — DECISIONS next-hop chrome.
             "next_sector": report.next_sector,
             "stop_requested": report.stop_requested,
@@ -787,6 +800,7 @@ class ExploreRunner:
         self._stop: Optional[threading.Event] = None
         self._thread: Optional[threading.Thread] = None
         self._report: Optional[ExploreReport] = None
+        self._chain_state: Optional[_explore.ChainHuntState] = None
 
     def snapshot(self) -> ExploreSnapshot:
         with self._mutex:
@@ -1002,6 +1016,7 @@ class ExploreRunner:
         intent: str = _explore.INTENT_MAP_FILL,
         dock_new_ports: bool = False,
         fight_tolls: bool = False,
+        exhaust_depth: Optional[int] = None,
     ) -> ExploreSnapshot:
         if not isinstance(world_id, str) or not world_id.strip():
             raise ExploreRefused("missing_world_id")
@@ -1025,6 +1040,17 @@ class ExploreRunner:
         # Same refusal, higher stakes: a truthy string here would arm combat.
         if not isinstance(fight_tolls, bool):
             raise ExploreRefused("invalid_fight_tolls")
+        # WO-BUILD-CHAIN-HUNT-SIBLING-EXHAUST-EXPLORE: depth is required for
+        # chain_hunt and forbidden-as-invented for other intents (None OK).
+        if intent == _explore.INTENT_CHAIN_HUNT:
+            if (
+                isinstance(exhaust_depth, bool)
+                or not isinstance(exhaust_depth, int)
+                or exhaust_depth < 1
+            ):
+                raise ExploreRefused("missing_exhaust_depth")
+        elif exhaust_depth is not None:
+            raise ExploreRefused("exhaust_depth_not_applicable")
 
         stop = threading.Event()
         report = ExploreReport(
@@ -1034,6 +1060,7 @@ class ExploreRunner:
             intent=intent,
             dock_new_ports=bool(dock_new_ports),
             fight_tolls=bool(fight_tolls),
+            exhaust_depth=int(exhaust_depth) if exhaust_depth is not None else None,
             turns_remaining=int(turn_budget),
         )
         with self._mutex:
@@ -1053,6 +1080,11 @@ class ExploreRunner:
             self._stop = stop
             self._thread = thread
             self._report = report
+            self._chain_state = (
+                _explore.ChainHuntState()
+                if intent == _explore.INTENT_CHAIN_HUNT
+                else None
+            )
             try:
                 thread.start()
             except Exception as exc:
@@ -1060,6 +1092,7 @@ class ExploreRunner:
                 self._in_flight = False
                 self._thread = None
                 self._stop = None
+                self._chain_state = None
                 self._report = replace(
                     report,
                     outcome=OUTCOME_CRASHED,
@@ -1448,7 +1481,11 @@ class ExploreRunner:
                     turn_budget=turns,
                     state_dir=self._state_dir,
                     deny=frozenset(denied_sectors),
+                    exhaust_depth=report.exhaust_depth,
+                    chain_state=self._chain_state,
                 )
+                if tick.chain_state is not None:
+                    self._chain_state = tick.chain_state
                 if tick.goal_reached:
                     if seeking_dealer and not posture_done:
                         outcome = OUTCOME_HALTED
