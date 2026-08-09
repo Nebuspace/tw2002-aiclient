@@ -1299,7 +1299,7 @@ def _trace(
 
 def replay_loop(
     loop: Loop,
-    session,
+    session: ReplaySession,
     *,
     force: bool = False,
     floor: Optional[int] = None,
