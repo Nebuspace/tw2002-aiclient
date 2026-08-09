@@ -254,7 +254,7 @@ class PortWithout:
 # --------------------------------------------------------------------------
 
 
-def make_loop(steps, *, name="ore-run", start_anchor=158, draft=False):
+def make_loop(steps, *, name="ore-run", start_anchor=158, draft=False, params=None):
     return Loop(
         name=name,
         steps=tuple(LoopStep(*step) for step in steps),
@@ -263,6 +263,7 @@ def make_loop(steps, *, name="ore-run", start_anchor=158, draft=False):
         created_ts="2026-07-26T00:00:00Z",
         draft=draft,
         path=f"/nowhere/{name}.json",
+        params=params if params is not None else {},
     )
 
 
@@ -1032,6 +1033,7 @@ def test_the_player_cannot_acquire_a_session():
         "turns_stale_ms",
         "profit_target",
         "profit_stale_ms",
+        "params",
     ]
     for keyword in (
         "force",
@@ -1193,3 +1195,95 @@ def test_the_package_waiver_is_load_bearing_and_narrow() -> None:
     assert _send_violations(
         "from ..protocol import send_request", allow_package_modules=ALLOWED_PACKAGE_MODULES
     ) != []
+
+
+# ---------------------------------------------------------------------------
+# Parameter placeholders (WO-BUILD-MACRO-CAPTURE-PARAM-GENERALIZATION-2)
+# ---------------------------------------------------------------------------
+
+PARAM_STEP = [("{qty}", None, "main_command")]
+
+
+def test_a_placeholder_step_resolves_to_the_loops_own_recorded_default():
+    session = ScriptedSession(screens=[ANCHOR_158, ANCHOR_158])
+    loop = make_loop(PARAM_STEP, params={"qty": "50"})
+    result = replay_loop(loop, session)
+
+    assert result.outcome == OUTCOME_COMPLETED
+    assert session.sends == [("50", None)]  # the resolved literal, never "{qty}"
+    assert result.steps[0].input == "50"
+
+
+def test_an_explicit_override_outranks_the_recorded_default():
+    session = ScriptedSession(screens=[ANCHOR_158, ANCHOR_158])
+    loop = make_loop(PARAM_STEP, params={"qty": "50"})
+    result = replay_loop(loop, session, params={"qty": "100"})
+
+    assert result.outcome == OUTCOME_COMPLETED
+    assert session.sends == [("100", None)]
+
+
+def test_a_non_parameterized_macro_is_unaffected_by_an_unrelated_params_argument():
+    """Zero new behaviour for every macro that predates this rail, even
+    when a caller passes params for a name the macro never references."""
+    session = ScriptedSession(screens=[ANCHOR_158, ANCHOR_158])
+    result = replay_loop(make_loop(ONE_STEP), session, params={"unused": "1"})
+
+    assert result.outcome == OUTCOME_COMPLETED
+    assert session.sends == [("P", None)]
+
+
+def test_an_unresolvable_placeholder_refuses_before_the_first_byte():
+    """Zero-bytes proof, extended to parameterization: a macro with no
+    recorded default and no override for `{qty}` must not send a single
+    keystroke, including step 0's normal literal-send neighbors."""
+    session = NoSendSession(screens=[ANCHOR_158])
+    loop = make_loop(PARAM_STEP)  # no params default at all
+    with pytest.raises(ValueError) as exc:
+        replay_loop(loop, session)
+    assert "qty" in str(exc.value)
+    assert session.sends == []
+
+
+def test_an_unresolvable_placeholder_in_a_later_step_still_refuses_at_entry():
+    """The whole point of checking every step up front: an early literal
+    step must not run just because a LATER step's parameter is unbound."""
+    session = NoSendSession(screens=[ANCHOR_158])
+    loop = make_loop([("P", None, "port_trade"), ("{qty}", None, "main_command")])
+    with pytest.raises(ValueError):
+        replay_loop(loop, session)
+    assert session.sends == []
+
+
+def test_params_must_be_a_mapping_of_strings():
+    session = NoSendSession(screens=[ANCHOR_158])
+    loop = make_loop(ONE_STEP)
+    for bad in ("qty=50", ["qty", "50"], {"qty": 50}, {50: "50"}):
+        with pytest.raises(TypeError):
+            replay_loop(loop, session, params=bad)
+    assert session.sends == []
+
+
+def test_a_never_auto_screen_still_halts_even_with_a_resolvable_parameter():
+    """Invariant preserved: parameterization resolves WHAT gets sent, never
+    WHETHER the never-auto gate fires first."""
+    session = NoSendSession(screens=[MONEY])
+    loop = make_loop(PARAM_STEP, params={"qty": "50"}, start_anchor=None)
+    result = replay_loop(loop, session, force=True)
+
+    assert result.outcome == OUTCOME_HALTED
+    assert result.reason == "never_auto_action:money_prompt"
+    assert session.sends == []
+
+
+def test_an_unconfirmed_parameterized_send_still_halts_confirm_failed():
+    """send-and-confirm preserved: a resolved parameterized send that the
+    port does not confirm halts exactly like an unconfirmed literal one."""
+    session = ScriptedSession(screens=[ANCHOR_158, ANCHOR_158], confirmations=[False])
+    loop = make_loop(PARAM_STEP, params={"qty": "50"})
+    result = replay_loop(loop, session)
+
+    assert result.outcome == OUTCOME_HALTED
+    assert result.reason == HALT_CONFIRM_FAILED
+    assert session.sends == [("50", None)]  # sent (and counted) before the halt
+    assert result.steps[0].confirmed is False

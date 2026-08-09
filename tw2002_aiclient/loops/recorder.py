@@ -120,6 +120,32 @@ inert. Every consumer already treats ``draft`` as a first-class fact
 (``loader.py``, ``store.py``, ``player.py`` -- none of them special-case
 ``source`` directly).
 
+Parameterization (WO-BUILD-MACRO-CAPTURE-PARAM-GENERALIZATION-2)
+------------------------------------------------------------------
+``canon/engine/macros.md`` §"Parameterization" wants "the concrete numbers
+a human typed during one demonstration (a hold count, an offer, a sector
+id)" to generalize into named placeholders bound at replay time. Before
+this WO neither side of that round trip existed at all -- capture recorded
+every keystroke literally and replay sent ``step.input`` verbatim, no
+matter what it looked like.
+
+:meth:`LoopRecorder.step`'s optional ``param`` argument is the capture
+half: it never GUESSES which value is a parameter -- the caller (the
+manifest, today ``cli.cmd_record``'s per-step ``"param"`` key) says so
+explicitly, the same opt-in shape ``confirm_exact`` already uses. Scoped to
+NUMERIC input only, matching canon's own examples: a non-digit
+``keystrokes`` refuses rather than generalize an arbitrary command letter
+into something a caller could rebind into anything. The literal value
+captured becomes the parameter's recorded DEFAULT
+(:meth:`LoopRecorder.document`'s ``params`` object,
+``loader.py``'s ``Loop.params``) and the step's own ``input`` becomes the
+placeholder text ``{name}`` -- never both, so a document's ``steps`` never
+carry the literal value a caller asked to generalize away. Replay
+(``loops/player.py``'s ``_apply_params``) resolves the placeholder back
+into keystrokes immediately before the send it gates, preferring an
+explicit override over this recorded default, and refuses to press an
+unresolvable one rather than send the four literal bytes ``"{qty}"``.
+
 Identity, and why a fourth trap does not reach this module
 ------------------------------------------------------------
 Every document this recorder writes carries a ``name`` field equal to
@@ -162,7 +188,7 @@ from ..session.classify import (
     classify_screen,
 )
 from ..session.state_parser import OUTCOME_READ, read_current_sector
-from .loader import LoopStep
+from .loader import LoopStep, is_valid_param_name
 from .store import DRAFTS_DIRNAME, drafts_dir, loops_dir
 
 __all__ = [
@@ -444,13 +470,21 @@ class LoopRecorder:
             raise NoStartAnchor(read)
         self.start_anchor: int = read.sector
         self._steps: list[LoopStep] = []
+        self._params: dict[str, str] = {}
 
     @property
     def steps(self) -> tuple[LoopStep, ...]:
         """Every step captured so far, read-only."""
         return tuple(self._steps)
 
-    def step(self, keystrokes: str, resulting_screen, *, confirm_exact: bool = False) -> LoopStep:
+    def step(
+        self,
+        keystrokes: str,
+        resulting_screen,
+        *,
+        confirm_exact: bool = False,
+        param: Optional[str] = None,
+    ) -> LoopStep:
         """Record one send: ``keystrokes`` (already issued, by the CALLER,
         never by this method) and the screen it actually produced.
 
@@ -466,6 +500,18 @@ class LoopRecorder:
         line at all: an empty ``wait_prompt`` is not "no confirmation
         target" to the loader, it is a malformed step (``loader.py``'s own
         validation), so this method never manufactures one.
+
+        ``param`` (optional) generalizes THIS step's ``keystrokes`` into a
+        named replay-time parameter (module docstring, "Parameterization").
+        The caller names it explicitly -- this method never guesses which
+        step is "the quantity" -- and it must be all-digit keystrokes
+        (canon scopes parameterization to numeric input: a hold count, an
+        offer, a sector id). The literal value becomes this parameter's
+        recorded default and the step's own ``input`` becomes the
+        placeholder ``{param}``, never both. Reusing the same ``param``
+        name across two steps is legal only when the literal agrees with
+        what was already captured -- disagreement would mean one recorded
+        default silently overwrites another with no record either existed.
         """
         if not isinstance(keystrokes, str):
             raise TypeError(f"a step's input must be str -- got {type(keystrokes).__name__}")
@@ -492,20 +538,56 @@ class LoopRecorder:
             wait_prompt: Optional[str] = re.escape(prompt_line)
         else:
             wait_prompt = None
-        recorded = LoopStep(input=keystrokes, wait_prompt=wait_prompt, expected_post_class=klass)
+
+        if param is None:
+            recorded_input = keystrokes
+        else:
+            if not is_valid_param_name(param):
+                raise RecorderError(
+                    f"step {len(self._steps)}: {param!r} is not a usable parameter name "
+                    "-- it needs to start with a letter or underscore and contain only "
+                    "letters, digits, and underscores"
+                )
+            if not keystrokes.isdigit():
+                raise RecorderError(
+                    f"step {len(self._steps)}: cannot generalize {keystrokes!r} into "
+                    f"parameter {param!r} -- macros.md scopes parameterization to NUMERIC "
+                    "input (a hold count, an offer, a sector id), and these keystrokes "
+                    "are not all digits"
+                )
+            existing = self._params.get(param)
+            if existing is not None and existing != keystrokes:
+                raise RecorderError(
+                    f"step {len(self._steps)}: parameter {param!r} was already captured "
+                    f"with default {existing!r} at an earlier step -- this step's "
+                    f"{keystrokes!r} would silently overwrite it"
+                )
+            self._params[param] = keystrokes
+            recorded_input = "{" + param + "}"
+
+        recorded = LoopStep(
+            input=recorded_input, wait_prompt=wait_prompt, expected_post_class=klass
+        )
         self._steps.append(recorded)
         return recorded
 
     def document(self) -> dict:
         """The plain-dict JSON document -- ``canon/engine/macros.md``
         §Schema, verbatim field names. Raises :class:`EmptyRecording` if no
-        step was ever captured."""
+        step was ever captured.
+
+        ``params`` is written only when at least one step generalized a
+        value (``step(param=...)``) -- a recording that never used the
+        feature produces the EXACT document shape it always did, key for
+        key, so this addition costs nothing for the overwhelming majority
+        of every capture that does not opt in.
+        """
         if not self._steps:
             raise EmptyRecording(
                 f"loop {self.name!r} captured zero steps -- nothing was "
                 "recorded between opening this capture and finalizing it"
             )
-        return {
+        document = {
             "name": self.name,
             "source": "recorded",
             "created_ts": _utc_now_iso(),
@@ -519,6 +601,9 @@ class LoopRecorder:
                 for s in self._steps
             ],
         }
+        if self._params:
+            document["params"] = dict(self._params)
+        return document
 
     def save(
         self,

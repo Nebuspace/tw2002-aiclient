@@ -617,6 +617,60 @@ def test_the_anchor_value_itself_is_not_range_checked(tmp_path):
 
 
 # --------------------------------------------------------------------------
+# params -- WO-BUILD-MACRO-CAPTURE-PARAM-GENERALIZATION-2
+# --------------------------------------------------------------------------
+
+
+def test_an_absent_params_key_loads_as_an_empty_mapping(tmp_path):
+    """Every document written before this field existed has no ``params``
+    key at all -- absence is legal and stays empty, not an error."""
+    _write_store(tmp_path, {"ore-run": RECORDED})
+    loop = load_loop("ore-run", state_dir=tmp_path)
+    assert dict(loop.params) == {}
+
+
+def test_a_real_params_mapping_survives_the_round_trip(tmp_path):
+    _write_store(tmp_path, {"x": _doc(name="x", params={"qty": "50"})})
+    loop = load_loop("x", state_dir=tmp_path)
+    assert dict(loop.params) == {"qty": "50"}
+
+
+@pytest.mark.parametrize(
+    "bad",
+    ["not-an-object", ["qty"], 42, None],
+    ids=["string", "list", "int", "null"],
+)
+def test_a_params_value_that_is_not_an_object_is_refused(tmp_path, bad):
+    _write_store(tmp_path, {"x": _doc(name="x", params=bad)})
+    with pytest.raises(LoopMalformed) as exc:
+        load_loop("x", state_dir=tmp_path)
+    assert "params" in str(exc.value)
+
+
+@pytest.mark.parametrize("bad_key", ["1qty", "qty!", "", "qty name"])
+def test_a_params_key_that_is_not_a_valid_parameter_name_is_refused(tmp_path, bad_key):
+    _write_store(tmp_path, {"x": _doc(name="x", params={bad_key: "50"})})
+    with pytest.raises(LoopMalformed) as exc:
+        load_loop("x", state_dir=tmp_path)
+    assert "params" in str(exc.value)
+
+
+@pytest.mark.parametrize("bad_value", [50, True, None, ["50"]])
+def test_a_params_value_that_is_not_a_string_is_refused(tmp_path, bad_value):
+    _write_store(tmp_path, {"x": _doc(name="x", params={"qty": bad_value})})
+    with pytest.raises(LoopMalformed) as exc:
+        load_loop("x", state_dir=tmp_path)
+    assert "params" in str(exc.value)
+
+
+def test_params_is_immutable_like_every_other_loaded_field(tmp_path):
+    _write_store(tmp_path, {"x": _doc(name="x", params={"qty": "50"})})
+    loop = load_loop("x", state_dir=tmp_path)
+    with pytest.raises(Exception):
+        loop.params["qty"] = "999"
+
+
+# --------------------------------------------------------------------------
 # The asymmetry rule: acted-on fields fail closed, displayed fields degrade
 # --------------------------------------------------------------------------
 

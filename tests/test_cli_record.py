@@ -232,6 +232,68 @@ def test_a_manifest_with_no_steps_is_reported_and_exits_one(tmp_path, monkeypatc
     assert not (tmp_path / "skills").exists()
 
 
+def test_a_manifest_step_param_writes_a_placeholder_and_a_recorded_default(
+    tmp_path, monkeypatch, capsys
+):
+    """WO-BUILD-MACRO-CAPTURE-PARAM-GENERALIZATION-2's capture-side manifest
+    wiring: a step's ``"param"`` key reaches ``LoopRecorder.step`` through
+    the real wire, not just through ``recorder.py``'s own suite."""
+    _at(monkeypatch, tmp_path)
+    manifest = _manifest_file(
+        tmp_path,
+        {
+            **MANIFEST,
+            "steps": [
+                {"input": "P", "screen": PORT_ROWS},
+                {"input": "50", "screen": ANCHOR_ROWS, "param": "qty"},
+            ],
+        },
+    )
+
+    rc, _out = _run(capsys, ["record", str(manifest)])
+    assert rc == 0
+
+    document = json.loads((tmp_path / "skills" / "ore-run.json").read_text(encoding="utf-8"))
+    assert document["steps"][1]["input"] == "{qty}"
+    assert document["params"] == {"qty": "50"}
+
+    loop = load_loop("ore-run", state_dir=tmp_path)
+    assert loop.params == {"qty": "50"}
+    assert loop.steps[1].input == "{qty}"
+
+
+def test_a_manifest_step_param_on_non_digit_input_refuses_and_writes_nothing(
+    tmp_path, monkeypatch, capsys
+):
+    _at(monkeypatch, tmp_path)
+    manifest = _manifest_file(
+        tmp_path,
+        {
+            **MANIFEST,
+            "steps": [{"input": "P", "screen": PORT_ROWS, "param": "action"}],
+        },
+    )
+
+    rc, out = _run(capsys, ["record", str(manifest)])
+
+    assert rc == 1
+    assert "ERROR" in out
+    assert not (tmp_path / "skills").exists()
+
+
+def test_a_manifest_with_no_step_params_omits_the_params_key(tmp_path, monkeypatch, capsys):
+    """Backward compatibility through the real wire: a manifest that never
+    opts in produces exactly the document shape it always did."""
+    _at(monkeypatch, tmp_path)
+    manifest = _manifest_file(tmp_path)
+
+    rc, _out = _run(capsys, ["record", str(manifest)])
+    assert rc == 0
+
+    document = json.loads((tmp_path / "skills" / "ore-run.json").read_text(encoding="utf-8"))
+    assert "params" not in document
+
+
 def test_a_manifest_whose_anchor_sector_is_unreadable_refuses_and_writes_nothing(
     tmp_path, monkeypatch, capsys
 ):
