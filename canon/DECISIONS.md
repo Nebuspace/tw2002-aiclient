@@ -74,6 +74,42 @@ without a ruling.
 `canon/strategy/exploration-policy.md` § Chain-hunt · `canon/strategy/trade-loops.md` cross-link ·
 origin Max sector-5/6/7/8 walkthrough 2026-08-09.
 
+### PENDING-AFFORDABILITY-EXPLORE-WEIGHT-DEFINITION — credits-cross-cost explore nudge (2026-08-09)
+
+**Edge:** Gap — `canon/engine/priority-engine.md` and `canon/strategy/exploration-policy.md` add
+**affordability** as a second OR-cause of the shared `explore_appetite_raised` FOCUS ranking input
+(credits clearing a known hold-upgrade and/or fighter cost → louder explore suggestion). Mechanism
+shape is specified (reuse existing flag + `afford_fighters` math surface; never autonomous switch).
+**What counts as "affordable"** and whether the two cost surfaces nudge with different strength are
+not fixed — hard-coding them in a follow-on build WO would invent operator-facing thresholds without
+a ruling.
+
+**Kernel (unambiguous without the numbers):**
+1. Affordability MAY raise explore's FOCUS `overlay_weight` / set `explore_appetite_raised` when
+   credits clear a **known** quote — omit-until-known; never invent prices.
+2. Depletion and affordability share **one** signal (`explore_appetite_raised`) and one FOCUS
+   consumer — do not mint a parallel appetite boolean.
+3. Ranking / suggestion only — never autonomous rotation off a running loop, never live-drive
+   (same invariant as depletion appetite and [trade-loops](/strategy/trade-loops.md) depletion STOP).
+4. Implementation wiring (`afford_fighters` → `focus_status.recommend_focus_candidates` reader for
+   the existing flag) stays a **follow-on build WO** after this canon draft is reviewed.
+
+**Needs human ruling before build:**
+- **Affordability definition** — raw `credits ≥ hold_upgrade_quote` / `fighter_unit_price`, or a
+  safety-margin buffer above reserved trade float (and how that float is measured)?
+- **Differential weighting** — should clearing a hold-upgrade quote nudge explore stronger than
+  clearing a fighter purchase (hold upgrades being cheaper / more directly loop-enabling), or one
+  shared boost when either threshold clears?
+
+**Status:** Pending — threshold definition human-gated; mechanism canon in priority-engine +
+exploration-policy (this WO).
+
+**Refs:** `workorders/WO-CANON-DRAFT-AFFORDABILITY-EXPLORE-WEIGHT.md` ·
+`canon/engine/priority-engine.md` § FOCUS ranking input — affordability ·
+`canon/strategy/exploration-policy.md` § Explore / exploit appetite ·
+`chain_depletion.py` ~148–165 (`explore_appetite_raised`) · origin Max credit-threshold framing
+2026-08-09.
+
 ---
 
 

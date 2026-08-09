@@ -1,7 +1,7 @@
 ---
 type: System
 title: Frontier Exploration Policy & Mechanism
-description: When and how much to explore (appetite, turn budget, density-value interpretation), the deterministic BFS/frontier planner (Map-fill family), and the Chain-hunt sibling-exhaust intent that grows the map for maximal trade-loop chain length — taught, human-armed behaviors that STOP on any unrecognized sector screen.
+description: When and how much to explore (appetite — depletion and affordability triggers sharing explore_appetite_raised, turn budget, density-value interpretation), the deterministic BFS/frontier planner (Map-fill family), and the Chain-hunt sibling-exhaust intent that grows the map for maximal trade-loop chain length — taught, human-armed behaviors that STOP on any unrecognized sector screen.
 tags: [strategy, exploration, world-model, bfs, frontier, priority-input, hypothesis, prescriptive, stop-on-unknown]
 timestamp: 2026-07-23T20:20:02Z
 ---
@@ -186,8 +186,23 @@ live per-cycle action-picker that lets a computed exploration value beat out an 
   hunt for fresh patterns — see [Port Economics](/strategy/port-economics.md). Depletion raises the
   *appetite to suggest exploring*; it never triggers autonomous rotation into a new loop. Depletion
   is a STOP-and-escalate / re-rank signal, not a license to auto-switch what the ship is doing.
-- **Appetite LOWERED** when known loops are fresh and high-yield — no pressing reason to spend turns
-  discovering more.
+  Tip already writes this as `explore_appetite_raised` from
+  `chain_depletion.depletion_signals()` (`chain_depletion.py` ~148–165) onto chain status when
+  `nearing_depletion` is true — **today that flag has zero product readers**; the follow-on build
+  WO must consume it rather than invent a parallel appetite bit.
+- **Appetite RAISED when credits cross a known upgrade/fighter cost (affordability-driven).** Once
+  current credits clear a known cargo-hold upgrade quote and/or fighter unit cost (the same math
+  surface as `priority_engine.afford_fighters`, which today only feeds GOALS labels), grinding an
+  inefficient known loop is no longer the only rational move — exploring for StarDock / fresh loops
+  becomes a louder FOCUS suggestion so the operator can act on what exploring finds. **Same signal,
+  second OR-cause:** affordability MUST set / extend the existing `explore_appetite_raised` flag
+  (shared consumer with depletion), never a second competing boolean. Exact threshold definition
+  (raw credits ≥ cost vs safety margin above trade float; whether hold-upgrade and fighter costs
+  nudge with different strength) is Pending —
+  `PENDING-AFFORDABILITY-EXPLORE-WEIGHT-DEFINITION` in [DECISIONS](/DECISIONS.md). Ranking input
+  only — never an autonomous FOCUS rotation or live drive.
+- **Appetite LOWERED** when known loops are fresh and high-yield **and** credits have not crossed a
+  known affordability threshold — no pressing reason to spend turns discovering more.
 - A profitable new commodity pairing found while exploring is captured as a *candidate* loop (handed
   to the pattern-capture path — see [Trade Loops](/strategy/trade-loops.md)), never acted on as a
   live one-off. That is how the repertoire compounds across sessions without any autonomous trade.
@@ -227,8 +242,10 @@ operationally, and never hardcode these per-server.
   [Control & Escalation](/architecture/control-and-escalation.md)).
 - **Priority ranks, never overrides.** The explore/exploit appetite and any frontier score order
   suggestions and armed behaviors — they can never let an exploration value win over a STOP.
-- **Depletion ⇒ STOP-guard / re-rank, not autonomous rotation.** A depleting loop raises the
-  appetite to *suggest* a hunt; it does not autonomously switch the ship into a new loop.
+- **Depletion or affordability ⇒ STOP-guard / re-rank, not autonomous rotation.** A depleting
+  loop **or** credits clearing a known hold-upgrade/fighter cost raises the appetite to *suggest* a
+  hunt (via the shared `explore_appetite_raised` signal); it does not autonomously switch the ship
+  into a new loop or change live drive.
 - **Plan, never blind-send.** Every proposed send is a real, adjacent, game-legal warp resolved
   against the known graph. The frontier planner never guesses a warp, price, or non-adjacent hop.
 - **Locate / catalog / recommend — never claim.** Find-Formations routes to a candidate; deploying
