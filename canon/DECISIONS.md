@@ -34,16 +34,15 @@ RULES:
 
 **Superseded by** `RESOLVED-TRAINER-STRIP-AND-GUTTER-20260731`: App `status_line` / offers paint in **LOGS**, not a mid control-strip segment. Calm teachband is the trainer key row (E/P/L/T/C/S), not A/R/T.
 
-### PENDING-HUD-CARGO-BREAKDOWN — CARGO shows empty/total (+ holdings next) (2026-08-01)
+### PENDING-HUD-CARGO-HOLDINGS-SHIP-INFO — ship-info per-commodity hold lines (2026-08-08)
 
-**Edge:** Change — `trainer-cockpit.md` said CARGO is **empty holds only**; Max (2026-08-01) asked the right HUD to explain **what is in cargo holds**. Bare `CARGO 50` reads as contents.
+**Edge:** Change — trade-path sticky Ore/Org/Equ shipped (`WO-HUD-CARGO-HOLDINGS`, #306); ship-info lines that name per-commodity holds are **not parsed yet** (no fixture shape — see `trainer-cockpit.md` cargo blurb).
 
-**Kernel (build now · Max product ask = GO for display honesty):**
-1. CARGO paints **empty and total** when ship-info `Total Holds : N - Empty=M` is known (filled = N−M is implied, not a third invented claim).
-2. Port-commerce empty-only lines still update empty; do not invent total from port **market** commodity rows.
-3. Per-commodity Ore/Org/Equ sticky holdings = `WO-HUD-CARGO-HOLDINGS` (wave 2), fed by trade buy/sell and/or future ship-info lines — still never from market rows.
+**Kernel (still open):**
+1. When ship-info prints Ore/Org/Equ hold lines in fixtures/live, parse into session sticky holdings (same honesty contract as trade writes — never from port market rows).
+2. Until that shape exists, trade buy/sell remains the only holdings writer; HUD shows trade-derived holdings only.
 
-**Status:** Pending formal RESOLVED stamp; empty/total + holdings kernels executing under Max ask.
+**Status:** Pending — trade-path wave shipped; ship-info parse deferred.
 
 ---
 
@@ -51,6 +50,18 @@ RULES:
 ## RESOLVED
 
 <!-- Items with a human decision on record. Waiting for ADR drafting or already captured. -->
+
+### RESOLVED-HUD-CARGO-BREAKDOWN-EMPTY-TOTAL — CARGO empty/total occupancy (2026-08-01)
+
+**Edge:** Change — `trainer-cockpit.md` said CARGO is **empty holds only**; Max (2026-08-01) asked the right HUD to explain hold occupancy. Bare `CARGO 50` reads as contents.
+
+**Ruling (Max product ask = GO for display honesty):**
+1. CARGO paints **empty and total** when ship-info `Total Holds : N - Empty=M` is known (filled = N−M is implied, not a third invented claim).
+2. Port-commerce empty-only lines still update empty; do not invent total from port **market** commodity rows.
+
+**Shipped:** `WO-HUD-CARGO-BREAKDOWN` → `9b78c57` (#305) — `hud_tracking.format_cargo_hud_value`, `Session.observe_cargo`, trainer-cockpit cargo blurb. Trade-path per-commodity holdings → `ad0aff8` (#306); ship-info parse remains open as `PENDING-HUD-CARGO-HOLDINGS-SHIP-INFO` above.
+
+---
 
 ### RESOLVED-DEV-DRIVE-EXCEPTION — narrow, sacrificial-only, manual AI live-drive for development (Max direct, 2026-08-07)
 
@@ -303,7 +314,7 @@ Max: "Carte Blanche to make the decisions for aiclient." Applying the same patte
 - **`WO-ESCALATE-CLI-VERBS-DOC-VS-LIVE-MISMATCH`** — Option B: correct `cli-verbs.md` to stop presenting `replay/play/autoloop/haggle/autopilot/analyze/mine` as live `tw` subcommands when none are registered in `session/cli.py`'s `build_parser`. Wiring them for real (Option A) is deferred — several of the underlying engines (autopilot, haggle) are themselves still gated/partially-safety-adjacent, so wiring the CLI surface ahead of those individual rulings would front-run them. Fix the doc now; wire each verb through its own existing (or future) WO as that engine's gating resolves.
 - **`WO-ESCALATE-TOLL-DEFENSE-UNBUILT-CONSTANTS`** — Option B: strip `keep_min_defense_fighters=20`, `shield_reserve_multiplier=2:1`, `missile_bypass_fraction≈7%` from canon as unconfirmed noise until a real design pass. Doc already self-flags `[hypothesis]` but still presents step-3 math as computable today — that's the part that's misleading and should go, not a build authorization for these specific numbers.
 - **Port-economics floor/regrowth/plague numbers** (queue-aiclient.md:169) — mark permanently-unconfirmed in canon rather than investing in live per-server introspection right now. Same posture as the planet-colonization ruling below — third-party strategy-guide numbers don't get encoded as canon constants until someone actually measures them live.
-- **Auto-haggle tuning defaults registry-migration** (queue-aiclient.md:170) — not urgent. Convergence behavior is already live-proven with the current hardcoded defaults (~15% aggression, ~5% accept, round cap 4); migrating to registry-driven per-server knobs matches the project's stated data-driven-registries preference but is a LOW-priority future WO, not a blocker on anything.
+- **Auto-haggle tuning defaults registry-migration** (queue-aiclient.md:170) — **DONE** (`WO-BUILD-HAGGLE-PARAMS-REGISTRY`, `37bf8bb` #575). Defaults now load from `data/haggle/params.json` via `tw2002_aiclient/haggle_params.py` (`round_cap=4`, `accept_threshold_pct=5.0`, `open_aggression_pct=15.0`, `verified_vs_live=true`); `session/haggle.py` consumes `DEFAULT_HAGGLE_PARAMS`. Per-server knob expansion remains optional future work; the registry substrate ships.
 - **Toll resolver reserve floor / winnable-enemy-count band** (queue-aiclient.md:171) — verify-first: check whether code already exposes an override path before concluding it's hardcoded. If genuinely hardcoded, same LOW-priority registry-migration treatment as the haggle defaults above, not an urgent fix.
 - **Ledger world_id: single-ledger Option A ratification** (queue-aiclient.md:188) — ratify Option A (single ledger, row-level `world_id` stamp) as the accepted design. It's already the de facto shipped implementation (`WO-PWO-090-LEDGER-WORLD-ID-STAMP`, merged `6244787` #366) with real behavior riding on it; this closes the missing paper trail, not a design change.
 - **`WO-CANON-DRAFT-AUTOLOOP-RELAUNCH-ZERO-COVERAGE`** — proceed: draft canon coverage of `autoloop_relaunch`'s existing shipped semantics (`replays_from_start`, `sends_already_issued`) in `mode-line-and-teach-controls.md` alongside the existing `Spc` pause documentation. This is describing already-live, already-confirm-gated behavior — a doc-honesty fix, not new authorization for the replay mechanism itself (which already ships and is already confirm-gated).
