@@ -495,6 +495,12 @@ def rule_to_dict(rule: Rule) -> dict:
 
 
 def document_from_dicts(payload: Any) -> tuple:
+    """In-memory Rule-tuple parse (tests / kernel helpers).
+
+    Disk persistence for taught rules is ``rules/store.py`` + ``rules/writer.py``
+    (``state/rules/*.json``) — not this pair. Audit tip-check
+    WO-BUILD-RULE-ENGINE-SERIALIZE-WIRE: not a missing save/load bridge.
+    """
     if isinstance(payload, (str, bytes, Mapping)) or not isinstance(payload, Iterable):
         raise RuleDocumentError("a rule document must be a list of rule mappings")
     rules = tuple(rule_from_dict(item) for item in payload)
@@ -509,4 +515,5 @@ def document_from_dicts(payload: Any) -> tuple:
 
 
 def document_to_dicts(rules: Iterable[Rule]) -> list:
+    """Inverse of :func:`document_from_dicts` — in-memory only (see that docstring)."""
     return [rule_to_dict(rule) for rule in rules]
