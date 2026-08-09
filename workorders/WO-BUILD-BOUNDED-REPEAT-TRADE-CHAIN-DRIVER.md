@@ -1,6 +1,6 @@
 # WO-BUILD-BOUNDED-REPEAT-TRADE-CHAIN-DRIVER
 
-**Status:** IN FLIGHT (impl-aiclient-cursor)  
+**Status:** DONE — PR #637 merged → main @ `22dfe7f3`  
 **Max GO:** 2026-08-09 (sacrificial only)  
 **HANDOFF:** orchestrator 2026-08-09T13:28Z
 
