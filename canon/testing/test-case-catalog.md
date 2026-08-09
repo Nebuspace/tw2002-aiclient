@@ -10,17 +10,26 @@ timestamp: 2026-08-09T05:30:00Z
 # Test Case Catalog
 
 Module inventory and per-test blurbs below may lag tip (many modules were added after the
-2026-07-25 full pass). **Headline counts re-verified 2026-08-09 against tip**
-(`tests/test_*.py` + `pytest.ini --ignore`):
+2026-07-25 full pass). **Headline counts re-verified 2026-08-09 against tip** via actual
+collection (not AST estimate):
 
-Complete inventory target: **~4567 pytest test cases** across **310 modules**
-(`tests/test_*.py`) in the tw2002-aiclient repo. Each module *should* link to a per-module OKF
-case file with per-test blurbs (regeneration of every case file is a separate catalog-refresh WO —
-this pass only corrects the stale headline counts).
+```text
+.venv/bin/python -m pytest -n0 --collect-only
+→ 7437 tests collected   # footer is authoritative
+.venv/bin/python -m pytest -n0 --collect-only -q
+→ 308 lines of form tests/test_*.py: <n>  (sum == 7437)
+```
 
-- **Active (default run):** 308 modules · ~4556 tests
-- **BANKED (ignored via `pytest.ini`):** 2 modules · 11 tests
-  (`tests/test_analyze.py`, `tests/test_crawl_start_protocol.py`)
+`tests/test_*.py` on disk: **310** files. Default collect excludes the 2 BANKED ignores below.
+
+Each module *should* link to a per-module OKF case file with per-test blurbs (regeneration of
+every case file is a separate catalog-refresh WO — this pass only corrects the stale headline
+counts).
+
+- **Active (default run):** 308 modules · **7437** tests
+- **BANKED (ignored via `pytest.ini`):** 2 modules — `tests/test_analyze.py`,
+  `tests/test_crawl_start_protocol.py` (still `import twclient`; collection ERRORs if un-ignored;
+  not included in the 7437)
 
 > **Blurb rule:** first complete sentence of the function docstring when it is well-formed (ends with `.!?`, no truncated backticks); otherwise readable English derived from the `test_*` name. No runtime behavior is invented beyond name/docstring.
 
