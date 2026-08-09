@@ -151,11 +151,21 @@ do-not-revive; tip measurement of the live share is **shipped**.
   graduation threshold**. Do not revive `spectate_layout.format_autonomy_counts`
   (`App N / AI N · Hum N`).
 
-- **Ledger live-sender enum — tip closed.** Tip `ledger.LedgerWriter.record_do`
-  requires `actor ∈ VALID_SENDERS` (`app`|`human`); `session.VALID_SENDERS` matches.
-  Legacy `{ai, trainer, human}` vocabulary is archive / old-row caution only.
-  `ledger.live_actor_counts` counts only `app`/`human` and skips unknown/`ai` rows
-  (never invents a third live driver).
+- **Ledger live-sender enum — tip closed, three values.** Tip `session.VALID_SENDERS`
+  is `("app", "human", "dev")`; `ledger.LedgerWriter.record_do` requires
+  `actor ∈ VALID_SENDERS` and matches it exactly — this page's earlier "`app`|`human`"
+  framing of that enum was stale. `dev` is not a fourth live-*play* driver and does
+  **not** enter this page's coverage denominator: it is the sacrificial-only,
+  AI-agent-development sender authorized by
+  [dev-drive-exception](/doctrine/dev-drive-exception.md), refused at send time by
+  `Session._require_dev_sender_authorized` unless the active profile's
+  `crawl_sacrificial` flag is `True` (checked fresh every call). Legacy
+  `{ai, trainer, human}` vocabulary is archive / old-row caution only.
+  `ledger.live_actor_counts` counts only `app`/`human` and skips unknown/`ai` rows —
+  and skips `dev` rows too, by the same "never invents a third live driver" design,
+  so `coverage = app / (app + human)` above is unchanged by `dev`'s existence. (Same
+  closed note lives in [trace-ledger](/engine/trace-ledger.md) § Code divergence,
+  which is where this page's own staleness was first flagged.)
 
 - **Live coverage computation — tip shipped (WO-P5-072 / PWO-094 /
   WO-WIRE-COVERAGE-LEDGER-COUNTS).** `cockpit/covermeter.py` computes
@@ -190,6 +200,10 @@ do-not-revive; tip measurement of the live share is **shipped**.
   by candidate-mining / the AI teacher, not here.
 - Code modules (plain-text): `ledger.py` (`VALID_SENDERS` + `live_actor_counts`);
   `cockpit/covermeter.py` (share math + `COV` meter); `screens.py` (control-strip
-  wire); `session/session.py` (`VALID_SENDERS`); `rule_engine.py` (`origin` on
-  rules); `coverage_metrics.py` (teaching-provenance counts). Session-retro
-  candidate-mining remains with `miner.py` / AI-teacher surfaces.
+  wire); `session/session.py` (`VALID_SENDERS`, `_require_dev_sender_authorized`);
+  `rule_engine.py` (`origin` on rules); `coverage_metrics.py` (teaching-provenance
+  counts). Session-retro candidate-mining remains with `miner.py` / AI-teacher
+  surfaces.
+- Doctrine — the sacrificial-only `dev` sender's own scope and gate (see
+  [dev-drive-exception](/doctrine/dev-drive-exception.md)); does not alter this
+  page's `app`/`human` coverage denominator.

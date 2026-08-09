@@ -186,8 +186,8 @@ the write path. Remaining gaps are keying / consumer wiring, not the enum:
   unknown/`ai` rows and does not count `dev` either (never invents a third live-*play* driver). Old
   rows written with `actor: "ai"`/`"trainer"` are not migrated in place; a retro pass may map
   legacy `trainer` → `app` and treat legacy `ai` as authored-decision provenance, not a live-sender
-  count. (Same closed note lives in [coverage-metrics](/engine/coverage-metrics.md) — that page
-  still frames the enum as two values; out of this pass's scope.)
+  count. (Same closed note now also lives in [coverage-metrics](/engine/coverage-metrics.md) §
+  Code divergence — that page's stale "two values" framing was fixed alongside this one.)
 
 - **Ledger world keying — Option A closed (PWO-090 / DECISION-LEDGER-WORLD-ID-STAMP).** The ledger
   remains a single global append-only sink (`state/ledger.jsonl`) — not split per world. Rows carry
