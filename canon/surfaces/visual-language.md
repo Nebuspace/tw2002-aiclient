@@ -69,9 +69,9 @@ everywhere — a naming quirk of the library, not a design choice.
 Two shared classifiers emit only `ok`/`warn`/`danger` and are the source of every gauge/status tint
 across every surface — a surface never invents its own thresholds:
 
-- **`status_semantic(connected, last_rx_age_s)`** (`spectate_layout.py`) — `danger` if disconnected;
+- **`status_semantic(connected, last_rx_age_s)`** (`cockpit/tones.py`) — `danger` if disconnected;
   `warn` if `last_rx_age_s ≥ 5.0` (`_STALE_RX_THRESHOLD_S`); else `ok`.
-- **`gauge_semantic(fraction)`** (`spectate_layout.py`) — `ok` ≥0.5, `warn` ≥0.2, else `danger`. This
+- **`gauge_semantic(fraction)`** (`cockpit/tones.py`) — `ok` ≥0.5, `warn` ≥0.2, else `danger`. This
   is what colors the turns fuel-gauge green→amber→red as turns drain.
 
 ### Three load-bearing color rules (apply on every surface, no exceptions)
@@ -122,8 +122,9 @@ entry at tone `info` — port-source only, do not revive.
 
 ### Per-cell game color is a distinct system
 
-Inside the `[GAME UI]` viewport, `terminal.color_map()` (`terminal.py`) RLE-encodes pyte's true SGR
-fg/bg/bold per row, and `_ColorPairs` (`spectate_app.py`) lazily allocates a curses pair per
+Inside the `[GAME UI]` viewport, `terminal.color_map()` (`session/terminal.py`) RLE-encodes pyte's
+true SGR fg/bg/bold per row, and tip color-pair allocation lives under the cockpit viewport path
+(archive `_ColorPairs` in `spectate_app.py` is port-source), lazily allocating a curses pair per
 distinct `(fg,bg)`, degrading to plain bold/normal when the pair table is exhausted. The viewport
 therefore renders in the **server's own CP437 palette**, not the 7-tone semantic set — what the
 operator sees is exactly what the game sends, reproduced, never reinterpreted. `[HYPOTHESIS]` The
@@ -152,14 +153,14 @@ gate chrome.)
 | `⊘` | `⊘` (no swap) | blocked / gated — an unmet prerequisite, a gated autopilot-trace candidate, or `[ASPIRATIONAL]` a non-connectable catalog entry | `compose_primary_goals_lines` / `format_autopilot_trace_lines` |
 | `✦` | `*` | freshness mark — **non-negotiable per `TUI-POLISH-PLAN.md`**; appears on every persisted value as `✦ Ns ago` / `✦ now`, dims past 20s | `format_freshness` |
 | `★` | `★` (no swap) | centerpiece / you-are-here / chosen-action — the MENU MAP marker (`here ★{cur}`), the autopilot-trace chosen action, the longest Loops chain | `format_autopilot_trace_lines` / `menu_map_view.py` |
-| `▸` | `▸` (no swap) | the selected/armed row marker (chains library) and the play-progress separator `Playing <name> ▸ cycle/total` | `spectate_app.py` |
+| `▸` | `▸` (no swap) | the selected/armed row marker (chains library) and the play-progress separator `Playing <name> ▸ cycle/total` | tip `cockpit/` / archive `spectate_app.py` |
 | `→` | `→` (no swap) | sent-key / TX channel (`→ 158` sent, `→ -` idle) and the step arrow | `format_tx_readout` |
-| `⇒` | `⇒` (no swap) | the LOG "landing differs" suffix | `spectate_layout.py` |
-| `○ ○` | `○ ○` (no swap) | the empty-chain placeholder (`○ ○  no trade loop yet`) | `spectate_app.py` |
+| `⇒` | `⇒` (no swap) | the LOG "landing differs" suffix | tip LOG paint / archive `spectate_layout.py` |
+| `○ ○` | `○ ○` (no swap) | the empty-chain placeholder (`○ ○  no trade loop yet`) | tip `cockpit/chain_bubbles.py` / archive `spectate_app.py` |
 | `—` (em-dash) | `—` (no swap) | an unknown/empty value, in place of a fabricated `-` or a blank | throughout HUD/GOALS/PRIORITIES rendering |
 | `×` | `×` (no swap) | dimensional multiply in gate/refusal copy (`C×L`, `60×20`) — same no-swap family as `·` / `—`; never ASCII `x` | `tw2002_aiclient/cockpit/layout.py::frame_layout` `too_small` `message` (≈97–102) |
 | `!` | `!` (no swap) | leads the STOP / intervention strip — the one-glyph "attention" mark | `compose_intervention_strip` |
-| `KEY)verb` | `KEY)verb` (no swap) | the uniform hotkey-token shape on the control-strip hint band (`^A)ode`, `A)nalyze`, …) | `spectate_app.py` control strip |
+| `KEY)verb` | `KEY)verb` (no swap) | the uniform hotkey-token shape on the control-strip hint band (`^A)ode`, `A)nalyze`, …) | tip `cockpit/teachband.py` / `control_seat.py` |
 
 **Motion glyphs** (see the Liveness-cue catalog below for full behavior): spinner `⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏`
 (ASCII `|/-\`) · heartbeat `●`/`○` (ASCII `*`/`.`) · sparkline `▁▂▃▄▅▆▇█` (ASCII `.-=#`) ·
@@ -183,25 +184,27 @@ switched by the same `unicode_ok` flag so every glyph has an ASCII twin:
   stacked widgets.
 - **Viewport zero-inset is an invariant, not a style choice.** The `[GAME UI]` box is titled
   `" GAME "` with the border on row/col 0 and content at (1,1), **zero inner padding**
-  (`_content_inset`, `spectate_app.py`). Any inward pad would shear the game's own CP437 box-art —
+  (tip viewport path in `screens.py` / cockpit; archive `_content_inset` in `spectate_app.py`
+  port-source). Any inward pad would shear the game's own CP437 box-art —
   this is why `VIEWPORT_W/H = GAME_W+2, GAME_H+2` (82×27, from `GAME_W, GAME_H = 80, 25`) and never
   a padded inset.
 - **Titled thin boxes** carry their title at `addnstr(0, 2, " TITLE ")` in cyan — the uniform
   titling convention every instrument box on every surface follows (`HUD`, `LOG`, `DECISIONS`,
   `PRIORITIES`, `FORMATIONS`, `MENU MAP`, `TRADE LOOP CHAINS`, and `[ASPIRATIONAL]` a launcher's
   `PLAYERS`/`SERVERS` boxes).
-- **Chain bubbles** are rounded `╭─╮ │ ╰─╯` joined by a heavy `═════` connector (`_CHAIN_CONNECTOR`,
-  `spectate_layout.py`) — the one place a chrome element deliberately borrows the viewport's heavier
-  weight, marking the trade loop as the "live" instrument.
+- **Chain bubbles** are rounded `╭─╮ │ ╰─╯` joined by a heavy `═════` connector
+  (`cockpit/chain_bubbles.py`; archive `_CHAIN_CONNECTOR` in `spectate_layout.py` port-source) — the
+  one place a chrome element deliberately borrows the viewport's heavier weight, marking the trade
+  loop as the "live" instrument.
 - **No double-line weight exists outside a live game viewport.** A surface with no socket open (the
   launcher) never earns the heavier border — it is reserved exclusively for the CP437 world.
 
 ## Liveness-cue catalog — the "is it frozen?" killers
 
-Animation is decoupled from content so motion never costs a redraw storm: chrome animates at
-`ANIM_FPS = 13` (`spectate_app.py`, i.e. one repaint per ~77ms), the viewport redraws only on a real
-settle-edge event, and a disconnected session drops to a slow `IDLE_ANIM_INTERVAL_S = 0.5s` idle
-cadence. All flashes are `is_recent`-gated: they decay and never stick, so the steady state settles
+Animation is decoupled from content so motion never costs a redraw storm: chrome animates on the
+play-shell / liveness tick (archive `ANIM_FPS = 13` in `spectate_app.py` ≈ one repaint per ~77ms —
+port-source), the viewport redraws only on a real settle-edge event, and a disconnected session
+drops to a slow idle cadence (archive `IDLE_ANIM_INTERVAL_S = 0.5s` port-source). All flashes are `is_recent`-gated: they decay and never stick, so the steady state settles
 back to quiet.
 
 | cue | glyph / const | behavior |
@@ -222,9 +225,10 @@ The `→ TX` value is already redacted upstream — a `--secret` send arrives pr
 
 ## Responsive-fold ladder
 
-The fold is **cols-driven**, keyed on inner content-column budget (`frame_layout`,
-`spectate_layout.py`; the constants below are measured against the 1-cell-inset inner size, a real
-terminal's raw `cols` needs `+2`). Height degrades in a fixed order — header → control → ticker →
+The fold is **cols-driven**, keyed on inner content-column budget
+(`cockpit/layout.py::frame_layout`; archive `spectate_layout.frame_layout` port-source; the
+constants below are measured against the 1-cell-inset inner size, a real terminal's raw `cols`
+needs `+2`). Height degrades in a fixed order — header → control → ticker →
 viewport border — before ever falling to `too_small`, and the intervention strip always claims
 leftover height **first**, ahead of that ladder, so a halt banner survives even a height-starved
 terminal.
@@ -347,14 +351,13 @@ could commit live turns. `y/N` capitalization signals the safe default; a bare E
   `format_autopilot_trace_lines`, `format_freshness`, `format_tx_readout`,
   `compose_intervention_strip`). Full archive-citation rewrite deferred to
   `WO-CANON-GLYPH-SOURCE-OF-TRUTH` if still needed.
-- **Liveness-cue constants** — `spectate_layout.py` (`FRESHNESS_STALE_S`, `CREDIT_FLASH_DURATION_S`,
+- **Liveness-cue constants** — tip: `cockpit/hud.py` (`FRESHNESS_STALE_S`), `cockpit/liveness.py`
+  (spinner/heartbeat). Archive port-source: `spectate_layout.py` (`CREDIT_FLASH_DURATION_S`,
   `TICKER_FLASH_DURATION_S`, `CREDIT_SPARK_WIDTH`, `TURNS_GAUGE_WIDTH`, `render_sparkline`,
   `render_bar_meter`).
-- **Responsive-fold ladder** — `spectate_layout.py` (`frame_layout`, `GAME_W`/`GAME_H`,
-  `VIEWPORT_W`/`VIEWPORT_H`, `HUD_GUTTER_W`, `PRIORITIES_W`/`PRIORITIES_MIN_W`,
-  `MINIMAL_HEADER_MIN_COLS`, `RIGHT_GUTTER_MIN_COLS`, `FULL_GUTTER_MIN_COLS`,
-  `LEFT_GUTTER_MIN_COLS`, `MIN_COLS`, `MIN_LINES`); reborn port
-  `tw2002_aiclient/cockpit/layout.py::frame_layout` (incl. `×` in `too_small` message).
+- **Responsive-fold ladder** — tip: `tw2002_aiclient/cockpit/layout.py::frame_layout` (incl. `×` in
+  `too_small` message). Archive port-source: `spectate_layout.py` (`GAME_W`/`GAME_H`,
+  `VIEWPORT_W`/`VIEWPORT_H`, gutter floors, `MIN_COLS`/`MIN_LINES`).
 - **Cockpit strip / refuse / viewport-STATE tones (tip `f594b9e`)** —
   `tw2002_aiclient/screens.py` PlayShellScreen (`A_NORMAL` row-1 strip; `_outer_attr`
   cyan+bold on `draw_refuse_message`; `_viewport_border_attr` red non-bold /
