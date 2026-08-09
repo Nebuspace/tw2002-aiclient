@@ -3,7 +3,7 @@ type: Reference
 title: Toll & Defense Math (NPC-only)
 description: Fight/pay/reroute decision math feeding the fighter-toll guarded rule — NPC targets only, where combat is a prime escalation moment.
 tags: [strategy, combat, defense, toll, npc-only, hypothesis]
-timestamp: 2026-08-06T02:02:00Z
+timestamp: 2026-08-09T04:19:53Z
 ---
 
 # Scope
@@ -185,12 +185,22 @@ recorded, not silently conformed to).
   `focus_status.py` (display subdivergence closed elsewhere).
 - **`trade_driver`'s autonomous chain runner** executes a taught chain end-to-end under
   fail-closed arm predicates (`is_armed` / `should_abort` via `TradeChainRunner` / ADR-003).
-  **Option C fact-find (2026-08-06):** there is **no** kernel `screen_match` field check inside
-  `run_chain()`, but tip **does** re-validate the live screen every navigation step and at port
-  cascade prompts via `classify_screen` + `ChainHold` on unexpected classes
-  (`_navigate` requires `main_command` before each warp send; warp_confirm / avoid-DANGER handled;
-  `_visit_port` HOLDs on unexpected cascade screens). Mid-chain toll/mine still STOP unless the
-  fighter-toll guard's force_share gate applies — the runner does not invent via EV. See
+  **Option C fact-find (2026-08-06, re-verified tip `7c97b2a` 2026-08-09):** there is **no**
+  kernel `screen_match` field check inside `run_chain()` (`tw2002_aiclient/trade_driver.py:928`) —
+  zero occurrences of the `screen_match` symbol anywhere in `trade_driver.py`. Tip **does**
+  re-validate the live screen every navigation step and at port cascade prompts:
+  `_navigate()` (`trade_driver.py:764-841`) takes a fresh render and calls `classify_screen` before
+  each warp send (`:807-810`), raising `ChainHold` unless the class is `_MOVEMENT_PROMPT_CLASS`
+  (`"main_command"`, `:186`, `:811-812`), then re-classifies after the send to catch `warp_confirm`
+  (`:831-832`) and declines + HOLDs on an avoid-DANGER body rather than guessing a detour
+  (`:833-837`); `_visit_port()` (`trade_driver.py:702-761`) HOLDs on any unexpected commodity-cascade
+  screen (`:753-755`). Every actual send funnels through the one choke point `_confirmed_send()`
+  (`:359-403`), which fails closed on `ctx.armed()` (`:345-347`, `:380-381`) and the abort predicate
+  (`:341-343`, `:382-383`) before it ever reaches the wire; the daemon-owned caller wires
+  `is_armed`/`should_abort` from the control-lock and stop-event
+  (`tw2002_aiclient/session/trade_chain.py:391-403`). Mid-chain toll/mine still STOP unless the
+  fighter-toll guard's force_share gate applies — the runner does not invent via EV. **Verdict:
+  clear, not ambiguous — closed without re-escalation.** See
   `WO-ESCALATE-TRADE-DRIVER-CHAIN-RUNNER-SCREEN-MATCH-NO-CANON`.
 - **§22 / TW-23 capstone re-scope.** The original autonomous-trainer capstone framed the
   toll/defense math as an input to an EV-maximizing pilot. It is re-scoped here to a
