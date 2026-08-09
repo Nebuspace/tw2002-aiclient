@@ -174,14 +174,20 @@ Ledger rows (illustrative — reborn actor values):
 The reborn actor model above (`{app, human}` live senders; AI author-only) is **tip reality** for
 the write path. Remaining gaps are keying / consumer wiring, not the enum:
 
-- **Ledger live-sender enum — tip closed.** Tip `ledger.LedgerWriter.record_do` requires
-  `actor ∈ VALID_SENDERS` (`app`|`human`); `session.VALID_SENDERS` matches. There is no live `ai`
-  default and no `trainer` synonym on the write path. Legacy `{ai, trainer, human}` vocabulary is
-  archive / old-row caution only — `live_actor_counts` skips unknown/`ai` rows (never invents a
-  third live driver). Old rows written with `actor: "ai"`/`"trainer"` are not migrated in place;
-  a retro pass may map legacy `trainer` → `app` and treat legacy `ai` as authored-decision
-  provenance, not a live-sender count. (Same closed note lives in
-  [coverage-metrics](/engine/coverage-metrics.md).)
+- **Ledger live-sender enum — tip closed, three values.** Tip `session.VALID_SENDERS` is
+  `("app", "human", "dev")`; `ledger.LedgerWriter.record_do` requires `actor ∈ VALID_SENDERS` and
+  matches it exactly. `dev` is not a fourth live-*play* driver — it is the sacrificial-only,
+  AI-agent-development sender authorized by
+  [dev-drive-exception](/doctrine/dev-drive-exception.md), refused at send time by
+  `Session._require_dev_sender_authorized` unless the active profile's `crawl_sacrificial` flag is
+  `True` (checked fresh every call, never cached, never on this module's membership check alone).
+  There is still no live `ai` default and no `trainer` synonym on the write path. Legacy
+  `{ai, trainer, human}` vocabulary is archive / old-row caution only — `live_actor_counts` skips
+  unknown/`ai` rows and does not count `dev` either (never invents a third live-*play* driver). Old
+  rows written with `actor: "ai"`/`"trainer"` are not migrated in place; a retro pass may map
+  legacy `trainer` → `app` and treat legacy `ai` as authored-decision provenance, not a live-sender
+  count. (Same closed note lives in [coverage-metrics](/engine/coverage-metrics.md) — that page
+  still frames the enum as two values; out of this pass's scope.)
 
 - **Ledger world keying — Option A closed (PWO-090 / DECISION-LEDGER-WORLD-ID-STAMP).** The ledger
   remains a single global append-only sink (`state/ledger.jsonl`) — not split per world. Rows carry
