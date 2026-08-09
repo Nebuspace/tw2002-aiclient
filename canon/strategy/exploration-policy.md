@@ -1,7 +1,7 @@
 ---
 type: System
 title: Frontier Exploration Policy & Mechanism
-description: When and how much to explore (appetite, turn budget, density-value interpretation) and the deterministic BFS/frontier planner that writes the world-model — a taught, human-armed behavior that STOPS on any unrecognized sector screen.
+description: When and how much to explore (appetite, turn budget, density-value interpretation), the deterministic BFS/frontier planner (Map-fill family), and the Chain-hunt sibling-exhaust intent that grows the map for maximal trade-loop chain length — taught, human-armed behaviors that STOP on any unrecognized sector screen.
 tags: [strategy, exploration, world-model, bfs, frontier, priority-input, hypothesis, prescriptive, stop-on-unknown]
 timestamp: 2026-07-23T20:20:02Z
 ---
@@ -28,16 +28,19 @@ it never picks a live action over an unrecognized sector screen.
 
 # Schema
 
-## The three explore intents (taught behaviors, TW-14)
+## The four explore intents (taught behaviors, TW-14)
 
-Exploration ships as three distinct opt-in intents, each a taught behavior the human arms
-separately, each respecting a turn budget, each halting on an unrecognized screen. They share the
-one frontier planner underneath but differ in their goal:
+Exploration ships as four distinct opt-in intents, each a taught behavior the human arms
+separately, each respecting a turn budget, each halting on an unrecognized screen. Map-fill,
+Find-StarDock, and Find-Formations share the one BFS/frontier planner underneath (G1) but differ
+in their goal. **Chain-hunt** is a fourth intent with its own sibling-exhaust planner (below) —
+it does **not** reuse Map-fill's global nearest-first frontier pick.
 
 - **Map-fill** — grow the known graph outward from the current sector. Picks the nearest unmapped
   frontier edge (with an ε-explore chance of sampling a farther one) and proposes a single valid
-  adjacent hop toward it. This is the base intent the other two fall back to when their goal is not
-  yet on the map.
+  adjacent hop toward it. This is the base intent Find-StarDock / Find-Formations fall back to when
+  their goal is not yet on the map. It is **not** an adequate chain-hunting strategy: it does not
+  exhaust a port sector's own unmapped siblings before the frontier advances past them.
 - **Find-StarDock** — reach the StarDock. If a StarDock landmark is already recorded in the world
   model, pathfind the shortest known route to it and propose the next hop along that route. If no
   StarDock is known yet, fall back to Map-fill to hunt for it. When the frontier is also exhausted,
@@ -48,9 +51,19 @@ one frontier planner underneath but differ in their goal:
   Routes to the nearest catalogued candidate if one exists, else Map-fills to grow the graph.
   It **locates and routes only** — it never deploys Genesis; that is always a human-confirmed
   one-shot (see [Planet Colonization](/strategy/planet-colonization.md)).
+- **Chain-hunt** — grow the known graph in a **chain-length-maximizing** shape: at a sector with a
+  confirmed port, exhaust that sector's unmapped warp-neighbors (visit → free flyby read → return)
+  before advancing the frontier past any of them; when a neighbor itself has a port, recurse; on a
+  dead end, backtrack to the nearest ancestor port that still has unexhausted neighbors. Explicit
+  tradeoff vs Map-fill: ~**2× hop count** (there-and-back per sibling instead of one-way advance)
+  for guaranteed maximal chain-length discovery in the covered area. See **Chain-hunt mechanism**
+  below. Counterpart relationship to `chains.py` cycle-search is noted in
+  [Trade Loops](/strategy/trade-loops.md) — Chain-hunt does not call into or replace that finder.
 
-The trainer panel cycles the active intent `off → mapfill → stardock → formations → off`. `off` is
-the default: no explore behavior runs until the human arms one.
+The trainer panel cycles the active intent
+`off → mapfill → stardock → formations → chainhunt → off`. `off` is the default: no explore
+behavior runs until the human arms one. (Panel/CLI wiring for `chainhunt` is a follow-on build;
+this concept is the prescriptive target.)
 
 ## The BFS / frontier planner mechanism (G1)
 
@@ -81,6 +94,82 @@ returns the next warp target to *propose* — it emits no keystrokes itself. The
 
 Pathfinding for Find-StarDock / Find-Formations is shortest-path BFS on the same known warp graph.
 Nothing here invents a warp that was never observed or guesses a price.
+
+## Chain-hunt mechanism (sibling-exhaust + ancestor-port backtrack)
+
+Chain-hunt is a **separate taught intent** from Map-fill. It still proposes only valid adjacent
+hops (plan-never-blind-send), still re-validates the screen every cycle (stop-on-unknown), and
+still writes discoveries only through the normal observe/parse path into the
+[World Model](/engine/world-model.md). What changes is **which** frontier work it chooses next.
+
+### Motivation (why Map-fill is not enough)
+
+Map-fill's G1 pick is global nearest-first over the whole frontier. Concrete failure for chain
+hunting (operator walkthrough, 2026-08-09): sector **5** has a port and warps to unmapped **6**,
+**7**, **8**. Map-fill may visit one neighbor and then let the frontier push onward from that
+neighbor without ever returning to exhaust 5's remaining siblings — so a port chain that would
+have been visible by sweeping 5's closed neighbor set is left incomplete. Recovery after a dead
+end falls through to generic exhausted-frontier heuristics (`plan_exhausted_recovery` /
+densest-reachable), which are map-fill shaped and **not** chain-aware. Chain-hunt exists to close
+that gap as net-new strategy canon (G1's description of Map-fill remains accurate to code).
+
+### Sibling-exhaust rule
+
+1. **Anchor on a confirmed-port sector.** While Chain-hunt is armed and the current (or resumed)
+   focus sector has a confirmed port in the world model, treat that sector's **unmapped
+   warp-neighbors** as a closed work set to exhaust **before** treating any farther frontier as
+   the next primary expansion.
+2. **Visit one unmapped sibling at a time.** Propose the adjacent hop from the port sector to one
+   unmapped neighbor; on arrival, read the free flyby / sector screen (port presence/class, warps,
+   threats) into the world model — **no dock required** for the no-port / port-presence decision.
+3. **Return to the port sector.** After the flyby read, the next proposed hop is back to the
+   anchoring port sector (or along the known shortest path back to it if an intervening move was
+   required). That closes the sibling's visit as a there-and-back, not a one-way Map-fill advance.
+4. **Classify the sibling, then continue the set.**
+   - **No port** — that branch is closed. Cheap cost: one round-trip. Resume exhausting remaining
+     unmapped siblings of the same anchor.
+   - **Has a port** — that neighbor becomes the **new chain frontier / new anchor**. Recurse the
+     same exhaust-then-advance rule from there (its own unmapped siblings become the next closed
+     set). The previous anchor remains on an ancestor stack for backtrack.
+5. **Advance only after the closed set is empty.** Only when the current anchor has no remaining
+   unmapped warp-neighbors does Chain-hunt advance the primary focus to the next port frontier
+   produced by step 4 (or backtrack per below).
+
+### Backtrack on dead end
+
+When the current focus sector is **fully exhausted** (all known warp-neighbors mapped) **and** it
+has **no port** (or is otherwise not a viable chain anchor), Chain-hunt **does not** use Map-fill's
+generic exhausted-frontier recovery. It **backtracks to the nearest ancestor port** on the
+Chain-hunt stack that still has unexhausted unmapped neighbors, and resumes sibling-exhaust there.
+If no such ancestor remains and the turn budget / depth cap is not yet spent, the intent may fall
+back to Map-fill only as an explicit last resort to keep the graph growing — never silently
+substitute densest-reachable recovery for chain-aware backtrack while an ancestor port still has
+open siblings.
+
+### Explicit hop-cost tradeoff (~2×)
+
+State this plainly — it is a real turn-budget cost, not an implementation footnote:
+
+- Map-fill pays roughly **1×** hop cost per newly mapped neighbor (one-way advance along the
+  chosen frontier).
+- Chain-hunt pays roughly **2×** hop cost per sibling in the closed set (there **and** back to the
+  port anchor) so every sibling of a confirmed port is observed before the frontier is allowed to
+  abandon that port's neighborhood.
+- The exchange is **guaranteed maximal chain-length discovery in the covered area** (every
+  port-adjacent unmapped edge considered under the exhaust rule) versus Map-fill's cheaper but
+  incomplete neighborhood sweep.
+
+Numeric defaults for **sibling-exhaust depth limit** and **per-run turn-budget cap** are **not**
+fixed here — they are Pending in
+[`canon/DECISIONS.md`](/DECISIONS.md) (`PENDING-CHAIN-HUNT-SIBLING-EXHAUST-DEPTH-TURN-CAP`) and
+must be ruled before the follow-on build WO hard-codes them.
+
+### Runtime invariants (same as every explore intent)
+
+Chain-hunt remains subject to every standing explore invariant: human-armed opt-in, stop-on-unknown
+every cycle, plan-never-blind-send (adjacent legal warps only), locate/catalog/recommend-never-claim,
+and priority-ranks-never-overrides-STOP. It grows the map; it does not execute trade loops, dock for
+commerce, or call into `chains.py`.
 
 ## Explore / exploit appetite — a priority INPUT, not a driver (G2)
 
@@ -252,7 +341,8 @@ Axis 5.
 - design history §16.2 — density-scan value table (flagged as hypothesis in source)
 - design history §22.4 / TW-23 — full-autopilot capstone (re-scoped, DOCS-WIN)
 - source module `explore.py` — TW-14 frontier/BFS planner (Map-fill / Find-StarDock / Find-Formations,
-  recovery policy, adjacent-hop resolution)
+  recovery policy, adjacent-hop resolution); Chain-hunt planner is **canon-first** — not yet in tip
+  `explore.py` (follow-on build WO; do not treat Map-fill pick as Chain-hunt)
 - source module `world_model.py` — TW-06 persisted per-world sector store (G1 write target)
 - source module `autopilot.py` — **archive-only** EV-select / `EXPLORE_BASELINE_EV` (do-not-revive)
 - source module `trade_driver.py` — recorded autonomous chain-runner divergence

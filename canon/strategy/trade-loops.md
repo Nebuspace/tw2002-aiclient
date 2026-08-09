@@ -55,6 +55,14 @@ ordering used by `tw chains` / `cmd_chains` when the operator wants the
 fattest credits-per-turn cycle, even if it is shorter. Both live in
 `chains.py`; this concept owns both rankings.
 
+**Chain-hunt (explore-side counterpart).** The sibling-exhaust
+[Chain-hunt](/strategy/exploration-policy.md#chain-hunt-mechanism-sibling-exhaust--ancestor-port-backtrack)
+explore intent grows the world-model graph in a chain-length-maximizing shape so longer port rings
+are more likely to appear in the hop set this finder ranks; `chains.py` remains the pure
+cycle-search / ranking surface over whatever the world model already holds. Chain-hunt does **not**
+replace, call into, or embed `find_profit_chains` / `rank_chains` — explore writes the map; this
+concept still owns discovery and earn-surface ranking over TradeHop edges.
+
 ## The profit-per-TURN scorer [H1]
 
 Score a loop by **credits-per-turn, not credits-per-trip.** A loop with a smaller net profit but
