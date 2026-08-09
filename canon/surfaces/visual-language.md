@@ -10,14 +10,16 @@ Four surfaces — [The Trainer Cockpit](/surfaces/trainer-cockpit.md),
 [Mode Line & Teach Controls](/surfaces/mode-line-and-teach-controls.md),
 [Spectate & Attach](/surfaces/spectate-and-attach.md), and
 [Entry & Profile Selection](/surfaces/entry-and-profile-selection.md) — render through the *same*
-rendering code paths (`spectate_layout.py` for pure layout, `spectate_app.py` for the curses host,
-`cockpit/draw.py` + `cockpit/liveness.py` for chrome glyphs, `session/terminal.py` for CP437/pyte
-game-byte color translation), so a color, a glyph, or a border weight means the same thing
-everywhere it appears. This concept is that shared dictionary, extracted once so the four surface
-docs never restate it — they instead forward-reference here and specify only their own
-*application* of it (which HUD cell gets which tone, which panel gets which border). If a value
-below and a surface doc's inline restatement of it ever drift, this concept is the single-source
-authority and the surface doc's copy is a stale echo to be corrected.
+tip rendering paths (`tw2002_aiclient/cockpit/` for chrome/layout/tones/fold/viewport,
+`screens.py` for the play-shell host, `session/terminal.py` for CP437/pyte game-byte color
+translation). Archive `spectate_layout.py` / `spectate_app.py` remain **port-source only**
+(`tw spectate` RETIRED — see [Spectate & Attach](/surfaces/spectate-and-attach.md)); do not cite
+them as live tip modules. A color, a glyph, or a border weight means the same thing everywhere it
+appears. This concept is that shared dictionary, extracted once so the four surface docs never
+restate it — they instead forward-reference here and specify only their own *application* of it
+(which HUD cell gets which tone, which panel gets which border). If a value below and a surface
+doc's inline restatement of it ever drift, this concept is the single-source authority and the
+surface doc's copy is a stale echo to be corrected.
 
 Every concrete value below is grounded to the module and, where meaningfully stable, the symbol name
 that defines it. **Rebirth tip (Phases 0–3 CLOSED · Phase 4 CLOSED through `bba53d4` · PWO-060
@@ -47,10 +49,12 @@ Do not read chrome-tones prose as recoloring game cells with the 7-tone semantic
 
 ## Color semantics — the one 7-tone table
 
-A single semantic palette, `_SEMANTIC_COLORS` (`spectate_app.py`), drives every dashboard surface —
-one table, seven meanings, so a color never has to be re-learned per panel. pyte color-names map to
-curses basic-8 via `_PYTE_TO_CURSES_COLOR` (`spectate_app.py`); pyte names ANSI-yellow `"brown"` but
-it renders **yellow** everywhere — a naming quirk of the library, not a design choice.
+A single semantic palette, `_SEMANTIC_COLORS` / `SEMANTIC_COLORS`
+(`tw2002_aiclient/cockpit/tones.py` — tip; archive `spectate_app.py` was the port-source), drives
+every dashboard surface — one table, seven meanings, so a color never has to be re-learned per
+panel. pyte color-names map to curses basic-8 via tip `cockpit/viewport_color.py` (same table the
+archive called `_PYTE_TO_CURSES_COLOR`); pyte names ANSI-yellow `"brown"` but it renders **yellow**
+everywhere — a naming quirk of the library, not a design choice.
 
 | tone | fg / attr | Meaning | Representative uses |
 |---|---|---|---|
@@ -330,10 +334,11 @@ could commit live turns. `y/N` capitalization signals the safe default; a bare E
 
 # Citations
 
-- **Color semantics, mode badges, per-cell game color** — `spectate_app.py` (`_SEMANTIC_COLORS`,
-  `_PYTE_TO_CURSES_COLOR`, `_ColorPairs`, `_tone_attr`, `ANIM_FPS`, `ANIM_INTERVAL_S`,
-  `IDLE_ANIM_INTERVAL_S`, `HEARTBEAT_PERIOD_S`), `spectate_layout.py` (`status_semantic`,
-  `gauge_semantic`, `_MODE_BADGES`, `format_mode_badge`), `terminal.py` (`color_map`).
+- **Color semantics, mode badges, per-cell game color** — tip: `tw2002_aiclient/cockpit/tones.py`
+  (`SEMANTIC_COLORS` / `status_semantic` / `gauge_semantic`), `cockpit/viewport_color.py`,
+  `session/terminal.py` (`color_map`). Archive port-source still: `spectate_app.py`
+  (`_SEMANTIC_COLORS`, `_PYTE_TO_CURSES_COLOR`, `_ColorPairs`, `_tone_attr`, `ANIM_FPS`, …),
+  `spectate_layout.py` (`status_semantic`, `gauge_semantic`, `_MODE_BADGES`, `format_mode_badge`).
 - **Glyphs, box-drawing, two-weight border hierarchy** — tip:
   `tw2002_aiclient/cockpit/draw.py` (`unicode_ok`, `DOUBLE_*`, `THIN_*`),
   `tw2002_aiclient/cockpit/liveness.py` (spinner/heartbeat), `screens.py` (`_glyph_set`);
