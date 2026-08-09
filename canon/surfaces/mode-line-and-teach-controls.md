@@ -324,22 +324,23 @@ band, the STOP banner, and the confirm-gate dialog — as a builder-aimable spec
 and glyph is grounded to a module (or marked `[ASPIRATIONAL]` where it is reborn-intent not-yet-built).
 The color/glyph/border **dictionary** is shared across all four cockpit surfaces; this doc states the
 mode-line-specific slice inline and forward-references the shared concept
-[visual-language](/surfaces/visual-language.md) (a proposed 37th concept — treat as a forward-ref
-until it lands; the vocabulary below is the authoritative statement for this surface in the interim).
+[visual-language](/surfaces/visual-language.md) (authoritative shared vocabulary — tip).
 
 ## Color semantics — the mode indicator, teach overlay, and the one 7-tone table
 
-Every tint on this surface resolves through the single semantic table `_SEMANTIC_COLORS`
-(`spectate_app.py`) — one table, one meaning per tone on every surface. The seven tones:
+Every tint on this surface resolves through the single semantic table `SEMANTIC_COLORS` /
+`_SEMANTIC_COLORS` (`tw2002_aiclient/cockpit/tones.py` — tip; archive `spectate_app.py` port-source)
+— one table, one meaning per tone on every surface. The seven tones:
 `ok` = green/**bold**, `warn` = yellow/**bold** (pyte names it `"brown"` but it renders ANSI-yellow),
 `danger` = red/**bold**, `info` = cyan/non-bold, `gain` = green/**bold**, `loss` = red/**bold**,
 `muted` = terminal-default/non-bold (genuinely uncolored — basic-8 has no grey). **Cyan is chrome,
 never data;** **reverse-video (`A_REVERSE`) is the single "selected / active / badge" signal** across
 the whole UI.
 
-**The mode-indicator colors** (`_MODE_BADGES`, `spectate_layout.py`; drawn reverse-video + tone-tinted
-in `_draw_control_strip`, `spectate_app.py`). The badge is a reverse-video chip so it reads as a chip,
-not text; the tone colors the chip:
+**The mode-indicator colors** (tip `cockpit/control_seat.py` dual chips; archive `_MODE_BADGES` in
+`spectate_layout.py` is port-source). Drawn reverse-video + tone-tinted on the control strip
+(`compose_control_strip_segments` → `screens.py` draw). The badge is a reverse-video chip so it
+reads as a chip, not text; the tone colors the chip:
 
 - **App (autopilot holds the keyboard)** — **green (`ok`)**. Green is "healthy / the taught app is
   covering the known." Tip play shell (PWO-060 · `2ca3154`) ships the unified **`APP`** chip at
@@ -370,14 +371,16 @@ double-line `╔═╗` box is reserved for the live GAME viewport so the eye la
 first. The control strip itself is a single unbordered row (no box) sitting inside the outer
 double-line cyan frame; the **STOP / intervention strip** is likewise an unboxed single row led by
 a bare `!`. The **Trade-Loop-Chains library** is a titled modal that *replaces* the dashboard
-(`_draw_loops_library`, `spectate_app.py`), title drawn at col 2 in the shared cyan-title
+(tip chains/arm under `cockpit/`; archive `_draw_loops_library` in `spectate_app.py` port-source),
+title drawn at col 2 in the shared cyan-title
 convention; its confirm line is an inset row inside that modal. Every glyph has an ASCII twin via
 the `unicode_ok` flag — an 80-col non-UTF-8 / `TW2002_ASCII=1` terminal loses fidelity, never
 information.
 
 ## Spacing, alignment & hierarchy — the mode-line reading order
 
-The control strip lays out strictly **left-to-right** (`compose_control_strip` → `_draw_control_strip`):
+The control strip lays out strictly **left-to-right** (`cockpit/control_seat.compose_control_strip_segments`
+→ `screens.py` draw; archive `compose_control_strip` / `_draw_control_strip` port-source):
 
 ```
 [ APP ]      → 158                         ^A)ode  A)nalyze  R)ecord  T)rigger  L)chains  P panic
@@ -422,14 +425,15 @@ banner's teach line. Their affordance styling:
 
 ## The STOP / escalation banner styling
 
-When autopilot halts, `compose_intervention_strip` (`spectate_layout.py`) emits a single line
-`! <label>; <label>` and `_draw_intervention_strip` (`spectate_app.py`) paints it **warn-tone
-(yellow) and BOLD** (the draw doubles `A_BOLD` on top of the `warn` tone for an unmissable weight),
-one row, **led by a bare `!`**, pinned **directly above the status bar**. The strip is allocated *only*
-when `intervention.needs_attention` is set, and it **claims leftover height first** — before the
-control strip, before the ticker — so a halt always surfaces even as the terminal shrinks
-(`frame_layout`). This is the concrete "calm-until-it-needs-you" mechanism: steady state shows no strip
-at all; a halt muscles a bold-yellow row ahead of everything optional.
+When autopilot halts, tip `cockpit/stopbanner.py` paints the STOP banner from typed intervention
+reason codes (archive `compose_intervention_strip` / `_draw_intervention_strip` in
+`spectate_layout.py` / `spectate_app.py` remain port-source). The banner is **warn-tone (yellow) and
+BOLD**, one row, **led by a bare `!`**, pinned **directly above the status bar**. The strip is
+allocated *only* when intervention needs attention, and it **claims leftover height first** — before
+the control strip, before the ticker — so a halt always surfaces even as the terminal shrinks
+(`cockpit/layout.py::frame_layout`; archive `spectate_layout.frame_layout` port-source). This is the
+concrete "calm-until-it-needs-you" mechanism: steady state shows no strip at all; a halt muscles a
+bold-yellow row ahead of everything optional.
 
 **The reason is a typed code, never free text.** Each label comes from the enumerated catalog —
 `intervention_reason_label()` / `INTERVENTION_REASON_LABELS` (`cockpit/stopbanner.py`) — rendering the
@@ -446,7 +450,8 @@ been taught yet, not a failure, so it wears yellow.
 
 Arming a live run is the one money-path moment, and it is styled to look like one. In the Trade-Loop
 library modal, selecting a chain **arms** a pending action and raises a single confirm line
-(`_draw_loops_library`, `spectate_app.py`):
+(tip chain / arm surfaces under `cockpit/`; archive `_draw_loops_library` in `spectate_app.py` is
+port-source):
 
 ```
 Play "Ferren-Sol" x3 LIVE? y/N        ← danger-tone + reverse-video; a bare Enter does NOT fire
@@ -458,8 +463,8 @@ attr, precisely because it is the only place one keystroke could commit live tur
 out *what* runs and *how many cycles* (`x3`), the `y/N` capitalization signals the safe default is No,
 and **Enter alone must never fire** — only a deliberate `y` commits. This is the −75/−78-turn-scar
 doctrine made visible: the redder-and-reversed styling is the surface saying *this one spends real
-money.* The same warn+reverse treatment marks the idle-prompt "Send…" line (`spectate_app.py`),
-the lighter sibling of the same "this input goes live" cue.
+money.* The same warn+reverse treatment marks the idle-prompt "Send…" line (tip play-shell draw;
+archive `spectate_app.py` port-source), the lighter sibling of the same "this input goes live" cue.
 
 ## Liveness & motion on the strip
 
@@ -491,7 +496,8 @@ events), so the strip breathes without churning the game screen.
 
 ## Responsive fold
 
-The control strip and its chip survive the cockpit fold ladder (`frame_layout`, `spectate_layout.py`).
+The control strip and its chip survive the cockpit fold ladder (`cockpit/layout.py::frame_layout`;
+archive `spectate_layout.frame_layout` port-source).
 In the **`minimal`** tier (≥82 inner cols) there is no side gutter, so the mode line rides the packed
 header strip and the hint band abbreviates — but the tokens are chosen to fit **82 inner cols without
 truncating** (tip bands are length-budgeted to that width; keep the same budget when extending). Height
@@ -602,8 +608,9 @@ The reborn contract above is the target; the current code still carries pre-rebo
 - Tip calm-band / teach tokens — `cockpit/teachband.py`, `cockpit/autonomy_keys.py`,
   `cockpit/reflex_controls.py` (`REFLEX_TOKEN`), `cockpit/chains.py` (`CHAINS_TOKEN`) — see
   **Tip token SSOT** above (`AUDIT-CANON-DRAFT-TEACH-BAND-CROSSREF`).
-- Code modules grounded against: `spectate_app.py` (`_handle_key`, control strip),
-  `spectate_layout.py` (`_MODE_BADGES`, `format_mode_badge`, `compose_control_strip`,
-  `format_autonomy_counts`, `compose_intervention_strip`), `control_lock.py` (the mode state
-  machine + `take_human` immediacy), `interactive_app.py` (`tw attach`, the live keyboard seat),
-  `cockpit/stopbanner.py` (the typed reason-code labels the STOP banner renders).
+- Code modules grounded against — tip: `cockpit/control_seat.py` (dual chips / strip segments),
+  `cockpit/tones.py`, `cockpit/stopbanner.py`, `cockpit/teachband.py`, `cockpit/layout.py`,
+  `screens.py`, `session/control_lock.py`. Archive port-source: `spectate_app.py` (`_handle_key`,
+  control strip draw), `spectate_layout.py` (`_MODE_BADGES`, `format_mode_badge`,
+  `compose_control_strip`, `format_autonomy_counts`, `compose_intervention_strip`),
+  `interactive_app.py` (`tw attach` seat).
