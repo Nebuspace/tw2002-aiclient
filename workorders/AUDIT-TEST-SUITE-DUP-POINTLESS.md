@@ -7,13 +7,16 @@
 
 ---
 
+> **TIP-TRUE (2026-08-09 · after #623/#624):** default collect is **7437** tests across **308** active modules; **2** BANKED `pytest.ini` ignores remain (`tests/test_analyze.py`, `tests/test_crawl_start_protocol.py`). Authoritative live inventory: `canon/testing/test-case-catalog.md`. The metric table below is the **2026-07-25 WO snapshot** (2271/129 · 94/44 filesystem) — historical audit evidence only; do not treat those counts as tip.
+
 ## Exec summary
 
 | Metric | Count | Notes |
 |---|---:|---|
-| Catalog snapshot (OKF) | **2271** cases · **129** modules | 83 active / 1263 · 46 BANKED / 1008 — **stale vs tip** |
-| Tip filesystem now | **94** active `test_*.py` · **44** BANKED ignores | Catalog lag: ≥9 active modules have **no** case file |
-| Examined (this WO) | Catalog inventory + CC hand-overs + ~22 cli/session files + cockpit Layer-A/B pattern + crawl_sacrificial family + banked archive twins | Not a line-by-line re-read of all 2271 |
+| Catalog snapshot (OKF) — **WO-day historical** | **2271** cases · **129** modules | 83 active / 1263 · 46 BANKED / 1008 — **not tip**; see tip-true banner |
+| Tip filesystem — **WO-day historical** | **94** active `test_*.py` · **44** BANKED ignores | Also **not tip** (tip: 308 active collect modules · 2 BANKED ignores) |
+| Tip collect (2026-08-09) | **7437** tests · **308** active modules · **2** BANKED | From `canon/testing/test-case-catalog.md` (#623/#624) |
+| Examined (this WO) | Catalog inventory + CC hand-overs + ~22 cli/session files + cockpit Layer-A/B pattern + crawl_sacrificial family + banked archive twins | Not a line-by-line re-read of all 2271 (WO-day count) |
 | Suspect true DUP (cuttable twins) | **0** | No identical-assertion pairs recommended CUT |
 | Suspect POINTLESS (no teeth) | **0 confirmed** | Several *look* tautological; all CC-proven KEEP or environment-coupled |
 | NEAR-DUP-KEEP | **many** (pattern) + **named rows below** | Layer-A composer vs Layer-B pty · unit vs wire |
@@ -79,7 +82,7 @@ Even if verbose / low-drama / parametrized-looking:
 | Scripted `tw attach --keys <unencodable>` | Unencodable suite uses `keys=None` only | Add cases beside keys-exit suite; preserve empty-keys pin |
 | Attach redaction **failure** path | F6 inject stayed green on `test_attach_redaction` | Extend suite when F6 tip on origin |
 | Login password redaction | BANKED `test_login_redaction` uncollected | Max #3 + REHAB WO |
-| Catalog lag (≥9 active modules) | Filesystem 94 active vs catalog 83 | Docs tip: regenerate/append case files |
+| Catalog lag (WO-day: ≥9 active modules) | WO-day filesystem 94 vs catalog 83; **tip** is 308 active / 2 BANKED with headline counts tip-true in `test-case-catalog.md` — per-module blurbs may still lag | Separate catalog-refresh WO for case-file blurbs |
 
 ---
 
