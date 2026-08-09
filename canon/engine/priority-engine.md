@@ -75,7 +75,7 @@ Starved — `WO-WM-LANDMARKS-WRITE` landed; `world_model.add_landmark` is called
 | 4 | Cost of other ships known | Boolean | 80 | #3 | **Partial (live-bridged)** — writer: `GameDataStats.refresh` loads Layer-B `game_data` ships and merges `ship_catalog` (`[{ship_name, cost}, …]` for `cost > 0`) plus `ship_prices_count` onto status (`game_data_stats.py`); readers: GOALS + FOCUS overlay + priority-engine pre-flight. Still omit-until-load (no invent). |
 | 5 | Cost of cargo-hold upgrades known | Boolean | 75 | #3 | Partial — GOALS gated until dock found; quote via `introspector.parse_cargo_hold_price()` when captured (re-verified 2026-08-08: prior citation `get_cargo_hold_price()` did not exist in tip) |
 | 6 | Obtain fighters (aboard > 0) | Boolean | 73 | #1 (Class-0 at Sol always reachable) | Partial — tip `afford_fighters()` recommend/display (`priority_engine.py`) feeds GOALS labels when unit price is injected; **no** buy EXECUTE (still Planned / Max-GO) |
-| 7 | Cost of fighters known | Boolean | 70 | #1 (Class-0 assumed reachable) | Partial — canon still names `FIGHTER_UNIT_PRICE_CLASS0 = 100` as an **UNVERIFIED hypothesis**; tip Python has **zero** references to that constant (no producer for a numeric price yet) |
+| 7 | Cost of fighters known | Boolean | 70 | #1 (Class-0 assumed reachable) | Partial — canon/`FIGHTER_UNIT_PRICE_CLASS0 = 100` remains an **UNVERIFIED hypothesis**. Tip has **no** constant by that name; explore posture uses a separately named placeholder `FIGHTER_UNIT_PRICE_DEFAULT = 100` (`session/explore_defensive_posture.py`) for routing math only. `afford_fighters` / GOALS still require injected `fighter_unit_price` / `fighter_price_class0` — **no** status producer writes a live Class-0 quote yet |
 | 8 | Purchase additional cargo holds | Boolean | 65 | #5, credits, RT cost | **Partial (EXECUTE live)** — decision logic in `ship_upgrade_decision.py`; confirm-armed buy via `stardock_hold_driver.run_hold_purchase` + `session/stardock_hold.StardockHoldRunner` (not navigation-only; re-verified 2026-08-08) |
 | 9 | Purchase ship with larger holds | Boolean | 60 | #4, loop economics, RT cost | Partial — `ship_upgrade_decision.evaluate_candidate()`/`choose_upgrade()` score holds-only cr/turn (re-verified 2026-08-08: prior citation `_score_upgrade()` did not exist in tip); live catalog/loop inputs missing; travel one-way only today |
 | 10 | Locate special formation for planet placement | Range | 55 | map exploration | Partial — `formations.py` detects dead-ends/bubbles/one-ways/warp-sinks + `genesis_candidates`; no deploy |
@@ -270,7 +270,9 @@ gate this row.
 recommend-only `FighterAffordability` / `afford_fighters(...)` in `priority_engine.py`. Unit price
 is **injected** (status `fighter_unit_price` / `fighter_price_class0`, or caller kwarg) — tip does
 **not** define a `FIGHTER_UNIT_PRICE_CLASS0` constant that pretends the community hypothesis is
-measured. What ships today:
+measured, and `afford_fighters` never falls back to a default. (Explore defensive posture keeps a
+separately named `FIGHTER_UNIT_PRICE_DEFAULT = 100` for dealer-detour *routing* estimates only —
+not a GOALS/FOCUS price producer.) What ships today:
 
 - GOALS (`cockpit/goals.py`) paints `fighters_aboard`; when count is zero it uses an explicit
   `fighter_buy_status` override if present, otherwise the short label from `afford_fighters`
@@ -334,9 +336,10 @@ or archive history differs, the gap is recorded here — never silently erased:
 
 6. **Fighter buy EXECUTE remains canon-ahead of tip.** Recommend-only `afford_fighters()` shipped
    (`WO-BUILD-FIGHTER-AFFORDABILITY-DECISION-ENGINE`); tip still has **no**
-   `FIGHTER_UNIT_PRICE_CLASS0` constant and **no** Class-0 purchase driver. Live price capture +
-   Max-gated buy EXECUTE stay separate (`WO-BUILD-FIGHTER-CLASS0-LIVE-PRICE-CAPTURE` /
-   `AUDIT-BUILD-FIGHTER-PURCHASE-EXECUTE`).
+   `FIGHTER_UNIT_PRICE_CLASS0` constant, **no** status writer for a live Class-0 unit quote, and
+   **no** Class-0 purchase driver. The explore-only `FIGHTER_UNIT_PRICE_DEFAULT` placeholder must
+   not be read as closing this gap. Live price capture + Max-gated buy EXECUTE stay separate
+   (`WO-BUILD-FIGHTER-CLASS0-LIVE-PRICE-CAPTURE` / `AUDIT-BUILD-FIGHTER-PURCHASE-EXECUTE`).
 
 # Citations
 
