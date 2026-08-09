@@ -256,3 +256,72 @@ def test_unknown_turns_halts_without_invoking_driver(monkeypatch):
     assert report.outcome == "halted"
     assert report.reason == "turns_unknown"
     assert report.sends_issued == 0
+
+
+def test_start_refuses_bounded_repeat_without_sacrificial(monkeypatch):
+    chain = _chain()
+    plan = plan_from_chain("world-a", chain)
+    monkeypatch.setattr(
+        trade_chain.chain_search,
+        "recompute",
+        lambda *a, **k: _discovered(chain),
+    )
+    monkeypatch.setattr(
+        trade_chain, "is_crawl_sacrificial", lambda _profile: False
+    )
+    session = _Session()
+    session.auto_login_profile = "real_player"
+    runner = trade_chain.TradeChainRunner(session, ControlLock())
+    with pytest.raises(
+        trade_chain.TradeChainRefused, match="bounded_repeat_requires_sacrificial"
+    ):
+        runner.start("world-a", plan.fingerprint, pass_count=3)
+    assert runner.snapshot().running is False
+
+
+def test_bounded_repeat_rearms_when_sacrificial(monkeypatch):
+    chain = _chain()
+    plan = plan_from_chain("world-a", chain)
+    monkeypatch.setattr(
+        trade_chain.chain_search,
+        "recompute",
+        lambda *a, **k: _discovered(chain),
+    )
+    monkeypatch.setattr(
+        trade_chain, "is_crawl_sacrificial", lambda _profile: True
+    )
+    calls = {"n": 0}
+
+    def _run(_session, resolved, **kwargs):
+        calls["n"] += 1
+        return ChainRunResult(
+            completed=True,
+            hops_completed=2,
+            steps=4,
+            credits_delta=10,
+            stop_reason="completed",
+        )
+
+    monkeypatch.setattr(trade_chain, "run_chain", _run)
+    from tw2002_aiclient.session.hud_tracking import ProfitSnapshot
+    from tw2002_aiclient.session.state_parser import CreditsSnapshot
+
+    session = _Session()
+    session.auto_login_profile = "scout_academy"
+    # Re-arm gates need fresh X5 / profit snapshots (fail-closed otherwise).
+    session.credits_snapshot = lambda: CreditsSnapshot(
+        outcome=OUTCOME_READ, balance=50_000, age_s=0.0
+    )
+    session.profit_snapshot = lambda: ProfitSnapshot(
+        outcome=OUTCOME_READ, profit=0, age_s=0.0
+    )
+    runner = trade_chain.TradeChainRunner(session, ControlLock())
+    snap = runner.start("world-a", plan.fingerprint, pass_count=3)
+    assert snap.running is True
+    runner.stop()
+    finished = runner.snapshot()
+    assert finished.running is False
+    assert calls["n"] == 3
+    assert finished.report.passes_completed == 3
+    assert finished.report.pass_count == 3
+    assert finished.report.reason == "pass_count_ceiling"

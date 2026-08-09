@@ -1234,6 +1234,12 @@ def cmd_chain_start(args):
         "cash_floor": int(args.cash_floor),
         "turn_reserve": int(args.turn_reserve),
     }
+    # WO-BUILD-BOUNDED-REPEAT-TRADE-CHAIN-DRIVER: expose protocol fields the
+    # runner already accepted (profit_target) plus pass_count override.
+    if getattr(args, "profit_target", None) is not None:
+        payload["profit_target"] = int(args.profit_target)
+    if getattr(args, "pass_count", None) is not None:
+        payload["pass_count"] = int(args.pass_count)
     resp = send_request("trade_chain_start", payload, run_dir=run_dir)
     print_response(resp, args)
     return 0 if resp.get("ok") else 1
@@ -2171,6 +2177,7 @@ def build_parser() -> argparse.ArgumentParser:
     # name world_id + fingerprint (no auto-pick).
     from tw2002_aiclient.session.trade_chain import (
         DEFAULT_CASH_FLOOR as _CHAIN_CASH_FLOOR,
+        DEFAULT_PASS_COUNT as _CHAIN_PASS_COUNT,
         DEFAULT_TURN_RESERVE as _CHAIN_TURN_RESERVE,
     )
 
@@ -2214,6 +2221,28 @@ def build_parser() -> argparse.ArgumentParser:
         dest="turn_reserve",
         metavar="N",
         help=f"keep at least this many turns (default {_CHAIN_TURN_RESERVE})",
+    )
+    sp.add_argument(
+        "--profit-target",
+        type=int,
+        default=None,
+        dest="profit_target",
+        metavar="N",
+        help="halt when session profit reaches this credit delta (optional)",
+    )
+    sp.add_argument(
+        "--pass-count",
+        type=int,
+        nargs="?",
+        const=_CHAIN_PASS_COUNT,
+        default=None,
+        dest="pass_count",
+        metavar="N",
+        help=(
+            "sacrificial bounded-repeat ceiling "
+            f"(omit flag = one pass; bare flag = {_CHAIN_PASS_COUNT}; "
+            "explicit N overrides)"
+        ),
     )
     sp.add_argument("--run-dir", default=None, metavar="PATH", dest="run_dir",
                     help="daemon run directory override")

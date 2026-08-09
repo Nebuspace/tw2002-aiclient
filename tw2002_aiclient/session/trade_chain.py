@@ -10,15 +10,30 @@ from typing import Optional
 from .. import chain_search
 from ..explore import known_graph, path_to_sector
 from ..trade_chain_plan import plan_from_chain, resolve_exact_chain
+from ..bounded_repeat_trade_chain_driver import (
+    DEFAULT_MAX_PASSES,
+    clamp_pass_count,
+    run_bounded_repeat,
+)
 from ..trade_driver import ChainRunResult, run_chain
 from .control_lock import ControlModeConflict
+from .credentials import is_crawl_sacrificial
 from .state_parser import OUTCOME_READ
 
 ARGS_TRADE_CHAIN_START = frozenset(
-    {"world_id", "fingerprint", "cash_floor", "turn_reserve", "profit_target"}
+    {
+        "world_id",
+        "fingerprint",
+        "cash_floor",
+        "turn_reserve",
+        "profit_target",
+        "pass_count",
+    }
 )
 DEFAULT_CASH_FLOOR = 1_000
 DEFAULT_TURN_RESERVE = 10
+# Re-export for CLI (bounded-repeat ceiling default).
+DEFAULT_PASS_COUNT = DEFAULT_MAX_PASSES
 DEFAULT_STATE_STALE_MS = 60_000
 STOP_JOIN_TIMEOUT_S = 5.0
 OUTCOME_COMPLETED = "completed"
@@ -97,12 +112,14 @@ class TradeRunReport:
     turn_reserve: int
     started_at: str
     profit_target: Optional[int] = None
+    pass_count: int = 1
     outcome: Optional[str] = None
     reason: Optional[str] = None
     hops_completed: Optional[int] = None
     hops_total: int = 0
     sends_issued: Optional[int] = None
     credits_delta: Optional[int] = None
+    passes_completed: Optional[int] = None
     stop_requested: bool = False
     error: Optional[str] = None
     finished_at: Optional[str] = None
@@ -138,6 +155,7 @@ def run_wire(snapshot: TradeSnapshot) -> dict:
         "cash_floor": report.cash_floor,
         "turn_reserve": report.turn_reserve,
         "profit_target": report.profit_target,
+        "pass_count": report.pass_count,
         "started_at": report.started_at,
         "hops_total": report.hops_total,
         "stop_requested": report.stop_requested,
@@ -148,6 +166,7 @@ def run_wire(snapshot: TradeSnapshot) -> dict:
         "hops_completed",
         "sends_issued",
         "credits_delta",
+        "passes_completed",
         "error",
         "finished_at",
     ):
@@ -195,6 +214,7 @@ class TradeChainRunner:
         cash_floor: int = DEFAULT_CASH_FLOOR,
         turn_reserve: int = DEFAULT_TURN_RESERVE,
         profit_target: Optional[int] = None,
+        pass_count: Optional[int] = None,
     ) -> TradeSnapshot:
         if not isinstance(world_id, str) or not world_id.strip():
             raise TradeChainRefused("invalid_world_id")
@@ -216,6 +236,20 @@ class TradeChainRunner:
             isinstance(profit_target, bool) or not isinstance(profit_target, int)
         ):
             raise TradeChainRefused("invalid_profit_target")
+        effective_passes = 1
+        if pass_count is not None:
+            try:
+                effective_passes = clamp_pass_count(pass_count)
+            except ValueError:
+                raise TradeChainRefused("invalid_pass_count") from None
+        # Bounded-repeat (pass_count > 1) is sacrificial-only — never arm on
+        # a real player account (Max GO 2026-08-09 for this capability).
+        if effective_passes > 1:
+            profile = getattr(self._session, "auto_login_profile", None)
+            if not isinstance(profile, str) or not profile or not is_crawl_sacrificial(
+                profile
+            ):
+                raise TradeChainRefused("bounded_repeat_requires_sacrificial")
 
         try:
             # Map growth made the default 100k DFS budget return 0 cycles while
@@ -257,6 +291,7 @@ class TradeChainRunner:
             cash_floor=cash_floor,
             turn_reserve=turn_reserve,
             profit_target=profit_target,
+            pass_count=effective_passes,
             started_at=_utc_now(),
             hops_total=plan.hops,
         )
@@ -388,18 +423,33 @@ class TradeChainRunner:
                     turn_reserve=report.turn_reserve,
                     profit_target=report.profit_target,
                 )
-                result = run_chain(
+                bounded = run_bounded_repeat(
                     self._session,
                     chain,
                     world_id=report.world_id,
-                    turns_left=turns_left,
+                    turns_left_fn=self._turns_left,
                     caps=caps,
                     should_abort=stop.is_set,
                     is_armed=lambda: (
                         not stop.is_set() and _lock_held(self._control_lock)
                     ),
+                    max_passes=report.pass_count,
                     state_dir=self._state_dir,
                     on_progress=_progress,
+                    run_chain_fn=run_chain,
+                    credits_stale_ms=DEFAULT_STATE_STALE_MS,
+                )
+                # Adapt aggregate into ChainRunResult shape for existing finish path.
+                result = ChainRunResult(
+                    completed=bounded.completed,
+                    hops_completed=bounded.hops_completed,
+                    steps=bounded.steps,
+                    credits_delta=bounded.credits_delta,
+                    stop_reason=bounded.stop_reason,
+                )
+                # Stash passes_completed on the report via closure after finish.
+                report = replace(
+                    report, passes_completed=bounded.passes_completed
                 )
         except Exception as exc:  # noqa: BLE001
             error = type(exc).__name__
