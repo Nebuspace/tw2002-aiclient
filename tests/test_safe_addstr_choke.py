@@ -39,6 +39,7 @@ import pytest
 
 from tw2002_aiclient import screens
 from tw2002_aiclient.cockpit import draw as cockpit_draw
+from tw2002_aiclient.cockpit import strip as cockpit_strip
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -168,7 +169,29 @@ def _load_prefix_screens_module(tmp_path: Path):
     package-relative ``from .x import y``), so no ``__package__`` shim is
     needed -- the blob's imports resolve against the real installed
     siblings, same as the memory note's relative-import wrinkle achieves for
-    packages that DO need one."""
+    packages that DO need one.
+
+    The pinned blob still imports the retired
+    ``compose_profile_strip_from_row`` helper at module load time even though
+    these choke tests only exercise ``_safe_addstr``. Stub that symbol on
+    the live ``strip`` module for the duration of the load so the blob can
+    import without reviving product dead code."""
+    if not hasattr(cockpit_strip, "compose_profile_strip_from_row"):
+
+        def _legacy_compose_profile_strip_from_row(
+            row: object, *, width: int, unicode_ok: bool = True
+        ) -> str:
+            host = getattr(row, "host", None) or getattr(row, "server", None)
+            return cockpit_strip.compose_profile_strip(
+                host=host,
+                game_letter=getattr(row, "game_letter", None),
+                handle=getattr(row, "handle", None),
+                width=width,
+                unicode_ok=unicode_ok,
+            )
+
+        cockpit_strip.compose_profile_strip_from_row = _legacy_compose_profile_strip_from_row
+
     blob = subprocess.run(
         ["git", "show", f"{_PRE_FIX_TIP}:tw2002_aiclient/screens.py"],
         cwd=REPO_ROOT,

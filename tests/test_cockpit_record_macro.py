@@ -124,8 +124,10 @@ def test_record_session_starts_inactive() -> None:
     assert RecordSession().active is False
 
 
-def test_record_session_step_count_starts_zero() -> None:
-    assert RecordSession().step_count == 0
+def test_record_session_has_no_steps_until_add(tmp_path: Path) -> None:
+    s = RecordSession()
+    s.start("ore-run", _ANCHOR_ROWS)
+    assert s.save(skills_dir=str(tmp_path)) is None
 
 
 def test_start_activates_session() -> None:
@@ -134,53 +136,58 @@ def test_start_activates_session() -> None:
     assert s.active is True
 
 
-def test_start_resets_previous_steps() -> None:
+def test_start_resets_previous_steps(tmp_path: Path) -> None:
     s = RecordSession()
     s.start("first", _ANCHOR_ROWS)
     s.add_step("P", _PORT_ROWS)
-    assert s.step_count == 1
     s.start("second", _ANCHOR_ROWS)
-    assert s.step_count == 0
+    s.add_step("Y", _ANCHOR_ROWS2)
+    result = s.save(skills_dir=str(tmp_path))
+    assert result is not None
+    assert result.steps == 1
 
 
-def test_add_step_increments_step_count() -> None:
+def test_add_step_accumulates_steps_until_save(tmp_path: Path) -> None:
     s = RecordSession()
     s.start("ore-run", _ANCHOR_ROWS)
     s.add_step("P", _PORT_ROWS)
-    assert s.step_count == 1
     s.add_step("Y", _ANCHOR_ROWS2)
-    assert s.step_count == 2
+    result = s.save(skills_dir=str(tmp_path))
+    assert result is not None
+    assert result.steps == 2
 
 
 def test_add_step_ignored_when_not_active() -> None:
     s = RecordSession()
     s.add_step("P", _PORT_ROWS)  # not active
-    assert s.step_count == 0
+    assert s.save() is None
 
 
-def test_add_step_ignored_for_non_str_keystrokes() -> None:
+def test_add_step_ignored_for_non_str_keystrokes(tmp_path: Path) -> None:
     s = RecordSession()
     s.start("ore-run", _ANCHOR_ROWS)
     for bad in (None, 0, [], b"bytes", object()):
         s.add_step(bad, _ANCHOR_ROWS2)
-    assert s.step_count == 0
+    assert s.save(skills_dir=str(tmp_path)) is None
 
 
-def test_add_step_ignored_for_non_list_rows() -> None:
+def test_add_step_ignored_for_non_list_rows(tmp_path: Path) -> None:
     s = RecordSession()
     s.start("ore-run", _ANCHOR_ROWS)
     for bad in (None, "string", 0, object()):
         s.add_step("P", bad)
-    assert s.step_count == 0
+    assert s.save(skills_dir=str(tmp_path)) is None
 
 
-def test_cancel_deactivates_and_clears() -> None:
+def test_cancel_deactivates_and_clears(tmp_path: Path) -> None:
     s = RecordSession()
     s.start("ore-run", _ANCHOR_ROWS)
     s.add_step("P", _PORT_ROWS)
     s.cancel()
     assert s.active is False
-    assert s.step_count == 0
+    assert s.save() is None
+    s.start("again", _ANCHOR_ROWS)
+    assert s.save(skills_dir=str(tmp_path)) is None
 
 
 def test_save_on_inactive_session_returns_none() -> None:
