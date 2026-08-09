@@ -1,6 +1,8 @@
 # WO-13 — Mode line App/Human (extend)
 > ⚠️ **LEGACY-SURFACE — non-executable.** Superseded under greenfield rebirth (2026-07-23) by `ULTRACODE-WO-INVENTORY.md` (master list); its Proof paths assume the pre-archive root and will fail. Retained for reference — see the inventory §5 current→proposed mapping for the replacement PWO(s). Do not execute.
 
+> **Tip honesty (2026-08-09):** ops `./tw spectate` is **RETIRED / WONTBUILD** (Max · rebirth). Accept/Proof that require parity with or running `./tw spectate` are tip-false — live observation is in-cockpit Spectate ([Trainer Cockpit](../canon/surfaces/trainer-cockpit.md) · PWO-055) plus `tw watch`. Do not invent the ops verb.
+
 **Goal:** Replace legacy `ai_pilot` mode strings with reborn **App / Human** actor badge on play control strip.
 
 **Scope:** `tw2002_aiclient/adapters.py` (`compose_play_panels` mode field) · `screens.py` control strip · map from `tw status` control mode
@@ -11,7 +13,7 @@
 - Mode badge reads `App` when trainer/autopilot holds lock and `Human` after attach / human control
 - No user-visible "AI pilot" or third mode slot
 - Autopilot ON/OFF badge remains separate from actor badge (Trainer toggle ≠ actor — see README)
-- Spectate attach-only sessions unchanged (`./tw spectate` ops path)
+- Read-only observation sessions unchanged via in-cockpit Spectate / `tw watch` (ops `./tw spectate` RETIRED — not an Accept path)
 
 **Proof (TTY):**
 ```bash
