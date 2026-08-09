@@ -62,7 +62,7 @@
 
 ### PWO-053 — Viewport color parity (HARDEN) — **DONE 2026-07-25** (impl-claudecode-aiclient · tip `eb59274` — one-lock `render_with_color` on bare `build_response`; `draw_runs`; process-global `_SharedPairs (fg,bg)`; pair exhaustion → A_NORMAL)
 - **Depends-on:** 052
-- **Accept:** Per-cell fg/bg/bold from `terminal.color_map()` (or equivalent) matches ops spectate contract / visual-language "server CP437 palette"; pair exhaustion degrades without crash.
+- **Accept:** Per-cell fg/bg/bold from `terminal.color_map()` (or equivalent) matches tip GAME viewport / visual-language "server CP437 palette" (ops `./tw spectate` RETIRED — not an Accept parity path); pair exhaustion degrades without crash.
 - **Proof:** Layer-A — color_map fixture → attr pairs. Layer-B — pty cell `.fg`/`.bold` vs fixture (not ANSI-regex).
 - **Hazards:** Semantic 7-tone table is **chrome only** — never recolor game cells with `ok`/`danger`.
 
