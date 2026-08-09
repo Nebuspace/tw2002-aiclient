@@ -34,6 +34,7 @@ single append-only JSONL sink. The semantic shape of a row:
 | `settled_class` | The classification of the settled screen the send produced. |
 | `screen_delta` | A compact human-readable summary of what changed on screen — a line-level diff (`+a/-b/~c lines`), not a full grid dump, so a row stays greppable by eye. (Code field: `screen_delta_summary`.) |
 | `reward` | The outcome delta: `{d_credits, d_turns, d_cargo}`, each computed as post − pre and present only when both sides carried the underlying field. `d_turns` is normally ≤ 0 (turns are spent); a pattern's turn *cost* is `-d_turns`. |
+| `world_id` | Optional per-world slug when the session can form a profile-derived identity (see [world-identity](/engine/world-identity.md)). Omitted when unknown — never invent a slug. Lets retro / candidate-mining filter rows without splitting the JSONL file. |
 
 Two omission conventions are load-bearing and shared across the row: **a missing key means
 "unknown," never zero.** A `reward` field is absent when either state lacked its input; an older row
@@ -182,13 +183,15 @@ the write path. Remaining gaps are keying / consumer wiring, not the enum:
   provenance, not a live-sender count. (Same closed note lives in
   [coverage-metrics](/engine/coverage-metrics.md).)
 
-- **The ledger is a single global sink (`state/ledger.jsonl`), not per-world.** Rows carry
-  `session_id` (so a retro can slice by session) but not a world slug, so a clean per-world slice
-  requires correlating sessions to worlds out of band. The per-world keying invariant
-  (see [world-identity](/engine/world-identity.md)) prescribes a world-scoped view; whether that is
-  a per-world ledger path or a world-stamped row that mining filters is an implementation choice this
-  concept and candidate-mining should settle. Recorded here as a keying divergence, not a defect in
-  the row shape itself.
+- **Ledger world keying — Option A closed (PWO-090 / DECISION-LEDGER-WORLD-ID-STAMP).** The ledger
+  remains a single global append-only sink (`state/ledger.jsonl`) — not split per world. Rows carry
+  `session_id` for session-scoped retro. New rows may also carry an optional `world_id` stamp when
+  the dispatch path can form a profile-derived identity; `LedgerWriter.record_do(..., world_id=)`
+  writes it, and `read_entries(..., world_id=)` returns only matching stamped rows (unstamped
+  legacy rows stay on disk and are excluded from filtered reads). Never invent a slug; omit when
+  unknown. A per-world ledger *path* (Option B) remains held — not required for world-scoped retro
+  once stamps are present on new traffic. Same closed note lives in
+  [world-identity](/engine/world-identity.md) § Code divergence.
 
 - **The `intent` field is carried; `interrupted_by_human` is consumed by the
   post-session report.** `record_do()` writes optional `intent` and
