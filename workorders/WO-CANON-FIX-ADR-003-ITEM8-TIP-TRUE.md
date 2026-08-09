@@ -1,6 +1,6 @@
 # WO-CANON-FIX-ADR-003-ITEM8-TIP-TRUE
 
-**Status:** IN FLIGHT (impl-aiclient-cursor)
+**Status:** DONE — PR #643 open (docs tip-true)
 **Answers:** queue `WO-CLEANUP-ADR-003-RESIDUAL-ITEMS-7-8-TRACKING-WO` tip-true follow-through
 after bounded-repeat shipped.
 
