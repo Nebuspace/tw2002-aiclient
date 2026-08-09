@@ -36,8 +36,8 @@ Three carve-outs to the one-shot shape, all deliberate:
   they work with the daemon stopped. **LIVE today:** `log`/`trail`/`report` (ledger),
   `loops`/`menumap`/`pairs`/`chains`/`record`/`teach`/`skill`/`reflex`/`rule` (stores),
   `servers`/`probe` (catalog), `players` (rotation metadata), `mine`/`patterns` (candidate mining),
-  `coach`, `port-floor`, `planet-colonization`.
-  **TARGET (not a `tw` subparser yet):** `frames`.
+  `coach`, `port-floor`, `planet-colonization`, `frames` (post-mortem settle frames under
+  `state/frames/` — daemon write via `FrameRecorder`; CLI read path filesystem-only).
   `probe` opens its own throwaway connections to *catalog* endpoints, never the live game session.
 - **Session-establishing verbs** (`start`, `ensure`) may spawn the daemon before the round trip.
 
@@ -243,10 +243,10 @@ see [Macros](/engine/macros.md)'s Findings for the mirrored note.
 
 **NOT a `tw` CLI verb on tip (HOLD / later / retired — do not document as runnable):**
 `spectate` (**RETIRED / WONTBUILD** — Max; in-cockpit Spectate LIVE via PWO-055),
-`start` (ensure covers spawn), `frames`, `replay`,
+`start` (ensure covers spawn), `replay`,
 `play`/`haggle`/`autopilot`/`crawl`/`autoloop` (shell), `aiclient` as a separate curses
 product entry (product is `./tw2002-aiclient`). See the LIVE list above for the tip-true set
-(`chain`, `coach`, `players`, `port-floor`, `planet-colonization`, `teach`/`skill`, …).
+(`chain`, `coach`, `players`, `port-floor`, `planet-colonization`, `teach`/`skill`, `frames`, …).
 
 **WIRE-ONLY (a daemon protocol verb exists; no `tw` CLI subparser wraps it — not runnable from a
 shell today, only over the daemon's own socket protocol):**

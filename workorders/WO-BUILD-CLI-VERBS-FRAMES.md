@@ -1,6 +1,6 @@
 # WO-BUILD-CLI-VERBS-FRAMES
 
-**Status:** IN FLIGHT (impl-aiclient-cursor)
+**Status:** DONE — PR #642 merged (`eb8129f`); residual cli-verbs honesty closed via WO-BUILD-CLI-VERBS-FRAMES-TRACKING
 **Priority:** MED
 **Depends-on:** WO-BUILD-CLI-VERBS-FRAMES-TRACKING (tracking Accept satisfied)
 
