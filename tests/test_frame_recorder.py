@@ -116,7 +116,7 @@ def test_diff_shows_line_delta():
     assert any("How many fighters" in line for line in delta)
 
 
-def test_secret_sent_input_redacted(tmp_path):
+def test_secret_sent_input_never_persisted(tmp_path):
     session = _FakeSession(["Password? "])
     rec = FrameRecorder("sec_sess", state_dir=tmp_path)
     session.frame_recorder = rec
@@ -124,9 +124,8 @@ def test_secret_sent_input_redacted(tmp_path):
     session.last_sent_secret = True
     protocol.build_response(session)
     frames = read_frames("sec_sess", state_dir=tmp_path)
-    assert frames[0]["sent_input"] == "<redacted>"
+    assert "sent_input" not in frames[0]
     assert frames[0]["was_secret"] is True
-    assert "sent_input_secret" not in frames[0]
     # Raw credential must not appear anywhere in the on-disk JSONL bytes.
     blob = (tmp_path / "frames" / "sec_sess.jsonl").read_text(encoding="utf-8")
     assert "hunter2" not in blob
@@ -143,12 +142,13 @@ def test_password_prompt_redacts_even_without_secret_flag(tmp_path):
     protocol.build_response(session)
     frames = read_frames("pw_prompt", state_dir=tmp_path)
     assert frames[0]["was_secret"] is True
-    assert frames[0]["sent_input"] == "<redacted>"
+    assert "sent_input" not in frames[0]
     blob = (tmp_path / "frames" / "pw_prompt.jsonl").read_text(encoding="utf-8")
     assert "hunter2" not in blob
 
 
-def test_non_secret_sent_input_preserved(tmp_path):
+def test_non_secret_omits_sent_input(tmp_path):
+    """Keystrokes are never mirrored to JSONL — only was_secret honesty."""
     session = _FakeSession(["Command [TL=40]:"])
     rec = FrameRecorder("plain_sess", state_dir=tmp_path)
     session.frame_recorder = rec
@@ -157,7 +157,9 @@ def test_non_secret_sent_input_preserved(tmp_path):
     protocol.build_response(session)
     frames = read_frames("plain_sess", state_dir=tmp_path)
     assert frames[0]["was_secret"] is False
-    assert frames[0]["sent_input"] == "D"
+    assert "sent_input" not in frames[0]
+    blob = (tmp_path / "frames" / "plain_sess.jsonl").read_text(encoding="utf-8")
+    assert '"sent_input"' not in blob
 
 
 def test_no_recorder_still_ok():

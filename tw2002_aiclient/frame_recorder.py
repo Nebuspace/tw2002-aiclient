@@ -6,9 +6,10 @@ Every settled ``build_response()`` can append one NDJSON object under
 or watch coalesces intermediate screens).
 
 Read path is pure filesystem (``tw frames``) — no daemon required for
-closed sessions. Secret inputs never hit disk as plaintext: ``sent_input`` becomes
-``"<redacted>"`` (ledger vocabulary) and ``was_secret`` is a boolean honesty
-flag — raw password bytes are never written to ``state/frames/*.jsonl``.
+closed sessions. Keystroke text is never persisted: frames store ``was_secret`` (boolean)
+only — never ``session.last_sent``. On secret/password-shaped settles the
+``prompt`` field is the ledger ``"<redacted>"`` placeholder; ``sent_input``
+is always omitted from the JSONL object.
 
 Ported from archive ``twclient/frame_recorder.py`` (WO-FRAMES-0) into the
 reborn ``tw2002_aiclient`` tree.
@@ -215,21 +216,16 @@ class FrameRecorder:
             raw = list(cropped_rows or [])
         cropped = list(cropped_rows) if cropped_rows is not None else raw
         prompt_line = prompt if prompt is not None else last_nonblank_line(raw)
-        # Honesty flag only — never persist the credential (or a variable that
-        # CodeQL can taint-track as clear-text secret storage).
+        # Honesty flag only — never read session.last_sent into any value that
+        # is written to JSONL (CodeQL py/clear-text-storage-sensitive-data:
+        # conditional REDACTED is not a recognized sanitizer).
         was_secret = bool(getattr(session, "last_sent_secret", False)) or bool(
             _PASSWORD_PROMPT_RE.search(prompt_line or "")
         )
-        raw_sent = getattr(session, "last_sent", None)
         if was_secret:
-            # Session normally already stores REDACTED in last_sent for secret
-            # sends; still force the placeholder so FakeSession / fail-paths
-            # cannot leak password bytes into JSONL.
-            sent_input = None if raw_sent is None else REDACTED
             # Match ledger: password-shaped prompts are redacted on disk too.
+            # Use the untainted REDACTED constant — do not flow prompt_line.
             prompt_line = REDACTED
-        else:
-            sent_input = raw_sent
         with self._lock:
             self._seq += 1
             seq = self._seq
@@ -243,7 +239,6 @@ class FrameRecorder:
                 "settled_reason": settled_reason,
                 "classification": classification,
                 "prompt": prompt_line,
-                "sent_input": sent_input,
                 "was_secret": was_secret,
                 "cols": self.cols,
                 "rows": self.rows,
