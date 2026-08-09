@@ -70,6 +70,8 @@ DEAD_END_COUNT_KEY = "dead_end_count"
 FORMATIONS_COUNT_KEY = "formations_count"
 GENESIS_COUNT_KEY = "genesis_count"
 FORMATIONS_PANEL_KEY = "formations_panel"
+HOPS_TO_STARDOCK_KEY = "hops_to_stardock"
+HOPS_RETURN_TO_WORK_KEY = "hops_return_to_work"
 
 
 def _sector_from_status(status: object) -> int | None:
@@ -107,6 +109,10 @@ class WorldStats:
         "_genesis_count",
         "_formations_panel",
         "_formations_seen",
+        "_hops_to_stardock",
+        "_hops_to_stardock_seen",
+        "_hops_return_to_work",
+        "_hops_return_seen",
     )
 
     def __init__(self) -> None:
@@ -121,6 +127,10 @@ class WorldStats:
         self._genesis_count: int | None = None
         self._formations_panel: dict | None = None
         self._formations_seen = False
+        self._hops_to_stardock: int | None = None
+        self._hops_to_stardock_seen = False
+        self._hops_return_to_work: int | None = None
+        self._hops_return_seen = False
 
     def refresh(
         self,
@@ -128,6 +138,7 @@ class WorldStats:
         *,
         status: object = None,
         state_dir: object = None,
+        work_sector: object = None,
     ) -> None:
         """Re-read world-model scalars. Never raises.
 
@@ -154,6 +165,66 @@ class WorldStats:
         self._refresh_dead_ends(world_id, state_dir=state_dir)
         if status is not None:
             self._refresh_has_port(world_id, status, state_dir=state_dir)
+        self._refresh_route_hops(
+            world_id, status=status, work_sector=work_sector, state_dir=state_dir
+        )
+
+    def _refresh_route_hops(
+        self,
+        world_id: object,
+        *,
+        status: object = None,
+        work_sector: object = None,
+        state_dir: object = None,
+    ) -> None:
+        """Cache StarDock RT hop counts via ``compute_return_path`` (off-draw).
+
+        ``hops_to_stardock``: current HUD sector → nearest StarDock landmark.
+        ``hops_return_to_work``: StarDock → ``work_sector`` (priced-chain home).
+        Missing graph / landmark / sectors → leave prior cache (or unseen).
+        """
+        if not isinstance(world_id, str) or not world_id:
+            return
+        try:
+            from tw2002_aiclient.explore import known_graph
+            from tw2002_aiclient.priority_engine import (
+                compute_return_path,
+                hops_of_path,
+            )
+            from tw2002_aiclient.session.explore_defensive_posture import (
+                hops_to_stardock as _hops_to_dock,
+            )
+        except Exception:  # noqa: BLE001
+            return
+        kwargs = {}
+        if state_dir is not None:
+            kwargs["state_dir"] = state_dir
+        cur = _sector_from_status(status) if status is not None else None
+        try:
+            hops_out = _hops_to_dock(world_id, cur, **kwargs)
+        except Exception:  # noqa: BLE001
+            hops_out = None
+        else:
+            # Successful call (including None = unknown path) counts as seen
+            # only when we have a non-None hop count — omit-until-known.
+            if hops_out is not None:
+                self._hops_to_stardock = hops_out
+                self._hops_to_stardock_seen = True
+        work = work_sector
+        if isinstance(work, bool) or not isinstance(work, int):
+            work = None
+        docks = list(self._stardock_sectors) if self._stardock_seen else []
+        if not docks or work is None:
+            return
+        try:
+            graph = known_graph(world_id, **kwargs)
+            path = compute_return_path(graph, int(docks[0]), int(work))
+            hops_ret = hops_of_path(path)
+        except Exception:  # noqa: BLE001
+            return
+        if hops_ret is not None:
+            self._hops_return_to_work = hops_ret
+            self._hops_return_seen = True
 
     def _refresh_known_sectors(
         self, world_id: object, *, state_dir: object = None
@@ -311,6 +382,8 @@ class WorldStats:
             and not self._has_port_seen
             and not self._dead_end_seen
             and not self._formations_seen
+            and not self._hops_to_stardock_seen
+            and not self._hops_return_seen
         ):
             return status
         merged = dict(status)
@@ -334,6 +407,10 @@ class WorldStats:
                 merged[FORMATIONS_PANEL_KEY] = {
                     "items": list(self._formations_panel.get("items", [])),
                 }
+        if self._hops_to_stardock_seen and merged.get(HOPS_TO_STARDOCK_KEY) is None:
+            merged[HOPS_TO_STARDOCK_KEY] = self._hops_to_stardock
+        if self._hops_return_seen and merged.get(HOPS_RETURN_TO_WORK_KEY) is None:
+            merged[HOPS_RETURN_TO_WORK_KEY] = self._hops_return_to_work
         return merged
 
     def wrap(self, provider):

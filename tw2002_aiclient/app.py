@@ -454,7 +454,37 @@ _DETACH_KEY = 29
 _STATUS_POLL_TIMEOUT_S = 1.0
 
 
+def _work_sector_for_return_path(play, status) -> int | None:
+    """Priced-chain home sector for StarDock→work RT hops (FOCUS upgrade gate).
+
+    Prefer the HUD sector when it lies on the priced chain; else the chain's
+    first sector. Omit rather than invent when no chain/sector is known.
+    """
+    try:
+        chain_scalars = getattr(play, "chain_scalars", None)
+        if chain_scalars is None:
+            return None
+        from tw2002_aiclient.chain_status import ChainScalars
+
+        cur = None
+        if isinstance(status, dict):
+            cur = ChainScalars._sector_from_status(status)
+        subject, _caption = chain_scalars.bubble_subject(current_sector=cur)
+        if subject is None:
+            return cur if isinstance(cur, int) and not isinstance(cur, bool) else None
+        sectors = getattr(subject, "sectors", None)
+        if not isinstance(sectors, (list, tuple)) or not sectors:
+            return cur if isinstance(cur, int) and not isinstance(cur, bool) else None
+        if isinstance(cur, int) and not isinstance(cur, bool) and cur in sectors:
+            return cur
+        first = sectors[0]
+        return first if isinstance(first, int) and not isinstance(first, bool) else None
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def _daemon_status_provider(run_dir):
+
     """Build the play shell's GOALS ``status_provider`` (PWO-034): a no-arg
     closure that polls the daemon's ``status`` verb and returns its dict, or
     ``None`` on any non-``ok`` response.
@@ -656,7 +686,11 @@ def _poll_explore_status(play: PlayShellScreen, *, run_dir) -> bool:
                 except Exception:  # noqa: BLE001
                     status = None
             _wid = _world_identity.world_id_from_profile(play.profile)
-            play.world_stats.refresh(_wid, status=status)
+            play.world_stats.refresh(
+                _wid,
+                status=status,
+                work_sector=_work_sector_for_return_path(play, status),
+            )
             play.game_data_stats.refresh(_wid)
         except Exception:  # noqa: BLE001 — count is best-effort; keep the loop
             pass
@@ -1728,7 +1762,11 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                         except Exception:  # noqa: BLE001
                             status = None
                     _wid = _world_identity.world_id_from_profile(profile)
-                    play.world_stats.refresh(_wid, status=status)
+                    play.world_stats.refresh(
+                        _wid,
+                        status=status,
+                        work_sector=_work_sector_for_return_path(play, status),
+                    )
                     play.game_data_stats.refresh(_wid)
                 except Exception:  # noqa: BLE001
                     pass
