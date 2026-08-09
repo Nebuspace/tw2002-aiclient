@@ -147,37 +147,25 @@ layer feeds ordering into this loop; this loop owns the STOP.
 
 # Code Divergences (DOCS WIN)
 
-The three modules that implement the run-loop today were built against the retired AI-first
-"keep-driving / goal-seek unattended" paradigm. These are recorded, not silently reconciled — the
-canon above is the prescriptive target; the code conforms to it in future work orders.
-
-- **`autopilot.py` is a per-cycle expected-value action-picker.** Its `select()` is, by its own
-  docstring, "a CONTINUOUS cost-benefit scorer … every candidate action is scored by expected
-  value (cr/turn) from scratch, every tick," and `AutopilotEngine`'s ASSESS→SELECT→EXECUTE→RECORD
-  tick loop drives a live keystroke each tick. That is the retired per-tick goal-seek framing, not
-  play-the-taught-step. The reborn model keeps the tick loop's *shape* but recasts SELECT from
-  "compute the best action" to "play the active taught behavior's next step," and forbids the
-  computed EV from ever overriding an unrecognized screen. (Notably, the module has already grown
-  much of the stop-on-unknown machinery the reborn model requires — a live re-classification
-  before every send that HOLDs unless the screen is exactly the movement prompt (`HIGH-2`), a
-  fail-closed per-profile arm flag, dry-run-never-sends, and `send_and_confirm` on every send — so
-  the divergence is the *framing* of SELECT and the auto-driver justification, not a wholesale
-  absence of safety rails.)
+- **`autopilot.py` — tip closed (archive / do-not-revive).** Pre-rebirth
+  `archive/.../autopilot.py` was a per-cycle EV action-picker
+  (`AutopilotEngine` ASSESS→SELECT→EXECUTE→RECORD). Tip has **no**
+  `tw2002_aiclient/autopilot.py` and no `tw autopilot` verb. Live taught
+  playback is `loops/player.py` + `session/autoloop.py` (novelty-halt,
+  human-armed). Do not revive the archive EV driver under a new name.
 - **`EXPLORE_BASELINE_EV = 0.01` — tip subdivergence closed (display-only).** Archived
   `autopilot.py` seeded this constant as a "no idle" auto-driver so a tick always manufactured an
-  explore action. Tip has **no** `autopilot.py`; the surviving constant lives in
+  explore action. The surviving constant lives in
   `tw2002_aiclient/focus_status.py` as a **suggestion-only** FOCUS floor (comment: keep explore
   visible when the map still has work — never sends / arms / drives a keystroke). The never-idle
   *driver* appetite is abolished on tip. Whether a display-only floor is itself correct policy vs a
   strict novelty-halt empty FOCUS remains a separate gated design question
   (`WO-FIX-EXPLORE-BASELINE-EV-NEVER-IDLE` / exploration-policy). Recorded here as closed for the
   "auto-driver" half only.
-- **`priority_engine.recommend_actions()` wired as a live `select()` override.** `autopilot.py`
-  consults the priority engine and, when it disagrees with the EV winner, lets it *re-pick the
-  live action* for the tick. In the reborn model that ranking may order which taught behaviors are
-  offered or run, but must **not** let a computed focus win over an unrecognized screen. Recorded
-  here (the strategic-layer half of the same divergence is recorded in
-  [Priority Engine](/engine/priority-engine.md)).
+- **`priority_engine.recommend_actions()` as live `select()` override — tip closed with
+  `autopilot.py`.** Archive wiring let the priority engine re-pick the live keystroke each tick.
+  Tip `priority_engine.py` is strategic ranking / FOCUS only — it does **not** override a taught
+  replay send. (Strategic half still recorded in [Priority Engine](/engine/priority-engine.md).)
 - **`trade_driver.py` guarded-chain divergence resolved by ADR-003.**
   `TradeChainRunner` is now the only product owner of `run_chain()`: it
   requires an exact human-confirmed fingerprint, re-runs discovery before the

@@ -4,15 +4,23 @@ title: Test Case Catalog
 description: Inventory of every pytest case in tw2002-aiclient with a one-sentence blurb of what each asserts.
 resource: repo://tw2002-aiclient/tests
 tags: [testing, catalog, pytest, inventory]
-timestamp: 2026-07-25T14:10:13Z
+timestamp: 2026-08-09T05:30:00Z
 ---
 
 # Test Case Catalog
 
-Complete inventory of **2271 pytest test cases** across **129 modules** (`tests/test_*.py`) in the tw2002-aiclient repo. Each module links to a per-module OKF case file with per-test blurbs.
+Module inventory and per-test blurbs below may lag tip (many modules were added after the
+2026-07-25 full pass). **Headline counts re-verified 2026-08-09 against tip**
+(`tests/test_*.py` + `pytest.ini --ignore`):
 
-- **Active (default run):** 83 modules · 1263 tests
-- **BANKED (ignored):** 46 modules · 1008 tests
+Complete inventory target: **~4567 pytest test cases** across **310 modules**
+(`tests/test_*.py`) in the tw2002-aiclient repo. Each module *should* link to a per-module OKF
+case file with per-test blurbs (regeneration of every case file is a separate catalog-refresh WO —
+this pass only corrects the stale headline counts).
+
+- **Active (default run):** 308 modules · ~4556 tests
+- **BANKED (ignored via `pytest.ini`):** 2 modules · 11 tests
+  (`tests/test_analyze.py`, `tests/test_crawl_start_protocol.py`)
 
 > **Blurb rule:** first complete sentence of the function docstring when it is well-formed (ends with `.!?`, no truncated backticks); otherwise readable English derived from the `test_*` name. No runtime behavior is invented beyond name/docstring.
 

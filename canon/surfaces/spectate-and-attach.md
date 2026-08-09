@@ -315,31 +315,24 @@ Taking the keyboard, then handing it back:
 
 # Code Divergence
 
-**Spectate is no longer *strictly* read-only in the literal sense.** Under the reborn target,
-Spectate is a pure read-only observation surface that holds no lock and emits nothing. The current
-`spectate_app.py` binary is dual-hatted as the "Trainer Control Panel" and *also* issues a small set
-of **control-plane META-commands** to the daemon (`set_mode` / `play_start` / `play_stop` /
-`play_pause` / `play_resume`) over short-lived one-shot connections. The invariant that still holds
-is the load-bearing one: **nothing there ever reaches `session.send()` / `send_raw()`** — no game
-keystroke is ever forwarded, and it never takes the control-lock — so it cannot drive the game. But
-it *does* mutate daemon control state (mode / loop-player), which the "touch nothing" framing does
-not cover. Recorded here: the surface is read-only *toward the game wire* but is a control-plane
-*writer* for mode/loop transitions; the clean reborn split would move those control commands onto the
-[Trainer Cockpit](/surfaces/trainer-cockpit.md) / mode-line surface and leave Spectate genuinely
-observation-only.
+**`spectate_app.py` / `tw spectate` — tip closed (deleted / RETIRED).** The dual-hatted archive
+binary (read-only viewer + Trainer Control Panel META-commands `set_mode` /
+`play_start`/`play_stop`/`play_pause`/`play_resume`) was removed by the rebirth scaffold
+(`452d896`). Tip observation is **in-cockpit Spectate** ([Trainer Cockpit](/surfaces/trainer-cockpit.md)
+· PWO-055) plus daemon-free `tw watch` settle-edge streaming. Control-plane mode / autoloop arming
+lives on the cockpit mode-line / wire `autoloop_*` verbs — not a separate spectate binary.
+`tw spectate` remains **RETIRED / WONTBUILD** (Max); see [CLI Verbs](/architecture/cli-verbs.md).
 
-**The word "spectate" names two different things.** `tw spectate` (this read-only viewer) stays
-*outside* the control-mode state machine entirely. There is *also* a `MODE_SPECTATE` control-lock
-state meaning "driving paused, nobody is driving" — the panel's explicit pause / panic-landing mode.
-They are unrelated: the viewer never enters that mode, and that mode is not the viewer. Recorded to
-prevent conflating the observation surface with the pause state.
+**The word "spectate" names two different things.** In-cockpit Spectate / `tw watch` (observation)
+stays *outside* the control-mode state machine as a game-wire reader. There is *also* a
+`MODE_SPECTATE` control-lock state meaning "driving paused, nobody is driving" — the panel's
+explicit pause / panic-landing mode. They are unrelated: the viewer never enters that mode, and
+that mode is not the viewer. Recorded to prevent conflating the observation surface with the pause
+state.
 
-**The dashboard's "autonomy ratio" is the pre-reborn gauge.** `spectate_app.py` /
-`spectate_layout.py` still compute and render an `autonomy_ratio` derived from ledger actor counts.
-Under the reborn model the only live coverage meter is **App-vs-Human** share (live AI share ≡ 0);
-the old "autonomy" naming is the retired autonomy-graduation gauge. The meter's reborn definition
-lives in [Coverage Metrics](/engine/coverage-metrics.md); the naming/semantics in the spectate layer
-are recorded as a divergence to be renamed toward App-vs-Human coverage, not silently reconciled.
+**Coverage meter naming.** Under the reborn model the only live coverage meter is **App-vs-Human**
+share (live AI share ≡ 0). Archive `spectate_layout.py`'s `autonomy_ratio` gauge is gone with the
+binary; the meter's reborn definition lives in [Coverage Metrics](/engine/coverage-metrics.md).
 
 **`MODE_AI_PILOT` — retired on tip (2026-08-04).** Attach's `take_human()` still fences an
 in-flight App dispatch / auto_loop hold (not an `ai_pilot` mode string — that drive mode is gone
@@ -350,12 +343,12 @@ senders remain `{app, human}` only. Resolution recorded in
 
 # Citations
 
-[1] twclient/spectate_app.py (read-only spectator TUI; SpectateClient subscribe stream; Trainer Control Panel META-command addendum)
-[2] twclient/spectate_layout.py (pure dashboard layout — panes, color tones, autonomy-ratio compose)
-[3] twclient/interactive_app.py (`tw attach`; two-connection design; AttachInputConn; Ctrl-] detach)
-[4] twclient/watch.py (WatchHub settle-edge push-stream engine; broadcast to a subscriber set)
-[5] tw2002_aiclient/session/control_lock.py (tip control-mode state machine; take_human/release_human; MODE_SPECTATE pause state; `{app, human, spectate}` only)
-[6] twclient/daemon.py (_handle_attach — take_human on connect, try/finally release_human on every exit path)
+[1] Archive `twclient/spectate_app.py` / `spectate_layout.py` — deleted by rebirth; historical dual-hat viewer + META-command panel (do not cite as tip)
+[2] `tw2002_aiclient/cockpit/` + in-cockpit Spectate (PWO-055) — live observation surface
+[3] `tw2002_aiclient/session/attach_client.py` + `tw attach` (`session/cli.py`) — interactive keyboard; Ctrl-] detach
+[4] `tw2002_aiclient/session/watch.py` (WatchHub settle-edge push-stream; `tw watch`)
+[5] `tw2002_aiclient/session/control_lock.py` (tip control-mode state machine; take_human/release_human; MODE_SPECTATE pause state; `{app, human, spectate}` only)
+[6] `tw2002_aiclient/session/daemon.py` / protocol attach path — take_human on connect, try/finally release_human on every exit path
 [7] canon/architecture/control-and-escalation.md (the control dual, {app,human} attribution; MODE_AI_PILOT retirement DONE)
 [8] twclient/terminal.py (color_map RLE per-cell SGR encode — game bytes only; chrome borders live in cockpit/draw.py on tip)
 [9] twclient/spectate_app.py (_SEMANTIC_COLORS 7-tone table; _ColorPairs lazy allocation; viewport red-on-disconnect border)

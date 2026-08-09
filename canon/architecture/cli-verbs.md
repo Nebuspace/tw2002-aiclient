@@ -34,9 +34,9 @@ Three carve-outs to the one-shot shape, all deliberate:
   `attach`, and `aiclient` are long-running curses/TUI sessions, not one-shots.
 - **Daemon-free reads** never touch the socket at all — they read on-disk artifacts directly, so
   they work with the daemon stopped. **LIVE today:** `log`/`trail`/`report` (ledger),
-  `loops`/`menumap`/`pairs`/`chains`/`record`/`reflex`/`rule` (stores), `servers`/`probe`
-  (catalog), `players` (rotation metadata), `mine`/`patterns` (candidate mining).
-  **TARGET (not a `tw` subparser yet):** `frames`, `analyze`.
+  `loops`/`menumap`/`pairs`/`chains`/`record`/`teach`/`skill`/`reflex`/`rule` (stores),
+  `servers`/`probe` (catalog), `players` (rotation metadata), `mine`/`patterns` (candidate mining).
+  **TARGET (not a `tw` subparser yet):** `frames`.
   `probe` opens its own throwaway connections to *catalog* endpoints, never the live game session.
 - **Session-establishing verbs** (`start`, `ensure`) may spawn the daemon before the round trip.
 
@@ -55,7 +55,7 @@ keystroke senders are `{app, human}` only — never the AI.**
 - **`read-only`** — never takes the control lock, never sends a keystroke. Safe to observe with.
 - **`teach`** — the retrospective, human-invoked teach path. Reads history and *proposes* rules or
   macros; it never sends a live keystroke and never auto-applies its own output. `record`,
-  `analyze`, and `mine`/`patterns` are the teach verbs.
+  `teach analyze`, `skill approve`, and `mine`/`patterns` are the teach verbs.
 
 There is no `ai` actor-class, because the AI is never a live driver — it authors drafts that a
 human must approve before the App can ever play them.
@@ -139,8 +139,9 @@ config is isolated, and print the run-dir path they would have targeted (WO-CLI-
 | verb | one-line effect | key args | actor-class | owning concept |
 |---|---|---|---|---|
 | `record <manifest>` | **LIVE.** Write a taught macro from an **already-captured** JSON demonstration manifest — daemon-free, never sends. Shipped shape (X6); see Implementation status and [Macros](/engine/macros.md)'s Findings for how this differs from the live start/stop bracket capture this row originally specified. | `manifest` (path) `--draft` | `teach` | [Rule–Macro Engine](/architecture/rule-macro-engine.md) |
-| `analyze <session>` | **TARGET — not a `tw` CLI verb yet.** Session-retro: group recurring ledger decisions, rank profitable ones as candidates to codify (proposes, never applies). | `--min-support` `--top-k` | `teach` | [Rule–Macro Engine](/architecture/rule-macro-engine.md) |
+| `teach analyze` | **LIVE.** On-demand AI teacher: read recent ledger + a frame source, propose an inert rule draft (never approves, never sends). Wired by `teach_cli.add_teach_parser`. Default backend always declines until a model is wired. | `--session ID` `--ledger PATH` `--frame-file PATH` `--backend MODULE:FUNC` `--state-dir PATH` `--json` | `teach` | [Rule–Macro Engine](/architecture/rule-macro-engine.md) |
 | `mine` (alias `patterns`) | **LIVE.** Mine the Trace-Ledger for recurring profitable input-subsequences; proposes inert drafts under `state/skills/_drafts/`. Flag is `--top-k` (not `--top`). | `--min-support` `--top-k` `--ledger` `--drafts` `--no-propose` `--json` | `teach` | [Candidate Mining](/engine/candidate-mining.md) · [Rule–Macro Engine](/architecture/rule-macro-engine.md) |
+| `skill approve <name>` | **LIVE.** Promote one mined/AI skill draft from `state/skills/_drafts/` into the blessed skills library — filesystem-only; never sends. The human act (mirrors `tw rule approve`). Wired by `skill_cli.add_skill_parser`. | `name` `--world-id SLUG` `--json` | `teach` | [Rule–Macro Engine](/architecture/rule-macro-engine.md) · [Candidate Mining](/engine/candidate-mining.md) |
 
 ## App-drive (deterministic macro / loop / pilot playback) — TARGET unless noted
 
@@ -184,16 +185,14 @@ tw log --n 20                      # the QUESTION → KEYSTROKE → RESULT trail
 # spectate: in-cockpit only (no tw spectate — RETIRED)
 ```
 
-Teach after an escalation (retrospective, proposes — never fires). `analyze` stays a **TARGET
-example — not a `tw` verb on tip yet**; `mine` already ships LIVE (see Teach table above):
+Teach after an escalation (retrospective, proposes — never fires). LIVE today:
 
 ```
-# TARGET (not runnable today):
-# tw analyze all --top-k 10
-# LIVE today for taught-rule authoring:
-tw mine --min-support 3            # mine the ledger for recurring profitable subsequences
-tw reflex                          # what the blessed library proposes for the live screen
-tw rule …                          # draft / approve path (see tw rule --help)
+tw teach analyze --frame-file ./frame.json   # propose an inert draft (backend may decline)
+tw mine --min-support 3 --top-k 10           # ledger mining → state/skills/_drafts/
+tw skill approve <draft-name>                # human promotes one draft into blessed store
+tw reflex                                    # what the blessed library proposes for the live screen
+tw rule …                                    # draft / approve path (see tw rule --help)
 # a human reviews and approves before anything the App plays back can ever fire
 ```
 
@@ -201,7 +200,8 @@ tw rule …                          # draft / approve path (see tw rule --help)
 
 **LIVE `tw` verbs today** (from `build_parser()`): `status`, `ensure`, `screen`, `stop`, `do`,
 `send`, `read`, `history`, `log`/`trail`, `report`, `watch`, `attach`, `menumap`, `loops`, `pairs`,
-`chains`, `record`, `explore` (`start`/`stop`/`status`), `reflex`, `rule`, `servers`, `probe`.
+`chains`, `record`, `teach analyze`, `skill approve`, `mine`/`patterns`, `explore`
+(`start`/`stop`/`status`), `reflex`, `rule`, `servers`, `probe`.
 
 `pairs` (**WO-CHAIN-DETECT-WIRE**, re-scoped 2026-07-28) is the thin product caller over the
 class-derived pair-loop path: `chain_detect.recompute` reads a world's `state/world/<world-id>`
@@ -236,10 +236,11 @@ see [Macros](/engine/macros.md)'s Findings for the mirrored note.
 
 **NOT a `tw` CLI verb on tip (HOLD / later / retired — do not document as runnable):**
 `spectate` (**RETIRED / WONTBUILD** — Max; in-cockpit Spectate LIVE via PWO-055),
-`start` (ensure covers spawn), `frames`, `analyze`, `replay`,
+`start` (ensure covers spawn), `frames`, `replay`,
 `play`/`haggle`/`autopilot`/`crawl`/`autoloop` (shell), `aiclient` as a separate curses
-product entry (product is `./tw2002-aiclient`). `record`, `log`/`trail`, `servers`/`probe`,
-`report`, `chains`, `explore`, `reflex`, `rule`, `players`, `mine`/`patterns` are LIVE — not on this HOLD list.
+product entry (product is `./tw2002-aiclient`). `record`, `teach analyze`, `skill approve`,
+`log`/`trail`, `servers`/`probe`, `report`, `chains`, `explore`, `reflex`, `rule`, `players`,
+`mine`/`patterns` are LIVE — not on this HOLD list.
 
 **WIRE-ONLY (a daemon protocol verb exists; no `tw` CLI subparser wraps it — not runnable from a
 shell today, only over the daemon's own socket protocol):**
@@ -275,10 +276,15 @@ block when answering "what can I run right now?"
    `tw2002_aiclient/session/cli.py` (ADR-001 relocate). Archive paths remain port-source for verbs
    not yet restored.
 
-3. **`autopilot` is the reborn-vision tension to watch.** Under reborn canon the App is a
-   **deterministic** autopilot that plays only taught, human-approved rules and **stops on any
-   unknown screen** — it does not "reason." Documentation-only note — reconciliation is a separate
-   work order; tip has no `tw autopilot` verb yet.
+3. **`tw autopilot` — TARGET / WONTBUILD as a reasoning driver (tension closed).** Under reborn
+   canon the App is a **deterministic** autopilot that plays only taught, human-approved rules and
+   **stops on any unknown screen** — it does not "reason" or run a per-cycle EV chooser. Tip has
+   no `tw autopilot` verb and no live `autopilot.py` (archive-only / do-not-revive; see
+   [App Autopilot Model](/architecture/app-autopilot-model.md)). Live playback is
+   `loops/player.py` + wire `autoloop_*` — unattended-and-unguarded *by construction* only in the
+   taught-step sense (no guard/arming field inventing keystrokes). Catalog row stays TARGET for a
+   possible future shell wrapper around taught orchestration; it is **not** an open design tension
+   about AI/EV live-drive.
 
 4. **`record`'s catalog row now documents a shape that was deliberately shipped different from
    what this concept originally specified.** X6's manifest writer (see Implementation status
