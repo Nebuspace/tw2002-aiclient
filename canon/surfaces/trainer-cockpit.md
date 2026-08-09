@@ -346,7 +346,8 @@ The frame uses a deliberate **two-weight** border system (`cockpit/draw.py` `DOU
   this is why `VIEWPORT_W/H = GAME_W+2, GAME_H+2` (82×27) and never a padded inset.
 - **Titled thin boxes** carry their title at `addnstr(0, 2, " TITLE ")` in cyan: `HUD`, `LOG`,
   `DECISIONS`, `PRIORITIES`, `FORMATIONS`, `MENU MAP`, `TRADE LOOP CHAINS`.
-- **Chain bubbles** are rounded `╭─╮ │ ╰─╯` joined by a heavy `═════` connector (`_CHAIN_CONNECTOR`)
+- **Chain bubbles** are rounded `╭─╮ │ ╰─╯` joined by a heavy `═════` connector
+  (`cockpit/chain_bubbles.py`; archive `_CHAIN_CONNECTOR` port-source)
   — the one place a chrome element borrows the viewport's heavier weight, marking the trade loop as
   the "live" instrument. The autonomy footer is a nested rounded box.
 
@@ -355,12 +356,13 @@ The frame uses a deliberate **two-weight** border system (`cockpit/draw.py` `DOU
 The composition has a fixed reading order, enforced by geometry:
 
 - **Gutter widths are fixed and symmetric:** `HUD_GUTTER_W = 44` on the right, `PRIORITIES_W = 44`
-  on the left (`spectate_layout.py`), sized so the CREDITS value plus its freshness stamp (plus the
+  on the left (`cockpit/layout.py`), sized so the CREDITS value plus its freshness stamp (plus the
   sparkline) fit without wrapping. The center viewport is whatever remains
   (`middle = i_cols − PRIORITIES_W − HUD_GUTTER_W`), keeping the game grid centered between two
   equal instrument rails.
 - **CREDITS is the primary metric and it is cell #1.** The HUD renders in a fixed operator order —
-  **`CREDITS · SECTOR · TURNS · CARGO · PROFIT`** (`compose_hud_cells`, `_HUD_FIELD_SPECS`) — top of
+  **`CREDITS · SECTOR · TURNS · CARGO · PROFIT`** (`cockpit/hud.py` / archive `compose_hud_cells`,
+  `_HUD_FIELD_SPECS` port-source) — top of
   the right gutter, first thing read. Labels are `A_BOLD`; value rows are indented two spaces under
   their label (`HUD_VALUE_INDENT`) so the column scans cleanly. The value carries the full emphasis
   stack: semantic tone + a floating delta chip + the recent-credits sparkline. SECTOR/TURNS/CARGO/
