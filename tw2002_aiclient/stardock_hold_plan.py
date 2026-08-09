@@ -21,12 +21,6 @@ class StardockHoldPlan:
     credits: int
     qty: int
 
-    def wire_identity(self) -> dict:
-        return {
-            "world_id": self.world_id,
-            "fingerprint": self.fingerprint,
-        }
-
 
 def _pos_int(value: object) -> Optional[int]:
     if isinstance(value, bool) or not isinstance(value, int) or value < 0:
