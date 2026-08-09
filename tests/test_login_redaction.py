@@ -193,8 +193,8 @@ def _exception_renderings(exc: BaseException) -> dict[str, str]:
     exception -- `daemon.py` puts `type(e).__name__` on the wire and
     `traceback.format_exc()` in the owner-only local log, and `guardian.py`
     renders `str(e)` for its typed catch and a type name for its broad one --
-    while `menu/crawl_driver.py` DOES repr, into a persisted file, one caller
-    away.
+    while the now-retired `menu/crawl_driver.py` DID repr, into a persisted
+    file, one caller away.
 
     WO-SECRETS-REPR-GET-PASSWORD-REHAB closed that at the source:
     `credentials.get_password` now raises a bounded
@@ -699,9 +699,10 @@ def test_an_undecodable_store_no_longer_reaches_the_caller_as_the_decoder_error(
     `traceback.format_exception()` -- which is why every sweep above passed and
     why nothing leaked on the daemon path -- but its `args[1]` IS the entire
     undecodable file, so `repr()` and `f"{exc!r}"` rendered every credential in
-    the store verbatim, and `menu/crawl_driver.py` writes `repr(exc)` into a
-    PERSISTED status file. The old docstring said "closing it should update THIS
-    test"; WO-SECRETS-REPR-GET-PASSWORD-REHAB (DECISIONS §C) closed it.
+    the store verbatim, and the now-retired `menu/crawl_driver.py` wrote
+    `repr(exc)` into a PERSISTED status file. The old docstring said "closing
+    it should update THIS test"; WO-SECRETS-REPR-GET-PASSWORD-REHAB
+    (DECISIONS §C) closed it.
 
     `get_password` now classifies the decoder failure into a bounded
     `credentials.SecretStoreUnreadable` carrying `_decoder_detail` (type name +
@@ -730,7 +731,7 @@ def test_an_undecodable_store_no_longer_reaches_the_caller_as_the_decoder_error(
         assert needle not in str(exc)
         assert needle not in repr(exc), (
             "the decode error's buffer is back in a rendering the product "
-            "performs -- crawl_driver.py persists repr(exc)"
+            "performs -- now-retired crawl_driver.py used to persist repr(exc)"
         )
         assert needle not in f"{exc!r}"
         assert needle not in "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))

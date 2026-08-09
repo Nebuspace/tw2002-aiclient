@@ -478,3 +478,36 @@ navigation, no send. Distinct from opportunistic StarDock capture
 **Status:** Accepted (hub GO Propose B 2026-08-03T15:22:00Z)
 
 RX **transcript logging** reuses TX / ledger password-anchor (`password` RE) **or** post-`secret=True` operator-TX echo window → `log_redacted`. Live screen/`watch` paint residual remains named in `secrets-and-credentials.md` Code Divergence #1. No new match vocabulary; no parse/classify/session-control changes.
+
+## DECISION-ADR-003-RESIDUAL-7-8 — Distributed-fold 6/8 residual items disposed (2026-08-09)
+
+**Status:** Accepted (item 7) / Pending — tracked, human-gated (item 8)
+
+**Context:** ADR-003's index row (`canon/ADR/index.md`) cannot graduate from
+**Distributed-fold: 6/8** to plain **Folded** by re-labeling alone — the lifecycle rule
+requires the N→M gap to close "by shipping or by a tracked not-building judgment." Items
+7 and 8 previously carried only a single pointer to
+`workorders/WO-CANON-ROLLUP-ADR-003-DISTRIBUTED-FOLD-TAG.md` Accept #2, with no real
+disposition. `workorders/WO-ADR-003-RESIDUAL-7-8-TRACKING.md` gives each a ruling.
+
+**Item 7 — sacrificial live-prove gate (Accepted, non-blocking):** this is the standing
+hub/Max merge-ritual live-prove process (`.cursor/rules/live-prove-pushback.mdc` /
+`.cursor/rules/workorders-required.mdc` § Hub merge ritual), not an ADR-003-specific tip
+module — it was never going to "ship" as code. It has already been concretely exercised
+against this exact discovered-chain flow: `WO-BUILD-CREDIT-DOUBLING-LIVE-PROVE`
+(`Nebuspace/.samantha/coord/queue-aiclient.md`, ✅DONE — live-proven 2026-08-09 on the
+`scout_academy` sacrificial profile, 6 instrumented cycles spending real turns/credits,
+Δ≈1786cr/cycle). Rules that item 7 does not block ADR-003's graduation.
+
+**Item 8 — bounded-repeat contract (Pending, human-gated, tracked precisely):** genuinely
+unresolved design work — the loop-repeat primitive (pass-count? floor re-check? value
+ceiling?) has never been scoped. Already tracked with mailing-address precision, not
+untracked: queue row `WO-CANON-DRAFT-BOUNDED-REPEAT-CONTRACT-SCOPE`
+(`Nebuspace/.samantha/coord/queue-aiclient.md`, MED, GATED (human)) with follow-on execute
+row `WO-BUILD-DEV-DRIVE-CLI-SURFACE` (HIGH, GATED (human) — `tw chain start` doesn't
+expose `profit_target` yet). This is a real, tracked not-building judgment per the
+lifecycle rule's escape hatch — it keeps ADR-003 at **Distributed-fold: 6/8**, not
+Folded, until the design review referenced by those queue rows resolves.
+
+**Refs:** `canon/ADR/003-discovered-chain-approve-scaffold.md` § Status items 7–8 ·
+`canon/ADR/index.md` § Lifecycle · `workorders/WO-ADR-003-RESIDUAL-7-8-TRACKING.md`.
