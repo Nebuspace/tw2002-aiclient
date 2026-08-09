@@ -25,6 +25,27 @@ fabricated share. One capture is the whole fixture for the wire pin.
 ``adapters.ensure_session`` is stubbed inside the spawned process and
 ``TW_RUN_DIR`` points at an isolated per-test tmp dir, never
 ``run/twd.sock``.
+
+# WO-FIX-COVERMETER-PTY-FLAKE-STABILIZE -- the ledger isolation gap
+
+``screens.py``'s draw path reads counts via
+``live_actor_counts(getattr(self, "ledger_path", None))`` -- and no product
+code ever sets ``self.ledger_path`` (pinned by
+``tests/test_coverage_ledger_counts.py``), so that call always falls through
+to ``ledger.DEFAULT_LEDGER_PATH``, a path computed **relative to the repo
+root**, not to ``TW_RUN_DIR``. ``TW_RUN_DIR`` isolates the daemon socket and
+world state; it was silently *not* isolating the ledger this suite's own
+docstring assumed was absent. Measured, not guessed: copying this
+developer's real (git-ignored, in-tree) ``state/ledger.jsonl`` into a fresh
+checkout reproduced both failures below deterministically, and removing the
+copy made them pass again -- a real-play sandbox with dev-drive history
+renders the *actual* live share here instead of the isolated ``COV ?`` both
+tests assert, while a clean CI checkout (no ``state/`` at all) never sees it.
+Not a timing race in ``drive_play_shell_pty`` -- the bootstrap below
+monkeypatches ``ledger.DEFAULT_LEDGER_PATH`` to a path under this test's own
+``tmp_path`` (never created, so it reads as absent) before the app ever
+draws a frame, closing the one isolation channel ``TW_RUN_DIR`` doesn't
+cover.
 """
 
 from __future__ import annotations
@@ -75,6 +96,18 @@ def _fake_ensure(profile, **kwargs):
 
 adapters.ensure_session = _fake_ensure
 
+# Close the one isolation gap TW_RUN_DIR doesn't cover: screens.py's draw
+# path always falls through to ledger.DEFAULT_LEDGER_PATH (repo-root
+# relative, never wired from self.ledger_path -- see this module's
+# docstring), so an un-isolated run reads whatever this developer's real
+# state/ledger.jsonl happens to hold. Pointed at a path under this test's
+# own tmp_path, which is never created, so it reads as absent.
+from pathlib import Path as _Path
+
+from tw2002_aiclient import ledger as _ledger
+
+_ledger.DEFAULT_LEDGER_PATH = _Path(__ISOLATED_LEDGER_PATH__)
+
 import curses
 from tw2002_aiclient.app import _run
 
@@ -84,8 +117,11 @@ curses.wrapper(_run)
 
 def _drive(tmp_path: Path, *, timeout: float = 20.0) -> bytes:
     bootstrap = tmp_path / "covermeter_pty_bootstrap.py"
+    isolated_ledger = tmp_path / "isolated_ledger" / "ledger.jsonl"
     bootstrap.write_text(
-        _BOOTSTRAP.replace("__PROJECT_ROOT__", repr(str(PROJECT_ROOT))),
+        _BOOTSTRAP.replace("__PROJECT_ROOT__", repr(str(PROJECT_ROOT))).replace(
+            "__ISOLATED_LEDGER_PATH__", repr(str(isolated_ledger))
+        ),
         encoding="utf-8",
     )
     capture1, _ = drive_play_shell_pty(
