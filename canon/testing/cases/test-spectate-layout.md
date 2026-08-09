@@ -9,9 +9,14 @@ timestamp: 2026-07-25T14:10:13Z
 
 # Test Cases — `tests/test_spectate_layout.py`
 
-_Spectator dashboard layout tests — pure functions, no curses/terminal involved._
+> **Tip reality:** `tests/test_spectate_layout.py` and archive `spectate_layout.py` are
+> **REMOVED**. Tip layout coverage lives under `cockpit/` module tests (e.g.
+> `tests/test_cockpit_spectate.py`, layout/fold/tones suites). Table below is **historical
+> inventory** only.
 
-> **BANKED** — excluded from the default pytest run via `pytest.ini --ignore`. Catalogued for completeness.
+_Spectator dashboard layout tests — pure functions, no curses/terminal involved (historical)._
+
+> **REMOVED** — module absent on tip (not merely pytest-ignored). Catalogued for completeness.
 
 | Test | Blurb |
 |------|-------|

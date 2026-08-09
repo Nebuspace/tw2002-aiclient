@@ -197,9 +197,9 @@ rather than inventing a local one. The one dimension that is fully *built and lo
 **spacing/alignment** (the CLI column layout) and the structural **password-never-shown** affordance.
 
 The shared color/glyph/border/fold vocabulary this surface would inherit lives in
-[the shared visual language](/surfaces/visual-language.md) (a cross-surface concept; forward-ref —
-the single source of truth for the 7-tone semantic palette, the Unicode/ASCII glyph twin-tables, the
-two-weight border hierarchy, and the responsive fold ladder). This section specifies only what is
+[the shared visual language](/surfaces/visual-language.md) (tip — authoritative dictionary for the
+7-tone semantic palette, Unicode/ASCII glyph twin-tables, two-weight border hierarchy, and
+responsive fold ladder). This section specifies only what is
 *surface-specific* to the launcher and points at that dictionary for the rest.
 
 ## Spacing / alignment / hierarchy — the one built dimension

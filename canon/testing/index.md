@@ -117,8 +117,8 @@ OKF inventory of the pytest suite.
 * [test_settle.py](/testing/cases/test-settle.md) — Settle-detection timing tests with a fake clock — no real sleeping.
 * [test_ship_upgrade_decision.py](/testing/cases/test-ship-upgrade-decision.md) — TW-30 ship-upgrade decision engine — unit coverage for all five §24 learnings. _(BANKED)_
 * [test_skills.py](/testing/cases/test-skills.md) — Skill record/replay + playback tests (DESIGN-v2 §3 v2.1 item 11b/11d, C3) -- no network. _(BANKED)_
-* [test_spectate_app.py](/testing/cases/test-spectate-app.md) — Regression test for the interactive `tw spectate` curses render path. _(BANKED)_
-* [test_spectate_layout.py](/testing/cases/test-spectate-layout.md) — Spectator dashboard layout tests — pure functions, no curses/terminal involved. _(BANKED)_
+* [test_spectate_app.py](/testing/cases/test-spectate-app.md) — **REMOVED** (ops `tw spectate` RETIRED; tip = `test_cockpit_spectate.py`). Historical case inventory only.
+* [test_spectate_layout.py](/testing/cases/test-spectate-layout.md) — **REMOVED** (archive `spectate_layout.py` deleted). Historical case inventory only.
 * [test_spectate_no_send.py](/testing/cases/test-spectate-no-send.md) — Spectate no send.
 * [test_state_parser.py](/testing/cases/test-state-parser.md) — Best-effort state-extraction tests — no network involved. _(BANKED)_
 * [test_terminal.py](/testing/cases/test-terminal.md) — pyte render + crop correctness tests — no network involved.
