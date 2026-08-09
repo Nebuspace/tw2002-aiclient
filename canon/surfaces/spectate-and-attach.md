@@ -147,12 +147,11 @@ signalling layered over the raw screen, distinct from the game's own cell colors
 This section specifies the *look* of the two surfaces across the nine polish dimensions. The
 color-semantics table, the glyph/marker set, the border-weight hierarchy, the liveness-cue catalog,
 and the fold ladder are **shared vocabulary** consumed identically by Spectate, Attach, and the
-[Trainer Cockpit](/surfaces/trainer-cockpit.md) — they are literally the same
-`spectate_layout.py` / `terminal.py` code paths rendering all three. The canonical dictionary of
-that vocabulary lives in [Visual Language](/surfaces/visual-language.md) *(forward-reference — a
-recommended-but-not-yet-created 37th concept; until it exists, the grounded tables in the UI-polish
-assessment are the source of truth)*. What follows is the **surface-specific application** of that
-vocabulary to Spectate and Attach — the sentences, not the dictionary.
+[Trainer Cockpit](/surfaces/trainer-cockpit.md) — tip renders them through
+`tw2002_aiclient/cockpit/` + `session/terminal.py` (archive `spectate_layout.py` /
+`spectate_app.py` = port-source only; ops `tw spectate` RETIRED). The canonical dictionary lives in
+[Visual Language](/surfaces/visual-language.md). What follows is the **surface-specific application**
+of that vocabulary to Spectate and Attach — the sentences, not the dictionary.
 
 ## Color semantics on these surfaces
 
@@ -160,26 +159,26 @@ Two color systems coexist on-screen and must never be confused (this is the same
 [Color rendering](#color-rendering-n3) section draws, restated as a design rule):
 
 - **Game-native per-cell color** fills the GAME viewport. `terminal.color_map()`
-  (`terminal.py:65-94`) RLE-encodes pyte's SGR fg/bg/bold per row; `_ColorPairs`
-  (`spectate_app.py:527`) lazily allocates one curses pair per distinct `(fg,bg)`, degrading to
-  plain bold/normal when the terminal runs out of color or pairs. This is the server's true CP437
-  color, reproduced, never reinterpreted. *Hypothesis (kept deliberately un-promoted): the stock
-  TradeWars palette uses red for hostiles and cyan for menu chrome — rendered as the server sends
-  it, unverified by us, and must stay hypothesis-marked wherever a surface repeats it.*
+  (`session/terminal.py`) RLE-encodes pyte's SGR fg/bg/bold per row; tip color-pair allocation lives
+  under the cockpit viewport path (archive `_ColorPairs` in `spectate_app.py` port-source),
+  degrading to plain bold/normal when the terminal runs out of color or pairs. This is the server's
+  true CP437 color, reproduced, never reinterpreted. *Hypothesis (kept deliberately un-promoted):
+  the stock TradeWars palette uses red for hostiles and cyan for menu chrome — rendered as the
+  server sends it, unverified by us, and must stay hypothesis-marked wherever a surface repeats it.*
 - **Dashboard semantic tint** colors *parsed* state in the chrome. One 7-tone table
-  (`_SEMANTIC_COLORS`, `spectate_app.py:1098-1114`) drives every surface, so a tone always means the
-  same thing: `ok` green-bold (profit/healthy), `warn` yellow-bold (stale/attention), `danger`
-  red-bold (hostile/disconnected/loss), `info` cyan non-bold (menus/neutral/selling), `gain`/`loss`
-  the green/red credit-delta flashes, `muted` genuinely-uncolored (parked). pyte names ANSI-yellow
+  (`SEMANTIC_COLORS` / `_SEMANTIC_COLORS` in `cockpit/tones.py` — tip; archive `spectate_app.py`
+  port-source) drives every surface, so a tone always means the same thing: `ok` green-bold
+  (profit/healthy), `warn` yellow-bold (stale/attention), `danger` red-bold
+  (hostile/disconnected/loss), `info` cyan non-bold (menus/neutral/selling), `gain`/`loss` the
+  green/red credit-delta flashes, `muted` genuinely-uncolored (parked). pyte names ANSI-yellow
   `"brown"`; it renders yellow. The load-bearing rules: **cyan is chrome, never data**, and
   **reverse-video (`A_REVERSE`) is the single selection/active/badge signal** across the whole UI.
 
 **Spectator sidebar & ticker tinting.** The parsed-state HUD sidebar reads each metric through the
 shared tone set — a healthy turns-gauge is `ok` green, a stale-rx status cell goes `warn` yellow via
-`status_semantic(connected, age)` (`spectate_layout.py:2681`, `warn` at `last_rx_age_s ≥ 5.0s`), a
-credit drop flashes `loss` red. The event LOG ticker's newest row flashes bold on arrival
-(`TICKER_FLASH_DURATION_S=1.0`) then settles — the settle-edge the watch-stream delivered made
-visible as motion.
+`status_semantic(connected, age)` (`cockpit/tones.py`, `warn` at `last_rx_age_s ≥ 5.0s`), a credit
+drop flashes `loss` red. The event LOG ticker's newest row flashes bold on arrival then settles —
+the settle-edge the watch-stream delivered made visible as motion.
 
 **Attach borrows only the game colors.** `tw attach` is full-screen game (no sidebar to tint), so on
 it the game-native per-cell color is essentially the *only* color — the sole chrome element, the
@@ -208,12 +207,13 @@ lands on the game first and reads the HUD as its frame. See
 
 The GAME viewport content area is **always ≤ the native 80×25 grid, centered, never stretched** to
 fill leftover space — `game_w = min(GAME_W, viewport_w - 2)` / `game_h = min(GAME_H, viewport_h - 2)`
-(`spectate_layout.py:505-506`); it is only *clipped* when a fold tier genuinely lacks room for the
+(`cockpit/layout.py` viewport crop; archive `spectate_layout.py` port-source); it is only *clipped*
+when a fold tier genuinely lacks room for the
 full native size. Because the daemon already crops the screen, `cropped(0,0) == native(0,0)` — the
 top-left game cell maps to the top-left viewport cell with no offset, which is what lets the
 zero-inset double-line border sit flush against real game content. On Spectate the sidebar sits in
 fixed-width gutters flanking that centered viewport; on Attach the game pane simply fills the whole
-terminal minus the status row (`body_h = max(1, lines - 1)`, `interactive_app.py:245`).
+terminal minus the status row (`body_h = max(1, lines - 1)`, `interactive_app.py` / tip attach path).
 
 ## Panel states
 
@@ -227,7 +227,8 @@ terminal minus the status row (`body_h = max(1, lines - 1)`, `interactive_app.py
   Reverse-video here is the same "this is live/active" signal reverse-video carries everywhere else,
   applied to the one bar that says the human currently holds the keyboard.
 - **Link-down on the frame itself:** the viewport border flips cyan → **red non-bold** when not
-  connected (`spectate_app.py:2258`) — an unmissable "link down" cue on the frame, never touching game
+  connected (`screens.py` / cockpit viewport border attr — tip; archive `spectate_app.py`
+  port-source) — an unmissable "link down" cue on the frame, never touching game
   content. On disconnect the viewport shows a calm placeholder set (`WAITING_SESSION_LINES`), *not* a
   frozen stale login prompt, while the client reconnects on bounded backoff.
 - **Empty / cold-join:** a newly-subscribing spectator is seeded with the current settled screen as
@@ -254,7 +255,8 @@ silent.
 
 ## Responsive fold
 
-Spectate degrades through the shared **fold ladder** (`frame_layout`, `spectate_layout.py:237`):
+Spectate degrades through the shared **fold ladder** (`cockpit/layout.py::frame_layout`; archive
+`spectate_layout.frame_layout` port-source):
 full two-gutter layout → single-gutter → HUD-on-header `minimal` → border-dropped `no_border` →
 `too_small` refusal, keyed on inner content-column budget. The **body never scrolls horizontally** —
 the viewport is fixed ≤80 wide and the LOG truncates to its line-tail rather than overflowing. This
