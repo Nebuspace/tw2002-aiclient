@@ -39,6 +39,7 @@ import pytest
 
 from tw2002_aiclient import screens
 from tw2002_aiclient.cockpit import draw as cockpit_draw
+from tw2002_aiclient.cockpit import strip as cockpit_strip
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -168,27 +169,56 @@ def _load_prefix_screens_module(tmp_path: Path):
     package-relative ``from .x import y``), so no ``__package__`` shim is
     needed -- the blob's imports resolve against the real installed
     siblings, same as the memory note's relative-import wrinkle achieves for
-    packages that DO need one."""
-    blob = subprocess.run(
-        ["git", "show", f"{_PRE_FIX_TIP}:tw2002_aiclient/screens.py"],
-        cwd=REPO_ROOT,
-        capture_output=True,
-        check=True,
-        text=True,
-    ).stdout
-    module_path = tmp_path / "prefix_screens.py"
-    module_path.write_text(blob, encoding="utf-8")
+    packages that DO need one.
 
-    spec = importlib.util.spec_from_file_location(
-        "tw2002_aiclient._prefix_screens_addstr_dedupe", module_path
-    )
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = module
+    The pinned blob still imports the retired
+    ``compose_profile_strip_from_row`` helper at module load time even though
+    these choke tests only exercise ``_safe_addstr``. Stub that symbol on
+    the live ``strip`` module only for the duration of the load so the blob
+    can import without reviving product dead code or leaving the live module
+    mutated for later tests."""
+    added_stub = False
+    if not hasattr(cockpit_strip, "compose_profile_strip_from_row"):
+
+        def _legacy_compose_profile_strip_from_row(
+            row: object, *, width: int, unicode_ok: bool = True
+        ) -> str:
+            host = getattr(row, "host", None) or getattr(row, "server", None)
+            return cockpit_strip.compose_profile_strip(
+                host=host,
+                game_letter=getattr(row, "game_letter", None),
+                handle=getattr(row, "handle", None),
+                width=width,
+                unicode_ok=unicode_ok,
+            )
+
+        cockpit_strip.compose_profile_strip_from_row = _legacy_compose_profile_strip_from_row
+        added_stub = True
+
     try:
-        spec.loader.exec_module(module)
+        blob = subprocess.run(
+            ["git", "show", f"{_PRE_FIX_TIP}:tw2002_aiclient/screens.py"],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            check=True,
+            text=True,
+        ).stdout
+        module_path = tmp_path / "prefix_screens.py"
+        module_path.write_text(blob, encoding="utf-8")
+
+        spec = importlib.util.spec_from_file_location(
+            "tw2002_aiclient._prefix_screens_addstr_dedupe", module_path
+        )
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = module
+        try:
+            spec.loader.exec_module(module)
+        finally:
+            del sys.modules[spec.name]
+        return module
     finally:
-        del sys.modules[spec.name]
-    return module
+        if added_stub:
+            del cockpit_strip.compose_profile_strip_from_row
 
 
 def test_old_safe_addstr_stopped_one_column_short_of_window_edge(tmp_path):

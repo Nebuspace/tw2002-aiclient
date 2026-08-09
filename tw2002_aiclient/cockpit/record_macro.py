@@ -149,11 +149,6 @@ class RecordSession:
         """``True`` while a recording is in progress."""
         return self._active
 
-    @property
-    def step_count(self) -> int:
-        """Number of steps accumulated so far."""
-        return len(self._steps)
-
     # ------------------------------------------------------------------
     # Lifecycle
     # ------------------------------------------------------------------
