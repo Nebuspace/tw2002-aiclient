@@ -159,7 +159,7 @@ gate chrome.)
 | `○ ○` | `○ ○` (no swap) | the empty-chain placeholder (`○ ○  no trade loop yet`) | tip `cockpit/chain_bubbles.py` / archive `spectate_app.py` |
 | `—` (em-dash) | `—` (no swap) | an unknown/empty value, in place of a fabricated `-` or a blank | throughout HUD/GOALS/PRIORITIES rendering |
 | `×` | `×` (no swap) | dimensional multiply in gate/refusal copy (`C×L`, `60×20`) — same no-swap family as `·` / `—`; never ASCII `x` | `tw2002_aiclient/cockpit/layout.py::frame_layout` `too_small` `message` (≈97–102) |
-| `!` | `!` (no swap) | leads the STOP / intervention strip — the one-glyph "attention" mark | `compose_intervention_strip` |
+| `!` | `!` (no swap) | leads the STOP / intervention strip — the one-glyph "attention" mark | tip `cockpit/stopbanner.py` |
 | `KEY)verb` | `KEY)verb` (no swap) | the uniform hotkey-token shape on the control-strip hint band (`^A)ode`, `A)nalyze`, …) | tip `cockpit/teachband.py` / `control_seat.py` |
 
 **Motion glyphs** (see the Liveness-cue catalog below for full behavior): spinner `⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏`
