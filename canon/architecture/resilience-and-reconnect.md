@@ -180,10 +180,10 @@ banner. There is **no** auto-`MODE_HUMAN` — keyboard escalate stays operator-d
 moves). The sticky clears on a successful D9 reconnect, on `clear_reconnect_exhausted()`, or when a
 later tick observes the socket already connected again (manual ensure).
 
-(Minor, sub-divergence: the keepalive's blank Enter is a live App-class keystroke but is not yet
-explicitly actor-tagged `app` at the send site — the send-time actor tag is owned by
-[the Session Engine](/architecture/session-engine.md); this concept only notes that the keepalive is,
-canonically, an App-class send.)
+(Minor, sub-divergence — **RESOLVED on tip.**) The keepalive's blank Enter is an App-class
+keystroke; tip `guardian._maybe_keepalive` sends with `sender="app"`
+(`session.send("", enter=True, secret=False, sender="app")`) and records a Trace-Ledger row via
+`_record_keepalive_ledger`. No longer an untagged App send.
 
 # Citations
 
