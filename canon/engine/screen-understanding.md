@@ -262,10 +262,11 @@ divergences worth recording are narrow:
   documented residual, bounded today by solo play and slated for a single unified
   anchor-to-live-prompt / exclusivity hardening before any autonomous run on a multiplayer or
   shared server — recorded here, not silently reconciled.
-- **`parse_state()`'s per-cycle consumers.** The run-loop that reads this structured state and, in
-  current code (`autopilot.py`), can pick a per-cycle EV keystroke off a *recognized* class rather
-  than only playing a taught macro is a divergence from the reborn taught-behavior contract — but
-  that divergence is owned and recorded by
+- **`parse_state()`'s per-cycle consumers (archive-only — do-not-revive).** The pre-rebirth run-loop
+  that read this structured state and could pick a per-cycle EV keystroke off a *recognized* class
+  rather than only playing a taught macro lived in archive `twclient/autopilot.py`. Tip has **no**
+  `autopilot.py` outside `archive/` — it is gone from the live import tree, not merely deprecated in
+  place. That historical divergence from the reborn taught-behavior contract is owned and recorded by
   [The App Autopilot Model](/architecture/app-autopilot-model.md), not here. This concept only
   produces the semantic read; it never selects an action, and nothing in these read modules should
   be changed to do so.
