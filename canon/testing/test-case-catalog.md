@@ -115,8 +115,8 @@ counts).
 
 | Module | Tests | Status | Blurb |
 |--------|-------|--------|-------|
-| [`test_spectate_app.py`](/testing/cases/test-spectate-app.md) | 78 | BANKED | Regression test for the interactive `tw spectate` curses render path. |
-| [`test_spectate_layout.py`](/testing/cases/test-spectate-layout.md) | 170 | BANKED | Spectator dashboard layout tests — pure functions, no curses/terminal involved. |
+| [`test_spectate_app.py`](/testing/cases/test-spectate-app.md) | 78 | **REMOVED** | Ops `tw spectate` / `spectate_app.py` **RETIRED** — module deleted; tip observation is `test_cockpit_spectate.py` + `tw watch`. Case file kept as historical inventory only. |
+| [`test_spectate_layout.py`](/testing/cases/test-spectate-layout.md) | 170 | **REMOVED** | Archive `spectate_layout.py` deleted with ops spectate; tip layout tests live under `cockpit/` modules. Case file historical only. |
 | [`test_spectate_no_send.py`](/testing/cases/test-spectate-no-send.md) | 13 | active | Spectate no send. |
 | [`test_watch.py`](/testing/cases/test-watch.md) | 14 | active | Watch. |
 | [`test_watchfeed.py`](/testing/cases/test-watchfeed.md) | 10 | active | Watchfeed. |

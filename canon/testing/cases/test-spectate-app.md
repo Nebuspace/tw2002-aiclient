@@ -1,7 +1,7 @@
 ---
 type: Reference
 title: Test Cases — test_spectate_app
-description: Regression test for the interactive `tw spectate` curses render path.
+description: REMOVED — historical inventory for deleted ops `tw spectate` suite (tip: test_cockpit_spectate).
 resource: repo://tw2002-aiclient/tests/test_spectate_app.py
 tags: [testing, catalog, pytest, inventory]
 timestamp: 2026-07-25T14:10:13Z
@@ -9,9 +9,14 @@ timestamp: 2026-07-25T14:10:13Z
 
 # Test Cases — `tests/test_spectate_app.py`
 
-_Regression test for the interactive `tw spectate` curses render path._
+> **Tip reality:** `tests/test_spectate_app.py` and ops `tw spectate` / `spectate_app.py` are
+> **REMOVED / RETIRED**. Live observation coverage is `tests/test_cockpit_spectate.py` (in-cockpit
+> Spectate) plus `tw watch`. The table below is a **historical inventory** of the deleted suite —
+> not a claim the module still ships.
 
-> **BANKED** — excluded from the default pytest run via `pytest.ini --ignore`. Catalogued for completeness.
+_Regression test for the interactive `tw spectate` curses render path (historical)._
+
+> **REMOVED** — module absent on tip (not merely pytest-ignored). Catalogued for completeness.
 
 | Test | Blurb |
 |------|-------|
