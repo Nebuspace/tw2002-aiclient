@@ -775,6 +775,8 @@ def _dispatch_trade_chain_start(args, server):
         kwargs["turn_reserve"] = args["turn_reserve"]
     if "profit_target" in args:
         kwargs["profit_target"] = args["profit_target"]
+    if "pass_count" in args:
+        kwargs["pass_count"] = args["pass_count"]
     try:
         snapshot = runner.start(
             args.get("world_id"),

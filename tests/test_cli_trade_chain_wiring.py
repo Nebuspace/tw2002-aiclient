@@ -178,3 +178,49 @@ def test_chain_start_ok_false_returns_nonzero(monkeypatch):
         "--json",
     ])
     assert args.func(args) != 0
+
+
+def test_chain_start_parses_profit_target_and_pass_count():
+    args = cli.build_parser().parse_args([
+        "chain", "start",
+        "--world-id", "academy",
+        "--fingerprint", "fp",
+        "--profit-target", "5000",
+        "--pass-count", "7",
+    ])
+    assert args.profit_target == 5000
+    assert args.pass_count == 7
+
+
+def test_chain_start_bare_pass_count_defaults_to_ten():
+    from tw2002_aiclient.session.trade_chain import DEFAULT_PASS_COUNT
+
+    args = cli.build_parser().parse_args([
+        "chain", "start",
+        "--world-id", "academy",
+        "--fingerprint", "fp",
+        "--pass-count",
+    ])
+    assert args.pass_count == DEFAULT_PASS_COUNT == 10
+
+
+def test_chain_start_sends_profit_target_and_pass_count(monkeypatch):
+    seen = {}
+
+    def fake_send(verb, args_payload, *, timeout=15.0, run_dir=None):
+        seen["args"] = args_payload
+        return {"ok": True}
+
+    monkeypatch.setattr(cli, "send_request", fake_send)
+    args = cli.build_parser().parse_args([
+        "chain", "start",
+        "--world-id", "w",
+        "--fingerprint", "f",
+        "--profit-target", "9000",
+        "--pass-count", "4",
+        "--json",
+    ])
+    args.func(args)
+    assert seen["args"]["profit_target"] == 9000
+    assert seen["args"]["pass_count"] == 4
+    assert "cash_floor" in seen["args"]
