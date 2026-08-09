@@ -2284,6 +2284,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     add_port_floor_parsers(sub)
 
+    # WO-BUILD-PLANET-COLONIZATION-LIVE-CAPTURE: planet production observation store.
+    from ..planet_colonization_cli import add_planet_colonization_parsers
+
+    add_planet_colonization_parsers(sub)
+
     # WO-BUILD-AI-TEACHER-ANALYZE-CLI: on-demand retrospective AI teacher
     # (filesystem only, never sends). Same line-cap reason as mine_cli.
     from ..teach_cli import add_teach_parser
