@@ -35,7 +35,8 @@ Three carve-outs to the one-shot shape, all deliberate:
 - **Daemon-free reads** never touch the socket at all — they read on-disk artifacts directly, so
   they work with the daemon stopped. **LIVE today:** `log`/`trail`/`report` (ledger),
   `loops`/`menumap`/`pairs`/`chains`/`record`/`teach`/`skill`/`reflex`/`rule` (stores),
-  `servers`/`probe` (catalog), `players` (rotation metadata), `mine`/`patterns` (candidate mining).
+  `servers`/`probe` (catalog), `players` (rotation metadata), `mine`/`patterns` (candidate mining),
+  `coach`, `port-floor`, `planet-colonization`.
   **TARGET (not a `tw` subparser yet):** `frames`.
   `probe` opens its own throwaway connections to *catalog* endpoints, never the live game session.
 - **Session-establishing verbs** (`start`, `ensure`) may spawn the daemon before the round trip.
@@ -133,6 +134,9 @@ config is isolated, and print the run-dir path they would have targeted (WO-CLI-
 | `players {list,next,rotate}` | **LIVE.** Multi-character rotation bank metadata (reads `state/player_bank.json`; no daemon, no game keystrokes). `list` prints bank rows + no-collusion boundary; `next` prints the next eligible profile; `rotate` prints the rotation driver's decision with reasoning. | `--cooldown-hours H` on each subverb | `read-only` | [Session Engine](/architecture/session-engine.md) |
 | `servers list` | Summarize `config/servers.inventory.json` provenance + optional liveness sidecar (no live session). | `--inventory` `--liveness` `--json` | `read-only` | [Session Engine](/architecture/session-engine.md) |
 | `probe` | TCP-only catalog probe (no login / no turns); writes `config/servers.liveness.json`. Same engine as `scripts/catalog-tcp-probe.py`. | `--limit` `--timeout` `--out` `--json` | `read-only` | [Session Engine](/architecture/session-engine.md) |
+| `coach show [id]` | **LIVE.** Show one strategy card in full, or list all cards when `id` is omitted (daemon-free). | `id` (optional) | `read-only` | [Coaching Engine](/engine/coaching-engine.md) |
+| `port-floor {snapshot,analyze}` | **LIVE.** Observation-store ingest + regrowth/floor analysis over world-model sector JSON (daemon-free; never sends). | `snapshot` / `analyze` args per `--help` | `read-only` | [Port Economics](/strategy/port-economics.md) |
+| `planet-colonization {snapshot,analyze}` | **LIVE.** Observation-store ingest + production-hypothesis analysis over planet record JSON (daemon-free; never sends). | `snapshot` / `analyze` args per `--help` | `read-only` | [Planet Colonization](/strategy/planet-colonization.md) |
 
 ## Teach (retrospective, human-invoked)
 
@@ -145,12 +149,14 @@ config is isolated, and print the run-dir path they would have targeted (WO-CLI-
 
 ## App-drive (deterministic macro / loop / pilot playback) — TARGET unless noted
 
-None of these rows are `tw` CLI subparsers on tip today (Option B · WO-ESCALATE-CLI-VERBS).
+Most of these rows are still not `tw` CLI subparsers (Option B · WO-ESCALATE-CLI-VERBS).
 Autoloop *wire* verbs exist on the daemon socket — see Implementation status — but there is no
 `tw autoloop` / `tw play` / `tw haggle` / `tw autopilot` / `tw crawl` / `tw replay` shell entry.
+**Exception on tip:** `tw chain` (discovered trade-chain driver) is LIVE — see row below.
 
 | verb | one-line effect | key args | actor-class | owning concept |
 |---|---|---|---|---|
+| `chain {start,stop,status}` | **LIVE.** Start/stop/status a discovered trade chain (start requires a human-confirmed fingerprint). Distinct from read-only `tw chains` / `tw pairs`. | per-subverb; see `tw chain --help` | `drives {app}` | [Trade Loops](/strategy/trade-loops.md) · ADR-003 |
 | `replay <name>` | **TARGET.** Re-issue a saved skill's steps, halting on the first divergence from what was recorded/mined. | `--param k=v` `--step-timeout` `--force` | `drives {app}` | [Rule–Macro Engine](/architecture/rule-macro-engine.md) |
 | `play <name>` | **TARGET.** Run a learned skill for N cycles synchronously; halts on surprise or a rail (`--cycles`/`--floor`). | `--cycles` `--floor` `--param k=v` | `drives {app}` | [Rule–Macro Engine](/architecture/rule-macro-engine.md) |
 | `autoloop {start,stop,pause,resume}` | **TARGET as `tw` CLI.** Wire verbs `autoloop_*` exist (see Implementation status); no shell subparser. Catalog `{resume}` deliberately does not match wire (`relaunch` instead of thaw). | `name` `--cycles` `--floor` `--param k=v` | `drives {app}` | [Rule–Macro Engine](/architecture/rule-macro-engine.md) |
@@ -196,12 +202,13 @@ tw rule …                                    # draft / approve path (see tw ru
 # a human reviews and approves before anything the App plays back can ever fire
 ```
 
-# Implementation status (tip `f04b96b` · live `./tw --help`)
+# Implementation status (tip `5b1b8e9` · live `./tw --help` / `build_parser()`)
 
-**LIVE `tw` verbs today** (from `build_parser()`): `status`, `ensure`, `screen`, `stop`, `do`,
-`send`, `read`, `history`, `log`/`trail`, `report`, `watch`, `attach`, `menumap`, `loops`, `pairs`,
-`chains`, `record`, `teach analyze`, `skill approve`, `mine`/`patterns`, `explore`
-(`start`/`stop`/`status`), `reflex`, `rule`, `servers`, `probe`.
+**LIVE `tw` verbs today** (re-verified 2026-08-09 against tip `build_parser()` choices):
+`attach`, `chain`, `chains`, `coach`, `do`, `ensure`, `explore`, `history`, `log`/`trail`,
+`loops`, `menumap`, `mine`/`patterns`, `pairs`, `planet-colonization`, `players`, `port-floor`,
+`probe`, `read`, `record`, `reflex`, `report`, `rule`, `screen`, `send`, `servers`, `skill`,
+`status`, `stop`, `teach`, `watch`.
 
 `pairs` (**WO-CHAIN-DETECT-WIRE**, re-scoped 2026-07-28) is the thin product caller over the
 class-derived pair-loop path: `chain_detect.recompute` reads a world's `state/world/<world-id>`
@@ -238,9 +245,8 @@ see [Macros](/engine/macros.md)'s Findings for the mirrored note.
 `spectate` (**RETIRED / WONTBUILD** — Max; in-cockpit Spectate LIVE via PWO-055),
 `start` (ensure covers spawn), `frames`, `replay`,
 `play`/`haggle`/`autopilot`/`crawl`/`autoloop` (shell), `aiclient` as a separate curses
-product entry (product is `./tw2002-aiclient`). `record`, `teach analyze`, `skill approve`,
-`log`/`trail`, `servers`/`probe`, `report`, `chains`, `explore`, `reflex`, `rule`, `players`,
-`mine`/`patterns` are LIVE — not on this HOLD list.
+product entry (product is `./tw2002-aiclient`). See the LIVE list above for the tip-true set
+(`chain`, `coach`, `players`, `port-floor`, `planet-colonization`, `teach`/`skill`, …).
 
 **WIRE-ONLY (a daemon protocol verb exists; no `tw` CLI subparser wraps it — not runnable from a
 shell today, only over the daemon's own socket protocol):**
