@@ -2337,6 +2337,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     add_mine_parsers(sub)
 
+    from ..frames_cli import add_frames_parsers
+
+    add_frames_parsers(sub)
+
     # WO-BUILD-PORT-FLOOR-PRICE-LIVE-CAPTURE: observation store snapshot/analyze.
     from ..port_floor_cli import add_port_floor_parsers
 

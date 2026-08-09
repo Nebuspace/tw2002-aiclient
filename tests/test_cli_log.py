@@ -58,6 +58,8 @@ _SHIPPED_VERBS = frozenset(
         # WO-WIRE-STRATEGY-CARD-TRADEOFFS-OKF-REFS — full authored strategy card
         # (tradeoffs/okf_refs) beyond the width-budgeted DECISIONS renderer.
         "coach",
+        # WO-BUILD-CLI-VERBS-FRAMES — settle-frame post-mortem over state/frames/.
+        "frames",
     }
 )
 
