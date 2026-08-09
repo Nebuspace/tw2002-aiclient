@@ -10,7 +10,13 @@ it. Existing rows are never rewritten. No per-world ledger path (Option B
 held).
 
 Actor attribution is the reborn invariant: live senders are
-``VALID_SENDERS`` (``app``, ``human``) only — never ``ai``.
+``VALID_SENDERS`` (``app``, ``human``, ``dev``) — never ``ai``. ``dev`` is not
+a free third driver this module enforces on its own: it is the
+sacrificial-only sender for an AI agent's own development/debugging
+keystrokes (canon: ``canon/doctrine/dev-drive-exception.md``), gated at
+send time by ``session.Session._require_dev_sender_authorized`` against
+the active profile's ``crawl_sacrificial`` flag *before* a row ever
+reaches this module.
 
 Secret sends store ``input: "<redacted>"`` and redact ``prompt`` too
 (password-anchor match *or* ``secret=True``), matching the TX redaction
@@ -140,8 +146,12 @@ class LedgerWriter:
     ) -> dict[str, Any]:
         """Build and append one per-dispatch row.
 
-        ``actor`` must be in ``VALID_SENDERS`` (``app``|``human``). ``session_id``
-        is required on every row per canon. Secret sends never persist the
+        ``actor`` must be in ``VALID_SENDERS`` (``app``|``human``|``dev``).
+        ``dev`` is only ever reachable here after
+        ``Session._require_dev_sender_authorized`` has already gated the send
+        on a ``crawl_sacrificial`` profile — this method's own membership
+        check does not re-verify that flag. ``session_id`` is required on
+        every row per canon. Secret sends never persist the
         credential — ``input`` and ``prompt`` become ``<redacted>``.
 
         ``world_id``, when a non-empty string, is stamped on the row so retro /

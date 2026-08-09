@@ -71,23 +71,36 @@ on," under the same flag.
 
 # Code divergence
 
-This is a **canon-only ruling today.** Nothing in the codebase implements or gates this exception
-yet:
+**Send-time gate — tip implemented (`WO-BUILD-DEV-DRIVE-SENDER-ENFORCEMENT`).**
+`tw2002_aiclient/session/session.py` now carries the third sender value and its gate exactly as
+this document authorizes:
 
-- `tw2002_aiclient/ledger.py`'s `VALID_SENDERS` is still exactly `("app", "human")`
-  (`ledger.py:13,143,154-156`) — there is no third sender value, so an action taken under this
-  exception cannot currently be logged as anything but `human` (if sent via `tw do`/`tw send`) or
-  left unlogged (if sent some other way). That is a real gap against this document's own "logged
-  as what it is" requirement.
-- There is no code-level check anywhere that confirms `crawl_sacrificial = true` before permitting
-  a manual send — the constraint above is currently enforced by operator discipline only, the same
-  way every hard rule in `CLAUDE.md` is enforced before its own tooling exists.
-- A follow-on WO would need to: add a third `VALID_SENDERS` value (e.g. `"dev"`), gate any send
-  path exercising it behind an explicit `crawl_sacrificial` check read from `config/profiles.toml`,
-  and ensure it is never reachable from any autopilot/taught-rule/macro path. Until that WO lands,
-  this exception is authorized but not yet mechanically enforced — an agent exercising it today is
-  relying on the same operator discipline the rest of this codebase's hard rules already rely on
-  pre-tooling.
+- `VALID_SENDERS = ("app", "human", "dev")` (`session.py:100`) — a real third value, never folded
+  into `human`.
+- `Session._require_dev_sender_authorized()` (`session.py:925`) is a no-op for `"app"`/`"human"`
+  and, for `"dev"`, raises `ValueError` unless the active profile is flagged
+  `crawl_sacrificial=true`, checked fresh via `credentials.is_crawl_sacrificial()` on **every**
+  call (never cached). Both `send()` (`session.py:942,951`) and `send_raw()`
+  (`session.py:995,1041`) run this gate before the byte reaches the wire.
+- Tested: `tests/test_actor_attribution.py` exercises both `send()` and `send_raw()` for the
+  refusal (no profile marked; profile marked but not sacrificial) and the allow (profile marked
+  sacrificial) cases.
+- `tw2002_aiclient/ledger.py`'s `VALID_SENDERS` re-export and `record_do()`'s membership check
+  match, so a `dev` row is structurally acceptable to the ledger. `record_do()` does not itself
+  re-check `crawl_sacrificial` — it relies entirely on the send-time gate above having already
+  run, satisfying this document's own "logged as what it is" requirement without a second,
+  divergent enforcement point.
+
+**Remaining residual — no reachable product path yet.** The gate above exists but nothing in the
+shipped CLI reaches it: `tw do` / `tw send` (`session/protocol.py:1432,1474`) hardcode
+`sender="app"`, and the daemon's own ledger-attribution choke point, `protocol._record_ledger()`
+(`protocol.py:1264`), still attributes only `actor ∈ {"app", "human"}` and silently declines to
+record a `dev` row. So an agent exercising this exception today can only do so by calling
+`Session.send()`/`send_raw()` directly (e.g. from a Python REPL or a throwaway script) with
+`sender="dev"` on a `crawl_sacrificial` profile — never through the product's own `tw` verbs.
+Wiring a real CLI surface (e.g. a `--sender dev` flag on `tw do`, itself re-checking
+`is_crawl_sacrificial` rather than trusting the caller) and teaching `_record_ledger` to attribute
+`dev` rows are tracked as `WO-WIRE-DEV-SENDER-CLI-PATH` — a real follow-on, not yet landed.
 
 # Citations
 
