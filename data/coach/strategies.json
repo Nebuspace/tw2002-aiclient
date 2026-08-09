@@ -121,7 +121,7 @@
       "priority": 25
     },
     {
-      "id": "longest_profit_chain",
+      "id": "top_profit_chain",
       "title": "Celebrate longest profit chains",
       "what": "Multi-hop adjacent station cycles where every hop margins positive; call out length + cr/turn (TW-21).",
       "when_trigger": "chain_opportunity",
@@ -130,7 +130,7 @@
         "Needs a filled warp+port world-model to fire live."
       ],
       "steps": [
-        "Run find_profit_chains / longest_profit_chain on the graph.",
+        "Run find_profit_chains + rank_chains on the graph.",
         "Surface format_coach_callout to the Decisions box.",
         "Optionally arm as a library row (source=discovered)."
       ],
