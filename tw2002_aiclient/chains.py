@@ -335,11 +335,3 @@ def rank_chains_by_longevity(
     from tw2002_aiclient.chain_depletion import rank_chains_by_longevity as _rank
 
     return _rank(chains, remaining_by_key, base_rank=base_rank)
-
-
-def longest_profit_chain(
-    hops: Sequence[TradeHop],
-    **kwargs,
-) -> Optional[ProfitChain]:
-    chains = find_profit_chains(hops, **kwargs)
-    return chains[0] if chains else None

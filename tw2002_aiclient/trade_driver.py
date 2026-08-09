@@ -5,7 +5,7 @@ deferred "a fuller haggle-wired trade-loop driver" as a follow-up. This
 module is that follow-up (buy/sell cascade LIVE; auto-haggle opt-in via
 ``TradeDriverConfig.auto_haggle``, default OFF): given a `chains.ProfitChain`
 already discovered by `trade_adapter.build_trade_hops` +
-`chains.longest_profit_chain`, `run_chain()` drives the WHOLE loop --
+`chains.find_profit_chains` / `rank_chains`, `run_chain()` drives the WHOLE loop --
 navigate -> dock -> buy -> navigate -> dock -> sell -> repeat -- end to
 end, synchronously, one call. `autopilot.AutopilotEngine._execute_chain()`
 routes a chosen `"run_chain"` candidate here instead of a single bare

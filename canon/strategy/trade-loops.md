@@ -110,7 +110,7 @@ configurable.
 
 ## The longest-profit-chain finder (TW-21) — cockpit centerpiece
 
-The chain finder (`chains.find_profit_chains` / `longest_profit_chain`) searches the known
+The chain finder (`chains.find_profit_chains` / `rank_chains`) searches the known
 TradeHop edges for the best closed cycles and surfaces each with **three metrics**:
 
 - **overall profit** (`overall_profit` / `cr_per_execution`) — credits per full chain execution,
@@ -220,7 +220,7 @@ trade path are recorded here explicitly:
   decision rather than be abandoned outright (reborn: that decision is the operator's, not an
   autonomous rotation).
 - Code module `chains.py` — `TradeHop`, `ProfitChain`, `find_profit_chains`, `rank_chains`
-  (hop-count desc then cr/turn desc), the three-metric shape, `longest_profit_chain`.
+  (hop-count desc then cr/turn desc), the three-metric shape; top chain = `find_profit_chains(...)[0]`.
 - canon/research/archive-port-patterns.md AP-07 (DFS chain-finder algorithm, cycle normalization,
   rank_chains sort key, chain_as_library_row wire format).
 - Code module `trade_adapter.py` — world-model port records → `TradeHop` edges; the buy-at-`frm`
