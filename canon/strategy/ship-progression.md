@@ -217,6 +217,7 @@ The execute path for a human-approved (or App-armed `C)argo Hold Upgrade·ON`) h
 |---|---|
 | `tw2002_aiclient/stardock_hold_plan.py` | Pure evidence → `StardockHoldPlan` (world_id, fingerprint, sector, empty, unit price, credits, qty). Incomplete/hostile fields → `None` (fail-closed). Parses quote + P-QTY range from screen text. |
 | `tw2002_aiclient/stardock_hold_driver.py` | `run_hold_purchase(session, plan, should_abort=, is_armed=)` — **one send**: the planned qty string. Expects quote (+ qty prompt) already on screen. |
+| `tw2002_aiclient/session/stardock_hold.py` | Daemon-owned `StardockHoldRunner` — arms/executes an exactly approved hold buy on the session thread; refuse path includes `DEFAULT_CASH_FLOOR = 1_000` (`below_cash_floor` / `invalid_cash_floor`) before any send. Wire surface: `stardock_hold_{start,stop,status}` via `session/protocol.py` / adapters. |
 
 **Safety pins (do not "simplify" away):**
 
@@ -305,7 +306,8 @@ listing screen itself.
   `twclient/autopilot.py` (do-not-revive EV picker / `EXPLORE_BASELINE_EV` auto-driver),
   `trade_driver.py` (arm-gated chain runner), and tip hold-buy execute
   — `stardock_hold_plan.py` / `stardock_hold_driver.py` (`run_hold_purchase` one-pass; refuse unknown
-  qty range / price mismatch; never toll-pay or trade_chain).
+  qty range / price mismatch; never toll-pay or trade_chain) / `session/stardock_hold.py`
+  (`StardockHoldRunner`, `DEFAULT_CASH_FLOOR=1_000` refuse-before-send).
 - Research evidence — [`stardock-ship-purchase-capture-2026-08-08`](/research/stardock-ship-purchase-capture-2026-08-08.md)
   (fixture-vs-live mismatch on the listing screen; no purchase-confirm ground truth on any server
   driven yet; the send/confirm half of a purchase driver stays held until a live capture exists).

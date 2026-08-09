@@ -332,3 +332,5 @@ across all three sinks, and the `{actor, session_id}` ledger tag
 [7] tw2002_aiclient/session/env.py — the host/port resolution precedence chain
 [8] tw2002_aiclient/daemon_lifecycle.py — app-owned presence + quit-stop helpers
     (OFFLINE/ONLINE/UNREACHABLE; bounded status/stop; at-most-one ONLINE; single stop on confirm)
+[9] tw2002_aiclient/session/stardock_hold.py — daemon `StardockHoldRunner` for human-/App-armed
+    StarDock hold buys (`DEFAULT_CASH_FLOOR=1_000`; `StardockHoldRefused` before send; Mode-leave stop)
