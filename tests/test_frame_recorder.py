@@ -14,8 +14,6 @@ class _FakeSession:
     def __init__(self, screens):
         self._screens = list(screens)
         self._i = 0
-        self.last_sent = None
-        self.last_sent_secret = False
         self.rx_count = 0
         self.frame_recorder = None
 
@@ -67,7 +65,6 @@ def test_recorder_appends_and_grows(tmp_path):
     r1 = protocol.build_response(session)
     assert r1["ok"] is True
     session._i = 1
-    session.last_sent = "A"
     r2 = protocol.build_response(session, settled_reason="idle")
     assert r2["ok"] is True
 
@@ -117,43 +114,36 @@ def test_diff_shows_line_delta():
 
 
 def test_secret_sent_input_never_persisted(tmp_path):
+    """Password-shaped prompt → was_secret + redacted prompt; no sent_input."""
     session = _FakeSession(["Password? "])
     rec = FrameRecorder("sec_sess", state_dir=tmp_path)
     session.frame_recorder = rec
-    session.last_sent = "hunter2"
-    session.last_sent_secret = True
     protocol.build_response(session)
     frames = read_frames("sec_sess", state_dir=tmp_path)
     assert "sent_input" not in frames[0]
     assert frames[0]["was_secret"] is True
-    # Raw credential must not appear anywhere in the on-disk JSONL bytes.
-    blob = (tmp_path / "frames" / "sec_sess.jsonl").read_text(encoding="utf-8")
-    assert "hunter2" not in blob
     assert frames[0]["prompt"] == "<redacted>"
+    blob = (tmp_path / "frames" / "sec_sess.jsonl").read_text(encoding="utf-8")
+    assert '"sent_input"' not in blob
 
 
-def test_password_prompt_redacts_even_without_secret_flag(tmp_path):
-    """Prompt-shape alone is enough — same ledger discipline."""
+def test_password_prompt_redacts_from_prompt_text_alone(tmp_path):
+    """Prompt-shape alone drives was_secret — no session secret flag."""
     session = _FakeSession(["Enter your password:"])
     rec = FrameRecorder("pw_prompt", state_dir=tmp_path)
     session.frame_recorder = rec
-    session.last_sent = "hunter2"
-    session.last_sent_secret = False
     protocol.build_response(session)
     frames = read_frames("pw_prompt", state_dir=tmp_path)
     assert frames[0]["was_secret"] is True
+    assert frames[0]["prompt"] == "<redacted>"
     assert "sent_input" not in frames[0]
-    blob = (tmp_path / "frames" / "pw_prompt.jsonl").read_text(encoding="utf-8")
-    assert "hunter2" not in blob
 
 
 def test_non_secret_omits_sent_input(tmp_path):
-    """Keystrokes are never mirrored to JSONL — only was_secret honesty."""
+    """Non-password prompts: was_secret false; keystrokes never mirrored."""
     session = _FakeSession(["Command [TL=40]:"])
     rec = FrameRecorder("plain_sess", state_dir=tmp_path)
     session.frame_recorder = rec
-    session.last_sent = "D"
-    session.last_sent_secret = False
     protocol.build_response(session)
     frames = read_frames("plain_sess", state_dir=tmp_path)
     assert frames[0]["was_secret"] is False

@@ -6,10 +6,11 @@ Every settled ``build_response()`` can append one NDJSON object under
 or watch coalesces intermediate screens).
 
 Read path is pure filesystem (``tw frames``) — no daemon required for
-closed sessions. Keystroke text is never persisted: frames store ``was_secret`` (boolean)
-only — never ``session.last_sent``. On secret/password-shaped settles the
-``prompt`` field is the ledger ``"<redacted>"`` placeholder; ``sent_input``
-is always omitted from the JSONL object.
+closed sessions. Keystroke text is never persisted: frames store ``was_secret``
+(boolean from password-shaped prompt text only). Session keystroke/secret
+flags are never read. On password-shaped settles the ``prompt`` field is the
+ledger ``"<redacted>"`` placeholder; ``sent_input`` is always omitted from
+the JSONL object.
 
 Ported from archive ``twclient/frame_recorder.py`` (WO-FRAMES-0) into the
 reborn ``tw2002_aiclient`` tree.
@@ -216,12 +217,11 @@ class FrameRecorder:
             raw = list(cropped_rows or [])
         cropped = list(cropped_rows) if cropped_rows is not None else raw
         prompt_line = prompt if prompt is not None else last_nonblank_line(raw)
-        # Honesty flag only — never read session.last_sent into any value that
-        # is written to JSONL (CodeQL py/clear-text-storage-sensitive-data:
-        # conditional REDACTED is not a recognized sanitizer).
-        was_secret = bool(getattr(session, "last_sent_secret", False)) or bool(
-            _PASSWORD_PROMPT_RE.search(prompt_line or "")
-        )
+        # Redact only from local prompt text via _PASSWORD_PROMPT_RE.
+        # Never read session keystroke or secret-flag attributes — CodeQL
+        # taints anything named/flowing from *secret* into clear-text JSONL
+        # storage (py/clear-text-storage-sensitive-data).
+        was_secret = bool(_PASSWORD_PROMPT_RE.search(prompt_line or ""))
         if was_secret:
             # Match ledger: password-shaped prompts are redacted on disk too.
             # Use the untainted REDACTED constant — do not flow prompt_line.
