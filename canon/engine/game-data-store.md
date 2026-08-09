@@ -141,13 +141,13 @@ value read on one server can never silently drive a decision on a different one.
 
 ## Read-only catalog acquisition — VIEW is never BUY
 
-Rows enter this store by *reading a listing*, never by acquiring from it. The zero-input entry point
-is the read-only catalog probe (`probe.py` / `tw probe`, **L0**): a polite, credential-free connect
-that classifies a server front-end from its banner and never sends a byte of user input — the
-starting rung of the same read-only, never-commit introspection path that, when driven deeper over
-in-game catalog screens, parses shipyard/scanner/TransWarp/item listings into the rows above. That
-never-commit crawl contract — pre-classify keys from menu text, follow only clearly-safe nav/info,
-and **never press purchase/sell/attack/deploy/genesis/confirm** — is owned by
+Rows enter this store by *reading a listing*, never by acquiring from it. `tw probe`
+(`catalog_cli.py`) is **not** that read path — it is daemon-free, TCP-connect-only catalog hygiene
+(liveness sidecar; no telnet, no banner, no game-data rows). In-game rows enter when listing text
+is already on screen: opportunistic settle-edge capture (`game_data_capture`, below) parses
+shipyard/scanner/TransWarp/item buffers into the rows above. The never-commit crawl contract —
+pre-classify keys from menu text, follow only clearly-safe nav/info, and **never press
+purchase/sell/attack/deploy/genesis/confirm** — is owned by
 [menu-map-and-introspection](/engine/menu-map-and-introspection.md), which populates this store;
 this concept is the *destination* of those reads, not the owner of the crawl. Acquiring a scanner or
 a TransWarp drive that the store shows as available is a separate, human-approved *behavior*, gated
@@ -198,21 +198,26 @@ with `source: "authored"`. On the next load the store rejects it — `source` mu
 DOCS WIN: the following are places where the current implementation has not yet reached the target
 this concept prescribes. The prescription stands; these are recorded, not silently conformed to.
 
-- **The introspector's row grammar is constructed, not yet real-capture-verified.** The parser that
-  turns a StarDock/shipyard/scanner/TransWarp/item screen into rows (`introspector.py`) currently
-  matches a listing grammar *constructed* from the documented TW2002 shipyard convention plus this
-  project's own proven divider style — the repo has **no live-captured StarDock screen yet**. Until
-  the daemon actually reads a real listing, every introspected ship/equipment row is
-  provisional-by-construction and expects a refinement pass. This is exactly why the two-layer gate
-  matters: the store still refuses any *authored* number, but the parser's field-mapping is itself
-  unproven against reality.
+- **The introspector's row grammar is constructed; live capture is partial.** The parser that
+  turns a StarDock/shipyard/scanner/TransWarp/item screen into rows (`introspector.py`) matches a
+  listing grammar *constructed* from the documented TW2002 shipyard convention plus this project's
+  own proven divider style. A historical fixture
+  (`tests/fixtures/stardock_shipyard_listing.txt`) and a 2026-08-08 live-drive pass
+  ([`stardock-ship-purchase-capture-2026-08-08`](/research/stardock-ship-purchase-capture-2026-08-08.md))
+  exist, but they diverge: the live session reached a **read-only** Onboard Computer ship catalog
+  (`C`→`C`) yet did **not** reproduce the `-=-=- StarDock Shipyard - Ship Registration -=-=-`
+  listing screen or any purchase-confirm prompt on that server. Until the daemon reads a real
+  listing matching the parser's grammar on a live server, every introspected ship/equipment row
+  remains provisional-by-construction and expects a refinement pass. This is exactly why the
+  two-layer gate matters: the store still refuses any *authored* number, but the parser's
+  field-mapping is itself unproven against the live listing path still missing ground truth.
 
-- **`tw probe` today classifies front-ends; it does not populate game-data rows.** The L0 probe
-  (`probe.py`) currently connects, reads the opening banner, classifies the server front-end
-  (`twgs-direct` / `bbs` / …), and patches the server catalog's status — it is the *entry rung* of
-  the read-only introspection path, but it does **not** drive in-game catalog screens into this
-  store's ship/scanner/TransWarp/item rows. That fill path is a separate product surface
-  (`game_data_capture` below), not an extension of `tw probe`.
+- **`tw probe` today is TCP-connect-only; it does not populate game-data rows.** On tip, `tw probe`
+  lives in `catalog_cli.py` (`tcp_probe` / `run_catalog_tcp_probe`): one socket connect per catalog
+  endpoint, write liveness sidecar — **no telnet negotiation, no banner read, no front-end
+  classification**. There is no `probe.py` on tip. It is daemon-free catalog hygiene, not an entry
+  rung of in-game introspection, and it does **not** drive catalog screens into this store's
+  ship/scanner/TransWarp/item rows. That fill path is `game_data_capture` (below), not `tw probe`.
 
 - **Opportunistic StarDock capture→persist is LIVE on tip.** `game_data_capture.py`
   (`GameDataCapture.tick` → `capture_screen`) parses shipyard / cargo-hold listing text already on
@@ -244,7 +249,7 @@ this concept prescribes. The prescription stands; these are recorded, not silent
   pure text→rows parser, its no-clock / stamp-at-write-time contract, and its last-header
   stale-scrollback anchoring — the same LAST-match discipline `state_parser.py` uses),
   `game_data_capture.py` (opportunistic settle-edge capture→persist; never-send), and
-  `probe.py` (the L0 read-only, credential-free catalog probe — classifies banners; does not fill rows).
+  `catalog_cli.py` (`tw probe` — TCP-only catalog liveness sidecar; no banner; does not fill rows).
 - Cross-cutting invariants — [world-identity](/engine/world-identity.md) (host + game-letter +
   character keying), the read-only never-commit crawl contract owned by
   [menu-map-and-introspection](/engine/menu-map-and-introspection.md), and the economic consumers
