@@ -200,6 +200,9 @@ doc; **archive-only** shapes are do-not-revive (not open tip defects to "fix"):
     module supplies the missing *analysis step* over repeated real observations; it does not
     itself supply or claim real observations, and it does not promote the Floor-price/Depletion
     sections above from hypothesis to confirmed.
+  - **Stays unwired by design.** See `DECISION-PORT-FLOOR-CAPTURE-HOLD-RATIONALE` in
+    `canon/DECISIONS.md` for why this module is never wired to write its estimates back into
+    the hypothesis constants above or any persisted world-model state.
 
 # Citations
 
