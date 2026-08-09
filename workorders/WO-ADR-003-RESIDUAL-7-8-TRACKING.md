@@ -1,8 +1,10 @@
 # WO-ADR-003-RESIDUAL-7-8-TRACKING — Closing the N/M gap for items 7 & 8
 
-**Status:** DONE (docs/process only — no product behavior)
-**Answers:** `WO-CANON-ROLLUP-ADR-003-RESIDUAL-ITEMS-7-8-TRACKING-WO` (queue-aiclient.md,
-tranche-7 HANDOFF)
+**Status:** DONE (docs/process only — no product behavior) · **item 8 follow-through:**
+shipped same day via `WO-BUILD-BOUNDED-REPEAT-TRADE-CHAIN-DRIVER` (PR #637); ADR-003
+graduated to Folded (see tip-true pass `workorders/WO-CANON-FIX-ADR-003-ITEM8-TIP-TRUE.md`).
+**Answers:** `WO-CANON-ROLLUP-ADR-003-RESIDUAL-ITEMS-7-8-TRACKING-WO` / queue
+`WO-CLEANUP-ADR-003-RESIDUAL-ITEMS-7-8-TRACKING-WO` (queue-aiclient.md)
 
 ## Goal
 
@@ -73,8 +75,9 @@ this WO.
 - `canon/ADR/003-discovered-chain-approve-scaffold.md` (Status section, items 7 & 8 only)
 - `canon/DECISIONS.md` (one new tracking entry)
 
-**Out of scope:** no product code changed; ADR-003 Status stays **Distributed-fold: 6/8**
-(not re-labeled to 7/8 or Folded) since item 8 is still genuinely open.
+**Out of scope (original pass):** no product code changed. *Follow-through (same day):*
+item 8 shipped via `WO-BUILD-BOUNDED-REPEAT-TRADE-CHAIN-DRIVER` (PR #637); ADR-003
+graduated to Folded — see `workorders/WO-CANON-FIX-ADR-003-ITEM8-TIP-TRUE.md`.
 
 ## Accept
 
@@ -84,7 +87,8 @@ this WO.
    mailing-address-precise citations to the two queue-aiclient.md rows.
 3. `canon/DECISIONS.md` carries a short Accepted/Pending entry linking both items to
    their tracking WOs so a future re-verify pass does not rediscover this from scratch.
-4. ADR-003 Status remains **Distributed-fold: 6/8** — not marked Folded.
+4. ADR-003 Status remained **Distributed-fold: 6/8** at this WO's Accept time (item 8
+   still open then). Superseded same-day by tip-true Folded graduation after #637.
 5. `chain_search_view.py` addendum spot-checked against tip (still a pure formatter, no
    arm/session/curses import) — no rewrite needed.
 
