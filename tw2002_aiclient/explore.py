@@ -948,14 +948,22 @@ def _adjacent_hop_toward(
 INTENT_MAP_FILL = "map_fill"
 INTENT_FIND_STARDOCK = "find_stardock"
 INTENT_FIND_FORMATIONS = "find_formations"
+INTENT_CHAIN_HUNT = "chain_hunt"
 #: The intents a caller may arm. Deliberately a closed set: an unknown intent
 #: is REFUSED by the daemon rather than silently falling back to map-fill,
 #: because a run that quietly does something other than what the confirm line
 #: promised is exactly what the arm gate exists to prevent.
 #:
-#: ``find_formations`` is CLI/daemon-armable (WO-FORMATIONS-CATALOG-PORT) but
-#: deliberately NOT in ``ARMABLE_INTENTS`` — Play's E-cycle stays 2-wide (#247).
-INTENTS = frozenset({INTENT_MAP_FILL, INTENT_FIND_STARDOCK, INTENT_FIND_FORMATIONS})
+#: ``find_formations`` / ``chain_hunt`` are CLI/daemon-armable but deliberately
+#: NOT in ``ARMABLE_INTENTS`` — Play's E-cycle stays 2-wide (#247).
+INTENTS = frozenset(
+    {
+        INTENT_MAP_FILL,
+        INTENT_FIND_STARDOCK,
+        INTENT_FIND_FORMATIONS,
+        INTENT_CHAIN_HUNT,
+    }
+)
 
 #: Cycle order for the Play `E` offer. ORDERED (a frozenset is not) and
 #: map-fill FIRST so the first `E` press raises exactly the prompt it raised
@@ -981,11 +989,312 @@ class IntentTick:
     ``arrive`` — a *success* — and a tuple whose only non-``None`` answer is
     "next hop" would have to encode that as a halt reason, making a completed
     goal indistinguishable from an exhausted frontier in the run report.
+
+    ``chain_state`` carries Chain-hunt working memory across ticks (None for
+    other intents).
     """
 
     next_sector: Optional[int]
     goal_reached: bool = False
     reason: str = ""
+    chain_state: Optional["ChainHuntState"] = None
+
+
+@dataclass(frozen=True)
+class ChainHuntState:
+    """Cross-tick Chain-hunt memory (immutable snapshots; runner stores latest).
+
+    Canon steps 1–5: ``anchor`` is the confirmed-port closed-set owner;
+    ``ancestors`` is the backtrack stack of prior anchors; ``visiting`` is the
+    unmapped sibling hop in flight; ``return_to`` is set when the next hop
+    must be the trip back to the anchor after a no-port (or depth-capped)
+    classify.
+    """
+
+    ancestors: tuple[int, ...] = ()
+    anchor: Optional[int] = None
+    visiting: Optional[int] = None
+    return_to: Optional[int] = None
+
+
+@dataclass(frozen=True)
+class ChainHuntPlan:
+    """One Chain-hunt tick — next adjacent hop + updated working memory."""
+
+    next_sector: Optional[int]
+    state: ChainHuntState
+    mode: str
+    reason: str = ""
+
+
+def unmapped_warp_neighbors(
+    graph: Mapping[int, Sequence[int]],
+    sector: int,
+) -> list[int]:
+    """Sorted warp destinations from ``sector`` that are not yet graph keys."""
+    known = set(graph.keys())
+    return sorted(w for w in graph.get(int(sector), ()) if w not in known)
+
+
+def _hop_toward_sector(
+    graph: Mapping[int, Sequence[int]],
+    current: int,
+    goal: int,
+) -> Optional[int]:
+    """Immediate adjacent hop on the known graph toward ``goal``, or None."""
+    cur = int(current)
+    g = int(goal)
+    if cur == g:
+        return None
+    if g not in graph and cur in graph and g in graph.get(cur, ()):
+        # First visit to an unmapped neighbor — adjacent warp from current.
+        return g
+    path = path_to_sector(graph, cur, g)
+    if path is None or len(path) < 2:
+        return None
+    return path[1]
+
+
+def _nearest_port_with_unmapped_siblings(
+    graph: Mapping[int, Sequence[int]],
+    ports: set[int],
+    start: int,
+) -> Optional[int]:
+    """Nearest known port (by known-graph hops) that still has unmapped warps."""
+    if start not in graph:
+        return None
+    best: Optional[int] = None
+    best_len: Optional[int] = None
+    for port in ports:
+        if port not in graph:
+            continue
+        if not unmapped_warp_neighbors(graph, port):
+            continue
+        path = path_to_sector(graph, start, port)
+        if path is None:
+            continue
+        plen = len(path)
+        if best_len is None or plen < best_len or (plen == best_len and port < (best or port)):
+            best = port
+            best_len = plen
+    return best
+
+
+def plan_chain_hunt(
+    world_id: str,
+    *,
+    current_sector: int,
+    turn_budget: int,
+    exhaust_depth: int,
+    state: Optional[ChainHuntState] = None,
+    state_dir=None,
+    epsilon: float = 0.1,
+    rng: Optional[random.Random] = None,
+    deny: frozenset[int] = frozenset(),
+) -> ChainHuntPlan:
+    """Chain-hunt tick: sibling-exhaust + ancestor-port backtrack (canon).
+
+    ``exhaust_depth`` and ``turn_budget`` are **required caller-supplied** —
+    this function does not invent defaults. Depth is the max number of nested
+    port anchors (1 = current anchor only; finding a deeper port maps it but
+    does not re-anchor). While any ancestor still has open unmapped siblings,
+    this never falls through to Map-fill densest/stardock recovery.
+    """
+    if isinstance(exhaust_depth, bool) or not isinstance(exhaust_depth, int) or exhaust_depth < 1:
+        return ChainHuntPlan(
+            None,
+            state or ChainHuntState(),
+            "halt",
+            "explore_exhausted:invalid_exhaust_depth",
+        )
+    budget = int(turn_budget)
+    if isinstance(turn_budget, bool) or not isinstance(turn_budget, int) or budget < 0:
+        return ChainHuntPlan(
+            None,
+            state or ChainHuntState(),
+            "halt",
+            "explore_exhausted:invalid_turn_budget",
+        )
+    if budget <= 0:
+        return ChainHuntPlan(
+            None,
+            state or ChainHuntState(),
+            "exhausted",
+            "explore_exhausted:turn_budget",
+        )
+
+    cur = int(current_sector)
+    graph = known_graph(world_id, state_dir=state_dir)
+    ports = known_port_sectors(world_id, state_dir=state_dir)
+    st = state or ChainHuntState()
+
+    def _last_resort_mapfill(st_now: ChainHuntState) -> ChainHuntPlan:
+        """Map-fill recovery ONLY when the ancestor stack is empty."""
+        if st_now.ancestors:
+            # Canon: never densest-reachable while an ancestor remains.
+            return ChainHuntPlan(
+                None,
+                st_now,
+                "halt",
+                "explore_exhausted:ancestor_open_but_unreachable",
+            )
+        target, reason = map_fill_warp_target(
+            world_id,
+            current_sector=cur,
+            turn_budget=budget,
+            epsilon=epsilon,
+            state_dir=state_dir,
+            rng=rng,
+            deny=deny,
+        )
+        if target is None:
+            return ChainHuntPlan(
+                None,
+                st_now,
+                "exhausted",
+                reason or "explore_exhausted:no_hop",
+            )
+        return ChainHuntPlan(int(target), st_now, "last_resort_mapfill", reason)
+
+    # --- return trip after classify ---
+    if st.return_to is not None:
+        goal = int(st.return_to)
+        if cur == goal:
+            st = ChainHuntState(
+                ancestors=st.ancestors,
+                anchor=st.anchor,
+                visiting=None,
+                return_to=None,
+            )
+        else:
+            hop = _hop_toward_sector(graph, cur, goal)
+            if hop is None:
+                return ChainHuntPlan(
+                    None,
+                    st,
+                    "halt",
+                    "explore_exhausted:return_unreachable",
+                )
+            return ChainHuntPlan(hop, st, "return_anchor")
+
+    # --- arrive at visiting sibling: classify (canon step 4) ---
+    if (
+        st.anchor is not None
+        and st.visiting is not None
+        and cur == int(st.visiting)
+        and cur != int(st.anchor)
+    ):
+        anchor = int(st.anchor)
+        depth_now = len(st.ancestors) + 1  # depth of current anchor
+        if cur in ports and depth_now < exhaust_depth:
+            # Port found — re-anchor; push previous onto ancestor stack.
+            st = ChainHuntState(
+                ancestors=st.ancestors + (anchor,),
+                anchor=cur,
+                visiting=None,
+                return_to=None,
+            )
+            # Fall through to exhaust the new anchor this tick.
+        else:
+            # No port, or depth-capped: close branch, return to anchor.
+            hop = _hop_toward_sector(graph, cur, anchor)
+            st = ChainHuntState(
+                ancestors=st.ancestors,
+                anchor=anchor,
+                visiting=None,
+                return_to=anchor,
+            )
+            if hop is None:
+                return ChainHuntPlan(
+                    None,
+                    st,
+                    "halt",
+                    "explore_exhausted:return_unreachable",
+                )
+            return ChainHuntPlan(hop, st, "return_anchor")
+
+    # --- choose / reach an anchor (canon step 1) ---
+    if st.anchor is None:
+        if cur in ports:
+            st = ChainHuntState(ancestors=(), anchor=cur)
+        else:
+            candidate = _nearest_port_with_unmapped_siblings(graph, ports, cur)
+            if candidate is None:
+                return _last_resort_mapfill(st)
+            if candidate == cur:
+                st = ChainHuntState(ancestors=(), anchor=cur)
+            else:
+                hop = _hop_toward_sector(graph, cur, candidate)
+                if hop is None:
+                    return _last_resort_mapfill(st)
+                # Navigate toward the seed port; anchor latches on arrival.
+                return ChainHuntPlan(
+                    hop,
+                    ChainHuntState(ancestors=(), anchor=candidate),
+                    "seek_anchor",
+                )
+
+    anchor = int(st.anchor)
+    if cur != anchor:
+        hop = _hop_toward_sector(graph, cur, anchor)
+        if hop is None:
+            # Cannot reach declared anchor — try backtrack / last resort.
+            if st.ancestors:
+                parent = int(st.ancestors[-1])
+                st2 = ChainHuntState(
+                    ancestors=st.ancestors[:-1],
+                    anchor=parent,
+                    visiting=None,
+                    return_to=None,
+                )
+                hop2 = _hop_toward_sector(graph, cur, parent)
+                if hop2 is not None:
+                    return ChainHuntPlan(hop2, st2, "backtrack")
+            return _last_resort_mapfill(st)
+        return ChainHuntPlan(hop, st, "seek_anchor")
+
+    # --- at anchor: exhaust closed sibling set (canon steps 2–5) ---
+    siblings = [
+        s for s in unmapped_warp_neighbors(graph, anchor) if s not in deny
+    ]
+    if siblings:
+        nxt = siblings[0]  # deterministic: lowest id
+        st2 = ChainHuntState(
+            ancestors=st.ancestors,
+            anchor=anchor,
+            visiting=nxt,
+            return_to=None,
+        )
+        return ChainHuntPlan(nxt, st2, "visit_sibling")
+
+    # Closed set empty — backtrack to nearest ancestor with open siblings.
+    for i in range(len(st.ancestors) - 1, -1, -1):
+        parent = int(st.ancestors[i])
+        open_sibs = [
+            s for s in unmapped_warp_neighbors(graph, parent) if s not in deny
+        ]
+        if not open_sibs:
+            continue
+        st2 = ChainHuntState(
+            ancestors=st.ancestors[:i],
+            anchor=parent,
+            visiting=None,
+            return_to=None,
+        )
+        hop = _hop_toward_sector(graph, cur, parent)
+        if hop is None:
+            return ChainHuntPlan(
+                None,
+                st2,
+                "halt",
+                "explore_exhausted:backtrack_unreachable",
+            )
+        return ChainHuntPlan(hop, st2, "backtrack")
+
+    # Ancestor stack empty (or all ancestors exhausted) — last-resort Map-fill.
+    return _last_resort_mapfill(
+        ChainHuntState(ancestors=(), anchor=None, visiting=None, return_to=None)
+    )
 
 
 def warp_target_for_intent(
@@ -998,6 +1307,8 @@ def warp_target_for_intent(
     state_dir=None,
     rng: Optional[random.Random] = None,
     deny: frozenset[int] = frozenset(),
+    exhaust_depth: Optional[int] = None,
+    chain_state: Optional[ChainHuntState] = None,
 ) -> IntentTick:
     """One tick for *intent* — the single seam the explore runner drives.
 
@@ -1015,6 +1326,43 @@ def warp_target_for_intent(
     avoid-list DANGER prompt this run -- excluded from this tick's fresh-
     frontier candidates so the very next tick does not re-pick the same hop.
     """
+    if intent == INTENT_CHAIN_HUNT:
+        if exhaust_depth is None:
+            return IntentTick(
+                next_sector=None,
+                reason="explore_exhausted:missing_exhaust_depth",
+                chain_state=chain_state,
+            )
+        plan = plan_chain_hunt(
+            world_id,
+            current_sector=current_sector,
+            turn_budget=turn_budget,
+            exhaust_depth=exhaust_depth,
+            state=chain_state,
+            state_dir=state_dir,
+            epsilon=epsilon,
+            rng=rng,
+            deny=deny,
+        )
+        if plan.next_sector is None:
+            reason = plan.reason or plan.mode or "no_hop"
+            if not reason.startswith("explore_exhausted") and not reason.startswith(
+                "route_hazard:"
+            ):
+                reason = f"explore_exhausted:{reason}"
+            return IntentTick(
+                next_sector=None, reason=reason, chain_state=plan.state
+            )
+        nxt = int(plan.next_sector)
+        graph = known_graph(world_id, state_dir=state_dir)
+        hazard = _guard_route_hazard_hop(
+            graph, current_sector, nxt, world_id=world_id, state_dir=state_dir
+        )
+        if hazard is not None:
+            return IntentTick(
+                next_sector=None, reason=hazard, chain_state=plan.state
+            )
+        return IntentTick(next_sector=nxt, chain_state=plan.state)
     if intent == INTENT_MAP_FILL:
         target, reason = map_fill_warp_target(
             world_id,

@@ -711,13 +711,25 @@ def _dispatch_explore_start(args, server):
         return {"ok": False, "error": f"unsupported_arg:{unsupported[0]}"}
     world_id = args.get("world_id")
     min_sectors = args.get("min_sectors", sector_explore.DEFAULT_MIN_DISTINCT_SECTORS)
-    turn_budget = args.get("turn_budget", sector_explore.DEFAULT_TURN_BUDGET)
     # WO-EXPLORE-AUTOMATION-GATE E3. Omitting `intent` keeps the pre-WO
     # behaviour exactly (map-fill), so every existing caller is unchanged;
     # an unknown value is refused by `runner.start` as `invalid_intent`
     # rather than defaulted, because a run that silently pursues a different
     # goal than the one confirmed is the failure this gate exists to prevent.
     intent = args.get("intent", _explore.INTENT_MAP_FILL)
+    # WO-BUILD-CHAIN-HUNT-SIBLING-EXHAUST-EXPLORE: chain_hunt refuses the
+    # daemon turn_budget default — both turn_budget and exhaust_depth must
+    # be explicit on the wire (Pending numeric defaults must not be invented).
+    if intent == _explore.INTENT_CHAIN_HUNT:
+        if "turn_budget" not in args:
+            return {"ok": False, "error": "missing_turn_budget"}
+        if "exhaust_depth" not in args:
+            return {"ok": False, "error": "missing_exhaust_depth"}
+        turn_budget = args["turn_budget"]
+        exhaust_depth = args["exhaust_depth"]
+    else:
+        turn_budget = args.get("turn_budget", sector_explore.DEFAULT_TURN_BUDGET)
+        exhaust_depth = args.get("exhaust_depth")
     # WO-EXPLORE-DOCK-NEW-PORT: absent means False, matching the library
     # default. This is the only explore arg whose omission decides whether the
     # run may SPEND turns, so it is read the same way `intent` is -- taken
@@ -737,6 +749,7 @@ def _dispatch_explore_start(args, server):
             intent=intent,
             dock_new_ports=dock_new_ports,
             fight_tolls=fight_tolls,
+            exhaust_depth=exhaust_depth,
         )
     except sector_explore.ExploreRefused as exc:
         return {"ok": False, "error": str(exc)}

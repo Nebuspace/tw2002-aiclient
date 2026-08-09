@@ -6,6 +6,8 @@ behaviour against a mocked transport -- no live daemon required.
 
 from __future__ import annotations
 
+import argparse
+
 import pytest
 
 from tw2002_aiclient.session import cli
@@ -227,3 +229,80 @@ def test_explore_start_sends_intent(monkeypatch):
     assert seen["verb"] == "explore_start"
     assert seen["payload"]["intent"] == "find_formations"
     assert seen["payload"]["world_id"] == "ona"
+
+
+def test_explore_start_help_lists_chain_hunt_required_flags():
+    """Both chain-hunt flags must appear as required (no argparse [default: N])."""
+    top = cli.build_parser()
+    ex = None
+    for action in top._actions:
+        if isinstance(action, argparse._SubParsersAction):
+            ex = action.choices.get("explore")
+            break
+    assert ex is not None
+    start = None
+    for action in ex._actions:
+        if isinstance(action, argparse._SubParsersAction):
+            start = action.choices.get("start")
+            break
+    assert start is not None
+    help_text = start.format_help()
+    assert "--exhaust-depth" in help_text
+    assert "REQUIRED with --intent chain_hunt" in help_text
+    # argparse only emits ``[default: …]`` when default is not None — neither
+    # flag invents a numeric default.
+    assert "[default:" not in help_text
+
+
+def test_explore_start_parses_chain_hunt_with_required_flags():
+    args = cli.build_parser().parse_args([
+        "explore", "start", "--world-id", "ona",
+        "--intent", "chain_hunt",
+        "--exhaust-depth", "3",
+        "--turn-budget", "40",
+    ])
+    assert args.intent == "chain_hunt"
+    assert args.exhaust_depth == 3
+    assert args.turn_budget == 40
+
+
+def test_explore_start_chain_hunt_missing_flags_fail_closed(monkeypatch, capsys):
+    sent = []
+
+    def fake_send(*a, **k):
+        sent.append(1)
+        return {"ok": True}
+
+    monkeypatch.setattr(cli, "send_request", fake_send)
+    args = cli.build_parser().parse_args([
+        "explore", "start", "--world-id", "ona",
+        "--intent", "chain_hunt",
+    ])
+    rc = args.func(args)
+    assert rc == 2
+    assert not sent
+    err = capsys.readouterr().err
+    assert "--turn-budget" in err
+    assert "--exhaust-depth" in err
+
+
+def test_explore_start_sends_chain_hunt_payload(monkeypatch):
+    seen = {}
+
+    def fake_send(verb, payload, run_dir=None):
+        seen["verb"] = verb
+        seen["payload"] = payload
+        return {"ok": True}
+
+    monkeypatch.setattr(cli, "send_request", fake_send)
+    monkeypatch.setattr(cli, "print_response", lambda *a, **k: None)
+    args = cli.build_parser().parse_args([
+        "explore", "start", "--world-id", "ona",
+        "--intent", "chain_hunt",
+        "--exhaust-depth", "2",
+        "--turn-budget", "25",
+    ])
+    assert args.func(args) == 0
+    assert seen["payload"]["intent"] == "chain_hunt"
+    assert seen["payload"]["exhaust_depth"] == 2
+    assert seen["payload"]["turn_budget"] == 25
