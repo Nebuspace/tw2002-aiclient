@@ -1100,13 +1100,24 @@ def cmd_record(args):
                                                  # field, taken BEFORE step 0
           "steps": [
             {"input": "P", "screen": [...]},
-            {"input": "1", "screen": [...], "confirm_exact": true}
+            {"input": "1", "screen": [...], "confirm_exact": true},
+            {"input": "50", "screen": [...], "param": "qty"}
           ]
         }
 
     ``confirm_exact`` (optional, default false) asks the recorder to capture
     that step's resulting prompt line as an exact (escaped) ``wait_prompt``
     -- see ``loops/recorder.py``'s docstring, trap 2.
+
+    ``param`` (optional, per-step) generalizes that step's ``input`` into a
+    named replay-time parameter -- ``canon/engine/macros.md``
+    §"Parameterization". The manifest's ``input`` for that step must be
+    all-digit keystrokes (a hold count, an offer, a sector id); the written
+    loop's step carries the placeholder ``{param}`` instead, and the
+    literal value becomes that parameter's recorded default (``params`` in
+    the saved document). ``tw2002_aiclient.loops.player.replay_loop``'s own
+    ``params=`` argument overrides the default at replay time; omitting it
+    replays with exactly what was demonstrated here.
 
     Exit codes mirror ``cmd_loops``'s posture: a malformed manifest, or a
     refusal from the recorder itself (no readable start_anchor, an empty
@@ -1148,6 +1159,7 @@ def cmd_record(args):
                 raw_step.get("input", ""),
                 raw_step.get("screen"),
                 confirm_exact=bool(raw_step.get("confirm_exact", False)),
+                param=raw_step.get("param"),
             )
         path = recorder.save(
             blessed=blessed,

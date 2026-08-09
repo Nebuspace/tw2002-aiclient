@@ -114,8 +114,9 @@ from __future__ import annotations
 
 import os
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
+from types import MappingProxyType
 from typing import Any, Mapping, Optional
 
 # The shared document-admission gate, imported rather than re-implemented so
@@ -151,8 +152,45 @@ __all__ = [
     "LoopUnreadable",
     "ReadFailure",
     "StepDefect",
+    "is_valid_param_name",
     "load_loop",
+    "param_placeholder_name",
 ]
+
+
+# ---------------------------------------------------------------------------
+# Parameterization -- ``canon/engine/macros.md`` §"Parameterization"
+# ---------------------------------------------------------------------------
+#
+# A step's `input` may, instead of literal keystrokes, name a parameter to
+# bind at replay time -- canon's own example: `{qty}` -> `50` on one run,
+# `100` on another. The syntax is deliberately narrow: the ENTIRE `input`
+# string must be exactly `{name}`, never a partial/inline substitution, so
+# a step is unambiguously either a literal send or a parameter reference
+# and this module never has to interpret a hybrid. Shared here (rather than
+# forked between `recorder.py`, which WRITES a placeholder, and `player.py`,
+# which RESOLVES one) so the two sides of the round trip can never drift
+# into two different ideas of what a placeholder looks like.
+
+_PARAM_NAME_PATTERN = r"[A-Za-z_][A-Za-z0-9_]*"
+_PARAM_NAME_RE = re.compile(r"^" + _PARAM_NAME_PATTERN + r"$")
+_PARAM_PLACEHOLDER_RE = re.compile(r"^\{(" + _PARAM_NAME_PATTERN + r")\}$")
+
+
+def is_valid_param_name(name: object) -> bool:
+    """Is ``name`` usable as a parameter name -- a letter/underscore start,
+    then letters, digits, or underscores? Shared by the loader's own
+    ``params`` validation and the recorder's ``step(param=...)`` gate, so
+    a name good enough to write is always good enough to read back."""
+    return isinstance(name, str) and _PARAM_NAME_RE.match(name) is not None
+
+
+def param_placeholder_name(value: str) -> Optional[str]:
+    """``name`` if ``value`` is EXACTLY a ``{name}`` placeholder, else
+    ``None``. A step whose whole ``input`` is not this shape is an ordinary
+    literal send, unchanged from every macro recorded before this existed."""
+    match = _PARAM_PLACEHOLDER_RE.match(value)
+    return match.group(1) if match else None
 
 
 # ---------------------------------------------------------------------------
@@ -191,6 +229,17 @@ class Loop:
     ``source`` is ``None`` unless the document carried one of canon's two
     values; ``draft`` is the real approval gate, since approval is expressed
     by file location.
+
+    ``params`` is the macro's own recorded DEFAULTS for any named
+    placeholder its steps reference (``canon/engine/macros.md``
+    §"Parameterization") -- name -> the literal keystrokes captured for it.
+    Empty (never ``None``) for every document that predates this field, so
+    an old macro loads and replays exactly as it always did. A
+    :class:`~tw2002_aiclient.loops.player.ReplaySession` caller's own
+    override outranks this default; this is only what replay falls back to
+    when nothing else names the parameter. A ``types.MappingProxyType``,
+    not a plain ``dict``, for the same reason ``steps`` is a tuple: frozen
+    all the way down.
     """
 
     name: str
@@ -200,6 +249,7 @@ class Loop:
     created_ts: Optional[str]
     draft: bool
     path: str
+    params: Mapping[str, str] = field(default_factory=lambda: MappingProxyType({}))
 
 
 @dataclass(frozen=True)
@@ -475,6 +525,38 @@ def _validate_anchor(document: Mapping[str, Any]) -> tuple[Optional[int], Option
     return anchor, None
 
 
+def _validate_params(document: Mapping[str, Any]) -> tuple[Mapping[str, str], Optional[str]]:
+    """``(params, None)`` or ``({}, reason)``.
+
+    Absent is legal and stays empty: every document written before this
+    field existed has no ``params`` key at all, and refusing them would
+    retroactively unplay the whole real store. When present, ``params`` IS
+    acted on -- a step referencing an unbound placeholder falls back to it
+    -- so, like ``start_anchor`` and unlike the purely-displayed ``source``,
+    a malformed entry is refused rather than silently dropped: downgrading
+    to "no default" here does not fail safe, it changes what gets pressed.
+    """
+    if "params" not in document:
+        return MappingProxyType({}), None
+    raw = document["params"]
+    if not isinstance(raw, Mapping):
+        return MappingProxyType({}), (
+            f"'params' is a {type(raw).__name__}, expected an object mapping "
+            "parameter names to their recorded default keystrokes"
+        )
+    cleaned: dict[str, str] = {}
+    for key, value in raw.items():
+        if not is_valid_param_name(key):
+            return MappingProxyType({}), f"'params' key {key!r} is not a valid parameter name"
+        if not isinstance(value, str):
+            return MappingProxyType({}), (
+                f"'params' entry {key!r} is a {type(value).__name__}, expected "
+                "the default keystrokes to send when this parameter is unbound"
+            )
+        cleaned[key] = value
+    return MappingProxyType(cleaned), None
+
+
 def _build_loop(document: Mapping[str, Any], path: Path, *, draft: bool) -> Loop:
     """Validate a matched document into a playable ``Loop``, or refuse."""
     name = document["name"]
@@ -482,6 +564,10 @@ def _build_loop(document: Mapping[str, Any], path: Path, *, draft: bool) -> Loop
     anchor, anchor_problem = _validate_anchor(document)
     if anchor_problem is not None:
         raise LoopMalformed(name, path, anchor_problem)
+
+    params, params_problem = _validate_params(document)
+    if params_problem is not None:
+        raise LoopMalformed(name, path, params_problem)
 
     raw_steps = document["steps"]  # a list, guaranteed by the admission gate
     if not raw_steps:
@@ -529,6 +615,7 @@ def _build_loop(document: Mapping[str, Any], path: Path, *, draft: bool) -> Loop
         created_ts=created if isinstance(created, str) else None,
         draft=draft,
         path=str(path),
+        params=params,
     )
 
 

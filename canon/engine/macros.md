@@ -76,22 +76,22 @@ only when a human promotes it into the blessed store.
 
 A macro is meant to be *reusable*, which means the concrete numbers a human typed during one
 demonstration (a hold count, an offer, a sector id) should be able to generalize into named parameters
-bound at replay time (e.g. `{qty}` → `50` on one run, `100` on another) — **this is the target
-vision**; see the Code divergence note immediately below for what tip actually does today (nothing:
-no placeholder is ever produced or resolved on either side).
+bound at replay time (e.g. `{qty}` → `50` on one run, `100` on another) — this is now real on both
+sides of the round trip; see the Code divergence note immediately below for the shape it landed in.
 
-> **Code divergence (re-verified 2026-08-08: parameterization does not exist on EITHER side, not
-> just capture-side as previously recorded here).** In tip `tw2002_aiclient/loops/player.py`, capture
-> records each keystroke **literally** (and the shipped X6 recorder writes the same literal shape),
-> and `replay_loop` sends `step.input` to `session.send_and_confirm` verbatim — grep-confirmed there
-> is no `_apply_params` function or any other placeholder-substitution call site anywhere in tip.
-> (The prior wording here claimed `_apply_params` substituted into pre-existing `{…}` tokens at
-> replay time; that function does not exist in tip and this doc's own citation of it was itself
-> stale.) Recording never produces placeholders and replay never resolves them, so numeric
-> generalization today requires a human to hand-edit the macro JSON **and** the replayed keystroke to
-> literally equal what's in the file — there is no `{qty}`-style binding anywhere in the live path.
-> The "numeric inputs generalizable" capability the target vision calls for is **not built on either
-> side**. Recorded, not silently conformed. (Pre-rebirth port-source: archived `twclient/skills.py`.)
+> **Code divergence (re-verified 2026-08-08, WO-BUILD-MACRO-CAPTURE-PARAM-GENERALIZATION-2:
+> parameterization now exists on BOTH sides — the prior entry recording "nothing on either side" is
+> superseded).** In tip, `LoopRecorder.step(..., param="qty")` (`tw2002_aiclient/loops/recorder.py`)
+> is the opt-in capture half: the caller (today, `tw record`'s per-step manifest `"param"` key) names
+> which step's all-digit `keystrokes` to generalize, never a guess. The literal value becomes that
+> parameter's recorded default (the document's own `params` object) and the step's `input` becomes the
+> placeholder `{name}`; the two never coexist on one step. `replay_loop` (`tw2002_aiclient/loops/player.py`)
+> resolves every placeholder through `_apply_params` immediately before the send it gates — an explicit
+> `params=` argument outranks the macro's own recorded default — and validates every step's placeholder
+> resolvable **at entry, before the first observation**, refusing (never guessing, never sending the
+> literal text `"{qty}"`) if any is unbound. A macro that never opts in replays exactly as it always did;
+> every non-parameterized step's `input` is untouched. Recorded, not silently conformed. (Pre-rebirth
+> port-source: archived `twclient/skills.py`.)
 
 ## Deterministic replay — one confirmed step at a time
 
@@ -225,8 +225,6 @@ tw replay ore-run          # ship is currently in sector 231, not 158
 Recorded per the reborn contract: where current code diverges from the target vision, the divergence is
 noted, not conformed away.
 
-- **Parameterization is replay-side only.** Capture stores literal keystrokes; numeric generalization
-  into named params requires hand-editing the macro JSON (detailed under *Parameterization* above).
 - **Autopilot's per-cycle EV select vs stop-on-unknown.** The broader autopilot run-loop historically
   selected a live action per cycle by expected-value ranking over the current screen (a
   priority-engine-driven "keep driving / never idle" posture) rather than replaying only *taught*

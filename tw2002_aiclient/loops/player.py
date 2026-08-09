@@ -272,16 +272,45 @@ start-anchor re-check for free, exactly as the archived ``play_skill``
 got it from ``replay_skill``.
 
 Also absent, deliberately: no ledger rows (``macros.md`` §"Ledgering a
-replay" -- ``actor=trainer``), no parameter substitution (``_apply_params``
-in the archive), no ``autoloop`` CLI verb, no daemon driver, no wire
-serializer. Each belongs to a slice that owns its own surface.
+replay" -- ``actor=trainer``), no ``autoloop`` CLI verb, no daemon driver,
+no wire serializer. Each belongs to a slice that owns its own surface.
+
+Parameter placeholders (WO-BUILD-MACRO-CAPTURE-PARAM-GENERALIZATION-2)
+------------------------------------------------------------------------
+``macros.md`` §"Parameterization" wants a step's literal number to
+generalize into a named replay-time binding, e.g. ``{qty}`` -> ``50`` on
+one run, ``100`` on another. Until this WO neither side of that existed:
+capture recorded literals only and this module sent ``step.input``
+verbatim, whatever it looked like -- ``_apply_params`` was cited in this
+very docstring as archive-only, absent from tip.
+
+:func:`loader.param_placeholder_name` is the ONE syntax both sides of the
+round trip share: a step's entire ``input`` is either an ordinary literal
+(the overwhelming majority of every macro, including every one recorded
+before this existed) or exactly ``{name}``, never a hybrid. Resolution
+(:func:`_apply_params`) happens immediately before the send it gates, and
+the binding rule is one sentence: an explicit ``params=`` override (this
+call's own argument) outranks the macro's own recorded default
+(``loop.params``, written by the recorder), which is what a caller gets
+when it supplies nothing at all.
+
+Validated ENTIRELY at entry, before the first observation, for every step
+in the macro at once (:func:`_unbound_params`) -- not lazily at the send
+that would need it. The reason is the same one the floor/turn_budget port-
+capability checks already give: discovering an unresolvable placeholder at
+step 5 would mean steps 0-4 already spent real turns and credits on a run
+that can never finish, which is a strictly worse outcome than refusing to
+start. This module never sends the literal text of an unresolved
+placeholder -- that would be four-or-so live bytes nobody taught, the
+exact blind-pump send-and-confirm exists to make impossible, one layer
+earlier than the send itself.
 """
 
 from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from typing import Optional, Protocol
+from typing import Mapping, Optional, Protocol
 
 from ..halt_reasons import QUALIFIER_SEP, halt_reason_code, qualify as _qualify
 from ..session.classify import NEVER_AUTO_ACTION_CLASSES, classify_screen
@@ -296,7 +325,7 @@ from ..session.state_parser import (
     TurnsSnapshot,
     read_current_sector,
 )
-from .loader import Loop, LoopStep
+from .loader import Loop, LoopStep, param_placeholder_name
 
 __all__ = [
     "CREDITS_STALE_MS",
@@ -749,6 +778,12 @@ class StepTrace:
     failing step". A step never reached carries no row, so the trace length
     is the number of sends, never a plan.
 
+    ``input`` is what was ACTUALLY sent -- for a parameterized step
+    (``{qty}``-style) that is the resolved keystrokes, not the macro's own
+    placeholder text (:func:`_apply_params`); every non-parameterized step
+    (still the overwhelming majority) carries exactly ``step.input``,
+    unchanged from before this rail existed.
+
     ``observed_class`` is ``None`` when the boundary after this step never
     produced a classification: either the send was not confirmed (canon
     forbids classifying a screen already known to be untrustworthy) or the
@@ -1190,14 +1225,71 @@ def _check_start_anchor(loop: Loop, read: Optional[SectorRead], force: bool) -> 
 
 
 # ---------------------------------------------------------------------------
+# Parameter placeholders -- see the module docstring's own section
+# ---------------------------------------------------------------------------
+
+
+def _resolve_param(name: str, defaults: Mapping[str, str], overrides: Mapping[str, str]) -> Optional[str]:
+    """The one binding rule, as one function: an explicit override
+    outranks the macro's own recorded default. ``None`` means neither
+    side names this parameter at all -- unresolved, not "empty"."""
+    if name in overrides:
+        return overrides[name]
+    return defaults.get(name)
+
+
+def _unbound_params(loop: Loop, overrides: Mapping[str, str]) -> list[str]:
+    """Every parameter this macro's steps reference that neither
+    ``overrides`` nor ``loop.params`` can resolve -- checked across ALL
+    steps at once, so a macro missing a LATE parameter refuses before step
+    0 rather than stranding mid-run with earlier steps already sent (see
+    the module docstring's "Parameter placeholders" section)."""
+    # A comprehension, not a `for`: `test_no_run_loop_snuck_in` asserts
+    # exactly one loop statement in this whole module (the replay's own
+    # step walk) as a structural proof that no repetition snuck in beside
+    # it. This is validation, not repetition, so it earns no exception --
+    # a comprehension makes that true at the AST level, not just by intent.
+    names = (param_placeholder_name(step.input) for step in loop.steps)
+    return [name for name in names if name is not None and _resolve_param(name, loop.params, overrides) is None]
+
+
+def _apply_params(raw_input: str, defaults: Mapping[str, str], overrides: Mapping[str, str]) -> str:
+    """The keystrokes to actually send for one step.
+
+    A step whose ``input`` is not a ``{name}`` placeholder resolves to
+    itself, unchanged -- zero new behaviour for every macro that predates
+    this rail. A placeholder resolves through :func:`_resolve_param`.
+
+    :func:`replay_loop` proves every step's placeholder resolvable BEFORE
+    the first observation (:func:`_unbound_params`); the assertion below is
+    belt-and-suspenders against a FUTURE edit that let an unresolvable one
+    through anyway, not the enforcement itself -- sending the literal text
+    ``"{qty}"`` would be live bytes nobody taught, and asserting here is
+    cheaper than discovering it against a real socket.
+    """
+    name = param_placeholder_name(raw_input)
+    if name is None:
+        return raw_input
+    resolved = _resolve_param(name, defaults, overrides)
+    assert resolved is not None, (
+        f"step input {raw_input!r} names parameter {name!r}, which replay_loop's "
+        "own entry validation should already have refused -- resolving it here "
+        "anyway would send the literal placeholder text"
+    )
+    return resolved
+
+
+# ---------------------------------------------------------------------------
 # The replay
 # ---------------------------------------------------------------------------
 
 
-def _trace(index: int, step: LoopStep, confirmed: bool, observed_class: Optional[str]) -> StepTrace:
+def _trace(
+    index: int, step: LoopStep, resolved_input: str, confirmed: bool, observed_class: Optional[str]
+) -> StepTrace:
     return StepTrace(
         index=index,
-        input=step.input,
+        input=resolved_input,
         wait_prompt=step.wait_prompt,
         expected_post_class=step.expected_post_class,
         confirmed=confirmed,
@@ -1216,6 +1308,7 @@ def replay_loop(
     turns_stale_ms: int = TURNS_STALE_MS,
     profit_target: Optional[int] = None,
     profit_stale_ms: int = CREDITS_STALE_MS,
+    params: Optional[Mapping[str, str]] = None,
 ) -> ReplayResult:
     """Replay one taught macro against a live session, one confirmed step
     at a time, halting the instant reality disagrees.
@@ -1265,11 +1358,24 @@ def replay_loop(
     floor. ``profit_stale_ms`` is its staleness window, same rule as
     ``credits_stale_ms``.
 
+    ``params`` is an optional name -> keystrokes mapping that OVERRIDES the
+    macro's own recorded defaults (``loop.params``) for any ``{name}``
+    placeholder step (module docstring, "Parameter placeholders"). ``None``
+    (the default) means every placeholder falls back to its recorded
+    default, so a caller that never asks for this behaves exactly as if the
+    macro had none. Every placeholder across every step must resolve --
+    through ``params`` or through ``loop.params``, either is enough -- or
+    this raises **at entry**, before any observation, the same posture as
+    an unenforceable floor: discovering a missing parameter at step 5 would
+    mean steps 0-4 already spent real turns and credits on a run that can
+    never finish.
+
     Returns a :class:`ReplayResult` and does not raise for any game
     outcome; halting is the normal, correct answer whenever the world has
     moved. It raises only for a caller bug (a wrong ``loop`` type, an
-    unenforceable floor or budget), and every such raise costs zero bytes
-    because it happens before the first observation.
+    unenforceable floor or budget, an unresolvable parameter), and every
+    such raise costs zero bytes because it happens before the first
+    observation.
     """
     if not isinstance(loop, Loop):
         raise TypeError(
@@ -1351,6 +1457,30 @@ def replay_loop(
             raise ValueError(
                 f"profit_stale_ms must be positive -- got {profit_stale_ms}."
             )
+    if params is not None and (
+        not isinstance(params, Mapping)
+        or not all(isinstance(k, str) and isinstance(v, str) for k, v in params.items())
+    ):
+        raise TypeError(
+            "replay_loop's params must be a mapping of parameter name -> "
+            f"keystrokes to send -- got {type(params).__name__}."
+        )
+    overrides: Mapping[str, str] = params if params is not None else {}
+    # Every step's placeholder, checked NOW rather than at the send that
+    # would need it -- see the module docstring's "Parameter placeholders"
+    # section for why a late unbound parameter is refused before step 0
+    # rather than discovered after earlier steps already spent real turns
+    # and credits on a run that can never finish.
+    unbound = _unbound_params(loop, overrides)
+    if unbound:
+        names = sorted(set(unbound))
+        raise ValueError(
+            f"replay_loop cannot resolve parameter{'s' if len(names) != 1 else ''} "
+            f"{names} in macro {loop.name!r} -- pass params={{...}} or record a "
+            "default for each (loops/recorder.py's step(param=...)); discovering "
+            "this mid-run would mean earlier steps already sent while a later "
+            "one could not be"
+        )
 
     traces: list[StepTrace] = []
     sends_issued = 0
@@ -1398,6 +1528,12 @@ def replay_loop(
         return halted(reason, BEFORE_FIRST_SEND, anchor_read)
 
     for index, step in enumerate(loop.steps):
+        # Resolved BEFORE the send it gates, never after -- see the module
+        # docstring's "Parameter placeholders" section. `replay_loop`'s own
+        # entry validation has already proven every placeholder resolvable,
+        # so this cannot itself halt; it is the SUBSTITUTION step, not a
+        # second gate.
+        resolved_input = _apply_params(step.input, loop.params, overrides)
         # THE ONE SEND. Everything above this line is why it is allowed to
         # happen; everything below is why the next one might not be.
         #
@@ -1413,12 +1549,12 @@ def replay_loop(
         # through the whole macro, which is the exact failure canon's
         # send-and-confirm invariant exists to make impossible. Anything
         # that is not `True` is a send this module cannot call confirmed.
-        confirmed = session.send_and_confirm(step.input, step.wait_prompt) is True
+        confirmed = session.send_and_confirm(resolved_input, step.wait_prompt) is True
         if not confirmed:
             # Canon: an unconfirmed send is itself the surprise, and replay
             # "does not then try to classify a screen it already knows is
             # untrustworthy". So there is no observation here at all.
-            traces.append(_trace(index, step, confirmed=False, observed_class=None))
+            traces.append(_trace(index, step, resolved_input, confirmed=False, observed_class=None))
             return halted(HALT_CONFIRM_FAILED, index, anchor_read)
 
         observation = _observe(
@@ -1448,7 +1584,7 @@ def replay_loop(
             # of the real archived corpus) halts on the novelty rather
             # than "matching" an unrecognized screen against itself.
             reason = HALT_POST_CLASS
-        traces.append(_trace(index, step, confirmed=True, observed_class=observation.klass))
+        traces.append(_trace(index, step, resolved_input, confirmed=True, observed_class=observation.klass))
         if reason is not None:
             return halted(reason, index, anchor_read)
 

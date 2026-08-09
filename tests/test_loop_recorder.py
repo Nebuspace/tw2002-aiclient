@@ -284,6 +284,94 @@ def test_the_escaped_wait_prompt_survives_a_real_save_and_load_round_trip(tmp_pa
 
 
 # ---------------------------------------------------------------------------
+# Parameterization (WO-BUILD-MACRO-CAPTURE-PARAM-GENERALIZATION-2)
+# ---------------------------------------------------------------------------
+
+
+def test_a_parameterized_step_writes_a_placeholder_not_the_literal():
+    rec = LoopRecorder("ore-run", ANCHOR_158)
+    step = rec.step("50", PORT, param="qty")
+    assert step.input == "{qty}"
+    doc = rec.document()
+    assert doc["params"] == {"qty": "50"}
+
+
+def test_a_non_parameterized_step_still_writes_its_literal_input():
+    """Isolates the cell above: opting IN on one step never generalizes a
+    sibling step that did not ask for it."""
+    rec = LoopRecorder("ore-run", ANCHOR_158)
+    rec.step("P", PORT)
+    step = rec.step("50", PORT, param="qty")
+    doc = rec.document()
+    assert doc["steps"][0]["input"] == "P"
+    assert doc["steps"][1]["input"] == "{qty}"
+    assert step.input == "{qty}"
+
+
+def test_document_omits_params_entirely_when_none_were_captured():
+    """Byte-for-byte backward compatibility: a capture that never opts in
+    produces the exact document shape it always did, no new key at all."""
+    rec = LoopRecorder("ore-run", ANCHOR_158)
+    rec.step("P", PORT)
+    doc = rec.document()
+    assert "params" not in doc
+
+
+def test_a_non_digit_keystrokes_cannot_be_parameterized():
+    rec = LoopRecorder("ore-run", ANCHOR_158)
+    with pytest.raises(RecorderError):
+        rec.step("P", PORT, param="qty")
+
+
+def test_an_invalid_param_name_is_refused():
+    rec = LoopRecorder("ore-run", ANCHOR_158)
+    for bad in ("1qty", "qty!", "", " ", "qty name"):
+        with pytest.raises(RecorderError):
+            rec.step("50", PORT, param=bad)
+
+
+def test_reusing_a_param_name_with_the_same_literal_is_legal():
+    """The same quantity demonstrated twice (e.g. two holds of the same
+    count) is one parameter, not a conflict."""
+    rec = LoopRecorder("ore-run", ANCHOR_158)
+    rec.step("50", PORT, param="qty")
+    step2 = rec.step("50", ANCHOR_158_METACHAR, param="qty")
+    assert step2.input == "{qty}"
+    assert rec.document()["params"] == {"qty": "50"}
+
+
+def test_reusing_a_param_name_with_a_different_literal_is_refused():
+    """Two different literals under one name would mean the second
+    silently overwrites the first's recorded default with no record
+    either value existed -- refused rather than picking a winner."""
+    rec = LoopRecorder("ore-run", ANCHOR_158)
+    rec.step("50", PORT, param="qty")
+    with pytest.raises(RecorderError):
+        rec.step("100", ANCHOR_158_METACHAR, param="qty")
+
+
+def test_a_parameterized_loop_round_trips_through_the_loader_into_a_completed_replay(
+    tmp_path,
+):
+    """The headline proof, extended: a captured placeholder loads with its
+    recorded default AND replays by sending the resolved literal, never
+    the placeholder text `{qty}`."""
+    rec = LoopRecorder("ore-run", ANCHOR_158)
+    rec.step("50", PORT, param="qty")
+    rec.save(state_dir=tmp_path)
+
+    loop = load_loop("ore-run", state_dir=tmp_path)
+    assert loop.params == {"qty": "50"}
+    assert loop.steps[0].input == "{qty}"
+
+    session = ScriptedSession(screens=[_text_and_prompt(ANCHOR_158), _text_and_prompt(PORT)])
+    result = replay_loop(loop, session)
+
+    assert result.outcome == OUTCOME_COMPLETED
+    assert session.sends == [("50", None)]  # the resolved literal, never "{qty}"
+
+
+# ---------------------------------------------------------------------------
 # document() / save() plumbing
 # ---------------------------------------------------------------------------
 
