@@ -12,16 +12,26 @@ watching, or the teacher assists a targeted map-fill after an escalation.
 (The archived module described this as "AI-driven"; canon's reborn recast
 retires that framing, and this module is written to the recast.)
 
-**THE NEVER-COMMIT GUARANTEE LIVES OUTSIDE THIS MODULE.** It is enforced
-by the live-crawl driver (``menu.crawl_driver``) on two structural legs,
-both canon:
+**THE NEVER-COMMIT GUARANTEE LIVES OUTSIDE THIS MODULE — AND TIP HAS NO
+LIVE DRIVER TODAY.** The module that held the code-enforced half of it,
+``menu/crawl_driver.py`` (``run_live_crawl()``), was retired
+(WO-CLEANUP-DEAD-SYMBOLS-BATCH-2026-08-05): it had zero product callers,
+because the daemon's ``crawl_start`` protocol verb has never been wired to
+a driver. Driving this module against a live connection is not currently
+wired to anything — see ``canon/engine/menu-map-and-introspection.md``
+§ "The guarantee lives in the supervised run, not the word-list" for the
+full picture. What still lives on tip, for a future driver rebuild to wire
+back up:
 
-1. a **sacrificial-only startup gate** — a live crawl refuses outright,
-   before opening a single connection or invoking the session factory even
-   once, on any profile not explicitly flagged ``crawl_sacrificial``;
-2. a **boundary-aligned abort** — a hub-supervisor abort, or a human
-   ``tw attach`` fencing the driver, lands the stop at the next screen
-   boundary, never mid-send.
+1. ``credentials.is_crawl_sacrificial()`` — the fail-closed
+   `crawl_sacrificial` flag reader the retired driver's sacrificial-only
+   startup gate read; today it backs only the unrelated ``dev``-sender
+   exception (``canon/doctrine/dev-drive-exception.md``), not a live
+   crawl;
+2. ``control_lock.is_driver_fenced()`` — the boundary-fence signal a
+   hub-supervisor abort or a human ``tw attach`` would raise; a rebuilt
+   driver would check it ahead of the real session factory, as the
+   retired one did.
 
 That pairing (a disposable zero-credit / zero-asset character plus a
 supervisor able to abort) is what bounds the worst case to *nothing*. The

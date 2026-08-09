@@ -10,9 +10,10 @@ the decoder's own exception escape. `repr()` of a `UnicodeDecodeError` renders
 `config/secrets.json` that is every profile's stored password, not just the one
 being resolved. Measured on this tree: a 200 KB store produced a 200,153-character
 `repr()`. Nothing on the login path reprs an exception, which is why the sibling
-suite (`tests/test_login_redaction.py`) was green — but `menu/crawl_driver.py`
-already writes `repr(exc)` into a *persisted* status file and a JSONL log for its
-own broad catch, so the pattern was one caller away from a durable leak.
+suite (`tests/test_login_redaction.py`) was green — but the now-retired
+`menu/crawl_driver.py` wrote `repr(exc)` into a *persisted* status file and a
+JSONL log for its own broad catch, so the pattern was one caller away from a
+durable leak.
 
 **Why the obvious probe is the one that does NOT fire.** The exposure depends on
 the error's SHAPE, not on the file. The same store, malformed rather than
@@ -23,10 +24,10 @@ Both halves are driven below.
 **Sinks swept.** Every rendering the product actually performs — `str()`,
 `repr()`, both f-string forms, the type name, `traceback.format_exception`, the
 `__cause__`/`__context__` chain, the daemon's wire frame, guardian's
-`last_reconnect_error`, and `crawl_driver`'s persisted `reason` — plus, for the
-crawl scenarios, every byte left on disk. Assertions are against SERIALISED
-output, never a dict key: a value nested in `args` / `detail` / `object` passes a
-shallow check and still reaches disk.
+`last_reconnect_error`, and the now-retired `crawl_driver`'s persisted `reason` —
+plus, for the crawl scenarios, every byte left on disk. Assertions are against
+SERIALISED output, never a dict key: a value nested in `args` / `detail` /
+`object` passes a shallow check and still reaches disk.
 
 **Never the operator's store.** Every file here is written under this module's own
 `tempfile.mkdtemp()` root or pytest's `tmp_path`, and every `chmod` is guarded by
@@ -177,8 +178,9 @@ def _renderings(exc: BaseException) -> dict[str, str]:
     `repr()` is IN this set, and that is the whole point of the work order:
     `tests/test_login_redaction.py::_exception_renderings` deliberately omits it
     because before this rehab it was the one rendering that leaked, and nothing
-    on the login path performed it. `menu/crawl_driver.py` does, into a persisted
-    file, so it is swept here as a first-class product rendering.
+    on the login path performed it. The now-retired `menu/crawl_driver.py` did,
+    into a persisted file, which is why it stayed swept here as a first-class
+    product rendering.
 
     The `__cause__`/`__context__` chain is rendered with `str()`, which is what
     `traceback` itself uses. The cause's own `repr()` is the residual, pinned
