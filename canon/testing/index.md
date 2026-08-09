@@ -65,7 +65,6 @@ OKF inventory of the pytest suite.
 * [test_connection.py](/testing/cases/test-connection.md) — TelnetConnection unit tests — no network.
 * [test_control_lock.py](/testing/cases/test-control-lock.md) — ControlLock (tw2002_aiclient.session.control_lock) — pure unit tests.
 * [test_control_panel.py](/testing/cases/test-control-panel.md) — Control panel. _(BANKED)_
-* [test_crawl_driver.py](/testing/cases/test-crawl-driver.md) — Live-crawl driver tests — canon K3's two structural legs. _(BANKED)_
 * [test_crawl_start_protocol.py](/testing/cases/test-crawl-start-protocol.md) — Crawl start protocol. _(BANKED)_
 * [test_credentials.py](/testing/cases/test-credentials.md) — Secure credential store tests (DESIGN-v2 B2) — no network, tmp_path only, never touches the real config/ directory. _(BANKED)_
 * [test_ensure_from_play.py](/testing/cases/test-ensure-from-play.md) — Ensure from play.

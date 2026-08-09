@@ -132,15 +132,6 @@ COVERAGE: tuple[GuardCoverage, ...] = (
         notes="Unknown/stale balance fails closed rather than arming unbounded",
     ),
     GuardCoverage(
-        guard_id="crawl_sacrificial_gate",
-        canon_layer="Crawl",
-        source_relpath="menu/crawl_driver.py",
-        source_marker="crawl_sacrificial",
-        proof_test_relpath="tests/test_crawl_driver.py",
-        proof_marker="crawl_sacrificial",
-        notes="Live crawl refuses non-sacrificial profiles before connect",
-    ),
-    GuardCoverage(
         guard_id="crawl_safe_emit_chokepoint",
         canon_layer="Crawl",
         source_relpath="menu/crawler.py",
