@@ -14,7 +14,7 @@ timestamp: 2026-07-30T22:01:00Z
 
 **Distributed-fold: 6/8** · Accepted 2026-07-30 by Max (`Continue; your choice` after the
 B1/B2 choice; Samantha selected recommended B2 approve-scaffold) ·
-_(re-verified 2026-08-06)_
+_(re-verified 2026-08-09)_
 
 Durable prose lives primarily in [`trade-loops.md`](/strategy/trade-loops.md)
 (Discovered → approved semantic plan · tip `trade_chain_plan.py`). This ADR remains
@@ -32,14 +32,21 @@ the decision record / pointer.
 
 **Still design-intent / process (2 — do not blanket-Fold):**
 7. Sacrificial live-prove gate for turn/credit-spending proof (hub/Max process,
-   not a missing tip module) — tracked as an open residual item in
-   `workorders/WO-CANON-ROLLUP-ADR-003-DISTRIBUTED-FOLD-TAG.md` (Accept #2);
-   no dedicated hub/Max-process WO beyond that pointer exists yet.
+   not a missing tip module) — **ruled non-blocking, 2026-08-09**
+   (`workorders/WO-ADR-003-RESIDUAL-7-8-TRACKING.md`): this is the standing
+   Nebuspace merge-ritual live-prove gate, not an ADR-003-specific artifact, and
+   it has already been concretely exercised against this exact discovered-chain
+   flow by `WO-BUILD-CREDIT-DOUBLING-LIVE-PROVE` (queue-aiclient.md, DONE —
+   live-proven 2026-08-09 on `scout_academy`, 6 instrumented cycles spending
+   real turns/credits). Nothing further to build; does not block graduation.
 8. Bounded-repeat contract (explicitly future; one-pass until separately reviewed) —
-   same tracking: `workorders/WO-CANON-ROLLUP-ADR-003-DISTRIBUTED-FOLD-TAG.md`
-   (Accept #2) names it a residual alongside item 7; no separate design/build WO
-   exists yet — untracked beyond this pointer, needs one when the bounded-repeat
-   review is actually scoped.
+   **remains open/human-gated, tracked precisely** (not untracked): queue row
+   `WO-CANON-DRAFT-BOUNDED-REPEAT-CONTRACT-SCOPE` (`Nebuspace/.samantha/coord/queue-aiclient.md`,
+   MED, GATED (human) — "loop-repeat primitive never scoped: pass-count? floor
+   re-check? value ceiling?"), with follow-on execute row
+   `WO-BUILD-DEV-DRIVE-CLI-SURFACE` (HIGH, GATED (human)). Full detail:
+   `workorders/WO-ADR-003-RESIDUAL-7-8-TRACKING.md`. This item alone is why
+   Status stays **Distributed-fold: 6/8**, not Folded.
 
 ---
 
@@ -103,4 +110,5 @@ automatic substitution/rotation remains forbidden.
 - `canon/strategy/trade-loops.md`
 - `canon/architecture/app-autopilot-model.md`
 - `workorders/WO-GUARDED-CHAIN-APPROVE-SCAFFOLD.md`
+- `workorders/WO-ADR-003-RESIDUAL-7-8-TRACKING.md` (items 7 & 8 disposition, 2026-08-09)
 - tip: `tw2002_aiclient/chain_search_view.py` · `cockpit/chains.py`
