@@ -211,6 +211,11 @@ described an implementation that did not exist. What is true at tip:
     margin. Wired from `PlayShellScreen.chain_scalars` + idle/discovery update sites in `app.py` /
     `screens.py`; also consumed by `focus_status` / `cockpit/decisions`.
 
+- **`tw coach show` — LIVE shell surface.** Tip registers `coach_cli.add_coach_parsers` on
+  `build_parser()` (`tw coach show [id]`): daemon-free read of the strategy-card KB (full card or
+  list when `id` is omitted). Complements the DECISIONS-pane consumer; never sends. Catalogued in
+  [CLI Verbs](/architecture/cli-verbs.md).
+
 - **Authored but unreachable:** `strategies.json` carries eight cards; the trigger map can produce seven
   ids. The sole authored-unreachable card is `planet_production` (`when_trigger=planet_management`) — it
   still needs an honest planet/genesis producer and must not be marked wired without one.
