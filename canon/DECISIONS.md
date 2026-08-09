@@ -44,6 +44,36 @@ RULES:
 
 **Status:** Pending — trade-path wave shipped; ship-info parse deferred.
 
+### PENDING-CHAIN-HUNT-SIBLING-EXHAUST-DEPTH-TURN-CAP — Chain-hunt numeric defaults (2026-08-09)
+
+**Edge:** Gap — `canon/strategy/exploration-policy.md` adds the **Chain-hunt** intent
+(sibling-exhaust + ancestor-port backtrack, ~2× hop-cost vs Map-fill) as net-new strategy canon.
+Mechanism shape is specified; **numeric defaults** for how far / how long a single armed Chain-hunt
+run may go are not — hard-coding them in a follow-on build WO would invent operator-facing budgets
+without a ruling.
+
+**Kernel (unambiguous without the numbers):**
+1. Chain-hunt planner shape (closed sibling set at a confirmed-port anchor; return after flyby;
+   recurse on port neighbors; backtrack to nearest ancestor port with open siblings; do not use
+   Map-fill densest-reachable recovery while an ancestor still has open siblings) may be drafted and
+   reviewed as canon.
+2. Implementation / CLI / panel wiring stays a **follow-on build WO** after this canon draft is
+   reviewed — this Pending does not authorize inventing depth/turn constants in code.
+3. Map-fill G1 nearest-first behavior remains correct for Map-fill; Chain-hunt must not silently
+   reuse that pick as if it were chain-aware.
+
+**Needs human ruling before build:**
+- **Sibling-exhaust depth limit** — max recursion / anchor-stack depth (or equivalent) per armed
+  Chain-hunt run before the intent must halt or explicitly fall back.
+- **Turn-budget cap** — max turns (or hop proposals) per armed Chain-hunt run, acknowledging the
+  ~2× hop-cost tradeoff vs Map-fill.
+
+**Status:** Pending — numerics human-gated; mechanism canon in exploration-policy (this WO).
+
+**Refs:** `workorders/WO-CANON-DRAFT-CHAIN-MAXIMIZING-EXPLORE-STRATEGY.md` ·
+`canon/strategy/exploration-policy.md` § Chain-hunt · `canon/strategy/trade-loops.md` cross-link ·
+origin Max sector-5/6/7/8 walkthrough 2026-08-09.
+
 ---
 
 
