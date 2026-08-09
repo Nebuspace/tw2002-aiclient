@@ -62,7 +62,6 @@ from typing import NamedTuple
 import pytest
 
 from tw2002_aiclient import screens
-from tw2002_aiclient.cockpit import arm as cockpit_arm
 from tw2002_aiclient.cockpit import focus as cockpit_focus
 from tw2002_aiclient.cockpit import goals as cockpit_goals
 from tw2002_aiclient.cockpit import hud as cockpit_hud
@@ -736,7 +735,6 @@ _STATUS_PANELS = {
     "LOGS newest": lambda s: cockpit_logsband.newest_tail_entry(s),
     "STOP banner": lambda s: cockpit_stopbanner.compose_stop_banner_lines(s, width=80),
     "STOP needs_attention": lambda s: cockpit_stopbanner.needs_attention(s),
-    "ARM chip": lambda s: cockpit_arm.compose_arm_chip(s),
     "HUD cells": lambda s: cockpit_hud.compose_hud_cells(s, width=60),
     "viewport border freshness": lambda s: screens._resolve_last_rx_age_s(s),
 }
@@ -752,7 +750,6 @@ _PANEL_SENSITIVITY_PROBE = {
     "log_tail": ["app> a line no panel can ignore"],  # LOGS band + newest
     "intervention": {"needs_attention": True, "reason": "manual_stop"},  # STOP
     "mode": "human",  # STOP banner's handoff marker
-    "autopilot": {"running": True},  # ARM chip
     "hud": {"credits": {"value": 1234, "age_s": 1.0}},  # HUD cells
     "idle_ms": 987654,  # viewport border freshness
 }

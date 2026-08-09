@@ -38,8 +38,12 @@ import pytest
 pytestmark = pytest.mark.pty_ui
 
 
-from tw2002_aiclient.cockpit.arm import ARM_OFF_LABEL, ARM_ON_LABEL, ARM_UNKNOWN_LABEL
 from tw2002_aiclient.cockpit.control_seat import APP_LABEL, TRAINER_APP_ARMED_LABEL
+
+# Retired separate ARM chip labels -- must never appear on a real screen.
+ARM_ON_LABEL = "ARM ON"
+ARM_OFF_LABEL = "ARM OFF"
+ARM_UNKNOWN_LABEL = "ARM ?"
 
 from .pty_helpers import (
     drive_play_shell_pty,

@@ -156,19 +156,9 @@ read-only observation of the seat's own state, never a command.
 
 from __future__ import annotations
 
-# WO-P5-062: the inter-chip gutter, IMPORTED rather than re-spelled. The
-# gap is a shared fact between the module that owns the ARM chip and the
-# module that places it, and a value read in two files gets exactly one
-# home -- two independent copies is how the pair silently drifts to
-# different widths later. Sibling-relative import, matching `focus.py`/
-# `decisions.py`/`fold.py`'s own `from .goals import ...` convention.
-# `arm.py` imports nothing at all, so there is no cycle here.
-#
-# This is the ONLY thing this module takes from `arm.py`: the arm STATE
-# never enters here. `screens.py` resolves the chip and hands this module
-# the finished `(text, tone)` pair, keeping the seat composer blind to
-# daemon-global status exactly as the module docstring above commits to.
-from .arm import ARM_GAP as _ARM_SEPARATOR
+# Inter-chip gutter: two blank columns between control-strip segments.
+# Reverse-video chips with no gap read as one wider badge.
+_ARM_SEPARATOR = "  "
 from .teachband import EXPLORE_TOKEN, LOOPS_TOKEN, TEACH_TONE, fit_teach_band
 
 # Canon-cited verbatim (see module docstring) -- deliberately a single
