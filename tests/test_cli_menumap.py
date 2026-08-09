@@ -271,3 +271,31 @@ def test_cmd_menumap_exec_arm_calls_run_nav(tmp_path, capsys, monkeypatch):
     assert payload["exec"]["sends_issued"] == 1
     assert seen["armed"] is True
     assert seen["steps"] == 1
+
+
+def test_cmd_menumap_json_includes_last_crawl(tmp_path, capsys, monkeypatch):
+    path = tmp_path / "game_knowledge.json"
+    menu_knowledge.upsert_menu_node(path, "sig-a", label="Computer")
+    menu_knowledge.record_crawl_status(
+        path, status="complete", nodes_visited=1, frontier_remaining=0
+    )
+    monkeypatch.setattr(cli, "daemon_alive", lambda _rd=None: False)
+    args = cli.build_parser().parse_args(["menumap", "--path", str(path), "--json"])
+    assert cli.cmd_menumap(args) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["last_crawl"]["status"] == "complete"
+    assert payload["last_crawl"]["nodes_visited"] == 1
+
+
+def test_cmd_menumap_text_shows_last_crawl(tmp_path, capsys, monkeypatch):
+    path = tmp_path / "game_knowledge.json"
+    menu_knowledge.upsert_menu_node(path, "sig-a", label="Computer")
+    menu_knowledge.record_crawl_status(
+        path, status="error", reason="structural", nodes_visited=0, frontier_remaining=0
+    )
+    monkeypatch.setattr(cli, "daemon_alive", lambda _rd=None: False)
+    args = cli.build_parser().parse_args(["menumap", "--path", str(path)])
+    assert cli.cmd_menumap(args) == 0
+    out = capsys.readouterr().out
+    assert "last-crawl: error" in out
+    assert "reason=structural" in out
