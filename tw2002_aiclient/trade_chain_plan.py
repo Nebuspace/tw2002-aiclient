@@ -38,12 +38,6 @@ class TradeChainPlan:
     def commodity_route(self) -> str:
         return ">".join(self.commodities)
 
-    def wire_identity(self) -> dict:
-        return {
-            "world_id": self.world_id,
-            "fingerprint": self.fingerprint,
-        }
-
 
 def _canonical_payload(world_id: str, chain: ProfitChain) -> Optional[dict]:
     if not isinstance(world_id, str) or not world_id.strip():
