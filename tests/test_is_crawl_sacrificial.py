@@ -2,11 +2,12 @@
 `dev`-sender live-drive exception's gate (WO-BUILD-DEV-DRIVE-SENDER-ENFORCEMENT,
 canon: canon/doctrine/dev-drive-exception.md).
 
-Reuses the same ``crawl_sacrificial`` flag `menu.crawl_driver.run_live_crawl`
-already gates a live crawl on (`_SACRIFICIAL_FLAG`), read straight from
-``profiles.toml`` this time rather than off an in-memory profile object.
-Every negative shape must answer ``False`` — never raise, never default to
-permissive.
+Reuses the same ``crawl_sacrificial`` flag the now-retired live-crawl driver
+(`menu.crawl_driver.run_live_crawl`, deleted -- zero product callers,
+WO-CLEANUP-DEAD-SYMBOLS-BATCH-2026-08-05) gated a live crawl on, read
+straight from ``profiles.toml`` this time rather than off an in-memory
+profile object. Every negative shape must answer ``False`` — never raise,
+never default to permissive.
 """
 
 from __future__ import annotations
@@ -54,8 +55,8 @@ def test_flag_false_refuses(cfg):
 
 def test_flag_string_truthy_stand_in_refuses(cfg):
     # TOML `crawl_sacrificial = "true"` parses to the Python str "true",
-    # not the bool True -- `is True` refuses it, mirroring
-    # crawl_driver._SACRIFICIAL_FLAG's own stricter-than-truthy check.
+    # not the bool True -- `is True` refuses it, mirroring the retired
+    # crawl_driver's own stricter-than-truthy check on this same flag.
     _write_profiles(
         cfg, '[sac1]\nserver = "demo"\ngame_letter = "A"\ncrawl_sacrificial = "true"\n'
     )
