@@ -129,17 +129,29 @@ routine state the strip must be able to show. Collapsing them into one
 chip would make it unrepresentable.
 
 This module does NOT resolve the arm state. It takes a pre-resolved
-``(text, tone)`` pair through the new keyword-only ``arm_chip`` parameter
+``(text, tone)`` pair through the keyword-only ``arm_chip`` parameter
 (default ``None``, so every pre-existing caller's row stays byte-identical
 -- no signature rework, the same additive shape PWO-056 used for
-``attached``), and ``cockpit/arm.py`` owns the extraction from the
-daemon's status payload. That division is not incidental: it is what keeps
-the commitment this docstring makes above -- that this module never
+``attached``); at WO-P5-062 time, ``cockpit/arm.py`` owned the extraction
+from the daemon's status payload. That division was not incidental: it
+kept the commitment this docstring makes above -- that this module never
 sources a chip from daemon-global ``status`` -- intact while still letting
-the row carry a daemon-global fact. The arm state genuinely IS a
-daemon-global fact (unlike ``status["mode"]``, it is not a claim about
-which client holds the seat), so reporting it verbatim is honest; reading
-it HERE would still be the wrong home for it.
+the row carry a daemon-global fact when one was supplied. The arm state
+genuinely IS a daemon-global fact (unlike ``status["mode"]``, it is not a
+claim about which client holds the seat), so reporting it verbatim was
+honest; reading it HERE would still have been the wrong home for it.
+
+**Post-trainer-strip status (module deleted):** DECISION
+`RESOLVED-TRAINER-STRIP-AND-GUTTER-20260731` retired the separate ARM chip
+from the live draw path -- `screens.py` folds an armed reading into the
+merged trainer seat chip instead of calling `compose_arm_chip` -- and
+`cockpit/arm.py` was deleted as orphaned
+(`workorders/WO-CLEANUP-COCKPIT-ARM-ORPHANED-POST-DECISION.md`; its
+`ARM_GAP` constant lives on here, inlined as `_ARM_SEPARATOR`). This
+module's ``arm_chip`` parameter and ``_safe_arm_chip`` coercion remain --
+today no live caller supplies a non-``None`` value, but the shape stays
+correct as inert default-``None`` plumbing rather than a rip-out
+mid-dispatch.
 
 Hardening family (matches ``liveness.py``/``hud.py``): every public function
 is never-raises regardless of input shape -- defense-in-depth here, since
@@ -456,12 +468,14 @@ def _safe_arm_chip(value: object) -> tuple[str, str | None]:
     arm chip was supplied at all", so the row simply carries the seat chip
     and the liveness cluster as it did before WO-P5-062.
 
-    The expected value is ``cockpit.arm.compose_arm_chip``'s own return: a
-    2-tuple of a ``str`` text and a ``str``-or-``None`` tone. This module
-    never inspects the daemon's status payload to produce it -- see the
-    module docstring for why the seat composer stays deliberately blind to
-    daemon-global state, a discipline WO-P5-062 keeps by taking the chip
-    pre-resolved rather than taking the payload.
+    The expected value matches what ``cockpit.arm.compose_arm_chip`` used
+    to return before that module was deleted (see the module docstring's
+    "Post-trainer-strip status" note): a 2-tuple of a ``str`` text and a
+    ``str``-or-``None`` tone. This module never inspects the daemon's
+    status payload to produce it -- see the module docstring for why the
+    seat composer stays deliberately blind to daemon-global state, a
+    discipline WO-P5-062 kept by taking the chip pre-resolved rather than
+    taking the payload.
 
     Degrading to "no chip" (rather than to some placeholder text) is the
     claim-least reading, matching ``_safe_width``'s own "never let a
@@ -561,7 +575,9 @@ def _compose_segments(
     flat string join the segment texts).
 
     Layout, left to right: the seat chip, then (WO-P5-062) the ARM chip
-    separated by ``cockpit.arm.ARM_GAP``, then (WO-PLAY-OFFER-VISIBLE-ON-LIVE)
+    separated by this module's own ``_ARM_SEPARATOR`` (inlined from the
+    now-deleted ``cockpit.arm.ARM_GAP`` -- see the module docstring's
+    "Post-trainer-strip status" note), then (WO-PLAY-OFFER-VISIBLE-ON-LIVE)
     an optional mid-strip ``status_offer`` (``PlayShellScreen.status_line`` on
     live sessions), then the standing teach/hint band, then the right-justified
     liveness cluster. Either chip may be absent; when both are, the row is the bare
@@ -768,11 +784,15 @@ def compose_control_strip_segments(
     liveness cluster and the inter-chip separator) -- see
     ``_resolve_label_and_tone``'s own docstring for the seat tone
     vocabulary and the App-never-co-renders-with-MANUAL structural
-    guarantee, and ``cockpit.arm.arm_tone`` for the ARM chip's own.
+    guarantee. (The ARM chip's own tone resolution lived in the
+    now-deleted ``cockpit.arm.arm_tone`` -- see the module docstring's
+    "Post-trainer-strip status" note.)
 
-    ``arm_chip`` (WO-P5-062) is the optional ``(text, tone)`` pair
-    ``cockpit.arm.compose_arm_chip`` produces. It may legitimately
-    co-render with ANY seat chip, including a tone-carrying one: the two
+    ``arm_chip`` (WO-P5-062) is the optional ``(text, tone)`` pair that
+    ``cockpit.arm.compose_arm_chip`` used to produce before that module
+    was deleted; today it is caller-supplied and no live caller passes a
+    non-``None`` value. It may legitimately co-render with ANY seat chip,
+    including a tone-carrying one: the two
     answer different questions, so a result carrying two non-``None``
     tones is correct here and is NOT a widening of the seat chips' own XOR
     (see ``_compose_segments``, which still emits at most one seat label).
