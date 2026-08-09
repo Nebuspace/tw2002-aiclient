@@ -1,6 +1,8 @@
+> **2026-08-09:** Tracking Accept satisfied earlier; this WO's *build* Accept (verb LIVE + write-path + tests) is in flight on `wo/BUILD-CLI-VERBS-FRAMES`.
+
 # WO-BUILD-CLI-VERBS-FRAMES-TRACKING
 
-**Status:** TRACKING (not scheduled to build this batch)
+**Status:** BUILDING → see implementation PR (scope+build landed)
 **Priority:** MED
 **Claimed-by:** impl-aiclient-cursor (tracking only)
 **Source:** 6-lens audit 2026-08-09T09:59Z / queue-aiclient.md

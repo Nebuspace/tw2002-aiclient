@@ -127,7 +127,7 @@ config is isolated, and print the run-dir path they would have targeted (WO-CLI-
 | `watch` | Tail the settle-edge push stream (holds the socket; exits on `--frames`/Ctrl-C). | `--frames N` | `read-only` | [Session Engine](/architecture/session-engine.md) |
 | `log` (alias `trail`) | Human-readable per-action trail — QUESTION → KEYSTROKE → RESULT (reads `state/ledger.jsonl`; no daemon). | `--n N` | `read-only` | [Session Engine](/architecture/session-engine.md) |
 | `report` | Post-session `actor=app` action digest from the trace ledger — the accountability trail for an already-armed rule's autonomous firing, never a live-decision input (reads `state/ledger.jsonl`; no daemon). | `--ledger PATH` `--session-id ID` `--world-id SLUG` `--out PATH` `--include-interrupted` | `read-only` | [Post-Session Action Report](/engine/post-session-action-report.md) |
-| `frames {tail,show,grep,diff}` | **TARGET — not a `tw` CLI verb yet.** Post-mortem over full 80×25 settle frames in `state/frames/` (no daemon). | `--session ID` `-n N` `seq` `pattern` | `read-only` | [Session Engine](/architecture/session-engine.md) |
+| `frames {tail,show,grep,diff}` | **LIVE** — post-mortem over full 80×25 settle frames in `state/frames/` (daemon write via `FrameRecorder` on settle; read path filesystem-only, no daemon). | `--session ID` `-n N` `seq` `pattern` `--state-dir` `--json` | `read-only` | [Session Engine](/architecture/session-engine.md) · [Trace Ledger](/engine/trace-ledger.md) |
 | `menumap` | Read-only menu-map inspector — coverage, orphans, you-are-here ★ / off-map (never sends). | `--profile` \| `--world-id` \| `--path` | `read-only` | [Session Engine](/architecture/session-engine.md) |
 | `loops` | List every learned loop with profit metadata — CLI twin of the in-TUI Learned-Loops Library. | `--include-drafts` | `read-only` | [Rule–Macro Engine](/architecture/rule-macro-engine.md) |
 | `pairs` | List class-derived DISCOVERED pair loops for a world — margin-unknown candidates, never the taught `L)chains` library (reads `state/world/<world-id>` directly, never sends). | `--world-id` (required) `--json` | `read-only` | [Trade Loops](/strategy/trade-loops.md) |
@@ -306,6 +306,7 @@ block when answering "what can I run right now?"
 # Citations
 
 [1] `tw2002_aiclient/session/cli.py` — `build_parser()`, tip authoritative LIVE verb list
+[1c] `tw2002_aiclient/frame_recorder.py` / `frames_cli.py` — `FrameRecorder` settle write-path + `tw frames {tail,show,grep,diff}` (WO-BUILD-CLI-VERBS-FRAMES)
 [1b] `tw2002_aiclient/mine_cli.py` — `add_mine_parsers` / `cmd_mine` (`tw mine` / `tw patterns` wrapper)
 [2] `canon/architecture/control-and-escalation.md` — actor model, approval gate, stop-on-unknown
 [3] Archive `twclient/cli.py` — port-source for verbs not yet restored

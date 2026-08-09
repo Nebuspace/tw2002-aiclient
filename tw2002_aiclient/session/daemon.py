@@ -13,8 +13,9 @@ on the wire (WO-AUDIT-F5-TYPE-NAME). It is not part of the run-dir contract
 Ported from `archive/pre-rebirth-2026-07-23/code/twclient/daemon.py`
 (WO-P2-020, Wave-3 + WO-P2-025 control-lock wire + WO-P2-027 SessionGuardian
 D9 reconnect/replay + WO-P2-G4-X4 background loop player). Still cut vs
-archive: `SkillRecorder`, `FrameRecorder` (`frame_recorder.py`,
-`autopilot.py`); `LedgerWriter` is LIVE (WO-DAEMON-LEDGER-WRITER-ATTACH).
+archive: `SkillRecorder`, `autopilot.py`; `LedgerWriter` is LIVE
+(WO-DAEMON-LEDGER-WRITER-ATTACH); `FrameRecorder` is LIVE
+(WO-BUILD-CLI-VERBS-FRAMES).
 The archive's `loop_player.py` is
 re-rooted as `loops/player.py` (X3) driven by `session/autoloop.py` (X4),
 one pass per start rather than a bounded cycle loop. Guardian D10 keepalive
@@ -45,6 +46,7 @@ from .stardock_hold import StardockHoldRunner
 from .control_lock import ControlLock, ControlModeConflict
 from .credentials import get_password
 from .guardian import SessionGuardian
+from ..frame_recorder import FrameRecorder
 from ..ledger import LedgerWriter
 from .protocol import _save_password, dispatch, record_attach_keystroke
 from .session import Session
@@ -682,6 +684,10 @@ def main(argv=None):
         error_log.close()
         sys.exit(1)
     server.session = session
+    # WO-BUILD-CLI-VERBS-FRAMES: full-grid settle frames for post-mortem.
+    # Attached on the session so protocol.build_response can append without
+    # threading server through every call site.
+    session.frame_recorder = FrameRecorder(session.logger.session_id)
     server.guardian = guardian
     server.watch_hub = watch_hub
     server.error_log = error_log

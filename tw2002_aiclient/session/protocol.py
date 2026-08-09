@@ -68,10 +68,11 @@ def build_response(session, rows=None, settled_reason=None, extra=None):
     `cursor` (`session.cursor_pos()` -- the attach surface
     that reads it hasn't landed), the `world_identity`/`world_model`
     write hooks, `observe_credits`/`observe_turns`/`observe_fighters`
-    (Session methods cut in Wave-2), and the `frame_recorder` post-mortem
-    hook are all left off this response until their own work orders land.
-    `sent_input` is kept -- it's a plain `Session` attribute (session.py,
-    Wave-2), zero extra dependency.
+    (Session methods cut in Wave-2) are left off this response until their
+    own work orders land. `frame_recorder` is LIVE (WO-BUILD-CLI-VERBS-FRAMES)
+    — optional on the session; appends after the response is built and never
+    fails the answer. `sent_input` is kept -- it's a plain `Session`
+    attribute (session.py, Wave-2), zero extra dependency.
 
     WO-P4-053: `color` is back, additive, but ONLY on the bare-`rows`
     path -- every caller here except `screen`'s `raw` branch (`do`,
@@ -109,6 +110,18 @@ def build_response(session, rows=None, settled_reason=None, extra=None):
         resp["settled_reason"] = settled_reason
     if extra:
         resp.update(extra)
+    # WO-BUILD-CLI-VERBS-FRAMES: persist full 80×25 raw grid for post-mortem
+    # grep (Option?/qty prompts). Optional on the session — tests without a
+    # recorder keep working; never fails the response.
+    recorder = getattr(session, "frame_recorder", None)
+    if recorder is not None:
+        recorder.record(
+            session,
+            cropped_rows=rows,
+            settled_reason=settled_reason,
+            classification=resp["classification"],
+            prompt=prompt,
+        )
     return resp
 
 
