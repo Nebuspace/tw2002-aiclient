@@ -7,6 +7,7 @@ import json
 from tw2002_aiclient.session import cli
 from tw2002_aiclient import mine_cli
 from tw2002_aiclient import players_cli
+from tw2002_aiclient import planet_colonization_cli
 from tw2002_aiclient import port_floor_cli
 
 
@@ -52,6 +53,8 @@ _SHIPPED_VERBS = frozenset(
         "teach",
         # WO-BUILD-PORT-FLOOR-PRICE-LIVE-CAPTURE — filesystem observation store.
         "port-floor",
+        # WO-BUILD-PLANET-COLONIZATION-LIVE-CAPTURE — planet production observation store.
+        "planet-colonization",
     }
 )
 
@@ -107,6 +110,12 @@ def test_parser_shipped_verb_allowlist():
     assert port_floor_snap.func is port_floor_cli.cmd_port_floor_snapshot
     port_floor_an = parser.parse_args(["port-floor", "analyze"])
     assert port_floor_an.func is port_floor_cli.cmd_port_floor_analyze
+    planet_col_snap = parser.parse_args(
+        ["planet-colonization", "snapshot", "--planet-dir", "x"]
+    )
+    assert planet_col_snap.func is planet_colonization_cli.cmd_planet_colonization_snapshot
+    planet_col_an = parser.parse_args(["planet-colonization", "analyze"])
+    assert planet_col_an.func is planet_colonization_cli.cmd_planet_colonization_analyze
     sub = next(
         a for a in parser._actions if getattr(a, "choices", None) is not None
     )

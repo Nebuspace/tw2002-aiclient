@@ -157,24 +157,55 @@ STOP-guarded every tick.
   bubble}`, `detect_formations`, `catalog_world`), reading the world-model warp graph and emitting
   operator-facing hints only. The LOCATE / CATALOG / RECOMMEND-only posture is enforced structurally:
   that module never deploys or claims.
-- **HYPOTHESIS (design-history only — no live capture, no implementing module):** every production
-  number — the ~1/10-of-stored-cargo daily production bonus, the ~10%/day compounding rate, the
-  ~9-credit buy-production threshold, the ~1%–99% plague loss band, the ~100-planet-per-empire cap,
-  and the GF-growth-vs-stored-credits estimator (~1 GF/min at 100k → ~7 GF/min near 1M). All must be
-  confirmed against locally-observed production deltas on the live game before being used as planning
-  constants, and each carries its own inline caveat wherever consumed. Per project discipline, no
-  per-server stat value is hardcoded in canon — these are portable *semantics* (a stored-cargo bonus
-  exists, production compounds, plague is a spread-to-survive risk); the live numbers are
-  introspected, not asserted (see [Game-Data Store](/engine/game-data-store.md)).
+- **HYPOTHESIS (design-history only — capture/analysis module exists, numbers unverified):**
+  every production number — the ~1/10-of-stored-cargo daily production bonus, the ~10%/day
+  compounding rate, the ~9-credit buy-production threshold, the ~1%–99% plague loss band, the
+  ~100-planet-per-empire cap, and the GF-growth-vs-stored-credits estimator (~1 GF/min at 100k →
+  ~7 GF/min near 1M). All must be confirmed against locally-observed production deltas on the live
+  game before being used as planning constants, and each carries its own inline caveat wherever
+  consumed. Per project discipline, no per-server stat value is hardcoded in canon — these are
+  portable *semantics* (a stored-cargo bonus exists, production compounds, plague is a spread-to-survive
+  risk); the live numbers are introspected, not asserted (see
+  [Game-Data Store](/engine/game-data-store.md)). **`planet_colonization_capture.py`** supplies the
+  missing *analysis step* over repeated real observations; it does not itself supply or claim real
+  observations, and every emitted estimate carries ``verified_vs_live=False`` unconditionally.
 
 # Code divergence
 
 - **NOT-BUILT / deferred — no planet-production engine in tip.** The entire H5 production model
   (stored-cargo bonus, compounding, buy-threshold, plague spread, GF-growth scouting) is authored
   here as *portable hypothesis semantics* from design history. There is no module that reads or
-  models planet production, and no live capture of a planet screen. Per the 2026-08-05 ruling this
-  is **explicitly deferred**, not a next-up BUILD authorization — recorded so the doc does not read
-  as ready-to-implement spec prose.
+  models planet production for live recommendations, and **live TWGS planet-screen capture remains
+  DEFERRED** (no sacrificial-arm collection run in this slice). Per the 2026-08-05 ruling this is
+  **explicitly deferred**, not a next-up BUILD authorization — recorded so the doc does not read as
+  ready-to-implement spec prose.
+- **`planet_colonization_capture.py` — a pure analysis module now exists, but it does not change
+  the "unconfirmed hypothesis" status above.** It is a separate, opt-in observation-history analyzer,
+  not a live production field on the world-model planet record:
+  - `estimate_stored_cargo_bonus(observations)` — per `(sector_id, planet_id)`, linear fit of
+    `daily_production` against `stored_cargo_units` (canon hypothesis: bonus ≈ one-tenth of stored
+    cargo); identities with fewer than two spread cargo/production rows are omitted.
+  - `estimate_compounding_rate(observations)` — per identity, average fractional stored-cargo growth
+    per day over consecutive pairs the caller marks untouched (`withdrawn_since_prior=False` and
+    `production_bought_since_prior=False` on the later row).
+  - `estimate_buy_production_threshold(observations)` — per identity, median/min/max of observed
+    `buy_production_price` readings (canon hypothesis: worthwhile below ~9 credits/unit).
+  - `estimate_plague_band(observations)` — per identity, min/max of explicit `plague_loss_pct` event
+    observations (canon hypothesis: ~1%–99% band).
+  - `estimate_gf_growth_curve(observations)` — per identity, linear fit of passive-watch GF/min
+    against `stored_credits` (canon hypothesis: ~1 GF/min at 100k scaling toward ~7 GF/min near 1M).
+  - `analyze_planet_history(observations)` — convenience wrapper returning a
+    `PlanetColonizationReport` with all five dicts keyed by `PlanetIdentity`.
+  - Every result carries `tag="observed_estimate"`, a `sample_count`, a raw `evidence` tuple, plus
+    `verified_vs_live: bool = False` **unconditionally** — this module never flips that flag itself.
+  - **`tw planet-colonization {snapshot,analyze}`** (`planet_colonization_cli.py`, registered via
+    `add_planet_colonization_parsers` in `session/cli.py`) is the filesystem-only CLI surface:
+    `snapshot --planet-dir PATH [--store PATH]` ingests planet record JSON into a JSONL observation
+    store (default `state/planet_colonization_observations.jsonl`), and `analyze [--store PATH]` runs
+    `analyze_planet_history` over that store. Neither subcommand opens a session socket or sends a
+    keystroke.
+  - **Still true, unchanged by this module's existence:** every emitted number remains a
+    synthetic-fixture-proven estimate only — `verified_vs_live=False` on every result, always.
 - **Formations siting inputs are computed and membership is written** (#326): dead-end/bubble
   genesis candidates flow through the shared detector / panel / `recommend_genesis` alias. There is
   still **no autonomous Genesis deploy** and no new product surface that auto-invokes
@@ -198,6 +229,8 @@ STOP-guarded every tick.
   candidates, human-confirmed commit.
 - `formations.py` — the dead-end / bubble Genesis-candidate topology pass, membership writeback,
   and `recommend_genesis` alias (no autonomous deploy).
+- `planet_colonization_capture.py` — pure production-hypothesis analysis over caller-supplied
+  `PlanetObservation` rows (no socket I/O; `verified_vs_live=False` always).
 - `world_model.py` — the warp-graph and landmark substrate the siting scorer reads (planets surface
   only as an `own_planet` landmark and a density-scan `500=planet` presence hint; no production
   fields).
