@@ -2295,6 +2295,13 @@ def build_parser() -> argparse.ArgumentParser:
 
     add_teach_parser(sub)
 
+    # WO-WIRE-STRATEGY-CARD-TRADEOFFS-OKF-REFS: full authored strategy card
+    # (tradeoffs/okf_refs) never reach an operator through the width-budgeted
+    # DECISIONS renderer. Filesystem-only, same line-cap reason as mine_cli.
+    from ..coach_cli import add_coach_parsers
+
+    add_coach_parsers(sub)
+
     return parser
 
 

@@ -55,6 +55,9 @@ _SHIPPED_VERBS = frozenset(
         "port-floor",
         # WO-BUILD-PLANET-COLONIZATION-LIVE-CAPTURE — planet production observation store.
         "planet-colonization",
+        # WO-WIRE-STRATEGY-CARD-TRADEOFFS-OKF-REFS — full authored strategy card
+        # (tradeoffs/okf_refs) beyond the width-budgeted DECISIONS renderer.
+        "coach",
     }
 )
 
