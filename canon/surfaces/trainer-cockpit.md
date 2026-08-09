@@ -18,8 +18,9 @@ grid, a HUD that persists the tracked model across screens that don't restate it
 how much of the live driving is the app versus the human, and enough motion that a settled screen
 never reads as a frozen one. It is a **read-only** surface — a spectator holds no control-lock (see
 [spectate-and-attach](/surfaces/spectate-and-attach.md)); nothing on this dashboard sends a
-keystroke. This concept is prescriptive: it specifies the reborn cockpit and records where the built
-`spectate_app.py` / `spectate_layout.py` code diverges.
+keystroke. This concept is prescriptive: it specifies the reborn cockpit under
+`tw2002_aiclient/cockpit/` + `screens.py`, and records where archived
+`spectate_app.py` / `spectate_layout.py` (ops `tw spectate` **RETIRED**) remain port-source only.
 
 # Schema
 
@@ -266,20 +267,19 @@ read as one calm, honest instrument. Every concrete glyph, color, and threshold 
 to a code module (or marked `[ASPIRATIONAL]` where it is intent-not-yet-built). The vocabulary here
 — the 7-tone color table, the glyph set, the two-weight border hierarchy, the liveness-cue catalog —
 is **shared verbatim across all four surface docs** (cockpit, mode-line, spectate/attach, entry);
-it is the same code paths (`spectate_layout.py` / `terminal.py`) rendering every surface. The
-canonical single-source home for the shared vocabulary is
-[visual-language](/surfaces/visual-language.md) *(forward-reference — a staged concept pending
-operator go-ahead; until it lands, the tables below are the working reference and this doc is the
-most-referenced surface that carries them)*. What stays local to this doc is the cockpit's own
-**application** of that vocabulary: the HUD cell order, gutter widths, the fold ladder, the
-intervention strip's height claim.
+tip renders it through `tw2002_aiclient/cockpit/` + `session/terminal.py` (archive
+`spectate_layout.py` / `spectate_app.py` = port-source only). The canonical single-source home for
+the shared vocabulary is [visual-language](/surfaces/visual-language.md). What stays local to this
+doc is the cockpit's own **application** of that vocabulary: the HUD cell order, gutter widths, the
+fold ladder, the intervention strip's height claim.
 
 ## Color semantics — the one 7-tone table
 
-A single semantic palette (`_SEMANTIC_COLORS`, `spectate_app.py`) drives the whole dashboard, so a
-color always means the same thing on every panel. pyte color-names map to curses basic-8 via
-`_PYTE_TO_CURSES_COLOR` (`spectate_app.py`); note pyte names ANSI-yellow `"brown"` but it renders
-**yellow** everywhere.
+A single semantic palette (`SEMANTIC_COLORS` / `_SEMANTIC_COLORS`,
+`tw2002_aiclient/cockpit/tones.py` — tip; archive `spectate_app.py` port-source) drives the whole
+dashboard, so a color always means the same thing on every panel. pyte color-names map to curses
+basic-8 via tip `cockpit/viewport_color.py` (archive `_PYTE_TO_CURSES_COLOR`); note pyte names
+ANSI-yellow `"brown"` but it renders **yellow** everywhere.
 
 | tone | fg / attr | Meaning | Representative cockpit uses |
 |---|---|---|---|
@@ -293,9 +293,9 @@ color always means the same thing on every panel. pyte color-names map to curses
 
 Two shared classifiers emit only `ok`/`warn`/`danger` and are the source of every gauge/status tint:
 
-- **`status_semantic(connected, last_rx_age_s)`** (`spectate_layout.py`) — `danger` if disconnected;
+- **`status_semantic(connected, last_rx_age_s)`** (`cockpit/tones.py`) — `danger` if disconnected;
   `warn` if `last_rx_age_s ≥ 5.0` (`_STALE_RX_THRESHOLD_S`); else `ok`.
-- **`gauge_semantic(fraction)`** (`spectate_layout.py`) — `ok` ≥0.5, `warn` ≥0.2, else `danger`.
+- **`gauge_semantic(fraction)`** (`cockpit/tones.py`) — `ok` ≥0.5, `warn` ≥0.2, else `danger`.
   This is what colors the turns fuel-gauge green→amber→red as turns drain.
 
 Three load-bearing color rules:
@@ -308,12 +308,14 @@ Three load-bearing color rules:
   the classification-change header pulse, the connect/disconnect status flash. There is no second
   "this is selected" convention to learn.
 - **The viewport border is a STATE surface.** It flips cyan → **red non-bold** the moment the daemon
-  reports `not connected` (`spectate_app.py`) — an unmissable "link down" cue drawn on the frame
-  itself, never touching game content.
+  reports `not connected` (`screens.py` / cockpit viewport border attr — tip; archive
+  `spectate_app.py` port-source) — an unmissable "link down" cue drawn on the frame itself, never
+  touching game content.
 
 **Per-cell game color is distinct from the dashboard tint set.** Inside `[GAME UI]`, `terminal.color_map()`
-(`terminal.py`) RLE-encodes pyte's true SGR fg/bg/bold per row, and `_ColorPairs` (`spectate_app.py`)
-lazily allocates a curses pair per distinct (fg,bg), degrading to plain bold/normal when the pair
+(`session/terminal.py`) RLE-encodes pyte's true SGR fg/bg/bold per row, and tip color-pair allocation
+lives under the cockpit viewport path (archive `_ColorPairs` in `spectate_app.py` was the port-source),
+lazily allocating a curses pair per distinct (fg,bg), degrading to plain bold/normal when the pair
 table is exhausted. The viewport therefore renders in the **server's own CP437 palette**, not the
 7-tone semantic set — what the operator sees is exactly what the app sees. `[ASPIRATIONAL/HYPOTHESIS]`
 the stock-TradeWars convention that "red = hostiles, cyan = menu chrome" in that native palette is
@@ -516,22 +518,20 @@ reborn module is cited; prefer `tw2002_aiclient/cockpit/*` for chrome that has a
 
 # Citations
 
-- **Panel layout, tiers, fold, HUD cells, freshness, liveness, TX, coverage footer** —
+- **Panel layout, tiers, fold, HUD cells, freshness, liveness, TX, coverage footer** — tip:
+  `tw2002_aiclient/cockpit/layout.py`, `cockpit/fold.py`, `cockpit/goals.py`, `cockpit/focus.py`,
+  `cockpit/hud.py`, `cockpit/liveness.py`, `screens.py`. Archive port-source:
   `spectate_layout.py` (`frame_layout`, `compose_primary_goals_lines`, `compose_priorities_lines`,
   `format_autopilot_trace_lines`, `aggregate_world_metrics`, `compose_hud_cells`,
   `format_freshness`, `render_sparkline` / `render_bar_meter`, `format_tx_readout`,
   `compose_autonomy_footer_box`, and the width/motion constants).
-- **Curses I/O host for the above pure layout** — `spectate_app.py` (read-only spectator dashboard).
-- **Visual design & polish grounding** — `spectate_app.py` (`_SEMANTIC_COLORS`, `_PYTE_TO_CURSES_COLOR`,
-  `_ColorPairs`, `_content_inset`, `_draw_outer_frame`, `ANIM_FPS`, `HEARTBEAT_PERIOD_S`),
-  `spectate_layout.py` (`status_semantic` / `gauge_semantic`, `_MODE_BADGES`, `_HUD_FIELD_SPECS`,
-  `compose_hud_cells`, `HUD_GUTTER_W` / `PRIORITIES_W`, `FRESHNESS_STALE_S`, `format_freshness`,
-  `render_sparkline` / `render_bar_meter`, `compose_intervention_strip`, `frame_layout`'s
-  `needs_attention` height claim), `cockpit/draw.py` (two-weight border set + `unicode_ok`),
-  `session/terminal.py` (`color_map()` game-byte RLE only), `menu_map_view.py` (`here off-map` /
-  `here ★`), and the polish intent in
-  `TUI-POLISH-PLAN.md` (BBS/DOS-door border echo, the anti-gold-plating cut list, dark-only theme).
-  Shared vocabulary forward-referenced to the staged `visual-language.md` concept (operator-gated).
+- **Curses I/O host** — tip `screens.py` play-shell (ops `tw spectate` / `spectate_app.py` **RETIRED**).
+- **Visual design & polish grounding** — tip: `cockpit/tones.py`, `cockpit/viewport_color.py`,
+  `cockpit/draw.py`, `session/terminal.py` (`color_map()` game-byte RLE). Archive port-source:
+  `spectate_app.py` / `spectate_layout.py` (palette, classifiers, HUD field specs). Shared
+  vocabulary: [visual-language](/surfaces/visual-language.md). Also `menu_map_view.py`
+  (`here off-map` / `here ★`) and polish intent in `TUI-POLISH-PLAN.md` (BBS/DOS-door border echo,
+  anti-gold-plating cut list, dark-only theme).
 - **Cold-join HUD seed** — `hud_seed.py` (`seed_hud_after_join`, the single `I` ship-info probe,
   fighter-`Option?` deferral, age-gated `force` re-probe).
 - **HUD cargo sticky / extract honesty** — `tw2002_aiclient/session/hud_tracking.py`
