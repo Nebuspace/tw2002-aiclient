@@ -170,11 +170,17 @@ which owns the run-loop; here they are named as safety rails.
 
 Some actions are irreversible: Genesis torpedo detonation, a major purchase, planetary
 colonization. These are **never** an autonomous competing candidate in any selection loop. The App
-may *recommend* one — surface it to the human with its rationale — but the firing is always a
-human-approved one-shot, not an EV candidate the loop can pick on its own. The confirm boundary for
-colonization is owned by [planet-colonization](/strategy/planet-colonization.md), and for major
-purchases by [ship-progression](/strategy/ship-progression.md); this doctrine states the general
-rule they specialize: an irreversible action crosses to the human, always.
+may *recommend* one — surface it to the human with its rationale — but the firing is normally a
+human-approved one-shot, not an EV candidate the loop can pick on its own. **Carve-out (trainer
+default):** StarDock **cargo-hold upgrade** buys under APP-ARMED + `C)argo Hold Upgrade·ON` may
+App-arm auto-fire per `RESOLVED-TRAINER-STRIP-AND-GUTTER-20260731` point 6 — soft confirm banked,
+not per-action `y`. Ship upgrades, Genesis, colonization, and purchases outside that strip toggle
+remain human one-shot. The confirm boundary for colonization is owned by
+[planet-colonization](/strategy/planet-colonization.md); hold vs ship purchase boundaries live in
+[ship-progression](/strategy/ship-progression.md) and
+[mode-line-and-teach-controls](/surfaces/mode-line-and-teach-controls.md); this doctrine states the
+general rule they specialize: an irreversible action crosses to the human unless the trainer strip
+explicitly arms auto-fire for that kind.
 
 ## Genesis confirm-to-send choke-point (tip)
 

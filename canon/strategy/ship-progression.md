@@ -17,13 +17,17 @@ happening again — a decision-support layer that answers *when* and *to-what* w
 gate, an alignment/rank filter, a per-turn (not raw) hold-throughput ranking, a loop-stock match, and
 a defense floor.
 
-Everything here is **recommendation and taught behavior, never an autonomous spend.** A dock purchase
-is one of the trainer's irreversible, credit-spending actions; under the reborn framing it is *always*
-a human-approved one-shot, never a candidate that a computed expected-value can slip past to execute on
-its own. The decision engine ranks and explains; the coded auto-max-holds behavior detects the
-opportunity and prepares the expansion; but the credit leaves the account only when the human says yes.
-The engine's job is to make that yes (or no) an informed one — to hand the human a `{recommend,
-rationale, payback}` verdict, not to press the buy key.
+Everything here is **recommendation and taught behavior, not an EV-picker spend.** A dock purchase
+is one of the trainer's irreversible, credit-spending actions; under the reborn framing it is *usually*
+a human-approved one-shot — never a candidate that a computed expected-value can slip past to execute on
+its own. **Exception (trainer default):** under APP-ARMED with `C)argo Hold Upgrade·ON`, hold-buy may
+**App-arm auto-fire** per `RESOLVED-TRAINER-STRIP-AND-GUTTER-20260731` point 6 (soft confirm banked;
+see [mode-line-and-teach-controls](/surfaces/mode-line-and-teach-controls.md)). Ship upgrades and other
+major purchases remain confirm-gated until their engines exist. The decision engine ranks and explains;
+coded auto-max-holds detects the opportunity and (when armed + toggle ON) may commit the hold purchase;
+manual paths and other purchase kinds still require explicit human approval. The engine's job is to
+make informed `{recommend, rationale, payback}` verdicts — and, for holds under the trainer default,
+execute the taught hold expansion without per-action `y`.
 
 # Schema
 
@@ -126,10 +130,11 @@ Two invariants bound it, and neither is negotiable:
 - **Human-armed before it can run.** Like every taught behavior and background loop, auto-max-holds is
   armed by the human before it may fire — it does not self-enable because the conditions happen to line
   up.
-- **The purchase itself is a human-approved one-shot.** Detecting the opportunity and preparing the
-  expansion is deterministic and coded; committing the credits is a confirm-gated action the human
-  approves. Auto-max-holds automates the *recognition and the setup*, not the *spend*. Even fully
-  armed, the actual buy remains an approve/reject moment, never one keystroke to live money.
+- **Hold-buy spend follows the trainer strip policy.** Detecting the opportunity and expanding qty
+  toward max is deterministic and coded. Under APP-ARMED + `C)argo Hold Upgrade·ON`, the hold purchase
+  may **auto-fire** (App-arm default per `RESOLVED-TRAINER-STRIP-AND-GUTTER-20260731` point 6); manual
+  `H` / confirm offers and MANUAL-HUMAN mode stay one-shot approve/reject. Auto-max-holds automates
+  recognition, planning, and (when toggled ON) the hold spend — not ship upgrades or other purchases.
 
 This is holds-first made mechanical — the trainer stops making the human re-issue the same
 "grow my holds" order at every shipyard — without turning a credit-spending irreversible into an
