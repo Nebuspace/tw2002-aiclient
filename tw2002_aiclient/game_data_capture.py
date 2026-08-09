@@ -30,18 +30,6 @@ from tw2002_aiclient import game_data as _game_data
 from tw2002_aiclient import introspector as _introspector
 from tw2002_aiclient import world_identity as _world_identity
 
-# Documented classify labels for the same listing grammars (may appear on
-# the watch event when the prompt is still inside the block). Content
-# detection via introspector remains authoritative.
-CAPTURE_SCREEN_CLASSES = frozenset(
-    {
-        "stardock_shipyard_listing",
-        "stardock_cargo_hold_quote",
-        "stardock_equipment_listing",
-    }
-)
-
-
 @dataclass(frozen=True)
 class CaptureResult:
     """Outcome of one opportunistic capture attempt (for pins / STATUS)."""

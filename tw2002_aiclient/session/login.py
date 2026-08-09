@@ -85,6 +85,13 @@ import re
 
 from . import fighter_toll_policy
 from .classify import classify_screen
+from .interjection_registry import (
+    BEEN_ON_TODAY_RE as _BEEN_ON_TODAY_RE,
+    CLEAR_AVOIDS_RE as _CLEAR_AVOIDS_RE,
+    INACTIVITY_RE as _INACTIVITY_RE,
+    SHOW_LOG_RE as _SHOW_LOG_RE,
+    match_interjection,
+)
 from .sector_explore import FIGHT_FORBIDDEN_KEYS, FIGHT_LETTER_ALLOWLIST
 from .settle import send_and_confirm
 
@@ -110,30 +117,15 @@ _STAGNANT_ROUNDS_LIMIT = 3
 # settled rejection), so it's the one safe to shorten.
 _RETURNING_REJECT_SETTLE_S = 2.5
 
-# -- known nuisance interjections, matched on raw text regardless of
-# classification, checked before the main per-classification dispatch so
-# they can't desync any branch.
-_SHOW_LOG_RE = re.compile(r"show\s+today.?s\s+log", re.I)
-_INACTIVITY_RE = re.compile(r"inactivity\s+warning|critical\s+inactivity", re.I)
 # Live a-net Star Wars (letter C): after MODULE_ENTRY ``T`` the host prints
 # this closed-game refusal then returns the player to TWGS game_select
 # (hub capture anet-postpause-194645Z). Fail loud — never loop door↔Play.
+# Not an absorbable interjection (hard refuse, not a standing auto-response).
+# Nuisance absorb patterns: ``interjection_registry`` (re-exported above as
+# ``_SHOW_LOG_RE`` / ``_INACTIVITY_RE`` / ``_BEEN_ON_TODAY_RE`` /
+# ``_CLEAR_AVOIDS_RE`` for scrollback-scope pins).
 _CLOSED_GAME_RE = re.compile(
     r"this\s+is\s+a\s+closed\s+game|request\s+a\s+player\s+account\s+from\s+the\s+game\s+administrator",
-    re.I,
-)
-# RETURNING re-enter interstitial: TWGS shows "You have been on today ..."
-# after password, sometimes alone after `[Pause]` is dismissed -- not
-# covered by the pause_key anchor, so without this it lands in `unknown`
-# and wedges the automaton in automaton_stuck. Matched on the CURRENT
-# prompt line (or the last non-empty line when the prompt is blank) --
-# NOT on stale scrollback above an already-active main_command prompt.
-_BEEN_ON_TODAY_RE = re.compile(r"you\s+have\s+been\s+on\s+(?:the\s+game\s+)?today", re.I)
-# After re-enter, TWGS may ask whether to clear the avoid list. Optional
-# Y/N -- default N (keep avoids; clearing would wipe trader navigation
-# memory). Override via profile `clear_avoids_on_login = true`.
-_CLEAR_AVOIDS_RE = re.compile(
-    r"do\s+you\s+wish\s+to\s+clear\s+some\s+avoids\s*\?\s*\(\s*Y\s*/\s*N\s*\)",
     re.I,
 )
 
@@ -596,55 +588,20 @@ def _decide(cls, text, prompt, profile, state, get_password, save_password, sess
     outright-failed send could never recover from."""
 
     # -- nuisances first: these can interleave with any branch. ----------
-    if cls == "pause_key":
-        # Closed-game refusal often shares the screen with ``[Pause]``
-        # (a-net live). Detect BEFORE dismissing the pause so we do not
-        # loop forever via door re-entry (hub 194645Z).
-        if _CLOSED_GAME_RE.search(text or ""):
-            raise LoginError(f"game_closed:profile={profile.name}")
-        return "", False, None
+    # Closed-game is a hard refuse (not registry-absorbable). Detect BEFORE
+    # ``match_interjection`` so a ``[Pause]`` that shares the closed-game
+    # screen never gets dismissed into a door↔Play loop (hub 194645Z).
     if _CLOSED_GAME_RE.search(text or ""):
         raise LoginError(f"game_closed:profile={profile.name}")
-    if _BEEN_ON_TODAY_RE.search(prompt):
-        return "", False, None
-    if cls == "unknown" and not prompt.strip():
-        for line in reversed(text.splitlines()):
-            stripped = line.strip()
-            if not stripped:
-                continue
-            if _BEEN_ON_TODAY_RE.search(stripped):
-                return "", False, None
-            break
-    # Intentional whole-grid match (stale-scrollback hazard accepted):
-    # "show today's log?" sits in the BODY a line or more above the
-    # current prompt by the time we classify, never on the prompt line
-    # itself -- a prompt-only search would miss the live gate. One-shot
-    # interstitial; unlikely to linger as a false-fire after answer.
-    if _SHOW_LOG_RE.search(text):
-        return "N", False, None
-    # Stale-scrollback hazard: pyte keeps prior "clear avoids?" cells.
-    # Scope to current prompt line OR the option-block attached to that
-    # prompt (same helper as MODULE_ENTRY) — never the whole grid.
-    if _CLEAR_AVOIDS_RE.search(prompt) or _CLEAR_AVOIDS_RE.search(
-        _option_block_above_prompt(text, prompt)
-    ):
-        # Keep avoids unless the profile explicitly opts in (rare).
-        clear = bool(getattr(profile, "clear_avoids_on_login", False))
-        return ("Y" if clear else "N"), False, None
-    # Stale-scrollback hazard: pyte can leave a prior inactivity banner in
-    # the grid. Whole-grid `.search(text)` would blank-Enter against an
-    # unrelated later prompt (Accept #4 — "harmless" claim falsified).
-    # Scope to current prompt line OR the option-block attached to that
-    # prompt (same helper as MODULE_ENTRY / CLEAR_AVOIDS) so a fresh
-    # warning still matches in the BODY above the prompt, never only on
-    # the last line.
-    if _INACTIVITY_RE.search(prompt) or _INACTIVITY_RE.search(
-        _option_block_above_prompt(text, prompt)
-    ):
-        # Keepalive nudge for a LIVE inactivity banner -- blank Enter
-        # resets the server's idle clock without altering any pending
-        # field entry.
-        return "", False, None
+    hit = match_interjection(
+        cls,
+        text,
+        prompt,
+        profile=profile,
+        option_block=_option_block_above_prompt(text, prompt),
+    )
+    if hit is not None:
+        return hit.response, hit.secret, hit.wait_prompt_hint
 
     # -- outer BBS-level connection name vs. the TW2002 module's own
     # character-handle prompt: both anchor to login_name, disambiguated

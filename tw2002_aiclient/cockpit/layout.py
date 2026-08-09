@@ -330,9 +330,9 @@ def frame_layout(lines: int, cols: int, *, needs_attention: bool = False) -> dic
         banner_h = min(INTERVENTION_H, max(0, column_h - 1))
         column_h -= banner_h
 
-    if column_h > 1:
-        control_strip_h = 1
-        column_h -= 1
+    if column_h > CONTROL_STRIP_H:
+        control_strip_h = CONTROL_STRIP_H
+        column_h -= CONTROL_STRIP_H
     else:
         control_strip_h = 0
 

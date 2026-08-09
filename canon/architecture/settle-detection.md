@@ -206,17 +206,18 @@ A `[Pause]` interjection absorbed, versus a novel screen surfaced:
 
 # Code Divergence
 
-**(1) The interjection registry is not yet a first-class subsystem.** The reborn design specifies a
-single enumerated registry of unsolicited-output shapes paired with standing safe responses. In the
-current code, interjection *classification* exists (`classify.py` anchors `pause_key` for
-`[Pause]`/`-- More --`/`press … key`) but auto-handling is **scattered across driving callers**
-rather than centralized — e.g. the AUTO-LOOP driver clears a mid-run pager itself, and
-`watch.py` explicitly disclaims any auto-handling ("Nuisance auto-handling … is explicitly NOT this
-module's job — it streams every settle-edge as-is"). There is no single registry module enumerating
-`[Pause]`, the inactivity warning, and "Show today's log?" with their responses. The canon
-prescribes consolidating these into one first-class registry so the "absorbed vs. surfaced"
-boundary is defined in exactly one place; recorded here as a divergence, not reconciled by this
-concept.
+**(1) Interjection registry — LIVE substrate; callers migrating.** Tip
+(`WO-FIX-SETTLE-DETECTION-INTERJECTION-REGISTRY`):
+`tw2002_aiclient/session/interjection_registry.py` is the closed allow-list of absorbable
+nuisance shapes paired with standing safe responses (`pause_key` → blank Enter,
+`show_todays_log` → `N`, `clear_avoids` → `N`/`Y` from profile, `inactivity_warning` → blank
+Enter, `been_on_today` → blank Enter). `session/login.py`'s nuisance branch consults
+`match_interjection()` so the absorbed-vs-surfaced boundary is defined in one place.
+Classification anchors stay in `classify.py` (`pause_key` for `[Pause]`/`-- More --`/
+`press … key`). Residuals (incremental, not a missing substrate): other drivers that still
+inline their own dismiss (if any) should migrate onto the registry; `watch.py` still
+disclaims auto-handling by design (streams every settle-edge as-is — absorption is a
+control-side responsibility of whoever is driving).
 
 **(2) Per-screen settle profiles — registry LIVE; callers migrating.**
 Tip (WO-CLEANUP-SETTLE-PROFILES-DECLARATIVE-TABLE): `settle.SETTLE_PROFILES` +
@@ -233,7 +234,8 @@ every product caller has migrated onto the registry yet (incremental).
     `clock`, `sleep`, `render_text`, `wait_settle`)
 [3] `tw2002_aiclient/session/watch.py` (`WatchHub` settle-edge push stream; explicit no-auto-handling boundary)
 [4] `tw2002_aiclient/session/terminal.py` (pyte-backed render the settle wait polls)
-[5] `tw2002_aiclient/session/classify.py` (`pause_key` and other gate anchors — interjection classification today)
+[5] `tw2002_aiclient/session/classify.py` (`pause_key` and other gate anchors — interjection classification)
+[5b] `tw2002_aiclient/session/interjection_registry.py` (`match_interjection` — closed allow-list + standing responses; login consults)
 [6] Historical settle design (retired root `DESIGN.md` §6, now owned here); DESIGN-v2.md §8 (send/settle race, B4/B5 — internal planning history)
 [7] [/research/tw2002-screen-patterns.md](/research/tw2002-screen-patterns.md) (P-SETTLE-LINE · P-SUPPRESS — prompt-line scope + suppressed sub-prompts)
 [8] [/research/archive-port-patterns.md](/research/archive-port-patterns.md) AP-02 (send_and_confirm detailed algorithm, stale pre-send guard, stability re-check, retry_unstable_idle, wait_until_settled pre-read gate)
