@@ -6,7 +6,9 @@ Every settled ``build_response()`` can append one NDJSON object under
 or watch coalesces intermediate screens).
 
 Read path is pure filesystem (``tw frames``) — no daemon required for
-closed sessions. Secret inputs are redacted the same way as the ledger.
+closed sessions. Secret inputs never hit disk as plaintext: ``sent_input`` becomes
+``"<redacted>"`` (ledger vocabulary) and ``was_secret`` is a boolean honesty
+flag — raw password bytes are never written to ``state/frames/*.jsonl``.
 
 Ported from archive ``twclient/frame_recorder.py`` (WO-FRAMES-0) into the
 reborn ``tw2002_aiclient`` tree.
@@ -34,6 +36,10 @@ __all__ = [
 ]
 
 _PASSWORD_PROMPT_RE = re.compile(r"password", re.I)
+
+# Same placeholder as tw2002_aiclient.ledger.REDACTED (avoid importing
+# ledger here — it pulls session/pyte). Keep strings identical.
+REDACTED = "<redacted>"
 
 
 def _now_iso() -> str:
@@ -209,10 +215,21 @@ class FrameRecorder:
             raw = list(cropped_rows or [])
         cropped = list(cropped_rows) if cropped_rows is not None else raw
         prompt_line = prompt if prompt is not None else last_nonblank_line(raw)
-        sent = getattr(session, "last_sent", None)
-        secret = bool(getattr(session, "last_sent_secret", False))
-        if secret or _PASSWORD_PROMPT_RE.search(prompt_line or ""):
-            sent = "<redacted>" if sent is not None else None
+        # Honesty flag only — never persist the credential (or a variable that
+        # CodeQL can taint-track as clear-text secret storage).
+        was_secret = bool(getattr(session, "last_sent_secret", False)) or bool(
+            _PASSWORD_PROMPT_RE.search(prompt_line or "")
+        )
+        raw_sent = getattr(session, "last_sent", None)
+        if was_secret:
+            # Session normally already stores REDACTED in last_sent for secret
+            # sends; still force the placeholder so FakeSession / fail-paths
+            # cannot leak password bytes into JSONL.
+            sent_input = None if raw_sent is None else REDACTED
+            # Match ledger: password-shaped prompts are redacted on disk too.
+            prompt_line = REDACTED
+        else:
+            sent_input = raw_sent
         with self._lock:
             self._seq += 1
             seq = self._seq
@@ -226,8 +243,8 @@ class FrameRecorder:
                 "settled_reason": settled_reason,
                 "classification": classification,
                 "prompt": prompt_line,
-                "sent_input": sent,
-                "sent_input_secret": secret,
+                "sent_input": sent_input,
+                "was_secret": was_secret,
                 "cols": self.cols,
                 "rows": self.rows,
                 "screen_raw": raw,

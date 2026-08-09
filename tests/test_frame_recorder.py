@@ -125,7 +125,39 @@ def test_secret_sent_input_redacted(tmp_path):
     protocol.build_response(session)
     frames = read_frames("sec_sess", state_dir=tmp_path)
     assert frames[0]["sent_input"] == "<redacted>"
-    assert frames[0]["sent_input_secret"] is True
+    assert frames[0]["was_secret"] is True
+    assert "sent_input_secret" not in frames[0]
+    # Raw credential must not appear anywhere in the on-disk JSONL bytes.
+    blob = (tmp_path / "frames" / "sec_sess.jsonl").read_text(encoding="utf-8")
+    assert "hunter2" not in blob
+    assert frames[0]["prompt"] == "<redacted>"
+
+
+def test_password_prompt_redacts_even_without_secret_flag(tmp_path):
+    """Prompt-shape alone is enough — same ledger discipline."""
+    session = _FakeSession(["Enter your password:"])
+    rec = FrameRecorder("pw_prompt", state_dir=tmp_path)
+    session.frame_recorder = rec
+    session.last_sent = "hunter2"
+    session.last_sent_secret = False
+    protocol.build_response(session)
+    frames = read_frames("pw_prompt", state_dir=tmp_path)
+    assert frames[0]["was_secret"] is True
+    assert frames[0]["sent_input"] == "<redacted>"
+    blob = (tmp_path / "frames" / "pw_prompt.jsonl").read_text(encoding="utf-8")
+    assert "hunter2" not in blob
+
+
+def test_non_secret_sent_input_preserved(tmp_path):
+    session = _FakeSession(["Command [TL=40]:"])
+    rec = FrameRecorder("plain_sess", state_dir=tmp_path)
+    session.frame_recorder = rec
+    session.last_sent = "D"
+    session.last_sent_secret = False
+    protocol.build_response(session)
+    frames = read_frames("plain_sess", state_dir=tmp_path)
+    assert frames[0]["was_secret"] is False
+    assert frames[0]["sent_input"] == "D"
 
 
 def test_no_recorder_still_ok():
