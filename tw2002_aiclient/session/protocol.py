@@ -374,7 +374,13 @@ def _status_response(session, server):
         # The global status surface stays deliberately bounded; detailed
         # route/fingerprint progress is available only from the dedicated
         # trade_chain_status verb.
-        "autopilot": {"running": bool(arm.running or trade.running)},
+        # arm_block is the pure composer for the autoloop half; OR trade so a
+        # live trade-chain runner still lights the same chip (WO-BUILD-AUTOLOOP-ARM-BLOCK-WIRE).
+        "autopilot": {
+            "running": bool(
+                autoloop.arm_block(arm)["running"] or trade.running
+            )
+        },
         "subscribers": watch_hub.subscriber_count() if watch_hub else 0,
         "replay_arm": replay_arm,
     }

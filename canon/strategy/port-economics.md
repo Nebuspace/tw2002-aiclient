@@ -97,12 +97,15 @@ a license for the app to autonomously switch loops** (see Depletion, below).
 How many more round-trips a loop yields before it depletes is hypothesized as:
 
 ```
-remaining_trades  ≈  min(stock across the loop's four buy/sell legs)  ÷  ship hold count
+remaining_trades  ≈  min(stock across the route's buy/sell legs)  ÷  ship hold count
 ```
 
 where hold count comes from the live [Game-Data Store](/engine/game-data-store.md) (never
-hardcoded), and the four leg stocks are the observed `amount` fields of the two ports' relevant
-commodities. As `remaining_trades` falls toward zero the loop is nearing depletion.
+hardcoded), and leg stocks are the observed `amount` fields on each hop's buy/sell pair
+(`leg_stocks_for_hops` — **two legs per hop**, so a >2-hop chain has more than four legs; the
+classic two-port loop is the four-leg special case). Tip ranks longevity via
+`rank_chains_by_longevity` and treats routes at/under `DEPLETION_THRESHOLD_TRADES` as depleted
+signals. As `remaining_trades` falls toward zero the loop is nearing depletion.
 
 **Depletion is a STOP-guard, not an autonomous rotation.** In the reborn runtime, a loop reading
 depleted (or a **plague/inventory-crash** condition — total stock approaching a very large ceiling,
@@ -214,6 +217,9 @@ doc; **archive-only** shapes are do-not-revive (not open tip defects to "fix"):
   what the client actually observes per commodity.
 - `world_model.py` (`write_from_state`, `write_port_only`, the per-sector `port` record) — the
   persisted profit database this substrate scores against.
+- `chain_depletion.py` (H2 live+wired — `DEPLETION_THRESHOLD_TRADES`, `leg_stocks_for_hops`,
+  `rank_chains_by_longevity`; consumed by `chains.py` / `chain_status.py` / `trade_driver.py`) — the
+  tip implementation of this section's remaining-trades / STOP-guard signal.
 - Reimagined from `knowledge/strategies/port-economics.md` (the frozen raw material), re-rooted in
   the reborn vision; consumers: [Trade Loops](/strategy/trade-loops.md),
   [Priority Engine](/engine/priority-engine.md); hazard/appetite link:
