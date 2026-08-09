@@ -79,6 +79,21 @@ inside `_run` not visible from this trace. **This finding is evidenced (the halt
 reproducible with the exact commands above) but the root cause inside `_run` is not yet isolated —
 that isolation is the WO seed below, not resolved in this research pass.**
 
+### Post-fix status (2026-08-09)
+
+**Mitigated on tip** by `WO-DIAGNOSE-EXPLORE-HALT-GAME-SELECT-LIVE-SESSION` /
+PR #554: explore waits out an in-flight guardian reconnect burst before
+accepting `halt_not_drivable:*` (see
+[Exploration Policy](/strategy/exploration-policy.md) § Session continuity).
+Sacrificial credit-doubling live-prove the same day completed
+`tw explore start … --dock-new-ports` (`outcome=completed`, distinct sectors
+ingested). Residual risk: a halt that persists *after* the burst clears, or a
+deadline expiry while `guardian.reconnecting` remains true, still halts
+unchanged — that is intentional fail-closed, not a reopen of the false
+`game_select` race. Canon contract for same-session reuse is
+`WO-CANON-DRAFT-EXPLORE-SESSION-CONTINUITY`.
+
+
 Consequence: `--dock-new-ports` never ran, so no port price data was ever ingested — this is the
 reason Axis 1's chain discovery came back empty, and the reason Axes 2–4 below are NOT-ATTEMPTED
 rather than exercised.
