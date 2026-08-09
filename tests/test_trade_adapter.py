@@ -15,7 +15,7 @@ from typing import Optional
 import pytest
 
 from tw2002_aiclient import trade_adapter, world_model
-from tw2002_aiclient.chains import find_profit_chains, longest_profit_chain
+from tw2002_aiclient.chains import find_profit_chains
 
 WORLD = "hostA__F__ALPHA"
 
@@ -96,7 +96,9 @@ def test_direction_compatible_pair_hand_computed_margins_and_best_chain(tmp_path
     assert by_key[(11, 10, "Fuel Ore")].turns == 1
     assert len(hops) == 2
 
-    chain = longest_profit_chain(hops)
+    chains = find_profit_chains(hops)
+    assert chains
+    chain = chains[0]
     assert chain is not None
     assert chain.overall_profit == 66.0
     assert chain.turns == 2
@@ -402,7 +404,6 @@ def test_single_port_world_returns_empty(tmp_path):
 
 
 def test_empty_hops_keeps_chain_finder_output_none():
-    assert longest_profit_chain(()) is None
     assert find_profit_chains(()) == []
 
 
