@@ -250,11 +250,19 @@ holds structurally. Two things worth recording:
   + WO-WIRE-DENSITY-SCAN-WRITEBACK):** `tw2002_aiclient.density_scan.parse_density_scan` +
   `DENSITY_VALUE_TABLE` land the raw `sector → density` extract and the canon atom table; row grammar
   remains a **hypothesis** (synthetic fixtures only — no live multi-sector density screen capture yet).
-  Opportunistic writeback is wired (`density_scan_capture` idle-tick →
+  Opportunistic writeback is wired (`DensityScanCapture` / `DensityCaptureResult` idle-tick →
   `world_model.write_density_scan`) into a sector `density_scan` observation always stamped
   `verification: HYPOTHESIS` (decoded atoms + presence-via-absence fighter signal stay inside that
   field — they do **not** mutate `threats`/`port` until a live capture promotes the grammar). Recorded
   as a residual verification gap (live capture), not a missing ingestion path.
+  **Tip (WO-WIRE-BULK-UPSERT-CIM-INGEST):** `CimReportCapture` / `CimCaptureResult` mirror the same
+  observe-only idle-tick pattern: when the settle-edge watch event is a genuine `cim_report` (re-classifies
+  via `classify_screen` when the event hint alone is insufficient — shape alone is not provenance),
+  parse batch rows and persist via `world_model.write_from_cim_report` → `bulk_upsert`. Fail-closed:
+  non-`cim_report` classifications and unparseable screens write nothing. Never raises on the play-loop
+  idle tick (`reason="error_contained"` on containment). Per-session dedupe via
+  `{world_id}:cim:{text_fingerprint}`. Pure observe path: no send, no crawl, no connection open. Same
+  residual live-capture verification gap as density — wired ingestion, not a missing path.
 - **`formations.py` membership writeback is wired** (WO-FORMATIONS-MEMBERSHIP-WRITEBACK / #326).
   `catalog_world` and `WorldStats.refresh` call `write_membership` after a successful scan, stamping
   canon-hyphen `formation_membership` tags. Still LOCATE/CATALOG/RECOMMEND-only — no Genesis or claim

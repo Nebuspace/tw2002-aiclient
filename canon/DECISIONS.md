@@ -426,9 +426,11 @@ chose rules over ledger for this residual (ledger HOLD — money-path audit trai
 
 **Refs:** hub GO rules-store · `rules/store.py` · loops precedent PWO-090.
 
-## Pending — ledger world_id row stamp (PWO-090 residual · hub GO Option A 2026-08-03)
+## Accepted — ledger world_id row stamp (PWO-090 residual · hub GO Option A 2026-08-03)
 
 **ID:** `DECISION-LEDGER-WORLD-ID-STAMP`
+
+**Status:** Accepted (ratified 2026-08-05 batch — ledger world_id Option A at :308)
 
 **Context:** Trace ledger remains a single append-only `state/ledger.jsonl` (passive
 dispatch-trace sink — records decisions; never chooses a live keystroke). Hub GO
