@@ -166,7 +166,7 @@ from .explore import known_graph, path_to_sector
 from .formations import route_hazard_for_hop
 from . import world_model
 from .session.classify import classify_screen, is_avoid_danger_warp
-from .session.settle import send_and_confirm
+from .session.settle import send_and_confirm_for
 from .session.state_parser import (
     OUTCOME_READ,
     read_credits_balance,
@@ -369,13 +369,14 @@ def _confirmed_send(
     step budget, a shape-assert (A-C2), then `settle.send_and_confirm` --
     and a clean `ChainHold` the instant any of those refuse.
 
-    ``retry_unstable_idle`` is for nav warps only (WO-DIAGNOSE-TRADE-CHAIN-
-    UNCONFIRMED-SEND-HALT): mid-warp / multi-packet paints can flash an
-    idle then emit more bytes during the stability window — settle's
-    default fail-fast then returns confirmed=False even though the hop
-    landed (live academy_of_tradewars 2026-08-07, sector 10396). Matches
-    ``sector_explore`` / settle ``warp_unstable``. Qty/offer/dock sends
-    keep the default False.
+    ``retry_unstable_idle`` selects settle profile ``warp_unstable`` (nav
+    warps only — WO-DIAGNOSE-TRADE-CHAIN-UNCONFIRMED-SEND-HALT). Otherwise
+    ``positive_shape`` when ``confirm_prompt`` is set, else ``stable_idle``.
+    Mid-warp / multi-packet paints can flash an idle then emit more bytes
+    during the stability window — settle's default fail-fast then returns
+    confirmed=False even though the hop landed (live academy_of_tradewars
+    2026-08-07, sector 10396). Qty/offer/dock sends keep
+    ``retry_unstable_idle`` False.
     """
     if not ctx.armed():
         raise ChainHold("armed_off")
@@ -390,13 +391,19 @@ def _confirmed_send(
     # just `_send_letter()`'s own narrower allowlist.
     if text != "" and not text.isdigit() and text not in _ALLOWED_LETTER_SENDS:
         raise PaladinViolation(f"refused_disallowed_send_shape:{text!r}")
-    _reason, _elapsed, confirmed = send_and_confirm(
+    if retry_unstable_idle:
+        profile = "warp_unstable"
+    elif confirm_prompt is not None:
+        profile = "positive_shape"
+    else:
+        profile = "stable_idle"
+    _reason, _elapsed, confirmed = send_and_confirm_for(
         ctx.session,
         text,
-        confirm_prompt,
+        profile=profile,
+        confirm_prompt=confirm_prompt,
         enter=enter,
         timeout_s=ctx.config.step_timeout_s,
-        retry_unstable_idle=retry_unstable_idle,
     )
     ctx.steps += 1
     if not confirmed:

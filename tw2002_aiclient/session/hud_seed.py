@@ -12,7 +12,7 @@ and never break a successful ensure.
 
 from __future__ import annotations
 
-from .settle import send_and_confirm
+from .settle import send_and_confirm_for
 from .state_parser import OUTCOME_READ
 
 _PROBE_TIMEOUT_S = 8.0
@@ -90,9 +90,10 @@ def seed_hud_after_join(session, *, force: bool = False) -> dict:
         if session.classify() != "main_command":
             return {"hud_seed_probed": False, "hud_seed_reason": "unsafe_screen"}
 
-        _reason, _elapsed, confirmed = send_and_confirm(
+        _reason, _elapsed, confirmed = send_and_confirm_for(
             session,
             "I",
+            profile="positive_shape",
             confirm_prompt=_SHIP_INFO_CONFIRM,
             enter=True,
             secret=False,

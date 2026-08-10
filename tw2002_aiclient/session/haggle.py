@@ -14,7 +14,7 @@ from typing import Any, Optional
 
 from tw2002_aiclient.haggle_params import DEFAULT_HAGGLE_PARAMS
 
-from .settle import send_and_confirm, wait_until_settled
+from .settle import send_and_confirm_for, wait_until_settled
 from .state_parser import OUTCOME_READ, read_credits_balance
 
 # Defaults authored in ``data/haggle/params.json`` via haggle_params registry.
@@ -141,8 +141,9 @@ def _evidence_backed_price(
 
 def _accept_current_default_and_confirm(session: Any, step_timeout: float) -> Optional[str]:
     """Accept a proven current default by blank Enter and confirm the result."""
-    _reason, _elapsed, confirmed = send_and_confirm(
-        session, "", _CONFIRM_RE, enter=True, timeout_s=step_timeout
+    _reason, _elapsed, confirmed = send_and_confirm_for(
+        session, "", profile="positive_shape", confirm_prompt=_CONFIRM_RE,
+        enter=True, timeout_s=step_timeout,
     )
     if not confirmed:
         return None
@@ -182,8 +183,9 @@ def run_haggle(
     before_credits = _credits_balance(text)
 
     for round_i in range(1, round_cap + 1):
-        _reason, _elapsed, confirmed = send_and_confirm(
-            session, str(our_ask), _CONFIRM_RE, enter=True, timeout_s=step_timeout
+        _reason, _elapsed, confirmed = send_and_confirm_for(
+            session, str(our_ask), profile="positive_shape", confirm_prompt=_CONFIRM_RE,
+            enter=True, timeout_s=step_timeout,
         )
         if not confirmed:
             _accept_current_default_and_confirm(session, step_timeout)

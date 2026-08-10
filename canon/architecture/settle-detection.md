@@ -220,11 +220,13 @@ inline their own dismiss (if any) should migrate onto the registry; `watch.py` s
 disclaims auto-handling by design (streams every settle-edge as-is — absorption is a
 control-side responsibility of whoever is driving).
 
-**(2) Per-screen settle profiles — registry LIVE; callers migrating.**
-Tip (WO-CLEANUP-SETTLE-PROFILES-DECLARATIVE-TABLE): `settle.SETTLE_PROFILES` +
+**(2) Per-screen settle profiles — registry LIVE; product callers on tip.**
+Tip (WO-CLEANUP-SETTLE-PROFILES-DECLARATIVE-TABLE +
+WO-CLEANUP-SETTLE-PROFILES-CALLER-MIGRATE): `settle.SETTLE_PROFILES` +
 `send_and_confirm_for(..., profile=...)` name `stable_idle` / `warp_unstable` /
-`positive_shape`. Raw `send_and_confirm()` remains the primitive. Residual: not
-every product caller has migrated onto the registry yet (incremental).
+`positive_shape`. Product send paths (menu crawler, hud_seed, autoloop replay,
+haggle, login, sector_explore, trade_driver) route through `send_and_confirm_for`.
+Raw `send_and_confirm()` remains the load-bearing primitive underneath.
 
 
 # Citations

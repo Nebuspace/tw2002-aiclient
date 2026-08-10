@@ -87,7 +87,7 @@ from . import fighter_toll_policy
 from .classify import classify_screen
 from .interjection_registry import match_interjection
 from .sector_explore import FIGHT_FORBIDDEN_KEYS, FIGHT_LETTER_ALLOWLIST
-from .settle import send_and_confirm
+from .settle import send_and_confirm_for
 
 _MAX_STEPS = 60
 _STEP_SETTLE_TIMEOUT_S = 12.0
@@ -528,8 +528,14 @@ def run_login(
         # a-net ``_expect_line``).
         multigame_letter = _is_multigame_letter_menu_send(cls, send_text, text, prompt)
         enter = not (cls == "game_select" or multigame_letter)
-        _reason, _elapsed, confirmed = send_and_confirm(
-            session, send_text, confirm_prompt=wait_hint, enter=enter, secret=secret, timeout_s=_STEP_SETTLE_TIMEOUT_S
+        _reason, _elapsed, confirmed = send_and_confirm_for(
+            session,
+            send_text,
+            profile="positive_shape",
+            confirm_prompt=wait_hint,
+            enter=enter,
+            secret=secret,
+            timeout_s=_STEP_SETTLE_TIMEOUT_S,
         )
         if cls == "game_select" or multigame_letter:
             session.game_select_letter_sent = True
