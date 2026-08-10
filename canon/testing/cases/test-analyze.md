@@ -1,17 +1,20 @@
 ---
 type: Reference
 title: Test Cases — test_analyze
-description: TW-12 session-retro analyzer tests — no network, synthetic ledger only.
+description: Archive TW-12 session-retro analyzer suite — BANK-DELETED (no tip twclient.analyze).
 resource: repo://tw2002-aiclient/tests/test_analyze.py
-tags: [testing, catalog, pytest, inventory]
-timestamp: 2026-07-25T14:10:13Z
+tags: [testing, catalog, pytest, inventory, bank-deleted]
+timestamp: 2026-08-10T04:12:00Z
 ---
 
 # Test Cases — `tests/test_analyze.py`
 
-_TW-12 session-retro analyzer tests — no network, synthetic ledger only._
+_Archive TW-12 session-retro analyzer tests (synthetic ledger)._
 
-> **BANKED** — excluded from the default pytest run via `pytest.ini --ignore`. Catalogued for completeness.
+> **BANK-DELETED** (WO-CLEANUP-BANK-DELETE-TWCLIENT-ANALYZE-SUITE, 2026-08-10) —
+> file removed. It imported deleted `twclient.analyze` and could not collect on
+> tip after ADR-001. Rebirth twins: `tw mine` / `miner.py`, `tw teach analyze`,
+> `tw report`. Historical case names kept below for archaeology only.
 
 | Test | Blurb |
 |------|-------|

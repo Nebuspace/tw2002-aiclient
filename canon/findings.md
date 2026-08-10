@@ -80,8 +80,8 @@ never drive recommendations that contradict reborn `canon/`.
 
 **Symptom:** stale tests still `import twclient` (archive-only). Rehab buckets live in
 `workorders/WO-TEST-SUITE-REHAB.md`. **Default honesty (WO-TEST-COLLECT-HYGIENE):** tip
-`pytest.ini` `--ignore=`s the remaining uncollectable BANKED modules (`test_analyze.py`,
-`test_crawl_start_protocol.py`) so `pytest --collect-only` / `pytest -q` stay green (0 collection
+`pytest.ini` `--ignore=`s the remaining uncollectable BANKED module
+(`test_crawl_start_protocol.py` only) so `pytest --collect-only` / `pytest -q` stay green (0 collection
 ERRORS). Remove an ignore line when that file is rewritten/Accepted.
 
 **P2-025 control-lock (execute):** live `session/control_lock.py` modes `{app,human,spectate}`;
@@ -101,7 +101,7 @@ green; keepalive skipped until 028. See WO-P2-027.
 targeted ops `tw spectate` / interactive panels (`test_spectate_app` / `test_spectate_layout` /
 `test_interactive_app` / `test_aiclient_play_panels`) are **REMOVED** from tip — not ignored.
 In-cockpit Spectate coverage lives under tip suites such as `tests/test_cockpit_spectate.py`.
-Default ignore census is only `test_analyze.py` + `test_crawl_start_protocol.py`.
+Default ignore census is only `test_crawl_start_protocol.py` (analyze suite BANK-DELETED).
 
 ## Run-dir override (WO-P2-021)
 

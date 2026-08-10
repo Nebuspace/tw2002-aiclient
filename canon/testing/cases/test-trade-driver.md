@@ -11,7 +11,7 @@ timestamp: 2026-08-09T09:15:46Z
 
 _tests/test_trade_driver.py -- WO-FA4 trade_driver.py: the money-path chain-execution driver._
 
-> **Active** on tip (default pytest collect). Historical case file once marked BANKED; tip module is collected — not among the tip **2** BANKED ignores (`test_analyze.py`, `test_crawl_start_protocol.py`). Headline inventory: **7437** tests · **308** active modules.
+> **Active** on tip (default pytest collect). Historical case file once marked BANKED; tip module is collected — not among the tip **1** BANKED ignore (`test_crawl_start_protocol.py`; `test_analyze.py` BANK-DELETED). Headline inventory: **7437** tests · **308** active modules.
 | Test | Blurb |
 |------|-------|
 | `test_run_chain_completes_a_scripted_two_port_loop_with_exact_credits_math` | Run chain completes a scripted two port loop with exact credits math. |

@@ -2,14 +2,14 @@
 
 OKF inventory of the pytest suite.
 
-* [Test Case Catalog](/testing/test-case-catalog.md) — Inventory of every pytest case (**7437** tests · **308** active modules on tip 2026-08-09; **2** BANKED ignores): one-sentence blurb per test; REMOVED/BANKED modules annotated.
+* [Test Case Catalog](/testing/test-case-catalog.md) — Inventory of every pytest case (**7490** tests · **313** active modules on tip 2026-08-10; **1** BANKED ignore): one-sentence blurb per test; REMOVED/BANKED modules annotated.
 
 ## Per-module case files
 
 * [test_actor_attribution.py](/testing/cases/test-actor-attribution.md) — Actor attribution at the send choke point (WO-P2-025).
 * [test_aiclient_adapters.py](/testing/cases/test-aiclient-adapters.md) — **REMOVED** (deleted from tip). Historical only. Was: Unit tests for tw2002_aiclient ensure/autopilot adapters (mocked daemon). 
 * [test_aiclient_play_panels.py](/testing/cases/test-aiclient-play-panels.md) — **REMOVED** (deleted from tip). Historical only. Was: Aiclient play panels. 
-* [test_analyze.py](/testing/cases/test-analyze.md) — TW-12 session-retro analyzer tests — no network, synthetic ledger only. _(BANKED)_
+* [test_analyze.py](/testing/cases/test-analyze.md) — Archive TW-12 session-retro analyzer suite. _(BANK-DELETED · WO-CLEANUP-BANK-DELETE-TWCLIENT-ANALYZE-SUITE)_
 * [test_attach_client_timeouts.py](/testing/cases/test-attach-client-timeouts.md) — AttachInputConn socket-op timeouts (HARDEN-ATTACH).
 * [test_attach_protocol.py](/testing/cases/test-attach-protocol.md) — Attach control-lock handoff over a real unix socket + FakeAttachSession.
 * [test_attach_redaction.py](/testing/cases/test-attach-redaction.md) — Attach keystroke secret redaction (WO-P2-OPS-VERB-F1b).

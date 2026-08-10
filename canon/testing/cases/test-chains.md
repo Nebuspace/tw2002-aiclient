@@ -11,7 +11,7 @@ timestamp: 2026-08-09T09:15:00Z
 
 _TW-21 longest-profit-chain algorithm tests (synthetic graphs)._
 
-> **Active** on tip (default pytest collect). Historical case file once marked BANKED; un-ignored via WO-CHAIN-DETECT-PORT rehab — not among the tip **2** BANKED ignores (`test_analyze.py`, `test_crawl_start_protocol.py`). Headline inventory: **7437** tests · **308** active modules.
+> **Active** on tip (default pytest collect). Historical case file once marked BANKED; un-ignored via WO-CHAIN-DETECT-PORT rehab — not among the tip **1** BANKED ignore (`test_crawl_start_protocol.py`; `test_analyze.py` BANK-DELETED). Headline inventory: **7437** tests · **308** active modules.
 
 | Test | Blurb |
 |------|-------|

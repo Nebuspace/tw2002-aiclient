@@ -16,7 +16,7 @@ pre-port KEEP bucket in `AUDIT-TEST-IGNORE-LIST-LANDMINE.md`.
 |---|---|---|
 | `tests/test_haggle.py` | `from tw2002_aiclient.session.haggle import …` | drop `--ignore` |
 | `tests/test_ledger.py` | `from tw2002_aiclient.ledger import …` | drop `--ignore` |
-| `tests/test_analyze.py` | still `from twclient.analyze` | KEEP ignored |
+| `tests/test_analyze.py` | still `from twclient.analyze` | **BANK-DELETED** by WO-CLEANUP-BANK-DELETE-TWCLIENT-ANALYZE-SUITE (was KEEP) |
 | `tests/test_crawl_start_protocol.py` | still `from twclient` (daemon crawl unwired) | KEEP ignored |
 
 ## Out of bounds

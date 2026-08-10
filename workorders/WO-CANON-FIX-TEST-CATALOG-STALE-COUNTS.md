@@ -40,4 +40,4 @@ git ls-files 'tests/test_*.py' | wc -l
 ```
 
 Verified on tip `eb8129f9` (worktree): **7480** collected · **311** active modules ·
-**313** on-disk · **2** BANKED (`test_analyze.py`, `test_crawl_start_protocol.py`).
+**312** on-disk · **1** BANKED (`test_crawl_start_protocol.py`; analyze BANK-DELETED by WO-CLEANUP-BANK-DELETE-TWCLIENT-ANALYZE-SUITE). Historical Accept below recorded 313/2 at #644 merge.

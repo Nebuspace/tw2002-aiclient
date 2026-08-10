@@ -23,7 +23,7 @@ Same class as #168–#176 archive DELETE batches. Drop matching `--ignore=` line
 ## Out of bounds
 
 - `tests/test_crawl_start_protocol.py` (still KEEP-IGNORED — daemon crawl verb)
-- `tests/test_haggle.py` / `tests/test_ledger.py` / `tests/test_analyze.py` (other ignore rows)
+- `tests/test_haggle.py` / `tests/test_ledger.py` (un-ignored later); `tests/test_analyze.py` (BANK-DELETED by WO-CLEANUP-BANK-DELETE-TWCLIENT-ANALYZE-SUITE)
 - Restoring crawl/haggle CLI verbs
 
 ## Accept
