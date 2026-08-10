@@ -266,8 +266,11 @@ holds structurally. Two things worth recording:
 - **`formations.py` membership writeback is wired** (WO-FORMATIONS-MEMBERSHIP-WRITEBACK / #326).
   `catalog_world` and `WorldStats.refresh` call `write_membership` after a successful scan, stamping
   canon-hyphen `formation_membership` tags. Still LOCATE/CATALOG/RECOMMEND-only — no Genesis or claim
-  action. `recommend_genesis` remains an alias of `genesis_candidates` without a separate auto-caller.
-  Route-hazard STOP/exclude for explore/trade is also wired (#327–#329); see
+  action. `recommend_genesis` remains a thin alias of `genesis_candidates` (RECOMMEND-only —
+  no deploy send). **Tip (WO-BUILD-FORMATIONS-GENESIS-RECOMMEND-VERIFY / #659):** product
+  recommend consumers call the alias — `explore.plan_find_formations` and
+  `WorldStats.refresh` (`genesis_count`) — so GOALS/coach/explore cannot bypass the shared
+  shortlist. Route-hazard STOP/exclude for explore/trade is also wired (#327–#329); see
   [Special Formations](/strategy/special-formations.md) § Code reality.
 
 # Citations

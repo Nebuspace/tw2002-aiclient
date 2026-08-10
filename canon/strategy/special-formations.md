@@ -144,8 +144,9 @@ Coaching surface, after a mapping pass:
 - **Membership writeback (wired):** `membership_map` / `write_membership` stamp canon-hyphen
   `formation_membership` tags after a successful scan — called from `catalog_world` and
   `WorldStats.refresh` (WO-FORMATIONS-MEMBERSHIP-WRITEBACK / #326). Still catalog-only side effects;
-  no Genesis or claim action. `recommend_genesis` remains an alias of `genesis_candidates` with no
-  new auto-caller beyond that.
+  no Genesis or claim action. `recommend_genesis` remains a thin alias of `genesis_candidates`
+  (RECOMMEND-only — no deploy). **Tip (#659):** `explore.plan_find_formations` and
+  `WorldStats.refresh` call the alias so panel / GOALS / explore share one shortlist path.
 - **Route-hazard guards (wired):** Dual-consumer STOP, not reroute —
   `route_hazard_for_hop` feeds explore (`WO-ROUTE-HAZARD-GUARD` / #327) and trade navigate
   (`WO-TRADE-ROUTE-HAZARD-GUARD` / #328); trade hop/pair discovery excludes hazardous shortest paths
