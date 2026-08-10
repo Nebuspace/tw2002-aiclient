@@ -108,12 +108,13 @@ def test_seed_sends_one_i_and_observes_the_confirmed_ship_info(tmp_path, monkeyp
         current["rows"] = FIXTURE.read_text().splitlines()
         return "prompt", 0.1, True
 
-    monkeypatch.setattr(hud_seed, "send_and_confirm", fake_send_and_confirm)
+    monkeypatch.setattr(hud_seed, "send_and_confirm_for", fake_send_and_confirm)
 
     result = hud_seed.seed_hud_after_join(session)
 
     assert len(sent) == 1
     assert sent[0][1] == "I"
+    assert sent[0][2].get("profile") == "positive_shape"
     assert result == {
         "hud_seed_probed": True,
         "hud_seed_reason": "seeded",
@@ -129,7 +130,7 @@ def test_seed_is_no_send_when_already_seeded_or_not_at_main_command(tmp_path, mo
     current = _screen(session, monkeypatch, FIXTURE.read_text().splitlines())
     monkeypatch.setattr(
         hud_seed,
-        "send_and_confirm",
+        "send_and_confirm_for",
         lambda *a, **k: (_ for _ in ()).throw(AssertionError("unexpected send")),
     )
 
@@ -150,7 +151,7 @@ def test_seed_failure_never_raises_or_invents_values(tmp_path, monkeypatch):
     )
     monkeypatch.setattr(
         hud_seed,
-        "send_and_confirm",
+        "send_and_confirm_for",
         lambda *a, **k: (_ for _ in ()).throw(OSError("transport down")),
     )
 
@@ -181,17 +182,18 @@ def test_seed_confirms_ship_info_that_omits_turns_left(tmp_path, monkeypatch):
     sent = []
 
     def fake_send_and_confirm(target, text, **kwargs):
-        sent.append(kwargs.get("confirm_prompt"))
+        sent.append(kwargs)
         current["rows"] = list(_UNLIMITED_SHIP_INFO)
         return "prompt", 0.1, True
 
-    monkeypatch.setattr(hud_seed, "send_and_confirm", fake_send_and_confirm)
+    monkeypatch.setattr(hud_seed, "send_and_confirm_for", fake_send_and_confirm)
 
     result = hud_seed.seed_hud_after_join(session)
 
     assert len(sent) == 1
-    assert "Credits" in sent[0]
-    assert "Turns" not in sent[0]
+    assert sent[0].get("profile") == "positive_shape"
+    assert "Credits" in sent[0].get("confirm_prompt")
+    assert "Turns" not in sent[0].get("confirm_prompt")
     assert result == {
         "hud_seed_probed": True,
         "hud_seed_reason": "seeded",
@@ -207,7 +209,7 @@ def test_credits_and_cargo_known_without_turns_is_already_seeded(tmp_path, monke
     _screen(session, monkeypatch, _UNLIMITED_SHIP_INFO)
     monkeypatch.setattr(
         hud_seed,
-        "send_and_confirm",
+        "send_and_confirm_for",
         lambda *a, **k: (_ for _ in ()).throw(AssertionError("unexpected send")),
     )
 
