@@ -1,6 +1,6 @@
 # WO-CANON-FIX-MENU-MAP-STALE-TWCLIENT-CITATIONS
 
-**Status:** OPEN (building)  
+**Status:** DONE — PR #647 · SHA `a533ff5614e6d97516da0405a70995dffef0a8a8`  
 **Priority:** LOW  
 **gated:** no · **schema:** n/a (docs only)
 
