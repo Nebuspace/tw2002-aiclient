@@ -60,10 +60,13 @@ it does **not** reuse Map-fill's global nearest-first frontier pick.
   below. Counterpart relationship to `chains.py` cycle-search is noted in
   [Trade Loops](/strategy/trade-loops.md) — Chain-hunt does not call into or replace that finder.
 
-The trainer panel cycles the active intent
-`off → mapfill → stardock → formations → chainhunt → off`. `off` is the default: no explore
-behavior runs until the human arms one. (Panel/CLI wiring for `chainhunt` is a follow-on build;
-this concept is the prescriptive target.)
+Arming surfaces (tip-true): Play's Explore offer stays **2-wide** —
+`map_fill` / `find_stardock` via `ARMABLE_INTENTS` and the find-StarDock toggle (`#247` /
+WO-RETIRE-CYCLE-EXPLORE-MODE). It is **not** a rotating
+`off → mapfill → stardock → formations → chainhunt → off` panel cycle. `find_formations` and
+`chain_hunt` are **CLI/daemon-armable and LIVE** (`tw explore start --intent …`; Chain-hunt
+planner + wiring shipped in PR `#640` / `#641`) — they are deliberately **not** on Play's E
+cycle. `off` remains the default: no explore behavior runs until the human arms one.
 
 ## The BFS / frontier planner mechanism (G1)
 
@@ -259,6 +262,12 @@ operationally, and never hardcode these per-server.
 The tip/archive history predates the reborn framing in places. Recorded here per DOCS-WIN (docs are
 the target). **Archive-only** shapes are do-not-revive — not open tip defects to "fix":
 
+- **Schema arming cycle — tip-true (closed 2026-08-10).** Older Schema prose claimed a trainer-panel
+  cycle `off → mapfill → stardock → formations → chainhunt → off` and called Panel/CLI wiring for
+  `chainhunt` a "follow-on build." Tip is otherwise: Play E stays **2-wide** (`ARMABLE_INTENTS` =
+  `map_fill`, `find_stardock`); `find_formations` / `chain_hunt` are CLI/daemon-armable and **already
+  shipped** (`plan_chain_hunt` / `INTENT_CHAIN_HUNT` / CLI — PR `#640` / `#641`). Do not re-open as
+  "chain_hunt unbuilt" or as a 4-/5-step panel cycle.
 - **Archived `autopilot.py` "never-idle" explore baseline — do-not-revive.** Pre-rebirth
   `EXPLORE_BASELINE_EV = 0.01` existed so a per-cycle EV SELECT always had *something* to do
   (`"keep exploring (…) — no idle (§11)"`). That module is **gone from tip**. Reborn: explore is a
