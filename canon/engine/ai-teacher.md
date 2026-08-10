@@ -163,19 +163,20 @@ Ethos-bound refusal:
 
 # Code divergence
 
-The reborn model above is teacher-only and author-only. The current code still carries the
-pre-reborn shape in several places (docs win — these are the deltas to close, recorded, not silently
-conformed):
+The reborn model above is teacher-only and author-only. Tip now matches that spine for the
+author plumbing (below). Remaining deltas are recorded here (docs win — not silently conformed):
 
-- **There is no AI-teacher module.** No code path today reads an escalation moment and returns a
-  drafted guarded rule from a language model. The only "analyze" surface that exists — `analyze.py`'s
-  `tw analyze <session>` — is **deterministic**: it slices the ledger by session and reuses the
-  no-LLM pattern miner (`miner.py`) to rank recurring profitable input-subsequences as "candidates to
-  codify." That is the *deterministic sibling* (see [candidate-mining](/engine/candidate-mining.md)),
-  not this concept. The LLM Screen-Analyze that proposes a guarded `when → do` from a single
-  unrecognized screen is prescriptive here and unbuilt in code. (Distinction to preserve when it is
-  built: the two share the draft-and-approve gate, but the miner groups *recurring profitable*
-  sequences across a session, whereas the teacher reasons about *one specific hard screen* on demand.)
+- **AI-teacher author path — tip closed (plumbing); real LLM backend still deferred.** Tip ships
+  `tw2002_aiclient/ai_teacher.py`: on-demand, ethos-bound `analyze_escalation` /
+  `complete_cockpit_analyze` that declines PvP/exploit/collude proposals and persists only inert
+  drafts via `rules.writer.write_draft` (`approved: False` — no live-send path). Surfaces:
+  `tw teach analyze` (`teach_cli.py`) and cockpit Analyze-close wiring
+  (`cockpit/analyze.py` → `draft_approve.py`). Default backend is `no_backend_configured` (raises);
+  a real model client is injectable via `AnalyzeBackend` but **not wired** — new external dependency,
+  still Max-gated. The deterministic sibling remains `tw analyze <session>` / `miner.py`
+  ([candidate-mining](/engine/candidate-mining.md)): miner ranks *recurring profitable* ledger
+  subsequences; the teacher targets *one specific hard screen* on demand. Both share the
+  draft-and-approve gate.
 
 - **`control_lock.py` `MODE_AI_PILOT` — RETIRED on tip (2026-08-04).** Tip keeps only
   `{app, human, spectate}`; there is no live-AI-driver mode. Historical finding + do-not-revive
