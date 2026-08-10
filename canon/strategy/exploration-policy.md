@@ -265,10 +265,13 @@ the target). **Archive-only** shapes are do-not-revive — not open tip defects 
   `Candidate(kind="explore", …)` rows and SELECTed the highest-EV candidate each tick. Tip priority
   *ranks/orders* taught behaviors and suggestions; it must not revive a live per-cycle picker where
   a computed EV can win over an unrecognized screen. Stop-on-unknown sits above SELECT.
-- **`trade_driver.py` — autonomous chain runner (tip — arm/guards).** `run_chain()` can drive a whole
-  `ProfitChain` end-to-end synchronously; it carries interruptibility and fail-closed arming, but its
-  shape is multi-step driving. Reborn: a chain is a taught, human-armed repeating macro that
-  re-validates and STOPS on unknown each step.
+- **`trade_driver.py` — autonomous chain runner, RESOLVED, closed 2026-08-09.** `run_chain()` drives
+  a whole `ProfitChain` end-to-end, but per-step re-validation and human-armed gating are proven, not
+  open: `_navigate` (~L764-841) re-validates `classify_screen` before every warp send, and every send
+  funnels through `_confirmed_send()` (~L359-403), which fails closed on `ctx.armed()`/
+  `should_abort()`. See [Port Economics](/strategy/port-economics.md)'s matching Code divergence
+  entry and [toll-and-defense](/strategy/toll-and-defense.md) Option C fact-find (re-verified against
+  tip `7c97b2a`) for the citation trail — do not re-litigate this as an open gap in either doc.
 - **§22.4 / TW-23 capstone re-scope.** Design history §22.4 still describes a "full-autopilot
   capstone" that "goes AUTOPILOT → seeks to DOUBLE starting credits autonomously." That
   autonomous-doubling end-state is counter-canon and re-scoped to human-armed, stop-on-unknown taught
@@ -362,7 +365,7 @@ Axis 5.
   `39a8634c` (`INTENT_CHAIN_HUNT` / `plan_chain_hunt` in `explore.py` — do not treat Map-fill pick as Chain-hunt)
 - source module `world_model.py` — TW-06 persisted per-world sector store (G1 write target)
 - source module `autopilot.py` — **archive-only** EV-select / `EXPLORE_BASELINE_EV` (do-not-revive)
-- source module `trade_driver.py` — recorded autonomous chain-runner divergence
+- source module `trade_driver.py` — RESOLVED autonomous chain-runner (per-step classify + armed send; see Code divergence)
 - tip Play flags — `tw2002_aiclient/cockpit/explore_flags.py` · `adapters.explore_start_for_profile`
   dock/fight asymmetry · [mode-line](/surfaces/mode-line-and-teach-controls.md) Explore vs `P` split
 - tip `session/sector_explore.py` — ExploreRunner same-session start + guardian reconnect wait (`RECONNECT_WAIT_*`) · `session/daemon.py` ExploreRunner wiring · `session/protocol.py` `_dispatch_explore_start`

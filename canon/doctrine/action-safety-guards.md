@@ -105,7 +105,10 @@ moment, not an App decision — the conduct boundary is owned by
 The reserve floor and the "clearly winnable" enemy band are **configurable policy knobs**, not
 fixed game facts; their current defaults are small early-game values and portable across servers.
 Any concrete per-server stat that would refine them (fighter costs, ship defense caps) is
-introspected live, never hardcoded here.
+introspected live, never hardcoded here. `force_share_auto_attack` (0.90) is itself
+**Max-ratified** (2026-07-28, `DECISIONS.md` `RESOLVED-COMBAT-AUTOFIGHT-90`) as the operational
+auto-Attack threshold — still a configurable knob, but no longer a placeholder default. See
+[toll & defense](/strategy/toll-and-defense.md) for the full ratification citation.
 
 # Read-only, never-commit crawl gate (K3)
 

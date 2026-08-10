@@ -158,10 +158,14 @@ doc; **archive-only** shapes are do-not-revive (not open tip defects to "fix"):
   with a baseline explore floor that kept driving. That module is **gone from tip**. These numbers
   feed *ranking, guards, and coaching only*; depletion/idle is a STOP-guard, not a reason to keep
   the ship moving. See [app-autopilot-model](/architecture/app-autopilot-model.md).
-- **`trade_driver` autonomous chain runner.** Tip trade driver can still run a trade chain across
-  sectors under arm/guards. The reborn target requires stop-on-unknown re-validated **every
-  cycle** and a **human-armed** loop before any background run — a chain is a taught behavior the
-  human arms, not a self-launching runner.
+- **`trade_driver` autonomous chain runner — RESOLVED, closed 2026-08-09.** `TradeChainRunner`
+  (`trade_driver.py` `_navigate`/`_visit_port`/`_confirmed_send`, ~L359-841) requires an exact
+  human-confirmed fingerprint, re-validates `classify_screen` before every warp send, HOLDs on any
+  unexpected cascade, and funnels every send through `_confirmed_send()`, which fails closed on
+  `ctx.armed()`/`should_abort()`. Per-cycle re-validation and human-armed gating are proven live on
+  tip, not open. See [toll-and-defense](/strategy/toll-and-defense.md) Option C fact-find
+  (re-verified against tip `7c97b2a`) and [ADR-003](/ADR/003-discovered-chain-approve-scaffold.md)'s
+  own Code Divergences section for the full citation trail — do not re-file this as an open gap.
 - **§22 / TW-23 autonomous-trainer capstone re-scope.** The original AI-first capstone framed this
   economics substrate as fuel for an autonomous EV-maximizing trainer. It is re-scoped: the
   substrate feeds a human-armed, priority-ranked, teacher-assisted trainer — the priority layer
