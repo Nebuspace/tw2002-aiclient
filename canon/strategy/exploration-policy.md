@@ -162,10 +162,13 @@ State this plainly — it is a real turn-budget cost, not an implementation foot
   port-adjacent unmapped edge considered under the exhaust rule) versus Map-fill's cheaper but
   incomplete neighborhood sweep.
 
-Numeric defaults for **sibling-exhaust depth limit** and **per-run turn-budget cap** are **not**
-fixed here — they are Pending in
-[`canon/DECISIONS.md`](/DECISIONS.md) (`PENDING-CHAIN-HUNT-SIBLING-EXHAUST-DEPTH-TURN-CAP`) and
-must be ruled before the follow-on build WO hard-codes them.
+Numeric **built-in defaults** for **sibling-exhaust depth limit** and **per-run
+turn-budget cap** are **not** fixed here — they remain Pending in
+[`canon/DECISIONS.md`](/DECISIONS.md) (`PENDING-CHAIN-HUNT-SIBLING-EXHAUST-DEPTH-TURN-CAP`).
+Tip arming already requires explicit caller-supplied `--exhaust-depth` / `--turn-budget`
+(fail-closed; no invented defaults — PR `#640` / `#641`). The Pending ruling is only whether
+optional built-in defaults may later be shipped when those flags are omitted — not a gate on
+building or arming Chain-hunt itself.
 
 ### Runtime invariants (same as every explore intent)
 
@@ -268,6 +271,10 @@ the target). **Archive-only** shapes are do-not-revive — not open tip defects 
   `map_fill`, `find_stardock`); `find_formations` / `chain_hunt` are CLI/daemon-armable and **already
   shipped** (`plan_chain_hunt` / `INTENT_CHAIN_HUNT` / CLI — PR `#640` / `#641`). Do not re-open as
   "chain_hunt unbuilt" or as a 4-/5-step panel cycle.
+- **Chain-hunt numeric defaults prose — tip-true (closed 2026-08-10).** Older mechanism prose said
+  depth/turn caps "must be ruled before the follow-on build WO hard-codes them," which re-reads as
+  "Chain-hunt is still unbuilt." Tip already arms with **required** caller flags and no defaults
+  (`#640`/`#641`); DECISIONS Pending is **defaults-only** (`#668`). Do not re-open as a build gate.
 - **Archived `autopilot.py` "never-idle" explore baseline — do-not-revive.** Pre-rebirth
   `EXPLORE_BASELINE_EV = 0.01` existed so a per-cycle EV SELECT always had *something* to do
   (`"keep exploring (…) — no idle (§11)"`). That module is **gone from tip**. Reborn: explore is a
