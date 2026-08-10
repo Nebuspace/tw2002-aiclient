@@ -296,7 +296,8 @@ Two shared classifiers emit only `ok`/`warn`/`danger` and are the source of ever
 - **`status_semantic(connected, last_rx_age_s)`** (`cockpit/tones.py`) — `danger` if disconnected;
   `warn` if `last_rx_age_s ≥ 5.0` (`_STALE_RX_THRESHOLD_S`); else `ok`.
 - **`gauge_semantic(fraction)`** (`cockpit/tones.py`) — `ok` ≥0.5, `warn` ≥0.2, else `danger`.
-  This is what colors the turns fuel-gauge green→amber→red as turns drain.
+  **Tip:** intentional scaffolding (#496) — classifier+tests only until a `turns_max` fuel-gauge
+  follow-on wires it; not a live chrome consumer today.
 
 Three load-bearing color rules:
 
@@ -400,7 +401,7 @@ to a slow `IDLE_ANIM_INTERVAL_S` idle. The always-running cues:
 | waiting spinner | braille ramp `⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏` (ASCII `\|/-`) | advances while connecting/between events; frozen at `[0]` when calm |
 | heartbeat | `●`/`○` (ASCII `*`/`.`), `HEARTBEAT_PERIOD_S = 0.8` | always breathing — slower than the spinner, so "alive" reads even on a settled screen |
 | credit sparkline | `▁▂▃▄▅▆▇█` (ASCII `.-=#`), `CREDIT_SPARK_WIDTH = 20` | scaled to its own min/max; flat series → middle glyph |
-| turns fuel-gauge | `[████░░░░░░]`, `TURNS_GAUGE_WIDTH = 10` | green→amber→red via `gauge_semantic` as turns drain |
+| turns fuel-gauge | `[████░░░░░░]`, `TURNS_GAUGE_WIDTH = 10` | **TARGET** — banked motion cue; `gauge_semantic` parked (no tip `turns_max`). Numeric TURNS cell is live via freshness HUD. |
 | delta chip + tween | `{delta:+,} ▲/▼`, `CREDIT_FLASH_DURATION_S = 1.5`, tween `0.3s` | slot-machine count-up on a credits change, then fades |
 | ticker flash | newest LOG row bold, `TICKER_FLASH_DURATION_S = 1.0` | flags a just-arrived transcript line |
 | classification pulse | header reverse-video, `1.0s` | pulses when the screen classification changes |
