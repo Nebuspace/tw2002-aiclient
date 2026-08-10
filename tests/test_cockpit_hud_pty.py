@@ -499,17 +499,17 @@ class _AttrRecordingWin:
         return None
 
 
-_FIXTURE_CELLS: list[tuple[str, bool]] = [
-    ("CREDITS", False),
-    ("54,321", False),
-    ("SECTOR", False),
-    ("1234", False),
-    ("TURNS", False),
-    ("42", False),
-    ("CARGO", False),
-    ("3", False),
-    ("PROFIT", False),
-    ("+500", True),  # the one stale value row in this fixture
+_FIXTURE_CELLS: list[tuple[str, bool, str | None]] = [
+    ("CREDITS", False, None),
+    ("54,321", False, None),
+    ("SECTOR", False, None),
+    ("1234", False, None),
+    ("TURNS", False, None),
+    ("42", False, None),
+    ("CARGO", False, None),
+    ("3", False, None),
+    ("PROFIT", False, None),
+    ("+500", True, None),  # the one stale value row in this fixture
 ]
 
 
@@ -541,7 +541,7 @@ def test_hud_stale_value_rows_dim_label_rows_stay_normal(monkeypatch):
     inner_y, inner_x = hud["y"] + 1, hud["x"] + 1
 
     calls_by_pos = {(y, x): (text, attr) for (y, x, text, attr) in win.calls}
-    for i, (text, stale) in enumerate(_FIXTURE_CELLS):
+    for i, (text, stale, *_rest) in enumerate(_FIXTURE_CELLS):
         pos = (inner_y + i, inner_x)
         assert pos in calls_by_pos, f"no addstr recorded at HUD row {i} ({pos}); calls={win.calls}"
         recorded_text, attr = calls_by_pos[pos]

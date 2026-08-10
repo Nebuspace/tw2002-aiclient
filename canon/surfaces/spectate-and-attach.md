@@ -242,7 +242,7 @@ The watch-stream substrate above is the *data* engine; these are the *visual* cu
 cues that kill "is it frozen?". Each Spectate settle-edge event surfaces as: the **LOG ticker flash**
 (newest row bold ~1.0s), a **freshness stamp** (`✦ Ns ago` / `✦ now`, dimming past 20s) on every
 persistent value, a **credit sparkline** + **delta chip** (`▲`/`▼`) tween when credits move, a
-**turns fuel-gauge** (canon TARGET — `gauge_semantic` parked until `turns_max` lands; not a live tip chrome wire), an always-breathing
+**turns fuel-gauge** (SHIPPED — `turns_max` + `gauge_semantic` on the TURNS HUD cell), an always-breathing
 **heartbeat** (`●`/`○`) and a **waiting spinner** (braille ramp, frozen at rest). Chrome animates at
 a steady low frame-rate decoupled from content so the dashboard never flickers and never looks dead.
 See the full catalog in [Visual Language](/surfaces/visual-language.md).

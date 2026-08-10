@@ -610,7 +610,7 @@ def test_accept_3_the_composer_renders_the_payload_this_bridge_emits(session, mo
     resp = _status(session, monkeypatch, LIVE_NARRATIVE, LIVE_PROMPT)
     lines = hud.compose_hud_cells(resp, width=40)
     assert len(lines) == 10
-    rendered = "\n".join(text for text, _stale in lines)
+    rendered = "\n".join(text for text, *_rest in lines)
     assert "29,990" in rendered or "29990" in rendered, rendered
     assert "21,068" in rendered or "21068" in rendered, rendered
 
@@ -620,7 +620,7 @@ def test_the_composer_still_paints_unknown_when_the_bridge_says_nothing(session,
     and always printed a number would pass the test above."""
     resp = _status(session, monkeypatch, "nothing at all")
     lines = hud.compose_hud_cells(resp, width=40)
-    rendered = "\n".join(text for text, _stale in lines)
+    rendered = "\n".join(text for text, *_rest in lines)
     assert hud.UNKNOWN_VALUE in rendered
     assert "29,990" not in rendered
 
@@ -885,3 +885,44 @@ def test_decisions_reads_status_explore_mode(session, monkeypatch):
     resp = protocol._status_response(session, _ExploreServer(_ExploreStub(snap)))
     joined = "\n".join(compose_decisions_lines(resp, width=60))
     assert "Density-scan before stepping" in joined
+
+# ===========================================================================
+# WO-BUILD-TURNS-FUEL-GAUGE-MAX-ACCUMULATOR — turns_max high-water mark
+# ===========================================================================
+
+
+def test_turns_max_tracks_session_high_and_does_not_fall(session, monkeypatch):
+    """Archive shape: spent turns keep the prior full-tank denominator.
+
+    LIVE_PROMPT's TL= is a clock (absent for the count reader), so the
+    ship-info ``Turns left`` body line is what fills the sticky — same path
+    the live HUD uses on this server dialect.
+    """
+    session.observe_turns(f"Turns left     : 1000\n{LIVE_PROMPT}", LIVE_PROMPT)
+    snap = session.turns_snapshot()
+    assert snap.turns == 1000
+    assert snap.turns_max == 1000
+
+    session.observe_turns(f"Turns left     : 850\n{LIVE_PROMPT}", LIVE_PROMPT)
+    snap = session.turns_snapshot()
+    assert snap.turns == 850
+    assert snap.turns_max == 1000  # spent turns do not lower the mark
+
+    session.observe_turns(f"Turns left     : 1200\n{LIVE_PROMPT}", LIVE_PROMPT)
+    snap = session.turns_snapshot()
+    assert snap.turns == 1200
+    assert snap.turns_max == 1200  # a real increase raises it
+
+
+def test_status_hud_turns_cell_carries_turns_max(session, monkeypatch):
+    session.observe_turns(f"Turns left     : 1000\n{LIVE_PROMPT}", LIVE_PROMPT)
+    session.observe_turns(f"Turns left     : 400\n{LIVE_PROMPT}", LIVE_PROMPT)
+    # idle body + LIVE_PROMPT: non-clobber leaves sticky 400 / max 1000
+    resp = _status(session, monkeypatch, f"idle\n{LIVE_PROMPT}", LIVE_PROMPT)
+    turns_cell = resp["hud"]["turns"]
+    assert turns_cell["value"] == 400
+    assert turns_cell["turns_max"] == 1000
+    lines = hud.compose_hud_cells(resp, width=60)
+    turns_line = lines[5][0]  # value row for TURNS (index 1+2*2)
+    assert "[" in turns_line
+    assert lines[5][2] == "warn"  # 400/1000 -> warn

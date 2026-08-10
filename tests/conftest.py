@@ -195,6 +195,7 @@ class FakeAttachSession:
         self.last_credits_ts = 0.0
         self.last_turns = 100
         self.last_turns_ts = 0.0
+        self.last_turns_max = 100
         # Sticky fighters start unknown (None) — status intervention may
         # report fighters_unknown until an Info/HFS screen is observed.
         self.last_fighters = None
