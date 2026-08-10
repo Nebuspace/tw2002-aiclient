@@ -1064,10 +1064,11 @@ class PlayShellScreen:
         # reading these booleans through its `play` parameter) now honors
         # `port_trade_on`/`cargo_upgrade_on` for real -- App-armed +
         # ·ON reaches a live trade/hold-buy start with no human `y`. Still
-        # true for `ship_upgrade_on` alone: no ship-upgrade engine or
-        # `AutonomyOffer` kind exists yet, so it remains local-only chrome
-        # by honest necessity, not by the same "not wired yet" reason the
-        # other two used to share.
+        # true for `ship_upgrade_on` alone: recommend-only
+        # `ship_upgrade_decision` / decisions callouts exist, but no spend /
+        # `AutonomyOffer` purchase path is wired to this toggle yet, so it
+        # remains local-only chrome (honest missing spend gate — not a
+        # missing decision engine).
         self.port_trade_on: bool = True
         self.cargo_upgrade_on: bool = True
         self.ship_upgrade_on: bool = True

@@ -98,9 +98,13 @@ The chrome above is now backed by real behavior, not just a rendered `·ON`/`·O
 - **Trade Loop execution is not silent FOCUS auto-fire during Explore.** Under APP-ARMED +
   `P)ort Trade·ON`, **`T`** runs the L-armed loop without per-action `y` (trainer default). The App
   must not pick a FOCUS bubble chain and spend money while Explore owns discovery.
-- **`S)hip Upgrade·ON` gates nothing yet, honestly.** No ship-upgrade engine or offer kind exists
-  in this codebase, so the toggle is local-only chrome by necessity, not an unwired follow-on —
-  the honest state until a future WO lands a real ship-upgrade path to gate.
+- **`S)hip Upgrade·ON` gates nothing yet, honestly.** A recommend-only
+  `UpgradeDecision` engine ships in `tw2002_aiclient/ship_upgrade_decision.py`
+  (coach / FOCUS callouts via `cockpit/decisions.py` — see
+  [ship-progression](/strategy/ship-progression.md) § DECISION engine). What is
+  still absent is a spend / `AutonomyOffer` purchase path the Mode-line toggle
+  could gate — so `S` remains local-only chrome until a future WO wires that,
+  not because the decision engine is missing.
 
 # Schema
 

@@ -43,9 +43,10 @@ trainer-plain vocabulary:
   spend gate for Trade Loop **execution** is `T` when Port Trade is ON
   (FOCUS no longer silent-fires `run_chain`). Cargo upgrade may still
   App-armed auto-fire via `_autonomy_auto_fire`. `ship_upgrade_on` alone
-  still gates nothing --
-  no ship-upgrade engine or offer kind exists yet, an honest absence
-  rather than an unwired follow-on. `P` is DELIBERATELY no longer
+  still gates nothing -- recommend-only `ship_upgrade_decision` /
+  `cockpit/decisions` callouts exist, but no spend / ``AutonomyOffer``
+  purchase path is wired to this toggle yet (honest chrome, not a missing
+  decision engine). `P` is DELIBERATELY no longer
   `cockpit.panic`'s key on this calm path (the STATUS-DONE cut of this
   WO left that old wire live underneath the new label, a
   plausible-but-wrong claim caught in hub REVISE): `cockpit/panic.py`
