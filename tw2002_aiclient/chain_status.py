@@ -505,17 +505,14 @@ class ChainScalars:
         return merged
 
     def _hold_count_from_status(self, status: dict) -> int | None:
-        player = status.get("upgrade_player")
-        if isinstance(player, dict):
-            holds = player.get("current_holds")
-            if isinstance(holds, int) and not isinstance(holds, bool) and holds > 0:
-                return holds
-        ship = status.get("current_ship")
-        if isinstance(ship, dict):
-            holds = ship.get("total_holds")
-            if isinstance(holds, int) and not isinstance(holds, bool) and holds > 0:
-                return holds
-        return None
+        """Positive holds for depletion — delegates to ``chains.hold_count_from_status``.
+
+        Kept as a method so depletion call sites stay local; the free function
+        is the SSOT (also used by ``screens.py`` chain-panel hold scaling).
+        """
+        from tw2002_aiclient.chains import hold_count_from_status
+
+        return hold_count_from_status(status)
 
     def _display_chain_for_depletion(self, status: dict):
         sector = self._sector_from_status(status)

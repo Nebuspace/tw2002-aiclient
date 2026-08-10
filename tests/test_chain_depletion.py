@@ -206,3 +206,55 @@ def test_predicted_depletion_stop_reason_when_thin():
         world_model.query = real_query  # type: ignore[assignment]
     assert reason is not None
     assert reason.startswith("depleted:predicted:")
+
+def test_depletion_routes_via_hold_count_from_status(monkeypatch):
+    """WO-BUILD-CHAIN-STATUS-HOLD-COUNT-WIRE: ChainScalars uses chains.hold_count_from_status."""
+    from tw2002_aiclient import chains as chains_mod
+    from tw2002_aiclient.chain_status import (
+        DEPLETION_STOP_RECOMMENDED_KEY,
+        EXPLORE_APPETITE_RAISED_KEY,
+        NEARING_DEPLETION_KEY,
+        REMAINING_TRADES_KEY,
+        ChainScalars,
+    )
+
+    calls: list[object] = []
+    real = chains_mod.hold_count_from_status
+
+    def _spy(status):
+        calls.append(status)
+        return real(status)
+
+    monkeypatch.setattr(chains_mod, "hold_count_from_status", _spy)
+
+    hops = (
+        _hop(1, 2, "Fuel Ore"),
+        _hop(2, 1, "Organics"),
+    )
+    chain = _chain(*hops)
+    cs = ChainScalars()
+    cs._seen = True
+    cs._hops = 2
+    cs._unit = "hops"
+    cs._best_chain = chain
+    cs._ranked_chains = (chain,)
+    cs._commodity_maps = {
+        1: {
+            "Fuel Ore": {"name": "Fuel Ore", "amount": 10},
+            "Organics": {"name": "Organics", "amount": 10},
+        },
+        2: {
+            "Fuel Ore": {"name": "Fuel Ore", "amount": 10},
+            "Organics": {"name": "Organics", "amount": 10},
+        },
+    }
+    status = {"current_ship": {"total_holds": 40, "ship_type": "Scout"}}
+    merged = cs.merge(status)
+    assert calls, "ChainScalars depletion must call chains.hold_count_from_status"
+    # merge() may pass an enriched status mapping; hold keys must still resolve.
+    assert calls[0].get("current_ship", {}).get("total_holds") == 40
+    assert merged[REMAINING_TRADES_KEY] == 0.25
+    assert merged[NEARING_DEPLETION_KEY] is True
+    assert merged[EXPLORE_APPETITE_RAISED_KEY] is True
+    assert merged[DEPLETION_STOP_RECOMMENDED_KEY] is True
+
