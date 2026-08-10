@@ -359,6 +359,6 @@ senders remain `{app, human}` only. Resolution recorded in
 [5] `tw2002_aiclient/session/control_lock.py` (tip control-mode state machine; take_human/release_human; MODE_SPECTATE pause state; `{app, human, spectate}` only)
 [6] `tw2002_aiclient/session/daemon.py` / protocol attach path — take_human on connect, try/finally release_human on every exit path
 [7] canon/architecture/control-and-escalation.md (the control dual, {app,human} attribution; MODE_AI_PILOT retirement DONE)
-[8] twclient/terminal.py (color_map RLE per-cell SGR encode — game bytes only; chrome borders live in cockpit/draw.py on tip)
-[9] twclient/spectate_app.py (_SEMANTIC_COLORS 7-tone table; _ColorPairs lazy allocation; viewport red-on-disconnect border)
+[8] `tw2002_aiclient/session/terminal.py` (color_map RLE per-cell SGR encode — game bytes only; chrome borders live in `cockpit/draw.py` on tip; archive port-source `twclient/terminal.py`)
+[9] Archive `twclient/spectate_app.py` (_SEMANTIC_COLORS 7-tone table; _ColorPairs lazy allocation; viewport red-on-disconnect border) — deleted by rebirth; do not cite as tip (see citation [1])
 [10] .samantha/plans/ui-polish-assessment.md (shared visual vocabulary — grounded color/glyph/border/fold tables; forward-ref for /surfaces/visual-language.md)

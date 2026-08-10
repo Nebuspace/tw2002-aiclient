@@ -323,29 +323,33 @@ localize(live_screen, path) -> None        => off-map: STOP, escalate — never 
 
 # Citations
 
-[1] `twclient/menu_crawler.py` — the read-only crawler: deny-by-default `classify_option_label`,
-    `screen_state` per-screen gate, the single `emit_key_if_safe` chokepoint, BFS-via-replay
-    traversal, the `nav|info|action` edge folding, and the accepted-residual analysis.
-[2] `twclient/crawl_driver.py` (archive) — the load-bearing safety leg: the `crawl_sacrificial`
-    startup refusal (A+C protocol) and the abort / driver-fence stop-at-boundary wrapper. Its tip
-    port (`menu/crawl_driver.py`) was retired 2026-08-05 (zero product callers, `crawl_start`
-    never wired to a driver) — see "The guarantee lives in the supervised run" above. No live
-    tip module implements this citation today.
-[3] `twclient/introspector.py` — the pure text-in/rows-out game-data introspector, last-match
-    block anchoring, conservative omit-never-guess discipline, and the constructed-grammar
-    provenance caveat.
-[4] `twclient/probe.py` — `tw probe`: L0 IAC-only banner classification, the polite envelope, and
-    the L1 single-CR-only TWGS-outer-prompt peek.
-[5] `twclient/menu_nav.py`, `twclient/game_knowledge.py`, `twclient/menu_map_view.py` —
-    localize / `find_menu_path` route composition, the per-world-keyed node/edge store
-    (`MENU_EDGE_KINDS`, `upsert_menu_node`/`upsert_menu_edge`, `knowledge_path`), and the
-    read-only menu-map inspector.
-[6] `twclient/menu_sig.py` — the shared menu-signature primitive keying every node (owned by
-    Screen Understanding).
-[7] `twclient/ship_upgrade_decision.py` — the read-only upgrade evaluator behind K6 scanner/
-    TransWarp acquisition; the `commissioned` (alignment/rank) gate.
-[8] `twclient/world_identity.py` — `world_id(host, game_letter, handle)`, the per-world keying
-    invariant the map is stored under.
+[1] `tw2002_aiclient/menu/crawler.py` — the read-only crawler: deny-by-default
+    `classify_option_label`, `screen_state` per-screen gate, the single `emit_key_if_safe`
+    chokepoint, BFS-via-replay traversal, the `nav|info|action` edge folding, and the
+    accepted-residual analysis. (Archive port-source: `twclient/menu_crawler.py`.)
+[2] Archive `twclient/crawl_driver.py` / retired tip `menu/crawl_driver.py` — the load-bearing
+    safety leg: the `crawl_sacrificial` startup refusal (A+C protocol) and the abort /
+    driver-fence stop-at-boundary wrapper. Retired 2026-08-05 (zero product callers,
+    `crawl_start` never wired to a driver) — see "The guarantee lives in the supervised run"
+    above. No live tip module implements this citation today.
+[3] `tw2002_aiclient/introspector.py` — the pure text-in/rows-out game-data introspector,
+    last-match block anchoring, conservative omit-never-guess discipline, and the
+    constructed-grammar provenance caveat. (Archive port-source: `twclient/introspector.py`.)
+[4] Tip probe/IAC split (archive `twclient/probe.py` was a single L0/L1 peek module):
+    `tw2002_aiclient/session/iac.py` (IAC negotiation / polite envelope) +
+    `tw2002_aiclient/catalog_cli.py` (`tw probe` — TCP catalog liveness sidecar; not a
+    TWGS-outer-prompt typer). Do not read tip `tw probe` as a revival of archive L0 banner
+    classification.
+[5] `tw2002_aiclient/menu/nav.py`, `tw2002_aiclient/menu/knowledge.py`,
+    `tw2002_aiclient/menu/map_view.py` — localize / `find_menu_path` route composition, the
+    per-world-keyed node/edge store (`MENU_EDGE_KINDS`, `upsert_menu_node`/`upsert_menu_edge`,
+    `knowledge_path`), and the read-only menu-map inspector.
+[6] `tw2002_aiclient/menu/sig.py` — the shared menu-signature primitive keying every node
+    (owned by Screen Understanding).
+[7] `tw2002_aiclient/ship_upgrade_decision.py` — the read-only upgrade evaluator behind K6
+    scanner/TransWarp acquisition; the `commissioned` (alignment/rank) gate.
+[8] `tw2002_aiclient/world_identity.py` — `world_id(host, game_letter, handle)`, the per-world
+    keying invariant the map is stored under.
 [9] CLAUDE.md "Architecture map" + "Hard rules" — the read-only crawl gate, `state_parser`
     last-match invariant, single-connection daemon, and secrets discipline.
 [10] `.samantha/plans/okf-final-vision-map.md` — `engine/menu-map-and-introspection.md` spec
