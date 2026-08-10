@@ -2960,6 +2960,21 @@ def main(argv: list[str] | None = None) -> int:
     except AssertionError as exc:
         print(f"DECISIONS imperative denylist broken: {exc}", file=sys.stderr)
         return 1
+    # WO-CLEANUP-PORT-ECONOMICS-LEDGER-FLIP: hypothesis-tag discipline must
+    # fail loud at boot (same pin as scripts/hypothesis_tag_ci_guard.py) —
+    # product caller so unused-code tick does not reopen tip_check on
+    # assert_all_unverified_tagged / all_hypothesis_params.
+    try:
+        from tw2002_aiclient.port_economics import (
+            all_hypothesis_params,
+            assert_all_unverified_tagged,
+        )
+
+        assert_all_unverified_tagged()
+        _ = all_hypothesis_params()  # product read — not test/CI-only
+    except AssertionError as exc:
+        print(f"port-economics hypothesis tags broken: {exc}", file=sys.stderr)
+        return 1
     try:
         curses.wrapper(_run)
     except DeadTerminalError as exc:
