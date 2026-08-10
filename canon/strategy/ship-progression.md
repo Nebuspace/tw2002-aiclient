@@ -206,13 +206,16 @@ this concept prescribes. The prescription stands; these are recorded, not silent
   `upgrade_loop` (or a precomputed `upgrade_decision`). Incomplete evidence still returns
   `None` and coach falls through — fail-closed omission, not a missing producer.
 
-- **Coded auto-max-holds (TW-22) — recognition + toward-max qty LIVE; catalog ship
-  max still optional.** App-armed Cargo Hold Upgrade (`_autonomy_auto_fire` +
-  `stardock_hold_plan.plan_from_status(..., auto_max=True)`) expands qty toward
-  empty-hold capacity as credits allow (after cash floor), reusing the existing
-  one-pass driver. Manual `H` / confirm offers stay qty=1. Per-ship `max_holds`
-  from Layer-B catalog is not yet required — HUD empty-holds already is room to
-  the ship's current max. Live StarDock capture (game_data) feeds the hold price.
+- **Coded auto-max-holds (TW-22) — recognition + toward-max qty LIVE; catalog
+  `max_holds` preferred when resolvable.** App-armed Cargo Hold Upgrade
+  (`_autonomy_auto_fire` + `stardock_hold_plan.plan_from_status(..., auto_max=True)`)
+  expands qty toward ship-max room as credits allow (after cash floor), reusing the
+  existing one-pass driver. Manual `H` / confirm offers stay qty=1. Tip
+  (`WO-FIX-STARDOCK-HOLD-CLAMP-CATALOG-LOOKUP` / PR #535): auto-max room prefers
+  Layer-B catalog `max_holds − current_holds` when the current ship type matches a
+  catalog row; incomplete / unmatched catalog evidence falls back to HUD
+  empty-holds (fail-closed — never fabricates a max). Live StarDock capture
+  (`game_data`) feeds the hold price.
 
 ## One-pass StarDock hold driver (tip)
 
@@ -221,7 +224,7 @@ The execute path for a human-approved (or App-armed `C)argo Hold Upgrade·ON`) h
 
 | Module | Role |
 |---|---|
-| `tw2002_aiclient/stardock_hold_plan.py` | Pure evidence → `StardockHoldPlan` (world_id, fingerprint, sector, empty, unit price, credits, qty). Incomplete/hostile fields → `None` (fail-closed). Parses quote + P-QTY range from screen text. |
+| `tw2002_aiclient/stardock_hold_plan.py` | Pure evidence → `StardockHoldPlan` (world_id, fingerprint, sector, empty, unit price, credits, qty). Incomplete/hostile fields → `None` (fail-closed). Parses quote + P-QTY range from screen text. `auto_max=True` room prefers catalog `max_holds` headroom, else HUD empty. |
 | `tw2002_aiclient/stardock_hold_driver.py` | `run_hold_purchase(session, plan, should_abort=, is_armed=)` — **one send**: the planned qty string. Expects quote (+ qty prompt) already on screen. |
 | `tw2002_aiclient/session/stardock_hold.py` | Daemon-owned `StardockHoldRunner` — arms/executes an exactly approved hold buy on the session thread; refuse path includes `DEFAULT_CASH_FLOOR = 1_000` (`below_cash_floor` / `invalid_cash_floor`) before any send. Wire surface: `stardock_hold_{start,stop,status}` via `session/protocol.py` / adapters. |
 
