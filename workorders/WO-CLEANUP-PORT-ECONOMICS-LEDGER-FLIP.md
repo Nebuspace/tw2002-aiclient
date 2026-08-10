@@ -1,6 +1,6 @@
 # WO-CLEANUP-PORT-ECONOMICS-LEDGER-FLIP
 
-**Status:** DONE · tip  (this PR)  
+**Status:** DONE · tip  (PR #648)
 **Priority:** LOW  
 **Claimed-by:** impl-aiclient-cursor  
 **Source:** queue-aiclient.md · audit 2026-08-09
