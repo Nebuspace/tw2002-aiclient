@@ -131,9 +131,11 @@ world-identity for the full derivation and why all three components are load-bea
 TradeWars metes out turns per character per day. The **credential bank** (TW-31) exists to multiply
 the operator's *own* daily allotment by rotating across **several independent characters** — each a
 distinct profile, each its own world. The entry surface is where that bank is visible as a rotation
-touchpoint: `tw players list` (`cli.py::cmd_players_list`) shows the banked characters with
-`last_played` / `turns_state` rotation bookkeeping, and `tw players add <profile>` links a bank entry
-back to an existing profile by name.
+touchpoint: `tw players list` (`players_cli.py::cmd_players_list`) shows the banked characters with
+`last_played` / `turns_state` rotation bookkeeping. Tip LIVE bank verbs are
+`{list,next,rotate}` only — there is **no** `tw players add` today; linking a new bank row to a
+profile remains TARGET / cockpit Create-New-Player + credential-bank write paths, not a shipped
+`tw` subcommand (see [CLI Verbs](/architecture/cli-verbs.md)).
 
 The bank stores **metadata only** — name, handle, host, game-letter, rotation timestamps. It holds
 **no password** (`player_bank.py` pulls fields from `credentials.Profile`, which has no password
@@ -189,7 +191,8 @@ this surface only launches the app the exit flow later closes.
 This surface is, by design, the **plainest** in the bundle — and its look-and-polish spec has to be
 read against a hard split between *what is built* and *what is aspirational*. Today the entry surface
 is not a curses screen at all: it is a set of composed CLI verbs (`tw servers list`,
-`tw players list`, `tw players add`, profile creation) that print **plain, uncolored, columnar text**
+`tw players list` / `next` / `rotate`, plus profile creation via `credentials.create_profile()` /
+Create-New-Player TUI) that print **plain, uncolored, columnar text**
 to the terminal. The consolidated visual picker+create flow this document specifies — a focused
 curses launcher rendered by the same engine as the cockpit — is the target; where a look detail
 depends on that unbuilt picker it is marked `[ASPIRATIONAL]` and inherits the shared vocabulary
@@ -376,12 +379,14 @@ paladin-main     PaladinPrime     tw2002.briancmoses.com   A   2026-07-23     ok
 
 - **Launcher UI is CLI-verb-composed, not a single dedicated screen (yet).** The reborn "entry
   surface" is described here as one launcher; in current code its pieces are separate CLI verbs —
-  `tw servers list` (`cmd_servers_list`), `tw players list` / `tw players add` (`cmd_players_list` /
-  `cmd_players_add`), and profile creation via `credentials.create_profile()` — plus the
-  `tw aiclient` product TUI entry (`cmd_aiclient`). The consolidated visual picker+create flow this
-  document specifies is the target; the underlying data functions
-  (`list_profile_summaries`, `create_profile`, `list_servers`, `player_bank`) already exist and are
-  what a single surface would compose. Recorded, not silently conformed.
+  `tw servers list` (`catalog_cli.cmd_servers_list`), `tw players {list,next,rotate}`
+  (`players_cli`) — **no** `tw players add` — and profile creation via
+  `credentials.create_profile()` / Create-New-Player TUI. The product cockpit entry is
+  `./tw2002-aiclient` / `python -m tw2002_aiclient` (`app.py`) — **not** a `tw aiclient`
+  subcommand (there is no `cmd_aiclient`; see [CLI Verbs](/architecture/cli-verbs.md)). The
+  consolidated visual picker+create flow this document specifies is the target; the underlying
+  data functions (`list_profile_summaries`, `create_profile`, `list_servers`, `player_bank`)
+  already exist and are what a single surface would compose. Recorded, not silently conformed.
 
 - **`tw players next` rotation selection and the rotation *driver* are both LIVE.**
   `player_bank.next_player` + `tw players next` (`players_cli.py`) pick a read-only next
@@ -427,8 +432,10 @@ paladin-main     PaladinPrime     tw2002.briancmoses.com   A   2026-07-23     ok
 - **Code modules:** `credentials.py` (`list_profile_summaries`, `create_profile`, `load_profile`,
   `Profile`, env-first password resolution); `create_form_screen.py` (Create-New-Player TUI —
   server/game_letter/handle only; no secret fields); `world_identity.py` (`world_id`,
-  `world_id_from_profile`); `cli.py` (`cmd_servers_list`, `cmd_players_list`, `cmd_players_add`,
-  `cmd_aiclient`); `player_bank.py` (metadata-only bank, secret-shaped-key notes filter);
+  `world_id_from_profile`); `catalog_cli.py` (`cmd_servers_list` / `tw servers list`);
+  `players_cli.py` (`cmd_players_list` / `next` / `rotate` — no `add`); product entry
+  `./tw2002-aiclient` / `python -m tw2002_aiclient` (`app.py` / `__main__.py` — not a `tw`
+  subcommand); `session/player_bank.py` (metadata-only bank, secret-shaped-key notes filter);
   `config/servers.toml` (the tracked server catalog); `config/profiles.toml.example` (the tracked
   profile shape). Per CLAUDE.md's Architecture map and Hard rules: secrets never touch logs/argv/repo;
   `config/`, `run/`, `state/`, `logs/` are gitignored, with only `profiles.toml.example` and
