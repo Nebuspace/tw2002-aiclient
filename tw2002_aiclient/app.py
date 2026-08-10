@@ -1108,9 +1108,11 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
     # the profile itself enables autopilot -- no surprise auto-arm here.
     result = adapters.ensure_session(profile.name, no_auto_arm=True)
     if result.ok:
-        # WO-P5-068: record the confirmed classification so T Assign-Trigger
-        # can stamp it on the stub's ``when.screen`` field.  Only set on
-        # a successful ensure (an ok=False result has no confirmed screen
+        # WO-P5-068: record the confirmed classification so Assign-Trigger
+        # (non-calm / programmatic callers) can stamp it on the stub's
+        # ``when.screen`` field.  Calm ``T`` is Trade Loop, not Assign-Trigger
+        # (WO-CLEANUP-ASSIGN-TRIGGER-DOCSTRING-T-STALE).  Only set on a
+        # successful ensure (an ok=False result has no confirmed screen
         # class -- leaving current_classification as None lets create_stub's
         # own degradation path produce "" rather than a wrong class name).
         play.current_classification = result.classification
@@ -2334,12 +2336,14 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                 play.status_line = "did not arm — nothing pending for this confirm"
                 continue
             if action == "assign_trigger":
-                # WO-P5-068: T Assign-Trigger scaffold.  Create a when+guards
-                # stub for the most-recently confirmed screen classification
-                # and record it in the play shell's in-memory stub store.
-                # This is a DRAFT only -- the stub is NOT on the live
-                # autopilot fire path and cannot trigger any send.  Full
-                # rule engine + approval gate land in WO-070 family.
+                # WO-P5-068: Assign-Trigger scaffold (non-calm action).
+                # Create a when+guards stub for the most-recently confirmed
+                # screen classification and record it in the play shell's
+                # in-memory stub store. Calm ``T`` is Trade Loop, not this
+                # path (WO-CLEANUP-ASSIGN-TRIGGER-DOCSTRING-T-STALE). DRAFT
+                # only -- the stub is NOT on the live autopilot fire path
+                # and cannot trigger any send. Full rule engine + approval
+                # gate land in WO-070 family.
                 stub = _assign_trigger.create_stub(play.current_classification)
                 play.stub_store.set(stub)
                 # WO-WIRE-STUB-STORE-APPROVED-READER: product get() via summarize.
