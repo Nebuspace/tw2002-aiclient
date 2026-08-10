@@ -989,12 +989,14 @@ def _autonomy_auto_fire(
     Each of the two toggles gates its own kind independently:
     ``play.port_trade_on`` for ``run_chain``, ``play.cargo_upgrade_on`` for
     ``upgrade``. Ship Upgrade (``play.ship_upgrade_on``) gates nothing
-    here, by honest necessity rather than oversight: no ``AutonomyOffer``
-    kind or adapter verb for a ship-upgrade engine exists yet
+    here, by honest necessity rather than oversight: a recommend-only
+    decision engine already ships in ``ship_upgrade_decision.py`` (coach /
+    FOCUS callouts), but no ``AutonomyOffer`` kind / adapter verb /
+    EXECUTE auto-fire path is wired to this toggle yet
     (``autonomy_policy.OfferKind`` is exactly ``explore``/``run_chain``/
-    ``upgrade``/``idle``) -- there is no path to gate until a future WO
-    lands one, so this function has nothing to branch on for it and adds
-    no dead stub for a state that cannot occur.
+    ``upgrade``/``idle``) -- there is no spend path to gate until a future
+    WO lands one, so this function has nothing to branch on for it and
+    adds no dead stub for a state that cannot occur.
 
     A gated offer, an offer whose kind is not in ``_AUTO_FIRE_KINDS``, an
     incomplete plan (the identical honest-refusal the `O`/`H` keys already
