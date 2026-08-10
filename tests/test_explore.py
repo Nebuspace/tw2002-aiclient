@@ -259,7 +259,8 @@ class _FakeFormation:
 def _fake_catalog(*formations):
     """A `catalog_provider` seam double. Deliberately NOT a port of the
     deleted `twclient.formations` — it exposes only `.genesis_candidates`,
-    which is the whole contract `plan_find_formations` depends on."""
+    which ``recommend_genesis`` reads (the whole contract
+    `plan_find_formations` depends on)."""
 
     class _Cat:
         genesis_candidates = list(formations)
@@ -299,6 +300,43 @@ def test_find_formations_routes_to_dead_end(tmp_path: Path):
     assert plan.mode == "route"
     assert plan.next_sector == 2
     assert plan.kind == "dead-end"
+
+def test_find_formations_routes_via_recommend_genesis(tmp_path: Path, monkeypatch):
+    """WO-BUILD-FORMATIONS-GENESIS-RECOMMEND-VERIFY: product path calls recommend_genesis."""
+    from tw2002_aiclient import explore as explore_mod
+    from tw2002_aiclient import formations as formations_mod
+    from tw2002_aiclient.explore import plan_find_formations
+
+    calls = []
+    real = formations_mod.recommend_genesis
+
+    def _spy(catalog):
+        calls.append(catalog)
+        return real(catalog)
+
+    monkeypatch.setattr(formations_mod, "recommend_genesis", _spy)
+
+    wid = "test+form-recommend"
+    _seed(
+        wid,
+        tmp_path,
+        [
+            {"sector_id": 1, "warps": [2], "landmarks": []},
+            {"sector_id": 2, "warps": [1, 3], "landmarks": []},
+            {"sector_id": 3, "warps": [2], "landmarks": []},
+        ],
+    )
+    plan = plan_find_formations(
+        wid,
+        current_sector=1,
+        turn_budget=5,
+        epsilon=0.0,
+        state_dir=tmp_path,
+        catalog_provider=_fake_catalog(_FakeFormation("dead-end", (3,), entrance=3)),
+    )
+    assert calls, "plan_find_formations must call formations.recommend_genesis"
+    assert plan.found is True
+    assert plan.next_sector == 2
 
 
 def test_find_formations_without_a_provider_refuses_honestly(tmp_path: Path):
