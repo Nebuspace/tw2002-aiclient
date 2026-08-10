@@ -207,12 +207,13 @@ STOP-guarded every tick.
   - **Still true, unchanged by this module's existence:** every emitted number remains a
     synthetic-fixture-proven estimate only — `verified_vs_live=False` on every result, always.
 - **Formations siting inputs are computed and membership is written** (#326): dead-end/bubble
-  genesis candidates flow through the shared detector / panel / `recommend_genesis` alias. There is
-  still **no autonomous Genesis deploy** and no new product surface that auto-invokes
-  `recommend_genesis` beyond the catalogue — RECOMMEND-only doctrine holds. Membership writeback and
-  route-hazard guards are documented in [Special Formations](/strategy/special-formations.md)
-  § Code reality (#326–#331). The confirm-to-send choke-point for any future App Genesis send is
-  documented under [Action-Safety Guards](/doctrine/action-safety-guards.md)
+  genesis candidates flow through the shared detector / panel / `recommend_genesis` alias.
+  **Tip (#659):** `explore.plan_find_formations` and `WorldStats.refresh` invoke that alias as the
+  shared RECOMMEND consumer (still **no autonomous Genesis deploy** / no App send without the
+  confirm choke-point). Membership writeback and route-hazard guards are documented in
+  [Special Formations](/strategy/special-formations.md) § Code reality (#326–#331 / #659). The
+  confirm-to-send choke-point for any future App Genesis send is documented under
+  [Action-Safety Guards](/doctrine/action-safety-guards.md)
   § Genesis confirm-to-send choke-point (`genesis_confirm.py`, Option A shipped / Option B HELD).
 - **Archived "never-idle" EV appetite — do-not-revive (framing only here).** Pre-rebirth autopilot
   EV-select / `EXPLORE_BASELINE_EV` keep-driving is archive-only. In the reborn framing a production
