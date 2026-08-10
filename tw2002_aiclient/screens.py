@@ -534,7 +534,7 @@ _FOLD_COMPOSE_FAILED = ["—"]
 # plain-hyphen vocabulary rather than the other panels' em-dash (HUD's
 # sticky-unknown glyph is "-", not "—" -- ``cockpit.hud``'s own convention,
 # distinct on purpose).
-_HUD_COMPOSE_FAILED = [("-", False)]
+_HUD_COMPOSE_FAILED = [("-", False, None)]
 # CONTROL_STRIP's own composer (WO-P3-038, ``cockpit.liveness.
 # compose_liveness_cluster``) has no honest-empty convention of its own to
 # borrow -- it is a bare motion cluster, not a panel with an empty state --
@@ -838,10 +838,9 @@ class PlayShellScreen:
     bold exception and the GAME viewport border's own STATE flip: cyan
     chrome by default, red non-bold the instant the same shared ``status``
     snapshot carries a real, definite ``connected: False`` (see
-    ``_viewport_border_attr``). No gauge surface renders here —
-    ``gauge_semantic`` is **intentional scaffolding** pending a turns-max /
-    HUD fuel-gauge follow-on (WO-CANON-DRAFT-GAUGE-SEMANTIC-WIRE-CONSUMER;
-    PWO-040 already banked the same deferral).
+    ``_viewport_border_attr``). The TURNS fuel-gauge is live via
+    ``cockpit.hud.compose_hud_cells`` + ``gauge_semantic`` when
+    ``turns_max`` is on the wire (WO-BUILD-TURNS-FUEL-GAUGE-MAX-ACCUMULATOR).
     The App/Human mode badge *does* render on the control strip via
     ``cockpit.control_seat`` (WO-P5-060 LIVE) -- see the paragraphs below;
     an older revision of this docstring falsely claimed there was no badge.
@@ -1873,13 +1872,21 @@ class PlayShellScreen:
                 hud_cells = _HUD_COMPOSE_FAILED
         else:
             hud_cells = []
-        # HUD dims only STALE VALUE rows (content stays data-tone, never a
-        # color swap -- "cyan is chrome, never data") -- the one panel
-        # needing draw_lines_attrs' per-line attr rather than draw_lines'
-        # single flat one.
-        hud_lines_attrs = [
-            (text, curses.A_DIM if stale else curses.A_NORMAL) for text, stale in hud_cells
-        ]
+        # HUD dims STALE VALUE rows; TURNS fuel-gauge may also carry a
+        # gauge_semantic tone (ok/warn/danger). Cyan stays chrome-only —
+        # gauge tones are data, never info/cyan.
+        hud_lines_attrs = []
+        for row in hud_cells:
+            text = row[0]
+            stale = row[1] if len(row) > 1 else False
+            tone = row[2] if len(row) > 2 else None
+            if tone:
+                attr = self._palette.attr(tone)
+            else:
+                attr = curses.A_NORMAL
+            if stale:
+                attr = attr | curses.A_DIM
+            hud_lines_attrs.append((text, attr))
         cockpit_draw.draw_lines_attrs(self.stdscr, right, hud_lines_attrs)
 
         cockpit_draw.draw_box(

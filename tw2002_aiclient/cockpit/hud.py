@@ -114,15 +114,15 @@ archive) that fills sticky cells on join — explicitly flagged in the
 dispatch as a sibling WO / fold-in, **not built here**; this module simply
 renders whatever the (not-yet-existing) wire bridge hands it, honestly
 ``-`` until that lands, same as GOALS/FOCUS/DECISIONS render honestly empty
-today. (3) **Motion/liveness extras** (credit delta-chip, tween, sparkline,
-turns fuel-gauge) the archive's ``compose_hud_cells`` also computed — out
-of scope; this WO's API contract is deliberately the simpler
-``(value, age_s) -> (text, stale)`` shape, and that polish belongs to the
-liveness/motion work (`trainer-cockpit.md` "Liveness & motion"), not this
-freshness-focused composer. ``cockpit.tones.gauge_semantic`` stays
-intentional scaffolding until a ``turns_max``-aware fuel-gauge follow-on
-owns that wire (WO-CANON-DRAFT-GAUGE-SEMANTIC-WIRE-CONSUMER). **Never
-wires the trace ledger as a live HUD source** (`trainer-cockpit.md`
+today. (3) **Motion/liveness extras** (credit delta-chip, tween, sparkline) the
+archive's ``compose_hud_cells`` also computed — still out of scope; this
+composer's base contract stays ``(value, age_s) -> (text, stale[, tone])``.
+**Exception (WO-BUILD-TURNS-FUEL-GAUGE-MAX-ACCUMULATOR):** the TURNS cell
+reads optional ``turns_max`` from the wire (session high-water mark,
+archive ``tracked["_turns_max"]``), appends ``render_bar_meter``, and
+calls ``cockpit.tones.gauge_semantic(turns_remaining/turns_max)`` so the
+draw layer can tint the value row. Other motion polish stays deferred.
+**Never wires the trace ledger as a live HUD source** (`trainer-cockpit.md`
 N4/N8: "the trace ledger is history only"); this module has no ledger
 import and never will.
 
@@ -136,6 +136,7 @@ import math
 from collections.abc import Callable
 
 from .goals import _safe_str
+from .tones import gauge_semantic
 
 # The HUD's own sticky-unknown marker — an ASCII hyphen, deliberately
 # distinct from GOALS/FOCUS/DECISIONS' em-dash ``UNKNOWN_DETAIL``. The
@@ -154,6 +155,15 @@ HUD_VALUE_INDENT = "  "
 # ported verbatim from the archive's ``FRESHNESS_STALE_S``.
 FRESHNESS_STALE_S: float = 20.0
 
+# Turns fuel-gauge bar width (canon visual-language / trainer-cockpit
+# "Liveness & motion"; archive ``TURNS_GAUGE_WIDTH``).
+TURNS_GAUGE_WIDTH: int = 10
+
+_GAUGE_FULL_UNICODE = "█"
+_GAUGE_EMPTY_UNICODE = "░"
+_GAUGE_FULL_ASCII = "#"
+_GAUGE_EMPTY_ASCII = "."
+
 # Canon-authored HUD field order (`trainer-cockpit.md` mock: "credits/
 # sector/turns" / "cargo"; PROFIT is the archive's own established fifth
 # HUD field, `compose_hud_cells`' fixed display order).
@@ -169,11 +179,10 @@ _FIELD_LABELS: dict[str, str] = {
 
 # Per-field numeric formatter. credits/sector/cargo/profit mirror the
 # archive's own ``_HUD_FIELD_SPECS`` lambdas verbatim (credits comma'd,
-# sector/cargo plain, profit signed+comma'd); turns is this module's own
-# addition (the archive special-cased TURNS for its fuel-gauge, out of
-# scope here) and is comma'd to match GOALS' own Turns row convention
-# (``goals.py``'s ``f"{turns:,}"``) since turn counts run into the
-# thousands the same way credits do.
+# sector/cargo plain, profit signed+comma'd); turns is comma'd to match
+# GOALS' own Turns row convention (``goals.py``'s ``f"{turns:,}"``). The
+# fuel-gauge bar + ``gauge_semantic`` tone are layered on in ``_field_cell``
+# when ``turns_max`` is present (WO-BUILD-TURNS-FUEL-GAUGE-MAX-ACCUMULATOR).
 _VALUE_FORMATTERS: dict[str, Callable[[object], str]] = {
     "credits": lambda v: f"{v:,}",
     "sector": lambda v: f"{v}",
@@ -285,8 +294,95 @@ def _clip(text: str, *, width: int) -> str:
     return text[:width]
 
 
-def _field_cell(field: str, hud: dict, *, unicode_ok: bool) -> tuple[str, bool]:
-    """Compose one field's unclipped value-row text and its ``stale`` flag.
+def render_bar_meter(
+    fraction: object,
+    width: int = TURNS_GAUGE_WIDTH,
+    *,
+    unicode_ok: bool = True,
+) -> str:
+    """``[███████░░░]``-style bar (archive ``render_bar_meter``).
+
+    ``fraction`` is clamped to ``[0, 1]`` so out-of-range input degrades to a
+    full/empty bar instead of a garbled one. Hostile/non-numeric fraction
+    yields an empty (zero-fill) bar — the caller still decides whether to
+    show the meter at all.
+    """
+    try:
+        width_i = int(width)
+    except Exception:
+        width_i = 0
+    if width_i <= 0:
+        return "[]"
+    try:
+        frac = float(fraction)  # type: ignore[arg-type]
+    except Exception:
+        frac = 0.0
+    if not math.isfinite(frac):
+        frac = 0.0
+    frac = max(0.0, min(1.0, frac))
+    filled = int(round(frac * width_i))
+    filled = max(0, min(width_i, filled))
+    full = _GAUGE_FULL_UNICODE if unicode_ok else _GAUGE_FULL_ASCII
+    empty = _GAUGE_EMPTY_UNICODE if unicode_ok else _GAUGE_EMPTY_ASCII
+    return "[" + full * filled + empty * (width_i - filled) + "]"
+
+
+def _coerce_turns_number(value: object) -> int | float | None:
+    """Numeric turns remaining for the fuel-gauge fraction, or ``None``.
+
+    Mirrors ``_format_value``'s numeric gate: ``bool``/non-finite/uncoercible
+    never become a gauge numerator.
+    """
+    if value is None or isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        try:
+            if not math.isfinite(value):
+                return None
+        except Exception:
+            return None
+        return value
+    try:
+        as_float = float(value)  # type: ignore[arg-type]
+    except Exception:
+        return None
+    if not math.isfinite(as_float):
+        return None
+    return as_float
+
+
+def _turns_gauge(
+    raw_value: object, field_status: dict, *, unicode_ok: bool
+) -> tuple[str, str | None]:
+    """Bar + ``gauge_semantic`` tone when ``turns_max`` is a usable denominator.
+
+    Archive rule: ``if turns_max:`` — ``0``/``None`` → no gauge (div-by-zero
+    guard). Hostile ``turns_max`` likewise yields no gauge.
+    """
+    try:
+        turns_max = field_status.get("turns_max")
+    except Exception:
+        return "", None
+    if isinstance(turns_max, bool):
+        return "", None
+    try:
+        max_n = float(turns_max)  # type: ignore[arg-type]
+    except Exception:
+        return "", None
+    if not math.isfinite(max_n) or max_n <= 0:
+        return "", None
+    remaining = _coerce_turns_number(raw_value)
+    if remaining is None:
+        return "", None
+    fraction = float(remaining) / max_n
+    tone = gauge_semantic(fraction)
+    return render_bar_meter(fraction, TURNS_GAUGE_WIDTH, unicode_ok=unicode_ok), tone
+
+
+def _field_cell(
+    field: str, hud: dict, *, unicode_ok: bool
+) -> tuple[str, bool, str | None]:
+    """Compose one field's unclipped value-row text, ``stale``, and optional tone.
 
     ``hud.get(field)`` itself is trusted (the top-level ``status["hud"]``
     payload boundary — same trust level ``focus.py``'s
@@ -295,39 +391,55 @@ def _field_cell(field: str, hud: dict, *, unicode_ok: bool) -> tuple[str, bool]:
     module defends — mirroring ``focus.py``/``decisions.py``'s per-
     candidate ``try``/``except`` around each candidate's own ``.get()``
     calls: a hostile ``dict`` subclass in this slot (raising ``.get()``) is
-    contained here, never escapes."""
+    contained here, never escapes.
+
+    ``tone`` is ``None`` except on the TURNS value row when a fuel-gauge
+    bar is rendered (``gauge_semantic`` product caller).
+    """
     field_status = hud.get(field)
     if not isinstance(field_status, dict):
-        return UNKNOWN_VALUE, False
+        return UNKNOWN_VALUE, False, None
     try:
         raw_value = field_status.get("value")
         raw_age = field_status.get("age_s")
     except Exception:
-        return UNKNOWN_VALUE, False
+        return UNKNOWN_VALUE, False, None
 
     value_text = _format_value(field, raw_value)
     if value_text is None:
-        return UNKNOWN_VALUE, False
+        return UNKNOWN_VALUE, False, None
+
+    gauge = ""
+    tone: str | None = None
+    if field == "turns":
+        gauge, tone = _turns_gauge(raw_value, field_status, unicode_ok=unicode_ok)
 
     age = _safe_age(raw_age)
     if age is None:
-        return value_text, False
+        if gauge:
+            return f"{value_text} {gauge}", False, tone
+        return value_text, False, None
 
     stale = age >= FRESHNESS_STALE_S
     freshness = format_freshness(age, unicode_ok=unicode_ok)
-    return f"{value_text} {freshness}", stale
+    if gauge:
+        return f"{value_text} {freshness} {gauge}", stale, tone
+    return f"{value_text} {freshness}", stale, None
 
 
 def compose_hud_cells(
     status: dict | None, *, width: int, unicode_ok: bool = True
-) -> list[tuple[str, bool]]:
+) -> list[tuple[str, bool, str | None]]:
     """Compose the HUD panel's fixed 10-line readout — 5 fields
     (``HUD_FIELDS``, canon order CREDITS/SECTOR/TURNS/CARGO/PROFIT) × a
     2-row stride: a label row (e.g. ``"CREDITS"``) then a value row (e.g.
-    ``"12,345 ✦ 3s ago"``). Each returned item is ``(text, stale)`` —
-    ``stale`` is ``True`` only on a value row whose age has passed
-    ``FRESHNESS_STALE_S``; label rows are always ``stale=False`` (a label
-    never dims — only the persisted value it stamps does).
+    ``"12,345 ✦ 3s ago"`` / TURNS may append ``[████░░░░░░]``). Each
+    returned item is ``(text, stale, tone)`` — ``stale`` is ``True`` only on
+    a value row whose age has passed ``FRESHNESS_STALE_S``; label rows are
+    always ``stale=False`` (a label never dims — only the persisted value it
+    stamps does). ``tone`` is ``None`` except on a TURNS value row that
+    rendered a fuel-gauge (``"ok"``/``"warn"``/``"danger"`` from
+    ``gauge_semantic``).
 
     Never raises regardless of ``status``'s shape or content. A non-dict
     ``status`` (including ``None``) or a non-dict/absent ``status["hud"]``
@@ -368,13 +480,15 @@ def compose_hud_cells(
     hud = status.get("hud")
     hud = hud if isinstance(hud, dict) else {}
 
-    lines: list[tuple[str, bool]] = []
+    lines: list[tuple[str, bool, str | None]] = []
     for field in HUD_FIELDS:
-        lines.append((_clip(_FIELD_LABELS[field], width=width), False))
+        lines.append((_clip(_FIELD_LABELS[field], width=width), False, None))
         try:
-            value_line, stale = _field_cell(field, hud, unicode_ok=unicode_ok)
+            value_line, stale, tone = _field_cell(field, hud, unicode_ok=unicode_ok)
         except Exception:
-            value_line, stale = UNKNOWN_VALUE, False
-        lines.append((_clip(f"{HUD_VALUE_INDENT}{value_line}", width=width), stale))
+            value_line, stale, tone = UNKNOWN_VALUE, False, None
+        lines.append(
+            (_clip(f"{HUD_VALUE_INDENT}{value_line}", width=width), stale, tone)
+        )
 
     return lines

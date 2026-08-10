@@ -72,9 +72,9 @@ across every surface — a surface never invents its own thresholds:
 - **`status_semantic(connected, last_rx_age_s)`** (`cockpit/tones.py`) — `danger` if disconnected;
   `warn` if `last_rx_age_s ≥ 5.0` (`_STALE_RX_THRESHOLD_S`); else `ok`.
 - **`gauge_semantic(fraction)`** (`cockpit/tones.py`) — `ok` ≥0.5, `warn` ≥0.2, else `danger`.
-  **Tip:** intentional scaffolding (WO-CANON-DRAFT-GAUGE-SEMANTIC-WIRE-CONSUMER / #496) — no
-  product caller until a `turns_max`-aware HUD fuel-gauge follow-on lands. Thresholds stay the
-  contracted palette for that follow-on; do not read this bullet as a live chrome wire today.
+  **Tip:** live product caller — `cockpit.hud` TURNS fuel-gauge via `turns_max`
+  (WO-BUILD-TURNS-FUEL-GAUGE-MAX-ACCUMULATOR). Thresholds color the bar green→amber→red as
+  turns drain.
 
 ### Three load-bearing color rules (apply on every surface, no exceptions)
 
@@ -214,7 +214,7 @@ back to quiet.
 | waiting spinner | braille ramp `⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏` (ASCII `\|/-\`) | advances while connecting/between events; frozen at frame `[0]` when calm |
 | heartbeat | `●`/`○` (ASCII `*`/`.`), `HEARTBEAT_PERIOD_S = 0.8` | always breathing — slower than the spinner, so "alive" reads even on a settled screen |
 | credit sparkline | `▁▂▃▄▅▆▇█` (ASCII `.-=#`), `CREDIT_SPARK_WIDTH = 20` | scaled to its own recent min/max; a flat series renders the middle glyph |
-| turns fuel-gauge | `[████░░░░░░]`, `TURNS_GAUGE_WIDTH = 10` | **TARGET** — banked motion cue; `gauge_semantic` parked (no `turns_max` accumulator on tip). Freshness HUD renders numeric TURNS only today. |
+| turns fuel-gauge | `[████░░░░░░]`, `TURNS_GAUGE_WIDTH = 10` | **SHIPPED** — `turns_max` session accumulator + `gauge_semantic` on the TURNS HUD value row (WO-BUILD-TURNS-FUEL-GAUGE-MAX-ACCUMULATOR). |
 | delta chip + tween | `{delta:+,} ▲/▼`, `CREDIT_FLASH_DURATION_S = 1.5`, ~0.3s tween | slot-machine count-up on a credits change, then fades |
 | ticker flash | newest LOG row bold, `TICKER_FLASH_DURATION_S = 1.0` | flags a just-arrived transcript line |
 | classification pulse | header reverse-video, ~1.0s | pulses when the underlying screen classification changes |

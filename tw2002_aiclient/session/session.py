@@ -207,6 +207,10 @@ class Session:
         # reached ZERO must not look alike to the HUD.
         self.last_turns = None
         self.last_turns_ts = None
+        # Session high-water mark for the TURNS fuel-gauge denominator
+        # (archive ``tracked["_turns_max"]``). Raised only by observe_turns
+        # when a real count arrives; never lowered when turns are spent.
+        self.last_turns_max = None
         # Historical HUD semantics: CARGO empty holds (+ sticky total from
         # ship-info when known). Port lines update empty only; never invent
         # total from commodity / market rows.
@@ -629,6 +633,11 @@ class Session:
         with self.lock:
             self.last_turns = read.turns
             self.last_turns_ts = time.monotonic()
+            # getattr: test doubles may predate last_turns_max (#653 lesson).
+            prev_max = getattr(self, "last_turns_max", None)
+            self.last_turns_max = (
+                read.turns if prev_max is None else max(prev_max, read.turns)
+            )
 
     def turns_snapshot(self):
         """What this session knows about the turn count right now, as a
@@ -653,10 +662,12 @@ class Session:
             # fail-OPEN direction), and clamping here keeps a monotonic
             # hiccup from raising out of a status poll. It can only ever make
             # the age look OLDER.
+            turns_max = getattr(self, "last_turns_max", None)
             return TurnsSnapshot(
                 outcome=OUTCOME_READ,
                 turns=turns,
                 age_s=max(0.0, time.monotonic() - ts),
+                turns_max=turns_max,
             )
 
     def observe_cargo(self, rendered_text):

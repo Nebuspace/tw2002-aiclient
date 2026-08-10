@@ -993,11 +993,17 @@ class TurnsSnapshot:
     about the observation history, never a claim that zero turns remain --
     which on this field is the single most important distinction the type
     carries, and the one the archive lost.
+
+    ``turns_max`` (WO-BUILD-TURNS-FUEL-GAUGE-MAX-ACCUMULATOR) is the session
+    high-water mark mirroring the archive's ``tracked["_turns_max"]`` — the
+    fuel-gauge denominator. Optional on ``read`` for older constructors; when
+    present it must be an ``int >= turns``. Absent/unreadable never carry it.
     """
 
     outcome: str
     turns: Optional[int] = None
     age_s: Optional[float] = None
+    turns_max: Optional[int] = None
 
     def __post_init__(self) -> None:
         if self.outcome not in SNAPSHOT_OUTCOMES:
@@ -1029,6 +1035,17 @@ class TurnsSnapshot:
                 raise ValueError(f"age_s must be a number, got {type(self.age_s).__name__}")
             if not math.isfinite(self.age_s) or self.age_s < 0:
                 raise ValueError(f"age_s must be finite and non-negative, got {self.age_s!r}")
+        if self.turns_max is not None:
+            if not read:
+                raise ValueError("turns_max only accompanies the 'read' outcome")
+            if isinstance(self.turns_max, bool) or not isinstance(self.turns_max, int):
+                raise ValueError(
+                    f"turns_max must be an int, got {type(self.turns_max).__name__}"
+                )
+            if self.turns is not None and self.turns_max < self.turns:
+                raise ValueError(
+                    f"turns_max ({self.turns_max}) cannot be below turns ({self.turns})"
+                )
 
 
 def turns_never_observed() -> TurnsSnapshot:

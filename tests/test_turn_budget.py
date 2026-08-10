@@ -44,6 +44,7 @@ class TurnsWireSession(CreditsWireSession):
         super().__init__(screens, **kwargs)
         self.last_turns = None
         self.last_turns_ts = None
+        self.last_turns_max = None
 
 
 def _turns_screen(turns: int) -> str:

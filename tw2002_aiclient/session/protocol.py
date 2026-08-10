@@ -706,7 +706,14 @@ def _hud_payload(session):
     def cell(snapshot, attr):
         if snapshot is None or snapshot.outcome != OUTCOME_READ:
             return _hud_cell(None, None)
-        return _hud_cell(getattr(snapshot, attr), snapshot.age_s)
+        payload = _hud_cell(getattr(snapshot, attr), snapshot.age_s)
+        # Fuel-gauge denominator (archive ``_turns_max``) rides on the turns
+        # cell only — other vitals ignore an unknown key.
+        if attr == "turns":
+            turns_max = getattr(snapshot, "turns_max", None)
+            if turns_max is not None:
+                payload["turns_max"] = turns_max
+        return payload
 
     def cargo_cell(snapshot):
         if snapshot is None or snapshot.outcome != OUTCOME_READ:
