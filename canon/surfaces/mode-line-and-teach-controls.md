@@ -259,9 +259,11 @@ surface presents that handoff as a banner that carries:
   construction: an unrecognized code passes through as its own text, an empty code renders `"?"`.)
 - **Keyboard → Human.** The banner makes explicit that control has passed to the human — the mode
   line reads Human — so the human is unambiguously the pilot.
-- **The three teach moves as affordances.** `A` / `R` / `T` are surfaced right at the STOP so the
-  human can immediately Analyze, Record, or Assign-Trigger to teach the screen that caused the halt —
-  turning the escalation into a durable rule for next time.
+- **The wired teach moves as affordances.** `A` / `R` are surfaced right at the STOP so the
+  human can immediately Analyze or Record to teach the screen that caused the halt —
+  turning the escalation into a durable rule for next time. Assign-Trigger stays a tip module
+  for non-calm callers but is **not** advertised on the STOP teach line (calm `T` is Trade Loop;
+  hub 2026-08-06 · WO-BUILD-ASSIGN-TRIGGER-REKEY — no replacement calm letter).
 
 ## The coverage / auto meter — App-vs-Human live share
 
@@ -279,7 +281,7 @@ teach-provenance number, if shown, is labeled and kept separate from the live sh
 ## Mode line, healthy autopilot
 
 ```
-[ APP ]  → K            AUTO 82%   App 41 / Hum 9        ^A)ode  A)nalyze  R)ecord  T)rigger  L)chains  P panic
+[ APP ]  → K            AUTO 82%   App 41 / Hum 9        ^A)ode  A)nalyze  R)ecord  L)chains  P panic
 ```
 The App holds the keyboard (dual: App or Human). The auto meter is App-vs-Human live share. No AI
 slice appears in the live share; the teach keys sit on the hint band.
@@ -383,7 +385,7 @@ The control strip lays out strictly **left-to-right** (`cockpit/control_seat.com
 → `screens.py` draw; archive `compose_control_strip` / `_draw_control_strip` port-source):
 
 ```
-[ APP ]      → 158                         ^A)ode  A)nalyze  R)ecord  T)rigger  L)chains  P panic
+[ APP ]      → 158                         ^A)ode  A)nalyze  R)ecord  L)chains  P panic
 └ chip ┘     └ TX readout ┘                └──────────────  hint band (right-aligned) ──────────────┘
 ```
 
@@ -417,9 +419,10 @@ banner's teach line. Their affordance styling:
 - **Ctrl-A (`^A)ode`)** leads the band (the Mode switch is the strip's own primary control, adjacent
   to the chip it flips). A press flips the chip color the instant the switch lands (green↔yellow) —
   the color change *is* the acknowledgement. Attached bare `M` is Move, not Mode.
-- **`A` / `R` / `T`** are the teach triad; at an escalation they move off the band and onto the banner's
-  dedicated **`teach:`** line so the three moves sit right where the halt happened. On the calm band
-  they are ordinary cyan `KEY)verb` tokens; on the banner they inherit the banner's warn-bold weight.
+- **`A` / `R`** are the wired teach pair on the STOP banner's dedicated **`teach:`** line
+  (Analyze / Record). Assign-Trigger is not a third calm/STOP letter after calm `T` → Trade Loop
+  (WO-BUILD-ASSIGN-TRIGGER-REKEY). On the calm band the trainer tokens differ (see Policy-auto /
+  tip token SSOT); on the banner `A`/`R` inherit the banner's warn-bold weight.
 - Every affordance that *arms or launches* (a chain launch, a run) is confirm-gated (below) — the hint
   token merely opens the gate; it never fires.
 
@@ -487,7 +490,7 @@ events), so the strip breathes without churning the game screen.
 - **Calm (App healthy)** — green chip, quiet cyan hint band, no intervention strip, `→ -` or a settling
   `→ N`. No color noise.
 - **Alert (halt)** — the yellow-bold `!` strip appears above the status bar and claims height first; the
-  chip has flipped to the yellow Human register; the teach triad is offered on the banner.
+  chip has flipped to the yellow Human register; the wired teach moves (Analyze / Record) are offered on the banner.
 - **Armed (confirm pending)** — the red+reverse `y/N` line is up; the surface is holding for a
   deliberate second keystroke and will not commit on Enter.
 - **Empty / cold-join** — before a mode is known, the chip degrades sanely: an unrecognized/empty mode
@@ -528,7 +531,7 @@ this surface actually renders.
 green chip, a low-key `→` telemetry channel, a cyan hint band that reads as chrome — and it stays out of
 the way while the taught app covers the known. The instant autopilot meets an unknown screen the register
 flips hard: a bold-yellow `!` banner that claims height ahead of everything optional, the chip snapping to
-the yellow Human register, and the teach triad placed exactly where the halt happened. And the single
+the yellow Human register, and the wired teach moves (Analyze / Record) placed exactly where the halt happened. And the single
 place one keystroke could spend real money — the launch confirm — is dressed in the loudest tone the
 palette owns (red + reverse), because the surface would rather look alarming than let an unguarded Enter
 burn a turn. Terminal-native, semantic-monochrome-plus, honest: it names the actor, shows the keys it

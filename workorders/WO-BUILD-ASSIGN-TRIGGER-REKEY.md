@@ -1,6 +1,6 @@
 # WO-BUILD-ASSIGN-TRIGGER-REKEY
 
-**Status:** in flight (impl-aiclient-cursor)  
+**Status:** DONE (this PR) — residual tip-stamp after calm-band retirement  
 **Priority:** MED (Cycle-43)  
 **Depends-on:** hub ruling 2026-08-06T15:49Z (orchestrator)
 
@@ -41,3 +41,10 @@ key emits `assign_trigger`. Keep backend + `app.py` handler for non-calm callers
 ```
 
 Live-prove: **n/a** (docs + offline key-intent pins; no session/login/play path change).
+
+## Residual tip-stamp (2026-08-10)
+
+Hub Accept prose landed earlier; leftover Schema/Examples still named a STOP
+"three teach moves" / `A`/`R`/`T` Assign-Trigger triad and developer-strip
+`T)rigger` illustrations. This PR aligns those lines with the STOP example,
+`TEACH_LINE`, and the residual-closed stamp already in this concept.
