@@ -186,10 +186,13 @@ live per-cycle action-picker that lets a computed exploration value beat out an 
   hunt for fresh patterns — see [Port Economics](/strategy/port-economics.md). Depletion raises the
   *appetite to suggest exploring*; it never triggers autonomous rotation into a new loop. Depletion
   is a STOP-and-escalate / re-rank signal, not a license to auto-switch what the ship is doing.
-  Tip already writes this as `explore_appetite_raised` from
+  Tip writes this as `explore_appetite_raised` from
   `chain_depletion.depletion_signals()` (`chain_depletion.py` ~148–165) onto chain status when
-  `nearing_depletion` is true — **today that flag has zero product readers**; the follow-on build
-  WO must consume it rather than invent a parallel appetite bit.
+  `nearing_depletion` is true — **FOCUS consumer LIVE** (`focus_status.recommend_focus_candidates`
+  raises explore `overlay_weight` via `WEIGHT_EXPLORE_APPETITE` when the flag is true;
+  WO-BUILD-EXPLORE-APPETITE-FOCUS-CONSUMER). Do not invent a parallel appetite bit.
+  Affordability as a second OR-cause of the same flag remains Pending
+  (`PENDING-AFFORDABILITY-EXPLORE-WEIGHT-DEFINITION`).
 - **Appetite RAISED when credits cross a known upgrade/fighter cost (affordability-driven).** Once
   current credits clear a known cargo-hold upgrade quote and/or fighter unit cost (the same math
   surface as `priority_engine.afford_fighters`, which today only feeds GOALS labels), grinding an

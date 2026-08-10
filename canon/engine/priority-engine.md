@@ -219,17 +219,17 @@ credits clear a threshold.
 | Same threshold while quotes are unknown | No boost — honest omit; GOALS/FOCUS keep `?` / ungated-absence rather than inventing affordability | Invent Class-0 / hold prices from placeholders |
 
 **Shared signal — reuse `explore_appetite_raised`, do not invent a twin.** Tip
-`chain_depletion.depletion_signals()` already writes `explore_appetite_raised` onto chain status
-when near depletion (`chain_depletion.py` ~148–165; key also in `chain_status.py`) — and **zero
-product readers consume it today**. Affordability is a **second OR-cause** of that same flag (and
-of the explore overlay boost in `focus_status.recommend_focus_candidates` ~214–312), not a second
-boolean. Depletion and affordability share one consumer path into FOCUS.
+`chain_depletion.depletion_signals()` writes `explore_appetite_raised` onto chain status
+when near depletion (`chain_depletion.py` ~148–165; key also in `chain_status.py`).
+**FOCUS consumer LIVE** (`focus_status.recommend_focus_candidates` reads the flag and raises
+explore `overlay_weight` to at least `WEIGHT_EXPLORE_APPETITE=70` — WO-BUILD-EXPLORE-APPETITE-FOCUS-CONSUMER).
+Affordability is a **second OR-cause** of that same flag (same consumer path), not a second
+boolean — still Pending for exact credit thresholds.
 
 Exact numerics (raw credits ≥ cost vs buffer above trade float; whether hold-upgrade vs fighter
 thresholds weight explore differently) stay Pending —
-`PENDING-AFFORDABILITY-EXPLORE-WEIGHT-DEFINITION` in [DECISIONS](/DECISIONS.md). Follow-on build WO
-wires the reader; this draft does not touch `afford_fighters` / `focus_status.py` /
-`chain_depletion.py` code. Cross-ref appetite framing:
+`PENDING-AFFORDABILITY-EXPLORE-WEIGHT-DEFINITION` in [DECISIONS](/DECISIONS.md). Do not invent
+those thresholds in code until ruled. Cross-ref appetite framing:
 [exploration-policy](/strategy/exploration-policy.md) § Explore / exploit appetite.
 
 ## Two-layer information architecture
