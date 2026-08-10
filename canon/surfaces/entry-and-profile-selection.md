@@ -82,17 +82,24 @@ not exist yet.
 ## The new-player flow
 
 Creating a player collects the non-secret shape of a profile and, crucially, lets the operator
-**pick the server from a catalog** instead of typing a raw hostname. The catalog is
-`config/servers.toml` — a directory-listed inventory of known TW2002 endpoints (hostname, port,
-transport, front-end kind, status), resolved for display by `tw servers list`
-(`cli.py::cmd_servers_list` → `servers.list_servers()`). It performs **no live connections**; the
-`status` column is directory-provenance, not a health probe.
+**pick the server from a catalog** instead of typing a raw hostname. That **profile catalog** is
+`config/servers.toml` — a directory of known TW2002 endpoints (hostname, port, …) read by
+`credentials.list_servers()` / `credentials.create_profile()` when the Create-New-Player path
+stores a `server=` catalog key (or an explicit `host`+`port`). It is **not** what
+`tw servers list` prints.
+
+`tw servers list` (`catalog_cli.cmd_servers_list` → `server_inventory.summarize_inventory`) is a
+**research inventory** over `config/servers.inventory.json` (+ optional liveness sidecar). It
+performs **no live connections** and **no login**; provenance/`status` there is listing
+provenance, not a health probe (TCP reachability is `tw probe`).
 
 A created profile is written to `config/profiles.toml` (via `credentials.create_profile()`), which
 requires at minimum a `game_letter` and either a `server` catalog key or an explicit `host`+`port`.
-A profile may reference the catalog by key and let the endpoint resolve at load time
-(`load_profile()` calls `servers.resolve_endpoint()` when `host`/`port` are absent but a `server`
-key is present), so the catalog stays the single source of truth for where a server actually lives.
+A profile may reference `servers.toml` by key and let the endpoint resolve at load /
+summary time inside `credentials` (when `host`/`port` are absent but a `server` key is
+present) — there is no separate `servers.resolve_endpoint()` helper. `servers.toml` stays the
+profile-binding source of truth for *where this character connects*; the inventory JSON is the
+separate research/planning directory.
 
 `handle` (the character name) is normally required too — with one deliberate exception: a profile
 that opts into automated new-character registration (`allow_register = true`) may omit `handle`, and
@@ -207,18 +214,22 @@ responsive fold ladder). This section specifies only what is
 
 ## Spacing / alignment / hierarchy — the one built dimension
 
-The current CLI verbs already commit to a **fixed-width, left-aligned columnar** convention, and the
-consolidated picker should inherit it verbatim so the two never drift. Grounded in `cli.py`:
+The current CLI verbs already commit to a **fixed-width, left-aligned columnar** convention on the
+player-bank list, and the consolidated picker should inherit that verbatim so the two never drift.
+Grounded in tip modules (not a monolithic `cli.py`):
 
-- **Server catalog** (`cmd_servers_list`, cli.py:394-397): header + rows on the exact format
-  `{KEY:<28} {HOST:<36} {PORT:>5} {FE:<7} {STATUS}` — text columns left-aligned, the **numeric
-  `PORT` right-aligned** (`:>5`) so port numbers align on their ones digit. A single space is the
-  gutter between every column.
-- **Player / rotation list** (`cmd_players_list`, cli.py:458-459):
-  `{name:<16} {handle:<16} {host:<24} {game_letter:<3} {last_played:<21} {turns_state}` — the same
-  left-aligned-text convention; `game_letter` gets a tight 3-col field, `last_played` a wide 21-col
-  field to hold a full ISO date.
-- **Probe/catalog variant** (cli.py:424-428): `{KEY:<28} {CLASS:<14} {STATUS:<10} {HOST:PORT}`.
+- **Research inventory** (`catalog_cli.format_servers_report` / `tw servers list`): summary lines
+  (`inventory scraped_at=… rows=… planning=…`, provenance/liveness rollups, then
+  `name  endpoint  provenance  liveness` planning rows) — **not** the retired fixed-width
+  `{KEY:<28} {HOST:<36} {PORT:>5} {FE:<7} {STATUS}` layout. Profile-create still picks keys from
+  `servers.toml` via credentials, not from this report.
+- **Player / rotation list** (`players_cli.cmd_players_list`): header
+  `{'name':<16} {'handle':<16} {'host':<24} {'game':<3} {'last_played':<21} turns` with a leading
+  `→ `/`  ` due-marker on each row — same left-aligned-text convention; `game` is a tight 3-col
+  field (the profile's `game_letter`), `last_played` a wide 21-col field for a full ISO date.
+- **Probe** (`catalog_cli` / `tw probe`): tab-separated `OPEN|FAIL\t{host:port}\t{error}` lines plus
+  a stderr `RESULT: N / M tcp_open → …` rollup — **not** a `{KEY:<28} {CLASS:<14} {STATUS:<10}`
+  columnar twin of the old servers layout.
 
 **Hierarchy / what draws the eye:** the operator is choosing *a character on a world*, so the
 identity columns lead — `name` / `handle` first, the server context (`host`, `game_letter`) next, and
@@ -388,6 +399,13 @@ paladin-main     PaladinPrime     tw2002.briancmoses.com   A   2026-07-23     ok
   data functions (`list_profile_summaries`, `create_profile`, `list_servers`, `player_bank`)
   already exist and are what a single surface would compose. Recorded, not silently conformed.
 
+- **Dual server directories — do not conflate.** `config/servers.toml` is the profile-binding
+  catalog (`credentials.list_servers` / `create_profile`). `tw servers list` reads
+  `config/servers.inventory.json` via `catalog_cli` / `server_inventory` (research +
+  live-prove planning). Tip previously documented `tw servers list` as
+  `cli.py::cmd_servers_list → servers.list_servers()` with retired KEY/HOST/PORT columns —
+  that call chain and layout are gone; body sections above are tip-true as of this WO.
+
 - **`tw players next` rotation selection and the rotation *driver* are both LIVE.**
   `player_bank.next_player` + `tw players next` (`players_cli.py`) pick a read-only next
   profile under a default 24h cooldown window. `player_bank.advance_rotation` + `tw players
@@ -436,7 +454,8 @@ paladin-main     PaladinPrime     tw2002.briancmoses.com   A   2026-07-23     ok
   `players_cli.py` (`cmd_players_list` / `next` / `rotate` — no `add`); product entry
   `./tw2002-aiclient` / `python -m tw2002_aiclient` (`app.py` / `__main__.py` — not a `tw`
   subcommand); `session/player_bank.py` (metadata-only bank, secret-shaped-key notes filter);
-  `config/servers.toml` (the tracked server catalog); `config/profiles.toml.example` (the tracked
+  `config/servers.toml` (profile-binding server catalog); `config/servers.inventory.json`
+  (research inventory for `tw servers list` / `tw probe`); `config/profiles.toml.example` (the tracked
   profile shape). Per CLAUDE.md's Architecture map and Hard rules: secrets never touch logs/argv/repo;
   `config/`, `run/`, `state/`, `logs/` are gitignored, with only `profiles.toml.example` and
   `servers.toml` tracked.
