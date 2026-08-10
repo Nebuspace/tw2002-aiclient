@@ -193,6 +193,21 @@ galaxy where they may be false.
 with `source: "authored"`. On the next load the store rejects it — `source` must begin with
 `introspected` — so the fabricated value never reaches a consumer.
 
+# Capture-module trust tiers (observed vs derived)
+
+Not every capture module that *can* parse game text is eligible to **persist** into authoritative
+store or world-model state. Two trust tiers govern wiring:
+
+| Tier | What it is | Tip examples | Persist? |
+|---|---|---|---|
+| **Observed live** | Values read directly from a settled live screen into the world model | `density_scan_capture`, `cim_report_capture`, opportunistic `game_data_capture` | **Yes** — observed data, tagged at write time |
+| **Derived estimate** | Numbers inferred over fixtures, synthetic rows, or unverified hypotheses | `port_floor_capture` (analysis-only; every result `verified_vs_live=False` today) | **No** — must not write back into canonical hypothesis constants or any persisted field that downstream readers treat as confirmed |
+
+A derived estimate must stay analysis-only until its inputs are genuinely live-verified; writing
+it into persisted state would make unverified numbers *look* confirmed (see
+`DECISION-PORT-FLOOR-CAPTURE-HOLD-RATIONALE` in [DECISIONS.md](/DECISIONS.md), 2026-08-09).
+Future capture modules should classify themselves against this table before wiring a persist path.
+
 # Code divergence
 
 DOCS WIN: the following are places where the current implementation has not yet reached the target

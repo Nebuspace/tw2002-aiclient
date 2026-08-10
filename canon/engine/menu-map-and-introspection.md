@@ -156,6 +156,17 @@ the one who decides to explore it, and the crawl records what is found for a fut
 knowledge store is *read* by guards, the navigator, and the teacher; it never reads itself to
 drive.
 
+## Crawl-status provenance (`record_crawl_status` / `get_crawl_status`)
+
+Each crawl stamps a sidecar on the on-disk menu map via `menu/knowledge.record_crawl_status`
+(writer — called from `menu/crawler.py` at crawl end/abort/error) and reads it back with
+`get_crawl_status` (reader). The stamp carries `status` (`complete` / `aborted` / `error` /
+`truncated`), optional `reason`, and frontier counters (`nodes_visited`, `frontier_remaining`).
+`menu/map_view.menu_map_summary_from_store` attaches that blob as `last_crawl`; `format_menu_map_report`
+(`tw menumap`) appends one provenance line when present so a partial map is not silently readable
+as complete — absent stamp omits the line (unknown provenance is not invented as "never crawled").
+Shipped PR #636.
+
 # The Game-Data Introspector — Read, Parse, Store as VIEW
 
 Alongside the menu-graph crawl sits a pure **game-data introspector** (`introspector.py`): it
