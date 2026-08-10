@@ -258,10 +258,13 @@ def test_upgrade_offer_policy_refuse_rewrites_starting_line(monkeypatch):
 
 
 def test_ship_upgrade_toggle_never_reaches_any_adapter(monkeypatch):
-    """WO scope #4: Ship Upgrade gates nothing — no engine/offer kind exists.
-    Structural pin: regardless of ``ship_upgrade_on``, no ship-shaped adapter
-    call happens, and the (irrelevant) toggle never changes the outcome for
-    an unrelated offer kind."""
+    """Ship Upgrade Mode-line toggle still gates no spend path.
+
+    Recommend-only ``ship_upgrade_decision`` exists for coach/FOCUS, but there
+    is no ``ship_upgrade_start`` / ``AutonomyOffer`` purchase adapter. Structural
+    pin: regardless of ``ship_upgrade_on``, no ship-shaped adapter call happens,
+    and the toggle never changes the outcome for an unrelated offer kind.
+    """
     monkeypatch.setattr(_autonomy_policy, "choose_offer", lambda *_a, **_k: _offer("explore"))
     play_on = _FakePlay(ship_upgrade_on=True)
     play_off = _FakePlay(ship_upgrade_on=False)
