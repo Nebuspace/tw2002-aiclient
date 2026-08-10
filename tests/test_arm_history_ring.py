@@ -293,11 +293,12 @@ def test_classification_is_left_absent_rather_than_guessed():
 def test_the_replay_port_never_sends_a_secret():
     """The reason there is no redaction branch in `_record`.
 
-    `settle.send_and_confirm` *does* take a `secret` parameter, and the port
-    does not pass it, so a taught-macro step can never be a secret send today.
-    A redaction branch here would therefore be unreachable code that reads as a
-    live guard -- and an unreachable guard on a secrets path is worse than none,
-    because it answers "is this handled?" with a yes nobody can falsify.
+    `settle.send_and_confirm` / `send_and_confirm_for` *do* take a `secret`
+    parameter, and the port does not pass it, so a taught-macro step can never
+    be a secret send today. A redaction branch here would therefore be
+    unreachable code that reads as a live guard -- and an unreachable guard on
+    a secrets path is worse than none, because it answers "is this handled?"
+    with a yes nobody can falsify.
 
     This is the tripwire instead: route a secret through the player and this
     goes red, and whoever did it has to handle redaction deliberately rather
@@ -307,28 +308,36 @@ def test_the_replay_port_never_sends_a_secret():
     import inspect
 
     source = inspect.getsource(autoloop._ReplayPort.send_and_confirm)
+    # Port now routes through send_and_confirm_for(..., profile=...); still must
+    # not pass secret= (defaults False inside settle).
     call = next(
         n for n in ast.walk(ast.parse(source.strip()))
-        if isinstance(n, ast.Call) and getattr(n.func, "attr", None) == "send_and_confirm"
+        if isinstance(n, ast.Call)
+        and getattr(n.func, "attr", None) == "send_and_confirm_for"
     )
     passed = {kw.arg for kw in call.keywords}
     assert "secret" not in passed, (
         "the replay port now passes `secret` -- `_record` needs a redaction branch"
     )
+    assert "profile" in passed, "replay port must name a settle profile"
 
     from tw2002_aiclient.session import settle as settle_mod
 
     assert inspect.signature(settle_mod.send_and_confirm).parameters["secret"].default is False
+    assert inspect.signature(settle_mod.send_and_confirm_for).parameters["secret"].default is False
 
 
 def test_that_tripwire_can_actually_fire():
     """Control: the extractor finds a `secret` kwarg when one is present."""
     import ast
 
-    tree = ast.parse("x = _settle.send_and_confirm(s, k, secret=True)")
+    tree = ast.parse(
+        "x = _settle.send_and_confirm_for(s, k, profile='stable_idle', secret=True)"
+    )
     call = next(
         n for n in ast.walk(tree)
-        if isinstance(n, ast.Call) and getattr(n.func, "attr", None) == "send_and_confirm"
+        if isinstance(n, ast.Call)
+        and getattr(n.func, "attr", None) == "send_and_confirm_for"
     )
     assert "secret" in {kw.arg for kw in call.keywords}
 

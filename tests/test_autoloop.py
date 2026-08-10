@@ -909,7 +909,7 @@ def test_an_unconfirmed_send_is_not_read_as_confirmed(tmp_path, monkeypatch):
         sess.send(text, enter=kwargs.get("enter", True))
         return "prompt", 0.4, False
 
-    monkeypatch.setattr(autoloop._settle, "send_and_confirm", unconfirmed)
+    monkeypatch.setattr(autoloop._settle, "send_and_confirm_for", unconfirmed)
     runner.start("ore-run")
     snapshot = run_to_completion(runner, session)
 
@@ -941,13 +941,13 @@ def test_the_ports_send_is_scoped_to_the_live_prompt_line(tmp_path, monkeypatch)
     runner = make_runner(tmp_path, session)
     seen = {}
 
-    real = autoloop._settle.send_and_confirm
+    real = autoloop._settle.send_and_confirm_for
 
     def record(sess, text, **kwargs):
         seen.update(kwargs)
         return real(sess, text, **kwargs)
 
-    monkeypatch.setattr(autoloop._settle, "send_and_confirm", record)
+    monkeypatch.setattr(autoloop._settle, "send_and_confirm_for", record)
     runner.start("ore-run")
     run_to_completion(runner, session)
 

@@ -286,7 +286,7 @@ def test_an_unconfirmed_send_halts_rather_than_guessing_the_next_key(
     Guessing the next keystroke into a live combat screen is exactly the
     failure this module exists to prevent -- and the send still counts."""
     monkeypatch.setattr(
-        sx._settle, "send_and_confirm", lambda *a, **k: ("desync", 0.1, False)
+        sx._settle, "send_and_confirm_for", lambda *a, **k: ("desync", 0.1, False)
     )
     session = _TollSession()
     report = _run(session, tmp_path, fight_tolls=True)

@@ -64,12 +64,12 @@ def test_navigate_passes_retry_unstable_idle_on_sector_warp(tmp_path, monkeypatc
 
     captured = []
 
-    def _spy(session, text, confirm_prompt=None, enter=True, secret=False, **kwargs):
-        captured.append({"text": text, "confirm_prompt": confirm_prompt, **kwargs})
+    def _spy(session, text, *, profile, confirm_prompt=None, enter=True, secret=False, **kwargs):
+        captured.append({"text": text, "profile": profile, "confirm_prompt": confirm_prompt, **kwargs})
         session.send(text, enter=enter, secret=secret)
         return ("idle", 0.05, True)
 
-    monkeypatch.setattr(trade_driver, "send_and_confirm", _spy)
+    monkeypatch.setattr(trade_driver, "send_and_confirm_for", _spy)
 
     session = _NavSession()
     ctx = _StepCtx(session, TradeDriverConfig(step_timeout_s=2.0), lambda: False, lambda: True)
@@ -77,4 +77,5 @@ def test_navigate_passes_retry_unstable_idle_on_sector_warp(tmp_path, monkeypatc
     assert left == 9
     warp_calls = [c for c in captured if str(c.get("text", "")).isdigit()]
     assert warp_calls, f"expected a sector warp send, got {captured!r}"
-    assert warp_calls[0]["retry_unstable_idle"] is True
+    # Nav warps map retry_unstable_idle=True → profile warp_unstable.
+    assert warp_calls[0]["profile"] == "warp_unstable"
