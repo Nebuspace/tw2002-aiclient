@@ -179,6 +179,25 @@ def test_cmd_chains_requests_yield_rank(world, monkeypatch):
     assert seen.get("rank") == chain_search.RANK_YIELD
 
 
+def test_cmd_chains_requests_longevity_rank_when_holds_set(world, monkeypatch):
+    """--holds arms H2 longevity down-rank on the yield base."""
+    from tw2002_aiclient import chain_search
+
+    seen: dict = {}
+    real = chain_search.recompute
+
+    def _capture(world_id, **kwargs):
+        seen.update(kwargs)
+        return real(world_id, **kwargs)
+
+    monkeypatch.setattr(chain_search, "recompute", _capture)
+    rc, _ = _run(["chains", "--world-id", W, "--holds", "50", "--json"])
+    assert rc == 0
+    assert seen.get("rank") == chain_search.RANK_LONGEVITY
+    assert seen.get("hold_count") == 50
+    assert seen.get("longevity_base") == chain_search.RANK_YIELD
+
+
 def test_cmd_chains_json_lists_yield_first_when_short_rich_and_long_thin(
     world, monkeypatch
 ):

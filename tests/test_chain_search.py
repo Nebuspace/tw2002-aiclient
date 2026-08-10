@@ -225,3 +225,109 @@ def test_recompute_rank_yield_surfaces_short_rich(monkeypatch, tmp_path: Path):
 def test_recompute_rejects_unknown_rank(tmp_path: Path):
     with pytest.raises(ValueError, match="unknown rank"):
         chain_search.recompute(W, state_dir=tmp_path, now=CLOCK, rank="nonsense")
+
+
+def test_recompute_rank_longevity_downranks_near_depleted(tmp_path: Path):
+    """Product wire: RANK_LONGEVITY calls rank_chains_by_longevity when
+    holds + amounts are known (canon port-economics H2 ranking)."""
+    # Fresh loop: high stock on every leg. Thin loop: near-empty stock.
+    _up(
+        tmp_path,
+        10,
+        (11, 12),
+        [
+            _row("Equipment", "selling", 100, amount=50_000),
+            _row("Fuel Ore", "buying", 0, amount=50_000),
+        ],
+    )
+    _up(
+        tmp_path,
+        11,
+        (10, 12),
+        [
+            _row("Fuel Ore", "selling", 100, amount=50_000),
+            _row("Organics", "buying", 0, amount=50_000),
+        ],
+    )
+    _up(
+        tmp_path,
+        12,
+        (10, 11),
+        [
+            _row("Organics", "selling", 100, amount=50_000),
+            _row("Equipment", "buying", 0, amount=50_000),
+        ],
+    )
+    # Parallel thin triangle on higher sectors (same shape, tiny stock).
+    _up(
+        tmp_path,
+        20,
+        (21, 22),
+        [
+            _row("Equipment", "selling", 100, amount=5),
+            _row("Fuel Ore", "buying", 0, amount=5),
+        ],
+    )
+    _up(
+        tmp_path,
+        21,
+        (20, 22),
+        [
+            _row("Fuel Ore", "selling", 100, amount=5),
+            _row("Organics", "buying", 0, amount=5),
+        ],
+    )
+    _up(
+        tmp_path,
+        22,
+        (20, 21),
+        [
+            _row("Organics", "selling", 100, amount=5),
+            _row("Equipment", "buying", 0, amount=5),
+        ],
+    )
+
+    hops_result = chain_search.recompute(W, state_dir=tmp_path, now=CLOCK)
+    assert hops_result.reason is None
+    assert len(hops_result.chains) >= 2
+
+    longevity = chain_search.recompute(
+        W,
+        state_dir=tmp_path,
+        now=CLOCK,
+        rank=chain_search.RANK_LONGEVITY,
+        hold_count=50,
+        longevity_base=chain_search.RANK_HOPS,
+    )
+    assert longevity.reason is None
+    assert len(longevity.chains) >= 2
+    # Near-depleted triangle (sectors 20-22) must not lead when holds=50
+    # (remaining_trades = 5/50 < 1).
+    top_sectors = set(longevity.chains[0].sectors)
+    assert 20 not in top_sectors or 10 in top_sectors
+    assert top_sectors >= {10, 11, 12} or 10 in top_sectors
+
+
+def test_recompute_rank_longevity_fails_closed_without_holds(monkeypatch, tmp_path: Path):
+    """Missing holds → keep base order; never invent remaining_trades."""
+    short_rich = _fake_chain(hops=2, cr_per_turn=3.5, start=100)
+    long_thin = _fake_chain(hops=9, cr_per_turn=1.0, start=1)
+    monkeypatch.setattr(
+        trade_adapter,
+        "build_trade_hops",
+        lambda *a, **k: ((chains.TradeHop(1, 2, "X", 1.0, 1),), None),
+    )
+    monkeypatch.setattr(
+        chains,
+        "find_profit_chains_with_note",
+        lambda *a, **k: ([long_thin, short_rich], None),
+    )
+    # No hold_count: longevity base=yield → short_rich first (yield), no crash.
+    result = chain_search.recompute(
+        W,
+        state_dir=tmp_path,
+        now=CLOCK,
+        rank=chain_search.RANK_LONGEVITY,
+        longevity_base=chain_search.RANK_YIELD,
+    )
+    assert result.chains[0] is short_rich

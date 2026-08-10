@@ -68,13 +68,15 @@ REASON_NO_WORLD_MODEL = "no_world_model"  # this world has never recorded a sect
 REASON_NO_TRADEABLE_HOPS = "no_tradeable_hops"  # sectors known; no priced, routable, direction-compatible hop
 REASON_NO_CLOSED_CYCLE = "no_closed_cycle"  # hops exist; none of them close a profitable cycle
 
-# Dual ranking (WO-FIX-CHAIN-DISCOVERY-RANK-SORT-ORDER): canon discovery /
-# explore keeps hop-count-first; earn / CLI credit-doubling surfaces ask
-# for yield-first. Default stays RANK_HOPS so L)chains / bubble callers
-# do not silently flip.
+# Ranking (WO-FIX-CHAIN-DISCOVERY-RANK-SORT-ORDER + WO-BUILD-CHAIN-LONGEVITY-RANK-WIRE):
+# canon discovery / explore keeps hop-count-first; earn / CLI credit-doubling
+# surfaces ask for yield-first; longevity down-ranks near-depleted loops when
+# holds + port amounts are known (port-economics H2). Default stays RANK_HOPS
+# so L)chains / bubble callers do not silently flip.
 RANK_HOPS = "hops"
 RANK_YIELD = "yield"
-_RANK_VALUES = frozenset({RANK_HOPS, RANK_YIELD})
+RANK_LONGEVITY = "longevity"
+_RANK_VALUES = frozenset({RANK_HOPS, RANK_YIELD, RANK_LONGEVITY})
 
 
 @dataclass(frozen=True)
@@ -83,8 +85,10 @@ class ProfitChainResult:
 
     `chains` is ranked per `recompute(..., rank=)` — default
     `chains.rank_chains` (hop-count desc, then cr/turn); earn surfaces
-    may request `rank=RANK_YIELD` (`rank_chains_by_yield`). Non-empty
-    exactly when `reason` is `None`.
+    may request `rank=RANK_YIELD` (`rank_chains_by_yield`); longevity
+    surfaces may request `rank=RANK_LONGEVITY` (down-rank near-depleted
+    via `chains.rank_chains_by_longevity` when holds + amounts known).
+    Non-empty exactly when `reason` is `None`.
 
     `adapter_note` and `search_note` are independent and BOTH may be set.
     Neither is cleared on an empty result -- see the module docstring: a
@@ -117,6 +121,8 @@ def recompute(
     max_hops: Optional[int] = None,
     max_search_steps: int = chains_module.DEFAULT_MAX_SEARCH_STEPS,
     rank: str = RANK_HOPS,
+    hold_count: Optional[int] = None,
+    longevity_base: str = RANK_HOPS,
 ) -> ProfitChainResult:
     """Recompute N-port profit cycles for `world_id` from its current
     world-model state.
@@ -131,8 +137,15 @@ def recompute(
     execute-floor constant without one of them failing its own pin.
 
     `rank` selects the post-search order: ``RANK_HOPS`` (default, canon
-    discovery) or ``RANK_YIELD`` (earn / CLI). Finder output is hop-ranked;
-    yield re-ranks without changing the search itself.
+    discovery), ``RANK_YIELD`` (earn / CLI), or ``RANK_LONGEVITY`` (H2
+    depletion down-rank). Finder output is hop-ranked; yield/longevity
+    re-rank without changing the search itself.
+
+    Longevity ranking needs a positive ``hold_count`` plus world-model port
+    ``amount`` fields. When evidence is incomplete, fail closed: keep the
+    ``longevity_base`` order (``RANK_HOPS`` or ``RANK_YIELD``) and do **not**
+    invent remaining-trades. ``longevity_base`` is ignored for non-longevity
+    ranks.
     """
     if rank not in _RANK_VALUES:
         raise ValueError(
@@ -180,6 +193,14 @@ def recompute(
 
     if rank == RANK_YIELD:
         found = chains_module.rank_chains_by_yield(found)
+    elif rank == RANK_LONGEVITY:
+        found = _rank_found_by_longevity(
+            found,
+            world_id,
+            state_dir=state_dir,
+            hold_count=hold_count,
+            longevity_base=longevity_base,
+        )
 
     return ProfitChainResult(
         world_id=world_id,
@@ -187,4 +208,69 @@ def recompute(
         reason=None,
         adapter_note=adapter_note,
         search_note=search_note,
+    )
+
+
+def _rank_found_by_longevity(
+    found: list,
+    world_id: str,
+    *,
+    state_dir,
+    hold_count: Optional[int],
+    longevity_base: str,
+) -> list:
+    """Apply ``rank_chains_by_longevity`` or fall back to base rank.
+
+    Product wire for the previously test-only longevity helper (canon
+    port-economics H2 — ranking / coaching, never autonomous rotation).
+    """
+    base = longevity_base if longevity_base in (RANK_HOPS, RANK_YIELD) else RANK_HOPS
+    if base == RANK_YIELD:
+        ordered = chains_module.rank_chains_by_yield(found)
+        base_rank_name = "yield"
+    else:
+        ordered = list(found)  # finder already hop-ranked
+        base_rank_name = "discovery"
+
+    if isinstance(hold_count, bool) or not isinstance(hold_count, int) or hold_count <= 0:
+        return ordered
+
+    try:
+        from tw2002_aiclient.chain_depletion import (
+            chain_identity_key,
+            ports_commodity_maps_from_records,
+            predict_remaining_trades,
+        )
+    except Exception:  # noqa: BLE001 — ranking must not raise
+        return ordered
+
+    try:
+        recs = world_model.query(
+            world_id, lambda s: bool(s.get("port")), state_dir=state_dir
+        )
+        ports_by_sector = ports_commodity_maps_from_records(recs)
+    except Exception:  # noqa: BLE001
+        return ordered
+    if not ports_by_sector:
+        return ordered
+
+    remaining_by_key: dict = {}
+    for chain in ordered:
+        key = chain_identity_key(chain)
+        if key is None:
+            continue
+        remaining = predict_remaining_trades(
+            chain,
+            hold_count=hold_count,
+            ports_by_sector=ports_by_sector,
+        )
+        if remaining is None:
+            continue
+        remaining_by_key[key] = remaining
+
+    if not remaining_by_key:
+        return ordered
+
+    return chains_module.rank_chains_by_longevity(
+        ordered, remaining_by_key, base_rank=base_rank_name
     )
