@@ -57,22 +57,29 @@ without a ruling.
    recurse on port neighbors; backtrack to nearest ancestor port with open siblings; do not use
    Map-fill densest-reachable recovery while an ancestor still has open siblings) may be drafted and
    reviewed as canon.
-2. Implementation / CLI / panel wiring stays a **follow-on build WO** after this canon draft is
-   reviewed — this Pending does not authorize inventing depth/turn constants in code.
+2. **Planner + CLI/daemon arming is LIVE on tip** (`plan_chain_hunt` / `INTENT_CHAIN_HUNT` /
+   `tw explore start --intent chain_hunt` with **required** caller-supplied
+   `--exhaust-depth` / `--turn-budget` — PR `#640` / `#641`). Play E stays 2-wide; Chain-hunt is
+   deliberately not on the panel cycle ([exploration-policy](/strategy/exploration-policy.md)
+   Schema · Code divergence closed 2026-08-10). This Pending does **not** authorize inventing
+   built-in depth/turn **defaults** in code — omit-until-ruled; fail closed if the caller omits
+   the required flags (already tip behavior).
 3. Map-fill G1 nearest-first behavior remains correct for Map-fill; Chain-hunt must not silently
    reuse that pick as if it were chain-aware.
 
-**Needs human ruling before build:**
-- **Sibling-exhaust depth limit** — max recursion / anchor-stack depth (or equivalent) per armed
-  Chain-hunt run before the intent must halt or explicitly fall back.
-- **Turn-budget cap** — max turns (or hop proposals) per armed Chain-hunt run, acknowledging the
-  ~2× hop-cost tradeoff vs Map-fill.
+**Needs human ruling before shipping defaults (not before arming):**
+- **Sibling-exhaust depth default** — optional built-in max recursion / anchor-stack depth when the
+  operator does not pass `--exhaust-depth` (today: no default; flag required).
+- **Turn-budget default** — optional built-in max turns / hop proposals when `--turn-budget` is
+  omitted (today: no default; flag required), acknowledging the ~2× hop-cost tradeoff vs Map-fill.
 
-**Status:** Pending — numerics human-gated; mechanism canon in exploration-policy (this WO).
+**Status:** Pending — **numeric defaults only** remain human-gated; mechanism canon + tip wiring
+shipped (exploration-policy · `#640`/`#641`). Do not re-open as "Chain-hunt CLI unbuilt."
 
 **Refs:** `workorders/WO-CANON-DRAFT-CHAIN-MAXIMIZING-EXPLORE-STRATEGY.md` ·
+`workorders/WO-CANON-FIX-DECISIONS-CHAIN-HUNT-WIRED-TIP-TRUE.md` ·
 `canon/strategy/exploration-policy.md` § Chain-hunt · `canon/strategy/trade-loops.md` cross-link ·
-origin Max sector-5/6/7/8 walkthrough 2026-08-09.
+origin Max sector-5/6/7/8 walkthrough 2026-08-09 · tip `explore.py` / `session/cli.py`.
 
 ### PENDING-AFFORDABILITY-EXPLORE-WEIGHT-DEFINITION — credits-cross-cost explore nudge (2026-08-09)
 
