@@ -202,10 +202,10 @@ tw rule …                                    # draft / approve path (see tw ru
 # a human reviews and approves before anything the App plays back can ever fire
 ```
 
-# Implementation status (tip `13153a6` · live `./tw --help` / `build_parser()`)
+# Implementation status (tip `f14cc30` · live `./tw --help` / `build_parser()`)
 
-**LIVE `tw` verbs today** (re-verified 2026-08-09 against tip `build_parser()` choices):
-`attach`, `chain`, `chains`, `coach`, `do`, `ensure`, `explore`, `history`, `log`/`trail`,
+**LIVE `tw` verbs today** (re-verified 2026-08-10 against tip `build_parser()` choices):
+`attach`, `chain`, `chains`, `coach`, `do`, `ensure`, `explore`, `frames`, `history`, `log`/`trail`,
 `loops`, `menumap`, `mine`/`patterns`, `pairs`, `planet-colonization`, `players`, `port-floor`,
 `probe`, `read`, `record`, `reflex`, `report`, `rule`, `screen`, `send`, `servers`, `skill`,
 `status`, `stop`, `teach`, `watch`.
@@ -275,8 +275,10 @@ block when answering "what can I run right now?"
 
 1. **Catalog vs tip help (WO-ESCALATE-CLI-VERBS Option B).** Catalog rows for teach / App-drive /
    HOLD verbs are marked **TARGET** (or WIRE-ONLY / RETIRED) so they cannot be read as shipped
-   `tw` subcommands. Tip `13153a6` LIVE set is listed in Implementation status — honesty gate:
-   never claim a HOLD or unported verb is runnable.
+   `tw` subcommands. Tip `f14cc30` LIVE set is listed in Implementation status — honesty gate:
+   never claim a HOLD or unported verb is runnable. (`frames` was catalog-LIVE + wired after
+   #642 / `f3b2f33` but omitted from the enumerated LIVE list until
+   `WO-CANON-FIX-CLI-VERBS-FRAMES-LIVE-LIST` — closed.)
 
 2. **Citations historically pointed at `twclient/cli.py`.** Authoritative tip parser is
    `tw2002_aiclient/session/cli.py` (ADR-001 relocate). Archive paths remain port-source for verbs
