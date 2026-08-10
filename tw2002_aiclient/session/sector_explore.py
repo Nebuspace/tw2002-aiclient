@@ -441,9 +441,10 @@ def _handle_encounter(
         return HALT_FIGHT_NO_KEY, 0
     if not _fight_key_permitted(decision.key, decision.reason or ""):
         return HALT_FIGHT_FORBIDDEN_KEY, 0
-    _reason, _elapsed, confirmed = _settle.send_and_confirm(
+    _reason, _elapsed, confirmed = _settle.send_and_confirm_for(
         session,
         decision.key,
+        profile="stable_idle",
         enter=True,
         timeout_s=timeout_s,
         debounce_ms=debounce_ms,
@@ -882,9 +883,10 @@ class ExploreRunner:
         # spending 924 credits. `send_and_confirm` makes `enter` explicit
         # precisely so the caller decides per prompt-shape; taking its default
         # was the bug.
-        _reason, _elapsed, confirmed = _settle.send_and_confirm(
+        _reason, _elapsed, confirmed = _settle.send_and_confirm_for(
             self._session,
             letter,
+            profile="warp_unstable",
             confirm_prompt=None,
             enter=False,
             timeout_s=self._timeout_s,
@@ -892,7 +894,7 @@ class ExploreRunner:
             # WO-FIX-EXPLORE-PORT-DOCK-CONFIRM-FAILED: docking paints a large
             # commerce screen with the same mid-paint unstable-idle shape as
             # nav warps (live joes_tavern confirm_failed on Fuel Ore qty).
-            retry_unstable_idle=True,
+            # Profile warp_unstable carries retry_unstable_idle=True.
         )
         rows = self._session.render()
         return (
@@ -990,15 +992,15 @@ class ExploreRunner:
             ):
                 return halt, sends
 
-            _reason, _elapsed, confirmed = _settle.send_and_confirm(
+            _reason, _elapsed, confirmed = _settle.send_and_confirm_for(
                 self._session,
                 "0",
+                profile="warp_unstable",
                 confirm_prompt=_PORT_QUANTITY_OR_COMMAND_PATTERN,
                 enter=True,
                 timeout_s=self._timeout_s,
                 debounce_ms=self._debounce_ms,
                 match_scope=_gather_match_scope(self._session),
-                retry_unstable_idle=True,
             )
             sends += 1
             if not confirmed:
@@ -1178,9 +1180,10 @@ class ExploreRunner:
                     pending_hop_target = None
                     is_avoid = is_avoid_danger_warp(full_text)
                     answer = "N" if is_avoid else "Y"
-                    _reason, _elapsed, confirmed = _settle.send_and_confirm(
+                    _reason, _elapsed, confirmed = _settle.send_and_confirm_for(
                         self._session,
                         answer,
+                        profile="stable_idle",
                         confirm_prompt=None,
                         enter=False,
                         timeout_s=self._timeout_s,
@@ -1539,9 +1542,10 @@ class ExploreRunner:
                     stop_requested=stop.is_set(),
                     next_sector=int(target),
                 )
-                _reason, _elapsed, _confirmed = _settle.send_and_confirm(
+                _reason, _elapsed, _confirmed = _settle.send_and_confirm_for(
                     self._session,
                     str(target),
+                    profile="warp_unstable",
                     confirm_prompt=None,
                     enter=True,
                     timeout_s=self._timeout_s,
@@ -1551,7 +1555,7 @@ class ExploreRunner:
                     # the animation is confirm_failed even though the hop
                     # completes (live Cartogra 2026-08-01, after
                     # WO-EXPLORE-MIDWARP-WAIT unblocked sector_display).
-                    retry_unstable_idle=True,
+                    # Profile warp_unstable carries retry_unstable_idle=True.
                 )
                 sends += 1
                 turns -= 1

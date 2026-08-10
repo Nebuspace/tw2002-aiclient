@@ -713,9 +713,10 @@ class _ReplayPort:
         that only ever matched a BODY line can no longer be confirmed, so
         that step times out and the run halts ``confirm_failed``. A missed
         confirm, never a wrong one."""
-        reason, _elapsed, confirmed = _settle.send_and_confirm(
+        reason, _elapsed, confirmed = _settle.send_and_confirm_for(
             self._session,
             keystrokes,
+            profile="positive_shape" if wait_prompt else "stable_idle",
             confirm_prompt=wait_prompt,
             enter=True,
             timeout_s=self._timeout_s,
