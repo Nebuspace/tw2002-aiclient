@@ -11,7 +11,7 @@ hands the keyboard back, "raising a clear escalation signal"
 (`canon/architecture/control-and-escalation.md` "Escalate-on-Unknown").
 This module composes the human-facing half of that signal: the banner
 that says *why* the run halted, who holds the keyboard now, and which
-three teach moves are available right there at the halt.
+wired teach moves (Analyze / Record) are available right there at the halt.
 
 # The reason is a TYPED CODE, never free text
 
@@ -300,7 +300,8 @@ ATTACH_AFFORDANCE = "press ^A to take the keyboard"
 # Band 3. Teach moves that actually bind on tip: Analyze + Record.
 # ``T)assign`` was retired from this line after calm ``T`` became Trade Loop
 # (WO-EXPLORE-TRADE-MODE-SPLIT) — advertising Assign-Trigger on ``T`` was a
-# lie. Assign-Trigger module/handler remain; re-key is a separate WO.
+# lie. Assign-Trigger module/handler remain for non-calm callers; hub
+# 2026-08-06 (WO-BUILD-ASSIGN-TRIGGER-REKEY) ruled no replacement calm letter.
 # Labels only for wired moves — PWO-066+/067/069 own the wires.
 TEACH_LINE = "teach:  A)nalyze  R)ecord"
 
