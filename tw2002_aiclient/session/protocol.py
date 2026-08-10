@@ -409,6 +409,13 @@ def _status_response(session, server):
     guardian = getattr(server, "guardian", None)
     if guardian is not None and getattr(guardian, "reconnect_exhausted", False):
         g_reason = {"code": "reconnect_exhausted"}
+        # WO-CLEANUP-GUARDIAN-RECONNECT-DIAGNOSTICS-UNWIRED: the sticky code
+        # alone does not say *why* the burst failed; last_reconnect_error is
+        # already a closed-vocabulary / type-name string (LoginError /
+        # OSError / guardian_tick_error:Type) — safe on the status wire.
+        err = getattr(guardian, "last_reconnect_error", None)
+        if isinstance(err, str) and err:
+            g_reason["detail"] = err
         if intervention is None:
             intervention = {"needs_attention": True, "reasons": [g_reason]}
         else:
@@ -423,6 +430,19 @@ def _status_response(session, server):
                 }
     if intervention is not None:
         resp["intervention"] = intervention
+    # WO-CLEANUP-GUARDIAN-RECONNECT-DIAGNOSTICS-UNWIRED: diagnostics for the
+    # D9 guardian. Present whenever a SessionGuardian is attached (daemon
+    # always attaches one); omitted on test doubles with no guardian so the
+    # field stays additive. count / last_error were recorded but unwired;
+    # reconnect_exhausted already rode intervention — this block is the
+    # durable place operators/spectators can read both without a halt.
+    if guardian is not None:
+        last_err = getattr(guardian, "last_reconnect_error", None)
+        resp["reconnect"] = {
+            "count": int(getattr(guardian, "reconnect_count", 0) or 0),
+            "exhausted": bool(getattr(guardian, "reconnect_exhausted", False)),
+            "last_error": last_err if isinstance(last_err, str) else None,
+        }
     if lock is not None:
         mode = getattr(lock, "mode", None)
         if isinstance(mode, str):
