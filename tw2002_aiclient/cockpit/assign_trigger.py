@@ -1,16 +1,17 @@
 """Assign-Trigger scaffold — WO-P5-068.
 
-``T`` in the Play cockpit binds the current screen to a macro stub: a
-draft ``when(screen_match + guards) → do(macro)`` rule that the human
-can refine and approve in a later WO (069/070 family).
+Builds an inert draft ``when(screen_match + guards) → do(macro)`` stub the
+human can refine and approve later (069/070 family). Calm Play ``T`` is
+**Trade Loop Chain** (``trade_loop_toggle``) — this module is **not** bound
+to calm ``T`` (hub 2026-08-06 · WO-BUILD-ASSIGN-TRIGGER-REKEY;
+WO-CLEANUP-ASSIGN-TRIGGER-DOCSTRING-T-STALE). Callers are non-calm /
+programmatic (``app.py`` ``assign_trigger`` action, draft-approve).
 
 # What this is
 
-Canon (``canon/surfaces/mode-line-and-teach-controls.md`` §T ~67-70):
-
-    T — Assign-Trigger.  Bind a screen-match + guards to a recorded macro,
-    producing a proposed rule (``when(screen_match + guards) → do(macro)``).
-    Assigning a trigger drafts the rule; it does not arm it to fire.
+Canon (``canon/surfaces/mode-line-and-teach-controls.md``): Assign-Trigger
+remains a tip module for non-calm callers; calm ``T`` is Trade Loop; STOP
+teach line is ``A)nalyze  R)ecord`` only (no false ``T)assign``).
 
 This module owns the SCAFFOLD half — the ``when + guards`` schema factory
 and an in-memory stub store.  The full rule engine (``do(macro)``
