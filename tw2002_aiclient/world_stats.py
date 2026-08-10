@@ -293,6 +293,7 @@ class WorldStats:
             from tw2002_aiclient.formations import (
                 formations_from_sectors,
                 panel_items_from_catalog,
+                recommend_genesis,
                 write_membership,
             )
 
@@ -310,7 +311,7 @@ class WorldStats:
         self._dead_end_seen = True
         # Same observation feeds the formations panel / GOALS count / coach.
         self._formations_count = len(catalog.formations)
-        self._genesis_count = len(catalog.genesis_candidates)
+        self._genesis_count = len(recommend_genesis(catalog))
         self._formations_panel = {"items": panel_items_from_catalog(catalog)}
         self._formations_seen = True
         # Canon writeback: stamp formation_membership on mapped sectors.

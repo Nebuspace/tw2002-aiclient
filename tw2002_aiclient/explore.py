@@ -592,7 +592,8 @@ def plan_find_formations(
     Genesis — locate/recommend only.
 
     ``catalog_provider`` is the TW-16 formation catalogue seam: a callable
-    ``(world_id, *, state_dir) -> object`` exposing ``.genesis_candidates``.
+    ``(world_id, *, state_dir) -> object`` exposing ``.genesis_candidates``
+    (read via :func:`tw2002_aiclient.formations.recommend_genesis`).
     It mirrors ``screens.py``'s ``status_provider`` contract — **defaults to
     ``None``, and with no provider set this returns an honest
     ``mode="unavailable"`` rather than inventing content.**
@@ -627,8 +628,10 @@ def plan_find_formations(
             mode="unavailable",
         )
 
+    from tw2002_aiclient.formations import recommend_genesis
+
     cat = catalog_provider(world_id, state_dir=state_dir)
-    candidates = cat.genesis_candidates
+    candidates = recommend_genesis(cat)
     if not candidates:
         hunt = plan_map_fill(
             world_id,

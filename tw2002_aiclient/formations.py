@@ -513,9 +513,10 @@ def write_membership(
 def recommend_genesis(catalog: FormationsCatalog) -> list[Formation]:
     """Operator-facing shortlist — identical to ``catalog.genesis_candidates``.
 
-    Product explore / world_stats already consume ``catalog.genesis_candidates``
-    directly; this alias exists for call sites that want the free-function shape.
-    Not a missing bridge.
+    Product callers: ``explore.plan_find_formations`` and
+    ``world_stats`` genesis_count refresh (WO-BUILD-FORMATIONS-GENESIS-RECOMMEND-VERIFY).
+    The catalogue seam still exposes ``.genesis_candidates`` for provider doubles;
+    product paths go through this free function so the shortlist has a live import.
     """
     return list(catalog.genesis_candidates)
 
