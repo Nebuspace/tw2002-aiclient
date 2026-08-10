@@ -207,18 +207,20 @@ A `[Pause]` interjection absorbed, versus a novel screen surfaced:
 
 # Code Divergence
 
-**(1) Interjection registry — LIVE substrate; callers migrating.** Tip
-(`WO-FIX-SETTLE-DETECTION-INTERJECTION-REGISTRY`):
+**(1) Interjection registry — LIVE; login on tip.** Tip
+(`WO-FIX-SETTLE-DETECTION-INTERJECTION-REGISTRY` + tip-stamp
+`WO-CANON-FIX-SETTLE-DETECTION-INTERJECTION-DIVERGENCE-TIP-TRUE`):
 `tw2002_aiclient/session/interjection_registry.py` is the closed allow-list of absorbable
 nuisance shapes paired with standing safe responses (`pause_key` → blank Enter,
 `show_todays_log` → `N`, `clear_avoids` → `N`/`Y` from profile, `inactivity_warning` → blank
 Enter, `been_on_today` → blank Enter). `session/login.py`'s nuisance branch consults
-`match_interjection()` so the absorbed-vs-surfaced boundary is defined in one place.
-Classification anchors stay in `classify.py` (`pause_key` for `[Pause]`/`-- More --`/
-`press … key`). Residuals (incremental, not a missing substrate): other drivers that still
-inline their own dismiss (if any) should migrate onto the registry; `watch.py` still
-disclaims auto-handling by design (streams every settle-edge as-is — absorption is a
-control-side responsibility of whoever is driving).
+`match_interjection()` so the absorbed-vs-surfaced boundary is defined in one place —
+login no longer re-exports or inlines the regex pins. Classification anchors stay in
+`classify.py` (`pause_key` for `[Pause]`/`-- More --`/`press … key`). Product grep
+(re-verified 2026-08-10): no remaining driver inlines those nuisance dismiss patterns
+outside the registry. `watch.py` still disclaims auto-handling by design (streams every
+settle-edge as-is — absorption is a control-side responsibility of whoever is driving,
+not a missing migrate).
 
 **(2) Per-screen settle profiles — registry LIVE; product callers on tip.**
 Tip (WO-CLEANUP-SETTLE-PROFILES-DECLARATIVE-TABLE +
