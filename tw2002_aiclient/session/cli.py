@@ -1013,17 +1013,28 @@ def cmd_chains(args):
     from tw2002_aiclient import chain_search, chain_search_view
     from tw2002_aiclient.trade_chain_plan import plan_from_chain
 
-    # Earn / credit-doubling surface: yield-first so short high cr/turn
-    # pairs surface above long thin hop-count winners (discovery modal
-    # keeps default hop-count ranking via recompute's RANK_HOPS).
-    result = chain_search.recompute(args.world_id, rank=chain_search.RANK_YIELD)
-
     from tw2002_aiclient.chains import hold_scaled_cr_per_turn
 
     # Optional offline hold scale (daemon-free CLI has no live ship status).
     holds = getattr(args, "holds", None)
     if isinstance(holds, bool) or not isinstance(holds, int) or holds <= 0:
         holds = None
+
+    # Earn / credit-doubling surface: yield-first so short high cr/turn
+    # pairs surface above long thin hop-count winners (discovery modal
+    # keeps default hop-count ranking via recompute's RANK_HOPS). When
+    # --holds is known, apply H2 longevity down-rank on that yield base
+    # (WO-BUILD-CHAIN-LONGEVITY-RANK-WIRE) — fail-closed to yield-only if
+    # port amounts are incomplete.
+    if holds is not None:
+        result = chain_search.recompute(
+            args.world_id,
+            rank=chain_search.RANK_LONGEVITY,
+            hold_count=holds,
+            longevity_base=chain_search.RANK_YIELD,
+        )
+    else:
+        result = chain_search.recompute(args.world_id, rank=chain_search.RANK_YIELD)
 
     if getattr(args, "json", False):
         # Additive fingerprint per row: same identity ``tw chain start
