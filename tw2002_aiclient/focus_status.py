@@ -19,7 +19,10 @@ from __future__ import annotations
 __all__ = ["FocusScalars", "recommend_focus_candidates", "FOCUS_KEY"]
 
 from tw2002_aiclient.chains import is_executable_chain
-from tw2002_aiclient.chain_status import ChainScalars
+from tw2002_aiclient.chain_status import (
+    EXPLORE_APPETITE_RAISED_KEY,
+    ChainScalars,
+)
 from tw2002_aiclient.game_data_stats import HOLD_PRICE_LABEL_KEY, SHIP_PRICES_COUNT_KEY
 from tw2002_aiclient.priority_engine import hops_of_path, upgrade_gate_while_chaining
 
@@ -33,6 +36,12 @@ EXPLORE_BASELINE_EV = 0.01
 WEIGHT_TURNS_CREDITS = 100
 WEIGHT_SHIP_PRICES = 80
 WEIGHT_HOLD_PRICE = 75
+# Depletion-driven explore appetite (canon exploration-policy /
+# priority-engine explore_appetite_raised consumer). Below catalog #4/#5
+# (80/75) so unmet dock quotes still dominate; above the EV sort band so
+# a depleting executable chain yields a louder explore suggestion.
+# Affordability OR-cause stays Pending — do not invent credit thresholds.
+WEIGHT_EXPLORE_APPETITE = 70
 
 
 def _sector_from_status(status: object) -> object | None:
@@ -239,6 +248,15 @@ def recommend_focus_candidates(
             elif not hold_met:
                 overlay_weight = WEIGHT_HOLD_PRICE
                 upgrade_gate = "hold price unknown"
+
+        # WO-BUILD-EXPLORE-APPETITE-FOCUS-CONSUMER: depletion (and later
+        # affordability) share explore_appetite_raised — raise explore
+        # overlay when the flag is set. Never invents the flag.
+        if status_d.get(EXPLORE_APPETITE_RAISED_KEY) is True:
+            if overlay_weight is None:
+                overlay_weight = WEIGHT_EXPLORE_APPETITE
+            else:
+                overlay_weight = max(overlay_weight, WEIGHT_EXPLORE_APPETITE)
 
         chain = _priced_chain(chain_scalars, status_d)
         has_executable = False

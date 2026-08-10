@@ -272,3 +272,49 @@ def test_focus_hops_return_from_warp_graph_via_compute_return_path():
     upgrade = next(c for c in cands if c["kind"] == "upgrade")
     assert upgrade["gated"] is False
     assert upgrade.get("travel_cost_rt") == 4  # (2+2)*1
+
+def test_focus_explore_appetite_raised_beats_executable_chain():
+    """WO-BUILD-EXPLORE-APPETITE-FOCUS-CONSUMER — depletion flag boosts explore.
+
+    When status carries explore_appetite_raised=True and an executable chain
+    exists with all catalog prereqs met, explore must still appear and sort
+    above run_chain via the overlay weight (not invent a second appetite bit).
+    """
+    from tw2002_aiclient.focus_status import WEIGHT_EXPLORE_APPETITE
+
+    cs = ChainScalars()
+    cs.update(_result(chains_=[_chain([50, 51, 52, 50], cr_per_turn=80.0)]))
+    status = {
+        "hud": {"sector": {"value": 51, "age_s": 0.0}},
+        "stardock_found": True,
+        "stardock_sectors": [1],
+        "ship_prices_count": 2,
+        "hold_price_label": "1468 cr/hold",
+        "explore_appetite_raised": True,
+        **_VITALS,
+    }
+    cands = recommend_focus_candidates(status, chain_scalars=cs)
+    assert cands[0]["kind"] == "explore"
+    assert cands[0].get("priority_weight") == WEIGHT_EXPLORE_APPETITE
+    assert any(c["kind"] == "run_chain" for c in cands)
+
+
+def test_focus_explore_appetite_absent_does_not_invent_boost():
+    """Omit-until-known: missing/false flag must not invent explore overlay."""
+    cs = ChainScalars()
+    cs.update(_result(chains_=[_chain([50, 51, 52, 50], cr_per_turn=80.0)]))
+    status = {
+        "hud": {"sector": {"value": 51, "age_s": 0.0}},
+        "stardock_found": True,
+        "stardock_sectors": [1],
+        "ship_prices_count": 2,
+        "hold_price_label": "1468 cr/hold",
+        **_VITALS,
+    }
+    cands = recommend_focus_candidates(status, chain_scalars=cs)
+    assert cands[0]["kind"] == "run_chain"
+    explore = next((c for c in cands if c["kind"] == "explore"), None)
+    # With prereqs met + executable chain, explore may be omitted entirely.
+    if explore is not None:
+        assert explore.get("priority_weight") is None
+
