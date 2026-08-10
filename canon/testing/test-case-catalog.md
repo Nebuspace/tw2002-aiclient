@@ -4,33 +4,34 @@ title: Test Case Catalog
 description: Inventory of every pytest case in tw2002-aiclient with a one-sentence blurb of what each asserts.
 resource: repo://tw2002-aiclient/tests
 tags: [testing, catalog, pytest, inventory]
-timestamp: 2026-08-09T20:55:00Z
+timestamp: 2026-08-10T04:12:00Z
 ---
 
 # Test Case Catalog
 
 Module inventory and per-test blurbs below may lag tip (many modules were added after the
-2026-07-25 full pass). **Headline counts re-verified 2026-08-09 against tip** via actual
+2026-07-25 full pass). **Headline counts re-verified 2026-08-10 against tip** (analyze BANK-DELETE; collect 7490) via actual
 collection (not AST estimate):
 
 ```text
 .venv/bin/python -m pytest -n0 --collect-only
-→ 7480 tests collected   # footer is authoritative
+→ 7490 tests collected   # footer is authoritative
 .venv/bin/python -m pytest -n0 --collect-only -q
-→ 311 lines of form tests/test_*.py: <n>  (sum == 7480)
+→ 313 lines of form tests/test_*.py: <n>  (sum == 7490)
 ```
 
-`tests/test_*.py` on disk: **313** files. Default collect excludes the 2 BANKED ignores below
-(313 − 2 = 311 active modules).
+`tests/test_*.py` on disk: **314** files. Default collect excludes the 1 BANKED ignore below
+(314 − 1 = 313 active modules).
 
 Each module *should* link to a per-module OKF case file with per-test blurbs (regeneration of
 every case file is a separate catalog-refresh WO — this pass only corrects the stale headline
 counts).
 
-- **Active (default run):** 311 modules · **7480** tests
-- **BANKED (ignored via `pytest.ini`):** 2 modules — `tests/test_analyze.py`,
-  `tests/test_crawl_start_protocol.py` (still `import twclient`; collection ERRORs if un-ignored;
-  not included in the 7480)
+- **Active (default run):** 313 modules · **7490** tests
+- **BANKED (ignored via `pytest.ini`):** 1 module — `tests/test_crawl_start_protocol.py`
+  (still `import twclient`; daemon crawl verb unwired; collection ERRORs if un-ignored;
+  not included in the 7490). `tests/test_analyze.py` was **BANK-DELETED**
+  (WO-CLEANUP-BANK-DELETE-TWCLIENT-ANALYZE-SUITE).
 
 > **Blurb rule:** first complete sentence of the function docstring when it is well-formed (ends with `.!?`, no truncated backticks); otherwise readable English derived from the `test_*` name. No runtime behavior is invented beyond name/docstring.
 
@@ -163,7 +164,7 @@ counts).
 |--------|-------|--------|-------|
 | [`test_actor_attribution.py`](/testing/cases/test-actor-attribution.md) | 9 | active | Actor attribution at the send choke point (WO-P2-025). |
 | [`test_aiclient_adapters.py`](/testing/cases/test-aiclient-adapters.md) | 24 | **REMOVED** | Deleted from tip (was BANKED archive/rehab inventory). Historical case file only. Original blurb: Unit tests for tw2002_aiclient ensure/autopilot adapters (mocked daemon). |
-| [`test_analyze.py`](/testing/cases/test-analyze.md) | 5 | BANKED | TW-12 session-retro analyzer tests — no network, synthetic ledger only. |
+| [`test_analyze.py`](/testing/cases/test-analyze.md) | 5 | **BANK-DELETED** | Removed from tip (archive `twclient.analyze`); historical case file only. Twins: `tw mine` / `tw teach analyze` / `tw report`. |
 | [`test_chains.py`](/testing/cases/test-chains.md) | 6 | active | TW-21 longest-profit-chain algorithm tests (synthetic graphs). |
 | [`test_classify.py`](/testing/cases/test-classify.md) | 53 | active | Screen classifier tests: synthetic anchor coverage + a real captured TWGS screen fixture (see tests/fixtures/, captured live (historical DoD; see session-engine / screen-understanding)). |
 | [`test_clean_preempt.py`](/testing/cases/test-clean-preempt.md) | 11 | **REMOVED** | Deleted from tip (was BANKED archive/rehab inventory). Historical case file only. Original blurb: Clean preempt. |

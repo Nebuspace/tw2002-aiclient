@@ -11,7 +11,7 @@ timestamp: 2026-08-09T09:15:46Z
 
 _WO-FA3 trade_adapter tests -- synthetic world-model fixtures only, no live daemon, no network (same tmp_path/state_dir convention as test_world_model.py)._
 
-> **Active** on tip (default pytest collect). Historical case file once marked BANKED; tip module is collected — not among the tip **2** BANKED ignores (`test_analyze.py`, `test_crawl_start_protocol.py`). Headline inventory: **7437** tests · **308** active modules.
+> **Active** on tip (default pytest collect). Historical case file once marked BANKED; tip module is collected — not among the tip **1** BANKED ignore (`test_crawl_start_protocol.py`; `test_analyze.py` BANK-DELETED). Headline inventory: **7437** tests · **308** active modules.
 | Test | Blurb |
 |------|-------|
 | `test_direction_compatible_pair_hand_computed_margins_and_best_chain` | Direction compatible pair hand computed margins and best chain. |

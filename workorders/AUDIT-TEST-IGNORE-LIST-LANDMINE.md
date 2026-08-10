@@ -34,7 +34,7 @@ Correction vs CC **04:16:48Z** (“37/39 hard-fail on twclient”): **36** hard-
 | `tests/test_world_identity.py` | **COLLECT_OK** | `world_identity` (sole coverage) | **UNIGNORE-NOW** (this WO) · **HIGH landmine** while ignored |
 | `tests/test_aiclient_adapters.py` | **STALE_API** (`_launcher_selectable`) | `screens` / launcher adapters | **BANK-REHAB** `WO-TEST-AICLIENT-ADAPTERS-REHAB` |
 | `tests/test_aiclient_play_panels.py` | TWCLIENT | archive play panels | **BANK-DELETE** or KEEP until panel port |
-| `tests/test_analyze.py` | TWCLIENT | AI analyze (not live-drive) | KEEP-IGNORED / BANK when teacher ported |
+| `tests/test_analyze.py` | TWCLIENT | archive session-retro analyze | **BANK-DELETE** (WO-CLEANUP-BANK-DELETE-TWCLIENT-ANALYZE-SUITE) — tip twins: `tw mine` / `tw teach analyze` / `tw report` |
 | `tests/test_clean_preempt.py` | TWCLIENT | control preempt | BANK-REHAB if fence still product-critical |
 | `tests/test_cli_crawl_wiring.py` | TWCLIENT | crawl CLI verb (G2 unwired) | **KEEP-IGNORED** (pytest.ini already documents) |
 | `tests/test_cli_haggle_wiring.py` | TWCLIENT | haggle CLI | KEEP-IGNORED until haggle verb |

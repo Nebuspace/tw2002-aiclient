@@ -11,7 +11,7 @@ timestamp: 2026-08-09T09:15:46Z
 
 _Cipher security gate (2026-07-20): sentinel-password redaction proof across the TW-02 `send_and_confirm` login/password swap (a2e99f6)._
 
-> **Active** on tip (default pytest collect). Historical case file once marked BANKED; tip module is collected — not among the tip **2** BANKED ignores (`test_analyze.py`, `test_crawl_start_protocol.py`). Headline inventory: **7437** tests · **308** active modules.
+> **Active** on tip (default pytest collect). Historical case file once marked BANKED; tip module is collected — not among the tip **1** BANKED ignore (`test_crawl_start_protocol.py`; `test_analyze.py` BANK-DELETED). Headline inventory: **7437** tests · **308** active modules.
 | Test | Blurb |
 |------|-------|
 | `test_green_sentinel_absent_from_log_transcript_with_redaction_on` | Green sentinel absent from log transcript with redaction on. |

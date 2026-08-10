@@ -11,7 +11,7 @@ timestamp: 2026-08-09T09:15:46Z
 
 _World identity._
 
-> **Active** on tip (default pytest collect). Historical case file once marked BANKED; tip module is collected — not among the tip **2** BANKED ignores (`test_analyze.py`, `test_crawl_start_protocol.py`). Headline inventory: **7437** tests · **308** active modules.
+> **Active** on tip (default pytest collect). Historical case file once marked BANKED; tip module is collected — not among the tip **1** BANKED ignore (`test_crawl_start_protocol.py`; `test_analyze.py` BANK-DELETED). Headline inventory: **7437** tests · **308** active modules.
 | Test | Blurb |
 |------|-------|
 | `test_world_id_is_deterministic_for_the_same_inputs` | World id is deterministic for the same inputs. |

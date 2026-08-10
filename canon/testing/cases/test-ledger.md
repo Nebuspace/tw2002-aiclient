@@ -11,7 +11,7 @@ timestamp: 2026-08-09T09:15:46Z
 
 _Trace-Ledger tests (DESIGN-v2 §3 v2.1 item 11a, C1) -- no network, tmp_path only, never touches the real state/ directory._
 
-> **Active** on tip (default pytest collect). Historical case file once marked BANKED; tip module is collected — not among the tip **2** BANKED ignores (`test_analyze.py`, `test_crawl_start_protocol.py`). Headline inventory: **7437** tests · **308** active modules.
+> **Active** on tip (default pytest collect). Historical case file once marked BANKED; tip module is collected — not among the tip **1** BANKED ignore (`test_crawl_start_protocol.py`; `test_analyze.py` BANK-DELETED). Headline inventory: **7437** tests · **308** active modules.
 | Test | Blurb |
 |------|-------|
 | `test_snapshot_state_merges_state_parser_plus_local_cargo_extraction` | Snapshot state merges state parser plus local cargo extraction. |

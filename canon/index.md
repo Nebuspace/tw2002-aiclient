@@ -70,7 +70,7 @@ marked _(planned)_ are not yet written; entries marked ✅ written exist on disk
 
 # Testing
 
-* [Test Case Catalog](/testing/test-case-catalog.md) — Inventory of every pytest case in tw2002-aiclient (**7437** tests · **308** active modules on tip 2026-08-09; **2** BANKED ignores): one-sentence blurb per test, grouped by subsystem; REMOVED/BANKED annotated. — ✅ written
+* [Test Case Catalog](/testing/test-case-catalog.md) — Inventory of every pytest case in tw2002-aiclient (**7490** tests · **313** active modules on tip 2026-08-10; **1** BANKED ignore): one-sentence blurb per test, grouped by subsystem; REMOVED/BANKED annotated. — ✅ written
 
 
 # Research / Interop evidence
