@@ -517,3 +517,71 @@ def test_status_surfaces_reconnect_exhausted_intervention(tmp_path):
         for r in resp["intervention"]["reasons"]
     ]
     assert "reconnect_exhausted" in codes
+    # WO-CLEANUP-GUARDIAN-RECONNECT-DIAGNOSTICS-UNWIRED
+    reason = next(
+        r for r in resp["intervention"]["reasons"]
+        if isinstance(r, dict) and r.get("code") == "reconnect_exhausted"
+    )
+    assert reason.get("detail") == g.last_reconnect_error
+    assert "reconnect" in resp
+    assert resp["reconnect"]["exhausted"] is True
+    assert resp["reconnect"]["count"] == 0
+    assert resp["reconnect"]["last_error"] == g.last_reconnect_error
+    assert "down" in resp["reconnect"]["last_error"]
+
+
+def test_status_reconnect_diagnostics_when_guardian_idle(tmp_path):
+    """Guardian attached but not exhausted still emits status["reconnect"]."""
+    from tw2002_aiclient.session import protocol
+    from tw2002_aiclient.session.session import Session
+
+    class _Server:
+        watch_hub = None
+        control_lock = None
+        autoloop = None
+        trade_chain = None
+        guardian = None
+
+    session = Session("127.0.0.1", 65000, "sg-idle", str(tmp_path))
+    session.conn.connected = True
+    g = _guardian(
+        ReconnectFakeSession(
+            steps=[{"screen": "unused", "expect": None}],
+            reconnect_outcomes=[],
+        ),
+        max_reconnect_attempts=2,
+    )
+    g.reconnect_count = 3
+    g.last_reconnect_error = None
+    g.reconnect_exhausted = False
+    server = _Server()
+    server.guardian = g
+    resp = protocol._status_response(session, server)
+    assert "intervention" not in resp or "reconnect_exhausted" not in [
+        (r.get("code") if isinstance(r, dict) else r)
+        for r in (resp.get("intervention") or {}).get("reasons") or []
+    ]
+    assert resp["reconnect"] == {
+        "count": 3,
+        "exhausted": False,
+        "last_error": None,
+    }
+
+
+def test_status_omits_reconnect_when_no_guardian(tmp_path):
+    """Additive: test doubles without guardian keep the key absent."""
+    from tw2002_aiclient.session import protocol
+    from tw2002_aiclient.session.session import Session
+
+    class _Server:
+        watch_hub = None
+        control_lock = None
+        autoloop = None
+        trade_chain = None
+        guardian = None
+
+    session = Session("127.0.0.1", 65000, "sg-none", str(tmp_path))
+    session.conn.connected = True
+    resp = protocol._status_response(session, _Server())
+    assert "reconnect" not in resp
+

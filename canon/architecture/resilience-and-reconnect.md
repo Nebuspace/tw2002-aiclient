@@ -172,11 +172,14 @@ target="main_command")` with the saved credential through the redacted secret pa
 that fires **only** when the current screen classifies as `main_command`. Those match the reborn
 target. (Archive port-source: `twclient/guardian.py`.)
 
-**Reconnect × control (shipped WO-FIX-SESSIONGUARDIAN-EXHAUSTED-RECONNECT-SILENT).** When
-reconnect + replay exhausts all attempts, the guardian sets a sticky `reconnect_exhausted` flag that
-suppresses further auto-retry (no silent forever-poll), records `last_reconnect_error`, and the
-`status` verb surfaces typed reason `reconnect_exhausted` on `status["intervention"]` for the STOP
-banner. There is **no** auto-`MODE_HUMAN` — keyboard escalate stays operator-driven (attach / teach
+**Reconnect × control (shipped WO-FIX-SESSIONGUARDIAN-EXHAUSTED-RECONNECT-SILENT +
+WO-CLEANUP-GUARDIAN-RECONNECT-DIAGNOSTICS-UNWIRED).** When reconnect + replay exhausts all attempts,
+the guardian sets a sticky `reconnect_exhausted` flag that suppresses further auto-retry (no silent
+forever-poll), records `last_reconnect_error`, and the `status` verb surfaces typed reason
+`reconnect_exhausted` on `status["intervention"]` for the STOP banner (with `detail` set to that
+last error when present). Independently, whenever a SessionGuardian is attached, `status["reconnect"]`
+carries `{count, exhausted, last_error}` so the accumulator and last failure are readable without a
+halt. There is **no** auto-`MODE_HUMAN` — keyboard escalate stays operator-driven (attach / teach
 moves). The sticky clears on a successful D9 reconnect, on `clear_reconnect_exhausted()`, or when a
 later tick observes the socket already connected again (manual ensure).
 

@@ -522,6 +522,14 @@ def test_the_status_answer_carries_only_bounded_fields(cfg, tmp_path, run_dir):
                               disarmed); host/port are the session reconnect
                               endpoint when armed. Never RX-buffer content,
                               never a password.
+      `reconnect`             WO-CLEANUP-GUARDIAN-RECONNECT-DIAGNOSTICS-
+                              UNWIRED: `{count, exhausted, last_error}` when
+                              a SessionGuardian is attached (live `twd`
+                              always attaches one). Omitted by this file's
+                              `_Daemon` harness (no guardian). last_error is
+                              closed-vocabulary / type-name (or null), never
+                              RX-buffer / never a password. Asserted in
+                              `tests/test_guardian.py`, not this exact-set.
       `hud`                   WO-HUD-STATUS-BRIDGE: always-present five-cell
                               `{value, age_s}` payload. Bounded by
                               CONSTRUCTION, not by filtering — every value is
