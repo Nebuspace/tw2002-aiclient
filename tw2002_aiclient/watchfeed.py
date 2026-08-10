@@ -134,8 +134,9 @@ class WatchFeed:
     returns, before the subscribe line is ever written; the fresh
     transport is closed and no subscribe line is sent (Mack
     adversarial-review fix, HIGH, WO-P4-050). General concurrent
-    ``start()``/``stop()`` beyond that one race remains undocumented
-    territory.
+    ``start()``/``stop()`` beyond that one race is out of contract —
+    see canon/surfaces/spectate-and-attach.md Code Divergence
+    (``WatchFeed`` lifecycle — single-owner-thread).
     """
 
     def __init__(self, *, connect_fn=None, run_dir=None):

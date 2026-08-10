@@ -350,6 +350,8 @@ senders remain `{app, human}` only. Resolution recorded in
 [Control & Escalation](/architecture/control-and-escalation.md)
 (`AUDIT-CANON-DRAFT-AI-PILOT-RETIREMENT-STALE`).
 
+**`WatchFeed` lifecycle — single-owner-thread contract (tip).** Product play-shell subscribe (`tw2002_aiclient/watchfeed.py`, PWO-050) assumes one owning thread calls `start()` / `stop()` for a given instance (the play-shell flow that owns it). Only `snapshot()` is proven thread-safe against the background reader; concurrent `start()` / `stop()` from multiple threads are neither guarded nor tested and must not be relied on. One race *is* handled: a `stop()` that lands while `start()` is mid-`connect_fn()` is honored after connect returns — the fresh transport is closed and no subscribe line is written (Mack adversarial-review · WO-P4-050). That mid-connect honor is not a general multi-thread lifecycle guarantee.
+
 # Citations
 
 [1] Archive `twclient/spectate_app.py` / `spectate_layout.py` — deleted by rebirth; historical dual-hat viewer + META-command panel (do not cite as tip)
