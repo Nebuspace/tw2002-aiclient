@@ -38,6 +38,13 @@ A/R/T teach-loop mechanics, the STOP banner's own `teach:` line, and the confirm
   `A)nalyze  R)ecord` only (no false `T)assign` after calm `T` → Trade Loop) —
   a different surface, not this calm band.
 
+> **Superseded developer-band citation (historical):** the pre-trainer calm/STOP teach
+> triad was spelled `A)nalyze  R)ecord  T)rigger`. That string is retained here so the
+> developer-band register stays grounded in canon; it is **not** tip STOP chrome.
+> Current STOP teach line is Analyze/Record only (`teach:  A)nalyze  R)ecord` / tip
+> `A)nalyze  R)ecord`) — no false third `T)rigger` / `T)assign` after calm `T` → Trade Loop
+> (WO-BUILD-ASSIGN-TRIGGER-REKEY).
+
 **Tip token SSOT (do not let chrome and handlers drift).** Calm-band spellings and the keys that
 offer them are owned by tip modules — import the `*_TOKEN` / help strings; do not re-type labels:
 
