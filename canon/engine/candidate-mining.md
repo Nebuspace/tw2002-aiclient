@@ -179,15 +179,15 @@ not in the miner's own safety:
   worth codifying," not "AI decisions worth codifying." Archive `autonomy-loop.md` framing is
   do-not-revive.
 
-- **The counter-canon mining must never become is live in a sibling autopilot.** Mining itself correctly
-  ranks-to-propose, but the same cr/turn scorer is, in the current codebase, also wired into a
-  per-cycle live action-picker: `priority_engine.recommend_actions()` used as a keystroke driver and
-  `autopilot.select()` choosing an action each tick (with an `EXPLORE_BASELINE_EV` "never idle"
-  floor). That per-cycle EV-select over whatever screen is showing is exactly the self-driving shape
-  candidate-mining is defined *against*, and it diverges from stop-on-unknown. Recorded here as the
-  boundary this concept must not be read as blessing; the runtime fix lives in
-  [app-autopilot-model](/architecture/app-autopilot-model.md) and [priority-engine](/engine/priority-engine.md),
-  which own that divergence — mining's contribution is to keep its own output a *proposal*, never a tick.
+- **The counter-canon per-cycle EV action-picker — tip closed (do-not-revive).** Mining itself
+  correctly ranks-to-propose and never scores a live keystroke. The retired shape — a sibling
+  `autopilot.select()` / `priority_engine.recommend_actions()` per-cycle EV driver with an
+  `EXPLORE_BASELINE_EV` "never idle" floor — is **gone from tip**: no `autopilot.py` outside
+  `archive/`, and `recommend_actions()` ranks/coaches only (see
+  [app-autopilot-model](/architecture/app-autopilot-model.md),
+  [priority-engine](/engine/priority-engine.md),
+  [toll-and-defense](/strategy/toll-and-defense.md)). Recorded here as the boundary mining must
+  not be read as blessing; mining's contribution stays a *proposal*, never a tick.
 
 - **The 78-turn auto-haggle misfire is the concrete scar behind the loop STOP-guard.** A verified
   live run let a deterministic resolver keep answering offer prompts far past sense (~78 turns) — the
