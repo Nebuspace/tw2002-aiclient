@@ -4,6 +4,9 @@ WO-CANON-FIX-MODE-LINE-SHIP-UPGRADE-ENGINE-FALSE-CLAIM / #653 lesson:
 Mode-line + auto-fire comments once asserted absence while
 ``ship_upgrade_decision.py`` was already tip-live. Keep "gates nothing" for
 missing EXECUTE / offer-kind wiring — not for a missing engine.
+
+Forbidden phrases are assembled at runtime so this file itself does not
+reintroduce the stale claim as a ``git grep`` hit.
 """
 
 from __future__ import annotations
@@ -12,13 +15,17 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 
-# Exact absence phrasing from the pre-#654 / stale cycle-49 claim.
-_FORBIDDEN = (
-    "No ship-upgrade engine or offer kind exists",
-    "no ship-upgrade engine or offer kind exists",
-    "no ship-upgrade engine exists",
-    "adapter verb for a ship-upgrade engine exists yet",
-)
+
+def _forbidden() -> tuple[str, ...]:
+    # Assemble so product ``git grep`` for the stale claim stays empty.
+    engine = "ship-upgrade " + "engine"
+    return (
+        "No " + engine + " or offer kind exists",
+        "no " + engine + " or offer kind exists",
+        "no " + engine + " exists",
+        "adapter verb for a " + engine + " exists yet",
+    )
+
 
 _SURFACES = (
     ROOT / "canon" / "surfaces" / "mode-line-and-teach-controls.md",
@@ -35,7 +42,7 @@ def test_ship_upgrade_decision_module_exists() -> None:
 def test_surfaces_do_not_claim_engine_absent() -> None:
     for path in _SURFACES:
         text = path.read_text(encoding="utf-8")
-        for phrase in _FORBIDDEN:
+        for phrase in _forbidden():
             assert phrase not in text, f"{path.relative_to(ROOT)} still has {phrase!r}"
 
 
