@@ -274,8 +274,9 @@ def hold_scaled_cr_per_turn(cr_per_turn: object, hold_count: object) -> Optional
 def hold_count_from_status(status: object) -> Optional[int]:
     """Positive live hold count from a status mapping, or None.
 
-    Prefers ``upgrade_player.current_holds``, then ``current_ship.total_holds``
-    — same keys ``chain_status.ChainScalars`` already reads for depletion.
+    Prefers ``upgrade_player.current_holds``, then ``current_ship.total_holds``.
+    Product callers: ``chain_status.ChainScalars`` depletion (via
+    ``_hold_count_from_status``) and ``screens.py`` chain-panel hold scaling.
     """
     if not isinstance(status, Mapping):
         return None
