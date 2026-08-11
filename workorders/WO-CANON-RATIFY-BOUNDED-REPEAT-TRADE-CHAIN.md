@@ -1,5 +1,7 @@
 # WO-CANON-RATIFY-BOUNDED-REPEAT-TRADE-CHAIN
 
+**Status:** OPEN on PR #674 (`wo/CANON-RATIFY-BOUNDED-REPEAT-TRADE-CHAIN`) — docs landed; awaiting hub verify + merge.
+
 **Goal:** Close WO-ESCALATE-BOUNDED-REPEAT-TRADE-CHAIN-UNDOCUMENTED-AUTOMATION per Max's direct ruling (relayed via orchestrator, 2026-08-10): **Ratify as intentional.** This matches his prior carte-blanche for tw2002 autonomous trade+chain-seeking on disposable/sacrificial accounts (2026-07-21 witness carte-blanche).
 
 **Scope:** `canon/strategy/trade-loops.md`, `canon/DECISIONS.md`, and (if warranted) a new/amended ADR — implementer's call on ADR vs DECISIONS-only given `bounded_repeat_trade_chain_driver.py`'s actual shape. Also, per the 2026-08-10T19:18:00Z scope amendment (cycle-52 audit independently re-found the same gap with more scope than originally named):

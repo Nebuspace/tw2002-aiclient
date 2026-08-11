@@ -581,6 +581,9 @@ PR #637 → main @ `22dfe7f3` (`tw2002_aiclient/bounded_repeat_trade_chain_drive
 CLI `--pass-count` / `--profit-target`; sacrificial-only when `pass_count > 1`).
 Supersedes `WO-CANON-DRAFT-BOUNDED-REPEAT-CONTRACT-SCOPE`. Default arm remains one-pass;
 multi-pass is explicit. N→M gap closed → ADR-003 **Folded into trade-loops.md**.
+The 2026-08-10 **Ratify as intentional** ruling is canon-honesty follow-through
+(`DECISION-BOUNDED-REPEAT-TRADE-CHAIN-RATIFY` / this WO), not a re-open of those
+scoping questions.
 
 **Refs:** `canon/ADR/003-discovered-chain-approve-scaffold.md` § Status ·
 `canon/ADR/index.md` · `workorders/WO-ADR-003-RESIDUAL-7-8-TRACKING.md` ·
@@ -594,3 +597,35 @@ multi-pass is explicit. N→M gap closed → ADR-003 **Folded into trade-loops.m
 
 **Refs:** `canon/strategy/port-economics.md` § Floor-price hypothesis / `port_floor_capture.py` ·
 `workorders/WO-PORT-FLOOR-CAPTURE-HOLD-RATIONALE.md`.
+
+## DECISION-BOUNDED-REPEAT-TRADE-CHAIN-RATIFY (2026-08-10)
+
+**Status:** Ruled (Max, via orchestrator 2026-08-10) — **Ratify as intentional.**
+The sacrificial bounded-repeat trade-chain already shipped on main (#637,
+`22dfe7f3`) is authorized as designed, not an undocumented automation leak.
+
+**Reasoning.** Max's 2026-08-10 ruling matches the prior 2026-07-21 witness
+carte-blanche for autonomous trade + chain-seeking on disposable / sacrificial
+accounts. It ratifies the mechanism **as shipped** and invents no new
+authorization:
+
+- `pass_count > 1` is `is_crawl_sacrificial`-only (`TradeChainRunner.start`
+  raises `bounded_repeat_requires_sacrificial` otherwise).
+- Default arm remains one pass (omit `--pass-count`).
+- Multi-pass is explicit (`--pass-count` / `pass_count`).
+- Caps: `DEFAULT_MAX_PASSES=10`, `PASSES_HARD_CEILING=50`.
+- Before every re-arm, the X5 stop-loss floor and optional profit-target are
+  re-checked; whichever of (pass-count, floor, profit_target) trips first
+  stops.
+- Same fingerprint only — no finder-initiated launch, no next-chain rotation.
+- Do not widen to non-sacrificial / real player accounts without a new
+  design ruling.
+
+Item 8 of `DECISION-ADR-003-RESIDUAL-7-8` remains **Accepted — shipped**; this
+entry is the canon-honesty follow-through, not a re-open of those scoping
+questions.
+
+**Refs:** orchestrator.md 2026-08-10T19:14:00Z / 2026-08-10T19:18:00Z ·
+`workorders/WO-CANON-RATIFY-BOUNDED-REPEAT-TRADE-CHAIN.md` · PR #674 ·
+`tw2002_aiclient/bounded_repeat_trade_chain_driver.py` ·
+`canon/strategy/trade-loops.md` · ADR-003 (Folded).
