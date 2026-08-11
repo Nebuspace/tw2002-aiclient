@@ -145,6 +145,7 @@ counts).
 | [`test_protocol_haggle.py`](/testing/cases/test-protocol-haggle.md) | 6 | **REMOVED** | Deleted from tip (was BANKED archive/rehab inventory). Historical case file only. Original blurb: Protocol haggle. |
 | [`test_trade_adapter.py`](/testing/cases/test-trade-adapter.md) | 28 | active | WO-FA3 trade_adapter tests -- synthetic world-model fixtures only, no live daemon, no network (same tmp_path/state_dir convention as test_world_model.py). |
 | [`test_trade_driver.py`](/testing/cases/test-trade-driver.md) | 16 | active | tests/test_trade_driver.py -- WO-FA4 trade_driver.py: the money-path chain-execution driver. |
+| `test_bounded_repeat_trade_chain_driver.py` | 8 | active | `tests/test_bounded_repeat_trade_chain_driver.py` (228 lines) — clamp / one-pass preserve / re-arm to ceiling / X5 floor + profit-target halt before re-arm / no re-arm on incomplete pass. Case-file blurbs are a separate catalog-refresh WO. |
 
 ## Session / Protocol / Transcript
 

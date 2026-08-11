@@ -169,9 +169,13 @@ layer feeds ordering into this loop; this loop owns the STOP.
 - **`trade_driver.py` guarded-chain divergence resolved by ADR-003.**
   `TradeChainRunner` is now the only product owner of `run_chain()`: it
   requires an exact human-confirmed fingerprint, re-runs discovery before the
-  lock, executes one pass, and surfaces each `ChainHold` as a terminal STOP.
-  Fresh-render, arm/abort, floor, reconciliation, and Paladin checks remain at
-  every send. No finder-initiated launch or replacement-chain rotation exists.
+  lock, and surfaces each `ChainHold` as a terminal STOP. Default remains one
+  pass. Sacrificial-only bounded-repeat (`pass_count > 1`, gated by
+  `is_crawl_sacrificial`) may re-arm the *same* fingerprint up to the shipped
+  ceiling; that is not finder-initiated launch and not replacement-chain
+  rotation. Fresh-render, arm/abort, floor, reconciliation, and Paladin
+  checks remain at every send. No finder-initiated launch or replacement-chain
+  rotation exists.
 - **`session/autoloop.py` is the background AUTO-LOOP driver** (ported from archive
   `twclient/loop_player.py`). It runs a saved skill as a bounded (hard cycle cap), human-armed,
   pause/stop-able background thread that halts on replay divergence (`surprise`) and on a

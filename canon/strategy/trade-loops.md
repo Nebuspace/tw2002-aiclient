@@ -150,7 +150,7 @@ the two populations remain visibly distinct. The operator may select one exact
 discovered fingerprint and review its semantic scaffold — start anchor,
 ordered sector ring, and ordered commodity buy/sell blocks; quantities remain
 explicitly unresolved. Accepting that scaffold still sends nothing. A separate
-default-deny `y/N` arm names the exact route, one-pass bound, cash floor, and
+default-deny `y/N` arm names the exact route, default one-pass bound, cash floor, and
 turn reserve.
 
 **Tip module — `trade_chain_plan.py`.** Pure preview/identity builder for that
@@ -167,11 +167,17 @@ only until the human confirms; daemon re-resolution and sends live under
 The daemon then recomputes discovery from the current world model and requires
 one exact fingerprint match. Missing, changed, partial, truncated, or ambiguous
 identity refuses before the control lock or first send; the current best chain
-is never substituted. One confirmed arm runs one pass. Live quantities come
+is never substituted. Default: one confirmed arm runs one pass. On a
+`crawl_sacrificial` profile only, an explicit `--pass-count` / `pass_count`
+may re-arm that **same** fingerprint up to a shipped ceiling
+(`DEFAULT_MAX_PASSES=10`, `PASSES_HARD_CEILING=50`); each re-arm re-checks the
+X5 stop-loss floor and optional profit-target, and whichever of (pass-count,
+floor, profit_target) trips first stops. Multi-pass is never implicit and
+never available on a real player account. Live quantities come
 only from freshly rendered quantity prompts and are bounded under the confirmed
 floors; every send re-checks arm, abort, screen shape, and PALADIN. Depletion,
 loss, floor breach, stranded cargo, or an unrecognized screen STOPs and hands
-control back — never rotates.
+control back — never rotates to a different chain.
 
 # Examples
 
@@ -218,13 +224,14 @@ trade path are recorded here explicitly:
   decision).
 - **`trade_driver.run_chain()` divergence resolved by ADR-003.** The guarded
   driver now runs only behind `TradeChainRunner`: exact human-confirmed
-  fingerprint, daemon re-resolution, one-pass bound, exclusive App hold, and
-  stop/disarm checked at every send. It retains fresh-render gates, PALADIN,
-  floors, reconciliation, and typed STOPs; there is no finder-initiated launch
-  or next-chain rotation.
+  fingerprint, daemon re-resolution, default one-pass bound, exclusive App hold, and
+  stop/disarm checked at every send. Sacrificial-only bounded-repeat
+  (`pass_count > 1`, `is_crawl_sacrificial`) may re-arm the same fingerprint;
+  it is not a finder-initiated launch and not next-chain rotation. It retains
+  fresh-render gates, PALADIN, floors, reconciliation, and typed STOPs.
 - **Depletion escalation resolved by ADR-003.** `ChainHold("depleted:...")`
   and `realized_margin_below_floor:...` become the terminal guarded-run report
-  and STOP banner. The one-pass runner releases the keyboard and has no branch
+  and STOP banner. The runner releases the keyboard and has no branch
   that selects or starts another chain.
 - **§22 / TW-23 autonomous-trainer capstone re-scope.** The original §22/TW-23 "autonomous trainer"
   epic assumed the app keeps driving and selecting actions on its own. Under the reborn vision that
