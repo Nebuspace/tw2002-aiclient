@@ -1,6 +1,6 @@
 # WO-CLEANUP-RUFF-F401-F841-BATCH
 
-**Status:** DONE (pending merge)  
+**Status:** DONE · PR #528 · unused-import batch on tip  
 **Priority:** LOW (Cycle-34 / Cycle-43 queue · ungated)  
 **Depends-on:** none
 

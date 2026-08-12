@@ -1,5 +1,7 @@
 # WO-BUILD-DEV-DRIVE-CLI-SURFACE
 
+**Status:** DONE · PR #680 · tip `b64096c` — `--sender {app,dev}` on tw do/send
+
 **Goal:** make the sacrificial `sender=dev` gate reachable from `tw do` /
 `tw send` (not only REPL `Session.send`).
 

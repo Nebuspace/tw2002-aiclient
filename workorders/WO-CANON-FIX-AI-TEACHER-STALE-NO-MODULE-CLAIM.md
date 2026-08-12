@@ -1,6 +1,6 @@
 # WO-CANON-FIX-AI-TEACHER-STALE-NO-MODULE-CLAIM
 
-**Status:** IN FLIGHT · Cursor · `wo/CANON-FIX-AI-TEACHER-STALE-NO-MODULE-CLAIM`
+**Status:** DONE · PR #662 · tip ai-teacher.md names write_draft / tw teach analyze
 **Seat:** `impl-aiclient-cursor`
 **Depends:** `main` ≥ `0fa9c855` (#661 MERGED)
 **Refs:** cycle-49 audit · `canon/engine/ai-teacher.md` Code divergence ·

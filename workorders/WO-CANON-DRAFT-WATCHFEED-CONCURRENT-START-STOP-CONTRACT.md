@@ -1,6 +1,6 @@
 # WO-CANON-DRAFT-WATCHFEED-CONCURRENT-START-STOP-CONTRACT
 
-**Status:** IN FLIGHT · Cursor · `wo/CANON-DRAFT-WATCHFEED-CONCURRENT-START-STOP-CONTRACT`
+**Status:** DONE · PR #663 · WatchFeed concurrent start/stop contract on tip
 **Seat:** `impl-aiclient-cursor`
 **Depends:** `main` ≥ `e019ae7b` (#662 MERGED)
 **Refs:** cycle-49 audit · `tw2002_aiclient/watchfeed.py` lifecycle docstring ·

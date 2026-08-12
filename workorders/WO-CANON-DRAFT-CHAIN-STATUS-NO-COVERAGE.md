@@ -1,6 +1,6 @@
 # WO-CANON-DRAFT-CHAIN-STATUS-NO-COVERAGE
 
-**Status:** OPEN (in PR)  
+**Status:** DONE · tip coaching-engine.md cites chain_status.py ChainScalars LIVE
 **Priority:** MED  
 **Claimed-by:** impl-aiclient-cursor  
 **Source:** Cycle-36 / queue-aiclient.md

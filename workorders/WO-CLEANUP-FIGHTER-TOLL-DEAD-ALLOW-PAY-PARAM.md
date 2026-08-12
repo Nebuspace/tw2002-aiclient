@@ -1,6 +1,6 @@
 # WO-CLEANUP-FIGHTER-TOLL-DEAD-ALLOW-PAY-PARAM — drop dead allow_pay kwarg
 
-**Status:** IN FLIGHT · Cursor · `wo/CLEANUP-FIGHTER-TOLL-DEAD-ALLOW-PAY-PARAM`  
+**Status:** DONE · tip fighter_toll_policy has no allow_pay parameter
 **Posted:** queue-aiclient.md (ungated MED)
 
 ## Goal

@@ -1,6 +1,6 @@
 # WO-CANON-DRAFT-AUTOPILOT-RETIRED-STALE-CLUSTER — trade-loops residual
 
-**Status:** IN FLIGHT · Cursor · `wo/CANON-DRAFT-AUTOPILOT-RETIRED-STALE-CLUSTER`
+**Status:** DONE · PR #681 · tip `61a60e9` (trade-loops residual; siblings already do-not-revive)
 
 ## Goal
 
