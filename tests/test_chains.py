@@ -26,14 +26,18 @@ from tw2002_aiclient.chains import (
     MIN_CHAIN_LINKS_TO_EXECUTE,
     ProfitChain,
     TradeHop,
-    find_profit_chains,
     find_profit_chains_with_note,
     is_executable_chain,
 )
 
 
+def _chains(hops, **kwargs):
+    chains, _note = find_profit_chains_with_note(hops, **kwargs)
+    return chains
+
+
 def _top_chain(hops, **kwargs):
-    chains = find_profit_chains(hops, **kwargs)
+    chains, _note = find_profit_chains_with_note(hops, **kwargs)
     return chains[0] if chains else None
 
 
@@ -63,7 +67,7 @@ def test_negative_hop_breaks_triangle():
         TradeHop(3, 1, "Fuel Ore", 20, 1),
     ]
     assert _top_chain(hops) is None
-    assert find_profit_chains(hops) == []
+    assert _chains(hops) == []
 
 
 def test_longer_cycle_preferred_over_shorter_higher_cprt():
@@ -144,7 +148,7 @@ def test_tie_on_length_higher_cr_per_turn_wins():
 
 def test_empty_hops():
     assert _top_chain([]) is None
-    assert find_profit_chains([]) == []
+    assert _chains([]) == []
 
 
 def test_no_cycle_yields_no_chain():
@@ -154,7 +158,7 @@ def test_no_cycle_yields_no_chain():
         TradeHop(2, 3, "B", 10, 1),
     ]
     assert _top_chain(hops) is None
-    assert find_profit_chains(hops) == []
+    assert _chains(hops) == []
 
 
 def test_rotation_dedups_the_same_cycle_regardless_of_start_node():
@@ -165,7 +169,7 @@ def test_rotation_dedups_the_same_cycle_regardless_of_start_node():
         TradeHop(6, 7, "B", 10, 1),
         TradeHop(7, 5, "C", 10, 1),
     ]
-    chains = find_profit_chains(hops)
+    chains = _chains(hops)
     assert len(chains) == 1
     assert chains[0].sectors == (5, 6, 7, 5)
 
@@ -178,7 +182,7 @@ def test_max_hops_bounds_the_search():
         TradeHop(3, 4, "C", 10, 1),
         TradeHop(4, 1, "D", 10, 1),
     ]
-    assert find_profit_chains(hops, max_hops=3) == []
+    assert _chains(hops, max_hops=3) == []
     chain = _top_chain(hops, max_hops=4)
     assert chain is not None
     assert len(chain.hops) == 4
@@ -391,8 +395,6 @@ def test_differential_iterative_matches_legacy_recursive_on_small_graphs():
             f"case {i} diverged from the legacy oracle (n={n} min_hops={min_hops} "
             f"max_hops={max_hops})\nhops={hops}\nexpected={expected}\nactual={actual}"
         )
-        # The plain (no-note) entry point must agree with the honest one.
-        assert find_profit_chains(hops, min_hops=min_hops, max_hops=max_hops) == expected
 
 
 # WO-CHAIN-K9-BUDGET-ASSERT: a wall-clock comparison is a property of the
@@ -520,17 +522,6 @@ def test_max_search_steps_actually_bounds_the_search():
     assert chains == []
     assert note is not None
     assert "exhausted at 5 DFS steps" in note
-
-
-def test_find_profit_chains_and_with_note_agree_on_a_truncated_search():
-    """Pins 'one internal search routine feeds both, they cannot drift':
-    on a search that DOES truncate, the note-less entry point's result
-    must be identical to the honest entry point's chain list."""
-    hops = _complete(9)
-    plain = find_profit_chains(hops)
-    with_note, note = find_profit_chains_with_note(hops)
-    assert note is not None
-    assert plain == with_note
 
 
 def test_default_max_search_steps_is_configurable_not_magic():

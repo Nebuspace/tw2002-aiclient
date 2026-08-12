@@ -1005,7 +1005,7 @@ def cmd_chains(args):
     Sibling of ``pairs`` above, not a replacement: ``pairs`` lists 2-port
     class-derived loops (``chain_detect``); this lists general N-port cycles
     found by real DFS over priced hops (``chain_search`` ->
-    ``trade_adapter.build_trade_hops`` -> ``chains.find_profit_chains``).
+    ``trade_adapter.build_trade_hops`` -> ``chains.find_profit_chains_with_note``).
     A pair is the cheapest shape; a chain is the general one.
 
     Daemon-free, world-model-scoped read, same family as ``loops``/``pairs``:
