@@ -65,6 +65,15 @@ INTERJECTION_IDS = frozenset(
 )
 
 
+def _hit(id: str, response: str) -> InterjectionHit:
+    """Build a hit; refuse ids outside the closed allow-list (drift guard)."""
+    if id not in INTERJECTION_IDS:
+        raise AssertionError(
+            f"interjection id {id!r} is not in INTERJECTION_IDS"
+        )
+    return InterjectionHit(id, response)
+
+
 def match_interjection(
     cls: str,
     text: str,
@@ -86,10 +95,10 @@ def match_interjection(
 
     if cls == "pause_key":
         # Blank Enter dismisses ``[Pause]`` / ``-- More --`` / press-any-key.
-        return InterjectionHit("pause_key", "")
+        return _hit("pause_key", "")
 
     if BEEN_ON_TODAY_RE.search(prompt):
-        return InterjectionHit("been_on_today", "")
+        return _hit("been_on_today", "")
 
     if cls == "unknown" and not prompt.strip():
         for line in reversed(text.splitlines()):
@@ -97,19 +106,19 @@ def match_interjection(
             if not stripped:
                 continue
             if BEEN_ON_TODAY_RE.search(stripped):
-                return InterjectionHit("been_on_today", "")
+                return _hit("been_on_today", "")
             break
 
     # Whole-grid: the log question sits in the BODY above the prompt.
     if SHOW_LOG_RE.search(text):
-        return InterjectionHit("show_todays_log", "N")
+        return _hit("show_todays_log", "N")
 
     # Prompt-or-option-block only — never whole-grid (stale scrollback).
     if CLEAR_AVOIDS_RE.search(prompt) or CLEAR_AVOIDS_RE.search(option_block):
         clear = bool(getattr(profile, "clear_avoids_on_login", False))
-        return InterjectionHit("clear_avoids", "Y" if clear else "N")
+        return _hit("clear_avoids", "Y" if clear else "N")
 
     if INACTIVITY_RE.search(prompt) or INACTIVITY_RE.search(option_block):
-        return InterjectionHit("inactivity_warning", "")
+        return _hit("inactivity_warning", "")
 
     return None
