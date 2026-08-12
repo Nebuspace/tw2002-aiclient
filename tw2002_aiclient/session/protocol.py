@@ -1357,6 +1357,37 @@ def _optional_stamp(args: object, key: str) -> str | None:
         return raw.strip()
     return None
 
+
+# WO-BUILD-DEV-DRIVE-CLI-SURFACE: do/send may attribute app (default) or
+# sacrificial dev. Human keystrokes stay on attach/send_raw — never via these
+# verbs. AI is never a legal drive-verb sender.
+_CLI_DRIVE_SENDERS = frozenset({"app", "dev"})
+
+
+def _drive_sender(args: object) -> tuple[str, dict | None]:
+    """Resolve ``args['sender']`` for do/send. Default ``app``.
+
+    Returns ``(sender, None)`` or ``(raw, error_response)`` when the value is
+    not in ``_CLI_DRIVE_SENDERS``. Sacrificial refuse for ``dev`` stays in
+    ``Session._require_dev_sender_authorized`` (raised as ValueError on send).
+    """
+    raw: object = "app"
+    if isinstance(args, dict) and "sender" in args and args.get("sender") is not None:
+        raw = args.get("sender")
+    if not isinstance(raw, str) or not raw.strip():
+        return "app", {
+            "ok": False,
+            "error": f"invalid_sender:{raw!r}:allowed={sorted(_CLI_DRIVE_SENDERS)}",
+        }
+    sender = raw.strip()
+    if sender not in _CLI_DRIVE_SENDERS:
+        return sender, {
+            "ok": False,
+            "error": f"invalid_sender:{sender!r}:allowed={sorted(_CLI_DRIVE_SENDERS)}",
+        }
+    return sender, None
+
+
 def record_attach_keystroke(server, session, pre_text, input_text, secret) -> None:
     """Route a ``tw attach`` keystroke into the same Trace-Ledger as do/send.
 
@@ -1492,9 +1523,12 @@ def dispatch(session, verb, args, server):
             enter = args.get("enter", True)
             secret = args.get("secret", False)
             wait_prompt = args.get("wait_prompt")
+            sender, sender_err = _drive_sender(args)
+            if sender_err is not None:
+                return sender_err
             try:
                 pre_text = session.render_text(session.render())
-                session.send(text, enter=enter, secret=secret, sender="app")
+                session.send(text, enter=enter, secret=secret, sender=sender)
                 reason, elapsed = session.wait_settle(
                     wait_prompt=wait_prompt,
                     timeout=args.get("timeout", 8.0),
@@ -1504,6 +1538,9 @@ def dispatch(session, verb, args, server):
                 )
             except re.error as e:
                 return {"ok": False, "error": f"bad_wait_prompt_regex:{e}"}
+            except ValueError as e:
+                # sender='dev' refuse / VALID_SENDERS miss from Session.send
+                return {"ok": False, "error": f"sender_refused:{e}"}
             resp = build_response(session, settled_reason=reason, extra={"elapsed": elapsed})
             history_args = {**args, "input": "<redacted>"} if secret else args
             session.record_history(
@@ -1517,7 +1554,7 @@ def dispatch(session, verb, args, server):
                 text,
                 secret=secret,
                 resp=resp,
-                actor="app",
+                actor=sender,
                 interrupted_by_human=_driver_was_fenced(server),
                 rule_id=_optional_stamp(args, "rule_id"),
                 target_player=_optional_stamp(args, "target_player"),
@@ -1535,8 +1572,14 @@ def dispatch(session, verb, args, server):
             text = args.get("input", "")
             enter = args.get("enter", True)
             secret = args.get("secret", False)
+            sender, sender_err = _drive_sender(args)
+            if sender_err is not None:
+                return sender_err
             pre_text = session.render_text(session.render())
-            session.send(text, enter=enter, secret=secret, sender="app")
+            try:
+                session.send(text, enter=enter, secret=secret, sender=sender)
+            except ValueError as e:
+                return {"ok": False, "error": f"sender_refused:{e}"}
             resp = build_response(session)
             history_args = {**args, "input": "<redacted>"} if secret else args
             session.record_history(
@@ -1549,7 +1592,7 @@ def dispatch(session, verb, args, server):
                 text,
                 secret=secret,
                 resp=resp,
-                actor="app",
+                actor=sender,
                 interrupted_by_human=_driver_was_fenced(server),
                 rule_id=_optional_stamp(args, "rule_id"),
                 target_player=_optional_stamp(args, "target_player"),

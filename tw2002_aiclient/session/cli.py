@@ -482,6 +482,7 @@ def cmd_do(args):
             "secret": bool(args.secret),
             "wait_prompt": args.wait_prompt,
             "timeout": timeout,
+            "sender": getattr(args, "sender", "app") or "app",
         },
         timeout=timeout + 5,
         run_dir=run_dir,
@@ -499,6 +500,7 @@ def cmd_send(args):
             "input": args.input,
             "enter": args.enter,
             "secret": bool(args.secret),
+            "sender": getattr(args, "sender", "app") or "app",
         },
         run_dir=run_dir,
     )
@@ -1853,6 +1855,12 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--wait-prompt", default=None, dest="wait_prompt",
                      help="case-sensitive regex; settle waits until prompt matches")
     sp.add_argument("--timeout", type=float, default=8.0, help="settle timeout seconds")
+    sp.add_argument(
+        "--sender",
+        choices=("app", "dev"),
+        default="app",
+        help="send-time actor (default app; dev = sacrificial crawl_sacrificial profile only)",
+    )
     sp.add_argument("--run-dir", default=None, metavar="PATH", dest="run_dir",
                      help="daemon run directory override (default: project-rooted run/)")
     sp.add_argument("--json", action="store_true", help="machine-parseable JSON output")
@@ -1868,6 +1876,12 @@ def build_parser() -> argparse.ArgumentParser:
     sp.set_defaults(enter=True)
     sp.add_argument("--secret", action="store_true",
                      help="password entry -- never persisted to the transcript log")
+    sp.add_argument(
+        "--sender",
+        choices=("app", "dev"),
+        default="app",
+        help="send-time actor (default app; dev = sacrificial crawl_sacrificial profile only)",
+    )
     sp.add_argument("--run-dir", default=None, metavar="PATH", dest="run_dir",
                      help="daemon run directory override (default: project-rooted run/)")
     sp.add_argument("--json", action="store_true", help="machine-parseable JSON output")
