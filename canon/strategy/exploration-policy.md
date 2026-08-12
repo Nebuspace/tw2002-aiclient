@@ -62,7 +62,9 @@ it does **not** reuse Map-fill's global nearest-first frontier pick.
 
 Arming surfaces (tip-true): Play's Explore offer stays **2-wide** —
 `map_fill` / `find_stardock` via `ARMABLE_INTENTS` and the find-StarDock toggle (`#247` /
-WO-RETIRE-CYCLE-EXPLORE-MODE). It is **not** a rotating
+WO-RETIRE-CYCLE-EXPLORE-MODE). Play's confirm-arm site **refuse-gates** at runtime: if the armed
+intent is not in that 2-wide tuple, `app.py` raises `ValueError` (PR `#677` —
+`WO-CLEANUP-ARMABLE-INTENTS-ENFORCEMENT-TIPCHECK`); the set is not documentation-only. It is **not** a rotating
 `off → mapfill → stardock → formations → chainhunt → off` panel cycle. `find_formations` and
 `chain_hunt` are **CLI/daemon-armable and LIVE** (`tw explore start --intent …`; Chain-hunt
 planner + wiring shipped in PR `#640` / `#641`) — they are deliberately **not** on Play's E
