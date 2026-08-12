@@ -181,7 +181,7 @@ def add_players_parsers(sub: argparse._SubParsersAction) -> None:
         dest="game_letter",
         required=True,
         metavar="L",
-        help="single game letter (A–Z)",
+        help="single game letter (A-Z)",
     )
     sp_add.add_argument(
         "--handle",
