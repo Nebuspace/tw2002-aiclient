@@ -39,7 +39,8 @@ a live keystroke, which would recreate the self-driving loop the trace-ledger co
 forbids.
 
 **Delivery surface (as shipped):** CLI verb `tw report` (`tw2002_aiclient/session_report.py`,
-`tw2002_aiclient/session/cli.py: cmd_report`). Daemon-free — reads `state/ledger.jsonl` directly.
+`tw2002_aiclient/session/cli.py: cmd_report`) plus unprompted print on successful `tw stop`
+(non-`--json`; `cmd_stop`). Daemon-free ledger read — `state/ledger.jsonl` directly.
 Cataloged in [CLI Verb Surface](/architecture/cli-verbs.md) under Read-only introspection
 (WO-CANON-FIX-CLI-VERBS-TW-REPORT-MISSING).
 
@@ -78,9 +79,10 @@ equivalent structured payload instead of the plain-text trail.
   and is never called from the dispatch path.
 - Not a replacement for the teach-time human-approval gate ([control-and-escalation](/architecture/control-and-escalation.md)) — post-session accountability and teach-time approval are two
   different invariants that both hold simultaneously, not a trade of one for the other.
-- Not yet an unprompted session-end auto-print. Today's primary surface is the on-demand `tw report`
-  pull; an automatic print/summary at session exit is optional delivery polish, not ruled out but
-  not built.
+- Unprompted session-end auto-print on successful `tw stop` (human-readable
+  mode only; `--json` stays a single JSON object). Today's primary pull surface
+  remains on-demand `tw report`; stop prints the same `format_session_report`
+  digest best-effort and never fails the stop path if the ledger read errors.
 
 # Citations
 
@@ -93,5 +95,5 @@ equivalent structured payload instead of the plain-text trail.
   `interrupted_by_human` consumption note.
 - [coverage-metrics](/engine/coverage-metrics.md) — the sibling consumer counting the same
   `actor=app` rows as a ratio rather than a trail.
-- `tw2002_aiclient/session_report.py`, `tw2002_aiclient/session/cli.py: cmd_report` — the shipped
-  implementation this stub describes honestly (no unbuilt fields invented).
+- `tw2002_aiclient/session_report.py`, `tw2002_aiclient/session/cli.py: cmd_report` /
+  `cmd_stop` — the shipped pull + session-end auto-print surfaces (no unbuilt fields invented).

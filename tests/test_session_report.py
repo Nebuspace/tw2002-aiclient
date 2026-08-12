@@ -105,3 +105,54 @@ def test_report_cli_json(tmp_path: Path, monkeypatch):
     assert payload["ok"] is True
     assert payload["app_actions"][0]["rule_id"] == "cli-rule"
     assert payload["app_actions"][0]["screen"] == "computer"
+
+
+def test_cmd_stop_prints_session_report_after_ok(monkeypatch, tmp_path: Path):
+    """WO-BUILD-SESSION-END-AUTO-REPORT: successful stop auto-prints the digest."""
+    import io
+    import sys
+    from types import SimpleNamespace
+
+    from tw2002_aiclient.session import cli
+
+    ledger = tmp_path / "ledger.jsonl"
+    writer = LedgerWriter(ledger)
+    _row(writer, rule_id="stop-rule", settled_class="command")
+
+    monkeypatch.setattr(cli, "_guard_run_dir_footgun", lambda args: None)
+    monkeypatch.setattr(cli, "_resolve_run_dir", lambda run_dir: tmp_path)
+    monkeypatch.setattr(cli, "daemon_alive", lambda run_dir: True)
+    monkeypatch.setattr(cli, "send_request", lambda *a, **k: {"ok": True})
+    monkeypatch.setattr(cli, "print_response", lambda *a, **k: None)
+    monkeypatch.setattr(
+        "tw2002_aiclient.session_report.DEFAULT_LEDGER_PATH",
+        ledger,
+    )
+
+    buf = io.StringIO()
+    monkeypatch.setattr(sys, "stdout", buf)
+    args = SimpleNamespace(run_dir=None, json=False)
+    assert cli.cmd_stop(args) == 0
+    out = buf.getvalue()
+    assert "stop-rule" in out
+    assert "Post-session" in out or "session" in out.lower()
+
+
+def test_cmd_stop_json_skips_session_report_print(monkeypatch, tmp_path: Path):
+    import io
+    import sys
+    from types import SimpleNamespace
+
+    from tw2002_aiclient.session import cli
+
+    monkeypatch.setattr(cli, "_guard_run_dir_footgun", lambda args: None)
+    monkeypatch.setattr(cli, "_resolve_run_dir", lambda run_dir: tmp_path)
+    monkeypatch.setattr(cli, "daemon_alive", lambda run_dir: True)
+    monkeypatch.setattr(cli, "send_request", lambda *a, **k: {"ok": True})
+    monkeypatch.setattr(cli, "print_response", lambda *a, **k: None)
+
+    buf = io.StringIO()
+    monkeypatch.setattr(sys, "stdout", buf)
+    args = SimpleNamespace(run_dir=None, json=True)
+    assert cli.cmd_stop(args) == 0
+    assert buf.getvalue() == ""
