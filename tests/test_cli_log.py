@@ -99,6 +99,10 @@ def test_parser_shipped_verb_allowlist():
     assert players_next.func is players_cli.cmd_players_next
     players_list = parser.parse_args(["players", "list"])
     assert players_list.func is players_cli.cmd_players_list
+    players_add = parser.parse_args(
+        ["players", "add", "--server", "demo", "--game-letter", "A", "--handle", "Pilot"]
+    )
+    assert players_add.func is players_cli.cmd_players_add
     mine = parser.parse_args(["mine", "--no-propose"])
     patterns = parser.parse_args(["patterns", "--top-k", "1"])
     assert mine.func is mine_cli.cmd_mine
