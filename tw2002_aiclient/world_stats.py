@@ -11,6 +11,12 @@ sector is a real int and the world-model record for that sector carries a
 port, merge ``has_port=True``. Unknown / missing sector / no port observation
 **omits** the key (never invents confirmed-negative ``False``).
 
+``planet_management`` (WO-BUILD-COACH-PLANET-MANAGEMENT-TRIGGER-WIRE) feeds the
+authored ``planet_production`` coach card: when any sector carries the
+``own_planet`` landmark, merge ``planet_management=True``. Empty / failed
+landmark scan **omits** the key (never invents confirmed-negative
+``False``) — same True-or-omit contract as ``has_port`` / StarDock.
+
 ``dead_end_count`` (WO-COACH-DEAD-END-COUNT) counts world-model sectors whose
 ``warps`` list has length exactly 1 (colonization dead-ends — **not**
 menu-map signature dead-ends). Pre-scan **omits**; a completed scan may
@@ -66,6 +72,7 @@ KNOWN_SECTORS_KEY = "known_sectors"
 STARDOCK_SECTORS_KEY = "stardock_sectors"
 STARDOCK_FOUND_KEY = "stardock_found"
 HAS_PORT_KEY = "has_port"
+PLANET_MANAGEMENT_KEY = "planet_management"
 DEAD_END_COUNT_KEY = "dead_end_count"
 FORMATIONS_COUNT_KEY = "formations_count"
 GENESIS_COUNT_KEY = "genesis_count"
@@ -103,6 +110,7 @@ class WorldStats:
         "_stardock_sectors",
         "_stardock_seen",
         "_has_port_seen",
+        "_planet_management_seen",
         "_dead_end_count",
         "_dead_end_seen",
         "_formations_count",
@@ -121,6 +129,7 @@ class WorldStats:
         self._stardock_sectors: list[int] = []
         self._stardock_seen = False
         self._has_port_seen = False
+        self._planet_management_seen = False
         self._dead_end_count: int | None = None
         self._dead_end_seen = False
         self._formations_count: int | None = None
@@ -162,6 +171,7 @@ class WorldStats:
         """
         self._refresh_known_sectors(world_id, state_dir=state_dir)
         self._refresh_stardock(world_id, state_dir=state_dir)
+        self._refresh_planet_management(world_id, state_dir=state_dir)
         self._refresh_dead_ends(world_id, state_dir=state_dir)
         if status is not None:
             self._refresh_has_port(world_id, status, state_dir=state_dir)
@@ -270,6 +280,37 @@ class WorldStats:
         self._stardock_sectors = sectors
         self._stardock_seen = True
 
+    def _refresh_planet_management(
+        self, world_id: object, *, state_dir: object = None
+    ) -> None:
+        """Observe own-planet landmarks for coach ``planet_management``. Never raises.
+
+        True-or-omit: only a completed landmark scan that finds ≥1
+        ``OWN_PLANET_LANDMARK`` sector sets ``_planet_management_seen``. Empty
+        scan clears the flag so merge omits the key (never invents
+        confirmed-negative ``False``). Hostile / raising lookups leave the
+        prior observation untouched — same discipline as StarDock.
+        """
+        try:
+            from tw2002_aiclient import explore as _explore
+            from tw2002_aiclient import world_model as _world_model
+
+            kwargs = {}
+            if state_dir is not None:
+                kwargs["state_dir"] = state_dir
+            raw = _explore.find_landmark_sectors(
+                world_id, _world_model.OWN_PLANET_LANDMARK, **kwargs
+            )
+        except Exception:  # noqa: BLE001
+            return
+        if not isinstance(raw, list):
+            return
+        for item in raw:
+            if isinstance(item, bool) or not isinstance(item, int):
+                return
+        # Completed scan: True only when ≥1 own planet; empty → omit.
+        self._planet_management_seen = len(raw) > 0
+
     def _refresh_dead_ends(
         self, world_id: object, *, state_dir: object = None
     ) -> None:
@@ -372,6 +413,8 @@ class WorldStats:
 
         **``has_port`` is True-or-omit.** Never merges ``False``.
 
+        **``planet_management`` is True-or-omit.** Never merges ``False``.
+
         **``dead_end_count`` / formations:** omitted until a completed scan;
         then non-negative ints (including ``0``) and a panel payload.
         """
@@ -381,6 +424,7 @@ class WorldStats:
             not self._seen
             and not self._stardock_seen
             and not self._has_port_seen
+            and not self._planet_management_seen
             and not self._dead_end_seen
             and not self._formations_seen
             and not self._hops_to_stardock_seen
@@ -397,6 +441,8 @@ class WorldStats:
                 merged[STARDOCK_FOUND_KEY] = True
         if self._has_port_seen and merged.get(HAS_PORT_KEY) is None:
             merged[HAS_PORT_KEY] = True
+        if self._planet_management_seen and merged.get(PLANET_MANAGEMENT_KEY) is None:
+            merged[PLANET_MANAGEMENT_KEY] = True
         if self._dead_end_seen and merged.get(DEAD_END_COUNT_KEY) is None:
             merged[DEAD_END_COUNT_KEY] = self._dead_end_count
         if self._formations_seen:

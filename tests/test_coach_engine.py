@@ -136,6 +136,7 @@ def test_no_input_yields_no_triggers():
         ({"classification": "fighter_encounter"}, "toll_or_gate"),
         ({"chain": {"source": "discovered", "steps": 3}}, "chain_opportunity"),
         ({"loop_depleting": True}, "loop_depleting"),
+        ({"planet_management": True}, "planet_management"),
     ],
 )
 def test_each_trigger_fires_on_its_own_signal(kwargs, expected):
@@ -158,6 +159,11 @@ def test_each_trigger_fires_on_its_own_signal(kwargs, expected):
         {"loop_depleting": 1},
         {"loop_depleting": "yes"},
         {"loop_depleting": "True"},
+        # WO-BUILD-COACH-PLANET-MANAGEMENT-TRIGGER-WIRE: same identity-true rule.
+        {"planet_management": False},
+        {"planet_management": 1},
+        {"planet_management": "yes"},
+        {"planet_management": "True"},
     ],
 )
 def test_negative_signals_produce_no_trigger(kwargs):
@@ -174,6 +180,7 @@ def test_triggers_are_unique_and_order_is_stable():
         chain={"source": "discovered", "steps": 4},
         loop_depleting=True,
         genesis_count=2,
+        planet_management=True,
         explore_mode="auto",
     )
     got = infer_coach_triggers(**kwargs)
@@ -185,18 +192,18 @@ def test_triggers_are_unique_and_order_is_stable():
         "chain_opportunity",
         "loop_depleting",
         "at_dead_end",
+        "planet_management",
         "exploring_frontier",
         "toll_or_gate",
     ]
 
 
 def test_the_reachable_trigger_set_is_pinned_against_the_shipped_cards():
-    """Enumerate the CLOSED side: which authored cards can never fire.
+    """Authored cards and the trigger map stay 1:1 (no silent unreachable).
 
-    ``infer_coach_triggers`` emits seven ids. ``strategies.json`` authors eight
-    cards. The one whose trigger is never produced is unreachable through
-    this engine -- pinned here so the gap is a stated fact rather than a
-    surprise, and so closing it has to update this list deliberately.
+    ``infer_coach_triggers`` emits eight ids; ``strategies.json`` authors eight
+    cards. Closing a former gap (``planet_management``) must keep this pin at
+    empty-set difference so a future orphan cannot hide.
     """
     emitted = {
         "docked_at_port",
@@ -204,12 +211,13 @@ def test_the_reachable_trigger_set_is_pinned_against_the_shipped_cards():
         "chain_opportunity",
         "loop_depleting",
         "at_dead_end",
+        "planet_management",
         "exploring_frontier",
         "toll_or_gate",
     }
     kb = coach_kb.load_coach_kb(*coach_kb.default_kb_paths())
     authored = {c.when_trigger for c in kb.strategies}
-    assert authored - emitted == {"planet_management"}
+    assert authored - emitted == set()
     assert emitted - authored == set()
 
 

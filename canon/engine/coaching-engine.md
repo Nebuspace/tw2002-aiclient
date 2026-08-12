@@ -27,7 +27,7 @@ figure a hypothesis until proven.
 | Part | What it is | Where it lives |
 |---|---|---|
 | **I1 — Strategy knowledge base** | The taught strategy *content*: encoded cards, one per play pattern, each with WHAT it is, the WHEN game-state trigger, tradeoffs/risks, and concrete steps + numbers. | Content authored in the `strategy/*` concepts; encoded as data and loaded by `coach_kb.py` (`StrategyCard`) from `data/coach/strategies.json`. |
-| **I2 — Contextual trigger map** | The pure function from live game-state to the set of applicable strategy cards: docked→trade-eval, dead-end→colonize, toll→attack/pay/flee, depleting-source→rotate, explore→density-scan. | `infer_coach_triggers()` in `coach_engine.py`. Emits seven trigger ids the authored KB can fire; only `planet_management` stays authored-unreachable — see Code divergence. |
+| **I2 — Contextual trigger map** | The pure function from live game-state to the set of applicable strategy cards: docked→trade-eval, dead-end→colonize, toll→attack/pay/flee, depleting-source→rotate, explore→density-scan, own-planet→planet production. | `infer_coach_triggers()` in `coach_engine.py`. Emits all eight authored trigger ids — `planet_management` is True-or-omit from `WorldStats` (`own_planet` landmarks). |
 | **I3 — Contextual-advice engine** | The renderer that takes the triggered cards and composes the option + its tradeoffs as human-facing callouts — never a keystroke, never an armed behavior. | `compose_decisions_coach()` in `coach_engine.py`, consumed by `cockpit/decisions.py` in front of its honest-empty state. The pre-rebirth consumer was `spectate_app.py`, which the rebirth deleted; the reborn one is the cockpit's own DECISIONS composer. |
 | **I4 — Configurable coaching parameters** | The numeric substrate the cards cite — every one a hypothesis carrying a verify-vs-live flag, never a hardcoded fact. | `CoachParam` loaded by `coach_kb.py` from `data/coach/params.json`; the convention itself is [game-data-store](/engine/game-data-store.md)'s. |
 
@@ -216,10 +216,11 @@ described an implementation that did not exist. What is true at tip:
   list when `id` is omitted). Complements the DECISIONS-pane consumer; never sends. Catalogued in
   [CLI Verbs](/architecture/cli-verbs.md).
 
-- **Authored but unreachable:** `strategies.json` carries eight cards; the trigger map can produce seven
-  ids. The sole authored-unreachable card is `planet_production` (`when_trigger=planet_management`) — it
-  still needs an honest planet/genesis producer and must not be marked wired without one.
-  `route_longevity` (`loop_depleting`) is reachable via the intervention-derived flag.
+- **Authored trigger coverage:** `strategies.json` carries eight cards; the trigger map
+  can produce all eight ids. `planet_production` (`when_trigger=planet_management`) fires when
+  `WorldStats` observes ≥1 `own_planet` landmark and merges `planet_management=True`
+  (WO-BUILD-COACH-PLANET-MANAGEMENT-TRIGGER-WIRE). `route_longevity` (`loop_depleting`) is
+  reachable via the intervention-derived flag.
 
 The coaching kernel as restored already matches the reborn frame:
 it is a pure, fail-closed, read-only teacher that surfaces cards and never sends. The divergences are not

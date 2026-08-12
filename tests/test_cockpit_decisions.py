@@ -545,6 +545,34 @@ def test_live_trace_still_wins_over_has_port_coach(_fresh_coach_kb):
 
 
 # ---------------------------------------------------------------------------
+# WO-BUILD-COACH-PLANET-MANAGEMENT-TRIGGER-WIRE — idle DECISIONS
+# ---------------------------------------------------------------------------
+
+
+def test_planet_management_true_renders_planet_production_card(_fresh_coach_kb):
+    lines = compose_decisions_lines({"planet_management": True}, width=60)
+    assert lines != _EMPTY_LINES
+    joined = "\n".join(lines)
+    assert "Planet production" in joined
+
+
+@pytest.mark.parametrize(
+    "planet_management",
+    [False, 1, "yes", "True", None],
+    ids=["false", "int-1", "yes", "str-True", "none"],
+)
+def test_planet_management_non_identity_true_stays_honest_empty(
+    planet_management, _fresh_coach_kb
+):
+    status = (
+        {"planet_management": planet_management}
+        if planet_management is not None
+        else {"planet_management": None}
+    )
+    assert compose_decisions_lines(status, width=60) == _empty_at(60)
+
+
+# ---------------------------------------------------------------------------
 # WO-COACH-DEAD-END-COUNT — idle DECISIONS + status dead_end_count
 # ---------------------------------------------------------------------------
 

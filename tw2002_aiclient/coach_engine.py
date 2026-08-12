@@ -44,6 +44,7 @@ def infer_coach_triggers(
     dead_end_count: int = 0,
     explore_mode: str | None = None,
     has_port: bool = False,
+    planet_management: object = False,
     loop_depleting: object = False,
 ) -> list[str]:
     """Map live context to ``StrategyCard.when_trigger`` ids.
@@ -52,8 +53,9 @@ def infer_coach_triggers(
     one. Returns unique ids in a stable priority order for
     ``compose_decisions_coach``.
 
-    ``loop_depleting`` is identity-true only (``is True``): a truthy string /
-    ``1`` / ``"yes"`` must not fire the card (WO-COACH-LOOP-DEPLETING-TRIGGER).
+    ``loop_depleting`` / ``planet_management`` are identity-true only
+    (``is True``): a truthy string / ``1`` / ``"yes"`` must not fire the card
+    (WO-COACH-LOOP-DEPLETING-TRIGGER · WO-BUILD-COACH-PLANET-MANAGEMENT-TRIGGER-WIRE).
     """
     found: list[str] = []
 
@@ -81,6 +83,9 @@ def infer_coach_triggers(
         _add("loop_depleting")
     if int(genesis_count or 0) > 0 or int(dead_end_count or 0) > 0:
         _add("at_dead_end")
+    # Own-planet landmark observed on status (WorldStats True-or-omit).
+    if planet_management is True:
+        _add("planet_management")
     if explore_mode and explore_mode != "off":
         _add("exploring_frontier")
     if "option?" in prompt_l or "fighters to use" in prompt_l:
