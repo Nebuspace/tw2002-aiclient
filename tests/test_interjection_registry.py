@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import ast
+import inspect
 from types import SimpleNamespace
 
 from tw2002_aiclient.session.interjection_registry import (
@@ -19,6 +21,38 @@ def test_registry_ids_are_the_closed_allow_list():
             "clear_avoids",
             "inactivity_warning",
         }
+    )
+
+
+def test_match_interjection_ids_parity_with_frozenset():
+    """Fail if match_interjection return ids drift from INTERJECTION_IDS.
+
+    AST-scans ``_hit("…")`` / ``InterjectionHit("…")`` string literals inside
+    ``match_interjection`` so a new branch cannot land without updating the
+    frozenset (and the reverse: frozenset members need a return path).
+    """
+    src = inspect.getsource(match_interjection)
+    tree = ast.parse(src)
+    found: set[str] = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        func = node.func
+        name = None
+        if isinstance(func, ast.Name):
+            name = func.id
+        elif isinstance(func, ast.Attribute):
+            name = func.attr
+        if name not in {"_hit", "InterjectionHit"}:
+            continue
+        if not node.args:
+            continue
+        arg0 = node.args[0]
+        if isinstance(arg0, ast.Constant) and isinstance(arg0.value, str):
+            found.add(arg0.value)
+    assert found == set(INTERJECTION_IDS), (
+        f"match_interjection ids {sorted(found)} != "
+        f"INTERJECTION_IDS {sorted(INTERJECTION_IDS)}"
     )
 
 
