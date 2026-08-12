@@ -107,11 +107,15 @@ Inspect:
 
 | Signature | What you see |
 |---|---|
-| `game_select` | classification / Autopilot `stop_reason` is `game_select` |
-| Tick-cap stop | Autopilot not running, `ticks_done` == 500, `stop_reason` `max_ticks_exhausted` |
-| `explore_exhausted` | frontier idle stop |
-| Intervention attention | `intervention.needs_attention` / STOP banner |
-| Unanswered warp Y/N | `warp_confirm`; Autopilot may still show `running: true` while not sending |
+| `game_select` | `intervention.reasons` includes a game-select halt (autoloop hazard → `autopilot_game_select`); STOP banner raised |
+| Autoloop / trade halt | `intervention.needs_attention` with tip reason codes such as `explore_exhausted`, `autopilot_game_select`, or other autoloop/trade_chain `intervention_block` codes — **not** a pre-rebirth tick counter |
+| Intervention attention | `intervention.needs_attention` / STOP banner (any typed reason) |
+| Unanswered warp Y/N | `warp_confirm` classification; `status.autopilot` may still be `{running: true}` while nothing is sending |
+
+> **Tip honesty:** `status["autopilot"]` is only `{running: bool}` (arm chip). There is **no**
+> `ticks_done` / `max_ticks_exhausted` Autopilot tick-cap stop on tip — that was a pre-rebirth
+> model. Halt attention rides `status["intervention"]` from `autoloop.intervention_block` /
+> `trade_chain.intervention_block` (and guardian reconnect reasons when present).
 
 Unanswered warp (manual clear):
 

@@ -203,8 +203,13 @@ code.)*
 
 # Citations
 
-[1] `tw2002_aiclient/session/credentials.py` (profile shape, env-first `get_password()`, atomic chmod-600
-`save_password()`, CSPRNG `generate_password()`, `allow_register` gate; ported from archive `twclient/credentials.py`)
+[1] `tw2002_aiclient/session/credentials.py` (profile shape, env-first `get_password()`, CSPRNG
+`generate_password()`, `allow_register` gate, `SECRETS_PATH` / `PROFILES_PATH` constants — **read-only**
+for password resolution; the module deliberately does not write `secrets.json`; ported from archive
+`twclient/credentials.py`)
+[1b] `tw2002_aiclient/session/protocol.py` (`_save_password` / `_merge_secret_entry` — atomic chmod-600
+write into `credentials.SECRETS_PATH` so a later `credentials.get_password` can resolve it; module
+docstring flags this write/read split as owed consolidation tech debt)
 [2] `tw2002_aiclient/session/logging_util.py` (`log_redacted()` — redaction marker, no byte count)
 [3] `tw2002_aiclient/session/connection.py` + `tw2002_aiclient/session/session.py` (fresh-at-send-time secret detection; TX-side
 redaction on both send channels; RX transcript gate via password-anchor / post-secret)
