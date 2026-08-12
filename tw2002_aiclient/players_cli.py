@@ -1,8 +1,9 @@
-"""``tw players`` — player-bank CLI (rotation next / rotate + list).
+"""``tw players`` — player-bank CLI (rotation next / rotate + list + add).
 
-Read-only metadata: never opens the session socket, never logs in, never
-auto-switches. Lives outside ``session/cli.py`` for the same line-cap reason
-as ``catalog_cli`` / ``rules.cli``.
+Read-only metadata for next/rotate/list: never opens the session socket, never
+logs in, never auto-switches. ``add`` writes a non-secret profile section only
+(``credentials.create_profile``). Lives outside ``session/cli.py`` for the same
+line-cap reason as ``catalog_cli`` / ``rules.cli``.
 """
 
 from __future__ import annotations
@@ -13,7 +14,13 @@ import sys
 from tw2002_aiclient.screens import BANK_EMPTY_LINE, BOUNDARY_LINE_1, BOUNDARY_LINE_2
 from tw2002_aiclient.session import player_bank
 
-__all__ = ["add_players_parsers", "cmd_players_list", "cmd_players_next", "cmd_players_rotate"]
+__all__ = [
+    "add_players_parsers",
+    "cmd_players_add",
+    "cmd_players_list",
+    "cmd_players_next",
+    "cmd_players_rotate",
+]
 
 _ROTATE_REASON_TEXT = {
     "empty_bank": "empty bank",
@@ -95,8 +102,26 @@ def cmd_players_list(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_players_add(args: argparse.Namespace) -> int:
+    """Append a non-secret profile section via ``credentials.create_profile``."""
+    from tw2002_aiclient.session import credentials
+
+    try:
+        section = credentials.create_profile(
+            server=args.server,
+            game_letter=args.game_letter,
+            handle=args.handle,
+            name=getattr(args, "profile", None),
+        )
+    except ValueError as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+    print(section)
+    return 0
+
+
 def add_players_parsers(sub: argparse._SubParsersAction) -> None:
-    """Register ``tw players next`` / ``tw players list``."""
+    """Register ``tw players next`` / ``list`` / ``rotate`` / ``add``."""
     sp_players = sub.add_parser(
         "players",
         help="player-bank helpers (metadata only - never logs in)",
@@ -140,3 +165,31 @@ def add_players_parsers(sub: argparse._SubParsersAction) -> None:
         help=f"mark the rotation-due row using this cooldown window (default {player_bank.DEFAULT_ROTATION_COOLDOWN_HOURS:g})",
     )
     sp_list.set_defaults(func=cmd_players_list)
+
+    sp_add = players_sub.add_parser(
+        "add",
+        help="append a non-secret profile section (metadata only — never logs in)",
+    )
+    sp_add.add_argument(
+        "--server",
+        required=True,
+        metavar="KEY",
+        help="catalog server key (must exist in servers.toml)",
+    )
+    sp_add.add_argument(
+        "--game-letter",
+        dest="game_letter",
+        required=True,
+        metavar="L",
+        help="single game letter (A–Z)",
+    )
+    sp_add.add_argument(
+        "--handle",
+        required=True,
+        help="in-game handle for the profile",
+    )
+    sp_add.add_argument(
+        "--profile",
+        help="profile section name (default: derived from handle)",
+    )
+    sp_add.set_defaults(func=cmd_players_add)
