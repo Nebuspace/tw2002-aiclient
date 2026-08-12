@@ -138,3 +138,12 @@ def test_the_armable_intents_are_a_closed_ordered_set():
     )
     assert set(explore_mod.ARMABLE_INTENTS) <= explore_mod.INTENTS
     assert not hasattr(explore_mod, "next_armable_intent")
+
+
+def test_play_confirm_arm_enforces_armable_intents_in_source():
+    """Parity pin: Play confirm-arm must consult ARMABLE_INTENTS at runtime."""
+    from pathlib import Path
+
+    src = Path(explore_mod.__file__).resolve().parent / "app.py"
+    text = src.read_text(encoding="utf-8")
+    assert "armed_intent not in _explore.ARMABLE_INTENTS" in text

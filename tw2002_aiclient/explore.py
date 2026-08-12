@@ -980,6 +980,10 @@ INTENTS = frozenset(
 #: The old Play E-cycle helper ``next_armable_intent`` was retired with
 #: ``cycle_explore_mode`` (#247 / WO-RETIRE-CYCLE-EXPLORE-MODE) — tip Play
 #: arms via find-stardock toggle, not a rotating offer cycle.
+#:
+#: Runtime-enforced at the Play confirm-arm site (``app.py``): an intent not
+#: in this tuple is refused closed rather than silently started. CLI/daemon
+#: may still arm the wider ``INTENTS`` set (e.g. ``find_formations``).
 ARMABLE_INTENTS: tuple[str, ...] = (INTENT_MAP_FILL, INTENT_FIND_STARDOCK)
 
 

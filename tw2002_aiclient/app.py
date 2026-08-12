@@ -2254,6 +2254,14 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                 # find-StarDock runs until arrival or exhaustion.
                 pending_confirm_action = None
                 armed_intent = explore_intent_offered or _explore.INTENT_MAP_FILL
+                # WO-CLEANUP-ARMABLE-INTENTS-ENFORCEMENT-TIPCHECK: Play's
+                # E-cycle is 2-wide; refuse anything outside ARMABLE_INTENTS
+                # rather than treating the tuple as documentation-only.
+                if armed_intent not in _explore.ARMABLE_INTENTS:
+                    raise ValueError(
+                        f"Play explore arm refused: intent {armed_intent!r} "
+                        f"not in ARMABLE_INTENTS {_explore.ARMABLE_INTENTS!r}"
+                    )
                 pending_confirm_hold = None
                 pending_confirm_reflex = None
                 if armed_intent == _explore.INTENT_FIND_STARDOCK:
