@@ -452,6 +452,21 @@ def cmd_stop(args):
         return 0
     resp = send_request("stop", {}, run_dir=run_dir)
     print_response(resp, args)
+    # WO-BUILD-SESSION-END-AUTO-REPORT: unprompted post-session digest on
+    # successful stop. Never fail the stop path if the ledger read blows up;
+    # skip when --json so machine clients keep a single JSON object.
+    if resp.get("ok") and not getattr(args, "json", False):
+        try:
+            from tw2002_aiclient.session_report import (
+                build_session_report,
+                format_session_report,
+            )
+
+            text = format_session_report(build_session_report())
+            print()
+            print(text)
+        except Exception as exc:  # noqa: BLE001 — best-effort polish only
+            print(f"(session report skipped: {exc})", file=sys.stderr)
     return 0 if resp.get("ok") else 1
 
 

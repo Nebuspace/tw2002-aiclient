@@ -4,9 +4,10 @@ Canon: ``canon/engine/trace-ledger.md`` § session report · DECISIONS
 post-session-action-report DOC-GAP. Pure retrospective read of the trace
 ledger — never a live-decision input, never sends.
 
-**Delivery choice:** CLI-invocable ``tw report`` (primary). Session-end can
-call the same formatter; a pull verb means operators can review mid-session
-or after exit without wiring a fragile process-exit hook first.
+**Delivery choice:** CLI-invocable ``tw report`` (primary pull). Successful
+``tw stop`` (non-``--json``) also prints the same ``format_session_report``
+digest best-effort so operators get an unprompted exit trail without a
+fragile process-exit hook inside the daemon.
 """
 
 from __future__ import annotations
