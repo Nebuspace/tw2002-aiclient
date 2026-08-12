@@ -208,20 +208,23 @@ Depletion STOP (never autonomous rotation):
 
 # Code divergence
 
-The remaining pre-reborn autonomous-picker divergence and the resolved guarded
-trade path are recorded here explicitly:
+Archive-only autonomous-picker shapes (do-not-revive — not open tip defects) and the
+resolved guarded trade path are recorded here explicitly:
 
-- **`autopilot.py` per-cycle EV picker + `EXPLORE_BASELINE_EV` "never idle."** The autopilot's
-  `SELECT` step is a continuous per-tick cost-benefit scorer that picks the highest expected-value
-  candidate from scratch every cycle, with no committed-pursuit state — a lower-EV pursuit is
-  "naturally abandoned" the instant a higher-EV one out-scores it. Combined with
-  `EXPLORE_BASELINE_EV = 0.01` (a deliberately-nonzero explore floor under §11 "no idle") this is
-  an autonomous action-picker with a never-idle appetite — exactly the shape the reborn vision
-  retires. Reborn target: the priority layer RANKS/ORDERS taught behaviors; it does not let a
-  computed EV win over an unrecognized screen, and explore is a taught, budgeted, human-armed
-  behavior, not a keep-driving baseline. A continuous EV re-pick across chains is also *de-facto
-  autonomous rotation* — the reborn depletion contract forbids it (rotation is an operator
-  decision).
+- **Archived `autopilot.py` per-cycle EV picker + `EXPLORE_BASELINE_EV` "never idle" — do-not-revive.**
+  Pre-rebirth `archive/.../twclient/autopilot.py`'s `SELECT` step was a continuous per-tick
+  cost-benefit scorer that picked the highest expected-value candidate from scratch every cycle,
+  with no committed-pursuit state — a lower-EV pursuit was "naturally abandoned" the instant a
+  higher-EV one out-scored it. Combined with `EXPLORE_BASELINE_EV = 0.01` (a deliberately-nonzero
+  explore floor under §11 "no idle") that was an autonomous action-picker with a never-idle
+  appetite — exactly the shape the reborn vision retires. **Tip has no `autopilot.py` and no
+  `tw autopilot` verb** (archive / do-not-revive). Live ranking/FOCUS suggestion contracts live in
+  [priority-engine](/engine/priority-engine.md) and
+  [app-autopilot-model](/architecture/app-autopilot-model.md): the priority layer RANKS/ORDERS taught
+  behaviors; it does not let a computed EV win over an unrecognized screen, and explore is a taught,
+  budgeted, human-armed behavior, not a keep-driving baseline. A continuous EV re-pick across chains
+  would also be *de-facto autonomous rotation* — the reborn depletion contract forbids it (rotation
+  is an operator decision).
 - **`trade_driver.run_chain()` divergence resolved by ADR-003.** The guarded
   driver now runs only behind `TradeChainRunner`: exact human-confirmed
   fingerprint, daemon re-resolution, default one-pass bound, exclusive App hold, and
@@ -258,7 +261,8 @@ trade path are recorded here explicitly:
 - Code module `chains.py` — also owns `MIN_CHAIN_LINKS_TO_EXECUTE=2`,
   `CHAIN_LINKS_PREFER_SEARCH_BELOW=2`, `MIN_CHAIN_LINKS_FOR_SHIP_UPGRADE=4` and the earn-vs-search
   band (constants cited above; tip home is `chains.py`, not archived `priority_engine.py`).
-- Code module `autopilot.py` — the per-tick continuous-EV `SELECT` scorer and
-  `EXPLORE_BASELINE_EV = 0.01` (recorded as a reborn divergence).
+- Archive-only (do-not-revive): `archive/pre-rebirth-2026-07-23/twclient/autopilot.py` —
+  historical per-tick continuous-EV `SELECT` scorer and `EXPLORE_BASELINE_EV = 0.01`. Tip replacement
+  is suggestion-only ranking/FOCUS (`priority_engine.py` / `focus_status.py`), not a live picker.
 - Reimagined from `knowledge/strategies/pair-trade-loops.md` (raw material; re-rooted in the reborn
   vision — the priority layer ranks/orders, it does not pick a live action over an unknown screen).
