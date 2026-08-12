@@ -651,3 +651,70 @@ price, when trade-in credit is known:
 `tw2002_aiclient/ship_upgrade_decision.py` ·
 `workorders/WO-CANON-DRAFT-SHIP-UPGRADE-TRADE-IN-ECONOMICS.md` ·
 orchestrator.md 2026-08-12T04:18:34Z.
+
+## PENDING-PLAYER-ROTATION-AUTO-SWITCH-CONSUMER (2026-08-12)
+
+**Status:** Pending — Orchestrator review, needs Max (auth-adjacent, on the safety list)
+
+**Finding.** `player_bank.advance_rotation()` / `tw players rotate` already produce a correct,
+safety-reviewed `RotationDecision(name, reason)` for credential-bank multi-character rotation
+(TW-31) — the decision math is done and the credential bank itself is metadata-only (no
+cross-account transfer risk). But canon (`canon/surfaces/entry-and-profile-selection.md:410-417`)
+states plainly the daemon-side consumer that would actually *act* on a driver decision
+(auto-login / auto-switch) "remains a separate future wave" — nothing calls
+`advance_rotation` from the daemon, cockpit, or any scheduled path today; it is CLI-only,
+read-only-forever unless invoked by hand.
+
+**Why this needs a ruling, not a WO.** Any consumer that would auto-login/auto-switch characters
+touches the login automaton and control-lock — explicitly auth-adjacent per parent CLAUDE.md's
+safety list. Two shapes are on the table: (a) a real auto-switch daemon consumer, or (b) a
+passive cockpit/CLI notify-only surface ("X is due, rotate?") with no auto-login at all. (b) is
+almost certainly buildable without a gate; (a) needs an explicit Max GO given the auth-adjacency.
+
+**Refs:** `tw2002_aiclient/session/player_bank.py` · `tw2002_aiclient/players_cli.py` ·
+`canon/surfaces/entry-and-profile-selection.md:410-417` · 6-lens aiclient audit, 2026-08-12
+(build-and-unwired lens).
+
+## PENDING-AI-TEACHER-LLM-BACKEND-WIRING (2026-08-12)
+
+**Status:** Pending — Orchestrator review, needs Max (new external dependency + AI-dialogue,
+doubly on the safety list)
+
+**Finding.** The entire on-demand AI-teacher author path (`tw teach analyze`, cockpit Analyze
+overlay, draft-and-approve gate) is tip-closed and correctly ethos-bound, but it can never
+actually run: `AnalyzeBackend` is injectable in `tw2002_aiclient/ai_teacher.py` but the default
+backend raises `no_backend_configured` — no real model client is wired. Canon
+(`canon/engine/ai-teacher.md:169-179`) already names this: "a real model client is injectable
+via AnalyzeBackend but not wired — new external dependency, still Max-gated."
+
+**Why this needs a ruling.** Both "new external dependencies" and "AI-dialogue/ARIA-LLM" are
+independently on parent CLAUDE.md's safety list — this finding is doubly gated. No DECISIONS.md
+entry existed naming which model/provider to wire before this pass, so the fully-built plumbing
+was at risk of staying permanently dead with no tracked ask. Needs Max to name a provider/model
+(or explicitly decline to wire one for now).
+
+**Refs:** `tw2002_aiclient/ai_teacher.py` · `canon/engine/ai-teacher.md:169-179` · 6-lens aiclient
+audit, 2026-08-12 (build-and-unwired lens).
+
+## PENDING-SHIP-UPGRADE-TOGGLE-MISLEADING-DEFAULT (2026-08-12)
+
+**Status:** Pending — Orchestrator review, needs Max (UX mechanic choice among distinct options,
+not a pure number)
+
+**Finding.** `cockpit/teachband.py` (lines 120, 196, 224, 368) defaults the `S)hip Upgrade`
+toggle chip to display `·ON` even though the toggle currently gates zero purchase behavior — no
+ship-purchase send/confirm driver exists in tip. Canon (`canon/surfaces/mode-line-and-teach-
+controls.md` § Policy-auto amendment) already documents this honestly as "gates nothing yet" —
+code and doc agree in substance, this is not a hidden defect. But operationally the chip sits
+beside `P)ort Trade` and `C)argo Hold Upgrade` toggles that DO gate real spend, with an operator
+having no way to distinguish inert-vs-live from the chip alone.
+
+**Options on the table:** (a) default `S` to `OFF` until the purchase path ships, or (b) keep
+`ON` but visually distinguish inert-vs-live toggles (e.g. a dimmed/hatched state). Left as a
+genuine design-taste call per the ratification-authority amendment (CLAUDE.local.md,
+2026-08-10) rather than self-ruled, since it's a UX mechanic choice among distinct options, not a
+faucet-rate/magnitude-style number.
+
+**Refs:** `tw2002_aiclient/cockpit/teachband.py:120,196,224,368` · `canon/surfaces/mode-line-and-
+teach-controls.md` § Policy-auto amendment · 6-lens aiclient audit, 2026-08-12 (code-vs-canon
+lens).
