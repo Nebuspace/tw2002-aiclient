@@ -119,6 +119,9 @@ class _FakeWM:
         self.calls: list = []
         self.landmark_results: list = [[]]
         self.landmark_calls: list = []
+        # Separate queue so StarDock tests keep one-result-per-refresh.
+        # None → every own_planet lookup returns [] (no planets observed).
+        self.own_planet_landmark_results: list | None = None
         # None → every all_sectors call returns [] (completed empty scan).
         self.sector_lists: list | None = None
         self.sector_list_calls: list = []
@@ -132,7 +135,16 @@ class _FakeWM:
 
     def find_landmark_sectors(self, world_id, landmark_name, **kw):
         self.landmark_calls.append((world_id, landmark_name))
-        r = self.landmark_results.pop(0) if self.landmark_results else []
+        if str(landmark_name).casefold() == world_model.OWN_PLANET_LANDMARK.casefold():
+            if self.own_planet_landmark_results is None:
+                return []
+            r = (
+                self.own_planet_landmark_results.pop(0)
+                if self.own_planet_landmark_results
+                else []
+            )
+        else:
+            r = self.landmark_results.pop(0) if self.landmark_results else []
         if isinstance(r, BaseException):
             raise r
         return r
@@ -358,7 +370,10 @@ def test_nonempty_landmarks_supply_sectors_and_found(wm):
         "stardock_sectors": [11, 42],
         "stardock_found": True,
     }
-    assert wm.landmark_calls == [("w-1", world_model.STARDOCK_LANDMARK)]
+    assert wm.landmark_calls == [
+        ("w-1", world_model.STARDOCK_LANDMARK),
+        ("w-1", world_model.OWN_PLANET_LANDMARK),
+    ]
 
 
 def test_empty_landmark_scan_omits_stardock_keys(wm):
@@ -587,6 +602,53 @@ def test_wrap_does_not_touch_world_model_for_has_port(tmp_path, wm, monkeypatch)
     wrapped = s.wrap(lambda: {"ok": True})
     assert wrapped()["has_port"] is True
     assert calls["n"] == 1
+
+
+# ------------------------------------------------- planet_management (WO-BUILD-COACH-PLANET-MANAGEMENT-TRIGGER-WIRE)
+
+
+def test_planet_management_omitted_when_no_own_planet(wm):
+    wm.results = [1]
+    wm.own_planet_landmark_results = [[]]
+    s = world_stats.WorldStats()
+    s.refresh("w-1")
+    assert "planet_management" not in s.merge({"ok": True})
+
+
+def test_planet_management_true_when_own_planet_landmark_found(wm):
+    wm.results = [1]
+    wm.own_planet_landmark_results = [[41]]
+    s = world_stats.WorldStats()
+    s.refresh("w-1")
+    assert s.merge({"ok": True})["planet_management"] is True
+
+
+def test_planet_management_clears_when_later_scan_is_empty(wm):
+    wm.results = [1, 1]
+    wm.own_planet_landmark_results = [[41], []]
+    s = world_stats.WorldStats()
+    s.refresh("w-1")
+    assert s.merge({})["planet_management"] is True
+    s.refresh("w-1")
+    assert "planet_management" not in s.merge({"ok": True})
+
+
+def test_planet_management_does_not_clobber_caller(wm):
+    wm.results = [1]
+    wm.own_planet_landmark_results = [[9]]
+    s = world_stats.WorldStats()
+    s.refresh("w-1")
+    assert s.merge({"planet_management": False})["planet_management"] is False
+
+
+def test_failed_planet_refresh_keeps_last_observation(wm):
+    wm.results = [1, 1]
+    wm.own_planet_landmark_results = [[12], RuntimeError("store on fire")]
+    s = world_stats.WorldStats()
+    s.refresh("w-1")
+    assert s.merge({})["planet_management"] is True
+    s.refresh("w-1")
+    assert s.merge({})["planet_management"] is True
 
 
 # ------------------------------------------------- dead_end_count (WO-COACH-DEAD-END-COUNT)

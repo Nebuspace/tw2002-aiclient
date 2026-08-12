@@ -241,6 +241,9 @@ def _coach_lines(status: dict, *, width: int) -> list[str]:
             dead_end_count=_safe_nonneg_int(status.get("dead_end_count")) or 0,
             # WO-FORMATIONS-CATALOG-PORT: same pattern — wire the consumer.
             genesis_count=_safe_nonneg_int(status.get("genesis_count")) or 0,
+            # WO-BUILD-COACH-PLANET-MANAGEMENT-TRIGGER-WIRE: identity-true only
+            # (same as has_port / loop_depleting). Absent / False / junk → omit.
+            planet_management=status.get("planet_management") is True,
             # WO-COACH-EXPLORE-MODE: fail-closed string only (int/bool must not
             # coerce into a mode); "off"/blank/absent → no card.
             explore_mode=(

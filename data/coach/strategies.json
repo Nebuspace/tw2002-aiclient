@@ -85,8 +85,8 @@
       "title": "Planet production compounder",
       "what": "Planets make turn-free compounding income; cargo left on-planet can raise daily production. Best lever on no-PvP builder games.",
       "when_trigger": "planet_management",
-      "status": "unreachable",
-      "status_note": "No live tip path emits when_trigger=planet_management (coach_engine.infer_coach_triggers). Authored content retained; do not treat as wired. See coaching-engine.md Authored but unreachable + WO-CLEANUP-COACHING-STRATEGIES-JSON-UNREACHABLE-CARD.",
+      "status": "wired",
+      "status_note": "WorldStats merges planet_management=True when ≥1 own_planet landmark is on disk; cockpit/decisions passes identity-true into infer_coach_triggers (WO-BUILD-COACH-PLANET-MANAGEMENT-TRIGGER-WIRE).",
       "tradeoffs": [
         "Mega-planets invite plague risk — diversify (hypothesis).",
         "Buying production with credits only pays when unit price is cheap enough.",

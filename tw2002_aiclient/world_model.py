@@ -401,6 +401,11 @@ def write_from_cim_report(world_id, rendered_text, state_dir=None, now=None):
 #: loser. One name, written from one place.
 STARDOCK_LANDMARK = "StarDock"
 
+#: Canon token for an operator-owned planet (world-model.md landmarks table).
+#: Same single-spelling discipline as STARDOCK_LANDMARK — casefold matches
+#: ``explore.find_landmark_sectors``, but writers must use this exact form.
+OWN_PLANET_LANDMARK = "own_planet"
+
 
 def add_landmark(world_id, sector_id, name, state_dir=None, now=None):
     """Attribute a named landmark to an EXPLICITLY-SUPPLIED sector.
