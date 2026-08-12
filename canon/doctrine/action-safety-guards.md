@@ -185,8 +185,15 @@ may *recommend* one — surface it to the human with its rationale — but the f
 human-approved one-shot, not an EV candidate the loop can pick on its own. **Carve-out (trainer
 default):** StarDock **cargo-hold upgrade** buys under APP-ARMED + `C)argo Hold Upgrade·ON` may
 App-arm auto-fire per `RESOLVED-TRAINER-STRIP-AND-GUTTER-20260731` point 6 — soft confirm banked,
-not per-action `y`. Ship upgrades, Genesis, colonization, and purchases outside that strip toggle
-remain human one-shot. The confirm boundary for colonization is owned by
+not per-action `y`. That path is tip-LIVE via `stardock_hold_driver.run_hold_purchase` /
+`session/stardock_hold.StardockHoldRunner` (one-pass qty send against a captured quote). **Ship
+purchase is not parity with that path:** tip has **no** ship-purchase send/confirm driver (no
+`stardock_ship_*` twin of the hold modules), and the 2026-08-08 live-drive pass
+([`stardock-ship-purchase-capture-2026-08-08`](/research/stardock-ship-purchase-capture-2026-08-08.md))
+reached **no** purchase-confirm screen on the driven server — hold the send/confirm half until a
+real capture exists ([ship-progression](/strategy/ship-progression.md) § StarDock ship-purchase).
+Genesis, colonization, and other purchases outside the hold strip toggle remain human one-shot.
+The confirm boundary for colonization is owned by
 [planet-colonization](/strategy/planet-colonization.md); hold vs ship purchase boundaries live in
 [ship-progression](/strategy/ship-progression.md) and
 [mode-line-and-teach-controls](/surfaces/mode-line-and-teach-controls.md); this doctrine states the
@@ -223,7 +230,7 @@ The guard ladder, from per-keystroke to whole-run, each failing *closed* (toward
 | Run | turn-budget / stop-loss / hazard | multi-cycle run | hard cap / credit floor / hazard ⇒ halt; unknown ⇒ fail-closed |
 | Launch | arm-confirm | run/loop start | preconditions unconfirmed ⇒ instant-die, never arm blind |
 | Crawl | sacrificial-only gate | live crawl start | non-sacrificial profile ⇒ refuse before any connection |
-| Always | human-confirmed irreversible | Genesis / purchase / colonize | never an autonomous candidate; human one-shot only |
+| Always | human-confirmed irreversible | Genesis / colonize / ship purchase (no tip send driver yet) | never an autonomous candidate; human one-shot only. Hold upgrade is the strip carve-out above — not ship-purchase parity |
 | Always | genesis confirm-to-send | future App Genesis send | only via `genesis_send_if_confirmed`; else `refused` (Option B HELD) |
 
 Every STOP carries a typed reason-code from the escalation catalog owned by
