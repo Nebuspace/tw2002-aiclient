@@ -20,6 +20,7 @@ from tw2002_aiclient.rule_engine import (
 
 __all__ = [
     "ORIGIN_BUCKET_UNKNOWN",
+    "format_teaching_provenance_line",
     "teaching_provenance_counts",
     "teaching_provenance_share",
 ]
@@ -78,3 +79,21 @@ def teaching_provenance_share(counts: Mapping[str, int]) -> float | None:
         return None
     ai = int(counts.get(ORIGIN_AI_APPROVED, 0) or 0)
     return ai / total
+
+
+def format_teaching_provenance_line(counts: Mapping[str, int]) -> str:
+    """One-line operator digest of the teaching-provenance axis.
+
+    Never invents a share when ``total == 0`` — prints ``ai-share=?`` instead.
+    """
+    human = int(counts.get(ORIGIN_HUMAN, 0) or 0)
+    ai = int(counts.get(ORIGIN_AI_APPROVED, 0) or 0)
+    unknown = int(counts.get(ORIGIN_BUCKET_UNKNOWN, 0) or 0)
+    total = int(counts.get("total", 0) or 0)
+    share = teaching_provenance_share(counts)
+    share_txt = f"{share:.0%}" if share is not None else "?"
+    return (
+        f"teaching provenance (approved rules): "
+        f"human={human}  ai-approved={ai}  unknown={unknown}  "
+        f"total={total}  ai-share={share_txt}"
+    )

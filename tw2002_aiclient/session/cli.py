@@ -590,6 +590,7 @@ def cmd_report(args):
         session_id=getattr(args, "session_id", None),
         world_id=getattr(args, "world_id", None),
         include_interrupted=bool(getattr(args, "include_interrupted", False)),
+        state_dir=getattr(args, "state_dir", None),
     )
     text = format_session_report(report)
     out = getattr(args, "out", None)
@@ -603,6 +604,11 @@ def cmd_report(args):
             "human_count": report.human_count,
             "skipped_interrupted": report.skipped_interrupted,
             "notes": list(report.notes),
+            "teaching_provenance": (
+                dict(report.teaching_provenance)
+                if report.teaching_provenance is not None
+                else None
+            ),
             "app_actions": [
                 {
                     "ts": r.ts,

@@ -1,16 +1,10 @@
-"""``tw coach show`` — read-only strategy-card KB CLI (WO-WIRE-STRATEGY-CARD-TRADEOFFS-OKF-REFS).
+"""``tw coach`` — strategy-card KB + teaching-provenance coverage CLI.
 
-Filesystem-only: loads ``data/coach/strategies.json`` via ``coach_kb.py``. Never
-opens a session socket, never sends, never touches the world-model.
-
-Why this exists: ``coach_kb.py`` requires (and schema-validates) every
-``StrategyCard`` to carry ``tradeoffs`` and ``okf_refs``, but the live
-DECISIONS-panel renderer (``coach_engine.compose_decisions_coach``) only ever
-reads ``.title`` / ``.what`` / ``.steps[0]`` — the tight per-tick width budget
-means those two validated fields never reach an operator through that path.
-This verb is the tip-honest companion: it renders the *whole* authored card,
-including ``tradeoffs`` and ``okf_refs``, without touching the DECISIONS
-gutter's width budget at all.
+``show`` is filesystem-only over ``data/coach/strategies.json`` (never a
+session socket). ``provenance`` is a separate read-only rule-store surface
+for the teaching-provenance coverage axis
+(``coverage_metrics.teaching_provenance_counts``) — WO-BUILD-COVERAGE-METRICS-
+TEACHING-PROVENANCE-WIRE.
 
 Lives outside ``session/cli.py`` for the same line-cap reason as
 ``catalog_cli`` / ``mine_cli`` / ``players_cli``.
@@ -24,8 +18,14 @@ from pathlib import Path
 from typing import Any
 
 from tw2002_aiclient import coach_kb
+from tw2002_aiclient.coverage_metrics import (
+    format_teaching_provenance_line,
+    teaching_provenance_counts,
+    teaching_provenance_share,
+)
+from tw2002_aiclient.rules.store import read_rule_store
 
-__all__ = ["add_coach_parsers", "cmd_coach_show"]
+__all__ = ["add_coach_parsers", "cmd_coach_provenance", "cmd_coach_show"]
 
 
 def _strategies_path(args: argparse.Namespace) -> Path:
@@ -125,11 +125,67 @@ def cmd_coach_show(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_coach_provenance(args: argparse.Namespace) -> int:
+    """``tw coach provenance`` — teaching-provenance axis over approved rules.
+
+    Read-only rule-store consumer. Never sends. Never touches live covermeter.
+    """
+    as_json = bool(getattr(args, "json", False))
+    state_raw = getattr(args, "state_dir", None)
+    state_dir = Path(state_raw) if state_raw else None
+    world_id = getattr(args, "world_id", None)
+    try:
+        store = read_rule_store(state_dir=state_dir, world_id=world_id)
+    except Exception as exc:  # noqa: BLE001 — CLI fail-closed message
+        err = {"ok": False, "error": type(exc).__name__, "detail": str(exc)}
+        if as_json:
+            print(json.dumps(err))
+        else:
+            print(f"coach provenance: {type(exc).__name__}: {exc}")
+        return 1
+
+    rules = store.get("rules") if isinstance(store, dict) else None
+    if not isinstance(rules, list):
+        err = {
+            "ok": False,
+            "error": "unreadable_store",
+            "status": store.get("status") if isinstance(store, dict) else None,
+        }
+        if as_json:
+            print(json.dumps(err))
+        else:
+            print(f"coach provenance: unreadable store (status={err['status']!r})")
+        return 1
+
+    counts = teaching_provenance_counts(rules)
+    share = teaching_provenance_share(counts)
+    if as_json:
+        print(
+            json.dumps(
+                {
+                    "ok": True,
+                    "counts": dict(counts),
+                    "ai_share": share,
+                    "store_status": store.get("status"),
+                }
+            )
+        )
+    else:
+        print(format_teaching_provenance_line(counts))
+        status = store.get("status")
+        if status and status != "ok":
+            print(f"(rule store status: {status})")
+    return 0
+
+
 def add_coach_parsers(sub: argparse._SubParsersAction) -> None:
-    """Register ``tw coach show``."""
+    """Register ``tw coach show`` and ``tw coach provenance``."""
     sp_coach = sub.add_parser(
         "coach",
-        help="read-only strategy-card knowledge base (full authored card incl. tradeoffs/okf_refs)",
+        help=(
+            "strategy-card KB (show) + teaching-provenance coverage axis "
+            "(provenance)"
+        ),
     )
     coach_sub = sp_coach.add_subparsers(dest="coach_verb")
 
@@ -155,3 +211,26 @@ def add_coach_parsers(sub: argparse._SubParsersAction) -> None:
         help="machine-parseable JSON (full card fields incl. tradeoffs/okf_refs)",
     )
     sp_show.set_defaults(func=cmd_coach_show)
+
+    sp_prov = coach_sub.add_parser(
+        "provenance",
+        help="teaching-provenance axis over approved rules (human / ai-approved / unknown)",
+    )
+    sp_prov.add_argument(
+        "--state-dir",
+        default=None,
+        metavar="PATH",
+        help="override state/ root (default: project state/)",
+    )
+    sp_prov.add_argument(
+        "--world-id",
+        default=None,
+        metavar="ID",
+        help="world-scoped rules/ subdirectory when present",
+    )
+    sp_prov.add_argument(
+        "--json",
+        action="store_true",
+        help="machine-parseable JSON counts + ai_share",
+    )
+    sp_prov.set_defaults(func=cmd_coach_provenance)
