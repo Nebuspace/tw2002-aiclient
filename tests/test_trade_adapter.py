@@ -15,7 +15,7 @@ from typing import Optional
 import pytest
 
 from tw2002_aiclient import trade_adapter, world_model
-from tw2002_aiclient.chains import find_profit_chains
+from tw2002_aiclient.chains import find_profit_chains_with_note
 
 WORLD = "hostA__F__ALPHA"
 
@@ -96,7 +96,7 @@ def test_direction_compatible_pair_hand_computed_margins_and_best_chain(tmp_path
     assert by_key[(11, 10, "Fuel Ore")].turns == 1
     assert len(hops) == 2
 
-    chains = find_profit_chains(hops)
+    chains, _note = find_profit_chains_with_note(hops)
     assert chains
     chain = chains[0]
     assert chain is not None
@@ -404,7 +404,7 @@ def test_single_port_world_returns_empty(tmp_path):
 
 
 def test_empty_hops_keeps_chain_finder_output_none():
-    assert find_profit_chains(()) == []
+    assert find_profit_chains_with_note(())[0] == []
 
 
 # -- malformed container shapes fail-closed (isinstance guards), never ------
@@ -1520,7 +1520,7 @@ def test_zero_spread_restores_same_pct_zero_margin(tmp_path):
     # margin == 0 is dropped by chains, but build_trade_hops still emits the leg
     assert len(hops) == 1
     assert hops[0].margin == 0.0
-    assert find_profit_chains(hops) == []
+    assert find_profit_chains_with_note(hops)[0] == []
 
 
 def test_same_posture_still_yields_no_hop_with_spread(tmp_path):

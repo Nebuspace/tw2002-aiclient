@@ -4,7 +4,7 @@ Pure logic: ZERO sends, ZERO execution. Reads `world_model`'s persisted
 port records (canon shape `{class, commodities:[{name, status, amount,
 pct}], last_seen_ts}` -- see world_model.py/state_parser.py) plus
 `explore.py`'s known-warp-graph routing, and emits `chains.TradeHop`
-edges so the chain-finder (`chains.find_profit_chains` /
+edges so the chain-finder (`chains.find_profit_chains_with_note` /
 `rank_chains`) can discover real, currently-known profit loops
 instead of only ever seeing an empty `hops` tuple. Wiring this output
 into a live autopilot snapshot is a later WO's job, not this module's --
@@ -32,7 +32,7 @@ priciest), then a posture spread (`buy_sell_spread_of_floor`): the mid-
 curve estimate is shifted down for a port `selling` row (player cost)
 and up for a port `buying` row (player revenue) by ``floor * spread``.
 Without that spread, Gather docks that stamp every row at `pct=100`
-produce `margin == 0` forever and `chains.find_profit_chains` stays
+produce `margin == 0` forever and `chains.find_profit_chains_with_note` stays
 empty. Every number here is a `TradeAdapterConfig` field, never a
 hardcoded constant, so it can be corrected the moment live data
 contradicts it.

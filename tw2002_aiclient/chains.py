@@ -73,7 +73,7 @@ def _normalize_cycle(sectors: tuple[int, ...]) -> tuple[int, ...]:
 
 
 DEFAULT_MAX_SEARCH_STEPS = 100_000
-"""Global cap on DFS frame-visits across the *whole* `find_profit_chains`
+"""Global cap on DFS frame-visits across the *whole* `find_profit_chains_with_note`
 search (summed over every start sector, not per-start). Protects both
 wall-clock time and the Python call stack on pathological graphs --
 `trade_adapter.DEFAULT_MAX_HOPS` bounds the ADAPTER's edge output, not
@@ -88,27 +88,6 @@ whatever chains were found before the budget fired are ranked exactly
 as they always were."""
 
 
-def find_profit_chains(
-    hops: Sequence[TradeHop],
-    *,
-    min_hops: int = 2,
-    max_hops: Optional[int] = None,
-    max_search_steps: int = DEFAULT_MAX_SEARCH_STEPS,
-) -> list[ProfitChain]:
-    """Every closed profit cycle discoverable in `hops`, ranked by
-    `rank_chains`. Iterative DFS (explicit stack -- see `_search_cycles`)
-    so `RecursionError` cannot escape regardless of graph size; search is
-    bounded by `max_search_steps` (see `DEFAULT_MAX_SEARCH_STEPS`).
-    Truncation is silent here by design -- this function's return type
-    stays `list[ProfitChain]` for existing callers. Callers that must
-    know whether the budget fired use `find_profit_chains_with_note`,
-    which shares this same search and cannot drift from this one."""
-    chains, _note = _search_cycles(
-        hops, min_hops=min_hops, max_hops=max_hops, max_search_steps=max_search_steps
-    )
-    return chains
-
-
 def find_profit_chains_with_note(
     hops: Sequence[TradeHop],
     *,
@@ -116,9 +95,11 @@ def find_profit_chains_with_note(
     max_hops: Optional[int] = None,
     max_search_steps: int = DEFAULT_MAX_SEARCH_STEPS,
 ) -> tuple[list[ProfitChain], Optional[str]]:
-    """The honest entry point for callers (WIRE) that must know when the
-    search budget truncated the result -- same `(result, note)` shape
-    `trade_adapter.build_trade_hops` already uses. `note` is `None`
+    """Every closed profit cycle discoverable in `hops`, ranked by
+    `rank_chains`, plus an optional truncation note. Iterative DFS
+    (explicit stack -- see `_search_cycles`) so `RecursionError` cannot
+    escape regardless of graph size; search is bounded by
+    `max_search_steps` (see `DEFAULT_MAX_SEARCH_STEPS`). `note` is `None`
     unless `max_search_steps` was exhausted, in which case it names the
     budget, how many chains were found before truncation, and how many
     start sectors were fully searched -- a truncated result must never
@@ -135,9 +116,8 @@ def _search_cycles(
     max_hops: Optional[int],
     max_search_steps: int,
 ) -> tuple[list[ProfitChain], Optional[str]]:
-    """The ONE search routine `find_profit_chains` and
-    `find_profit_chains_with_note` both route through, so their outputs
-    cannot drift apart. Iterative DFS with an explicit stack of resumable
+    """Internal search routine behind `find_profit_chains_with_note`.
+    Iterative DFS with an explicit stack of resumable
     hop-iterators -- never Python recursion, so `RecursionError` is
     structurally unreachable at any graph size (a depth constant alone
     would only postpone the crash) -- that reproduces the exact
