@@ -107,6 +107,25 @@ def test_no_ai_actor_ever_written(tmp_path: Path) -> None:
     assert read_entries(tmp_path / "ledger.jsonl") == []
 
 
+def test_dev_actor_is_attributed(tmp_path: Path) -> None:
+    """WO-BUILD-LEDGER-DEV-SENDER-ATTRIBUTION: sacrificial dev rows land."""
+    session = _session(tmp_path)
+    server = _server(session, tmp_path)
+    protocol._record_ledger(
+        server,
+        session,
+        "pre",
+        "d",
+        secret=False,
+        resp={"screen": ["Command:"], "classification": "main_command"},
+        actor="dev",
+    )
+    rows = read_entries(tmp_path / "ledger.jsonl")
+    assert len(rows) == 1
+    assert rows[0]["actor"] == "dev"
+    assert rows[0]["input"] == "d"
+
+
 def test_daemon_imports_record_attach_and_constructs_ledger() -> None:
     src = Path(__file__).resolve().parents[1] / "tw2002_aiclient" / "session" / "daemon.py"
     text = src.read_text(encoding="utf-8")

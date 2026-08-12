@@ -49,6 +49,7 @@ from .control_lock import (
 from .hud_seed import seed_hud_after_join
 from .hud_tracking import format_cargo_hud_value
 from .settle import MATCH_SCOPE_PROMPT_LINE
+from .session import VALID_SENDERS
 from .state_parser import (
     OUTCOME_READ,
     REASON_SESSION_DISCONNECTED,
@@ -1313,8 +1314,11 @@ def _record_ledger(
     """Append one Trace-Ledger row for a do/send that already hit the wire.
 
     ``server.ledger`` absent (bare test harness) → silent no-op.
-    Missing ``session_id`` → skip (never invent). Actor must be a live
-    sender (`app`/`human`) — never ``ai``.
+    Missing ``session_id`` → skip (never invent). Actor must be in
+    ``VALID_SENDERS`` (``app`` / ``human`` / sacrificial ``dev``) — never
+    ``ai``. ``dev`` rows are only reachable after the send-time
+    ``Session._require_dev_sender_authorized`` gate (see
+    ``canon/doctrine/dev-drive-exception.md``).
     """
     ledger = getattr(server, "ledger", None)
     if ledger is None:
@@ -1322,7 +1326,7 @@ def _record_ledger(
     session_id = _current_session_id(session)
     if not session_id:
         return
-    if actor not in ("app", "human"):
+    if actor not in VALID_SENDERS:
         # Reborn north-star: AI never live-drives. Refuse to attribute.
         return
     post_text = "\n".join(resp.get("screen") or [])
