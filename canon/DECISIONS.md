@@ -629,3 +629,25 @@ questions.
 `workorders/WO-CANON-RATIFY-BOUNDED-REPEAT-TRADE-CHAIN.md` · PR #674 ·
 `tw2002_aiclient/bounded_repeat_trade_chain_driver.py` ·
 `canon/strategy/trade-loops.md` · ADR-003 (Folded).
+
+## DECISION-SHIP-UPGRADE-TRADE-IN-ECONOMICS (2026-08-12)
+
+**Status:** Accepted (hub GO 2026-08-12T04:18:34Z — batch-4 ACK greenlit this WO)
+
+**Ruling.** Ship-upgrade `projected_payback` amortizes **net cash outlay**, not gross list
+price, when trade-in credit is known:
+
+`net_cash_outlay = max(0, candidate.list_price − trade_in_credit) + hold_fill_cost(extra_holds)`.
+
+- `trade_in_credit` is **omit-until-known** (status key `upgrade_trade_in_credit` or an
+  explicit pure-engine kwarg). Default / unknown = `0` — keeps the pre-existing pessimistic
+  HOLD bias; does **not** assert that shipyards pay zero trade-in.
+- **Never invent** a server-wide trade-in percentage. Live confirm-screen credit deltas remain
+  a capture/driver follow-up; this decision only corrects the ROI math contract.
+- Recommend-only / purchase-adapter HELD posture from `DECISION-PWO-107-SHIP-UPGRADE-DECISION-PORT`
+  is unchanged.
+
+**Refs:** `canon/strategy/ship-progression.md` § Trade-in ·
+`tw2002_aiclient/ship_upgrade_decision.py` ·
+`workorders/WO-CANON-DRAFT-SHIP-UPGRADE-TRADE-IN-ECONOMICS.md` ·
+orchestrator.md 2026-08-12T04:18:34Z.

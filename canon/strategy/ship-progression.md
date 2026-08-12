@@ -2,7 +2,7 @@
 type: System
 title: Ship Progression & Upgrade Decisions (holds-first)
 description: When and to-what to upgrade holds and ships — a decision-support engine that returns recommendations and taught, human-approved behaviors, never an autonomous purchase that competes to execute.
-tags: [strategy, ship-progression, holds-first, upgrade-decision, roi, alignment-gate, defense-floor, human-approved, recommend-only]
+tags: [strategy, ship-progression, holds-first, upgrade-decision, roi, trade-in, alignment-gate, defense-floor, human-approved, recommend-only]
 timestamp: 2026-07-23T20:21:14Z
 ---
 
@@ -109,10 +109,35 @@ qualifies (so the human hears *why* a HOLD, not just "no"):
    no positive credit-per-turn delta) has nothing to amortize and is refused — no upgrade, no
    recommendation.
 5. **ROI-vs-turn-budget gate.** The engine computes `projected_payback` — the turns needed to amortize
-   the upgrade's cost (ship price plus the credits to fill the extra holds) out of the *extra*
-   credits-per-turn the bigger ship earns. If that payback exceeds the player's **remaining productive
-   turns** (turns left minus a safety reserve), the verdict is HOLD with a `roi_vs_budget` flag: the
-   capacity cannot pay for itself in the turns that remain. *Don't buy capacity you can't run.*
+   the upgrade's **net cash outlay** (see trade-in below) out of the *extra* credits-per-turn the
+   bigger ship earns. If that payback exceeds the player's **remaining productive turns** (turns left
+   minus a safety reserve), the verdict is HOLD with a `roi_vs_budget` flag: the capacity cannot pay
+   for itself in the turns that remain. *Don't buy capacity you can't run.*
+
+### Trade-in is part of net cash outlay (omit-until-known)
+
+Many TWGS shipyards credit the **outgoing hull** toward the new ship's list price (a trade-in). The
+payback numerator must amortize what the trader actually spends, not the catalog sticker:
+
+```
+net_cash_outlay = max(0, candidate.list_price − trade_in_credit) + hold_fill_cost(extra_holds)
+projected_payback = net_cash_outlay / extra_credits_per_turn
+```
+
+Rules (load-bearing):
+
+- **`trade_in_credit` is omit-until-known.** It comes only from introspected / observed evidence
+  (e.g. a shipyard confirm screen's credit delta, or an explicit status key). The engine must
+  **never invent** a percentage of the old ship's list price — that formula is server-specific and
+  not tip-measured in this repo's live-capture research
+  (`canon/research/stardock-ship-purchase-capture-2026-08-08.md` left purchase-confirm NOT-ATTEMPTED).
+- **Unknown → `0`.** Treating missing trade-in as zero keeps today's gross-list payback: systematically
+  *pessimistic* when a world does grant trade-in, which biases toward HOLD rather than over-recommend.
+  That bias is intentional until evidence lands; it is not a claim that trade-in is zero.
+- **Known → subtract, floor at zero.** Trade-in cannot invent a rebate larger than the list price for
+  payback math (`max(0, …)`). Hold-fill credits for the *extra* holds remain additive either way.
+- **Recommend-only unchanged.** Trade-in only corrects the ROI gate's honesty; it does not authorize
+  a purchase adapter (still HELD per `DECISION-PWO-107-SHIP-UPGRADE-DECISION-PORT`).
 
 A candidate that clears all five is recommended, and among all recommended candidates the engine picks
 the highest **holds-per-turn** — the per-turn throughput metric above, so the winner is the best
@@ -308,15 +333,18 @@ listing screen itself.
   hand-ordered repeatedly; and the full-autopilot capstone the reborn vision re-scopes.
 - Code modules — `ship_upgrade_decision.py` (the pure five-gate decision engine: alignment/rank,
   loop-stock, defense-floor, positive-delta, and ROI-vs-turn-budget gates; the holds-per-turn
-  throughput metric; the payback computation; and the best-of-eligible chooser returning `{recommend,
-  ship, rationale, projected_payback, flags}`), `game_data.py` (the introspected per-world ship rows
-  and the `ship_row_to_spec` bridge that feeds the engine), `chains.py` (the longest-profit-chain
-  finder whose loop economics the loop-stock match and per-turn metric depend on), archive-only
+  throughput metric; the payback computation with optional `trade_in_credit` (default 0 =
+  omit-until-known); and the best-of-eligible chooser returning `{recommend, ship, rationale,
+  projected_payback, flags}`), `game_data.py` (the introspected per-world ship rows and the
+  `ship_row_to_spec` bridge that feeds the engine), `chains.py` (the longest-profit-chain finder
+  whose loop economics the loop-stock match and per-turn metric depend on), archive-only
   `twclient/autopilot.py` (do-not-revive EV picker / `EXPLORE_BASELINE_EV` auto-driver),
   `trade_driver.py` (arm-gated chain runner), and tip hold-buy execute
   — `stardock_hold_plan.py` / `stardock_hold_driver.py` (`run_hold_purchase` one-pass; refuse unknown
   qty range / price mismatch; never toll-pay or trade_chain) / `session/stardock_hold.py`
   (`StardockHoldRunner`, `DEFAULT_CASH_FLOOR=1_000` refuse-before-send).
+- Trade-in economics: `DECISION-SHIP-UPGRADE-TRADE-IN-ECONOMICS` ·
+  `workorders/WO-CANON-DRAFT-SHIP-UPGRADE-TRADE-IN-ECONOMICS.md`.
 - Research evidence — [`stardock-ship-purchase-capture-2026-08-08`](/research/stardock-ship-purchase-capture-2026-08-08.md)
   (fixture-vs-live mismatch on the listing screen; no purchase-confirm ground truth on any server
   driven yet; the send/confirm half of a purchase driver stays held until a live capture exists).
