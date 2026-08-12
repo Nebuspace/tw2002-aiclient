@@ -104,7 +104,7 @@ STOP-cause family they express:
 | `autopilot_halted` | autopilot halted | **guard-STOP** — a guarded rule refused to fire (guard tripped), so autopilot stopped rather than play an unsafe macro |
 | `autopilot_no_candidates` | autopilot no candidates | **unrecognized-screen** — no rule matched the current screen; nothing to play, so hand off |
 | `explore_exhausted` | explore exhausted | **novelty-halt** — the exploration budget ran out with no recognized continuation |
-| `autopilot_max_ticks_exhausted` | autopilot max ticks exhausted | **depletion** — the per-run tick budget is spent; stop and let the human decide whether to continue |
+| `autopilot_max_ticks_exhausted` | autopilot max ticks exhausted | **depletion** — inventory-only / **unproduced** on tip: label exists in `stopbanner.INTERVENTION_REASON_LABELS` (and tests may hand-construct the string) but **no** product path emits this code. Pre-rebirth Autopilot tick-cap stop; tip turn-budget / cycle clamp is `CYCLES_HARD_CEILING` via other depletion codes (e.g. `turn_budget_exhausted`) — see [operator-cold-start](/surfaces/operator-cold-start.md) tip-honesty note |
 | `autopilot_game_select` | autopilot game select | **hazard** — autopilot reached a game-select / session-boundary screen it must not auto-answer; the human owns that choice |
 | `human_attach_blocks_trainer` | human attach blocks trainer | **human-sovereignty preemption** — a human attached interactively, so the trainer yields the keyboard unconditionally |
 | `operator_stop` | operator stop | **human-sovereignty preemption** — the run was stood down (nobody necessarily typing; distinct from attach-fence) |
