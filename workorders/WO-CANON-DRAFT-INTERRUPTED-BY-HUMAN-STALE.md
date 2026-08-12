@@ -1,6 +1,6 @@
 # WO-CANON-DRAFT-INTERRUPTED-BY-HUMAN-STALE — correct "not yet consumed" note
 
-**Status:** IN FLIGHT · Cursor · `wo/CANON-DRAFT-INTERRUPTED-BY-HUMAN-STALE`  
+**Status:** DONE · tip trace-ledger.md documents session_report consumer
 **Posted:** Cycle-43 LOW · queue-aiclient.md
 
 ## Goal

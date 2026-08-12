@@ -1,6 +1,6 @@
 # WO-CANON-DRAFT-TRADE-CHAIN-PLAN-NO-COVERAGE — name tip `trade_chain_plan.py` in canon
 
-**Status:** IN FLIGHT · Cursor · `wo/CANON-DRAFT-TRADE-CHAIN-PLAN-NO-COVERAGE`  
+**Status:** DONE · tip trade-loops.md + mode-line cite trade_chain_plan.py
 **Posted:** Cycle-45 MED · queue-aiclient.md
 
 ## Goal

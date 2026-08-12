@@ -1,6 +1,6 @@
 # WO-ADR-DRAFT-AICLIENT-LIFECYCLE-CONVENTION
 
-**Status:** OPEN (in PR)  
+**Status:** DONE · tip canon/ADR/index.md already carries Lifecycle table + re-verify cadence
 **Priority:** LOW  
 **Claimed-by:** impl-aiclient-cursor  
 **Source:** Cycle-36 / queue-aiclient.md

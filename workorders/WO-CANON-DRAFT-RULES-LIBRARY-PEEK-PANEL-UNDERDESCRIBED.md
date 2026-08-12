@@ -1,6 +1,6 @@
 # WO-CANON-DRAFT-RULES-LIBRARY-PEEK-PANEL-UNDERDESCRIBED
 
-**Status:** OPEN (in PR)  
+**Status:** DONE · tip mode-line-and-teach-controls.md § Blessed rules peek documents U)rules states
 **Priority:** LOW  
 **Claimed-by:** impl-aiclient-cursor  
 **Source:** Cycle-37 / queue-aiclient.md

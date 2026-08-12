@@ -1,6 +1,6 @@
 # WO-CANON-ROLLUP-ADR-003-DISTRIBUTED-FOLD-TAG — Distributed-fold 6/8
 
-**Status:** IN FLIGHT · Cursor · `wo/CANON-ROLLUP-ADR-003-DISTRIBUTED-FOLD-TAG`  
+**Status:** DONE · tip ADR-003 Status Folded into trade-loops.md (re-verified 2026-08-09 — 8/8 gap closed)
 **Posted:** Cycle-43 MED · queue-aiclient.md
 
 ## Goal

@@ -1,6 +1,6 @@
 # WO-CANON-DRAFT-PWO-092-HELD-STALE-RECONCILE — narrow Option B HELD vs #471
 
-**Status:** IN FLIGHT · Cursor · `wo/CANON-DRAFT-PWO-092-HELD-STALE-RECONCILE`  
+**Status:** DONE · PR #475 · tip already narrows Option B HELD vs passive I LIVE
 **Posted:** Cycle-43 MED · queue-aiclient.md
 
 ## Goal

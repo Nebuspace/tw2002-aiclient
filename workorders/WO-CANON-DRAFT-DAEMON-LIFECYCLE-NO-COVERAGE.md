@@ -1,6 +1,6 @@
 # WO-CANON-DRAFT-DAEMON-LIFECYCLE-NO-COVERAGE
 
-**Status:** OPEN (in PR)  
+**Status:** DONE · tip session-engine.md documents daemon_lifecycle.py presence vocabulary + budgets
 **Priority:** MED  
 **Claimed-by:** impl-aiclient-cursor  
 **Source:** Cycle-36 / queue-aiclient.md

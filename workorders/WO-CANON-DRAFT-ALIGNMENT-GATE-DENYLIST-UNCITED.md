@@ -1,6 +1,6 @@
 # WO-CANON-DRAFT-ALIGNMENT-GATE-DENYLIST-UNCITED
 
-**Status:** OPEN (in PR)  
+**Status:** DONE · tip alignment-and-conduct.md § Proposal-time alignment gate names module + denylists
 **Priority:** MED  
 **Claimed-by:** impl-aiclient-cursor  
 **Source:** Cycle-37 / queue-aiclient.md

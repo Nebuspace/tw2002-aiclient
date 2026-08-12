@@ -1,6 +1,6 @@
 # WO-CLEANUP-TRADE-CHAIN-DISCOVERY-PREFLIGHT-ORPHAN — delete dead client preflight
 
-**Status:** IN FLIGHT · Cursor · `wo/CLEANUP-TRADE-CHAIN-DISCOVERY-PREFLIGHT-ORPHAN`  
+**Status:** DONE · tip has no `_trade_chain_discovery_preflight` symbol
 **Posted:** Cycle-43 MED · queue-aiclient.md
 
 ## Goal

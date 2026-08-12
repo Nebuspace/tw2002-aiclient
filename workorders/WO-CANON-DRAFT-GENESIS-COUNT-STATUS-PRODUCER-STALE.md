@@ -1,6 +1,6 @@
 # WO-CANON-DRAFT-GENESIS-COUNT-STATUS-PRODUCER-STALE — correct stale "no producer" note
 
-**Status:** IN FLIGHT · Cursor · `wo/CANON-DRAFT-GENESIS-COUNT-STATUS-PRODUCER-STALE`  
+**Status:** DONE · tip coaching-engine.md already says genesis_count producer LIVE
 **Posted:** Cycle-43 LOW · queue-aiclient.md
 
 ## Goal

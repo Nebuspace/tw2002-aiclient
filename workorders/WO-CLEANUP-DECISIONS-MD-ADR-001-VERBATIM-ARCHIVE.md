@@ -1,6 +1,6 @@
 # WO-CLEANUP-DECISIONS-MD-ADR-001-VERBATIM-ARCHIVE
 
-**Status:** OPEN (in PR)  
+**Status:** DONE · PR #467 · `canon/DECISIONS-archive.md` on tip; live DECISIONS pointers only
 **Priority:** LOW  
 **Claimed-by:** impl-aiclient-cursor  
 **Source:** Cycle-39 / queue-aiclient.md
