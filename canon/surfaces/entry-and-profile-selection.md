@@ -140,9 +140,9 @@ the operator's *own* daily allotment by rotating across **several independent ch
 distinct profile, each its own world. The entry surface is where that bank is visible as a rotation
 touchpoint: `tw players list` (`players_cli.py::cmd_players_list`) shows the banked characters with
 `last_played` / `turns_state` rotation bookkeeping. Tip LIVE bank verbs are
-`{list,next,rotate}` only — there is **no** `tw players add` today; linking a new bank row to a
-profile remains TARGET / cockpit Create-New-Player + credential-bank write paths, not a shipped
-`tw` subcommand (see [CLI Verbs](/architecture/cli-verbs.md)).
+`{list,next,rotate,add}` — `tw players add` wraps `credentials.create_profile()` to append a
+non-secret profile section (metadata only; never logs in). Cockpit Create-New-Player remains an
+alternate create path; the consolidated visual launcher is still TARGET (see [CLI Verbs](/architecture/cli-verbs.md)).
 
 The bank stores **metadata only** — name, handle, host, game-letter, rotation timestamps. It holds
 **no password** (`player_bank.py` pulls fields from `credentials.Profile`, which has no password
@@ -390,14 +390,14 @@ paladin-main     PaladinPrime     tw2002.briancmoses.com   A   2026-07-23     ok
 
 - **Launcher UI is CLI-verb-composed, not a single dedicated screen (yet).** The reborn "entry
   surface" is described here as one launcher; in current code its pieces are separate CLI verbs —
-  `tw servers list` (`catalog_cli.cmd_servers_list`), `tw players {list,next,rotate}`
-  (`players_cli`) — **no** `tw players add` — and profile creation via
-  `credentials.create_profile()` / Create-New-Player TUI. The product cockpit entry is
-  `./tw2002-aiclient` / `python -m tw2002_aiclient` (`app.py`) — **not** a `tw aiclient`
-  subcommand (there is no `cmd_aiclient`; see [CLI Verbs](/architecture/cli-verbs.md)). The
-  consolidated visual picker+create flow this document specifies is the target; the underlying
-  data functions (`list_profile_summaries`, `create_profile`, `list_servers`, `player_bank`)
-  already exist and are what a single surface would compose. Recorded, not silently conformed.
+  `tw servers list` (`catalog_cli.cmd_servers_list`), `tw players {list,next,rotate,add}`
+  (`players_cli`; `add` → `credentials.create_profile()`), plus Create-New-Player TUI as an
+  alternate create path. The product cockpit entry is `./tw2002-aiclient` /
+  `python -m tw2002_aiclient` (`app.py`) — **not** a `tw aiclient` subcommand (there is no
+  `cmd_aiclient`; see [CLI Verbs](/architecture/cli-verbs.md)). The consolidated visual
+  picker+create flow this document specifies is the target; the underlying data functions
+  (`list_profile_summaries`, `create_profile`, `list_servers`, `player_bank`) already exist and
+  are what a single surface would compose. Recorded, not silently conformed.
 
 - **Dual server directories — do not conflate.** `config/servers.toml` is the profile-binding
   catalog (`credentials.list_servers` / `create_profile`). `tw servers list` reads
