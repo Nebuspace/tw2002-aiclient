@@ -1,6 +1,6 @@
 # WO-CANON-FIX-TEST-CATALOG-STALE-COUNTS
 
-**Status:** IN_PROGRESS  
+**Status:** DONE · this PR — headline census re-verified tip d9a3fb6 → 7512/314/315
 **Priority:** LOW (queue-aiclient READY · ungated)  
 **Depends-on:** none  
 **gated:** no · **schema:** n/a
