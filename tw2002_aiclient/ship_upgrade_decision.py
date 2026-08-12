@@ -85,8 +85,13 @@ def payback_turns(
     loop: LoopEconomics,
     *,
     cost_per_hold: int = 0,
+    trade_in_credit: int = 0,
 ) -> Optional[float]:
-    """Turns to amortize upgrade cost from the extra credits/turn."""
+    """Turns to amortize net cash outlay from the extra credits/turn.
+
+    ``trade_in_credit`` is omit-until-known (default 0 = unknown / pessimistic).
+    Never invent a trade-in percentage — callers pass observed credit only.
+    """
     extra_holds = ship.holds - state.current_holds
     if extra_holds <= 0:
         return None
@@ -105,7 +110,9 @@ def payback_turns(
     extra_cr_per_turn = hpt_new - hpt_cur
     if extra_cr_per_turn <= 0:
         return None
-    total_cost = ship.cost + hold_fill_cost(extra_holds, cost_per_hold)
+    credit = max(0, trade_in_credit)
+    net_ship_cost = max(0, ship.cost - credit)
+    total_cost = net_ship_cost + hold_fill_cost(extra_holds, cost_per_hold)
     return total_cost / extra_cr_per_turn
 
 
@@ -121,6 +128,7 @@ def evaluate_candidate(
     loop: LoopEconomics,
     *,
     cost_per_hold: int = 0,
+    trade_in_credit: int = 0,
     defense_floor_fighters: int = 1,
 ) -> UpgradeDecision:
     """Evaluate a single commissioned ship against the five TW-30 gates."""
@@ -163,7 +171,13 @@ def evaluate_candidate(
         )
 
     productive = remaining_productive_turns(state)
-    pb = payback_turns(ship, state, loop, cost_per_hold=cost_per_hold)
+    pb = payback_turns(
+        ship,
+        state,
+        loop,
+        cost_per_hold=cost_per_hold,
+        trade_in_credit=trade_in_credit,
+    )
     if pb is None:
         return UpgradeDecision(
             recommend=False,
@@ -203,6 +217,7 @@ def choose_upgrade(
     loop: LoopEconomics,
     *,
     cost_per_hold: int = 0,
+    trade_in_credit: int = 0,
     defense_floor_fighters: int = 1,
 ) -> UpgradeDecision:
     """Pick the best hold-throughput ship that passes all five gates, or HOLD."""
@@ -215,6 +230,7 @@ def choose_upgrade(
             state,
             loop,
             cost_per_hold=cost_per_hold,
+            trade_in_credit=trade_in_credit,
             defense_floor_fighters=defense_floor_fighters,
         )
         if decision.recommend and decision.ship is not None:
@@ -763,7 +779,18 @@ def upgrade_decision_from_status(status: object) -> Optional[UpgradeDecision]:
         cost_per_hold = status.get("upgrade_cost_per_hold", 0)
         if not isinstance(cost_per_hold, int) or isinstance(cost_per_hold, bool):
             cost_per_hold = 0
-        return choose_upgrade(catalog, state, loop, cost_per_hold=cost_per_hold)
+        trade_in_credit = status.get("upgrade_trade_in_credit", 0)
+        if not isinstance(trade_in_credit, int) or isinstance(trade_in_credit, bool):
+            trade_in_credit = 0
+        if trade_in_credit < 0:
+            trade_in_credit = 0
+        return choose_upgrade(
+            catalog,
+            state,
+            loop,
+            cost_per_hold=cost_per_hold,
+            trade_in_credit=trade_in_credit,
+        )
     except Exception:  # noqa: BLE001 -- fail-closed
         return None
 

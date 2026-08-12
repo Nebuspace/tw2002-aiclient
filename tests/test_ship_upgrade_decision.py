@@ -203,6 +203,25 @@ def test_payback_turns_positive_for_upgrade():
     assert pb > 0
 
 
+def test_payback_turns_trade_in_shortens_amortization():
+    """Known trade-in reduces net cash outlay; unknown (0) stays gross-list."""
+    state = PlayerState(turns_left=800, current_holds=40)
+    loop = LoopEconomics(margin_per_hold=200, turns_per_cycle=10, stock_capacity=300)
+    ship = _merchant_man()
+    gross = payback_turns(ship, state, loop, cost_per_hold=100)
+    net = payback_turns(
+        ship, state, loop, cost_per_hold=100, trade_in_credit=ship.cost // 2
+    )
+    assert gross is not None and net is not None
+    assert net < gross
+    # Trade-in larger than list price floors ship cost at 0; hold-fill remains.
+    zero_ship = payback_turns(
+        ship, state, loop, cost_per_hold=100, trade_in_credit=ship.cost * 2
+    )
+    assert zero_ship is not None
+    assert zero_ship < net
+
+
 def test_compose_upgrade_decision_lines_recommend_and_hold():
     from tw2002_aiclient.ship_upgrade_decision import (
         UpgradeDecision,
