@@ -14,8 +14,8 @@ _Cockpit viewport color._
 | Test | Blurb |
 |------|-------|
 | `test_pyte_to_curses_color_covers_exactly_the_real_pyte_names` | Pyte to curses color covers exactly the real pyte names. |
-| `test_curses_color_of_maps_every_real_pyte_name` | Curses color of maps every real pyte name. |
-| `test_curses_color_of_default_and_unknown_and_hostile_are_minus_one` | Curses color of default and unknown and hostile are minus one. |
+| `test_pyte_to_curses_color_maps_every_real_pyte_name` | Pyte to curses color maps every real pyte name. |
+| `test_pyte_to_curses_color_default_and_unknown_absent` | Default/unknown names absent from PYTE_TO_CURSES_COLOR (dict-only; orphaned `_curses_color_of` retired). |
 | `test_exact_run_survives_unchanged_when_fully_in_bounds` | Exact run survives unchanged when fully in bounds. |
 | `test_output_length_always_matches_text_lines_length` | Output length always matches text lines length. |
 | `test_row_count_matches_color_rows_with_no_transform_needed` | Row count matches color rows with no transform needed. |

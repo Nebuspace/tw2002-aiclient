@@ -74,8 +74,8 @@ import curses
 # archive precedent: archive/pre-rebirth-2026-07-23/code/twclient/
 # spectate_app.py's own _PYTE_TO_CURSES_COLOR, same table). "default" is
 # deliberately ABSENT from this dict -- it means "terminal default", not a
-# color to force, and resolves to curses' -1 sentinel in
-# ``_curses_color_of`` below, same as any other unrecognized name.
+# color to force. Unrecognized names resolve to ``-1`` at the allocator
+# (``screens.py`` ``_SharedPairs.attr_for``), not via a wrapper in this module.
 PYTE_TO_CURSES_COLOR: dict[str, int] = {
     "black": curses.COLOR_BLACK,
     "red": curses.COLOR_RED,
@@ -86,17 +86,6 @@ PYTE_TO_CURSES_COLOR: dict[str, int] = {
     "cyan": curses.COLOR_CYAN,
     "white": curses.COLOR_WHITE,
 }
-
-
-def _curses_color_of(name: object) -> int:
-    """pyte color name -> curses basic-8 int, or ``-1`` (terminal default,
-    ``curses.use_default_colors()``'s sentinel) for ``"default"`` or any
-    unrecognized/hostile ``name`` -- degrading an unknown name to "default"
-    is the honest choice (never guess a color that was never named). Never
-    raises regardless of ``name``'s type."""
-    if not isinstance(name, str):
-        return -1
-    return PYTE_TO_CURSES_COLOR.get(name, -1)
 
 
 # ---------------------------------------------------------------------------
