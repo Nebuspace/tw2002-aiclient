@@ -50,6 +50,7 @@ class SessionReport:
     skipped_interrupted: int
     ledger_path: str
     notes: tuple[str, ...] = field(default_factory=tuple)
+    teaching_provenance: Mapping[str, int] | None = None
 
 
 def _str_or_none(value: object) -> str | None:
@@ -72,12 +73,35 @@ def _input_summary(entry: Mapping[str, Any]) -> str:
     return text
 
 
+def _load_teaching_provenance(
+    *,
+    state_dir: str | Path | None,
+    world_id: str | None,
+) -> tuple[Mapping[str, int] | None, str | None]:
+    """Best-effort third-axis read; never raises into the report path."""
+    try:
+        from tw2002_aiclient.coverage_metrics import teaching_provenance_counts
+        from tw2002_aiclient.rules.store import read_rule_store
+    except Exception:  # noqa: BLE001 — optional surface
+        return None, "teaching provenance unavailable (import)"
+    try:
+        report = read_rule_store(state_dir=state_dir, world_id=world_id)
+    except Exception as exc:  # noqa: BLE001
+        return None, f"teaching provenance skipped ({type(exc).__name__})"
+    status = report.get("status") if isinstance(report, dict) else None
+    rules = report.get("rules") if isinstance(report, dict) else None
+    if not isinstance(rules, list):
+        return None, f"teaching provenance skipped (store status={status!r})"
+    return teaching_provenance_counts(rules), None
+
+
 def build_session_report(
     *,
     path: str | Path | None = None,
     session_id: str | None = None,
     world_id: str | None = None,
     include_interrupted: bool = False,
+    state_dir: str | Path | None = None,
 ) -> SessionReport:
     """Build a digest from the ledger. Never raises on corrupt rows."""
     ledger_path = Path(path) if path is not None else DEFAULT_LEDGER_PATH
@@ -125,6 +149,12 @@ def build_session_report(
                 "pass --session-id to narrow"
             )
 
+    provenance, prov_note = _load_teaching_provenance(
+        state_dir=state_dir, world_id=world_id
+    )
+    if prov_note:
+        notes.append(prov_note)
+
     return SessionReport(
         session_id=want_session,
         app_actions=tuple(app_rows),
@@ -132,6 +162,7 @@ def build_session_report(
         skipped_interrupted=skipped_interrupted,
         ledger_path=str(ledger_path),
         notes=tuple(notes),
+        teaching_provenance=dict(provenance) if provenance is not None else None,
     )
 
 
@@ -151,6 +182,10 @@ def format_session_report(report: SessionReport) -> str:
         lines.append(
             f"skipped interrupted_by_human app rows: {report.skipped_interrupted}"
         )
+    if report.teaching_provenance is not None:
+        from tw2002_aiclient.coverage_metrics import format_teaching_provenance_line
+
+        lines.append(format_teaching_provenance_line(report.teaching_provenance))
     for note in report.notes:
         lines.append(f"note: {note}")
     lines.append("")

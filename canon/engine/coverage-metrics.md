@@ -172,11 +172,14 @@ do-not-revive; tip measurement of the live share is **shipped**.
   `app/(app+human)` (+ honest `?` for unavailable / empty window);
   `ledger.live_actor_counts` folds the ledger; `screens.py` wires the meter on
   the control strip. Queue claim "zero code exists" was stale.
-  **Teaching-provenance axis — tip shipped (WO-BUILD-COVERAGE-METRICS-TEACHING-PROVENANCE-AXIS).**
+  **Teaching-provenance axis — tip shipped (WO-BUILD-COVERAGE-METRICS-TEACHING-PROVENANCE-AXIS
+  + WO-BUILD-COVERAGE-METRICS-TEACHING-PROVENANCE-WIRE).**
   Rule documents may carry optional `origin` (`human` | `ai-approved`); absent
   values bucket as legacy/`unknown`. `coverage_metrics.teaching_provenance_counts`
   reports the third axis over approved rules without touching the live
-  app/human share (`covermeter` / `live_actor_counts`). Still prescribed beside
+  app/human share (`covermeter` / `live_actor_counts`). Operator surfaces:
+  `tw coach provenance` and the teaching-provenance line on `tw report` /
+  `format_session_report` (best-effort rule-store read). Still prescribed beside
   this meter: the session-retro candidate-mining surface.
 
 # Citations
