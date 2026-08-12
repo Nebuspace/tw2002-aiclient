@@ -29,7 +29,8 @@ import pytest
 from tw2002_aiclient.cockpit import viewport_color as vc
 
 # ---------------------------------------------------------------------------
-# PYTE_TO_CURSES_COLOR / _curses_color_of -- exact name mapping
+# PYTE_TO_CURSES_COLOR -- exact name mapping (dict only; orphaned
+# `_curses_color_of` wrapper retired — live resolution is pairs.attr_for)
 # ---------------------------------------------------------------------------
 
 # The exact pyte FG_ANSI/BG_ANSI vocabulary (session/terminal.py's own
@@ -55,16 +56,13 @@ def test_pyte_to_curses_color_covers_exactly_the_real_pyte_names():
         ("white", curses.COLOR_WHITE),
     ],
 )
-def test_curses_color_of_maps_every_real_pyte_name(name, expected):
-    assert vc._curses_color_of(name) == expected
+def test_pyte_to_curses_color_maps_every_real_pyte_name(name, expected):
+    assert vc.PYTE_TO_CURSES_COLOR[name] == expected
 
 
-def test_curses_color_of_default_and_unknown_and_hostile_are_minus_one():
-    assert vc._curses_color_of("default") == -1
-    assert vc._curses_color_of("not-a-real-color") == -1
-    assert vc._curses_color_of(None) == -1
-    assert vc._curses_color_of(42) == -1
-    assert vc._curses_color_of(["red"]) == -1  # unhashable, must not raise
+def test_pyte_to_curses_color_default_and_unknown_absent():
+    assert "default" not in vc.PYTE_TO_CURSES_COLOR
+    assert vc.PYTE_TO_CURSES_COLOR.get("not-a-real-color", -1) == -1
 
 
 # ---------------------------------------------------------------------------
