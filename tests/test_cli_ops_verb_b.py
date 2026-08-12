@@ -145,10 +145,12 @@ def test_cmd_do_forwards_payload(monkeypatch, tmp_path):
         timeout=3.0,
         json=True,
         run_dir=str(tmp_path / "r"),
+        sender="app",
     )
     assert cli.cmd_do(args) == 0
     assert seen["verb"] == "do"
     assert seen["args"]["input"] == "d"
+    assert seen["args"]["sender"] == "app"
     assert seen["timeout"] == 8.0  # 3 + 5
     assert seen["run_dir"] == tmp_path / "r"
 
@@ -161,13 +163,42 @@ def test_cmd_send_and_read_forward(monkeypatch):
         return {"ok": True, "screen": _MAIN}
 
     monkeypatch.setattr(cli, "send_request", fake_send)
-    assert cli.cmd_send(Namespace(input="x", enter=False, secret=True, json=True, run_dir=None)) == 0
+    assert (
+        cli.cmd_send(
+            Namespace(input="x", enter=False, secret=True, json=True, run_dir=None, sender="app")
+        )
+        == 0
+    )
     assert cli.cmd_read(Namespace(wait_prompt="Hi", timeout=1.5, json=True, run_dir=None)) == 0
     assert calls[0][0] == "send"
-    assert calls[0][1] == {"input": "x", "enter": False, "secret": True}
+    assert calls[0][1] == {"input": "x", "enter": False, "secret": True, "sender": "app"}
     assert calls[1][0] == "read"
     assert calls[1][1]["wait_prompt"] == "Hi"
     assert calls[1][2] == 6.5
+
+
+def test_parser_do_send_accept_sender_dev():
+    parser = cli.build_parser()
+    do = parser.parse_args(["do", "d", "--sender", "dev"])
+    assert do.sender == "dev"
+    send = parser.parse_args(["send", "x", "--sender", "dev"])
+    assert send.sender == "dev"
+
+
+def test_protocol_do_send_dev_sender_and_invalid(monkeypatch):
+    session = FakeSession(_MAIN)
+    server = FakeServer()
+    ok = protocol.dispatch(session, "do", {"input": "d", "sender": "dev"}, server)
+    assert ok["ok"] is True
+    assert session.sent[-1]["sender"] == "dev"
+
+    bad = protocol.dispatch(session, "do", {"input": "d", "sender": "human"}, server)
+    assert bad["ok"] is False
+    assert "invalid_sender" in bad["error"]
+
+    refused = protocol.dispatch(session, "send", {"input": "x", "sender": "ai"}, server)
+    assert refused["ok"] is False
+    assert "invalid_sender" in refused["error"]
 
 
 def test_protocol_do_send_read_fake_session():

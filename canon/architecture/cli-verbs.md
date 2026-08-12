@@ -52,7 +52,10 @@ keystroke senders are `{app, human}` only — never the AI.**
   and the **Human** (sovereign pilot). Sub-labels sharpen *which* sender a verb serves: `{human}`
   for the interactive keyboard (`attach`), `{app}` for the deterministic macro/loop/pilot drivers
   (`play`, `replay`, `autoloop`, `autopilot`, `haggle`, `crawl`). The bare primitives
-  (`do`, `send`, `ensure`, `start`, `stop`) are `{app,human}` — usable by either legal sender.
+  (`do`, `send`, `ensure`, `start`, `stop`) are `{app,human}` for play — usable by either legal
+  play sender. `tw do`/`tw send` also accept `--sender dev` for the sacrificial
+  [dev-drive exception](/doctrine/dev-drive-exception.md) (refused unless
+  `crawl_sacrificial=true`).
 - **`read-only`** — never takes the control lock, never sends a keystroke. Safe to observe with.
 - **`teach`** — the retrospective, human-invoked teach path. Reads history and *proposes* rules or
   macros; it never sends a live keystroke and never auto-applies its own output. `record`,
@@ -180,6 +183,7 @@ The daily one-shot rhythm — one verb, one settled screen, then reason:
 tw ensure --profile pilot          # land at the command prompt (idempotent)
 tw screen                          # look — non-destructive, safe any time
 tw do "d"                          # send 'd', wait for settle, get the new screen
+tw do "d" --sender dev             # sacrificial crawl_sacrificial profile only
 tw status --json                   # intervention.needs_attention? still mine to drive?
 ```
 

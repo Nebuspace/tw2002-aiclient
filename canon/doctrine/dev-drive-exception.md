@@ -91,17 +91,13 @@ this document authorizes:
   run, satisfying this document's own "logged as what it is" requirement without a second,
   divergent enforcement point.
 
-**Remaining residual — no reachable product CLI path yet.** The gate above exists and
-ledger attribution for `actor=dev` is LIVE (`protocol._record_ledger` accepts
-`VALID_SENDERS`, including `dev` — WO-BUILD-LEDGER-DEV-SENDER-ATTRIBUTION). Nothing in
-the shipped CLI reaches the send gate: `tw do` / `tw send` (`session/protocol.py:1493,1535`)
-hardcode `sender="app"`, and login paths leave `Session.send`'s default `sender="app"`
-untouched (`protocol.py:1985`). So an agent exercising this exception today can only do
-so by calling `Session.send()`/`send_raw()` directly (e.g. from a Python REPL or a
-throwaway script) with `sender="dev"` on a `crawl_sacrificial` profile — never through
-the product's own `tw` verbs. Wiring a real CLI surface (e.g. a `--sender dev` flag on
-`tw do`, itself re-checking `is_crawl_sacrificial` rather than trusting the caller) is
-tracked as `WO-BUILD-DEV-DRIVE-CLI-SURFACE` / `WO-WIRE-DEV-SENDER-CLI-PATH` — still open.
+**Remaining residual — CLI path now exists; still sacrificial-gated.** Ledger
+attribution for `actor=dev` is LIVE. `tw do` / `tw send` accept
+`--sender {app,dev}` (default `app`); protocol passes that value to
+`Session.send` / `_record_ledger`. `sender=dev` still refuses unless the
+active profile is `crawl_sacrificial=true` (send-time gate). Login paths leave
+`Session.send`'s default `sender="app"` untouched (`protocol.py` ensure/login
+notes). Human keystrokes stay on `tw attach` / `send_raw`, not these verbs.
 
 # Citations
 
