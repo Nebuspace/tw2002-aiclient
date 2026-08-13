@@ -152,10 +152,6 @@ COVERAGE: tuple[GuardCoverage, ...] = (
 )
 
 
-def all_coverage() -> tuple[GuardCoverage, ...]:
-    return COVERAGE
-
-
 def source_path(entry: GuardCoverage) -> Path:
     return _PKG_ROOT / entry.source_relpath
 

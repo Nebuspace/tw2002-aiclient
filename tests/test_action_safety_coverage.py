@@ -16,12 +16,12 @@ def test_coverage_map_intact() -> None:
 
 
 def test_guard_ids_unique_and_nonempty() -> None:
-    ids = [g.guard_id for g in action_safety.all_coverage()]
+    ids = [g.guard_id for g in action_safety.COVERAGE]
     assert ids
     assert len(ids) == len(set(ids))
 
 
-@pytest.mark.parametrize("entry", action_safety.all_coverage(), ids=lambda g: g.guard_id)
+@pytest.mark.parametrize("entry", action_safety.COVERAGE, ids=lambda g: g.guard_id)
 def test_unit_per_guard_class_source_and_proof(entry: GuardCoverage) -> None:
     """Unit-per-class: each inventory row's pins resolve on tip."""
     src = action_safety.source_path(entry)
@@ -36,14 +36,14 @@ def test_unit_per_guard_class_source_and_proof(entry: GuardCoverage) -> None:
 
 def test_map_covers_canon_schema_core_layers() -> None:
     """Schema ladder layers from action-safety-guards.md must appear."""
-    layers = {g.canon_layer for g in action_safety.all_coverage()}
+    layers = {g.canon_layer for g in action_safety.COVERAGE}
     for required in ("Per-send", "Per-cycle", "Resolver", "Run", "Crawl", "Always"):
         assert required in layers, required
 
 
 def test_never_auto_inventory_is_referenced_not_replaced() -> None:
     """NEVER_AUTO consumer audit remains the money_prompt depth proof."""
-    entry = next(g for g in action_safety.all_coverage() if g.guard_id == "never_auto_money_prompt")
+    entry = next(g for g in action_safety.COVERAGE if g.guard_id == "never_auto_money_prompt")
     assert entry.proof_test_relpath == "tests/test_never_auto_action.py"
     audit = Path(__file__).resolve().parents[1] / "audit" / "never-auto-action-consumer-audit-20260726.md"
     assert audit.is_file()
