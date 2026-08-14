@@ -2,6 +2,10 @@
 
 ## 2026-08-14
 
+- **WO-CANON-DRAFT-COACH-PROVENANCE-CLI-CATALOG.** `cli-verbs.md` now catalogs **LIVE**
+  `tw coach provenance` (human / ai-approved / unknown teaching-provenance axis; wired since
+  #685) beside `coach show`; LIVE verb enumeration spells `coach {show,provenance}`.
+
 - **WO-BUILD-CLI-STATE-VERB-SUBPARSER.** `tw state` is LIVE — thin CLI over the existing
   daemon `state` protocol verb (`cmd_state` + `build_parser` registration). Catalog row,
   runnable-at-any-moment list, LIVE verb enumeration, and WIRE-ONLY bucket updated so
