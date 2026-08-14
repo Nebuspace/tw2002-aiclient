@@ -7,6 +7,17 @@
   runnable-at-any-moment list, LIVE verb enumeration, and WIRE-ONLY bucket updated so
   `state` is no longer documented as shell-unreachable; autoloop_* remains WIRE-ONLY.
 
+- **WO-CANON-DRAFT-LOG-MD-CATCHUP-BATCH-669-684.** Digest catch-up for merged PRs #669-#684
+  (2026-08-10..12) while underlying concept docs were already tip-true: Chain-hunt defaults
+  honesty (#669); `frames` on the LIVE verb list (#670); entry/profile launcher + servers-list
+  citation honesty (#671/#672) plus cycle-51 docs batch (#673); sacrificial bounded-repeat
+  trade-chain ratification (#674); stale `dev-drive-exception` protocol cites (#675);
+  `INTERJECTION_IDS` drift guard (#676); Play `ARMABLE_INTENTS` enforce (#677); `tw stop`
+  session-report auto-print (#678); sacrificial `actor=dev` ledger attribution (#679) and
+  `tw do`/`tw send --sender app|dev` (#680); trade-loops autopilot EV picker marked
+  archive/do-not-revive (#681); tip-closed workorder banner stamp (#682); test-case-catalog
+  census refresh (#683); ship-upgrade trade-in economics in payback math (#684).
+
 ## 2026-08-08
 
 - **WO-CANON-DRAFT-EXPLORE-DEFENSIVE-POSTURE-COVERAGE.** New strategy concept
