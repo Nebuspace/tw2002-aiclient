@@ -20,12 +20,23 @@ __all__ = [
     "cmd_players_list",
     "cmd_players_next",
     "cmd_players_rotate",
+    "format_rotation_notify",
 ]
 
 _ROTATE_REASON_TEXT = {
     "empty_bank": "empty bank",
     "none_eligible": "all cooling down, or only broken profiles",
 }
+
+_NOTIFY_ONLY = "notify only; no auto-switch"
+
+
+def format_rotation_notify(decision: player_bank.RotationDecision) -> str:
+    """Passive notify line for ``tw players rotate --check`` — never an action."""
+    if decision.name is not None:
+        return f"rotation due: {decision.name} — rotate? ({_NOTIFY_ONLY})"
+    reason_text = _ROTATE_REASON_TEXT.get(decision.reason, decision.reason)
+    return f"rotation: none eligible ({reason_text}) — {_NOTIFY_ONLY}"
 
 
 def cmd_players_next(args: argparse.Namespace) -> int:
@@ -50,6 +61,9 @@ def cmd_players_rotate(args: argparse.Namespace) -> int:
     Same round-robin-by-oldest policy as ``tw players next``
     (:func:`player_bank.advance_rotation` wraps :func:`player_bank.next_player`
     unchanged) — this verb only reports the driver's reasoning alongside it.
+
+    With ``--check``, print a passive notify line and exit 0 whenever the bank
+    is readable (nobody-due is still a successful inquiry).
     """
     try:
         rows = player_bank.list_players()
@@ -58,6 +72,9 @@ def cmd_players_rotate(args: argparse.Namespace) -> int:
         return 2
     cooldown = float(getattr(args, "cooldown_hours", player_bank.DEFAULT_ROTATION_COOLDOWN_HOURS))
     decision = player_bank.advance_rotation(rows, cooldown_hours=cooldown)
+    if getattr(args, "check", False):
+        print(format_rotation_notify(decision))
+        return 0
     if decision.name is None:
         reason_text = _ROTATE_REASON_TEXT.get(decision.reason, decision.reason)
         print(f"no eligible player ({reason_text})")
@@ -150,6 +167,11 @@ def add_players_parsers(sub: argparse._SubParsersAction) -> None:
         default=player_bank.DEFAULT_ROTATION_COOLDOWN_HOURS,
         metavar="H",
         help=f"skip last_played within this many hours (default {player_bank.DEFAULT_ROTATION_COOLDOWN_HOURS:g})",
+    )
+    sp_rotate.add_argument(
+        "--check",
+        action="store_true",
+        help="passive notify only — print due/not-due with reason; exit 0 if bank readable",
     )
     sp_rotate.set_defaults(func=cmd_players_rotate)
 
