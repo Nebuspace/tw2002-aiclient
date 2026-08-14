@@ -64,10 +64,6 @@ _LAUNCHER_PRESENCE_POLL_MS = 2000
 # gate and the pin that guards it read the SAME literal -- a drifting spelling
 # would silently stop offering explore, and the failure mode is silence.
 _EXPLORE_OFFER_CLASSIFICATION = "main_command"
-# What the confirm line describes. `compose_arm_confirm_line` renders this as
-# `Explore x5 LIVE?  y/N` -- canon's "the prompt spells out *what* runs and
-# *how many cycles*".
-_EXPLORE_OFFER_ACTION = "Explore"
 # WO-EXPLORE-AUTOMATION-GATE E3: the second armable intent's confirm text.
 # States the stopping rule ("until found") because it is NOT the ×N rule the
 # map-fill prompt states, and the gate must describe the run it arms.
