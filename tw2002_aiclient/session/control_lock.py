@@ -157,7 +157,6 @@ MODE_SPECTATE = "spectate"
 _AUTO_LOOP_ALIAS = "auto_loop"
 
 _SETTABLE_MODES = frozenset({MODE_APP, MODE_SPECTATE})
-_ALL_MODES = frozenset({MODE_APP, MODE_HUMAN, MODE_SPECTATE})
 
 
 class ControlModeConflict(Exception):
