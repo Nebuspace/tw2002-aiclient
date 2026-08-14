@@ -2,6 +2,11 @@
 
 ## 2026-08-14
 
+- **WO-CANON-DRAFT-ATTACH-CURSES-DISCLAIMER.** `spectate-and-attach.md` Attach section now carries
+  the same tip-reality disclaimer pattern as Spectate: tip `tw attach` is the thin control-lock
+  forwarder (no full curses paint); full-curses body prose is target/archive (`interactive_app.py`
+  under the pre-rebirth archive tree). Code Divergence bullet added.
+
 - **WO-CANON-DRAFT-TEACHING-PROVENANCE-FIELD.** `post-session-action-report.md` Fields now
   document tip-true `SessionReport.teaching_provenance` (shipped #685) — best-effort rule-store
   counts, same axis as `tw coach provenance`, distinct from live covermeter share.
