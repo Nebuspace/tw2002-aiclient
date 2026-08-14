@@ -2,6 +2,10 @@
 
 ## 2026-08-14
 
+- **WO-CANON-DRAFT-DEV-DRIVE-EXCEPTION-CITATION-DRIFT.** `dev-drive-exception.md` Code Divergence
+  send-time gate cites re-pinned to tip `session.py` (`VALID_SENDERS:100`,
+  `_require_dev_sender_authorized:936`, `send:953`/gate `:962`, `send_raw:1006`/gate `:1052`).
+
 - **WO-CANON-DRAFT-ATTACH-CURSES-DISCLAIMER.** `spectate-and-attach.md` Attach section now carries
   the same tip-reality disclaimer pattern as Spectate: tip `tw attach` is the thin control-lock
   forwarder (no full curses paint); full-curses body prose is target/archive (`interactive_app.py`
