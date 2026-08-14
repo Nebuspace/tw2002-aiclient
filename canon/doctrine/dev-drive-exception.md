@@ -80,7 +80,7 @@ this document authorizes:
 - `Session._require_dev_sender_authorized()` (`session.py:936`) is a no-op for `"app"`/`"human"`
   and, for `"dev"`, raises `ValueError` unless the active profile is flagged
   `crawl_sacrificial=true`, checked fresh via `credentials.is_crawl_sacrificial()` on **every**
-  call (never cached). Both `send()` (`session.py:962`) and `send_raw()`
+  call (never cached). Both `send()` (`session.py:953`, gate at `:962`) and `send_raw()`
   (`session.py:1006`, gate at `:1052`) run this gate before the byte reaches the wire.
 - Tested: `tests/test_actor_attribution.py` exercises both `send()` and `send_raw()` for the
   refusal (no profile marked; profile marked but not sacrificial) and the allow (profile marked
