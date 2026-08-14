@@ -688,7 +688,9 @@ def _record_port_floor_observation(sector_id, port_dict, *, state_dir=None):
 
     Never raises — world_model writes must not fail because the capture
     store is missing or unwritable. ``traded_since_prior`` stays unknown
-    here; only an operator/ledger-aware caller can set False/True.
+    here on purpose (WO-ESCALATE-PORT-FLOOR-TRADED-SINCE-PRIOR-UNREACHABLE):
+    inventing False/True without a ledger would fake regrowth windows.
+    Only an operator/ledger-aware caller may set the flag.
     """
     try:
         from tw2002_aiclient.port_floor_capture import record_port_write

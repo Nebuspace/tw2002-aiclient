@@ -12,22 +12,31 @@ observations of the *same* port over *time* into a measured estimate.
 This module is that missing analysis step, and nothing more:
 
 - **Pure functions over caller-supplied observations.** No socket, no
-  live-send, no auto-visiting a port, no scheduling. A future capture loop
-  (out of this module's scope) collects :class:`PortObservation` rows from
-  repeated real visits and feeds them here.
+  live-send, no auto-visiting a port, no scheduling. Product capture today is
+  the best-effort append in ``world_model._record_port_floor_observation`` →
+  ``record_port_write``; that path always leaves ``traded_since_prior`` as
+  unknown. Tests (and any future ledger-aware caller) may pass True/False
+  explicitly — this module never invents the flag.
 - **Never fabricates a "real" number.** Every result carries
   ``tag="observed_estimate"`` and a ``sample_count`` / ``evidence`` trail so
   a caller can see exactly how thin (or synthetic) the backing data is. This
   module does not itself claim ``verified_vs_live=True`` for
   ``port_economics.py``'s hypothesis params — that flip is a live-prove
-  decision made by whoever owns the capture loop, not by this analysis code.
-- **Regrowth needs a trade-free window.** Amount/pct can rise either because
-  the port is regrowing stock *or* because someone else traded against it in
-  the sink direction — this module cannot distinguish the two from the
-  numbers alone. It only computes a regrowth rate over an observation pair
-  the caller explicitly marks ``traded_since_prior=False`` (the operator's
-  own ledger knows whether *they* traded; a third-party trade on the same
-  port is an unavoidable, documented residual noise source in the estimate).
+  decision made by whoever owns a ledger-aware capture path, not by this
+  analysis code.
+- **Regrowth needs a trade-free window — and is dark on tip product paths.**
+  Amount/pct can rise either because the port is regrowing stock *or* because
+  someone else traded against it in the sink direction — this module cannot
+  distinguish the two from the numbers alone. It only computes a regrowth
+  rate over an observation pair the caller explicitly marks
+  ``traded_since_prior=False`` (the operator's own ledger knows whether
+  *they* traded; a third-party trade on the same port is an unavoidable,
+  documented residual noise source in the estimate). Because the live
+  world-model capture never sets that flag, ``estimate_regrowth_rate`` over
+  product-captured JSONL yields no qualifying pairs in practice — intentional
+  honesty (WO-ESCALATE-PORT-FLOOR-TRADED-SINCE-PRIOR-UNREACHABLE), not a
+  silent wiring gap. Ranking/coach consumers stay out of scope per the
+  analysis-only ruling on this module.
 - **Floor price needs a price observation.** ``amount``/``pct`` alone say
   nothing about credits/unit — only a haggle's ``final_price`` (or an
   equivalent future price-quote reader) does. This module fits price against
@@ -162,7 +171,11 @@ def estimate_regrowth_rate(
     """Per (sector, port, commodity): average pct-of-max recovered per day,
     over consecutive-visit pairs explicitly marked ``traded_since_prior=False``
     on the later observation, where ``pct`` rose. Identities with zero
-    qualifying pairs are omitted (never a fabricated zero)."""
+    qualifying pairs are omitted (never a fabricated zero).
+
+    Tip product capture leaves ``traded_since_prior`` unknown, so this returns
+    ``{}`` for world-model JSONL until a ledger-aware caller marks pairs.
+    """
 
     results: dict[PortIdentity, RegrowthEstimate] = {}
     for identity, rows in _group(observations).items():
