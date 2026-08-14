@@ -67,16 +67,16 @@ human must approve before the App can ever play them.
 ## Read-only-safe at any time vs. control-lock
 
 A caller may run the pure observers — **`status`, `screen`, `history`,
-`watch`, `log`/`trail`, `frames`, `loops`, `menumap`, `pairs`, `servers`, `players`** — at **any** moment,
+`watch`, `log`/`trail`, `frames`, `loops`, `menumap`, `pairs`, `servers`, `players`,
+`state`** — at **any** moment,
 including while the App or a human is mid-drive, because none of them touch the control lock. The
 `drives {*}` verbs contend for that lock; the control-lock arbitration (who may hold it, and the
 handoff on escalation) is specified in
 [Control & Escalation](/architecture/control-and-escalation.md), not here.
 
-`state` is **not** a `tw` CLI verb (WIRE-ONLY today — daemon protocol only, no `tw state`
-subparser; see the Session primitives table below) and `spectate` is **RETIRED / WONTBUILD as
+`spectate` is **RETIRED / WONTBUILD as
 `tw spectate`** (Max) — the read-only Spectate surface lives in-cockpit instead (see
-[Spectate & Attach](/surfaces/spectate-and-attach.md)). Neither belongs on this "runnable at any
+[Spectate & Attach](/surfaces/spectate-and-attach.md)). It does not belong on this "runnable at any
 moment" list of actual `tw` subcommands.
 
 # The Hard Rule
@@ -119,7 +119,7 @@ config is isolated, and print the run-dir path they would have targeted (WO-CLI-
 |---|---|---|---|---|
 | `send "<input>"` | Raw send, no wait (rare / low-level). | `--secret` `--no-enter` | `drives {app,human}` | [Session Engine](/architecture/session-engine.md) |
 | `read` | Wait-and-return WITHOUT sending — for unsolicited server output. | `--wait-prompt REGEX` `--timeout` | `read-only` | [Session Engine](/architecture/session-engine.md) |
-| `state` | **WIRE-ONLY today** (daemon protocol; no `tw state` subparser). Parsed structured game-state only (sector/credits/turns/port…). | — | `read-only` | [Session Engine](/architecture/session-engine.md) |
+| `state` | **LIVE.** Parsed structured game-state (sector outcome envelope today; credits/turns/port land via their own WOs). Thin CLI over the daemon `state` verb — never sends, never settles. | — | `read-only` | [Session Engine](/architecture/session-engine.md) |
 | `history` | Recent screens/commands (full transcript lives in `logs/`). | `--n N` | `read-only` | [Session Engine](/architecture/session-engine.md) |
 | `ensure [target]` | Idempotent auto-login: classify → no-op if already at `target`, else register/log in to it, spawning the daemon first if needed. | `--profile NAME` (required) `--timeout` `--no-auto-arm` | `drives {app,human}` | [Session Engine](/architecture/session-engine.md) |
 
@@ -208,11 +208,11 @@ tw rule …                                    # draft / approve path (see tw ru
 
 # Implementation status (tip `f14cc30` · live `./tw --help` / `build_parser()`)
 
-**LIVE `tw` verbs today** (re-verified 2026-08-10 against tip `build_parser()` choices):
+**LIVE `tw` verbs today** (re-verified 2026-08-14 against tip `build_parser()` choices):
 `attach`, `chain`, `chains`, `coach`, `do`, `ensure`, `explore`, `frames`, `history`, `log`/`trail`,
 `loops`, `menumap`, `mine`/`patterns`, `pairs`, `planet-colonization`, `players`, `port-floor`,
 `probe`, `read`, `record`, `reflex`, `report`, `rule`, `screen`, `send`, `servers`, `skill`,
-`status`, `stop`, `teach`, `watch`.
+`state`, `status`, `stop`, `teach`, `watch`.
 
 `pairs` (**WO-CHAIN-DETECT-WIRE**, re-scoped 2026-07-28) is the thin product caller over the
 class-derived pair-loop path: `chain_detect.recompute` reads a world's `state/world/<world-id>`
@@ -255,9 +255,6 @@ product entry (product is `./tw2002-aiclient`). See the LIVE list above for the 
 **WIRE-ONLY (a daemon protocol verb exists; no `tw` CLI subparser wraps it — not runnable from a
 shell today, only over the daemon's own socket protocol):**
 
-- **`state`** (**X1**, `protocol.py` `verb == "state"`) — the parsed current-sector read replay's
-  start-anchor guard depends on. `WO-P2-G4-X1-STATE-SECTOR-READ` scoped a CLI wrapper as optional
-  ("+ thin CLI if honesty requires") and none landed.
 - **`autoloop_start` / `autoloop_stop` / `autoloop_status` / `autoloop_pause` / `autoloop_relaunch`**
   (**X4/X5** + WO-AUTOLOOP-PAUSE-RESUME, `protocol.py`) — the background AUTO-LOOP player.
   **Not** the catalog's four-verb `{start,stop,pause,resume}` surface: five wire verbs
@@ -271,6 +268,8 @@ shell today, only over the daemon's own socket protocol):**
   `CYCLES_HARD_CEILING` (never unbounded). `param` and `force` are **refused** as
   `unsupported_arg`, never silently ignored. No `tw autoloop` CLI subparser wraps these; the
   catalog row states the full future target, this paragraph states wire-level reality today.
+
+(`state` left WIRE-ONLY until `WO-BUILD-CLI-STATE-VERB-SUBPARSER` — now LIVE as `tw state`.)
 
 The catalog tables **above** are the **prescriptive full vocabulary** (target). Prefer this status
 block when answering "what can I run right now?"

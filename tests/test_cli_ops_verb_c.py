@@ -1,8 +1,8 @@
 """WO-P2-OPS-VERB-C — ``tw history`` (session ring). The ``state`` protocol
-verb landed later, in WO-P2-G4-X1; this file keeps only the "it is not a
-stub" pin, and ``tests/test_state_sector_read.py`` owns the read's contract.
-There is still no ``tw state`` CLI subcommand — X1 deliberately added no CLI
-surface (the daemon verb is the consumer-facing contract)."""
+verb landed in WO-P2-G4-X1; this file keeps the "it is not a stub" pin, and
+``tests/test_state_sector_read.py`` owns the read's contract.
+``tw state`` CLI wire: ``tests/test_cli_state_verb.py`` (WO-BUILD-CLI-STATE-VERB-SUBPARSER).
+"""
 
 from __future__ import annotations
 

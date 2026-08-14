@@ -1,5 +1,12 @@
 # Canon — Change Log
 
+## 2026-08-14
+
+- **WO-BUILD-CLI-STATE-VERB-SUBPARSER.** `tw state` is LIVE — thin CLI over the existing
+  daemon `state` protocol verb (`cmd_state` + `build_parser` registration). Catalog row,
+  runnable-at-any-moment list, LIVE verb enumeration, and WIRE-ONLY bucket updated so
+  `state` is no longer documented as shell-unreachable; autoloop_* remains WIRE-ONLY.
+
 ## 2026-08-08
 
 - **WO-CANON-DRAFT-EXPLORE-DEFENSIVE-POSTURE-COVERAGE.** New strategy concept

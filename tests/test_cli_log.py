@@ -17,6 +17,7 @@ _SHIPPED_VERBS = frozenset(
         "status",
         "ensure",
         "screen",
+        "state",
         "stop",
         "do",
         "send",
@@ -69,6 +70,7 @@ def test_parser_shipped_verb_allowlist():
     status = parser.parse_args(["status"])
     ensure = parser.parse_args(["ensure", "--profile", "x"])
     screen = parser.parse_args(["screen"])
+    state = parser.parse_args(["state"])
     stop = parser.parse_args(["stop"])
     do = parser.parse_args(["do", "d"])
     send = parser.parse_args(["send", "x"])
@@ -83,6 +85,7 @@ def test_parser_shipped_verb_allowlist():
     assert status.func is cli.cmd_status
     assert ensure.func is cli.cmd_ensure
     assert screen.func is cli.cmd_screen
+    assert state.func is cli.cmd_state
     assert stop.func is cli.cmd_stop
     assert do.func is cli.cmd_do
     assert send.func is cli.cmd_send

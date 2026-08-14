@@ -438,6 +438,18 @@ def cmd_screen(args):
     return 0 if resp.get("ok") else 1
 
 
+def cmd_state(args):
+    """WO-BUILD-CLI-STATE-VERB-SUBPARSER: parsed game-state (read-only; never sends).
+
+    Thin wrapper over protocol ``state`` — sector outcome envelope + classification.
+    Does not settle; poll after ``read``/``do`` when a settled grid is required.
+    """
+    run_dir = _resolve_run_dir(args.run_dir)
+    resp = send_request("state", {}, run_dir=run_dir)
+    print_response(resp, args)
+    return 0 if resp.get("ok") else 1
+
+
 def cmd_stop(args):
     """WO-P2-OPS-VERB-A: ask the daemon to shut down (protocol already present)."""
     blocked = _guard_run_dir_footgun(args)
@@ -1837,6 +1849,15 @@ def build_parser() -> argparse.ArgumentParser:
                      help="daemon run directory override (default: project-rooted run/)")
     sp.add_argument("--json", action="store_true", help="machine-parseable JSON output")
     sp.set_defaults(func=cmd_screen)
+
+    sp = sub.add_parser(
+        "state",
+        help="parsed structured game-state (sector outcome; read-only; never sends)",
+    )
+    sp.add_argument("--run-dir", default=None, metavar="PATH", dest="run_dir",
+                     help="daemon run directory override (default: project-rooted run/)")
+    sp.add_argument("--json", action="store_true", help="machine-parseable JSON output")
+    sp.set_defaults(func=cmd_state)
 
     sp = sub.add_parser(
         "stop",
