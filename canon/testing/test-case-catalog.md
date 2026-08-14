@@ -4,33 +4,33 @@ title: Test Case Catalog
 description: Inventory of every pytest case in tw2002-aiclient with a one-sentence blurb of what each asserts.
 resource: repo://tw2002-aiclient/tests
 tags: [testing, catalog, pytest, inventory]
-timestamp: 2026-08-12T04:00:35Z
+timestamp: 2026-08-14T20:35:00Z
 ---
 
 # Test Case Catalog
 
 Module inventory and per-test blurbs below may lag tip (many modules were added after the
-2026-07-25 full pass). **Headline counts re-verified 2026-08-12 against tip** `d9a3fb6` via actual
+2026-07-25 full pass). **Headline counts re-verified 2026-08-14 against tip** `8b38b88` via actual
 collection (not AST estimate):
 
 ```text
 .venv/bin/python -m pytest -n0 --collect-only
-→ 7512 tests collected   # footer is authoritative
+→ 7545 tests collected   # footer is authoritative
 .venv/bin/python -m pytest -n0 --collect-only -q
-→ 314 lines of form tests/test_*.py: <n>  (sum == 7512)
+→ 317 lines of form tests/test_*.py: <n>  (sum == 7545)
 ```
 
-`tests/test_*.py` on disk: **315** files. Default collect excludes the 1 BANKED ignore below
-(315 − 1 = 314 active modules).
+`tests/test_*.py` on disk: **318** files. Default collect excludes the 1 BANKED ignore below
+(318 − 1 = 317 active modules).
 
 Each module *should* link to a per-module OKF case file with per-test blurbs (regeneration of
 every case file is a separate catalog-refresh WO — this pass only corrects the stale headline
-counts).
+counts and adds the missing `test_coach_provenance` case stub).
 
-- **Active (default run):** 314 modules · **7512** tests
+- **Active (default run):** 317 modules · **7545** tests
 - **BANKED (ignored via `pytest.ini`):** 1 module — `tests/test_crawl_start_protocol.py`
   (still `import twclient`; daemon crawl verb unwired; collection ERRORs if un-ignored;
-  not included in the 7512). `tests/test_analyze.py` was **BANK-DELETED**
+  not included in the 7545). `tests/test_analyze.py` was **BANK-DELETED**
   (WO-CLEANUP-BANK-DELETE-TWCLIENT-ANALYZE-SUITE).
 
 > **Blurb rule:** first complete sentence of the function docstring when it is well-formed (ends with `.!?`, no truncated backticks); otherwise readable English derived from the `test_*` name. No runtime behavior is invented beyond name/docstring.
