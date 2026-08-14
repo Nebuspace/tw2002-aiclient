@@ -77,7 +77,17 @@ share ≡ 0 (see [Coverage Metrics](/engine/coverage-metrics.md)).
 
 # Attach — the interactive driving surface
 
-`tw attach` is the human's live driving seat: a full-screen curses console that forwards the
+> **Tip reality (`tw attach` is thin today):** tip `cmd_attach` (`session/cli.py`) is a bare
+> control-lock + keystroke forwarder (TTY cbreak / `--keys`) with **no** full-screen curses paint,
+> reverse-video status bar, TX readout, or caret tracking. The status table above already says
+> **LIVE — no full curses paint yet**. The prose below preserves the *target / archive* full-curses
+> Attach contract (citations to `interactive_app.py` mean
+> `archive/pre-rebirth-2026-07-23/code/twclient/interactive_app.py`, **not** a live package module)
+> so port notes stay readable; Implementation status + Code Divergence + this box are authoritative
+> for tip. Do **not** treat the body as a claim that ops Attach already paints like the cockpit.
+
+`tw attach` *(target / historical full-curses shape)* is the human's live driving seat: a
+full-screen curses console that forwards the
 operator's keystrokes, one at a time and unbuffered, straight to the daemon's single game connection,
 with the live screen streaming back in real color. TradeWars reads most menu commands a single
 keystroke at a time, so keystrokes go out raw and immediately — no local line-editing or batching.
@@ -351,6 +361,11 @@ senders remain `{app, human}` only. Resolution recorded in
 (`AUDIT-CANON-DRAFT-AI-PILOT-RETIREMENT-STALE`).
 
 **`WatchFeed` lifecycle — single-owner-thread contract (tip).** Product play-shell subscribe (`tw2002_aiclient/watchfeed.py`, PWO-050) assumes one owning thread calls `start()` / `stop()` for a given instance (the play-shell flow that owns it). Only `snapshot()` is proven thread-safe against the background reader; concurrent `start()` / `stop()` from multiple threads are neither guarded nor tested and must not be relied on. One race *is* handled: a `stop()` that lands while `start()` is mid-`connect_fn()` is honored after connect returns — the fresh transport is closed and no subscribe line is written (Mack adversarial-review · WO-P4-050). That mid-connect honor is not a general multi-thread lifecycle guarantee.
+
+**Ops `tw attach` paint — tip thin (WO-CANON-DRAFT-ATTACH-CURSES-DISCLAIMER).** The Attach
+section body still describes the archive full-curses console (`interactive_app.py` under
+`archive/pre-rebirth-2026-07-23/`). Tip `cmd_attach` is the thin forwarder only — see the tip-reality
+box under `# Attach`. Product Human-mode paint lives in the cockpit (PWO-056), not ops `tw attach`.
 
 # Citations
 
