@@ -303,10 +303,10 @@ two live-*play* senders, `{app, human}` (plus the separate, sacrificial-only `de
 never a play sender — carried by [dev-drive-exception](/doctrine/dev-drive-exception.md)). This
 section previously flagged a richer, older `{ai, trainer}` vocabulary as still live; tip grep finds
 zero `actor="ai"` / `actor="trainer"` callers and no `_current_actor()` function anywhere in
-`tw2002_aiclient/`. Every App-executed keystroke — `do`/`send` dispatch (`session/protocol.py:1455,1487`),
+`tw2002_aiclient/`. Every App-executed keystroke — `do`/`send` dispatch (`session/protocol.py:1469,1564`),
 `haggle`, and the background AUTO-LOOP driver (`session/autoloop.py`, which sends through the same
 `sender="app"` choke point rather than tagging a separate value) — is already tagged `actor="app"`;
-interactive `attach` (`session/protocol.py:1325`) is already tagged `actor="human"`. There is no
+interactive `attach` (`session/protocol.py:1421` via `record_attach_keystroke`) is already tagged `actor="human"`. There is no
 outstanding tag-rename work order here; the full row schema is [the Trace Ledger](/engine/trace-ledger.md)'s
 to carry.
 
