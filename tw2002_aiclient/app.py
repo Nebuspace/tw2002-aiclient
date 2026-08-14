@@ -1092,11 +1092,14 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
     # Both overlays compose by wrapping: each adds only its own keys, each
     # declines to clobber a value the layer beneath already supplied, and each
     # maps a `None` provider to `None`, so the order is not load-bearing.
-    # FOCUS wraps outermost so it sees chain + world + game-data scalars.
-    play.status_provider = play.focus_scalars.wrap(
-        play.game_data_stats.wrap(
-            play.world_stats.wrap(
-                play.chain_scalars.wrap(_daemon_status_provider(run_dir))
+    # FOCUS wraps outside chain/world/game-data; DECISIONS wraps outermost
+    # so it can reuse status["focus"]["candidates"] for autopilot_trace.
+    play.status_provider = play.decision_scalars.wrap(
+        play.focus_scalars.wrap(
+            play.game_data_stats.wrap(
+                play.world_stats.wrap(
+                    play.chain_scalars.wrap(_daemon_status_provider(run_dir))
+                )
             )
         )
     )

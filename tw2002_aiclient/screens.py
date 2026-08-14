@@ -14,6 +14,7 @@ import curses
 
 from tw2002_aiclient import chain_status as _chain_status
 from tw2002_aiclient import focus_status as _focus_status
+from tw2002_aiclient import decisions_status as _decisions_status
 from tw2002_aiclient import world_stats as _world_stats
 from tw2002_aiclient import game_data_stats as _game_data_stats
 from tw2002_aiclient.cockpit import analyze as cockpit_analyze
@@ -977,6 +978,9 @@ class PlayShellScreen:
         # WO-PRIORITY-ENGINE-FOCUS-WIRE: FOCUS candidates overlay (display
         # only). Bound to chain_scalars so merge can see priced cycles.
         self.focus_scalars = _focus_status.FocusScalars(self.chain_scalars)
+        # WO-BUILD-DECISIONS-PANEL-TRACE-PRODUCER: DECISIONS autopilot_trace
+        # overlay (display only). Outermost wrap in app.py so it sees FOCUS.
+        self.decision_scalars = _decisions_status.DecisionScalars(self.chain_scalars)
         # WO-P4-052: a no-arg callable returning a `WatchFeedSnapshot`-shaped
         # object (duck-typed via `.latest_event` only -- this module never
         # imports `WatchFeed` itself, see draw()'s own GAME viewport block).
