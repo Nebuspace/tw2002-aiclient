@@ -28,6 +28,10 @@ from pathlib import Path
 
 import pytest
 
+# Shared in-process attach CLI fixtures (tty_fd); FakeAttachConn helpers live
+# in attach_helpers.py and are imported by test_cli_attach_*.py directly.
+pytest_plugins = ("tests.attach_helpers",)
+
 from tw2002_aiclient.session import env as _env
 from tw2002_aiclient.session.settle import MATCH_SCOPE_SCREEN
 

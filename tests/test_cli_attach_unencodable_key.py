@@ -24,59 +24,20 @@ the new path must not become fatal, and the old path must not stop being.
 
 from __future__ import annotations
 
-import os
-import pty
-import termios
 from argparse import Namespace
 
 import pytest
 
+from tests.attach_helpers import FakeAttachConn as _FakeAttachConn
+from tests.attach_helpers import terminal_mode
 from tw2002_aiclient.session import attach_client, cli, env
 
 DETACH_CH = chr(29)  # Ctrl-] — the documented interactive detach key
-
-_LFLAG = 3  # index of lflag in a termios.tcgetattr() list
 
 # Characters with no latin-1 encoding — the ones the old `errors="ignore"`
 # turned into an empty payload. Spread deliberately across the BMP and one
 # astral char, since `ord(ch)` and the message's `U+%04X` both have to cope.
 UNENCODABLE = ["→", "—", "“", "\U0001f600"]  # → — “ 😀
-
-
-def terminal_mode(fd):
-    """``tcgetattr(fd)`` with the transient ``PENDIN`` bit masked off.
-
-    Same helper, same reason, as tests/test_cli_attach_interactive_send_failure.py:
-    the kernel sets ``PENDIN`` behind the caller's back during a cbreak round
-    trip, so comparing it would fail a restore assertion for a reason that has
-    nothing to do with the restore.
-    """
-    attrs = list(termios.tcgetattr(fd))
-    attrs[_LFLAG] &= ~getattr(termios, "PENDIN", 0)
-    return attrs
-
-
-class _FakeAttachConn:
-    """Stands in for ``AttachInputConn`` -- ``cmd_attach`` only ever calls
-    ``connect()``, ``send_key(data)`` and ``close()`` on it. Mirrors the fakes
-    in the two sibling attach test files."""
-
-    def __init__(self, sock_path=None, *, send_ok):
-        self.sock_path = sock_path
-        self._send_ok = send_ok
-        self.error = None
-        self.sent = []
-        self.closed = False
-
-    def connect(self):
-        return True
-
-    def send_key(self, data):
-        self.sent.append(data)
-        return self._send_ok
-
-    def close(self):
-        self.closed = True
 
 
 class _ScriptedTtyStdin:
@@ -98,19 +59,6 @@ class _ScriptedTtyStdin:
     def read(self, n=1):
         self.reads += 1
         return self._chars.pop(0) if self._chars else ""  # "" == EOF
-
-
-@pytest.fixture
-def tty_fd():
-    master_fd, slave_fd = pty.openpty()
-    try:
-        yield slave_fd
-    finally:
-        for fd in (master_fd, slave_fd):
-            try:
-                os.close(fd)
-            except OSError:
-                pass
 
 
 def _attach(monkeypatch, tmp_path, tty_fd, *, chars, send_ok):
