@@ -675,6 +675,13 @@ almost certainly buildable without a gate; (a) needs an explicit Max GO given th
 `canon/surfaces/entry-and-profile-selection.md:410-417` · 6-lens aiclient audit, 2026-08-12
 (build-and-unwired lens).
 
+**Update 2026-08-14.** Option (b) shipped as `tw players rotate --check` (notify-only; exit 0
+even when nobody is due; exit 2 on BankUnreadable) via WO-BUILD-ROTATION-NOTIFY-ONLY-SURFACE
+(PR #706, `d7bd7f0`). Canon coverage for the flag landed in WO-CANON-DRAFT-PLAYERS-ROTATE-CHECK-FLAG
+(PR #711, `ad8c0ac` — `cli-verbs.md` players row + `entry-and-profile-selection.md` rotation-driver
+paragraph). Only option (a) — the auth-adjacent auto-switch daemon/cockpit consumer — remains
+open and Max-gated. This entry stays Pending for (a); (b) is no longer an open menu item.
+
 ## PENDING-AI-TEACHER-LLM-BACKEND-WIRING (2026-08-12)
 
 **Status:** Pending — Orchestrator review, needs Max (new external dependency + AI-dialogue,
