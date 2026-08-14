@@ -44,6 +44,12 @@ RULES:
 
 **Status:** Pending — trade-path wave shipped; ship-info parse deferred.
 
+**Update 2026-08-14 (staleness check).** Re-affirmed Pending — tip still has no ship-info
+Ore/Org/Equ fixture shape and no product parser into sticky holdings; trade buy/sell remains
+the only holdings writer (`WO-HUD-CARGO-HOLDINGS` / #306). Open since 2026-08-08; keep on the
+2-sprint triage radar but do **not** age-out silently — next step is a fixture-backed build WO
+when a real ship-info hold-lines sample exists, not a decline. Kernel above unchanged.
+
 ### PENDING-CHAIN-HUNT-SIBLING-EXHAUST-DEPTH-TURN-CAP — Chain-hunt numeric defaults (2026-08-09)
 
 **Edge:** Gap — `canon/strategy/exploration-policy.md` adds the **Chain-hunt** intent
