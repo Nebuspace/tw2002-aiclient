@@ -2,6 +2,10 @@
 
 ## 2026-08-14
 
+- **WO-CANON-DRAFT-TEACHING-PROVENANCE-FIELD.** `post-session-action-report.md` Fields now
+  document tip-true `SessionReport.teaching_provenance` (shipped #685) — best-effort rule-store
+  counts, same axis as `tw coach provenance`, distinct from live covermeter share.
+
 - **WO-CANON-DRAFT-COACH-PROVENANCE-CLI-CATALOG.** `cli-verbs.md` now catalogs **LIVE**
   `tw coach provenance` (human / ai-approved / unknown teaching-provenance axis; wired since
   #685) beside `coach show`; LIVE verb enumeration spells `coach {show,provenance}`.

@@ -66,7 +66,14 @@ The report (`SessionReport`) surfaces, per invocation:
 - **`skipped_interrupted`** — how many `app` rows were excluded because `interrupted_by_human` was
   set (a `tw attach` seized the control lock mid-dispatch, corrupting that row's action→outcome
   mapping); `tw report --include-interrupted` opts them back in.
-- **`notes`** — free-text advisories (currently: the multi-session-in-window note above).
+- **`teaching_provenance`** — optional third-axis counts over the approved rule store
+  (`human` / `ai-approved` / `unknown` / `total`), best-effort via
+  `coverage_metrics.teaching_provenance_counts` (never raises into the report path; omitted or
+  noted when the store is unreadable). Same axis as `tw coach provenance`; **not** the live
+  app/human covermeter share. Plain-text `format_session_report` prints
+  `format_teaching_provenance_line(...)` when present; `--json` includes the counts object.
+- **`notes`** — free-text advisories (currently: the multi-session-in-window note above; may also
+  carry a teaching-provenance skip reason when the rule-store read fails).
 
 `tw report --out <path>` writes the same formatted text as a file artifact; `--json` emits the
 equivalent structured payload instead of the plain-text trail.
@@ -94,6 +101,7 @@ equivalent structured payload instead of the plain-text trail.
 - [trace-ledger § Code divergence](/engine/trace-ledger.md#code-divergence) — the
   `interrupted_by_human` consumption note.
 - [coverage-metrics](/engine/coverage-metrics.md) — the sibling consumer counting the same
-  `actor=app` rows as a ratio rather than a trail.
+  `actor=app` rows as a ratio rather than a trail; also owns the teaching-provenance axis
+  (`teaching_provenance_counts`) that `SessionReport.teaching_provenance` mirrors on tip (#685).
 - `tw2002_aiclient/session_report.py`, `tw2002_aiclient/session/cli.py: cmd_report` /
   `cmd_stop` — the shipped pull + session-end auto-print surfaces (no unbuilt fields invented).
