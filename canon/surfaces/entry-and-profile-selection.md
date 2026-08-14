@@ -412,9 +412,14 @@ paladin-main     PaladinPrime     tw2002.briancmoses.com   A   2026-07-23     ok
   rotate` (WO-BUILD-PLAYER-BANK-ROTATION-DRIVER) wrap that same selector to report who's due
   as a first-class decision (`RotationDecision(name, reason)`) — still decide-and-report only,
   never a write: no `last_played` write path exists anywhere in this codebase today, so the
-  driver never fabricates a play session. Neither logs in / auto-switches. The daemon-side
-  consumer that would actually *act* on a driver decision (auto-login/auto-switch) remains a
-  separate future wave.
+  driver never fabricates a play session. Neither logs in / auto-switches. **`tw players rotate
+  --check`** (WO-BUILD-ROTATION-NOTIFY-ONLY-SURFACE / PR #706) is the passive notify-only surface
+  for that decision: it always prints a human notify line (due name or none-eligible reason) and
+  exits `0` whenever the bank is readable — nobody-due is still a successful inquiry — or `2` on
+  `BankUnreadable`. Plain `rotate` (no `--check`) keeps name-only / exit-1 behavior. The
+  daemon-side consumer that would actually *act* on a driver decision (auto-login/auto-switch)
+  remains a separate future wave (Max-gated; see DECISIONS
+  `PENDING-PLAYER-ROTATION-AUTO-SWITCH-CONSUMER`).
 
 - **`tw players list` is LIVE (WO-BUILD-TW-PLAYERS-LIST).** Prints the same
   `BOUNDARY_LINE_1` / `BOUNDARY_LINE_2` no-collusion lines as `BankViewScreen`, then
