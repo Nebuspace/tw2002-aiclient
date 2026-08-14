@@ -238,14 +238,15 @@ The strategic layer renders in the cockpit as two related-but-distinct panels. B
 context or suggestion** — neither is an autonomous selector.
 
 **Layer 1 — GOALS (informational prerequisite status).** The left-gutter GOALS section
-(`GoalsSnapshot` → `compose_primary_goals_lines()`) renders each strategic prerequisite on its own
+(`cockpit/goals.py:compose_goals_lines(status, *, width)`) renders each strategic prerequisite on its own
 line with status glyphs: `✓` known/met, `·` in progress / partial, `?` unknown. Turns, credits,
 StarDock, map, formations, chain, ship prices, hold price, fighters. This layer does **not** pick an
 action; it tells the human (and the future overlay) what is known.
 
 **Layer 2 — FOCUS (ranked candidate behaviors = suggestions).** The FOCUS section below GOALS shows
 the priority engine's ordered candidates for the current tick
-(`compose_priorities_lines()` → `recommend_actions()`), ranked by comparable cr/turn with gated
+(`cockpit/focus.py:compose_focus_lines(status, *, width)` fed by
+`focus_status.recommend_focus_candidates()`), ranked by comparable cr/turn with gated
 candidates carrying `⊘` and a reason. Reborn reframe: **FOCUS is a ranked list of suggestions, not the
 app's chosen action.** It says "here is what would be worth doing, in order"; whether a taught behavior
 actually runs is gated by human-arming and by stop-on-unknown at the run-loop, not by FOCUS's top row.
