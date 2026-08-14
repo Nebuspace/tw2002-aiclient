@@ -21,61 +21,18 @@ from __future__ import annotations
 
 import ast
 import builtins
-import os
-import pty
-import termios
 from argparse import Namespace
 from pathlib import Path
 
 import pytest
 
+from tests.attach_helpers import FakeAttachConn as _FakeAttachConn
+from tests.attach_helpers import terminal_mode
 from tw2002_aiclient.session import attach_client, cli, env
 
 DETACH_CH = chr(29)  # Ctrl-] — the documented interactive detach key
 
 CLI_SRC_PATH = Path(cli.__file__)
-
-_LFLAG = 3  # index of lflag in a termios.tcgetattr() list
-
-
-def terminal_mode(fd):
-    """``tcgetattr(fd)`` with the transient ``PENDIN`` status bit masked off.
-
-    ``PENDIN`` ("input is pending re-print") is set by the kernel behind the
-    caller's back during a cbreak round trip -- it is not part of the mode
-    ``cmd_attach`` saved and restored. Verified on this platform rather than
-    assumed: after a full attach cycle the saved and restored attrs differ in
-    that one bit and nothing else, while ECHO / ICANON / ISIG / IEXTEN all
-    come back identical. Comparing it would fail the restore assertions for a
-    reason that has nothing to do with the restore; every flag cbreak
-    actually clears stays unmasked and compared.
-    """
-    attrs = list(termios.tcgetattr(fd))
-    attrs[_LFLAG] &= ~getattr(termios, "PENDIN", 0)
-    return attrs
-
-
-class _FakeAttachConn:
-    """Stands in for ``AttachInputConn`` -- ``cmd_attach`` only ever calls
-    ``connect()``, ``send_key(data)`` and ``close()`` on it. Mirrors the
-    fake in tests/test_cli_attach_keys_exit_code.py."""
-
-    def __init__(self, sock_path=None, *, send_ok):
-        self.sock_path = sock_path
-        self._send_ok = send_ok
-        self.error = None
-        self.sent = []
-        self.closed = False
-
-    def connect(self):
-        return True
-
-    def send_key(self, data):
-        self.sent.append(data)
-        return self._send_ok
-
-    def close(self):
-        self.closed = True
 
 
 class _ScriptedTtyStdin:
@@ -97,19 +54,6 @@ class _ScriptedTtyStdin:
     def read(self, n=1):
         self.attrs_while_reading.append(terminal_mode(self._fd))
         return self._chars.pop(0) if self._chars else ""  # "" == EOF
-
-
-@pytest.fixture
-def tty_fd():
-    master_fd, slave_fd = pty.openpty()
-    try:
-        yield slave_fd
-    finally:
-        for fd in (master_fd, slave_fd):
-            try:
-                os.close(fd)
-            except OSError:
-                pass
 
 
 def _attach(monkeypatch, tmp_path, tty_fd, *, chars, send_ok):

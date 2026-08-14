@@ -41,12 +41,11 @@ distinguishable from "everything you asked for was thrown away".
 
 from __future__ import annotations
 
-import os
-import pty
 from argparse import Namespace
 
 import pytest
 
+from tests.attach_helpers import FakeAttachConn as _FakeAttachConn
 from tests.attach_terminal_harness import attach_daemon  # noqa: F401  (fixture)
 from tw2002_aiclient.session import attach_client, cli, env
 
@@ -63,25 +62,6 @@ ESC_OCTAL_OVER = BS + "777"        # -> U+01FF, octal overflow
 ESC_OCTAL_FIRST_OVER = BS + "400"  # -> U+0100, first octal overflow
 ESC_OCTAL_MAX_OK = BS + "377"      # -> U+00FF, last octal still encodable
 ESC_HEX_MAX_OK = BS + "xff"        # -> U+00FF
-
-
-class _FakeAttachConn:
-    def __init__(self, sock_path=None, *, send_ok=True):
-        self.sock_path = sock_path
-        self._send_ok = send_ok
-        self.error = None
-        self.sent = []
-        self.closed = False
-
-    def connect(self):
-        return True
-
-    def send_key(self, data):
-        self.sent.append(data)
-        return self._send_ok
-
-    def close(self):
-        self.closed = True
 
 
 def _run_keys(monkeypatch, tmp_path, keys, *, send_ok=True):
@@ -109,19 +89,6 @@ class _ScriptedTtyStdin:
 
     def read(self, n=1):
         return self._chars.pop(0) if self._chars else ""
-
-
-@pytest.fixture
-def tty_fd():
-    master_fd, slave_fd = pty.openpty()
-    try:
-        yield slave_fd
-    finally:
-        for fd in (master_fd, slave_fd):
-            try:
-                os.close(fd)
-            except OSError:
-                pass
 
 
 def _run_interactive(monkeypatch, tmp_path, tty_fd, chars):

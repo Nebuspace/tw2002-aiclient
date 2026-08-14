@@ -12,29 +12,8 @@ from __future__ import annotations
 
 from argparse import Namespace
 
+from tests.attach_helpers import FakeAttachConn as _FakeAttachConn
 from tw2002_aiclient.session import attach_client, cli, env
-
-
-class _FakeAttachConn:
-    """Stands in for ``AttachInputConn`` -- ``cmd_attach`` only ever calls
-    ``connect()``, ``send_key(data)``, and ``close()`` on it."""
-
-    def __init__(self, sock_path, *, send_ok):
-        self.sock_path = sock_path
-        self._send_ok = send_ok
-        self.error = None
-        self.sent = []
-        self.closed = False
-
-    def connect(self):
-        return True
-
-    def send_key(self, data):
-        self.sent.append(data)
-        return self._send_ok
-
-    def close(self):
-        self.closed = True
 
 
 def _make_args(run_dir, keys):
