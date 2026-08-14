@@ -138,6 +138,7 @@ config is isolated, and print the run-dir path they would have targeted (WO-CLI-
 | `servers list` | Summarize `config/servers.inventory.json` provenance + optional liveness sidecar (no live session). | `--inventory` `--liveness` `--json` | `read-only` | [Session Engine](/architecture/session-engine.md) |
 | `probe` | TCP-only catalog probe (no login / no turns); writes `config/servers.liveness.json`. Same engine as `scripts/catalog-tcp-probe.py`. | `--limit` `--timeout` `--out` `--json` | `read-only` | [Session Engine](/architecture/session-engine.md) |
 | `coach show [id]` | **LIVE.** Show one strategy card in full, or list all cards when `id` is omitted (daemon-free). | `id` (optional) | `read-only` | [Coaching Engine](/engine/coaching-engine.md) |
+| `coach provenance` | **LIVE.** Teaching-provenance axis over approved rules (human / ai-approved / unknown counts + AI share) — daemon-free rule-store read; never sends; never touches live covermeter. Wired since #685. | `--state-dir` `--world-id` `--json` | `read-only` | [Coverage Metrics](/engine/coverage-metrics.md) · [Coaching Engine](/engine/coaching-engine.md) |
 | `port-floor {snapshot,analyze}` | **LIVE.** Observation-store ingest + regrowth/floor analysis over world-model sector JSON (daemon-free; never sends). | `snapshot` / `analyze` args per `--help` | `read-only` | [Port Economics](/strategy/port-economics.md) |
 | `planet-colonization {snapshot,analyze}` | **LIVE.** Observation-store ingest + production-hypothesis analysis over planet record JSON (daemon-free; never sends). | `snapshot` / `analyze` args per `--help` | `read-only` | [Planet Colonization](/strategy/planet-colonization.md) |
 
@@ -209,7 +210,7 @@ tw rule …                                    # draft / approve path (see tw ru
 # Implementation status (tip `f14cc30` · live `./tw --help` / `build_parser()`)
 
 **LIVE `tw` verbs today** (re-verified 2026-08-14 against tip `build_parser()` choices):
-`attach`, `chain`, `chains`, `coach`, `do`, `ensure`, `explore`, `frames`, `history`, `log`/`trail`,
+`attach`, `chain`, `chains`, `coach {show,provenance}`, `do`, `ensure`, `explore`, `frames`, `history`, `log`/`trail`,
 `loops`, `menumap`, `mine`/`patterns`, `pairs`, `planet-colonization`, `players`, `port-floor`,
 `probe`, `read`, `record`, `reflex`, `report`, `rule`, `screen`, `send`, `servers`, `skill`,
 `state`, `status`, `stop`, `teach`, `watch`.
