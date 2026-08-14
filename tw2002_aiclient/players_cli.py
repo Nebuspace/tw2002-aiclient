@@ -171,7 +171,7 @@ def add_players_parsers(sub: argparse._SubParsersAction) -> None:
     sp_rotate.add_argument(
         "--check",
         action="store_true",
-        help="passive notify only — print due/not-due with reason; exit 0 if bank readable",
+        help="passive notify only - print due/not-due with reason; exit 0 if bank readable",
     )
     sp_rotate.set_defaults(func=cmd_players_rotate)
 
