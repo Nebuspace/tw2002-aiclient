@@ -148,9 +148,20 @@ exploration-policy (this WO).
 
 **Ruling (Max, 2026-08-07 — "You are OK live driving it if its for the purpose of development! Add that to canon!"):** clarified via follow-up question to exactly three conditions, all required simultaneously: (1) sacrificial account only (`crawl_sacrificial = true`), (2) manual, one action at a time — never a standing autopilot/loop/taught rule, (3) logged as a distinct third sender class, never folded into `app` or `human`.
 
-**Canon home:** [dev-drive-exception](/doctrine/dev-drive-exception.md) (new doc, full schema + "what this does not authorize" + Code divergence noting this is canon-only today — no `VALID_SENDERS` third value, no runtime `crawl_sacrificial` gate check yet). Pointer addenda added to [ai-teacher](/engine/ai-teacher.md) and [alignment-and-conduct](/doctrine/alignment-and-conduct.md) — additive only, does not weaken the `{app, human}`-for-play framing either document already carries.
+**Canon home:** [dev-drive-exception](/doctrine/dev-drive-exception.md) (full schema + "what this
+does not authorize" + Code divergence). Pointer addenda in [ai-teacher](/engine/ai-teacher.md) and
+[alignment-and-conduct](/doctrine/alignment-and-conduct.md) — additive only, does not weaken the
+`{app, human}`-for-play framing either document already carries.
 
-**Status:** RESOLVED / canon-only. Follow-up WO (code enforcement: third `VALID_SENDERS` value + `crawl_sacrificial` gate) not yet filed — optional, sequenced behind in-flight work.
+**Status:** RESOLVED / code enforcement LIVE. Send-time gate shipped as
+`WO-BUILD-DEV-DRIVE-SENDER-ENFORCEMENT` (`999ddc7`, 2026-08-08): tip
+`VALID_SENDERS = ("app", "human", "dev")` + `crawl_sacrificial` gate on every `dev` send — see
+[dev-drive-exception](/doctrine/dev-drive-exception.md) § Code divergence. Residual there is the
+CLI `--sender` surface (also LIVE, still sacrificial-gated), not an unbuilt third sender.
+
+**Update 2026-08-15 (staleness check).** Prior Status/Canon-home prose said "canon-only today —
+no `VALID_SENDERS` third value / follow-up WO not yet filed." Tip-false since `999ddc7`; ledger
+lines above corrected to match the doctrine Code-divergence section.
 
 ### RESOLVED-EXPLORE-VS-TRADE-LOOP-MODES — two operator modes (Max ratify 2026-08-01)
 
