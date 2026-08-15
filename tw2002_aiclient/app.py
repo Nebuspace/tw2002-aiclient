@@ -1097,8 +1097,10 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
     play.status_provider = play.decision_scalars.wrap(
         play.focus_scalars.wrap(
             play.game_data_stats.wrap(
-                play.world_stats.wrap(
-                    play.chain_scalars.wrap(_daemon_status_provider(run_dir))
+                play.fighter_price_scalars.wrap(
+                    play.world_stats.wrap(
+                        play.chain_scalars.wrap(_daemon_status_provider(run_dir))
+                    )
                 )
             )
         )
