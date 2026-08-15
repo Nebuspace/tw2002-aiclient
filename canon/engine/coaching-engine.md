@@ -289,7 +289,8 @@ diverging autopilot it can only ever teach.
 - Code modules (plain text) — **at tip:** `coach_kb.py` (`StrategyCard` / `CoachParam` loader + schema
   validation, I1/I4), `coach_engine.py` (`infer_coach_triggers` = I2 trigger map, `compose_decisions_coach`
   = I3 advice renderer, plus the honest empty-state placeholder), `chain_units.py` (the hop/step arithmetic
-  the trigger map consumes), `chain_status.py` (`ChainScalars` — cached `chain_hops`/`chain_unit`
+  the trigger map consumes — owned contract in [trade-loops](/strategy/trade-loops.md#library-row-steps--hops-vs-keystroke-steps-chain_units),
+  not inside `coach_engine`), `chain_status.py` (`ChainScalars` — cached `chain_hops`/`chain_unit`
   producer; honest absence; never imports `chain_search` on the draw path), `cockpit/decisions.py` (reborn DECISIONS consumer — fail-closed KB load,
   yield-to-live-trace, coach call when the pane would otherwise be idle). **Port-source only, deleted at
   the rebirth:** `spectate_layout.py` (original home of the two I2/I3 functions), `spectate_app.py`
