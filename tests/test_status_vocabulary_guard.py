@@ -67,7 +67,16 @@ STARVED_ALLOWLIST: dict[str, tuple[str, str]] = {
     # already emitted. fighters_aboard — same pattern (WO-STATUS-FIGHTERS-ABOARD).
     # ship_prices_count / hold_price_label — supplied by game_data_stats.GameDataStats
     # (WO-AUDIT-BUILD-SHIPPROG-FOCUS-OVERLAY) from Layer-B game_data.json.
-    "fighter_buy_status": ("T3", "needs shipyard-screen parsing"),
+    # fighter_buy_status — optional override only. GOALS derives the Fighters
+    # detail at compose time via afford_fighters → fighter_buy_status_label
+    # when the key is absent (cockpit/goals.py::_fighter_buy_status_from_status).
+    # Still "starved" as a *written* status key by design (injectable override);
+    # tip-false to claim it waits on shipyard-screen parsing for display.
+    "fighter_buy_status": (
+        "T3",
+        "optional override; GOALS derives label via afford_fighters when absent "
+        "(not blocked on shipyard parsing — display path already live)",
+    ),
     # trade_float — supplied by trade_float_status.TradeFloatScalars
     # (WO-AICLIENT-BUILD-TRADE-FLOAT-STATUS-PRODUCER); omit-until-known from
     # active money-path cash_floor.
@@ -139,6 +148,16 @@ def test_every_allowlist_entry_names_a_tranche_and_a_reason():
         tranche, why = entry
         assert tranche in _VALID_TRANCHES, f"{key}: unknown tranche {tranche!r}"
         assert len(why) > 20, f"{key}: reason too thin to act on: {why!r}"
+
+
+def test_fighter_buy_status_allowlist_reason_is_tip_honest():
+    """WO-AICLIENT-DOC-VOCAB-FIGHTER-BUY-STATUS-ALLOWLIST: display is derived
+    via afford_fighters; do not re-admit the shipyard-parser lie."""
+    tranche, why = STARVED_ALLOWLIST["fighter_buy_status"]
+    assert tranche == "T3"
+    assert "afford_fighters" in why
+    assert "shipyard" not in why.lower() or "not blocked on shipyard" in why.lower()
+    assert "needs shipyard-screen parsing" not in why
 
 
 # ---------------------------------------------------------------------------

@@ -218,7 +218,15 @@ def _trade_float_from_status(status: dict) -> int | None:
 
 
 def _fighter_buy_status_from_status(status: dict) -> str:
-    """Explicit override wins; else recommend-only afford_fighters label."""
+    """Explicit override wins; else recommend-only afford_fighters label.
+
+    ``status["fighter_buy_status"]`` is an *optional* inject — tip does not
+    require a shipyard-screen writer for GOALS to show a buy hint. When the
+    key is absent, the label is derived here from ``afford_fighters`` (fail-
+    closed ``price?`` until credits + unit price are known). Vocab-guard
+    still lists the key as starved-as-written (override-only); see
+    ``tests/test_status_vocabulary_guard.py``.
+    """
     override = _safe_str(status.get("fighter_buy_status"))
     if override:
         return override
