@@ -256,7 +256,7 @@ class ChainScalars:
             self._ranked_chains = (chains[0],)
         self._priced_search_incomplete = False
         try:
-            classes, known, cmap = _port_snapshot_from_world(
+            classes, known, commodities = _port_snapshot_from_world(
                 getattr(discovered, "world_id", None), state_dir=state_dir
             )
             self._port_classes = classes

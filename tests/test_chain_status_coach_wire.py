@@ -291,6 +291,50 @@ def test_port_classes_enrich_from_world_model_on_successful_update(tmp_path):
     assert "known_ports" not in merged
 
 
+def test_update_populates_commodity_maps_not_nameerror(tmp_path):
+    """WO-FIX-CHAIN-STATUS-UPDATE-COMMODITY-MAP-NAMEERROR: update() must
+    assign the unpacked commodity maps (was NameError on `commodities`)."""
+    from tw2002_aiclient import world_model
+
+    world_id = "bubble-cmap"
+    world_model.upsert_sector(
+        world_id,
+        {
+            "sector_id": 10,
+            "warps": [11],
+            "port": {
+                "class": "BSB",
+                "commodities": [
+                    {"name": "Fuel Ore", "status": "Buying", "amount": 100},
+                ],
+            },
+        },
+        state_dir=tmp_path,
+    )
+    world_model.upsert_sector(
+        world_id,
+        {
+            "sector_id": 11,
+            "warps": [10],
+            "port": {
+                "class": "SSS",
+                "commodities": [
+                    {"name": "Fuel Ore", "status": "Selling", "amount": 50},
+                ],
+            },
+        },
+        state_dir=tmp_path,
+    )
+    cs = ChainScalars()
+    cs.update(
+        _result(chains_=[_chain([10, 11, 10])], world_id=world_id),
+        state_dir=tmp_path,
+    )
+    assert 10 in cs._commodity_maps
+    assert "Fuel Ore" in cs._commodity_maps[10]
+    assert 11 in cs._commodity_maps
+
+
 def test_failed_update_retains_last_good_port_classes(tmp_path):
     from tw2002_aiclient import world_model
 
