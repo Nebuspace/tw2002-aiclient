@@ -85,9 +85,9 @@ def test_a_stored_retired_kind_is_still_READABLE(tmp_path, kind):
     """The legacy-data guarantee: narrowing gates WRITES, never READS.
 
     A map written by an older build (or hand-edited) that holds a retired
-    kind must still load, list, path-find, plan, and summarize -- passing the
-    stored kind through verbatim. If this ever goes red, the narrowing has
-    become a store-breaking change and needs a migration, not a constant.
+    kind must still load, list, and summarize — passing the stored kind
+    through verbatim. Pathfinding deliberately will not walk it: only
+    ``SAFE_MENU_WALK_KINDS`` are hops (WO-FIX-MENU-PATH-KIND-FILTER).
     """
     path = tmp_path / "game_knowledge.json"
     screen = "Legacy Root Menu"
@@ -118,17 +118,32 @@ def test_a_stored_retired_kind_is_still_READABLE(tmp_path, kind):
     assert load_knowledge(path)["menu_map"]["edges"][0]["kind"] == kind
     assert [e["kind"] for e in list_menu_edges(path)] == [kind]
 
-    # pathfinding still crosses it.
-    assert [e["key"] for e in find_menu_path(path, sig_a, "sig-b")] == ["1"]
+    # pathfinding skips non-safe kinds (retired kinds are not nav|info).
+    assert find_menu_path(path, sig_a, "sig-b") is None
 
-    # the planner reports it verbatim to its caller.
+    # the planner reports not-ok when no safe path exists.
     plan = nav.plan_nav(screen, "sig-b", path)
-    assert plan["ok"] is True
-    assert [s["kind"] for s in plan["steps"]] == [kind]
+    assert plan["ok"] is False
 
-    # the map-view summary counts it like any other edge.
+    # the map-view summary still counts the stored edge.
     summary = map_view.menu_map_summary_from_store(path)
     assert summary["edge_count"] == 1
+
+
+def test_find_menu_path_skips_action_edges_even_to_real_nodes(tmp_path):
+    """Kind filter is structural — not only emergent from <unexplored> sinks.
+
+    A hand-edited / second-writer map that records an action edge to a real
+    destination must not be walked (WO-FIX-MENU-PATH-KIND-FILTER).
+    """
+    path = tmp_path / "game_knowledge.json"
+    upsert_menu_edge(path, "sig-a", "1", "sig-b", kind="nav")
+    upsert_menu_edge(path, "sig-a", "B", "sig-buy", kind="action", desc="buy")
+    assert [e["key"] for e in find_menu_path(path, "sig-a", "sig-b")] == ["1"]
+    assert find_menu_path(path, "sig-a", "sig-buy") is None
+    # info edges remain walkable.
+    upsert_menu_edge(path, "sig-a", "V", "sig-view", kind="info", desc="view")
+    assert [e["key"] for e in find_menu_path(path, "sig-a", "sig-view")] == ["V"]
 
 
 @pytest.mark.parametrize("kind", RETIRED_KINDS)
@@ -174,13 +189,11 @@ def test_the_error_message_names_the_accepted_set(tmp_path):
 
 
 def test_find_menu_path_refuses_when_unexplored_has_outgoing_edges(tmp_path):
-    """Pin: safe-kinds-only is named where BFS silently depended on it.
+    """Pin: belt-and-suspenders assert still names the sink invariant.
 
-    Scout finding (WO-FIND-MENU-PATH-KIND-FILTER-SCOUT): BFS has no kind
-    filter; safety is emergent from action→<unexplored> with no outgoing
-    edges from that sentinel. Hand-edit / second writer that gives the
-    sentinel an outgoing edge would otherwise route through an action
-    edge. The interim assert must fail loudly instead.
+    Kind filter is the structural guarantee (WO-FIX-MENU-PATH-KIND-FILTER);
+    the assert remains so a store that gives ``<unexplored>`` outgoing edges
+    fails loudly even if a future change weakened the filter.
     """
     assert SAFE_MENU_WALK_KINDS == frozenset({"nav", "info"})
     path = tmp_path / "game_knowledge.json"
@@ -191,7 +204,7 @@ def test_find_menu_path_refuses_when_unexplored_has_outgoing_edges(tmp_path):
     # Well-formed store: nav target still reachable; sink stays terminal.
     assert [e["key"] for e in find_menu_path(path, "sig-a", "sig-b")] == ["1"]
 
-    # Violate the emergent property the router does not otherwise enforce.
+    # Violate the sink property the assert still guards.
     upsert_menu_edge(
         path, UNEXPLORED_MENU_NODE, "!", "sig-beyond", kind="nav"
     )
