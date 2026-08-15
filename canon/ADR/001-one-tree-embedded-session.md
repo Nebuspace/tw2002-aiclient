@@ -15,7 +15,7 @@ Filename convention: `/ADR/001-one-tree-embedded-session.md`
 ## Status
 
 **Folded into [session-engine](/architecture/session-engine.md)** · Accepted 2026-07-24 by Max ·
-_(re-verified 2026-08-06)_
+_(re-verified 2026-08-15)_
 
 **Fold target (live tip):** one top-level `tw2002_aiclient` tree with daemon-core under
 `session/` is stated in [`session-engine.md` Schema](/architecture/session-engine.md)
