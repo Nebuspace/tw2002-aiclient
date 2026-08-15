@@ -84,12 +84,12 @@ These are code constants (`tw2002_aiclient/chains.py` — tip home; archived nam
 is not reborn), not game numbers — they gate which taught macros are *offerable* and how the
 earn-vs-search band is chosen:
 
-- **`MIN_CHAIN_LINKS_TO_EXECUTE = 2`** — a chain shorter than two links (a single hop, or empty) is
+- **`MIN_CHAIN_LINKS_TO_EXECUTE = 2`** — sole SSOT for both the discovery-only floor and the
+  earn-vs-search band boundary. A chain shorter than two links (a single hop, or empty) is
   discovery-only: it is never offered as an executable earn macro; below it the layer prefers to
-  keep searching/exploring.
-- **`CHAIN_LINKS_PREFER_SEARCH_BELOW = 2`** (defined as `= MIN_CHAIN_LINKS_TO_EXECUTE`) — the
-  earn-vs-search band boundary: at or above it, *earning* on the known chain is preferred over
-  hunting a longer one; below it, exploration stays the preferred secondary candidate.
+  keep searching/exploring. At or above it, *earning* on the known chain is preferred over hunting
+  a longer one. (Retired alias `CHAIN_LINKS_PREFER_SEARCH_BELOW` was identical and unused by any
+  ranking consumer — name parity without a second constant.)
 - **`MIN_CHAIN_LINKS_FOR_SHIP_UPGRADE = 4`** — a hull/ship upgrade is not prioritized until the best
   known chain is at least four links; at 2–3 links, capital is steered to holds and defense first
   (see [Ship Progression & Upgrades](/strategy/ship-progression.md)).
@@ -259,8 +259,8 @@ resolved guarded trade path are recorded here explicitly:
 - Code module `trade_driver.py` — `run_chain()` end-to-end drive, `should_abort`/`is_armed` gates,
   fresh-render + PALADIN allowlist, `ChainHold("depleted:...")` / `realized_margin_below_floor`.
 - Code module `chains.py` — also owns `MIN_CHAIN_LINKS_TO_EXECUTE=2`,
-  `CHAIN_LINKS_PREFER_SEARCH_BELOW=2`, `MIN_CHAIN_LINKS_FOR_SHIP_UPGRADE=4` and the earn-vs-search
-  band (constants cited above; tip home is `chains.py`, not archived `priority_engine.py`).
+  `MIN_CHAIN_LINKS_FOR_SHIP_UPGRADE=4` and the earn-vs-search band folded into the execute floor
+  (constants cited above; tip home is `chains.py`, not archived `priority_engine.py`).
 - Archive-only (do-not-revive): `archive/pre-rebirth-2026-07-23/twclient/autopilot.py` —
   historical per-tick continuous-EV `SELECT` scorer and `EXPLORE_BASELINE_EV = 0.01`. Tip replacement
   is suggestion-only ranking/FOCUS (`priority_engine.py` / `focus_status.py`), not a live picker.

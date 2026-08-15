@@ -20,7 +20,6 @@ import pytest
 
 import tw2002_aiclient.chains as chains_module
 from tw2002_aiclient.chains import (
-    CHAIN_LINKS_PREFER_SEARCH_BELOW,
     DEFAULT_MAX_SEARCH_STEPS,
     MIN_CHAIN_LINKS_FOR_SHIP_UPGRADE,
     MIN_CHAIN_LINKS_TO_EXECUTE,
@@ -193,8 +192,8 @@ def test_max_hops_bounds_the_search():
 
 def test_chain_link_threshold_constants_match_canon():
     assert MIN_CHAIN_LINKS_TO_EXECUTE == 2
-    assert CHAIN_LINKS_PREFER_SEARCH_BELOW == MIN_CHAIN_LINKS_TO_EXECUTE
     assert MIN_CHAIN_LINKS_FOR_SHIP_UPGRADE == 4
+    assert not hasattr(chains_module, "CHAIN_LINKS_PREFER_SEARCH_BELOW")
 
 
 def _hop():
@@ -230,13 +229,12 @@ def test_min_chain_links_to_execute_has_exactly_one_pure_consumer():
     """Pins the WO's "no picker, no EV scorer, no which-loop-to-run
     function" constraint structurally. Counted via `ast.Name` nodes (not
     a text/docstring count, which would conflate prose mentions with
-    real references): the assignment target itself, the
-    `CHAIN_LINKS_PREFER_SEARCH_BELOW` alias's RHS, and the one Load
-    inside `is_executable_chain` -- exactly 3 code references. A new
-    consumer (a picker, a ranker) would add a 4th and fail this."""
+    real references): the assignment target itself and the one Load
+    inside `is_executable_chain` -- exactly 2 code references. A new
+    consumer (a picker, a ranker) would add a 3rd and fail this."""
     tree = ast.parse(inspect.getsource(chains_module))
     refs = [n for n in ast.walk(tree) if isinstance(n, ast.Name) and n.id == "MIN_CHAIN_LINKS_TO_EXECUTE"]
-    assert len(refs) == 3
+    assert len(refs) == 2
 
 
 # -- search budget (WO-CHAIN-SEARCH-BUDGET) --------------------------------

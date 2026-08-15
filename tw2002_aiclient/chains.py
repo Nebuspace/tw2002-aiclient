@@ -46,7 +46,6 @@ class ProfitChain:
 # screen -- the stop-on-unknown invariant is prior to and independent of
 # any threshold here (canon, same section).
 MIN_CHAIN_LINKS_TO_EXECUTE = 2
-CHAIN_LINKS_PREFER_SEARCH_BELOW = MIN_CHAIN_LINKS_TO_EXECUTE
 MIN_CHAIN_LINKS_FOR_SHIP_UPGRADE = 4
 
 
