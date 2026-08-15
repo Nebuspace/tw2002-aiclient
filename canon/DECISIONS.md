@@ -731,3 +731,24 @@ faucet-rate/magnitude-style number.
 **Refs:** `tw2002_aiclient/cockpit/teachband.py:120,196,224,368` · `canon/surfaces/mode-line-and-
 teach-controls.md` § Policy-auto amendment · 6-lens aiclient audit, 2026-08-12 (code-vs-canon
 lens).
+
+## DECISION-PORT-FLOOR-TRADED-SINCE-PRIOR-ACCEPT-DARK (2026-08-15)
+
+**Status:** Ruled (implementer + hub pushback on WO-ESCALATE-PORT-FLOOR-TRADED-SINCE-PRIOR-UNREACHABLE) —
+**accept-dark** for tip product capture. The either/or ("wire a `traded_since_prior` signal" vs
+"accept regrowth stays dark") is closed on the accept-dark horn.
+
+**Reasoning.** Product capture (`world_model._record_port_floor_observation` →
+`port_floor_capture.record_port_write`) has no operator ledger of whether *this* profile traded the
+port since the prior observation. Marking pairs `False` without that ledger would fabricate
+trade-free windows and make `estimate_regrowth_rate` look live when it is not. Marking `True` would
+silently drop every pair. Leaving the flag unknown yields `{}` from product JSONL — honest empty,
+not a silent wiring gap. This sits under the existing analysis-only hold
+(`DECISION-PORT-FLOOR-CAPTURE-HOLD-RATIONALE`): no ranking/coach consumer is owed a regrowth number
+from this path. PR #715 documented the darkness; this ruling **decides** it rather than leaving the
+queue either/or open. A future ledger-aware capture WO may set the flag; that is new scoped work,
+not a reopen of this decision by default.
+
+**Refs:** `tw2002_aiclient/port_floor_capture.py` · `tw2002_aiclient/world_model.py`
+(`_record_port_floor_observation`) · `canon/strategy/port-economics.md` § port_floor_capture ·
+`DECISION-PORT-FLOOR-CAPTURE-HOLD-RATIONALE` · WO-ESCALATE-PORT-FLOOR-TRADED-SINCE-PRIOR-UNREACHABLE.

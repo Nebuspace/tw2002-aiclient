@@ -184,6 +184,9 @@ doc; **archive-only** shapes are do-not-revive (not open tip defects to "fix"):
   - `estimate_regrowth_rate(observations)` — per `(sector_id, port_id, commodity)`, averages
     pct-of-max recovered per real-time day over consecutive-visit pairs the caller marks
     `traded_since_prior=False` where `pct` rose; identities with zero qualifying pairs are omitted.
+    Tip product capture (`world_model._record_port_floor_observation`) **accepts dark** and never
+    sets that flag (`DECISION-PORT-FLOOR-TRADED-SINCE-PRIOR-ACCEPT-DARK`) — regrowth estimates from
+    product JSONL stay empty until a ledger-aware capture WO lands.
   - `estimate_floor_price(observations)` — per identity, a least-squares fit of observed
     `price_per_unit` (populated only from a completed haggle's `final_price`) against `pct`,
     evaluated at `pct=100`; identities with fewer than two distinctly-priced observations are

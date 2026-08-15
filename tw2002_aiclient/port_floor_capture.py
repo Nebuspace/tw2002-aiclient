@@ -24,19 +24,21 @@ This module is that missing analysis step, and nothing more:
   ``port_economics.py``'s hypothesis params — that flip is a live-prove
   decision made by whoever owns a ledger-aware capture path, not by this
   analysis code.
-- **Regrowth needs a trade-free window — and is dark on tip product paths.**
+- **Regrowth needs a trade-free window — and is dark on tip product paths (DECIDED).**
   Amount/pct can rise either because the port is regrowing stock *or* because
   someone else traded against it in the sink direction — this module cannot
   distinguish the two from the numbers alone. It only computes a regrowth
   rate over an observation pair the caller explicitly marks
   ``traded_since_prior=False`` (the operator's own ledger knows whether
   *they* traded; a third-party trade on the same port is an unavoidable,
-  documented residual noise source in the estimate). Because the live
-  world-model capture never sets that flag, ``estimate_regrowth_rate`` over
-  product-captured JSONL yields no qualifying pairs in practice — intentional
-  honesty (WO-ESCALATE-PORT-FLOOR-TRADED-SINCE-PRIOR-UNREACHABLE), not a
-  silent wiring gap. Ranking/coach consumers stay out of scope per the
-  analysis-only ruling on this module.
+  documented residual noise source in the estimate). Product capture
+  (``world_model._record_port_floor_observation``) deliberately leaves the
+  flag unknown — **accept-dark** for tip product paths
+  (``DECISION-PORT-FLOOR-TRADED-SINCE-PRIOR-ACCEPT-DARK``). Inventing
+  False/True without a ledger would fake regrowth windows. Ranking/coach
+  consumers stay out of scope per ``DECISION-PORT-FLOOR-CAPTURE-HOLD-RATIONALE``.
+  A future ledger-aware capture WO may flip pairs; that is new work, not an
+  open either/or on this module.
 - **Floor price needs a price observation.** ``amount``/``pct`` alone say
   nothing about credits/unit — only a haggle's ``final_price`` (or an
   equivalent future price-quote reader) does. This module fits price against
@@ -173,7 +175,8 @@ def estimate_regrowth_rate(
     on the later observation, where ``pct`` rose. Identities with zero
     qualifying pairs are omitted (never a fabricated zero).
 
-    Tip product capture leaves ``traded_since_prior`` unknown, so this returns
+    Tip product capture leaves ``traded_since_prior`` unknown by decision
+    (``DECISION-PORT-FLOOR-TRADED-SINCE-PRIOR-ACCEPT-DARK``), so this returns
     ``{}`` for world-model JSONL until a ledger-aware caller marks pairs.
     """
 
