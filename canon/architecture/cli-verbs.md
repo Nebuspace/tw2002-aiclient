@@ -156,11 +156,13 @@ config is isolated, and print the run-dir path they would have targeted (WO-CLI-
 Most of these rows are still not `tw` CLI subparsers (Option B · WO-ESCALATE-CLI-VERBS).
 Autoloop *wire* verbs exist on the daemon socket — see Implementation status — but there is no
 `tw autoloop` / `tw play` / `tw haggle` / `tw autopilot` / `tw crawl` / `tw replay` shell entry.
-**Exception on tip:** `tw chain` (discovered trade-chain driver) is LIVE — see row below.
+**Exceptions on tip:** `tw chain` (discovered trade-chain driver) and `tw explore` (sector
+explorer) are LIVE — see rows below.
 
 | verb | one-line effect | key args | actor-class | owning concept |
 |---|---|---|---|---|
 | `chain {start,stop,status}` | **LIVE.** Start/stop/status a discovered trade chain (start requires a human-confirmed fingerprint). Distinct from read-only `tw chains` / `tw pairs`. | `start`: fingerprint; `--pass-count` (omit = one pass; bare flag = 10; explicit N ≤ 50) and `--profit-target` are sacrificial-only when `pass_count > 1` — `TradeChainRunner` refuses `bounded_repeat_requires_sacrificial` otherwise. See `tw chain --help`. | `drives {app}` | [Trade Loops](/strategy/trade-loops.md) · ADR-003 · [DECISION-BOUNDED-REPEAT-TRADE-CHAIN-RATIFY](/DECISIONS.md) |
+| `explore {start,stop,status}` | **LIVE.** Start/stop/status the daemon sector explorer (`explore_*` wire verbs via `session/cli.py`, WO-EXPLORE-CLI-INVOKE). Distinct from Play's E-cycle Explore offer. | `start`: `--world-id` (required); `--min-sectors`; `--turn-budget`; `--dock-new-ports` / `--no-dock-new-ports` (default OFF); `--fight-tolls` / `--no-fight-tolls` (default OFF); `--intent` (`map_fill` / `find_formations` / `chain_hunt`); `--exhaust-depth` (required with `chain_hunt`); `--json`. See `tw explore --help`. | `drives {app}` | [Exploration Policy](/strategy/exploration-policy.md) |
 | `replay <name>` | **TARGET.** Re-issue a saved skill's steps, halting on the first divergence from what was recorded/mined. | `--param k=v` `--step-timeout` `--force` | `drives {app}` | [Rule–Macro Engine](/architecture/rule-macro-engine.md) |
 | `play <name>` | **TARGET.** Run a learned skill for N cycles synchronously; halts on surprise or a rail (`--cycles`/`--floor`). | `--cycles` `--floor` `--param k=v` | `drives {app}` | [Rule–Macro Engine](/architecture/rule-macro-engine.md) |
 | `autoloop {start,stop,pause,resume}` | **TARGET as `tw` CLI.** Wire verbs `autoloop_*` exist (see Implementation status); no shell subparser. Catalog `{resume}` deliberately does not match wire (`relaunch` instead of thaw). | `name` `--cycles` `--floor` `--param k=v` | `drives {app}` | [Rule–Macro Engine](/architecture/rule-macro-engine.md) |
