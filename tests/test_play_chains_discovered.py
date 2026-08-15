@@ -620,6 +620,13 @@ def test_the_cached_scalars_reach_the_real_status_provider(monkeypatch):
         assert {"margin_per_hold", "turns_per_cycle", "stock_capacity"} <= set(
             upgrade_loop
         )
+    # WO-BUILD-DECISIONS-PANEL-TRACE-PRODUCER: DecisionScalars wraps outside
+    # FOCUS and adds the DECISIONS dry-run trace — peel it off for the same
+    # reason as the two above.
+    autopilot_trace = got.pop("autopilot_trace", None)
+    assert isinstance(autopilot_trace, dict)
+    assert {"chosen", "candidates"} <= set(autopilot_trace)
+    assert isinstance(autopilot_trace["candidates"], list)
     assert got == {
         "ok": True, "credits": 7,
         "chain_hops": 3, "chain_unit": "hops",
