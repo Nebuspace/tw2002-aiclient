@@ -2117,7 +2117,7 @@ def _dispatch_ensure(session, args, server):
             )
 
         try:
-            final_cls, steps = run_login(
+            _, steps = run_login(
                 session,
                 profile,
                 get_password=credentials.get_password,
