@@ -734,9 +734,10 @@ lens).
 
 ## DECISION-PORT-FLOOR-TRADED-SINCE-PRIOR-ACCEPT-DARK (2026-08-15)
 
-**Status:** Ruled (implementer + hub pushback on WO-ESCALATE-PORT-FLOOR-TRADED-SINCE-PRIOR-UNREACHABLE) —
-**accept-dark** for tip product capture. The either/or ("wire a `traded_since_prior` signal" vs
-"accept regrowth stays dark") is closed on the accept-dark horn.
+**Status:** Ruled (hub self-ruled 2026-08-15, logged `port-floor-traded-since-prior-accept-dark`
+(Decided) in the Nebuspace decisions DB) — **accept-dark** for tip product capture. The either/or
+("wire a `traded_since_prior` signal" vs "accept regrowth stays dark") is closed on the
+accept-dark horn.
 
 **Reasoning.** Product capture (`world_model._record_port_floor_observation` →
 `port_floor_capture.record_port_write`) has no operator ledger of whether *this* profile traded the
@@ -749,6 +750,7 @@ from this path. PR #715 documented the darkness; this ruling **decides** it rath
 queue either/or open. A future ledger-aware capture WO may set the flag; that is new scoped work,
 not a reopen of this decision by default.
 
-**Refs:** `tw2002_aiclient/port_floor_capture.py` · `tw2002_aiclient/world_model.py`
+**Refs:** hub ruling `port-floor-traded-since-prior-accept-dark` (Nebuspace decisions DB, Decided
+2026-08-15) · `tw2002_aiclient/port_floor_capture.py` · `tw2002_aiclient/world_model.py`
 (`_record_port_floor_observation`) · `canon/strategy/port-economics.md` § port_floor_capture ·
 `DECISION-PORT-FLOOR-CAPTURE-HOLD-RATIONALE` · WO-ESCALATE-PORT-FLOOR-TRADED-SINCE-PRIOR-UNREACHABLE.
