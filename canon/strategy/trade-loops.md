@@ -36,6 +36,23 @@ never silently conformed to.
   ring of sectors (`first == last`) with its hops, carrying `overall_profit`, `turns`,
   `cr_per_turn`, and `cr_per_execution` (`chains.ProfitChain`).
 
+## Library-row `steps` — hops vs keystroke-steps (`chain_units`)
+
+Discovered trade loops and recorded/mined skill macros both travel as library rows that share one
+wire field named `steps`. They do **not** mean the same thing:
+
+| `source` | What `steps` counts | Display unit |
+|---|---|---|
+| `discovered` / `presence_seed` | sector-path edges (trade-loop **hops**) | `hops` |
+| recorded / mined (everything else) | macro keystroke-sequence length | `steps` |
+
+`tw2002_aiclient/chain_units.py` is the **sole** tip module that decides which word applies
+(`unit_for_source`, `chain_hop_count_and_unit`, `hop_count_from_sectors`). It lives **outside**
+`coach_engine` on purpose: this is chain arithmetic that coaching / GOALS merely *consume* — the
+coach trigger map must not own the hop/step split. Status merge is
+`chain_status.ChainScalars` → `status["chain_hops"]` / `status["chain_unit"]` for the GOALS Chain
+row (`cockpit/goals.py`). Conflating the two would label a macro's keystroke count as "hops".
+
 ## Ranking — hop-count first, then credits-per-turn
 
 Candidate chains rank by **hop-count descending, then credits-per-turn descending**
@@ -251,6 +268,9 @@ resolved guarded trade path are recorded here explicitly:
 - Code module `chains.py` — `TradeHop`, `ProfitChain`, `find_profit_chains`, `rank_chains`
   (hop-count desc then cr/turn desc), `rank_chains_by_yield` (cr/turn-first for `tw chains`),
   the three-metric shape; top chain = `find_profit_chains(...)[0]`.
+- Code module `chain_units.py` — sole hops-vs-steps decision for library-row `steps`
+  (`unit_for_source` / `chain_hop_count_and_unit`); consumed by `chain_status.ChainScalars` and
+  coaching/GOALS, not owned by `coach_engine`.
 - canon/research/archive-port-patterns.md AP-07 (DFS chain-finder algorithm, cycle normalization,
   rank_chains sort key, chain_as_library_row wire format).
 - Code module `trade_adapter.py` — world-model port records → `TradeHop` edges; the buy-at-`frm`
