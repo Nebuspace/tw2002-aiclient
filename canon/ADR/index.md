@@ -25,8 +25,9 @@ Status values (aligned with the sw2102-docs ADR convention; fold targets here ar
 file:line) and append `_(re-verified YYYY-MM-DD)_` on the row. A row with no re-verify tag has not
 been re-checked since it was written.
 
-At three ADRs today this is cheap insurance — port the convention **before** the set grows past
-easy retrofit size.
+At three ADRs today this is cheap insurance — enforced by
+`scripts/adr-reverify-cadence-lint.py` (defaults to this directory + `index.md`;
+pass `--dir` / `--index` for other ADR trees such as sw2102-docs).
 
 ## Index
 
