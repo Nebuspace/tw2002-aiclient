@@ -345,11 +345,6 @@ def find_text(grid: Sequence[str], needle: str) -> tuple[int, int] | None:
     return None
 
 
-def cell_at(screen: pyte.Screen, row: int, col: int) -> Any:
-    """Convenience: ``screen.buffer[row][col]`` (pyte Char with .fg/.bold/…)."""
-    return screen.buffer[row][col]
-
-
 # Underscore aliases — drop-in for archive-local ``_set_winsize`` / ``_pyte_*``.
 _set_winsize = set_winsize
 _capture_pty = capture_pty
