@@ -686,11 +686,11 @@ def write_port_only(world_id, sector_id, parsed_port, state_dir=None, now=None):
 def _record_port_floor_observation(sector_id, port_dict, *, state_dir=None):
     """Best-effort append to the port-floor observation JSONL (WO capture loop).
 
-    Never raises — world_model writes must not fail because the capture
+    Never raises — world-model writes must not fail because the capture
     store is missing or unwritable. ``traded_since_prior`` stays unknown
-    here on purpose (WO-ESCALATE-PORT-FLOOR-TRADED-SINCE-PRIOR-UNREACHABLE):
+    here by decision (``DECISION-PORT-FLOOR-TRADED-SINCE-PRIOR-ACCEPT-DARK``):
     inventing False/True without a ledger would fake regrowth windows.
-    Only an operator/ledger-aware caller may set the flag.
+    Only a future ledger-aware caller may set the flag.
     """
     try:
         from tw2002_aiclient.port_floor_capture import record_port_write
