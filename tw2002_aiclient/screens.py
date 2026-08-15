@@ -17,6 +17,7 @@ from tw2002_aiclient import focus_status as _focus_status
 from tw2002_aiclient import decisions_status as _decisions_status
 from tw2002_aiclient import world_stats as _world_stats
 from tw2002_aiclient import game_data_stats as _game_data_stats
+from tw2002_aiclient import fighter_price_status as _fighter_price_status
 from tw2002_aiclient.cockpit import analyze as cockpit_analyze
 from tw2002_aiclient.cockpit import armconfirm as cockpit_armconfirm
 from tw2002_aiclient import genesis_confirm as cockpit_genesis_confirm
@@ -975,6 +976,9 @@ class PlayShellScreen:
         # WO-AUDIT-BUILD-SHIPPROG-FOCUS-OVERLAY: Layer-B catalog → status
         # (ship_prices_count / hold_price_label) for GOALS + FOCUS overlay.
         self.game_data_stats = _game_data_stats.GameDataStats()
+        # WO-AICLIENT-BUILD-FIGHTER-CLASS0-PRICE-EXECUTE: Class-0 unit quote
+        # for afford_fighters / GOALS — observe-only; never invents a default.
+        self.fighter_price_scalars = _fighter_price_status.FighterPriceScalars()
         # WO-PRIORITY-ENGINE-FOCUS-WIRE: FOCUS candidates overlay (display
         # only). Bound to chain_scalars so merge can see priced cycles.
         self.focus_scalars = _focus_status.FocusScalars(self.chain_scalars)
