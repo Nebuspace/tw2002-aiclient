@@ -168,8 +168,7 @@ behavior is offerable and how it sorts**, not autonomous triggers:
 
 | Constant | Value | Effect on the ordering |
 |---|---:|---|
-| `MIN_CHAIN_LINKS_TO_EXECUTE` | 2 | Below 2 links, the run-chain behavior is not offerable — discovery/explore ranks above it |
-| `CHAIN_LINKS_PREFER_SEARCH_BELOW` | 2 | Empty hunt-before-grind band: at ≥2 links, prefer earning (fighters/holds) over hunting a longer chain |
+| `MIN_CHAIN_LINKS_TO_EXECUTE` | 2 | Below 2 links, the run-chain behavior is not offerable — discovery/explore ranks above it; at ≥2 links, prefer earning (fighters/holds) over hunting a longer chain (earn-vs-search band; no separate alias) |
 | `MIN_CHAIN_LINKS_FOR_SHIP_UPGRADE` | 4 | Ship-hull upgrade stays deferred below 4 links so a short chain funds fighters + holds first |
 
 See [trade-loops](/strategy/trade-loops.md) for the loop/chain definitions and the hop-count-then-cr/turn
