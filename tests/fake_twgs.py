@@ -63,7 +63,7 @@ silent on the fourth, wedging the (pre-fix) automaton in
 against the login automaton's OWN documented policy (blank on the first
 send, the profile's handle on every rejected retry after that) rather than
 merely recorded, so a regressed automaton that keeps re-sending blank shows
-up as a `ScriptMismatch` on `.errors`, not just a silently-wrong
+up as a script-mismatch string on `.errors`, not just a silently-wrong
 `.received_inputs`. Both knobs raise `ValueError` at construction time if
 combined with a non-`"returning"` mode, same as `start_at`/
 `restale_game_select`; `outer_name_reject_then_silent=True` with
@@ -148,14 +148,6 @@ def _is_teardown_oserror(exc: BaseException) -> bool:
     if not isinstance(exc, OSError):
         return False
     return exc.errno in _TEARDOWN_ERRNOS or exc.errno is None
-
-
-class ScriptMismatch(Exception):
-    """A scripted step received input that didn't match what the login
-    automaton is documented to send at that step -- recorded on
-    `FakeTWGS.errors` rather than raised in the server thread (an
-    exception there would just vanish silently), so the test can assert
-    the harness itself stayed in sync."""
 
 
 class _Reader:
@@ -454,7 +446,7 @@ class FakeTWGS:
         policy is blank on the first send, then the profile's handle on
         every subsequent retry, so each reply is checked against exactly
         that rather than merely recorded (a regressed automaton that keeps
-        re-sending blank surfaces as a `ScriptMismatch` on `.errors`).
+        re-sending blank surfaces as a script-mismatch string on `.errors`).
         """
         steps = self._PRE_LOGIN_STEPS
         if self.start_at is not None:
