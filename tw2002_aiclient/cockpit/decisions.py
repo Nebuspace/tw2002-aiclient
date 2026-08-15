@@ -35,11 +35,11 @@ pair. Still never an imperative command — see ``IMPERATIVE_DENYLIST``.
 
 Status-dict field mapping (WO-P3-036). ``status`` is the daemon's ``status``
 verb response shape (``tw2002_aiclient/session/protocol.py::dispatch()``).
-As of this WO the live daemon status carries no ``autopilot_trace`` key at
-all (the priority engine's dry-run trace bridge into a wire payload is not
-built yet — the same "not wired" state ``focus.py`` documents for its own
-``status["focus"]`` key), so every real call renders the honest empty panel
-until that lands. The key mapping mirrors the archived Phase-1 dry-run
+``autopilot_trace`` is produced client-side by ``decisions_status.DecisionScalars``
+(WO-BUILD-DECISIONS-PANEL-TRACE-PRODUCER) wrapping the Play ``status_provider`` —
+the daemon status verb itself still carries no trace key. Absent producer (tests
+that skip the wrap) still renders the honest empty/HELP panel. The key mapping
+mirrors the archived Phase-1 dry-run
 trace shape verbatim (``archive/pre-rebirth-2026-07-23/code/twclient/
 spectate_layout.py::PROVISIONAL_AUTOPILOT_TRACE`` / ``format_autopilot_
 trace_lines``) so the eventual wire bridge needs zero composer rework:
