@@ -222,6 +222,48 @@ def test_payback_turns_trade_in_shortens_amortization():
     assert zero_ship < net
 
 
+def test_trade_in_unverifiable_flag_distinct_from_omit_until_known():
+    """Unreachable evidence stays math-at-0 but surfaces trade_in_unverifiable."""
+    state = PlayerState(turns_left=800, current_holds=40)
+    loop = LoopEconomics(margin_per_hold=200, turns_per_cycle=10, stock_capacity=300)
+    ship = _merchant_man()
+    plain = evaluate_candidate(ship, state, loop, cost_per_hold=100)
+    assert "trade_in_unverifiable" not in plain.flags
+    marked = evaluate_candidate(
+        ship, state, loop, cost_per_hold=100, trade_in_unverifiable=True
+    )
+    assert "trade_in_unverifiable" in marked.flags
+    assert marked.projected_payback == plain.projected_payback
+    # Observed credit clears the visibility flag even if unverifiable was set.
+    known = evaluate_candidate(
+        ship,
+        state,
+        loop,
+        cost_per_hold=100,
+        trade_in_credit=ship.cost // 2,
+        trade_in_unverifiable=True,
+    )
+    assert "trade_in_unverifiable" not in known.flags
+    assert known.projected_payback is not None
+    assert plain.projected_payback is not None
+    assert known.projected_payback < plain.projected_payback
+
+
+def test_choose_upgrade_propagates_trade_in_unverifiable_from_status_shape():
+    from tw2002_aiclient.ship_upgrade_decision import choose_upgrade
+
+    state = PlayerState(turns_left=800, current_holds=40)
+    loop = LoopEconomics(margin_per_hold=200, turns_per_cycle=10, stock_capacity=300)
+    decision = choose_upgrade(
+        [_merchant_man()],
+        state,
+        loop,
+        cost_per_hold=100,
+        trade_in_unverifiable=True,
+    )
+    assert "trade_in_unverifiable" in decision.flags
+
+
 def test_compose_upgrade_decision_lines_recommend_and_hold():
     from tw2002_aiclient.ship_upgrade_decision import (
         UpgradeDecision,
@@ -278,6 +320,35 @@ def test_upgrade_decision_from_status_catalog_path():
     assert decision.recommend is True
     assert decision.ship is not None
     assert decision.ship.name == "Merchant Cruiser"
+
+
+def test_upgrade_decision_from_status_trade_in_unverifiable_key():
+    from tw2002_aiclient.ship_upgrade_decision import upgrade_decision_from_status
+
+    status = {
+        "upgrade_catalog": [
+            {
+                "name": "Merchant Cruiser",
+                "cost": 50_000,
+                "holds": 75,
+                "turns_per_warp": 3,
+                "fighters": 100,
+                "shields": 50,
+                "commissioned": True,
+            }
+        ],
+        "upgrade_player": {"turns_left": 800, "current_holds": 40},
+        "upgrade_loop": {
+            "margin_per_hold": 250,
+            "turns_per_cycle": 8,
+            "stock_capacity": 300,
+        },
+        "upgrade_cost_per_hold": 100,
+        "upgrade_trade_in_unverifiable": True,
+    }
+    decision = upgrade_decision_from_status(status)
+    assert decision is not None
+    assert "trade_in_unverifiable" in decision.flags
 
 
 def test_decisions_panel_surfaces_upgrade_decision():

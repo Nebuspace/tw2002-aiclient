@@ -134,6 +134,12 @@ Rules (load-bearing):
 - **Unknown → `0`.** Treating missing trade-in as zero keeps today's gross-list payback: systematically
   *pessimistic* when a world does grant trade-in, which biases toward HOLD rather than over-recommend.
   That bias is intentional until evidence lands; it is not a claim that trade-in is zero.
+- **Unreachable evidence → still `0`, plus `trade_in_unverifiable`.** When the only prescribed
+  evidence source is known-unreachable on a world (e.g. no Ship Dealer / purchase-confirm path on
+  the live menu map), payback math stays at credit `0` (same conservative numerator) but the
+  decision carries flag `trade_in_unverifiable` so the gap is visible — distinct from plain
+  omit-until-known ("not yet observed"). Status key: `upgrade_trade_in_unverifiable: true`.
+  A positive observed `upgrade_trade_in_credit` clears the visibility need (flag not applied).
 - **Known → subtract, floor at zero.** Trade-in cannot invent a rebate larger than the list price for
   payback math (`max(0, …)`). Hold-fill credits for the *extra* holds remain additive either way.
 - **Recommend-only unchanged.** Trade-in only corrects the ROI gate's honesty; it does not authorize

@@ -91,6 +91,9 @@ def payback_turns(
 
     ``trade_in_credit`` is omit-until-known (default 0 = unknown / pessimistic).
     Never invent a trade-in percentage — callers pass observed credit only.
+    Unreachable evidence is a separate visibility signal
+    (``trade_in_unverifiable`` on ``evaluate_candidate`` / ``UpgradeDecision.flags``),
+    not a different payback formula — math stays at 0 until a real credit lands.
     """
     extra_holds = ship.holds - state.current_holds
     if extra_holds <= 0:
@@ -129,10 +132,19 @@ def evaluate_candidate(
     *,
     cost_per_hold: int = 0,
     trade_in_credit: int = 0,
+    trade_in_unverifiable: bool = False,
     defense_floor_fighters: int = 1,
 ) -> UpgradeDecision:
-    """Evaluate a single commissioned ship against the five TW-30 gates."""
+    """Evaluate a single commissioned ship against the five TW-30 gates.
+
+    ``trade_in_unverifiable`` marks that the world's trade-in evidence source
+    is known-unreachable (distinct from plain omit-until-known). Payback math
+    still uses credit 0 until observed; the flag makes the gap visible on the
+    decision rather than indistinguishable from "not yet observed."
+    """
     flags: list[str] = []
+    if trade_in_unverifiable and trade_in_credit <= 0:
+        flags.append("trade_in_unverifiable")
 
     if not ship.commissioned:
         return UpgradeDecision(
@@ -218,6 +230,7 @@ def choose_upgrade(
     *,
     cost_per_hold: int = 0,
     trade_in_credit: int = 0,
+    trade_in_unverifiable: bool = False,
     defense_floor_fighters: int = 1,
 ) -> UpgradeDecision:
     """Pick the best hold-throughput ship that passes all five gates, or HOLD."""
@@ -231,6 +244,7 @@ def choose_upgrade(
             loop,
             cost_per_hold=cost_per_hold,
             trade_in_credit=trade_in_credit,
+            trade_in_unverifiable=trade_in_unverifiable,
             defense_floor_fighters=defense_floor_fighters,
         )
         if decision.recommend and decision.ship is not None:
@@ -250,12 +264,15 @@ def choose_upgrade(
                         projected_payback=r.projected_payback,
                         flags=r.flags,
                     )
+        empty_flags: tuple[str, ...] = ()
+        if trade_in_unverifiable and trade_in_credit <= 0:
+            empty_flags = ("trade_in_unverifiable",)
         return UpgradeDecision(
             recommend=False,
             ship=None,
             rationale="HOLD — no eligible commissioned upgrade in catalog.",
             projected_payback=None,
-            flags=(),
+            flags=empty_flags,
         )
 
     eligible.sort(key=lambda pair: pair[0], reverse=True)
@@ -784,12 +801,14 @@ def upgrade_decision_from_status(status: object) -> Optional[UpgradeDecision]:
             trade_in_credit = 0
         if trade_in_credit < 0:
             trade_in_credit = 0
+        trade_in_unverifiable = status.get("upgrade_trade_in_unverifiable") is True
         return choose_upgrade(
             catalog,
             state,
             loop,
             cost_per_hold=cost_per_hold,
             trade_in_credit=trade_in_credit,
+            trade_in_unverifiable=trade_in_unverifiable,
         )
     except Exception:  # noqa: BLE001 -- fail-closed
         return None
