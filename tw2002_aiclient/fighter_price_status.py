@@ -14,11 +14,12 @@ elsewhere.
   integer from a captured/parsed screen (or an explicit test inject).
 - Buy EXECUTE stays Max-gated and out of this module.
 
-Live screen discovery is still open
+Live *menu discovery* is still open
 (``canon/research/fighters-cargo-ship-purchase-coverage-2026-08-09.md`` —
-StarDock reached, price line not found). Callers that later capture a quote
-must ``observe`` it here; this module does not pretend a regex for an unseen
-screen.
+StarDock reached, price line not found). When matching quote text *is*
+already on the settle-edge watch event, ``fighter_price_capture`` feeds
+``observe_screen`` on the play idle tick. This module still does not invent
+a measured Class-0 constant for an unseen screen.
 """
 
 from __future__ import annotations
