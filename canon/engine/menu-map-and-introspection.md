@@ -279,6 +279,11 @@ introspector cannot guess, the probe cannot type. The divergences worth recordin
   candidates from the DB, but there is no autonomous acquisition executor — consistent with the
   reborn target (acquisition is human-approved). Recorded as intended-not-missing: the seam is
   correct; only a human-gated suggestion surface, not an auto-buyer, should ever be built on it.
+- **`find_menu_path` kind filter — CLOSED (WO-FIX-MENU-PATH-KIND-FILTER).** Earlier tip BFS walked
+  every stored edge; safety was emergent from action→`<unexplored>` sinks (scout
+  WO-FIND-MENU-PATH-KIND-FILTER-SCOUT). Tip now filters hops to `SAFE_MENU_WALK_KINDS` (`nav|info`)
+  so an action edge to a real node cannot be walked. The unexplored-sink assert remains
+  belt-and-suspenders.
 
 # Verification status
 

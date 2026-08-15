@@ -29,8 +29,8 @@ SCHEMA_VERSION = 1
 # pinned by tests/test_menu_knowledge_edge_kinds.py.
 MENU_EDGE_KINDS = frozenset({"nav", "info", "action"})
 # Canon walk set — nav|info only. `action` is gated like a taught rule
-# (menu-map-and-introspection.md). Kept here so the invariant below can
-# name it; find_menu_path does NOT filter by kind (see that function).
+# (menu-map-and-introspection.md). `find_menu_path` filters BFS to this set
+# (WO-FIX-MENU-PATH-KIND-FILTER).
 SAFE_MENU_WALK_KINDS = frozenset({"nav", "info"})
 # Same sentinel crawler.py writes for recorded-not-pressed action edges.
 # Duplicated (not imported) so this store module stays free of crawler.
@@ -258,31 +258,32 @@ def get_crawl_status(path):
 
 
 def find_menu_path(path, from_signature, to_signature):
-    """BFS over every stored edge — no kind filter.
+    """BFS over stored edges whose ``kind`` is in ``SAFE_MENU_WALK_KINDS``.
 
-    Canon says pathfinding may route only through ``SAFE_MENU_WALK_KINDS``
-    (nav|info). This function does not enforce that. Safety is **emergent**:
-    the crawler records every ``action`` edge to ``UNEXPLORED_MENU_NODE`` and
-    never writes ``from_node=<unexplored>``, so an action edge is a terminal
-    sink rather than a hop. The assert below names that dependency so a
-    second writer / press-the-unexplored crawler fails loudly instead of
-    silently walking an action edge (WO-FIND-MENU-PATH-KIND-FILTER-SCOUT).
-    Full kind-filter design belongs to a separate router WO.
+    Canon (menu-map-and-introspection): pathfinding routes only through
+    ``nav|info``. ``action`` edges are skipped — they stay in the store for
+    map completeness / recorded-not-pressed truth, but never as hops.
+
+    The assert below remains belt-and-suspenders against a store where
+    ``<unexplored>`` gained outgoing edges (WO-FIND-MENU-PATH-KIND-FILTER-SCOUT
+    interim invariant); the kind filter is the structural guarantee.
     """
     if from_signature == to_signature:
         return []
     edges = list_menu_edges(path)
-    # safe-kinds-only invariant (emergent): <unexplored> must stay a sink.
+    # safe-kinds-only invariant (belt-and-suspenders): <unexplored> must stay a sink.
     assert not any(
         edge.get("from_node") == UNEXPLORED_MENU_NODE for edge in edges
     ), (
-        "safe-kinds-only invariant: find_menu_path BFS has no kind filter; "
-        "safety requires <unexplored> to be a terminal sink (no outgoing edges). "
+        "safe-kinds-only invariant: <unexplored> must stay a terminal sink "
+        "(no outgoing edges). "
         f"Walk set is {sorted(SAFE_MENU_WALK_KINDS)}; action is gated. "
-        "See WO-FIND-MENU-PATH-KIND-FILTER-SCOUT."
+        "See WO-FIND-MENU-PATH-KIND-FILTER-SCOUT / WO-FIX-MENU-PATH-KIND-FILTER."
     )
     adjacency = {}
     for edge in edges:
+        if edge.get("kind") not in SAFE_MENU_WALK_KINDS:
+            continue
         adjacency.setdefault(edge["from_node"], []).append(edge)
     visited = {from_signature}
     queue = deque([(from_signature, [])])
