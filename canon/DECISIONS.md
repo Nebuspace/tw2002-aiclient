@@ -413,10 +413,38 @@ Max: "Carte Blanche to make the decisions for aiclient." Applying the same patte
 
 **Left Pending — stays Max-gated (hard safety-list carve-out, not covered by this carte blanche):**
 
-- **`WO-ESCALATE-EXPLORE-BASELINE-EV-VS-NOVELTY-HALT`** / **`WO-ESCALATE-AUTOPILOT-EV-SELECTOR-VS-NOVELTY-HALT-CONTRADICTION`** / **`WO-FIX-EXPLORE-BASELINE-EV-NEVER-IDLE`** — AI-safety/autopilot-behavior precedence call (when the never-idle floor retires in favor of strict stop-on-unknown). This changes what the autopilot does when it doesn't know what's happening — squarely the kind of call that needs your eyes, not a design-scope default.
 - **`WO-FIX-TRADE-DRIVER-RUN-CHAIN-ARM-GATE`** — autonomous money-path arm-gate hardening. Safety-list item by its own tag.
 - **`WO-FIX-FIGHTER-TOLL-HUMAN-APPROVAL-GATE`** (and its duplicate at queue-aiclient.md:187) — combat/money-adjacent AI-safety: whether NPC-toll auto-Attack needs a per-fire human-approval gate on top of the existing force_share≥0.90 guard. Same reasoning as above — this is exactly the class of call the safety list exists to reserve for you.
 - **3 DECISIONS.md entries "Pending Max Accept of prose"** (queue-aiclient.md:202, LOOPS/RULES-WORLD-MIGRATE-ON-READ, LEDGER-WORLD-ID-STAMP) — these are pure ratification-lag (code already shipped and matches), genuinely trivial, but "marking canonical prose Accepted" is the one canon-stewardship action this project's own convention reserves for a direct human nod rather than a design ruling. Flagging for your next pass rather than self-accepting — should take one line from you.
+
+### tip-closed — EXPLORE_BASELINE_EV vs novelty-halt (WO-AICLIENT-RECONCILE-NOVELTY-HALT-DECISION-STATUS · 2026-08-15)
+
+**Conflict:** this carte-blanche "Left Pending" list still named
+`WO-ESCALATE-EXPLORE-BASELINE-EV-VS-NOVELTY-HALT` /
+`WO-ESCALATE-AUTOPILOT-EV-SELECTOR-VS-NOVELTY-HALT-CONTRADICTION` /
+`WO-FIX-EXPLORE-BASELINE-EV-NEVER-IDLE` as an open Max AI-safety precedence call
+(never-idle floor vs strict stop-on-unknown). Meanwhile
+[exploration-policy](/strategy/exploration-policy.md) Code divergence already states in
+present tense that the archived never-idle explore baseline is **do-not-revive**, and
+[action-safety-guards](/doctrine/action-safety-guards.md) Code divergence #2 already
+marks the EV-selector vs novelty-halt contradiction **RESOLVED on tip**.
+
+**Tip-check (do not silently prefer either doc — cite code):**
+
+| Claim | Tip evidence |
+|---|---|
+| Never-idle EV *driver* still competes with novelty-halt on unknown screens? | **No.** Tip has no `tw2002_aiclient/autopilot.py`. |
+| `EXPLORE_BASELINE_EV` still drives a live keystroke? | **No.** Sole definition/use: `focus_status.py` (`EXPLORE_BASELINE_EV = 0.01` → explore candidate `ev_per_turn` only; module docstring: never sends / arms). |
+| Novelty-halt rail present? | **Yes.** `action_safety.py` `guard_id="novelty_halt"`. |
+
+**Stale side:** the Pending bullet above (removed from Left Pending this entry). The
+safety-list *driver* precedence question is already settled by tip + rebirth framing —
+not an open Max call.
+
+**Accurate side:** exploration-policy / action-safety-guards / app-autopilot-model
+(auto-driver half closed). Display-only FOCUS floor vs empty suggestion list is UX/display
+policy under [app-autopilot-model](/architecture/app-autopilot-model.md); it does **not**
+change App behavior on an unrecognized screen (novelty-halt still wins).
 
 ### Max 2026-07-29 — no invented defaults on draft→kernel bridge (WO-CANON-DRAFT-KERNEL-BRIDGE)
 

@@ -281,7 +281,10 @@ the target). **Archive-only** shapes are do-not-revive — not open tip defects 
   `EXPLORE_BASELINE_EV = 0.01` existed so a per-cycle EV SELECT always had *something* to do
   (`"keep exploring (…) — no idle (§11)"`). That module is **gone from tip**. Reborn: explore is a
   human-armed opt-in behavior; tip may keep a FOCUS *suggestion* floor only
-  ([app-autopilot-model](/architecture/app-autopilot-model.md)).
+  ([app-autopilot-model](/architecture/app-autopilot-model.md)). The old DECISIONS "Left Pending"
+  escalate for never-idle-driver vs novelty-halt precedence is **tip-closed**
+  (`canon/DECISIONS.md` · WO-AICLIENT-RECONCILE-NOVELTY-HALT-DECISION-STATUS) — novelty-halt wins
+  on unrecognized screens; the constant that remains is display-only.
 - **Archived `autopilot.py` per-cycle EV action-picker — do-not-revive.** Archive built
   `Candidate(kind="explore", …)` rows and SELECTed the highest-EV candidate each tick. Tip priority
   *ranks/orders* taught behaviors and suggestions; it must not revive a live per-cycle picker where

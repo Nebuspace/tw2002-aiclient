@@ -158,10 +158,9 @@ layer feeds ordering into this loop; this loop owns the STOP.
   explore action. The surviving constant lives in
   `tw2002_aiclient/focus_status.py` as a **suggestion-only** FOCUS floor (comment: keep explore
   visible when the map still has work — never sends / arms / drives a keystroke). The never-idle
-  *driver* appetite is abolished on tip. Whether a display-only floor is itself correct policy vs a
-  strict novelty-halt empty FOCUS remains a separate gated design question
-  (`WO-FIX-EXPLORE-BASELINE-EV-NEVER-IDLE` / exploration-policy). Recorded here as closed for the
-  "auto-driver" half only.
+  *driver* appetite is abolished on tip. Display-only floor vs an empty FOCUS explore row is
+  UX/display policy only — it does **not** re-open the never-idle-driver vs novelty-halt
+  safety precedence (tip-closed in `canon/DECISIONS.md`, WO-AICLIENT-RECONCILE-NOVELTY-HALT-DECISION-STATUS).
 - **`priority_engine.recommend_actions()` as live `select()` override — tip closed with
   `autopilot.py`.** Archive wiring let the priority engine re-pick the live keystroke each tick.
   Tip `priority_engine.py` is strategic ranking / FOCUS only — it does **not** override a taught
