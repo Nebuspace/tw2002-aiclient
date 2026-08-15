@@ -38,18 +38,19 @@ one this design chooses.
 
 # What it halts, honestly
 
-`adapters.autoloop_stop()` sends the daemon's `autoloop_stop` verb, which
-is **idempotent and never refuses** (`session/protocol.py`
-`_dispatch_autoloop_stop`): the player's own arm predicate is what stops
-the run, within one send-step, and the run releases its own control-lock
-hold as it dies. So panic cannot drop the App's exclusivity out from under
-a step still in flight, and pressing it twice is harmless.
+``adapters.autoloop_stop()`` alone stops only the taught-run player. The
+play-shell ``panic`` action (and Mode-leave attach halt) call
+``app._stop_live_runners``, which issues **every** stop verb this surface
+can start — ``autoloop_stop``, ``explore_stop``, ``trade_chain_stop``, and
+``stardock_hold_stop`` — each idempotent. Partial failures are reported,
+not smoothed.
 
-It does **not** halt an `explore` run -- that has its own `explore_stop`
-verb and its own affordance. "Halts *all* automation" is canon's intent and
-is not yet literally true on tip; recorded here rather than quietly
-overclaimed in a docstring. A future WO widening panic to every runner
-should update this paragraph and the pin that goes with it.
+Canon's "halts *all* automation" is therefore tip-true on those halt
+paths. Calm-path ``P`` is no longer bound to this module (``P`` is Port
+Trade after WO-PLAY-STRIP-TRAINER-CHROME); Esc / Mode-leave remain the
+operator's standing ways to reach a halt when the calm band has no panic
+token. Rebinding a future panic key should keep routing through
+``_stop_live_runners`` (or the same four verbs), not ``autoloop_stop`` alone.
 
 # Pause and relaunch are no longer absent
 

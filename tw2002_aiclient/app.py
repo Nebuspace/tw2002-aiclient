@@ -887,13 +887,12 @@ def _stop_live_runners(*, run_dir) -> tuple[bool, list[str]]:
     `RESOLVED-TRAINER-STRIP-AND-GUTTER-20260731` point 1: "leave App ->
     Manual is the halt" -- STOP/PANIC redundant as operator controls).
 
-    A superset of the retired-from-the-calm-path ``panic`` action's own
-    three-verb halt (``cockpit/panic.py``, that action block below):
-    ``stardock_hold_stop`` is the fourth verb, because this WO's own auto
-    path is the first thing in this codebase that can start a hold buy
-    *without* a human ``y`` -- a halt covering three of the four things
-    that can now be running unattended would leave the fourth spending
-    live turns after the operator took the seat back.
+    A superset of the play-shell ``panic`` action's halt contract
+    (``cockpit/panic.py``): panic routes through this helper so explore /
+    trade / hold are never left spending after an all-automation stop.
+    ``stardock_hold_stop`` is included because App-armed auto can start a
+    hold buy without a human ``y`` — a halt covering three of four runners
+    would leave the fourth spending after the operator took the seat back.
 
     Every one of the four stop verbs is idempotent and never raises
     daemon-side (each dispatches through a typed Result rather than an
@@ -2578,28 +2577,21 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                         )
                 continue
             if action == "panic":
-                # WO-P5-071: P panic — halt the taught-run player NOW.
+                # WO-P5-071 / WO-AICLIENT-WIRE-PANIC-ALSO-STOPS-EXPLORE:
+                # halt EVERY runner this surface can start — not autoloop
+                # alone. Calm-path P is retired (Port Trade), but this
+                # action block remains the halt contract for any future
+                # rebind and for tests that inject PANIC_INTENT.
                 #
                 # No confirm gate, by design and by hub ruling (2026-07-27).
-                # Canon's "a bare Enter must never fire a launch" protects
-                # the direction that SPENDS turns and credits; this is the
-                # halt direction. See `cockpit/panic.py` for the full
-                # reasoning and `tests/test_cockpit_panic.py` for the pin
-                # that keeps a future "consistency" refactor from adding one.
-                #
-                # `autoloop_stop` never raises and is idempotent daemon-side,
-                # so this needs no try/except of its own and a double-press
-                # is harmless.
-                results = (
-                    adapters.autoloop_stop(run_dir=run_dir),
-                    adapters.explore_stop(run_dir=run_dir),
-                    adapters.trade_chain_stop(run_dir=run_dir),
-                )
-                if all(result.ok for result in results):
+                # See `cockpit/panic.py` and `tests/test_cockpit_panic.py`.
+                halt_ok, halt_failures = _stop_live_runners(run_dir=run_dir)
+                if halt_ok:
                     play.status_line = "PANIC — all automation halt requested"
                     autoloop_poll_active = False
                     explore_poll_active = False
                     trade_poll_active = False
+                    hold_poll_active = False
                     play.explore_band = None
                 else:
                     # Reported, not smoothed. "I could not reach a runner" and
@@ -2607,12 +2599,9 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                     # who just hit panic is entitled to know which one
                     # happened — a reassuring message here would be the
                     # worst possible lie on this particular key.
-                    failures = [
-                        result.reason or "unknown"
-                        for result in results
-                        if not result.ok
-                    ]
-                    play.status_line = f"PANIC partial — {', '.join(failures)}"
+                    play.status_line = (
+                        f"PANIC partial — {', '.join(halt_failures)}"
+                    )
                 continue
             if action == "attach":
                 if attach_conn is None:

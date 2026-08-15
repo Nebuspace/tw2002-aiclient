@@ -213,3 +213,42 @@ def test_panic_wears_chrome_not_danger():
     means 'this commits'."""
     assert panic.PANIC_TONE == "chrome"
     assert panic.PANIC_TONE != armconfirm.ARM_CONFIRM_TONE
+
+
+# --------------------------------------------------------------------------
+# WO-AICLIENT-WIRE-PANIC-ALSO-STOPS-EXPLORE — halt-all tip honesty
+# --------------------------------------------------------------------------
+
+def test_panic_docs_no_longer_exclude_explore():
+    """Stale claim caught by queue-exhaustion audit: docs said explore was
+    excluded while app.py already issued explore_stop. Tip must not re-admit
+    the gap."""
+    from pathlib import Path as P
+
+    src = P(panic.__file__).read_text(encoding="utf-8")
+    assert "does **not** halt an `explore` run" not in src
+    assert "_stop_live_runners" in src
+    assert "explore_stop" in src
+
+
+def test_panic_action_routes_through_stop_live_runners():
+    """Structural: panic action uses the four-verb helper, not autoloop alone."""
+    from pathlib import Path as P
+    import ast
+
+    app_src = P("tw2002_aiclient/app.py").read_text(encoding="utf-8")
+    marker = 'if action == "panic":'
+    assert marker in app_src
+    chunk = app_src.split(marker, 1)[1].split("if action ==", 1)[0]
+    assert "_stop_live_runners" in chunk
+    assert "adapters.autoloop_stop" not in chunk
+    assert ast.parse(app_src) is not None
+
+
+def test_stop_live_runners_includes_explore_stop():
+    from tw2002_aiclient import app as app_mod
+
+    src = inspect.getsource(app_mod._stop_live_runners)
+    assert "explore_stop" in src
+    assert "autoloop_stop" in src
+    assert "stardock_hold_stop" in src

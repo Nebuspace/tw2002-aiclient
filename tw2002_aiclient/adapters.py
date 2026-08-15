@@ -574,9 +574,10 @@ def autoloop_stop(*, run_dir: Path | None = None) -> AutoLoopResult:
     ``reason`` rather than being smoothed into a success — an operator who
     hit panic is entitled to know the halt did not reach a runner.
 
-    NOTE: this stops the AUTO-LOOP player only, not an ``explore`` run
-    (which has its own ``explore_stop``). Canon's "halts *all* automation"
-    is not yet literally true on tip; see ``cockpit/panic.py``.
+    This helper stops the AUTO-LOOP player only. Canon's "halts *all*
+    automation" is owned by ``app._stop_live_runners`` (panic action /
+    Mode-leave), which also issues ``explore_stop`` / ``trade_chain_stop`` /
+    ``stardock_hold_stop``. See ``cockpit/panic.py``.
     """
     resolved_run_dir = run_dir or _env.resolve_run_dir()
     try:
