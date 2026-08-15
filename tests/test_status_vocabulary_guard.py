@@ -68,14 +68,9 @@ STARVED_ALLOWLIST: dict[str, tuple[str, str]] = {
     # ship_prices_count / hold_price_label — supplied by game_data_stats.GameDataStats
     # (WO-AUDIT-BUILD-SHIPPROG-FOCUS-OVERLAY) from Layer-B game_data.json.
     "fighter_buy_status": ("T3", "needs shipyard-screen parsing"),
-    # trade_float — afford_fighters working-capital reserve; no tip status
-    # producer yet (not Layer-B game_data). Keep injectable via status for
-    # tests; wire when an econ-caps / working-capital status producer lands.
-    "trade_float": (
-        "T3",
-        "working-capital reserve for afford_fighters; no tip status producer yet "
-        "(inject in tests; wire with a dedicated econ-caps status merge)",
-    ),
+    # trade_float — supplied by trade_float_status.TradeFloatScalars
+    # (WO-AICLIENT-BUILD-TRADE-FLOAT-STATUS-PRODUCER); omit-until-known from
+    # active money-path cash_floor.
     # -- T4: whole nested panel payloads, each its own surface-sized WO.
     # autopilot_trace — supplied by decisions_status.DecisionScalars
     # (WO-BUILD-DECISIONS-PANEL-TRACE-PRODUCER); no longer starved.
