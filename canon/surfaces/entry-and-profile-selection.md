@@ -141,8 +141,9 @@ distinct profile, each its own world. The entry surface is where that bank is vi
 touchpoint: `tw players list` (`players_cli.py::cmd_players_list`) shows the banked characters with
 `last_played` / `turns_state` rotation bookkeeping. Tip LIVE bank verbs are
 `{list,next,rotate,add}` — `tw players add` wraps `credentials.create_profile()` to append a
-non-secret profile section (metadata only; never logs in). Cockpit Create-New-Player remains an
-alternate create path; the consolidated visual launcher is still TARGET (see [CLI Verbs](/architecture/cli-verbs.md)).
+non-secret profile section (metadata only; never logs in). The product curses entry
+(`LauncherScreen` / Create-New-Player / bank view via `./tw2002-aiclient`) is LIVE; the CLI bank
+verbs remain companion surfaces (see [CLI Verbs](/architecture/cli-verbs.md)).
 
 The bank stores **metadata only** — name, handle, host, game-letter, rotation timestamps. It holds
 **no password** (`player_bank.py` pulls fields from `credentials.Profile`, which has no password
@@ -196,15 +197,15 @@ this surface only launches the app the exit flow later closes.
 # Visual design & polish
 
 This surface is, by design, the **plainest** in the bundle — and its look-and-polish spec has to be
-read against a hard split between *what is built* and *what is aspirational*. Today the entry surface
-is not a curses screen at all: it is a set of composed CLI verbs (`tw servers list`,
-`tw players list` / `next` / `rotate`, plus profile creation via `credentials.create_profile()` /
-Create-New-Player TUI) that print **plain, uncolored, columnar text**
-to the terminal. The consolidated visual picker+create flow this document specifies — a focused
-curses launcher rendered by the same engine as the cockpit — is the target; where a look detail
-depends on that unbuilt picker it is marked `[ASPIRATIONAL]` and inherits the shared vocabulary
-rather than inventing a local one. The one dimension that is fully *built and load-bearing* here is
-**spacing/alignment** (the CLI column layout) and the structural **password-never-shown** affordance.
+read against a hard split between *what is built* and *what is aspirational*. Tip ships a focused
+curses launcher (`screens.LauncherScreen`, `create_form_screen.CreateFormScreen`,
+`screens.BankViewScreen`) through `./tw2002-aiclient` / `python -m tw2002_aiclient` (`app.py`),
+rendered by the same engine as the cockpit. Companion CLI verbs (`tw servers list`,
+`tw players list` / `next` / `rotate` / `add`) still print **plain, uncolored, columnar text** for
+ops/scripting. Where a look detail is not yet on the LIVE picker it is marked `[ASPIRATIONAL]` and
+inherits the shared vocabulary rather than inventing a local one. The dimensions that are fully
+*built and load-bearing* here include the curses picker+create+bank path, CLI **spacing/alignment**,
+and the structural **password-never-shown** affordance.
 
 The shared color/glyph/border/fold vocabulary this surface would inherit lives in
 [the shared visual language](/surfaces/visual-language.md) (tip — authoritative dictionary for the
@@ -388,16 +389,16 @@ paladin-main     PaladinPrime     tw2002.briancmoses.com   A   2026-07-23     ok
 
 # Code divergence
 
-- **Launcher UI is CLI-verb-composed, not a single dedicated screen (yet).** The reborn "entry
-  surface" is described here as one launcher; in current code its pieces are separate CLI verbs —
-  `tw servers list` (`catalog_cli.cmd_servers_list`), `tw players {list,next,rotate,add}`
-  (`players_cli`; `add` → `credentials.create_profile()`), plus Create-New-Player TUI as an
-  alternate create path. The product cockpit entry is `./tw2002-aiclient` /
-  `python -m tw2002_aiclient` (`app.py`) — **not** a `tw aiclient` subcommand (there is no
-  `cmd_aiclient`; see [CLI Verbs](/architecture/cli-verbs.md)). The consolidated visual
-  picker+create flow this document specifies is the target; the underlying data functions
-  (`list_profile_summaries`, `create_profile`, `list_servers`, `player_bank`) already exist and
-  are what a single surface would compose. Recorded, not silently conformed.
+- **Consolidated curses launcher is LIVE; CLI verbs remain companions.** The reborn "entry
+  surface" is one curses launcher on tip: `LauncherScreen` (profile picker + Create-New-Player CTA),
+  `CreateFormScreen` (non-secret create form), and `BankViewScreen` (rotation touchpoint), entered
+  via `./tw2002-aiclient` / `python -m tw2002_aiclient` (`app.py`) — **not** a `tw aiclient`
+  subcommand (there is no `cmd_aiclient`; see [CLI Verbs](/architecture/cli-verbs.md)). Companion
+  CLI verbs stay live for ops/scripting — `tw servers list` (`catalog_cli.cmd_servers_list`),
+  `tw players {list,next,rotate,add}` (`players_cli`; `add` → `credentials.create_profile()`).
+  Underlying data functions (`list_profile_summaries`, `create_profile`, `list_servers`,
+  `player_bank`) are what both the curses surface and the CLI compose. Prior drafts that called the
+  picker "TARGET / unbuilt" were doc drift against tip `screens.py` / `app.py`.
 
 - **Dual server directories — do not conflate.** `config/servers.toml` is the profile-binding
   catalog (`credentials.list_servers` / `create_profile`). `tw servers list` reads
@@ -453,12 +454,13 @@ paladin-main     PaladinPrime     tw2002.briancmoses.com   A   2026-07-23     ok
   catalog and WO-MS-3/L0 probe work that built the known-server directory.
 
 - **Code modules:** `credentials.py` (`list_profile_summaries`, `create_profile`, `load_profile`,
-  `Profile`, env-first password resolution); `create_form_screen.py` (Create-New-Player TUI —
-  server/game_letter/handle only; no secret fields); `world_identity.py` (`world_id`,
-  `world_id_from_profile`); `catalog_cli.py` (`cmd_servers_list` / `tw servers list`);
-  `players_cli.py` (`cmd_players_list` / `next` / `rotate` — no `add`); product entry
-  `./tw2002-aiclient` / `python -m tw2002_aiclient` (`app.py` / `__main__.py` — not a `tw`
-  subcommand); `session/player_bank.py` (metadata-only bank, secret-shaped-key notes filter);
+  `Profile`, env-first password resolution); `screens.py` (`LauncherScreen`, `BankViewScreen`);
+  `create_form_screen.py` (Create-New-Player TUI — server/game_letter/handle only; no secret
+  fields); `world_identity.py` (`world_id`, `world_id_from_profile`); `catalog_cli.py`
+  (`cmd_servers_list` / `tw servers list`); `players_cli.py` (`cmd_players_list` / `next` /
+  `rotate` / `add`); product entry `./tw2002-aiclient` / `python -m tw2002_aiclient` (`app.py` /
+  `__main__.py` — not a `tw` subcommand); `session/player_bank.py` (metadata-only bank,
+  secret-shaped-key notes filter);
   `config/servers.toml` (profile-binding server catalog); `config/servers.inventory.json`
   (research inventory for `tw servers list` / `tw probe`); `config/profiles.toml.example` (the tracked
   profile shape). Per CLAUDE.md's Architecture map and Hard rules: secrets never touch logs/argv/repo;
