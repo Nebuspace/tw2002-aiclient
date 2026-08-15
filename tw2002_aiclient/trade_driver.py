@@ -1,15 +1,18 @@
 """Guarded one-pass trade-chain execution.
 
-`autopilot.py`'s own module docstring cut EXECUTE to navigation-only and
-deferred "a fuller haggle-wired trade-loop driver" as a follow-up. This
-module is that follow-up (buy/sell cascade LIVE; auto-haggle opt-in via
-``TradeDriverConfig.auto_haggle``, default OFF): given a `chains.ProfitChain`
-already discovered by `trade_adapter.build_trade_hops` +
-`chains.find_profit_chains_with_note` / `rank_chains`, `run_chain()` drives the WHOLE loop --
-navigate -> dock -> buy -> navigate -> dock -> sell -> repeat -- end to
-end, synchronously, one call. `autopilot.AutopilotEngine._execute_chain()`
-routes a chosen `"run_chain"` candidate here instead of a single bare
-sector-number send.
+Pre-rebirth `archive/.../twclient/autopilot.py` cut EXECUTE to navigation-only
+and deferred "a fuller haggle-wired trade-loop driver" as a follow-up (that
+module is archive-only / do-not-revive). This module is that follow-up
+(buy/sell cascade LIVE; auto-haggle opt-in via ``TradeDriverConfig.auto_haggle``,
+default OFF): given a `chains.ProfitChain` already discovered by
+`trade_adapter.build_trade_hops` + `chains.find_profit_chains_with_note` /
+`rank_chains`, `run_chain()` drives the WHOLE loop -- navigate -> dock -> buy
+-> navigate -> dock -> sell -> repeat -- end to end, synchronously, one call.
+
+**Tip callers.** Live entry is `session.trade_chain.TradeChainRunner` (daemon
+`trade_chain_*` verbs / `tw chain`), which arms `should_abort` /
+`is_armed` and may wrap passes via `bounded_repeat_trade_chain_driver`. There
+is no tip `autopilot.AutopilotEngine` — do not revive that archive caller.
 
 **Ground truth, not invention.** Every screen shape this module drives
 against is cited from a LIVE-CAPTURED source already in this repo:
@@ -67,9 +70,8 @@ Default remains OFF so existing callers never silently start negotiating.
 send in this module is preceded by a FRESH `session.render()` call whose
 resulting text/prompt-line is what gets checked against the expected
 shape for that step -- never a screen captured earlier in the call.
-Mirrors `autopilot.py`'s own HIGH-2 fix (same `classify_screen` call,
-same "blank render is itself a HOLD" rule) for navigation sends, and
-haggle.py's `_resolution_evidence()` convention (check the CURRENT
+Same discipline as the archive autopilot HIGH-2 fix and as
+`haggle.py`'s `_resolution_evidence()` convention (check the CURRENT
 last-non-blank line, never trust a whole-buffer `confirm_prompt` match by
 itself) for the dock/trade-cascade sends.
 
@@ -77,31 +79,15 @@ itself) for the dock/trade-cascade sends.
 a REQUIRED, fail-closed `should_abort: Callable[[], bool]` -- checked at
 the same choke point (`_confirmed_send()`) as every other gate, so an
 in-flight chain halts within ONE send-step of the caller's stop signal
-firing, never only at the next `AutopilotLoop` tick boundary. The
-original design considered wiring `control_lock.is_driver_fenced()` (the
-WO-CLEANPREEMPT fence `skills.replay_skill()`/`loop_player.LoopPlayer`
-both use) -- but that fence is STRUCTURALLY DEAD for the autopilot path:
-it only flips when `take_human()` finds `_driving` True, and `_driving`
-is set only by `acquire_driver()` (the do/send-family dispatch path);
-the autopilot runs under `MODE_AUTO_LOOP` instead, and `take_human()`
-REFUSES OUTRIGHT under that mode (`control_lock.py`'s own
-`locked_by_auto_loop`) -- the fence can never fire here. `should_abort`
-generalizes this into the one predicate that actually matters:
-`AutopilotLoop` wires `should_abort=self._stop.is_set`, so `tw autopilot
-stop` reaches an in-flight chain within one send-step, and once
-`AutopilotLoop._run()`'s own next tick-boundary check observes the same
-stop signal and its `finally` releases `MODE_AUTO_LOOP` (the existing,
-unchanged mechanism -- see that class's own docstring), `tw attach`
-succeeds immediately after.
+firing. Tip `TradeChainRunner` supplies `stop.is_set` (daemon stop /
+`tw chain stop`); bounded-repeat wraps the same predicate across passes.
 
 **Fail-closed arming (A-C1).** `run_chain()` also takes a REQUIRED
 `is_armed: Callable[[], bool]` -- checked alongside `should_abort` at the
-same choke point. `AutopilotEngine._execute_chain()` supplies
-`lambda: self.enabled` (immutable post-construction, so this is never a
-live toggle -- see that method's own docstring for why a REQUIRED INPUT,
-not an internal re-check, is the correct shape: a bare `self.enabled`
-re-check INSIDE this module would be a no-op against a value this module
-has no way to read on its own).
+same choke point. `TradeChainRunner` supplies a lambda that is true only
+while the runner is still the armed driver (immutable for the duration of
+a pass — a REQUIRED INPUT rather than an internal re-check this module
+cannot read on its own).
 
 **Turns budget.** This server never surfaces a live turn COUNT outside a
 post-dock "N turns left." line (`TL=` is an HH:MM:SS countdown here, see
@@ -143,14 +129,9 @@ reporting a profitable round trip that never actually happened.
 **UX-parity progress events (A-PROG, not a freeze fix).** `run_chain()`
 takes an optional `on_progress` callback, invoked at each hop boundary
 (and once more when the chain stops) -- mirrors `loop_player.LoopPlayer.
-_broadcast_progress()`'s pattern exactly (a plain event dict, pushed by
-the caller through `watch.WatchHub.broadcast_extra()`). `AutopilotLoop`
-never freezes the raw spectate viewport during a chain (`WatchHub._loop`
-polls session state independently of protocol.py, on its own 50ms
-thread); what's missing without this is the hop/step METADATA overlay
-(which hop, which step) `LoopPlayer` already has and `AutopilotLoop`
-otherwise lacks. This module never imports `watch.py`/`autopilot.py`
-itself -- the callback is the caller's job to wire.
+_broadcast_progress()`'s pattern (a plain event dict; tip callers may
+push through `watch.WatchHub.broadcast_extra()`). This module never
+imports `watch.py` itself -- the callback is the caller's job to wire.
 """
 
 from __future__ import annotations
@@ -178,11 +159,9 @@ from .session.state_parser import (
 from .trade_adapter import DEFAULT_CEILING_MULTIPLIER, DEFAULT_FLOOR_PRICES, _commodity_price
 
 # The one live classification a bare sector-number nav send is safe
-# against -- mirrors autopilot.py's own `_MOVEMENT_PROMPT_CLASS` (same
-# value, kept as an independent constant so this module has no
-# import-time dependency on autopilot.py -- see module docstring's
-# PALADIN section for why this module never depends upward on the engine
-# that calls it).
+# against -- independent constant (same value the archive autopilot used
+# for its movement gate). Kept here so this module has no import-time
+# dependency on archive autopilot paths; see module docstring's tip callers.
 _MOVEMENT_PROMPT_CLASS = "main_command"
 
 # -- ground-truth screen-shape patterns (see module docstring's citations
@@ -305,11 +284,9 @@ class ChainRunResult:
     """`run_chain()`'s one falsifiable output. `stop_reason` is
     `"completed"` iff every hop finished (buy+sell) and the ship is back
     at the chain's start sector; every other value names exactly which
-    stop condition ended it (see each raise site below) -- the caller
-    (`autopilot.AutopilotEngine.live_tick()`) prefixes it `"held:"` to
-    match that module's existing `decision.send_outcome` schema; kept
-    bare here since this module has no dependency on autopilot.py's
-    trace conventions."""
+    stop condition ended it (see each raise site below). Tip
+    `TradeChainRunner` / daemon status surfaces this as-is (no
+    `"held:"` prefix required inside this module)."""
 
     completed: bool
     hops_completed: int
@@ -431,11 +408,10 @@ def _current_strict_credits(session, caps, current_text: str) -> Optional[int]:
     screen we're already holding (the docked commerce report genuinely
     prints "You have N credits..." on the SAME screen, see
     `tests/fixtures/port_trade_screen.txt`) -- falling back to `session.
-    credits_snapshot()`'s freshness-gated cache (mirrors `autopilot.
-    AutopilotEngine._fresh_credits()`/`loop_player.py`'s own identical
-    inline copy of this exact check -- an independent, duplicated
-    implementation is this codebase's own established convention for
-    this specific cross-module concern) when the current screen carries
+    credits_snapshot()`'s freshness-gated cache (same pattern as
+    `loop_player.py`'s inline freshness check -- an independent,
+    duplicated implementation is this codebase's established convention
+    for this cross-module concern) when the current screen carries
     no balance line of its own. NEVER `state_parser.parse_state()`'s
     loose `credits` field (a port's own price quote satisfies it just as
     well as a real balance)."""
@@ -516,7 +492,7 @@ def _dock(ctx: _StepCtx, hop_index: int) -> None:
     never ``ChainHold(dock_menu)`` solely because the menu regex missed.
     Gated on the CURRENT screen genuinely being the ordinary sector
     command prompt before ever sending "P" (HIGH-2 discipline, same
-    classification autopilot.py's own nav gate uses)."""
+    `main_command` classification the nav gate uses)."""
     full_text, prompt_line = ctx.fresh()
     if not prompt_line or classify_screen(full_text, prompt_line) != _MOVEMENT_PROMPT_CLASS:
         raise ChainHold(f"unexpected_screen:predock:{hop_index}")
@@ -782,8 +758,7 @@ def _navigate(
 ) -> int:
     """One warp at a time along the known-graph shortest path from `frm`
     to `to`, each gated fresh (HIGH-2 classify check + a non-adjacent
-    backstop mirroring `autopilot.py`'s own HIGH fix) -- never the
-    chain's own far-side sector fired blind.
+    backstop) -- never the chain's own far-side sector fired blind.
 
     WO-TRADE-ROUTE-HAZARD-GUARD: before any send, scan the planned path
     for known one-way / warp-sink / sector-threat hops. Hazard → ChainHold
@@ -957,12 +932,10 @@ def run_chain(
     `world_id`/`turns_left` are REQUIRED keyword-only params (no
     default) that may still legitimately be `None` -- meaning "unknown"
     -- in which case this function HOLDs immediately rather than crash
-    or guess (the same required-but-nullable shape `autopilot.assess()`'s
-    `credits` kwarg already established). `caps` is the caller's
-    `autopilot.EconCaps` instance (duck-typed here --
+    or guess. `caps` is the caller's econ-caps object (duck-typed here --
     `.cash_floor`/`.turn_reserve`/`.credits_stale_ms` -- so this module
-    has no import-time dependency on autopilot.py, see module
-    docstring's PALADIN section for why layering stays one-directional).
+    has no import-time dependency on a specific caps type; tip
+    `TradeChainRunner` builds the values it needs).
 
     `should_abort`/`is_armed` (A-M1/A-C1): REQUIRED, fail-closed
     predicates -- see module docstring. `on_progress` (A-PROG): optional,
