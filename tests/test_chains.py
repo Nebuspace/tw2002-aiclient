@@ -193,6 +193,9 @@ def test_max_hops_bounds_the_search():
 def test_chain_link_threshold_constants_match_canon():
     assert MIN_CHAIN_LINKS_TO_EXECUTE == 2
     assert MIN_CHAIN_LINKS_FOR_SHIP_UPGRADE == 4
+    # Negative pin: retired alias must stay gone (PR #725). String-only —
+    # unused-code AST Name scan correctly ignores this (WO-AICLIENT-CLEANUP-
+    # CHAINS-FALSE-POSITIVE-UNUSED-TICK).
     assert not hasattr(chains_module, "CHAIN_LINKS_PREFER_SEARCH_BELOW")
 
 
