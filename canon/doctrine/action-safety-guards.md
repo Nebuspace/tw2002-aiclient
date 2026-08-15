@@ -91,6 +91,12 @@ no firing without every guard below:
    presses on past a screen it cannot positively identify — it accepts the currently-shown default
    safely or reports the desync, and escalates.
 
+**Scoped caveat — TradeChainRunner is opt-in OFF (PWO-087).** The ON-BY-DEFAULT framing above is
+the rule–macro-engine / `session.haggle` resolver contract when a caller enables auto-haggle.
+Tip `TradeDriverConfig.auto_haggle` defaults to **`False`** (blank-accept) per Max GO on PWO-087 /
+merge #360 — chain runs do not silently start negotiating. Full wording:
+[auto-haggle](/engine/auto-haggle.md) § On-by-default, guarded.
+
 **Fighter-toll resolver.** The Option? toll/combat resolver picks Attack only when an **NPC**
 toll is clearly winnable: `force_share = own/(own+enemy) ≥ 0.90` (Max-ratified
 `force_share_auto_attack`) **and** enemy count within the winnable band — see
@@ -281,8 +287,9 @@ code.)*
    offer prompt is gone" as proof of acceptance with zero trade evidence; and an opening read with
    no freshness gate. The current code hardens all three (current-line anchor + acceptance context,
    verified credits-delta, pre-send freshness gate), and canon above states the guarded contract
-   prescriptively. Recorded because the resolver ships **on by default** (operator ruling
-   2026-07-23) — the hardening is what makes "on" safe, and it is non-negotiable, not optional.
+   prescriptively. Recorded because the resolver ships **on by default** as a built-in rule
+   (operator ruling 2026-07-23; TradeChainRunner remains opt-in OFF — see caveat above) — the
+   hardening is what makes "on" safe, and it is non-negotiable, not optional.
 
 2. **Archived autopilot per-cycle EV selector vs stop-on-unknown — RESOLVED on tip (do-not-revive).**
    Pre-rebirth `autopilot.py` / `priority_engine.py` selected an action every cycle by expected

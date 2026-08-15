@@ -151,6 +151,15 @@ approved. "On by default" is **not** "unguarded": Guards 1–3 above are mandato
 precisely because on-by-default on the money path raises, not lowers, the bar for proof. A user
 toggle may disable the rule, but while enabled the guards are not optional and cannot be waived.
 
+**Scoped caveat — TradeChainRunner is opt-in OFF (PWO-087).** The ON-BY-DEFAULT ruling above is
+about the *resolver* as a built-in rule under the rule–macro engine: when a caller enables it,
+Guards 1–3 fire with no off-until-proven gate. Separately, tip
+`TradeDriverConfig.auto_haggle` / the trade-chain driver defaults to **`False`** (blank-accept the
+port's shown offer) per Max GO on PWO-087 / merge #360 (`37fd42d`, `trade_driver.py`). Enabling
+negotiation on a chain run is an explicit opt-in; existing callers never silently start
+countering. Do not read this section as "every tip trade path auto-haggles." See also
+`workorders/ULTRACODE-WO-INVENTORY.md` PWO-087.
+
 # The guarded-resolver contract, generalized
 
 Auto-haggle is the archetype, but the *contract* it embodies — parse a taught screen deterministically,
