@@ -72,17 +72,24 @@ The bounding guarantee is the **A+C protocol**: a live crawl must only ever run 
 That is what would bound the worst case to *nothing* — not the crawler's lexical label
 classification.
 
-**Tip has no live crawl driver today.** `menu/crawl_driver.py` — the module that held the
-code-enforced half of this (`run_live_crawl()`, which refused outright before opening a single
-connection unless the profile was explicitly flagged `crawl_sacrificial`) — was retired
-(WO-CLEANUP-DEAD-SYMBOLS-BATCH-2026-08-05): it had zero product callers, because the daemon's
-`crawl_start` protocol verb has never been wired to a driver (`tests/test_crawl_start_protocol.py`
-stays BANKED/ignored for exactly that reason). The read-only discovery machinery this concept
-describes (`menu/crawler.py`, below) is live and real; *driving* it against a live connection is
-not currently wired to anything. `credentials.is_crawl_sacrificial()` — the fail-closed
-`crawl_sacrificial` flag reader — is still live, but today it only backs the unrelated `dev`-sender
-exception (`canon/doctrine/dev-drive-exception.md`), not a live crawl. A genuine sacrificial
-profile is still expected to set both `crawl_sacrificial = true` and `allow_register = true`
+**Tip has no live crawl driver today — intentionally parked, not orphan-dead.**
+`menu/crawl_driver.py` — the module that held the code-enforced half of this
+(`run_live_crawl()`, which refused outright before opening a single
+connection unless the profile was explicitly flagged `crawl_sacrificial`) — was
+retired (WO-CLEANUP-DEAD-SYMBOLS-BATCH-2026-08-05) because the daemon's
+`crawl_start` protocol verb has never been wired to a driver
+(`tests/test_crawl_start_protocol.py` stays BANKED/ignored for exactly that
+reason). The read-only discovery machinery this concept describes
+(`menu/crawler.py` / `crawl_menus()`, below) is live, real, and test-proven;
+*driving* it against a live connection waits on Max's scope ruling in
+[PENDING-MENU-CRAWL-LIVE-DRIVER-REBUILD](/DECISIONS.md#PENDING-MENU-CRAWL-LIVE-DRIVER-REBUILD)
+(queue visibility: `WO-GATED-MENU-CRAWL-DRIVER-REBUILD`). Cleanup-removal
+audits must not delete the never-commit suite or half-wire `tw crawl` ahead of
+that gate. `credentials.is_crawl_sacrificial()` — the fail-closed
+`crawl_sacrificial` flag reader — is still live, but today it only backs the
+unrelated `dev`-sender exception (`canon/doctrine/dev-drive-exception.md`), not
+a live crawl. A genuine sacrificial profile is still expected to set both
+`crawl_sacrificial = true` and `allow_register = true`
 whenever a live driver is (re)built — the requirement below is the contract that rebuild must
 satisfy, not a description of code that exists today.
 

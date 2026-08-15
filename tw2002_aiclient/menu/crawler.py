@@ -12,16 +12,19 @@ watching, or the teacher assists a targeted map-fill after an escalation.
 (The archived module described this as "AI-driven"; canon's reborn recast
 retires that framing, and this module is written to the recast.)
 
-**THE NEVER-COMMIT GUARANTEE LIVES OUTSIDE THIS MODULE — AND TIP HAS NO
-LIVE DRIVER TODAY.** The module that held the code-enforced half of it,
-``menu/crawl_driver.py`` (``run_live_crawl()``), was retired
-(WO-CLEANUP-DEAD-SYMBOLS-BATCH-2026-08-05): it had zero product callers,
-because the daemon's ``crawl_start`` protocol verb has never been wired to
-a driver. Driving this module against a live connection is not currently
-wired to anything — see ``canon/engine/menu-map-and-introspection.md``
-§ "The guarantee lives in the supervised run, not the word-list" for the
-full picture. What still lives on tip, for a future driver rebuild to wire
-back up:
+**THE NEVER-COMMIT GUARANTEE LIVES OUTSIDE THIS MODULE — LIVE DRIVER IS
+INTENTIONALLY PARKED (NOT ORPHAN-DEAD).** ``crawl_menus()`` is the
+well-tested BFS library; product invocation is deliberately absent until
+Max rules on ``canon/DECISIONS.md#PENDING-MENU-CRAWL-LIVE-DRIVER-REBUILD``
+/ queue ``WO-GATED-MENU-CRAWL-DRIVER-REBUILD`` (full ``crawl_driver`` +
+``crawl_start`` rebuild vs lighter CLI-only shape vs decline). Tip retired
+``menu/crawl_driver.py`` (WO-CLEANUP-DEAD-SYMBOLS-BATCH-2026-08-05) because
+the daemon ``crawl_start`` verb was never wired — that was a sequencing
+gap, not a verdict that this library should be deleted. Do **not** retire
+this module or its never-commit suite under a cleanup-removal lens; do
+**not** half-wire a live ``tw crawl`` ahead of that gated ruling.
+
+What still lives on tip for a future driver rebuild to wire back up:
 
 1. ``credentials.is_crawl_sacrificial()`` — the fail-closed
    `crawl_sacrificial` flag reader the retired driver's sacrificial-only

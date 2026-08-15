@@ -120,10 +120,12 @@ auto-Attack threshold — still a configurable knob, but no longer a placeholder
 
 The menu crawler that discovers a world's dialogue graph must observe every screen without ever
 committing a destructive action. That never-commit guarantee was designed to live *outside* the
-crawler's own traversal logic, in a live-crawl driver — but **tip has no live driver today**:
-`menu/crawl_driver.py` (`run_live_crawl()`) was retired (WO-CLEANUP-DEAD-SYMBOLS-BATCH-2026-08-05),
-zero product callers, because the daemon's `crawl_start` protocol verb has never been wired to a
-driver. Full picture cross-linked from
+crawler's own traversal logic, in a live-crawl driver — but **tip has no live driver today
+(intentionally parked, not orphan-dead)**: `menu/crawl_driver.py` (`run_live_crawl()`) was retired
+(WO-CLEANUP-DEAD-SYMBOLS-BATCH-2026-08-05) because the daemon's `crawl_start` protocol verb has
+never been wired to a driver. Scope for rebuild vs lighter CLI vs decline is
+[PENDING-MENU-CRAWL-LIVE-DRIVER-REBUILD](/DECISIONS.md#PENDING-MENU-CRAWL-LIVE-DRIVER-REBUILD).
+Full picture cross-linked from
 [menu-map & introspection](/engine/menu-map-and-introspection.md) § "The guarantee lives in the
 supervised run, not the word-list". The retired driver's two structural legs, and what still lives
 on tip for a future rebuild to wire back up:
