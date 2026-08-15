@@ -94,6 +94,23 @@ claiming the rest of the column all the way down toward `[LOGS]`:
   world-model (`aggregate_world_metrics`, `_LIVE_METRIC_SPECS`). GOALS says *what is known*, FOCUS
   says *what is worth doing*, DECISIONS says *what the app is actually reasoning right now*.
 
+**Autopilot-trace producer (field contract).** `tw2002_aiclient/decisions_status.py` is the
+documented producer of `status["autopilot_trace"]`. The pane composer (`cockpit/decisions.py`)
+only renders that key — it never builds one. Shape (display-only dry-run; never sends / never
+arms):
+
+| key | shape |
+|---|---|
+| `autopilot_trace` | `{chosen, candidates}` dict; absent/`None` → empty / HELP panel |
+| `chosen` | first **ungated** candidate `kind` in FOCUS order, or `None` — bookkeeping pick for display, **not** a live keystroke |
+| `candidates[].kind` | str — same vocabulary as FOCUS (`run_chain` / `explore` / `upgrade`) |
+| `candidates[].ev_cr_per_turn` | float or `None` — archived dry-run name; **distinct** from FOCUS `ev_per_turn` |
+| `candidates[].gated` / `gate_reason` | bool + optional str (reason shown when gated) |
+| `candidates[].rationale` | short per-kind string (or `gate_reason` / explore catalog-weight text) |
+
+Shares the FOCUS candidate set (`recommend_focus_candidates` / `status["focus"]["candidates"]`).
+Glyphs for the rendered lines: see Autopilot-trace under Glyph / status-marker vocabulary below.
+
 **Bottom band** — **`[LOGS]`**, the running session transcript tail, full width.
 
 Data behind HUD and DECISIONS is the semantic screen read plus the persisted world database — see
@@ -524,7 +541,9 @@ reborn module is cited; prefer `tw2002_aiclient/cockpit/*` for chrome that has a
 
 - **Panel layout, tiers, fold, HUD cells, freshness, liveness, TX, coverage footer** — tip:
   `tw2002_aiclient/cockpit/layout.py`, `cockpit/fold.py`, `cockpit/goals.py`, `cockpit/focus.py`,
-  `cockpit/hud.py`, `cockpit/liveness.py`, `screens.py`. Archive port-source:
+  `cockpit/hud.py`, `cockpit/liveness.py`, `cockpit/decisions.py`, `decisions_status.py`
+  (`build_autopilot_trace` / `DecisionScalars` — DECISIONS `autopilot_trace` producer),
+  `screens.py`. Archive port-source:
   `spectate_layout.py` (`frame_layout`, `compose_primary_goals_lines`, `compose_priorities_lines`,
   `format_autopilot_trace_lines`, `aggregate_world_metrics`, `compose_hud_cells`,
   `format_freshness`, `render_sparkline` / `render_bar_meter`, `format_tx_readout`,
