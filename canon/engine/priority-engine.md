@@ -319,7 +319,9 @@ keeps a separately named `FIGHTER_UNIT_PRICE_DEFAULT = 100` for dealer-detour
 **Spending priority** (`afford_fighters`): reserve the trade float (working capital) first, then
 prefer a hold upgrade (weight 75) over a fighter buy (73) when a hold quote is known and
 affordable, then buy fighters if discretionary credits cover the stack. Every `None` input
-fail-closes to `price_unknown` rather than guessing.
+fail-closes to `price_unknown` rather than guessing. Status producer for the reserve:
+`trade_float_status.TradeFloatScalars` (omit-until-known; observes an active money-path
+`cash_floor` — never seeds a tip default at play entry).
 
 `FIGHTER_UNIT_PRICE_CLASS0 = 100 cr` per fighter remains a **[hypothesis] placeholder** in canon /
 research only — sourced from community guides, UNVERIFIED against the live game. Inject a captured

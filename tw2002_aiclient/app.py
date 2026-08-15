@@ -740,6 +740,17 @@ def _poll_autoloop_status(play: PlayShellScreen, *, run_dir) -> bool:
     return _apply_autoloop_cycle_band(play, result.raw)
 
 
+def _observe_trade_float(play: PlayShellScreen, cash_floor: object) -> None:
+    """Feed an active money-path cash_floor into status trade_float (never raises)."""
+    scalars = getattr(play, "trade_float_scalars", None)
+    observe = getattr(scalars, "observe", None)
+    if callable(observe):
+        try:
+            observe(cash_floor)
+        except Exception:  # noqa: BLE001 — play-loop containment
+            return
+
+
 def _apply_trade_chain_band(play: PlayShellScreen, raw: object) -> bool:
     if not isinstance(raw, dict):
         play.explore_band = None
@@ -748,6 +759,7 @@ def _apply_trade_chain_band(play: PlayShellScreen, raw: object) -> bool:
     if not isinstance(run, dict):
         play.explore_band = None
         return bool(raw.get("running"))
+    _observe_trade_float(play, run.get("cash_floor"))
     route = run.get("route") if isinstance(run.get("route"), str) else "?"
     if raw.get("running"):
         done = run.get("hops_completed")
@@ -815,17 +827,21 @@ def _poll_stardock_hold_status(play: PlayShellScreen, *, run_dir) -> bool:
     if not result.ok:
         return False
     raw = result.raw if isinstance(result.raw, dict) else {}
-    if raw.get("running"):
-        return True
     run = raw.get("run")
     if isinstance(run, dict):
+        _observe_trade_float(play, run.get("cash_floor"))
         outcome = run.get("outcome")
+        if raw.get("running"):
+            return True
         if outcome == "completed":
             play.status_line = (
                 f"hold buy completed — {run.get('qty_sent', '?')} sent"
             )
         elif outcome is not None:
             play.status_line = f"hold buy stopped — {run.get('reason') or 'unknown'}"
+        return False
+    if raw.get("running"):
+        return True
     return False
 
 
@@ -1066,6 +1082,7 @@ def _autonomy_auto_fire(
         play.status_line = f"App-armed hold start failed — {type(exc).__name__}"
         return False, False
     if getattr(started, "ok", False):
+        _observe_trade_float(play, _HOLD_CASH_FLOOR)
         play.status_line = (
             f"App-armed hold buy — {plan.qty} hold(s) @ StarDock "
             f"{plan.stardock_sector}, one pass running"
@@ -1099,8 +1116,10 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
         play.focus_scalars.wrap(
             play.game_data_stats.wrap(
                 play.fighter_price_scalars.wrap(
-                    play.world_stats.wrap(
-                        play.chain_scalars.wrap(_daemon_status_provider(run_dir))
+                    play.trade_float_scalars.wrap(
+                        play.world_stats.wrap(
+                            play.chain_scalars.wrap(_daemon_status_provider(run_dir))
+                        )
                     )
                 )
             )
@@ -2000,6 +2019,7 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                         )
                         continue
                     if getattr(started, "ok", False):
+                        _observe_trade_float(play, _TRADE_CASH_FLOOR)
                         trade_poll_active = _apply_trade_chain_band(
                             play, getattr(started, "raw", None)
                         )
@@ -2079,6 +2099,7 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                     play.status_line = f"trade arm failed — {type(exc).__name__}"
                 else:
                     if getattr(started, "ok", False):
+                        _observe_trade_float(play, _TRADE_CASH_FLOOR)
                         play.status_line = (
                             f"trade armed — {plan.route}, one pass running"
                         )
@@ -2121,6 +2142,7 @@ def _run_play(stdscr: curses.window, profile: ProfileRow) -> str:
                     play.status_line = f"hold arm failed — {type(exc).__name__}"
                 else:
                     if getattr(started, "ok", False):
+                        _observe_trade_float(play, _HOLD_CASH_FLOOR)
                         play.status_line = (
                             f"hold buy armed — {plan.qty} hold(s) @ "
                             f"StarDock {plan.stardock_sector}, one pass running"
