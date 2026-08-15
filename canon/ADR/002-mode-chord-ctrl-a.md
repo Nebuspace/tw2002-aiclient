@@ -16,7 +16,7 @@ Filename convention: `/ADR/002-mode-chord-ctrl-a.md`
 
 **Folded into [control-and-escalation](/architecture/control-and-escalation.md#the-mode-switch)** ·
 Accepted 2026-07-25 by Max (Batch 1b + Batch 2/3 · hub GO `@ 09:31:54Z`) ·
-_(re-verified 2026-08-06)_
+_(re-verified 2026-08-15)_
 
 Durable Mode Switch prose lives under [The Mode Switch](/architecture/control-and-escalation.md#the-mode-switch)
 and the Mode Line surface. This ADR remains the decision record / pointer.
