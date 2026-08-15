@@ -669,6 +669,38 @@ price, when trade-in credit is known:
 `workorders/WO-CANON-DRAFT-SHIP-UPGRADE-TRADE-IN-ECONOMICS.md` ·
 orchestrator.md 2026-08-12T04:18:34Z.
 
+## PENDING-MENU-CRAWL-LIVE-DRIVER-REBUILD (2026-08-14)
+
+**Status:** Pending — Orchestrator review, needs Max (autonomous-exploration / sacrificial
+live-drive safety-adjacent)
+
+**Finding.** Tip keeps a substantial, well-tested never-commit menu crawler
+(`tw2002_aiclient/menu/crawler.py` · `crawl_menus()`) and the fail-closed
+`credentials.is_crawl_sacrificial()` reader, but the load-bearing live driver
+(`menu/crawl_driver.py` · `run_live_crawl`) was retired
+(WO-CLEANUP-DEAD-SYMBOLS-BATCH-2026-08-05) because the daemon `crawl_start`
+protocol verb was never wired. `tw crawl` CLI wiring was also removed (historical
+`tests/test_cli_crawl_wiring.py` REMOVED). Cleanup-removal audits then re-flag
+`crawl_menus()` as "zero product callers" — that is a *sequencing* gap, not proof
+the library is dead.
+
+**Why this needs a ruling, not an ungated cleanup.** Three shapes are on the table:
+(a) full A+C driver rebuild (`crawl_driver` + `crawl_start` + sacrificial/abort/
+fence gates), (b) lighter CLI-only wiring that still must refuse non-sacrificial
+profiles and re-anchor a fresh start context per BFS factory call, or (c) decline
+live crawl and keep the library test-only forever. (a)/(b) touch sacrificial
+live-drive and control-lock fencing — safety-adjacent enough that Max should name
+the scope. Retiring the never-commit suite is **not** on the table.
+
+**Queue visibility:** `WO-GATED-MENU-CRAWL-DRIVER-REBUILD` (pointer row).
+Ungated twin `WO-CLEANUP-CRAWL-MENUS-WIRE-OR-RETIRE` is tip-honest PARK/SUPERSEDE
+into this Pending (docs only — do not half-wire ahead of the ruling).
+
+**Refs:** `canon/engine/menu-map-and-introspection.md` § "The guarantee lives in
+the supervised run" · `canon/architecture/cli-verbs.md` `crawl` row ·
+`tw2002_aiclient/menu/crawler.py` · archive `twclient/crawl_driver.py` ·
+6-lens audits wf_6bb491f0-b7b / wf_6fbc4f72-4a0.
+
 ## PENDING-PLAYER-ROTATION-AUTO-SWITCH-CONSUMER (2026-08-12)
 
 **Status:** Pending — Orchestrator review, needs Max (auth-adjacent, on the safety list)
