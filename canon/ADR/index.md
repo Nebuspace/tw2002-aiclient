@@ -34,4 +34,4 @@ easy retrofit size.
 |---|-------|--------|------|
 | [001](001-one-tree-embedded-session.md) | One Package Tree, Embedded Session Engine | **Folded into** [session-engine](../architecture/session-engine.md) _(re-verified 2026-08-15)_ | 2026-07-24 |
 | [002](002-mode-chord-ctrl-a.md) | Mode Chord Is Ctrl-A (No Printable Mode) | **Folded into** [control-and-escalation § Mode Switch](../architecture/control-and-escalation.md#the-mode-switch) _(re-verified 2026-08-15)_ | 2026-07-25 |
-| [003](003-discovered-chain-approve-scaffold.md) | Discovered Chains Require Exact Approve-Scaffold Before Arm | **Folded into** [trade-loops](../strategy/trade-loops.md) _(re-verified 2026-08-09 — 8/8 gap closed)_ | 2026-07-30 |
+| [003](003-discovered-chain-approve-scaffold.md) | Discovered Chains Require Exact Approve-Scaffold Before Arm | **Folded into** [trade-loops](../strategy/trade-loops.md) _(re-verified 2026-08-15 — 8/8 gap closed)_ | 2026-07-30 |
