@@ -1,95 +1,66 @@
-# tw2002-aiclient — Project Context
+# tw2002-aiclient — project context
 
-**Samantha's persona lives in the output-style** (`.claude/output-styles/samantha.md`), auto-loaded via `.claude/settings.json` (`outputStyle: Samantha`). This file is project context.
+A **human-piloted trainer** for TradeWars 2002 (raw telnet BBS game). The operator flies; the
+app carries only screens it has been *taught* (deterministic autopilot/macros). An AI teacher
+may propose draft rules when invited, after the fact. **The AI never live-drives** a real
+account — one narrow carve-out in `canon/doctrine/dev-drive-exception.md` (agent-authored
+dev/debug proof only, sacrificial profile, never for play).
 
----
+## Doc canon — read in this order
 
-## This Repo
+1. `canon/index.md` — OKF bundle entry point: `architecture/`, `engine/`, `surfaces/`,
+   `doctrine/`, `strategy/`, `ADR/` (decisions), `DECISIONS.md` (open questions), `log.md`.
+2. `workorders/README.md` — the live, ordered build queue; each WO has
+   Goal · Scope · Constraints · Accept · Proof · Refs. Work proceeds **only** through this
+   queue — don't freelance outside a WO's scope.
+3. Code vs. canon disagree → canon wins; flag the drift, don't silently pick one.
 
-**tw2002-aiclient** — a **human-piloted trainer** for TradeWars 2002. The operator flies; the app carries only screens it has been *taught* (deterministic autopilot / macros); a retrospective AI teacher may propose draft rules when invited. The AI **never live-drives**.
-
-This repo is in **rebirth** (2026-07-23): live tree is `canon/` (prescriptive OKF) + `workorders/` (master list `workorders/ULTRACODE-WO-INVENTORY.md`; Phase 0–2 materialized as `WO-P0/P1/P2-*.md`; `WO-00…WO-17` are LEGACY-SURFACE). Prior product code + old docs live under `archive/pre-rebirth-2026-07-23/` for reference/porting only. **DOCS WIN:** where archived code contradicts reborn canon, canon wins.
-
-An instance rooted **here** is an **IMPLEMENTER** seat in the Nebuspace dual — live identity is set by `SAMANTHA_IDENTITY` / the seat's presence file in the coord-dir. Current roster: **`impl-aiclient-cursor`** (Cursor · volume) and **`impl-claudecode-aiclient`** (Claude Code · premium) (registered in `Claude_Samantha/.samantha/DEPLOYMENTS.md`). The **ORCHESTRATOR** runs from `"$(git rev-parse --show-toplevel)"/../`. Claude Code/Cursor auto-loads ancestor `CLAUDE.md` files, so the parent Nebuspace coordination spec is in context — but **this file's seat definition is authoritative for cwd = here**.
-
----
-
-## Doc canon (read in this order)
-
-1. **`canon/architecture/north-star.md`** — vision & win condition (human sovereign · app taught-screen autopilot · AI teacher never live-drives).
-2. **`canon/index.md`** — the OKF bundle's entry point and full concept index. The bundle is the sole docs root (no second docs tree) and spans `canon/architecture/`, `canon/engine/`, `canon/surfaces/`, `canon/doctrine/`, `canon/strategy/`, plus `canon/ADR/` (decision records), `canon/DECISIONS.md` (open-questions workspace), and `canon/log.md`.
-3. Surface / engine / strategy concepts under `canon/surfaces/`, `canon/architecture/`, `canon/engine/`, `canon/doctrine/`, `canon/strategy/` as the WO scopes them.
-4. **`workorders/README.md`** — ordered product rebuild queue; each WO has Goal · Scope · Depends-on · Accept · Proof.
-   **WO file gate (Max 2026-07-25):** every coord `🤝 HANDOFF [WO-…]` MUST have a matching `workorders/<WO-id>.md` (same id) written in the same hub action as the HANDOFF. No coord-only work orders.
-5. **Research evidence — screen patterns (required for classify / settle / screen-understanding):** [`canon/research/tw2002-screen-patterns.md`](canon/research/tw2002-screen-patterns.md) · brief [`workorders/BRIEF-OKF-SCREEN-PATTERNS.md`](workorders/BRIEF-OKF-SCREEN-PATTERNS.md). `research/raw/` is gitignored corpus only.
-6. **Research evidence — archive port patterns (required before cockpit/autopilot · teach A/R/T · settle polish · menu crawl · trade loops · world-model · login UX · priority ranking):** [`canon/research/archive-port-patterns.md`](canon/research/archive-port-patterns.md) (AP-01…AP-14) · brief [`workorders/BRIEF-OKF-ARCHIVE-PORT-PATTERNS.md`](workorders/BRIEF-OKF-ARCHIVE-PORT-PATTERNS.md). Hard pins in the brief; Negative patterns are firm.
-7. **`archive/pre-rebirth-2026-07-23/`** — reference only (old AI-first framing in places). Port behavior only when a WO scopes it and canon defines the target contract. Prefer the OKF extracts above over ad-hoc archive browsing.
-
----
-
-## How work proceeds
-
-Build **only** through the ordered queue in `workorders/` — see `workorders/ULTRACODE-WO-INVENTORY.md` for the master list; start at the first unproven `WO-P0/P1/P2-*` item on a cold seat. Daemon-side safety items (TW-01…TW-30) stay in the parent Nebuspace `QUEUE.md`, not here.
-
-Phase 0 shipped a greenfield package at repo root — this is **greenfield-from-`canon/`, not a
-restore of archived code**. Per [ADR-001](canon/ADR/001-one-tree-embedded-session.md)
-(**Accepted** 2026-07-24 · **DONE**), the codebase is **one** `tw2002_aiclient` import tree: product
-TUI at the package root and daemon-core under `tw2002_aiclient/session/`. The old sibling top-level
-`twclient/` package is **gone** — do not target it; new daemon-core work goes under `session/`.
-
----
-
-## Setup & commands (as of rebirth)
-
-One package tree at repo root today (`tw2002_aiclient/` — product TUI + `session/` daemon-core per
-ADR-001); `./tw`, `./twd`, `./tw2002-aiclient` launcher scripts and console-script wiring may still
-be landing per WO Proof sections. What runs today:
+## Setup & commands
 
 ```bash
 cd "$(git rev-parse --show-toplevel)"
-python3 -m venv .venv && .venv/bin/pip install -e .
-.venv/bin/python -m tw2002_aiclient   # placeholder TUI entry — TTY-gated, per WO-P0-003
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt -r requirements-dev.txt
+.venv/bin/pip install -e .
+
+./tw2002-aiclient          # product TUI (needs a real TTY)
+./tw                       # one-shot CLI entry point
+./twd                      # session daemon (normally spawned by `tw start`)
+
+.venv/bin/python -m pytest              # parallel by default (-n auto); -n0 for serial debug
+.venv/bin/python -m pytest -m "not live_login and not pty_ui"   # matches CI (.github/workflows/suite.yml)
 ```
 
-- **Lint:** none configured — don't invent one.
-- **Tests:** when `tests/` returns to root, prefer `.venv/bin/python -m pytest` (network-free; parallel by default via `-n auto`; use `-n0` for serial debug). Don't invent a lint gate.
-- Never run `tw start`/`tw stop` against a session someone else may be driving without checking `tw status` first.
+No lint is configured — don't invent one. `live_login` needs a real server and doesn't run in CI;
+`pty_ui` needs a real curses-capable pty and self-skips otherwise. Never run `tw start`/`tw stop`
+against a session someone else may be driving — check `tw status` first.
 
----
+## How work lands
 
-## Hard rules
+Branch per work order (`wo/<ID>`) off `main` → PR → CI (`.github/workflows/suite.yml`) green,
+including the zero-skipped-tests guard → merge. This tree is worked by more than one agent:
+**commit only explicit paths** (`git commit -- <paths>`), never `git add -A` / `git add .`, and
+never `git stash` — each can sweep or discard a sibling session's in-flight files, and both have
+actually happened here. No force-push or history rewrite without sign-off.
 
-- **Secrets never touch logs, argv, shell history, or the repo.** See `canon/doctrine/secrets-and-credentials.md`. `config/secrets.json` is chmod-600 + gitignored; `TW2002_PASSWORD_<PROFILE>` env-first. Every password send routes through the redaction sink. Public repo: no real personal names, handles, FQDNs, or usernames in committed artifacts.
-- **Live-driving a real player account stays `{app, human}` only** — the AI never drives real play. On a `crawl_sacrificial=true` profile, an AI agent MAY live-drive — manually (see `canon/doctrine/dev-drive-exception.md`) or via autopilot/chain execution (witness carte-blanche, Max 2026-07-21) — strictly to develop, debug, or prove this client works end-to-end, never to accumulate value for its own sake outside that purpose. Spectate of a real account stays read-only; escalations on a real account still route to the human.
-- **Single-connection, single-session daemon** (once the daemon module lands): one telnet socket; control-lock governs who may drive. Don't bypass it.
-- **`.claude/` and `.samantha/` are gitignored** (hub ruling) — framework install is local orchestration, not shippable client. Same for private journals (`DESIGN-v2.md`, `QUEUE.md`, etc. if reintroduced).
-- **Path-leak gate (both seats).** Do not commit operator-home absolute paths (`/Users/<username>/` or `/home/<username>/`).
+## Secrets and credentials
 
-  **Dual-layer design (Cursor seat · WO-CURSOR-HOOK-RECOVERY-HARDENING):**
-  1. **Tip / shared config** — `.cursor/hooks.json` wires `beforeShellExecution` → `.cursor/hooks/path-leak-gate.sh` with **`failClosed: false`**. The hook still denies leaky `git commit` when Cursor can run it; when the worker **cannot** execute command hooks (`Shell execution is not available in the worker extension host`), fail-open keeps Shell usable. Tip no longer requires a dirty local overlay after `checkout` / `reset --hard` / `worktree add`. Scanner: `scripts/path-leak-scan.sh`.
-  2. **Real commit backstop (fail-closed)** — tracked `scripts/githooks/pre-commit` runs the same scanner. **Enable once per clone:**
-     ```bash
-     git config core.hooksPath scripts/githooks
-     ```
-     This is the load-bearing gate: a staged operator-home path must still make `git commit` exit 1 with HEAD unmoved.
-  3. **Recovery if a seat is already shell-dead** — usually from an *old* tip/`failClosed: true` overlay still loaded in the live Cursor config. The seat **cannot** self-repair via Shell. Fix out-of-band: another seat, the IDE file editor, or a host terminal — set `.cursor/hooks.json` to tip (`failClosed: false`) or temporarily `"hooks": {}`, then reload the agent. Do not reintroduce a dirty tracked overlay as the standing disarm.
+Secrets never touch logs, argv, shell history, or the repo — see
+`canon/doctrine/secrets-and-credentials.md`. `config/secrets.json` is chmod-600 and gitignored;
+resolve passwords via `TW2002_PASSWORD_<PROFILE>` env-first; every send routes through the
+redaction sink. **Public repo:** no real personal names, handles, FQDNs, or usernames committed.
 
-  Claude Code enforces the same intent via its PreToolUse hook. Dry-run: stage a file containing `/Users/…` and confirm `scripts/path-leak-scan.sh` exits 1.
+## Path-leak gate
 
----
+Committed content must never carry an operator-home absolute path (`/Users/<user>/` or
+`/home/<user>/`). Cursor's `.cursor/hooks.json` → `.cursor/hooks/path-leak-gate.sh` is
+`failClosed: false` by design (a worker host that can't run shell hooks stays usable). The
+load-bearing backstop is `git config core.hooksPath scripts/githooks` **once per clone**, which
+wires `scripts/githooks/pre-commit` → `scripts/path-leak-scan.sh` and fails closed: a staged
+leak makes `git commit` exit 1 with HEAD unmoved. Claude Code enforces the same intent via its
+own PreToolUse hook.
 
-- **Throwaway-worktree lifecycle (RATIFIED this project 2026-07-26 · Max GO still pending for the `Claude_Samantha` framework backport):** after hub Accept (tip on `origin/main`) or abandon, the owning seat `git worktree remove`s in that STATUS turn — clean-as-you-go. Preserve tip as `preserve/<wo-id>` if not on origin. Hub mass-prune forbidden without `🧹 PRUNE-INTENT` + seat ACKs. Soft ceiling 12 worktrees/repo.
-  - **Step 2b — preserve the lane notebook before removing.** Merge any worktree-local lane notes (e.g. `.claude/agent-memory/<agent>/` entries that exist only in that worktree) into the shared notebook **and its index** first. **Unlocked + every dirty file blob-reachable in history is necessary, not sufficient** — a worktree can pass both and still be the only home of a night's accumulated lessons (incident 2026-07-26: 8 worktrees cleared the reap test while holding 38 unmerged notes between them).
-  - **The live-lane signal is the lock FILE's presence, not the pid recorded inside it.** One agent host serves many lanes, so the same pid appears in unrelated lanes' lock files and "pid alive" proves nothing about *this* lane.
-  - Merging an index is **append-only**: a worktree's own `MEMORY.md` is usually a short delta, not a full index, so copying it over the shared one destroys everything it does not mention.
+## Local orchestration is not shippable client code
 
-## Two-Instance Coordination (Implementer view)
-
-Full protocol = parent **`Nebuspace/CLAUDE.md`** + `.samantha/references/coordination-protocol/README.md` (M9 STAR).
-
-- **Identity:** set by `SAMANTHA_IDENTITY` / the seat's presence file in the coord-dir. Current roster: `impl-aiclient-cursor` (Cursor · volume) and `impl-claudecode-aiclient` (Claude Code · premium).
-- **Outbox / presence:** `"$(git rev-parse --show-toplevel)"/../.samantha/coord/<identity>.md` — your own seat's file only (e.g. `impl-aiclient-cursor.md` or `impl-claudecode-aiclient.md`).
-- **Watch only:** `orchestrator.md`
-- **Arm each session:** parent `coord-monitor.sh` + `heartbeat.sh` for this identity; confirm `coord-status.sh` → BOTH ALIVE.
-- **Cursor arming:** Shell `block_until_ms: 0`, `required_permissions: ["all"]`, and `notify_on_output` (deaf gap otherwise).
-- Commit only explicit paths; never `git add -A` / `git add .` in a shared tree. Never write secrets to the coord-dir.
+`.claude/` and `.samantha/` are gitignored — local agent-framework install state, not product
+code. Never let their contents leak into a commit.
