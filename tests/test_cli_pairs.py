@@ -30,8 +30,27 @@ _CLOCK = lambda: datetime.datetime(2026, 7, 20, 12, 0, 0, tzinfo=datetime.timezo
 def _at(monkeypatch, tmp_path):
     """Point the world-model's default root at this test's tmp tree --
     same seam `world_model._world_dir` itself falls back to when a
-    caller (here, `cmd_pairs`) supplies no explicit `state_dir`."""
+    caller (here, `cmd_pairs`) supplies no explicit `state_dir`.
+
+    `cmd_pairs` -> `chain_detect.recompute` omits `now=` (the CLI
+    deliberately exposes no `--now`/staleness knob -- see
+    `test_all_stale_exits_zero_and_explains_why`'s own docstring), so
+    `trade_adapter.build_candidate_pairs` falls back to wall-clock UTC
+    for its class-staleness check. Ports stamped at this file's fixed
+    `_CLOCK` (2026-07-20) age past the 30-day class ceiling once real
+    wall-clock time crosses ~2026-08-19 -- a CI time bomb (green today,
+    `all_stale` forever after), the exact failure `test_cli_chains.py`'s
+    `world` fixture already found and pinned for `build_trade_hops`.
+    Pin this module's sibling adapter call the same way."""
+    from tw2002_aiclient import trade_adapter
+
     monkeypatch.setattr(world_model, "WORLD_DIR", tmp_path)
+    _orig_build = trade_adapter.build_candidate_pairs
+
+    def _build_pinned(world_id, *, state_dir=None, config=None, now=None):
+        return _orig_build(world_id, state_dir=state_dir, config=config, now=now or _CLOCK)
+
+    monkeypatch.setattr(trade_adapter, "build_candidate_pairs", _build_pinned)
 
 
 def _upsert_class(sector_id, *, warps=(), klass=None, port_ts_clock=_CLOCK):
